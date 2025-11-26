@@ -661,29 +661,19 @@ function af_advancedmentions_on_post_insert($datahandler): void
 
     $sentKey = $pid > 0 ? 'pid:'.$pid : ($tid > 0 ? 'tid:'.$tid : null);
 
-    if (function_exists('afaa_collect_mentions') && function_exists('af_advancedalerts_add')) {
-        $buckets = afaa_collect_mentions($message, $from_uid);
-
-        foreach ($buckets['mention'] as $uid) {
-            af_advancedalerts_add('mention', (int)$uid, [
-                'from_uid' => $from_uid,
-                'pid'      => $pid,
-                'tid'      => $tid,
-            ]);
+    // Пытаемся подгрузить Advanced Alerts, чтобы отправлять уведомления
+    if (!function_exists('afaa_collect_mentions') || !function_exists('afaa_notify_mentions_from_message')) {
+        $bridge = MYBB_ROOT.'inc/plugins/advancedfunctionality/addons/advancedalerts/advancedalerts.php';
+        if (file_exists($bridge)) {
+            require_once $bridge;
         }
+    }
 
-        foreach ($buckets['group_mention'] as $uid) {
-            af_advancedalerts_add('group_mention', (int)$uid, [
-                'from_uid' => $from_uid,
-                'pid'      => $pid,
-                'tid'      => $tid,
-            ]);
-        }
-
+    if (function_exists('afaa_notify_mentions_from_message')) {
+        afaa_notify_mentions_from_message($message, $from_uid, $pid, $tid);
         if ($sentKey !== null) {
             $GLOBALS['afaa_mentions_sent'][$sentKey] = true;
         }
-
         return;
     }
 

@@ -1178,6 +1178,108 @@ function afaa_collect_mentions(string $message, int $author_uid): array
     ];
 }
 
+/**
+ * Универсальный отправитель уведомлений об упоминаниях.
+ * Используется и Advanced Alerts, и Advanced Mentions, чтобы не было расхождений/дубликатов.
+ */
+function afaa_notify_mentions_from_message(
+    string $message,
+    int $author_uid,
+    int $pid = 0,
+    int $tid = 0,
+    ?string $thread_subject = null,
+    ?string $from_username = null,
+    ?string $link = null
+): void {
+    global $db, $mybb;
+
+    // Определяем ключ, чтобы повторно не отправлять для одного и того же поста/темы
+    $mentionKey = $pid > 0 ? 'pid:'.$pid : ($tid > 0 ? 'tid:'.$tid : null);
+    if ($mentionKey && !empty($GLOBALS['afaa_mentions_sent'][$mentionKey])) {
+        return;
+    }
+
+    // Восстанавливаем tid/pid/subject/link, если не передали
+    if ($tid <= 0 && $pid > 0) {
+        $post = $db->fetch_array(
+            $db->simple_select('posts', 'tid', "pid={$pid}", ['limit' => 1])
+        ) ?: [];
+        $tid = (int)($post['tid'] ?? 0);
+    }
+
+    if ($thread_subject === null || $thread_subject === '') {
+        if ($tid > 0) {
+            $thr = $db->fetch_array(
+                $db->simple_select('threads', 'subject', "tid={$tid}", ['limit' => 1])
+            ) ?: [];
+            $thread_subject = trim((string)($thr['subject'] ?? 'Тема'));
+        } else {
+            $thread_subject = 'Тема';
+        }
+    }
+
+    if ($pid <= 0 && $tid > 0) {
+        $post = $db->fetch_array(
+            $db->simple_select('posts', 'pid', "tid={$tid}", ['order_by' => 'dateline', 'order_dir' => 'ASC', 'limit' => 1])
+        ) ?: [];
+        $pid = (int)($post['pid'] ?? 0);
+    }
+
+    if ($link === null || $link === '') {
+        $link = $pid > 0
+            ? "showthread.php?tid={$tid}&pid={$pid}#pid{$pid}"
+            : ($tid > 0 ? "showthread.php?tid={$tid}" : '');
+    }
+
+    if ($from_username === null) {
+        $from_username = '';
+        if ($author_uid > 0) {
+            require_once MYBB_ROOT.'inc/functions_user.php';
+            $u = get_user($author_uid);
+            if (!empty($u['username'])) {
+                $from_username = (string)$u['username'];
+            }
+        }
+        if ($from_username === '' && !empty($mybb->user['uid']) && (int)$mybb->user['uid'] === $author_uid) {
+            $from_username = (string)($mybb->user['username'] ?? '');
+        }
+    }
+
+    $buckets = afaa_collect_mentions($message, $author_uid);
+
+    foreach ($buckets['mention'] as $uid) {
+        afaa_send(
+            (int)$uid,
+            'mention',
+            [
+                'thread_subject' => $thread_subject,
+                'from_username'  => $from_username,
+                'link'           => $link,
+            ],
+            $author_uid,
+            $pid ?: $tid ?: null
+        );
+    }
+
+    foreach ($buckets['group_mention'] as $uid) {
+        afaa_send(
+            (int)$uid,
+            'group_mention',
+            [
+                'thread_subject' => $thread_subject,
+                'from_username'  => $from_username,
+                'link'           => $link,
+            ],
+            $author_uid,
+            $pid ?: $tid ?: null
+        );
+    }
+
+    if ($mentionKey !== null) {
+        $GLOBALS['afaa_mentions_sent'][$mentionKey] = true;
+    }
+}
+
 
 
 /* ====================== HOOKS REG ======================= */
@@ -2133,43 +2235,15 @@ function afaa_post_insert_end(&$posthandler): void
 
     /* ---------- 4) УПОМИНАНИЯ: @username / @"username", @all, @group{} ---------- */
 
-    $mentionKey     = $pid > 0 ? 'pid:'.$pid : ($tid > 0 ? 'tid:'.$tid : null);
-    $skipMentions   = $mentionKey && !empty($GLOBALS['afaa_mentions_sent'][$mentionKey]);
-    $mentionBuckets = afaa_collect_mentions($message, $author);
-
-    if (!$skipMentions) {
-        foreach ($mentionBuckets['mention'] as $uid) {
-            afaa_send(
-                (int)$uid,
-                'mention',
-                [
-                    'thread_subject' => $subject,
-                    'from_username'  => $author_name,
-                    'link'           => $link,
-                ],
-                $author,
-                $pid ?: null
-            );
-        }
-
-        foreach ($mentionBuckets['group_mention'] as $uid) {
-            afaa_send(
-                (int)$uid,
-                'group_mention',
-                [
-                    'thread_subject' => $subject,
-                    'from_username'  => $author_name,
-                    'link'           => $link,
-                ],
-                $author,
-                $pid ?: null
-            );
-        }
-
-        if ($mentionKey !== null) {
-            $GLOBALS['afaa_mentions_sent'][$mentionKey] = true;
-        }
-    }
+    afaa_notify_mentions_from_message(
+        $message,
+        $author,
+        $pid,
+        $tid,
+        $subject,
+        $author_name,
+        $link
+    );
 
 
 function afaa_rep_do_add_end($reputationhandler): void
