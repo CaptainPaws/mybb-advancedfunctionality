@@ -5,9 +5,14 @@
 .afaa-popup { position:absolute; right:0; top:100%; z-index:9999; width:360px; background:#111; color:#eee; border:1px solid rgba(255,255,255,.12); border-radius:.5rem; box-shadow:0 10px 30px rgba(0,0,0,.5); }
 .afaa-popup-head { display:flex; align-items:center; justify-content:space-between; padding:.6rem .8rem; border-bottom:1px solid rgba(255,255,255,.08); }
 .afaa-head-actions { display:flex; gap:.5rem; align-items:center; }
-.afaa-gear { text-decoration:none; font-size:1.1rem; }
+.afaa-gear { text-decoration:none; font-size:1.1rem; background:none; border:1px solid rgba(255,255,255,.15); color:inherit; border-radius:.35rem; padding:.15rem .45rem; cursor:pointer; }
+.afaa-back { background:none; border:1px solid rgba(255,255,255,.15); color:inherit; border-radius:.35rem; padding:.15rem .45rem; cursor:pointer; }
 .afaa-close { background:none; border:none; color:#aaa; font-size:1.2rem; cursor:pointer; }
 .afaa-popup-body { max-height:420px; overflow:auto; }
+.afaa-popup-body-prefs { padding:.8rem; }
+.afaa-prefs-types { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:.4rem .6rem; margin-bottom:.6rem; }
+.afaa-prefs-legend { font-weight:700; margin-bottom:.35rem; }
+.afaa-prefs-ui { display:flex; flex-direction:column; gap:.35rem; margin-top:.35rem; }
 .afaa-list { list-style:none; margin:0; padding:0; }
 .afaa-item.is-unread { background:rgba(255,255,255,.03); }
 .afaa-text {color:inherit;text-decoration:none;display:block;white-space:normal;      /* было nowrap */overflow:hidden;text-overflow:ellipsis;}

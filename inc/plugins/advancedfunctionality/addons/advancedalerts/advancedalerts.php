@@ -561,6 +561,53 @@ function afaa_set_user_type_enabled(int $uid, int $type_id, bool $on): void
     }
 }
 
+/**
+ * Вернуть все типы уведомлений с учётом пользовательских предпочтений.
+ *
+ * @return array{code:string,title:string,enabled:bool,can_disable:bool,user_enabled:bool,id:int}[]
+ */
+function afaa_types_for_user(int $uid, bool $only_enabled = true): array
+{
+    global $db;
+
+    $types = [];
+    $q = $db->simple_select('alert_types', 'id,code,title,enabled,can_be_user_disabled');
+    while ($t = $db->fetch_array($q)) {
+        $enabled = (int)$t['enabled'] === 1;
+        if ($only_enabled && !$enabled) {
+            continue;
+        }
+
+        $canDisable = (int)$t['can_be_user_disabled'] === 1;
+        $types[] = [
+            'id'           => (int)$t['id'],
+            'code'         => (string)$t['code'],
+            'title'        => (string)($t['title'] ?: $t['code']),
+            'enabled'      => $enabled,
+            'can_disable'  => $canDisable,
+            'user_enabled' => $canDisable ? afaa_user_type_enabled($uid, (int)$t['id']) : true,
+        ];
+    }
+
+    return $types;
+}
+
+/**
+ * Массовое сохранение пользовательских настроек типов уведомлений.
+ */
+function afaa_save_user_types(int $uid, array $incoming): void
+{
+    $types = afaa_types_for_user($uid, false);
+    foreach ($types as $type) {
+        if (!$type['can_disable']) {
+            continue;
+        }
+
+        $on = isset($incoming[$type['code']]);
+        afaa_set_user_type_enabled($uid, (int)$type['id'], $on);
+    }
+}
+
 function afaa_send(int $uid, string $type_code, array $extra = [], ?int $from_user_id = null, $object_id = null): bool
 {
     global $db, $mybb;
@@ -992,6 +1039,145 @@ function afaa_users_in_groups(array $gids): array
     return array_keys($uids);
 }
 
+/**
+ * Унифицированный сбор адресатов упоминаний (обычные, группы, @all).
+ * Возвращает массив uid по типам: ['mention' => [...], 'group_mention' => [...]].
+ */
+function afaa_collect_mentions(string $message, int $author_uid): array
+{
+    global $db, $mybb;
+
+    // Нормализуем текст, чтобы ловить NBSP и двойные пробелы
+    $message = str_replace("\xc2\xa0", ' ', $message);
+    $message = preg_replace('~[ \t]+~u', ' ', $message);
+
+    $mentionUsernames = [];
+    $mentionAll       = false;
+    $mentionGroups    = [];
+
+    if (preg_match_all('~@([^\r\n@]{2,80})~u', $message, $mAll)) {
+        foreach ($mAll[1] as $raw) {
+            $tok = (string)$raw;
+            $tok = str_replace("\xc2\xa0", ' ', $tok);
+            $tok = preg_replace('~\s+~u', ' ', $tok);
+
+            $tokParts = preg_split('~(\[|/quote)~ui', $tok, 2);
+            $tok = $tokParts[0] ?? $tok;
+            $tok = trim($tok);
+            if ($tok === '') {
+                continue;
+            }
+
+            if (preg_match('~^["«](.+?)["»]$~u', $tok, $mmTok)) {
+                $tok = trim($mmTok[1]);
+            }
+
+            if ($tok === '') {
+                continue;
+            }
+
+            $low = my_strtolower($tok);
+
+            if ($low === 'all') {
+                $mentionAll = true;
+                continue;
+            }
+
+            if (preg_match('~^group\{(\d+)\}$~', $low, $gm)) {
+                $gid = (int)$gm[1];
+                if ($gid > 0) {
+                    $mentionGroups[$gid] = true;
+                }
+                continue;
+            }
+
+            $mentionUsernames[$low] = true;
+        }
+    }
+
+    // Разрешения на @all: только группы 3,4,6 (модеры/админы)
+    $canUseAll = false;
+    if ($mentionAll) {
+        require_once MYBB_ROOT.'inc/functions_user.php';
+        if (function_exists('is_member')) {
+            $canUseAll = is_member([3,4,6], $author_uid);
+        } else {
+            $ug  = (int)($mybb->user['usergroup'] ?? 0);
+            $ags = (string)($mybb->user['additionalgroups'] ?? '');
+            $allowed = [3,4,6];
+            if (in_array($ug, $allowed, true)) {
+                $canUseAll = true;
+            } else {
+                $extra = array_filter(array_map('intval', explode(',', $ags)));
+                if (array_intersect($extra, $allowed)) {
+                    $canUseAll = true;
+                }
+            }
+        }
+
+        if (!$canUseAll) {
+            $mentionAll = false;
+        }
+    }
+
+    $mentionUidsDirect = [];
+    $mentionUidsGroup  = [];
+
+    if ($mentionUsernames) {
+        $in = [];
+        foreach (array_keys($mentionUsernames) as $n) {
+            $in[] = "'".$db->escape_string($n)."'";
+        }
+        if ($in) {
+            $rq = $db->write_query(
+                "SELECT uid, username
+                 FROM ".TABLE_PREFIX."users
+                 WHERE LOWER(username) IN (".implode(',', $in).")"
+            );
+            while ($u = $db->fetch_array($rq)) {
+                $uid = (int)$u['uid'];
+                if ($uid > 0 && $uid !== $author_uid) {
+                    $mentionUidsDirect[$uid] = true;
+                }
+            }
+        }
+    }
+
+    if ($mentionAll && $canUseAll) {
+        $aq = $db->simple_select(
+            'users',
+            'uid',
+            "uid<>".$author_uid." AND uid>0"
+        );
+        while ($u = $db->fetch_array($aq)) {
+            $uid = (int)$u['uid'];
+            if ($uid > 0 && $uid !== $author_uid) {
+                $mentionUidsDirect[$uid] = true;
+            }
+        }
+    }
+
+    if ($mentionGroups) {
+        $gids      = array_keys($mentionGroups);
+        $groupUids = afaa_users_in_groups($gids);
+        foreach ($groupUids as $uid) {
+            $uid = (int)$uid;
+            if ($uid <= 0 || $uid === $author_uid) {
+                continue;
+            }
+            if (!empty($mentionUidsDirect[$uid])) {
+                continue;
+            }
+            $mentionUidsGroup[$uid] = true;
+        }
+    }
+
+    return [
+        'mention'       => array_keys($mentionUidsDirect),
+        'group_mention' => array_keys($mentionUidsGroup),
+    ];
+}
+
 
 
 /* ====================== HOOKS REG ======================= */
@@ -1040,6 +1226,7 @@ function af_advancedalerts_init(): void
     // Посты: подписки, цитаты, упоминания, подписка на форум
     // Правильный хук: вызывается при вставке поста (и для новых тем, и для ответов)
     $plugins->add_hook('datahandler_post_insert_post', 'afaa_post_insert_end');
+    $plugins->add_hook('datahandler_post_insert_thread', 'afaa_post_insert_end');
 
     // Личные сообщения: новое ЛС
     // Правильный хук: вызывается после успешного коммита ЛС
@@ -1203,6 +1390,7 @@ function afaa_pre_output(string &$page): void
     $title = 'Уведомления';
     $all   = 'Все уведомления';
     $gear  = 'Настройки';
+    $back  = 'Вернуться к уведомлениям';
 
     $soundChecked = $up['sound'] ? ' checked' : '';
 
@@ -1216,8 +1404,9 @@ function afaa_pre_output(string &$page): void
     </a>
     <div class="afaa-popup" role="dialog" aria-modal="true" style="display:none">
         <div class="afaa-popup-head">
-        <span>{$title}</span>
+        <span class="afaa-head-title" data-afaa-head-title>{$title}</span>
         <div class="afaa-head-actions">
+            <button class="afaa-back" type="button" data-afaa-prefs-back title="{$back}" style="display:none">←</button>
             <span class="afaa-sound">
             Звук:
             <label class="afaa-switch">
@@ -1225,13 +1414,16 @@ function afaa_pre_output(string &$page): void
                 <span class="afaa-slider"></span>
             </label>
             </span>
-            <a class="afaa-gear" href="usercp.php?action=af_alert_prefs" title="{$gear}">⚙</a>
+            <button class="afaa-gear" type="button" data-afaa-open-prefs title="{$gear}">⚙</button>
             <button class="afaa-close" type="button" aria-label="Закрыть" onclick="AFAlerts.closePopup(this)">×</button>
         </div>
         </div>
-        <div class="afaa-popup-body">
+        <div class="afaa-popup-body" data-afaa-view="list">
         <ul class="afaa-list" data-afaa-list></ul>
         <div class="afaa-empty" data-afaa-empty style="display:none">Нет уведомлений</div>
+        </div>
+        <div class="afaa-popup-body afaa-popup-body-prefs" data-afaa-view="prefs" style="display:none">
+            <div class="afaa-prefs" data-afaa-prefs></div>
         </div>
         <div class="afaa-popup-foot">
         <a class="button small" href="misc.php?action=af_alerts">{$all}</a>
@@ -1417,6 +1609,15 @@ function afaa_misc_router(): void
             exit;
         }
 
+        if ($op === 'types') {
+            echo json_encode([
+                'ok'    => 1,
+                'types' => afaa_types_for_user($uid),
+                'prefs' => afaa_get_user_prefs($uid),
+            ]);
+            exit;
+        }
+
         if ($op === 'badge') {
             echo json_encode(['ok'=>1, 'badge'=>afaa_unread_count($uid)]);
             exit;
@@ -1425,7 +1626,12 @@ function afaa_misc_router(): void
         if ($op === 'prefs') {
             $sound  = (int)$mybb->get_input('sound') ? 1 : 0;
             $toasts = (int)$mybb->get_input('toasts') ? 1 : 0;
+            $types  = $mybb->get_input('types', MyBB::INPUT_ARRAY) ?? [];
+
             afaa_set_user_prefs($uid, $sound, $toasts);
+            if (is_array($types)) {
+                afaa_save_user_types($uid, $types);
+            }
             echo json_encode([
                 'ok'     => 1,
                 'sound'  => $sound,
@@ -1767,6 +1973,14 @@ function afaa_post_insert_end(&$posthandler): void
 
     $author_name = (string)($mybb->user['username'] ?? '');
 
+    $callKey = $pid > 0 ? 'pid:'.$pid : ($tid > 0 ? 'tid:'.$tid : null);
+    if ($callKey !== null) {
+        if (!empty($GLOBALS['afaa_post_processed'][$callKey])) {
+            return;
+        }
+        $GLOBALS['afaa_post_processed'][$callKey] = true;
+    }
+
     /* ---------- 1) Подписчики темы (subscribed_thread) ---------- */
 
     $subs = [];
@@ -1919,175 +2133,43 @@ function afaa_post_insert_end(&$posthandler): void
 
     /* ---------- 4) УПОМИНАНИЯ: @username / @"username", @all, @group{} ---------- */
 
-    $mentionUsernames = [];
-    $mentionAll       = false;
-    $mentionGroups    = [];
+    $mentionKey     = $pid > 0 ? 'pid:'.$pid : ($tid > 0 ? 'tid:'.$tid : null);
+    $skipMentions   = $mentionKey && !empty($GLOBALS['afaa_mentions_sent'][$mentionKey]);
+    $mentionBuckets = afaa_collect_mentions($message, $author);
 
-    // Унифицированный парсер: любое @..., включая @"Имя Фамилия" и @Имя Фамилия
-    // Берём всё после @ до перевода строки или второго @
-    if (preg_match_all('~@([^\r\n@]{2,80})~u', $message, $mAll)) {
-        foreach ($mAll[1] as $raw) {
-            $tok = (string)$raw;
-
-            // NBSP -> обычный пробел, схлопываем цепочки пробелов
-            $tok = str_replace("\xc2\xa0", ' ', $tok);
-            $tok = preg_replace('~\s+~u', ' ', $tok);
-
-            // Отрезаем всё, что пошло в BB-код (например [/url], [b] и т.п.)
-            $tokParts = preg_split('~(\[|/quote)~ui', $tok, 2);
-            $tok = $tokParts[0] ?? $tok;
-
-            $tok = trim($tok);
-            if ($tok === '') {
-                continue;
-            }
-
-            // Снимаем кавычки: @"Имя Фамилия" → Имя Фамилия
-            // Поддерживаем обычные "..." и «...»
-            if (preg_match('~^["«](.+?)["»]$~u', $tok, $mmTok)) {
-                $tok = trim($mmTok[1]);
-            }
-
-            if ($tok === '') {
-                continue;
-            }
-
-            $low = my_strtolower($tok);
-
-            // Спец-тег @all
-            if ($low === 'all') {
-                $mentionAll = true;
-                continue;
-            }
-
-            // Спец-тег @group{ID}
-            if (preg_match('~^group\{(\d+)\}$~', $low, $gm)) {
-                $gid = (int)$gm[1];
-                if ($gid > 0) {
-                    $mentionGroups[$gid] = true;
-                }
-                continue;
-            }
-
-            // Обычное упоминание: @Имя / @Имя Фамилия / @"Имя Фамилия"
-            $mentionUsernames[$low] = true;
-        }
-    }
-
-    // Разрешения на @all: только группы 3,4,6 (модеры/админы)
-    $canUseAll = false;
-    if ($mentionAll) {
-        require_once MYBB_ROOT.'inc/functions_user.php';
-        if (function_exists('is_member')) {
-            $canUseAll = is_member([3,4,6], $author);
-        } else {
-            // Fallback: руками по usergroup/additionalgroups
-            $ug  = (int)($mybb->user['usergroup'] ?? 0);
-            $ags = (string)($mybb->user['additionalgroups'] ?? '');
-            $allowed = [3,4,6];
-            if (in_array($ug, $allowed, true)) {
-                $canUseAll = true;
-            } else {
-                $extra = array_filter(array_map('intval', explode(',', $ags)));
-                if (array_intersect($extra, $allowed)) {
-                    $canUseAll = true;
-                }
-            }
-        }
-
-        if (!$canUseAll) {
-            $mentionAll = false;
-        }
-    }
-
-    // Список UID по прямым упоминаниям и по группам/@all
-    $mentionUidsDirect = [];
-    $mentionUidsGroup  = [];
-
-    // 4.a. Обычные пользователи по username (ищем по LOWER(username))
-    if ($mentionUsernames) {
-        $in = [];
-        foreach (array_keys($mentionUsernames) as $n) {
-            $in[] = "'".$db->escape_string($n)."'";
-        }
-        if ($in) {
-            $rq = $db->write_query(
-                "SELECT uid, username
-                 FROM ".TABLE_PREFIX."users
-                 WHERE LOWER(username) IN (".implode(',', $in).")"
+    if (!$skipMentions) {
+        foreach ($mentionBuckets['mention'] as $uid) {
+            afaa_send(
+                (int)$uid,
+                'mention',
+                [
+                    'thread_subject' => $subject,
+                    'from_username'  => $author_name,
+                    'link'           => $link,
+                ],
+                $author,
+                $pid ?: null
             );
-            while ($u = $db->fetch_array($rq)) {
-                $uid = (int)$u['uid'];
-                if ($uid > 0 && $uid !== $author) {
-                    $mentionUidsDirect[$uid] = true;
-                }
-            }
+        }
+
+        foreach ($mentionBuckets['group_mention'] as $uid) {
+            afaa_send(
+                (int)$uid,
+                'group_mention',
+                [
+                    'thread_subject' => $subject,
+                    'from_username'  => $author_name,
+                    'link'           => $link,
+                ],
+                $author,
+                $pid ?: null
+            );
+        }
+
+        if ($mentionKey !== null) {
+            $GLOBALS['afaa_mentions_sent'][$mentionKey] = true;
         }
     }
-
-    // 4.b. @all — все зарегистрированные (кроме автора), если есть права
-    if ($mentionAll && $canUseAll) {
-        $aq = $db->simple_select(
-            'users',
-            'uid',
-            "uid<>".$author." AND uid>0"
-        );
-        while ($u = $db->fetch_array($aq)) {
-            $uid = (int)$u['uid'];
-            if ($uid > 0 && $uid !== $author) {
-                $mentionUidsDirect[$uid] = true;
-            }
-        }
-    }
-
-    // 4.c. @group{ID} — все пользователи группы
-    if ($mentionGroups) {
-        $gids      = array_keys($mentionGroups);
-        $groupUids = afaa_users_in_groups($gids);
-        foreach ($groupUids as $uid) {
-            $uid = (int)$uid;
-            if ($uid <= 0 || $uid === $author) {
-                continue;
-            }
-            // Если юзера уже явно @упомянули, не дублируем
-            if (!empty($mentionUidsDirect[$uid])) {
-                continue;
-            }
-            $mentionUidsGroup[$uid] = true;
-        }
-    }
-
-    // 4.d. Рассылка: прямые упоминания
-    foreach (array_keys($mentionUidsDirect) as $uid) {
-        afaa_send(
-            (int)$uid,
-            'mention',
-            [
-                'thread_subject' => $subject,
-                'from_username'  => $author_name,
-                'link'           => $link,
-            ],
-            $author,
-            $pid ?: null
-        );
-    }
-
-    // 4.e. Рассылка: упоминания по группе / @all
-    foreach (array_keys($mentionUidsGroup) as $uid) {
-        afaa_send(
-            (int)$uid,
-            'group_mention',
-            [
-                'thread_subject' => $subject,
-                'from_username'  => $author_name,
-                'link'           => $link,
-            ],
-            $author,
-            $pid ?: null
-        );
-    }
-
-}
 
 
 function afaa_rep_do_add_end($reputationhandler): void
@@ -2310,14 +2392,7 @@ function afaa_usercp_prefs_page(): void
 
         // Чекбоксы типов
         $incoming = $mybb->get_input('afaa_types', MyBB::INPUT_ARRAY) ?? [];
-        $q = $db->simple_select('alert_types', 'id,code,enabled');
-        while ($t = $db->fetch_array($q)) {
-            if ((int)$t['enabled'] !== 1) {
-                continue;
-            }
-            $on = isset($incoming[$t['code']]);
-            afaa_set_user_type_enabled($uid, (int)$t['id'], $on);
-        }
+        afaa_save_user_types($uid, $incoming);
 
         // Персональные флаги UI (звук/тосты)
         $sound  = (int)$mybb->get_input('afaa_sound') === 1 ? 1 : 0;
@@ -2335,15 +2410,13 @@ function afaa_usercp_prefs_page(): void
     $chkToasts = $prefs['toasts'] ? ' checked' : '';
 
     $rows = '';
-    $q = $db->simple_select('alert_types', 'id,code,title,enabled');
-    while ($t = $db->fetch_array($q)) {
-        if ((int)$t['enabled'] !== 1) {
+    foreach (afaa_types_for_user($uid) as $type) {
+        if (!$type['can_disable']) {
             continue;
         }
-        $on = afaa_user_type_enabled($uid, (int)$t['id']);
-        $title = htmlspecialchars($t['title'] ?: $t['code']);
-        $code  = htmlspecialchars($t['code']);
-        $chk   = $on ? ' checked' : '';
+        $title = htmlspecialchars($type['title']);
+        $code  = htmlspecialchars($type['code']);
+        $chk   = $type['user_enabled'] ? ' checked' : '';
         $rows .= '<label class="afaa-chk"><input type="checkbox" name="afaa_types['.$code.']" value="1"'.$chk.'> '.$title.'</label>';
     }
     if ($rows === '') {

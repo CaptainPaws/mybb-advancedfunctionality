@@ -165,6 +165,13 @@ function af_advancedmentions_register_alert_type_if_possible(): void
  */
 function af_advancedmentions_init(): void
 {
+    static $booted = false;
+    if ($booted) {
+        return;
+    }
+
+    $booted = true;
+
     global $mybb, $plugins;
 
     if (!af_advancedmentions_is_frontend()) {
@@ -181,6 +188,7 @@ function af_advancedmentions_init(): void
     $plugins->add_hook('postbit', 'af_advancedmentions_postbit');
     $plugins->add_hook('postbit_prev', 'af_advancedmentions_postbit');
     $plugins->add_hook('postbit_announcement', 'af_advancedmentions_postbit');
+    $plugins->add_hook('pre_output_page', 'af_advancedmentions_pre_output');
 
     $plugins->add_hook('misc_start', 'af_advancedmentions_misc');
 
@@ -643,7 +651,7 @@ function af_advancedmentions_on_post_insert($datahandler): void
     $pid      = (int)($datahandler->pid ?? 0);
     $tid      = (int)($datahandler->data['tid'] ?? 0);
 
-    if ($from_uid <= 0 || $pid <= 0) {
+    if ($from_uid <= 0 || ($pid <= 0 && $tid <= 0)) {
         return;
     }
 
@@ -651,9 +659,37 @@ function af_advancedmentions_on_post_insert($datahandler): void
     $emailRegex = "#\\b[^@[\"|'|`]][A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,4}\\b#i";
     $message = preg_replace($emailRegex, "<af-email>\n", $message);
 
+    $sentKey = $pid > 0 ? 'pid:'.$pid : ($tid > 0 ? 'tid:'.$tid : null);
+
+    if (function_exists('afaa_collect_mentions') && function_exists('af_advancedalerts_add')) {
+        $buckets = afaa_collect_mentions($message, $from_uid);
+
+        foreach ($buckets['mention'] as $uid) {
+            af_advancedalerts_add('mention', (int)$uid, [
+                'from_uid' => $from_uid,
+                'pid'      => $pid,
+                'tid'      => $tid,
+            ]);
+        }
+
+        foreach ($buckets['group_mention'] as $uid) {
+            af_advancedalerts_add('group_mention', (int)$uid, [
+                'from_uid' => $from_uid,
+                'pid'      => $pid,
+                'tid'      => $tid,
+            ]);
+        }
+
+        if ($sentKey !== null) {
+            $GLOBALS['afaa_mentions_sent'][$sentKey] = true;
+        }
+
+        return;
+    }
+
+    // Fallback: простые @username без групп/@all, если по какой-то причине AF Alerts недоступен
     $names = [];
 
-    // @"Имя Фамилия"
     if (preg_match_all('~@"([^"\r\n]{1,60})"~u', $message, $m1)) {
         foreach ($m1[1] as $raw) {
             $name = trim($raw);
@@ -665,7 +701,6 @@ function af_advancedmentions_on_post_insert($datahandler): void
         }
     }
 
-    // @Имя / @Имя Фамилия
     if (preg_match_all('~@([^\r\n]{1,60})~u', $message, $m3)) {
         foreach ($m3[1] as $rawChunk) {
             $chunk = trim($rawChunk);
@@ -761,4 +796,9 @@ function af_advancedmentions_notify_users(array $uids, array $context): void
             'tid'      => $tid,
         ]);
     }
+}
+
+// Подстраховка: гарантируем регистрацию хуков даже если ядро AF не дернуло init
+if (defined('IN_MYBB')) {
+    af_advancedmentions_init();
 }
