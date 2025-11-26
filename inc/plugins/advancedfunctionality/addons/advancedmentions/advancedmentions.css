@@ -1,0 +1,68 @@
+/* Ссылки-упоминания в тексте */
+a.af_mention {
+    font-weight: 600;
+    text-decoration: none;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.25);
+    padding: 0 2px;
+}
+
+a.af_mention:hover {
+    text-decoration: none;
+    border-bottom-style: solid;
+}
+
+/* Бокс подсказок @username */
+.af-mention-suggest {
+    z-index: 9999;
+    background: #11141b;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.45);
+    font-size: 13px;
+    max-height: 260px;
+    overflow: auto;
+}
+
+.af-mention-suggest-list {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+}
+
+.af-mention-suggest-item {
+    padding: 4px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.af-mention-suggest-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+/* Кнопка "Упомянуть" в посткнопках */
+a.af-mention-button {
+    display: inline-block;
+    margin: 0 2px;
+    padding: 0 4px;
+    text-decoration: none;
+    background: none !important;
+    border: 0;
+    font-size: 11px;
+}
+
+/* Сбросить любые фоновые спрайты на span'ах внутри кнопки */
+a.af-mention-button span {
+    background: none !important;
+    padding: 0;
+}
+
+a.af-mention-button .af-mention-at {
+    font-weight: 700;
+    margin-right: 3px;
+}
+
+a.af-mention-button .af-mention-text {
+    font-size: 11px;
+}

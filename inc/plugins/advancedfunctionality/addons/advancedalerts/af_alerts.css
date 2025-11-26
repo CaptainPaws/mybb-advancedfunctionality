@@ -1,0 +1,104 @@
+/* Поп-ап в хедере */
+.afaa-li { position: relative; }
+.afaa-bell-link { display:inline-flex; align-items:center; gap:.4rem; padding:.25rem .5rem; }
+.afaa-badge { display:inline-block; min-width:1.2em; padding:0 .35em; text-align:center; border-radius:1em; background:#c0392b; color:#fff; font-size:.85em; }
+.afaa-popup { position:absolute; right:0; top:100%; z-index:9999; width:360px; background:#111; color:#eee; border:1px solid rgba(255,255,255,.12); border-radius:.5rem; box-shadow:0 10px 30px rgba(0,0,0,.5); }
+.afaa-popup-head { display:flex; align-items:center; justify-content:space-between; padding:.6rem .8rem; border-bottom:1px solid rgba(255,255,255,.08); }
+.afaa-head-actions { display:flex; gap:.5rem; align-items:center; }
+.afaa-gear { text-decoration:none; font-size:1.1rem; }
+.afaa-close { background:none; border:none; color:#aaa; font-size:1.2rem; cursor:pointer; }
+.afaa-popup-body { max-height:420px; overflow:auto; }
+.afaa-list { list-style:none; margin:0; padding:0; }
+.afaa-item.is-unread { background:rgba(255,255,255,.03); }
+.afaa-text {color:inherit;text-decoration:none;display:block;white-space:normal;      /* было nowrap */overflow:hidden;text-overflow:ellipsis;}
+
+.afaa-time { display:block; opacity:.7; font-size:.85em; }
+.afaa-del { background:inherit; border:1px solid inherit; color:inherit; padding:.2rem .4rem; border-radius:.35rem; cursor:pointer; }
+.afaa-popup-foot { display:flex; justify-content:space-between; padding:.5rem .7rem; border-top:1px solid rgba(255,255,255,.08); }
+.afaa-item.is-unread { background:rgba(255,255,255,.03); }
+.afaa-item:not(.is-unread) { opacity:.4; }
+.afaa-col-from { width:40px; text-align:center; }
+.afaa-col-time { white-space:nowrap; }
+.afaa-col-actions .button.small { padding:.2rem .45rem; }
+.afaa-mark { opacity:.4; }
+.afaa-item {display:flex !important;align-items:flex-start;gap:.5rem;padding:.45rem .6rem;border-bottom:1px solid rgba(255,255,255,.06);}
+.afaa-item-left {flex:0 0 auto;}
+.afaa-item-mid  {flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:.15rem;}
+.afaa-item-right {flex:0 0 auto;display:flex;gap:.35rem;align-items:center;}
+
+
+
+/* Страница */
+.afaa-page { padding:1rem 0; }
+.afaa-page-list { list-style:none; margin:0; padding:0; }
+.afaa-page-list .afaa-item { border:none; }
+
+/* Аватары */
+.afaa-ava { width:32px; height:32px; object-fit:cover; border-radius:4px; display:block; }
+
+/* Тосты */
+.afaa-toast.show { transform:translateY(0); opacity:1; }
+.afaa-toast-text { color:#fff; text-decoration:none; margin-right:.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.afaa-toasts {position:fixed;right:1rem;bottom:1rem;z-index:99999;display:flex;flex-direction:column;align-items:flex-end;gap:.5rem;}
+.afaa-toast {min-width:260px;max-width:350px; /* было 460px */background:#111;color:#eee;border:1px solid rgba(255,255,255,.18);border-radius:.5rem;box-shadow:0 8px 24px rgba(0,0,0,.5);padding:.6rem .8rem;display:flex;align-items:center;gap:.6rem;transform:translateY(10px);opacity:0;transition:all .2s ease;}
+.afaa-toast-left { flex:0 0 auto; }
+.afaa-toast-mid { flex:1 1 auto; min-width:0; }
+.afaa-toast-right { flex:0 0 auto; display:flex; gap:.35rem; }
+.afaa-toast-mark, .afaa-toast-close { background:#222; border:1px solid #333; color:#ddd; padding:.2rem .45rem; border-radius:.35rem; cursor:pointer; }
+
+/* UCP блок чекбоксов */
+.afaa-ucp-box { margin:1rem 0; border:1px solid rgba(255,255,255,.15); border-radius:.5rem; padding:.8rem; background:#0f0f12; }
+.afaa-chk-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:.5rem .8rem; }
+.afaa-chk input { vertical-align:middle; }
+.afaa-head-actions {
+    display:flex;
+    gap:.5rem;
+    align-items:center;
+}
+
+/* Блок "Звук: [тумблер]" */
+.afaa-sound {
+    display:flex;
+    align-items:center;
+    gap:.25rem;
+    font-size:.9em;
+    opacity:.85;
+}
+
+/* Слайдер-переключатель звука */
+.afaa-switch {
+    position:relative;
+    display:inline-block;
+    width:32px;
+    height:16px;
+}
+.afaa-switch input {
+    opacity:0;
+    width:0;
+    height:0;
+}
+.afaa-slider {
+    position:absolute;
+    cursor:pointer;
+    inset:0;
+    background:#444;
+    border-radius:16px;
+    transition:.2s;
+}
+.afaa-slider:before {
+    position:absolute;
+    content:"";
+    height:12px;
+    width:12px;
+    left:2px;
+    top:2px;
+    background:#ccc;
+    border-radius:50%;
+    transition:.2s;
+}
+.afaa-switch input:checked + .afaa-slider {
+    background:#2ecc71;
+}
+.afaa-switch input:checked + .afaa-slider:before {
+    transform:translateX(16px);
+}
