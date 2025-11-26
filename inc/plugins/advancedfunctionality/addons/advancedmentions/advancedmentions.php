@@ -161,6 +161,27 @@ function af_advancedmentions_register_alert_type_if_possible(): void
 }
 
 /**
+ * Гарантированно подключить Advanced Alerts и вызвать init.
+ */
+function af_advancedmentions_bootstrap_alerts(): void
+{
+    if (function_exists('af_advancedalerts_init')) {
+        af_advancedalerts_init();
+        return;
+    }
+
+    $path = MYBB_ROOT.'inc/plugins/advancedfunctionality/addons/advancedalerts/advancedalerts.php';
+    if (file_exists($path)) {
+        /** @noinspection PhpIncludeInspection */
+        require_once $path;
+    }
+
+    if (function_exists('af_advancedalerts_init')) {
+        af_advancedalerts_init();
+    }
+}
+
+/**
  * INIT — вызывает ядро AF из global_start
  */
 function af_advancedmentions_init(): void
@@ -181,6 +202,8 @@ function af_advancedmentions_init(): void
     if (empty($mybb->settings['af_advancedmentions_enabled'])) {
         return;
     }
+
+    af_advancedmentions_bootstrap_alerts();
 
     // На всякий случай регистрируем тип алерта, если Advanced Alerts включили позже
     af_advancedmentions_register_alert_type_if_possible();
@@ -641,6 +664,12 @@ function af_advancedmentions_parse_message(string $message): string
 function af_advancedmentions_on_post_insert($datahandler): void
 {
     global $db;
+
+    // Advanced Alerts обрабатывает подписки, цитаты и упоминания; подключим его и не дублируем рассылку
+    af_advancedmentions_bootstrap_alerts();
+    if (function_exists('afaa_post_insert_end')) {
+        return;
+    }
 
     if (!is_object($datahandler) || empty($datahandler->data['message'])) {
         return;
