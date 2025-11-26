@@ -43,7 +43,11 @@
     open: false,
     lastIds: loadSeenIds(), // уже показанные
     queue: [],
-    showing: 0
+    showing: 0,
+    prefsLoaded: false,
+    types: [],
+    view: 'list',
+    headTitle: ''
   };
 
   var pollTimer = null;
@@ -139,6 +143,108 @@
       post('badge', {}).done(function (r) {
         if (r && r.ok) $('[data-afaa-badge]').text(r.badge);
       });
+    }
+  }
+
+  function collectTypePayload() {
+    var payload = {};
+    $('[data-afaa-type-toggle]').each(function () {
+      var $el = $(this);
+      if ($el.is(':checked')) {
+        payload[$el.val()] = 1;
+      }
+    });
+    return payload;
+  }
+
+  function renderPrefs(types, prefs) {
+    var $wrap = $('[data-afaa-prefs]');
+    $wrap.empty();
+
+    if (!types || !types.length) {
+      $wrap.append('<div class="afaa-empty">Нет доступных типов уведомлений</div>');
+      return;
+    }
+
+    var $list = $('<div class="afaa-prefs-types">');
+
+    types.forEach(function (t) {
+      if (!t.can_disable) return;
+      var id = 'afaa-type-' + t.code;
+      var $chk = $('<input type="checkbox">')
+        .attr('id', id)
+        .attr('value', t.code)
+        .attr('data-afaa-type-toggle', '1')
+        .prop('checked', !!t.user_enabled);
+
+      var $lbl = $('<label class="afaa-chk" for="' + id + '">').text(' ' + (t.title || t.code));
+      $lbl.prepend($chk);
+      $list.append($lbl);
+    });
+
+    var $ui = $('<div class="afaa-prefs-ui">');
+
+    var $toastToggle = $('<label class="afaa-chk">')
+      .append($('<input type="checkbox" data-afaa-toast-toggle>')
+        .prop('checked', !!(prefs && prefs.toasts)))
+      .append(' Показывать тост-плашки');
+
+    var $soundToggle = $('<label class="afaa-chk">')
+      .append($('<input type="checkbox" data-afaa-sound-toggle-popup>')
+        .prop('checked', !!(prefs && prefs.sound)))
+      .append(' Звук при новых уведомлениях');
+
+    $ui.append('<div class="afaa-prefs-legend">Интерфейс</div>');
+    $ui.append($soundToggle).append($toastToggle);
+
+    $wrap.append('<div class="afaa-prefs-legend">Типы уведомлений</div>');
+    $wrap.append($list);
+    $wrap.append($ui);
+  }
+
+  function syncPrefs() {
+    var payload = {
+      sound: cfg.userSound ? 1 : 0,
+      toasts: cfg.userToasts ? 1 : 0,
+      types: collectTypePayload()
+    };
+    post('prefs', payload).done(function (r) {
+      if (r && r.ok && typeof r.badge !== 'undefined') {
+        updateBadge(r);
+      }
+    });
+  }
+
+  function ensureTypesLoaded() {
+    if (state.prefsLoaded) {
+      renderPrefs(state.types, { sound: cfg.userSound, toasts: cfg.userToasts });
+      return $.Deferred().resolve().promise();
+    }
+
+    return post('types', {}).done(function (r) {
+      if (!r || !r.ok) return;
+      state.prefsLoaded = true;
+      state.types = r.types || [];
+      if (r.prefs) {
+        cfg.userSound = !!r.prefs.sound;
+        cfg.userToasts = !!r.prefs.toasts;
+      }
+      renderPrefs(state.types, r.prefs || {});
+    });
+  }
+
+  function switchView(name) {
+    state.view = name;
+    var showingPrefs = name === 'prefs';
+    $('[data-afaa-view="list"]').toggle(!showingPrefs);
+    $('[data-afaa-view="prefs"]').toggle(showingPrefs);
+    $('[data-afaa-prefs-back]').toggle(showingPrefs);
+
+    var $title = $('[data-afaa-head-title]');
+    if (showingPrefs) {
+      $title.text('Настройки уведомлений');
+    } else {
+      $title.text(state.headTitle || 'Уведомления');
     }
   }
 
@@ -288,6 +394,7 @@
       $('.afaa-popup').not($popup).hide();
       $popup.show();
       state.open = true;
+      switchView('list');
       post('list', { limit: cfg.dropdownLimit }).done(function (r) {
         if (r && r.ok) renderList(r.items || []);
       });
@@ -320,12 +427,39 @@
 
   // Переключатель "Звук" в попапе
   $(document).on('change', '[data-afaa-sound-toggle]', function () {
-    var on = !!$(this).is(':checked');
-    cfg.userSound = on;
-    post('prefs', {
-      sound: on ? 1 : 0,
-      toasts: cfg.userToasts ? 1 : 0
+    cfg.userSound = !!$(this).is(':checked');
+    syncPrefs();
+  });
+
+  // Переключатель звука внутри настроек
+  $(document).on('change', '[data-afaa-sound-toggle-popup]', function () {
+    cfg.userSound = !!$(this).is(':checked');
+    syncPrefs();
+  });
+
+  // Тосты в настройках
+  $(document).on('change', '[data-afaa-toast-toggle]', function () {
+    cfg.userToasts = !!$(this).is(':checked');
+    syncPrefs();
+  });
+
+  // Переключение чекбоксов типов
+  $(document).on('change', '[data-afaa-type-toggle]', function () {
+    syncPrefs();
+  });
+
+  // Открываем настройки в поп-апе
+  $(document).on('click', '[data-afaa-open-prefs]', function (e) {
+    e.preventDefault();
+    ensureTypesLoaded().done(function () {
+      switchView('prefs');
     });
+  });
+
+  // Назад к списку уведомлений
+  $(document).on('click', '[data-afaa-prefs-back]', function (e) {
+    e.preventDefault();
+    switchView('list');
   });
 
   window.AFAlerts = {
@@ -347,6 +481,8 @@
   }
 
   $(function () {
+    state.headTitle = $('[data-afaa-head-title]').text();
+
     $(document).on('click', '.afaa-row-link', function (e) {
       var id = parseInt($(this).closest('tr').find('input[name="ids[]"]').val(), 10);
       if (!id) return;

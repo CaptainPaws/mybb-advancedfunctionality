@@ -165,6 +165,13 @@ function af_advancedmentions_register_alert_type_if_possible(): void
  */
 function af_advancedmentions_init(): void
 {
+    static $booted = false;
+    if ($booted) {
+        return;
+    }
+
+    $booted = true;
+
     global $mybb, $plugins;
 
     if (!af_advancedmentions_is_frontend()) {
@@ -181,6 +188,7 @@ function af_advancedmentions_init(): void
     $plugins->add_hook('postbit', 'af_advancedmentions_postbit');
     $plugins->add_hook('postbit_prev', 'af_advancedmentions_postbit');
     $plugins->add_hook('postbit_announcement', 'af_advancedmentions_postbit');
+    $plugins->add_hook('pre_output_page', 'af_advancedmentions_pre_output');
 
     $plugins->add_hook('misc_start', 'af_advancedmentions_misc');
 
@@ -761,4 +769,9 @@ function af_advancedmentions_notify_users(array $uids, array $context): void
             'tid'      => $tid,
         ]);
     }
+}
+
+// Подстраховка: гарантируем регистрацию хуков даже если ядро AF не дернуло init
+if (defined('IN_MYBB')) {
+    af_advancedmentions_init();
 }

@@ -561,6 +561,53 @@ function afaa_set_user_type_enabled(int $uid, int $type_id, bool $on): void
     }
 }
 
+/**
+ * Вернуть все типы уведомлений с учётом пользовательских предпочтений.
+ *
+ * @return array{code:string,title:string,enabled:bool,can_disable:bool,user_enabled:bool,id:int}[]
+ */
+function afaa_types_for_user(int $uid, bool $only_enabled = true): array
+{
+    global $db;
+
+    $types = [];
+    $q = $db->simple_select('alert_types', 'id,code,title,enabled,can_be_user_disabled');
+    while ($t = $db->fetch_array($q)) {
+        $enabled = (int)$t['enabled'] === 1;
+        if ($only_enabled && !$enabled) {
+            continue;
+        }
+
+        $canDisable = (int)$t['can_be_user_disabled'] === 1;
+        $types[] = [
+            'id'           => (int)$t['id'],
+            'code'         => (string)$t['code'],
+            'title'        => (string)($t['title'] ?: $t['code']),
+            'enabled'      => $enabled,
+            'can_disable'  => $canDisable,
+            'user_enabled' => $canDisable ? afaa_user_type_enabled($uid, (int)$t['id']) : true,
+        ];
+    }
+
+    return $types;
+}
+
+/**
+ * Массовое сохранение пользовательских настроек типов уведомлений.
+ */
+function afaa_save_user_types(int $uid, array $incoming): void
+{
+    $types = afaa_types_for_user($uid, false);
+    foreach ($types as $type) {
+        if (!$type['can_disable']) {
+            continue;
+        }
+
+        $on = isset($incoming[$type['code']]);
+        afaa_set_user_type_enabled($uid, (int)$type['id'], $on);
+    }
+}
+
 function afaa_send(int $uid, string $type_code, array $extra = [], ?int $from_user_id = null, $object_id = null): bool
 {
     global $db, $mybb;
@@ -1203,6 +1250,7 @@ function afaa_pre_output(string &$page): void
     $title = 'Уведомления';
     $all   = 'Все уведомления';
     $gear  = 'Настройки';
+    $back  = 'Вернуться к уведомлениям';
 
     $soundChecked = $up['sound'] ? ' checked' : '';
 
@@ -1216,8 +1264,9 @@ function afaa_pre_output(string &$page): void
     </a>
     <div class="afaa-popup" role="dialog" aria-modal="true" style="display:none">
         <div class="afaa-popup-head">
-        <span>{$title}</span>
+        <span class="afaa-head-title" data-afaa-head-title>{$title}</span>
         <div class="afaa-head-actions">
+            <button class="afaa-back" type="button" data-afaa-prefs-back title="{$back}" style="display:none">←</button>
             <span class="afaa-sound">
             Звук:
             <label class="afaa-switch">
@@ -1225,13 +1274,16 @@ function afaa_pre_output(string &$page): void
                 <span class="afaa-slider"></span>
             </label>
             </span>
-            <a class="afaa-gear" href="usercp.php?action=af_alert_prefs" title="{$gear}">⚙</a>
+            <button class="afaa-gear" type="button" data-afaa-open-prefs title="{$gear}">⚙</button>
             <button class="afaa-close" type="button" aria-label="Закрыть" onclick="AFAlerts.closePopup(this)">×</button>
         </div>
         </div>
-        <div class="afaa-popup-body">
+        <div class="afaa-popup-body" data-afaa-view="list">
         <ul class="afaa-list" data-afaa-list></ul>
         <div class="afaa-empty" data-afaa-empty style="display:none">Нет уведомлений</div>
+        </div>
+        <div class="afaa-popup-body afaa-popup-body-prefs" data-afaa-view="prefs" style="display:none">
+            <div class="afaa-prefs" data-afaa-prefs></div>
         </div>
         <div class="afaa-popup-foot">
         <a class="button small" href="misc.php?action=af_alerts">{$all}</a>
@@ -1417,6 +1469,15 @@ function afaa_misc_router(): void
             exit;
         }
 
+        if ($op === 'types') {
+            echo json_encode([
+                'ok'    => 1,
+                'types' => afaa_types_for_user($uid),
+                'prefs' => afaa_get_user_prefs($uid),
+            ]);
+            exit;
+        }
+
         if ($op === 'badge') {
             echo json_encode(['ok'=>1, 'badge'=>afaa_unread_count($uid)]);
             exit;
@@ -1425,7 +1486,12 @@ function afaa_misc_router(): void
         if ($op === 'prefs') {
             $sound  = (int)$mybb->get_input('sound') ? 1 : 0;
             $toasts = (int)$mybb->get_input('toasts') ? 1 : 0;
+            $types  = $mybb->get_input('types', MyBB::INPUT_ARRAY) ?? [];
+
             afaa_set_user_prefs($uid, $sound, $toasts);
+            if (is_array($types)) {
+                afaa_save_user_types($uid, $types);
+            }
             echo json_encode([
                 'ok'     => 1,
                 'sound'  => $sound,
@@ -2310,14 +2376,7 @@ function afaa_usercp_prefs_page(): void
 
         // Чекбоксы типов
         $incoming = $mybb->get_input('afaa_types', MyBB::INPUT_ARRAY) ?? [];
-        $q = $db->simple_select('alert_types', 'id,code,enabled');
-        while ($t = $db->fetch_array($q)) {
-            if ((int)$t['enabled'] !== 1) {
-                continue;
-            }
-            $on = isset($incoming[$t['code']]);
-            afaa_set_user_type_enabled($uid, (int)$t['id'], $on);
-        }
+        afaa_save_user_types($uid, $incoming);
 
         // Персональные флаги UI (звук/тосты)
         $sound  = (int)$mybb->get_input('afaa_sound') === 1 ? 1 : 0;
@@ -2335,15 +2394,13 @@ function afaa_usercp_prefs_page(): void
     $chkToasts = $prefs['toasts'] ? ' checked' : '';
 
     $rows = '';
-    $q = $db->simple_select('alert_types', 'id,code,title,enabled');
-    while ($t = $db->fetch_array($q)) {
-        if ((int)$t['enabled'] !== 1) {
+    foreach (afaa_types_for_user($uid) as $type) {
+        if (!$type['can_disable']) {
             continue;
         }
-        $on = afaa_user_type_enabled($uid, (int)$t['id']);
-        $title = htmlspecialchars($t['title'] ?: $t['code']);
-        $code  = htmlspecialchars($t['code']);
-        $chk   = $on ? ' checked' : '';
+        $title = htmlspecialchars($type['title']);
+        $code  = htmlspecialchars($type['code']);
+        $chk   = $type['user_enabled'] ? ' checked' : '';
         $rows .= '<label class="afaa-chk"><input type="checkbox" name="afaa_types['.$code.']" value="1"'.$chk.'> '.$title.'</label>';
     }
     if ($rows === '') {
