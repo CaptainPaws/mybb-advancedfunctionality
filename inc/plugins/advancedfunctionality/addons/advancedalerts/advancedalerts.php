@@ -1401,19 +1401,12 @@ function afaa_xmlhttp_router(): void
         return;
     }
 
-    // Только POST
+    // Только POST. Если прилетает GET (например, пользователь кликает по ссылке в WOL),
+    // не отвечаем ошибкой, чтобы не ломать UX, а просто перенаправляем на главную.
     if ($mybb->request_method !== 'post') {
-        // Страховочный ответ, если кто-то долбится GET'ом
         while (ob_get_level() > 0) { @ob_end_clean(); }
         @ini_set('display_errors', '0');
-        @header_remove('Content-Type');
-        header('Content-Type: application/json; charset=utf-8', true, 405);
-        header('Cache-Control: no-store');
-
-        echo json_encode([
-            'ok'    => 0,
-            'error' => 'method_not_allowed',
-        ]);
+        header('Location: index.php');
         exit;
     }
 
