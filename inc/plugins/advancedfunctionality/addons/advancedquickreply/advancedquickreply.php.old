@@ -1,0 +1,644 @@
+<?php
+/**
+ * Advanced QuickReply — внутренний аддон AF
+ * MyBB 1.8.38–1.8.39, PHP 8.0–8.4
+ *
+ * - Делает форму быстрого ответа полноценным редактором (SCEditor + BB-коды).
+ * - Даёт настройку layout'а тулбара (кнопки и группы через |).
+ */
+
+if (!defined('IN_MYBB')) {
+    die('No direct access');
+}
+
+/**
+ * Установка аддона: создаём настройки и патчим showthread_quickreply.
+ */
+function af_advancedquickreply_install(): void
+{
+    global $db;
+
+    // === группа настроек ===
+    $query = $db->simple_select('settinggroups', 'gid', "name='af_advancedquickreply'");
+    $group = $db->fetch_array($query);
+    if (!$group) {
+        $group = [
+            'name'        => 'af_advancedquickreply',
+            'title'       => 'AF: Advanced QuickReply',
+            'description' => 'Расширенный быстрый ответ с полным редактором и настройкой BB-кнопок.',
+            'disporder'   => 10,
+            'isdefault'   => 0,
+        ];
+        $gid = (int)$db->insert_query('settinggroups', $group);
+    } else {
+        $gid = (int)$group['gid'];
+    }
+
+    // === сами настройки ===
+    $settings = [];
+
+    $settings[] = [
+        'name'        => 'af_advancedquickreply_enabled',
+        'title'       => 'Включить Advanced QuickReply',
+        'description' => 'Если включено, в форме быстрого ответа отображается полный редактор с BB-кодами.',
+        'optionscode' => 'yesno',
+        'value'       => '1',
+        'disporder'   => 1,
+        'gid'         => $gid,
+    ];
+
+    $settings[] = [
+        'name'        => 'af_advancedquickreply_toolbar',
+        'title'       => 'Layout тулбара SCEditor',
+        'description' => 'Список кнопок редактора через запятую. Группы разделяются символом |. Оставьте пустым, чтобы использовать стандартный layout MyBB.',
+        'optionscode' => 'textarea',
+        'value'       => '',
+        'disporder'   => 2,
+        'gid'         => $gid,
+    ];
+
+    foreach ($settings as $setting) {
+        $existing = $db->simple_select(
+            'settings',
+            'sid',
+            "name='".$db->escape_string($setting['name'])."'",
+            ['limit' => 1]
+        );
+        if ($db->fetch_array($existing)) {
+            continue;
+        }
+        $db->insert_query('settings', $setting);
+    }
+
+    if (function_exists('rebuild_settings')) {
+        rebuild_settings();
+    }
+
+    // === шаблоны showthread_quickreply: добавляем {$codebuttons} после textarea ===
+    $query = $db->simple_select('templates', 'tid,template', "title='showthread_quickreply'");
+    while ($tpl = $db->fetch_array($query)) {
+        if (strpos($tpl['template'], 'advancedquickreply') !== false) {
+            continue;
+        }
+
+        $updated = preg_replace(
+            '#</textarea>#i',
+            '</textarea><!-- advancedquickreply -->{$codebuttons}',
+            $tpl['template'],
+            1
+        );
+
+        if ($updated !== null && $updated !== $tpl['template']) {
+            $db->update_query('templates', [
+                'template' => $db->escape_string($updated),
+            ], 'tid='.(int)$tpl['tid']);
+        }
+    }
+
+    // === колонка с картинками для кастомных BB-кодов ===
+    if ($db->table_exists('mycode') && !$db->field_exists('af_button_icon', 'mycode')) {
+        $db->add_column('mycode', 'af_button_icon', "varchar(255) NOT NULL default ''");
+    }
+
+    // === колонка с Font Awesome для кастомных BB-кодов ===
+    if ($db->table_exists('mycode') && !$db->field_exists('af_fa_icon', 'mycode')) {
+        $db->add_column('mycode', 'af_fa_icon', "varchar(100) NOT NULL default ''");
+    }
+
+    // === таблица настроек для стандартных BB-кодов (название/описание/вкл/иконки) ===
+    if (!$db->table_exists('af_aqr_defaultcodes')) {
+        $collation = $db->build_create_table_collation();
+        $db->write_query("
+            CREATE TABLE ".TABLE_PREFIX."af_aqr_defaultcodes (
+                tag            varchar(32)  NOT NULL,
+                title          varchar(100) NOT NULL default '',
+                description    text         NOT NULL,
+                enabled        tinyint(1)   NOT NULL default 1,
+                fa_icon        varchar(100) NOT NULL default '',
+                af_button_icon varchar(255) NOT NULL default '',
+                PRIMARY KEY (tag)
+            ) ENGINE=MyISAM {$collation}
+        ");
+    } else {
+        if (!$db->field_exists('fa_icon', 'af_aqr_defaultcodes')) {
+            $db->add_column('af_aqr_defaultcodes', 'fa_icon', "varchar(100) NOT NULL default ''");
+        }
+    }
+}
+
+
+function af_advancedquickreply_uninstall(): void
+{
+    global $db;
+
+    // Настройки
+    $db->delete_query('settings', "name LIKE 'af_advancedquickreply_%'");
+    $db->delete_query('settinggroups', "name='af_advancedquickreply'");
+
+    if (function_exists('rebuild_settings')) {
+        rebuild_settings();
+    }
+
+    // Шаблоны: убираем только наш маркер, не трогая чужие {$codebuttons}
+    $query = $db->simple_select('templates', 'tid,template', "title='showthread_quickreply'");
+    while ($tpl = $db->fetch_array($query)) {
+        if (strpos($tpl['template'], 'advancedquickreply') === false) {
+            continue;
+        }
+
+        $updated = str_replace('<!-- advancedquickreply -->{$codebuttons}', '', $tpl['template']);
+
+        if ($updated !== $tpl['template']) {
+            $db->update_query('templates', [
+                'template' => $db->escape_string($updated),
+            ], 'tid='.(int)$tpl['tid']);
+        }
+    }
+
+    // колонка для иконок кастомных BB-кодов
+    if ($db->table_exists('mycode') && $db->field_exists('af_button_icon', 'mycode')) {
+        $db->drop_column('mycode', 'af_button_icon');
+    }
+
+    if ($db->table_exists('mycode') && $db->field_exists('af_fa_icon', 'mycode')) {
+        $db->drop_column('mycode', 'af_fa_icon');
+    }
+
+    // таблица настроек стандартных BB-кодов
+    if ($db->table_exists('af_aqr_defaultcodes')) {
+        $db->drop_table('af_aqr_defaultcodes');
+    }
+}
+
+
+
+/**
+ * Проверяем, установлен ли аддон.
+ */
+function af_advancedquickreply_is_installed(): bool
+{
+    global $db;
+
+    $query = $db->simple_select('settinggroups', 'gid', "name='af_advancedquickreply'", ['limit' => 1]);
+    return (bool)$db->fetch_array($query);
+}
+
+
+/**
+ * Активация/деактивация — заглушки, управление идёт через настройку enabled.
+ */
+function af_advancedquickreply_activate(): void
+{
+    // Ничего не делаем.
+}
+
+function af_advancedquickreply_deactivate(): void
+{
+    // Ничего не делаем.
+}
+
+/**
+ * Инициализация на фронте: регистрируем свои хуки.
+ * Вызывается из ядра AdvancedFunctionality в global_start.
+ */
+function af_advancedquickreply_init(): void
+{
+    global $mybb, $plugins;
+
+    if (defined('IN_ADMINCP') || defined('IN_MODCP')) {
+        return;
+    }
+
+    if (empty($mybb->settings['af_advancedquickreply_enabled'])) {
+        return;
+    }
+
+    if (!isset($plugins) || !is_object($plugins)) {
+        return;
+    }
+
+    // Подвешиваемся к showthread_start, чтобы подготовить $codebuttons / $smilieinserter.
+    $plugins->add_hook('showthread_start', 'af_advancedquickreply_showthread_start');
+
+    // ВАЖНО: напрямую вешаемся на pre_output_page, чтобы не зависеть от ядра AF.
+    $plugins->add_hook('pre_output_page', 'af_advancedquickreply_pre_output');
+}
+
+
+/**
+ * Хук showthread_start: превращаем quick reply в полный редактор.
+ */
+function af_advancedquickreply_showthread_start(): void
+{
+    global $mybb, $forum, $codebuttons, $smilieinserter;
+
+    if (defined('IN_ADMINCP') || defined('IN_MODCP')) {
+        return;
+    }
+
+    if (empty($mybb->settings['af_advancedquickreply_enabled'])) {
+        return;
+    }
+
+    // Логика близка к newreply.php — уважаем настройки доски и форума
+    if (!empty($mybb->settings['bbcodeinserter'])
+        && ($forum['allowmycode'] != 0 || $forum['allowsmilies'] != 0)
+        && ($mybb->user['uid'] == 0 || !empty($mybb->user['showcodebuttons']))
+    ) {
+        if (!function_exists('build_mycode_inserter')) {
+            require_once MYBB_ROOT.'inc/functions.php';
+        }
+
+        // Quick reply использует textarea с id="message"
+        $codebuttons = build_mycode_inserter('message', true);
+    }
+
+    if (!empty($mybb->settings['smilieinserter']) && $forum['allowsmilies'] != 0) {
+        if (!function_exists('build_clickable_smilies')) {
+            require_once MYBB_ROOT.'inc/functions.php';
+        }
+
+        $smilieinserter = build_clickable_smilies();
+    }
+}
+
+/**
+ * Хук pre_output_page: подменяем layout тулбара SCEditor и иконки кнопок.
+ *
+ * @param mixed $page Строка HTML, которую можно менять по ссылке
+ */
+function af_advancedquickreply_pre_output(&$page): void
+{
+    global $mybb, $db;
+
+    if ($page === null || $page === '') {
+        return;
+    }
+
+    if (defined('IN_ADMINCP') || defined('IN_MODCP')) {
+        return;
+    }
+
+    if (empty($mybb->settings['af_advancedquickreply_enabled'])) {
+        return;
+    }
+
+    // ---------- 1) Разбор настройки тулбара (JSON или legacy-строка) ----------
+
+    $raw_toolbar    = trim((string)$mybb->settings['af_advancedquickreply_toolbar']);
+    $toolbar_string = '';
+    $menu_map       = []; // [['label'=>'Меню','buttons'=>['bold','italic']], ...]
+
+    if ($raw_toolbar !== '') {
+        $decoded = json_decode($raw_toolbar, true);
+        if (is_array($decoded)) {
+            $groups_strings = [];
+
+            foreach ($decoded as $group) {
+                if (!is_array($group) || ($group['type'] ?? '') !== 'group') {
+                    continue;
+                }
+
+                $commands = [];
+
+                foreach ($group['items'] ?? [] as $item) {
+                    if (!is_array($item)) {
+                        continue;
+                    }
+
+                    if (($item['type'] ?? '') === 'button' && !empty($item['id'])) {
+                        $commands[] = (string)$item['id'];
+                    } elseif (($item['type'] ?? '') === 'menu') {
+                        $menu_label   = (string)($item['label'] ?? '');
+                        $menu_buttons = [];
+
+                        foreach ($item['items'] ?? [] as $sub) {
+                            if (!is_array($sub)) {
+                                continue;
+                            }
+                            if (($sub['type'] ?? '') === 'button' && !empty($sub['id'])) {
+                                $cmd = (string)$sub['id'];
+                                $commands[]     = $cmd;
+                                $menu_buttons[] = $cmd;
+                            }
+                        }
+
+                        if ($menu_label !== '' && !empty($menu_buttons)) {
+                            $menu_map[] = [
+                                'label'   => $menu_label,
+                                'buttons' => array_values(array_unique($menu_buttons)),
+                            ];
+                        }
+                    }
+                }
+
+                if (!empty($commands)) {
+                    $groups_strings[] = implode(',', array_values(array_unique($commands)));
+                }
+            }
+
+            if (!empty($groups_strings)) {
+                $toolbar_string = implode('|', $groups_strings);
+            }
+        }
+
+        // Легаси: если JSON не смогли разобрать — используем строку как есть
+        if ($toolbar_string === '') {
+            $toolbar_string = $raw_toolbar;
+        }
+    }
+
+    // ---------- Подмена layout тулбара в JS MyBB ----------
+
+    if ($toolbar_string !== '') {
+        $safe_toolbar = addcslashes($toolbar_string, "\\\"");
+
+        // Меняем только первую встречу var toolbar = "..."
+        $pattern     = '#var\s+toolbar\s*=\s*"([^"]*)";#';
+        $replacement = 'var toolbar = "'.$safe_toolbar.'";';
+
+        $new_page = preg_replace($pattern, $replacement, $page, 1);
+        if ($new_page !== null) {
+            $page = $new_page;
+        }
+    }
+
+    // ---------- 2) Картинки и Font Awesome для иконок ----------
+
+    $bburl       = rtrim($mybb->settings['bburl'] ?? '', '/');
+    $css         = '';
+    $fa_buttons  = []; // btn_name => fa_class
+    $img_buttons = []; // btn_name => icon_url
+
+    // Маппинг: тег BB-кода -> команда SCEditor
+    $tag_to_button = [
+        'b'       => 'bold',
+        'i'       => 'italic',
+        'u'       => 'underline',
+        's'       => 'strike',
+        'url'     => 'link',
+        'img'     => 'image',
+        'email'   => 'email',
+        'quote'   => 'quote',
+        'code'    => 'code',
+        'php'     => 'php',
+        'list'    => 'bulletlist',
+        'video'   => 'video',
+        'size'    => 'size',
+        'font'    => 'font',
+        'color'   => 'color',
+        'align'   => 'left',
+        'spoiler' => 'spoiler',
+    ];
+
+    // --- 2.1) Стандартные BB-коды (af_aqr_defaultcodes) ---
+    if ($db->table_exists('af_aqr_defaultcodes')) {
+        $q = $db->simple_select('af_aqr_defaultcodes', '*');
+        while ($row = $db->fetch_array($q)) {
+            $tag = $row['tag'] ?? '';
+            if ($tag === '' || !isset($tag_to_button[$tag])) {
+                continue;
+            }
+
+            $enabled = (int)($row['enabled'] ?? 1);
+            if ($enabled === 0) {
+                continue;
+            }
+
+            $btn_name = $tag_to_button[$tag];
+
+            $fa_icon  = trim($row['fa_icon'] ?? '');
+            $img_icon = trim($row['af_button_icon'] ?? '');
+
+            // Приоритет: FontAwesome > картинка
+            if ($fa_icon !== '') {
+                $fa_buttons[$btn_name] = $fa_icon;
+                continue;
+            }
+
+            if ($img_icon === '') {
+                continue;
+            }
+
+            $icon_url = $img_icon;
+            if ($bburl !== '' && !preg_match('#^https?://#i', $icon_url) && $icon_url[0] !== '/') {
+                $icon_url = $bburl.'/'.$icon_url;
+            }
+
+            $img_buttons[$btn_name] = $icon_url;
+        }
+    }
+
+    // --- 2.2) Кастомные BB-коды (таблица mycode) ---
+    if ($db->table_exists('mycode') && $db->field_exists('af_button_icon', 'mycode')) {
+        $fields = 'cid,af_button_icon,active';
+        if ($db->field_exists('af_fa_icon', 'mycode')) {
+            $fields .= ',af_fa_icon';
+        }
+
+        $q2 = $db->simple_select('mycode', $fields);
+        while ($row = $db->fetch_array($q2)) {
+            $cid    = (int)($row['cid'] ?? 0);
+            $active = (int)($row['active'] ?? 0);
+
+            if ($cid <= 0 || $active === 0) {
+                continue;
+            }
+
+            $btn_name = 'mycode_'.$cid;
+
+            $fa_icon  = trim($row['af_fa_icon'] ?? '');
+            $img_icon = trim($row['af_button_icon'] ?? '');
+
+            if ($fa_icon !== '') {
+                $fa_buttons[$btn_name] = $fa_icon;
+                continue;
+            }
+
+            if ($img_icon === '') {
+                continue;
+            }
+
+            $icon_url = $img_icon;
+            if ($bburl !== '' && !preg_match('#^https?://#i', $icon_url) && $icon_url[0] !== '/') {
+                $icon_url = $bburl.'/'.$icon_url;
+            }
+
+            $img_buttons[$btn_name] = $icon_url;
+        }
+    }
+
+    // --- 2.3) CSS для картинок-иконок и меню ---
+
+    // Если вообще есть кастомные/FA-иконки — лучше погасить дефолтный sprite у всех кнопок.
+    if (!empty($img_buttons) || !empty($fa_buttons)) {
+        $css .= ".sceditor-button div{background-image:none !important;}\n";
+    }
+
+    // Картинки-иконки
+    foreach ($img_buttons as $btn_name => $icon_url) {
+        $icon_url_esc = addcslashes($icon_url, "\\\"");
+
+        $css .= ".sceditor-button.sceditor-button-{$btn_name} div,"
+              . ".sceditor-button-{$btn_name} div{"
+              . "background:url(\"{$icon_url_esc}\") no-repeat 0 0 !important;"
+              . "background-size:16px 16px !important;"
+              . "}\n";
+    }
+
+    // CSS для выпадающих меню тулбара (если они есть в layout)
+    if (!empty($menu_map)) {
+        $css .= ".af-aqr-menu-wrapper{position:relative;display:inline-block;margin-right:2px;}\n"
+              . ".af-aqr-menu-trigger{border:1px solid #ccc;background:#f7f7f7;border-radius:3px;padding:2px 6px;font-size:11px;cursor:pointer;}\n"
+              . ".af-aqr-menu-trigger:hover{background:#e8f0ff;}\n"
+              . ".af-aqr-menu-dropdown{position:absolute;top:100%;left:0;z-index:9999;display:none;"
+              . "background:#fff;border:1px solid #ccc;border-radius:3px;padding:3px;white-space:nowrap;}\n"
+              . ".af-aqr-menu-dropdown .sceditor-button{margin:1px;}\n";
+    }
+
+    $injection = '';
+
+    if ($css !== '') {
+        $injection .= "<style type=\"text/css\">\n/* AdvancedQuickReply icons and menus */\n{$css}</style>\n";
+    }
+
+    // --- 2.4) JS для Font Awesome-иконок ---
+    if (!empty($fa_buttons)) {
+        $json = json_encode($fa_buttons);
+        $json = str_replace('</', '<\/', $json);
+
+        $script_fa = "<script type=\"text/javascript\">
+        (function() {
+            var faMap = {$json};
+
+            function applyFaIcons() {
+                try {
+                    for (var btn in faMap) {
+                        if (!Object.prototype.hasOwnProperty.call(faMap, btn)) continue;
+                        var cls = faMap[btn];
+                        var selectors = '.sceditor-button.sceditor-button-' + btn + ' div, .sceditor-button-' + btn + ' div';
+                        var nodes = document.querySelectorAll(selectors);
+                        for (var i = 0; i < nodes.length; i++) {
+                            var div = nodes[i];
+                            div.style.background = 'none';
+                            div.style.backgroundImage = 'none';
+
+                            if (div.querySelector('i.af-aqr-fa')) continue;
+
+                            var el = document.createElement('i');
+                            el.className = cls + ' af-aqr-fa';
+                            el.style.fontSize = '14px';
+                            el.style.lineHeight = '16px';
+                            el.style.display = 'inline-block';
+                            el.style.textAlign = 'center';
+
+                            div.innerHTML = '';
+                            div.appendChild(el);
+                        }
+                    }
+                } catch (e) {
+                    // тихо
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', applyFaIcons);
+            } else {
+                applyFaIcons();
+            }
+        })();
+        </script>";
+
+        $injection .= $script_fa."\n";
+    }
+
+    // --- 2.5) JS для выпадающих меню тулбара на фронте ---
+    if (!empty($menu_map)) {
+        $menu_json = json_encode($menu_map);
+        $menu_json = str_replace('</', '<\/', $menu_json);
+
+        $script_menu = "<script type=\"text/javascript\">
+        (function() {
+            var menus = {$menu_json};
+
+            function initMenus() {
+                try {
+                    var toolbar = document.querySelector('.sceditor-toolbar');
+                    if (!toolbar) return;
+
+                    menus.forEach(function(menu) {
+                        var btnIds = menu.buttons || [];
+                        if (!btnIds.length) return;
+
+                        var btns = [];
+                        btnIds.forEach(function(id) {
+                            var selector = '.sceditor-button-' + id;
+                            var found = toolbar.querySelectorAll(selector);
+                            for (var i = 0; i < found.length; i++) {
+                                var el = found[i];
+                                if (btns.indexOf(el) === -1) {
+                                    btns.push(el);
+                                }
+                            }
+                        });
+
+                        if (!btns.length) return;
+
+                        var wrapper = document.createElement('div');
+                        wrapper.className = 'af-aqr-menu-wrapper';
+
+                        var trigger = document.createElement('button');
+                        trigger.type = 'button';
+                        trigger.className = 'af-aqr-menu-trigger';
+                        var label = menu.label || '\\u22EE';
+                        trigger.innerHTML = label;
+                        wrapper.appendChild(trigger);
+
+                        var dd = document.createElement('div');
+                        dd.className = 'af-aqr-menu-dropdown';
+                        wrapper.appendChild(dd);
+
+                        btns.forEach(function(btn) {
+                            dd.appendChild(btn);
+                        });
+
+                        var firstBtn = btns[0];
+                        toolbar.insertBefore(wrapper, firstBtn);
+
+                        trigger.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            dd.style.display = (dd.style.display === 'block') ? 'none' : 'block';
+                        });
+
+                        document.addEventListener('click', function(e) {
+                            if (!wrapper.contains(e.target)) {
+                                dd.style.display = 'none';
+                            }
+                        });
+                    });
+                } catch (e) {
+                    // молча
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    setTimeout(initMenus, 0);
+                });
+            } else {
+                setTimeout(initMenus, 0);
+            }
+        })();
+        </script>";
+
+        $injection .= $script_menu."\n";
+    }
+
+    if ($injection !== '') {
+        if (stripos($page, '</head>') !== false) {
+            $page = str_ireplace('</head>', $injection.'</head>', $page);
+        } else {
+            $page = $injection.$page;
+        }
+    }
+}
