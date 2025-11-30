@@ -409,8 +409,11 @@ function afaa_register_default_types(): void
         'buddylist'         => 'Заявка в друзья',
         'buddy_accept'      => 'Принятие заявки в друзья',
         'quoted'            => 'Вас процитировали',
+        'post_threadauthor' => 'Ответ в вашей теме',
         'subscribed_thread' => 'Ответ в подписанной теме',
         'subscribed_forum'  => 'Новая тема в подписанном форуме',
+        'rated_threadauthor'=> 'Оценка вашей темы',
+        'voted_threadauthor'=> 'Голос в опросе вашей темы',
         'mention'           => 'Упоминание пользователя',
         'mention_group'     => 'Упоминание группы @group{ID}',
         'mention_all'       => 'Глобальное упоминание @all',
@@ -814,9 +817,6 @@ function afaa_compose_row_text(array $r): array
         case 'mentioned_you':
             $type = 'mention';
             break;
-        case 'post_threadauthor':
-            $type = 'subscribed_thread';
-            break;
         case 'group_mention':
             $type = 'mention_group';
             break;
@@ -873,6 +873,21 @@ function afaa_compose_row_text(array $r): array
     if ($type === 'subscribed_thread') {
         $txt = '"'.$from_link.'" написал в теме "'.$thread_title_html.'", на которую вы подписаны';
         return ['text_html'=>$txt, 'link'=>$msg_link, 'avatar'=>$from_a];
+    }
+
+    if ($type === 'post_threadauthor') {
+        $txt = '"'.$from_link.'" ответил в вашей теме "'.$thread_title_html.'"';
+        return ['text_html' => $txt, 'link' => $msg_link, 'avatar' => $from_a];
+    }
+
+    if ($type === 'rated_threadauthor') {
+        $txt = '"'.$from_link.'" оценил вашу тему "'.$thread_title_html.'"';
+        return ['text_html' => $txt, 'link' => $msg_link, 'avatar' => $from_a];
+    }
+
+    if ($type === 'voted_threadauthor') {
+        $txt = '"'.$from_link.'" проголосовал в опросе вашей темы "'.$thread_title_html.'"';
+        return ['text_html' => $txt, 'link' => $msg_link, 'avatar' => $from_a];
     }
 
     if ($type === 'subscribed_forum') {
@@ -1122,6 +1137,9 @@ function af_advancedalerts_init(): void
 
     $plugins->add_hook('usercp_do_editlists_end', 'afaa_editlists_end');
 
+    $plugins->add_hook('ratethread_process', 'afaa_ratethread_process');
+    $plugins->add_hook('polls_vote_end', 'afaa_polls_vote_end');
+
     $plugins->add_hook('reputation_do_add_end', 'afaa_rep_do_add_end');
 
     $plugins->add_hook('postbit',             'afaa_postbit_mentions');
@@ -1154,8 +1172,11 @@ function afaa_global_start(): void
                 'buddylist',
                 'buddy_accept',
                 'quoted',
+                'post_threadauthor',
                 'subscribed_thread',
                 'subscribed_forum',
+                'rated_threadauthor',
+                'voted_threadauthor',
                 'mention',
                 'mention_group',
                 'mention_all',
@@ -2341,6 +2362,34 @@ function afaa_notify_thread_subscribers(int $from_uid, int $tid, int $pid): void
         }
         af_advancedalerts_add('subscribed_thread', $uid, $ctx);
     }
+
+    afaa_notify_thread_author($from_uid, $tid, $pid, $subject);
+}
+
+function afaa_notify_thread_author(int $from_uid, int $tid, int $pid, ?string $subject = null): void
+{
+    global $db;
+
+    $thread = $db->fetch_array(
+        $db->simple_select('threads', 'uid, subject', "tid={$tid}", ['limit' => 1])
+    ) ?: [];
+
+    $author = (int)($thread['uid'] ?? 0);
+    if ($author <= 0 || $author === $from_uid) {
+        return;
+    }
+
+    $title = $subject !== null ? $subject : (string)($thread['subject'] ?? '');
+
+    $ctx = [
+        'from_uid'       => $from_uid,
+        'pid'            => $pid,
+        'tid'            => $tid,
+        'thread_subject' => $title,
+        'link'           => "showthread.php?tid={$tid}&pid={$pid}#pid{$pid}",
+    ];
+
+    af_advancedalerts_add('post_threadauthor', $author, $ctx);
 }
 
 function afaa_notify_forum_subscribers(int $from_uid, int $fid, int $tid, int $pid): void
@@ -2384,6 +2433,58 @@ function afaa_notify_forum_subscribers(int $from_uid, int $fid, int $tid, int $p
         }
         af_advancedalerts_add('subscribed_forum', $uid, $ctx);
     }
+}
+
+function afaa_ratethread_process(): void
+{
+    global $mybb, $tid;
+
+    $from_uid = (int)($mybb->user['uid'] ?? 0);
+    $tid      = (int)$tid;
+
+    if ($from_uid <= 0 || $tid <= 0) {
+        return;
+    }
+
+    require_once MYBB_ROOT.'inc/functions.php';
+    $thread = get_thread($tid);
+    if (empty($thread['uid']) || (int)$thread['uid'] === $from_uid) {
+        return;
+    }
+
+    $ctx = [
+        'from_uid'       => $from_uid,
+        'tid'            => $tid,
+        'thread_subject' => (string)($thread['subject'] ?? ''),
+        'link'           => "showthread.php?tid={$tid}",
+    ];
+
+    afaa_send((int)$thread['uid'], 'rated_threadauthor', $ctx, $from_uid, $tid);
+}
+
+function afaa_polls_vote_end(): void
+{
+    global $mybb, $poll;
+
+    $from_uid = (int)($mybb->user['uid'] ?? 0);
+    if ($from_uid <= 0 || empty($poll) || (int)$poll['public'] === 0) {
+        return;
+    }
+
+    require_once MYBB_ROOT.'inc/functions.php';
+    $thread = get_thread((int)$poll['tid']);
+    if (empty($thread['uid']) || (int)$thread['uid'] === $from_uid) {
+        return;
+    }
+
+    $ctx = [
+        'from_uid'       => $from_uid,
+        'tid'            => (int)$poll['tid'],
+        'thread_subject' => (string)($thread['subject'] ?? ''),
+        'link'           => "showthread.php?tid=".(int)$poll['tid'],
+    ];
+
+    afaa_send((int)$thread['uid'], 'voted_threadauthor', $ctx, $from_uid, (int)($poll['pid'] ?? 0));
 }
 
 /**
