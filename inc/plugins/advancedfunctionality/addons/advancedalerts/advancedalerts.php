@@ -320,8 +320,18 @@ function afaa_wol_location(&$plugin_array): void
     }
 
     $loc = $plugin_array['user_activity']['location'];
+    $path = parse_url($loc, PHP_URL_PATH) ?? '';
+    parse_str(parse_url($loc, PHP_URL_QUERY) ?? '', $params);
 
-    if (strpos($loc, 'xmlhttp.php') !== false && strpos($loc, 'action=af_alerts_api') !== false) {
+    // /misc.php?action=af_alerts — список уведомлений
+    if (stripos((string)$path, 'misc.php') !== false && ($params['action'] ?? '') === 'af_alerts') {
+        $plugin_array['location_name'] = 'Просматривает уведомления';
+        $plugin_array['location_url']  = 'misc.php?action=af_alerts';
+        return;
+    }
+
+    // Ajax-проверка (xmlhttp.php?action=af_alerts_api) засчитываем как обычное пребывание на форуме
+    if (stripos((string)$path, 'xmlhttp.php') !== false && ($params['action'] ?? '') === 'af_alerts_api') {
         $plugin_array['location_name'] = 'Просматривает форум';
         $plugin_array['location_url']  = 'index.php';
     }
@@ -2246,7 +2256,7 @@ function afaa_handle_quotes_for_post(int $from_uid, int $tid, int $pid, string $
     global $db;
 
     if (!preg_match_all(
-        "#\[quote=(?:\\\"|&quot;)?(?P<username>.+?)(?:\\\"|&quot;)? pid='(?P<pid>\d+)' dateline='(?P<dt>\d+)'[^\]]*\]#i",
+        "#\[quote=(?:\\\"|'|&quot;)?(?P<username>.+?)(?:\\\"|'|&quot;)? pid='(?P<pid>\d+)' dateline='(?P<dt>\d+)'[^\]]*\]#i",
         $message,
         $m
     )) {
@@ -2534,9 +2544,9 @@ function afaa_post_insert_end(&$posthandler): void
     afaa_handle_mentions_for_post($from_uid, $tid, $pid, $fid, $message);
     afaa_handle_quotes_for_post($from_uid, $tid, $pid, $message);
 
-    if ($method === 'insertPost') {
+    if (in_array($method, ['insert_post', 'insertPost'], true)) {
         afaa_notify_thread_subscribers($from_uid, $tid, $pid);
-    } elseif ($method === 'insertThread') {
+    } elseif (in_array($method, ['insert_thread', 'insertThread'], true)) {
         afaa_notify_forum_subscribers($from_uid, $fid, $tid, $pid);
     }
 }
