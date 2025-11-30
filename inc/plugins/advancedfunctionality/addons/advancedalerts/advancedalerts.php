@@ -2114,6 +2114,37 @@ function afaa_extract_mentions(string $message): array
         }
     }
 
+    if (preg_match_all('~@\s*([^\r\n <>"\.,!?:;\[\]\(\)\{\}]{1,60})~u', $message, $m)) {
+        global $db;
+
+        $names = [];
+        foreach ($m[1] as $name) {
+            $name = trim($name);
+            $name = rtrim($name, ',.!?:;)]}>»');
+            if ($name !== '') {
+                $names[my_strtolower($name)] = $name;
+            }
+        }
+
+        if ($names) {
+            $whereParts = [];
+            foreach (array_keys($names) as $low) {
+                $whereParts[] = "LOWER(username)='".$db->escape_string($low)."'";
+            }
+
+            if ($whereParts) {
+                $q = $db->simple_select('users', 'uid,username', implode(' OR ', $whereParts));
+                while ($row = $db->fetch_array($q)) {
+                    $uid  = (int)$row['uid'];
+                    $uname= (string)$row['username'];
+                    if ($uid > 0) {
+                        $res['users'][$uid] = $uname;
+                    }
+                }
+            }
+        }
+    }
+
     if (preg_match_all('~@\"([^\"\r\n]{1,60})\"~u', $message, $m)) {
         $names = [];
         foreach ($m[1] as $name) {
