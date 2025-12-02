@@ -20,7 +20,7 @@ return [
         // slug используется в левом меню AF
         'slug'       => 'advancedalertsandmentions',
         'title'      => 'Advanced Alerts & Mentions',
-        'controller' => 'AdvancedAlertsAndMentions', // класс AF_Admin_AdvancedAlertsAndMentions
+        'controller' => 'admin.php', // класс AF_Admin_AdvancedAlertsAndMentions
     ],
 
     // языковые ключи, AF-ядро сгенерит RU/EN файлы
