@@ -792,8 +792,6 @@ function af_sync_addon_languages(array $meta, bool $force = false): void
  */
 function af_write_lang_file(string $fullpath, array $pairs, bool $force): void
 {
-    if (is_file($fullpath) && !$force) return;
-
     if (!is_dir(dirname($fullpath))) {
         @mkdir(dirname($fullpath), 0777, true);
     }
@@ -805,6 +803,15 @@ function af_write_lang_file(string $fullpath, array $pairs, bool $force): void
         $val = str_replace(['\\', "'"], ['\\\\', "\\'"], (string)$v);
         $buf .= "\$l['{$key}'] = '{$val}';\n";
     }
+
+    // Перезаписываем, если файл отсутствует, требует force или содержимое отличается (например, после обновления manifest.php)
+    if (!$force && is_file($fullpath)) {
+        $current = @file_get_contents($fullpath);
+        if ($current === $buf) {
+            return;
+        }
+    }
+
     @file_put_contents($fullpath, $buf);
 }
 
@@ -846,6 +853,7 @@ function advancedfunctionality_bootstrap_addons()
     }
 }
 
+
 function advancedfunctionality_bootstrap_addons_preoutput($page)
 {
     $addons = af_discover_addons();
@@ -854,12 +862,21 @@ function advancedfunctionality_bootstrap_addons_preoutput($page)
         if (af_is_addon_enabled($id) && !empty($meta['bootstrap']) && is_file($meta['bootstrap'])) {
             $fn = 'af_'.$id.'_pre_output';
             if (function_exists($fn)) {
-                $page = $fn($page);
+                $res = $fn($page);
+
+                // Поддержка старого API: если функция ничего не вернула или вернула не строку —
+                // считаем, что страница не менялась.
+                if (is_string($res) && $res !== '') {
+                    $page = $res;
+                }
             }
         }
     }
     return $page;
 }
+
+
+
 
 function af_discover_addons(): array
 {
