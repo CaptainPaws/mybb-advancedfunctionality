@@ -363,18 +363,14 @@ function af_advancedalertsandmentions_deactivate(): void
     // Специально ничего не трогаем: AF просто перестаёт вызывать init()
 }
 
-function af_aam_install_templates(): void
-{
-    global $db, $lang, $mybb;
-
-    require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
-
-    // === header icon: MyAlerts-стиль, но с Unicode-иконкой и только с бэджем ===
+    // === header icon: MyAlerts-стиль, но с Unicode-иконкой ===
     $template = <<<HTML
 <li class="alerts {\$af_aam_new_indicator}">
-    <a href="{\$mybb->settings['bburl']}/misc.php?action=af_aam_list" class="myalerts af-aam-header-link" id="af_aam_header_link" aria-label="{\$lang->af_aam_link_alerts}" onclick="return false;">
-        <span class="af-aam-bell" id="af_aam_bell" aria-hidden="true">🔔</span>
-        <span class="af-aam-badge" id="af_aam_badge">{\$af_aam_unread}</span>
+    <a href="{\$mybb->settings['bburl']}/misc.php?action=af_aam_list" class="myalerts" id="af_aam_header_link"
+       onclick="return false;">
+        <span class="af-aam-bell" id="af_aam_bell">🔔</span>
+        {\$lang->af_aam_link_alerts}
+        (<span id="af_aam_badge">{\$af_aam_unread}</span>)
     </a>
 </li>
 HTML;
@@ -384,7 +380,6 @@ HTML;
 
     // модальное окно: повторяем myalerts_modal_content (но без картинок)
     $template = <<<HTML
-<div id="af_aam_modal_backdrop" class="af-aam-modal-backdrop" style="display: none;"></div>
 <div id="af_aam_modal" style="display: none;" class="modal af-aam-modal">
     <table class="tborder af-aam-modal-table" cellspacing="{\$theme['borderwidth']}" cellpadding="{\$theme['tablespace']}" border="0">
         <thead>
@@ -402,9 +397,6 @@ HTML;
         <tr>
             <td class="tfoot smalltext" colspan="3">
                 <a href="{\$mybb->settings['bburl']}/misc.php?action=af_aam_list">{\$lang->af_aam_modal_display_alerts}</a>
-                <label for="af_aam_unread_only" style="margin-left:10px; cursor:pointer;">
-                    <input type="checkbox" id="af_aam_unread_only" name="af_aam_unread_only" value="1" /> {\$af_aam_modal_unread_only}
-                </label>
                 <span class="float_right">
                     <a class="markAllReadButton" href="{\$mybb->settings['bburl']}/xmlhttp.php?action=markAllRead&amp;my_post_key={\$mybb->post_code}">{\$lang->af_aam_mark_all}</a>
                 </span>
@@ -533,6 +525,62 @@ HTML;
     find_replace_templatesets('footer', '#$#', '{\$af_aam_modal}');
 }
 
+function af_advancedalertsandmentions_uninstall(): void
+{
+    global $db;
+
+    if ($db->table_exists(AF_AAM_TABLE_ALERTS)) {
+        $db->drop_table(AF_AAM_TABLE_ALERTS);
+    }
+    if ($db->table_exists(AF_AAM_TABLE_TYPES)) {
+        $db->drop_table(AF_AAM_TABLE_TYPES);
+    }
+
+    if ($db->field_exists('af_aam_disabled_types', 'users')) {
+        $db->drop_column('users', 'af_aam_disabled_types');
+    }
+
+    // удаляем настройки
+    $db->delete_query('settings', "name IN('af_aam_enabled','af_aam_per_page','af_aam_dropdown_limit','af_aam_autorefresh','af_aam_sound')");
+    $db->delete_query('settinggroups', "name='af_aam'");
+    rebuild_settings();
+
+    // удаляем шаблоны
+    $titles = [
+        'af_aam_header_icon',
+        'af_aam_header_bell',
+        'af_aam_modal',
+        'af_aam_list_page',
+        'af_aam_list_row',
+        'af_aam_ucp_prefs',
+        'af_aam_ucp_prefs_row',
+        'af_aam_alert_row_popup',
+        'af_aam_alert_row_popup_empty',
+    ];
+    $in = "'" . implode("','", array_map('my_strtolower', $titles)) . "'";
+
+    $db->delete_query('templates', "title IN({$in})");
+
+    require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
+    // чистим вставки
+    find_replace_templatesets('headerinclude', '#{\$af_aam_js}{\$af_aam_css}#i', '');
+    find_replace_templatesets('header_welcomeblock_member', '#{\$af_aam_header_icon}#i', '');
+    find_replace_templatesets('header_welcomeblock_member', '#{\$af_aam_header_bell}#i', '');
+    find_replace_templatesets('footer', '#{\$af_aam_modal}#i', '');
+}
+
+// AF-ядро само управляет "включено/выключено"
+// При активации прогоняем install() ещё раз, чтобы обновить шаблоны/вставки
+function af_advancedalertsandmentions_activate(): void
+{
+    af_advancedalertsandmentions_install();
+}
+
+function af_advancedalertsandmentions_deactivate(): void
+{
+    // Специально ничего не трогаем: AF просто перестаёт вызывать init()
+}
+
 // помощник для добавления шаблонов (теперь upsert, а не только insert)
 function af_aam_insert_template(string $title, string $template): void
 {
@@ -575,7 +623,7 @@ function af_aam_is_enabled(): bool
 function af_aam_bootstrap(): void
 {
     global $mybb, $db, $templates, $lang;
-    global $af_aam_js, $af_aam_css, $af_aam_header_icon, $af_aam_modal, $af_aam_unread, $af_aam_modal_list, $af_aam_new_indicator, $af_aam_modal_unread_only;
+    global $af_aam_js, $af_aam_css, $af_aam_header_icon, $af_aam_modal, $af_aam_unread, $af_aam_modal_list, $af_aam_new_indicator;
 
     if (!af_aam_is_enabled()) {
         return;
@@ -591,10 +639,20 @@ function af_aam_bootstrap(): void
     $base = rtrim($mybb->settings['bburl'], '/');
     $assetBase = $base . '/' . AF_AAM_BASE;
 
-    $af_aam_unread = (int)($mybb->user['unreadAlerts'] ?? 0);
-    $af_aam_autorefresh = (int)($mybb->settings['af_aam_autorefresh'] ?? 0);
-    $af_aam_asset_base = $assetBase;
-    eval('$af_aam_js = "'.$templates->get('af_aam_js_popup').'";');
+    $config = [
+        'unread'      => (int)($mybb->user['unreadAlerts'] ?? 0),
+        'autorefresh' => (int)($mybb->settings['af_aam_autorefresh'] ?? 0),
+        'postKey'     => $mybb->post_code ?? '',
+    ];
+
+    $configJs = '<script>'
+        . 'window.afAamConfig=' . json_encode($config) . ';'
+        . 'window.myalerts_autorefresh=' . (int)($mybb->settings['af_aam_autorefresh'] ?? 0) . ';'
+        . 'window.unreadAlerts=' . (int)($mybb->user['unreadAlerts'] ?? 0) . ';'
+        . 'window.my_post_key=' . json_encode($mybb->post_code ?? '') . ';'
+        . '</script>';
+
+    $af_aam_js  = $configJs . '<script src="' . $assetBase . 'advancedalertsandmentions.js"></script>';
     $af_aam_css = '<link rel="stylesheet" href="' . $assetBase . 'advancedalertsandmentions.css" />';
 
     // гость — ничего

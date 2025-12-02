@@ -76,9 +76,14 @@
             document.title = title;
         }
 
-        var alertsRoot = document.querySelector('.alerts');
-        if (alertsRoot) {
-            alertsRoot.classList.toggle('alerts--new', unreadCount > 0);
+        var alertsEl = document.querySelector('.alerts a');
+        if (alertsEl) {
+            var baseText = alertsEl.textContent.replace(/\(.*\)$/,'').trimEnd();
+            alertsEl.textContent = baseText + ' (' + unreadCount + ')';
+            var parent = alertsEl.closest('.alerts');
+            if (parent) {
+                parent.classList.toggle('alerts--new', unreadCount > 0);
+            }
         }
     }
 
@@ -90,8 +95,6 @@
         var modalClose = modal ? modal.querySelector('.af-aam-modal-close') : null;
         var alertsTable = qs('#alerts_content');
         var bell = qs('#af_aam_bell') || qs('.af-aam-bell');
-        var unreadOnly = qs('#af_aam_unread_only');
-        var backdrop = qs('#af_aam_modal_backdrop');
 
         if (bell && !bell.textContent) {
             bell.textContent = '🔔';
@@ -101,21 +104,10 @@
             return;
         }
 
-        function ensureBackdrop() {
-            if (!backdrop) {
-                backdrop = document.createElement('div');
-                backdrop.id = 'af_aam_modal_backdrop';
-                backdrop.className = 'af-aam-modal-backdrop';
-                backdrop.style.display = 'none';
-                document.body.appendChild(backdrop);
-            }
-            return backdrop;
-        }
-
-        function renderModal(unreadOnlyFlag) {
+        function renderModal(unreadOnly) {
             ajax('xmlhttp.php', {
                 action: 'getLatestAlerts',
-                unreadOnly: unreadOnlyFlag ? 1 : 0
+                unreadOnly: unreadOnly ? 1 : 0
             }, function (resp) {
                 if (resp && resp.template) {
                     alertsTable.innerHTML = resp.template;
@@ -123,36 +115,23 @@
                 if (resp && typeof resp.unread_count === 'number') {
                     updateVisibleCounts(resp.unread_count);
                 }
-                var checkbox = qs('#af_aam_unread_only');
-                if (checkbox && typeof unreadOnlyFlag !== 'undefined') {
-                    checkbox.checked = !!unreadOnlyFlag;
-                }
             });
         }
 
         function openModal() {
-            var checkbox = qs('#af_aam_unread_only');
-            var unreadOnlyVal = checkbox ? checkbox.checked : false;
-            renderModal(unreadOnlyVal);
+            renderModal();
             modal.classList.add('af-aam-modal-open');
             modal.style.display = 'block';
-            ensureBackdrop().style.display = 'block';
         }
 
         function closeModal() {
             modal.classList.remove('af-aam-modal-open');
             modal.style.display = 'none';
-            if (backdrop) {
-                backdrop.style.display = 'none';
-            }
         }
 
-        document.addEventListener('click', function (e) {
-            var trigger = e.target.closest('#af_aam_header_link');
-            if (trigger) {
-                e.preventDefault();
-                openModal();
-            }
+        link.addEventListener('click', function (e) {
+            e.preventDefault();
+            openModal();
         });
 
         if (modalClose) {
@@ -160,10 +139,6 @@
                 e.preventDefault();
                 closeModal();
             });
-        }
-
-        if (backdrop) {
-            backdrop.addEventListener('click', closeModal);
         }
 
         modal.addEventListener('click', function (e) {
@@ -197,18 +172,6 @@
                         renderModal();
                     });
                 }
-            }
-        });
-
-        if (unreadOnly) {
-            unreadOnly.addEventListener('change', function () {
-                renderModal(unreadOnly.checked);
-            });
-        }
-
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && modal.classList.contains('af-aam-modal-open')) {
-                closeModal();
             }
         });
 
