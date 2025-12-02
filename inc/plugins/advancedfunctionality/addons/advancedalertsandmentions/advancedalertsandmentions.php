@@ -290,16 +290,18 @@ function af_advancedalertsandmentions_install(): void
 
     foreach ($defaultTypes as $code) {
         $titleKey = 'af_aam_alert_type_' . $code;
-        $title = $lang->{$titleKey} ?? $code;
+        $title = isset($lang->{$titleKey}) ? $lang->{$titleKey} : $code;
 
-        $db->insert_query(AF_AAM_TABLE_TYPES, [
-            'code'                 => $db->escape_string($code),
-            'title'                => $db->escape_string($title),
-            'enabled'              => 1,
-            'can_be_user_disabled' => 1,
-            'default_user_enabled' => 1,
-        ]);
+        // upsert вместо тупого insert — не будет дубликатов
+        af_aam_register_type(
+            $code,
+            $title,
+            1, // canBeUserDisabled
+            1, // defaultUserEnabled
+            1  // enabled
+        );
     }
+
 
     // шаблоны: заголовок, модалка, страница списка, UCP-предпочтения
     require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
