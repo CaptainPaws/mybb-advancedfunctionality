@@ -20,7 +20,7 @@ return [
         // slug используется в левом меню AF
         'slug'       => 'advancedalertsandmentions',
         'title'      => 'Advanced Alerts & Mentions',
-        'controller' => 'AdvancedAlertsAndMentions', // класс AF_Admin_AdvancedAlertsAndMentions
+        'controller' => 'admin.php', // класс AF_Admin_AdvancedAlertsAndMentions
     ],
 
     // языковые ключи, AF-ядро сгенерит RU/EN файлы
@@ -64,10 +64,16 @@ return [
                 'af_aam_admin_code'        => 'Код',
                 'af_aam_admin_title_col'   => 'Название',
                 'af_aam_admin_can_disable' => 'Пользователь может отключить',
+                'af_aam_admin_default_user_enabled' => 'Включено у новых пользователей',
                 'af_aam_admin_enabled'     => 'Включено',
                 'af_aam_admin_actions'     => 'Действия',
                 'af_aam_admin_empty'       => 'Типы уведомлений ещё не настроены.',
                 'af_aam_admin_add'         => 'Добавить тип',
+                'af_aam_admin_add_button'  => 'Создать тип уведомления',
+                'af_aam_admin_title_placeholder' => 'Название уведомления',
+                'af_aam_admin_delete'      => 'Удалить',
+                'af_aam_admin_confirm_delete' => 'Удалить пользовательский тип? Уведомления этого типа больше не будут отображаться.',
+                'af_aam_admin_save_types'  => 'Сохранить настройки типов',
                 'af_aam_admin_msg_saved'   => 'Тип уведомления сохранён.',
                 'af_aam_admin_msg_deleted' => 'Тип уведомления удалён.',
             ],
@@ -111,10 +117,16 @@ return [
                 'af_aam_admin_code'        => 'Code',
                 'af_aam_admin_title_col'   => 'Title',
                 'af_aam_admin_can_disable' => 'User can disable',
+                'af_aam_admin_default_user_enabled' => 'Enabled by default for users',
                 'af_aam_admin_enabled'     => 'Enabled',
                 'af_aam_admin_actions'     => 'Actions',
                 'af_aam_admin_empty'       => 'No alert types configured yet.',
                 'af_aam_admin_add'         => 'Add alert type',
+                'af_aam_admin_add_button'  => 'Create alert type',
+                'af_aam_admin_title_placeholder' => 'Alert title',
+                'af_aam_admin_delete'      => 'Delete',
+                'af_aam_admin_confirm_delete' => 'Delete this custom alert type? Alerts of this code will no longer display.',
+                'af_aam_admin_save_types'  => 'Save alert type settings',
                 'af_aam_admin_msg_saved'   => 'Alert type saved.',
                 'af_aam_admin_msg_deleted' => 'Alert type deleted.',
             ],
