@@ -100,5 +100,43 @@ class AF_Admin_AdvancedAlertsAndMentions
         }
 
         $form->end();
+
+        // Форма добавления пользовательского типа
+        $addForm = new Form($baseUrl, 'post');
+        echo $addForm->generate_hidden_field('my_post_key', $mybb->post_code);
+        echo $addForm->generate_hidden_field('af_aam_action', 'create');
+
+        $addTable = new Table;
+        $addTable->construct_header($lang->af_aam_admin_code);
+        $addTable->construct_header($lang->af_aam_admin_title_col);
+        $addTable->construct_header($lang->af_aam_admin_enabled, ['class' => 'align_center']);
+        $addTable->construct_header($lang->af_aam_admin_can_disable, ['class' => 'align_center']);
+        $addTable->construct_header($lang->af_aam_admin_default_user_enabled, ['class' => 'align_center']);
+
+        $addTable->construct_cell(
+            $addForm->generate_text_box('new_alert_code', '', ['style' => 'width:95%;', 'placeholder' => 'custom_code'])
+        );
+        $addTable->construct_cell(
+            $addForm->generate_text_box('new_alert_title', '', ['style' => 'width:95%;', 'placeholder' => $lang->af_aam_admin_title_placeholder])
+        );
+        $addTable->construct_cell(
+            $addForm->generate_check_box('new_alert_enabled', '1', '', ['checked' => true]),
+            ['class' => 'align_center']
+        );
+        $addTable->construct_cell(
+            $addForm->generate_check_box('new_alert_can_be_user_disabled', '1', '', ['checked' => true]),
+            ['class' => 'align_center']
+        );
+        $addTable->construct_cell(
+            $addForm->generate_check_box('new_alert_default_user_enabled', '1', '', ['checked' => true]),
+            ['class' => 'align_center']
+        );
+        $addTable->construct_row();
+
+        $addTable->output($lang->af_aam_admin_add);
+
+        $addButtons[] = $addForm->generate_submit_button($lang->af_aam_admin_add_button);
+        $addForm->output_submit_wrapper($addButtons);
+        $addForm->end();
     }
 }

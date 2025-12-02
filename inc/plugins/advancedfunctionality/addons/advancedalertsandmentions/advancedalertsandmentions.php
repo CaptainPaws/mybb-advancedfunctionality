@@ -25,6 +25,55 @@ const AF_AAM_TABLE_ALERTS = 'aam_alerts';
 const AF_AAM_TABLE_TYPES  = 'aam_alert_types';
 
 /**
+ * Регистрация (или обновление) типа уведомления. Используется и в админке, и клиентскими модулями.
+ */
+function af_aam_register_type(string $code, string $title = '', int $canBeUserDisabled = 1, int $defaultUserEnabled = 1, int $enabled = 1): ?int
+{
+    global $db;
+
+    $code = trim($code);
+    if ($code === '' || !$db->table_exists(AF_AAM_TABLE_TYPES)) {
+        return null;
+    }
+
+    $title = trim($title);
+    $escapedCode = $db->escape_string($code);
+    $existing = $db->fetch_array($db->simple_select(AF_AAM_TABLE_TYPES, '*', "code='{$escapedCode}'"));
+    if ($existing) {
+        $update = [];
+        if ($title !== '' && $title !== $existing['title']) {
+            $update['title'] = $db->escape_string($title);
+        }
+        if ((int)$existing['can_be_user_disabled'] !== (int)$canBeUserDisabled) {
+            $update['can_be_user_disabled'] = (int)$canBeUserDisabled;
+        }
+        if ((int)$existing['default_user_enabled'] !== (int)$defaultUserEnabled) {
+            $update['default_user_enabled'] = (int)$defaultUserEnabled;
+        }
+        if ((int)$existing['enabled'] !== (int)$enabled) {
+            $update['enabled'] = (int)$enabled;
+        }
+
+        if (!empty($update)) {
+            $db->update_query(AF_AAM_TABLE_TYPES, $update, "id=" . (int)$existing['id']);
+        }
+
+        return (int)$existing['id'];
+    }
+
+    $insert = [
+        'code'                 => $escapedCode,
+        'title'                => $db->escape_string($title),
+        'enabled'              => (int)$enabled,
+        'can_be_user_disabled' => (int)$canBeUserDisabled,
+        'default_user_enabled' => (int)$defaultUserEnabled,
+    ];
+
+    $db->insert_query(AF_AAM_TABLE_TYPES, $insert);
+    return (int)$db->insert_id();
+}
+
+/**
  * Точка входа для ядра AdvancedFunctionality:
  * вызывается из af_{id}_init() внутри хуков global_start.
  */
@@ -240,11 +289,6 @@ function af_advancedalertsandmentions_install(): void
     ];
 
     foreach ($defaultTypes as $code) {
-        $query = $db->simple_select(AF_AAM_TABLE_TYPES, 'id', "code='" . $db->escape_string($code) . "'");
-        if ($db->fetch_array($query)) {
-            continue;
-        }
-
         $titleKey = 'af_aam_alert_type_' . $code;
         $title = $lang->{$titleKey} ?? $code;
 
@@ -517,7 +561,7 @@ function af_aam_bootstrap(): void
 
     $af_aam_dropdown_items = '';
     $sql = $db->write_query("
-        SELECT a.*, t.code
+        SELECT a.*, t.code, t.title
         FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
         LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id=a.type_id)
         WHERE a.uid={$uid}
@@ -626,7 +670,7 @@ function af_aam_usercp_start(): void
         $af_aam_list_rows = '';
         if ($total > 0) {
             $sql = $db->write_query("
-                SELECT a.*, t.code
+                SELECT a.*, t.code, t.title
                 FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
                 LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id=a.type_id)
                 WHERE a.uid={$uid}
@@ -1413,8 +1457,9 @@ function af_aam_format_alert(array $alert): array
         $lang->load('advancedfunctionality_' . AF_AAM_ID);
     }
 
-    $code  = $alert['code'] ?? '';
-    $extra = [];
+    $code   = $alert['code'] ?? '';
+    $title  = $alert['title'] ?? '';
+    $extra  = [];
     if (!empty($alert['extra'])) {
         $decoded = json_decode($alert['extra'], true);
         if (is_array($decoded)) {
@@ -1482,7 +1527,12 @@ function af_aam_format_alert(array $alert): array
 
         default:
             $labelKey = 'af_aam_alert_type_' . $code;
-            $text = $lang->{$labelKey} ?? $code;
+            $customText = (string)($extra['message'] ?? '');
+            $text = $customText !== '' ? $customText : ($title ?: ($lang->{$labelKey} ?? $code));
+    }
+
+    if (!empty($extra['url'])) {
+        $url = (string)$extra['url'];
     }
 
     return [
