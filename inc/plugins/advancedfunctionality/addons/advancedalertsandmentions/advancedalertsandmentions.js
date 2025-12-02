@@ -87,149 +87,95 @@
         }
     }
 
-    // ======== ALERTS: HEADER ICON, DROPDOWN =========
+    // ======== ALERTS: HEADER ICON + МОДАЛКА =========
 
     function initAlertsUI() {
         var link   = qs('#af_aam_header_link');
-        var dd     = qs('#af_aam_dropdown');
-        var badge  = qs('#af_aam_badge');
-        var listUl = qs('#af_aam_dropdown_list');
-        var markAll = qs('#af_aam_mark_all');
         var modal = qs('#af_aam_modal');
         var modalClose = modal ? modal.querySelector('.af-aam-modal-close') : null;
-        var modalMarkAll = qs('#af_aam_modal_mark_all');
+        var alertsTable = qs('#alerts_content');
         var bell = qs('#af_aam_bell') || qs('.af-aam-bell');
 
-        // главное — иконка и дропдаун. Остальное опционально.
-        if (!link || !dd) {
-            return;
-        }
-
-        // сюда через JS вставляем Unicode-колокольчик, не храним эмодзи в БД
         if (bell && !bell.textContent) {
             bell.textContent = '🔔';
         }
 
-        function loadList(limit) {
-            if (!listUl) {
-                return;
-            }
+        if (!link || !modal || !alertsTable) {
+            return;
+        }
+
+        function renderModal(unreadOnly) {
             ajax('xmlhttp.php', {
-                action: 'af_aam_api',
-                op: 'list',
-                limit: limit || ''
+                action: 'getLatestAlerts',
+                unreadOnly: unreadOnly ? 1 : 0
             }, function (resp) {
-                if (!resp || !resp.ok) {
-                    return;
+                if (resp && resp.template) {
+                    alertsTable.innerHTML = resp.template;
                 }
-
-                if (typeof resp.badge === 'number' && badge) {
-                    updateVisibleCounts(resp.badge);
-                }
-
-                if (Array.isArray(resp.items)) {
-                    listUl.innerHTML = '';
-                    if (!resp.items.length) {
-                        var li = document.createElement('li');
-                        li.className = 'af-aam-empty';
-                        li.textContent = listUl.getAttribute('data-empty-text') || 'Нет новых уведомлений';
-                        listUl.appendChild(li);
-                    } else {
-                        resp.items.forEach(function (it) {
-                            var li = document.createElement('li');
-                            li.className = 'af-aam-item ' + (it.is_read ? 'af-aam-item-read' : 'af-aam-item-unread');
-                            li.setAttribute('data-alert-id', it.id);
-
-                            var textSpan = document.createElement(it.url ? 'a' : 'span');
-                            textSpan.className = 'af-aam-item-text';
-                            textSpan.textContent = it.text || '';
-                            if (it.url) {
-                                textSpan.setAttribute('href', it.url);
-                            }
-
-                            var spanDate = document.createElement('span');
-                            spanDate.className = 'af-aam-item-date';
-                            if (it.date_fmt) {
-                                spanDate.textContent = it.date_fmt;
-                            }
-
-                            li.appendChild(textSpan);
-                            li.appendChild(spanDate);
-
-                            li.addEventListener('click', function () {
-                                markRead(it.id);
-                            });
-
-                            listUl.appendChild(li);
-                        });
-                    }
+                if (resp && typeof resp.unread_count === 'number') {
+                    updateVisibleCounts(resp.unread_count);
                 }
             });
         }
 
-        function markRead(id) {
-            ajax('xmlhttp.php', {
-                action: 'af_aam_api',
-                op: 'mark_read',
-                id: id
-            }, function () {
-                loadList();
-            });
+        function openModal() {
+            renderModal();
+            modal.classList.add('af-aam-modal-open');
+            modal.style.display = 'block';
         }
 
-        function markAllRead() {
-            ajax('xmlhttp.php', {
-                action: 'af_aam_api',
-                op: 'mark_all'
-            }, function () {
-                loadList();
-            });
-        }
-
-        var dropdownVisible = false;
-
-        function toggleDropdown() {
-            dropdownVisible = !dropdownVisible;
-            if (dropdownVisible) {
-                dd.classList.add('af-aam-open');
-                loadList();
-            } else {
-                dd.classList.remove('af-aam-open');
-            }
+        function closeModal() {
+            modal.classList.remove('af-aam-modal-open');
+            modal.style.display = 'none';
         }
 
         link.addEventListener('click', function (e) {
             e.preventDefault();
-            toggleDropdown();
+            openModal();
         });
 
-        document.addEventListener('click', function (e) {
-            if (!dropdownVisible) {
-                return;
+        if (modalClose) {
+            modalClose.addEventListener('click', function (e) {
+                e.preventDefault();
+                closeModal();
+            });
+        }
+
+        modal.addEventListener('click', function (e) {
+            if (e.target === modal) {
+                closeModal();
             }
+        });
+
+        modal.addEventListener('click', function (e) {
             var target = e.target;
-            if (target === link || (dd && dd.contains(target))) {
-                return;
+            if (target.classList.contains('markReadAlertButton')) {
+                e.preventDefault();
+                var id = parseInt((target.id || '').replace(/[^0-9]/g, ''), 10);
+                if (id) {
+                    ajax('xmlhttp.php', { action: 'myalerts_mark_read', id: id, my_post_key: window.my_post_key || '' }, function (resp) {
+                        if (resp && typeof resp.unread_count === 'number') {
+                            updateVisibleCounts(resp.unread_count);
+                        }
+                        renderModal();
+                    });
+                }
             }
-            dropdownVisible = false;
-            dd.classList.remove('af-aam-open');
+            if (target.classList.contains('markUnreadAlertButton')) {
+                e.preventDefault();
+                var id2 = parseInt((target.id || '').replace(/[^0-9]/g, ''), 10);
+                if (id2) {
+                    ajax('xmlhttp.php', { action: 'myalerts_mark_unread', id: id2, my_post_key: window.my_post_key || '' }, function (resp) {
+                        if (resp && typeof resp.unread_count === 'number') {
+                            updateVisibleCounts(resp.unread_count);
+                        }
+                        renderModal();
+                    });
+                }
+            }
         });
 
-        if (markAll) {
-            markAll.addEventListener('click', function () {
-                markAllRead();
-            });
-        }
-        if (modal && modalClose) {
-            modalClose.addEventListener('click', function () {
-                modal.classList.remove('af-aam-modal-open');
-            });
-        }
-        if (modalMarkAll && modal) {
-            modalMarkAll.addEventListener('click', function () {
-                markAllRead();
-            });
-        }
+        window.afAamRefreshModal = renderModal;
     }
 
     function initMyAlertsCompat() {
@@ -261,6 +207,9 @@
                 ajax('xmlhttp.php', { action: 'markAllRead', my_post_key: window.my_post_key || '' }, function (resp) {
                     if (resp && resp.success) {
                         renderLatest();
+                        if (typeof window.afAamRefreshModal === 'function') {
+                            window.afAamRefreshModal();
+                        }
                     }
                 });
             });
