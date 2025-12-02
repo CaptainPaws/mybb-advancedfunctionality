@@ -292,7 +292,13 @@ function af_advancedalertsandmentions_install(): void
         $titleKey = 'af_aam_alert_type_' . $code;
         $title = $lang->{$titleKey} ?? $code;
 
-        af_aam_register_type($code, $title, 1, 1, 1);
+        $db->insert_query(AF_AAM_TABLE_TYPES, [
+            'code'                 => $db->escape_string($code),
+            'title'                => $db->escape_string($title),
+            'enabled'              => 1,
+            'can_be_user_disabled' => 1,
+            'default_user_enabled' => 1,
+        ]);
     }
 
     // шаблоны: заголовок, модалка, страница списка, UCP-предпочтения
@@ -1594,3 +1600,32 @@ function af_aam_postbit_mention_button(array &$post): void
     }
 }
 
+// ================ АДМИН-КОНТРОЛЛЕР ДЛЯ AF ======================
+
+if (!class_exists('AF_Admin_AdvancedAlertsAndMentions')) {
+    /**
+     * Простейший контроллер для AF-роутера:
+     * /admin/index.php?module=advancedfunctionality&addon=advancedalertsandmentions
+     */
+    class AF_Admin_AdvancedAlertsAndMentions
+    {
+        public static function dispatch(): void
+        {
+            global $mybb, $db, $page, $lang;
+
+            if (!isset($lang->af_aam_name)) {
+                $lang->load('advancedfunctionality_' . AF_AAM_ID);
+            }
+
+            $page->output_inline_message(
+                $lang->af_aam_name . ' — используйте страницу "Настройки" для конфигурации типов уведомлений и поведения.'
+            );
+
+            // небольшая статистика
+            $row = $db->fetch_array($db->simple_select(AF_AAM_TABLE_ALERTS, 'COUNT(id) AS cnt'));
+            $totalAlerts = (int)($row['cnt'] ?? 0);
+
+            $page->output_inline_message('Всего уведомлений в базе: ' . $totalAlerts);
+        }
+    }
+}
