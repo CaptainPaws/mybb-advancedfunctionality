@@ -303,51 +303,143 @@ function af_advancedalertsandmentions_install(): void
     }
 
 
-    // шаблоны: заголовок, модалка, страница списка, UCP-предпочтения
+    af_aam_install_templates();
+}
+
+function af_advancedalertsandmentions_uninstall(): void
+{
+    global $db;
+
+    if ($db->table_exists(AF_AAM_TABLE_ALERTS)) {
+        $db->drop_table(AF_AAM_TABLE_ALERTS);
+    }
+    if ($db->table_exists(AF_AAM_TABLE_TYPES)) {
+        $db->drop_table(AF_AAM_TABLE_TYPES);
+    }
+
+    if ($db->field_exists('af_aam_disabled_types', 'users')) {
+        $db->drop_column('users', 'af_aam_disabled_types');
+    }
+
+    // удаляем настройки
+    $db->delete_query('settings', "name IN('af_aam_enabled','af_aam_per_page','af_aam_dropdown_limit','af_aam_autorefresh','af_aam_sound')");
+    $db->delete_query('settinggroups', "name='af_aam'");
+    rebuild_settings();
+
+    // удаляем шаблоны
+    $titles = [
+        'af_aam_header_icon',
+        'af_aam_header_bell',
+        'af_aam_modal',
+        'af_aam_list_page',
+        'af_aam_list_row',
+        'af_aam_ucp_prefs',
+        'af_aam_ucp_prefs_row',
+        'af_aam_alert_row_popup',
+        'af_aam_alert_row_popup_empty',
+        'af_aam_js_popup',
+    ];
+    $in = "'" . implode("','", array_map('my_strtolower', $titles)) . "'";
+
+    $db->delete_query('templates', "title IN({$in})");
+
+    require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
+    // чистим вставки
+    find_replace_templatesets('headerinclude', '#{\$af_aam_js}{\$af_aam_css}#i', '');
+    find_replace_templatesets('header_welcomeblock_member', '#{\$af_aam_header_icon}#i', '');
+    find_replace_templatesets('header_welcomeblock_member', '#{\$af_aam_header_bell}#i', '');
+    find_replace_templatesets('footer', '#{\$af_aam_modal}#i', '');
+}
+
+// AF-ядро само управляет "включено/выключено"
+// При активации прогоняем install() ещё раз, чтобы обновить шаблоны/вставки
+function af_advancedalertsandmentions_activate(): void
+{
+    af_advancedalertsandmentions_install();
+}
+
+function af_advancedalertsandmentions_deactivate(): void
+{
+    // Специально ничего не трогаем: AF просто перестаёт вызывать init()
+}
+
+function af_aam_install_templates(): void
+{
+    global $db, $lang, $mybb;
+
     require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
 
-    // === header icon: пустой span, колокольчик придёт из JS ===
+    // === header icon: MyAlerts-стиль, но с Unicode-иконкой и только с бэджем ===
     $template = <<<HTML
-<a href="#" id="af_aam_header_link" class="af-aam-header-link" title="{\$lang->af_aam_link_alerts}">
-    <span class="af-aam-bell" id="af_aam_bell"></span>
-    <span class="af-aam-badge" id="af_aam_badge">{\$af_aam_unread}</span>
-</a>
-<div id="af_aam_dropdown" class="af-aam-dropdown">
-    <div class="af-aam-dropdown-inner">
-        <ul id="af_aam_dropdown_list" data-empty-text="{\$lang->af_aam_no_alerts}">
-            {\$af_aam_dropdown_items}
-        </ul>
-        <div class="af-aam-dropdown-footer">
-            <a href="misc.php?action=af_aam_list">{\$lang->af_aam_link_alerts}</a>
-            <button type="button" id="af_aam_mark_all">{\$lang->af_aam_mark_all}</button>
-        </div>
-    </div>
-</div>
+<li class="alerts {\$af_aam_new_indicator}">
+    <a href="{\$mybb->settings['bburl']}/misc.php?action=af_aam_list" class="myalerts af-aam-header-link" id="af_aam_header_link" aria-label="{\$lang->af_aam_link_alerts}" onclick="return false;">
+        <span class="af-aam-bell" id="af_aam_bell" aria-hidden="true">🔔</span>
+        <span class="af-aam-badge" id="af_aam_badge">{\$af_aam_unread}</span>
+    </a>
+</li>
 HTML;
 
     af_aam_insert_template('af_aam_header_icon', $template);
 
 
-    // модальное окно
+    // модальное окно: повторяем myalerts_modal_content (но без картинок)
     $template = <<<HTML
-<div id="af_aam_modal" class="af-aam-modal">
-    <div class="af-aam-modal-backdrop"></div>
-    <div class="af-aam-modal-window">
-        <div class="af-aam-modal-header">
-            <span class="af-aam-modal-title">{\$lang->af_aam_link_alerts}</span>
-            <button type="button" class="af-aam-modal-close">✕</button>
-        </div>
-        <div class="af-aam-modal-body" id="af_aam_modal_body">
-            {\$af_aam_modal_list}
-        </div>
-        <div class="af-aam-modal-footer">
-            <button type="button" id="af_aam_modal_mark_all">{\$lang->af_aam_mark_all}</button>
-        </div>
-    </div>
+<div id="af_aam_modal_backdrop" class="af-aam-modal-backdrop" style="display: none;"></div>
+<div id="af_aam_modal" style="display: none;" class="modal af-aam-modal">
+    <table class="tborder af-aam-modal-table" cellspacing="{\$theme['borderwidth']}" cellpadding="{\$theme['tablespace']}" border="0">
+        <thead>
+        <tr>
+            <th class="thead" colspan="3">
+                <strong>{\$lang->af_aam_link_alerts}</strong>
+                <button type="button" class="af-aam-modal-close" title="×">✕</button>
+            </th>
+        </tr>
+        </thead>
+        <tbody id="alerts_content">
+        {\$af_aam_modal_list}
+        </tbody>
+        <tfoot>
+        <tr>
+            <td class="tfoot smalltext" colspan="3">
+                <a href="{\$mybb->settings['bburl']}/misc.php?action=af_aam_list">{\$lang->af_aam_modal_display_alerts}</a>
+                <label for="af_aam_unread_only" style="margin-left:10px; cursor:pointer;">
+                    <input type="checkbox" id="af_aam_unread_only" name="af_aam_unread_only" value="1" /> {\$af_aam_modal_unread_only}
+                </label>
+                <span class="float_right">
+                    <a class="markAllReadButton" href="{\$mybb->settings['bburl']}/xmlhttp.php?action=markAllRead&amp;my_post_key={\$mybb->post_code}">{\$lang->af_aam_mark_all}</a>
+                </span>
+                <br class="clear"/>
+            </td>
+        </tr>
+        </tfoot>
+    </table>
 </div>
 HTML;
 
     af_aam_insert_template('af_aam_modal', $template);
+
+    // строки для модального окна (таблица)
+    $template = <<<HTML
+<tr class="alert {\$af_aam_alert_class}" id="alert_row_popup_{\$af_aam_alert_id}">
+    <td class="trow1 align-center alert__avatar" align="center">{\$af_aam_alert_icon}</td>
+    <td class="trow1 alert__content">
+        <a href="{\$af_aam_alert_link}">{\$af_aam_alert_text}</a>
+    </td>
+    <td class="trow1 alert__time" align="center">
+        {\$af_aam_alert_date}<br />
+        <a href="#" class="markReadAlertButton{\$af_aam_markread_hidden}" id="popup_markread_alert_{\$af_aam_alert_id}" title="{\$lang->af_aam_mark_read}">{\$lang->af_aam_mark_read}</a>
+        <a href="#" class="markUnreadAlertButton{\$af_aam_markunread_hidden}" id="popup_markunread_alert_{\$af_aam_alert_id}" title="{\$lang->af_aam_mark_unread}">{\$lang->af_aam_mark_unread}</a>
+    </td>
+</tr>
+HTML;
+    af_aam_insert_template('af_aam_alert_row_popup', $template);
+
+    $template = <<<HTML
+<tr class="alert-row__no-alerts">
+    <td class="trow1" colspan="3">{\$lang->af_aam_no_alerts}</td>
+</tr>
+HTML;
+    af_aam_insert_template('af_aam_alert_row_popup_empty', $template);
 
     // страница списка уведомлений
     $template = <<<HTML
@@ -417,6 +509,18 @@ HTML;
 
     af_aam_insert_template('af_aam_ucp_prefs_row', $template);
 
+    // JS-конфиг в стиле MyAlerts
+    $template = <<<HTML
+<script type="text/javascript">
+    var unreadAlerts = '{\$af_aam_unread}';
+    var myalerts_autorefresh = '{\$af_aam_autorefresh}';
+    var my_post_key = '{\$mybb->post_code}';
+</script>
+<script type="text/javascript" src="{\$af_aam_asset_base}advancedalertsandmentions.js"></script>
+HTML;
+
+    af_aam_insert_template('af_aam_js_popup', $template);
+
     // сначала вычистим старые вставки, если они уже есть
     find_replace_templatesets('headerinclude', '#{\$af_aam_js}{\$af_aam_css}#i', '');
     find_replace_templatesets('header_welcomeblock_member', '#{\$af_aam_header_icon}#i', '');
@@ -427,60 +531,6 @@ HTML;
     find_replace_templatesets('headerinclude', '#$#', '{\$af_aam_js}{\$af_aam_css}');
     find_replace_templatesets('header_welcomeblock_member', '#{\$modcplink}#i', '{\$af_aam_header_icon}{\$modcplink}');
     find_replace_templatesets('footer', '#$#', '{\$af_aam_modal}');
-}
-
-function af_advancedalertsandmentions_uninstall(): void
-{
-    global $db;
-
-    if ($db->table_exists(AF_AAM_TABLE_ALERTS)) {
-        $db->drop_table(AF_AAM_TABLE_ALERTS);
-    }
-    if ($db->table_exists(AF_AAM_TABLE_TYPES)) {
-        $db->drop_table(AF_AAM_TABLE_TYPES);
-    }
-
-    if ($db->field_exists('af_aam_disabled_types', 'users')) {
-        $db->drop_column('users', 'af_aam_disabled_types');
-    }
-
-    // удаляем настройки
-    $db->delete_query('settings', "name IN('af_aam_enabled','af_aam_per_page','af_aam_dropdown_limit','af_aam_autorefresh','af_aam_sound')");
-    $db->delete_query('settinggroups', "name='af_aam'");
-    rebuild_settings();
-
-    // удаляем шаблоны
-    $titles = [
-        'af_aam_header_icon',
-        'af_aam_header_bell',
-        'af_aam_modal',
-        'af_aam_list_page',
-        'af_aam_list_row',
-        'af_aam_ucp_prefs',
-        'af_aam_ucp_prefs_row',
-    ];
-    $in = "'" . implode("','", array_map('my_strtolower', $titles)) . "'";
-
-    $db->delete_query('templates', "title IN({$in})");
-
-    require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
-    // чистим вставки
-    find_replace_templatesets('headerinclude', '#{\$af_aam_js}{\$af_aam_css}#i', '');
-    find_replace_templatesets('header_welcomeblock_member', '#{\$af_aam_header_icon}#i', '');
-    find_replace_templatesets('header_welcomeblock_member', '#{\$af_aam_header_bell}#i', '');
-    find_replace_templatesets('footer', '#{\$af_aam_modal}#i', '');
-}
-
-// AF-ядро само управляет "включено/выключено"
-// При активации прогоняем install() ещё раз, чтобы обновить шаблоны/вставки
-function af_advancedalertsandmentions_activate(): void
-{
-    af_advancedalertsandmentions_install();
-}
-
-function af_advancedalertsandmentions_deactivate(): void
-{
-    // Специально ничего не трогаем: AF просто перестаёт вызывать init()
 }
 
 // помощник для добавления шаблонов (теперь upsert, а не только insert)
@@ -525,7 +575,7 @@ function af_aam_is_enabled(): bool
 function af_aam_bootstrap(): void
 {
     global $mybb, $db, $templates, $lang;
-    global $af_aam_js, $af_aam_css, $af_aam_header_icon, $af_aam_modal, $af_aam_unread, $af_aam_dropdown_items;
+    global $af_aam_js, $af_aam_css, $af_aam_header_icon, $af_aam_modal, $af_aam_unread, $af_aam_modal_list, $af_aam_new_indicator, $af_aam_modal_unread_only;
 
     if (!af_aam_is_enabled()) {
         return;
@@ -535,11 +585,16 @@ function af_aam_bootstrap(): void
         $lang->load('advancedfunctionality_' . AF_AAM_ID);
     }
 
+    $af_aam_modal_unread_only = $lang->af_aam_modal_unread_only ?? 'Только непрочитанные';
+
     // web-URL к ассетам
     $base = rtrim($mybb->settings['bburl'], '/');
     $assetBase = $base . '/' . AF_AAM_BASE;
 
-    $af_aam_js  = '<script src="' . $assetBase . 'advancedalertsandmentions.js"></script>';
+    $af_aam_unread = (int)($mybb->user['unreadAlerts'] ?? 0);
+    $af_aam_autorefresh = (int)($mybb->settings['af_aam_autorefresh'] ?? 0);
+    $af_aam_asset_base = $assetBase;
+    eval('$af_aam_js = "'.$templates->get('af_aam_js_popup').'";');
     $af_aam_css = '<link rel="stylesheet" href="' . $assetBase . 'advancedalertsandmentions.css" />';
 
     // гость — ничего
@@ -554,14 +609,15 @@ function af_aam_bootstrap(): void
     $query = $db->simple_select(AF_AAM_TABLE_ALERTS, 'COUNT(id) AS cnt', "uid={$uid} AND is_read=0");
     $row = $db->fetch_array($query);
     $af_aam_unread = (int)($row['cnt'] ?? 0);
+    $af_aam_new_indicator = ($af_aam_unread > 0) ? 'alerts--new' : '';
 
-    // последние N уведомлений для дропдауна
+    // последние N уведомлений для модального окна
     $limit = (int)($mybb->settings['af_aam_dropdown_limit'] ?? 5);
     if ($limit <= 0) {
         $limit = 5;
     }
 
-    $af_aam_dropdown_items = '';
+    $alerts = [];
     $sql = $db->write_query("
         SELECT a.*, t.code, t.title
         FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
@@ -571,39 +627,60 @@ function af_aam_bootstrap(): void
         LIMIT {$limit}
     ");
     while ($alert = $db->fetch_array($sql)) {
-        $af_aam_dropdown_items .= af_aam_render_dropdown_item($alert);
+        $alerts[] = $alert;
     }
 
-    if ($af_aam_dropdown_items === '') {
-        $af_aam_dropdown_items = '<li class="af-aam-empty">' . htmlspecialchars_uni($lang->af_aam_no_alerts) . '</li>';
-    }
+    $af_aam_modal_list = af_aam_render_popup_rows($alerts);
 
+    eval('$af_aam_js          = "'.$templates->get('af_aam_js_popup').'";');
     eval('$af_aam_header_icon = "'.$templates->get('af_aam_header_icon').'";');
     eval('$af_aam_modal       = "'.$templates->get('af_aam_modal').'";');
 }
 
-function af_aam_render_dropdown_item(array $alert): string
+function af_aam_render_popup_rows(array $alerts): string
 {
-    global $lang, $mybb;
+    global $templates, $lang, $mybb;
 
-    $formatted = af_aam_format_alert($alert);
-    $text = $formatted['text'];
-    $url  = $formatted['url'];
-
-    $date = my_date($mybb->settings['dateformat'] . ' ' . $mybb->settings['timeformat'], (int)$alert['dateline']);
-    $class = ((int)$alert['is_read'] === 1) ? 'af-aam-item-read' : 'af-aam-item-unread';
-
-    $id = (int)$alert['id'];
-
-    $textHtml = '<span class="af-aam-item-text">' . htmlspecialchars_uni($text) . '</span>';
-    if ($url !== '') {
-        $textHtml = '<a href="' . htmlspecialchars_uni($url) . '">' . $textHtml . '</a>';
+    if (empty($alerts)) {
+        return $templates->render('af_aam_alert_row_popup_empty');
     }
 
-    return '<li class="af-aam-item ' . $class . '" data-alert-id="' . $id . '">' .
-        $textHtml .
-        '<span class="af-aam-item-date">' . htmlspecialchars_uni($date) . '</span>' .
-        '</li>';
+    $rows = '';
+    foreach ($alerts as $alert) {
+        $formatted = af_aam_format_alert($alert);
+        $af_aam_alert_text = htmlspecialchars_uni($formatted['text']);
+        $af_aam_alert_link = htmlspecialchars_uni($formatted['url'] ?: '#');
+        $af_aam_alert_date = my_date($mybb->settings['dateformat'] . ' ' . $mybb->settings['timeformat'], (int)$alert['dateline']);
+        $af_aam_alert_id   = (int)$alert['id'];
+        $af_aam_alert_class = ((int)$alert['is_read'] === 1) ? 'alert--read' : 'alert--unread';
+        $af_aam_alert_icon = '🔔';
+
+        switch ($alert['code'] ?? '') {
+            case 'pm':
+                $af_aam_alert_icon = '✉️';
+                break;
+            case 'rep':
+                $af_aam_alert_icon = '⭐';
+                break;
+            case 'quoted':
+                $af_aam_alert_icon = '💬';
+                break;
+            case 'mention':
+                $af_aam_alert_icon = '@';
+                break;
+            case 'post_threadauthor':
+            case 'subscribed_thread':
+                $af_aam_alert_icon = '📌';
+                break;
+        }
+
+        $af_aam_markread_hidden = ((int)$alert['is_read'] === 1) ? ' hidden' : '';
+        $af_aam_markunread_hidden = ((int)$alert['is_read'] === 1) ? '' : ' hidden';
+
+        eval('$rows .= "' . $templates->get('af_aam_alert_row_popup') . '";');
+    }
+
+    return $rows;
 }
 
 function af_aam_pre_output_page(string &$page): void
@@ -844,7 +921,7 @@ function af_aam_misc_router(): void
 
 function af_aam_xmlhttp(): void
 {
-    global $mybb, $db, $lang;
+    global $mybb, $db, $lang, $templates;
 
     // Универсальный ответ с ошибкой, чтобы никогда не молчать
     $error = static function (string $code, string $msg = ''): void {
@@ -888,12 +965,18 @@ function af_aam_xmlhttp(): void
         $alerts      = [];
         $idsToMark   = [];
         $alertsHtml  = '';
+        $unreadOnly  = (int)$mybb->get_input('unreadOnly', MyBB::INPUT_INT) === 1;
+
+        $where = "a.uid = {$uid}";
+        if ($unreadOnly) {
+            $where .= " AND a.is_read = 0";
+        }
 
         $sql = $db->write_query("
             SELECT a.*, t.code
             FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
             LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id = a.type_id)
-            WHERE a.uid = {$uid}
+            WHERE {$where}
             ORDER BY a.dateline DESC
             LIMIT {$limit}
         ");
@@ -906,7 +989,6 @@ function af_aam_xmlhttp(): void
                 $mybb->settings['dateformat'] . ' ' . $mybb->settings['timeformat'],
                 (int)$row['dateline']
             );
-            $class = ((int)$row['is_read'] === 1) ? 'af-aam-item-read' : 'af-aam-item-unread';
 
             $alerts[] = [
                 'id'       => $id,
@@ -918,23 +1000,16 @@ function af_aam_xmlhttp(): void
                 'date_fmt' => $date,
             ];
 
-            $textHtml = '<span class="af-aam-item-text">' . htmlspecialchars_uni($text) . '</span>';
-            if ($formatted['url'] !== '') {
-                $textHtml = '<a href="' . htmlspecialchars_uni($formatted['url']) . '">' . $textHtml . '</a>';
-            }
-
-            $alertsHtml .= '<li class="af-aam-item ' . $class . '" data-alert-id="' . $id . '">'
-                . $textHtml
-                . '<span class="af-aam-item-date">' . htmlspecialchars_uni($date) . '</span>'
-                . '</li>';
             $idsToMark[] = $id;
         }
 
-        if (empty($alerts)) {
-            $alertsHtml = '<li class="af-aam-empty">'
-                . htmlspecialchars_uni($lang->af_aam_no_alerts)
-                . '</li>';
-        } elseif (!empty($idsToMark)) {
+        if (!empty($alerts)) {
+            $alertsHtml = af_aam_render_popup_rows($alerts);
+        } else {
+            $alertsHtml = $templates->render('af_aam_alert_row_popup_empty');
+        }
+
+        if (!empty($idsToMark)) {
             $idsSql = implode(',', array_map('intval', $idsToMark));
             $db->update_query(
                 AF_AAM_TABLE_ALERTS,

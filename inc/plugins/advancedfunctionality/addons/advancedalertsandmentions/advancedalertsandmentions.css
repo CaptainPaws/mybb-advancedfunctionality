@@ -1,21 +1,30 @@
 .af-aam-header-link {
     position: relative;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+    border-radius: 4px;
+}
+
+.af-aam-header-link:hover,
+.af-aam-header-link:focus {
+    background: rgba(255, 255, 255, 0.08);
+    text-decoration: none;
 }
 
 .af-aam-bell {
     font-size: 18px;
+    line-height: 1;
 }
 
 .af-aam-badge {
-    position: absolute;
-    right: -6px;
-    top: -4px;
-    min-width: 14px;
-    padding: 1px 3px;
-    font-size: 10px;
+    display: inline-block;
+    min-width: 16px;
+    padding: 2px 6px;
+    font-size: 11px;
     line-height: 1;
-    border-radius: 8px;
+    border-radius: 10px;
     background: #c33;
     color: #fff;
     text-align: center;
@@ -102,6 +111,36 @@
 
 .af-aam-modal.af-aam-modal-open {
     display: block;
+}
+
+.af-aam-modal-table {
+    width: 100%;
+}
+
+.af-aam-modal .af-aam-modal-close {
+    float: right;
+    background: transparent;
+    border: 0;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.alert__avatar {
+    width: 40px;
+    font-size: 18px;
+}
+
+.alert__content a {
+    color: inherit;
+}
+
+.alert--read td {
+    opacity: .7;
+}
+
+.hidden {
+    display: none;
 }
 
 .af-aam-modal-backdrop {
