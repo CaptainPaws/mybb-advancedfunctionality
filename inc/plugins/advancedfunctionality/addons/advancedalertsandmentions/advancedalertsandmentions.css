@@ -104,6 +104,36 @@
     display: block;
 }
 
+.af-aam-modal-table {
+    width: 100%;
+}
+
+.af-aam-modal .af-aam-modal-close {
+    float: right;
+    background: transparent;
+    border: 0;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.alert__avatar {
+    width: 40px;
+    font-size: 18px;
+}
+
+.alert__content a {
+    color: inherit;
+}
+
+.alert--read td {
+    opacity: .7;
+}
+
+.hidden {
+    display: none;
+}
+
 .af-aam-modal-backdrop {
     position: fixed;
     inset: 0;
