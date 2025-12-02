@@ -44,6 +44,7 @@ function af_advancedalertsandmentions_init(): void
     $plugins->add_hook('reputation_do_add_end',        'af_aam_rep_do_add_end');
     $plugins->add_hook('datahandler_pm_insert_end',    'af_aam_pm_insert_end');
     $plugins->add_hook('datahandler_post_insert_post', 'af_aam_post_insert_end');
+    $plugins->add_hook('datahandler_user_insert',      'af_aam_datahandler_user_insert');
 
     $plugins->add_hook('postbit',                      'af_aam_postbit_mention_button');
     $plugins->add_hook('postbit_pm',                   'af_aam_postbit_mention_button');
@@ -78,6 +79,10 @@ function af_advancedalertsandmentions_install(): void
         $db->add_column(AF_AAM_TABLE_TYPES, 'title', "VARCHAR(255) NOT NULL DEFAULT '' AFTER code");
     }
 
+    if ($db->table_exists(AF_AAM_TABLE_TYPES) && !$db->field_exists('default_user_enabled', AF_AAM_TABLE_TYPES)) {
+        $db->add_column(AF_AAM_TABLE_TYPES, 'default_user_enabled', "TINYINT(1) NOT NULL DEFAULT 1 AFTER can_be_user_disabled");
+    }
+
     // заполняем названия для уже существующих типов
     $labels = [];
     if (isset($lang->af_aam_alert_type_rep)) {
@@ -109,6 +114,7 @@ function af_advancedalertsandmentions_install(): void
                 title VARCHAR(255) NOT NULL DEFAULT '',
                 enabled TINYINT(1) NOT NULL DEFAULT 1,
                 can_be_user_disabled TINYINT(1) NOT NULL DEFAULT 1,
+                default_user_enabled TINYINT(1) NOT NULL DEFAULT 1,
                 PRIMARY KEY (id),
                 UNIQUE KEY unique_code (code)
             ) ENGINE=InnoDB{$collation};
@@ -247,6 +253,7 @@ function af_advancedalertsandmentions_install(): void
             'title'                => $db->escape_string($title),
             'enabled'              => 1,
             'can_be_user_disabled' => 1,
+            'default_user_enabled' => 1,
         ]);
     }
 
@@ -704,6 +711,23 @@ function af_aam_usercp_start(): void
         eval('echo "'.$templates->get('af_aam_ucp_prefs').'";');
         exit;
     }
+}
+
+function af_aam_datahandler_user_insert(\UserDataHandler &$dataHandler): void
+{
+    global $db;
+
+    if (!$db->table_exists(AF_AAM_TABLE_TYPES) || !$db->field_exists('default_user_enabled', AF_AAM_TABLE_TYPES)) {
+        return;
+    }
+
+    $disabledCodes = [];
+    $query = $db->simple_select(AF_AAM_TABLE_TYPES, 'code', 'default_user_enabled=0');
+    while ($row = $db->fetch_array($query)) {
+        $disabledCodes[] = $row['code'];
+    }
+
+    $dataHandler->user_insert_data['af_aam_disabled_types'] = $db->escape_string(json_encode($disabledCodes));
 }
 
 // ================ MISC/ XMLHTTP: API и список ===================
