@@ -1,0 +1,250 @@
+.af-aam-header-link {
+    position: relative;
+    display: inline-block;
+}
+
+.af-aam-bell {
+    font-size: 18px;
+}
+
+.af-aam-badge {
+    position: absolute;
+    right: -6px;
+    top: -4px;
+    min-width: 14px;
+    padding: 1px 3px;
+    font-size: 10px;
+    line-height: 1;
+    border-radius: 8px;
+    background: #c33;
+    color: #fff;
+    text-align: center;
+}
+
+.af-aam-dropdown {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 4px;
+    min-width: 260px;
+    background: #1e1e1e;
+    border: 1px solid #444;
+    display: none;
+    z-index: 9999;
+}
+
+.af-aam-dropdown.af-aam-open {
+    display: block;
+}
+
+.af-aam-dropdown-inner {
+    min-width: 260px;
+    max-width: 320px;
+    max-height: 320px;
+    overflow-y: auto;
+    background: #222;
+    color: #eee;
+    border: 1px solid #444;
+    border-radius: 3px;
+    box-shadow: 0 2px 5px rgba(0,0,0,.5);
+}
+
+#af_aam_dropdown_list {
+    list-style: none;
+    margin: 0;
+    padding: 4px;
+}
+
+.af-aam-item {
+    padding: 4px 6px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.af-aam-item-unread {
+    background: rgba(255,255,255,0.06);
+    font-weight: bold;
+}
+
+.af-aam-item:hover {
+    background: rgba(255,255,255,0.12);
+}
+
+.af-aam-empty {
+    padding: 6px;
+    font-size: 12px;
+    opacity: .8;
+}
+
+.af-aam-dropdown-footer {
+    padding: 4px 6px;
+    border-top: 1px solid #444;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+}
+
+.af-aam-dropdown-footer a {
+    color: #9cf;
+    text-decoration: none;
+}
+
+.af-aam-dropdown-footer button {
+    font-size: 11px;
+}
+
+/* modal */
+
+.af-aam-modal {
+    display: none;
+}
+
+.af-aam-modal.af-aam-modal-open {
+    display: block;
+}
+
+.af-aam-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.6);
+    z-index: 9998;
+}
+
+.af-aam-modal-window {
+    position: fixed;
+    z-index: 9999;
+    top: 10%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 480px;
+    max-width: 95%;
+    background: #222;
+    color: #eee;
+    border-radius: 4px;
+    box-shadow: 0 3px 10px rgba(0,0,0,.7);
+}
+
+.af-aam-modal-header,
+.af-aam-modal-footer {
+    padding: 8px 10px;
+    border-bottom: 1px solid #444;
+}
+
+.af-aam-modal-footer {
+    border-top: 1px solid #444;
+    border-bottom: 0;
+}
+
+.af-aam-modal-title {
+    font-weight: bold;
+}
+
+.af-aam-modal-close {
+    float: right;
+}
+
+/* list page */
+
+.af-aam-list-page {
+    margin: 10px;
+}
+
+.af-aam-list-row {
+    padding: 6px 8px;
+    border-bottom: 1px solid #333;
+    display: flex;
+    align-items: center;
+    font-size: 13px;
+}
+
+.af-aam-row-unread {
+    background: rgba(255,255,255,0.04);
+    font-weight: bold;
+}
+
+.af-aam-list-icon {
+    margin-right: 6px;
+}
+
+.af-aam-list-text {
+    flex: 1;
+}
+
+.af-aam-list-date {
+    font-size: 11px;
+    opacity: .8;
+}
+
+/* mention button */
+
+.af-aam-mention-button {
+    margin-left: 4px;
+    font-size: 11px;
+    text-decoration: none;
+}
+
+/* suggest box */
+
+.af-aam-suggest-box {
+    position: absolute;
+    z-index: 9999;
+    min-width: 180px;
+    max-width: 260px;
+    max-height: 200px;
+    overflow-y: auto;
+    background: #222;
+    color: #eee;
+    border: 1px solid #444;
+    border-radius: 3px;
+    box-shadow: 0 2px 5px rgba(0,0,0,.6);
+}
+
+/* элементы MyAlerts, адаптированные под AAM (без графических файлов) */
+.alerts--new a,
+.newAlerts > a {
+    color: #d9534f !important;
+    font-weight: bold;
+}
+
+.alert-row__no-alerts td {
+    text-align: center;
+}
+
+.alert--read.alert,
+.af-aam-item.af-aam-item-read {
+    opacity: .6;
+}
+
+.alert.alert--read td.trow1 {
+    background-color: #f5f5f5;
+}
+
+.usercp_nav_myalerts,
+.usercp_nav_myalerts_delete_all,
+.usercp_nav_myalerts_delete_read {
+    padding-left: 24px;
+    position: relative;
+}
+
+.usercp_nav_myalerts::before,
+.usercp_nav_myalerts_delete_all::before,
+.usercp_nav_myalerts_delete_read::before {
+    content: '\23f3';
+    position: absolute;
+    left: 6px;
+    color: #888;
+}
+
+.usercp_nav_myalerts_delete_all::before { content: '\2716'; }
+.usercp_nav_myalerts_delete_read::before { content: '\1F5D1'; }
+
+.af-aam-suggest-item {
+    padding: 4px 6px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.af-aam-suggest-item:hover {
+    background: rgba(255,255,255,0.12);
+}
