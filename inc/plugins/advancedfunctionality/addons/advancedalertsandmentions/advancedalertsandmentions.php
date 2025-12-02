@@ -25,6 +25,71 @@ const AF_AAM_TABLE_ALERTS = 'aam_alerts';
 const AF_AAM_TABLE_TYPES  = 'aam_alert_types';
 
 /**
+ * Регистрация (или обновление) типа уведомления. Используется и в админке, и клиентскими модулями.
+ */
+function af_aam_register_type(string $code, string $title = '', int $canBeUserDisabled = 1, int $defaultUserEnabled = 1, int $enabled = 1): ?int
+{
+    global $db;
+
+    $code = trim($code);
+    if ($code === '' || !$db->table_exists(AF_AAM_TABLE_TYPES)) {
+        return null;
+    }
+
+    $title = trim($title);
+    $escapedCode = $db->escape_string($code);
+    $existing = $db->fetch_array($db->simple_select(AF_AAM_TABLE_TYPES, '*', "code='{$escapedCode}'"));
+    if ($existing) {
+        $update = [];
+        if ($title !== '' && $title !== $existing['title']) {
+            $update['title'] = $db->escape_string($title);
+        }
+        if ((int)$existing['can_be_user_disabled'] !== (int)$canBeUserDisabled) {
+            $update['can_be_user_disabled'] = (int)$canBeUserDisabled;
+        }
+        if ((int)$existing['default_user_enabled'] !== (int)$defaultUserEnabled) {
+            $update['default_user_enabled'] = (int)$defaultUserEnabled;
+        }
+        if ((int)$existing['enabled'] !== (int)$enabled) {
+            $update['enabled'] = (int)$enabled;
+        }
+
+        if (!empty($update)) {
+            $db->update_query(AF_AAM_TABLE_TYPES, $update, "id=" . (int)$existing['id']);
+        }
+
+        return (int)$existing['id'];
+    }
+
+    $insert = [
+        'code'                 => $escapedCode,
+        'title'                => $db->escape_string($title),
+        'enabled'              => (int)$enabled,
+        'can_be_user_disabled' => (int)$canBeUserDisabled,
+        'default_user_enabled' => (int)$defaultUserEnabled,
+    ];
+
+    // Подстрахуемся от гонок или остаточных записей: upsert вместо «слепого» insert.
+    $db->write_query(
+        "INSERT INTO " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " (code, title, enabled, can_be_user_disabled, default_user_enabled)
+         VALUES ('{$insert['code']}', '{$insert['title']}', {$insert['enabled']}, {$insert['can_be_user_disabled']}, {$insert['default_user_enabled']})
+         ON DUPLICATE KEY UPDATE
+            title=VALUES(title),
+            enabled=VALUES(enabled),
+            can_be_user_disabled=VALUES(can_be_user_disabled),
+            default_user_enabled=VALUES(default_user_enabled)"
+    );
+
+    $insertId = (int)$db->insert_id();
+    if ($insertId > 0) {
+        return $insertId;
+    }
+
+    $existingAfterInsert = $db->fetch_array($db->simple_select(AF_AAM_TABLE_TYPES, 'id', "code='{$escapedCode}'"));
+    return $existingAfterInsert ? (int)$existingAfterInsert['id'] : null;
+}
+
+/**
  * Точка входа для ядра AdvancedFunctionality:
  * вызывается из af_{id}_init() внутри хуков global_start.
  */
@@ -44,6 +109,7 @@ function af_advancedalertsandmentions_init(): void
     $plugins->add_hook('reputation_do_add_end',        'af_aam_rep_do_add_end');
     $plugins->add_hook('datahandler_pm_insert_end',    'af_aam_pm_insert_end');
     $plugins->add_hook('datahandler_post_insert_post', 'af_aam_post_insert_end');
+    $plugins->add_hook('datahandler_user_insert',      'af_aam_datahandler_user_insert');
 
     $plugins->add_hook('postbit',                      'af_aam_postbit_mention_button');
     $plugins->add_hook('postbit_pm',                   'af_aam_postbit_mention_button');
@@ -78,6 +144,10 @@ function af_advancedalertsandmentions_install(): void
         $db->add_column(AF_AAM_TABLE_TYPES, 'title', "VARCHAR(255) NOT NULL DEFAULT '' AFTER code");
     }
 
+    if ($db->table_exists(AF_AAM_TABLE_TYPES) && !$db->field_exists('default_user_enabled', AF_AAM_TABLE_TYPES)) {
+        $db->add_column(AF_AAM_TABLE_TYPES, 'default_user_enabled', "TINYINT(1) NOT NULL DEFAULT 1 AFTER can_be_user_disabled");
+    }
+
     // заполняем названия для уже существующих типов
     $labels = [];
     if (isset($lang->af_aam_alert_type_rep)) {
@@ -109,6 +179,7 @@ function af_advancedalertsandmentions_install(): void
                 title VARCHAR(255) NOT NULL DEFAULT '',
                 enabled TINYINT(1) NOT NULL DEFAULT 1,
                 can_be_user_disabled TINYINT(1) NOT NULL DEFAULT 1,
+                default_user_enabled TINYINT(1) NOT NULL DEFAULT 1,
                 PRIMARY KEY (id),
                 UNIQUE KEY unique_code (code)
             ) ENGINE=InnoDB{$collation};
@@ -234,20 +305,10 @@ function af_advancedalertsandmentions_install(): void
     ];
 
     foreach ($defaultTypes as $code) {
-        $query = $db->simple_select(AF_AAM_TABLE_TYPES, 'id', "code='" . $db->escape_string($code) . "'");
-        if ($db->fetch_array($query)) {
-            continue;
-        }
-
         $titleKey = 'af_aam_alert_type_' . $code;
         $title = $lang->{$titleKey} ?? $code;
 
-        $db->insert_query(AF_AAM_TABLE_TYPES, [
-            'code'                 => $db->escape_string($code),
-            'title'                => $db->escape_string($title),
-            'enabled'              => 1,
-            'can_be_user_disabled' => 1,
-        ]);
+        af_aam_register_type($code, $title, 1, 1, 1);
     }
 
     // шаблоны: заголовок, модалка, страница списка, UCP-предпочтения
@@ -510,7 +571,7 @@ function af_aam_bootstrap(): void
 
     $af_aam_dropdown_items = '';
     $sql = $db->write_query("
-        SELECT a.*, t.code
+        SELECT a.*, t.code, t.title
         FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
         LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id=a.type_id)
         WHERE a.uid={$uid}
@@ -619,7 +680,7 @@ function af_aam_usercp_start(): void
         $af_aam_list_rows = '';
         if ($total > 0) {
             $sql = $db->write_query("
-                SELECT a.*, t.code
+                SELECT a.*, t.code, t.title
                 FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
                 LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id=a.type_id)
                 WHERE a.uid={$uid}
@@ -704,6 +765,23 @@ function af_aam_usercp_start(): void
         eval('echo "'.$templates->get('af_aam_ucp_prefs').'";');
         exit;
     }
+}
+
+function af_aam_datahandler_user_insert(\UserDataHandler &$dataHandler): void
+{
+    global $db;
+
+    if (!$db->table_exists(AF_AAM_TABLE_TYPES) || !$db->field_exists('default_user_enabled', AF_AAM_TABLE_TYPES)) {
+        return;
+    }
+
+    $disabledCodes = [];
+    $query = $db->simple_select(AF_AAM_TABLE_TYPES, 'code', 'default_user_enabled=0');
+    while ($row = $db->fetch_array($query)) {
+        $disabledCodes[] = $row['code'];
+    }
+
+    $dataHandler->user_insert_data['af_aam_disabled_types'] = $db->escape_string(json_encode($disabledCodes));
 }
 
 // ================ MISC/ XMLHTTP: API и список ===================
@@ -1389,8 +1467,9 @@ function af_aam_format_alert(array $alert): array
         $lang->load('advancedfunctionality_' . AF_AAM_ID);
     }
 
-    $code  = $alert['code'] ?? '';
-    $extra = [];
+    $code   = $alert['code'] ?? '';
+    $title  = $alert['title'] ?? '';
+    $extra  = [];
     if (!empty($alert['extra'])) {
         $decoded = json_decode($alert['extra'], true);
         if (is_array($decoded)) {
@@ -1458,7 +1537,12 @@ function af_aam_format_alert(array $alert): array
 
         default:
             $labelKey = 'af_aam_alert_type_' . $code;
-            $text = $lang->{$labelKey} ?? $code;
+            $customText = (string)($extra['message'] ?? '');
+            $text = $customText !== '' ? $customText : ($title ?: ($lang->{$labelKey} ?? $code));
+    }
+
+    if (!empty($extra['url'])) {
+        $url = (string)$extra['url'];
     }
 
     return [
@@ -1526,30 +1610,3 @@ function af_aam_postbit_mention_button(array &$post): void
     }
 }
 
-// ================ АДМИН-КОНТРОЛЛЕР ДЛЯ AF ======================
-
-/**
- * Простейший контроллер для AF-роутера:
- * /admin/index.php?module=advancedfunctionality&addon=advancedalertsandmentions
- */
-class AF_Admin_AdvancedAlertsAndMentions
-{
-    public static function dispatch(): void
-    {
-        global $mybb, $db, $page, $lang;
-
-        if (!isset($lang->af_aam_name)) {
-            $lang->load('advancedfunctionality_' . AF_AAM_ID);
-        }
-
-        $page->output_inline_message(
-            $lang->af_aam_name . ' — используйте страницу "Настройки" для конфигурации типов уведомлений и поведения.'
-        );
-
-        // небольшая статистика
-        $row = $db->fetch_array($db->simple_select(AF_AAM_TABLE_ALERTS, 'COUNT(id) AS cnt'));
-        $totalAlerts = (int)($row['cnt'] ?? 0);
-
-        $page->output_inline_message('Всего уведомлений в базе: ' . $totalAlerts);
-    }
-}
