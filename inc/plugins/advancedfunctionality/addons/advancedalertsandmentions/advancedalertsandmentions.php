@@ -303,8 +303,65 @@ function af_advancedalertsandmentions_install(): void
     }
 
 
-    // шаблоны: заголовок, модалка, страница списка, UCP-предпочтения
+    af_aam_install_templates();
+}
+
+function af_advancedalertsandmentions_uninstall(): void
+{
+    global $db;
+
+    if ($db->table_exists(AF_AAM_TABLE_ALERTS)) {
+        $db->drop_table(AF_AAM_TABLE_ALERTS);
+    }
+    if ($db->table_exists(AF_AAM_TABLE_TYPES)) {
+        $db->drop_table(AF_AAM_TABLE_TYPES);
+    }
+
+    if ($db->field_exists('af_aam_disabled_types', 'users')) {
+        $db->drop_column('users', 'af_aam_disabled_types');
+    }
+
+    // удаляем настройки
+    $db->delete_query('settings', "name IN('af_aam_enabled','af_aam_per_page','af_aam_dropdown_limit','af_aam_autorefresh','af_aam_sound')");
+    $db->delete_query('settinggroups', "name='af_aam'");
+    rebuild_settings();
+
+    // удаляем шаблоны
+    $titles = [
+        'af_aam_header_icon',
+        'af_aam_header_bell',
+        'af_aam_modal',
+        'af_aam_list_page',
+        'af_aam_list_row',
+        'af_aam_ucp_prefs',
+        'af_aam_ucp_prefs_row',
+        'af_aam_alert_row_popup',
+        'af_aam_alert_row_popup_empty',
+        'af_aam_js_popup',
+    ];
+    $in = "'" . implode("','", array_map('my_strtolower', $titles)) . "'";
+
+    $db->delete_query('templates', "title IN({$in})");
+
     require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
+    // чистим вставки
+    find_replace_templatesets('headerinclude', '#{\$af_aam_js}{\$af_aam_css}#i', '');
+    find_replace_templatesets('header_welcomeblock_member', '#{\$af_aam_header_icon}#i', '');
+    find_replace_templatesets('header_welcomeblock_member', '#{\$af_aam_header_bell}#i', '');
+    find_replace_templatesets('footer', '#{\$af_aam_modal}#i', '');
+}
+
+// AF-ядро само управляет "включено/выключено"
+// При активации прогоняем install() ещё раз, чтобы обновить шаблоны/вставки
+function af_advancedalertsandmentions_activate(): void
+{
+    af_advancedalertsandmentions_install();
+}
+
+function af_advancedalertsandmentions_deactivate(): void
+{
+    // Специально ничего не трогаем: AF просто перестаёт вызывать init()
+}
 
     // === header icon: MyAlerts-стиль, но с Unicode-иконкой ===
     $template = <<<HTML
@@ -444,6 +501,18 @@ HTML;
 
     af_aam_insert_template('af_aam_ucp_prefs_row', $template);
 
+    // JS-конфиг в стиле MyAlerts
+    $template = <<<HTML
+<script type="text/javascript">
+    var unreadAlerts = '{\$af_aam_unread}';
+    var myalerts_autorefresh = '{\$af_aam_autorefresh}';
+    var my_post_key = '{\$mybb->post_code}';
+</script>
+<script type="text/javascript" src="{\$af_aam_asset_base}advancedalertsandmentions.js"></script>
+HTML;
+
+    af_aam_insert_template('af_aam_js_popup', $template);
+
     // сначала вычистим старые вставки, если они уже есть
     find_replace_templatesets('headerinclude', '#{\$af_aam_js}{\$af_aam_css}#i', '');
     find_replace_templatesets('header_welcomeblock_member', '#{\$af_aam_header_icon}#i', '');
@@ -564,6 +633,8 @@ function af_aam_bootstrap(): void
         $lang->load('advancedfunctionality_' . AF_AAM_ID);
     }
 
+    $af_aam_modal_unread_only = $lang->af_aam_modal_unread_only ?? 'Только непрочитанные';
+
     // web-URL к ассетам
     $base = rtrim($mybb->settings['bburl'], '/');
     $assetBase = $base . '/' . AF_AAM_BASE;
@@ -619,6 +690,7 @@ function af_aam_bootstrap(): void
 
     $af_aam_modal_list = af_aam_render_popup_rows($alerts);
 
+    eval('$af_aam_js          = "'.$templates->get('af_aam_js_popup').'";');
     eval('$af_aam_header_icon = "'.$templates->get('af_aam_header_icon').'";');
     eval('$af_aam_modal       = "'.$templates->get('af_aam_modal').'";');
 }
