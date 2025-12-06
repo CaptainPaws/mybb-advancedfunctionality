@@ -64,7 +64,7 @@
 
 <!-- TEMPLATE: af_aam_alert_row_popup -->
 <tr class="alert {$af_aam_alert_class}" id="alert_row_popup_{$af_aam_alert_id}" data-alert-id="{$af_aam_alert_id}">
-    <td class="trow1 align-center alert__avatar" align="center">{$af_aam_alert_icon}</td>
+    <td class="trow1 align-center alert__avatar" align="center">{$af_aam_alert_avatar}</td>
     <td class="trow1 alert__content">
         <a href="{$af_aam_alert_link}" class="af-aam-alert-link">
             {$af_aam_alert_text}
@@ -126,7 +126,8 @@
 
 <!-- TEMPLATE: af_aam_list_row -->
 <div class="af-aam-list-row {$af_aam_read_class}" data-alert-id="{$af_aam_alert_id}">
-    <a class="af-aam-list-text" href="{$af_aam_url}">{$af_aam_text}</a>
+    <span class="af-aam-list-avatar">{$af_aam_alert_avatar}</span>
+    <a class="af-aam-list-text af-aam-list-link" data-alert-id="{$af_aam_alert_id}" href="{$af_aam_url}">{$af_aam_text}</a>
     <span class="af-aam-list-date">{$af_aam_date}</span>
 </div>
 <!-- /TEMPLATE -->
@@ -170,6 +171,7 @@
     window.af_aam_autorefresh   = {$af_aam_autorefresh};
     window.af_aam_sound_enabled = {$af_aam_sound_enabled};
     window.af_aam_toast_limit   = {$af_aam_toast_limit};
+    window.my_post_key          = "{$mybb->post_code}";
 
     // начальное количество непрочитанных (для корректного сравнения old/new в poll)
     window.unreadAlerts         = {$af_aam_unread};
