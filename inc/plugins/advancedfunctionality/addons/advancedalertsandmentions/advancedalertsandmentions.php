@@ -282,20 +282,42 @@ function af_advancedalertsandmentions_install(): void
         $db->add_column('users', 'af_aam_disabled_types', "TEXT NOT NULL");
     }
 
-    // группа настроек AF: AAM
+    // группа настроек AF: AAM (основное имя = af_advancedalertsandmentions, старое = af_aam)
+    $groupPrimary = 'af_' . AF_AAM_ID;
+    $groupLegacy  = 'af_aam';
     $gid = null;
-    $query = $db->simple_select('settinggroups', 'gid', "name='af_aam'");
-    $group = $db->fetch_array($query);
-    if (!$group) {
+
+    // сразу собираем существующие группы, чтобы не плодить дубли
+    $gids = [];
+    $gq = $db->simple_select('settinggroups', 'gid,name', "name IN('{$groupPrimary}','{$groupLegacy}')");
+    while ($g = $db->fetch_array($gq)) {
+        $gids[$g['name']] = (int)$g['gid'];
+    }
+
+    if (isset($gids[$groupPrimary])) {
+        $gid = $gids[$groupPrimary];
+        // если вдруг legacy тоже есть – объединим, чтобы не было двух пунктов
+        if (isset($gids[$groupLegacy]) && $gids[$groupLegacy] !== $gid) {
+            $db->update_query('settings', ['gid' => $gid], 'gid=' . (int)$gids[$groupLegacy]);
+            $db->delete_query('settinggroups', 'gid=' . (int)$gids[$groupLegacy]);
+        }
+    } elseif (isset($gids[$groupLegacy])) {
+        // переименуем старую группу в каноническое имя и используем её
+        $gid = $gids[$groupLegacy];
+        $db->update_query('settinggroups', [
+            'name'        => $groupPrimary,
+            'title'       => $db->escape_string($lang->af_aam_group),
+            'description' => $db->escape_string($lang->af_aam_group_desc),
+            'disporder'   => 50,
+        ], 'gid=' . $gid);
+    } else {
         $gid = (int)$db->insert_query('settinggroups', [
-            'name'        => 'af_aam',
+            'name'        => $groupPrimary,
             'title'       => $db->escape_string($lang->af_aam_group),
             'description' => $db->escape_string($lang->af_aam_group_desc),
             'disporder'   => 50,
             'isdefault'   => 0,
         ]);
-    } else {
-        $gid = (int)$group['gid'];
     }
 
     $settings = [
@@ -391,6 +413,9 @@ function af_advancedalertsandmentions_install(): void
         );
     }
 
+    // MyCode для тегов [mention]
+    af_aam_ensure_mycode();
+
     // шаблоны и врезки
     af_aam_install_templates();
 
@@ -400,7 +425,7 @@ function af_advancedalertsandmentions_install(): void
 
 function af_advancedalertsandmentions_uninstall(): void
 {
-    global $db;
+    global $db, $cache;
 
     if ($db->table_exists(AF_AAM_TABLE_ALERTS)) {
         $db->drop_table(AF_AAM_TABLE_ALERTS);
@@ -419,7 +444,10 @@ function af_advancedalertsandmentions_uninstall(): void
         "name IN('af_aam_enabled','af_aam_per_page','af_aam_dropdown_limit','af_aam_autorefresh','af_aam_sound','af_aam_autoclean_days','af_aam_sound','af_aam_autoclean_days','af_aam_toast_limit')"
     );
     $db->delete_query('settings', "name IN('af_aam_enabled','af_aam_per_page','af_aam_dropdown_limit','af_aam_autorefresh','af_aam_sound')");
-    $db->delete_query('settinggroups', "name='af_aam'");
+    $db->delete_query('settinggroups', "name IN('af_aam','af_" . AF_AAM_ID . "')");
+    if ($cache) {
+        $cache->delete('af_aam_last_autoclean');
+    }
     rebuild_settings();
 
     // удаляем шаблоны
@@ -443,6 +471,75 @@ function af_advancedalertsandmentions_uninstall(): void
     find_replace_templatesets('headerinclude', '#{\$af_aam_js}{\$af_aam_css}#i', '');
     find_replace_templatesets('header_welcomeblock_member', '#{\$af_aam_header_icon}#i', '');
     find_replace_templatesets('footer', '#{\$af_aam_modal}#i', '');
+}
+
+function af_aam_ensure_mycode(): void
+{
+    global $db, $lang;
+
+    if (!isset($lang->af_aam_name)) {
+        $lang->load('advancedfunctionality_' . AF_AAM_ID);
+    }
+
+    $hasAllowHtml     = $db->field_exists('allowhtml', 'mycode');
+    $hasAllowMyCode   = $db->field_exists('allowmycode', 'mycode');
+    $hasAllowSmilies  = $db->field_exists('allowsmilies', 'mycode');
+    $hasAllowImgCode  = $db->field_exists('allowimgcode', 'mycode');
+    $hasAllowVideo    = $db->field_exists('allowvideocode', 'mycode');
+
+    $mycodes = [
+        [
+            'title'       => 'AF AAM Mention (uid)',
+            'description' => $lang->af_aam_mycode_desc ?? 'Упоминание пользователя с привязкой к uid',
+            'regex'       => '\\[mention=([0-9]+)\\](.+?)\\[/mention\\]',
+            'replacement' => '<span class="af-aam-mention">@<a href="member.php?action=profile&uid=$1">$2</a></span>',
+            'parseorder'  => 0,
+        ],
+        [
+            'title'       => 'AF AAM Mention (name)',
+            'description' => $lang->af_aam_mycode_desc ?? 'Упоминание пользователя по имени',
+            'regex'       => '\\[mention\\](.+?)\\[/mention\\]',
+            'replacement' => '<span class="af-aam-mention">@<a href="member.php?action=profile&username=$1">$1</a></span>',
+            'parseorder'  => 1,
+        ],
+    ];
+
+    foreach ($mycodes as $code) {
+        $row = [
+            'title'       => $db->escape_string($code['title']),
+            'description' => $db->escape_string($code['description']),
+            'regex'       => $db->escape_string($code['regex']),
+            'replacement' => $db->escape_string($code['replacement']),
+            'active'      => 1,
+            'parseorder'  => (int)$code['parseorder'],
+        ];
+
+        if ($hasAllowHtml) {
+            $row['allowhtml'] = 0;
+        }
+        if ($hasAllowMyCode) {
+            $row['allowmycode'] = 1;
+        }
+        if ($hasAllowSmilies) {
+            $row['allowsmilies'] = 1;
+        }
+        if ($hasAllowImgCode) {
+            $row['allowimgcode'] = 0;
+        }
+        if ($hasAllowVideo) {
+            $row['allowvideocode'] = 0;
+        }
+
+        $existing = $db->fetch_array(
+            $db->simple_select('mycode', 'cid', "title='{$row['title']}'")
+        );
+
+        if ($existing) {
+            $db->update_query('mycode', $row, 'cid=' . (int)$existing['cid']);
+        } else {
+            $db->insert_query('mycode', $row);
+        }
+    }
 }
 
 
@@ -607,6 +704,9 @@ function af_aam_bootstrap(): void
         $lang->load('advancedfunctionality_' . AF_AAM_ID);
     }
 
+    // периодическая автоочистка даже без новых уведомлений
+    af_aam_maybe_autoclean(false);
+
     // web-URL к ассетам
     $base = rtrim($mybb->settings['bburl'], '/');
     $assetBase = $base . '/' . AF_AAM_BASE;
@@ -640,9 +740,10 @@ function af_aam_bootstrap(): void
 
     $alerts = [];
     $sql = $db->write_query("
-        SELECT a.*, t.code, t.title
+        SELECT a.*, t.code, t.title, u.username AS from_username, u.avatar AS from_avatar, u.avatardimensions AS from_avatardimensions
         FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
         LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id=a.type_id)
+        LEFT JOIN " . TABLE_PREFIX . "users u ON (u.uid = a.from_uid)
         WHERE a.uid={$uid}
         ORDER BY a.dateline DESC
         LIMIT {$limit}
@@ -715,6 +816,7 @@ function af_aam_render_popup_rows(array $alerts): string
         $af_aam_alert_date = my_date($mybb->settings['dateformat'] . ' ' . $mybb->settings['timeformat'], (int)$alert['dateline']);
         $af_aam_alert_id   = (int)$alert['id'];
         $af_aam_alert_class = ((int)$alert['is_read'] === 1) ? 'alert--read' : 'alert--unread';
+        $af_aam_alert_avatar = af_aam_render_avatar_html((int)($alert['from_uid'] ?? 0), (string)($alert['from_username'] ?? ''));
         $af_aam_alert_icon = '🔔';
 
         switch ($alert['code'] ?? '') {
@@ -830,9 +932,10 @@ function af_aam_usercp_start(): void
         $af_aam_list_rows = '';
         if ($total > 0) {
             $sql = $db->write_query("
-                SELECT a.*, t.code, t.title
+                SELECT a.*, t.code, t.title, u.username AS from_username, u.avatar AS from_avatar, u.avatardimensions AS from_avatardimensions
                 FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
                 LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id=a.type_id)
+                LEFT JOIN " . TABLE_PREFIX . "users u ON (u.uid = a.from_uid)
                 WHERE a.uid={$uid}
                 ORDER BY a.dateline DESC
                 LIMIT {$offset}, {$perPage}
@@ -853,6 +956,7 @@ function af_aam_usercp_start(): void
                 $af_aam_text       = htmlspecialchars_uni($text);
                 $af_aam_date       = htmlspecialchars_uni($date);
                 $af_aam_alert_id   = (int)$alert['id'];
+                $af_aam_alert_avatar = af_aam_render_avatar_html((int)($alert['from_uid'] ?? 0), (string)($alert['from_username'] ?? ''));
 
                 eval('$af_aam_list_rows .= "'.$templates->get('af_aam_list_row').'";');
             }
@@ -983,9 +1087,10 @@ function af_aam_misc_router(): void
         $af_aam_list_rows = '';
         if ($total > 0) {
             $sql = $db->write_query("
-                SELECT a.*, t.code
+                SELECT a.*, t.code, u.username AS from_username, u.avatar AS from_avatar, u.avatardimensions AS from_avatardimensions
                 FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
                 LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id=a.type_id)
+                LEFT JOIN " . TABLE_PREFIX . "users u ON (u.uid = a.from_uid)
                 WHERE a.uid={$uid}
                 ORDER BY a.dateline DESC
                 LIMIT {$offset}, {$perPage}
@@ -993,12 +1098,19 @@ function af_aam_misc_router(): void
             while ($alert = $db->fetch_array($sql)) {
                 $formatted = af_aam_format_alert($alert);
                 $text = $formatted['text'];
-                $af_aam_url = htmlspecialchars_uni($formatted['url']);
+                $url = af_aam_normalize_url($formatted['url'] ?? '');
+                if ($url === '') {
+                    $url = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/misc.php?action=af_aam_list';
+                }
+
+                $af_aam_url = htmlspecialchars_uni($url);
                 $date = my_date($mybb->settings['dateformat'] . ' ' . $mybb->settings['timeformat'], (int)$alert['dateline']);
                 $af_aam_read_class = ((int)$alert['is_read'] === 1) ? 'af-aam-row-read' : 'af-aam-row-unread';
 
                 $af_aam_text = htmlspecialchars_uni($text);
                 $af_aam_date = htmlspecialchars_uni($date);
+                $af_aam_alert_id = (int)$alert['id'];
+                $af_aam_alert_avatar = af_aam_render_avatar_html((int)($alert['from_uid'] ?? 0), (string)($alert['from_username'] ?? ''));
                 eval('$af_aam_list_rows .= "'.$templates->get('af_aam_list_row').'";');
             }
         } else {
@@ -1137,6 +1249,8 @@ function af_aam_xmlhttp(): void
     }
 
     if ($action_lc === 'markallread' || $action_lc === 'mark_all_read') {
+        verify_post_check($mybb->get_input('my_post_key'));
+
         $db->update_query(
             AF_AAM_TABLE_ALERTS,
             ['is_read' => 1],
@@ -1154,6 +1268,8 @@ function af_aam_xmlhttp(): void
     }
 
     if ($action_lc === 'myalerts_mark_read' || $action_lc === 'myalerts_mark_unread') {
+        verify_post_check($mybb->get_input('my_post_key'));
+
         $id = (int)$mybb->get_input('id', MyBB::INPUT_INT);
         $markRead = ($action_lc === 'myalerts_mark_read');
 
@@ -1200,9 +1316,10 @@ function af_aam_xmlhttp(): void
         $rawAlerts = [];
 
         $sql = $db->write_query("
-            SELECT a.*, t.code, t.title
+            SELECT a.*, t.code, t.title, u.username AS from_username, u.avatar AS from_avatar, u.avatardimensions AS from_avatardimensions
             FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
             LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id = a.type_id)
+            LEFT JOIN " . TABLE_PREFIX . "users u ON (u.uid = a.from_uid)
             WHERE a.uid = {$uid}
             ORDER BY a.dateline DESC
             LIMIT {$limit}
@@ -1212,6 +1329,7 @@ function af_aam_xmlhttp(): void
             $rawAlerts[] = $alert;
 
             $formatted = af_aam_format_alert($alert);
+            $avatar = af_aam_avatar_data((int)($alert['from_uid'] ?? 0));
 
             $items[] = [
                 'id'       => (int)$alert['id'],
@@ -1224,6 +1342,12 @@ function af_aam_xmlhttp(): void
                     $mybb->settings['dateformat'] . ' ' . $mybb->settings['timeformat'],
                     (int)$alert['dateline']
                 ),
+                'avatar' => [
+                    'url'      => $avatar['url'] ?? '',
+                    'width'    => (int)($avatar['width'] ?? 32),
+                    'height'   => (int)($avatar['height'] ?? 32),
+                    'username' => $alert['from_username'] ?? ($avatar['username'] ?? ''),
+                ],
             ];
         }
 
@@ -1257,6 +1381,8 @@ function af_aam_xmlhttp(): void
 
     // --- пометить одно уведомление прочитанным ---
     if ($op === 'mark_read') {
+        verify_post_check($mybb->get_input('my_post_key'));
+
         $id = (int)$mybb->get_input('id', MyBB::INPUT_INT);
         if ($id > 0) {
             $db->update_query(
@@ -1284,9 +1410,42 @@ function af_aam_xmlhttp(): void
         exit;
     }
 
+    // --- пометить одно уведомление непрочитанным ---
+    if ($op === 'mark_unread') {
+        verify_post_check($mybb->get_input('my_post_key'));
+
+        $id = (int)$mybb->get_input('id', MyBB::INPUT_INT);
+        if ($id > 0) {
+            $db->update_query(
+                AF_AAM_TABLE_ALERTS,
+                ['is_read' => 0],
+                "id = {$id} AND uid = {$uid}"
+            );
+        }
+
+        $q = $db->simple_select(
+            AF_AAM_TABLE_ALERTS,
+            'COUNT(id) AS cnt',
+            "uid = {$uid} AND is_read = 0"
+        );
+        $r     = $db->fetch_array($q);
+        $count = (int)($r['cnt'] ?? 0);
+
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'ok'           => 1,
+            'unread'       => $count,
+            'unread_count' => $count,
+            'badge'        => $count,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
 
     // --- пометить все уведомления прочитанными ---
     if ($op === 'mark_all') {
+        verify_post_check($mybb->get_input('my_post_key'));
+
         $db->update_query(
             AF_AAM_TABLE_ALERTS,
             ['is_read' => 1],
@@ -1306,6 +1465,8 @@ function af_aam_xmlhttp(): void
 
     // --- удалить одно уведомление ---
     if ($op === 'delete') {
+        verify_post_check($mybb->get_input('my_post_key'));
+
         $id = (int)$mybb->get_input('id', MyBB::INPUT_INT);
         if ($id > 0) {
             $db->delete_query(AF_AAM_TABLE_ALERTS, "id = {$id} AND uid = {$uid}");
@@ -1504,6 +1665,28 @@ function af_aam_user_allows_type(int $uid, string $code): bool
     return !in_array($code, $decoded, true);
 }
 
+function af_aam_maybe_autoclean(bool $force = false): void
+{
+    global $db, $mybb, $cache;
+
+    $days = (int)($mybb->settings['af_aam_autoclean_days'] ?? 0);
+    if ($days <= 0) {
+        return;
+    }
+
+    $minInterval = 3600; // не чаще раза в час, чтобы не грузить базу
+    $state = $cache->read('af_aam_last_autoclean');
+    $lastTs = is_array($state) && !empty($state['ts']) ? (int)$state['ts'] : 0;
+
+    if (!$force && $lastTs > 0 && (TIME_NOW - $lastTs) < $minInterval) {
+        return;
+    }
+
+    $threshold = TIME_NOW - ($days * 86400);
+    $db->delete_query(AF_AAM_TABLE_ALERTS, "dateline < {$threshold}");
+    $cache->update('af_aam_last_autoclean', ['ts' => TIME_NOW]);
+}
+
 function af_aam_add_alert(int $uid, string $code, int $objectId = 0, int $fromUid = 0, array $extra = [], int $forced = 0): void
 {
     global $db, $mybb;
@@ -1539,11 +1722,7 @@ function af_aam_add_alert(int $uid, string $code, int $objectId = 0, int $fromUi
 
     $db->insert_query(AF_AAM_TABLE_ALERTS, $insert);
     // Автоочистка старых уведомлений
-    $days = (int)($mybb->settings['af_aam_autoclean_days'] ?? 0);
-    if ($days > 0) {
-        $threshold = TIME_NOW - ($days * 86400);
-        $db->delete_query(AF_AAM_TABLE_ALERTS, "dateline < {$threshold}");
-    }
+    af_aam_maybe_autoclean(true);
 }
 
 // репутация
@@ -1770,61 +1949,37 @@ function af_aam_post_insert_end(&$posthandler): void
 
     // 3) Цитаты и упоминания в тексте поста
     if (!empty($data['message'])) {
-        $message = (string)$data['message'];
+        af_aam_process_message_mentions((string)$data['message'], $tid, $pid, $thread, $fromUid);
+    }
+}
 
-        // --- ЦИТАТЫ [quote="Username"] ---
-        if (preg_match_all('#\[quote=("|\')(.*?)(\\1)[^\]]*\]#i', $message, $m)) {
-            $names = array_unique(array_map('trim', $m[2]));
-            if (!empty($names)) {
-                $in     = array_map([$db, 'escape_string'], $names);
-                $inList = "'" . implode("','", $in) . "'";
-                $sql    = $db->simple_select('users', 'uid,username', "username IN({$inList})");
+/**
+ * Обработка цитат и упоминаний в тексте поста/темы.
+ */
+function af_aam_process_message_mentions(string $message, int $tid, int $pid, array $thread, int $fromUid): void
+{
+    global $db;
 
-                while ($u = $db->fetch_array($sql)) {
-                    $toUid = (int)$u['uid'];
-                    if ($toUid <= 0 || $toUid === $fromUid) {
-                        continue;
-                    }
+    $tid = (int)$tid;
+    $pid = (int)$pid;
+    $fromUid = (int)$fromUid;
 
-                    af_aam_add_alert(
-                        $toUid,
-                        'quoted',
-                        $tid,
-                        $fromUid,
-                        [
-                            'tid'     => $tid,
-                            'pid'     => $pid,
-                            'subject' => $thread['subject'] ?? '',
-                        ]
-                    );
-                }
-            }
-        }
+    if ($tid <= 0 || $fromUid <= 0) {
+        return;
+    }
 
-        // --- УПОМИНАНИЯ: @"Имя Фамилия" и @username ---
-        $mentionedUsernames = [];
+    $message = trim($message);
+    if ($message === '') {
+        return;
+    }
 
-        if (preg_match_all('#@\"([^"]+)\"#u', $message, $m1)) {
-            foreach ($m1[1] as $name) {
-                $n = trim($name);
-                if ($n !== '') {
-                    $mentionedUsernames[] = $n;
-                }
-            }
-        }
+    $threadSubject = $thread['subject'] ?? '';
 
-        if (preg_match_all('#@([\p{L}\p{N}_\.]+)#u', $message, $m2)) {
-            foreach ($m2[1] as $name) {
-                $n = trim($name);
-                if ($n !== '') {
-                    $mentionedUsernames[] = $n;
-                }
-            }
-        }
-
-        $mentionedUsernames = array_unique($mentionedUsernames);
-        if (!empty($mentionedUsernames)) {
-            $in     = array_map([$db, 'escape_string'], $mentionedUsernames);
+    // --- ЦИТАТЫ [quote="Username"] ---
+    if (preg_match_all('#\[quote=("|\')(.*?)(\\1)[^\]]*\]#i', $message, $m)) {
+        $names = array_unique(array_map('trim', $m[2]));
+        if (!empty($names)) {
+            $in     = array_map([$db, 'escape_string'], $names);
             $inList = "'" . implode("','", $in) . "'";
             $sql    = $db->simple_select('users', 'uid,username', "username IN({$inList})");
 
@@ -1836,16 +1991,95 @@ function af_aam_post_insert_end(&$posthandler): void
 
                 af_aam_add_alert(
                     $toUid,
-                    'mention',
+                    'quoted',
                     $tid,
                     $fromUid,
                     [
                         'tid'     => $tid,
                         'pid'     => $pid,
-                        'subject' => $thread['subject'] ?? '',
+                        'subject' => $threadSubject,
                     ]
                 );
             }
+        }
+    }
+
+    // --- УПОМИНАНИЯ: [mention], @"Имя Фамилия" и @username ---
+    $mentionedUids      = [];
+    $mentionedUsernames = [];
+
+    // [mention]User[/mention] или [mention=123]User[/mention]
+    if (preg_match_all('#\[mention(?:=([0-9]+))?\](.+?)\[/mention\]#iu', $message, $mTags)) {
+        foreach ($mTags[2] as $idx => $name) {
+            $idVal = isset($mTags[1][$idx]) ? (int)$mTags[1][$idx] : 0;
+            if ($idVal > 0) {
+                $mentionedUids[] = $idVal;
+            }
+
+            $n = trim($name);
+            if ($n !== '') {
+                $mentionedUsernames[] = $n;
+            }
+        }
+    }
+
+    if (preg_match_all('#@\"([^"]+)\"#u', $message, $m1)) {
+        foreach ($m1[1] as $name) {
+            $n = trim($name);
+            if ($n !== '') {
+                $mentionedUsernames[] = $n;
+            }
+        }
+    }
+
+    if (preg_match_all('#@([\p{L}\p{N}_\.]+)#u', $message, $m2)) {
+        foreach ($m2[1] as $name) {
+            $n = trim($name);
+            if ($n !== '') {
+                $mentionedUsernames[] = $n;
+            }
+        }
+    }
+
+    $targetUsers = [];
+
+    $mentionedUids = array_unique(array_filter(array_map('intval', $mentionedUids)));
+    if (!empty($mentionedUids)) {
+        $uidList = implode(',', $mentionedUids);
+        $sqlByUid = $db->simple_select('users', 'uid,username', "uid IN({$uidList})");
+        while ($u = $db->fetch_array($sqlByUid)) {
+            $targetUsers[(int)$u['uid']] = $u['username'];
+        }
+    }
+
+    $mentionedUsernames = array_unique($mentionedUsernames);
+    if (!empty($mentionedUsernames)) {
+        $in     = array_map([$db, 'escape_string'], $mentionedUsernames);
+        $inList = "'" . implode("','", $in) . "'";
+        $sql    = $db->simple_select('users', 'uid,username', "username IN({$inList})");
+
+        while ($u = $db->fetch_array($sql)) {
+            $targetUsers[(int)$u['uid']] = $u['username'];
+        }
+    }
+
+    if (!empty($targetUsers)) {
+        foreach ($targetUsers as $toUid => $toName) {
+            if ($toUid <= 0 || $toUid === $fromUid) {
+                continue;
+            }
+
+            af_aam_add_alert(
+                $toUid,
+                'mention',
+                $tid,
+                $fromUid,
+                [
+                    'tid'     => $tid,
+                    'pid'     => $pid,
+                    'subject' => $threadSubject,
+                ]
+            );
         }
     }
 }
@@ -1932,6 +2166,10 @@ function af_aam_thread_insert_end(&$posthandler): void
                 'subject' => $subject,
             ]
         );
+    }
+
+    if (!empty($data['message'])) {
+        af_aam_process_message_mentions((string)$data['message'], $tid, $pid, ($thread ?: ['subject' => $subject, 'fid' => $fid]), $fromUid);
     }
 }
 

@@ -11,12 +11,17 @@
     var afAamDebug = !!window.afAamDebug;
 
     var currentUnread = 0;
+    var lastSeenAlertId = 0;
     if (typeof window.unreadAlerts !== 'undefined') {
         currentUnread = parseInt(window.unreadAlerts, 10) || 0;
     }
 
     // лимит тостов
     var afAamToastLimit = parseInt(window.af_aam_toast_limit || '0', 10) || 0;
+    var afAamToastQueue = [];
+    var afAamActiveToasts = 0;
+    var afAamToastDuration = 10000;
+    var afAamShownToastIds = {};
 
     // глобальная настройка из PHP (0/1, число или строка)
     var rawSoundFlag = (typeof window.af_aam_sound_enabled !== 'undefined')
@@ -55,7 +60,13 @@
             var qsArr = [];
             for (var k in data) {
                 if (Object.prototype.hasOwnProperty.call(data, k)) {
-                    qsArr.push(encodeURIComponent(k) + '=' + encodeURIComponent(data[k]));
+                    if (Array.isArray(data[k])) {
+                        data[k].forEach(function (val) {
+                            qsArr.push(encodeURIComponent(k) + '=' + encodeURIComponent(val));
+                        });
+                    } else {
+                        qsArr.push(encodeURIComponent(k) + '=' + encodeURIComponent(data[k]));
+                    }
                 }
             }
             if (qsArr.length) {
@@ -87,7 +98,13 @@
             var body = [];
             for (var k2 in data) {
                 if (Object.prototype.hasOwnProperty.call(data, k2)) {
-                    body.push(encodeURIComponent(k2) + '=' + encodeURIComponent(data[k2]));
+                    if (Array.isArray(data[k2])) {
+                        data[k2].forEach(function (val) {
+                            body.push(encodeURIComponent(k2) + '=' + encodeURIComponent(val));
+                        });
+                    } else {
+                        body.push(encodeURIComponent(k2) + '=' + encodeURIComponent(data[k2]));
+                    }
                 }
             }
             xhr.send(body.join('&'));
@@ -305,7 +322,7 @@
                                     op: 'prefs_save',
                                     my_post_key: window.my_post_key || '',
                                     // отправим массив
-                                    'types[]': types
+                                    'types': types
                                 }, function (resp2) {
                                     // можно показать "сохранено"
                                 });
@@ -433,7 +450,8 @@
                     ajax('xmlhttp.php', {
                         action: 'af_aam_api',
                         op: 'delete',
-                        id: id3
+                        id: id3,
+                        my_post_key: window.my_post_key || ''
                     }, function () {
                         pollUnreadAlerts();
                     });
@@ -495,6 +513,53 @@
     }
 
 
+    function initListClicks() {
+        document.addEventListener('click', function (e) {
+            var node = e.target;
+
+            while (node && node !== document) {
+                if (node.classList && node.classList.contains('af-aam-list-link')) {
+                    if (node.href && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+                        e.preventDefault();
+
+                        var row = node.closest('.af-aam-list-row');
+                        var alertId = parseInt((node.getAttribute('data-alert-id') || (row && row.getAttribute('data-alert-id')) || '0'), 10);
+
+                        // локально отметим прочитанным и скорректируем счётчик, чтобы UCP сразу реагировал
+                        var wasUnread = false;
+                        if (row) {
+                            wasUnread = row.classList.contains('af-aam-row-unread');
+                            row.classList.remove('af-aam-row-unread');
+                            row.classList.add('af-aam-row-read');
+                        }
+
+                        if (wasUnread) {
+                            var badgeVal = currentUnread > 0 ? currentUnread - 1 : 0;
+                            updateVisibleCounts(badgeVal);
+                        }
+
+                        if (alertId) {
+                            ajax('xmlhttp.php', {
+                                action: 'af_aam_api',
+                                op: 'mark_read',
+                                id: alertId,
+                                my_post_key: window.my_post_key || ''
+                            }, function () {
+                                pollUnreadAlerts();
+                                window.location.href = node.href;
+                            });
+                        } else {
+                            window.location.href = node.href;
+                        }
+                    }
+                    return;
+                }
+                node = node.parentNode;
+            }
+        });
+    }
+
+
 
     function initMyAlertsCompat() {
         var latestBtn = qs('#getLatestAlerts');
@@ -520,23 +585,32 @@
             });
         }
 
-        markAllButtons.forEach(function (btn) {
-            btn.addEventListener('click', function (e) {
-                e.preventDefault();
-                ajax('xmlhttp.php', { action: 'markAllRead', my_post_key: window.my_post_key || '' }, function (resp) {
-                    if (resp && resp.success) {
-                        renderLatest();
-                        if (typeof window.afAamRefreshModal === 'function') {
-                            window.afAamRefreshModal();
-                        }
-
-                        // всё прочитано → сразу обнуляем на клиенте
-                        updateVisibleCounts(0);
-                        // и на всякий случай синхронизируемся с бэкендом
-                        pollUnreadAlerts();
+        function markAllHandler(e) {
+            e.preventDefault();
+            ajax('xmlhttp.php', { action: 'markAllRead', my_post_key: window.my_post_key || '' }, function (resp) {
+                if (resp && resp.success) {
+                    renderLatest();
+                    if (typeof window.afAamRefreshModal === 'function') {
+                        window.afAamRefreshModal();
                     }
-                });
+
+                    // всё прочитано → сразу обнуляем на клиенте
+                    updateVisibleCounts(0);
+                    // и на всякий случай синхронизируемся с бэкендом
+                    pollUnreadAlerts();
+                }
             });
+        }
+
+        markAllButtons.forEach(function (btn) {
+            btn.addEventListener('click', markAllHandler);
+        });
+
+        document.addEventListener('click', function (e) {
+            var target = e.target.closest('.markAllReadButton');
+            if (target) {
+                markAllHandler(e);
+            }
         });
 
 
@@ -794,7 +868,28 @@
         afAamToastContainer = div;
     }
 
-    function makeToastFromAlert(alert) {
+    function dismissToast(div, timeoutId) {
+        if (!div) {
+            return;
+        }
+
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+
+        div.classList.remove('af-aam-toast-show');
+        setTimeout(function () {
+            if (div.parentNode === afAamToastContainer) {
+                afAamToastContainer.removeChild(div);
+            }
+            if (afAamActiveToasts > 0) {
+                afAamActiveToasts--;
+            }
+            processToastQueue();
+        }, 200);
+    }
+
+    function spawnToast(alert) {
         if (!afAamToastContainer) {
             initToasts();
         }
@@ -802,68 +897,112 @@
             return;
         }
 
+        afAamActiveToasts++;
+
         var div = document.createElement('div');
         div.className = 'af-aam-toast';
+
+        var header = document.createElement('div');
+        header.className = 'af-aam-toast-header';
 
         var title = document.createElement('div');
         title.className = 'af-aam-toast-title';
         title.textContent = 'Новое уведомление';
 
+        var close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'af-aam-toast-close';
+        close.textContent = '×';
+
+        header.appendChild(title);
+        header.appendChild(close);
+
         var text = document.createElement('div');
         text.className = 'af-aam-toast-text';
         text.textContent = alert.text || '';
 
-        div.appendChild(title);
+        if (alert.avatar && alert.avatar.url) {
+            var avatarWrap = document.createElement('span');
+            avatarWrap.className = 'af-aam-toast-avatar';
+            var img = document.createElement('img');
+            img.src = alert.avatar.url;
+            img.width = alert.avatar.width || 32;
+            img.height = alert.avatar.height || 32;
+            img.alt = alert.avatar.username || '';
+            avatarWrap.appendChild(img);
+            div.appendChild(avatarWrap);
+        }
+
+        div.appendChild(header);
         div.appendChild(text);
+
+        var autoHide = setTimeout(function () {
+            dismissToast(div);
+        }, afAamToastDuration);
 
         // клик — перейти по ссылке, если есть
         div.addEventListener('click', function () {
             if (alert.url) {
                 window.location.href = alert.url;
             }
+            dismissToast(div, autoHide);
+        });
+
+        close.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            dismissToast(div, autoHide);
         });
 
         afAamToastContainer.appendChild(div);
 
-        // ограничиваем количество
-        while (afAamToastContainer.children.length > afAamToastLimit && afAamToastContainer.firstChild) {
-            afAamToastContainer.removeChild(afAamToastContainer.firstChild);
-        }
-
-        // анимация появления
         setTimeout(function () {
             div.classList.add('af-aam-toast-show');
         }, 10);
+    }
 
-        // автоудаление
-        setTimeout(function () {
-            div.classList.remove('af-aam-toast-show');
-            setTimeout(function () {
-                if (div.parentNode === afAamToastContainer) {
-                    afAamToastContainer.removeChild(div);
-                }
-            }, 200);
-        }, 8000);
+    function processToastQueue() {
+        if (!afAamToastContainer || afAamToastLimit <= 0) {
+            return;
+        }
+
+        while (afAamActiveToasts < afAamToastLimit && afAamToastQueue.length) {
+            spawnToast(afAamToastQueue.shift());
+        }
+    }
+
+    function queueToasts(alerts) {
+        if (!Array.isArray(alerts) || !alerts.length) {
+            return;
+        }
+
+        alerts.forEach(function (alert) {
+            var id = parseInt(alert.id, 10) || null;
+            if (id && afAamShownToastIds[id]) {
+                return;
+            }
+            if (id) {
+                afAamShownToastIds[id] = true;
+            }
+            afAamToastQueue.push(alert);
+        });
+
+        processToastQueue();
     }
 
     // звук больше НЕ зависит от лимита тостов
     function showToastsFromAlerts(alerts) {
-        if (!alerts || !alerts.length) {
+        if (!alerts || !alerts.length || afAamToastLimit <= 0) {
             if (afAamDebug) {
-                console.log('[AAM] showToastsFromAlerts: пусто');
+                console.log('[AAM] showToastsFromAlerts: пусто или лимит 0');
             }
             return;
         }
 
-        if (afAamToastLimit > 0) {
-            initToasts();
-            for (var i = 0; i < alerts.length && i < afAamToastLimit; i++) {
-                makeToastFromAlert(alerts[i]);
-            }
-        }
+        initToasts();
+        queueToasts(alerts);
 
         if (afAamDebug) {
-            console.log('[AAM] showToastsFromAlerts: тосты показаны');
+            console.log('[AAM] showToastsFromAlerts: тосты поставлены в очередь');
         }
     }
 
@@ -889,6 +1028,7 @@
 
             var oldCount = currentUnread || 0;
             var newCount = extractUnreadCount(resp);
+            var newestId = 0;
 
             // на всякий случай дублируем через badge
             if (newCount === null && typeof resp.badge !== 'undefined') {
@@ -917,25 +1057,34 @@
                 }
             }
 
+            if (Array.isArray(resp.items) && resp.items.length) {
+                newestId = parseInt(resp.items[0].id, 10) || 0;
+            }
+
             if (afAamDebug) {
                 console.log('[AAM] pollUnreadAlerts: old=', oldCount, 'new=', newCount);
             }
 
             updateVisibleCounts(newCount);
 
-            // если новых не стало больше — выходим без звука/тостов
-            if (newCount <= oldCount) {
-                return;
+            var hasNewAlerts = (newCount > oldCount);
+            if (!hasNewAlerts && newestId && newestId > lastSeenAlertId) {
+                hasNewAlerts = true;
             }
 
-            // появились новые → звук и тосты
-            if (afAamDebug) {
-                console.log('[AAM] pollUnreadAlerts: обнаружены новые, играем звук и тосты');
-            }
-            playAlertSound();
+            if (hasNewAlerts) {
+                if (afAamDebug) {
+                    console.log('[AAM] pollUnreadAlerts: обнаружены новые, играем звук и тосты');
+                }
+                playAlertSound();
 
-            if (Array.isArray(resp.items) && resp.items.length) {
-                showToastsFromAlerts(resp.items);
+                if (Array.isArray(resp.items) && resp.items.length) {
+                    showToastsFromAlerts(resp.items);
+                }
+            }
+
+            if (newestId && newestId > lastSeenAlertId) {
+                lastSeenAlertId = newestId;
             }
         });
     }
@@ -977,6 +1126,7 @@
         initMyAlertsCompat();
         initMentionButtons();
         initMentionAutocomplete();
+        initListClicks();
 
         // глобальный клик для "разбуживания" звука (один раз)
         document.addEventListener('click', primeSoundOnce, true);
@@ -987,6 +1137,7 @@
 
     // выбираем интервал: сначала af_aam_autorefresh, потом myalerts, иначе дефолт 30 сек
     var refreshInterval = 0;
+    var minRefreshInterval = 5; // секунды, чтобы обновление было "почти realtime"
 
     if (typeof window.af_aam_autorefresh !== 'undefined' &&
         !isNaN(parseInt(window.af_aam_autorefresh, 10)) &&
@@ -1003,6 +1154,10 @@
     } else {
         // если всё выключено/ноль — всё равно опрашиваем раз в 30 сек
         refreshInterval = 30;
+    }
+
+    if (refreshInterval > 0 && refreshInterval < minRefreshInterval) {
+        refreshInterval = minRefreshInterval;
     }
 
     if (refreshInterval > 0) {

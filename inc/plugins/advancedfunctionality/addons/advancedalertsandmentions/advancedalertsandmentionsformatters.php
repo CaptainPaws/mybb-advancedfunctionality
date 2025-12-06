@@ -62,7 +62,10 @@ function af_aam_format_alert(array $alert): array
         }
     }
 
-    $fromUser = af_aam_format_username((int)($alert['from_uid'] ?? 0));
+    $fromUser = $alert['from_username'] ?? '';
+    if ($fromUser === '') {
+        $fromUser = af_aam_format_username((int)($alert['from_uid'] ?? 0));
+    }
     $subject  = (string)($extra['subject'] ?? '');
     $pid      = (int)($extra['pid'] ?? 0);
     $tid      = (int)($extra['tid'] ?? (int)($alert['object_id'] ?? 0));
@@ -220,4 +223,56 @@ function af_aam_format_username(int $uid): string
     }
 
     return $user['username'];
+}
+
+function af_aam_avatar_data(int $uid): array
+{
+    $fallbackInitial = '?';
+    $username = '';
+
+    if ($uid > 0) {
+        $user = get_user($uid);
+        if (!empty($user)) {
+            $username = $user['username'] ?? '';
+            $avatar = format_avatar($user['avatar'] ?? '', $user['avatardimensions'] ?? '', '32|32');
+            if (!empty($avatar['image'])) {
+                return [
+                    'url'      => $avatar['image'],
+                    'width'    => (int)($avatar['width'] ?? 32),
+                    'height'   => (int)($avatar['height'] ?? 32),
+                    'username' => $username,
+                    'initial'  => mb_substr($username, 0, 1, 'UTF-8'),
+                ];
+            }
+            $fallbackInitial = mb_substr($username, 0, 1, 'UTF-8');
+        }
+    }
+
+    return [
+        'url'      => '',
+        'width'    => 32,
+        'height'   => 32,
+        'username' => $username,
+        'initial'  => $fallbackInitial,
+    ];
+}
+
+function af_aam_render_avatar_html(int $uid, string $username = ''): string
+{
+    $data = af_aam_avatar_data($uid);
+
+    if ($username === '') {
+        $username = $data['username'] ?: ($data['initial'] ?: '?');
+    }
+
+    if (!empty($data['url'])) {
+        $img = htmlspecialchars_uni($data['url']);
+        $alt = htmlspecialchars_uni($username);
+        $w   = (int)($data['width'] ?? 32);
+        $h   = (int)($data['height'] ?? 32);
+        return '<span class="af-aam-avatar"><img src="' . $img . '" alt="' . $alt . '" width="' . $w . '" height="' . $h . '" loading="lazy" /></span>';
+    }
+
+    $initial = htmlspecialchars_uni($data['initial'] ?: mb_substr($username, 0, 1, 'UTF-8'));
+    return '<span class="af-aam-avatar af-aam-avatar--placeholder" aria-hidden="true">' . $initial . '</span>';
 }
