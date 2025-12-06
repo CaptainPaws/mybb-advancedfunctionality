@@ -48,6 +48,25 @@ class AF_Admin_AdvancedAlertsAndMentions
 
             $action = $mybb->get_input('af_aam_action');
 
+            if ($action === 'cleanup_inactive') {
+                $result = af_aam_cleanup_inactive_alerts();
+
+                if (!empty($result['disabled'])) {
+                    flash_message($lang->af_aam_admin_cleanup_disabled, 'error');
+                    admin_redirect($baseUrl);
+                }
+
+                $message = $lang->af_aam_admin_cleanup_done ?? 'Cleanup finished.';
+                $message = str_replace(
+                    ['{1}', '{2}'],
+                    [(int)($result['alerts_deleted'] ?? 0), (int)($result['users_affected'] ?? 0)],
+                    $message
+                );
+
+                flash_message($message, 'success');
+                admin_redirect($baseUrl);
+            }
+
             if ($action === 'create') {
                 $code = trim($mybb->get_input('new_alert_code'));
                 $title = trim($mybb->get_input('new_alert_title'));
@@ -82,6 +101,15 @@ class AF_Admin_AdvancedAlertsAndMentions
             flash_message($lang->af_aam_admin_msg_saved, 'success');
             admin_redirect($baseUrl);
         }
+
+        $cleanupForm = new Form($baseUrl, 'post');
+        echo $cleanupForm->generate_hidden_field('my_post_key', $mybb->post_code);
+        echo $cleanupForm->generate_hidden_field('af_aam_action', 'cleanup_inactive');
+
+        $cleanupButtons   = [];
+        $cleanupButtons[] = $cleanupForm->generate_submit_button($lang->af_aam_admin_cleanup_button);
+        $cleanupForm->output_submit_wrapper($cleanupButtons);
+        $cleanupForm->end();
 
         $form = new Form($baseUrl, 'post');
         echo $form->generate_hidden_field('my_post_key', $mybb->post_code);

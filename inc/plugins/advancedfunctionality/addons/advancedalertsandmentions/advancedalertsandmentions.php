@@ -189,6 +189,26 @@ function af_advancedalertsandmentions_is_installed(): bool
     return $db->table_exists(AF_AAM_TABLE_ALERTS) && $db->table_exists(AF_AAM_TABLE_TYPES);
 }
 
+function af_aam_install_task_file(): void
+{
+    $source = MYBB_ROOT . AF_AAM_BASE . 'task_af_aam_cleanup.php';
+    $destination = MYBB_ROOT . 'inc/tasks/af_aam_cleanup.php';
+
+    if (!file_exists($source) || !is_readable($source) || !is_dir(dirname($destination))) {
+        return;
+    }
+
+    $contents = file_get_contents($source);
+    if ($contents === false) {
+        return;
+    }
+
+    $shouldWrite = !file_exists($destination) || md5_file($destination) !== md5($contents);
+    if ($shouldWrite) {
+        file_put_contents($destination, $contents);
+    }
+}
+
 function af_advancedalertsandmentions_install(): void
 {
     global $db, $lang;
@@ -356,19 +376,33 @@ function af_advancedalertsandmentions_install(): void
             'value'       => '1',
             'disporder'   => 5,
         ],
+        'af_aam_max_alerts_per_user' => [
+            'title'       => $lang->af_aam_max_alerts_per_user,
+            'description' => $lang->af_aam_max_alerts_per_user_desc,
+            'optionscode' => 'text',
+            'value'       => '0',
+            'disporder'   => 6,
+        ],
         'af_aam_autoclean_days' => [
             'title'       => $lang->af_aam_autoclean_days,
             'description' => $lang->af_aam_autoclean_days_desc,
             'optionscode' => 'text',
             'value'       => '0', // 0 = не чистить автоматически
-            'disporder'   => 6,
+            'disporder'   => 7,
+        ],
+        'af_aam_inactive_days' => [
+            'title'       => $lang->af_aam_inactive_days,
+            'description' => $lang->af_aam_inactive_days_desc,
+            'optionscode' => 'text',
+            'value'       => '0',
+            'disporder'   => 8,
         ],
         'af_aam_toast_limit' => [
         'title'       => $lang->af_aam_toast_limit,
         'description' => $lang->af_aam_toast_limit_desc,
         'optionscode' => 'text',
         'value'       => '5',
-        'disporder'   => 7,
+        'disporder'   => 9,
         ],
 
 
@@ -421,6 +455,33 @@ function af_advancedalertsandmentions_install(): void
 
     // ВАЖНО: чистим старые коды типов (reputation, subscription, reply, quote)
     af_aam_cleanup_legacy_types();
+
+    af_aam_install_task_file();
+
+    // Таск автоочистки по неактивности
+    require_once MYBB_ROOT . 'inc/functions_task.php';
+    $existingTask = $db->fetch_field(
+        $db->simple_select('tasks', 'tid', "file='af_aam_cleanup'"),
+        'tid'
+    );
+
+    if (!$existingTask) {
+        $task = [
+            'title'       => 'AF AAM: Inactive users cleanup',
+            'description' => 'Удаление уведомлений неактивных пользователей',
+            'file'        => 'af_aam_cleanup',
+            'minute'      => '0',
+            'hour'        => '3',
+            'day'         => '*',
+            'month'       => '*',
+            'weekday'     => '*',
+            'enabled'     => 1,
+            'logging'     => 1,
+        ];
+
+        $task['nextrun'] = fetch_next_run($task);
+        $db->insert_query('tasks', $task);
+    }
 }
 
 function af_advancedalertsandmentions_uninstall(): void
@@ -441,12 +502,19 @@ function af_advancedalertsandmentions_uninstall(): void
     // удаляем настройки
     $db->delete_query(
         'settings',
-        "name IN('af_aam_enabled','af_aam_per_page','af_aam_dropdown_limit','af_aam_autorefresh','af_aam_sound','af_aam_autoclean_days','af_aam_sound','af_aam_autoclean_days','af_aam_toast_limit')"
+        "name IN('af_aam_enabled','af_aam_per_page','af_aam_dropdown_limit','af_aam_autorefresh','af_aam_sound','af_aam_autoclean_days','af_aam_sound','af_aam_autoclean_days','af_aam_toast_limit','af_aam_max_alerts_per_user','af_aam_inactive_days')"
     );
     $db->delete_query('settings', "name IN('af_aam_enabled','af_aam_per_page','af_aam_dropdown_limit','af_aam_autorefresh','af_aam_sound')");
     $db->delete_query('settinggroups', "name IN('af_aam','af_" . AF_AAM_ID . "')");
     if ($cache) {
         $cache->delete('af_aam_last_autoclean');
+    }
+
+    $db->delete_query('tasks', "file='af_aam_cleanup'");
+
+    $taskFile = MYBB_ROOT . 'inc/tasks/af_aam_cleanup.php';
+    if (file_exists($taskFile)) {
+        unlink($taskFile);
     }
     rebuild_settings();
 
@@ -1687,6 +1755,82 @@ function af_aam_maybe_autoclean(bool $force = false): void
     $cache->update('af_aam_last_autoclean', ['ts' => TIME_NOW]);
 }
 
+function af_aam_enforce_max_alerts(int $uid): void
+{
+    global $db, $mybb;
+
+    $limit = (int)($mybb->settings['af_aam_max_alerts_per_user'] ?? 0);
+    if ($limit <= 0) {
+        return;
+    }
+
+    $uid = (int)$uid;
+    if ($uid <= 0) {
+        return;
+    }
+
+    $query = $db->simple_select(AF_AAM_TABLE_ALERTS, 'COUNT(*) AS cnt', "uid={$uid}");
+    $count = (int)$db->fetch_field($query, 'cnt');
+    if ($count <= $limit) {
+        return;
+    }
+
+    $toDelete = $count - $limit;
+    $db->write_query(
+        "DELETE FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " WHERE uid={$uid} ORDER BY dateline ASC, id ASC LIMIT {$toDelete}"
+    );
+}
+
+function af_aam_cleanup_inactive_alerts(?int $inactiveDays = null): array
+{
+    global $db, $mybb;
+
+    if ($inactiveDays === null) {
+        $inactiveDays = (int)($mybb->settings['af_aam_inactive_days'] ?? 0);
+    }
+
+    $result = [
+        'alerts_deleted'  => 0,
+        'users_affected'  => 0,
+        'disabled'        => false,
+    ];
+
+    if ($inactiveDays <= 0) {
+        $result['disabled'] = true;
+        return $result;
+    }
+
+    if (!$db->table_exists(AF_AAM_TABLE_ALERTS)) {
+        return $result;
+    }
+
+    $cutoff = TIME_NOW - ($inactiveDays * 86400);
+    $alertsTable = TABLE_PREFIX . AF_AAM_TABLE_ALERTS;
+    $usersTable  = TABLE_PREFIX . 'users';
+
+    $statsQuery = $db->write_query(
+        "SELECT a.uid, COUNT(*) AS cnt FROM {$alertsTable} a " .
+        "INNER JOIN {$usersTable} u ON u.uid = a.uid " .
+        "WHERE u.lastactive > 0 AND u.lastactive < {$cutoff} GROUP BY a.uid"
+    );
+
+    while ($row = $db->fetch_array($statsQuery)) {
+        $result['alerts_deleted'] += (int)$row['cnt'];
+        $result['users_affected']++;
+    }
+
+    if ($result['alerts_deleted'] === 0) {
+        return $result;
+    }
+
+    $db->write_query(
+        "DELETE a FROM {$alertsTable} a INNER JOIN {$usersTable} u ON u.uid = a.uid " .
+        "WHERE u.lastactive > 0 AND u.lastactive < {$cutoff}"
+    );
+
+    return $result;
+}
+
 function af_aam_add_alert(int $uid, string $code, int $objectId = 0, int $fromUid = 0, array $extra = [], int $forced = 0): void
 {
     global $db, $mybb;
@@ -1723,6 +1867,7 @@ function af_aam_add_alert(int $uid, string $code, int $objectId = 0, int $fromUi
     $db->insert_query(AF_AAM_TABLE_ALERTS, $insert);
     // Автоочистка старых уведомлений
     af_aam_maybe_autoclean(true);
+    af_aam_enforce_max_alerts($uid);
 }
 
 // репутация
