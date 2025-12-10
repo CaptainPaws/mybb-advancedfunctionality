@@ -572,7 +572,7 @@
 
         function markAllHandler(e) {
             e.preventDefault();
-            ajax('xmlhttp.php', { action: 'af_aam_api', op: 'mark_all', my_post_key: window.my_post_key || '' }, function (resp) {
+            ajax('xmlhttp.php', { action: 'af_aam_api', op: 'mark_all_read', my_post_key: window.my_post_key || '' }, function (resp) {
                 syncFromResponse(resp || {});
                 renderLatest();
             });

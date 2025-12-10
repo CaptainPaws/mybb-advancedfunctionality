@@ -1322,16 +1322,13 @@ function af_aam_xmlhttp(): void
         $db->update_query(
             AF_AAM_TABLE_ALERTS,
             ['is_read' => 1],
-            "uid = {$uid}"
+            "uid = {$uid} AND is_read = 0"
         );
 
+        $payload = af_aam_build_alerts_payload($uid);
+
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
-            'success'          => true,
-            'template'         => '',
-            'unread_count'     => 0,
-            'unread_count_fmt' => '0',
-        ], JSON_UNESCAPED_UNICODE);
+        echo json_encode(array_merge(['ok' => 1], $payload), JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -1427,13 +1424,13 @@ function af_aam_xmlhttp(): void
 
 
     // --- пометить все уведомления прочитанными ---
-    if ($op === 'mark_all') {
+    if ($op === 'mark_all' || $op === 'mark_all_read') {
         verify_post_check($mybb->get_input('my_post_key'), true);
 
         $db->update_query(
             AF_AAM_TABLE_ALERTS,
             ['is_read' => 1],
-            "uid = {$uid}"
+            "uid = {$uid} AND is_read = 0"
         );
 
         $payload = af_aam_build_alerts_payload($uid);
