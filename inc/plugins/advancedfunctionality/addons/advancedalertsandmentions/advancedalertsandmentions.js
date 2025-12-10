@@ -241,16 +241,11 @@
 
         function renderModal(unreadOnly) {
             ajax('xmlhttp.php', {
-                action: 'getLatestAlerts',
+                action: 'af_aam_api',
+                op: 'list',
                 unreadOnly: unreadOnly ? 1 : 0
             }, function (resp) {
-                if (resp && resp.template) {
-                    alertsTable.innerHTML = resp.template;
-                }
-                var cnt = extractUnreadCount(resp);
-                if (cnt !== null) {
-                    updateVisibleCounts(cnt);
-                }
+                syncFromResponse(resp || {});
             });
         }
 
@@ -577,18 +572,9 @@
 
         function markAllHandler(e) {
             e.preventDefault();
-            ajax('xmlhttp.php', { action: 'markAllRead', my_post_key: window.my_post_key || '' }, function (resp) {
-                if (resp && resp.success) {
-                    renderLatest();
-                    if (typeof window.afAamRefreshModal === 'function') {
-                        window.afAamRefreshModal();
-                    }
-
-                    // всё прочитано → сразу обнуляем на клиенте
-                    updateVisibleCounts(0);
-                    // и на всякий случай синхронизируемся с бэкендом
-                    pollUnreadAlerts();
-                }
+            ajax('xmlhttp.php', { action: 'af_aam_api', op: 'mark_all', my_post_key: window.my_post_key || '' }, function (resp) {
+                syncFromResponse(resp || {});
+                renderLatest();
             });
         }
 
