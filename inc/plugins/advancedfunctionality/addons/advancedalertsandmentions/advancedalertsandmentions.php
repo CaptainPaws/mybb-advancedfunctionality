@@ -915,6 +915,26 @@ function af_aam_render_popup_rows(array $alerts): string
     return $rows;
 }
 
+/**
+ * Возвращает количество непрочитанных уведомлений пользователя.
+ */
+function af_aam_unread_count(int $uid): int
+{
+    global $db;
+
+    $uid = (int)$uid;
+
+    $q = $db->simple_select(
+        AF_AAM_TABLE_ALERTS,
+        'COUNT(id) AS cnt',
+        "uid = {$uid} AND is_read = 0"
+    );
+
+    $row = $db->fetch_array($q);
+
+    return (int)($row['cnt'] ?? 0);
+}
+
 function af_aam_pre_output_page(string &$page): void
 {
     // Пока не лезем прямо в HTML, всё через шаблоны
@@ -1370,7 +1390,7 @@ function af_aam_xmlhttp(): void
 
     // --- список уведомлений ---
     if ($op === 'list') {
-        $limit = (int)$mybb->get_input('limit', MyBB::INPUT_INT);
+        $limit   = (int)$mybb->get_input('limit', MyBB::INPUT_INT);
         $payload = af_aam_build_alerts_payload($uid, $limit);
 
         header('Content-Type: application/json; charset=utf-8');
@@ -2319,13 +2339,7 @@ function af_aam_build_alerts_payload(int $uid, ?int $limit = null): array
         eval('$alertsHtml = "'.$templates->get('af_aam_alert_row_popup_empty').'";');
     }
 
-    $q = $db->simple_select(
-        AF_AAM_TABLE_ALERTS,
-        'COUNT(id) AS cnt',
-        "uid = {$uid} AND is_read = 0"
-    );
-    $r     = $db->fetch_array($q);
-    $badge = (int)($r['cnt'] ?? 0);
+    $badge = af_aam_unread_count($uid);
 
     return [
         'items'        => $items,
