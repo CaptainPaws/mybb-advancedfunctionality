@@ -2278,7 +2278,8 @@ function af_aam_build_alerts_payload(int $uid, ?int $limit = null): array
     $items     = [];
     $rawAlerts = [];
 
-    $sql = $db->write_query(""
+    // 🔧 ИСПРАВЛЕННО: нормальная строка для SQL-запроса
+    $sql = $db->write_query("
         SELECT a.*, t.code, t.title, u.username AS from_username, u.avatar AS from_avatar, u.avatardimensions AS from_avatardimensions
         FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
         LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id = a.type_id)
@@ -2286,13 +2287,13 @@ function af_aam_build_alerts_payload(int $uid, ?int $limit = null): array
         WHERE a.uid = {$uid}
         ORDER BY a.dateline DESC
         LIMIT {$limit}
-    "");
+    ");
 
     while ($alert = $db->fetch_array($sql)) {
         $rawAlerts[] = $alert;
 
         $formatted = af_aam_format_alert($alert);
-        $avatar = af_aam_avatar_data((int)($alert['from_uid'] ?? 0));
+        $avatar    = af_aam_avatar_data((int)($alert['from_uid'] ?? 0));
 
         $items[] = [
             'id'       => (int)$alert['id'],
@@ -2337,4 +2338,3 @@ function af_aam_build_alerts_payload(int $uid, ?int $limit = null): array
         'unread_count' => $badge,
     ];
 }
-
