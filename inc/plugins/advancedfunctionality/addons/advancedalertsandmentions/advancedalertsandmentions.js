@@ -176,7 +176,7 @@
 
         var badge = qs('#af_aam_badge');
         if (badge) {
-            badge.textContent = unreadCount;
+            badge.textContent = currentUnread;
         }
 
         // Обновляем заголовок страницы (как у MyAlerts)
@@ -189,11 +189,11 @@
         // Только добавляем/убираем класс alerts--new, но НЕ трогаем текст ссылки
         var alertsContainer = document.querySelector('.af-aam-alerts');
         if (alertsContainer) {
-            alertsContainer.classList.toggle('alerts--new', unreadCount > 0);
+            alertsContainer.classList.toggle('alerts--new', currentUnread > 0);
         }
 
         if (afAamDebug) {
-            console.log('[AAM] unread updated:', unreadCount);
+            console.log('[AAM] unread updated:', currentUnread);
         }
     }
 
@@ -338,7 +338,6 @@
                                     action: 'af_aam_api',
                                     op: 'prefs_save',
                                     my_post_key: window.my_post_key || '',
-                                    // отправим массив
                                     'types': types
                                 }, function (resp2) {
                                     // можно показать "сохранено"
@@ -384,6 +383,7 @@
                         id: id,
                         my_post_key: window.my_post_key || ''
                     }, function (resp) {
+                        // сервер вернёт актуальное количество непрочитанных
                         syncFromResponse(resp || {});
                     });
                 }
@@ -427,7 +427,7 @@
                 return;
             }
 
-            // 3) Удалить
+            // 3) Удалить — этот блок уже ходит в af_aam_api: op=delete, оставляем как есть
             if (target.classList && target.classList.contains('deleteAlertButton')) {
                 e.preventDefault();
 
@@ -451,7 +451,6 @@
                         id: id3,
                         my_post_key: window.my_post_key || ''
                     }, function (resp) {
-                        // если удалили непрочитанное, скорректируем по ответу
                         if (wasUnread && (!resp || extractUnreadCount(resp) === null)) {
                             pollUnreadAlerts();
                             return;
@@ -495,6 +494,7 @@
                         } else {
                             window.location.href = node.href;
                         }
+
                     }
                     return;
                 }
@@ -502,6 +502,7 @@
             }
 
         });
+
 
 
         window.afAamRefreshModal = renderModal;
@@ -556,6 +557,7 @@
 
 
 
+
     function initMyAlertsCompat() {
         var latestBtn = qs('#getLatestAlerts');
         var latestContainer = qs('#latestAlertsListing');
@@ -570,13 +572,6 @@
                 if (cnt !== null) {
                     updateVisibleCounts(cnt);
                 }
-            });
-        }
-
-        if (latestBtn && latestContainer) {
-            latestBtn.addEventListener('click', function (e) {
-                e.preventDefault();
-                renderLatest();
             });
         }
 
@@ -597,6 +592,13 @@
             });
         }
 
+        if (latestBtn && latestContainer) {
+            latestBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                renderLatest();
+            });
+        }
+
         markAllButtons.forEach(function (btn) {
             btn.addEventListener('click', markAllHandler);
         });
@@ -607,7 +609,6 @@
                 markAllHandler(e);
             }
         });
-
 
         if (typeof window.myalerts_autorefresh !== 'undefined' && window.myalerts_autorefresh > 0) {
             setInterval(renderLatest, window.myalerts_autorefresh * 1000);
@@ -788,8 +789,13 @@
     }
 
     function initSound() {
-        // 1) Пробуем использовать <audio id="af_aam_sound"> из шаблона
+        // 0) Если есть <audio>, но без src — попробуем подставить ping.mp3
         var domAudio = document.getElementById('af_aam_sound');
+        if (domAudio && !domAudio.src && typeof window.af_aam_asset_base === 'string') {
+            domAudio.src = window.af_aam_asset_base + 'ping.mp3';
+        }
+
+        // 1) Пробуем использовать <audio id="af_aam_sound"> из шаблона
         if (domAudio && typeof domAudio.play === 'function') {
             afAamSound = domAudio;
             afAamSound.muted  = false;
@@ -1130,7 +1136,7 @@
         pollUnreadAlerts();
     }
 
-    // выбираем интервал: сначала af_aam_autorefresh, потом myalerts, иначе дефолт 30 сек
+    // выбираем интервал: сначала af_aam_autorefresh, потом myalerts, иначе дефолт 5 сек
     var refreshInterval = 0;
     var minRefreshInterval = 5; // секунды, чтобы обновление было "почти realtime"
 
@@ -1147,8 +1153,8 @@
         refreshInterval = parseInt(window.myalerts_autorefresh, 10);
 
     } else {
-        // если всё выключено/ноль — всё равно опрашиваем раз в 30 сек
-        refreshInterval = 30;
+        // если всё выключено/ноль — всё равно опрашиваем раз в 5 сек
+        refreshInterval = 5;
     }
 
     if (refreshInterval > 0 && refreshInterval < minRefreshInterval) {
