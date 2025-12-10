@@ -12,6 +12,10 @@
 
 <!-- TEMPLATE: af_aam_modal -->
 <div id="af_aam_modal" style="display: none;" class="modal af-aam-modal">
+
+    <!-- затемнённый фон, чтобы JS мог закрывать модалку по клику по фону -->
+    <div class="af-aam-modal-backdrop"></div>
+
     <table class="tborder af-aam-modal-table" cellspacing="{$theme['borderwidth']}"
            cellpadding="{$theme['tablespace']}" border="0">
         <thead>
@@ -22,39 +26,48 @@
             </th>
         </tr>
         </thead>
-        <tbody id="alerts_content">    
-        {$af_aam_modal_list}
+
+        <!-- контейнер, к которому JS привязан по #alerts_content -->
+        <tbody id="alerts_content">
+            {$af_aam_modal_list}
         </tbody>
+
         <tfoot>
         <tr>
             <td class="tfoot smalltext" colspan="3">
                 <a href="{$mybb->settings['bburl']}/usercp.php?action=af_aam_list">
                     {$lang->af_aam_modal_display_alerts}
                 </a>
+
+                <!-- markAllReadButton — оставляем action=markAllRead, как ждёт JS -->
                 <span class="float_right">
                     <a class="markAllReadButton"
                        href="{$mybb->settings['bburl']}/xmlhttp.php?action=markAllRead&amp;my_post_key={$mybb->post_code}">
                         {$lang->af_aam_mark_all}
                     </a>
                 </span>
+
                 <span class="float_right">
                     <a href="#" id="af_aam_prefs_toggle">⚙ {$lang->af_aam_prefs_title}</a>
                     &nbsp;|&nbsp;
                 </span>
+
                 <div id="af_aam_prefs_inline" style="display:none;"></div>
                 <br class="clear" />
-                        <div class="af-aam-modal-footer">
-                        <div class="af-aam-sound-toggle">
-                            <label class="af-aam-sound-switch">
-                                <span class="af-aam-sound-label">🔊</span>
-                                <input type="checkbox" id="af_aam_sound_toggle" />
-                                <span class="af-aam-sound-slider"></span>
-                            </label>
-                        </div>
+
+                <div class="af-aam-modal-footer">
+                    <div class="af-aam-sound-toggle">
+                        <label class="af-aam-sound-switch">
+                            <span class="af-aam-sound-label">🔊</span>
+                            <input type="checkbox" id="af_aam_sound_toggle" />
+                            <span class="af-aam-sound-slider"></span>
+                        </label>
                     </div>
-                    <audio id="af_aam_sound" preload="auto" style="display:none;">
+                </div>
+
+                <audio id="af_aam_sound" preload="auto" style="display:none;">
                     <source src="{$af_aam_asset_base}ping.mp3" type="audio/mpeg" />
-                    </audio>
+                </audio>
             </td>
         </tr>
         </tfoot>
@@ -63,8 +76,12 @@
 <!-- /TEMPLATE -->
 
 <!-- TEMPLATE: af_aam_alert_row_popup -->
-<tr class="alert {$af_aam_alert_class}" id="alert_row_popup_{$af_aam_alert_id}" data-alert-id="{$af_aam_alert_id}">
-    <td class="trow1 align-center alert__avatar" align="center">{$af_aam_alert_avatar}</td>
+<tr class="alert {$af_aam_alert_class}"
+    id="alert_row_popup_{$af_aam_alert_id}"
+    data-alert-id="{$af_aam_alert_id}">
+    <td class="trow1 align-center alert__avatar" align="center">
+        {$af_aam_alert_avatar}
+    </td>
     <td class="trow1 alert__content">
         <a href="{$af_aam_alert_link}" class="af-aam-alert-link">
             {$af_aam_alert_text}
@@ -72,18 +89,21 @@
     </td>
     <td class="trow1 alert__time" align="center">
         {$af_aam_alert_date}<br />
-        <a href="#" class="markReadAlertButton{$af_aam_markread_hidden}"
-        id="popup_markread_alert_{$af_aam_alert_id}"
-        title="{$lang->af_aam_mark_read}">✔</a>||
-        <a href="#" class="deleteAlertButton"
+        <a href="#"
+           class="markReadAlertButton{$af_aam_markread_hidden}"
+           id="popup_markread_alert_{$af_aam_alert_id}"
+           title="{$lang->af_aam_mark_read}">✔</a>
+        ||
+        <a href="#"
+           class="deleteAlertButton"
            id="popup_delete_alert_{$af_aam_alert_id}"
            title="{$lang->af_aam_delete}">✕</a>
-           <br />
-        <a href="#" class="markUnreadAlertButton{$af_aam_markunread_hidden}"
+        <br />
+        <a href="#"
+           class="markUnreadAlertButton{$af_aam_markunread_hidden}"
            id="popup_markunread_alert_{$af_aam_alert_id}"
            title="{$lang->af_aam_mark_unread}">{$lang->af_aam_mark_unread}</a>
     </td>
-
 </tr>
 <!-- /TEMPLATE -->
 
@@ -108,10 +128,10 @@
             <input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
             <div class="af-aam-list-actions">
                 <input type="submit"
-                    class="button"
-                    name="af_aam_clear_all"
-                    value="{$lang->af_aam_clear_all_button}"
-                    onclick="return confirm('{$lang->af_aam_clear_all_confirm}');" />
+                       class="button"
+                       name="af_aam_clear_all"
+                       value="{$lang->af_aam_clear_all_button}"
+                       onclick="return confirm('{$lang->af_aam_clear_all_confirm}');" />
             </div>
         </form>
 
@@ -127,7 +147,11 @@
 <!-- TEMPLATE: af_aam_list_row -->
 <div class="af-aam-list-row {$af_aam_read_class}" data-alert-id="{$af_aam_alert_id}">
     <span class="af-aam-list-avatar">{$af_aam_alert_avatar}</span>
-    <a class="af-aam-list-text af-aam-list-link" data-alert-id="{$af_aam_alert_id}" href="{$af_aam_url}">{$af_aam_text}</a>
+    <a class="af-aam-list-text af-aam-list-link"
+       data-alert-id="{$af_aam_alert_id}"
+       href="{$af_aam_url}">
+        {$af_aam_text}
+    </a>
     <span class="af-aam-list-date">{$af_aam_date}</span>
 </div>
 <!-- /TEMPLATE -->
@@ -141,7 +165,7 @@
 </head>
 <body>
 {$header}
-<form action="usercp.php?action=af_aam_prefs" method="post">
+<form id="af_aam_prefs_form" action="usercp.php?action=af_aam_prefs" method="post">
     <input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
     <div class="trow1">
         {$af_aam_prefs_rows}
@@ -158,7 +182,11 @@
 <!-- TEMPLATE: af_aam_ucp_prefs_row -->
 <div class="af-aam-pref-row">
     <label>
-        <input type="checkbox" name="aam_enabled_types[]" value="{$af_aam_type_code}" {$af_aam_checked} />
+        <input type="checkbox"
+               class="af-aam-pref-checkbox"
+               name="aam_enabled_types[]"
+               value="{$af_aam_type_code}"
+               {$af_aam_checked} />
         {$af_aam_type_label}
     </label>
 </div>
