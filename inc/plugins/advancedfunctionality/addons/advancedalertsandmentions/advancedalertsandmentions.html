@@ -39,10 +39,10 @@
                     {$lang->af_aam_modal_display_alerts}
                 </a>
 
-                <!-- markAllReadButton — оставляем action=markAllRead, как ждёт JS -->
+                <!-- markAllReadButton — ссылается на unified af_aam_api endpoint, JS подхватит -->
                 <span class="float_right">
                     <a class="markAllReadButton"
-                       href="{$mybb->settings['bburl']}/xmlhttp.php?action=markAllRead&amp;my_post_key={$mybb->post_code}">
+                       href="{$mybb->settings['bburl']}/xmlhttp.php?action=af_aam_api&amp;op=mark_all_read&amp;my_post_key={$mybb->post_code}">
                         {$lang->af_aam_mark_all}
                     </a>
                 </span>
