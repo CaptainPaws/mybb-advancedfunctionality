@@ -1374,8 +1374,7 @@ function af_aam_xmlhttp(): void
     // --- список уведомлений ---
     if ($op === 'list') {
         $limit = (int)$mybb->get_input('limit', MyBB::INPUT_INT);
-        $unreadOnly = (int)$mybb->get_input('unreadOnly', MyBB::INPUT_INT) === 1;
-        $payload = af_aam_build_alerts_payload($uid, $limit, $unreadOnly);
+        $payload = af_aam_build_alerts_payload($uid, $limit);
 
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(array_merge(['ok' => 1], $payload), JSON_UNESCAPED_UNICODE);
@@ -2263,7 +2262,7 @@ function af_aam_postbit_mention_button(array &$post): void
 /**
  * Унифицированная выборка уведомлений + полезные данные для фронтенда.
  */
-function af_aam_build_alerts_payload(int $uid, ?int $limit = null, bool $unreadOnly = false): array
+function af_aam_build_alerts_payload(int $uid, ?int $limit = null): array
 {
     global $db, $templates, $mybb;
 
@@ -2279,26 +2278,22 @@ function af_aam_build_alerts_payload(int $uid, ?int $limit = null, bool $unreadO
     $items     = [];
     $rawAlerts = [];
 
-    $where = "a.uid = {$uid}";
-    if ($unreadOnly) {
-        $where .= " AND a.is_read = 0";
-    }
-
-    $sql = $db->write_query(
-        "SELECT a.*, t.code, t.title, u.username AS from_username, u.avatar AS from_avatar, u.avatardimensions AS from_avatardimensions
+    // 🔧 ИСПРАВЛЕННО: нормальная строка для SQL-запроса
+    $sql = $db->write_query("
+        SELECT a.*, t.code, t.title, u.username AS from_username, u.avatar AS from_avatar, u.avatardimensions AS from_avatardimensions
         FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
         LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id = a.type_id)
         LEFT JOIN " . TABLE_PREFIX . "users u ON (u.uid = a.from_uid)
-        WHERE {$where}
+        WHERE a.uid = {$uid}
         ORDER BY a.dateline DESC
-        LIMIT {$limit}"
-    );
+        LIMIT {$limit}
+    ");
 
     while ($alert = $db->fetch_array($sql)) {
         $rawAlerts[] = $alert;
 
         $formatted = af_aam_format_alert($alert);
-        $avatar = af_aam_avatar_data((int)($alert['from_uid'] ?? 0));
+        $avatar    = af_aam_avatar_data((int)($alert['from_uid'] ?? 0));
 
         $items[] = [
             'id'       => (int)$alert['id'],
@@ -2343,4 +2338,3 @@ function af_aam_build_alerts_payload(int $uid, ?int $limit = null, bool $unreadO
         'unread_count' => $badge,
     ];
 }
-
