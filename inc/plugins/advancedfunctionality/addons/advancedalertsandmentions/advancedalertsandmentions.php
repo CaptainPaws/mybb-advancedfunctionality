@@ -1373,76 +1373,11 @@ function af_aam_xmlhttp(): void
 
     // --- список уведомлений ---
     if ($op === 'list') {
-        global $templates;
-
         $limit = (int)$mybb->get_input('limit', MyBB::INPUT_INT);
-        if ($limit <= 0) {
-            $limit = (int)($mybb->settings['af_aam_dropdown_limit'] ?? 5);
-        }
-
-        $items     = [];
-        $rawAlerts = [];
-
-        $sql = $db->write_query("
-            SELECT a.*, t.code, t.title, u.username AS from_username, u.avatar AS from_avatar, u.avatardimensions AS from_avatardimensions
-            FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
-            LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id = a.type_id)
-            LEFT JOIN " . TABLE_PREFIX . "users u ON (u.uid = a.from_uid)
-            WHERE a.uid = {$uid}
-            ORDER BY a.dateline DESC
-            LIMIT {$limit}
-        ");
-
-        while ($alert = $db->fetch_array($sql)) {
-            $rawAlerts[] = $alert;
-
-            $formatted = af_aam_format_alert($alert);
-            $avatar = af_aam_avatar_data((int)($alert['from_uid'] ?? 0));
-
-            $items[] = [
-                'id'       => (int)$alert['id'],
-                'code'     => $alert['code'],
-                'is_read'  => (int)$alert['is_read'],
-                'text'     => $formatted['text'],
-                'url'      => $formatted['url'],
-                'dateline' => (int)$alert['dateline'],
-                'date_fmt' => my_date(
-                    $mybb->settings['dateformat'] . ' ' . $mybb->settings['timeformat'],
-                    (int)$alert['dateline']
-                ),
-                'avatar' => [
-                    'url'      => $avatar['url'] ?? '',
-                    'width'    => (int)($avatar['width'] ?? 32),
-                    'height'   => (int)($avatar['height'] ?? 32),
-                    'username' => $alert['from_username'] ?? ($avatar['username'] ?? ''),
-                ],
-            ];
-        }
-
-        if (!empty($rawAlerts)) {
-            $alertsHtml = af_aam_render_popup_rows($rawAlerts);
-        } else {
-            $alertsHtml = '';
-            eval('$alertsHtml = "'.$templates->get('af_aam_alert_row_popup_empty').'";');
-        }
-
-        $q = $db->simple_select(
-            AF_AAM_TABLE_ALERTS,
-            'COUNT(id) AS cnt',
-            "uid = {$uid} AND is_read = 0"
-        );
-        $r     = $db->fetch_array($q);
-        $badge = (int)($r['cnt'] ?? 0);
+        $payload = af_aam_build_alerts_payload($uid, $limit);
 
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
-            'ok'           => 1,
-            'items'        => $items,
-            'template'     => $alertsHtml,
-            'badge'        => $badge,
-            'unread'       => $badge,
-            'unread_count' => $badge,
-        ], JSON_UNESCAPED_UNICODE);
+        echo json_encode(array_merge(['ok' => 1], $payload), JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -1461,21 +1396,10 @@ function af_aam_xmlhttp(): void
             );
         }
 
-        $q = $db->simple_select(
-            AF_AAM_TABLE_ALERTS,
-            'COUNT(id) AS cnt',
-            "uid = {$uid} AND is_read = 0"
-        );
-        $r     = $db->fetch_array($q);
-        $count = (int)($r['cnt'] ?? 0);
+        $payload = af_aam_build_alerts_payload($uid);
 
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
-            'ok'           => 1,
-            'unread'       => $count,
-            'unread_count' => $count,
-            'badge'        => $count,
-        ], JSON_UNESCAPED_UNICODE);
+        echo json_encode(array_merge(['ok' => 1], $payload), JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -1493,21 +1417,10 @@ function af_aam_xmlhttp(): void
             );
         }
 
-        $q = $db->simple_select(
-            AF_AAM_TABLE_ALERTS,
-            'COUNT(id) AS cnt',
-            "uid = {$uid} AND is_read = 0"
-        );
-        $r     = $db->fetch_array($q);
-        $count = (int)($r['cnt'] ?? 0);
+        $payload = af_aam_build_alerts_payload($uid);
 
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
-            'ok'           => 1,
-            'unread'       => $count,
-            'unread_count' => $count,
-            'badge'        => $count,
-        ], JSON_UNESCAPED_UNICODE);
+        echo json_encode(array_merge(['ok' => 1], $payload), JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -1523,13 +1436,10 @@ function af_aam_xmlhttp(): void
             "uid = {$uid}"
         );
 
+        $payload = af_aam_build_alerts_payload($uid);
+
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
-            'ok'           => 1,
-            'unread'       => 0,
-            'unread_count' => 0,
-            'badge'        => 0,
-        ], JSON_UNESCAPED_UNICODE);
+        echo json_encode(array_merge(['ok' => 1], $payload), JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -1544,21 +1454,10 @@ function af_aam_xmlhttp(): void
             $db->delete_query(AF_AAM_TABLE_ALERTS, "id = {$id} AND uid = {$uid}");
         }
 
-        $q = $db->simple_select(
-            AF_AAM_TABLE_ALERTS,
-            'COUNT(id) AS cnt',
-            "uid = {$uid} AND is_read = 0"
-        );
-        $r     = $db->fetch_array($q);
-        $count = (int)($r['cnt'] ?? 0);
+        $payload = af_aam_build_alerts_payload($uid);
 
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
-            'ok'           => 1,
-            'unread'       => $count,
-            'unread_count' => $count,
-            'badge'        => $count,
-        ], JSON_UNESCAPED_UNICODE);
+        echo json_encode(array_merge(['ok' => 1], $payload), JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -2360,3 +2259,82 @@ function af_aam_postbit_mention_button(array &$post): void
         $post['button_quote'] = $button;
     }
 }
+/**
+ * Унифицированная выборка уведомлений + полезные данные для фронтенда.
+ */
+function af_aam_build_alerts_payload(int $uid, ?int $limit = null): array
+{
+    global $db, $templates, $mybb;
+
+    $uid = (int)$uid;
+
+    if ($limit === null || $limit <= 0) {
+        $limit = (int)($mybb->settings['af_aam_dropdown_limit'] ?? 5);
+    }
+    if ($limit <= 0) {
+        $limit = 5;
+    }
+
+    $items     = [];
+    $rawAlerts = [];
+
+    $sql = $db->write_query(""
+        SELECT a.*, t.code, t.title, u.username AS from_username, u.avatar AS from_avatar, u.avatardimensions AS from_avatardimensions
+        FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
+        LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id = a.type_id)
+        LEFT JOIN " . TABLE_PREFIX . "users u ON (u.uid = a.from_uid)
+        WHERE a.uid = {$uid}
+        ORDER BY a.dateline DESC
+        LIMIT {$limit}
+    "");
+
+    while ($alert = $db->fetch_array($sql)) {
+        $rawAlerts[] = $alert;
+
+        $formatted = af_aam_format_alert($alert);
+        $avatar = af_aam_avatar_data((int)($alert['from_uid'] ?? 0));
+
+        $items[] = [
+            'id'       => (int)$alert['id'],
+            'code'     => $alert['code'],
+            'is_read'  => (int)$alert['is_read'],
+            'text'     => $formatted['text'],
+            'url'      => $formatted['url'],
+            'dateline' => (int)$alert['dateline'],
+            'date_fmt' => my_date(
+                $mybb->settings['dateformat'] . ' ' . $mybb->settings['timeformat'],
+                (int)$alert['dateline']
+            ),
+            'avatar' => [
+                'url'      => $avatar['url'] ?? '',
+                'width'    => (int)($avatar['width'] ?? 32),
+                'height'   => (int)($avatar['height'] ?? 32),
+                'username' => $alert['from_username'] ?? ($avatar['username'] ?? ''),
+            ],
+        ];
+    }
+
+    if (!empty($rawAlerts)) {
+        $alertsHtml = af_aam_render_popup_rows($rawAlerts);
+    } else {
+        $alertsHtml = '';
+        eval('$alertsHtml = "'.$templates->get('af_aam_alert_row_popup_empty').'";');
+    }
+
+    $q = $db->simple_select(
+        AF_AAM_TABLE_ALERTS,
+        'COUNT(id) AS cnt',
+        "uid = {$uid} AND is_read = 0"
+    );
+    $r     = $db->fetch_array($q);
+    $badge = (int)($r['cnt'] ?? 0);
+
+    return [
+        'items'        => $items,
+        'template'     => $alertsHtml,
+        'badge'        => $badge,
+        'unread'       => $badge,
+        'unread_count' => $badge,
+    ];
+}
+
