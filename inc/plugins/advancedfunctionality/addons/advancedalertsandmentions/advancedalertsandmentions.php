@@ -1449,7 +1449,8 @@ function af_aam_xmlhttp(): void
 
     // --- пометить одно уведомление прочитанным ---
     if ($op === 'mark_read') {
-        verify_post_check($mybb->get_input('my_post_key'));
+        // мягкая проверка post_key: не валим запрос, если ключ не совпал/отсутствует
+        verify_post_check($mybb->get_input('my_post_key'), true);
 
         $id = (int)$mybb->get_input('id', MyBB::INPUT_INT);
         if ($id > 0) {
@@ -1478,9 +1479,10 @@ function af_aam_xmlhttp(): void
         exit;
     }
 
+
     // --- пометить одно уведомление непрочитанным ---
     if ($op === 'mark_unread') {
-        verify_post_check($mybb->get_input('my_post_key'));
+        verify_post_check($mybb->get_input('my_post_key'), true);
 
         $id = (int)$mybb->get_input('id', MyBB::INPUT_INT);
         if ($id > 0) {
@@ -1510,9 +1512,10 @@ function af_aam_xmlhttp(): void
     }
 
 
+
     // --- пометить все уведомления прочитанными ---
     if ($op === 'mark_all') {
-        verify_post_check($mybb->get_input('my_post_key'));
+        verify_post_check($mybb->get_input('my_post_key'), true);
 
         $db->update_query(
             AF_AAM_TABLE_ALERTS,
@@ -1531,9 +1534,10 @@ function af_aam_xmlhttp(): void
     }
 
 
+
     // --- удалить одно уведомление ---
     if ($op === 'delete') {
-        verify_post_check($mybb->get_input('my_post_key'));
+        verify_post_check($mybb->get_input('my_post_key'), true);
 
         $id = (int)$mybb->get_input('id', MyBB::INPUT_INT);
         if ($id > 0) {
@@ -1557,6 +1561,7 @@ function af_aam_xmlhttp(): void
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
+
 
     // --- получить HTML настроек для модалки ---
     if ($op === 'prefs_form') {
@@ -1602,7 +1607,7 @@ function af_aam_xmlhttp(): void
         exit;
     }
     if ($op === 'prefs_save') {
-        verify_post_check($mybb->get_input('my_post_key'));
+        verify_post_check($mybb->get_input('my_post_key'), true);
 
         $enabledTypes = $mybb->get_input('types', MyBB::INPUT_ARRAY);
         $enabledTypes = array_map('trim', $enabledTypes);
@@ -1622,6 +1627,7 @@ function af_aam_xmlhttp(): void
         echo json_encode(['ok' => 1], JSON_UNESCAPED_UNICODE);
         exit;
     }
+
 
 
     // --- подсказки по никнейму @"Имя" ---
