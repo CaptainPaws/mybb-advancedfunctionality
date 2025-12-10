@@ -113,29 +113,27 @@
 /* modal */
 
 .af-aam-modal {
-    display: none;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    align-content: center;
-    justify-content: space-between;
-    align-items: center;
     position: fixed;
     inset: 0;
-    margin: 0 auto;
+    margin: 0;
     z-index: 9998;
-    background: #00000052;
-    height: auto;
+
+    /* будем центрировать таблицу через flex */
+    display: none;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 150px;
+
+    /* фон теперь делает backdrop, здесь прозрачный */
+    background: transparent;
     width: 100%;
+    height: 100%;
 }
 
 .af-aam-modal.af-aam-modal-open {
-    display: block;
+    display: flex;
 }
 
-
-.af-aam-modal-table {
-    max-width: 600px;
-}
 
 .af-aam-modal .af-aam-modal-close {
     float: right;
@@ -189,8 +187,17 @@
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,.6);
-    z-index: 9998;
+    z-index: 0; /* фон ниже окна внутри одной модалки */
 }
+
+/* сама таблица модалки — поверх backdrop */
+.af-aam-modal-table {
+    position: relative;
+    z-index: 1;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
 
 .af-aam-modal-window {
     position: fixed;
