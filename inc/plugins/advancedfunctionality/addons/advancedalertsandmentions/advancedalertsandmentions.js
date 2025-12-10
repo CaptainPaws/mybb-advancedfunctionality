@@ -11,6 +11,7 @@
     var afAamDebug = !!window.afAamDebug;
 
     var currentUnread = 0;
+    var afAamBaseTitle = document.title;
     var lastSeenAlertId = 0;
     if (typeof window.unreadAlerts !== 'undefined') {
         currentUnread = parseInt(window.unreadAlerts, 10) || 0;
@@ -148,9 +149,30 @@
         return null;
     }
 
+    function syncFromResponse(resp) {
+        if (!resp || typeof resp !== 'object') {
+            pollUnreadAlerts();
+            return;
+        }
+
+        var cnt = extractUnreadCount(resp);
+        if (cnt !== null) {
+            updateVisibleCounts(cnt);
+        } else {
+            pollUnreadAlerts();
+        }
+
+        if (resp && resp.template) {
+            var tbody = qs('#alerts_content');
+            if (tbody) {
+                tbody.innerHTML = resp.template;
+            }
+        }
+    }
+
     // ======== ЛОГИКА MyAlerts (адаптация) =========
     function updateVisibleCounts(unreadCount) {
-        currentUnread = unreadCount;
+        currentUnread = Math.max(0, unreadCount || 0);
 
         var badge = qs('#af_aam_badge');
         if (badge) {
@@ -158,15 +180,10 @@
         }
 
         // Обновляем заголовок страницы (как у MyAlerts)
-        var title = document.title;
-        var idx = title.lastIndexOf('(');
-        if (idx !== -1 && title.endsWith(')')) {
-            title = title.substring(0, idx).trimEnd();
-        }
-        if (unreadCount > 0) {
-            document.title = title + ' (' + unreadCount + ')';
+        if (currentUnread > 0) {
+            document.title = '(' + currentUnread + ') ' + afAamBaseTitle;
         } else {
-            document.title = title;
+            document.title = afAamBaseTitle;
         }
 
         // Только добавляем/убираем класс alerts--new, но НЕ трогаем текст ссылки
@@ -360,21 +377,14 @@
                     }
                 }
 
-                // уменьшаем счётчик на клиенте
-                var badge = qs('#af_aam_badge');
-                var raw   = badge ? parseInt(badge.textContent, 10) || 0 : currentUnread || 0;
-                var newVal = raw > 0 ? raw - 1 : 0;
-                updateVisibleCounts(newVal);
-
                 if (id) {
                     ajax('xmlhttp.php', {
                         action: 'af_aam_api',
                         op: 'mark_read',
                         id: id,
                         my_post_key: window.my_post_key || ''
-                    }, function () {
-                        // после бэкенда просто синхронизируемся поллингом
-                        pollUnreadAlerts();
+                    }, function (resp) {
+                        syncFromResponse(resp || {});
                     });
                 }
 
@@ -403,19 +413,14 @@
                     }
                 }
 
-                var badge2 = qs('#af_aam_badge');
-                var raw2   = badge2 ? parseInt(badge2.textContent, 10) || 0 : currentUnread || 0;
-                var newVal2 = raw2 + 1;
-                updateVisibleCounts(newVal2);
-
                 if (id2) {
                     ajax('xmlhttp.php', {
                         action: 'af_aam_api',
                         op: 'mark_unread',
                         id: id2,
                         my_post_key: window.my_post_key || ''
-                    }, function () {
-                        pollUnreadAlerts();
+                    }, function (resp) {
+                        syncFromResponse(resp || {});
                     });
                 }
 
@@ -435,13 +440,6 @@
                     row3.parentNode.removeChild(row3);
                 }
 
-                if (wasUnread) {
-                    var badge3 = qs('#af_aam_badge');
-                    var raw3   = badge3 ? parseInt(badge3.textContent, 10) || 0 : currentUnread || 0;
-                    var newVal3 = raw3 > 0 ? raw3 - 1 : 0;
-                    updateVisibleCounts(newVal3);
-                }
-
                 if (!id3 && row3) {
                     id3 = parseInt(row3.getAttribute('data-alert-id') || '0', 10);
                 }
@@ -452,8 +450,13 @@
                         op: 'delete',
                         id: id3,
                         my_post_key: window.my_post_key || ''
-                    }, function () {
-                        pollUnreadAlerts();
+                    }, function (resp) {
+                        // если удалили непрочитанное, скорректируем по ответу
+                        if (wasUnread && (!resp || extractUnreadCount(resp) === null)) {
+                            pollUnreadAlerts();
+                            return;
+                        }
+                        syncFromResponse(resp || {});
                     });
                 }
 
@@ -480,21 +483,13 @@
                         }
 
                         if (alertId) {
-                            // локальное уменьшение счётчика — как "прочитано"
-                            var badge4 = qs('#af_aam_badge');
-                            var raw4   = badge4 ? parseInt(badge4.textContent, 10) || 0 : currentUnread || 0;
-                            var newVal4 = raw4 > 0 ? raw4 - 1 : 0;
-                            updateVisibleCounts(newVal4);
-
                             ajax('xmlhttp.php', {
                                 action: 'af_aam_api',
                                 op: 'mark_read',
                                 id: alertId,
                                 my_post_key: window.my_post_key || ''
-                            }, function () {
-                                // после перехода всё равно будет полный reload,
-                                // но на всякий случай синхронизируемся
-                                pollUnreadAlerts();
+                            }, function (resp) {
+                                syncFromResponse(resp || {});
                                 window.location.href = node.href;
                             });
                         } else {
@@ -544,8 +539,8 @@
                                 op: 'mark_read',
                                 id: alertId,
                                 my_post_key: window.my_post_key || ''
-                            }, function () {
-                                pollUnreadAlerts();
+                            }, function (resp) {
+                                syncFromResponse(resp || {});
                                 window.location.href = node.href;
                             });
                         } else {
