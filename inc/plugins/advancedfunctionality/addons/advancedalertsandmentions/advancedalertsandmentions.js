@@ -7,8 +7,17 @@
     }
     window.afAamInitialized = true;
 
-    // включаем отладку, если нужно: window.afAamDebug = true в консоли
+    // включаем отладку:
+    //   до загрузки:   window.afAamDebug = true;
+    //   после загрузки: window.afAamSetDebug(true);
     var afAamDebug = !!window.afAamDebug;
+
+    window.afAamSetDebug = function (flag) {
+        afAamDebug = !!flag;
+        window.afAamDebug = afAamDebug;
+        console.log('[AAM] debug =', afAamDebug);
+    };
+
 
     var currentUnread = 0;
     var afAamBaseTitle = document.title;
@@ -53,69 +62,132 @@
 
 
     // ======== простая AJAX-обёртка =========
-    function ajax(url, data, cb) {
+    function ajax(url, data, callback, timeoutMs) {
         var xhr = new XMLHttpRequest();
-        var method = data ? 'POST' : 'GET';
 
-        if (method === 'GET' && data) {
-            var qsArr = [];
-            for (var k in data) {
-                if (Object.prototype.hasOwnProperty.call(data, k)) {
-                    if (Array.isArray(data[k])) {
-                        data[k].forEach(function (val) {
-                            qsArr.push(encodeURIComponent(k) + '=' + encodeURIComponent(val));
-                        });
-                    } else {
-                        qsArr.push(encodeURIComponent(k) + '=' + encodeURIComponent(data[k]));
-                    }
-                }
-            }
-            if (qsArr.length) {
-                url += (url.indexOf('?') === -1 ? '?' : '&') + qsArr.join('&');
+        // сериализация данных вида {key: value}
+        var params = [];
+        for (var key in data) {
+            if (!data.hasOwnProperty(key)) continue;
+
+            var value = data[key];
+            if (Array.isArray(value)) {
+                value.forEach(function (v) {
+                    params.push(encodeURIComponent(key + '[]') + '=' + encodeURIComponent(v));
+                });
+            } else {
+                params.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
             }
         }
+        var body = params.join('&');
 
-        xhr.open(method, url, true);
-
-        if (method === 'POST') {
-            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
+        if (afAamDebug) {
+            console.log('[AAM ajax →]', url, data);
         }
+
+        xhr.open('POST', url, true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
+
+        if (typeof timeoutMs === 'number' && timeoutMs > 0) {
+            xhr.timeout = timeoutMs;
+        }
+
+        xhr.onerror = function () {
+            if (afAamDebug) console.log('[AAM ajax] network error');
+            if (typeof callback === 'function') callback({ ok: 0, error: 'network_error' });
+        };
+
+        xhr.ontimeout = function () {
+            if (afAamDebug) console.log('[AAM ajax] timeout');
+            if (typeof callback === 'function') callback({ ok: 0, error: 'timeout' });
+        };
 
         xhr.onreadystatechange = function () {
             if (xhr.readyState === 4) {
+                if (afAamDebug) {
+                    console.log('[AAM ajax ←]', 'status=' + xhr.status, 'resp=', xhr.responseText);
+                }
+
                 var resp = null;
                 try {
                     resp = JSON.parse(xhr.responseText);
                 } catch (e) {
+                    // ВОТ ЭТО ТВОЯ БОЛЬ: раньше тут “молча”
                     if (afAamDebug) {
-                        console.log('[AAM] ajax JSON parse error:', e, 'raw:', xhr.responseText);
+                        console.log('[AAM ajax] JSON parse error:', e);
                     }
+                    resp = { ok: 0, error: 'bad_json', raw: xhr.responseText };
                 }
-                cb(resp || {});
+
+                if (typeof callback === 'function') {
+                    callback(resp);
+                }
             }
         };
 
-        if (method === 'POST' && data) {
-            var body = [];
-            for (var k2 in data) {
-                if (Object.prototype.hasOwnProperty.call(data, k2)) {
-                    if (Array.isArray(data[k2])) {
-                        data[k2].forEach(function (val) {
-                            body.push(encodeURIComponent(k2) + '=' + encodeURIComponent(val));
-                        });
-                    } else {
-                        body.push(encodeURIComponent(k2) + '=' + encodeURIComponent(data[k2]));
-                    }
-                }
-            }
-            xhr.send(body.join('&'));
-        } else {
-            xhr.send(null);
-        }
+        xhr.send(body);
     }
+
+
 
     function qs(sel) { return document.querySelector(sel); }
     function qsa(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+    function afAamSendBeacon(payload) {
+        try {
+            if (!navigator.sendBeacon) return false;
+
+            var params = [];
+            for (var k in payload) {
+                if (!payload.hasOwnProperty(k)) continue;
+                params.push(encodeURIComponent(k) + '=' + encodeURIComponent(payload[k]));
+            }
+
+            var blob = new Blob([params.join('&')], { type: 'application/x-www-form-urlencoded; charset=UTF-8' });
+            return navigator.sendBeacon('xmlhttp.php', blob);
+        } catch (e) {
+            return false;
+        }
+    }
+
+
+    // ===== вспомогательный хелпер: достать ID алерта из элемента/строки =====
+    function getAlertIdFromElement(el) {
+        if (!el) {
+            return 0;
+        }
+
+        // 1) если у самого элемента есть data-alert-id
+        if (el.getAttribute) {
+            var rawData = el.getAttribute('data-alert-id');
+            if (rawData) {
+                var n1 = parseInt(String(rawData).replace(/[^0-9]/g, ''), 10);
+                if (!isNaN(n1) && n1 > 0) {
+                    return n1;
+                }
+            }
+        }
+
+        // 2) если есть id вида read_123 / unread_123 / alert_123 и т.п.
+        if (el.id) {
+            var n2 = parseInt(String(el.id).replace(/[^0-9]/g, ''), 10);
+            if (!isNaN(n2) && n2 > 0) {
+                return n2;
+            }
+        }
+
+        // 3) поднимаемся наверх по DOM и ищем любой родитель с data-alert-id
+        var node = el.closest ? el.closest('[data-alert-id]') : null;
+        if (node && node.getAttribute) {
+            var raw = node.getAttribute('data-alert-id') || '';
+            var n3 = parseInt(String(raw).replace(/[^0-9]/g, ''), 10);
+            if (!isNaN(n3) && n3 > 0) {
+                return n3;
+            }
+        }
+
+        return 0;
+    }
+
 
     // ======== вспомогательная: вытащить число непрочитанных =========
     function extractUnreadCount(resp) {
@@ -149,26 +221,54 @@
         return null;
     }
 
-    function syncFromResponse(resp) {
+    function syncFromResponse(resp, deltaIfUnknown) {
+        if (afAamDebug) {
+            console.log('[AAM sync]', resp, 'deltaIfUnknown =', deltaIfUnknown);
+        }
+
+        // если вообще ничего не прилетело
         if (!resp || typeof resp !== 'object') {
-            pollUnreadAlerts();
+            // если знаем, что счётчик должен сдвинуться на ±1 / ±N — двигаем локально
+            if (typeof deltaIfUnknown === 'number' && deltaIfUnknown !== 0) {
+                updateVisibleCounts(Math.max(0, currentUnread + deltaIfUnknown));
+            } else {
+                // иначе — переспрашиваем сервер через list
+                pollUnreadAlerts();
+            }
             return;
         }
 
+        // сервер мог прислать блок debug
+        if (afAamDebug && resp.debug) {
+            console.log('[AAM debug (server)]', resp.debug);
+        }
+
+        var hasDelta = (typeof deltaIfUnknown === 'number' && deltaIfUnknown !== 0);
+
+        // Пытаемся вытащить число непрочитанных
         var cnt = extractUnreadCount(resp);
-        if (cnt !== null) {
+
+        if (typeof cnt === 'number' && !isNaN(cnt)) {
+            // сервер честно прислал счётчик — верим ему
             updateVisibleCounts(cnt);
+        } else if (hasDelta) {
+            // сервер молчит про счётчик, но мы знаем, что он изменился относительно currentUnread
+            updateVisibleCounts(Math.max(0, currentUnread + deltaIfUnknown));
         } else {
+            // ни числа, ни дельты — спрашиваем list
             pollUnreadAlerts();
         }
 
-        if (resp && resp.template) {
+        // Если пришёл шаблон — обновляем тело модалки
+        if (resp.template) {
             var tbody = qs('#alerts_content');
             if (tbody) {
                 tbody.innerHTML = resp.template;
             }
         }
     }
+
+
 
     // ======== ЛОГИКА MyAlerts (адаптация) =========
     function updateVisibleCounts(unreadCount) {
@@ -352,11 +452,14 @@
             if (target.classList && target.classList.contains('markReadAlertButton')) {
                 e.preventDefault();
 
-                var id = parseInt((target.id || '').replace(/[^0-9]/g, ''), 10);
-                var row = target.closest('tr.alert');
+                // ищем ближайший контейнер с data-alert-id
+                var row = target.closest('[data-alert-id]');
+                var id  = row ? getAlertIdFromElement(row) : getAlertIdFromElement(target);
+                var wasUnread = false;
 
                 // ЛОКАЛЬНО ОБНОВЛЯЕМ UI
                 if (row) {
+                    wasUnread = row.classList.contains('alert--unread');
                     row.classList.remove('alert--unread');
                     row.classList.add('alert--read');
 
@@ -373,27 +476,34 @@
 
                 if (id) {
                     ajax('xmlhttp.php', {
-                        action: 'af_aam_api',
-                        op: 'mark_read',
-                        id: id,
+                        action:    'af_aam_api',
+                        op:        'mark_read',
+                        id:        id,
+                        alert_id:  id,
+                        'alert_id[]': id,
                         my_post_key: window.my_post_key || ''
                     }, function (resp) {
-                        // сервер вернёт актуальное количество непрочитанных
-                        syncFromResponse(resp || {});
+                        syncFromResponse(resp || {}, wasUnread ? -1 : 0);
                     });
+                } else if (afAamDebug) {
+                    console.log('[AAM] mark_read: не удалось определить id алерта');
                 }
 
                 return;
             }
 
+
             // 2) Непрочитано
             if (target.classList && target.classList.contains('markUnreadAlertButton')) {
                 e.preventDefault();
 
-                var id2 = parseInt((target.id || '').replace(/[^0-9]/g, ''), 10);
-                var row2 = target.closest('tr.alert');
+                var row2 = target.closest('[data-alert-id]');
+                var id2  = row2 ? getAlertIdFromElement(row2) : getAlertIdFromElement(target);
+                var wasRead = false;
 
+                // ЛОКАЛЬНО ОБНОВЛЯЕМ UI
                 if (row2) {
+                    wasRead = row2.classList.contains('alert--read');
                     row2.classList.remove('alert--read');
                     row2.classList.add('alert--unread');
 
@@ -410,24 +520,28 @@
 
                 if (id2) {
                     ajax('xmlhttp.php', {
-                        action: 'af_aam_api',
-                        op: 'mark_unread',
-                        id: id2,
+                        action:    'af_aam_api',
+                        op:        'mark_unread',
+                        id:        id2,
+                        alert_id:  id2,
+                        'alert_id[]': id2,
                         my_post_key: window.my_post_key || ''
                     }, function (resp) {
-                        syncFromResponse(resp || {});
+                        syncFromResponse(resp || {}, wasRead ? +1 : 0);
                     });
+                } else if (afAamDebug) {
+                    console.log('[AAM] mark_unread: не удалось определить id алерта');
                 }
 
                 return;
             }
 
-            // 3) Удалить — этот блок уже ходит в af_aam_api: op=delete, оставляем как есть
+            // 3) Удалить
             if (target.classList && target.classList.contains('deleteAlertButton')) {
                 e.preventDefault();
 
-                var id3 = parseInt((target.id || '').replace(/[^0-9]/g, ''), 10);
-                var row3 = target.closest('tr.alert');
+                var row3 = target.closest('[data-alert-id]');
+                var id3  = row3 ? getAlertIdFromElement(row3) : getAlertIdFromElement(target);
 
                 var wasUnread = false;
                 if (row3) {
@@ -435,27 +549,25 @@
                     row3.parentNode.removeChild(row3);
                 }
 
-                if (!id3 && row3) {
-                    id3 = parseInt(row3.getAttribute('data-alert-id') || '0', 10);
-                }
-
                 if (id3) {
                     ajax('xmlhttp.php', {
-                        action: 'af_aam_api',
-                        op: 'delete',
-                        id: id3,
+                        action:    'af_aam_api',
+                        op:        'delete',
+                        id:        id3,
+                        alert_id:  id3,
+                        'alert_id[]': id3,
                         my_post_key: window.my_post_key || ''
                     }, function (resp) {
-                        if (wasUnread && (!resp || extractUnreadCount(resp) === null)) {
-                            pollUnreadAlerts();
-                            return;
-                        }
-                        syncFromResponse(resp || {});
+                        syncFromResponse(resp || {}, wasUnread ? -1 : 0);
                     });
+                } else if (afAamDebug) {
+                    console.log('[AAM] delete: не удалось определить id алерта');
                 }
 
                 return;
             }
+
+
 
             // 4) клик по самому уведомлению — пометить прочитанным и перейти
             var node = target;
@@ -466,36 +578,45 @@
                     if (node.href && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
                         e.preventDefault();
 
-                        // найдём id алерта
-                        var tr2 = node;
-                        while (tr2 && tr2 !== modal && (!tr2.tagName || tr2.tagName.toLowerCase() !== 'tr')) {
-                            tr2 = tr2.parentNode;
-                        }
+                        // ищем контейнер с data-alert-id
+                        var tr2 = node.closest('[data-alert-id]');
                         var alertId = 0;
-                        if (tr2 && tr2.getAttribute) {
-                            alertId = parseInt(tr2.getAttribute('data-alert-id') || '0', 10);
+                        var wasUnreadLink = false;
+
+                        if (tr2) {
+                            alertId = getAlertIdFromElement(tr2);
+                            wasUnreadLink = tr2.classList.contains('alert--unread');
+                        }
+
+                        // локально помечаем прочитанным
+                        if (tr2) {
+                            tr2.classList.remove('alert--unread');
+                            tr2.classList.add('alert--read');
                         }
 
                         if (alertId) {
                             ajax('xmlhttp.php', {
-                                action: 'af_aam_api',
-                                op: 'mark_read',
-                                id: alertId,
+                                action:      'af_aam_api',
+                                op:          'mark_read',
+                                id:          alertId,
+                                alert_id:    alertId,
+                                'alert_id[]': alertId,
                                 my_post_key: window.my_post_key || ''
                             }, function (resp) {
-                                syncFromResponse(resp || {});
+                                syncFromResponse(resp || {}, wasUnreadLink ? -1 : 0);
                                 window.location.href = node.href;
                             });
                         } else {
+                            if (afAamDebug) {
+                                console.log('[AAM] click-link: alertId=0, идём без ajax');
+                            }
                             window.location.href = node.href;
                         }
-
                     }
                     return;
                 }
                 node = node.parentNode;
             }
-
         });
 
 
@@ -506,17 +627,67 @@
 
     function initListClicks() {
         document.addEventListener('click', function (e) {
-            var node = e.target;
+            var target = e.target;
 
+            // 1) ✔ на странице списка (без перехода)
+            if (target && target.classList && target.classList.contains('markReadAlertButton')) {
+                var rowBtn = target.closest('.af-aam-list-row');
+                if (rowBtn) {
+                    e.preventDefault();
+
+                    var idBtn = getAlertIdFromElement(rowBtn) || getAlertIdFromElement(target);
+                    var wasUnreadBtn = rowBtn.classList.contains('af-aam-row-unread');
+
+                    // UI локально
+                    rowBtn.classList.remove('af-aam-row-unread');
+                    rowBtn.classList.add('af-aam-row-read');
+
+                    ajax('xmlhttp.php', {
+                        action: 'af_aam_api',
+                        op: 'mark_read',
+                        id: idBtn,
+                        my_post_key: window.my_post_key || ''
+                    }, function (resp) {
+                        syncFromResponse(resp || {}, wasUnreadBtn ? -1 : 0);
+                    });
+
+                    return;
+                }
+            }
+
+            // 2) ✕ на странице списка (удалить)
+            if (target && target.classList && target.classList.contains('deleteAlertButton')) {
+                var rowDel = target.closest('.af-aam-list-row');
+                if (rowDel) {
+                    e.preventDefault();
+
+                    var idDel = getAlertIdFromElement(rowDel) || getAlertIdFromElement(target);
+                    var wasUnreadDel = rowDel.classList.contains('af-aam-row-unread');
+
+                    // UI локально
+                    rowDel.parentNode.removeChild(rowDel);
+
+                    ajax('xmlhttp.php', {
+                        action: 'af_aam_api',
+                        op: 'delete',
+                        id: idDel,
+                        my_post_key: window.my_post_key || ''
+                    }, function (resp) {
+                        syncFromResponse(resp || {}, wasUnreadDel ? -1 : 0);
+                    });
+
+                    return;
+                }
+            }
+
+            // 3) Клик по уведомлению на странице списка — пометить и перейти
+            var node = target;
             while (node && node !== document) {
                 if (node.classList && node.classList.contains('af-aam-list-link')) {
                     if (node.href && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
-                        e.preventDefault();
-
                         var row = node.closest('.af-aam-list-row');
-                        var alertId = parseInt((node.getAttribute('data-alert-id') || (row && row.getAttribute('data-alert-id')) || '0'), 10);
+                        var alertId = getAlertIdFromElement(node) || (row ? getAlertIdFromElement(row) : 0);
 
-                        // локально отметим прочитанным и скорректируем счётчик, чтобы UCP сразу реагировал
                         var wasUnread = false;
                         if (row) {
                             wasUnread = row.classList.contains('af-aam-row-unread');
@@ -524,10 +695,26 @@
                             row.classList.add('af-aam-row-read');
                         }
 
-                        if (wasUnread) {
-                            var badgeVal = currentUnread > 0 ? currentUnread - 1 : 0;
-                            updateVisibleCounts(badgeVal);
+                        // бейдж сразу (оптимистично)
+                        if (wasUnread) updateVisibleCounts(Math.max(0, currentUnread - 1));
+
+                        // НЕ блочим навигацию: beacon → идеально, иначе ajax с быстрым fallback
+                        var ok = false;
+                        if (alertId) {
+                            ok = afAamSendBeacon({
+                                action: 'af_aam_api',
+                                op: 'mark_read',
+                                id: alertId,
+                                my_post_key: window.my_post_key || ''
+                            });
                         }
+
+                        // если beacon есть — даём браузеру перейти как обычно
+                        if (ok) return;
+
+                        // fallback: короткий ajax, но не держим пользователя “в заложниках”
+                        e.preventDefault();
+                        var jumped = false;
 
                         if (alertId) {
                             ajax('xmlhttp.php', {
@@ -536,19 +723,31 @@
                                 id: alertId,
                                 my_post_key: window.my_post_key || ''
                             }, function (resp) {
-                                syncFromResponse(resp || {});
-                                window.location.href = node.href;
-                            });
+                                if (!jumped) {
+                                    syncFromResponse(resp || {}, 0);
+                                    jumped = true;
+                                    window.location.href = node.href;
+                                }
+                            }, 1500);
+
+                            setTimeout(function () {
+                                if (!jumped) {
+                                    jumped = true;
+                                    window.location.href = node.href;
+                                }
+                            }, 200);
                         } else {
                             window.location.href = node.href;
                         }
                     }
                     return;
                 }
+
                 node = node.parentNode;
             }
         });
     }
+
 
 
 
@@ -572,11 +771,17 @@
 
         function markAllHandler(e) {
             e.preventDefault();
-            ajax('xmlhttp.php', { action: 'af_aam_api', op: 'mark_all_read', my_post_key: window.my_post_key || '' }, function (resp) {
-                syncFromResponse(resp || {});
+            ajax('xmlhttp.php', {
+                action:    'af_aam_api',
+                op:        'mark_all_read',
+                my_post_key: window.my_post_key || ''
+            }, function (resp) {
+                // если сервер не прислал явный unread_count, просто зануляем счётчик
+                syncFromResponse(resp || {}, -currentUnread);
                 renderLatest();
             });
         }
+
 
         if (latestBtn && latestContainer) {
             latestBtn.addEventListener('click', function (e) {
@@ -1001,42 +1206,28 @@
         }, function (resp) {
             if (!resp || typeof resp !== 'object') {
                 if (afAamDebug) {
-                    console.log('[AAM] pollUnreadAlerts: пустой или некорректный ответ', resp);
+                    console.log('[AAM] pollUnreadAlerts: пустой/битый ответ', resp);
                 }
                 return;
             }
 
-            if (resp.ok !== 1) {
+            // если сервер явно сказал "ошибка" — выходим
+            if (resp.error && !resp.ok) {
                 if (afAamDebug) {
-                    console.log('[AAM] pollUnreadAlerts: ok!=1', resp);
+                    console.log('[AAM] pollUnreadAlerts: ошибка от сервера', resp);
                 }
                 return;
             }
 
             var oldCount = currentUnread || 0;
             var newCount = extractUnreadCount(resp);
-            var newestId = 0;
-
-            // на всякий случай дублируем через badge
-            if (newCount === null && typeof resp.badge !== 'undefined') {
-                var tmp = parseInt(resp.badge, 10);
-                if (!isNaN(tmp)) {
-                    newCount = tmp;
-                }
-            }
 
             if (newCount === null) {
-                if (afAamDebug) {
-                    console.log('[AAM] pollUnreadAlerts: не смогли вытащить счётчик из', resp);
-                }
-                return;
+                // если счётчик не нашли — не роняем логику
+                newCount = oldCount;
             }
 
-            if (newCount < 0) {
-                newCount = 0;
-            }
-
-            // обновляем содержимое модалки, если шаблон пришёл
+            // обновляем HTML модалки, если пришёл шаблон
             if (resp.template) {
                 var tbody = qs('#alerts_content');
                 if (tbody) {
@@ -1044,25 +1235,30 @@
                 }
             }
 
+            // вычисляем id самого свежего алерта
+            var newestId = lastSeenAlertId;
             if (Array.isArray(resp.items) && resp.items.length) {
-                newestId = parseInt(resp.items[0].id, 10) || 0;
+                var nid = parseInt(resp.items[0].id, 10);
+                if (!isNaN(nid)) {
+                    newestId = nid;
+                }
             }
 
-            if (afAamDebug) {
-                console.log('[AAM] pollUnreadAlerts: old=', oldCount, 'new=', newCount);
-            }
-
+            // подтягиваем бейдж и title
             updateVisibleCounts(newCount);
 
             var hasNewAlerts = (newCount > oldCount);
             if (!hasNewAlerts && newestId && newestId > lastSeenAlertId) {
+                // счётчик тот же, но появился алерт с новым id
                 hasNewAlerts = true;
             }
 
             if (hasNewAlerts) {
                 if (afAamDebug) {
-                    console.log('[AAM] pollUnreadAlerts: обнаружены новые, играем звук и тосты');
+                    console.log('[AAM] pollUnreadAlerts: есть новые алерты');
                 }
+
+                // звук отдельно от тостов
                 playAlertSound();
 
                 if (Array.isArray(resp.items) && resp.items.length) {
@@ -1074,6 +1270,84 @@
                 lastSeenAlertId = newestId;
             }
         });
+    }
+
+    var afAamLongPollRunning = false;
+
+    function afAamHandleIncoming(resp) {
+        if (!resp || typeof resp !== 'object') return;
+
+        if (resp.error && !resp.ok) {
+            if (afAamDebug) console.log('[AAM] server error:', resp);
+            return;
+        }
+
+        var oldCount = currentUnread || 0;
+        var newCount = extractUnreadCount(resp);
+        if (newCount === null) newCount = oldCount;
+
+        if (resp.template) {
+            var tbody = qs('#alerts_content');
+            if (tbody) tbody.innerHTML = resp.template;
+        }
+
+        // обновляем newest id (сервер может прислать server_newest_id)
+        if (typeof resp.server_newest_id !== 'undefined') {
+            var sid = parseInt(resp.server_newest_id, 10);
+            if (!isNaN(sid) && sid > lastSeenAlertId) lastSeenAlertId = sid;
+        } else if (Array.isArray(resp.items) && resp.items.length) {
+            var nid = parseInt(resp.items[0].id, 10);
+            if (!isNaN(nid) && nid > lastSeenAlertId) lastSeenAlertId = nid;
+        }
+
+        updateVisibleCounts(newCount);
+
+        var hasNewAlerts = (newCount > oldCount);
+        if (resp.changed === 1 || resp.changed === true) {
+            // long-poll: changed=1 всегда значит “что-то произошло”
+            // звук+тосты — только если стало больше или реально пришли items
+            if (Array.isArray(resp.items) && resp.items.length) hasNewAlerts = true;
+        }
+
+        if (hasNewAlerts) {
+            playAlertSound();
+            if (Array.isArray(resp.items) && resp.items.length) {
+                showToastsFromAlerts(resp.items);
+            }
+        }
+    }
+
+    function afAamLongPollLoop() {
+        if (afAamLongPollRunning) return;
+        afAamLongPollRunning = true;
+
+        var timeoutSec = 25;
+        var timeoutMs  = (timeoutSec + 5) * 1000;
+
+        function tick() {
+            ajax('xmlhttp.php', {
+                action: 'af_aam_api',
+                op: 'poll',
+                since_id: lastSeenAlertId || 0,
+                since_unread: currentUnread || 0,
+                timeout: timeoutSec
+            }, function (resp) {
+                // если таймаут/ошибка — просто повторяем через небольшую паузу
+                if (!resp || resp.ok === 0) {
+                    if (afAamDebug) console.log('[AAM] longpoll fail:', resp);
+                    setTimeout(tick, 1500);
+                    return;
+                }
+
+                // changed=0 → тоже норм, просто повторяем
+                afAamHandleIncoming(resp);
+
+                // сразу следующий запрос (без setInterval, без “удушения” в фоне)
+                setTimeout(tick, 50);
+            }, timeoutMs);
+        }
+
+        tick();
     }
 
 
@@ -1120,6 +1394,9 @@
 
         // сразу один раз дернем, чтобы синхронизировать бейдж без ожидания интервала
         pollUnreadAlerts();
+        // long-poll realtime (работает лучше setInterval в фоне)
+        afAamLongPollLoop();
+
     }
 
     // выбираем интервал: сначала af_aam_autorefresh, потом myalerts, иначе дефолт 5 сек
@@ -1149,10 +1426,14 @@
 
     if (refreshInterval > 0) {
         if (afAamDebug) {
-            console.log('[AAM] автообновление каждые', refreshInterval, 'секунд');
+            console.log('[AAM] interval fallback каждые', refreshInterval, 'сек (на случай, если long-poll упадёт)');
         }
-        setInterval(pollUnreadAlerts, refreshInterval * 1000);
+        setInterval(function () {
+            // лёгкий фолбэк: просто сверим счётчик
+            pollUnreadAlerts();
+        }, refreshInterval * 1000);
     }
+
 
     // запуск init после загрузки DOM
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
