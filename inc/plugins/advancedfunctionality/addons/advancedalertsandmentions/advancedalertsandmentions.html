@@ -65,7 +65,7 @@
                     </div>
                 </div>
 
-                <audio id="af_aam_sound" preload="auto" style="display:none;">
+                <audio id="af_aam_sound" preload="auto" style="display:none;" src="{$af_aam_asset_base}ping.mp3">
                     <source src="{$af_aam_asset_base}ping.mp3" type="audio/mpeg" />
                 </audio>
             </td>
@@ -147,14 +147,27 @@
 <!-- TEMPLATE: af_aam_list_row -->
 <div class="af-aam-list-row {$af_aam_read_class}" data-alert-id="{$af_aam_alert_id}">
     <span class="af-aam-list-avatar">{$af_aam_alert_avatar}</span>
+
     <a class="af-aam-list-text af-aam-list-link"
        data-alert-id="{$af_aam_alert_id}"
        href="{$af_aam_url}">
         {$af_aam_text}
     </a>
+
     <span class="af-aam-list-date">{$af_aam_date}</span>
+
+    <span class="af-aam-list-actions">
+        <a href="#"
+           class="markReadAlertButton"
+           title="{$lang->af_aam_mark_read}">✔</a>
+        &nbsp;|&nbsp;
+        <a href="#"
+           class="deleteAlertButton"
+           title="{$lang->af_aam_delete}">✕</a>
+    </span>
 </div>
 <!-- /TEMPLATE -->
+
 
 
 <!-- TEMPLATE: af_aam_ucp_prefs -->
@@ -205,5 +218,5 @@
     window.unreadAlerts         = {$af_aam_unread};
 </script>
 
-<script src="{$af_aam_asset_base}advancedalertsandmentions.js?ver=1.0.1"></script>
+<script type="text/javascript" src="{$af_aam_asset_base}advancedalertsandmentions.js"></script>
 <!-- /TEMPLATE -->
