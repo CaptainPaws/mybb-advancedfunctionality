@@ -1,176 +1,278 @@
 <?php
+/**
+ * Advanced Alerts and Mentions — форматирование текстов уведомлений и описание типов.
+ *
+ * ВАЖНО:
+ * - Этот файл подключается из advancedalertsandmentions.php
+ * - Здесь нет хуков, только форматирование и помощь по типам.
+ */
 
 if (!defined('IN_MYBB')) {
     die('No direct access');
 }
+if (!defined('AF_AAM_ID')) {
+    // На всякий случай, но по идее константа уже определена в основном файле
+    define('AF_AAM_ID', 'advancedalertsandmentions');
+}
 
-return [
-    'id'          => 'advancedalertsandmentions',
-    'type'        => 'addon',
-    'name'        => 'Advanced Alerts and Mentions',
-    'description' => 'Система уведомлений и @упоминаний пользователей, интегрированная в AdvancedFunctionality.',
-    'version'     => '1.0.0',
-    'compatibility' => '18*',
-    'author'   => 'CaptainPaws',
-    'website'     => 'https://warprift.ru',
-    'bootstrap'   => 'advancedalertsandmentions.php',
+/**
+ * Возвращает список "известных" типов уведомлений.
+ * Можно использовать для каких-нибудь проверок/будущей админки.
+ */
+function af_aam_get_known_types(): array
+{
+    return [
+        'rep',
+        'pm',
+        'post_threadauthor',
+        'subscribed_thread',
+        'quoted',
+        'mention',
+        // кастомные типы (например achievements) регистрируются своими аддонами
+    ];
+}
 
-    // админ-интеграция в роутер AF
-    'admin' => [
-        // slug используется в левом меню AF
-        'slug'       => 'advancedalertsandmentions',
-        'title'      => 'Advanced Alerts & Mentions',
-        'controller' => 'admin.php', // класс AF_Admin_AdvancedAlertsAndMentions
-    ],
+/**
+ * Форматирование одного уведомления: текст + URL.
+ *
+ * На входе ожидается массив из SELECT'а:
+ *  - code
+ *  - title
+ *  - uid
+ *  - from_uid
+ *  - object_id
+ *  - extra (JSON)
+ */
+function af_aam_format_alert(array $alert): array
+{
+    global $lang, $mybb;
 
-    // языковые ключи, AF-ядро сгенерит RU/EN файлы
-    'lang' => [
-        'russian' => [
-            'front' => [
-                'af_aam_name'               => 'Уведомления и упоминания',
-                'af_aam_description'        => 'Система уведомлений и @упоминаний пользователей.',
-                'af_aam_link_alerts'        => 'Уведомления',
-                'af_aam_no_alerts'          => 'Новых уведомлений нет.',
-                'af_aam_mark_all'           => 'Отметить все как прочитанные',
-                'af_aam_mark_read'          => 'Прочитано',
-                'af_aam_mark_unread'        => 'Не прочитано',
-                'af_aam_modal_display_alerts' => 'Открыть список уведомлений',
-                'af_aam_mention_button'     => 'Упомянуть',
-                'af_aam_alert_type_rep'     => 'Изменение репутации',
-                'af_aam_alert_type_pm'      => 'Новое личное сообщение',
-                'af_aam_alert_type_reply'   => 'Ответ в вашей теме',
-                'af_aam_alert_type_quote'   => 'Вас процитировали',
-                'af_aam_alert_type_subscribed' => 'Ответ в подписанной теме',
-                'af_aam_alert_type_mention' => 'Вас упомянули',
-                'af_aam_text_unknown_user'  => 'Кто-то',
-                'af_aam_text_rep'           => '{1} изменил(а) вашу репутацию ({2})',
-                'af_aam_text_pm'            => 'Новое ЛС от {1}: {2}',
-                'af_aam_text_reply'         => '{1} ответил(а) в вашей теме "{2}"',
-                'af_aam_text_subscribed'    => '{1} ответил(а) в подписанной теме "{2}"',
-                'af_aam_text_quote'         => '{1} процитировал(а) вас в "{2}"',
-                'af_aam_text_mention'       => '{1} упомянул(а) вас в "{2}"',
-                'af_aam_text_subscribed_forum' => '{1} создал(а) новую тему: {2}',
-                'af_aam_delete' => 'Удалить',
-                'af_aam_autoclean_days' => 'Автоочистка уведомлений (дней)',
-                'af_aam_autoclean_days_desc' => 'Если больше 0 — при создании новых уведомлений будут автоматически удаляться уведомления старше указанного количества дней.',
-                'af_aam_clear_all_button'  => 'Очистить все уведомления',
-                'af_aam_clear_all_confirm' => 'Очистить все уведомления безвозвратно?',
-                'af_aam_cleared_all'       => 'Все уведомления удалены.',
-                'af_aam_toast_limit' => 'Максимум всплывающих уведомлений',
-                'af_aam_toast_limit_desc' => '0 — отключить всплывающие тосты. Иначе показывать не более указанного количества подряд.',
-                'af_aam_prefs_title' => 'Настройки уведомлений',
+    if (!isset($lang->af_aam_name)) {
+        $lang->load('advancedfunctionality_' . AF_AAM_ID);
+    }
 
-            ],
-            'admin' => [
-                'af_aam_group'             => 'AF: Уведомления и упоминания',
-                'af_aam_group_desc'        => 'Настройки системы уведомлений и @упоминаний.',
-                'af_aam_enabled'           => 'Включить Advanced Alerts and Mentions',
-                'af_aam_enabled_desc'      => 'Если выключено, система уведомлений не будет работать.',
-                'af_aam_per_page'          => 'Уведомлений на странице',
-                'af_aam_per_page_desc'     => 'Сколько уведомлений показывать на странице списка.',
-                'af_aam_dropdown_limit'    => 'Уведомлений в выпадающем списке',
-                'af_aam_dropdown_limit_desc' => 'Сколько последних уведомлений показывать в выпадающем списке в шапке.',
-                'af_aam_autorefresh'       => 'Автообновление уведомлений (секунды)',
-                'af_aam_autorefresh_desc'  => '0 — не обновлять автоматически.',
-                'af_aam_sound'             => 'Звук при новом уведомлении',
-                'af_aam_sound_desc'        => 'Воспроизводить ли звук при появлении нового уведомления.',
-                'af_aam_max_alerts_per_user' => 'Максимум уведомлений на пользователя',
-                'af_aam_max_alerts_per_user_desc' => '0 — не ограничивать. Если больше 0, при превышении лимита самые старые уведомления будут удалены.',
-                'af_aam_inactive_days'     => 'Срок неактивности (дни)',
-                'af_aam_inactive_days_desc'=> '0 — не очищать. Если больше 0, уведомления неактивных пользователей (lastactive < cutoff) будут удалены автоматически.',
-                'af_aam_admin_title'       => 'Типы уведомлений',
-                'af_aam_admin_code'        => 'Код',
-                'af_aam_admin_title_col'   => 'Название',
-                'af_aam_admin_can_disable' => 'Пользователь может отключить',
-                'af_aam_admin_default_user_enabled' => 'Включено у новых пользователей',
-                'af_aam_admin_enabled'     => 'Включено',
-                'af_aam_admin_actions'     => 'Действия',
-                'af_aam_admin_cleanup_button' => 'Очистить уведомления неактивных пользователей',
-                'af_aam_admin_cleanup_done'    => 'Удалено уведомлений: {1}. Пользователей затронуто: {2}.',
-                'af_aam_admin_cleanup_disabled'=> 'Очистка по неактивности отключена в настройках.',
-                'af_aam_admin_empty'       => 'Типы уведомлений ещё не настроены.',
-                'af_aam_admin_add'         => 'Добавить тип',
-                'af_aam_admin_add_button'  => 'Создать тип уведомления',
-                'af_aam_admin_title_placeholder' => 'Название уведомления',
-                'af_aam_admin_delete'      => 'Удалить',
-                'af_aam_admin_confirm_delete' => 'Удалить пользовательский тип? Уведомления этого типа больше не будут отображаться.',
-                'af_aam_admin_save_types'  => 'Сохранить настройки типов',
-                'af_aam_admin_msg_saved'   => 'Тип уведомления сохранён.',
-                'af_aam_admin_msg_deleted' => 'Тип уведомления удалён.',
-            ],
-        ],
-        'english' => [
-            'front' => [
-                'af_aam_name'               => 'Alerts and Mentions',
-                'af_aam_description'        => 'Notification and @mention system for users.',
-                'af_aam_link_alerts'        => 'Alerts',
-                'af_aam_no_alerts'          => 'No new alerts.',
-                'af_aam_mark_all'           => 'Mark all as read',
-                'af_aam_mark_read'          => 'Mark read',
-                'af_aam_mark_unread'        => 'Mark unread',
-                'af_aam_modal_display_alerts' => 'View all alerts',
-                'af_aam_mention_button'     => 'Mention',
-                'af_aam_alert_type_rep'     => 'Reputation change',
-                'af_aam_alert_type_pm'      => 'New private message',
-                'af_aam_alert_type_reply'   => 'Reply in your thread',
-                'af_aam_alert_type_quote'   => 'You were quoted',
-                'af_aam_alert_type_subscribed' => 'Reply in subscribed thread',
-                'af_aam_alert_type_mention' => 'You were mentioned',
-                'af_aam_text_unknown_user'  => 'Someone',
-                'af_aam_text_rep'           => '{1} changed your reputation ({2})',
-                'af_aam_text_pm'            => 'New private message from {1}: {2}',
-                'af_aam_text_reply'         => '{1} replied in your thread "{2}"',
-                'af_aam_text_subscribed'    => '{1} replied in subscribed thread "{2}"',
-                'af_aam_text_quote'         => '{1} quoted you in "{2}"',
-                'af_aam_text_mention'       => '{1} mentioned you in "{2}"',
-                'af_aam_text_subscribed_forum' => '{1} create new tread: {2}',
-                'af_aam_delete' => 'Delete',
-                'af_aam_autoclean_days' => 'Auto-clearing notifications (days)',
-                'af_aam_autoclean_days_desc' => 'If greater than 0, when creating new notifications, notifications older than the specified number of days will be automatically deleted.',
-                'af_aam_clear_all_button'  => 'Clear all notifications',
-                'af_aam_clear_all_confirm' => 'Clear all notifications permanently?',
-                'af_aam_cleared_all'       => 'All notifications have been deleted.',
-                'af_aam_toast_limit' => 'Maximum pop-up notifications',
-                'af_aam_toast_limit_desc' => '0-disable pop-up toasts. Otherwise, show no more than the specified number in a row.',
-                'af_aam_prefs_title' => 'Notification settings',
-            ],
-            'admin' => [
-                'af_aam_group'             => 'AF: Alerts and Mentions',
-                'af_aam_group_desc'        => 'Settings for the alerts and @mentions system.',
-                'af_aam_enabled'           => 'Enable Advanced Alerts and Mentions',
-                'af_aam_enabled_desc'      => 'If disabled, the notification system will not run.',
-                'af_aam_per_page'          => 'Alerts per page',
-                'af_aam_per_page_desc'     => 'How many alerts to show per page in the list.',
-                'af_aam_dropdown_limit'    => 'Alerts in dropdown',
-                'af_aam_dropdown_limit_desc' => 'How many latest alerts to show in the header dropdown.',
-                'af_aam_autorefresh'       => 'Auto refresh alerts (seconds)',
-                'af_aam_autorefresh_desc'  => '0 = no auto refresh.',
-                'af_aam_sound'             => 'Play sound on new alert',
-                'af_aam_sound_desc'        => 'Whether to play a sound when a new alert arrives.',
-                'af_aam_max_alerts_per_user' => 'Maximum alerts per user',
-                'af_aam_max_alerts_per_user_desc' => '0 = unlimited. If greater than 0, oldest alerts will be removed when the limit is exceeded.',
-                'af_aam_inactive_days'     => 'Inactivity threshold (days)',
-                'af_aam_inactive_days_desc'=> '0 = do not clean. If greater than 0, alerts of inactive users (lastactive < cutoff) will be removed automatically.',
-                'af_aam_admin_title'       => 'Alert types',
-                'af_aam_admin_code'        => 'Code',
-                'af_aam_admin_title_col'   => 'Title',
-                'af_aam_admin_can_disable' => 'User can disable',
-                'af_aam_admin_default_user_enabled' => 'Enabled by default for users',
-                'af_aam_admin_enabled'     => 'Enabled',
-                'af_aam_admin_actions'     => 'Actions',
-                'af_aam_admin_cleanup_button' => 'Clear alerts of inactive users',
-                'af_aam_admin_cleanup_done'    => 'Alerts removed: {1}. Users affected: {2}.',
-                'af_aam_admin_cleanup_disabled'=> 'Inactivity cleanup is disabled in settings.',
-                'af_aam_admin_empty'       => 'No alert types configured yet.',
-                'af_aam_admin_add'         => 'Add alert type',
-                'af_aam_admin_add_button'  => 'Create alert type',
-                'af_aam_admin_title_placeholder' => 'Alert title',
-                'af_aam_admin_delete'      => 'Delete',
-                'af_aam_admin_confirm_delete' => 'Delete this custom alert type? Alerts of this code will no longer display.',
-                'af_aam_admin_save_types'  => 'Save alert type settings',
-                'af_aam_admin_msg_saved'   => 'Alert type saved.',
-                'af_aam_admin_msg_deleted' => 'Alert type deleted.',
-            ],
-        ],
-    ],
-];
+    $code   = $alert['code'] ?? '';
+    $title  = $alert['title'] ?? '';
+    $extra  = [];
+
+    if (!empty($alert['extra'])) {
+        $decoded = json_decode($alert['extra'], true);
+        if (is_array($decoded)) {
+            $extra = $decoded;
+        }
+    }
+
+    $fromUser = $alert['from_username'] ?? '';
+    if ($fromUser === '') {
+        $fromUser = af_aam_format_username((int)($alert['from_uid'] ?? 0));
+    }
+    $subject  = (string)($extra['subject'] ?? '');
+    $pid      = (int)($extra['pid'] ?? 0);
+    $tid      = (int)($extra['tid'] ?? (int)($alert['object_id'] ?? 0));
+
+    $url  = '';
+    $text = $code;
+
+    switch ($code) {
+        // --- Репутация ---
+        case 'rep':
+            $repChange = (int)($extra['reputation'] ?? 0);
+            $text = $lang->sprintf($lang->af_aam_text_rep, $fromUser, $repChange);
+
+            $targetUid = (int)($alert['uid'] ?? 0);
+            $url = 'reputation.php?uid=' . $targetUid;
+            if (!empty($extra['rid'])) {
+                $url .= '#rid' . (int)$extra['rid'];
+            }
+            break;
+
+        // --- Личные сообщения ---
+        case 'pm':
+            // Ожидаем, что object_id = pmid
+            $pmid    = (int)($alert['object_id'] ?? 0);
+            $subject = (string)($extra['subject'] ?? '');
+
+            if ($fromUser === '') {
+                // подстраховка, если $fromUser не вычислился
+                $fromUser = $lang->af_aam_unknown_user ?? 'Кто-то';
+            }
+
+            $text = $lang->sprintf($lang->af_aam_text_pm, $fromUser, $subject);
+
+            if ($pmid > 0) {
+                $url = 'private.php?action=read&pmid=' . $pmid;
+            } else {
+                // На крайний случай – просто список ЛС
+                $url = 'private.php';
+            }
+            break;
+
+
+        // --- Ответ в твоей теме ---
+        case 'post_threadauthor':
+            $text = $lang->sprintf($lang->af_aam_text_reply, $fromUser, $subject);
+            if ($pid > 0) {
+                $url = 'showthread.php?pid=' . $pid . '#pid' . $pid;
+            } else {
+                $url = 'showthread.php?tid=' . $tid;
+            }
+            break;
+
+        // --- Новый пост в подписанной теме ---
+        case 'subscribed_thread':
+            $text = $lang->sprintf($lang->af_aam_text_subscribed, $fromUser, $subject);
+            if ($pid > 0) {
+                $url = 'showthread.php?pid=' . $pid . '#pid' . $pid;
+            } else {
+                $url = 'showthread.php?tid=' . $tid;
+            }
+            break;
+
+
+        // --- Цитата ---
+        case 'quoted':
+            $text = $lang->sprintf($lang->af_aam_text_quote, $fromUser, $subject);
+            if ($pid > 0) {
+                $url = 'showthread.php?pid=' . $pid . '#pid' . $pid;
+            } else {
+                $url = 'showthread.php?tid=' . $tid;
+            }
+            break;
+
+
+        // --- Упоминание @username / @"Имя" ---
+        case 'mention':
+            $text = $lang->sprintf($lang->af_aam_text_mention, $fromUser, $subject);
+            if ($pid > 0) {
+                $url = 'showthread.php?pid=' . $pid . '#pid' . $pid;
+            } else {
+                $url = 'showthread.php?tid=' . $tid;
+            }
+            break;
+
+
+        // "В подписанном форуме создана новая тема ..." 
+        case 'subscribed_forum':
+            $text = $lang->sprintf($lang->af_aam_text_subscribed_forum, $fromUser, $subject);
+
+            if ($pid > 0) {
+                // Сразу на первый пост темы
+                $url = 'showthread.php?pid=' . $pid . '#pid' . $pid;
+            } elseif ($tid > 0) {
+                $url = 'showthread.php?tid=' . $tid;
+            } elseif (!empty($extra['fid'])) {
+                $url = 'forumdisplay.php?fid=' . (int)$extra['fid'];
+            }
+            break;
+
+        // --- Все остальные коды (в т.ч. кастомные) ---
+        default:
+            $labelKey   = 'af_aam_alert_type_' . $code;
+            $customText = (string)($extra['message'] ?? '');
+
+            if ($customText !== '') {
+                $text = $customText;
+            } elseif ($title !== '') {
+                $text = $title;
+            } elseif (isset($lang->{$labelKey})) {
+                $text = $lang->{$labelKey};
+            } else {
+                $text = $code;
+            }
+
+            if (!empty($extra['url'])) {
+                $url = (string)$extra['url'];
+            }
+            
+    }
+
+    // Если в extra явно передали URL – он имеет приоритет
+    if (!empty($extra['url'])) {
+        $url = (string)$extra['url'];
+    }
+
+    return [
+        'text' => $text,
+        'url'  => $url,
+    ];
+}
+
+/**
+ * Упрощённый помощник: сразу вернуть только текст.
+ */
+function af_aam_format_alert_text(array $alert): string
+{
+    $formatted = af_aam_format_alert($alert);
+    return $formatted['text'];
+}
+
+/**
+ * Форматирование имени пользователя для текста уведомлений.
+ */
+function af_aam_format_username(int $uid): string
+{
+    global $lang;
+
+    if ($uid <= 0) {
+        return $lang->af_aam_text_unknown_user ?? 'User';
+    }
+
+    $user = get_user($uid);
+    if (empty($user['username'])) {
+        return $lang->af_aam_text_unknown_user ?? 'User';
+    }
+
+    return $user['username'];
+}
+
+function af_aam_avatar_data(int $uid): array
+{
+    $fallbackInitial = '?';
+    $username = '';
+
+    if ($uid > 0) {
+        $user = get_user($uid);
+        if (!empty($user)) {
+            $username = $user['username'] ?? '';
+            $avatar = format_avatar($user['avatar'] ?? '', $user['avatardimensions'] ?? '', '32|32');
+            if (!empty($avatar['image'])) {
+                return [
+                    'url'      => $avatar['image'],
+                    'width'    => (int)($avatar['width'] ?? 32),
+                    'height'   => (int)($avatar['height'] ?? 32),
+                    'username' => $username,
+                    'initial'  => mb_substr($username, 0, 1, 'UTF-8'),
+                ];
+            }
+            $fallbackInitial = mb_substr($username, 0, 1, 'UTF-8');
+        }
+    }
+
+    return [
+        'url'      => '',
+        'width'    => 32,
+        'height'   => 32,
+        'username' => $username,
+        'initial'  => $fallbackInitial,
+    ];
+}
+
+function af_aam_render_avatar_html(int $uid, string $username = ''): string
+{
+    $data = af_aam_avatar_data($uid);
+
+    if ($username === '') {
+        $username = $data['username'] ?: ($data['initial'] ?: '?');
+    }
+
+    if (!empty($data['url'])) {
+        $img = htmlspecialchars_uni($data['url']);
+        $alt = htmlspecialchars_uni($username);
+        $w   = (int)($data['width'] ?? 32);
+        $h   = (int)($data['height'] ?? 32);
+        return '<span class="af-aam-avatar"><img src="' . $img . '" alt="' . $alt . '" width="' . $w . '" height="' . $h . '" loading="lazy" /></span>';
+    }
+
+    $initial = htmlspecialchars_uni($data['initial'] ?: mb_substr($username, 0, 1, 'UTF-8'));
+    return '<span class="af-aam-avatar af-aam-avatar--placeholder" aria-hidden="true">' . $initial . '</span>';
+}
