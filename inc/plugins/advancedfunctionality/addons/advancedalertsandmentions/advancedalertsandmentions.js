@@ -422,6 +422,25 @@
         return false;
     }
 
+    function afAamMaxAlertId(alerts) {
+        if (!Array.isArray(alerts) || !alerts.length) {
+            return 0;
+        }
+
+        var maxId = 0;
+        for (var i = 0; i < alerts.length; i++) {
+            var a = alerts[i];
+            if (!a) continue;
+
+            var id = parseInt(a.id, 10) || 0;
+            if (id > maxId) {
+                maxId = id;
+            }
+        }
+
+        return maxId;
+    }
+
     // ======== ALERTS: HEADER ICON + МОДАЛКА =========
     function initAlertsUI() {
         var link   = qs('#af_aam_header_link');
@@ -1647,14 +1666,11 @@
         // тосты выключены пользователем
         if (!afAamUserToastsEnabled) return;
 
-        var maxId = lastSeenAlertId;
-
         for (var i = 0; i < alerts.length; i++) {
             var a = alerts[i];
             if (!a) continue;
 
             var id = parseInt(a.id, 10) || 0;
-            if (id > maxId) maxId = id;
 
             // только непрочитанные
             if (a.is_read && parseInt(a.is_read, 10) === 1) continue;
@@ -1665,10 +1681,6 @@
 
             afAamShownToastIds[id] = 1;
             afAamToastQueue.push(a);
-        }
-
-        if (maxId > lastSeenAlertId) {
-            saveLastSeen(maxId);
         }
 
         // запуск показа, если у тебя дальше в файле есть drain/renderer — оставляем как было
@@ -1705,7 +1717,7 @@
         ajax('xmlhttp.php', {
             action: 'af_aam_api',
             op: 'list',
-            unreadOnly: 1
+            unreadOnly: 0
         }, function (resp) {
             afAamPollInFlight = false;
 
@@ -1742,6 +1754,7 @@
 
             // Есть ли реально новые (непр.) относительно lastSeenAlertId
             var hasNewUnseen = afAamHasNewUnseenUnread(items);
+            var maxId = afAamMaxAlertId(items);
 
             // Тосты — только новые (queueToasts сама фильтрует)
             queueToasts(items);
@@ -1749,6 +1762,10 @@
             // Звук — ТОЛЬКО если реально пришло новое
             if (hasNewUnseen) {
                 playAlertSound();
+            }
+
+            if (maxId > lastSeenAlertId) {
+                saveLastSeen(maxId);
             }
         });
     }
@@ -1840,10 +1857,6 @@
             newest = parseInt(items[0].id, 10) || 0;
         }
 
-        if (newest > 0 && newest > lastSeenAlertId) {
-            saveLastSeen(newest);
-        }
-
         updateVisibleCounts(newCount);
 
         // “новые” — это НЕ просто changed=1, а реально новые непрочитанные выше lastSeenAlertId
@@ -1860,6 +1873,15 @@
             if (items.length) {
                 showToastsFromAlerts(items);
             }
+        }
+
+        var maxCandidate = afAamMaxAlertId(items);
+        if (newest > maxCandidate) {
+            maxCandidate = newest;
+        }
+
+        if (maxCandidate > lastSeenAlertId) {
+            saveLastSeen(maxCandidate);
         }
     }
 
