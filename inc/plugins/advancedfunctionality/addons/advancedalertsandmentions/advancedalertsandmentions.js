@@ -676,40 +676,62 @@
                                     else localStorage.removeItem(afAamToastsStorageKey);
                                 } catch (e) {}
 
+                                var telegramEnabled = false;
+                                var telegramCb = prefsBox.querySelector('#af_aam_pref_telegram_enabled');
+                                if (telegramCb) {
+                                    telegramEnabled = !!telegramCb.checked;
+                                }
+
+                                var telegramChat = '';
+                                var telegramInput = prefsBox.querySelector('#af_aam_pref_telegram_chat');
+                                if (telegramInput) {
+                                    telegramChat = (telegramInput.value || '').trim();
+                                }
+
                                 ajax('xmlhttp.php', {
                                     action: 'af_aam_api',
-                                    op: 'list',
-                                    unreadOnly: 1
-                                }, function (resp2) {
+                                    op: 'prefs_save',
+                                    types: types,
+                                    toasts: toastsEnabled ? 1 : 0,
+                                    telegram_enabled: telegramEnabled ? 1 : 0,
+                                    telegram_chat_id: telegramChat,
+                                    my_post_key: window.my_post_key || ''
+                                }, function () {
+                                    ajax('xmlhttp.php', {
+                                        action: 'af_aam_api',
+                                        op: 'list',
+                                        unreadOnly: 1
+                                    }, function (resp2) {
 
-                                    // на первом запуске — просто “запоминаем верхний id”, без тостов
-                                    if (!lastSeenAlertId && resp2 && Array.isArray(resp2.items) && resp2.items.length) {
-                                        var maxId = 0;
-                                        resp2.items.forEach(function (a) {
-                                            var id = parseInt(a.id, 10) || 0;
-                                            if (id > maxId) maxId = id;
-                                        });
-                                        lastSeenAlertId = maxId;
+                                        // на первом запуске — просто “запоминаем верхний id”, без тостов
+                                        if (!lastSeenAlertId && resp2 && Array.isArray(resp2.items) && resp2.items.length) {
+                                            var maxId = 0;
+                                            resp2.items.forEach(function (a) {
+                                                var id = parseInt(a.id, 10) || 0;
+                                                if (id > maxId) maxId = id;
+                                            });
+                                            lastSeenAlertId = maxId;
+                                            syncFromResponse(resp2 || {});
+                                            return;
+                                        }
+
+                                        // ВАЖНО: вычисляем "есть ли новые" ДО queueToasts(), потому что queueToasts двигает lastSeenAlertId
+                                        var hasNewUnseen = (resp2 && Array.isArray(resp2.items))
+                                            ? afAamHasNewUnseenUnread(resp2.items)
+                                            : false;
+
                                         syncFromResponse(resp2 || {});
-                                        return;
-                                    }
 
-                                    // ВАЖНО: вычисляем "есть ли новые" ДО queueToasts(), потому что queueToasts двигает lastSeenAlertId
-                                    var hasNewUnseen = (resp2 && Array.isArray(resp2.items))
-                                        ? afAamHasNewUnseenUnread(resp2.items)
-                                        : false;
+                                        // тосты только для новых непрочитанных (queueToasts это фильтрует)
+                                        if (resp2 && Array.isArray(resp2.items)) {
+                                            queueToasts(resp2.items);
+                                        }
 
-                                    syncFromResponse(resp2 || {});
-
-                                    // тосты только для новых непрочитанных (queueToasts это фильтрует)
-                                    if (resp2 && Array.isArray(resp2.items)) {
-                                        queueToasts(resp2.items);
-                                    }
-
-                                    // звук — только если реально пришли НОВЫЕ уведомления, а не просто "в списке есть непрочитанные"
-                                    if (hasNewUnseen) {
-                                        playAlertSound();
-                                    }
+                                        // звук — только если реально пришли НОВЫЕ уведомления, а не просто "в списке есть непрочитанные"
+                                        if (hasNewUnseen) {
+                                            playAlertSound();
+                                        }
+                                    });
                                 });
                             });
                         }

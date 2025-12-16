@@ -222,6 +222,11 @@
 .af-aam-modal-footer {
     border-top: 1px solid #444;
     border-bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
 }
 
 .af-aam-modal-title {
@@ -528,6 +533,16 @@
 
 .af-aam-sound-switch input:checked + .af-aam-sound-slider::before {
     transform: translateX(16px);
+}
+
+.af-aam-telegram-link a {
+    color: #4da3ff;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.af-aam-telegram-link a:hover {
+    text-decoration: underline;
 }
 
 .af-aam-pref-row { display:block; margin: 6px 0; }
