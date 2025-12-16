@@ -239,7 +239,7 @@ function af_aam_attach_avatars(array &$items, int $size = 32): void
 
 /**
  * Чтение/запись prefs в users.af_aam_prefs (JSON).
- * Схема: { disabled_types: [..], toasts: 1|0, telegram_chat_id: string, telegram_enabled: 0|1 }
+ * Схема: { disabled_types: [..], toasts: 1|0 }
  */
 function af_aam_get_user_prefs(int $uid): array
 {
@@ -543,14 +543,6 @@ function af_aam_xmlhttp_dispatch(): void
             $toasts = (int)$prefs['toasts'] ? 1 : 0;
         }
 
-        $telegramChatId = isset($prefs['telegram_chat_id']) ? (string)$prefs['telegram_chat_id'] : '';
-        $telegramEnabled = (int)($prefs['telegram_enabled'] ?? 0) ? 1 : 0;
-
-        $telegramLink = trim((string)($mybb->settings['af_aam_telegram_bot_link'] ?? ''));
-        if ($telegramLink === '') {
-            $telegramLink = 'https://t.me/warprift_notifications_bot';
-        }
-
         $rows = '';
 
         // ожидаем таблицу aam_alert_types
@@ -572,13 +564,6 @@ function af_aam_xmlhttp_dispatch(): void
         $typesTitle      = htmlspecialchars_uni($lang->af_aam_prefs_title ?? 'Типы уведомлений');
         $toastTitle      = htmlspecialchars_uni($lang->af_aam_toast_limit ?? 'Плашки');
         $toastLabel      = htmlspecialchars_uni($lang->af_aam_toast_limit ?? 'Показывать тост-плашки');
-        $telegramTitle   = htmlspecialchars_uni($lang->af_aam_telegram_prefs_title ?? 'Телеграм');
-        $telegramLabel   = htmlspecialchars_uni($lang->af_aam_telegram_enable_label ?? 'Отправлять уведомления в Телеграм');
-        $telegramPh      = htmlspecialchars_uni($lang->af_aam_telegram_chat_placeholder ?? 'ID чата или @username');
-        $telegramLinkLbl = htmlspecialchars_uni($lang->af_aam_telegram_link ?? 'Telegram');
-
-        $telegramChatEsc = htmlspecialchars_uni($telegramChatId);
-        $telegramLinkEsc = htmlspecialchars_uni($telegramLink);
 
         $html =
             '<form id="af_aam_prefs_form" class="af-aam-prefs-form">'
@@ -591,14 +576,6 @@ function af_aam_xmlhttp_dispatch(): void
         . '    <label class="af-aam-pref-row">'
         . '      <input type="checkbox" id="af_aam_pref_toasts" '.($toasts ? 'checked="checked"' : '').'> ' . $toastLabel
         . '    </label>'
-        . '  </div>'
-        . '  <div class="af-aam-prefs-section">'
-        . '    <div class="af-aam-prefs-title">' . $telegramTitle . '</div>'
-        . '    <label class="af-aam-pref-row">'
-        . '      <input type="checkbox" id="af_aam_pref_telegram_enabled" '.($telegramEnabled ? 'checked="checked"' : '').'> ' . $telegramLabel
-        . '    </label>'
-        . '    <input type="text" class="textbox" id="af_aam_pref_telegram_chat" value="' . $telegramChatEsc . '" placeholder="' . $telegramPh . '">' 
-        . '    <div class="af-aam-prefs-note"><a href="' . $telegramLinkEsc . '" target="_blank" rel="noopener">🤖 ' . $telegramLinkLbl . '</a></div>'
         . '  </div>'
         . '  <div class="af-aam-prefs-actions">'
         . '    <button type="submit" class="button">Сохранить</button>'
@@ -637,28 +614,10 @@ function af_aam_xmlhttp_dispatch(): void
         // тосты (0/1)
         $toasts = isset($mybb->input['toasts']) ? ((int)$mybb->input['toasts'] ? 1 : 0) : 1;
 
-        $telegramEnabled = isset($mybb->input['telegram_enabled']) ? ((int)$mybb->input['telegram_enabled'] ? 1 : 0) : 0;
-        $telegramChatId = '';
-        if (isset($mybb->input['telegram_chat_id'])) {
-            $telegramChatId = trim((string)$mybb->input['telegram_chat_id']);
-            $telegramChatId = preg_replace('~[^0-9A-Za-z_@-]~', '', $telegramChatId);
-            if (strlen($telegramChatId) > 128) {
-                $telegramChatId = substr($telegramChatId, 0, 128);
-            }
-        }
-
         $prefs = af_aam_get_user_prefs($uid);
         $prefs['disabled_types'] = $disabled;
         $prefs['toasts'] = $toasts;
-        $prefs['telegram_enabled'] = $telegramEnabled;
-        $prefs['telegram_chat_id'] = $telegramChatId;
         af_aam_set_user_prefs($uid, $prefs);
-
-        if ($telegramEnabled && $telegramChatId !== '') {
-            af_aam_store_telegram_binding($uid, $telegramChatId);
-        } else {
-            af_aam_remove_telegram_bindings($uid);
-        }
 
         af_aam_json(['ok' => 1, 'saved' => 1]);
     }

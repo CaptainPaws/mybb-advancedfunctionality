@@ -63,11 +63,6 @@
                             <span class="af-aam-sound-slider"></span>
                         </label>
                     </div>
-                    <div class="af-aam-telegram-link">
-                        <a href="{$af_aam_telegram_bot_link}" target="_blank" rel="noopener">
-                            🤖 {$lang->af_aam_telegram_link}
-                        </a>
-                    </div>
                 </div>
 
                 <audio id="af_aam_sound" preload="auto" style="display:none;" src="{$af_aam_asset_base}ping.mp3">
@@ -215,10 +210,12 @@
     window.af_aam_sound_enabled = {$af_aam_sound_enabled};
     window.af_aam_toast_limit   = {$af_aam_toast_limit};
     window.my_post_key          = "{$mybb->post_code}";
+    window.af_aam_mention_suggest_url = "misc.php?action=af_mention_suggest";
 
     // начальное количество непрочитанных (для корректного сравнения old/new в poll)
     window.unreadAlerts         = {$af_aam_unread};
 </script>
 
 <script type="text/javascript" src="{$af_aam_asset_base}advancedalertsandmentions.js"></script>
+{$af_aam_mentions_js}
 <!-- /TEMPLATE -->
