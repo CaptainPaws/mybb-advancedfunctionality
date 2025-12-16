@@ -22,6 +22,7 @@ const AF_AAM_ID           = 'advancedalertsandmentions';
 const AF_AAM_BASE         = 'inc/plugins/advancedfunctionality/addons/' . AF_AAM_ID . '/';
 const AF_AAM_TABLE_ALERTS = 'aam_alerts';
 const AF_AAM_TABLE_TYPES  = 'aam_alert_types';
+const AF_AAM_TABLE_TELEGRAM = 'aam_telegram_links';
 
 // Подключаем форматтеры и описание типов
 require_once MYBB_ROOT . AF_AAM_BASE . 'advancedalertsandmentionsformatters.php';
@@ -349,6 +350,22 @@ function af_advancedalertsandmentions_install(): void
         }
     }
 
+    if (!$db->table_exists(AF_AAM_TABLE_TELEGRAM)) {
+        $db->write_query("
+            CREATE TABLE " . TABLE_PREFIX . AF_AAM_TABLE_TELEGRAM . " (
+                id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                uid INT UNSIGNED NOT NULL,
+                chat_id VARCHAR(128) NOT NULL,
+                telegram_user_id VARCHAR(128) NOT NULL DEFAULT '',
+                created_at INT UNSIGNED NOT NULL,
+                updated_at INT UNSIGNED NOT NULL,
+                PRIMARY KEY (id),
+                UNIQUE KEY uniq_uid_chat (uid, chat_id),
+                KEY idx_chat (chat_id)
+            ) ENGINE=InnoDB{$collation};
+        ");
+    }
+
     // колонка в users для отключённых типов
     if (!$db->field_exists('af_aam_disabled_types', 'users')) {
         $db->add_column('users', 'af_aam_disabled_types', "TEXT NOT NULL");
@@ -632,6 +649,10 @@ function af_advancedalertsandmentions_uninstall(): void
     }
     if ($db->field_exists('af_aam_prefs', 'users')) {
         $db->drop_column('users', 'af_aam_prefs');
+    }
+
+    if ($db->table_exists(AF_AAM_TABLE_TELEGRAM)) {
+        $db->drop_table(AF_AAM_TABLE_TELEGRAM);
     }
 
     // настройки — ОДИН раз, без дублей
@@ -1671,6 +1692,114 @@ function af_aam_cleanup_inactive_alerts(?int $inactiveDays = null): array
     return $result;
 }
 
+function af_aam_log_telegram(string $stage, array $payload = []): void
+{
+    $line = [
+        'ts'     => date('c'),
+        'stage'  => $stage,
+        'data'   => $payload,
+    ];
+
+    $json = json_encode($line, JSON_UNESCAPED_UNICODE);
+    if ($json === false) {
+        return;
+    }
+
+    $file = AF_CACHE . 'af_aam_telegram.log';
+    @file_put_contents($file, $json . "\n", FILE_APPEND | LOCK_EX);
+}
+
+function af_aam_normalize_chat_id(string $chatId): string
+{
+    $chatId = trim($chatId);
+    $chatId = preg_replace('~[^0-9A-Za-z_@-]~', '', $chatId ?? '');
+    if (strlen($chatId) > 128) {
+        $chatId = substr($chatId, 0, 128);
+    }
+
+    return $chatId;
+}
+
+function af_aam_store_telegram_binding(int $uid, string $chatId, string $telegramUserId = ''): void
+{
+    global $db;
+
+    $uid = (int)$uid;
+    $chatId = af_aam_normalize_chat_id($chatId);
+    $telegramUserId = af_aam_normalize_chat_id($telegramUserId);
+
+    if ($uid <= 0 || $chatId === '' || !$db->table_exists(AF_AAM_TABLE_TELEGRAM)) {
+        return;
+    }
+
+    $now = TIME_NOW;
+    $escapedChat = $db->escape_string($chatId);
+    $existing = $db->fetch_array(
+        $db->simple_select(
+            AF_AAM_TABLE_TELEGRAM,
+            '*',
+            "uid={$uid} AND chat_id='{$escapedChat}'",
+            ['limit' => 1]
+        )
+    );
+
+    $data = [
+        'uid'              => $uid,
+        'chat_id'          => $escapedChat,
+        'telegram_user_id' => $db->escape_string($telegramUserId),
+        'updated_at'       => $now,
+    ];
+
+    if ($existing) {
+        $db->update_query(AF_AAM_TABLE_TELEGRAM, $data, 'id=' . (int)$existing['id']);
+    } else {
+        $data['created_at'] = $now;
+        $db->insert_query(AF_AAM_TABLE_TELEGRAM, $data);
+    }
+
+    // Чистим старые привязки пользователя, если он сменил чат
+    $db->delete_query(AF_AAM_TABLE_TELEGRAM, "uid={$uid} AND chat_id<>'{$escapedChat}'");
+}
+
+function af_aam_remove_telegram_bindings(int $uid): void
+{
+    global $db;
+
+    if ($uid <= 0 || !$db->table_exists(AF_AAM_TABLE_TELEGRAM)) {
+        return;
+    }
+
+    $db->delete_query(AF_AAM_TABLE_TELEGRAM, 'uid=' . (int)$uid);
+}
+
+function af_aam_get_chat_ids_for_uid(int $uid, array $prefs = []): array
+{
+    global $db;
+
+    $uid = (int)$uid;
+    if ($uid <= 0) {
+        return [];
+    }
+
+    $chatIds = [];
+
+    if ($db->table_exists(AF_AAM_TABLE_TELEGRAM)) {
+        $q = $db->simple_select(AF_AAM_TABLE_TELEGRAM, 'chat_id', 'uid=' . $uid);
+        while ($row = $db->fetch_array($q)) {
+            $chat = af_aam_normalize_chat_id((string)($row['chat_id'] ?? ''));
+            if ($chat !== '') {
+                $chatIds[] = $chat;
+            }
+        }
+    }
+
+    if (empty($chatIds) && !empty($prefs['telegram_chat_id'])) {
+        $chatIds[] = af_aam_normalize_chat_id((string)$prefs['telegram_chat_id']);
+    }
+
+    return array_values(array_unique(array_filter($chatIds)));
+}
+
 function af_aam_fetch_alert_for_telegram(int $alertId): ?array
 {
     global $db;
@@ -1696,6 +1825,52 @@ function af_aam_fetch_alert_for_telegram(int $alertId): ?array
     return $row ?: null;
 }
 
+function af_aam_trim_excerpt(string $text, int $limit = 100): string
+{
+    $text = trim(strip_tags($text));
+    $text = html_entity_decode($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $text = preg_replace('~\s+~u', ' ', $text);
+
+    if (mb_strlen($text, 'UTF-8') > $limit) {
+        $text = mb_substr($text, 0, $limit, 'UTF-8') . '…';
+    }
+
+    return $text;
+}
+
+function af_aam_telegram_type_label(array $alert): string
+{
+    global $lang;
+
+    if (!isset($lang->af_aam_name)) {
+        $lang->load('advancedfunctionality_' . AF_AAM_ID);
+    }
+
+    $code = (string)($alert['code'] ?? '');
+    $extra = [];
+    if (!empty($alert['extra'])) {
+        $decoded = json_decode((string)$alert['extra'], true);
+        if (is_array($decoded)) {
+            $extra = $decoded;
+        }
+    }
+
+    switch ($code) {
+        case 'quoted':
+            return $lang->af_aam_telegram_type_quoted ?? 'Вас процитировали';
+        case 'mention':
+            return $lang->af_aam_telegram_type_mention ?? 'Вас упомянули';
+        case 'pm':
+            return $lang->af_aam_telegram_type_pm ?? 'Вам написали';
+        case 'rep':
+            $delta = (int)($extra['reputation'] ?? 0);
+            $prefix = $delta > 0 ? '+' . $delta : (string)$delta;
+            return ($lang->af_aam_telegram_type_rep ?? 'Изменение репутации') . ': ' . $prefix;
+        default:
+            return $alert['title'] ?? ($lang->{'af_aam_alert_type_' . $code} ?? $code);
+    }
+}
+
 function af_aam_prepare_telegram_message(array $alert): ?string
 {
     $formatted = af_aam_format_alert($alert);
@@ -1706,21 +1881,25 @@ function af_aam_prepare_telegram_message(array $alert): ?string
         return null;
     }
 
+    $label = af_aam_telegram_type_label($alert);
+    $excerpt = af_aam_trim_excerpt($text, 100);
+    $body = $label . ': ' . $excerpt;
+
     if ($url !== '') {
-        $text .= "\n" . $url;
+        $body .= "\n" . $url;
     }
 
-    return $text;
+    return $body;
 }
 
-function af_aam_send_telegram_message(string $token, string $chatId, string $text): void
+function af_aam_send_telegram_message(string $token, string $chatId, string $text): array
 {
     $token  = trim($token);
     $chatId = trim($chatId);
     $text   = trim($text);
 
     if ($token === '' || $chatId === '' || $text === '') {
-        return;
+        return ['ok' => false, 'error' => 'empty_payload'];
     }
 
     $url = 'https://api.telegram.org/bot' . $token . '/sendMessage';
@@ -1730,6 +1909,10 @@ function af_aam_send_telegram_message(string $token, string $chatId, string $tex
         'disable_web_page_preview' => false,
     ];
 
+    $responseBody = '';
+    $httpCode = 0;
+    $error = '';
+
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_POST, true);
@@ -1737,23 +1920,45 @@ function af_aam_send_telegram_message(string $token, string $chatId, string $tex
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($payload));
         curl_setopt($ch, CURLOPT_TIMEOUT, 5);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-        curl_exec($ch);
+        $responseBody = (string)curl_exec($ch);
+        $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        if ($responseBody === false) {
+            $error = curl_error($ch);
+        }
         curl_close($ch);
-        return;
+    } else {
+        $opts = [
+            'http' => [
+                'method'  => 'POST',
+                'header'  => 'Content-type: application/x-www-form-urlencoded',
+                'content' => http_build_query($payload),
+                'timeout' => 5,
+            ],
+        ];
+
+        $context = stream_context_create($opts);
+        $result = @file_get_contents($url, false, $context);
+        $responseBody = (string)$result;
+        if (is_array($http_response_header ?? [])) {
+            foreach ($http_response_header as $header) {
+                if (preg_match('~HTTP/[^ ]+ ([0-9]+)~', $header, $m)) {
+                    $httpCode = (int)$m[1];
+                    break;
+                }
+            }
+        }
+        if ($result === false) {
+            $error = 'stream_send_failed';
+        }
     }
 
-    // fallback без cURL
-    $opts = [
-        'http' => [
-            'method'  => 'POST',
-            'header'  => 'Content-type: application/x-www-form-urlencoded',
-            'content' => http_build_query($payload),
-            'timeout' => 5,
-        ],
+    $success = ($httpCode >= 200 && $httpCode < 300);
+    return [
+        'ok'       => $success,
+        'http'     => $httpCode,
+        'response' => $responseBody,
+        'error'    => $error,
     ];
-
-    $context = stream_context_create($opts);
-    @file_get_contents($url, false, $context);
 }
 
 function af_aam_dispatch_telegram_alert(int $alertId): void
@@ -1784,19 +1989,35 @@ function af_aam_dispatch_telegram_alert(int $alertId): void
     }
 
     $prefs = af_aam_get_user_prefs($uid);
-    $chatId = trim((string)($prefs['telegram_chat_id'] ?? ''));
     $enabled = (int)($prefs['telegram_enabled'] ?? 0) === 1;
+    if (!$enabled) {
+        af_aam_log_telegram('skip_disabled', ['alert_id' => $alertId, 'uid' => $uid]);
+        return;
+    }
 
-    if (!$enabled || $chatId === '') {
+    $chatIds = af_aam_get_chat_ids_for_uid($uid, $prefs);
+    if (empty($chatIds)) {
+        af_aam_log_telegram('skip_no_chat', ['alert_id' => $alertId, 'uid' => $uid]);
         return;
     }
 
     $message = af_aam_prepare_telegram_message($alert);
     if ($message === null) {
+        af_aam_log_telegram('skip_no_message', ['alert_id' => $alertId, 'uid' => $uid]);
         return;
     }
 
-    af_aam_send_telegram_message($token, $chatId, $message);
+    foreach ($chatIds as $chatId) {
+        $result = af_aam_send_telegram_message($token, $chatId, $message);
+        af_aam_log_telegram('send', [
+            'alert_id' => $alertId,
+            'uid'      => $uid,
+            'chat_id'  => $chatId,
+            'http'     => $result['http'] ?? 0,
+            'ok'       => $result['ok'] ?? false,
+            'error'    => $result['error'] ?? '',
+        ]);
+    }
 }
 
 function af_aam_add_alert(int $uid, string $code, int $objectId = 0, int $fromUid = 0, array $extra = [], int $forced = 0): void
