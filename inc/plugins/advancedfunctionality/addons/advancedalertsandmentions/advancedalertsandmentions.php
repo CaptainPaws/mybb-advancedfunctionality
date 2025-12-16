@@ -201,49 +201,124 @@ function af_advancedalertsandmentions_init(): void
 
 /**
  * Безопасный вывод [mention]...[/mention] и @all.
+ * Совместимо с хуками MyBB, где аргументом может быть как массив, так и строка сообщения.
  */
-function af_aam_parse_message_mentions(array &$args): void
+function af_aam_parse_message_mentions(&$arg): void
 {
     if (!af_aam_is_enabled()) {
         return;
     }
 
-    if (!isset($args['message'])) {
+    // 1) Массив вида ['message' => '...']
+    if (is_array($arg)) {
+        if (!isset($arg['message'])) {
+            return;
+        }
+
+        $orig = (string)$arg['message'];
+        $msg  = af_aam_render_mentions_in_text($orig);
+
+        // Никогда не кладём "пустоту" поверх непустого исходника из-за ошибки PCRE
+        if ($msg === '' && $orig !== '') {
+            return;
+        }
+
+        $arg['message'] = $msg;
         return;
     }
 
-    $msg = (string)$args['message'];
+    // 2) Строка (&$message)
+    if (is_string($arg)) {
+        $orig = (string)$arg;
+        $msg  = af_aam_render_mentions_in_text($orig);
+
+        if ($msg === '' && $orig !== '') {
+            return;
+        }
+
+        $arg = $msg;
+        return;
+    }
+
+    return;
+}
+
+/**
+ * Рендер упоминаний внутри текста. Гарантированно возвращает строку:
+ * - если PCRE упал и вернул null → возвращаем исходник без изменений
+ * - если имя в [mention=uid] пустое → пробуем взять username по uid
+ */
+function af_aam_render_mentions_in_text(string $msg): string
+{
+    $orig = $msg;
+
+    static $uidNameCache = [];
 
     // [mention=123]User[/mention] или [mention]User[/mention]
-    $msg = preg_replace_callback('#\[mention(?:=([0-9]+))?\](.+?)\[/mention\]#iu', function ($m) {
-        $uid     = (int)($m[1] ?? 0);
-        $rawName = trim((string)($m[2] ?? ''));
+    $replaced = preg_replace_callback(
+        '#\[mention(?:=([0-9]+))?\](.*?)\[/mention\]#ius',
+        function ($m) use (&$uidNameCache) {
+            $uid     = (int)($m[1] ?? 0);
+            $rawName = trim((string)($m[2] ?? ''));
 
-        // Пустое содержимое — просто удалим тег, чтобы не ломать вывод
-        if ($rawName === '') {
-            return '';
-        }
+            // Если имя пустое, но uid есть — подтянем username
+            if ($rawName === '' && $uid > 0) {
+                if (!array_key_exists($uid, $uidNameCache)) {
+                    $u = get_user($uid);
+                    $uidNameCache[$uid] = (!empty($u['username']) ? (string)$u['username'] : '');
+                }
+                $rawName = trim($uidNameCache[$uid]);
+            }
 
-        // @all в любой записи
-        if (strtolower($rawName) === 'all') {
-            return '<strong class="af-aam-mention af-aam-mention-all">@all</strong>';
-        }
+            // Всё равно пусто — просто убираем тег
+            if ($rawName === '') {
+                return '';
+            }
 
-        $safeText = htmlspecialchars_uni($rawName);
-        if ($uid > 0) {
-            $href = 'member.php?action=profile&uid=' . $uid;
-        } else {
-            $href = 'member.php?action=profile&username=' . rawurlencode($rawName);
-        }
+            // @all
+            if (mb_strtolower($rawName) === 'all') {
+                // делаем "как ссылку", чтобы цвет был как у <a>
+                return '<a href="javascript:void(0)" onclick="return false;" class="af-aam-mention-link af-aam-mention-all"><strong>@all</strong></a>';
+            }
 
-        return '<span class="af-aam-mention">@<a href="' . $href . '">' . $safeText . '</a></span>';
-    }, $msg);
+            $safeName = htmlspecialchars_uni($rawName);
 
-    // Голый @all (без тега)
-    $msg = preg_replace('/(^|\s)@all\b/i', '$1<strong class="af-aam-mention af-aam-mention-all">@all</strong>', $msg);
+            if ($uid > 0) {
+                $href = 'member.php?action=profile&uid=' . $uid;
+            } else {
+                $href = 'member.php?action=profile&username=' . rawurlencode($rawName);
+            }
 
-    $args['message'] = $msg;
+            $href = htmlspecialchars_uni($href);
+
+            // ВАЖНО: @ внутри ссылки + жирный ник
+            return '<a class="af-aam-mention-link" href="' . $href . '"><strong>@' . $safeName . '</strong></a>';
+        },
+        $msg
+    );
+
+    if ($replaced === null) {
+        return $orig;
+    }
+
+    $msg = $replaced;
+
+    // Голый @all (без тега) → тоже стилизуем "как ссылку"
+    $replaced2 = preg_replace(
+        '/(^|\s)@all\b/iu',
+        '$1<a href="javascript:void(0)" onclick="return false;" class="af-aam-mention-link af-aam-mention-all"><strong>@all</strong></a>',
+        $msg
+    );
+
+    if ($replaced2 === null) {
+        return $orig;
+    }
+
+    return $replaced2;
 }
+
+
+
 
 /**
  * Доп. точка для pre_output_page
@@ -859,6 +934,57 @@ function af_aam_is_enabled(): bool
     return true;
 }
 
+// Версия для cache-busting (можно руками менять при обновлениях)
+const AF_AAM_VERSION = '1.1.0';
+
+function af_aam_build_js_tags(string $assetBase, int $uid, int $unread, int $autorefresh, int $soundEnabled, int $toastLimit): string
+{
+    global $mybb;
+
+    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+    $assetBase = rtrim($assetBase, '/') . '/';
+
+    // Единый конфиг (новый)
+    $cfg = [
+        'bburl'             => $bburl,
+        'uid'               => $uid,
+        'assetBase'         => $assetBase,
+        'autorefresh'       => (int)$autorefresh,
+        'soundEnabled'      => (int)$soundEnabled,
+        'toastLimit'        => (int)$toastLimit,
+        'mentionSuggestUrl' => $bburl . '/misc.php?action=af_aam_mention_suggest',
+        'alertsListUrl'     => $bburl . '/misc.php?action=af_aam_list',
+        'xmlhttpUrl'        => $bburl . '/xmlhttp.php',
+    ];
+
+    $cfgJson = json_encode($cfg, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    // CSRF ключ (подстраховка)
+    $postKey = '';
+    if (isset($mybb->post_code) && is_string($mybb->post_code)) {
+        $postKey = $mybb->post_code;
+    }
+    $postKeyJson = json_encode((string)$postKey, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    $v = rawurlencode(AF_AAM_VERSION);
+
+    // ВАЖНО: оставляем старые глобальные переменные для совместимости,
+    // чтобы никакой из файлов не падал, если ждёт window.af_aam_asset_base и т.д.
+    return
+        "<script>\n" .
+        "window.afAamConfig = {$cfgJson};\n" .
+        "window.unreadAlerts = " . (int)$unread . ";\n" .
+        "window.af_aam_asset_base = " . json_encode($assetBase, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ";\n" .
+        "window.af_aam_autorefresh = " . (int)$autorefresh . ";\n" .
+        "window.af_aam_sound_enabled = " . (int)$soundEnabled . ";\n" .
+        "window.af_aam_toast_limit = " . (int)$toastLimit . ";\n" .
+        "if (typeof window.my_post_key === 'undefined' || !window.my_post_key) { window.my_post_key = {$postKeyJson}; }\n" .
+        "</script>\n" .
+        "<script src=\"{$assetBase}advancedalertsandmentions.js?v={$v}\" defer></script>\n" .
+        "<script src=\"{$assetBase}advancedalertsandmentions_mentions.js?v={$v}\" defer></script>\n";
+}
+
+
 function af_aam_bootstrap(): void
 {
     global $mybb, $db, $templates, $lang;
@@ -926,11 +1052,20 @@ function af_aam_bootstrap(): void
     af_aam_attach_avatars($items, 32);
     $af_aam_modal_list = af_aam_render_rows($items);
 
-    // собираем JS и header icon через шаблоны
-    $af_aam_js = '';
-    eval('$af_aam_js          = "'.$templates->get('af_aam_js_popup').'";');
+    // JS подключаем прямо из PHP (без зависимости от af_aam_js_popup)
+    $af_aam_js = af_aam_build_js_tags(
+        $assetBase,
+        $uid,
+        (int)$af_aam_unread,
+        (int)$af_aam_autorefresh,
+        (int)$af_aam_sound_enabled,
+        (int)$af_aam_toast_limit
+    );
+
+    // Иконка и модалка — как и раньше, из шаблонов
     eval('$af_aam_header_icon = "'.$templates->get('af_aam_header_icon').'";');
     eval('$af_aam_modal       = "'.$templates->get('af_aam_modal').'";');
+
 }
 
 /**
@@ -1288,7 +1423,16 @@ function af_aam_misc_router(): void
         return;
     }
 
-    if ($mybb->get_input('action') === 'af_aam_list') {
+    $action = (string)$mybb->get_input('action');
+
+    // AJAX: подсказки упоминаний для редактора
+    if ($action === 'af_aam_mention_suggest') {
+        af_aam_misc_mention_suggest();
+        exit;
+    }
+
+    // существующая логика
+    if ($action === 'af_aam_list') {
         if (!$mybb->user['uid']) {
             error_no_permission();
         }
@@ -1296,6 +1440,87 @@ function af_aam_misc_router(): void
         exit;
     }
 }
+function af_aam_db_escape_like(string $s): string
+{
+    global $db;
+
+    if (method_exists($db, 'escape_string_like')) {
+        return $db->escape_string_like($s);
+    }
+
+    // fallback для старых драйверов
+    return strtr($s, [
+        '\\' => '\\\\',
+        '%'  => '\%',
+        '_'  => '\_',
+    ]);
+}
+
+/**
+ * misc.php?action=af_aam_mention_suggest&q=...
+ * Возвращает JSON: { ok:1, items:[{uid,username}] }
+ */
+function af_aam_misc_mention_suggest(): void
+{
+    global $db, $mybb;
+
+    header('Content-Type: application/json; charset=utf-8');
+
+    if (empty($mybb->user['uid'])) {
+        echo json_encode(['ok' => 1, 'items' => []], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $q = (string)$mybb->get_input('q');
+    if ($q === '') $q = (string)$mybb->get_input('term');
+    if ($q === '') $q = (string)$mybb->get_input('query');
+
+    $q = trim($q);
+
+    // не даём долбить базу пустотой/мусором
+    if ($q === '' || mb_strlen($q) < 1) {
+        echo json_encode(['ok' => 1, 'items' => []], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // лимит
+    $limit = (int)$mybb->get_input('limit', MyBB::INPUT_INT);
+    if ($limit <= 0 || $limit > 20) $limit = 10;
+
+    $qExact = $db->escape_string($q);
+    $qLike  = af_aam_db_escape_like($qExact);
+
+    // Ищем по contains, но сортируем так, чтобы exact/prefix были выше
+    $usersTable = TABLE_PREFIX . 'users';
+
+    $sql = $db->write_query("
+        SELECT uid, username
+        FROM {$usersTable}
+        WHERE username LIKE '%{$qLike}%' ESCAPE '\\\\'
+        ORDER BY
+            (username = '{$qExact}') DESC,
+            (username LIKE '{$qLike}%') DESC,
+            username ASC
+        LIMIT {$limit}
+    ");
+
+    $items = [];
+    while ($u = $db->fetch_array($sql)) {
+        $uid = (int)$u['uid'];
+        $un  = (string)$u['username'];
+
+        if ($uid <= 0 || $un === '') continue;
+
+        $items[] = [
+            'uid'      => $uid,
+            'username' => $un,
+        ];
+    }
+
+    echo json_encode(['ok' => 1, 'items' => $items], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 
 
 /**
@@ -2151,6 +2376,9 @@ function af_aam_postbit_mention_button(array &$post): void
         return;
     }
 
+    // 1) ВАЖНО: принудительный рендер упоминаний и rescue пустых сообщений
+    af_aam_postbit_force_render_mentions($post);
+
     if (!isset($lang->af_aam_name)) {
         $lang->load('advancedfunctionality_' . AF_AAM_ID);
     }
@@ -2159,19 +2387,20 @@ function af_aam_postbit_mention_button(array &$post): void
         return;
     }
 
-    $username = $post['username']; // уже очищено MyBB
+    $username = (string)$post['username']; // уже очищено MyBB
 
+    // Проставим data-атрибуты на ссылку профиля (если есть)
     if (!empty($post['profilelink'])) {
         $mentionAttrs = ' data-mention="1" data-mention-username="' . htmlspecialchars_uni($username) . '" data-uid="' . (int)$post['uid'] . '"';
         if (strpos($post['profilelink'], 'data-mention=') === false) {
             $post['profilelink'] = preg_replace('/(<a\\b[^>]*)(>)/i', '$1' . $mentionAttrs . '$2', $post['profilelink'], 1, $replaced);
             if ((int)$replaced === 0) {
-                $post['profilelink'] .= '';
+                // ничего не делаем — на крайняк просто не добавим атрибуты
             }
         }
     }
 
-    $title = htmlspecialchars_uni($lang->af_aam_mention_button);
+    $title = htmlspecialchars_uni($lang->af_aam_mention_button ?? 'Упомянуть');
 
     // компактная собачка, кликабельная
     $button = '<a href="javascript:void(0)" class="af-aam-mention-button" data-username="' .
@@ -2189,10 +2418,114 @@ function af_aam_postbit_mention_button(array &$post): void
     }
 }
 
+function af_aam_postbit_force_render_mentions(array &$post): void
+{
+    if (!isset($post['message'])) {
+        return;
+    }
 
-/**
- * Собирает payload для JS:
- * - unread_count / unread / badge
- * - items[] для тостов
- * - template для модалки
- */
+    $currentHtml = (string)$post['message'];
+
+    // 1) Если в теме/ПМ пост внезапно "пустой" — попробуем восстановить сырой текст
+    if (af_aam_is_effectively_empty_html($currentHtml)) {
+        $raw = '';
+
+        // Обычные посты в теме
+        if (!empty($post['pid'])) {
+            $raw = af_aam_fetch_raw_post_message((int)$post['pid']);
+        }
+        // PM постбит (если вдруг понадобится)
+        elseif (!empty($post['pmid'])) {
+            $raw = af_aam_fetch_raw_pm_message((int)$post['pmid']);
+        }
+
+        // Восстанавливаем только если действительно есть что восстанавливать
+        if ($raw !== '') {
+            // Эта страховка именно под упоминания: если это вообще не про mentions — не лезем.
+            $looksLikeMention =
+                (strpos($raw, '[mention') !== false)
+                || (preg_match('/(^|\\s)@all\\b/iu', $raw) === 1)
+                || (preg_match('/@[\p{L}\p{N}_\\.]+/u', $raw) === 1);
+
+            if ($looksLikeMention) {
+                // Безопасный “plain text” рендер:
+                //  - экранируем HTML
+                //  - рендерим [mention] и @all/@username в ссылки
+                //  - переносы строк -> <br />
+                $safe = htmlspecialchars_uni($raw);
+                $safe = af_aam_render_mentions_in_text($safe);
+                $safe = nl2br($safe);
+
+                // Не кладём пустоту поверх реально непустого сырого текста
+                if (!af_aam_is_effectively_empty_html($safe)) {
+                    $post['message'] = $safe;
+                    $currentHtml = $safe;
+                }
+            }
+        }
+    }
+
+    // 2) Даже если сообщение не пустое — принудительно дорендерим теги упоминаний,
+    //    если они остались в тексте (т.е. MyCode отсутствует/не сработал).
+    $html = (string)$post['message'];
+
+    $maybeHasMentions =
+        (strpos($html, '[mention') !== false)
+        || (stripos($html, '@all') !== false)
+        || (strpos($html, '@"') !== false)
+        || (strpos($html, '@') !== false);
+
+    if ($maybeHasMentions) {
+        $orig = $html;
+        $rendered = af_aam_render_mentions_in_text($html);
+
+        // Не заменяем непустое на пустое
+        if ($rendered === '' && $orig !== '') {
+            return;
+        }
+
+        $post['message'] = $rendered;
+    }
+}
+
+function af_aam_is_effectively_empty_html(string $html): bool
+{
+    $txt = strip_tags($html);
+    $txt = html_entity_decode($txt, ENT_QUOTES, 'UTF-8');
+
+    // NBSP (часто остаётся как "пустота")
+    $txt = str_replace("\xC2\xA0", ' ', $txt);
+
+    return trim($txt) === '';
+}
+
+function af_aam_fetch_raw_post_message(int $pid): string
+{
+    global $db;
+
+    $pid = (int)$pid;
+    if ($pid <= 0) {
+        return '';
+    }
+
+    $q = $db->simple_select('posts', 'message', 'pid=' . $pid, ['limit' => 1]);
+    $m = $db->fetch_field($q, 'message');
+
+    return is_string($m) ? $m : '';
+}
+
+function af_aam_fetch_raw_pm_message(int $pmid): string
+{
+    global $db;
+
+    $pmid = (int)$pmid;
+    if ($pmid <= 0) {
+        return '';
+    }
+
+    $q = $db->simple_select('privatemessages', 'message', 'pmid=' . $pmid, ['limit' => 1]);
+    $m = $db->fetch_field($q, 'message');
+
+    return is_string($m) ? $m : '';
+}
+
