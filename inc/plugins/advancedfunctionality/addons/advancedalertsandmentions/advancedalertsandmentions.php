@@ -1645,6 +1645,11 @@ function af_aam_post_insert_end(&$posthandler): void
     $pid = 0;
     $tid = 0;
 
+    $fromUid = (int)($mybb->user['uid'] ?? 0);
+    if ($fromUid <= 0) {
+        return;
+    }
+
     if (!empty($post['pid'])) {
         $pid = (int)$post['pid'];
     }
@@ -1671,7 +1676,6 @@ function af_aam_post_insert_end(&$posthandler): void
     // pid может быть 0: в этом случае будем ссылаться хотя бы на тему
     $pid = (int)$pid;
     if ($pid <= 0) {
-        $fromUid = (int)$mybb->user['uid'];
         $pidQuery = $db->simple_select(
             'posts',
             'pid',
@@ -1689,8 +1693,14 @@ function af_aam_post_insert_end(&$posthandler): void
 
     $threadUid = (int)$thread['uid'];
 
-    // 1) Уведомление автору темы (если это не он сам)
-    if ($threadUid > 0 && $threadUid !== $fromUid) {
+    // Сначала фиксируем всех, кого уведомили по цитате/упоминанию, чтобы не дублировать другими типами
+    $notifiedUids = [];
+    if (!empty($data['message'])) {
+        $notifiedUids = af_aam_process_message_mentions((string)$data['message'], $tid, $pid, $thread, $fromUid);
+    }
+
+    // 1) Уведомление автору темы (если это не он сам и не получил упоминание/цитату)
+    if ($threadUid > 0 && $threadUid !== $fromUid && !in_array($threadUid, $notifiedUids, true)) {
         af_aam_add_alert(
             $threadUid,
             'post_threadauthor',
@@ -1714,7 +1724,7 @@ function af_aam_post_insert_end(&$posthandler): void
     ");
     while ($row = $db->fetch_array($subs)) {
         $subUid = (int)$row['uid'];
-        if ($subUid <= 0 || $subUid === $threadUid) {
+        if ($subUid <= 0 || $subUid === $threadUid || in_array($subUid, $notifiedUids, true)) {
             continue;
         }
 
@@ -1731,31 +1741,28 @@ function af_aam_post_insert_end(&$posthandler): void
             ]
         );
     }
-
-    // 3) Цитаты и упоминания в тексте поста
-    if (!empty($data['message'])) {
-        af_aam_process_message_mentions((string)$data['message'], $tid, $pid, $thread, $fromUid);
-    }
 }
 
 /**
  * Обработка цитат и упоминаний в тексте поста/темы.
  */
-function af_aam_process_message_mentions(string $message, int $tid, int $pid, array $thread, int $fromUid): void
+function af_aam_process_message_mentions(string $message, int $tid, int $pid, array $thread, int $fromUid): array
 {
     global $db;
+
+    $notifiedUids = [];
 
     $tid = (int)$tid;
     $pid = (int)$pid;
     $fromUid = (int)$fromUid;
 
     if ($tid <= 0 || $fromUid <= 0) {
-        return;
+        return [];
     }
 
     $message = trim($message);
     if ($message === '') {
-        return;
+        return [];
     }
 
     $threadSubject = $thread['subject'] ?? '';
@@ -1785,6 +1792,7 @@ function af_aam_process_message_mentions(string $message, int $tid, int $pid, ar
                         'subject' => $threadSubject,
                     ]
                 );
+                $notifiedUids[] = $toUid;
             }
         }
     }
@@ -1865,8 +1873,11 @@ function af_aam_process_message_mentions(string $message, int $tid, int $pid, ar
                     'subject' => $threadSubject,
                 ]
             );
+            $notifiedUids[] = $toUid;
         }
     }
+
+    return array_values(array_unique($notifiedUids));
 }
 
 function af_aam_thread_insert_end(&$posthandler): void
@@ -1981,7 +1992,7 @@ function af_aam_postbit_mention_button(array &$post): void
 
     // компактная собачка, кликабельная
     $button = '<a href="javascript:void(0)" class="af-aam-mention-button" data-username="' .
-        htmlspecialchars_uni($username) . '" title="' . $title . '">@</a>';
+        htmlspecialchars_uni($username) . '" data-uid="' . (int)$post['uid'] . '" title="' . $title . '">@</a>';
 
     // сначала — после кнопки репутации
     if (!empty($post['button_rep'])) {
