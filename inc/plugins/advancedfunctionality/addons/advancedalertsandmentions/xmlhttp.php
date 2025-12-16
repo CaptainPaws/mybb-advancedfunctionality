@@ -151,6 +151,12 @@ function af_aam_attach_avatars(array &$items, int $size = 32): void
 
     if (!$items) return;
 
+    static $cacheBySize = [];
+
+    if (!isset($cacheBySize[$size])) {
+        $cacheBySize[$size] = [];
+    }
+
     $uids = [];
     foreach ($items as $it) {
         $fu = af_aam_item_from_uid(is_array($it) ? $it : []);
@@ -160,58 +166,47 @@ function af_aam_attach_avatars(array &$items, int $size = 32): void
 
     $defaultUrl = af_aam_default_avatar_url();
 
-    // если не нашли ни одного uid — приклеим дефолт всем items
-    if (!$uids) {
-        foreach ($items as &$it) {
-            $uname = af_aam_item_from_username(is_array($it) ? $it : []);
-            $payload = [
-                'url'      => $defaultUrl,
-                'width'    => $size,
-                'height'   => $size,
-                'username' => $uname,
-            ];
-            $it['avatar'] = $payload;              // текущий формат (объект)
-            $it['avatar_payload'] = $payload;      // совместимость
-            $it['avatar_url'] = $payload['url'];   // совместимость со старым JS (строка)
-        }
-        unset($it);
-        return;
-    }
+    $uidsToFetch = $uids ? array_values(array_diff($uids, array_keys($cacheBySize[$size]))) : [];
 
-    $in = implode(',', array_map('intval', $uids));
-    $map = [];
+    $map = $cacheBySize[$size];
 
-    $q = $db->write_query("
-        SELECT uid, username, avatar, avatardimensions
-        FROM " . TABLE_PREFIX . "users
-        WHERE uid IN ({$in})
-    ");
+    if ($uidsToFetch) {
+        $in = implode(',', array_map('intval', $uidsToFetch));
 
-    while ($u = $db->fetch_array($q)) {
-        $uid = (int)$u['uid'];
+        $q = $db->write_query("
+            SELECT uid, username, avatar, avatardimensions
+            FROM " . TABLE_PREFIX . "users
+            WHERE uid IN ({$in})
+        ");
 
-        $raw = trim((string)($u['avatar'] ?? ''));
-        $url = $raw !== '' ? af_aam_abs_url($raw) : $defaultUrl;
+        while ($u = $db->fetch_array($q)) {
+            $uid = (int)$u['uid'];
 
-        // размеры
-        $w = $size; $h = $size;
-        $dims = (string)($u['avatardimensions'] ?? '');
-        if ($dims && strpos($dims, '|') !== false) {
-            $p = explode('|', $dims);
-            $dw = isset($p[0]) ? (int)$p[0] : $size;
-            $dh = isset($p[1]) ? (int)$p[1] : $size;
-            if ($dw > 0 && $dh > 0) {
-                $w = min($dw, 64);
-                $h = min($dh, 64);
+            $raw = trim((string)($u['avatar'] ?? ''));
+            $url = $raw !== '' ? af_aam_abs_url($raw) : $defaultUrl;
+
+            // размеры
+            $w = $size; $h = $size;
+            $dims = (string)($u['avatardimensions'] ?? '');
+            if ($dims && strpos($dims, '|') !== false) {
+                $p = explode('|', $dims);
+                $dw = isset($p[0]) ? (int)$p[0] : $size;
+                $dh = isset($p[1]) ? (int)$p[1] : $size;
+                if ($dw > 0 && $dh > 0) {
+                    $w = min($dw, 64);
+                    $h = min($dh, 64);
+                }
             }
-        }
 
-        $map[$uid] = [
-            'url'      => $url,
-            'width'    => $w > 0 ? $w : $size,
-            'height'   => $h > 0 ? $h : $size,
-            'username' => (string)($u['username'] ?? ''),
-        ];
+            $map[$uid] = [
+                'url'      => $url,
+                'width'    => $w > 0 ? $w : $size,
+                'height'   => $h > 0 ? $h : $size,
+                'username' => (string)($u['username'] ?? ''),
+            ];
+
+            $cacheBySize[$size][$uid] = $map[$uid];
+        }
     }
 
     foreach ($items as &$it) {
@@ -250,15 +245,25 @@ function af_aam_get_user_prefs(int $uid): array
 {
     global $db;
 
+    static $cache = [];
+
     $uid = (int)$uid;
     if ($uid <= 0) return [];
 
+    if (array_key_exists($uid, $cache)) {
+        return $cache[$uid];
+    }
+
     $row = $db->fetch_array($db->simple_select('users', 'af_aam_prefs', "uid={$uid}", ['limit' => 1]));
     $raw = (string)($row['af_aam_prefs'] ?? '');
-    if ($raw === '') return [];
+    if ($raw === '') {
+        $cache[$uid] = [];
+        return [];
+    }
 
     $data = json_decode($raw, true);
-    return is_array($data) ? $data : [];
+    $cache[$uid] = is_array($data) ? $data : [];
+    return $cache[$uid];
 }
 
 function af_aam_set_user_prefs(int $uid, array $prefs): void
@@ -286,7 +291,7 @@ function af_aam_render_rows(array $items): string
         $cls = $isRead ? 'alert--read' : 'alert--unread';
 
         $text = htmlspecialchars((string)($it['text'] ?? 'Уведомление'), ENT_QUOTES, 'UTF-8');
-        $url  = (string)($it['url'] ?? '');
+        $url  = af_aam_normalize_url((string)($it['url'] ?? ''));
         $href = $url !== '' ? htmlspecialchars($url, ENT_QUOTES, 'UTF-8') : '#';
 
         $aUrl = $defaultUrl;
