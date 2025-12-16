@@ -192,8 +192,57 @@ function af_advancedalertsandmentions_init(): void
     $plugins->add_hook('datahandler_post_insert_thread', 'af_aam_thread_insert_end');
     $plugins->add_hook('datahandler_user_insert',      'af_aam_datahandler_user_insert');
 
+    // Рендер упоминаний и @all прямо в тексте сообщения
+    $plugins->add_hook('parse_message',                'af_aam_parse_message_mentions');
+
     $plugins->add_hook('postbit',                      'af_aam_postbit_mention_button');
     $plugins->add_hook('postbit_pm',                   'af_aam_postbit_mention_button');
+}
+
+/**
+ * Безопасный вывод [mention]...[/mention] и @all.
+ */
+function af_aam_parse_message_mentions(array &$args): void
+{
+    if (!af_aam_is_enabled()) {
+        return;
+    }
+
+    if (!isset($args['message'])) {
+        return;
+    }
+
+    $msg = (string)$args['message'];
+
+    // [mention=123]User[/mention] или [mention]User[/mention]
+    $msg = preg_replace_callback('#\[mention(?:=([0-9]+))?\](.+?)\[/mention\]#iu', function ($m) {
+        $uid     = (int)($m[1] ?? 0);
+        $rawName = trim((string)($m[2] ?? ''));
+
+        // Пустое содержимое — просто удалим тег, чтобы не ломать вывод
+        if ($rawName === '') {
+            return '';
+        }
+
+        // @all в любой записи
+        if (strtolower($rawName) === 'all') {
+            return '<strong class="af-aam-mention af-aam-mention-all">@all</strong>';
+        }
+
+        $safeText = htmlspecialchars_uni($rawName);
+        if ($uid > 0) {
+            $href = 'member.php?action=profile&uid=' . $uid;
+        } else {
+            $href = 'member.php?action=profile&username=' . rawurlencode($rawName);
+        }
+
+        return '<span class="af-aam-mention">@<a href="' . $href . '">' . $safeText . '</a></span>';
+    }, $msg);
+
+    // Голый @all (без тега)
+    $msg = preg_replace('/(^|\s)@all\b/i', '$1<strong class="af-aam-mention af-aam-mention-all">@all</strong>', $msg);
+
+    $args['message'] = $msg;
 }
 
 /**
@@ -1714,6 +1763,23 @@ function af_aam_post_insert_end(&$posthandler): void
 
     if (!$tid && !empty($data['tid'])) {
         $tid = (int)$data['tid'];
+    }
+
+    // попробуем через insert_id (если его не перетёрли внешние плагины)
+    if (!$pid && !empty($posthandler->insert_id)) {
+        $pid = (int)$posthandler->insert_id;
+    }
+
+    // в постах есть posthash — он точнее, чем поиск последнего по uid
+    if (!$pid && !empty($data['posthash'])) {
+        $hash = $db->escape_string((string)$data['posthash']);
+        $pidQuery = $db->simple_select(
+            'posts',
+            'pid',
+            "posthash='{$hash}'",
+            ['order_by' => 'pid', 'order_dir' => 'DESC', 'limit' => 1]
+        );
+        $pid = (int)$db->fetch_field($pidQuery, 'pid');
     }
 
     // Без tid вообще не знаем, к какой теме привязать

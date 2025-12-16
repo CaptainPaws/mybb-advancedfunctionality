@@ -275,6 +275,10 @@
     display: inline !important;
 }
 
+.af-aam-mention-all {
+    font-weight: bold;
+}
+
 .af-aam-mention-button {
     margin-left: 4px;
     font-size: 11px;

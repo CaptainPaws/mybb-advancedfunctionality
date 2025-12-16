@@ -1477,6 +1477,7 @@
             afAamSound.preload = 'auto';
             afAamSound.volume = 1.0;
             afAamSound.muted = false;
+            afAamSound.crossOrigin = 'anonymous';
 
             afAamSound.addEventListener('error', function () {
                 try {
@@ -1484,12 +1485,21 @@
                     afAamSound.preload = 'auto';
                     afAamSound.volume = 1.0;
                     afAamSound.muted = false;
+                    afAamSound.crossOrigin = 'anonymous';
+                    afAamSound.load();
                 } catch (e2) {
                     afAamSound = null;
                 }
             }, { once: true });
+            afAamSound.load();
         } catch (e) {
             afAamSound = null;
+        }
+
+        if (afAamSound && document.body && !afAamSound.parentNode) {
+            // Firefox не всегда играет звук для "висячих" объектов Audio
+            afAamSound.style.display = 'none';
+            document.body.appendChild(afAamSound);
         }
 
         if (afAamDebug) console.log('[AAM] initSound ok=', !!afAamSound);
@@ -1502,6 +1512,8 @@
         if (!afAamSound) return;
 
         try {
+            afAamSound.pause();
+            afAamSound.currentTime = 0;
             // если звук ещё не "разбужен" жестом — пробуем тихо. Если нельзя — молча.
             var p = afAamSound.play();
             if (p && typeof p.then === 'function') {
