@@ -977,7 +977,7 @@
     }
 
     // ======== MENTIONS: КНОПКА + АВТОДОПОЛНЕНИЕ =============
-    function insertMention(username) {
+    function insertMention(username, uid) {
         var u = String(username || '')
             .replace(/[\r\n]+/g, ' ')
             .replace(/"/g, '')
@@ -985,8 +985,10 @@
 
         if (!u) return;
 
-        // если ник с пробелами — используем @"Nick Name", иначе @Nick
-        var text = (/\s/.test(u) ? '@"' + u + '"' : '@' + u) + ' ';
+        var mentionUid = parseInt(uid || '0', 10) || 0;
+        var text = (mentionUid > 0)
+            ? '[mention=' + mentionUid + ']' + u + '[/mention] '
+            : '[mention]' + u + '[/mention] ';
 
         // SCEditor (стандартный редактор MyBB)
         if (window.jQuery && window.jQuery.fn && window.jQuery.fn.sceditor) {
@@ -1055,8 +1057,9 @@
                     var username =
                         (node.getAttribute && (node.getAttribute('data-username') || node.getAttribute('data-mention-username'))) ||
                         '';
+                    var uid = node.getAttribute ? (parseInt(node.getAttribute('data-uid'), 10) || 0) : 0;
 
-                    if (username) insertMention(username);
+                    if (username) insertMention(username, uid);
                     return;
                 }
 
@@ -1133,7 +1136,7 @@
 
                 item.addEventListener('mousedown', function (e) {
                     e.preventDefault();
-                    applySuggestion(it.username);
+                    applySuggestion(it);
                 });
 
                 box.appendChild(item);
@@ -1162,11 +1165,16 @@
             }, 4000);
         }
 
-        function applySuggestion(username) {
+        function applySuggestion(item) {
+            var username = item && item.username ? item.username : item;
+            var uid = item && item.uid ? parseInt(item.uid, 10) || 0 : 0;
+
             var u = String(username || '').replace(/"/g, '').trim();
             if (!u) return;
 
-            var mentionText = (/\s/.test(u) ? '@"' + u + '"' : '@' + u) + ' ';
+            var mentionText = (uid > 0)
+                ? '[mention=' + uid + ']' + u + '[/mention] '
+                : '[mention]' + u + '[/mention] ';
 
             // textarea режим — точная замена
             if (state.mode === 'textarea' && textarea) {
@@ -1176,7 +1184,7 @@
 
                 if (atPos < 0 || atPos >= caret) {
                     // просто вставим
-                    insertMention(u);
+                    insertMention(u, uid);
                     hideBox();
                     return;
                 }
@@ -1256,7 +1264,7 @@
             }
 
             // совсем фолбэк
-            insertMention(u);
+            insertMention(u, uid);
             hideBox();
         }
 
@@ -1544,6 +1552,37 @@
     }
 
 
+    function markToastAlertRead(alert) {
+        if (!alert) return;
+
+        var id = parseInt(alert.id, 10) || 0;
+        var wasUnread = !(alert.is_read && parseInt(alert.is_read, 10) === 1);
+
+        if (wasUnread) {
+            updateVisibleCounts(Math.max(0, currentUnread - 1));
+            alert.is_read = 1;
+        }
+
+        if (!id) return;
+
+        var payload = {
+            action: 'af_aam_api',
+            op: 'mark_read',
+            id: id,
+            alert_id: id,
+            'alert_id[]': id,
+            my_post_key: window.my_post_key || ''
+        };
+
+        var ok = afAamSendBeacon(payload);
+        if (ok) return;
+
+        ajax('xmlhttp.php', payload, function (resp) {
+            syncFromResponse(resp || {}, wasUnread ? -1 : 0);
+        }, 1500);
+    }
+
+
     function spawnToast(alert) {
         if (!afAamUserToastsEnabled) return;
 
@@ -1631,8 +1670,14 @@
         }, afAamToastDuration);
 
         div.addEventListener('click', function () {
-            if (alert && alert.url) {
-                window.location.href = alert.url;
+            if (alert) {
+                markToastAlertRead(alert);
+                if (alert.id) {
+                    saveLastSeen(alert.id);
+                }
+                if (alert.url) {
+                    window.location.href = alert.url;
+                }
             }
             dismissToast(div, autoHide);
         });
@@ -1891,9 +1936,15 @@
 
     // ======== ИНИЦИАЛИЗАЦИЯ ==========================
 
+    function removeSoundPrimers() {
+        document.removeEventListener('click', primeSoundOnce, true);
+        document.removeEventListener('keydown', primeSoundOnce, true);
+        document.removeEventListener('pointerdown', primeSoundOnce, true);
+    }
+
     function primeSoundOnce() {
         if (!afAamSound || afAamSoundPrimed || !afAamUserSoundEnabled) {
-            document.removeEventListener('click', primeSoundOnce, true);
+            removeSoundPrimers();
             return;
         }
 
@@ -1904,18 +1955,16 @@
                     afAamSound.pause();
                     afAamSound.currentTime = 0;
                     afAamSoundPrimed = true;
-                    document.removeEventListener('click', primeSoundOnce, true);
+                    removeSoundPrimers();
                 }).catch(function () {
-                    afAamSoundPrimed = true;
-                    document.removeEventListener('click', primeSoundOnce, true);
+                    // Firefox может отклонить первый автоплей — пробуем ещё раз на следующем жесте
                 });
             } else {
                 afAamSoundPrimed = true;
-                document.removeEventListener('click', primeSoundOnce, true);
+                removeSoundPrimers();
             }
         } catch (e) {
-            afAamSoundPrimed = true;
-            document.removeEventListener('click', primeSoundOnce, true);
+            // ждём следующего пользовательского жеста
         }
     }
 
@@ -1930,6 +1979,7 @@
         // глобальный клик для "разбуживания" звука (один раз)
         document.addEventListener('click', primeSoundOnce, true);
         document.addEventListener('keydown', primeSoundOnce, true);
+        document.addEventListener('pointerdown', primeSoundOnce, true);
 
         // сразу один раз дернем, чтобы синхронизировать бейдж без ожидания интервала
         pollUnreadAlerts();
