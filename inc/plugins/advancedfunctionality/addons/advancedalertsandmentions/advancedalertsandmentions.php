@@ -25,12 +25,29 @@ const AF_AAM_TABLE_TYPES  = 'aam_alert_types';
 
 // Подключаем форматтеры и описание типов
 require_once MYBB_ROOT . AF_AAM_BASE . 'advancedalertsandmentionsformatters.php';
-// === AJAX: подвешиваемся к xmlhttp.php (как MyAlerts) ===
-global $plugins;
-if (isset($plugins) && is_object($plugins)) {
-    // -1: чуть раньше дефолта, но после всяких отладочных штук
-    $plugins->add_hook('xmlhttp', 'af_aam_xmlhttp', -1);
+
+/**
+ * Ленивая загрузка внутренних файлов аддона (чтобы не плодить require_once по коду).
+ */
+function af_aam_require(string $rel): void
+{
+    static $loaded = [];
+    if (isset($loaded[$rel])) {
+        return;
+    }
+
+    $path = MYBB_ROOT . AF_AAM_BASE . ltrim($rel, '/');
+    if (is_file($path)) {
+        require_once $path;
+    }
+
+    $loaded[$rel] = true;
 }
+
+// База/репозиторий и подсказки упоминаний нужны не только для xmlhttp
+af_aam_require('repo.php');
+af_aam_require('mentions.php');
+
 
 /**
  * Регистрация (или обновление) типа уведомления. Используется и в админке, и клиентскими модулями.
@@ -160,6 +177,8 @@ function af_advancedalertsandmentions_init(): void
 
     // глобальная инициализация (подключение CSS/JS, шапка)
     af_aam_bootstrap();
+    af_aam_backfill_type_titles();
+
 
     // остальные хуки (после global_start)
     $plugins->add_hook('usercp_menu',                  'af_aam_usercp_menu');
@@ -304,6 +323,9 @@ function af_advancedalertsandmentions_install(): void
     // колонка в users для отключённых типов
     if (!$db->field_exists('af_aam_disabled_types', 'users')) {
         $db->add_column('users', 'af_aam_disabled_types', "TEXT NOT NULL");
+    }
+    if (!$db->field_exists('af_aam_prefs', 'users')) {
+        $db->add_column('users', 'af_aam_prefs', "MEDIUMTEXT NOT NULL");
     }
 
     // группа настроек AF: AAM (основное имя = af_advancedalertsandmentions, старое = af_aam)
@@ -502,14 +524,27 @@ function af_advancedalertsandmentions_uninstall(): void
     if ($db->field_exists('af_aam_disabled_types', 'users')) {
         $db->drop_column('users', 'af_aam_disabled_types');
     }
+    if ($db->field_exists('af_aam_prefs', 'users')) {
+        $db->drop_column('users', 'af_aam_prefs');
+    }
 
-    // удаляем настройки
+    // настройки — ОДИН раз, без дублей
     $db->delete_query(
         'settings',
-        "name IN('af_aam_enabled','af_aam_per_page','af_aam_dropdown_limit','af_aam_autorefresh','af_aam_sound','af_aam_autoclean_days','af_aam_sound','af_aam_autoclean_days','af_aam_toast_limit','af_aam_max_alerts_per_user','af_aam_inactive_days')"
+        "name IN(
+            'af_aam_enabled',
+            'af_aam_per_page',
+            'af_aam_dropdown_limit',
+            'af_aam_autorefresh',
+            'af_aam_sound',
+            'af_aam_autoclean_days',
+            'af_aam_toast_limit',
+            'af_aam_max_alerts_per_user',
+            'af_aam_inactive_days'
+        )"
     );
-    $db->delete_query('settings', "name IN('af_aam_enabled','af_aam_per_page','af_aam_dropdown_limit','af_aam_autorefresh','af_aam_sound')");
     $db->delete_query('settinggroups', "name IN('af_aam','af_" . AF_AAM_ID . "')");
+
     if ($cache) {
         $cache->delete('af_aam_last_autoclean');
     }
@@ -518,8 +553,9 @@ function af_advancedalertsandmentions_uninstall(): void
 
     $taskFile = MYBB_ROOT . 'inc/tasks/af_aam_cleanup.php';
     if (file_exists($taskFile)) {
-        unlink($taskFile);
+        @unlink($taskFile);
     }
+
     rebuild_settings();
 
     // удаляем шаблоны
@@ -535,11 +571,9 @@ function af_advancedalertsandmentions_uninstall(): void
         'af_aam_js_popup',
     ];
     $in = "'" . implode("','", array_map('my_strtolower', $titles)) . "'";
-
     $db->delete_query('templates', "title IN({$in})");
 
     require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
-    // чистим вставки
     find_replace_templatesets('headerinclude', '#{\$af_aam_js}{\$af_aam_css}#i', '');
     find_replace_templatesets('header_welcomeblock_member', '#{\$af_aam_header_icon}#i', '');
     find_replace_templatesets('footer', '#{\$af_aam_modal}#i', '');
@@ -865,6 +899,101 @@ function af_aam_normalize_url(string $url): string
     return $base . '/' . $url;
 }
 
+function af_aam_default_type_title(string $code): string
+{
+    global $lang;
+
+    $code = trim($code);
+
+    // язык если есть
+    $key = 'af_aam_alert_type_' . $code;
+    if (isset($lang->{$key}) && trim((string)$lang->{$key}) !== '') {
+        return (string)$lang->{$key};
+    }
+
+    // жёсткий fallback (RU)
+    $map = [
+        'mention'           => 'Упоминания по никнейму',
+        'pm'                => 'Личные сообщения',
+        'post_threadauthor' => 'Новый ответ в вашей теме',
+        'quoted'            => 'Цитирования',
+        'rep'               => 'Репутация',
+        'subscribed_thread' => 'Ответ в теме подписки',
+        'subscribed_forum'  => 'Новая тема в форуме',
+    ];
+
+    return $map[$code] ?? $code;
+}
+
+/**
+ * Подлечить старые/пустые title у типов, чтобы в чекбоксах не торчали коды.
+ */
+function af_aam_backfill_type_titles(): void
+{
+    global $db, $lang;
+
+    if (!$db->table_exists(AF_AAM_TABLE_TYPES)) {
+        return;
+    }
+
+    if (!isset($lang->af_aam_name)) {
+        $lang->load('advancedfunctionality_' . AF_AAM_ID);
+    }
+
+    $q = $db->simple_select(AF_AAM_TABLE_TYPES, 'id,code,title', "title='' OR title IS NULL");
+    while ($row = $db->fetch_array($q)) {
+        $code = (string)$row['code'];
+        $title = af_aam_default_type_title($code);
+
+        $db->update_query(
+            AF_AAM_TABLE_TYPES,
+            ['title' => $db->escape_string($title)],
+            'id=' . (int)$row['id']
+        );
+    }
+}
+
+
+/**
+ * Нормализует аватар: делает абсолютным, и даёт дефолтный, если пусто.
+ * $size — желаемый размер (квадрат).
+ */
+function af_aam_avatar_payload_from_row(array $row, int $size = 32): array
+{
+    global $mybb;
+
+    $username = (string)($row['from_username'] ?? '');
+    $raw = trim((string)($row['from_avatar'] ?? ''));
+
+    // дефолтный аватар MyBB (стабильный путь)
+    $default = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/images/default_avatar.png';
+
+    $url = $raw !== '' ? af_aam_normalize_url($raw) : $default;
+
+    // размеры (если есть в users.avatardimensions вида "80|80")
+    $w = $size; $h = $size;
+    $dims = (string)($row['from_avatardimensions'] ?? '');
+    if ($dims && strpos($dims, '|') !== false) {
+        $parts = explode('|', $dims);
+        $dw = isset($parts[0]) ? (int)$parts[0] : $size;
+        $dh = isset($parts[1]) ? (int)$parts[1] : $size;
+
+        // не даём ломать тосты огромными картинками
+        if ($dw > 0 && $dh > 0) {
+            $w = min($dw, 64);
+            $h = min($dh, 64);
+        }
+    }
+
+    return [
+        'url'      => $url,
+        'width'    => $w > 0 ? $w : $size,
+        'height'   => $h > 0 ? $h : $size,
+        'username' => $username,
+    ];
+}
+
+
 function af_aam_render_popup_rows(array $alerts): string
 {
     global $templates, $lang, $mybb;
@@ -878,34 +1007,24 @@ function af_aam_render_popup_rows(array $alerts): string
     $rows = '';
     foreach ($alerts as $alert) {
         $formatted = af_aam_format_alert($alert);
-        $af_aam_alert_text = htmlspecialchars_uni($formatted['text']);
-        // Нормализуем URL; если его нет — пусть будет ссылка на список уведомлений, а не #
-        $normalizedUrl = af_aam_normalize_url($formatted['url'] ?? '');
-        if ($normalizedUrl === '') {
-            $normalizedUrl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/usercp.php?action=af_aam_list';
-        }
-        $af_aam_alert_link = htmlspecialchars_uni($normalizedUrl);
-        $af_aam_alert_date = my_date($mybb->settings['dateformat'] . ' ' . $mybb->settings['timeformat'], (int)$alert['dateline']);
-        $af_aam_alert_id   = (int)$alert['id'];
-        $af_aam_alert_class = ((int)$alert['is_read'] === 1) ? 'alert--read' : 'alert--unread';
-        $af_aam_alert_avatar = af_aam_render_avatar_html((int)($alert['from_uid'] ?? 0), (string)($alert['from_username'] ?? ''));
-        $af_aam_alert_icon = '🔔';
 
+        $af_aam_alert_text  = htmlspecialchars_uni((string)($formatted['text'] ?? ''));
+        $af_aam_alert_link  = htmlspecialchars_uni(af_aam_fix_alert_url($alert, (string)($formatted['url'] ?? '')));
+        $af_aam_alert_date  = my_date($mybb->settings['dateformat'] . ' ' . $mybb->settings['timeformat'], (int)$alert['dateline']);
+        $af_aam_alert_id    = (int)$alert['id'];
+        $af_aam_alert_class = ((int)$alert['is_read'] === 1) ? 'alert--read' : 'alert--unread';
+
+        $af_aam_alert_avatar = af_aam_render_avatar_html((int)($alert['from_uid'] ?? 0), (string)($alert['from_username'] ?? ''), 32);
+
+        $af_aam_alert_icon = '🔔';
         switch ($alert['code'] ?? '') {
-            case 'pm':
-                $af_aam_alert_icon = '✉️';
-                break;
-            case 'rep':
-                $af_aam_alert_icon = '⭐';
-                break;
-            case 'quoted':
-                $af_aam_alert_icon = '💬';
-                break;
-            case 'mention':
-                $af_aam_alert_icon = '@';
-                break;
+            case 'pm':     $af_aam_alert_icon = '✉️'; break;
+            case 'rep':    $af_aam_alert_icon = '⭐'; break;
+            case 'quoted': $af_aam_alert_icon = '💬'; break;
+            case 'mention':$af_aam_alert_icon = '@';  break;
             case 'post_threadauthor':
             case 'subscribed_thread':
+            case 'subscribed_forum':
                 $af_aam_alert_icon = '📌';
                 break;
         }
@@ -918,6 +1037,7 @@ function af_aam_render_popup_rows(array $alerts): string
 
     return $rows;
 }
+
 
 /**
  * Возвращает количество непрочитанных уведомлений пользователя.
@@ -1143,78 +1263,21 @@ function af_aam_datahandler_user_insert(\UserDataHandler &$dataHandler): void
 
 function af_aam_misc_router(): void
 {
-    global $mybb, $db, $lang, $templates, $header, $headerinclude, $footer;
+    global $mybb;
 
     if (!af_aam_is_enabled()) {
         return;
     }
 
-    $action = $mybb->get_input('action');
-
-    if ($action === 'af_aam_list') {
+    if ($mybb->get_input('action') === 'af_aam_list') {
         if (!$mybb->user['uid']) {
             error_no_permission();
         }
-
-        // просто отправляем в usercp
         redirect('usercp.php?action=af_aam_list');
-
-        if (!isset($lang->af_aam_name)) {
-            $lang->load('advancedfunctionality_' . AF_AAM_ID);
-        }
-
-        $uid = (int)$mybb->user['uid'];
-        $perPage = (int)($mybb->settings['af_aam_per_page'] ?? 20);
-        if ($perPage <= 0) {
-            $perPage = 20;
-        }
-
-        $page = max(1, (int)$mybb->get_input('page', MyBB::INPUT_INT));
-        $offset = ($page - 1) * $perPage;
-
-        $totalQuery = $db->simple_select(AF_AAM_TABLE_ALERTS, 'COUNT(id) AS cnt', "uid={$uid}");
-        $totalRow = $db->fetch_array($totalQuery);
-        $total = (int)($totalRow['cnt'] ?? 0);
-
-        $af_aam_list_rows = '';
-        if ($total > 0) {
-            $sql = $db->write_query("
-                SELECT a.*, t.code, u.username AS from_username, u.avatar AS from_avatar, u.avatardimensions AS from_avatardimensions
-                FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
-                LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id=a.type_id)
-                LEFT JOIN " . TABLE_PREFIX . "users u ON (u.uid = a.from_uid)
-                WHERE a.uid={$uid}
-                ORDER BY a.dateline DESC
-                LIMIT {$offset}, {$perPage}
-            ");
-            while ($alert = $db->fetch_array($sql)) {
-                $formatted = af_aam_format_alert($alert);
-                $text = $formatted['text'];
-                $url = af_aam_normalize_url($formatted['url'] ?? '');
-                if ($url === '') {
-                    $url = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/misc.php?action=af_aam_list';
-                }
-
-                $af_aam_url = htmlspecialchars_uni($url);
-                $date = my_date($mybb->settings['dateformat'] . ' ' . $mybb->settings['timeformat'], (int)$alert['dateline']);
-                $af_aam_read_class = ((int)$alert['is_read'] === 1) ? 'af-aam-row-read' : 'af-aam-row-unread';
-
-                $af_aam_text = htmlspecialchars_uni($text);
-                $af_aam_date = htmlspecialchars_uni($date);
-                $af_aam_alert_id = (int)$alert['id'];
-                $af_aam_alert_avatar = af_aam_render_avatar_html((int)($alert['from_uid'] ?? 0), (string)($alert['from_username'] ?? ''));
-                eval('$af_aam_list_rows .= "'.$templates->get('af_aam_list_row').'";');
-            }
-        } else {
-            $af_aam_list_rows = '<div class="af-aam-empty">' . htmlspecialchars_uni($lang->af_aam_no_alerts) . '</div>';
-        }
-
-        $multipage = multipage($total, $perPage, $page, 'misc.php?action=af_aam_list');
-
-        eval('echo "'.$templates->get('af_aam_list_page').'";');
         exit;
     }
 }
+
 
 /**
  * Вытаскивает ID уведомления из запроса:
@@ -1267,431 +1330,47 @@ function af_aam_json_response(array $payload, array $debug = [])
     exit;
 }
 
-
-function af_aam_xmlhttp(): void
+/**
+ * Контрактный xmlhttp-хендлер для AF core router:
+ * AF вызывает af_{addon_id}_xmlhttp()
+ */
+function af_advancedalertsandmentions_xmlhttp(): bool
 {
-    global $mybb, $db, $lang, $templates;
-
-    $error = static function (string $code, string $msg = ''): void {
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
-            'ok'      => 0,
-            'error'   => $code,
-            'message' => $msg,
-        ], JSON_UNESCAPED_UNICODE);
-        exit;
-    };
-
-    if (empty($mybb->user['uid'])) {
-        $error('not_logged_in', 'Пользователь не авторизован.');
-    }
-
     if (!af_aam_is_enabled()) {
-        $error('addon_disabled', 'Система уведомлений отключена настройками.');
+        return false;
     }
 
-    if (!isset($lang->af_aam_name)) {
-        $lang->load('advancedfunctionality_' . AF_AAM_ID);
+    // Вся логика — внутри af_aam_xmlhttp()
+    af_aam_xmlhttp();
+    return true; // формально, хотя ниже обычно будет exit
+}
+
+/**
+ * Единая точка входа для xmlhttp-логики аддона.
+ * Контроллер лежит в addons/advancedalertsandmentions/xmlhttp.php
+ */
+function af_aam_xmlhttp(): bool
+{
+    if (!af_aam_is_enabled()) {
+        return false;
     }
 
-    $uid    = (int)$mybb->user['uid'];
-    $action = (string)$mybb->get_input('action');
-    $action_lc = strtolower($action);
+    // Подгружаем контроллер xmlhttp
+    af_aam_require('xmlhttp.php');
 
-    // ==========================
-    // 1) Совместимость с MyAlerts
-    // ==========================
-    if ($action_lc === 'getlatestalerts' || $action_lc === 'getnewalerts') {
-        $limit = (int)($mybb->settings['af_aam_dropdown_limit'] ?? 5);
-        if ($limit <= 0) $limit = 5;
-
-        $unreadOnly = (int)$mybb->get_input('unreadOnly', MyBB::INPUT_INT) === 1;
-
-        $where = "a.uid = {$uid}";
-        if ($unreadOnly) $where .= " AND a.is_read = 0";
-
-        $rows = [];
-        $sql = $db->write_query("
-            SELECT a.*, t.code, t.title, u.username AS from_username, u.avatar AS from_avatar, u.avatardimensions AS from_avatardimensions
-            FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
-            LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id = a.type_id)
-            LEFT JOIN " . TABLE_PREFIX . "users u ON (u.uid = a.from_uid)
-            WHERE {$where}
-            ORDER BY a.dateline DESC
-            LIMIT {$limit}
-        ");
-
-        $alerts = [];
-        while ($row = $db->fetch_array($sql)) {
-            $formatted = af_aam_format_alert($row);
-            $alerts[] = [
-                'id'       => (int)$row['id'],
-                'code'     => (string)($row['code'] ?? ''),
-                'is_read'  => (int)$row['is_read'],
-                'text'     => (string)($formatted['text'] ?? ''),
-                'url'      => (string)($formatted['url'] ?? ''),
-                'dateline' => (int)$row['dateline'],
-                'date_fmt' => my_date(
-                    $mybb->settings['dateformat'] . ' ' . $mybb->settings['timeformat'],
-                    (int)$row['dateline']
-                ),
-            ];
-            $rows[] = $row;
-        }
-
-        $alertsHtml = af_aam_render_popup_rows($rows);
-
-        $badge = af_aam_unread_count($uid);
-
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
-            'ok'               => 1,
-            'alerts'           => $alerts,
-            'template'         => $alertsHtml,
-            'badge'            => $badge,
-            'unread_count'     => $badge,
-            'unread_count_fmt' => my_number_format($badge),
-        ], JSON_UNESCAPED_UNICODE);
-        exit;
+    // Функциональный контроллер
+    if (function_exists('af_aam_xmlhttp_dispatch')) {
+        af_aam_xmlhttp_dispatch(); // обычно делает JSON + exit
+        return true;
     }
 
-    if ($action_lc === 'getnumunreadalerts' || $action_lc === 'get_num_unread_alerts') {
-        $count = af_aam_unread_count($uid);
-
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
-            'ok'              => 1,
-            'unread'          => $count,
-            'unread_count'    => $count,
-            'unread_count_fmt'=> my_number_format($count),
-        ], JSON_UNESCAPED_UNICODE);
-        exit;
+    // Классовый контроллер (если когда-то перейдёшь на класс)
+    if (class_exists('AF_AAM_XmlHttp') && method_exists('AF_AAM_XmlHttp', 'dispatch')) {
+        AF_AAM_XmlHttp::dispatch();
+        return true;
     }
 
-    if ($action_lc === 'markallread' || $action_lc === 'mark_all_read') {
-        if (!verify_post_check($mybb->get_input('my_post_key'), true)) {
-            $error('invalid_post_code', 'Неверный my_post_key.');
-        }
-
-        $db->update_query(
-            AF_AAM_TABLE_ALERTS,
-            ['is_read' => 1],
-            "uid = {$uid} AND is_read = 0"
-        );
-
-        $payload = af_aam_build_alerts_payload($uid);
-
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(array_merge(['ok' => 1], $payload), JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
-    if ($action_lc === 'myalerts_mark_read' || $action_lc === 'myalerts_mark_unread') {
-        if (!verify_post_check($mybb->get_input('my_post_key'), true)) {
-            $error('invalid_post_code', 'Неверный my_post_key.');
-        }
-
-        $id = (int)$mybb->get_input('id', MyBB::INPUT_INT);
-        $markRead = ($action_lc === 'myalerts_mark_read');
-
-        if ($id > 0) {
-            $db->update_query(
-                AF_AAM_TABLE_ALERTS,
-                ['is_read' => $markRead ? 1 : 0],
-                "id = {$id} AND uid = {$uid}"
-            );
-        }
-
-        $count = af_aam_unread_count($uid);
-
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
-            'ok'              => 1,
-            'success'         => true,
-            'unread_count'    => $count,
-            'unread_count_fmt'=> my_number_format($count),
-        ], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
-    // ==========================
-    // 2) Наш JSON-API
-    // ==========================
-    if ($action_lc !== 'af_aam_api' && $action_lc !== 'af_alerts_api') {
-        return;
-    }
-
-    $op = (string)$mybb->get_input('op');
-
-    // --- long-poll realtime ---
-    if ($op === 'poll') {
-        @ignore_user_abort(true);
-        @session_write_close();
-
-        $timeout = (int)$mybb->get_input('timeout', MyBB::INPUT_INT);
-        if ($timeout <= 0) $timeout = 25;
-        if ($timeout > 30) $timeout = 30;
-
-        $sinceId     = (int)$mybb->get_input('since_id', MyBB::INPUT_INT);
-        $sinceUnread = (int)$mybb->get_input('since_unread', MyBB::INPUT_INT);
-
-        @set_time_limit($timeout + 5);
-
-        $deadline = microtime(true) + $timeout;
-
-        $changed = false;
-        $newestId = $sinceId;
-
-        while (microtime(true) < $deadline) {
-            // Быстрая проверка на “новый id”
-            $qNew = $db->simple_select(
-                AF_AAM_TABLE_ALERTS,
-                'id',
-                "uid={$uid} AND id>{$sinceId}",
-                ['order_by' => 'id', 'order_dir' => 'DESC', 'limit' => 1]
-            );
-            $maybeNew = (int)($db->fetch_field($qNew, 'id') ?? 0);
-
-            if ($maybeNew > 0) {
-                $changed = true;
-                $newestId = $maybeNew;
-                break;
-            }
-
-            // Проверка на изменения unread (например, в другой вкладке отметили прочитанным)
-            $unreadNow = af_aam_unread_count($uid);
-            if ($unreadNow !== $sinceUnread) {
-                $changed = true;
-
-                $qLast = $db->simple_select(
-                    AF_AAM_TABLE_ALERTS,
-                    'id',
-                    "uid={$uid}",
-                    ['order_by' => 'id', 'order_dir' => 'DESC', 'limit' => 1]
-                );
-                $last = (int)($db->fetch_field($qLast, 'id') ?? 0);
-                if ($last > 0) $newestId = $last;
-
-                break;
-            }
-
-            usleep(700000); // 0.7s
-        }
-
-        if ($changed) {
-            $payload = af_aam_build_alerts_payload($uid);
-            $payload['changed'] = 1;
-            $payload['server_newest_id'] = $newestId;
-
-            af_aam_json_response(array_merge(['ok' => 1], $payload), [
-                'op' => 'poll',
-                'uid' => $uid,
-                'since_id' => $sinceId,
-                'since_unread' => $sinceUnread
-            ]);
-        }
-
-        af_aam_json_response([
-            'ok' => 1,
-            'changed' => 0,
-            'unread' => $sinceUnread,
-            'server_newest_id' => $sinceId
-        ], [
-            'op' => 'poll',
-            'uid' => $uid
-        ]);
-    }
-
-    // --- список уведомлений ---
-    if ($op === 'list') {
-        $limit = (int)$mybb->get_input('limit', MyBB::INPUT_INT);
-        $unreadOnly = (int)$mybb->get_input('unreadOnly', MyBB::INPUT_INT) === 1;
-
-        $payload = af_aam_build_alerts_payload($uid, $limit, $unreadOnly);
-
-        af_aam_json_response(array_merge(['ok' => 1], $payload), [
-            'op'    => 'list',
-            'uid'   => $uid,
-            'limit' => $limit,
-            'unreadOnly' => $unreadOnly ? 1 : 0,
-        ]);
-    }
-
-    // --- пометить одно уведомление прочитанным ---
-    if ($op === 'mark_read') {
-        if (!verify_post_check($mybb->get_input('my_post_key'), true)) {
-            $error('invalid_post_code', 'Неверный my_post_key.');
-        }
-
-        $id = af_aam_request_alert_id();
-        $affected = 0;
-
-        if ($id > 0) {
-            $db->update_query(AF_AAM_TABLE_ALERTS, ['is_read' => 1], "id={$id} AND uid={$uid}");
-            $affected = $db->affected_rows();
-        }
-
-        $payload = af_aam_build_alerts_payload($uid);
-
-        af_aam_json_response(array_merge(['ok' => 1], $payload), [
-            'op' => 'mark_read',
-            'uid' => $uid,
-            'id' => $id,
-            'affected_rows' => $affected,
-        ]);
-    }
-
-    // --- пометить одно уведомление непрочитанным ---
-    if ($op === 'mark_unread') {
-        if (!verify_post_check($mybb->get_input('my_post_key'), true)) {
-            $error('invalid_post_code', 'Неверный my_post_key.');
-        }
-
-        $id = af_aam_request_alert_id();
-        $affected = 0;
-
-        if ($id > 0) {
-            $db->update_query(AF_AAM_TABLE_ALERTS, ['is_read' => 0], "id={$id} AND uid={$uid}");
-            $affected = $db->affected_rows();
-        }
-
-        $payload = af_aam_build_alerts_payload($uid);
-
-        af_aam_json_response(array_merge(['ok' => 1], $payload), [
-            'op' => 'mark_unread',
-            'uid' => $uid,
-            'id' => $id,
-            'affected_rows' => $affected,
-        ]);
-    }
-
-    // --- пометить все прочитанными ---
-    if ($op === 'mark_all' || $op === 'mark_all_read') {
-        if (!verify_post_check($mybb->get_input('my_post_key'), true)) {
-            $error('invalid_post_code', 'Неверный my_post_key.');
-        }
-
-        $db->update_query(AF_AAM_TABLE_ALERTS, ['is_read' => 1], "uid={$uid} AND is_read=0");
-        $affected = $db->affected_rows();
-
-        $payload = af_aam_build_alerts_payload($uid);
-
-        af_aam_json_response(array_merge(['ok' => 1], $payload), [
-            'op' => $op,
-            'uid' => $uid,
-            'affected_rows' => $affected,
-        ]);
-    }
-
-    // --- удалить одно уведомление ---
-    if ($op === 'delete') {
-        if (!verify_post_check($mybb->get_input('my_post_key'), true)) {
-            $error('invalid_post_code', 'Неверный my_post_key.');
-        }
-
-        $id = af_aam_request_alert_id();
-        $affected = 0;
-
-        if ($id > 0) {
-            $db->delete_query(AF_AAM_TABLE_ALERTS, "id={$id} AND uid={$uid}");
-            $affected = $db->affected_rows();
-        }
-
-        $payload = af_aam_build_alerts_payload($uid);
-
-        af_aam_json_response(array_merge(['ok' => 1], $payload), [
-            'op' => 'delete',
-            'uid' => $uid,
-            'id' => $id,
-            'affected_rows' => $affected,
-        ]);
-    }
-
-    // --- prefs_form / prefs_save / suggest оставляем как было ---
-    if ($op === 'prefs_form') {
-        $disabledList = [];
-        if (!empty($mybb->user['af_aam_disabled_types'])) {
-            $decoded = json_decode($mybb->user['af_aam_disabled_types'], true);
-            if (is_array($decoded)) $disabledList = $decoded;
-        }
-
-        $rows = '';
-        $sql = $db->simple_select(AF_AAM_TABLE_TYPES, '*', 'enabled=1');
-        while ($type = $db->fetch_array($sql)) {
-            $code = $type['code'];
-            $checked = in_array($code, $disabledList, true) ? '' : 'checked="checked"';
-
-            $labelKey = 'af_aam_alert_type_' . $code;
-            $label = $type['title'] ?: (isset($lang->{$labelKey}) ? $lang->{$labelKey} : $code);
-
-            $rows .= '<div class="af-aam-pref-row">'
-                . '<label>'
-                . '<input type="checkbox" class="af-aam-pref-checkbox" value="' . htmlspecialchars_uni($code) . '" ' . $checked . ' /> '
-                . htmlspecialchars_uni($label)
-                . '</label>'
-                . '</div>';
-        }
-
-        $html = '<form id="af_aam_prefs_form">'
-            . '<input type="hidden" name="my_post_key" value="' . $mybb->post_code . '" />'
-            . $rows
-            . '<div class="af-aam-prefs-actions">'
-            . '<button type="submit" class="button">' . htmlspecialchars_uni($lang->usercp_update_options) . '</button>'
-            . '</div>'
-            . '</form>';
-
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok' => 1, 'html' => $html], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
-    if ($op === 'prefs_save') {
-        if (!verify_post_check($mybb->get_input('my_post_key'), true)) {
-            $error('invalid_post_code', 'Неверный my_post_key.');
-        }
-
-        $enabledTypes = $mybb->get_input('types', MyBB::INPUT_ARRAY);
-        $enabledTypes = array_map('trim', $enabledTypes);
-        $enabledTypes = array_filter($enabledTypes);
-
-        $codes = [];
-        $sql = $db->simple_select(AF_AAM_TABLE_TYPES, 'code', 'can_be_user_disabled=1');
-        while ($row = $db->fetch_array($sql)) {
-            $codes[] = $row['code'];
-        }
-
-        $disabled = array_diff($codes, $enabledTypes);
-        $store = json_encode(array_values($disabled));
-        $db->update_query('users', ['af_aam_disabled_types' => $db->escape_string($store)], "uid={$uid}");
-
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok' => 1], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
-    if ($op === 'suggest') {
-        $qStr = trim($mybb->get_input('q'));
-
-        $items = [];
-        if ($qStr !== '') {
-            $like = $db->escape_string_like($qStr);
-            $sql  = $db->simple_select('users', 'uid, username', "username LIKE '" . $like . "%'", ['limit' => 10]);
-
-            while ($row = $db->fetch_array($sql)) {
-                $items[] = [
-                    'uid'      => (int)$row['uid'],
-                    'username' => $row['username'],
-                    'profile'  => get_profile_link($row['uid']),
-                ];
-            }
-        }
-
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok' => 1, 'items' => $items], JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
-    $error('unknown_op', 'Неизвестная операция API: ' . $op);
+    return false;
 }
 
 
@@ -2401,6 +2080,47 @@ function af_aam_postbit_mention_button(array &$post): void
  * - items[] для тостов
  * - template для модалки
  */
+function af_aam_decode_alert_extra(array $alert): array
+{
+    $raw = $alert['extra'] ?? '';
+    if (!is_string($raw) || trim($raw) === '') {
+        return [];
+    }
+    $decoded = json_decode($raw, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function af_aam_fix_alert_url(array $alert, string $urlFromFormatter = ''): string
+{
+    $code = (string)($alert['code'] ?? '');
+    $url  = trim((string)$urlFromFormatter);
+
+    $extra = af_aam_decode_alert_extra($alert);
+    $tid   = (int)($extra['tid'] ?? ($alert['object_id'] ?? 0));
+    $pid   = (int)($extra['pid'] ?? 0);
+
+    if (in_array($code, ['mention','quoted','post_threadauthor','subscribed_thread','subscribed_forum'], true)) {
+        if ($tid > 0 && $pid > 0) {
+            $url = "showthread.php?tid={$tid}&pid={$pid}#pid{$pid}";
+        } elseif ($tid > 0) {
+            $url = "showthread.php?tid={$tid}";
+        }
+    }
+
+    if ($code === 'pm') {
+        $pmid = (int)($alert['object_id'] ?? 0);
+        if ($pmid > 0) {
+            $url = "private.php?action=read&pmid={$pmid}";
+        }
+    }
+
+    if ($url === '') {
+        $url = 'usercp.php?action=af_aam_list';
+    }
+
+    return af_aam_normalize_url($url);
+}
+
 function af_aam_build_alerts_payload(int $uid, int $limit = 0, bool $unreadOnly = false): array
 {
     global $db, $mybb;
@@ -2429,7 +2149,10 @@ function af_aam_build_alerts_payload(int $uid, int $limit = 0, bool $unreadOnly 
 
     $rows = [];
     $sql = $db->write_query("
-        SELECT a.*, t.code, t.title, u.username AS from_username, u.avatar AS from_avatar, u.avatardimensions AS from_avatardimensions
+        SELECT a.*, t.code, t.title,
+               u.username AS from_username,
+               u.avatar AS from_avatar,
+               u.avatardimensions AS from_avatardimensions
         FROM " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " a
         LEFT JOIN " . TABLE_PREFIX . AF_AAM_TABLE_TYPES . " t ON (t.id=a.type_id)
         LEFT JOIN " . TABLE_PREFIX . "users u ON (u.uid = a.from_uid)
@@ -2443,35 +2166,25 @@ function af_aam_build_alerts_payload(int $uid, int $limit = 0, bool $unreadOnly 
         $rows[] = $row;
 
         $formatted = af_aam_format_alert($row);
-        $url = af_aam_normalize_url((string)($formatted['url'] ?? ''));
+
+        $url  = af_aam_fix_alert_url($row, (string)($formatted['url'] ?? ''));
         $text = (string)($formatted['text'] ?? '');
 
-        $avatarUrl = (string)($row['from_avatar'] ?? '');
-        $dims = (string)($row['from_avatardimensions'] ?? '');
-        $w = 32; $h = 32;
-        if ($dims && strpos($dims, '|') !== false) {
-            $parts = explode('|', $dims);
-            $w = isset($parts[0]) ? (int)$parts[0] : 32;
-            $h = isset($parts[1]) ? (int)$parts[1] : 32;
-            if ($w <= 0) $w = 32;
-            if ($h <= 0) $h = 32;
-        }
+        $av = af_aam_avatar_payload_from_row($row, 32);
 
         $items[] = [
-            'id' => (int)$row['id'],
-            'text' => $text,
-            'url' => $url,
+            'id'      => (int)$row['id'],
+            'text'    => $text,
+            'url'     => $url,
             'is_read' => (int)$row['is_read'],
-            'avatar' => [
-                'url' => $avatarUrl,
-                'width' => $w,
-                'height' => $h,
-                'username' => (string)($row['from_username'] ?? ''),
-            ],
+
+            // максимально совместимо:
+            'avatar'         => (string)$av['url'], // строка для старого JS
+            'avatar_payload' => $av,                // объект если нужен
         ];
     }
 
-    $unread = af_aam_unread_count($uid);
+    $unread   = af_aam_unread_count($uid);
     $template = af_aam_render_popup_rows($rows);
 
     return [
@@ -2484,3 +2197,35 @@ function af_aam_build_alerts_payload(int $uid, int $limit = 0, bool $unreadOnly 
     ];
 }
 
+
+if (!function_exists('af_aam_render_avatar_html')) {
+    function af_aam_render_avatar_html(int $uid, string $username = '', int $size = 32): string
+    {
+        global $mybb;
+
+        $uid = (int)$uid;
+
+        $default = (string)($mybb->settings['default_avatar'] ?? '');
+        if ($default === '') {
+            $default = 'images/default_avatar.png';
+        }
+        $defaultUrl = af_aam_normalize_url($default);
+
+        if ($uid <= 0) {
+            return '<img class="af-aam-avatar" src="' . htmlspecialchars_uni($defaultUrl) . '" alt="" width="' . (int)$size . '" height="' . (int)$size . '" loading="lazy" />';
+        }
+
+        $u = get_user($uid);
+        $avatar = '';
+        if (is_array($u) && !empty($u['avatar'])) {
+            $avatar = (string)$u['avatar'];
+        } else {
+            $avatar = $default;
+        }
+
+        $url = af_aam_normalize_url($avatar);
+        $alt = $username !== '' ? htmlspecialchars_uni($username) : '';
+
+        return '<img class="af-aam-avatar" src="' . htmlspecialchars_uni($url) . '" alt="' . $alt . '" width="' . (int)$size . '" height="' . (int)$size . '" loading="lazy" />';
+    }
+}
