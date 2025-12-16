@@ -356,7 +356,13 @@ function af_aam_xmlhttp_dispatch(): void
 
     if ($op === 'list') {
         $unreadOnly = !empty($mybb->input['unreadOnly']) ? 1 : 0;
-        $limit = isset($mybb->input['limit']) ? (int)$mybb->input['limit'] : 20;
+        $limit = isset($mybb->input['limit']) ? (int)$mybb->input['limit'] : 0;
+        if ($limit <= 0) {
+            $limit = (int)($mybb->settings['af_aam_dropdown_limit'] ?? 20);
+        }
+        if ($limit <= 0) {
+            $limit = 20;
+        }
 
         $items  = $repo->list_alerts($uid, (bool)$unreadOnly, $limit);
 
@@ -396,6 +402,11 @@ function af_aam_xmlhttp_dispatch(): void
         $sinceUnread = isset($mybb->input['since_unread']) ? (int)$mybb->input['since_unread'] : 0;
         $timeout     = isset($mybb->input['timeout']) ? (int)$mybb->input['timeout'] : 25;
 
+        $listLimit = (int)($mybb->settings['af_aam_dropdown_limit'] ?? 20);
+        if ($listLimit <= 0) {
+            $listLimit = 20;
+        }
+
         $r = $repo->poll($uid, $sinceId, $sinceUnread, $timeout, 5);
 
         $items = $r['items'] ?? [];
@@ -423,11 +434,21 @@ function af_aam_xmlhttp_dispatch(): void
             }));
         }
 
-        // аватары для тостов/реалтайма
+        // полный список для модалки (не только новые элементы)
+        $listItems = $repo->list_alerts($uid, false, $listLimit);
+        if ($disabled) {
+            $listItems = array_values(array_filter($listItems, function($it) use ($disabled) {
+                $code = (string)($it['type_code'] ?? $it['code'] ?? $it['type'] ?? '');
+                return $code === '' ? true : !in_array($code, $disabled, true);
+            }));
+        }
+
+        // аватары для тостов/реалтайма и для модалки
         af_aam_attach_avatars($items, 32);
+        af_aam_attach_avatars($listItems, 32);
 
         // ВАЖНО: чтобы фронт мог обновить модалку/список без доп. запроса
-        $template = af_aam_render_rows($items);
+        $template = af_aam_render_rows($listItems);
 
         af_aam_json([
             'ok' => 1,
