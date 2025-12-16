@@ -89,13 +89,52 @@ class AF_Admin_AdvancedAlertsAndMentions
             $canBeUserDisabled = array_map('intval', array_keys($mybb->get_input('alert_types_can_be_user_disabled', MyBB::INPUT_ARRAY)));
             $defaultUserEnabled = array_map('intval', array_keys($mybb->get_input('alert_types_default_user_enabled', MyBB::INPUT_ARRAY)));
 
+            $postedTypes = $mybb->get_input('alert_types', MyBB::INPUT_ARRAY);
+            $usedCodes = [];
+            foreach ($alertTypes as $alertType) {
+                $usedCodes[my_strtolower($alertType['code'])] = (int)$alertType['id'];
+            }
+
             foreach ($alertTypes as $alertType) {
                 $id = (int)$alertType['id'];
-                $db->update_query(AF_AAM_TABLE_TYPES, [
+                $posted = $postedTypes[$id] ?? [];
+                $newCode = isset($posted['code']) ? trim($posted['code']) : $alertType['code'];
+                $newTitle = isset($posted['title']) ? trim($posted['title']) : $alertType['title'];
+
+                if ($newTitle === '') {
+                    $newTitle = af_aam_default_type_title($newCode);
+                }
+
+                if (in_array($alertType['code'], $protectedCodes, true)) {
+                    $newCode = $alertType['code'];
+                } elseif ($newCode === '' || !preg_match('/^[a-z0-9_]+$/i', $newCode)) {
+                    $newCode = $alertType['code'];
+                } else {
+                    $lower = my_strtolower($newCode);
+                    if (isset($usedCodes[$lower]) && $usedCodes[$lower] !== $id) {
+                        $newCode = $alertType['code'];
+                    }
+                }
+
+                $usedCodes[my_strtolower($newCode)] = $id;
+
+                $update = [
                     'enabled'              => in_array($id, $enabledAlertTypes, true) ? 1 : 0,
                     'can_be_user_disabled' => in_array($id, $canBeUserDisabled, true) ? 1 : 0,
                     'default_user_enabled' => in_array($id, $defaultUserEnabled, true) ? 1 : 0,
-                ], "id={$id}");
+                ];
+
+                if ($newCode !== $alertType['code']) {
+                    $update['code'] = $db->escape_string($newCode);
+                }
+
+                if ($newTitle !== '' && $newTitle !== $alertType['title']) {
+                    $update['title'] = $db->escape_string($newTitle);
+                }
+
+                if (!empty($update)) {
+                    $db->update_query(AF_AAM_TABLE_TYPES, $update, "id={$id}");
+                }
             }
 
             flash_message($lang->af_aam_admin_msg_saved, 'success');
@@ -128,11 +167,26 @@ class AF_Admin_AdvancedAlertsAndMentions
             $table->construct_row();
         } else {
             foreach ($alertTypes as $alertType) {
-                $code = htmlspecialchars_uni($alertType['code']);
-                $titleKey = 'af_aam_alert_type_' . $alertType['code'];
-                $title = $alertType['title'] ?: ($lang->{$titleKey} ?? $alertType['code']);
-                $table->construct_cell($code);
-                $table->construct_cell(htmlspecialchars_uni($title));
+                $codeValue = $alertType['code'];
+                $titleValue = $alertType['title'] ?: af_aam_default_type_title($alertType['code']);
+
+                $table->construct_cell(
+                    $form->generate_text_box(
+                        'alert_types[' . $alertType['id'] . '][code]',
+                        $codeValue,
+                        [
+                            'style'    => 'width:95%;',
+                            'readonly' => in_array($alertType['code'], $protectedCodes, true),
+                        ]
+                    )
+                );
+                $table->construct_cell(
+                    $form->generate_text_box(
+                        'alert_types[' . $alertType['id'] . '][title]',
+                        $titleValue,
+                        ['style' => 'width:95%;']
+                    )
+                );
                 $table->construct_cell(
                     $form->generate_check_box('alert_types_enabled[' . $alertType['id'] . ']', '1', '', ['checked' => (int)$alertType['enabled'] === 1]),
                     ['class' => 'align_center']

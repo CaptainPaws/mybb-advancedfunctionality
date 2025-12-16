@@ -1079,16 +1079,39 @@
         // SCEditor instance (если есть)
         var sceditor = null;
         var scBody = null;
+        var scEditorEventsBound = false;
+        var scEditorPoll = null;
+        var scEditorPollTries = 0;
 
-        if (window.jQuery && window.jQuery.fn && window.jQuery.fn.sceditor) {
+        function bindSceditorEvents() {
+            if (scEditorEventsBound || !scBody) return;
+
+            scBody.addEventListener('keyup', function () {
+                onKeyUp();
+            });
+            // клики/фокус вне — прячем
+            scBody.addEventListener('blur', function () {
+                setTimeout(hideBox, 200);
+            }, true);
+
+            scEditorEventsBound = true;
+        }
+
+        function refreshSceditorInstance() {
+            if (!window.jQuery || !window.jQuery.fn || !window.jQuery.fn.sceditor) return;
+
             var $ta = window.jQuery('textarea[name="message"]');
-            if ($ta.length) {
-                sceditor = $ta.sceditor('instance') || null;
-                if (sceditor && typeof sceditor.getBody === 'function') {
-                    try { scBody = sceditor.getBody(); } catch (e) { scBody = null; }
-                }
+            if (!$ta.length) return;
+
+            var instance = $ta.sceditor('instance') || null;
+            if (instance && typeof instance.getBody === 'function') {
+                sceditor = instance;
+                try { scBody = sceditor.getBody(); } catch (e) { scBody = null; }
+                bindSceditorEvents();
             }
         }
+
+        refreshSceditorInstance();
 
         // если нет ни textarea, ни sceditor — выходим
         if (!textarea && !scBody) return;
@@ -1379,15 +1402,19 @@
             });
         }
 
-        // sceditor body
-        if (scBody) {
-            scBody.addEventListener('keyup', function () {
-                onKeyUp();
-            });
-            // клики/фокус вне — прячем
-            scBody.addEventListener('blur', function () {
-                setTimeout(hideBox, 200);
-            }, true);
+        bindSceditorEvents();
+
+        if (!scEditorEventsBound) {
+            scEditorPoll = setInterval(function () {
+                if (scEditorEventsBound || scEditorPollTries > 50) {
+                    clearInterval(scEditorPoll);
+                    scEditorPoll = null;
+                    return;
+                }
+
+                scEditorPollTries += 1;
+                refreshSceditorInstance();
+            }, 600);
         }
 
         // клик вне бокса — прячем

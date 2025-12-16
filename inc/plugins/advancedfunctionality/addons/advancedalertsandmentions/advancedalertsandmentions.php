@@ -367,6 +367,13 @@ function af_advancedalertsandmentions_install(): void
         ]);
     }
 
+    if (!isset($lang->af_aam_allow_at_all)) {
+        $lang->af_aam_allow_at_all = 'Разрешить @all (только администраторам и модераторам)';
+    }
+    if (!isset($lang->af_aam_allow_at_all_desc)) {
+        $lang->af_aam_allow_at_all_desc = 'Позволяет администраторам и модераторам отмечать всех пользователей через @all.';
+    }
+
     $settings = [
         'af_aam_enabled' => [
             'title'       => $lang->af_aam_enabled,
@@ -430,6 +437,14 @@ function af_advancedalertsandmentions_install(): void
         'optionscode' => 'text',
         'value'       => '5',
         'disporder'   => 9,
+        ],
+
+        'af_aam_allow_at_all' => [
+            'title'       => $lang->af_aam_allow_at_all,
+            'description' => $lang->af_aam_allow_at_all_desc,
+            'optionscode' => 'yesno',
+            'value'       => '1',
+            'disporder'   => 10,
         ],
 
 
@@ -901,6 +916,32 @@ function af_aam_normalize_url(string $url): string
     return $base . '/' . $url;
 }
 
+function af_aam_known_type_titles(): array
+{
+    return [
+        'mention'           => 'Упоминания по никнейму',
+        'pm'                => 'Уведомление об ЛС',
+        'post_threadauthor' => 'Уведомление в теме автора',
+        'quoted'            => 'Уведомление о цитировании',
+        'rep'               => 'Уведомление о репутации',
+        'subscribed_thread' => 'Уведомление в теме подписки',
+        'subscribed_forum'  => 'Новая тема в форуме',
+    ];
+}
+
+function af_aam_legacy_type_titles(): array
+{
+    return [
+        'mention'           => 'Упоминания по никнейму',
+        'pm'                => 'Личные сообщения',
+        'post_threadauthor' => 'Новый ответ в вашей теме',
+        'quoted'            => 'Цитирования',
+        'rep'               => 'Репутация',
+        'subscribed_thread' => 'Ответ в теме подписки',
+        'subscribed_forum'  => 'Новая тема в форуме',
+    ];
+}
+
 function af_aam_default_type_title(string $code): string
 {
     global $lang;
@@ -913,16 +954,7 @@ function af_aam_default_type_title(string $code): string
         return (string)$lang->{$key};
     }
 
-    // жёсткий fallback (RU)
-    $map = [
-        'mention'           => 'Упоминания по никнейму',
-        'pm'                => 'Личные сообщения',
-        'post_threadauthor' => 'Новый ответ в вашей теме',
-        'quoted'            => 'Цитирования',
-        'rep'               => 'Репутация',
-        'subscribed_thread' => 'Ответ в теме подписки',
-        'subscribed_forum'  => 'Новая тема в форуме',
-    ];
+    $map = af_aam_known_type_titles();
 
     return $map[$code] ?? $code;
 }
@@ -942,16 +974,32 @@ function af_aam_backfill_type_titles(): void
         $lang->load('advancedfunctionality_' . AF_AAM_ID);
     }
 
-    $q = $db->simple_select(AF_AAM_TABLE_TYPES, 'id,code,title', "title='' OR title IS NULL");
+    $knownTitles  = af_aam_known_type_titles();
+    $legacyTitles = af_aam_legacy_type_titles();
+
+    $q = $db->simple_select(AF_AAM_TABLE_TYPES, 'id,code,title');
     while ($row = $db->fetch_array($q)) {
         $code = (string)$row['code'];
-        $title = af_aam_default_type_title($code);
+        if (!isset($knownTitles[$code])) {
+            continue;
+        }
 
-        $db->update_query(
-            AF_AAM_TABLE_TYPES,
-            ['title' => $db->escape_string($title)],
-            'id=' . (int)$row['id']
-        );
+        $currentTitle = trim((string)($row['title'] ?? ''));
+        $desired      = $knownTitles[$code];
+        $legacy       = $legacyTitles[$code] ?? '';
+
+        $shouldUpdate = ($currentTitle === '' || $currentTitle === $code);
+        if (!$shouldUpdate && $legacy !== '' && $legacy === $currentTitle) {
+            $shouldUpdate = true;
+        }
+
+        if ($shouldUpdate) {
+            $db->update_query(
+                AF_AAM_TABLE_TYPES,
+                ['title' => $db->escape_string($desired)],
+                'id=' . (int)$row['id']
+            );
+        }
     }
 }
 
@@ -1743,6 +1791,52 @@ function af_aam_post_insert_end(&$posthandler): void
     }
 }
 
+function af_aam_message_targets_all(string $message): bool
+{
+    if ($message === '') {
+        return false;
+    }
+
+    if (preg_match('/(^|\s)@all\b/i', $message)) {
+        return true;
+    }
+
+    if (preg_match('#\[mention=all\](.+?)\[/mention\]#i', $message)) {
+        return true;
+    }
+
+    if (preg_match('#\[mention\]all\[/mention\]#i', $message)) {
+        return true;
+    }
+
+    return false;
+}
+
+function af_aam_can_use_at_all(int $uid, int $fid = 0): bool
+{
+    global $mybb;
+
+    if ($uid <= 0) {
+        return false;
+    }
+
+    if (empty($mybb->settings['af_aam_allow_at_all']) || (int)$mybb->settings['af_aam_allow_at_all'] !== 1) {
+        return false;
+    }
+
+    $group = $mybb->usergroup ?? [];
+
+    if ((int)($group['cancp'] ?? 0) === 1 || (int)($group['issupermod'] ?? 0) === 1) {
+        return true;
+    }
+
+    if (function_exists('is_moderator') && is_moderator($fid, $uid)) {
+        return true;
+    }
+
+    return false;
+}
+
 /**
  * Обработка цитат и упоминаний в тексте поста/темы.
  */
@@ -1766,6 +1860,8 @@ function af_aam_process_message_mentions(string $message, int $tid, int $pid, ar
     }
 
     $threadSubject = $thread['subject'] ?? '';
+    $fid = (int)($thread['fid'] ?? 0);
+    $notifyAll = af_aam_message_targets_all($message) && af_aam_can_use_at_all($fromUid, $fid);
 
     // --- ЦИТАТЫ [quote="Username"] ---
     if (preg_match_all('#\[quote=("|\')(.*?)(\\1)[^\]]*\]#i', $message, $m)) {
@@ -1835,6 +1931,16 @@ function af_aam_process_message_mentions(string $message, int $tid, int $pid, ar
     }
 
     $targetUsers = [];
+
+    if ($notifyAll) {
+        $allUsers = $db->simple_select('users', 'uid,username');
+        while ($u = $db->fetch_array($allUsers)) {
+            $uid = (int)$u['uid'];
+            if ($uid > 0 && $uid !== $fromUid) {
+                $targetUsers[$uid] = (string)$u['username'];
+            }
+        }
+    }
 
     $mentionedUids = array_unique(array_filter(array_map('intval', $mentionedUids)));
     if (!empty($mentionedUids)) {
@@ -1988,6 +2094,17 @@ function af_aam_postbit_mention_button(array &$post): void
     }
 
     $username = $post['username']; // уже очищено MyBB
+
+    if (!empty($post['profilelink'])) {
+        $mentionAttrs = ' data-mention="1" data-mention-username="' . htmlspecialchars_uni($username) . '" data-uid="' . (int)$post['uid'] . '"';
+        if (strpos($post['profilelink'], 'data-mention=') === false) {
+            $post['profilelink'] = preg_replace('/(<a\\b[^>]*)(>)/i', '$1' . $mentionAttrs . '$2', $post['profilelink'], 1, $replaced);
+            if ((int)$replaced === 0) {
+                $post['profilelink'] .= '';
+            }
+        }
+    }
+
     $title = htmlspecialchars_uni($lang->af_aam_mention_button);
 
     // компактная собачка, кликабельная
