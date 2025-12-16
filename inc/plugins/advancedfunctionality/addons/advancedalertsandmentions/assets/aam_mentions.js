@@ -514,12 +514,26 @@
             if (box.style.display === 'block') hideBox();
         }, true);
 
+        function findMentionElement(node) {
+            var cur = node;
+            while (cur && cur !== document) {
+                if (cur.nodeType === 1) {
+                    if (cur.classList && cur.classList.contains('af-aam-mention-button')) {
+                        return cur;
+                    }
+                    if ((cur.classList && (cur.classList.contains('mention_user') || cur.classList.contains('af-aam-mention-user')))
+                        || (cur.getAttribute && cur.getAttribute('data-mention') === '1')) {
+                        return cur;
+                    }
+                }
+                cur = cur.parentNode;
+            }
+            return null;
+        }
+
         document.addEventListener('click', function (e) {
-            var node = e.target;
-            var isButton = node.classList && node.classList.contains('af-aam-mention-button');
-            var isProfile = (node.classList && (node.classList.contains('mention_user') || node.classList.contains('af-aam-mention-user'))) ||
-                (node.getAttribute && node.getAttribute('data-mention') === '1');
-            if (!isButton && !isProfile) return;
+            var node = findMentionElement(e.target);
+            if (!node) return;
             e.preventDefault();
             var username = '';
             var uid = 0;
