@@ -965,19 +965,10 @@ function af_aam_should_load_mentions_js(): bool
         return false;
     }
 
-    $scripts = [
-        'showthread.php',
-        'newthread.php',
-        'newreply.php',
-        'editpost.php',
-        'private.php',
-    ];
-
-    if (defined('THIS_SCRIPT') && in_array(THIS_SCRIPT, $scripts, true)) {
-        return true;
-    }
-
-    return false;
+    // Скрипт с подсказками нужен везде, где может появиться редактор или кнопка «Упомянуть».
+    // Раньше он грузился только на нескольких страницах, из-за чего клики по нику/кнопке
+    // перестали работать после изменений в шаблонах. Грузим всегда (кроме админки).
+    return true;
 }
 
 
