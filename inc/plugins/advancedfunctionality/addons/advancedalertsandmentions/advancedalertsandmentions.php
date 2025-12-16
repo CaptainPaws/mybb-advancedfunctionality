@@ -469,6 +469,27 @@ function af_advancedalertsandmentions_install(): void
             'value'       => '5',
             'disporder'   => 9,
         ],
+        'af_aam_telegram_enabled' => [
+            'title'       => $lang->af_aam_telegram_enabled ?? 'Телеграм-уведомления',
+            'description' => $lang->af_aam_telegram_enabled_desc ?? 'Отправлять уведомления в бота Telegram.',
+            'optionscode' => 'yesno',
+            'value'       => '1',
+            'disporder'   => 10,
+        ],
+        'af_aam_telegram_bot_token' => [
+            'title'       => $lang->af_aam_telegram_bot_token ?? 'Токен бота',
+            'description' => $lang->af_aam_telegram_bot_token_desc ?? 'Токен, выданный BotFather.',
+            'optionscode' => 'text',
+            'value'       => '7604781142:AAFY8yvVzIDsuAfrp5A_XZabhguoDaWiboI',
+            'disporder'   => 11,
+        ],
+        'af_aam_telegram_bot_link' => [
+            'title'       => $lang->af_aam_telegram_bot_link ?? 'Ссылка на бота',
+            'description' => $lang->af_aam_telegram_bot_link_desc ?? 'Публичная ссылка для подключения пользователей к боту.',
+            'optionscode' => 'text',
+            'value'       => 'https://t.me/warprift_notifications_bot',
+            'disporder'   => 12,
+        ],
         'af_aam_mention_button_enabled' => [
             'title'       => $lang->af_aam_mention_button_enabled ?? 'Кнопка «Упомянуть» в постбите',
             'description' => $lang->af_aam_mention_button_enabled_desc ?? 'Если выключить — кнопка под постом исчезнет, но клик по никнейму (в постбите) всё равно будет вставлять упоминание в редактор.',
@@ -626,6 +647,9 @@ function af_advancedalertsandmentions_uninstall(): void
             'af_aam_toast_limit',
             'af_aam_max_alerts_per_user',
             'af_aam_inactive_days',
+            'af_aam_telegram_enabled',
+            'af_aam_telegram_bot_token',
+            'af_aam_telegram_bot_link',
             'af_aam_mention_button_enabled',
             'af_aam_all_allowed_groups',
             'af_aam_all_target_groups'
@@ -953,7 +977,7 @@ function af_aam_bootstrap(): void
     global $af_aam_js, $af_aam_css, $af_aam_header_icon, $af_aam_modal;
     global $af_aam_unread, $af_aam_modal_list, $af_aam_new_indicator;
     global $af_aam_asset_base, $af_aam_autorefresh;
-    global $af_aam_sound_enabled, $af_aam_toast_limit;
+    global $af_aam_sound_enabled, $af_aam_toast_limit, $af_aam_telegram_bot_link;
 
     if (!af_aam_is_enabled()) {
         return;
@@ -975,6 +999,10 @@ function af_aam_bootstrap(): void
     $af_aam_css          = '<link rel="stylesheet" href="' . $assetBase . 'advancedalertsandmentions.css" />';
     $af_aam_sound_enabled = (int)($mybb->settings['af_aam_sound'] ?? 1);
     $af_aam_toast_limit   = (int)($mybb->settings['af_aam_toast_limit'] ?? 5);
+    $af_aam_telegram_bot_link = trim((string)($mybb->settings['af_aam_telegram_bot_link'] ?? ''));
+    if ($af_aam_telegram_bot_link === '') {
+        $af_aam_telegram_bot_link = 'https://t.me/warprift_notifications_bot';
+    }
 
     // гость — ничего
     if (empty($mybb->user['uid'])) {
@@ -1643,6 +1671,134 @@ function af_aam_cleanup_inactive_alerts(?int $inactiveDays = null): array
     return $result;
 }
 
+function af_aam_fetch_alert_for_telegram(int $alertId): ?array
+{
+    global $db;
+
+    $alertId = (int)$alertId;
+    if ($alertId <= 0 || !$db->table_exists(AF_AAM_TABLE_ALERTS)) {
+        return null;
+    }
+
+    $alerts = TABLE_PREFIX . AF_AAM_TABLE_ALERTS;
+    $types  = TABLE_PREFIX . AF_AAM_TABLE_TYPES;
+    $users  = TABLE_PREFIX . 'users';
+
+    $query = $db->write_query(
+        "SELECT a.*, t.code, t.title, u.username AS from_username " .
+        "FROM {$alerts} a " .
+        "LEFT JOIN {$types} t ON (t.id=a.type_id) " .
+        "LEFT JOIN {$users} u ON (u.uid=a.from_uid) " .
+        "WHERE a.id={$alertId} LIMIT 1"
+    );
+
+    $row = $db->fetch_array($query);
+    return $row ?: null;
+}
+
+function af_aam_prepare_telegram_message(array $alert): ?string
+{
+    $formatted = af_aam_format_alert($alert);
+    $text = trim((string)($formatted['text'] ?? ''));
+    $url  = af_aam_normalize_url((string)($formatted['url'] ?? ''));
+
+    if ($text === '') {
+        return null;
+    }
+
+    if ($url !== '') {
+        $text .= "\n" . $url;
+    }
+
+    return $text;
+}
+
+function af_aam_send_telegram_message(string $token, string $chatId, string $text): void
+{
+    $token  = trim($token);
+    $chatId = trim($chatId);
+    $text   = trim($text);
+
+    if ($token === '' || $chatId === '' || $text === '') {
+        return;
+    }
+
+    $url = 'https://api.telegram.org/bot' . $token . '/sendMessage';
+    $payload = [
+        'chat_id' => $chatId,
+        'text' => $text,
+        'disable_web_page_preview' => false,
+    ];
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($payload));
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_exec($ch);
+        curl_close($ch);
+        return;
+    }
+
+    // fallback без cURL
+    $opts = [
+        'http' => [
+            'method'  => 'POST',
+            'header'  => 'Content-type: application/x-www-form-urlencoded',
+            'content' => http_build_query($payload),
+            'timeout' => 5,
+        ],
+    ];
+
+    $context = stream_context_create($opts);
+    @file_get_contents($url, false, $context);
+}
+
+function af_aam_dispatch_telegram_alert(int $alertId): void
+{
+    global $mybb, $lang;
+
+    if (!isset($lang->af_aam_name)) {
+        $lang->load('advancedfunctionality_' . AF_AAM_ID);
+    }
+
+    if (!(int)($mybb->settings['af_aam_telegram_enabled'] ?? 0)) {
+        return;
+    }
+
+    $token = trim((string)($mybb->settings['af_aam_telegram_bot_token'] ?? ''));
+    if ($token === '') {
+        return;
+    }
+
+    $alert = af_aam_fetch_alert_for_telegram($alertId);
+    if (empty($alert)) {
+        return;
+    }
+
+    $uid = (int)($alert['uid'] ?? 0);
+    if ($uid <= 0) {
+        return;
+    }
+
+    $prefs = af_aam_get_user_prefs($uid);
+    $chatId = trim((string)($prefs['telegram_chat_id'] ?? ''));
+    $enabled = (int)($prefs['telegram_enabled'] ?? 0) === 1;
+
+    if (!$enabled || $chatId === '') {
+        return;
+    }
+
+    $message = af_aam_prepare_telegram_message($alert);
+    if ($message === null) {
+        return;
+    }
+
+    af_aam_send_telegram_message($token, $chatId, $message);
+}
+
 function af_aam_add_alert(int $uid, string $code, int $objectId = 0, int $fromUid = 0, array $extra = [], int $forced = 0): void
 {
     global $db, $mybb;
@@ -1677,9 +1833,14 @@ function af_aam_add_alert(int $uid, string $code, int $objectId = 0, int $fromUi
     ];
 
     $db->insert_query(AF_AAM_TABLE_ALERTS, $insert);
+    $alertId = (int)$db->insert_id();
     // Автоочистка старых уведомлений
     af_aam_maybe_autoclean(true);
     af_aam_enforce_max_alerts($uid);
+
+    if ($alertId > 0) {
+        af_aam_dispatch_telegram_alert($alertId);
+    }
 }
 
 // репутация
