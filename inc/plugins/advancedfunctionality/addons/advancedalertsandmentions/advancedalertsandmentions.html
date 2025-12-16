@@ -194,16 +194,13 @@
 
 <!-- TEMPLATE: af_aam_ucp_prefs_row -->
 <div class="af-aam-pref-row">
-    <label>
-        <input type="checkbox"
-               class="af-aam-pref-checkbox"
-               name="aam_enabled_types[]"
-               value="{$af_aam_type_code}"
-               {$af_aam_checked} />
-        {$af_aam_type_label}
+    <label class="af-aam-pref-label">
+        <input type="checkbox" class="af-aam-pref-checkbox" name="aam_enabled_types[]" value="{$af_aam_type_code}" {$af_aam_checked} />
+        <span class="af-aam-pref-text">{$af_aam_type_label}</span>
     </label>
 </div>
 <!-- /TEMPLATE -->
+
 
 <!-- TEMPLATE: af_aam_js_popup -->
 <script type="text/javascript">
