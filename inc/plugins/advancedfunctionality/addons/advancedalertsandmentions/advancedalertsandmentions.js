@@ -312,52 +312,139 @@
         return null;
     }
 
+    function afAamEscapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function afAamNormalizeMentionLinks(root) {
+        try {
+            root = root || document;
+
+            // поддержка “старых”/альтернативных классов (если где-то уже рендерится иначе)
+            var links = root.querySelectorAll('a.af-aam-mention-link, a.mention, a.mybb-mention, a.mention_user');
+            if (!links || !links.length) return;
+
+            Array.prototype.forEach.call(links, function (a) {
+                if (!a || !a.textContent) return;
+
+                // приводим к нашему основному классу
+                if (!a.classList.contains('af-aam-mention-link')) {
+                    a.classList.add('af-aam-mention-link');
+                }
+
+                var t = (a.textContent || '').trim();
+                if (!t) return;
+
+                // если нет '@' — добавим, чтобы @ был того же цвета (внутри ссылки)
+                if (t.charAt(0) !== '@') {
+                    a.textContent = '@' + t;
+                    t = a.textContent.trim();
+                }
+
+                // @all — отдельный класс (для тонкой стилизации)
+                if (t.toLowerCase() === '@all') {
+                    a.classList.add('af-aam-mention-all');
+                }
+            });
+        } catch (e) {}
+    }
+
+    function afAamRenderMentionsInContainer(root) {
+        try {
+            if (!root) return;
+
+            var html0 = root.innerHTML || '';
+
+            // быстрый выход
+            if (html0.indexOf('[mention') === -1) return;
+
+            var html = html0;
+
+            // [mention=123]Name[/mention] -> <a ...>@Name</a>
+            html = html.replace(/\[mention=([0-9]+)\]([\s\S]*?)\[\/mention\]/g, function (_, uid, name) {
+                var cleanName = String(name || '').trim();
+                var safeName = afAamEscapeHtml(cleanName);
+                var safeUid = String(uid).replace(/[^0-9]/g, '');
+
+                var isAll = (cleanName.toLowerCase() === 'all');
+
+                return '<a class="af-aam-mention-link' + (isAll ? ' af-aam-mention-all' : '') + '" ' +
+                    'href="member.php?action=profile&uid=' + safeUid + '">' +
+                    '@' + safeName +
+                    '</a>';
+            });
+
+            // [mention]Name[/mention] -> <a ...>@Name</a>
+            html = html.replace(/\[mention\]([\s\S]*?)\[\/mention\]/g, function (_, name) {
+                var clean = String(name || '').trim();
+                var safeName2 = afAamEscapeHtml(clean);
+                var enc = encodeURIComponent(clean);
+
+                var isAll2 = (clean.toLowerCase() === 'all');
+
+                return '<a class="af-aam-mention-link' + (isAll2 ? ' af-aam-mention-all' : '') + '" ' +
+                    'href="member.php?action=profile&username=' + enc + '">' +
+                    '@' + safeName2 +
+                    '</a>';
+            });
+
+            root.innerHTML = html;
+
+            // На всякий случай: нормализуем уже готовые ссылки, чтобы @ точно был
+            afAamNormalizeMentionLinks(root);
+
+        } catch (e) {
+            // молча
+        }
+    }
+
+
+
     function syncFromResponse(resp, deltaIfUnknown) {
         if (afAamDebug) {
             console.log('[AAM sync]', resp, 'deltaIfUnknown =', deltaIfUnknown);
         }
 
-        // если вообще ничего не прилетело
         if (!resp || typeof resp !== 'object') {
-            // если знаем, что счётчик должен сдвинуться на ±1 / ±N — двигаем локально
             if (typeof deltaIfUnknown === 'number' && deltaIfUnknown !== 0) {
                 updateVisibleCounts(Math.max(0, currentUnread + deltaIfUnknown));
             } else {
-                // иначе — переспрашиваем сервер через list
                 pollUnreadAlerts();
             }
             return;
         }
 
-        // сервер мог прислать блок debug
         if (afAamDebug && resp.debug) {
             console.log('[AAM debug (server)]', resp.debug);
         }
 
         var hasDelta = (typeof deltaIfUnknown === 'number' && deltaIfUnknown !== 0);
-
-        // Пытаемся вытащить число непрочитанных
         var cnt = extractUnreadCount(resp);
 
         if (typeof cnt === 'number' && !isNaN(cnt)) {
-            // сервер честно прислал счётчик — верим ему
             updateVisibleCounts(cnt);
         } else if (hasDelta) {
-            // сервер молчит про счётчик, но мы знаем, что он изменился относительно currentUnread
             updateVisibleCounts(Math.max(0, currentUnread + deltaIfUnknown));
         } else {
-            // ни числа, ни дельты — спрашиваем list
             pollUnreadAlerts();
         }
 
-        // Если пришёл шаблон — обновляем тело модалки
         if (resp.template) {
             var tbody = qs('#alerts_content');
             if (tbody) {
                 tbody.innerHTML = resp.template;
+
+                // ФИКС №2: превращаем [mention] в жирную ссылку на профиль
+                afAamRenderMentionsInContainer(tbody);
             }
         }
     }
+
 
 
 
@@ -977,6 +1064,91 @@
     }
 
     // ======== MENTIONS: КНОПКА + АВТОДОПОЛНЕНИЕ =============
+    function jumpToMessageEditor() {
+        function findTextarea() {
+            return (
+                document.querySelector('textarea[name="message"]') ||
+                document.getElementById('message') ||
+                document.getElementById('message_new') ||
+                document.querySelector('textarea[id^="message"]') ||
+                null
+            );
+        }
+
+        var ta = findTextarea();
+        var sc = null;
+
+        // 1) если есть SCEditor — работаем через него (самый правильный путь)
+        if (window.jQuery && window.jQuery.fn && window.jQuery.fn.sceditor) {
+            try {
+                if (ta) {
+                    var $ta = window.jQuery(ta);
+                    sc = $ta.sceditor('instance') || null;
+                }
+
+                // fallback: найдём хоть какой-нибудь instance, если textarea не нашли/другая
+                if (!sc) {
+                    var $any = window.jQuery('textarea').filter(function () {
+                        try { return !!window.jQuery(this).sceditor('instance'); } catch (e) { return false; }
+                    }).first();
+
+                    if ($any.length) {
+                        ta = $any.get(0);
+                        sc = $any.sceditor('instance') || null;
+                    }
+                }
+            } catch (e2) {
+                sc = null;
+            }
+        }
+
+        if (sc) {
+            // контейнер редактора
+            var container = null;
+            try {
+                if (typeof sc.getContainer === 'function') container = sc.getContainer();
+            } catch (e3) {}
+
+            if (!container && ta) {
+                container = ta.closest ? ta.closest('.sceditor-container') : null;
+            }
+
+            // скроллим именно контейнер
+            if (container && container.scrollIntoView) {
+                try {
+                    container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } catch (e4) {
+                    container.scrollIntoView(true);
+                }
+            } else if (ta && ta.scrollIntoView) {
+                try { ta.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e5) { ta.scrollIntoView(true); }
+            }
+
+            // фокус редактора
+            try {
+                if (typeof sc.focus === 'function') sc.focus();
+                else if (typeof sc.getBody === 'function') sc.getBody().focus();
+            } catch (e6) {}
+
+            return true;
+        }
+
+        // 2) fallback: обычная textarea
+        if (ta) {
+            try {
+                ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } catch (e7) {
+                ta.scrollIntoView(true);
+            }
+
+            try { ta.focus(); } catch (e8) {}
+            return true;
+        }
+
+        return false;
+    }
+
+
     function insertMention(username, uid) {
         var u = String(username || '')
             .replace(/[\r\n]+/g, ' ')
@@ -985,30 +1157,42 @@
 
         if (!u) return;
 
+        // сначала прыгнуть + сфокусировать SCEditor
+        jumpToMessageEditor();
+
         var mentionUid = parseInt(uid || '0', 10) || 0;
+
+        // ВСТАВЛЯЕМ через BBCode как и раньше, но теперь визуально в тексте будет @username (мы это нормализуем при рендере)
         var text = (mentionUid > 0)
             ? '[mention=' + mentionUid + ']' + u + '[/mention] '
             : '[mention]' + u + '[/mention] ';
 
-        // SCEditor (стандартный редактор MyBB)
+        // SCEditor
         if (window.jQuery && window.jQuery.fn && window.jQuery.fn.sceditor) {
-            var $ta = window.jQuery('textarea[name="message"]');
-            if ($ta.length) {
-                var editor = $ta.sceditor('instance');
-                if (editor) {
-                    if (typeof editor.insertText === 'function') {
-                        editor.insertText(text);
-                        return;
-                    }
-                    if (typeof editor.insert === 'function') {
-                        editor.insert(text);
-                        return;
+            try {
+                var ta = document.querySelector('textarea[name="message"]') ||
+                        document.getElementById('message') ||
+                        document.getElementById('message_new') ||
+                        document.querySelector('textarea[id^="message"]');
+
+                if (ta) {
+                    var editor = window.jQuery(ta).sceditor('instance');
+                    if (editor) {
+                        if (typeof editor.focus === 'function') editor.focus();
+                        if (typeof editor.insertText === 'function') {
+                            editor.insertText(text);
+                            return;
+                        }
+                        if (typeof editor.insert === 'function') {
+                            editor.insert(text);
+                            return;
+                        }
                     }
                 }
-            }
+            } catch (e) {}
         }
 
-        // Возможный глобальный MyBBEditor
+        // MyBBEditor fallback
         if (typeof window.MyBBEditor !== 'undefined' &&
             window.MyBBEditor &&
             typeof window.MyBBEditor.insert === 'function') {
@@ -1016,11 +1200,15 @@
             return;
         }
 
-        // Фолбэк: обычное textarea
-        var textarea = document.querySelector('textarea[name="message"]');
+        // plain textarea
+        var textarea = document.querySelector('textarea[name="message"]') ||
+                    document.getElementById('message') ||
+                    document.getElementById('message_new') ||
+                    document.querySelector('textarea[id^="message"]');
+
         if (!textarea) return;
 
-        textarea.focus();
+        try { textarea.focus(); } catch (e2) {}
 
         if (typeof textarea.selectionStart === 'number') {
             var start = textarea.selectionStart;
@@ -1034,6 +1222,7 @@
             textarea.value += text;
         }
     }
+
 
 
 
@@ -1067,6 +1256,63 @@
             }
         }, true);
     }
+
+    function hasMessageEditor() {
+        if (document.querySelector('textarea[name="message"]')) return true;
+
+        // SCEditor
+        if (window.jQuery && window.jQuery.fn && window.jQuery.fn.sceditor) {
+            var $ta = window.jQuery('textarea[name="message"]');
+            if ($ta.length) {
+                var ed = $ta.sceditor('instance');
+                if (ed) return true;
+            }
+        }
+        return false;
+    }
+
+    function extractUidFromProfileHref(href) {
+        try {
+            if (!href) return 0;
+            var m = href.match(/[?&]uid=([0-9]+)/);
+            if (m) return parseInt(m[1], 10) || 0;
+        } catch (e) {}
+        return 0;
+    }
+
+    function initPostAuthorNicknameClicks() {
+        document.addEventListener('click', function (e) {
+            // не ломаем “открыть в новой вкладке”
+            if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+
+            // если нет редактора — это обычный клик по профилю, не мешаем
+            if (!hasMessageEditor()) return;
+
+            // разные варианты разметки MyBB/тем:
+            // - классический: .post_author a
+            // - часто: .author_information strong a
+            // - иногда: a.author_name / a.username / .largetext a
+            var a =
+                (e.target && e.target.closest) ? (
+                    e.target.closest('.post_author a') ||
+                    e.target.closest('.author_information strong a') ||
+                    e.target.closest('a.author_name') ||
+                    e.target.closest('a.username') ||
+                    e.target.closest('.largetext a')
+                ) : null;
+
+            if (!a) return;
+
+            var username = (a.textContent || '').trim();
+            if (!username) return;
+
+            var uid = extractUidFromProfileHref(a.getAttribute('href') || '');
+            e.preventDefault();
+
+            insertMention(username, uid);
+        }, true);
+    }
+
 
 
     function initMentionAutocomplete() {
@@ -2014,6 +2260,10 @@
         initMentionButtons();
         initMentionAutocomplete();
         initListClicks();
+        initPostAuthorNicknameClicks();
+        afAamNormalizeMentionLinks(document);
+
+
 
         // глобальный клик для "разбуживания" звука (один раз)
         document.addEventListener('click', primeSoundOnce, true);
