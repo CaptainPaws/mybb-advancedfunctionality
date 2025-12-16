@@ -1024,6 +1024,24 @@ function af_aam_bootstrap(): void
 /**
  * Приводит URL уведомления к полному виду с учётом bburl.
  */
+function af_aam_append_pid_fragment(string $url): string
+{
+    // если якорь уже есть — оставляем как есть
+    if (strpos($url, '#') !== false) {
+        return $url;
+    }
+
+    // добавляем #pid{pid}, если параметр есть, но якоря нет
+    if (preg_match('~[?&]pid=([0-9]+)~', $url, $m)) {
+        $pid = (int)$m[1];
+        if ($pid > 0) {
+            return $url . '#pid' . $pid;
+        }
+    }
+
+    return $url;
+}
+
 function af_aam_normalize_url(string $url): string
 {
     global $mybb;
@@ -1032,6 +1050,8 @@ function af_aam_normalize_url(string $url): string
     if ($url === '') {
         return '';
     }
+
+    $url = af_aam_append_pid_fragment($url);
 
     // Уже абсолютный URL
     if (preg_match('#^(https?|ftp)://#i', $url)) {

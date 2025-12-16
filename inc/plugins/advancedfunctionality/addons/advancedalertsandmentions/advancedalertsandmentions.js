@@ -2124,6 +2124,11 @@
         afAamLongPollRunning = true;
 
         function tick() {
+            if (afAamPollInFlight) {
+                return setTimeout(tick, afAamComputeNextDelay());
+            }
+
+            afAamPollInFlight = true;
             var timeoutSec = document.hidden ? 30 : 25;
             var timeoutMs  = (timeoutSec + 5) * 1000;
 
@@ -2134,6 +2139,7 @@
                 since_unread: currentUnread || 0,
                 timeout: timeoutSec
             }, function (resp) {
+                afAamPollInFlight = false;
                 if (!resp || resp.ok === 0) {
                     if (afAamDebug) console.log('[AAM] longpoll fail:', resp);
                     afAamOnPollFail();
