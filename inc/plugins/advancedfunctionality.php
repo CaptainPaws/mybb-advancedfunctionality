@@ -20,6 +20,10 @@ define('AF_CACHE',  AF_BASE.'cache/');
 define('AF_ADMIN_PROXY_DIR', MYBB_ROOT.'admin/modules/'.AF_PLUGIN_ID.'/');
 define('AF_ADMIN_PROXY', AF_ADMIN_PROXY_DIR.'index.php');
 define('AF_SETTINGS_FILE', MYBB_ROOT.'inc/settings.php');
+define('AF_GATEWAY_STUB', AF_BASE.'gateway_stub.php');
+// Runtime файл в КОРНЕ форума (как ты и хотела)
+define('AF_GATEWAY_RUNTIME', MYBB_ROOT.'advancedfunctionality_gateway.php');
+
 
 
 // Папки языков (ядро)
@@ -29,7 +33,6 @@ define('AF_LANG_EN_ADMIN', AF_LANG_EN.'admin/');
 define('AF_LANG_RU', AF_LANG_BASE.'russian/');
 define('AF_LANG_RU_ADMIN', AF_LANG_RU.'admin/');
 
-global $plugins;
 
 /* ========================= INFO ========================= */
 function advancedfunctionality_info()
@@ -77,9 +80,13 @@ function advancedfunctionality_install()
         af_sync_addon_languages($meta, true);
     }
 
-    // 6) Служебный кэш
+    // 6) Gateway runtime (в корень форума)
+    af_ensure_gateway_runtime(true);
+
+    // 7) Служебный кэш
     af_write_cache('installed_at', (string)TIME_NOW);
 }
+
 
 /**
  * ЕДИНСТВЕННАЯ версия activate() — объединяет обе логики:
@@ -89,24 +96,27 @@ function advancedfunctionality_install()
  */
 function advancedfunctionality_activate()
 {
-    // 1) Папки и «железо»
-    af_ensure_scaffold(true);
+    // НЕ форсим scaffold — чтобы не перезаписывать router.php и admin proxy.
+    // Только создаём каталоги, если их нет.
+    af_ensure_scaffold(false);
 
-    // 2) Языки ядра (обновим на случай правок)
+    // Языки ядра можно обновлять безопасно (это не "перезаписываемые" ACP/роутеры)
     af_ensure_core_languages(true);
 
-    // 3) Языки всех найденных аддонов (ленивое обновление)
+    // Языки аддонов синхронизируем (это тоже безопасно и ожидаемо)
     $addons = af_discover_addons();
     foreach ($addons as $meta) {
         af_sync_addon_languages($meta, true);
     }
 
-    // 4) Прокси для ACP — пересоберём
-    af_write_admin_proxy();
+    // Шлюз: обновляем runtime в корне форума из stub
+    af_ensure_gateway_runtime(true);
 
-    // 5) Кэш
+    // Кэш
     af_write_cache('last_activation', (string)TIME_NOW);
 }
+
+
 
 function advancedfunctionality_uninstall()
 {
@@ -214,6 +224,8 @@ function af_ensure_scaffold(bool $force_refresh = false): void
     // --- 1) Пересборка маршрутизатора плагина (inc/plugins/.../admin/router.php)
     $router = AF_ADMIN.'router.php';
     if (!is_file($router) || $force_refresh) {
+
+        // ВАЖНО: тут должен быть ТОЛЬКО ОДИН nowdoc. Никаких "$code = <<<'PHP'" внутри.
         $code = <<<'PHP'
 <?php
 // Router for Advanced functionality admin module
@@ -233,9 +245,6 @@ class AF_Admin
 
         $page->add_breadcrumb_item($lang->af_admin_title);
 
-        // Секции (для module_meta и активного заголовка)
-        $sections = self::collectAdminSections();
-
         $action = $mybb->get_input('af_action');
         $addon  = $mybb->get_input('addon');
         $view   = $mybb->get_input('af_view');
@@ -248,123 +257,123 @@ class AF_Admin
                 flash_message($lang->af_addon_enabled, 'success');
             } elseif ($action === 'disable') {
                 self::disableAddon($addon);
+
                 $bootstrap = self::addonBootstrap($addon);
                 if ($bootstrap && is_file($bootstrap)) {
                     require_once $bootstrap;
                     $fn = 'af_'.$addon.'_deactivate';
                     if (function_exists($fn)) { $fn(); }
                 }
+
                 flash_message($lang->af_addon_disabled, 'success');
             }
+
             admin_redirect('index.php?module='.AF_PLUGIN_ID.'&_='.TIME_NOW);
         }
 
         af_reload_settings_runtime();
 
-    // Заголовок ACP
-    $page->output_header($lang->af_admin_title);
+        $page->output_header($lang->af_admin_title);
 
-    // Никаких своих <div id="left_menu"> и <div id="content"> — всё внутри системного #page
-    if ($view) {
-        // Подпишем хлебные крошки для секции
-        foreach ($sections as $sec) {
-            if ($sec['slug'] === $view) {
-                $page->add_breadcrumb_item($sec['title']);
-                break;
+        if ($view) {
+            $sections = self::collectAdminSections();
+            foreach ($sections as $sec) {
+                if ($sec['slug'] === $view) {
+                    $page->add_breadcrumb_item($sec['title']);
+                    break;
+                }
             }
-        }
 
-        // Роутинг в контроллер аддона
-        $ctrl = self::findAdminController($view);
-        if ($ctrl && file_exists($ctrl['path'])) {
-            require_once $ctrl['path'];
-            $klass = $ctrl['class'];
-            if (class_exists($klass) && method_exists($klass, 'dispatch')) {
-                // ВАЖНО: контроллер НЕ должен вызывать output_header/output_footer
-                call_user_func([$klass, 'dispatch']);
+            $ctrl = self::findAdminController($view);
+            if ($ctrl && file_exists($ctrl['path'])) {
+                require_once $ctrl['path'];
+                $klass = $ctrl['class'];
+
+                if (class_exists($klass) && method_exists($klass, 'dispatch')) {
+                    // контроллер НЕ должен вызывать output_header/output_footer
+                    call_user_func([$klass, 'dispatch']);
+                } else {
+                    echo '<div class="error">Контроллер найден, но класс/метод не обнаружен.</div>';
+                }
             } else {
-                echo '<div class="error">Контроллер найден, но класс/метод не обнаружен.</div>';
+                echo '<div class="error">Не найден контроллер для указанного раздела.</div>';
             }
         } else {
-            echo '<div class="error">Не найден контроллер для указанного раздела.</div>';
-        }
-    } else {
-        // Обзор аддонов
-        $table = new Table;
-        $table->construct_header($lang->af_tbl_name_desc, ['width' => '55%']);
-        $table->construct_header($lang->af_tbl_version,   ['width' => '10%', 'class' => 'align_center']);
-        $table->construct_header($lang->af_tbl_status,    ['width' => '10%', 'class' => 'align_center']);
-        $table->construct_header($lang->af_tbl_toggle,    ['width' => '15%', 'class' => 'align_center']);
-        $table->construct_header($lang->af_tbl_settings,  ['width' => '10%', 'class' => 'align_center']);
+            $table = new Table;
+            $table->construct_header($lang->af_tbl_name_desc, ['width' => '55%']);
+            $table->construct_header($lang->af_tbl_version,   ['width' => '10%', 'class' => 'align_center']);
+            $table->construct_header($lang->af_tbl_status,    ['width' => '10%', 'class' => 'align_center']);
+            $table->construct_header($lang->af_tbl_toggle,    ['width' => '15%', 'class' => 'align_center']);
+            $table->construct_header($lang->af_tbl_settings,  ['width' => '10%', 'class' => 'align_center']);
 
-        $addons = self::discoverAddons();
+            $addons = self::discoverAddons();
 
-        if (!$addons) {
-            $table->construct_cell($lang->af_no_addons, ['colspan' => 5, 'class'=>'align_center']);
-            $table->construct_row();
-        } else {
-            foreach ($addons as $meta) {
-                af_sync_addon_languages($meta, false);
-                $enabled = self::isAddonEnabled($meta['id']);
+            if (!$addons) {
+                $table->construct_cell($lang->af_no_addons, ['colspan' => 5, 'class'=>'align_center']);
+                $table->construct_row();
+            } else {
+                foreach ($addons as $meta) {
+                    af_sync_addon_languages($meta, false);
+                    $enabled = self::isAddonEnabled($meta['id']);
 
-                $name  = htmlspecialchars_uni($meta['name']);
-                $desc  = htmlspecialchars_uni($meta['description'] ?? '');
-                $ver   = htmlspecialchars_uni($meta['version'] ?? '1.0.0');
+                    $name  = htmlspecialchars_uni($meta['name']);
+                    $desc  = htmlspecialchars_uni($meta['description'] ?? '');
+                    $ver   = htmlspecialchars_uni($meta['version'] ?? '1.0.0');
 
-                $authorHtml = '';
-                if (!empty($meta['author'])) {
-                    $a = htmlspecialchars_uni($meta['author']);
-                    if (!empty($meta['authorsite'])) {
-                        $u = htmlspecialchars_uni($meta['authorsite']);
-                        $authorHtml = "<br /><span class='smalltext' style='color:#666;'>{$lang->af_author}: <a href=\"{$u}\" target=\"_blank\" rel=\"noopener\">{$a}</a></span>";
-                    } else {
-                        $authorHtml = "<br /><span class='smalltext' style='color:#666;'>{$lang->af_author}: {$a}</span>";
+                    $authorHtml = '';
+                    if (!empty($meta['author'])) {
+                        $a = htmlspecialchars_uni($meta['author']);
+                        if (!empty($meta['authorsite'])) {
+                            $u = htmlspecialchars_uni($meta['authorsite']);
+                            $authorHtml = "<br /><span class='smalltext' style='color:#666;'>{$lang->af_author}: <a href=\"{$u}\" target=\"_blank\" rel=\"noopener\">{$a}</a></span>";
+                        } else {
+                            $authorHtml = "<br /><span class='smalltext' style='color:#666;'>{$lang->af_author}: {$a}</span>";
+                        }
                     }
-                }
 
-                if (!empty($meta['admin']['slug']) && $enabled) {
-                    $desc .= ($desc ? ' ' : '').'(Админ-страница: '
-                        . 'Advanced functionality → <a href="index.php?module='.AF_PLUGIN_ID.'&amp;af_view='.htmlspecialchars_uni($meta['admin']['slug']).'">'
-                        . htmlspecialchars_uni($meta['admin']['title'] ?? $meta['name']).'</a>)';
-                }
-                $nameDesc = "<strong>{$name}</strong><br /><span class='smalltext'>{$desc}</span>{$authorHtml}";
+                    if (!empty($meta['admin']['slug']) && $enabled) {
+                        $desc .= ($desc ? ' ' : '').'(Админ-страница: '
+                            . 'Advanced functionality → <a href="index.php?module='.AF_PLUGIN_ID.'&amp;af_view='.htmlspecialchars_uni($meta['admin']['slug']).'">'
+                            . htmlspecialchars_uni($meta['admin']['title'] ?? $meta['name']).'</a>)';
+                    }
 
-                $table->construct_cell($nameDesc);
-                $table->construct_cell($ver, ['class' => 'align_center']);
-                $table->construct_cell($enabled ? "<span style='color:green;'>{$lang->af_on}</span>" : "<span style='color:#a00;'>{$lang->af_off}</span>", ['class'=>'align_center']);
+                    $nameDesc = "<strong>{$name}</strong><br /><span class='smalltext'>{$desc}</span>{$authorHtml}";
 
-                $btn_text  = $enabled ? $lang->af_btn_disable : $lang->af_btn_enable;
-                $act       = $enabled ? 'disable' : 'enable';
-                $form_html = '<form method="post" action="index.php?module='.AF_PLUGIN_ID.'" style="margin:0;">'
+                    $table->construct_cell($nameDesc);
+                    $table->construct_cell($ver, ['class' => 'align_center']);
+                    $table->construct_cell($enabled ? "<span style='color:green;'>{$lang->af_on}</span>" : "<span style='color:#a00;'>{$lang->af_off}</span>", ['class'=>'align_center']);
+
+                    $btn_text  = $enabled ? $lang->af_btn_disable : $lang->af_btn_enable;
+                    $act       = $enabled ? 'disable' : 'enable';
+
+                    $form_html = '<form method="post" action="index.php?module='.AF_PLUGIN_ID.'" style="margin:0;">'
                         . '<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'">'
                         . '<input type="hidden" name="af_action" value="'.htmlspecialchars_uni($act).'">'
                         . '<input type="hidden" name="addon" value="'.htmlspecialchars_uni($meta['id']).'">'
                         . '<input type="submit" class="submit_button" value="'.htmlspecialchars_uni($btn_text).'">'
                         . '</form>';
-                $table->construct_cell($form_html, ['class'=>'align_center']);
 
-                $gid = self::findSettingsGroup('af_'.$meta['id']);
-                if ($gid) {
-                    $gear = "⚙";
-                    $url  = "index.php?module=config-settings&amp;action=change&amp;gid=".$gid;
-                    $table->construct_cell("<a href=\"{$url}\" title=\"{$lang->af_open_settings}\" style=\"font-size:20px;text-decoration:none;\">{$gear}</a>", ['class'=>'align_center']);
-                } else {
-                    $table->construct_cell("—", ['class'=>'align_center']);
+                    $table->construct_cell($form_html, ['class'=>'align_center']);
+
+                    $gid = self::findSettingsGroup('af_'.$meta['id']);
+                    if ($gid) {
+                        $gear = "⚙";
+                        $url  = "index.php?module=config-settings&amp;action=change&amp;gid=".$gid;
+                        $table->construct_cell("<a href=\"{$url}\" title=\"{$lang->af_open_settings}\" style=\"font-size:20px;text-decoration:none;\">{$gear}</a>", ['class'=>'align_center']);
+                    } else {
+                        $table->construct_cell("—", ['class'=>'align_center']);
+                    }
+
+                    $table->construct_row();
                 }
-
-                $table->construct_row();
             }
+
+            $table->output($lang->af_admin_title);
         }
 
-        $table->output($lang->af_admin_title);
+        $page->output_footer();
+        exit;
     }
-
-    // Закрываем системный layout
-    $page->output_footer();
-    exit;
-
-    }
-
 
     public static function collectAdminSections(): array
     {
@@ -387,7 +396,7 @@ class AF_Admin
         foreach (self::discoverAddons() as $meta) {
             if (!self::isAddonEnabled($meta['id'])) continue;
             if (!empty($meta['admin']['slug']) && $meta['admin']['slug'] === $slug) {
-                $path = $meta['path'].($meta['admin']['controller'] ?? '');
+                $path  = $meta['path'].($meta['admin']['controller'] ?? '');
                 $klass = 'AF_Admin_'.preg_replace('~[^A-Za-z0-9]+~', '', ucfirst($slug));
                 return ['path'=>$path, 'class'=>$klass];
             }
@@ -395,14 +404,14 @@ class AF_Admin
         return null;
     }
 
-    // ==== ниже — как у тебя было (enable/disable/discover и т.д.) ====
-
     public static function discoverAddons(): array { return af_discover_addons(); }
+
     public static function isAddonEnabled(string $id): bool
     {
         global $mybb;
         return isset($mybb->settings['af_'.$id.'_enabled']) && $mybb->settings['af_'.$id.'_enabled'] === '1';
     }
+
     public static function enableAddon(string $id): void
     {
         $bootstrap = self::addonBootstrap($id);
@@ -414,20 +423,27 @@ class AF_Admin
         self::ensureEnabledSetting($id, 1);
         af_rebuild_and_reload_settings();
     }
+
     public static function disableAddon(string $id): void
     {
         self::ensureEnabledSetting($id, 0);
         af_rebuild_and_reload_settings();
     }
+
     public static function addonBootstrap(string $id): ?string
     {
-        $list = self::discoverAddons();
-        foreach ($list as $meta) { if ($meta['id'] === $id) return $meta['bootstrap'] ?? null; }
+        foreach (self::discoverAddons() as $meta) {
+            if (($meta['id'] ?? '') === $id) {
+                return $meta['bootstrap'] ?? null;
+            }
+        }
         return null;
     }
+
     public static function ensureEnabledSetting(string $id, int $value): void
     {
         global $db;
+
         $group_name = 'af_'.$id;
         $setting    = 'af_'.$id.'_enabled';
 
@@ -443,12 +459,14 @@ class AF_Admin
         $dupes_q  = $db->simple_select('settings', 'sid', "name='{$name_esc}'", ['order_by' => 'sid', 'order_dir' => 'asc']);
         $sids     = [];
         while ($r = $db->fetch_array($dupes_q)) { $sids[] = (int)$r['sid']; }
+
         if (count($sids) > 1) {
             $keep = array_shift($sids);
             $db->delete_query('settings', "sid IN (".implode(',', array_map('intval',$sids)).")");
             $db->update_query('settings', ['gid' => (int)$gid, 'value' => ($value ? '1' : '0')], "sid=".(int)$keep);
         }
     }
+
     public static function findSettingsGroup(string $name): ?int
     {
         global $db;
@@ -460,6 +478,7 @@ class AF_Admin
 
 AF_Admin::dispatch();
 PHP;
+
         @file_put_contents($router, $code);
     }
 
@@ -557,8 +576,8 @@ require_once MYBB_ROOT.'inc/plugins/advancedfunctionality/admin/router.php';
 PHP;
         @file_put_contents($idx, $code);
     }
-
 }
+
 
 
 
@@ -584,6 +603,76 @@ function af_write_cache(string $key, string $value): void
 {
     @file_put_contents(AF_CACHE.$key.'.txt', $value);
 }
+
+function af_gateway_signature(): string
+{
+    return 'AF-GENERATED: advancedfunctionality_gateway v2';
+}
+
+
+/**
+ * Пишет/обновляет runtime gateway-файл в корне форума из stub-файла.
+ * - если runtime уже существует БЕЗ нашей сигнатуры — не трогаем
+ * - если существует с сигнатурой — обновляем при отличии
+ */
+function af_ensure_gateway_runtime(bool $force_refresh = false): void
+{
+    $stub = AF_GATEWAY_STUB;
+    $dst  = AF_GATEWAY_RUNTIME;
+
+    if (!is_file($stub)) {
+        return;
+    }
+
+    $code = (string)@file_get_contents($stub);
+    if ($code === '') {
+        return;
+    }
+
+    // Базовый маркер "нашести" — принимаем любую версию (v1/v2/будущие)
+    $baseMarker = 'AF-GENERATED: advancedfunctionality_gateway';
+
+    // Stub должен содержать базовый маркер и текущую сигнатуру (защита от "левых" файлов)
+    if (strpos($code, $baseMarker) === false || strpos($code, af_gateway_signature()) === false) {
+        return;
+    }
+
+    if (is_file($dst)) {
+        $cur = (string)@file_get_contents($dst);
+
+        // Если runtime вообще не наш (нет базового маркера) — не трогаем
+        if (strpos($cur, $baseMarker) === false) {
+            return;
+        }
+
+        // Если не форсим и контент идентичен — не перезаписываем
+        if (!$force_refresh && $cur === $code) {
+            return;
+        }
+    }
+
+    @file_put_contents($dst, $code, LOCK_EX);
+}
+
+
+/** Подключает runtime gateway (или stub как fallback), чтобы функция роутера точно существовала */
+function af_require_gateway_router(): void
+{
+    if (function_exists('af_gateway_xmlhttp_router')) {
+        return;
+    }
+
+    if (is_file(AF_GATEWAY_RUNTIME)) {
+        require_once AF_GATEWAY_RUNTIME;
+        return;
+    }
+
+    if (is_file(AF_GATEWAY_STUB)) {
+        require_once AF_GATEWAY_STUB;
+        return;
+    }
+}
+
 
 function af_find_gid(string $group_name): ?int
 {
@@ -830,8 +919,21 @@ function af_reload_settings_runtime(): void
 
 
 /* =================== ХУКИ ЗАГРУЗКИ АДДОНОВ =================== */
+global $plugins;
+
+// Языки ядра (полезно и во фронте, и в ACP)
+$plugins->add_hook('global_start', 'advancedfunctionality_load_lang', 0);
+
+// Подключение аддонов
 $plugins->add_hook('global_start', 'advancedfunctionality_bootstrap_addons', 1);
 $plugins->add_hook('pre_output_page', 'advancedfunctionality_bootstrap_addons_preoutput', 1);
+
+// XMLHTTP роутинг (аналог MyAlerts)
+$plugins->add_hook('xmlhttp', 'af_xmlhttp_router', -1);
+
+
+
+
 
 function advancedfunctionality_bootstrap_addons()
 {
@@ -854,26 +956,39 @@ function advancedfunctionality_bootstrap_addons()
 }
 
 
-function advancedfunctionality_bootstrap_addons_preoutput($page)
+function advancedfunctionality_bootstrap_addons_preoutput(&$page)
 {
     $addons = af_discover_addons();
-    foreach ($addons as $meta) {
-        $id = $meta['id'];
-        if (af_is_addon_enabled($id) && !empty($meta['bootstrap']) && is_file($meta['bootstrap'])) {
-            $fn = 'af_'.$id.'_pre_output';
-            if (function_exists($fn)) {
-                $res = $fn($page);
 
-                // Поддержка старого API: если функция ничего не вернула или вернула не строку —
-                // считаем, что страница не менялась.
-                if (is_string($res) && $res !== '') {
-                    $page = $res;
-                }
-            }
+    foreach ($addons as $meta) {
+        $id = $meta['id'] ?? '';
+        if ($id === '' || !af_is_addon_enabled($id)) {
+            continue;
+        }
+
+        // На всякий случай гарантируем bootstrap (иногда pre_output может сработать раньше, чем ты думаешь)
+        if (!empty($meta['bootstrap']) && is_file($meta['bootstrap'])) {
+            require_once $meta['bootstrap'];
+        }
+
+        $fn = 'af_'.$id.'_pre_output';
+        if (!function_exists($fn)) {
+            continue;
+        }
+
+        // 1) Новый стиль: аддон меняет $page по ссылке
+        // 2) Старый стиль: аддон возвращает строку
+        $before = $page;
+        $res = $fn($page);
+
+        if (is_string($res) && $res !== '' && $res !== $before) {
+            $page = $res;
         }
     }
-    return $page;
+
+    return $page; // не обязателен, но не мешает
 }
+
 
 
 
@@ -918,3 +1033,134 @@ function af_load_addon_lang(string $id): void
         $lang->load($file); // дублирование для админ-контекста
     }
 }
+
+/**
+ * XMLHTTP роутер AF (аналог myalerts_xmlhttp()).
+ * Срабатывает в /xmlhttp.php до того, как MyBB выведет что-либо.
+ */
+function af_xmlhttp_router(): void
+{
+    global $mybb;
+
+    // MyBB: /xmlhttp.php?action=...
+    $action = $mybb->get_input('action');
+
+    // Мы обслуживаем только свои экшены
+    if ($action === '') {
+        return;
+    }
+
+    // ЖЁСТКО фиксируем канон для AAM:
+    // твой JS/шаблоны должны ходить сюда:
+    // /xmlhttp.php?action=af_aam_api&op=...
+    if ($action === 'af_aam_api') {
+        af_xmlhttp_call_addon('advancedalertsandmentions');
+        return; // call_addon сам либо отдаст JSON и exit, либо ничего не сделает
+    }
+
+    // На будущее: универсальный экшен вида:
+    // /xmlhttp.php?action=af_addon_api&addon=<id>
+    if ($action === 'af_addon_api') {
+        $addon = $mybb->get_input('addon');
+        if ($addon !== '') {
+            $addon = preg_replace('~[^a-z0-9_]+~i', '', (string)$addon);
+            if ($addon !== '') {
+                af_xmlhttp_call_addon($addon);
+            }
+        }
+        return;
+    }
+
+    // Остальное не трогаем — пусть обрабатывают другие плагины/ядро
+}
+
+/**
+ * Подключает bootstrap аддона и вызывает его xmlhttp-хендлер.
+ * Если аддон не включён — ничего не делает.
+ */
+function af_xmlhttp_call_addon(string $id): void
+{
+    // ВАЖНО: никаких fatals — если чего-то нет, просто выходим
+    if (!function_exists('af_discover_addons')) {
+        return;
+    }
+
+    // аддон должен быть включён через AF settings
+    if (function_exists('af_is_addon_enabled')) {
+        if (!af_is_addon_enabled($id)) {
+            return;
+        }
+    } else {
+        // fallback, если вдруг helper не объявлен
+        global $mybb;
+        if (empty($mybb->settings['af_'.$id.'_enabled']) || (string)$mybb->settings['af_'.$id.'_enabled'] !== '1') {
+            return;
+        }
+    }
+
+    $bootstrap = af_get_addon_bootstrap_path($id);
+    if (!$bootstrap || !is_file($bootstrap)) {
+        return;
+    }
+
+    require_once $bootstrap;
+
+    // Канонический контракт: аддон может объявить af_{id}_xmlhttp()
+    $fn = 'af_'.$id.'_xmlhttp';
+    if (function_exists($fn)) {
+        $fn(); // обычно внутри будет JSON + exit
+        return;
+    }
+
+    // Fallback именно для AAM (если ты оставила старую точку входа)
+    if ($id === 'advancedalertsandmentions') {
+        if (function_exists('af_aam_xmlhttp')) {
+            af_aam_xmlhttp();
+            return;
+        }
+    }
+}
+
+/**
+ * Находит абсолютный путь до bootstrap-файла аддона по его id.
+ */
+function af_get_addon_bootstrap_path(string $id): ?string
+{
+    $id = preg_replace('~[^a-z0-9_]+~i', '', $id);
+    if ($id === '') {
+        return null;
+    }
+
+    $addons = af_discover_addons();
+    foreach ($addons as $meta) {
+        if (empty($meta['id']) || (string)$meta['id'] !== $id) {
+            continue;
+        }
+
+        // meta может хранить:
+        // - path (абсолютный путь до папки аддона)
+        // - bootstrap (имя файла или абсолютный путь)
+        $bootstrap = $meta['bootstrap'] ?? '';
+        $path      = $meta['path'] ?? '';
+
+        if (!is_string($bootstrap) || $bootstrap === '') {
+            return null;
+        }
+
+        // Абсолютный путь?
+        if (isset($bootstrap[0]) && ($bootstrap[0] === '/' || preg_match('~^[A-Za-z]:[\\\\/]~', $bootstrap))) {
+            return $bootstrap;
+        }
+
+        // Если есть meta['path'] — клеим к нему
+        if (is_string($path) && $path !== '') {
+            return rtrim($path, '/\\') . '/' . ltrim($bootstrap, '/\\');
+        }
+
+        // Последний fallback: стандартная структура AF
+        return rtrim(AF_ADDONS, '/\\') . '/' . $id . '/' . ltrim($bootstrap, '/\\');
+    }
+
+    return null;
+}
+
