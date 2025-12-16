@@ -654,6 +654,12 @@ function af_aam_xmlhttp_dispatch(): void
         $prefs['telegram_chat_id'] = $telegramChatId;
         af_aam_set_user_prefs($uid, $prefs);
 
+        if ($telegramEnabled && $telegramChatId !== '') {
+            af_aam_store_telegram_binding($uid, $telegramChatId);
+        } else {
+            af_aam_remove_telegram_bindings($uid);
+        }
+
         af_aam_json(['ok' => 1, 'saved' => 1]);
     }
 
