@@ -22,6 +22,25 @@
     var currentUnread = 0;
     var afAamBaseTitle = document.title;
     var lastSeenAlertId = 0;
+
+    // хранить "последний увиденный id" в рамках вкладки
+    var afAamLastSeenStorageKey = 'af_aam_last_seen_alert_id';
+
+    (function restoreLastSeen() {
+        try {
+            var v = sessionStorage.getItem(afAamLastSeenStorageKey);
+            var n = parseInt(v || '0', 10) || 0;
+            if (n > 0) lastSeenAlertId = n;
+        } catch (e) {}
+    })();
+
+    function saveLastSeen(id) {
+        lastSeenAlertId = parseInt(id || '0', 10) || 0;
+        try {
+            if (lastSeenAlertId > 0) sessionStorage.setItem(afAamLastSeenStorageKey, String(lastSeenAlertId));
+        } catch (e) {}
+    }
+
     if (typeof window.unreadAlerts !== 'undefined') {
         currentUnread = parseInt(window.unreadAlerts, 10) || 0;
     }
@@ -49,6 +68,17 @@
     // ключ для localStorage и реальный флаг для пользователя
     var afAamSoundStorageKey  = 'af_aam_sound_muted';
     var afAamUserSoundEnabled = afAamGlobalSoundEnabled;
+    // тосты: настройка пользователя (localStorage)
+    var afAamToastsStorageKey = 'af_aam_toasts_disabled';
+    var afAamUserToastsEnabled = true;
+
+    try {
+        var tVal = localStorage.getItem(afAamToastsStorageKey);
+        if (tVal === '1') {
+            afAamUserToastsEnabled = false;
+        }
+    } catch (e) {}
+
 
     // если в localStorage стоит "заглушено" — переопределяем
     try {
@@ -64,6 +94,13 @@
     // ======== простая AJAX-обёртка =========
     function ajax(url, data, callback, timeoutMs) {
         var xhr = new XMLHttpRequest();
+
+        data = data || {};
+
+        // анти-кэш (некоторые прокси/браузеры умудряются “переиспользовать” xmlhttp ответы)
+        if (typeof data._ts === 'undefined') {
+            data._ts = Date.now();
+        }
 
         // сериализация данных вида {key: value}
         var params = [];
@@ -86,7 +123,9 @@
         }
 
         xhr.open('POST', url, true);
+        xhr.withCredentials = true;
         xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
 
         if (typeof timeoutMs === 'number' && timeoutMs > 0) {
             xhr.timeout = timeoutMs;
@@ -103,30 +142,82 @@
         };
 
         xhr.onreadystatechange = function () {
-            if (xhr.readyState === 4) {
-                if (afAamDebug) {
-                    console.log('[AAM ajax ←]', 'status=' + xhr.status, 'resp=', xhr.responseText);
-                }
+            if (xhr.readyState !== 4) return;
 
-                var resp = null;
-                try {
-                    resp = JSON.parse(xhr.responseText);
-                } catch (e) {
-                    // ВОТ ЭТО ТВОЯ БОЛЬ: раньше тут “молча”
-                    if (afAamDebug) {
-                        console.log('[AAM ajax] JSON parse error:', e);
-                    }
-                    resp = { ok: 0, error: 'bad_json', raw: xhr.responseText };
-                }
-
-                if (typeof callback === 'function') {
-                    callback(resp);
-                }
+            if (afAamDebug) {
+                console.log('[AAM ajax ←]', 'status=' + xhr.status, 'resp=', xhr.responseText);
             }
+
+            // status=0 бывает при сворачивании/переключении/обрыве — не считаем это “валидным JSON”
+            if (xhr.status === 0 && (!xhr.responseText || !xhr.responseText.trim())) {
+                if (typeof callback === 'function') callback({ ok: 0, error: 'status_0' });
+                return;
+            }
+
+            var resp = null;
+            try {
+                resp = JSON.parse(xhr.responseText);
+            } catch (e) {
+                if (afAamDebug) console.log('[AAM ajax] JSON parse error:', e);
+                resp = { ok: 0, error: 'bad_json', raw: xhr.responseText };
+            }
+
+            if (typeof callback === 'function') callback(resp);
         };
 
         xhr.send(body);
     }
+
+    // GET-обёртка (для mention suggest через misc.php)
+    function ajaxGet(url, data, callback, timeoutMs) {
+        var xhr = new XMLHttpRequest();
+        data = data || {};
+        if (typeof data._ts === 'undefined') data._ts = Date.now();
+
+        var params = [];
+        for (var key in data) {
+            if (!data.hasOwnProperty(key)) continue;
+            params.push(encodeURIComponent(key) + '=' + encodeURIComponent(data[key]));
+        }
+
+        var glue = (url.indexOf('?') >= 0) ? '&' : '?';
+        var fullUrl = url + glue + params.join('&');
+
+        if (afAamDebug) console.log('[AAM ajaxGet →]', fullUrl);
+
+        xhr.open('GET', fullUrl, true);
+        xhr.withCredentials = true;
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+        if (typeof timeoutMs === 'number' && timeoutMs > 0) xhr.timeout = timeoutMs;
+
+        xhr.onerror = function () {
+            if (afAamDebug) console.log('[AAM ajaxGet] network error');
+            if (typeof callback === 'function') callback({ ok: 0, error: 'network_error' });
+        };
+
+        xhr.ontimeout = function () {
+            if (afAamDebug) console.log('[AAM ajaxGet] timeout');
+            if (typeof callback === 'function') callback({ ok: 0, error: 'timeout' });
+        };
+
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+
+            if (afAamDebug) console.log('[AAM ajaxGet ←]', 'status=' + xhr.status, 'resp=', xhr.responseText);
+
+            var resp = null;
+            try {
+                resp = JSON.parse(xhr.responseText);
+            } catch (e) {
+                resp = { ok: 0, error: 'bad_json', raw: xhr.responseText };
+            }
+            if (typeof callback === 'function') callback(resp);
+        };
+
+        xhr.send(null);
+    }
+
 
 
 
@@ -298,8 +389,40 @@
     }
 
 
-    // ======== ALERTS: HEADER ICON + МОДАЛКА =========
+    function afAamHasNewUnseenUnread(alerts) {
+        if (!Array.isArray(alerts) || !alerts.length) {
+            return false;
+        }
 
+        for (var i = 0; i < alerts.length; i++) {
+            var a = alerts[i];
+            if (!a) continue;
+
+            var id = parseInt(a.id, 10) || 0;
+
+            // только непрочитанные
+            if (a.is_read && parseInt(a.is_read, 10) === 1) {
+                continue;
+            }
+
+            // если это "старьё" (мы уже видели такие id) — не считаем новым
+            if (id && lastSeenAlertId > 0 && id <= lastSeenAlertId) {
+                continue;
+            }
+
+            // если уже показывали/обрабатывали именно этот id — тоже не новое
+            if (id && afAamShownToastIds[id]) {
+                continue;
+            }
+
+            // дошли сюда — это новое непрочитанное
+            return true;
+        }
+
+        return false;
+    }
+
+    // ======== ALERTS: HEADER ICON + МОДАЛКА =========
     function initAlertsUI() {
         var link   = qs('#af_aam_header_link');
         var modal  = qs('#af_aam_modal');
@@ -362,7 +485,7 @@
                         afAamSound.currentTime = 0;
                         afAamSoundPrimed = true;
                     }).catch(function () {
-                        // если браузер упёрся — не критично, всё равно будем пробовать позже
+                        // если браузер упёрся — не критично
                     });
                 } catch (e) {}
             }
@@ -414,6 +537,15 @@
                 ajax('xmlhttp.php', { action: 'af_aam_api', op: 'prefs_form' }, function (resp) {
                     if (resp && resp.ok && resp.html) {
                         prefsBox.innerHTML = resp.html;
+
+                        // выставляем тост-тумблер по localStorage
+                        try {
+                            var toastCb0 = prefsBox.querySelector('#af_aam_pref_toasts');
+                            if (toastCb0) {
+                                toastCb0.checked = afAamUserToastsEnabled;
+                            }
+                        } catch (e) {}
+
                         prefsBox.setAttribute('data-loaded', '1');
                         prefsBox.style.display = 'block';
 
@@ -421,21 +553,57 @@
                         if (form) {
                             form.addEventListener('submit', function (ev) {
                                 ev.preventDefault();
+
                                 var checkboxes = prefsBox.querySelectorAll('.af-aam-pref-checkbox');
                                 var types = [];
                                 checkboxes.forEach(function (cb) {
-                                    if (cb.checked) {
-                                        types.push(cb.value);
-                                    }
+                                    if (cb.checked) types.push(cb.value);
                                 });
+
+                                // тосты: сохраняем локально
+                                var toastCb = prefsBox.querySelector('#af_aam_pref_toasts');
+                                var toastsEnabled = toastCb ? !!toastCb.checked : true;
+
+                                afAamUserToastsEnabled = toastsEnabled;
+                                try {
+                                    if (!toastsEnabled) localStorage.setItem(afAamToastsStorageKey, '1');
+                                    else localStorage.removeItem(afAamToastsStorageKey);
+                                } catch (e) {}
 
                                 ajax('xmlhttp.php', {
                                     action: 'af_aam_api',
-                                    op: 'prefs_save',
-                                    my_post_key: window.my_post_key || '',
-                                    'types': types
+                                    op: 'list',
+                                    unreadOnly: 1
                                 }, function (resp2) {
-                                    // можно показать "сохранено"
+
+                                    // на первом запуске — просто “запоминаем верхний id”, без тостов
+                                    if (!lastSeenAlertId && resp2 && Array.isArray(resp2.items) && resp2.items.length) {
+                                        var maxId = 0;
+                                        resp2.items.forEach(function (a) {
+                                            var id = parseInt(a.id, 10) || 0;
+                                            if (id > maxId) maxId = id;
+                                        });
+                                        lastSeenAlertId = maxId;
+                                        syncFromResponse(resp2 || {});
+                                        return;
+                                    }
+
+                                    // ВАЖНО: вычисляем "есть ли новые" ДО queueToasts(), потому что queueToasts двигает lastSeenAlertId
+                                    var hasNewUnseen = (resp2 && Array.isArray(resp2.items))
+                                        ? afAamHasNewUnseenUnread(resp2.items)
+                                        : false;
+
+                                    syncFromResponse(resp2 || {});
+
+                                    // тосты только для новых непрочитанных (queueToasts это фильтрует)
+                                    if (resp2 && Array.isArray(resp2.items)) {
+                                        queueToasts(resp2.items);
+                                    }
+
+                                    // звук — только если реально пришли НОВЫЕ уведомления, а не просто "в списке есть непрочитанные"
+                                    if (hasNewUnseen) {
+                                        playAlertSound();
+                                    }
                                 });
                             });
                         }
@@ -452,12 +620,10 @@
             if (target.classList && target.classList.contains('markReadAlertButton')) {
                 e.preventDefault();
 
-                // ищем ближайший контейнер с data-alert-id
                 var row = target.closest('[data-alert-id]');
                 var id  = row ? getAlertIdFromElement(row) : getAlertIdFromElement(target);
                 var wasUnread = false;
 
-                // ЛОКАЛЬНО ОБНОВЛЯЕМ UI
                 if (row) {
                     wasUnread = row.classList.contains('alert--unread');
                     row.classList.remove('alert--unread');
@@ -466,12 +632,8 @@
                     var btnRead   = row.querySelector('.markReadAlertButton');
                     var btnUnread = row.querySelector('.markUnreadAlertButton');
 
-                    if (btnRead) {
-                        btnRead.classList.add('hidden');
-                    }
-                    if (btnUnread) {
-                        btnUnread.classList.remove('hidden');
-                    }
+                    if (btnRead) btnRead.classList.add('hidden');
+                    if (btnUnread) btnUnread.classList.remove('hidden');
                 }
 
                 if (id) {
@@ -482,8 +644,8 @@
                         alert_id:  id,
                         'alert_id[]': id,
                         my_post_key: window.my_post_key || ''
-                    }, function (resp) {
-                        syncFromResponse(resp || {}, wasUnread ? -1 : 0);
+                    }, function (resp3) {
+                        syncFromResponse(resp3 || {}, wasUnread ? -1 : 0);
                     });
                 } else if (afAamDebug) {
                     console.log('[AAM] mark_read: не удалось определить id алерта');
@@ -491,7 +653,6 @@
 
                 return;
             }
-
 
             // 2) Непрочитано
             if (target.classList && target.classList.contains('markUnreadAlertButton')) {
@@ -501,7 +662,6 @@
                 var id2  = row2 ? getAlertIdFromElement(row2) : getAlertIdFromElement(target);
                 var wasRead = false;
 
-                // ЛОКАЛЬНО ОБНОВЛЯЕМ UI
                 if (row2) {
                     wasRead = row2.classList.contains('alert--read');
                     row2.classList.remove('alert--read');
@@ -510,12 +670,8 @@
                     var btnRead2   = row2.querySelector('.markReadAlertButton');
                     var btnUnread2 = row2.querySelector('.markUnreadAlertButton');
 
-                    if (btnRead2) {
-                        btnRead2.classList.remove('hidden');
-                    }
-                    if (btnUnread2) {
-                        btnUnread2.classList.add('hidden');
-                    }
+                    if (btnRead2) btnRead2.classList.remove('hidden');
+                    if (btnUnread2) btnUnread2.classList.add('hidden');
                 }
 
                 if (id2) {
@@ -526,8 +682,8 @@
                         alert_id:  id2,
                         'alert_id[]': id2,
                         my_post_key: window.my_post_key || ''
-                    }, function (resp) {
-                        syncFromResponse(resp || {}, wasRead ? +1 : 0);
+                    }, function (resp4) {
+                        syncFromResponse(resp4 || {}, wasRead ? +1 : 0);
                     });
                 } else if (afAamDebug) {
                     console.log('[AAM] mark_unread: не удалось определить id алерта');
@@ -543,9 +699,9 @@
                 var row3 = target.closest('[data-alert-id]');
                 var id3  = row3 ? getAlertIdFromElement(row3) : getAlertIdFromElement(target);
 
-                var wasUnread = false;
+                var wasUnread3 = false;
                 if (row3) {
-                    wasUnread = row3.classList.contains('alert--unread');
+                    wasUnread3 = row3.classList.contains('alert--unread');
                     row3.parentNode.removeChild(row3);
                 }
 
@@ -557,8 +713,8 @@
                         alert_id:  id3,
                         'alert_id[]': id3,
                         my_post_key: window.my_post_key || ''
-                    }, function (resp) {
-                        syncFromResponse(resp || {}, wasUnread ? -1 : 0);
+                    }, function (resp5) {
+                        syncFromResponse(resp5 || {}, wasUnread3 ? -1 : 0);
                     });
                 } else if (afAamDebug) {
                     console.log('[AAM] delete: не удалось определить id алерта');
@@ -566,8 +722,6 @@
 
                 return;
             }
-
-
 
             // 4) клик по самому уведомлению — пометить прочитанным и перейти
             var node = target;
@@ -578,7 +732,6 @@
                     if (node.href && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
                         e.preventDefault();
 
-                        // ищем контейнер с data-alert-id
                         var tr2 = node.closest('[data-alert-id]');
                         var alertId = 0;
                         var wasUnreadLink = false;
@@ -588,7 +741,6 @@
                             wasUnreadLink = tr2.classList.contains('alert--unread');
                         }
 
-                        // локально помечаем прочитанным
                         if (tr2) {
                             tr2.classList.remove('alert--unread');
                             tr2.classList.add('alert--read');
@@ -602,8 +754,8 @@
                                 alert_id:    alertId,
                                 'alert_id[]': alertId,
                                 my_post_key: window.my_post_key || ''
-                            }, function (resp) {
-                                syncFromResponse(resp || {}, wasUnreadLink ? -1 : 0);
+                            }, function (resp6) {
+                                syncFromResponse(resp6 || {}, wasUnreadLink ? -1 : 0);
                                 window.location.href = node.href;
                             });
                         } else {
@@ -619,10 +771,9 @@
             }
         });
 
-
-
         window.afAamRefreshModal = renderModal;
     }
+
 
 
     function initListClicks() {
@@ -807,18 +958,31 @@
     }
 
     // ======== MENTIONS: КНОПКА + АВТОДОПОЛНЕНИЕ =============
-
     function insertMention(username) {
-        var text = '@"' + username + '" ';
+        var u = String(username || '')
+            .replace(/[\r\n]+/g, ' ')
+            .replace(/"/g, '')
+            .trim();
+
+        if (!u) return;
+
+        // если ник с пробелами — используем @"Nick Name", иначе @Nick
+        var text = (/\s/.test(u) ? '@"' + u + '"' : '@' + u) + ' ';
 
         // SCEditor (стандартный редактор MyBB)
-        if (window.jQuery && jQuery.fn && jQuery.fn.sceditor) {
-            var $ta = jQuery('textarea[name="message"]');
+        if (window.jQuery && window.jQuery.fn && window.jQuery.fn.sceditor) {
+            var $ta = window.jQuery('textarea[name="message"]');
             if ($ta.length) {
                 var editor = $ta.sceditor('instance');
-                if (editor && typeof editor.insert === 'function') {
-                    editor.insert(text);
-                    return;
+                if (editor) {
+                    if (typeof editor.insertText === 'function') {
+                        editor.insertText(text);
+                        return;
+                    }
+                    if (typeof editor.insert === 'function') {
+                        editor.insert(text);
+                        return;
+                    }
                 }
             }
         }
@@ -833,9 +997,7 @@
 
         // Фолбэк: обычное textarea
         var textarea = document.querySelector('textarea[name="message"]');
-        if (!textarea) {
-            return;
-        }
+        if (!textarea) return;
 
         textarea.focus();
 
@@ -853,202 +1015,450 @@
     }
 
 
+
     function initMentionButtons() {
         document.addEventListener('click', function (e) {
             var node = e.target;
 
-            // поднимаемся вверх по DOM, пока не найдём .af-aam-mention-button
             while (node && node !== document) {
-                if (node.classList && node.classList.contains('af-aam-mention-button')) {
+                // твой основной класс
+                var isAam = node.classList && node.classList.contains('af-aam-mention-button');
+
+                // частые варианты разметки (если шаблон/постбит поменялся)
+                var isAlt =
+                    (node.classList && node.classList.contains('mention_user')) ||
+                    (node.classList && node.classList.contains('aam-mention')) ||
+                    (node.getAttribute && node.getAttribute('data-mention') === '1');
+
+                if (isAam || isAlt) {
                     e.preventDefault();
-                    var username = node.getAttribute('data-username') || '';
-                    if (username) {
-                        insertMention(username);
-                    }
-                    break;
+
+                    var username =
+                        (node.getAttribute && (node.getAttribute('data-username') || node.getAttribute('data-mention-username'))) ||
+                        '';
+
+                    if (username) insertMention(username);
+                    return;
                 }
+
                 node = node.parentNode;
             }
-        });
+        }, true);
     }
 
+
     function initMentionAutocomplete() {
+        var mentionSuggestUrl = (typeof window.af_aam_mention_suggest_url === 'string' && window.af_aam_mention_suggest_url)
+            ? window.af_aam_mention_suggest_url
+            : 'misc.php?action=af_mention_suggest';
+
         var textarea = document.querySelector('textarea[name="message"]');
-        if (!textarea) {
-            return;
+
+        // SCEditor instance (если есть)
+        var sceditor = null;
+        var scBody = null;
+
+        if (window.jQuery && window.jQuery.fn && window.jQuery.fn.sceditor) {
+            var $ta = window.jQuery('textarea[name="message"]');
+            if ($ta.length) {
+                sceditor = $ta.sceditor('instance') || null;
+                if (sceditor && typeof sceditor.getBody === 'function') {
+                    try { scBody = sceditor.getBody(); } catch (e) { scBody = null; }
+                }
+            }
         }
+
+        // если нет ни textarea, ни sceditor — выходим
+        if (!textarea && !scBody) return;
 
         var box = document.createElement('div');
         box.className = 'af-aam-suggest-box';
         box.style.display = 'none';
         document.body.appendChild(box);
 
-        var currentPrefix = '';
-        var lastPos = 0;
+        var state = {
+            mode: null,          // 'textarea' | 'sceditor'
+            prefix: '',
+            lastAtIndex: -1,
+            lastCaret: 0,
+            lastTextNode: null,
+            lastTextNodeAtOffset: 0
+        };
 
         function hideBox() {
             box.style.display = 'none';
             box.innerHTML = '';
-            currentPrefix = '';
+            state.prefix = '';
+            state.lastAtIndex = -1;
         }
 
-        function showBox(items, x, y) {
+        function placeBoxByRect(rect) {
+            if (!rect) return;
+            var x = (rect.left + window.scrollX);
+            var y = (rect.bottom + window.scrollY + 6);
+            box.style.left = Math.max(8, x) + 'px';
+            box.style.top  = Math.max(8, y) + 'px';
+        }
+
+        function showBox(items, rect) {
             box.innerHTML = '';
-            if (!items.length) {
+            if (!items || !items.length) {
                 hideBox();
                 return;
             }
+
             items.forEach(function (it) {
                 var item = document.createElement('div');
                 item.className = 'af-aam-suggest-item';
                 item.textContent = it.username;
+
                 item.addEventListener('mousedown', function (e) {
                     e.preventDefault();
                     applySuggestion(it.username);
                 });
+
                 box.appendChild(item);
             });
-            box.style.left = x + 'px';
-            box.style.top  = y + 'px';
+
+            placeBoxByRect(rect);
             box.style.display = 'block';
         }
 
-        function applySuggestion(username) {
-            if (!currentPrefix) {
-                return;
-            }
-            var value = textarea.value;
-            var pos = textarea.selectionStart;
+        function requestSuggest(prefix, rect) {
+            // 1) основной путь — misc.php suggest
+            ajaxGet(mentionSuggestUrl, { q: prefix }, function (resp) {
+                if (resp && Array.isArray(resp.items)) {
+                    showBox(resp.items, rect);
+                    return;
+                }
 
-            var start = lastPos;
-            var before = value.substring(0, start);
-            var after  = value.substring(pos);
-            var text = '@"' + username + '" ';
-            textarea.value = before + text + after;
-            var caret = before.length + text.length;
-            textarea.selectionStart = textarea.selectionEnd = caret;
-
-            hideBox();
+                // 2) фолбэк — старый путь через af_aam_api suggest (если у тебя так было заведено)
+                ajax('xmlhttp.php', { action: 'af_aam_api', op: 'suggest', q: prefix }, function (resp2) {
+                    if (resp2 && Array.isArray(resp2.items)) {
+                        showBox(resp2.items, rect);
+                    } else {
+                        hideBox();
+                    }
+                }, 3000);
+            }, 4000);
         }
 
-        textarea.addEventListener('keyup', function () {
-            var pos = textarea.selectionStart;
-            var value = textarea.value;
+        function applySuggestion(username) {
+            var u = String(username || '').replace(/"/g, '').trim();
+            if (!u) return;
 
-            var slice = value.substring(0, pos);
-            var atPos = slice.lastIndexOf('@');
-            if (atPos === -1) {
-                hideBox();
-                return;
-            }
+            var mentionText = (/\s/.test(u) ? '@"' + u + '"' : '@' + u) + ' ';
 
-            var prefix = slice.substring(atPos + 1);
-            if (/\s/.test(prefix)) {
-                hideBox();
-                return;
-            }
+            // textarea режим — точная замена
+            if (state.mode === 'textarea' && textarea) {
+                var value = textarea.value;
+                var caret = textarea.selectionStart || state.lastCaret || value.length;
+                var atPos = state.lastAtIndex;
 
-            if (prefix.length < 2) {
-                hideBox();
-                return;
-            }
-
-            currentPrefix = prefix;
-            lastPos = atPos;
-
-            var rect = textarea.getBoundingClientRect();
-            var lineHeight = 18;
-            var x = rect.left + 20;
-            var y = rect.top + textarea.scrollTop + lineHeight * (value.substring(0, pos).split('\n').length);
-
-            ajax('xmlhttp.php', {
-                action: 'af_aam_api',
-                op: 'suggest',
-                q: prefix
-            }, function (resp) {
-                if (!resp || !Array.isArray(resp.items)) {
+                if (atPos < 0 || atPos >= caret) {
+                    // просто вставим
+                    insertMention(u);
                     hideBox();
                     return;
                 }
-                showBox(resp.items, x, y);
+
+                var before = value.substring(0, atPos);
+                var after  = value.substring(caret);
+                textarea.value = before + mentionText + after;
+
+                var newCaret = before.length + mentionText.length;
+                textarea.focus();
+                textarea.selectionStart = textarea.selectionEnd = newCaret;
+
+                hideBox();
+                return;
+            }
+
+            // SCEditor WYSIWYG — заменяем в текущем текст-ноде участок "@prefix"
+            if (state.mode === 'sceditor' && sceditor && scBody) {
+                try {
+                    sceditor.focus();
+
+                    var sel = window.getSelection ? window.getSelection() : null;
+                    if (!sel || sel.rangeCount === 0) {
+                        sceditor.insertText(mentionText);
+                        hideBox();
+                        return;
+                    }
+
+                    var r = sel.getRangeAt(0);
+                    var endNode = r.endContainer;
+                    var endOffset = r.endOffset;
+
+                    // используем сохранённую ноду (более стабильно)
+                    if (state.lastTextNode && state.lastTextNode.nodeType === 3) {
+                        endNode = state.lastTextNode;
+                        endOffset = state.lastCaret;
+                    }
+
+                    if (!endNode || endNode.nodeType !== 3) {
+                        sceditor.insertText(mentionText);
+                        hideBox();
+                        return;
+                    }
+
+                    var text = endNode.nodeValue || '';
+                    var startOffset = state.lastTextNodeAtOffset;
+
+                    // страховка
+                    if (startOffset < 0 || startOffset > endOffset) {
+                        sceditor.insertText(mentionText);
+                        hideBox();
+                        return;
+                    }
+
+                    var rr = document.createRange();
+                    rr.setStart(endNode, startOffset);
+                    rr.setEnd(endNode, endOffset);
+                    rr.deleteContents();
+
+                    var tn = document.createTextNode(mentionText);
+                    rr.insertNode(tn);
+
+                    // курсор после вставки
+                    rr.setStartAfter(tn);
+                    rr.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(rr);
+
+                    hideBox();
+                    return;
+                } catch (e) {
+                    // фолбэк
+                    try { sceditor.insertText(mentionText); } catch (e2) {}
+                    hideBox();
+                    return;
+                }
+            }
+
+            // совсем фолбэк
+            insertMention(u);
+            hideBox();
+        }
+
+        function parseTextareaContext() {
+            var pos = textarea.selectionStart || 0;
+            var value = textarea.value || '';
+            var slice = value.substring(0, pos);
+            var atPos = slice.lastIndexOf('@');
+            if (atPos === -1) return null;
+
+            var prefix = slice.substring(atPos + 1);
+            if (!prefix || /\s/.test(prefix)) return null;
+            if (prefix.length < 2) return null;
+
+            state.mode = 'textarea';
+            state.prefix = prefix;
+            state.lastAtIndex = atPos;
+            state.lastCaret = pos;
+
+            // позицию сильно “не высчитываем”: ставим рядом с textarea
+            var rect = textarea.getBoundingClientRect();
+            return { prefix: prefix, rect: rect };
+        }
+
+        function parseSceditorContext() {
+            var sel = window.getSelection ? window.getSelection() : null;
+            if (!sel || sel.rangeCount === 0) return null;
+
+            var r = sel.getRangeAt(0);
+
+            // если курсор не внутри тела редактора — выходим
+            if (!scBody.contains(r.endContainer)) return null;
+
+            var endNode = r.endContainer;
+            var endOffset = r.endOffset;
+
+            // нормализуем к текст-ноде
+            if (endNode && endNode.nodeType === 1) {
+                // попытка найти текстовую ноду рядом
+                var child = endNode.childNodes[endOffset - 1] || endNode.childNodes[endOffset] || null;
+                if (child && child.nodeType === 3) {
+                    endNode = child;
+                    endOffset = child.nodeValue ? child.nodeValue.length : 0;
+                }
+            }
+
+            if (!endNode || endNode.nodeType !== 3) return null;
+
+            var t = endNode.nodeValue || '';
+            var i = endOffset - 1;
+
+            // ищем '@' назад до пробела
+            while (i >= 0) {
+                var ch = t.charAt(i);
+                if (ch === '@') break;
+                if (/\s/.test(ch)) return null;
+                i--;
+            }
+            if (i < 0 || t.charAt(i) !== '@') return null;
+
+            var prefix = t.substring(i + 1, endOffset);
+            if (!prefix || prefix.length < 2) return null;
+
+            state.mode = 'sceditor';
+            state.prefix = prefix;
+            state.lastAtIndex = i; // локальный индекс, но нам важнее offsets в ноде
+            state.lastTextNode = endNode;
+            state.lastTextNodeAtOffset = i;
+            state.lastCaret = endOffset;
+
+            // координаты — по range rect
+            var rect = null;
+            try {
+                rect = r.getBoundingClientRect && r.getBoundingClientRect();
+            } catch (e) { rect = null; }
+            if (!rect || (!rect.left && !rect.top)) {
+                // фолбэк к контейнеру редактора
+                try { rect = scBody.getBoundingClientRect(); } catch (e2) {}
+            }
+
+            return { prefix: prefix, rect: rect };
+        }
+
+        function onKeyUp() {
+            var ctx = null;
+
+            // приоритет SCEditor (если активен)
+            if (scBody) {
+                ctx = parseSceditorContext();
+            }
+
+            // иначе textarea
+            if (!ctx && textarea) {
+                ctx = parseTextareaContext();
+            }
+
+            if (!ctx) {
+                hideBox();
+                return;
+            }
+
+            requestSuggest(ctx.prefix, ctx.rect);
+        }
+
+        // textarea
+        if (textarea) {
+            textarea.addEventListener('keyup', function () {
+                onKeyUp();
             });
+            textarea.addEventListener('blur', function () {
+                setTimeout(hideBox, 200);
+            });
+        }
+
+        // sceditor body
+        if (scBody) {
+            scBody.addEventListener('keyup', function () {
+                onKeyUp();
+            });
+            // клики/фокус вне — прячем
+            scBody.addEventListener('blur', function () {
+                setTimeout(hideBox, 200);
+            }, true);
+        }
+
+        // клик вне бокса — прячем
+        document.addEventListener('mousedown', function (e) {
+            if (box.style.display === 'block' && e.target !== box && !box.contains(e.target)) {
+                hideBox();
+            }
         });
 
-        textarea.addEventListener('blur', function () {
-            setTimeout(hideBox, 200);
-        });
+        window.addEventListener('scroll', function () {
+            if (box.style.display === 'block') hideBox();
+        }, true);
     }
 
+
     function initSound() {
-        // 0) Если есть <audio>, но без src — попробуем подставить ping.mp3
-        var domAudio = document.getElementById('af_aam_sound');
-        if (domAudio && !domAudio.src && typeof window.af_aam_asset_base === 'string') {
-            domAudio.src = window.af_aam_asset_base + 'ping.mp3';
+        // глобально выключено — всё, выходим
+        if (!afAamGlobalSoundEnabled) {
+            if (afAamDebug) console.log('[AAM] sound globally disabled');
+            return;
         }
 
-        // 1) Пробуем использовать <audio id="af_aam_sound"> из шаблона
+        // 0) если есть <audio id="af_aam_sound"> — используем его
+        var domAudio = document.getElementById('af_aam_sound');
         if (domAudio && typeof domAudio.play === 'function') {
             afAamSound = domAudio;
-            afAamSound.muted  = false;
-            afAamSound.volume = 1.0;
-            if (afAamDebug) {
-                console.log('[AAM] initSound: using existing <audio> element');
+
+            // если src пуст — пробуем подставить файл из asset_base
+            if ((!afAamSound.src || afAamSound.src === window.location.href) && typeof window.af_aam_asset_base === 'string') {
+                var base = window.af_aam_asset_base;
+                if (base[base.length - 1] !== '/') base += '/';
+
+                // сначала notification.mp3, если нет — ping.mp3
+                afAamSound.src = base + 'notification.mp3';
+                afAamSound.addEventListener('error', function () {
+                    // fallback
+                    afAamSound.src = base + 'ping.mp3';
+                }, { once: true });
             }
+
+            afAamSound.muted = false;
+            afAamSound.volume = 1.0;
+
+            if (afAamDebug) console.log('[AAM] initSound: using existing <audio>');
             return;
         }
 
-        // 2) Фолбэк — создаём Audio вручную
+        // 1) fallback: создаём Audio вручную
         if (typeof window.af_aam_asset_base !== 'string') {
-            if (afAamDebug) {
-                console.log('[AAM] no af_aam_asset_base, sound disabled');
-            }
+            if (afAamDebug) console.log('[AAM] initSound: no af_aam_asset_base, skip');
             return;
         }
+
+        var base2 = window.af_aam_asset_base;
+        if (base2[base2.length - 1] !== '/') base2 += '/';
+
+        // пробуем notification.mp3, если не прогрузится — ping.mp3
         try {
-            afAamSound = new Audio(window.af_aam_asset_base + 'ping.mp3');
+            afAamSound = new Audio(base2 + 'notification.mp3');
             afAamSound.preload = 'auto';
-            afAamSound.volume  = 1.0;
-            afAamSound.muted   = false;
+            afAamSound.volume = 1.0;
+            afAamSound.muted = false;
+
+            afAamSound.addEventListener('error', function () {
+                try {
+                    afAamSound = new Audio(base2 + 'ping.mp3');
+                    afAamSound.preload = 'auto';
+                    afAamSound.volume = 1.0;
+                    afAamSound.muted = false;
+                } catch (e2) {
+                    afAamSound = null;
+                }
+            }, { once: true });
         } catch (e) {
             afAamSound = null;
         }
-        if (afAamDebug) {
-            console.log('[AAM] initSound, asset:', window.af_aam_asset_base + 'ping.mp3', 'ok=', !!afAamSound);
-        }
+
+        if (afAamDebug) console.log('[AAM] initSound ok=', !!afAamSound);
     }
 
 
     function playAlertSound() {
-        // если пользователь или глобальная настройка отключили звук — выходим
-        if (!afAamUserSoundEnabled) {
-            if (afAamDebug) {
-                console.log('[AAM] sound disabled by user/global');
-            }
-            return;
-        }
-        if (!afAamSound) {
-            if (afAamDebug) {
-                console.log('[AAM] no Audio object to play');
-            }
-            return;
-        }
+        if (!afAamGlobalSoundEnabled) return;
+        if (!afAamUserSoundEnabled) return;
+        if (!afAamSound) return;
+
         try {
-            afAamSound.currentTime = 0;
+            // если звук ещё не "разбужен" жестом — пробуем тихо. Если нельзя — молча.
             var p = afAamSound.play();
             if (p && typeof p.then === 'function') {
-                p.catch(function (e) {
-                    if (afAamDebug) {
-                        console.log('[AAM] audio play() blocked:', e);
-                    }
+                p.then(function () {
+                    // ок
+                }).catch(function () {
+                    // браузер запретил автоплей — не критично
                 });
             }
-        } catch (e) {
-            if (afAamDebug) {
-                console.log('[AAM] playAlertSound error:', e);
-            }
-        }
+        } catch (e) {}
     }
-
 
     function initToasts() {
         if (afAamToastContainer) {
@@ -1058,7 +1468,13 @@
         div.className = 'af-aam-toast-container';
         document.body.appendChild(div);
         afAamToastContainer = div;
+
+        // гарантируем “дренаж” очереди, даже если снаружи никто не определил функцию
+        window.afAamDrainToasts = function () {
+            processToastQueue();
+        };
     }
+
 
     function dismissToast(div, timeoutId) {
         if (!div) {
@@ -1081,7 +1497,37 @@
         }, 200);
     }
 
+    function afAamGetDefaultAvatarUrl() {
+        // пробуем разные возможные глобалы (в темах/плагинах по-разному)
+        if (typeof window.af_aam_default_avatar === 'string' && window.af_aam_default_avatar) {
+            return window.af_aam_default_avatar;
+        }
+        if (typeof window.default_avatar === 'string' && window.default_avatar) {
+            return window.default_avatar;
+        }
+        if (typeof window.mybb_default_avatar === 'string' && window.mybb_default_avatar) {
+            return window.mybb_default_avatar;
+        }
+
+        // совсем фолбэк: если у тебя в assets лежит дефолт (необязательно)
+        if (typeof window.af_aam_asset_base === 'string' && window.af_aam_asset_base) {
+            var base = window.af_aam_asset_base;
+            if (base[base.length - 1] !== '/') base += '/';
+            return base + 'default_avatar.png';
+        }
+
+        return '';
+    }
+
+    function afAamCssUrl(url) {
+        // безопасно для url('...') — убираем кавычки/переводы строк
+        return String(url || '').replace(/['"\n\r\\]/g, '');
+    }
+
+
     function spawnToast(alert) {
+        if (!afAamUserToastsEnabled) return;
+
         if (!afAamToastContainer) {
             initToasts();
         }
@@ -1097,6 +1543,50 @@
         var header = document.createElement('div');
         header.className = 'af-aam-toast-header';
 
+        // аватар слева
+        var avatarWrap = document.createElement('span');
+        avatarWrap.className = 'af-aam-toast-avatar';
+
+        var img = document.createElement('img');
+
+        var avatarUrl = (alert && alert.avatar && alert.avatar.url) ? String(alert.avatar.url) : '';
+        if (!avatarUrl) {
+            avatarUrl = afAamGetDefaultAvatarUrl();
+        }
+
+        // Ставим фон INLINE + !important: это убивает “перекрытие дефолтом” CSS’ом
+        if (avatarUrl) {
+            var safe = afAamCssUrl(avatarUrl);
+            avatarWrap.style.setProperty('background-image', "url('" + safe + "')", 'important');
+            avatarWrap.style.setProperty('background-size', 'cover', 'important');
+            avatarWrap.style.setProperty('background-position', 'center', 'important');
+            avatarWrap.style.setProperty('background-repeat', 'no-repeat', 'important');
+        }
+
+        // Сам img оставляем (если CSS его не скрывает — отлично; если скрывает — фон уже верный)
+        if (avatarUrl) {
+            img.src = avatarUrl;
+        }
+        img.width  = (alert && alert.avatar && alert.avatar.width)  ? (parseInt(alert.avatar.width, 10) || 32)  : 32;
+        img.height = (alert && alert.avatar && alert.avatar.height) ? (parseInt(alert.avatar.height, 10) || 32) : 32;
+        img.alt    = (alert && alert.avatar && alert.avatar.username) ? String(alert.avatar.username) : '';
+        img.decoding = 'async';
+        img.loading = 'lazy';
+        img.draggable = false;
+
+        // Если вдруг реальный аватар не грузится — упадём в дефолт (и тоже обновим фон)
+        img.addEventListener('error', function () {
+            var d = afAamGetDefaultAvatarUrl();
+            if (d && img.src !== d) {
+                img.src = d;
+
+                var safeD = afAamCssUrl(d);
+                avatarWrap.style.setProperty('background-image', "url('" + safeD + "')", 'important');
+            }
+        }, { once: true });
+
+        avatarWrap.appendChild(img);
+
         var title = document.createElement('div');
         title.className = 'af-aam-toast-title';
         title.textContent = 'Новое уведомление';
@@ -1106,24 +1596,13 @@
         close.className = 'af-aam-toast-close';
         close.textContent = '×';
 
+        header.appendChild(avatarWrap);
         header.appendChild(title);
         header.appendChild(close);
 
         var text = document.createElement('div');
         text.className = 'af-aam-toast-text';
-        text.textContent = alert.text || '';
-
-        if (alert.avatar && alert.avatar.url) {
-            var avatarWrap = document.createElement('span');
-            avatarWrap.className = 'af-aam-toast-avatar';
-            var img = document.createElement('img');
-            img.src = alert.avatar.url;
-            img.width = alert.avatar.width || 32;
-            img.height = alert.avatar.height || 32;
-            img.alt = alert.avatar.username || '';
-            avatarWrap.appendChild(img);
-            div.appendChild(avatarWrap);
-        }
+        text.textContent = (alert && alert.text) ? String(alert.text) : '';
 
         div.appendChild(header);
         div.appendChild(text);
@@ -1132,9 +1611,8 @@
             dismissToast(div);
         }, afAamToastDuration);
 
-        // клик — перейти по ссылке, если есть
         div.addEventListener('click', function () {
-            if (alert.url) {
+            if (alert && alert.url) {
                 window.location.href = alert.url;
             }
             dismissToast(div, autoHide);
@@ -1152,6 +1630,7 @@
         }, 10);
     }
 
+
     function processToastQueue() {
         if (!afAamToastContainer || afAamToastLimit <= 0) {
             return;
@@ -1163,23 +1642,43 @@
     }
 
     function queueToasts(alerts) {
-        if (!Array.isArray(alerts) || !alerts.length) {
-            return;
+        if (!Array.isArray(alerts) || !alerts.length) return;
+
+        // тосты выключены пользователем
+        if (!afAamUserToastsEnabled) return;
+
+        var maxId = lastSeenAlertId;
+
+        for (var i = 0; i < alerts.length; i++) {
+            var a = alerts[i];
+            if (!a) continue;
+
+            var id = parseInt(a.id, 10) || 0;
+            if (id > maxId) maxId = id;
+
+            // только непрочитанные
+            if (a.is_read && parseInt(a.is_read, 10) === 1) continue;
+
+            // уже видели/показывали
+            if (id && lastSeenAlertId > 0 && id <= lastSeenAlertId) continue;
+            if (id && afAamShownToastIds[id]) continue;
+
+            afAamShownToastIds[id] = 1;
+            afAamToastQueue.push(a);
         }
 
-        alerts.forEach(function (alert) {
-            var id = parseInt(alert.id, 10) || null;
-            if (id && afAamShownToastIds[id]) {
-                return;
-            }
-            if (id) {
-                afAamShownToastIds[id] = true;
-            }
-            afAamToastQueue.push(alert);
-        });
+        if (maxId > lastSeenAlertId) {
+            saveLastSeen(maxId);
+        }
 
-        processToastQueue();
+        // запуск показа, если у тебя дальше в файле есть drain/renderer — оставляем как было
+        if (typeof window.afAamDrainToasts === 'function') {
+            window.afAamDrainToasts();
+        }
     }
+
+    var afAamPollInFlight = false;
+    var afAamInitialSnapshotDone = false;
 
     // звук больше НЕ зависит от лимита тостов
     function showToastsFromAlerts(alerts) {
@@ -1200,79 +1699,118 @@
 
     // ======== ПОЛЛИНГ НЕПРОЧИТАННЫХ (ТЕПЕРЬ ЧЕРЕЗ af_aam_api&op=list) =========
     function pollUnreadAlerts() {
+        if (afAamPollInFlight) return;
+        afAamPollInFlight = true;
+
         ajax('xmlhttp.php', {
             action: 'af_aam_api',
-            op: 'list'
+            op: 'list',
+            unreadOnly: 1
         }, function (resp) {
-            if (!resp || typeof resp !== 'object') {
-                if (afAamDebug) {
-                    console.log('[AAM] pollUnreadAlerts: пустой/битый ответ', resp);
-                }
+            afAamPollInFlight = false;
+
+            if (!resp || !resp.ok) {
+                if (afAamDebug) console.log('[AAM] poll failed', resp);
                 return;
             }
 
-            // если сервер явно сказал "ошибка" — выходим
-            if (resp.error && !resp.ok) {
-                if (afAamDebug) {
-                    console.log('[AAM] pollUnreadAlerts: ошибка от сервера', resp);
-                }
+            // синк счётчика/шаблона
+            syncFromResponse(resp || {});
+
+            var items = Array.isArray(resp.items) ? resp.items : [];
+            if (!items.length) {
+                afAamInitialSnapshotDone = true;
                 return;
             }
 
-            var oldCount = currentUnread || 0;
-            var newCount = extractUnreadCount(resp);
+            // На первом нормальном ответе: делаем "слепок" и НЕ считаем это новыми уведомлениями
+            // (решает твой кейс “кликнула лого — звук”)
+            if (!afAamInitialSnapshotDone) {
+                var maxId0 = 0;
+                items.forEach(function (a) {
+                    var id = parseInt(a.id, 10) || 0;
+                    if (id > maxId0) maxId0 = id;
+                });
 
-            if (newCount === null) {
-                // если счётчик не нашли — не роняем логику
-                newCount = oldCount;
-            }
-
-            // обновляем HTML модалки, если пришёл шаблон
-            if (resp.template) {
-                var tbody = qs('#alerts_content');
-                if (tbody) {
-                    tbody.innerHTML = resp.template;
-                }
-            }
-
-            // вычисляем id самого свежего алерта
-            var newestId = lastSeenAlertId;
-            if (Array.isArray(resp.items) && resp.items.length) {
-                var nid = parseInt(resp.items[0].id, 10);
-                if (!isNaN(nid)) {
-                    newestId = nid;
-                }
-            }
-
-            // подтягиваем бейдж и title
-            updateVisibleCounts(newCount);
-
-            var hasNewAlerts = (newCount > oldCount);
-            if (!hasNewAlerts && newestId && newestId > lastSeenAlertId) {
-                // счётчик тот же, но появился алерт с новым id
-                hasNewAlerts = true;
-            }
-
-            if (hasNewAlerts) {
-                if (afAamDebug) {
-                    console.log('[AAM] pollUnreadAlerts: есть новые алерты');
+                if (lastSeenAlertId <= 0 && maxId0 > 0) {
+                    saveLastSeen(maxId0);
                 }
 
-                // звук отдельно от тостов
+                afAamInitialSnapshotDone = true;
+                return;
+            }
+
+            // Есть ли реально новые (непр.) относительно lastSeenAlertId
+            var hasNewUnseen = afAamHasNewUnseenUnread(items);
+
+            // Тосты — только новые (queueToasts сама фильтрует)
+            queueToasts(items);
+
+            // Звук — ТОЛЬКО если реально пришло новое
+            if (hasNewUnseen) {
                 playAlertSound();
-
-                if (Array.isArray(resp.items) && resp.items.length) {
-                    showToastsFromAlerts(resp.items);
-                }
-            }
-
-            if (newestId && newestId > lastSeenAlertId) {
-                lastSeenAlertId = newestId;
             }
         });
     }
 
     var afAamLongPollRunning = false;
+    var afAamPollBackoff = 0;
+
+    function afAamComputeNextDelay() {
+        // в фоне чуть медленнее, но без “умирания”
+        var hidden = document.hidden;
+        var base = hidden ? 1200 : 150;
+        if (afAamPollBackoff <= 0) return base;
+        return Math.min(10000, base + afAamPollBackoff);
+    }
+
+    function afAamOnPollFail() {
+        afAamPollBackoff = afAamPollBackoff ? Math.min(15000, afAamPollBackoff * 2) : 800;
+    }
+
+    function afAamOnPollOk() {
+        afAamPollBackoff = 0;
+    }
+
+    function afAamLongPollLoop() {
+        if (afAamLongPollRunning) return;
+        afAamLongPollRunning = true;
+
+        function tick() {
+            var timeoutSec = document.hidden ? 30 : 25;
+            var timeoutMs  = (timeoutSec + 5) * 1000;
+
+            ajax('xmlhttp.php', {
+                action: 'af_aam_api',
+                op: 'poll',
+                since_id: lastSeenAlertId || 0,
+                since_unread: currentUnread || 0,
+                timeout: timeoutSec
+            }, function (resp) {
+                if (!resp || resp.ok === 0) {
+                    if (afAamDebug) console.log('[AAM] longpoll fail:', resp);
+                    afAamOnPollFail();
+                    return setTimeout(tick, afAamComputeNextDelay());
+                }
+
+                afAamOnPollOk();
+
+                afAamHandleIncoming(resp);
+
+                // следующий тик почти сразу, но с учётом backoff/visibility
+                setTimeout(tick, afAamComputeNextDelay());
+            }, timeoutMs);
+        }
+
+        // при возвращении на вкладку — ускоряемся
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) {
+                afAamPollBackoff = 0;
+            }
+        });
+
+        tick();
+    }
 
     function afAamHandleIncoming(resp) {
         if (!resp || typeof resp !== 'object') return;
@@ -1291,64 +1829,42 @@
             if (tbody) tbody.innerHTML = resp.template;
         }
 
+        // вычислим items заранее
+        var items = Array.isArray(resp.items) ? resp.items : [];
+
         // обновляем newest id (сервер может прислать server_newest_id)
+        var newest = 0;
         if (typeof resp.server_newest_id !== 'undefined') {
-            var sid = parseInt(resp.server_newest_id, 10);
-            if (!isNaN(sid) && sid > lastSeenAlertId) lastSeenAlertId = sid;
-        } else if (Array.isArray(resp.items) && resp.items.length) {
-            var nid = parseInt(resp.items[0].id, 10);
-            if (!isNaN(nid) && nid > lastSeenAlertId) lastSeenAlertId = nid;
+            newest = parseInt(resp.server_newest_id, 10) || 0;
+        } else if (items.length) {
+            newest = parseInt(items[0].id, 10) || 0;
+        }
+
+        if (newest > 0 && newest > lastSeenAlertId) {
+            saveLastSeen(newest);
         }
 
         updateVisibleCounts(newCount);
 
-        var hasNewAlerts = (newCount > oldCount);
-        if (resp.changed === 1 || resp.changed === true) {
-            // long-poll: changed=1 всегда значит “что-то произошло”
-            // звук+тосты — только если стало больше или реально пришли items
-            if (Array.isArray(resp.items) && resp.items.length) hasNewAlerts = true;
+        // “новые” — это НЕ просто changed=1, а реально новые непрочитанные выше lastSeenAlertId
+        var hasNewUnseen = false;
+        if (items.length) {
+            hasNewUnseen = afAamHasNewUnseenUnread(items);
+        } else {
+            // если items не дали, но счётчик вырос — тоже считаем событием (на случай урезанного ответа)
+            hasNewUnseen = (newCount > oldCount);
         }
 
-        if (hasNewAlerts) {
+        if (hasNewUnseen) {
             playAlertSound();
-            if (Array.isArray(resp.items) && resp.items.length) {
-                showToastsFromAlerts(resp.items);
+            if (items.length) {
+                showToastsFromAlerts(items);
             }
         }
     }
 
-    function afAamLongPollLoop() {
-        if (afAamLongPollRunning) return;
-        afAamLongPollRunning = true;
 
-        var timeoutSec = 25;
-        var timeoutMs  = (timeoutSec + 5) * 1000;
 
-        function tick() {
-            ajax('xmlhttp.php', {
-                action: 'af_aam_api',
-                op: 'poll',
-                since_id: lastSeenAlertId || 0,
-                since_unread: currentUnread || 0,
-                timeout: timeoutSec
-            }, function (resp) {
-                // если таймаут/ошибка — просто повторяем через небольшую паузу
-                if (!resp || resp.ok === 0) {
-                    if (afAamDebug) console.log('[AAM] longpoll fail:', resp);
-                    setTimeout(tick, 1500);
-                    return;
-                }
-
-                // changed=0 → тоже норм, просто повторяем
-                afAamHandleIncoming(resp);
-
-                // сразу следующий запрос (без setInterval, без “удушения” в фоне)
-                setTimeout(tick, 50);
-            }, timeoutMs);
-        }
-
-        tick();
-    }
 
 
     // ======== ИНИЦИАЛИЗАЦИЯ ==========================
@@ -1391,6 +1907,7 @@
 
         // глобальный клик для "разбуживания" звука (один раз)
         document.addEventListener('click', primeSoundOnce, true);
+        document.addEventListener('keydown', primeSoundOnce, true);
 
         // сразу один раз дернем, чтобы синхронизировать бейдж без ожидания интервала
         pollUnreadAlerts();
