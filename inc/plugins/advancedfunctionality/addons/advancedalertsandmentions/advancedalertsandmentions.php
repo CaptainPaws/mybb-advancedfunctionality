@@ -598,14 +598,14 @@ function af_aam_ensure_mycode(): void
         [
             'title'       => 'AF AAM Mention (uid)',
             'description' => $lang->af_aam_mycode_desc ?? 'Упоминание пользователя с привязкой к uid',
-            'regex'       => '\\[mention=([0-9]+)\\](.+?)\\[/mention\\]',
+            'regex'       => '\[mention=([0-9]+)\](.+?)\[/mention\]',
             'replacement' => '<span class="af-aam-mention">@<a href="member.php?action=profile&uid=$1">$2</a></span>',
             'parseorder'  => 0,
         ],
         [
             'title'       => 'AF AAM Mention (name)',
             'description' => $lang->af_aam_mycode_desc ?? 'Упоминание пользователя по имени',
-            'regex'       => '\\[mention\\](.+?)\\[/mention\\]',
+            'regex'       => '\[mention\](.+?)\[/mention\]',
             'replacement' => '<span class="af-aam-mention">@<a href="member.php?action=profile&username=$1">$1</a></span>',
             'parseorder'  => 1,
         ],
