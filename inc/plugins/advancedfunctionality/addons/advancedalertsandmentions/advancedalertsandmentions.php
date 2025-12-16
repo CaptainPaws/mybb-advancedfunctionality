@@ -44,6 +44,38 @@ function af_aam_require(string $rel): void
     $loaded[$rel] = true;
 }
 
+function af_aam_get_setting_texts(string $settingName, string $fallbackTitle, string $fallbackDesc): array
+{
+    global $lang;
+
+    // приоритет: стандартный стиль MyBB -> setting_{name}
+    $titleKey = 'setting_' . $settingName;
+    $descKey  = 'setting_' . $settingName . '_desc';
+
+    $title = '';
+    $desc  = '';
+
+    if (isset($lang->{$titleKey}) && trim((string)$lang->{$titleKey}) !== '') {
+        $title = (string)$lang->{$titleKey};
+    } elseif (isset($lang->{$settingName}) && trim((string)$lang->{$settingName}) !== '') {
+        // fallback на твой стиль ключей (если он есть)
+        $title = (string)$lang->{$settingName};
+    } else {
+        $title = $fallbackTitle;
+    }
+
+    if (isset($lang->{$descKey}) && trim((string)$lang->{$descKey}) !== '') {
+        $desc = (string)$lang->{$descKey};
+    } elseif (isset($lang->{$settingName . '_desc'}) && trim((string)$lang->{$settingName . '_desc'}) !== '') {
+        $desc = (string)$lang->{$settingName . '_desc'};
+    } else {
+        $desc = $fallbackDesc;
+    }
+
+    return [$title, $desc];
+}
+
+
 // База/репозиторий и подсказки упоминаний нужны не только для xmlhttp
 af_aam_require('repo.php');
 af_aam_require('mentions.php');
@@ -289,7 +321,6 @@ function af_advancedalertsandmentions_install(): void
 
     // таблица уведомлений
     if (!$db->table_exists(AF_AAM_TABLE_ALERTS)) {
-        // свежая установка
         $db->write_query("
             CREATE TABLE " . TABLE_PREFIX . AF_AAM_TABLE_ALERTS . " (
                 id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -307,15 +338,12 @@ function af_advancedalertsandmentions_install(): void
             ) ENGINE=InnoDB{$collation};
         ");
     } else {
-        // апгрейд старой таблицы: докидываем недостающие колонки
         if (!$db->field_exists('from_uid', AF_AAM_TABLE_ALERTS)) {
             $db->add_column(AF_AAM_TABLE_ALERTS, 'from_uid', "INT UNSIGNED NOT NULL DEFAULT 0 AFTER object_id");
         }
-
         if (!$db->field_exists('forced', AF_AAM_TABLE_ALERTS)) {
             $db->add_column(AF_AAM_TABLE_ALERTS, 'forced', "TINYINT(1) NOT NULL DEFAULT 0 AFTER from_uid");
         }
-
         if (!$db->field_exists('extra', AF_AAM_TABLE_ALERTS)) {
             $db->add_column(AF_AAM_TABLE_ALERTS, 'extra', "TEXT NULL AFTER forced");
         }
@@ -329,12 +357,11 @@ function af_advancedalertsandmentions_install(): void
         $db->add_column('users', 'af_aam_prefs', "MEDIUMTEXT NOT NULL");
     }
 
-    // группа настроек AF: AAM (основное имя = af_advancedalertsandmentions, старое = af_aam)
+    // группа настроек AF: AAM
     $groupPrimary = 'af_' . AF_AAM_ID;
     $groupLegacy  = 'af_aam';
     $gid = null;
 
-    // сразу собираем существующие группы, чтобы не плодить дубли
     $gids = [];
     $gq = $db->simple_select('settinggroups', 'gid,name', "name IN('{$groupPrimary}','{$groupLegacy}')");
     while ($g = $db->fetch_array($gq)) {
@@ -343,13 +370,11 @@ function af_advancedalertsandmentions_install(): void
 
     if (isset($gids[$groupPrimary])) {
         $gid = $gids[$groupPrimary];
-        // если вдруг legacy тоже есть – объединим, чтобы не было двух пунктов
         if (isset($gids[$groupLegacy]) && $gids[$groupLegacy] !== $gid) {
             $db->update_query('settings', ['gid' => $gid], 'gid=' . (int)$gids[$groupLegacy]);
             $db->delete_query('settinggroups', 'gid=' . (int)$gids[$groupLegacy]);
         }
     } elseif (isset($gids[$groupLegacy])) {
-        // переименуем старую группу в каноническое имя и используем её
         $gid = $gids[$groupLegacy];
         $db->update_query('settinggroups', [
             'name'        => $groupPrimary,
@@ -367,125 +392,183 @@ function af_advancedalertsandmentions_install(): void
         ]);
     }
 
+    // --- правильные тексты для проблемных настроек (и фолбэки на случай пустого языка)
+    [$autocleanTitle, $autocleanDesc] = af_aam_get_setting_texts(
+        'af_aam_autoclean_days',
+        'Автоочистка уведомлений (дней)',
+        'Удалять уведомления старше N дней. 0 = не удалять автоматически.'
+    );
+
+    [$toastTitle, $toastDesc] = af_aam_get_setting_texts(
+        'af_aam_toast_limit',
+        'Лимит тост-уведомлений',
+        'Сколько тостов максимум показывать подряд. 0 = выключить тосты полностью.'
+    );
+
     $settings = [
         'af_aam_enabled' => [
-            'title'       => $lang->af_aam_enabled,
-            'description' => $lang->af_aam_enabled_desc,
+            'title'       => $lang->af_aam_enabled ?? 'Включить уведомления',
+            'description' => $lang->af_aam_enabled_desc ?? 'Включает систему уведомлений и упоминаний.',
             'optionscode' => 'yesno',
             'value'       => '1',
             'disporder'   => 1,
         ],
         'af_aam_per_page' => [
-            'title'       => $lang->af_aam_per_page,
-            'description' => $lang->af_aam_per_page_desc,
+            'title'       => $lang->af_aam_per_page ?? 'Уведомлений на страницу',
+            'description' => $lang->af_aam_per_page_desc ?? 'Количество уведомлений в UCP.',
             'optionscode' => 'text',
             'value'       => '20',
             'disporder'   => 2,
         ],
         'af_aam_dropdown_limit' => [
-            'title'       => $lang->af_aam_dropdown_limit,
-            'description' => $lang->af_aam_dropdown_limit_desc,
+            'title'       => $lang->af_aam_dropdown_limit ?? 'Уведомлений в выпадающем списке',
+            'description' => $lang->af_aam_dropdown_limit_desc ?? 'Сколько последних уведомлений показывать в модалке/дропдауне.',
             'optionscode' => 'text',
             'value'       => '5',
             'disporder'   => 3,
         ],
         'af_aam_autorefresh' => [
-            'title'       => $lang->af_aam_autorefresh,
-            'description' => $lang->af_aam_autorefresh_desc,
+            'title'       => $lang->af_aam_autorefresh ?? 'Автообновление (сек)',
+            'description' => $lang->af_aam_autorefresh_desc ?? '0 = выключено. Иначе — интервал автообновления списка уведомлений.',
             'optionscode' => 'text',
             'value'       => '0',
             'disporder'   => 4,
         ],
         'af_aam_sound' => [
-            'title'       => $lang->af_aam_sound,
-            'description' => $lang->af_aam_sound_desc,
+            'title'       => $lang->af_aam_sound ?? 'Звук уведомления',
+            'description' => $lang->af_aam_sound_desc ?? 'Включить звук при новых уведомлениях (если браузер разрешает).',
             'optionscode' => 'yesno',
             'value'       => '1',
             'disporder'   => 5,
         ],
         'af_aam_max_alerts_per_user' => [
-            'title'       => $lang->af_aam_max_alerts_per_user,
-            'description' => $lang->af_aam_max_alerts_per_user_desc,
+            'title'       => $lang->af_aam_max_alerts_per_user ?? 'Макс. уведомлений на пользователя',
+            'description' => $lang->af_aam_max_alerts_per_user_desc ?? '0 = без лимита. Иначе — старые будут удаляться.',
             'optionscode' => 'text',
             'value'       => '0',
             'disporder'   => 6,
         ],
         'af_aam_autoclean_days' => [
-            'title'       => $lang->af_aam_autoclean_days,
-            'description' => $lang->af_aam_autoclean_days_desc,
+            'title'       => $autocleanTitle,
+            'description' => $autocleanDesc,
             'optionscode' => 'text',
-            'value'       => '0', // 0 = не чистить автоматически
+            'value'       => '0',
             'disporder'   => 7,
         ],
         'af_aam_inactive_days' => [
-            'title'       => $lang->af_aam_inactive_days,
-            'description' => $lang->af_aam_inactive_days_desc,
+            'title'       => $lang->af_aam_inactive_days ?? 'Очистка по неактивности (дней)',
+            'description' => $lang->af_aam_inactive_days_desc ?? 'Удалять уведомления пользователей, которые не заходили N дней. 0 = выключено.',
             'optionscode' => 'text',
             'value'       => '0',
             'disporder'   => 8,
         ],
         'af_aam_toast_limit' => [
-        'title'       => $lang->af_aam_toast_limit,
-        'description' => $lang->af_aam_toast_limit_desc,
-        'optionscode' => 'text',
-        'value'       => '5',
-        'disporder'   => 9,
+            'title'       => $toastTitle,
+            'description' => $toastDesc,
+            'optionscode' => 'text',
+            'value'       => '5',
+            'disporder'   => 9,
         ],
-
-
+        'af_aam_mention_button_enabled' => [
+            'title'       => $lang->af_aam_mention_button_enabled ?? 'Кнопка «Упомянуть» в постбите',
+            'description' => $lang->af_aam_mention_button_enabled_desc ?? 'Если выключить — кнопка под постом исчезнет, но клик по никнейму (в постбите) всё равно будет вставлять упоминание в редактор.',
+            'optionscode' => 'yesno',
+            'value'       => '1',
+            'disporder'   => 20,
+        ],
+        'af_aam_all_allowed_groups' => [
+            'title'       => $lang->af_aam_all_allowed_groups ?? '@all: кому разрешено использовать',
+            'description' => $lang->af_aam_all_allowed_groups_desc ?? 'ID групп через запятую. Только эти группы смогут писать @all. Пусто = никто не может.',
+            'optionscode' => 'text',
+            'value'       => '',
+            'disporder'   => 21,
+        ],
+        'af_aam_all_target_groups' => [
+            'title'       => $lang->af_aam_all_target_groups ?? '@all: кому приходит уведомление',
+            'description' => $lang->af_aam_all_target_groups_desc ?? 'ID групп через запятую. Пусто = всем зарегистрированным пользователям. Если указано — уведомление получат только пользователи, состоящие в этих группах (основная или доп. группа).',
+            'optionscode' => 'text',
+            'value'       => '',
+            'disporder'   => 22,
+        ],
     ];
 
     foreach ($settings as $name => $data) {
-        $exists = $db->simple_select('settings', 'sid', "name='" . $db->escape_string($name) . "'");
-        if ($db->fetch_array($exists)) {
+        $nameEsc = $db->escape_string($name);
+
+        $existing = $db->fetch_array(
+            $db->simple_select('settings', 'sid,title,description,gid,optionscode,value,disporder', "name='{$nameEsc}'", ['limit' => 1])
+        );
+
+        $row = $data;
+        $row['name']        = $name;
+        $row['gid']         = $gid;
+        $row['title']       = (string)($row['title'] ?? '');
+        $row['description'] = (string)($row['description'] ?? '');
+
+        $rowDb = [
+            'gid'         => (int)$row['gid'],
+            'title'       => $db->escape_string($row['title']),
+            'description' => $db->escape_string($row['description']),
+            'optionscode' => $db->escape_string((string)$row['optionscode']),
+            'value'       => $db->escape_string((string)$row['value']),
+            'disporder'   => (int)$row['disporder'],
+        ];
+
+        if ($existing) {
+            $upd = [];
+
+            // фикс пустых заголовков/описаний (твоя проблема №1)
+            if (trim((string)$existing['title']) === '' && trim((string)$row['title']) !== '') {
+                $upd['title'] = $rowDb['title'];
+            }
+            if (trim((string)$existing['description']) === '' && trim((string)$row['description']) !== '') {
+                $upd['description'] = $rowDb['description'];
+            }
+
+            // приводим gid/параметры к актуальным (безопасно)
+            if ((int)$existing['gid'] !== (int)$gid) {
+                $upd['gid'] = (int)$gid;
+            }
+            if ((string)$existing['optionscode'] !== (string)$data['optionscode']) {
+                $upd['optionscode'] = $rowDb['optionscode'];
+            }
+            if ((string)$existing['value'] === '' && (string)$data['value'] !== '') {
+                // не перезатираем пользовательские значения, но заполняем пустое
+                $upd['value'] = $rowDb['value'];
+            }
+            if ((int)$existing['disporder'] !== (int)$data['disporder']) {
+                $upd['disporder'] = $rowDb['disporder'];
+            }
+
+            if (!empty($upd)) {
+                $db->update_query('settings', $upd, 'sid=' . (int)$existing['sid']);
+            }
             continue;
         }
 
-        $data['name']  = $name;
-        $data['gid']   = $gid;
-        $data['title'] = $db->escape_string($data['title']);
-        $data['description'] = $db->escape_string($data['description']);
-        $db->insert_query('settings', $data);
+        $insert = $rowDb;
+        $insert['name'] = $nameEsc;
+        $db->insert_query('settings', $insert);
     }
 
     rebuild_settings();
 
-    // дефолтные типы уведомлений (на основе набора MyAlerts)
-    $defaultTypes = [
-        'rep',
-        'pm',
-        'post_threadauthor',
-        'subscribed_thread',
-        'quoted',
-        'mention',
-    ];
+    // дефолтные типы уведомлений
+    $defaultTypes = ['rep', 'pm', 'post_threadauthor', 'subscribed_thread', 'quoted', 'mention'];
 
     foreach ($defaultTypes as $code) {
         $titleKey = 'af_aam_alert_type_' . $code;
         $title = isset($lang->{$titleKey}) ? $lang->{$titleKey} : $code;
 
-        // upsert вместо тупого insert — не будет дубликатов
-        af_aam_register_type(
-            $code,
-            $title,
-            1, // canBeUserDisabled
-            1, // defaultUserEnabled
-            1  // enabled
-        );
+        af_aam_register_type($code, $title, 1, 1, 1);
     }
 
-    // MyCode для тегов [mention]
     af_aam_ensure_mycode();
-
-    // шаблоны и врезки
     af_aam_install_templates();
-
-    // ВАЖНО: чистим старые коды типов (reputation, subscription, reply, quote)
     af_aam_cleanup_legacy_types();
-
     af_aam_install_task_file();
 
-    // Таск автоочистки по неактивности
+    // таск автоочистки по неактивности
     require_once MYBB_ROOT . 'inc/functions_task.php';
     $existingTask = $db->fetch_field(
         $db->simple_select('tasks', 'tid', "file='af_aam_cleanup'"),
@@ -510,6 +593,7 @@ function af_advancedalertsandmentions_install(): void
         $db->insert_query('tasks', $task);
     }
 }
+
 
 function af_advancedalertsandmentions_uninstall(): void
 {
@@ -541,7 +625,11 @@ function af_advancedalertsandmentions_uninstall(): void
             'af_aam_autoclean_days',
             'af_aam_toast_limit',
             'af_aam_max_alerts_per_user',
-            'af_aam_inactive_days'
+            'af_aam_inactive_days',
+            'af_aam_mention_button_enabled',
+            'af_aam_all_allowed_groups',
+            'af_aam_all_target_groups'
+
         )"
     );
     $db->delete_query('settinggroups', "name IN('af_aam','af_" . AF_AAM_ID . "')");
@@ -594,20 +682,37 @@ function af_aam_ensure_mycode(): void
     $hasAllowImgCode  = $db->field_exists('allowimgcode', 'mycode');
     $hasAllowVideo    = $db->field_exists('allowvideocode', 'mycode');
 
+    /**
+     * ВАЖНО:
+     * - Regex максимально безопасные (не допускаем < > " и скобки), иначе XSS через MyCode — это реальность.
+     * - parseorder:
+     *   @all ставим раньше, потом mention.
+     */
     $mycodes = [
+        [
+            'title'       => 'AF AAM Mention All',
+            'description' => $lang->af_aam_mycode_desc ?? '@all',
+            // ловим @all как отдельное слово (не @all123 и не mail@all.com)
+            'regex'       => '(^|[^a-zA-Z0-9_])@all(?![a-zA-Z0-9_])',
+            'replacement' => '$1<a href="javascript:void(0)" class="af-aam-mention-all" data-mention-all="1">@all</a>',
+            'parseorder'  => 48,
+        ],
         [
             'title'       => 'AF AAM Mention (uid)',
             'description' => $lang->af_aam_mycode_desc ?? 'Упоминание пользователя с привязкой к uid',
-            'regex'       => '\[mention=([0-9]+)\](.+?)\[/mention\]',
-            'replacement' => '<span class="af-aam-mention">@<a href="member.php?action=profile&uid=$1">$2</a></span>',
-            'parseorder'  => 0,
+            // username ограничиваем безопасными символами (без < > " [ ])
+            'regex'       => '\[mention=([0-9]+)\]([^\r\n\[\]<>"]+)\[/mention\]',
+            // @ И username внутри ОДНОЙ ссылки (и жирность/цвет будут “как у ссылки”)
+            'replacement' => '<a class="af-aam-mention-link" data-uid="$1" data-username="$2" href="member.php?action=profile&amp;uid=$1">@${2}</a>',
+            'parseorder'  => 50,
         ],
         [
             'title'       => 'AF AAM Mention (name)',
             'description' => $lang->af_aam_mycode_desc ?? 'Упоминание пользователя по имени',
-            'regex'       => '\[mention\](.+?)\[/mention\]',
-            'replacement' => '<span class="af-aam-mention">@<a href="member.php?action=profile&username=$1">$1</a></span>',
-            'parseorder'  => 1,
+            // аналогично: безопасный набор
+            'regex'       => '\[mention\]([^\r\n\[\]<>"]+)\[/mention\]',
+            'replacement' => '<a class="af-aam-mention-link" data-username="$1" href="member.php?action=profile&amp;username=$1">@${1}</a>',
+            'parseorder'  => 51,
         ],
     ];
 
@@ -621,21 +726,11 @@ function af_aam_ensure_mycode(): void
             'parseorder'  => (int)$code['parseorder'],
         ];
 
-        if ($hasAllowHtml) {
-            $row['allowhtml'] = 0;
-        }
-        if ($hasAllowMyCode) {
-            $row['allowmycode'] = 1;
-        }
-        if ($hasAllowSmilies) {
-            $row['allowsmilies'] = 1;
-        }
-        if ($hasAllowImgCode) {
-            $row['allowimgcode'] = 0;
-        }
-        if ($hasAllowVideo) {
-            $row['allowvideocode'] = 0;
-        }
+        if ($hasAllowHtml)    { $row['allowhtml'] = 0; }
+        if ($hasAllowMyCode)  { $row['allowmycode'] = 1; }
+        if ($hasAllowSmilies) { $row['allowsmilies'] = 1; }
+        if ($hasAllowImgCode) { $row['allowimgcode'] = 0; }
+        if ($hasAllowVideo)   { $row['allowvideocode'] = 0; }
 
         $existing = $db->fetch_array(
             $db->simple_select('mycode', 'cid', "title='{$row['title']}'")
@@ -648,6 +743,7 @@ function af_aam_ensure_mycode(): void
         }
     }
 }
+
 
 
 // AF-ядро само управляет "включено/выключено"
@@ -794,6 +890,62 @@ function af_aam_is_enabled(): bool
     }
     return true;
 }
+
+function af_aam_parse_gid_csv(string $raw): array
+{
+    $raw = trim($raw);
+    if ($raw === '') {
+        return [];
+    }
+
+    $out = [];
+    foreach (preg_split('/[,\s]+/', $raw) as $p) {
+        $n = (int)trim($p);
+        if ($n > 0) {
+            $out[$n] = true;
+        }
+    }
+
+    return array_keys($out);
+}
+
+function af_aam_user_group_ids(array $user): array
+{
+    $ids = [];
+
+    $primary = (int)($user['usergroup'] ?? 0);
+    if ($primary > 0) {
+        $ids[$primary] = true;
+    }
+
+    $add = (string)($user['additionalgroups'] ?? '');
+    if ($add !== '') {
+        foreach (explode(',', $add) as $p) {
+            $n = (int)trim($p);
+            if ($n > 0) {
+                $ids[$n] = true;
+            }
+        }
+    }
+
+    return array_keys($ids);
+}
+
+function af_aam_user_in_any_group(array $user, array $allowedGids): bool
+{
+    if (empty($allowedGids)) {
+        return false;
+    }
+
+    $userGids = af_aam_user_group_ids($user);
+    foreach ($userGids as $gid) {
+        if (in_array((int)$gid, $allowedGids, true)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 
 function af_aam_bootstrap(): void
 {
@@ -1641,7 +1793,6 @@ function af_aam_post_insert_end(&$posthandler): void
     $data = $posthandler->data ?? [];
     $post = $posthandler->post_insert_data ?? [];
 
-    // Пытаемся аккуратно вытащить pid и tid из разных мест
     $pid = 0;
     $tid = 0;
 
@@ -1691,31 +1842,61 @@ function af_aam_post_insert_end(&$posthandler): void
         return;
     }
 
-    $threadUid = (int)$thread['uid'];
+    $threadUid = (int)($thread['uid'] ?? 0);
 
-    // Сначала фиксируем всех, кого уведомили по цитате/упоминанию, чтобы не дублировать другими типами
+    // Текст поста
+    $message = trim((string)($data['message'] ?? ''));
+
+    // Список тех, кого мы уведомили по цитатам/упоминаниям/@all,
+    // чтобы не дублировать "автор темы" и "подписки"
     $notifiedUids = [];
-    if (!empty($data['message'])) {
-        $notifiedUids = af_aam_process_message_mentions((string)$data['message'], $tid, $pid, $thread, $fromUid);
+
+    if ($message !== '') {
+
+        // 0) @all (упоминание всех/групп)
+        // ВАЖНО: object_id у алерта = tid (а pid кладём в extra)
+        if (function_exists('af_aam_handle_all_mention')) {
+            af_aam_handle_all_mention(
+                $message,
+                $fromUid,
+                (int)$tid,
+                [
+                    'tid'     => (int)$tid,
+                    'pid'     => (int)$pid,
+                    'fid'     => (int)($thread['fid'] ?? 0),
+                    'subject' => (string)($thread['subject'] ?? ''),
+                ]
+            );
+            // твой обработчик сейчас void, поэтому notifiedUids отсюда не расширяем
+        }
+
+        // 1) Цитаты + обычные упоминания (@ник, @"Имя", [mention])
+        $notifiedUids = array_merge(
+            $notifiedUids,
+            af_aam_process_message_mentions($message, (int)$tid, (int)$pid, $thread, (int)$fromUid)
+        );
+
+        // нормализуем
+        $notifiedUids = array_values(array_unique(array_map('intval', $notifiedUids)));
     }
 
-    // 1) Уведомление автору темы (если это не он сам и не получил упоминание/цитату)
+    // 2) Уведомление автору темы (если это не он сам и не получил упоминание/цитату)
     if ($threadUid > 0 && $threadUid !== $fromUid && !in_array($threadUid, $notifiedUids, true)) {
         af_aam_add_alert(
             $threadUid,
             'post_threadauthor',
-            $tid,
-            $fromUid,
+            (int)$tid,     // object_id = tid
+            (int)$fromUid,
             [
-                'tid'     => $tid,
-                'pid'     => $pid,
-                'subject' => $thread['subject'],
-                'fid'     => (int)$thread['fid'],
+                'tid'     => (int)$tid,
+                'pid'     => (int)$pid,
+                'subject' => (string)($thread['subject'] ?? ''),
+                'fid'     => (int)($thread['fid'] ?? 0),
             ]
         );
     }
 
-    // 2) Подписчики темы
+    // 3) Подписчики темы
     $subs = $db->write_query("
         SELECT s.uid
         FROM " . TABLE_PREFIX . "threadsubscriptions s
@@ -1731,17 +1912,19 @@ function af_aam_post_insert_end(&$posthandler): void
         af_aam_add_alert(
             $subUid,
             'subscribed_thread',
-            $tid,
-            $fromUid,
+            (int)$tid,     // object_id = tid
+            (int)$fromUid,
             [
-                'tid'     => $tid,
-                'pid'     => $pid,
-                'subject' => $thread['subject'],
-                'fid'     => (int)$thread['fid'],
+                'tid'     => (int)$tid,
+                'pid'     => (int)$pid,
+                'subject' => (string)($thread['subject'] ?? ''),
+                'fid'     => (int)($thread['fid'] ?? 0),
             ]
         );
     }
 }
+
+
 
 /**
  * Обработка цитат и упоминаний в тексте поста/темы.
@@ -1922,7 +2105,7 @@ function af_aam_thread_insert_end(&$posthandler): void
         return;
     }
 
-    $fromUid = (int)$mybb->user['uid'];
+    $fromUid = (int)($mybb->user['uid'] ?? 0);
     if ($fromUid <= 0) {
         return;
     }
@@ -1931,9 +2114,40 @@ function af_aam_thread_insert_end(&$posthandler): void
     $subject = '';
 
     if ($thread && !empty($thread['subject'])) {
-        $subject = $thread['subject'];
+        $subject = (string)$thread['subject'];
     } elseif (!empty($data['subject'])) {
         $subject = (string)$data['subject'];
+    }
+
+    // Упоминания в первом посте темы (включая @all)
+    $message = trim((string)($data['message'] ?? ''));
+
+    if ($message !== '') {
+
+        // @all
+        // ВАЖНО: object_id у алерта = tid, pid кладём в extra
+        if (function_exists('af_aam_handle_all_mention')) {
+            af_aam_handle_all_mention(
+                $message,
+                (int)$fromUid,
+                (int)$tid,
+                [
+                    'tid'     => (int)$tid,
+                    'pid'     => (int)$pid,
+                    'fid'     => (int)$fid,
+                    'subject' => (string)$subject,
+                ]
+            );
+        }
+
+        // обычные упоминания/цитаты
+        af_aam_process_message_mentions(
+            $message,
+            (int)$tid,
+            (int)$pid,
+            ($thread ?: ['subject' => $subject, 'fid' => $fid]),
+            (int)$fromUid
+        );
     }
 
     // Все, кто подписан на форум, кроме автора темы
@@ -1953,33 +2167,38 @@ function af_aam_thread_insert_end(&$posthandler): void
         af_aam_add_alert(
             $toUid,
             'subscribed_forum',
-            $tid,
-            $fromUid,
+            (int)$tid,       // object_id = tid
+            (int)$fromUid,
             [
-                'tid'     => $tid,
-                'pid'     => $pid,
-                'fid'     => $fid,
-                'subject' => $subject,
+                'tid'     => (int)$tid,
+                'pid'     => (int)$pid,
+                'fid'     => (int)$fid,
+                'subject' => (string)$subject,
             ]
         );
     }
-
-    if (!empty($data['message'])) {
-        af_aam_process_message_mentions((string)$data['message'], $tid, $pid, ($thread ?: ['subject' => $subject, 'fid' => $fid]), $fromUid);
-    }
 }
+
 
 // ================ ПОСТБИТ: КНОПКА «СОБАЧКА» ===================
 
 function af_aam_postbit_mention_button(array &$post): void
 {
-    global $lang;
+    global $mybb, $lang;
+
+    if (empty($mybb->settings['af_aam_mention_button_enabled']) || (int)$mybb->settings['af_aam_mention_button_enabled'] !== 1) {
+        return;
+    }
 
     if (!af_aam_is_enabled()) {
         return;
     }
 
-    if (!isset($lang->af_aam_name)) {
+    if (!is_object($lang)) {
+        return;
+    }
+
+    if (!isset($lang->af_aam_mention_button)) {
         $lang->load('advancedfunctionality_' . AF_AAM_ID);
     }
 
@@ -1987,24 +2206,42 @@ function af_aam_postbit_mention_button(array &$post): void
         return;
     }
 
-    $username = $post['username']; // уже очищено MyBB
-    $title = htmlspecialchars_uni($lang->af_aam_mention_button);
+    $uid      = (int)$post['uid'];
+    $username = (string)$post['username']; // уже очищено MyBB
+    $title    = htmlspecialchars_uni($lang->af_aam_mention_button ?? 'Mention');
 
-    // компактная собачка, кликабельная
+    // 1) Делегируемый “@"-баттон
     $button = '<a href="javascript:void(0)" class="af-aam-mention-button" data-username="' .
-        htmlspecialchars_uni($username) . '" data-uid="' . (int)$post['uid'] . '" title="' . $title . '">@</a>';
+        htmlspecialchars_uni($username) . '" data-uid="' . $uid . '" title="' . $title . '">@</a>';
 
-    // сначала — после кнопки репутации
+    // 2) Делаем кликабельным ник автора поста (profilelink), чтобы JS мог ловить клик и вставлять mention в редактор
+    if (!empty($post['profilelink']) && is_string($post['profilelink'])) {
+        if (stripos($post['profilelink'], 'af-aam-mention-user') === false) {
+            $post['profilelink'] = preg_replace_callback('#<a\b([^>]*)>#i', function ($m) use ($uid, $username) {
+                $attrs = $m[1];
+
+                $data = ' data-uid="' . (int)$uid . '" data-username="' . htmlspecialchars_uni($username) . '"';
+
+                if (preg_match('#\bclass\s*=\s*("|\')([^"\']*)\1#i', $attrs)) {
+                    $attrs = preg_replace('#\bclass\s*=\s*("|\')([^"\']*)\1#i', 'class="$2 af-aam-mention-user"', $attrs, 1);
+                    return '<a' . $attrs . $data . '>';
+                }
+
+                return '<a class="af-aam-mention-user"' . $attrs . $data . '>';
+            }, $post['profilelink'], 1);
+        }
+    }
+
+    // Вставка кнопки в блок кнопок постбита
     if (!empty($post['button_rep'])) {
         $post['button_rep'] .= ' ' . $button;
-    }
-    // если по какой-то причине репы нет — добавляем к цитате
-    elseif (!empty($post['button_quote'])) {
+    } elseif (!empty($post['button_quote'])) {
         $post['button_quote'] .= ' ' . $button;
     } else {
         $post['button_quote'] = $button;
     }
 }
+
 
 
 /**
