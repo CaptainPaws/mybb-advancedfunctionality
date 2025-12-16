@@ -62,7 +62,8 @@ class AF_AAM_Repo
         if ($timeout > 30) $timeout = 30;
         if ($limit <= 0) $limit = 5;
 
-        $start = time();
+        $deadline = microtime(true) + $timeout;
+
         do {
             $newest = $this->get_newest_id($uid);
             $unread = $this->get_unread_count($uid);
@@ -78,9 +79,9 @@ class AF_AAM_Repo
                 ];
             }
 
-            // чуть-чуть подождём и проверим снова
-            usleep(350000);
-        } while ((time() - $start) < $timeout);
+            // Пауза между проверками, чтобы не долбить БД десятками запросов за один HTTP-коннект
+            usleep(900000); // ~0.9 сек
+        } while (microtime(true) < $deadline);
 
         // timeout — изменений нет
         return [
