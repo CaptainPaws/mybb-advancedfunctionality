@@ -14,9 +14,17 @@ function af_aam_suggest_users(string $q, int $limit = 8): array
         return [];
     }
 
+    if (mb_strlen($q) > 50) {
+        $q = mb_substr($q, 0, 50);
+    }
+
+    if (mb_strlen($q) < 2) {
+        return [];
+    }
+
     $limit = (int)$limit;
-    if ($limit <= 0) $limit = 8;
-    if ($limit > 20) $limit = 20;
+    if ($limit <= 0) $limit = 10;
+    if ($limit > 10) $limit = 10;
 
     // LIKE-safe (экранируем % и _)
     $qLike = str_replace(['%', '_'], ['\\%', '\\_'], $q);
@@ -26,7 +34,7 @@ function af_aam_suggest_users(string $q, int $limit = 8): array
         SELECT uid, username
         FROM " . TABLE_PREFIX . "users
         WHERE username LIKE '%{$qLike}%'
-        ORDER BY username ASC
+        ORDER BY (username LIKE '{$qLike}%') DESC, username ASC
         LIMIT {$limit}
     ");
 
