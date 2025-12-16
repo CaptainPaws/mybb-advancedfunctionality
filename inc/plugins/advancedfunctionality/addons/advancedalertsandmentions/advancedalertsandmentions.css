@@ -389,7 +389,7 @@
 }
 
 .af-aam-list-actions {
-    margin: 0 0 10px 0;
+    margin: 0 20px 10px 20px;
     text-align: right;
 }
 /* Toast-уведомления */
@@ -521,3 +521,9 @@
 .af-aam-sound-switch input:checked + .af-aam-sound-slider::before {
     transform: translateX(16px);
 }
+
+.af-aam-pref-row { display:block; margin: 6px 0; }
+.af-aam-pref-label { display:flex; align-items:center; gap:8px; cursor:pointer; }
+.af-aam-pref-checkbox { flex: 0 0 auto; }
+.af-aam-pref-text { display:inline-block; }
+.af-aam-alert-avatar img {max-width: 32px; height: 100%;}
