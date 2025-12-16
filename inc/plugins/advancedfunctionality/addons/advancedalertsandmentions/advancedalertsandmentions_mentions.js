@@ -19,14 +19,31 @@
   function qsa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
 
   // ---------- редактор / textarea ----------
-  function getMessageTextarea() {
-    // стандартно MyBB: textarea#message
-    var ta = qs('textarea#message');
-    if (ta) return ta;
-
+  function getMessageTextareas() {
+    var set = qsa('textarea#message');
     // quick reply иногда другой id, но name обычно message
-    ta = qs('textarea[name="message"]');
-    return ta || null;
+    qsa('textarea[name="message"]').forEach(function (ta) {
+      if (set.indexOf(ta) === -1) set.push(ta);
+    });
+    return set;
+  }
+
+  function pickActiveTextarea() {
+    var all = getMessageTextareas();
+    if (!all.length) return null;
+
+    var focused = document.activeElement;
+    if (focused && focused.tagName === 'TEXTAREA' && all.indexOf(focused) !== -1) {
+      return focused;
+    }
+
+    // выберем первый видимый textarea
+    for (var i = 0; i < all.length; i++) {
+      var ta = all[i];
+      if (ta && ta.offsetParent !== null) return ta;
+    }
+
+    return all[0];
   }
 
   function tryGetSceditorInstance(textarea) {
@@ -71,7 +88,7 @@
       ? ('[mention=' + parseInt(uid, 10) + ']' + username + '[/mention] ')
       : ('[mention]' + username + '[/mention] ');
 
-    var ta = getMessageTextarea();
+    var ta = pickActiveTextarea();
     var sc = tryGetSceditorInstance(ta);
 
     // SCEditor: вставка прямо в редактор
@@ -158,6 +175,11 @@
 
       var sc = tryGetSceditorInstance(ta);
 
+      // Синхронизируем SCEditor -> textarea, чтобы AJAX-отправка брала актуальный текст
+      if (sc && typeof sc.updateOriginal === 'function') {
+        try { sc.updateOriginal(); } catch (e3) {}
+      }
+
       // берём BBCode из sceditor, если он есть
       var current = '';
       if (sc && typeof sc.val === 'function') {
@@ -173,6 +195,11 @@
           try { sc.val(normalized); } catch (e2) {}
         }
         ta.value = normalized;
+      }
+
+      // и обратно в textarea (sceditor)
+      if (sc && typeof sc.updateOriginal === 'function') {
+        try { sc.updateOriginal(); } catch (e4) {}
       }
     } catch (e) {}
   }
@@ -205,13 +232,14 @@
 
       // делегирование: <a class="af-aam-mention-button" ...>@</a>
       var btn = (t.closest ? t.closest('.af-aam-mention-button') : null);
-      if (!btn) return;
+      var link = btn || (t.closest ? t.closest('[data-mention="1"][data-mention-username]') : null);
+      if (!link) return;
 
       // НЕ блокируем другие клики случайно
       ev.preventDefault();
 
-      var username = btn.getAttribute('data-username') || '';
-      var uid = btn.getAttribute('data-uid') || '0';
+      var username = link.getAttribute('data-username') || link.getAttribute('data-mention-username') || '';
+      var uid = link.getAttribute('data-uid') || link.getAttribute('data-mention-uid') || '0';
 
       insertMention(uid, username);
     }, false);
@@ -378,49 +406,51 @@
   }
 
   function bindTextareaSuggest() {
-    var ta = getMessageTextarea();
-    if (!ta) return;
+    var textareas = getMessageTextareas();
+    if (!textareas.length) return;
 
-    // если SCEditor — подсказки тут могут быть неуместны (iframe),
-    // но мы НЕ ломаем: просто работаем по textarea, если в ней реально печатают
-    ta.addEventListener('keyup', function () {
-      try {
-        var caret = ta.selectionStart;
-        if (typeof caret !== 'number') { hideSuggest(); return; }
+    textareas.forEach(function (ta) {
+      // если SCEditor — подсказки тут могут быть неуместны (iframe),
+      // но мы НЕ ломаем: просто работаем по textarea, если в ней реально печатают
+      ta.addEventListener('keyup', function () {
+        try {
+          var caret = ta.selectionStart;
+          if (typeof caret !== 'number') { hideSuggest(); return; }
 
-        var info = parseAtToken(ta.value || '', caret);
-        if (!info) { hideSuggest(); return; }
+          var info = parseAtToken(ta.value || '', caret);
+          if (!info) { hideSuggest(); return; }
 
-        sugg.ta = ta;
-        sugg.range = info;
-        positionSuggestNearTextarea(ta);
+          sugg.ta = ta;
+          sugg.range = info;
+          positionSuggestNearTextarea(ta);
 
-        var q = info.token.trim();
-        if (!q) { hideSuggest(); return; }
+          var q = info.token.trim();
+          if (!q) { hideSuggest(); return; }
 
-        // debounce
-        clearTimeout(sugg.timer);
-        sugg.timer = setTimeout(function () {
-          requestSuggest(q);
-        }, 160);
-      } catch (e) {
-        hideSuggest();
-      }
-    });
+          // debounce
+          clearTimeout(sugg.timer);
+          sugg.timer = setTimeout(function () {
+            requestSuggest(q);
+          }, 160);
+        } catch (e) {
+          hideSuggest();
+        }
+      });
 
-    ta.addEventListener('keydown', function (ev) {
-      if (!sugg.box || sugg.box.style.display === 'none') return;
+      ta.addEventListener('keydown', function (ev) {
+        if (!sugg.box || sugg.box.style.display === 'none') return;
 
-      // Enter -> выбрать первый
-      if (ev.key === 'Enter') {
-        ev.preventDefault();
-        chooseSuggest(0);
-      }
-      // Escape -> закрыть
-      if (ev.key === 'Escape') {
-        ev.preventDefault();
-        hideSuggest();
-      }
+        // Enter -> выбрать первый
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          chooseSuggest(0);
+        }
+        // Escape -> закрыть
+        if (ev.key === 'Escape') {
+          ev.preventDefault();
+          hideSuggest();
+        }
+      });
     });
 
     document.addEventListener('click', function (ev) {
