@@ -1231,7 +1231,7 @@
 
     // интервальный fallback (на случай если long-poll умрёт)
     var refreshInterval = 0;
-    var minRefreshInterval = 5;
+    var minRefreshInterval = 20;
 
     if (typeof window.af_aam_autorefresh !== 'undefined' &&
         !isNaN(parseInt(window.af_aam_autorefresh, 10)) &&
@@ -1246,7 +1246,7 @@
         refreshInterval = parseInt(window.myalerts_autorefresh, 10);
 
     } else {
-        refreshInterval = 5;
+        refreshInterval = 25;
     }
 
     if (refreshInterval > 0 && refreshInterval < minRefreshInterval) refreshInterval = minRefreshInterval;

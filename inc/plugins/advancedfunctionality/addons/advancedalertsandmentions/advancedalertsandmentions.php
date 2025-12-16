@@ -1022,12 +1022,7 @@ function af_aam_bootstrap(): void
         return;
     }
 
-    // считаем непрочитанные
     $uid = (int)$mybb->user['uid'];
-    $query = $db->simple_select(AF_AAM_TABLE_ALERTS, 'COUNT(id) AS cnt', "uid={$uid} AND is_read=0");
-    $row = $db->fetch_array($query);
-    $af_aam_unread = (int)($row['cnt'] ?? 0);
-    $af_aam_new_indicator = ($af_aam_unread > 0) ? 'alerts--new' : '';
 
     // последние N уведомлений для модального окна (с учётом prefs)
     $limit = (int)($mybb->settings['af_aam_dropdown_limit'] ?? 0);
@@ -1041,13 +1036,17 @@ function af_aam_bootstrap(): void
         $disabled = array_values(array_filter(array_map('strval', $prefs['disabled_types'])));
     }
 
-    $items = af_aam_repo()->list_alerts($uid, false, $limit);
+    $listData = af_aam_repo()->list_alerts_with_stats($uid, false, $limit);
+    $items = $listData['items'];
     if ($disabled) {
         $items = array_values(array_filter($items, function ($it) use ($disabled) {
             $code = (string)($it['type_code'] ?? $it['code'] ?? $it['type'] ?? '');
             return $code === '' ? true : !in_array($code, $disabled, true);
         }));
     }
+
+    $af_aam_unread = (int)($listData['unread'] ?? 0);
+    $af_aam_new_indicator = ($af_aam_unread > 0) ? 'alerts--new' : '';
 
     af_aam_attach_avatars($items, 32);
     $af_aam_modal_list = af_aam_render_rows($items);

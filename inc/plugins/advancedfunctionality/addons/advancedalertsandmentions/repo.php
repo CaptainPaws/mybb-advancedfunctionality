@@ -13,6 +13,9 @@ function af_aam_repo(): AF_AAM_Repo
 
 class AF_AAM_Repo
 {
+    /** @var array<int, array{unread: int, newest_id: int}> */
+    private $statsCache = [];
+
     public function ok(): bool
     {
         global $db;
@@ -21,32 +24,31 @@ class AF_AAM_Repo
 
     public function get_unread_count(int $uid): int
     {
-        global $db;
-
-        $uid = (int)$uid;
-        if ($uid <= 0) return 0;
-
-        $q = $db->simple_select('aam_alerts', 'COUNT(id) AS cnt', "uid={$uid} AND is_read=0");
-        $row = $db->fetch_array($q);
-        return (int)($row['cnt'] ?? 0);
+        $stats = $this->get_stats($uid);
+        return $stats['unread'];
     }
 
     public function get_newest_id(int $uid): int
     {
-        global $db;
-
-        $uid = (int)$uid;
-        if ($uid <= 0) return 0;
-
-        $q = $db->simple_select('aam_alerts', 'MAX(id) AS mid', "uid={$uid}");
-        $mid = (int)$db->fetch_field($q, 'mid');
-        return $mid > 0 ? $mid : 0;
+        $stats = $this->get_stats($uid);
+        return $stats['newest_id'];
     }
 
     public function list_alerts(int $uid, bool $unreadOnly, int $limit): array
     {
-        $rows = $this->fetch_rows($uid, $unreadOnly, $limit, 0);
-        return $this->map_items($rows);
+        $data = $this->list_alerts_with_stats($uid, $unreadOnly, $limit, 0);
+        return $data['items'];
+    }
+
+    public function list_alerts_with_stats(int $uid, bool $unreadOnly, int $limit, int $minIdExclusive = 0): array
+    {
+        $bundle = $this->fetch_rows_bundle($uid, $unreadOnly, $limit, $minIdExclusive);
+
+        return [
+            'items' => $this->map_items($bundle['rows']),
+            'unread' => $bundle['stats']['unread'],
+            'newest_id' => $bundle['stats']['newest_id'],
+        ];
     }
 
     /**
@@ -65,17 +67,16 @@ class AF_AAM_Repo
         $deadline = microtime(true) + $timeout;
 
         do {
-            $newest = $this->get_newest_id($uid);
-            $unread = $this->get_unread_count($uid);
+            $stats = $this->get_stats($uid);
 
-            $changed = ($newest > $sinceId) || ($unread !== $sinceUnread);
+            $changed = ($stats['newest_id'] > $sinceId) || ($stats['unread'] !== $sinceUnread);
             if ($changed) {
-                $rows = $this->fetch_rows($uid, false, $limit, $sinceId);
+                $data = $this->list_alerts_with_stats($uid, false, $limit, $sinceId);
                 return [
                     'changed' => 1,
-                    'unread' => $unread,
-                    'server_newest_id' => $newest,
-                    'items' => $this->map_items($rows),
+                    'unread' => $data['unread'],
+                    'server_newest_id' => $data['newest_id'],
+                    'items' => $data['items'],
                 ];
             }
 
@@ -86,8 +87,8 @@ class AF_AAM_Repo
         // timeout — изменений нет
         return [
             'changed' => 0,
-            'unread' => $this->get_unread_count($uid),
-            'server_newest_id' => $this->get_newest_id($uid),
+            'unread' => $stats['unread'],
+            'server_newest_id' => $stats['newest_id'],
             'items' => [],
         ];
     }
@@ -100,6 +101,7 @@ class AF_AAM_Repo
 
         $uid = (int)$uid;
         $db->update_query('aam_alerts', ['is_read' => 1], "uid={$uid} AND id IN(".implode(',', $ids).")");
+        $this->invalidate_stats($uid);
     }
 
     public function mark_unread(int $uid, array $ids): void
@@ -110,6 +112,7 @@ class AF_AAM_Repo
 
         $uid = (int)$uid;
         $db->update_query('aam_alerts', ['is_read' => 0], "uid={$uid} AND id IN(".implode(',', $ids).")");
+        $this->invalidate_stats($uid);
     }
 
     public function delete_alerts(int $uid, array $ids): void
@@ -120,6 +123,7 @@ class AF_AAM_Repo
 
         $uid = (int)$uid;
         $db->delete_query('aam_alerts', "uid={$uid} AND id IN(".implode(',', $ids).")");
+        $this->invalidate_stats($uid);
     }
 
     public function mark_all_read(int $uid): void
@@ -129,6 +133,7 @@ class AF_AAM_Repo
         if ($uid <= 0) return;
 
         $db->update_query('aam_alerts', ['is_read' => 1], "uid={$uid} AND is_read=0");
+        $this->invalidate_stats($uid);
     }
 
     // ----------------- internals -----------------
@@ -146,39 +151,132 @@ class AF_AAM_Repo
 
     private function fetch_rows(int $uid, bool $unreadOnly, int $limit, int $minIdExclusive): array
     {
+        $bundle = $this->fetch_rows_bundle($uid, $unreadOnly, $limit, $minIdExclusive);
+        return $bundle['rows'];
+    }
+
+    private function fetch_rows_bundle(int $uid, bool $unreadOnly, int $limit, int $minIdExclusive): array
+    {
         global $db;
 
         $uid = (int)$uid;
-        if ($uid <= 0) return [];
+        if ($uid <= 0) {
+            return [
+                'rows' => [],
+                'stats' => ['unread' => 0, 'newest_id' => 0],
+            ];
+        }
 
         $limit = (int)$limit;
         if ($limit <= 0) $limit = 20;
         if ($limit > 100) $limit = 100;
 
-        $where = "a.uid={$uid}";
+        $where = "uid={$uid}";
         if ($unreadOnly) {
-            $where .= " AND a.is_read=0";
+            $where .= " AND is_read=0";
         }
         if ($minIdExclusive > 0) {
-            $where .= " AND a.id > ".(int)$minIdExclusive;
+            $where .= " AND id > ".(int)$minIdExclusive;
         }
 
-        $sql = $db->write_query("
-            SELECT a.*, t.code, t.title,
-                   u.username AS from_username, u.avatar AS from_avatar, u.avatardimensions AS from_avatardimensions
-            FROM " . TABLE_PREFIX . "aam_alerts a
-            LEFT JOIN " . TABLE_PREFIX . "aam_alert_types t ON (t.id=a.type_id)
-            LEFT JOIN " . TABLE_PREFIX . "users u ON (u.uid=a.from_uid)
+        $statsSql = "
+            SELECT SUM(is_read=0) AS unread_count, MAX(id) AS newest_id
+            FROM " . TABLE_PREFIX . "aam_alerts
+            WHERE uid={$uid}
+        ";
+
+        $alertsSql = "
+            SELECT *
+            FROM " . TABLE_PREFIX . "aam_alerts
             WHERE {$where}
-            ORDER BY a.id DESC
+            ORDER BY id DESC
             LIMIT {$limit}
+        ";
+
+        $sql = $db->write_query("
+            SELECT a1.*, t.code, t.title,
+                   u.username AS from_username, u.avatar AS from_avatar, u.avatardimensions AS from_avatardimensions,
+                   stats.unread_count, stats.newest_id
+            FROM ({$statsSql}) stats
+            LEFT JOIN ({$alertsSql}) a1 ON 1=1
+            LEFT JOIN " . TABLE_PREFIX . "aam_alert_types t ON (t.id=a1.type_id)
+            LEFT JOIN " . TABLE_PREFIX . "users u ON (u.uid=a1.from_uid)
+            ORDER BY a1.id DESC
         ");
 
         $rows = [];
+        $stats = null;
+
         while ($row = $db->fetch_array($sql)) {
-            $rows[] = $row;
+            if ($stats === null) {
+                $stats = [
+                    'unread' => (int)($row['unread_count'] ?? 0),
+                    'newest_id' => (int)($row['newest_id'] ?? 0),
+                ];
+                $this->cache_stats($uid, $stats);
+            }
+
+            $id = (int)($row['id'] ?? 0);
+            if ($id > 0) {
+                $rows[] = $row;
+            }
         }
-        return $rows;
+
+        if ($stats === null) {
+            $stats = ['unread' => 0, 'newest_id' => 0];
+            $this->cache_stats($uid, $stats);
+        }
+
+        return [
+            'rows' => $rows,
+            'stats' => $stats,
+        ];
+    }
+
+    private function get_stats(int $uid): array
+    {
+        global $db;
+
+        $uid = (int)$uid;
+        if ($uid <= 0) {
+            return ['unread' => 0, 'newest_id' => 0];
+        }
+
+        if (isset($this->statsCache[$uid])) {
+            return $this->statsCache[$uid];
+        }
+
+        $q = $db->write_query("
+            SELECT SUM(is_read=0) AS unread_count, MAX(id) AS newest_id
+            FROM " . TABLE_PREFIX . "aam_alerts
+            WHERE uid={$uid}
+        ");
+
+        $row = $db->fetch_array($q);
+        $stats = [
+            'unread' => (int)($row['unread_count'] ?? 0),
+            'newest_id' => (int)($row['newest_id'] ?? 0),
+        ];
+
+        $this->cache_stats($uid, $stats);
+        return $stats;
+    }
+
+    private function cache_stats(int $uid, array $stats): void
+    {
+        $uid = (int)$uid;
+        if ($uid <= 0) return;
+
+        $this->statsCache[$uid] = [
+            'unread' => (int)($stats['unread'] ?? 0),
+            'newest_id' => (int)($stats['newest_id'] ?? 0),
+        ];
+    }
+
+    private function invalidate_stats(int $uid): void
+    {
+        $uid = (int)$uid;
+        unset($this->statsCache[$uid]);
     }
 
     private function map_items(array $rows): array
