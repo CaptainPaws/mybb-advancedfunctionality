@@ -364,8 +364,7 @@ function af_aam_xmlhttp_dispatch(): void
             $limit = 20;
         }
 
-        $data   = $repo->list_alerts_with_stats($uid, (bool)$unreadOnly, $limit);
-        $items  = $data['items'];
+        $items  = $repo->list_alerts($uid, (bool)$unreadOnly, $limit);
 
         // prefs: отключённые типы
         $prefs = af_aam_get_user_prefs($uid);
@@ -384,8 +383,8 @@ function af_aam_xmlhttp_dispatch(): void
         // аватары для модалки/тостов
         af_aam_attach_avatars($items, 32);
 
-        $unread = (int)($data['unread'] ?? 0);
-        $newest = (int)($data['newest_id'] ?? 0);
+        $unread = $repo->get_unread_count($uid);
+        $newest = $repo->get_newest_id($uid);
 
 
         af_aam_json([
@@ -436,24 +435,20 @@ function af_aam_xmlhttp_dispatch(): void
         }
 
         // полный список для модалки (не только новые элементы)
-        $listItems = [];
-        $template = '';
-        if (!empty($r['changed'])) {
-            $listData = $repo->list_alerts_with_stats($uid, false, $listLimit);
-            $listItems = $listData['items'];
-            if ($disabled) {
-                $listItems = array_values(array_filter($listItems, function($it) use ($disabled) {
-                    $code = (string)($it['type_code'] ?? $it['code'] ?? $it['type'] ?? '');
-                    return $code === '' ? true : !in_array($code, $disabled, true);
-                }));
-            }
-
-            af_aam_attach_avatars($listItems, 32);
-            $template = af_aam_render_rows($listItems);
+        $listItems = $repo->list_alerts($uid, false, $listLimit);
+        if ($disabled) {
+            $listItems = array_values(array_filter($listItems, function($it) use ($disabled) {
+                $code = (string)($it['type_code'] ?? $it['code'] ?? $it['type'] ?? '');
+                return $code === '' ? true : !in_array($code, $disabled, true);
+            }));
         }
 
-        // аватары для тостов/реалтайма
+        // аватары для тостов/реалтайма и для модалки
         af_aam_attach_avatars($items, 32);
+        af_aam_attach_avatars($listItems, 32);
+
+        // ВАЖНО: чтобы фронт мог обновить модалку/список без доп. запроса
+        $template = af_aam_render_rows($listItems);
 
         af_aam_json([
             'ok' => 1,
