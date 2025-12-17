@@ -228,6 +228,7 @@ function af_aas_misc_dispatch()
 
     if ($action === 'af_aas_account_list') {
         af_aas_render_account_list_page();
+        exit;
     }
 }
 
@@ -246,6 +247,7 @@ function af_aas_usercp_dispatch()
     }
 
     af_aas_render_usercp_page();
+    exit;
 }
 
 /* ============================================================
@@ -706,6 +708,7 @@ function af_aas_render_usercp_page()
     add_breadcrumb($af_aas_page_title, 'usercp.php?action=af_aas');
 
     // ---- ВАЖНО: стандартный UCP-лейаут ----
+    eval('$headerinclude = "' . $templates->get('headerinclude') . '";');
     // 1) Собираем дополнительные пункты UCP-меню через хук (как делает usercp.php)
     $usercpnav = '';
     if (is_object($plugins)) {
@@ -1454,6 +1457,8 @@ function af_aas_render_account_list_page()
 
     $bburl = rtrim((string)$mybb->settings['bburl'], '/');
 
+    $title = 'Account list';
+
     // пагинация по мастерам
     $perPage = 50;
     $pageNum = max(1, (int)($mybb->input['page'] ?? 1));
@@ -1512,8 +1517,6 @@ function af_aas_render_account_list_page()
         $multipage = multipage($total, $perPage, $pageNum, $baseUrl);
     }
 
-    add_breadcrumb($title, 'misc.php?action=af_aas_account_list');
-
     // table rows with trow1/trow2
     $rowsHtml = '';
     $i = 0;
@@ -1549,9 +1552,9 @@ function af_aas_render_account_list_page()
         ';
     }
 
-    $title = 'Account list';
     add_breadcrumb($title, 'misc.php?action=af_aas_account_list');
 
+    eval('$headerinclude = "' . $templates->get('headerinclude') . '";');
     eval('$header = "' . $templates->get('header') . '";');
     eval('$footer = "' . $templates->get('footer') . '";');
 
@@ -1568,10 +1571,6 @@ function af_aas_render_account_list_page()
             </tr>
         ';
     }
-
-    eval('$header = "' . $templates->get('header') . '";');
-    eval('$footer = "' . $templates->get('footer') . '";');
-    eval('$headerinclude = "' . $templates->get('headerinclude') . '";');
 
     eval('$page = "' . $templates->get('af_aas_account_list_page') . '";');
     output_page($page);
