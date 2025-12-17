@@ -1,0 +1,145 @@
+<!-- TEMPLATE: af_aas_header_switcher -->
+<div class="af-aas-header">
+  <div class="af-aas-box">
+    <button type="button" class="af-aas-toggle" aria-expanded="false">Аккаунт</button>
+    <ul class="af-aas-menu" hidden="hidden">
+      {$af_aas_header_items}
+    </ul>
+  </div>
+</div>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_header_item -->
+<li class="af-aas-item{$af_aas_active_class}">
+  <a class="af-aas-switch" href="{$af_aas_switch_url}" data-uid="{$af_aas_uid}">
+    {$af_aas_label}
+  </a>
+</li>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_ucp_page -->
+<div class="af-aas-ucp">
+  <h2>{$af_aas_page_title}</h2>
+
+  {$af_aas_warning}
+
+  <div class="af-aas-block">
+    <h3>Привязанные аккаунты</h3>
+    {$af_aas_list}
+  </div>
+
+  <div class="af-aas-grid">
+    <div>{$af_aas_create_form}</div>
+    <div>{$af_aas_link_form}</div>
+  </div>
+</div>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_ucp_row -->
+<div class="af-aas-row">
+  <div class="af-aas-row-name">
+    <strong>{$af_aas_username}</strong> <span class="smalltext">(#{$af_aas_uid})</span>
+  </div>
+  <div class="af-aas-row-actions">
+    <a class="button button_small" href="{$af_aas_switch_url}">Переключиться</a>
+    {$af_aas_unlink_form}
+  </div>
+</div>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_ucp_empty -->
+<div class="af-aas-empty">Пока нет привязанных аккаунтов.</div>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_ucp_warning_not_master -->
+<div class="alert alert_warning">Управление дополнительными аккаунтами доступно только из мастер-аккаунта.</div>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_ucp_unlink_form -->
+<form method="post" action="{$af_aas_ucp_action}" class="af-aas-inlineform">
+  <input type="hidden" name="my_post_key" value="{$my_post_key}">
+  <input type="hidden" name="do" value="unlink">
+  <input type="hidden" name="uid" value="{$af_aas_unlink_uid}">
+  <button type="submit" class="button button_small">Отвязать</button>
+</form>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_ucp_form_create -->
+<form method="post" action="{$af_aas_ucp_action}" class="af-aas-form">
+  <input type="hidden" name="my_post_key" value="{$my_post_key}">
+  <input type="hidden" name="do" value="create">
+
+  <h3>Создать дополнительный аккаунт</h3>
+  <p class="smalltext">Email будет взят от мастер-аккаунта. Аккаунт создаётся без активации и попадёт в группу “Registered”.</p>
+
+  <div class="af-aas-field">
+    <label>Логин (username)</label>
+    <input type="text" name="new_username" class="textbox" required>
+  </div>
+
+  <div class="af-aas-field">
+    <label>Пароль</label>
+    <input type="password" name="new_password" class="textbox" required>
+  </div>
+
+  <div class="af-aas-field">
+    <label>Пароль ещё раз</label>
+    <input type="password" name="new_password2" class="textbox" required>
+  </div>
+
+  <button type="submit" class="button">Создать и привязать</button>
+</form>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_ucp_form_link -->
+<form method="post" action="{$af_aas_ucp_action}" class="af-aas-form" id="afAasLinkForm">
+  <input type="hidden" name="my_post_key" value="{$my_post_key}">
+  <input type="hidden" name="do" value="link_existing">
+
+  <h3>Привязать существующий аккаунт</h3>
+
+  <div class="af-aas-field">
+    <label>Имя пользователя</label>
+    <input type="text" name="link_username" class="textbox" autocomplete="off" id="afAasLinkUsername" required>
+    <input type="hidden" name="link_uid" id="afAasLinkUid" value="0">
+    <div class="af-aas-suggest" id="afAasSuggest" hidden="hidden"></div>
+    <p class="smalltext">Начни вводить ник — появится список. Выбери нужный аккаунт и введи его пароль.</p>
+  </div>
+
+  <div class="af-aas-field">
+    <label>Пароль этого аккаунта</label>
+    <input type="password" name="link_password" class="textbox" required>
+  </div>
+
+  <button type="submit" class="button">Привязать</button>
+</form>
+<!-- /TEMPLATE -->
+<!-- TEMPLATE: af_aas_panel_widget -->
+<span class="af-aas-panel">
+  <a href="#" class="af-aas-panel-toggle" aria-expanded="false" title="Переключить аккаунт">👥</a>
+  <div class="af-aas-panel-menu" hidden="hidden">
+    <table class="af-aas-panel-table">
+      {$af_aas_panel_rows}
+    </table>
+    <div class="af-aas-panel-footer">
+      <a href="{$af_aas_ucp_url}">Управление</a>
+      <span class="smalltext">UCP</span>
+    </div>
+  </div>
+</span>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_panel_row -->
+<tr class="af-aas-panel-row{$af_aas_item_active}">
+  <td width="30">
+    <img class="af-aas-panel-avatar" src="{$af_aas_item_avatar}" alt="">
+  </td>
+  <td class="af-aas-panel-name">
+    {$af_aas_item_username} {$af_aas_item_badge}
+  </td>
+  <td class="af-aas-panel-action" width="70">
+    <a class="button button_small" href="{$af_aas_item_switch_url}">Войти</a>
+  </td>
+</tr>
+<!-- /TEMPLATE -->
+

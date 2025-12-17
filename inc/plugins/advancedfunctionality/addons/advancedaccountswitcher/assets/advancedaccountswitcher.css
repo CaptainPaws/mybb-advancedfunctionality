@@ -1,0 +1,130 @@
+/* 👥 panel widget */
+.af-aas-panel {
+  position: relative;
+  display: inline-block;
+  margin-left: 8px;
+  z-index: 9999;
+}
+
+.af-aas-panel-toggle {
+  display: inline-block;
+  text-decoration: none;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 16px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.af-aas-panel-toggle:hover {
+  background: rgba(255,255,255,0.10);
+}
+
+.af-aas-panel-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 250px;
+  max-height: 300px;
+  overflow: auto;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.92);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+.af-aas-panel-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.af-aas-panel-row td {
+  padding: 6px 4px;
+  vertical-align: middle;
+  border-bottom: 1px dashed rgba(255,255,255,0.08);
+}
+
+.af-aas-panel-row:last-child td {
+  border-bottom: 0;
+}
+
+.af-aas-panel-avatar {
+  width: 25px;
+  height: 25px;
+  border-radius: 6px;
+  object-fit: cover;
+  display: block;
+}
+
+.af-aas-panel-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.af-aas-panel-action {
+  text-align: right;
+}
+
+.af-aas-badge {
+  font-size: 11px;
+  opacity: 0.8;
+  margin-left: 6px;
+}
+
+.af-aas-active .af-aas-panel-name {
+  font-weight: 700;
+}
+
+.af-aas-panel-footer {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.10);
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.af-aas-panel-footer a {
+  text-decoration: none;
+}
+
+/* UCP styles (твои старые — оставляю как были) */
+.af-aas-ucp { padding: 10px 0; }
+.af-aas-block { margin: 12px 0; padding: 10px; border: 1px solid rgba(255,255,255,0.10); border-radius: 8px; }
+.af-aas-row { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px dashed rgba(255,255,255,0.08); }
+.af-aas-row:last-child { border-bottom: 0; }
+.af-aas-row-actions { display: flex; gap: 8px; align-items: center; }
+.af-aas-inlineform { display: inline; margin: 0; }
+
+.af-aas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 900px) { .af-aas-grid { grid-template-columns: 1fr; } }
+
+.af-aas-form { padding: 10px; border: 1px solid rgba(255,255,255,0.10); border-radius: 8px; }
+.af-aas-field { margin: 8px 0; }
+.af-aas-field label { display: block; margin-bottom: 4px; }
+
+.af-aas-suggest {
+  margin-top: 6px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  background: rgba(0,0,0,0.65);
+  overflow: hidden;
+}
+.af-aas-suggest-item {
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.af-aas-suggest-item:hover {
+  background: rgba(255,255,255,0.10);
+}
+.af-aas-empty { opacity: 0.8; }
+
+/* account list page */
+.af-aas-accountlist-page { padding: 10px 0; }
+.af-aas-pager { margin-top: 10px; }
+.af-aas-page { display: inline-block; padding: 4px 8px; border-radius: 6px; text-decoration: none; }
+.af-aas-page-active { background: rgba(255,255,255,0.12); }
