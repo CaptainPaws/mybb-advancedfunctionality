@@ -223,6 +223,92 @@
 
     function qs(sel) { return document.querySelector(sel); }
     function qsa(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+    function afAamGetReplyEditorHandles() {
+        var ta =
+            document.querySelector('textarea[name="message"]') ||
+            document.getElementById('message') ||
+            document.getElementById('message_new') ||
+            document.querySelector('textarea[id^="message"]') ||
+            null;
+
+        var host =
+            document.getElementById('quickreply_e') ||
+            document.getElementById('quickreply') ||
+            (ta ? (ta.closest ? ta.closest('form') : null) : null) ||
+            null;
+
+        var inst = null;
+        if (ta && window.jQuery && window.jQuery.fn && window.jQuery.fn.sceditor) {
+            try { inst = window.jQuery(ta).sceditor('instance') || null; } catch (e) { inst = null; }
+        }
+
+        var body = null;
+        try { body = inst && typeof inst.getBody === 'function' ? inst.getBody() : null; } catch (e2) { body = null; }
+
+        return {
+            textarea: ta || null,
+            host: host || null,
+            sceditor: inst || null,
+            scBody: body || null
+        };
+    }
+
+    function afAamJumpToReplyAndFocus() {
+        var h = afAamGetReplyEditorHandles();
+        var host = h.host;
+
+        // попытка раскрыть quickreply, если он скрыт темой/скриптом
+        if (host) {
+            try {
+                var cs = window.getComputedStyle(host);
+                var hidden = (cs && (cs.display === 'none' || cs.visibility === 'hidden')) || host.hidden;
+                if (hidden) {
+                    // популярные тогглеры в темах MyBB
+                    var toggler =
+                        document.getElementById('quickreplylink') ||
+                        document.querySelector('[data-toggle="quickreply"]') ||
+                        document.querySelector('.quickreply_toggle, .quickreply-link, a.quickreply, a#quick_reply_button') ||
+                        null;
+
+                    if (toggler && typeof toggler.click === 'function') {
+                        toggler.click();
+                    } else {
+                        host.style.display = 'block';
+                        host.hidden = false;
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // прокрутка
+        var scrollTarget = host || h.textarea || null;
+        if (scrollTarget && scrollTarget.scrollIntoView) {
+            try { scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e2) {
+                try { scrollTarget.scrollIntoView(true); } catch (e3) {}
+            }
+        }
+
+        // фокус (чуть позже, чтобы после scrollIntoView/раскрытия не слетел)
+        setTimeout(function () {
+            try {
+                if (h.sceditor) {
+                    h.sceditor.focus();
+                    // иногда нужно дополнительно дать фокус body iframe
+                    if (h.scBody && h.scBody.focus) h.scBody.focus();
+                    return;
+                }
+            } catch (e) {}
+
+            try {
+                if (h.textarea && h.textarea.focus) {
+                    h.textarea.focus();
+                }
+            } catch (e2) {}
+        }, 60);
+
+        return h;
+    }
+
     function afAamSendBeacon(payload) {
         try {
             if (!navigator.sendBeacon) return false;
@@ -1616,7 +1702,348 @@
         }
     }
 
+    function initMentionButtons() {
+        // Делегированный клик по кнопкам "Упомянуть" (постбит и любые места)
+        // Поддерживаем разные варианты разметки:
+        //  - .af-aam-mention-btn / .af-aam-mention-button
+        //  - [data-af-aam-mention], [data-mention-username], [data-mention-uid]
+        // Вставляем ТОЛЬКО BBCode:
+        //  - [mention=uid]username[/mention] или [mention]username[/mention]
+        // Никаких "@username" — чтобы не ломать твой текущий парсер.
 
+        function closest(el, selector) {
+            if (!el) return null;
+            if (el.closest) return el.closest(selector);
+            // fallback для старых браузеров
+            while (el) {
+                if (el.matches && el.matches(selector)) return el;
+                el = el.parentNode;
+            }
+            return null;
+        }
+
+        function sanitizeName(s) {
+            s = String(s || '').trim();
+            if (!s) return '';
+            if (s.charAt(0) === '@') s = s.slice(1).trim();
+            // убираем переносы/табы
+            s = s.replace(/[\r\n\t]+/g, ' ').trim();
+            // схлопнем двойные пробелы
+            s = s.replace(/\s{2,}/g, ' ');
+            return s;
+        }
+
+        function parseUidFromHref(href) {
+            href = String(href || '');
+            // member.php?action=profile&uid=123
+            var m = href.match(/[?&]uid=([0-9]+)/i);
+            if (m && m[1]) return parseInt(m[1], 10) || 0;
+            return 0;
+        }
+
+        function parseUsernameFromHref(href) {
+            href = String(href || '');
+            // member.php?action=profile&username=Name
+            var m = href.match(/[?&]username=([^&#]+)/i);
+            if (m && m[1]) {
+                try { return decodeURIComponent(m[1].replace(/\+/g, ' ')); } catch (e) { return m[1]; }
+            }
+            return '';
+        }
+
+        function extractUserFromElement(btn) {
+            // 1) data- атрибуты на самой кнопке или родителе
+            var holder = btn;
+
+            var host = closest(holder, '[data-mention-username], [data-mention-uid], [data-username], [data-uid], [data-af-aam-username], [data-af-aam-uid]') || holder;
+
+            var uid = 0;
+            var username = '';
+
+            function readAttr(el, name) {
+                try { return el && el.getAttribute ? el.getAttribute(name) : ''; } catch (e) { return ''; }
+            }
+
+            var rawUid =
+                readAttr(host, 'data-mention-uid') ||
+                readAttr(host, 'data-af-aam-uid') ||
+                readAttr(host, 'data-uid') ||
+                '';
+
+            if (rawUid) uid = parseInt(String(rawUid).replace(/[^0-9]/g, ''), 10) || 0;
+
+            var rawName =
+                readAttr(host, 'data-mention-username') ||
+                readAttr(host, 'data-af-aam-username') ||
+                readAttr(host, 'data-username') ||
+                '';
+
+            if (rawName) username = sanitizeName(rawName);
+
+            // 2) если кнопка рядом с ссылкой на профиль — попробуем вытащить из неё
+            if (!username || !uid) {
+                var link =
+                    closest(holder, 'tr, li, .post, .postbit') ?
+                        (closest(holder, 'tr, li, .post, .postbit').querySelector('a[href*="member.php?action=profile"]') || null)
+                        : null;
+
+                if (link) {
+                    if (!uid) uid = parseUidFromHref(link.href);
+                    if (!username) username = sanitizeName(parseUsernameFromHref(link.href) || link.textContent);
+                }
+            }
+
+            // 3) крайний фолбэк — текст самой кнопки (если вдруг там ник)
+            if (!username) username = sanitizeName(btn.textContent);
+
+            return { uid: uid || 0, username: username || '' };
+        }
+
+        function buildMentionTag(user) {
+            var name = sanitizeName(user && user.username ? user.username : '');
+            var uid = parseInt(user && user.uid ? user.uid : 0, 10) || 0;
+
+            if (!name) return '';
+
+            // @all — разрешим как [mention]all[/mention]
+            if (name.toLowerCase() === 'all') {
+                return '[mention]all[/mention] ';
+            }
+
+            if (uid > 0) {
+                return '[mention=' + uid + ']' + name + '[/mention] ';
+            }
+            return '[mention]' + name + '[/mention] ';
+        }
+
+        function insertIntoEditor(text) {
+            if (!text) return false;
+
+            // используем твою функцию — она уже умеет раскрывать quickreply и фокусить
+            var h = (typeof afAamJumpToReplyAndFocus === 'function') ? afAamJumpToReplyAndFocus() : null;
+            if (!h) return false;
+
+            // SCEditor
+            if (h.sceditor && typeof h.sceditor.insertText === 'function') {
+                try {
+                    h.sceditor.insertText(text, '');
+                    return true;
+                } catch (e) {}
+            }
+
+            // textarea
+            if (h.textarea) {
+                try {
+                    var ta = h.textarea;
+                    var start = typeof ta.selectionStart === 'number' ? ta.selectionStart : ta.value.length;
+                    var end = typeof ta.selectionEnd === 'number' ? ta.selectionEnd : ta.value.length;
+
+                    var before = ta.value.slice(0, start);
+                    var after = ta.value.slice(end);
+
+                    ta.value = before + text + after;
+
+                    var pos = (before + text).length;
+                    if (ta.setSelectionRange) ta.setSelectionRange(pos, pos);
+                    return true;
+                } catch (e2) {
+                    // фолбэк: допишем в конец
+                    try { h.textarea.value += text; return true; } catch (e3) {}
+                }
+            }
+
+            return false;
+        }
+
+        // Чтобы не навесить дважды, ставим флаг
+        if (window.afAamMentionButtonsInited) return;
+        window.afAamMentionButtonsInited = true;
+
+        document.addEventListener('click', function (e) {
+            var t = e.target;
+            if (!t) return;
+
+            // Ищем кнопку/ссылку "упомянуть"
+            var btn = closest(t,
+                '.af-aam-mention-btn, .af-aam-mention-button, .af-aam-mention, ' +
+                '[data-af-aam-mention="1"], [data-af-aam-mention], ' +
+                '[data-mention-username], [data-mention-uid]'
+            );
+
+            if (!btn) return;
+
+            // ЛКМ без модификаторов — вставляем mention. Остальное оставляем браузеру (открытие в новой вкладке и т.п.)
+            if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+
+            e.preventDefault();
+
+            var u = extractUserFromElement(btn);
+            if (!u.username && !u.uid) {
+                if (typeof window.afAamDebug !== 'undefined' && window.afAamDebug) {
+                    console.log('[AAM] mention button: не смогли вытащить user из элемента', btn);
+                }
+                return;
+            }
+
+            var tag = buildMentionTag(u);
+            if (!tag) return;
+
+            insertIntoEditor(tag);
+        });
+    }
+
+    function initPostAuthorNicknameClicks() {
+        // Клики по нику автора поста → вставка [mention]...[/mention]
+        // Безопасный режим:
+        //  - ALT+ЛКМ по нику автора: вставить mention и прыгнуть к ответу
+        //  - Обычный ЛКМ: оставить переход в профиль (НЕ ломаем UX)
+        // Опционально:
+        //  - если у ссылки ника есть класс .af-aam-mention-onclick или атрибут data-af-aam-mention-onclick="1"
+        //    тогда mention вставится и по обычному ЛКМ.
+
+        function closest(el, selector) {
+            if (!el) return null;
+            if (el.closest) return el.closest(selector);
+            while (el) {
+                if (el.matches && el.matches(selector)) return el;
+                el = el.parentNode;
+            }
+            return null;
+        }
+
+        function sanitizeName(s) {
+            s = String(s || '').trim();
+            if (!s) return '';
+            if (s.charAt(0) === '@') s = s.slice(1).trim();
+            s = s.replace(/[\r\n\t]+/g, ' ').trim().replace(/\s{2,}/g, ' ');
+            return s;
+        }
+
+        function parseUidFromHref(href) {
+            href = String(href || '');
+            var m = href.match(/[?&]uid=([0-9]+)/i);
+            if (m && m[1]) return parseInt(m[1], 10) || 0;
+            return 0;
+        }
+
+        function parseUsernameFromHref(href) {
+            href = String(href || '');
+            var m = href.match(/[?&]username=([^&#]+)/i);
+            if (m && m[1]) {
+                try { return decodeURIComponent(m[1].replace(/\+/g, ' ')); } catch (e) { return m[1]; }
+            }
+            return '';
+        }
+
+        function buildMention(uid, username) {
+            username = sanitizeName(username);
+            uid = parseInt(uid || 0, 10) || 0;
+            if (!username) return '';
+
+            if (username.toLowerCase() === 'all') {
+                return '[mention]all[/mention] ';
+            }
+
+            if (uid > 0) return '[mention=' + uid + ']' + username + '[/mention] ';
+            return '[mention]' + username + '[/mention] ';
+        }
+
+        function insertMention(text) {
+            if (!text) return false;
+
+            var h = (typeof afAamJumpToReplyAndFocus === 'function') ? afAamJumpToReplyAndFocus() : null;
+            if (!h) return false;
+
+            if (h.sceditor && typeof h.sceditor.insertText === 'function') {
+                try { h.sceditor.insertText(text, ''); return true; } catch (e) {}
+            }
+
+            if (h.textarea) {
+                try {
+                    var ta = h.textarea;
+                    var start = typeof ta.selectionStart === 'number' ? ta.selectionStart : ta.value.length;
+                    var end = typeof ta.selectionEnd === 'number' ? ta.selectionEnd : ta.value.length;
+                    ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
+                    var pos = start + text.length;
+                    if (ta.setSelectionRange) ta.setSelectionRange(pos, pos);
+                    return true;
+                } catch (e2) {
+                    try { h.textarea.value += text; return true; } catch (e3) {}
+                }
+            }
+
+            return false;
+        }
+
+        function isAuthorLink(a) {
+            if (!a || !a.tagName || a.tagName.toLowerCase() !== 'a') return false;
+
+            var href = String(a.getAttribute('href') || '');
+            if (href.indexOf('member.php') === -1 || href.indexOf('action=profile') === -1) {
+                return false;
+            }
+
+            // Должно быть в контексте поста/постбита, чтобы не цеплять любые профили на странице
+            var inPost =
+                !!closest(a, '.post, .postbit, .postclassic, .post_author, .author_information, [id^="post_"], tr[id^="post_"], div[id^="post_"]');
+
+            return inPost;
+        }
+
+        function wantsMentionOnPlainClick(a) {
+            try {
+                if (a.classList && a.classList.contains('af-aam-mention-onclick')) return true;
+                var v = a.getAttribute('data-af-aam-mention-onclick');
+                if (v === '1' || v === 'true') return true;
+            } catch (e) {}
+            return false;
+        }
+
+        if (window.afAamPostAuthorClicksInited) return;
+        window.afAamPostAuthorClicksInited = true;
+
+        document.addEventListener('click', function (e) {
+            var t = e.target;
+            if (!t) return;
+
+            // ловим клик по ссылке ника или по вложенным элементам внутри неё
+            var a = closest(t, 'a');
+            if (!a) return;
+            if (!isAuthorLink(a)) return;
+
+            // Правило:
+            //  - ALT+ЛКМ → mention
+            //  - обычный ЛКМ → mention ТОЛЬКО если явно разрешено (класс/атрибут)
+            var plainMention = wantsMentionOnPlainClick(a);
+
+            var isLmb = (e.button === 0);
+            var hasModifiers = (e.ctrlKey || e.metaKey || e.shiftKey); // alt отдельно, он наш триггер
+
+            if (!isLmb) return;
+            if (hasModifiers) return; // Ctrl/Shift — оставим браузеру (новая вкладка, выделение и т.д.)
+
+            var doMention = false;
+            if (e.altKey) doMention = true;
+            else if (plainMention) doMention = true;
+
+            if (!doMention) return;
+
+            e.preventDefault();
+
+            var uid = parseUidFromHref(a.href);
+            var username = sanitizeName(parseUsernameFromHref(a.href) || a.textContent);
+
+            // иногда темы вставляют ник в span внутри ссылки
+            if (!username) {
+                username = sanitizeName(a.textContent || '');
+            }
+
+            var tag = buildMention(uid, username);
+            if (!tag) return;
+
+            insertMention(tag);
+        });
+    }
 
 
 
@@ -1659,11 +2086,47 @@
         initAlertsUI();
         initMyAlertsCompat();
         initMentionButtons();
-        initMentionAutocomplete();
         initListClicks();
         initPostAuthorNicknameClicks();
         afAamNormalizeMentionLinks(document);
 
+        // автокомплит живёт в aam_mentions.js — тут только безопасный вызов, чтобы main не падал
+        (function safeInitMentionAutocomplete() {
+            try {
+                // 1) самый очевидный вариант: функция экспортирована в window
+                if (typeof window.initMentionAutocomplete === 'function') {
+                    window.initMentionAutocomplete();
+                    return;
+                }
+
+                // 2) запасной: если ты в mentions-файле назвала иначе
+                if (typeof window.afAamInitMentionAutocomplete === 'function') {
+                    window.afAamInitMentionAutocomplete();
+                    return;
+                }
+
+                // 3) если mentions.js грузится позже — попробуем пару раз догнать (без вечного интервала)
+                var tries = 0;
+                (function retry() {
+                    tries++;
+                    if (typeof window.initMentionAutocomplete === 'function') {
+                        window.initMentionAutocomplete();
+                        return;
+                    }
+                    if (typeof window.afAamInitMentionAutocomplete === 'function') {
+                        window.afAamInitMentionAutocomplete();
+                        return;
+                    }
+                    if (tries < 12) {
+                        setTimeout(retry, 250);
+                    } else if (afAamDebug) {
+                        console.log('[AAM] mention autocomplete not available (aam_mentions.js?)');
+                    }
+                })();
+            } catch (e) {
+                if (afAamDebug) console.log('[AAM] safeInitMentionAutocomplete error', e);
+            }
+        })();
 
 
         // глобальный клик для "разбуживания" звука (один раз)
