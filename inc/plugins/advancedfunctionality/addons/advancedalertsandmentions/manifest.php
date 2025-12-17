@@ -12,7 +12,7 @@ return [
     'version'     => '1.0.0',
     'compatibility' => '18*',
     'author'   => 'CaptainPaws',
-    'website'     => 'https://warprift.ru',
+    'website'     => 'https://github.com/CaptainPaws',
     'bootstrap'   => 'advancedalertsandmentions.php',
 
     // админ-интеграция в роутер AF
