@@ -7,46 +7,66 @@
   function qs(sel, root) { return (root || document).querySelector(sel); }
   function qsa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
 
-  // Panel dropdown (👥)
-  qsa('.af-aas-panel-toggle').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.preventDefault();
+  // Header modal (👥)
+  (function initModal() {
+    var trigger = qs('#af_aas_trigger');
+    var modal = qs('#af_aas_modal');
+    var closeBtn = modal ? modal.querySelector('.af-aas-modal-close') : null;
+    var backdrop = modal ? modal.querySelector('.af-aas-modal-backdrop') : null;
 
-      var wrap = btn.closest('.af-aas-panel');
-      if (!wrap) return;
+    if (!trigger || !modal) {
+      return;
+    }
 
-      var menu = qs('.af-aas-panel-menu', wrap);
-      if (!menu) return;
+    function openModal() {
+      modal.classList.add('af-aas-modal-open');
+      modal.style.display = 'flex';
+      trigger.setAttribute('aria-expanded', 'true');
+    }
 
-      var open = !menu.hasAttribute('hidden');
-      if (open) {
-        menu.setAttribute('hidden', 'hidden');
-        btn.setAttribute('aria-expanded', 'false');
-      } else {
-        menu.removeAttribute('hidden');
-        btn.setAttribute('aria-expanded', 'true');
+    function closeModal() {
+      modal.classList.remove('af-aas-modal-open');
+      modal.style.display = 'none';
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+
+    trigger.addEventListener('click', function (e) {
+      if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        if (modal.classList.contains('af-aas-modal-open')) {
+          closeModal();
+        } else {
+          openModal();
+        }
       }
     });
-  });
 
-  function closeAll(exceptWrap) {
-    qsa('.af-aas-panel').forEach(function (wrap) {
-      if (exceptWrap && wrap === exceptWrap) return;
-      var btn = qs('.af-aas-panel-toggle', wrap);
-      var menu = qs('.af-aas-panel-menu', wrap);
-      if (menu && !menu.hasAttribute('hidden')) menu.setAttribute('hidden', 'hidden');
-      if (btn) btn.setAttribute('aria-expanded', 'false');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        closeModal();
+      });
+    }
+
+    if (backdrop) {
+      backdrop.addEventListener('click', function (e) {
+        e.preventDefault();
+        closeModal();
+      });
+    }
+
+    document.addEventListener('click', function (e) {
+      if (modal.style.display === 'none') return;
+      if (e.target.closest('#af_aas_modal') || e.target.closest('#af_aas_trigger')) return;
+      closeModal();
     });
-  }
 
-  document.addEventListener('click', function (e) {
-    var wrap = e.target.closest('.af-aas-panel');
-    closeAll(wrap);
-  });
-
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closeAll(null);
-  });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        closeModal();
+      }
+    });
+  })();
 
   // UCP suggest
   var input = qs('#afAasLinkUsername');

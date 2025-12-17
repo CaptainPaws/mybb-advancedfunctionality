@@ -656,7 +656,11 @@ function af_aas_render_usercp_page()
     $attached = af_aas_get_accounts_for_master($masterUid);
     $rowsHtml = '';
 
+    $rowIndex = 0;
     foreach ($attached as $a) {
+        $rowIndex++;
+        $af_aas_row_class = ($rowIndex % 2 === 0) ? 'trow2' : 'trow1';
+
         $af_aas_uid = (int)$a['uid'];
         $af_aas_username = htmlspecialchars_uni((string)$a['username']);
         $af_aas_switch_url = htmlspecialchars_uni(
@@ -680,7 +684,7 @@ function af_aas_render_usercp_page()
     }
 
     // warning / формы
-    $af_aas_warning = '';
+    $af_aas_warning = '&nbsp;';
     $af_aas_create_form = '';
     $af_aas_link_form = '';
 
@@ -1401,13 +1405,18 @@ function af_aas_render_panel_widget(): string
     }
 
     $af_aas_ucp_url = htmlspecialchars_uni($bburl . '/usercp.php?action=af_aas');
+    $af_aas_account_list_url = htmlspecialchars_uni($bburl . '/misc.php?action=af_aas_account_list');
     $myPostKey = (string)$mybb->post_code;
 
     $af_aas_panel_rows = '';
+    $i = 0;
     foreach ($items as $it) {
+        $i++;
+        $af_aas_row_class = ($i % 2 === 0) ? 'trow2' : 'trow1';
         $af_aas_item_uid = (int)$it['uid'];
         $af_aas_item_username = htmlspecialchars_uni((string)$it['username']);
-        $af_aas_item_avatar = htmlspecialchars_uni(af_aas_get_avatar_url($af_aas_item_uid));
+        $af_aas_item_avatar_url = htmlspecialchars_uni(af_aas_get_avatar_url($af_aas_item_uid));
+        $af_aas_item_avatar = '<span class="af-aas-avatar"><img src="' . $af_aas_item_avatar_url . '" alt="" /></span>';
 
         $switchUrl = $bburl . '/misc.php?action=af_aas_switch&uid=' . (int)$af_aas_item_uid . '&my_post_key=' . urlencode($myPostKey);
         $af_aas_item_switch_url = htmlspecialchars_uni($switchUrl);
@@ -1418,6 +1427,10 @@ function af_aas_render_panel_widget(): string
         eval('$af_aas_panel_rows .= "'.$templates->get('af_aas_panel_row').'";');
     }
 
+    if ($af_aas_panel_rows === '') {
+        eval('$af_aas_panel_rows = "'.$templates->get('af_aas_panel_empty').'";');
+    }
+
     $out = '';
     eval('$out = "'.$templates->get('af_aas_panel_widget').'";');
     return $out;
@@ -1425,7 +1438,7 @@ function af_aas_render_panel_widget(): string
 
 function af_aas_render_account_list_page()
 {
-    global $mybb, $db, $templates, $header, $footer, $theme;
+    global $mybb, $db, $templates, $header, $footer, $theme, $headerinclude;
 
     if (empty($mybb->settings['af_advancedaccountswitcher_enabled'])) {
         error_no_permission();
@@ -1499,36 +1512,33 @@ function af_aas_render_account_list_page()
         $multipage = multipage($total, $perPage, $pageNum, $baseUrl);
     }
 
+    add_breadcrumb($title, 'misc.php?action=af_aas_account_list');
+
     // table rows with trow1/trow2
     $rowsHtml = '';
     $i = 0;
 
     foreach ($groups as $g) {
         $i++;
-        $trow = ($i % 2 === 0) ? 'trow2' : 'trow1';
+        $af_aas_row_class = ($i % 2 === 0) ? 'trow2' : 'trow1';
 
-        $muid = (int)$g['master_uid'];
-        $mname = htmlspecialchars_uni((string)$g['master_name']);
-        $masterUrl = htmlspecialchars_uni($bburl . '/member.php?action=profile&uid=' . $muid);
+        $af_aas_master_uid = (int)$g['master_uid'];
+        $af_aas_master_name = htmlspecialchars_uni((string)$g['master_name']);
+        $af_aas_master_url = htmlspecialchars_uni($bburl . '/member.php?action=profile&uid=' . $af_aas_master_uid);
 
-        $attachedHtml = '';
+        $af_aas_attached_list = '';
         foreach ($g['attached'] as $a) {
             $auid = (int)$a['uid'];
             $aname = htmlspecialchars_uni((string)$a['username']);
             $aurl = htmlspecialchars_uni($bburl . '/member.php?action=profile&uid=' . $auid);
-            $attachedHtml .= '<a href="' . $aurl . '">' . $aname . '</a>, ';
+            $af_aas_attached_list .= '<a href="' . $aurl . '">' . $aname . '</a>, ';
         }
-        $attachedHtml = rtrim($attachedHtml, ', ');
+        $af_aas_attached_list = rtrim($af_aas_attached_list, ', ');
+        if ($af_aas_attached_list === '') {
+            $af_aas_attached_list = '<em>—</em>';
+        }
 
-        $rowsHtml .= '
-            <tr>
-                <td class="' . $trow . '">
-                    <a href="' . $masterUrl . '"><strong>' . $mname . '</strong></a>
-                    <span class="smalltext">(#' . (int)$muid . ')</span>
-                </td>
-                <td class="' . $trow . '">' . ($attachedHtml !== '' ? $attachedHtml : '<em>—</em>') . '</td>
-            </tr>
-        ';
+        eval('$rowsHtml .= "' . $templates->get('af_aas_account_list_row') . '";');
     }
 
     if ($rowsHtml === '') {
@@ -1548,27 +1558,22 @@ function af_aas_render_account_list_page()
     $borderwidth = isset($theme['borderwidth']) ? (int)$theme['borderwidth'] : 1;
     $tablespace  = isset($theme['tablespace']) ? (int)$theme['tablespace'] : 6;
 
-    $content = '
-    <div class="float_right">' . $multipage . '</div>
-    <br class="clear" />
+    $af_aas_page_title = $title;
+    $af_aas_account_rows = $rowsHtml;
 
-    <table border="0" cellspacing="' . $borderwidth . '" cellpadding="' . $tablespace . '" class="tborder">
-        <tr>
-            <td class="thead" colspan="2"><strong>' . htmlspecialchars_uni($title) . '</strong></td>
-        </tr>
-        <tr>
-            <td class="tcat" width="35%"><strong>Master</strong></td>
-            <td class="tcat"><strong>Attached accounts</strong></td>
-        </tr>
-        ' . $rowsHtml . '
-    </table>
+    if ($af_aas_account_rows === '') {
+        $af_aas_account_rows = '
+            <tr>
+                <td class="trow1" colspan="2"><em>Пока нет привязок.</em></td>
+            </tr>
+        ';
+    }
 
-    <div class="float_right" style="margin-top: 10px;">' . $multipage . '</div>
-    <br class="clear" />
+    eval('$header = "' . $templates->get('header') . '";');
+    eval('$footer = "' . $templates->get('footer') . '";');
+    eval('$headerinclude = "' . $templates->get('headerinclude') . '";');
 
-    <p class="smalltext" style="margin-top: 10px;">Показаны только те, у кого есть привязанные аккаунты.</p>
-    ';
-
-    output_page($header . $content . $footer);
+    eval('$page = "' . $templates->get('af_aas_account_list_page') . '";');
+    output_page($page);
     exit;
 }
