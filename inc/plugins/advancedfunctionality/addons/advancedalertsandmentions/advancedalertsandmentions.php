@@ -94,14 +94,27 @@ function af_aam_register_type(string $code, string $title = '', int $canBeUserDi
         return null;
     }
 
+    // если title пустой ИЛИ равен коду — используем нормальный фоллбек
     $title = trim($title);
+    if ($title === '' || my_strtolower($title) === my_strtolower($code)) {
+        $title = af_aam_default_type_title($code);
+    }
+
     $escapedCode = $db->escape_string($code);
+
     $existing = $db->fetch_array($db->simple_select(AF_AAM_TABLE_TYPES, '*', "code='{$escapedCode}'"));
     if ($existing) {
         $update = [];
-        if ($title !== '' && $title !== $existing['title']) {
+
+        // обновляем title, если:
+        // - текущий title пустой
+        // - или текущий title равен коду
+        // - или пришёл другой title (и он не пустой)
+        $existingTitle = (string)($existing['title'] ?? '');
+        if ($title !== '' && ($existingTitle === '' || my_strtolower($existingTitle) === my_strtolower($code) || $title !== $existingTitle)) {
             $update['title'] = $db->escape_string($title);
         }
+
         if ((int)$existing['can_be_user_disabled'] !== (int)$canBeUserDisabled) {
             $update['can_be_user_disabled'] = (int)$canBeUserDisabled;
         }
@@ -130,6 +143,7 @@ function af_aam_register_type(string $code, string $title = '', int $canBeUserDi
     $db->insert_query(AF_AAM_TABLE_TYPES, $insert);
     return (int)$db->insert_id();
 }
+
 
 /**
  * Слияние старых кодов типов (от MyAlerts) в наши канонические.
@@ -755,7 +769,11 @@ function af_aam_ensure_mycode(): void
 function af_advancedalertsandmentions_activate(): void
 {
     af_advancedalertsandmentions_install();
+
+    // гарантированно лечим title=code сразу при активации
+    af_aam_backfill_type_titles();
 }
+
 
 function af_advancedalertsandmentions_deactivate(): void
 {
@@ -1141,18 +1159,33 @@ function af_aam_backfill_type_titles(): void
         $lang->load('advancedfunctionality_' . AF_AAM_ID);
     }
 
-    $q = $db->simple_select(AF_AAM_TABLE_TYPES, 'id,code,title', "title='' OR title IS NULL");
+    // чиним:
+    // 1) title пустой/NULL
+    // 2) title == code (то, что у тебя сейчас и видно в ACP)
+    $q = $db->simple_select(AF_AAM_TABLE_TYPES, 'id,code,title');
     while ($row = $db->fetch_array($q)) {
-        $code = (string)$row['code'];
-        $title = af_aam_default_type_title($code);
+        $code  = trim((string)($row['code'] ?? ''));
+        $title = (string)($row['title'] ?? '');
 
-        $db->update_query(
-            AF_AAM_TABLE_TYPES,
-            ['title' => $db->escape_string($title)],
-            'id=' . (int)$row['id']
-        );
+        if ($code === '') {
+            continue;
+        }
+
+        if ($title === '' || my_strtolower($title) === my_strtolower($code)) {
+            $fixed = af_aam_default_type_title($code);
+
+            // не делаем лишних апдейтов, если вдруг fixed тоже равен коду
+            if ($fixed !== '' && $fixed !== $title) {
+                $db->update_query(
+                    AF_AAM_TABLE_TYPES,
+                    ['title' => $db->escape_string($fixed)],
+                    'id=' . (int)$row['id']
+                );
+            }
+        }
     }
 }
+
 
 
 /**
@@ -1511,17 +1544,15 @@ function af_aam_xmlhttp(): bool
 
 
 // ================ ТРИГГЕРЫ УВЕДОМЛЕНИЙ =======================
-
 function af_aam_get_type_id(string $code): ?int
 {
-    global $db, $lang;
+    global $db;
 
     $code = trim($code);
     if ($code === '') {
         return null;
     }
 
-    // Таблица типов вообще существует?
     if (!$db->table_exists(AF_AAM_TABLE_TYPES)) {
         return null;
     }
@@ -1530,29 +1561,32 @@ function af_aam_get_type_id(string $code): ?int
     $row = $db->fetch_array(
         $db->simple_select(
             AF_AAM_TABLE_TYPES,
-            'id, enabled',
+            'id, enabled, title, code',
             "code='{$escapedCode}'"
         )
     );
 
-    // Тип есть и включен — просто вернуть ID
     if ($row) {
         if ((int)$row['enabled'] !== 1) {
             return null;
         }
+
+        // если тип есть, но title = '' или title = code — подлечим сразу
+        $existingTitle = (string)($row['title'] ?? '');
+        if ($existingTitle === '' || my_strtolower($existingTitle) === my_strtolower($code)) {
+            $fixed = af_aam_default_type_title($code);
+            $db->update_query(
+                AF_AAM_TABLE_TYPES,
+                ['title' => $db->escape_string($fixed)],
+                'id=' . (int)$row['id']
+            );
+        }
+
         return (int)$row['id'];
     }
 
-    // ---- ВАЖНОЕ МЕСТО: типа нет → регистрируем его на лету ----
-
-    if (!isset($lang->af_aam_name)) {
-        $lang->load('advancedfunctionality_' . AF_AAM_ID);
-    }
-
-    $titleKey = 'af_aam_alert_type_' . $code;
-    $title = isset($lang->{$titleKey}) ? $lang->{$titleKey} : $code;
-
-    // canBeUserDisabled = 1, defaultUserEnabled = 1, enabled = 1
+    // типа нет → регистрируем на лету уже с нормальным фоллбеком
+    $title = af_aam_default_type_title($code);
     $newId = af_aam_register_type($code, $title, 1, 1, 1);
 
     if ($newId === null) {
@@ -1561,6 +1595,7 @@ function af_aam_get_type_id(string $code): ?int
 
     return (int)$newId;
 }
+
 
 function af_aam_user_allows_type(int $uid, string $code): bool
 {
@@ -2244,24 +2279,20 @@ function af_aam_thread_insert_end(&$posthandler): void
 
 
 // ================ ПОСТБИТ: КНОПКА «СОБАЧКА» ===================
-
 function af_aam_postbit_mention_button(array &$post): void
 {
     global $mybb, $lang;
-
-    if (empty($mybb->settings['af_aam_mention_button_enabled']) || (int)$mybb->settings['af_aam_mention_button_enabled'] !== 1) {
-        return;
-    }
 
     if (!af_aam_is_enabled()) {
         return;
     }
 
-    if (!is_object($lang)) {
+    // гостям не нужно (и чтобы лишние data-атрибуты не лепить)
+    if (empty($mybb->user['uid'])) {
         return;
     }
 
-    if (!isset($lang->af_aam_mention_button)) {
+    if (!isset($lang->af_aam_name)) {
         $lang->load('advancedfunctionality_' . AF_AAM_ID);
     }
 
@@ -2270,30 +2301,55 @@ function af_aam_postbit_mention_button(array &$post): void
     }
 
     $uid      = (int)$post['uid'];
-    $username = (string)$post['username']; // уже очищено MyBB
-    $title    = htmlspecialchars_uni($lang->af_aam_mention_button ?? 'Mention');
+    $username = (string)$post['username']; // MyBB уже чистит username
 
-    // 1) Делегируемый “@"-баттон
-    $button = '<a href="javascript:void(0)" class="af-aam-mention-button" data-username="' .
-        htmlspecialchars_uni($username) . '" data-uid="' . $uid . '" title="' . $title . '">@</a>';
-
-    // 2) Делаем кликабельным ник автора поста (profilelink), чтобы JS мог ловить клик и вставлять mention в редактор
+    /**
+     * 1) ВСЕГДА делаем кликабельным ник автора (для вставки mention по клику),
+     * даже если кнопка "@" выключена настройкой.
+     */
     if (!empty($post['profilelink']) && is_string($post['profilelink'])) {
         if (stripos($post['profilelink'], 'af-aam-mention-user') === false) {
-            $post['profilelink'] = preg_replace_callback('#<a\b([^>]*)>#i', function ($m) use ($uid, $username) {
-                $attrs = $m[1];
+            $post['profilelink'] = preg_replace_callback(
+                '#<a\b([^>]*)>#i',
+                function ($m) use ($uid, $username) {
+                    $attrs = $m[1];
 
-                $data = ' data-uid="' . (int)$uid . '" data-username="' . htmlspecialchars_uni($username) . '"';
+                    $data = ' data-uid="' . (int)$uid . '" data-username="' . htmlspecialchars_uni($username) . '"';
 
-                if (preg_match('#\bclass\s*=\s*("|\')([^"\']*)\1#i', $attrs)) {
-                    $attrs = preg_replace('#\bclass\s*=\s*("|\')([^"\']*)\1#i', 'class="$2 af-aam-mention-user"', $attrs, 1);
-                    return '<a' . $attrs . $data . '>';
-                }
+                    if (preg_match('#\bclass\s*=\s*("|\')([^"\']*)\1#i', $attrs)) {
+                        $attrs = preg_replace(
+                            '#\bclass\s*=\s*("|\')([^"\']*)\1#i',
+                            'class="$2 af-aam-mention-user"',
+                            $attrs,
+                            1
+                        );
+                        return '<a' . $attrs . $data . '>';
+                    }
 
-                return '<a class="af-aam-mention-user"' . $attrs . $data . '>';
-            }, $post['profilelink'], 1);
+                    return '<a class="af-aam-mention-user"' . $attrs . $data . '>';
+                },
+                $post['profilelink'],
+                1
+            );
         }
     }
+
+    /**
+     * 2) КНОПКА "@" — только если включена настройкой.
+     * Фолбэк на альтернативное имя (на случай если где-то сохранилось иначе).
+     */
+    $mentionButtonEnabled = $mybb->settings['af_aam_mention_button_enabled']
+        ?? $mybb->settings['af_' . AF_AAM_ID . '_mention_button_enabled']
+        ?? 1;
+
+    if ((int)$mentionButtonEnabled !== 1) {
+        return; // кнопку не добавляем, но "клик по нику" уже включён выше
+    }
+
+    $title = htmlspecialchars_uni($lang->af_aam_mention_button ?? 'Mention');
+
+    $button = '<a href="javascript:void(0)" class="af-aam-mention-button" data-username="' .
+        htmlspecialchars_uni($username) . '" data-uid="' . $uid . '" title="' . $title . '">@</a>';
 
     // Вставка кнопки в блок кнопок постбита
     if (!empty($post['button_rep'])) {
@@ -2304,12 +2360,3 @@ function af_aam_postbit_mention_button(array &$post): void
         $post['button_quote'] = $button;
     }
 }
-
-
-
-/**
- * Собирает payload для JS:
- * - unread_count / unread / badge
- * - items[] для тостов
- * - template для модалки
- */
