@@ -709,21 +709,29 @@ function af_aas_render_usercp_page()
 
     // ---- ВАЖНО: стандартный UCP-лейаут ----
     eval('$headerinclude = "' . $templates->get('headerinclude') . '";');
-    // 1) Собираем дополнительные пункты UCP-меню через хук (как делает usercp.php)
-    $usercpnav = '';
-    if (is_object($plugins)) {
-        $plugins->run_hooks('usercp_menu');
+
+    // 1) Полное меню UCP, как в usercp.php
+    if (!function_exists('usercp_menu')) {
+        require_once MYBB_ROOT . 'inc/functions_user.php';
     }
-    // 2) Оборачиваем навигацию стандартным шаблоном usercp_nav
-    if (is_object($templates) && $templates->get('usercp_nav')) {
-        eval('$usercpnav = "' . $templates->get('usercp_nav') . '";');
+    if (function_exists('usercp_menu')) {
+        $usercpnav = usercp_menu();
+    } else {
+        // fallback: только наш пункт меню
+        $usercpnav = '';
+        if (is_object($plugins)) {
+            $plugins->run_hooks('usercp_menu');
+        }
+        if (is_object($templates) && $templates->get('usercp_nav')) {
+            eval('$usercpnav = "' . $templates->get('usercp_nav') . '";');
+        }
     }
 
-    // 3) Основной контент страницы (наш шаблон)
+    // 2) Основной контент страницы (наш шаблон)
     $usercpmain = '';
     eval('$usercpmain = "' . $templates->get('af_aas_ucp_page') . '";');
 
-    // 4) Рендерим через стандартный шаблон usercp (если он есть), иначе fallback
+    // 3) Рендерим через стандартный шаблон usercp (если он есть), иначе fallback
     eval('$header = "' . $templates->get('header') . '";');
     eval('$footer = "' . $templates->get('footer') . '";');
 
@@ -1545,11 +1553,7 @@ function af_aas_render_account_list_page()
     }
 
     if ($rowsHtml === '') {
-        $rowsHtml = '
-            <tr>
-                <td class="trow1" colspan="2"><em>Пока нет привязок.</em></td>
-            </tr>
-        ';
+        eval('$rowsHtml = "' . $templates->get('af_aas_account_list_empty') . '";');
     }
 
     add_breadcrumb($title, 'misc.php?action=af_aas_account_list');
@@ -1565,11 +1569,7 @@ function af_aas_render_account_list_page()
     $af_aas_account_rows = $rowsHtml;
 
     if ($af_aas_account_rows === '') {
-        $af_aas_account_rows = '
-            <tr>
-                <td class="trow1" colspan="2"><em>Пока нет привязок.</em></td>
-            </tr>
-        ';
+        eval('$af_aas_account_rows = "' . $templates->get('af_aas_account_list_empty') . '";');
     }
 
     eval('$page = "' . $templates->get('af_aas_account_list_page') . '";');
