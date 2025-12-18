@@ -1268,7 +1268,7 @@ function af_advancedpostcounter_admin_selfheal(): void
 
 function af_advancedpostcounter_postsactivity_page(): void
 {
-    global $mybb, $db, $templates, $lang;
+    global $mybb, $db, $templates, $lang, $headerinclude, $header, $footer;
 
     if (!af_advancedpostcounter_is_enabled()) {
         if (function_exists('error_no_permission')) {
@@ -1306,6 +1306,12 @@ function af_advancedpostcounter_postsactivity_page(): void
         }
         output_page('AdvancedPostCounter: templates missing');
         return;
+    }
+
+    if (is_object($templates)) {
+        if (empty($headerinclude)) { eval('$headerinclude = "'.$templates->get('headerinclude').'";'); }
+        if (empty($header))        { eval('$header        = "'.$templates->get('header').'";'); }
+        if (empty($footer))        { eval('$footer        = "'.$templates->get('footer').'";'); }
     }
 
     // 2) Хлебные крошки/заголовок
@@ -1372,11 +1378,13 @@ function af_advancedpostcounter_postsactivity_page(): void
     if (empty($uids)) {
         $rows = '';
         $page_inner = '';
-        eval("\$page_inner = \"{$pageTpl}\";");
+        if (is_object($templates) && method_exists($templates, 'render')) {
+            $page_inner = (string)$templates->render('advancedpostcounter_postsactivity');
+        } else {
+            eval("\$page_inner = \"{$pageTpl}\";");
+        }
 
-        // ВСЕГДА гарантируем header/footer, если шаблон их не содержит
-        $final = af_advancedpostcounter_wrap_with_forum_shell($page_inner, $pageTpl);
-        output_page($final);
+        output_page($page_inner);
         return;
     }
 
@@ -1481,45 +1489,13 @@ function af_advancedpostcounter_postsactivity_page(): void
 
     // 10) Рендер страницы
     $page_inner = '';
-    eval("\$page_inner = \"{$pageTpl}\";");
-
-    // 11) Гарантируем оболочку темы
-    $final = af_advancedpostcounter_wrap_with_forum_shell($page_inner, $pageTpl);
-    output_page($final);
-}
-function af_advancedpostcounter_wrap_with_forum_shell(string $page_inner, string $original_tpl): string
-{
-    global $templates;
-
-    // Если шаблон уже содержит {$header} или {$footer} — НЕ вмешиваемся
-    if (strpos($original_tpl, '{$header}') !== false || strpos($original_tpl, '{$footer}') !== false) {
-        return $page_inner;
+    if (is_object($templates) && method_exists($templates, 'render')) {
+        $page_inner = (string)$templates->render('advancedpostcounter_postsactivity');
+    } else {
+        eval("\$page_inner = \"{$pageTpl}\";");
     }
 
-    if (!isset($templates) || !method_exists($templates, 'get')) {
-        return $page_inner;
-    }
-
-    // Стандартная связка MyBB: headerinclude -> header -> footer
-    $headerinclude = '';
-    $header = '';
-    $footer = '';
-
-    $hiTpl = (string)$templates->get('headerinclude');
-    $hTpl  = (string)$templates->get('header');
-    $fTpl  = (string)$templates->get('footer');
-
-    if ($hiTpl !== '') {
-        eval("\$headerinclude = \"{$hiTpl}\";");
-    }
-    if ($hTpl !== '') {
-        eval("\$header = \"{$hTpl}\";");
-    }
-    if ($fTpl !== '') {
-        eval("\$footer = \"{$fTpl}\";");
-    }
-
-    return (string)$header . (string)$page_inner . (string)$footer;
+    output_page($page_inner);
 }
 
 /* -------------------- HOOKS REGISTRATION -------------------- */
