@@ -1487,15 +1487,29 @@ function af_advancedpostcounter_postsactivity_page(): void
         eval("\$rows .= \"{$rowTpl}\";");
     }
 
-    // 10) Рендер страницы
-    $page_inner = '';
+    // 10) Рендер страницы: полный документ одним куском (как в AAS)
+    $page = '';
+
     if (is_object($templates) && method_exists($templates, 'render')) {
-        $page_inner = (string)$templates->render('advancedpostcounter_postsactivity');
-    } else {
-        eval("\$page_inner = \"{$pageTpl}\";");
+        $page = (string)$templates->render('advancedpostcounter_postsactivity');
+    } elseif ($pageTpl !== '') {
+        eval("\$page = \"{$pageTpl}\";");
     }
 
-    output_page($page_inner);
+    if ($page === '') {
+        $page = '<!DOCTYPE html><html><head><title>'
+            .htmlspecialchars_uni($activity_title)
+            .' - '.htmlspecialchars_uni((string)$mybb->settings['bbname']).'</title>'
+            .$headerinclude
+            .'</head><body>'
+            .$header
+            .'<div class="af-apc-activity-page">'.$rows.'</div>'
+            .$footer
+            .'</body></html>';
+    }
+
+    output_page($page);
+    exit;
 }
 
 /* -------------------- HOOKS REGISTRATION -------------------- */

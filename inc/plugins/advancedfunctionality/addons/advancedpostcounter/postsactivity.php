@@ -4,6 +4,7 @@
  */
 
 define('IN_MYBB', 1);
+define('THIS_SCRIPT', 'postsactivity.php');
 require_once __DIR__ . '/global.php';
 
 $addon = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/advancedpostcounter/advancedpostcounter.php';
