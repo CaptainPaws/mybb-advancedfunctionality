@@ -1,0 +1,66 @@
+<!-- TEMPLATE: advancedpostcounter_bit -->
+<div class="af-apc">
+    <span class="af-apc-label">{$apc_label}</span>
+    <span class="af-apc-count" title="{$apc_tip}">{$apc_count}</span>
+</div>
+<!-- /TEMPLATE -->
+
+
+<!-- TEMPLATE: advancedpostcounter_profile_bit -->
+<tr>
+    <td class="trow1"><strong>{$apc_label}</strong></td>
+    <td class="trow1"><span title="{$apc_tip}">{$apc_count}</span></td>
+</tr>
+<!-- /TEMPLATE -->
+
+
+<!-- TEMPLATE: advancedpostcounter_postsactivity -->
+<!DOCTYPE html>
+<html xml:lang="{$lang->settings['htmllang']}" lang="{$lang->settings['htmllang']}">
+<head>
+    <title>{$activity_title} - {$mybb->settings['bbname']}</title>
+    {$headerinclude}
+</head>
+<body>
+{$header}
+
+<div class="af-apc-activity-page">
+    <div class="float_right">{$multipage}</div>
+    <br class="clear" />
+
+    <table border="0" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" class="tborder" width="100%">
+        <tr>
+            <td class="thead" colspan="6"><strong>{$activity_title}</strong></td>
+        </tr>
+        <tr>
+            <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$lang->avatar}</strong></td>
+            <td class="tcat"><strong>{$lang->username}</strong></td>
+            <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>Всего</strong></td>
+            <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>За месяц</strong></td>
+            <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>За неделю</strong></td>
+            <td class="tcat"><strong>Последний пост</strong></td>
+        </tr>
+
+        {$rows}
+    </table>
+
+    <div class="float_right" style="margin-top: 10px;">{$multipage}</div>
+    <br class="clear" />
+</div>
+
+{$footer}
+</body>
+</html>
+<!-- /TEMPLATE -->
+
+
+<!-- TEMPLATE: advancedpostcounter_postsactivity_row -->
+<tr>
+    <td class="{$row_bg}" style="text-align:center; white-space:nowrap;">{$row_avatar}</td>
+    <td class="{$row_bg}">{$row_user}</td>
+    <td class="{$row_bg}" style="text-align:center; white-space:nowrap;">{$row_total}</td>
+    <td class="{$row_bg}" style="text-align:center; white-space:nowrap;">{$row_month}</td>
+    <td class="{$row_bg}" style="text-align:center; white-space:nowrap;">{$row_week}</td>
+    <td class="{$row_bg}">{$row_last}</td>
+</tr>
+<!-- /TEMPLATE -->
