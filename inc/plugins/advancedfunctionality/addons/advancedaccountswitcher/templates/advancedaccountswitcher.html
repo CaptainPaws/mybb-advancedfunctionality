@@ -1,0 +1,286 @@
+<!-- TEMPLATE: af_aas_panel_widget -->
+<span class="af-aas-panel">
+    <a href="#" class="af-aas-trigger" id="af_aas_trigger" aria-expanded="false" title="Переключить аккаунт">👥 Аккаунты</a>
+</span>
+
+<div id="af_aas_modal" class="modal af-aas-modal" style="display:none;">
+    <div class="af-aas-modal-backdrop"></div>
+
+    <table class="tborder af-aas-modal-table" cellspacing="{$theme['borderwidth']}"
+           cellpadding="{$theme['tablespace']}" border="0">
+        <thead>
+        <tr>
+            <th class="thead" colspan="3">
+                <strong>Аккаунты</strong>
+                <button type="button" class="af-aas-modal-close" title="Закрыть">✕</button>
+            </th>
+        </tr>
+        </thead>
+
+        <tbody id="af_aas_modal_body">
+            {$af_aas_panel_rows}
+        </tbody>
+
+        <tfoot>
+        <tr>
+            <td class="tfoot" colspan="3">
+                <div class="af-aas-modal-footer">
+                    <a href="{$af_aas_ucp_url}" class="af-aas-footer-link">⚙ Управление аккаунтами</a>
+                    <a href="{$af_aas_account_list_url}" class="af-aas-footer-link">📋 Список аккаунтов</a>
+                </div>
+            </td>
+        </tr>
+        </tfoot>
+
+    </table>
+</div>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_panel_row -->
+<tr class="{$af_aas_row_class} af-aas-modal-row{$af_aas_item_active}">
+    <td class="af-aas-modal-avatar" width="40">{$af_aas_item_avatar}</td>
+    <td class="af-aas-modal-name">
+        <strong>{$af_aas_item_username}</strong> {$af_aas_item_badge}<br />
+        <span class="smalltext">#{$af_aas_item_uid}</span>
+    </td>
+    <td class="af-aas-modal-action" width="90">
+        <a class="button button_small" href="{$af_aas_item_switch_url}">Войти</a>
+    </td>
+</tr>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_panel_empty -->
+<tr>
+    <td class="trow1" colspan="3">Пока нет доступных аккаунтов.</td>
+  </tr>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_ucp_page -->
+<div class="af-aas-ucp">
+    <table class="tborder" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" border="0">
+        <tr>
+            <td class="thead" colspan="2"><strong>{$af_aas_page_title}</strong></td>
+        </tr>
+        <tr>
+            <td class="trow1" colspan="2">{$af_aas_warning}</td>
+        </tr>
+        <tr>
+            <td class="tcat" colspan="2"><strong>Привязанные аккаунты</strong></td>
+        </tr>
+        {$af_aas_list}
+    </table>
+
+    <div class="af-aas-grid">
+        {$af_aas_create_form}
+        {$af_aas_link_form}
+    </div>
+
+    {$af_aas_privacy_form}
+</div>
+<!-- /TEMPLATE -->
+
+
+<!-- TEMPLATE: af_aas_usercp -->
+<!DOCTYPE html>
+<html xml:lang="{$lang->settings['htmllang']}" lang="{$lang->settings['htmllang']}">
+<head>
+<title>{$af_aas_page_title} - {$mybb->settings['bbname']}</title>
+{$headerinclude}
+</head>
+<body>
+{$header}
+<table width="100%" border="0" align="center">
+<tr>
+{$usercpnav}
+<td valign="top">
+{$af_aas_usercpmain}
+</td>
+</tr>
+</table>
+{$footer}
+</body>
+</html>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_ucp_row -->
+<tr>
+    <td class="{$af_aas_row_class}">
+        {$af_aas_miniavatar}<strong>{$af_aas_username}</strong> <span class="smalltext">(#{$af_aas_uid})</span>
+    </td>
+    <td class="{$af_aas_row_class} af-aas-row-actions" width="35%">
+        <a class="button button_small" href="{$af_aas_switch_url}">Переключиться</a>
+        {$af_aas_unlink_form}
+    </td>
+</tr>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_ucp_empty -->
+<tr>
+    <td class="trow1" colspan="2">Пока нет привязанных аккаунтов.</td>
+</tr>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_ucp_warning_not_master -->
+<div class="af-aas-warning">
+    <div class="alert alert_warning">Управление дополнительными аккаунтами доступно только из мастер-аккаунта.</div>
+</div>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_ucp_unlink_form -->
+<form method="post" action="{$af_aas_ucp_action}" class="af-aas-inlineform">
+    <input type="hidden" name="my_post_key" value="{$my_post_key}">
+    <input type="hidden" name="do" value="unlink">
+    <input type="hidden" name="uid" value="{$af_aas_unlink_uid}">
+    <button type="submit" class="button button_small">Отвязать</button>
+</form>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_ucp_form_create -->
+<form method="post" action="{$af_aas_ucp_action}" class="af-aas-form">
+    <input type="hidden" name="my_post_key" value="{$my_post_key}">
+    <input type="hidden" name="do" value="create">
+
+    <table class="tborder" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" border="0">
+        <tr>
+            <td class="thead" colspan="2"><strong>Создать дополнительный аккаунт</strong></td>
+        </tr>
+        <tr>
+            <td class="trow1" width="35%"><label for="afAasCreateUsername">Логин (username)</label></td>
+            <td class="trow1"><input type="text" id="afAasCreateUsername" name="new_username" class="textbox" required></td>
+        </tr>
+        <tr>
+            <td class="trow2"><label for="afAasCreatePassword">Пароль</label></td>
+            <td class="trow2"><input type="password" id="afAasCreatePassword" name="new_password" class="textbox" required></td>
+        </tr>
+        <tr>
+            <td class="trow1"><label for="afAasCreatePassword2">Пароль ещё раз</label></td>
+            <td class="trow1"><input type="password" id="afAasCreatePassword2" name="new_password2" class="textbox" required></td>
+        </tr>
+        <tr>
+            <td class="trow2" colspan="2">
+                <div class="smalltext">Email будет взят от мастер-аккаунта. Аккаунт создаётся без активации и попадёт в группу “Registered”.</div>
+                <div class="af-aas-form-actions"><button type="submit" class="button">Создать и привязать</button></div>
+            </td>
+        </tr>
+    </table>
+</form>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_ucp_form_link -->
+<form method="post" action="{$af_aas_ucp_action}" class="af-aas-form" id="afAasLinkForm">
+    <input type="hidden" name="my_post_key" value="{$my_post_key}">
+    <input type="hidden" name="do" value="link_existing">
+
+    <table class="tborder" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" border="0">
+        <tr>
+            <td class="thead" colspan="2"><strong>Привязать существующий аккаунт</strong></td>
+        </tr>
+        <tr>
+            <td class="trow1" width="35%"><label for="afAasLinkUsername">Имя пользователя</label></td>
+            <td class="trow1">
+                <input type="text" name="link_username" class="textbox" autocomplete="off" id="afAasLinkUsername" required>
+                <input type="hidden" name="link_uid" id="afAasLinkUid" value="0">
+                <div class="af-aas-suggest" id="afAasSuggest" hidden="hidden"></div>
+                <p class="smalltext">Начни вводить ник — появится список. Выбери нужный аккаунт и введи его пароль.</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="trow2"><label for="afAasLinkPassword">Пароль этого аккаунта</label></td>
+            <td class="trow2"><input type="password" name="link_password" class="textbox" id="afAasLinkPassword" required></td>
+        </tr>
+        <tr>
+            <td class="trow1" colspan="2"><div class="af-aas-form-actions"><button type="submit" class="button">Привязать</button></div></td>
+        </tr>
+    </table>
+</form>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_account_list_page -->
+<!DOCTYPE html>
+<html xml:lang="{$lang->settings['htmllang']}" lang="{$lang->settings['htmllang']}">
+<head>
+    <title>{$af_aas_page_title} - {$mybb->settings['bbname']}</title>
+    {$headerinclude}
+</head>
+<body>
+{$header}
+
+<div class="af-aas-accountlist-page">
+    <div class="float_right">{$multipage}</div>
+    <br class="clear" />
+
+    <table border="0" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" class="tborder" width="100%">
+        <tr>
+            <td class="thead" colspan="7"><strong>{$af_aas_page_title}</strong></td>
+        </tr>
+        <tr>
+            <td class="tcat" style="width:40px;"></td>
+            <td class="tcat"><strong>Аккаунт</strong></td>
+            <td class="tcat" style="white-space:nowrap;"><strong>Регистрация</strong></td>
+            <td class="tcat" style="white-space:nowrap;"><strong>Активность</strong></td>
+            <td class="tcat" style="white-space:nowrap; text-align:center;"><strong>Сообщений</strong></td>
+            <td class="tcat" style="white-space:nowrap; text-align:center;"><strong>Тем</strong></td>
+            <td class="tcat" style="white-space:nowrap;"><strong>Привязка</strong></td>
+        </tr>
+
+        {$af_aas_account_rows}
+    </table>
+
+    <div class="float_right" style="margin-top: 10px;">{$multipage}</div>
+    <br class="clear" />
+
+    <p class="smalltext" style="margin-top: 10px;">
+        В колонке “Привязка” показывается мастер-аккаунт, если он есть и если у мастера не включена приватность.
+    </p>
+</div>
+
+{$footer}
+</body>
+</html>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_account_list_row -->
+<tr>
+    <td class="{$af_aas_row_class}" style="width:40px;">{$af_aas_avatar_html}</td>
+    <td class="{$af_aas_row_class}">{$af_aas_user_link}</td>
+    <td class="{$af_aas_row_class}" style="white-space:nowrap;">{$af_aas_regdate}</td>
+    <td class="{$af_aas_row_class}" style="white-space:nowrap;">{$af_aas_lastactive}</td>
+    <td class="{$af_aas_row_class}" style="text-align:center; white-space:nowrap;">{$af_aas_postnum}</td>
+    <td class="{$af_aas_row_class}" style="text-align:center; white-space:nowrap;">{$af_aas_threadnum}</td>
+    <td class="{$af_aas_row_class}" style="white-space:nowrap;">{$af_aas_master_link}</td>
+</tr>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_aas_account_list_empty -->
+<tr>
+    <td class="trow1" colspan="7"><em>Пока ничего не найдено.</em></td>
+</tr>
+<!-- /TEMPLATE -->
+
+
+<!-- TEMPLATE: af_aas_ucp_privacy_form -->
+<form method="post" action="{$af_aas_ucp_action}" class="af-aas-form" style="margin-top:12px;">
+    <input type="hidden" name="my_post_key" value="{$my_post_key}">
+    <input type="hidden" name="do" value="save_privacy">
+
+    <table class="tborder" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" border="0">
+        <tr>
+            <td class="thead"><strong>Приватность</strong></td>
+        </tr>
+        <tr>
+            <td class="trow1">
+                <label>
+                    <input type="checkbox" name="hide_in_list" value="1"{$af_aas_privacy_checked}>
+                    Не показывать связанные аккаунты в списке пользователей
+                </label>
+                <div class="smalltext" style="margin-top:6px;">
+                    Если включено — в “Пользователи” не будет показан мастер-аккаунт и не будет показана привязка у связанных аккаунтов.
+                </div>
+                <div class="af-aas-form-actions" style="margin-top:8px;">
+                    <button type="submit" class="button">Сохранить</button>
+                </div>
+            </td>
+        </tr>
+    </table>
+</form>
+<!-- /TEMPLATE -->
