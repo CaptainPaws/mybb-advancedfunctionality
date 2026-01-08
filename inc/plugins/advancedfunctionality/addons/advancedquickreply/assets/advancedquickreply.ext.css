@@ -1,0 +1,174 @@
+:root { --af-aqr-ext-icon-rev: 20260108; }
+
+/* ==========================================
+   EXT: SCEditor toolbar icons (FULL EDITOR / QUICK EDIT)
+   СКОУП ТОЛЬКО там, где ext.js пометил контейнер классом .af-aqr-ext-scope
+   ========================================== */
+
+/* Контейнер редактора (как в QR — чтобы iframe не чудил) */
+.af-aqr-ext-scope.sceditor-container{
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* Тулбар: переменные и поведение иконок */
+.af-aqr-ext-scope .sceditor-toolbar{
+  flex: 0 0 auto;
+
+  --af-aqr-toolbar-icon: #cc0606;
+  --af-aqr-toolbar-icon-hover: #0a8b7a;
+
+  --af-aqr-icon-color: var(--af-aqr-toolbar-icon);
+  --af-aqr-icon-color-hover: var(--af-aqr-toolbar-icon-hover);
+
+  --af-aqr-icon-opacity: 0.8;
+  --af-aqr-icon-opacity-hover: 1;
+}
+
+/* Область редактора тянется */
+.af-aqr-ext-scope iframe,
+.af-aqr-ext-scope textarea{
+  flex: 1 1 auto;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 180px;
+  height: auto;
+}
+
+/* Кнопки: фон прозрачный, цвет управляется переменными */
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button{
+  background-color: transparent;
+  filter: none;
+  opacity: 0.95;
+
+  color: var(--af-aqr-icon-color, currentColor);
+}
+
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button:hover,
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button.active{
+  color: var(--af-aqr-icon-color-hover, currentColor);
+}
+
+/* Стандартная иконка (div внутри кнопки) */
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button > div{
+  width: 16px;
+  height: 16px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 16px 16px;
+
+  opacity: var(--af-aqr-icon-opacity);
+}
+
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button:hover > div{
+  opacity: var(--af-aqr-icon-opacity-hover);
+}
+
+/* ==========================================
+   EXT: Стандартные кнопки → НАШИ svg (assets/img/*.svg)
+   (пути relative — потому что файл лежит в /assets/)
+   ========================================== */
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button > div{
+  color: inherit; /* чтобы currentColor у div = цвет кнопки */
+}
+
+
+/* форматирование */
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-bold > div       { --af-aqr-icon-url: url("img/bold.svg");       background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-italic > div     { --af-aqr-icon-url: url("img/italic.svg");     background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-underline > div  { --af-aqr-icon-url: url("img/underline.svg");  background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-strike > div     { --af-aqr-icon-url: url("img/strike.svg");     background-image: var(--af-aqr-icon-url); }
+
+/* dropdown’ы */
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-font > div       { --af-aqr-icon-url: url("img/font.svg");       background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-size > div       { --af-aqr-icon-url: url("img/size.svg");       background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-color > div      { --af-aqr-icon-url: url("img/color.svg");      background-image: var(--af-aqr-icon-url); }
+
+/* очистка/история */
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-removeformat > div { --af-aqr-icon-url: url("img/removeformat.svg"); background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-undo > div         { --af-aqr-icon-url: url("img/undo.svg");         background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-redo > div         { --af-aqr-icon-url: url("img/redo.svg");         background-image: var(--af-aqr-icon-url); }
+
+/* выравнивание */
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-left > div       { --af-aqr-icon-url: url("img/left.svg");       background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-center > div     { --af-aqr-icon-url: url("img/center.svg");     background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-right > div      { --af-aqr-icon-url: url("img/right.svg");      background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-justify > div    { --af-aqr-icon-url: url("img/justify.svg");    background-image: var(--af-aqr-icon-url); }
+
+/* списки */
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-bulletlist > div { --af-aqr-icon-url: url("img/bulletlist.svg"); background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-orderedlist > div{ --af-aqr-icon-url: url("img/orderedlist.svg");background-image: var(--af-aqr-icon-url); }
+
+/* вставки */
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-quote > div      { --af-aqr-icon-url: url("img/quote.svg");      background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-code > div       { --af-aqr-icon-url: url("img/code.svg");       background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-link > div       { --af-aqr-icon-url: url("img/link.svg");       background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-unlink > div     { --af-aqr-icon-url: url("img/unlink.svg");     background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-email > div      { --af-aqr-icon-url: url("img/email.svg");      background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-image > div      { --af-aqr-icon-url: url("img/image.svg");      background-image: var(--af-aqr-icon-url); }
+
+/* режимы */
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-source > div     { --af-aqr-icon-url: url("img/source.svg");     background-image: var(--af-aqr-icon-url); }
+.af-aqr-ext-scope .sceditor-toolbar a.sceditor-button-maximize > div   { --af-aqr-icon-url: url("img/maximize.svg");   background-image: var(--af-aqr-icon-url); }
+
+/* ==========================================
+   EXT: ONE-COLOR (mask) — аккуратная одноцветная иконка
+   ========================================== */
+@supports ((mask-image: url("img/bold.svg")) or (-webkit-mask-image: url("img/bold.svg"))) {
+
+  /* общая база */
+  .af-aqr-ext-scope .sceditor-toolbar a.sceditor-button > div{
+    background-image: none;          /* убираем фон-картинку */
+    background-color: currentColor;  /* красим через currentColor */
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-size: 16px 16px;
+    mask-size: 16px 16px;
+  }
+
+  /* ставим маски по кнопкам (из переменной --af-aqr-icon-url) */
+  .af-aqr-ext-scope .sceditor-toolbar a.sceditor-button > div{
+    -webkit-mask-image: var(--af-aqr-icon-url);
+    mask-image: var(--af-aqr-icon-url);
+  }
+}
+
+/* ==========================================
+   EXT: кастомные кнопки (af_*) + dropdown (afmenu_*) — currentColor
+   ========================================== */
+.af-aqr-ext-scope .sceditor-toolbar a[class*="sceditor-button-af_"],
+.af-aqr-ext-scope .sceditor-toolbar a[class*="sceditor-button-afmenu_"]{
+  color: var(--af-aqr-icon-color);
+}
+
+.af-aqr-ext-scope .sceditor-toolbar a[class*="sceditor-button-af_"]:hover,
+.af-aqr-ext-scope .sceditor-toolbar a[class*="sceditor-button-afmenu_"]:hover,
+.af-aqr-ext-scope .sceditor-toolbar a[class*="sceditor-button-afmenu_"].is-open{
+  color: var(--af-aqr-icon-color-hover);
+}
+
+.af-aqr-ext-scope .sceditor-toolbar a[class*="sceditor-button-af_"] svg,
+.af-aqr-ext-scope .sceditor-toolbar a[class*="sceditor-button-afmenu_"] svg{
+  width: 16px;
+  height: 16px;
+  display: block;
+  color: currentColor;
+}
+
+.af-aqr-ext-scope .sceditor-toolbar a[class*="sceditor-button-af_"] svg *,
+.af-aqr-ext-scope .sceditor-toolbar a[class*="sceditor-button-afmenu_"] svg *{
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+/* уважение fill="none"/stroke="none" */
+.af-aqr-ext-scope .sceditor-toolbar a[class*="sceditor-button-af_"] svg [fill="none"],
+.af-aqr-ext-scope .sceditor-toolbar a[class*="sceditor-button-afmenu_"] svg [fill="none"]{ fill: none; }
+
+.af-aqr-ext-scope .sceditor-toolbar a[class*="sceditor-button-af_"] svg [stroke="none"],
+.af-aqr-ext-scope .sceditor-toolbar a[class*="sceditor-button-afmenu_"] svg [stroke="none"]{ stroke: none; }

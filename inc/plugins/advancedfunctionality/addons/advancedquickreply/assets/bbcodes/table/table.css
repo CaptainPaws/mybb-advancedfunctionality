@@ -1,0 +1,142 @@
+/* ====== Rendered table ====== */
+.af-aqr-table {
+  border-collapse: collapse;
+  width: 100%;
+  max-width: 100%;
+  margin: 10px 0;
+}
+
+.af-aqr-table td,
+.af-aqr-table th {
+  border: 1px solid rgba(255,255,255,.14);
+  padding: 8px 10px;
+  vertical-align: top;
+}
+
+.af-aqr-table th {
+  font-weight: 700;
+  background: rgba(255,255,255,.06);
+}
+
+.af-aqr-table[data-headers="row"] tr:first-child > th,
+.af-aqr-table[data-headers="row"] tr:first-child > td {
+  font-weight: 700;
+  background: rgba(255,255,255,.06);
+}
+
+.af-aqr-table[data-headers="col"] tr > th:first-child,
+.af-aqr-table[data-headers="col"] tr > td:first-child {
+  font-weight: 700;
+  background: rgba(255,255,255,.06);
+}
+
+.af-aqr-table[data-headers="both"] tr:first-child > * ,
+.af-aqr-table[data-headers="both"] tr > *:first-child {
+  font-weight: 700;
+  background: rgba(255,255,255,.06);
+}
+
+/* ====== Table popover UI ====== */
+#af-aqr-tablepop {
+  position: absolute;
+  z-index: 99999;
+  display: none;
+  width: 340px;
+  background: #1f1f1f;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.45);
+  overflow: hidden;
+}
+
+#af-aqr-tablepop .af-aqr-tablepop-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.10);
+}
+
+#af-aqr-tablepop .af-aqr-tablepop-title {
+  font-weight: 800;
+  color: #fff;
+}
+
+#af-aqr-tablepop .af-aqr-tablepop-x {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: rgba(255,255,255,.8);
+  font-size: 18px;
+  line-height: 18px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 10px;
+}
+
+#af-aqr-tablepop .af-aqr-tablepop-x:hover {
+  background: rgba(255,255,255,.08);
+  color: #fff;
+}
+
+#af-aqr-tablepop .af-aqr-tablepop-gridwrap {
+  padding: 10px 12px 6px 12px;
+}
+
+#af-aqr-tablepop .af-aqr-tablepop-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 4px;
+}
+
+#af-aqr-tablepop .af-aqr-tablepop-cell {
+  height: 18px;
+  border-radius: 4px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.10);
+}
+
+#af-aqr-tablepop .af-aqr-tablepop-cell.is-on {
+  background: rgba(255,255,255,.18);
+  border-color: rgba(255,255,255,.25);
+}
+
+#af-aqr-tablepop .af-aqr-tablepop-size {
+  margin-top: 8px;
+  color: rgba(255,255,255,.75);
+  font-size: 12px;
+}
+
+#af-aqr-tablepop .af-aqr-tablepop-opts {
+  padding: 10px 12px 12px 12px;
+  border-top: 1px solid rgba(255,255,255,.10);
+  display: grid;
+  gap: 8px;
+}
+
+#af-aqr-tablepop .af-aqr-tablepop-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 10px;
+  align-items: center;
+  color: rgba(255,255,255,.85);
+  font-size: 12px;
+}
+
+#af-aqr-tablepop input,
+#af-aqr-tablepop select {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: #fff;
+  padding: 8px 10px;
+  outline: none;
+}
+
+#af-aqr-tablepop .af-aqr-tablepop-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding-top: 6px;
+}
