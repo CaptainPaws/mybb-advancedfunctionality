@@ -3350,6 +3350,40 @@
     return l;
   }
 
+  function normalizeSelectorList(input) {
+    var out = [];
+    if (!input) return out;
+    if (typeof input === 'string') input = input.split(',');
+    if (!Array.isArray(input)) return out;
+    input.forEach(function (sel) {
+      sel = asText(sel).trim();
+      if (!sel) return;
+      out.push(sel);
+    });
+    return out;
+  }
+
+  function getEditorSelectors() {
+    var list = [
+      'textarea#message',
+      'textarea[name="message"]',
+      'textarea[id^="quickedit"]',
+      'textarea[name^="quickedit"]',
+      'textarea'
+    ];
+    var extra = normalizeSelectorList(cfg && cfg.editorSelectors);
+    list = list.concat(extra);
+    var seen = Object.create(null);
+    var out = [];
+    list.forEach(function (sel) {
+      if (!sel) return;
+      if (seen[sel]) return;
+      seen[sel] = true;
+      out.push(sel);
+    });
+    return out;
+  }
+
   // ---------------------------
   // URL / assets resolution
   // ---------------------------
@@ -3599,6 +3633,217 @@
     builtins.forEach(normalizeOne);
 
     return meta;
+  }
+
+  function insertAtCursor(ta, open, close) {
+    open = asText(open);
+    close = asText(close);
+    if (!ta) return;
+    try { ta.focus(); } catch (e0) {}
+    var val = asText(ta.value || '');
+    var start = (typeof ta.selectionStart === 'number') ? ta.selectionStart : val.length;
+    var end = (typeof ta.selectionEnd === 'number') ? ta.selectionEnd : val.length;
+    ta.value = val.slice(0, start) + open + val.slice(start, end) + close + val.slice(end);
+    var caret = start + open.length;
+    try { ta.selectionStart = ta.selectionEnd = caret; } catch (e1) {}
+    try { ta.dispatchEvent(new Event('input', { bubbles: true })); } catch (e2) {}
+    try { ta.dispatchEvent(new Event('change', { bubbles: true })); } catch (e3) {}
+  }
+
+  function createTextareaAdapter(ta) {
+    return {
+      textarea: ta,
+      ta: ta,
+      focus: function () { try { ta && ta.focus && ta.focus(); } catch (e0) {} },
+      insert: function (open, close) { insertAtCursor(ta, open, close); },
+      insertText: function (open, close) { insertAtCursor(ta, open, close); },
+      val: function (value) {
+        if (value === undefined) return ta ? asText(ta.value || '') : '';
+        if (ta) ta.value = asText(value);
+      }
+    };
+  }
+
+  function getMetaForCmd(meta, cmd) {
+    if (!meta || !cmd) return null;
+    if (meta[cmd]) return meta[cmd];
+    if (/^af_/i.test(cmd)) {
+      var esc = 'af_' + escCss(cmd.slice(3));
+      if (meta[esc]) return meta[esc];
+    }
+    return null;
+  }
+
+  function buildFallbackEntries(layout, meta) {
+    var entries = [];
+    function pushSeparator() {
+      if (!entries.length) return;
+      var last = entries[entries.length - 1];
+      if (last && last.type === 'separator') return;
+      entries.push({ type: 'separator' });
+    }
+    if (layout && Array.isArray(layout.sections)) {
+      layout.sections.forEach(function (sec, idx) {
+        if (!sec || typeof sec !== 'object') return;
+        var type = String(sec.type || 'group').toLowerCase();
+        var title = String(sec.title || '');
+        var items = Array.isArray(sec.items) ? sec.items.slice() : [];
+        if (type === 'dropdown') {
+          entries.push({ type: 'dropdown', title: title, items: items.slice(), id: String(sec.id || ('sec' + idx)) });
+          pushSeparator();
+          return;
+        }
+        items.forEach(function (cmd) {
+          cmd = asText(cmd).trim();
+          if (!cmd) return;
+          if (cmd === '|') { pushSeparator(); return; }
+          if (!getMetaForCmd(meta, cmd)) return;
+          entries.push({ type: 'button', cmd: cmd });
+        });
+        pushSeparator();
+      });
+    } else {
+      var used = Object.create(null);
+      function addButton(cmd) {
+        cmd = asText(cmd).trim();
+        if (!cmd || used[cmd]) return;
+        if (!getMetaForCmd(meta, cmd)) return;
+        used[cmd] = true;
+        entries.push({ type: 'button', cmd: cmd });
+      }
+      buttons.forEach(function (b) {
+        var cmd = asText(b && (b.cmd || '')).trim();
+        if (!cmd && b && b.name) cmd = 'af_' + b.name;
+        addButton(cmd);
+      });
+      builtins.forEach(function (b) {
+        var cmd = asText(b && (b.cmd || '')).trim();
+        if (!cmd && b && b.name) cmd = 'af_' + b.name;
+        addButton(cmd);
+      });
+    }
+    while (entries.length && entries[0].type === 'separator') entries.shift();
+    while (entries.length && entries[entries.length - 1].type === 'separator') entries.pop();
+    return entries;
+  }
+
+  function ensureFallbackOutsideClose() {
+    if (window.__afAqrFallbackDocBound) return;
+    window.__afAqrFallbackDocBound = true;
+    document.addEventListener('click', function (ev) {
+      var target = ev && ev.target;
+      if (target && target.closest && target.closest('.af-aqr-fallback-dropdown')) return;
+      var menus = document.querySelectorAll('.af-aqr-fallback-dropdown-menu.is-open');
+      for (var i = 0; i < menus.length; i++) menus[i].classList.remove('is-open');
+      var btns = document.querySelectorAll('.af-aqr-fallback-dropdown-button.is-open');
+      for (var j = 0; j < btns.length; j++) btns[j].classList.remove('is-open');
+    });
+  }
+
+  function executeFallbackCommand(meta, cmd, ta, caller) {
+    var info = getMetaForCmd(meta, cmd);
+    if (!info) return;
+    if (info.handler && window.afAqrBuiltinHandlers && typeof window.afAqrBuiltinHandlers[info.handler] === 'function') {
+      try { window.afAqrBuiltinHandlers[info.handler](createTextareaAdapter(ta), caller); } catch (e0) {}
+      return;
+    }
+    if (!info.opentag && !info.closetag) return;
+    insertAtCursor(ta, info.opentag, info.closetag);
+  }
+
+  function renderFallbackToolbar(ta, layout, meta) {
+    if (!ta || !ta.parentNode) return;
+    if (ta.__afAqrFallbackDone) return;
+    if (ta.getAttribute && ta.getAttribute('data-af-aqr-ignore') === '1') return;
+    if (ta.classList && ta.classList.contains('af-aqr-ignore')) return;
+    var entries = buildFallbackEntries(layout, meta);
+    if (!entries.length) return;
+    var bar = document.createElement('div');
+    bar.className = 'af-aqr-fallback-toolbar';
+    bar.setAttribute('data-af-aqr-fallback', '1');
+    entries.forEach(function (entry) {
+      if (!entry) return;
+      if (entry.type === 'separator') {
+        var sep = document.createElement('span');
+        sep.className = 'af-aqr-fallback-sep';
+        bar.appendChild(sep);
+        return;
+      }
+      if (entry.type === 'dropdown') {
+        var wrap = document.createElement('div');
+        wrap.className = 'af-aqr-fallback-dropdown';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'af-aqr-fallback-button af-aqr-fallback-dropdown-button';
+        btn.title = normalizeDropdownTooltip(entry.title || '');
+        btn.innerHTML = '<span class="af-aqr-fallback-icon">' + svgStarMarkup() + '</span>';
+        var menu = document.createElement('div');
+        menu.className = 'af-aqr-fallback-dropdown-menu';
+        (entry.items || []).forEach(function (cmd) {
+          cmd = asText(cmd).trim();
+          if (!cmd || cmd === '|') return;
+          var info = getMetaForCmd(meta, cmd);
+          if (!info) return;
+          var item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'af-aqr-fallback-dropdown-item';
+          item.textContent = info.title || cmd;
+          item.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            executeFallbackCommand(meta, cmd, ta, item);
+            menu.classList.remove('is-open');
+            btn.classList.remove('is-open');
+          });
+          menu.appendChild(item);
+        });
+        btn.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          ensureFallbackOutsideClose();
+          var open = menu.classList.contains('is-open');
+          var menus = document.querySelectorAll('.af-aqr-fallback-dropdown-menu.is-open');
+          for (var i = 0; i < menus.length; i++) menus[i].classList.remove('is-open');
+          var btns = document.querySelectorAll('.af-aqr-fallback-dropdown-button.is-open');
+          for (var j = 0; j < btns.length; j++) btns[j].classList.remove('is-open');
+          if (!open) {
+            menu.classList.add('is-open');
+            btn.classList.add('is-open');
+          }
+        });
+        wrap.appendChild(btn);
+        wrap.appendChild(menu);
+        bar.appendChild(wrap);
+        return;
+      }
+      if (entry.type === 'button') {
+        var info2 = getMetaForCmd(meta, entry.cmd);
+        if (!info2) return;
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'af-aqr-fallback-button';
+        b.title = info2.title || entry.cmd;
+        var icon = document.createElement('span');
+        icon.className = 'af-aqr-fallback-icon';
+        if (info2.iconSpec && info2.iconSpec.kind === 'svg') {
+          icon.classList.add('is-svg');
+          icon.innerHTML = info2.iconSpec.value;
+        } else if (info2.iconSpec && info2.iconSpec.kind === 'url') {
+          icon.style.backgroundImage = 'url("' + info2.iconSpec.value + '")';
+        } else if (info2.iconSpec && info2.iconSpec.kind === 'text') {
+          icon.textContent = info2.iconSpec.value;
+        } else {
+          icon.textContent = info2.name || entry.cmd;
+        }
+        b.appendChild(icon);
+        b.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          executeFallbackCommand(meta, entry.cmd, ta, b);
+        });
+        bar.appendChild(b);
+      }
+    });
+    ta.parentNode.insertBefore(bar, ta);
+    ta.__afAqrFallbackToolbar = bar;
+    ta.__afAqrFallbackDone = true;
   }
 
   function ensureDropdownCommands(out) {
@@ -4632,8 +4877,11 @@
   // Targets + scan
   // ---------------------------
   function findTargets() {
-    var list = Array.prototype.slice.call(document.querySelectorAll('textarea#message, textarea[name="message"]'));
-    list = list.concat(Array.prototype.slice.call(document.querySelectorAll('textarea[id^="quickedit"], textarea[name^="quickedit"]')));
+    var selectors = getEditorSelectors();
+    var list = [];
+    selectors.forEach(function (sel) {
+      try { list = list.concat(Array.prototype.slice.call(document.querySelectorAll(sel))); } catch (e0) {}
+    });
 
     var seen = new Set();
     var out = [];
@@ -4647,29 +4895,60 @@
   }
 
   function scan() {
-    if (!hasJQEditor()) return;
-
-    sanitizeBbcodeDefinitionsOnce();
-
+    var hasEditor = hasJQEditor();
     var layout = getToolbarLayout();
-    var out = buildToolbarFromLayout(layout);
-
-    // готовим систему заранее (важно для полного редактора)
-    ensureCommands(out);
-    injectExtCssOnce();
-    if (out.toolbar) patchGlobalToolbarOnce(out.toolbar);
-
     var tas = findTargets();
+
+    if (hasEditor) {
+      sanitizeBbcodeDefinitionsOnce();
+
+      var out = buildToolbarFromLayout(layout);
+
+      // готовим систему заранее (важно для полного редактора)
+      ensureCommands(out);
+      injectExtCssOnce();
+      if (out.toolbar) patchGlobalToolbarOnce(out.toolbar);
+
+      tas.forEach(function (ta) {
+        if (!ta) return;
+        if (isInsideQuickReply(ta)) return;
+        if (isSceditorInternalTextarea(ta)) return;
+
+        try { if (ta.disabled) return; } catch (e) {}
+
+        if (ta.__afAqrFallbackToolbar) {
+          try { ta.__afAqrFallbackToolbar.remove(); } catch (e0) {}
+          ta.__afAqrFallbackToolbar = null;
+        }
+        reinitOnTextarea(ta);
+      });
+      return;
+    }
+
+    var meta = buildMetaByCmd();
     tas.forEach(function (ta) {
       if (!ta) return;
       if (isInsideQuickReply(ta)) return;
       if (isSceditorInternalTextarea(ta)) return;
 
-      try { if (ta.disabled) return; } catch (e) {}
+      try { if (ta.disabled) return; } catch (e1) {}
 
-      reinitOnTextarea(ta);
+      renderFallbackToolbar(ta, layout, meta);
     });
   }
+
+  // API
+  window.afAqrUnifiedEditor = window.afAqrUnifiedEditor || {};
+  window.afAqrUnifiedEditor.initAll = scan;
+  window.afAqrUnifiedEditor.refresh = scan;
+  window.afAqrUnifiedEditor.initTextarea = function (ta) {
+    if (!ta) return;
+    if (hasJQEditor()) {
+      reinitOnTextarea(ta);
+      return;
+    }
+    renderFallbackToolbar(ta, getToolbarLayout(), buildMetaByCmd());
+  };
 
   // старт
   scan();
