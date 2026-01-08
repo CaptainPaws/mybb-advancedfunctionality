@@ -1,0 +1,69 @@
+<!-- TEMPLATE: advancedpostcounter_bit -->
+<div class="af-apc">
+    <span class="af-apc-label">{$apc_label}</span>
+    <span class="af-apc-count" title="{$apc_tip}">{$apc_count}</span>
+</div>
+<!-- /TEMPLATE -->
+
+
+<!-- TEMPLATE: advancedpostcounter_profile_bit -->
+<tr>
+    <td class="trow1"><strong>{$apc_label}</strong></td>
+    <td class="trow1"><span title="{$apc_tip}">{$apc_count}</span></td>
+</tr>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: advancedpostcounter_postsactivity -->
+{$header}
+
+<div class="af-apc-activity-page">
+    <div class="float_right">{$multipage}</div>
+    <br class="clear" />
+
+    {$filters}
+
+    <table class="tborder" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" border="0" width="100%" style="width:100%">
+        <tr>
+            <td class="thead" colspan="6"><strong>{$activity_title}</strong></td>
+        </tr>
+        <tr>
+            <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$lang->avatar}</strong></td>
+            <td class="tcat"><strong>{$th_user}</strong></td>
+            <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$th_total}</strong></td>
+            <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$th_month}</strong></td>
+            <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$th_week}</strong></td>
+            <td class="tcat"><strong>{$th_last}</strong></td>
+        </tr>
+
+        {$rows}
+    </table>
+
+    {$multipage}
+</div>
+
+{$footer}
+
+<!-- TEMPLATE: advancedpostcounter_postsactivity_row -->
+<tr>
+    <td class="{$row_bg}" style="text-align:center; white-space:nowrap;">{$row_avatar}</td>
+    <td class="{$row_bg}">{$row_user}</td>
+    <td class="{$row_bg}" style="text-align:center; white-space:nowrap;">{$row_total}</td>
+    <td class="{$row_bg}" style="text-align:center; white-space:nowrap;">{$row_month}</td>
+    <td class="{$row_bg}" style="text-align:center; white-space:nowrap;">{$row_week}</td>
+    <td class="{$row_bg}">{$row_last}</td>
+</tr>
+<!-- TEMPLATE: af_apc_postsactivity_page -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{$af_apc_page_title} - {$mybb->settings['bbname']}</title>
+    {$headerinclude}
+</head>
+<body>
+{$header}
+{$af_apc_content}
+{$footer}
+</body>
+</html>
+<!-- /TEMPLATE -->
+

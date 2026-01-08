@@ -1,0 +1,86 @@
+/* AdvancedMenu */
+
+/* наши пункты: убираем спрайт и отступ под старые иконки */
+#header ul.menu li.af-am-item > a {
+  background-image: none !important;
+  padding-left: 0 !important;
+}
+
+/* выравнивание контента */
+.af-am-item > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* иконка (то, что ты кладёшь в поле icon) */
+.af-am-item .af-am-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  line-height: 1;
+}
+
+/* если иконка = img */
+.af-am-item .af-am-icon img {
+  max-width: 16px;
+  max-height: 16px;
+  display: block;
+}
+
+/* если иконка = svg */
+.af-am-item .af-am-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+/* текст */
+.af-am-item .af-am-title {
+  line-height: 16px;
+}
+/* AdvancedMenu icons (pseudo-elements) */
+
+.af-am-item > a,
+.af-am-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.af-am-ico {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+/* текст/эмодзи */
+.af-am-ico-text::before {
+  content: var(--af-am-icon-text);
+}
+
+/* картинка */
+.af-am-ico-img::before {
+  content: "";
+  display: block;
+  width: 1em;
+  height: 1em;
+  background-image: var(--af-am-icon-url);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+/* FontAwesome: полагаемся на правила FA (они сами дают ::before для .fa-bell и т.п.) */
+.af-am-ico-fa {
+  width: 1em;
+  height: 1em;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

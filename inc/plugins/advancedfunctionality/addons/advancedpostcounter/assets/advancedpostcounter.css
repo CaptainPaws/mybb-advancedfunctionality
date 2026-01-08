@@ -1,0 +1,97 @@
+/* AdvancedPostCounter */
+
+.af-apc {
+  margin-top: 6px;
+  font-size: 0.95em;
+  line-height: 1.2;
+}
+
+.af-apc-label {
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.af-apc-count {
+  font-weight: 700;
+}
+
+/* postsactivity */
+
+.af-apc-activity-page {
+  width: 100%;
+}
+
+.af-apc-activity-page .tborder {
+  width: 100% !important;
+}
+
+.af-apc-filters select,
+.af-apc-filters input[type="text"] {
+  vertical-align: middle;
+}
+/* postsactivity sort links + avatars */
+
+.af-apc-avatar{
+  border-radius: 8px;
+  max-width: 30px;
+  max-height: 30px;
+  display: inline-block;
+}
+
+.af-apc-sortlink{
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.af-apc-sortlink.is-active{
+  text-decoration: underline;
+}
+
+.af-apc-sort-arrow{
+  font-size: 0.9em;
+  opacity: 0.9;
+}
+/* APC tooltip (styled) */
+.af-apc-count{
+  position: relative;
+  display: inline-block;
+  cursor: help;
+}
+
+.af-apc-num{
+  font-weight: 700;
+}
+
+.af-apc-count:hover .af-apc-tooltip{
+  display: block;
+}
+
+.af-apc-tooltip{
+  display: none;
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  margin-bottom: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  white-space: nowrap;
+  z-index: 9999;
+  background: rgba(0,0,0,.85);
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(0,0,0,.25);
+  font-size: 0.9em;
+  line-height: 1.2;
+}
+
+.af-apc-tooltip:before{
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-style: solid;
+  border-width: 6px 6px 0 6px;
+  border-color: rgba(0,0,0,.85) transparent transparent transparent;
+}

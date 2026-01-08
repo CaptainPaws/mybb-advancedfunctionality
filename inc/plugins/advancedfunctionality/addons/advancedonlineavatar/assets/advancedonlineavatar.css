@@ -1,0 +1,16 @@
+/* AdvancedOnlineAvatar */
+
+.af-aoa-avatar{
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 8px;
+  align-items: center;
+}
+
+.af-aoa-avatar img{
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  object-fit: cover;
+  display: block;
+}
