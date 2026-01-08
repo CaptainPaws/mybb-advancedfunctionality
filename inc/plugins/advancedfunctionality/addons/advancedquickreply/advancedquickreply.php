@@ -1129,17 +1129,11 @@ function af_aqr_assets_html(array $buttons, bool $includeSceditorCss = false, bo
         $out .= "\n".'<script'.$defer.' src="'.$bburl.'/jscripts/bbcodes_sceditor.js?v='.$ver.'"></script>';
     }
 
-    // БАЗОВЫЙ CSS (QR и общие фиксы)
-    $out .= "\n".'<link rel="stylesheet" href="'.$base.'/advancedquickreply.css?v='.$ver.'" />';
-
-    // НОВОЕ: CSS для full editor / quick edit (ext.js scope)
-    $out .= "\n".'<link rel="stylesheet" href="'.$base.'/advancedquickreply.ext.css?v='.$ver.'" />';
+    // ЕДИНЫЙ CSS (QR + full editor / quick edit)
+    $out .= "\n".'<link rel="stylesheet" href="'.$base.'/advancededitor.css?v='.$ver.'" />';
 
     $out .= "\n".'<script>window.afAqrPayload = '.$json.';</script>';
-    $out .= "\n".'<script'.$defer.' src="'.$base.'/advancedquickreply.js?v='.$ver.'"></script>';
-
-    // расширение
-    $out .= "\n".'<script'.$defer.' src="'.$base.'/advancedquickreply.ext.js?v='.$ver.'"></script>'."\n";
+    $out .= "\n".'<script'.$defer.' src="'.$base.'/advancededitor.js?v='.$ver.'"></script>'."\n";
 
     return $out;
 }
@@ -1207,11 +1201,8 @@ function af_aqr_assets_parts(array $buttons, bool $includeSceditorCss, bool $inc
         $js .= "\n" . '<script' . $defer . ' src="' . $bburl . '/jscripts/bbcodes_sceditor.js?v=' . $ver . '"></script>';
     }
 
-    // БАЗОВЫЙ CSS ядра (QR и общие фиксы)
-    $css .= "\n" . '<link rel="stylesheet" href="' . $base . '/advancedquickreply.css?v=' . $ver . '" />';
-
-    // НОВОЕ: CSS для ext.js (full editor / quick edit)
-    $css .= "\n" . '<link rel="stylesheet" href="' . $base . '/advancedquickreply.ext.css?v=' . $ver . '" />';
+    // ЕДИНЫЙ CSS ядра (QR + full editor / quick edit)
+    $css .= "\n" . '<link rel="stylesheet" href="' . $base . '/advancededitor.css?v=' . $ver . '" />';
 
     // CSS паков
     $assetsBaseUrl = af_aqr_assets_base_url();
@@ -1243,10 +1234,7 @@ function af_aqr_assets_parts(array $buttons, bool $includeSceditorCss, bool $inc
 
     // Ядро JS
     $js  .= "\n" . '<script>window.afAqrPayload = ' . $json . ';</script>';
-    $js  .= "\n" . '<script defer="defer" src="' . $base . '/advancedquickreply.js?v=' . $ver . '"></script>';
-
-    // Ext JS
-    $js  .= "\n" . '<script defer="defer" src="' . $base . '/advancedquickreply.ext.js?v=' . $ver . '"></script>' . "\n";
+    $js  .= "\n" . '<script defer="defer" src="' . $base . '/advancededitor.js?v=' . $ver . '"></script>' . "\n";
 
     return [
         'css' => $css,
