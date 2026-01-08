@@ -125,6 +125,14 @@ function af_advancedquickreply_init(): void
         return;
     }
 
+    if (defined('IN_ADMINCP') || defined('IN_MODCP')) {
+        return;
+    }
+
+    if (defined('IN_ADMINCP') || defined('IN_MODCP')) {
+        return;
+    }
+
     // ВАЖНО: подхватываем весь PHP из assets/bbcodes/**,
     // чтобы парсеры/хуки паков работали независимо от layout тулбара.
     af_aqr_include_all_bbcode_php();
@@ -343,6 +351,10 @@ function af_advancedquickreply_pre_output(&$page = ''): void
         return;
     }
 
+    if (defined('IN_ADMINCP') || defined('IN_MODCP')) {
+        return;
+    }
+
     // если разрешено выключать и юзер выключил — ничего не делаем
     if (!empty($mybb->settings['af_advancedquickreply_user_toggle'])) {
         if (!empty($mybb->user['uid']) && isset($mybb->user[AF_AQR_USER_COL]) && (int)$mybb->user[AF_AQR_USER_COL] !== 1) {
@@ -350,21 +362,20 @@ function af_advancedquickreply_pre_output(&$page = ''): void
         }
     }
 
-    // есть ли вообще textarea message
-    $hasMessage =
-        (stripos($page, 'id="message"') !== false) ||
-        (stripos($page, "id='message'") !== false) ||
-        (stripos($page, 'name="message"') !== false);
-
-    if (!$hasMessage) {
-        return;
-    }
+    $hasTextarea = af_aqr_page_has_textarea($page);
 
     // quick reply?
     $isQuickReplyPage =
         (stripos($page, 'id="quick_reply_form"') !== false) ||
         (stripos($page, "id='quick_reply_form'") !== false) ||
         (stripos($page, AF_AQR_MARK_TEMPLATE) !== false);
+
+    $script = defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '';
+    $isTargetScript = in_array($script, ['newthread.php', 'newreply.php', 'editpost.php', 'private.php', 'usercp.php', 'showthread.php'], true);
+
+    if (!$hasTextarea && !$isQuickReplyPage && !$isTargetScript) {
+        return;
+    }
 
     $applyWhere = (string)($mybb->settings['af_advancedquickreply_apply_where'] ?? 'both');
     $forceFullEditor = !empty($mybb->settings['af_advancedquickreply_quickreply_full_editor']);
@@ -1079,6 +1090,31 @@ function af_aqr_cache_buster(): string
     return rawurlencode($t . '-' . (string)mt_rand(1000, 9999));
 }
 
+function af_aqr_page_has_textarea(string $page): bool
+{
+    return (bool)preg_match('~<textarea\b~i', $page);
+}
+
+function af_aqr_editor_selectors_from_settings(): array
+{
+    global $mybb;
+
+    $raw = trim((string)($mybb->settings['af_advancedquickreply_editor_selectors'] ?? ''));
+    if ($raw === '') {
+        return [];
+    }
+
+    $parts = preg_split('~\s*,\s*~', $raw) ?: [];
+    $out = [];
+    foreach ($parts as $part) {
+        $part = trim((string)$part);
+        if ($part === '') continue;
+        $out[] = $part;
+    }
+
+    return $out;
+}
+
 function af_aqr_page_has_sceditor_css(string $page): bool
 {
     // Ищем реальные инклюды темы SCEditor (обычно default.min.css)
@@ -1105,6 +1141,7 @@ function af_aqr_assets_html(array $buttons, bool $includeSceditorCss = false, bo
             'previewUrl' => $bburl.'/misc.php?action=af_aqr_postpreview',
             'postKey'    => isset($mybb->post_code) ? (string)$mybb->post_code : '',
             'countBbcode' => !empty($mybb->settings['af_advancedquickreply_counter_count_bbcode']),
+            'editorSelectors' => af_aqr_editor_selectors_from_settings(),
 
             'assetsBaseUrl'         => rtrim($bburl, '/') . '/inc/plugins/advancedfunctionality/addons/' . AF_AQR_ID . '/assets/',
             'sceditorStylesBaseUrl' => rtrim($bburl, '/') . '/jscripts/sceditor/styles/',
@@ -1176,6 +1213,7 @@ function af_aqr_assets_parts(array $buttons, bool $includeSceditorCss, bool $inc
             'toolbarLayout'         => $toolbarLayout,
             'enabledPacks'          => $enabledPackIds,
             'fontFamilies'          => af_aqr_get_fontfamily_families(),
+            'editorSelectors'       => af_aqr_editor_selectors_from_settings(),
 
             'assetsBaseUrl'         => af_aqr_assets_base_url(),
             'sceditorStylesBaseUrl' => $bburl . '/jscripts/sceditor/styles/',
