@@ -1169,6 +1169,92 @@
     return res;
   }
 
+  function parseToolbarString(toolbar) {
+    toolbar = String(toolbar || '');
+    if (!toolbar) return [];
+
+    var groups = toolbar.split('|').map(function (group) {
+      return group.split(',').map(function (cmd) {
+        return String(cmd || '').trim();
+      }).filter(Boolean);
+    }).filter(function (group) {
+      return group.length > 0;
+    });
+
+    return groups;
+  }
+
+  function toolbarGroupsToString(groups) {
+    if (!groups || !groups.length) return '';
+    return groups.map(function (group) { return group.join(','); }).join('|');
+  }
+
+  function filterToolbar(toolbar, predicate) {
+    var groups = parseToolbarString(toolbar);
+    var out = [];
+    groups.forEach(function (group) {
+      var filtered = group.filter(function (cmd) {
+        return predicate(cmd);
+      });
+      if (filtered.length) out.push(filtered);
+    });
+    return toolbarGroupsToString(out);
+  }
+
+  function isCustomCmd(cmd) {
+    cmd = String(cmd || '').trim();
+    if (!cmd) return false;
+    return /^af_/i.test(cmd) || /^afmenu_/i.test(cmd);
+  }
+
+  function buildCustomToolbar(layout) {
+    var built = buildToolbarFromLayout(layout);
+    return filterToolbar(built.toolbar || '', isCustomCmd);
+  }
+
+  function mergeToolbarStrings(baseToolbar, extraToolbar) {
+    var baseGroups = parseToolbarString(baseToolbar);
+    var extraGroups = parseToolbarString(extraToolbar);
+
+    if (!extraGroups.length) return toolbarGroupsToString(baseGroups);
+
+    var baseSet = Object.create(null);
+    baseGroups.forEach(function (group) {
+      group.forEach(function (cmd) {
+        baseSet[cmd] = true;
+      });
+    });
+
+    var filteredExtra = [];
+    extraGroups.forEach(function (group) {
+      var filtered = group.filter(function (cmd) {
+        return !baseSet[cmd];
+      });
+      if (filtered.length) filteredExtra.push(filtered);
+    });
+
+    if (!filteredExtra.length) return toolbarGroupsToString(baseGroups);
+
+    var merged = baseGroups.concat(filteredExtra);
+    return toolbarGroupsToString(merged);
+  }
+
+  function getGlobalToolbarFallback() {
+    try {
+      if (window.sceditor_opts && typeof window.sceditor_opts === 'object') {
+        return String(window.sceditor_opts.toolbar || '');
+      }
+    } catch (e0) {}
+
+    try {
+      if (window.sceditorOptions && typeof window.sceditorOptions === 'object') {
+        return String(window.sceditorOptions.toolbar || '');
+      }
+    } catch (e1) {}
+
+    return '';
+  }
+
   function ensureDropdownMenus(form, ta, inst, menus) {
     if (!form || !ta || !inst || !menus || !menus.length) return;
 
@@ -2068,7 +2154,11 @@
     if (!layout) return;
 
     var built = buildToolbarFromLayout(layout);
-    var toolbarNew = String(built.toolbar || '');
+    var baseToolbar = (inst && inst.opts) ? String(inst.opts.toolbar || '') : '';
+    if (!baseToolbar) baseToolbar = getGlobalToolbarFallback();
+
+    var customToolbar = buildCustomToolbar(layout);
+    var toolbarNew = mergeToolbarStrings(baseToolbar, customToolbar);
     var menus = built.menus || [];
 
     // layout есть, но строка пуста => значит админ реально очистил тулбар
@@ -3533,6 +3623,92 @@
     return out;
   }
 
+  function parseToolbarString(toolbar) {
+    toolbar = String(toolbar || '');
+    if (!toolbar) return [];
+
+    var groups = toolbar.split('|').map(function (group) {
+      return group.split(',').map(function (cmd) {
+        return String(cmd || '').trim();
+      }).filter(Boolean);
+    }).filter(function (group) {
+      return group.length > 0;
+    });
+
+    return groups;
+  }
+
+  function toolbarGroupsToString(groups) {
+    if (!groups || !groups.length) return '';
+    return groups.map(function (group) { return group.join(','); }).join('|');
+  }
+
+  function filterToolbar(toolbar, predicate) {
+    var groups = parseToolbarString(toolbar);
+    var out = [];
+    groups.forEach(function (group) {
+      var filtered = group.filter(function (cmd) {
+        return predicate(cmd);
+      });
+      if (filtered.length) out.push(filtered);
+    });
+    return toolbarGroupsToString(out);
+  }
+
+  function isCustomCmd(cmd) {
+    cmd = String(cmd || '').trim();
+    if (!cmd) return false;
+    return /^af_/i.test(cmd) || /^afmenu_/i.test(cmd);
+  }
+
+  function buildCustomToolbar(layout) {
+    var built = buildToolbarFromLayout(layout);
+    return filterToolbar(built.toolbar || '', isCustomCmd);
+  }
+
+  function mergeToolbarStrings(baseToolbar, extraToolbar) {
+    var baseGroups = parseToolbarString(baseToolbar);
+    var extraGroups = parseToolbarString(extraToolbar);
+
+    if (!extraGroups.length) return toolbarGroupsToString(baseGroups);
+
+    var baseSet = Object.create(null);
+    baseGroups.forEach(function (group) {
+      group.forEach(function (cmd) {
+        baseSet[cmd] = true;
+      });
+    });
+
+    var filteredExtra = [];
+    extraGroups.forEach(function (group) {
+      var filtered = group.filter(function (cmd) {
+        return !baseSet[cmd];
+      });
+      if (filtered.length) filteredExtra.push(filtered);
+    });
+
+    if (!filteredExtra.length) return toolbarGroupsToString(baseGroups);
+
+    var merged = baseGroups.concat(filteredExtra);
+    return toolbarGroupsToString(merged);
+  }
+
+  function getGlobalToolbarFallback() {
+    try {
+      if (window.sceditor_opts && typeof window.sceditor_opts === 'object') {
+        return String(window.sceditor_opts.toolbar || '');
+      }
+    } catch (e0) {}
+
+    try {
+      if (window.sceditorOptions && typeof window.sceditorOptions === 'object') {
+        return String(window.sceditorOptions.toolbar || '');
+      }
+    } catch (e1) {}
+
+    return '';
+  }
+
   // ---------------------------
   // Tooltips
   // ---------------------------
@@ -4454,7 +4630,9 @@
 
       function patchObj(o) {
         if (!o || typeof o !== 'object') return;
-        o.toolbar = toolbar;
+        var baseToolbar = String(o.toolbar || '');
+        var merged = mergeToolbarStrings(baseToolbar, toolbar);
+        if (merged) o.toolbar = merged;
         if (!o.plugins) o.plugins = 'bbcode';
         if (String(o.plugins).toLowerCase().indexOf('bbcode') === -1) o.plugins = 'bbcode';
         if (o.format == null) o.format = 'bbcode';
@@ -4711,13 +4889,16 @@
 
     var layout = getToolbarLayout();
     var out = buildToolbarFromLayout(layout);
+    var customToolbar = buildCustomToolbar(layout);
+    var baseToolbar = getGlobalToolbarFallback();
+    var mergedToolbar = mergeToolbarStrings(baseToolbar, customToolbar);
 
     // регаем команды заранее
     ensureCommands(out);
     injectExtCssOnce();
 
     // Патчим глобальные opts (важно для полного редактора ДО init)
-    if (out.toolbar) patchGlobalToolbarOnce(out.toolbar);
+    if (mergedToolbar) patchGlobalToolbarOnce(mergedToolbar);
 
     var $ta = jQuery(ta);
 
@@ -4756,10 +4937,14 @@
     try { instExisting = $ta.sceditor('instance'); } catch (e0) { instExisting = null; }
 
     if (instExisting) {
+      var baseToolbarInst = (instExisting && instExisting.opts) ? String(instExisting.opts.toolbar || '') : '';
+      if (!baseToolbarInst) baseToolbarInst = getGlobalToolbarFallback();
+      var mergedToolbarInst = mergeToolbarStrings(baseToolbarInst, customToolbar);
+
       // если в тулбаре явно нет наших кнопок — делаем один безопасный rebuild (destroy + init) с сохранением текста
       // это лечит ситуацию "скрипт подключили поздно и MyBB собрал дефолтный тулбар".
       try {
-        if (out.toolbar && !ta.__afAqrExtRebuiltOnce) {
+        if (mergedToolbarInst && !ta.__afAqrExtRebuiltOnce) {
           var cont = getEditorContainerEl(ta);
           var tb = cont ? cont.querySelector('.sceditor-toolbar') : null;
 
@@ -4785,7 +4970,7 @@
 
             var opts = cloneEditorOptions();
             opts.width = '100%';
-            opts.toolbar = out.toolbar;
+            opts.toolbar = mergedToolbarInst;
 
             try { $ta.sceditor('destroy'); } catch (eD) {}
 
@@ -4854,11 +5039,14 @@
       // Фоллбек init (quickedit / нестандартные формы)
       var layout2 = getToolbarLayout();
       var out2 = buildToolbarFromLayout(layout2);
+      var customToolbar2 = buildCustomToolbar(layout2);
+      var baseToolbar2 = getGlobalToolbarFallback();
+      var mergedToolbar2 = mergeToolbarStrings(baseToolbar2, customToolbar2);
       ensureCommands(out2);
 
       var opts2 = cloneEditorOptions();
       opts2.width = '100%';
-      if (out2.toolbar) opts2.toolbar = out2.toolbar;
+      if (mergedToolbar2) opts2.toolbar = mergedToolbar2;
 
       var keep2 = '';
       try { keep2 = String(ta.value || ''); } catch (eK2) { keep2 = ''; }
@@ -4903,11 +5091,14 @@
       sanitizeBbcodeDefinitionsOnce();
 
       var out = buildToolbarFromLayout(layout);
+      var customToolbar = buildCustomToolbar(layout);
+      var baseToolbar = getGlobalToolbarFallback();
+      var mergedToolbar = mergeToolbarStrings(baseToolbar, customToolbar);
 
       // готовим систему заранее (важно для полного редактора)
       ensureCommands(out);
       injectExtCssOnce();
-      if (out.toolbar) patchGlobalToolbarOnce(out.toolbar);
+      if (mergedToolbar) patchGlobalToolbarOnce(mergedToolbar);
 
       tas.forEach(function (ta) {
         if (!ta) return;
