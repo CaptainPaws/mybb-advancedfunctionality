@@ -1,0 +1,93 @@
+/* AdvancedGiphy
+   - стили кнопки в SCEditor
+   - UI выпадашки
+   - ограничение max-width для giphy-картинок в постах
+
+   Переменная:
+     --af-giphy-max-width: 100px | none
+*/
+
+:root{
+  --af-giphy-max-width: 100px;
+}
+
+/* 1) Иконка кнопки (перебиваем спрайт SCEditor) */
+.sceditor-button.sceditor-button-advancedgiphy > div{
+  background: transparent url(giphy.png) no-repeat center / 16px 16px;
+  text-indent: -9999px;
+  overflow: hidden;
+}
+
+
+/* 2) UI */
+.af-giphy-dd{
+  width: 320px;
+  padding: 8px;
+}
+
+.af-giphy-dd .af-giphy-search{
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.af-giphy-dd input[type="text"]{
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+}
+
+.af-giphy-dd .af-giphy-results{
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 6px;
+  padding: 6px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.af-giphy-dd .af-giphy-item{
+  display: block;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.af-giphy-dd .af-giphy-item img{
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.af-giphy-dd .af-giphy-footer{
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+  opacity: 0.85;
+}
+
+.af-giphy-dd .af-giphy-footer img{
+  height: 16px;
+  width: auto;
+  display: block;
+}
+
+.af-giphy-dd .af-giphy-msg{
+  grid-column: 1 / -1;
+  padding: 10px;
+  opacity: 0.85;
+}
+
+/* 3) Ограничение размеров giphy-картинок в постах
+   Мы сознательно таргетим по src, потому что [img] не даёт нам CSS-класс.
+*/
+img[src*="giphy.com/media/"],
+img[src*="media.giphy.com/media/"],
+img[src*="i.giphy.com/"]{
+  max-width: var(--af-giphy-max-width);
+  height: auto;
+}

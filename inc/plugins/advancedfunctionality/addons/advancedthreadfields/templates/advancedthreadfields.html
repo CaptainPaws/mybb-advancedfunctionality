@@ -1,0 +1,35 @@
+<!-- TEMPLATE: input_block -->
+<tr>
+  <td class="trow_sep" colspan="2">
+    <strong>Дополнительные поля</strong>
+  </td>
+</tr>
+{$rows}
+
+<!-- TEMPLATE: af_atf_input_row -->
+<tr>
+  <td class="trow2" style="width: 20%;">
+    <strong>{$title}</strong>{$requiredMark}<br />
+    <span class="smalltext">{$desc}</span>
+  </td>
+  <td class="trow2">
+    {$input}
+  </td>
+</tr>
+
+
+<!-- TEMPLATE: display_block -->
+<div class="af-atf-display">
+  {$rows}
+</div>
+
+<!-- TEMPLATE: display_row -->
+<div class="af-atf-display-row">
+  {$line}
+</div>
+
+<!-- TEMPLATE: forum_chip -->
+<span class="af-atf-chip">
+  <span class="af-atf-chip-label">{$label}:</span>
+  <span class="af-atf-chip-value">{$value}</span>
+</span>

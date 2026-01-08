@@ -1,0 +1,38 @@
+/* =========================================================
+   POSTBIT: кнопка "Профиль"
+   ========================================================= */
+
+/* Собираем кнопку аккуратно */
+.postbit_buttons a.af-apf-postbit-profile{
+  align-items: center;
+  gap: 6px;
+}
+
+/* Сбрасываем дефолтный спрайт темы на span'ах ВНУТРИ нашей кнопки */
+.postbit_buttons a.af-apf-postbit-profile span{
+  background-image: none;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+  padding: 0;
+  margin: 0;
+  float: none;
+  text-indent: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Это и есть “перенос инлайн-стилей” с иконки из PHP в CSS */
+.postbit_buttons a.af-apf-postbit-profile .af-apf-ico-profile{
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
+
+  background-image: url(/images/usercp_sprite.png);
+  background-repeat: no-repeat;
+  background-position: 0 -380px;
+}
+
+/* На всякий: текст — без лишнего мусора темы */
+.postbit_buttons a.af-apf-postbit-profile .af-apf-title{
+  line-height: 16px;
+}

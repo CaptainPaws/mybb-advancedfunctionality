@@ -1,0 +1,199 @@
+.af-atf-block {
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+}
+
+.af-atf-title {
+  font-weight: 700;
+  margin-bottom: 8px;
+  opacity: 0.9;
+}
+
+.af-atf-row {
+  display: flex;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.af-atf-row:first-child {
+  border-top: 0;
+}
+
+.af-atf-row-left {
+  flex: 0 0 42%;
+}
+
+.af-atf-row-right {
+  flex: 1 1 auto;
+}
+
+.af-atf-label {
+  font-weight: 700;
+}
+
+.af-atf-desc {
+  opacity: 0.75;
+  font-size: 0.92em;
+  margin-top: 2px;
+}
+
+.af-atf-required {
+  color: #ff6b6b;
+  font-weight: 900;
+}
+
+.af-atf-display {
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+}
+
+.af-atf-display-row {
+  padding: 4px 0;
+}
+
+.af-atf-label {
+  margin-right: 6px;
+}
+
+.af-atf-chip {
+  display: inline-flex;
+  gap: 6px;
+  margin: 0 6px 6px 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.08);
+  font-size: 0.92em;
+  opacity: 0.95;
+}
+
+/* ATF usernames: chips input */
+
+.af-atf-userchip-in{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:4px 8px;
+  border-radius:8px;
+  background: rgba(0,0,0,.08);
+  border: 1px solid rgba(0,0,0,.12);
+}
+
+.af-atf-userchip-remove{
+  cursor:pointer;
+  border:none;
+  background:transparent;
+  font-size:16px;
+  line-height:1;
+  opacity:.7;
+}
+.af-atf-userchip-remove:hover{ opacity:1; }
+
+.af-atf-userchips-dd-item{
+  padding:8px 10px;
+  cursor:pointer;
+}
+.af-atf-userchips-dd-item:hover{
+  background: rgba(0,0,0,.06);
+}
+
+/* output chips in showthread/forumdisplay */
+.af-atf-userchips-out { display:inline-flex; flex-wrap:wrap; gap:6px; }
+/* ATF usernames dropdown (chips) */
+.af-atf-userchips { position: relative; }
+
+.af-atf-userchips-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.af-atf-userchips-input {
+  min-width: 180px;
+}
+
+.af-atf-userchips-dd {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 9999;
+  background: #1c1c1c;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 6px;
+  max-height: 220px;
+  overflow: auto;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+.af-atf-userchips-item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.af-atf-userchips-item:hover,
+.af-atf-userchips-item.is-active {
+  background: rgba(255,255,255,0.08);
+}
+
+.af-atf-userchip {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.10);
+}
+
+.af-atf-userchip-x {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0.8;
+}
+.af-atf-userchip-x:hover { opacity: 1; }
+
+
+/* userchips dropdown */
+.af-atf-userchips { position: relative; }
+
+.af-atf-userchips-dd {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 9999;
+  background: #111;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 4px;
+}
+
+.af-atf-userchips-dd[hidden] { display: none !important; }
+
+.af-atf-userchips-dd-item {
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.af-atf-userchips-dd-item:hover,
+.af-atf-userchips-dd-item.is-active {
+  background: rgba(255,255,255,0.08);
+}
