@@ -362,8 +362,6 @@ function af_advancedquickreply_pre_output(&$page = ''): void
         }
     }
 
-    $hasTextarea = af_aqr_page_has_textarea($page);
-
     // quick reply?
     $isQuickReplyPage =
         (stripos($page, 'id="quick_reply_form"') !== false) ||
@@ -371,9 +369,10 @@ function af_advancedquickreply_pre_output(&$page = ''): void
         (stripos($page, AF_AQR_MARK_TEMPLATE) !== false);
 
     $script = defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '';
-    $isTargetScript = in_array($script, ['newthread.php', 'newreply.php', 'editpost.php', 'private.php', 'usercp.php', 'showthread.php'], true);
+    $action = (string)($mybb->input['action'] ?? '');
+    $isTargetScript = af_aqr_is_target_script($script, $action);
 
-    if (!$hasTextarea && !$isQuickReplyPage && !$isTargetScript) {
+    if (!$isTargetScript) {
         return;
     }
 
@@ -382,7 +381,7 @@ function af_advancedquickreply_pre_output(&$page = ''): void
 
     if (!$forceFullEditor) {
         if ($applyWhere !== 'both') {
-            if ($applyWhere === 'quickreply' && !$isQuickReplyPage) {
+            if ($applyWhere === 'quickreply' && !$isQuickReplyPage && $script === 'showthread.php') {
                 return;
             }
             if ($applyWhere === 'full' && $isQuickReplyPage) {
@@ -1157,11 +1156,6 @@ function af_aqr_cache_buster(): string
     return rawurlencode($t . '-' . (string)mt_rand(1000, 9999));
 }
 
-function af_aqr_page_has_textarea(string $page): bool
-{
-    return (bool)preg_match('~<textarea\b~i', $page);
-}
-
 function af_aqr_editor_selectors_from_settings(): array
 {
     global $mybb;
@@ -1189,6 +1183,19 @@ function af_aqr_page_has_sceditor_css(string $page): bool
         || (stripos($page, 'default.min.css') !== false);
 }
 
+function af_aqr_is_target_script(string $script, string $action = ''): bool
+{
+    if ($script === 'showthread.php' || $script === 'newthread.php' || $script === 'editpost.php') {
+        return true;
+    }
+
+    if ($script === 'private.php') {
+        return in_array($action, ['send', 'read'], true);
+    }
+
+    return false;
+}
+
 function af_aqr_assets_html(array $buttons, bool $includeSceditorCss = false, bool $includeSceditorJs = false, bool $isQuickReplyPage = false): string
 {
     global $mybb;
@@ -1198,17 +1205,23 @@ function af_aqr_assets_html(array $buttons, bool $includeSceditorCss = false, bo
 
     $ver = af_aqr_cache_buster();
 
+    $toolbarLayout = af_aqr_get_toolbar_layout();
+
     $payload = [
         'buttons' => $buttons,
         'cfg' => [
-            'enabled' => true,
-            'quickreplyFullEditor' => !empty($mybb->settings['af_advancedquickreply_quickreply_full_editor']),
-            'bburl' => $bburl,
-            'isQuickReplyPage' => $isQuickReplyPage,
-            'previewUrl' => $bburl.'/misc.php?action=af_aqr_postpreview',
-            'postKey'    => isset($mybb->post_code) ? (string)$mybb->post_code : '',
-            'countBbcode' => !empty($mybb->settings['af_advancedquickreply_counter_count_bbcode']),
-            'editorSelectors' => af_aqr_editor_selectors_from_settings(),
+            'enabled'               => true,
+            'quickreplyFullEditor'  => !empty($mybb->settings['af_advancedquickreply_quickreply_full_editor']),
+            'bburl'                 => $bburl,
+            'isQuickReplyPage'      => $isQuickReplyPage,
+            'previewUrl'            => $bburl . '/misc.php?action=af_aqr_postpreview',
+            'postKey'               => isset($mybb->post_code) ? (string)$mybb->post_code : '',
+            'countBbcode'           => !empty($mybb->settings['af_advancedquickreply_counter_count_bbcode']),
+            'editorSelectors'       => af_aqr_editor_selectors_from_settings(),
+            'toolbarLayout'         => $toolbarLayout,
+            'payloadVersion'        => (string)af_aqr_cache_buster(),
+            'layoutHash'            => $toolbarLayout ? md5(json_encode($toolbarLayout)) : '',
+            'debug'                 => !empty($mybb->settings['af_advancedquickreply_debug']),
 
             'assetsBaseUrl'         => rtrim($bburl, '/') . '/inc/plugins/advancedfunctionality/addons/' . AF_AQR_ID . '/assets/',
             'sceditorStylesBaseUrl' => rtrim($bburl, '/') . '/jscripts/sceditor/styles/',
@@ -1236,7 +1249,7 @@ function af_aqr_assets_html(array $buttons, bool $includeSceditorCss = false, bo
     // ЕДИНЫЙ CSS (QR + full editor / quick edit)
     $out .= "\n".'<link rel="stylesheet" href="'.$base.'/advancededitor.css?v='.$ver.'" />';
 
-    $out .= "\n".'<script>window.afAqrPayload = '.$json.';</script>';
+    $out .= "\n".'<script>window.afEditorPayload = '.$json.';window.afAqrPayload = window.afEditorPayload;</script>';
     $out .= "\n".'<script'.$defer.' src="'.$base.'/advancededitor.js?v='.$ver.'"></script>'."\n";
 
     return $out;
@@ -1281,6 +1294,9 @@ function af_aqr_assets_parts(array $buttons, bool $includeSceditorCss, bool $inc
             'enabledPacks'          => $enabledPackIds,
             'fontFamilies'          => af_aqr_get_fontfamily_families(),
             'editorSelectors'       => af_aqr_editor_selectors_from_settings(),
+            'payloadVersion'        => (string)af_aqr_cache_buster(),
+            'layoutHash'            => $toolbarLayout ? md5(json_encode($toolbarLayout)) : '',
+            'debug'                 => !empty($mybb->settings['af_advancedquickreply_debug']),
 
             'assetsBaseUrl'         => af_aqr_assets_base_url(),
             'sceditorStylesBaseUrl' => $bburl . '/jscripts/sceditor/styles/',
@@ -1343,7 +1359,7 @@ function af_aqr_assets_parts(array $buttons, bool $includeSceditorCss, bool $inc
     }
 
     // Ядро JS
-    $js  .= "\n" . '<script>window.afAqrPayload = ' . $json . ';</script>';
+    $js  .= "\n" . '<script>window.afEditorPayload = ' . $json . ';window.afAqrPayload = window.afEditorPayload;</script>';
     $js  .= "\n" . '<script defer="defer" src="' . $base . '/advancededitor.js?v=' . $ver . '"></script>' . "\n";
 
     return [
@@ -1514,10 +1530,17 @@ function af_aqr_ensure_settings(): int
             'title'       => 'Счётчик символов: считать BBCode',
             'description' => 'Если Да — считаем вместе с тегами [b], [url=...] и т.п. Если Нет — теги не учитываются.',
         ],
+        'af_advancedquickreply_debug' => [
+            'optionscode' => 'yesno',
+            'value'       => '0',
+            'disporder'   => 6,
+            'title'       => 'Debug-режим редактора',
+            'description' => 'Включает диагностические логи в консоли браузера для Advanced Editor.',
+        ],
         'af_advancedquickreply_toolbar_layout' => [
             'optionscode' => 'textarea',
             'value'       => '',
-            'disporder'   => 6,
+            'disporder'   => 7,
             'title'       => 'Toolbar layout (JSON)',
             'description' => 'Не редактируй руками. Заполняется конструктором тулбара в Advanced Quick Reply.',
         ],
@@ -1526,7 +1549,7 @@ function af_aqr_ensure_settings(): int
         'af_advancedquickreply_fontfamily_json' => [
             'optionscode' => 'textarea',
             'value'       => $defaultFontsJson,
-            'disporder'   => 7,
+            'disporder'   => 8,
             'title'       => 'Font families (JSON)',
             'description' => 'Заполняется вкладкой "Загрузить шрифты". Не редактируй руками.',
         ],
