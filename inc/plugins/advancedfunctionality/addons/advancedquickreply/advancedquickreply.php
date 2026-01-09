@@ -397,13 +397,8 @@ function af_advancedquickreply_pre_output(&$page = ''): void
 
     $buttons = af_aqr_get_active_buttons();
 
-    $needSceditorJs  = false;
-    $needSceditorCss = false;
-
-    if ($forceFullEditor && $isQuickReplyPage) {
-        $needSceditorJs  = !af_aqr_page_has_sceditor_js($page);
-        $needSceditorCss = !af_aqr_page_has_sceditor_css($page);
-    }
+    $needSceditorJs  = !af_aqr_page_has_sceditor_js($page);
+    $needSceditorCss = !af_aqr_page_has_sceditor_css($page);
 
     // Разделяем CSS и JS, чтобы JS ставить строго ПОСЛЕ jQuery
     $parts = af_aqr_assets_parts($buttons, $needSceditorCss, $needSceditorJs, $isQuickReplyPage, $page);
@@ -853,6 +848,78 @@ function af_aqr_get_fontfamily_families(): array
     return $out;
 }
 
+function af_aqr_safe_css_string(string $value): string
+{
+    $value = preg_replace('/[\x00-\x1f\x7f]/u', '', $value ?? '');
+    $value = str_replace(['"', "'", '\\'], '', $value);
+    return trim($value);
+}
+
+function af_aqr_build_fontface_css(array $families): string
+{
+    if (empty($families)) {
+        return '';
+    }
+
+    $base = af_aqr_assets_base_url();
+    if ($base === '') {
+        return '';
+    }
+
+    $base = rtrim($base, '/') . '/';
+
+    $css = '';
+    foreach ($families as $family) {
+        if (!is_array($family)) {
+            continue;
+        }
+
+        $name = af_aqr_safe_css_string((string)($family['name'] ?? ''));
+        if ($name === '') {
+            continue;
+        }
+
+        $files = $family['files'] ?? null;
+        if (!is_array($files) || empty($files)) {
+            continue;
+        }
+
+        $src = [];
+        $map = [
+            'woff2' => 'woff2',
+            'woff'  => 'woff',
+            'ttf'   => 'truetype',
+            'otf'   => 'opentype',
+        ];
+
+        foreach ($map as $ext => $format) {
+            $file = trim((string)($files[$ext] ?? ''));
+            if ($file === '') {
+                continue;
+            }
+
+            $encoded = rawurlencode($file);
+            $encoded = str_replace('%2F', '/', $encoded);
+
+            $src[] = 'url("' . $base . 'fonts/' . $encoded . '") format("' . $format . '")';
+        }
+
+        if (empty($src)) {
+            continue;
+        }
+
+        $css .= "\n@font-face{"
+            . 'font-family:"' . $name . '";'
+            . 'src:' . implode(',', $src) . ';'
+            . 'font-style:normal;'
+            . 'font-weight:400;'
+            . 'font-display:swap;'
+            . "}\n";
+    }
+
+    return trim($css);
+}
+
 /**
  * Дискавери паков: assets/bbcodes/<pack>/manifest.php
  * manifest.php должен return array.
@@ -1241,6 +1308,11 @@ function af_aqr_assets_parts(array $buttons, bool $includeSceditorCss, bool $inc
 
     // ЕДИНЫЙ CSS ядра (QR + full editor / quick edit)
     $css .= "\n" . '<link rel="stylesheet" href="' . $base . '/advancededitor.css?v=' . $ver . '" />';
+
+    $fontCss = af_aqr_build_fontface_css(af_aqr_get_fontfamily_families());
+    if ($fontCss !== '') {
+        $css .= "\n" . '<style id="af-aqr-fontfaces">' . $fontCss . "\n</style>";
+    }
 
     // CSS паков
     $assetsBaseUrl = af_aqr_assets_base_url();

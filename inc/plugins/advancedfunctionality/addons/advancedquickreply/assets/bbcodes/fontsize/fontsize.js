@@ -71,6 +71,8 @@
   }
 
   function getSceditorInstanceFromCtx(ctx) {
+    if (ctx && typeof ctx.insertText === 'function') return ctx;
+    if (ctx && typeof ctx.createDropDown === 'function') return ctx;
     if (ctx && ctx.sceditor && typeof ctx.sceditor.insertText === 'function') return ctx.sceditor;
     if (ctx && ctx.inst && typeof ctx.inst.insertText === 'function') return ctx.inst;
     if (ctx && ctx.instance && typeof ctx.instance.insertText === 'function') return ctx.instance;
