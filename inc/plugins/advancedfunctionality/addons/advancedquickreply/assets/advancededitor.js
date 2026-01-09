@@ -2,13 +2,29 @@
 (function () {
   'use strict';
 
-  if (window.afAqrInitialized) return;
-  window.afAqrInitialized = true;
+  // ВАЖНО: не блокируем повторную инициализацию, потому что payload может появиться ПОЗЖЕ
+  if (window.afAqrCoreLoaded) return;
+  window.afAqrCoreLoaded = true;
 
-  var payload = window.afAqrPayload || {};
-  var buttons = Array.isArray(payload.buttons) ? payload.buttons : [];
-  var builtins = Array.isArray(payload.builtins) ? payload.builtins : [];
-  var cfg = payload.cfg || {};
+  var payload = {};
+  var buttons = [];
+  var builtins = [];
+  var cfg = {};
+
+  function afAqrRefreshPayload() {
+    payload = window.afAqrPayload || {};
+    buttons = Array.isArray(payload.buttons) ? payload.buttons : [];
+    builtins = Array.isArray(payload.builtins) ? payload.builtins : [];
+    cfg = (payload && payload.cfg && typeof payload.cfg === 'object') ? payload.cfg : {};
+    return payload;
+  }
+
+  // первый снимок
+  afAqrRefreshPayload();
+
+  // экспорт (на случай дебага из консоли)
+  try { window.afAqrRefreshPayload = afAqrRefreshPayload; } catch (e) {}
+
 
 
   var PREVIEW_LS_KEY = 'af_aqr_quickpreview_enabled';
@@ -474,6 +490,7 @@
 
   function afAqrInstallAutoClearOnSubmit(form, ta) {
     if (!form || form.__afAqrAutoClearInstalled) return;
+    if (!afAqrIsQuickReplyForm(form)) return null;
     form.__afAqrAutoClearInstalled = true;
 
     form.addEventListener(
@@ -1011,6 +1028,39 @@
     document.head.appendChild(st);
   }
 
+  function injectToolbarLayoutFixCSS() {
+    if (document.getElementById('af-aqr-toolbarfix')) return;
+
+    var css = ''
+      + '.sceditor-container .sceditor-toolbar{'
+      + '  display:flex;'
+      + '  flex-wrap:wrap;'
+      + '  align-items:center;'
+      + '  gap:0;'
+      + '}\n'
+      + '.sceditor-container .sceditor-toolbar .sceditor-group{'
+      + '  display:flex;'
+      + '  flex-wrap:wrap;'
+      + '  align-items:center;'
+      + '  float:none;'
+      + '  clear:none;'
+      + '}\n'
+      + '.sceditor-container .sceditor-toolbar a.sceditor-button{'
+      + '  display:flex;'
+      + '  align-items:center;'
+      + '  justify-content:center;'
+      + '}\n'
+      + '.sceditor-container .sceditor-toolbar .sceditor-separator{'
+      + '  display:block;'
+      + '}\n';
+
+    var st = document.createElement('style');
+    st.type = 'text/css';
+    st.id = 'af-aqr-toolbarfix';
+    st.appendChild(document.createTextNode(css));
+    document.head.appendChild(st);
+  }
+
   function afAqrEnsureToolbarIconColor(container) {
     try {
       if (!container) return;
@@ -1110,6 +1160,57 @@
 
     if (!layout || !isObj(layout) || !Array.isArray(layout.sections)) return res;
 
+    // ВАЖНО: layout может хранить "имя" кнопки (table) вместо команды (af_table).
+    // Это маппер: токен -> реальная команда.
+    function resolveLayoutToken(token) {
+      token = normalizeCmd(token);
+      if (!token || token === '|') return token;
+
+      // уже команда
+      if (/^af_/i.test(token) || /^afmenu_/i.test(token)) return token;
+
+      // попробуем сопоставить с DB-кнопками / builtins по name
+      var low = token.toLowerCase();
+
+      // DB кнопки
+      for (var i = 0; i < buttons.length; i++) {
+        var b = buttons[i];
+        if (!b) continue;
+        var nm = asText(b.name || '').trim();
+        if (!nm) continue;
+
+        var esc = escCss(nm).toLowerCase();
+        if (nm.toLowerCase() === low || esc === low) {
+          return 'af_' + escCss(nm);
+        }
+      }
+
+      // builtins
+      for (var j = 0; j < builtins.length; j++) {
+        var bb = builtins[j];
+        if (!bb) continue;
+
+        var cmdRaw = asText(bb.cmd || '').trim();
+        var name = asText(bb.name || '').trim();
+
+        // если layout хранит cmd напрямую — ок
+        if (cmdRaw && cmdRaw.toLowerCase() === low) return cmdRaw;
+
+        // если хранит name (table) — маппим в af_table (по имени)
+        if (name) {
+          var esc2 = escCss(name).toLowerCase();
+          if (name.toLowerCase() === low || esc2 === low) {
+            // если built-in реально определён как cmd — лучше использовать его
+            if (cmdRaw) return cmdRaw;
+            return 'af_' + escCss(name);
+          }
+        }
+      }
+
+      // иначе это стандартная команда SCEditor (bold/italic/quote/...)
+      return token;
+    }
+
     var parts = [];
 
     layout.sections.forEach(function (sec, idx) {
@@ -1119,20 +1220,19 @@
       var id = String(sec.id || ('sec' + idx)).trim() || ('sec' + idx);
       var title = String(sec.title || '').trim();
 
-      // items могут содержать и "виртуальный" разделитель "|"
       var items = Array.isArray(sec.items) ? sec.items.slice() : [];
 
       if (type === 'dropdown') {
-        // dropdown — это ОДНА кнопка на тулбаре
+        // dropdown — одна кнопка на тулбаре
         var menuCmd = 'afmenu_' + id.replace(/[^a-z0-9_\-]/gi, '_');
         parts.push(menuCmd);
 
-        // а вот его содержимое — отдельно
+        // содержимое dropdown — список команд, маппим токены
         res.menus.push({
           id: id,
           cmd: menuCmd,
           title: title || '★',
-          items: items.map(normalizeCmd).filter(Boolean)
+          items: items.map(resolveLayoutToken).map(normalizeCmd).filter(Boolean)
         });
 
         return;
@@ -1141,10 +1241,10 @@
       // group: собираем группу кнопок
       var group = [];
       items.forEach(function (it) {
-        var v = normalizeCmd(it);
+        var v = resolveLayoutToken(it);
+        v = normalizeCmd(v);
         if (!v) return;
 
-        // допускаем явный разделитель группы внутри группы
         if (v === '|') {
           if (group.length) {
             parts.push(group.join(','));
@@ -1158,11 +1258,9 @@
       });
 
       if (group.length) parts.push(group.join(','));
-      // между секциями делаем разделитель групп
       if (idx !== layout.sections.length - 1) parts.push('|');
     });
 
-    // подчистим "||" и "|," артефакты
     var toolbar = parts.join(',');
     toolbar = toolbar.replace(/,+\|,+/g, '|');
     toolbar = toolbar.replace(/\|{2,}/g, '|');
@@ -1172,6 +1270,7 @@
     res.toolbar = toolbar;
     return res;
   }
+
 
   function parseToolbarString(toolbar) {
     toolbar = String(toolbar || '');
@@ -1731,10 +1830,22 @@
     });
   }
 
+  function afAqrIsQuickReplyForm(form) {
+    if (!form) return false;
+    if (form.id === 'quick_reply_form') return true;
+    try {
+      if (form.querySelector && (form.querySelector('#quickreply_e') || form.querySelector('input[name="action"][value="quickreply"]'))) {
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
   /* -------------------- layout helpers (СТАБИЛЬНОЕ) -------------------- */
 
   function removeLeftColumn(form, ta) {
     if (!form || !ta) return;
+    if (!afAqrIsQuickReplyForm(form)) return null;
 
     var tr = ta.closest('tr');
     if (!tr) return;
@@ -2013,6 +2124,7 @@
 
   function enforceSingleEditor(form, ta) {
     if (!form || !ta) return;
+    if (!afAqrIsQuickReplyForm(form)) return null;
 
     var containers = form.querySelectorAll('.sceditor-container');
     if (!containers || !containers.length) {
@@ -2132,6 +2244,7 @@
   }
 
   function patchToolbarIfNeeded(form, ta) {
+    afAqrRefreshPayload();
     if (!hasSceditor()) return;
     if (!ta) return;
 
@@ -2139,56 +2252,70 @@
     var inst = getInstance($ta);
     if (!inst || !inst.opts) return;
 
-    // если уже патчили — не трогаем
-    if (ta._afAqrToolbarPatched) {
-      // но dropdown-меню надо уметь подвесить повторно (после пересоздания)
-      try {
-        var lay0 = cfg && cfg.toolbarLayout ? cfg.toolbarLayout : null;
-        var built0 = buildToolbarFromLayout(lay0);
-        if (built0 && built0.menus && built0.menus.length) {
-          ensureDropdownMenus(form, ta, inst, built0.menus);
-        }
-      } catch (e0) {}
-      return;
-    }
-
-    // ИСТОЧНИК ИСТИНЫ: layout из ACP.
-    // Если layout не задан/не пришёл — НИЧЕГО не добавляем автоматически.
+    // если layout не пришёл — НИЧЕГО не трогаем
     var layout = (cfg && cfg.toolbarLayout) ? cfg.toolbarLayout : null;
     if (!layout) return;
+
+    // CSS-фиксы для тулбара (особенно ЛС)
+    try { injectToolbarLayoutFixCSS(); } catch (eCss0) {}
+    try { injectIconCSS(); } catch (eCss1) {}
+
+    // ВАЖНО: команды должны существовать ДО пересборки тулбара
+    try { ensureCommands(); } catch (eCmd0) {}
 
     var built = buildToolbarFromLayout(layout);
     var toolbarNew = String(built.toolbar || '');
     var menus = built.menus || [];
 
+    // если вдруг получилось пусто — лучше не ломать существующий
+    if (!toolbarNew.trim()) return;
+
+    // если уже патчили и тулбар совпадает — просто подвесь dropdown
+    try {
+      var oldTb = String(inst.opts.toolbar || '');
+      if (ta._afAqrToolbarPatched && oldTb === toolbarNew) {
+        try {
+          if (menus && menus.length) ensureDropdownMenus(form || ta.form || ta.closest('form'), ta, inst, menus);
+        } catch (eDd0) {}
+
+        // на всякий — добьём кастомные кнопки если тема/SCEditor их не нарисовали
+        try { ensureToolbarButtons(form || ta.form || ta.closest('form'), ta); } catch (eBtn0) {}
+
+        return;
+      }
+    } catch (eSame) {}
+
     ta._afAqrToolbarPatched = true;
 
+    // сохраняем текст
     var val = '';
     try { val = inst.val(); } catch (e1) {}
 
+    // копируем opts
     var opts = {};
     for (var k in inst.opts) opts[k] = inst.opts[k];
 
     opts.toolbar = toolbarNew;
-
-    // важное: ресайз включён
     opts.resizeEnabled = true;
-
-    // Высотой рулит bindSceditorResizeSync (localStorage + MIN/DEFAULT).
-    // Если оставить height как есть — многие темы выставляют 250 по умолчанию.
-    // Поэтому специально НИЧЕГО не форсим здесь.
-
     opts.width = '100%';
 
+    // пересоздаём
     try { inst.destroy(); } catch (e2) {}
 
-    // подчистка контейнеров на всякий
+    // НЕ вычищаем все контейнеры формы — это как раз и может ломать ЛС/стили.
+    // Максимум — уберём “дубликат рядом”, если он есть.
     try {
-      var all = form.querySelectorAll('.sceditor-container');
-      for (var j = 0; j < all.length; j++) {
-        try { all[j].parentNode && all[j].parentNode.removeChild(all[j]); } catch (e3) {}
+      var parent = ta.parentNode;
+      if (parent) {
+        var prev = ta.previousElementSibling;
+        // Если SCEditor почему-то оставил контейнер рядом — прибьём только его.
+        if (prev && prev.classList && prev.classList.contains('sceditor-container')) {
+          // но только если он реально “старый” (без iframe/textarea может быть обрубок)
+          // в любом случае SCEditor сам создаст новый.
+          prev.parentNode && prev.parentNode.removeChild(prev);
+        }
       }
-    } catch (e4) {}
+    } catch (eClean) {}
 
     try { $ta.sceditor(opts); } catch (e5) {}
 
@@ -2196,10 +2323,16 @@
       var inst2 = getInstance($ta);
       if (inst2 && typeof inst2.val === 'function') inst2.val(val);
 
-      // dropdown-меню подвешиваем после создания
+      // снова убедимся, что команды есть (бывает race)
+      try { ensureCommands(); } catch (eCmd1) {}
+
+      // dropdown после создания
       if (menus && menus.length) {
-        ensureDropdownMenus(form, ta, inst2, menus);
+        ensureDropdownMenus(form || ta.form || ta.closest('form'), ta, inst2, menus);
       }
+
+      // если SCEditor “не нарисовал” кастомы — дорисуем
+      try { ensureToolbarButtons(form || ta.form || ta.closest('form'), ta); } catch (eBtn1) {}
     } catch (e6) {}
 
     try {
@@ -2212,6 +2345,7 @@
 
   function ensureTopUi(form, ta) {
     if (!form || !ta) return null;
+    if (!afAqrIsQuickReplyForm(form)) return null;
 
     ta._afAqrUi = ta._afAqrUi || {
       wrap: null,
@@ -2569,6 +2703,7 @@
   function startCounter(form, ta) {
     if (!form || !ta) return;
     if (ta._afAqrCounterStarted) return;
+    if (!afAqrIsQuickReplyForm(form)) return null;
     ta._afAqrCounterStarted = true;
 
     // гарантируем верхний UI (как ты просишь)
@@ -2716,6 +2851,7 @@
   function afAqrBindClearAfterSend(form, ta) {
     if (!form || !ta) return;
     if (form._afAqrClearAfterSendBound) return;
+    if (!afAqrIsQuickReplyForm(form)) return null;
     form._afAqrClearAfterSendBound = true;
 
     // Глобальное состояние ожидания “успешного” AJAX после submit
@@ -2916,6 +3052,7 @@
   /* -------------------- MAIN (СТАБИЛЬНОЕ) -------------------- */
   function ensureQrWrap(form) {
     if (!form) return null;
+    if (!afAqrIsQuickReplyForm(form)) return null;
 
     // 1) если родитель уже обёртка — ок
     var parent = form.parentElement;
@@ -2937,6 +3074,7 @@
 
   function removeQuickReplyTitleRow(form) {
     if (!form) return;
+    if (!afAqrIsQuickReplyForm(form)) return null;
 
     // Самый безопасный вариант: удалить первый separator-row внутри формы, если он выглядит как заголовок
     // Обычно это <tr><td class="trow_sep" colspan="2"><strong>Быстрый ответ</strong>...
@@ -3045,7 +3183,7 @@
       var name = asText(b.name).trim();
       if (!name) return;
 
-      var cmd = 'af_' + name;
+      var cmd = 'af_' + escCss(name);
 
       // главное: если команды нет в group layout — кнопку не добавляем
       if (!inLayout[cmd]) return;
@@ -3724,6 +3862,7 @@
   // Commands registry (custom + dropdown)
   // ---------------------------
   function buildMetaByCmd() {
+    afAqrRefreshPayload();
     var meta = Object.create(null);
 
     function add(cmd, base) {
@@ -4035,66 +4174,96 @@
     });
   }
 
-  function ensureCommands(out) {
+  function ensureCommands() {
     if (!window.jQuery || !jQuery.sceditor || !jQuery.sceditor.command) return false;
 
-    ensureBuiltinHandlersBucket();
-    var metaByCmd = buildMetaByCmd();
+    // всегда берём актуальный payload
+    afAqrRefreshPayload();
 
-    function commandExists(cmd) {
-      try { return !!jQuery.sceditor.command.get(cmd); } catch (e0) {}
-      return false;
-    }
+    // ПАКИ САМИ РЕГИСТРИРУЮТ window.afAqrBuiltinHandlers[handlerName] в своих JS.
+    try {
+      if (!window.afAqrBuiltinHandlers) window.afAqrBuiltinHandlers = Object.create(null);
+    } catch (e0) {}
+
+    var metaByCmd = buildMetaByCmd();
 
     Object.keys(metaByCmd).forEach(function (cmd) {
       var m = metaByCmd[cmd];
       if (!m) return;
 
-      // не перетираем системные команды SCEditor
-      if (commandExists(cmd)) return;
+      try {
+        if (jQuery.sceditor.command.exists && jQuery.sceditor.command.exists(cmd)) return;
+      } catch (e0) {}
 
       var open = asText(m.opentag);
       var close = asText(m.closetag);
 
+      // 1) BUILTIN HANDLER (из паков)
       if (m.handler) {
-        try {
-          jQuery.sceditor.command.set(cmd, {
-            tooltip: m.title || cmd,
-            exec: function (caller) {
-              try {
-                if (window.afAqrBuiltinHandlers && typeof window.afAqrBuiltinHandlers[m.handler] === 'function') {
-                  window.afAqrBuiltinHandlers[m.handler](this, caller);
-                  return;
-                }
-              } catch (e1) {}
-              if (open || close) { try { this.insert(open, close); } catch (e2) {} }
-            },
-            txtExec: function (caller) {
-              try {
-                if (window.afAqrBuiltinHandlers && typeof window.afAqrBuiltinHandlers[m.handler] === 'function') {
-                  window.afAqrBuiltinHandlers[m.handler](this, caller);
-                  return;
-                }
-              } catch (e3) {}
-              if (open || close) { try { this.insert(open, close); } catch (e4) {} }
+        jQuery.sceditor.command.set(cmd, {
+          tooltip: m.title || cmd,
+          exec: function (caller) {
+            try {
+              if (window.afAqrBuiltinHandlers && typeof window.afAqrBuiltinHandlers[m.handler] === 'function') {
+                window.afAqrBuiltinHandlers[m.handler](this, caller);
+                return;
+              }
+            } catch (e1) {}
+
+            if (open || close) {
+              try { this.insert(open, close); } catch (e2) {}
             }
-          });
-        } catch (eSet1) {}
+          },
+          txtExec: function (caller) {
+            try {
+              if (window.afAqrBuiltinHandlers && typeof window.afAqrBuiltinHandlers[m.handler] === 'function') {
+                window.afAqrBuiltinHandlers[m.handler](this, caller);
+                return;
+              }
+            } catch (e3) {}
+
+            if (open || close) {
+              try { this.insert(open, close); } catch (e4) {}
+            }
+          }
+        });
         return;
       }
 
-      try {
-        jQuery.sceditor.command.set(cmd, {
-          tooltip: m.title || cmd,
-          txtExec: [open, close],
-          exec: function () { try { this.insert(open, close); } catch (e1) {} }
-        });
-      } catch (eSet2) {}
+      // 2) DEFAULT: вставка тегов
+      jQuery.sceditor.command.set(cmd, {
+        tooltip: m.title || cmd,
+        txtExec: [open, close],
+        exec: function () {
+          try { this.insert(open, close); } catch (e1) {}
+        }
+      });
     });
 
-    ensureDropdownCommands(out || { toolbar: '', menus: [] });
+    // dropdown-команды
+    if (cfg && cfg.toolbarLayout && cfg.toolbarLayout.sections && Array.isArray(cfg.toolbarLayout.sections)) {
+      cfg.toolbarLayout.sections.forEach(function (sec, idx) {
+        if (!sec || typeof sec !== 'object') return;
+        if (String(sec.type || '').toLowerCase() !== 'dropdown') return;
+
+        var id = String(sec.id || ('sec' + idx)).trim() || ('sec' + idx);
+        var menuCmd = 'afmenu_' + id.replace(/[^a-z0-9_\-]/gi, '_');
+
+        try {
+          if (jQuery.sceditor.command.exists && jQuery.sceditor.command.exists(menuCmd)) return;
+        } catch (e2) {}
+
+        jQuery.sceditor.command.set(menuCmd, {
+          tooltip: normalizeDropdownTooltip(sec.title || ''),
+          exec: function () {},
+          txtExec: function () {}
+        });
+      });
+    }
+
     return true;
   }
+
 
   // ---------------------------
   // CSS injection fallback
@@ -5177,4 +5346,287 @@
     setInterval(scan, 600);
   }
 
+  /* =======================
+   * GLOBAL: patch ALL SCEditor editors (not only quick reply)
+   * Makes every editor behave like the quick-edit container scope.
+   * ======================= */
+
+  function afAqrGetContainerForTextarea(ta) {
+    if (!ta) return null;
+
+    // SCEditor обычно вставляет контейнер прямо перед textarea
+    try {
+      var prev = ta.previousElementSibling;
+      if (prev && prev.classList && prev.classList.contains('sceditor-container')) return prev;
+    } catch (e0) {}
+
+    // fallback: ближайший контейнер рядом
+    try {
+      var p = ta.parentElement;
+      for (var i = 0; i < 6 && p; i++) {
+        var c = p.querySelector ? p.querySelector('.sceditor-container') : null;
+        if (c) return c;
+        p = p.parentElement;
+      }
+    } catch (e1) {}
+
+    return null;
+  }
+
+  function afAqrMarkExtScope(container) {
+    try {
+      if (container && container.classList) container.classList.add('af-aqr-ext-scope');
+    } catch (e) {}
+  }
+
+  function afAqrTextareaLooksLikeEditor(ta) {
+    if (!ta || ta.nodeType !== 1) return false;
+    if (ta.tagName !== 'TEXTAREA') return false;
+
+    // Не трогаем textarea из капчи/поиска/и прочих не-редакторов
+    var name = (ta.getAttribute('name') || '').toLowerCase();
+    var id = (ta.id || '').toLowerCase();
+    if (name === 'captcha' || id.indexOf('captcha') !== -1) return false;
+
+    // Обычно редакторные: message, signature, pm message и т.п.
+    // Но лучше не гадать: если рядом есть sceditor-container — это оно.
+    var c = afAqrGetContainerForTextarea(ta);
+    if (c) return true;
+
+    // Если уже есть инстанс SCEditor — точно оно
+    try {
+      var inst = afAqrGetSceditorInstance(ta);
+      if (inst) return true;
+    } catch (e0) {}
+
+    return false;
+  }
+
+  function afAqrPatchOneEditor(ta) {
+    try {
+      if (!ta || !document.body || !document.body.contains(ta)) return;
+      if (!hasSceditor()) return;
+
+      // обновим payload (вдруг появился позже)
+      afAqrRefreshPayload();
+
+      var form = ta.form || (ta.closest ? ta.closest('form') : null) || null;
+
+      // помечаем контейнер как “наш скоуп”
+      var container = afAqrGetContainerForTextarea(ta);
+      if (container) afAqrMarkExtScope(container);
+
+      // важное: команды должны быть до патча тулбара
+      try { ensureCommands(); } catch (e1) {}
+
+      // CSS для иконок/тулбара — глобально, один раз
+      try { injectToolbarLayoutFixCSS(); } catch (e2) {}
+      try { injectIconCSS(); } catch (e3) {}
+
+      // патчим тулбар под layout (если layout есть)
+      try { patchToolbarIfNeeded(form || null, ta); } catch (e4) {}
+
+      // если SCEditor “не нарисовал” кастомы — дорисуем (тоже безопасно)
+      try { ensureToolbarButtons(form || (ta.closest ? ta.closest('form') : null) || document, ta); } catch (e5) {}
+    } catch (e) {}
+  }
+
+  function afAqrScanAndPatchAllEditors() {
+    if (!document.body) return;
+    if (!hasSceditor()) return;
+
+    // обновим payload — на некоторых страницах он появляется позднее
+    afAqrRefreshPayload();
+
+    var list = document.querySelectorAll('textarea');
+    for (var i = 0; i < list.length; i++) {
+      var ta = list[i];
+      if (!afAqrTextareaLooksLikeEditor(ta)) continue;
+      afAqrPatchOneEditor(ta);
+    }
+
+    // плюс: если где-то есть контейнеры без найденной textarea (редкий кейс) — пометим их тоже
+    try {
+      var cs = document.querySelectorAll('.sceditor-container');
+      for (var j = 0; j < cs.length; j++) afAqrMarkExtScope(cs[j]);
+    } catch (e0) {}
+  }
+
+  function afAqrInstallGlobalEditorObserver() {
+    if (window.__afAqrGlobalEditorObsInstalled) return;
+    window.__afAqrGlobalEditorObsInstalled = true;
+
+    if (!window.MutationObserver) return;
+
+    var root = document.body || document.documentElement;
+    if (!root) return;
+
+    var timer = null;
+    function schedule() {
+      if (timer) return;
+      timer = setTimeout(function () {
+        timer = null;
+        afAqrScanAndPatchAllEditors();
+      }, 50);
+    }
+
+    var obs = new MutationObserver(function (muts) {
+      for (var i = 0; i < muts.length; i++) {
+        var m = muts[i];
+        if (!m.addedNodes || !m.addedNodes.length) continue;
+
+        for (var k = 0; k < m.addedNodes.length; k++) {
+          var n = m.addedNodes[k];
+          if (!n || n.nodeType !== 1) continue;
+
+          // если прилетела textarea или sceditor-container — пора сканить
+          if ((n.tagName === 'TEXTAREA') ||
+              (n.classList && n.classList.contains('sceditor-container')) ||
+              (n.querySelector && (n.querySelector('textarea') || n.querySelector('.sceditor-container')))) {
+            schedule();
+            return;
+          }
+        }
+      }
+    });
+
+    obs.observe(root, { childList: true, subtree: true });
+  }
+
+  // BOOT: сразу + после load + несколько ретраев (на случай позднего payload/инициализации)
+  (function afAqrBootGlobalEditors() {
+    try { afAqrScanAndPatchAllEditors(); } catch (e0) {}
+    try { afAqrInstallGlobalEditorObserver(); } catch (e1) {}
+
+    try {
+      window.addEventListener('load', function () {
+        try { afAqrScanAndPatchAllEditors(); } catch (e2) {}
+      }, { once: true });
+    } catch (e3) {}
+
+    // ретраи: когда SCEditor/пэйлоад приходит не сразу
+    var tries = 0;
+    var t = setInterval(function () {
+      tries++;
+      try { afAqrScanAndPatchAllEditors(); } catch (e4) {}
+      if (tries >= 20) clearInterval(t); // ~10 секунд
+    }, 500);
+  })();
+
+
+})();
+
+(function afAqrBoot() {
+  // не плодим интервалы
+  if (window.afAqrBooted) return;
+  window.afAqrBooted = true;
+
+  function isRealTextarea(ta) {
+    if (!ta || ta.nodeType !== 1) return false;
+    if (ta.tagName !== 'TEXTAREA') return false;
+
+    // игнорим внутреннюю source-textarea SCEditor (она внутри контейнера)
+    try {
+      if (ta.closest && ta.closest('.sceditor-container')) return false;
+    } catch (e) {}
+
+    return true;
+  }
+
+  function findForm(ta) {
+    try { return ta.closest ? ta.closest('form') : null; } catch (e) { return null; }
+  }
+
+  function getAllCandidateTextareas() {
+    // message — в MyBB почти везде один и тот же
+    var list = [];
+    try {
+      var q = document.querySelectorAll('textarea#message, textarea[name="message"]');
+      for (var i = 0; i < q.length; i++) {
+        if (isRealTextarea(q[i])) list.push(q[i]);
+      }
+    } catch (e) {}
+    return list;
+  }
+
+  function payloadSig() {
+    afAqrRefreshPayload();
+    var lay = '';
+    try { lay = cfg && cfg.toolbarLayout ? JSON.stringify(cfg.toolbarLayout) : ''; } catch (e) { lay = ''; }
+    return String((buttons ? buttons.length : 0)) + '|' + String((builtins ? builtins.length : 0)) + '|' + lay;
+  }
+
+  function initOne(form, ta) {
+    if (!form || !ta) return;
+
+    // подпись конфигурации: если payload изменился — разрешаем переинициал
+    var sig = payloadSig();
+    if (ta._afAqrInitSig === sig) return;
+    ta._afAqrInitSig = sig;
+
+    // 1) команды/иконки — безопасно для всех страниц
+    try { ensureCommands(); } catch (e0) {}
+    try { injectIconCSS(); } catch (e1) {}
+
+    // 2) toolbar из ACP layout — для всех редакторов (и full editor тоже)
+    try { patchToolbarIfNeeded(form, ta); } catch (e2) {}
+
+    // 3) dropdown меню, если есть layout (после возможного пересоздания)
+    try {
+      afAqrRefreshPayload();
+      if (cfg && cfg.toolbarLayout) {
+        var built = buildToolbarFromLayout(cfg.toolbarLayout);
+        if (built && built.menus && built.menus.length) {
+          var inst = null;
+          try { inst = getInstance(jQuery(ta)); } catch (e3) { inst = null; }
+          if (inst) ensureDropdownMenus(form, ta, inst, built.menus);
+        }
+      }
+    } catch (e4) {}
+
+    // 4) всё, что двигает DOM/таблицы/высоты — ТОЛЬКО quick reply
+    if (afAqrIsQuickReplyForm(form)) {
+      try { ensureQrWrap(form); } catch (e5) {}
+      try { removeQuickReplyTitleRow(form); } catch (e6) {}
+      try { removeLeftColumn(form, ta); } catch (e7) {}
+
+      // не трогай PM/notes этим, только QR
+      try { enforceSingleEditor(form, ta); } catch (e8) {}
+
+      try { startCounter(form, ta); } catch (e9) {}
+      try { afAqrBindClearAfterSend(form, ta); } catch (e10) {}
+      try { afAqrInstallAutoClearOnSubmit(form, ta); } catch (e11) {}
+    }
+  }
+
+  function initAll() {
+    // ждём SCEditor/jQuery
+    if (!window.jQuery) return;
+    if (!hasSceditor()) return;
+
+    var tas = getAllCandidateTextareas();
+    for (var i = 0; i < tas.length; i++) {
+      var ta = tas[i];
+      var form = findForm(ta);
+      if (!form) continue;
+      initOne(form, ta);
+    }
+  }
+
+  // 1) несколько “пульсов” — потому что payload и SCEditor реально могут приходить позже
+  var tries = 0;
+  var t = setInterval(function () {
+    tries++;
+
+    try { initAll(); } catch (e0) {}
+
+    // держим дольше обычного — MyBB иногда поздно создаёт инстансы на некоторых страницах
+    if (tries > 80) {
+      try { clearInterval(t); } catch (e1) {}
+    }
+  }, 250);
+
+  // 2) инициализация по событиям тоже
+  try { document.addEventListener('DOMContentLoaded', function(){ try{ initAll(); }catch(e){} }, { once: true }); } catch (e2) {}
+  try { window.addEventListener('load', function(){ try{ initAll(); }catch(e){} }, { once: true }); } catch (e3) {}
 })();
