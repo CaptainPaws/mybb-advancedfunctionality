@@ -10,20 +10,38 @@
   var buttons = [];
   var builtins = [];
   var cfg = {};
+  var debugEnabled = false;
 
   function afAqrRefreshPayload() {
-    payload = window.afAqrPayload || {};
+    if (window.afEditorPayload && !window.afAqrPayload) {
+      window.afAqrPayload = window.afEditorPayload;
+    } else if (window.afAqrPayload && !window.afEditorPayload) {
+      window.afEditorPayload = window.afAqrPayload;
+    }
+
+    payload = window.afEditorPayload || window.afAqrPayload || {};
     buttons = Array.isArray(payload.buttons) ? payload.buttons : [];
     builtins = Array.isArray(payload.builtins) ? payload.builtins : [];
     cfg = (payload && payload.cfg && typeof payload.cfg === 'object') ? payload.cfg : {};
+    debugEnabled = !!(payload && (payload.debug || (cfg && cfg.debug)));
     return payload;
   }
 
   // первый снимок
   afAqrRefreshPayload();
 
+  function afAqrDebugLog() {
+    if (!debugEnabled) return;
+    try {
+      var args = Array.prototype.slice.call(arguments);
+      args.unshift('[AF Editor]');
+      console.log.apply(console, args);
+    } catch (e) {}
+  }
+
   // экспорт (на случай дебага из консоли)
   try { window.afAqrRefreshPayload = afAqrRefreshPayload; } catch (e) {}
+  try { window.afAqrDebugLog = afAqrDebugLog; } catch (e) {}
 
 
 
@@ -2339,6 +2357,11 @@
       ta.style.display = 'none';
       ta.style.visibility = 'hidden';
     } catch (e7) {}
+
+    debugLog('toolbar-patched', {
+      textarea: ta.id || ta.name || 'unknown',
+      toolbar: toolbarNew
+    });
   }
 
   /* -------------------- UI before table (ПРЕВЬЮ + СЧЁТЧИК) -------------------- */
@@ -3529,10 +3552,30 @@
   if (window.afAqrExtInitialized) return;
   window.afAqrExtInitialized = true;
 
-  var payload = window.afAqrPayload || {};
-  var buttons = Array.isArray(payload.buttons) ? payload.buttons : [];
-  var builtins = Array.isArray(payload.builtins) ? payload.builtins : [];
-  var cfg = payload.cfg || {};
+  var payload = {};
+  var buttons = [];
+  var builtins = [];
+  var cfg = {};
+
+  function refreshPayload() {
+    if (typeof window.afAqrRefreshPayload === 'function') {
+      payload = window.afAqrRefreshPayload() || {};
+    } else {
+      payload = window.afEditorPayload || window.afAqrPayload || {};
+    }
+    buttons = Array.isArray(payload.buttons) ? payload.buttons : [];
+    builtins = Array.isArray(payload.builtins) ? payload.builtins : [];
+    cfg = (payload && payload.cfg && typeof payload.cfg === 'object') ? payload.cfg : {};
+    return payload;
+  }
+
+  function debugLog() {
+    if (typeof window.afAqrDebugLog === 'function') {
+      window.afAqrDebugLog.apply(window, arguments);
+    }
+  }
+
+  refreshPayload();
 
   function asText(x) { return String(x == null ? '' : x); }
   function escCss(s) { return String(s || '').replace(/[^a-z0-9_\-]/gi, '_'); }
@@ -3564,9 +3607,12 @@
     var list = [
       'textarea#message',
       'textarea[name="message"]',
+      'textarea#message_new',
+      'textarea[name="message_new"]',
+      'textarea#pm_message',
+      'textarea[name="pm_message"]',
       'textarea[id^="quickedit"]',
-      'textarea[name^="quickedit"]',
-      'textarea'
+      'textarea[name^="quickedit"]'
     ];
     var extra = normalizeSelectorList(cfg && cfg.editorSelectors);
     list = list.concat(extra);
@@ -3875,8 +3921,12 @@
     function normalizeOne(b) {
       if (!b) return null;
 
-      var cmdRaw = asText(b.cmd || '').trim();
-      var name = asText(b.name || '').trim();
+      var type = asText(b.type || '').trim().toLowerCase();
+      if (type === 'separator') return null;
+
+      var payloadData = (b.payload && typeof b.payload === 'object') ? b.payload : null;
+      var cmdRaw = asText(b.command || b.cmd || b.name || b.id || '').trim();
+      var name = asText(b.id || b.name || '').trim();
 
       if (!cmdRaw && name) cmdRaw = 'af_' + name;
       if (!cmdRaw) return null;
@@ -3889,11 +3939,11 @@
       var base = {
         cmd: cmdRaw,
         name: name || cmdRaw,
-        title: asText(b.title || b.hint || name || cmdRaw).trim() || cmdRaw,
-        opentag: asText(b.opentag || ''),
-        closetag: asText(b.closetag || ''),
-        iconSpec: normalizeIconSpec(b.icon),
-        handler: asText(b.handler || '').trim() || ''
+        title: asText(b.label || b.title || b.hint || name || cmdRaw).trim() || cmdRaw,
+        opentag: asText(b.opentag || b.openTag || (payloadData && payloadData.opentag) || ''),
+        closetag: asText(b.closetag || b.closeTag || (payloadData && payloadData.closetag) || ''),
+        iconSpec: normalizeIconSpec(b.icon || (payloadData && payloadData.icon) || ''),
+        handler: asText(b.handler || (payloadData && payloadData.handler) || b.commandHandler || '').trim() || ''
       };
 
       add(cmdRaw, base);
@@ -3996,13 +4046,13 @@
         entries.push({ type: 'button', cmd: cmd });
       }
       buttons.forEach(function (b) {
-        var cmd = asText(b && (b.cmd || '')).trim();
-        if (!cmd && b && b.name) cmd = 'af_' + b.name;
+        var cmd = asText(b && (b.command || b.cmd || b.name || b.id || '')).trim();
+        if (!cmd && b && (b.name || b.id)) cmd = 'af_' + (b.name || b.id);
         addButton(cmd);
       });
       builtins.forEach(function (b) {
-        var cmd = asText(b && (b.cmd || '')).trim();
-        if (!cmd && b && b.name) cmd = 'af_' + b.name;
+        var cmd = asText(b && (b.command || b.cmd || b.name || b.id || '')).trim();
+        if (!cmd && b && (b.name || b.id)) cmd = 'af_' + (b.name || b.id);
         addButton(cmd);
       });
     }
@@ -4128,6 +4178,7 @@
     ta.parentNode.insertBefore(bar, ta);
     ta.__afAqrFallbackToolbar = bar;
     ta.__afAqrFallbackDone = true;
+    debugLog('fallback-toolbar', { textarea: ta.id || ta.name || 'unknown', entries: entries.length });
   }
 
   function ensureDropdownCommands(out) {
@@ -5243,9 +5294,19 @@
   }
 
   function scan() {
+    refreshPayload();
     var hasEditor = hasJQEditor();
     var layout = getToolbarLayout();
     var tas = findTargets();
+
+    debugLog('scan', {
+      page: location.pathname + location.search,
+      payload: !!(window.afEditorPayload || window.afAqrPayload),
+      buttons: buttons.length,
+      builtins: builtins.length,
+      hasSceditor: hasEditor,
+      targets: tas.length
+    });
 
     if (window.afAqrInjectIconCSS && typeof window.afAqrInjectIconCSS === 'function') {
       window.afAqrInjectIconCSS();
