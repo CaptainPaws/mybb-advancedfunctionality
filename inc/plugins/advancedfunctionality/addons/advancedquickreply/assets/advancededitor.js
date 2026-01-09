@@ -2154,15 +2154,8 @@
     if (!layout) return;
 
     var built = buildToolbarFromLayout(layout);
-    var baseToolbar = (inst && inst.opts) ? String(inst.opts.toolbar || '') : '';
-    if (!baseToolbar) baseToolbar = getGlobalToolbarFallback();
-
-    var customToolbar = buildCustomToolbar(layout);
-    var toolbarNew = mergeToolbarStrings(baseToolbar, customToolbar);
+    var toolbarNew = String(built.toolbar || '');
     var menus = built.menus || [];
-
-    // layout есть, но строка пуста => значит админ реально очистил тулбар
-    if (!toolbarNew) return;
 
     ta._afAqrToolbarPatched = true;
 
@@ -4622,17 +4615,21 @@
   // ---------------------------
   // Patch global sceditor_opts BEFORE MyBB init (чтобы в полном редакторе сразу был кастомный тулбар)
   // ---------------------------
-  function patchGlobalToolbarOnce(toolbar) {
+  function patchGlobalToolbarOnce(toolbar, replace) {
     try {
-      if (!toolbar) return;
+      if (!toolbar && !replace) return;
       if (window.__afAqrExtGlobalToolbarPatched) return;
       window.__afAqrExtGlobalToolbarPatched = true;
 
       function patchObj(o) {
         if (!o || typeof o !== 'object') return;
-        var baseToolbar = String(o.toolbar || '');
-        var merged = mergeToolbarStrings(baseToolbar, toolbar);
-        if (merged) o.toolbar = merged;
+        if (replace) {
+          o.toolbar = String(toolbar || '');
+        } else {
+          var baseToolbar = String(o.toolbar || '');
+          var merged = mergeToolbarStrings(baseToolbar, toolbar);
+          if (merged || toolbar === '') o.toolbar = merged;
+        }
         if (!o.plugins) o.plugins = 'bbcode';
         if (String(o.plugins).toLowerCase().indexOf('bbcode') === -1) o.plugins = 'bbcode';
         if (o.format == null) o.format = 'bbcode';
@@ -4889,16 +4886,20 @@
 
     var layout = getToolbarLayout();
     var out = buildToolbarFromLayout(layout);
-    var customToolbar = buildCustomToolbar(layout);
     var baseToolbar = getGlobalToolbarFallback();
-    var mergedToolbar = mergeToolbarStrings(baseToolbar, customToolbar);
+    var mergedToolbar = mergeToolbarStrings(baseToolbar, buildCustomToolbar(layout));
+    var desiredToolbar = (layout ? String(out.toolbar || '') : mergedToolbar);
 
     // регаем команды заранее
     ensureCommands(out);
     injectExtCssOnce();
 
     // Патчим глобальные opts (важно для полного редактора ДО init)
-    if (mergedToolbar) patchGlobalToolbarOnce(mergedToolbar);
+    if (layout) {
+      patchGlobalToolbarOnce(desiredToolbar, true);
+    } else if (mergedToolbar) {
+      patchGlobalToolbarOnce(mergedToolbar);
+    }
 
     var $ta = jQuery(ta);
 
@@ -4939,12 +4940,13 @@
     if (instExisting) {
       var baseToolbarInst = (instExisting && instExisting.opts) ? String(instExisting.opts.toolbar || '') : '';
       if (!baseToolbarInst) baseToolbarInst = getGlobalToolbarFallback();
-      var mergedToolbarInst = mergeToolbarStrings(baseToolbarInst, customToolbar);
+      var mergedToolbarInst = mergeToolbarStrings(baseToolbarInst, buildCustomToolbar(layout));
+      var desiredToolbarInst = (layout ? String(out.toolbar || '') : mergedToolbarInst);
 
       // если в тулбаре явно нет наших кнопок — делаем один безопасный rebuild (destroy + init) с сохранением текста
       // это лечит ситуацию "скрипт подключили поздно и MyBB собрал дефолтный тулбар".
       try {
-        if (mergedToolbarInst && !ta.__afAqrExtRebuiltOnce) {
+        if ((layout || mergedToolbarInst) && !ta.__afAqrExtRebuiltOnce) {
           var cont = getEditorContainerEl(ta);
           var tb = cont ? cont.querySelector('.sceditor-toolbar') : null;
 
@@ -4962,7 +4964,11 @@
             });
           }
 
-          if (!hasAnyCustom) {
+          var normalizedCurrent = String(baseToolbarInst || '').trim();
+          var normalizedDesired = String(desiredToolbarInst || '').trim();
+          var needsLayoutRebuild = layout && normalizedDesired !== normalizedCurrent;
+
+          if (!hasAnyCustom || needsLayoutRebuild) {
             ta.__afAqrExtRebuiltOnce = true;
 
             var keep = '';
@@ -4970,7 +4976,9 @@
 
             var opts = cloneEditorOptions();
             opts.width = '100%';
-            opts.toolbar = mergedToolbarInst;
+            if (layout || mergedToolbarInst || desiredToolbarInst === '') {
+              opts.toolbar = desiredToolbarInst;
+            }
 
             try { $ta.sceditor('destroy'); } catch (eD) {}
 
@@ -5039,14 +5047,16 @@
       // Фоллбек init (quickedit / нестандартные формы)
       var layout2 = getToolbarLayout();
       var out2 = buildToolbarFromLayout(layout2);
-      var customToolbar2 = buildCustomToolbar(layout2);
       var baseToolbar2 = getGlobalToolbarFallback();
-      var mergedToolbar2 = mergeToolbarStrings(baseToolbar2, customToolbar2);
+      var mergedToolbar2 = mergeToolbarStrings(baseToolbar2, buildCustomToolbar(layout2));
+      var desiredToolbar2 = (layout2 ? String(out2.toolbar || '') : mergedToolbar2);
       ensureCommands(out2);
 
       var opts2 = cloneEditorOptions();
       opts2.width = '100%';
-      if (mergedToolbar2) opts2.toolbar = mergedToolbar2;
+      if (layout2 || desiredToolbar2 || desiredToolbar2 === '') {
+        opts2.toolbar = desiredToolbar2;
+      }
 
       var keep2 = '';
       try { keep2 = String(ta.value || ''); } catch (eK2) { keep2 = ''; }
@@ -5091,14 +5101,18 @@
       sanitizeBbcodeDefinitionsOnce();
 
       var out = buildToolbarFromLayout(layout);
-      var customToolbar = buildCustomToolbar(layout);
       var baseToolbar = getGlobalToolbarFallback();
-      var mergedToolbar = mergeToolbarStrings(baseToolbar, customToolbar);
+      var mergedToolbar = mergeToolbarStrings(baseToolbar, buildCustomToolbar(layout));
+      var desiredToolbar = (layout ? String(out.toolbar || '') : mergedToolbar);
 
       // готовим систему заранее (важно для полного редактора)
       ensureCommands(out);
       injectExtCssOnce();
-      if (mergedToolbar) patchGlobalToolbarOnce(mergedToolbar);
+      if (layout) {
+        patchGlobalToolbarOnce(desiredToolbar, true);
+      } else if (mergedToolbar) {
+        patchGlobalToolbarOnce(mergedToolbar);
+      }
 
       tas.forEach(function (ta) {
         if (!ta) return;
