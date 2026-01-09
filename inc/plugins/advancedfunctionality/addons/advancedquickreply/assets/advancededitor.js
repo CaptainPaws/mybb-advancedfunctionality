@@ -684,8 +684,8 @@
     var metaByCmd = buildMetaByCmd();
     var css = '';
 
-    // СКОП: только quick reply
-    var SCOPE = '#quick_reply_form .sceditor-container .sceditor-toolbar ';
+    // СКОП: все тулбары SCEditor (не только quick reply)
+    var SCOPE = '.sceditor-container .sceditor-toolbar ';
 
     // 0) ВАЖНО: делаем цвет/hover для ВСЕХ кнопок тулбара,
     // чтобы mask на currentColor реально менялся по hover
@@ -1084,6 +1084,10 @@
       tb.style.setProperty('--af-aqr-icon-color', chosen);
     } catch (e3) {}
   }
+
+  try {
+    window.afAqrInjectIconCSS = injectIconCSS;
+  } catch (e0) {}
 
   function buildAddonToolbarChunk() {
     var add = buttons.map(function (b) { return 'af_' + escCss(b.name); }).join(',');
@@ -3333,37 +3337,9 @@
     // UI + счётчик/превью можно и без SCEditor
     startCounter(form, ta);
 
-    // дальше — только если SCEditor реально поднят
-    if (!hasSceditor()) return;
-
-    var inst = null;
-    try { inst = getInstance(jQuery(ta)); } catch (e0) { inst = null; }
-    if (!inst) return;
-
-    // команды регистрируем один раз
-    ensureCommands();
-    injectIconCSS();
-
-    // 1) сначала пробуем “родной” тулбар SCEditor
-    patchToolbarIfNeeded(form, ta);
-
-    // 2) после этого инстанс мог пересоздаться — стабилизируем
-    enforceSingleEditor(form, ta);
-
-    // гарантируем цвет тулбара под mask-иконки
-    try {
-      var container = null;
-      try {
-        var prev = ta.previousElementSibling;
-        if (prev && prev.classList && prev.classList.contains('sceditor-container')) container = prev;
-      } catch (e1) {}
-      if (!container) container = form.querySelector('.sceditor-container');
-      if (container) afAqrEnsureToolbarIconColor(container);
-    } catch (e2) {}
-
-    // если где-то ещё руками дорисовываешь кнопки/иконки — оставляем как было
-    try { ensureToolbarButtons(form, ta); } catch (e3) {}
-    try { decorateToolbarButtons(form, ta); } catch (e4) {}
+    if (window.afAqrUnifiedEditor && typeof window.afAqrUnifiedEditor.initTextarea === 'function') {
+      window.afAqrUnifiedEditor.initTextarea(ta);
+    }
   }
 
   function start() {
@@ -3411,7 +3387,7 @@
 (function () {
   'use strict';
 
-  // это НЕ трогает QR: мы работаем только с другими textarea, не внутри #quick_reply_form
+  // Editor Core: работает со всеми textarea (включая quick reply / quick edit)
   if (window.afAqrExtInitialized) return;
   window.afAqrExtInitialized = true;
 
@@ -4165,7 +4141,7 @@
       if (!ta) return false;
       var id = String(ta.id || '').toLowerCase();
       var nm = String(ta.name || '').toLowerCase();
-      return (id === 'message' || nm === 'message') && !isQuickEditTextarea(ta) && !isInsideQuickReply(ta);
+      return (id === 'message' || nm === 'message') && !isQuickEditTextarea(ta);
     } catch (e) {}
     return false;
   }
@@ -4870,7 +4846,6 @@
   function reinitOnTextarea(ta) {
     if (!ta) return;
     if (ta.__afAqrExtDone) return;
-    if (isInsideQuickReply(ta)) return;
     if (!hasJQEditor()) return;
     if (isSceditorInternalTextarea(ta)) return;
 
@@ -5097,6 +5072,10 @@
     var layout = getToolbarLayout();
     var tas = findTargets();
 
+    if (window.afAqrInjectIconCSS && typeof window.afAqrInjectIconCSS === 'function') {
+      window.afAqrInjectIconCSS();
+    }
+
     if (hasEditor) {
       sanitizeBbcodeDefinitionsOnce();
 
@@ -5116,7 +5095,6 @@
 
       tas.forEach(function (ta) {
         if (!ta) return;
-        if (isInsideQuickReply(ta)) return;
         if (isSceditorInternalTextarea(ta)) return;
 
         try { if (ta.disabled) return; } catch (e) {}
@@ -5133,7 +5111,6 @@
     var meta = buildMetaByCmd();
     tas.forEach(function (ta) {
       if (!ta) return;
-      if (isInsideQuickReply(ta)) return;
       if (isSceditorInternalTextarea(ta)) return;
 
       try { if (ta.disabled) return; } catch (e1) {}
