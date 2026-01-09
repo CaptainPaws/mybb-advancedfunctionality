@@ -4141,7 +4141,13 @@
       if (!ta) return false;
       var id = String(ta.id || '').toLowerCase();
       var nm = String(ta.name || '').toLowerCase();
-      return (id === 'message' || nm === 'message') && !isQuickEditTextarea(ta);
+      if ((id === 'message' || nm === 'message') && !isQuickEditTextarea(ta)) {
+        if (ta.closest && (ta.closest('#quick_reply_form') || ta.closest('#quickreply_e'))) {
+          return false;
+        }
+        return true;
+      }
+      return false;
     } catch (e) {}
     return false;
   }
