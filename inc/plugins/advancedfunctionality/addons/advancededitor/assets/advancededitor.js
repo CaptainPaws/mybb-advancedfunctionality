@@ -378,29 +378,18 @@
     bb.__afAeMybbPatched = true;
 
     // =========================
-    // LISTS: MyBB style
+    // LISTS: [ol]/[ul]/[li]
     // =========================
-    // list item = [*] без закрывающего тега
-    try {
-      bb.set('*', {
-        format: '[*]{0}',
-        html: '<li>{0}</li>',
-        isInline: false,
-        skipLastLineBreak: true
-      });
-    } catch (eL0) {}
-
-    // общий [list] и [list=1]
     try {
       bb.set('list', {
         isInline: false,
         format: function (el, content) {
           try {
             var tag = (el && el.tagName) ? String(el.tagName).toUpperCase() : '';
-            if (tag === 'OL') return '[list=1]{0}[/list]';
-            return '[list]{0}[/list]';
+            if (tag === 'OL') return '[ol]{0}[/ol]';
+            return '[ul]{0}[/ul]';
           } catch (e) {
-            return '[list]{0}[/list]';
+            return '[ul]{0}[/ul]';
           }
         },
         html: function (token, attrs, content) {
@@ -408,28 +397,25 @@
           try { t = (attrs && attrs.defaultattr != null) ? String(attrs.defaultattr) : ''; } catch (e0) { t = ''; }
           t = (t || '').toLowerCase().trim();
 
-          // MyBB: [list=1] = ordered
           if (t === '1') return '<ol>{0}</ol>'.replace('{0}', content);
           return '<ul>{0}</ul>'.replace('{0}', content);
         }
       });
     } catch (eL1) {}
 
-    // если SCEditor дефолтит в [ol]/[ul]/[li] — переопределяем их форматы в MyBB
     try {
       bb.set('li', {
-        format: '[*]{0}',
+        format: '[li]{0}[/li]',
         html: '<li>{0}</li>',
-        isInline: false,
-        skipLastLineBreak: true
+        isInline: false
       });
       bb.set('ul', {
-        format: '[list]{0}[/list]',
+        format: '[ul]{0}[/ul]',
         html: '<ul>{0}</ul>',
         isInline: false
       });
       bb.set('ol', {
-        format: '[list=1]{0}[/list]',
+        format: '[ol]{0}[/ol]',
         html: '<ol>{0}</ol>',
         isInline: false
       });
@@ -488,25 +474,13 @@
     patchLegacyAlign('center', 'center');
     patchLegacyAlign('right', 'right');
     patchLegacyAlign('justify', 'justify');
-  }
 
-  function afAeEnsureMybbAlignBbcode() {
-    if (!hasSceditor()) return;
-
+    // 3) div с text-align -> [align=...]
     try {
-      var bb = jQuery.sceditor.plugins && jQuery.sceditor.plugins.bbcode
-        ? jQuery.sceditor.plugins.bbcode.bbcode
-        : null;
-
-      if (!bb || typeof bb.set !== 'function') return;
-
-      // div/span с text-align превращаем в [align=...][/align]
-      // SCEditor bbcode engine умеет прокидывать style-значение через styles map.
       bb.set('div', {
         styles: { 'text-align': 'align' },
         format: function (el, content) {
           try {
-            // normalize align value
             var a = '';
             try { a = (el && el.style && el.style.textAlign) ? String(el.style.textAlign) : ''; } catch (e0) { a = ''; }
             a = a.toLowerCase().trim();
@@ -514,7 +488,6 @@
             if (a === 'start') a = 'left';
             if (a === 'end') a = 'right';
             if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') {
-              // если не распознали — не оборачиваем
               return content;
             }
             return '[align=' + a + ']' + content + '[/align]';
@@ -529,8 +502,7 @@
           return '<div style="text-align:' + a + '">' + content + '</div>';
         }
       });
-
-    } catch (e) {}
+    } catch (eD) {}
   }
 
   function afAePatchAlignCommandsForSourceMode() {
@@ -561,6 +533,20 @@
     patch('center', 'center');
     patch('right', 'right');
     patch('justify', 'justify');
+  }
+
+  function ensureDefaultSourceMode(inst) {
+    if (!inst) return;
+    var inSource = false;
+    try {
+      if (typeof inst.sourceMode === 'function') inSource = !!inst.sourceMode();
+      else if (typeof inst.isSourceMode === 'function') inSource = !!inst.isSourceMode();
+      else if (typeof inst.sourceMode === 'boolean') inSource = inst.sourceMode;
+    } catch (e0) { inSource = false; }
+
+    if (!inSource && typeof inst.toggleSourceMode === 'function') {
+      try { inst.toggleSourceMode(); } catch (e1) {}
+    }
   }
 
   function buildDropdownContent(editor, menu, availableMap) {
@@ -755,6 +741,11 @@
         }
       });
     } catch (e) {}
+  }
+
+  function afAeEnsureFrontendCodeCss() {
+    if (window.__afAeFrontendCodeCssDone) return;
+    window.__afAeFrontendCodeCssDone = true;
   }
 
   function afAeApplyWysiwygCodeQuoteCss(inst) {
@@ -1015,25 +1006,34 @@
 
     var $ = window.jQuery;
     var $ta = $(ta);
+    var layout = sanitizeLayout(P.layout || null);
+    var availableMap = buildAvailableMap();
+    var out = buildToolbarFromLayout(layout);
 
     var existing = safeGetInstance($ta);
     if (existing) {
       ta.__afAeInited = true;
       existing.__afAeOwned = true;
 
+      try { ensureCustomCommands(); } catch (eC0) {}
+      try { ensureDropdownCommands(out, availableMap); } catch (eD0) {}
+
       try { afAeEnsureMybbListAndAlignBbcode(existing); } catch (eA0) {}
+      try { afAePatchAlignCommandsForSourceMode(); } catch (eA0b) {}
       try { afAeEnsureFrontendCodeCss(); } catch (eA1) {}
 
       try { patchEditorInstanceForSafeToggle(existing); } catch (e0) {}
+      try { ensureDefaultSourceMode(existing); } catch (e0b) {}
       try { bindSubmitSync(ta.form, existing, ta); } catch (e1) {}
       try { afAeApplyWysiwygCodeQuoteCss(existing); } catch (e2) {}
 
+      try {
+        decorateDropdownButtons(ta, out);
+        decorateCustomButtons(ta);
+      } catch (e3) {}
+
       return true;
     }
-
-    var layout = sanitizeLayout(P.layout || null);
-    var availableMap = buildAvailableMap();
-    var out = buildToolbarFromLayout(layout);
 
     try {
       ensureCustomCommands();
@@ -1050,7 +1050,8 @@
         height: 180,
         width: '100%',
         resizeEnabled: true,
-        autoExpand: false
+        autoExpand: false,
+        startInSourceMode: true
       });
 
       var inst = safeGetInstance($ta);
@@ -1061,9 +1062,11 @@
 
         // Патчи bbcode/стилей уже по факту инстанса
         try { afAeEnsureMybbListAndAlignBbcode(inst); } catch (eP1) {}
+        try { afAePatchAlignCommandsForSourceMode(); } catch (eP1b) {}
         try { afAeEnsureFrontendCodeCss(); } catch (eP2) {}
 
         try { patchEditorInstanceForSafeToggle(inst); } catch (e3) {}
+        try { ensureDefaultSourceMode(inst); } catch (e3b) {}
         try { bindSubmitSync(ta.form, inst, ta); } catch (e4) {}
         try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e5) {}
 

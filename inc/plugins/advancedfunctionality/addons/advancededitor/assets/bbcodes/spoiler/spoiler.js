@@ -42,10 +42,17 @@
 
   function insertWithEditor(inst, open, close) {
     var ta = getTextareaFromInst(inst);
-    var ed = getScEditorInstance(ta);
-    if (ed && typeof ed.insertText === 'function') {
-      ed.insertText(open, close);
-      return;
+    var ed = inst && (typeof inst.insert === 'function' || typeof inst.insertText === 'function') ? inst : null;
+    if (!ed) ed = getScEditorInstance(ta);
+    if (ed) {
+      if (typeof ed.insert === 'function') {
+        ed.insert(open, close);
+        return;
+      }
+      if (typeof ed.insertText === 'function') {
+        ed.insertText(open, close);
+        return;
+      }
     }
     if (ta) wrapTextareaSelection(ta, open, close);
   }
