@@ -2,12 +2,6 @@
 /**
  * AF Addon: AdvancedEditor
  * MyBB 1.8.39, PHP 8.4+
- *
- * Задача:
- * - единый SCEditor везде (newthread/newreply/editpost/showthread quickreply + динамика quickedit + private/usercp и т.д.)
- * - кастомный тулбар из ACP (sections + dropdown)
- * - кастомные кнопки из БД + встроенные bbcodes packs (/bbcodes/*)
- * - единый стиль иконок (svg mask)
  */
 
 if (!defined('IN_MYBB')) { die('No direct access'); }
@@ -507,19 +501,6 @@ function af_advancededitor_pre_output(string &$page = ''): void
 
     // layout/fonts/settings
     $customDefs = af_advancededitor_get_custom_button_defs($bburl);
-    if (!empty($packs['buttons']) && is_array($packs['buttons'])) {
-        $merged = [];
-        foreach (array_merge($packs['buttons'], $customDefs) as $def) {
-            if (!is_array($def) || empty($def['cmd'])) continue;
-            $cmd = (string)$def['cmd'];
-            if (!isset($merged[$cmd])) {
-                $merged[$cmd] = $def;
-            } else {
-                $merged[$cmd] = array_merge($merged[$cmd], $def);
-            }
-        }
-        $customDefs = array_values($merged);
-    }
     $available  = af_advancededitor_get_available_buttons($bburl, $customDefs);
 
     $layoutRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_LAYOUT);
@@ -1067,17 +1048,30 @@ function af_advancededitor_force_disable_mybb_clickable_editor(): void
 {
     global $mybb, $db, $cache;
 
-    // MyBB setting: Clickable MyCode Editor
-    // Важно: мы выключаем его в рантайме ВСЕГДА, если AE включён.
-    if (isset($mybb->settings['bbcodeeditor'])) {
-        $mybb->settings['bbcodeeditor'] = 0;
+    // 1) РАНТАЙМ: всегда гасим базовые вставлялки MyBB
+    foreach (['bbcodeeditor', 'bbcodeinserter', 'smilieinserter'] as $k) {
+        if (isset($mybb->settings[$k])) {
+            $mybb->settings[$k] = 0;
+        }
     }
 
-    // Дополнительно: "закрепим" выключение в БД, чтобы MyBB физически перестал пытаться грузить свой редактор.
-    // Делаем это аккуратно: не чаще раза в сутки.
+    // 2) БД: фиксируем выключение (только супер-админ, не чаще раза/сутки)
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    $isSa = false;
 
-    // anti-spam guard
-    $ck = 'af_advancededitor_force_disable_bbcodeeditor_ts';
+    if ($uid > 0) {
+        if (function_exists('is_super_admin')) {
+            $isSa = (bool)is_super_admin($uid);
+        } else {
+            $isSa = ($uid === 1);
+        }
+    }
+
+    if (!$isSa) {
+        return;
+    }
+
+    $ck = 'af_advancededitor_force_disable_editor_ts';
     $now = defined('TIME_NOW') ? (int)TIME_NOW : time();
     $lastTs = 0;
 
@@ -1090,16 +1084,22 @@ function af_advancededitor_force_disable_mybb_clickable_editor(): void
         return;
     }
 
-    // Если в БД реально включено — выключаем и перестраиваем settings.
     try {
         if (isset($db) && is_object($db)) {
-            $q = $db->simple_select('settings', 'value', "name='bbcodeeditor'", ['limit' => 1]);
-            $val = $db->fetch_field($q, 'value');
-            $val = is_string($val) ? trim($val) : '';
+            $needRebuild = false;
 
-            if ($val !== '' && (int)$val === 1) {
-                $db->update_query('settings', ['value' => '0'], "name='bbcodeeditor'");
+            foreach (['bbcodeeditor', 'bbcodeinserter', 'smilieinserter'] as $name) {
+                $q = $db->simple_select('settings', 'value', "name='".$db->escape_string($name)."'", ['limit' => 1]);
+                $val = $db->fetch_field($q, 'value');
+                $val = is_string($val) ? trim($val) : '';
 
+                if ($val !== '' && (int)$val === 1) {
+                    $db->update_query('settings', ['value' => '0'], "name='".$db->escape_string($name)."'");
+                    $needRebuild = true;
+                }
+            }
+
+            if ($needRebuild) {
                 if (!function_exists('rebuild_settings')) {
                     require_once MYBB_ROOT . 'inc/functions.php';
                 }
@@ -1113,13 +1113,14 @@ function af_advancededitor_force_disable_mybb_clickable_editor(): void
             }
         }
     } catch (Throwable $e) {
-        // молча: нам важнее не убить страницу
+        // не ломаем страницу
     }
 
     if (isset($cache) && is_object($cache) && method_exists($cache, 'update')) {
         $cache->update($ck, ['ts' => $now]);
     }
 }
+
 
 function af_advancededitor_strip_mybb_sceditor_assets(string &$page): void
 {
