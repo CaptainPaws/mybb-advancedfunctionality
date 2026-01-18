@@ -1,0 +1,65 @@
+/* Dropdown для font-family */
+.af-ff-dd {
+  width: 260px;
+  padding: 8px;
+}
+
+.af-ff-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid #d7d7d7;
+  border-radius: 10px;
+  outline: none;
+  margin-bottom: 8px;
+}
+
+.af-ff-list {
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.af-ff-item {
+  width: 100%;
+  display: block;
+  box-sizing: border-box;
+  text-align: left;
+  padding: 7px 8px;
+  margin: 4px 0;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+}
+
+.af-ff-item:hover {
+  background: rgba(0,0,0,.04);
+  border-color: rgba(0,0,0,.08);
+}
+
+.af-ff-name {
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1.15;
+}
+
+.af-ff-sample {
+  font-size: 12px;
+  opacity: .9;
+  margin-top: 2px;
+}
+
+.af-ff-empty {
+  padding: 8px 2px;
+  opacity: .75;
+  font-size: 12px;
+}
+
+.af-ff-group {
+  margin: 10px 0 6px 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  opacity: .65;
+}

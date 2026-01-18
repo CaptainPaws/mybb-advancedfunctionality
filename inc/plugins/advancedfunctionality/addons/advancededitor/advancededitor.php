@@ -1,0 +1,1871 @@
+<?php
+/**
+ * AF Addon: AdvancedEditor
+ * MyBB 1.8.39, PHP 8.4+
+ *
+ * Задача:
+ * - единый SCEditor везде (newthread/newreply/editpost/showthread quickreply + динамика quickedit + private/usercp и т.д.)
+ * - кастомный тулбар из ACP (sections + dropdown)
+ * - кастомные кнопки из БД + встроенные bbcodes packs (/bbcodes/*)
+ * - единый стиль иконок (svg mask)
+ */
+
+if (!defined('IN_MYBB')) { die('No direct access'); }
+if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
+
+define('AF_AE_ID', 'advancededitor');
+
+define('AF_AE_GROUP', 'af_advancededitor');
+define('AF_AE_SETTING_LAYOUT', 'af_advancededitor_toolbar_layout');
+define('AF_AE_SETTING_FONTS',  'af_advancededitor_fontfamily_json');
+define('AF_AE_SETTING_COUNTBBCODE',     'af_advancededitor_counter_count_bbcode');
+define('AF_AE_SETTING_HIDE_POSTOPTIONS','af_advancededitor_hide_postoptions');
+define('AF_AE_SETTING_POSTCOUNT_FORUMS', 'af_advancededitor_postcount_forum_ids');
+define('AF_AE_SETTING_FORMFEATURE_FORUMS', 'af_advancededitor_formfeature_forum_ids');
+
+
+
+// Таблица кастомных кнопок
+define('AF_AE_TABLE', 'af_ae_buttons');
+
+/**
+ * === AE: helper paths/urls ===
+ */
+function af_advancededitor_base_rel(): string
+{
+    // web-relative base to addon folder (from forum root)
+    return 'inc/plugins/advancedfunctionality/addons/advancededitor/';
+}
+
+function af_advancededitor_assets_rel(): string
+{
+    return af_advancededitor_base_rel() . 'assets/';
+}
+
+function af_advancededitor_bbcodes_rel(): string
+{
+    return af_advancededitor_assets_rel() . 'bbcodes/';
+}
+
+function af_advancededitor_fs_bbcodes_dir(): string
+{
+    return MYBB_ROOT . af_advancededitor_bbcodes_rel();
+}
+
+function af_advancededitor_url(string $rel): string
+{
+    global $mybb;
+    $bburl = rtrim((string)$mybb->settings['bburl'], '/');
+    $rel = ltrim($rel, '/');
+    return $bburl . '/' . $rel;
+}
+
+function af_advancededitor_realpath_safe(string $path): string
+{
+    $rp = @realpath($path);
+    return $rp ? $rp : $path;
+}
+
+function af_advancededitor_is_path_inside(string $path, string $baseDir): bool
+{
+    $path = af_advancededitor_realpath_safe($path);
+    $baseDir = af_advancededitor_realpath_safe($baseDir);
+
+    $path = rtrim($path, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+    $baseDir = rtrim($baseDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+
+    // case-insensitive on Windows, normal on Linux
+    if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+        return stripos($path, $baseDir) === 0;
+    }
+    return strpos($path, $baseDir) === 0;
+}
+
+/**
+ * === AE: scan bbcodes packs ===
+ *
+ * Поддерживаем 2 формата манифеста:
+ * 1) manifest.php (return [ 'js'=>[], 'css'=>[], 'buttons'=>[] ])
+ * 2) manifest.json (то же самое)
+ *
+ * Можно класть:
+ * - /bbcodes/<pack>/manifest.php
+ * - /bbcodes/<pack>/manifest.json
+ * - /bbcodes/manifest.php
+ * - /bbcodes/manifest.json
+ */
+function af_advancededitor_collect_bbcode_packs(): array
+{
+    $baseFs = af_advancededitor_fs_bbcodes_dir();
+    $baseRel = af_advancededitor_bbcodes_rel();
+
+    $out = [
+        'js' => [],
+        'css' => [],
+        'buttons' => [], // -> customDefs
+    ];
+
+    if (!@is_dir($baseFs)) {
+        return $out;
+    }
+
+    $seen = [
+        'js' => [],
+        'css' => [],
+        'cmd' => [],
+    ];
+
+    $addJs = function(string $rel) use (&$out, &$seen) {
+        $rel = ltrim($rel, '/');
+        if (isset($seen['js'][$rel])) return;
+        $seen['js'][$rel] = true;
+        $out['js'][] = af_advancededitor_url($rel);
+    };
+
+    $addCss = function(string $rel) use (&$out, &$seen) {
+        $rel = ltrim($rel, '/');
+        if (isset($seen['css'][$rel])) return;
+        $seen['css'][$rel] = true;
+        $out['css'][] = af_advancededitor_url($rel);
+    };
+
+    $addBtn = function(array $b) use (&$out, &$seen) {
+        $cmd = isset($b['cmd']) ? (string)$b['cmd'] : '';
+        $cmd = trim($cmd);
+
+        if ($cmd === '' || $cmd === '|') return;
+
+        // нормализуем: af_* lower
+        $cmd = preg_replace('~^af_~i', 'af_', $cmd);
+        $cmd = strtolower($cmd);
+
+        if (isset($seen['cmd'][$cmd])) return;
+        $seen['cmd'][$cmd] = true;
+
+        $out['buttons'][] = [
+            'cmd'      => $cmd,
+            'title'    => isset($b['title']) ? (string)$b['title'] : $cmd,
+            'hint'     => isset($b['hint']) ? (string)$b['hint'] : '',
+            'icon'     => isset($b['icon']) ? (string)$b['icon'] : '',
+            'opentag'  => isset($b['opentag']) ? (string)$b['opentag'] : '',
+            'closetag' => isset($b['closetag']) ? (string)$b['closetag'] : '',
+        ];
+    };
+
+    $readManifest = function(string $manifestFs, string $manifestRel) use ($baseFs, $addJs, $addCss, $addBtn): void {
+        $manifestFs = af_advancededitor_realpath_safe($manifestFs);
+
+        if (!@is_file($manifestFs)) return;
+        if (!af_advancededitor_is_path_inside($manifestFs, $baseFs)) return;
+
+        $data = null;
+
+        if (preg_match('~\.php$~i', $manifestFs)) {
+            // manifest.php должен возвращать массив
+            $tmp = @include $manifestFs;
+            if (is_array($tmp)) $data = $tmp;
+        } else if (preg_match('~\.json$~i', $manifestFs)) {
+            $raw = @file_get_contents($manifestFs);
+            if ($raw !== false) {
+                $tmp = @json_decode($raw, true);
+                if (is_array($tmp)) $data = $tmp;
+            }
+        }
+
+        if (!is_array($data)) return;
+
+        // base rel path for this manifest folder
+        $dirRel = preg_replace('~[^/]+$~', '', $manifestRel); // keep trailing slash
+
+        if (!empty($data['css']) && is_array($data['css'])) {
+            foreach ($data['css'] as $c) {
+                $c = trim((string)$c);
+                if ($c === '') continue;
+                // относительные пути считаем относительно папки манифеста
+                $rel = (strpos($c, '/') === 0 || preg_match('~^https?://~i', $c)) ? ltrim($c, '/') : $dirRel . ltrim($c, '/');
+                $addCss($rel);
+            }
+        }
+
+        if (!empty($data['js']) && is_array($data['js'])) {
+            foreach ($data['js'] as $j) {
+                $j = trim((string)$j);
+                if ($j === '') continue;
+                $rel = (strpos($j, '/') === 0 || preg_match('~^https?://~i', $j)) ? ltrim($j, '/') : $dirRel . ltrim($j, '/');
+                $addJs($rel);
+            }
+        }
+
+        if (!empty($data['buttons']) && is_array($data['buttons'])) {
+            foreach ($data['buttons'] as $b) {
+                if (is_array($b)) $addBtn($b);
+            }
+        }
+    };
+
+    // 1) корневые манифесты
+    $rootPhp = $baseFs . 'manifest.php';
+    $rootJson = $baseFs . 'manifest.json';
+    if (@is_file($rootPhp))  $readManifest($rootPhp,  $baseRel . 'manifest.php');
+    if (@is_file($rootJson)) $readManifest($rootJson, $baseRel . 'manifest.json');
+
+    // 2) подпапки (pack dirs)
+    $dh = @opendir($baseFs);
+    if ($dh) {
+        while (($e = readdir($dh)) !== false) {
+            if ($e === '.' || $e === '..') continue;
+
+            $p = $baseFs . $e;
+            if (!@is_dir($p)) continue;
+
+            $mPhp = $p . '/manifest.php';
+            $mJson = $p . '/manifest.json';
+
+            if (@is_file($mPhp))  $readManifest($mPhp,  $baseRel . $e . '/manifest.php');
+            if (@is_file($mJson)) $readManifest($mJson, $baseRel . $e . '/manifest.json');
+        }
+        closedir($dh);
+    }
+
+    return $out;
+}
+
+/**
+ * === AE: collect DB custom buttons (optional) ===
+ */
+function af_advancededitor_collect_db_buttons(): array
+{
+    global $db;
+
+    $defs = [];
+
+    if (!$db->table_exists(AF_AE_TABLE)) {
+        return $defs;
+    }
+
+    $q = $db->simple_select(AF_AE_TABLE, '*', "active=1", ['order_by' => 'disporder', 'order_dir' => 'ASC']);
+    while ($row = $db->fetch_array($q)) {
+        $cmd = strtolower(preg_replace('~^af_~i', 'af_', (string)$row['name']));
+        if ($cmd === '') continue;
+
+        $defs[] = [
+            'cmd'      => $cmd,
+            'title'    => (string)$row['title'],
+            'hint'     => '',
+            'icon'     => (string)$row['icon'],
+            'opentag'  => (string)$row['opentag'],
+            'closetag' => (string)$row['closetag'],
+        ];
+    }
+
+    return $defs;
+}
+
+/**
+ * === AE: build payload (THIS is what makes buttons appear) ===
+ */
+function af_advancededitor_build_payload(): array
+{
+    global $mybb;
+
+    // layout из settings (как есть, JSON строка)
+    $layoutRaw = (string)($mybb->settings[AF_AE_SETTING_LAYOUT] ?? '');
+    $layout = null;
+    if ($layoutRaw !== '') {
+        $tmp = @json_decode($layoutRaw, true);
+        if (is_array($tmp)) $layout = $tmp;
+    }
+
+    // packs from /assets/bbcodes
+    $packs = af_advancededitor_collect_bbcode_packs();
+
+    // DB defs (если используешь)
+    $dbDefs = af_advancededitor_collect_db_buttons();
+
+    // customDefs: packs.buttons + dbDefs
+    $customDefs = array_values(array_merge(
+        is_array($packs['buttons'] ?? null) ? $packs['buttons'] : [],
+        is_array($dbDefs) ? $dbDefs : []
+    ));
+
+    // available: минимум + все кастомные команды, чтобы sanitizeLayout НЕ выкинул их
+    $available = [];
+
+    // добавляем кастомные команды в available
+    foreach ($customDefs as $d) {
+        if (!is_array($d) || empty($d['cmd'])) continue;
+        $available[] = [
+            'cmd'   => (string)$d['cmd'],
+            'title' => (string)($d['title'] ?? $d['cmd']),
+            'hint'  => (string)($d['hint'] ?? ''),
+            'icon'  => (string)($d['icon'] ?? ''),
+        ];
+    }
+
+    // packs assets
+    $packsOut = [
+        'js'  => array_values(array_unique(is_array($packs['js'] ?? null) ? $packs['js'] : [])),
+        'css' => array_values(array_unique(is_array($packs['css'] ?? null) ? $packs['css'] : [])),
+        'buttons' => [], // на фронт не надо
+    ];
+
+    // sceditor css (если хочешь – можно пусто, твой JS это переживёт)
+    $sceditorCss = af_advancededitor_url('jscripts/sceditor/styles/jquery.sceditor.mybb.css');
+
+    return [
+        'debug'     => 0,
+        'layout'    => $layout,
+        'packs'     => $packsOut,
+        'customDefs'=> $customDefs,
+        'available' => $available,
+        'sceditorCss'=> $sceditorCss,
+    ];
+}
+
+/**
+ * === AF hook: pre_output_page ===
+ * Вставляет payload + грузит advancededitor.js
+ */
+function af_advancededitor_collect_font_families_for_payload(): array
+{
+    // 1) системные — как база (они пойдут в секцию "Системные")
+    $system = [
+        ['id' => 'arial',           'name' => 'Arial',           'system' => 1],
+        ['id' => 'helvetica',       'name' => 'Helvetica',       'system' => 1],
+        ['id' => 'verdana',         'name' => 'Verdana',         'system' => 1],
+        ['id' => 'tahoma',          'name' => 'Tahoma',          'system' => 1],
+        ['id' => 'trebuchet_ms',    'name' => 'Trebuchet MS',    'system' => 1],
+        ['id' => 'georgia',         'name' => 'Georgia',         'system' => 1],
+        ['id' => 'times_new_roman', 'name' => 'Times New Roman', 'system' => 1],
+        ['id' => 'garamond',        'name' => 'Garamond',        'system' => 1],
+        ['id' => 'courier_new',     'name' => 'Courier New',     'system' => 1],
+    ];
+
+    // 2) загруженные — сканируем assets/fonts рекурсивно
+    $fontsDirAbs = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/fonts/';
+    if (!is_dir($fontsDirAbs)) {
+        return $system;
+    }
+
+    $allowedExt = ['woff2', 'woff', 'ttf', 'otf'];
+
+    $deriveFamily = function (string $filenameBase): string {
+        $family = $filenameBase;
+        if (preg_match('~^([^-_]+)[-_]~', $filenameBase, $m)) {
+            $family = $m[1];
+        }
+        $family = trim($family);
+        return $family !== '' ? $family : 'CustomFont';
+    };
+
+    $slug = function (string $s): string {
+        $s = strtolower(trim($s));
+        $s = preg_replace('~[^a-z0-9]+~i', '_', $s);
+        $s = trim($s, '_');
+        return $s !== '' ? $s : 'font';
+    };
+
+    $families = []; // familyName => ['id'=>..,'name'=>..,'system'=>0,'files'=>['woff2'=>..]]
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($fontsDirAbs, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+
+    foreach ($it as $file) {
+        /** @var SplFileInfo $file */
+        if (!$file->isFile()) continue;
+
+        $abs = $file->getPathname();
+        $ext = strtolower(pathinfo($abs, PATHINFO_EXTENSION));
+        if (!in_array($ext, $allowedExt, true)) continue;
+
+        $rel = str_replace('\\', '/', substr($abs, strlen($fontsDirAbs)));
+        $rel = ltrim($rel, '/');
+        if ($rel === '' || strpos($rel, '..') !== false) continue;
+
+        $base = pathinfo($abs, PATHINFO_FILENAME);
+        $familyName = $deriveFamily($base);
+
+        if (!isset($families[$familyName])) {
+            $families[$familyName] = [
+                'id'     => $slug($familyName),
+                'name'   => $familyName,
+                'system' => 0,
+                'files'  => [],
+            ];
+        }
+
+        // если у одной семьи несколько файлов одного типа — оставляем первый (дальше можно усложнять)
+        if (empty($families[$familyName]['files'][$ext])) {
+            $families[$familyName]['files'][$ext] = $rel;
+        }
+    }
+
+    // нормализуем + сортировка (JS всё равно отсортит, но пусть будет чисто)
+    $custom = array_values($families);
+    usort($custom, function($a, $b) {
+        return strcasecmp((string)$a['name'], (string)$b['name']);
+    });
+
+    return array_merge($system, $custom);
+}
+
+
+function af_advancededitor_pre_output(string &$page = ''): void
+{
+    global $mybb;
+
+    $enabledKey = 'af_' . AF_AE_ID . '_enabled';
+    if (empty($mybb->settings[$enabledKey])) return;
+
+    if ($page === '' || stripos($page, '<html') === false) return;
+    if (strpos($page, '<!--af_advancededitor-->') !== false) return;
+
+    // Не лезем в админку/модку
+    if (defined('IN_ADMINCP') || defined('IN_MODCP')) return;
+
+    // 1) ГЛАВНОЕ: отключаем MyBB Clickable Editor (на случай, если он включён)
+    af_advancededitor_force_disable_mybb_clickable_editor();
+
+    // 2) Гейт: подключаемся ВЕЗДЕ, где реально есть textarea.
+    // Это соответствует твоему текущему режиму "только textarea везде".
+    if (stripos($page, '<textarea') === false) return;
+
+    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+    if ($bburl === '') return;
+
+    // 3) Если MyBB уже воткнул свои SCEditor ассеты — вычищаем, чтобы не было двойной инициализации.
+    af_advancededitor_strip_mybb_sceditor_assets($page);
+
+    $assetsBase  = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/';
+    $imgBase     = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/img/';
+    $v = defined('TIME_NOW') ? (int)TIME_NOW : time();
+
+    // пакеты
+    $packs = af_advancededitor_discover_bbcode_packs($bburl);
+
+    $injectHead = "\n<!--af_advancededitor-->\n";
+
+    // базовый CSS аддона
+    $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($assetsBase . 'advancededitor.css?v=' . $v) . '" />' . "\n";
+
+    // локальные @font-face
+    $fontsCss = af_advancededitor_build_fonts_css($bburl);
+    if ($fontsCss !== '') {
+        $injectHead .= "<style id=\"af-ae-local-fonts\">\n" . $fontsCss . "\n</style>\n";
+    }
+
+    // CSS паков
+    if (!empty($packs['css']) && is_array($packs['css'])) {
+        foreach ($packs['css'] as $u) {
+            $u = (string)$u;
+            if ($u === '') continue;
+            $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($u) . '?v=' . $v . '" />' . "\n";
+        }
+    }
+
+    // JS паков (defer)
+    if (!empty($packs['js']) && is_array($packs['js'])) {
+        foreach ($packs['js'] as $u) {
+            $u = (string)$u;
+            if ($u === '') continue;
+            $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni($u) . '?v=' . $v . '"></script>' . "\n";
+        }
+    }
+
+    // Мини-cfg (твои ограничения по форумам)
+    $postcountCsv   = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_POSTCOUNT_FORUMS));
+    $formfeatureCsv = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_FORMFEATURE_FORUMS));
+
+    $injectHead .= '<script>'
+        . 'window.afAePayload=window.afAePayload||{};'
+        . 'window.afAePayload.cfg=window.afAePayload.cfg||{};'
+        . 'window.afAePayload.cfg.bburl=' . json_encode($bburl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
+        . 'window.afAePayload.cfg.postcountForumIds=' . json_encode($postcountCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
+        . 'window.afAePayload.cfg.formFeatureForumIds=' . json_encode($formfeatureCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
+        . '</script>' . "\n";
+
+    // SCEditor css
+    $sceditorCss = af_advancededitor_resolve_sceditor_css_url($bburl);
+    $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($sceditorCss) . '" />' . "\n";
+
+    // SCEditor core
+    $core = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.min.js');
+    if ($core === '') $core = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.js');
+
+    $bb = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.bbcode.min.js');
+    if ($bb === '') $bb = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.bbcode.js');
+
+    if ($core !== '') $injectHead .= '<script src="' . htmlspecialchars_uni($core) . '"></script>' . "\n";
+    if ($bb !== '')   $injectHead .= '<script src="' . htmlspecialchars_uni($bb) . '"></script>' . "\n";
+
+    // MyBB bridge (он нужен, чтобы поведение было как “родное” — включая submit-синхронизацию textarea)
+    $mybbBridge = af_advancededitor_resolve_sceditor_mybb_js_url($bburl);
+    if ($mybbBridge !== '') {
+        $injectHead .= '<script src="' . htmlspecialchars_uni($mybbBridge) . '"></script>' . "\n";
+    }
+
+    // layout/fonts/settings
+    $customDefs = af_advancededitor_get_custom_button_defs($bburl);
+    $available  = af_advancededitor_get_available_buttons($bburl, $customDefs);
+
+    $layoutRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_LAYOUT);
+    $layout = null;
+    if (trim($layoutRaw) !== '') {
+        $decoded = json_decode($layoutRaw, true);
+        if (is_array($decoded)) $layout = $decoded;
+    }
+
+    $fontsRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_FONTS);
+    $fonts = null;
+    if (trim($fontsRaw) !== '') {
+        $decoded = json_decode($fontsRaw, true);
+        if (is_array($decoded)) $fonts = $decoded;
+    }
+
+    $countBbcodeRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_COUNTBBCODE);
+    $countBbcode = ((int)trim((string)$countBbcodeRaw) === 1) ? 1 : 0;
+
+    $hideOptsRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_HIDE_POSTOPTIONS);
+    $hidePostOptions = ((int)trim((string)$hideOptsRaw) === 1) ? 1 : 0;
+
+    if ($hidePostOptions) {
+        $injectHead .= "<style id=\"af-ae-hide-postoptions\">
+#post_options, #postoptions, .post_options, .postoptions,
+fieldset.post_options, fieldset.postoptions,
+.postoptions-container, .post-options, .postOptions,
+table #post_options, table #postoptions{display:none!important;}
+</style>\n";
+    }
+
+    $fontFamilies = af_advancededitor_collect_font_families_for_payload();
+    $postKey = (string)($mybb->post_code ?? '');
+
+    $payload = [
+        'v'           => 3,
+        'bburl'       => $bburl,
+        'assetsBase'  => $assetsBase,
+        'imgBase'     => $imgBase,
+        'sceditorCss' => $sceditorCss,
+        'available'   => $available,
+        'layout'      => $layout,
+        'fonts'       => $fonts,
+        'packs'       => $packs,
+        'customDefs'  => $customDefs,
+
+        // превью
+        'previewUrl'  => $bburl . '/misc.php?action=af_ae_postpreview',
+
+        // важно: my_post_key
+        'postKey'     => $postKey,
+
+        'countBbcode' => $countBbcode,
+        'hidePostOptions' => $hidePostOptions,
+        'cfg' => [
+            'bburl' => $bburl,
+            'fontFamilies' => $fontFamilies,
+            'postcountForumIds'   => $postcountCsv,
+            'formFeatureForumIds' => $formfeatureCsv,
+        ],
+    ];
+
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($json) || $json === '') $json = '{}';
+
+    $injectHead .= '<script>window.afAdvancedEditorPayload=' . $json . ';</script>' . "\n";
+    $injectHead .= '<script>window.afAePayload=window.afAdvancedEditorPayload;</script>' . "\n";
+
+    // advancededitor.js
+    $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni($assetsBase . 'advancededitor.js?v=' . $v) . '"></script>' . "\n";
+
+    if (stripos($page, '</head>') !== false) {
+        $page = preg_replace('~</head>~i', $injectHead . '</head>', $page, 1);
+    } else {
+        $page = $injectHead . $page;
+    }
+}
+
+/**
+ * === AE: install/uninstall pack MyCodes ===
+ * Конвенция:
+ * - pack folder: assets/bbcodes/<pack>/
+ * - manifest.php returns ['id'=>...]
+ * - optional installer file: <pack>/<pack>.php (например indent/indent.php)
+ * - functions:
+ *     af_ae_<id>_install_mycode()
+ *     af_ae_<id>_uninstall_mycode()
+ */
+function af_advancededitor_install_pack_mycodes(): void
+{
+    $base = __DIR__ . '/assets/bbcodes';
+    if (!is_dir($base)) return;
+
+    $dirs = @scandir($base);
+    if (!is_array($dirs)) return;
+
+    foreach ($dirs as $d) {
+        if ($d === '.' || $d === '..') continue;
+
+        $packDir = $base . '/' . $d;
+        if (!is_dir($packDir)) continue;
+
+        $mf = $packDir . '/manifest.php';
+        if (!is_file($mf)) continue;
+
+        $m = @include $mf;
+        if (!is_array($m)) continue;
+
+        $id = trim((string)($m['id'] ?? ''));
+        if ($id === '') continue;
+
+        // sanitize id for function names
+        $idFn = preg_replace('~[^a-z0-9_]+~i', '_', strtolower($id));
+
+        // include installer file if exists: <id>/<id>.php
+        $installer = $packDir . '/' . $idFn . '.php';
+        if (is_file($installer)) {
+            require_once $installer;
+        }
+
+        $fn = 'af_ae_' . $idFn . '_install_mycode';
+        if (function_exists($fn)) {
+            $fn();
+        }
+    }
+}
+
+function af_advancededitor_uninstall_pack_mycodes(): void
+{
+    $base = __DIR__ . '/assets/bbcodes';
+    if (!is_dir($base)) return;
+
+    $dirs = @scandir($base);
+    if (!is_array($dirs)) return;
+
+    foreach ($dirs as $d) {
+        if ($d === '.' || $d === '..') continue;
+
+        $packDir = $base . '/' . $d;
+        if (!is_dir($packDir)) continue;
+
+        $mf = $packDir . '/manifest.php';
+        if (!is_file($mf)) continue;
+
+        $m = @include $mf;
+        if (!is_array($m)) continue;
+
+        $id = trim((string)($m['id'] ?? ''));
+        if ($id === '') continue;
+
+        $idFn = preg_replace('~[^a-z0-9_]+~i', '_', strtolower($id));
+
+        $installer = $packDir . '/' . $idFn . '.php';
+        if (is_file($installer)) {
+            require_once $installer;
+        }
+
+        $fn = 'af_ae_' . $idFn . '_uninstall_mycode';
+        if (function_exists($fn)) {
+            $fn();
+        }
+    }
+}
+
+
+function af_advancededitor_install(): void
+{
+    global $db;
+
+    // 1) таблица кастомных кнопок
+    if (!$db->table_exists(AF_AE_TABLE)) {
+        $collation = $db->build_create_table_collation();
+        $db->write_query("
+            CREATE TABLE " . TABLE_PREFIX . AF_AE_TABLE . " (
+                bid INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                name VARCHAR(64) NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                icon VARCHAR(255) NOT NULL DEFAULT '',
+                opentag VARCHAR(255) NOT NULL,
+                closetag VARCHAR(255) NOT NULL DEFAULT '',
+                active TINYINT(1) NOT NULL DEFAULT 1,
+                disporder INT UNSIGNED NOT NULL DEFAULT 0,
+                PRIMARY KEY (bid),
+                UNIQUE KEY name (name),
+                KEY active (active),
+                KEY disporder (disporder)
+            ) ENGINE=MyISAM {$collation};
+        ");
+    }
+
+    // 2) группа настроек + настройки
+    $q = $db->simple_select('settinggroups', 'gid', "name='" . $db->escape_string(AF_AE_GROUP) . "'", ['limit' => 1]);
+    $gid = (int)$db->fetch_field($q, 'gid');
+
+    if ($gid <= 0) {
+        $gid = (int)$db->insert_query('settinggroups', [
+            'name'        => AF_AE_GROUP,
+            'title'       => 'Advanced Editor',
+            'description' => 'Настройка тулбара, шрифтов и расширений редактора.',
+            'disporder'   => 1,
+            'isdefault'   => 0,
+        ]);
+    } else {
+        $db->update_query('settinggroups', [
+            'title'       => $db->escape_string('Advanced Editor'),
+            'description' => $db->escape_string('Настройка тулбара, шрифтов и расширений редактора.'),
+        ], "gid='{$gid}'");
+    }
+
+    // helper: ensure setting
+    $ensure = function(string $name, string $title, string $desc, string $optionscode, string $value, int $disporder) use ($db, $gid): void {
+        $nameEsc = $db->escape_string($name);
+        $q = $db->simple_select('settings', 'sid', "name='{$nameEsc}'", ['limit' => 1]);
+        $sid = (int)$db->fetch_field($q, 'sid');
+
+        if ($sid > 0) {
+            $db->update_query('settings', [
+                'title'       => $db->escape_string($title),
+                'description' => $db->escape_string($desc),
+                'optionscode' => $db->escape_string($optionscode),
+                'disporder'   => $disporder,
+                'gid'         => $gid,
+            ], "sid='{$sid}'");
+            return;
+        }
+
+        $db->insert_query('settings', [
+            'name'        => $db->escape_string($name),
+            'title'       => $db->escape_string($title),
+            'description' => $db->escape_string($desc),
+            'optionscode' => $db->escape_string($optionscode),
+            'value'       => $db->escape_string($value),
+            'disporder'   => $disporder,
+            'gid'         => $gid,
+        ]);
+    };
+
+    // layout
+    $ensure(
+        AF_AE_SETTING_LAYOUT,
+        'Toolbar layout JSON',
+        'JSON раскладка секций/дропдаунов для тулбара.',
+        'textarea',
+        '',
+        10
+    );
+
+    // fonts json
+    $ensure(
+        AF_AE_SETTING_FONTS,
+        'Font families JSON',
+        'JSON список font-family (системные и загруженные).',
+        'textarea',
+        '{"v":1,"families":[]}',
+        20
+    );
+
+    // counter behavior
+    $ensure(
+        AF_AE_SETTING_COUNTBBCODE,
+        'Счётчик символов: считать BBCode',
+        'Если Да — считаем вместе с тегами [b], [url=...] и т.п. Если Нет — теги не учитываются.',
+        'yesno',
+        '0',
+        30
+    );
+
+    // hide post options block
+    $ensure(
+        AF_AE_SETTING_HIDE_POSTOPTIONS,
+        'Скрыть блок опций поста',
+        'Скрывает левый блок чекбоксов: подпись, запретить смайлы и т.д. (newreply/newthread/editpost/showthread/PM).',
+        'yesno',
+        '1',
+        40
+    );
+
+    // === НОВОЕ: ограничения по форумам ===
+    // формат: "2,3,10" (пусто = везде)
+    $ensure(
+        AF_AE_SETTING_POSTCOUNT_FORUMS,
+        'Счётчик “Символов в посте”: forum ids',
+        'Список fid через запятую, где показывать “Символов в посте” под опубликованными постами. Пусто = везде. Пример: 2,3,10',
+        'text',
+        '',
+        50
+    );
+
+    $ensure(
+        AF_AE_SETTING_FORMFEATURE_FORUMS,
+        'Счётчик/предпросмотр над формой: forum ids',
+        'Список fid через запятую, где включать бар “Символов” и предпросмотр над формой ответа. Пусто = везде. Пример: 2,3',
+        'text',
+        '',
+        60
+    );
+
+    if (!function_exists('rebuild_settings')) {
+        require_once MYBB_ROOT . 'inc/functions.php';
+    }
+    rebuild_settings();
+
+    // ставим MyCode из паков (включая indent/indent.php)
+    af_advancededitor_install_pack_mycodes();
+
+    // OPcache дружелюбие
+    $settingsFile = MYBB_ROOT . 'inc/settings.php';
+    @clearstatcache(true, $settingsFile);
+    if (function_exists('opcache_invalidate')) {
+        @opcache_invalidate($settingsFile, true);
+    }
+}
+
+
+function af_advancededitor_uninstall(): void
+{
+    global $db;
+
+    // сначала убираем MyCode паков (только если пак даёт uninstall-функцию)
+    af_advancededitor_uninstall_pack_mycodes();
+
+    // Таблицу удаляем (это именно наши данные)
+    if ($db->table_exists(AF_AE_TABLE)) {
+        $db->drop_table(AF_AE_TABLE);
+    }
+
+    // настройки + группа
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_LAYOUT) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_FONTS) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_COUNTBBCODE) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_HIDE_POSTOPTIONS) . "'");
+
+    // НОВОЕ
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_POSTCOUNT_FORUMS) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_FORMFEATURE_FORUMS) . "'");
+
+    $db->delete_query('settinggroups', "name='" . $db->escape_string(AF_AE_GROUP) . "'");
+
+    if (function_exists('rebuild_settings')) {
+        rebuild_settings();
+    } else {
+        require_once MYBB_ROOT . 'inc/functions.php';
+        rebuild_settings();
+    }
+
+    $settingsFile = MYBB_ROOT . 'inc/settings.php';
+    @clearstatcache(true, $settingsFile);
+    if (function_exists('opcache_invalidate')) {
+        @opcache_invalidate($settingsFile, true);
+    }
+}
+
+function af_ae_bbcode_dispatch_init(): void
+{
+    global $plugins;
+
+    // ВАЖНО:
+    // - parse_message_start: даём пакам шанс преобразовать BBCode ДО стандартного парсинга MyBB
+    // - parse_message_end: даём пакам шанс превратить результат в нужный HTML ПОСЛЕ парсинга
+    $plugins->add_hook('parse_message_start', 'af_ae_bbcode_dispatch_parse_message_start', 10);
+    $plugins->add_hook('parse_message_end',   'af_ae_bbcode_dispatch_parse_message_end',   10);
+}
+
+
+/**
+ * Вызывается MyBB после стандартного парсинга (BBCode + nl2br).
+ * Здесь мы прогоняем кастомные теги паков AE (table и др.)
+ */
+function af_ae_bbcode_dispatch_parse_message_end(&$message): void
+{
+    if (!is_string($message) || $message === '') {
+        return;
+    }
+
+    // быстрый skip
+    if (strpos($message, '[') === false && stripos($message, '<blockquote') === false) {
+        return;
+    }
+
+    static $packs = null;
+    if ($packs === null) {
+        $packs = [];
+
+        $base = __DIR__ . '/assets/bbcodes';
+        if (is_dir($base)) {
+            $dirs = @scandir($base);
+            if (is_array($dirs)) {
+                foreach ($dirs as $d) {
+                    if ($d === '.' || $d === '..') continue;
+                    $packDir = $base . '/' . $d;
+                    if (!is_dir($packDir)) continue;
+
+                    $mf = $packDir . '/manifest.php';
+                    if (!is_file($mf)) continue;
+
+                    $manifest = @include $mf;
+                    if (!is_array($manifest) || empty($manifest['id'])) continue;
+
+                    $id = (string)$manifest['id'];
+                    $tags = [];
+                    if (!empty($manifest['tags']) && is_array($manifest['tags'])) {
+                        foreach ($manifest['tags'] as $t) {
+                            $t = trim((string)$t);
+                            if ($t !== '') $tags[] = $t;
+                        }
+                    }
+
+                    $parserRel = !empty($manifest['parser']) ? (string)$manifest['parser'] : '';
+                    $parserPath = $parserRel ? ($packDir . '/' . $parserRel) : '';
+
+                    $packs[] = [
+                        'id'     => $id,
+                        'tags'   => $tags,
+                        'parser' => $parserPath,
+                    ];
+                }
+            }
+        }
+    }
+
+    if (empty($packs)) {
+        return;
+    }
+
+    foreach ($packs as $p) {
+        if (empty($p['tags'])) continue;
+
+        // триггер по тегам пакета (для end тоже)
+        $hit = false;
+        foreach ($p['tags'] as $tag) {
+            if (stripos($message, '[' . $tag) !== false) { $hit = true; break; }
+            if (stripos($message, ']' . $tag) !== false) { $hit = true; break; }
+        }
+        // Для spoiler: после parse_start тегов [spoiler] уже нет — он превращается в [quote] с маркером,
+        // поэтому end должен сработать даже без [spoiler] в тексте.
+        if (!$hit && $p['id'] !== 'spoiler') continue;
+
+        if (!empty($p['parser']) && is_file($p['parser'])) {
+            require_once $p['parser'];
+        }
+
+        // ПРИОРИТЕТ: parse_end
+        $fnEnd = 'af_ae_bbcode_' . $p['id'] . '_parse_end';
+        if (function_exists($fnEnd)) {
+            $fnEnd($message);
+            continue;
+        }
+
+        // ФОЛЛБЭК: старый формат одного вызова ..._parse (для паков, где так сделано)
+        $fn = 'af_ae_bbcode_' . $p['id'] . '_parse';
+        if (function_exists($fn)) {
+            $fn($message);
+        }
+    }
+}
+
+
+function af_ae_bbcode_dispatch_parse_message_start(&$message): void
+{
+    if (!is_string($message) || $message === '') {
+        return;
+    }
+
+    // быстрый skip
+    if (strpos($message, '[') === false) {
+        return;
+    }
+
+    static $packs = null;
+    if ($packs === null) {
+        $packs = [];
+
+        $base = __DIR__ . '/assets/bbcodes';
+        if (is_dir($base)) {
+            $dirs = @scandir($base);
+            if (is_array($dirs)) {
+                foreach ($dirs as $d) {
+                    if ($d === '.' || $d === '..') continue;
+                    $packDir = $base . '/' . $d;
+                    if (!is_dir($packDir)) continue;
+
+                    $mf = $packDir . '/manifest.php';
+                    if (!is_file($mf)) continue;
+
+                    $manifest = @include $mf;
+                    if (!is_array($manifest) || empty($manifest['id'])) continue;
+
+                    $id = (string)$manifest['id'];
+                    $tags = [];
+                    if (!empty($manifest['tags']) && is_array($manifest['tags'])) {
+                        foreach ($manifest['tags'] as $t) {
+                            $t = trim((string)$t);
+                            if ($t !== '') $tags[] = $t;
+                        }
+                    }
+
+                    $parserRel = !empty($manifest['parser']) ? (string)$manifest['parser'] : '';
+                    $parserPath = $parserRel ? ($packDir . '/' . $parserRel) : '';
+
+                    $packs[] = [
+                        'id'     => $id,
+                        'tags'   => $tags,
+                        'parser' => $parserPath,
+                    ];
+                }
+            }
+        }
+    }
+
+    if (empty($packs)) {
+        return;
+    }
+
+    foreach ($packs as $p) {
+        if (empty($p['tags'])) continue;
+
+        // триггер по тегам пакета
+        $hit = false;
+        foreach ($p['tags'] as $tag) {
+            if (stripos($message, '[' . $tag) !== false) {
+                $hit = true;
+                break;
+            }
+        }
+        if (!$hit) continue;
+
+        // подключаем parser.php
+        if (!empty($p['parser']) && is_file($p['parser'])) {
+            require_once $p['parser'];
+        }
+
+        // ПРИОРИТЕТ: parse_start
+        $fnStart = 'af_ae_bbcode_' . $p['id'] . '_parse_start';
+        if (function_exists($fnStart)) {
+            $fnStart($message);
+        }
+    }
+}
+
+
+/**
+ * AF hook: init (можно оставить no-op)
+ */
+function af_advancededitor_force_disable_mybb_clickable_editor(): void
+{
+    global $mybb, $db, $cache;
+
+    // MyBB setting: Clickable MyCode Editor
+    // Важно: мы выключаем его в рантайме ВСЕГДА, если AE включён.
+    if (isset($mybb->settings['bbcodeeditor'])) {
+        $mybb->settings['bbcodeeditor'] = 0;
+    }
+
+    // Дополнительно: "закрепим" выключение в БД, чтобы MyBB физически перестал пытаться грузить свой редактор.
+    // Делаем это аккуратно: только для супер-админа и не чаще раза в сутки.
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    $isSa = false;
+
+    if ($uid > 0) {
+        if (function_exists('is_super_admin')) {
+            $isSa = (bool)is_super_admin($uid);
+        } else {
+            $isSa = ($uid === 1);
+        }
+    }
+
+    if (!$isSa) {
+        return;
+    }
+
+    // anti-spam guard
+    $ck = 'af_advancededitor_force_disable_bbcodeeditor_ts';
+    $now = defined('TIME_NOW') ? (int)TIME_NOW : time();
+    $lastTs = 0;
+
+    if (isset($cache) && is_object($cache) && method_exists($cache, 'read') && method_exists($cache, 'update')) {
+        $last = $cache->read($ck);
+        $lastTs = is_array($last) && !empty($last['ts']) ? (int)$last['ts'] : 0;
+    }
+
+    if ($lastTs > 0 && ($now - $lastTs) < 86400) {
+        return;
+    }
+
+    // Если в БД реально включено — выключаем и перестраиваем settings.
+    try {
+        if (isset($db) && is_object($db)) {
+            $q = $db->simple_select('settings', 'value', "name='bbcodeeditor'", ['limit' => 1]);
+            $val = $db->fetch_field($q, 'value');
+            $val = is_string($val) ? trim($val) : '';
+
+            if ($val !== '' && (int)$val === 1) {
+                $db->update_query('settings', ['value' => '0'], "name='bbcodeeditor'");
+
+                if (!function_exists('rebuild_settings')) {
+                    require_once MYBB_ROOT . 'inc/functions.php';
+                }
+                rebuild_settings();
+
+                $settingsFile = MYBB_ROOT . 'inc/settings.php';
+                @clearstatcache(true, $settingsFile);
+                if (function_exists('opcache_invalidate')) {
+                    @opcache_invalidate($settingsFile, true);
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        // молча: нам важнее не убить страницу
+    }
+
+    if (isset($cache) && is_object($cache) && method_exists($cache, 'update')) {
+        $cache->update($ck, ['ts' => $now]);
+    }
+}
+
+function af_advancededitor_strip_mybb_sceditor_assets(string &$page): void
+{
+    if ($page === '') return;
+
+    // Если MyBB успел вставить свои ассеты SCEditor (при включённом bbcodeeditor) — вычищаем,
+    // иначе будет двойная инициализация и “пляски” с режимами.
+    // Удаляем только типовые ссылки на jscripts/sceditor/ и mybb sceditor bridge/styles.
+    $patterns = [
+        // <script ... jscripts/sceditor/...></script>
+        '~<script\b[^>]*\bsrc=("|\')[^"\']*?/jscripts/sceditor/[^"\']*\1[^>]*>\s*</script>\s*~i',
+        // <link ... jscripts/sceditor/...>
+        '~<link\b[^>]*\bhref=("|\')[^"\']*?/jscripts/sceditor/[^"\']*\1[^>]*>\s*~i',
+    ];
+
+    foreach ($patterns as $p) {
+        $page = preg_replace($p, '', $page);
+    }
+}
+
+function af_advancededitor_init(): void
+{
+    global $plugins, $mybb, $cache;
+
+    if (defined('IN_ADMINCP') || defined('IN_MODCP')) {
+        return;
+    }
+
+    $enabledKey = 'af_' . AF_AE_ID . '_enabled';
+    if (empty($mybb->settings[$enabledKey])) {
+        return;
+    }
+
+    // 1) ГЛАВНОЕ: выключаем Clickable MyCode Editor MyBB (и в рантайме, и при необходимости фиксируем в БД).
+    af_advancededitor_force_disable_mybb_clickable_editor();
+
+    // 2) Разовый авто-ensure MyCode паков (чтобы после добавления indent всё появилось без reinstall)
+    // делаем только для супер-админа и не чаще раза в сутки
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    $isSa = false;
+    if ($uid > 0) {
+        if (function_exists('is_super_admin')) {
+            $isSa = (bool)is_super_admin($uid);
+        } else {
+            $isSa = ($uid === 1);
+        }
+    }
+
+    if ($isSa && isset($cache) && method_exists($cache, 'read') && method_exists($cache, 'update')) {
+        $ck = 'af_advancededitor_pack_mycodes_ts';
+        $last = $cache->read($ck);
+        $lastTs = is_array($last) && !empty($last['ts']) ? (int)$last['ts'] : 0;
+
+        $now = defined('TIME_NOW') ? (int)TIME_NOW : time();
+        if ($lastTs <= 0 || ($now - $lastTs) > 86400) {
+            af_advancededitor_install_pack_mycodes();
+            $cache->update($ck, ['ts' => $now]);
+        }
+    }
+
+    af_ae_bbcode_dispatch_init();
+
+    // Быстрый предпросмотр через misc.php?action=af_ae_postpreview
+    $plugins->add_hook('misc_start', 'af_advancededitor_misc_start');
+}
+
+
+
+function af_advancededitor_misc_start(): void
+{
+    global $mybb;
+
+    $action = (string)($mybb->input['action'] ?? '');
+
+    // поддержим и старое имя на всякий случай (если где-то осталось)
+    if ($action !== 'af_ae_postpreview' && $action !== 'af_aqr_postpreview') {
+        return;
+    }
+
+    @header('Content-Type: text/html; charset=UTF-8');
+    @header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    @header('Pragma: no-cache');
+
+    if (!function_exists('verify_post_check')) {
+        require_once MYBB_ROOT . 'inc/functions.php';
+    }
+
+    $postKey = (string)($mybb->input['my_post_key'] ?? '');
+
+    // “вежливая” защита post_key (не ломаем гостям страницу, но и не отдаём превью абы кому)
+    if (!empty($mybb->user['uid'])) {
+        $ok = true;
+        try {
+            $ok = (bool)verify_post_check($postKey, true);
+        } catch (Throwable $e) {
+            $ok = false;
+        }
+        if (!$ok) {
+            echo '<div class="af-ae-previewempty">Ошибка: неверный my_post_key.</div>';
+            exit;
+        }
+    } else {
+        if ($postKey === '') {
+            echo '<div class="af-ae-previewempty">Ошибка: предпросмотр доступен только авторизованным.</div>';
+            exit;
+        }
+    }
+
+    $raw = trim((string)($mybb->input['message'] ?? ''));
+    if ($raw === '') {
+        echo '<div class="af-ae-previewempty">Пусто. Напиши что-нибудь 🙂</div>';
+        exit;
+    }
+
+    if (!class_exists('postParser')) {
+        require_once MYBB_ROOT . 'inc/class_parser.php';
+    }
+
+    // (опционально) ограничения по форуму через tid
+    $allowMyCode  = 1;
+    $allowSmilies = 1;
+    $allowImg     = 1;
+    $allowVideo   = 1;
+
+    $tid = isset($mybb->input['tid']) ? (int)$mybb->input['tid'] : 0;
+    if ($tid > 0 && function_exists('get_thread') && function_exists('get_forum')) {
+        $thread = get_thread($tid);
+        if (!empty($thread['fid'])) {
+            $forum = get_forum((int)$thread['fid']);
+            if (is_array($forum) && !empty($forum)) {
+                $allowMyCode  = !empty($forum['allowmycode']) ? 1 : 0;
+                $allowSmilies = !empty($forum['allowsmilies']) ? 1 : 0;
+                $allowImg     = !empty($forum['allowimgcode']) ? 1 : 0;
+                $allowVideo   = !empty($forum['allowvideocode']) ? 1 : 0;
+            }
+        }
+    }
+
+    $parser = new postParser();
+
+    $options = [
+        'allow_html'      => 0, // безопасность как в старой версии
+        'allow_mycode'    => $allowMyCode,
+        'allow_smilies'   => $allowSmilies,
+        'allow_imgcode'   => $allowImg,
+        'allow_videocode' => $allowVideo,
+        'filter_badwords' => 1,
+    ];
+
+    $html = $parser->parse_message($raw, $options);
+
+    echo '<div class="af-ae-previewparsed">' . $html . '</div>';
+    exit;
+}
+
+
+/**
+ * AF hook: pre_output — сюда вставляем CSS/JS + payload, если на странице есть textarea/редактор.
+ */
+function af_advancededitor_build_fonts_css(string $bburl): string
+{
+    $bburl = rtrim($bburl, '/');
+
+    $fontsDirAbs = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/fonts/';
+    $fontsBaseUrl = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/fonts/';
+
+    if (!is_dir($fontsDirAbs)) {
+        return '';
+    }
+
+    // собираем файлы шрифтов рекурсивно (1 уровень подпапок тоже ок)
+    $files = [];
+
+    $scan = function (string $dirAbs, string $prefixRel) use (&$files, &$scan) {
+        $list = @scandir($dirAbs);
+        if (!is_array($list)) return;
+
+        foreach ($list as $x) {
+            if ($x === '.' || $x === '..') continue;
+
+            $abs = $dirAbs . $x;
+            $rel = $prefixRel . $x;
+
+            if (is_dir($abs)) {
+                $scan(rtrim($abs, '/') . '/', rtrim($rel, '/') . '/');
+                continue;
+            }
+
+            $ext = strtolower(pathinfo($x, PATHINFO_EXTENSION));
+            if (!in_array($ext, ['woff2','woff','ttf','otf'], true)) continue;
+
+            $files[] = ['abs' => $abs, 'rel' => $rel, 'ext' => $ext];
+        }
+    };
+
+    $scan($fontsDirAbs, '');
+
+    if (!$files) return '';
+
+    // группируем по family (имя берём из имени файла до первого '-' или '_', иначе весь basename)
+    $byFamily = [];
+    foreach ($files as $f) {
+        $base = pathinfo($f['rel'], PATHINFO_FILENAME);
+        $family = $base;
+
+        if (preg_match('~^([^-_]+)[-_]~', $base, $m)) {
+            $family = $m[1];
+        }
+
+        $family = trim(str_replace(['__','--'], ['_','-'], $family));
+        if ($family === '') $family = 'CustomFont';
+
+        $meta = af_advancededitor_guess_font_meta($base);
+
+        $byFamily[$family][] = [
+            'url'   => $fontsBaseUrl . str_replace('%2F', '/', rawurlencode($f['rel'])),
+            'ext'   => $f['ext'],
+            'weight'=> $meta['weight'],
+            'style' => $meta['style'],
+        ];
+    }
+
+    // генерим @font-face
+    $css = "/* AF AdvancedEditor: local fonts */\n";
+    foreach ($byFamily as $family => $variants) {
+        foreach ($variants as $v) {
+            $format = 'woff2';
+            if ($v['ext'] === 'woff') $format = 'woff';
+            elseif ($v['ext'] === 'ttf') $format = 'truetype';
+            elseif ($v['ext'] === 'otf') $format = 'opentype';
+
+            $css .= "@font-face{font-family:'" . addslashes($family) . "';src:url('" . addslashes($v['url']) . "') format('" . $format . "');font-weight:" . (int)$v['weight'] . ";font-style:" . ($v['style'] === 'italic' ? 'italic' : 'normal') . ";font-display:swap;}\n";
+        }
+    }
+
+    return $css;
+}
+
+function af_advancededitor_guess_font_meta(string $filenameBase): array
+{
+    $s = strtolower($filenameBase);
+
+    $style = (strpos($s, 'italic') !== false || strpos($s, 'it') !== false) ? 'italic' : 'normal';
+
+    $weight = 400;
+    if (strpos($s, 'thin') !== false) $weight = 100;
+    elseif (strpos($s, 'extralight') !== false || strpos($s, 'ultralight') !== false) $weight = 200;
+    elseif (strpos($s, 'light') !== false) $weight = 300;
+    elseif (strpos($s, 'regular') !== false || strpos($s, 'book') !== false) $weight = 400;
+    elseif (strpos($s, 'medium') !== false) $weight = 500;
+    elseif (strpos($s, 'semibold') !== false || strpos($s, 'demibold') !== false) $weight = 600;
+    elseif (strpos($s, 'bold') !== false) $weight = 700;
+    elseif (strpos($s, 'extrabold') !== false || strpos($s, 'ultrabold') !== false) $weight = 800;
+    elseif (strpos($s, 'black') !== false || strpos($s, 'heavy') !== false) $weight = 900;
+
+    // если в имени явно указан weight числом типа 500/700
+    if (preg_match('~\b([1-9]00)\b~', $s, $m)) {
+        $w = (int)$m[1];
+        if ($w >= 100 && $w <= 900) $weight = $w;
+    }
+
+    return ['weight' => $weight, 'style' => $style];
+}
+
+/**
+ * ===== Helpers =====
+ */
+function af_advancededitor_url_if_file_exists(string $bburl, string $rel): string
+{
+    $bburl = rtrim($bburl, '/');
+    $rel = '/' . ltrim($rel, '/');
+
+    $abs = MYBB_ROOT . ltrim($rel, '/');
+    if (is_file($abs)) {
+        return $bburl . $rel;
+    }
+    return '';
+}
+
+function af_advancededitor_load_setting_value_from_db(string $name): string
+{
+    global $db, $mybb;
+
+    $nameEsc = $db->escape_string($name);
+    $q = $db->simple_select('settings', 'value', "name='{$nameEsc}'", ['limit' => 1]);
+    $raw = $db->fetch_field($q, 'value');
+
+    if (is_string($raw)) return $raw;
+    return (string)($mybb->settings[$name] ?? '');
+}
+
+
+/**
+ * Parse CSV of forum ids ("2,3,10") into unique int[].
+ */
+function af_advancededitor_parse_forum_id_csv(string $csv): array
+{
+    $csv = trim($csv);
+    if ($csv === '') return [];
+
+    $out = [];
+    foreach (explode(',', $csv) as $part) {
+        $n = (int)trim($part);
+        if ($n > 0) $out[$n] = true;
+    }
+    return array_keys($out);
+}
+
+/**
+ * Expand forum ids with all child forums (supports categories too) using MyBB forum cache.
+ * Returns unique sorted int[].
+ */
+function af_advancededitor_expand_forum_ids_with_children(array $ids): array
+{
+    $ids = array_values(array_filter(array_map('intval', $ids), function($n){ return $n > 0; }));
+    if (empty($ids)) return [];
+
+    $want = array_fill_keys($ids, true);
+
+    global $cache;
+    $forums = null;
+
+    if (isset($cache) && is_object($cache) && method_exists($cache, 'read')) {
+        $forums = $cache->read('forums');
+    }
+
+    // если кеш почему-то пуст — попробуем обновить
+    if (!is_array($forums) || empty($forums)) {
+        if (function_exists('cache_forums')) {
+            @cache_forums();
+            if (isset($cache) && is_object($cache) && method_exists($cache, 'read')) {
+                $forums = $cache->read('forums');
+            }
+        }
+    }
+
+    if (!is_array($forums) || empty($forums)) {
+        // фоллбек: без кеша не умеем развернуть — вернём как есть
+        sort($ids);
+        return $ids;
+    }
+
+    $out = $want; // include originals
+
+    foreach ($forums as $fid => $f) {
+        $fid = (int)$fid;
+        if ($fid <= 0) continue;
+
+        // parentlist обычно есть в кешированном форуме: "1,2,10"
+        $parentlist = '';
+        if (is_array($f) && isset($f['parentlist'])) {
+            $parentlist = (string)$f['parentlist'];
+        }
+
+        // если нет parentlist — пробуем по pid (редко, но пусть будет)
+        if ($parentlist === '' && is_array($f) && isset($f['pid'])) {
+            $pid = (int)$f['pid'];
+            $chain = [$fid];
+            $guard = 0;
+
+            while ($pid > 0 && $guard++ < 50) {
+                $chain[] = $pid;
+                if (!isset($forums[$pid]) || !is_array($forums[$pid])) break;
+                $pid = (int)($forums[$pid]['pid'] ?? 0);
+            }
+            $parentlist = implode(',', array_reverse($chain));
+        }
+
+        if ($parentlist === '') continue;
+
+        // Проверяем: содержит ли parentlist любой из заданных ids
+        $pl = ',' . $parentlist . ',';
+        foreach ($ids as $x) {
+            if (strpos($pl, ',' . $x . ',') !== false) {
+                $out[$fid] = true;
+                break;
+            }
+        }
+    }
+
+    $result = array_keys($out);
+    sort($result);
+    return $result;
+}
+
+/**
+ * Expand CSV forum ids with children; returns CSV string.
+ * Empty input => empty output (meaning "everywhere").
+ */
+function af_advancededitor_expand_forum_csv(string $csv): string
+{
+    $csv = trim($csv);
+    if ($csv === '') return '';
+
+    $ids = af_advancededitor_parse_forum_id_csv($csv);
+    $expanded = af_advancededitor_expand_forum_ids_with_children($ids);
+    return implode(',', $expanded);
+}
+
+function af_advancededitor_resolve_sceditor_css_url(string $bburl): string
+{
+    $bburl = rtrim($bburl, '/');
+
+    $candidates = [
+        '/jscripts/sceditor/themes/default.min.css',
+        '/jscripts/sceditor/themes/default.css',
+        '/jscripts/sceditor/themes/modern.min.css',
+        '/jscripts/sceditor/themes/modern.css',
+    ];
+
+    foreach ($candidates as $rel) {
+        $fs = MYBB_ROOT . ltrim($rel, '/');
+        if (file_exists($fs)) {
+            return $bburl . $rel;
+        }
+    }
+
+    return $bburl . '/jscripts/sceditor/themes/default.min.css';
+}
+
+function af_advancededitor_resolve_sceditor_mybb_js_url(string $bburl): string
+{
+    $bburl = rtrim($bburl, '/');
+
+    $candidates = [
+        'jscripts/sceditor/jquery.sceditor.mybb.min.js',
+        'jscripts/sceditor/jquery.sceditor.mybb.js',
+    ];
+
+    foreach ($candidates as $rel) {
+        $url = af_advancededitor_url_if_file_exists($bburl, $rel);
+        if ($url !== '') return $url;
+    }
+    return '';
+}
+
+
+function af_advancededitor_get_custom_button_defs(string $bburl): array
+{
+    global $db;
+
+    $bburl = rtrim($bburl, '/');
+
+    $defs = [];
+
+    if (!$db->table_exists(AF_AE_TABLE)) {
+        return $defs;
+    }
+
+    $q = $db->simple_select(AF_AE_TABLE, '*', "active=1", ['order_by' => 'disporder ASC, name ASC']);
+    while ($r = $db->fetch_array($q)) {
+        $name = trim((string)($r['name'] ?? ''));
+        if ($name === '') continue;
+
+        $cmd = (stripos($name, 'af_') === 0) ? $name : ('af_' . $name);
+        $cmd = preg_replace('~\s+~', '', $cmd);
+
+        $title = trim((string)($r['title'] ?? $cmd));
+        if ($title === '') $title = $cmd;
+
+        $icon = trim((string)($r['icon'] ?? ''));
+        if ($icon === '') {
+            $icon = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/img/af.svg';
+        }
+
+        $open = (string)($r['opentag'] ?? '');
+        $close = (string)($r['closetag'] ?? '');
+
+        // минимальная защита от пустых тегов
+        if (trim($open) === '' && trim($close) === '') {
+            continue;
+        }
+
+        $defs[] = [
+            'cmd'      => $cmd,
+            'title'    => $title,
+            'icon'     => $icon,
+            'opentag'  => $open,
+            'closetag' => $close,
+        ];
+    }
+
+    return $defs;
+}
+
+
+/**
+ * Скан BB-паков
+ */
+function af_advancededitor_discover_bbcode_packs(string $bburl): array
+{
+    $bburl = rtrim($bburl, '/');
+
+    // ВАЖНО: пакеты лежат в assets/bbcodes/*
+    $baseDirAbs = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/bbcodes/';
+    $assetsBaseUrl = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/';
+
+    $out = [
+        // агрегаты для фронта/ACP
+        'buttons' => [], // flattened list of buttons
+        'js'      => [],
+        'css'     => [],
+        'parsers' => [], // absolute fs paths
+        // детальная карта паков (полезно для дебага/будущего)
+        'packs'   => [], // id => ['id','title','tags','buttons','assets','parser_abs','manifest_path']
+    ];
+
+    if (!is_dir($baseDirAbs)) {
+        return $out;
+    }
+
+    $dirs = @scandir($baseDirAbs);
+    if (!is_array($dirs)) {
+        return $out;
+    }
+
+    foreach ($dirs as $d) {
+        if ($d === '.' || $d === '..') continue;
+
+        $packDir = $baseDirAbs . $d . '/';
+        if (!is_dir($packDir)) continue;
+
+        $manifestFile = $packDir . 'manifest.php';
+        if (!is_file($manifestFile)) continue;
+
+        $m = @include $manifestFile;
+        if (!is_array($m)) continue;
+
+        $packId = trim((string)($m['id'] ?? ''));
+        if ($packId === '') continue;
+
+        $packTitle = trim((string)($m['title'] ?? $packId));
+        $tags = [];
+        if (!empty($m['tags']) && is_array($m['tags'])) {
+            foreach ($m['tags'] as $t) {
+                $t = trim((string)$t);
+                if ($t !== '') $tags[] = $t;
+            }
+        }
+
+        // assets from manifest: paths are RELATIVE TO assets/
+        $packCss = [];
+        $packJs  = [];
+        if (!empty($m['assets']['css']) && is_array($m['assets']['css'])) {
+            foreach ($m['assets']['css'] as $rel) {
+                $rel = trim((string)$rel);
+                if ($rel === '') continue;
+                $packCss[] = $assetsBaseUrl . ltrim($rel, '/');
+            }
+        }
+        if (!empty($m['assets']['js']) && is_array($m['assets']['js'])) {
+            foreach ($m['assets']['js'] as $rel) {
+                $rel = trim((string)$rel);
+                if ($rel === '') continue;
+                $packJs[] = $assetsBaseUrl . ltrim($rel, '/');
+            }
+        }
+
+        // parser path in manifest: RELATIVE TO pack folder
+        $parserAbs = '';
+        if (!empty($m['parser'])) {
+            $parserRel = trim((string)$m['parser']);
+            if ($parserRel !== '') {
+                $cand = $packDir . ltrim($parserRel, '/');
+                if (is_file($cand)) {
+                    $parserAbs = $cand;
+                    $out['parsers'][] = $parserAbs;
+                }
+            }
+        }
+
+        // buttons from manifest: отдаём и плоско, и в pack-map
+        $packButtons = [];
+        if (!empty($m['buttons']) && is_array($m['buttons'])) {
+            foreach ($m['buttons'] as $b) {
+                if (!is_array($b)) continue;
+
+                $cmd = trim((string)($b['cmd'] ?? ''));
+                if ($cmd === '') continue;
+
+                $title = trim((string)($b['title'] ?? $b['name'] ?? $cmd));
+                $name  = trim((string)($b['name'] ?? ''));
+                $handler = trim((string)($b['handler'] ?? ''));
+
+                $icon = trim((string)($b['icon'] ?? ''));
+                if ($icon !== '') {
+                    // icon in your packs is RELATIVE TO assets/
+                    $icon = $assetsBaseUrl . ltrim($icon, '/');
+                }
+
+                $btn = [
+                    'cmd'     => $cmd,
+                    'name'    => $name,
+                    'title'   => ($title !== '' ? $title : $cmd),
+                    'icon'    => $icon,
+                    'handler' => $handler,
+
+                    // meta
+                    'packId'    => $packId,
+                    'packTitle' => $packTitle,
+                ];
+
+                $packButtons[] = $btn;
+                $out['buttons'][] = $btn;
+            }
+        }
+
+        // merge assets
+        foreach ($packCss as $u) $out['css'][] = $u;
+        foreach ($packJs as $u)  $out['js'][]  = $u;
+
+        $out['packs'][$packId] = [
+            'id'            => $packId,
+            'title'         => $packTitle,
+            'tags'          => $tags,
+            'buttons'       => $packButtons,
+            'assets'        => ['css' => $packCss, 'js' => $packJs],
+            'parser_abs'    => $parserAbs,
+            'manifest_path' => $manifestFile,
+        ];
+    }
+
+    // дедуп ассетов, чтобы не дублировать <link>/<script>
+    $out['css'] = array_values(array_unique(array_filter($out['css'], 'is_string')));
+    $out['js']  = array_values(array_unique(array_filter($out['js'], 'is_string')));
+
+    // parsers тоже дедуп
+    $out['parsers'] = array_values(array_unique(array_filter($out['parsers'], 'is_string')));
+
+    return $out;
+}
+
+
+function af_advancededitor_norm_asset_url(string $bburl, string $addonBaseUrl, string $rel): string
+{
+    $bburl = rtrim($bburl, '/');
+    $addonBaseUrl = rtrim($addonBaseUrl, '/');
+
+    $rel = trim($rel);
+    if ($rel === '') return '';
+
+    if (preg_match('~^(https?:)?//~i', $rel) || strpos($rel, 'data:') === 0) {
+        return $rel;
+    }
+
+    if (isset($rel[0]) && $rel[0] === '/') {
+        return $bburl . $rel;
+    }
+
+    // если дали "bbcodes/..." — это путь относительно аддона
+    return $addonBaseUrl . '/' . ltrim($rel, '/');
+}
+
+/**
+ * Доступные кнопки:
+ * - стандартные команды SCEditor
+ * - встроенные кнопки из bbcodes packs
+ * - кастомные кнопки из БД (active=1)
+ */
+function af_advancededitor_get_available_buttons(string $bburl, array $customDefs = []): array
+{
+    global $db;
+
+    $std = [
+        ['cmd' => 'bold', 'label' => 'B', 'hint' => 'SCEditor: bold', 'title' => 'Жирный'],
+        ['cmd' => 'italic', 'label' => 'I', 'hint' => 'SCEditor: italic', 'title' => 'Курсив'],
+        ['cmd' => 'underline', 'label' => 'U', 'hint' => 'SCEditor: underline', 'title' => 'Подчёркнутый'],
+        ['cmd' => 'strike', 'label' => 'S', 'hint' => 'SCEditor: strike', 'title' => 'Зачёркнутый'],
+        ['cmd' => 'subscript', 'label' => 'x₂', 'hint' => 'SCEditor: subscript', 'title' => 'Нижний индекс'],
+        ['cmd' => 'superscript', 'label' => 'x²', 'hint' => 'SCEditor: superscript', 'title' => 'Верхний индекс'],
+
+        ['cmd' => 'font', 'label' => 'F', 'hint' => 'SCEditor: font', 'title' => 'Шрифт'],
+        ['cmd' => 'size', 'label' => 'Sz', 'hint' => 'SCEditor: size', 'title' => 'Размер'],
+        ['cmd' => 'color', 'label' => 'C', 'hint' => 'SCEditor: color', 'title' => 'Цвет'],
+        ['cmd' => 'removeformat', 'label' => '×', 'hint' => 'SCEditor: removeformat', 'title' => 'Сбросить форматирование'],
+
+        ['cmd' => 'undo', 'label' => '↶', 'hint' => 'SCEditor: undo', 'title' => 'Отменить'],
+        ['cmd' => 'redo', 'label' => '↷', 'hint' => 'SCEditor: redo', 'title' => 'Повторить'],
+        ['cmd' => 'pastetext', 'label' => 'Tx', 'hint' => 'SCEditor: pastetext', 'title' => 'Вставить как текст'],
+        ['cmd' => 'horizontalrule', 'label' => '—', 'hint' => 'Горизонтальная линия', 'title' => 'Горизонтальная линия'],
+
+        ['cmd' => 'left', 'label' => 'L', 'hint' => 'SCEditor: left', 'title' => 'По левому краю'],
+        ['cmd' => 'center', 'label' => 'C', 'hint' => 'SCEditor: center', 'title' => 'По центру'],
+        ['cmd' => 'right', 'label' => 'R', 'hint' => 'SCEditor: right', 'title' => 'По правому краю'],
+        ['cmd' => 'justify', 'label' => 'J', 'hint' => 'SCEditor: justify', 'title' => 'По ширине'],
+
+        ['cmd' => 'bulletlist', 'label' => '•', 'hint' => 'SCEditor: bulletlist', 'title' => 'Маркированный список'],
+        ['cmd' => 'orderedlist', 'label' => '1.', 'hint' => 'SCEditor: orderedlist', 'title' => 'Нумерованный список'],
+
+        ['cmd' => 'quote', 'label' => '❝', 'hint' => 'SCEditor: quote', 'title' => 'Цитата'],
+        ['cmd' => 'code', 'label' => '</>', 'hint' => 'SCEditor: code', 'title' => 'Код'],
+
+        ['cmd' => 'image', 'label' => '🖼', 'hint' => 'SCEditor: image', 'title' => 'Изображение'],
+        ['cmd' => 'link', 'label' => '🔗', 'hint' => 'SCEditor: link', 'title' => 'Ссылка'],
+        ['cmd' => 'unlink', 'label' => '⛓', 'hint' => 'SCEditor: unlink', 'title' => 'Убрать ссылку'],
+        ['cmd' => 'email', 'label' => '@', 'hint' => 'SCEditor: email', 'title' => 'Email'],
+        ['cmd' => 'youtube', 'label' => '▶', 'hint' => 'SCEditor: youtube', 'title' => 'YouTube'],
+        ['cmd' => 'emoticon', 'label' => '☺', 'hint' => 'SCEditor: emoticon', 'title' => 'Смайлы'],
+
+        ['cmd' => 'af_togglemode', 'label' => 'A↔', 'hint' => 'Переключить режим: BBCode / Визуальный', 'title' => 'BBCode ⇄ Визуальный'],
+        ['cmd' => 'source', 'label' => '{ }', 'hint' => 'SCEditor: source', 'title' => 'Исходник'],
+
+        ['cmd' => 'maximize', 'label' => '⤢', 'hint' => 'SCEditor: maximize', 'title' => 'Развернуть'],
+        ['cmd' => '|', 'label' => '|', 'hint' => 'Разделитель группы', 'title' => 'Разделитель'],
+    ];
+
+    // === builtins from packs ===
+    $packs = af_advancededitor_discover_bbcode_packs($bburl);
+    $builtins = [];
+
+    if (!empty($packs['buttons']) && is_array($packs['buttons'])) {
+        foreach ($packs['buttons'] as $b) {
+            if (!is_array($b) || empty($b['cmd'])) continue;
+
+            $cmd  = (string)$b['cmd'];
+            $t    = (string)($b['title'] ?? $cmd);
+
+            $builtins[] = [
+                'cmd'   => $cmd,
+                'label' => 'BB',
+                'hint'  => $t,
+                'title' => $t,
+                'icon'  => (string)($b['icon'] ?? ''),
+            ];
+        }
+    }
+
+    // === custom from DB (из переданных defs) ===
+    $custom = [];
+    if (!empty($customDefs)) {
+        foreach ($customDefs as $d) {
+            if (!is_array($d)) continue;
+
+            $cmd = trim((string)($d['cmd'] ?? ''));
+            if ($cmd === '') continue;
+
+            $custom[] = [
+                'cmd'   => $cmd,
+                'label' => 'AF',
+                'hint'  => (string)($d['title'] ?? $cmd),
+                'title' => (string)($d['title'] ?? $cmd),
+                'icon'  => (string)($d['icon'] ?? ''),
+            ];
+        }
+    }
+
+    return array_merge($std, $builtins, $custom);
+}

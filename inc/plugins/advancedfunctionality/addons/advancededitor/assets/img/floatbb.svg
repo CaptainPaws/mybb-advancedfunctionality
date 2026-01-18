@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+  <!-- floating box -->
+  <rect x="3" y="6" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+
+  <!-- text lines to the right of the box -->
+  <path d="M12 7h9M12 10h9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+
+  <!-- full-width text lines below -->
+  <path d="M3 15h18M3 18h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+</svg>

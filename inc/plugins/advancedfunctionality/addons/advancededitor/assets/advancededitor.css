@@ -1,0 +1,169 @@
+/* === AdvancedEditor: базовая унификация тулбара/иконок === */
+#quickreply_e tr td.trow1:first-child {display: none;}
+/* Переменная для цвета mask-иконок: подхватывай из темы */
+.sceditor-container .sceditor-toolbar {
+  //--af-ae-icon-color: currentColor;
+}
+
+/* Превращаем стандартные кнопки в “иконку через mask”: и оно начинает краситься currentColor. */
+
+/* Dropdown (команды afmenu_*) — просто даём вид как кнопке */
+.sceditor-container .sceditor-button[class*="sceditor-button-afmenu_"] div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+}
+
+/* Dropdown panel */
+.af-ae-dd {
+  padding: 6px;
+  min-width: 220px;
+}
+
+/* Небольшая косметика */
+.sceditor-container {
+  border-radius: 12px;
+  overflow: visible; /* FIX: иначе dropdown клипается и “улетает внутрь” */
+}
+.sceditor-container .sceditor-toolbar {
+  border-bottom: 1px solid rgba(0,0,0,.08);
+}
+
+/* === AdvancedEditor: dropdown меню === */
+
+/* внешний контейнер dropdown (его создаёт SCEditor) */
+.sceditor-dropdown.af-ae-dropdown {
+  min-width: 240px;
+  max-width: 360px;
+  padding: 6px;
+  border-radius: 10px;
+
+  /* FIX: поверх редактора */
+  position: absolute;
+  z-index: 2147483000;
+
+
+}
+.sceditor-dropdown, .sceditor-dropdown.af-ae-dropdown {
+  max-height: 260px;
+  overflow: auto;
+}
+/* внутренний контент */
+.af-ae-dd {
+  display: block;
+}
+
+/* пункты меню */
+.af-ae-dd .af-ae-dd-item {
+  display: block;
+  padding: 8px 10px;
+  margin: 2px 0;
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+/* hover */
+.af-ae-dd .af-ae-dd-item:hover {
+  background: rgba(0,0,0,.08);
+}
+
+/* пустое */
+.af-ae-dd .af-ae-dd-empty {
+  padding: 8px 10px;
+  opacity: .75;
+}
+/* dropdown items: badge + text */
+.af-ae-dd-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 10px;
+  border-radius:8px;
+  text-decoration:none;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.af-ae-dd-item:hover{
+  background: rgba(0,0,0,.08);
+}
+.af-ae-dd-badge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:24px;
+  min-width:24px;
+  height:18px;
+  font-size:12px;
+  font-weight:700;
+  opacity:.9;
+}
+.af-ae-dd-text{
+  flex:1;
+}
+/* === AdvancedEditor dropdown: ПРИНУДИТЕЛЬНО показываем текст (тема могла прятать) === */
+.sceditor-dropdown .af-ae-dd {
+  padding: 6px;
+  min-width: 240px;
+}
+
+.sceditor-dropdown .af-ae-dd-item{
+  /* перебиваем “иконковый” стиль ссылок/кнопок SCEditor */
+  appearance: none;
+  -webkit-appearance: none;
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  width: 100%;
+  box-sizing: border-box;
+
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+
+  background: transparent;
+
+  /* вот это ключевое против font-size:0 / text-indent */
+  font-size: 13px !important;
+  line-height: 1.25 !important;
+  text-indent: 0 !important;
+
+  color: rgba(255,255,255,.92) !important;
+  cursor: pointer;
+
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sceditor-dropdown .af-ae-dd-item:hover{
+  background: rgba(255,255,255,.08);
+}
+
+.sceditor-dropdown .af-ae-dd-badge{
+  /* display: inline-flex; */
+  display: none;
+  align-items: center;
+  justify-content: center;
+
+  width: 26px;
+  min-width: 26px;
+  height: 18px;
+
+  font-weight: 800;
+  opacity: .95;
+}
+
+.sceditor-dropdown .af-ae-dd-badge-empty{
+  opacity: .15;
+}
+
+.sceditor-dropdown .af-ae-dd-text{
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: initial;
+}

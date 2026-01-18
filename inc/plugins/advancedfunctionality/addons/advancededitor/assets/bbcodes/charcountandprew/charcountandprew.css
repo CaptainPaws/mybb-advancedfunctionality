@@ -1,0 +1,76 @@
+/* AF AdvancedEditor: CharCount + Preview */
+
+.af-ccp-wrap {
+  margin: 10px 0 10px 0;
+}
+
+/* бар делаем “справа”, как ты просила */
+.af-ccp-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,.08);
+  background: rgba(0,0,0,.02);
+  font-size: 12px;
+}
+
+.af-ccp-label {
+  opacity: .9;
+}
+
+.af-ccp-value {
+  font-weight: 700;
+}
+
+.af-ccp-muted {
+  opacity: .75;
+}
+
+.af-ccp-preview {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,.10);
+  background: rgba(0,0,0,.02);
+}
+
+.af-ccp-preview[hidden] { display: none !important; }
+
+.af-ccp-preview-title {
+  font-weight: 700;
+  font-size: 12px;
+  margin: 0 0 8px 0;
+  opacity: .85;
+}
+
+.af-ccp-preview-body {
+  font-size: 14px;
+}
+
+/* Счётчик в опубликованных постах */
+.af-ccp-postcount {
+  float: right;
+  clear: both;
+  margin-top: 10px;
+  margin-left: 10px;
+  font-size: 12px;
+  opacity: .75;
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,.08);
+  background: rgba(0,0,0,.02);
+}
+.af-ccp-preview-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.af-ccp-preview-close {
+  cursor: pointer;
+}

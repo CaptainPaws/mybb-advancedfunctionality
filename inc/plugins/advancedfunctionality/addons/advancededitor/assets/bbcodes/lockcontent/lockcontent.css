@@ -1,0 +1,252 @@
+/* AQR Builtin: lockcontent modal */
+
+.af-aqr-lc-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.af-aqr-lc-modal{
+  width: 460px;
+  max-width: 100%;
+  background: #1b1b1b;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.40);
+  color: #eee;
+  overflow: hidden;
+}
+
+.af-aqr-lc-head{
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.af-aqr-lc-title{
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.af-aqr-lc-close{
+  background: transparent;
+  border: 0;
+  color: #ddd;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+.af-aqr-lc-close:hover{
+  background: rgba(255,255,255,.07);
+}
+
+.af-aqr-lc-body{
+  padding: 12px 14px;
+}
+
+/* ===== Tabs (radio -> tabs) ===== */
+.af-aqr-lc-tabs{
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.03);
+}
+
+.af-aqr-lc-tab{
+  flex: 1;
+  display: block;
+  cursor: pointer;
+  user-select: none;
+}
+
+.af-aqr-lc-tab input{
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.af-aqr-lc-tab span{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.2;
+  color: rgba(255,255,255,.82);
+  border: 1px solid transparent;
+  background: transparent;
+  transition: background .12s ease, border-color .12s ease, color .12s ease, transform .12s ease;
+}
+
+.af-aqr-lc-tab:hover span{
+  background: rgba(255,255,255,.06);
+}
+
+.af-aqr-lc-tab input:checked + span{
+  background: rgba(255,255,255,.12);
+  border-color: rgba(255,255,255,.16);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(0,0,0,.25);
+}
+
+/* ===== Panels ===== */
+.af-aqr-lc-panels{
+  margin-top: 10px;
+}
+
+.af-aqr-lc-panel{
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.03);
+}
+
+/* show/hide panels by mode (JS ставит data-mode на overlay) */
+.af-aqr-lc-overlay[data-mode="posts"] .af-aqr-lc-panel[data-panel="users"]{ display: none; }
+.af-aqr-lc-overlay[data-mode="users"] .af-aqr-lc-panel[data-panel="posts"]{ display: none; }
+
+.af-aqr-lc-help{
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(255,255,255,.70);
+  margin: 0 0 10px 0;
+}
+
+.af-aqr-lc-posts{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.af-aqr-lc-posts span{
+  color: rgba(255,255,255,.85);
+  font-size: 13px;
+}
+
+/* ===== Inputs (общий стиль) ===== */
+.af-aqr-lc-input,
+.af-aqr-lc-uids{
+  width: 100%;
+  max-width: 100%;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: #eee;
+  outline: none;
+  font-size: 13px;
+  line-height: 1.2;
+  box-sizing: border-box;
+  transition: border-color .12s ease, background .12s ease, box-shadow .12s ease;
+}
+
+.af-aqr-lc-input{
+  width: 120px;
+}
+
+.af-aqr-lc-input:focus,
+.af-aqr-lc-uids:focus{
+  border-color: rgba(255,255,255,.26);
+  background: rgba(255,255,255,.08);
+  box-shadow: 0 0 0 3px rgba(255,255,255,.06);
+}
+
+.af-aqr-lc-input::placeholder,
+.af-aqr-lc-uids::placeholder{
+  color: rgba(255,255,255,.45);
+}
+
+.af-aqr-lc-input:disabled,
+.af-aqr-lc-uids:disabled{
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+/* аккуратнее number spinners (не обязательно, но красиво) */
+.af-aqr-lc-input[type="number"]{
+  -moz-appearance: textfield;
+}
+.af-aqr-lc-input[type="number"]::-webkit-outer-spin-button,
+.af-aqr-lc-input[type="number"]::-webkit-inner-spin-button{
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* ===== Footer buttons ===== */
+.af-aqr-lc-foot{
+  padding: 12px 14px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.af-aqr-lc-btn{
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(255,255,255,.06);
+  color: #eee;
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.2;
+  transition: background .12s ease, transform .12s ease, border-color .12s ease;
+}
+
+.af-aqr-lc-btn:hover{
+  background: rgba(255,255,255,.10);
+}
+
+.af-aqr-lc-btn:active{
+  transform: translateY(1px);
+}
+
+.af-aqr-lc-btn.primary{
+  background: rgba(255,255,255,.14);
+  border-color: rgba(255,255,255,.20);
+}
+
+.af-aqr-lc-btn.primary:hover{
+  background: rgba(255,255,255,.20);
+}
+
+/* ===== LockContent quote ===== */
+.mycode_quote.af-aqr-lc-quote{
+  position: relative;
+}
+
+/* водяной знак-замочек, чуть повернут */
+.mycode_quote.af-aqr-lc-quote::after{
+  content: "";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  background: url("../../img/locked.svg") no-repeat center / contain;
+  opacity: .10;
+  transform: rotate(-12deg);
+  pointer-events: none;
+  filter: grayscale(1);
+}
+
+/* если cite вдруг где-то всё равно оказался — прячем только в lc-цитате */
+.mycode_quote.af-aqr-lc-quote > cite{
+  display: none;
+}
