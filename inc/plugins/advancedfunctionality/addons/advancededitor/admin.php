@@ -679,6 +679,7 @@ class AF_Admin_AdvancedEditor
             ['cmd' => 'youtube',     'label' => '▶',   'title' => 'YouTube',                'hint' => 'SCEditor: youtube'],
             ['cmd' => 'emoticon',    'label' => '☺',   'title' => 'Смайлы',                 'hint' => 'SCEditor: emoticon'],
 
+            ['cmd' => 'af_togglemode', 'label' => 'A↔', 'title' => 'BBCode ⇄ Визуальный',     'hint' => 'Переключить режим редактора'],
             ['cmd' => 'source',      'label' => '{ }', 'title' => 'BBCode/Визуальный',       'hint' => 'SCEditor: source'],
             ['cmd' => 'maximize',    'label' => '⤢',  'title' => 'Развернуть',              'hint' => 'SCEditor: maximize'],
 
