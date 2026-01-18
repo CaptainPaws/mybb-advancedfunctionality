@@ -143,6 +143,23 @@
     } catch (e5) {}
   }
 
+  function scheduleHardClear(form, textarea) {
+    try {
+      window.requestAnimationFrame(function () {
+        try { hardClearEditor(form, textarea); } catch (e0) {}
+      });
+    } catch (e1) {}
+
+    var delays = [0, 50, 250, 800];
+    for (var i = 0; i < delays.length; i++) {
+      (function (d) {
+        window.setTimeout(function () {
+          try { hardClearEditor(form, textarea); } catch (e2) {}
+        }, d);
+      })(delays[i]);
+    }
+  }
+
   // ====== submit flag ======
   function markJustSubmitted(key) {
     try { sessionStorage.setItem(SUBMIT_SS_PREFIX + key, String(Date.now())); } catch (e) {}
@@ -218,7 +235,7 @@
       form._afAeDraftsLocked = true;
       deleteNow();
       setEditorBBCode(ta, '');
-      hardClearEditor(form, ta);
+      scheduleHardClear(form, ta);
     } else {
       // 2) Восстановить черновик только если поле пустое
       try {
@@ -295,19 +312,7 @@
       deleteNow();
       markJustSubmitted(key);
 
-      try {
-        window.requestAnimationFrame(function () {
-          try { hardClearEditor(form, ta); } catch (e5) {}
-        });
-      } catch (e6) {}
-
-      window.setTimeout(function () {
-        try { hardClearEditor(form, ta); } catch (e7) {}
-      }, 50);
-
-      window.setTimeout(function () {
-        try { hardClearEditor(form, ta); } catch (e8) {}
-      }, 250);
+      scheduleHardClear(form, ta);
     }, true);
 
     // 5) BFCache: если вернулись назад — и флаг ещё жив, добить очистку
