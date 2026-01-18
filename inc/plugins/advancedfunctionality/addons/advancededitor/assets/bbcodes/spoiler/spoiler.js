@@ -94,30 +94,7 @@
 
         '<div class="af-aqr-sp-body">' +
           '<div class="af-aqr-sp-tools" role="toolbar" aria-label="Форматирование заголовка">' +
-            '<button type="button" data-act="b"><b>B</b></button>' +
-            '<button type="button" data-act="i"><i>I</i></button>' +
-            '<button type="button" data-act="u"><u>U</u></button>' +
-            '<button type="button" data-act="s"><span style="text-decoration:line-through;">S</span></button>' +
             '<span class="af-aqr-sp-sep"></span>' +
-            '<button type="button" data-act="al">L</button>' +
-            '<button type="button" data-act="ac">C</button>' +
-            '<button type="button" data-act="ar">R</button>' +
-            '<span class="af-aqr-sp-sep"></span>' +
-            '<select data-act="size" aria-label="Размер">' +
-              '<option value="">size</option>' +
-              '<option value="10">10</option><option value="12">12</option><option value="14">14</option>' +
-              '<option value="16">16</option><option value="18">18</option><option value="24">24</option>' +
-            '</select>' +
-            '<select data-act="font" aria-label="Шрифт">' +
-              '<option value="">font</option>' +
-              '<option value="Arial">Arial</option>' +
-              '<option value="Georgia">Georgia</option>' +
-              '<option value="Tahoma">Tahoma</option>' +
-              '<option value="Times New Roman">Times</option>' +
-              '<option value="Verdana">Verdana</option>' +
-            '</select>' +
-            '<span class="af-aqr-sp-sep"></span>' +
-            '<button type="button" data-act="img">img</button>' +
           '</div>' +
 
           '<textarea class="af-aqr-sp-input" rows="4" placeholder="Можно BBCode: [b]жирно[/b], [size=16]...[/size], [align=center]...[/align], [img]URL[/img]"></textarea>' +
