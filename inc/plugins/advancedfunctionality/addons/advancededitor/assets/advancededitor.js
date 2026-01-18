@@ -267,6 +267,7 @@
     ensureToggleCommandDefinition();
 
     var customDefs = buildCustomDefMap();
+
     Object.keys(customDefs).forEach(function (cmd) {
       if (!cmd || cmd === '|') return;
       if (!/^af_/i.test(cmd)) return;
@@ -280,28 +281,35 @@
 
       var def = {
         tooltip: tooltip,
+
         exec: function (caller) {
           var ed = this;
 
           if (cmd === 'af_togglemode') {
-            try { if (ed.toggleSourceMode) ed.toggleSourceMode(); } catch (e0) {}
+            try { if (ed && typeof ed.toggleSourceMode === 'function') ed.toggleSourceMode(); } catch (e0) {}
             return;
           }
 
-          if (handler && window.afAeBuiltinHandlers && window.afAeBuiltinHandlers[handler]) {
+          // handler (spoiler.js и др.)
+          if (handler) {
             try {
-              var h = window.afAeBuiltinHandlers[handler];
+              var h = null;
+              if (window.afAeBuiltinHandlers && window.afAeBuiltinHandlers[handler]) h = window.afAeBuiltinHandlers[handler];
+              else if (window.afAqrBuiltinHandlers && window.afAqrBuiltinHandlers[handler]) h = window.afAqrBuiltinHandlers[handler];
+
               if (typeof h === 'function') {
-                h({ editor: ed, caller: caller, cmd: cmd, payload: defData });
+                // КАНОН: отдаём инстанс SCEditor (как ждёт spoiler.js)
+                h(ed, caller, cmd, defData);
                 return;
               }
               if (h && typeof h.exec === 'function') {
-                h.exec({ editor: ed, caller: caller, cmd: cmd, payload: defData });
+                h.exec(ed, caller, cmd, defData);
                 return;
               }
             } catch (e1) {}
           }
 
+          // open/close tags
           try {
             if (opentag && typeof ed.insert === 'function') {
               ed.insert(opentag, closetag || '');
@@ -309,10 +317,10 @@
             }
           } catch (e2) {}
 
-          try {
-            if (typeof ed.insert === 'function') ed.insert('[' + cmd + ']', '[/' + cmd + ']');
-          } catch (e3) {}
+          // fallback
+          try { if (typeof ed.insert === 'function') ed.insert('[' + cmd + ']', '[/' + cmd + ']'); } catch (e3) {}
         },
+
         txtExec: function (caller) {
           try { def.exec.call(this, caller); } catch (e4) {}
         }
@@ -322,8 +330,246 @@
     });
   }
 
+  function afAeEnsureMybbListAndAlignBbcode(inst) {
+    if (!hasSceditor()) return;
+
+    function getBb() {
+      try {
+        // глобально
+        var bb = jQuery.sceditor.plugins && jQuery.sceditor.plugins.bbcode
+          ? jQuery.sceditor.plugins.bbcode.bbcode
+          : null;
+        if (bb && typeof bb.set === 'function') return bb;
+      } catch (e0) {}
+
+      // через инстанс (иногда так надёжнее)
+      try {
+        if (inst && typeof inst.getPlugin === 'function') {
+          var p = inst.getPlugin('bbcode');
+          if (p && p.bbcode && typeof p.bbcode.set === 'function') return p.bbcode;
+        }
+      } catch (e1) {}
+
+      return null;
+    }
+
+    var bb = getBb();
+    if (!bb) {
+      // bbcode plugin мог подгрузиться позже — повторим пару раз
+      if (window.__afAeBbPatchRetrying) return;
+      window.__afAeBbPatchRetrying = true;
+
+      var t = 0;
+      (function retry() {
+        t++;
+        var b2 = getBb();
+        if (b2) {
+          window.__afAeBbPatchRetrying = false;
+          try { afAeEnsureMybbListAndAlignBbcode(inst); } catch (e2) {}
+          return;
+        }
+        if (t < 25) return setTimeout(retry, 120);
+        window.__afAeBbPatchRetrying = false;
+      })();
+      return;
+    }
+
+    if (bb.__afAeMybbPatched) return;
+    bb.__afAeMybbPatched = true;
+
+    // =========================
+    // LISTS: MyBB style
+    // =========================
+    // list item = [*] без закрывающего тега
+    try {
+      bb.set('*', {
+        format: '[*]{0}',
+        html: '<li>{0}</li>',
+        isInline: false,
+        skipLastLineBreak: true
+      });
+    } catch (eL0) {}
+
+    // общий [list] и [list=1]
+    try {
+      bb.set('list', {
+        isInline: false,
+        format: function (el, content) {
+          try {
+            var tag = (el && el.tagName) ? String(el.tagName).toUpperCase() : '';
+            if (tag === 'OL') return '[list=1]{0}[/list]';
+            return '[list]{0}[/list]';
+          } catch (e) {
+            return '[list]{0}[/list]';
+          }
+        },
+        html: function (token, attrs, content) {
+          var t = '';
+          try { t = (attrs && attrs.defaultattr != null) ? String(attrs.defaultattr) : ''; } catch (e0) { t = ''; }
+          t = (t || '').toLowerCase().trim();
+
+          // MyBB: [list=1] = ordered
+          if (t === '1') return '<ol>{0}</ol>'.replace('{0}', content);
+          return '<ul>{0}</ul>'.replace('{0}', content);
+        }
+      });
+    } catch (eL1) {}
+
+    // если SCEditor дефолтит в [ol]/[ul]/[li] — переопределяем их форматы в MyBB
+    try {
+      bb.set('li', {
+        format: '[*]{0}',
+        html: '<li>{0}</li>',
+        isInline: false,
+        skipLastLineBreak: true
+      });
+      bb.set('ul', {
+        format: '[list]{0}[/list]',
+        html: '<ul>{0}</ul>',
+        isInline: false
+      });
+      bb.set('ol', {
+        format: '[list=1]{0}[/list]',
+        html: '<ol>{0}</ol>',
+        isInline: false
+      });
+    } catch (eL2) {}
+
+    // =========================
+    // ALIGN: MyBB style [align=...]
+    // =========================
+
+    // 1) сам тег [align=...]
+    try {
+      bb.set('align', {
+        isInline: false,
+        html: function (token, attrs, content) {
+          var a = '';
+          try { a = (attrs && attrs.defaultattr != null) ? String(attrs.defaultattr) : ''; } catch (e0) { a = ''; }
+          a = (a || '').toLowerCase().trim();
+
+          if (a === 'start') a = 'left';
+          if (a === 'end') a = 'right';
+          if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') a = 'left';
+
+          return '<div style="text-align:' + a + '">' + content + '</div>';
+        },
+        format: function (el, content) {
+          try {
+            var a = '';
+            try { a = (el && el.style && el.style.textAlign) ? String(el.style.textAlign) : ''; } catch (e0) { a = ''; }
+            a = (a || '').toLowerCase().trim();
+
+            if (a === 'start') a = 'left';
+            if (a === 'end') a = 'right';
+            if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') return content;
+
+            return '[align=' + a + ']' + content + '[/align]';
+          } catch (e1) {
+            return '[align=left]' + content + '[/align]';
+          }
+        }
+      });
+    } catch (eA0) {}
+
+    // 2) перебиваем дефолтные теги SCEditor [left]/[center]/...
+    // чтобы HTML->BBCode отдавал [align=...]
+    function patchLegacyAlign(tag, val) {
+      try {
+        bb.set(tag, {
+          isInline: false,
+          html: '<div style="text-align:' + val + '">{0}</div>',
+          format: '[align=' + val + ']{0}[/align]'
+        });
+      } catch (e) {}
+    }
+
+    patchLegacyAlign('left', 'left');
+    patchLegacyAlign('center', 'center');
+    patchLegacyAlign('right', 'right');
+    patchLegacyAlign('justify', 'justify');
+  }
+
+  function afAeEnsureMybbAlignBbcode() {
+    if (!hasSceditor()) return;
+
+    try {
+      var bb = jQuery.sceditor.plugins && jQuery.sceditor.plugins.bbcode
+        ? jQuery.sceditor.plugins.bbcode.bbcode
+        : null;
+
+      if (!bb || typeof bb.set !== 'function') return;
+
+      // div/span с text-align превращаем в [align=...][/align]
+      // SCEditor bbcode engine умеет прокидывать style-значение через styles map.
+      bb.set('div', {
+        styles: { 'text-align': 'align' },
+        format: function (el, content) {
+          try {
+            // normalize align value
+            var a = '';
+            try { a = (el && el.style && el.style.textAlign) ? String(el.style.textAlign) : ''; } catch (e0) { a = ''; }
+            a = a.toLowerCase().trim();
+
+            if (a === 'start') a = 'left';
+            if (a === 'end') a = 'right';
+            if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') {
+              // если не распознали — не оборачиваем
+              return content;
+            }
+            return '[align=' + a + ']' + content + '[/align]';
+          } catch (e1) {
+            return '[align=left]' + content + '[/align]';
+          }
+        },
+        html: function (token, attrs, content) {
+          var a = (attrs && attrs.defaultattr) ? String(attrs.defaultattr) : '';
+          a = a.toLowerCase().trim();
+          if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') a = 'left';
+          return '<div style="text-align:' + a + '">' + content + '</div>';
+        }
+      });
+
+    } catch (e) {}
+  }
+
+  function afAePatchAlignCommandsForSourceMode() {
+    if (!hasSceditor()) return;
+
+    function patch(cmd, alignVal) {
+      try {
+        var c = getCommand(cmd);
+        if (!c || c.__afAeAlignPatched) return;
+
+        var origTxt = c.txtExec;
+        c.txtExec = function () {
+          try {
+            if (typeof this.insert === 'function') {
+              this.insert('[align=' + alignVal + ']', '[/align]');
+              return;
+            }
+          } catch (e0) {}
+          try { if (origTxt) return origTxt.apply(this, arguments); } catch (e1) {}
+        };
+
+        c.__afAeAlignPatched = true;
+        setCommand(cmd, c);
+      } catch (e2) {}
+    }
+
+    patch('left', 'left');
+    patch('center', 'center');
+    patch('right', 'right');
+    patch('justify', 'justify');
+  }
+
   function buildDropdownContent(editor, menu, availableMap) {
-    var $content = jQuery('<div class="af-ae-dd"></div>');
+    var $content = jQuery('<div class="af-ae-dd" role="menu"></div>');
+
+    // ВАЖНО: не даём SCEditor “съесть” клики
+    $content.on('mousedown click', function (e) {
+      try { e.stopPropagation(); } catch (e0) {}
+    });
 
     (menu.items || []).forEach(function (cmd) {
       cmd = String(cmd || '').trim();
@@ -333,14 +579,20 @@
       var title = String(meta.title || meta.hint || cmd || '').trim() || cmd;
 
       var $btn = jQuery(
-        '<button type="button" class="af-ae-dd-item">' +
-        '<span class="af-ae-dd-text"></span>' +
+        '<button type="button" class="af-ae-dd-item" role="menuitem">' +
+          '<span class="af-ae-dd-text"></span>' +
         '</button>'
       );
       $btn.find('.af-ae-dd-text').text(title);
 
+      $btn.on('mousedown', function (e) {
+        try { e.preventDefault(); } catch (e0) {}
+        try { e.stopPropagation(); } catch (e1) {}
+      });
+
       $btn.on('click', function (e) {
-        e.preventDefault();
+        try { e.preventDefault(); } catch (e0) {}
+        try { e.stopPropagation(); } catch (e1) {}
 
         try {
           if (editor && editor.command && typeof editor.command.exec === 'function') {
@@ -348,11 +600,9 @@
           } else if (editor && typeof editor.execCommand === 'function') {
             editor.execCommand(cmd);
           } else if (editor && typeof editor.insert === 'function') {
-            editor.insert(cmd, null);
+            editor.insert('', '');
           }
-        } catch (e1) {
-          try { if (editor && typeof editor.insert === 'function') editor.insert(cmd, null); } catch (e2) {}
-        }
+        } catch (e2) {}
 
         try { if (editor && typeof editor.closeDropDown === 'function') editor.closeDropDown(true); } catch (e3) {}
       });
@@ -368,15 +618,19 @@
   }
 
   function ensureDropdownCommands(out, availableMap) {
-    if (!window.jQuery || !jQuery.sceditor) return;
+    if (!hasSceditor()) return;
     if (!out || !Array.isArray(out.menus)) return;
 
     out.menus.forEach(function (m) {
       if (!m || !m.cmd) return;
-      if (getCommand(m.cmd)) return;
+
+      // Регистрируем команду ДО инициализации редактора,
+      // иначе SCEditor может нарисовать кнопку, но не повесить обработчик нормально.
+      var existing = getCommand(m.cmd);
+      if (existing && existing.__afAeDropdownPatched) return;
 
       var def = {
-        tooltip: 'Dropdown: ' + (m.title || '★'),
+        tooltip: String(m.title || '★'),
         dropDown: function (editor, caller) {
           try {
             var $content = buildDropdownContent(editor, m, availableMap);
@@ -384,19 +638,17 @@
           } catch (e0) {}
         },
         exec: function (caller) {
-          try {
-            var ed = this;
-            if (def.dropDown) def.dropDown(ed, caller);
-          } catch (e1) {}
+          try { this.command && this.command.dropDown
+            ? this.command.dropDown(caller, m.cmd)
+            : def.dropDown(this, caller);
+          } catch (e1) { try { def.dropDown(this, caller); } catch (e2) {} }
         },
         txtExec: function (caller) {
-          try {
-            var ed = this;
-            if (def.dropDown) def.dropDown(ed, caller);
-          } catch (e2) {}
+          try { def.dropDown(this, caller); } catch (e3) {}
         }
       };
 
+      def.__afAeDropdownPatched = true;
       setCommand(m.cmd, def);
     });
   }
@@ -502,6 +754,62 @@
           a.style.padding = '0 2px';
         }
       });
+    } catch (e) {}
+  }
+
+  function afAeApplyWysiwygCodeQuoteCss(inst) {
+    try {
+      if (!inst || typeof inst.getBody !== 'function') return;
+
+      // Ретраи: iframe может появиться чуть позже
+      var tries = 0;
+
+      (function tick() {
+        tries++;
+
+        var body = null;
+        try { body = inst.getBody(); } catch (e0) { body = null; }
+        if (!body || !body.ownerDocument) {
+          if (tries < 40) return setTimeout(tick, 50);
+          return;
+        }
+
+        var doc = body.ownerDocument;
+        var head = doc.head || doc.getElementsByTagName('head')[0];
+        if (!head) {
+          if (tries < 40) return setTimeout(tick, 50);
+          return;
+        }
+
+        // Если iframe пересоздался — стиль надо вставлять заново (в новом документе)
+        if (doc.getElementById('af-ae-wysiwyg-codequote')) return;
+
+        // CSS именно для WYSIWYG-iframe: blockquote + pre/code + общий читабельный вид
+        var css =
+          "blockquote{padding:10px 12px;margin:10px 0;border-left:4px solid rgba(255,255,255,.15);background:rgba(0,0,0,.18);}\n" +
+          "blockquote cite{display:block;opacity:.75;font-style:normal;margin-bottom:6px;}\n" +
+
+          // inline code
+          "code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;" +
+          "padding:.12em .35em;border-radius:6px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.10);}\n" +
+
+          // pre/code blocks
+          "pre,pre code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;}\n" +
+          "pre{padding:10px 12px;margin:10px 0;background:rgba(0,0,0,.28);" +
+          "border:1px solid rgba(255,255,255,.12);border-radius:10px;overflow:auto;white-space:pre;}\n" +
+          "pre code{background:transparent;border:0;padding:0;}\n" +
+
+          // если в WYSIWYG вдруг попадает mybb-ish разметка codeblock
+          ".codeblock{margin:12px 0;border:1px solid rgba(255,255,255,.12);border-radius:10px;overflow:hidden;background:rgba(0,0,0,.18)}\n" +
+          ".codeblock .title{padding:8px 10px;font-weight:700;opacity:.85;border-bottom:1px solid rgba(255,255,255,.10)}\n" +
+          ".codeblock .body{padding:10px 12px}\n";
+
+        var style = doc.createElement('style');
+        style.id = 'af-ae-wysiwyg-codequote';
+        style.type = 'text/css';
+        style.appendChild(doc.createTextNode(css));
+        head.appendChild(style);
+      })();
     } catch (e) {}
   }
 
@@ -616,22 +924,42 @@
 
   function bindSubmitSync(form, inst, ta) {
     if (!form || !inst || !ta) return;
-    if (form.__afAeSubmitBound) return;
-    form.__afAeSubmitBound = true;
 
-    form.addEventListener('submit', function () {
-      try { updateOriginal(inst); } catch (e) {}
+    // можно биндинг на каждый инстанс, но без дублей
+    var key = '__afAeSubmitBound_' + (ta.name || ta.id || 'message');
+    if (form[key]) return;
+    form[key] = true;
+
+    function syncNow() {
       try {
-        if (ta && typeof ta.value === 'string') {
-          if (ta.value === '' || ta.value == null) {
-            try {
-              var val = '';
-              try { val = inst.val ? inst.val() : ''; } catch (e2) { val = ''; }
-              if (val && typeof val === 'string') ta.value = val;
-            } catch (e3) {}
+        // 1) стандартный метод SCEditor
+        try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e0) {}
+
+        // 2) железный фоллбек: значение из инстанса в textarea
+        try {
+          if (typeof inst.val === 'function') {
+            var v = inst.val();
+            if (typeof v === 'string') ta.value = v;
           }
+        } catch (e1) {}
+      } catch (e2) {}
+    }
+
+    // submit capture — раньше всего
+    form.addEventListener('submit', function () {
+      syncNow();
+    }, true);
+
+    // на всякий: клик по submit-кнопкам (иногда формы валидируются до submit)
+    form.addEventListener('click', function (e) {
+      try {
+        var t = e.target;
+        if (!t) return;
+        if (t.tagName === 'BUTTON' || t.tagName === 'INPUT') {
+          var type = (t.getAttribute('type') || '').toLowerCase();
+          if (type === 'submit') syncNow();
         }
-      } catch (e4) {}
+      } catch (e0) {}
     }, true);
   }
 
@@ -652,19 +980,27 @@
     inst.__afAePatchedToggle = true;
 
     var origToggle = inst.toggleSourceMode;
+
     if (typeof origToggle === 'function') {
       inst.toggleSourceMode = function () {
         window.__afAeGlobalToggling++;
         window.__afAeIgnoreMutationsUntil = now() + 1200;
+
         try { return origToggle.apply(inst, arguments); }
         finally {
+          // ВАЖНО: iframe может появиться не мгновенно — даём микропаузу и ретраи внутри функции
           setTimeout(function () {
+            try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e0) {}
+
             window.__afAeIgnoreMutationsUntil = now() + 250;
             window.__afAeGlobalToggling = Math.max(0, (window.__afAeGlobalToggling | 0) - 1);
-          }, 0);
+          }, 30);
         }
       };
     }
+
+    // На старте тоже пинаем: иногда инстанс уже есть, но iframe ещё догружается
+    try { setTimeout(function () { try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e1) {} }, 30); } catch (e2) {}
   }
 
   function initOneTextarea(ta) {
@@ -684,8 +1020,14 @@
     if (existing) {
       ta.__afAeInited = true;
       existing.__afAeOwned = true;
+
+      try { afAeEnsureMybbListAndAlignBbcode(existing); } catch (eA0) {}
+      try { afAeEnsureFrontendCodeCss(); } catch (eA1) {}
+
       try { patchEditorInstanceForSafeToggle(existing); } catch (e0) {}
       try { bindSubmitSync(ta.form, existing, ta); } catch (e1) {}
+      try { afAeApplyWysiwygCodeQuoteCss(existing); } catch (e2) {}
+
       return true;
     }
 
@@ -697,6 +1039,9 @@
       ensureCustomCommands();
       ensureDropdownCommands(out, availableMap);
       ensurePostKeyInput(ta.form);
+
+      // Патчи bbcode (до инициализации) — и потом ещё раз после, чтобы точно
+      try { afAeEnsureMybbListAndAlignBbcode(null); } catch (eP0) {}
 
       $ta.sceditor({
         format: 'bbcode',
@@ -714,11 +1059,17 @@
         inst.__afAeOwned = true;
         inst.__afAeToolbarSig = asText(out.toolbar);
 
-        try { patchEditorInstanceForSafeToggle(inst); } catch (e2) {}
-        try { bindSubmitSync(ta.form, inst, ta); } catch (e3) {}
+        // Патчи bbcode/стилей уже по факту инстанса
+        try { afAeEnsureMybbListAndAlignBbcode(inst); } catch (eP1) {}
+        try { afAeEnsureFrontendCodeCss(); } catch (eP2) {}
+
+        try { patchEditorInstanceForSafeToggle(inst); } catch (e3) {}
+        try { bindSubmitSync(ta.form, inst, ta); } catch (e4) {}
+        try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e5) {}
 
         decorateDropdownButtons(ta, out);
         decorateCustomButtons(ta);
+
         return true;
       }
     } catch (e) {
