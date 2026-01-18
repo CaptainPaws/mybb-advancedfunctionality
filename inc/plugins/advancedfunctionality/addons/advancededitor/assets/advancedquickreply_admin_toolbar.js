@@ -53,7 +53,7 @@
               '|',
               'link', 'unlink', 'email', 'image', 'youtube', 'emoticon',
               '|',
-              'source', 'maximize'
+              'af_togglemode', 'maximize'
             ]
           },
           { id: 'addons', type: 'group', title: 'Доп. кнопки', items: [] }
@@ -871,6 +871,15 @@
 
         exec: function (caller) {
           var ed = this;
+
+          if (cmd === 'af_togglemode') {
+            try {
+              if (ed && typeof ed.toggleSourceMode === 'function') {
+                ed.toggleSourceMode();
+                return;
+              }
+            } catch (e0) {}
+          }
 
           // 1) handler-путь (как у table)
           if (handler && window.afAqrBuiltinHandlers && window.afAqrBuiltinHandlers[handler]) {

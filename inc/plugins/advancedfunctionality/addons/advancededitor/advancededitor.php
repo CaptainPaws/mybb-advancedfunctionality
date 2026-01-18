@@ -507,6 +507,19 @@ function af_advancededitor_pre_output(string &$page = ''): void
 
     // layout/fonts/settings
     $customDefs = af_advancededitor_get_custom_button_defs($bburl);
+    if (!empty($packs['buttons']) && is_array($packs['buttons'])) {
+        $merged = [];
+        foreach (array_merge($packs['buttons'], $customDefs) as $def) {
+            if (!is_array($def) || empty($def['cmd'])) continue;
+            $cmd = (string)$def['cmd'];
+            if (!isset($merged[$cmd])) {
+                $merged[$cmd] = $def;
+            } else {
+                $merged[$cmd] = array_merge($merged[$cmd], $def);
+            }
+        }
+        $customDefs = array_values($merged);
+    }
     $available  = af_advancededitor_get_available_buttons($bburl, $customDefs);
 
     $layoutRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_LAYOUT);
@@ -1061,21 +1074,7 @@ function af_advancededitor_force_disable_mybb_clickable_editor(): void
     }
 
     // Дополнительно: "закрепим" выключение в БД, чтобы MyBB физически перестал пытаться грузить свой редактор.
-    // Делаем это аккуратно: только для супер-админа и не чаще раза в сутки.
-    $uid = (int)($mybb->user['uid'] ?? 0);
-    $isSa = false;
-
-    if ($uid > 0) {
-        if (function_exists('is_super_admin')) {
-            $isSa = (bool)is_super_admin($uid);
-        } else {
-            $isSa = ($uid === 1);
-        }
-    }
-
-    if (!$isSa) {
-        return;
-    }
+    // Делаем это аккуратно: не чаще раза в сутки.
 
     // anti-spam guard
     $ck = 'af_advancededitor_force_disable_bbcodeeditor_ts';
