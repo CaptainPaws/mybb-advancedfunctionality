@@ -23,6 +23,13 @@
     background: #fff;
 }
 
+.ag-album-tile {
+    border: 1px solid #e1e1e1;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #fff;
+}
+
 .ag-thumb {
     display: block;
     width: 100%;
@@ -77,8 +84,24 @@
     flex-wrap: wrap;
 }
 
+.ag-add-to-album {
+    margin-top: 16px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.ag-add-to-album-empty {
+    color: #666;
+}
+
 .ag-upload-form {
     max-width: 520px;
+}
+
+.ag-album-form {
+    max-width: 560px;
 }
 
 .ag-field {
@@ -90,6 +113,45 @@
 
 .ag-pagination {
     margin-top: 16px;
+}
+
+.ag-breadcrumbs {
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: #777;
+}
+
+.ag-album-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.ag-album-desc {
+    color: #555;
+}
+
+.ag-album-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-end;
+}
+
+.ag-album-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.ag-album-sort-form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 12px;
 }
 
 .ag-empty {

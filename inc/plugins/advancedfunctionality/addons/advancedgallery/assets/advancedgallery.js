@@ -28,4 +28,27 @@
             });
         }
     });
+
+    function toggleAllowedGroups() {
+        var select = document.getElementById('ag_visibility');
+        var wrapper = document.getElementById('ag_allowed_groups_wrap');
+        if (!select || !wrapper) {
+            return;
+        }
+        if (select.value === 'groups') {
+            wrapper.style.display = 'flex';
+        } else {
+            wrapper.style.display = 'none';
+        }
+    }
+
+    document.addEventListener('change', function (event) {
+        if (event.target && event.target.id === 'ag_visibility') {
+            toggleAllowedGroups();
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        toggleAllowedGroups();
+    });
 })();
