@@ -110,7 +110,6 @@ function af_ag_ensure_setting(int $gid, string $name, string $title, string $des
 }
 
 /* -------------------- INSTALL / UNINSTALL -------------------- */
-
 function af_advancedgallery_install(): bool
 {
     global $db, $lang, $mybb;
@@ -118,52 +117,58 @@ function af_advancedgallery_install(): bool
     af_advancedgallery_load_lang(true);
 
     if (!$db->table_exists('af_gallery_media')) {
-        $db->write_query("\
-            CREATE TABLE ".TABLE_PREFIX."af_gallery_media (
-              id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-              uid_owner INT NOT NULL,
-              type ENUM('local','remote') NOT NULL DEFAULT 'local',
-              status ENUM('approved','pending','rejected') NOT NULL DEFAULT 'approved',
-              created_at INT NOT NULL,
-              updated_at INT NOT NULL,
-              title VARCHAR(120) NOT NULL DEFAULT '',
-              description TEXT NOT NULL,
-              tags VARCHAR(255) NOT NULL DEFAULT '',
-              views INT NOT NULL DEFAULT 0,
-              original_name VARCHAR(255) NOT NULL DEFAULT '',
-              storage_path VARCHAR(255) NOT NULL DEFAULT '',
-              mime VARCHAR(80) NOT NULL DEFAULT '',
-              ext VARCHAR(10) NOT NULL DEFAULT '',
-              filesize INT NOT NULL DEFAULT 0,
-              width INT NOT NULL DEFAULT 0,
-              height INT NOT NULL DEFAULT 0,
-              thumb_path VARCHAR(255) NOT NULL DEFAULT '',
-              preview_path VARCHAR(255) NOT NULL DEFAULT '',
-              remote_url VARCHAR(500) NOT NULL DEFAULT '',
-              provider VARCHAR(50) NOT NULL DEFAULT '',
-              embed_html MEDIUMTEXT NOT NULL,
-              KEY uid_owner (uid_owner),
-              KEY status (status),
-              KEY created_at (created_at)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-        ");
+        $sql = <<<SQL
+CREATE TABLE {TABLE_PREFIX}af_gallery_media (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  uid_owner INT NOT NULL,
+  type ENUM('local','remote') NOT NULL DEFAULT 'local',
+  status ENUM('approved','pending','rejected') NOT NULL DEFAULT 'approved',
+  created_at INT NOT NULL,
+  updated_at INT NOT NULL,
+  title VARCHAR(120) NOT NULL DEFAULT '',
+  description TEXT NOT NULL,
+  tags VARCHAR(255) NOT NULL DEFAULT '',
+  views INT NOT NULL DEFAULT 0,
+  original_name VARCHAR(255) NOT NULL DEFAULT '',
+  storage_path VARCHAR(255) NOT NULL DEFAULT '',
+  mime VARCHAR(80) NOT NULL DEFAULT '',
+  ext VARCHAR(10) NOT NULL DEFAULT '',
+  filesize INT NOT NULL DEFAULT 0,
+  width INT NOT NULL DEFAULT 0,
+  height INT NOT NULL DEFAULT 0,
+  thumb_path VARCHAR(255) NOT NULL DEFAULT '',
+  preview_path VARCHAR(255) NOT NULL DEFAULT '',
+  remote_url VARCHAR(500) NOT NULL DEFAULT '',
+  provider VARCHAR(50) NOT NULL DEFAULT '',
+  embed_html MEDIUMTEXT NOT NULL,
+  KEY uid_owner (uid_owner),
+  KEY status (status),
+  KEY created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+
+        $sql = str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql);
+        $db->write_query($sql);
     }
 
     if (!$db->table_exists('af_gallery_logs')) {
-        $db->write_query("\
-            CREATE TABLE ".TABLE_PREFIX."af_gallery_logs (
-              id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-              uid_actor INT NOT NULL,
-              uid_owner INT NOT NULL DEFAULT 0,
-              media_id INT NOT NULL DEFAULT 0,
-              action VARCHAR(50) NOT NULL,
-              details TEXT NOT NULL,
-              created_at INT NOT NULL,
-              KEY uid_actor (uid_actor),
-              KEY media_id (media_id),
-              KEY created_at (created_at)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-        ");
+        $sql = <<<SQL
+CREATE TABLE {TABLE_PREFIX}af_gallery_logs (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  uid_actor INT NOT NULL,
+  uid_owner INT NOT NULL DEFAULT 0,
+  media_id INT NOT NULL DEFAULT 0,
+  action VARCHAR(50) NOT NULL,
+  details TEXT NOT NULL,
+  created_at INT NOT NULL,
+  KEY uid_actor (uid_actor),
+  KEY media_id (media_id),
+  KEY created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+
+        $sql = str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql);
+        $db->write_query($sql);
     }
 
     $gid = af_ag_ensure_group(
