@@ -1,0 +1,75 @@
+<!-- TEMPLATE: advancedgallery_page -->
+<html>
+<head>
+<title>{$ag_page_title}</title>
+{$headerinclude}
+</head>
+<body>
+{$header}
+<div class="af-advancedgallery">
+{$ag_content}
+</div>
+{$footer}
+</body>
+</html>
+
+<!-- TEMPLATE: advancedgallery_index -->
+<div class="ag-toolbar">
+    <a class="button" href="{$ag_upload_url}">Upload</a>
+    <a class="button" href="{$ag_mine_url}">Mine</a>
+</div>
+<div class="ag-grid">
+    {$ag_tiles}
+</div>
+<div class="ag-pagination">
+    {$ag_pagination}
+</div>
+
+<!-- TEMPLATE: advancedgallery_tile -->
+<div class="ag-tile">
+    <a class="ag-thumb-link" href="{$ag_view_url}">
+        <img class="ag-thumb" src="{$ag_thumb_url}" alt="{$ag_title}" />
+    </a>
+    <div class="ag-tile-body">
+        <div class="ag-title">{$ag_title}</div>
+        <div class="ag-meta">{$ag_author}</div>
+        {$ag_status_badge}
+    </div>
+</div>
+
+<!-- TEMPLATE: advancedgallery_view -->
+<div class="ag-view">
+    <div class="ag-view-media">
+        <img src="{$ag_image_url}" alt="{$ag_title}" />
+    </div>
+    <div class="ag-view-info">
+        <h2>{$ag_title}</h2>
+        <div class="ag-view-meta">{$ag_author} · {$ag_created}</div>
+        <div class="ag-view-desc">{$ag_description}</div>
+        <div class="ag-view-actions">
+            {$ag_approve_form}
+            {$ag_delete_form}
+            <button type="button" class="button ag-copy-bbcode" data-bbcode="{$ag_bbcode}">Copy BBCode</button>
+        </div>
+    </div>
+</div>
+
+<!-- TEMPLATE: advancedgallery_upload -->
+<form action="{$ag_upload_do_url}" method="post" enctype="multipart/form-data" class="ag-upload-form">
+    <input type="hidden" name="my_post_key" value="{$ag_my_post_key}" />
+    <div class="ag-field">
+        <label for="ag_title">Title</label>
+        <input type="text" name="ag_title" id="ag_title" />
+    </div>
+    <div class="ag-field">
+        <label for="ag_description">Description</label>
+        <textarea name="ag_description" id="ag_description" rows="5"></textarea>
+    </div>
+    <div class="ag-field">
+        <label for="ag_file">File</label>
+        <input type="file" name="ag_file" id="ag_file" accept="image/*" required />
+    </div>
+    <div class="ag-actions">
+        <button type="submit" class="button">Upload</button>
+    </div>
+</form>
