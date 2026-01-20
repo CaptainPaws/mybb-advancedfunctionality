@@ -28,7 +28,6 @@ function af_advancedgallery_info(): array
 }
 
 /* -------------------- LANG -------------------- */
-
 function af_advancedgallery_load_lang(bool $admin = false): void
 {
     global $lang;
@@ -41,13 +40,36 @@ function af_advancedgallery_load_lang(bool $admin = false): void
         }
     }
 
-    $file = 'advancedfunctionality_'.AF_AG_ID.'.lang.php';
+    // ВАЖНО: MyBB сам добавляет ".lang.php", поэтому передаём имя БЕЗ расширения
+    $base = 'advancedfunctionality_' . AF_AG_ID;
+
+    // Подстраховка: если язык для аддона ещё не сгенерен AF-ядром — попробуем синкануть
+    // и повторить загрузку, но без фатала.
+    $langFolder = !empty($lang->language) ? (string)$lang->language : 'russian';
+    $expectedFile = MYBB_ROOT . 'inc/languages/' . $langFolder . '/' . $base . '.lang.php';
+
+    if (!is_file($expectedFile) && function_exists('af_sync_addon_languages')) {
+        // AF core: подтянет языки аддонов из manifest.php
+        // (если он у тебя именно так работает — как мы и договаривались)
+        try {
+            af_sync_addon_languages();
+        } catch (Throwable $e) {
+            // молча: не валим фронт из-за языка
+        }
+    }
+
+    // Если файла всё ещё нет — просто выходим, чтобы не ловить фатал
+    if (!is_file($expectedFile)) {
+        return;
+    }
+
     if ($admin) {
-        $lang->load($file, true, true);
+        $lang->load($base, true, true);
     } else {
-        $lang->load($file);
+        $lang->load($base);
     }
 }
+
 
 /* -------------------- SETTINGS HELPERS -------------------- */
 
