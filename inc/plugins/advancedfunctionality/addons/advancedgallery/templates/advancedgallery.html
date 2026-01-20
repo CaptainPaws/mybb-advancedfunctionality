@@ -17,6 +17,7 @@
 <div class="ag-toolbar">
     <a class="button" href="{$ag_upload_url}">Upload</a>
     <a class="button" href="{$ag_mine_url}">Mine</a>
+    <a class="button" href="{$ag_albums_url}">{$ag_albums_label}</a>
 </div>
 <div class="ag-grid">
     {$ag_tiles}
@@ -51,6 +52,7 @@
             {$ag_delete_form}
             <button type="button" class="button ag-copy-bbcode" data-bbcode="{$ag_bbcode}">Copy BBCode</button>
         </div>
+        {$ag_add_to_album_form}
     </div>
 </div>
 
@@ -71,5 +73,78 @@
     </div>
     <div class="ag-actions">
         <button type="submit" class="button">Upload</button>
+    </div>
+</form>
+
+<!-- TEMPLATE: advancedgallery_albums -->
+<div class="ag-toolbar">
+    <a class="button" href="{$ag_create_album_url}">{$lang->af_advancedgallery_create_album}</a>
+</div>
+<div class="ag-grid ag-album-grid">
+    {$ag_tiles}
+</div>
+
+<!-- TEMPLATE: advancedgallery_album_tile -->
+<div class="ag-album-tile">
+    <a class="ag-thumb-link" href="{$ag_album_url}">
+        <img class="ag-thumb" src="{$ag_album_cover_url}" alt="{$ag_album_title}" />
+    </a>
+    <div class="ag-tile-body">
+        <div class="ag-title">{$ag_album_title}</div>
+        <div class="ag-meta">{$ag_album_count}</div>
+    </div>
+</div>
+
+<!-- TEMPLATE: advancedgallery_album_view -->
+<div class="ag-breadcrumbs">{$ag_breadcrumbs}</div>
+<div class="ag-album-header">
+    <div>
+        <h2>{$ag_album_title}</h2>
+        <div class="ag-album-desc">{$ag_album_desc}</div>
+    </div>
+    <div class="ag-album-actions">
+        {$ag_album_sort_select}
+        <div class="ag-album-buttons">
+            {$ag_album_actions}
+        </div>
+    </div>
+</div>
+<div class="ag-grid">
+    {$ag_album_tiles}
+</div>
+
+<!-- TEMPLATE: advancedgallery_album_form -->
+<form action="{$ag_form_action}" method="post" class="ag-album-form">
+    <input type="hidden" name="my_post_key" value="{$ag_form_my_post_key}" />
+    <div class="ag-field">
+        <label for="ag_album_title">{$lang->af_advancedgallery_album_title}</label>
+        <input type="text" name="title" id="ag_album_title" value="{$ag_form_title}" required />
+    </div>
+    <div class="ag-field">
+        <label for="ag_album_desc">{$lang->af_advancedgallery_album_desc}</label>
+        <textarea name="description" id="ag_album_desc" rows="5">{$ag_form_desc}</textarea>
+    </div>
+    <div class="ag-field">
+        <label for="ag_visibility">{$lang->af_advancedgallery_album_visibility}</label>
+        <select name="visibility" id="ag_visibility">
+            {$ag_form_visibility}
+        </select>
+    </div>
+    <div class="ag-field" id="ag_allowed_groups_wrap">
+        <label for="ag_allowed_groups">{$lang->af_advancedgallery_album_allowed_groups}</label>
+        <input type="text" name="allowed_groups" id="ag_allowed_groups" value="{$ag_form_allowed_groups}" />
+    </div>
+    <div class="ag-field">
+        <label for="ag_sort_mode">{$lang->af_advancedgallery_album_sort_mode}</label>
+        <select name="sort_mode" id="ag_sort_mode">
+            {$ag_form_sort_mode}
+        </select>
+    </div>
+    <div class="ag-field">
+        <label for="ag_cover_media_id">{$lang->af_advancedgallery_album_cover}</label>
+        <input type="number" name="cover_media_id" id="ag_cover_media_id" value="{$ag_form_cover_media_id}" min="0" />
+    </div>
+    <div class="ag-actions">
+        <button type="submit" class="button">{$ag_form_submit_label}</button>
     </div>
 </form>
