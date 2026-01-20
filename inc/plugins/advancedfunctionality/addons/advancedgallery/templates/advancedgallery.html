@@ -16,6 +16,7 @@
 <!-- TEMPLATE: advancedgallery_index -->
 <div class="ag-toolbar">
     <a class="button" href="{$ag_upload_url}">Upload</a>
+    {$ag_remote_button}
     <a class="button" href="{$ag_mine_url}">Mine</a>
     <a class="button" href="{$ag_albums_url}">{$ag_albums_label}</a>
 </div>
@@ -41,7 +42,7 @@
 <!-- TEMPLATE: advancedgallery_view -->
 <div class="ag-view">
     <div class="ag-view-media">
-        <img src="{$ag_image_url}" alt="{$ag_title}" />
+        {$ag_media_html}
     </div>
     <div class="ag-view-info">
         <h2>{$ag_title}</h2>
@@ -53,6 +54,58 @@
             <button type="button" class="button ag-copy-bbcode" data-bbcode="{$ag_bbcode}">Copy BBCode</button>
         </div>
         {$ag_add_to_album_form}
+    </div>
+</div>
+
+<!-- TEMPLATE: advancedgallery_remote_add -->
+<form action="{$ag_remote_action}" method="post" class="ag-upload-form">
+    <input type="hidden" name="my_post_key" value="{$ag_remote_my_post_key}" />
+    <div class="ag-field">
+        <label for="ag_remote_url">{$lang->af_advancedgallery_remote_url}</label>
+        <input type="url" name="ag_remote_url" id="ag_remote_url" required />
+    </div>
+    <div class="ag-field">
+        <label for="ag_remote_title">Title</label>
+        <input type="text" name="ag_title" id="ag_remote_title" />
+    </div>
+    <div class="ag-field">
+        <label for="ag_remote_description">Description</label>
+        <textarea name="ag_description" id="ag_remote_description" rows="5"></textarea>
+    </div>
+    {$ag_remote_album_field}
+    <div class="ag-actions">
+        <button type="submit" class="button">{$lang->af_advancedgallery_remote_add}</button>
+    </div>
+</form>
+
+<!-- TEMPLATE: advancedgallery_picker_modal -->
+<div class="ag-picker-modal" id="af-gallery-picker"
+     data-insert-img-label="{$lang->af_advancedgallery_picker_insert_img}"
+     data-insert-link-label="{$lang->af_advancedgallery_picker_insert_link}"
+     data-empty-label="{$lang->af_advancedgallery_picker_empty}">
+    <div class="ag-picker-backdrop" data-picker-close="1"></div>
+    <div class="ag-picker-dialog" role="dialog" aria-label="{$lang->af_advancedgallery_picker_title}">
+        <div class="ag-picker-header">
+            <div class="ag-picker-title">{$lang->af_advancedgallery_picker_title}</div>
+            <button type="button" class="ag-picker-close" data-picker-close="1">×</button>
+        </div>
+        <div class="ag-picker-tabs">
+            <button type="button" class="ag-picker-tab is-active" data-tab="media">{$lang->af_advancedgallery_picker_media_tab}</button>
+            <button type="button" class="ag-picker-tab" data-tab="albums">{$lang->af_advancedgallery_picker_albums_tab}</button>
+        </div>
+        <div class="ag-picker-body">
+            <div class="ag-picker-controls">
+                <input type="search" class="ag-picker-search" placeholder="{$lang->af_advancedgallery_picker_search}" />
+                <div class="ag-picker-actions">
+                    <a class="button" href="{$ag_picker_upload_url}">{$lang->af_advancedgallery_picker_upload_local}</a>
+                    {$ag_picker_remote_link}
+                </div>
+            </div>
+            <div class="ag-picker-grid" data-picker-grid="1"></div>
+            <div class="ag-picker-albums" data-picker-albums="1">
+                {$ag_picker_albums}
+            </div>
+        </div>
     </div>
 </div>
 
