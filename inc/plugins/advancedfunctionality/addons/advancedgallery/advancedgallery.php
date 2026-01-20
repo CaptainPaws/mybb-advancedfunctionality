@@ -1539,12 +1539,28 @@ function ag_get_user_groups(): array
 
 function ag_groups_from_setting(string $key): array
 {
-    $raw = (string)af_ag_get_setting($key, '');
+    global $mybb;
+
+    // Поддержка двух вариантов ключей:
+    // 1) короткий: can_upload_groups
+    // 2) полный:  af_advancedgallery_can_upload_groups  (если вдруг кто-то так передал)
+    $raw = '';
+
+    // если передали полный ключ — читаем напрямую
+    if ($key !== '' && strpos($key, 'af_'.AF_AG_ID.'_') === 0) {
+        $raw = (string)($mybb->settings[$key] ?? '');
+    } else {
+        // иначе — читаем через наш хелпер (он сам добавит префикс)
+        $raw = (string)af_ag_get_setting($key, '');
+    }
+
+    $raw = trim($raw);
     if ($raw === '') {
         return [];
     }
+
     $items = array_filter(array_map('trim', explode(',', $raw)));
-    return array_map('intval', $items);
+    return array_values(array_unique(array_map('intval', $items)));
 }
 
 function ag_user_in_groups(array $allowed): bool
@@ -1569,21 +1585,40 @@ function ag_can_view(): bool
 
 function ag_can_upload(): bool
 {
-    $allowed = ag_groups_from_setting('af_advancedgallery_can_upload_groups');
+    global $mybb;
+
+    // гости — нет
+    if ((int)$mybb->user['uid'] <= 0) {
+        return false;
+    }
+
+    // если список групп не задан — разрешаем всем зарегистрированным
+    $allowed = ag_groups_from_setting('can_upload_groups');
+    if (empty($allowed)) {
+        return true;
+    }
+
     return ag_user_in_groups($allowed);
 }
 
 function ag_can_moderate(): bool
 {
-    $allowed = ag_groups_from_setting('af_advancedgallery_can_moderate_groups');
+    $allowed = ag_groups_from_setting('can_moderate_groups');
+    if (empty($allowed)) {
+        return false;
+    }
     return ag_user_in_groups($allowed);
 }
 
 function ag_is_autoapprove(): bool
 {
-    $allowed = ag_groups_from_setting('af_advancedgallery_autoapprove_groups');
+    $allowed = ag_groups_from_setting('autoapprove_groups');
+    if (empty($allowed)) {
+        return false;
+    }
     return ag_user_in_groups($allowed);
 }
+
 
 function ag_can_delete_media(array $media): bool
 {
