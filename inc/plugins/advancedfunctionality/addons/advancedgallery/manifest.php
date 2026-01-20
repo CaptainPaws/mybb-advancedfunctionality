@@ -5,8 +5,8 @@ return [
     'name'        => 'Галерея',
     'description' => 'Пользовательская галерея изображений с загрузкой и модерацией.',
     'version'     => '1.0.0',
-    'author'      => 'AdvancedFunctionality',
-    'authorsite'  => '',
+    'author'      => 'CaptainPaws',
+    'website'     => 'https://github.com/CaptainPaws',
 
     'bootstrap'   => 'advancedgallery.php',
 
