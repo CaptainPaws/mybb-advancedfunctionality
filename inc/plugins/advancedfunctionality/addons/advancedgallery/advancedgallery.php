@@ -13,6 +13,7 @@ define('AF_AG_BASE', AF_ADDONS . AF_AG_ID . '/');
 define('AF_AG_ASSETS', AF_AG_BASE . 'assets/');
 define('AF_AG_TPL_FILE', AF_AG_BASE . 'templates/advancedgallery.html');
 define('AF_AG_ALIAS_SIGNATURE', 'AF_PAGE_ALIAS: advancedgallery');
+define('AF_AG_MARK_DONE', '<!--af_advancedgallery_done-->');
 
 /* -------------------- INFO -------------------- */
 
@@ -301,6 +302,31 @@ SQL;
         $lang->af_advancedgallery_album_visibility_default_desc ?? 'Видимость альбома по умолчанию.',
         "select\npublic=public\nregistered=registered\nprivate=private", 'public', 12
     );
+    af_ag_ensure_setting($gid, 'af_advancedgallery_remote_enabled',
+        $lang->af_advancedgallery_remote_enabled ?? 'Разрешить remote media (вставку по URL)',
+        $lang->af_advancedgallery_remote_enabled_desc ?? 'Да/Нет',
+        'yesno', '1', 13
+    );
+    af_ag_ensure_setting($gid, 'af_advancedgallery_remote_whitelist_domains',
+        $lang->af_advancedgallery_remote_whitelist_domains ?? 'Разрешённые домены',
+        $lang->af_advancedgallery_remote_whitelist_domains_desc ?? 'Разрешённые домены (по одному в строке). Пусто = встроенный whitelist.',
+        'textarea', '', 14
+    );
+    af_ag_ensure_setting($gid, 'af_advancedgallery_remote_allow_oembed',
+        $lang->af_advancedgallery_remote_allow_oembed ?? 'Разрешить oEmbed (карточки предпросмотра)',
+        $lang->af_advancedgallery_remote_allow_oembed_desc ?? 'По умолчанию выключено.',
+        'yesno', '0', 15
+    );
+    af_ag_ensure_setting($gid, 'af_advancedgallery_remote_cache_preview',
+        $lang->af_advancedgallery_remote_cache_preview ?? 'Кешировать preview/thumbnail для remote',
+        $lang->af_advancedgallery_remote_cache_preview_desc ?? 'Кешировать preview/thumbnail для remote (если возможно безопасно).',
+        'yesno', '1', 16
+    );
+    af_ag_ensure_setting($gid, 'af_advancedgallery_remote_max_url_len',
+        $lang->af_advancedgallery_remote_max_url_len ?? 'Макс. длина URL',
+        $lang->af_advancedgallery_remote_max_url_len_desc ?? 'Максимальная длина URL.',
+        'numeric', '500', 17
+    );
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -354,7 +380,12 @@ function af_advancedgallery_uninstall(): bool
         'af_advancedgallery_autoapprove_groups',
         'af_advancedgallery_max_albums',
         'af_advancedgallery_max_media_per_album',
-        'af_advancedgallery_album_visibility_default'
+        'af_advancedgallery_album_visibility_default',
+        'af_advancedgallery_remote_enabled',
+        'af_advancedgallery_remote_whitelist_domains',
+        'af_advancedgallery_remote_allow_oembed',
+        'af_advancedgallery_remote_cache_preview',
+        'af_advancedgallery_remote_max_url_len'
     )");
     $db->delete_query('settinggroups', "name='af_advancedgallery'");
 
@@ -364,10 +395,12 @@ function af_advancedgallery_uninstall(): bool
         'advancedgallery_tile',
         'advancedgallery_view',
         'advancedgallery_upload',
+        'advancedgallery_remote_add',
         'advancedgallery_albums',
         'advancedgallery_album_tile',
         'advancedgallery_album_view',
-        'advancedgallery_album_form'
+        'advancedgallery_album_form',
+        'advancedgallery_picker_modal'
     )");
 
     if (function_exists('rebuild_settings')) {
@@ -391,6 +424,68 @@ function af_advancedgallery_activate(): bool
 function af_advancedgallery_deactivate(): bool
 {
     return true;
+}
+
+/* -------------------- RUNTIME -------------------- */
+
+function af_advancedgallery_init(): void
+{
+    global $plugins;
+
+    $plugins->add_hook('pre_output_page', 'af_advancedgallery_pre_output', 10);
+}
+
+function af_advancedgallery_pre_output(string &$page = ''): void
+{
+    global $mybb;
+
+    if (!ag_is_frontend()) {
+        return;
+    }
+
+    if (empty($mybb->settings['af_advancedgallery_enabled'])) {
+        return;
+    }
+
+    if (strpos($page, AF_AG_MARK_DONE) !== false) {
+        return;
+    }
+
+    if (!ag_page_has_editor($page)) {
+        return;
+    }
+
+    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+    if ($bburl === '') {
+        return;
+    }
+
+    $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AG_ID . '/assets';
+
+    $cssTag = '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/advancedgallery.css?ver='.AF_AG_VER.'" />';
+    $jsTag  = '<script src="'.$assetsBase.'/advancedgallery.js?ver='.AF_AG_VER.'"></script>';
+    $cfg = [
+        'pickerUrl' => $bburl . '/gallery.php?action=picker',
+        'dataUrl' => $bburl . '/gallery.php?action=picker_data',
+    ];
+    $cfgTag = '<script>window.AF_GalleryPickerConfig='
+        .json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+        .';</script>';
+
+    if (stripos($page, '</head>') !== false) {
+        if (strpos($page, 'advancedgallery.css') === false) {
+            $page = str_ireplace('</head>', $cssTag.$cfgTag.$jsTag.AF_AG_MARK_DONE.'</head>', $page);
+        } else {
+            $page = str_ireplace('</head>', $cfgTag.$jsTag.AF_AG_MARK_DONE.'</head>', $page);
+        }
+        return;
+    }
+
+    if (stripos($page, '</body>') !== false) {
+        $page = str_ireplace('</body>', $cfgTag.$jsTag.AF_AG_MARK_DONE.'</body>', $page);
+    } else {
+        $page .= $cfgTag.$jsTag.AF_AG_MARK_DONE;
+    }
 }
 
 /* -------------------- ALIAS -------------------- */
@@ -532,6 +627,18 @@ function af_advancedgallery_render_gallery(): void
         case 'upload_do':
             ag_handle_upload();
             return;
+        case 'remote_add':
+            $ag_content = ag_render_remote_add();
+            break;
+        case 'remote_add_do':
+            ag_handle_remote_add_do();
+            return;
+        case 'picker':
+            ag_render_picker_modal();
+            return;
+        case 'picker_data':
+            ag_handle_picker_data();
+            return;
         case 'delete':
             ag_handle_delete();
             return;
@@ -594,6 +701,12 @@ function ag_render_index(bool $mine): string
     $ag_mine_url = 'gallery.php?action=mine';
     $ag_albums_url = 'gallery.php?action=albums';
     $ag_albums_label = htmlspecialchars_uni($lang->af_advancedgallery_my_albums ?? 'Мои альбомы');
+    $ag_remote_button = '';
+    if (ag_remote_enabled() && ag_can_upload()) {
+        $ag_remote_button = '<a class="button" href="gallery.php?action=remote_add">'
+            .htmlspecialchars_uni($lang->af_advancedgallery_remote_add ?? 'Добавить по ссылке')
+            .'</a>';
+    }
     $ag_tiles = $tiles;
     $ag_pagination = $pagination;
 
@@ -1087,17 +1200,15 @@ function ag_render_tile(array $media): string
 {
     global $mybb, $templates;
 
-    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
     $title = htmlspecialchars_uni((string)$media['title']);
-    $thumbRel = $media['thumb_path'] ?: $media['storage_path'];
-    $thumbUrl = $bburl . '/' . ltrim($thumbRel, '/');
+    $thumbUrl = ag_media_thumb_url($media);
 
     $user = get_user((int)$media['uid_owner']);
     $authorName = htmlspecialchars_uni($user['username'] ?? '');
     $ag_author = $authorName !== '' ? build_profile_link($authorName, (int)$media['uid_owner']) : '';
 
     $ag_view_url = 'gallery.php?action=view&id='.(int)$media['id'];
-    $ag_thumb_url = $thumbUrl;
+    $ag_thumb_url = htmlspecialchars_uni($thumbUrl);
     $ag_title = $title;
 
     $ag_status_badge = '';
@@ -1131,8 +1242,13 @@ function ag_render_view(): string
     }
 
     $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
-    $imageRel = $media['preview_path'] ?: $media['storage_path'];
-    $imageUrl = $bburl . '/' . ltrim($imageRel, '/');
+    $imageUrl = '';
+    if ($media['type'] === 'local') {
+        $imageRel = $media['preview_path'] ?: $media['storage_path'];
+        $imageUrl = $bburl . '/' . ltrim($imageRel, '/');
+    } elseif ($media['type'] === 'remote') {
+        $imageUrl = (string)$media['remote_url'];
+    }
 
     $user = get_user((int)$media['uid_owner']);
     $authorName = htmlspecialchars_uni($user['username'] ?? '');
@@ -1158,8 +1274,8 @@ function ag_render_view(): string
     $ag_description = $parser->parse_message($descRaw, $parser_options);
 
     $ag_title = htmlspecialchars_uni((string)$media['title']);
-    $ag_image_url = $imageUrl;
-    $ag_bbcode = '[img]'.$imageUrl.'[/img]';
+    $ag_bbcode = htmlspecialchars_uni(ag_media_bbcode($media, $imageUrl));
+    $ag_media_html = ag_render_media_view($media, $imageUrl);
 
     $ag_approve_form = '';
     if ($media['status'] === 'pending' && ag_can_moderate()) {
@@ -1338,6 +1454,225 @@ function ag_handle_upload(): void
     redirect('gallery.php?action=view&id='.$newId, 'Uploaded successfully.');
 }
 
+function ag_render_remote_add(): string
+{
+    global $db, $mybb, $templates, $lang;
+
+    if (!ag_can_upload() || !ag_remote_enabled()) {
+        error_no_permission();
+    }
+
+    $ag_remote_action = 'gallery.php?action=remote_add_do';
+    $ag_remote_my_post_key = $mybb->post_code;
+    $ag_remote_album_field = '';
+
+    if (ag_can_manage_albums()) {
+        $options = '<option value="">'.htmlspecialchars_uni($lang->af_advancedgallery_remote_album_none ?? 'Без альбома').'</option>';
+        $albumsQuery = $db->simple_select('af_gallery_albums', 'id,title', "uid_owner='".(int)$mybb->user['uid']."'", [
+            'order_by' => 'created_at',
+            'order_dir' => 'DESC',
+        ]);
+        while ($album = $db->fetch_array($albumsQuery)) {
+            $options .= '<option value="'.(int)$album['id'].'">'.htmlspecialchars_uni((string)$album['title']).'</option>';
+        }
+        $ag_remote_album_field = '<div class="ag-field">'
+            .'<label for="ag_remote_album">'.htmlspecialchars_uni($lang->af_advancedgallery_albums ?? 'Альбомы').'</label>'
+            .'<select name="album_id" id="ag_remote_album">'.$options.'</select>'
+            .'</div>';
+    }
+
+    eval('$output = "' . $templates->get('advancedgallery_remote_add') . '";');
+    return $output;
+}
+
+function ag_handle_remote_add_do(): void
+{
+    global $db, $mybb, $lang;
+
+    if (!ag_can_upload() || !ag_remote_enabled()) {
+        error_no_permission();
+    }
+
+    verify_post_check($mybb->get_input('my_post_key'));
+
+    $urlRaw = (string)$mybb->get_input('ag_remote_url');
+    $url = ag_remote_normalize_url($urlRaw);
+    if ($url === '') {
+        error($lang->af_advancedgallery_remote_invalid_url ?? 'Invalid URL.');
+    }
+
+    $parts = @parse_url($url);
+    $host = strtolower((string)($parts['host'] ?? ''));
+    if ($host === '' || !ag_remote_is_domain_allowed($host)) {
+        error($lang->af_advancedgallery_remote_domain_denied ?? 'Domain not allowed.');
+    }
+
+    $resolved = ag_remote_resolve_url($url);
+    if (!$resolved) {
+        error($lang->af_advancedgallery_remote_invalid_url ?? 'Invalid URL.');
+    }
+
+    $title = (string)$mybb->get_input('ag_title');
+    $description = (string)$mybb->get_input('ag_description');
+    $albumId = $mybb->get_input('album_id', MyBB::INPUT_INT);
+
+    $status = ag_is_autoapprove() ? 'approved' : 'pending';
+
+    $thumbPath = '';
+    if (!empty($resolved['thumb_url']) && preg_match('~^https?://~i', (string)$resolved['thumb_url'])) {
+        $thumbPath = (string)$resolved['thumb_url'];
+    }
+
+    $insert = [
+        'uid_owner'     => (int)$mybb->user['uid'],
+        'type'          => 'remote',
+        'status'        => $status,
+        'created_at'    => TIME_NOW,
+        'updated_at'    => TIME_NOW,
+        'title'         => $db->escape_string($title),
+        'description'   => $db->escape_string($description),
+        'tags'          => '',
+        'views'         => 0,
+        'original_name' => '',
+        'storage_path'  => '',
+        'mime'          => '',
+        'ext'           => $db->escape_string((string)($resolved['ext'] ?? '')),
+        'filesize'      => 0,
+        'width'         => 0,
+        'height'        => 0,
+        'thumb_path'    => $db->escape_string($thumbPath),
+        'preview_path'  => '',
+        'remote_url'    => $db->escape_string($url),
+        'provider'      => $db->escape_string((string)$resolved['provider']),
+        'embed_html'    => $db->escape_string((string)$resolved['embed_html']),
+    ];
+
+    $db->insert_query('af_gallery_media', $insert);
+    $newId = (int)$db->insert_id();
+
+    if ($albumId > 0 && ag_can_manage_albums()) {
+        $album = ag_get_album($albumId);
+        if ($album && (int)$album['uid_owner'] === (int)$mybb->user['uid']) {
+            ag_enforce_media_limits($albumId);
+            $exists = $db->simple_select('af_gallery_album_media', 'id', "album_id='{$albumId}' AND media_id='{$newId}'", ['limit' => 1]);
+            if (!$db->fetch_field($exists, 'id')) {
+                $db->insert_query('af_gallery_album_media', [
+                    'album_id' => $albumId,
+                    'media_id' => $newId,
+                    'sort_order' => 0,
+                    'created_at' => TIME_NOW,
+                ]);
+                $db->update_query('af_gallery_albums', ['updated_at' => TIME_NOW], "id='{$albumId}'");
+            }
+        }
+    }
+
+    redirect('gallery.php?action=view&id='.$newId, $lang->af_advancedgallery_remote_added ?? 'Media added.');
+}
+
+function ag_render_picker_modal(): void
+{
+    global $db, $mybb, $templates, $lang;
+
+    if ((int)$mybb->user['uid'] <= 0 || !ag_can_upload()) {
+        error_no_permission();
+    }
+
+    $albumsHtml = '';
+    $albumsQuery = $db->simple_select('af_gallery_albums', 'id,title', "uid_owner='".(int)$mybb->user['uid']."'", [
+        'order_by' => 'created_at',
+        'order_dir' => 'DESC',
+    ]);
+    while ($album = $db->fetch_array($albumsQuery)) {
+        $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="'
+            .(int)$album['id'].'">'
+            .htmlspecialchars_uni((string)$album['title'])
+            .'</button>';
+    }
+    if ($albumsHtml === '') {
+        $albumsHtml = '<div class="ag-empty">'.htmlspecialchars_uni($lang->af_advancedgallery_album_empty ?? 'Нет содержимого.').'</div>';
+    }
+
+    $ag_picker_upload_url = 'gallery.php?action=upload';
+    $ag_picker_remote_link = '';
+    if (ag_remote_enabled()) {
+        $ag_picker_remote_link = '<a class="button" href="gallery.php?action=remote_add">'
+            .htmlspecialchars_uni($lang->af_advancedgallery_picker_add_remote ?? 'Добавить по ссылке')
+            .'</a>';
+    }
+    $ag_picker_albums = $albumsHtml;
+
+    eval('$output = "' . $templates->get('advancedgallery_picker_modal') . '";');
+    header('Content-Type: text/html; charset=UTF-8');
+    echo $output;
+    exit;
+}
+
+function ag_handle_picker_data(): void
+{
+    global $db, $mybb;
+
+    if ((int)$mybb->user['uid'] <= 0 || !ag_can_upload()) {
+        error_no_permission();
+    }
+
+    $page = max(1, $mybb->get_input('page', MyBB::INPUT_INT));
+    $perPage = (int)($mybb->settings['af_advancedgallery_items_per_page'] ?? 24);
+    if ($perPage < 1) {
+        $perPage = 24;
+    }
+    $offset = ($page - 1) * $perPage;
+
+    $uid = (int)$mybb->user['uid'];
+    $where = "m.uid_owner='{$uid}'";
+
+    $q = trim((string)$mybb->get_input('q'));
+    if ($q !== '') {
+        $qEsc = $db->escape_string('%'.$q.'%');
+        $where .= " AND m.title LIKE '{$qEsc}'";
+    }
+
+    $type = (string)$mybb->get_input('type');
+    if (in_array($type, ['local', 'remote'], true)) {
+        $where .= " AND m.type='".$db->escape_string($type)."'";
+    }
+
+    $albumId = $mybb->get_input('album_id', MyBB::INPUT_INT);
+    $join = '';
+    if ($albumId > 0) {
+        $album = ag_get_album($albumId);
+        if ($album && (int)$album['uid_owner'] === $uid) {
+            $join = " INNER JOIN ".TABLE_PREFIX."af_gallery_album_media am ON am.media_id=m.id";
+            $where .= " AND am.album_id='{$albumId}'";
+        }
+    }
+
+    $sql = "SELECT m.* FROM ".TABLE_PREFIX."af_gallery_media m{$join} WHERE {$where}"
+        ." ORDER BY m.created_at DESC";
+    $query = $db->write_query($sql . " LIMIT {$offset}, {$perPage}");
+
+    $items = [];
+    while ($row = $db->fetch_array($query)) {
+        $thumb = ag_media_thumb_url($row);
+        $fullUrl = $row['type'] === 'remote'
+            ? (string)$row['remote_url']
+            : (rtrim((string)($mybb->settings['bburl'] ?? ''), '/').'/'.ltrim((string)($row['preview_path'] ?: $row['storage_path']), '/'));
+        $items[] = [
+            'id' => (int)$row['id'],
+            'title' => (string)$row['title'],
+            'thumb' => (string)$thumb,
+            'url_full' => (string)$fullUrl,
+            'type' => (string)$row['type'],
+            'provider' => (string)$row['provider'],
+            'created_at' => (int)$row['created_at'],
+        ];
+    }
+
+    header('Content-Type: application/json');
+    echo json_encode($items, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 function ag_handle_delete(): void
 {
     global $db, $mybb;
@@ -1420,8 +1755,6 @@ function ag_album_media_count(int $albumId): int
 function ag_album_cover_url(array $albumRow): string
 {
     global $db, $mybb;
-
-    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
     $coverId = (int)($albumRow['cover_media_id'] ?? 0);
     if ($coverId > 0) {
         $media = $db->fetch_array($db->simple_select('af_gallery_media', '*', "id='{$coverId}'", ['limit' => 1]));
@@ -1430,19 +1763,12 @@ function ag_album_cover_url(array $albumRow): string
                 || (int)$media['uid_owner'] === (int)$mybb->user['uid']
                 || ag_can_moderate();
             if ($canView) {
-                $thumbRel = $media['thumb_path'] ?: $media['storage_path'];
-                if ($thumbRel !== '') {
-                    return $bburl . '/' . ltrim($thumbRel, '/');
-                }
+                return ag_media_thumb_url($media);
             }
         }
     }
 
-    $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300">'
-        .'<rect width="100%" height="100%" fill="#f2f2f2"/>'
-        .'<text x="50%" y="50%" font-size="20" text-anchor="middle" fill="#999" dy=".3em">Album</text>'
-        .'</svg>';
-    return 'data:image/svg+xml;utf8,' . rawurlencode($svg);
+    return ag_placeholder_thumb_url('Album');
 }
 
 function ag_can_view_album(array $albumRow): bool
@@ -1619,6 +1945,11 @@ function ag_is_autoapprove(): bool
     return ag_user_in_groups($allowed);
 }
 
+function ag_remote_enabled(): bool
+{
+    global $mybb;
+    return !empty($mybb->settings['af_advancedgallery_remote_enabled']);
+}
 
 function ag_can_delete_media(array $media): bool
 {
@@ -1627,6 +1958,374 @@ function ag_can_delete_media(array $media): bool
         return true;
     }
     return (int)$media['uid_owner'] === (int)$mybb->user['uid'];
+}
+
+function ag_is_frontend(): bool
+{
+    if (defined('IN_ADMINCP') && IN_ADMINCP) {
+        return false;
+    }
+
+    if (defined('THIS_SCRIPT')) {
+        $s = (string)THIS_SCRIPT;
+        if ($s === 'modcp.php') {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function ag_page_has_editor(string $page): bool
+{
+    if (stripos($page, 'bbcodes_sceditor.js') !== false) {
+        return true;
+    }
+    if (stripos($page, 'sceditor') !== false && stripos($page, 'toolbar') !== false) {
+        return true;
+    }
+    if (stripos($page, '/rin/') !== false && stripos($page, 'editor') !== false) {
+        return true;
+    }
+    return false;
+}
+
+function ag_placeholder_thumb_url(string $label = 'Media'): string
+{
+    $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300">'
+        .'<rect width="100%" height="100%" fill="#f2f2f2"/>'
+        .'<text x="50%" y="50%" font-size="20" text-anchor="middle" fill="#999" dy=".3em">'
+        .htmlspecialchars($label, ENT_QUOTES, 'UTF-8')
+        .'</text>'
+        .'</svg>';
+    return 'data:image/svg+xml;utf8,' . rawurlencode($svg);
+}
+
+function ag_media_thumb_url(array $media): string
+{
+    global $mybb;
+
+    if (($media['type'] ?? '') === 'remote') {
+        $thumb = (string)($media['thumb_path'] ?? '');
+        if (preg_match('~^https?://~i', $thumb)) {
+            return $thumb;
+        }
+        if (ag_media_is_direct_image($media)) {
+            return (string)($media['remote_url'] ?? '');
+        }
+        return ag_placeholder_thumb_url('Media');
+    }
+
+    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+    $thumbRel = (string)($media['thumb_path'] ?? '');
+    if ($thumbRel === '') {
+        $thumbRel = (string)($media['storage_path'] ?? '');
+    }
+    if ($thumbRel === '') {
+        return ag_placeholder_thumb_url('Media');
+    }
+    return $bburl . '/' . ltrim($thumbRel, '/');
+}
+
+function ag_media_is_direct_image(array $media): bool
+{
+    if (($media['type'] ?? '') !== 'remote') {
+        return true;
+    }
+    $provider = (string)($media['provider'] ?? '');
+    if (in_array($provider, ['direct', 'imgur', 'giphy', 'discord'], true)) {
+        return ag_remote_is_image_url((string)($media['remote_url'] ?? ''));
+    }
+    return false;
+}
+
+function ag_media_bbcode(array $media, string $fallbackUrl): string
+{
+    $url = $fallbackUrl;
+    if (($media['type'] ?? '') === 'remote') {
+        $url = (string)($media['remote_url'] ?? $fallbackUrl);
+    }
+    if (ag_media_is_direct_image($media)) {
+        return '[img]'.$url.'[/img]';
+    }
+    return '[url='.$url.']'.$url.'[/url]';
+}
+
+function ag_render_media_view(array $media, string $fallbackUrl): string
+{
+    $title = htmlspecialchars_uni((string)($media['title'] ?? ''));
+
+    if (($media['type'] ?? '') === 'local') {
+        $src = htmlspecialchars_uni($fallbackUrl);
+        return '<img src="'.$src.'" alt="'.$title.'" />';
+    }
+
+    $provider = (string)($media['provider'] ?? '');
+    $embed = (string)($media['embed_html'] ?? '');
+    if (in_array($provider, ['youtube', 'vimeo'], true) && $embed !== '') {
+        return $embed;
+    }
+
+    $remoteUrl = (string)($media['remote_url'] ?? '');
+    $remoteEsc = htmlspecialchars_uni($remoteUrl);
+    if (ag_media_is_direct_image($media)) {
+        return '<img src="'.$remoteEsc.'" alt="'.$title.'" />';
+    }
+
+    $thumb = ag_media_thumb_url($media);
+    $thumbEsc = htmlspecialchars_uni($thumb);
+    $thumbHtml = '';
+    if ($thumb !== '' && strpos($thumb, 'data:image/svg+xml') !== 0) {
+        $thumbHtml = '<img src="'.$thumbEsc.'" alt="'.$title.'" />';
+    }
+
+    return '<a href="'.$remoteEsc.'" target="_blank" rel="noopener">'.$thumbHtml.$remoteEsc.'</a>';
+}
+
+function ag_remote_normalize_url(string $url): string
+{
+    $url = trim($url);
+    if ($url === '') {
+        return '';
+    }
+
+    $url = preg_replace('~[\s\x00-\x1F\x7F]+~u', '', $url);
+    if ($url === '') {
+        return '';
+    }
+
+    $max = (int)af_ag_get_setting('remote_max_url_len', 500);
+    if ($max > 0 && strlen($url) > $max) {
+        return '';
+    }
+
+    $parts = @parse_url($url);
+    if (!is_array($parts)) {
+        return '';
+    }
+    $scheme = strtolower($parts['scheme'] ?? '');
+    if (!in_array($scheme, ['http', 'https'], true)) {
+        return '';
+    }
+    if (empty($parts['host'])) {
+        return '';
+    }
+
+    return $url;
+}
+
+function ag_remote_is_domain_allowed(string $host): bool
+{
+    $host = strtolower(trim($host, '.'));
+    if ($host === '') {
+        return false;
+    }
+
+    $raw = trim((string)af_ag_get_setting('remote_whitelist_domains', ''));
+    $domains = [];
+    if ($raw !== '') {
+        $lines = preg_split('~\r\n|\r|\n~', $raw);
+        if (is_array($lines)) {
+            foreach ($lines as $line) {
+                $line = strtolower(trim($line));
+                if ($line !== '') {
+                    $domains[] = $line;
+                }
+            }
+        }
+    } else {
+        $domains = [
+            'youtube.com',
+            'youtu.be',
+            'vimeo.com',
+            'imgur.com',
+            'i.imgur.com',
+            'giphy.com',
+            'media.giphy.com',
+            'cdn.discordapp.com',
+            'media.discordapp.net',
+        ];
+    }
+
+    foreach ($domains as $domain) {
+        if ($host === $domain) {
+            return true;
+        }
+        if (substr($host, -strlen('.'.$domain)) === '.'.$domain) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function ag_remote_is_image_url(string $url): bool
+{
+    $parts = @parse_url($url);
+    if (!is_array($parts)) {
+        return false;
+    }
+    $path = (string)($parts['path'] ?? '');
+    $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+    if ($ext === '') {
+        return false;
+    }
+    return in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
+}
+
+function ag_remote_extract_youtube_id(array $parts): string
+{
+    $host = strtolower($parts['host'] ?? '');
+    $path = (string)($parts['path'] ?? '');
+    $query = (string)($parts['query'] ?? '');
+
+    if ($host === 'youtu.be') {
+        $id = trim($path, '/');
+        if ($id !== '') {
+            return $id;
+        }
+    }
+
+    if (strpos($host, 'youtube.com') !== false) {
+        if ($query !== '') {
+            parse_str($query, $vars);
+            if (!empty($vars['v'])) {
+                return (string)$vars['v'];
+            }
+        }
+        if (preg_match('~^/(embed|shorts)/([^/?]+)~', $path, $m)) {
+            return (string)$m[2];
+        }
+    }
+
+    return '';
+}
+
+function ag_remote_extract_vimeo_id(array $parts): string
+{
+    $path = (string)($parts['path'] ?? '');
+    if (preg_match('~/(\\d+)(?:$|/)~', $path, $m)) {
+        return (string)$m[1];
+    }
+    return '';
+}
+
+function ag_remote_build_embed(string $provider, string $id): array
+{
+    if ($provider === 'youtube') {
+        $safeId = preg_replace('~[^a-zA-Z0-9_-]~', '', $id);
+        if ($safeId === '') {
+            return ['embed' => '', 'thumb' => ''];
+        }
+        $src = 'https://www.youtube.com/embed/'.$safeId;
+        $thumb = 'https://i.ytimg.com/vi/'.$safeId.'/hqdefault.jpg';
+        $embed = '<iframe class="ag-embed" width="560" height="315" src="'
+            .htmlspecialchars_uni($src)
+            .'" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
+        return ['embed' => $embed, 'thumb' => $thumb];
+    }
+    if ($provider === 'vimeo') {
+        $safeId = preg_replace('~[^0-9]~', '', $id);
+        if ($safeId === '') {
+            return ['embed' => '', 'thumb' => ''];
+        }
+        $src = 'https://player.vimeo.com/video/'.$safeId;
+        $embed = '<iframe class="ag-embed" width="560" height="315" src="'
+            .htmlspecialchars_uni($src)
+            .'" title="Vimeo video player" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
+        return ['embed' => $embed, 'thumb' => ''];
+    }
+    return ['embed' => '', 'thumb' => ''];
+}
+
+function ag_remote_resolve_url(string $url): ?array
+{
+    $parts = @parse_url($url);
+    if (!is_array($parts)) {
+        return null;
+    }
+
+    $host = strtolower($parts['host'] ?? '');
+    $path = (string)($parts['path'] ?? '');
+    $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+    $isImage = $ext !== '' && in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
+    $videoExt = in_array($ext, ['mp4', 'webm'], true) ? $ext : '';
+
+    if (strpos($host, 'youtube.com') !== false || $host === 'youtu.be') {
+        $id = ag_remote_extract_youtube_id($parts);
+        if ($id === '') {
+            return null;
+        }
+        $embed = ag_remote_build_embed('youtube', $id);
+        return [
+            'provider' => 'youtube',
+            'embed_html' => $embed['embed'],
+            'thumb_url' => $embed['thumb'],
+            'is_direct_image' => false,
+            'ext' => '',
+        ];
+    }
+
+    if (strpos($host, 'vimeo.com') !== false) {
+        $id = ag_remote_extract_vimeo_id($parts);
+        if ($id === '') {
+            return null;
+        }
+        $embed = ag_remote_build_embed('vimeo', $id);
+        return [
+            'provider' => 'vimeo',
+            'embed_html' => $embed['embed'],
+            'thumb_url' => $embed['thumb'],
+            'is_direct_image' => false,
+            'ext' => '',
+        ];
+    }
+
+    if (strpos($host, 'imgur.com') !== false) {
+        if ($isImage) {
+            return [
+                'provider' => 'imgur',
+                'embed_html' => '',
+                'thumb_url' => '',
+                'is_direct_image' => true,
+                'ext' => $ext,
+            ];
+        }
+        return null;
+    }
+
+    if (strpos($host, 'giphy.com') !== false) {
+        return [
+            'provider' => 'giphy',
+            'embed_html' => '',
+            'thumb_url' => '',
+            'is_direct_image' => $isImage,
+            'ext' => $isImage ? $ext : ($videoExt !== '' ? $videoExt : ''),
+        ];
+    }
+
+    if (strpos($host, 'discordapp.com') !== false || strpos($host, 'discordapp.net') !== false) {
+        return [
+            'provider' => 'discord',
+            'embed_html' => '',
+            'thumb_url' => '',
+            'is_direct_image' => $isImage,
+            'ext' => $isImage ? $ext : ($videoExt !== '' ? $videoExt : ''),
+        ];
+    }
+
+    if ($isImage) {
+        return [
+            'provider' => 'direct',
+            'embed_html' => '',
+            'thumb_url' => '',
+            'is_direct_image' => true,
+            'ext' => $ext,
+        ];
+    }
+
+    return null;
 }
 
 /* -------------------- FILE HELPERS -------------------- */
