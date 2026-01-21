@@ -23,6 +23,9 @@ function af_advancedfontawesome_install(): bool
     af_afo_ensure_mycode();
     af_afo_install_headerinclude();
 
+    // --- ACP Bridge plugin (чтобы поле работало в forum-management) ---
+    af_afo_install_acp_bridge_plugin();
+
     return true;
 }
 
@@ -36,7 +39,15 @@ function af_advancedfontawesome_uninstall(): bool
 
     $db->delete_query('mycode', "title='AF Font Awesome'");
 
+    // --- убираем ACP bridge plugin (только если это наш файл по сигнатуре) ---
+    af_afo_uninstall_acp_bridge_plugin();
+
     return true;
+}
+
+function af_advancedfontawesome_activate(): void
+{
+    // Языки генерятся ядром AF при enable; тут аддону достаточно безопасного $lang->load().
 }
 
 function af_advancedfontawesome_deactivate(): void
@@ -48,13 +59,48 @@ function af_advancedfontawesome_init(): void
 {
     global $plugins;
 
+    // фронт
     $plugins->add_hook('pre_output_page', 'af_advancedfontawesome_pre_output');
 
-    if (defined('IN_ADMINCP')) {
-        $plugins->add_hook('admin_forum_management_add', 'af_afo_admin_forum_assets');
-        $plugins->add_hook('admin_forum_management_edit', 'af_afo_admin_forum_assets');
+    // ACP: гарантированно цепляемся к шапке любой админ-страницы
+    if (defined('IN_ADMINCP') && IN_ADMINCP) {
+        $plugins->add_hook('admin_page_output_header', 'af_afo_admin_page_output_header');
+        // Сохранение оставляем — но оно будет работать только если файл реально загружен в ACP (а мы его теперь грузим через header-hook)
         $plugins->add_hook('admin_forum_management_add_start', 'af_afo_admin_forum_save_add');
         $plugins->add_hook('admin_forum_management_edit_commit', 'af_afo_admin_forum_save_edit');
+    }
+}
+
+/**
+ * Безопасная загрузка языкового файла аддона.
+ * Важно: не падать, если файл ещё не создан/не синкнут ядром.
+ */
+function af_afo_lang_load(bool $admin = false): void
+{
+    global $lang;
+
+    if (!isset($lang) || !is_object($lang)) {
+        return;
+    }
+
+    // Уже загружено — выходим
+    if (isset($lang->af_advancedfontawesome_name) || isset($lang->af_advancedfontawesome_group)) {
+        return;
+    }
+
+    $file = 'advancedfunctionality_' . AF_AFO_ID;
+
+    $base = rtrim(MYBB_ROOT, '/\\') . '/inc/languages/' . $lang->language . '/';
+    $path = $base . ($admin ? 'admin/' : '') . $file . '.lang.php';
+
+    if (@file_exists($path)) {
+        $lang->load($file, $admin);
+        return;
+    }
+
+    $altPath = $base . ($admin ? '' : 'admin/') . $file . '.lang.php';
+    if (@file_exists($altPath)) {
+        $lang->load($file, !$admin);
     }
 }
 
@@ -82,9 +128,7 @@ function af_afo_ensure_mycode(): void
 {
     global $db, $lang;
 
-    if (!isset($lang->af_advancedfontawesome_name)) {
-        $lang->load('advancedfunctionality_' . AF_AFO_ID);
-    }
+    af_afo_lang_load(defined('IN_ADMINCP') && IN_ADMINCP);
 
     $hasAllowHtml     = $db->field_exists('allowhtml', 'mycode');
     $hasAllowMyCode   = $db->field_exists('allowmycode', 'mycode');
@@ -92,10 +136,12 @@ function af_afo_ensure_mycode(): void
     $hasAllowImgCode  = $db->field_exists('allowimgcode', 'mycode');
     $hasAllowVideo    = $db->field_exists('allowvideocode', 'mycode');
 
+    $title = 'AF Font Awesome';
+
     $row = [
-        'title'       => 'AF Font Awesome',
+        'title'       => $title,
         'description' => $lang->af_advancedfontawesome_description ?? 'Font Awesome tag.',
-        'regex'       => '\\[fa\\]([a-z0-9\- ]+)\\[/fa\\]',
+        'regex'       => '\\[fa\\]([a-z0-9\\- ]+)\\[/fa\\]',
         'replacement' => '<i class="$1" aria-hidden="true"></i>',
         'active'      => 1,
         'parseorder'  => 52,
@@ -108,7 +154,7 @@ function af_afo_ensure_mycode(): void
     if ($hasAllowVideo)   { $row['allowvideocode'] = 0; }
 
     $existing = $db->fetch_array(
-        $db->simple_select('mycode', 'cid', "title='{$row['title']}'")
+        $db->simple_select('mycode', 'cid', "title='" . $db->escape_string($title) . "'")
     );
 
     $data = [];
@@ -157,9 +203,9 @@ function af_advancedfontawesome_pre_output(string &$page = ''): void
     if ($needsEditor || $needsForumIcons) {
         $iconMap = $needsForumIcons ? af_afo_collect_forum_icons() : [];
         $cfg = [
-            'cssUrl' => $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AFO_ID . '/assets/font-awesome-6/css/all.css',
-            'icons'  => $iconMap,
-            'defaultStyle' => 'fa-solid',
+            'cssUrl'        => $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AFO_ID . '/assets/font-awesome-6/css/all.css',
+            'icons'         => $iconMap,
+            'defaultStyle'  => 'fa-solid',
         ];
 
         $cfgJson = json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
@@ -259,7 +305,7 @@ function af_afo_normalize_icon(string $raw): string
     $clean = [];
 
     foreach ($parts as $part) {
-        $part = strtolower(trim($part));
+        $part = strtolower(trim((string)$part));
         if ($part === '') {
             continue;
         }
@@ -269,11 +315,11 @@ function af_afo_normalize_icon(string $raw): string
     }
 
     if (!$clean) {
-        $raw = preg_replace('/[^a-z0-9\-]/', '', $raw);
-        if ($raw === '') {
+        $raw2 = preg_replace('/[^a-z0-9\-]/', '', strtolower($raw));
+        if ($raw2 === '') {
             return '';
         }
-        return 'fa-solid fa-' . $raw;
+        return 'fa-solid fa-' . $raw2;
     }
 
     $styleClasses = [
@@ -303,46 +349,84 @@ function af_afo_normalize_icon(string $raw): string
     }
 
     if (!$hasIcon) {
-        return implode(' ', array_unique($clean));
+        return implode(' ', array_values(array_unique($clean)));
     }
 
-    return implode(' ', array_unique($clean));
+    return implode(' ', array_values(array_unique($clean)));
 }
 
+/**
+ * ACP: подключаем ассеты на страницах add/edit форумов.
+ * Тут же подключаем Font Awesome CSS, иначе превью/иконки в пикере “невидимы”.
+ */
 function af_afo_admin_forum_assets(): void
 {
-    global $mybb, $page, $lang, $forum_data;
+    global $mybb, $page, $lang, $forum_data, $db;
+
+    af_afo_lang_load(true);
 
     if (empty($mybb->settings['af_advancedfontawesome_enabled'])) {
         return;
     }
 
-    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
-    if ($bburl === '') {
-        return;
-    }
+    // ВАЖНО: ACP живёт в /admin/, поэтому используем относительные пути
+    // /admin/ -> ../inc/plugins/...
+    $assetsBaseRel = '../inc/plugins/advancedfunctionality/addons/' . AF_AFO_ID . '/assets';
+    $faCssRel      = $assetsBaseRel . '/font-awesome-6/css/all.css';
 
-    $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AFO_ID . '/assets';
-
+    // --- текущая иконка: forum_data или из БД по fid ---
     $icon = '';
-    if (isset($forum_data['af_fa_icon'])) {
+    if (is_array($forum_data) && isset($forum_data['af_fa_icon'])) {
         $icon = (string)$forum_data['af_fa_icon'];
+    } else {
+        $fid = (int)$mybb->get_input('fid');
+        if ($fid > 0 && $db && $db->table_exists('forums') && $db->field_exists('af_fa_icon', 'forums')) {
+            $row = $db->fetch_array($db->simple_select('forums', 'af_fa_icon', "fid='{$fid}'", ['limit' => 1]));
+            if ($row && isset($row['af_fa_icon'])) {
+                $icon = (string)$row['af_fa_icon'];
+            }
+        }
     }
+
     $icon = af_afo_normalize_icon($icon);
 
     $cfg = [
-        'cssUrl' => $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AFO_ID . '/assets/font-awesome-6/css/all.css',
-        'icon' => $icon,
-        'label' => $lang->af_advancedfontawesome_icon_label ?? 'Icon',
-        'description' => $lang->af_advancedfontawesome_icon_desc ?? '',
-        'searchPlaceholder' => $lang->af_advancedfontawesome_icon_search ?? 'Search icons...',
+        // fetch() в admin.js будет читать CSS по относительному пути
+        'cssUrl'            => $faCssRel,
+        'icon'              => $icon,
+        'label'             => $lang->af_advancedfontawesome_icon_label ?? 'Иконка',
+        'description'       => $lang->af_advancedfontawesome_icon_desc ?? 'Выбери иконку или вставь классы Font Awesome (пример: fa-solid fa-star).',
+        'searchPlaceholder' => $lang->af_advancedfontawesome_icon_search ?? 'Поиск иконок...',
     ];
 
     $cfgJson = json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
-    $page->extra_header .= "\n<link rel=\"stylesheet\" type=\"text/css\" href=\"{$assetsBase}/advancedfontawesome-admin.css?ver=" . AF_AFO_VER . "\" />";
+    // 1) Font Awesome CSS (иначе <i class="fa-..."> пустой)
+    $page->extra_header .= "\n<link rel=\"stylesheet\" type=\"text/css\" href=\"{$faCssRel}?ver=" . AF_AFO_VER . "\" />";
+
+    // 2) Наши админские стили/скрипты
+    $page->extra_header .= "\n<link rel=\"stylesheet\" type=\"text/css\" href=\"{$assetsBaseRel}/advancedfontawesome-admin.css?ver=" . AF_AFO_VER . "\" />";
     $page->extra_header .= "\n<script>window.afAdvancedFontAwesomeAdminConfig={$cfgJson};</script>";
-    $page->extra_header .= "\n<script src=\"{$assetsBase}/advancedfontawesome-admin.js?ver=" . AF_AFO_VER . "\"></script>";
+    $page->extra_header .= "\n<script src=\"{$assetsBaseRel}/advancedfontawesome-admin.js?ver=" . AF_AFO_VER . "\"></script>";
+}
+
+function af_afo_admin_page_output_header(): void
+{
+    global $mybb;
+
+    // Мы хотим только forum-management add/edit
+    $module = (string)$mybb->get_input('module');
+    if ($module !== 'forum-management') {
+        return;
+    }
+
+    $action = (string)$mybb->get_input('action');
+    if ($action !== 'edit' && $action !== 'add') {
+        return;
+    }
+
+    // Подключаем ассеты (CSS/JS) и конфиг
+    af_afo_admin_forum_assets();
 }
 
 function af_afo_admin_forum_save_add(): void
@@ -376,4 +460,123 @@ function af_afo_admin_forum_save_edit(): void
 
     $icon = af_afo_normalize_icon((string)$mybb->get_input('af_fa_icon'));
     $db->update_query('forums', ['af_fa_icon' => $db->escape_string($icon)], "fid='{$fid}'");
+}
+function af_afo_install_acp_bridge_plugin(): void
+{
+    $path = MYBB_ROOT . 'inc/plugins/af_advancedfontawesome_bridge.php';
+
+    // Если файл уже есть — не трогаем (вдруг пользователь правил сам)
+    if (@file_exists($path)) {
+        return;
+    }
+
+    $sig = 'AF_AFO_BRIDGE_PLUGIN_v1';
+
+    $code = <<<PHP
+<?php
+/**
+ * {$sig}
+ * ACP bridge for AF Addon: AdvancedFontAwesome
+ * Loads addon on ANY ACP pages (forum-management) to inject icon field + save it.
+ */
+
+if (!defined('IN_MYBB')) { die('No direct access'); }
+
+// если AF_ADDONS не определён (в ACP так бывает), определим мягко — нам нужно лишь пройти guard в аддоне
+if (!defined('AF_ADDONS')) { define('AF_ADDONS', 1); }
+
+function af_advancedfontawesome_bridge_info()
+{
+    return [
+        'name' => 'AF AdvancedFontAwesome Bridge',
+        'description' => 'Bridge plugin to enable AdvancedFontAwesome on ACP forum-management pages.',
+        'website' => '',
+        'author' => 'AF',
+        'authorsite' => '',
+        'version' => '1.0.0',
+        'compatibility' => '18*'
+    ];
+}
+
+function af_advancedfontawesome_bridge_activate() {}
+function af_advancedfontawesome_bridge_deactivate() {}
+
+function af_advancedfontawesome_bridge_load_addon(): void
+{
+    static \$loaded = false;
+    if (\$loaded) return;
+
+    \$file = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/advancedfontawesome/advancedfontawesome.php';
+    if (@file_exists(\$file)) {
+        require_once \$file;
+        \$loaded = true;
+    }
+}
+
+function af_advancedfontawesome_bridge_init(): void
+{
+    global \$plugins;
+
+    // Важно: эти хуки должны быть зарегистрированы именно из обычного MyBB-плагина, который грузится в ACP всегда.
+    \$plugins->add_hook('admin_page_output_header', 'af_advancedfontawesome_bridge_admin_header');
+    \$plugins->add_hook('admin_forum_management_add_start', 'af_advancedfontawesome_bridge_save_add');
+    \$plugins->add_hook('admin_forum_management_edit_commit', 'af_advancedfontawesome_bridge_save_edit');
+}
+
+function af_advancedfontawesome_bridge_admin_header(): void
+{
+    global \$mybb;
+
+    af_advancedfontawesome_bridge_load_addon();
+
+    if (!function_exists('af_afo_admin_page_output_header')) {
+        return;
+    }
+
+    // фильтруем только forum-management add/edit
+    \$module = (string)\$mybb->get_input('module');
+    if (\$module !== 'forum-management') return;
+
+    \$action = (string)\$mybb->get_input('action');
+    if (\$action !== 'edit' && \$action !== 'add') return;
+
+    af_afo_admin_page_output_header();
+}
+
+function af_advancedfontawesome_bridge_save_add(): void
+{
+    af_advancedfontawesome_bridge_load_addon();
+    if (function_exists('af_afo_admin_forum_save_add')) {
+        af_afo_admin_forum_save_add();
+    }
+}
+
+function af_advancedfontawesome_bridge_save_edit(): void
+{
+    af_advancedfontawesome_bridge_load_addon();
+    if (function_exists('af_afo_admin_forum_save_edit')) {
+        af_afo_admin_forum_save_edit();
+    }
+}
+PHP;
+
+    @file_put_contents($path, $code);
+}
+
+function af_afo_uninstall_acp_bridge_plugin(): void
+{
+    $path = MYBB_ROOT . 'inc/plugins/af_advancedfontawesome_bridge.php';
+    if (!@file_exists($path)) {
+        return;
+    }
+
+    $txt = @file_get_contents($path);
+    if ($txt === false) {
+        return;
+    }
+
+    // удаляем только если это наш файл
+    if (strpos($txt, 'AF_AFO_BRIDGE_PLUGIN_v1') !== false) {
+        @unlink($path);
+    }
 }
