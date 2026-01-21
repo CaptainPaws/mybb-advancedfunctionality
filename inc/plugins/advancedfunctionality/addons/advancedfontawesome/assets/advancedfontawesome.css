@@ -1,0 +1,74 @@
+.af-fa-forum-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none !important;
+}
+
+.af-fa-forum-icon > i {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.subforumicon.af-fa-forum-icon > i {
+  font-size: 14px;
+}
+
+.sceditor-button-advancedfontawesome div {
+  background: none !important;
+  position: relative;
+}
+
+.sceditor-button-advancedfontawesome div::before {
+  content: "\f005";
+  font-family: "Font Awesome 6 Free";
+  font-weight: 900;
+  font-size: 14px;
+  line-height: 16px;
+  color: #444;
+}
+
+.af-fa-dropdown {
+  width: 360px;
+  padding: 8px;
+}
+
+.af-fa-dropdown input.af-fa-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.af-fa-dropdown .af-fa-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+  gap: 6px;
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.af-fa-dropdown .af-fa-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 32px;
+  border: 1px solid #ddd;
+  background: #fafafa;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.af-fa-dropdown .af-fa-icon-btn:hover {
+  background: #f0f0f0;
+}
+
+.af-fa-dropdown .af-fa-status {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 6px;
+}
