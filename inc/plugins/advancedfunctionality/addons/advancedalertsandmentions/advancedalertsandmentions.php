@@ -1436,7 +1436,6 @@ function af_aam_datahandler_user_insert(\UserDataHandler &$dataHandler): void
 }
 
 // ================ MISC/ XMLHTTP: API и список ===================
-
 function af_aam_misc_router(): void
 {
     global $mybb;
@@ -1452,8 +1451,19 @@ function af_aam_misc_router(): void
             exit;
         }
 
+        // на всякий случай гарантируем, что helper'ы (включая af_aam_attach_avatars) загружены
+        if (function_exists('af_aam_require')) {
+            af_aam_require('xmlhttp.php');
+        }
+
         $q = (string)$mybb->get_input('q');
         $items = af_aam_suggest_users($q, 10);
+
+        // ДОБАВЛЕНО: приклеиваем аватары, чтобы фронт не рисовал "буквы"
+        if (function_exists('af_aam_attach_avatars')) {
+            af_aam_attach_avatars($items, 24);
+        }
+
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($items, JSON_UNESCAPED_UNICODE);
         exit;
