@@ -9,8 +9,65 @@ if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
 define('AF_AFO_ID', 'advancedfontawesome');
 define('AF_AFO_VER', '1.0.0');
+define('AF_AFO_BASE', AF_ADDONS . AF_AFO_ID . '/');
+define('AF_AFO_TPL_FILE', AF_AFO_BASE . 'templates/advancedfontawesome.html');
 
 define('AF_AFO_MARK_DONE', '<!--af_advancedfontawesome_done-->');
+
+function af_afo_load_templates(): array
+{
+    static $cache = null;
+
+    if (is_array($cache)) {
+        return $cache;
+    }
+
+    $cache = [];
+
+    if (!is_file(AF_AFO_TPL_FILE)) {
+        return $cache;
+    }
+
+    $raw = @file_get_contents(AF_AFO_TPL_FILE);
+    if ($raw === false || trim($raw) === '') {
+        return $cache;
+    }
+
+    $pattern = '~<!--\s*TEMPLATE:\s*([a-zA-Z0-9_\-]+)\s*-->\s*(.*?)\s*(?=(<!--\s*TEMPLATE:\s*[a-zA-Z0-9_\-]+\s*-->|$))~si';
+    if (!preg_match_all($pattern, $raw, $matches, PREG_SET_ORDER)) {
+        return $cache;
+    }
+
+    foreach ($matches as $row) {
+        $name = trim((string)$row[1]);
+        $tpl = trim((string)$row[2]);
+        if ($name !== '' && $tpl !== '') {
+            $cache[$name] = $tpl;
+        }
+    }
+
+    return $cache;
+}
+
+function af_afo_get_template(string $name): string
+{
+    $templates = af_afo_load_templates();
+    return $templates[$name] ?? '';
+}
+
+function af_afo_render_template(string $name, array $vars = []): string
+{
+    $tpl = af_afo_get_template($name);
+    if ($tpl === '') {
+        return '';
+    }
+
+    foreach ($vars as $key => $value) {
+        $tpl = str_replace('{$' . $key . '}', (string)$value, $tpl);
+    }
+
+    return $tpl;
+}
 
 function af_advancedfontawesome_install(): bool
 {

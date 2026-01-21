@@ -1,0 +1,61 @@
+<!-- TEMPLATE: af_advancedfontawesome_admin_forums_page -->
+<div class="af-afo-admin">
+  <div class="af-afo-admin-header">
+    <h2>{$title}</h2>
+    <p>{$description}</p>
+  </div>
+  <form method="post" action="index.php?module=advancedfunctionality&af_view=advancedfontawesome&do=save_forums_icons">
+    <input type="hidden" name="my_post_key" value="{$my_post_key}" />
+    <div class="af-afo-admin-toolbar">
+      <div class="af-afo-admin-field">
+        <label for="af-afo-forum-search">{$forum_search_label}</label>
+        <input type="text" id="af-afo-forum-search" name="forum_search" value="{$forum_search}" placeholder="{$forum_search_placeholder}" data-role="forum-search" />
+      </div>
+      <label class="af-afo-admin-checkbox">
+        <input type="checkbox" name="filter_icon" value="1" {$filter_icon_checked} data-role="filter-icon" />
+        <span>{$filter_icon_label}</span>
+      </label>
+      <button type="submit" class="button button_primary">{$save_label}</button>
+    </div>
+    <table class="general af-afo-admin-table" cellspacing="0" cellpadding="5">
+      <thead>
+        <tr>
+          <th>{$th_forum}</th>
+          <th>{$th_fid}</th>
+          <th>{$th_icon}</th>
+          <th>{$th_preview}</th>
+          <th>{$th_pick}</th>
+          <th>{$th_clear}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {$rows}
+      </tbody>
+    </table>
+    <div class="af-afo-admin-sticky">
+      <div class="af-afo-admin-sticky-inner">
+        <span>{$sticky_label}</span>
+        <button type="submit" class="button button_primary">{$save_label}</button>
+      </div>
+    </div>
+  </form>
+  <div class="af-afo-admin-picker-overlay" aria-hidden="true"></div>
+</div>
+
+<!-- TEMPLATE: af_advancedfontawesome_admin_forums_row -->
+<tr class="af-afo-admin-row" data-fid="{$fid}" data-name="{$name_lc}" data-hasicon="{$has_icon}">
+  <td class="af-afo-admin-name" style="padding-left: {$indent}px;">{$name}</td>
+  <td class="af-afo-admin-fid"><span class="af-afo-admin-fid-text">{$fid}</span></td>
+  <td class="af-afo-admin-icon-input">
+    <input type="text" class="af-afo-admin-input" name="icons[{$fid}]" value="{$icon}" />
+  </td>
+  <td class="af-afo-admin-preview">
+    <span class="af-afo-admin-preview-box">{$preview}</span>
+  </td>
+  <td class="af-afo-admin-actions">
+    <button type="button" class="button button_small" data-action="pick">{$pick_label}</button>
+  </td>
+  <td class="af-afo-admin-actions">
+    <button type="button" class="button button_small" data-action="clear">{$clear_label}</button>
+  </td>
+</tr>
