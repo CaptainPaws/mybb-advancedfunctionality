@@ -223,6 +223,72 @@
 
     function qs(sel) { return document.querySelector(sel); }
     function qsa(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+    // ===== FIX: стабилизация showthread URL после перехода по уведомлению/подписке =====
+    function afAamStabilizeShowthreadUrl() {
+        try {
+            // только showthread.php
+            var path = String(window.location.pathname || '');
+            if (!/showthread\.php$/i.test(path)) return;
+
+            var url = new URL(window.location.href);
+            var sp = url.searchParams;
+
+            // действия, которые часто вызывают редиректы/прыжки
+            var action = (sp.get('action') || '').toLowerCase();
+            var badActions = {
+                newpost: 1,
+                lastpost: 1,
+                nextnewest: 1,
+                unread: 1,
+                getnew: 1,
+                firstnew: 1
+            };
+
+            var changed = false;
+
+            if (action && badActions[action]) {
+                sp.delete('action');
+                changed = true;
+            }
+
+            // если алерт/плагин добавлял трекинговые параметры — выпиливаем, чтобы URL был “чистым”
+            ['alert_id', 'aid', 'fromalert', 'from', 'af_aam_alert_id'].forEach(function (k) {
+                if (sp.has(k)) { sp.delete(k); changed = true; }
+            });
+
+            // если есть pid, но нет хеша — добавим #pidNNN (через replaceState, без скролла)
+            var pid = sp.get('pid');
+            if (pid) {
+                pid = String(pid).replace(/[^0-9]/g, '');
+                if (pid && (!url.hash || url.hash === '#')) {
+                    url.hash = 'pid' + pid;
+                    changed = true;
+                }
+            }
+
+            if (!changed) return;
+
+            var newSearch = sp.toString();
+            var newUrl =
+                url.origin +
+                url.pathname +
+                (newSearch ? ('?' + newSearch) : '') +
+                (url.hash || '');
+
+            // replaceState НЕ меняет scroll position
+            window.history.replaceState(null, document.title, newUrl);
+        } catch (e) {
+            // молча
+        }
+    }
+
+    // вызвать как можно раньше
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', afAamStabilizeShowthreadUrl);
+    } else {
+        afAamStabilizeShowthreadUrl();
+    }
+
     function afAamGetReplyEditorHandles() {
         var ta =
             document.querySelector('textarea[name="message"]') ||
@@ -619,38 +685,81 @@
         var link   = qs('#af_aam_header_link');
         var modal  = qs('#af_aam_modal');
         var alertsTable = qs('#alerts_content');
-        var bell   = qs('#af_aam_bell') || qs('.af-aam-bell');
+
+        // Иконка колокольчика: сначала новый id, потом совместимые фолбэки
+        var bellIcon =
+            qs('#af_aam_bell_icon') ||
+            qs('#af_aam_bell') ||
+            (link ? link.querySelector('.af-aam-bell') : null) ||
+            qs('.af-aam-bell');
+
         var modalClose = modal ? modal.querySelector('.af-aam-modal-close') : null;
         var backdrop   = modal ? modal.querySelector('.af-aam-modal-backdrop') : null;
+
         // Тумблер звука в модалке
         var soundToggle = qs('#af_aam_sound_toggle');
 
+        // ---- 1) ГИБКАЯ ПОДМЕНА ИКОНКИ (без правок шаблона) ----
+        // Можно задать в шаблоне/пейлоаде:
+        //   window.af_aam_bell_html = '<svg ...>...</svg>';
+        // или
+        //   window.af_aam_bell_text = '🔔';
+        // или
+        //   window.af_aam_bell_text = '🩸' (да, почему бы и нет)
+        (function applyFlexibleBell() {
+            if (!bellIcon) return;
+
+            try {
+                var html = (typeof window.af_aam_bell_html === 'string') ? window.af_aam_bell_html : '';
+                var text = (typeof window.af_aam_bell_text === 'string') ? window.af_aam_bell_text : '';
+
+                if (html && html.trim()) {
+                    bellIcon.innerHTML = html;
+                    return;
+                }
+
+                if (text && text.trim()) {
+                    bellIcon.textContent = text;
+                    return;
+                }
+
+                // дефолт, если пусто
+                if (!bellIcon.textContent || !String(bellIcon.textContent).trim()) {
+                    bellIcon.textContent = '🔔';
+                }
+            } catch (e) {
+                try {
+                    if (!bellIcon.textContent || !String(bellIcon.textContent).trim()) {
+                        bellIcon.textContent = '🔔';
+                    }
+                } catch (e2) {}
+            }
+        })();
+
+        // ---- 2) ЗВУК ----
         if (soundToggle) {
-            // начальное состояние — с учётом глобальной настройки и localStorage
             soundToggle.checked = afAamUserSoundEnabled;
 
             soundToggle.addEventListener('change', function () {
                 afAamUserSoundEnabled = !!soundToggle.checked;
                 try {
                     if (!afAamUserSoundEnabled) {
-                        // запоминаем, что пользователь заглушил звук
                         localStorage.setItem(afAamSoundStorageKey, '1');
                     } else {
-                        // убираем "мьют" и даём тестовый пинг
                         localStorage.removeItem(afAamSoundStorageKey);
                         playAlertSound();
                     }
-                } catch (e) {
-                    // если localStorage отвалился — просто игнорируем
-                }
+                } catch (e) {}
             });
         }
 
-        if (bell && !bell.textContent) {
-            bell.textContent = '🔔';
-        }
-
+        // если обязательных узлов нет — выходим
         if (!link || !modal || !alertsTable) {
+            if (afAamDebug) {
+                console.log('[AAM] initAlertsUI: missing nodes', {
+                    link: !!link, modal: !!modal, alertsTable: !!alertsTable, bellIcon: !!bellIcon
+                });
+            }
             return;
         }
 
@@ -676,9 +785,7 @@
                         afAamSound.pause();
                         afAamSound.currentTime = 0;
                         afAamSoundPrimed = true;
-                    }).catch(function () {
-                        // если браузер упёрся — не критично
-                    });
+                    }).catch(function () {});
                 } catch (e) {}
             }
         }
@@ -688,9 +795,8 @@
             modal.style.display = 'none';
         }
 
-        // Клик по колокольчику — просто открываем модалку
+        // Клик по ссылке — открыть модалку
         link.addEventListener('click', function (e) {
-            // ЛКМ без модификаторов — модалка; Ctrl/колёсико оставляем как есть (открыть ссылку)
             if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
                 e.preventDefault();
                 openModal();
@@ -705,7 +811,7 @@
             });
         }
 
-        // Клик по тёмному фону (если появится)
+        // Клик по подложке
         if (backdrop) {
             backdrop.addEventListener('click', function (e) {
                 e.preventDefault();
@@ -721,7 +827,6 @@
             prefsToggle.addEventListener('click', function (e) {
                 e.preventDefault();
                 if (prefsBox.getAttribute('data-loaded') === '1') {
-                    // просто показать/скрыть
                     prefsBox.style.display = (prefsBox.style.display === 'none' || !prefsBox.style.display) ? 'block' : 'none';
                     return;
                 }
@@ -730,12 +835,9 @@
                     if (resp && resp.ok && resp.html) {
                         prefsBox.innerHTML = resp.html;
 
-                        // выставляем тост-тумблер по localStorage
                         try {
                             var toastCb0 = prefsBox.querySelector('#af_aam_pref_toasts');
-                            if (toastCb0) {
-                                toastCb0.checked = afAamUserToastsEnabled;
-                            }
+                            if (toastCb0) toastCb0.checked = afAamUserToastsEnabled;
                         } catch (e) {}
 
                         prefsBox.setAttribute('data-loaded', '1');
@@ -752,7 +854,6 @@
                                     if (cb.checked) types.push(cb.value);
                                 });
 
-                                // тосты: сохраняем локально
                                 var toastCb = prefsBox.querySelector('#af_aam_pref_toasts');
                                 var toastsEnabled = toastCb ? !!toastCb.checked : true;
 
@@ -774,8 +875,6 @@
                                         op: 'list',
                                         unreadOnly: 1
                                     }, function (resp2) {
-
-                                        // на первом запуске — просто “запоминаем верхний id”, без тостов
                                         if (!lastSeenAlertId && resp2 && Array.isArray(resp2.items) && resp2.items.length) {
                                             var maxId = 0;
                                             resp2.items.forEach(function (a) {
@@ -787,19 +886,16 @@
                                             return;
                                         }
 
-                                        // ВАЖНО: вычисляем "есть ли новые" ДО queueToasts(), потому что queueToasts двигает lastSeenAlertId
                                         var hasNewUnseen = (resp2 && Array.isArray(resp2.items))
                                             ? afAamHasNewUnseenUnread(resp2.items)
                                             : false;
 
                                         syncFromResponse(resp2 || {});
 
-                                        // тосты только для новых непрочитанных (queueToasts это фильтрует)
                                         if (resp2 && Array.isArray(resp2.items)) {
                                             queueToasts(resp2.items);
                                         }
 
-                                        // звук — только если реально пришли НОВЫЕ уведомления, а не просто "в списке есть непрочитанные"
                                         if (hasNewUnseen) {
                                             playAlertSound();
                                         }
@@ -812,11 +908,10 @@
             });
         }
 
-        // Делегирование кликов внутри модалки
+        // Делегирование кликов внутри модалки — оставляем как было у тебя
         modal.addEventListener('click', function (e) {
             var target = e.target;
 
-            // 1) Прочитано
             if (target.classList && target.classList.contains('markReadAlertButton')) {
                 e.preventDefault();
 
@@ -854,7 +949,6 @@
                 return;
             }
 
-            // 2) Непрочитано
             if (target.classList && target.classList.contains('markUnreadAlertButton')) {
                 e.preventDefault();
 
@@ -892,7 +986,6 @@
                 return;
             }
 
-            // 3) Удалить
             if (target.classList && target.classList.contains('deleteAlertButton')) {
                 e.preventDefault();
 
@@ -923,7 +1016,6 @@
                 return;
             }
 
-            // 4) клик по самому уведомлению — пометить прочитанным и перейти
             var node = target;
             while (node && node !== modal) {
                 if (node.tagName && node.tagName.toLowerCase() === 'a' &&
@@ -959,9 +1051,7 @@
                                 window.location.href = node.href;
                             });
                         } else {
-                            if (afAamDebug) {
-                                console.log('[AAM] click-link: alertId=0, идём без ajax');
-                            }
+                            if (afAamDebug) console.log('[AAM] click-link: alertId=0, идём без ajax');
                             window.location.href = node.href;
                         }
                     }
@@ -972,7 +1062,17 @@
         });
 
         window.afAamRefreshModal = renderModal;
+
+        if (afAamDebug) {
+            console.log('[AAM] initAlertsUI ok', {
+                bellIcon: !!bellIcon,
+                bellIconId: bellIcon ? bellIcon.id : '',
+                link: !!link,
+                modal: !!modal
+            });
+        }
     }
+
 
 
 
