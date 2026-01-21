@@ -53,23 +53,37 @@
     return iconListPromise;
   }
 
-  function buildRow() {
+    function buildRow() {
     var cfg = getConfig();
-    var form = document.querySelector('form[action*="forum-management"]');
+
+    // 1) Находим форму редактирования/добавления форума максимально тупо-надёжно
+    var form = null;
+    var nameInput = document.querySelector('input[name="name"]');
+    if (nameInput) form = nameInput.closest('form');
+    if (!form) form = document.querySelector('form[action*="forum-management"]');
+    if (!form) form = document.querySelector('form');
     if (!form) return;
 
-    var table = form.querySelector('table.general');
+    // 2) Находим таблицу/контейнер, куда можно вставить row
+    // В MyBB ACP обычно это первая таблица внутри формы
+    var table = form.querySelector('table');
     if (!table) return;
 
-    var descriptionField = table.querySelector('#description');
-    var anchorRow = descriptionField ? descriptionField.closest('tr') : table.querySelector('tr');
+    // якорь — строка с описанием, если есть
+    var anchorRow = null;
+    var desc = form.querySelector('#description');
+    if (desc) anchorRow = desc.closest('tr');
+    if (!anchorRow) anchorRow = table.querySelector('tr');
+
+    // если уже вставляли — не дублим
+    if (form.querySelector('.af-fa-admin-row')) return;
 
     var row = document.createElement('tr');
     row.className = anchorRow ? anchorRow.className : '';
     row.classList.add('af-fa-admin-row');
 
     var labelCell = document.createElement('td');
-    labelCell.innerHTML = '<strong>' + (cfg.label || 'Icon') + '</strong>';
+    labelCell.innerHTML = '<strong>' + (cfg.label || 'Иконка') + '</strong>';
 
     var inputCell = document.createElement('td');
 
@@ -82,23 +96,22 @@
     var preview = document.createElement('span');
     preview.className = 'af-fa-admin-preview';
 
-    var desc = document.createElement('div');
-    desc.className = 'smalltext';
-    desc.textContent = cfg.description || '';
+    var descBox = document.createElement('div');
+    descBox.className = 'smalltext';
+    descBox.textContent = cfg.description || '';
 
     inputCell.appendChild(input);
     inputCell.appendChild(preview);
-    if (cfg.description) {
-      inputCell.appendChild(desc);
-    }
+    if (cfg.description) inputCell.appendChild(descBox);
 
     row.appendChild(labelCell);
     row.appendChild(inputCell);
 
+    // вставляем после anchorRow
     if (anchorRow && anchorRow.parentNode) {
-      anchorRow.parentNode.insertBefore(row, anchorRow.nextSibling);
+        anchorRow.parentNode.insertBefore(row, anchorRow.nextSibling);
     } else {
-      table.appendChild(row);
+        table.appendChild(row);
     }
 
     var picker = document.createElement('div');
@@ -107,7 +120,7 @@
     var search = document.createElement('input');
     search.type = 'text';
     search.className = 'af-fa-admin-search';
-    search.placeholder = cfg.searchPlaceholder || 'Search icons...';
+    search.placeholder = cfg.searchPlaceholder || 'Поиск иконок...';
     picker.appendChild(search);
 
     var grid = document.createElement('div');
@@ -117,43 +130,49 @@
     inputCell.appendChild(picker);
 
     function updatePreview(value) {
-      preview.innerHTML = '';
-      if (!value) return;
-      preview.innerHTML = '<i class="' + value + '"></i>';
+        preview.innerHTML = '';
+        if (!value) return;
+        preview.innerHTML = '<i class="' + value + '"></i>';
     }
 
     updatePreview(input.value);
 
     function render(list, filter) {
-      grid.innerHTML = '';
-      var term = String(filter || '').toLowerCase();
+        grid.innerHTML = '';
+        var term = String(filter || '').toLowerCase();
 
-      list.forEach(function (icon) {
+        list.forEach(function (icon) {
         if (term && icon.indexOf(term) === -1) return;
+
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'af-fa-admin-icon';
+
+        // стиль по умолчанию всегда solid
         var className = 'fa-solid ' + icon;
         btn.innerHTML = '<i class="' + className + '"></i>';
+
         btn.addEventListener('click', function () {
-          input.value = className;
-          updatePreview(className);
+            input.value = className;
+            updatePreview(className);
         });
+
         grid.appendChild(btn);
-      });
+        });
     }
 
     input.addEventListener('input', function () {
-      updatePreview(input.value);
+        updatePreview(input.value);
     });
 
     loadIconList().then(function (list) {
-      render(list, '');
-      search.addEventListener('input', function () {
+        render(list, '');
+        search.addEventListener('input', function () {
         render(list, search.value);
-      });
+        });
     });
-  }
+    }
+
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', buildRow);
