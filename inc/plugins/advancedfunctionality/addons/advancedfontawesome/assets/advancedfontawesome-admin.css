@@ -1,0 +1,51 @@
+.af-fa-admin-row .af-fa-admin-input {
+  width: 320px;
+  padding: 6px 8px;
+}
+
+.af-fa-admin-picker {
+  margin-top: 8px;
+  border: 1px solid #ddd;
+  background: #fafafa;
+  padding: 8px;
+  max-width: 520px;
+}
+
+.af-fa-admin-picker input.af-fa-admin-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+}
+
+.af-fa-admin-picker .af-fa-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+  gap: 6px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.af-fa-admin-picker .af-fa-admin-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 32px;
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.af-fa-admin-preview {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-left: 8px;
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 4px;
+}
