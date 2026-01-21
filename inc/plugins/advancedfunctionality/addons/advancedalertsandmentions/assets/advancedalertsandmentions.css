@@ -7,8 +7,10 @@
 
 .af-aam-header-link {
     position: relative;
-    display: inline-block;
-    font-size: 0; /* работаем иконкой, без лишнего текста */
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    font-size: inherit;
 }
 
 .af-aam-header-link:hover,
@@ -18,18 +20,32 @@
 }
 
 .af-aam-bell {
-    display: inline-block;
-    font-size: 14px; /* единое значение */
+    display: inline-flex;
+    align-items: center;
     line-height: 1;
-    vertical-align: middle;
     text-indent: 0;
     color: inherit;
 }
 
+.af-aam-icon {
+    display: inline-flex;
+    align-items: center;
+}
+
+.af-aam-svg {
+    width: 1em;
+    height: 1em;
+    fill: currentColor;
+    display: block;
+}
+
+.af-aam-label {
+    line-height: 1;
+}
+
 .af-aam-badge {
-    position: absolute;
-    top: -5px;
-    left: -3px;
+    position: relative;
+    top: -1px;
     min-width: 14px;
     height: 14px;
     padding: 0 4px;
