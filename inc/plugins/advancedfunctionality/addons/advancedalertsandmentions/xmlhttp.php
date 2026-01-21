@@ -332,7 +332,6 @@ function af_aam_render_rows(array $items): string
 
 
 
-
 function af_aam_xmlhttp_dispatch(): void
 {
     global $mybb;
@@ -356,6 +355,10 @@ function af_aam_xmlhttp_dispatch(): void
     if ($op === 'suggest') {
         $q = isset($mybb->input['q']) ? (string)$mybb->input['q'] : '';
         $items = af_aam_suggest_users($q, 8);
+
+        // ДОБАВЛЕНО: приклеиваем аватары для выпадающих подсказок (иначе фронт рисует "буквы")
+        af_aam_attach_avatars($items, 24);
+
         af_aam_json(['ok' => 1, 'items' => $items]);
     }
 
@@ -390,7 +393,6 @@ function af_aam_xmlhttp_dispatch(): void
 
         $unread = $repo->get_unread_count($uid);
         $newest = $repo->get_newest_id($uid);
-
 
         af_aam_json([
             'ok' => 1,
@@ -466,8 +468,6 @@ function af_aam_xmlhttp_dispatch(): void
             'template' => $template,
         ]);
     }
-
-
 
     // ---------- MUTATIONS ----------
     if (in_array($op, ['mark_read', 'mark_unread', 'delete', 'mark_all_read'], true)) {
@@ -621,7 +621,6 @@ function af_aam_xmlhttp_dispatch(): void
 
         af_aam_json(['ok' => 1, 'saved' => 1]);
     }
-
 
     af_aam_json(['ok' => 0, 'error' => 'unknown_op', 'op' => $op]);
 }
