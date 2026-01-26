@@ -82,24 +82,18 @@
     cursor: pointer;
 }
 
-.af-kb-insert-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+.af-kb-insert-controls {
+    display: grid;
+    gap: 10px;
     margin-bottom: 12px;
 }
 
-.af-kb-insert-tab {
-    border: 1px solid #ccd2dd;
-    padding: 6px 10px;
+.af-kb-insert-select {
+    width: 100%;
+    padding: 8px 10px;
     border-radius: 6px;
+    border: 1px solid #ccd2dd;
     background: #fff;
-    cursor: pointer;
-}
-
-.af-kb-insert-tab.is-active {
-    border-color: #4462b2;
-    background: #f2f5ff;
 }
 
 .af-kb-insert-list {
@@ -108,10 +102,9 @@
 }
 
 .af-kb-insert-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px 12px;
     padding: 8px 10px;
     border-radius: 6px;
     border: 1px solid #dcdfe6;
@@ -123,17 +116,28 @@
     gap: 6px;
 }
 
+.af-kb-insert-item-meta {
+    grid-column: 1 / 2;
+    color: #667085;
+    font-size: 0.9em;
+}
+
 .af-kb-insert-search {
     width: 100%;
     padding: 8px 10px;
     border-radius: 6px;
     border: 1px solid #ccd2dd;
-    margin-bottom: 12px;
 }
 
 .af-kb-insert-empty {
     color: #667085;
     font-style: italic;
+}
+
+.af-kb-insert-hint {
+    color: #667085;
+    font-style: italic;
+    margin-bottom: 8px;
 }
 .af-kb-btn {
     display: inline-block;
