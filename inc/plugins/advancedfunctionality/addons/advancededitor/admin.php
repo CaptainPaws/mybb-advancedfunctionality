@@ -530,6 +530,7 @@ class AF_Admin_AdvancedEditor
             'available'   => $available,
             'layout'      => $layout,
             'sceditorCss' => $sceditorCss,
+            'dropdownCmdPrefix' => 'af_menu_dropdown',
 
             // ДОБАВИЛИ:
             'packCss'     => array_keys($packCss),
