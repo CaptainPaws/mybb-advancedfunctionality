@@ -35,9 +35,21 @@
         <textarea name="description_ru">{$kb_type_description_ru}</textarea>
         <label>{$lang->af_kb_description_en}</label>
         <textarea name="description_en">{$kb_type_description_en}</textarea>
+        <div class="af-kb-row">
+            <div>
+                <label>Icon URL</label>
+                <input type="text" name="icon_url" value="{$kb_type_icon_url}" />
+            </div>
+            <div>
+                <label>Icon Class</label>
+                <input type="text" name="icon_class" value="{$kb_type_icon_class}" />
+            </div>
+        </div>
+        <label>Background URL</label>
+        <input type="text" name="bg_url" value="{$kb_type_bg_url}" />
     </section>
     <div class="af-kb-inline">
-        <button type="submit" class="af-kb-btn af-kb-btn--edit">{$lang->af_kb_save}</button>
+        <button type="submit" class="af-kb-btn af-kb-btn--edit af-kb-btn-edit">{$lang->af_kb_save}</button>
         <a class="af-kb-btn" href="{$kb_cancel_link}">{$lang->af_kb_cancel}</a>
         {$kb_type_delete_link}
     </div>

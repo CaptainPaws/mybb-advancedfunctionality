@@ -1,3 +1,7 @@
+<form class="af-kb-search" method="get" action="misc.php">
+    <input type="hidden" name="action" value="kb" />
+    <input type="text" name="q" value="{$kb_query}" placeholder="{$lang->af_kb_search_placeholder}" />
+</form>
 <div class="af-kb-header">
     <h1>{$lang->af_kb_catalog_title}</h1>
     {$kb_create_link}
@@ -5,3 +9,4 @@
 <div class="af-kb-tabs">
     {$kb_types_rows}
 </div>
+<div class="af-kb-pagination">{$kb_pagination}</div>
