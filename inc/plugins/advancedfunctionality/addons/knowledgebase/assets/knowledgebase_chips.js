@@ -44,14 +44,36 @@
         return tooltip;
     }
 
-    function showTooltip(chip, text) {
-        if (!text) return;
+    function buildIconHtml(entry) {
+        if (!entry) return '';
+        if (entry.icon_url) {
+            return '<img class="af-kb-icon-img" src="' + escapeHtml(entry.icon_url) + '" alt="" loading="lazy" />';
+        }
+        if (entry.icon_class) {
+            return '<i class="' + escapeHtml(entry.icon_class) + '"></i>';
+        }
+        return '';
+    }
 
-        var limit = 220;
-        var trimmed = text.length > limit ? text.slice(0, limit) + '…' : text;
+    function showTooltip(chip, payload) {
+        if (!payload) return;
+
+        var html = payload.html || '';
+        var text = payload.text || '';
+        if (!html && !text) return;
+
+        if (!html && text) {
+            var limit = 220;
+            var trimmed = text.length > limit ? text.slice(0, limit) + '…' : text;
+            html = escapeHtml(trimmed).replace(/\n/g, '<br />');
+        }
 
         var tip = ensureTooltip();
-        tip.textContent = trimmed;
+        tip.innerHTML =
+            '<div class="af-kb-tooltip-inner">' +
+                (payload.iconHtml ? '<span class="af-kb-tooltip-icon">' + payload.iconHtml + '</span>' : '') +
+                '<div class="af-kb-tooltip-body">' + html + '</div>' +
+            '</div>';
         tip.style.display = 'block';
 
         var rect = chip.getBoundingClientRect();
@@ -123,12 +145,7 @@
 
         var entry = entryData.entry;
 
-        var iconHtml = '';
-        if (entry.icon_url) {
-            iconHtml = '<img class="af-kb-icon-img" src="' + escapeHtml(entry.icon_url) + '" alt="" loading="lazy" />';
-        } else if (entry.icon_class) {
-            iconHtml = '<i class="' + escapeHtml(entry.icon_class) + '"></i>';
-        }
+        var iconHtml = buildIconHtml(entry);
 
         title.innerHTML =
             '<span class="af-kb-modal-title">' +
@@ -139,8 +156,12 @@
         var banner = entry.banner_url
             ? '<img class="af-kb-banner" src="' + escapeHtml(entry.banner_url) + '" alt="" loading="lazy" />'
             : '';
-        var short = entry.short ? '<p>' + escapeHtml(entry.short) + '</p>' : '';
-        var bodyText = entry.body ? '<div>' + escapeHtml(entry.body).replace(/\n/g, '<br />') + '</div>' : '';
+        var short = entry.short_rendered
+            ? '<div class="af-kb-modal-short">' + entry.short_rendered + '</div>'
+            : (entry.short ? '<p>' + escapeHtml(entry.short) + '</p>' : '');
+        var bodyText = entry.body_rendered
+            ? '<div class="af-kb-modal-main">' + entry.body_rendered + '</div>'
+            : (entry.body ? '<div>' + escapeHtml(entry.body).replace(/\n/g, '<br />') + '</div>' : '');
         var blocksHtml = '';
         if (entryData.blocks && Array.isArray(entryData.blocks)) {
             entryData.blocks.forEach(function (block) {
@@ -177,7 +198,10 @@
                 }
 
                 var blockTitle = escapeHtml(block.title || block.block_key || '');
-                var blockBody = escapeHtml(block.content || block.body || '').replace(/\n/g, '<br />');
+                var blockBody = block.body_rendered || block.content_rendered || '';
+                if (!blockBody) {
+                    blockBody = escapeHtml(block.content || block.body || '').replace(/\n/g, '<br />');
+                }
                 if (!blockTitle && !blockBody) {
                     return;
                 }
@@ -199,9 +223,21 @@
             var chip = event.target && event.target.closest ? event.target.closest('.af-kb-chip') : null;
             if (!chip) return;
 
+            var cachedHtml = chip.__afKbTooltipHtml;
+            if (cachedHtml) {
+                showTooltip(chip, {
+                    html: cachedHtml,
+                    iconHtml: chip.__afKbTooltipIconHtml || ''
+                });
+                return;
+            }
+
             var techHint = chip.getAttribute('data-tech-hint');
             if (techHint) {
-                showTooltip(chip, techHint);
+                showTooltip(chip, {
+                    text: techHint,
+                    iconHtml: chip.querySelector('.af-kb-chip-icon') ? chip.querySelector('.af-kb-chip-icon').innerHTML : ''
+                });
                 return;
             }
 
@@ -213,9 +249,22 @@
                 fetchEntry(type, key).then(function (data) {
                     if (!data || !data.entry) return;
                     var hint = data.entry.tech_hint || '';
+                    var tooltipHtml = data.entry.tooltip_html || '';
+                    chip.__afKbTooltipIconHtml = buildIconHtml(data.entry);
+                    if (tooltipHtml) {
+                        chip.__afKbTooltipHtml = tooltipHtml;
+                        showTooltip(chip, {
+                            html: tooltipHtml,
+                            iconHtml: chip.__afKbTooltipIconHtml
+                        });
+                        return;
+                    }
                     if (hint) {
                         chip.setAttribute('data-tech-hint', hint);
-                        showTooltip(chip, hint);
+                        showTooltip(chip, {
+                            text: hint,
+                            iconHtml: chip.__afKbTooltipIconHtml
+                        });
                     }
                 });
             }, 150);

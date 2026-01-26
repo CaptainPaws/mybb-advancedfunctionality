@@ -664,6 +664,12 @@ function af_kb_build_tech_hint(string $text): string
     return trim($text);
 }
 
+function af_kb_strip_tech_icon_tag(string $text): string
+{
+    $text = preg_replace('/^\s*\[icon=[^\]]+\]\s*/i', '', $text);
+    return $text ?? '';
+}
+
 function af_kb_build_tech_note_html(string $text): string
 {
     $text = trim($text);
@@ -696,6 +702,49 @@ function af_kb_build_tech_note_html(string $text): string
     }
 
     return $parsed;
+}
+
+function af_kb_sanitize_rendered_html(string $html): string
+{
+    $html = trim($html);
+    if ($html === '') {
+        return '';
+    }
+
+    $allowed = '<b><strong><i><em><u><s><br><p><ul><ol><li><span><a><img><blockquote><code><pre>';
+    $html = strip_tags($html, $allowed);
+    if ($html === '') {
+        return '';
+    }
+
+    $html = preg_replace('/\s*on[a-z]+\s*=\s*(".*?"|\'.*?\'|[^\s>]+)/i', '', $html) ?? $html;
+    $html = preg_replace('/\sstyle\s*=\s*(".*?"|\'.*?\'|[^\s>]+)/i', '', $html) ?? $html;
+
+    $html = preg_replace_callback(
+        '/\s(href|src)\s*=\s*("|\')(.*?)\2/i',
+        static function (array $matches): string {
+            $clean = af_kb_sanitize_url($matches[3]);
+            if ($clean === '') {
+                return '';
+            }
+            return ' ' . $matches[1] . '="' . htmlspecialchars_uni($clean) . '"';
+        },
+        $html
+    );
+
+    $html = preg_replace_callback(
+        '/\s(href|src)\s*=\s*([^\s>\'"]+)/i',
+        static function (array $matches): string {
+            $clean = af_kb_sanitize_url($matches[2]);
+            if ($clean === '') {
+                return '';
+            }
+            return ' ' . $matches[1] . '="' . htmlspecialchars_uni($clean) . '"';
+        },
+        $html
+    );
+
+    return $html;
 }
 
 function af_kb_render_tech_note_details(string $label, string $text): string
@@ -1566,6 +1615,11 @@ function af_kb_handle_view(): void
     $kb_title = htmlspecialchars_uni($title);
     $kb_short = $short;
     $kb_body = $body;
+    $kb_banner = '';
+    $bannerUrl = af_kb_sanitize_url((string)($entry['banner_url'] ?? ''));
+    if ($bannerUrl !== '') {
+        $kb_banner = '<img class="af-kb-banner" src="' . htmlspecialchars_uni($bannerUrl) . '" alt="" loading="lazy" />';
+    }
     $kb_can_edit = af_kb_can_edit() ? '1' : '0';
     $kb_edit_link = af_kb_can_edit() ? '<a class="af-kb-btn af-kb-btn--edit af-kb-btn-edit" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'&key='.htmlspecialchars_uni($key).'">'.htmlspecialchars_uni($lang->af_kb_edit ?? 'Edit').'</a>' : '';
     $kb_delete_form = '';
@@ -2280,10 +2334,16 @@ function af_kb_handle_json_get(): void
         if (!$row['active'] && !af_kb_can_edit()) {
             continue;
         }
+        $blockContent = af_kb_pick_text($row, 'content');
+        $blockContentRendered = '';
+        if ($blockContent !== '') {
+            $blockContentRendered = af_kb_sanitize_rendered_html(af_kb_parse_message($blockContent));
+        }
         $blocks[] = [
             'block_key' => $row['block_key'],
             'title'     => af_kb_pick_text($row, 'title'),
             'content'   => af_kb_pick_text($row, 'content'),
+            'body_rendered' => $blockContentRendered,
             'data_json' => $row['data_json'],
             'sortorder' => (int)$row['sortorder'],
         ];
@@ -2302,15 +2362,25 @@ function af_kb_handle_json_get(): void
     }
 
     $entryUi = af_kb_get_entry_ui($entry);
+    $entryShort = af_kb_pick_text($entry, 'short');
+    $entryBody = af_kb_pick_text($entry, 'body');
+    $entryTech = af_kb_pick_text($entry, 'tech');
+    $shortRendered = $entryShort !== '' ? af_kb_sanitize_rendered_html(af_kb_parse_message($entryShort)) : '';
+    $bodyRendered = $entryBody !== '' ? af_kb_sanitize_rendered_html(af_kb_parse_message($entryBody)) : '';
+    $tooltipText = af_kb_strip_tech_icon_tag($entryTech);
+    $tooltipHtml = $tooltipText !== '' ? af_kb_sanitize_rendered_html(af_kb_parse_message($tooltipText)) : '';
     $payload = [
         'entry' => [
             'type'      => $entry['type'],
             'key'       => $entry['key'],
             'title'     => af_kb_pick_text($entry, 'title'),
-            'short'     => af_kb_pick_text($entry, 'short'),
-            'body'      => af_kb_pick_text($entry, 'body'),
+            'short'     => $entryShort,
+            'body'      => $entryBody,
+            'short_rendered' => $shortRendered,
+            'body_rendered' => $bodyRendered,
             'meta_json' => $entry['meta_json'],
             'tech_hint' => af_kb_build_tech_hint(af_kb_pick_text($entry, 'tech')),
+            'tooltip_html' => $tooltipHtml,
             'icon_url'  => $entryUi['icon_url'],
             'icon_class'=> $entryUi['icon_class'],
             'banner_url'=> $entry['banner_url'] ?? '',

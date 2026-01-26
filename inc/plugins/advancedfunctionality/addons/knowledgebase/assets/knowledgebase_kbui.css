@@ -25,15 +25,52 @@
 .af-kb-tooltip {
     position: absolute;
     z-index: 10000;
-    max-width: 260px;
+    max-width: 320px;
+    max-height: 180px;
     background: #1d2435;
     color: #fff;
     padding: 8px 10px;
     border-radius: 6px;
     font-size: 0.85em;
     line-height: 1.4;
-    white-space: pre-line;
+    overflow: hidden;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+}
+
+.af-kb-tooltip-inner {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.af-kb-tooltip-icon {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
+.af-kb-tooltip-icon .af-kb-icon-img {
+    width: 24px;
+    height: 24px;
+}
+
+.af-kb-tooltip-body {
+    overflow: hidden;
+}
+
+.af-kb-tooltip-body > *:first-child {
+    margin-top: 0;
+}
+
+.af-kb-tooltip-body > *:last-child {
+    margin-bottom: 0;
+}
+
+.af-kb-tooltip img {
+    max-width: 100%;
+    max-height: 80px;
+    height: auto;
+    border-radius: 4px;
 }
 
 .af-kb-modal-backdrop {
@@ -214,6 +251,8 @@
     display: block;
     width: 100%;
     height: auto;
+    max-height: 320px;
+    object-fit: cover;
     border-radius: 8px;
     margin-bottom: 12px;
 }
