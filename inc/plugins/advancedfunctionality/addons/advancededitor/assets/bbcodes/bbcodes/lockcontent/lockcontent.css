@@ -1,0 +1,170 @@
+/* AQR Builtin: lockcontent (current) */
+
+/* ===== LockContent quote ===== */
+.mycode_quote.af-aqr-lc-quote{
+  position: relative;
+}
+
+/* водяной знак-замочек */
+.mycode_quote.af-aqr-lc-quote::after{
+  content: "";
+  position: absolute;
+  top: 0px;
+  right: 0px;
+  width: 40px;
+  height: 40px;
+  background: url("../../img/locked.svg") no-repeat center / contain;
+  opacity: .15;
+  transform: rotate(-12deg);
+  pointer-events: none;
+  filter: grayscale(1);
+}
+
+/* если cite вдруг где-то всё равно оказался — прячем только в lc-цитате */
+.mycode_quote.af-aqr-lc-quote > cite{
+  display: none;
+}
+
+/* ===== LockContent dropdown (SCEditor) ===== */
+.sceditor-dropdown .af-lc-dd{
+  width: 360px;
+  max-width: 92vw;
+  color: #eee;
+}
+
+.sceditor-dropdown .af-lc-dd-hd{
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+.sceditor-dropdown .af-lc-dd-title{
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.sceditor-dropdown .af-lc-dd-body{
+  padding: 10px 12px;
+}
+
+.sceditor-dropdown .af-lc-dd-tabs{
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.03);
+}
+
+.sceditor-dropdown .af-lc-dd-tab{
+  flex: 1;
+  display: block;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sceditor-dropdown .af-lc-dd-tab input{
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sceditor-dropdown .af-lc-dd-tab span{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.2;
+  color: rgba(255,255,255,.82);
+  border: 1px solid transparent;
+  background: transparent;
+  transition: background .12s ease, border-color .12s ease, color .12s ease, transform .12s ease;
+}
+
+.sceditor-dropdown .af-lc-dd-tab:hover span{
+  background: rgba(255,255,255,.06);
+}
+
+.sceditor-dropdown .af-lc-dd-tab input:checked + span{
+  background: rgba(255,255,255,.12);
+  border-color: rgba(255,255,255,.16);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(0,0,0,.25);
+}
+
+.sceditor-dropdown .af-lc-dd-panels{
+  margin-top: 10px;
+}
+
+.sceditor-dropdown .af-lc-dd-panel{
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.03);
+}
+
+/* show/hide panels by mode (JS ставит data-mode на wrap) */
+.sceditor-dropdown .af-lc-dd[data-mode="posts"] .af-lc-dd-panel[data-panel="users"]{ display: none; }
+.sceditor-dropdown .af-lc-dd[data-mode="users"] .af-lc-dd-panel[data-panel="posts"]{ display: none; }
+
+.sceditor-dropdown .af-lc-dd-help{
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(255,255,255,.70);
+  margin: 0 0 10px 0;
+}
+
+.sceditor-dropdown .af-lc-dd-posts{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.sceditor-dropdown .af-lc-dd-posts span{
+  color: rgba(255,255,255,.85);
+  font-size: 13px;
+}
+
+.sceditor-dropdown .af-lc-dd-input{
+  width: 100%;
+  max-width: 100%;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: #eee;
+  outline: none;
+  font-size: 13px;
+  line-height: 1.2;
+  box-sizing: border-box;
+  transition: border-color .12s ease, background .12s ease, box-shadow .12s ease;
+}
+
+.sceditor-dropdown .af-lc-dd-minposts{
+  width: 120px;
+}
+
+.sceditor-dropdown .af-lc-dd-input:focus{
+  border-color: rgba(255,255,255,.26);
+  background: rgba(255,255,255,.08);
+  box-shadow: 0 0 0 3px rgba(255,255,255,.06);
+}
+
+.sceditor-dropdown .af-lc-dd-input::placeholder{
+  color: rgba(255,255,255,.45);
+}
+
+.sceditor-dropdown .af-lc-dd-input:disabled{
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.sceditor-dropdown .af-lc-dd-actions{
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

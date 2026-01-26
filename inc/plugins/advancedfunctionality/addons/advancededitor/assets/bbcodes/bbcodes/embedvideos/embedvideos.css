@@ -1,0 +1,61 @@
+/* AE BBCode Pack: EmbedVideos */
+
+.af-ev-dd { padding: 10px; min-width: 260px; max-width: 360px; }
+
+.af-ev-title {
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  font-size: 13px;
+}
+
+.af-ev-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.af-ev-item {
+  display: inline-block;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid rgba(0,0,0,.15);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  text-align: center;
+  font-size: 12px;
+}
+
+.af-ev-item:hover { filter: brightness(0.97); }
+
+.af-ev-row { margin-top: 6px; }
+
+.af-ev-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid rgba(0,0,0,.18);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.af-ev-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.af-ev-back,
+.af-ev-insert {
+  padding: 7px 10px;
+  border: 1px solid rgba(0,0,0,.15);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  width: 48%;
+}
+
+.af-ev-back:hover,
+.af-ev-insert:hover { filter: brightness(0.97); }

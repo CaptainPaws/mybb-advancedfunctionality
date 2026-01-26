@@ -1,0 +1,44 @@
+/* Общая зачистка фона у кнопок списков */
+a.sceditor-button-af_ul_disc div,
+a.sceditor-button-af_ul_square div,
+a.sceditor-button-af_ul_decimal div,
+a.sceditor-button-af_ul_upper_roman div,
+a.sceditor-button-af_ul_upper_alpha div,
+a.sceditor-button-af_ul_lower_alpha div {
+  background: none !important;
+  text-indent: 0 !important;
+  overflow: visible !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Псевдо-иконки (отличаем визуально) */
+a.sceditor-button-af_ul_disc div:before        { content: "•"; font-weight: 700; }
+a.sceditor-button-af_ul_square div:before      { content: "■"; font-weight: 700; }
+a.sceditor-button-af_ul_decimal div:before     { content: "1"; font-weight: 700; }
+a.sceditor-button-af_ul_upper_roman div:before { content: "I"; font-weight: 700; }
+a.sceditor-button-af_ul_upper_alpha div:before { content: "A"; font-weight: 700; }
+a.sceditor-button-af_ul_lower_alpha div:before { content: "a"; font-weight: 700; }
+
+a.sceditor-button-af_ul_disc div:before,
+a.sceditor-button-af_ul_square div:before,
+a.sceditor-button-af_ul_decimal div:before,
+a.sceditor-button-af_ul_upper_roman div:before,
+a.sceditor-button-af_ul_upper_alpha div:before,
+a.sceditor-button-af_ul_lower_alpha div:before {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+  font-size: 13px;
+  line-height: 1;
+  opacity: .95;
+}
+
+/* На всякий — убираем любые "before" от дефолтных спрайтов, если MyBB их подмешает */
+a.sceditor-button-af_ul_disc div:after,
+a.sceditor-button-af_ul_square div:after,
+a.sceditor-button-af_ol_decimal div:after,
+a.sceditor-button-af_ol_upper_roman div:after,
+a.sceditor-button-af_ol_upper_alpha div:after,
+a.sceditor-button-af_ol_lower_alpha div:after{
+  content: "" !important;
+}

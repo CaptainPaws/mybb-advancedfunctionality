@@ -1,0 +1,206 @@
+/* ====== Rendered table ====== */
+.af-aqr-table {
+  border-collapse: collapse;
+  width: 100%;
+  max-width: 100%;
+  margin: 10px 0;
+}
+
+.af-aqr-table td,
+.af-aqr-table th {
+  border-style: solid;
+  border-width: var(--af-tbl-bw, 1px);
+  border-color: var(--af-tbl-bc, rgba(255,255,255,.14));
+
+  padding: 8px 10px;
+  vertical-align: top;
+
+  /* default: inherit from forum */
+  background: var(--af-tbl-bg, transparent);
+  color: var(--af-tbl-txt, inherit);
+}
+
+.af-aqr-table th {
+  font-weight: 700;
+
+  /* header bg:
+     1) --af-tbl-hbg if set
+     2) fallback to common --af-tbl-bg if set
+     3) otherwise transparent (или можешь вернуть rgba(255,255,255,.06) если хочешь “красивый дефолт”) */
+  background: var(--af-tbl-hbg, var(--af-tbl-bg, rgba(255,255,255,.06)));
+
+  /* header text:
+     1) --af-tbl-htxt if set
+     2) fallback to common --af-tbl-txt if set
+     3) otherwise inherit */
+  color: var(--af-tbl-htxt, var(--af-tbl-txt, inherit));
+}
+
+
+.af-aqr-table[style*="--af-tbl-bw:0px"] td,
+.af-aqr-table[style*="--af-tbl-bw:0px"] th {
+  border: 0 !important;
+}
+
+.af-aqr-table[data-headers="row"] tr:first-child > th,
+.af-aqr-table[data-headers="row"] tr:first-child > td {
+  font-weight: 700;
+  background: var(--af-tbl-hbg, var(--af-tbl-bg, rgba(255,255,255,.06)));
+  color: var(--af-tbl-htxt, var(--af-tbl-txt, inherit));
+}
+
+.af-aqr-table[data-headers="col"] tr > th:first-child,
+.af-aqr-table[data-headers="col"] tr > td:first-child {
+  font-weight: 700;
+  background: var(--af-tbl-hbg, var(--af-tbl-bg, rgba(255,255,255,.06)));
+  color: var(--af-tbl-htxt, var(--af-tbl-txt, inherit));
+}
+
+.af-aqr-table[data-headers="both"] tr:first-child > * ,
+.af-aqr-table[data-headers="both"] tr > *:first-child {
+  font-weight: 700;
+  background: var(--af-tbl-hbg, var(--af-tbl-bg, rgba(255,255,255,.06)));
+  color: var(--af-tbl-htxt, var(--af-tbl-txt, inherit));
+}
+
+
+/* ====== Table dropdown UI (SCEditor dropdown) ====== */
+.sceditor-dropdown .af-table-dd {
+  width: 100%;
+  min-width: 320px;
+  box-sizing: border-box;
+  background: #1f1f1f;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.45);
+  overflow: hidden;
+}
+
+/* компактная шапка */
+.sceditor-dropdown .af-table-dd-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.10);
+}
+
+.sceditor-dropdown .af-table-dd-title {
+  font-weight: 800;
+  color: #fff;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  opacity: .9;
+}
+
+.sceditor-dropdown .af-table-dd-body {
+  padding: 8px 10px 10px 10px;
+  display: grid;
+  gap: 8px;
+}
+
+/* grid выбора размера */
+.sceditor-dropdown .af-table-dd-gridwrap {
+  display: grid;
+  gap: 6px;
+}
+
+.sceditor-dropdown .af-table-dd-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 3px;
+}
+
+.sceditor-dropdown .af-table-dd-cell {
+  height: 16px;
+  border-radius: 4px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.10);
+  box-sizing: border-box;
+}
+
+.sceditor-dropdown .af-table-dd-cell.is-on {
+  background: rgba(255,255,255,.18);
+  border-color: rgba(255,255,255,.25);
+}
+
+.sceditor-dropdown .af-table-dd-size {
+  color: rgba(255,255,255,.70);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+/* options */
+.sceditor-dropdown .af-table-dd-opts {
+  border-top: 1px solid rgba(255,255,255,.10);
+  padding-top: 8px;
+
+  display: grid;
+  gap: 8px;
+}
+
+/* общий стиль label: заголовок сверху, инпут под ним */
+.sceditor-dropdown .af-table-dd-row {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.sceditor-dropdown .af-table-dd-row > span, .af-table-dd-field > span {
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.75);
+  line-height: 1.1;
+}
+
+/* мини-табличка 2 колонки для cols/rows */
+.sceditor-dropdown .af-table-dd-row.is-rc {
+  grid-template-columns: 1fr 1fr;
+  column-gap: 8px;
+  row-gap: 0;
+}
+
+.sceditor-dropdown .af-table-dd-row.is-rc .af-table-dd-field {
+  display: grid;
+  gap: 4px;
+}
+
+/* inputs */
+.sceditor-dropdown .af-table-dd input,
+.sceditor-dropdown .af-table-dd select {
+  width: 100%;
+  box-sizing: border-box;
+
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: #fff;
+
+  padding: 7px 9px;          /* меньше по высоте */
+  line-height: 1.2;
+  outline: none;
+}
+
+.sceditor-dropdown .af-table-dd input:focus,
+.sceditor-dropdown .af-table-dd select:focus {
+  border-color: rgba(255,255,255,.22);
+}
+
+/* кнопка */
+.sceditor-dropdown .af-table-dd-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
+.sceditor-dropdown .af-table-dd .button.af-t-insert {
+  padding: 7px 10px;
+  border-radius: 10px;
+}
+
+/* чуть сжимаем дефолтный dropdown от SCEditor, если он добавляет padding */
+.sceditor-dropdown {
+  box-sizing: border-box;
+}

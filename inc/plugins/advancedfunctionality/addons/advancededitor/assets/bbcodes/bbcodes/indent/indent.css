@@ -1,0 +1,52 @@
+/* AF AdvancedEditor: indent (first-line) */
+
+/* блок, который создаёт MyCode */
+.af-indent {
+  display: block;
+}
+
+/* отступ ПЕРВОЙ строки */
+.af-indent-1 { text-indent: 1em; }
+.af-indent-2 { text-indent: 2em; }
+.af-indent-3 { text-indent: 3em; }
+
+/* чтобы блок не ломал вертикальные отступы у вложенного контента */
+.af-indent > :first-child { margin-top: 0; }
+.af-indent > :last-child  { margin-bottom: 0; }
+
+/* Dropdown UI (по примеру fontfamily) */
+.af-indent-dd {
+  width: 240px;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+.af-indent-item {
+  width: 100%;
+  display: block;
+  box-sizing: border-box;
+  text-align: left;
+  padding: 7px 8px;
+  margin: 4px 0;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+}
+
+.af-indent-item:hover {
+  background: rgba(0,0,0,.04);
+  border-color: rgba(0,0,0,.08);
+}
+
+.af-indent-name {
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1.15;
+}
+
+.af-indent-sample {
+  font-size: 12px;
+  opacity: .9;
+  margin-top: 2px;
+}

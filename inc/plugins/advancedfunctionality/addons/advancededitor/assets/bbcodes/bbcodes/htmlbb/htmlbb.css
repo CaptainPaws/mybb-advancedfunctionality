@@ -1,0 +1,65 @@
+.af-htmlbb {
+  margin: 8px 0;
+}
+
+.af-htmlbb .af-htmlbb-fallback {
+  padding: 8px 10px;
+  border: 1px dashed rgba(255,255,255,.18);
+  border-radius: 8px;
+  opacity: .85;
+  font-size: 12px;
+}
+
+.af-htmlbb-box iframe {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  border: 0;
+}
+
+.af-htmlbb-dd {
+  padding: 10px;
+  min-width: 340px;
+  max-width: 420px;
+}
+
+.af-htmlbb-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.af-htmlbb-hint {
+  font-size: 12px;
+  opacity: .85;
+  margin-bottom: 8px;
+  line-height: 1.35;
+}
+
+.af-htmlbb-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.15);
+  background: rgba(0,0,0,.25);
+  color: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.af-htmlbb-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.af-htmlbb-insert {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.15);
+  background: rgba(0,0,0,.25);
+  color: inherit;
+  cursor: pointer;
+}

@@ -1,0 +1,96 @@
+/* ===== CopyCode: add "Copy" button to [code] blocks ===== */
+
+.af-cc-scope{
+  position: relative;
+}
+
+/* кнопка (в хедере или внутри блока) */
+.af-cc-btn{
+  appearance: none;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.55);          
+  color: #fff;                           
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background .12s ease, border-color .12s ease, transform .12s ease, opacity .12s ease, box-shadow .12s ease;
+  user-select: none;
+  backdrop-filter: blur(2px); 
+  text-transform: uppercase;
+  font-size: 10px;        
+}
+
+.af-cc-btn:hover{
+  background: rgba(0,0,0,.70);
+  border-color: rgba(255,255,255,.18);
+  box-shadow: 0 6px 18px rgba(0,0,0,.25);
+}
+
+.af-cc-btn:active{
+  transform: translateY(1px);
+}
+
+.af-cc-btn[disabled]{
+  opacity: .55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* маленькая иконка-копия (CSS) */
+.af-cc-ico{
+  width: 12px;
+  height: 12px;
+  display: inline-block;
+  position: relative;
+}
+
+/* светло-серая иконка */
+.af-cc-ico::before,
+.af-cc-ico::after{
+  content: "";
+  position: absolute;
+  border: 1px solid rgba(210,210,210,.85); /* светло-серый */
+  border-radius: 2px;
+  background: transparent;
+}
+
+.af-cc-ico::before{
+  inset: 2px 0 0 2px;
+  opacity: .75;
+}
+
+.af-cc-ico::after{
+  inset: 0 2px 2px 0;
+}
+
+/* чуть “подсвечиваем” иконку при hover */
+.af-cc-btn:hover .af-cc-ico::before,
+.af-cc-btn:hover .af-cc-ico::after{
+  border-color: rgba(235,235,235,.95);
+}
+
+/* размещение кнопки в "шапке" codeblock (если есть) */
+.af-cc-in-title{
+  position: absolute;
+  top: -5px;
+  right: 5px;
+}
+
+/* если шапки нет — позиционируем кнопку на самом блоке */
+.af-cc-fallback{
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+}
+
+/* чуть-чуть пространства сверху у pre, чтобы кнопка не наезжала на текст (fallback режим) */
+.af-cc-scope.af-cc-has-fallback pre{
+  padding-top: 26px;
+}

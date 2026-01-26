@@ -1,0 +1,272 @@
+/* ===== Typographic quote block ===== */
+
+.mycode_quote.af-aqr-tquote{
+  position: relative;
+  padding: 55px;
+  border-radius: 6px;
+  background: var(--af-tq-bg, rgba(255,255,255,.06));
+  overflow: hidden;
+  text-align: justify;
+  border: none;
+}
+
+/* Только одна полоса слева/справа (никаких рамок вокруг) */
+.mycode_quote.af-aqr-tquote[data-side="left"]{
+  border-right: 4px solid var(--af-tq-accent, rgba(255,255,255,.35));
+}
+.mycode_quote.af-aqr-tquote[data-side="right"]{
+  border-left: 4px solid var(--af-tq-accent, rgba(255,255,255,.35));
+}
+
+/* скрываем cite только у нашей цитаты */
+.mycode_quote.af-aqr-tquote > cite{
+  display: none;
+}
+
+/* декоративные кавычки: сверху + акцентный цвет */
+.mycode_quote.af-aqr-tquote::before{
+  content: "";
+  position: absolute;
+  top: -5px;
+  width: 60px;
+  height: 60px;
+  opacity: .16;
+  pointer-events: none;
+
+  background-color: var(--af-tq-accent, rgba(255,255,255,.35));
+
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+
+  /* inline svg (двойные кавычки) */
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='black' d='M10 28c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H10V28zm26 0c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H36V28z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='black' d='M10 28c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H10V28zm26 0c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H36V28z'/%3E%3C/svg%3E");
+}
+
+.mycode_quote.af-aqr-tquote[data-side="left"]::before{
+  left: 1px;
+  transform: rotate(-190deg) scaleX(-1);
+}
+.mycode_quote.af-aqr-tquote[data-side="right"]::before{
+  right: 1px;
+  transform: rotate(190deg);
+}
+
+/* мягкая подсветка внутри блока */
+.mycode_quote.af-aqr-tquote::after{
+  content: "";
+  position: absolute;
+  inset: -40% -30%;
+  background: radial-gradient(closest-side, rgba(255,255,255,.10), transparent 60%);
+  opacity: .35;
+  pointer-events: none;
+}
+
+
+/* ===== Dropdown (SCEditor) ===== */
+
+.sceditor-dropdown .af-tquote-dd{
+  width: 380px;
+  max-width: 92vw;
+  color: #eee;
+}
+
+.sceditor-dropdown .af-tquote-dd-hd{
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+.sceditor-dropdown .af-tquote-dd-title{
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.sceditor-dropdown .af-tquote-dd-body{
+  padding: 10px 12px;
+}
+
+.sceditor-dropdown .af-tquote-dd-row{
+  margin-bottom: 10px;
+}
+
+.sceditor-dropdown .af-tquote-dd-label{
+  font-size: 12px;
+  line-height: 1.2;
+  color: rgba(255,255,255,.70);
+  margin-bottom: 6px;
+}
+
+.sceditor-dropdown .af-tquote-dd-seg{
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.03);
+}
+
+.sceditor-dropdown .af-tquote-dd-segbtn{
+  flex: 1;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255,255,255,.82);
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.2;
+  transition: background .12s ease, border-color .12s ease, color .12s ease, transform .12s ease;
+}
+
+.sceditor-dropdown .af-tquote-dd-segbtn:hover{
+  background: rgba(255,255,255,.06);
+}
+
+.sceditor-dropdown .af-tquote-dd-segbtn.is-active{
+  background: rgba(255,255,255,.12);
+  border-color: rgba(255,255,255,.16);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(0,0,0,.25);
+}
+
+.sceditor-dropdown .af-tquote-dd-grid{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.sceditor-dropdown .af-tquote-dd-field > span{
+  display: block;
+  font-size: 12px;
+  line-height: 1.2;
+  color: rgba(255,255,255,.70);
+  margin-bottom: 6px;
+}
+
+.sceditor-dropdown .af-tquote-dd-color{
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sceditor-dropdown .af-tquote-dd-color input[type="color"]{
+  width: 44px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  padding: 2px;
+  cursor: pointer;
+}
+
+.sceditor-dropdown .af-tquote-dd-color input[type="text"]{
+  width: 100%;
+  max-width: 100%;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: #eee;
+  outline: none;
+  font-size: 13px;
+  line-height: 1.2;
+  box-sizing: border-box;
+  transition: border-color .12s ease, background .12s ease, box-shadow .12s ease;
+}
+
+.sceditor-dropdown .af-tquote-dd-color input[type="text"]:focus{
+  border-color: rgba(255,255,255,.26);
+  background: rgba(255,255,255,.08);
+  box-shadow: 0 0 0 3px rgba(255,255,255,.06);
+}
+
+.sceditor-dropdown .af-tquote-dd-preview{
+  margin-top: 10px;
+}
+
+.sceditor-dropdown .af-tquote-dd-previewbox{
+  position: relative;
+  padding: 12px 14px;
+  padding-top: 52px; /* место сверху под кавычки в превью */
+  border-radius: 14px;
+
+  border: 0; /* ВАЖНО: убрали тонкую рамку вокруг превью */
+  background: var(--af-tq-bg, rgba(255,255,255,.06));
+  overflow: hidden;
+
+  /* дефолты, JS может менять через style */
+  --af-tq-accent: #ffffff;
+  --af-tq-bg: #111111;
+}
+
+/* только одна полоса слева/справа */
+.sceditor-dropdown .af-tquote-dd-previewbox[data-side="left"]{
+  border-left: 4px solid var(--af-tq-accent);
+  padding-left: 68px; /* под кавычки */
+}
+.sceditor-dropdown .af-tquote-dd-previewbox[data-side="right"]{
+  border-right: 4px solid var(--af-tq-accent);
+  padding-right: 68px; /* под кавычки */
+}
+
+/* кавычки в превью: сверху */
+.sceditor-dropdown .af-tquote-dd-previewbox::before{
+  content: "";
+  position: absolute;
+  top: 10px;
+  width: 44px;
+  height: 44px;
+  opacity: .16;
+  pointer-events: none;
+  background-color: var(--af-tq-accent);
+
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='black' d='M10 28c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H10V28zm26 0c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H36V28z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='black' d='M10 28c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H10V28zm26 0c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H36V28z'/%3E%3C/svg%3E");
+}
+
+.sceditor-dropdown .af-tquote-dd[data-side="left"] .af-tquote-dd-previewbox::before{
+  left: 12px;
+}
+.sceditor-dropdown .af-tquote-dd[data-side="right"] .af-tquote-dd-previewbox::before{
+  right: 12px;
+}
+
+/* мягкая подсветка в превью */
+.sceditor-dropdown .af-tquote-dd-previewbox::after{
+  content: "";
+  position: absolute;
+  inset: -40% -30%;
+  background: radial-gradient(closest-side, rgba(255,255,255,.10), transparent 60%);
+  opacity: .35;
+  pointer-events: none;
+}
+
+.sceditor-dropdown .af-tquote-dd-previewtext{
+  position: relative;
+  z-index: 1;
+  display: block;
+  color: rgba(255,255,255,.85);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.sceditor-dropdown .af-tquote-dd-actions{
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
