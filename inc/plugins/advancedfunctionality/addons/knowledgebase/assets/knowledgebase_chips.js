@@ -105,56 +105,70 @@
         body.innerHTML = short + bodyText;
     }
 
-    document.addEventListener('mouseover', function (event) {
-        var chip = event.target.closest && event.target.closest('.af-kb-chip');
-        if (!chip) {
+    function initChips() {
+        if (window.__afKbChipsInit) {
             return;
         }
-        var techHint = chip.getAttribute('data-tech-hint');
-        if (techHint) {
-            showTooltip(chip, techHint);
-            return;
-        }
-        var type = chip.getAttribute('data-kb-type');
-        var key = chip.getAttribute('data-kb-key');
-        if (!type || !key) {
-            return;
-        }
-        tooltipTimer = setTimeout(function () {
-            fetchEntry(type, key).then(function (data) {
-                if (!data || !data.entry) {
-                    return;
-                }
-                var hint = data.entry.tech_hint || '';
-                if (hint) {
-                    chip.setAttribute('data-tech-hint', hint);
-                    showTooltip(chip, hint);
-                }
-            });
-        }, 150);
-    });
+        window.__afKbChipsInit = true;
 
-    document.addEventListener('mouseout', function (event) {
-        if (event.target.closest && event.target.closest('.af-kb-chip')) {
-            hideTooltip();
-        }
-    });
-
-    document.addEventListener('click', function (event) {
-        var chip = event.target.closest && event.target.closest('.af-kb-chip');
-        if (!chip) {
-            return;
-        }
-        event.preventDefault();
-        var type = chip.getAttribute('data-kb-type');
-        var key = chip.getAttribute('data-kb-key');
-        if (!type || !key) {
-            return;
-        }
-        fetchEntry(type, key).then(function (data) {
-            var backdrop = getOrBuildModal();
-            renderModal(data);
-            backdrop.classList.add('is-active');
+        document.addEventListener('mouseover', function (event) {
+            var chip = event.target.closest && event.target.closest('.af-kb-chip');
+            if (!chip) {
+                return;
+            }
+            var techHint = chip.getAttribute('data-tech-hint');
+            if (techHint) {
+                showTooltip(chip, techHint);
+                return;
+            }
+            var type = chip.getAttribute('data-kb-type');
+            var key = chip.getAttribute('data-kb-key');
+            if (!type || !key) {
+                return;
+            }
+            tooltipTimer = setTimeout(function () {
+                fetchEntry(type, key).then(function (data) {
+                    if (!data || !data.entry) {
+                        return;
+                    }
+                    var hint = data.entry.tech_hint || '';
+                    if (hint) {
+                        chip.setAttribute('data-tech-hint', hint);
+                        showTooltip(chip, hint);
+                    }
+                });
+            }, 150);
         });
+
+        document.addEventListener('mouseout', function (event) {
+            if (event.target.closest && event.target.closest('.af-kb-chip')) {
+                hideTooltip();
+            }
+        });
+
+        document.addEventListener('click', function (event) {
+            var chip = event.target.closest && event.target.closest('.af-kb-chip');
+            if (!chip) {
+                return;
+            }
+            event.preventDefault();
+            var type = chip.getAttribute('data-kb-type');
+            var key = chip.getAttribute('data-kb-key');
+            if (!type || !key) {
+                return;
+            }
+            fetchEntry(type, key).then(function (data) {
+                var backdrop = getOrBuildModal();
+                renderModal(data);
+                backdrop.classList.add('is-active');
+            });
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        if (!document.querySelector('.af-kb-chip')) {
+            return;
+        }
+        initChips();
     });
 })();

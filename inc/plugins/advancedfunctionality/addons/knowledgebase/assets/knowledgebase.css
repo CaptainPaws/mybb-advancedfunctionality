@@ -204,6 +204,18 @@
     border-radius: 6px;
 }
 
+.af-kb-tech-note .af-kb-tech-icon {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 8px;
+}
+
+.af-kb-tech-note .af-kb-tech-icon i,
+.af-kb-tech-note .af-kb-tech-icon img {
+    width: 18px;
+    height: 18px;
+}
+
 .af-kb-breadcrumbs {
     font-size: 0.9em;
     color: #666;
