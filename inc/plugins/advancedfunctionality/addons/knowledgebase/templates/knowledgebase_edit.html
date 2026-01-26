@@ -37,13 +37,19 @@
         <label>Краткое описание (EN)</label>
         <textarea name="short_en">{$kb_short_en}</textarea>
         <label>Полное описание (RU)</label>
-        <textarea name="body_ru">{$kb_body_ru}</textarea>
+        <textarea class="af-kb-editor" name="body_ru">{$kb_body_ru}</textarea>
         <label>Полное описание (EN)</label>
-        <textarea name="body_en">{$kb_body_en}</textarea>
+        <textarea class="af-kb-editor" name="body_en">{$kb_body_en}</textarea>
         <label>Техническое описание (RU)</label>
-        <textarea name="tech_ru">{$kb_tech_ru}</textarea>
+        <div class="af-kb-inline af-kb-inline--align">
+            <textarea name="tech_ru" data-kb-tech="tech_ru">{$kb_tech_ru}</textarea>
+            <button type="button" class="af-kb-add af-kb-tech-template" data-target="tech_ru" data-template="{$kb_tech_template}">{$kb_tech_template_label}</button>
+        </div>
         <label>Техническое описание (EN)</label>
-        <textarea name="tech_en">{$kb_tech_en}</textarea>
+        <div class="af-kb-inline af-kb-inline--align">
+            <textarea name="tech_en" data-kb-tech="tech_en">{$kb_tech_en}</textarea>
+            <button type="button" class="af-kb-add af-kb-tech-template" data-target="tech_en" data-template="{$kb_tech_template}">{$kb_tech_template_label}</button>
+        </div>
         <div class="af-kb-row">
             <div>
                 <label>Meta JSON</label>

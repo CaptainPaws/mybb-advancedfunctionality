@@ -6,14 +6,6 @@
     z-index: 1;
 }
 
-.af-kb-bg {
-    position: fixed;
-    inset: 0;
-    background-size: cover;
-    background-position: center;
-    z-index: 0;
-}
-
 .af-kb-header {
     display: flex;
     align-items: center;
@@ -128,6 +120,7 @@
 .af-kb-tab--with-bg {
     background-size: cover;
     background-position: center;
+    background-repeat: no-repeat;
 }
 
 .af-kb-type-header,
@@ -136,6 +129,20 @@
     border-radius: 6px;
     background-size: cover;
     background-position: center;
+}
+
+.af-kb-entries--with-bg {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    border-radius: 8px;
+    padding: 8px;
+}
+
+.af-kb-entry--with-bg {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
 }
 
 .af-kb-tab:hover {
@@ -281,6 +288,15 @@
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+.af-kb-inline--align {
+    align-items: flex-start;
+}
+
+.af-kb-inline--align textarea {
+    flex: 1;
+    margin-bottom: 0;
 }
 
 .af-kb-block-item,
