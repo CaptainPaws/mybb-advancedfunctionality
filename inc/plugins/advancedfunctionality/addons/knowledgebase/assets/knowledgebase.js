@@ -36,11 +36,19 @@
         }
         var baseOptions = window.sceditor_options && typeof window.sceditor_options === 'object'
             ? window.sceditor_options
-            : {
-                plugins: 'bbcode',
-                toolbar: 'bold,italic,underline,strike|left,center,right,justify|bulletlist,orderedlist|link,unlink|image|quote,code',
-                style: ''
-            };
+            : {};
+        if (!baseOptions.plugins) {
+            baseOptions.plugins = 'bbcode';
+        }
+        if (!baseOptions.toolbar) {
+            baseOptions.toolbar = 'bold,italic,underline,strike|left,center,right,justify|bulletlist,orderedlist|link,unlink|image|quote,code';
+        }
+        if (!baseOptions.style) {
+            var defaultStyle = window.sceditor && window.sceditor.defaultOptions ? window.sceditor.defaultOptions.style : '';
+            if (defaultStyle) {
+                baseOptions.style = defaultStyle;
+            }
+        }
         fields.forEach(function (field) {
             if (field.dataset.afKbEditor === '1') {
                 return;

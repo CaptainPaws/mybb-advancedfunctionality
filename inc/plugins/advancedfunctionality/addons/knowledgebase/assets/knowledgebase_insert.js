@@ -16,7 +16,13 @@
             return Promise.resolve(cache.types);
         }
         return fetch('misc.php?action=kb_types')
-            .then(function (res) { return res.json(); })
+            .then(function (res) {
+                var contentType = res.headers.get('content-type') || '';
+                if (!res.ok || contentType.indexOf('application/json') === -1) {
+                    throw new Error('Invalid response');
+                }
+                return res.json();
+            })
             .then(function (data) {
                 cache.types = data.items || [];
                 return cache.types;
@@ -34,7 +40,13 @@
             url += '&q=' + encodeURIComponent(query);
         }
         return fetch(url)
-            .then(function (res) { return res.json(); })
+            .then(function (res) {
+                var contentType = res.headers.get('content-type') || '';
+                if (!res.ok || contentType.indexOf('application/json') === -1) {
+                    throw new Error('Invalid response');
+                }
+                return res.json();
+            })
             .then(function (data) {
                 cache.lists[cacheKey] = data.items || [];
                 return cache.lists[cacheKey];
@@ -195,6 +207,9 @@
         }
 
         fetchTypes().then(function (types) {
+            if (!state.type && types.length) {
+                state.type = types[0].type || '';
+            }
             renderTypeOptions(typeSelect, types, state.type);
             loadList();
         });
@@ -294,8 +309,17 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-        ensureCommandRegistered();
-        hookSceditorCreate();
-        attachPlainTextareaButtons();
+        var hasTextarea = document.querySelector('textarea[name="message"], textarea#message');
+        var hasSceditor = window.jQuery && window.jQuery.fn && typeof window.jQuery.fn.sceditor === 'function';
+        if (!hasTextarea && !hasSceditor && !(window.sceditor_options && typeof window.sceditor_options === 'object')) {
+            return;
+        }
+        if (hasSceditor || (window.sceditor_options && typeof window.sceditor_options === 'object')) {
+            ensureCommandRegistered();
+            hookSceditorCreate();
+        }
+        if (hasTextarea) {
+            attachPlainTextareaButtons();
+        }
     });
 })();

@@ -643,6 +643,7 @@ function af_kb_build_body_bg_style(string $bgUrl): string
 
 function af_kb_build_tech_hint(string $text): string
 {
+    $text = preg_replace('/^\s*\[icon=[^\]]+\]\s*/i', '', $text) ?? $text;
     $text = trim(strip_tags($text));
     if ($text === '') {
         return '';
@@ -657,6 +658,50 @@ function af_kb_build_tech_hint(string $text): string
     $lines = array_slice($lines, 0, 3);
     $text = implode("\n", $lines);
     return trim($text);
+}
+
+function af_kb_build_tech_note_html(string $text): string
+{
+    $text = trim($text);
+    if ($text === '') {
+        return '';
+    }
+
+    $iconHtml = '';
+    if (preg_match('/^\s*\[icon=([^\]]+)\]\s*/i', $text, $matches)) {
+        $rawIcon = trim($matches[1]);
+        $text = substr($text, strlen($matches[0]));
+        $url = af_kb_sanitize_url($rawIcon);
+        if ($url !== '' && (preg_match('~^https?://~i', $rawIcon) || strpos($rawIcon, '/') !== false || strpos($rawIcon, '.') !== false)) {
+            $iconHtml = '<img class="af-kb-icon-img" src="' . htmlspecialchars_uni($url) . '" alt="" loading="lazy" />';
+        } else {
+            $class = af_kb_sanitize_icon_class($rawIcon);
+            if ($class !== '') {
+                $iconHtml = '<i class="' . htmlspecialchars_uni($class) . '"></i>';
+            }
+        }
+    }
+
+    $parsed = af_kb_parse_message(trim($text));
+    if ($parsed === '') {
+        return '';
+    }
+
+    if ($iconHtml !== '') {
+        return '<span class="af-kb-tech-icon">' . $iconHtml . '</span><span class="af-kb-tech-text">' . $parsed . '</span>';
+    }
+
+    return $parsed;
+}
+
+function af_kb_render_tech_note_details(string $label, string $text): string
+{
+    $html = af_kb_build_tech_note_html($text);
+    if ($html === '') {
+        return '';
+    }
+
+    return '<details class="af-kb-tech"><summary>' . htmlspecialchars_uni($label) . '</summary><div class="af-kb-tech-note">' . $html . '</div></details>';
 }
 
 function af_kb_parse_message(string $message): string
@@ -1399,14 +1444,10 @@ function af_kb_handle_view(): void
             $lang->af_kb_copy_json ?? 'Copy JSON'
         );
     }
-    $kb_tech_details = '';
-    if (af_kb_can_edit()) {
-        $techText = af_kb_parse_message(af_kb_pick_text($entry, 'tech'));
-        if ($techText !== '') {
-            $techLabel = htmlspecialchars_uni($lang->af_kb_tech_label ?? 'Technical note');
-            $kb_tech_details = '<div class="af-kb-tech-note"><strong>' . $techLabel . '</strong><div>' . $techText . '</div></div>';
-        }
-    }
+    $kb_tech_details = af_kb_render_tech_note_details(
+        $lang->af_kb_tech_label ?? 'Technical note',
+        af_kb_pick_text($entry, 'tech')
+    );
     $kb_page_bg = '';
     $bodyBgUrl = $entryUi['background_url'] ?: ($typeRow ? ($typeRow['bg_url'] ?? '') : '');
     $kb_body_style = af_kb_build_body_bg_style($bodyBgUrl);
@@ -2137,7 +2178,7 @@ function af_kb_handle_json_list(): void
 {
     global $mybb, $db, $lang;
 
-    if (!af_kb_can_view()) {
+    if (!af_kb_can_view() && (int)($mybb->user['uid'] ?? 0) === 0) {
         af_kb_render_json_error($lang->af_kb_no_access ?? 'No access', 403);
     }
 
@@ -2180,7 +2221,7 @@ function af_kb_handle_json_types(): void
 {
     global $mybb, $db, $lang;
 
-    if (!af_kb_can_view()) {
+    if (!af_kb_can_view() && (int)($mybb->user['uid'] ?? 0) === 0) {
         af_kb_render_json_error($lang->af_kb_no_access ?? 'No access', 403);
     }
 
