@@ -68,7 +68,8 @@
               '|',
               'link', 'unlink', 'email', 'image', 'youtube', 'emoticon',
               '|',
-              'af_togglemode', 'maximize'
+              // ВАЖНО: больше НЕ добавляем af_togglemode по умолчанию
+              'maximize'
             ]
           },
           { id: 'addons', type: 'group', title: 'Доп. кнопки', items: [] }
@@ -79,6 +80,7 @@
     if (!Array.isArray(x.sections)) x.sections = [];
     return x;
   }
+
 
   function buildAvailableMap() {
     var map = Object.create(null);
@@ -100,6 +102,152 @@
     return map;
   }
 
+  function afAeParseBbTagFromOpenClose(openTag, closeTag) {
+    openTag = asText(openTag).trim();
+    closeTag = asText(closeTag).trim();
+
+    // ждём формат вида: [tag] или [tag=...]
+    var m = openTag.match(/^\[([a-z0-9_]+)(?:=([^\]]*))?\]/i);
+    if (!m) return null;
+
+    var tag = String(m[1] || '').toLowerCase();
+    var defAttr = (typeof m[2] !== 'undefined') ? String(m[2] || '') : '';
+
+    var hasClose = false;
+    if (closeTag) {
+      var mc = closeTag.match(/^\[\/([a-z0-9_]+)\]/i);
+      if (mc && String(mc[1] || '').toLowerCase() === tag) hasClose = true;
+    } else {
+      // self-closing типа [hr]
+      hasClose = false;
+    }
+
+    return {
+      tag: tag,
+      defaultAttr: defAttr,
+      openRaw: openTag,
+      closeRaw: closeTag,
+      hasClose: hasClose
+    };
+  }
+
+  function afAeEscAttr(s) {
+    s = asText(s);
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function afAeMakePlaceholderOpenClose(tagInfo, attrsOrDefault) {
+    var tag = tagInfo.tag;
+    var attr = (attrsOrDefault != null) ? String(attrsOrDefault) : String(tagInfo.defaultAttr || '');
+    var dataAttr = attr ? (' data-af-bb-attr="' + afAeEscAttr(attr) + '"') : '';
+    // inline placeholder по умолчанию
+    var open = '<span class="af-ae-bb af-ae-bb-' + afAeEscAttr(tag) + '" data-af-bb="' + afAeEscAttr(tag) + '"' + dataAttr + '>';
+    var close = '</span>';
+    return { open: open, close: close };
+  }
+
+  // Универсальная проверка режима
+  function afAeIsSourceMode(ed) {
+    try {
+      if (!ed) return false;
+      if (typeof ed.sourceMode === 'function') return !!ed.sourceMode();
+      if (typeof ed.isSourceMode === 'function') return !!ed.isSourceMode();
+    } catch (e) {}
+    return false;
+  }
+
+  function afAeGetSourceTextarea(ed) {
+    try {
+      // Некоторые сборки SCEditor держат ссылку так
+      if (ed && ed.sourceEditor && ed.sourceEditor.nodeType === 1) return ed.sourceEditor;
+    } catch (e0) {}
+
+    try {
+      // Пробуем найти textarea внутри контейнера
+      var cont = null;
+      try { cont = (ed && typeof ed.getContainer === 'function') ? ed.getContainer() : null; } catch (e1) { cont = null; }
+      if (!cont && ed && ed.container && ed.container.nodeType === 1) cont = ed.container;
+      if (cont && cont.querySelector) {
+        var ta = cont.querySelector('textarea.sceditor-textarea');
+        if (ta) return ta;
+        // fallback: первый textarea в контейнере
+        ta = cont.querySelector('textarea');
+        if (ta) return ta;
+      }
+    } catch (e2) {}
+
+    return null;
+  }
+
+  function afAeInsertIntoTextareaAtCursor(ta, text) {
+    try {
+      if (!ta) return false;
+      text = String(text == null ? '' : text);
+
+      // Фокус обязателен, иначе selectionStart/End может быть 0/0 или не обновиться
+      try { ta.focus(); } catch (e0) {}
+
+      var start = 0, end = 0;
+      try {
+        start = (typeof ta.selectionStart === 'number') ? ta.selectionStart : ta.value.length;
+        end = (typeof ta.selectionEnd === 'number') ? ta.selectionEnd : start;
+      } catch (e1) {
+        start = ta.value.length;
+        end = start;
+      }
+
+      var v = String(ta.value || '');
+      ta.value = v.slice(0, start) + text + v.slice(end);
+
+      var pos = start + text.length;
+      try { ta.selectionStart = ta.selectionEnd = pos; } catch (e2) {}
+
+      // триггерим input, чтобы SCEditor/валидаторы увидели изменение
+      try { ta.dispatchEvent(new Event('input', { bubbles: true })); } catch (e3) {}
+      return true;
+    } catch (e) {}
+    return false;
+  }
+
+  function afAeInsertOpenClose(ed, open, close) {
+    open = String(open == null ? '' : open);
+    close = String(close == null ? '' : close);
+
+    // SOURCE MODE — вставляем прямо в source-textarea
+    try {
+      if (afAeIsSourceMode(ed)) {
+        var src = afAeGetSourceTextarea(ed);
+        if (src) {
+          return afAeInsertIntoTextareaAtCursor(src, open + close);
+        }
+      }
+    } catch (e0) {}
+
+    // WYSIWYG/общий случай — BBCode через insert()
+    try {
+      if (ed && typeof ed.insert === 'function') {
+        ed.insert(open, close);
+        return true;
+      }
+    } catch (e1) {}
+
+    // fallback: через val()
+    try {
+      if (ed && typeof ed.val === 'function') {
+        var cur = ed.val();
+        ed.val(String(cur || '') + open + close);
+        return true;
+      }
+    } catch (e2) {}
+
+    return false;
+  }
+ 
+
   function buildAllowedCmdSet() {
     var s = Object.create(null);
     var list = Array.isArray(P.available) ? P.available : [];
@@ -108,33 +256,19 @@
       s[String(b.cmd)] = true;
     });
     s['|'] = true;
+
+    // Канон dropdown-команд: af_menu_dropdown1, af_menu_dropdown2, ...
+    // (sanitize должен их пропускать всегда)
     return s;
   }
 
+
   function ensureToggleCommand(layout) {
-    var hasToggle = false;
-    (layout.sections || []).forEach(function (sec) {
-      if (!sec || !Array.isArray(sec.items)) return;
-      sec.items.forEach(function (cmd) {
-        cmd = String(cmd || '').trim();
-        if (cmd === 'source' || cmd === 'af_togglemode') hasToggle = true;
-      });
-    });
-
-    if (hasToggle) return layout;
-
-    if (!layout.sections || !layout.sections.length) {
-      layout.sections = [{ id: 'main', type: 'group', title: 'Основное', items: [] }];
-    }
-
-    var last = layout.sections[layout.sections.length - 1];
-    if (!Array.isArray(last.items)) last.items = [];
-    if (last.items.length && last.items[last.items.length - 1] !== '|') {
-      last.items.push('|');
-    }
-    last.items.push('af_togglemode');
+    // Никакой авто-вставки кнопки переключения режимов.
+    // Кнопка появляется ТОЛЬКО если ты сама добавила её в layout из ACP.
     return layout;
   }
+
 
   function sanitizeLayout(lay) {
     lay = normalizeLayout(lay);
@@ -151,21 +285,30 @@
       if (!Array.isArray(sec.items)) sec.items = [];
 
       sec.items = sec.items
-        .map(function (x) { return String(x || '').trim(); })
+        .map(function (x) { return String(x == null ? '' : x).trim(); })
         .filter(function (cmd) {
           if (!cmd) return false;
           if (cmd === '|') return true;
-          if (/^afmenu_/i.test(cmd)) return true;
+
+          // канон dropdown-команд
+          if (/^af_menu_dropdown\d+$/i.test(cmd)) return true;
+
           return !!allowed[cmd];
         });
     });
 
-    return ensureToggleCommand(lay);
+    // ВАЖНО: больше НЕ вызываем ensureToggleCommand(lay)
+    // Никакой автодобавки af_togglemode.
+    return lay;
   }
+
+
 
   function buildToolbarFromLayout(lay) {
     var parts = [];
     var menus = [];
+
+    var dropdownN = 0;
 
     (lay.sections || []).forEach(function (sec, idx) {
       if (!sec) return;
@@ -176,9 +319,16 @@
       var items = Array.isArray(sec.items) ? sec.items.slice() : [];
 
       if (type === 'dropdown') {
-        var cmd = 'afmenu_' + id.replace(/[^a-z0-9_\-]/gi, '_');
+        dropdownN++;
+        var cmd = 'af_menu_dropdown' + dropdownN;
+
         parts.push(cmd);
-        menus.push({ id: id, cmd: cmd, title: (title || '★'), items: items.slice() });
+        menus.push({
+          id: id,          // внутренний id секции
+          cmd: cmd,        // имя команды SCEditor
+          title: (title || '★'),
+          items: items.slice()
+        });
         parts.push('|');
         return;
       }
@@ -205,6 +355,7 @@
     var toolbar = parts.join(',');
     toolbar = toolbar.replace(/,+\|,+/g, '|').replace(/\|{2,}/g, '|');
     toolbar = toolbar.replace(/^,|,$/g, '').replace(/^\|+|\|+$/g, '');
+
     return { toolbar: toolbar, menus: menus };
   }
 
@@ -235,6 +386,286 @@
     return null;
   }
 
+  function afAeForceAlignEverywhere(inst) {
+    if (!hasSceditor()) return;
+
+    function isSource(ed) {
+      try {
+        if (!ed) return false;
+        if (typeof ed.sourceMode === 'function') return !!ed.sourceMode();
+        if (typeof ed.isSourceMode === 'function') return !!ed.isSourceMode();
+        if (typeof ed.sourceMode === 'boolean') return !!ed.sourceMode;
+      } catch (e) {}
+      return false;
+    }
+
+    // ---------- 1) HARD OVERRIDE COMMANDS (кнопки) ----------
+    // ВАЖНО: больше НЕ делаем execCommand(justifyLeft).
+    // Вставляем ТОЛЬКО [align=...] — и в source, и в WYSIWYG.
+    function hardCmd(cmd, alignVal) {
+      try {
+        var def = {
+          tooltip: cmd,
+
+          exec: function () {
+            var ed = this;
+
+            // Всегда вставляем MyBB-валидный BBCode.
+            // В WYSIWYG SCEditor bbcode-плагин должен превратить это в HTML <div style="text-align:...">
+            try {
+              if (ed && typeof ed.insert === 'function') {
+                ed.insert('[align=' + alignVal + ']', '[/align]');
+                return;
+              }
+            } catch (e0) {}
+
+            // fallback: если вдруг insert не доступен — хотя бы в textarea
+            try {
+              if (ed && typeof ed.val === 'function') {
+                var cur = ed.val();
+                ed.val(String(cur || '') + '[align=' + alignVal + '][/align]');
+                return;
+              }
+            } catch (e1) {}
+          },
+
+          txtExec: function () {
+            // source mode: тоже только align
+            try {
+              if (this && typeof this.insert === 'function') {
+                this.insert('[align=' + alignVal + ']', '[/align]');
+                return;
+              }
+            } catch (e0) {}
+            try { this.exec(); } catch (e1) {}
+          }
+        };
+
+        def.__afAeHardAlign = true;
+        setCommand(cmd, def); // перезаписываем всегда
+      } catch (e) {}
+    }
+
+    hardCmd('left', 'left');
+    hardCmd('center', 'center');
+    hardCmd('right', 'right');
+    hardCmd('justify', 'justify');
+
+    // ---------- 2) HARD OVERRIDE BBCODE MAP (WYSIWYG <-> BBCode) ----------
+    function getBb() {
+      try {
+        var bb = jQuery.sceditor.plugins && jQuery.sceditor.plugins.bbcode
+          ? jQuery.sceditor.plugins.bbcode.bbcode
+          : null;
+        if (bb && typeof bb.set === 'function') return bb;
+      } catch (e0) {}
+
+      try {
+        if (inst && typeof inst.getPlugin === 'function') {
+          var p = inst.getPlugin('bbcode');
+          if (p && p.bbcode && typeof p.bbcode.set === 'function') return p.bbcode;
+        }
+      } catch (e1) {}
+
+      return null;
+    }
+
+    function patchBb(bb) {
+      if (!bb) return;
+
+      // основной тег [align=...]
+      try {
+        bb.set('align', {
+          isInline: false,
+          html: function (token, attrs, content) {
+            var a = '';
+            try { a = (attrs && attrs.defaultattr != null) ? String(attrs.defaultattr) : ''; } catch (e0) { a = ''; }
+            a = (a || '').toLowerCase().trim();
+
+            if (a === 'start') a = 'left';
+            if (a === 'end') a = 'right';
+            if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') a = 'left';
+
+            return '<div style="text-align:' + a + '">' + content + '</div>';
+          },
+          format: function (el, content) {
+            try {
+              var a = '';
+              try { a = (el && el.style && el.style.textAlign) ? String(el.style.textAlign) : ''; } catch (e0) { a = ''; }
+              a = (a || '').toLowerCase().trim();
+
+              if (a === 'start') a = 'left';
+              if (a === 'end') a = 'right';
+              if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') return content;
+
+              return '[align=' + a + ']' + content + '[/align]';
+            } catch (e1) {
+              return '[align=left]' + content + '[/align]';
+            }
+          }
+        });
+      } catch (eA0) {}
+
+      // legacy-теги сериализуем как [align=...]
+      function hardLegacy(tag, val) {
+        try {
+          bb.set(tag, {
+            isInline: false,
+            html: '<div style="text-align:' + val + '">{0}</div>',
+            format: '[align=' + val + ']{0}[/align]'
+          });
+        } catch (e) {}
+      }
+      hardLegacy('left', 'left');
+      hardLegacy('center', 'center');
+      hardLegacy('right', 'right');
+      hardLegacy('justify', 'justify');
+
+      // div/p с text-align -> [align=...]
+      function formatAlignFromEl(el, content) {
+        try {
+          var a = '';
+          try { a = (el && el.style && el.style.textAlign) ? String(el.style.textAlign) : ''; } catch (e0) { a = ''; }
+          a = (a || '').toLowerCase().trim();
+
+          if (a === 'start') a = 'left';
+          if (a === 'end') a = 'right';
+
+          if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') return content;
+          return '[align=' + a + ']' + content + '[/align]';
+        } catch (e1) {
+          return content;
+        }
+      }
+
+      try {
+        bb.set('div', {
+          styles: { 'text-align': 'align' },
+          format: function (el, content) { return formatAlignFromEl(el, content); }
+        });
+      } catch (eD) {}
+
+      try {
+        bb.set('p', {
+          styles: { 'text-align': 'align' },
+          format: function (el, content) { return formatAlignFromEl(el, content); }
+        });
+      } catch (eP) {}
+    }
+
+    // bbcode plugin может быть поздним — ретраи
+    var bb = getBb();
+    if (!bb) {
+      var tries = 0;
+      (function retry() {
+        tries++;
+        var b2 = getBb();
+        if (b2) {
+          patchBb(b2);
+          // и сразу чистим инстанс, если он уже есть
+          try { if (inst) afAeNormalizeAlignInInstance(inst); } catch (e0) {}
+          return;
+        }
+        if (tries < 25) return setTimeout(retry, 120);
+      })();
+      return;
+    }
+
+    patchBb(bb);
+
+    // добиваем уже существующее содержимое редактора (чтобы прямо ВНУТРИ стало [align=...])
+    try { if (inst) afAeNormalizeAlignInInstance(inst); } catch (eZ) {}
+  }
+
+  function afAeEnsureMycodePassthroughBbcode(inst) {
+    if (!hasSceditor()) return;
+
+    function getBb() {
+      try {
+        var bb = jQuery.sceditor.plugins && jQuery.sceditor.plugins.bbcode
+          ? jQuery.sceditor.plugins.bbcode.bbcode
+          : null;
+        if (bb && typeof bb.set === 'function') return bb;
+      } catch (e0) {}
+
+      try {
+        if (inst && typeof inst.getPlugin === 'function') {
+          var p = inst.getPlugin('bbcode');
+          if (p && p.bbcode && typeof p.bbcode.set === 'function') return p.bbcode;
+        }
+      } catch (e1) {}
+
+      return null;
+    }
+
+    var bb = getBb();
+    if (!bb) {
+      // ретраи — bbcode плагин иногда поднимается позже
+      var t = 0;
+      (function retry() {
+        t++;
+        var b2 = getBb();
+        if (b2) {
+          try { afAeEnsureMycodePassthroughBbcode(inst); } catch (e2) {}
+          return;
+        }
+        if (t < 25) return setTimeout(retry, 120);
+      })();
+      return;
+    }
+
+    if (bb.__afAeMycodePassthroughPatched) return;
+    bb.__afAeMycodePassthroughPatched = true;
+
+    // Берём все customDefs: DB-кнопки + pack-кнопки (если ты их туда кладёшь)
+    var defs = buildCustomDefMap();
+    Object.keys(defs).forEach(function(cmd) {
+      if (!cmd) return;
+
+      // не трогаем системные команды/дропдауны
+      if (/^af_menu_dropdown\d+$/i.test(cmd)) return;
+      if (cmd === 'af_togglemode') return;
+
+      var d = defs[cmd] || {};
+      var ti = afAeParseBbTagFromOpenClose(d.opentag, d.closetag);
+      if (!ti || !ti.tag) return;
+
+      var tag = ti.tag;
+
+      // уже есть правило — не перетираем
+      try {
+        if (bb.get && bb.get(tag)) return;
+      } catch (e0) {}
+
+      try {
+        bb.set(tag, {
+          isInline: true,
+          html: function(token, attrs, content) {
+            var a = '';
+            try { a = (attrs && attrs.defaultattr != null) ? String(attrs.defaultattr) : ''; } catch (e1) { a = ''; }
+            var ph = afAeMakePlaceholderOpenClose({ tag: tag, defaultAttr: '' }, a);
+            return ph.open + (content || '') + ph.close;
+          },
+          format: function(el, content) {
+            try {
+              var a = '';
+              try { a = (el && el.getAttribute) ? String(el.getAttribute('data-af-bb-attr') || '') : ''; } catch (e2) { a = ''; }
+              a = (a || '').trim();
+
+              var open = '[' + tag + (a ? '=' + a : '') + ']';
+              var close = '[/'+ tag +']';
+              return open + (content || '') + close;
+            } catch (e3) {
+              return '[' + tag + ']' + (content || '') + '[/'+ tag +']';
+            }
+          }
+        });
+      } catch (eSet) {
+        // если bb.set на этот тег не принял — просто игнорим
+      }
+    });
+  }
+  
   function ensureToggleCommandDefinition() {
     if (!window.jQuery || !jQuery.sceditor) return;
     if (getCommand('af_togglemode')) return;
@@ -261,88 +692,191 @@
     });
   }
 
+  function ensureMybbTagAliases() {
+    if (!hasSceditor()) return;
+
+    if (window.__afAeMybbTagAliasesDone) return;
+    window.__afAeMybbTagAliasesDone = true;
+
+    function hard(cmd, open, close) {
+      cmd = String(cmd || '').trim();
+      if (!cmd) return;
+
+      setCommand(cmd, {
+        tooltip: cmd,
+
+        exec: function () {
+          // железно: sourceMode -> пишем в source textarea; иначе insert()
+          try {
+            afAeInsertOpenClose(this, open, close);
+          } catch (e0) {}
+        },
+
+        txtExec: function () {
+          try {
+            afAeInsertOpenClose(this, open, close);
+          } catch (e1) {}
+        },
+
+        __afAeHardMybbAlias: true
+      });
+    }
+
+    // ВОТ ОН — [hr] в sourceMode должен работать идеально
+    hard('horizontalrule', '[hr]\n', '');
+
+    // остальные алиасы
+    hard('subscript', '[sub]', '[/sub]');
+    hard('superscript', '[sup]', '[/sup]');
+
+    hard('af_Subscript', '[sub]', '[/sub]');
+    hard('af_Superscript', '[sup]', '[/sup]');
+
+    hard('af_subscript', '[sub]', '[/sub]');
+    hard('af_superscript', '[sup]', '[/sup]');
+  }
+
   function ensureCustomCommands() {
-    if (!window.jQuery || !jQuery.sceditor) return;
+    if (!hasSceditor()) return;
 
-    ensureToggleCommandDefinition();
+    var defs = buildCustomDefMap();
 
-    var customDefs = buildCustomDefMap();
+    Object.keys(defs).forEach(function (cmd) {
+      var b = defs[cmd] || {};
+      var handler = asText(b.handler).trim();
+      var openTag = asText(b.opentag);
+      var closeTag = asText(b.closetag);
 
-    Object.keys(customDefs).forEach(function (cmd) {
-      if (!cmd || cmd === '|') return;
-      if (!/^af_/i.test(cmd)) return;
-      if (getCommand(cmd)) return;
+      var title = asText(b.title || b.name || cmd).trim();
+      var tooltip = title || cmd;
 
-      var defData = customDefs[cmd] || {};
-      var handler = String(defData.handler || '').trim();
-      var opentag = String(defData.opentag || '');
-      var closetag = String(defData.closetag || '');
-      var tooltip = String(defData.title || defData.hint || cmd).trim() || cmd;
+      // dropdown команды отдельно
+      if (/^af_menu_dropdown\d+$/i.test(cmd)) return;
 
-      var def = {
-        tooltip: tooltip,
-
-        exec: function (caller) {
-          var ed = this;
-
-          if (cmd === 'af_togglemode') {
-            try { if (ed && typeof ed.toggleSourceMode === 'function') ed.toggleSourceMode(); } catch (e0) {}
-            return;
-          }
-
-          // handler (spoiler.js и др.)
-          if (handler) {
+      // toggle mode отдельно
+      if (cmd === 'af_togglemode') {
+        setCommand(cmd, {
+          tooltip: tooltip || 'BBCode / WYSIWYG',
+          exec: function () {
             try {
-              var h = null;
-              if (window.afAeBuiltinHandlers && window.afAeBuiltinHandlers[handler]) h = window.afAeBuiltinHandlers[handler];
-              else if (window.afAqrBuiltinHandlers && window.afAqrBuiltinHandlers[handler]) h = window.afAqrBuiltinHandlers[handler];
-
-              if (typeof h === 'function') {
-                // КАНОН: отдаём инстанс SCEditor (как ждёт spoiler.js)
-                h(ed, caller, cmd, defData);
+              if (typeof this.toggleSourceMode === 'function') {
+                this.toggleSourceMode();
                 return;
               }
-              if (h && typeof h.exec === 'function') {
-                h.exec(ed, caller, cmd, defData);
+            } catch (e0) {}
+            try {
+              if (typeof this.sourceMode === 'function') {
+                this.sourceMode(!this.sourceMode());
                 return;
               }
             } catch (e1) {}
-          }
+          },
+          txtExec: function () { try { this.exec(); } catch (e2) {} }
+        });
+        return;
+      }
 
-          // open/close tags
+      // если есть pack-handler — оставляем как есть (он сам решит что вставлять)
+      function tryHandler(ed) {
+        if (!handler) return false;
+        try {
+          var fn = window['af_ae_' + handler + '_exec'];
+          if (typeof fn === 'function') {
+            fn(ed, b);
+            return true;
+          }
+        } catch (e0) {}
+        return false;
+      }
+
+      function insertInSource(ed) {
+        // sourceMode: вставляем РЕАЛЬНЫЙ BBCode (MyBB MyCode)
+        try {
+          if (ed && typeof ed.insertText === 'function') {
+            ed.insertText(String(openTag || '') + String(closeTag || ''));
+            return true;
+          }
+        } catch (e0) {}
+
+        try {
+          if (ed && typeof ed.insert === 'function') {
+            ed.insert(openTag, closeTag);
+            return true;
+          }
+        } catch (e1) {}
+
+        try {
+          if (ed && typeof ed.val === 'function') {
+            var cur = ed.val();
+            ed.val(String(cur || '') + String(openTag || '') + String(closeTag || ''));
+            return true;
+          }
+        } catch (e2) {}
+
+        return false;
+      }
+
+      function insertInWysiwyg(ed) {
+        // ВАЖНО: в формате bbcode editor.insert() ожидает BBCode, а не HTML.
+        // Поэтому в WYSIWYG тоже вставляем BBCode.
+        try {
+          if (ed && typeof ed.insert === 'function') {
+            ed.insert(openTag, closeTag);
+            return true;
+          }
+        } catch (e0) {}
+
+        // fallback: если insert внезапно недоступен — вставим как текст
+        try {
+          if (ed && typeof ed.insertText === 'function') {
+            ed.insertText(String(openTag || '') + String(closeTag || ''));
+            return true;
+          }
+        } catch (e1) {}
+
+        return false;
+      }
+
+      setCommand(cmd, {
+        tooltip: tooltip,
+
+        exec: function () {
+          var ed = this;
           try {
-            if (opentag && typeof ed.insert === 'function') {
-              ed.insert(opentag, closetag || '');
+            // handler имеет приоритет
+            if (tryHandler(ed)) return;
+
+            if (afAeIsSourceMode(ed)) {
+              insertInSource(ed);
               return;
             }
-          } catch (e2) {}
 
-          // fallback
-          try { if (typeof ed.insert === 'function') ed.insert('[' + cmd + ']', '[/' + cmd + ']'); } catch (e3) {}
+            insertInWysiwyg(ed);
+          } catch (e0) {}
         },
 
-        txtExec: function (caller) {
-          try { def.exec.call(this, caller); } catch (e4) {}
+        txtExec: function () {
+          var ed = this;
+          try {
+            if (tryHandler(ed)) return;
+            insertInSource(ed);
+          } catch (e1) {}
         }
-      };
-
-      setCommand(cmd, def);
+      });
     });
   }
 
-  function afAeEnsureMybbListAndAlignBbcode(inst) {
+  function afAeEnsureMybbAlignBbcode(inst) {
     if (!hasSceditor()) return;
 
     function getBb() {
       try {
-        // глобально
         var bb = jQuery.sceditor.plugins && jQuery.sceditor.plugins.bbcode
           ? jQuery.sceditor.plugins.bbcode.bbcode
           : null;
         if (bb && typeof bb.set === 'function') return bb;
       } catch (e0) {}
 
-      // через инстанс (иногда так надёжнее)
       try {
         if (inst && typeof inst.getPlugin === 'function') {
           var p = inst.getPlugin('bbcode');
@@ -355,77 +889,31 @@
 
     var bb = getBb();
     if (!bb) {
-      // bbcode plugin мог подгрузиться позже — повторим пару раз
-      if (window.__afAeBbPatchRetrying) return;
-      window.__afAeBbPatchRetrying = true;
+      if (window.__afAeAlignBbPatchRetrying) return;
+      window.__afAeAlignBbPatchRetrying = true;
 
       var t = 0;
       (function retry() {
         t++;
         var b2 = getBb();
         if (b2) {
-          window.__afAeBbPatchRetrying = false;
-          try { afAeEnsureMybbListAndAlignBbcode(inst); } catch (e2) {}
+          window.__afAeAlignBbPatchRetrying = false;
+          try { afAeEnsureMybbAlignBbcode(inst); } catch (e2) {}
           return;
         }
         if (t < 25) return setTimeout(retry, 120);
-        window.__afAeBbPatchRetrying = false;
+        window.__afAeAlignBbPatchRetrying = false;
       })();
       return;
     }
 
-    if (bb.__afAeMybbPatched) return;
-    bb.__afAeMybbPatched = true;
-
-    // =========================
-    // LISTS: [ol]/[ul]/[li]
-    // =========================
-    try {
-      bb.set('list', {
-        isInline: false,
-        format: function (el, content) {
-          try {
-            var tag = (el && el.tagName) ? String(el.tagName).toUpperCase() : '';
-            if (tag === 'OL') return '[ol]{0}[/ol]';
-            return '[ul]{0}[/ul]';
-          } catch (e) {
-            return '[ul]{0}[/ul]';
-          }
-        },
-        html: function (token, attrs, content) {
-          var t = '';
-          try { t = (attrs && attrs.defaultattr != null) ? String(attrs.defaultattr) : ''; } catch (e0) { t = ''; }
-          t = (t || '').toLowerCase().trim();
-
-          if (t === '1') return '<ol>{0}</ol>'.replace('{0}', content);
-          return '<ul>{0}</ul>'.replace('{0}', content);
-        }
-      });
-    } catch (eL1) {}
-
-    try {
-      bb.set('li', {
-        format: '[li]{0}[/li]',
-        html: '<li>{0}</li>',
-        isInline: false
-      });
-      bb.set('ul', {
-        format: '[ul]{0}[/ul]',
-        html: '<ul>{0}</ul>',
-        isInline: false
-      });
-      bb.set('ol', {
-        format: '[ol]{0}[/ol]',
-        html: '<ol>{0}</ol>',
-        isInline: false
-      });
-    } catch (eL2) {}
+    if (bb.__afAeMybbAlignPatched) return;
+    bb.__afAeMybbAlignPatched = true;
 
     // =========================
     // ALIGN: MyBB style [align=...]
     // =========================
 
-    // 1) сам тег [align=...]
     try {
       bb.set('align', {
         isInline: false,
@@ -458,8 +946,6 @@
       });
     } catch (eA0) {}
 
-    // 2) перебиваем дефолтные теги SCEditor [left]/[center]/...
-    // чтобы HTML->BBCode отдавал [align=...]
     function patchLegacyAlign(tag, val) {
       try {
         bb.set(tag, {
@@ -475,7 +961,6 @@
     patchLegacyAlign('right', 'right');
     patchLegacyAlign('justify', 'justify');
 
-    // 3) div с text-align -> [align=...]
     try {
       bb.set('div', {
         styles: { 'text-align': 'align' },
@@ -487,9 +972,8 @@
 
             if (a === 'start') a = 'left';
             if (a === 'end') a = 'right';
-            if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') {
-              return content;
-            }
+            if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') return content;
+
             return '[align=' + a + ']' + content + '[/align]';
           } catch (e1) {
             return '[align=left]' + content + '[/align]';
@@ -506,33 +990,8 @@
   }
 
   function afAePatchAlignCommandsForSourceMode() {
-    if (!hasSceditor()) return;
-
-    function patch(cmd, alignVal) {
-      try {
-        var c = getCommand(cmd);
-        if (!c || c.__afAeAlignPatched) return;
-
-        var origTxt = c.txtExec;
-        c.txtExec = function () {
-          try {
-            if (typeof this.insert === 'function') {
-              this.insert('[align=' + alignVal + ']', '[/align]');
-              return;
-            }
-          } catch (e0) {}
-          try { if (origTxt) return origTxt.apply(this, arguments); } catch (e1) {}
-        };
-
-        c.__afAeAlignPatched = true;
-        setCommand(cmd, c);
-      } catch (e2) {}
-    }
-
-    patch('left', 'left');
-    patch('center', 'center');
-    patch('right', 'right');
-    patch('justify', 'justify');
+    // теперь это просто “вызов жёсткого режима”
+    try { afAeForceAlignEverywhere(null); } catch (e) {}
   }
 
   function ensureDefaultSourceMode(inst) {
@@ -549,93 +1008,355 @@
     }
   }
 
-  function buildDropdownContent(editor, menu, availableMap) {
-    var $content = jQuery('<div class="af-ae-dd" role="menu"></div>');
+  function svgStarMarkup() {
+    return '' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+      '<path d="M12 17.3l-6.18 3.73 1.64-7.03L2 9.24l7.19-.62L12 2l2.81 6.62 7.19.62-5.46 4.76 1.64 7.03z"></path>' +
+      '</svg>';
+  }
 
-    // ВАЖНО: не даём SCEditor “съесть” клики
-    $content.on('mousedown click', function (e) {
-      try { e.stopPropagation(); } catch (e0) {}
-    });
+  function resolveCaller(a, b) {
+    // DOM
+    if (a && a.nodeType === 1) return a;
+    if (b && b.nodeType === 1) return b;
 
-    (menu.items || []).forEach(function (cmd) {
-      cmd = String(cmd || '').trim();
-      if (!cmd || cmd === '|') return;
+    // jQuery object
+    if (a && a.jquery && a[0] && a[0].nodeType === 1) return a[0];
+    if (b && b.jquery && b[0] && b[0].nodeType === 1) return b[0];
 
-      var meta = availableMap[cmd] || {};
-      var title = String(meta.title || meta.hint || cmd || '').trim() || cmd;
+    // event -> currentTarget/target
+    if (a && a.currentTarget && a.currentTarget.nodeType === 1) return a.currentTarget;
+    if (b && b.currentTarget && b.currentTarget.nodeType === 1) return b.currentTarget;
 
-      var $btn = jQuery(
-        '<button type="button" class="af-ae-dd-item" role="menuitem">' +
-          '<span class="af-ae-dd-text"></span>' +
-        '</button>'
-      );
-      $btn.find('.af-ae-dd-text').text(title);
+    if (a && a.target && a.target.nodeType === 1) return a.target;
+    if (b && b.target && b.target.nodeType === 1) return b.target;
 
-      $btn.on('mousedown', function (e) {
-        try { e.preventDefault(); } catch (e0) {}
-        try { e.stopPropagation(); } catch (e1) {}
-      });
+    return null;
+  }
 
-      $btn.on('click', function (e) {
-        try { e.preventDefault(); } catch (e0) {}
-        try { e.stopPropagation(); } catch (e1) {}
+  function openDropdown(editor, caller, menu, availableMap) {
+    if (!editor || typeof editor.createDropDown !== 'function') return false;
 
-        try {
-          if (editor && editor.command && typeof editor.command.exec === 'function') {
-            editor.command.exec(cmd);
-          } else if (editor && typeof editor.execCommand === 'function') {
-            editor.execCommand(cmd);
-          } else if (editor && typeof editor.insert === 'function') {
-            editor.insert('', '');
-          }
-        } catch (e2) {}
+    // caller должен быть DOM-элементом (как в floatbb)
+    var el = resolveCaller(caller, null);
 
-        try { if (editor && typeof editor.closeDropDown === 'function') editor.closeDropDown(true); } catch (e3) {}
-      });
+    // Если кликнули по svg/div внутри кнопки — поднимаемся к <a>
+    try {
+      if (el && el.nodeType === 1 && el.closest) {
+        var a = el.closest('a.sceditor-button');
+        if (a) el = a;
+      }
+    } catch (e0) {}
 
-      $content.append($btn);
-    });
+    if (!el || el.nodeType !== 1) return false;
 
-    if (!$content.children().length) {
-      $content.append(jQuery('<div class="af-ae-dd-empty">Пустое меню</div>'));
+    // Закрываем предыдущий dropdown
+    try { if (typeof editor.closeDropDown === 'function') editor.closeDropDown(true); } catch (e1) {}
+
+    var wrap = null;
+    try { wrap = buildDropdownContent(editor, menu, availableMap); } catch (e2) { wrap = null; }
+    if (!wrap) return false;
+
+    // ВАЖНО: ровно как ты показала:
+    // sceditor-dropdown sceditor-sceditor-af_menu_dropdown1-picker
+    var id = 'sceditor-sceditor-' + String(menu && menu.cmd ? menu.cmd : 'af_menu_dropdown') + '-picker';
+
+    try {
+      editor.createDropDown(el, id, wrap);
+      return true;
+    } catch (e3) {
+      // Фоллбек: иногда сборки хотят jQuery(caller)
+      try {
+        if (window.jQuery) {
+          editor.createDropDown(window.jQuery(el), id, wrap);
+          return true;
+        }
+      } catch (e4) {}
     }
 
-    return $content;
+    return false;
+  }
+
+  function buildDropdownContent(editor, menu, availableMap) {
+    var wrap = document.createElement('div');
+    wrap.className = 'af-ae-dd';
+
+    var customDefs = null;
+    try { customDefs = buildCustomDefMap(); } catch (e0) { customDefs = Object.create(null); }
+
+    function addSeparator() {
+      var sep = document.createElement('div');
+      sep.className = 'sceditor-separator';
+      wrap.appendChild(sep);
+    }
+
+    function isVisibleEl(el) {
+      try {
+        if (!el || el.nodeType !== 1) return false;
+        if (el.disabled) return false;
+        if (el.offsetParent === null && el.getClientRects().length === 0) return false;
+        return true;
+      } catch (e) { return false; }
+    }
+
+    function findToolbarCallerForCmd(ed, cmd) {
+      cmd = String(cmd || '').trim();
+      if (!cmd) return null;
+
+      var sel = 'a.sceditor-button-' + cmd;
+
+      try {
+        var cont = null;
+        try { cont = (ed && typeof ed.getContainer === 'function') ? ed.getContainer() : null; } catch (e0) { cont = null; }
+        if (!cont && ed && ed.container && ed.container.nodeType === 1) cont = ed.container;
+
+        if (cont && cont.querySelector) {
+          var a1 = cont.querySelector(sel);
+          if (isVisibleEl(a1)) return a1;
+
+          var near = cont.closest ? cont.closest('.sceditor-container') : null;
+          if (near && near.querySelector) {
+            var a2 = near.querySelector(sel);
+            if (isVisibleEl(a2)) return a2;
+          }
+        }
+      } catch (e1) {}
+
+      try {
+        var all = document.querySelectorAll(sel);
+        if (all && all.length) {
+          for (var i = all.length - 1; i >= 0; i--) {
+            if (isVisibleEl(all[i])) return all[i];
+          }
+          return all[0] || null;
+        }
+      } catch (e2) {}
+
+      return null;
+    }
+
+    function getDefByCmdAnyCase(map, cmd) {
+      if (!map || !cmd) return null;
+      if (map[cmd]) return map[cmd];
+
+      // кейс-инсенситив
+      var low = String(cmd).toLowerCase();
+      if (map[low]) return map[low];
+
+      // перебор ключей (редко, но безопасно)
+      try {
+        var keys = Object.keys(map);
+        for (var i = 0; i < keys.length; i++) {
+          if (String(keys[i]).toLowerCase() === low) return map[keys[i]];
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    // ---- глобальный резолвер "cmd -> {open,close}" ----
+    function resolveInsertForCmd(cmd) {
+      cmd = String(cmd || '').trim();
+      var low = cmd.toLowerCase();
+
+      // 1) если есть opentag/closetag в availableMap
+      try {
+        var b1 = getDefByCmdAnyCase(availableMap, cmd);
+        if (b1) {
+          var ot1 = String(b1.opentag || b1.openTag || b1.open || '').trim();
+          var ct1 = String(b1.closetag || b1.closeTag || b1.close || '').trim();
+          if (ot1 || ct1) return { open: ot1, close: ct1 };
+        }
+      } catch (e1) {}
+
+      // 2) если есть opentag/closetag в customDefs
+      try {
+        var b2 = getDefByCmdAnyCase(customDefs, cmd);
+        if (b2) {
+          var ot2 = String(b2.opentag || b2.openTag || b2.open || '').trim();
+          var ct2 = String(b2.closetag || b2.closeTag || b2.close || '').trim();
+          if (ot2 || ct2) return { open: ot2, close: ct2 };
+        }
+      } catch (e2) {}
+
+      // 3) алиасы команд -> MyBB теги (глобально)
+      // сюда добавляешь любые “несовпадающие” команды
+      var ALIAS = {
+        horizontalrule: { open: '[hr]\n', close: '' },
+
+        subscript: { open: '[sub]', close: '[/sub]' },
+        superscript: { open: '[sup]', close: '[/sup]' },
+
+        // твои кастомные имена
+        af_subscript: { open: '[sub]', close: '[/sub]' },
+        af_superscript: { open: '[sup]', close: '[/sup]' },
+
+      };
+
+      if (ALIAS[low]) return ALIAS[low];
+
+      // 4) общий фоллбек
+      // Для стандартных команд лучше ничего не делать, чем гадить мусором.
+      if (getCommand(cmd)) {
+        return { open: '', close: '' };
+      }
+      return { open: '[' + cmd + ']', close: '[/' + cmd + ']' };
+
+    }
+
+    function execCmd(cmd, callerEl) {
+      cmd = String(cmd || '').trim();
+      if (!cmd) return;
+
+      if (/^af_menu_dropdown\d+$/i.test(cmd)) return;
+
+      try { if (editor && typeof editor.focus === 'function') editor.focus(); } catch (e0) {}
+
+      var caller = findToolbarCallerForCmd(editor, cmd) || callerEl || null;
+
+      // 1) НОРМАЛЬНЫЙ штатный запуск SCEditor: ВАЖНО — БЕЗ .call(editor,...)
+      try {
+        if (editor && editor.command && typeof editor.command.exec === 'function') {
+          editor.command.exec(cmd, caller);
+          return;
+        }
+      } catch (e1) {}
+
+      // 2) Фоллбек №1: дергаем definition команды напрямую (если она есть)
+      try {
+        var def = getCommand(cmd);
+        if (def) {
+          var isSrc = false;
+          try { isSrc = afAeIsSourceMode(editor); } catch (e2a) { isSrc = false; }
+
+          if (isSrc && typeof def.txtExec === 'function') {
+            def.txtExec.call(editor, caller);
+            return;
+          }
+          if (typeof def.exec === 'function') {
+            def.exec.call(editor, caller);
+            return;
+          }
+        }
+      } catch (e2) {}
+
+      // 3) Фоллбек №2: ВСТАВЛЯЕМ ТОЛЬКО если это реально "неизвестная" команда.
+      // Сначала пытаемся получить реальные open/close из available/customDefs/alias.
+      var ins = resolveInsertForCmd(cmd);
+
+      try {
+        // важно: sourceMode -> вставляем в source textarea по курсору
+        if (editor) {
+          if (afAeInsertOpenClose(editor, ins.open || '', ins.close || '')) return;
+        }
+      } catch (e3) {}
+
+
+      try {
+        if (editor && typeof editor.val === 'function') {
+          var cur = editor.val();
+          editor.val(String(cur || '') + String(ins.open || '') + String(ins.close || ''));
+        }
+      } catch (e4) {}
+    }
+
+    function addItem(cmd, titleText) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'af-ae-dd-item';
+      btn.setAttribute('data-cmd', String(cmd || ''));
+      btn.textContent = String(titleText || cmd || '').trim() || cmd;
+
+      btn.addEventListener('click', function (ev) {
+        try { ev.preventDefault(); } catch (e0) {}
+
+        execCmd(cmd, btn);
+
+        try { if (editor && typeof editor.closeDropDown === 'function') editor.closeDropDown(true); } catch (e1) {}
+      });
+
+      wrap.appendChild(btn);
+    }
+
+    function expandItems(arr) {
+      var out = [];
+      (arr || []).forEach(function (raw) {
+        raw = String(raw || '').trim();
+        if (!raw) return;
+
+        if (raw === '|') { out.push('|'); return; }
+
+        if (raw.indexOf(',') !== -1) {
+          raw.split(',').forEach(function (p) {
+            p = String(p || '').trim();
+            if (p) out.push(p);
+          });
+          return;
+        }
+
+        out.push(raw);
+      });
+      return out;
+    }
+
+    var items0 = (menu && Array.isArray(menu.items)) ? menu.items : [];
+    var items = expandItems(items0);
+
+    var hasAny = false;
+
+    for (var i = 0; i < items.length; i++) {
+      var cmd = String(items[i] || '').trim();
+      if (!cmd) continue;
+
+      if (cmd === '|') { addSeparator(); continue; }
+      if (/^af_menu_dropdown\d+$/i.test(cmd)) continue;
+
+      var b = (availableMap && availableMap[cmd]) ? availableMap[cmd] : null;
+      var title = b ? (b.title || b.name || cmd) : cmd;
+
+      addItem(cmd, title);
+      hasAny = true;
+    }
+
+    if (!hasAny) {
+      var empty = document.createElement('div');
+      empty.className = 'smalltext';
+      empty.style.padding = '6px 2px';
+      empty.textContent = 'Пустое меню';
+      wrap.appendChild(empty);
+    }
+
+    return wrap;
   }
 
   function ensureDropdownCommands(out, availableMap) {
     if (!hasSceditor()) return;
-    if (!out || !Array.isArray(out.menus)) return;
+    if (!out || !Array.isArray(out.menus) || !out.menus.length) return;
 
     out.menus.forEach(function (m) {
       if (!m || !m.cmd) return;
 
-      // Регистрируем команду ДО инициализации редактора,
-      // иначе SCEditor может нарисовать кнопку, но не повесить обработчик нормально.
-      var existing = getCommand(m.cmd);
-      if (existing && existing.__afAeDropdownPatched) return;
+      // уже патчили — не трогаем
+      try {
+        var ex = getCommand(m.cmd);
+        if (ex && ex.__afAeDropdownPatched) return;
+      } catch (eX) {}
 
-      var def = {
-        tooltip: String(m.title || '★'),
-        dropDown: function (editor, caller) {
-          try {
-            var $content = buildDropdownContent(editor, m, availableMap);
-            editor.createDropDown(caller, m.cmd, $content);
-          } catch (e0) {}
+      setCommand(m.cmd, {
+        tooltip: asText(m.title || '★'),
+
+        // SCEditor иногда дергает dropDown, иногда exec/txtExec — дадим всё
+        dropDown: function (caller) {
+          openDropdown(this, caller, m, availableMap);
         },
         exec: function (caller) {
-          try { this.command && this.command.dropDown
-            ? this.command.dropDown(caller, m.cmd)
-            : def.dropDown(this, caller);
-          } catch (e1) { try { def.dropDown(this, caller); } catch (e2) {} }
+          openDropdown(this, caller, m, availableMap);
         },
         txtExec: function (caller) {
-          try { def.dropDown(this, caller); } catch (e3) {}
-        }
-      };
+          openDropdown(this, caller, m, availableMap);
+        },
 
-      def.__afAeDropdownPatched = true;
-      setCommand(m.cmd, def);
+        __afAeDropdownPatched: true
+      });
     });
   }
 
@@ -645,9 +1366,42 @@
       var tb = cont ? cont.querySelector('.sceditor-toolbar') : null;
       if (!tb || !out || !Array.isArray(out.menus)) return;
 
+      function parseRgb(s) {
+        s = String(s || '').trim();
+        var m = s.match(/rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*([0-9.]+))?\s*\)/i);
+        if (m) return { r: +m[1], g: +m[2], b: +m[3], a: (m[4] == null ? 1 : +m[4]) };
+        return null;
+      }
+      function isTransparentRgb(x) { return !x || (typeof x.a === 'number' && x.a <= 0.02); }
+      function getBg(el) {
+        var cur = el;
+        for (var i = 0; i < 8 && cur; i++) {
+          var cs = null;
+          try { cs = getComputedStyle(cur); } catch (e) { cs = null; }
+          if (cs) {
+            var bg = parseRgb(cs.backgroundColor);
+            if (bg && !isTransparentRgb(bg)) return bg;
+          }
+          cur = cur.parentElement;
+        }
+        return null;
+      }
+
+      // автоцвет иконок (mask) — если уже есть, не трогаем
+      try {
+        var already = getComputedStyle(tb).getPropertyValue('--af-ae-icon-color');
+        if (!String(already || '').trim()) {
+          var bgc = getBg(tb) || getBg(cont) || getBg(document.body);
+          var r = bgc ? bgc.r : 255, g = bgc ? bgc.g : 255, b = bgc ? bgc.b : 255;
+          var lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+          var chosen = (lum < 0.48) ? 'rgba(255,255,255,.92)' : 'rgba(0,0,0,.72)';
+          tb.style.setProperty('--af-ae-icon-color', chosen);
+        }
+      } catch (eCol) {}
+
       function isUrl(x) {
         x = String(x || '').trim();
-        return /^https?:\/\//i.test(x) || x.startsWith('/');
+        return /^(https?:)?\/\//i.test(x) || x.startsWith('/');
       }
 
       function isSvg(x) {
@@ -662,6 +1416,14 @@
       function looksLikeSvgUrl(u) {
         u = String(u || '').trim().toLowerCase();
         return u.includes('.svg') || u.startsWith('data:image/svg');
+      }
+
+      function titleSpec(t) {
+        t = String(t || '').trim();
+        if (isSvg(t)) return { kind: 'svg', value: t };
+        if (isUrl(t)) return { kind: 'url', value: t };
+        if (t) return { kind: 'text', value: t };
+        return { kind: 'svg', value: svgStarMarkup() };
       }
 
       function applyUrlIcon(el, url) {
@@ -691,17 +1453,12 @@
         }
       }
 
-      function titleSpec(t) {
-        t = String(t || '').trim();
-        if (isSvg(t)) return { kind: 'svg', value: t };
-        if (isUrl(t)) return { kind: 'url', value: t };
-        if (t) return { kind: 'text', value: t };
-        return { kind: 'text', value: '★' };
-      }
-
       out.menus.forEach(function (m) {
         var a = tb.querySelector('a.sceditor-button-' + m.cmd);
         if (!a) return;
+
+        // чтобы currentColor работал
+        try { a.style.color = 'var(--af-ae-icon-color, currentColor)'; } catch (e0) {}
 
         var d = a.querySelector('div');
         if (!d) return;
@@ -733,8 +1490,10 @@
           d.textContent = String(spec.value).trim();
           d.style.fontSize = '12px';
           d.style.fontWeight = '700';
+
           d.style.width = 'auto';
           d.style.padding = '0 6px';
+
           a.style.width = 'auto';
           a.style.minWidth = '16px';
           a.style.padding = '0 2px';
@@ -746,6 +1505,45 @@
   function afAeEnsureFrontendCodeCss() {
     if (window.__afAeFrontendCodeCssDone) return;
     window.__afAeFrontendCodeCssDone = true;
+  }
+
+  function afAeApplyWysiwygLocalFontsCss(inst) {
+    try {
+      if (!inst || typeof inst.getBody !== 'function') return;
+
+      var tries = 0;
+      (function tick() {
+        tries++;
+
+        var body = null;
+        try { body = inst.getBody(); } catch (e0) { body = null; }
+        if (!body || !body.ownerDocument) {
+          if (tries < 40) return setTimeout(tick, 50);
+          return;
+        }
+
+        var doc = body.ownerDocument;
+        var head = doc.head || doc.getElementsByTagName('head')[0];
+        if (!head) {
+          if (tries < 40) return setTimeout(tick, 50);
+          return;
+        }
+
+        if (doc.getElementById('af-ae-local-fonts-iframe')) return;
+
+        var hostStyle = document.getElementById('af-ae-local-fonts');
+        if (!hostStyle) return;
+
+        var cssText = hostStyle.textContent || hostStyle.innerText || '';
+        if (!cssText) return;
+
+        var st = doc.createElement('style');
+        st.id = 'af-ae-local-fonts-iframe';
+        st.type = 'text/css';
+        st.appendChild(doc.createTextNode(cssText));
+        head.appendChild(st);
+      })();
+    } catch (e) {}
   }
 
   function afAeApplyWysiwygCodeQuoteCss(inst) {
@@ -812,9 +1610,28 @@
 
       var customDefs = buildCustomDefMap();
 
-      function isUrl(x) {
-        x = String(x || '').trim();
-        return /^https?:\/\//i.test(x) || x.startsWith('/');
+      function asText(x) { return String(x == null ? '' : x); }
+
+      function guessBburl() {
+        var bburl = '';
+        try { bburl = asText((CFG && CFG.bburl) ? CFG.bburl : '').replace(/\/+$/, ''); } catch (e0) { bburl = ''; }
+        if (bburl) return bburl;
+
+        try {
+          if (window.MyBB && window.MyBB.settings && window.MyBB.settings.bburl) {
+            bburl = asText(window.MyBB.settings.bburl).replace(/\/+$/, '');
+            if (bburl) return bburl;
+          }
+        } catch (e1) {}
+
+        try { return (location && location.origin) ? String(location.origin) : ''; } catch (e2) {}
+        return '';
+      }
+
+      function getAssetsBaseUrl() {
+        var bburl = guessBburl();
+        if (!bburl) return '';
+        return bburl + '/inc/plugins/advancedfunctionality/addons/advancededitor/assets/';
       }
 
       function isSvgMarkupSafe(x) {
@@ -831,7 +1648,28 @@
         return u.includes('.svg') || u.startsWith('data:image/svg');
       }
 
+      function resolveIconUrl(icon) {
+        icon = String(icon || '').trim();
+        if (!icon) return '';
+
+        // уже абсолютный
+        if (/^(https?:)?\/\//i.test(icon) || icon.startsWith('/') || icon.startsWith('data:')) return icon;
+
+        // защита от "assets/assets/..."
+        if (icon.startsWith('assets/')) icon = icon.slice('assets/'.length);
+
+        var base = getAssetsBaseUrl(); // bburl + '/inc/plugins/.../assets/'
+        if (!base) return icon;
+
+        icon = icon.replace(/^\.?\//, '');
+        return base + icon;
+      }
+
       function applyMaskIcon(el, url) {
+        url = resolveIconUrl(url);
+        if (!url) return;
+
+        // сброс любых старых спрайтов SCEditor
         el.style.backgroundImage = 'none';
         el.style.backgroundRepeat = '';
         el.style.backgroundPosition = '';
@@ -845,6 +1683,8 @@
         el.style.maskPosition = 'center';
         el.style.webkitMaskSize = '16px 16px';
         el.style.maskSize = '16px 16px';
+
+        // ВАЖНО: цвет иконки именно через background-color при mask
         el.style.backgroundColor = 'var(--af-ae-icon-color, currentColor)';
       }
 
@@ -863,13 +1703,7 @@
         var d = a.querySelector('div');
         if (!d) return;
 
-        d.innerHTML = '';
-        d.textContent = '';
-        d.style.backgroundImage = 'none';
-        d.style.webkitMaskImage = 'none';
-        d.style.maskImage = 'none';
-        d.style.backgroundColor = '';
-
+        // базовая геометрия: если div “нулевой”, маска тоже “не видна”
         d.style.display = 'flex';
         d.style.alignItems = 'center';
         d.style.justifyContent = 'center';
@@ -878,24 +1712,42 @@
         d.style.lineHeight = '16px';
         d.style.padding = '0';
 
+        // жёсткий сброс
+        d.innerHTML = '';
+        d.textContent = '';
+        d.style.backgroundImage = 'none';
+        d.style.webkitMaskImage = 'none';
+        d.style.maskImage = 'none';
+        d.style.backgroundColor = '';
+
         var icon = String(b.icon || '').trim();
+
+        // SVG markup
         if (icon && isSvgMarkupSafe(icon)) {
           d.innerHTML = icon;
           return;
         }
 
-        if (icon && isUrl(icon)) {
+        // URL/path
+        if (icon) {
+          // svg -> mask, raster -> background-image
           if (looksLikeSvgUrl(icon)) {
             applyMaskIcon(d, icon);
-          } else {
-            d.style.backgroundImage = 'url("' + icon.replace(/"/g, '\\"') + '")';
+            return;
+          }
+
+          // растровая картинка
+          var u = resolveIconUrl(icon);
+          if (u) {
+            d.style.backgroundImage = 'url("' + u.replace(/"/g, '\\"') + '")';
             d.style.backgroundRepeat = 'no-repeat';
             d.style.backgroundPosition = 'center';
             d.style.backgroundSize = '16px 16px';
+            return;
           }
-          return;
         }
 
+        // fallback label
         var label = String(b.label || 'AE').trim();
         d.textContent = label || 'AE';
         d.style.fontSize = '11px';
@@ -913,10 +1765,48 @@
     try { inst.updateOriginal(); } catch (e) {}
   }
 
+  function normalizeLegacyAlignBbcode(s) {
+    s = String(s == null ? '' : s);
+
+    // парные
+    s = s.replace(/\[left\]([\s\S]*?)\[\/left\]/gi, '[align=left]$1[/align]');
+    s = s.replace(/\[center\]([\s\S]*?)\[\/center\]/gi, '[align=center]$1[/align]');
+    s = s.replace(/\[right\]([\s\S]*?)\[\/right\]/gi, '[align=right]$1[/align]');
+    s = s.replace(/\[justify\]([\s\S]*?)\[\/justify\]/gi, '[align=justify]$1[/align]');
+
+    // одиночные/кривые
+    s = s.replace(/\[(\/?)left\]/gi, '[$1align=left]').replace(/\[\/align=left\]/gi, '[/align]');
+    s = s.replace(/\[(\/?)center\]/gi, '[$1align=center]').replace(/\[\/align=center\]/gi, '[/align]');
+    s = s.replace(/\[(\/?)right\]/gi, '[$1align=right]').replace(/\[\/align=right\]/gi, '[/align]');
+    s = s.replace(/\[(\/?)justify\]/gi, '[$1align=justify]').replace(/\[\/align=justify\]/gi, '[/align]');
+
+    return s;
+  }
+
+  function afAeNormalizeAlignInInstance(inst) {
+    if (!inst || inst.__afAeAlignNormalizing) return;
+    inst.__afAeAlignNormalizing = true;
+
+    try {
+      if (typeof inst.val === 'function') {
+        var v = inst.val();
+        var nv = normalizeLegacyAlignBbcode(v);
+        if (nv !== v) {
+          // важно: задаём обратно — чтобы изменения были В РЕДАКТОРЕ, а не только в textarea перед submit
+          inst.val(nv);
+        }
+      }
+      try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e0) {}
+    } catch (e1) {
+      // no-op
+    } finally {
+      inst.__afAeAlignNormalizing = false;
+    }
+  }
+
   function bindSubmitSync(form, inst, ta) {
     if (!form || !inst || !ta) return;
 
-    // можно биндинг на каждый инстанс, но без дублей
     var key = '__afAeSubmitBound_' + (ta.name || ta.id || 'message');
     if (form[key]) return;
     form[key] = true;
@@ -930,18 +1820,24 @@
         try {
           if (typeof inst.val === 'function') {
             var v = inst.val();
-            if (typeof v === 'string') ta.value = v;
+            if (typeof v === 'string') {
+              v = normalizeLegacyAlignBbcode(v);
+              ta.value = v;
+            }
+          } else {
+            // если inst.val нет — хотя бы textarea прогоняем
+            ta.value = normalizeLegacyAlignBbcode(ta.value);
           }
-        } catch (e1) {}
-      } catch (e2) {}
+        } catch (e1) {
+          try { ta.value = normalizeLegacyAlignBbcode(ta.value); } catch (e2) {}
+        }
+      } catch (e3) {}
     }
 
-    // submit capture — раньше всего
     form.addEventListener('submit', function () {
       syncNow();
     }, true);
 
-    // на всякий: клик по submit-кнопкам (иногда формы валидируются до submit)
     form.addEventListener('click', function (e) {
       try {
         var t = e.target;
@@ -979,19 +1875,32 @@
 
         try { return origToggle.apply(inst, arguments); }
         finally {
-          // ВАЖНО: iframe может появиться не мгновенно — даём микропаузу и ретраи внутри функции
+          // ВАЖНО: iframe может появиться не мгновенно — даём микропаузу и ретраи внутри функций
           setTimeout(function () {
             try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e0) {}
+            try { afAeApplyWysiwygLocalFontsCss(inst); } catch (e0b) {}
+
+            try { afAePatchAlignCommandsForSourceMode(); } catch (eX) {}
+            try { afAeEnsureMybbAlignBbcode(inst); } catch (eY) {}
+            try { afAeForceAlignEverywhere(inst); } catch (eZ) {}
+            try { afAeNormalizeAlignInInstance(inst); } catch (eN) {}
 
             window.__afAeIgnoreMutationsUntil = now() + 250;
             window.__afAeGlobalToggling = Math.max(0, (window.__afAeGlobalToggling | 0) - 1);
+
           }, 30);
         }
       };
     }
 
     // На старте тоже пинаем: иногда инстанс уже есть, но iframe ещё догружается
-    try { setTimeout(function () { try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e1) {} }, 30); } catch (e2) {}
+    try {
+      setTimeout(function () {
+        try { afAeNormalizeAlignInInstance(inst); } catch (eN2) {}
+        try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e1) {}
+        try { afAeApplyWysiwygLocalFontsCss(inst); } catch (e1b) {}
+      }, 30);
+    } catch (e2) {}
   }
 
   function initOneTextarea(ta) {
@@ -1006,6 +1915,8 @@
 
     var $ = window.jQuery;
     var $ta = $(ta);
+
+    // === ВОТ ТУТ И ДОЛЖНО БЫТЬ ===
     var layout = sanitizeLayout(P.layout || null);
     var availableMap = buildAvailableMap();
     var out = buildToolbarFromLayout(layout);
@@ -1015,17 +1926,28 @@
       ta.__afAeInited = true;
       existing.__afAeOwned = true;
 
-      try { ensureCustomCommands(); } catch (eC0) {}
+      // dropdown-меню (afmenu_*) — чтобы кнопки точно были “живые”
       try { ensureDropdownCommands(out, availableMap); } catch (eD0) {}
+      // bbcode passthrough для MyCode-тегов (WYSIWYG <-> BBCode) — НА ИМЕННО ЭТОМ инстансе
+      try { afAeEnsureMycodePassthroughBbcode(existing); } catch (eM0) {}
 
-      try { afAeEnsureMybbListAndAlignBbcode(existing); } catch (eA0) {}
+      // остальные кастомные команды (af_*)
+      try { ensureCustomCommands(); } catch (eC0) {}
+      try { ensureToggleCommandDefinition(); } catch (eT0) {}
+      try { ensureMybbTagAliases(); } catch (eTA0) {}
+
+
+      try { afAeEnsureMybbAlignBbcode(existing); } catch (eA0) {}
       try { afAePatchAlignCommandsForSourceMode(); } catch (eA0b) {}
       try { afAeEnsureFrontendCodeCss(); } catch (eA1) {}
+      try { afAeForceAlignEverywhere(existing); } catch (eAA) {}
 
       try { patchEditorInstanceForSafeToggle(existing); } catch (e0) {}
       try { ensureDefaultSourceMode(existing); } catch (e0b) {}
       try { bindSubmitSync(ta.form, existing, ta); } catch (e1) {}
+
       try { afAeApplyWysiwygCodeQuoteCss(existing); } catch (e2) {}
+      try { afAeApplyWysiwygLocalFontsCss(existing); } catch (e2b) {}
 
       try {
         decorateDropdownButtons(ta, out);
@@ -1036,17 +1958,26 @@
     }
 
     try {
-      ensureCustomCommands();
-      ensureDropdownCommands(out, availableMap);
+      // регаем всё ДО создания инстанса
       ensurePostKeyInput(ta.form);
 
-      // Патчи bbcode (до инициализации) — и потом ещё раз после, чтобы точно
-      try { afAeEnsureMybbListAndAlignBbcode(null); } catch (eP0) {}
+      try { ensureDropdownCommands(out, availableMap); } catch (eD1) {}
+      try { ensureCustomCommands(); } catch (eC1) {}
+      try { ensureToggleCommandDefinition(); } catch (eT1) {}
+      try { ensureMybbTagAliases(); } catch (eTA1) {}
+
+
+      // Патчи bbcode (до инициализации) — и потом ещё раз после
+      try { afAeEnsureMybbAlignBbcode(null); } catch (eP0) {}
+      try { afAeForceAlignEverywhere(null); } catch (eX) {}
 
       $ta.sceditor({
         format: 'bbcode',
         toolbar: out.toolbar,
-        style: P.sceditorCss || '',
+
+        // ВАЖНО: WYSIWYG iframe CSS
+        style: (P.sceditorContentCss || P.sceditorCss || ''),
+
         height: 180,
         width: '100%',
         resizeEnabled: true,
@@ -1060,15 +1991,24 @@
         inst.__afAeOwned = true;
         inst.__afAeToolbarSig = asText(out.toolbar);
 
-        // Патчи bbcode/стилей уже по факту инстанса
-        try { afAeEnsureMybbListAndAlignBbcode(inst); } catch (eP1) {}
+        // bbcode passthrough для MyCode-тегов (WYSIWYG <-> BBCode)
+        try { afAeEnsureMycodePassthroughBbcode(inst); } catch (eM1) {}
+        // алиасы MyBB-тегов и команды — один раз глобально, но тут безопасно
+        try { ensureMybbTagAliases(); } catch (eTA2) {}
+        try { ensureCustomCommands(); } catch (eC2) {}
+
+
+        try { afAeEnsureMybbAlignBbcode(inst); } catch (eP1) {}
         try { afAePatchAlignCommandsForSourceMode(); } catch (eP1b) {}
         try { afAeEnsureFrontendCodeCss(); } catch (eP2) {}
+        try { afAeForceAlignEverywhere(inst); } catch (ePP) {}
 
         try { patchEditorInstanceForSafeToggle(inst); } catch (e3) {}
         try { ensureDefaultSourceMode(inst); } catch (e3b) {}
         try { bindSubmitSync(ta.form, inst, ta); } catch (e4) {}
+
         try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e5) {}
+        try { afAeApplyWysiwygLocalFontsCss(inst); } catch (e5b) {}
 
         decorateDropdownButtons(ta, out);
         decorateCustomButtons(ta);
