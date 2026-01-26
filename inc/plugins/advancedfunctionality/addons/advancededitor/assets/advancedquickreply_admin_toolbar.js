@@ -8,6 +8,9 @@
   var available = Array.isArray(P.available) ? P.available : [];
   var layout = P.layout && typeof P.layout === 'object' ? P.layout : null;
   var dragState = null;
+  var sectionDragGhostEl = null;
+  var sectionDropPlaceholder = null;
+
 
 
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -27,6 +30,71 @@
     } else {
       fn();
     }
+  }
+
+  function ensureSectionDnDStylesOnce() {
+    if (document.getElementById('af-aqr-admin-dnd-css')) return;
+
+    var css = ''
+      + 'html.af-aqr-sec-dragging, html.af-aqr-sec-dragging * { cursor: grabbing !important; }'
+      + '.af-aqr-sec-drag { cursor: grab; user-select: none; }'
+      + '.af-aqr-sec.is-sec-dragging { opacity: .75; }'
+      + '.af-aqr-sec.is-sec-over { outline: 2px dashed rgba(120,160,255,.45); outline-offset: 4px; }'
+      + '.af-aqr-sec.is-sec-before { box-shadow: inset 0 3px 0 rgba(120,160,255,.65); }'
+      + '.af-aqr-sec.is-sec-after  { box-shadow: inset 0 -3px 0 rgba(120,160,255,.65); }'
+      + '.af-aqr-sec-placeholder {'
+      + '  height: 10px; margin: 8px 0; border-radius: 8px;'
+      + '  background: rgba(120,160,255,.35);'
+      + '  box-shadow: 0 0 0 2px rgba(120,160,255,.25) inset;'
+      + '}'
+      + '.af-aqr-sec-ghost {'
+      + '  position: fixed; left: -9999px; top: -9999px; z-index: 999999;'
+      + '  padding: 10px 12px; border-radius: 12px;'
+      + '  background: rgba(30,30,30,.92); color: #fff;'
+      + '  font: 600 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial;'
+      + '  box-shadow: 0 12px 40px rgba(0,0,0,.35);'
+      + '  pointer-events: none;'
+      + '}';
+
+    var st = document.createElement('style');
+    st.id = 'af-aqr-admin-dnd-css';
+    st.type = 'text/css';
+    st.appendChild(document.createTextNode(css));
+    document.head.appendChild(st);
+  }
+
+  function setSectionDraggingCursor(on) {
+    try {
+      if (on) document.documentElement.classList.add('af-aqr-sec-dragging');
+      else document.documentElement.classList.remove('af-aqr-sec-dragging');
+    } catch (e) {}
+  }
+
+  function clearSectionDndVisuals() {
+    // placeholder
+    try {
+      if (sectionDropPlaceholder && sectionDropPlaceholder.parentNode) {
+        sectionDropPlaceholder.parentNode.removeChild(sectionDropPlaceholder);
+      }
+    } catch (e0) {}
+    sectionDropPlaceholder = null;
+
+    // ghost
+    try {
+      if (sectionDragGhostEl && sectionDragGhostEl.parentNode) {
+        sectionDragGhostEl.parentNode.removeChild(sectionDragGhostEl);
+      }
+    } catch (e1) {}
+    sectionDragGhostEl = null;
+
+    // classes
+    try {
+      $all('.af-aqr-sec').forEach(function (el) {
+        el.classList.remove('is-sec-over', 'is-sec-before', 'is-sec-after', 'is-sec-dragging');
+      });
+    } catch (e2) {}
+
+    setSectionDraggingCursor(false);
   }
 
   function normalizeLayout(x) {
@@ -72,8 +140,10 @@
       s[String(b.cmd)] = true;
     });
     s['|'] = true;
-    // dropdown-команды мы генерим сами как afmenu_*
-    // пропускаем их через allow по префиксу при проверке
+
+    // dropdown-команды мы генерим сами как:
+    // af_menu_dropdown1, af_menu_dropdown2, ...
+    // (и при санитайзе/валидации пропускаем по этому паттерну)
     return s;
   }
 
@@ -94,11 +164,15 @@
 
       // чистим мусор/пустые
       sec.items = sec.items
-        .map(function (x) { return String(x || '').trim(); })
+        .map(function (x) { return String(x == null ? '' : x).trim(); })
         .filter(function (cmd) {
           if (!cmd) return false;
           if (cmd === '|') return true;
-          if (/^afmenu_/i.test(cmd)) return true; // внутреннее
+
+          // Новый канон дропдаун-команд:
+          // af_menu_dropdown1, af_menu_dropdown2, ...
+          if (/^af_menu_dropdown\d+$/i.test(cmd)) return true; // на случай если кто-то вручную впихнул
+
           return !!allowed[cmd];
         });
     });
@@ -121,6 +195,8 @@
     var parts = [];
     var menus = [];
 
+    var dropdownN = 0;
+
     (lay.sections || []).forEach(function (sec, idx) {
       if (!sec) return;
 
@@ -131,9 +207,16 @@
       var items = Array.isArray(sec.items) ? sec.items.slice() : [];
 
       if (type === 'dropdown') {
-        var cmd = 'afmenu_' + id.replace(/[^a-z0-9_\-]/gi, '_');
+        dropdownN++;
+        var cmd = 'af_menu_dropdown' + dropdownN;
+
         parts.push(cmd);
-        menus.push({ id: id, cmd: cmd, title: (title || '★'), items: items.slice() });
+        menus.push({
+          id: id,               // внутренний id секции (для переносов/редакта)
+          cmd: cmd,             // красивое имя команды для SCEditor-кнопки
+          title: (title || '★'),
+          items: items.slice()
+        });
         parts.push('|');
         return;
       }
@@ -160,6 +243,7 @@
     var toolbar = parts.join(',');
     toolbar = toolbar.replace(/,+\|,+/g, '|').replace(/\|{2,}/g, '|');
     toolbar = toolbar.replace(/^,|,$/g, '').replace(/^\|+|\|+$/g, '');
+
     return { toolbar: toolbar, menus: menus };
   }
 
@@ -577,223 +661,435 @@
     }
   }
 
-    function renderSections() {
-        var wrap = $('.af-aqr-sections');
-        if (!wrap) return;
-        wrap.innerHTML = '';
+  function moveSectionBySid(fromSid, toSid, before) {
+    fromSid = String(fromSid || '');
+    toSid = String(toSid || '');
+    if (!fromSid || !toSid || fromSid === toSid) return false;
 
-        (state.layout.sections || []).forEach(function (sec) {
-            var box = document.createElement('div');
-            box.className = 'af-aqr-sec';
-            box.dataset.sid = sec.id;
+    var secs = state.layout.sections || [];
+    var fromIndex = -1, toIndex = -1;
 
-            var hd = document.createElement('div');
-            hd.className = 'af-aqr-sec-hd';
-
-            var meta = document.createElement('div');
-            meta.className = 'meta';
-
-            var title = document.createElement('input');
-            title.type = 'text';
-            title.value = sec.title || '';
-            title.placeholder = 'Название секции / символ (для dropdown)';
-            title.addEventListener('input', function () {
-            sec.title = title.value;
-            schedulePreview();
-            });
-
-            var type = document.createElement('select');
-            type.innerHTML = '<option value="group">group</option><option value="dropdown">dropdown</option>';
-            type.value = String(sec.type || 'group');
-            type.addEventListener('change', function () {
-            sec.type = type.value;
-            schedulePreview();
-            });
-
-            meta.appendChild(title);
-            meta.appendChild(type);
-
-            var del = document.createElement('a');
-            del.href = '#';
-            del.textContent = 'Удалить';
-            del.addEventListener('click', function (ev) {
-            ev.preventDefault();
-            state.layout.sections = state.layout.sections.filter(function (s) { return s !== sec; });
-            renderSections();
-            schedulePreview();
-            });
-
-            hd.appendChild(meta);
-            hd.appendChild(del);
-
-            var drop = document.createElement('div');
-            drop.className = 'af-aqr-drop';
-            drop.dataset.sid = sec.id;
-
-            // Чтобы в пустую секцию можно было нормально бросать
-            drop.style.minHeight = '44px';
-
-            function onDragOver(ev) {
-            ev.preventDefault();
-            drop.classList.add('is-over');
-
-            // Мы ВСЕГДА работаем в режиме move (а source теперь copyMove),
-            // так Firefox не запрещает drop.
-            try { ev.dataTransfer.dropEffect = 'move'; } catch (e) { }
-            }
-            function onDragEnter(ev) {
-            ev.preventDefault();
-            drop.classList.add('is-over');
-            }
-            function onDragLeave(ev) {
-            var rt = ev.relatedTarget;
-            if (rt && drop.contains(rt)) return;
-            drop.classList.remove('is-over');
-            }
-
-            drop.addEventListener('dragover', onDragOver, true);
-            drop.addEventListener('dragenter', onDragEnter, true);
-            drop.addEventListener('dragleave', onDragLeave, false);
-            drop.addEventListener('drop', function (ev) {
-              ev.preventDefault();
-              drop.classList.remove('is-over');
-
-              var data = dndGet(ev);
-              if (!data || !data.cmd) return;
-
-              // НОВОЕ: если тащим dropdown-секцию (через чип в "Доступных") —
-              // то это НЕ вставка в items, а ПЕРЕМЕЩЕНИЕ dropdown-секции по порядку.
-              if (data.from === 'dropdown_section' && data.fromSid) {
-                var sid = String(data.fromSid);
-                var secs = state.layout.sections || [];
-
-                var fromIndex = -1;
-                for (var ii = 0; ii < secs.length; ii++) {
-                  if (String(secs[ii].id) === sid) { fromIndex = ii; break; }
-                }
-
-                if (fromIndex >= 0) {
-                  var moving = secs[fromIndex];
-                  // тащим только dropdown-секции (страховка)
-                  if (moving && String(moving.type).toLowerCase() === 'dropdown') {
-                    secs.splice(fromIndex, 1);
-
-                    // цель: разместить dropdown ПОСЛЕ секции, куда ты дропнула
-                    var toId = String(sec.id);
-                    var toIndex = -1;
-                    for (var jj = 0; jj < secs.length; jj++) {
-                      if (String(secs[jj].id) === toId) { toIndex = jj; break; }
-                    }
-                    if (toIndex < 0) toIndex = secs.length - 1;
-
-                    secs.splice(toIndex + 1, 0, moving);
-
-                    // обновляем UI и превью + обновим "available", чтобы чипы соответствовали новой позиции
-                    renderSections();
-                    renderAvail();
-                    schedulePreview();
-                  }
-                }
-
-                dragState = null;
-                return;
-              }
-
-              // --- старое поведение (кнопки/пиллы) ---
-              sec.items = Array.isArray(sec.items) ? sec.items : [];
-
-              var insertAt = getInsertIndex(drop, ev.target);
-
-              // move/copy logic
-              if (data.from === 'pill' && data.fromSid) {
-                var fromSec = findSectionById(data.fromSid);
-                if (fromSec && Array.isArray(fromSec.items)) {
-                  var fromIdx = (typeof data.fromIdx === 'number')
-                    ? data.fromIdx
-                    : fromSec.items.indexOf(data.cmd);
-
-                  if (fromIdx >= 0) {
-                    fromSec.items.splice(fromIdx, 1);
-
-                    if (String(fromSec.id) === String(sec.id) && fromIdx < insertAt) {
-                      insertAt = Math.max(0, insertAt - 1);
-                    }
-                  }
-                }
-              }
-
-              if (insertAt < 0) insertAt = 0;
-              if (insertAt > sec.items.length) insertAt = sec.items.length;
-
-              sec.items.splice(insertAt, 0, String(data.cmd));
-
-              renderSections();
-              schedulePreview();
-            });
-
-            // Плейсхолдер в пустой секции
-            if (!sec.items || !sec.items.length) {
-            var ph = document.createElement('div');
-            ph.className = 'af-aqr-drop-placeholder';
-            ph.textContent = 'Перетащи кнопки сюда';
-            ph.style.opacity = '0.6';
-            ph.style.padding = '10px';
-            ph.style.pointerEvents = 'none';
-            drop.appendChild(ph);
-            }
-
-            (sec.items || []).forEach(function (cmd, idx) {
-            cmd = String(cmd || '').trim();
-            if (!cmd) return;
-
-            var pill = document.createElement('div');
-            pill.className = 'af-aqr-pill';
-            pill.draggable = true;
-            pill.dataset.cmd = cmd;
-            pill.dataset.sid = sec.id;
-            pill.dataset.idx = String(idx);
-            pill.textContent = cmd;
-
-            pill.addEventListener('dragover', function (ev) { ev.preventDefault(); }, true);
-            pill.addEventListener('dragenter', function (ev) { ev.preventDefault(); }, true);
-
-            pill.addEventListener('dragstart', function (ev) {
-              dragState = {
-                cmd: String(cmd),
-                from: 'pill',
-                fromSid: String(sec.id),
-                fromIdx: idx
-              };
-
-              dndSet(ev, {
-                cmd: cmd,
-                from: 'pill',
-                fromSid: String(sec.id),
-                fromIdx: idx
-              });
-
-              try { ev.dataTransfer.effectAllowed = 'copyMove'; } catch (e0) {}
-            });
-
-            pill.addEventListener('dragend', function () {
-              dragState = null;
-            });
-
-
-            pill.addEventListener('dblclick', function () {
-                sec.items.splice(idx, 1);
-                renderSections();
-                schedulePreview();
-            });
-
-            drop.appendChild(pill);
-            });
-
-            box.appendChild(hd);
-            box.appendChild(drop);
-            wrap.appendChild(box);
-        });
+    for (var i = 0; i < secs.length; i++) {
+      if (String(secs[i].id) === fromSid) fromIndex = i;
+      if (String(secs[i].id) === toSid) toIndex = i;
     }
+    if (fromIndex < 0 || toIndex < 0) return false;
+
+    var moving = secs[fromIndex];
+    secs.splice(fromIndex, 1);
+
+    // если вытащили секцию левее/выше цели — индекс цели сдвинулся
+    if (fromIndex < toIndex) toIndex = Math.max(0, toIndex - 1);
+
+    var insertAt = before ? toIndex : (toIndex + 1);
+    if (insertAt < 0) insertAt = 0;
+    if (insertAt > secs.length) insertAt = secs.length;
+
+    secs.splice(insertAt, 0, moving);
+    return true;
+  }
+
+  function getBeforeAfterByPointer(boxEl, ev) {
+    // true = вставить ДО секции, false = ПОСЛЕ
+    try {
+      var r = boxEl.getBoundingClientRect();
+      var y = (ev && typeof ev.clientY === 'number') ? ev.clientY : (r.top + r.height / 2);
+      return y < (r.top + r.height / 2);
+    } catch (e) {}
+    return true;
+  }
+
+  function renderSections() {
+    var wrap = $('.af-aqr-sections');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+
+    // bind "drop at end" once
+    if (!wrap.dataset.afAqrSecWrapBound) {
+      wrap.dataset.afAqrSecWrapBound = '1';
+
+      wrap.addEventListener('dragover', function (ev) {
+        if (!dragState || dragState.from !== 'section' || !dragState.fromSid) return;
+
+        // если мы не над конкретной секцией — показываем placeholder в конец
+        if (ev.target && ev.target.closest && ev.target.closest('.af-aqr-sec')) return;
+
+        ev.preventDefault();
+        try { ev.dataTransfer.dropEffect = 'move'; } catch (e) {}
+
+        if (!sectionDropPlaceholder) {
+          sectionDropPlaceholder = document.createElement('div');
+          sectionDropPlaceholder.className = 'af-aqr-sec-placeholder';
+        }
+        // всегда в конец
+        if (sectionDropPlaceholder.parentNode !== wrap) {
+          try { if (sectionDropPlaceholder.parentNode) sectionDropPlaceholder.parentNode.removeChild(sectionDropPlaceholder); } catch (e0) {}
+          wrap.appendChild(sectionDropPlaceholder);
+        } else {
+          // уже в wrap, просто гарантируем что последний
+          if (wrap.lastChild !== sectionDropPlaceholder) wrap.appendChild(sectionDropPlaceholder);
+        }
+      }, true);
+
+      wrap.addEventListener('drop', function (ev) {
+        if (!dragState || dragState.from !== 'section' || !dragState.fromSid) return;
+
+        // если дропнули на конкретную секцию — её обработчик решит
+        if (ev.target && ev.target.closest && ev.target.closest('.af-aqr-sec')) return;
+
+        ev.preventDefault();
+
+        // drop в конец: двигаем секцию последней
+        var fromSid = String(dragState.fromSid);
+        var secs = state.layout.sections || [];
+        var fromIndex = -1;
+        for (var i = 0; i < secs.length; i++) {
+          if (String(secs[i].id) === fromSid) { fromIndex = i; break; }
+        }
+        if (fromIndex >= 0) {
+          var moving = secs[fromIndex];
+          secs.splice(fromIndex, 1);
+          secs.push(moving);
+
+          renderSections();
+          renderAvail();
+          schedulePreview();
+        }
+
+        dragState = null;
+        clearSectionDndVisuals();
+      }, true);
+
+      wrap.addEventListener('dragleave', function (ev) {
+        var rt = ev.relatedTarget;
+        if (rt && wrap.contains(rt)) return;
+        // если ушли вообще из блока — убираем placeholder
+        try {
+          if (sectionDropPlaceholder && sectionDropPlaceholder.parentNode) {
+            sectionDropPlaceholder.parentNode.removeChild(sectionDropPlaceholder);
+          }
+        } catch (e) {}
+        sectionDropPlaceholder = null;
+      }, false);
+    }
+
+    (state.layout.sections || []).forEach(function (sec) {
+      var box = document.createElement('div');
+      box.className = 'af-aqr-sec';
+      box.dataset.sid = sec.id;
+
+      function ensurePlaceholder() {
+        if (!sectionDropPlaceholder) {
+          sectionDropPlaceholder = document.createElement('div');
+          sectionDropPlaceholder.className = 'af-aqr-sec-placeholder';
+        }
+        return sectionDropPlaceholder;
+      }
+
+      function placePlaceholderAroundBox(targetBox, before) {
+        var ph = ensurePlaceholder();
+        var parent = targetBox.parentNode;
+        if (!parent) return;
+
+        // снять со старого места
+        if (ph.parentNode && ph.parentNode !== parent) {
+          try { ph.parentNode.removeChild(ph); } catch (e0) {}
+        }
+
+        // вставка до/после
+        try {
+          if (before) parent.insertBefore(ph, targetBox);
+          else parent.insertBefore(ph, targetBox.nextSibling);
+        } catch (e1) {}
+      }
+
+      function getBeforeAfterByPointerLocal(boxEl, ev) {
+        try {
+          var r = boxEl.getBoundingClientRect();
+          var y = (ev && typeof ev.clientY === 'number') ? ev.clientY : (r.top + r.height / 2);
+          return y < (r.top + r.height / 2);
+        } catch (e) {}
+        return true;
+      }
+
+      function onSectionDragOver(ev) {
+        if (!dragState || dragState.from !== 'section') return;
+        if (!dragState.fromSid) return;
+
+        ev.preventDefault();
+        try { ev.dataTransfer.dropEffect = 'move'; } catch (e) {}
+
+        // подсветка
+        box.classList.add('is-sec-over');
+
+        var before = getBeforeAfterByPointerLocal(box, ev);
+        if (before) {
+          box.classList.add('is-sec-before');
+          box.classList.remove('is-sec-after');
+        } else {
+          box.classList.add('is-sec-after');
+          box.classList.remove('is-sec-before');
+        }
+
+        // placeholder
+        placePlaceholderAroundBox(box, before);
+      }
+
+      function onSectionDragLeave(ev) {
+        var rt = ev.relatedTarget;
+        if (rt && box.contains(rt)) return;
+        box.classList.remove('is-sec-over', 'is-sec-before', 'is-sec-after');
+      }
+
+      function onSectionDrop(ev) {
+        if (!dragState || dragState.from !== 'section' || !dragState.fromSid) return;
+
+        ev.preventDefault();
+
+        // убрать подсветку и placeholder
+        box.classList.remove('is-sec-over', 'is-sec-before', 'is-sec-after');
+        try {
+          if (sectionDropPlaceholder && sectionDropPlaceholder.parentNode) {
+            sectionDropPlaceholder.parentNode.removeChild(sectionDropPlaceholder);
+          }
+        } catch (e0) {}
+        sectionDropPlaceholder = null;
+
+        var fromSid = String(dragState.fromSid);
+        var toSid = String(sec.id);
+        var before = getBeforeAfterByPointerLocal(box, ev);
+
+        if (moveSectionBySid(fromSid, toSid, before)) {
+          renderSections();
+          renderAvail();
+          schedulePreview();
+        }
+
+        dragState = null;
+        clearSectionDndVisuals();
+      }
+
+      box.addEventListener('dragover', onSectionDragOver, true);
+      box.addEventListener('dragenter', onSectionDragOver, true);
+      box.addEventListener('dragleave', onSectionDragLeave, false);
+      box.addEventListener('drop', onSectionDrop, true);
+
+      var hd = document.createElement('div');
+      hd.className = 'af-aqr-sec-hd';
+
+      var meta = document.createElement('div');
+      meta.className = 'meta';
+
+      // --- РУЧКА ПЕРЕТАСКИВАНИЯ СЕКЦИИ
+      var dragHandle = document.createElement('span');
+      dragHandle.className = 'af-aqr-sec-drag';
+      dragHandle.title = 'Перетащи секцию, чтобы поменять порядок';
+      dragHandle.textContent = '☰';
+      dragHandle.draggable = true;
+
+      // важные мелочи UX
+      try {
+        dragHandle.style.cursor = 'grab';
+        dragHandle.style.userSelect = 'none';
+      } catch (eUx) {}
+
+      dragHandle.addEventListener('dragstart', function (ev) {
+        ensureSectionDnDStylesOnce();
+        setSectionDraggingCursor(true);
+
+        var token = '__af_section__:' + String(sec.id);
+
+        dragState = {
+          cmd: token,
+          from: 'section',
+          fromSid: String(sec.id)
+        };
+
+        dndSet(ev, {
+          cmd: token,
+          from: 'section',
+          fromSid: String(sec.id)
+        });
+
+        try { ev.dataTransfer.effectAllowed = 'move'; } catch (e0) {}
+
+        // делаем НОРМАЛЬНЫЙ drag-image (а не микроспан)
+        try {
+          // чистим старый ghost
+          if (sectionDragGhostEl && sectionDragGhostEl.parentNode) {
+            sectionDragGhostEl.parentNode.removeChild(sectionDragGhostEl);
+          }
+
+          sectionDragGhostEl = document.createElement('div');
+          sectionDragGhostEl.className = 'af-aqr-sec-ghost';
+
+          var t = String(sec.title || '').trim();
+          var type = String(sec.type || '').trim();
+          sectionDragGhostEl.textContent = (t ? t : 'Секция') + (type ? (' • ' + type) : '');
+
+          document.body.appendChild(sectionDragGhostEl);
+
+          // смещение "под курсором"
+          if (ev.dataTransfer && typeof ev.dataTransfer.setDragImage === 'function') {
+            ev.dataTransfer.setDragImage(sectionDragGhostEl, 16, 16);
+          }
+        } catch (eGhost) {}
+
+        box.classList.add('is-sec-dragging');
+      });
+
+      dragHandle.addEventListener('dragend', function () {
+        dragState = null;
+        clearSectionDndVisuals();
+      });
+
+      var title = document.createElement('input');
+      title.type = 'text';
+      title.value = sec.title || '';
+      title.placeholder = 'Название секции / символ (для dropdown)';
+      title.addEventListener('input', function () {
+        sec.title = title.value;
+        schedulePreview();
+      });
+
+      var type = document.createElement('select');
+      type.innerHTML = '<option value="group">group</option><option value="dropdown">dropdown</option>';
+      type.value = String(sec.type || 'group');
+      type.addEventListener('change', function () {
+        sec.type = type.value;
+        schedulePreview();
+        renderAvail();
+      });
+
+      meta.appendChild(dragHandle);
+      meta.appendChild(title);
+      meta.appendChild(type);
+
+      var del = document.createElement('a');
+      del.href = '#';
+      del.textContent = 'Удалить';
+      del.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        state.layout.sections = state.layout.sections.filter(function (s) { return s !== sec; });
+        renderSections();
+        renderAvail();
+        schedulePreview();
+      });
+
+      hd.appendChild(meta);
+      hd.appendChild(del);
+
+      var drop = document.createElement('div');
+      drop.className = 'af-aqr-drop';
+      drop.dataset.sid = sec.id;
+      drop.style.minHeight = '44px';
+
+      function onDragOver(ev) {
+        if (dragState && dragState.from === 'section') return;
+
+        ev.preventDefault();
+        drop.classList.add('is-over');
+        try { ev.dataTransfer.dropEffect = 'move'; } catch (e) { }
+      }
+      function onDragEnter(ev) {
+        if (dragState && dragState.from === 'section') return;
+
+        ev.preventDefault();
+        drop.classList.add('is-over');
+      }
+      function onDragLeave(ev) {
+        var rt = ev.relatedTarget;
+        if (rt && drop.contains(rt)) return;
+        drop.classList.remove('is-over');
+      }
+
+      drop.addEventListener('dragover', onDragOver, true);
+      drop.addEventListener('dragenter', onDragEnter, true);
+      drop.addEventListener('dragleave', onDragLeave, false);
+
+      drop.addEventListener('drop', function (ev) {
+        if (dragState && dragState.from === 'section') return;
+
+        ev.preventDefault();
+        drop.classList.remove('is-over');
+
+        var data = dndGet(ev);
+        if (!data || !data.cmd) return;
+
+        sec.items = Array.isArray(sec.items) ? sec.items : [];
+        var insertAt = getInsertIndex(drop, ev.target);
+
+        if (data.from === 'pill' && data.fromSid) {
+          var fromSec = findSectionById(data.fromSid);
+          if (fromSec && Array.isArray(fromSec.items)) {
+            var fromIdx = (typeof data.fromIdx === 'number') ? data.fromIdx : fromSec.items.indexOf(data.cmd);
+            if (fromIdx >= 0) {
+              fromSec.items.splice(fromIdx, 1);
+              if (String(fromSec.id) === String(sec.id) && fromIdx < insertAt) {
+                insertAt = Math.max(0, insertAt - 1);
+              }
+            }
+          }
+        }
+
+        if (insertAt < 0) insertAt = 0;
+        if (insertAt > sec.items.length) insertAt = sec.items.length;
+
+        sec.items.splice(insertAt, 0, String(data.cmd));
+
+        renderSections();
+        schedulePreview();
+      });
+
+      if (!sec.items || !sec.items.length) {
+        var ph = document.createElement('div');
+        ph.className = 'af-aqr-drop-placeholder';
+        ph.textContent = 'Перетащи кнопки сюда';
+        ph.style.opacity = '0.6';
+        ph.style.padding = '10px';
+        ph.style.pointerEvents = 'none';
+        drop.appendChild(ph);
+      }
+
+      (sec.items || []).forEach(function (cmd, idx) {
+        cmd = String(cmd || '').trim();
+        if (!cmd) return;
+
+        var pill = document.createElement('div');
+        pill.className = 'af-aqr-pill';
+        pill.draggable = true;
+        pill.dataset.cmd = cmd;
+        pill.dataset.sid = sec.id;
+        pill.dataset.idx = String(idx);
+        pill.textContent = cmd;
+
+        pill.addEventListener('dragover', function (ev) { ev.preventDefault(); }, true);
+        pill.addEventListener('dragenter', function (ev) { ev.preventDefault(); }, true);
+
+        pill.addEventListener('dragstart', function (ev) {
+          dragState = { cmd: String(cmd), from: 'pill', fromSid: String(sec.id), fromIdx: idx };
+          dndSet(ev, { cmd: cmd, from: 'pill', fromSid: String(sec.id), fromIdx: idx });
+          try { ev.dataTransfer.effectAllowed = 'copyMove'; } catch (e0) {}
+        });
+
+        pill.addEventListener('dragend', function () {
+          dragState = null;
+        });
+
+        pill.addEventListener('dblclick', function () {
+          sec.items.splice(idx, 1);
+          renderSections();
+          schedulePreview();
+        });
+
+        drop.appendChild(pill);
+      });
+
+      box.appendChild(hd);
+      box.appendChild(drop);
+      wrap.appendChild(box);
+    });
+  }
 
   var previewTimer = null;
 
@@ -997,6 +1293,40 @@
       return $content;
     }
 
+    function resolveCaller(a, b) {
+      // SCEditor обычно передаёт caller (DOM) как 1-й аргумент в dropDown.
+      if (a && a.nodeType === 1) return a;
+      if (b && b.nodeType === 1) return b;
+
+      // иногда прилетает event
+      if (a && a.currentTarget && a.currentTarget.nodeType === 1) return a.currentTarget;
+      if (b && b.currentTarget && b.currentTarget.nodeType === 1) return b.currentTarget;
+
+      return null;
+    }
+
+    function openDropdown(ed, caller, menu) {
+      if (!ed || typeof ed.createDropDown !== 'function') return false;
+
+      try { ed.closeDropDown(true); } catch (e0) {}
+
+      var $content = buildDropdownContent(ed, menu);
+      // как в floatbb.js: третий аргумент — DOM-узел (самый стабильный вариант)
+      var node = $content && $content[0] ? $content[0] : $content;
+      try {
+        ed.createDropDown(caller, 'sceditor-' + String(menu.cmd || 'af_menu_dropdown') + '-picker', node);
+        return true;
+      } catch (e1) {
+        // запасной путь — если SCEditor принял jQuery-объект лучше
+        try {
+          ed.createDropDown(caller, 'sceditor-' + String(menu.cmd || 'af_menu_dropdown') + '-picker', $content);
+          return true;
+        } catch (e2) {}
+      }
+
+      return false;
+    }
+
     out.menus.forEach(function (m) {
       if (!m || !m.cmd) return;
 
@@ -1006,26 +1336,30 @@
       var def = {
         tooltip: 'Dropdown: ' + (m.title || '★'),
 
-        // Некоторые сборки SCEditor рисуют dropdown-кнопки, если есть dropDown
-        dropDown: function (editor, caller /*, html */) {
-          try {
-            var $content = buildDropdownContent(editor, m);
-            editor.createDropDown(caller, m.cmd, $content);
-          } catch (e0) {}
+        // КЛЮЧ: dropDown использует this как editor (как в floatbb/indent паттерне)
+        // SCEditor вызывает dropDown(caller), а не dropDown(editor, caller)
+        dropDown: function (a, b) {
+          var ed = this;
+          var caller = resolveCaller(a, b);
+          if (!caller) return;
+          openDropdown(ed, caller, m);
         },
 
-        // Универсальный путь: по клику на кнопку — открываем dropdown
+        // Универсальный путь: если SCEditor вдруг кликает через exec/txtExec
         exec: function (caller) {
-          try {
-            var ed = this;
-            if (def.dropDown) def.dropDown(ed, caller);
-          } catch (e1) {}
+          var ed = this;
+          var c = resolveCaller(caller, null);
+          if (!c) c = resolveCaller(null, null);
+          if (!c) return;
+          openDropdown(ed, c, m);
         },
+
         txtExec: function (caller) {
-          try {
-            var ed = this;
-            if (def.dropDown) def.dropDown(ed, caller);
-          } catch (e2) {}
+          var ed = this;
+          var c = resolveCaller(caller, null);
+          if (!c) c = resolveCaller(null, null);
+          if (!c) return;
+          openDropdown(ed, c, m);
         }
       };
 
@@ -1396,7 +1730,7 @@
 
     // если из PHP пришёл layout — санитайзим под список доступных кнопок
     state.layout = sanitizeLayout(state.layout);
-
+    ensureSectionDnDStylesOnce();
     renderAvail();
     renderSections();
 
