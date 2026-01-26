@@ -16,6 +16,7 @@ define('AF_AE_SETTING_COUNTBBCODE',     'af_advancededitor_counter_count_bbcode'
 define('AF_AE_SETTING_HIDE_POSTOPTIONS','af_advancededitor_hide_postoptions');
 define('AF_AE_SETTING_POSTCOUNT_FORUMS', 'af_advancededitor_postcount_forum_ids');
 define('AF_AE_SETTING_FORMFEATURE_FORUMS', 'af_advancededitor_formfeature_forum_ids');
+define('AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS', 'af_ae_htmlbb_allowed_groups');
 
 
 
@@ -260,61 +261,78 @@ function af_advancededitor_collect_db_buttons(): array
  */
 function af_advancededitor_build_payload(): array
 {
-    global $mybb;
+    // DB layout: sections/items
+    $layoutJson = (string)af_advancededitor_cfg_get('layout_json', '');
 
-    // layout из settings (как есть, JSON строка)
-    $layoutRaw = (string)($mybb->settings[AF_AE_SETTING_LAYOUT] ?? '');
-    $layout = null;
-    if ($layoutRaw !== '') {
-        $tmp = @json_decode($layoutRaw, true);
-        if (is_array($tmp)) $layout = $tmp;
+    // Available commands: base + custom packs + custom buttons
+    $available = af_advancededitor_get_available_buttons();
+
+    // CustomDefs include pack buttons + DB custom buttons (same format)
+    $customDefs = af_advancededitor_get_all_custom_defs();
+
+    // Normalized assets base url (addon assets/)
+    $assetsBaseUrl = af_advancededitor_url('inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/');
+
+    // Normalize icon urls for frontend:
+    // - allow both "img/..." and "assets/img/..." (strip leading "assets/")
+    // - convert relative => absolute url under /assets/
+    $normalizeIcon = function(array $b) use ($assetsBaseUrl): array {
+        $icon = isset($b['icon']) ? (string)$b['icon'] : '';
+        $icon = trim($icon);
+
+        if ($icon !== '') {
+            // tolerate manifests that mistakenly write "assets/img/.."
+            if (str_starts_with($icon, 'assets/')) {
+                $icon = substr($icon, 7);
+            }
+
+            // if not absolute (http(s) or // or /), prefix assetsBaseUrl
+            if (!preg_match('~^(https?:)?//|^/~i', $icon)) {
+                $icon = $assetsBaseUrl . ltrim($icon, '/');
+            }
+        }
+
+        $b['icon'] = $icon;
+        return $b;
+    };
+
+    if (is_array($available)) {
+        foreach ($available as $k => $b) {
+            if (is_array($b)) {
+                $available[$k] = $normalizeIcon($b);
+            }
+        }
     }
 
-    // packs from /assets/bbcodes
-    $packs = af_advancededitor_collect_bbcode_packs();
-
-    // DB defs (если используешь)
-    $dbDefs = af_advancededitor_collect_db_buttons();
-
-    // customDefs: packs.buttons + dbDefs
-    $customDefs = array_values(array_merge(
-        is_array($packs['buttons'] ?? null) ? $packs['buttons'] : [],
-        is_array($dbDefs) ? $dbDefs : []
-    ));
-
-    // available: минимум + все кастомные команды, чтобы sanitizeLayout НЕ выкинул их
-    $available = [];
-
-    // добавляем кастомные команды в available
-    foreach ($customDefs as $d) {
-        if (!is_array($d) || empty($d['cmd'])) continue;
-        $available[] = [
-            'cmd'   => (string)$d['cmd'],
-            'title' => (string)($d['title'] ?? $d['cmd']),
-            'hint'  => (string)($d['hint'] ?? ''),
-            'icon'  => (string)($d['icon'] ?? ''),
-        ];
+    if (is_array($customDefs)) {
+        foreach ($customDefs as $k => $b) {
+            if (is_array($b)) {
+                $customDefs[$k] = $normalizeIcon($b);
+            }
+        }
     }
 
-    // packs assets
-    $packsOut = [
-        'js'  => array_values(array_unique(is_array($packs['js'] ?? null) ? $packs['js'] : [])),
-        'css' => array_values(array_unique(is_array($packs['css'] ?? null) ? $packs['css'] : [])),
-        'buttons' => [], // на фронт не надо
-    ];
+    // Post key for forms (to avoid "неверный ключ" при отправке)
+    $postKey = isset($GLOBALS['mybb']->post_code) ? (string)$GLOBALS['mybb']->post_code : '';
 
-    // sceditor css (если хочешь – можно пусто, твой JS это переживёт)
-    $sceditorCss = af_advancededitor_url('jscripts/sceditor/styles/jquery.sceditor.mybb.css');
+    // Packs assets (css/js) that should be auto-loaded on frontend
+    $packsAssets = af_advancededitor_collect_packs_assets();
 
     return [
-        'debug'     => 0,
-        'layout'    => $layout,
-        'packs'     => $packsOut,
-        'customDefs'=> $customDefs,
-        'available' => $available,
-        'sceditorCss'=> $sceditorCss,
+        'enabled'     => (int)af_advancededitor_cfg_get('enabled', 1),
+        'layoutJson'  => $layoutJson,
+        'available'   => $available,
+        'customDefs'  => $customDefs,
+        'packsAssets' => $packsAssets,
+
+        // IMPORTANT: used by JS for resolving icons/assets
+        'assetsBaseUrl' => $assetsBaseUrl,
+
+        // for my_post_key injection
+        'postKey'     => $postKey,
     ];
 }
+
 
 /**
  * === AF hook: pre_output_page ===
@@ -404,6 +422,281 @@ function af_advancededitor_collect_font_families_for_payload(): array
     return array_merge($system, $custom);
 }
 
+function af_advancededitor_asset_ver(string $absPath): int
+{
+    return (is_file($absPath) ? (int)@filemtime($absPath) : 0);
+}
+
+function af_advancededitor_add_ver(string $url, int $ver): string
+{
+    if ($url === '' || $ver <= 0) return $url;
+    return (strpos($url, '?') !== false) ? ($url . '&v=' . $ver) : ($url . '?v=' . $ver);
+}
+
+/**
+ * === AE: local fonts CSS (generated file in /cache) ===
+ */
+function af_advancededitor_fonts_cache_rel(): string
+{
+    return 'cache/af_advancededitor_fonts.css';
+}
+
+function af_advancededitor_fonts_cache_url(): string
+{
+    // URL к cache-файлу
+    $rel = (string)af_advancededitor_fonts_cache_rel();
+    $rel = '/' . ltrim($rel, '/'); // нормализуем
+
+    return af_advancededitor_url($rel);
+}
+
+function af_advancededitor_fonts_cache_abs(): string
+{
+    $rel = (string)af_advancededitor_fonts_cache_rel();
+    $rel = ltrim($rel, '/'); // для FS лучше без ведущего /
+
+    return rtrim(MYBB_ROOT, "/\\") . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+}
+
+function af_advancededitor_fonts_css_safe_family(string $name): string
+{
+    $name = trim($name);
+    // убираем управляющие и кавычки/слэши, чтобы не ломать CSS
+    $name = preg_replace('~[\x00-\x1F\x7F]+~', '', $name);
+    $name = str_replace(['"', "'", '\\'], '', $name);
+    return $name;
+}
+
+function af_advancededitor_fonts_css_latest_mtime(): int
+{
+    $fontsDirAbs = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/fonts/';
+    if (!is_dir($fontsDirAbs)) return 0;
+
+    $allowedExt = ['woff2', 'woff', 'ttf', 'otf'];
+
+    $max = 0;
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($fontsDirAbs, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+
+    foreach ($it as $file) {
+        /** @var SplFileInfo $file */
+        if (!$file->isFile()) continue;
+
+        $abs = $file->getPathname();
+        $ext = strtolower(pathinfo($abs, PATHINFO_EXTENSION));
+        if (!in_array($ext, $allowedExt, true)) continue;
+
+        $mt = (int)@filemtime($abs);
+        if ($mt > $max) $max = $mt;
+    }
+
+    return $max;
+}
+
+function af_advancededitor_build_font_face_css(array $families): string
+{
+    // строим CSS @font-face для custom семейств (system=0) из payload-формата
+    $assetsBase = af_advancededitor_url('inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/');
+    $css = "/* AF AdvancedEditor: local fonts */\n";
+
+    foreach ($families as $f) {
+        if (!is_array($f)) continue;
+        if (!empty($f['system'])) continue;
+
+        $name = isset($f['name']) ? af_advancededitor_fonts_css_safe_family((string)$f['name']) : '';
+        if ($name === '') continue;
+
+        $files = $f['files'] ?? null;
+        if (!is_array($files) || empty($files)) continue;
+
+        $src = [];
+
+        $add = function(string $ext, string $fmt) use (&$src, $files, $assetsBase) {
+            if (empty($files[$ext])) return;
+            $file = trim((string)$files[$ext]);
+            if ($file === '') return;
+
+            // нормализуем относительный путь (внутри assets/fonts/)
+            $file = str_replace(['\\', "\0"], ['/', ''], $file);
+            $file = ltrim($file, '/');
+            if ($file === '' || strpos($file, '..') !== false) return;
+
+            $url = $assetsBase . 'fonts/' . str_replace('%2F', '/', rawurlencode($file));
+            $src[] = 'url("' . str_replace('"', '\\"', $url) . '") format("' . $fmt . '")';
+        };
+
+        // приоритет woff2 -> woff -> ttf -> otf
+        $add('woff2', 'woff2');
+        $add('woff',  'woff');
+        $add('ttf',   'truetype');
+        $add('otf',   'opentype');
+
+        if (!$src) continue;
+
+        $css .= "@font-face{"
+            . "font-family:'{$name}';"
+            . "src:" . implode(',', $src) . ";"
+            . "font-weight:400;"
+            . "font-style:normal;"
+            . "font-display:swap;"
+            . "}\n";
+    }
+
+    return $css;
+}
+
+/**
+ * Генерит /cache/af_advancededitor_fonts.css если он отсутствует или устарел.
+ * Возвращает URL для <link>, либо '' если нечего/нельзя подключать.
+ */
+function af_advancededitor_ensure_local_fonts_css_file(): string
+{
+    $abs = af_advancededitor_fonts_cache_abs();
+
+    // если cache/ не существует — пробуем создать (обычно есть, но мало ли)
+    $cacheDir = dirname($abs);
+    if (!is_dir($cacheDir)) {
+        @mkdir($cacheDir, 0775, true);
+    }
+
+    // на основе файлов шрифтов определяем “нужно ли пересобирать”
+    $latestFontsMtime = af_advancededitor_fonts_css_latest_mtime();
+    $fileExists = is_file($abs);
+    $fileMtime  = $fileExists ? (int)@filemtime($abs) : 0;
+
+    // если шрифтов вообще нет — не подключаем ничего
+    if ($latestFontsMtime <= 0) {
+        return '';
+    }
+
+    $needRebuild = (!$fileExists) || ($latestFontsMtime > $fileMtime);
+
+    if ($needRebuild) {
+        // берём ровно тот же список, что идёт в payload (system + custom),
+        // но CSS строим только для custom (логика внутри build_font_face_css)
+        $families = af_advancededitor_collect_font_families_for_payload();
+        $css = af_advancededitor_build_font_face_css($families);
+
+        // если вдруг CSS пустой — не пишем и не подключаем
+        if (!is_string($css) || trim($css) === '') {
+            return '';
+        }
+
+        // если cache недоступен для записи — НЕ ломаем фронт:
+        // если уже есть старый файл, подключаем его; иначе — ничего
+        if (!is_dir($cacheDir) || !is_writable($cacheDir)) {
+            if ($fileExists) {
+                $ver = $fileMtime > 0 ? $fileMtime : $latestFontsMtime;
+                return af_advancededitor_add_ver(af_advancededitor_fonts_cache_url(), $ver);
+            }
+            return '';
+        }
+
+        $tmp = $abs . '.tmp_' . uniqid('', true);
+        $ok = (@file_put_contents($tmp, $css, LOCK_EX) !== false);
+
+        if ($ok) {
+            @chmod($tmp, 0644);
+
+            // атомарная замена (на одной FS ок; если внезапно нет — будет fail)
+            if (!@rename($tmp, $abs)) {
+                @unlink($tmp);
+
+                // если не удалось заменить, но старый файл есть — подключаем старый
+                if ($fileExists) {
+                    $ver = $fileMtime > 0 ? $fileMtime : $latestFontsMtime;
+                    return af_advancededitor_add_ver(af_advancededitor_fonts_cache_url(), $ver);
+                }
+                return '';
+            }
+        } else {
+            @unlink($tmp);
+
+            // если не удалось записать, но старый файл есть — подключаем старый
+            if ($fileExists) {
+                $ver = $fileMtime > 0 ? $fileMtime : $latestFontsMtime;
+                return af_advancededitor_add_ver(af_advancededitor_fonts_cache_url(), $ver);
+            }
+            return '';
+        }
+    }
+
+    // версионируем по mtime самого cache-файла (или latestFontsMtime как fallback)
+    $finalMtime = is_file($abs) ? (int)@filemtime($abs) : 0;
+    $ver = $finalMtime > 0 ? $finalMtime : $latestFontsMtime;
+
+    return af_advancededitor_add_ver(af_advancededitor_fonts_cache_url(), $ver);
+}
+
+function af_advancededitor_strip_own_assets(string &$page): void
+{
+    if ($page === '') return;
+
+    // Убираем маркер (чтобы можно было безопасно переинжектить)
+    $page = str_replace('<!--af_advancededitor-->', '', $page);
+
+    // Убираем style с локальными шрифтами (старый режим)
+    $page = preg_replace('~<style\b[^>]*\bid=("|\')af-ae-local-fonts\1[^>]*>.*?</style>\s*~is', '', $page);
+
+    // Убираем link на локальные шрифты (новый режим через cache-файл)
+    $page = preg_replace(
+        '~<link\b[^>]*\bid=("|\')af-ae-local-fonts\1[^>]*\bhref=("|\')[^"\']*?/cache/af_advancededitor_fonts\.css(?:\?[^"\']*)?\2[^>]*>\s*~i',
+        '',
+        $page
+    );
+
+    // Убираем наши link/script из аддона (css/js)
+    $page = preg_replace('~<link\b[^>]*\bhref=("|\')[^"\']*?/inc/plugins/advancedfunctionality/addons/advancededitor/assets/[^"\']+\.(?:css)(?:\?[^"\']*)?\1[^>]*>\s*~i', '', $page);
+    $page = preg_replace('~<script\b[^>]*\bsrc=("|\')[^"\']*?/inc/plugins/advancedfunctionality/addons/advancededitor/assets/[^"\']+\.(?:js)(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i', '', $page);
+
+    // На всякий случай: если когда-то грузили advancededitor.(js|css) не из ожидаемой папки
+    $page = preg_replace('~<script\b[^>]*\bsrc=("|\')[^"\']*advancededitor\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i', '', $page);
+    $page = preg_replace('~<link\b[^>]*\bhref=("|\')[^"\']*advancededitor\.css(?:\?[^"\']*)?\1[^>]*>\s*~i', '', $page);
+}
+
+function af_advancededitor_resolve_sceditor_content_css_url(string $bburl): string
+{
+    $bburl = rtrim($bburl, '/');
+
+    $candidates = [
+        '/jscripts/sceditor/styles/jquery.sceditor.mybb.css',
+        '/jscripts/sceditor/styles/jquery.sceditor.default.css',
+        '/jscripts/sceditor/styles/jquery.sceditor.default.min.css',
+    ];
+
+    foreach ($candidates as $rel) {
+        $fs = MYBB_ROOT . ltrim($rel, '/');
+        if (is_file($fs)) {
+            return $bburl . $rel;
+        }
+    }
+
+    // fallback (пусть будет хоть что-то)
+    return $bburl . '/jscripts/sceditor/styles/jquery.sceditor.mybb.css';
+}
+
+function af_advancededitor_resolve_sceditor_theme_css_url(string $bburl): string
+{
+    $bburl = rtrim($bburl, '/');
+
+    $candidates = [
+        '/jscripts/sceditor/themes/default.min.css',
+        '/jscripts/sceditor/themes/default.css',
+        '/jscripts/sceditor/themes/modern.min.css',
+        '/jscripts/sceditor/themes/modern.css',
+    ];
+
+    foreach ($candidates as $rel) {
+        $fs = MYBB_ROOT . ltrim($rel, '/');
+        if (is_file($fs)) {
+            return $bburl . $rel;
+        }
+    }
+
+    return $bburl . '/jscripts/sceditor/themes/default.min.css';
+}
 
 function af_advancededitor_pre_output(string &$page = ''): void
 {
@@ -413,165 +706,217 @@ function af_advancededitor_pre_output(string &$page = ''): void
     if (empty($mybb->settings[$enabledKey])) return;
 
     if ($page === '' || stripos($page, '<html') === false) return;
-    if (strpos($page, '<!--af_advancededitor-->') !== false) return;
-
-    // Не лезем в админку/модку
     if (defined('IN_ADMINCP') || defined('IN_MODCP')) return;
-
-    // 1) ГЛАВНОЕ: отключаем MyBB Clickable Editor (на случай, если он включён)
-    af_advancededitor_force_disable_mybb_clickable_editor();
-
-    // 2) Гейт: подключаемся ВЕЗДЕ, где реально есть textarea.
-    // Это соответствует твоему текущему режиму "только textarea везде".
-    if (stripos($page, '<textarea') === false) return;
 
     $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
     if ($bburl === '') return;
 
-    // 3) Если MyBB уже воткнул свои SCEditor ассеты — вычищаем, чтобы не было двойной инициализации.
-    af_advancededitor_strip_mybb_sceditor_assets($page);
+    // ---- определяем режим ----
+    $hasTextarea = (stripos($page, '<textarea') !== false);
 
-    $assetsBase  = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/';
-    $imgBase     = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/img/';
-    $v = defined('TIME_NOW') ? (int)TIME_NOW : time();
+    // быстрый признак "есть контент постов"
+    $looksLikeContentPage =
+        (stripos($page, 'class="post ') !== false) ||
+        (stripos($page, 'class="post_body"') !== false) ||
+        (stripos($page, 'id="posts"') !== false) ||
+        (stripos($page, 'showthread.php') !== false) ||
+        (stripos($page, 'forumdisplay.php') !== false) ||
+        (stripos($page, 'private.php') !== false) ||
+        (stripos($page, 'search.php') !== false);
 
-    // пакеты
+    // Пакеты BB-кнопок/стилей (включая copycode)
     $packs = af_advancededitor_discover_bbcode_packs($bburl);
 
-    $injectHead = "\n<!--af_advancededitor-->\n";
-
-    // базовый CSS аддона
-    $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($assetsBase . 'advancededitor.css?v=' . $v) . '" />' . "\n";
-
-    // локальные @font-face
-    $fontsCss = af_advancededitor_build_fonts_css($bburl);
-    if ($fontsCss !== '') {
-        $injectHead .= "<style id=\"af-ae-local-fonts\">\n" . $fontsCss . "\n</style>\n";
+    // Если это не страница с редактором и не похоже на страницу с контентом — не грузим ничего,
+    // чтобы не раздувать абсолютно все страницы.
+    if (!$hasTextarea && !$looksLikeContentPage) {
+        return;
     }
 
-    // CSS паков
+    // ---- чистим возможный старый мусор (чтобы можно было переинжектить) ----
+    af_advancededitor_strip_own_assets($page);
+
+    // В режиме редактора: гасим MyBB clickable editor + вычищаем SCEditor ассеты MyBB
+    // (в VIEW режиме это не трогаем вообще)
+    if ($hasTextarea) {
+        af_advancededitor_force_disable_mybb_clickable_editor();
+        af_advancededitor_strip_mybb_sceditor_assets($page);
+    }
+
+    $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/';
+    $imgBase    = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/img/';
+
+    // Версии файлов (cache busting)
+    $aeCssAbs = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/advancededitor.css';
+    $aeJsAbs  = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/advancededitor.js';
+    $verCss   = af_advancededitor_asset_ver($aeCssAbs);
+    $verJs    = af_advancededitor_asset_ver($aeJsAbs);
+    $buildVer = max($verCss, $verJs, 1);
+
+    $injectHead  = "\n<!--af_advancededitor-->\n";
+
+    /**
+     * ===== ВСЕГДА (контентные страницы + страницы с textarea) =====
+     * ВАЖНО: именно тут грузим copycode.js/css для гостей.
+     */
+
+    // базовый CSS аддона (общие правила/переменные/иконки тулбара и т.п.)
+    $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor.css', $buildVer)) . '" />' . "\n";
+
+    // локальные @font-face — лучше отдельным файлом, а не inline style
+    $fontsCssUrl = af_advancededitor_ensure_local_fonts_css_file(); // должна вернуть абсолютный URL или '' 
+    if ($fontsCssUrl !== '') {
+        $injectHead .= '<link rel="stylesheet" id="af-ae-local-fonts" href="' 
+            . htmlspecialchars_uni(af_advancededitor_add_ver($fontsCssUrl, $buildVer)) 
+            . "\" />\n";
+    } else {
+        // fallback: если не хочешь inline вообще — просто ничего.
+        // если хочешь оставить запасной вариант — можешь вернуть старый build_fonts_css тут.
+        /*
+        $fontsCss = af_advancededitor_build_fonts_css($bburl);
+        if ($fontsCss !== '') {
+            $injectHead .= "<style id=\"af-ae-local-fonts\">\n" . $fontsCss . "\n</style>\n";
+        }
+        */
+    }
+
+
+    // CSS паков (table/float/copycode/…)
     if (!empty($packs['css']) && is_array($packs['css'])) {
         foreach ($packs['css'] as $u) {
             $u = (string)$u;
             if ($u === '') continue;
-            $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($u) . '?v=' . $v . '" />' . "\n";
+            $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_add_ver($u, $buildVer)) . '" />' . "\n";
         }
     }
 
-    // JS паков (defer)
+    // JS паков (copycode.js должен быть тут всегда, чтобы работал у гостя в showthread)
     if (!empty($packs['js']) && is_array($packs['js'])) {
         foreach ($packs['js'] as $u) {
             $u = (string)$u;
             if ($u === '') continue;
-            $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni($u) . '?v=' . $v . '"></script>' . "\n";
+            $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($u, $buildVer)) . '"></script>' . "\n";
         }
     }
 
-    // Мини-cfg (твои ограничения по форумам)
-    $postcountCsv   = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_POSTCOUNT_FORUMS));
-    $formfeatureCsv = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_FORMFEATURE_FORUMS));
+    /**
+     * ===== ТОЛЬКО ЕСЛИ ЕСТЬ TEXTAREA (редакторный режим) =====
+     */
+    if ($hasTextarea) {
 
-    $injectHead .= '<script>'
-        . 'window.afAePayload=window.afAePayload||{};'
-        . 'window.afAePayload.cfg=window.afAePayload.cfg||{};'
-        . 'window.afAePayload.cfg.bburl=' . json_encode($bburl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
-        . 'window.afAePayload.cfg.postcountForumIds=' . json_encode($postcountCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
-        . 'window.afAePayload.cfg.formFeatureForumIds=' . json_encode($formfeatureCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
-        . '</script>' . "\n";
+        // Ограничения по форумам (как было)
+        $postcountCsv   = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_POSTCOUNT_FORUMS));
+        $formfeatureCsv = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_FORMFEATURE_FORUMS));
 
-    // SCEditor css
-    $sceditorCss = af_advancededitor_resolve_sceditor_css_url($bburl);
-    $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($sceditorCss) . '" />' . "\n";
+        $injectHead .= '<script>'
+            . 'window.afAePayload=window.afAePayload||{};'
+            . 'window.afAePayload.cfg=window.afAePayload.cfg||{};'
+            . 'window.afAePayload.cfg.bburl=' . json_encode($bburl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
+            . 'window.afAePayload.cfg.postcountForumIds=' . json_encode($postcountCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
+            . 'window.afAePayload.cfg.formFeatureForumIds=' . json_encode($formfeatureCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
+            . '</script>' . "\n";
 
-    // SCEditor core
-    $core = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.min.js');
-    if ($core === '') $core = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.js');
+        // SCEditor: theme css (для тулбара)
+        $sceditorThemeCss = af_advancededitor_resolve_sceditor_theme_css_url($bburl);
+        $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_add_ver($sceditorThemeCss, $buildVer)) . '" />' . "\n";
 
-    $bb = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.bbcode.min.js');
-    if ($bb === '') $bb = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.bbcode.js');
+        // SCEditor: content css (для iframe WYSIWYG)
+        $sceditorContentCss = af_advancededitor_resolve_sceditor_content_css_url($bburl);
 
-    if ($core !== '') $injectHead .= '<script src="' . htmlspecialchars_uni($core) . '"></script>' . "\n";
-    if ($bb !== '')   $injectHead .= '<script src="' . htmlspecialchars_uni($bb) . '"></script>' . "\n";
+        // SCEditor core + bbcode plugin
+        $core = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.min.js');
+        if ($core === '') $core = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.js');
 
-    // MyBB bridge (он нужен, чтобы поведение было как “родное” — включая submit-синхронизацию textarea)
-    $mybbBridge = af_advancededitor_resolve_sceditor_mybb_js_url($bburl);
-    if ($mybbBridge !== '') {
-        $injectHead .= '<script src="' . htmlspecialchars_uni($mybbBridge) . '"></script>' . "\n";
-    }
+        $bb = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.bbcode.min.js');
+        if ($bb === '') $bb = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.bbcode.js');
 
-    // layout/fonts/settings
-    $customDefs = af_advancededitor_get_custom_button_defs($bburl);
-    $available  = af_advancededitor_get_available_buttons($bburl, $customDefs);
+        if ($core !== '') $injectHead .= '<script src="' . htmlspecialchars_uni(af_advancededitor_add_ver($core, $buildVer)) . '"></script>' . "\n";
+        if ($bb !== '')   $injectHead .= '<script src="' . htmlspecialchars_uni(af_advancededitor_add_ver($bb, $buildVer)) . '"></script>' . "\n";
 
-    $layoutRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_LAYOUT);
-    $layout = null;
-    if (trim($layoutRaw) !== '') {
-        $decoded = json_decode($layoutRaw, true);
-        if (is_array($decoded)) $layout = $decoded;
-    }
+        // MyBB bridge (submit-sync)
+        $mybbBridge = af_advancededitor_resolve_sceditor_mybb_js_url($bburl);
+        if ($mybbBridge !== '') {
+            $injectHead .= '<script src="' . htmlspecialchars_uni(af_advancededitor_add_ver($mybbBridge, $buildVer)) . '"></script>' . "\n";
+        }
 
-    $fontsRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_FONTS);
-    $fonts = null;
-    if (trim($fontsRaw) !== '') {
-        $decoded = json_decode($fontsRaw, true);
-        if (is_array($decoded)) $fonts = $decoded;
-    }
+        // layout/fonts/settings
+        $customDefs = af_advancededitor_get_custom_button_defs($bburl);
+        $available  = af_advancededitor_get_available_buttons($bburl, $customDefs);
 
-    $countBbcodeRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_COUNTBBCODE);
-    $countBbcode = ((int)trim((string)$countBbcodeRaw) === 1) ? 1 : 0;
+        $layoutRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_LAYOUT);
+        $layout = null;
+        if (trim($layoutRaw) !== '') {
+            $decoded = json_decode($layoutRaw, true);
+            if (is_array($decoded)) $layout = $decoded;
+        }
 
-    $hideOptsRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_HIDE_POSTOPTIONS);
-    $hidePostOptions = ((int)trim((string)$hideOptsRaw) === 1) ? 1 : 0;
+        $fontsRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_FONTS);
+        $fonts = null;
+        if (trim($fontsRaw) !== '') {
+            $decoded = json_decode($fontsRaw, true);
+            if (is_array($decoded)) $fonts = $decoded;
+        }
 
-    if ($hidePostOptions) {
-        $injectHead .= "<style id=\"af-ae-hide-postoptions\">
+        $countBbcodeRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_COUNTBBCODE);
+        $countBbcode = ((int)trim((string)$countBbcodeRaw) === 1) ? 1 : 0;
+
+        $hideOptsRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_HIDE_POSTOPTIONS);
+        $hidePostOptions = ((int)trim((string)$hideOptsRaw) === 1) ? 1 : 0;
+
+        if ($hidePostOptions) {
+            $injectHead .= "<style id=\"af-ae-hide-postoptions\">
 #post_options, #postoptions, .post_options, .postoptions,
 fieldset.post_options, fieldset.postoptions,
 .postoptions-container, .post-options, .postOptions,
 table #post_options, table #postoptions{display:none!important;}
 </style>\n";
+        }
+
+        $fontFamilies = af_advancededitor_collect_font_families_for_payload();
+        $postKey = (string)($mybb->post_code ?? '');
+
+        $payload = [
+            'v'                => 4,
+            'assetVer'          => $buildVer,
+
+            'bburl'             => $bburl,
+            'assetsBase'        => $assetsBase,
+            'imgBase'           => $imgBase,
+
+            'sceditorContentCss'=> $sceditorContentCss,
+            'sceditorThemeCss'  => $sceditorThemeCss,
+            'sceditorCss'       => $sceditorContentCss,
+
+            'available'         => $available,
+            'layout'            => $layout,
+            'fonts'             => $fonts,
+            'packs'             => $packs,
+            'customDefs'        => $customDefs,
+
+            'previewUrl'        => $bburl . '/misc.php?action=af_ae_postpreview',
+            'postKey'           => $postKey,
+
+            'countBbcode'       => $countBbcode,
+            'hidePostOptions'   => $hidePostOptions,
+            'cfg' => [
+                'bburl' => $bburl,
+                'fontFamilies' => $fontFamilies,
+                'postcountForumIds'   => $postcountCsv,
+                'formFeatureForumIds' => $formfeatureCsv,
+            ],
+        ];
+
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (!is_string($json) || $json === '') $json = '{}';
+
+        $injectHead .= '<script>window.afAdvancedEditorPayload=' . $json . ';</script>' . "\n";
+        $injectHead .= '<script>window.afAePayload=window.afAdvancedEditorPayload;</script>' . "\n";
+
+        // advancededitor.js
+        $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor.js', $buildVer)) . '"></script>' . "\n";
     }
 
-    $fontFamilies = af_advancededitor_collect_font_families_for_payload();
-    $postKey = (string)($mybb->post_code ?? '');
-
-    $payload = [
-        'v'           => 3,
-        'bburl'       => $bburl,
-        'assetsBase'  => $assetsBase,
-        'imgBase'     => $imgBase,
-        'sceditorCss' => $sceditorCss,
-        'available'   => $available,
-        'layout'      => $layout,
-        'fonts'       => $fonts,
-        'packs'       => $packs,
-        'customDefs'  => $customDefs,
-
-        // превью
-        'previewUrl'  => $bburl . '/misc.php?action=af_ae_postpreview',
-
-        // важно: my_post_key
-        'postKey'     => $postKey,
-
-        'countBbcode' => $countBbcode,
-        'hidePostOptions' => $hidePostOptions,
-        'cfg' => [
-            'bburl' => $bburl,
-            'fontFamilies' => $fontFamilies,
-            'postcountForumIds'   => $postcountCsv,
-            'formFeatureForumIds' => $formfeatureCsv,
-        ],
-    ];
-
-    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if (!is_string($json) || $json === '') $json = '{}';
-
-    $injectHead .= '<script>window.afAdvancedEditorPayload=' . $json . ';</script>' . "\n";
-    $injectHead .= '<script>window.afAePayload=window.afAdvancedEditorPayload;</script>' . "\n";
-
-    // advancededitor.js
-    $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni($assetsBase . 'advancededitor.js?v=' . $v) . '"></script>' . "\n";
-
+    // ---- вставляем в </head> ----
     if (stripos($page, '</head>') !== false) {
         $page = preg_replace('~</head>~i', $injectHead . '</head>', $page, 1);
     } else {
@@ -798,6 +1143,17 @@ function af_advancededitor_install(): void
         60
     );
 
+    // === HTMLBB: кто может ИСПОЛЬЗОВАТЬ тег [html] ===
+    $ensure(
+        AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS,
+        'HTMLBB: группы, которым доступен тег [html]',
+        'ID групп через запятую, которым разрешено использовать тег [html] (и кнопку в тулбаре). Просмотр HTMLBB доступен всем.',
+        'text',
+        '3,4,6',
+        70
+    );
+
+
     if (!function_exists('rebuild_settings')) {
         require_once MYBB_ROOT . 'inc/functions.php';
     }
@@ -805,6 +1161,7 @@ function af_advancededitor_install(): void
 
     // ставим MyCode из паков (включая indent/indent.php)
     af_advancededitor_install_pack_mycodes();
+
 
     // OPcache дружелюбие
     $settingsFile = MYBB_ROOT . 'inc/settings.php';
@@ -822,6 +1179,8 @@ function af_advancededitor_uninstall(): void
     // сначала убираем MyCode паков (только если пак даёт uninstall-функцию)
     af_advancededitor_uninstall_pack_mycodes();
 
+
+
     // Таблицу удаляем (это именно наши данные)
     if ($db->table_exists(AF_AE_TABLE)) {
         $db->drop_table(AF_AE_TABLE);
@@ -836,6 +1195,8 @@ function af_advancededitor_uninstall(): void
     // НОВОЕ
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_POSTCOUNT_FORUMS) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_FORMFEATURE_FORUMS) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS) . "'");
+
 
     $db->delete_query('settinggroups', "name='" . $db->escape_string(AF_AE_GROUP) . "'");
 
