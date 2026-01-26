@@ -241,7 +241,13 @@
 
 <!-- TEMPLATE: af_aas_account_list_row -->
 <tr>
-    <td class="{$af_aas_row_class}" style="width:40px;">{$af_aas_avatar_html}</td>
+    <td class="{$af_aas_row_class}" style="width:40px; white-space:nowrap;">
+    <span class="af-aas-avatarwrap">
+        {$af_aas_avatar_html}
+        <span class="af-aas-userstatus-slot">{$af_aas_userstatus_html}</span>
+    </span>
+
+    </td>
     <td class="{$af_aas_row_class}">{$af_aas_user_link}</td>
     <td class="{$af_aas_row_class}" style="white-space:nowrap;">{$af_aas_regdate}</td>
     <td class="{$af_aas_row_class}" style="white-space:nowrap;">{$af_aas_lastactive}</td>
@@ -250,6 +256,7 @@
     <td class="{$af_aas_row_class}" style="white-space:nowrap;">{$af_aas_master_link}</td>
 </tr>
 <!-- /TEMPLATE -->
+
 
 <!-- TEMPLATE: af_aas_account_list_empty -->
 <tr>
