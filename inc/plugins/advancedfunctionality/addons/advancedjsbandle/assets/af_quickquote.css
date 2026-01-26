@@ -1,0 +1,29 @@
+#af-quickquote-float{
+  position: fixed;
+  z-index: 2147483200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+
+  cursor: pointer;
+  user-select: none;
+  pointer-events: auto;
+
+  box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  background: #111;
+  color: #fff;
+}
+
+#af-quickquote-float::before{
+  content:"\f10d";
+  font-family:"Font Awesome 6 Free";
+  font-weight: 900;
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+  line-height: 1;
+}

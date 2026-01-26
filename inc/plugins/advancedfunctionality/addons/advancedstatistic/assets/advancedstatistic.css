@@ -1,0 +1,376 @@
+/* Advanced Statistic — base */
+.af_as_section {
+  margin: 16px 0;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.af_as_head {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+
+.af_as_head_title {
+  font-size: 28px;
+  letter-spacing: .04em;
+  opacity: .95;
+}
+
+/* Layout */
+.af_as_grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 16px;
+  padding: 16px;
+}
+
+@media (max-width: 980px) {
+  .af_as_grid { grid-template-columns: 1fr; }
+}
+
+.af_as_panel_title {
+  font-size: 12px;
+  letter-spacing: .12em;
+  opacity: .7;
+  margin-bottom: 10px;
+}
+
+/* Число перед "Online today" */
+.af_as_today_count {
+  font-weight: 800;
+  opacity: 1;
+  letter-spacing: .02em;
+  margin-right: 8px;
+}
+
+/* -------------------------------------------
+   Left — recent threads
+   ВАЖНО: карточка теперь НЕ <a>, чтобы не было вложенных ссылок
+-------------------------------------------- */
+.af_as_recent_list {
+  display: grid;
+  gap: 10px;
+  overflow: auto;
+  max-height: 570px;
+  padding-right: 2px;
+}
+
+.af_as_recent_item {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.06);
+  background: rgba(0,0,0,.10);
+  min-width: 0;
+}
+
+.af_as_recent_item:hover {
+  border-color: rgba(255,255,255,.14);
+  background: rgba(0,0,0,.16);
+}
+
+/* Avatar link */
+.af_as_recent_avatar{
+  --af-as-bg: #303030;
+  --af-as-border: #232323;
+  --af-as-pad: 3px;
+  width: 50px;
+  height: 50px;
+  display: block;
+  box-sizing: border-box;
+  padding: var(--af-as-pad);
+  border: 1px solid var(--af-as-border);
+  background: var(--af-as-bg);
+  border-radius: 0px;
+  overflow: hidden;
+
+  text-decoration: none;
+}
+
+.af_as_recent_avatar img{
+  width: 100%;
+  height: 100%;
+  display: block;
+
+  object-fit: cover;
+
+  /* чтобы внутри padding выглядело аккуратно */
+  border-radius: 4px;
+}
+a.af_as_recent_avatar img{
+  filter: grayscale(80%) contrast(110%);
+  transition: filter .25s ease, transform .18s ease;
+}
+
+a.af_as_recent_avatar:hover img{
+  filter: grayscale(20%) contrast(110%);
+}
+
+
+/* Текстовая часть */
+.af_as_recent_text {
+  min-width: 0;
+}
+
+/* Заголовок темы — это ссылка на тему */
+.af_as_recent_title {
+  display: block;
+  font-weight: 400;
+  letter-spacing: .02em;
+  line-height: 1.2;
+  margin-bottom: 6px;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+/* meta: posted by + username */
+.af_as_recent_meta {
+  font-size: 9px;
+  opacity: .75;
+  line-height: 1.25;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ключевой фикс от “ник улетает/становится блочным” из стилей темы */
+.af_as_recent_meta a {
+  display: inline !important;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* Если захочешь разрешить перенос внутри meta, добавь класс af_as_wrap_meta на meta */
+.af_as_recent_meta.af_as_wrap_meta {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.af_as_recent_meta.af_as_wrap_meta a {
+  white-space: normal;
+}
+
+/* -------------------------------------------
+   Right panels
+-------------------------------------------- */
+.af_as_panel {
+  border: 1px solid rgba(255,255,255,.06);
+  background: rgba(0,0,0,.10);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.af_as_panel_today {
+  margin-top: 12px;
+}
+
+/* -------------------------------------------
+   Online now — meta counters
+-------------------------------------------- */
+.af_as_online_meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 10px;
+  font-size: 11px;
+  opacity: .85;
+  letter-spacing: .02em;
+}
+
+.af_as_online_meta_item b {
+  font-weight: 800;
+  opacity: 1;
+}
+
+.af_as_online_meta_sep {
+  opacity: .55;
+}
+
+.af_as_online_meta_item, .af_as_today_breakdown {
+  padding: 2px 5px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.06);
+  background: rgba(0,0,0,.10);
+  font-variant: small-caps;
+  font-size: 10px;
+}
+
+/* -------------------------------------------
+   Online now — avatars grid
+-------------------------------------------- */
+.af_as_online_grid {
+  --af-as-avatar-size: 40px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--af-as-avatar-size));
+  grid-auto-rows: var(--af-as-avatar-size);
+  gap: 10px;
+  justify-content: start;
+  align-content: start;
+}
+
+/* -------------------------------------------
+   Online now — avatar tile (ПРАВКА: фон + паддинг)
+-------------------------------------------- */
+.af_as_avatar {
+  --af-as-bg: #303030;
+  --af-as-border: #232323;
+  --af-as-pad: 3px;
+  --af-as-filter: grayscale(100%) contrast(110%);
+  --af-as-hover-filter: brightness(1.05);
+  display: block;
+  width: var(--af-as-avatar-size);
+  height: var(--af-as-avatar-size);
+  box-sizing: border-box;
+  padding: var(--af-as-pad);
+  border-radius: 0px;
+  overflow: hidden;
+  border: 1px solid var(--af-as-border);
+  background: var(--af-as-bg);
+  transform: translateZ(0);
+  text-decoration: none;
+  position: relative;
+}
+
+/* сама картинка теперь живёт ВНУТРИ padding */
+.af_as_avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 0px;
+  object-fit: cover;
+
+  filter: var(--af-as-filter);
+  transition: transform .18s ease, filter .18s ease;
+}
+
+.af_as_avatar:hover img {
+  transform: scale(1.05);
+  filter: var(--af-as-filter) var(--af-as-hover-filter);
+}
+
+/* Группа 4: админы (твой градиент, но фон/паддинг уже остаются) */
+.af_as_avatar[data-af-as-group="4"],
+.af_as_avatar.af_as_g_admin {
+  /* если хочешь, чтобы админы имели другой фон плитки - меняй тут */
+  --af-as-bg: #303030;
+  --af-as-border: #232323;
+  --af-as-filter: none;
+}
+
+.af_as_avatar.af_as_g_glow {
+  box-shadow: 0 0 0 1px rgba(255,255,255,.06), 0 0 18px rgba(255,255,255,.06);
+}
+
+/* -------------------------------------------
+   Online today list
+-------------------------------------------- */
+.af_as_today_list {
+  font-size: 10px;
+  line-height: 1.4;
+  opacity: .95;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.af_as_today_list a {
+  text-decoration: none;
+}
+
+/* -------------------------------------------
+   Stats bottom
+-------------------------------------------- */
+.af_as_stats {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 980px) {
+  .af_as_stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.af_as_stat {
+  border: 1px solid rgba(255,255,255,.06);
+  background: rgba(0,0,0,.10);
+  border-radius: 10px;
+  padding: 12px;
+  min-width: 0;
+}
+
+/* Последняя карточка (newest member) — на 2 колонки */
+.af_as_stats .af_as_stat:last-child {
+  grid-column: span 2;
+  text-align: right;
+}
+
+/* На адаптиве (2 колонки) — пусть занимает всю ширину */
+@media (max-width: 980px) {
+  .af_as_stats .af_as_stat:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+.af_as_stat_num {
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: .02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af_as_stat_lbl {
+  margin-top: 6px;
+  font-size: 11px;
+  opacity: .75;
+  letter-spacing: .12em;
+}
+
+/* Title row inside panel titles (для Online now / Online today) */
+.af_as_title_row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.af_as_title_text{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Online now link */
+.af_as_online_link{
+  flex: 0 0 auto;
+  font-size: 12px;
+  letter-spacing: .02em;
+  text-decoration: none;
+}
+
+.af_as_online_link:hover{
+  opacity: 1;
+  text-decoration: none;
+}
+
+/* Online today breakdown (users || guests) */
+.af_as_today_breakdown{
+  font-size: 10px;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+

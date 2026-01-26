@@ -1,0 +1,44 @@
+<!-- TEMPLATE: af_advancedstatistic_block -->
+<!--af_advancedstatistic-->
+<div class="af_as_section" data-af-as="1">
+  <div class="af_as_head">
+    <div class="af_as_head_title">{$af_as_title}</div>
+  </div>
+
+  <div class="af_as_grid">
+    <div class="af_as_col af_as_left">
+      <div class="af_as_panel_title">{$af_as_recent_title}</div>
+      <div class="af_as_recent_list">
+        {$af_as_recent_list}
+      </div>
+    </div>
+
+    <div class="af_as_col af_as_right">
+      <div class="af_as_panel">
+        <div class="af_as_panel_title">{$af_as_online_now_title}</div>
+
+        <div class="af_as_online_meta">
+          {$af_as_online_meta}
+        </div>
+
+        <div class="af_as_online_grid">
+          {$af_as_online_now_grid}
+        </div>
+      </div>
+
+      <div class="af_as_panel af_as_panel_today">
+        <!-- тут теперь заголовок уже включает число: "287 Online today" -->
+        <div class="af_as_panel_title">{$af_as_online_today_title}</div>
+
+        <div class="af_as_today_list">
+          {$af_as_online_today_list}
+        </div>
+      </div>
+
+      <div class="af_as_stats">
+        {$af_as_stat_cards}
+      </div>
+    </div>
+  </div>
+</div>
+<!-- /TEMPLATE -->

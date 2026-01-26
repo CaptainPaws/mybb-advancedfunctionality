@@ -1,0 +1,22 @@
+/* Postbit FontAwesome icons (AF) */
+
+.af-pbfa-ico{
+  display:inline-block;
+  margin-right:6px;
+  opacity:.85;
+  vertical-align:middle;
+  line-height:1;
+}
+
+/* чтобы в post_date не “ломало” строчку */
+.post_date{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+}
+
+/* иконка внутри ссылки #номер */
+.float_right a .af-pbfa-linkinside{
+  margin-right:6px;
+  opacity:.75;
+}

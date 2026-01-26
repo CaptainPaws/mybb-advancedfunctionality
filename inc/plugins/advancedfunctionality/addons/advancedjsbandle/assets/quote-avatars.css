@@ -1,0 +1,48 @@
+/* quote avatars (AF) — fixed header layout */
+cite.af-qa-cite,
+.quote_header.af-qa-cite,
+.af-qa-cite {
+  /* важно: заголовок должен быть блочным, чтобы “полоска” была на всю ширину */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  width: 100%;
+  box-sizing: border-box;
+
+  /* чтобы текст нормально переносился внутри flex */
+  min-width: 0;
+}
+
+/* аватар */
+.af-qa-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  flex: 0 0 18px;
+}
+
+/* контейнер текста (всё, что кроме аватара) */
+cite.af-qa-cite > :not(.af-qa-avatar),
+.quote_header.af-qa-cite > :not(.af-qa-avatar),
+.af-qa-cite > :not(.af-qa-avatar) {
+  min-width: 0;              /* критично для переноса в flex */
+  flex: 0 0 auto;
+}
+
+/* если внутри есть ссылка на автора — тоже даём ей переноситься */
+cite.af-qa-cite a,
+.quote_header.af-qa-cite a,
+.af-qa-cite a {
+  min-width: 0;
+}
+
+/* иногда темы добавляют псевдо-иконки/элементы: не даём им ломать выравнивание */
+cite.af-qa-cite img:not(.af-qa-avatar),
+.quote_header.af-qa-cite img:not(.af-qa-avatar),
+.af-qa-cite img:not(.af-qa-avatar) {
+  max-height: 1em;
+  width: auto;
+}

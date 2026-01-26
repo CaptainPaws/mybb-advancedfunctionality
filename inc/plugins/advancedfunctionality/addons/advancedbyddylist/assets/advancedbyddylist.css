@@ -1,0 +1,81 @@
+/* =========================================
+   ABDL — overlay modal (popup + jquery-modal)
+   ========================================= */
+
+.modal.af-abdl-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 120px;
+
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+
+  /* ВАЖНО: чтобы клик не попадал в контейнер вместо backdrop */
+  pointer-events: none;
+}
+
+/* Подложка (тёмная) */
+.modal.af-abdl-modal .af-abdl-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: rgba(0, 0, 0, 0.60);
+
+  pointer-events: auto; /* ловит клик */
+}
+
+/* Панель */
+.modal.af-abdl-modal .af-abdl-modal-panel {
+  position: relative;
+  z-index: 1;
+
+  width: 520px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 60px);
+  overflow: auto;
+
+  pointer-events: auto; /* ловит клик */
+}
+
+/* Таблица */
+.modal.af-abdl-modal .af-abdl-modal-table { width: 100%; }
+
+/* Крестик-кнопка */
+.modal.af-abdl-modal .af-abdl-modal-close {
+  position: absolute;
+  right: 10px;
+  top: 8px;
+  z-index: 5;
+
+  background: transparent;
+  border: 0;
+  color: inherit;
+
+  font-size: 22px;
+  line-height: 1;
+  padding: 2px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+
+  pointer-events: auto; /* на всякий */
+}
+
+.modal.af-abdl-modal .af-abdl-modal-close:hover {
+  background: rgba(255,255,255,0.10);
+}
+
+/* Табы */
+.modal.af-abdl-modal .af-abdl-tabs {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.modal.af-abdl-modal .af-abdl-tab { text-decoration: none; }
+.modal.af-abdl-modal .af-abdl-tab.is-active { font-weight: 700; opacity: 1; }

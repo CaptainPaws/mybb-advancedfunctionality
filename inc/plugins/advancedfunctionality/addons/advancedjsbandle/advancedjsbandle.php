@@ -1,0 +1,310 @@
+<?php
+/**
+ * AF Addon: AdvancedJSBand(le)
+ * MyBB 1.8.39, PHP 8.0+
+ */
+
+if (!defined('IN_MYBB')) { die('No direct access'); }
+if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
+
+define('AF_AJSB_ID', 'advancedjsbandle');
+define('AF_AJSB_VER', '1.0.2');
+
+define('AF_AJSB_BASE', AF_ADDONS . AF_AJSB_ID . '/');
+define('AF_AJSB_ASSETS_DIR', AF_AJSB_BASE . 'assets/');
+
+define('AF_AJSB_MARK_START', '<!-- af_advancedjsbandle_start -->');
+define('AF_AJSB_MARK_END',   '<!-- af_advancedjsbandle_end -->');
+
+function af_advancedjsbandle_install(): bool
+{
+    // как у advancedfontawesome — вставка делается на install
+    af_ajsb_install_or_update_headerinclude();
+    return true;
+}
+
+function af_advancedjsbandle_uninstall(): bool
+{
+    af_ajsb_remove_headerinclude();
+    return true;
+}
+
+function af_advancedjsbandle_activate(): void
+{
+    // на случай если AF вызывает activate
+    af_ajsb_install_or_update_headerinclude();
+}
+
+function af_advancedjsbandle_deactivate(): void
+{
+    af_ajsb_remove_headerinclude();
+}
+
+function af_advancedjsbandle_init(): void
+{
+    global $plugins;
+
+    // Дедупликация на финальной странице:
+    // - не добавляем никаких ?v=
+    // - убираем любые повторные подключения (в т.ч. с query)
+    $plugins->add_hook('pre_output_page', 'af_advancedjsbandle_pre_output');
+}
+
+
+/**
+ * pre_output_page:
+ * 1) берём наш блок между маркерами как есть,
+ * 2) чистим у него любые query в src/href (если вдруг появились),
+ * 3) удаляем все <script src="...assets/<file>.js..."> и <link href="...assets/<file>.css..."> по всей странице,
+ * 4) вставляем наш блок обратно (один раз).
+ */
+function af_advancedjsbandle_pre_output(string &$page = ''): void
+{
+    $startPos = strpos($page, AF_AJSB_MARK_START);
+    if ($startPos === false) {
+        return;
+    }
+
+    $endPos = strpos($page, AF_AJSB_MARK_END, $startPos);
+    if ($endPos === false) {
+        return;
+    }
+
+    $endPos += strlen(AF_AJSB_MARK_END);
+    $blockHtml = substr($page, $startPos, $endPos - $startPos);
+    if ($blockHtml === '' || $blockHtml === false) {
+        return;
+    }
+
+    $jsFiles  = af_ajsb_list_js_files();
+    $cssFiles = af_ajsb_list_css_files();
+
+    if (!$jsFiles && !$cssFiles) {
+        return;
+    }
+
+    // 1) вычищаем query-параметры внутри блока для наших файлов (если вдруг они там есть)
+    $cleanBlock = $blockHtml;
+
+    foreach ($jsFiles as $fname) {
+        $qf = preg_quote($fname, '#');
+        $cleanBlock = preg_replace(
+            '#(/assets/' . $qf . ')(\?[^"\']+)(["\'])#i',
+            '$1$3',
+            $cleanBlock
+        );
+    }
+
+    foreach ($cssFiles as $fname) {
+        $qf = preg_quote($fname, '#');
+        $cleanBlock = preg_replace(
+            '#(/assets/' . $qf . ')(\?[^"\']+)(["\'])#i',
+            '$1$3',
+            $cleanBlock
+        );
+    }
+
+    // 2) вырезаем ВСЕ наши скрипты/стили по всей странице (и с query и без)
+    foreach ($jsFiles as $fname) {
+        $page = af_ajsb_remove_script_tags_for_file($page, $fname);
+    }
+    foreach ($cssFiles as $fname) {
+        $page = af_ajsb_remove_link_tags_for_file($page, $fname);
+    }
+
+    // 3) возвращаем наш блок ровно один раз
+    $pattern = '#'.preg_quote(AF_AJSB_MARK_START, '#').'.*?'.preg_quote(AF_AJSB_MARK_END, '#').'#si';
+    $page = preg_replace($pattern, $cleanBlock, $page, 1);
+}
+
+function af_ajsb_install_or_update_headerinclude(): void
+{
+    require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
+
+    // 1) удаляем старый блок
+    af_ajsb_remove_headerinclude();
+
+    // 2) строим 
+    $styles  = af_ajsb_build_link_tags();
+    $scripts = af_ajsb_build_script_tags();
+
+    if ($styles === '' && $scripts === '') {
+        return;
+    }
+
+    // 3) вставка строго ПОСЛЕ {$stylesheets}
+    $block =
+        "\n" . AF_AJSB_MARK_START . "\n" .
+        ($styles ? $styles . "\n" : '') .
+        ($scripts ? $scripts . "\n" : '') .
+        AF_AJSB_MARK_END . "\n";
+
+    $insert = '{$stylesheets}' . $block;
+
+    find_replace_templatesets('headerinclude', '#\{\$stylesheets\}#i', $insert);
+}
+
+function af_ajsb_list_js_files(): array
+{
+    static $cache = null;
+    if (is_array($cache)) {
+        return $cache;
+    }
+
+    $dir = rtrim((string)AF_AJSB_ASSETS_DIR, "/\\") . '/';
+    if (!is_dir($dir)) {
+        $cache = [];
+        return $cache;
+    }
+
+    $files = @scandir($dir);
+    if (!is_array($files)) {
+        $cache = [];
+        return $cache;
+    }
+
+    // Собираем ТОЛЬКО "полные" .js (без .min.js), исключаем .map
+    $js = [];
+    foreach ($files as $f) {
+        if ($f === '.' || $f === '..') continue;
+        if (!is_file($dir . $f)) continue;
+
+        if (preg_match('~\.js\.map$~i', $f)) continue;
+        if (preg_match('~\.min\.js$~i', $f)) continue;
+        if (!preg_match('~\.js$~i', $f)) continue;
+
+        $js[] = $f;
+    }
+
+    if (!$js) {
+        $cache = [];
+        return $cache;
+    }
+
+    natcasesort($js);
+    $cache = array_values($js);
+    return $cache;
+}
+
+function af_ajsb_build_script_tags(): string
+{
+    $files = af_ajsb_list_js_files();
+    if (!$files) {
+        return '';
+    }
+
+    $out = [];
+    foreach ($files as $fname) {
+        // БЕЗ ?v=... (как ты требуешь)
+        // + defer: чтобы даже если наш блок стоит раньше jQuery, скрипты выполнялись после парсинга (и jQuery уже будет загружен)
+        $src = '{$mybb->asset_url}/inc/plugins/advancedfunctionality/addons/' . AF_AJSB_ID . '/assets/' . $fname;
+        $out[] = '<script type="text/javascript" src="' . $src . '" defer></script>';
+    }
+
+    return implode("\n", $out);
+}
+
+/**
+ * Удаляет из HTML любые <script ...src=".../advancedjsbandle/assets/<fname>.js[?...]">...</script>
+ */
+function af_ajsb_remove_script_tags_for_file(string $html, string $fname): string
+{
+    $qf = preg_quote($fname, '#');
+
+    $pattern = '#<script\b[^>]*\bsrc=(["\'])[^"\']*/inc/plugins/advancedfunctionality/addons/'
+        . preg_quote(AF_AJSB_ID, '#')
+        . '/assets/' . $qf . '(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*#is';
+
+    return preg_replace($pattern, '', $html);
+}
+
+function af_ajsb_remove_headerinclude(): void
+{
+    require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
+
+    find_replace_templatesets(
+        'headerinclude',
+        '#\s*<!--\s*af_advancedjsbandle_start\s*-->.*?<!--\s*af_advancedjsbandle_end\s*-->\s*#is',
+        ''
+    );
+
+    // страховка на точные константы
+    find_replace_templatesets(
+        'headerinclude',
+        '#\s*' . preg_quote(AF_AJSB_MARK_START, '#') . '.*?' . preg_quote(AF_AJSB_MARK_END, '#') . '\s*#is',
+        ''
+    );
+}
+
+function af_ajsb_list_css_files(): array
+{
+    static $cache = null;
+    if (is_array($cache)) {
+        return $cache;
+    }
+
+    $dir = rtrim((string)AF_AJSB_ASSETS_DIR, "/\\") . '/';
+    if (!is_dir($dir)) {
+        $cache = [];
+        return $cache;
+    }
+
+    $files = @scandir($dir);
+    if (!is_array($files)) {
+        $cache = [];
+        return $cache;
+    }
+
+    // Собираем ТОЛЬКО "полные" .css (без .min.css), исключаем .map
+    $css = [];
+    foreach ($files as $f) {
+        if ($f === '.' || $f === '..') continue;
+        if (!is_file($dir . $f)) continue;
+
+        if (preg_match('~\.css\.map$~i', $f)) continue;
+        if (preg_match('~\.min\.css$~i', $f)) continue;
+        if (!preg_match('~\.css$~i', $f)) continue;
+
+        $css[] = $f;
+    }
+
+    if (!$css) {
+        $cache = [];
+        return $cache;
+    }
+
+    natcasesort($css);
+    $cache = array_values($css);
+    return $cache;
+}
+
+function af_ajsb_build_link_tags(): string
+{
+    $files = af_ajsb_list_css_files();
+    if (!$files) {
+        return '';
+    }
+
+    $out = [];
+    foreach ($files as $fname) {
+        $href = '{$mybb->asset_url}/inc/plugins/advancedfunctionality/addons/' . AF_AJSB_ID . '/assets/' . $fname;
+        $out[] = '<link rel="stylesheet" type="text/css" href="' . $href . '" />';
+    }
+
+    return implode("\n", $out);
+}
+
+/**
+ * Удаляет из HTML любые <link ...href=".../advancedjsbandle/assets/<fname>.css[?...]"...>
+ */
+function af_ajsb_remove_link_tags_for_file(string $html, string $fname): string
+{
+    $qf = preg_quote($fname, '#');
+
+    $pattern = '#<link\b[^>]*\bhref=(["\'])[^"\']*/inc/plugins/advancedfunctionality/addons/'
+        . preg_quote(AF_AJSB_ID, '#')
+        . '/assets/' . $qf . '(?:\?[^"\']*)?\1[^>]*>\s*#is';
+
+    return preg_replace($pattern, '', $html);
+}
+
