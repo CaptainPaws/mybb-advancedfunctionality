@@ -17,31 +17,60 @@
 {$header}
 
 <div class="af-apc-activity-page">
-    <div class="float_right">{$multipage}</div>
-    <br class="clear" />
 
-    {$filters}
+    <div class="af-apc-tabs" role="tablist" aria-label="Post activity tabs">
+        <a href="#apc-users" class="af-apc-tab is-active" data-apc-tab="apc-users" role="tab" aria-selected="true">
+            Активность пользователей
+        </a>
+        <a href="#apc-months" class="af-apc-tab" data-apc-tab="apc-months" role="tab" aria-selected="false">
+            Активность по месяцам
+        </a>
+    </div>
 
-    <table class="tborder" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" border="0" width="100%" style="width:100%">
-        <tr>
-            <td class="thead" colspan="6"><strong>{$activity_title}</strong></td>
-        </tr>
-        <tr>
-            <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$lang->avatar}</strong></td>
-            <td class="tcat"><strong>{$th_user}</strong></td>
-            <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$th_total}</strong></td>
-            <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$th_month}</strong></td>
-            <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$th_week}</strong></td>
-            <td class="tcat"><strong>{$th_last}</strong></td>
-        </tr>
+    <div id="apc-users" class="af-apc-tabpanel is-active" data-apc-panel="apc-users" role="tabpanel">
+        <div class="float_right">{$multipage}</div>
+        <br class="clear" />
 
-        {$rows}
-    </table>
+        {$filters}
 
-    {$multipage}
+        <table class="tborder" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" border="0" width="100%" style="width:100%">
+            <tr>
+                <td class="thead" colspan="6"><strong>{$activity_title}</strong></td>
+            </tr>
+            <tr>
+                <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$lang->avatar}</strong></td>
+                <td class="tcat"><strong>{$th_user}</strong></td>
+                <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$th_total}</strong></td>
+                <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$th_month}</strong></td>
+                <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$th_week}</strong></td>
+                <td class="tcat"><strong>{$th_last}</strong></td>
+            </tr>
+
+            {$rows}
+        </table>
+
+        {$multipage}
+    </div>
+
+    <div id="apc-months" class="af-apc-tabpanel" data-apc-panel="apc-months" role="tabpanel">
+        <table class="tborder" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" border="0" width="100%" style="width:100%">
+            <tr>
+                <td class="thead" colspan="2"><strong>Активность по месяцам</strong></td>
+            </tr>
+            <tr>
+                <td class="tcat"><strong>Месяц</strong></td>
+                <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>Постов</strong></td>
+            </tr>
+
+            {$months_rows}
+        </table>
+    </div>
+
 </div>
 
 {$footer}
+<!-- /TEMPLATE -->
+
 
 <!-- TEMPLATE: advancedpostcounter_postsactivity_row -->
 <tr>
