@@ -121,6 +121,44 @@ class AF_Admin_Advancedmenu
         }
     }
 
+    private static function output_iconpicker_assets(): void
+    {
+        global $mybb, $page;
+
+        $bburl = isset($mybb->settings['bburl']) ? rtrim((string)$mybb->settings['bburl'], '/') : '';
+        if ($bburl === '') {
+            return;
+        }
+
+        // Font Awesome CSS (для превью и чтобы JS мог распарсить список иконок)
+        $faCss = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css';
+
+        $base = $bburl . '/inc/plugins/advancedfunctionality/addons/advancedmenu/assets';
+
+        // ACP ассеты
+        $css = $base . '/advancedmenu_admin.css?v=1';
+        $js  = $base . '/advancedmenu_admin.js?v=1';
+
+        $out  = "\n" . '<!-- AF AdvancedMenu ACP IconPicker assets -->' . "\n";
+        $out .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($faCss) . '" />' . "\n";
+        $out .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($css) . '" />' . "\n";
+        $out .= '<script type="text/javascript">' . "\n";
+        $out .= 'window.afAdvancedMenuIconPickerConfig = window.afAdvancedMenuIconPickerConfig || {};' . "\n";
+        $out .= 'window.afAdvancedMenuIconPickerConfig.cssUrl = ' . json_encode($faCss) . ';' . "\n";
+        $out .= '</script>' . "\n";
+        $out .= '<script type="text/javascript" src="' . htmlspecialchars_uni($js) . '" defer="defer"></script>' . "\n";
+
+        // 1) Пытаемся положить в HEAD (если роутер ещё не вывел header — будет идеально)
+        if (is_object($page) && property_exists($page, 'extra_header')) {
+            $page->extra_header .= $out;
+        }
+
+        // 2) ФОЛБЭК: выводим прямо сейчас в BODY.
+        // Это спасает кейс, когда output_header уже произошёл ДО page_form().
+        // Дубликаты не страшны: JS защищён window.__afAdvancedMenuAdminLoaded.
+        echo $out;
+    }
+
     /* ----------------------------- LIST ----------------------------- */
 
     private static function page_list(string $loc): void
@@ -228,10 +266,12 @@ class AF_Admin_Advancedmenu
             'title'      => '',
             'url'        => '',
             'icon'       => '',
+            'hint'       => '',
             'sort_order' => 10,
             'enabled'    => 1,
             'visibility' => $defaultVis,
         ];
+
 
         if ($isEdit) {
             $row = $db->fetch_array($db->simple_select(AF_AM_TABLE_ITEMS, '*', "id='".(int)$id."'", ['limit' => 1]));
@@ -270,6 +310,7 @@ class AF_Admin_Advancedmenu
             $title   = trim((string)$mybb->get_input('title'));
             $url     = trim((string)$mybb->get_input('url'));
             $icon    = trim((string)$mybb->get_input('icon'));
+            $hint    = trim((string)$mybb->get_input('hint'));
             $sort    = (int)$mybb->get_input('sort_order', MyBB::INPUT_INT);
             $enabled = ((int)$mybb->get_input('enabled', MyBB::INPUT_INT) === 1) ? 1 : 0;
 
@@ -289,6 +330,38 @@ class AF_Admin_Advancedmenu
                 return;
             }
             if ($sort < 0) { $sort = 0; }
+
+            // icon: лёгкая защита (нам не нужен <script> в этом поле)
+            // мы ожидаем: классы FA / URL картинки / текст (эмодзи)
+            // если админ всё же вставил HTML — оставим как legacy, но аккуратно:
+            if ($icon !== '') {
+                $iconTrim = $icon;
+                if (strpos($iconTrim, '<') !== false || strpos($iconTrim, '>') !== false) {
+                    // legacy HTML — сохраняем как есть, но режем самые опасные куски
+                    if (function_exists('af_advancedmenu_sanitize_icon_html')) {
+                        $iconTrim = af_advancedmenu_sanitize_icon_html($iconTrim);
+                    }
+                } else {
+                    // простая нормализация пробелов
+                    $iconTrim = preg_replace('~\s+~', ' ', $iconTrim);
+                    $iconTrim = trim((string)$iconTrim);
+                }
+                $icon = $iconTrim;
+            }
+            // hint: только текст, без HTML
+            if ($hint !== '') {
+                // вырубаем теги, сжимаем пробелы
+                $hint = strip_tags($hint);
+                $hint = preg_replace('~\s+~u', ' ', $hint);
+                $hint = trim((string)$hint);
+
+                // ограничим длину под varchar(255)
+                if (function_exists('my_substr')) {
+                    $hint = my_substr($hint, 0, 255);
+                } else {
+                    $hint = mb_substr($hint, 0, 255, 'UTF-8');
+                }
+            }
 
             // visibility сборка
             $visibility = '';
@@ -327,6 +400,7 @@ class AF_Admin_Advancedmenu
                 'title'      => $db->escape_string($title),
                 'url'        => $db->escape_string($url),
                 'icon'       => $db->escape_string($icon),
+                'hint'       => $db->escape_string($hint),
                 'visibility' => $db->escape_string($visibility),
                 'sort_order' => $sort,
                 'enabled'    => $enabled,
@@ -347,6 +421,9 @@ class AF_Admin_Advancedmenu
             admin_redirect(self::url(['loc' => $loc, 'do' => 'list']), 'Сохранено.');
             return;
         }
+
+        // ассеты пикера (FA + наши CSS/JS)
+        self::output_iconpicker_assets();
 
         echo '<div style="margin: 10px 0;">';
         echo '<a class="button" href="'.htmlspecialchars_uni(self::url(['loc' => $loc, 'do' => 'list'])).'">← Назад к списку</a>';
@@ -383,11 +460,46 @@ class AF_Admin_Advancedmenu
             $form->generate_text_box('url', htmlspecialchars_uni((string)$data['url']), ['style' => 'width: 520px;']),
             'url'
         );
+        
+        $container->output_row(
+            'Подсказка (tooltip)',
+            'Появится при наведении на пункт меню. Только текст, без HTML.',
+            $form->generate_text_box('hint', htmlspecialchars_uni((string)($data['hint'] ?? '')), ['style' => 'width: 520px;', 'placeholder' => 'Например: Перейти к профилю']),
+            'hint'
+        );
+        
+
+        // Иконка: инпут + кнопка пикера + превью (JS сам подцепит по data-атрибутам)
+        $iconVal = (string)($data['icon'] ?? '');
+        $iconInput = $form->generate_text_box('icon', htmlspecialchars_uni($iconVal), [
+            'style' => 'width: 420px;',
+            'id' => 'af-am-icon-input',
+            'data-af-am-icon-input' => '1',
+            'placeholder' => 'Например: fa-solid fa-house (или URL / эмодзи)',
+        ]);
+
+        $iconUi = ''
+            .'<div class="af-am-iconrow">'
+            .'  <div class="af-am-iconleft">'.$iconInput.'</div>'
+            .'  <div class="af-am-iconright">'
+            .'    <button type="button" class="button af-am-iconpick-btn" data-af-am-iconpick="1">Выбрать иконку</button>'
+            .'    <button type="button" class="button af-am-iconclear-btn" data-af-am-iconclear="1" title="Очистить">×</button>'
+            .'    <span class="af-am-iconpreview" data-af-am-iconpreview="1" aria-hidden="true"></span>'
+            .'  </div>'
+            .'</div>'
+            .'<div class="af-am-iconhint">'
+            .'  <div><strong>Форматы:</strong></div>'
+            .'  <ul style="margin:6px 0 0 18px;">'
+            .'    <li><code>fa-solid fa-house</code> / <code>fa-regular fa-user</code> / <code>fa-brands fa-discord</code></li>'
+            .'    <li>URL картинки: <code>/images/icon.svg</code> или <code>https://site/icon.png</code></li>'
+            .'    <li>Текст/эмодзи: <code>🔔</code></li>'
+            .'  </ul>'
+            .'</div>';
 
         $container->output_row(
             'Иконка (опционально)',
-            'Можно HTML, например: <code>&lt;i class="fa fa-home"&gt;&lt;/i&gt;</code> или <code>&lt;img src="...png" alt=""&gt;</code>.',
-            $form->generate_text_box('icon', htmlspecialchars_uni((string)($data['icon'] ?? '')), ['style' => 'width: 520px;']),
+            'Нормальный пикер для FontAwesome + поддержка URL/эмодзи.',
+            $iconUi,
             'icon'
         );
 
