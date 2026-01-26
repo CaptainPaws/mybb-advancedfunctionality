@@ -215,6 +215,9 @@ SQL;
 
         $sql = str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql);
         $db->write_query($sql);
+
+        // --- default album schema (adds is_default) ---
+        ag_ensure_default_album_schema();
     }
 
     if (!$db->table_exists('af_gallery_album_media')) {
@@ -242,90 +245,175 @@ SQL;
         $lang->af_advancedgallery_group_desc ?? 'Настройки аддона AdvancedGallery.'
     );
 
-    af_ag_ensure_setting($gid, 'af_advancedgallery_enabled',
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_enabled',
         $lang->af_advancedgallery_enabled ?? 'Включить галерею',
         $lang->af_advancedgallery_enabled_desc ?? 'Да/Нет',
-        'yesno', '1', 1
+        'yesno',
+        '1',
+        1
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_items_per_page',
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_items_per_page',
         $lang->af_advancedgallery_items_per_page ?? 'Элементов на страницу',
         $lang->af_advancedgallery_items_per_page_desc ?? 'Сколько карточек выводить на странице.',
-        'numeric', '24', 2
+        'numeric',
+        '24',
+        2
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_upload_max_mb',
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_upload_max_mb',
         $lang->af_advancedgallery_upload_max_mb ?? 'Макс. размер файла (МБ)',
         $lang->af_advancedgallery_upload_max_mb_desc ?? 'Ограничение на размер файла загрузки.',
-        'numeric', '10', 3
+        'numeric',
+        '10',
+        3
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_allowed_ext',
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_allowed_ext',
         $lang->af_advancedgallery_allowed_ext ?? 'Разрешённые расширения',
         $lang->af_advancedgallery_allowed_ext_desc ?? 'Список через запятую.',
-        'text', 'jpg,jpeg,png,gif,webp', 4
+        'text',
+        'jpg,jpeg,png,gif,webp',
+        4
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_thumb_w',
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_thumb_w',
         $lang->af_advancedgallery_thumb_w ?? 'Ширина превью',
         $lang->af_advancedgallery_thumb_w_desc ?? 'Ширина превью в пикселях.',
-        'numeric', '320', 5
+        'numeric',
+        '320',
+        5
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_thumb_h',
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_thumb_h',
         $lang->af_advancedgallery_thumb_h ?? 'Высота превью',
         $lang->af_advancedgallery_thumb_h_desc ?? 'Высота превью в пикселях.',
-        'numeric', '320', 6
+        'numeric',
+        '320',
+        6
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_can_upload_groups',
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_can_upload_groups',
         $lang->af_advancedgallery_can_upload_groups ?? 'Группы с правом загрузки',
         $lang->af_advancedgallery_can_upload_groups_desc ?? 'ID групп через запятую.',
-        'text', '4', 7
+        'text',
+        '4',
+        7
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_can_moderate_groups',
-        $lang->af_advancedgallery_can_moderate_groups ?? 'Группы модерации',
+
+    // FIX: тут раньше было 6 аргументов и "desc" попадал в title.
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_can_moderate_groups',
+        $lang->af_advancedgallery_can_moderate_groups ?? 'Группы с правом модерации',
         $lang->af_advancedgallery_can_moderate_groups_desc ?? 'ID групп через запятую.',
-        'text', '4', 8
+        'text',
+        '4',
+        8
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_autoapprove_groups',
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_autoapprove_groups',
         $lang->af_advancedgallery_autoapprove_groups ?? 'Группы автопринятия',
         $lang->af_advancedgallery_autoapprove_groups_desc ?? 'ID групп через запятую.',
-        'text', '4', 9
+        'text',
+        '4',
+        9
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_max_albums',
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_max_albums',
         $lang->af_advancedgallery_max_albums ?? 'Макс. альбомов на пользователя',
         $lang->af_advancedgallery_max_albums_desc ?? 'Макс. альбомов на пользователя (0 = без лимита).',
-        'numeric', '20', 10
+        'numeric',
+        '20',
+        10
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_max_media_per_album',
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_max_media_per_album',
         $lang->af_advancedgallery_max_media_per_album ?? 'Макс. медиа в одном альбоме',
         $lang->af_advancedgallery_max_media_per_album_desc ?? 'Макс. медиа в одном альбоме (0 = без лимита).',
-        'numeric', '200', 11
+        'numeric',
+        '200',
+        11
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_album_visibility_default',
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_album_visibility_default',
         $lang->af_advancedgallery_album_visibility_default ?? 'Видимость альбома по умолчанию',
         $lang->af_advancedgallery_album_visibility_default_desc ?? 'Видимость альбома по умолчанию.',
-        "select\npublic=public\nregistered=registered\nprivate=private", 'public', 12
+        "select\npublic=public\nregistered=registered\nprivate=private",
+        'public',
+        12
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_remote_enabled',
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_remote_enabled',
         $lang->af_advancedgallery_remote_enabled ?? 'Разрешить remote media (вставку по URL)',
         $lang->af_advancedgallery_remote_enabled_desc ?? 'Да/Нет',
-        'yesno', '1', 13
+        'yesno',
+        '1',
+        13
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_remote_whitelist_domains',
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_remote_whitelist_domains',
         $lang->af_advancedgallery_remote_whitelist_domains ?? 'Разрешённые домены',
         $lang->af_advancedgallery_remote_whitelist_domains_desc ?? 'Разрешённые домены (по одному в строке). Пусто = встроенный whitelist.',
-        'textarea', '', 14
+        'textarea',
+        '',
+        14
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_remote_allow_oembed',
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_remote_allow_oembed',
         $lang->af_advancedgallery_remote_allow_oembed ?? 'Разрешить oEmbed (карточки предпросмотра)',
         $lang->af_advancedgallery_remote_allow_oembed_desc ?? 'По умолчанию выключено.',
-        'yesno', '0', 15
+        'yesno',
+        '0',
+        15
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_remote_cache_preview',
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_remote_cache_preview',
         $lang->af_advancedgallery_remote_cache_preview ?? 'Кешировать preview/thumbnail для remote',
         $lang->af_advancedgallery_remote_cache_preview_desc ?? 'Кешировать preview/thumbnail для remote (если возможно безопасно).',
-        'yesno', '1', 16
+        'yesno',
+        '1',
+        16
     );
-    af_ag_ensure_setting($gid, 'af_advancedgallery_remote_max_url_len',
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_advancedgallery_remote_max_url_len',
         $lang->af_advancedgallery_remote_max_url_len ?? 'Макс. длина URL',
         $lang->af_advancedgallery_remote_max_url_len_desc ?? 'Максимальная длина URL.',
-        'numeric', '500', 17
+        'numeric',
+        '500',
+        17
     );
 
     if (function_exists('rebuild_settings')) {
@@ -417,9 +505,13 @@ function af_advancedgallery_uninstall(): bool
 
 function af_advancedgallery_activate(): bool
 {
+    // На существующих установках тоже добавим поле is_default
+    ag_ensure_default_album_schema();
+
     af_ag_templates_install_or_update();
     return true;
 }
+
 
 function af_advancedgallery_deactivate(): bool
 {
@@ -432,7 +524,8 @@ function af_advancedgallery_init(): void
 {
     global $plugins;
 
-    $plugins->add_hook('pre_output_page', 'af_advancedgallery_pre_output', 10);
+    // Выполняемся максимально поздно, чтобы никто после нас не дописывал ?v=...
+    $plugins->add_hook('pre_output_page', 'af_advancedgallery_pre_output', 9999);
 }
 
 function af_advancedgallery_pre_output(string &$page = ''): void
@@ -447,11 +540,40 @@ function af_advancedgallery_pre_output(string &$page = ''): void
         return;
     }
 
-    if (strpos($page, AF_AG_MARK_DONE) !== false) {
-        return;
+    // Нормализация/дедуп должны работать даже если маркер уже есть,
+    // потому что "вторая волна" может прилетать отдельно.
+    // Поэтому marker-check делаем ПОСЛЕ чистки/дедупа.
+
+    // Где подключаем assets:
+    // - на странице галереи
+    // - на страницах с редактором (кнопка галереи + модалка)
+    $script = defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '';
+    $wantScripts = false;
+
+    if ($script === 'gallery.php') {
+        $wantScripts = true;
+    } else {
+        $editorScripts = [
+            'showthread.php',
+            'newreply.php',
+            'newthread.php',
+            'editpost.php',
+            'private.php',
+            'usercp.php',
+            'misc.php',
+        ];
+
+        if (in_array($script, $editorScripts, true)) {
+            $wantScripts = true;
+        } else {
+            // fallback: если в HTML уже есть SCEditor — значит это страница с редактором
+            if (stripos($page, 'sceditor') !== false || stripos($page, 'data-sceditor-command') !== false) {
+                $wantScripts = true;
+            }
+        }
     }
 
-    if (!ag_page_has_editor($page)) {
+    if (!$wantScripts) {
         return;
     }
 
@@ -462,29 +584,110 @@ function af_advancedgallery_pre_output(string &$page = ''): void
 
     $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AG_ID . '/assets';
 
-    $cssTag = '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/advancedgallery.css?ver='.AF_AG_VER.'" />';
-    $jsTag  = '<script src="'.$assetsBase.'/advancedgallery.js?ver='.AF_AG_VER.'"></script>';
-    $cfg = [
-        'pickerUrl' => $bburl . '/gallery.php?action=picker',
-        'dataUrl' => $bburl . '/gallery.php?action=picker_data',
-    ];
-    $cfgTag = '<script>window.AF_GalleryPickerConfig='
-        .json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-        .';</script>';
+    // ---------------------------------------------------------------------
+    // 1) Нормализуем ?v=... / &v=... / &amp;v=... ТОЛЬКО у advancedgallery.css/js
+    // ---------------------------------------------------------------------
+    $page = preg_replace(
+        '~(advancedgallery\.(?:css|js))(?:\?(?:amp;)?v=\d+|&(amp;)?v=\d+)~iu',
+        '$1',
+        $page
+    );
 
-    if (stripos($page, '</head>') !== false) {
-        if (strpos($page, 'advancedgallery.css') === false) {
-            $page = str_ireplace('</head>', $cssTag.$cfgTag.$jsTag.AF_AG_MARK_DONE.'</head>', $page);
-        } else {
-            $page = str_ireplace('</head>', $cfgTag.$jsTag.AF_AG_MARK_DONE.'</head>', $page);
-        }
+    // ---------------------------------------------------------------------
+    // 2) Дедуп: оставляем только ПЕРВОЕ подключение advancedgallery.css и .js
+    //    (после нормализации они становятся одинаковыми, так что это стабильно)
+    // ---------------------------------------------------------------------
+    $seenCss = 0;
+    $page = preg_replace_callback(
+        '~<link\b[^>]*href=(["\'])([^"\']*advancedgallery\.css[^"\']*)\1[^>]*\/?>\s*~iu',
+        function ($m) use (&$seenCss) {
+            $seenCss++;
+            return ($seenCss === 1) ? $m[0] : '';
+        },
+        $page
+    );
+
+    $seenJs = 0;
+    $page = preg_replace_callback(
+        '~<script\b[^>]*src=(["\'])([^"\']*advancedgallery\.js[^"\']*)\1[^>]*>\s*</script>\s*~iu',
+        function ($m) use (&$seenJs) {
+            $seenJs++;
+            return ($seenJs === 1) ? $m[0] : '';
+        },
+        $page
+    );
+
+    // Если маркер уже стоит — после нормализации/дедупа больше ничего не вставляем.
+    if (strpos($page, AF_AG_MARK_DONE) !== false) {
         return;
     }
 
-    if (stripos($page, '</body>') !== false) {
-        $page = str_ireplace('</body>', $cfgTag.$jsTag.AF_AG_MARK_DONE.'</body>', $page);
-    } else {
-        $page .= $cfgTag.$jsTag.AF_AG_MARK_DONE;
+    // Проверяем: есть ли уже линк/скрипт (после дедупа они могут быть, даже без marker)
+    $hasCss = (bool)preg_match('~advancedgallery\.css~iu', $page);
+    $hasJs  = (bool)preg_match('~advancedgallery\.js~iu', $page);
+
+    // ---------------------------------------------------------------------
+    // 3) Если чего-то нет — вставляем ОДИН комплект (без ?v=, чтобы не плодить варианты)
+    // ---------------------------------------------------------------------
+    if (!$hasCss || !$hasJs) {
+        $cssTag = '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/advancedgallery.css" />';
+        $jsTag  = '<script src="'.$assetsBase.'/advancedgallery.js"></script>';
+
+        // Конфиг нужен и для gallery.php, и для кнопки/модалки в редакторе
+        $cfg = [
+            'pickerUrl' => $bburl . '/gallery.php?action=picker',
+            'dataUrl'   => $bburl . '/gallery.php?action=picker_data',
+        ];
+
+        $cfgTag = '<script>window.AF_GalleryPickerConfig='
+            .json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+            .';</script>';
+
+        $inject = '';
+        if (!$hasCss) {
+            $inject .= $cssTag;
+        }
+        // cfg можно вставлять всегда вместе с js — но чтобы не дублировать, вставим только если js отсутствовал
+        if (!$hasJs) {
+            $inject .= $cfgTag . $jsTag;
+        }
+
+        $inject .= AF_AG_MARK_DONE;
+
+        if (stripos($page, '</head>') !== false) {
+            $page = str_ireplace('</head>', $inject.'</head>', $page);
+        } elseif (stripos($page, '</body>') !== false) {
+            $page = str_ireplace('</body>', $inject.'</body>', $page);
+        } else {
+            $page .= $inject;
+        }
+
+        // Финальный проход: ещё раз нормализуем и дедуп (на случай странных инжекторов)
+        $page = preg_replace(
+            '~(advancedgallery\.(?:css|js))(?:\?(?:amp;)?v=\d+|&(amp;)?v=\d+)~iu',
+            '$1',
+            $page
+        );
+
+        $seenCss2 = 0;
+        $page = preg_replace_callback(
+            '~<link\b[^>]*href=(["\'])([^"\']*advancedgallery\.css[^"\']*)\1[^>]*\/?>\s*~iu',
+            function ($m) use (&$seenCss2) {
+                $seenCss2++;
+                return ($seenCss2 === 1) ? $m[0] : '';
+            },
+            $page
+        );
+
+        $seenJs2 = 0;
+        $page = preg_replace_callback(
+            '~<script\b[^>]*src=(["\'])([^"\']*advancedgallery\.js[^"\']*)\1[^>]*>\s*</script>\s*~iu',
+            function ($m) use (&$seenJs2) {
+                $seenJs2++;
+                return ($seenJs2 === 1) ? $m[0] : '';
+            },
+            $page
+        );
     }
 }
 
@@ -567,7 +770,6 @@ function af_ag_templates_install_or_update(): void
 }
 
 /* -------------------- RENDER / ROUTES -------------------- */
-
 function af_advancedgallery_render_gallery(): void
 {
     global $mybb, $db, $templates, $theme, $header, $headerinclude, $footer, $lang, $page;
@@ -581,75 +783,105 @@ function af_advancedgallery_render_gallery(): void
     $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
     $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AG_ID . '/assets';
 
-    $headerinclude .= "\n" . '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/advancedgallery.css?ver='.AF_AG_VER.'" />';
-    $headerinclude .= "\n" . '<script src="'.$assetsBase.'/advancedgallery.js?ver='.AF_AG_VER.'"></script>';
+    //$headerinclude .= "\n" . '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/advancedgallery.css" />';
+    //$headerinclude .= "\n" . '<script src="'.$assetsBase.'/advancedgallery.js"></script>';
+
 
     $action = $mybb->get_input('action');
     $ag_page_title = $lang->af_advancedgallery_name ?? 'Галерея';
 
     switch ($action) {
+        case 'albumsalbums':
+            $ag_content = ag_render_albums();
+            break;
+
         case 'albums':
             $ag_content = ag_render_albums();
             break;
+
         case 'album':
             $ag_content = ag_render_album_view();
             break;
+
         case 'album_create':
             $ag_content = ag_render_album_form('create', null);
             break;
+
         case 'album_create_do':
             ag_handle_album_create_do();
             return;
+
         case 'album_edit':
             $ag_content = ag_render_album_form('edit', null);
             break;
+
         case 'album_edit_do':
             ag_handle_album_edit_do();
             return;
+
         case 'album_delete':
             ag_handle_album_delete();
             return;
+
         case 'album_add_media':
             ag_handle_album_add_media();
             return;
+
         case 'album_remove_media':
             ag_handle_album_remove_media();
             return;
+
         case 'album_sort_do':
             ag_handle_album_sort_do();
             return;
+
         case 'view':
             $ag_content = ag_render_view();
             break;
+
         case 'upload':
             $ag_content = ag_render_upload();
             break;
+
         case 'upload_do':
             ag_handle_upload();
             return;
+
         case 'remote_add':
             $ag_content = ag_render_remote_add();
             break;
+
         case 'remote_add_do':
             ag_handle_remote_add_do();
             return;
+
         case 'picker':
             ag_render_picker_modal();
             return;
+
         case 'picker_data':
             ag_handle_picker_data();
             return;
+
         case 'delete':
             ag_handle_delete();
             return;
+
         case 'approve':
             ag_handle_approve();
             return;
+
+        // NEW: массовые действия
+        case 'bulk_do':
+            ag_handle_bulk_do();
+            return;
+
         case 'mine':
             $ag_content = ag_render_index(true);
             break;
+
         default:
-            $ag_content = ag_render_index(false);
+            $ag_content = ag_render_home_albums();
             break;
     }
 
@@ -658,7 +890,6 @@ function af_advancedgallery_render_gallery(): void
 }
 
 /* -------------------- ROUTE HELPERS -------------------- */
-
 function ag_render_index(bool $mine): string
 {
     global $db, $mybb, $templates, $lang;
@@ -697,18 +928,90 @@ function ag_render_index(bool $mine): string
     $baseUrl = 'gallery.php' . ($mine ? '?action=mine' : '');
     $pagination = multipage($total, $perPage, $pageNum, $baseUrl);
 
+    // toolbar links
     $ag_upload_url = 'gallery.php?action=upload';
     $ag_mine_url = 'gallery.php?action=mine';
     $ag_albums_url = 'gallery.php?action=albums';
     $ag_albums_label = htmlspecialchars_uni($lang->af_advancedgallery_my_albums ?? 'Мои альбомы');
+
+    // ВАЖНО: отдельную кнопку "Добавить по ссылке" убираем.
+    // Вся логика remote теперь живёт в "Загрузить" (вкладка remote).
     $ag_remote_button = '';
-    if (ag_remote_enabled() && ag_can_upload()) {
-        $ag_remote_button = '<a class="button" href="gallery.php?action=remote_add">'
-            .htmlspecialchars_uni($lang->af_advancedgallery_remote_add ?? 'Добавить по ссылке')
-            .'</a>';
-    }
+
     $ag_tiles = $tiles;
     $ag_pagination = $pagination;
+
+    eval('$output = "' . $templates->get('advancedgallery_index') . '";');
+    return $output;
+}
+
+function ag_render_home_albums(): string
+{
+    global $db, $mybb, $templates, $lang, $ag_page_title;
+
+    $ag_page_title = $lang->af_advancedgallery_name ?? 'Галерея';
+
+    $uidViewer = (int)($mybb->user['uid'] ?? 0);
+    $isMod = ag_can_moderate();
+
+    // Общие/системные (uid_owner=0) больше не используем
+    $base = "uid_owner<>0";
+
+    if ($isMod) {
+        $where = $base;
+    } else {
+        $whereParts = [];
+
+        // свои альбомы видны всегда
+        if ($uidViewer > 0) {
+            $whereParts[] = "uid_owner='{$uidViewer}'";
+        }
+
+        // публичные
+        $whereParts[] = "visibility='public'";
+
+        // для зарегистрированных
+        if ($uidViewer > 0) {
+            $whereParts[] = "visibility='registered'";
+        }
+
+        $where = $base . " AND (" . implode(' OR ', array_unique($whereParts)) . ")";
+    }
+
+    $query = $db->simple_select('af_gallery_albums', '*', $where, [
+        'order_by'  => 'updated_at',
+        'order_dir' => 'DESC',
+    ]);
+
+    $tiles = '';
+    while ($album = $db->fetch_array($query)) {
+        if (!$isMod && (string)$album['visibility'] === 'groups') {
+            if (!ag_can_view_album($album)) {
+                continue;
+            }
+        }
+        if (!$isMod && !ag_can_view_album($album)) {
+            continue;
+        }
+
+        $tiles .= ag_render_album_tile($album);
+    }
+
+    if ($tiles === '') {
+        $tiles = '<div class="ag-empty">'.htmlspecialchars_uni($lang->af_advancedgallery_album_empty ?? 'Альбомов пока нет.').'</div>';
+    }
+
+    // toolbar links
+    $ag_upload_url = 'gallery.php?action=upload';
+    $ag_mine_url = 'gallery.php?action=mine';
+    $ag_albums_url = 'gallery.php?action=albums';
+    $ag_albums_label = htmlspecialchars_uni($lang->af_advancedgallery_my_albums ?? 'Мои альбомы');
+
+    // remote кнопки отдельно нет
+    $ag_remote_button = '';
+
+    $ag_tiles = $tiles;
+    $ag_pagination = '';
 
     eval('$output = "' . $templates->get('advancedgallery_index') . '";');
     return $output;
@@ -751,7 +1054,7 @@ function ag_render_album_tile(array $album): string
     global $templates;
 
     $coverUrl = ag_album_cover_url($album);
-    $title = htmlspecialchars_uni((string)$album['title']);
+    $title = htmlspecialchars_uni(ag_album_ui_title($album));
     $mediaCount = ag_album_media_count((int)$album['id']);
 
     $ag_album_url = 'gallery.php?action=album&id='.(int)$album['id'];
@@ -784,7 +1087,8 @@ function ag_render_album_view(): string
     $isOwner = (int)$album['uid_owner'] === (int)$mybb->user['uid'];
     $canManage = ag_can_manage_album($album);
 
-    $ag_page_title = ($lang->af_advancedgallery_albums ?? 'Альбомы') . ' - ' . htmlspecialchars_uni((string)$album['title']);
+    $uiTitle = ag_album_ui_title($album);
+    $ag_page_title = ($lang->af_advancedgallery_albums ?? 'Альбомы') . ' - ' . htmlspecialchars_uni($uiTitle);
 
     $sortInput = $mybb->get_input('sort');
     $validSorts = ['manual', 'date_desc', 'date_asc'];
@@ -811,9 +1115,12 @@ function ag_render_album_view(): string
         ." WHERE {$mediaWhere} ORDER BY {$orderBy}";
     $query = $db->write_query($sql);
 
+    // BULK UI: показываем на альбоме, если владелец или модератор
+    $bulkMode = ($canManage || ag_can_moderate());
+
     $tiles = '';
     while ($media = $db->fetch_array($query)) {
-        $tiles .= ag_render_tile($media);
+        $tiles .= ag_render_tile($media, $albumId, $bulkMode);
     }
 
     if ($tiles === '') {
@@ -823,28 +1130,75 @@ function ag_render_album_view(): string
     $breadcrumbs = [
         '<a href="gallery.php">'.htmlspecialchars_uni($lang->af_advancedgallery_name ?? 'Галерея').'</a>',
         '<a href="gallery.php?action=albums">'.htmlspecialchars_uni($lang->af_advancedgallery_albums ?? 'Альбомы').'</a>',
-        htmlspecialchars_uni((string)$album['title']),
+        htmlspecialchars_uni($uiTitle),
     ];
     $ag_breadcrumbs = implode(' &raquo; ', $breadcrumbs);
 
-    $ag_album_title = htmlspecialchars_uni((string)$album['title']);
+    $ag_album_title = htmlspecialchars_uni($uiTitle);
     $ag_album_desc = nl2br(htmlspecialchars_uni((string)$album['description']));
-    $ag_album_tiles = $tiles;
+
+    // bulk toolbar + form wrapper
+    if ($bulkMode) {
+        $albumsOptions = '';
+        if ($isOwner) {
+            // 0 => default (UX), но move-handler конвертит 0 в дефолт
+            $albumsOptions .= '<option value="0">'.htmlspecialchars_uni($lang->af_advancedgallery_album_default ?? 'По умолчанию').'</option>';
+
+            $qA = $db->simple_select('af_gallery_albums', 'id,title', "uid_owner='".(int)$mybb->user['uid']."'", [
+                'order_by' => 'created_at',
+                'order_dir' => 'DESC',
+            ]);
+            while ($a = $db->fetch_array($qA)) {
+                $albumsOptions .= '<option value="'.(int)$a['id'].'">'.htmlspecialchars_uni((string)$a['title']).'</option>';
+            }
+        }
+
+        // ВАЖНО: bulkBar — БЕЗ <form>. Форму делает $ag_album_tiles ниже.
+        $bulkBar =
+            '<div class="ag-bulk-bar">'
+            .'<select name="bulk_action" class="ag-bulk-action">'
+                .'<option value="move">'.htmlspecialchars_uni($lang->af_advancedgallery_bulk_move ?? 'Перенести').'</option>'
+                .'<option value="delete">'.htmlspecialchars_uni($lang->af_advancedgallery_bulk_delete ?? 'Удалить').'</option>'
+                .(ag_can_moderate() ? '<option value="approve">'.htmlspecialchars_uni($lang->af_advancedgallery_bulk_approve ?? 'Одобрить').'</option>' : '')
+            .'</select>';
+
+        if ($isOwner) {
+            $bulkBar .=
+                '<select name="target_album_id" class="ag-bulk-target">'
+                .$albumsOptions
+                .'</select>';
+        }
+
+        $bulkBar .=
+            '<button type="submit" class="button">'.htmlspecialchars_uni($lang->af_advancedgallery_bulk_apply ?? 'Применить').'</button>'
+            .'</div>';
+
+        // ВОТ ТУТ — то самое место: ОДНА форма оборачивает и панель, и сетку.
+        $ag_album_tiles =
+            '<form action="gallery.php?action=bulk_do" method="post">'
+            .'<input type="hidden" name="my_post_key" value="'.$mybb->post_code.'" />'
+            .'<input type="hidden" name="from_album_id" value="'.$albumId.'" />'
+            .$bulkBar
+            .'<div class="ag-grid">'.$tiles.'</div>'
+            .'</form>';
+    } else {
+        $ag_album_tiles = '<div class="ag-grid">'.$tiles.'</div>';
+    }
 
     $ag_album_actions = '';
     if ($canManage) {
+        $ag_album_actions .= '<a class="button" href="gallery.php?action=upload&album_id='.$albumId.'">'
+            .htmlspecialchars_uni($lang->af_advancedgallery_upload ?? 'Загрузить')
+            .'</a>';
+
         $ag_album_actions .= '<a class="button" href="gallery.php?action=album_edit&id='.$albumId.'">'
             .htmlspecialchars_uni($lang->af_advancedgallery_edit_album ?? 'Edit album')
             .'</a>';
+
         $ag_album_actions .= '<form action="gallery.php?action=album_delete&id='.$albumId.'" method="post" class="ag-inline-form">'
             .'<input type="hidden" name="my_post_key" value="'.$mybb->post_code.'" />'
             .'<button type="submit" class="button">'.htmlspecialchars_uni($lang->af_advancedgallery_delete_album ?? 'Delete album').'</button>'
             .'</form>';
-    }
-    if ($isOwner) {
-        $ag_album_actions .= '<a class="button" href="gallery.php?action=mine">'
-            .htmlspecialchars_uni($lang->af_advancedgallery_added_to_album ?? 'Add media')
-            .'</a>';
     }
 
     $ag_album_sort_select = ag_render_album_sort_filter($albumId, $sortMode);
@@ -1112,6 +1466,36 @@ function ag_handle_album_add_media(): void
 
     ag_enforce_media_limits($albumId);
 
+    // MOVE semantics: медиа может быть только в одном альбоме владельца
+    $uid = (int)$mybb->user['uid'];
+
+    // найдём все альбомы владельца, где это медиа сейчас лежит
+    $oldAlbumIds = [];
+    $qOld = $db->simple_select('af_gallery_album_media', 'album_id', "media_id='{$mediaId}'");
+    while ($r = $db->fetch_array($qOld)) {
+        $oldAlbumIds[] = (int)$r['album_id'];
+    }
+    $oldAlbumIds = array_values(array_unique(array_filter($oldAlbumIds)));
+
+    // удаляем связи, но только в альбомах пользователя (безопасно)
+    $userAlbumIds = [];
+    $qA = $db->simple_select('af_gallery_albums', 'id', "uid_owner='{$uid}'");
+    while ($a = $db->fetch_array($qA)) {
+        $userAlbumIds[] = (int)$a['id'];
+    }
+    $userAlbumIds = array_values(array_unique(array_filter($userAlbumIds)));
+
+    if (!empty($userAlbumIds)) {
+        $in = implode(',', array_map('intval', $userAlbumIds));
+        $db->delete_query('af_gallery_album_media', "media_id='{$mediaId}' AND album_id IN ({$in})");
+
+        // обновим updated_at старых альбомов, где раньше лежало
+        if (!empty($oldAlbumIds)) {
+            $inOld = implode(',', array_map('intval', $oldAlbumIds));
+            $db->update_query('af_gallery_albums', ['updated_at' => TIME_NOW], "id IN ({$inOld})");
+        }
+    }
+
     $exists = $db->simple_select('af_gallery_album_media', 'id', "album_id='{$albumId}' AND media_id='{$mediaId}'", ['limit' => 1]);
     if (!$db->fetch_field($exists, 'id')) {
         $db->insert_query('af_gallery_album_media', [
@@ -1196,7 +1580,7 @@ function ag_handle_album_sort_do(): void
     exit;
 }
 
-function ag_render_tile(array $media): string
+function ag_render_tile(array $media, int $contextAlbumId = 0, bool $bulkMode = false): string
 {
     global $mybb, $templates;
 
@@ -1207,9 +1591,27 @@ function ag_render_tile(array $media): string
     $authorName = htmlspecialchars_uni($user['username'] ?? '');
     $ag_author = $authorName !== '' ? build_profile_link($authorName, (int)$media['uid_owner']) : '';
 
-    $ag_view_url = 'gallery.php?action=view&id='.(int)$media['id'];
+    $viewUrl = 'gallery.php?action=view&id='.(int)$media['id'];
+    if ($contextAlbumId > 0) {
+        $viewUrl .= '&album_id='.(int)$contextAlbumId;
+    }
+    $ag_view_url = $viewUrl;
+
     $ag_thumb_url = htmlspecialchars_uni($thumbUrl);
     $ag_title = $title;
+
+    // bulk checkbox (только если включён bulkMode и есть право: владелец или модератор)
+    $ag_bulk_checkbox = '';
+    if ($bulkMode) {
+        $canSelect = ag_can_moderate() || ((int)$media['uid_owner'] === (int)$mybb->user['uid']);
+        if ($canSelect) {
+            $ag_bulk_checkbox =
+                '<label class="ag-bulk-check">'
+                .'<input type="checkbox" name="media_ids[]" value="'.(int)$media['id'].'" />'
+                .'<span class="ag-bulk-check-ui" aria-hidden="true"></span>'
+                .'</label>';
+        }
+    }
 
     $ag_status_badge = '';
     if ($media['status'] === 'pending' && (ag_can_moderate() || (int)$media['uid_owner'] === (int)$mybb->user['uid'])) {
@@ -1245,7 +1647,7 @@ function ag_render_view(): string
     $imageUrl = '';
     if ($media['type'] === 'local') {
         $imageRel = $media['preview_path'] ?: $media['storage_path'];
-        $imageUrl = $bburl . '/' . ltrim($imageRel, '/');
+        $imageUrl = $bburl . '/' . ltrim((string)$imageRel, '/');
     } elseif ($media['type'] === 'remote') {
         $imageUrl = (string)$media['remote_url'];
     }
@@ -1275,8 +1677,11 @@ function ag_render_view(): string
 
     $ag_title = htmlspecialchars_uni((string)$media['title']);
     $ag_bbcode = htmlspecialchars_uni(ag_media_bbcode($media, $imageUrl));
+
+    // ВАЖНО: не оборачиваем навигацией тут — это делает шаблон
     $ag_media_html = ag_render_media_view($media, $imageUrl);
 
+    // ---- approve/delete UI ----
     $ag_approve_form = '';
     if ($media['status'] === 'pending' && ag_can_moderate()) {
         $ag_approve_form = '<form action="gallery.php?action=approve&id='.(int)$media['id'].'" method="post" class="ag-inline-form">'
@@ -1293,6 +1698,7 @@ function ag_render_view(): string
             .'</form>';
     }
 
+    // ---- add to album (только свои) ----
     $ag_add_to_album_form = '';
     if ((int)$media['uid_owner'] === (int)$mybb->user['uid'] && ag_can_manage_albums()) {
         $albumsQuery = $db->simple_select('af_gallery_albums', 'id,title', "uid_owner='".(int)$mybb->user['uid']."'", [
@@ -1320,6 +1726,143 @@ function ag_render_view(): string
         }
     }
 
+    // ---- NAV / PAGINATION ON VIEW ----
+    $viewerUid = (int)$mybb->user['uid'];
+    $canSeeUnapproved = (ag_can_moderate() || $viewerUid === (int)$media['uid_owner']);
+
+    $contextAlbumId = $mybb->get_input('album_id', MyBB::INPUT_INT);
+    $ag_view_context_album_id = (int)$contextAlbumId;
+
+    $ag_prev_url = '';
+    $ag_next_url = '';
+    $ag_back_url = '';
+
+    // breadcrumbs
+    $ag_breadcrumbs = '';
+    $curTitle = $ag_title !== '' ? $ag_title : ('#'.(int)$media['id']);
+
+    if ($contextAlbumId > 0) {
+        $album = ag_get_album($contextAlbumId);
+        $albumTitle = $album ? htmlspecialchars_uni(ag_album_ui_title($album)) : ('#'.$contextAlbumId);
+
+        $ag_breadcrumbs = implode(' &raquo; ', [
+            '<a href="gallery.php">'.htmlspecialchars_uni($lang->af_advancedgallery_name ?? 'Галерея').'</a>',
+            '<a href="gallery.php?action=albums">'.htmlspecialchars_uni($lang->af_advancedgallery_albums ?? 'Альбомы').'</a>',
+            '<a href="gallery.php?action=album&id='.$contextAlbumId.'">'.$albumTitle.'</a>',
+            htmlspecialchars_uni($curTitle),
+        ]);
+    } else {
+        $ag_breadcrumbs = implode(' &raquo; ', [
+            '<a href="gallery.php">'.htmlspecialchars_uni($lang->af_advancedgallery_name ?? 'Галерея').'</a>',
+            htmlspecialchars_uni($curTitle),
+        ]);
+    }
+
+    $ag_related_tiles = '';
+    $ag_related_pagination = '';
+
+    if ($contextAlbumId > 0) {
+        $ag_back_url = 'gallery.php?action=album&id='.$contextAlbumId;
+
+        $prefix = TABLE_PREFIX;
+        $extraStatus = $canSeeUnapproved ? '' : " AND m.status='approved'";
+
+        // prev = более новый (created_at > текущего)
+        $sqlPrev = "SELECT m.id FROM {$prefix}af_gallery_album_media am
+            INNER JOIN {$prefix}af_gallery_media m ON m.id=am.media_id
+            WHERE am.album_id='{$contextAlbumId}'{$extraStatus} AND m.created_at > ".(int)$media['created_at']."
+            ORDER BY m.created_at ASC
+            LIMIT 1";
+        $prevId = (int)$db->fetch_field($db->write_query($sqlPrev), 'id');
+
+        // next = более старый (created_at < текущего)
+        $sqlNext = "SELECT m.id FROM {$prefix}af_gallery_album_media am
+            INNER JOIN {$prefix}af_gallery_media m ON m.id=am.media_id
+            WHERE am.album_id='{$contextAlbumId}'{$extraStatus} AND m.created_at < ".(int)$media['created_at']."
+            ORDER BY m.created_at DESC
+            LIMIT 1";
+        $nextId = (int)$db->fetch_field($db->write_query($sqlNext), 'id');
+
+        if ($prevId > 0) {
+            $ag_prev_url = 'gallery.php?action=view&id='.$prevId.'&album_id='.$contextAlbumId;
+        }
+        if ($nextId > 0) {
+            $ag_next_url = 'gallery.php?action=view&id='.$nextId.'&album_id='.$contextAlbumId;
+        }
+
+        // related thumbnails + pagination
+        $perPage = (int)($mybb->settings['af_advancedgallery_items_per_page'] ?? 24);
+        if ($perPage < 1) $perPage = 24;
+
+        $relPage = max(1, $mybb->get_input('page', MyBB::INPUT_INT));
+        $offset = ($relPage - 1) * $perPage;
+
+        $sqlCnt = "SELECT COUNT(*) AS cnt FROM {$prefix}af_gallery_album_media am
+            INNER JOIN {$prefix}af_gallery_media m ON m.id=am.media_id
+            WHERE am.album_id='{$contextAlbumId}'{$extraStatus}";
+        $total = (int)$db->fetch_field($db->write_query($sqlCnt), 'cnt');
+
+        $sqlList = "SELECT m.* FROM {$prefix}af_gallery_album_media am
+            INNER JOIN {$prefix}af_gallery_media m ON m.id=am.media_id
+            WHERE am.album_id='{$contextAlbumId}'{$extraStatus}
+            ORDER BY m.created_at DESC
+            LIMIT {$offset}, {$perPage}";
+        $q = $db->write_query($sqlList);
+
+        $tiles = '';
+        while ($row = $db->fetch_array($q)) {
+            $tiles .= ag_render_tile($row, $contextAlbumId, false);
+        }
+        if ($tiles === '') {
+            $tiles = '<div class="ag-empty">'.htmlspecialchars_uni($lang->af_advancedgallery_album_empty ?? 'Альбом пуст.').'</div>';
+        }
+
+        $baseUrl = 'gallery.php?action=view&id='.(int)$id.'&album_id='.$contextAlbumId;
+        $ag_related_pagination = multipage($total, $perPage, $relPage, $baseUrl);
+        $ag_related_tiles = '<div class="ag-grid">'.$tiles.'</div>';
+    } else {
+        $ag_back_url = 'gallery.php';
+
+        $extraStatus = $canSeeUnapproved ? '' : " AND status='approved'";
+
+        $sqlPrev = "SELECT id FROM ".TABLE_PREFIX."af_gallery_media
+            WHERE 1=1{$extraStatus} AND created_at > ".(int)$media['created_at']."
+            ORDER BY created_at ASC
+            LIMIT 1";
+        $prevId = (int)$db->fetch_field($db->write_query($sqlPrev), 'id');
+
+        $sqlNext = "SELECT id FROM ".TABLE_PREFIX."af_gallery_media
+            WHERE 1=1{$extraStatus} AND created_at < ".(int)$media['created_at']."
+            ORDER BY created_at DESC
+            LIMIT 1";
+        $nextId = (int)$db->fetch_field($db->write_query($sqlNext), 'id');
+
+        if ($prevId > 0) {
+            $ag_prev_url = 'gallery.php?action=view&id='.$prevId;
+        }
+        if ($nextId > 0) {
+            $ag_next_url = 'gallery.php?action=view&id='.$nextId;
+        }
+    }
+
+    // КНОПКИ СТРЕЛОК — строим по URL
+    $ag_prev_btn = $ag_prev_url !== ''
+        ? '<a class="ag-nav-btn ag-nav-prev" href="'.$ag_prev_url.'" title="Предыдущее">‹</a>'
+        : '';
+    $ag_next_btn = $ag_next_url !== ''
+        ? '<a class="ag-nav-btn ag-nav-next" href="'.$ag_next_url.'" title="Следующее">›</a>'
+        : '';
+    $ag_nav_pair = $ag_prev_btn . $ag_next_btn;
+
+    // ДОП. НАВИГАЦИЯ ПОД МЕДИА (как на скрине)
+    $ag_nav_under = '';
+    if ($ag_nav_pair !== '') {
+        $ag_nav_under =
+            '<div class="ag-view-under-nav">'.
+              '<div class="ag-view-under-navgroup">'.$ag_nav_pair.'</div>'.
+            '</div>';
+    }
+
     eval('$output = "' . $templates->get('advancedgallery_view') . '";');
     return $output;
 }
@@ -1332,11 +1875,36 @@ function ag_render_upload(): string
         error_no_permission();
     }
 
+    $uid = (int)$mybb->user['uid'];
+    ag_get_default_album_id($uid, true); // гарантируем дефолтный альбом
+
     $ag_upload_do_url = 'gallery.php?action=upload_do';
+    $ag_remote_do_url = 'gallery.php?action=remote_add_do';
     $ag_my_post_key = $mybb->post_code;
+
+    // ВАЖНО: если пользователь пришёл из альбома — подставляем его в селект
+    $preferredAlbumId = $mybb->get_input('album_id', MyBB::INPUT_INT);
+    $ag_upload_album_field = ag_build_upload_album_field($uid, (int)$preferredAlbumId);
+
+    $tab = (string)$mybb->get_input('tab');
+    $tab = in_array($tab, ['local', 'remote'], true) ? $tab : 'local';
+
+    $ag_upload_tab_local_active  = ($tab === 'local')  ? ' ag-tab-active' : '';
+    $ag_upload_tab_remote_active = ($tab === 'remote') ? ' ag-tab-active' : '';
+
+    $ag_remote_enabled = ag_remote_enabled() ? '1' : '0';
 
     eval('$output = "' . $templates->get('advancedgallery_upload') . '";');
     return $output;
+}
+
+function ag_render_remote_add(): string
+{
+    // unified UI: просто открываем тот же шаблон, но с вкладкой remote
+    // (без редиректа, чтобы не плодить прыжки)
+    global $mybb;
+    $mybb->input['tab'] = 'remote';
+    return ag_render_upload();
 }
 
 function ag_handle_upload(): void
@@ -1359,9 +1927,7 @@ function ag_handle_upload(): void
     }
 
     $maxMb = (int)($mybb->settings['af_advancedgallery_upload_max_mb'] ?? 10);
-    if ($maxMb < 1) {
-        $maxMb = 10;
-    }
+    if ($maxMb < 1) { $maxMb = 10; }
     $maxBytes = $maxMb * 1024 * 1024;
     if ((int)$file['size'] > $maxBytes) {
         error('File is too large.');
@@ -1378,9 +1944,7 @@ function ag_handle_upload(): void
 
     $finfo = finfo_open(FILEINFO_MIME_TYPE);
     $mime = $finfo ? finfo_file($finfo, $file['tmp_name']) : '';
-    if ($finfo) {
-        finfo_close($finfo);
-    }
+    if ($finfo) { finfo_close($finfo); }
 
     $allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if ($mime === '' || !in_array($mime, $allowedMimes, true)) {
@@ -1394,6 +1958,7 @@ function ag_handle_upload(): void
 
     $uploadRoot = af_ag_resolve_upload_path();
     $uid = (int)$mybb->user['uid'];
+
     $subdir = $uploadRoot . '/af_gallery/' . $uid . '/' . date('Y') . '/' . date('m');
     if (!is_dir($subdir)) {
         @mkdir($subdir, 0755, true);
@@ -1451,38 +2016,62 @@ function ag_handle_upload(): void
     $db->insert_query('af_gallery_media', $insert);
     $newId = (int)$db->insert_id();
 
-    redirect('gallery.php?action=view&id='.$newId, 'Uploaded successfully.');
-}
+    // ====== Привязка к альбому (БЕЗ "общего") ======
+    $albumIdInput = $mybb->get_input('album_id', MyBB::INPUT_INT);
+    $albumId = 0;
 
-function ag_render_remote_add(): string
-{
-    global $db, $mybb, $templates, $lang;
+    if ($albumIdInput <= 0) {
+        $albumId = ag_get_default_album_id($uid, true);
+    } else {
+        $album = ag_get_album($albumIdInput);
 
-    if (!ag_can_upload() || !ag_remote_enabled()) {
-        error_no_permission();
-    }
-
-    $ag_remote_action = 'gallery.php?action=remote_add_do';
-    $ag_remote_my_post_key = $mybb->post_code;
-    $ag_remote_album_field = '';
-
-    if (ag_can_manage_albums()) {
-        $options = '<option value="">'.htmlspecialchars_uni($lang->af_advancedgallery_remote_album_none ?? 'Без альбома').'</option>';
-        $albumsQuery = $db->simple_select('af_gallery_albums', 'id,title', "uid_owner='".(int)$mybb->user['uid']."'", [
-            'order_by' => 'created_at',
-            'order_dir' => 'DESC',
-        ]);
-        while ($album = $db->fetch_array($albumsQuery)) {
-            $options .= '<option value="'.(int)$album['id'].'">'.htmlspecialchars_uni((string)$album['title']).'</option>';
+        // разрешаем только свой альбом
+        if ($album && (int)$album['uid_owner'] === $uid) {
+            $albumId = $albumIdInput;
         }
-        $ag_remote_album_field = '<div class="ag-field">'
-            .'<label for="ag_remote_album">'.htmlspecialchars_uni($lang->af_advancedgallery_albums ?? 'Альбомы').'</label>'
-            .'<select name="album_id" id="ag_remote_album">'.$options.'</select>'
-            .'</div>';
+
+        if ($albumId <= 0) {
+            $albumId = ag_get_default_album_id($uid, true);
+        }
     }
 
-    eval('$output = "' . $templates->get('advancedgallery_remote_add') . '";');
-    return $output;
+    if ($albumId > 0) {
+        // лимит применяем только к пользовательскому альбому (все альбомы тут пользовательские)
+        ag_enforce_media_limits($albumId);
+
+        $exists = $db->simple_select('af_gallery_album_media', 'id', "album_id='{$albumId}' AND media_id='{$newId}'", ['limit' => 1]);
+        if (!$db->fetch_field($exists, 'id')) {
+            $db->insert_query('af_gallery_album_media', [
+                'album_id'   => $albumId,
+                'media_id'   => $newId,
+                'sort_order' => 0,
+                'created_at' => TIME_NOW,
+            ]);
+            $db->update_query('af_gallery_albums', ['updated_at' => TIME_NOW], "id='{$albumId}'");
+
+            // Автообложка для дефолтного альбома, если пустая
+            ag_album_autoset_cover_if_empty($albumId, $newId);
+        }
+    }
+
+    // ====== Ответ ======
+    if (ag_is_ajax_request()) {
+        $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+        $fullUrl = $bburl . '/' . ltrim((string)$storageRel, '/');
+        $thumbUrl = $bburl . '/' . ltrim((string)$thumbRel, '/');
+
+        ag_json_response([
+            'ok' => true,
+            'id' => $newId,
+            'status' => $status,
+            'title' => (string)$title,
+            'thumb' => $thumbUrl,
+            'url_full' => $fullUrl,
+            'bbcode' => '[img]'.$fullUrl.'[/img]',
+        ]);
+    }
+
+    redirect('gallery.php?action=view&id='.$newId, 'Uploaded successfully.');
 }
 
 function ag_handle_remote_add_do(): void
@@ -1514,7 +2103,7 @@ function ag_handle_remote_add_do(): void
 
     $title = (string)$mybb->get_input('ag_title');
     $description = (string)$mybb->get_input('ag_description');
-    $albumId = $mybb->get_input('album_id', MyBB::INPUT_INT);
+    $albumIdInput = $mybb->get_input('album_id', MyBB::INPUT_INT);
 
     $status = ag_is_autoapprove() ? 'approved' : 'pending';
 
@@ -1523,8 +2112,10 @@ function ag_handle_remote_add_do(): void
         $thumbPath = (string)$resolved['thumb_url'];
     }
 
+    $uid = (int)$mybb->user['uid'];
+
     $insert = [
-        'uid_owner'     => (int)$mybb->user['uid'],
+        'uid_owner'     => $uid,
         'type'          => 'remote',
         'status'        => $status,
         'created_at'    => TIME_NOW,
@@ -1550,21 +2141,54 @@ function ag_handle_remote_add_do(): void
     $db->insert_query('af_gallery_media', $insert);
     $newId = (int)$db->insert_id();
 
-    if ($albumId > 0 && ag_can_manage_albums()) {
-        $album = ag_get_album($albumId);
-        if ($album && (int)$album['uid_owner'] === (int)$mybb->user['uid']) {
-            ag_enforce_media_limits($albumId);
-            $exists = $db->simple_select('af_gallery_album_media', 'id', "album_id='{$albumId}' AND media_id='{$newId}'", ['limit' => 1]);
-            if (!$db->fetch_field($exists, 'id')) {
-                $db->insert_query('af_gallery_album_media', [
-                    'album_id' => $albumId,
-                    'media_id' => $newId,
-                    'sort_order' => 0,
-                    'created_at' => TIME_NOW,
-                ]);
-                $db->update_query('af_gallery_albums', ['updated_at' => TIME_NOW], "id='{$albumId}'");
-            }
+    // ====== Привязка к альбому (БЕЗ "общего") ======
+    $albumId = 0;
+
+    if ($albumIdInput <= 0) {
+        $albumId = ag_get_default_album_id($uid, true);
+    } else {
+        $album = ag_get_album($albumIdInput);
+
+        // разрешаем только свой альбом
+        if ($album && (int)$album['uid_owner'] === $uid) {
+            $albumId = $albumIdInput;
         }
+
+        if ($albumId <= 0) {
+            $albumId = ag_get_default_album_id($uid, true);
+        }
+    }
+
+    if ($albumId > 0) {
+        ag_enforce_media_limits($albumId);
+
+        $exists = $db->simple_select('af_gallery_album_media', 'id', "album_id='{$albumId}' AND media_id='{$newId}'", ['limit' => 1]);
+        if (!$db->fetch_field($exists, 'id')) {
+            $db->insert_query('af_gallery_album_media', [
+                'album_id'   => $albumId,
+                'media_id'   => $newId,
+                'sort_order' => 0,
+                'created_at' => TIME_NOW,
+            ]);
+            $db->update_query('af_gallery_albums', ['updated_at' => TIME_NOW], "id='{$albumId}'");
+
+            // Автообложка для дефолтного альбома, если пустая
+            ag_album_autoset_cover_if_empty($albumId, $newId);
+        }
+    }
+
+    if (ag_is_ajax_request()) {
+        ag_json_response([
+            'ok' => true,
+            'id' => $newId,
+            'status' => $status,
+            'title' => (string)$title,
+            'thumb' => (string)$thumbPath,
+            'url_full' => (string)$url,
+            'bbcode' => ag_media_is_direct_image(['type'=>'remote','provider'=>(string)$resolved['provider'],'remote_url'=>$url])
+                ? '[img]'.$url.'[/img]'
+                : '[url='.$url.']'.$url.'[/url]',
+        ]);
     }
 
     redirect('gallery.php?action=view&id='.$newId, $lang->af_advancedgallery_remote_added ?? 'Media added.');
@@ -1578,28 +2202,43 @@ function ag_render_picker_modal(): void
         error_no_permission();
     }
 
+    $uid = (int)$mybb->user['uid'];
+    $defaultId = ag_get_default_album_id($uid, true);
+
+    // ---- кнопки альбомов (фильтр) ----
     $albumsHtml = '';
-    $albumsQuery = $db->simple_select('af_gallery_albums', 'id,title', "uid_owner='".(int)$mybb->user['uid']."'", [
+
+    // Default как album_id=0 (виртуальный, но обработчик picker_data переведёт в реальный defaultId)
+    $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="0">'
+        .htmlspecialchars_uni($lang->af_advancedgallery_album_default ?? 'По умолчанию')
+        .'</button>';
+
+    $albumsQuery = $db->simple_select('af_gallery_albums', 'id,title', "uid_owner='{$uid}'", [
         'order_by' => 'created_at',
         'order_dir' => 'DESC',
     ]);
     while ($album = $db->fetch_array($albumsQuery)) {
+        $aid = (int)$album['id'];
+        if ($aid <= 0) continue;
+
         $albumsHtml .= '<button type="button" class="ag-picker-album" data-album-id="'
-            .(int)$album['id'].'">'
+            .$aid.'">'
             .htmlspecialchars_uni((string)$album['title'])
             .'</button>';
     }
+
     if ($albumsHtml === '') {
         $albumsHtml = '<div class="ag-empty">'.htmlspecialchars_uni($lang->af_advancedgallery_album_empty ?? 'Нет содержимого.').'</div>';
     }
 
-    $ag_picker_upload_url = 'gallery.php?action=upload';
-    $ag_picker_remote_link = '';
-    if (ag_remote_enabled()) {
-        $ag_picker_remote_link = '<a class="button" href="gallery.php?action=remote_add">'
-            .htmlspecialchars_uni($lang->af_advancedgallery_picker_add_remote ?? 'Добавить по ссылке')
-            .'</a>';
-    }
+    // ---- блок загрузки прямо в модалке ----
+    $ag_picker_upload_do_url = 'gallery.php?action=upload_do';
+    $ag_picker_remote_do_url = 'gallery.php?action=remote_add_do';
+    $ag_picker_my_post_key = $mybb->post_code;
+    $preferredAlbumId = $mybb->get_input('album_id', MyBB::INPUT_INT);
+    $ag_picker_album_field = ag_build_upload_album_field($uid, (int)$preferredAlbumId);
+    $ag_picker_remote_enabled = ag_remote_enabled() ? '1' : '0';
+
     $ag_picker_albums = $albumsHtml;
 
     eval('$output = "' . $templates->get('advancedgallery_picker_modal') . '";');
@@ -1618,9 +2257,7 @@ function ag_handle_picker_data(): void
 
     $page = max(1, $mybb->get_input('page', MyBB::INPUT_INT));
     $perPage = (int)($mybb->settings['af_advancedgallery_items_per_page'] ?? 24);
-    if ($perPage < 1) {
-        $perPage = 24;
-    }
+    if ($perPage < 1) { $perPage = 24; }
     $offset = ($page - 1) * $perPage;
 
     $uid = (int)$mybb->user['uid'];
@@ -1639,6 +2276,12 @@ function ag_handle_picker_data(): void
 
     $albumId = $mybb->get_input('album_id', MyBB::INPUT_INT);
     $join = '';
+
+    // album_id = 0 => default album
+    if ($albumId === 0) {
+        $albumId = ag_get_default_album_id($uid, true);
+    }
+
     if ($albumId > 0) {
         $album = ag_get_album($albumId);
         if ($album && (int)$album['uid_owner'] === $uid) {
@@ -1706,6 +2349,26 @@ function ag_handle_delete(): void
         }
     }
 
+    // какие альбомы затронуты (чтобы обновить updated_at)
+    $affectedAlbums = [];
+    $qA = $db->simple_select('af_gallery_album_media', 'album_id', "media_id='{$id}'");
+    while ($r = $db->fetch_array($qA)) {
+        $affectedAlbums[] = (int)$r['album_id'];
+    }
+    $affectedAlbums = array_values(array_unique(array_filter($affectedAlbums)));
+
+    // чистим связи
+    $db->delete_query('af_gallery_album_media', "media_id='{$id}'");
+
+    // если это было cover — сбрасываем cover_media_id
+    $db->update_query('af_gallery_albums', ['cover_media_id' => 0, 'updated_at' => TIME_NOW], "cover_media_id='{$id}'");
+
+    // обновляем updated_at у альбомов, где медиа было
+    if (!empty($affectedAlbums)) {
+        $in = implode(',', array_map('intval', $affectedAlbums));
+        $db->update_query('af_gallery_albums', ['updated_at' => TIME_NOW], "id IN ({$in})");
+    }
+
     $db->delete_query('af_gallery_media', "id='{$id}'");
 
     redirect('gallery.php', 'Deleted.');
@@ -1734,7 +2397,326 @@ function ag_handle_approve(): void
     redirect('gallery.php?action=view&id='.$id, 'Approved.');
 }
 
+function ag_handle_bulk_do(): void
+{
+    global $db, $mybb, $lang;
+
+    if ((int)$mybb->user['uid'] <= 0) {
+        error_no_permission();
+    }
+
+    verify_post_check($mybb->get_input('my_post_key'));
+
+    $bulkAction = trim((string)$mybb->get_input('bulk_action'));
+    if (!in_array($bulkAction, ['delete', 'approve', 'move'], true)) {
+        error('Invalid bulk action.');
+    }
+
+    $ids = $mybb->get_input('media_ids', MyBB::INPUT_ARRAY);
+    if (!is_array($ids) || $ids === []) {
+        // поддержка варианта media_id[]
+        $ids = $mybb->get_input('media_id', MyBB::INPUT_ARRAY);
+    }
+    if (!is_array($ids) || $ids === []) {
+        error('No media selected.');
+    }
+
+    $mediaIds = [];
+    foreach ($ids as $v) {
+        $i = (int)$v;
+        if ($i > 0) {
+            $mediaIds[$i] = true;
+        }
+    }
+    $mediaIds = array_keys($mediaIds);
+
+    // защита от “выделить всё на свете”
+    if (count($mediaIds) > 500) {
+        error('Too many items selected.');
+    }
+
+    $uid = (int)$mybb->user['uid'];
+    $isMod = ag_can_moderate();
+
+    // MOVE: валидируем целевой альбом
+    $targetAlbumId = 0;
+    if ($bulkAction === 'move') {
+        $targetAlbumIdInput = $mybb->get_input('target_album_id', MyBB::INPUT_INT);
+        if ($targetAlbumIdInput <= 0) {
+            // 0 => default
+            $targetAlbumId = ag_get_default_album_id($uid, true);
+        } else {
+            $album = ag_get_album($targetAlbumIdInput);
+            if (!$album || (int)$album['uid_owner'] !== $uid) {
+                error($lang->af_advancedgallery_no_permission ?? 'No permission.');
+            }
+            $targetAlbumId = $targetAlbumIdInput;
+        }
+
+        ag_enforce_media_limits($targetAlbumId);
+    }
+
+    $affected = 0;
+
+    foreach ($mediaIds as $mid) {
+        $media = $db->fetch_array($db->simple_select('af_gallery_media', '*', "id='{$mid}'", ['limit' => 1]));
+        if (!$media) {
+            continue;
+        }
+
+        $isOwner = (int)$media['uid_owner'] === $uid;
+
+        if ($bulkAction === 'approve') {
+            if (!$isMod) {
+                continue;
+            }
+            $db->update_query('af_gallery_media', [
+                'status'     => 'approved',
+                'updated_at' => TIME_NOW,
+            ], "id='{$mid}'");
+            $affected++;
+            continue;
+        }
+
+        if ($bulkAction === 'delete') {
+            if (!$isMod && !$isOwner) {
+                continue;
+            }
+
+            // удаляем файлы
+            if ((string)$media['type'] === 'local') {
+                $paths = [
+                    af_ag_abs_path((string)$media['storage_path']),
+                    af_ag_abs_path((string)$media['thumb_path']),
+                    af_ag_abs_path((string)$media['preview_path']),
+                ];
+                foreach ($paths as $p) {
+                    if ($p && is_file($p)) {
+                        @unlink($p);
+                    }
+                }
+            }
+
+            // вычищаем связи
+            $db->delete_query('af_gallery_album_media', "media_id='{$mid}'");
+
+            // если это было cover — сбросим
+            $db->update_query('af_gallery_albums', ['cover_media_id' => 0, 'updated_at' => TIME_NOW], "cover_media_id='{$mid}'");
+
+            // удаляем сам медиа-объект
+            $db->delete_query('af_gallery_media', "id='{$mid}'");
+
+            $affected++;
+            continue;
+        }
+
+        if ($bulkAction === 'move') {
+            // перемещать разрешаем только владельцу (или модеру, но это спорно — оставляю строго)
+            if (!$isOwner) {
+                continue;
+            }
+
+            // удалим связь этого медиа с альбомами владельца и привяжем к target
+            // (чтобы “перемещение” было именно переносом, а не “добавлением ещё”)
+            $userAlbumIds = [];
+            $q = $db->simple_select('af_gallery_albums', 'id', "uid_owner='{$uid}'");
+            while ($a = $db->fetch_array($q)) {
+                $aid = (int)$a['id'];
+                if ($aid > 0) $userAlbumIds[] = $aid;
+            }
+            if (!empty($userAlbumIds)) {
+                $in = implode(',', array_map('intval', $userAlbumIds));
+                $db->delete_query('af_gallery_album_media', "media_id='{$mid}' AND album_id IN ({$in})");
+            }
+
+            // лимит целевого альбома
+            ag_enforce_media_limits($targetAlbumId);
+
+            $exists = $db->simple_select('af_gallery_album_media', 'id', "album_id='{$targetAlbumId}' AND media_id='{$mid}'", ['limit' => 1]);
+            if (!$db->fetch_field($exists, 'id')) {
+                $db->insert_query('af_gallery_album_media', [
+                    'album_id'   => $targetAlbumId,
+                    'media_id'   => $mid,
+                    'sort_order' => 0,
+                    'created_at' => TIME_NOW,
+                ]);
+            }
+
+            $db->update_query('af_gallery_albums', ['updated_at' => TIME_NOW], "id='{$targetAlbumId}'");
+
+            // автообложка дефолтного альбома (если переносим туда и он пустой)
+            ag_album_autoset_cover_if_empty($targetAlbumId, $mid);
+
+            $affected++;
+            continue;
+        }
+    }
+
+    if (ag_is_ajax_request()) {
+        ag_json_response(['ok' => true, 'affected' => $affected]);
+    }
+
+    // fallback — назад
+    $back = (string)($_SERVER['HTTP_REFERER'] ?? 'gallery.php');
+    if ($back === '') $back = 'gallery.php';
+    redirect($back, 'Done.');
+}
+
 /* -------------------- ALBUM HELPERS -------------------- */
+function ag_album_field_exists(string $table, string $field): bool
+{
+    global $db;
+
+    // MyBB DB-layer обычно имеет field_exists
+    if (method_exists($db, 'field_exists')) {
+        return (bool)$db->field_exists($field, $table);
+    }
+
+    // fallback
+    $t = TABLE_PREFIX . $table;
+    $field = strtolower($field);
+    $q = $db->write_query("SHOW COLUMNS FROM {$t}");
+    while ($row = $db->fetch_array($q)) {
+        if (strtolower((string)($row['Field'] ?? '')) === $field) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function ag_ensure_default_album_schema(): void
+{
+    global $db;
+
+    if (!$db->table_exists('af_gallery_albums')) {
+        return;
+    }
+
+    if (!ag_album_field_exists('af_gallery_albums', 'is_default')) {
+        $t = TABLE_PREFIX . 'af_gallery_albums';
+        $db->write_query("ALTER TABLE {$t} ADD COLUMN is_default TINYINT(1) NOT NULL DEFAULT 0");
+        // индекс для быстрых выборок default-альбома
+        $db->write_query("ALTER TABLE {$t} ADD KEY uid_default (uid_owner, is_default)");
+    }
+}
+
+function ag_set_default_album(int $uid, int $albumId): void
+{
+    global $db;
+
+    if ($uid <= 0 || $albumId <= 0) {
+        return;
+    }
+
+    ag_ensure_default_album_schema();
+
+    // Сначала снимаем default со всех альбомов пользователя, затем ставим на выбранный
+    $db->update_query('af_gallery_albums', ['is_default' => 0], "uid_owner='{$uid}'");
+    $db->update_query('af_gallery_albums', ['is_default' => 1], "id='{$albumId}' AND uid_owner='{$uid}'");
+}
+
+/**
+ * Возвращает ID default-альбома пользователя.
+ * - если есть is_default=1 -> возвращаем его
+ * - если альбомы есть, но default не назначен -> назначаем самый свежий
+ * - если альбомов нет -> создаём приватный альбом с title=username и делаем default
+ */
+function ag_get_default_album_id(int $uid, bool $createIfMissing = true): int
+{
+    global $db;
+
+    if ($uid <= 0) {
+        return 0;
+    }
+
+    ag_ensure_default_album_schema();
+
+    $row = $db->fetch_array(
+        $db->simple_select('af_gallery_albums', 'id', "uid_owner='{$uid}' AND is_default='1'", ['limit' => 1])
+    );
+    $id = (int)($row['id'] ?? 0);
+    if ($id > 0) {
+        return $id;
+    }
+
+    // Если альбомы уже есть — назначаем самый свежий default'ом
+    $row = $db->fetch_array(
+        $db->simple_select('af_gallery_albums', 'id', "uid_owner='{$uid}'", [
+            'order_by' => 'created_at',
+            'order_dir' => 'DESC',
+            'limit' => 1
+        ])
+    );
+    $candidate = (int)($row['id'] ?? 0);
+    if ($candidate > 0) {
+        ag_set_default_album($uid, $candidate);
+        return $candidate;
+    }
+
+    if (!$createIfMissing) {
+        return 0;
+    }
+
+    // Альбомов нет — создаём приватный дефолтный
+    $user = get_user($uid);
+    $title = trim((string)($user['username'] ?? ''));
+    if ($title === '') {
+        $title = 'User '.$uid;
+    }
+
+    $insert = [
+        'uid_owner'      => $uid,
+        'visibility'     => 'private',
+        'allowed_groups' => '',
+        'title'          => $db->escape_string($title),
+        'description'    => '',
+        'cover_media_id' => 0,
+        'sort_mode'      => 'date_desc',
+        'created_at'     => TIME_NOW,
+        'updated_at'     => TIME_NOW,
+        'is_default'     => 1,
+    ];
+
+    $db->insert_query('af_gallery_albums', $insert);
+    $newId = (int)$db->insert_id();
+
+    // На всякий случай подчистим: оставим default только один
+    ag_set_default_album($uid, $newId);
+
+    return $newId;
+}
+
+function ag_is_ajax_request(): bool
+{
+    global $mybb;
+
+    $ajax = $mybb->get_input('ajax', MyBB::INPUT_INT);
+    if ($ajax === 1) {
+        return true;
+    }
+
+    if (defined('IN_AJAX') && IN_AJAX) {
+        return true;
+    }
+
+    $hdr = (string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '');
+    if (strtolower($hdr) === 'xmlhttprequest') {
+        return true;
+    }
+
+    return false;
+}
+
+function ag_json_response(array $payload, int $statusCode = 200): void
+{
+    if (!headers_sent()) {
+        http_response_code($statusCode);
+        header('Content-Type: application/json; charset=UTF-8');
+    }
+    echo json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 
 function ag_get_album(int $id): ?array
 {
@@ -1743,19 +2725,145 @@ function ag_get_album(int $id): ?array
     return $row ?: null;
 }
 
+function ag_is_common_album(array $albumRow): bool
+{
+    return (int)($albumRow['uid_owner'] ?? -1) === 0 && (string)($albumRow['title'] ?? '') === '__COMMON__';
+}
+
+function ag_album_ui_title(array $albumRow): string
+{
+    global $lang;
+
+    if (ag_is_common_album($albumRow)) {
+        // лаконично, и смысл понятен: общий “свалочный” альбом
+        return (string)($lang->af_advancedgallery_common_album ?? 'Общий');
+    }
+
+    return (string)($albumRow['title'] ?? '');
+}
+
+
+function ag_get_common_album_id(): int
+{
+    global $db, $lang;
+
+    // общий альбом: uid_owner=0
+    $row = $db->fetch_array($db->simple_select('af_gallery_albums', 'id', "uid_owner='0' AND title='__COMMON__'", ['limit' => 1]));
+    $id = (int)($row['id'] ?? 0);
+    if ($id > 0) {
+        return $id;
+    }
+
+    // создаём лениво (не в install), чтобы не ломать существующие базы
+    $db->insert_query('af_gallery_albums', [
+        'uid_owner'      => 0,
+        'visibility'     => 'public',
+        'allowed_groups' => '',
+        'title'          => '__COMMON__',
+        'description'    => $db->escape_string($lang->af_advancedgallery_common_album_desc ?? 'Сюда попадают загрузки пользователей без личных альбомов.'),
+        'cover_media_id' => 0,
+        'sort_mode'      => 'date_desc',
+        'created_at'     => TIME_NOW,
+        'updated_at'     => TIME_NOW,
+    ]);
+
+    return (int)$db->insert_id();
+}
+
+function ag_user_has_any_album(int $uid): bool
+{
+    global $db;
+    if ($uid <= 0) return false;
+
+    $cnt = (int)$db->fetch_field(
+        $db->simple_select('af_gallery_albums', 'COUNT(*) AS cnt', "uid_owner='{$uid}'"),
+        'cnt'
+    );
+    return $cnt > 0;
+}
+
+function ag_build_upload_album_field(int $uid, int $preferredAlbumId = 0): string
+{
+    global $db, $lang;
+
+    if ($uid <= 0) {
+        return '';
+    }
+
+    // Гарантируем дефолтный альбом
+    $defaultId = ag_get_default_album_id($uid, true);
+
+    // Если пришёл preferredAlbumId — используем его, но только если он реально принадлежит юзеру
+    $selectedId = 0; // 0 = default (UX)
+    if ($preferredAlbumId > 0) {
+        $album = ag_get_album($preferredAlbumId);
+        if ($album && (int)$album['uid_owner'] === $uid) {
+            $selectedId = $preferredAlbumId;
+        }
+    }
+
+    $options = '';
+
+    // 0 = default (виртуальное UX-значение)
+    $defaultTitle = '';
+    if ($defaultId > 0) {
+        $d = $db->fetch_array($db->simple_select('af_gallery_albums', 'title', "id='{$defaultId}'", ['limit' => 1]));
+        $defaultTitle = (string)($d['title'] ?? '');
+    }
+    $defaultLabel = $defaultTitle !== ''
+        ? (htmlspecialchars_uni($lang->af_advancedgallery_album_default ?? 'По умолчанию') . ' — ' . htmlspecialchars_uni($defaultTitle))
+        : htmlspecialchars_uni($lang->af_advancedgallery_album_default ?? 'По умолчанию');
+
+    $selDefault = ($selectedId === 0) ? ' selected="selected"' : '';
+    $options .= '<option value="0"'.$selDefault.'>'.$defaultLabel.'</option>';
+
+    // Пользовательские альбомы (включая дефолтный как обычную опцию — но мы его не дублируем)
+    $q = $db->simple_select('af_gallery_albums', 'id,title', "uid_owner='{$uid}'", [
+        'order_by'  => 'created_at',
+        'order_dir' => 'DESC',
+    ]);
+    while ($a = $db->fetch_array($q)) {
+        $aid = (int)$a['id'];
+        if ($aid <= 0) {
+            continue;
+        }
+        if ($aid === $defaultId) {
+            // дефолтный уже представлен пунктом "0 (По умолчанию — ...)"
+            continue;
+        }
+
+        $sel = ($selectedId === $aid) ? ' selected="selected"' : '';
+        $options .= '<option value="'.$aid.'"'.$sel.'>'.htmlspecialchars_uni((string)$a['title']).'</option>';
+    }
+
+    return '<div class="ag-field">'
+        .'<label for="ag_album_id">'.htmlspecialchars_uni($lang->af_advancedgallery_upload_album ?? 'Альбом для загрузки').'</label>'
+        .'<select name="album_id" id="ag_album_id">'.$options.'</select>'
+        .'</div>';
+}
+
 function ag_album_media_count(int $albumId): int
 {
     global $db;
-    return (int)$db->fetch_field(
-        $db->simple_select('af_gallery_album_media', 'COUNT(*) AS cnt', "album_id='{$albumId}'"),
-        'cnt'
-    );
+
+    $p = TABLE_PREFIX;
+    $sql = "SELECT COUNT(*) AS cnt
+            FROM {$p}af_gallery_album_media am
+            INNER JOIN {$p}af_gallery_media m ON m.id=am.media_id
+            WHERE am.album_id='".(int)$albumId."'";
+
+    return (int)$db->fetch_field($db->write_query($sql), 'cnt');
 }
+
 
 function ag_album_cover_url(array $albumRow): string
 {
     global $db, $mybb;
+
+    $albumId = (int)($albumRow['id'] ?? 0);
     $coverId = (int)($albumRow['cover_media_id'] ?? 0);
+
+    // 1) если есть явная обложка — используем её
     if ($coverId > 0) {
         $media = $db->fetch_array($db->simple_select('af_gallery_media', '*', "id='{$coverId}'", ['limit' => 1]));
         if ($media) {
@@ -1768,7 +2876,60 @@ function ag_album_cover_url(array $albumRow): string
         }
     }
 
+    // 2) авто-превью: берём последнюю медию из альбома
+    if ($albumId > 0) {
+        $extraStatus = '';
+        $viewerUid = (int)$mybb->user['uid'];
+        $isOwner = ((int)($albumRow['uid_owner'] ?? 0) === $viewerUid);
+        $canSeeUnapproved = (ag_can_moderate() || $isOwner);
+
+        if (!$canSeeUnapproved) {
+            $extraStatus = " AND m.status='approved'";
+        }
+
+        $p = TABLE_PREFIX;
+        $sql = "SELECT m.* FROM {$p}af_gallery_album_media am
+                INNER JOIN {$p}af_gallery_media m ON m.id=am.media_id
+                WHERE am.album_id='{$albumId}'{$extraStatus}
+                ORDER BY m.created_at DESC
+                LIMIT 1";
+        $m = $db->fetch_array($db->write_query($sql));
+        if ($m) {
+            return ag_media_thumb_url($m);
+        }
+    }
+
     return ag_placeholder_thumb_url('Album');
+}
+
+function ag_album_autoset_cover_if_empty(int $albumId, int $mediaId): void
+{
+    global $db;
+
+    if ($albumId <= 0 || $mediaId <= 0) {
+        return;
+    }
+
+    // обновляем обложку только если:
+    // - у альбома нет cover_media_id
+    // - это дефолтный альбом (is_default=1)
+    $album = $db->fetch_array($db->simple_select('af_gallery_albums', 'id,cover_media_id,is_default', "id='{$albumId}'", ['limit' => 1]));
+    if (!$album) {
+        return;
+    }
+
+    if ((int)($album['cover_media_id'] ?? 0) !== 0) {
+        return;
+    }
+
+    if ((int)($album['is_default'] ?? 0) !== 1) {
+        return;
+    }
+
+    $db->update_query('af_gallery_albums', [
+        'cover_media_id' => $mediaId,
+        'updated_at'     => TIME_NOW,
+    ], "id='{$albumId}'");
 }
 
 function ag_can_view_album(array $albumRow): bool
@@ -2116,42 +3277,101 @@ function ag_remote_normalize_url(string $url): string
 
 function ag_remote_is_domain_allowed(string $host): bool
 {
-    $host = strtolower(trim($host, '.'));
+    $host = strtolower(trim($host, ". \t\n\r\0\x0B"));
     if ($host === '') {
         return false;
     }
 
     $raw = trim((string)af_ag_get_setting('remote_whitelist_domains', ''));
     $domains = [];
+
     if ($raw !== '') {
+        // Пользовательский whitelist (по одному в строке). Поддержка:
+        // - домен
+        // - URL (берем host)
         $lines = preg_split('~\r\n|\r|\n~', $raw);
         if (is_array($lines)) {
             foreach ($lines as $line) {
-                $line = strtolower(trim($line));
+                $line = trim((string)$line);
+                if ($line === '') {
+                    continue;
+                }
+
+                $line = preg_replace('~[\s\x00-\x1F\x7F]+~u', '', $line);
+                $line = trim($line);
+
+                // Если дали URL — вытащим host
+                if (preg_match('~^https?://~i', $line)) {
+                    $p = @parse_url($line);
+                    $h = strtolower((string)($p['host'] ?? ''));
+                    $h = trim($h, ". \t\n\r\0\x0B");
+                    if ($h !== '') {
+                        $domains[] = $h;
+                    }
+                    continue;
+                }
+
+                // Иначе считаем доменом/хостом
+                $line = strtolower($line);
+                $line = trim($line, ". \t\n\r\0\x0B");
                 if ($line !== '') {
                     $domains[] = $line;
                 }
             }
         }
     } else {
+        // Встроенный whitelist (если настройка пустая)
         $domains = [
+            // видео
             'youtube.com',
             'youtu.be',
             'vimeo.com',
+
+            // старые
             'imgur.com',
             'i.imgur.com',
             'giphy.com',
             'media.giphy.com',
             'cdn.discordapp.com',
             'media.discordapp.net',
+
+            // === NEW: image hosts ===
+            // imgbb / ibb
+            'imgbb.com',
+            'i.ibb.co',
+
+            // imagebam (у них часто картинки на *.imagebam.com или на imagebam.com)
+            'imagebam.com',
+
+            // iimg.su (часто прямые картинки там же)
+            'iimg.su',
+
+            // postimages (картинки могут быть на i.postimg.cc / postimg.cc / postimages.org)
+            'postimages.org',
+            'postimg.cc',
+            'i.postimg.cc',
+
+            // imgbox (картинки бывают на i.imgbox.com)
+            'imgbox.com',
+            'i.imgbox.com',
         ];
     }
 
+    // Подстраховка от дублей
+    $domains = array_values(array_unique(array_filter($domains)));
+
     foreach ($domains as $domain) {
+        $domain = strtolower(trim((string)$domain, ". \t\n\r\0\x0B"));
+        if ($domain === '') {
+            continue;
+        }
+
         if ($host === $domain) {
             return true;
         }
-        if (substr($host, -strlen('.'.$domain)) === '.'.$domain) {
+
+        // Разрешаем поддомены: xxx.domain.tld
+        if (strlen($host) > strlen($domain) && substr($host, -strlen('.' . $domain)) === '.' . $domain) {
             return true;
         }
     }
@@ -2372,34 +3592,55 @@ function ag_make_thumb(string $src, string $dst, int $w, int $h): string
         return $dst;
     }
 
-    $mime = $info['mime'] ?? '';
+    // Ensure destination directory exists
+    $dstDir = dirname($dst);
+    if (!is_dir($dstDir)) {
+        @mkdir($dstDir, 0755, true);
+    }
+
+    $mime = (string)($info['mime'] ?? '');
+    $srcW = (int)($info[0] ?? 0);
+    $srcH = (int)($info[1] ?? 0);
+
+    if ($srcW <= 0 || $srcH <= 0 || $w <= 0 || $h <= 0) {
+        return $dst;
+    }
+
     $create = null;
     $save = null;
-    $dstExt = pathinfo($dst, PATHINFO_EXTENSION);
 
     switch ($mime) {
         case 'image/jpeg':
             $create = 'imagecreatefromjpeg';
             $save = 'imagejpeg';
             break;
+
         case 'image/png':
             $create = 'imagecreatefrompng';
             $save = 'imagepng';
             break;
+
         case 'image/gif':
             $create = 'imagecreatefromgif';
             $save = 'imagegif';
             break;
+
         case 'image/webp':
             if (function_exists('imagecreatefromwebp') && function_exists('imagewebp')) {
                 $create = 'imagecreatefromwebp';
                 $save = 'imagewebp';
             } else {
+                // Fallback: decode via imagecreatefromstring and save as jpg
                 $create = 'imagecreatefromstring';
                 $save = 'imagejpeg';
-                $dst = preg_replace('~\.webp$~', '.jpg', $dst);
-                $dstExt = 'jpg';
+                $dst = preg_replace('~\.webp$~i', '.jpg', $dst);
             }
+            break;
+
+        default:
+            // Last resort: try to decode
+            $create = 'imagecreatefromstring';
+            $save = 'imagejpeg';
             break;
     }
 
@@ -2409,48 +3650,60 @@ function ag_make_thumb(string $src, string $dst, int $w, int $h): string
 
     if ($create === 'imagecreatefromstring') {
         $srcData = @file_get_contents($src);
-        $srcImg = $srcData !== false ? @imagecreatefromstring($srcData) : false;
+        $srcImg = ($srcData !== false) ? @imagecreatefromstring($srcData) : false;
     } else {
         $srcImg = @$create($src);
     }
+
     if (!$srcImg) {
         return $dst;
     }
 
-    $srcW = (int)$info[0];
-    $srcH = (int)$info[1];
-
+    // Cover-crop math
     $ratio = max($w / $srcW, $h / $srcH);
     $newW = (int)ceil($srcW * $ratio);
     $newH = (int)ceil($srcH * $ratio);
 
-    $tmp = imagecreatetruecolor($w, $h);
+    $dstImg = imagecreatetruecolor($w, $h);
 
-    if ($mime === 'image/png' || $mime === 'image/gif') {
-        imagecolortransparent($tmp, imagecolorallocatealpha($tmp, 0, 0, 0, 127));
-        imagealphablending($tmp, false);
-        imagesavealpha($tmp, true);
+    // Preserve alpha for png/gif/webp
+    if ($mime === 'image/png' || $mime === 'image/gif' || $mime === 'image/webp') {
+        imagealphablending($dstImg, false);
+        imagesavealpha($dstImg, true);
+        $transparent = imagecolorallocatealpha($dstImg, 0, 0, 0, 127);
+        imagefilledrectangle($dstImg, 0, 0, $w, $h, $transparent);
     }
 
-    $srcX = (int)(($newW - $w) / 2);
-    $srcY = (int)(($newH - $h) / 2);
+    // Center crop offsets
+    $dstX = (int)floor(($w - $newW) / 2);
+    $dstY = (int)floor(($h - $newH) / 2);
 
-    $scaled = imagecreatetruecolor($newW, $newH);
-    imagecopyresampled($scaled, $srcImg, 0, 0, 0, 0, $newW, $newH, $srcW, $srcH);
-    imagecopy($tmp, $scaled, 0, 0, $srcX, $srcY, $w, $h);
+    // One-step resample directly into destination
+    imagecopyresampled(
+        $dstImg,
+        $srcImg,
+        $dstX,
+        $dstY,
+        0,
+        0,
+        $newW,
+        $newH,
+        $srcW,
+        $srcH
+    );
 
+    // Save
     if ($save === 'imagejpeg') {
-        imagejpeg($tmp, $dst, 90);
+        @imagejpeg($dstImg, $dst, 90);
     } elseif ($save === 'imagepng') {
-        imagepng($tmp, $dst);
+        @imagepng($dstImg, $dst);
     } elseif ($save === 'imagegif') {
-        imagegif($tmp, $dst);
+        @imagegif($dstImg, $dst);
     } elseif ($save === 'imagewebp') {
-        imagewebp($tmp, $dst, 90);
+        @imagewebp($dstImg, $dst, 90);
     }
 
-    imagedestroy($scaled);
-    imagedestroy($tmp);
+    imagedestroy($dstImg);
     imagedestroy($srcImg);
 
     return $dst;
