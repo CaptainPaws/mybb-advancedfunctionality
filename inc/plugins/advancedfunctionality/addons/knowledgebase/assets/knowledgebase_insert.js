@@ -83,8 +83,11 @@
             '<h3>' + getLang('kbInsertTitle', 'Insert KB') + '</h3>' +
             '<button type="button" class="af-kb-modal-close">&times;</button>' +
             '</div>' +
+            '<div class="af-kb-insert-controls">' +
             '<input type="text" class="af-kb-insert-search" placeholder="' + getLang('kbInsertSearch', 'Search...') + '" />' +
-            '<div class="af-kb-insert-tabs"></div>' +
+            '<select class="af-kb-insert-select"></select>' +
+            '</div>' +
+            '<div class="af-kb-insert-hint"></div>' +
             '<div class="af-kb-insert-list"></div>' +
             '</div>';
         document.body.appendChild(backdrop);
@@ -96,20 +99,26 @@
         return backdrop;
     }
 
-    function renderTabs(container, types, currentType) {
-        container.innerHTML = '';
-        if (!types.length) {
-            container.textContent = getLang('kbInsertSelect', 'Select category');
-            return;
-        }
+    function renderTypeOptions(select, types, currentType) {
+        select.innerHTML = '';
+        var placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = getLang('kbInsertSelect', 'Select category');
+        select.appendChild(placeholder);
         types.forEach(function (item) {
-            var button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'af-kb-insert-tab' + (item.type === currentType ? ' is-active' : '');
-            button.textContent = item.title || item.type;
-            button.dataset.type = item.type;
-            container.appendChild(button);
+            var option = document.createElement('option');
+            option.value = item.type;
+            option.textContent = item.title || item.type;
+            if (item.type === currentType) {
+                option.selected = true;
+            }
+            select.appendChild(option);
         });
+    }
+
+    function renderHint(container, text) {
+        container.textContent = text || '';
+        container.style.display = text ? 'block' : 'none';
     }
 
     function renderList(container, items, insertCallback) {
@@ -141,6 +150,12 @@
             span.textContent = item.title || item.key;
             title.appendChild(span);
             row.appendChild(title);
+            if (item.tech) {
+                var meta = document.createElement('div');
+                meta.className = 'af-kb-insert-item-meta';
+                meta.textContent = item.tech;
+                row.appendChild(meta);
+            }
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'af-kb-btn af-kb-btn--edit';
@@ -156,41 +171,36 @@
     function openInsertModal(target) {
         var backdrop = buildModal();
         var searchInput = backdrop.querySelector('.af-kb-insert-search');
-        var tabs = backdrop.querySelector('.af-kb-insert-tabs');
+        var typeSelect = backdrop.querySelector('.af-kb-insert-select');
+        var hint = backdrop.querySelector('.af-kb-insert-hint');
         var list = backdrop.querySelector('.af-kb-insert-list');
         var state = { type: '', query: '' };
 
         function insertItem(item) {
-            insertIntoTarget(target, '[kb=' + state.type + ':' + item.key + ']');
+            var resolvedType = item.type || state.type;
+            insertIntoTarget(target, '[kb=' + resolvedType + ':' + item.key + ']');
             backdrop.classList.remove('is-active');
         }
 
         function loadList() {
             if (!state.type) {
                 list.innerHTML = '';
+                renderHint(hint, getLang('kbInsertHint', 'Select category or continue search'));
                 return;
             }
+            renderHint(hint, '');
             fetchList(state.type, state.query).then(function (items) {
                 renderList(list, items, insertItem);
             });
         }
 
         fetchTypes().then(function (types) {
-            var firstType = types.length ? types[0].type : '';
-            state.type = state.type || firstType;
-            renderTabs(tabs, types, state.type);
+            renderTypeOptions(typeSelect, types, state.type);
             loadList();
         });
 
-        tabs.onclick = function (event) {
-            var targetBtn = event.target.closest('.af-kb-insert-tab');
-            if (!targetBtn) {
-                return;
-            }
-            state.type = targetBtn.dataset.type;
-            Array.prototype.forEach.call(tabs.children, function (child) {
-                child.classList.toggle('is-active', child === targetBtn);
-            });
+        typeSelect.onchange = function () {
+            state.type = typeSelect.value;
             loadList();
         };
 
@@ -200,6 +210,7 @@
         };
 
         searchInput.value = '';
+        typeSelect.value = state.type;
         backdrop.classList.add('is-active');
         searchInput.focus();
     }
