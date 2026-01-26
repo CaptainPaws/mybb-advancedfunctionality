@@ -571,7 +571,7 @@ function af_advancedalertsandmentions_install(): void
     rebuild_settings();
 
     // дефолтные типы уведомлений
-    $defaultTypes = ['rep', 'pm', 'post_threadauthor', 'subscribed_thread', 'quoted', 'mention'];
+    $defaultTypes = ['rep', 'pm', 'post_threadauthor', 'subscribed_thread', 'subscribed_forum', 'quoted', 'mention', 'buddy_request'];
 
     foreach ($defaultTypes as $code) {
         $titleKey = 'af_aam_alert_type_' . $code;
@@ -1161,6 +1161,7 @@ function af_aam_default_type_title(string $code): string
         'rep'               => 'Репутация',
         'subscribed_thread' => 'Ответ в теме подписки',
         'subscribed_forum'  => 'Новая тема в форуме',
+        'buddy_request'     => 'Запрос в друзья',
     ];
 
     return $map[$code] ?? $code;
@@ -1291,6 +1292,13 @@ function af_aam_usercp_start(): void
     }
 
     $action = $mybb->get_input('action');
+    // --- Buddy request: usercp.php?action=do_editlists&add_username=... ---
+    if ($action === 'do_editlists') {
+        af_aam_maybe_alert_buddy_request();
+        // важно: не exit — даём MyBB продолжить штатное выполнение do_editlists
+        return;
+    }
+
 
     // список уведомлений в UCP
     if ($action === 'af_aam_list') {
@@ -1790,6 +1798,108 @@ function af_aam_add_alert(int $uid, string $code, int $objectId = 0, int $fromUi
     af_aam_maybe_autoclean(true);
     af_aam_enforce_max_alerts($uid);
 
+}
+
+function af_aam_has_recent_alert(int $uid, string $code, int $fromUid = 0, int $objectId = 0, int $seconds = 86400): bool
+{
+    global $db;
+
+    $uid = (int)$uid;
+    $fromUid = (int)$fromUid;
+    $objectId = (int)$objectId;
+
+    if ($uid <= 0 || $code === '' || !$db->table_exists(AF_AAM_TABLE_ALERTS) || !$db->table_exists(AF_AAM_TABLE_TYPES)) {
+        return false;
+    }
+
+    $typeId = af_aam_get_type_id($code);
+    if ($typeId === null) {
+        return false;
+    }
+
+    $since = TIME_NOW - max(0, (int)$seconds);
+
+    $where = "uid={$uid} AND type_id=" . (int)$typeId . " AND dateline>={$since}";
+    if ($fromUid > 0) {
+        $where .= " AND from_uid={$fromUid}";
+    }
+    if ($objectId > 0) {
+        $where .= " AND object_id={$objectId}";
+    }
+
+    $q = $db->simple_select(AF_AAM_TABLE_ALERTS, 'id', $where, ['limit' => 1]);
+    $id = (int)$db->fetch_field($q, 'id');
+
+    return ($id > 0);
+}
+
+function af_aam_maybe_alert_buddy_request(): void
+{
+    global $mybb, $db;
+
+    if (!af_aam_is_enabled()) {
+        return;
+    }
+
+    // только залогиненные
+    $fromUid = (int)($mybb->user['uid'] ?? 0);
+    if ($fromUid <= 0) {
+        return;
+    }
+
+    // защита от двойного срабатывания в одном хите (если где-то ещё хукнется)
+    static $done = false;
+    if ($done) {
+        return;
+    }
+
+    // нас интересует только добавление по username
+    $addUsername = (string)$mybb->get_input('add_username');
+    $addUsername = trim($addUsername);
+    if ($addUsername === '') {
+        return;
+    }
+
+    // MyBB делает это сам в do_editlists, но мы создаём алерт — значит тоже проверим ключ
+    $myPostKey = (string)$mybb->get_input('my_post_key');
+    if ($myPostKey !== '') {
+        // если ключ неверный — MyBB и так зарубит действие, алерт не нужен
+        verify_post_check($myPostKey);
+    } else {
+        // без ключа тоже не шлём (и MyBB обычно не даст)
+        return;
+    }
+
+    // находим пользователя, которого добавляют
+    $esc = $db->escape_string($addUsername);
+    $row = $db->fetch_array($db->simple_select('users', 'uid,username', "username='{$esc}'", ['limit' => 1]));
+    if (empty($row) || empty($row['uid'])) {
+        return;
+    }
+
+    $toUid = (int)$row['uid'];
+    if ($toUid <= 0 || $toUid === $fromUid) {
+        return;
+    }
+
+    // антиспам: если уже был такой алерт за последние 24ч — не дублируем
+    if (af_aam_has_recent_alert($toUid, 'buddy_request', $fromUid, 0, 86400)) {
+        $done = true;
+        return;
+    }
+
+    af_aam_add_alert(
+        $toUid,
+        'buddy_request',
+        0,
+        $fromUid,
+        [
+            // можно расширять позже (например, дать прямую ссылку на профиль инициатора)
+            'url' => 'usercp.php?action=editlists',
+        ]
+    );
+
+    $done = true;
 }
 
 // репутация
