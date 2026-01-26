@@ -1,0 +1,44 @@
+<div class="af-kb-header">
+    <h1>{$lang->af_kb_type_edit}</h1>
+    <a class="af-kb-btn" href="{$kb_cancel_link}">{$lang->af_kb_cancel}</a>
+</div>
+{$kb_errors}
+<form class="af-kb-form" method="post" action="misc.php?action=kb_type_edit">
+    <input type="hidden" name="my_post_key" value="{$mybb->post_code}" />
+    <section>
+        <h3>{$lang->af_kb_category_details}</h3>
+        <div class="af-kb-row">
+            <div>
+                <label>{$lang->af_kb_type_label}</label>
+                <input type="text" name="type" value="{$kb_type_value}" {$kb_type_readonly} required />
+            </div>
+            <div>
+                <label>{$lang->af_kb_sortorder}</label>
+                <input type="text" name="sortorder" value="{$kb_type_sortorder}" />
+                <div class="af-kb-inline">
+                    <label>{$lang->af_kb_active}</label>
+                    <input type="checkbox" name="active" value="1" {$kb_type_active_checked} />
+                </div>
+            </div>
+        </div>
+        <div class="af-kb-row">
+            <div>
+                <label>{$lang->af_kb_title_ru}</label>
+                <input type="text" name="title_ru" value="{$kb_type_title_ru}" />
+            </div>
+            <div>
+                <label>{$lang->af_kb_title_en}</label>
+                <input type="text" name="title_en" value="{$kb_type_title_en}" />
+            </div>
+        </div>
+        <label>{$lang->af_kb_description_ru}</label>
+        <textarea name="description_ru">{$kb_type_description_ru}</textarea>
+        <label>{$lang->af_kb_description_en}</label>
+        <textarea name="description_en">{$kb_type_description_en}</textarea>
+    </section>
+    <div class="af-kb-inline">
+        <button type="submit" class="af-kb-btn af-kb-btn--edit">{$lang->af_kb_save}</button>
+        <a class="af-kb-btn" href="{$kb_cancel_link}">{$lang->af_kb_cancel}</a>
+        {$kb_type_delete_link}
+    </div>
+</form>
