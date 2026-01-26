@@ -1,9 +1,11 @@
 <div class="af-kb-header">
-    <div class="af-kb-entry-header"{$kb_entry_bg_style}>
-        {$kb_breadcrumbs}
+    <div class="af-kb-entry-header">
         <h1>{$kb_entry_icon}{$kb_title}</h1>
     </div>
-    {$kb_edit_link}
+    <div class="af-kb-actions">
+        {$kb_edit_link}
+        {$kb_help_link}
+    </div>
 </div>
 <div class="af-kb-short">
     {$kb_short}
@@ -11,6 +13,7 @@
 <div class="af-kb-body">
     {$kb_body}
 </div>
+{$kb_meta_details}
 <div class="af-kb-blocks">
     {$kb_blocks}
 </div>

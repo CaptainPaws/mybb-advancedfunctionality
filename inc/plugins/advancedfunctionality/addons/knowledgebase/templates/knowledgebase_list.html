@@ -4,12 +4,13 @@
     <input type="text" name="q" value="{$kb_query}" placeholder="{$lang->af_kb_search_placeholder}" />
 </form>
 <div class="af-kb-header">
-    <div class="af-kb-type-header"{$kb_type_bg_style}>
+    <div class="af-kb-type-header">
         <h1>{$kb_type_icon}{$kb_type_title}</h1>
         <div class="af-kb-type-desc">{$kb_type_description}</div>
     </div>
     <div class="af-kb-actions">
         {$kb_type_actions}
+        {$kb_help_link}
     </div>
 </div>
 <div class="af-kb-entries">

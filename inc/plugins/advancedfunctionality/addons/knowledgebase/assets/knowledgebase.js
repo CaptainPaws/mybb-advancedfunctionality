@@ -1,4 +1,56 @@
 (function () {
+    function getEditorInstance(field) {
+        if (!field) {
+            return null;
+        }
+        if (window.jQuery && window.jQuery.fn && typeof window.jQuery.fn.sceditor === 'function') {
+            try {
+                return window.jQuery(field).sceditor('instance');
+            } catch (err) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    function setFieldValue(field, value) {
+        if (!field) {
+            return;
+        }
+        var instance = getEditorInstance(field);
+        if (instance) {
+            instance.val(value);
+            return;
+        }
+        field.value = value;
+    }
+
+    function initEditors(root) {
+        if (!window.jQuery || !window.jQuery.fn || typeof window.jQuery.fn.sceditor !== 'function') {
+            return;
+        }
+        var container = root || document;
+        var fields = container.querySelectorAll('textarea.af-kb-editor');
+        if (!fields.length) {
+            return;
+        }
+        var baseOptions = window.sceditor_options && typeof window.sceditor_options === 'object'
+            ? window.sceditor_options
+            : {
+                plugins: 'bbcode',
+                toolbar: 'bold,italic,underline,strike|left,center,right,justify|bulletlist,orderedlist|link,unlink|image|quote,code',
+                style: ''
+            };
+        fields.forEach(function (field) {
+            if (field.dataset.afKbEditor === '1') {
+                return;
+            }
+            field.dataset.afKbEditor = '1';
+            var options = Object.assign({}, baseOptions);
+            window.jQuery(field).sceditor(options);
+        });
+    }
+
     function initRepeater(containerId, addButtonId, templateId, indexAttr) {
         var container = document.getElementById(containerId);
         var addBtn = document.getElementById(addButtonId);
@@ -32,6 +84,9 @@
                 }
             }
             bumpIndex();
+            if (lastElement) {
+                initEditors(lastElement);
+            }
             return lastElement;
         }
 
@@ -63,7 +118,7 @@
         if (!field) {
             return;
         }
-        field.value = value;
+        setFieldValue(field, value);
     }
 
     function setBlockValues(blockElement, data) {
@@ -84,8 +139,40 @@
         Object.keys(fields).forEach(function (key) {
             var input = blockElement.querySelector('[name$="[' + key + ']"]');
             if (input) {
-                input.value = fields[key];
+                setFieldValue(input, fields[key]);
             }
+        });
+    }
+
+    function initCopyButtons() {
+        document.addEventListener('click', function (event) {
+            var target = event.target;
+            if (!(target instanceof HTMLElement)) {
+                return;
+            }
+            if (!target.classList.contains('af-kb-copy-json')) {
+                return;
+            }
+            var payload = target.getAttribute('data-json') || '';
+            if (payload === '') {
+                return;
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(payload);
+                return;
+            }
+            var temp = document.createElement('textarea');
+            temp.value = payload;
+            temp.style.position = 'fixed';
+            temp.style.opacity = '0';
+            document.body.appendChild(temp);
+            temp.select();
+            try {
+                document.execCommand('copy');
+            } catch (err) {
+                // ignore
+            }
+            document.body.removeChild(temp);
         });
     }
 
@@ -231,5 +318,7 @@
         var blockRepeater = initRepeater('af-kb-blocks', 'af-kb-add-block', 'af-kb-block-template', 'data-index');
         initRepeater('af-kb-relations', 'af-kb-add-relation', 'af-kb-relation-template', 'data-index');
         applyTemplate(blockRepeater);
+        initEditors(document);
+        initCopyButtons();
     });
 })();

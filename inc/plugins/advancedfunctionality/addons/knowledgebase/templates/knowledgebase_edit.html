@@ -1,6 +1,9 @@
 <div class="af-kb-header">
     <h1>{$lang->af_kb_edit}</h1>
-    <a class="af-kb-btn" href="misc.php?action=kb&type={$kb_type_value}&amp;key={$kb_key_value}">{$lang->af_kb_cancel}</a>
+    <div class="af-kb-actions">
+        <a class="af-kb-btn" href="misc.php?action=kb&type={$kb_type_value}&amp;key={$kb_key_value}">{$lang->af_kb_cancel}</a>
+        {$kb_help_link}
+    </div>
 </div>
 {$kb_errors}
 <form class="af-kb-form" method="post" action="misc.php?action=kb_edit">
@@ -37,6 +40,10 @@
         <textarea name="body_ru">{$kb_body_ru}</textarea>
         <label>Полное описание (EN)</label>
         <textarea name="body_en">{$kb_body_en}</textarea>
+        <label>Техническое описание (RU)</label>
+        <textarea name="tech_ru">{$kb_tech_ru}</textarea>
+        <label>Техническое описание (EN)</label>
+        <textarea name="tech_en">{$kb_tech_en}</textarea>
         <div class="af-kb-row">
             <div>
                 <label>Meta JSON</label>
@@ -92,7 +99,7 @@
             </div>
         </div>
         <label>Background URL</label>
-        <input type="text" name="bg_url" value="{$kb_bg_url}" />
+        <input type="text" name="background_url" value="{$kb_background_url}" />
     </section>
     <section>
         <h3>Шаблоны</h3>
@@ -200,9 +207,9 @@ meta_json:
             </div>
         </div>
         <label>Контент (RU)</label>
-        <textarea name="blocks[__INDEX__][content_ru]"></textarea>
+        <textarea class="af-kb-editor" name="blocks[__INDEX__][content_ru]"></textarea>
         <label>Контент (EN)</label>
-        <textarea name="blocks[__INDEX__][content_en]"></textarea>
+        <textarea class="af-kb-editor" name="blocks[__INDEX__][content_en]"></textarea>
         <label>Data JSON</label>
         <textarea name="blocks[__INDEX__][data_json]"></textarea>
         <button type="button" class="af-kb-remove">Удалить блок</button>

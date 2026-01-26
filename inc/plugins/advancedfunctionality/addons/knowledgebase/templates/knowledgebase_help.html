@@ -1,0 +1,77 @@
+<div class="af-kb-header">
+    <h1>{$lang->af_kb_help_title}</h1>
+    <div class="af-kb-actions">
+        <a class="af-kb-btn" href="misc.php?action=kb">{$lang->af_kb_cancel}</a>
+    </div>
+</div>
+
+<div class="af-kb-help-page">
+    <section>
+        <h3>Категории и записи</h3>
+        <p><strong>Category/Type</strong> — это вкладка или тип сущности (race, class, skill). Она задаёт визуальный стиль (фон, иконку, описание) и группирует записи.</p>
+        <p><strong>Entry</strong> — это конкретная запись внутри категории (например, race → human).</p>
+    </section>
+
+    <section>
+        <h3>Как выбирать key</h3>
+        <p>Ключ — это уникальный идентификатор внутри категории. Не повторяйте тип в ключе: если тип уже <code>race</code>, то ключ должен быть <code>human</code>, а не <code>race_human</code>.</p>
+    </section>
+
+    <section>
+        <h3>Блоки (Blocks)</h3>
+        <p>Блоки — это дополнительные секции записи. Они помогают структурировать контент: «Бонусы», «Лор», «Способности», «Ограничения».</p>
+        <p>Примеры блоков:</p>
+        <ul>
+            <li>race → blocks: bonuses, lore, traits</li>
+            <li>class → blocks: role, abilities, progression</li>
+            <li>skill → blocks: rules, effects, examples</li>
+        </ul>
+    </section>
+
+    <section>
+        <h3>Связи (Relations)</h3>
+        <p>Связи описывают отношения между записями.</p>
+        <ul>
+            <li>race → grants → skill:darkvision</li>
+            <li>class → requires → skill:athletics</li>
+        </ul>
+    </section>
+
+    <section>
+        <h3>Meta JSON</h3>
+        <p>Meta JSON хранит технические данные (grants, modifiers, tags, ui). Примеры:</p>
+        <div class="af-kb-code">
+<pre>{
+  "ui": {
+    "icon_url": "https://site/icons/races/human.png",
+    "background_url": "https://site/bg/races.jpg"
+  },
+  "grants": ["darkvision"],
+  "modifiers": [
+    {"stat":"dex","value":2}
+  ],
+  "tags": ["civilized","starter"]
+}</pre>
+        </div>
+        <div class="af-kb-code">
+<pre>{
+  "ui": {
+    "icon_url": "https://site/icons/skills/stealth.png"
+  },
+  "type": "active",
+  "cost": 2,
+  "cooldown": 1,
+  "effects": [
+    {"kind":"buff","stat":"dex","value":1,"duration_turns":3}
+  ]
+}</pre>
+        </div>
+        <p>Пример для relation meta_json:</p>
+        <div class="af-kb-code">
+<pre>{
+  "reason": "racial_trait",
+  "note": "Granted at character creation"
+}</pre>
+        </div>
+    </section>
+</div>
