@@ -5,6 +5,7 @@
   vertical-align: middle;
   margin-right: 8px;
   align-items: center;
+  float: left;
 }
 
 .af-aoa-avatar img{
