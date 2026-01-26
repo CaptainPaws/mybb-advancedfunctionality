@@ -35,9 +35,9 @@
             </div>
         </div>
         <label>{$lang->af_kb_description_ru}</label>
-        <textarea name="description_ru">{$kb_type_description_ru}</textarea>
+        <textarea class="af-kb-editor" name="description_ru">{$kb_type_description_ru}</textarea>
         <label>{$lang->af_kb_description_en}</label>
-        <textarea name="description_en">{$kb_type_description_en}</textarea>
+        <textarea class="af-kb-editor" name="description_en">{$kb_type_description_en}</textarea>
         <div class="af-kb-row">
             <div>
                 <label>Icon URL</label>
@@ -50,6 +50,8 @@
         </div>
         <label>Background URL</label>
         <input type="text" name="bg_url" value="{$kb_type_bg_url}" />
+        <label>Background Tab URL</label>
+        <input type="text" name="bg_tab_url" value="{$kb_type_bg_tab_url}" />
     </section>
     <div class="af-kb-inline">
         <button type="submit" class="af-kb-btn af-kb-btn--edit af-kb-btn-edit">{$lang->af_kb_save}</button>

@@ -1,0 +1,159 @@
+.af-kb-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid #ccd2dd;
+    background: #f7f9ff;
+    color: #2f3b55;
+    font-size: 0.92em;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.af-kb-chip .af-kb-chip-icon {
+    display: inline-flex;
+    align-items: center;
+}
+
+.af-kb-chip .af-kb-icon-img {
+    width: 18px;
+    height: 18px;
+}
+
+.af-kb-tooltip {
+    position: absolute;
+    z-index: 10000;
+    max-width: 260px;
+    background: #1d2435;
+    color: #fff;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    line-height: 1.4;
+    white-space: pre-line;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+}
+
+.af-kb-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 10001;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.af-kb-modal-backdrop.is-active {
+    display: flex;
+}
+
+.af-kb-modal {
+    background: #fff;
+    border-radius: 10px;
+    max-width: 720px;
+    width: 100%;
+    max-height: 80vh;
+    overflow: auto;
+    padding: 18px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+}
+
+.af-kb-modal-body {
+    color: #2f3b55;
+    line-height: 1.5;
+}
+
+.af-kb-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.af-kb-modal-close {
+    border: none;
+    background: transparent;
+    font-size: 1.2em;
+    cursor: pointer;
+}
+
+.af-kb-insert-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.af-kb-insert-tab {
+    border: 1px solid #ccd2dd;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.af-kb-insert-tab.is-active {
+    border-color: #4462b2;
+    background: #f2f5ff;
+}
+
+.af-kb-insert-list {
+    display: grid;
+    gap: 8px;
+}
+
+.af-kb-insert-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #dcdfe6;
+}
+
+.af-kb-insert-item-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.af-kb-insert-search {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #ccd2dd;
+    margin-bottom: 12px;
+}
+
+.af-kb-insert-empty {
+    color: #667085;
+    font-style: italic;
+}
+.af-kb-btn {
+    display: inline-block;
+    padding: 6px 12px;
+    background: #4462b2;
+    color: #fff;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.af-kb-btn:hover {
+    background: #2f4e96;
+}
+
+.af-kb-btn--edit {
+    background: #4462b2;
+}
+
+.af-kb-btn--edit:hover {
+    background: #2f4e96;
+}

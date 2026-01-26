@@ -136,6 +136,7 @@ CREATE TABLE {TABLE_PREFIX}af_kb_types (
   icon_class VARCHAR(128) NOT NULL DEFAULT '',
   icon_url VARCHAR(255) NOT NULL DEFAULT '',
   bg_url VARCHAR(255) NOT NULL DEFAULT '',
+  bg_tab_url VARCHAR(255) NOT NULL DEFAULT '',
   sortorder INT NOT NULL DEFAULT 0,
   active TINYINT(1) NOT NULL DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -252,12 +253,21 @@ SQL;
     );
     af_kb_ensure_setting(
         $gid,
+        'af_kb_nav_link_enabled',
+        $lang->af_kb_nav_link_enabled ?? 'KB nav link',
+        $lang->af_kb_nav_link_enabled_desc ?? 'Show Knowledge Base link in the top navigation.',
+        'yesno',
+        '1',
+        3
+    );
+    af_kb_ensure_setting(
+        $gid,
         'af_kb_editor_groups',
         $lang->af_kb_editor_groups ?? 'Editor groups',
         $lang->af_kb_editor_groups_desc ?? 'CSV of group IDs that can edit.',
         'text',
         '',
-        3
+        4
     );
     af_kb_ensure_setting(
         $gid,
@@ -266,7 +276,7 @@ SQL;
         $lang->af_kb_types_manage_groups_desc ?? 'CSV of group IDs that can manage types.',
         'text',
         '',
-        4
+        5
     );
     af_kb_ensure_setting(
         $gid,
@@ -275,7 +285,7 @@ SQL;
         $lang->af_kb_atf_map_desc ?? 'JSON mapping of ATF field → KB type.',
         'textarea',
         '{}',
-        5
+        6
     );
 
     if (function_exists('rebuild_settings')) {
@@ -302,7 +312,7 @@ function af_knowledgebase_uninstall(): bool
     $db->drop_table('af_kb_relations', true);
     $db->drop_table('af_kb_log', true);
 
-    $db->delete_query('settings', "name IN ('af_knowledgebase_enabled','af_kb_public_catalog','af_kb_editor_groups','af_kb_types_manage_groups','af_kb_atf_map')");
+    $db->delete_query('settings', "name IN ('af_knowledgebase_enabled','af_kb_public_catalog','af_kb_nav_link_enabled','af_kb_editor_groups','af_kb_types_manage_groups','af_kb_atf_map')");
     $db->delete_query('settinggroups', "name='af_knowledgebase'");
     $db->delete_query('templates', "title LIKE 'knowledgebase_%'");
 
@@ -386,6 +396,9 @@ function af_kb_ensure_schema(): void
         }
         if (!$db->field_exists('bg_url', 'af_kb_types')) {
             $db->add_column('af_kb_types', 'bg_url', "VARCHAR(255) NOT NULL DEFAULT ''");
+        }
+        if (!$db->field_exists('bg_tab_url', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'bg_tab_url', "VARCHAR(255) NOT NULL DEFAULT ''");
         }
     }
 
@@ -557,12 +570,24 @@ function af_kb_sanitize_url(string $url): string
     }
 
     $parts = parse_url($url);
-    if (!$parts || empty($parts['scheme'])) {
+    if ($parts === false) {
         return '';
     }
 
-    $scheme = strtolower((string)$parts['scheme']);
-    if (!in_array($scheme, ['http', 'https'], true)) {
+    $scheme = strtolower((string)($parts['scheme'] ?? ''));
+    if ($scheme !== '') {
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            return '';
+        }
+
+        return $url;
+    }
+
+    if (strpos($url, '//') === 0) {
+        return '';
+    }
+
+    if (preg_match('~^[a-z][a-z0-9+.-]*:~i', $url)) {
         return '';
     }
 
@@ -603,6 +628,35 @@ function af_kb_build_bg_style(string $bgUrl): string
     }
 
     return "background-image:url('" . htmlspecialchars_uni($url) . "');";
+}
+
+function af_kb_build_body_bg_style(string $bgUrl): string
+{
+    $url = af_kb_sanitize_url($bgUrl);
+    if ($url === '') {
+        return '';
+    }
+
+    $escaped = htmlspecialchars_uni($url);
+    return '<style>body{background:url(\'' . $escaped . '\') no-repeat center center fixed;background-size:cover;}</style>';
+}
+
+function af_kb_build_tech_hint(string $text): string
+{
+    $text = trim(strip_tags($text));
+    if ($text === '') {
+        return '';
+    }
+
+    $text = preg_replace('/\r\n?/', "\n", $text);
+    $lines = preg_split('/\n+/', $text);
+    if (!is_array($lines)) {
+        return $text;
+    }
+
+    $lines = array_slice($lines, 0, 3);
+    $text = implode("\n", $lines);
+    return trim($text);
 }
 
 function af_kb_parse_message(string $message): string
@@ -752,6 +806,41 @@ function af_kb_get_entry_ui(array $entry): array
     ];
 }
 
+function af_kb_get_entry_summary(string $type, string $key): array
+{
+    static $cache = [];
+    $cacheKey = $type . ':' . $key;
+    if (isset($cache[$cacheKey])) {
+        return $cache[$cacheKey];
+    }
+
+    global $db;
+
+    $where = "type='".$db->escape_string($type)."' AND `key`='".$db->escape_string($key)."'";
+    if (!af_kb_can_edit()) {
+        $where .= " AND active=1";
+    }
+
+    $entry = $db->fetch_array($db->simple_select('af_kb_entries', '*', $where, ['limit' => 1]));
+    if (!$entry) {
+        $cache[$cacheKey] = [];
+        return [];
+    }
+
+    $ui = af_kb_get_entry_ui($entry);
+    $title = af_kb_pick_text($entry, 'title') ?: $entry['key'];
+    $techHint = af_kb_build_tech_hint(af_kb_pick_text($entry, 'tech'));
+
+    $cache[$cacheKey] = [
+        'title' => $title,
+        'icon_url' => $ui['icon_url'],
+        'icon_class' => $ui['icon_class'],
+        'tech_hint' => $techHint,
+    ];
+
+    return $cache[$cacheKey];
+}
+
 /* -------------------- ATF UTILITIES -------------------- */
 
 function af_kb_parse_atf_options(string $rawOptions): array
@@ -791,42 +880,70 @@ function af_knowledgebase_init(): void
 
     $plugins->add_hook('misc_start', 'af_kb_misc_route', 10);
     $plugins->add_hook('pre_output_page', 'af_knowledgebase_pre_output', 10);
+    $plugins->add_hook('parse_message_end', 'af_kb_parse_message_end', 10);
 }
 
 function af_knowledgebase_pre_output(string &$page = ''): void
 {
     global $mybb, $lang;
 
-    if (strpos($page, AF_KB_MARK) !== false) {
-        return;
-    }
-
     $action = $mybb->get_input('action');
-    $is_kb_page = in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help'], true);
+    $is_kb_page = in_array(
+        $action,
+        ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types'],
+        true
+    );
+    $enabled = !empty($mybb->settings['af_knowledgebase_enabled']);
+    $hasMark = strpos($page, AF_KB_MARK) !== false;
 
-    if ($is_kb_page && !empty($mybb->settings['af_knowledgebase_enabled'])) {
+    if ($enabled && !$hasMark) {
         $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
         if ($bburl !== '') {
             $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_KB_ID . '/assets';
-            $cssTag = '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase.css?ver='.AF_KB_VER.'" />';
-            $jsTag = '<script src="'.$assetsBase.'/knowledgebase.js?ver='.AF_KB_VER.'"></script>';
+            $cssTag = '';
+            $jsTag = '';
             $editorAssets = '';
-            if ($action === 'kb_edit') {
+
+            if ($is_kb_page) {
+                $cssTag .= '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase.css?ver='.AF_KB_VER.'" />';
+                $jsTag .= '<script src="'.$assetsBase.'/knowledgebase.js?ver='.AF_KB_VER.'"></script>';
+            }
+
+            if (in_array($action, ['kb_edit', 'kb_type_edit'], true)) {
                 $editorAssets = '<link rel="stylesheet" type="text/css" href="'.$bburl.'/jscripts/sceditor/themes/default.min.css" />'
                     . '<script src="'.$bburl.'/jscripts/sceditor/jquery.sceditor.min.js"></script>'
                     . '<script src="'.$bburl.'/jscripts/sceditor/jquery.sceditor.bbcode.min.js"></script>'
                     . '<script src="'.$bburl.'/jscripts/sceditor/jquery.sceditor.mybb.min.js"></script>';
             }
 
+            af_knowledgebase_load_lang(false);
+            $langPayload = json_encode([
+                'kbInsertLabel' => $lang->af_kb_kb_insert_label ?? 'KB',
+                'kbInsertTitle' => $lang->af_kb_kb_insert_title ?? 'Insert KB',
+                'kbInsertSearch' => $lang->af_kb_kb_insert_search ?? 'Search...',
+                'kbInsertSelect' => $lang->af_kb_kb_insert_select ?? 'Select category',
+                'kbInsertEmpty' => $lang->af_kb_kb_insert_empty ?? 'Nothing found',
+                'kbInsertButton' => $lang->af_kb_kb_insert_button ?? 'Insert',
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $langTag = $langPayload !== false ? '<script>window.afKbLang='.$langPayload.';</script>' : '';
+
+            $kbUiCss = '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase_kbui.css?ver='.AF_KB_VER.'" />';
+            $chipsJs = '<script src="'.$assetsBase.'/knowledgebase_chips.js?ver='.AF_KB_VER.'"></script>';
+            $insertJs = '<script src="'.$assetsBase.'/knowledgebase_insert.js?ver='.AF_KB_VER.'"></script>';
+
             if (stripos($page, '</head>') !== false) {
-                $page = str_ireplace('</head>', $cssTag.$editorAssets.$jsTag.AF_KB_MARK.'</head>', $page);
+                $page = str_ireplace(
+                    '</head>',
+                    $cssTag.$kbUiCss.$editorAssets.$jsTag.$chipsJs.$insertJs.$langTag.AF_KB_MARK.'</head>',
+                    $page
+                );
             } else {
-                $page .= $cssTag.$editorAssets.$jsTag.AF_KB_MARK;
+                $page .= $cssTag.$kbUiCss.$editorAssets.$jsTag.$chipsJs.$insertJs.$langTag.AF_KB_MARK;
             }
         }
     }
 
-    if (!empty($mybb->settings['af_kb_public_catalog'])) {
+    if ($enabled && (int)af_kb_get_setting('af_kb_nav_link_enabled', 1) === 1 && af_kb_can_view()) {
         if (strpos($page, '<!--af_kb_nav-->') === false) {
             af_knowledgebase_load_lang(false);
             $linkText = $lang->af_knowledgebase_name ?? 'KB';
@@ -844,6 +961,46 @@ function af_knowledgebase_pre_output(string &$page = ''): void
     }
 }
 
+function af_kb_parse_message_end(&$message): void
+{
+    global $mybb;
+
+    if (empty($mybb->settings['af_knowledgebase_enabled'])) {
+        return;
+    }
+
+    if (!af_kb_can_view()) {
+        return;
+    }
+
+    if (stripos($message, '[kb=') === false) {
+        return;
+    }
+
+    $message = preg_replace_callback(
+        '/\\[kb=([a-z0-9_-]{2,64}):([a-z0-9_-]{2,64})\\]/i',
+        function (array $matches): string {
+            $type = strtolower($matches[1]);
+            $key = strtolower($matches[2]);
+            $summary = af_kb_get_entry_summary($type, $key);
+            $title = $summary['title'] ?? ($type . ':' . $key);
+            $iconHtml = af_kb_build_icon_html($summary['icon_url'] ?? '', $summary['icon_class'] ?? '');
+            $iconWrap = $iconHtml !== '' ? '<span class="af-kb-chip-icon">' . $iconHtml . '</span>' : '';
+            $techHint = $summary['tech_hint'] ?? '';
+
+            $attrs = ' data-kb-type="' . htmlspecialchars_uni($type) . '" data-kb-key="' . htmlspecialchars_uni($key) . '"'
+                . ' data-kb-title="' . htmlspecialchars_uni($title) . '"';
+            if ($techHint !== '') {
+                $attrs .= ' data-tech-hint="' . htmlspecialchars_uni($techHint) . '"';
+            }
+
+            return '<span class="af-kb-chip"' . $attrs . '>' . $iconWrap
+                . '<span class="af-kb-chip-label">' . htmlspecialchars_uni($title) . '</span></span>';
+        },
+        $message
+    );
+}
+
 /* -------------------- ROUTER -------------------- */
 
 function af_kb_misc_route(): void
@@ -851,7 +1008,7 @@ function af_kb_misc_route(): void
     global $mybb;
 
     $action = $mybb->get_input('action');
-    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help'], true)) {
+    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types'], true)) {
         return;
     }
 
@@ -866,6 +1023,9 @@ function af_kb_misc_route(): void
     }
     if ($action === 'kb_list') {
         af_kb_handle_json_list();
+    }
+    if ($action === 'kb_types') {
+        af_kb_handle_json_types();
     }
     if ($action === 'kb_children') {
         af_kb_handle_json_children();
@@ -948,7 +1108,7 @@ function af_kb_handle_view(): void
             $desc = af_kb_pick_text($row, 'description');
             $iconHtml = af_kb_build_icon_html($row['icon_url'] ?? '', $row['icon_class'] ?? '');
             $iconWrap = $iconHtml !== '' ? '<span class="af-kb-icon">' . $iconHtml . '</span>' : '';
-            $bgStyle = af_kb_build_bg_style($row['bg_url'] ?? '');
+            $bgStyle = af_kb_build_bg_style($row['bg_tab_url'] ?? '');
             $styleAttr = $bgStyle !== '' ? ' style="' . $bgStyle . '"' : '';
             $bgClass = $bgStyle !== '' ? ' af-kb-tab--with-bg' : '';
             $rows .= '<a class="af-kb-tab'.$bgClass.'"'.$styleAttr.' href="misc.php?action=kb&type='.htmlspecialchars_uni($row['type']).'">'
@@ -976,6 +1136,7 @@ function af_kb_handle_view(): void
             ? '<a class="af-kb-help-link" href="misc.php?action=kb_help" title="'.htmlspecialchars_uni($lang->af_kb_help_title ?? 'KB help').'"><i class="fa-regular fa-circle-question"></i></a>'
             : '';
         $kb_page_bg = '';
+        $kb_body_style = '';
         $af_kb_content = '';
         eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_catalog') . "\";");
         eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
@@ -1018,22 +1179,6 @@ function af_kb_handle_view(): void
             $entries[] = $row;
         }
 
-        $rows = '';
-        foreach ($entries as $row) {
-            $title = af_kb_pick_text($row, 'title');
-            if ($title === '') {
-                $title = $row['key'];
-            }
-            $short = af_kb_parse_message(af_kb_pick_text($row, 'short'));
-            $entryUi = af_kb_get_entry_ui($row);
-            $iconHtml = af_kb_build_icon_html($entryUi['icon_url'], $entryUi['icon_class']);
-            $iconWrap = $iconHtml !== '' ? '<span class="af-kb-icon">' . $iconHtml . '</span>' : '';
-            $rows .= '<div class="af-kb-entry">
-                <h3><a href="misc.php?action=kb&type='.htmlspecialchars_uni($row['type']).'&key='.htmlspecialchars_uni($row['key']).'">'.$iconWrap.htmlspecialchars_uni($title).'</a></h3>
-                <div class="af-kb-entry-short">'.$short.'</div>
-            </div>';
-        }
-
         $typeRow = $db->fetch_array(
             $db->simple_select('af_kb_types', '*', "type='".$db->escape_string($type)."'", ['limit' => 1])
         );
@@ -1044,6 +1189,29 @@ function af_kb_handle_view(): void
             $typeDesc = af_kb_pick_text($typeRow, 'description');
         }
 
+        $typeTabBgStyle = $typeRow ? af_kb_build_bg_style($typeRow['bg_tab_url'] ?? '') : '';
+        $typeIconUrl = $typeRow ? ($typeRow['icon_url'] ?? '') : '';
+        $typeIconClass = $typeRow ? ($typeRow['icon_class'] ?? '') : '';
+        $rows = '';
+        foreach ($entries as $row) {
+            $title = af_kb_pick_text($row, 'title');
+            if ($title === '') {
+                $title = $row['key'];
+            }
+            $short = af_kb_parse_message(af_kb_pick_text($row, 'short'));
+            $entryUi = af_kb_get_entry_ui($row);
+            $iconUrl = $entryUi['icon_url'] ?: $typeIconUrl;
+            $iconClass = $entryUi['icon_class'] ?: $typeIconClass;
+            $iconHtml = af_kb_build_icon_html($iconUrl, $iconClass);
+            $iconWrap = $iconHtml !== '' ? '<span class="af-kb-icon">' . $iconHtml . '</span>' : '';
+            $entryStyle = $typeTabBgStyle !== '' ? ' style="' . $typeTabBgStyle . '"' : '';
+            $entryClass = $typeTabBgStyle !== '' ? ' af-kb-entry--with-bg' : '';
+            $rows .= '<div class="af-kb-entry'.$entryClass.'"'.$entryStyle.'>
+                <h3><a href="misc.php?action=kb&type='.htmlspecialchars_uni($row['type']).'&key='.htmlspecialchars_uni($row['key']).'">'.$iconWrap.htmlspecialchars_uni($title).'</a></h3>
+                <div class="af-kb-entry-short">'.$short.'</div>
+            </div>';
+        }
+
         if (function_exists('add_breadcrumb')) {
             add_breadcrumb($lang->af_kb_catalog_title ?? 'Knowledge Base', 'misc.php?action=kb');
             add_breadcrumb($typeTitle, 'misc.php?action=kb&type=' . urlencode($type));
@@ -1051,14 +1219,14 @@ function af_kb_handle_view(): void
 
         $typeIconHtml = $typeRow ? af_kb_build_icon_html($typeRow['icon_url'] ?? '', $typeRow['icon_class'] ?? '') : '';
         $kb_type_icon = $typeIconHtml !== '' ? '<span class="af-kb-icon">' . $typeIconHtml . '</span>' : '';
-        $typeBgStyle = $typeRow ? af_kb_build_bg_style($typeRow['bg_url'] ?? '') : '';
-
         $kb_page_title = htmlspecialchars_uni($typeTitle);
         $kb_type_title = htmlspecialchars_uni($typeTitle);
         $kb_type_description = af_kb_parse_message($typeDesc);
         $kb_type_value = htmlspecialchars_uni($type);
         $kb_query = htmlspecialchars_uni($query);
         $kb_entries_rows = $rows;
+        $kb_entries_style = $typeTabBgStyle !== '' ? ' style="' . $typeTabBgStyle . '"' : '';
+        $kb_entries_class = $typeTabBgStyle !== '' ? ' af-kb-entries--with-bg' : '';
         $paginationUrl = 'misc.php?action=kb&type=' . urlencode($type);
         if ($query !== '') {
             $paginationUrl .= '&q=' . urlencode($query);
@@ -1080,7 +1248,8 @@ function af_kb_handle_view(): void
             ? '<a class="af-kb-help-link" href="misc.php?action=kb_help" title="'.htmlspecialchars_uni($lang->af_kb_help_title ?? 'KB help').'"><i class="fa-regular fa-circle-question"></i></a>'
             : '';
         $kb_type_actions = implode(' ', $actions);
-        $kb_page_bg = $typeBgStyle !== '' ? '<div class="af-kb-bg" style="' . $typeBgStyle . '"></div>' : '';
+        $kb_page_bg = '';
+        $kb_body_style = af_kb_build_body_bg_style($typeRow ? ($typeRow['bg_url'] ?? '') : '');
         $af_kb_content = '';
         eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_list') . "\";");
         eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
@@ -1201,8 +1370,6 @@ function af_kb_handle_view(): void
     $entryUi = af_kb_get_entry_ui($entry);
     $entryIconHtml = af_kb_build_icon_html($entryUi['icon_url'], $entryUi['icon_class']);
     $kb_entry_icon = $entryIconHtml !== '' ? '<span class="af-kb-icon">' . $entryIconHtml . '</span>' : '';
-    $entryBgStyle = af_kb_build_bg_style($entryUi['background_url']);
-
     $kb_page_title = htmlspecialchars_uni($title);
     $kb_title = htmlspecialchars_uni($title);
     $kb_short = $short;
@@ -1220,7 +1387,9 @@ function af_kb_handle_view(): void
             $lang->af_kb_copy_json ?? 'Copy JSON'
         );
     }
-    $kb_page_bg = $entryBgStyle !== '' ? '<div class="af-kb-bg" style="' . $entryBgStyle . '"></div>' : '';
+    $kb_page_bg = '';
+    $bodyBgUrl = $entryUi['background_url'] ?: ($typeRow ? ($typeRow['bg_url'] ?? '') : '');
+    $kb_body_style = af_kb_build_body_bg_style($bodyBgUrl);
     $af_kb_content = '';
     eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_view') . "\";");
     eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
@@ -1302,9 +1471,9 @@ function af_kb_handle_edit(): void
         }
 
         $metaJson = trim((string)$mybb->get_input('meta_json'));
-        $iconClass = af_kb_sanitize_icon_class((string)$mybb->get_input('icon_class'));
-        $iconUrl = af_kb_sanitize_url((string)$mybb->get_input('icon_url'));
-        $bgUrl = af_kb_sanitize_url((string)$mybb->get_input('background_url'));
+        $entryIconClass = af_kb_sanitize_icon_class((string)$mybb->get_input('icon_class'));
+        $entryIconUrl = af_kb_sanitize_url((string)$mybb->get_input('icon_url'));
+        $entryBgUrl = af_kb_sanitize_url((string)$mybb->get_input('background_url'));
         if (!af_kb_validate_json($metaJson)) {
             $errors[] = $lang->af_kb_invalid_json ?? 'Invalid JSON.';
         }
@@ -1324,8 +1493,8 @@ function af_kb_handle_edit(): void
                 $contentRu = trim((string)($block['content_ru'] ?? ''));
                 $contentEn = trim((string)($block['content_en'] ?? ''));
                 $dataJson = trim((string)($block['data_json'] ?? ''));
-                $iconClass = af_kb_sanitize_icon_class((string)($block['icon_class'] ?? ''));
-                $iconUrl = af_kb_sanitize_url((string)($block['icon_url'] ?? ''));
+                $blockIconClass = af_kb_sanitize_icon_class((string)($block['icon_class'] ?? ''));
+                $blockIconUrl = af_kb_sanitize_url((string)($block['icon_url'] ?? ''));
                 $active = !empty($block['active']) ? 1 : 0;
                 $sortorder = (int)($block['sortorder'] ?? 0);
 
@@ -1346,8 +1515,8 @@ function af_kb_handle_edit(): void
                     'content_ru'  => $contentRu,
                     'content_en'  => $contentEn,
                     'data_json'   => af_kb_normalize_json($dataJson),
-                    'icon_class'  => $iconClass,
-                    'icon_url'    => $iconUrl,
+                    'icon_class'  => $blockIconClass,
+                    'icon_url'    => $blockIconUrl,
                     'active'      => $active,
                     'sortorder'   => $sortorder,
                 ];
@@ -1416,9 +1585,9 @@ function af_kb_handle_edit(): void
             if (!isset($metaPayload['ui']) || !is_array($metaPayload['ui'])) {
                 $metaPayload['ui'] = [];
             }
-            $metaPayload['ui']['icon_class'] = $iconClass;
-            $metaPayload['ui']['icon_url'] = $iconUrl;
-            $metaPayload['ui']['background_url'] = $bgUrl;
+            $metaPayload['ui']['icon_class'] = $entryIconClass;
+            $metaPayload['ui']['icon_url'] = $entryIconUrl;
+            $metaPayload['ui']['background_url'] = $entryBgUrl;
             $metaJsonNormalized = json_encode($metaPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             if ($metaJsonNormalized === false) {
                 $metaJsonNormalized = '{}';
@@ -1436,9 +1605,9 @@ function af_kb_handle_edit(): void
                 'tech_ru'    => $db->escape_string((string)$mybb->get_input('tech_ru')),
                 'tech_en'    => $db->escape_string((string)$mybb->get_input('tech_en')),
                 'meta_json'  => $db->escape_string(af_kb_normalize_json($metaJsonNormalized)),
-                'icon_class' => $db->escape_string($iconClass),
-                'icon_url'   => $db->escape_string($iconUrl),
-                'bg_url'     => $db->escape_string($bgUrl),
+                'icon_class' => $db->escape_string($entryIconClass),
+                'icon_url'   => $db->escape_string($entryIconUrl),
+                'bg_url'     => $db->escape_string($entryBgUrl),
                 'active'     => (int)$mybb->get_input('active', MyBB::INPUT_INT) ? 1 : 0,
                 'sortorder'  => (int)$mybb->get_input('sortorder', MyBB::INPUT_INT),
                 'updated_at' => TIME_NOW,
@@ -1626,7 +1795,10 @@ function af_kb_handle_edit(): void
     $kb_help_link = af_kb_can_edit()
         ? '<a class="af-kb-help-link" href="misc.php?action=kb_help" title="'.htmlspecialchars_uni($lang->af_kb_help_title ?? 'KB help').'"><i class="fa-regular fa-circle-question"></i></a>'
         : '';
+    $kb_tech_template_label = htmlspecialchars_uni($lang->af_kb_insert_template ?? 'Insert template');
+    $kb_tech_template = htmlspecialchars_uni($lang->af_kb_tech_template_value ?? '[icon=URL_OR_CLASS] Short technical hint here (1–2 sentences).');
     $kb_page_bg = '';
+    $kb_body_style = '';
 
     if (function_exists('add_breadcrumb')) {
         add_breadcrumb($lang->af_kb_catalog_title ?? 'Knowledge Base', 'misc.php?action=kb');
@@ -1692,6 +1864,7 @@ function af_kb_handle_type_edit(): void
         $iconClass = af_kb_sanitize_icon_class((string)$mybb->get_input('icon_class'));
         $iconUrl = af_kb_sanitize_url((string)$mybb->get_input('icon_url'));
         $bgUrl = af_kb_sanitize_url((string)$mybb->get_input('bg_url'));
+        $bgTabUrl = af_kb_sanitize_url((string)$mybb->get_input('bg_tab_url'));
         $sortorder = (int)$mybb->get_input('sortorder', MyBB::INPUT_INT);
         $active = (int)$mybb->get_input('active', MyBB::INPUT_INT) ? 1 : 0;
 
@@ -1715,6 +1888,7 @@ function af_kb_handle_type_edit(): void
                 'icon_class'     => $db->escape_string($iconClass),
                 'icon_url'       => $db->escape_string($iconUrl),
                 'bg_url'         => $db->escape_string($bgUrl),
+                'bg_tab_url'     => $db->escape_string($bgTabUrl),
                 'sortorder'      => $sortorder,
                 'active'         => $active,
             ];
@@ -1738,6 +1912,7 @@ function af_kb_handle_type_edit(): void
         'icon_class'     => '',
         'icon_url'       => '',
         'bg_url'         => '',
+        'bg_tab_url'     => '',
         'sortorder'      => 0,
         'active'         => 1,
     ];
@@ -1760,6 +1935,7 @@ function af_kb_handle_type_edit(): void
     $kb_type_icon_class = htmlspecialchars_uni($typeRow['icon_class'] ?? '');
     $kb_type_icon_url = htmlspecialchars_uni($typeRow['icon_url'] ?? '');
     $kb_type_bg_url = htmlspecialchars_uni($typeRow['bg_url'] ?? '');
+    $kb_type_bg_tab_url = htmlspecialchars_uni($typeRow['bg_tab_url'] ?? '');
     $kb_type_sortorder = (int)$typeRow['sortorder'];
     $kb_type_active_checked = !empty($typeRow['active']) ? 'checked="checked"' : '';
     $kb_type_readonly = $isEditing ? 'readonly="readonly"' : '';
@@ -1776,14 +1952,16 @@ function af_kb_handle_type_edit(): void
         $kb_type_delete_link = '<a class="af-kb-btn af-kb-btn--delete af-kb-btn-delete" href="misc.php?action=kb_type_delete&type='.htmlspecialchars_uni($typeRow['type']).'&my_post_key='.htmlspecialchars_uni($mybb->post_code).'" onclick="return confirm(\''.$confirm.'\');">'.htmlspecialchars_uni($lang->af_kb_type_delete ?? 'Delete category').'</a>';
     }
     $kb_page_bg = '';
+    $kb_body_style = '';
 
     if (function_exists('add_breadcrumb')) {
         add_breadcrumb($lang->af_kb_catalog_title ?? 'Knowledge Base', 'misc.php?action=kb');
-        if (!empty($typeRow['type'])) {
-            $typeTitle = af_kb_pick_text($typeRow, 'title') ?: $typeRow['type'];
-            add_breadcrumb($typeTitle, 'misc.php?action=kb&type=' . urlencode($typeRow['type']));
-        }
-        add_breadcrumb($lang->af_kb_type_edit ?? 'Edit category', 'misc.php?action=kb_type_edit&type=' . urlencode($typeRow['type']));
+        $categoriesLabel = $lang->af_kb_categories_label ?? 'Categories';
+        add_breadcrumb($categoriesLabel, 'misc.php?action=kb');
+        $editLabel = $isEditing
+            ? ($lang->af_kb_type_edit ?? 'Edit category')
+            : ($lang->af_kb_type_create ?? 'Create category');
+        add_breadcrumb($editLabel, 'misc.php?action=kb_type_edit&type=' . urlencode($typeRow['type']));
     }
 
     $af_kb_content = '';
@@ -1843,6 +2021,7 @@ function af_kb_handle_help(): void
 
     $kb_page_title = htmlspecialchars_uni($lang->af_kb_help_title ?? 'KB help');
     $kb_page_bg = '';
+    $kb_body_style = '';
 
     if (function_exists('add_breadcrumb')) {
         add_breadcrumb($lang->af_kb_catalog_title ?? 'Knowledge Base', 'misc.php?action=kb');
@@ -1909,6 +2088,7 @@ function af_kb_handle_json_get(): void
         ];
     }
 
+    $entryUi = af_kb_get_entry_ui($entry);
     $payload = [
         'entry' => [
             'type'      => $entry['type'],
@@ -1917,6 +2097,9 @@ function af_kb_handle_json_get(): void
             'short'     => af_kb_pick_text($entry, 'short'),
             'body'      => af_kb_pick_text($entry, 'body'),
             'meta_json' => $entry['meta_json'],
+            'tech_hint' => af_kb_build_tech_hint(af_kb_pick_text($entry, 'tech')),
+            'icon_url'  => $entryUi['icon_url'],
+            'icon_class'=> $entryUi['icon_class'],
         ],
         'blocks' => $blocks,
         'relations' => $relations,
@@ -1953,9 +2136,39 @@ function af_kb_handle_json_list(): void
     $items = [];
     $q = $db->simple_select('af_kb_entries', '*', $where, ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
     while ($row = $db->fetch_array($q)) {
+        $entryUi = af_kb_get_entry_ui($row);
         $items[] = [
             'key'   => $row['key'],
             'title' => af_kb_pick_text($row, 'title') ?: $row['key'],
+            'tech_hint' => af_kb_build_tech_hint(af_kb_pick_text($row, 'tech')),
+            'icon_url' => $entryUi['icon_url'],
+            'icon_class' => $entryUi['icon_class'],
+        ];
+    }
+
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['items' => $items], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+function af_kb_handle_json_types(): void
+{
+    global $mybb, $db, $lang;
+
+    if (!af_kb_can_view()) {
+        af_kb_render_json_error($lang->af_kb_no_access ?? 'No access', 403);
+    }
+
+    $where = af_kb_can_edit() ? '1=1' : 'active=1';
+    $items = [];
+    $q = $db->simple_select('af_kb_types', '*', $where, ['order_by' => 'sortorder, type', 'order_dir' => 'ASC']);
+    while ($row = $db->fetch_array($q)) {
+        $items[] = [
+            'type' => $row['type'],
+            'title' => af_kb_pick_text($row, 'title') ?: $row['type'],
+            'icon_url' => $row['icon_url'],
+            'icon_class' => $row['icon_class'],
+            'background_tab_url' => $row['bg_tab_url'] ?? '',
         ];
     }
 

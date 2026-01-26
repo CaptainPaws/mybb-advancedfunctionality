@@ -176,6 +176,39 @@
         });
     }
 
+    function initTechTemplateButtons() {
+        document.addEventListener('click', function (event) {
+            var target = event.target;
+            if (!(target instanceof HTMLElement)) {
+                return;
+            }
+            if (!target.classList.contains('af-kb-tech-template')) {
+                return;
+            }
+            var fieldName = target.getAttribute('data-target');
+            var template = target.getAttribute('data-template') || '';
+            if (!fieldName || template === '') {
+                return;
+            }
+            var field = document.querySelector('textarea[name="' + fieldName + '"]');
+            if (!field) {
+                return;
+            }
+            var currentValue = '';
+            var instance = getEditorInstance(field);
+            if (instance) {
+                currentValue = instance.val();
+            } else {
+                currentValue = field.value;
+            }
+            if (currentValue.trim() === '') {
+                setFieldValue(field, template);
+                return;
+            }
+            setFieldValue(field, template + '\n' + currentValue);
+        });
+    }
+
     function applyTemplate(blockRepeater) {
         var select = document.getElementById('af-kb-template-select');
         var button = document.getElementById('af-kb-apply-template');
@@ -320,5 +353,6 @@
         applyTemplate(blockRepeater);
         initEditors(document);
         initCopyButtons();
+        initTechTemplateButtons();
     });
 })();
