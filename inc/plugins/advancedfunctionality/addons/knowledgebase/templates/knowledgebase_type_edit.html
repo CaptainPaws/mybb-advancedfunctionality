@@ -1,6 +1,9 @@
 <div class="af-kb-header">
     <h1>{$lang->af_kb_type_edit}</h1>
-    <a class="af-kb-btn" href="{$kb_cancel_link}">{$lang->af_kb_cancel}</a>
+    <div class="af-kb-actions">
+        <a class="af-kb-btn" href="{$kb_cancel_link}">{$lang->af_kb_cancel}</a>
+        {$kb_help_link}
+    </div>
 </div>
 {$kb_errors}
 <form class="af-kb-form" method="post" action="misc.php?action=kb_type_edit">

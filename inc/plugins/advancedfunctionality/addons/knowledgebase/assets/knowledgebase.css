@@ -2,6 +2,16 @@
     max-width: 1000px;
     margin: 0 auto;
     padding: 20px 16px;
+    position: relative;
+    z-index: 1;
+}
+
+.af-kb-bg {
+    position: fixed;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    z-index: 0;
 }
 
 .af-kb-header {
@@ -78,6 +88,22 @@
     gap: 8px;
     flex-wrap: wrap;
     justify-content: flex-end;
+}
+
+.af-kb-help-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #f2f5ff;
+    color: #4462b2;
+    text-decoration: none;
+}
+
+.af-kb-help-link:hover {
+    background: #e5ebff;
 }
 
 .af-kb-tabs {
@@ -316,4 +342,34 @@
 
 .af-kb-pagination {
     margin-top: 16px;
+}
+
+.af-kb-tech {
+    background: #f7f9ff;
+    border: 1px solid #d5d9e2;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin: 12px 0;
+}
+
+.af-kb-tech summary {
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.af-kb-copy-json {
+    margin: 8px 0;
+    padding: 6px 10px;
+    border: 1px solid #ccd2dd;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.af-kb-help-page section {
+    background: #fff;
+    border: 1px solid #dcdfe6;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 16px;
 }
