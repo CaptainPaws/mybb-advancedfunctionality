@@ -1,0 +1,1444 @@
+<?php
+/**
+ * AF Addon: Knowledge Base
+ * MyBB 1.8.x / PHP 8.0–8.4
+ */
+
+if (!defined('IN_MYBB')) { die('No direct access'); }
+if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
+
+define('AF_KB_ID', 'knowledgebase');
+define('AF_KB_VER', '1.0.0');
+define('AF_KB_BASE', AF_ADDONS . AF_KB_ID . '/');
+define('AF_KB_ASSETS', AF_KB_BASE . 'assets/');
+define('AF_KB_TPL_DIR', AF_KB_BASE . 'templates/');
+define('AF_KB_MARK', '<!--af_kb_assets-->');
+
+define('AF_KB_KEY_PATTERN', '/^[a-z0-9_-]{2,64}$/');
+
+/* -------------------- LANG -------------------- */
+
+function af_knowledgebase_load_lang(bool $admin = false): void
+{
+    global $lang;
+
+    if (!is_object($lang)) {
+        if (class_exists('MyLanguage')) {
+            $lang = new MyLanguage();
+        } else {
+            return;
+        }
+    }
+
+    $base = 'advancedfunctionality_' . AF_KB_ID;
+
+    $langFolder = !empty($lang->language) ? (string)$lang->language : 'russian';
+    $expectedFile = MYBB_ROOT . 'inc/languages/' . $langFolder . '/' . $base . '.lang.php';
+
+    if (!is_file($expectedFile) && function_exists('af_sync_addon_languages')) {
+        try {
+            af_sync_addon_languages();
+        } catch (Throwable $e) {
+            // ignore
+        }
+    }
+
+    if (!is_file($expectedFile)) {
+        return;
+    }
+
+    if ($admin) {
+        $lang->load($base, true, true);
+    } else {
+        $lang->load($base);
+    }
+}
+
+/* -------------------- SETTINGS HELPERS -------------------- */
+
+function af_kb_setting_name(string $key): string
+{
+    return 'af_' . $key;
+}
+
+function af_kb_get_setting(string $key, $default = null)
+{
+    global $mybb;
+    return $mybb->settings[$key] ?? $default;
+}
+
+function af_kb_ensure_group(string $name, string $title, string $desc): int
+{
+    global $db;
+
+    $q = $db->simple_select('settinggroups', 'gid', "name='".$db->escape_string($name)."'", ['limit' => 1]);
+    $gid = (int)$db->fetch_field($q, 'gid');
+    if ($gid) {
+        return $gid;
+    }
+
+    $max = $db->fetch_field($db->simple_select('settinggroups', 'MAX(disporder) AS m'), 'm');
+    $disp = (int)$max + 1;
+
+    $db->insert_query('settinggroups', [
+        'name'        => $db->escape_string($name),
+        'title'       => $db->escape_string($title),
+        'description' => $db->escape_string($desc),
+        'disporder'   => $disp,
+        'isdefault'   => 0,
+    ]);
+
+    return (int)$db->insert_id();
+}
+
+function af_kb_ensure_setting(int $gid, string $name, string $title, string $desc, string $type, string $value, int $order): void
+{
+    global $db;
+
+    $q = $db->simple_select('settings', 'sid', "name='".$db->escape_string($name)."'", ['limit' => 1]);
+    $sid = (int)$db->fetch_field($q, 'sid');
+
+    $row = [
+        'name'        => $db->escape_string($name),
+        'title'       => $db->escape_string($title),
+        'description' => $db->escape_string($desc),
+        'optionscode' => $db->escape_string($type),
+        'value'       => $db->escape_string($value),
+        'disporder'   => $order,
+        'gid'         => $gid,
+    ];
+
+    if ($sid) {
+        $db->update_query('settings', $row, "sid={$sid}");
+    } else {
+        $db->insert_query('settings', $row);
+    }
+}
+
+/* -------------------- INSTALL / UNINSTALL -------------------- */
+
+function af_knowledgebase_install(): bool
+{
+    global $db, $lang;
+
+    af_knowledgebase_load_lang(true);
+
+    if (!$db->table_exists('af_kb_types')) {
+        $sql = <<<SQL
+CREATE TABLE {TABLE_PREFIX}af_kb_types (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  type VARCHAR(64) NOT NULL UNIQUE,
+  title_ru VARCHAR(255) NOT NULL DEFAULT '',
+  title_en VARCHAR(255) NOT NULL DEFAULT '',
+  description_ru TEXT NOT NULL,
+  description_en TEXT NOT NULL,
+  sortorder INT NOT NULL DEFAULT 0,
+  active TINYINT(1) NOT NULL DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+        $db->write_query(str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql));
+    }
+
+    if (!$db->table_exists('af_kb_entries')) {
+        $sql = <<<SQL
+CREATE TABLE {TABLE_PREFIX}af_kb_entries (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  type VARCHAR(64) NOT NULL,
+  `key` VARCHAR(64) NOT NULL,
+  title_ru VARCHAR(255) NOT NULL DEFAULT '',
+  title_en VARCHAR(255) NOT NULL DEFAULT '',
+  short_ru TEXT NOT NULL,
+  short_en TEXT NOT NULL,
+  body_ru MEDIUMTEXT NOT NULL,
+  body_en MEDIUMTEXT NOT NULL,
+  meta_json MEDIUMTEXT NOT NULL DEFAULT '{}',
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  sortorder INT NOT NULL DEFAULT 0,
+  updated_at INT UNSIGNED NOT NULL DEFAULT 0,
+  UNIQUE KEY uniq_type_key (type, `key`),
+  KEY type_active_sort (type, active, sortorder)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+        $db->write_query(str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql));
+    }
+
+    if (!$db->table_exists('af_kb_blocks')) {
+        $sql = <<<SQL
+CREATE TABLE {TABLE_PREFIX}af_kb_blocks (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  entry_id INT UNSIGNED NOT NULL,
+  block_key VARCHAR(64) NOT NULL DEFAULT '',
+  title_ru VARCHAR(255) NOT NULL DEFAULT '',
+  title_en VARCHAR(255) NOT NULL DEFAULT '',
+  content_ru MEDIUMTEXT NOT NULL,
+  content_en MEDIUMTEXT NOT NULL,
+  data_json MEDIUMTEXT NOT NULL DEFAULT '{}',
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  sortorder INT NOT NULL DEFAULT 0,
+  KEY entry_sort (entry_id, sortorder),
+  KEY entry_block_key (entry_id, block_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+        $db->write_query(str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql));
+    }
+
+    if (!$db->table_exists('af_kb_relations')) {
+        $sql = <<<SQL
+CREATE TABLE {TABLE_PREFIX}af_kb_relations (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  from_type VARCHAR(64) NOT NULL,
+  from_key VARCHAR(64) NOT NULL,
+  rel_type VARCHAR(64) NOT NULL,
+  to_type VARCHAR(64) NOT NULL,
+  to_key VARCHAR(64) NOT NULL,
+  meta_json MEDIUMTEXT NOT NULL DEFAULT '{}',
+  sortorder INT NOT NULL DEFAULT 0,
+  KEY from_idx (from_type, from_key, rel_type),
+  KEY to_idx (to_type, to_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+        $db->write_query(str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql));
+    }
+
+    if (!$db->table_exists('af_kb_log')) {
+        $sql = <<<SQL
+CREATE TABLE {TABLE_PREFIX}af_kb_log (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  uid INT UNSIGNED NOT NULL,
+  action VARCHAR(32) NOT NULL,
+  type VARCHAR(64) NOT NULL,
+  `key` VARCHAR(64) NOT NULL,
+  diff_json MEDIUMTEXT NOT NULL,
+  dateline INT UNSIGNED NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+        $db->write_query(str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql));
+    }
+
+    $gid = af_kb_ensure_group(
+        'af_kb',
+        $lang->af_knowledgebase_group ?? 'AF: Knowledge Base',
+        $lang->af_knowledgebase_group_desc ?? 'Settings for Knowledge Base addon.'
+    );
+
+    af_kb_ensure_setting(
+        $gid,
+        'af_knowledgebase_enabled',
+        $lang->af_knowledgebase_enabled ?? 'Enable Knowledge Base',
+        $lang->af_knowledgebase_enabled_desc ?? 'Yes/No',
+        'yesno',
+        '1',
+        1
+    );
+    af_kb_ensure_setting(
+        $gid,
+        'af_kb_public_catalog',
+        $lang->af_kb_public_catalog ?? 'Public catalog',
+        $lang->af_kb_public_catalog_desc ?? 'Show catalog for everyone.',
+        'yesno',
+        '1',
+        2
+    );
+    af_kb_ensure_setting(
+        $gid,
+        'af_kb_editor_groups',
+        $lang->af_kb_editor_groups ?? 'Editor groups',
+        $lang->af_kb_editor_groups_desc ?? 'CSV of group IDs that can edit.',
+        'text',
+        '',
+        3
+    );
+    af_kb_ensure_setting(
+        $gid,
+        'af_kb_types_manage_groups',
+        $lang->af_kb_types_manage_groups ?? 'Type management groups',
+        $lang->af_kb_types_manage_groups_desc ?? 'CSV of group IDs that can manage types.',
+        'text',
+        '',
+        4
+    );
+    af_kb_ensure_setting(
+        $gid,
+        'af_kb_atf_map',
+        $lang->af_kb_atf_map ?? 'ATF → KB mapping',
+        $lang->af_kb_atf_map_desc ?? 'JSON mapping of ATF field → KB type.',
+        'textarea',
+        '{}',
+        5
+    );
+
+    if (function_exists('rebuild_settings')) {
+        rebuild_settings();
+    }
+    if (function_exists('af_rebuild_and_reload_settings')) {
+        af_rebuild_and_reload_settings();
+    }
+
+    af_kb_templates_install_or_update();
+
+    return true;
+}
+
+function af_knowledgebase_uninstall(): bool
+{
+    global $db;
+
+    $db->drop_table('af_kb_types', true);
+    $db->drop_table('af_kb_entries', true);
+    $db->drop_table('af_kb_blocks', true);
+    $db->drop_table('af_kb_relations', true);
+    $db->drop_table('af_kb_log', true);
+
+    $db->delete_query('settings', "name IN ('af_knowledgebase_enabled','af_kb_public_catalog','af_kb_editor_groups','af_kb_types_manage_groups','af_kb_atf_map')");
+    $db->delete_query('settinggroups', "name='af_kb'");
+    $db->delete_query('templates', "title LIKE 'knowledgebase_%'");
+
+    if (function_exists('rebuild_settings')) {
+        rebuild_settings();
+    }
+    if (function_exists('af_rebuild_and_reload_settings')) {
+        af_rebuild_and_reload_settings();
+    }
+
+    return true;
+}
+
+function af_knowledgebase_activate(): bool
+{
+    af_kb_templates_install_or_update();
+    return true;
+}
+
+function af_knowledgebase_deactivate(): bool
+{
+    return true;
+}
+
+/* -------------------- TEMPLATES -------------------- */
+
+function af_kb_templates_install_or_update(): void
+{
+    global $db;
+
+    if (!is_dir(AF_KB_TPL_DIR)) {
+        return;
+    }
+
+    $files = glob(AF_KB_TPL_DIR . '*.html');
+    if (!$files) {
+        return;
+    }
+
+    foreach ($files as $file) {
+        $name = basename($file, '.html');
+        if ($name === '') {
+            continue;
+        }
+        $tpl = @file_get_contents($file);
+        if ($tpl === false) {
+            continue;
+        }
+
+        $title = $db->escape_string($name);
+        $existing = $db->simple_select('templates', 'tid', "title='{$title}' AND sid='-1'", ['limit' => 1]);
+        $tid = (int)$db->fetch_field($existing, 'tid');
+
+        $row = [
+            'title'    => $title,
+            'template' => $db->escape_string($tpl),
+            'sid'      => -1,
+            'version'  => '1839',
+            'dateline' => TIME_NOW,
+        ];
+
+        if ($tid) {
+            $db->update_query('templates', $row, "tid='{$tid}'");
+        } else {
+            $db->insert_query('templates', $row);
+        }
+    }
+}
+
+function af_kb_get_template(string $name): string
+{
+    global $templates;
+
+    $tpl = '';
+    if (is_object($templates)) {
+        $tpl = (string)$templates->get($name);
+    }
+
+    if ($tpl === '' && is_file(AF_KB_TPL_DIR . $name . '.html')) {
+        $tpl = (string)@file_get_contents(AF_KB_TPL_DIR . $name . '.html');
+    }
+
+    return $tpl;
+}
+
+/* -------------------- ACCESS -------------------- */
+
+function af_kb_is_admin(): bool
+{
+    global $mybb;
+    return !empty($mybb->user['uid']) && $mybb->user['uid'] > 0 && (int)($mybb->usergroup['cancp'] ?? 0) === 1;
+}
+
+function af_kb_get_user_groups(): array
+{
+    global $mybb;
+
+    $groups = [];
+    if (!empty($mybb->user['usergroup'])) {
+        $groups[] = (int)$mybb->user['usergroup'];
+    }
+    if (!empty($mybb->user['additionalgroups'])) {
+        $extra = explode(',', (string)$mybb->user['additionalgroups']);
+        foreach ($extra as $gid) {
+            $gid = (int)trim($gid);
+            if ($gid > 0) {
+                $groups[] = $gid;
+            }
+        }
+    }
+
+    return array_unique($groups);
+}
+
+function af_kb_user_in_groups(string $csv): bool
+{
+    if ($csv === '') {
+        return false;
+    }
+
+    $allowed = [];
+    foreach (explode(',', $csv) as $gid) {
+        $gid = (int)trim($gid);
+        if ($gid > 0) {
+            $allowed[] = $gid;
+        }
+    }
+
+    if (!$allowed) {
+        return false;
+    }
+
+    $userGroups = af_kb_get_user_groups();
+    foreach ($userGroups as $gid) {
+        if (in_array($gid, $allowed, true)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function af_kb_can_edit(): bool
+{
+    if (af_kb_is_admin()) {
+        return true;
+    }
+
+    $csv = (string)af_kb_get_setting('af_kb_editor_groups', '');
+    return af_kb_user_in_groups($csv);
+}
+
+function af_kb_can_manage_types(): bool
+{
+    if (af_kb_is_admin()) {
+        return true;
+    }
+
+    $csv = (string)af_kb_get_setting('af_kb_types_manage_groups', '');
+    return af_kb_user_in_groups($csv);
+}
+
+function af_kb_can_view(): bool
+{
+    if ((int)af_kb_get_setting('af_kb_public_catalog', 1) === 1) {
+        return true;
+    }
+
+    return af_kb_can_edit() || af_kb_is_admin();
+}
+
+/* -------------------- UTILITIES -------------------- */
+
+function af_kb_is_ru(): bool
+{
+    global $lang;
+    return isset($lang->language) && $lang->language === 'russian';
+}
+
+function af_kb_pick_text(array $row, string $field): string
+{
+    $suffix = af_kb_is_ru() ? '_ru' : '_en';
+    $key = $field . $suffix;
+    $value = (string)($row[$key] ?? '');
+    if ($value === '') {
+        $fallback = (string)($row[$field . '_ru'] ?? '');
+        if ($fallback === '') {
+            $fallback = (string)($row[$field . '_en'] ?? '');
+        }
+        return $fallback;
+    }
+
+    return $value;
+}
+
+function af_kb_parse_message(string $message): string
+{
+    if ($message === '') {
+        return '';
+    }
+
+    if (!class_exists('postParser')) {
+        require_once MYBB_ROOT . 'inc/class_parser.php';
+    }
+
+    $parser = new postParser;
+    $options = [
+        'allow_html'         => 1,
+        'allow_mycode'       => 1,
+        'allow_basicmycode'  => 1,
+        'allow_smilies'      => 1,
+        'allow_imgcode'      => 1,
+        'allow_videocode'    => 1,
+        'allow_list'         => 1,
+        'allow_alignmycode'  => 1,
+        'allow_font'         => 1,
+        'allow_color'        => 1,
+        'allow_size'         => 1,
+        'filter_badwords'    => 1,
+        'nl2br'              => 1,
+    ];
+
+    return $parser->parse_message($message, $options);
+}
+
+function af_kb_render_json_error(string $message, int $code = 403): void
+{
+    http_response_code($code);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['error' => $message], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+function af_kb_validate_json(string $raw): bool
+{
+    if ($raw === '') {
+        return true;
+    }
+
+    json_decode($raw, true);
+    return json_last_error() === JSON_ERROR_NONE;
+}
+
+function af_kb_normalize_json(string $raw): string
+{
+    $raw = trim($raw);
+    if ($raw === '') {
+        return '{}';
+    }
+
+    $decoded = json_decode($raw, true);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        return $raw;
+    }
+
+    return json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+function af_kb_render_data_table(string $json): string
+{
+    $decoded = json_decode($json, true);
+    if (json_last_error() !== JSON_ERROR_NONE || !is_array($decoded)) {
+        return '';
+    }
+
+    $rows = '';
+    foreach ($decoded as $key => $value) {
+        if (is_array($value) || is_object($value)) {
+            $value = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+        $rows .= '<tr><th>' . htmlspecialchars_uni((string)$key) . '</th><td>'
+            . htmlspecialchars_uni((string)$value) . '</td></tr>';
+    }
+
+    if ($rows === '') {
+        return '';
+    }
+
+    return '<table class="af-kb-data-table">' . $rows . '</table>';
+}
+
+/* -------------------- ATF UTILITIES -------------------- */
+
+function af_kb_parse_atf_options(string $rawOptions): array
+{
+    $result = [];
+    $lines = preg_split('/\r\n|\r|\n/', $rawOptions);
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '') {
+            continue;
+        }
+        if (strpos($line, '=') === false) {
+            $result[$line] = $line;
+            continue;
+        }
+        [$key, $label] = array_map('trim', explode('=', $line, 2));
+        if ($key === '') {
+            continue;
+        }
+        $result[$key] = $label === '' ? $key : $label;
+    }
+
+    return $result;
+}
+
+function af_kb_resolve_atf_select_label(string $fieldOptions, string $rawValue): string
+{
+    $map = af_kb_parse_atf_options($fieldOptions);
+    return $map[$rawValue] ?? $rawValue;
+}
+
+/* -------------------- RUNTIME -------------------- */
+
+function af_knowledgebase_init(): void
+{
+    global $plugins;
+
+    $plugins->add_hook('misc_start', 'af_kb_misc_route', 10);
+    $plugins->add_hook('pre_output_page', 'af_knowledgebase_pre_output', 10);
+}
+
+function af_knowledgebase_pre_output(string &$page = ''): void
+{
+    global $mybb, $lang;
+
+    if (strpos($page, AF_KB_MARK) !== false) {
+        return;
+    }
+
+    $action = $mybb->get_input('action');
+    $is_kb_page = in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children'], true);
+
+    if ($is_kb_page && !empty($mybb->settings['af_knowledgebase_enabled'])) {
+        $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+        if ($bburl !== '') {
+            $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_KB_ID . '/assets';
+            $cssTag = '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase.css?ver='.AF_KB_VER.'" />';
+            $jsTag = '<script src="'.$assetsBase.'/knowledgebase.js?ver='.AF_KB_VER.'"></script>';
+
+            if (stripos($page, '</head>') !== false) {
+                $page = str_ireplace('</head>', $cssTag.$jsTag.AF_KB_MARK.'</head>', $page);
+            } else {
+                $page .= $cssTag.$jsTag.AF_KB_MARK;
+            }
+        }
+    }
+
+    if (!empty($mybb->settings['af_kb_public_catalog'])) {
+        if (strpos($page, '<!--af_kb_nav-->') === false) {
+            af_knowledgebase_load_lang(false);
+            $linkText = $lang->af_knowledgebase_name ?? 'KB';
+            $li = '<li class="af-kb-link"><a href="misc.php?action=kb">'.htmlspecialchars_uni($linkText).'</a></li><!--af_kb_nav-->';
+            $patched = preg_replace(
+                '~(<ul[^>]*class="[^"]*\bmenu\b[^"]*\btop_links\b[^"]*"[^>]*>)(.*?)(</ul>)~is',
+                '$1$2'.$li.'$3',
+                $page,
+                1
+            );
+            if ($patched !== null) {
+                $page = $patched;
+            }
+        }
+    }
+}
+
+/* -------------------- ROUTER -------------------- */
+
+function af_kb_misc_route(): void
+{
+    global $mybb;
+
+    $action = $mybb->get_input('action');
+    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children'], true)) {
+        return;
+    }
+
+    if (empty($mybb->settings['af_knowledgebase_enabled'])) {
+        error_no_permission();
+    }
+
+    af_knowledgebase_load_lang(false);
+
+    if ($action === 'kb_get') {
+        af_kb_handle_json_get();
+    }
+    if ($action === 'kb_list') {
+        af_kb_handle_json_list();
+    }
+    if ($action === 'kb_children') {
+        af_kb_handle_json_children();
+    }
+
+    if ($action === 'kb_edit') {
+        af_kb_handle_edit();
+    }
+
+    af_kb_handle_view();
+}
+
+/* -------------------- VIEW HANDLERS -------------------- */
+
+function af_kb_handle_view(): void
+{
+    global $mybb, $db, $lang, $headerinclude, $header, $footer, $theme, $templates;
+
+    if (!af_kb_can_view()) {
+        error($lang->af_kb_no_access ?? 'No access.');
+    }
+
+    $type = trim((string)$mybb->get_input('type'));
+    $key = trim((string)$mybb->get_input('key'));
+    $query = trim((string)$mybb->get_input('q'));
+
+    if ($type === '') {
+        $types = [];
+        $q = $db->simple_select('af_kb_types', '*', 'active=1', ['order_by' => 'sortorder, type', 'order_dir' => 'ASC']);
+        while ($row = $db->fetch_array($q)) {
+            $types[] = $row;
+        }
+
+        $rows = '';
+        foreach ($types as $row) {
+            $title = af_kb_pick_text($row, 'title');
+            if ($title === '') {
+                $title = $row['type'];
+            }
+            $desc = af_kb_pick_text($row, 'description');
+            $rows .= '<div class="af-kb-type">
+                <h3><a href="misc.php?action=kb&type='.htmlspecialchars_uni($row['type']).'">'.htmlspecialchars_uni($title).'</a></h3>
+                <div class="af-kb-type-desc">'.af_kb_parse_message($desc).'</div>
+            </div>';
+        }
+
+        $kb_page_title = $lang->af_kb_catalog_title ?? 'Knowledge Base';
+        $kb_types_rows = $rows;
+        $kb_can_edit = af_kb_can_edit() ? '1' : '0';
+        $kb_create_link = af_kb_can_edit() ? '<a class="af-kb-btn" href="misc.php?action=kb_edit">'.htmlspecialchars_uni($lang->af_kb_create ?? 'Create').'</a>' : '';
+        $af_kb_content = '';
+        eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_catalog') . "\";");
+        eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
+        output_page($page);
+        exit;
+    }
+
+    if ($key === '') {
+        $escapedType = $db->escape_string($type);
+        $where = "type='{$escapedType}'";
+        if (!af_kb_can_edit()) {
+            $where .= " AND active=1";
+        }
+        if ($query !== '') {
+            $safeQuery = $db->escape_string($query);
+            $where .= " AND (title_ru LIKE '%{$safeQuery}%' OR title_en LIKE '%{$safeQuery}%')";
+        }
+
+        $entries = [];
+        $q = $db->simple_select('af_kb_entries', '*', $where, ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
+        while ($row = $db->fetch_array($q)) {
+            $entries[] = $row;
+        }
+
+        $rows = '';
+        foreach ($entries as $row) {
+            $title = af_kb_pick_text($row, 'title');
+            if ($title === '') {
+                $title = $row['key'];
+            }
+            $short = af_kb_parse_message(af_kb_pick_text($row, 'short'));
+            $rows .= '<div class="af-kb-entry">
+                <h3><a href="misc.php?action=kb&type='.htmlspecialchars_uni($row['type']).'&key='.htmlspecialchars_uni($row['key']).'">'.htmlspecialchars_uni($title).'</a></h3>
+                <div class="af-kb-entry-short">'.$short.'</div>
+            </div>';
+        }
+
+        $kb_page_title = htmlspecialchars_uni($type);
+        $kb_type = htmlspecialchars_uni($type);
+        $kb_query = htmlspecialchars_uni($query);
+        $kb_entries_rows = $rows;
+        $kb_can_edit = af_kb_can_edit() ? '1' : '0';
+        $kb_create_link = af_kb_can_edit() ? '<a class="af-kb-btn" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_create ?? 'Create').'</a>' : '';
+        $af_kb_content = '';
+        eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_list') . "\";");
+        eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
+        output_page($page);
+        exit;
+    }
+
+    $escapedType = $db->escape_string($type);
+    $escapedKey = $db->escape_string($key);
+    $where = "type='{$escapedType}' AND `key`='{$escapedKey}'";
+    if (!af_kb_can_edit()) {
+        $where .= " AND active=1";
+    }
+
+    $entry = $db->fetch_array($db->simple_select('af_kb_entries', '*', $where, ['limit' => 1]));
+    if (!$entry) {
+        error($lang->af_kb_not_found ?? 'Not found');
+    }
+
+    $title = af_kb_pick_text($entry, 'title');
+    if ($title === '') {
+        $title = $entry['key'];
+    }
+
+    $short = af_kb_parse_message(af_kb_pick_text($entry, 'short'));
+    $body = af_kb_parse_message(af_kb_pick_text($entry, 'body'));
+
+    $blocks = [];
+    $bq = $db->simple_select('af_kb_blocks', '*', 'entry_id='.(int)$entry['id'], ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
+    while ($row = $db->fetch_array($bq)) {
+        if (!$row['active'] && !af_kb_can_edit()) {
+            continue;
+        }
+        $blocks[] = $row;
+    }
+
+    $kb_blocks = '';
+    foreach ($blocks as $block) {
+        $block_title = htmlspecialchars_uni(af_kb_pick_text($block, 'title'));
+        $block_content = af_kb_parse_message(af_kb_pick_text($block, 'content'));
+        $block_data_table = '';
+        if (!empty($block['data_json'])) {
+            $block_data_table = af_kb_render_data_table($block['data_json']);
+        }
+        eval("\$kb_blocks .= \"" . af_kb_get_template('knowledgebase_blocks_item') . "\";");
+    }
+
+    $relations = [];
+    $rq = $db->simple_select('af_kb_relations', '*', "from_type='{$escapedType}' AND from_key='{$escapedKey}'", ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
+    while ($row = $db->fetch_array($rq)) {
+        $relations[] = $row;
+    }
+
+    $grouped = [];
+    foreach ($relations as $rel) {
+        $grouped[$rel['rel_type']][] = $rel;
+    }
+
+    $kb_relations = '';
+    foreach ($grouped as $relType => $items) {
+        $kb_rel_items = '';
+        foreach ($items as $rel) {
+            $toTitle = $rel['to_key'];
+            $target = $db->fetch_array(
+                $db->simple_select(
+                    'af_kb_entries',
+                    '*',
+                    "type='".$db->escape_string($rel['to_type'])."' AND `key`='".$db->escape_string($rel['to_key'])."'",
+                    ['limit' => 1]
+                )
+            );
+            if ($target) {
+                $toTitle = af_kb_pick_text($target, 'title');
+                if ($toTitle === '') {
+                    $toTitle = $target['key'];
+                }
+            }
+            $rel_to_type = htmlspecialchars_uni($rel['to_type']);
+            $rel_to_key = htmlspecialchars_uni($rel['to_key']);
+            $rel_title = htmlspecialchars_uni($toTitle);
+            eval("\$kb_rel_items .= \"" . af_kb_get_template('knowledgebase_rel_item') . "\";");
+        }
+        $kb_relations .= '<div class="af-kb-rel-group"><h4>'.htmlspecialchars_uni($relType).'</h4><ul>'.$kb_rel_items.'</ul></div>';
+    }
+
+    $kb_page_title = htmlspecialchars_uni($title);
+    $kb_title = htmlspecialchars_uni($title);
+    $kb_short = $short;
+    $kb_body = $body;
+    $kb_can_edit = af_kb_can_edit() ? '1' : '0';
+    $kb_edit_link = af_kb_can_edit() ? '<a class="af-kb-btn" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'&key='.htmlspecialchars_uni($key).'">'.htmlspecialchars_uni($lang->af_kb_edit ?? 'Edit').'</a>' : '';
+    $af_kb_content = '';
+    eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_view') . "\";");
+    eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
+    output_page($page);
+    exit;
+}
+
+function af_kb_handle_edit(): void
+{
+    global $mybb, $db, $lang;
+
+    if (!af_kb_can_edit()) {
+        error_no_permission();
+    }
+
+    $type = trim((string)$mybb->get_input('type'));
+    $key = trim((string)$mybb->get_input('key'));
+
+    $entry = null;
+    if ($type !== '' && $key !== '') {
+        $entry = $db->fetch_array(
+            $db->simple_select(
+                'af_kb_entries',
+                '*',
+                "type='".$db->escape_string($type)."' AND `key`='".$db->escape_string($key)."'",
+                ['limit' => 1]
+            )
+        );
+    }
+
+    $typeRow = null;
+    if ($type !== '') {
+        $typeRow = $db->fetch_array(
+            $db->simple_select('af_kb_types', '*', "type='".$db->escape_string($type)."'", ['limit' => 1])
+        );
+    }
+
+    $errors = [];
+
+    if ($mybb->request_method === 'post') {
+        verify_post_check($mybb->get_input('my_post_key'));
+
+        $type = trim((string)$mybb->get_input('type'));
+        $key = trim((string)$mybb->get_input('key'));
+
+        if ((int)$mybb->get_input('kb_delete', MyBB::INPUT_INT) === 1) {
+            if ($type === '' || $key === '') {
+                error($lang->af_kb_not_found ?? 'Not found');
+            }
+            $existing = $db->fetch_array(
+                $db->simple_select(
+                    'af_kb_entries',
+                    '*',
+                    "type='".$db->escape_string($type)."' AND `key`='".$db->escape_string($key)."'",
+                    ['limit' => 1]
+                )
+            );
+            if (!$existing) {
+                error($lang->af_kb_not_found ?? 'Not found');
+            }
+
+            $db->delete_query('af_kb_blocks', 'entry_id='.(int)$existing['id']);
+            $db->delete_query('af_kb_relations', "from_type='".$db->escape_string($type)."' AND from_key='".$db->escape_string($key)."'");
+            $db->delete_query('af_kb_entries', 'id='.(int)$existing['id']);
+
+            $db->insert_query('af_kb_log', [
+                'uid'      => (int)$mybb->user['uid'],
+                'action'   => $db->escape_string('delete'),
+                'type'     => $db->escape_string($type),
+                'key'      => $db->escape_string($key),
+                'diff_json'=> $db->escape_string('{}'),
+                'dateline' => TIME_NOW,
+            ]);
+
+            redirect('misc.php?action=kb&type='.urlencode($type), 'Deleted');
+        }
+
+        if ($type === '') {
+            $errors[] = 'Type is required.';
+        }
+        if ($key === '') {
+            $errors[] = 'Key is required.';
+        }
+        if ($key !== '' && !preg_match(AF_KB_KEY_PATTERN, $key)) {
+            $errors[] = $lang->af_kb_invalid_key ?? 'Invalid key.';
+        }
+
+        $metaJson = trim((string)$mybb->get_input('meta_json'));
+        if (!af_kb_validate_json($metaJson)) {
+            $errors[] = $lang->af_kb_invalid_json ?? 'Invalid JSON.';
+        }
+
+        $typeTitleRu = trim((string)$mybb->get_input('type_title_ru'));
+        $typeTitleEn = trim((string)$mybb->get_input('type_title_en'));
+        $typeDescRu = trim((string)$mybb->get_input('type_description_ru'));
+        $typeDescEn = trim((string)$mybb->get_input('type_description_en'));
+
+        $blocksInput = $mybb->get_input('blocks', MyBB::INPUT_ARRAY);
+        $relationsInput = $mybb->get_input('relations', MyBB::INPUT_ARRAY);
+
+        $parsedBlocks = [];
+        if (is_array($blocksInput)) {
+            foreach ($blocksInput as $block) {
+                if (!is_array($block)) {
+                    continue;
+                }
+                $blockKey = trim((string)($block['block_key'] ?? ''));
+                $titleRu = trim((string)($block['title_ru'] ?? ''));
+                $titleEn = trim((string)($block['title_en'] ?? ''));
+                $contentRu = trim((string)($block['content_ru'] ?? ''));
+                $contentEn = trim((string)($block['content_en'] ?? ''));
+                $dataJson = trim((string)($block['data_json'] ?? ''));
+                $active = !empty($block['active']) ? 1 : 0;
+                $sortorder = (int)($block['sortorder'] ?? 0);
+
+                if ($blockKey === '' && $titleRu === '' && $titleEn === '' && $contentRu === '' && $contentEn === '' && $dataJson === '') {
+                    continue;
+                }
+
+                if (!af_kb_validate_json($dataJson)) {
+                    $errors[] = $lang->af_kb_invalid_json ?? 'Invalid JSON.';
+                    break;
+                }
+
+                $parsedBlocks[] = [
+                    'block_key'   => $blockKey,
+                    'title_ru'    => $titleRu,
+                    'title_en'    => $titleEn,
+                    'content_ru'  => $contentRu,
+                    'content_en'  => $contentEn,
+                    'data_json'   => af_kb_normalize_json($dataJson),
+                    'active'      => $active,
+                    'sortorder'   => $sortorder,
+                ];
+            }
+        }
+
+        $parsedRelations = [];
+        if (is_array($relationsInput)) {
+            foreach ($relationsInput as $rel) {
+                if (!is_array($rel)) {
+                    continue;
+                }
+                $relType = trim((string)($rel['rel_type'] ?? ''));
+                $toType = trim((string)($rel['to_type'] ?? ''));
+                $toKey = trim((string)($rel['to_key'] ?? ''));
+                $meta = trim((string)($rel['meta_json'] ?? ''));
+                $sortorder = (int)($rel['sortorder'] ?? 0);
+
+                if ($relType === '' && $toType === '' && $toKey === '' && $meta === '') {
+                    continue;
+                }
+
+                if ($toKey !== '' && !preg_match(AF_KB_KEY_PATTERN, $toKey)) {
+                    $errors[] = $lang->af_kb_invalid_key ?? 'Invalid key.';
+                    break;
+                }
+
+                if (!af_kb_validate_json($meta)) {
+                    $errors[] = $lang->af_kb_invalid_json ?? 'Invalid JSON.';
+                    break;
+                }
+
+                if ($relType === '' || $toType === '' || $toKey === '') {
+                    $errors[] = 'Relation requires rel_type, to_type, to_key.';
+                    break;
+                }
+
+                $parsedRelations[] = [
+                    'rel_type'  => $relType,
+                    'to_type'   => $toType,
+                    'to_key'    => $toKey,
+                    'meta_json' => af_kb_normalize_json($meta),
+                    'sortorder' => $sortorder,
+                ];
+            }
+        }
+
+        if (!$errors) {
+            $existing = $db->fetch_array(
+                $db->simple_select(
+                    'af_kb_entries',
+                    '*',
+                    "type='".$db->escape_string($type)."' AND `key`='".$db->escape_string($key)."'",
+                    ['limit' => 1]
+                )
+            );
+
+            if ($existing && (!$entry || (int)$existing['id'] !== (int)($entry['id'] ?? 0))) {
+                $errors[] = 'Entry with this type/key already exists.';
+            }
+        }
+
+        if (!$errors && af_kb_can_manage_types() && $type !== '') {
+            $existingType = $db->fetch_array(
+                $db->simple_select('af_kb_types', '*', "type='".$db->escape_string($type)."'", ['limit' => 1])
+            );
+            if ($existingType) {
+                $db->update_query('af_kb_types', [
+                    'title_ru'       => $db->escape_string($typeTitleRu !== '' ? $typeTitleRu : $existingType['title_ru']),
+                    'title_en'       => $db->escape_string($typeTitleEn !== '' ? $typeTitleEn : $existingType['title_en']),
+                    'description_ru' => $db->escape_string($typeDescRu),
+                    'description_en' => $db->escape_string($typeDescEn),
+                ], "id=".(int)$existingType['id']);
+            } else {
+                $db->insert_query('af_kb_types', [
+                    'type'           => $db->escape_string($type),
+                    'title_ru'       => $db->escape_string($typeTitleRu !== '' ? $typeTitleRu : $type),
+                    'title_en'       => $db->escape_string($typeTitleEn !== '' ? $typeTitleEn : $type),
+                    'description_ru' => $db->escape_string($typeDescRu),
+                    'description_en' => $db->escape_string($typeDescEn),
+                    'sortorder'      => 0,
+                    'active'         => 1,
+                ]);
+            }
+        }
+
+        if (!$errors) {
+            $data = [
+                'type'       => $db->escape_string($type),
+                'key'        => $db->escape_string($key),
+                'title_ru'   => $db->escape_string((string)$mybb->get_input('title_ru')),
+                'title_en'   => $db->escape_string((string)$mybb->get_input('title_en')),
+                'short_ru'   => $db->escape_string((string)$mybb->get_input('short_ru')),
+                'short_en'   => $db->escape_string((string)$mybb->get_input('short_en')),
+                'body_ru'    => $db->escape_string((string)$mybb->get_input('body_ru')),
+                'body_en'    => $db->escape_string((string)$mybb->get_input('body_en')),
+                'meta_json'  => $db->escape_string(af_kb_normalize_json($metaJson)),
+                'active'     => (int)$mybb->get_input('active', MyBB::INPUT_INT) ? 1 : 0,
+                'sortorder'  => (int)$mybb->get_input('sortorder', MyBB::INPUT_INT),
+                'updated_at' => TIME_NOW,
+            ];
+
+            if ($entry) {
+                $db->update_query('af_kb_entries', $data, 'id='.(int)$entry['id']);
+                $entryId = (int)$entry['id'];
+                $action = 'update';
+            } else {
+                $entryId = (int)$db->insert_query('af_kb_entries', $data);
+                $action = 'create';
+            }
+
+            $db->delete_query('af_kb_blocks', 'entry_id=' . $entryId);
+            foreach ($parsedBlocks as $block) {
+                $db->insert_query('af_kb_blocks', [
+                    'entry_id'   => $entryId,
+                    'block_key'  => $db->escape_string($block['block_key']),
+                    'title_ru'   => $db->escape_string($block['title_ru']),
+                    'title_en'   => $db->escape_string($block['title_en']),
+                    'content_ru' => $db->escape_string($block['content_ru']),
+                    'content_en' => $db->escape_string($block['content_en']),
+                    'data_json'  => $db->escape_string($block['data_json']),
+                    'active'     => (int)$block['active'],
+                    'sortorder'  => (int)$block['sortorder'],
+                ]);
+            }
+
+            $db->delete_query('af_kb_relations', "from_type='".$db->escape_string($type)."' AND from_key='".$db->escape_string($key)."'");
+            foreach ($parsedRelations as $rel) {
+                $db->insert_query('af_kb_relations', [
+                    'from_type' => $db->escape_string($type),
+                    'from_key'  => $db->escape_string($key),
+                    'rel_type'  => $db->escape_string($rel['rel_type']),
+                    'to_type'   => $db->escape_string($rel['to_type']),
+                    'to_key'    => $db->escape_string($rel['to_key']),
+                    'meta_json' => $db->escape_string($rel['meta_json']),
+                    'sortorder' => (int)$rel['sortorder'],
+                ]);
+            }
+
+            $db->insert_query('af_kb_log', [
+                'uid'      => (int)$mybb->user['uid'],
+                'action'   => $db->escape_string($action),
+                'type'     => $db->escape_string($type),
+                'key'      => $db->escape_string($key),
+                'diff_json'=> $db->escape_string('{}'),
+                'dateline' => TIME_NOW,
+            ]);
+
+            redirect('misc.php?action=kb&type='.urlencode($type).'&key='.urlencode($key), 'Saved');
+        }
+    }
+
+    $entry = $entry ?: [
+        'type'      => $type,
+        'key'       => $key,
+        'title_ru'  => '',
+        'title_en'  => '',
+        'short_ru'  => '',
+        'short_en'  => '',
+        'body_ru'   => '',
+        'body_en'   => '',
+        'meta_json' => '{}',
+        'active'    => 1,
+        'sortorder' => 0,
+    ];
+
+    $blocksRows = '';
+    $blocks = [];
+    if (!empty($entry['id'])) {
+        $bq = $db->simple_select('af_kb_blocks', '*', 'entry_id='.(int)$entry['id'], ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
+        while ($row = $db->fetch_array($bq)) {
+            $blocks[] = $row;
+        }
+    }
+
+    if (!$blocks) {
+        $blocks[] = [
+            'block_key' => '',
+            'title_ru' => '',
+            'title_en' => '',
+            'content_ru' => '',
+            'content_en' => '',
+            'data_json' => '{}',
+            'active' => 1,
+            'sortorder' => 0,
+        ];
+    }
+
+    $blockIndex = 0;
+    foreach ($blocks as $block) {
+        $block_index = $blockIndex;
+        $block_block_key = htmlspecialchars_uni($block['block_key']);
+        $block_title_ru = htmlspecialchars_uni($block['title_ru']);
+        $block_title_en = htmlspecialchars_uni($block['title_en']);
+        $block_content_ru = htmlspecialchars_uni($block['content_ru']);
+        $block_content_en = htmlspecialchars_uni($block['content_en']);
+        $block_data_json = htmlspecialchars_uni($block['data_json'] ?: '{}');
+        $block_active_checked = !empty($block['active']) ? 'checked="checked"' : '';
+        $block_sortorder = (int)$block['sortorder'];
+        eval("\$blocksRows .= \"" . af_kb_get_template('knowledgebase_blocks_edit_item') . "\";");
+        $blockIndex++;
+    }
+
+    $relationsRows = '';
+    $relations = [];
+    if (!empty($entry['type']) && !empty($entry['key'])) {
+        $rq = $db->simple_select(
+            'af_kb_relations',
+            '*',
+            "from_type='".$db->escape_string($entry['type'])."' AND from_key='".$db->escape_string($entry['key'])."'",
+            ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']
+        );
+        while ($row = $db->fetch_array($rq)) {
+            $relations[] = $row;
+        }
+    }
+
+    if (!$relations) {
+        $relations[] = [
+            'rel_type' => '',
+            'to_type' => '',
+            'to_key' => '',
+            'meta_json' => '{}',
+            'sortorder' => 0,
+        ];
+    }
+
+    $relIndex = 0;
+    foreach ($relations as $rel) {
+        $rel_index = $relIndex;
+        $rel_type = htmlspecialchars_uni($rel['rel_type']);
+        $rel_to_type = htmlspecialchars_uni($rel['to_type']);
+        $rel_to_key = htmlspecialchars_uni($rel['to_key']);
+        $rel_meta_json = htmlspecialchars_uni($rel['meta_json'] ?: '{}');
+        $rel_sortorder = (int)$rel['sortorder'];
+        eval("\$relationsRows .= \"" . af_kb_get_template('knowledgebase_rel_edit_item') . "\";");
+        $relIndex++;
+    }
+
+    $kb_errors = '';
+    if ($errors) {
+        $items = '';
+        foreach ($errors as $error) {
+            $items .= '<li>'.htmlspecialchars_uni($error).'</li>';
+        }
+        $kb_errors = '<div class="af-kb-errors"><ul>'.$items.'</ul></div>';
+    }
+
+    $kb_page_title = htmlspecialchars_uni($entry['title_ru'] ?: $entry['title_en'] ?: ($entry['key'] ?: 'KB'));
+    $kb_type_value = htmlspecialchars_uni($entry['type']);
+    $kb_key_value = htmlspecialchars_uni($entry['key']);
+    $kb_title_ru = htmlspecialchars_uni($entry['title_ru']);
+    $kb_title_en = htmlspecialchars_uni($entry['title_en']);
+    $kb_short_ru = htmlspecialchars_uni($entry['short_ru']);
+    $kb_short_en = htmlspecialchars_uni($entry['short_en']);
+    $kb_body_ru = htmlspecialchars_uni($entry['body_ru']);
+    $kb_body_en = htmlspecialchars_uni($entry['body_en']);
+    $kb_meta_json = htmlspecialchars_uni($entry['meta_json'] ?: '{}');
+    $kb_active_checked = !empty($entry['active']) ? 'checked="checked"' : '';
+    $kb_sortorder = (int)$entry['sortorder'];
+    $kb_blocks_rows = $blocksRows;
+    $kb_relations_rows = $relationsRows;
+    $kb_blocks_index = $blockIndex;
+    $kb_relations_index = $relIndex;
+
+    $kb_type_title_ru = htmlspecialchars_uni($typeRow['title_ru'] ?? '');
+    $kb_type_title_en = htmlspecialchars_uni($typeRow['title_en'] ?? '');
+    $kb_type_description_ru = htmlspecialchars_uni($typeRow['description_ru'] ?? '');
+    $kb_type_description_en = htmlspecialchars_uni($typeRow['description_en'] ?? '');
+    $kb_manage_types = af_kb_can_manage_types() ? '1' : '0';
+    $kb_delete_button = !empty($entry['id']) ? '<button type="submit" name="kb_delete" value="1" class="af-kb-remove">'.$lang->af_kb_delete.'</button>' : '';
+    $kb_type_manage_section = '';
+    if (af_kb_can_manage_types()) {
+        $kb_type_manage_section = '<section>'
+            . '<h3>Тип записи</h3>'
+            . '<div class=\"af-kb-row\">'
+            . '<div><label>Название (RU)</label><input type=\"text\" name=\"type_title_ru\" value=\"'.$kb_type_title_ru.'\" /></div>'
+            . '<div><label>Название (EN)</label><input type=\"text\" name=\"type_title_en\" value=\"'.$kb_type_title_en.'\" /></div>'
+            . '</div>'
+            . '<label>Описание (RU)</label><textarea name=\"type_description_ru\">'.$kb_type_description_ru.'</textarea>'
+            . '<label>Описание (EN)</label><textarea name=\"type_description_en\">'.$kb_type_description_en.'</textarea>'
+            . '</section>';
+    }
+
+    $af_kb_content = '';
+    eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_edit') . "\";");
+    eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
+    output_page($page);
+    exit;
+}
+
+/* -------------------- JSON API -------------------- */
+
+function af_kb_handle_json_get(): void
+{
+    global $mybb, $db, $lang;
+
+    if (!af_kb_can_view()) {
+        af_kb_render_json_error($lang->af_kb_no_access ?? 'No access', 403);
+    }
+
+    $type = trim((string)$mybb->get_input('type'));
+    $key = trim((string)$mybb->get_input('key'));
+    if ($type === '' || $key === '') {
+        af_kb_render_json_error('Missing parameters', 400);
+    }
+
+    $where = "type='".$db->escape_string($type)."' AND `key`='".$db->escape_string($key)."'";
+    if (!af_kb_can_edit()) {
+        $where .= ' AND active=1';
+    }
+
+    $entry = $db->fetch_array($db->simple_select('af_kb_entries', '*', $where, ['limit' => 1]));
+    if (!$entry) {
+        af_kb_render_json_error($lang->af_kb_not_found ?? 'Not found', 404);
+    }
+
+    $blocks = [];
+    $bq = $db->simple_select('af_kb_blocks', '*', 'entry_id='.(int)$entry['id'], ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
+    while ($row = $db->fetch_array($bq)) {
+        if (!$row['active'] && !af_kb_can_edit()) {
+            continue;
+        }
+        $blocks[] = [
+            'block_key' => $row['block_key'],
+            'title'     => af_kb_pick_text($row, 'title'),
+            'content'   => af_kb_pick_text($row, 'content'),
+            'data_json' => $row['data_json'],
+            'sortorder' => (int)$row['sortorder'],
+        ];
+    }
+
+    $relations = [];
+    $rq = $db->simple_select('af_kb_relations', '*', "from_type='".$db->escape_string($type)."' AND from_key='".$db->escape_string($key)."'", ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
+    while ($row = $db->fetch_array($rq)) {
+        $relations[] = [
+            'rel_type'  => $row['rel_type'],
+            'to_type'   => $row['to_type'],
+            'to_key'    => $row['to_key'],
+            'meta_json' => $row['meta_json'],
+            'sortorder' => (int)$row['sortorder'],
+        ];
+    }
+
+    $payload = [
+        'entry' => [
+            'type'      => $entry['type'],
+            'key'       => $entry['key'],
+            'title'     => af_kb_pick_text($entry, 'title'),
+            'short'     => af_kb_pick_text($entry, 'short'),
+            'body'      => af_kb_pick_text($entry, 'body'),
+            'meta_json' => $entry['meta_json'],
+        ],
+        'blocks' => $blocks,
+        'relations' => $relations,
+    ];
+
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+function af_kb_handle_json_list(): void
+{
+    global $mybb, $db, $lang;
+
+    if (!af_kb_can_view()) {
+        af_kb_render_json_error($lang->af_kb_no_access ?? 'No access', 403);
+    }
+
+    $type = trim((string)$mybb->get_input('type'));
+    if ($type === '') {
+        af_kb_render_json_error('Missing type', 400);
+    }
+
+    $query = trim((string)$mybb->get_input('q'));
+    $where = "type='".$db->escape_string($type)."'";
+    if (!af_kb_can_edit()) {
+        $where .= ' AND active=1';
+    }
+    if ($query !== '') {
+        $safeQuery = $db->escape_string($query);
+        $where .= " AND (title_ru LIKE '%{$safeQuery}%' OR title_en LIKE '%{$safeQuery}%')";
+    }
+
+    $items = [];
+    $q = $db->simple_select('af_kb_entries', '*', $where, ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
+    while ($row = $db->fetch_array($q)) {
+        $items[] = [
+            'key'   => $row['key'],
+            'title' => af_kb_pick_text($row, 'title') ?: $row['key'],
+        ];
+    }
+
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['items' => $items], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+function af_kb_handle_json_children(): void
+{
+    global $mybb, $db, $lang;
+
+    if (!af_kb_can_view()) {
+        af_kb_render_json_error($lang->af_kb_no_access ?? 'No access', 403);
+    }
+
+    $fromType = trim((string)$mybb->get_input('from_type'));
+    $fromKey = trim((string)$mybb->get_input('from_key'));
+    $relType = trim((string)$mybb->get_input('rel_type'));
+
+    if ($fromType === '' || $fromKey === '' || $relType === '') {
+        af_kb_render_json_error('Missing parameters', 400);
+    }
+
+    $items = [];
+    $rq = $db->simple_select(
+        'af_kb_relations',
+        '*',
+        "from_type='".$db->escape_string($fromType)."' AND from_key='".$db->escape_string($fromKey)."' AND rel_type='".$db->escape_string($relType)."'",
+        ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']
+    );
+    while ($row = $db->fetch_array($rq)) {
+        $title = $row['to_key'];
+        $target = $db->fetch_array(
+            $db->simple_select(
+                'af_kb_entries',
+                '*',
+                "type='".$db->escape_string($row['to_type'])."' AND `key`='".$db->escape_string($row['to_key'])."'",
+                ['limit' => 1]
+            )
+        );
+        if ($target) {
+            $title = af_kb_pick_text($target, 'title');
+            if ($title === '') {
+                $title = $target['key'];
+            }
+        }
+        $items[] = [
+            'to_type' => $row['to_type'],
+            'to_key'  => $row['to_key'],
+            'title'   => $title,
+        ];
+    }
+
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['items' => $items], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}

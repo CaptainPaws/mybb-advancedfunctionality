@@ -1,0 +1,27 @@
+<div class="af-kb-rel-item-edit">
+    <div class="af-kb-row">
+        <div>
+            <label>Relation type</label>
+            <input type="text" name="relations[{$rel_index}][rel_type]" value="{$rel_type}" />
+        </div>
+        <div>
+            <label>To type</label>
+            <input type="text" name="relations[{$rel_index}][to_type]" value="{$rel_to_type}" />
+        </div>
+        <div>
+            <label>To key</label>
+            <input type="text" name="relations[{$rel_index}][to_key]" value="{$rel_to_key}" />
+        </div>
+    </div>
+    <div class="af-kb-row">
+        <div>
+            <label>Meta JSON</label>
+            <textarea name="relations[{$rel_index}][meta_json]">{$rel_meta_json}</textarea>
+        </div>
+        <div>
+            <label>Порядок</label>
+            <input type="text" name="relations[{$rel_index}][sortorder]" value="{$rel_sortorder}" />
+        </div>
+    </div>
+    <button type="button" class="af-kb-remove">Удалить связь</button>
+</div>

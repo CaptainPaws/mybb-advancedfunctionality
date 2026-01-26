@@ -1,0 +1,152 @@
+.af-kb-page {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px 16px;
+}
+
+.af-kb-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.af-kb-btn {
+    display: inline-block;
+    padding: 8px 14px;
+    background: #4462b2;
+    color: #fff;
+    border-radius: 4px;
+    text-decoration: none;
+}
+
+.af-kb-btn:hover {
+    background: #2f4e96;
+}
+
+.af-kb-type,
+.af-kb-entry,
+.af-kb-block,
+.af-kb-rel-group {
+    background: #fff;
+    border: 1px solid #dcdfe6;
+    border-radius: 6px;
+    padding: 14px;
+    margin-bottom: 16px;
+}
+
+.af-kb-type-desc,
+.af-kb-entry-short,
+.af-kb-body {
+    color: #444;
+    line-height: 1.6;
+}
+
+.af-kb-search {
+    margin-bottom: 16px;
+}
+
+.af-kb-search input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 4px;
+    border: 1px solid #ccd2dd;
+}
+
+.af-kb-form section {
+    margin-bottom: 20px;
+    padding: 12px;
+    border: 1px solid #dcdfe6;
+    border-radius: 6px;
+    background: #fff;
+}
+
+.af-kb-form label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.af-kb-form input[type="text"],
+.af-kb-form textarea,
+.af-kb-form select {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 4px;
+    border: 1px solid #ccd2dd;
+    margin-bottom: 12px;
+}
+
+.af-kb-form textarea {
+    min-height: 120px;
+}
+
+.af-kb-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.af-kb-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.af-kb-block-item,
+.af-kb-rel-item-edit {
+    border: 1px dashed #c0c6d4;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    background: #f9fafc;
+}
+
+.af-kb-remove {
+    background: #b23b3b;
+    color: #fff;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.af-kb-add {
+    background: #2f8a5d;
+    color: #fff;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.af-kb-errors {
+    background: #ffecec;
+    border: 1px solid #ffb0b0;
+    padding: 10px 14px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+}
+
+.af-kb-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.af-kb-data-table th,
+.af-kb-data-table td {
+    border: 1px solid #d5d9e2;
+    padding: 6px 8px;
+    text-align: left;
+}
+
+.af-kb-rel-group ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.af-kb-rel-group li {
+    margin: 4px 0;
+}
