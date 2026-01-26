@@ -50,7 +50,10 @@ return [
                 'af_aam_text_quote'         => '{1} процитировал(а) вас в "{2}"',
                 'af_aam_text_mention'       => '{1} упомянул(а) вас в "{2}"',
                 'af_aam_text_subscribed_forum' => '{1} создал(а) новую тему: {2}',
+
                 'af_aam_delete' => 'Удалить',
+
+                // очистка/тосты (фронт)
                 'af_aam_autoclean_days' => 'Автоочистка уведомлений (дней)',
                 'af_aam_autoclean_days_desc' => 'Если больше 0 — при создании новых уведомлений будут автоматически удаляться уведомления старше указанного количества дней.',
                 'af_aam_clear_all_button'  => 'Очистить все уведомления',
@@ -58,8 +61,16 @@ return [
                 'af_aam_cleared_all'       => 'Все уведомления удалены.',
                 'af_aam_toast_limit' => 'Максимум всплывающих уведомлений',
                 'af_aam_toast_limit_desc' => '0 — отключить всплывающие тосты. Иначе показывать не более указанного количества подряд.',
-                'af_aam_prefs_title' => 'Настройки уведомлений',
 
+                // пользовательские настройки уведомлений (НОВЫЕ)
+                'af_aam_prefs_title'       => 'Настройки уведомлений',
+                'af_aam_prefs_save'        => 'Сохранить',
+                'af_aam_prefs_saved'       => 'Настройки сохранены.',
+                'af_aam_prefs_save_error'  => 'Не удалось сохранить настройки. Попробуйте ещё раз.',
+                'af_aam_prefs_enable'      => 'Включить',
+                'af_aam_prefs_disable'     => 'Отключить',
+                'af_aam_prefs_enabled'     => 'Включено',
+                'af_aam_prefs_disabled'    => 'Отключено',
             ],
             'admin' => [
                 'af_aam_group'             => 'AF: Уведомления и упоминания',
@@ -78,6 +89,13 @@ return [
                 'af_aam_max_alerts_per_user_desc' => '0 — не ограничивать. Если больше 0, при превышении лимита самые старые уведомления будут удалены.',
                 'af_aam_inactive_days'     => 'Срок неактивности (дни)',
                 'af_aam_inactive_days_desc'=> '0 — не очищать. Если больше 0, уведомления неактивных пользователей (lastactive < cutoff) будут удалены автоматически.',
+
+                // ACP-настройки очистки/тостов (НОВЫЕ — для админки)
+                'af_aam_autoclean_days' => 'Автоочистка уведомлений (дней)',
+                'af_aam_autoclean_days_desc' => 'Если больше 0 — при создании новых уведомлений будут автоматически удаляться уведомления старше указанного количества дней.',
+                'af_aam_toast_limit' => 'Максимум всплывающих уведомлений',
+                'af_aam_toast_limit_desc' => '0 — отключить всплывающие тосты. Иначе показывать не более указанного количества подряд.',
+
                 'af_aam_admin_title'       => 'Типы уведомлений',
                 'af_aam_admin_code'        => 'Код',
                 'af_aam_admin_title_col'   => 'Название',
@@ -123,8 +141,11 @@ return [
                 'af_aam_text_subscribed'    => '{1} replied in subscribed thread "{2}"',
                 'af_aam_text_quote'         => '{1} quoted you in "{2}"',
                 'af_aam_text_mention'       => '{1} mentioned you in "{2}"',
-                'af_aam_text_subscribed_forum' => '{1} create new tread: {2}',
+                'af_aam_text_subscribed_forum' => '{1} created a new thread: {2}',
+
                 'af_aam_delete' => 'Delete',
+
+                // cleanup/toasts (front)
                 'af_aam_autoclean_days' => 'Auto-clearing notifications (days)',
                 'af_aam_autoclean_days_desc' => 'If greater than 0, when creating new notifications, notifications older than the specified number of days will be automatically deleted.',
                 'af_aam_clear_all_button'  => 'Clear all notifications',
@@ -132,7 +153,16 @@ return [
                 'af_aam_cleared_all'       => 'All notifications have been deleted.',
                 'af_aam_toast_limit' => 'Maximum pop-up notifications',
                 'af_aam_toast_limit_desc' => '0-disable pop-up toasts. Otherwise, show no more than the specified number in a row.',
-                'af_aam_prefs_title' => 'Notification settings',
+
+                // user notification preferences (NEW)
+                'af_aam_prefs_title'       => 'Notification settings',
+                'af_aam_prefs_save'        => 'Save',
+                'af_aam_prefs_saved'       => 'Settings saved.',
+                'af_aam_prefs_save_error'  => 'Could not save settings. Please try again.',
+                'af_aam_prefs_enable'      => 'Enable',
+                'af_aam_prefs_disable'     => 'Disable',
+                'af_aam_prefs_enabled'     => 'Enabled',
+                'af_aam_prefs_disabled'    => 'Disabled',
             ],
             'admin' => [
                 'af_aam_group'             => 'AF: Alerts and Mentions',
@@ -151,6 +181,13 @@ return [
                 'af_aam_max_alerts_per_user_desc' => '0 = unlimited. If greater than 0, oldest alerts will be removed when the limit is exceeded.',
                 'af_aam_inactive_days'     => 'Inactivity threshold (days)',
                 'af_aam_inactive_days_desc'=> '0 = do not clean. If greater than 0, alerts of inactive users (lastactive < cutoff) will be removed automatically.',
+
+                // ACP cleanup/toasts settings (NEW)
+                'af_aam_autoclean_days' => 'Auto-clearing notifications (days)',
+                'af_aam_autoclean_days_desc' => 'If greater than 0, when creating new notifications, notifications older than the specified number of days will be automatically deleted.',
+                'af_aam_toast_limit' => 'Maximum pop-up notifications',
+                'af_aam_toast_limit_desc' => '0 = disable pop-up toasts. Otherwise, show no more than the specified number in a row.',
+
                 'af_aam_admin_title'       => 'Alert types',
                 'af_aam_admin_code'        => 'Code',
                 'af_aam_admin_title_col'   => 'Title',
