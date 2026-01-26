@@ -1205,28 +1205,61 @@
             return null;
         }
 
-        document.addEventListener('click', function (e) {
-            var node = findMentionElement(e.target);
-            if (!node) return;
+        // ---- Mention button click (deduped) ----
+        if (!document.__afAamMentionButtonsBound) {
+            document.__afAamMentionButtonsBound = true;
 
-            e.preventDefault();
-            var username = '';
-            var uid = 0;
+            // global dedupe
+            var __afAamLastMentionInsertTs = 0;
+            var __afAamLastMentionInsertText = '';
 
-            if (node.getAttribute) {
-                username = (node.getAttribute('data-username') || node.getAttribute('data-mention-username') || node.textContent || '').trim();
-                uid = parseInt(node.getAttribute('data-uid') || '0', 10) || 0;
-            }
+            document.addEventListener('click', function (e) {
+                var node = findMentionElement(e.target);
+                if (!node) return;
 
-            var mentionText = buildMentionText(username, uid);
-            if (!mentionText) return;
+                // stop other listeners from also handling this click
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
 
-            if (sceditor) {
-                try { sceditor.focus(); sceditor.insertText(mentionText); return; } catch (e2) {}
-            }
-            if (!textarea) textarea = findTextarea();
-            if (textarea) insertIntoTextarea(textarea, mentionText);
-        });
+                var username = '';
+                var uid = 0;
+
+                if (node.getAttribute) {
+                    username = (node.getAttribute('data-username') || node.getAttribute('data-mention-username') || node.textContent || '').trim();
+                    uid = parseInt(node.getAttribute('data-uid') || '0', 10) || 0;
+                }
+
+                var mentionText = buildMentionText(username, uid);
+                if (!mentionText) return;
+
+                // node-level dedupe (fast double click / double handler)
+                var now = Date.now();
+                try {
+                    var lastNodeTs = parseInt(node.getAttribute('data-af-aam-lastclick') || '0', 10) || 0;
+                    var lastNodeText = node.getAttribute('data-af-aam-lasttext') || '';
+                    if (lastNodeTs && (now - lastNodeTs) < 250 && lastNodeText === mentionText) {
+                        return;
+                    }
+                    node.setAttribute('data-af-aam-lastclick', String(now));
+                    node.setAttribute('data-af-aam-lasttext', mentionText);
+                } catch (e0) {}
+
+                // global dedupe (если обработчик всё равно вызвался дважды)
+                if (__afAamLastMentionInsertTs && (now - __afAamLastMentionInsertTs) < 250 && __afAamLastMentionInsertText === mentionText) {
+                    return;
+                }
+                __afAamLastMentionInsertTs = now;
+                __afAamLastMentionInsertText = mentionText;
+
+                // Insert
+                if (sceditor) {
+                    try { sceditor.focus(); sceditor.insertText(mentionText); return; } catch (e2) {}
+                }
+                if (!textarea) textarea = findTextarea();
+                if (textarea) insertIntoTextarea(textarea, mentionText);
+            }, true); // capture=true helps intercept earlier
+        }
 
         log('[AAM mentions] init ok. textarea=', !!textarea, 'sceditor=', !!sceditor, 'url=', mentionSuggestUrl);
     }
