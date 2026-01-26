@@ -1,0 +1,254 @@
+/* AdvancedMenu — ACP IconPicker styles */
+/* Цель:
+   1) Красивый inline-ряд: input + кнопки + превью (одна высота, ровные отступы)
+   2) Модалка: приятная, читабельная, без "слепящего" UI
+*/
+
+/* ======= INLINE ROW (input + buttons + preview) ======= */
+
+.af-am-iconrow{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:2px;
+}
+
+/* Левый блок с input должен тянуться */
+.af-am-iconleft{
+  flex: 1 1 520px;
+  min-width: 260px;
+}
+
+/* Правый блок с контролами */
+.af-am-iconright{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex: 0 0 auto;
+}
+
+/* Подтягиваем высоту и общий вид инпута (ACP обычно уже норм, но мы выравниваем) */
+#af-am-icon-input,
+input#af-am-icon-input{
+  height: 34px;
+  line-height: 34px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+/* Кнопки — одинаковая высота/вид, без "кривых" размеров */
+.af-am-iconpick-btn.button,
+.af-am-iconclear-btn.button{
+  height:34px;
+  line-height:32px;
+  padding:0 12px;
+  border-radius:8px;
+  box-sizing:border-box;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+}
+
+/* Кнопка очистки — компактнее, но не "квадрат-кирпич" */
+.af-am-iconclear-btn.button{
+  width:34px;
+  padding:0;
+  font-weight:800;
+  letter-spacing:0.2px;
+}
+
+/* Превью — вровень с кнопками */
+.af-am-iconpreview{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:34px;
+  height:34px;
+  border:1px solid #d7dde5;
+  border-radius:8px;
+  background:rgba(255,255,255,.85);
+  box-shadow:0 1px 0 rgba(0,0,0,.04);
+  font-size:16px;
+}
+
+/* Текст/эмодзи в превью */
+.af-am-icp-text{
+  font-size:16px;
+  line-height:1;
+}
+
+/* Хинт под полем — более аккуратно */
+.af-am-iconhint{
+  color:#6b7686;
+  margin-top:10px;
+  padding-top:8px;
+  border-top:1px dashed rgba(150,160,175,.35);
+}
+
+/* На узких экранах — правый блок уходит на новую строку */
+@media (max-width: 820px){
+  .af-am-iconleft{ flex-basis: 100%; }
+  .af-am-iconright{ width: 100%; }
+  .af-am-iconright .button{ flex: 0 0 auto; }
+}
+
+/* ======= MODAL OVERLAY ======= */
+
+.af-am-icp-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.55);
+  z-index:99999;
+  backdrop-filter: blur(2px);
+}
+
+.af-am-icp-modal{
+  position:fixed;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  width:min(980px, calc(100vw - 40px));
+  height:min(740px, calc(100vh - 40px));
+  background:#ffffff;
+  border-radius:14px;
+  box-shadow:0 18px 60px rgba(0,0,0,.40);
+  z-index:100000;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  border:1px solid rgba(0,0,0,.06);
+}
+
+/* header модалки */
+.af-am-icp-head{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:12px 14px;
+  border-bottom:1px solid #e8edf4;
+  background:linear-gradient(#fbfcfe, #f6f8fb);
+}
+
+.af-am-icp-title{
+  font-weight:800;
+  font-size:14px;
+  margin-right:auto;
+  color:#222b36;
+}
+
+/* поиск */
+.af-am-icp-search{
+  width:320px;
+  max-width:44vw;
+  height:34px;
+  padding:6px 10px;
+  border-radius:10px;
+  border:1px solid #d7dde5;
+  outline:none;
+  box-sizing:border-box;
+  background:#fff;
+}
+
+.af-am-icp-search:focus{
+  border-color:#9cc2ff;
+  box-shadow:0 0 0 3px rgba(60,130,255,.18);
+}
+
+/* переключатель стиля */
+.af-am-icp-style{
+  display:flex;
+  gap:6px;
+  align-items:center;
+}
+
+.af-am-icp-style button{
+  height:34px;
+  padding:0 10px;
+  border-radius:10px;
+  border:1px solid #d7dde5;
+  background:#ffffff;
+  cursor:pointer;
+  box-sizing:border-box;
+  color:#263142;
+  font-weight:700;
+}
+
+.af-am-icp-style button:hover{
+  background:#f3f6fb;
+}
+
+.af-am-icp-style button.is-active{
+  background:#e9f2ff;
+  border-color:#b9d6ff;
+  box-shadow:0 0 0 3px rgba(60,130,255,.14);
+}
+
+/* закрыть */
+.af-am-icp-close{
+  cursor:pointer;
+  height:34px;
+  padding:0 12px;
+  border:1px solid #d7dde5;
+  background:#fff;
+  border-radius:10px;
+  box-sizing:border-box;
+  font-weight:700;
+}
+
+.af-am-icp-close:hover{
+  background:#f3f6fb;
+}
+
+/* статус */
+.af-am-icp-status{
+  padding:10px 14px;
+  border-bottom:1px solid #eef2f7;
+  color:#5e6a7a;
+  font-size:12px;
+  background:#fff;
+}
+
+/* grid */
+.af-am-icp-grid{
+  padding:14px;
+  overflow:auto;
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(54px, 1fr));
+  gap:10px;
+  background:linear-gradient(#ffffff, #fbfcfe);
+}
+
+.af-am-icp-btn{
+  width:54px;
+  height:54px;
+  border-radius:12px;
+  border:1px solid #e3e9f2;
+  background:#fff;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transition:transform .08s ease, box-shadow .08s ease, border-color .08s ease, background .08s ease;
+  box-sizing:border-box;
+}
+
+.af-am-icp-btn:hover{
+  transform:translateY(-1px);
+  border-color:#c8d6ea;
+  box-shadow:0 6px 16px rgba(0,0,0,.10);
+  background:#ffffff;
+}
+
+.af-am-icp-btn:focus{
+  outline:none;
+  border-color:#9cc2ff;
+  box-shadow:0 0 0 3px rgba(60,130,255,.18), 0 6px 16px rgba(0,0,0,.10);
+}
+
+.af-am-icp-btn i{
+  font-size:18px;
+  line-height:1;
+}
