@@ -84,3 +84,9 @@
   align-items: center;
   justify-content: center;
 }
+/* ===== AdvancedMenu Tooltip (hint) ===== */
+
+.af-am-link{
+  position: relative;
+}
+
