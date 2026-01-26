@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true">
+  <g transform="rotate(180 32 32)">
+    <path fill="currentColor" d="M10 28c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H10V28z"/>
+    <path fill="currentColor" d="M36 28c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H36V28z"/>
+  </g>
+</svg>
