@@ -1,4 +1,9 @@
-/* Header trigger */
+/* =========================================
+   AdvancedAccountSwitcher (AAS) — styles
+   Goal: no !important, beat theme by specificity & scope
+   ========================================= */
+
+/* Header trigger wrapper */
 .af-aas-panel {
     position: relative;
     display: inline-block;
@@ -6,6 +11,7 @@
     z-index: 10;
 }
 
+/* Header trigger link (base) */
 .af-aas-trigger {
     display: inline-flex;
     align-items: center;
@@ -16,26 +22,35 @@
     font-size: 14px;
     padding: 4px 8px;
     border-radius: 6px;
-    background: none !important;
-    padding-left: 0 !important;
+    background: transparent;
 }
 
-#header ul.menu li a.af-aas-trigger {
-    background: none !important;
-    padding-left: 0 !important;
+/* Stronger scope for header menu trigger to beat sprite/link rules in theme */
+#header .lower .menu.panel_links li a#af_aas_trigger,
+#header .lower .menu.panel_links li a.af-aas-trigger {
+    background: transparent;
+    background-image: none;
+    background-repeat: no-repeat;
+    background-position: 0 0;
+    padding-left: 0;
+    top: -5px;
 }
 
-.af-aas-trigger:hover {
+#header .lower .menu.panel_links li a.af-aas-trigger:hover,
+#header .lower .menu.panel_links li a#af_aas_trigger:hover {
     background: rgba(255,255,255,0.08);
 }
 
+/* Badge */
 .af-aas-badge {
     font-size: 11px;
     opacity: 0.8;
     margin-left: 6px;
 }
 
-/* Modal */
+/* =========================================
+   Modal
+   ========================================= */
 .af-aas-modal {
     position: fixed;
     inset: 0;
@@ -81,8 +96,11 @@
     vertical-align: middle;
 }
 
-.af-aas-modal-action {text-align: center;}
+.af-aas-modal-action {
+    text-align: center;
+}
 
+/* Avatar cell block */
 .af-aas-modal-avatar .af-aas-avatar {
     display: inline-flex;
     width: 36px;
@@ -104,6 +122,7 @@
     display: block;
 }
 
+/* Footer */
 .af-aas-modal-footer {
     display: flex;
     align-items: center;
@@ -120,7 +139,9 @@
     text-decoration: underline;
 }
 
-/* UCP styles */
+/* =========================================
+   UCP styles
+   ========================================= */
 .af-aas-ucp { padding: 10px 0; }
 .af-aas-warning { margin-bottom: 6px; }
 .af-aas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
@@ -132,6 +153,7 @@
 
 .af-aas-form-actions { margin-top: 6px; }
 
+/* Suggest */
 .af-aas-suggest {
     margin-top: 6px;
     border: 1px solid rgba(255,255,255,0.12);
@@ -148,72 +170,191 @@
 }
 .af-aas-empty { opacity: 0.8; }
 
-/* account list page */
+/* Account list page */
 .af-aas-accountlist-page { padding: 10px 0; }
 
-/* miniavatar in UCP list */
+/* Miniavatar in UCP list */
 .af-aas-miniavatar {
-  display: inline-flex;
-  width: 24px;
-  height: 24px;
-  margin-right: 8px;
-  vertical-align: middle;
+    display: inline-flex;
+    width: 24px;
+    height: 24px;
+    margin-right: 8px;
+    vertical-align: middle;
 }
 .af-aas-miniavatar img {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  object-fit: cover;
-  display: block;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
 }
 
-/* ===========================
-   KILL SPRITE ICONS (theme)
-   =========================== */
+/* =========================================
+   Theme sprite neutralizers — WITHOUT !important
+   Fix: remove headerlinks_sprite.png “лупа” inside AAS modal
+   Strategy:
+   - override background shorthand (not only background-image)
+   - increase specificity by scoping to .af-aas-modal-table descendants
+   ========================================= */
 
-/* 1) Триггер в шапке: убить спрайт из #header ul.menu li a */
-#header ul.menu li a#af_aas_trigger,
-#header ul.menu li a.af-aas-trigger {
-    background-image: none !important;
-    background: none !important;
-    background-position: 0 0 !important;
-    background-repeat: no-repeat !important;
-    padding-left: 0 !important;
+/* 1) Header trigger: kill sprite backgrounds from theme */
+#header .lower ul.menu.panel_links li a#af_aas_trigger,
+#header .lower ul.menu.panel_links li a.af-aas-trigger {
+    background: transparent;
+    background-image: none;
+    background-repeat: no-repeat;
+    background-position: 0 0;
+    padding-left: 0;
 }
 
-/* 2) Вся модалка: убить спрайт/фон на ссылках и "кнопках" (<a class="button">) */
-.af-aas-modal a,
-.af-aas-modal a.button,
-.af-aas-modal a.button_small,
-.af-aas-modal .button,
-.af-aas-modal .button_small {
-    background-image: none !important;
-    background: none !important;
-    background-position: 0 0 !important;
-    background-repeat: no-repeat !important;
+/* 2) MODAL: kill ANY sprite backgrounds on links/buttons inside modal */
+body .af-aas-modal .af-aas-modal-table a,
+body .af-aas-modal .af-aas-modal-table a:link,
+body .af-aas-modal .af-aas-modal-table a:visited,
+body .af-aas-modal .af-aas-modal-table a:hover,
+body .af-aas-modal .af-aas-modal-table a:active,
+body .af-aas-modal .af-aas-modal-table .button,
+body .af-aas-modal .af-aas-modal-table .button_small,
+body .af-aas-modal .af-aas-modal-table a.button,
+body .af-aas-modal .af-aas-modal-table a.button_small,
+body .af-aas-modal .af-aas-modal-table input.button,
+body .af-aas-modal .af-aas-modal-table input.button_small,
+body .af-aas-modal .af-aas-modal-table button.button,
+body .af-aas-modal .af-aas-modal-table button.button_small {
+    background: transparent;          /* важно: перекрываем shorthand */
+    background-image: none;
+    background-repeat: no-repeat;
+    background-position: 0 0;
+    box-shadow: none;                 /* если тема рисует “иконку” тенью */
 }
 
-/* 3) Если тема под иконку добавляет левый отступ — прибиваем только в модалке */
-.af-aas-modal a.button,
-.af-aas-modal a.button_small,
-.af-aas-modal .af-aas-footer-link {
-    padding-left: 8px !important; /* чтобы не было "пустого места под лупу" */
+/* 3) MODAL: если тема добавляет padding-left под спрайт — нормализуем */
+body .af-aas-modal .af-aas-modal-table a.button,
+body .af-aas-modal .af-aas-modal-table a.button_small,
+body .af-aas-modal .af-aas-modal-table .button,
+body .af-aas-modal .af-aas-modal-table .button_small,
+body .af-aas-modal .af-aas-modal-table .af-aas-footer-link {
+    padding-left: 8px;
 }
 
-
-
-/* AAS: скрыть кнопку на странице misc.php?action=af_aas_switch
-   (если в breadcrumb есть ссылка на эту же страницу) */
+/* =========================================
+   Hide panel on specific pages
+   Note: uses :has() (modern browsers ok)
+   ========================================= */
 body:has(#breadcrumb a[href*="misc.php?action=af_aas_switch"]) .af-aas-panel,
 body:has(#breadcrumb a[href*="misc.php?action=af_aas_switch"]) #af_aas_trigger {
-  display: none !important;
+    display: none;
 }
 
-
-/* AAS: убрать кнопку/панель на redirect-страницах MyBB */
+/* MyBB redirect pages */
 body#redirect .af-aas-panel,
 body#redirect #af_aas_trigger,
 .redirect .af-aas-panel,
 .redirect #af_aas_trigger {
-  display: none !important;
+    display: none;
+}
+
+/* =========================
+   AAS: статус поверх аватара
+   ========================= */
+.af-aas-avatarwrap{
+    position: relative;
+    display: inline-block;
+    vertical-align: top;
+    line-height: 0;
+}
+
+.af-aas-avatarwrap a,
+.af-aas-avatarwrap img{
+    display: block;
+    line-height: 0;
+}
+
+.af-aas-userstatus{
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    z-index: 5;
+    margin: 0;
+    box-shadow: 0 0 0 2px rgba(0,0,0,.35);
+}
+
+.af-aas-userstatus--online{ background:#2ecc71; }
+.af-aas-userstatus--offline{ background:#95a5a6; }
+.af-aas-userstatus--invisible{ background:#f1c40f; }
+
+/* =========================
+   /userlist.php: статус поверх аватара
+   ========================= */
+
+/* центрируем аватар+точку внутри ячейки */
+td:has(.af-ul-avatarwrap){
+    text-align: center;
+}
+
+.af-ul-avatarwrap{
+    position: relative;
+    display: inline-block;
+    vertical-align: top;
+    line-height: 0;
+}
+
+.af-ul-avatarwrap a,
+.af-ul-avatarwrap img{
+    display: block;
+    line-height: 0;
+}
+
+.af-ul-status-dot{
+    position: absolute;
+    top: -2px;
+    left: -8px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    z-index: 5;
+    margin: 0;
+    box-shadow: 0 0 0 2px rgba(0,0,0,.35);
+}
+
+.af-ul-online{ background:#2ecc71; }
+.af-ul-offline{ background:#95a5a6; }
+.af-ul-invisible{ background:#f1c40f; }
+
+
+/* =========================================
+   AAS MODAL: kill header sprite (headerlinks_sprite.png)
+   Reason: modal is inside #header ul.menu li, so theme rule applies.
+   ========================================= */
+
+#header ul.menu li #af_aas_modal a,
+#header ul.menu li #af_aas_modal a:link,
+#header ul.menu li #af_aas_modal a:visited,
+#header ul.menu li #af_aas_modal a:hover,
+#header ul.menu li #af_aas_modal a:active,
+#header ul.menu li #af_aas_modal .button,
+#header ul.menu li #af_aas_modal .button_small,
+#header ul.menu li #af_aas_modal a.button,
+#header ul.menu li #af_aas_modal a.button_small,
+#header ul.menu li #af_aas_modal button,
+#header ul.menu li #af_aas_modal input {
+    background-image: none;
+    background-position: 0 0;
+}
+
+/* тема часто добавляет padding-left под “иконку” из спрайта */
+#header ul.menu li #af_aas_modal a.button,
+#header ul.menu li #af_aas_modal a.button_small,
+#header ul.menu li #af_aas_modal .af-aas-footer-link {
+    padding-left: 10px; /* обычный отступ, без “места под иконку” */
+}
+
+/* если спрайт оказался на контейнере (редко, но бывает) */
+#header ul.menu li #af_aas_modal .af-aas-modal-table,
+#header ul.menu li #af_aas_modal .af-aas-modal-action,
+#header ul.menu li #af_aas_modal .af-aas-modal-footer {
+    background-image: none;
 }
