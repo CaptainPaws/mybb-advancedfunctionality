@@ -151,7 +151,7 @@ CREATE TABLE {TABLE_PREFIX}af_kb_entries (
   short_en TEXT NOT NULL,
   body_ru MEDIUMTEXT NOT NULL,
   body_en MEDIUMTEXT NOT NULL,
-  meta_json MEDIUMTEXT NOT NULL DEFAULT '{}',
+  meta_json MEDIUMTEXT NOT NULL,
   active TINYINT(1) NOT NULL DEFAULT 1,
   sortorder INT NOT NULL DEFAULT 0,
   updated_at INT UNSIGNED NOT NULL DEFAULT 0,
@@ -172,7 +172,7 @@ CREATE TABLE {TABLE_PREFIX}af_kb_blocks (
   title_en VARCHAR(255) NOT NULL DEFAULT '',
   content_ru MEDIUMTEXT NOT NULL,
   content_en MEDIUMTEXT NOT NULL,
-  data_json MEDIUMTEXT NOT NULL DEFAULT '{}',
+  data_json MEDIUMTEXT NOT NULL,
   active TINYINT(1) NOT NULL DEFAULT 1,
   sortorder INT NOT NULL DEFAULT 0,
   KEY entry_sort (entry_id, sortorder),
@@ -191,7 +191,7 @@ CREATE TABLE {TABLE_PREFIX}af_kb_relations (
   rel_type VARCHAR(64) NOT NULL,
   to_type VARCHAR(64) NOT NULL,
   to_key VARCHAR(64) NOT NULL,
-  meta_json MEDIUMTEXT NOT NULL DEFAULT '{}',
+  meta_json MEDIUMTEXT NOT NULL,
   sortorder INT NOT NULL DEFAULT 0,
   KEY from_idx (from_type, from_key, rel_type),
   KEY to_idx (to_type, to_key)
@@ -216,7 +216,7 @@ SQL;
     }
 
     $gid = af_kb_ensure_group(
-        'af_kb',
+        'af_knowledgebase',
         $lang->af_knowledgebase_group ?? 'AF: Knowledge Base',
         $lang->af_knowledgebase_group_desc ?? 'Settings for Knowledge Base addon.'
     );
@@ -279,6 +279,7 @@ SQL;
     return true;
 }
 
+
 function af_knowledgebase_uninstall(): bool
 {
     global $db;
@@ -290,7 +291,7 @@ function af_knowledgebase_uninstall(): bool
     $db->drop_table('af_kb_log', true);
 
     $db->delete_query('settings', "name IN ('af_knowledgebase_enabled','af_kb_public_catalog','af_kb_editor_groups','af_kb_types_manage_groups','af_kb_atf_map')");
-    $db->delete_query('settinggroups', "name='af_kb'");
+    $db->delete_query('settinggroups', "name='af_knowledgebase'");
     $db->delete_query('templates', "title LIKE 'knowledgebase_%'");
 
     if (function_exists('rebuild_settings')) {
