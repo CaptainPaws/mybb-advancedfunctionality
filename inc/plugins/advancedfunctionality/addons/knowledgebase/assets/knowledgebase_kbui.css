@@ -75,6 +75,37 @@
     margin-bottom: 12px;
 }
 
+.af-kb-modal-header h3 {
+    margin: 0;
+}
+
+.af-kb-modal-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.af-kb-modal-title .af-kb-chip-icon {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
+.af-kb-modal-title .af-kb-chip-title {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.af-kb-modal-title .af-kb-icon-img {
+    width: 20px;
+    height: 20px;
+}
+
+.af-kb-modal-title i {
+    line-height: 1;
+}
+
 .af-kb-modal-close {
     border: none;
     background: transparent;
@@ -178,3 +209,15 @@
 .af-kb-modal-backdrop.af-kb-chip-modal.is-active{ display:flex; }
 .af-kb-modal-backdrop.af-kb-chip-modal::before,
 .af-kb-modal-backdrop.af-kb-chip-modal::after{ content:none !important; }
+
+.af-kb-banner {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+.af-kb-modal-block + .af-kb-modal-block {
+    margin-top: 12px;
+}

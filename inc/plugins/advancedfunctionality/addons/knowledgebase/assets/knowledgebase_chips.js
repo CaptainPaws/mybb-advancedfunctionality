@@ -131,12 +131,64 @@
         }
 
         title.innerHTML =
-            (iconHtml ? '<span class="af-kb-chip-icon">' + iconHtml + '</span>' : '') +
-            escapeHtml(entry.title || entry.key);
+            '<span class="af-kb-modal-title">' +
+                (iconHtml ? '<span class="af-kb-chip-icon">' + iconHtml + '</span>' : '') +
+                '<span class="af-kb-chip-title">' + escapeHtml(entry.title || entry.key) + '</span>' +
+            '</span>';
 
+        var banner = entry.banner_url
+            ? '<img class="af-kb-banner" src="' + escapeHtml(entry.banner_url) + '" alt="" loading="lazy" />'
+            : '';
         var short = entry.short ? '<p>' + escapeHtml(entry.short) + '</p>' : '';
         var bodyText = entry.body ? '<div>' + escapeHtml(entry.body).replace(/\n/g, '<br />') + '</div>' : '';
-        body.innerHTML = short + bodyText;
+        var blocksHtml = '';
+        if (entryData.blocks && Array.isArray(entryData.blocks)) {
+            entryData.blocks.forEach(function (block) {
+                if (!block) return;
+                var blockKey = String(block.block_key || block.key || '').toLowerCase();
+                if (blockKey === 'tech' || blockKey === 'tech_hint' || blockKey === 'meta_json' || blockKey.indexOf('meta') === 0) {
+                    return;
+                }
+
+                if (block.is_technical === true || block.visibility === 'technical') {
+                    return;
+                }
+
+                var dataVisibility = '';
+                if (block.data_json) {
+                    try {
+                        var parsed = JSON.parse(block.data_json);
+                        if (parsed && typeof parsed === 'object') {
+                            if (parsed.is_technical === true) {
+                                return;
+                            }
+                            if (parsed.visibility === 'technical') {
+                                return;
+                            }
+                            dataVisibility = parsed.visibility || '';
+                        }
+                    } catch (e) {
+                        dataVisibility = '';
+                    }
+                }
+
+                if (dataVisibility === 'technical') {
+                    return;
+                }
+
+                var blockTitle = escapeHtml(block.title || block.block_key || '');
+                var blockBody = escapeHtml(block.content || block.body || '').replace(/\n/g, '<br />');
+                if (!blockTitle && !blockBody) {
+                    return;
+                }
+                blocksHtml += '<section class="af-kb-modal-block">' +
+                    (blockTitle ? '<h4>' + blockTitle + '</h4>' : '') +
+                    (blockBody ? '<div>' + blockBody + '</div>' : '') +
+                    '</section>';
+            });
+        }
+
+        body.innerHTML = banner + short + bodyText + blocksHtml;
     }
 
     function initChips() {

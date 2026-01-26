@@ -161,6 +161,7 @@ CREATE TABLE {TABLE_PREFIX}af_kb_entries (
   meta_json MEDIUMTEXT NOT NULL,
   icon_class VARCHAR(128) NOT NULL DEFAULT '',
   icon_url VARCHAR(255) NOT NULL DEFAULT '',
+  banner_url VARCHAR(255) NOT NULL DEFAULT '',
   bg_url VARCHAR(255) NOT NULL DEFAULT '',
   active TINYINT(1) NOT NULL DEFAULT 1,
   sortorder INT NOT NULL DEFAULT 0,
@@ -411,6 +412,9 @@ function af_kb_ensure_schema(): void
         }
         if (!$db->field_exists('bg_url', 'af_kb_entries')) {
             $db->add_column('af_kb_entries', 'bg_url', "VARCHAR(255) NOT NULL DEFAULT ''");
+        }
+        if (!$db->field_exists('banner_url', 'af_kb_entries')) {
+            $db->add_column('af_kb_entries', 'banner_url', "VARCHAR(255) NOT NULL DEFAULT ''");
         }
         if (!$db->field_exists('tech_ru', 'af_kb_entries')) {
             $db->add_column('af_kb_entries', 'tech_ru', "TEXT NOT NULL");
@@ -1675,6 +1679,7 @@ function af_kb_handle_edit(): void
         $metaJson = trim((string)$mybb->get_input('meta_json'));
         $entryIconClass = af_kb_sanitize_icon_class((string)$mybb->get_input('icon_class'));
         $entryIconUrl = af_kb_sanitize_url((string)$mybb->get_input('icon_url'));
+        $entryBannerUrl = af_kb_sanitize_url((string)$mybb->get_input('banner_url'));
         $entryBgUrl = af_kb_sanitize_url((string)$mybb->get_input('background_url'));
         $entryBgTabUrl = af_kb_sanitize_url((string)$mybb->get_input('entry_background_tab_url'));
         if (!af_kb_validate_json($metaJson)) {
@@ -1811,6 +1816,7 @@ function af_kb_handle_edit(): void
                 'meta_json'  => $db->escape_string(af_kb_normalize_json($metaJsonNormalized)),
                 'icon_class' => $db->escape_string($entryIconClass),
                 'icon_url'   => $db->escape_string($entryIconUrl),
+                'banner_url' => $db->escape_string($entryBannerUrl),
                 'bg_url'     => $db->escape_string($entryBgUrl),
                 'active'     => (int)$mybb->get_input('active', MyBB::INPUT_INT) ? 1 : 0,
                 'sortorder'  => (int)$mybb->get_input('sortorder', MyBB::INPUT_INT),
@@ -1883,6 +1889,7 @@ function af_kb_handle_edit(): void
         'meta_json' => '{}',
         'icon_class' => '',
         'icon_url' => '',
+        'banner_url' => '',
         'bg_url' => '',
         'active'    => 1,
         'sortorder' => 0,
@@ -1987,6 +1994,7 @@ function af_kb_handle_edit(): void
     $entryUi = af_kb_get_entry_ui($entry);
     $kb_icon_class = htmlspecialchars_uni($entryUi['icon_class'] ?? '');
     $kb_icon_url = htmlspecialchars_uni($entryUi['icon_url'] ?? '');
+    $kb_banner_url = htmlspecialchars_uni($entry['banner_url'] ?? '');
     $kb_background_url = htmlspecialchars_uni($entryUi['background_url'] ?? '');
     $kb_background_tab_url = htmlspecialchars_uni($entryUi['background_tab_url'] ?? '');
     $kb_active_checked = !empty($entry['active']) ? 'checked="checked"' : '';
@@ -2305,6 +2313,7 @@ function af_kb_handle_json_get(): void
             'tech_hint' => af_kb_build_tech_hint(af_kb_pick_text($entry, 'tech')),
             'icon_url'  => $entryUi['icon_url'],
             'icon_class'=> $entryUi['icon_class'],
+            'banner_url'=> $entry['banner_url'] ?? '',
         ],
         'blocks' => $blocks,
         'relations' => $relations,
@@ -2348,6 +2357,7 @@ function af_kb_handle_json_list(): void
             'tech' => af_kb_build_tech_hint(af_kb_pick_text($row, 'tech')),
             'icon_url' => $entryUi['icon_url'],
             'icon_class' => $entryUi['icon_class'],
+            'banner_url' => $row['banner_url'] ?? '',
         ];
     }
 
