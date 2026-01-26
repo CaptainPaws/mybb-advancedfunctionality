@@ -549,6 +549,16 @@ function af_kb_normalize_json(string $raw): string
     return json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
+function af_kb_is_empty_json(string $raw): bool
+{
+    $raw = trim($raw);
+    if ($raw === '') {
+        return true;
+    }
+
+    return in_array($raw, ['{}', '[]'], true);
+}
+
 function af_kb_render_data_table(string $json): string
 {
     $decoded = json_decode($json, true);
@@ -622,7 +632,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
     }
 
     $action = $mybb->get_input('action');
-    $is_kb_page = in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children'], true);
+    $is_kb_page = in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete'], true);
 
     if ($is_kb_page && !empty($mybb->settings['af_knowledgebase_enabled'])) {
         $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
@@ -664,7 +674,7 @@ function af_kb_misc_route(): void
     global $mybb;
 
     $action = $mybb->get_input('action');
-    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children'], true)) {
+    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete'], true)) {
         return;
     }
 
@@ -686,6 +696,14 @@ function af_kb_misc_route(): void
 
     if ($action === 'kb_edit') {
         af_kb_handle_edit();
+    }
+
+    if ($action === 'kb_type_edit') {
+        af_kb_handle_type_edit();
+    }
+
+    if ($action === 'kb_type_delete') {
+        af_kb_handle_type_delete();
     }
 
     af_kb_handle_view();
@@ -719,16 +737,18 @@ function af_kb_handle_view(): void
                 $title = $row['type'];
             }
             $desc = af_kb_pick_text($row, 'description');
-            $rows .= '<div class="af-kb-type">
-                <h3><a href="misc.php?action=kb&type='.htmlspecialchars_uni($row['type']).'">'.htmlspecialchars_uni($title).'</a></h3>
-                <div class="af-kb-type-desc">'.af_kb_parse_message($desc).'</div>
-            </div>';
+            $rows .= '<a class="af-kb-tab" href="misc.php?action=kb&type='.htmlspecialchars_uni($row['type']).'">'
+                . '<span class="af-kb-tab-title">'.htmlspecialchars_uni($title).'</span>'
+                . '<span class="af-kb-tab-desc">'.af_kb_parse_message($desc).'</span>'
+                . '</a>';
         }
 
         $kb_page_title = $lang->af_kb_catalog_title ?? 'Knowledge Base';
         $kb_types_rows = $rows;
         $kb_can_edit = af_kb_can_edit() ? '1' : '0';
-        $kb_create_link = af_kb_can_edit() ? '<a class="af-kb-btn" href="misc.php?action=kb_edit">'.htmlspecialchars_uni($lang->af_kb_create ?? 'Create').'</a>' : '';
+        $kb_create_link = af_kb_can_manage_types()
+            ? '<a class="af-kb-btn af-kb-btn--create" href="misc.php?action=kb_type_edit">'.htmlspecialchars_uni($lang->af_kb_type_create ?? 'Create category').'</a>'
+            : '';
         $af_kb_content = '';
         eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_catalog') . "\";");
         eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
@@ -766,12 +786,33 @@ function af_kb_handle_view(): void
             </div>';
         }
 
-        $kb_page_title = htmlspecialchars_uni($type);
-        $kb_type = htmlspecialchars_uni($type);
+        $typeRow = $db->fetch_array(
+            $db->simple_select('af_kb_types', '*', "type='".$db->escape_string($type)."'", ['limit' => 1])
+        );
+        $typeTitle = $type;
+        $typeDesc = '';
+        if ($typeRow) {
+            $typeTitle = af_kb_pick_text($typeRow, 'title') ?: $type;
+            $typeDesc = af_kb_pick_text($typeRow, 'description');
+        }
+
+        $kb_page_title = htmlspecialchars_uni($typeTitle);
+        $kb_type_title = htmlspecialchars_uni($typeTitle);
+        $kb_type_description = af_kb_parse_message($typeDesc);
+        $kb_type_value = htmlspecialchars_uni($type);
         $kb_query = htmlspecialchars_uni($query);
         $kb_entries_rows = $rows;
         $kb_can_edit = af_kb_can_edit() ? '1' : '0';
-        $kb_create_link = af_kb_can_edit() ? '<a class="af-kb-btn" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_create ?? 'Create').'</a>' : '';
+        $actions = [];
+        if (af_kb_can_edit()) {
+            $actions[] = '<a class="af-kb-btn af-kb-btn--create" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_create ?? 'Create').'</a>';
+        }
+        if (af_kb_can_manage_types()) {
+            $actions[] = '<a class="af-kb-btn af-kb-btn--edit" href="misc.php?action=kb_type_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_type_edit ?? 'Edit category').'</a>';
+            $confirm = htmlspecialchars_uni($lang->af_kb_type_delete_confirm ?? 'Delete category?');
+            $actions[] = '<a class="af-kb-btn af-kb-btn--delete" href="misc.php?action=kb_type_delete&type='.htmlspecialchars_uni($type).'&my_post_key='.htmlspecialchars_uni($mybb->post_code).'" onclick="return confirm(\''.$confirm.'\');">'.htmlspecialchars_uni($lang->af_kb_type_delete ?? 'Delete category').'</a>';
+        }
+        $kb_type_actions = implode(' ', $actions);
         $af_kb_content = '';
         eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_list') . "\";");
         eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
@@ -789,6 +830,14 @@ function af_kb_handle_view(): void
     $entry = $db->fetch_array($db->simple_select('af_kb_entries', '*', $where, ['limit' => 1]));
     if (!$entry) {
         error($lang->af_kb_not_found ?? 'Not found');
+    }
+
+    $typeRow = $db->fetch_array(
+        $db->simple_select('af_kb_types', '*', "type='".$db->escape_string($type)."'", ['limit' => 1])
+    );
+    $typeTitle = $type;
+    if ($typeRow) {
+        $typeTitle = af_kb_pick_text($typeRow, 'title') ?: $type;
     }
 
     $title = af_kb_pick_text($entry, 'title');
@@ -859,6 +908,11 @@ function af_kb_handle_view(): void
 
     $kb_page_title = htmlspecialchars_uni($title);
     $kb_title = htmlspecialchars_uni($title);
+    $kb_breadcrumbs = '<nav class="af-kb-breadcrumbs">'
+        . '<a href="misc.php?action=kb">'.htmlspecialchars_uni($lang->af_kb_catalog_title ?? 'Catalog').'</a>'
+        . ' &raquo; <a href="misc.php?action=kb&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($typeTitle).'</a>'
+        . ' &raquo; <span>'.htmlspecialchars_uni($title).'</span>'
+        . '</nav>';
     $kb_short = $short;
     $kb_body = $body;
     $kb_can_edit = af_kb_can_edit() ? '1' : '0';
@@ -890,13 +944,6 @@ function af_kb_handle_edit(): void
                 "type='".$db->escape_string($type)."' AND `key`='".$db->escape_string($key)."'",
                 ['limit' => 1]
             )
-        );
-    }
-
-    $typeRow = null;
-    if ($type !== '') {
-        $typeRow = $db->fetch_array(
-            $db->simple_select('af_kb_types', '*', "type='".$db->escape_string($type)."'", ['limit' => 1])
         );
     }
 
@@ -955,11 +1002,6 @@ function af_kb_handle_edit(): void
             $errors[] = $lang->af_kb_invalid_json ?? 'Invalid JSON.';
         }
 
-        $typeTitleRu = trim((string)$mybb->get_input('type_title_ru'));
-        $typeTitleEn = trim((string)$mybb->get_input('type_title_en'));
-        $typeDescRu = trim((string)$mybb->get_input('type_description_ru'));
-        $typeDescEn = trim((string)$mybb->get_input('type_description_en'));
-
         $blocksInput = $mybb->get_input('blocks', MyBB::INPUT_ARRAY);
         $relationsInput = $mybb->get_input('relations', MyBB::INPUT_ARRAY);
 
@@ -978,11 +1020,12 @@ function af_kb_handle_edit(): void
                 $active = !empty($block['active']) ? 1 : 0;
                 $sortorder = (int)($block['sortorder'] ?? 0);
 
-                if ($blockKey === '' && $titleRu === '' && $titleEn === '' && $contentRu === '' && $contentEn === '' && $dataJson === '') {
+                $dataJsonEmpty = af_kb_is_empty_json($dataJson);
+                if ($blockKey === '' && $titleRu === '' && $titleEn === '' && $contentRu === '' && $contentEn === '' && $dataJsonEmpty) {
                     continue;
                 }
 
-                if (!af_kb_validate_json($dataJson)) {
+                if (!$dataJsonEmpty && !af_kb_validate_json($dataJson)) {
                     $errors[] = $lang->af_kb_invalid_json ?? 'Invalid JSON.';
                     break;
                 }
@@ -1012,7 +1055,8 @@ function af_kb_handle_edit(): void
                 $meta = trim((string)($rel['meta_json'] ?? ''));
                 $sortorder = (int)($rel['sortorder'] ?? 0);
 
-                if ($relType === '' && $toType === '' && $toKey === '' && $meta === '') {
+                $metaEmpty = af_kb_is_empty_json($meta);
+                if ($relType === '' && $toType === '' && $toKey === '' && $metaEmpty) {
                     continue;
                 }
 
@@ -1021,7 +1065,7 @@ function af_kb_handle_edit(): void
                     break;
                 }
 
-                if (!af_kb_validate_json($meta)) {
+                if (!$metaEmpty && !af_kb_validate_json($meta)) {
                     $errors[] = $lang->af_kb_invalid_json ?? 'Invalid JSON.';
                     break;
                 }
@@ -1053,30 +1097,6 @@ function af_kb_handle_edit(): void
 
             if ($existing && (!$entry || (int)$existing['id'] !== (int)($entry['id'] ?? 0))) {
                 $errors[] = 'Entry with this type/key already exists.';
-            }
-        }
-
-        if (!$errors && af_kb_can_manage_types() && $type !== '') {
-            $existingType = $db->fetch_array(
-                $db->simple_select('af_kb_types', '*', "type='".$db->escape_string($type)."'", ['limit' => 1])
-            );
-            if ($existingType) {
-                $db->update_query('af_kb_types', [
-                    'title_ru'       => $db->escape_string($typeTitleRu !== '' ? $typeTitleRu : $existingType['title_ru']),
-                    'title_en'       => $db->escape_string($typeTitleEn !== '' ? $typeTitleEn : $existingType['title_en']),
-                    'description_ru' => $db->escape_string($typeDescRu),
-                    'description_en' => $db->escape_string($typeDescEn),
-                ], "id=".(int)$existingType['id']);
-            } else {
-                $db->insert_query('af_kb_types', [
-                    'type'           => $db->escape_string($type),
-                    'title_ru'       => $db->escape_string($typeTitleRu !== '' ? $typeTitleRu : $type),
-                    'title_en'       => $db->escape_string($typeTitleEn !== '' ? $typeTitleEn : $type),
-                    'description_ru' => $db->escape_string($typeDescRu),
-                    'description_en' => $db->escape_string($typeDescEn),
-                    'sortorder'      => 0,
-                    'active'         => 1,
-                ]);
             }
         }
 
@@ -1176,10 +1196,10 @@ function af_kb_handle_edit(): void
             'title_en' => '',
             'content_ru' => '',
             'content_en' => '',
-            'data_json' => '{}',
-            'active' => 1,
-            'sortorder' => 0,
-        ];
+        'data_json' => '',
+        'active' => 1,
+        'sortorder' => 0,
+    ];
     }
 
     $blockIndex = 0;
@@ -1190,7 +1210,7 @@ function af_kb_handle_edit(): void
         $block_title_en = htmlspecialchars_uni($block['title_en']);
         $block_content_ru = htmlspecialchars_uni($block['content_ru']);
         $block_content_en = htmlspecialchars_uni($block['content_en']);
-        $block_data_json = htmlspecialchars_uni($block['data_json'] ?: '{}');
+        $block_data_json = htmlspecialchars_uni($block['data_json'] ?? '');
         $block_active_checked = !empty($block['active']) ? 'checked="checked"' : '';
         $block_sortorder = (int)$block['sortorder'];
         eval("\$blocksRows .= \"" . af_kb_get_template('knowledgebase_blocks_edit_item') . "\";");
@@ -1216,7 +1236,7 @@ function af_kb_handle_edit(): void
             'rel_type' => '',
             'to_type' => '',
             'to_key' => '',
-            'meta_json' => '{}',
+            'meta_json' => '',
             'sortorder' => 0,
         ];
     }
@@ -1227,7 +1247,7 @@ function af_kb_handle_edit(): void
         $rel_type = htmlspecialchars_uni($rel['rel_type']);
         $rel_to_type = htmlspecialchars_uni($rel['to_type']);
         $rel_to_key = htmlspecialchars_uni($rel['to_key']);
-        $rel_meta_json = htmlspecialchars_uni($rel['meta_json'] ?: '{}');
+        $rel_meta_json = htmlspecialchars_uni($rel['meta_json'] ?? '');
         $rel_sortorder = (int)$rel['sortorder'];
         eval("\$relationsRows .= \"" . af_kb_get_template('knowledgebase_rel_edit_item') . "\";");
         $relIndex++;
@@ -1259,30 +1279,167 @@ function af_kb_handle_edit(): void
     $kb_blocks_index = $blockIndex;
     $kb_relations_index = $relIndex;
 
-    $kb_type_title_ru = htmlspecialchars_uni($typeRow['title_ru'] ?? '');
-    $kb_type_title_en = htmlspecialchars_uni($typeRow['title_en'] ?? '');
-    $kb_type_description_ru = htmlspecialchars_uni($typeRow['description_ru'] ?? '');
-    $kb_type_description_en = htmlspecialchars_uni($typeRow['description_en'] ?? '');
-    $kb_manage_types = af_kb_can_manage_types() ? '1' : '0';
     $kb_delete_button = !empty($entry['id']) ? '<button type="submit" name="kb_delete" value="1" class="af-kb-remove">'.$lang->af_kb_delete.'</button>' : '';
-    $kb_type_manage_section = '';
-    if (af_kb_can_manage_types()) {
-        $kb_type_manage_section = '<section>'
-            . '<h3>Тип записи</h3>'
-            . '<div class=\"af-kb-row\">'
-            . '<div><label>Название (RU)</label><input type=\"text\" name=\"type_title_ru\" value=\"'.$kb_type_title_ru.'\" /></div>'
-            . '<div><label>Название (EN)</label><input type=\"text\" name=\"type_title_en\" value=\"'.$kb_type_title_en.'\" /></div>'
-            . '</div>'
-            . '<label>Описание (RU)</label><textarea name=\"type_description_ru\">'.$kb_type_description_ru.'</textarea>'
-            . '<label>Описание (EN)</label><textarea name=\"type_description_en\">'.$kb_type_description_en.'</textarea>'
-            . '</section>';
-    }
 
     $af_kb_content = '';
     eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_edit') . "\";");
     eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
     output_page($page);
     exit;
+}
+
+function af_kb_handle_type_edit(): void
+{
+    global $mybb, $db, $lang;
+
+    if (!af_kb_can_manage_types()) {
+        error_no_permission();
+    }
+
+    $type = trim((string)$mybb->get_input('type'));
+    $typeRow = null;
+    if ($type !== '') {
+        $typeRow = $db->fetch_array(
+            $db->simple_select('af_kb_types', '*', "type='".$db->escape_string($type)."'", ['limit' => 1])
+        );
+    }
+    $isEditing = (bool)$typeRow;
+
+    $errors = [];
+
+    if ($mybb->request_method === 'post') {
+        verify_post_check($mybb->get_input('my_post_key'));
+
+        $type = trim((string)$mybb->get_input('type'));
+        if ($type === '') {
+            $errors[] = $lang->af_kb_type_required ?? 'Type is required.';
+        }
+
+        if ($typeRow && $type !== $typeRow['type']) {
+            $errors[] = $lang->af_kb_type_locked ?? 'Type cannot be changed.';
+        }
+
+        $titleRu = trim((string)$mybb->get_input('title_ru'));
+        $titleEn = trim((string)$mybb->get_input('title_en'));
+        $descRu = trim((string)$mybb->get_input('description_ru'));
+        $descEn = trim((string)$mybb->get_input('description_en'));
+        $sortorder = (int)$mybb->get_input('sortorder', MyBB::INPUT_INT);
+        $active = (int)$mybb->get_input('active', MyBB::INPUT_INT) ? 1 : 0;
+
+        if (!$errors) {
+            $existingType = $db->fetch_array(
+                $db->simple_select('af_kb_types', '*', "type='".$db->escape_string($type)."'", ['limit' => 1])
+            );
+
+            if ($existingType && !$typeRow) {
+                $errors[] = $lang->af_kb_type_exists ?? 'Type already exists.';
+            }
+        }
+
+        if (!$errors) {
+            $data = [
+                'type'           => $db->escape_string($type),
+                'title_ru'       => $db->escape_string($titleRu),
+                'title_en'       => $db->escape_string($titleEn),
+                'description_ru' => $db->escape_string($descRu),
+                'description_en' => $db->escape_string($descEn),
+                'sortorder'      => $sortorder,
+                'active'         => $active,
+            ];
+
+            if ($typeRow) {
+                $db->update_query('af_kb_types', $data, 'id='.(int)$typeRow['id']);
+            } else {
+                $db->insert_query('af_kb_types', $data);
+            }
+
+            redirect('misc.php?action=kb&type='.urlencode($type), $lang->af_kb_type_saved ?? 'Category saved.');
+        }
+    }
+
+    $typeRow = $typeRow ?: [
+        'type'           => $type,
+        'title_ru'       => '',
+        'title_en'       => '',
+        'description_ru' => '',
+        'description_en' => '',
+        'sortorder'      => 0,
+        'active'         => 1,
+    ];
+
+    $kb_errors = '';
+    if ($errors) {
+        $items = '';
+        foreach ($errors as $error) {
+            $items .= '<li>'.htmlspecialchars_uni($error).'</li>';
+        }
+        $kb_errors = '<div class="af-kb-errors"><ul>'.$items.'</ul></div>';
+    }
+
+    $kb_page_title = htmlspecialchars_uni($lang->af_kb_type_edit ?? 'Edit category');
+    $kb_type_value = htmlspecialchars_uni($typeRow['type']);
+    $kb_type_title_ru = htmlspecialchars_uni($typeRow['title_ru']);
+    $kb_type_title_en = htmlspecialchars_uni($typeRow['title_en']);
+    $kb_type_description_ru = htmlspecialchars_uni($typeRow['description_ru']);
+    $kb_type_description_en = htmlspecialchars_uni($typeRow['description_en']);
+    $kb_type_sortorder = (int)$typeRow['sortorder'];
+    $kb_type_active_checked = !empty($typeRow['active']) ? 'checked="checked"' : '';
+    $kb_type_readonly = $isEditing ? 'readonly="readonly"' : '';
+
+    $cancelTarget = $typeRow['type'] !== '' ? 'misc.php?action=kb&type='.urlencode($typeRow['type']) : 'misc.php?action=kb';
+    $kb_cancel_link = htmlspecialchars_uni($cancelTarget);
+
+    $kb_type_delete_link = '';
+    if (!empty($typeRow['type'])) {
+        $confirm = htmlspecialchars_uni($lang->af_kb_type_delete_confirm ?? 'Delete category?');
+        $kb_type_delete_link = '<a class="af-kb-btn af-kb-btn--delete" href="misc.php?action=kb_type_delete&type='.htmlspecialchars_uni($typeRow['type']).'&my_post_key='.htmlspecialchars_uni($mybb->post_code).'" onclick="return confirm(\''.$confirm.'\');">'.htmlspecialchars_uni($lang->af_kb_type_delete ?? 'Delete category').'</a>';
+    }
+
+    $af_kb_content = '';
+    eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_type_edit') . "\";");
+    eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
+    output_page($page);
+    exit;
+}
+
+function af_kb_handle_type_delete(): void
+{
+    global $mybb, $db, $lang;
+
+    if (!af_kb_can_manage_types()) {
+        error_no_permission();
+    }
+
+    verify_post_check($mybb->get_input('my_post_key'));
+
+    $type = trim((string)$mybb->get_input('type'));
+    if ($type === '') {
+        error($lang->af_kb_not_found ?? 'Not found');
+    }
+
+    $typeRow = $db->fetch_array(
+        $db->simple_select('af_kb_types', '*', "type='".$db->escape_string($type)."'", ['limit' => 1])
+    );
+    if (!$typeRow) {
+        error($lang->af_kb_not_found ?? 'Not found');
+    }
+
+    $entryIds = [];
+    $q = $db->simple_select('af_kb_entries', 'id', "type='".$db->escape_string($type)."'");
+    while ($row = $db->fetch_array($q)) {
+        $entryIds[] = (int)$row['id'];
+    }
+
+    if ($entryIds) {
+        $db->delete_query('af_kb_blocks', 'entry_id IN ('.implode(',', $entryIds).')');
+    }
+
+    $db->delete_query('af_kb_relations', "from_type='".$db->escape_string($type)."' OR to_type='".$db->escape_string($type)."'");
+    $db->delete_query('af_kb_entries', "type='".$db->escape_string($type)."'");
+    $db->delete_query('af_kb_log', "type='".$db->escape_string($type)."'");
+    $db->delete_query('af_kb_types', 'id='.(int)$typeRow['id']);
+
+    redirect('misc.php?action=kb', $lang->af_kb_type_deleted ?? 'Category deleted.');
 }
 
 /* -------------------- JSON API -------------------- */

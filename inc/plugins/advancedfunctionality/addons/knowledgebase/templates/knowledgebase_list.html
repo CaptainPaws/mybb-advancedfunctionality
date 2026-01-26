@@ -1,10 +1,15 @@
 <div class="af-kb-header">
-    <h1>{$kb_type}</h1>
-    {$kb_create_link}
+    <div>
+        <h1>{$kb_type_title}</h1>
+        <div class="af-kb-type-desc">{$kb_type_description}</div>
+    </div>
+    <div class="af-kb-actions">
+        {$kb_type_actions}
+    </div>
 </div>
 <form class="af-kb-search" method="get" action="misc.php">
     <input type="hidden" name="action" value="kb" />
-    <input type="hidden" name="type" value="{$kb_type}" />
+    <input type="hidden" name="type" value="{$kb_type_value}" />
     <input type="text" name="q" value="{$kb_query}" placeholder="{$lang->af_kb_search_placeholder}" />
 </form>
 <div class="af-kb-entries">
