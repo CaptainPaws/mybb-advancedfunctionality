@@ -937,6 +937,107 @@ function af_knowledgebase_init(): void
     $plugins->add_hook('parse_message_end', 'af_kb_parse_message_end', 10);
 }
 
+function af_kb_build_sceditor_assets_and_init(string $bburl, string $pageHtml): array
+{
+    // Возвращает ['assets' => '...', 'init' => '...']
+    $assets = '';
+    $init = '';
+
+    $root = defined('MYBB_ROOT') ? MYBB_ROOT : '';
+    if ($root === '') {
+        return ['assets' => '', 'init' => ''];
+    }
+
+    // Проверяем наличие SCEditor файлов в ФС
+    $sceditorBaseFs = rtrim($root, '/\\') . '/jscripts/sceditor/';
+    $hasCore =
+        is_file($sceditorBaseFs . 'jquery.sceditor.min.js') &&
+        is_file($sceditorBaseFs . 'jquery.sceditor.bbcode.min.js');
+
+    // mybb-адаптер и тема - опционально, но желательно
+    $hasMybb = is_file($sceditorBaseFs . 'jquery.sceditor.mybb.min.js');
+    $hasTheme = is_file($sceditorBaseFs . 'themes/default.min.css');
+    $hasContentCss = is_file($sceditorBaseFs . 'themes/content.min.css') || is_file($sceditorBaseFs . 'themes/content.css');
+
+    if (!$hasCore) {
+        // SCEditor отсутствует — не подключаем, чтобы не было 404/ошибок.
+        return ['assets' => '', 'init' => ''];
+    }
+
+    // Фолбэк jQuery: только если на странице нет упоминаний jquery.* в HTML
+    $hasJqInHtml = (stripos($pageHtml, 'jscripts/jquery') !== false)
+        || (stripos($pageHtml, 'jquery.min.js') !== false)
+        || (stripos($pageHtml, 'jquery.js') !== false);
+
+    if (!$hasJqInHtml) {
+        // На всякий пожарный — подгружаем стандартный jQuery MyBB.
+        // (Если он уже есть в headerinclude — этот блок не добавится.)
+        if (is_file(rtrim($root, '/\\') . '/jscripts/jquery.js')) {
+            $assets .= '<script src="'.$bburl.'/jscripts/jquery.js"></script>';
+        }
+        if (is_file(rtrim($root, '/\\') . '/jscripts/jquery.plugins.min.js')) {
+            $assets .= '<script src="'.$bburl.'/jscripts/jquery.plugins.min.js"></script>';
+        }
+    }
+
+    if ($hasTheme) {
+        $assets .= '<link rel="stylesheet" type="text/css" href="'.$bburl.'/jscripts/sceditor/themes/default.min.css" />';
+    }
+
+    $assets .= '<script src="'.$bburl.'/jscripts/sceditor/jquery.sceditor.min.js"></script>';
+    $assets .= '<script src="'.$bburl.'/jscripts/sceditor/jquery.sceditor.bbcode.min.js"></script>';
+
+    if ($hasMybb) {
+        $assets .= '<script src="'.$bburl.'/jscripts/sceditor/jquery.sceditor.mybb.min.js"></script>';
+    }
+
+    // content css (если есть) — улучшает вид редактора
+    $contentCssUrl = '';
+    if (is_file($sceditorBaseFs . 'themes/content.min.css')) {
+        $contentCssUrl = $bburl.'/jscripts/sceditor/themes/content.min.css';
+    } elseif (is_file($sceditorBaseFs . 'themes/content.css')) {
+        $contentCssUrl = $bburl.'/jscripts/sceditor/themes/content.css';
+    }
+
+    // Инициализация: включаем на текстовых полях KB, исключаем JSON-поля
+    // Делается максимально “широко”, чтобы работало независимо от точных id в шаблонах.
+    $contentCssJs = $contentCssUrl !== '' ? json_encode($contentCssUrl) : '""';
+
+    $init = '<script>(function(){'
+        . 'function afKbInitSceditor(){'
+        . 'if(!window.jQuery || !jQuery.fn || !jQuery.fn.sceditor) return;'
+        . 'var $ = jQuery;'
+        . 'var contentCss = '.$contentCssJs.';'
+        . '$("textarea").each(function(){'
+        . '  var el=this;'
+        . '  if(!el || el.disabled) return;'
+        . '  var name = (el.name||"").toLowerCase();'
+        . '  if(!name) return;'
+        . '  if(name.indexOf("meta_json")!==-1) return;'
+        . '  if(name.indexOf("data_json")!==-1) return;'
+        . '  // Только поля контента KB (включая blocks[][content_ru/en], short/body/tech и т.п.)'
+        . '  var ok = (name.indexOf("short_")!==-1) || (name.indexOf("body_")!==-1) || (name.indexOf("tech_")!==-1) || (name.indexOf("[content_")!==-1);'
+        . '  if(!ok) return;'
+        . '  try{'
+        . '    if($(el).data("afKbSceditorReady")) return;'
+        . '    $(el).data("afKbSceditorReady",1);'
+        . '    $(el).sceditor({'
+        . '      plugins:"bbcode",'
+        . '      style: (contentCss && typeof contentCss==="string") ? contentCss : undefined,'
+        . '      emoticonsEnabled:false,'
+        . '      width:"100%",'
+        . '      height:240,'
+        . '      toolbar:"bold,italic,underline|left,center,right,justify|bulletlist,orderedlist|link,unlink|image|quote,code|source"'
+        . '    });'
+        . '  }catch(e){}'
+        . '});'
+        . '}'
+        . 'if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",afKbInitSceditor);}else{afKbInitSceditor();}'
+        . '})();</script>';
+
+    return ['assets' => $assets, 'init' => $init];
+}
+
 function af_knowledgebase_pre_output(string &$page = ''): void
 {
     global $mybb, $lang;
@@ -947,6 +1048,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
         ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types'],
         true
     );
+
     $enabled = !empty($mybb->settings['af_knowledgebase_enabled']);
     $hasMark = strpos($page, AF_KB_MARK) !== false;
 
@@ -954,50 +1056,81 @@ function af_knowledgebase_pre_output(string &$page = ''): void
         $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
         if ($bburl !== '') {
             $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_KB_ID . '/assets';
+
+            // cache-bust helper (by filemtime when possible)
+            $verFor = function (string $absPath, string $fallback): string {
+                if ($absPath !== '' && @is_file($absPath)) {
+                    $t = @filemtime($absPath);
+                    if ($t) return (string)$t;
+                }
+                return $fallback;
+            };
+
             $cssTag = '';
             $jsTag = '';
             $editorAssets = '';
+            $editorInit = '';
 
             if ($is_kb_page) {
+                // KB base css/js
                 $cssTag .= '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase.css?ver='.AF_KB_VER.'" />';
-                $jsTag .= '<script src="'.$assetsBase.'/knowledgebase.js?ver='.AF_KB_VER.'"></script>';
+                $jsTag  .= '<script src="'.$assetsBase.'/knowledgebase.js?ver='.AF_KB_VER.'"></script>';
+
+                // /cache/themes/theme2/castom.css
+                // /cache/themes/theme2/themestyle.css
+                $themeDirRel = '/cache/themes/theme2';
+                $themeDirAbs = rtrim(MYBB_ROOT, '/\\') . str_replace('/', DIRECTORY_SEPARATOR, $themeDirRel);
+
+                $themestyleAbs = $themeDirAbs . DIRECTORY_SEPARATOR . 'themestyle.css';
+                $castomAbs     = $themeDirAbs . DIRECTORY_SEPARATOR . 'castom.css';
+
+                $cssTag .= '<link rel="stylesheet" type="text/css" href="'.$bburl.$themeDirRel.'/themestyle.css?v='.$verFor($themestyleAbs, AF_KB_VER).'" />';
+                $cssTag .= '<link rel="stylesheet" type="text/css" href="'.$bburl.$themeDirRel.'/castom.css?v='.$verFor($castomAbs, AF_KB_VER).'" />';
             }
 
+            // SCEditor только на страницах редактирования KB
             if (in_array($action, ['kb_edit', 'kb_type_edit'], true)) {
-                $editorAssets = '<link rel="stylesheet" type="text/css" href="'.$bburl.'/jscripts/sceditor/themes/default.min.css" />'
-                    . '<script src="'.$bburl.'/jscripts/sceditor/jquery.sceditor.min.js"></script>'
-                    . '<script src="'.$bburl.'/jscripts/sceditor/jquery.sceditor.bbcode.min.js"></script>'
-                    . '<script src="'.$bburl.'/jscripts/sceditor/jquery.sceditor.mybb.min.js"></script>';
+                $bundle = af_kb_build_sceditor_assets_and_init($bburl, $page);
+                $editorAssets = $bundle['assets'] ?? '';
+                $editorInit   = $bundle['init'] ?? '';
             }
 
             af_knowledgebase_load_lang(false);
             $langPayload = json_encode([
-                'kbInsertLabel' => $lang->af_kb_kb_insert_label ?? 'KB',
-                'kbInsertTitle' => $lang->af_kb_kb_insert_title ?? 'Insert KB',
+                'kbInsertLabel'  => $lang->af_kb_kb_insert_label ?? 'KB',
+                'kbInsertTitle'  => $lang->af_kb_kb_insert_title ?? 'Insert KB',
                 'kbInsertSearch' => $lang->af_kb_kb_insert_search ?? 'Search...',
                 'kbInsertSelect' => $lang->af_kb_kb_insert_select ?? 'Select category',
-                'kbInsertEmpty' => $lang->af_kb_kb_insert_empty ?? 'Nothing found',
-                'kbInsertHint' => $lang->af_kb_kb_insert_hint ?? 'Select category or continue search',
+                'kbInsertEmpty'  => $lang->af_kb_kb_insert_empty ?? 'Nothing found',
+                'kbInsertHint'   => $lang->af_kb_kb_insert_hint ?? 'Select category or continue search',
                 'kbInsertButton' => $lang->af_kb_kb_insert_button ?? 'Insert',
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
             $langTag = $langPayload !== false ? '<script>window.afKbLang='.$langPayload.';</script>' : '';
 
-            $kbUiCss = '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase_kbui.css?ver='.AF_KB_VER.'" />';
-            $chipsJs = '<script src="'.$assetsBase.'/knowledgebase_chips.js?ver='.AF_KB_VER.'"></script>';
+            $kbUiCss  = '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase_kbui.css?ver='.AF_KB_VER.'" />';
+            $chipsJs  = '<script src="'.$assetsBase.'/knowledgebase_chips.js?ver='.AF_KB_VER.'"></script>';
             $insertJs = '<script src="'.$assetsBase.'/knowledgebase_insert.js?ver='.AF_KB_VER.'"></script>';
 
+            $inject = $cssTag
+                . $kbUiCss
+                . $editorAssets
+                . $jsTag
+                . $chipsJs
+                . $insertJs
+                . $langTag
+                . $editorInit
+                . AF_KB_MARK;
+
             if (stripos($page, '</head>') !== false) {
-                $page = str_ireplace(
-                    '</head>',
-                    $cssTag.$kbUiCss.$editorAssets.$jsTag.$chipsJs.$insertJs.$langTag.AF_KB_MARK.'</head>',
-                    $page
-                );
+                $page = str_ireplace('</head>', $inject . '</head>', $page);
             } else {
-                $page .= $cssTag.$kbUiCss.$editorAssets.$jsTag.$chipsJs.$insertJs.$langTag.AF_KB_MARK;
+                $page .= $inject;
             }
         }
     }
 
+    // Навлинк (оставляю твою логику как есть)
     if ($enabled && (int)af_kb_get_setting('af_kb_nav_link_enabled', 1) === 1 && af_kb_can_view()) {
         if (strpos($page, '<!--af_kb_nav-->') === false) {
             af_knowledgebase_load_lang(false);
