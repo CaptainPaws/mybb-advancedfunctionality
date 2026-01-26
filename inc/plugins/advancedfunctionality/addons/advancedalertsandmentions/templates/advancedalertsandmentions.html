@@ -1,22 +1,17 @@
 <!-- TEMPLATE: af_aam_header_icon -->
 <li class="alerts af-aam-alerts {$af_aam_new_indicator}">
-    <a href="{$mybb->settings['bburl']}/misc.php?action=af_aam_list"
-    class="myalerts af-aam-header-link"
-    id="af_aam_header_link"
-    onclick="return false;">
+  <a href="{$mybb->settings['bburl']}/misc.php?action=af_aam_list"
+     class="myalerts af-aam-header-link"
+     id="af_aam_header_link"
+     onclick="return false;">
 
-        <span class="af-aam-icon af-aam-bell" id="af_aam_bell_icon" aria-hidden="true">
-            <svg class="af-aam-svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" focusable="false" aria-hidden="true">
-                <path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6V11a6 6 0 1 0-12 0v5l-2 2v1h16v-1l-2-2z"/>
-            </svg>
-        </span>
-
-        <span class="af-aam-label" id="af_aam_label">Уведомления</span>
-
-        <span class="af-aam-badge" id="af_aam_badge">{$af_aam_unread}</span>
-    </a>
+    <span class="af-aam-label" id="af_aam_label">Уведомления</span>
+    <span class="af-aam-badge" id="af_aam_badge">{$af_aam_unread}</span>
+  </a>
 </li>
 <!-- /TEMPLATE -->
+
+
 
 <!-- TEMPLATE: af_aam_modal -->
 <div id="af_aam_modal" style="display: none;" class="modal af-aam-modal">
