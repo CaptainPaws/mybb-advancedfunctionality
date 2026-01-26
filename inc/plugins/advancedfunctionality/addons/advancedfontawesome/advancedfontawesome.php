@@ -79,6 +79,8 @@ function af_advancedfontawesome_install(): bool
 
     af_afo_ensure_mycode();
     af_afo_install_headerinclude();
+    af_afo_ensure_thread_status_setting();
+
 
     // --- ACP Bridge plugin (чтобы поле работало в forum-management) ---
     af_afo_install_acp_bridge_plugin();
@@ -166,14 +168,16 @@ function af_afo_install_headerinclude(): void
     require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
 
     $insert = "<!-- af_advancedfontawesome_start -->\n"
-        . '<link rel="stylesheet" type="text/css" href="{$mybb->settings[\'bburl\']}/inc/plugins/advancedfunctionality/addons/advancedfontawesome/assets/font-awesome-6/css/all.css" />' . "\n"
         . '<link rel="stylesheet" type="text/css" href="{$mybb->settings[\'bburl\']}/inc/plugins/advancedfunctionality/addons/advancedfontawesome/assets/font-awesome-6/css/all.min.css" />' . "\n"
         . "<!-- af_advancedfontawesome_end -->\n"
         . '{$stylesheets}';
 
+    // убираем старую вставку (если была)
     find_replace_templatesets('headerinclude', '#\s*<!-- af_advancedfontawesome_start -->.*?<!-- af_advancedfontawesome_end -->\s*#is', '');
+    // вставляем перед {$stylesheets}
     find_replace_templatesets('headerinclude', '#\{\$stylesheets\}#i', $insert);
 }
+
 
 function af_afo_remove_headerinclude(): void
 {
@@ -226,6 +230,37 @@ function af_afo_ensure_mycode(): void
     }
 }
 
+function af_afo_ensure_thread_status_setting(): void
+{
+    global $db;
+
+    // уже есть — ок
+    $exists = $db->fetch_array(
+        $db->simple_select('settings', 'sid', "name='af_advancedfontawesome_thread_status_map'", ['limit' => 1])
+    );
+    if ($exists) {
+        return;
+    }
+
+    // ставим дефолт (пусто) — ты выберешь в ACP
+    $insert = [
+        'name' => 'af_advancedfontawesome_thread_status_map',
+        'title' => 'AF AdvancedFontAwesome: Thread status icons (JSON)',
+        'description' => 'JSON map for thread_status icons (keys: newthread,newhotthread,hotthread,folder,dot_folder,lockfolder).',
+        'optionscode' => 'textarea',
+        'value' => '{}',
+        'disporder' => 0,
+        'gid' => 1, // можно в "Board Settings" (чтоб не плодить группы). если хочешь отдельную группу — сделаем.
+        'isdefault' => 0
+    ];
+
+    $db->insert_query('settings', $insert);
+
+    if (function_exists('rebuild_settings')) {
+        rebuild_settings();
+    }
+}
+
 function af_advancedfontawesome_pre_output(string &$page = ''): void
 {
     global $mybb;
@@ -257,13 +292,20 @@ function af_advancedfontawesome_pre_output(string &$page = ''): void
     $needsEditor = af_afo_page_has_editor($page);
     $needsForumIcons = af_afo_page_has_forum_icons($page);
 
-    if ($needsEditor || $needsForumIcons) {
+    // thread_status встречается на forumdisplay в списке тем
+    $needsThreadStatusIcons = (stripos($page, 'thread_status') !== false);
+
+    if ($needsEditor || $needsForumIcons || $needsThreadStatusIcons) {
         $iconMap = $needsForumIcons ? af_afo_collect_forum_icons() : [];
+        $tsMap   = $needsThreadStatusIcons ? af_afo_collect_thread_status_icons() : [];
+
         $cfg = [
-            'cssUrl'        => $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AFO_ID . '/assets/font-awesome-6/css/all.css',
+            'cssUrl' => $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AFO_ID . '/assets/font-awesome-6/css/all.min.css',
             'icons'         => $iconMap,
+            'threadStatus'  => $tsMap,
             'defaultStyle'  => 'fa-solid',
         ];
+
 
         $cfgJson = json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $cfgTag = '<script>window.afAdvancedFontAwesomeConfig=' . $cfgJson . ';</script>';
@@ -351,6 +393,48 @@ function af_afo_collect_forum_icons(): array
     return $map;
 }
 
+function af_afo_collect_thread_status_icons(): array
+{
+    global $mybb;
+
+    $raw = (string)($mybb->settings['af_advancedfontawesome_thread_status_map'] ?? '');
+    $raw = trim($raw);
+
+    if ($raw === '' || $raw === '{}' || $raw === '[]') {
+        return [];
+    }
+
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        return [];
+    }
+
+    // whitelist ключей, которые реально используются в MyBB thread_status
+    $allowed = [
+        'newthread' => 1,
+        'newhotthread' => 1,
+        'hotthread' => 1,
+        'folder' => 1,
+        'dot_folder' => 1,
+        'lockfolder' => 1,
+    ];
+
+    $out = [];
+    foreach ($data as $key => $icon) {
+        $key = (string)$key;
+        if (!isset($allowed[$key])) {
+            continue;
+        }
+        $norm = af_afo_normalize_icon((string)$icon);
+        if ($norm !== '') {
+            $out[$key] = $norm;
+        }
+    }
+
+    return $out;
+}
+
+
 function af_afo_normalize_icon(string $raw): string
 {
     $raw = trim($raw);
@@ -429,7 +513,7 @@ function af_afo_admin_forum_assets(): void
     // ВАЖНО: ACP живёт в /admin/, поэтому используем относительные пути
     // /admin/ -> ../inc/plugins/...
     $assetsBaseRel = '../inc/plugins/advancedfunctionality/addons/' . AF_AFO_ID . '/assets';
-    $faCssRel      = $assetsBaseRel . '/font-awesome-6/css/all.css';
+    $faCssRel      = $assetsBaseRel . '/font-awesome-6/css/all.min.css';
 
     // --- текущая иконка: forum_data или из БД по fid ---
     $icon = '';
