@@ -161,3 +161,20 @@
 .af-kb-btn--edit:hover {
     background: #2f4e96;
 }
+
+.af-kb-modal-backdrop.af-kb-chip-modal{
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: rgba(0,0,0,.65);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+}
+.af-kb-modal-backdrop.af-kb-chip-modal.is-active{ display:flex; }
+.af-kb-modal-backdrop.af-kb-chip-modal::before,
+.af-kb-modal-backdrop.af-kb-chip-modal::after{ content:none !important; }
