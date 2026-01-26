@@ -15,9 +15,9 @@
 
 <!-- TEMPLATE: advancedgallery_index -->
 <div class="ag-toolbar">
-    <a class="button" href="{$ag_upload_url}">Upload</a>
+    <a class="button" href="{$ag_upload_url}">Загрузить</a>
     {$ag_remote_button}
-    <a class="button" href="{$ag_mine_url}">Mine</a>
+    <a class="button" href="{$ag_mine_url}">Загружено мной</a>
     <a class="button" href="{$ag_albums_url}">{$ag_albums_label}</a>
 </div>
 <div class="ag-grid">
@@ -29,8 +29,9 @@
 
 <!-- TEMPLATE: advancedgallery_tile -->
 <div class="ag-tile">
+    {$ag_bulk_checkbox}
     <a class="ag-thumb-link" href="{$ag_view_url}">
-        <img class="ag-thumb" src="{$ag_thumb_url}" alt="{$ag_title}" />
+        <img class="ag-thumb" src="{$ag_thumb_url}" alt="{$ag_title}" loading="lazy" decoding="async" />
     </a>
     <div class="ag-tile-body">
         <div class="ag-title">{$ag_title}</div>
@@ -39,95 +40,205 @@
     </div>
 </div>
 
+
 <!-- TEMPLATE: advancedgallery_view -->
 <div class="ag-view">
-    <div class="ag-view-media">
-        {$ag_media_html}
-    </div>
-    <div class="ag-view-info">
-        <h2>{$ag_title}</h2>
-        <div class="ag-view-meta">{$ag_author} · {$ag_created}</div>
-        <div class="ag-view-desc">{$ag_description}</div>
-        <div class="ag-view-actions">
-            {$ag_approve_form}
-            {$ag_delete_form}
-            <button type="button" class="button ag-copy-bbcode" data-bbcode="{$ag_bbcode}">Copy BBCode</button>
+
+  <div class="ag-view-media">
+
+    <!-- TOP BAR (как на скрине) -->
+    <div class="ag-view-topbar">
+      <div class="ag-breadcrumbs ag-view-breadcrumbs">{$ag_breadcrumbs}</div>
+
+      <div class="ag-view-topbar-controls">
+        <a class="ag-view-btn ag-view-back" href="{$ag_back_url}" title="Назад">←</a>
+
+        <div class="ag-view-navgroup">
+          {$ag_nav_pair}
         </div>
-        {$ag_add_to_album_form}
+      </div>
     </div>
+
+    <div class="ag-view-media-inner"
+      data-ag-prev="{$ag_prev_url}"
+      data-ag-next="{$ag_next_url}">
+      {$ag_media_html}
+    </div>
+    {$ag_nav_under}
+
+
+  </div>
+
+  <div class="ag-view-info">
+    <h2>{$ag_title}</h2>
+    <div class="ag-view-meta">{$ag_author} · {$ag_created}</div>
+    <div class="ag-view-desc">{$ag_description}</div>
+
+    <div class="ag-view-actions">
+      {$ag_approve_form}
+      {$ag_delete_form}
+
+      <button
+        type="button"
+        class="button ag-copy-bbcode"
+        data-bbcode="{$ag_bbcode}"
+        data-label-default="Copy BBCode"
+        data-label-copied="Скопировано"
+      >Copy BBCode</button>
+    </div>
+
+    {$ag_add_to_album_form}
+  </div>
+
+</div>
+
+<!-- related -->
+<div class="ag-related">
+  {$ag_related_tiles}
+  <div class="ag-pagination">{$ag_related_pagination}</div>
 </div>
 
 <!-- TEMPLATE: advancedgallery_remote_add -->
-<form action="{$ag_remote_action}" method="post" class="ag-upload-form">
-    <input type="hidden" name="my_post_key" value="{$ag_remote_my_post_key}" />
-    <div class="ag-field">
-        <label for="ag_remote_url">{$lang->af_advancedgallery_remote_url}</label>
-        <input type="url" name="ag_remote_url" id="ag_remote_url" required />
-    </div>
-    <div class="ag-field">
-        <label for="ag_remote_title">Title</label>
-        <input type="text" name="ag_title" id="ag_remote_title" />
-    </div>
-    <div class="ag-field">
-        <label for="ag_remote_description">Description</label>
-        <textarea name="ag_description" id="ag_remote_description" rows="5"></textarea>
-    </div>
-    {$ag_remote_album_field}
-    <div class="ag-actions">
-        <button type="submit" class="button">{$lang->af_advancedgallery_remote_add}</button>
-    </div>
-</form>
+<div class="ag-remote-legacy">
+  <a class="button" href="gallery.php?action=upload&tab=remote">Открыть форму загрузки</a>
+</div>
+
 
 <!-- TEMPLATE: advancedgallery_picker_modal -->
-<div class="ag-picker-modal" id="af-gallery-picker"
-     data-insert-img-label="{$lang->af_advancedgallery_picker_insert_img}"
-     data-insert-link-label="{$lang->af_advancedgallery_picker_insert_link}"
-     data-empty-label="{$lang->af_advancedgallery_picker_empty}">
-    <div class="ag-picker-backdrop" data-picker-close="1"></div>
-    <div class="ag-picker-dialog" role="dialog" aria-label="{$lang->af_advancedgallery_picker_title}">
-        <div class="ag-picker-header">
-            <div class="ag-picker-title">{$lang->af_advancedgallery_picker_title}</div>
-            <button type="button" class="ag-picker-close" data-picker-close="1">×</button>
-        </div>
-        <div class="ag-picker-tabs">
-            <button type="button" class="ag-picker-tab is-active" data-tab="media">{$lang->af_advancedgallery_picker_media_tab}</button>
-            <button type="button" class="ag-picker-tab" data-tab="albums">{$lang->af_advancedgallery_picker_albums_tab}</button>
-        </div>
-        <div class="ag-picker-body">
-            <div class="ag-picker-controls">
-                <input type="search" class="ag-picker-search" placeholder="{$lang->af_advancedgallery_picker_search}" />
-                <div class="ag-picker-actions">
-                    <a class="button" href="{$ag_picker_upload_url}">{$lang->af_advancedgallery_picker_upload_local}</a>
-                    {$ag_picker_remote_link}
-                </div>
-            </div>
-            <div class="ag-picker-grid" data-picker-grid="1"></div>
-            <div class="ag-picker-albums" data-picker-albums="1">
-                {$ag_picker_albums}
-            </div>
-        </div>
+<div class="ag-picker" id="af-gallery-picker" role="dialog" aria-modal="true" aria-hidden="true">
+
+  <div class="ag-picker-overlay" data-ag-picker-close="1"></div>
+
+  <div class="ag-picker-dialog" role="document" tabindex="-1">
+
+    <div class="ag-picker-top">
+      <div class="ag-picker-albums">
+        {$ag_picker_albums}
+      </div>
     </div>
+
+    <div class="ag-picker-search">
+      <input type="search" placeholder="Поиск…" autocomplete="off" data-ag-picker-search="1" />
+    </div>
+
+    <div class="ag-picker-upload" data-remote-enabled="{$ag_picker_remote_enabled}">
+      <div class="ag-upload-tabs">
+        <button type="button" class="ag-tab ag-tab-active" data-tab="local">С устройства</button>
+        <button type="button" class="ag-tab" data-tab="remote">По ссылке</button>
+      </div>
+
+      <div class="ag-upload-pane" data-pane="local">
+        <form action="{$ag_picker_upload_do_url}" method="post" enctype="multipart/form-data" class="ag-upload-form ag-upload-form--modal" data-ag-ajax="1">
+        <input type="hidden" name="my_post_key" value="{$ag_picker_my_post_key}" />
+        <input type="hidden" name="ajax" value="1" />
+        {$ag_picker_album_field}
+
+        <!-- FIX: дефолты, чтобы бэкенд не падал -->
+        <input type="hidden" name="ag_title" value="" />
+        <input type="hidden" name="ag_description" value="" />
+
+        <div class="ag-field">
+            <input type="file" name="ag_file" accept="image/*" required />
+        </div>
+
+        <button type="submit" class="button">Загрузить</button>
+        </form>
+      </div>
+
+      <div class="ag-upload-pane" data-pane="remote" style="display:none;">
+        <form action="{$ag_picker_remote_do_url}" method="post" class="ag-upload-form ag-upload-form--modal" data-ag-ajax="1">
+          <input type="hidden" name="my_post_key" value="{$ag_picker_my_post_key}" />
+          <input type="hidden" name="ajax" value="1" />
+          {$ag_picker_album_field}
+
+          <div class="ag-field">
+            <input type="url" name="ag_remote_url" placeholder="https://…" required />
+          </div>
+
+          <button type="submit" class="button">Добавить</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="ag-picker-grid" data-ag-picker-grid="1">
+      <!-- сюда JS рисует карточки -->
+    </div>
+
+    <div class="ag-picker-footer">
+      <div class="ag-picker-pager" data-ag-picker-pager="1" style="display:none;">
+        <button type="button" class="button" data-ag-picker-prev="1">←</button>
+        <span class="ag-picker-page" data-ag-picker-page="1">1 / 1</span>
+        <button type="button" class="button" data-ag-picker-next="1">→</button>
+      </div>
+      <button type="button" class="button" data-ag-picker-close="1">Закрыть</button>
+    </div>
+
+  </div>
+
 </div>
 
 <!-- TEMPLATE: advancedgallery_upload -->
-<form action="{$ag_upload_do_url}" method="post" enctype="multipart/form-data" class="ag-upload-form">
-    <input type="hidden" name="my_post_key" value="{$ag_my_post_key}" />
-    <div class="ag-field">
-        <label for="ag_title">Title</label>
-        <input type="text" name="ag_title" id="ag_title" />
-    </div>
-    <div class="ag-field">
-        <label for="ag_description">Description</label>
-        <textarea name="ag_description" id="ag_description" rows="5"></textarea>
-    </div>
-    <div class="ag-field">
-        <label for="ag_file">File</label>
-        <input type="file" name="ag_file" id="ag_file" accept="image/*" required />
-    </div>
-    <div class="ag-actions">
-        <button type="submit" class="button">Upload</button>
-    </div>
-</form>
+<div class="ag-upload">
+
+  <div class="ag-upload-tabs" data-remote-enabled="{$ag_remote_enabled}">
+    <button type="button" class="ag-tab{$ag_upload_tab_local_active}" data-tab="local">
+      Загрузка с устройства
+    </button>
+    <button type="button" class="ag-tab{$ag_upload_tab_remote_active}" data-tab="remote">
+      По ссылке
+    </button>
+  </div>
+
+  <div class="ag-upload-pane" data-pane="local" style="display:none;">
+    <form action="{$ag_upload_do_url}" method="post" enctype="multipart/form-data" class="ag-upload-form">
+      <input type="hidden" name="my_post_key" value="{$ag_my_post_key}" />
+      {$ag_upload_album_field}
+
+      <div class="ag-field">
+        <label>Файл</label>
+        <input type="file" name="ag_file" accept="image/*" required />
+      </div>
+
+      <div class="ag-field">
+        <label>Заголовок</label>
+        <input type="text" name="ag_title" value="" />
+      </div>
+
+      <div class="ag-field">
+        <label>Описание</label>
+        <textarea name="ag_description" rows="4"></textarea>
+      </div>
+
+      <button type="submit" class="button">Загрузить</button>
+    </form>
+  </div>
+
+  <div class="ag-upload-pane" data-pane="remote" style="display:none;">
+    <form action="{$ag_remote_do_url}" method="post" class="ag-upload-form">
+      <input type="hidden" name="my_post_key" value="{$ag_my_post_key}" />
+      {$ag_upload_album_field}
+
+      <div class="ag-field">
+        <label>Ссылка</label>
+        <input type="url" name="ag_remote_url" value="" placeholder="https://…" required />
+      </div>
+
+      <div class="ag-field">
+        <label>Заголовок</label>
+        <input type="text" name="ag_title" value="" />
+      </div>
+
+      <div class="ag-field">
+        <label>Описание</label>
+        <textarea name="ag_description" rows="4"></textarea>
+      </div>
+
+      <button type="submit" class="button">Добавить</button>
+    </form>
+  </div>
+
+</div>
+
 
 <!-- TEMPLATE: advancedgallery_albums -->
 <div class="ag-toolbar">
@@ -140,7 +251,7 @@
 <!-- TEMPLATE: advancedgallery_album_tile -->
 <div class="ag-album-tile">
     <a class="ag-thumb-link" href="{$ag_album_url}">
-        <img class="ag-thumb" src="{$ag_album_cover_url}" alt="{$ag_album_title}" />
+        <img class="ag-thumb" src="{$ag_album_cover_url}" alt="{$ag_album_title}" loading="lazy" decoding="async" />
     </a>
     <div class="ag-tile-body">
         <div class="ag-title">{$ag_album_title}</div>
