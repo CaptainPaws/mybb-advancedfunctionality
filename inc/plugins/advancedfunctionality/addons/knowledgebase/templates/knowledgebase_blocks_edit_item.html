@@ -1,0 +1,33 @@
+<div class="af-kb-block-item">
+    <div class="af-kb-row">
+        <div>
+            <label>Block key</label>
+            <input type="text" name="blocks[{$block_index}][block_key]" value="{$block_block_key}" />
+        </div>
+        <div>
+            <label>Порядок</label>
+            <input type="text" name="blocks[{$block_index}][sortorder]" value="{$block_sortorder}" />
+            <div class="af-kb-inline">
+                <label>Активно</label>
+                <input type="checkbox" name="blocks[{$block_index}][active]" value="1" {$block_active_checked} />
+            </div>
+        </div>
+    </div>
+    <div class="af-kb-row">
+        <div>
+            <label>Заголовок (RU)</label>
+            <input type="text" name="blocks[{$block_index}][title_ru]" value="{$block_title_ru}" />
+        </div>
+        <div>
+            <label>Заголовок (EN)</label>
+            <input type="text" name="blocks[{$block_index}][title_en]" value="{$block_title_en}" />
+        </div>
+    </div>
+    <label>Контент (RU)</label>
+    <textarea name="blocks[{$block_index}][content_ru]">{$block_content_ru}</textarea>
+    <label>Контент (EN)</label>
+    <textarea name="blocks[{$block_index}][content_en]">{$block_content_en}</textarea>
+    <label>Data JSON</label>
+    <textarea name="blocks[{$block_index}][data_json]">{$block_data_json}</textarea>
+    <button type="button" class="af-kb-remove">Удалить блок</button>
+</div>

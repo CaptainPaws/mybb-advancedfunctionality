@@ -1,0 +1,12 @@
+<div class="af-kb-header">
+    <h1>{$kb_type}</h1>
+    {$kb_create_link}
+</div>
+<form class="af-kb-search" method="get" action="misc.php">
+    <input type="hidden" name="action" value="kb" />
+    <input type="hidden" name="type" value="{$kb_type}" />
+    <input type="text" name="q" value="{$kb_query}" placeholder="{$lang->af_kb_search_placeholder}" />
+</form>
+<div class="af-kb-entries">
+    {$kb_entries_rows}
+</div>
