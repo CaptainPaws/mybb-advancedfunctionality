@@ -686,57 +686,13 @@
         var modal  = qs('#af_aam_modal');
         var alertsTable = qs('#alerts_content');
 
-        // Иконка колокольчика: сначала новый id, потом совместимые фолбэки
-        var bellIcon =
-            qs('#af_aam_bell_icon') ||
-            qs('#af_aam_bell') ||
-            (link ? link.querySelector('.af-aam-bell') : null) ||
-            qs('.af-aam-bell');
-
         var modalClose = modal ? modal.querySelector('.af-aam-modal-close') : null;
         var backdrop   = modal ? modal.querySelector('.af-aam-modal-backdrop') : null;
 
         // Тумблер звука в модалке
         var soundToggle = qs('#af_aam_sound_toggle');
 
-        // ---- 1) ГИБКАЯ ПОДМЕНА ИКОНКИ (без правок шаблона) ----
-        // Можно задать в шаблоне/пейлоаде:
-        //   window.af_aam_bell_html = '<svg ...>...</svg>';
-        // или
-        //   window.af_aam_bell_text = '🔔';
-        // или
-        //   window.af_aam_bell_text = '🩸' (да, почему бы и нет)
-        (function applyFlexibleBell() {
-            if (!bellIcon) return;
-
-            try {
-                var html = (typeof window.af_aam_bell_html === 'string') ? window.af_aam_bell_html : '';
-                var text = (typeof window.af_aam_bell_text === 'string') ? window.af_aam_bell_text : '';
-
-                if (html && html.trim()) {
-                    bellIcon.innerHTML = html;
-                    return;
-                }
-
-                if (text && text.trim()) {
-                    bellIcon.textContent = text;
-                    return;
-                }
-
-                // дефолт, если пусто
-                if (!bellIcon.textContent || !String(bellIcon.textContent).trim()) {
-                    bellIcon.textContent = '🔔';
-                }
-            } catch (e) {
-                try {
-                    if (!bellIcon.textContent || !String(bellIcon.textContent).trim()) {
-                        bellIcon.textContent = '🔔';
-                    }
-                } catch (e2) {}
-            }
-        })();
-
-        // ---- 2) ЗВУК ----
+        // ---- ЗВУК ----
         if (soundToggle) {
             soundToggle.checked = afAamUserSoundEnabled;
 
@@ -757,7 +713,7 @@
         if (!link || !modal || !alertsTable) {
             if (afAamDebug) {
                 console.log('[AAM] initAlertsUI: missing nodes', {
-                    link: !!link, modal: !!modal, alertsTable: !!alertsTable, bellIcon: !!bellIcon
+                    link: !!link, modal: !!modal, alertsTable: !!alertsTable
                 });
             }
             return;
@@ -778,7 +734,7 @@
             modal.classList.add('af-aam-modal-open');
             modal.style.display = 'block';
 
-            // "пробуждаем" звук от первого клика по колокольчику
+            // "пробуждаем" звук от первого осознанного клика (по ссылке уведомлений)
             if (afAamSound && afAamUserSoundEnabled && !afAamSoundPrimed) {
                 try {
                     afAamSound.play().then(function () {
@@ -1065,14 +1021,11 @@
 
         if (afAamDebug) {
             console.log('[AAM] initAlertsUI ok', {
-                bellIcon: !!bellIcon,
-                bellIconId: bellIcon ? bellIcon.id : '',
                 link: !!link,
                 modal: !!modal
             });
         }
     }
-
 
 
 
