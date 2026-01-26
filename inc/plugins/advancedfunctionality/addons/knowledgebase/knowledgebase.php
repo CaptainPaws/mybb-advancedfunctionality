@@ -736,9 +736,17 @@ function af_kb_parse_message(string $message): string
 
 function af_kb_render_json_error(string $message, int $code = 403): void
 {
+    af_kb_send_json(['success' => false, 'error' => $message], $code);
+}
+
+function af_kb_send_json(array $payload, int $code = 200): void
+{
+    $GLOBALS['af_disable_pre_output'] = true;
     http_response_code($code);
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['error' => $message], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    header('Content-Type: application/json; charset=UTF-8');
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
 
@@ -2169,9 +2177,7 @@ function af_kb_handle_json_get(): void
         'relations' => $relations,
     ];
 
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    exit;
+    af_kb_send_json($payload);
 }
 
 function af_kb_handle_json_list(): void
@@ -2212,9 +2218,7 @@ function af_kb_handle_json_list(): void
         ];
     }
 
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['items' => $items], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    exit;
+    af_kb_send_json(['success' => true, 'items' => $items]);
 }
 
 function af_kb_handle_json_types(): void
@@ -2238,9 +2242,7 @@ function af_kb_handle_json_types(): void
         ];
     }
 
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['items' => $items], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    exit;
+    af_kb_send_json(['success' => true, 'items' => $items]);
 }
 
 function af_kb_handle_json_children(): void
@@ -2289,7 +2291,5 @@ function af_kb_handle_json_children(): void
         ];
     }
 
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['items' => $items], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    exit;
+    af_kb_send_json(['items' => $items]);
 }

@@ -875,6 +875,14 @@ table #post_options, table #postoptions{display:none!important;}
         $fontFamilies = af_advancededitor_collect_font_families_for_payload();
         $postKey = (string)($mybb->post_code ?? '');
 
+        $editorSelector = '';
+        if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'misc.php') {
+            $action = (string)($mybb->input['action'] ?? '');
+            if (in_array($action, ['kb_edit', 'kb_type_edit'], true)) {
+                $editorSelector = 'textarea.af-kb-editor';
+            }
+        }
+
         $payload = [
             'v'                => 4,
             'assetVer'          => $buildVer,
@@ -905,6 +913,9 @@ table #post_options, table #postoptions{display:none!important;}
                 'formFeatureForumIds' => $formfeatureCsv,
             ],
         ];
+        if ($editorSelector !== '') {
+            $payload['cfg']['editorSelector'] = $editorSelector;
+        }
 
         $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if (!is_string($json) || $json === '') $json = '{}';

@@ -1041,6 +1041,10 @@ function advancedfunctionality_bootstrap_addons()
 
 function advancedfunctionality_bootstrap_addons_preoutput(&$page)
 {
+    if (af_should_skip_preoutput()) {
+        return $page;
+    }
+
     // если уже прогнали через AF — не трогаем (важно, чтобы буфер-страховка не “двоила” инъекции)
     if (is_string($page) && strpos($page, '<!--af_core_preoutput_done-->') !== false) {
         return $page;
@@ -1102,6 +1106,11 @@ function advancedfunctionality_outputbuffer_flush()
         return;
     }
 
+    if (af_should_skip_preoutput()) {
+        echo $html;
+        return;
+    }
+
     // если уже обработано через pre_output_page (output_page) — просто отдаём как есть
     if (strpos($html, '<!--af_core_preoutput_done-->') !== false) {
         echo $html;
@@ -1128,6 +1137,10 @@ function advancedfunctionality_outputbuffer_flush()
  */
 function af_apply_preoutput_filters(string $page): string
 {
+    if (af_should_skip_preoutput()) {
+        return $page;
+    }
+
     // 0) Рантайм-синк шаблонов (очень лёгкий, с сигнатурой)
     af_maybe_sync_templates_runtime();
 
@@ -1166,6 +1179,15 @@ function af_apply_preoutput_filters(string $page): string
     $page = af_inject_core_stylesheets_if_missing($page);
 
     return $page;
+}
+
+function af_should_skip_preoutput(): bool
+{
+    if (!empty($GLOBALS['af_disable_pre_output'])) {
+        return true;
+    }
+
+    return defined('AF_NO_PRE_OUTPUT') && AF_NO_PRE_OUTPUT;
 }
 
 

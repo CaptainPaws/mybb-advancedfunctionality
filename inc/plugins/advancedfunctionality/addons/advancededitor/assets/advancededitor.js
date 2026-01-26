@@ -2022,11 +2022,25 @@
     return false;
   }
 
+  function getEditorSelector() {
+    var sel = (CFG && typeof CFG.editorSelector === 'string') ? CFG.editorSelector : '';
+    sel = asText(sel).trim();
+    return sel;
+  }
+
+  function collectTargets(root) {
+    var sel = getEditorSelector();
+    if (sel) {
+      try { return root.querySelectorAll(sel); } catch (e) {}
+    }
+    return root.querySelectorAll('textarea');
+  }
+
   function scanAndInit(root) {
     root = root || document;
     if (!root.querySelectorAll) return;
 
-    var list = root.querySelectorAll('textarea');
+    var list = collectTargets(root);
     for (var i = 0; i < list.length; i++) {
       initOneTextarea(list[i]);
     }
@@ -2049,12 +2063,22 @@
           var n = m.addedNodes[j];
           if (!n || n.nodeType !== 1) continue;
 
-          if (n.tagName === 'TEXTAREA') {
+          var selector = getEditorSelector();
+          if (selector) {
+            if (n.matches && n.matches(selector)) {
+              initOneTextarea(n);
+            } else if (n.querySelectorAll) {
+              var matched = n.querySelectorAll(selector);
+              if (matched && matched.length) {
+                for (var k = 0; k < matched.length; k++) initOneTextarea(matched[k]);
+              }
+            }
+          } else if (n.tagName === 'TEXTAREA') {
             initOneTextarea(n);
           } else if (n.querySelectorAll) {
             var tas = n.querySelectorAll('textarea');
             if (tas && tas.length) {
-              for (var k = 0; k < tas.length; k++) initOneTextarea(tas[k]);
+              for (var k2 = 0; k2 < tas.length; k2++) initOneTextarea(tas[k2]);
             }
           }
         }
