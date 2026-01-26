@@ -11,10 +11,12 @@
             <div>
                 <label>Type</label>
                 <input type="text" name="type" value="{$kb_type_value}" required />
+                <div class="af-kb-help">Тип — это категория. Обычно выбирается из списка категорий и совпадает с техническим ID категории. Пример: <code>race</code>, <code>class</code>, <code>skill</code>.</div>
             </div>
             <div>
                 <label>Key</label>
                 <input type="text" name="key" value="{$kb_key_value}" required />
+                <div class="af-kb-help">Ключ — уникальный идентификатор внутри категории. Пример: для <code>race</code> используйте <code>human</code>, <code>elf</code>, <code>vampire</code>. Рекомендация: ключ без префикса типа. Тип уже хранится отдельно.</div>
             </div>
         </div>
         <div class="af-kb-row">
@@ -39,6 +41,36 @@
             <div>
                 <label>Meta JSON</label>
                 <textarea name="meta_json">{$kb_meta_json}</textarea>
+                <div class="af-kb-help">Meta JSON — структурные данные для механик (статы, теги, ссылки, ограничения). Это не обязательное поле.</div>
+                <div class="af-kb-code">
+<pre>{
+  "tags": ["humanoid", "common"],
+  "stats": { "str": 0, "dex": 0, "int": 0 },
+  "bonuses": [
+    { "type": "resistance", "value": "poison" }
+  ],
+  "links": {
+    "wiki": "https://example.com/wiki/human"
+  }
+}</pre>
+                </div>
+                <div class="af-kb-code">
+<pre>{
+  "skill": {
+    "category": "combat",
+    "rank_max": 5,
+    "cooldown": 2,
+    "cost": { "mana": 10 },
+    "effects": [
+      { "type": "damage", "value": "2d6", "damage_type": "fire" }
+    ],
+    "requirements": {
+      "level": 3,
+      "tags_any": ["pyromancer"]
+    }
+  }
+}</pre>
+                </div>
             </div>
             <div>
                 <label>Порядок</label>
@@ -49,9 +81,55 @@
                 </div>
             </div>
         </div>
+        <div class="af-kb-row">
+            <div>
+                <label>Icon URL</label>
+                <input type="text" name="icon_url" value="{$kb_icon_url}" />
+            </div>
+            <div>
+                <label>Icon Class</label>
+                <input type="text" name="icon_class" value="{$kb_icon_class}" />
+            </div>
+        </div>
+        <label>Background URL</label>
+        <input type="text" name="bg_url" value="{$kb_bg_url}" />
+    </section>
+    <section>
+        <h3>Шаблоны</h3>
+        <div class="af-kb-row">
+            <div>
+                <label>Выберите шаблон (опционально)</label>
+                <select id="af-kb-template-select">
+                    <option value="">--</option>
+                    <option value="race">Race</option>
+                    <option value="class">Class</option>
+                    <option value="skill">Skill</option>
+                </select>
+            </div>
+            <div class="af-kb-inline">
+                <button type="button" class="af-kb-add" id="af-kb-apply-template">Применить шаблон</button>
+                <span class="af-kb-help">Заполнит примеры текста, meta JSON и создаст типовые блоки.</span>
+            </div>
+        </div>
     </section>
     <section>
         <h3>Блоки</h3>
+        <div class="af-kb-help">
+            <p>Блоки — это дополнительные секции внутри записи. Они помогают структурировать контент: «Бонусы», «Лор», «Способности», «Ограничения», «Примеры», «Синергии».</p>
+            <p>Блоки можно сортировать, включать/выключать и добавлять сколько нужно.</p>
+        </div>
+        <div class="af-kb-code">
+<pre>block_key: bonuses
+title_ru/title_en: Бонусы / Bonuses
+content_en: +2 to...
+data_json:
+{
+  "grants": ["darkvision"],
+  "modifiers": [
+    { "stat": "dex", "value": 2 }
+  ]
+}</pre>
+        </div>
         <div id="af-kb-blocks" data-index="{$kb_blocks_index}">
             {$kb_blocks_rows}
         </div>
@@ -59,6 +137,20 @@
     </section>
     <section>
         <h3>Связи</h3>
+        <div class="af-kb-help">
+            <p>Связи — это связи между сущностями KB. Например: раса → доступные классы; класс → стартовые скиллы; скилл → улучшения; предмет → требования.</p>
+            <p>rel_type — это название типа связи (например «available_classes», «requires», «upgrades_to»). to_type/to_key — ссылка на другую запись.</p>
+        </div>
+        <div class="af-kb-code">
+<pre>rel_type: available_classes
+to_type: class
+to_key: soldier
+meta_json:
+{
+  "note": "Common for humans",
+  "min_level": 1
+}</pre>
+        </div>
         <div id="af-kb-relations" data-index="{$kb_relations_index}">
             {$kb_relations_rows}
         </div>
@@ -97,6 +189,16 @@
                 <input type="text" name="blocks[__INDEX__][title_en]" value="" />
             </div>
         </div>
+        <div class="af-kb-row">
+            <div>
+                <label>Icon URL</label>
+                <input type="text" name="blocks[__INDEX__][icon_url]" value="" />
+            </div>
+            <div>
+                <label>Icon Class</label>
+                <input type="text" name="blocks[__INDEX__][icon_class]" value="" />
+            </div>
+        </div>
         <label>Контент (RU)</label>
         <textarea name="blocks[__INDEX__][content_ru]"></textarea>
         <label>Контент (EN)</label>
@@ -127,6 +229,7 @@
             <div>
                 <label>Meta JSON</label>
                 <textarea name="relations[__INDEX__][meta_json]"></textarea>
+                <div class="af-kb-help">Meta JSON связи хранит условия/пояснения/параметры именно этой связи.</div>
             </div>
             <div>
                 <label>Порядок</label>

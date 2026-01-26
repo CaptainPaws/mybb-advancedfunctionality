@@ -49,6 +49,30 @@
     background: #922f2f;
 }
 
+.af-kb-btn-create {
+    background: #2f8a5d;
+}
+
+.af-kb-btn-edit {
+    background: #4462b2;
+}
+
+.af-kb-btn-delete {
+    background: #b23b3b;
+}
+
+.af-kb-btn-create:hover {
+    background: #276f4c;
+}
+
+.af-kb-btn-edit:hover {
+    background: #2f4e96;
+}
+
+.af-kb-btn-delete:hover {
+    background: #922f2f;
+}
+
 .af-kb-actions {
     display: flex;
     gap: 8px;
@@ -75,6 +99,19 @@
     min-width: 200px;
 }
 
+.af-kb-tab--with-bg {
+    background-size: cover;
+    background-position: center;
+}
+
+.af-kb-type-header,
+.af-kb-entry-header {
+    padding: 8px 12px;
+    border-radius: 6px;
+    background-size: cover;
+    background-position: center;
+}
+
 .af-kb-tab:hover {
     border-color: #4462b2;
     box-shadow: 0 2px 8px rgba(68, 98, 178, 0.12);
@@ -87,6 +124,9 @@
 
 .af-kb-tab-title {
     font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .af-kb-tab-desc {
@@ -103,6 +143,20 @@
     border-radius: 6px;
     padding: 14px;
     margin-bottom: 16px;
+}
+
+.af-kb-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 6px;
+}
+
+.af-kb-icon-img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    display: block;
 }
 
 .af-kb-type-desc,
@@ -136,6 +190,31 @@
     padding: 8px 10px;
     border-radius: 4px;
     border: 1px solid #ccd2dd;
+}
+
+.af-kb-help {
+    font-size: 0.9em;
+    color: #56607a;
+    margin-top: 6px;
+}
+
+.af-kb-help p {
+    margin: 6px 0;
+}
+
+.af-kb-code {
+    background: #f5f7fb;
+    border: 1px solid #d5d9e2;
+    padding: 10px;
+    border-radius: 6px;
+    margin: 8px 0 12px;
+}
+
+.af-kb-code pre {
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, SFMono, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.9em;
+    white-space: pre-wrap;
 }
 
 .af-kb-form section {
@@ -233,4 +312,8 @@
 
 .af-kb-rel-group li {
     margin: 4px 0;
+}
+
+.af-kb-pagination {
+    margin-top: 16px;
 }

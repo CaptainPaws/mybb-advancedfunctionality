@@ -13,13 +13,14 @@
             <input type="text" name="relations[{$rel_index}][to_key]" value="{$rel_to_key}" />
         </div>
     </div>
-    <div class="af-kb-row">
-        <div>
-            <label>Meta JSON</label>
-            <textarea name="relations[{$rel_index}][meta_json]">{$rel_meta_json}</textarea>
-        </div>
-        <div>
-            <label>Порядок</label>
+        <div class="af-kb-row">
+            <div>
+                <label>Meta JSON</label>
+                <textarea name="relations[{$rel_index}][meta_json]">{$rel_meta_json}</textarea>
+                <div class="af-kb-help">Meta JSON связи хранит условия/пояснения/параметры именно этой связи.</div>
+            </div>
+            <div>
+                <label>Порядок</label>
             <input type="text" name="relations[{$rel_index}][sortorder]" value="{$rel_sortorder}" />
         </div>
     </div>

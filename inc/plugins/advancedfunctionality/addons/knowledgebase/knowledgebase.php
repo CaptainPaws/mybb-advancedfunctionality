@@ -15,6 +15,7 @@ define('AF_KB_TPL_DIR', AF_KB_BASE . 'templates/');
 define('AF_KB_MARK', '<!--af_kb_assets-->');
 
 define('AF_KB_KEY_PATTERN', '/^[a-z0-9_-]{2,64}$/');
+define('AF_KB_PERPAGE', 20);
 
 /* -------------------- LANG -------------------- */
 
@@ -132,6 +133,9 @@ CREATE TABLE {TABLE_PREFIX}af_kb_types (
   title_en VARCHAR(255) NOT NULL DEFAULT '',
   description_ru TEXT NOT NULL,
   description_en TEXT NOT NULL,
+  icon_class VARCHAR(128) NOT NULL DEFAULT '',
+  icon_url VARCHAR(255) NOT NULL DEFAULT '',
+  bg_url VARCHAR(255) NOT NULL DEFAULT '',
   sortorder INT NOT NULL DEFAULT 0,
   active TINYINT(1) NOT NULL DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -152,6 +156,9 @@ CREATE TABLE {TABLE_PREFIX}af_kb_entries (
   body_ru MEDIUMTEXT NOT NULL,
   body_en MEDIUMTEXT NOT NULL,
   meta_json MEDIUMTEXT NOT NULL,
+  icon_class VARCHAR(128) NOT NULL DEFAULT '',
+  icon_url VARCHAR(255) NOT NULL DEFAULT '',
+  bg_url VARCHAR(255) NOT NULL DEFAULT '',
   active TINYINT(1) NOT NULL DEFAULT 1,
   sortorder INT NOT NULL DEFAULT 0,
   updated_at INT UNSIGNED NOT NULL DEFAULT 0,
@@ -173,6 +180,8 @@ CREATE TABLE {TABLE_PREFIX}af_kb_blocks (
   content_ru MEDIUMTEXT NOT NULL,
   content_en MEDIUMTEXT NOT NULL,
   data_json MEDIUMTEXT NOT NULL,
+  icon_class VARCHAR(128) NOT NULL DEFAULT '',
+  icon_url VARCHAR(255) NOT NULL DEFAULT '',
   active TINYINT(1) NOT NULL DEFAULT 1,
   sortorder INT NOT NULL DEFAULT 0,
   KEY entry_sort (entry_id, sortorder),
@@ -275,6 +284,7 @@ SQL;
     }
 
     af_kb_templates_install_or_update();
+    af_kb_ensure_schema();
 
     return true;
 }
@@ -307,6 +317,7 @@ function af_knowledgebase_uninstall(): bool
 function af_knowledgebase_activate(): bool
 {
     af_kb_templates_install_or_update();
+    af_kb_ensure_schema();
     return true;
 }
 
@@ -356,6 +367,44 @@ function af_kb_templates_install_or_update(): void
             $db->update_query('templates', $row, "tid='{$tid}'");
         } else {
             $db->insert_query('templates', $row);
+        }
+    }
+}
+
+function af_kb_ensure_schema(): void
+{
+    global $db;
+
+    if ($db->table_exists('af_kb_types')) {
+        if (!$db->field_exists('icon_class', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'icon_class', "VARCHAR(128) NOT NULL DEFAULT ''");
+        }
+        if (!$db->field_exists('icon_url', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'icon_url', "VARCHAR(255) NOT NULL DEFAULT ''");
+        }
+        if (!$db->field_exists('bg_url', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'bg_url', "VARCHAR(255) NOT NULL DEFAULT ''");
+        }
+    }
+
+    if ($db->table_exists('af_kb_entries')) {
+        if (!$db->field_exists('icon_class', 'af_kb_entries')) {
+            $db->add_column('af_kb_entries', 'icon_class', "VARCHAR(128) NOT NULL DEFAULT ''");
+        }
+        if (!$db->field_exists('icon_url', 'af_kb_entries')) {
+            $db->add_column('af_kb_entries', 'icon_url', "VARCHAR(255) NOT NULL DEFAULT ''");
+        }
+        if (!$db->field_exists('bg_url', 'af_kb_entries')) {
+            $db->add_column('af_kb_entries', 'bg_url', "VARCHAR(255) NOT NULL DEFAULT ''");
+        }
+    }
+
+    if ($db->table_exists('af_kb_blocks')) {
+        if (!$db->field_exists('icon_class', 'af_kb_blocks')) {
+            $db->add_column('af_kb_blocks', 'icon_class', "VARCHAR(128) NOT NULL DEFAULT ''");
+        }
+        if (!$db->field_exists('icon_url', 'af_kb_blocks')) {
+            $db->add_column('af_kb_blocks', 'icon_url', "VARCHAR(255) NOT NULL DEFAULT ''");
         }
     }
 }
@@ -484,6 +533,68 @@ function af_kb_pick_text(array $row, string $field): string
     }
 
     return $value;
+}
+
+function af_kb_sanitize_url(string $url): string
+{
+    $url = trim($url);
+    if ($url === '') {
+        return '';
+    }
+
+    $url = str_replace(["\r", "\n", "\t"], '', $url);
+    $url = preg_replace('/["\'()\\\\]/', '', $url);
+    if ($url === null || $url === '') {
+        return '';
+    }
+
+    $parts = parse_url($url);
+    if (!$parts || empty($parts['scheme'])) {
+        return '';
+    }
+
+    $scheme = strtolower((string)$parts['scheme']);
+    if (!in_array($scheme, ['http', 'https'], true)) {
+        return '';
+    }
+
+    return $url;
+}
+
+function af_kb_sanitize_icon_class(string $class): string
+{
+    $class = trim($class);
+    if ($class === '') {
+        return '';
+    }
+
+    $class = preg_replace('/[^a-zA-Z0-9 _:-]/', '', $class);
+    return $class ?? '';
+}
+
+function af_kb_build_icon_html(string $iconUrl, string $iconClass): string
+{
+    $url = af_kb_sanitize_url($iconUrl);
+    if ($url !== '') {
+        return '<img class="af-kb-icon-img" src="' . htmlspecialchars_uni($url) . '" alt="" loading="lazy" />';
+    }
+
+    $class = af_kb_sanitize_icon_class($iconClass);
+    if ($class !== '') {
+        return '<i class="' . htmlspecialchars_uni($class) . '"></i>';
+    }
+
+    return '';
+}
+
+function af_kb_build_bg_style(string $bgUrl): string
+{
+    $url = af_kb_sanitize_url($bgUrl);
+    if ($url === '') {
+        return '';
+    }
+
+    return "background-image:url('" . htmlspecialchars_uni($url) . "');";
 }
 
 function af_kb_parse_message(string $message): string
@@ -724,8 +835,32 @@ function af_kb_handle_view(): void
     $query = trim((string)$mybb->get_input('q'));
 
     if ($type === '') {
+        $typesWhere = 'active=1';
+        if ($query !== '') {
+            $safeQuery = $db->escape_string($query);
+            $typesWhere .= " AND (title_ru LIKE '%{$safeQuery}%' OR title_en LIKE '%{$safeQuery}%')";
+        }
+
+        $page = max(1, (int)$mybb->get_input('page', MyBB::INPUT_INT));
+        $perpage = AF_KB_PERPAGE;
+        $total = (int)$db->fetch_field(
+            $db->simple_select('af_kb_types', 'COUNT(*) AS cnt', $typesWhere),
+            'cnt'
+        );
+        $start = ($page - 1) * $perpage;
+
         $types = [];
-        $q = $db->simple_select('af_kb_types', '*', 'active=1', ['order_by' => 'sortorder, type', 'order_dir' => 'ASC']);
+        $q = $db->simple_select(
+            'af_kb_types',
+            '*',
+            $typesWhere,
+            [
+                'order_by' => 'sortorder, type',
+                'order_dir' => 'ASC',
+                'limit' => $perpage,
+                'limit_start' => $start,
+            ]
+        );
         while ($row = $db->fetch_array($q)) {
             $types[] = $row;
         }
@@ -737,17 +872,31 @@ function af_kb_handle_view(): void
                 $title = $row['type'];
             }
             $desc = af_kb_pick_text($row, 'description');
-            $rows .= '<a class="af-kb-tab" href="misc.php?action=kb&type='.htmlspecialchars_uni($row['type']).'">'
-                . '<span class="af-kb-tab-title">'.htmlspecialchars_uni($title).'</span>'
+            $iconHtml = af_kb_build_icon_html($row['icon_url'] ?? '', $row['icon_class'] ?? '');
+            $iconWrap = $iconHtml !== '' ? '<span class="af-kb-icon">' . $iconHtml . '</span>' : '';
+            $bgStyle = af_kb_build_bg_style($row['bg_url'] ?? '');
+            $styleAttr = $bgStyle !== '' ? ' style="' . $bgStyle . '"' : '';
+            $bgClass = $bgStyle !== '' ? ' af-kb-tab--with-bg' : '';
+            $rows .= '<a class="af-kb-tab'.$bgClass.'"'.$styleAttr.' href="misc.php?action=kb&type='.htmlspecialchars_uni($row['type']).'">'
+                . '<span class="af-kb-tab-title">'.$iconWrap.htmlspecialchars_uni($title).'</span>'
                 . '<span class="af-kb-tab-desc">'.af_kb_parse_message($desc).'</span>'
                 . '</a>';
         }
 
+        $paginationUrl = 'misc.php?action=kb';
+        if ($query !== '') {
+            $paginationUrl .= '&q=' . urlencode($query);
+        }
+        $kb_pagination = $total > $perpage && function_exists('multipage')
+            ? multipage($total, $perpage, $page, $paginationUrl)
+            : '';
+
         $kb_page_title = $lang->af_kb_catalog_title ?? 'Knowledge Base';
         $kb_types_rows = $rows;
+        $kb_query = htmlspecialchars_uni($query);
         $kb_can_edit = af_kb_can_edit() ? '1' : '0';
         $kb_create_link = af_kb_can_manage_types()
-            ? '<a class="af-kb-btn af-kb-btn--create" href="misc.php?action=kb_type_edit">'.htmlspecialchars_uni($lang->af_kb_type_create ?? 'Create category').'</a>'
+            ? '<a class="af-kb-btn af-kb-btn--create af-kb-btn-create" href="misc.php?action=kb_type_edit">'.htmlspecialchars_uni($lang->af_kb_type_create ?? 'Create category').'</a>'
             : '';
         $af_kb_content = '';
         eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_catalog') . "\";");
@@ -767,8 +916,26 @@ function af_kb_handle_view(): void
             $where .= " AND (title_ru LIKE '%{$safeQuery}%' OR title_en LIKE '%{$safeQuery}%')";
         }
 
+        $page = max(1, (int)$mybb->get_input('page', MyBB::INPUT_INT));
+        $perpage = AF_KB_PERPAGE;
+        $total = (int)$db->fetch_field(
+            $db->simple_select('af_kb_entries', 'COUNT(*) AS cnt', $where),
+            'cnt'
+        );
+        $start = ($page - 1) * $perpage;
+
         $entries = [];
-        $q = $db->simple_select('af_kb_entries', '*', $where, ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
+        $q = $db->simple_select(
+            'af_kb_entries',
+            '*',
+            $where,
+            [
+                'order_by' => 'sortorder, id',
+                'order_dir' => 'ASC',
+                'limit' => $perpage,
+                'limit_start' => $start,
+            ]
+        );
         while ($row = $db->fetch_array($q)) {
             $entries[] = $row;
         }
@@ -780,8 +947,10 @@ function af_kb_handle_view(): void
                 $title = $row['key'];
             }
             $short = af_kb_parse_message(af_kb_pick_text($row, 'short'));
+            $iconHtml = af_kb_build_icon_html($row['icon_url'] ?? '', $row['icon_class'] ?? '');
+            $iconWrap = $iconHtml !== '' ? '<span class="af-kb-icon">' . $iconHtml . '</span>' : '';
             $rows .= '<div class="af-kb-entry">
-                <h3><a href="misc.php?action=kb&type='.htmlspecialchars_uni($row['type']).'&key='.htmlspecialchars_uni($row['key']).'">'.htmlspecialchars_uni($title).'</a></h3>
+                <h3><a href="misc.php?action=kb&type='.htmlspecialchars_uni($row['type']).'&key='.htmlspecialchars_uni($row['key']).'">'.$iconWrap.htmlspecialchars_uni($title).'</a></h3>
                 <div class="af-kb-entry-short">'.$short.'</div>
             </div>';
         }
@@ -796,21 +965,33 @@ function af_kb_handle_view(): void
             $typeDesc = af_kb_pick_text($typeRow, 'description');
         }
 
+        $typeIconHtml = $typeRow ? af_kb_build_icon_html($typeRow['icon_url'] ?? '', $typeRow['icon_class'] ?? '') : '';
+        $kb_type_icon = $typeIconHtml !== '' ? '<span class="af-kb-icon">' . $typeIconHtml . '</span>' : '';
+        $typeBgStyle = $typeRow ? af_kb_build_bg_style($typeRow['bg_url'] ?? '') : '';
+        $kb_type_bg_style = $typeBgStyle !== '' ? ' style="' . $typeBgStyle . '"' : '';
+
         $kb_page_title = htmlspecialchars_uni($typeTitle);
         $kb_type_title = htmlspecialchars_uni($typeTitle);
         $kb_type_description = af_kb_parse_message($typeDesc);
         $kb_type_value = htmlspecialchars_uni($type);
         $kb_query = htmlspecialchars_uni($query);
         $kb_entries_rows = $rows;
+        $paginationUrl = 'misc.php?action=kb&type=' . urlencode($type);
+        if ($query !== '') {
+            $paginationUrl .= '&q=' . urlencode($query);
+        }
+        $kb_pagination = $total > $perpage && function_exists('multipage')
+            ? multipage($total, $perpage, $page, $paginationUrl)
+            : '';
         $kb_can_edit = af_kb_can_edit() ? '1' : '0';
         $actions = [];
         if (af_kb_can_edit()) {
-            $actions[] = '<a class="af-kb-btn af-kb-btn--create" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_create ?? 'Create').'</a>';
+            $actions[] = '<a class="af-kb-btn af-kb-btn--create af-kb-btn-create" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_create ?? 'Create').'</a>';
         }
         if (af_kb_can_manage_types()) {
-            $actions[] = '<a class="af-kb-btn af-kb-btn--edit" href="misc.php?action=kb_type_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_type_edit ?? 'Edit category').'</a>';
+            $actions[] = '<a class="af-kb-btn af-kb-btn--edit af-kb-btn-edit" href="misc.php?action=kb_type_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_type_edit ?? 'Edit category').'</a>';
             $confirm = htmlspecialchars_uni($lang->af_kb_type_delete_confirm ?? 'Delete category?');
-            $actions[] = '<a class="af-kb-btn af-kb-btn--delete" href="misc.php?action=kb_type_delete&type='.htmlspecialchars_uni($type).'&my_post_key='.htmlspecialchars_uni($mybb->post_code).'" onclick="return confirm(\''.$confirm.'\');">'.htmlspecialchars_uni($lang->af_kb_type_delete ?? 'Delete category').'</a>';
+            $actions[] = '<a class="af-kb-btn af-kb-btn--delete af-kb-btn-delete" href="misc.php?action=kb_type_delete&type='.htmlspecialchars_uni($type).'&my_post_key='.htmlspecialchars_uni($mybb->post_code).'" onclick="return confirm(\''.$confirm.'\');">'.htmlspecialchars_uni($lang->af_kb_type_delete ?? 'Delete category').'</a>';
         }
         $kb_type_actions = implode(' ', $actions);
         $af_kb_content = '';
@@ -859,6 +1040,8 @@ function af_kb_handle_view(): void
 
     $kb_blocks = '';
     foreach ($blocks as $block) {
+        $blockIconHtml = af_kb_build_icon_html($block['icon_url'] ?? '', $block['icon_class'] ?? '');
+        $block_icon = $blockIconHtml !== '' ? '<span class="af-kb-icon">' . $blockIconHtml . '</span>' : '';
         $block_title = htmlspecialchars_uni(af_kb_pick_text($block, 'title'));
         $block_content = af_kb_parse_message(af_kb_pick_text($block, 'content'));
         $block_data_table = '';
@@ -884,6 +1067,7 @@ function af_kb_handle_view(): void
         $kb_rel_items = '';
         foreach ($items as $rel) {
             $toTitle = $rel['to_key'];
+            $rel_icon = '';
             $target = $db->fetch_array(
                 $db->simple_select(
                     'af_kb_entries',
@@ -897,6 +1081,10 @@ function af_kb_handle_view(): void
                 if ($toTitle === '') {
                     $toTitle = $target['key'];
                 }
+                $relIconHtml = af_kb_build_icon_html($target['icon_url'] ?? '', $target['icon_class'] ?? '');
+                if ($relIconHtml !== '') {
+                    $rel_icon = '<span class="af-kb-icon">' . $relIconHtml . '</span>';
+                }
             }
             $rel_to_type = htmlspecialchars_uni($rel['to_type']);
             $rel_to_key = htmlspecialchars_uni($rel['to_key']);
@@ -905,6 +1093,11 @@ function af_kb_handle_view(): void
         }
         $kb_relations .= '<div class="af-kb-rel-group"><h4>'.htmlspecialchars_uni($relType).'</h4><ul>'.$kb_rel_items.'</ul></div>';
     }
+
+    $entryIconHtml = af_kb_build_icon_html($entry['icon_url'] ?? '', $entry['icon_class'] ?? '');
+    $kb_entry_icon = $entryIconHtml !== '' ? '<span class="af-kb-icon">' . $entryIconHtml . '</span>' : '';
+    $entryBgStyle = af_kb_build_bg_style($entry['bg_url'] ?? '');
+    $kb_entry_bg_style = $entryBgStyle !== '' ? ' style="' . $entryBgStyle . '"' : '';
 
     $kb_page_title = htmlspecialchars_uni($title);
     $kb_title = htmlspecialchars_uni($title);
@@ -916,7 +1109,7 @@ function af_kb_handle_view(): void
     $kb_short = $short;
     $kb_body = $body;
     $kb_can_edit = af_kb_can_edit() ? '1' : '0';
-    $kb_edit_link = af_kb_can_edit() ? '<a class="af-kb-btn" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'&key='.htmlspecialchars_uni($key).'">'.htmlspecialchars_uni($lang->af_kb_edit ?? 'Edit').'</a>' : '';
+    $kb_edit_link = af_kb_can_edit() ? '<a class="af-kb-btn af-kb-btn--edit af-kb-btn-edit" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'&key='.htmlspecialchars_uni($key).'">'.htmlspecialchars_uni($lang->af_kb_edit ?? 'Edit').'</a>' : '';
     $af_kb_content = '';
     eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_view') . "\";");
     eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
@@ -998,6 +1191,9 @@ function af_kb_handle_edit(): void
         }
 
         $metaJson = trim((string)$mybb->get_input('meta_json'));
+        $iconClass = af_kb_sanitize_icon_class((string)$mybb->get_input('icon_class'));
+        $iconUrl = af_kb_sanitize_url((string)$mybb->get_input('icon_url'));
+        $bgUrl = af_kb_sanitize_url((string)$mybb->get_input('bg_url'));
         if (!af_kb_validate_json($metaJson)) {
             $errors[] = $lang->af_kb_invalid_json ?? 'Invalid JSON.';
         }
@@ -1017,6 +1213,8 @@ function af_kb_handle_edit(): void
                 $contentRu = trim((string)($block['content_ru'] ?? ''));
                 $contentEn = trim((string)($block['content_en'] ?? ''));
                 $dataJson = trim((string)($block['data_json'] ?? ''));
+                $iconClass = af_kb_sanitize_icon_class((string)($block['icon_class'] ?? ''));
+                $iconUrl = af_kb_sanitize_url((string)($block['icon_url'] ?? ''));
                 $active = !empty($block['active']) ? 1 : 0;
                 $sortorder = (int)($block['sortorder'] ?? 0);
 
@@ -1037,6 +1235,8 @@ function af_kb_handle_edit(): void
                     'content_ru'  => $contentRu,
                     'content_en'  => $contentEn,
                     'data_json'   => af_kb_normalize_json($dataJson),
+                    'icon_class'  => $iconClass,
+                    'icon_url'    => $iconUrl,
                     'active'      => $active,
                     'sortorder'   => $sortorder,
                 ];
@@ -1111,6 +1311,9 @@ function af_kb_handle_edit(): void
                 'body_ru'    => $db->escape_string((string)$mybb->get_input('body_ru')),
                 'body_en'    => $db->escape_string((string)$mybb->get_input('body_en')),
                 'meta_json'  => $db->escape_string(af_kb_normalize_json($metaJson)),
+                'icon_class' => $db->escape_string($iconClass),
+                'icon_url'   => $db->escape_string($iconUrl),
+                'bg_url'     => $db->escape_string($bgUrl),
                 'active'     => (int)$mybb->get_input('active', MyBB::INPUT_INT) ? 1 : 0,
                 'sortorder'  => (int)$mybb->get_input('sortorder', MyBB::INPUT_INT),
                 'updated_at' => TIME_NOW,
@@ -1135,6 +1338,8 @@ function af_kb_handle_edit(): void
                     'content_ru' => $db->escape_string($block['content_ru']),
                     'content_en' => $db->escape_string($block['content_en']),
                     'data_json'  => $db->escape_string($block['data_json']),
+                    'icon_class' => $db->escape_string($block['icon_class']),
+                    'icon_url'   => $db->escape_string($block['icon_url']),
                     'active'     => (int)$block['active'],
                     'sortorder'  => (int)$block['sortorder'],
                 ]);
@@ -1176,6 +1381,9 @@ function af_kb_handle_edit(): void
         'body_ru'   => '',
         'body_en'   => '',
         'meta_json' => '{}',
+        'icon_class' => '',
+        'icon_url' => '',
+        'bg_url' => '',
         'active'    => 1,
         'sortorder' => 0,
     ];
@@ -1211,6 +1419,8 @@ function af_kb_handle_edit(): void
         $block_content_ru = htmlspecialchars_uni($block['content_ru']);
         $block_content_en = htmlspecialchars_uni($block['content_en']);
         $block_data_json = htmlspecialchars_uni($block['data_json'] ?? '');
+        $block_icon_class = htmlspecialchars_uni($block['icon_class'] ?? '');
+        $block_icon_url = htmlspecialchars_uni($block['icon_url'] ?? '');
         $block_active_checked = !empty($block['active']) ? 'checked="checked"' : '';
         $block_sortorder = (int)$block['sortorder'];
         eval("\$blocksRows .= \"" . af_kb_get_template('knowledgebase_blocks_edit_item') . "\";");
@@ -1272,6 +1482,9 @@ function af_kb_handle_edit(): void
     $kb_body_ru = htmlspecialchars_uni($entry['body_ru']);
     $kb_body_en = htmlspecialchars_uni($entry['body_en']);
     $kb_meta_json = htmlspecialchars_uni($entry['meta_json'] ?: '{}');
+    $kb_icon_class = htmlspecialchars_uni($entry['icon_class'] ?? '');
+    $kb_icon_url = htmlspecialchars_uni($entry['icon_url'] ?? '');
+    $kb_bg_url = htmlspecialchars_uni($entry['bg_url'] ?? '');
     $kb_active_checked = !empty($entry['active']) ? 'checked="checked"' : '';
     $kb_sortorder = (int)$entry['sortorder'];
     $kb_blocks_rows = $blocksRows;
@@ -1279,7 +1492,7 @@ function af_kb_handle_edit(): void
     $kb_blocks_index = $blockIndex;
     $kb_relations_index = $relIndex;
 
-    $kb_delete_button = !empty($entry['id']) ? '<button type="submit" name="kb_delete" value="1" class="af-kb-remove">'.$lang->af_kb_delete.'</button>' : '';
+    $kb_delete_button = !empty($entry['id']) ? '<button type="submit" name="kb_delete" value="1" class="af-kb-btn af-kb-btn--delete af-kb-btn-delete">'.$lang->af_kb_delete.'</button>' : '';
 
     $af_kb_content = '';
     eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_edit') . "\";");
@@ -1323,6 +1536,9 @@ function af_kb_handle_type_edit(): void
         $titleEn = trim((string)$mybb->get_input('title_en'));
         $descRu = trim((string)$mybb->get_input('description_ru'));
         $descEn = trim((string)$mybb->get_input('description_en'));
+        $iconClass = af_kb_sanitize_icon_class((string)$mybb->get_input('icon_class'));
+        $iconUrl = af_kb_sanitize_url((string)$mybb->get_input('icon_url'));
+        $bgUrl = af_kb_sanitize_url((string)$mybb->get_input('bg_url'));
         $sortorder = (int)$mybb->get_input('sortorder', MyBB::INPUT_INT);
         $active = (int)$mybb->get_input('active', MyBB::INPUT_INT) ? 1 : 0;
 
@@ -1343,6 +1559,9 @@ function af_kb_handle_type_edit(): void
                 'title_en'       => $db->escape_string($titleEn),
                 'description_ru' => $db->escape_string($descRu),
                 'description_en' => $db->escape_string($descEn),
+                'icon_class'     => $db->escape_string($iconClass),
+                'icon_url'       => $db->escape_string($iconUrl),
+                'bg_url'         => $db->escape_string($bgUrl),
                 'sortorder'      => $sortorder,
                 'active'         => $active,
             ];
@@ -1363,6 +1582,9 @@ function af_kb_handle_type_edit(): void
         'title_en'       => '',
         'description_ru' => '',
         'description_en' => '',
+        'icon_class'     => '',
+        'icon_url'       => '',
+        'bg_url'         => '',
         'sortorder'      => 0,
         'active'         => 1,
     ];
@@ -1382,6 +1604,9 @@ function af_kb_handle_type_edit(): void
     $kb_type_title_en = htmlspecialchars_uni($typeRow['title_en']);
     $kb_type_description_ru = htmlspecialchars_uni($typeRow['description_ru']);
     $kb_type_description_en = htmlspecialchars_uni($typeRow['description_en']);
+    $kb_type_icon_class = htmlspecialchars_uni($typeRow['icon_class'] ?? '');
+    $kb_type_icon_url = htmlspecialchars_uni($typeRow['icon_url'] ?? '');
+    $kb_type_bg_url = htmlspecialchars_uni($typeRow['bg_url'] ?? '');
     $kb_type_sortorder = (int)$typeRow['sortorder'];
     $kb_type_active_checked = !empty($typeRow['active']) ? 'checked="checked"' : '';
     $kb_type_readonly = $isEditing ? 'readonly="readonly"' : '';
@@ -1392,7 +1617,7 @@ function af_kb_handle_type_edit(): void
     $kb_type_delete_link = '';
     if (!empty($typeRow['type'])) {
         $confirm = htmlspecialchars_uni($lang->af_kb_type_delete_confirm ?? 'Delete category?');
-        $kb_type_delete_link = '<a class="af-kb-btn af-kb-btn--delete" href="misc.php?action=kb_type_delete&type='.htmlspecialchars_uni($typeRow['type']).'&my_post_key='.htmlspecialchars_uni($mybb->post_code).'" onclick="return confirm(\''.$confirm.'\');">'.htmlspecialchars_uni($lang->af_kb_type_delete ?? 'Delete category').'</a>';
+        $kb_type_delete_link = '<a class="af-kb-btn af-kb-btn--delete af-kb-btn-delete" href="misc.php?action=kb_type_delete&type='.htmlspecialchars_uni($typeRow['type']).'&my_post_key='.htmlspecialchars_uni($mybb->post_code).'" onclick="return confirm(\''.$confirm.'\');">'.htmlspecialchars_uni($lang->af_kb_type_delete ?? 'Delete category').'</a>';
     }
 
     $af_kb_content = '';
