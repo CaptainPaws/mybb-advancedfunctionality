@@ -619,6 +619,113 @@ function af_advancedpostcounter_fetch_period_counts(array $uids): array
     return $out;
 }
 
+/**
+ * Возвращает массив месяцев с количеством постов (по выбранным tracked forums),
+ * отсортированный по убыванию месяца.
+ *
+ * Формат:
+ * [
+ *   ['ym' => '2026-01', 'count' => 123],
+ *   ...
+ * ]
+ */
+function af_advancedpostcounter_fetch_monthly_totals(int $limit = 0): array
+{
+    global $db;
+
+    $out = [];
+
+    $fids = af_advancedpostcounter_get_tracked_forums();
+    if (empty($fids)) {
+        return $out;
+    }
+
+    $fidList = implode(',', array_map('intval', $fids));
+    $prefix  = TABLE_PREFIX;
+
+    // Условие "не считать первый пост темы" (если выключено)
+    $first_cond = af_advancedpostcounter_count_firstpost_enabled() ? '1=1' : 'p.pid != t.firstpost';
+
+    // Драйвер-зависимое получение ключа YYYY-MM
+    switch ((string)$db->type) {
+        case 'pgsql':
+            $monthExpr = "to_char(to_timestamp(p.dateline), 'YYYY-MM')";
+            break;
+        case 'sqlite':
+            $monthExpr = "strftime('%Y-%m', p.dateline, 'unixepoch')";
+            break;
+        default: // mysql/mariadb
+            $monthExpr = "DATE_FORMAT(FROM_UNIXTIME(p.dateline), '%Y-%m')";
+            break;
+    }
+
+    $limitSql = '';
+    if ($limit > 0) {
+        $limit = (int)$limit;
+        // в sqlite/pgsql LIMIT в конце одинаковый
+        $limitSql = " LIMIT {$limit} ";
+    }
+
+    $q = $db->query("
+        SELECT {$monthExpr} AS ym, COUNT(*) AS c
+        FROM {$prefix}posts p
+        INNER JOIN {$prefix}threads t ON (t.tid = p.tid)
+        WHERE p.visible = 1
+          AND t.visible = 1
+          AND p.uid > 0
+          AND p.fid IN ({$fidList})
+          AND {$first_cond}
+        GROUP BY ym
+        ORDER BY ym DESC
+        {$limitSql}
+    ");
+
+    while ($row = $db->fetch_array($q)) {
+        $ym = trim((string)($row['ym'] ?? ''));
+        if ($ym === '') {
+            continue;
+        }
+        $out[] = [
+            'ym'    => $ym,
+            'count' => (int)($row['c'] ?? 0),
+        ];
+    }
+
+    return $out;
+}
+
+/**
+ * Превращает "YYYY-MM" в "Месяц YYYY" (рус).
+ * Если в $lang есть month_1..month_12 — используем их, иначе fallback на массив.
+ */
+function af_advancedpostcounter_format_month_label(string $ym): string
+{
+    global $lang;
+
+    $ym = trim($ym);
+    if (!preg_match('~^(\d{4})-(\d{2})$~', $ym, $m)) {
+        return $ym;
+    }
+
+    $year  = $m[1];
+    $month = (int)$m[2];
+
+    $fallback = [
+        1=>'Январь', 2=>'Февраль', 3=>'Март', 4=>'Апрель', 5=>'Май', 6=>'Июнь',
+        7=>'Июль', 8=>'Август', 9=>'Сентябрь', 10=>'Октябрь', 11=>'Ноябрь', 12=>'Декабрь'
+    ];
+
+    $name = $fallback[$month] ?? $ym;
+
+    // MyBB lang обычно хранит month_1..month_12 (в некоторых языках)
+    $key = 'month_'.$month;
+    if (is_object($lang) && isset($lang->$key) && is_string($lang->$key) && trim($lang->$key) !== '') {
+        $name = trim((string)$lang->$key);
+    }
+
+    return $name.' '.$year;
+}
+
 /* -------------------- DISPLAY (POSTBIT / PROFILE) -------------------- */
 function af_advancedpostcounter_postbit(array &$post): void
 {
@@ -1610,7 +1717,7 @@ function af_advancedpostcounter_postsactivity_page(): void
         error_no_permission();
     }
 
-    // Логично: доступ тем, кто видит список участников
+    // Доступ: кто видит memberlist
     if ((int)($mybb->usergroup['canviewmemberlist'] ?? 0) !== 1) {
         error_no_permission();
     }
@@ -1626,7 +1733,7 @@ function af_advancedpostcounter_postsactivity_page(): void
 
     add_breadcrumb($activity_title, 'postsactivity.php');
 
-    // Готовим headerinclude/header/footer как в AAS
+    // headerinclude/header/footer как в AAS
     af_apc_ensure_header_bits();
 
     $esc = static function ($s): string {
@@ -1635,7 +1742,7 @@ function af_advancedpostcounter_postsactivity_page(): void
             : htmlspecialchars((string)$s, ENT_QUOTES);
     };
 
-    // Какие форумы считаем
+    // tracked forums
     $trackedFids = af_advancedpostcounter_get_tracked_forums();
     $fidList = !empty($trackedFids) ? implode(',', array_map('intval', $trackedFids)) : '';
 
@@ -1705,48 +1812,48 @@ function af_advancedpostcounter_postsactivity_page(): void
         $where .= " AND u.username LIKE '%{$qLike}%'";
     }
 
-    // Если форумы для подсчёта не выбраны — всё равно отдаём нормальную страницу (не белый экран)
-    if ($fidList === '') {
-        $filters = '';
-        $multipage = '';
-        $rows = '<tr><td class="trow1" colspan="6"><em>'.$esc('Не выбраны категории/форумы для подсчёта.').'</em></td></tr>';
+    // если форумы не выбраны — отдадим страницу, но месяцы будут пустые
+    $months_rows = '';
+    $months_total = 0;
 
-        $th_user  = $esc($lang->username ?? 'Пользователь');
-        $th_total = $esc('Всего');
-        $th_month = $esc('За месяц');
-        $th_week  = $esc('За неделю');
-        $th_last  = $esc('Последний пост');
+    if ($fidList !== '') {
+        // собираем вкладку "по месяцам"
+        // Можно ограничить, например, 120 месяцев (~10 лет). Не просила — оставляю 0 = без лимита.
+        $months = af_advancedpostcounter_fetch_monthly_totals(0);
 
-        $inner = '';
-        $tplInner = (string)$templates->get('advancedpostcounter_postsactivity');
-        if ($tplInner !== '') {
-            // вычищаем {$header}{$footer} из старого шаблона — мы оборачиваем в полный документ
-            $tplInner = str_replace(['{$header}', '{$footer}'], '', $tplInner);
-            eval("\$inner = \"".$tplInner."\";");
+        if (!empty($months)) {
+            $i = 0;
+            foreach ($months as $m) {
+                $i++;
+                $row_bg = ($i % 2 === 0) ? 'trow2' : 'trow1';
+                $label = af_advancedpostcounter_format_month_label((string)$m['ym']);
+                $cnt   = (int)($m['count'] ?? 0);
+                $months_total += $cnt;
+
+                $months_rows .= '<tr>'
+                    .'<td class="'.$row_bg.'">'.$esc($label).'</td>'
+                    .'<td class="'.$row_bg.'" style="text-align:center;white-space:nowrap;">'.my_number_format($cnt).'</td>'
+                    .'</tr>';
+            }
+
+            // строка ИТОГО
+            $months_rows .= '<tr>'
+                .'<td class="tcat"><strong>'.$esc('ВСЕГО:').'</strong></td>'
+                .'<td class="tcat" style="text-align:center;white-space:nowrap;"><strong>'.my_number_format($months_total).'</strong></td>'
+                .'</tr>';
         } else {
-            $inner = '<div class="af-apc-activity-page"><table class="tborder" width="100%">'.$rows.'</table></div>';
+            $months_rows = '<tr><td class="trow1" colspan="2"><em>'.$esc('Нет данных.').'</em></td></tr>';
         }
-
-        $page = '';
-        $af_apc_page_title = $activity_title;
-        $af_apc_content = $inner;
-
-        $tplDoc = (string)$templates->get('af_apc_postsactivity_page');
-        if ($tplDoc !== '') {
-            eval("\$page = \"".$tplDoc."\";");
-        } else {
-            $page = (string)$header . (string)$inner . (string)$footer;
-        }
-
-        output_page($page);
-        exit;
+    } else {
+        $months_rows = '<tr><td class="trow1" colspan="2"><em>'.$esc('Не выбраны категории/форумы для подсчёта.').'</em></td></tr>';
     }
 
-    /* -------------------- SQL: lastpost join (нужен для sort/active/inactive) -------------------- */
+    /* -------------------- USER TABLE (первая вкладка) -------------------- */
 
     $prefix = TABLE_PREFIX;
     $firstCond = af_advancedpostcounter_count_firstpost_enabled() ? '1=1' : 'p.pid != t.firstpost';
 
+    // lastpost join (нужен для sort/active/inactive)
     $joins = "
         LEFT JOIN (
             SELECT p.uid, MAX(p.dateline) AS lastpost
@@ -1755,7 +1862,7 @@ function af_advancedpostcounter_postsactivity_page(): void
             WHERE p.visible = 1
               AND t.visible = 1
               AND p.uid > 0
-              AND p.fid IN ({$fidList})
+              ".($fidList !== '' ? " AND p.fid IN ({$fidList}) " : "")."
               AND {$firstCond}
             GROUP BY p.uid
         ) apclp ON (apclp.uid = u.uid)
@@ -1787,8 +1894,7 @@ function af_advancedpostcounter_postsactivity_page(): void
             break;
     }
 
-    /* -------------------- PAGINATION COUNT -------------------- */
-
+    // пагинация
     $qTotal = $db->query("
         SELECT COUNT(*) AS c
         FROM {$prefix}users u
@@ -1808,13 +1914,10 @@ function af_advancedpostcounter_postsactivity_page(): void
     if ($q !== '') {
         $baseArgs['q'] = $q;
     }
-
     $baseUrl = 'postsactivity.php?' . http_build_query($baseArgs);
     $multipage = function_exists('multipage') ? multipage($totalUsers, $perpage, $pageNum, $baseUrl) : '';
 
-    /* -------------------- PAGE SLICE -------------------- */
-
-    // LIMIT/OFFSET для разных драйверов
+    // LIMIT/OFFSET
     if (in_array($db->type, ['pgsql', 'sqlite'], true)) {
         $limitSql = " LIMIT ".(int)$perpage." OFFSET ".(int)$start." ";
     } else {
@@ -1845,12 +1948,10 @@ function af_advancedpostcounter_postsactivity_page(): void
         $uids[] = $uid;
     }
 
-    /* -------------------- PERIOD COUNTS + LAST POST DETAILS -------------------- */
-
     $periods = !empty($uids) ? af_advancedpostcounter_fetch_period_counts($uids) : [];
 
     $last = [];
-    if (!empty($uids)) {
+    if (!empty($uids) && $fidList !== '') {
         $uidList2 = implode(',', array_map('intval', $uids));
 
         $qLast = $db->query("
@@ -1873,15 +1974,13 @@ function af_advancedpostcounter_postsactivity_page(): void
         }
     }
 
-    /* -------------------- FILTERS BAR -------------------- */
-
+    // фильтры (как у тебя)
     $sortName = [
         'last'  => 'Последняя активность',
         'total' => 'Всего постов',
         'user'  => 'Имя',
         'reg'   => 'Регистрация',
     ];
-
     $onlyName = [
         'all'      => 'Все',
         'active'   => 'Активные (писали недавно)',
@@ -1928,15 +2027,14 @@ function af_advancedpostcounter_postsactivity_page(): void
         .' <a class="smalltext" href="postsactivity.php" style="opacity:.85;">Сброс</a>'
         .'</div></form>';
 
-    // TH (в твоём шаблоне th_* уже ожидаются строками)
+    // TH
     $th_user  = $esc($lang->username ?? 'Пользователь');
     $th_total = $esc('Всего');
     $th_month = $esc('За месяц');
     $th_week  = $esc('За неделю');
     $th_last  = $esc('Последний пост');
 
-    /* -------------------- ROWS -------------------- */
-
+    // rows
     $rows = '';
     $rowTpl = (string)$templates->get('advancedpostcounter_postsactivity_row');
 
@@ -2035,14 +2133,21 @@ function af_advancedpostcounter_postsactivity_page(): void
     $inner = '';
     $tplInner = (string)$templates->get('advancedpostcounter_postsactivity');
     if ($tplInner !== '') {
-        // старый вариант мог содержать {$header}{$footer} — вычищаем, потому что оборачиваем в полный документ
+        // оставляем как есть — твой шаблон содержит {$header}{$footer} и это нормально,
+        // но мы всё равно в конце рендерим fullpage af_apc_postsactivity_page (doctype),
+        // поэтому тут убираем header/footer, чтобы не было дубля
         $tplInner = str_replace(['{$header}', '{$footer}'], '', $tplInner);
+
+        // переменные для вкладки "по месяцам"
+        $months_tab_title = 'Активность по месяцам';
+        $users_tab_title  = 'Активность пользователей';
+
         eval("\$inner = \"".$tplInner."\";");
     } else {
         $inner = '<div class="af-apc-activity-page">'.$filters.'<table class="tborder" width="100%">'.$rows.'</table></div>';
     }
 
-    /* -------------------- FULL DOCUMENT TEMPLATE (канон как в AAS) -------------------- */
+    /* -------------------- FULL DOCUMENT TEMPLATE -------------------- */
 
     $page = '';
     $af_apc_page_title = $activity_title;
@@ -2052,14 +2157,12 @@ function af_advancedpostcounter_postsactivity_page(): void
     if ($tplDoc !== '') {
         eval("\$page = \"".$tplDoc."\";");
     } else {
-        // аварийный fallback (без DOCTYPE, но хоть не ломаемся)
         $page = (string)$header . (string)$inner . (string)$footer;
     }
 
     output_page($page);
     exit;
 }
-
 
 function af_advancedpostcounter_wrap_with_forum_shell(string $page_inner, string $original_tpl): string
 {
