@@ -26,11 +26,14 @@ function af_aam_get_known_types(): array
         'pm',
         'post_threadauthor',
         'subscribed_thread',
+        'subscribed_forum',
         'quoted',
         'mention',
+        'buddy_request',
         // кастомные типы (например achievements) регистрируются своими аддонами
     ];
 }
+
 
 /**
  * Форматирование одного уведомления: текст + URL.
@@ -107,6 +110,25 @@ function af_aam_format_alert(array $alert): array
             }
             break;
 
+        // --- Запрос в друзья ---
+        case 'buddy_request':
+            // Ожидаем: from_uid = кто добавил, uid = кому пришло
+            if ($fromUser === '') {
+                $fromUser = $lang->af_aam_unknown_user ?? 'Кто-то';
+            }
+
+            // Текст
+            if (isset($lang->af_aam_text_buddy_request) && trim((string)$lang->af_aam_text_buddy_request) !== '') {
+                $text = $lang->sprintf($lang->af_aam_text_buddy_request, $fromUser);
+            } else {
+                // fallback RU, если ключа нет
+                $text = $fromUser . ' отправил(а) вам запрос в друзья';
+            }
+
+            // Куда вести:
+            // логично — в списки друзей (там пользователь увидит добавленного/может добавить взаимно/управлять)
+            $url = 'usercp.php?action=editlists';
+            break;
 
         // --- Ответ в твоей теме ---
         case 'post_threadauthor':
