@@ -167,3 +167,18 @@
   text-overflow: ellipsis;
   color: initial;
 }
+/* AF AE dropdown fixes */
+.af-ae-dd {
+  position: relative;
+  z-index: 99999;
+  pointer-events: auto;
+  min-width: 220px;
+  padding: 6px;
+}
+
+.af-ae-dd-item {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+}
