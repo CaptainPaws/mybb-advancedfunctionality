@@ -72,6 +72,7 @@ function af_advancedmenu_install_db(): void
             `title` varchar(255) NOT NULL,
             `url` varchar(500) NOT NULL,
             `icon` varchar(255) NOT NULL DEFAULT '',
+            `hint` varchar(255) NOT NULL DEFAULT '',
             `sort_order` int NOT NULL DEFAULT 10,
             `enabled` tinyint(1) NOT NULL DEFAULT 1,
             `visibility` varchar(255) NOT NULL DEFAULT '',
@@ -83,12 +84,16 @@ function af_advancedmenu_install_db(): void
         ) {$collation}
     ");
 
-    // Мягкий апгрейд: если таблица была создана раньше без icon — добавим.
-    if (method_exists($db, 'field_exists') && !$db->field_exists('icon', AF_AM_TABLE_ITEMS)) {
-        $db->write_query("ALTER TABLE `".TABLE_PREFIX.AF_AM_TABLE_ITEMS."` ADD COLUMN `icon` varchar(255) NOT NULL DEFAULT '' AFTER `url`");
+    // Мягкий апгрейд: если таблица была создана раньше без icon/hint — добавим.
+    if (method_exists($db, 'field_exists')) {
+        if (!$db->field_exists('icon', AF_AM_TABLE_ITEMS)) {
+            $db->write_query("ALTER TABLE `".TABLE_PREFIX.AF_AM_TABLE_ITEMS."` ADD COLUMN `icon` varchar(255) NOT NULL DEFAULT '' AFTER `url`");
+        }
+        if (!$db->field_exists('hint', AF_AM_TABLE_ITEMS)) {
+            $db->write_query("ALTER TABLE `".TABLE_PREFIX.AF_AM_TABLE_ITEMS."` ADD COLUMN `hint` varchar(255) NOT NULL DEFAULT '' AFTER `icon`");
+        }
     } else {
-        // fallback для обёрток без field_exists: попробуем, и если упадёт — MyBB перехватит/логнет
-        // (но чаще field_exists в MyBB есть)
+        // fallback (если внезапно нет field_exists) — не трогаем, чтобы не падать.
     }
 }
 
@@ -684,14 +689,32 @@ function af_advancedmenu_render_item(array $item): string
     $title    = htmlspecialchars_uni((string)$item['title']);
     $url      = htmlspecialchars_uni(af_advancedmenu_normalize_url((string)$item['url']));
 
-    // ИКОНКА: превращаем в безопасный HTML+CSS-хуки (без “шакаленья” кавычек)
+    // ПОДСКАЗКА (tooltip)
+    // Делаем "двойной" вывод:
+    // - data-af-am-tip для нашего CSS-tooltip
+    // - title как нативный fallback (и полезно для доступности)
+    $hintRaw = isset($item['hint']) ? (string)$item['hint'] : '';
+    $hintRaw = trim($hintRaw);
+
+    $hintAttr = '';
+    if ($hintRaw !== '') {
+        $hintRaw = strip_tags($hintRaw);
+        $hintRaw = preg_replace('~\s+~u', ' ', $hintRaw);
+        $hintRaw = trim((string)$hintRaw);
+
+        if ($hintRaw !== '') {
+            $hintEsc = htmlspecialchars_uni($hintRaw);
+            $hintAttr = ' data-af-am-tip="' . $hintEsc . '" title="' . $hintEsc . '"';
+        }
+    }
+
+    // ИКОНКА
     $iconRaw = isset($item['icon']) ? (string)$item['icon'] : '';
     $icon    = af_advancedmenu_icon_parse($iconRaw);
 
     $iconHtml = '';
     if ($icon['type'] === 'text' && $icon['value'] !== '') {
         $txt = af_advancedmenu_css_escape((string)$icon['value']);
-        // ВАЖНО: для content нужен value с кавычками
         $style = '--af-am-icon-text:"'.$txt.'";';
         $iconHtml = '<span class="af-am-ico af-am-ico-text" style="'.htmlspecialchars_uni($style).'" aria-hidden="true"></span>';
     } elseif ($icon['type'] === 'img' && $icon['value'] !== '') {
@@ -700,11 +723,20 @@ function af_advancedmenu_render_item(array $item): string
         $style = "--af-am-icon-url:url('".$srcEsc."');";
         $iconHtml = '<span class="af-am-ico af-am-ico-img" style="'.htmlspecialchars_uni($style).'" aria-hidden="true"></span>';
     } elseif ($icon['type'] === 'fa' && $icon['value'] !== '') {
-        // чистим классы, чтобы не пролезло ничего странного
         $cls = preg_replace('~[^a-z0-9_\-\s]~i', '', (string)$icon['value']);
         $cls = trim(preg_replace('~\s+~', ' ', $cls));
+
         if ($cls !== '') {
-            $iconHtml = '<span class="af-am-ico af-am-ico-fa '.htmlspecialchars_uni($cls).'" aria-hidden="true"></span>';
+            if (!preg_match('~\bfa-(solid|regular|brands|light|thin|duotone)\b~i', $cls)) {
+                $cls = 'fa-solid '.$cls;
+            }
+            if (!preg_match('~\bfa-[a-z0-9-]+\b~i', $cls)) {
+                $cls = '';
+            }
+        }
+
+        if ($cls !== '') {
+            $iconHtml = '<i class="af-am-ico af-am-ico-fa '.htmlspecialchars_uni($cls).'" aria-hidden="true"></i>';
         }
     }
 
@@ -721,15 +753,17 @@ function af_advancedmenu_render_item(array $item): string
         $af_am_url      = $url;
         $af_am_icon     = $iconHtml;
 
+        // ВАЖНО: оставляем переменную как ты уже делала, но теперь она несёт и data и title.
+        $af_am_hint_attr = $hintAttr;
+
         $out = '';
         eval("\$out = \"$tpl\";");
         return (string)$out;
     }
 
-    // fallback
-    return '<li class="af-am-item af-am-'.$location.' af-am-'.$slug.'"><a class="af-am-link" href="'.$url.'">'.$iconHtml.'<span class="af-am-title">'.$title.'</span></a></li>';
+    // fallback HTML (если нет шаблона)
+    return '<li class="af-am-item af-am-'.$location.' af-am-'.$slug.'"><a class="af-am-link" href="'.$url.'"'.$hintAttr.'>'.$iconHtml.'<span class="af-am-title">'.$title.'</span></a></li>';
 }
-
 
 function af_advancedmenu_resolve_target(string $location): string
 {
@@ -988,8 +1022,21 @@ function af_advancedmenu_inject_assets(string &$page): void
     }
 
     $bburl = rtrim((string)$mybb->settings['bburl'], '/');
-    $css = $bburl.'/inc/plugins/advancedfunctionality/addons/advancedmenu/assets/advancedmenu.css?v=1';
-    $js  = $bburl.'/inc/plugins/advancedfunctionality/addons/advancedmenu/assets/advancedmenu.js?v=1';
+
+    // URL'ы ассетов
+    $cssUrl = $bburl.'/inc/plugins/advancedfunctionality/addons/advancedmenu/assets/advancedmenu.css';
+    $jsUrl  = $bburl.'/inc/plugins/advancedfunctionality/addons/advancedmenu/assets/advancedmenu.js';
+
+    // Авто-версия: берём время изменения файлов (чтобы всегда грузилась свежая)
+    $cssPath = MYBB_ROOT.'inc/plugins/advancedfunctionality/addons/advancedmenu/assets/advancedmenu.css';
+    $jsPath  = MYBB_ROOT.'inc/plugins/advancedfunctionality/addons/advancedmenu/assets/advancedmenu.js';
+
+    $cssV = (is_file($cssPath) ? (string)@filemtime($cssPath) : (string)TIME_NOW);
+    $jsV  = (is_file($jsPath) ? (string)@filemtime($jsPath)  : (string)TIME_NOW);
+
+    // Если bburl уже содержит ?, то аккуратно подцепим &v=
+    $css = $cssUrl.(strpos($cssUrl, '?') !== false ? '&' : '?').'v='.$cssV;
+    $js  = $jsUrl.(strpos($jsUrl, '?') !== false ? '&' : '?').'v='.$jsV;
 
     $tags = "\n".AF_AM_ASSETS_MARK."\n"
         .'<link rel="stylesheet" href="'.$css.'" />'."\n"
