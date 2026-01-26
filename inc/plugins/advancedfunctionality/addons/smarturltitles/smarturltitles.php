@@ -477,8 +477,10 @@ function af_sut_match(string $pattern, string $subject): string
 function af_sut_protect_bbcode_blocks(string $message, array &$store): string
 {
     // Защищаем контент внутри тегов, где URL должен остаться "чистым"
-    // чтобы не ломать [img], [video], [media] и т.д.
-    $pattern = '#\[(img|video|media|youtube|vimeo|dailymotion|tiktok|instagram|audio|code|php)(?:=[^\]]+)?\].*?\[/\1\]#si';
+    // чтобы не ломать [img], [video], [media], [code] и ВАЖНО: [html] (HTMLBB)
+    //
+    // Добавили 'html' — теперь автоссылки НЕ полезут внутрь HTMLBB блока и не обернут URL в [url].
+    $pattern = '#\[(img|video|media|youtube|vimeo|dailymotion|tiktok|instagram|audio|code|php|html)(?:=[^\]]+)?\].*?\[/\1\]#si';
 
     $message = preg_replace_callback($pattern, function($m) use (&$store) {
         $key = '%%AF_SUT_PROTECT_' . count($store) . '%%';
@@ -533,19 +535,38 @@ function af_sut_is_media_url(string $url): bool
 /* -------------------- auto-url -------------------- */
 function af_sut_auto_url(string $message): string
 {
-    // 1) прячем медиа/код блоки, чтобы не трогать URL внутри них
+    // 1) прячем блоки, где любые ссылки трогать нельзя (img/video/code/...)
     $store = [];
     $message = af_sut_protect_bbcode_blocks($message, $store);
 
-    // 2) автоссылки: ищем URL
+    // 2) КРИТИЧНО: прячем уже существующие [url]...[/url] и [url=...]...[/url]
+    // чтобы не “вложить url в url” и не сломать вставку ссылок через редактор
+    $urlStore = [];
+    $message = preg_replace_callback(
+        '~\[(url)\b(?:=[^\]]*)?\].*?\[/\1\]~is',
+        function ($m) use (&$urlStore) {
+            $key = '%%AF_SUT_URLPROTECT_' . count($urlStore) . '%%';
+            $urlStore[$key] = $m[0];
+            return $key;
+        },
+        $message
+    );
+
+    // 3) автоссылки: ищем "голые" URL
     $url_pattern = "~(?<prefix>\\b)(?<link>(?:https?://|ftp://|www\\.)[^\\s\\[\\]<>\"']+)~i";
     $message = preg_replace_callback($url_pattern, 'af_sut_auto_url_callback', $message);
 
-    // 3) возвращаем медиа/код блоки обратно
+    // 4) возвращаем [url]...[/url] и [url=...]...[/url]
+    if (!empty($urlStore)) {
+        $message = strtr($message, $urlStore);
+    }
+
+    // 5) возвращаем медиа/код блоки
     $message = af_sut_restore_bbcode_blocks($message, $store);
 
     return $message;
 }
+
 
 function af_sut_auto_url_callback(array $matches): string
 {
