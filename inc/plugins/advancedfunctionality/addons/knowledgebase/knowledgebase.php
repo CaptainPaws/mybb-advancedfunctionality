@@ -117,7 +117,6 @@ function af_kb_ensure_setting(int $gid, string $name, string $title, string $des
 }
 
 /* -------------------- INSTALL / UNINSTALL -------------------- */
-
 function af_knowledgebase_install(): bool
 {
     global $db, $lang;
@@ -131,10 +130,13 @@ CREATE TABLE {TABLE_PREFIX}af_kb_types (
   type VARCHAR(64) NOT NULL UNIQUE,
   title_ru VARCHAR(255) NOT NULL DEFAULT '',
   title_en VARCHAR(255) NOT NULL DEFAULT '',
+  short_ru TEXT NOT NULL,
+  short_en TEXT NOT NULL,
   description_ru TEXT NOT NULL,
   description_en TEXT NOT NULL,
   icon_class VARCHAR(128) NOT NULL DEFAULT '',
   icon_url VARCHAR(255) NOT NULL DEFAULT '',
+  banner_url VARCHAR(255) NOT NULL DEFAULT '',
   bg_url VARCHAR(255) NOT NULL DEFAULT '',
   bg_tab_url VARCHAR(255) NOT NULL DEFAULT '',
   sortorder INT NOT NULL DEFAULT 0,
@@ -302,7 +304,6 @@ SQL;
     return true;
 }
 
-
 function af_knowledgebase_uninstall(): bool
 {
     global $db;
@@ -394,6 +395,15 @@ function af_kb_ensure_schema(): void
         }
         if (!$db->field_exists('icon_url', 'af_kb_types')) {
             $db->add_column('af_kb_types', 'icon_url', "VARCHAR(255) NOT NULL DEFAULT ''");
+        }
+        if (!$db->field_exists('banner_url', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'banner_url', "VARCHAR(255) NOT NULL DEFAULT ''");
+        }
+        if (!$db->field_exists('short_ru', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'short_ru', "TEXT NOT NULL");
+        }
+        if (!$db->field_exists('short_en', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'short_en', "TEXT NOT NULL");
         }
         if (!$db->field_exists('bg_url', 'af_kb_types')) {
             $db->add_column('af_kb_types', 'bg_url', "VARCHAR(255) NOT NULL DEFAULT ''");
@@ -642,7 +652,79 @@ function af_kb_build_body_bg_style(string $bgUrl): string
     }
 
     $escaped = htmlspecialchars_uni($url);
-    return '<style>body{background:url(\'' . $escaped . '\') no-repeat center center fixed;background-size:cover;}</style>';
+
+    // id + marker, чтобы не плодить дубликаты при повторных прогонках pre_output_page
+    return '<style id="af-kb-body-bg-style">'
+        . 'html,body{'
+        . 'background-image:url(\'' . $escaped . '\') !important;'
+        . 'background-repeat:no-repeat !important;'
+        . 'background-position:center center !important;'
+        . 'background-attachment:fixed !important;'
+        . 'background-size:cover !important;'
+        . '}'
+        . '</style><!--af_kb_body_bg-->';
+}
+
+function af_kb_resolve_body_bg_for_request(): string
+{
+    global $mybb, $db;
+
+    // фон нам нужен только на витрине KB (каталог/категория/запись)
+    $action = (string)$mybb->get_input('action');
+    if ($action !== 'kb') {
+        return '';
+    }
+
+    $type = trim((string)$mybb->get_input('type'));
+    $key  = trim((string)$mybb->get_input('key'));
+
+    if ($type === '') {
+        // корневой каталог — фон не задаём
+        return '';
+    }
+
+    // 1) фон типа (категории)
+    $typeRow = $db->fetch_array(
+        $db->simple_select(
+            'af_kb_types',
+            'bg_url',
+            "type='".$db->escape_string($type)."'",
+            ['limit' => 1]
+        )
+    );
+    $typeBg = $typeRow ? (string)($typeRow['bg_url'] ?? '') : '';
+
+    // если это страница категории (без key) — достаточно фона типа
+    if ($key === '') {
+        return $typeBg;
+    }
+
+    // 2) фон записи (meta_json ui.background_url → bg_url → fallback к типу)
+    $entry = $db->fetch_array(
+        $db->simple_select(
+            'af_kb_entries',
+            'meta_json,bg_url',
+            "type='".$db->escape_string($type)."' AND `key`='".$db->escape_string($key)."'",
+            ['limit' => 1]
+        )
+    );
+
+    $entryBg = '';
+    if ($entry) {
+        $meta = json_decode((string)($entry['meta_json'] ?? ''), true);
+        if (is_array($meta) && isset($meta['ui']) && is_array($meta['ui'])) {
+            $entryBg = (string)($meta['ui']['background_url'] ?? '');
+        }
+        if ($entryBg === '') {
+            $entryBg = (string)($entry['bg_url'] ?? '');
+        }
+    }
+
+    if ($entryBg !== '') {
+        return $entryBg;
+    }
+
+    return $typeBg;
 }
 
 function af_kb_build_tech_hint(string $text): string
@@ -711,35 +793,72 @@ function af_kb_sanitize_rendered_html(string $html): string
         return '';
     }
 
-    $allowed = '<b><strong><i><em><u><s><br><p><ul><ol><li><span><a><img><blockquote><code><pre>';
+    // На всякий случай прибиваем скрипты/стили (даже если allow_html=0 в модалке)
+    $html = preg_replace('~<\s*(script|style)\b[^>]*>.*?<\s*/\s*\1\s*>~is', '', $html) ?? $html;
+
+    // Разрешаем набор тегов, которых требует MyBB MyCode (таблицы/спойлеры/цитаты/код)
+    // ВАЖНО: оставляем style и onclick (они нужны MyBB-рендеру), но чистим href/src.
+    $allowed = implode('', [
+        '<b><strong><i><em><u><s><br><p>',
+        '<ul><ol><li>',
+        '<span><div>',
+        '<a><img>',
+        '<blockquote><code><pre>',
+        '<hr>',
+        '<table><thead><tbody><tfoot><tr><th><td>',
+        '<details><summary>',
+        '<input><button>',
+        '<iframe>',
+    ]);
+
     $html = strip_tags($html, $allowed);
+    $html = trim($html);
     if ($html === '') {
         return '';
     }
 
-    $html = preg_replace('/\s*on[a-z]+\s*=\s*(".*?"|\'.*?\'|[^\s>]+)/i', '', $html) ?? $html;
-    $html = preg_replace('/\sstyle\s*=\s*(".*?"|\'.*?\'|[^\s>]+)/i', '', $html) ?? $html;
-
+    // Чистим href/src от мусора и потенциально опасных схем
+    // (javascript:, data:, vbscript:, file: и т.п.)
     $html = preg_replace_callback(
         '/\s(href|src)\s*=\s*("|\')(.*?)\2/i',
-        static function (array $matches): string {
-            $clean = af_kb_sanitize_url($matches[3]);
+        static function (array $m): string {
+            $attr = strtolower($m[1]);
+            $val = $m[3];
+
+            $clean = af_kb_sanitize_url($val);
+
+            // Дополнительно рубим data: и javascript: даже если sanitize_url вдруг пропустил относительное странное
+            $lower = strtolower(trim($val));
+            if (strpos($lower, 'javascript:') === 0 || strpos($lower, 'data:') === 0 || strpos($lower, 'vbscript:') === 0) {
+                return '';
+            }
+
             if ($clean === '') {
                 return '';
             }
-            return ' ' . $matches[1] . '="' . htmlspecialchars_uni($clean) . '"';
+
+            return ' ' . $attr . '="' . htmlspecialchars_uni($clean) . '"';
         },
         $html
     );
 
     $html = preg_replace_callback(
         '/\s(href|src)\s*=\s*([^\s>\'"]+)/i',
-        static function (array $matches): string {
-            $clean = af_kb_sanitize_url($matches[2]);
+        static function (array $m): string {
+            $attr = strtolower($m[1]);
+            $val = $m[2];
+
+            $clean = af_kb_sanitize_url($val);
+            $lower = strtolower(trim($val));
+            if (strpos($lower, 'javascript:') === 0 || strpos($lower, 'data:') === 0 || strpos($lower, 'vbscript:') === 0) {
+                return '';
+            }
+
             if ($clean === '') {
                 return '';
             }
-            return ' ' . $matches[1] . '="' . htmlspecialchars_uni($clean) . '"';
+
+            return ' ' . $attr . '="' . htmlspecialchars_uni($clean) . '"';
         },
         $html
     );
@@ -770,6 +889,38 @@ function af_kb_parse_message(string $message): string
     $parser = new postParser;
     $options = [
         'allow_html'         => 1,
+        'allow_mycode'       => 1,
+        'allow_basicmycode'  => 1,
+        'allow_smilies'      => 1,
+        'allow_imgcode'      => 1,
+        'allow_videocode'    => 1,
+        'allow_list'         => 1,
+        'allow_alignmycode'  => 1,
+        'allow_font'         => 1,
+        'allow_color'        => 1,
+        'allow_size'         => 1,
+        'filter_badwords'    => 1,
+        'nl2br'              => 1,
+    ];
+
+    return $parser->parse_message($message, $options);
+}
+
+function af_kb_parse_message_modal(string $message): string
+{
+    if ($message === '') {
+        return '';
+    }
+
+    if (!class_exists('postParser')) {
+        require_once MYBB_ROOT . 'inc/class_parser.php';
+    }
+
+    $parser = new postParser;
+    $options = [
+        // ВАЖНО: в модалке запрещаем raw HTML, чтобы можно было ослабить санитайзер
+        'allow_html'         => 0,
+
         'allow_mycode'       => 1,
         'allow_basicmycode'  => 1,
         'allow_smilies'      => 1,
@@ -1123,14 +1274,15 @@ function af_knowledgebase_pre_output(string &$page = ''): void
             $jsTag = '';
             $editorAssets = '';
             $editorInit = '';
+            $bodyBgCss = '';
 
             if ($is_kb_page) {
                 // KB base css/js
                 $cssTag .= '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase.css?ver='.AF_KB_VER.'" />';
                 $jsTag  .= '<script src="'.$assetsBase.'/knowledgebase.js?ver='.AF_KB_VER.'"></script>';
 
-                // /cache/themes/theme2/castom.css
-                // /cache/themes/theme2/themestyle.css
+                // Если тебе реально нужно подцеплять кастомный файл темы — ОК.
+                // Но жесткий theme2 может быть не твоим активным ID. Оставляю как есть, но учти.
                 $themeDirRel = '/cache/themes/theme2';
                 $themeDirAbs = rtrim(MYBB_ROOT, '/\\') . str_replace('/', DIRECTORY_SEPARATOR, $themeDirRel);
 
@@ -1139,6 +1291,13 @@ function af_knowledgebase_pre_output(string &$page = ''): void
 
                 $cssTag .= '<link rel="stylesheet" type="text/css" href="'.$bburl.$themeDirRel.'/themestyle.css?v='.$verFor($themestyleAbs, AF_KB_VER).'" />';
                 $cssTag .= '<link rel="stylesheet" type="text/css" href="'.$bburl.$themeDirRel.'/castom.css?v='.$verFor($castomAbs, AF_KB_VER).'" />';
+
+                // ✅ ВАЖНО: фон для body — инжектим в конец <head>, с !important
+                // и только для action=kb (витрина категории/записи)
+                if ((string)$action === 'kb' && strpos($page, '<!--af_kb_body_bg-->') === false) {
+                    $bgUrl = af_kb_resolve_body_bg_for_request();
+                    $bodyBgCss = af_kb_build_body_bg_style($bgUrl);
+                }
             }
 
             // SCEditor только на страницах редактирования KB
@@ -1165,6 +1324,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
             $chipsJs  = '<script src="'.$assetsBase.'/knowledgebase_chips.js?ver='.AF_KB_VER.'"></script>';
             $insertJs = '<script src="'.$assetsBase.'/knowledgebase_insert.js?ver='.AF_KB_VER.'"></script>';
 
+            // ✅ bodyBgCss ставим ближе к концу head, чтобы перебить тему
             $inject = $cssTag
                 . $kbUiCss
                 . $editorAssets
@@ -1173,6 +1333,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                 . $insertJs
                 . $langTag
                 . $editorInit
+                . $bodyBgCss
                 . AF_KB_MARK;
 
             if (stripos($page, '</head>') !== false) {
@@ -1292,7 +1453,6 @@ function af_kb_misc_route(): void
 }
 
 /* -------------------- VIEW HANDLERS -------------------- */
-
 function af_kb_handle_view(): void
 {
     global $mybb, $db, $lang, $headerinclude, $header, $footer, $theme, $templates;
@@ -1346,7 +1506,10 @@ function af_kb_handle_view(): void
             if ($title === '') {
                 $title = $row['type'];
             }
-            $desc = af_kb_pick_text($row, 'description');
+            $desc = af_kb_pick_text($row, 'short');
+            if ($desc === '') {
+                $desc = af_kb_pick_text($row, 'description');
+            }
             $iconHtml = af_kb_build_icon_html($row['icon_url'] ?? '', $row['icon_class'] ?? '');
             $iconWrap = $iconHtml !== '' ? '<span class="af-kb-icon">' . $iconHtml . '</span>' : '';
             $bgStyle = af_kb_build_bg_style($row['bg_tab_url'] ?? '');
@@ -1428,6 +1591,15 @@ function af_kb_handle_view(): void
         if ($typeRow) {
             $typeTitle = af_kb_pick_text($typeRow, 'title') ?: $type;
             $typeDesc = af_kb_pick_text($typeRow, 'description');
+        }
+
+        // ✅ FIX: баннер категории (af_kb_types.banner_url) для страницы /misc.php?action=kb&type=...
+        $kb_banner = '';
+        $kb_type_banner = '';
+        $typeBannerUrl = $typeRow ? af_kb_sanitize_url((string)($typeRow['banner_url'] ?? '')) : '';
+        if ($typeBannerUrl !== '') {
+            $kb_banner = '<img class="af-kb-banner" src="' . htmlspecialchars_uni($typeBannerUrl) . '" alt="" loading="lazy" />';
+            $kb_type_banner = $kb_banner; // на случай если в шаблоне ты вывела именно {$kb_type_banner}
         }
 
         $typeIconUrl = $typeRow ? ($typeRow['icon_url'] ?? '') : '';
@@ -1613,7 +1785,7 @@ function af_kb_handle_view(): void
     $kb_entry_icon = $entryIconHtml !== '' ? '<span class="af-kb-icon">' . $entryIconHtml . '</span>' : '';
     $kb_page_title = htmlspecialchars_uni($title);
     $kb_title = htmlspecialchars_uni($title);
-    $kb_short = $short;
+    $kb_short = '';
     $kb_body = $body;
     $kb_banner = '';
     $bannerUrl = af_kb_sanitize_url((string)($entry['banner_url'] ?? ''));
@@ -2126,12 +2298,24 @@ function af_kb_handle_type_edit(): void
 
         $titleRu = trim((string)$mybb->get_input('title_ru'));
         $titleEn = trim((string)$mybb->get_input('title_en'));
+
+        // NEW: короткое описание (только для табов)
+        $shortRu = trim((string)$mybb->get_input('short_ru'));
+        $shortEn = trim((string)$mybb->get_input('short_en'));
+
+        // длинное описание
         $descRu = trim((string)$mybb->get_input('description_ru'));
         $descEn = trim((string)$mybb->get_input('description_en'));
+
         $iconClass = af_kb_sanitize_icon_class((string)$mybb->get_input('icon_class'));
         $iconUrl = af_kb_sanitize_url((string)$mybb->get_input('icon_url'));
+
+        // NEW: баннер категории
+        $bannerUrl = af_kb_sanitize_url((string)$mybb->get_input('banner_url'));
+
         $bgUrl = af_kb_sanitize_url((string)$mybb->get_input('bg_url'));
         $bgTabUrl = af_kb_sanitize_url((string)$mybb->get_input('bg_tab_url'));
+
         $sortorder = (int)$mybb->get_input('sortorder', MyBB::INPUT_INT);
         $active = (int)$mybb->get_input('active', MyBB::INPUT_INT) ? 1 : 0;
 
@@ -2150,12 +2334,23 @@ function af_kb_handle_type_edit(): void
                 'type'           => $db->escape_string($type),
                 'title_ru'       => $db->escape_string($titleRu),
                 'title_en'       => $db->escape_string($titleEn),
+
+                // NEW
+                'short_ru'       => $db->escape_string($shortRu),
+                'short_en'       => $db->escape_string($shortEn),
+
                 'description_ru' => $db->escape_string($descRu),
                 'description_en' => $db->escape_string($descEn),
+
                 'icon_class'     => $db->escape_string($iconClass),
                 'icon_url'       => $db->escape_string($iconUrl),
+
+                // NEW
+                'banner_url'     => $db->escape_string($bannerUrl),
+
                 'bg_url'         => $db->escape_string($bgUrl),
                 'bg_tab_url'     => $db->escape_string($bgTabUrl),
+
                 'sortorder'      => $sortorder,
                 'active'         => $active,
             ];
@@ -2174,10 +2369,13 @@ function af_kb_handle_type_edit(): void
         'type'           => $type,
         'title_ru'       => '',
         'title_en'       => '',
+        'short_ru'       => '',
+        'short_en'       => '',
         'description_ru' => '',
         'description_en' => '',
         'icon_class'     => '',
         'icon_url'       => '',
+        'banner_url'     => '',
         'bg_url'         => '',
         'bg_tab_url'     => '',
         'sortorder'      => 0,
@@ -2197,12 +2395,23 @@ function af_kb_handle_type_edit(): void
     $kb_type_value = htmlspecialchars_uni($typeRow['type']);
     $kb_type_title_ru = htmlspecialchars_uni($typeRow['title_ru']);
     $kb_type_title_en = htmlspecialchars_uni($typeRow['title_en']);
+
+    // NEW
+    $kb_type_short_ru = htmlspecialchars_uni($typeRow['short_ru'] ?? '');
+    $kb_type_short_en = htmlspecialchars_uni($typeRow['short_en'] ?? '');
+
     $kb_type_description_ru = htmlspecialchars_uni($typeRow['description_ru']);
     $kb_type_description_en = htmlspecialchars_uni($typeRow['description_en']);
+
     $kb_type_icon_class = htmlspecialchars_uni($typeRow['icon_class'] ?? '');
     $kb_type_icon_url = htmlspecialchars_uni($typeRow['icon_url'] ?? '');
+
+    // NEW
+    $kb_type_banner_url = htmlspecialchars_uni($typeRow['banner_url'] ?? '');
+
     $kb_type_bg_url = htmlspecialchars_uni($typeRow['bg_url'] ?? '');
     $kb_type_bg_tab_url = htmlspecialchars_uni($typeRow['bg_tab_url'] ?? '');
+
     $kb_type_sortorder = (int)$typeRow['sortorder'];
     $kb_type_active_checked = !empty($typeRow['active']) ? 'checked="checked"' : '';
     $kb_type_readonly = $isEditing ? 'readonly="readonly"' : '';
@@ -2337,7 +2546,7 @@ function af_kb_handle_json_get(): void
         $blockContent = af_kb_pick_text($row, 'content');
         $blockContentRendered = '';
         if ($blockContent !== '') {
-            $blockContentRendered = af_kb_sanitize_rendered_html(af_kb_parse_message($blockContent));
+            $blockContentRendered = af_kb_sanitize_rendered_html(af_kb_parse_message_modal($blockContent));
         }
         $blocks[] = [
             'block_key' => $row['block_key'],
@@ -2365,10 +2574,10 @@ function af_kb_handle_json_get(): void
     $entryShort = af_kb_pick_text($entry, 'short');
     $entryBody = af_kb_pick_text($entry, 'body');
     $entryTech = af_kb_pick_text($entry, 'tech');
-    $shortRendered = $entryShort !== '' ? af_kb_sanitize_rendered_html(af_kb_parse_message($entryShort)) : '';
-    $bodyRendered = $entryBody !== '' ? af_kb_sanitize_rendered_html(af_kb_parse_message($entryBody)) : '';
     $tooltipText = af_kb_strip_tech_icon_tag($entryTech);
-    $tooltipHtml = $tooltipText !== '' ? af_kb_sanitize_rendered_html(af_kb_parse_message($tooltipText)) : '';
+    $shortRendered = $entryShort !== '' ? af_kb_sanitize_rendered_html(af_kb_parse_message_modal($entryShort)) : '';
+    $bodyRendered  = $entryBody  !== '' ? af_kb_sanitize_rendered_html(af_kb_parse_message_modal($entryBody))  : '';
+    $tooltipHtml   = $tooltipText !== '' ? af_kb_sanitize_rendered_html(af_kb_parse_message_modal($tooltipText)) : '';
     $payload = [
         'entry' => [
             'type'      => $entry['type'],
