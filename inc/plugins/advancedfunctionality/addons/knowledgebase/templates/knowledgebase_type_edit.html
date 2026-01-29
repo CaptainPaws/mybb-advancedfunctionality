@@ -48,6 +48,26 @@
                 <input type="text" name="icon_class" value="{$kb_type_icon_class}" />
             </div>
         </div>
+ 
+
+        <label>Баннер (URL)</label>
+        <div class="smalltext">Картинка-баннер для страницы категории.</div>
+        <input type="text" name="banner_url" value="{$kb_type_banner_url}" />
+
+        <div class="af-kb-row">
+            <div>
+                <label>Краткое описание (RU)</label>
+                <div class="smalltext">Показывается только в табах категорий.</div>
+                <textarea class="af-kb-editor" name="short_ru" rows="3">{$kb_type_short_ru}</textarea>
+            </div>
+            <div>
+                <label>Краткое описание (EN)</label>
+                <div class="smalltext">Shown only in category tabs.</div>
+                <textarea class="af-kb-editor" name="short_en" rows="3">{$kb_type_short_en}</textarea>
+            </div>
+        </div>
+
+
         <label>Background URL</label>
         <input type="text" name="bg_url" value="{$kb_type_bg_url}" />
         <label>Background Tab URL</label>
