@@ -273,21 +273,53 @@ function af_fakeonline_task_cleanup_all_fake_sessions(bool $debug): void
 {
     global $db;
 
+    // Сначала соберём uid всех наших фейковых сессий
+    $uids = [];
+    $q = $db->simple_select('sessions', 'uid', "useragent LIKE '%AF FakeOnline/%'");
+    while ($r = $db->fetch_array($q)) {
+        $u = (int)$r['uid'];
+        if ($u > 0) $uids[$u] = true;
+    }
+
     // Удаляем все наши сессии
     $db->delete_query('sessions', "useragent LIKE '%AF FakeOnline/%'");
 
+    // Сбрасываем online_until в state (если нужно)
     if ($debug && $db->table_exists('af_fakeonline_state')) {
         $db->update_query('af_fakeonline_state', [
             'online_until' => 0,
         ], "1=1");
+    }
+
+    // “Гасим” lastactive тем, у кого нет реальной сессии
+    if (!empty($uids)) {
+        $offlineTs = TIME_NOW - af_fakeonline_task_wol_cutoff_seconds() - 5;
+        foreach (array_keys($uids) as $uid) {
+            $uid = (int)$uid;
+            if ($uid <= 0) continue;
+
+            if (!af_fakeonline_task_has_real_session($uid)) {
+                af_fakeonline_task_touch_user_lastactive($uid, $offlineTs);
+            }
+        }
     }
 }
 
 function af_fakeonline_task_delete_fake_session(int $uid): void
 {
     global $db;
+
     $uid = (int)$uid;
+    if ($uid <= 0) return;
+
+    // Удаляем только нашу сессию
     $db->delete_query('sessions', "uid='{$uid}' AND useragent LIKE '%AF FakeOnline/%'");
+
+    // Если у пользователя НЕТ реальной сессии — “гасим” lastactive, чтобы статус стал оффлайн
+    if (!af_fakeonline_task_has_real_session($uid)) {
+        $offlineTs = TIME_NOW - af_fakeonline_task_wol_cutoff_seconds() - 5;
+        af_fakeonline_task_touch_user_lastactive($uid, $offlineTs);
+    }
 }
 
 function af_fakeonline_task_ensure_fake_session(int $uid, int $now, string $location, $task, bool $debug): void
@@ -296,26 +328,36 @@ function af_fakeonline_task_ensure_fake_session(int $uid, int $now, string $loca
 
     $uid = (int)$uid;
 
+    // Нормализуем location ДО записи в БД (никаких &amp; и двойных &)
+    $location = af_fakeonline_task_normalize_location($location);
+
     // useragent-маркер — по нему отличаем “наши” сессии
     $ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AF FakeOnline/1.0';
 
-    // Генерим стабильный “док-IP” + sid
+    // Генерим “док-IP” + sid
     $ip = af_fakeonline_task_fake_ip_for_uid($uid);
-    $sid = md5($uid . '|' . $now . '|' . mt_rand());
+
+    // ВАЖНО: sid лучше держать стабильным между обновлениями (иначе можно словить странности на некоторых сборках/кешах)
+    // Используем сохранённый sid из state, если есть
+    $sid = '';
+    $qs = $db->simple_select('af_fakeonline_state', 'fake_sid', "uid='{$uid}'", ['limit' => 1]);
+    $sid = (string)$db->fetch_field($qs, 'fake_sid');
+    if ($sid === '') {
+        $sid = md5($uid . '|AF|'. mt_rand() . '|' . $now);
+    }
 
     // Узнаём usergroup (если поле usergroup есть в sessions)
     $usergroup = 0;
     $qg = $db->simple_select('users', 'usergroup', "uid='{$uid}'", ['limit' => 1]);
     $usergroup = (int)$db->fetch_field($qg, 'usergroup');
 
-    // Подготовим колонки с учётом реальной схемы таблицы sessions (на разных сборках/форках отличия)
     $fields = [
-        'sid'       => $sid,
-        'uid'       => $uid,
-        'time'      => (int)$now,
-        'location'  => $db->escape_string($location),
-        'useragent' => $db->escape_string($ua),
-        'anonymous' => 0,
+        'sid'          => $sid,
+        'uid'          => $uid,
+        'time'         => (int)$now,
+        'location'     => $db->escape_string($location),
+        'useragent'    => $db->escape_string($ua),
+        'anonymous'    => 0,
         'nopermission' => 0,
     ];
 
@@ -332,10 +374,6 @@ function af_fakeonline_task_ensure_fake_session(int $uid, int $now, string $loca
         $fields['usergroup'] = $usergroup;
     }
 
-    // Обновить или вставить “нашу” сессию
-    $q = $db->simple_select('sessions', 'sid', "uid='{$uid}' AND useragent LIKE '%AF FakeOnline/%'", ['limit' => 1]);
-    $existingSid = (string)$db->fetch_field($q, 'sid');
-
     // Часть полей может отсутствовать — подрежем
     foreach (array_keys($fields) as $k) {
         if (!$db->field_exists($k, 'sessions')) {
@@ -343,17 +381,28 @@ function af_fakeonline_task_ensure_fake_session(int $uid, int $now, string $loca
         }
     }
 
+    // Есть ли уже “наша” сессия?
+    $q = $db->simple_select('sessions', 'sid', "uid='{$uid}' AND useragent LIKE '%AF FakeOnline/%'", ['limit' => 1]);
+    $existingSid = (string)$db->fetch_field($q, 'sid');
+
     if ($existingSid !== '') {
+        // Не меняем sid у уже существующей записи, если таблица/движок капризный
+        if (isset($fields['sid'])) {
+            unset($fields['sid']);
+        }
         $db->update_query('sessions', $fields, "uid='{$uid}' AND useragent LIKE '%AF FakeOnline/%'");
     } else {
-        // Вставка требует обязательных колонок — на всякий случай проверим минимум
+        // Вставка требует минимум
         if (!isset($fields['sid'], $fields['uid'], $fields['time'], $fields['location'], $fields['useragent'])) {
             return;
         }
         $db->insert_query('sessions', $fields);
     }
 
-    // Сохраним “последнюю локацию” в state
+    // обновляем lastactive -> загорится онлайн-статус + попадёт в “кто сегодня был”
+    af_fakeonline_task_touch_user_lastactive($uid, $now);
+
+    // Сохраним состояние
     $db->update_query('af_fakeonline_state', [
         'last_location' => $db->escape_string($location),
         'fake_ip'       => $db->escape_string($ip),
@@ -392,8 +441,14 @@ function af_fakeonline_task_pick_location(int $uid): string
         return 'forumdisplay.php';
     }
     if ($r <= 72) {
-        // “смотрит профиль”
-        return 'member.php?action=profile&uid=' . $uid;
+        // “смотрит профиль” — НЕ обязательно свой
+        $target = af_fakeonline_task_pick_random_user_id($uid);
+        if ($target <= 0) {
+            $target = $uid;
+        }
+
+        // ВАЖНО: MyBB WOL парсит параметры по "&amp;"
+        return 'member.php?action=profile&amp;uid=' . (int)$target;
     }
     if ($r <= 86) {
         // “ЛС”
@@ -406,6 +461,50 @@ function af_fakeonline_task_pick_location(int $uid): string
 
     // “поиск/новые сообщения”
     return 'search.php?action=getnew';
+}
+
+function af_fakeonline_task_pick_random_user_id(int $excludeUid = 0): int
+{
+    global $db;
+
+    $excludeUid = (int)$excludeUid;
+
+    // Берём max uid
+    $qMax = $db->simple_select('users', 'MAX(uid) AS m', "uid>'0'");
+    $max = (int)$db->fetch_field($qMax, 'm');
+    if ($max <= 0) {
+        return 0;
+    }
+
+    // Несколько попыток “попасть” в существующего пользователя без ORDER BY RAND()
+    for ($i = 0; $i < 8; $i++) {
+        $start = af_fakeonline_task_rand(1, $max);
+
+        $whereAsc = "uid>='" . (int)$start . "' AND uid>'0'";
+        if ($excludeUid > 0) {
+            $whereAsc .= " AND uid<>'" . (int)$excludeUid . "'";
+        }
+
+        $q1 = $db->simple_select('users', 'uid', $whereAsc, ['order_by' => 'uid', 'order_dir' => 'ASC', 'limit' => 1]);
+        $uid = (int)$db->fetch_field($q1, 'uid');
+        if ($uid > 0 && $uid !== $excludeUid) {
+            return $uid;
+        }
+
+        $whereDesc = "uid<='" . (int)$start . "' AND uid>'0'";
+        if ($excludeUid > 0) {
+            $whereDesc .= " AND uid<>'" . (int)$excludeUid . "'";
+        }
+
+        $q2 = $db->simple_select('users', 'uid', $whereDesc, ['order_by' => 'uid', 'order_dir' => 'DESC', 'limit' => 1]);
+        $uid2 = (int)$db->fetch_field($q2, 'uid');
+        if ($uid2 > 0 && $uid2 !== $excludeUid) {
+            return $uid2;
+        }
+    }
+
+    // Фолбэк: если не нашли никого кроме себя
+    return ($excludeUid > 0) ? $excludeUid : 1;
 }
 
 function af_fakeonline_task_pick_random_thread_id(): int
@@ -486,13 +585,11 @@ function af_fakeonline_task_is_location_allowed(int $uid, string $location): boo
     }
     $script = strtolower($script);
 
-    // Если хочешь вообще запретить эти страницы — оставь как есть.
-    // Если хочешь разрешить — просто убери их из списка.
     $hardDeny = [
-        'portal.php',    // у тебя отключён
-        'calendar.php',  // у тебя отключён
-        // 'private.php', // раскомментируй, если тоже хочешь запретить
-        // 'usercp.php',  // раскомментируй, если тоже хочешь запретить
+        'portal.php',    
+        'calendar.php',  
+        // 'private.php', 
+        // 'usercp.php',  
     ];
 
     if (in_array($script, $hardDeny, true)) {
@@ -552,3 +649,70 @@ function af_fakeonline_task_clamp_next_actions(array $uids, int $now, int $minIn
         }
     }
 }
+
+function af_fakeonline_task_wol_cutoff_seconds(): int
+{
+    global $mybb;
+
+    // wolcutoff — минуты (обычно 15)
+    $min = (int)($mybb->settings['wolcutoff'] ?? 15);
+    if ($min < 1) $min = 15;
+
+    return $min * 60;
+}
+
+function af_fakeonline_task_touch_user_lastactive(int $uid, int $ts): void
+{
+    global $db;
+
+    $uid = (int)$uid;
+    if ($uid <= 0) return;
+
+    // lastactive есть в стандартном MyBB users
+    if ($db->field_exists('lastactive', 'users')) {
+        $db->update_query('users', ['lastactive' => (int)$ts], "uid='{$uid}'");
+    }
+}
+
+function af_fakeonline_task_normalize_location(string $location): string
+{
+    $location = trim($location);
+    if ($location === '') {
+        return 'index.php';
+    }
+
+    // Сначала приводим к "человеческому" виду (если где-то прилетели entities),
+    // но дальше ОБЯЗАТЕЛЬНО нормализуем разделители параметров в "&amp;"
+    $decoded = html_entity_decode($location, ENT_QUOTES);
+
+    // Убираем "&&" -> "&" (на всякий случай)
+    while (strpos($decoded, '&&') !== false) {
+        $decoded = str_replace('&&', '&', $decoded);
+    }
+
+    // Убираем "?&" -> "?"
+    $decoded = str_replace('?&', '?', $decoded);
+
+    // Если есть query-строка — приводим разделители параметров к "&amp;"
+    $qpos = strpos($decoded, '?');
+    if ($qpos !== false) {
+        $path = substr($decoded, 0, $qpos);
+        $query = substr($decoded, $qpos + 1);
+
+        // Нормализуем: любые "&" в query превращаем в "&amp;"
+        // (но не допускаем двойного амперсанда)
+        if ($query !== '') {
+            $query = str_replace('&amp;', '&', $query); // сначала снимаем, если вдруг уже было
+            while (strpos($query, '&&') !== false) {
+                $query = str_replace('&&', '&', $query);
+            }
+            $query = ltrim($query, '&');
+            $query = str_replace('&', '&amp;', $query);
+        }
+
+        $decoded = $path . ($query !== '' ? '?' . $query : '');
+    }
+
+    return $decoded;
+}
+
