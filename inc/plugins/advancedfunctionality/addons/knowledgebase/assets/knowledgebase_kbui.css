@@ -260,3 +260,19 @@
 .af-kb-modal-block + .af-kb-modal-block {
     margin-top: 12px;
 }
+
+.af-kb-modal-short,
+.af-kb-modal-main,
+.af-kb-modal-block > div {
+    color: #444;
+    line-height: 1.6;
+    font-family: inherit;
+    font-weight: normal;
+    letter-spacing: normal;
+    text-shadow: none;
+    mix-blend-mode: normal;
+    filter: none;
+    -webkit-text-security: none;
+    -webkit-mask-image: none;
+    mask-image: none;
+}

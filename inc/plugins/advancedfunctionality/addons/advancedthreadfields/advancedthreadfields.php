@@ -766,8 +766,6 @@ function af_atf_kb_get_endpoint(): void
     $title = af_atf_kb_pick_text($row, 'title');
     $short = af_atf_kb_pick_text($row, 'short');
     $body = af_atf_kb_pick_text($row, 'body');
-    $metaJson = (string)($row['meta_json'] ?? '');
-
     $shortHtml = '';
     $bodyHtml = '';
     if ($short !== '') {
@@ -784,27 +782,36 @@ function af_atf_kb_get_endpoint(): void
             $bodyHtml = nl2br(htmlspecialchars_uni($body));
         }
     }
-
-    $metaHtml = '';
-    $metaJson = trim($metaJson);
-    if ($metaJson !== '' && $metaJson !== '{}' && $metaJson !== '[]') {
-        if (function_exists('af_kb_render_data_table')) {
-            $metaHtml = af_kb_render_data_table($metaJson);
-        } else {
-            $decoded = json_decode($metaJson, true);
-            if (is_array($decoded)) {
-                $rows = '';
-                foreach ($decoded as $mKey => $mVal) {
-                    if (is_array($mVal) || is_object($mVal)) {
-                        $mVal = json_encode($mVal, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                    }
-                    $rows .= '<tr><th>' . htmlspecialchars_uni((string)$mKey) . '</th><td>'
-                        . htmlspecialchars_uni((string)$mVal) . '</td></tr>';
-                }
-                if ($rows !== '') {
-                    $metaHtml = '<table class="af-atf-kb-meta-table">' . $rows . '</table>';
+    $blocks = [];
+    if ($db->table_exists('af_kb_blocks')) {
+        $bq = $db->simple_select(
+            'af_kb_blocks',
+            '*',
+            'entry_id='.(int)$row['id'],
+            ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']
+        );
+        while ($brow = $db->fetch_array($bq)) {
+            if (!$brow['active'] && (!function_exists('af_kb_can_edit') || !af_kb_can_edit())) {
+                continue;
+            }
+            $blockTitle = af_atf_kb_pick_text($brow, 'title');
+            $blockContent = af_atf_kb_pick_text($brow, 'content');
+            $blockHtml = '';
+            if ($blockContent !== '') {
+                if (function_exists('af_kb_parse_message_modal') && function_exists('af_kb_sanitize_rendered_html')) {
+                    $blockHtml = af_kb_sanitize_rendered_html(af_kb_parse_message_modal($blockContent));
+                } else {
+                    $blockHtml = nl2br(htmlspecialchars_uni($blockContent));
                 }
             }
+            if ($blockTitle === '' && $blockHtml === '') {
+                continue;
+            }
+            $blocks[] = [
+                'block_key' => (string)($brow['block_key'] ?? ''),
+                'title' => $blockTitle,
+                'body_html' => $blockHtml,
+            ];
         }
     }
 
@@ -816,7 +823,7 @@ function af_atf_kb_get_endpoint(): void
             'title' => $title,
             'short_html' => $shortHtml,
             'body_html' => $bodyHtml,
-            'meta_html' => $metaHtml,
+            'blocks' => $blocks,
         ],
     ]);
 }
@@ -2014,29 +2021,36 @@ function af_atf_sf_pointbuy_get_attr_groups(): array
 {
     global $lang;
 
+    $attrLabel = static function(string $key, string $fallback): string use ($lang): string {
+        if (!empty($lang->{$key})) {
+            return (string)$lang->{$key};
+        }
+        return $fallback;
+    };
+
     return [
         [
-            'label' => $lang->af_atf_sf_group_mental ?? 'Mental Group',
+            'label' => $lang->af_atf_group_mental ?? ($lang->af_atf_sf_group_mental ?? 'Mental Group'),
             'items' => [
-                ['code' => 'INT', 'label' => 'Intelligence'],
-                ['code' => 'WILL', 'label' => 'Willpower'],
-                ['code' => 'PRE', 'label' => 'Presence'],
+                ['code' => 'INT', 'label' => $attrLabel('af_atf_attr_int', 'Intelligence')],
+                ['code' => 'WILL', 'label' => $attrLabel('af_atf_attr_will', 'Willpower')],
+                ['code' => 'PRE', 'label' => $attrLabel('af_atf_attr_pre', 'Presence')],
             ],
         ],
         [
-            'label' => $lang->af_atf_sf_group_combat ?? 'Combat Group',
+            'label' => $lang->af_atf_group_combat ?? ($lang->af_atf_sf_group_combat ?? 'Combat Group'),
             'items' => [
-                ['code' => 'TECH', 'label' => 'Technique'],
-                ['code' => 'REF', 'label' => 'Reflexes'],
-                ['code' => 'DEX', 'label' => 'Dexterity'],
+                ['code' => 'TECH', 'label' => $attrLabel('af_atf_attr_tech', 'Technique')],
+                ['code' => 'REF', 'label' => $attrLabel('af_atf_attr_ref', 'Reflexes')],
+                ['code' => 'DEX', 'label' => $attrLabel('af_atf_attr_dex', 'Dexterity')],
             ],
         ],
         [
-            'label' => $lang->af_atf_sf_group_physical ?? 'Physical Group',
+            'label' => $lang->af_atf_group_physical ?? ($lang->af_atf_sf_group_physical ?? 'Physical Group'),
             'items' => [
-                ['code' => 'CON', 'label' => 'Constitution'],
-                ['code' => 'STR', 'label' => 'Strength'],
-                ['code' => 'BODY', 'label' => 'Body'],
+                ['code' => 'CON', 'label' => $attrLabel('af_atf_attr_con', 'Constitution')],
+                ['code' => 'STR', 'label' => $attrLabel('af_atf_attr_str', 'Strength')],
+                ['code' => 'BODY', 'label' => $attrLabel('af_atf_attr_body', 'Body')],
             ],
         ],
     ];

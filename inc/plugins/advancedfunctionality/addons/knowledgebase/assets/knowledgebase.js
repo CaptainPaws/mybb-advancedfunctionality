@@ -50,11 +50,15 @@
             }
         }
         fields.forEach(function (field) {
+            if (getEditorInstance(field)) {
+                field.dataset.afKbEditor = '1';
+                return;
+            }
             if (field.dataset.afKbEditor === '1') {
                 return;
             }
             field.dataset.afKbEditor = '1';
-            var options = Object.assign({}, baseOptions);
+            var options = Object.assign({}, baseOptions, { startInSourceMode: true });
             window.jQuery(field).sceditor(options);
         });
     }
