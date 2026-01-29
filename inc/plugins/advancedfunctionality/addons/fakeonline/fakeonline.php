@@ -20,7 +20,7 @@ const AF_FAKEONLINE_TASK_DB_FILE = 'af_fakeonline';
  */
 function af_fakeonline_init(): void
 {
-    global $mybb;
+    global $mybb, $plugins;
 
     if (empty($mybb->settings['af_fakeonline_enabled'])) {
         return;
@@ -34,8 +34,15 @@ function af_fakeonline_init(): void
 
     // В AF activate() может не вызываться, поэтому ставим таск по месту.
     af_fakeonline_runtime_ensure_task();
-}
 
+    // ── Fix WOL ("Кто онлайн") только для фейковых сессий ───────────────
+    if (isset($plugins) && is_object($plugins) && method_exists($plugins, 'add_hook')) {
+        // Правим activity/location если MyBB определил как "login/unknown"
+        $plugins->add_hook('fetch_wol_activity_end', 'af_fakeonline_wol_fix_activity');
+        // Если всё равно получилось "Вошедшие" — меняем текст на "На главной"
+        $plugins->add_hook('build_friendly_wol_location_end', 'af_fakeonline_wol_fix_location');
+    }
+}
 
 /**
  * No-op pre_output hook (AF core may call it).
@@ -444,4 +451,189 @@ function af_fakeonline_runtime_ensure_task(): void
     // 2) Записать/включить задачу в БД
     af_fakeonline_register_or_enable_task();
 }
+
+function af_fakeonline_wol_is_fake_session(array $user_activity): bool
+{
+    $ua = (string)($user_activity['useragent'] ?? '');
+    return ($ua !== '' && strpos($ua, 'AF FakeOnline/') !== false);
+}
+
+/**
+ * Если MyBB определил активность криво (login/unknown) или не распарсил location —
+ * принудительно выставляем activity по реальному location.
+ * ТОЛЬКО для AF FakeOnline.
+ *
+ * ВАЖНО: MyBB hook fetch_wol_activity_end передаёт сюда САМ массив $user_activity (по ссылке),
+ * а не массив-обёртку. Поэтому сигнатура должна быть (&$user_activity).
+ */
+function af_fakeonline_wol_fix_activity(&$user_activity): void
+{
+    if (empty($user_activity) || !is_array($user_activity)) {
+        return;
+    }
+
+    if (!af_fakeonline_wol_is_fake_session($user_activity)) {
+        return;
+    }
+
+    $activity = (string)($user_activity['activity'] ?? '');
+    $location = (string)($user_activity['location'] ?? '');
+
+    // Нормализуем на случай HTML entities (иногда location приходит уже экранированным)
+    if ($location !== '') {
+        $location = html_entity_decode($location, ENT_QUOTES);
+    }
+
+    // Если location пустой — хотя бы не "Вошедшие"
+    if (trim($location) === '') {
+        $user_activity['activity'] = 'index';
+        $user_activity['location'] = 'index.php';
+        $user_activity['nopermission'] = 0;
+        return;
+    }
+
+    // Распарсим script + query (поддержка /member.php и member.php)
+    $path  = (string)parse_url($location, PHP_URL_PATH);
+    $query = (string)parse_url($location, PHP_URL_QUERY);
+
+    $script = trim($path);
+    if ($script === '') {
+        $script = $location;
+        $qpos = strpos($script, '?');
+        if ($qpos !== false) {
+            $script = substr($script, 0, $qpos);
+        }
+    }
+
+    $script = ltrim(strtolower($script), '/');
+    $qs = [];
+    if ($query !== '') {
+        parse_str($query, $qs);
+    }
+
+    /**
+     * КРИТИЧНО:
+     * Для profile MyBB САМ формирует friendly-location и ссылку, опираясь на $user_activity['uid'].
+     * Поэтому location должен быть БЕЗ uid, иначе получится member.php?action=profile&&amp;uid=...
+     */
+    if (
+        $script === 'member.php'
+        && isset($qs['action']) && (string)$qs['action'] === 'profile'
+        && isset($qs['uid'])
+    ) {
+        $targetUid = (int)$qs['uid'];
+        if ($targetUid > 0) {
+            $user_activity['activity'] = 'profile';
+
+            // ВАЖНО: uid здесь = ЦЕЛЕВОЙ профиль (не автор сессии)
+            $user_activity['uid'] = $targetUid;
+
+            // ВАЖНО: location БЕЗ &uid=..., иначе MyBB допишет uid второй раз
+            $user_activity['location'] = 'member.php?action=profile';
+
+            $user_activity['nopermission'] = 0;
+            return;
+        }
+    }
+
+    // Если MyBB уже определил НЕ криво — не лезем дальше
+    $badActivity = in_array($activity, ['login', 'unknown', ''], true);
+    if (!$badActivity) {
+        return;
+    }
+
+    // Мини-маппинг “куда смотрит”
+    $map = [
+        'index.php'        => 'index',
+        'portal.php'       => 'portal',
+        'showthread.php'   => 'showthread',
+        'forumdisplay.php' => 'forumdisplay',
+        'private.php'      => 'private',
+        'usercp.php'       => 'usercp',
+        'search.php'       => 'search',
+        'member.php'       => 'profile',
+    ];
+
+    $act = $map[$script] ?? 'index';
+
+    $user_activity['activity'] = $act;
+
+    if (trim((string)($user_activity['location'] ?? '')) === '') {
+        $user_activity['location'] = 'index.php';
+    }
+
+    $user_activity['nopermission'] = 0;
+}
+
+/**
+ * Финальный слой: подстраховка текста локации в "Кто онлайн" для AF FakeOnline.
+ *
+ * ПРИМЕЧАНИЕ:
+ * В MyBB этот hook иногда даёт только строку $location, а иногда (в некоторых сборках/патчах) — массив.
+ * Поэтому делаем максимально терпимую сигнатуру.
+ */
+function af_fakeonline_wol_fix_location(&$arg1, $arg2 = null): void
+{
+    global $lang, $db;
+
+    // Вариант 1: MyBB/сборка передала массив вида ['location'=>...,'user_activity'=>...]
+    if (is_array($arg1) && isset($arg1['location'])) {
+        $hook_args = &$arg1;
+
+        if (empty($hook_args['user_activity']) || !is_array($hook_args['user_activity'])) {
+            return;
+        }
+        if (!af_fakeonline_wol_is_fake_session($hook_args['user_activity'])) {
+            return;
+        }
+
+        $ua = $hook_args['user_activity'];
+        $targetUid = 0;
+
+        if ((string)($ua['activity'] ?? '') === 'profile' && !empty($ua['uid'])) {
+            $targetUid = (int)$ua['uid'];
+        }
+
+        if ($targetUid > 0) {
+            static $nameCache = [];
+
+            if (!isset($nameCache[$targetUid])) {
+                $q = $db->simple_select('users', 'username', "uid='" . (int)$targetUid . "'", ['limit' => 1]);
+                $nameCache[$targetUid] = (string)$db->fetch_field($q, 'username');
+            }
+
+            $uname = $nameCache[$targetUid] ?: ('UID ' . $targetUid);
+            $unameEsc = function_exists('htmlspecialchars_uni')
+                ? htmlspecialchars_uni($uname)
+                : htmlspecialchars($uname, ENT_QUOTES);
+
+            // ВАЖНО: даём MyBB собрать корректную ссылку (SEO, экранирование и т.д.)
+            if (function_exists('get_profile_link')) {
+                $url = get_profile_link((int)$targetUid);
+            } else {
+                // fallback, если вдруг get_profile_link недоступен
+                $url = 'member.php?action=profile&amp;uid=' . (int)$targetUid;
+            }
+
+            $hook_args['location'] = 'Смотрит профиль <a href="' . $url . '">' . $unameEsc . '</a>';
+            return;
+        }
+
+        // если вдруг всё равно "Вошедшие"
+        $locHtml = (string)$hook_args['location'];
+        $plain = trim(htmlspecialchars_decode(strip_tags($locHtml)));
+        $loggedInText = (string)($lang->online_loggedin ?? 'Вошедшие');
+
+        if ($plain === $loggedInText || $plain === 'Вошедшие') {
+            $hook_args['location'] = 'На главной';
+        }
+
+        return;
+    }
+
+    // Вариант 2: MyBB передал только строку $location — без user_activity не трогаем.
+    return;
+}
+
+
 
