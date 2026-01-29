@@ -105,28 +105,25 @@
 
       const cache = new Map();
       const endpoint = AF_ATF.getKbEndpoint();
-      let modalState = null;
+      let modalState = window.__afAtfKbModal || null;
+      let requestCounter = 0;
+      let activeRequestId = 0;
 
-      function clearStaleModals() {
-        AF_ATF.qsa(".af-atf-kb-modal-backdrop").forEach((node) => {
-          if (!modalState || node !== modalState.backdrop) {
-            node.remove();
-          }
-        });
-      }
-
-      function destroyModal() {
-        if (!modalState) return;
-        modalState.closeBtn.removeEventListener("click", modalState.onClose);
-        modalState.backdrop.removeEventListener("click", modalState.onBackdrop);
-        document.removeEventListener("keydown", modalState.onKeydown);
-        modalState.backdrop.remove();
+      function destroyExistingModal() {
+        AF_ATF.qsa(".af-atf-kb-modal").forEach((node) => node.remove());
+        AF_ATF.qsa(".af-atf-kb-modal-backdrop").forEach((node) => node.remove());
+        document.body.classList.remove("modal-open");
+        if (modalState) {
+          modalState.closeBtn.removeEventListener("click", modalState.onClose);
+          modalState.backdrop.removeEventListener("click", modalState.onBackdrop);
+          document.removeEventListener("keydown", modalState.onKeydown);
+        }
         modalState = null;
+        window.__afAtfKbModal = null;
       }
 
       function buildModal() {
-        destroyModal();
-        clearStaleModals();
+        destroyExistingModal();
 
         const backdrop = document.createElement("div");
         backdrop.className = "af-atf-kb-modal-backdrop";
@@ -161,9 +158,7 @@
 
         const onClose = (event) => {
           if (event) event.preventDefault();
-          backdrop.hidden = true;
-          body.innerHTML = "";
-          title.textContent = "";
+          destroyExistingModal();
         };
 
         const onBackdrop = (event) => {
@@ -229,6 +224,7 @@
           }
         };
 
+        window.__afAtfKbModal = modalState;
         return modalState;
       }
 
@@ -263,10 +259,15 @@
         const key = chip.getAttribute("data-kb-key") || "";
         if (!type || !key) return;
 
+        const requestId = ++requestCounter;
+        activeRequestId = requestId;
+        destroyExistingModal();
+
         try {
           const entry = await fetchEntry(type, key);
-          if (!entry) return;
+          if (requestId !== activeRequestId || !entry) return;
           const modal = modalState || buildModal();
+          if (requestId !== activeRequestId) return;
           modal.show(entry);
         } catch (err) {
           // ignore fetch errors
