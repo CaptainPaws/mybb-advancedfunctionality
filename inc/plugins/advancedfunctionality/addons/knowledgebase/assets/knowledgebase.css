@@ -191,9 +191,19 @@
 
 .af-kb-type-desc,
 .af-kb-entry-short,
+.af-kb-block-content,
 .af-kb-body {
     color: #444;
     line-height: 1.6;
+    font-family: inherit;
+    font-weight: normal;
+    letter-spacing: normal;
+    text-shadow: none;
+    mix-blend-mode: normal;
+    filter: none;
+    -webkit-text-security: none;
+    -webkit-mask-image: none;
+    mask-image: none;
 }
 
 .af-kb-tech-note {

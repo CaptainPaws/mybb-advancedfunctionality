@@ -105,12 +105,30 @@
 
       const cache = new Map();
       const endpoint = AF_ATF.getKbEndpoint();
+      let modalState = null;
 
-      function ensureModal() {
-        let backdrop = document.querySelector(".af-atf-kb-modal-backdrop");
-        if (backdrop) return backdrop;
+      function clearStaleModals() {
+        AF_ATF.qsa(".af-atf-kb-modal-backdrop").forEach((node) => {
+          if (!modalState || node !== modalState.backdrop) {
+            node.remove();
+          }
+        });
+      }
 
-        backdrop = document.createElement("div");
+      function destroyModal() {
+        if (!modalState) return;
+        modalState.closeBtn.removeEventListener("click", modalState.onClose);
+        modalState.backdrop.removeEventListener("click", modalState.onBackdrop);
+        document.removeEventListener("keydown", modalState.onKeydown);
+        modalState.backdrop.remove();
+        modalState = null;
+      }
+
+      function buildModal() {
+        destroyModal();
+        clearStaleModals();
+
+        const backdrop = document.createElement("div");
         backdrop.className = "af-atf-kb-modal-backdrop";
         backdrop.hidden = true;
 
@@ -141,41 +159,77 @@
         backdrop.appendChild(modal);
         document.body.appendChild(backdrop);
 
-        function hide() {
+        const onClose = (event) => {
+          if (event) event.preventDefault();
           backdrop.hidden = true;
           body.innerHTML = "";
           title.textContent = "";
-        }
+        };
 
-        close.addEventListener("click", hide);
-        backdrop.addEventListener("click", (e) => {
-          if (e.target === backdrop) hide();
-        });
+        const onBackdrop = (event) => {
+          if (event.target === backdrop) onClose(event);
+        };
 
-        backdrop.__af_atf_modal = { title, body, show(entry) {
-          title.textContent = entry.title || "";
-          body.innerHTML = "";
-
-          if (entry.short_html) {
-            const shortBlock = document.createElement("div");
-            shortBlock.innerHTML = entry.short_html;
-            body.appendChild(shortBlock);
+        const onKeydown = (event) => {
+          if (event.key === "Escape" && !backdrop.hidden) {
+            onClose(event);
           }
-          if (entry.body_html) {
-            const bodyBlock = document.createElement("div");
-            bodyBlock.innerHTML = entry.body_html;
-            body.appendChild(bodyBlock);
-          }
-          if (entry.meta_html) {
-            const metaBlock = document.createElement("div");
-            metaBlock.innerHTML = entry.meta_html;
-            body.appendChild(metaBlock);
-          }
+        };
 
-          backdrop.hidden = false;
-        }};
+        close.addEventListener("click", onClose);
+        backdrop.addEventListener("click", onBackdrop);
+        document.addEventListener("keydown", onKeydown);
 
-        return backdrop;
+        modalState = {
+          backdrop,
+          title,
+          body,
+          closeBtn: close,
+          onClose,
+          onBackdrop,
+          onKeydown,
+          show(entry) {
+            title.textContent = entry.title || "";
+            body.innerHTML = "";
+
+            if (entry.short_html) {
+              const shortBlock = document.createElement("div");
+              shortBlock.innerHTML = entry.short_html;
+              body.appendChild(shortBlock);
+            }
+            if (entry.body_html) {
+              const bodyBlock = document.createElement("div");
+              bodyBlock.innerHTML = entry.body_html;
+              body.appendChild(bodyBlock);
+            }
+
+            if (Array.isArray(entry.blocks)) {
+              entry.blocks.forEach((block) => {
+                if (!block) return;
+                const blockTitle = String(block.title || "");
+                const blockHtml = String(block.body_html || block.content_html || "");
+                if (!blockTitle && !blockHtml) return;
+
+                const section = document.createElement("section");
+                if (blockTitle) {
+                  const h4 = document.createElement("h4");
+                  h4.textContent = blockTitle;
+                  section.appendChild(h4);
+                }
+                if (blockHtml) {
+                  const bodyWrap = document.createElement("div");
+                  bodyWrap.innerHTML = blockHtml;
+                  section.appendChild(bodyWrap);
+                }
+                body.appendChild(section);
+              });
+            }
+
+            backdrop.hidden = false;
+          }
+        };
+
+        return modalState;
       }
 
       async function fetchEntry(type, key) {
@@ -212,8 +266,8 @@
         try {
           const entry = await fetchEntry(type, key);
           if (!entry) return;
-          const modal = ensureModal();
-          modal.__af_atf_modal.show(entry);
+          const modal = modalState || buildModal();
+          modal.show(entry);
         } catch (err) {
           // ignore fetch errors
         }

@@ -10,8 +10,18 @@
   function getCfg() {
     try {
       var p = window.afAePayload || window.afAdvancedEditorPayload || window.afAdvancedEditor || null;
-      if (p && p.cfg) return p.cfg;
-      if (p && p.payload && p.payload.cfg) return p.payload.cfg;
+      var cfg = null;
+      if (p && p.cfg) cfg = Object.assign({}, p.cfg);
+      if (p && p.payload && p.payload.cfg) cfg = Object.assign({}, p.payload.cfg);
+      if (p && typeof p.countBbcode !== 'undefined') {
+        if (!cfg) cfg = {};
+        cfg.countBbcode = p.countBbcode;
+      }
+      if (p && p.payload && typeof p.payload.countBbcode !== 'undefined') {
+        if (!cfg) cfg = {};
+        cfg.countBbcode = p.payload.countBbcode;
+      }
+      if (cfg) return cfg;
     } catch (e) {}
     return {};
   }
@@ -137,8 +147,6 @@
     // теги
     s = s.replace(/\[(\/?)[^\]\s=]+(?:=[^\]]+)?\]/g, '');
 
-    // нормализация
-    s = s.replace(/\s+/g, ' ').trim();
     return s;
   }
 
@@ -252,8 +260,11 @@
   function updateCounter(ui, ta, inst) {
     if (!ui) return;
     var raw = getEditorRawText(ta, inst);
-    var clean = stripBbForCount(raw);
-    ui.valueEl.textContent = String(countGraphemes(clean));
+    var textForCount = raw;
+    if (!CFG.countBbcode) {
+      textForCount = stripBbForCount(raw);
+    }
+    ui.valueEl.textContent = String(countGraphemes(textForCount));
   }
 
   function findPreviewButton(form) {
