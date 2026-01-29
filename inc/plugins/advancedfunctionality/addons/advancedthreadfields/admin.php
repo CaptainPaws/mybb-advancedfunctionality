@@ -681,6 +681,9 @@ class AF_Admin_Advancedthreadfields
             'url'       => 'URL',
             'number'    => 'Number',
             'usernames' => 'Users (search + tags)',
+            'kb_race'   => $lang->af_atf_type_kb_race ?? 'KB select: Race',
+            'kb_class'  => $lang->af_atf_type_kb_class ?? 'KB select: Class',
+            'sf_attributes_pointbuy' => $lang->af_atf_type_sf_attributes_pointbuy ?? 'SF attributes point-buy',
         ];
 
         $nameHelp = '<div style="margin-top:6px; font-size:12px; opacity:.85;">

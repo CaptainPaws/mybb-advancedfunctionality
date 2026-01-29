@@ -27,6 +27,12 @@
         .replace(/>/g, "&gt;");
     },
 
+    getKbEndpoint() {
+      const meta = document.querySelector('meta[name="af-atf-kb-endpoint"]');
+      if (meta && meta.content) return meta.content;
+      return "/misc.php?action=af_kb_get";
+    },
+
     // --- 1) hide editor if meta flag present (НЕ трогаем остальное) ---
     applyHideEditor() {
       const meta = document.querySelector('meta[name="af-atf-hide-editor"][content="1"]');
@@ -57,6 +63,277 @@
       if (!blocks.length) return;
 
       blocks.forEach((wrap) => AF_ATF.initUserChipsOne(wrap));
+    },
+
+    initKbSelects() {
+      const blocks = AF_ATF.qsa(".af-atf-kb-select");
+      if (!blocks.length) return;
+
+      blocks.forEach((wrap) => {
+        const select = AF_ATF.qs(".af-atf-kb-select-input", wrap);
+        const preview = AF_ATF.qs(".af-atf-kb-preview", wrap);
+        if (!select || !preview) return;
+
+        const kbType = wrap.getAttribute("data-kb-type") || "";
+
+        function renderPreview() {
+          const key = String(select.value || "").trim();
+          if (!key) {
+            preview.innerHTML = "";
+            return;
+          }
+          const label = select.options[select.selectedIndex]
+            ? select.options[select.selectedIndex].textContent
+            : key;
+          const chip = document.createElement("span");
+          chip.className = "af_kb_chip";
+          chip.setAttribute("data-kb-type", kbType);
+          chip.setAttribute("data-kb-key", key);
+          chip.textContent = label;
+          preview.innerHTML = "";
+          preview.appendChild(chip);
+        }
+
+        select.addEventListener("change", renderPreview);
+        renderPreview();
+      });
+    },
+
+    initKbChips() {
+      if (AF_ATF.__kbChipsInited) return;
+      AF_ATF.__kbChipsInited = true;
+
+      const cache = new Map();
+      const endpoint = AF_ATF.getKbEndpoint();
+
+      function ensureModal() {
+        let backdrop = document.querySelector(".af-atf-kb-modal-backdrop");
+        if (backdrop) return backdrop;
+
+        backdrop = document.createElement("div");
+        backdrop.className = "af-atf-kb-modal-backdrop";
+        backdrop.hidden = true;
+
+        const modal = document.createElement("div");
+        modal.className = "af-atf-kb-modal";
+
+        const header = document.createElement("div");
+        header.style.display = "flex";
+        header.style.gap = "10px";
+        header.style.alignItems = "center";
+
+        const title = document.createElement("div");
+        title.className = "af-atf-kb-modal-title";
+
+        const close = document.createElement("button");
+        close.type = "button";
+        close.className = "af-atf-kb-modal-close";
+        close.textContent = "×";
+
+        header.appendChild(title);
+        header.appendChild(close);
+
+        const body = document.createElement("div");
+        body.className = "af-atf-kb-modal-body";
+
+        modal.appendChild(header);
+        modal.appendChild(body);
+        backdrop.appendChild(modal);
+        document.body.appendChild(backdrop);
+
+        function hide() {
+          backdrop.hidden = true;
+          body.innerHTML = "";
+          title.textContent = "";
+        }
+
+        close.addEventListener("click", hide);
+        backdrop.addEventListener("click", (e) => {
+          if (e.target === backdrop) hide();
+        });
+
+        backdrop.__af_atf_modal = { title, body, show(entry) {
+          title.textContent = entry.title || "";
+          body.innerHTML = "";
+
+          if (entry.short_html) {
+            const shortBlock = document.createElement("div");
+            shortBlock.innerHTML = entry.short_html;
+            body.appendChild(shortBlock);
+          }
+          if (entry.body_html) {
+            const bodyBlock = document.createElement("div");
+            bodyBlock.innerHTML = entry.body_html;
+            body.appendChild(bodyBlock);
+          }
+          if (entry.meta_html) {
+            const metaBlock = document.createElement("div");
+            metaBlock.innerHTML = entry.meta_html;
+            body.appendChild(metaBlock);
+          }
+
+          backdrop.hidden = false;
+        }};
+
+        return backdrop;
+      }
+
+      async function fetchEntry(type, key) {
+        const cacheKey = `${type}:${key}`;
+        if (cache.has(cacheKey)) {
+          return cache.get(cacheKey);
+        }
+
+        const url = new URL(endpoint, window.location.origin);
+        url.searchParams.set("type", type);
+        url.searchParams.set("key", key);
+
+        const resp = await fetch(url.toString(), {
+          method: "GET",
+          credentials: "same-origin"
+        });
+        const data = await resp.json();
+        if (!data || data.ok !== 1 || !data.entry) {
+          return null;
+        }
+        cache.set(cacheKey, data.entry);
+        return data.entry;
+      }
+
+      document.addEventListener("click", async (e) => {
+        const chip = e.target.closest(".af_kb_chip");
+        if (!chip) return;
+        e.preventDefault();
+
+        const type = chip.getAttribute("data-kb-type") || "";
+        const key = chip.getAttribute("data-kb-key") || "";
+        if (!type || !key) return;
+
+        try {
+          const entry = await fetchEntry(type, key);
+          if (!entry) return;
+          const modal = ensureModal();
+          modal.__af_atf_modal.show(entry);
+        } catch (err) {
+          // ignore fetch errors
+        }
+      });
+    },
+
+    initPointBuyAll() {
+      const blocks = AF_ATF.qsa(".af-atf-pointbuy");
+      if (!blocks.length) return;
+      blocks.forEach((wrap) => AF_ATF.initPointBuyOne(wrap));
+    },
+
+    initPointBuyOne(wrap) {
+      if (!wrap || wrap.__af_atf_pointbuy) return;
+      wrap.__af_atf_pointbuy = true;
+
+      const hidden = AF_ATF.qs(".af-atf-pointbuy-hidden", wrap);
+      const inputs = AF_ATF.qsa(".af-atf-pointbuy-input", wrap);
+      if (!hidden || !inputs.length) return;
+
+      const total = parseInt(wrap.getAttribute("data-total") || "0", 10);
+      const min = parseInt(wrap.getAttribute("data-min") || "0", 10);
+      const max = parseInt(wrap.getAttribute("data-max") || "0", 10);
+      const base = parseInt(wrap.getAttribute("data-base") || "0", 10);
+      const allowNegative = wrap.getAttribute("data-allow-negative") === "1";
+      const requireExact = wrap.getAttribute("data-require-exact") === "1";
+      const errOver = wrap.getAttribute("data-err-overbudget") || "Over budget";
+      const errRange = wrap.getAttribute("data-err-out-of-range") || "Out of range";
+      const errExact = wrap.getAttribute("data-err-not-exact") || "Not exact";
+      let curve = {};
+      try {
+        curve = JSON.parse(wrap.getAttribute("data-cost-curve") || "{}");
+      } catch (e) {
+        curve = {};
+      }
+
+      const spentEl = AF_ATF.qs(".af-atf-pointbuy-spent", wrap);
+      const remainingEl = AF_ATF.qs(".af-atf-pointbuy-remaining", wrap);
+      const errorEl = AF_ATF.qs(".af-atf-pointbuy-errors", wrap);
+
+      function stepCost(from, to) {
+        if (!curve || !curve.costs) return null;
+        const key = `${from}->${to}`;
+        if (Object.prototype.hasOwnProperty.call(curve.costs, key)) {
+          return parseInt(curve.costs[key], 10);
+        }
+        return null;
+      }
+
+      function calcCost(value) {
+        if (value === base) return { cost: 0, invalid: false };
+        let cost = 0;
+        if (value > base) {
+          for (let i = base; i < value; i += 1) {
+            const step = stepCost(i, i + 1);
+            if (step === null) return { cost: 0, invalid: true };
+            cost += step;
+          }
+          return { cost, invalid: false };
+        }
+        for (let i = base; i > value; i -= 1) {
+          const step = stepCost(i - 1, i);
+          if (step === null) return { cost: 0, invalid: true };
+          cost -= step;
+        }
+        return { cost, invalid: false };
+      }
+
+      function collectValues() {
+        const values = {};
+        inputs.forEach((input) => {
+          const code = input.getAttribute("data-attr");
+          if (!code) return;
+          values[code] = parseInt(input.value || "0", 10);
+        });
+        return values;
+      }
+
+      function update() {
+        const values = collectValues();
+        let spent = 0;
+        let hasRangeError = false;
+        let hasCostError = false;
+
+        Object.keys(values).forEach((code) => {
+          const val = values[code];
+          if (Number.isNaN(val) || val < min || val > max) {
+            hasRangeError = true;
+            return;
+          }
+          const result = calcCost(val);
+          if (result.invalid) {
+            hasCostError = true;
+            return;
+          }
+          spent += result.cost;
+        });
+
+        const remaining = total - spent;
+        if (spentEl) spentEl.textContent = String(spent);
+        if (remainingEl) remainingEl.textContent = String(remaining);
+
+        const errors = [];
+        if (hasRangeError || hasCostError) errors.push(errRange);
+        if (!allowNegative && spent > total) errors.push(errOver);
+        if (requireExact && spent !== total) errors.push(errExact);
+
+        if (errorEl) {
+          errorEl.textContent = errors.join(" · ");
+        }
+
+        hidden.value = JSON.stringify(values);
+      }
+
+      inputs.forEach((input) => {
+        input.addEventListener("input", update);
+        input.addEventListener("change", update);
+      });
+
+      update();
     },
 
     initUserChipsOne(wrap) {
@@ -352,6 +629,9 @@
   function boot() {
     AF_ATF.applyHideEditor();
     AF_ATF.initUserChipsAll();
+    AF_ATF.initKbSelects();
+    AF_ATF.initKbChips();
+    AF_ATF.initPointBuyAll();
   }
 
   if (document.readyState === "loading") {

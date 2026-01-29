@@ -378,6 +378,7 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         if (!empty($GLOBALS['af_atf_hide_editor'])) {
             $extra .= "\n<meta name=\"af-atf-hide-editor\" content=\"1\" />\n";
         }
+        $extra .= "\n<meta name=\"af-atf-kb-endpoint\" content=\"{$base}/misc.php?action=af_kb_get\" />\n";
 
         $tag = "\n".AF_ATF_MARK
              . "\n<link rel=\"stylesheet\" href=\"{$css}\" />"
@@ -529,6 +530,11 @@ function af_atf_misc_start(): void
         af_atf_clean_output_buffers();
         af_atf_user_resolve_endpoint(); // die внутри
     }
+
+    if ($action === 'af_kb_get') {
+        af_atf_clean_output_buffers();
+        af_atf_kb_get_endpoint(); // die внутри
+    }
 }
 
 function af_atf_early_ajax_router(): void
@@ -554,6 +560,11 @@ function af_atf_early_ajax_router(): void
     if ($action === 'af_atf_user_resolve') {
         af_atf_clean_output_buffers();
         af_atf_user_resolve_endpoint(); // внутри будет die
+    }
+
+    if ($action === 'af_kb_get') {
+        af_atf_clean_output_buffers();
+        af_atf_kb_get_endpoint(); // внутри будет die
     }
 }
 
@@ -706,6 +717,108 @@ function af_atf_user_resolve_endpoint(): void
     }
 
     af_atf_json_response(['ok' => 1, 'items' => $items]);
+}
+
+function af_atf_kb_get_endpoint(): void
+{
+    global $mybb, $db;
+
+    $type = strtolower(trim((string)$mybb->get_input('type')));
+    $key = strtolower(trim((string)$mybb->get_input('key')));
+
+    if (!in_array($type, af_atf_kb_allowed_types(), true)) {
+        af_atf_json_response(['ok' => 0, 'error' => 'invalid_type'], 400);
+        return;
+    }
+
+    if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $key)) {
+        af_atf_json_response(['ok' => 0, 'error' => 'invalid_key'], 400);
+        return;
+    }
+
+    if (function_exists('af_kb_can_view') && !af_kb_can_view()) {
+        af_atf_json_response(['ok' => 0, 'error' => 'no_access'], 403);
+        return;
+    }
+
+    if (empty($mybb->usergroup['canviewthreads'])) {
+        af_atf_json_response(['ok' => 0, 'error' => 'no_access'], 403);
+        return;
+    }
+
+    if (!is_object($db) || !$db->table_exists('af_kb_entries')) {
+        af_atf_json_response(['ok' => 0, 'error' => 'not_found'], 404);
+        return;
+    }
+
+    $row = $db->fetch_array($db->simple_select(
+        'af_kb_entries',
+        '*',
+        "type='".$db->escape_string($type)."' AND `key`='".$db->escape_string($key)."' AND active=1",
+        ['limit' => 1]
+    ));
+
+    if (!is_array($row) || empty($row)) {
+        af_atf_json_response(['ok' => 0, 'error' => 'not_found'], 404);
+        return;
+    }
+
+    $title = af_atf_kb_pick_text($row, 'title');
+    $short = af_atf_kb_pick_text($row, 'short');
+    $body = af_atf_kb_pick_text($row, 'body');
+    $metaJson = (string)($row['meta_json'] ?? '');
+
+    $shortHtml = '';
+    $bodyHtml = '';
+    if ($short !== '') {
+        if (function_exists('af_kb_parse_message_modal') && function_exists('af_kb_sanitize_rendered_html')) {
+            $shortHtml = af_kb_sanitize_rendered_html(af_kb_parse_message_modal($short));
+        } else {
+            $shortHtml = nl2br(htmlspecialchars_uni($short));
+        }
+    }
+    if ($body !== '') {
+        if (function_exists('af_kb_parse_message_modal') && function_exists('af_kb_sanitize_rendered_html')) {
+            $bodyHtml = af_kb_sanitize_rendered_html(af_kb_parse_message_modal($body));
+        } else {
+            $bodyHtml = nl2br(htmlspecialchars_uni($body));
+        }
+    }
+
+    $metaHtml = '';
+    $metaJson = trim($metaJson);
+    if ($metaJson !== '' && $metaJson !== '{}' && $metaJson !== '[]') {
+        if (function_exists('af_kb_render_data_table')) {
+            $metaHtml = af_kb_render_data_table($metaJson);
+        } else {
+            $decoded = json_decode($metaJson, true);
+            if (is_array($decoded)) {
+                $rows = '';
+                foreach ($decoded as $mKey => $mVal) {
+                    if (is_array($mVal) || is_object($mVal)) {
+                        $mVal = json_encode($mVal, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    }
+                    $rows .= '<tr><th>' . htmlspecialchars_uni((string)$mKey) . '</th><td>'
+                        . htmlspecialchars_uni((string)$mVal) . '</td></tr>';
+                }
+                if ($rows !== '') {
+                    $metaHtml = '<table class="af-atf-kb-meta-table">' . $rows . '</table>';
+                }
+            }
+        }
+    }
+
+    af_atf_json_response([
+        'ok' => 1,
+        'entry' => [
+            'type' => $type,
+            'key' => $key,
+            'title' => $title,
+            'short_html' => $shortHtml,
+            'body_html' => $bodyHtml,
+            'meta_html' => $metaHtml,
+        ],
+    ]);
 }
 
 /* -------------------- DB UPGRADE HELPERS -------------------- */
@@ -1487,6 +1600,117 @@ function af_atf_build_input_html(array $field, string $value): string
     }
 
     switch ($type) {
+        case 'kb_race':
+        case 'kb_class': {
+            $kbType = $type === 'kb_race' ? 'race' : 'class';
+            $list = af_atf_kb_get_list_by_type($kbType);
+
+            $html = '<div class="af-atf-kb-select" data-kb-type="'.htmlspecialchars_uni($kbType).'">';
+            $html .= '<select class="select af-atf-input af-atf-kb-select-input" name="'.$nameAttr.'">';
+            $html .= '<option value=""></option>';
+
+            $seen = [];
+            foreach ($list as $item) {
+                $key = (string)($item['key'] ?? '');
+                if ($key === '') {
+                    continue;
+                }
+                $seen[$key] = true;
+                $sel = ((string)$value === $key) ? ' selected="selected"' : '';
+                $label = (string)($item['title'] ?? $key);
+                $html .= '<option value="'.htmlspecialchars_uni($key).'"'.$sel.'>'.htmlspecialchars_uni($label).'</option>';
+            }
+
+            if ($value !== '' && !isset($seen[$value])) {
+                $fallbackLabel = af_atf_kb_resolve_label((string)$field['options'], $value);
+                $html .= '<option value="'.htmlspecialchars_uni($value).'" selected="selected">'.htmlspecialchars_uni($fallbackLabel).'</option>';
+            }
+
+            $html .= '</select>';
+
+            $preview = af_atf_kb_build_chip($kbType, $value, (string)$field['options']);
+            $html .= '<div class="af-atf-kb-preview">'.($preview !== '' ? $preview : '').'</div>';
+            $html .= '</div>';
+
+            return $html;
+        }
+
+        case 'sf_attributes_pointbuy': {
+            $settings = af_atf_sf_pointbuy_get_settings();
+            $curveJson = json_encode($settings['curve'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $costBase = isset($settings['curve']['base']) ? (int)$settings['curve']['base'] : (int)$settings['base'];
+            $values = [];
+            if ($value !== '') {
+                $decoded = json_decode($value, true);
+                if (is_array($decoded)) {
+                    foreach (af_atf_sf_pointbuy_get_attr_codes() as $code) {
+                        $values[$code] = isset($decoded[$code]) ? (int)$decoded[$code] : (int)$settings['base'];
+                    }
+                }
+            }
+            foreach (af_atf_sf_pointbuy_get_attr_codes() as $code) {
+                if (!isset($values[$code])) {
+                    $values[$code] = (int)$settings['base'];
+                }
+            }
+
+            $hiddenJson = json_encode($values, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+            $dataAttrs = ' data-total="'.(int)$settings['total'].'"'
+                . ' data-min="'.(int)$settings['min'].'"'
+                . ' data-max="'.(int)$settings['max'].'"'
+                . ' data-base="'.(int)$costBase.'"'
+                . ' data-allow-negative="'.($settings['allow_negative'] ? 1 : 0).'"'
+                . ' data-require-exact="'.($settings['require_exact'] ? 1 : 0).'"'
+                . ' data-cost-curve="'.htmlspecialchars_uni($curveJson).'"';
+
+            global $lang;
+            $errOver = $lang->af_atf_sf_err_overbudget ?? 'Over budget';
+            $errRange = $lang->af_atf_sf_err_out_of_range ?? 'Out of range';
+            $errExact = $lang->af_atf_sf_err_not_exact ?? 'Points not exact';
+
+            $dataAttrs .= ' data-err-overbudget="'.htmlspecialchars_uni($errOver).'"'
+                . ' data-err-out-of-range="'.htmlspecialchars_uni($errRange).'"'
+                . ' data-err-not-exact="'.htmlspecialchars_uni($errExact).'"';
+
+            $totalLabel = htmlspecialchars_uni($lang->af_atf_sf_total_points ?? 'Total points');
+            $spentLabel = htmlspecialchars_uni($lang->af_atf_sf_spent ?? 'Spent');
+            $remainingLabel = htmlspecialchars_uni($lang->af_atf_sf_remaining ?? 'Remaining');
+
+            $html = '<div class="af-atf-pointbuy"'.$dataAttrs.'>';
+            $html .= '<input type="hidden" class="af-atf-pointbuy-hidden" name="'.$nameAttr.'" value="'.htmlspecialchars_uni($hiddenJson).'" />';
+
+            $html .= '<div class="af-atf-pointbuy-table">';
+            foreach (af_atf_sf_pointbuy_get_attr_groups() as $group) {
+                $groupLabel = htmlspecialchars_uni((string)$group['label']);
+                $html .= '<div class="af-atf-pointbuy-group">';
+                $html .= '<div class="af-atf-pointbuy-group-title">'.$groupLabel.'</div>';
+                foreach ($group['items'] as $item) {
+                    $code = $item['code'];
+                    $label = htmlspecialchars_uni($item['label'].' ('.$code.')');
+                    $val = (int)($values[$code] ?? $settings['base']);
+                    $html .= '<div class="af-atf-pointbuy-row">';
+                    $html .= '<div class="af-atf-pointbuy-label">'.$label.'</div>';
+                    $html .= '<div class="af-atf-pointbuy-control">'
+                        . '<input type="number" class="text_input af-atf-pointbuy-input" data-attr="'.htmlspecialchars_uni($code).'"'
+                        . ' value="'.(int)$val.'" min="'.(int)$settings['min'].'" max="'.(int)$settings['max'].'" />'
+                        . '</div>';
+                    $html .= '</div>';
+                }
+                $html .= '</div>';
+            }
+            $html .= '</div>';
+
+            $html .= '<div class="af-atf-pointbuy-summary">'
+                . '<div><span class="af-atf-pointbuy-summary-label">'.$totalLabel.':</span> <span class="af-atf-pointbuy-total">'.(int)$settings['total'].'</span></div>'
+                . '<div><span class="af-atf-pointbuy-summary-label">'.$spentLabel.':</span> <span class="af-atf-pointbuy-spent">0</span></div>'
+                . '<div><span class="af-atf-pointbuy-summary-label">'.$remainingLabel.':</span> <span class="af-atf-pointbuy-remaining">0</span></div>'
+                . '</div>';
+            $html .= '<div class="af-atf-pointbuy-errors" role="alert"></div>';
+            $html .= '</div>';
+            return $html;
+        }
+
         case 'usernames': {
             // value хранится как "uid,uid,uid"
             $base = rtrim((string)$mybb->settings['bburl'], '/');
@@ -1585,6 +1809,346 @@ function af_atf_parse_options(string $raw): array
         }
     }
     return $out;
+}
+
+/* -------------------- KB HELPERS -------------------- */
+
+function af_atf_kb_allowed_types(): array
+{
+    return ['race', 'class'];
+}
+
+function af_atf_kb_is_ru(): bool
+{
+    if (function_exists('af_kb_is_ru')) {
+        return af_kb_is_ru();
+    }
+
+    global $lang;
+    return isset($lang->language) && $lang->language === 'russian';
+}
+
+function af_atf_kb_pick_text(array $row, string $field): string
+{
+    if (function_exists('af_kb_pick_text')) {
+        return af_kb_pick_text($row, $field);
+    }
+
+    $suffix = af_atf_kb_is_ru() ? '_ru' : '_en';
+    $key = $field . $suffix;
+    $value = (string)($row[$key] ?? '');
+    if ($value === '') {
+        $fallback = (string)($row[$field . '_ru'] ?? '');
+        if ($fallback === '') {
+            $fallback = (string)($row[$field . '_en'] ?? '');
+        }
+        return $fallback;
+    }
+
+    return $value;
+}
+
+function af_atf_kb_get_list_by_type(string $type): array
+{
+    static $cacheListByType = [];
+
+    $type = strtolower(trim($type));
+    if (!in_array($type, af_atf_kb_allowed_types(), true)) {
+        return [];
+    }
+
+    if (isset($cacheListByType[$type])) {
+        return $cacheListByType[$type];
+    }
+
+    global $db;
+    if (!is_object($db) || !$db->table_exists('af_kb_entries')) {
+        $cacheListByType[$type] = [];
+        return [];
+    }
+
+    $items = [];
+    $q = $db->simple_select(
+        'af_kb_entries',
+        'type,`key`,title_ru,title_en,sortorder',
+        "type='".$db->escape_string($type)."' AND active=1",
+        ['order_by' => 'sortorder, title_ru, title_en', 'order_dir' => 'ASC']
+    );
+    while ($row = $db->fetch_array($q)) {
+        $items[] = [
+            'key' => (string)$row['key'],
+            'title' => af_atf_kb_pick_text($row, 'title') ?: (string)$row['key'],
+        ];
+    }
+
+    $cacheListByType[$type] = $items;
+    return $items;
+}
+
+function af_atf_kb_get_entry(string $type, string $key): array
+{
+    static $cacheEntryByTypeKey = [];
+
+    $type = strtolower(trim($type));
+    $key = strtolower(trim($key));
+    if ($type === '' || $key === '') {
+        return [];
+    }
+
+    $cacheKey = $type . ':' . $key;
+    if (isset($cacheEntryByTypeKey[$cacheKey])) {
+        return $cacheEntryByTypeKey[$cacheKey];
+    }
+
+    global $db;
+    if (!is_object($db) || !$db->table_exists('af_kb_entries')) {
+        $cacheEntryByTypeKey[$cacheKey] = [];
+        return [];
+    }
+
+    $row = $db->fetch_array($db->simple_select(
+        'af_kb_entries',
+        '*',
+        "type='".$db->escape_string($type)."' AND `key`='".$db->escape_string($key)."' AND active=1",
+        ['limit' => 1]
+    ));
+
+    if (!is_array($row) || empty($row)) {
+        $cacheEntryByTypeKey[$cacheKey] = [];
+        return [];
+    }
+
+    $cacheEntryByTypeKey[$cacheKey] = $row;
+    return $row;
+}
+
+function af_atf_kb_resolve_label(string $optionsRaw, string $key): string
+{
+    if (function_exists('af_kb_resolve_atf_select_label')) {
+        return af_kb_resolve_atf_select_label($optionsRaw, $key);
+    }
+
+    $opts = af_atf_parse_options($optionsRaw);
+    return $opts[$key] ?? $key;
+}
+
+function af_atf_kb_build_chip(string $kbType, string $key, string $optionsRaw = ''): string
+{
+    $key = trim($key);
+    if ($key === '') {
+        return '';
+    }
+
+    $title = '';
+    $entry = af_atf_kb_get_entry($kbType, $key);
+    if (!empty($entry)) {
+        $title = af_atf_kb_pick_text($entry, 'title');
+    }
+
+    if ($title === '') {
+        $title = af_atf_kb_resolve_label($optionsRaw, $key);
+    }
+
+    $titleSafe = htmlspecialchars_uni($title);
+    $keySafe = htmlspecialchars_uni($key);
+    $typeSafe = htmlspecialchars_uni($kbType);
+
+    return '<span class="af_kb_chip" data-kb-type="' . $typeSafe . '" data-kb-key="' . $keySafe . '">' . $titleSafe . '</span>';
+}
+
+/* -------------------- SF POINTBUY HELPERS -------------------- */
+
+function af_atf_sf_pointbuy_default_curve(): array
+{
+    return [
+        'mode' => 'step',
+        'base' => 10,
+        'costs' => [
+            '10->11' => 1,
+            '11->12' => 1,
+            '12->13' => 2,
+            '13->14' => 2,
+            '14->15' => 3,
+            '15->16' => 4,
+            '16->17' => 5,
+            '17->18' => 6,
+        ],
+    ];
+}
+
+function af_atf_sf_pointbuy_get_settings(): array
+{
+    global $mybb;
+
+    $total = isset($mybb->settings['af_atf_sf_total_points'])
+        ? (int)$mybb->settings['af_atf_sf_total_points']
+        : 10;
+    $minValue = isset($mybb->settings['af_atf_sf_min_value'])
+        ? (int)$mybb->settings['af_atf_sf_min_value']
+        : 8;
+    $maxValue = isset($mybb->settings['af_atf_sf_max_value'])
+        ? (int)$mybb->settings['af_atf_sf_max_value']
+        : 18;
+    $baseValue = isset($mybb->settings['af_atf_sf_base_value'])
+        ? (int)$mybb->settings['af_atf_sf_base_value']
+        : 10;
+
+    $curveJson = (string)($mybb->settings['af_atf_sf_cost_curve'] ?? '');
+    $curve = json_decode($curveJson, true);
+    if (!is_array($curve)) {
+        $curve = af_atf_sf_pointbuy_default_curve();
+    }
+
+    return [
+        'total' => $total,
+        'min' => $minValue,
+        'max' => $maxValue,
+        'base' => $baseValue,
+        'curve' => $curve,
+        'allow_negative' => !empty($mybb->settings['af_atf_sf_allow_negative_remaining']),
+        'require_exact' => !empty($mybb->settings['af_atf_sf_require_exact_spend']),
+    ];
+}
+
+function af_atf_sf_pointbuy_get_attr_groups(): array
+{
+    global $lang;
+
+    return [
+        [
+            'label' => $lang->af_atf_sf_group_mental ?? 'Mental Group',
+            'items' => [
+                ['code' => 'INT', 'label' => 'Intelligence'],
+                ['code' => 'WILL', 'label' => 'Willpower'],
+                ['code' => 'PRE', 'label' => 'Presence'],
+            ],
+        ],
+        [
+            'label' => $lang->af_atf_sf_group_combat ?? 'Combat Group',
+            'items' => [
+                ['code' => 'TECH', 'label' => 'Technique'],
+                ['code' => 'REF', 'label' => 'Reflexes'],
+                ['code' => 'DEX', 'label' => 'Dexterity'],
+            ],
+        ],
+        [
+            'label' => $lang->af_atf_sf_group_physical ?? 'Physical Group',
+            'items' => [
+                ['code' => 'CON', 'label' => 'Constitution'],
+                ['code' => 'STR', 'label' => 'Strength'],
+                ['code' => 'BODY', 'label' => 'Body'],
+            ],
+        ],
+    ];
+}
+
+function af_atf_sf_pointbuy_get_attr_codes(): array
+{
+    $codes = [];
+    foreach (af_atf_sf_pointbuy_get_attr_groups() as $group) {
+        foreach ($group['items'] as $item) {
+            $codes[] = $item['code'];
+        }
+    }
+    return $codes;
+}
+
+function af_atf_sf_pointbuy_step_cost(int $from, int $to, array $curve): ?int
+{
+    $key = $from . '->' . $to;
+    if (isset($curve['costs']) && is_array($curve['costs']) && array_key_exists($key, $curve['costs'])) {
+        return (int)$curve['costs'][$key];
+    }
+    return null;
+}
+
+function af_atf_sf_pointbuy_calc_cost(int $value, array $curve, int $base): ?int
+{
+    if ($value === $base) {
+        return 0;
+    }
+
+    $cost = 0;
+    if ($value > $base) {
+        for ($i = $base; $i < $value; $i++) {
+            $stepCost = af_atf_sf_pointbuy_step_cost($i, $i + 1, $curve);
+            if ($stepCost === null) {
+                return null;
+            }
+            $cost += $stepCost;
+        }
+        return $cost;
+    }
+
+    for ($i = $base; $i > $value; $i--) {
+        $stepCost = af_atf_sf_pointbuy_step_cost($i - 1, $i, $curve);
+        if ($stepCost === null) {
+            return null;
+        }
+        $cost -= $stepCost;
+    }
+
+    return $cost;
+}
+
+function af_atf_sf_pointbuy_normalize(string $raw, array $settings, ?string &$errorKey = null): array
+{
+    $errorKey = null;
+
+    $raw = trim($raw);
+    if ($raw === '') {
+        return ['ok' => false, 'json' => '', 'values' => []];
+    }
+
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        $errorKey = 'af_atf_sf_err_out_of_range';
+        return ['ok' => false, 'json' => '', 'values' => []];
+    }
+
+    $values = [];
+    foreach (af_atf_sf_pointbuy_get_attr_codes() as $code) {
+        $values[$code] = isset($decoded[$code]) ? (int)$decoded[$code] : (int)$settings['base'];
+    }
+
+    foreach ($values as $val) {
+        if ($val < (int)$settings['min'] || $val > (int)$settings['max']) {
+            $errorKey = 'af_atf_sf_err_out_of_range';
+            return ['ok' => false, 'json' => '', 'values' => $values];
+        }
+    }
+
+    $curve = is_array($settings['curve']) ? $settings['curve'] : af_atf_sf_pointbuy_default_curve();
+    $base = isset($curve['base']) ? (int)$curve['base'] : (int)$settings['base'];
+
+    $spent = 0;
+    foreach ($values as $val) {
+        $cost = af_atf_sf_pointbuy_calc_cost($val, $curve, $base);
+        if ($cost === null) {
+            $errorKey = 'af_atf_sf_err_out_of_range';
+            return ['ok' => false, 'json' => '', 'values' => $values];
+        }
+        $spent += $cost;
+    }
+
+    if (!$settings['allow_negative'] && $spent > (int)$settings['total']) {
+        $errorKey = 'af_atf_sf_err_overbudget';
+        return ['ok' => false, 'json' => '', 'values' => $values];
+    }
+
+    if ($settings['require_exact'] && $spent !== (int)$settings['total']) {
+        $errorKey = 'af_atf_sf_err_not_exact';
+        return ['ok' => false, 'json' => '', 'values' => $values];
+    }
+
+    $normalized = [];
+    foreach (af_atf_sf_pointbuy_get_attr_codes() as $code) {
+        $normalized[$code] = $values[$code];
+    }
+
+    $json = json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+    return ['ok' => true, 'json' => $json, 'values' => $normalized, 'spent' => $spent];
 }
 
 /* -------------------- VALUES: LOAD/SAVE -------------------- */
@@ -1749,6 +2313,28 @@ function af_atf_newthread_do_end(): void
         }
 
         $type = (string)$f['type'];
+        if ($type === 'kb_race' || $type === 'kb_class') {
+            if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
+                $val = '';
+            } elseif ($val !== '') {
+                $kbType = $type === 'kb_race' ? 'race' : 'class';
+                $list = af_atf_kb_get_list_by_type($kbType);
+                $known = [];
+                foreach ($list as $item) {
+                    $known[(string)($item['key'] ?? '')] = true;
+                }
+                $opts = af_atf_parse_options((string)$f['options']);
+                if (empty($known[$val]) && !array_key_exists($val, $opts)) {
+                    $val = '';
+                }
+            }
+        } elseif ($type === 'sf_attributes_pointbuy') {
+            $settings = af_atf_sf_pointbuy_get_settings();
+            $errorKey = null;
+            $normalized = af_atf_sf_pointbuy_normalize($val, $settings, $errorKey);
+            $val = !empty($normalized['ok']) ? (string)$normalized['json'] : '';
+        }
+
         if (($type === 'select' || $type === 'radio') && $val !== '') {
             $opts = af_atf_parse_options((string)$f['options']);
             if (!array_key_exists($val, $opts)) {
@@ -1808,6 +2394,28 @@ function af_atf_editpost_do_end(): void
         }
 
         $type = (string)$f['type'];
+        if ($type === 'kb_race' || $type === 'kb_class') {
+            if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
+                $val = '';
+            } elseif ($val !== '') {
+                $kbType = $type === 'kb_race' ? 'race' : 'class';
+                $list = af_atf_kb_get_list_by_type($kbType);
+                $known = [];
+                foreach ($list as $item) {
+                    $known[(string)($item['key'] ?? '')] = true;
+                }
+                $opts = af_atf_parse_options((string)$f['options']);
+                if (empty($known[$val]) && !array_key_exists($val, $opts)) {
+                    $val = '';
+                }
+            }
+        } elseif ($type === 'sf_attributes_pointbuy') {
+            $settings = af_atf_sf_pointbuy_get_settings();
+            $errorKey = null;
+            $normalized = af_atf_sf_pointbuy_normalize($val, $settings, $errorKey);
+            $val = !empty($normalized['ok']) ? (string)$normalized['json'] : '';
+        }
+
         if (($type === 'select' || $type === 'radio') && $val !== '') {
             $opts = af_atf_parse_options((string)$f['options']);
             if (!array_key_exists($val, $opts)) {
@@ -1962,6 +2570,59 @@ function af_atf_dh_validate(&$ph): void
             }
 
             $clean[$fieldid] = $val;
+            continue;
+        }
+
+        if ($type === 'kb_race' || $type === 'kb_class') {
+            $val = is_string($raw) ? trim($raw) : '';
+            if ((int)$f['required'] === 1 && $val === '') {
+                $ph->set_error('missing_required_field_'.$fieldid);
+                continue;
+            }
+
+            if ($val !== '') {
+                if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
+                    $ph->set_error('invalid_field_'.$fieldid);
+                    continue;
+                }
+
+                $kbType = $type === 'kb_race' ? 'race' : 'class';
+                $list = af_atf_kb_get_list_by_type($kbType);
+                $known = [];
+                foreach ($list as $item) {
+                    $known[(string)($item['key'] ?? '')] = true;
+                }
+
+                $opts = af_atf_parse_options((string)$f['options']);
+                if (empty($known[$val]) && !array_key_exists($val, $opts)) {
+                    $ph->set_error('invalid_field_'.$fieldid);
+                    continue;
+                }
+            }
+
+            $clean[$fieldid] = $val;
+            continue;
+        }
+
+        if ($type === 'sf_attributes_pointbuy') {
+            $rawVal = is_string($raw) ? $raw : '';
+            if ((int)$f['required'] === 1 && trim($rawVal) === '') {
+                $ph->set_error('missing_required_field_'.$fieldid);
+                continue;
+            }
+
+            if (trim($rawVal) !== '') {
+                $settings = af_atf_sf_pointbuy_get_settings();
+                $errorKey = null;
+                $normalized = af_atf_sf_pointbuy_normalize($rawVal, $settings, $errorKey);
+                if (empty($normalized['ok'])) {
+                    $ph->set_error($errorKey ?: 'af_atf_sf_err_out_of_range');
+                    continue;
+                }
+                $clean[$fieldid] = (string)$normalized['json'];
+            } else {
+                $clean[$fieldid] = '';
+            }
             continue;
         }
 
@@ -2187,6 +2848,40 @@ function af_atf_format_value_for_display(array $field, string $val): string
 
     $type = (string)$field['type'];
     $val  = (string)$val;
+
+    if ($type === 'kb_race' || $type === 'kb_class') {
+        $kbType = $type === 'kb_race' ? 'race' : 'class';
+        return af_atf_kb_build_chip($kbType, $val, (string)$field['options']);
+    }
+
+    if ($type === 'sf_attributes_pointbuy') {
+        $decoded = json_decode($val, true);
+        if (!is_array($decoded)) {
+            return '';
+        }
+
+        $rows = '';
+        foreach (af_atf_sf_pointbuy_get_attr_groups() as $group) {
+            $rows .= '<div class="af-atf-pointbuy-display-group">';
+            $rows .= '<div class="af-atf-pointbuy-group-title">'.htmlspecialchars_uni((string)$group['label']).'</div>';
+            foreach ($group['items'] as $item) {
+                $code = $item['code'];
+                $label = htmlspecialchars_uni($item['label'].' ('.$code.')');
+                $value = isset($decoded[$code]) ? (int)$decoded[$code] : 0;
+                $rows .= '<div class="af-atf-pointbuy-display-row">'
+                    . '<span class="af-atf-pointbuy-display-label">'.$label.'</span>'
+                    . '<span class="af-atf-pointbuy-display-value">'.(int)$value.'</span>'
+                    . '</div>';
+            }
+            $rows .= '</div>';
+        }
+
+        if ($rows === '') {
+            return '';
+        }
+
+        return '<div class="af-atf-pointbuy-display">'.$rows.'</div>';
+    }
 
     // usernames: val = "uid,uid,uid"
     if ($type === 'usernames') {
@@ -2500,6 +3195,72 @@ function af_atf_ensure_settings(): void
         ]);
     }
 
+    $settings = [
+        'af_atf_sf_total_points' => [
+            'title' => 'SF Point-buy: total points',
+            'description' => 'Total points budget for attribute point-buy.',
+            'optionscode' => 'numeric',
+            'value' => '10',
+            'disporder' => 10,
+        ],
+        'af_atf_sf_min_value' => [
+            'title' => 'SF Point-buy: minimum value',
+            'description' => 'Minimum attribute value.',
+            'optionscode' => 'numeric',
+            'value' => '8',
+            'disporder' => 11,
+        ],
+        'af_atf_sf_max_value' => [
+            'title' => 'SF Point-buy: maximum value',
+            'description' => 'Maximum attribute value.',
+            'optionscode' => 'numeric',
+            'value' => '18',
+            'disporder' => 12,
+        ],
+        'af_atf_sf_base_value' => [
+            'title' => 'SF Point-buy: base value',
+            'description' => 'Base attribute value before point-buy.',
+            'optionscode' => 'numeric',
+            'value' => '10',
+            'disporder' => 13,
+        ],
+        'af_atf_sf_cost_curve' => [
+            'title' => 'SF Point-buy: cost curve (JSON)',
+            'description' => 'JSON rules for cost calculation.',
+            'optionscode' => 'textarea',
+            'value' => json_encode(af_atf_sf_pointbuy_default_curve(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'disporder' => 14,
+        ],
+        'af_atf_sf_allow_negative_remaining' => [
+            'title' => 'SF Point-buy: allow negative remaining',
+            'description' => 'Allow overspending the budget.',
+            'optionscode' => 'yesno',
+            'value' => '0',
+            'disporder' => 15,
+        ],
+        'af_atf_sf_require_exact_spend' => [
+            'title' => 'SF Point-buy: require exact spend',
+            'description' => 'Require spending exactly the total points.',
+            'optionscode' => 'yesno',
+            'value' => '0',
+            'disporder' => 16,
+        ],
+    ];
+
+    foreach ($settings as $name => $row) {
+        $sid = (int)$db->fetch_field(
+            $db->simple_select('settings', 'sid', "name='".$db->escape_string($name)."'", ['limit' => 1]),
+            'sid'
+        );
+        if ($sid) {
+            continue;
+        }
+        $db->insert_query('settings', array_merge($row, [
+            'name' => $name,
+            'gid' => $gid,
+        ]));
+    }
+
     rebuild_settings();
 }
 
@@ -2507,7 +3268,10 @@ function af_atf_remove_settings(): void
 {
     global $db;
 
-    $db->delete_query('settings', "name IN ('af_advancedthreadfields_enabled')");
+    $db->delete_query(
+        'settings',
+        "name IN ('af_advancedthreadfields_enabled','af_atf_sf_total_points','af_atf_sf_min_value','af_atf_sf_max_value','af_atf_sf_base_value','af_atf_sf_cost_curve','af_atf_sf_allow_negative_remaining','af_atf_sf_require_exact_spend')"
+    );
     $db->delete_query('settinggroups', "name='af_advancedthreadfields'");
 
     rebuild_settings();
