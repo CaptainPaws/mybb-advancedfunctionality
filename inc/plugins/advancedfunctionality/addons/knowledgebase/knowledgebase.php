@@ -805,7 +805,7 @@ function af_kb_sanitize_rendered_html(string $html): string
         '<a><img>',
         '<blockquote><code><pre>',
         '<hr>',
-        '<table><thead><tbody><tfoot><tr><th><td>',
+        '<table><caption><colgroup><col><thead><tbody><tfoot><tr><th><td>',
         '<details><summary>',
         '<input><button>',
         '<iframe>',
@@ -917,9 +917,12 @@ function af_kb_parse_message_modal(string $message): string
     }
 
     $parser = new postParser;
+
+    // В модалке мы РАЗРЕШАЕМ HTML на этапе парсера,
+    // но потом ЖЁСТКО режем всё санитайзером af_kb_sanitize_rendered_html().
+    // Это решает: таблицы/сложный MyCode/встроенные разметки, которые иначе “ломались”.
     $options = [
-        // ВАЖНО: в модалке запрещаем raw HTML, чтобы можно было ослабить санитайзер
-        'allow_html'         => 0,
+        'allow_html'         => 1,
 
         'allow_mycode'       => 1,
         'allow_basicmycode'  => 1,
@@ -944,8 +947,17 @@ function af_kb_render_block(string $raw): string
         return '';
     }
 
+    // Нормальный путь: парсим + санитайзим
     if (function_exists('af_kb_parse_message_modal') && function_exists('af_kb_sanitize_rendered_html')) {
-        return af_kb_sanitize_rendered_html(af_kb_parse_message_modal($raw));
+        $parsed = af_kb_parse_message_modal($raw);
+        $safe = af_kb_sanitize_rendered_html($parsed);
+
+        // а возвращаем безопасный текст (как раньше были “голые BB-коды”).
+        if (trim($safe) !== '') {
+            return $safe;
+        }
+
+        return nl2br(htmlspecialchars_uni($raw));
     }
 
     return nl2br(htmlspecialchars_uni($raw));
