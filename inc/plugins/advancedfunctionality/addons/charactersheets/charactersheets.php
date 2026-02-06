@@ -90,7 +90,7 @@ function af_charactersheets_ensure_settings(): void
         $lang->af_charactersheets_group_desc ?? 'CharacterSheets settings.'
     );
 
-    $default_template = "Добро пожаловать, @{username}!\n\nРады видеть тебя в Warp Rift. Вот полезные ссылки:\n- Правила: /rules.php\n- Лор: /misc.php?action=af_kb&type=...\n- Вопросы: /forumdisplay.php?fid=...";
+    $default_template = "Добро пожаловать, {mention}!\n\nРады видеть тебя в Warp Rift. Вот полезные ссылки:\n- Правила: /rules.php\n- Лор: /misc.php?action=af_kb&type=...\n- Вопросы: /forumdisplay.php?fid=...\n\nЛист персонажа: {sheet_url}";
 
     af_charactersheets_ensure_setting(
         $gid,
@@ -193,7 +193,6 @@ function af_charactersheets_init(): void
 }
 
 /* -------------------- SHOWTHREAD BUTTON -------------------- */
-
 function af_charactersheets_showthread_start(): void
 {
     global $mybb, $thread, $lang;
@@ -214,49 +213,128 @@ function af_charactersheets_showthread_start(): void
         return;
     }
 
+    // Кнопка и логика — только в pending-форумах
     if (!af_charactersheets_is_pending_forum($fid)) {
         return;
     }
 
-    if (af_charactersheets_is_accepted($tid)) {
-        return;
-    }
-
-    if (af_charactersheets_is_in_accepted_forum($fid)) {
-        return;
-    }
-
+    // Права (группы)
     if (!af_charactersheets_user_can_accept($mybb->user, $fid)) {
         return;
     }
 
-    $text = $lang->af_charactersheets_accept_button ?? 'Принять анкету';
+    // Если тему вернули обратно в pending после принятия —
+    // открываем (чтобы можно было редактировать). Делать это безопасно только для тех,
+    // кто имеет право принимать.
+    $accept_row = af_charactersheets_get_accept_row($tid);
+    $was_accepted = !empty($accept_row['accepted']);
+
+    if ($was_accepted) {
+        // В MyBB поле closed: '' или '0' = открыта, '1' = закрыта
+        $closed = (string)($thread['closed'] ?? '');
+        if ($closed === '1') {
+            require_once MYBB_ROOT . 'inc/class_moderation.php';
+            $moderation = new Moderation;
+            // Открываем тему. Если по какой-то причине нет прав — MyBB сам отработает.
+            $moderation->open_threads([$tid]);
+
+            // Обновим локально, чтоб не было странностей дальше
+            $thread['closed'] = '0';
+        }
+    }
+
+    // В accepted-форуме кнопка не нужна (на всякий)
+    if (af_charactersheets_is_in_accepted_forum($fid)) {
+        return;
+    }
+
+    $text = $was_accepted
+        ? ($lang->af_charactersheets_accept_button_reaccept ?? 'Принять заново')
+        : ($lang->af_charactersheets_accept_button ?? 'Принять анкету');
+
     $url = 'misc.php?action=af_charactersheets_accept&tid=' . $tid . '&my_post_key=' . $mybb->post_code;
 
+    // ВАЖНО: не оборачиваем в div — чтобы кнопка вставлялась в один ряд с input-кнопками
     $GLOBALS['af_charactersheets_accept_button'] =
-        '<div class="af-cs-accept-button">'
-        . '<a class="button new_thread_button" href="' . htmlspecialchars_uni($url) . '">'
+        '<a class="button af-cs-accept-button" href="' . htmlspecialchars_uni($url) . '">'
         . '<span>' . htmlspecialchars_uni($text) . '</span>'
-        . '</a>'
-        . '</div>';
+        . '</a>';
 }
 
-function af_charactersheets_pre_output(string $page): string
+function af_charactersheets_pre_output(&$page): void
 {
     if (!defined('THIS_SCRIPT') || THIS_SCRIPT !== 'showthread.php') {
-        return $page;
+        return;
     }
 
     if (empty($GLOBALS['af_charactersheets_accept_button'])) {
-        return $page;
+        return;
     }
 
     if (strpos($page, AF_CS_TPL_MARK) !== false) {
-        return $page;
+        return;
     }
 
     $insert = "\n" . AF_CS_TPL_MARK . "\n" . $GLOBALS['af_charactersheets_accept_button'] . "\n";
 
+    // в блоке quick reply — рядом с кнопками Preview/Submit
+    // Сначала пробуем вставить ПОСЛЕ preview (если есть), иначе — перед submit.
+    $count = 0;
+    $page2 = @preg_replace(
+        '~(<input\b[^>]*\bid=("|\')quick_reply_preview\2[^>]*>)~i',
+        '$1' . "\n" . $insert,
+        $page,
+        1,
+        $count
+    );
+    if ($count > 0 && is_string($page2)) {
+        $page = $page2;
+        return;
+    }
+
+    $count = 0;
+    $page2 = @preg_replace(
+        '~(<input\b[^>]*\bid=("|\')quick_reply_submit\2[^>]*>)~i',
+        $insert . '$1',
+        $page,
+        1,
+        $count
+    );
+    if ($count > 0 && is_string($page2)) {
+        $page = $page2;
+        return;
+    }
+
+
+    // 2) Альтернатива: рядом с формой quick reply (если id на submit вдруг кастомный)
+    $count = 0;
+    $page2 = @preg_replace(
+        '~(<form\b[^>]*\bname=("|\')quick_reply\2[^>]*>)~i',
+        '$1' . $insert,
+        $page,
+        1,
+        $count
+    );
+    if ($count > 0 && is_string($page2)) {
+        $page = $page2;
+        return;
+    }
+
+    // 3) Запасной якорь: перед контентом
+    $count = 0;
+    $page2 = @preg_replace(
+        '~(<div\s+id=("|\')content\2\b[^>]*>)~i',
+        $insert . '$1',
+        $page,
+        1,
+        $count
+    );
+    if ($count > 0 && is_string($page2)) {
+        $page = $page2;
+        return;
+    }
+
+    // 4) Старые темы: td.thead strong
     $count = 0;
     $page2 = @preg_replace(
         '~(<td\b[^>]*\bclass=("\')thead\2[^>]*>.*?<strong\b[^>]*>.*?</strong>)~is',
@@ -265,18 +343,21 @@ function af_charactersheets_pre_output(string $page): string
         1,
         $count
     );
-
     if ($count > 0 && is_string($page2)) {
-        return $page2;
+        $page = $page2;
+        return;
     }
 
+    // 5) Фолбэк: перед </body>
     $count = 0;
-    $page2 = @preg_replace('~(</strong>)~i', '$1' . $insert, $page, 1, $count);
+    $page2 = @preg_replace('~</body>~i', $insert . "\n</body>", $page, 1, $count);
     if ($count > 0 && is_string($page2)) {
-        return $page2;
+        $page = $page2;
+        return;
     }
 
-    return $page . $insert;
+    // 6) Совсем крайний случай
+    $page .= $insert;
 }
 
 /* -------------------- MISC ENDPOINT -------------------- */
@@ -284,6 +365,14 @@ function af_charactersheets_pre_output(string $page): string
 function af_charactersheets_misc_start(): void
 {
     global $mybb, $db, $lang, $session;
+
+    $action = (string)$mybb->get_input('action');
+    if ($action === 'af_charactersheet') {
+        af_charactersheets_lang();
+        $slug = (string)$mybb->get_input('slug');
+        af_charactersheets_render_sheet_page($slug);
+        exit;
+    }
 
     if ($mybb->get_input('action') !== 'af_charactersheets_accept') {
         return;
@@ -321,55 +410,67 @@ function af_charactersheets_misc_start(): void
     }
 
     $accept_row = af_charactersheets_get_accept_row($tid);
-    if (!empty($accept_row['accepted'])) {
-        $msg = $lang->af_charactersheets_accept_already ?? 'Анкета уже была принята.';
+    $was_accepted = !empty($accept_row['accepted']);
+
+    // 1) Убеждаемся, что лист существует (но НЕ пересоздаём, если уже есть)
+    $sheet = ['ok' => true, 'slug' => ''];
+    if (!empty($mybb->settings['af_charactersheets_sheet_autocreate'])) {
+        $sheet = af_charactersheets_autocreate_sheet($tid, $thread);
+    }
+
+    // 2) Всегда публикуем сообщение принятия (и при первичном принятии, и при повторном)
+    $message = af_charactersheets_build_accept_message($thread);
+
+    require_once MYBB_ROOT . 'inc/datahandlers/post.php';
+    $posthandler = new PostDataHandler('insert');
+    $posthandler->action = 'reply';
+
+    $subject = 'Re: ' . (string)$thread['subject'];
+
+    $post_data = [
+        'tid' => $tid,
+        'fid' => $fid,
+        'subject' => $subject,
+        'uid' => (int)$mybb->user['uid'],
+        'username' => (string)$mybb->user['username'],
+        'message' => $message,
+        'ipaddress' => $session->ipaddress ?? '',
+        'longipaddress' => $session->packedip ?? '',
+
+        // ВАЖНО (PHP8+): options обязателен массивом
+        'options' => [
+            'signature' => 0,
+            'disablesmilies' => 0,
+            'subscriptionmethod' => 0,
+        ],
+    ];
+
+    $posthandler->set_data($post_data);
+
+    if (!$posthandler->validate_post()) {
+        af_charactersheets_log('Post validation failed', [
+            'tid' => $tid,
+            'errors' => $posthandler->get_friendly_errors(),
+        ]);
+        $msg = $lang->af_charactersheets_accept_error ?? 'Не удалось принять анкету.';
         redirect('showthread.php?tid=' . $tid, $msg);
     }
 
-    $accepted_pid = (int)($accept_row['accepted_pid'] ?? 0);
-
+    $postinfo = $posthandler->insert_post();
+    $accepted_pid = (int)($postinfo['pid'] ?? 0);
     if ($accepted_pid <= 0) {
-        $message = af_charactersheets_build_accept_message($thread);
-
-        require_once MYBB_ROOT . 'inc/datahandlers/post.php';
-        $posthandler = new PostDataHandler('insert');
-        $posthandler->action = 'reply';
-
-        $subject = 'Re: ' . $thread['subject'];
-        $post_data = [
-            'tid' => $tid,
-            'fid' => $fid,
-            'subject' => $subject,
-            'uid' => (int)$mybb->user['uid'],
-            'username' => (string)$mybb->user['username'],
-            'message' => $message,
-            'ipaddress' => $session->ipaddress ?? '',
-            'longipaddress' => $session->packedip ?? '',
-        ];
-
-        $posthandler->set_data($post_data);
-        if (!$posthandler->validate_post()) {
-            af_charactersheets_log('Post validation failed', [
-                'tid' => $tid,
-                'errors' => $posthandler->get_friendly_errors(),
-            ]);
-            $msg = $lang->af_charactersheets_accept_error ?? 'Не удалось принять анкету.';
-            redirect('showthread.php?tid=' . $tid, $msg);
-        }
-
-        $postinfo = $posthandler->insert_post();
-        $accepted_pid = (int)($postinfo['pid'] ?? 0);
-        if ($accepted_pid <= 0) {
-            af_charactersheets_log('Post insert failed', ['tid' => $tid]);
-            $msg = $lang->af_charactersheets_accept_error ?? 'Не удалось принять анкету.';
-            redirect('showthread.php?tid=' . $tid, $msg);
-        }
-
-        af_charactersheets_upsert_accept_row($tid, [
-            'uid' => (int)$thread['uid'],
-            'accepted_pid' => $accepted_pid,
-        ]);
+        af_charactersheets_log('Post insert failed', ['tid' => $tid]);
+        $msg = $lang->af_charactersheets_accept_error ?? 'Не удалось принять анкету.';
+        redirect('showthread.php?tid=' . $tid, $msg);
     }
+
+    // Обновляем строку: accepted_pid теперь “последнее сообщение принятия”
+    af_charactersheets_upsert_accept_row($tid, [
+        'uid' => (int)$thread['uid'],
+        'accepted_pid' => $accepted_pid,
+        // sheet_slug/sheet_created сохранятся из autocreate_sheet, если он отработал
+    ]);
+
 
     if (!empty($mybb->settings['af_charactersheets_accept_move_thread'])) {
         $target_fid = (int)($mybb->settings['af_charactersheets_accepted_forum'] ?? 0);
@@ -404,18 +505,18 @@ function af_charactersheets_misc_start(): void
 }
 
 /* -------------------- ACCEPT LOGIC -------------------- */
-
 function af_charactersheets_build_accept_message(array $thread): string
 {
     global $mybb;
 
     $template = (string)($mybb->settings['af_charactersheets_accept_post_template'] ?? '');
     if ($template === '') {
-        $template = 'Добро пожаловать, @{username}!';
+        $template = 'Добро пожаловать, {mention}!';
     }
 
-    $tid = (int)$thread['tid'];
-    $uid = (int)$thread['uid'];
+    $tid = (int)($thread['tid'] ?? 0);
+    $uid = (int)($thread['uid'] ?? 0);
+    $username = (string)($thread['username'] ?? '');
 
     $thread_url = af_charactersheets_make_absolute_url(
         function_exists('get_thread_link') ? get_thread_link($tid) : ('showthread.php?tid=' . $tid)
@@ -424,17 +525,37 @@ function af_charactersheets_build_accept_message(array $thread): string
         function_exists('get_profile_link') ? get_profile_link($uid) : ('member.php?action=profile&uid=' . $uid)
     );
 
+    // Ссылка на лист персонажа (мы добавим роут ниже)
+    $sheet_slug = '';
+    $row = af_charactersheets_get_accept_row($tid);
+    if (!empty($row['sheet_slug'])) {
+        $sheet_slug = (string)$row['sheet_slug'];
+    } else {
+        // если ещё нет — ожидаемо, но мы всё равно подставим будущий
+        $sheet_slug = af_charactersheets_slugify((string)($thread['subject'] ?? ''), $tid);
+    }
+    $sheet_url = af_charactersheets_make_absolute_url('misc.php?action=af_charactersheet&slug=' . rawurlencode($sheet_slug));
+
+    // Упоминание в BBCode (надёжно, если НЕ оборачивать в [html])
+    $mention_bb = '[mention=' . $uid . ']' . $username . '[/mention]';
+
     $replacements = [
-        '{username}' => (string)($thread['username'] ?? ''),
-        '{uid}' => (string)$uid,
-        '{thread_url}' => $thread_url,
+        '{mention}'     => $mention_bb,
+        '{username}'    => $username,
+        '{uid}'         => (string)$uid,
+        '{thread_url}'  => $thread_url,
         '{profile_url}' => $profile_url,
         '{accepted_by}' => (string)($mybb->user['username'] ?? ''),
+        '{sheet_url}'   => $sheet_url,
+        '{sheet_slug}'  => $sheet_slug,
     ];
 
     $rendered = strtr($template, $replacements);
 
+    // ВАЖНО: если ты хочешь, чтобы {mention} точно стал кликабельным — НЕ заворачиваем в [html]
     if (!empty($mybb->settings['af_charactersheets_accept_wrap_htmlbb'])) {
+        // Оставляю как опцию, но предупреждаю: внутри [html] упоминания чаще всего не парсятся.
+        // Лучше выключить настройку wrap_htmlbb для принятия.
         $rendered = "[html]\n" . $rendered . "\n[/html]";
     }
 
@@ -443,11 +564,22 @@ function af_charactersheets_build_accept_message(array $thread): string
 
 function af_charactersheets_autocreate_sheet(int $tid, array $thread): array
 {
-    global $db;
-
     $row = af_charactersheets_get_accept_row($tid);
-    if (!empty($row['sheet_created'])) {
-        return ['ok' => true, 'slug' => (string)($row['sheet_slug'] ?? '')];
+
+    // Если лист уже был создан ранее — не трогаем, просто возвращаем
+    if (!empty($row['sheet_created']) && !empty($row['sheet_slug'])) {
+        return ['ok' => true, 'slug' => (string)$row['sheet_slug']];
+    }
+
+    // Если slug уже есть, даже без sheet_created — считаем, что это наш стабильный slug
+    if (!empty($row['sheet_slug'])) {
+        $slug = (string)$row['sheet_slug'];
+        af_charactersheets_upsert_accept_row($tid, [
+            'uid' => (int)($thread['uid'] ?? 0),
+            'sheet_slug' => $slug,
+            'sheet_created' => 1,
+        ]);
+        return ['ok' => true, 'slug' => $slug];
     }
 
     $slug = af_charactersheets_slugify((string)($thread['subject'] ?? ''), $tid);
@@ -459,6 +591,125 @@ function af_charactersheets_autocreate_sheet(int $tid, array $thread): array
     ]);
 
     return ['ok' => true, 'slug' => $slug];
+}
+
+
+function af_charactersheets_get_by_slug(string $slug): array
+{
+    global $db;
+    $slug = trim($slug);
+    if ($slug === '') return [];
+
+    $slug_esc = $db->escape_string($slug);
+    $row = $db->fetch_array($db->simple_select(AF_CS_TABLE, '*', "sheet_slug='{$slug_esc}'", ['limit' => 1]));
+    return is_array($row) ? $row : [];
+}
+
+function af_charactersheets_render_sheet_page(string $slug): void
+{
+    global $db, $lang, $templates, $header, $headerinclude, $footer;
+
+    $row = af_charactersheets_get_by_slug($slug);
+    if (empty($row)) {
+        error_no_permission(); // или error("Not found")
+        exit;
+    }
+
+    $tid = (int)($row['tid'] ?? 0);
+    $uid = (int)($row['uid'] ?? 0);
+
+    $thread = [];
+    if ($tid > 0) {
+        $thread = $db->fetch_array($db->simple_select('threads', 'tid,fid,subject', 'tid=' . $tid, ['limit' => 1]));
+        if (!is_array($thread)) $thread = [];
+    }
+
+    $user = [];
+    if ($uid > 0) {
+        $user = $db->fetch_array($db->simple_select('users', 'uid,username', 'uid=' . $uid, ['limit' => 1]));
+        if (!is_array($user)) $user = [];
+    }
+
+    $title = 'Лист персонажа';
+    if (!empty($user['username'])) {
+        $title .= ' — ' . $user['username'];
+    } elseif (!empty($thread['subject'])) {
+        $title .= ' — ' . $thread['subject'];
+    }
+
+    // Простая болванка табов без зависимостей
+    $profile_url = function_exists('get_profile_link') ? get_profile_link($uid) : ('member.php?action=profile&uid=' . $uid);
+
+    $html = '
+<style>
+.af-cs-page{max-width:1100px;margin:20px auto}
+.af-cs-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.af-cs-tabs{display:flex;gap:8px;margin:12px 0}
+.af-cs-tab{cursor:pointer;padding:8px 12px;border:1px solid rgba(255,255,255,.12);border-radius:8px}
+.af-cs-tab.is-active{border-color:rgba(255,255,255,.35)}
+.af-cs-panel{display:none;padding:14px;border:1px solid rgba(255,255,255,.10);border-radius:10px}
+.af-cs-panel.is-active{display:block}
+.af-cs-muted{opacity:.75}
+</style>
+
+<div class="af-cs-page">
+  <div class="af-cs-head">
+    <div>
+      <h1 style="margin:0;">' . htmlspecialchars_uni($title) . '</h1>
+      <div class="af-cs-muted">
+        slug: ' . htmlspecialchars_uni($slug) . '
+        ' . ($tid ? ' • tid: ' . (int)$tid : '') . '
+      </div>
+    </div>
+    <div>
+      ' . ($uid ? '<a class="button" href="' . htmlspecialchars_uni($profile_url) . '">Профиль</a>' : '') . '
+    </div>
+  </div>
+
+  <div class="af-cs-tabs" data-afcs-tabs>
+    <div class="af-cs-tab is-active" data-tab="sheet">Лист персонажа</div>
+    <div class="af-cs-tab" data-tab="inv">Инвентарь</div>
+    <div class="af-cs-tab" data-tab="ach">Ачивки</div>
+  </div>
+
+  <div class="af-cs-panel is-active" data-panel="sheet">
+    <p class="af-cs-muted">Болванка. Здесь позже подставим данные из ATF/KB (раса, класс, характеристики и т.д.).</p>
+    <ul>
+      <li>Источник: анкета tid=' . (int)$tid . '</li>
+      <li>Персонаж: uid=' . (int)$uid . '</li>
+    </ul>
+  </div>
+
+  <div class="af-cs-panel" data-panel="inv">
+    <p class="af-cs-muted">Болванка инвентаря. Позже подключим RPGSystem/Shop/Inventory.</p>
+  </div>
+
+  <div class="af-cs-panel" data-panel="ach">
+    <p class="af-cs-muted">Болванка ачивок. Позже подключим модуль достижений.</p>
+  </div>
+</div>
+
+<script>
+(function(){
+  var root = document.querySelector("[data-afcs-tabs]");
+  if(!root) return;
+  root.addEventListener("click", function(e){
+    var t = e.target.closest("[data-tab]");
+    if(!t) return;
+    var tab = t.getAttribute("data-tab");
+    root.querySelectorAll(".af-cs-tab").forEach(function(x){ x.classList.toggle("is-active", x===t); });
+    document.querySelectorAll(".af-cs-panel").forEach(function(p){
+      p.classList.toggle("is-active", p.getAttribute("data-panel")===tab);
+    });
+  });
+})();
+</script>
+';
+
+    // Канон: один output_page
+    $page = $header . $html . $footer;
+    output_page($page);
+    exit;
 }
 
 /* -------------------- HELPERS -------------------- */
@@ -568,11 +819,11 @@ function af_charactersheets_user_can_accept(array $user, int $fid): bool
         return false;
     }
 
-    if (function_exists('is_moderator')) {
-        if (!is_moderator($fid, 'canmanagethreads')) {
-            return false;
-        }
-    }
+    //if (function_exists('is_moderator')) {
+    //    if (!is_moderator($fid, 'canmanagethreads')) {
+    //        return false;
+    //    }
+    //}
 
     return true;
 }
