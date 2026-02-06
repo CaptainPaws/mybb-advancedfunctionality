@@ -11,7 +11,13 @@ if (!defined('AF_ADDONS')) { /* аддон предполагает наличи
 
 const AF_CS_ID = 'charactersheets';
 const AF_CS_TABLE = 'af_charactersheets_accept';
+const AF_CS_CONFIG_TABLE = 'af_charactersheets_config';
 const AF_CS_TPL_MARK = '<!--AF_CS_ACCEPT-->';
+const AF_CS_ASSET_MARK = '<!--AF_CS_ASSETS-->';
+const AF_CS_MODAL_MARK = '<!--AF_CS_MODAL-->';
+
+define('AF_CS_BASE', MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/charactersheets/');
+define('AF_CS_TPL_DIR', AF_CS_BASE . 'templates/');
 
 /* -------------------- INSTALL / UNINSTALL -------------------- */
 
@@ -25,29 +31,25 @@ function af_charactersheets_install(): void
 {
     global $db;
 
-    if (!$db->table_exists(AF_CS_TABLE)) {
-        $db->write_query("
-            CREATE TABLE ".TABLE_PREFIX."".AF_CS_TABLE." (
-              tid INT UNSIGNED NOT NULL,
-              uid INT UNSIGNED NOT NULL,
-              accepted TINYINT(1) NOT NULL DEFAULT 0,
-              accepted_by_uid INT UNSIGNED DEFAULT NULL,
-              accepted_pid INT UNSIGNED DEFAULT NULL,
-              accepted_at INT UNSIGNED NOT NULL DEFAULT 0,
-              sheet_slug VARCHAR(120) DEFAULT NULL,
-              sheet_created TINYINT(1) NOT NULL DEFAULT 0,
-              PRIMARY KEY (tid),
-              KEY uid (uid),
-              KEY accepted (accepted)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-        ");
-    }
-
+    af_charactersheets_ensure_schema();
     af_charactersheets_ensure_settings();
+    af_charactersheets_templates_install_or_update();
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
     }
+}
+
+function af_charactersheets_activate(): bool
+{
+    af_charactersheets_templates_install_or_update();
+    af_charactersheets_ensure_schema();
+    return true;
+}
+
+function af_charactersheets_deactivate(): bool
+{
+    return true;
 }
 
 function af_charactersheets_uninstall(): void
@@ -57,19 +59,22 @@ function af_charactersheets_uninstall(): void
     if ($db->table_exists(AF_CS_TABLE)) {
         $db->drop_table(AF_CS_TABLE);
     }
+    if ($db->table_exists(AF_CS_CONFIG_TABLE)) {
+        $db->drop_table(AF_CS_CONFIG_TABLE);
+    }
 
     $db->delete_query('settings', "name IN (
         'af_charactersheets_enabled',
         'af_charactersheets_accept_groups',
         'af_charactersheets_pending_forums',
         'af_charactersheets_accepted_forum',
-        'af_charactersheets_accept_post_template',
         'af_charactersheets_accept_wrap_htmlbb',
         'af_charactersheets_accept_close_thread',
         'af_charactersheets_accept_move_thread',
         'af_charactersheets_sheet_autocreate'
     )");
     $db->delete_query('settinggroups', "name='af_charactersheets'");
+    $db->delete_query('templates', "title LIKE 'charactersheets_%'");
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -89,8 +94,6 @@ function af_charactersheets_ensure_settings(): void
         $lang->af_charactersheets_group ?? 'AF: CharacterSheets',
         $lang->af_charactersheets_group_desc ?? 'CharacterSheets settings.'
     );
-
-    $default_template = "Добро пожаловать, {mention}!\n\nРады видеть тебя в Warp Rift. Вот полезные ссылки:\n- Правила: /rules.php\n- Лор: /misc.php?action=af_kb&type=...\n- Вопросы: /forumdisplay.php?fid=...\n\nЛист персонажа: {sheet_url}";
 
     af_charactersheets_ensure_setting(
         $gid,
@@ -130,21 +133,12 @@ function af_charactersheets_ensure_settings(): void
     );
     af_charactersheets_ensure_setting(
         $gid,
-        'af_charactersheets_accept_post_template',
-        $lang->af_charactersheets_accept_post_template ?? 'Acceptance post template',
-        $lang->af_charactersheets_accept_post_template_desc ?? 'Supports placeholders',
-        'textarea',
-        $default_template,
-        5
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
         'af_charactersheets_accept_wrap_htmlbb',
         $lang->af_charactersheets_accept_wrap_htmlbb ?? 'Wrap in [html]',
         $lang->af_charactersheets_accept_wrap_htmlbb_desc ?? 'Wrap acceptance post',
         'yesno',
         '1',
-        6
+        5
     );
     af_charactersheets_ensure_setting(
         $gid,
@@ -153,7 +147,7 @@ function af_charactersheets_ensure_settings(): void
         $lang->af_charactersheets_accept_close_thread_desc ?? 'Close thread after acceptance',
         'yesno',
         '1',
-        7
+        6
     );
     af_charactersheets_ensure_setting(
         $gid,
@@ -162,7 +156,7 @@ function af_charactersheets_ensure_settings(): void
         $lang->af_charactersheets_accept_move_thread_desc ?? 'Move thread after acceptance',
         'yesno',
         '1',
-        8
+        7
     );
     af_charactersheets_ensure_setting(
         $gid,
@@ -171,8 +165,10 @@ function af_charactersheets_ensure_settings(): void
         $lang->af_charactersheets_sheet_autocreate_desc ?? 'Trigger sheet generator stub',
         'yesno',
         '1',
-        9
+        8
     );
+
+    $db->delete_query('settings', "name='af_charactersheets_accept_post_template'");
 }
 
 function af_charactersheets_is_enabled(): bool
@@ -190,6 +186,9 @@ function af_charactersheets_init(): void
     $plugins->add_hook('showthread_start', 'af_charactersheets_showthread_start');
     $plugins->add_hook('pre_output_page', 'af_charactersheets_pre_output');
     $plugins->add_hook('misc_start', 'af_charactersheets_misc_start');
+    $plugins->add_hook('postbit', 'af_charactersheets_postbit_button');
+    $plugins->add_hook('postbit_prev', 'af_charactersheets_postbit_button');
+    $plugins->add_hook('postbit_pm', 'af_charactersheets_postbit_button');
 }
 
 /* -------------------- SHOWTHREAD BUTTON -------------------- */
@@ -265,6 +264,14 @@ function af_charactersheets_pre_output(&$page): void
 {
     if (!defined('THIS_SCRIPT') || THIS_SCRIPT !== 'showthread.php') {
         return;
+    }
+
+    if (!empty($GLOBALS['af_charactersheets_needs_assets'])) {
+        $page = af_charactersheets_inject_assets($page);
+    }
+
+    if (!empty($GLOBALS['af_charactersheets_needs_modal'])) {
+        $page = af_charactersheets_inject_modal($page);
     }
 
     if (empty($GLOBALS['af_charactersheets_accept_button'])) {
@@ -509,9 +516,9 @@ function af_charactersheets_build_accept_message(array $thread): string
 {
     global $mybb;
 
-    $template = (string)($mybb->settings['af_charactersheets_accept_post_template'] ?? '');
+    $template = af_charactersheets_get_accept_template();
     if ($template === '') {
-        $template = 'Добро пожаловать, {mention}!';
+        $template = af_charactersheets_default_accept_template();
     }
 
     $tid = (int)($thread['tid'] ?? 0);
@@ -607,7 +614,7 @@ function af_charactersheets_get_by_slug(string $slug): array
 
 function af_charactersheets_render_sheet_page(string $slug): void
 {
-    global $db, $lang, $templates, $header, $headerinclude, $footer;
+    global $db, $lang, $templates, $header, $headerinclude, $footer, $mybb;
 
     $row = af_charactersheets_get_by_slug($slug);
     if (empty($row)) {
@@ -637,77 +644,36 @@ function af_charactersheets_render_sheet_page(string $slug): void
         $title .= ' — ' . $thread['subject'];
     }
 
-    // Простая болванка табов без зависимостей
     $profile_url = function_exists('get_profile_link') ? get_profile_link($uid) : ('member.php?action=profile&uid=' . $uid);
+    $thread_url = function_exists('get_thread_link') ? get_thread_link($tid) : ('showthread.php?tid=' . $tid);
 
-    $html = '
-<style>
-.af-cs-page{max-width:1100px;margin:20px auto}
-.af-cs-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-.af-cs-tabs{display:flex;gap:8px;margin:12px 0}
-.af-cs-tab{cursor:pointer;padding:8px 12px;border:1px solid rgba(255,255,255,.12);border-radius:8px}
-.af-cs-tab.is-active{border-color:rgba(255,255,255,.35)}
-.af-cs-panel{display:none;padding:14px;border:1px solid rgba(255,255,255,.10);border-radius:10px}
-.af-cs-panel.is-active{display:block}
-.af-cs-muted{opacity:.75}
-</style>
+    $sheet_base_html = af_charactersheets_build_base_html($user, $thread, $profile_url, $thread_url, $slug);
+    $atf_fields = af_charactersheets_get_atf_fields($tid);
+    $sheet_attributes_html = af_charactersheets_build_attributes_html($atf_fields);
+    $sheet_extra_html = af_charactersheets_build_extra_fields_html($atf_fields);
+    $sheet_kb_html = af_charactersheets_build_kb_cards_html($atf_fields);
 
-<div class="af-cs-page">
-  <div class="af-cs-head">
-    <div>
-      <h1 style="margin:0;">' . htmlspecialchars_uni($title) . '</h1>
-      <div class="af-cs-muted">
-        slug: ' . htmlspecialchars_uni($slug) . '
-        ' . ($tid ? ' • tid: ' . (int)$tid : '') . '
-      </div>
-    </div>
-    <div>
-      ' . ($uid ? '<a class="button" href="' . htmlspecialchars_uni($profile_url) . '">Профиль</a>' : '') . '
-    </div>
-  </div>
+    $sheet_title = htmlspecialchars_uni($title);
+    $sheet_subtitle = htmlspecialchars_uni($thread['subject'] ?? '');
+    $sheet_actions = '';
+    if ($uid > 0) {
+        $sheet_actions .= '<a class="button" href="' . htmlspecialchars_uni($profile_url) . '">' . htmlspecialchars_uni($lang->profile ?? 'Профиль') . '</a>';
+    }
+    if ($tid > 0) {
+        $sheet_actions .= '<a class="button" href="' . htmlspecialchars_uni($thread_url) . '">' . htmlspecialchars_uni($lang->view_thread ?? 'Анкета') . '</a>';
+    }
 
-  <div class="af-cs-tabs" data-afcs-tabs>
-    <div class="af-cs-tab is-active" data-tab="sheet">Лист персонажа</div>
-    <div class="af-cs-tab" data-tab="inv">Инвентарь</div>
-    <div class="af-cs-tab" data-tab="ach">Ачивки</div>
-  </div>
+    $assets = af_charactersheets_get_asset_urls();
+    $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n"
+        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '?v=1.0.0" />' . "\n"
+        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '?v=1.0.0"></script>' . "\n";
 
-  <div class="af-cs-panel is-active" data-panel="sheet">
-    <p class="af-cs-muted">Болванка. Здесь позже подставим данные из ATF/KB (раса, класс, характеристики и т.д.).</p>
-    <ul>
-      <li>Источник: анкета tid=' . (int)$tid . '</li>
-      <li>Персонаж: uid=' . (int)$uid . '</li>
-    </ul>
-  </div>
+    $tplInner = $templates->get('charactersheets_sheet_inner');
+    eval("\$sheet_inner = \"" . $tplInner . "\";");
 
-  <div class="af-cs-panel" data-panel="inv">
-    <p class="af-cs-muted">Болванка инвентаря. Позже подключим RPGSystem/Shop/Inventory.</p>
-  </div>
+    $tplFull = $templates->get('charactersheets_sheet_full');
+    eval("\$page = \"" . $tplFull . "\";");
 
-  <div class="af-cs-panel" data-panel="ach">
-    <p class="af-cs-muted">Болванка ачивок. Позже подключим модуль достижений.</p>
-  </div>
-</div>
-
-<script>
-(function(){
-  var root = document.querySelector("[data-afcs-tabs]");
-  if(!root) return;
-  root.addEventListener("click", function(e){
-    var t = e.target.closest("[data-tab]");
-    if(!t) return;
-    var tab = t.getAttribute("data-tab");
-    root.querySelectorAll(".af-cs-tab").forEach(function(x){ x.classList.toggle("is-active", x===t); });
-    document.querySelectorAll(".af-cs-panel").forEach(function(p){
-      p.classList.toggle("is-active", p.getAttribute("data-panel")===tab);
-    });
-  });
-})();
-</script>
-';
-
-    // Канон: один output_page
-    $page = $header . $html . $footer;
     output_page($page);
     exit;
 }
@@ -777,6 +743,46 @@ function af_charactersheets_is_accepted(int $tid): bool
 {
     $row = af_charactersheets_get_accept_row($tid);
     return !empty($row['accepted']);
+}
+
+function af_charactersheets_postbit_button(array &$post): void
+{
+    global $mybb, $templates, $lang;
+
+    if (!af_charactersheets_is_enabled()) {
+        return;
+    }
+
+    $uid = (int)($post['uid'] ?? 0);
+    if ($uid <= 0) {
+        return;
+    }
+
+    $slug = af_charactersheets_get_sheet_slug_by_uid($uid);
+    if ($slug === '') {
+        return;
+    }
+
+    if (!isset($lang->af_charactersheets_name)) {
+        af_charactersheets_lang();
+    }
+
+    $sheet_url = 'misc.php?action=af_charactersheet&slug=' . rawurlencode($slug);
+    $button_label = $lang->af_charactersheets_sheet_button ?? 'Лист персонажа';
+    $sheet_url = htmlspecialchars_uni($sheet_url);
+    $button_label = htmlspecialchars_uni($button_label);
+
+    $tpl = $templates->get('charactersheets_postbit_button');
+    eval("\$button_html = \"" . $tpl . "\";");
+
+    if (!empty($post['postcontrols']) && is_string($post['postcontrols'])) {
+        $post['postcontrols'] .= $button_html;
+    } else {
+        $post['postcontrols'] = $button_html;
+    }
+
+    $GLOBALS['af_charactersheets_needs_assets'] = true;
+    $GLOBALS['af_charactersheets_needs_modal'] = true;
 }
 
 function af_charactersheets_is_pending_forum(int $fid): bool
@@ -861,6 +867,519 @@ function af_charactersheets_make_absolute_url(string $url): string
     }
 
     return $base . '/' . ltrim($url, '/');
+}
+
+function af_charactersheets_ensure_schema(): void
+{
+    global $db;
+
+    if (!$db->table_exists(AF_CS_TABLE)) {
+        $db->write_query("
+            CREATE TABLE ".TABLE_PREFIX."".AF_CS_TABLE." (
+              tid INT UNSIGNED NOT NULL,
+              uid INT UNSIGNED NOT NULL,
+              accepted TINYINT(1) NOT NULL DEFAULT 0,
+              accepted_by_uid INT UNSIGNED DEFAULT NULL,
+              accepted_pid INT UNSIGNED DEFAULT NULL,
+              accepted_at INT UNSIGNED NOT NULL DEFAULT 0,
+              sheet_slug VARCHAR(120) DEFAULT NULL,
+              sheet_created TINYINT(1) NOT NULL DEFAULT 0,
+              PRIMARY KEY (tid),
+              KEY uid (uid),
+              KEY accepted (accepted)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+    }
+
+    if (!$db->table_exists(AF_CS_CONFIG_TABLE)) {
+        $db->write_query("
+            CREATE TABLE ".TABLE_PREFIX."".AF_CS_CONFIG_TABLE." (
+              id TINYINT(1) NOT NULL,
+              accept_post_template MEDIUMTEXT NOT NULL,
+              updated_at INT UNSIGNED NOT NULL DEFAULT 0,
+              PRIMARY KEY (id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+    }
+
+    $exists = (int)$db->fetch_field($db->simple_select(AF_CS_CONFIG_TABLE, 'id', 'id=1', ['limit' => 1]), 'id');
+    if (!$exists) {
+        $db->insert_query(AF_CS_CONFIG_TABLE, [
+            'id' => 1,
+            'accept_post_template' => $db->escape_string(af_charactersheets_default_accept_template()),
+            'updated_at' => TIME_NOW,
+        ]);
+    }
+}
+
+function af_charactersheets_default_accept_template(): string
+{
+    return "Добро пожаловать, {mention}!\n\nРады видеть тебя в Warp Rift. Вот полезные ссылки:\n- Правила: /rules.php\n- Лор: /misc.php?action=af_kb&type=...\n- Вопросы: /forumdisplay.php?fid=...\n\nЛист персонажа: {sheet_url}";
+}
+
+function af_charactersheets_get_accept_template(): string
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    global $db;
+    if (!$db->table_exists(AF_CS_CONFIG_TABLE)) {
+        $cache = '';
+        return $cache;
+    }
+
+    $row = $db->fetch_array($db->simple_select(AF_CS_CONFIG_TABLE, 'accept_post_template', 'id=1', ['limit' => 1]));
+    $cache = is_array($row) ? (string)($row['accept_post_template'] ?? '') : '';
+    return $cache;
+}
+
+function af_charactersheets_set_accept_template(string $template): void
+{
+    global $db;
+    if (!$db->table_exists(AF_CS_CONFIG_TABLE)) {
+        return;
+    }
+
+    $db->update_query(AF_CS_CONFIG_TABLE, [
+        'accept_post_template' => $db->escape_string($template),
+        'updated_at' => TIME_NOW,
+    ], 'id=1');
+}
+
+function af_charactersheets_get_sheet_slug_by_uid(int $uid): string
+{
+    static $cache = [];
+    if ($uid <= 0) {
+        return '';
+    }
+    if (array_key_exists($uid, $cache)) {
+        return (string)$cache[$uid];
+    }
+
+    global $db;
+    if (!$db->table_exists(AF_CS_TABLE)) {
+        $cache[$uid] = '';
+        return '';
+    }
+
+    $row = $db->fetch_array($db->simple_select(
+        AF_CS_TABLE,
+        'sheet_slug',
+        "uid=" . (int)$uid . " AND sheet_created=1 AND sheet_slug<>''",
+        ['order_by' => 'tid', 'order_dir' => 'DESC', 'limit' => 1]
+    ));
+    $slug = is_array($row) ? (string)($row['sheet_slug'] ?? '') : '';
+    $cache[$uid] = $slug;
+    return $slug;
+}
+
+function af_charactersheets_get_asset_urls(): array
+{
+    global $mybb;
+    $baseUrl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+    return [
+        'css' => $baseUrl . '/inc/plugins/advancedfunctionality/addons/' . AF_CS_ID . '/assets/charactersheets.css',
+        'js' => $baseUrl . '/inc/plugins/advancedfunctionality/addons/' . AF_CS_ID . '/assets/charactersheets.js',
+    ];
+}
+
+function af_charactersheets_inject_assets(string $page): string
+{
+    if (strpos($page, AF_CS_ASSET_MARK) !== false) {
+        return $page;
+    }
+
+    $assets = af_charactersheets_get_asset_urls();
+    $inject = "\n" . AF_CS_ASSET_MARK . "\n"
+        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '?v=1.0.0" />' . "\n"
+        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '?v=1.0.0"></script>' . "\n";
+
+    if (stripos($page, '</head>') !== false) {
+        $page = preg_replace('~</head>~i', $inject . '</head>', $page, 1);
+        return $page;
+    }
+
+    return $inject . $page;
+}
+
+function af_charactersheets_inject_modal(string $page): string
+{
+    global $templates, $lang;
+
+    if (strpos($page, AF_CS_MODAL_MARK) !== false) {
+        return $page;
+    }
+
+    if (!isset($lang->af_charactersheets_name)) {
+        af_charactersheets_lang();
+    }
+
+    $modal_title = htmlspecialchars_uni($lang->af_charactersheets_sheet_modal_title ?? 'Лист персонажа');
+    $modal_close_label = htmlspecialchars_uni($lang->af_charactersheets_sheet_modal_close ?? 'Закрыть');
+
+    $tpl = $templates->get('charactersheets_sheet_modal');
+    eval("\$modal_html = \"" . $tpl . "\";");
+
+    $inject = "\n" . AF_CS_MODAL_MARK . "\n" . $modal_html . "\n";
+
+    if (stripos($page, '</body>') !== false) {
+        $page = preg_replace('~</body>~i', $inject . '</body>', $page, 1);
+        return $page;
+    }
+
+    return $page . $inject;
+}
+
+function af_charactersheets_templates_install_or_update(): void
+{
+    global $db;
+
+    if (!is_dir(AF_CS_TPL_DIR)) {
+        return;
+    }
+
+    $files = glob(AF_CS_TPL_DIR . '*.html');
+    if (!$files) {
+        return;
+    }
+
+    foreach ($files as $file) {
+        $name = basename($file, '.html');
+        if ($name === '') {
+            continue;
+        }
+        $tpl = @file_get_contents($file);
+        if ($tpl === false) {
+            continue;
+        }
+
+        $title = $db->escape_string($name);
+        $existing = $db->simple_select('templates', 'tid', "title='{$title}' AND sid='-1'", ['limit' => 1]);
+        $tid = (int)$db->fetch_field($existing, 'tid');
+
+        $row = [
+            'title'    => $title,
+            'template' => $db->escape_string($tpl),
+            'sid'      => -1,
+            'version'  => '1839',
+            'dateline' => TIME_NOW,
+        ];
+
+        if ($tid) {
+            $db->update_query('templates', $row, "tid='{$tid}'");
+        } else {
+            $db->insert_query('templates', $row);
+        }
+    }
+}
+
+function af_charactersheets_get_atf_fields(int $tid): array
+{
+    global $db;
+
+    if ($tid <= 0) {
+        return [];
+    }
+
+    if (!$db->table_exists('af_atf_fields') || !$db->table_exists('af_atf_values')) {
+        return [];
+    }
+
+    $fields = [];
+    $q = $db->write_query("
+        SELECT f.fieldid, f.name, f.title, f.type, f.options, v.value
+        FROM " . TABLE_PREFIX . "af_atf_values v
+        INNER JOIN " . TABLE_PREFIX . "af_atf_fields f ON f.fieldid = v.fieldid
+        WHERE v.tid = " . (int)$tid . " AND f.active = 1
+        ORDER BY f.sortorder ASC, f.fieldid ASC
+    ");
+
+    while ($row = $db->fetch_array($q)) {
+        $value = (string)($row['value'] ?? '');
+        if ($value === '') {
+            continue;
+        }
+
+        $fields[] = [
+            'name' => (string)($row['name'] ?? ''),
+            'title' => (string)($row['title'] ?? ''),
+            'type' => (string)($row['type'] ?? ''),
+            'options' => (string)($row['options'] ?? ''),
+            'value' => $value,
+        ];
+    }
+
+    foreach ($fields as &$field) {
+        $field['value_label'] = af_charactersheets_resolve_field_label($field);
+    }
+    unset($field);
+
+    return $fields;
+}
+
+function af_charactersheets_resolve_field_label(array $field): string
+{
+    $type = strtolower((string)($field['type'] ?? ''));
+    $value = (string)($field['value'] ?? '');
+
+    if ($value === '') {
+        return '';
+    }
+
+    if (in_array($type, ['select', 'radio'], true)) {
+        if (function_exists('af_atf_kb_resolve_label')) {
+            return af_atf_kb_resolve_label((string)($field['options'] ?? ''), $value);
+        }
+        $opts = af_charactersheets_parse_options((string)($field['options'] ?? ''));
+        return $opts[$value] ?? $value;
+    }
+
+    if ($type === 'checkbox') {
+        return $value === '1' ? 'Да' : 'Нет';
+    }
+
+    return $value;
+}
+
+function af_charactersheets_parse_options(string $raw): array
+{
+    if (function_exists('af_atf_parse_options')) {
+        return af_atf_parse_options($raw);
+    }
+
+    $raw = str_replace(["\r\n", "\r"], "\n", $raw);
+    $lines = array_filter(array_map('trim', explode("\n", $raw)));
+
+    $out = [];
+    foreach ($lines as $line) {
+        if (strpos($line, '=') !== false) {
+            [$k, $v] = array_map('trim', explode('=', $line, 2));
+            if ($k === '') {
+                $k = $v;
+            }
+            $out[$k] = ($v === '') ? $k : $v;
+        } else {
+            $out[$line] = $line;
+        }
+    }
+    return $out;
+}
+
+function af_charactersheets_kb_mapping(): array
+{
+    return [
+        'character_race' => 'race',
+        'character_class' => 'class',
+        'character_theme' => 'theme',
+    ];
+}
+
+function af_charactersheets_kb_get_entry(string $type, string $key): array
+{
+    if (function_exists('af_atf_kb_get_entry')) {
+        return af_atf_kb_get_entry($type, $key);
+    }
+
+    global $db;
+    if (!$db->table_exists('af_kb_entries')) {
+        return [];
+    }
+
+    $row = $db->fetch_array($db->simple_select(
+        'af_kb_entries',
+        '*',
+        "type='" . $db->escape_string($type) . "' AND `key`='" . $db->escape_string($key) . "' AND active=1",
+        ['limit' => 1]
+    ));
+
+    return is_array($row) ? $row : [];
+}
+
+function af_charactersheets_kb_pick_text(array $row, string $field): string
+{
+    if (function_exists('af_kb_pick_text')) {
+        return af_kb_pick_text($row, $field);
+    }
+
+    $suffix = af_charactersheets_is_ru() ? '_ru' : '_en';
+    $key = $field . $suffix;
+    $value = (string)($row[$key] ?? '');
+    if ($value === '') {
+        $fallback = (string)($row[$field . '_ru'] ?? '');
+        if ($fallback === '') {
+            $fallback = (string)($row[$field . '_en'] ?? '');
+        }
+        return $fallback;
+    }
+
+    return $value;
+}
+
+function af_charactersheets_is_ru(): bool
+{
+    if (function_exists('af_kb_is_ru')) {
+        return af_kb_is_ru();
+    }
+
+    global $lang;
+    return isset($lang->language) && $lang->language === 'russian';
+}
+
+function af_charactersheets_build_base_html(array $user, array $thread, string $profile_url, string $thread_url, string $slug): string
+{
+    $items = [];
+
+    if (!empty($thread['subject'])) {
+        $items[] = '<li><strong>Имя:</strong> ' . htmlspecialchars_uni((string)$thread['subject']) . '</li>';
+    }
+
+    if (!empty($user['username'])) {
+        $items[] = '<li><strong>Пользователь:</strong> ' . htmlspecialchars_uni((string)$user['username']) . '</li>';
+    }
+
+    if ($profile_url !== '') {
+        $items[] = '<li><strong>Профиль:</strong> <a href="' . htmlspecialchars_uni($profile_url) . '">Открыть</a></li>';
+    }
+
+    if ($thread_url !== '') {
+        $items[] = '<li><strong>Анкета:</strong> <a href="' . htmlspecialchars_uni($thread_url) . '">Открыть</a></li>';
+    }
+
+    if ($slug !== '') {
+        $items[] = '<li><strong>Slug:</strong> ' . htmlspecialchars_uni($slug) . '</li>';
+    }
+
+    if (empty($items)) {
+        return '<div class="af-cs-muted">Нет данных</div>';
+    }
+
+    return '<ul class="af-cs-list">' . implode('', $items) . '</ul>';
+}
+
+function af_charactersheets_build_attributes_html(array $fields): string
+{
+    $items = [];
+
+    foreach ($fields as $field) {
+        $type = strtolower((string)($field['type'] ?? ''));
+        $name = (string)($field['name'] ?? '');
+        $label = (string)($field['title'] ?? $name);
+        $value = (string)($field['value_label'] ?? '');
+
+        if ($value === '') {
+            continue;
+        }
+
+        if ($type !== 'number' && !preg_match('/^(attr_|attribute_|stat_)/i', $name)) {
+            continue;
+        }
+
+        $items[] = '<li><span class="af-cs-key">' . htmlspecialchars_uni($label) . '</span><span class="af-cs-value">' . htmlspecialchars_uni($value) . '</span></li>';
+    }
+
+    if (empty($items)) {
+        return '<div class="af-cs-muted">Нет данных</div>';
+    }
+
+    return '<ul class="af-cs-attrs">' . implode('', $items) . '</ul>';
+}
+
+function af_charactersheets_build_extra_fields_html(array $fields): string
+{
+    $items = [];
+    $mapped = af_charactersheets_kb_mapping();
+
+    foreach ($fields as $field) {
+        $name = (string)($field['name'] ?? '');
+        if (isset($mapped[$name])) {
+            continue;
+        }
+
+        $type = strtolower((string)($field['type'] ?? ''));
+        if ($type === 'number' || preg_match('/^(attr_|attribute_|stat_)/i', $name)) {
+            continue;
+        }
+
+        $label = (string)($field['title'] ?? $name);
+        $value = (string)($field['value_label'] ?? '');
+
+        if ($value === '') {
+            continue;
+        }
+
+        $items[] = '<li><span class="af-cs-key">' . htmlspecialchars_uni($label) . '</span><span class="af-cs-value">' . htmlspecialchars_uni($value) . '</span></li>';
+    }
+
+    if (empty($items)) {
+        return '<div class="af-cs-muted">Нет данных</div>';
+    }
+
+    return '<ul class="af-cs-list af-cs-list--columns">' . implode('', $items) . '</ul>';
+}
+
+function af_charactersheets_build_kb_cards_html(array $fields): string
+{
+    $mapped = af_charactersheets_kb_mapping();
+    $cards = [];
+
+    foreach ($fields as $field) {
+        $name = (string)($field['name'] ?? '');
+        if (!isset($mapped[$name])) {
+            continue;
+        }
+
+        $key = (string)($field['value'] ?? '');
+        if ($key === '') {
+            continue;
+        }
+
+        $kbType = $mapped[$name];
+        $entry = af_charactersheets_kb_get_entry($kbType, $key);
+        $title = af_charactersheets_kb_pick_text($entry, 'title');
+        if ($title === '') {
+            $title = (string)($field['value_label'] ?? $key);
+        }
+
+        $short = af_charactersheets_kb_pick_text($entry, 'short');
+        $body = af_charactersheets_kb_pick_text($entry, 'body');
+
+        $meta = [];
+        if (!empty($entry['meta_json'])) {
+            $decoded = json_decode((string)$entry['meta_json'], true);
+            if (is_array($decoded)) {
+                $meta = $decoded;
+            }
+        }
+
+        $metaHtml = '';
+        if (!empty($meta)) {
+            $pairs = [];
+            foreach ($meta as $metaKey => $metaValue) {
+                if (is_array($metaValue)) {
+                    $metaValue = implode(', ', array_map('strval', $metaValue));
+                }
+                $pairs[] = '<li><span class="af-cs-key">' . htmlspecialchars_uni((string)$metaKey) . '</span><span class="af-cs-value">' . htmlspecialchars_uni((string)$metaValue) . '</span></li>';
+            }
+            if (!empty($pairs)) {
+                $metaHtml = '<ul class="af-cs-list af-cs-list--compact">' . implode('', $pairs) . '</ul>';
+            }
+        }
+
+        $cards[] = '<div class="af-cs-kb-card">'
+            . '<div class="af-cs-kb-title">' . htmlspecialchars_uni($title) . '</div>'
+            . ($short !== '' ? '<div class="af-cs-kb-short">' . $short . '</div>' : '')
+            . ($body !== '' ? '<div class="af-cs-kb-body">' . $body . '</div>' : '')
+            . ($metaHtml !== '' ? '<div class="af-cs-kb-meta">' . $metaHtml . '</div>' : '')
+            . '</div>';
+    }
+
+    if (empty($cards)) {
+        return '<div class="af-cs-muted">Нет данных</div>';
+    }
+
+    return '<div class="af-cs-kb-grid">' . implode('', $cards) . '</div>';
 }
 
 function af_charactersheets_slugify(string $text, int $tid): string
