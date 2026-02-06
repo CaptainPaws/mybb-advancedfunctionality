@@ -13,91 +13,105 @@ return [
     'website'     => 'https://github.com/CaptainPaws',
     'bootstrap'   => 'charactersheets.php',
 
+    // Если у аддона будет AF-страница в ACP через роутер:
+    // (если admin.php реально отсутствует — можешь удалить этот блок целиком)
+    'admin' => [
+        'slug'       => 'charactersheets',
+        'name'       => 'CharacterSheets',
+        'controller' => 'admin.php',
+    ],
+
     /**
      * Языковые пакеты генерируются ядром AF по этим ключам.
-     * Здесь важно иметь и RU и EN тексты (front/admin).
+     * Канон: russian/english + секции front/admin без _ru/_en суффиксов.
      */
     'lang' => [
-        'front' => [
-            // RU
-            'af_charactersheets_name_ru'        => 'CharacterSheets',
-            'af_charactersheets_description_ru' => 'Автопринятие анкет и триггер листов персонажей.',
-            'af_charactersheets_accept_button_ru' => 'Принять анкету',
-            'af_charactersheets_accept_done_ru'   => 'Анкета принята: тема закрыта и перенесена.',
-            'af_charactersheets_accept_already_ru' => 'Анкета уже была принята.',
-            'af_charactersheets_accept_error_ru' => 'Не удалось принять анкету. Обратитесь к администратору.',
+        'russian' => [
+            'front' => [
+                'af_charactersheets_name'              => 'CharacterSheets',
+                'af_charactersheets_description'       => 'Автопринятие анкет и триггер листов персонажей.',
+                'af_charactersheets_accept_button'     => 'Принять анкету',
+                'af_charactersheets_accept_done'       => 'Анкета принята: тема закрыта и перенесена.',
+                'af_charactersheets_accept_already'    => 'Анкета уже была принята.',
+                'af_charactersheets_accept_error'      => 'Не удалось принять анкету. Обратитесь к администратору.',
+                'af_charactersheets_accept_no_permission' => 'У вас нет прав для принятия анкеты.',
+                'af_charactersheets_accept_invalid_thread' => 'Тема не найдена или недоступна.',
+            ],
+            'admin' => [
+                'af_charactersheets_group'                   => 'AF: CharacterSheets',
+                'af_charactersheets_group_desc'              => 'Автопринятие анкет, перенос и триггер листов персонажей.',
 
-            // EN
-            'af_charactersheets_name_en'        => 'CharacterSheets',
-            'af_charactersheets_description_en' => 'Auto-accept applications and trigger character sheets.',
-            'af_charactersheets_accept_button_en' => 'Accept application',
-            'af_charactersheets_accept_done_en'   => 'Application accepted: thread closed and moved.',
-            'af_charactersheets_accept_already_en' => 'Application has already been accepted.',
-            'af_charactersheets_accept_error_en' => 'Failed to accept the application. Contact an administrator.',
+                'af_charactersheets_enabled'                 => 'Включить CharacterSheets',
+                'af_charactersheets_enabled_desc'            => 'Включает кнопку принятия анкеты и обработчик misc.php.',
+
+                'af_charactersheets_accept_groups'           => 'Группы, которым доступно принятие',
+                'af_charactersheets_accept_groups_desc'      => 'CSV id групп (usergroup/additionalgroups), которым доступна кнопка принятия анкеты. Пример: 4,3,6',
+
+                'af_charactersheets_pending_forums'          => 'Форумы ожидания анкет',
+                'af_charactersheets_pending_forums_desc'     => 'CSV fid форумов, где анкеты считаются ожидающими. Пример: 12,13,14',
+
+                'af_charactersheets_accepted_forum'          => 'Форум принятых анкет',
+                'af_charactersheets_accepted_forum_desc'     => 'fid форума, куда переносить принятые анкеты.',
+
+                'af_charactersheets_accept_post_template'    => 'Шаблон сообщения принятия',
+                'af_charactersheets_accept_post_template_desc' => 'Поддерживает плейсхолдеры: {username}, {uid}, {thread_url}, {profile_url}, {accepted_by}.',
+
+                'af_charactersheets_accept_wrap_htmlbb'      => 'Оборачивать сообщение в [html][/html]',
+                'af_charactersheets_accept_wrap_htmlbb_desc' => 'Если включено, текст принятия будет обёрнут в [html]...[/html].',
+
+                'af_charactersheets_accept_close_thread'     => 'Закрывать тему после принятия',
+                'af_charactersheets_accept_close_thread_desc'=> 'Если включено, тема будет закрыта.',
+
+                'af_charactersheets_accept_move_thread'      => 'Переносить тему после принятия',
+                'af_charactersheets_accept_move_thread_desc' => 'Если включено, тема будет перенесена в форум принятых анкет.',
+
+                'af_charactersheets_sheet_autocreate'        => 'Автосоздание листа персонажа',
+                'af_charactersheets_sheet_autocreate_desc'   => 'Если включено, после принятия срабатывает генератор листа персонажа (заглушка).',
+            ],
         ],
 
-        'admin' => [
-            // RU
-            'af_charactersheets_group_ru'        => 'AF: CharacterSheets',
-            'af_charactersheets_group_desc_ru'   => 'Автопринятие анкет и триггер листов персонажей.',
+        'english' => [
+            'front' => [
+                'af_charactersheets_name'              => 'CharacterSheets',
+                'af_charactersheets_description'       => 'Auto-accept applications and trigger character sheets.',
+                'af_charactersheets_accept_button'     => 'Accept application',
+                'af_charactersheets_accept_done'       => 'Application accepted: thread closed and moved.',
+                'af_charactersheets_accept_already'    => 'Application has already been accepted.',
+                'af_charactersheets_accept_error'      => 'Failed to accept the application. Contact an administrator.',
+                'af_charactersheets_accept_no_permission' => 'You do not have permission to accept this application.',
+                'af_charactersheets_accept_invalid_thread' => 'Thread not found or not accessible.',
+            ],
+            'admin' => [
+                'af_charactersheets_group'                   => 'AF: CharacterSheets',
+                'af_charactersheets_group_desc'              => 'CharacterSheets addon settings.',
 
-            'af_charactersheets_enabled_ru'      => 'Включить CharacterSheets',
-            'af_charactersheets_enabled_desc_ru' => 'Включает кнопку принятия анкеты и обработчик misc.php.',
+                'af_charactersheets_enabled'                 => 'Enable CharacterSheets',
+                'af_charactersheets_enabled_desc'            => 'Enables the accept button and misc.php handler.',
 
-            'af_charactersheets_accept_groups_ru'      => 'Группы, которым доступно принятие',
-            'af_charactersheets_accept_groups_desc_ru' => 'CSV id групп (usergroup/additionalgroups), которым доступна кнопка принятия анкеты. Пример: 4,3,6',
+                'af_charactersheets_accept_groups'           => 'Groups allowed to accept',
+                'af_charactersheets_accept_groups_desc'      => 'CSV group ids (usergroup/additionalgroups) allowed to accept. Example: 4,3,6',
 
-            'af_charactersheets_pending_forums_ru'      => 'Форумы ожидания анкет',
-            'af_charactersheets_pending_forums_desc_ru' => 'CSV fid форумов, где анкеты считаются ожидающими. Пример: 12,13,14',
+                'af_charactersheets_pending_forums'          => 'Pending application forums',
+                'af_charactersheets_pending_forums_desc'     => 'CSV forum ids where applications are pending. Example: 12,13,14',
 
-            'af_charactersheets_accepted_forum_ru'      => 'Форум принятых анкет',
-            'af_charactersheets_accepted_forum_desc_ru' => 'fid форума, куда переносить принятые анкеты.',
+                'af_charactersheets_accepted_forum'          => 'Accepted applications forum',
+                'af_charactersheets_accepted_forum_desc'     => 'Forum id to move accepted applications into.',
 
-            'af_charactersheets_accept_post_template_ru'      => 'Шаблон сообщения принятия',
-            'af_charactersheets_accept_post_template_desc_ru' => "Поддерживает плейсхолдеры: {username}, {uid}, {thread_url}, {profile_url}, {accepted_by}.",
+                'af_charactersheets_accept_post_template'    => 'Acceptance post template',
+                'af_charactersheets_accept_post_template_desc' => 'Supports placeholders: {username}, {uid}, {thread_url}, {profile_url}, {accepted_by}.',
 
-            'af_charactersheets_accept_wrap_htmlbb_ru'      => 'Оборачивать сообщение в [html][/html]',
-            'af_charactersheets_accept_wrap_htmlbb_desc_ru' => 'Если включено, текст принятия будет обёрнут в [html]...[/html].',
+                'af_charactersheets_accept_wrap_htmlbb'      => 'Wrap acceptance post in [html][/html]',
+                'af_charactersheets_accept_wrap_htmlbb_desc' => 'If enabled, the acceptance text is wrapped in [html]...[/html].',
 
-            'af_charactersheets_accept_close_thread_ru'      => 'Закрывать тему после принятия',
-            'af_charactersheets_accept_close_thread_desc_ru' => 'Если включено, тема будет закрыта.',
+                'af_charactersheets_accept_close_thread'     => 'Close thread after acceptance',
+                'af_charactersheets_accept_close_thread_desc'=> 'If enabled, the thread will be closed.',
 
-            'af_charactersheets_accept_move_thread_ru'      => 'Переносить тему после принятия',
-            'af_charactersheets_accept_move_thread_desc_ru' => 'Если включено, тема будет перенесена в форум принятых анкет.',
+                'af_charactersheets_accept_move_thread'      => 'Move thread after acceptance',
+                'af_charactersheets_accept_move_thread_desc' => 'If enabled, the thread will be moved to the accepted forum.',
 
-            'af_charactersheets_sheet_autocreate_ru'      => 'Автосоздание листа персонажа',
-            'af_charactersheets_sheet_autocreate_desc_ru' => 'Если включено, после принятия срабатывает генератор листа персонажа (заглушка).',
-
-            // EN
-            'af_charactersheets_group_en'        => 'AF: CharacterSheets',
-            'af_charactersheets_group_desc_en'   => 'Auto-accept applications and trigger character sheets.',
-
-            'af_charactersheets_enabled_en'      => 'Enable CharacterSheets',
-            'af_charactersheets_enabled_desc_en' => 'Enables the accept button and misc.php handler.',
-
-            'af_charactersheets_accept_groups_en'      => 'Groups allowed to accept',
-            'af_charactersheets_accept_groups_desc_en' => 'CSV group ids (usergroup/additionalgroups) that can accept. Example: 4,3,6',
-
-            'af_charactersheets_pending_forums_en'      => 'Pending application forums',
-            'af_charactersheets_pending_forums_desc_en' => 'CSV forum ids where applications are pending. Example: 12,13,14',
-
-            'af_charactersheets_accepted_forum_en'      => 'Accepted applications forum',
-            'af_charactersheets_accepted_forum_desc_en' => 'Forum id to move accepted applications into.',
-
-            'af_charactersheets_accept_post_template_en'      => 'Acceptance post template',
-            'af_charactersheets_accept_post_template_desc_en' => 'Supports placeholders: {username}, {uid}, {thread_url}, {profile_url}, {accepted_by}.',
-
-            'af_charactersheets_accept_wrap_htmlbb_en'      => 'Wrap acceptance post in [html][/html]',
-            'af_charactersheets_accept_wrap_htmlbb_desc_en' => 'If enabled, the acceptance text is wrapped in [html]...[/html].',
-
-            'af_charactersheets_accept_close_thread_en'      => 'Close thread after acceptance',
-            'af_charactersheets_accept_close_thread_desc_en' => 'If enabled, the thread will be closed.',
-
-            'af_charactersheets_accept_move_thread_en'      => 'Move thread after acceptance',
-            'af_charactersheets_accept_move_thread_desc_en' => 'If enabled, the thread will be moved to the accepted forum.',
-
-            'af_charactersheets_sheet_autocreate_en'      => 'Auto-create character sheet',
-            'af_charactersheets_sheet_autocreate_desc_en' => 'If enabled, triggers the character sheet generator (stub).',
+                'af_charactersheets_sheet_autocreate'        => 'Auto-create character sheet',
+                'af_charactersheets_sheet_autocreate_desc'   => 'If enabled, triggers the character sheet generator (stub).',
+            ],
         ],
     ],
 ];
