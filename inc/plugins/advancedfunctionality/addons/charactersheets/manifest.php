@@ -36,6 +36,9 @@ return [
                 'af_charactersheets_accept_error'      => 'Не удалось принять анкету. Обратитесь к администратору.',
                 'af_charactersheets_accept_no_permission' => 'У вас нет прав для принятия анкеты.',
                 'af_charactersheets_accept_invalid_thread' => 'Тема не найдена или недоступна.',
+                'af_charactersheets_sheet_button'      => 'Лист персонажа',
+                'af_charactersheets_sheet_modal_title' => 'Лист персонажа',
+                'af_charactersheets_sheet_modal_close' => 'Закрыть',
             ],
             'admin' => [
                 'af_charactersheets_group'                   => 'AF: CharacterSheets',
@@ -53,9 +56,6 @@ return [
                 'af_charactersheets_accepted_forum'          => 'Форум принятых анкет',
                 'af_charactersheets_accepted_forum_desc'     => 'fid форума, куда переносить принятые анкеты.',
 
-                'af_charactersheets_accept_post_template'    => 'Шаблон сообщения принятия',
-                'af_charactersheets_accept_post_template_desc' => 'Поддерживает плейсхолдеры: {username}, {uid}, {thread_url}, {profile_url}, {accepted_by}.',
-
                 'af_charactersheets_accept_wrap_htmlbb'      => 'Оборачивать сообщение в [html][/html]',
                 'af_charactersheets_accept_wrap_htmlbb_desc' => 'Если включено, текст принятия будет обёрнут в [html]...[/html].',
 
@@ -67,6 +67,13 @@ return [
 
                 'af_charactersheets_sheet_autocreate'        => 'Автосоздание листа персонажа',
                 'af_charactersheets_sheet_autocreate_desc'   => 'Если включено, после принятия срабатывает генератор листа персонажа (заглушка).',
+
+                'af_charactersheets_admin_title'             => 'CharacterSheets',
+                'af_charactersheets_admin_subtitle'          => 'Настройка текста принятия анкеты.',
+                'af_charactersheets_admin_accept_template'   => 'Текст сообщения принятия',
+                'af_charactersheets_admin_accept_template_desc' => 'Плейсхолдеры: {mention}, {username}, {uid}, {thread_url}, {profile_url}, {accepted_by}, {sheet_url}, {sheet_slug}.',
+                'af_charactersheets_admin_save'              => 'Сохранить',
+                'af_charactersheets_admin_saved'             => 'Настройки сохранены.',
             ],
         ],
 
@@ -80,6 +87,9 @@ return [
                 'af_charactersheets_accept_error'      => 'Failed to accept the application. Contact an administrator.',
                 'af_charactersheets_accept_no_permission' => 'You do not have permission to accept this application.',
                 'af_charactersheets_accept_invalid_thread' => 'Thread not found or not accessible.',
+                'af_charactersheets_sheet_button'      => 'Character sheet',
+                'af_charactersheets_sheet_modal_title' => 'Character sheet',
+                'af_charactersheets_sheet_modal_close' => 'Close',
             ],
             'admin' => [
                 'af_charactersheets_group'                   => 'AF: CharacterSheets',
@@ -97,9 +107,6 @@ return [
                 'af_charactersheets_accepted_forum'          => 'Accepted applications forum',
                 'af_charactersheets_accepted_forum_desc'     => 'Forum id to move accepted applications into.',
 
-                'af_charactersheets_accept_post_template'    => 'Acceptance post template',
-                'af_charactersheets_accept_post_template_desc' => 'Supports placeholders: {username}, {uid}, {thread_url}, {profile_url}, {accepted_by}.',
-
                 'af_charactersheets_accept_wrap_htmlbb'      => 'Wrap acceptance post in [html][/html]',
                 'af_charactersheets_accept_wrap_htmlbb_desc' => 'If enabled, the acceptance text is wrapped in [html]...[/html].',
 
@@ -111,6 +118,13 @@ return [
 
                 'af_charactersheets_sheet_autocreate'        => 'Auto-create character sheet',
                 'af_charactersheets_sheet_autocreate_desc'   => 'If enabled, triggers the character sheet generator (stub).',
+
+                'af_charactersheets_admin_title'             => 'CharacterSheets',
+                'af_charactersheets_admin_subtitle'          => 'Acceptance message template settings.',
+                'af_charactersheets_admin_accept_template'   => 'Acceptance message',
+                'af_charactersheets_admin_accept_template_desc' => 'Placeholders: {mention}, {username}, {uid}, {thread_url}, {profile_url}, {accepted_by}, {sheet_url}, {sheet_slug}.',
+                'af_charactersheets_admin_save'              => 'Save',
+                'af_charactersheets_admin_saved'             => 'Settings saved.',
             ],
         ],
     ],
