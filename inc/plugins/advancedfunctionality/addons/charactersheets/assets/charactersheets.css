@@ -41,92 +41,114 @@
   font-size: 28px;
 }
 
-.af-cs-subtitle {
-  opacity: 0.7;
+.af-cs-name-ru {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   font-size: 14px;
 }
 
-.af-cs-summary__meta {
-  padding: 14px 16px;
-  border-radius: 12px;
-  background: rgb(38, 38, 38);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+.af-cs-name-ru__main {
+  font-weight: 700;
 }
 
-.af-cs-meta-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.af-cs-name-ru__nick {
+  opacity: 0.6;
+}
+
+.af-cs-level {
   display: grid;
-  gap: 8px;
-}
-
-.af-cs-meta-list li {
-  display: flex;
+  grid-template-columns: auto 1fr;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 6px;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
-}
-
-.af-cs-meta-list li:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
-}
-
-.af-cs-meta-key {
-  opacity: 0.7;
-}
-
-.af-cs-meta-value {
-  font-weight: 600;
-}
-
-.af-cs-summary__stats {
-  padding: 16px;
+  gap: 10px;
+  padding: 12px 14px;
   border-radius: 12px;
-  background: rgb(38, 38, 38);
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.af-cs-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
+.af-cs-level__value {
+  font-size: 22px;
+  font-weight: 700;
 }
 
-.af-cs-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.af-cs-stat__label {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  opacity: 0.7;
-}
-
-.af-cs-stat__value {
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.af-cs-progress {
+.af-cs-level__bar {
   position: relative;
-  height: 6px;
+  height: 8px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
   overflow: hidden;
 }
 
-.af-cs-progress span {
+.af-cs-level__bar span {
   position: absolute;
   inset: 0;
-  width: 0;
   background: linear-gradient(90deg, #5cc3ff, #7bffb8);
+}
+
+.af-cs-level__label {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+}
+
+.af-cs-button-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.af-cs-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: inherit;
+  text-decoration: none;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.af-cs-btn--ghost {
+  background: transparent;
+}
+
+.af-cs-info-table {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.af-cs-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+  padding-bottom: 6px;
+}
+
+.af-cs-info-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.af-cs-info-label {
+  opacity: 0.7;
+}
+
+.af-cs-info-value {
+  font-weight: 600;
+  text-align: right;
 }
 
 .af-cs-section {
@@ -147,90 +169,80 @@
   opacity: 0.7;
 }
 
-.af-cs-rct-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 12px;
-}
-
-.af-cs-kb-card {
-  padding: 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(0, 0, 0, 0.08);
-}
-
-.af-cs-kb-title {
-  font-size: 16px;
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-
-.af-cs-kb-short {
-  opacity: 0.8;
-  margin-bottom: 6px;
-}
-
-.af-cs-kb-body {
-  line-height: 1.45;
-}
-
 .af-cs-attrs {
   display: grid;
-  gap: 8px;
-}
-
-.af-cs-attrs ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-
-.af-cs-attrs li {
-  display: flex;
-  justify-content: space-between;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
-  padding-bottom: 6px;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
 }
 
-.af-cs-key {
+.af-cs-attr-card {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: grid;
+  gap: 6px;
+  text-align: center;
+}
+
+.af-cs-attr-name {
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.08em;
   opacity: 0.7;
 }
 
-.af-cs-value {
-  font-weight: 600;
+.af-cs-attr-score {
+  font-size: 22px;
+  font-weight: 700;
 }
 
-.af-cs-attrs li:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
+.af-cs-attr-meta {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+  opacity: 0.7;
 }
 
 .af-cs-skills,
 .af-cs-feats {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .af-cs-skill-item,
 .af-cs-feat-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 8px 12px;
+  padding: 12px 14px;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.af-cs-skill-item a,
-.af-cs-feat-item a {
-  color: inherit;
-  text-decoration: underline;
+.af-cs-skills {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.af-cs-skill-name span {
+  opacity: 0.6;
+  font-size: 12px;
+}
+
+.af-cs-skill-value {
+  font-weight: 700;
+}
+
+.af-cs-feat-title {
+  font-weight: 600;
+}
+
+.af-cs-feat-meta {
+  opacity: 0.7;
+  font-size: 12px;
 }
 
 .af-cs-modal {
@@ -314,6 +326,258 @@
   letter-spacing: 0.02em;
 }
 
+.af-cs-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.af-cs-bonus-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.af-cs-bonus-card {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: grid;
+  gap: 6px;
+}
+
+.af-cs-bonus-title {
+  font-weight: 700;
+}
+
+.af-cs-mechanics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.af-cs-mech-card {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: grid;
+  gap: 8px;
+}
+
+.af-cs-mech-title {
+  font-weight: 700;
+}
+
+.af-cs-mech-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.af-cs-mech-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 4px 0;
+}
+
+.af-cs-mech-total {
+  font-weight: 700;
+}
+
+.af-cs-tabs__nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.af-cs-tabs__nav button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: inherit;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.af-cs-tabs__nav button.is-active {
+  background: rgba(92, 195, 255, 0.2);
+  border-color: rgba(92, 195, 255, 0.6);
+}
+
+.af-cs-tab {
+  display: none;
+}
+
+.af-cs-tab.is-active {
+  display: block;
+}
+
+.af-cs-inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.af-cs-inventory-card {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: grid;
+  gap: 8px;
+}
+
+.af-cs-inventory-title {
+  font-weight: 700;
+}
+
+.af-cs-inventory-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.af-cs-augmentations {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 260px);
+  gap: 16px;
+}
+
+.af-cs-augmentations-list {
+  display: grid;
+  gap: 10px;
+}
+
+.af-cs-augmentation-item {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.af-cs-augmentation-meta {
+  opacity: 0.7;
+  font-size: 12px;
+}
+
+.af-cs-augmentation-empty {
+  opacity: 0.7;
+  font-size: 13px;
+}
+
+.af-cs-augmentation-controls {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.af-cs-augmentation-slot label {
+  font-size: 12px;
+  opacity: 0.7;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.af-cs-augmentation-slot select {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+}
+
+.af-cs-augmentation-humanity {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.af-cs-catalog-header {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.af-cs-catalog-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) repeat(3, minmax(140px, 180px));
+  gap: 12px;
+}
+
+.af-cs-input,
+.af-cs-select {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.2);
+  color: inherit;
+}
+
+.af-cs-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.af-cs-catalog-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  text-decoration: none;
+  color: inherit;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.af-cs-catalog-portrait {
+  height: 200px;
+  overflow: hidden;
+  background: #1c1c1c;
+}
+
+.af-cs-catalog-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.af-cs-catalog-body {
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.af-cs-catalog-name {
+  font-weight: 700;
+}
+
+.af-cs-catalog-sub {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.af-cs-catalog-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 @media (max-width: 860px) {
   .af-cs-hero {
     grid-template-columns: 1fr;
@@ -321,5 +585,17 @@
 
   .af-cs-portrait {
     min-height: 260px;
+  }
+
+  .af-cs-catalog-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .af-cs-augmentations {
+    grid-template-columns: 1fr;
+  }
+
+  .af-cs-skills {
+    grid-template-columns: 1fr;
   }
 }
