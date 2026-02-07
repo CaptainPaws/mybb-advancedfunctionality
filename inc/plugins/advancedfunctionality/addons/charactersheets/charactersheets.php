@@ -1019,6 +1019,24 @@ function af_charactersheets_get_sheet_by_uid(int $uid): array
     return is_array($row) ? $row : [];
 }
 
+function af_charactersheets_get_sheet_by_slug(string $slug): array
+{
+    global $db;
+
+    $slug = trim($slug);
+    if ($slug === '' || !$db->table_exists(AF_CS_SHEETS_TABLE)) {
+        return [];
+    }
+
+    if (!preg_match('~^[a-z0-9][a-z0-9\\-]*$~i', $slug)) {
+        return [];
+    }
+
+    $slug_esc = $db->escape_string($slug);
+    $row = $db->fetch_array($db->simple_select(AF_CS_SHEETS_TABLE, '*', "slug='{$slug_esc}'", ['limit' => 1]));
+    return is_array($row) ? $row : [];
+}
+
 function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): array
 {
     global $db, $mybb;
@@ -1883,11 +1901,11 @@ function af_charactersheets_postbit_button(array &$post): void
 {
     global $mybb, $templates, $lang;
 
+    $post['af_cs_plaque'] = '';
+
     if (!af_charactersheets_is_enabled()) {
         return;
     }
-
-    $post['af_cs_plaque'] = '';
 
     $uid = (int)($post['uid'] ?? 0);
     if ($uid <= 0) {
