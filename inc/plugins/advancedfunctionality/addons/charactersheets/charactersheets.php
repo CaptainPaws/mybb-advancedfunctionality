@@ -1434,7 +1434,7 @@ function af_charactersheets_kb_mapping(): array
             'label' => 'Класс',
         ],
         'character_themes' => [
-            'type' => 'theme',
+            'type' => 'themes',
             'label' => 'Тема',
         ],
     ];
@@ -1481,6 +1481,61 @@ function af_charactersheets_kb_pick_text(array $row, string $field): string
     return $value;
 }
 
+function af_charactersheets_kb_get_block_html(array $entry, string $blockKey): string
+{
+    $blockKey = trim($blockKey);
+    if ($blockKey === '') {
+        return '<div class="af-cs-muted">Нет данных</div>';
+    }
+
+    $block = [];
+
+    if (!empty($entry['id'])) {
+        global $db;
+        if (is_object($db) && $db->table_exists('af_kb_blocks')) {
+            $where = "entry_id=" . (int)$entry['id']
+                . " AND block_key='" . $db->escape_string($blockKey) . "'";
+            if (!function_exists('af_kb_can_edit') || !af_kb_can_edit()) {
+                $where .= " AND active=1";
+            }
+            $row = $db->fetch_array($db->simple_select('af_kb_blocks', '*', $where, ['limit' => 1]));
+            if (is_array($row)) {
+                $block = $row;
+            }
+        }
+    }
+
+    if (empty($block)) {
+        $metaRaw = (string)($entry['meta_json'] ?? '');
+        $meta = function_exists('af_kb_decode_json') ? af_kb_decode_json($metaRaw) : json_decode($metaRaw, true);
+        if (is_array($meta) && !empty($meta['blocks']) && is_array($meta['blocks'])) {
+            $blocks = $meta['blocks'];
+            $isList = array_keys($blocks) === range(0, count($blocks) - 1);
+            if ($isList) {
+                foreach ($blocks as $item) {
+                    if (!is_array($item)) {
+                        continue;
+                    }
+                    if ((string)($item['key'] ?? '') === $blockKey) {
+                        $block = $item;
+                        break;
+                    }
+                }
+            } else {
+                $block = is_array($blocks[$blockKey] ?? null) ? $blocks[$blockKey] : [];
+            }
+        }
+    }
+
+    $content = af_charactersheets_kb_pick_text($block, 'content');
+    if ($content === '') {
+        return '<div class="af-cs-muted">Нет данных</div>';
+    }
+
+    $html = af_charactersheets_parse_bbcode($content);
+    return $html !== '' ? $html : '<div class="af-cs-muted">Нет данных</div>';
+}
+
 function af_charactersheets_is_ru(): bool
 {
     if (function_exists('af_kb_is_ru')) {
@@ -1489,6 +1544,28 @@ function af_charactersheets_is_ru(): bool
 
     global $lang;
     return isset($lang->language) && $lang->language === 'russian';
+}
+
+function af_charactersheets_render_kb_chip(string $type, string $key, string $fallbackLabel = ''): string
+{
+    $key = trim($key);
+    if ($key === '') {
+        return '';
+    }
+
+    $entry = af_charactersheets_kb_get_entry($type, $key);
+    $label = af_charactersheets_kb_pick_text($entry, 'title');
+    if ($label === '') {
+        $label = $fallbackLabel;
+    }
+    if ($label === '') {
+        $label = $key;
+    }
+
+    $url = 'misc.php?action=kb&type=' . rawurlencode($type) . '&key=' . rawurlencode($key);
+
+    return '<a class="af-cs-chip af-cs-chip--link" href="' . htmlspecialchars_uni($url)
+        . '" target="_blank" rel="noopener">' . htmlspecialchars_uni($label) . '</a>';
 }
 
 function af_charactersheets_build_base_html(string $profile_url, string $thread_url): string
@@ -1562,19 +1639,11 @@ function af_charactersheets_build_kb_cards_html(array $fields): string
             $title = $label;
         }
 
-        $short = af_charactersheets_kb_pick_text($entry, 'short');
-        $body = af_charactersheets_kb_pick_text($entry, 'body');
-
-        $short_html = $short !== '' ? af_charactersheets_parse_bbcode($short) : '';
-        $body_html = $body !== '' ? af_charactersheets_parse_bbcode($body) : '';
-
-        if ($short_html === '' && $body_html === '' && $key === '') {
-            $body_html = '<div class="af-cs-muted">Нет данных</div>';
-        }
+        $blockKey = $kbType === 'themes' ? 'knowledges' : 'characteristics';
+        $body_html = af_charactersheets_kb_get_block_html($entry, $blockKey);
 
         $cards[] = '<div class="af-cs-kb-card">'
             . '<div class="af-cs-kb-title">' . htmlspecialchars_uni($title) . '</div>'
-            . ($short_html !== '' ? '<div class="af-cs-kb-short">' . $short_html . '</div>' : '')
             . ($body_html !== '' ? '<div class="af-cs-kb-body">' . $body_html . '</div>' : '')
             . '</div>';
     }
@@ -1591,20 +1660,21 @@ function af_charactersheets_build_info_table_html(array $index): string
 {
     $age = af_charactersheets_pick_field_value($index, ['character_age', 'age']);
     $gender = af_charactersheets_pick_field_value($index, ['character_gen', 'character_gender', 'gender']);
-    $race = af_charactersheets_pick_field_value($index, ['character_race', 'race']);
-    $class = af_charactersheets_pick_field_value($index, ['character_class', 'class']);
-    $theme = af_charactersheets_pick_field_value($index, ['character_themes', 'character_theme', 'theme']);
+    $race_key = af_charactersheets_pick_field_value($index, ['character_race', 'race'], false);
+    $class_key = af_charactersheets_pick_field_value($index, ['character_class', 'class'], false);
+    $theme_key = af_charactersheets_pick_field_value($index, ['character_themes', 'character_theme', 'theme'], false);
+    $race_label = af_charactersheets_pick_field_value($index, ['character_race', 'race'], true);
+    $class_label = af_charactersheets_pick_field_value($index, ['character_class', 'class'], true);
+    $theme_label = af_charactersheets_pick_field_value($index, ['character_themes', 'character_theme', 'theme'], true);
 
     $items = [];
     $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Возраст</div><div class="af-cs-info-value">' . htmlspecialchars_uni($age !== '' ? $age : '—') . '</div></div>';
     $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Пол</div><div class="af-cs-info-value">' . htmlspecialchars_uni($gender !== '' ? $gender : '—') . '</div></div>';
 
     $chip_html = '';
-    foreach ([$race, $class, $theme] as $chip) {
-        if ($chip !== '') {
-            $chip_html .= '<span class="af-cs-chip">' . htmlspecialchars_uni($chip) . '</span>';
-        }
-    }
+    $chip_html .= af_charactersheets_render_kb_chip('race', $race_key, $race_label);
+    $chip_html .= af_charactersheets_render_kb_chip('class', $class_key, $class_label);
+    $chip_html .= af_charactersheets_render_kb_chip('themes', $theme_key, $theme_label);
     if ($chip_html === '') {
         $chip_html = '<span class="af-cs-muted">—</span>';
     }
@@ -1623,11 +1693,7 @@ function af_charactersheets_build_bonus_html(array $index): string
         $key = (string)($field['value'] ?? '');
         $entry = $key !== '' ? af_charactersheets_kb_get_entry((string)$data['type'], $key) : [];
         $title = (string)$data['label'];
-        $text = af_charactersheets_kb_pick_text($entry, 'short');
-        if ($text === '') {
-            $text = af_charactersheets_kb_pick_text($entry, 'body');
-        }
-        $text_html = $text !== '' ? af_charactersheets_parse_bbcode($text) : '<div class="af-cs-muted">Нет данных</div>';
+        $text_html = af_charactersheets_kb_get_block_html($entry, 'bonuses');
         $columns[] = '<div class="af-cs-bonus-card">'
             . '<div class="af-cs-bonus-title">' . htmlspecialchars_uni($title) . '</div>'
             . '<div class="af-cs-bonus-body">' . $text_html . '</div>'
