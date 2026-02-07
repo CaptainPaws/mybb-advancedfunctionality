@@ -34,6 +34,7 @@ function af_charactersheets_install(): void
     af_charactersheets_ensure_schema();
     af_charactersheets_ensure_settings();
     af_charactersheets_templates_install_or_update();
+    af_charactersheets_ensure_postbit_placeholder();
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -44,6 +45,7 @@ function af_charactersheets_activate(): bool
 {
     af_charactersheets_templates_install_or_update();
     af_charactersheets_ensure_schema();
+    af_charactersheets_ensure_postbit_placeholder();
     return true;
 }
 
@@ -75,6 +77,14 @@ function af_charactersheets_uninstall(): void
     )");
     $db->delete_query('settinggroups', "name='af_charactersheets'");
     $db->delete_query('templates', "title LIKE 'charactersheets_%'");
+    $db->delete_query('templates', "title IN ('charactersheet_fullpage','charactersheet_inner','charactersheet_modal','postbit_plaque','charactersheet_rct_cards','charactersheet_stats_bars','charactersheet_attributes','charactersheet_skills','charactersheet_feats')");
+
+    if (file_exists(MYBB_ROOT . 'inc/adminfunctions_templates.php')) {
+        require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
+    }
+    if (function_exists('find_replace_templatesets')) {
+        find_replace_templatesets('postbit_classic', "#\\{\\$post\\['af_cs_plaque'\\]\\}#i", '');
+    }
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -637,30 +647,36 @@ function af_charactersheets_render_sheet_page(string $slug): void
         if (!is_array($user)) $user = [];
     }
 
-    $title = 'Лист персонажа';
-    if (!empty($user['username'])) {
-        $title .= ' — ' . $user['username'];
-    } elseif (!empty($thread['subject'])) {
-        $title .= ' — ' . $thread['subject'];
-    }
-
     $profile_url = function_exists('get_profile_link') ? get_profile_link($uid) : ('member.php?action=profile&uid=' . $uid);
     $thread_url = function_exists('get_thread_link') ? get_thread_link($tid) : ('showthread.php?tid=' . $tid);
 
-    $sheet_base_html = af_charactersheets_build_base_html($user, $thread, $profile_url, $thread_url, $slug);
     $atf_fields = af_charactersheets_get_atf_fields($tid);
-    $sheet_attributes_html = af_charactersheets_build_attributes_html($atf_fields);
-    $sheet_extra_html = af_charactersheets_build_extra_fields_html($atf_fields);
-    $sheet_kb_html = af_charactersheets_build_kb_cards_html($atf_fields);
+    $atf_index = af_charactersheets_index_fields($atf_fields);
 
-    $sheet_title = htmlspecialchars_uni($title);
-    $sheet_subtitle = htmlspecialchars_uni($thread['subject'] ?? '');
-    $sheet_actions = '';
-    if ($uid > 0) {
-        $sheet_actions .= '<a class="button" href="' . htmlspecialchars_uni($profile_url) . '">' . htmlspecialchars_uni($lang->profile ?? 'Профиль') . '</a>';
+    $character_name = af_charactersheets_pick_field_value($atf_index, ['character_name', 'char_name', 'name']);
+    if ($character_name === '') {
+        $character_name = (string)($thread['subject'] ?? '');
     }
-    if ($tid > 0) {
-        $sheet_actions .= '<a class="button" href="' . htmlspecialchars_uni($thread_url) . '">' . htmlspecialchars_uni($lang->view_thread ?? 'Анкета') . '</a>';
+    if ($character_name === '') {
+        $character_name = $user['username'] ?? 'Лист персонажа';
+    }
+
+    $sheet_title = htmlspecialchars_uni($character_name);
+    $sheet_subtitle = htmlspecialchars_uni((string)($user['username'] ?? ''));
+
+    $sheet_base_html = af_charactersheets_build_base_html($character_name, $profile_url, $thread_url);
+    $sheet_attributes_html = af_charactersheets_build_attributes_html($atf_fields);
+    $sheet_kb_html = af_charactersheets_build_kb_cards_html($atf_fields);
+    $sheet_stats_html = af_charactersheets_build_stats_html($atf_index);
+    $sheet_skills_html = af_charactersheets_build_skills_html($atf_index);
+    $sheet_feats_html = af_charactersheets_build_feats_html($atf_index);
+    $sheet_portrait_url = af_charactersheets_get_portrait_url($atf_index);
+
+    $page_title = 'Лист персонажа';
+    if (!empty($user['username'])) {
+        $page_title .= ' — ' . $user['username'];
+    } elseif (!empty($character_name)) {
+        $page_title .= ' — ' . $character_name;
     }
 
     $assets = af_charactersheets_get_asset_urls();
@@ -668,11 +684,17 @@ function af_charactersheets_render_sheet_page(string $slug): void
         . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '?v=1.0.0" />' . "\n"
         . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '?v=1.0.0"></script>' . "\n";
 
-    $tplInner = $templates->get('charactersheets_sheet_inner');
+    $tplInner = $templates->get('charactersheet_inner');
     eval("\$sheet_inner = \"" . $tplInner . "\";");
 
-    $tplFull = $templates->get('charactersheets_sheet_full');
-    eval("\$page = \"" . $tplFull . "\";");
+    $ajax = (string)$mybb->get_input('ajax');
+    if ($ajax === '1') {
+        $tplModal = $templates->get('charactersheet_modal');
+        eval("\$page = \"" . $tplModal . "\";");
+    } else {
+        $tplFull = $templates->get('charactersheet_fullpage');
+        eval("\$page = \"" . $tplFull . "\";");
+    }
 
     output_page($page);
     exit;
@@ -753,6 +775,8 @@ function af_charactersheets_postbit_button(array &$post): void
         return;
     }
 
+    $post['af_cs_plaque'] = '';
+
     $uid = (int)($post['uid'] ?? 0);
     if ($uid <= 0) {
         return;
@@ -772,14 +796,10 @@ function af_charactersheets_postbit_button(array &$post): void
     $sheet_url = htmlspecialchars_uni($sheet_url);
     $button_label = htmlspecialchars_uni($button_label);
 
-    $tpl = $templates->get('charactersheets_postbit_button');
-    eval("\$button_html = \"" . $tpl . "\";");
+    $tpl = $templates->get('postbit_plaque');
+    eval("\$plaque_html = \"" . $tpl . "\";");
 
-    if (!empty($post['postcontrols']) && is_string($post['postcontrols'])) {
-        $post['postcontrols'] .= $button_html;
-    } else {
-        $post['postcontrols'] = $button_html;
-    }
+    $post['af_cs_plaque'] = $plaque_html;
 
     $GLOBALS['af_charactersheets_needs_assets'] = true;
     $GLOBALS['af_charactersheets_needs_modal'] = true;
@@ -1006,7 +1026,7 @@ function af_charactersheets_inject_assets(string $page): string
 
 function af_charactersheets_inject_modal(string $page): string
 {
-    global $templates, $lang;
+    global $lang;
 
     if (strpos($page, AF_CS_MODAL_MARK) !== false) {
         return $page;
@@ -1019,8 +1039,18 @@ function af_charactersheets_inject_modal(string $page): string
     $modal_title = htmlspecialchars_uni($lang->af_charactersheets_sheet_modal_title ?? 'Лист персонажа');
     $modal_close_label = htmlspecialchars_uni($lang->af_charactersheets_sheet_modal_close ?? 'Закрыть');
 
-    $tpl = $templates->get('charactersheets_sheet_modal');
-    eval("\$modal_html = \"" . $tpl . "\";");
+    $modal_html = '<div class="af-cs-modal" data-afcs-modal>'
+        . '<div class="af-cs-modal__backdrop" data-afcs-close></div>'
+        . '<div class="af-cs-modal__dialog">'
+        . '<div class="af-cs-modal__header">'
+        . '<div class="af-cs-modal__title">' . $modal_title . '</div>'
+        . '<button class="af-cs-modal__close" type="button" data-afcs-close aria-label="' . $modal_close_label . '">×</button>'
+        . '</div>'
+        . '<div class="af-cs-modal__body">'
+        . '<iframe class="af-cs-modal__frame" data-afcs-frame title="' . $modal_title . '"></iframe>'
+        . '</div>'
+        . '</div>'
+        . '</div>';
 
     $inject = "\n" . AF_CS_MODAL_MARK . "\n" . $modal_html . "\n";
 
@@ -1032,6 +1062,39 @@ function af_charactersheets_inject_modal(string $page): string
     return $page . $inject;
 }
 
+function af_charactersheets_ensure_postbit_placeholder(): void
+{
+    global $db;
+
+    $needle = '{$post[\'af_cs_plaque\']}';
+    $q = $db->simple_select('templates', 'tid,template', "title='postbit_classic'");
+
+    while ($row = $db->fetch_array($q)) {
+        $tid = (int)$row['tid'];
+        $tpl = (string)$row['template'];
+
+        if ($tid <= 0 || $tpl === '') {
+            continue;
+        }
+
+        if (strpos($tpl, $needle) !== false) {
+            continue;
+        }
+
+        $count = 0;
+        $pattern = '#(<div[^>]*class="post_author[^"]*scaleimages[^"]*"[^>]*>)(.*?)(</div>\s*</td>)#s';
+        $new = preg_replace($pattern, '$1$2' . "\n" . $needle . "\n" . '$3', $tpl, 1, $count);
+
+        if ($count && is_string($new) && $new !== '' && $new !== $tpl) {
+            $db->update_query('templates', ['template' => $db->escape_string($new)], 'tid=' . $tid);
+        }
+    }
+
+    if (function_exists('cache_templatesets')) {
+        cache_templatesets();
+    }
+}
+
 function af_charactersheets_templates_install_or_update(): void
 {
     global $db;
@@ -1040,17 +1103,32 @@ function af_charactersheets_templates_install_or_update(): void
         return;
     }
 
-    $files = glob(AF_CS_TPL_DIR . '*.html');
-    if (!$files) {
-        return;
-    }
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator(AF_CS_TPL_DIR, RecursiveDirectoryIterator::SKIP_DOTS)
+    );
 
-    foreach ($files as $file) {
-        $name = basename($file, '.html');
-        if ($name === '') {
+    foreach ($iterator as $file) {
+        if (!$file->isFile()) {
             continue;
         }
-        $tpl = @file_get_contents($file);
+        if (strtolower($file->getExtension()) !== 'html') {
+            continue;
+        }
+
+        $path = $file->getPathname();
+        $relative = ltrim(str_replace(AF_CS_TPL_DIR, '', $path), DIRECTORY_SEPARATOR);
+        $basename = basename($path, '.html');
+        if ($basename === '') {
+            continue;
+        }
+
+        if (strpos($relative, 'blocks' . DIRECTORY_SEPARATOR) === 0) {
+            $name = 'charactersheet_' . $basename;
+        } else {
+            $name = $basename;
+        }
+
+        $tpl = @file_get_contents($path);
         if ($tpl === false) {
             continue;
         }
@@ -1167,12 +1245,199 @@ function af_charactersheets_parse_options(string $raw): array
     return $out;
 }
 
+function af_charactersheets_index_fields(array $fields): array
+{
+    $index = [];
+    foreach ($fields as $field) {
+        $name = strtolower((string)($field['name'] ?? ''));
+        if ($name === '') {
+            continue;
+        }
+        $index[$name] = $field;
+    }
+    return $index;
+}
+
+function af_charactersheets_pick_field_value(array $index, array $names, bool $label = true): string
+{
+    foreach ($names as $name) {
+        $key = strtolower((string)$name);
+        if (!isset($index[$key])) {
+            continue;
+        }
+        $field = $index[$key];
+        $value = $label ? (string)($field['value_label'] ?? '') : (string)($field['value'] ?? '');
+        if ($value !== '') {
+            return $value;
+        }
+    }
+    return '';
+}
+
+function af_charactersheets_to_number(string $value): ?float
+{
+    $value = str_replace(',', '.', $value);
+    $value = preg_replace('~[^0-9.\-]+~', '', $value);
+    if ($value === '' || $value === '-' || $value === '.') {
+        return null;
+    }
+    return is_numeric($value) ? (float)$value : null;
+}
+
+function af_charactersheets_get_portrait_url(array $index): string
+{
+    $url = af_charactersheets_pick_field_value($index, [
+        'character_image',
+        'character_avatar',
+        'character_portrait',
+        'character_face',
+        'portrait',
+        'avatar',
+        'image',
+    ]);
+
+    if ($url === '') {
+        return 'data:image/svg+xml;charset=UTF-8,' . rawurlencode(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="480" viewBox="0 0 360 480">'
+            . '<rect width="360" height="480" fill="#2b2b2b"/>'
+            . '<circle cx="180" cy="170" r="70" fill="#3d3d3d"/>'
+            . '<rect x="70" y="270" width="220" height="140" rx="24" fill="#3d3d3d"/>'
+            . '</svg>'
+        );
+    }
+
+    return $url;
+}
+
+function af_charactersheets_build_stats_html(array $index): string
+{
+    $level_value = af_charactersheets_pick_field_value($index, ['character_level', 'level'], false);
+    $level = af_charactersheets_to_number($level_value);
+
+    $hp_current_value = af_charactersheets_pick_field_value($index, ['character_hp', 'hp', 'hp_current'], false);
+    $hp_max_value = af_charactersheets_pick_field_value($index, ['character_hp_max', 'hp_max', 'hp_total'], false);
+    $hp_current = af_charactersheets_to_number($hp_current_value);
+    $hp_max = af_charactersheets_to_number($hp_max_value);
+
+    $energy_current_value = af_charactersheets_pick_field_value($index, ['character_energy', 'energy', 'energy_current'], false);
+    $energy_max_value = af_charactersheets_pick_field_value($index, ['character_energy_max', 'energy_max', 'energy_total'], false);
+    $energy_current = af_charactersheets_to_number($energy_current_value);
+    $energy_max = af_charactersheets_to_number($energy_max_value);
+
+    $ac_value = af_charactersheets_pick_field_value($index, ['character_ac', 'ac', 'armor_class'], false);
+    $balance_value = af_charactersheets_pick_field_value($index, ['character_balance', 'balance', 'currency', 'credits', 'gold'], false);
+
+    $ac = af_charactersheets_to_number($ac_value);
+    $balance = af_charactersheets_to_number($balance_value);
+
+    $stats = [];
+    $stats[] = af_charactersheets_render_stat_bar(
+        'Уровень',
+        $level !== null ? (string)(int)$level : 'нет данных',
+        $level !== null ? min(100, max(0, (int)$level * 5)) : 0
+    );
+    $stats[] = af_charactersheets_render_stat_bar(
+        'HP',
+        ($hp_current !== null && $hp_max !== null) ? (int)$hp_current . ' / ' . (int)$hp_max : 'нет данных',
+        ($hp_current !== null && $hp_max) ? min(100, max(0, (int)round(($hp_current / $hp_max) * 100))) : 0
+    );
+    $stats[] = af_charactersheets_render_stat_bar(
+        'Energy',
+        ($energy_current !== null && $energy_max !== null) ? (int)$energy_current . ' / ' . (int)$energy_max : 'нет данных',
+        ($energy_current !== null && $energy_max) ? min(100, max(0, (int)round(($energy_current / $energy_max) * 100))) : 0
+    );
+    $stats[] = af_charactersheets_render_stat_value('AC', $ac !== null ? (string)(int)$ac : 'нет данных');
+    $stats[] = af_charactersheets_render_stat_value('Баланс', $balance !== null ? (string)(int)$balance : 'нет данных');
+
+    $stats_html = implode('', $stats);
+    global $templates;
+    $tpl = $templates->get('charactersheet_stats_bars');
+    eval("\$out = \"" . $tpl . "\";");
+    return $out;
+}
+
+function af_charactersheets_render_stat_bar(string $label, string $value, int $percent): string
+{
+    $percent = max(0, min(100, $percent));
+    return '<div class="af-cs-stat">'
+        . '<div class="af-cs-stat__label">' . htmlspecialchars_uni($label) . '</div>'
+        . '<div class="af-cs-stat__value">' . htmlspecialchars_uni($value) . '</div>'
+        . '<div class="af-cs-progress" role="progressbar" aria-valuenow="' . $percent . '" aria-valuemin="0" aria-valuemax="100">'
+        . '<span style="width:' . $percent . '%"></span>'
+        . '</div>'
+        . '</div>';
+}
+
+function af_charactersheets_render_stat_value(string $label, string $value): string
+{
+    return '<div class="af-cs-stat">'
+        . '<div class="af-cs-stat__label">' . htmlspecialchars_uni($label) . '</div>'
+        . '<div class="af-cs-stat__value">' . htmlspecialchars_uni($value) . '</div>'
+        . '</div>';
+}
+
+function af_charactersheets_build_skills_html(array $index): string
+{
+    $skills_html = '<div class="af-cs-skill-item">'
+        . '<span>Нет данных по навыкам</span>'
+        . '<a href="#" class="af-cs-skill-link">Улучшить</a>'
+        . '</div>';
+
+    global $templates;
+    $tpl = $templates->get('charactersheet_skills');
+    eval("\$out = \"" . $tpl . "\";");
+    return $out;
+}
+
+function af_charactersheets_build_feats_html(array $index): string
+{
+    $feats_html = '<div class="af-cs-feat-item">'
+        . '<span>Нет данных по скиллам</span>'
+        . '<a href="#" class="af-cs-feat-link">Открыть магазин</a>'
+        . '</div>';
+
+    global $templates;
+    $tpl = $templates->get('charactersheet_feats');
+    eval("\$out = \"" . $tpl . "\";");
+    return $out;
+}
+
+function af_charactersheets_parse_bbcode(string $text): string
+{
+    $text = trim($text);
+    if ($text === '') {
+        return '';
+    }
+
+    require_once MYBB_ROOT . 'inc/class_parser.php';
+    $parser = new postParser;
+    $options = [
+        'allow_html' => 0,
+        'allow_mycode' => 1,
+        'allow_smilies' => 0,
+        'allow_imgcode' => 1,
+        'filter_badwords' => 1,
+        'nl2br' => 1,
+    ];
+
+    return $parser->parse_message($text, $options);
+}
+
 function af_charactersheets_kb_mapping(): array
 {
     return [
-        'character_race' => 'race',
-        'character_class' => 'class',
-        'character_theme' => 'theme',
+        'character_race' => [
+            'type' => 'race',
+            'label' => 'Раса',
+        ],
+        'character_class' => [
+            'type' => 'class',
+            'label' => 'Класс',
+        ],
+        'character_theme' => [
+            'type' => 'theme',
+            'label' => 'Тема',
+        ],
     ];
 }
 
@@ -1227,35 +1492,27 @@ function af_charactersheets_is_ru(): bool
     return isset($lang->language) && $lang->language === 'russian';
 }
 
-function af_charactersheets_build_base_html(array $user, array $thread, string $profile_url, string $thread_url, string $slug): string
+function af_charactersheets_build_base_html(string $character_name, string $profile_url, string $thread_url): string
 {
     $items = [];
 
-    if (!empty($thread['subject'])) {
-        $items[] = '<li><strong>Имя:</strong> ' . htmlspecialchars_uni((string)$thread['subject']) . '</li>';
-    }
-
-    if (!empty($user['username'])) {
-        $items[] = '<li><strong>Пользователь:</strong> ' . htmlspecialchars_uni((string)$user['username']) . '</li>';
+    if ($character_name !== '') {
+        $items[] = '<li><span class="af-cs-meta-key">Имя</span><span class="af-cs-meta-value">' . htmlspecialchars_uni($character_name) . '</span></li>';
     }
 
     if ($profile_url !== '') {
-        $items[] = '<li><strong>Профиль:</strong> <a href="' . htmlspecialchars_uni($profile_url) . '">Открыть</a></li>';
+        $items[] = '<li><span class="af-cs-meta-key">Профиль</span><span class="af-cs-meta-value"><a href="' . htmlspecialchars_uni($profile_url) . '">Открыть</a></span></li>';
     }
 
     if ($thread_url !== '') {
-        $items[] = '<li><strong>Анкета:</strong> <a href="' . htmlspecialchars_uni($thread_url) . '">Открыть</a></li>';
-    }
-
-    if ($slug !== '') {
-        $items[] = '<li><strong>Slug:</strong> ' . htmlspecialchars_uni($slug) . '</li>';
+        $items[] = '<li><span class="af-cs-meta-key">Анкета</span><span class="af-cs-meta-value"><a href="' . htmlspecialchars_uni($thread_url) . '">Открыть</a></span></li>';
     }
 
     if (empty($items)) {
         return '<div class="af-cs-muted">Нет данных</div>';
     }
 
-    return '<ul class="af-cs-list">' . implode('', $items) . '</ul>';
+    return '<ul class="af-cs-meta-list">' . implode('', $items) . '</ul>';
 }
 
 function af_charactersheets_build_attributes_html(array $fields): string
@@ -1283,103 +1540,58 @@ function af_charactersheets_build_attributes_html(array $fields): string
         return '<div class="af-cs-muted">Нет данных</div>';
     }
 
-    return '<ul class="af-cs-attrs">' . implode('', $items) . '</ul>';
-}
+    $attributes_html = '<ul>' . implode('', $items) . '</ul>';
 
-function af_charactersheets_build_extra_fields_html(array $fields): string
-{
-    $items = [];
-    $mapped = af_charactersheets_kb_mapping();
-
-    foreach ($fields as $field) {
-        $name = (string)($field['name'] ?? '');
-        if (isset($mapped[$name])) {
-            continue;
-        }
-
-        $type = strtolower((string)($field['type'] ?? ''));
-        if ($type === 'number' || preg_match('/^(attr_|attribute_|stat_)/i', $name)) {
-            continue;
-        }
-
-        $label = (string)($field['title'] ?? $name);
-        $value = (string)($field['value_label'] ?? '');
-
-        if ($value === '') {
-            continue;
-        }
-
-        $items[] = '<li><span class="af-cs-key">' . htmlspecialchars_uni($label) . '</span><span class="af-cs-value">' . htmlspecialchars_uni($value) . '</span></li>';
-    }
-
-    if (empty($items)) {
-        return '<div class="af-cs-muted">Нет данных</div>';
-    }
-
-    return '<ul class="af-cs-list af-cs-list--columns">' . implode('', $items) . '</ul>';
+    global $templates;
+    $tpl = $templates->get('charactersheet_attributes');
+    eval("\$out = \"" . $tpl . "\";");
+    return $out;
 }
 
 function af_charactersheets_build_kb_cards_html(array $fields): string
 {
     $mapped = af_charactersheets_kb_mapping();
     $cards = [];
+    $index = af_charactersheets_index_fields($fields);
 
-    foreach ($fields as $field) {
-        $name = (string)($field['name'] ?? '');
-        if (!isset($mapped[$name])) {
-            continue;
-        }
+    foreach ($mapped as $fieldName => $data) {
+        $kbType = (string)$data['type'];
+        $label = (string)$data['label'];
+        $field = $index[$fieldName] ?? [];
 
         $key = (string)($field['value'] ?? '');
-        if ($key === '') {
-            continue;
-        }
-
-        $kbType = $mapped[$name];
-        $entry = af_charactersheets_kb_get_entry($kbType, $key);
+        $entry = $key !== '' ? af_charactersheets_kb_get_entry($kbType, $key) : [];
         $title = af_charactersheets_kb_pick_text($entry, 'title');
         if ($title === '') {
-            $title = (string)($field['value_label'] ?? $key);
+            $title = (string)($field['value_label'] ?? '');
+        }
+        if ($title === '') {
+            $title = $label;
         }
 
         $short = af_charactersheets_kb_pick_text($entry, 'short');
         $body = af_charactersheets_kb_pick_text($entry, 'body');
 
-        $meta = [];
-        if (!empty($entry['meta_json'])) {
-            $decoded = json_decode((string)$entry['meta_json'], true);
-            if (is_array($decoded)) {
-                $meta = $decoded;
-            }
-        }
+        $short_html = $short !== '' ? af_charactersheets_parse_bbcode($short) : '';
+        $body_html = $body !== '' ? af_charactersheets_parse_bbcode($body) : '';
 
-        $metaHtml = '';
-        if (!empty($meta)) {
-            $pairs = [];
-            foreach ($meta as $metaKey => $metaValue) {
-                if (is_array($metaValue)) {
-                    $metaValue = implode(', ', array_map('strval', $metaValue));
-                }
-                $pairs[] = '<li><span class="af-cs-key">' . htmlspecialchars_uni((string)$metaKey) . '</span><span class="af-cs-value">' . htmlspecialchars_uni((string)$metaValue) . '</span></li>';
-            }
-            if (!empty($pairs)) {
-                $metaHtml = '<ul class="af-cs-list af-cs-list--compact">' . implode('', $pairs) . '</ul>';
-            }
+        if ($short_html === '' && $body_html === '' && $key === '') {
+            $body_html = '<div class="af-cs-muted">Нет данных</div>';
         }
 
         $cards[] = '<div class="af-cs-kb-card">'
             . '<div class="af-cs-kb-title">' . htmlspecialchars_uni($title) . '</div>'
-            . ($short !== '' ? '<div class="af-cs-kb-short">' . $short . '</div>' : '')
-            . ($body !== '' ? '<div class="af-cs-kb-body">' . $body . '</div>' : '')
-            . ($metaHtml !== '' ? '<div class="af-cs-kb-meta">' . $metaHtml . '</div>' : '')
+            . ($short_html !== '' ? '<div class="af-cs-kb-short">' . $short_html . '</div>' : '')
+            . ($body_html !== '' ? '<div class="af-cs-kb-body">' . $body_html . '</div>' : '')
             . '</div>';
     }
 
-    if (empty($cards)) {
-        return '<div class="af-cs-muted">Нет данных</div>';
-    }
+    $rct_cards_html = implode('', $cards);
 
-    return '<div class="af-cs-kb-grid">' . implode('', $cards) . '</div>';
+    global $templates;
+    $tpl = $templates->get('charactersheet_rct_cards');
+    eval("\$out = \"" . $tpl . "\";");
+    return $out;
 }
 
 function af_charactersheets_slugify(string $text, int $tid): string
