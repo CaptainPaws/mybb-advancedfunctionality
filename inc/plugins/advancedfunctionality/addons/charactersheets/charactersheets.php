@@ -77,7 +77,7 @@ function af_charactersheets_uninstall(): void
     )");
     $db->delete_query('settinggroups', "name='af_charactersheets'");
     $db->delete_query('templates', "title LIKE 'charactersheets_%'");
-    $db->delete_query('templates', "title IN ('charactersheet_fullpage','charactersheet_inner','charactersheet_modal','postbit_plaque','charactersheet_rct_cards','charactersheet_stats_bars','charactersheet_attributes','charactersheet_skills','charactersheet_feats')");
+    $db->delete_query('templates', "title IN ('charactersheet_fullpage','charactersheet_inner','charactersheet_modal','postbit_plaque','charactersheet_rct_cards','charactersheet_stats_bars','charactersheet_attributes','charactersheet_skills','charactersheet_feats','charactersheets_catalog','charactersheets_catalog_card')");
 
     if (file_exists(MYBB_ROOT . 'inc/adminfunctions_templates.php')) {
         require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
@@ -390,6 +390,11 @@ function af_charactersheets_misc_start(): void
         af_charactersheets_render_sheet_page($slug);
         exit;
     }
+    if ($action === 'af_charactersheets') {
+        af_charactersheets_lang();
+        af_charactersheets_render_catalog_page();
+        exit;
+    }
 
     if ($mybb->get_input('action') !== 'af_charactersheets_accept') {
         return;
@@ -653,24 +658,34 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $atf_fields = af_charactersheets_get_atf_fields($tid);
     $atf_index = af_charactersheets_index_fields($atf_fields);
 
-    $character_name = af_charactersheets_pick_field_value($atf_index, ['character_name', 'char_name', 'name']);
-    if ($character_name === '') {
-        $character_name = (string)($thread['subject'] ?? '');
+    $character_name_en = af_charactersheets_pick_field_value($atf_index, ['character_name_en', 'character_name', 'char_name', 'name']);
+    if ($character_name_en === '') {
+        $character_name_en = (string)($thread['subject'] ?? '');
     }
-    if ($character_name === '') {
-        $character_name = $user['username'] ?? 'Лист персонажа';
+    if ($character_name_en === '') {
+        $character_name_en = $user['username'] ?? 'Лист персонажа';
     }
 
-    $sheet_title = htmlspecialchars_uni($character_name);
+    $character_name_ru = af_charactersheets_pick_field_value($atf_index, ['character_name_ru']);
+    $character_nicknames = af_charactersheets_pick_field_value($atf_index, ['character_nicknames', 'character_nickname', 'nickname']);
+
+    $sheet_title = htmlspecialchars_uni($character_name_en);
     $sheet_subtitle = htmlspecialchars_uni((string)($user['username'] ?? ''));
 
-    $sheet_base_html = af_charactersheets_build_base_html($character_name, $profile_url, $thread_url);
+    $sheet_base_html = af_charactersheets_build_base_html($profile_url, $thread_url);
+    $sheet_info_table_html = af_charactersheets_build_info_table_html($atf_index);
     $sheet_attributes_html = af_charactersheets_build_attributes_html($atf_fields);
-    $sheet_kb_html = af_charactersheets_build_kb_cards_html($atf_fields);
-    $sheet_stats_html = af_charactersheets_build_stats_html($atf_index);
+    $sheet_bonus_html = af_charactersheets_build_bonus_html($atf_index);
     $sheet_skills_html = af_charactersheets_build_skills_html($atf_index);
     $sheet_feats_html = af_charactersheets_build_feats_html($atf_index);
+    $sheet_inventory_html = af_charactersheets_build_inventory_html();
+    $sheet_augments_html = af_charactersheets_build_augments_html();
+    $sheet_mechanics_html = af_charactersheets_build_mechanics_html();
     $sheet_portrait_url = af_charactersheets_get_portrait_url($atf_index);
+    $sheet_level_value = 1;
+    $sheet_level_percent = 20;
+    $sheet_name_ru = htmlspecialchars_uni($character_name_ru !== '' ? $character_name_ru : '—');
+    $sheet_nicknames = htmlspecialchars_uni($character_nicknames !== '' ? $character_nicknames : '—');
 
     $page_title = 'Лист персонажа';
     if (!empty($user['username'])) {
@@ -795,6 +810,7 @@ function af_charactersheets_postbit_button(array &$post): void
     $button_label = $lang->af_charactersheets_sheet_button ?? 'Лист персонажа';
     $sheet_url = htmlspecialchars_uni($sheet_url);
     $button_label = htmlspecialchars_uni($button_label);
+    $sheet_slug = htmlspecialchars_uni($slug);
 
     $tpl = $templates->get('postbit_plaque');
     eval("\$plaque_html = \"" . $tpl . "\";");
@@ -1067,6 +1083,7 @@ function af_charactersheets_ensure_postbit_placeholder(): void
     global $db;
 
     $needle = '{$post[\'af_cs_plaque\']}';
+    $anchor = '{$post[\'userstars\']}';
     $q = $db->simple_select('templates', 'tid,template', "title='postbit_classic'");
 
     while ($row = $db->fetch_array($q)) {
@@ -1080,12 +1097,13 @@ function af_charactersheets_ensure_postbit_placeholder(): void
         if (strpos($tpl, $needle) !== false) {
             continue;
         }
+        if (strpos($tpl, $anchor) === false) {
+            continue;
+        }
 
-        $count = 0;
-        $pattern = '#(<div[^>]*class="post_author[^"]*scaleimages[^"]*"[^>]*>)(.*?)(</div>\s*</td>)#s';
-        $new = preg_replace($pattern, '$1$2' . "\n" . $needle . "\n" . '$3', $tpl, 1, $count);
+        $new = str_replace($anchor, $anchor . "\n" . $needle, $tpl);
 
-        if ($count && is_string($new) && $new !== '' && $new !== $tpl) {
+        if (is_string($new) && $new !== '' && $new !== $tpl) {
             $db->update_query('templates', ['template' => $db->escape_string($new)], 'tid=' . $tid);
         }
     }
@@ -1287,6 +1305,7 @@ function af_charactersheets_to_number(string $value): ?float
 function af_charactersheets_get_portrait_url(array $index): string
 {
     $url = af_charactersheets_pick_field_value($index, [
+        'character_pic',
         'character_image',
         'character_avatar',
         'character_portrait',
@@ -1294,7 +1313,7 @@ function af_charactersheets_get_portrait_url(array $index): string
         'portrait',
         'avatar',
         'image',
-    ]);
+    ], false);
 
     if ($url === '') {
         return 'data:image/svg+xml;charset=UTF-8,' . rawurlencode(
@@ -1311,49 +1330,7 @@ function af_charactersheets_get_portrait_url(array $index): string
 
 function af_charactersheets_build_stats_html(array $index): string
 {
-    $level_value = af_charactersheets_pick_field_value($index, ['character_level', 'level'], false);
-    $level = af_charactersheets_to_number($level_value);
-
-    $hp_current_value = af_charactersheets_pick_field_value($index, ['character_hp', 'hp', 'hp_current'], false);
-    $hp_max_value = af_charactersheets_pick_field_value($index, ['character_hp_max', 'hp_max', 'hp_total'], false);
-    $hp_current = af_charactersheets_to_number($hp_current_value);
-    $hp_max = af_charactersheets_to_number($hp_max_value);
-
-    $energy_current_value = af_charactersheets_pick_field_value($index, ['character_energy', 'energy', 'energy_current'], false);
-    $energy_max_value = af_charactersheets_pick_field_value($index, ['character_energy_max', 'energy_max', 'energy_total'], false);
-    $energy_current = af_charactersheets_to_number($energy_current_value);
-    $energy_max = af_charactersheets_to_number($energy_max_value);
-
-    $ac_value = af_charactersheets_pick_field_value($index, ['character_ac', 'ac', 'armor_class'], false);
-    $balance_value = af_charactersheets_pick_field_value($index, ['character_balance', 'balance', 'currency', 'credits', 'gold'], false);
-
-    $ac = af_charactersheets_to_number($ac_value);
-    $balance = af_charactersheets_to_number($balance_value);
-
-    $stats = [];
-    $stats[] = af_charactersheets_render_stat_bar(
-        'Уровень',
-        $level !== null ? (string)(int)$level : 'нет данных',
-        $level !== null ? min(100, max(0, (int)$level * 5)) : 0
-    );
-    $stats[] = af_charactersheets_render_stat_bar(
-        'HP',
-        ($hp_current !== null && $hp_max !== null) ? (int)$hp_current . ' / ' . (int)$hp_max : 'нет данных',
-        ($hp_current !== null && $hp_max) ? min(100, max(0, (int)round(($hp_current / $hp_max) * 100))) : 0
-    );
-    $stats[] = af_charactersheets_render_stat_bar(
-        'Energy',
-        ($energy_current !== null && $energy_max !== null) ? (int)$energy_current . ' / ' . (int)$energy_max : 'нет данных',
-        ($energy_current !== null && $energy_max) ? min(100, max(0, (int)round(($energy_current / $energy_max) * 100))) : 0
-    );
-    $stats[] = af_charactersheets_render_stat_value('AC', $ac !== null ? (string)(int)$ac : 'нет данных');
-    $stats[] = af_charactersheets_render_stat_value('Баланс', $balance !== null ? (string)(int)$balance : 'нет данных');
-
-    $stats_html = implode('', $stats);
-    global $templates;
-    $tpl = $templates->get('charactersheet_stats_bars');
-    eval("\$out = \"" . $tpl . "\";");
-    return $out;
+    return '';
 }
 
 function af_charactersheets_render_stat_bar(string $label, string $value, int $percent): string
@@ -1378,10 +1355,32 @@ function af_charactersheets_render_stat_value(string $label, string $value): str
 
 function af_charactersheets_build_skills_html(array $index): string
 {
-    $skills_html = '<div class="af-cs-skill-item">'
-        . '<span>Нет данных по навыкам</span>'
-        . '<a href="#" class="af-cs-skill-link">Улучшить</a>'
-        . '</div>';
+    $skills = [
+        ['name' => 'Атлетика', 'attr' => 'Ловкости'],
+        ['name' => 'Скрытность', 'attr' => 'Ловкости'],
+        ['name' => 'Анализ', 'attr' => 'Интеллекта'],
+        ['name' => 'Восприятие', 'attr' => 'Мудрости'],
+        ['name' => 'Убеждение', 'attr' => 'Харизмы'],
+        ['name' => 'Медицина', 'attr' => 'Мудрости'],
+        ['name' => 'Выживание', 'attr' => 'Конституции'],
+        ['name' => 'Рукопашный бой', 'attr' => 'Силы'],
+        ['name' => 'Акробатика', 'attr' => 'Ловкости'],
+        ['name' => 'История', 'attr' => 'Интеллекта'],
+        ['name' => 'Запугивание', 'attr' => 'Харизмы'],
+        ['name' => 'Техника', 'attr' => 'Интеллекта'],
+        ['name' => 'Ловкость рук', 'attr' => 'Ловкости'],
+        ['name' => 'Знания', 'attr' => 'Интеллекта'],
+    ];
+
+    $items = [];
+    foreach ($skills as $skill) {
+        $items[] = '<div class="af-cs-skill-item">'
+            . '<div class="af-cs-skill-name">' . htmlspecialchars_uni($skill['name']) . ' <span>(от ' . htmlspecialchars_uni($skill['attr']) . ')</span></div>'
+            . '<div class="af-cs-skill-value">+0</div>'
+            . '</div>';
+    }
+
+    $skills_html = implode('', $items);
 
     global $templates;
     $tpl = $templates->get('charactersheet_skills');
@@ -1392,8 +1391,8 @@ function af_charactersheets_build_skills_html(array $index): string
 function af_charactersheets_build_feats_html(array $index): string
 {
     $feats_html = '<div class="af-cs-feat-item">'
-        . '<span>Нет данных по скиллам</span>'
-        . '<a href="#" class="af-cs-feat-link">Открыть магазин</a>'
+        . '<div class="af-cs-feat-title">Способностей пока нет</div>'
+        . '<div class="af-cs-feat-meta">Заглушка магазина</div>'
         . '</div>';
 
     global $templates;
@@ -1434,7 +1433,7 @@ function af_charactersheets_kb_mapping(): array
             'type' => 'class',
             'label' => 'Класс',
         ],
-        'character_theme' => [
+        'character_themes' => [
             'type' => 'theme',
             'label' => 'Тема',
         ],
@@ -1492,55 +1491,49 @@ function af_charactersheets_is_ru(): bool
     return isset($lang->language) && $lang->language === 'russian';
 }
 
-function af_charactersheets_build_base_html(string $character_name, string $profile_url, string $thread_url): string
+function af_charactersheets_build_base_html(string $profile_url, string $thread_url): string
 {
     $items = [];
 
-    if ($character_name !== '') {
-        $items[] = '<li><span class="af-cs-meta-key">Имя</span><span class="af-cs-meta-value">' . htmlspecialchars_uni($character_name) . '</span></li>';
-    }
-
     if ($profile_url !== '') {
-        $items[] = '<li><span class="af-cs-meta-key">Профиль</span><span class="af-cs-meta-value"><a href="' . htmlspecialchars_uni($profile_url) . '">Открыть</a></span></li>';
+        $items[] = '<a class="af-cs-btn" href="' . htmlspecialchars_uni($profile_url) . '">Профиль</a>';
     }
 
     if ($thread_url !== '') {
-        $items[] = '<li><span class="af-cs-meta-key">Анкета</span><span class="af-cs-meta-value"><a href="' . htmlspecialchars_uni($thread_url) . '">Открыть</a></span></li>';
+        $items[] = '<a class="af-cs-btn" href="' . htmlspecialchars_uni($thread_url) . '">Анкета</a>';
     }
 
     if (empty($items)) {
         return '<div class="af-cs-muted">Нет данных</div>';
     }
 
-    return '<ul class="af-cs-meta-list">' . implode('', $items) . '</ul>';
+    return '<div class="af-cs-button-row">' . implode('', $items) . '</div>';
 }
 
 function af_charactersheets_build_attributes_html(array $fields): string
 {
+    $attributes = [
+        'Сила',
+        'Ловкость',
+        'Конституция',
+        'Интеллект',
+        'Мудрость',
+        'Харизма',
+    ];
+
     $items = [];
-
-    foreach ($fields as $field) {
-        $type = strtolower((string)($field['type'] ?? ''));
-        $name = (string)($field['name'] ?? '');
-        $label = (string)($field['title'] ?? $name);
-        $value = (string)($field['value_label'] ?? '');
-
-        if ($value === '') {
-            continue;
-        }
-
-        if ($type !== 'number' && !preg_match('/^(attr_|attribute_|stat_)/i', $name)) {
-            continue;
-        }
-
-        $items[] = '<li><span class="af-cs-key">' . htmlspecialchars_uni($label) . '</span><span class="af-cs-value">' . htmlspecialchars_uni($value) . '</span></li>';
+    foreach ($attributes as $attribute) {
+        $items[] = '<div class="af-cs-attr-card">'
+            . '<div class="af-cs-attr-name">' . htmlspecialchars_uni($attribute) . '</div>'
+            . '<div class="af-cs-attr-score">0</div>'
+            . '<div class="af-cs-attr-meta">'
+            . '<span>База 0</span>'
+            . '<span>Бонус 0</span>'
+            . '</div>'
+            . '</div>';
     }
 
-    if (empty($items)) {
-        return '<div class="af-cs-muted">Нет данных</div>';
-    }
-
-    $attributes_html = '<ul>' . implode('', $items) . '</ul>';
+    $attributes_html = implode('', $items);
 
     global $templates;
     $tpl = $templates->get('charactersheet_attributes');
@@ -1592,6 +1585,248 @@ function af_charactersheets_build_kb_cards_html(array $fields): string
     $tpl = $templates->get('charactersheet_rct_cards');
     eval("\$out = \"" . $tpl . "\";");
     return $out;
+}
+
+function af_charactersheets_build_info_table_html(array $index): string
+{
+    $age = af_charactersheets_pick_field_value($index, ['character_age', 'age']);
+    $gender = af_charactersheets_pick_field_value($index, ['character_gen', 'character_gender', 'gender']);
+    $race = af_charactersheets_pick_field_value($index, ['character_race', 'race']);
+    $class = af_charactersheets_pick_field_value($index, ['character_class', 'class']);
+    $theme = af_charactersheets_pick_field_value($index, ['character_themes', 'character_theme', 'theme']);
+
+    $items = [];
+    $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Возраст</div><div class="af-cs-info-value">' . htmlspecialchars_uni($age !== '' ? $age : '—') . '</div></div>';
+    $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Пол</div><div class="af-cs-info-value">' . htmlspecialchars_uni($gender !== '' ? $gender : '—') . '</div></div>';
+
+    $chip_html = '';
+    foreach ([$race, $class, $theme] as $chip) {
+        if ($chip !== '') {
+            $chip_html .= '<span class="af-cs-chip">' . htmlspecialchars_uni($chip) . '</span>';
+        }
+    }
+    if ($chip_html === '') {
+        $chip_html = '<span class="af-cs-muted">—</span>';
+    }
+    $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Чипы</div><div class="af-cs-info-value">' . $chip_html . '</div></div>';
+    $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Кошелёк</div><div class="af-cs-info-value">0 ₵</div></div>';
+
+    return '<div class="af-cs-info-table">' . implode('', $items) . '</div>';
+}
+
+function af_charactersheets_build_bonus_html(array $index): string
+{
+    $mapping = af_charactersheets_kb_mapping();
+    $columns = [];
+    foreach ($mapping as $fieldName => $data) {
+        $field = $index[$fieldName] ?? [];
+        $key = (string)($field['value'] ?? '');
+        $entry = $key !== '' ? af_charactersheets_kb_get_entry((string)$data['type'], $key) : [];
+        $title = (string)$data['label'];
+        $text = af_charactersheets_kb_pick_text($entry, 'short');
+        if ($text === '') {
+            $text = af_charactersheets_kb_pick_text($entry, 'body');
+        }
+        $text_html = $text !== '' ? af_charactersheets_parse_bbcode($text) : '<div class="af-cs-muted">Нет данных</div>';
+        $columns[] = '<div class="af-cs-bonus-card">'
+            . '<div class="af-cs-bonus-title">' . htmlspecialchars_uni($title) . '</div>'
+            . '<div class="af-cs-bonus-body">' . $text_html . '</div>'
+            . '</div>';
+    }
+
+    return '<div class="af-cs-bonus-grid">' . implode('', $columns) . '</div>';
+}
+
+function af_charactersheets_build_mechanics_html(): string
+{
+    $col1 = '<div class="af-cs-mech-card">'
+        . '<div class="af-cs-mech-title">Класс брони</div>'
+        . '<div class="af-cs-mech-row"><span>Броня</span><span>0</span></div>'
+        . '<div class="af-cs-mech-row"><span>Щит</span><span>0</span></div>'
+        . '<div class="af-cs-mech-row af-cs-mech-total"><span>Итоговый AC</span><span>0</span></div>'
+        . '</div>';
+
+    $col2 = '<div class="af-cs-mech-card">'
+        . '<div class="af-cs-mech-title">Спасброски</div>'
+        . '<div class="af-cs-mech-row"><span>Рефлекс</span><span>0</span></div>'
+        . '<div class="af-cs-mech-row"><span>Воля</span><span>0</span></div>'
+        . '<div class="af-cs-mech-row"><span>Стойкость</span><span>0</span></div>'
+        . '<div class="af-cs-mech-row"><span>Восприятие</span><span>0</span></div>'
+        . '<div class="af-cs-mech-divider"></div>'
+        . '<div class="af-cs-mech-row"><span>HP</span><span>—</span></div>'
+        . '<div class="af-cs-mech-row"><span>Человечность</span><span>—</span></div>'
+        . '</div>';
+
+    $col3 = '<div class="af-cs-mech-card">'
+        . '<div class="af-cs-mech-title">Урон</div>'
+        . '<div class="af-cs-mech-row"><span>Базовый</span><span>0</span></div>'
+        . '<div class="af-cs-mech-row"><span>Бонус оружия</span><span>0</span></div>'
+        . '<div class="af-cs-mech-row af-cs-mech-total"><span>Итог</span><span>0</span></div>'
+        . '</div>';
+
+    return '<div class="af-cs-mechanics-grid">' . $col1 . $col2 . $col3 . '</div>';
+}
+
+function af_charactersheets_build_inventory_html(): string
+{
+    return '<div class="af-cs-inventory-grid">'
+        . '<div class="af-cs-inventory-card">'
+        . '<div class="af-cs-inventory-title">Экипировка</div>'
+        . '<div class="af-cs-inventory-row"><span>Оружие</span><span>—</span></div>'
+        . '<div class="af-cs-inventory-row"><span>Броня</span><span>—</span></div>'
+        . '</div>'
+        . '<div class="af-cs-inventory-card">'
+        . '<div class="af-cs-inventory-title">Инвентарь</div>'
+        . '<div class="af-cs-inventory-row"><span>Броня</span><span>—</span></div>'
+        . '<div class="af-cs-inventory-row"><span>Оружие</span><span>—</span></div>'
+        . '<div class="af-cs-inventory-row"><span>Боеприпасы</span><span>—</span></div>'
+        . '<div class="af-cs-inventory-row"><span>Инструменты</span><span>—</span></div>'
+        . '<div class="af-cs-inventory-row"><span>Модификации</span><span>—</span></div>'
+        . '<div class="af-cs-inventory-row"><span>Ресурсы</span><span>—</span></div>'
+        . '</div>'
+        . '</div>';
+}
+
+function af_charactersheets_build_augments_html(): string
+{
+    return '<div class="af-cs-augmentations">'
+        . '<div class="af-cs-augmentations-list">'
+        . '<div class="af-cs-augmentation-item">'
+        . '<div class="af-cs-augmentation-name">Усиленный слух</div>'
+        . '<div class="af-cs-augmentation-meta">Человечность: -3</div>'
+        . '</div>'
+        . '</div>'
+        . '<div class="af-cs-augmentation-controls">'
+        . '<button type="button" class="af-cs-btn af-cs-btn--ghost">Добавить мод</button>'
+        . '<div class="af-cs-augmentation-slot">'
+        . '<label>Слот</label>'
+        . '<select>'
+        . '<option>Левый глаз</option>'
+        . '<option>Правый глаз</option>'
+        . '<option>Левая рука</option>'
+        . '<option>Правая рука</option>'
+        . '<option>Ноги</option>'
+        . '<option>Нервная система</option>'
+        . '</select>'
+        . '</div>'
+        . '<div class="af-cs-augmentation-humanity">'
+        . '<span>Потеря человечности</span>'
+        . '<strong>3</strong>'
+        . '</div>'
+        . '</div>'
+        . '</div>';
+}
+
+function af_charactersheets_render_catalog_page(): void
+{
+    global $db, $templates, $header, $headerinclude, $footer;
+
+    $rows = [];
+    if ($db->table_exists(AF_CS_TABLE)) {
+        $q = $db->simple_select(AF_CS_TABLE, 'tid,uid,sheet_slug', 'sheet_created=1', ['order_by' => 'tid', 'order_dir' => 'DESC']);
+        while ($row = $db->fetch_array($q)) {
+            if (!empty($row['sheet_slug'])) {
+                $rows[] = $row;
+            }
+        }
+    }
+
+    $tids = array_map(static function ($row) {
+        return (int)($row['tid'] ?? 0);
+    }, $rows);
+    $atf_map = af_charactersheets_get_atf_fields_map($tids);
+
+    $cards = [];
+    foreach ($rows as $row) {
+        $tid = (int)($row['tid'] ?? 0);
+        $slug = (string)($row['sheet_slug'] ?? '');
+        $fields = $atf_map[$tid] ?? [];
+        $index = af_charactersheets_index_fields($fields);
+
+        $name_en = af_charactersheets_pick_field_value($index, ['character_name_en', 'character_name', 'char_name', 'name']);
+        $name_ru = af_charactersheets_pick_field_value($index, ['character_name_ru']);
+        $race = af_charactersheets_pick_field_value($index, ['character_race', 'race']);
+        $class = af_charactersheets_pick_field_value($index, ['character_class', 'class']);
+        $theme = af_charactersheets_pick_field_value($index, ['character_themes', 'character_theme', 'theme']);
+        $portrait = af_charactersheets_get_portrait_url($index);
+
+        $sheet_url = 'misc.php?action=af_charactersheet&slug=' . rawurlencode($slug);
+        $sheet_url = htmlspecialchars_uni($sheet_url);
+        $card_name_en = htmlspecialchars_uni($name_en !== '' ? $name_en : $slug);
+        $card_name_ru = htmlspecialchars_uni($name_ru);
+        $card_race_label = htmlspecialchars_uni($race);
+        $card_class_label = htmlspecialchars_uni($class);
+        $card_theme_label = htmlspecialchars_uni($theme);
+        $card_race_chip = $race !== '' ? '<span class="af-cs-chip">' . htmlspecialchars_uni($race) . '</span>' : '';
+        $card_class_chip = $class !== '' ? '<span class="af-cs-chip">' . htmlspecialchars_uni($class) . '</span>' : '';
+        $card_theme_chip = $theme !== '' ? '<span class="af-cs-chip">' . htmlspecialchars_uni($theme) . '</span>' : '';
+        $card_portrait = htmlspecialchars_uni($portrait);
+
+        $tpl = $templates->get('charactersheets_catalog_card');
+        eval("\$card_html = \"" . $tpl . "\";");
+        $cards[] = $card_html;
+    }
+
+    $cards_html = implode('', $cards);
+    if ($cards_html === '') {
+        $cards_html = '<div class="af-cs-muted">Листы персонажей пока не созданы.</div>';
+    }
+
+    $assets = af_charactersheets_get_asset_urls();
+    $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n"
+        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '?v=1.0.0" />' . "\n"
+        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '?v=1.0.0"></script>' . "\n";
+
+    $page_title = 'Каталог листов персонажей';
+    $tpl = $templates->get('charactersheets_catalog');
+    eval("\$page = \"" . $tpl . "\";");
+    output_page($page);
+    exit;
+}
+
+function af_charactersheets_get_atf_fields_map(array $tids): array
+{
+    global $db;
+
+    $tids = array_values(array_filter(array_map('intval', $tids)));
+    if (empty($tids)) {
+        return [];
+    }
+
+    if (!$db->table_exists('af_atf_fields') || !$db->table_exists('af_atf_values')) {
+        return [];
+    }
+
+    $id_list = implode(',', $tids);
+    $map = [];
+    $q = $db->write_query("
+        SELECT v.tid, f.name, f.title, f.type, f.options, v.value
+        FROM " . TABLE_PREFIX . "af_atf_values v
+        INNER JOIN " . TABLE_PREFIX . "af_atf_fields f ON f.fieldid = v.fieldid
+        WHERE v.tid IN (" . $id_list . ") AND f.active = 1
+        ORDER BY f.sortorder ASC, f.fieldid ASC
+    ");
+
+    while ($row = $db->fetch_array($q)) {
+        $tid = (int)($row['tid'] ?? 0);
+        $value = (string)($row['value'] ?? '');
+        if ($value === '' || $tid <= 0) {
+            continue;
+        }
+
+        $field = [
+            'name' => (string)($row['name'] ?? ''),
+            'title' => (string)($row['title'] ?? ''),
+            'type' => (string)($row['type'] ?? ''),
+            'options' => (string)($row['options'] ?? ''),
+            'value' => $value,
+        ];
+        $field['value_label'] = af_charactersheets_resolve_field_label($field);
+
+        $map[$tid][] = $field;
+    }
+
+    return $map;
 }
 
 function af_charactersheets_slugify(string $text, int $tid): string

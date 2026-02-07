@@ -6,21 +6,24 @@
     <div class="af-cs-summary">
       <div class="af-cs-summary__head">
         <h1>{$sheet_title}</h1>
-        <div class="af-cs-subtitle">{$sheet_subtitle}</div>
+        <div class="af-cs-name-ru">
+          <span class="af-cs-name-ru__main">{$sheet_name_ru}</span>
+          <span class="af-cs-name-ru__nick">{$sheet_nicknames}</span>
+        </div>
       </div>
-      <div class="af-cs-summary__meta">
+      <div class="af-cs-level">
+        <div class="af-cs-level__value">{$sheet_level_value}</div>
+        <div class="af-cs-level__bar"><span style="width: {$sheet_level_percent}%"></span></div>
+        <div class="af-cs-level__label">Уровень</div>
+      </div>
+      <div class="af-cs-summary__buttons">
         {$sheet_base_html}
       </div>
-      <div class="af-cs-summary__stats">
-        {$sheet_stats_html}
+      <div class="af-cs-summary__info">
+        {$sheet_info_table_html}
       </div>
     </div>
   </div>
-
-  <section class="af-cs-section">
-    <h2>Раса / Класс / Тема</h2>
-    {$sheet_kb_html}
-  </section>
 
   <section class="af-cs-section">
     <h2>Атрибуты</h2>
@@ -28,12 +31,37 @@
   </section>
 
   <section class="af-cs-section">
-    <h2>Навыки</h2>
-    {$sheet_skills_html}
+    <h2>Механика</h2>
+    {$sheet_mechanics_html}
   </section>
 
   <section class="af-cs-section">
-    <h2>Скиллы</h2>
-    {$sheet_feats_html}
+    <div class="af-cs-tabs" data-afcs-tabs>
+      <div class="af-cs-tabs__nav">
+        <button class="is-active" type="button" data-afcs-tab="main">Основная информация</button>
+        <button type="button" data-afcs-tab="skills">Навыки</button>
+        <button type="button" data-afcs-tab="feats">Способности</button>
+        <button type="button" data-afcs-tab="inventory">Инвентарь</button>
+        <button type="button" data-afcs-tab="augments">Аугментации</button>
+      </div>
+      <div class="af-cs-tabs__content">
+        <div class="af-cs-tab is-active" data-afcs-tab-content="main">
+          <h3>Бонусы</h3>
+          {$sheet_bonus_html}
+        </div>
+        <div class="af-cs-tab" data-afcs-tab-content="skills">
+          {$sheet_skills_html}
+        </div>
+        <div class="af-cs-tab" data-afcs-tab-content="feats">
+          {$sheet_feats_html}
+        </div>
+        <div class="af-cs-tab" data-afcs-tab-content="inventory">
+          {$sheet_inventory_html}
+        </div>
+        <div class="af-cs-tab" data-afcs-tab-content="augments">
+          {$sheet_augments_html}
+        </div>
+      </div>
+    </div>
   </section>
 </div>

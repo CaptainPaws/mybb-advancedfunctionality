@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>{$page_title}</title>
+{$headerinclude}
+</head>
+<body>
+{$header}
+<div class="af-cs-page">
+  <div class="af-cs-catalog-header">
+    <h1>Каталог листов персонажей</h1>
+    <div class="af-cs-catalog-controls">
+      <input type="search" class="af-cs-input" placeholder="Поиск по имени или нику" data-afcs-search />
+      <select class="af-cs-select" data-afcs-filter="race">
+        <option value="">Раса</option>
+      </select>
+      <select class="af-cs-select" data-afcs-filter="class">
+        <option value="">Класс</option>
+      </select>
+      <select class="af-cs-select" data-afcs-filter="theme">
+        <option value="">Тема</option>
+      </select>
+    </div>
+  </div>
+  <div class="af-cs-catalog-grid" data-afcs-catalog>
+    {$cards_html}
+  </div>
+</div>
+{$footer}
+</body>
+</html>
