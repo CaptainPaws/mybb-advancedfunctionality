@@ -1,4 +1,4 @@
-<div class="af-cs-page">
+<div class="af-cs-page" data-afcs-sheet data-afcs-sheet-id="{$sheet_id}" data-afcs-post-key="{$sheet_post_key}">
   <div class="af-cs-hero">
     <div class="af-cs-portrait">
       <img src="{$sheet_portrait_url}" alt="{$sheet_title}" loading="lazy" />
@@ -12,9 +12,9 @@
         </div>
       </div>
       <div class="af-cs-level">
-        <div class="af-cs-level__value">{$sheet_level_value}</div>
-        <div class="af-cs-level__bar"><span style="width: {$sheet_level_percent}%"></span></div>
-        <div class="af-cs-level__label">Уровень</div>
+        <div class="af-cs-level__value" data-afcs-level-value>{$sheet_level_value}</div>
+        <div class="af-cs-level__bar"><span data-afcs-level-bar style="width: {$sheet_level_percent}%"></span></div>
+        <div class="af-cs-level__label">Уровень · <span data-afcs-level-exp>{$sheet_level_exp_label}</span></div>
       </div>
       <div class="af-cs-summary__buttons">
         {$sheet_base_html}
@@ -27,12 +27,21 @@
 
   <section class="af-cs-section">
     <h2>Атрибуты</h2>
-    {$sheet_attributes_html}
+    <div data-afcs-block="attributes">
+      {$sheet_attributes_html}
+    </div>
   </section>
 
   <section class="af-cs-section">
     <h2>Механика</h2>
     {$sheet_mechanics_html}
+  </section>
+
+  <section class="af-cs-section">
+    <h2>Уровень и опыт</h2>
+    <div data-afcs-block="progress">
+      {$sheet_progress_html}
+    </div>
   </section>
 
   <section class="af-cs-section">
