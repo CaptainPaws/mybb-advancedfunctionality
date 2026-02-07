@@ -653,6 +653,7 @@ function af_charactersheets_render_sheet_page(string $slug): void
     }
 
     $profile_url = function_exists('get_profile_link') ? get_profile_link($uid) : ('member.php?action=profile&uid=' . $uid);
+    $profile_url = html_entity_decode($profile_url, ENT_QUOTES, 'UTF-8');
     $thread_url = function_exists('get_thread_link') ? get_thread_link($tid) : ('showthread.php?tid=' . $tid);
 
     $atf_fields = af_charactersheets_get_atf_fields($tid);
