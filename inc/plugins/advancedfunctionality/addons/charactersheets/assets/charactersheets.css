@@ -273,7 +273,7 @@
   position: relative;
   background: #111;
   border-radius: 14px;
-  width: min(980px, 90vw);
+  width: min(1100px, 90vw);
   height: min(720px, 85vh);
   display: flex;
   flex-direction: column;
