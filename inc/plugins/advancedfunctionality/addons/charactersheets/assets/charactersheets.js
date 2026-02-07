@@ -153,6 +153,134 @@
     });
   }
 
+  var sheet = document.querySelector('[data-afcs-sheet]');
+  if (sheet) {
+    var sheetId = sheet.getAttribute('data-afcs-sheet-id');
+    var postKey = sheet.getAttribute('data-afcs-post-key');
+
+    function sendAction(action, payload) {
+      payload = payload || {};
+      payload.do = action;
+      payload.sheet_id = sheetId;
+      payload.my_post_key = postKey;
+
+      var data = new FormData();
+      Object.keys(payload).forEach(function (key) {
+        var value = payload[key];
+        if (typeof value === 'object' && value !== null) {
+          Object.keys(value).forEach(function (sub) {
+            data.append(key + '[' + sub + ']', value[sub]);
+          });
+          return;
+        }
+        data.append(key, value);
+      });
+
+      return fetch('misc.php?action=af_charactersheet_api', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: data
+      }).then(function (resp) { return resp.json(); });
+    }
+
+    function applyViewUpdate(payload) {
+      if (payload.attributes_html) {
+        var block = sheet.querySelector('[data-afcs-block="attributes"]');
+        if (block) {
+          block.innerHTML = payload.attributes_html;
+        }
+      }
+      if (payload.progress_html) {
+        var blockProgress = sheet.querySelector('[data-afcs-block="progress"]');
+        if (blockProgress) {
+          blockProgress.innerHTML = payload.progress_html;
+        }
+      }
+      if (payload.view) {
+        var levelValue = sheet.querySelector('[data-afcs-level-value]');
+        var levelExp = sheet.querySelector('[data-afcs-level-exp]');
+        var levelBar = sheet.querySelector('[data-afcs-level-bar]');
+        if (levelValue) {
+          levelValue.textContent = payload.view.level;
+        }
+        if (levelExp) {
+          levelExp.textContent = payload.view.level_exp_label;
+        }
+        if (levelBar) {
+          levelBar.style.width = payload.view.level_percent + '%';
+        }
+      }
+    }
+
+    sheet.addEventListener('click', function (event) {
+      var saveAttrs = event.target.closest('[data-afcs-save-attributes]');
+      if (saveAttrs) {
+        var inputs = sheet.querySelectorAll('[data-afcs-attr-input]');
+        var allocations = {};
+        inputs.forEach(function (input) {
+          allocations[input.getAttribute('data-afcs-attr-input')] = input.value || 0;
+        });
+        sendAction('save_attributes', { allocations: allocations }).then(function (payload) {
+          if (!payload.success) {
+            alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
+            return;
+          }
+          applyViewUpdate(payload);
+        });
+        return;
+      }
+
+      var choiceSave = event.target.closest('[data-afcs-choice-save]');
+      if (choiceSave) {
+        var choiceKey = choiceSave.getAttribute('data-afcs-choice-save');
+        var select = sheet.querySelector('[data-afcs-choice-key="' + choiceKey + '"]');
+        var choiceValue = select ? select.value : '';
+        sendAction('save_choice', { choice_key: choiceKey, choice_value: choiceValue }).then(function (payload) {
+          if (!payload.success) {
+            alert((payload.error || 'Ошибка сохранения').toString());
+            return;
+          }
+          applyViewUpdate(payload);
+        });
+        return;
+      }
+
+      var ledgerToggle = event.target.closest('[data-afcs-ledger-toggle]');
+      if (ledgerToggle) {
+        var ledger = sheet.querySelector('[data-afcs-ledger]');
+        if (ledger) {
+          ledger.hidden = !ledger.hidden;
+        }
+      }
+    });
+
+    sheet.addEventListener('submit', function (event) {
+      var form = event.target.closest('[data-afcs-award-form]');
+      if (!form) {
+        return;
+      }
+      event.preventDefault();
+      var amount = form.querySelector('input[name="amount"]');
+      var reason = form.querySelector('input[name="reason"]');
+      sendAction('grant_exp', {
+        amount: amount ? amount.value : '',
+        reason: reason ? reason.value : ''
+      }).then(function (payload) {
+        if (!payload.success) {
+          alert((payload.error || 'Ошибка начисления').toString());
+          return;
+        }
+        if (amount) {
+          amount.value = '';
+        }
+        if (reason) {
+          reason.value = '';
+        }
+        applyViewUpdate(payload);
+      });
+    });
+  }
+
   document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape') {
       closeModal();

@@ -1,0 +1,14 @@
+<div class="af-cs-progress" data-afcs-progress>
+  <div class="af-cs-progress__summary">
+    <div class="af-cs-progress__level">Уровень {$level}</div>
+    <div class="af-cs-progress__exp">{$exp_label}</div>
+  </div>
+  <div class="af-cs-progress__bar"><span style="width: {$percent}%"></span></div>
+  <div class="af-cs-progress__actions">
+    <button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-ledger-toggle>История начислений</button>
+  </div>
+  <div class="af-cs-ledger" data-afcs-ledger hidden>
+    {$ledger_html}
+  </div>
+  {$manual_award_html}
+</div>

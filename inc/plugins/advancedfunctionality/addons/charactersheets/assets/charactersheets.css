@@ -176,38 +176,164 @@
 
 .af-cs-attrs {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
+  gap: 16px;
 }
 
-.af-cs-attr-card {
-  padding: 12px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+.af-cs-attr-table {
   display: grid;
-  gap: 6px;
-  text-align: center;
+  gap: 8px;
 }
 
-.af-cs-attr-name {
-  text-transform: uppercase;
+.af-cs-attr-table__head,
+.af-cs-attr-row {
+  display: grid;
+  grid-template-columns: 1.2fr repeat(4, minmax(80px, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+
+.af-cs-attr-table__head {
   font-size: 12px;
   letter-spacing: 0.08em;
-  opacity: 0.7;
+  text-transform: uppercase;
+  opacity: 0.6;
 }
 
-.af-cs-attr-score {
-  font-size: 22px;
+.af-cs-attr-table__body {
+  display: grid;
+  gap: 8px;
+}
+
+.af-cs-attr-row {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.af-cs-attr-table__body input {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #efefef;
+}
+
+.af-cs-attr-final {
   font-weight: 700;
+}
+
+.af-cs-attr-readonly {
+  opacity: 0.8;
+}
+
+.af-cs-attr-label {
+  font-weight: 600;
 }
 
 .af-cs-attr-meta {
   display: flex;
-  justify-content: center;
-  gap: 8px;
+  gap: 16px;
+  font-size: 13px;
+}
+
+.af-cs-attr-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.af-cs-warning {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 80, 80, 0.15);
+  border: 1px solid rgba(255, 80, 80, 0.35);
   font-size: 12px;
-  opacity: 0.7;
+}
+
+.af-cs-choices {
+  display: grid;
+  gap: 8px;
+}
+
+.af-cs-choice-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.af-cs-choice-row select {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #efefef;
+}
+
+.af-cs-progress {
+  display: grid;
+  gap: 12px;
+}
+
+.af-cs-progress__summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.af-cs-progress__bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.af-cs-progress__bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #5cc3ff, #7bffb8);
+}
+
+.af-cs-ledger {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.af-cs-ledger-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.af-cs-ledger-amount {
+  font-weight: 600;
+}
+
+.af-cs-ledger-date {
+  opacity: 0.6;
+}
+
+.af-cs-award {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(160px, 1fr) auto;
+  gap: 8px;
+}
+
+.af-cs-award input {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #efefef;
 }
 
 .af-cs-skills,
