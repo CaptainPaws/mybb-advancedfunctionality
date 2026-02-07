@@ -29,6 +29,7 @@
     var plaque = event.target.closest('.af-cs-plaque__btn[data-afcs-open="1"]');
     if (plaque) {
       event.preventDefault();
+      event.stopPropagation();
       var slug = plaque.getAttribute('data-slug');
       if (slug) {
         openModal('misc.php?action=af_charactersheet&slug=' + encodeURIComponent(slug));
