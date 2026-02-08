@@ -1454,11 +1454,19 @@ function af_charactersheets_build_progress_html(array $view, array $sheet, bool 
                 $desc = strtoupper((string)($row['event_type'] ?? 'exp'));
             }
 
+            $by_uid = (int)($meta['by_uid'] ?? $meta['awarded_by'] ?? $meta['accepted_by'] ?? 0);
+            $by_name = $by_uid > 0 ? af_charactersheets_username_by_uid($by_uid) : '';
+            $by_label = $by_name !== '' ? $by_name : ($by_uid > 0 ? ('UID ' . $by_uid) : 'Система');
+
+            $amount_label = af_charactersheets_format_decimal($row['amount']);
+
             $ledger_items[] = '<div class="af-cs-ledger-row">'
-                . '<div>' . htmlspecialchars_uni($desc) . '</div>'
-                . '<div class="af-cs-ledger-amount">' . htmlspecialchars_uni((string)$row['amount']) . '</div>'
+                . '<div class="af-cs-ledger-desc">' . htmlspecialchars_uni($desc) . '</div>'
+                . '<div class="af-cs-ledger-amount">' . htmlspecialchars_uni($amount_label) . '</div>'
+                . '<div class="af-cs-ledger-by">' . htmlspecialchars_uni($by_label) . '</div>'
                 . '<div class="af-cs-ledger-date">' . htmlspecialchars_uni(date('d.m.Y H:i', (int)$row['created_at'])) . '</div>'
                 . '</div>';
+
         }
 
         if (!$ledger_items) {
@@ -2254,6 +2262,46 @@ function af_charactersheets_format_signed($value): string
     }
     $prefix = $num > 0 ? '+' : '';
     return $prefix . (string)$num;
+}
+
+function af_charactersheets_format_decimal($value): string
+{
+    // В БД amount = DECIMAL(12,4), прилетает строкой типа "100.0000"
+    $s = trim((string)$value);
+    if ($s === '') return '0';
+
+    // Нормализуем запятую на всякий
+    $s = str_replace(',', '.', $s);
+
+    // Если есть дробная часть — срежем хвостовые нули
+    if (strpos($s, '.') !== false) {
+        $s = rtrim($s, '0');
+        $s = rtrim($s, '.');
+        if ($s === '' || $s === '-' ) return '0';
+    }
+
+    return $s;
+}
+
+/**
+ * Возвращает username по uid с простым статическим кэшем.
+ */
+function af_charactersheets_username_by_uid(int $uid): string
+{
+    static $cache = [];
+
+    if ($uid <= 0) return '';
+    if (isset($cache[$uid])) return (string)$cache[$uid];
+
+    global $db;
+    $name = '';
+    $row = $db->fetch_array($db->simple_select('users', 'username', 'uid=' . (int)$uid, ['limit' => 1]));
+    if (is_array($row) && !empty($row['username'])) {
+        $name = (string)$row['username'];
+    }
+
+    $cache[$uid] = $name;
+    return $name;
 }
 
 function af_charactersheets_build_skills_html(array $view, bool $can_manage, bool $can_view_pool): string
