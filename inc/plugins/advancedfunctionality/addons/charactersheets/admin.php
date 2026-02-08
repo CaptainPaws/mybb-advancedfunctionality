@@ -105,7 +105,7 @@ class AF_Admin_Charactersheets
             $sort_order = (int)($mybb->input['sort_order'] ?? 0);
             $active = !empty($mybb->input['active']) ? 1 : 0;
 
-            $allowed_attrs = array_keys(af_charactersheets_default_attributes());
+            $allowed_attrs = array_keys(af_cs_get_attribute_catalog());
             if ($slug === '' || !preg_match('~^[a-z0-9_-]+$~i', $slug)) {
                 flash_message($lang->af_charactersheets_admin_skill_slug_invalid ?? 'Некорректный ключ навыка.', 'error');
                 admin_redirect($skillsUrl);
@@ -177,7 +177,7 @@ class AF_Admin_Charactersheets
         echo '<div class="form_row"><label>Slug</label><input type="text" name="slug" value="' . htmlspecialchars_uni((string)$editRow['slug']) . '" /></div>';
         echo '<div class="form_row"><label>Название</label><input type="text" name="title" value="' . htmlspecialchars_uni((string)$editRow['title']) . '" /></div>';
         echo '<div class="form_row"><label>Атрибут</label><select name="attr_key">';
-        foreach (af_charactersheets_default_attributes() as $key => $label) {
+        foreach (af_cs_get_attribute_catalog() as $key => $label) {
             $selected = ((string)$editRow['attr_key'] === $key) ? ' selected' : '';
             echo '<option value="' . htmlspecialchars_uni($key) . '"' . $selected . '>' . htmlspecialchars_uni($label) . '</option>';
         }
