@@ -893,3 +893,163 @@
   max-height: 100px;
   overflow: auto;
 }
+
+/* ===== Skills ===== */
+.af-cs-skill-pool {
+  margin-bottom: 14px;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.af-cs-skill-item {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  margin-bottom: 10px;
+}
+
+.af-cs-skill-name {
+  font-weight: 700;
+}
+
+.af-cs-skill-name span {
+  display: block;
+  font-size: 12px;
+  opacity: 0.7;
+  font-weight: 500;
+}
+
+.af-cs-skill-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.af-cs-skill-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+.af-cs-skill-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.af-cs-skill-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  cursor: pointer;
+}
+
+.af-cs-skill-invested {
+  min-width: 20px;
+  text-align: center;
+}
+
+/* ===== Knowledge ===== */
+.af-cs-knowledge {
+  display: grid;
+  gap: 20px;
+}
+
+.af-cs-knowledge-section {
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.af-cs-knowledge-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.af-cs-knowledge-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.af-cs-knowledge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.af-cs-knowledge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-size: 12px;
+}
+
+.af-cs-knowledge-chip button {
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+}
+
+/* ===== Inventory / Augments ===== */
+.af-cs-inventory,
+.af-cs-augmentations {
+  display: grid;
+  gap: 20px;
+}
+
+.af-cs-inventory-equip,
+.af-cs-inventory-section,
+.af-cs-augmentations-column {
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.af-cs-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.af-cs-slot {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  text-align: center;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.af-cs-inventory-sections {
+  display: grid;
+  gap: 16px;
+}
+
+.af-cs-inventory-section--wide {
+  grid-column: 1 / -1;
+}
+
+.af-cs-augmentations {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}

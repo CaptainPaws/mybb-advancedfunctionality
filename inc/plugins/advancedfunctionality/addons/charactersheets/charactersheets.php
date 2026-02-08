@@ -14,6 +14,8 @@ const AF_CS_TABLE = 'af_charactersheets_accept';
 const AF_CS_CONFIG_TABLE = 'af_charactersheets_config';
 const AF_CS_SHEETS_TABLE = 'af_cs_sheets';
 const AF_CS_EXP_LEDGER_TABLE = 'af_cs_exp_ledger';
+const AF_CS_POINTS_LEDGER_TABLE = 'af_cs_points_ledger';
+const AF_CS_SKILLS_CATALOG_TABLE = 'af_cs_skills_catalog';
 const AF_CS_TPL_MARK = '<!--AF_CS_ACCEPT-->';
 const AF_CS_ASSET_MARK = '<!--AF_CS_ASSETS-->';
 const AF_CS_MODAL_MARK = '<!--AF_CS_MODAL-->';
@@ -73,6 +75,12 @@ function af_charactersheets_uninstall(): void
     if ($db->table_exists(AF_CS_EXP_LEDGER_TABLE)) {
         $db->drop_table(AF_CS_EXP_LEDGER_TABLE);
     }
+    if ($db->table_exists(AF_CS_POINTS_LEDGER_TABLE)) {
+        $db->drop_table(AF_CS_POINTS_LEDGER_TABLE);
+    }
+    if ($db->table_exists(AF_CS_SKILLS_CATALOG_TABLE)) {
+        $db->drop_table(AF_CS_SKILLS_CATALOG_TABLE);
+    }
 
     $db->delete_query('settings', "name IN (
         'af_charactersheets_enabled',
@@ -93,11 +101,19 @@ function af_charactersheets_uninstall(): void
         'af_charactersheets_level_req_step',
         'af_charactersheets_attr_points_per_level',
         'af_charactersheets_skill_points_per_level',
-        'af_charactersheets_exp_manual_groups'
+        'af_charactersheets_exp_manual_groups',
+        'af_charactersheets_exp_forum_categories',
+        'af_charactersheets_exp_forum_forums',
+        'af_charactersheets_exp_forum_exclude',
+        'af_charactersheets_exp_forum_mode',
+        'af_charactersheets_exp_allow_negative',
+        'af_charactersheets_exp_allow_overdraw',
+        'af_charactersheets_knowledge_base_choices',
+        'af_charactersheets_knowledge_per_int'
     )");
     $db->delete_query('settinggroups', "name='af_charactersheets'");
     $db->delete_query('templates', "title LIKE 'charactersheets_%'");
-    $db->delete_query('templates', "title IN ('charactersheet_fullpage','charactersheet_inner','charactersheet_modal','postbit_plaque','charactersheet_rct_cards','charactersheet_stats_bars','charactersheet_attributes','charactersheet_progress','charactersheet_skills','charactersheet_feats','charactersheets_catalog','charactersheets_catalog_card')");
+    $db->delete_query('templates', "title IN ('charactersheet_fullpage','charactersheet_inner','charactersheet_modal','postbit_plaque','charactersheet_rct_cards','charactersheet_stats_bars','charactersheet_attributes','charactersheet_progress','charactersheet_skills','charactersheet_feats','charactersheet_knowledge','charactersheets_catalog','charactersheets_catalog_card')");
 
     if (file_exists(MYBB_ROOT . 'inc/adminfunctions_templates.php')) {
         require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
@@ -226,6 +242,42 @@ function af_charactersheets_ensure_settings(): void
     );
     af_charactersheets_ensure_setting(
         $gid,
+        'af_charactersheets_exp_forum_categories',
+        $lang->af_charactersheets_exp_forum_categories ?? 'EXP forums: categories',
+        $lang->af_charactersheets_exp_forum_categories_desc ?? 'CSV category fids. All child forums are included.',
+        'text',
+        '',
+        31
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
+        'af_charactersheets_exp_forum_forums',
+        $lang->af_charactersheets_exp_forum_forums ?? 'EXP forums: forums',
+        $lang->af_charactersheets_exp_forum_forums_desc ?? 'CSV forum fids included.',
+        'text',
+        '',
+        32
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
+        'af_charactersheets_exp_forum_exclude',
+        $lang->af_charactersheets_exp_forum_exclude ?? 'EXP forums: exclude',
+        $lang->af_charactersheets_exp_forum_exclude_desc ?? 'CSV forum fids excluded.',
+        'text',
+        '',
+        33
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
+        'af_charactersheets_exp_forum_mode',
+        $lang->af_charactersheets_exp_forum_mode ?? 'EXP forums: mode',
+        $lang->af_charactersheets_exp_forum_mode_desc ?? 'include = only selected, exclude = all except selected.',
+        "select\ninclude=include\nexclude=exclude",
+        'include',
+        34
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
         'af_charactersheets_exp_on_register',
         $lang->af_charactersheets_exp_on_register ?? 'EXP on register',
         $lang->af_charactersheets_exp_on_register_desc ?? 'Experience granted after registration.',
@@ -240,7 +292,7 @@ function af_charactersheets_ensure_settings(): void
         $lang->af_charactersheets_exp_on_accept_desc ?? 'Experience granted after sheet acceptance.',
         'text',
         '0',
-        32
+        35
     );
     af_charactersheets_ensure_setting(
         $gid,
@@ -289,12 +341,48 @@ function af_charactersheets_ensure_settings(): void
     );
     af_charactersheets_ensure_setting(
         $gid,
+        'af_charactersheets_exp_allow_negative',
+        $lang->af_charactersheets_exp_allow_negative ?? 'Allow negative EXP awards',
+        $lang->af_charactersheets_exp_allow_negative_desc ?? 'Allow manual EXP subtraction.',
+        'yesno',
+        '0',
+        45
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
+        'af_charactersheets_exp_allow_overdraw',
+        $lang->af_charactersheets_exp_allow_overdraw ?? 'Allow EXP to go below zero',
+        $lang->af_charactersheets_exp_allow_overdraw_desc ?? 'If disabled, EXP cannot drop below zero.',
+        'yesno',
+        '0',
+        46
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
+        'af_charactersheets_knowledge_base_choices',
+        $lang->af_charactersheets_knowledge_base_choices ?? 'Knowledge choices base',
+        $lang->af_charactersheets_knowledge_base_choices_desc ?? 'Base number of knowledge choices.',
+        'text',
+        '0',
+        47
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
+        'af_charactersheets_knowledge_per_int',
+        $lang->af_charactersheets_knowledge_per_int ?? 'Knowledge per INT',
+        $lang->af_charactersheets_knowledge_per_int_desc ?? 'Choices added per INT point (floor).',
+        'text',
+        '0.4',
+        48
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
         'af_charactersheets_exp_manual_groups',
         $lang->af_charactersheets_exp_manual_groups ?? 'EXP manual award groups',
         $lang->af_charactersheets_exp_manual_groups_desc ?? 'CSV group ids allowed to grant experience manually.',
         'text',
         '4,3,6',
-        45
+        49
     );
 
     $db->delete_query('settings', "name='af_charactersheets_accept_post_template'");
@@ -404,6 +492,10 @@ function af_charactersheets_pre_output(&$page): void
     // Дедуп ассетов на showthread тоже
     if (!empty($GLOBALS['af_charactersheets_needs_assets'])) {
         $page = af_charactersheets_canonicalize_assets_html($page);
+    }
+
+    if (!empty($GLOBALS['af_charactersheets_needs_modal'])) {
+        $page = af_charactersheets_inject_modal($page);
     }
 
 
@@ -848,22 +940,23 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $sheet_view = af_charactersheets_compute_sheet_view($sheet);
     $can_edit_sheet = af_charactersheets_user_can_edit_sheet($sheet, $mybb->user ?? []);
     $can_award_exp = af_charactersheets_user_can_award_exp($mybb->user ?? []);
+    // fid нужен для is_moderator(), возьмём из threads если можем
+    $fid_for_mod = (int)($thread['fid'] ?? 0);
+    $can_view_ledger = af_charactersheets_user_can_view_ledger($sheet, $mybb->user ?? [], $fid_for_mod);
 
     $sheet_title = htmlspecialchars_uni($character_name_en);
     $sheet_subtitle = htmlspecialchars_uni((string)($user['username'] ?? ''));
 
     $sheet_base_html = af_charactersheets_build_base_html($profile_url, $thread_url);
     $sheet_info_table_html = af_charactersheets_build_info_table_html($atf_index);
-    $sheet_attributes_html = af_charactersheets_build_attributes_html($sheet_view, $can_edit_sheet);
+    $sheet_attributes_html = af_charactersheets_build_attributes_html($sheet_view, $can_edit_sheet, $can_view_ledger);
     $sheet_bonus_html = af_charactersheets_build_bonus_html($atf_index);
-    $sheet_skills_html = af_charactersheets_build_skills_html($atf_index);
+    $sheet_skills_html = af_charactersheets_build_skills_html($sheet_view, $can_edit_sheet, $can_view_ledger);
+    $sheet_knowledge_html = af_charactersheets_build_knowledge_html($sheet_view, $can_edit_sheet, $can_view_ledger);
     $sheet_feats_html = af_charactersheets_build_feats_html($atf_index);
     $sheet_inventory_html = af_charactersheets_build_inventory_html();
     $sheet_augments_html = af_charactersheets_build_augments_html();
     $sheet_mechanics_html = af_charactersheets_build_mechanics_html();
-    // fid нужен для is_moderator(), возьмём из threads если можем
-    $fid_for_mod = (int)($thread['fid'] ?? 0);
-    $can_view_ledger = af_charactersheets_user_can_view_ledger($sheet, $mybb->user ?? [], $fid_for_mod);
 
     $sheet_progress_html = af_charactersheets_build_progress_html($sheet_view, $sheet, $can_award_exp, $can_view_ledger);
 
@@ -1125,14 +1218,21 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
         'attributes_allocated' => af_charactersheets_default_attributes(),
         'choices' => [],
         'skills' => [],
+        'knowledge' => [
+            'languages' => [],
+            'knowledges' => [],
+        ],
         'inventory' => [],
     ];
 
+    $starting_attr_pool = (int)($mybb->settings['af_charactersheets_attr_pool_max'] ?? 0);
     $progress = [
         'level' => 1,
         'exp' => 0,
-        'attr_points_free' => 0,
+        'attr_points_free' => $starting_attr_pool,
         'skill_points_free' => 0,
+        'bonus_attr_points' => 0,
+        'bonus_skill_points' => 0,
     ];
 
     // ВАЖНО: если нет uid — пишем NULL, а не 0 (после миграции схемы)
@@ -1222,6 +1322,11 @@ function af_charactersheets_user_can_view_ledger(array $sheet, array $user, int 
     }
 
     return false;
+}
+
+function af_charactersheets_user_can_view_pools(array $sheet, array $user, int $fid = 0): bool
+{
+    return af_charactersheets_user_can_view_ledger($sheet, $user, $fid);
 }
 
 function af_charactersheets_user_can_edit_sheet(array $sheet, array $user): bool
@@ -1435,6 +1540,145 @@ function af_charactersheets_normalize_modifiers(string $type, string $key): arra
     return $modifiers;
 }
 
+/**
+ * Contract for bonuses in KB JSON (meta_json or blocks[].data_json):
+ * {
+ *   "bonuses": [
+ *     {"type":"attribute_bonus","target":"str","value":1},
+ *     {"type":"attribute_bonus","requires_choice":true,"value":2},
+ *     {"type":"attribute_points","value":2},
+ *     {"type":"skill_points","value":1},
+ *     {"type":"skill_bonus","target":"analysis","value":1},
+ *     {"type":"skill_bonus","requires_choice":true,"value":1},
+ *     {"type":"knowledge_choice","value":1},
+ *     {"type":"language_choice","value":1},
+ *     {"type":"knowledge","target":"lore_key"},
+ *     {"type":"language","target":"common"}
+ *   ]
+ * }
+ */
+function af_charactersheets_normalize_bonus_items(string $source, string $key): array
+{
+    $entry = af_charactersheets_kb_get_entry($source, $key);
+    if (empty($entry)) {
+        return [];
+    }
+
+    $items = [];
+    $attributes = af_charactersheets_default_attributes();
+
+    $meta = af_charactersheets_json_decode((string)($entry['meta_json'] ?? ''));
+    $sets = [];
+    if (!empty($meta['bonuses']) && is_array($meta['bonuses'])) {
+        $sets[] = $meta['bonuses'];
+    }
+    if (!empty($meta['modifiers']) && is_array($meta['modifiers'])) {
+        $sets[] = $meta['modifiers'];
+    }
+    foreach (['stats', 'attributes'] as $metaKey) {
+        if (!empty($meta[$metaKey]) && is_array($meta[$metaKey])) {
+            foreach ($meta[$metaKey] as $stat => $value) {
+                if (array_key_exists($stat, $attributes)) {
+                    $items[] = [
+                        'source' => $source,
+                        'type' => 'attribute_bonus',
+                        'target' => $stat,
+                        'value' => (float)$value,
+                        'requires_choice' => false,
+                    ];
+                }
+            }
+        }
+    }
+
+    $blocks = af_charactersheets_kb_get_blocks($entry);
+    foreach ($blocks as $block) {
+        $data = af_charactersheets_json_decode((string)($block['data_json'] ?? ''));
+        if (empty($data)) {
+            continue;
+        }
+        if (!empty($data['bonuses']) && is_array($data['bonuses'])) {
+            $sets[] = $data['bonuses'];
+        }
+        if (!empty($data['modifiers']) && is_array($data['modifiers'])) {
+            $sets[] = $data['modifiers'];
+        }
+        foreach (['stats', 'attributes'] as $blockKey) {
+            if (!empty($data[$blockKey]) && is_array($data[$blockKey])) {
+                foreach ($data[$blockKey] as $stat => $value) {
+                    if (array_key_exists($stat, $attributes)) {
+                        $items[] = [
+                            'source' => $source,
+                            'type' => 'attribute_bonus',
+                            'target' => $stat,
+                            'value' => (float)$value,
+                            'requires_choice' => false,
+                        ];
+                    }
+                }
+            }
+        }
+    }
+
+    foreach ($sets as $set) {
+        foreach ($set as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $type = (string)($item['type'] ?? '');
+            $target = (string)($item['target'] ?? $item['stat'] ?? $item['attribute'] ?? $item['skill'] ?? $item['key'] ?? '');
+            $value = $item['value'] ?? $item['amount'] ?? 0;
+            $requires_choice = !empty($item['requires_choice']) || !empty($item['choice']) || !empty($item['requiresChoice']);
+
+            if ($type === '') {
+                if ($target !== '' && array_key_exists($target, $attributes)) {
+                    $type = 'attribute_bonus';
+                } elseif ($target !== '') {
+                    $type = 'skill_bonus';
+                }
+            }
+
+            if ($type === '') {
+                continue;
+            }
+
+            $items[] = [
+                'source' => $source,
+                'type' => $type,
+                'target' => $target !== '' ? $target : null,
+                'value' => (float)$value,
+                'requires_choice' => $requires_choice,
+            ];
+        }
+    }
+
+    $normalized = [];
+    $i = 0;
+    foreach ($items as $item) {
+        $item['id'] = $source . ':' . $key . ':' . $i++;
+        $normalized[] = $item;
+    }
+
+    return $normalized;
+}
+
+function af_charactersheets_collect_bonus_items(array $base): array
+{
+    $items = [];
+    $sources = [
+        'race' => (string)($base['race_key'] ?? ''),
+        'class' => (string)($base['class_key'] ?? ''),
+        'themes' => (string)($base['theme_key'] ?? ''),
+    ];
+    foreach ($sources as $source => $key) {
+        if ($key === '') {
+            continue;
+        }
+        $items = array_merge($items, af_charactersheets_normalize_bonus_items($source, $key));
+    }
+    return $items;
+}
+
 function af_charactersheets_level_req(int $level): float
 {
     global $mybb;
@@ -1492,6 +1736,15 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $errors = [];
     $bonus = af_charactersheets_default_attributes();
     $choice_requirements = [];
+    $skill_choice_requirements = [];
+    $bonus_attr_points = 0;
+    $bonus_skill_points = 0;
+    $bonus_knowledge_choices = 0;
+    $bonus_language_choices = 0;
+    $bonus_skill_map = [];
+    $bonus_languages = [];
+    $bonus_knowledges = [];
+    $bonus_sources = [];
 
     $sources = [
         'race' => (string)($base['race_key'] ?? ''),
@@ -1505,23 +1758,25 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         'themes' => 'theme_attr_bonus_choice',
     ];
 
-    foreach ($sources as $source => $key) {
-        if ($key === '') {
-            continue;
+    $bonus_items = af_charactersheets_collect_bonus_items($base);
+    foreach ($bonus_items as $item) {
+        $type = (string)($item['type'] ?? '');
+        $target = $item['target'] ?? null;
+        $value = $item['value'] ?? 0;
+        $requires_choice = !empty($item['requires_choice']);
+        $source = (string)($item['source'] ?? '');
+        if ($source !== '' && !isset($bonus_sources[$source])) {
+            $bonus_sources[$source] = true;
         }
-        $mods = af_charactersheets_normalize_modifiers($source, $key);
-        foreach ($mods as $mod) {
-            if (($mod['type'] ?? '') !== 'attribute_bonus') {
-                continue;
-            }
-            $target = $mod['target'] ?? null;
-            if (!empty($mod['requires_choice'])) {
+
+        if ($type === 'attribute_bonus') {
+            if ($requires_choice) {
                 $choice_key = $choice_map[$source] ?? '';
                 $chosen = $choice_key !== '' ? (string)($choices[$choice_key] ?? '') : '';
                 $choice_requirements[$source] = [
                     'choice_key' => $choice_key,
                     'chosen' => $chosen,
-                    'value' => (float)($mod['value'] ?? 0),
+                    'value' => (float)$value,
                 ];
                 if ($chosen === '') {
                     if (!in_array('Не выбран бонус для ' . $source, $errors, true)) {
@@ -1531,10 +1786,64 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
                 }
                 $target = $chosen;
             }
-
             if ($target !== null && array_key_exists($target, $bonus)) {
-                $bonus[$target] += (float)($mod['value'] ?? 0);
+                $bonus[$target] += (float)$value;
             }
+            continue;
+        }
+
+        if ($type === 'attribute_points') {
+            $bonus_attr_points += (int)$value;
+            continue;
+        }
+
+        if ($type === 'skill_points') {
+            $bonus_skill_points += (int)$value;
+            continue;
+        }
+
+        if ($type === 'skill_bonus') {
+            if ($requires_choice && (string)$target === '') {
+                $choice_key = 'skill_bonus_choice_' . md5((string)($item['id'] ?? $source . ':' . $value));
+                $chosen = (string)($choices[$choice_key] ?? '');
+                $skill_choice_requirements[] = [
+                    'choice_key' => $choice_key,
+                    'chosen' => $chosen,
+                    'value' => (float)$value,
+                ];
+                if ($chosen === '') {
+                    continue;
+                }
+                $target = $chosen;
+            }
+            if (is_string($target) && $target !== '') {
+                $bonus_skill_map[$target] = ($bonus_skill_map[$target] ?? 0) + (float)$value;
+            }
+            continue;
+        }
+
+        if ($type === 'knowledge_choice') {
+            $bonus_knowledge_choices += (int)$value;
+            continue;
+        }
+
+        if ($type === 'language_choice') {
+            $bonus_language_choices += (int)$value;
+            continue;
+        }
+
+        if ($type === 'knowledge') {
+            if (is_string($target) && $target !== '') {
+                $bonus_knowledges[] = $target;
+            }
+            continue;
+        }
+
+        if ($type === 'language') {
+            if (is_string($target) && $target !== '') {
+                $bonus_languages[] = $target;
+            }
+            continue;
         }
     }
 
@@ -1543,14 +1852,14 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $final[$key] = (float)$value + (float)($attributes_allocated[$key] ?? 0) + (float)($bonus[$key] ?? 0);
     }
 
-    $pool_max = (int)($mybb->settings['af_charactersheets_attr_pool_max'] ?? 0);
     $spent = 0;
     foreach ($attributes_allocated as $value) {
         $spent += (int)$value;
     }
-
-    $remaining = $pool_max - $spent;
-    if ($spent > $pool_max) {
+    $pool_remaining = (int)($progress['attr_points_free'] ?? 0) + $bonus_attr_points;
+    $pool_max = $pool_remaining + $spent;
+    $remaining = $pool_remaining;
+    if ($pool_remaining < 0) {
         $errors[] = 'Превышен лимит очков пула.';
     }
 
@@ -1583,6 +1892,73 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         ];
     }
 
+    $bonus_source_labels = [];
+    foreach (array_keys($bonus_sources) as $source) {
+        $entry = af_charactersheets_kb_get_entry($source, (string)($sources[$source] ?? ''));
+        $label = af_charactersheets_kb_pick_text($entry, 'title');
+        if ($label === '') {
+            $label = $source;
+        }
+        $bonus_source_labels[] = $label;
+    }
+
+    $skills_catalog = af_charactersheets_get_skills_catalog(true);
+    $skills_invested = (array)($build['skills'] ?? []);
+    $skills_view = [];
+    $skills_spent = 0;
+    foreach ($skills_catalog as $skill) {
+        $slug = (string)$skill['slug'];
+        $attr_key = (string)$skill['attr_key'];
+        $base_val = (float)($final[$attr_key] ?? 0);
+        $base_mod = (int)floor($base_val);
+        $invested = (int)($skills_invested[$slug] ?? 0);
+        if ($invested < 0) {
+            $invested = 0;
+        }
+        $skills_spent += $invested;
+        $bonus_val = (float)($bonus_skill_map[$slug] ?? 0);
+        $total = $base_mod + $invested + $bonus_val;
+
+        $skills_view[] = [
+            'slug' => $slug,
+            'title' => (string)$skill['title'],
+            'attr_key' => $attr_key,
+            'attr_label' => $attributes_labels[$attr_key] ?? $attr_key,
+            'base' => $base_mod,
+            'invested' => $invested,
+            'bonus' => $bonus_val,
+            'total' => $total,
+        ];
+    }
+
+    $skill_pool_remaining = (int)($progress['skill_points_free'] ?? 0) + $bonus_skill_points;
+    $skill_pool_total = $skill_pool_remaining + $skills_spent;
+    if ($skill_pool_remaining < 0) {
+        $errors[] = 'Превышен лимит очков навыков.';
+    }
+
+    $knowledge_build = (array)($build['knowledge'] ?? []);
+    $knowledge_selected = array_values(array_unique(array_filter((array)($knowledge_build['knowledges'] ?? []))));
+    $language_selected = array_values(array_unique(array_filter((array)($knowledge_build['languages'] ?? []))));
+    $bonus_languages = array_values(array_unique($bonus_languages));
+    $bonus_knowledges = array_values(array_unique($bonus_knowledges));
+
+    $knowledge_base_choices = (int)($mybb->settings['af_charactersheets_knowledge_base_choices'] ?? 0);
+    $knowledge_per_int = (float)($mybb->settings['af_charactersheets_knowledge_per_int'] ?? 0);
+    $int_value = (float)($final['int'] ?? 0);
+    $knowledge_from_int = (int)floor($int_value * $knowledge_per_int);
+    $knowledge_total_choices = $knowledge_base_choices + $knowledge_from_int + $bonus_knowledge_choices;
+    $language_total_choices = $bonus_language_choices;
+
+    $knowledge_remaining = $knowledge_total_choices - count($knowledge_selected);
+    $language_remaining = $language_total_choices - count($language_selected);
+    if ($knowledge_remaining < 0) {
+        $errors[] = 'Превышен лимит знаний.';
+    }
+    if ($language_remaining < 0) {
+        $errors[] = 'Превышен лимит языков.';
+    }
+
     return [
         'base' => $attributes_base,
         'allocated' => $attributes_allocated,
@@ -1594,12 +1970,32 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         'errors' => $errors,
         'choices' => $choices,
         'choice_details' => $choice_details,
+        'skill_choice_details' => $skill_choice_requirements,
         'labels' => $attributes_labels,
         'level' => $level_data['level'],
         'level_percent' => $level_data['percent'],
         'level_exp_label' => number_format($exp, 2, '.', ' ') . ' / ' . number_format($level_data['next_req'], 2, '.', ' '),
         'exp' => $exp,
         'next_req' => $level_data['next_req'],
+        'skills' => $skills_view,
+        'skill_pool_total' => $skill_pool_total,
+        'skill_pool_spent' => $skills_spent,
+        'skill_pool_remaining' => $skill_pool_remaining,
+        'bonus_attr_points' => $bonus_attr_points,
+        'bonus_skill_points' => $bonus_skill_points,
+        'bonus_sources' => $bonus_source_labels,
+        'knowledge' => [
+            'selected' => $knowledge_selected,
+            'bonus' => $bonus_knowledges,
+            'total_choices' => $knowledge_total_choices,
+            'remaining' => $knowledge_remaining,
+        ],
+        'languages' => [
+            'selected' => $language_selected,
+            'bonus' => $bonus_languages,
+            'total_choices' => $language_total_choices,
+            'remaining' => $language_remaining,
+        ],
     ];
 }
 
@@ -1664,6 +2060,78 @@ function af_charactersheets_grant_exp(int $sheet_id, float $amount, string $even
     return true;
 }
 
+function af_charactersheets_get_pools(int $sheet_id): array
+{
+    $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
+    if (empty($sheet)) {
+        return [];
+    }
+    $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
+    return [
+        'attribute' => (int)($progress['attr_points_free'] ?? 0),
+        'skill' => (int)($progress['skill_points_free'] ?? 0),
+    ];
+}
+
+function af_charactersheets_log_points(int $sheet_id, string $type, int $amount, string $reason, array $meta = []): void
+{
+    global $db;
+    if (!$db->table_exists(AF_CS_POINTS_LEDGER_TABLE)) {
+        return;
+    }
+    $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
+    if (empty($sheet)) {
+        return;
+    }
+    $db->insert_query(AF_CS_POINTS_LEDGER_TABLE, af_charactersheets_db_escape_array([
+        'sheet_id' => $sheet_id,
+        'uid' => (int)($sheet['uid'] ?? 0),
+        'point_type' => $type,
+        'amount' => $amount,
+        'reason' => $reason,
+        'meta_json' => af_charactersheets_json_encode($meta),
+        'created_at' => TIME_NOW,
+    ]));
+}
+
+function af_charactersheets_add_points(int $sheet_id, string $type, int $amount, string $reason, array $meta = []): bool
+{
+    if ($amount <= 0) {
+        return false;
+    }
+    $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
+    if (empty($sheet)) {
+        return false;
+    }
+    $base = af_charactersheets_json_decode((string)($sheet['base_json'] ?? ''));
+    $build = af_charactersheets_json_decode((string)($sheet['build_json'] ?? ''));
+    $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
+    $key = $type === 'skill' ? 'skill_points_free' : 'attr_points_free';
+    $progress[$key] = (int)($progress[$key] ?? 0) + $amount;
+    af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
+    af_charactersheets_log_points($sheet_id, $type, $amount, $reason, $meta);
+    return true;
+}
+
+function af_charactersheets_spend_points(int $sheet_id, string $type, int $amount, string $reason, array $meta = []): bool
+{
+    if ($amount <= 0) {
+        return false;
+    }
+    $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
+    if (empty($sheet)) {
+        return false;
+    }
+    $base = af_charactersheets_json_decode((string)($sheet['base_json'] ?? ''));
+    $build = af_charactersheets_json_decode((string)($sheet['build_json'] ?? ''));
+    $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
+    $key = $type === 'skill' ? 'skill_points_free' : 'attr_points_free';
+    $progress[$key] = (int)($progress[$key] ?? 0) - $amount;
+    af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
+    af_charactersheets_log_points($sheet_id, $type, -$amount, $reason, $meta);
+    return true;
+}
+
 function af_charactersheets_get_ledger(int $sheet_id, int $limit = 10): array
 {
     global $db;
@@ -1688,7 +2156,7 @@ function af_charactersheets_get_ledger(int $sheet_id, int $limit = 10): array
     return $rows;
 }
 
-function af_charactersheets_build_attributes_html(array $view, bool $can_edit): string
+function af_charactersheets_build_attributes_html(array $view, bool $can_edit, bool $can_view_pool): string
 {
     $rows = [];
     $labels = (array)($view['labels'] ?? []);
@@ -1720,6 +2188,14 @@ function af_charactersheets_build_attributes_html(array $view, bool $can_edit): 
     $attributes_pool_max = (int)($view['pool_max'] ?? 0);
     $attributes_pool_remaining = (int)($view['remaining'] ?? 0);
     $attributes_pool_spent = (int)($view['spent'] ?? 0);
+    $attributes_pool_html = '';
+    if ($can_view_pool) {
+        $attributes_pool_html = '<div class="af-cs-attr-pool">'
+            . '<div>Пул: <strong>' . htmlspecialchars_uni((string)$attributes_pool_max) . '</strong></div>'
+            . '<div>Распределено: <strong data-afcs-pool-spent>' . htmlspecialchars_uni((string)$attributes_pool_spent) . '</strong></div>'
+            . '<div>Осталось: <strong data-afcs-pool-remaining>' . htmlspecialchars_uni((string)$attributes_pool_remaining) . '</strong></div>'
+            . '</div>';
+    }
 
     $error_items = [];
     foreach ((array)($view['errors'] ?? []) as $error) {
@@ -1774,7 +2250,20 @@ function af_charactersheets_build_progress_html(array $view, array $sheet, bool 
     $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
     $attr_points_free = (int)($progress['attr_points_free'] ?? 0);
     $skill_points_free = (int)($progress['skill_points_free'] ?? 0);
+    $bonus_attr_points = (int)($view['bonus_attr_points'] ?? 0);
+    $bonus_skill_points = (int)($view['bonus_skill_points'] ?? 0);
 
+    $points_html = '';
+    if ($can_view_ledger) {
+        $points_html = '<div>Свободные очки атрибутов: <strong>' . htmlspecialchars_uni((string)($attr_points_free + $bonus_attr_points)) . '</strong></div>'
+            . '<div>Свободные очки навыков: <strong>' . htmlspecialchars_uni((string)($skill_points_free + $bonus_skill_points)) . '</strong></div>';
+        $bonus_sources = (array)($view['bonus_sources'] ?? []);
+        if ($bonus_sources) {
+            $points_html .= '<div class="af-cs-muted">Источник бонусов: '
+                . htmlspecialchars_uni(implode(', ', $bonus_sources))
+                . '</div>';
+        }
+    }
     // ---- LEDGER (только если есть права) ----
     $ledger_html = '';
     $ledger_toggle_html = '';
@@ -1847,7 +2336,7 @@ function af_charactersheets_handle_api(): void
     $can_edit = af_charactersheets_user_can_edit_sheet($sheet, $mybb->user ?? []);
     $can_award = af_charactersheets_user_can_award_exp($mybb->user ?? []);
 
-    if (in_array($do, ['save_attributes', 'save_choice', 'grant_exp'], true)) {
+    if (in_array($do, ['save_attributes', 'save_choice', 'grant_exp', 'update_skill', 'add_knowledge', 'remove_knowledge'], true)) {
         verify_post_check($mybb->get_input('my_post_key'));
     }
 
@@ -1871,14 +2360,33 @@ function af_charactersheets_handle_api(): void
             $sanitized[$key] = $value;
         }
 
+        $prev_build = $build;
         $build['attributes_allocated'] = $sanitized;
-        $temp_sheet = $sheet;
-        $temp_sheet['build_json'] = af_charactersheets_json_encode($build);
-        $view = af_charactersheets_compute_sheet_view($temp_sheet);
-        if (!empty($view['errors'])) {
-            af_charactersheets_json_response(['success' => false, 'errors' => $view['errors']]);
+        $prev_spent = 0;
+        foreach ((array)($prev_build['attributes_allocated'] ?? []) as $value) {
+            $prev_spent += (int)$value;
         }
+        $new_spent = 0;
+        foreach ($sanitized as $value) {
+            $new_spent += (int)$value;
+        }
+        $delta = $new_spent - $prev_spent;
+        $view = af_charactersheets_compute_sheet_view($sheet);
+        $available = (int)($progress['attr_points_free'] ?? 0) + (int)($view['bonus_attr_points'] ?? 0);
+        if ($delta > $available) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Not enough attribute points']);
+        }
+        $progress['attr_points_free'] = (int)($progress['attr_points_free'] ?? 0) - $delta;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
+        if ($delta !== 0) {
+            af_charactersheets_log_points(
+                $sheet_id,
+                'attribute',
+                -$delta,
+                'attributes_allocation',
+                ['delta' => $delta]
+            );
+        }
     } elseif ($do === 'save_choice') {
         if (!$can_edit) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
@@ -1886,33 +2394,132 @@ function af_charactersheets_handle_api(): void
 
         $choice_key = (string)$mybb->get_input('choice_key');
         $choice_value = (string)$mybb->get_input('choice_value');
-        $allowed_choices = ['race_attr_bonus_choice', 'class_attr_bonus_choice', 'theme_attr_bonus_choice'];
-        if (!in_array($choice_key, $allowed_choices, true)) {
+        $allowed_attr_choices = ['race_attr_bonus_choice', 'class_attr_bonus_choice', 'theme_attr_bonus_choice'];
+        if (in_array($choice_key, $allowed_attr_choices, true)) {
+            if (!array_key_exists($choice_value, af_charactersheets_default_attributes())) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Invalid attribute']);
+            }
+        } elseif (strpos($choice_key, 'skill_bonus_choice_') === 0) {
+            $skills = af_charactersheets_get_skills_catalog(true);
+            $allowed = array_map(static function ($row) {
+                return (string)($row['slug'] ?? '');
+            }, $skills);
+            if ($choice_value === '' || !in_array($choice_value, $allowed, true)) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Invalid skill']);
+            }
+        } else {
             af_charactersheets_json_response(['success' => false, 'error' => 'Invalid choice']);
         }
-        if (!array_key_exists($choice_value, af_charactersheets_default_attributes())) {
-            af_charactersheets_json_response(['success' => false, 'error' => 'Invalid attribute']);
-        }
         $build['choices'][$choice_key] = $choice_value;
+        af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
+    } elseif ($do === 'update_skill') {
+        if (!$can_edit) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
+        }
+        $slug = (string)$mybb->get_input('slug');
+        $delta = (int)$mybb->get_input('delta');
+        if ($slug === '' || ($delta !== 1 && $delta !== -1)) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Invalid skill update']);
+        }
+        $skills = af_charactersheets_get_skills_catalog(true);
+        $allowed = array_map(static function ($row) {
+            return (string)($row['slug'] ?? '');
+        }, $skills);
+        if (!in_array($slug, $allowed, true)) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Unknown skill']);
+        }
+
+        $current = (int)($build['skills'][$slug] ?? 0);
+        $next = max(0, $current + $delta);
+
+        $view = af_charactersheets_compute_sheet_view($sheet);
+        $available = (int)($progress['skill_points_free'] ?? 0) + (int)($view['bonus_skill_points'] ?? 0);
+        if ($delta > $available) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Not enough skill points']);
+        }
+        $progress['skill_points_free'] = (int)($progress['skill_points_free'] ?? 0) - $delta;
+        $build['skills'][$slug] = $next;
+        af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
+        if ($delta !== 0) {
+            af_charactersheets_log_points(
+                $sheet_id,
+                'skill',
+                -$delta,
+                'skill_allocation',
+                ['slug' => $slug, 'delta' => $delta]
+            );
+        }
+    } elseif ($do === 'add_knowledge' || $do === 'remove_knowledge') {
+        if (!$can_edit) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
+        }
+        $type = (string)$mybb->get_input('type');
+        $key = (string)$mybb->get_input('key');
+        if (!in_array($type, ['knowledge', 'language'], true) || $key === '') {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Invalid knowledge request']);
+        }
+        $knowledge = (array)($build['knowledge'] ?? []);
+        $list_key = $type === 'knowledge' ? 'knowledges' : 'languages';
+        $selected = array_values(array_unique(array_filter((array)($knowledge[$list_key] ?? []))));
+
+        if ($do === 'add_knowledge') {
+            $view = af_charactersheets_compute_sheet_view($sheet);
+            $remaining = $type === 'knowledge'
+                ? (int)($view['knowledge']['remaining'] ?? 0)
+                : (int)($view['languages']['remaining'] ?? 0);
+            if ($remaining <= 0) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'No slots available']);
+            }
+            $entry = af_charactersheets_kb_get_entry($type, $key);
+            if (empty($entry)) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Unknown knowledge']);
+            }
+            if (!in_array($key, $selected, true)) {
+                $selected[] = $key;
+            }
+        } else {
+            $selected = array_values(array_filter($selected, static function ($item) use ($key) {
+                return $item !== $key;
+            }));
+        }
+
+        $knowledge[$list_key] = $selected;
+        $build['knowledge'] = $knowledge;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
     } elseif ($do === 'grant_exp') {
         if (!$can_award) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
         }
-        $amount = (float)$mybb->get_input('amount');
-        $reason = (string)$mybb->get_input('reason');
-        if ($amount == 0.0) {
-            af_charactersheets_json_response(['success' => false, 'error' => 'Amount is zero']);
+        $amount_raw = (string)$mybb->get_input('amount');
+        $amount = af_charactersheets_to_number($amount_raw);
+        $reason = trim((string)$mybb->get_input('reason'));
+        if ($amount === null || $amount == 0.0) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Amount is invalid']);
+        }
+        if ($amount < 0 && empty($mybb->settings['af_charactersheets_exp_allow_negative'])) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Negative EXP not allowed']);
+        }
+        if ($amount < 0 && empty($mybb->settings['af_charactersheets_exp_allow_overdraw'])) {
+            $current_exp = (float)($progress['exp'] ?? 0);
+            if ($current_exp + $amount < 0) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Not enough EXP to subtract']);
+            }
         }
         $event_key = 'manual:' . $sheet_id . ':' . TIME_NOW . ':' . mt_rand(1000, 9999);
-        af_charactersheets_grant_exp($sheet_id, $amount, $event_key, 'manual', ['reason' => $reason]);
+        $meta = [
+            'reason' => $reason,
+            'awarded_by' => (int)($mybb->user['uid'] ?? 0),
+            'awarded_by_username' => (string)($mybb->user['username'] ?? ''),
+        ];
+        if (!af_charactersheets_grant_exp($sheet_id, (float)$amount, $event_key, 'manual', $meta)) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'EXP update failed']);
+        }
     } else {
         af_charactersheets_json_response(['success' => false, 'error' => 'Unknown action']);
     }
 
     $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
     $view = af_charactersheets_compute_sheet_view($sheet);
-    $attributes_html = af_charactersheets_build_attributes_html($view, $can_edit);
     // попытаемся получить fid по tid (для is_moderator)
     $fid_for_mod = 0;
     if (!empty($sheet['tid'])) {
@@ -1928,7 +2535,10 @@ function af_charactersheets_handle_api(): void
 
     $can_view_ledger = af_charactersheets_user_can_view_ledger($sheet, $mybb->user ?? [], $fid_for_mod);
 
+    $attributes_html = af_charactersheets_build_attributes_html($view, $can_edit, $can_view_ledger);
     $progress_html = af_charactersheets_build_progress_html($view, $sheet, $can_award, $can_view_ledger);
+    $skills_html = af_charactersheets_build_skills_html($view, $can_edit, $can_view_ledger);
+    $knowledge_html = af_charactersheets_build_knowledge_html($view, $can_edit, $can_view_ledger);
 
 
     af_charactersheets_json_response([
@@ -1936,6 +2546,8 @@ function af_charactersheets_handle_api(): void
         'view' => $view,
         'attributes_html' => $attributes_html,
         'progress_html' => $progress_html,
+        'skills_html' => $skills_html,
+        'knowledge_html' => $knowledge_html,
     ]);
 }
 
@@ -1996,8 +2608,23 @@ function af_charactersheets_post_do_newpost_end(): void
         return;
     }
 
-    $uid = (int)($post['uid'] ?? $mybb->user['uid'] ?? 0);
+    global $db;
+    $post_row = $db->fetch_array($db->simple_select('posts', 'pid,fid,uid,visible,message', 'pid=' . $pid, ['limit' => 1]));
+    if (!is_array($post_row) || empty($post_row)) {
+        return;
+    }
+
+    $uid = (int)($post_row['uid'] ?? 0);
     if ($uid <= 0) {
+        return;
+    }
+
+    if ((int)($post_row['visible'] ?? 1) !== 1) {
+        return;
+    }
+
+    $fid = (int)($post_row['fid'] ?? 0);
+    if (!af_charactersheets_is_exp_forum_allowed($fid)) {
         return;
     }
 
@@ -2006,7 +2633,7 @@ function af_charactersheets_post_do_newpost_end(): void
         return;
     }
 
-    $message = (string)($post['message'] ?? $mybb->get_input('message'));
+    $message = (string)($post_row['message'] ?? $mybb->get_input('message'));
     $chars = function_exists('my_strlen') ? my_strlen($message) : strlen($message);
     if ($chars <= 0) {
         return;
@@ -2018,7 +2645,7 @@ function af_charactersheets_post_do_newpost_end(): void
         $amount,
         'post:' . $pid,
         'post',
-        ['pid' => $pid, 'chars' => $chars]
+        ['pid' => $pid, 'chars' => $chars, 'fid' => $fid]
     );
 }
 
@@ -2136,6 +2763,110 @@ function af_charactersheets_csv_to_ids(string $csv): array
     return $ids;
 }
 
+function af_charactersheets_expand_forum_ids_with_children(array $ids): array
+{
+    $ids = array_values(array_filter(array_map('intval', $ids), static function ($n) {
+        return $n > 0;
+    }));
+    if (!$ids) {
+        return [];
+    }
+
+    $want = array_fill_keys($ids, true);
+
+    global $cache;
+    $forums = null;
+    if (isset($cache) && is_object($cache) && method_exists($cache, 'read')) {
+        $forums = $cache->read('forums');
+    }
+    if (!is_array($forums) || empty($forums)) {
+        if (function_exists('cache_forums')) {
+            @cache_forums();
+            if (isset($cache) && is_object($cache) && method_exists($cache, 'read')) {
+                $forums = $cache->read('forums');
+            }
+        }
+    }
+    if (!is_array($forums) || empty($forums)) {
+        sort($ids);
+        return $ids;
+    }
+
+    $out = $want;
+    foreach ($forums as $fid => $forum) {
+        $fid = (int)$fid;
+        if ($fid <= 0) {
+            continue;
+        }
+        $parentlist = '';
+        if (is_array($forum) && isset($forum['parentlist'])) {
+            $parentlist = (string)$forum['parentlist'];
+        }
+        if ($parentlist === '' && is_array($forum) && isset($forum['pid'])) {
+            $pid = (int)$forum['pid'];
+            $chain = [$fid];
+            $guard = 0;
+            while ($pid > 0 && $guard++ < 50) {
+                $chain[] = $pid;
+                if (!isset($forums[$pid]) || !is_array($forums[$pid])) {
+                    break;
+                }
+                $pid = (int)($forums[$pid]['pid'] ?? 0);
+            }
+            $parentlist = implode(',', array_reverse($chain));
+        }
+        if ($parentlist === '') {
+            continue;
+        }
+        $pl = ',' . $parentlist . ',';
+        foreach ($ids as $x) {
+            if (strpos($pl, ',' . $x . ',') !== false) {
+                $out[$fid] = true;
+                break;
+            }
+        }
+    }
+
+    $result = array_keys($out);
+    sort($result);
+    return $result;
+}
+
+function af_charactersheets_is_exp_forum_allowed(int $fid): bool
+{
+    global $mybb;
+
+    if ($fid <= 0) {
+        return false;
+    }
+
+    $mode = (string)($mybb->settings['af_charactersheets_exp_forum_mode'] ?? 'include');
+    $category_ids = af_charactersheets_csv_to_ids((string)($mybb->settings['af_charactersheets_exp_forum_categories'] ?? ''));
+    $forum_ids = af_charactersheets_csv_to_ids((string)($mybb->settings['af_charactersheets_exp_forum_forums'] ?? ''));
+    $exclude_ids = af_charactersheets_csv_to_ids((string)($mybb->settings['af_charactersheets_exp_forum_exclude'] ?? ''));
+
+    if ($exclude_ids && in_array($fid, $exclude_ids, true)) {
+        return false;
+    }
+
+    $selected = array_values(array_unique(array_merge(
+        $forum_ids,
+        af_charactersheets_expand_forum_ids_with_children($category_ids)
+    )));
+
+    if ($mode === 'exclude') {
+        if (!$selected) {
+            return true;
+        }
+        return !in_array($fid, $selected, true);
+    }
+
+    if (!$selected) {
+        return true;
+    }
+    return in_array($fid, $selected, true);
+}
+
 function af_charactersheets_make_absolute_url(string $url): string
 {
     global $mybb;
@@ -2223,6 +2954,43 @@ function af_charactersheets_ensure_schema(): void
               UNIQUE KEY event_key (event_key),
               KEY sheet_id (sheet_id),
               KEY uid (uid)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+    }
+
+    if (!$db->table_exists(AF_CS_POINTS_LEDGER_TABLE)) {
+        $db->write_query("
+            CREATE TABLE ".TABLE_PREFIX."".AF_CS_POINTS_LEDGER_TABLE." (
+              id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+              sheet_id INT UNSIGNED NOT NULL,
+              uid INT UNSIGNED NOT NULL,
+              point_type VARCHAR(32) NOT NULL,
+              amount INT NOT NULL DEFAULT 0,
+              reason VARCHAR(190) NOT NULL,
+              meta_json TEXT NOT NULL,
+              created_at INT UNSIGNED NOT NULL DEFAULT 0,
+              PRIMARY KEY (id),
+              KEY sheet_id (sheet_id),
+              KEY uid (uid),
+              KEY point_type (point_type)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+    }
+
+    if (!$db->table_exists(AF_CS_SKILLS_CATALOG_TABLE)) {
+        $db->write_query("
+            CREATE TABLE ".TABLE_PREFIX."".AF_CS_SKILLS_CATALOG_TABLE." (
+              id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+              slug VARCHAR(120) NOT NULL,
+              title VARCHAR(190) NOT NULL,
+              attr_key VARCHAR(16) NOT NULL,
+              description TEXT NOT NULL,
+              sort_order INT NOT NULL DEFAULT 0,
+              active TINYINT(1) NOT NULL DEFAULT 1,
+              PRIMARY KEY (id),
+              UNIQUE KEY slug (slug),
+              KEY active (active),
+              KEY sort_order (sort_order)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         ");
     }
@@ -2746,37 +3514,225 @@ function af_charactersheets_render_stat_value(string $label, string $value): str
         . '</div>';
 }
 
-function af_charactersheets_build_skills_html(array $index): string
+function af_charactersheets_build_skills_html(array $view, bool $can_edit, bool $can_view_pool): string
 {
-    $skills = [
-        ['name' => 'Атлетика', 'attr' => 'Ловкости'],
-        ['name' => 'Скрытность', 'attr' => 'Ловкости'],
-        ['name' => 'Анализ', 'attr' => 'Интеллекта'],
-        ['name' => 'Восприятие', 'attr' => 'Мудрости'],
-        ['name' => 'Убеждение', 'attr' => 'Харизмы'],
-        ['name' => 'Медицина', 'attr' => 'Мудрости'],
-        ['name' => 'Выживание', 'attr' => 'Конституции'],
-        ['name' => 'Рукопашный бой', 'attr' => 'Силы'],
-        ['name' => 'Акробатика', 'attr' => 'Ловкости'],
-        ['name' => 'История', 'attr' => 'Интеллекта'],
-        ['name' => 'Запугивание', 'attr' => 'Харизмы'],
-        ['name' => 'Техника', 'attr' => 'Интеллекта'],
-        ['name' => 'Ловкость рук', 'attr' => 'Ловкости'],
-        ['name' => 'Знания', 'attr' => 'Интеллекта'],
-    ];
-
+    $skills = (array)($view['skills'] ?? []);
     $items = [];
     foreach ($skills as $skill) {
+        $slug = (string)($skill['slug'] ?? '');
+        $title = (string)($skill['title'] ?? '');
+        $attr_label = (string)($skill['attr_label'] ?? '');
+        $base = (int)($skill['base'] ?? 0);
+        $invested = (int)($skill['invested'] ?? 0);
+        $bonus = (float)($skill['bonus'] ?? 0);
+        $total = (float)($skill['total'] ?? 0);
+
+        $controls = '';
+        if ($can_edit && $slug !== '') {
+            $controls = '<div class="af-cs-skill-controls">'
+                . '<button type="button" class="af-cs-skill-btn" data-afcs-skill-change="1" data-slug="' . htmlspecialchars_uni($slug) . '" data-delta="-1">−</button>'
+                . '<span class="af-cs-skill-invested">' . htmlspecialchars_uni((string)$invested) . '</span>'
+                . '<button type="button" class="af-cs-skill-btn" data-afcs-skill-change="1" data-slug="' . htmlspecialchars_uni($slug) . '" data-delta="1">+</button>'
+                . '</div>';
+        } else {
+            $controls = '<div class="af-cs-skill-controls"><span class="af-cs-skill-invested">' . htmlspecialchars_uni((string)$invested) . '</span></div>';
+        }
+
         $items[] = '<div class="af-cs-skill-item">'
-            . '<div class="af-cs-skill-name">' . htmlspecialchars_uni($skill['name']) . ' <span>(от ' . htmlspecialchars_uni($skill['attr']) . ')</span></div>'
-            . '<div class="af-cs-skill-value">+0</div>'
+            . '<div class="af-cs-skill-name">' . htmlspecialchars_uni($title)
+            . '<span>(от ' . htmlspecialchars_uni($attr_label) . ')</span>'
+            . '</div>'
+            . '<div class="af-cs-skill-meta">'
+            . '<div class="af-cs-skill-base">База: <strong>' . htmlspecialchars_uni((string)$base) . '</strong></div>'
+            . '<div class="af-cs-skill-bonus">Бонус: <strong>' . htmlspecialchars_uni((string)$bonus) . '</strong></div>'
+            . '</div>'
+            . '<div class="af-cs-skill-right">'
+            . $controls
+            . '<div class="af-cs-skill-total">Итог: <strong>' . htmlspecialchars_uni((string)$total) . '</strong></div>'
+            . '</div>'
             . '</div>';
+    }
+
+    if (!$items) {
+        $items[] = '<div class="af-cs-muted">Навыков пока нет.</div>';
     }
 
     $skills_html = implode('', $items);
 
+    $skill_pool_html = '';
+    if ($can_view_pool) {
+        $skill_pool_html = '<div class="af-cs-skill-pool">'
+            . '<div>Пул навыков: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_total'] ?? 0)) . '</strong></div>'
+            . '<div>Распределено: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_spent'] ?? 0)) . '</strong></div>'
+            . '<div>Осталось: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_remaining'] ?? 0)) . '</strong></div>'
+            . '</div>';
+    }
+
+    $choice_html = '';
+    if ($can_edit && !empty($view['skill_choice_details'])) {
+        $options = '';
+        foreach ($skills as $skill) {
+            $slug = (string)($skill['slug'] ?? '');
+            $title = (string)($skill['title'] ?? '');
+            if ($slug === '') {
+                continue;
+            }
+            $options .= '<option value="' . htmlspecialchars_uni($slug) . '">' . htmlspecialchars_uni($title) . '</option>';
+        }
+
+        $rows = [];
+        foreach ($view['skill_choice_details'] as $choice) {
+            $choice_key = (string)($choice['choice_key'] ?? '');
+            $chosen = (string)($choice['chosen'] ?? '');
+            if ($choice_key === '') {
+                continue;
+            }
+            $select = '<select data-afcs-choice-key="' . htmlspecialchars_uni($choice_key) . '">';
+            $select .= '<option value="">— выбрать навык —</option>';
+            foreach ($skills as $skill) {
+                $slug = (string)($skill['slug'] ?? '');
+                $title = (string)($skill['title'] ?? '');
+                if ($slug === '') {
+                    continue;
+                }
+                $selected = $chosen === $slug ? ' selected' : '';
+                $select .= '<option value="' . htmlspecialchars_uni($slug) . '"' . $selected . '>' . htmlspecialchars_uni($title) . '</option>';
+            }
+            $select .= '</select>';
+
+            $rows[] = '<div class="af-cs-choice-row">'
+                . '<label>Бонус к любому навыку</label>'
+                . $select
+                . '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-choice-save="' . htmlspecialchars_uni($choice_key) . '">Применить</button>'
+                . '</div>';
+        }
+        if ($rows) {
+            $choice_html = '<div class="af-cs-choices">' . implode('', $rows) . '</div>';
+        }
+    }
+
     global $templates;
     $tpl = $templates->get('charactersheet_skills');
+    eval("\$out = \"" . $tpl . "\";");
+    return $out;
+}
+
+function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bool $can_view_pool): string
+{
+    $knowledge_entries = af_charactersheets_get_kb_entries_by_type('knowledge');
+    $language_entries = af_charactersheets_get_kb_entries_by_type('language');
+
+    $knowledge_selected = (array)($view['knowledge']['selected'] ?? []);
+    $knowledge_bonus = (array)($view['knowledge']['bonus'] ?? []);
+    $knowledge_remaining = (int)($view['knowledge']['remaining'] ?? 0);
+    $knowledge_total = (int)($view['knowledge']['total_choices'] ?? 0);
+
+    $language_selected = (array)($view['languages']['selected'] ?? []);
+    $language_bonus = (array)($view['languages']['bonus'] ?? []);
+    $language_remaining = (int)($view['languages']['remaining'] ?? 0);
+    $language_total = (int)($view['languages']['total_choices'] ?? 0);
+
+    $knowledge_options = '<option value="">— выбрать знание —</option>';
+    foreach ($knowledge_entries as $entry) {
+        $key = (string)($entry['key'] ?? '');
+        if ($key === '') {
+            continue;
+        }
+        $title = af_charactersheets_kb_pick_text($entry, 'title');
+        $knowledge_options .= '<option value="' . htmlspecialchars_uni($key) . '">' . htmlspecialchars_uni($title !== '' ? $title : $key) . '</option>';
+    }
+
+    $language_options = '<option value="">— выбрать язык —</option>';
+    foreach ($language_entries as $entry) {
+        $key = (string)($entry['key'] ?? '');
+        if ($key === '') {
+            continue;
+        }
+        $title = af_charactersheets_kb_pick_text($entry, 'title');
+        $language_options .= '<option value="' . htmlspecialchars_uni($key) . '">' . htmlspecialchars_uni($title !== '' ? $title : $key) . '</option>';
+    }
+
+    $knowledge_items = [];
+    foreach ($knowledge_bonus as $key) {
+        $entry = af_charactersheets_kb_get_entry('knowledge', $key);
+        $label = af_charactersheets_kb_pick_text($entry, 'title');
+        $knowledge_items[] = '<div class="af-cs-knowledge-chip">'
+            . '<span>' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
+            . '<em>Бонус</em>'
+            . '</div>';
+    }
+    foreach ($knowledge_selected as $key) {
+        $entry = af_charactersheets_kb_get_entry('knowledge', $key);
+        $label = af_charactersheets_kb_pick_text($entry, 'title');
+        $remove = $can_edit
+            ? '<button type="button" data-afcs-knowledge-remove="1" data-afcs-knowledge-type="knowledge" data-afcs-knowledge-key="' . htmlspecialchars_uni($key) . '">×</button>'
+            : '';
+        $knowledge_items[] = '<div class="af-cs-knowledge-chip">'
+            . '<span>' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
+            . $remove
+            . '</div>';
+    }
+    if (!$knowledge_items) {
+        $knowledge_items[] = '<div class="af-cs-muted">Пока нет знаний.</div>';
+    }
+
+    $language_items = [];
+    foreach ($language_bonus as $key) {
+        $entry = af_charactersheets_kb_get_entry('language', $key);
+        $label = af_charactersheets_kb_pick_text($entry, 'title');
+        $language_items[] = '<div class="af-cs-knowledge-chip">'
+            . '<span>' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
+            . '<em>Бонус</em>'
+            . '</div>';
+    }
+    foreach ($language_selected as $key) {
+        $entry = af_charactersheets_kb_get_entry('language', $key);
+        $label = af_charactersheets_kb_pick_text($entry, 'title');
+        $remove = $can_edit
+            ? '<button type="button" data-afcs-knowledge-remove="1" data-afcs-knowledge-type="language" data-afcs-knowledge-key="' . htmlspecialchars_uni($key) . '">×</button>'
+            : '';
+        $language_items[] = '<div class="af-cs-knowledge-chip">'
+            . '<span>' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
+            . $remove
+            . '</div>';
+    }
+    if (!$language_items) {
+        $language_items[] = '<div class="af-cs-muted">Пока нет языков.</div>';
+    }
+
+    $knowledge_items_html = implode('', $knowledge_items);
+    $language_items_html = implode('', $language_items);
+    $knowledge_form = '';
+    $language_form = '';
+    if ($can_edit) {
+        $knowledge_form = '<div class="af-cs-knowledge-form">'
+            . '<select data-afcs-knowledge-select="knowledge">' . $knowledge_options . '</select>'
+            . '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-knowledge-add="1" data-afcs-knowledge-type="knowledge">Добавить</button>'
+            . '</div>';
+        $language_form = '<div class="af-cs-knowledge-form">'
+            . '<select data-afcs-knowledge-select="language">' . $language_options . '</select>'
+            . '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-knowledge-add="1" data-afcs-knowledge-type="language">Добавить</button>'
+            . '</div>';
+    }
+
+    $knowledge_pool_html = '';
+    if ($can_view_pool) {
+        $knowledge_pool_html = '<div class="af-cs-knowledge-pool">'
+            . '<div>Доступно знаний: <strong>' . htmlspecialchars_uni((string)$knowledge_total) . '</strong></div>'
+            . '<div>Осталось: <strong>' . htmlspecialchars_uni((string)$knowledge_remaining) . '</strong></div>'
+            . '</div>';
+    }
+
+    $language_pool_html = '';
+    if ($can_view_pool) {
+        $language_pool_html = '<div class="af-cs-knowledge-pool">'
+            . '<div>Доступно языков: <strong>' . htmlspecialchars_uni((string)$language_total) . '</strong></div>'
+            . '<div>Осталось: <strong>' . htmlspecialchars_uni((string)$language_remaining) . '</strong></div>'
+            . '</div>';
+    }
+
+    global $templates;
+    $tpl = $templates->get('charactersheet_knowledge');
     eval("\$out = \"" . $tpl . "\";");
     return $out;
 }
@@ -2852,6 +3808,51 @@ function af_charactersheets_kb_get_entry(string $type, string $key): array
     ));
 
     return is_array($row) ? $row : [];
+}
+
+function af_charactersheets_get_kb_entries_by_type(string $type): array
+{
+    global $db;
+    if (!$db->table_exists('af_kb_entries')) {
+        return [];
+    }
+
+    $rows = [];
+    $q = $db->simple_select(
+        'af_kb_entries',
+        '*',
+        "type='" . $db->escape_string($type) . "' AND active=1",
+        ['order_by' => 'id', 'order_dir' => 'ASC']
+    );
+    while ($row = $db->fetch_array($q)) {
+        if (is_array($row)) {
+            $rows[] = $row;
+        }
+    }
+    return $rows;
+}
+
+function af_charactersheets_get_skills_catalog(bool $activeOnly = true): array
+{
+    global $db;
+    if (!$db->table_exists(AF_CS_SKILLS_CATALOG_TABLE)) {
+        return [];
+    }
+
+    $where = $activeOnly ? 'active=1' : '1=1';
+    $rows = [];
+    $q = $db->simple_select(
+        AF_CS_SKILLS_CATALOG_TABLE,
+        '*',
+        $where,
+        ['order_by' => 'sort_order', 'order_dir' => 'ASC']
+    );
+    while ($row = $db->fetch_array($q)) {
+        if (is_array($row)) {
+            $rows[] = $row;
+        }
+    }
+    return $rows;
 }
 
 function af_charactersheets_kb_pick_text(array $row, string $field): string
@@ -3097,54 +4098,72 @@ function af_charactersheets_build_mechanics_html(): string
 
 function af_charactersheets_build_inventory_html(): string
 {
-    return '<div class="af-cs-inventory-grid" data-afcs-inventory>'
-        . '<div class="af-cs-inventory-card">'
+    $slot = '<div class="af-cs-slot"><span>—</span></div>';
+    $equip = '<div class="af-cs-inventory-equip">'
         . '<div class="af-cs-inventory-title">Экипировка</div>'
-        . '<div class="af-cs-inventory-row"><span>Оружие</span><span>—</span></div>'
-        . '<div class="af-cs-inventory-row"><span>Броня</span><span>—</span></div>'
+        . '<div class="af-cs-slot-grid">'
+        . '<div class="af-cs-slot"><span>Голова</span></div>'
+        . '<div class="af-cs-slot"><span>Торс</span></div>'
+        . '<div class="af-cs-slot"><span>Руки</span></div>'
+        . '<div class="af-cs-slot"><span>Ноги</span></div>'
+        . '<div class="af-cs-slot"><span>Оружие</span></div>'
+        . '<div class="af-cs-slot"><span>Оружие 2</span></div>'
+        . '<div class="af-cs-slot"><span>Броня</span></div>'
+        . '<div class="af-cs-slot"><span>Аксессуар</span></div>'
         . '</div>'
-        . '<div class="af-cs-inventory-card">'
-        . '<div class="af-cs-inventory-title">Инвентарь</div>'
-        . '<div class="af-cs-inventory-row"><span>Броня</span><span>—</span></div>'
-        . '<div class="af-cs-inventory-row"><span>Оружие</span><span>—</span></div>'
-        . '<div class="af-cs-inventory-row"><span>Боеприпасы</span><span>—</span></div>'
-        . '<div class="af-cs-inventory-row"><span>Инструменты</span><span>—</span></div>'
-        . '<div class="af-cs-inventory-row"><span>Модификации</span><span>—</span></div>'
-        . '<div class="af-cs-inventory-row"><span>Ресурсы</span><span>—</span></div>'
-        . '</div>'
-        . '<div class="af-cs-inventory-card">'
-        . '<div class="af-cs-inventory-title">Навыки и предметы</div>'
-        . '<div class="af-cs-muted">Скоро: интеграция с магазином по ключам KB.</div>'
+        . '</div>';
+
+    $section = static function (string $title, int $count) use ($slot): string {
+        return '<div class="af-cs-inventory-section">'
+            . '<div class="af-cs-inventory-title">' . htmlspecialchars_uni($title) . '</div>'
+            . '<div class="af-cs-slot-grid">' . str_repeat($slot, $count) . '</div>'
+            . '</div>';
+    };
+
+    $craft = '<div class="af-cs-inventory-section af-cs-inventory-section--wide">'
+        . '<div class="af-cs-inventory-title">Ремесленная сумка</div>'
+        . '<div class="af-cs-slot-grid">' . str_repeat($slot, 10) . '</div>'
+        . '</div>';
+
+    return '<div class="af-cs-inventory" data-afcs-inventory>'
+        . $equip
+        . '<div class="af-cs-inventory-sections">'
+        . $section('Броня', 6)
+        . $section('Оружие', 6)
+        . $section('Боеприпасы', 6)
+        . $section('Инструменты', 6)
+        . $craft
         . '</div>'
         . '</div>';
 }
 
 function af_charactersheets_build_augments_html(): string
 {
+    $slot = '<div class="af-cs-slot"><span>—</span></div>';
+    $slots = '<div class="af-cs-slot-grid">'
+        . '<div class="af-cs-slot"><span>Голова</span></div>'
+        . '<div class="af-cs-slot"><span>Глаза</span></div>'
+        . '<div class="af-cs-slot"><span>Руки</span></div>'
+        . '<div class="af-cs-slot"><span>Торс</span></div>'
+        . '<div class="af-cs-slot"><span>Ноги</span></div>'
+        . '<div class="af-cs-slot"><span>Нервная система</span></div>'
+        . '<div class="af-cs-slot"><span>Кожа</span></div>'
+        . '<div class="af-cs-slot"><span>Имплант</span></div>'
+        . '</div>';
+
+    $available = '<div class="af-cs-slot-grid">'
+        . str_repeat($slot, 8)
+        . '</div>';
+
     return '<div class="af-cs-augmentations">'
-        . '<div class="af-cs-augmentations-list">'
-        . '<div class="af-cs-augmentation-item">'
-        . '<div class="af-cs-augmentation-name">Усиленный слух</div>'
-        . '<div class="af-cs-augmentation-meta">Человечность: -3</div>'
+        . '<div class="af-cs-augmentations-column">'
+        . '<div class="af-cs-inventory-title">Слоты экипировки аугментаций</div>'
+        . $slots
         . '</div>'
-        . '</div>'
-        . '<div class="af-cs-augmentation-controls">'
-        . '<button type="button" class="af-cs-btn af-cs-btn--ghost">Добавить мод</button>'
-        . '<div class="af-cs-augmentation-slot">'
-        . '<label>Слот</label>'
-        . '<select>'
-        . '<option>Левый глаз</option>'
-        . '<option>Правый глаз</option>'
-        . '<option>Левая рука</option>'
-        . '<option>Правая рука</option>'
-        . '<option>Ноги</option>'
-        . '<option>Нервная система</option>'
-        . '</select>'
-        . '</div>'
-        . '<div class="af-cs-augmentation-humanity">'
-        . '<span>Потеря человечности</span>'
-        . '<strong>3</strong>'
-        . '</div>'
+        . '<div class="af-cs-augmentations-column">'
+        . '<div class="af-cs-inventory-title">Доступные аугментации</div>'
+        . '<div class="af-cs-muted">Заглушка инвентаря аугментаций.</div>'
+        . $available
         . '</div>'
         . '</div>';
 }

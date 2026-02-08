@@ -43,6 +43,7 @@
       <div class="af-cs-tabs__nav">
         <button class="is-active" type="button" data-afcs-tab="main">Основная информация</button>
         <button type="button" data-afcs-tab="skills">Навыки</button>
+        <button type="button" data-afcs-tab="knowledge">Знания</button>
         <button type="button" data-afcs-tab="feats">Способности</button>
         <button type="button" data-afcs-tab="inventory">Инвентарь</button>
         <button type="button" data-afcs-tab="augments">Аугментации</button>
@@ -53,7 +54,14 @@
           {$sheet_bonus_html}
         </div>
         <div class="af-cs-tab" data-afcs-tab-content="skills">
-          {$sheet_skills_html}
+          <div data-afcs-block="skills">
+            {$sheet_skills_html}
+          </div>
+        </div>
+        <div class="af-cs-tab" data-afcs-tab-content="knowledge">
+          <div data-afcs-block="knowledge">
+            {$sheet_knowledge_html}
+          </div>
         </div>
         <div class="af-cs-tab" data-afcs-tab-content="feats">
           {$sheet_feats_html}

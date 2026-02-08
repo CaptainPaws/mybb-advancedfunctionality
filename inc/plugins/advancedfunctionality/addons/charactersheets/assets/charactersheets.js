@@ -290,6 +290,18 @@
           block.innerHTML = payload.attributes_html;
         }
       }
+      if (payload.skills_html) {
+        var skillsBlock = sheet.querySelector('[data-afcs-block="skills"]');
+        if (skillsBlock) {
+          skillsBlock.innerHTML = payload.skills_html;
+        }
+      }
+      if (payload.knowledge_html) {
+        var knowledgeBlock = sheet.querySelector('[data-afcs-block="knowledge"]');
+        if (knowledgeBlock) {
+          knowledgeBlock.innerHTML = payload.knowledge_html;
+        }
+      }
       if (payload.progress_html) {
         var blockProgress = sheet.querySelector('[data-afcs-block="progress"]');
         if (blockProgress) {
@@ -486,6 +498,55 @@
           if (f && !f.hasAttribute('data-afcs-award-form')) {
             f.setAttribute('data-afcs-award-form', '1');
           }
+        }
+        return;
+      }
+
+      var skillChange = event.target.closest('[data-afcs-skill-change]');
+      if (skillChange) {
+        var slug = skillChange.getAttribute('data-slug');
+        var delta = parseInt(skillChange.getAttribute('data-delta') || '0', 10);
+        if (slug && (delta === 1 || delta === -1)) {
+          sendAction('update_skill', { slug: slug, delta: delta }).then(function (payload) {
+            if (!payload.success) {
+              alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
+              return;
+            }
+            applyViewUpdate(payload);
+          });
+        }
+        return;
+      }
+
+      var knowledgeAdd = event.target.closest('[data-afcs-knowledge-add]');
+      if (knowledgeAdd) {
+        var type = knowledgeAdd.getAttribute('data-afcs-knowledge-type');
+        var select = sheet.querySelector('[data-afcs-knowledge-select="' + type + '"]');
+        var key = select ? select.value : '';
+        if (type && key) {
+          sendAction('add_knowledge', { type: type, key: key }).then(function (payload) {
+            if (!payload.success) {
+              alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+              return;
+            }
+            applyViewUpdate(payload);
+          });
+        }
+        return;
+      }
+
+      var knowledgeRemove = event.target.closest('[data-afcs-knowledge-remove]');
+      if (knowledgeRemove) {
+        var typeRemove = knowledgeRemove.getAttribute('data-afcs-knowledge-type');
+        var keyRemove = knowledgeRemove.getAttribute('data-afcs-knowledge-key');
+        if (typeRemove && keyRemove) {
+          sendAction('remove_knowledge', { type: typeRemove, key: keyRemove }).then(function (payload) {
+            if (!payload.success) {
+              alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+              return;
+            }
+            applyViewUpdate(payload);
+          });
         }
         return;
       }
