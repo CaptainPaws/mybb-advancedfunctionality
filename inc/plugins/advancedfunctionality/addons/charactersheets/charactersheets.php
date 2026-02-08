@@ -861,7 +861,12 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $sheet_inventory_html = af_charactersheets_build_inventory_html();
     $sheet_augments_html = af_charactersheets_build_augments_html();
     $sheet_mechanics_html = af_charactersheets_build_mechanics_html();
-    $sheet_progress_html = af_charactersheets_build_progress_html($sheet_view, $sheet, $can_award_exp);
+    // fid нужен для is_moderator(), возьмём из threads если можем
+    $fid_for_mod = (int)($thread['fid'] ?? 0);
+    $can_view_ledger = af_charactersheets_user_can_view_ledger($sheet, $mybb->user ?? [], $fid_for_mod);
+
+    $sheet_progress_html = af_charactersheets_build_progress_html($sheet_view, $sheet, $can_award_exp, $can_view_ledger);
+
     $sheet_portrait_url = af_charactersheets_get_portrait_url($atf_index);
     $sheet_level_value = (int)($sheet_view['level'] ?? 1);
     $sheet_level_percent = (int)($sheet_view['level_percent'] ?? 0);
@@ -1181,6 +1186,42 @@ function af_charactersheets_update_sheet_json(int $sheet_id, array $base, array 
         ]),
         'id=' . $sheet_id
     );
+}
+
+function af_charactersheets_user_can_view_ledger(array $sheet, array $user, int $fid = 0): bool
+{
+    global $mybb;
+
+    $uid = (int)($user['uid'] ?? 0);
+    if ($uid <= 0) {
+        return false;
+    }
+
+    // 1) владелец листа
+    if ((int)($sheet['uid'] ?? 0) === $uid) {
+        return true;
+    }
+
+    // 2) админ/мод/супермод
+    if (!empty($mybb->usergroup['cancp']) || !empty($user['cancp'])) {
+        return true;
+    }
+    if (!empty($mybb->usergroup['issupermod']) || !empty($user['issupermod'])) {
+        return true;
+    }
+    if (!empty($mybb->usergroup['canmodcp']) || !empty($user['canmodcp'])) {
+        return true;
+    }
+
+    // 3) модератор форума (если можем определить fid)
+    if ($fid > 0 && function_exists('is_moderator')) {
+        // можно усилить правом, но ты просила минимум is_moderator()
+        if (is_moderator($fid)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 function af_charactersheets_user_can_edit_sheet(array $sheet, array $user): bool
@@ -1721,7 +1762,7 @@ function af_charactersheets_build_attributes_html(array $view, bool $can_edit): 
 
 }
 
-function af_charactersheets_build_progress_html(array $view, array $sheet, bool $can_award): string
+function af_charactersheets_build_progress_html(array $view, array $sheet, bool $can_award, bool $can_view_ledger): string
 {
     $sheet_id = (int)($sheet['id'] ?? 0);
     $level = (int)($view['level'] ?? 1);
@@ -1729,31 +1770,48 @@ function af_charactersheets_build_progress_html(array $view, array $sheet, bool 
     $next = (float)($view['next_req'] ?? 0);
     $percent = (int)($view['level_percent'] ?? 0);
     $exp_label = htmlspecialchars_uni((string)($view['level_exp_label'] ?? ''));
+
     $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
     $attr_points_free = (int)($progress['attr_points_free'] ?? 0);
     $skill_points_free = (int)($progress['skill_points_free'] ?? 0);
 
-    $ledger_items = [];
-    foreach (af_charactersheets_get_ledger($sheet_id, 10) as $row) {
-        $meta = af_charactersheets_json_decode((string)($row['meta_json'] ?? ''));
-        $desc = (string)($meta['reason'] ?? $meta['source'] ?? '');
-        if ($desc === '' && !empty($meta['tid'])) {
-            $desc = 'Тема #' . (int)$meta['tid'];
-        }
-        if ($desc === '') {
-            $desc = strtoupper((string)($row['event_type'] ?? 'exp'));
-        }
-        $ledger_items[] = '<div class="af-cs-ledger-row">'
-            . '<div>' . htmlspecialchars_uni($desc) . '</div>'
-            . '<div class="af-cs-ledger-amount">' . htmlspecialchars_uni((string)$row['amount']) . '</div>'
-            . '<div class="af-cs-ledger-date">' . htmlspecialchars_uni(date('d.m.Y H:i', (int)$row['created_at'])) . '</div>'
-            . '</div>';
-    }
-    if (!$ledger_items) {
-        $ledger_items[] = '<div class="af-cs-muted">Нет начислений.</div>';
-    }
-    $ledger_html = implode('', $ledger_items);
+    // ---- LEDGER (только если есть права) ----
+    $ledger_html = '';
+    $ledger_toggle_html = '';
+    $ledger_block_html = '';
 
+    if ($can_view_ledger) {
+        $ledger_items = [];
+        foreach (af_charactersheets_get_ledger($sheet_id, 10) as $row) {
+            $meta = af_charactersheets_json_decode((string)($row['meta_json'] ?? ''));
+            $desc = (string)($meta['reason'] ?? $meta['source'] ?? '');
+
+            if ($desc === '' && !empty($meta['tid'])) {
+                $desc = 'Тема #' . (int)$meta['tid'];
+            }
+            if ($desc === '') {
+                $desc = strtoupper((string)($row['event_type'] ?? 'exp'));
+            }
+
+            $ledger_items[] = '<div class="af-cs-ledger-row">'
+                . '<div>' . htmlspecialchars_uni($desc) . '</div>'
+                . '<div class="af-cs-ledger-amount">' . htmlspecialchars_uni((string)$row['amount']) . '</div>'
+                . '<div class="af-cs-ledger-date">' . htmlspecialchars_uni(date('d.m.Y H:i', (int)$row['created_at'])) . '</div>'
+                . '</div>';
+        }
+
+        if (!$ledger_items) {
+            $ledger_items[] = '<div class="af-cs-muted">Нет начислений.</div>';
+        }
+
+        $ledger_html = implode('', $ledger_items);
+
+        // toggle + block (как ты просила)
+        $ledger_toggle_html = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-ledger-toggle>История начислений</button>';
+        $ledger_block_html = '<div class="af-cs-ledger" data-afcs-ledger hidden>' . $ledger_html . '</div>';
+    }
+
+    // ---- MANUAL AWARD (только если can_award) ----
     $manual_award_html = '';
     $manual_award_toggle_html = '';
     if ($can_award) {
@@ -1855,7 +1913,23 @@ function af_charactersheets_handle_api(): void
     $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
     $view = af_charactersheets_compute_sheet_view($sheet);
     $attributes_html = af_charactersheets_build_attributes_html($view, $can_edit);
-    $progress_html = af_charactersheets_build_progress_html($view, $sheet, $can_award);
+    // попытаемся получить fid по tid (для is_moderator)
+    $fid_for_mod = 0;
+    if (!empty($sheet['tid'])) {
+        global $db;
+        $tid = (int)$sheet['tid'];
+        if ($tid > 0) {
+            $fid_for_mod = (int)$db->fetch_field(
+                $db->simple_select('threads', 'fid', 'tid=' . $tid, ['limit' => 1]),
+                'fid'
+            );
+        }
+    }
+
+    $can_view_ledger = af_charactersheets_user_can_view_ledger($sheet, $mybb->user ?? [], $fid_for_mod);
+
+    $progress_html = af_charactersheets_build_progress_html($view, $sheet, $can_award, $can_view_ledger);
+
 
     af_charactersheets_json_response([
         'success' => true,
