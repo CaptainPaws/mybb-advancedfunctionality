@@ -49,41 +49,6 @@ function af_charactersheets_compute_level(float $exp): array
     ];
 }
 
-function af_charactersheets_user_is_admin_or_moderator(array $user, int $fid = 0): bool
-{
-    global $mybb;
-
-    $uid = (int)($user['uid'] ?? 0);
-    if ($uid <= 0) {
-        return false;
-    }
-
-    if (!empty($user['cancp']) || !empty($mybb->usergroup['cancp'])) {
-        return true;
-    }
-
-    if (!empty($user['issupermod']) || !empty($mybb->usergroup['issupermod'])) {
-        return true;
-    }
-
-    if (!empty($user['canmodcp']) || !empty($mybb->usergroup['canmodcp'])) {
-        return true;
-    }
-
-    if ($fid > 0 && function_exists('is_moderator')) {
-        if (is_moderator($fid)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-function af_charactersheets_user_can_award_exp(array $user, int $fid = 0): bool
-{
-    return af_charactersheets_user_is_admin_or_moderator($user, $fid);
-}
-
 function af_charactersheets_award_exp_manual(array $sheet, array $user, int $fid, string $amount_raw, string $reason): array
 {
     global $mybb;
@@ -198,6 +163,29 @@ function af_charactersheets_grant_exp(int $sheet_id, float $amount, string $even
     af_charactersheets_update_sheet_json($sheet_id, af_charactersheets_json_decode((string)($sheet['base_json'] ?? '')), af_charactersheets_json_decode((string)($sheet['build_json'] ?? '')), $progress);
 
     return true;
+}
+
+function af_charactersheets_handle_accept_exp(int $tid, int $accepted_by_uid): void
+{
+    global $mybb;
+
+    $exp_on_accept = (float)($mybb->settings['af_charactersheets_exp_on_accept'] ?? 0);
+    if ($exp_on_accept <= 0) {
+        return;
+    }
+
+    $sheet = af_charactersheets_get_sheet_by_tid($tid);
+    if (empty($sheet)) {
+        return;
+    }
+
+    af_charactersheets_grant_exp(
+        (int)$sheet['id'],
+        $exp_on_accept,
+        'accept:' . $tid,
+        'accept',
+        ['tid' => $tid, 'accepted_by' => $accepted_by_uid]
+    );
 }
 
 function af_charactersheets_log_points(int $sheet_id, string $type, int $amount, string $reason, array $meta = []): void
