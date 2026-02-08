@@ -67,7 +67,7 @@
   gap: 10px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
+  background:rgb(38, 38, 38);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: #efefef;
 }
@@ -134,7 +134,7 @@
   gap: 10px;
   padding: 14px;
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.12);
+  background: rgb(38, 38, 38);;
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -779,5 +779,87 @@
 
   .af-cs-skills {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ===== Attributes: compact view + gear toggle ===== */
+
+.af-cs-attrs__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.af-cs-attrs__title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.af-cs-attrs__gear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.af-cs-attrs__gear:hover {
+  background: rgba(92, 195, 255, 0.18);
+  border-color: rgba(92, 195, 255, 0.55);
+}
+
+.af-cs-attrs__gear.is-active {
+  background: rgba(92, 195, 255, 0.22);
+  border-color: rgba(92, 195, 255, 0.7);
+  transform: rotate(20deg);
+}
+
+.af-cs-attr-compact {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.af-cs-attr-compact__cell {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: grid;
+  gap: 6px;
+  text-align: center;
+}
+
+.af-cs-attr-compact__label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.65;
+  white-space: nowrap;
+}
+
+.af-cs-attr-compact__value {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* По умолчанию показываем компакт, редактирование скрыто */
+.af-cs-attrs:not(.is-editing) [data-afcs-attr-edit] { display: none; }
+.af-cs-attrs.is-editing [data-afcs-attr-compact] { display: none; }
+
+/* если нет прав — шестеренка скрыта всегда */
+.af-cs-attrs[data-afcs-can-edit="0"] .af-cs-attrs__gear { display: none; }
+
+@media (max-width: 860px) {
+  .af-cs-attr-compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
