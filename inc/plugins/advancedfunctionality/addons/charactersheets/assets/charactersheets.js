@@ -480,8 +480,16 @@
         var awardPanel = sheet.querySelector('[data-afcs-award-panel]');
         if (awardPanel) {
           awardPanel.hidden = !awardPanel.hidden;
+
+          // FIX: если сервер отрендерил форму без data-атрибута — пометим её, чтобы submit-хендлер сработал
+          var f = awardPanel.querySelector('form');
+          if (f && !f.hasAttribute('data-afcs-award-form')) {
+            f.setAttribute('data-afcs-award-form', '1');
+          }
         }
+        return;
       }
+
     });
 
     sheet.addEventListener('input', function (event) {
@@ -492,29 +500,58 @@
 
     sheet.addEventListener('submit', function (event) {
       var form = event.target.closest('[data-afcs-award-form]');
-      if (!form) {
-        return;
-      }
+      if (!form) return;
+
       event.preventDefault();
-      var amount = form.querySelector('input[name="amount"]');
-      var reason = form.querySelector('input[name="reason"]');
-      sendAction('grant_exp', {
-        amount: amount ? amount.value : '',
-        reason: reason ? reason.value : ''
-      }).then(function (payload) {
-        if (!payload.success) {
-          alert((payload.error || 'Ошибка начисления').toString());
+
+      var amountEl =
+        form.querySelector('input[name="amount"]') ||
+        form.querySelector('input[name="exp"]') ||
+        form.querySelector('input[data-afcs-award-amount]');
+
+      var reasonEl =
+        form.querySelector('input[name="reason"]') ||
+        form.querySelector('textarea[name="reason"]') ||
+        form.querySelector('textarea[name="comment"]') ||
+        form.querySelector('[data-afcs-award-reason]');
+
+      var payloadBase = {
+        amount: amountEl ? amountEl.value : '',
+        reason: reasonEl ? reasonEl.value : ''
+      };
+
+      // Фолбэк по именам do=... (на случай если бэк ждёт другое действие)
+      var actions = ['grant_exp', 'manual_award', 'award_exp'];
+
+      function tryNext(i) {
+        if (i >= actions.length) {
+          alert('Ошибка начисления: сервер не принял запрос (неизвестное действие).');
           return;
         }
-        if (amount) {
-          amount.value = '';
-        }
-        if (reason) {
-          reason.value = '';
-        }
-        applyViewUpdate(payload);
-      });
+
+        sendAction(actions[i], payloadBase).then(function (payload) {
+          if (!payload || !payload.success) {
+            // если это "не то действие" — пробуем следующее
+            var msg = String((payload && (payload.error || payload.errors)) || '');
+            if (/unknown|invalid|action|do|not\s+allowed|permission/i.test(msg)) {
+              tryNext(i + 1);
+              return;
+            }
+            alert((payload && (payload.error || payload.errors) ? (payload.error || payload.errors) : 'Ошибка начисления').toString());
+            return;
+          }
+
+          if (amountEl) amountEl.value = '';
+          if (reasonEl) reasonEl.value = '';
+          applyViewUpdate(payload);
+        }).catch(function () {
+          tryNext(i + 1);
+        });
+      }
+
+      tryNext(0);
     });
+
 
     updatePool();
     initAttributesUI();
