@@ -1,16 +1,38 @@
-<div class="af-cs-attrs" data-afcs-pool-max="{$attributes_pool_max}">
-  <div class="af-cs-attr-pool">
-    <div>Пул: <strong>{$attributes_pool_max}</strong></div>
-    <div>Распределено: <strong data-afcs-pool-spent>{$attributes_pool_spent}</strong></div>
-    <div>Осталось: <strong data-afcs-pool-remaining>{$attributes_pool_remaining}</strong></div>
+<div class="af-cs-attrs"
+     data-afcs-attrs
+     data-afcs-pool-max="{$attributes_pool_max}"
+     data-afcs-can-edit="{$attributes_can_edit}">
+
+  <div class="af-cs-attrs__head">
+    <button type="button"
+            class="af-cs-attrs__gear"
+            data-afcs-attrs-toggle
+            aria-label="Редактировать распределение"
+            title="Редактировать распределение">
+      <i class="fa-solid fa-gear" aria-hidden="true"></i>
+    </button>
   </div>
-  <div class="af-cs-attr-grid">
-    {$attributes_rows_html}
-  </div>
-  <div class="af-cs-warning" data-afcs-pool-warning hidden>Превышен лимит очков пула.</div>
-  {$attributes_choice_html}
-  {$attributes_errors_html}
-  <div class="af-cs-attr-actions">
-    {$attributes_actions_html}
+
+
+  <div class="af-cs-attr-compact" data-afcs-attr-compact></div>
+
+  <div class="af-cs-attr-edit" data-afcs-attr-edit>
+    <div class="af-cs-attr-pool">
+      <div>Пул: <strong>{$attributes_pool_max}</strong></div>
+      <div>Распределено: <strong data-afcs-pool-spent>{$attributes_pool_spent}</strong></div>
+      <div>Осталось: <strong data-afcs-pool-remaining>{$attributes_pool_remaining}</strong></div>
+    </div>
+
+    <div class="af-cs-attr-grid">
+      {$attributes_rows_html}
+    </div>
+
+    <div class="af-cs-warning" data-afcs-pool-warning hidden>Превышен лимит очков пула.</div>
+    {$attributes_choice_html}
+    {$attributes_errors_html}
+
+    <div class="af-cs-attr-actions">
+      {$attributes_actions_html}
+    </div>
   </div>
 </div>
