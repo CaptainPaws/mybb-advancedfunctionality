@@ -42,6 +42,32 @@
   color: #efefef;
 }
 
+.af-cs-summary__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+
+.af-cs-summary__title-row h1 {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-cs-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+}
+
 .af-cs-name-ru {
   display: flex;
   flex-wrap: wrap;
@@ -103,6 +129,20 @@
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.af-cs-btn--compact {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.af-cs-btn--icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  line-height: 1;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .af-cs-btn {

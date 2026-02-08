@@ -948,9 +948,9 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $sheet_view = af_charactersheets_compute_sheet_view($sheet);
     $can_edit_sheet = af_charactersheets_user_can_edit_sheet($sheet, $mybb->user ?? []);
     $can_manage_sheet = af_cs_can_manage_sheet((int)($mybb->user['uid'] ?? 0), (int)($sheet['uid'] ?? 0));
-    $can_award_exp = af_charactersheets_user_can_award_exp($mybb->user ?? []);
     // fid нужен для is_moderator(), возьмём из threads если можем
     $fid_for_mod = (int)($thread['fid'] ?? 0);
+    $can_award_exp = af_charactersheets_user_can_award_exp($mybb->user ?? [], $fid_for_mod);
     $can_view_ledger = af_charactersheets_user_can_view_ledger($sheet, $mybb->user ?? [], $fid_for_mod);
 
     $sheet_title = htmlspecialchars_uni($character_name_en);
@@ -958,7 +958,13 @@ function af_charactersheets_render_sheet_page(string $slug): void
 
     $can_delete_sheet = af_charactersheets_user_can_delete_sheet($sheet, $mybb->user ?? []);
     $delete_redirect = $thread_url !== '' ? $thread_url : 'misc.php?action=af_charactersheets';
-    $sheet_base_html = af_charactersheets_build_base_html($profile_url, $thread_url, $can_delete_sheet, $delete_redirect);
+    $sheet_header_actions_html = af_charactersheets_build_header_actions_html(
+        $profile_url,
+        $thread_url,
+        $can_delete_sheet,
+        $delete_redirect,
+        $can_award_exp
+    );
     $sheet_info_table_html = af_charactersheets_build_info_table_html($atf_index);
     $sheet_attributes_html = af_charactersheets_build_attributes_html($sheet_view, $can_edit_sheet, $can_view_ledger);
     $sheet_bonus_html = af_charactersheets_build_bonus_html($atf_index);
@@ -1100,35 +1106,6 @@ function af_cs_can_manage_sheet(int $viewerUid, int $sheetUid): bool
     $is_supermod = !empty($mybb->user['issupermod']);
 
     return $is_admin || $is_modcp || $is_supermod;
-}
-
-function af_charactersheets_user_can_award_exp(array $user): bool
-{
-    global $mybb;
-
-    $uid = (int)($user['uid'] ?? 0);
-    if ($uid <= 0) {
-        return false;
-    }
-
-    // Админы/супермоды — всегда да
-    if (!empty($user['issupermod']) || !empty($user['cancp'])) {
-        return true;
-    }
-
-    // Разрешённые группы (CSV из настроек)
-    $allowed = af_charactersheets_csv_to_ids($mybb->settings['af_charactersheets_exp_manual_groups'] ?? '');
-    if (!$allowed) {
-        return false;
-    }
-
-    // Группы пользователя: основная + дополнительные
-    $usergroups = [(int)($user['usergroup'] ?? 0)];
-    $additional = af_charactersheets_csv_to_ids((string)($user['additionalgroups'] ?? ''));
-    $usergroups = array_values(array_unique(array_filter(array_merge($usergroups, $additional))));
-
-    // Есть пересечение — можно
-    return !empty(array_intersect($allowed, $usergroups));
 }
 
 function af_charactersheets_kb_get_blocks(array $entry): array
@@ -1484,12 +1461,25 @@ function af_charactersheets_build_progress_html(array $view, array $sheet, bool 
     $manual_award_html = '';
     $manual_award_toggle_html = '';
     if ($can_award) {
-        $manual_award_toggle_html = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-award-toggle>Ручное начисление</button>';
-        $manual_award_html = '<form class="af-cs-award" data-afcs-award-form>'
-            . '<input type="number" step="0.01" name="amount" placeholder="EXP" required />'
-            . '<input type="text" name="reason" placeholder="Причина" />'
-            . '<button type="submit" class="af-cs-btn">Начислить</button>'
-            . '</form>';
+        $manual_award_html = '<div class="af-cs-award-panel" data-afcs-award-panel hidden>'
+            . '<form class="af-cs-award-form" data-afcs-award-form="1" autocomplete="off">'
+            . '<div class="af-cs-award-form__row">'
+            . '<label class="af-cs-award-form__label" for="afcs_award_amount">EXP</label>'
+            . '<input id="afcs_award_amount" class="textbox af-cs-award-form__input" type="number" name="amount"'
+            . ' step="1" inputmode="numeric" placeholder="Например: 100" required>'
+            . '</div>'
+            . '<div class="af-cs-award-form__row">'
+            . '<label class="af-cs-award-form__label" for="afcs_award_reason">Причина</label>'
+            . '<input id="afcs_award_reason" class="textbox af-cs-award-form__input" type="text" name="reason"'
+            . ' maxlength="255" placeholder="Например: квест, ивент, награда" required>'
+            . '</div>'
+            . '<div class="af-cs-award-form__actions">'
+            . '<button type="submit" class="button button--primary af-cs-btn af-cs-btn--submit">Отправить</button>'
+            . '<button type="button" class="button button--secondary af-cs-btn af-cs-btn--cancel"'
+            . ' data-afcs-award-toggle>Закрыть</button>'
+            . '</div>'
+            . '</form>'
+            . '</div>';
     }
 
     global $templates;
@@ -2776,28 +2766,42 @@ function af_charactersheets_render_kb_chip(string $type, string $key, string $fa
         . '" target="_blank" rel="noopener">' . htmlspecialchars_uni($label) . '</a>';
 }
 
-function af_charactersheets_build_base_html(string $profile_url, string $thread_url, bool $can_delete, string $delete_redirect): string
+function af_charactersheets_build_header_actions_html(
+    string $profile_url,
+    string $thread_url,
+    bool $can_delete,
+    string $delete_redirect,
+    bool $can_award
+): string
 {
     $items = [];
 
     if ($profile_url !== '') {
-        $items[] = '<a class="af-cs-btn" href="' . htmlspecialchars_uni($profile_url) . '">Профиль</a>';
+        $items[] = '<a class="af-cs-btn af-cs-btn--compact" href="' . htmlspecialchars_uni($profile_url)
+            . '" title="Профиль" aria-label="Профиль">Профиль</a>';
     }
 
     if ($thread_url !== '') {
-        $items[] = '<a class="af-cs-btn" href="' . htmlspecialchars_uni($thread_url) . '">Анкета</a>';
+        $items[] = '<a class="af-cs-btn af-cs-btn--compact" href="' . htmlspecialchars_uni($thread_url)
+            . '" title="Анкета" aria-label="Анкета">Анкета</a>';
+    }
+
+    if ($can_award) {
+        $items[] = '<button type="button" class="af-cs-btn af-cs-btn--compact af-cs-btn--icon" data-afcs-award-toggle'
+            . ' title="Ручное начисление" aria-label="Ручное начисление">+</button>';
     }
 
     if ($can_delete) {
-        $items[] = '<button type="button" class="af-cs-btn af-cs-btn--danger" data-afcs-delete-sheet data-afcs-delete-redirect="'
-            . htmlspecialchars_uni($delete_redirect) . '">Удалить</button>';
+        $items[] = '<button type="button" class="af-cs-btn af-cs-btn--compact af-cs-btn--danger" data-afcs-delete-sheet'
+            . ' data-afcs-delete-redirect="' . htmlspecialchars_uni($delete_redirect) . '" title="Удалить"'
+            . ' aria-label="Удалить">Удалить</button>';
     }
 
     if (empty($items)) {
-        return '<div class="af-cs-muted">Нет данных</div>';
+        return '';
     }
 
-    return '<div class="af-cs-button-row">' . implode('', $items) . '</div>';
+    return implode('', $items);
 }
 
 function af_charactersheets_build_kb_cards_html(array $fields): string

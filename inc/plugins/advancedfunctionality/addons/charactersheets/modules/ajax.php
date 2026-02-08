@@ -18,9 +18,21 @@ function af_charactersheets_handle_api(): void
         af_charactersheets_json_response(['success' => false, 'error' => 'Sheet not found']);
     }
 
+    $fid_for_mod = 0;
+    if (!empty($sheet['tid'])) {
+        global $db;
+        $tid = (int)$sheet['tid'];
+        if ($tid > 0) {
+            $fid_for_mod = (int)$db->fetch_field(
+                $db->simple_select('threads', 'fid', 'tid=' . $tid, ['limit' => 1]),
+                'fid'
+            );
+        }
+    }
+
     $can_edit = af_charactersheets_user_can_edit_sheet($sheet, $mybb->user ?? []);
     $can_manage = af_cs_can_manage_sheet((int)($mybb->user['uid'] ?? 0), (int)($sheet['uid'] ?? 0));
-    $can_award = af_charactersheets_user_can_award_exp($mybb->user ?? []);
+    $can_award = af_charactersheets_user_can_award_exp($mybb->user ?? [], $fid_for_mod);
 
     if (in_array($do, ['save_attributes', 'save_choice', 'grant_exp', 'update_skill', 'add_knowledge', 'remove_knowledge', 'delete_sheet'], true)) {
         verify_post_check($mybb->get_input('my_post_key'));
@@ -195,32 +207,14 @@ function af_charactersheets_handle_api(): void
         $build['knowledge'] = $knowledge;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
     } elseif ($do === 'grant_exp') {
-        if (!$can_award) {
-            af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
-        }
         $amount_raw = (string)$mybb->get_input('amount');
-        $amount = af_charactersheets_to_number($amount_raw);
         $reason = trim((string)$mybb->get_input('reason'));
-        if ($amount === null || $amount == 0.0) {
-            af_charactersheets_json_response(['success' => false, 'error' => 'Amount is invalid']);
-        }
-        if ($amount < 0 && empty($mybb->settings['af_charactersheets_exp_allow_negative'])) {
-            af_charactersheets_json_response(['success' => false, 'error' => 'Negative EXP not allowed']);
-        }
-        if ($amount < 0 && empty($mybb->settings['af_charactersheets_exp_allow_overdraw'])) {
-            $current_exp = (float)($progress['exp'] ?? 0);
-            if ($current_exp + $amount < 0) {
-                af_charactersheets_json_response(['success' => false, 'error' => 'Not enough EXP to subtract']);
+        $result = af_charactersheets_award_exp_manual($sheet, $mybb->user ?? [], $fid_for_mod, $amount_raw, $reason);
+        if (empty($result['success'])) {
+            if (($result['error'] ?? '') === 'Permission denied') {
+                http_response_code(403);
             }
-        }
-        $event_key = 'manual:' . $sheet_id . ':' . TIME_NOW . ':' . mt_rand(1000, 9999);
-        $meta = [
-            'reason' => $reason,
-            'awarded_by' => (int)($mybb->user['uid'] ?? 0),
-            'awarded_by_username' => (string)($mybb->user['username'] ?? ''),
-        ];
-        if (!af_charactersheets_grant_exp($sheet_id, (float)$amount, $event_key, 'manual', $meta)) {
-            af_charactersheets_json_response(['success' => false, 'error' => 'EXP update failed']);
+            af_charactersheets_json_response(['success' => false, 'error' => $result['error'] ?? 'EXP update failed']);
         }
     } else {
         af_charactersheets_json_response(['success' => false, 'error' => 'Unknown action']);
@@ -228,17 +222,6 @@ function af_charactersheets_handle_api(): void
 
     $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
     $view = af_charactersheets_compute_sheet_view($sheet);
-    $fid_for_mod = 0;
-    if (!empty($sheet['tid'])) {
-        global $db;
-        $tid = (int)$sheet['tid'];
-        if ($tid > 0) {
-            $fid_for_mod = (int)$db->fetch_field(
-                $db->simple_select('threads', 'fid', 'tid=' . $tid, ['limit' => 1]),
-                'fid'
-            );
-        }
-    }
 
     $can_view_ledger = af_charactersheets_user_can_view_ledger($sheet, $mybb->user ?? [], $fid_for_mod);
 

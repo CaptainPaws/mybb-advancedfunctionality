@@ -49,6 +49,81 @@ function af_charactersheets_compute_level(float $exp): array
     ];
 }
 
+function af_charactersheets_user_is_admin_or_moderator(array $user, int $fid = 0): bool
+{
+    global $mybb;
+
+    $uid = (int)($user['uid'] ?? 0);
+    if ($uid <= 0) {
+        return false;
+    }
+
+    if (!empty($user['cancp']) || !empty($mybb->usergroup['cancp'])) {
+        return true;
+    }
+
+    if (!empty($user['issupermod']) || !empty($mybb->usergroup['issupermod'])) {
+        return true;
+    }
+
+    if (!empty($user['canmodcp']) || !empty($mybb->usergroup['canmodcp'])) {
+        return true;
+    }
+
+    if ($fid > 0 && function_exists('is_moderator')) {
+        if (is_moderator($fid)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function af_charactersheets_user_can_award_exp(array $user, int $fid = 0): bool
+{
+    return af_charactersheets_user_is_admin_or_moderator($user, $fid);
+}
+
+function af_charactersheets_award_exp_manual(array $sheet, array $user, int $fid, string $amount_raw, string $reason): array
+{
+    global $mybb;
+
+    if (!af_charactersheets_user_can_award_exp($user, $fid)) {
+        return ['success' => false, 'error' => 'Permission denied'];
+    }
+
+    $amount = af_charactersheets_to_number($amount_raw);
+    if ($amount === null || $amount == 0.0) {
+        return ['success' => false, 'error' => 'Amount is invalid'];
+    }
+
+    if ($amount < 0 && empty($mybb->settings['af_charactersheets_exp_allow_negative'])) {
+        return ['success' => false, 'error' => 'Negative EXP not allowed'];
+    }
+
+    $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
+    if ($amount < 0 && empty($mybb->settings['af_charactersheets_exp_allow_overdraw'])) {
+        $current_exp = (float)($progress['exp'] ?? 0);
+        if ($current_exp + $amount < 0) {
+            return ['success' => false, 'error' => 'Not enough EXP to subtract'];
+        }
+    }
+
+    $sheet_id = (int)($sheet['id'] ?? 0);
+    $event_key = 'manual:' . $sheet_id . ':' . TIME_NOW . ':' . mt_rand(1000, 9999);
+    $meta = [
+        'reason' => trim($reason),
+        'awarded_by' => (int)($user['uid'] ?? 0),
+        'awarded_by_username' => (string)($user['username'] ?? ''),
+    ];
+
+    if (!af_charactersheets_grant_exp($sheet_id, (float)$amount, $event_key, 'manual', $meta)) {
+        return ['success' => false, 'error' => 'EXP update failed'];
+    }
+
+    return ['success' => true];
+}
+
 function af_charactersheets_grant_exp(int $sheet_id, float $amount, string $event_key, string $event_type, array $meta): bool
 {
     global $db, $mybb;
