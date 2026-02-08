@@ -331,8 +331,10 @@ function af_charactersheets_handle_api(): void
             if (!is_array($item)) {
                 continue;
             }
-            if ((string)($item['type'] ?? '') === $type && (string)($item['key'] ?? '') === $key) {
+            if (af_charactersheets_get_inventory_item_type($item) === $type && af_charactersheets_get_inventory_item_key($item) === $key) {
                 $found = true;
+                $items[$idx]['kb_type'] = $type;
+                $items[$idx]['kb_key'] = $key;
                 if ($do === 'inventory_add_item') {
                     $items[$idx]['qty'] = (int)($item['qty'] ?? 0) + max(1, (int)$mybb->get_input('qty'));
                 } elseif ($do === 'inventory_set_qty') {
@@ -358,8 +360,8 @@ function af_charactersheets_handle_api(): void
         if (!$found && $do !== 'inventory_remove_item' && $do !== 'inventory_toggle_item') {
             $qty = max(1, (int)$mybb->get_input('qty'));
             $items[] = [
-                'type' => $type,
-                'key' => $key,
+                'kb_type' => $type,
+                'kb_key' => $key,
                 'qty' => $qty,
                 'equipped' => false,
                 'slot' => '',
@@ -374,10 +376,11 @@ function af_charactersheets_handle_api(): void
             af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
         }
         $slot = (string)$mybb->get_input('slot');
-        $slots_allowed = array_keys(af_charactersheets_get_augmentation_slots());
-        if ($slot === '' || !in_array($slot, $slots_allowed, true)) {
+        $slot_configs = af_charactersheets_get_augmentation_slots();
+        if ($slot === '' || !array_key_exists($slot, $slot_configs)) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Invalid slot']);
         }
+        $max_equipped = (int)($slot_configs[$slot]['max_equipped'] ?? 1);
 
         $augmentations = (array)($build['augmentations'] ?? []);
         $slots = (array)($augmentations['slots'] ?? []);
@@ -392,26 +395,95 @@ function af_charactersheets_handle_api(): void
             if (empty($entry)) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Unknown augmentation']);
             }
-            $owned = (array)($augmentations['owned'] ?? []);
-            $owned_match = false;
-            foreach ($owned as $item) {
-                if (!is_array($item)) {
+            $allowed_slots = af_charactersheets_pick_augmentation_slots($entry);
+            if ($allowed_slots && !in_array($slot, $allowed_slots, true)) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Slot not allowed for this augmentation']);
+            }
+
+            $qty_owned = 0;
+            $inventory = (array)($build['inventory'] ?? []);
+            foreach ((array)($inventory['items'] ?? []) as $inv_item) {
+                if (!is_array($inv_item)) {
                     continue;
                 }
-                if ((string)($item['type'] ?? '') === $type && (string)($item['key'] ?? '') === $key) {
-                    $owned_match = true;
+                if (af_charactersheets_get_inventory_item_type($inv_item) === $type
+                    && af_charactersheets_get_inventory_item_key($inv_item) === $key
+                ) {
+                    $qty_owned = (int)($inv_item['qty'] ?? 0);
                     break;
                 }
             }
-            if (!$owned_match) {
+
+            if ($qty_owned <= 0) {
+                $owned = (array)($augmentations['owned'] ?? []);
+                foreach ($owned as $item) {
+                    if (!is_array($item)) {
+                        continue;
+                    }
+                    if ((string)($item['type'] ?? '') === $type && (string)($item['key'] ?? '') === $key) {
+                        $qty_owned = 1;
+                        break;
+                    }
+                }
+            }
+
+            if ($qty_owned <= 0) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Augmentation not owned']);
             }
-            $slots[$slot] = [
-                'type' => $type,
-                'key' => $key,
-            ];
+
+            $equipped_count = 0;
+            foreach ($slots as $slot_value) {
+                foreach (af_charactersheets_normalize_slot_items($slot_value) as $equipped_item) {
+                    if (!is_array($equipped_item)) {
+                        continue;
+                    }
+                    if ((string)($equipped_item['type'] ?? $equipped_item['kb_type'] ?? '') === $type
+                        && (string)($equipped_item['key'] ?? $equipped_item['kb_key'] ?? '') === $key
+                    ) {
+                        $equipped_count++;
+                    }
+                }
+            }
+
+            if ($equipped_count >= $qty_owned) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'No available augmentation copies']);
+            }
+
+            if ($max_equipped <= 1) {
+                $slots[$slot] = [
+                    'type' => $type,
+                    'key' => $key,
+                ];
+            } else {
+                $slot_items = af_charactersheets_normalize_slot_items($slots[$slot] ?? []);
+                if (count($slot_items) >= $max_equipped) {
+                    af_charactersheets_json_response(['success' => false, 'error' => 'Slot is full']);
+                }
+                $slot_items[] = [
+                    'type' => $type,
+                    'key' => $key,
+                ];
+                $slots[$slot] = $slot_items;
+            }
         } else {
-            $slots[$slot] = null;
+            $remove_key = (string)$mybb->get_input('key');
+            if ($max_equipped <= 1) {
+                $slots[$slot] = null;
+            } else {
+                $slot_items = af_charactersheets_normalize_slot_items($slots[$slot] ?? []);
+                if ($remove_key !== '') {
+                    $slot_items = array_values(array_filter($slot_items, function ($item) use ($remove_key) {
+                        if (!is_array($item)) {
+                            return false;
+                        }
+                        $item_key = (string)($item['key'] ?? $item['kb_key'] ?? '');
+                        return $item_key !== $remove_key;
+                    }));
+                } else {
+                    $slot_items = [];
+                }
+                $slots[$slot] = $slot_items;
+            }
         }
 
         $augmentations['slots'] = $slots;
@@ -493,7 +565,7 @@ function af_charactersheets_handle_api(): void
     $knowledge_html = af_charactersheets_build_knowledge_html($view, $can_edit, $can_view_ledger);
     $abilities_html = af_charactersheets_build_abilities_html($build, $can_edit);
     $inventory_html = af_charactersheets_build_inventory_html($build, $can_edit);
-    $augmentations_html = af_charactersheets_build_augments_html($build, $can_edit);
+    $augmentations_html = af_charactersheets_build_augments_html($build, $can_edit, $view);
     $equipment_html = af_charactersheets_build_equipment_html($build, $can_edit);
     $mechanics_html = af_charactersheets_build_mechanics_html($view);
 

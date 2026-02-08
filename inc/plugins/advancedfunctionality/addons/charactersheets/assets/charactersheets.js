@@ -878,12 +878,13 @@
           event.preventDefault();
           var augType = augEquip.getAttribute('data-afcs-augmentation-type');
           var augKey = augEquip.getAttribute('data-afcs-augmentation-key');
+          var augDefaultSlot = augEquip.getAttribute('data-afcs-augmentation-slot-default') || '';
           var augSelect = augEquip.closest('.af-cs-augment-card') || augEquip.parentElement;
           var augSlotSelect = augSelect ? augSelect.querySelector('[data-afcs-augmentation-slot-select]') : null;
           if (augSlotSelect && !augSlotSelect.value && augSlotSelect.options && augSlotSelect.options.length === 2) {
             augSlotSelect.value = augSlotSelect.options[1].value;
           }
-          var augSlot = augSlotSelect ? augSlotSelect.value : '';
+          var augSlot = augSlotSelect ? augSlotSelect.value : augDefaultSlot;
           if (augType && augKey && augSlot) {
             sendAction('equip_augmentation', {
               slot: augSlot,
@@ -904,8 +905,9 @@
         if (augUnequip) {
           event.preventDefault();
           var augSlotKey = augUnequip.getAttribute('data-afcs-augmentation-slot');
+          var augKey = augUnequip.getAttribute('data-afcs-augmentation-key');
           if (augSlotKey) {
-            sendAction('unequip_augmentation', { slot: augSlotKey }).then(function (payload) {
+            sendAction('unequip_augmentation', { slot: augSlotKey, key: augKey || '' }).then(function (payload) {
               if (!payload.success) {
                 alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
                 return;

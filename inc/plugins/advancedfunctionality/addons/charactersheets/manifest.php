@@ -89,6 +89,10 @@ return [
                 'af_charactersheets_knowledge_base_choices_desc' => 'Базовое количество выборов знаний.',
                 'af_charactersheets_knowledge_per_int'        => 'Знания за INT',
                 'af_charactersheets_knowledge_per_int_desc'   => 'Сколько выборов добавляется за 1 INT (floor).',
+                'af_charactersheets_humanity_base'            => 'Базовая человечность',
+                'af_charactersheets_humanity_base_desc'       => 'Базовое значение человечности (в процентах).',
+                'af_charactersheets_aug_slots_json'           => 'Слоты аугментаций',
+                'af_charactersheets_aug_slots_json_desc'      => 'JSON список слотов: slot_key, title_ru/title_en, icon, sortorder, max_equipped.',
                 'af_charactersheets_exp_manual_groups'        => 'Группы ручного начисления EXP',
                 'af_charactersheets_exp_manual_groups_desc'   => 'CSV id групп, которые могут выдавать EXP вручную.',
 
@@ -172,6 +176,10 @@ return [
                 'af_charactersheets_knowledge_base_choices_desc' => 'Base number of knowledge choices.',
                 'af_charactersheets_knowledge_per_int'       => 'Knowledge per INT',
                 'af_charactersheets_knowledge_per_int_desc'  => 'Choices added per INT point (floor).',
+                'af_charactersheets_humanity_base'           => 'Humanity base',
+                'af_charactersheets_humanity_base_desc'      => 'Base humanity value (percent).',
+                'af_charactersheets_aug_slots_json'          => 'Augmentation slots',
+                'af_charactersheets_aug_slots_json_desc'     => 'JSON list of slots: slot_key, title_ru/title_en, icon, sortorder, max_equipped.',
                 'af_charactersheets_exp_manual_groups'       => 'EXP manual award groups',
                 'af_charactersheets_exp_manual_groups_desc'  => 'CSV group ids allowed to grant experience manually.',
 
