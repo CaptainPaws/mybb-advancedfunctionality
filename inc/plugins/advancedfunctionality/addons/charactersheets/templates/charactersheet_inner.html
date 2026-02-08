@@ -12,10 +12,11 @@
         </div>
       </div>
       <div class="af-cs-level">
-        <div class="af-cs-level__value" data-afcs-level-value>{$sheet_level_value}</div>
-        <div class="af-cs-level__bar"><span data-afcs-level-bar style="width: {$sheet_level_percent}%"></span></div>
-        <div class="af-cs-level__label">Уровень · <span data-afcs-level-exp>{$sheet_level_exp_label}</span></div>
+        <div data-afcs-block="progress">
+          {$sheet_progress_html}
+        </div>
       </div>
+
       <div class="af-cs-summary__buttons">
         {$sheet_base_html}
       </div>
@@ -35,13 +36,6 @@
   <section class="af-cs-section">
     <h2>Механика</h2>
     {$sheet_mechanics_html}
-  </section>
-
-  <section class="af-cs-section">
-    <h2>Уровень и опыт</h2>
-    <div data-afcs-block="progress">
-      {$sheet_progress_html}
-    </div>
   </section>
 
   <section class="af-cs-section">
