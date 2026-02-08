@@ -34,7 +34,26 @@ function af_charactersheets_handle_api(): void
     $can_manage = af_cs_can_manage_sheet((int)($mybb->user['uid'] ?? 0), (int)($sheet['uid'] ?? 0));
     $can_award = af_charactersheets_user_can_award_exp($mybb->user ?? [], $fid_for_mod);
 
-    if (in_array($do, ['save_attributes', 'save_choice', 'grant_exp', 'update_skill', 'add_knowledge', 'remove_knowledge', 'delete_sheet'], true)) {
+    if (in_array($do, [
+        'save_attributes',
+        'save_choice',
+        'grant_exp',
+        'update_skill',
+        'add_knowledge',
+        'remove_knowledge',
+        'delete_sheet',
+        'add_ability',
+        'remove_ability',
+        'toggle_ability',
+        'inventory_add_item',
+        'inventory_remove_item',
+        'inventory_set_qty',
+        'inventory_toggle_item',
+        'equip_augmentation',
+        'unequip_augmentation',
+        'equip_equipment',
+        'unequip_equipment',
+    ], true)) {
         verify_post_check($mybb->get_input('my_post_key'));
     }
 
@@ -63,6 +82,7 @@ function af_charactersheets_handle_api(): void
     $base = af_charactersheets_json_decode((string)($sheet['base_json'] ?? ''));
     $build = af_charactersheets_json_decode((string)($sheet['build_json'] ?? ''));
     $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
+    $build = af_charactersheets_normalize_build($build);
 
     if ($do === 'save_attributes') {
         if (!$can_manage) {
@@ -206,6 +226,245 @@ function af_charactersheets_handle_api(): void
         $knowledge[$list_key] = $selected;
         $build['knowledge'] = $knowledge;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
+    } elseif ($do === 'add_ability' || $do === 'remove_ability' || $do === 'toggle_ability') {
+        if (!$can_edit) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
+        }
+        $type = (string)$mybb->get_input('type');
+        $key = (string)$mybb->get_input('key');
+        if ($type === '' || $key === '') {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Invalid ability']);
+        }
+        $entry = af_charactersheets_kb_get_entry($type, $key);
+        if (empty($entry)) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Unknown ability']);
+        }
+
+        $abilities = (array)($build['abilities'] ?? []);
+        $owned = (array)($abilities['owned'] ?? []);
+        $slots_total = (int)($abilities['slots_total'] ?? 0);
+
+        if ($do === 'add_ability') {
+            if ($slots_total <= count($owned)) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'No slots available']);
+            }
+            foreach ($owned as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                if ((string)($item['type'] ?? '') === $type && (string)($item['key'] ?? '') === $key) {
+                    af_charactersheets_json_response(['success' => false, 'error' => 'Ability already owned']);
+                }
+            }
+            $owned[] = [
+                'type' => $type,
+                'key' => $key,
+                'equipped' => false,
+                'slot' => '',
+                'added_at' => TIME_NOW,
+            ];
+        } elseif ($do === 'remove_ability') {
+            $owned = array_values(array_filter($owned, static function ($item) use ($type, $key) {
+                return !is_array($item) || (string)($item['type'] ?? '') !== $type || (string)($item['key'] ?? '') !== $key;
+            }));
+        } else {
+            $equip = (int)$mybb->get_input('equipped') === 1;
+            $found = false;
+            foreach ($owned as $idx => $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                if ((string)($item['type'] ?? '') === $type && (string)($item['key'] ?? '') === $key) {
+                    $owned[$idx]['equipped'] = $equip;
+                    $found = true;
+                    break;
+                }
+            }
+            if (!$found) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Ability not owned']);
+            }
+            if ($slots_total <= 0) {
+                foreach ($owned as $idx => $item) {
+                    if (is_array($item)) {
+                        $owned[$idx]['equipped'] = false;
+                    }
+                }
+            } else {
+                $equipped_count = 0;
+                foreach ($owned as $item) {
+                    if (!empty($item['equipped'])) {
+                        $equipped_count++;
+                    }
+                }
+                if ($equipped_count > $slots_total) {
+                    for ($i = count($owned) - 1; $i >= 0 && $equipped_count > $slots_total; $i--) {
+                        if (!empty($owned[$i]['equipped'])) {
+                            $owned[$i]['equipped'] = false;
+                            $equipped_count--;
+                        }
+                    }
+                }
+            }
+        }
+
+        $abilities['owned'] = array_values($owned);
+        $build['abilities'] = $abilities;
+        af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
+    } elseif (in_array($do, ['inventory_add_item', 'inventory_remove_item', 'inventory_set_qty', 'inventory_toggle_item'], true)) {
+        if (!$can_edit) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
+        }
+        $type = (string)$mybb->get_input('type');
+        $key = (string)$mybb->get_input('key');
+        if ($type === '' || $key === '') {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Invalid item']);
+        }
+        $entry = af_charactersheets_kb_get_entry($type, $key);
+        if (empty($entry)) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Unknown item']);
+        }
+
+        $inventory = (array)($build['inventory'] ?? []);
+        $items = (array)($inventory['items'] ?? []);
+        $found = false;
+        foreach ($items as $idx => $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            if ((string)($item['type'] ?? '') === $type && (string)($item['key'] ?? '') === $key) {
+                $found = true;
+                if ($do === 'inventory_add_item') {
+                    $items[$idx]['qty'] = (int)($item['qty'] ?? 0) + max(1, (int)$mybb->get_input('qty'));
+                } elseif ($do === 'inventory_set_qty') {
+                    $qty = (int)$mybb->get_input('qty');
+                    if ($qty <= 0) {
+                        unset($items[$idx]);
+                    } else {
+                        $items[$idx]['qty'] = $qty;
+                    }
+                } elseif ($do === 'inventory_toggle_item') {
+                    $items[$idx]['equipped'] = (int)$mybb->get_input('equipped') === 1;
+                } else {
+                    unset($items[$idx]);
+                }
+                break;
+            }
+        }
+
+        if (!$found && $do === 'inventory_toggle_item') {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Item not found']);
+        }
+
+        if (!$found && $do !== 'inventory_remove_item' && $do !== 'inventory_toggle_item') {
+            $qty = max(1, (int)$mybb->get_input('qty'));
+            $items[] = [
+                'type' => $type,
+                'key' => $key,
+                'qty' => $qty,
+                'equipped' => false,
+                'slot' => '',
+            ];
+        }
+
+        $inventory['items'] = array_values($items);
+        $build['inventory'] = $inventory;
+        af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
+    } elseif ($do === 'equip_augmentation' || $do === 'unequip_augmentation') {
+        if (!$can_edit) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
+        }
+        $slot = (string)$mybb->get_input('slot');
+        $slots_allowed = array_keys(af_charactersheets_get_augmentation_slots());
+        if ($slot === '' || !in_array($slot, $slots_allowed, true)) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Invalid slot']);
+        }
+
+        $augmentations = (array)($build['augmentations'] ?? []);
+        $slots = (array)($augmentations['slots'] ?? []);
+
+        if ($do === 'equip_augmentation') {
+            $type = (string)$mybb->get_input('type');
+            $key = (string)$mybb->get_input('key');
+            if ($type === '' || $key === '') {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Invalid augmentation']);
+            }
+            $entry = af_charactersheets_kb_get_entry($type, $key);
+            if (empty($entry)) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Unknown augmentation']);
+            }
+            $owned = (array)($augmentations['owned'] ?? []);
+            $owned_match = false;
+            foreach ($owned as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                if ((string)($item['type'] ?? '') === $type && (string)($item['key'] ?? '') === $key) {
+                    $owned_match = true;
+                    break;
+                }
+            }
+            if (!$owned_match) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Augmentation not owned']);
+            }
+            $slots[$slot] = [
+                'type' => $type,
+                'key' => $key,
+            ];
+        } else {
+            $slots[$slot] = null;
+        }
+
+        $augmentations['slots'] = $slots;
+        $build['augmentations'] = $augmentations;
+        af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
+    } elseif ($do === 'equip_equipment' || $do === 'unequip_equipment') {
+        if (!$can_edit) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
+        }
+        $slot = (string)$mybb->get_input('slot');
+        $slots_allowed = array_keys(af_charactersheets_get_equipment_slots());
+        if ($slot === '' || !in_array($slot, $slots_allowed, true)) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Invalid slot']);
+        }
+
+        $equipment = (array)($build['equipment'] ?? []);
+        $slots = (array)($equipment['slots'] ?? []);
+
+        if ($do === 'equip_equipment') {
+            $type = (string)$mybb->get_input('type');
+            $key = (string)$mybb->get_input('key');
+            if ($type === '' || $key === '') {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Invalid equipment']);
+            }
+            $entry = af_charactersheets_kb_get_entry($type, $key);
+            if (empty($entry)) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Unknown equipment']);
+            }
+            $owned = (array)($equipment['owned'] ?? []);
+            $owned_match = false;
+            foreach ($owned as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                if ((string)($item['type'] ?? '') === $type && (string)($item['key'] ?? '') === $key) {
+                    $owned_match = true;
+                    break;
+                }
+            }
+            if (!$owned_match) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Equipment not owned']);
+            }
+            $slots[$slot] = [
+                'type' => $type,
+                'key' => $key,
+            ];
+        } else {
+            $slots[$slot] = null;
+        }
+
+        $equipment['slots'] = $slots;
+        $build['equipment'] = $equipment;
+        af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
     } elseif ($do === 'grant_exp') {
         $amount_raw = (string)$mybb->get_input('amount');
         $reason = trim((string)$mybb->get_input('reason'));
@@ -222,6 +481,9 @@ function af_charactersheets_handle_api(): void
 
     $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
     $view = af_charactersheets_compute_sheet_view($sheet);
+    $build = af_charactersheets_normalize_build(
+        af_charactersheets_json_decode((string)($sheet['build_json'] ?? ''))
+    );
 
     $can_view_ledger = af_charactersheets_user_can_view_ledger($sheet, $mybb->user ?? [], $fid_for_mod);
 
@@ -229,6 +491,11 @@ function af_charactersheets_handle_api(): void
     $progress_html = af_charactersheets_build_progress_html($view, $sheet, $can_award, $can_view_ledger);
     $skills_html = af_charactersheets_build_skills_html($view, $can_manage, $can_view_ledger);
     $knowledge_html = af_charactersheets_build_knowledge_html($view, $can_edit, $can_view_ledger);
+    $abilities_html = af_charactersheets_build_abilities_html($build, $can_edit);
+    $inventory_html = af_charactersheets_build_inventory_html($build, $can_edit);
+    $augmentations_html = af_charactersheets_build_augments_html($build, $can_edit);
+    $equipment_html = af_charactersheets_build_equipment_html($build, $can_edit);
+    $mechanics_html = af_charactersheets_build_mechanics_html($view);
 
     af_charactersheets_json_response([
         'success' => true,
@@ -237,6 +504,11 @@ function af_charactersheets_handle_api(): void
         'progress_html' => $progress_html,
         'skills_html' => $skills_html,
         'knowledge_html' => $knowledge_html,
+        'abilities_html' => $abilities_html,
+        'inventory_html' => $inventory_html,
+        'augmentations_html' => $augmentations_html,
+        'equipment_html' => $equipment_html,
+        'mechanics_html' => $mechanics_html,
     ]);
 }
 

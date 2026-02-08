@@ -37,7 +37,9 @@
 
   <section class="af-cs-section">
     <h2>Механика</h2>
-    {$sheet_mechanics_html}
+    <div data-afcs-block="mechanics">
+      {$sheet_mechanics_html}
+    </div>
   </section>
 
   <section class="af-cs-section">
@@ -46,9 +48,10 @@
         <button class="is-active" type="button" data-afcs-tab="main">Основная информация</button>
         <button type="button" data-afcs-tab="skills">Навыки</button>
         <button type="button" data-afcs-tab="knowledge">Знания</button>
-        <button type="button" data-afcs-tab="feats">Способности</button>
+        <button type="button" data-afcs-tab="abilities">Способности</button>
         <button type="button" data-afcs-tab="inventory">Инвентарь</button>
         <button type="button" data-afcs-tab="augments">Аугментации</button>
+        <button type="button" data-afcs-tab="equipment">Экипировка</button>
       </div>
       <div class="af-cs-tabs__content">
         <div class="af-cs-tab is-active" data-afcs-tab-content="main">
@@ -65,14 +68,25 @@
             {$sheet_knowledge_html}
           </div>
         </div>
-        <div class="af-cs-tab" data-afcs-tab-content="feats">
-          {$sheet_feats_html}
+        <div class="af-cs-tab" data-afcs-tab-content="abilities">
+          <div data-afcs-block="abilities">
+            {$sheet_abilities_html}
+          </div>
         </div>
         <div class="af-cs-tab" data-afcs-tab-content="inventory">
-          {$sheet_inventory_html}
+          <div data-afcs-block="inventory">
+            {$sheet_inventory_html}
+          </div>
         </div>
         <div class="af-cs-tab" data-afcs-tab-content="augments">
-          {$sheet_augments_html}
+          <div data-afcs-block="augmentations">
+            {$sheet_augments_html}
+          </div>
+        </div>
+        <div class="af-cs-tab" data-afcs-tab-content="equipment">
+          <div data-afcs-block="equipment">
+            {$sheet_equipment_html}
+          </div>
         </div>
       </div>
     </div>

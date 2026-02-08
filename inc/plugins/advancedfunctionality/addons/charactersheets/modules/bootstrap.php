@@ -94,11 +94,16 @@ function af_charactersheets_uninstall_impl(): void
         'af_charactersheets_exp_allow_negative',
         'af_charactersheets_exp_allow_overdraw',
         'af_charactersheets_knowledge_base_choices',
-        'af_charactersheets_knowledge_per_int'
+        'af_charactersheets_knowledge_per_int',
+        'af_charactersheets_hp_base',
+        'af_charactersheets_hp_per_con',
+        'af_charactersheets_hp_per_level',
+        'af_charactersheets_humanity_base',
+        'af_charactersheets_humanity_loss_per_aug'
     )");
     $db->delete_query('settinggroups', "name='af_charactersheets'");
     $db->delete_query('templates', "title LIKE 'charactersheets_%'");
-    $db->delete_query('templates', "title IN ('charactersheet_fullpage','charactersheet_inner','charactersheet_modal','postbit_plaque','charactersheet_rct_cards','charactersheet_stats_bars','charactersheet_attributes','charactersheet_progress','charactersheet_skills','charactersheet_feats','charactersheet_knowledge','charactersheets_catalog','charactersheets_catalog_card')");
+    $db->delete_query('templates', "title IN ('charactersheet_fullpage','charactersheet_inner','charactersheet_modal','postbit_plaque','charactersheet_rct_cards','charactersheet_stats_bars','charactersheet_attributes','charactersheet_progress','charactersheet_skills','charactersheet_feats','charactersheet_abilities','charactersheet_inventory','charactersheet_augmentations','charactersheet_equipment','charactersheet_knowledge','charactersheets_catalog','charactersheets_catalog_card')");
 
     if (file_exists(MYBB_ROOT . 'inc/adminfunctions_templates.php')) {
         require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
@@ -362,12 +367,57 @@ function af_charactersheets_ensure_settings(): void
     );
     af_charactersheets_ensure_setting(
         $gid,
+        'af_charactersheets_hp_base',
+        $lang->af_charactersheets_hp_base ?? 'HP base',
+        $lang->af_charactersheets_hp_base_desc ?? 'Base HP for all characters.',
+        'text',
+        '10',
+        49
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
+        'af_charactersheets_hp_per_con',
+        $lang->af_charactersheets_hp_per_con ?? 'HP per CON',
+        $lang->af_charactersheets_hp_per_con_desc ?? 'HP gain per CON (final).',
+        'text',
+        '1',
+        50
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
+        'af_charactersheets_hp_per_level',
+        $lang->af_charactersheets_hp_per_level ?? 'HP per level',
+        $lang->af_charactersheets_hp_per_level_desc ?? 'HP gain per level.',
+        'text',
+        '2',
+        51
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
+        'af_charactersheets_humanity_base',
+        $lang->af_charactersheets_humanity_base ?? 'Humanity base',
+        $lang->af_charactersheets_humanity_base_desc ?? 'Base Humanity for all characters.',
+        'text',
+        '10',
+        52
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
+        'af_charactersheets_humanity_loss_per_aug',
+        $lang->af_charactersheets_humanity_loss_per_aug ?? 'Humanity loss per augmentation',
+        $lang->af_charactersheets_humanity_loss_per_aug_desc ?? 'Penalty per equipped augmentation.',
+        'text',
+        '0',
+        53
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
         'af_charactersheets_exp_manual_groups',
         $lang->af_charactersheets_exp_manual_groups ?? 'EXP manual award groups',
         $lang->af_charactersheets_exp_manual_groups_desc ?? 'CSV group ids allowed to grant experience manually.',
         'text',
         '4,3,6',
-        49
+        54
     );
 
     $db->delete_query('settings', "name='af_charactersheets_accept_post_template'");
@@ -1857,6 +1907,109 @@ function af_charactersheets_get_kb_entries_by_type(string $type): array
         }
     }
     return $rows;
+}
+
+function af_charactersheets_get_augmentation_slots(): array
+{
+    return [
+        'head' => 'Голова',
+        'eyes' => 'Глаза',
+        'arms' => 'Руки',
+        'body' => 'Торс',
+        'legs' => 'Ноги',
+        'nervous' => 'Нервная система',
+        'skin' => 'Кожа',
+        'implant' => 'Имплант',
+    ];
+}
+
+function af_charactersheets_get_equipment_slots(): array
+{
+    return [
+        'armor' => 'Броня',
+        'weapon' => 'Оружие',
+        'shield' => 'Щит',
+    ];
+}
+
+function af_charactersheets_default_build(): array
+{
+    $augmentation_slots = [];
+    foreach (af_charactersheets_get_augmentation_slots() as $slot => $label) {
+        $augmentation_slots[$slot] = null;
+    }
+    $equipment_slots = [];
+    foreach (af_charactersheets_get_equipment_slots() as $slot => $label) {
+        $equipment_slots[$slot] = null;
+    }
+
+    return [
+        'attributes_allocated' => af_charactersheets_default_attributes(),
+        'choices' => [],
+        'skills' => [],
+        'knowledge' => [
+            'languages' => [],
+            'knowledges' => [],
+        ],
+        'inventory' => [
+            'items' => [],
+        ],
+        'abilities' => [
+            'slots_total' => 0,
+            'owned' => [],
+        ],
+        'augmentations' => [
+            'slots' => $augmentation_slots,
+            'owned' => [],
+        ],
+        'equipment' => [
+            'slots' => $equipment_slots,
+            'owned' => [],
+        ],
+    ];
+}
+
+function af_charactersheets_normalize_build(array $build): array
+{
+    $defaults = af_charactersheets_default_build();
+
+    $build = array_merge($defaults, $build);
+    $build['knowledge'] = array_merge($defaults['knowledge'], (array)($build['knowledge'] ?? []));
+    $build['inventory'] = array_merge($defaults['inventory'], (array)($build['inventory'] ?? []));
+    $build['abilities'] = array_merge($defaults['abilities'], (array)($build['abilities'] ?? []));
+    $build['augmentations'] = array_merge($defaults['augmentations'], (array)($build['augmentations'] ?? []));
+    $build['equipment'] = array_merge($defaults['equipment'], (array)($build['equipment'] ?? []));
+
+    $inventory_raw = (array)($build['inventory'] ?? []);
+    $inventory_items = [];
+    if (isset($inventory_raw['items']) && is_array($inventory_raw['items'])) {
+        $inventory_items = $inventory_raw['items'];
+    } elseif (array_values($inventory_raw) === $inventory_raw) {
+        $inventory_items = $inventory_raw;
+    }
+    $build['inventory']['items'] = array_values(array_filter($inventory_items, 'is_array'));
+
+    $abilities_owned = [];
+    $abilities_raw = (array)($build['abilities'] ?? []);
+    if (isset($abilities_raw['owned']) && is_array($abilities_raw['owned'])) {
+        $abilities_owned = $abilities_raw['owned'];
+    } elseif (array_values($abilities_raw) === $abilities_raw) {
+        $abilities_owned = $abilities_raw;
+    }
+    $build['abilities']['owned'] = array_values(array_filter($abilities_owned, 'is_array'));
+    $build['abilities']['slots_total'] = (int)($build['abilities']['slots_total'] ?? 0);
+
+    $augmentation_defaults = $defaults['augmentations']['slots'];
+    $augmentation_slots = array_merge($augmentation_defaults, (array)($build['augmentations']['slots'] ?? []));
+    $build['augmentations']['slots'] = $augmentation_slots;
+    $build['augmentations']['owned'] = array_values(array_filter((array)($build['augmentations']['owned'] ?? []), 'is_array'));
+
+    $equipment_defaults = $defaults['equipment']['slots'];
+    $equipment_slots = array_merge($equipment_defaults, (array)($build['equipment']['slots'] ?? []));
+    $build['equipment']['slots'] = $equipment_slots;
+    $build['equipment']['owned'] = array_values(array_filter((array)($build['equipment']['owned'] ?? []), 'is_array'));
+
+    return $build;
 }
 
 function af_charactersheets_get_skills_catalog(bool $activeOnly = true): array

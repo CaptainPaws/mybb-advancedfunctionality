@@ -16,7 +16,13 @@ if (!defined('IN_MYBB')) {
  *     {"type":"knowledge_choice","value":1},
  *     {"type":"language_choice","value":1},
  *     {"type":"knowledge","target":"lore_key"},
- *     {"type":"language","target":"common"}
+ *     {"type":"language","target":"common"},
+ *     {"type":"hp_bonus","value":5},
+ *     {"type":"humanity_bonus","value":-1},
+ *     {"type":"armor_bonus","value":1},
+ *     {"type":"shield_bonus","value":1},
+ *     {"type":"weapon_bonus","value":2},
+ *     {"type":"ac_bonus","value":1}
  *   ]
  * }
  */
@@ -209,6 +215,65 @@ function af_charactersheets_collect_bonus_items(array $base): array
     return $items;
 }
 
+function af_charactersheets_collect_build_bonus_items(array $build): array
+{
+    $items = [];
+
+    $abilities = (array)($build['abilities'] ?? []);
+    foreach ((array)($abilities['owned'] ?? []) as $ability) {
+        if (empty($ability['equipped'])) {
+            continue;
+        }
+        $type = (string)($ability['type'] ?? '');
+        $key = (string)($ability['key'] ?? '');
+        if ($type === '' || $key === '') {
+            continue;
+        }
+        $items = array_merge($items, af_charactersheets_normalize_bonus_items($type, $key));
+    }
+
+    $inventory = (array)($build['inventory'] ?? []);
+    foreach ((array)($inventory['items'] ?? []) as $item) {
+        if (empty($item['equipped'])) {
+            continue;
+        }
+        $type = (string)($item['type'] ?? '');
+        $key = (string)($item['key'] ?? '');
+        if ($type === '' || $key === '') {
+            continue;
+        }
+        $items = array_merge($items, af_charactersheets_normalize_bonus_items($type, $key));
+    }
+
+    $augmentations = (array)($build['augmentations'] ?? []);
+    foreach ((array)($augmentations['slots'] ?? []) as $slotItem) {
+        if (!is_array($slotItem)) {
+            continue;
+        }
+        $type = (string)($slotItem['type'] ?? '');
+        $key = (string)($slotItem['key'] ?? '');
+        if ($type === '' || $key === '') {
+            continue;
+        }
+        $items = array_merge($items, af_charactersheets_normalize_bonus_items($type, $key));
+    }
+
+    $equipment = (array)($build['equipment'] ?? []);
+    foreach ((array)($equipment['slots'] ?? []) as $slotItem) {
+        if (!is_array($slotItem)) {
+            continue;
+        }
+        $type = (string)($slotItem['type'] ?? '');
+        $key = (string)($slotItem['key'] ?? '');
+        if ($type === '' || $key === '') {
+            continue;
+        }
+        $items = array_merge($items, af_charactersheets_normalize_bonus_items($type, $key));
+    }
+
+    return $items;
+}
+
 function af_charactersheets_compute_sheet_view(array $sheet): array
 {
     global $mybb;
@@ -216,6 +281,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $base = af_charactersheets_json_decode((string)($sheet['base_json'] ?? ''));
     $build = af_charactersheets_json_decode((string)($sheet['build_json'] ?? ''));
     $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
+    $build = af_charactersheets_normalize_build($build);
 
     $attributes_base = array_merge(af_charactersheets_default_attributes(), (array)($base['attributes_base'] ?? []));
     $attributes_allocated = array_merge(af_charactersheets_default_attributes(), (array)($build['attributes_allocated'] ?? []));
@@ -233,6 +299,12 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $bonus_languages = [];
     $bonus_knowledges = [];
     $bonus_sources = [];
+    $bonus_hp = 0;
+    $bonus_humanity = 0;
+    $bonus_armor = 0;
+    $bonus_shield = 0;
+    $bonus_weapon = 0;
+    $bonus_ac = 0;
 
     $sources = [
         'race' => (string)($base['race_key'] ?? ''),
@@ -247,6 +319,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     ];
 
     $bonus_items = af_charactersheets_collect_bonus_items($base);
+    $bonus_items = array_merge($bonus_items, af_charactersheets_collect_build_bonus_items($build));
     foreach ($bonus_items as $item) {
         $type = (string)($item['type'] ?? '');
         $target = $item['target'] ?? null;
@@ -331,6 +404,36 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             if (is_string($target) && $target !== '') {
                 $bonus_languages[] = $target;
             }
+            continue;
+        }
+
+        if ($type === 'hp_bonus') {
+            $bonus_hp += (float)$value;
+            continue;
+        }
+
+        if ($type === 'humanity_bonus') {
+            $bonus_humanity += (float)$value;
+            continue;
+        }
+
+        if ($type === 'armor_bonus') {
+            $bonus_armor += (float)$value;
+            continue;
+        }
+
+        if ($type === 'shield_bonus') {
+            $bonus_shield += (float)$value;
+            continue;
+        }
+
+        if ($type === 'weapon_bonus') {
+            $bonus_weapon += (float)$value;
+            continue;
+        }
+
+        if ($type === 'ac_bonus') {
+            $bonus_ac += (float)$value;
             continue;
         }
     }
@@ -457,11 +560,52 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $con_mod = (int)floor((float)($final['con'] ?? 0));
     $wis_mod = (int)floor((float)($final['wis'] ?? 0));
     $int_mod = (int)floor((float)($final['int'] ?? 0));
-    $equipment = (array)($build['equipment'] ?? $build['equipment_bonuses'] ?? $build['inventory'] ?? []);
-    $armor_bonus = (int)($equipment['armor_bonus'] ?? 0);
-    $shield_bonus = (int)($equipment['shield_bonus'] ?? 0);
-    $weapon_bonus = (int)($equipment['weapon_bonus'] ?? 0);
-    $ac_total = 10 + $dex_mod + $armor_bonus + $shield_bonus;
+    $legacy_equipment = [];
+    if (!empty($build['equipment_bonuses']) && is_array($build['equipment_bonuses'])) {
+        $legacy_equipment = $build['equipment_bonuses'];
+    }
+    if (isset($build['equipment']) && is_array($build['equipment'])) {
+        foreach (['armor_bonus', 'shield_bonus', 'weapon_bonus'] as $legacyKey) {
+            if (array_key_exists($legacyKey, $build['equipment'])) {
+                $legacy_equipment[$legacyKey] = $build['equipment'][$legacyKey];
+            }
+        }
+    }
+    if (isset($build['inventory']) && is_array($build['inventory'])) {
+        foreach (['armor_bonus', 'shield_bonus', 'weapon_bonus'] as $legacyKey) {
+            if (array_key_exists($legacyKey, $build['inventory'])) {
+                $legacy_equipment[$legacyKey] = $build['inventory'][$legacyKey];
+            }
+        }
+    }
+    $armor_bonus = (int)($legacy_equipment['armor_bonus'] ?? 0) + (int)$bonus_armor;
+    $shield_bonus = (int)($legacy_equipment['shield_bonus'] ?? 0) + (int)$bonus_shield;
+    $weapon_bonus = (int)($legacy_equipment['weapon_bonus'] ?? 0) + (int)$bonus_weapon;
+    $ac_total = 10 + $dex_mod + $armor_bonus + $shield_bonus + (int)$bonus_ac;
+
+    $hp_base = (float)($mybb->settings['af_charactersheets_hp_base'] ?? 0);
+    $hp_per_con = (float)($mybb->settings['af_charactersheets_hp_per_con'] ?? 0);
+    $hp_per_level = (float)($mybb->settings['af_charactersheets_hp_per_level'] ?? 0);
+    $humanity_base = (float)($mybb->settings['af_charactersheets_humanity_base'] ?? 0);
+    $humanity_loss_per_aug = (float)($mybb->settings['af_charactersheets_humanity_loss_per_aug'] ?? 0);
+
+    $con_value = (float)($final['con'] ?? 0);
+    $hp_from_con = (int)floor($con_value * $hp_per_con);
+    $hp_from_level = (int)floor(((int)$level_data['level']) * $hp_per_level);
+    $hp_from_kb = (float)$bonus_hp;
+
+    $equipped_augments = 0;
+    $augmentation_slots = (array)($build['augmentations']['slots'] ?? []);
+    foreach ($augmentation_slots as $slotItem) {
+        if (is_array($slotItem) && !empty($slotItem['key'])) {
+            $equipped_augments += 1;
+        }
+    }
+    $humanity_from_augs = $equipped_augments * $humanity_loss_per_aug;
+    $humanity_from_kb = (float)$bonus_humanity;
+
+    $hp_total = (int)floor($hp_base + $hp_from_con + $hp_from_level + $hp_from_kb);
+    $humanity_total = (int)floor($humanity_base - $humanity_from_augs + $humanity_from_kb);
 
     return [
         'base' => $attributes_base,
@@ -494,6 +638,19 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'shield_bonus' => $shield_bonus,
             'weapon_bonus' => $weapon_bonus,
             'ac_total' => $ac_total,
+            'hp_total' => $hp_total,
+            'humanity_total' => $humanity_total,
+            'hp_breakdown' => [
+                'base' => $hp_base,
+                'from_con' => $hp_from_con,
+                'from_level' => $hp_from_level,
+                'from_kb' => $hp_from_kb,
+            ],
+            'humanity_breakdown' => [
+                'base' => $humanity_base,
+                'from_augs' => $humanity_from_augs,
+                'from_kb' => $humanity_from_kb,
+            ],
             'saves' => [
                 'reflex' => $dex_mod,
                 'will' => $wis_mod,

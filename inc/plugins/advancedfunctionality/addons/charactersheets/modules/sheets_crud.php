@@ -201,16 +201,7 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
         $base['theme_key'] = af_charactersheets_pick_field_value($index, ['character_themes', 'character_theme', 'theme'], false);
     }
 
-    $build = [
-        'attributes_allocated' => af_charactersheets_default_attributes(),
-        'choices' => [],
-        'skills' => [],
-        'knowledge' => [
-            'languages' => [],
-            'knowledges' => [],
-        ],
-        'inventory' => [],
-    ];
+    $build = af_charactersheets_default_build();
 
     $starting_attr_pool = (int)($mybb->settings['af_charactersheets_attr_pool_max'] ?? 0);
     $progress = [
