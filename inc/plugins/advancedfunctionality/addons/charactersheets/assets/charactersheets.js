@@ -159,6 +159,10 @@
     var postKey = sheet.getAttribute('data-afcs-post-key');
 
     function sendAction(action, payload) {
+      if (!sheetId || !postKey) {
+        alert('sheet_id/my_post_key missing in DOM');
+        return Promise.reject(new Error('sheet_id/my_post_key missing in DOM'));
+      }
       payload = payload || {};
       payload.do = action;
       payload.sheet_id = sheetId;
@@ -180,7 +184,26 @@
         method: 'POST',
         credentials: 'same-origin',
         body: data
-      }).then(function (resp) { return resp.json(); });
+      }).then(function (resp) {
+        if (!resp.ok) {
+          return resp.text().then(function (text) {
+            var message = text || ('HTTP ' + resp.status);
+            throw new Error(message);
+          });
+        }
+        return resp.text().then(function (text) {
+          try {
+            return JSON.parse(text);
+          } catch (error) {
+            var message = text || 'Некорректный ответ сервера';
+            throw new Error(message);
+          }
+        });
+      }).catch(function (error) {
+        alert(error.message || 'Ошибка запроса');
+        console.error(error);
+        throw error;
+      });
     }
 
     function applyViewUpdate(payload) {
@@ -209,6 +232,43 @@
         if (levelBar) {
           levelBar.style.width = payload.view.level_percent + '%';
         }
+      }
+      updatePool();
+    }
+
+    function updatePool() {
+      var poolContainer = sheet.querySelector('[data-afcs-pool-max]');
+      if (!poolContainer) {
+        return;
+      }
+      var poolMax = parseInt(poolContainer.getAttribute('data-afcs-pool-max'), 10);
+      if (isNaN(poolMax)) {
+        poolMax = 0;
+      }
+      var inputs = sheet.querySelectorAll('[data-afcs-attr-input]');
+      var spent = 0;
+      inputs.forEach(function (input) {
+        var value = parseInt(input.value || '0', 10);
+        if (!isNaN(value)) {
+          spent += value;
+        }
+      });
+      var remaining = poolMax - spent;
+      var spentEl = sheet.querySelector('[data-afcs-pool-spent]');
+      var remainingEl = sheet.querySelector('[data-afcs-pool-remaining]');
+      if (spentEl) {
+        spentEl.textContent = spent;
+      }
+      if (remainingEl) {
+        remainingEl.textContent = remaining;
+      }
+      var warning = sheet.querySelector('[data-afcs-pool-warning]');
+      if (warning) {
+        warning.hidden = remaining >= 0;
+      }
+      var saveButton = sheet.querySelector('[data-afcs-save-attributes]');
+      if (saveButton) {
+        saveButton.disabled = remaining < 0;
       }
     }
 
@@ -251,6 +311,21 @@
         if (ledger) {
           ledger.hidden = !ledger.hidden;
         }
+        return;
+      }
+
+      var awardToggle = event.target.closest('[data-afcs-award-toggle]');
+      if (awardToggle) {
+        var awardPanel = sheet.querySelector('[data-afcs-award-panel]');
+        if (awardPanel) {
+          awardPanel.hidden = !awardPanel.hidden;
+        }
+      }
+    });
+
+    sheet.addEventListener('input', function (event) {
+      if (event.target.closest('[data-afcs-attr-input]')) {
+        updatePool();
       }
     });
 
@@ -279,6 +354,8 @@
         applyViewUpdate(payload);
       });
     });
+
+    updatePool();
   }
 
   document.addEventListener('keydown', function (event) {

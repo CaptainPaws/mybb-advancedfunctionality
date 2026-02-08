@@ -17,6 +17,7 @@ const AF_CS_EXP_LEDGER_TABLE = 'af_cs_exp_ledger';
 const AF_CS_TPL_MARK = '<!--AF_CS_ACCEPT-->';
 const AF_CS_ASSET_MARK = '<!--AF_CS_ASSETS-->';
 const AF_CS_MODAL_MARK = '<!--AF_CS_MODAL-->';
+const AF_CS_ASSET_FALLBACK_VERSION = '1.1.0';
 
 define('AF_CS_BASE', MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/charactersheets/');
 define('AF_CS_TPL_DIR', AF_CS_BASE . 'templates/');
@@ -876,9 +877,10 @@ function af_charactersheets_render_sheet_page(string $slug): void
     }
 
     $assets = af_charactersheets_get_asset_urls();
+    $asset_version = af_charactersheets_get_asset_version();
     $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n"
-        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '?v=1.1.0" />' . "\n"
-        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '?v=1.1.0"></script>' . "\n";
+        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '?v=' . $asset_version . '" />' . "\n"
+        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '?v=' . $asset_version . '"></script>' . "\n";
 
     $tplInner = $templates->get('charactersheet_inner');
     eval("\$sheet_inner = \"" . $tplInner . "\";");
@@ -1643,21 +1645,26 @@ function af_charactersheets_build_attributes_html(array $view, bool $can_edit): 
 
         $input = $can_edit
             ? '<input type="number" min="0" step="1" value="' . htmlspecialchars_uni((string)$allocated)
-                . '" data-afcs-attr-input="' . htmlspecialchars_uni($key) . '" />'
+                . '" data-afcs-attr-input="' . htmlspecialchars_uni($key) . '" class="af-cs-attr-input" />'
             : '<span class="af-cs-attr-readonly">' . htmlspecialchars_uni((string)$allocated) . '</span>';
 
-        $rows[] = '<div class="af-cs-attr-row">'
+        $rows[] = '<div class="af-cs-attr-card">'
+            . '<div class="af-cs-attr-card__head">'
             . '<div class="af-cs-attr-label">' . htmlspecialchars_uni($label) . '</div>'
-            . '<div>' . htmlspecialchars_uni((string)$base) . '</div>'
-            . '<div>' . $input . '</div>'
-            . '<div>' . htmlspecialchars_uni((string)$bonus) . '</div>'
             . '<div class="af-cs-attr-final">' . htmlspecialchars_uni((string)$final) . '</div>'
+            . '</div>'
+            . '<div class="af-cs-attr-card__meta">'
+            . '<div class="af-cs-attr-card__stat"><span>База</span><strong>' . htmlspecialchars_uni((string)$base) . '</strong></div>'
+            . '<div class="af-cs-attr-card__stat"><span>Бонус</span><strong>' . htmlspecialchars_uni((string)$bonus) . '</strong></div>'
+            . '<div class="af-cs-attr-card__stat"><span>Распределено</span>' . $input . '</div>'
+            . '</div>'
             . '</div>';
     }
 
     $attributes_rows_html = implode('', $rows);
     $attributes_pool_max = (int)($view['pool_max'] ?? 0);
     $attributes_pool_remaining = (int)($view['remaining'] ?? 0);
+    $attributes_pool_spent = (int)($view['spent'] ?? 0);
 
     $error_items = [];
     foreach ((array)($view['errors'] ?? []) as $error) {
@@ -1705,6 +1712,9 @@ function af_charactersheets_build_progress_html(array $view, array $sheet, bool 
     $next = (float)($view['next_req'] ?? 0);
     $percent = (int)($view['level_percent'] ?? 0);
     $exp_label = htmlspecialchars_uni((string)($view['level_exp_label'] ?? ''));
+    $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
+    $attr_points_free = (int)($progress['attr_points_free'] ?? 0);
+    $skill_points_free = (int)($progress['skill_points_free'] ?? 0);
 
     $ledger_items = [];
     foreach (af_charactersheets_get_ledger($sheet_id, 10) as $row) {
@@ -1728,7 +1738,9 @@ function af_charactersheets_build_progress_html(array $view, array $sheet, bool 
     $ledger_html = implode('', $ledger_items);
 
     $manual_award_html = '';
+    $manual_award_toggle_html = '';
     if ($can_award) {
+        $manual_award_toggle_html = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-award-toggle>Ручное начисление</button>';
         $manual_award_html = '<form class="af-cs-award" data-afcs-award-form>'
             . '<input type="number" step="0.01" name="amount" placeholder="EXP" required />'
             . '<input type="text" name="reason" placeholder="Причина" />'
@@ -2215,6 +2227,23 @@ function af_charactersheets_get_asset_urls(): array
     ];
 }
 
+function af_charactersheets_get_asset_version(): string
+{
+    $css = AF_CS_BASE . 'assets/charactersheets.css';
+    $js = AF_CS_BASE . 'assets/charactersheets.js';
+    $timestamps = [];
+    if (is_file($css)) {
+        $timestamps[] = (int)filemtime($css);
+    }
+    if (is_file($js)) {
+        $timestamps[] = (int)filemtime($js);
+    }
+    if (!$timestamps) {
+        return AF_CS_ASSET_FALLBACK_VERSION;
+    }
+    return (string)max($timestamps);
+}
+
 function af_charactersheets_inject_assets(string $page): string
 {
     if (strpos($page, AF_CS_ASSET_MARK) !== false) {
@@ -2222,9 +2251,10 @@ function af_charactersheets_inject_assets(string $page): string
     }
 
     $assets = af_charactersheets_get_asset_urls();
+    $asset_version = af_charactersheets_get_asset_version();
     $inject = "\n" . AF_CS_ASSET_MARK . "\n"
-        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '?v=1.0.0" />' . "\n"
-        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '?v=1.0.0"></script>' . "\n";
+        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '?v=' . $asset_version . '" />' . "\n"
+        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '?v=' . $asset_version . '"></script>' . "\n";
 
     if (stripos($page, '</head>') !== false) {
         $page = preg_replace('~</head>~i', $inject . '</head>', $page, 1);
@@ -2277,7 +2307,11 @@ function af_charactersheets_ensure_postbit_placeholder(): void
     global $db;
 
     $needle = '{$post[\'af_cs_plaque\']}';
-    $anchor = '{$post[\'userstars\']}';
+    $anchors = [
+        '{$post[\'user_details\']}',
+        '{$post[\'usercontact\']}',
+        '{$post[\'userstars\']}',
+    ];
     $q = $db->simple_select('templates', 'tid,template', "title='postbit_classic'");
 
     while ($row = $db->fetch_array($q)) {
@@ -2291,11 +2325,22 @@ function af_charactersheets_ensure_postbit_placeholder(): void
         if (strpos($tpl, $needle) !== false) {
             continue;
         }
-        if (strpos($tpl, $anchor) === false) {
-            continue;
+        $new = '';
+        foreach ($anchors as $anchor) {
+            if (strpos($tpl, $anchor) !== false) {
+                $new = str_replace($anchor, $anchor . "\n" . $needle, $tpl);
+                break;
+            }
         }
-
-        $new = str_replace($anchor, $anchor . "\n" . $needle, $tpl);
+        if ($new === '') {
+            if (stripos($tpl, '</td>') !== false) {
+                $new = preg_replace('~</td>~i', $needle . "\n</td>", $tpl, 1);
+            } elseif (stripos($tpl, '</div>') !== false) {
+                $new = preg_replace('~</div>~i', $needle . "\n</div>", $tpl, 1);
+            } else {
+                $new = $tpl . "\n" . $needle;
+            }
+        }
 
         if (is_string($new) && $new !== '' && $new !== $tpl) {
             $db->update_query('templates', ['template' => $db->escape_string($new)], 'tid=' . $tid);
@@ -3006,9 +3051,10 @@ function af_charactersheets_render_catalog_page(): void
     }
 
     $assets = af_charactersheets_get_asset_urls();
+    $asset_version = af_charactersheets_get_asset_version();
     $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n"
-        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '?v=1.0.0" />' . "\n"
-        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '?v=1.0.0"></script>' . "\n";
+        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '?v=' . $asset_version . '" />' . "\n"
+        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '?v=' . $asset_version . '"></script>' . "\n";
 
     $page_title = 'Каталог листов персонажей';
     $tpl = $templates->get('charactersheets_catalog');

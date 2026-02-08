@@ -1,20 +1,13 @@
-<div class="af-cs-attrs">
-  <div class="af-cs-attr-table">
-    <div class="af-cs-attr-table__head">
-      <div>Атрибут</div>
-      <div>База</div>
-      <div>Распределено</div>
-      <div>Бонус</div>
-      <div>Итог</div>
-    </div>
-    <div class="af-cs-attr-table__body">
-      {$attributes_rows_html}
-    </div>
+<div class="af-cs-attrs" data-afcs-pool-max="{$attributes_pool_max}">
+  <div class="af-cs-attr-pool">
+    <div>Пул: <strong>{$attributes_pool_max}</strong></div>
+    <div>Распределено: <strong data-afcs-pool-spent>{$attributes_pool_spent}</strong></div>
+    <div>Осталось: <strong data-afcs-pool-remaining>{$attributes_pool_remaining}</strong></div>
   </div>
-  <div class="af-cs-attr-meta">
-    <div>Пул: {$attributes_pool_max}</div>
-    <div>Осталось: <strong>{$attributes_pool_remaining}</strong></div>
+  <div class="af-cs-attr-grid">
+    {$attributes_rows_html}
   </div>
+  <div class="af-cs-warning" data-afcs-pool-warning hidden>Превышен лимит очков пула.</div>
   {$attributes_choice_html}
   {$attributes_errors_html}
   <div class="af-cs-attr-actions">
