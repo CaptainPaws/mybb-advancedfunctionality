@@ -274,39 +274,6 @@ function af_charactersheets_update_sheet_json(int $sheet_id, array $base, array 
     );
 }
 
-function af_charactersheets_user_can_delete_sheet(array $sheet, array $user): bool
-{
-    global $mybb, $db;
-
-    $uid = (int)($user['uid'] ?? 0);
-    if ($uid <= 0) {
-        return false;
-    }
-
-    if (!empty($mybb->usergroup['cancp']) || !empty($user['cancp'])) {
-        return true;
-    }
-    if (!empty($mybb->usergroup['issupermod']) || !empty($user['issupermod'])) {
-        return true;
-    }
-    if (!empty($mybb->usergroup['canmodcp']) || !empty($user['canmodcp'])) {
-        return true;
-    }
-
-    $tid = (int)($sheet['tid'] ?? 0);
-    if ($tid > 0 && function_exists('is_moderator')) {
-        $fid = (int)$db->fetch_field(
-            $db->simple_select('threads', 'fid', 'tid=' . $tid, ['limit' => 1]),
-            'fid'
-        );
-        if ($fid > 0 && is_moderator($fid)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 function af_charactersheets_delete_sheet(int $sheet_id, array $actor, string $reason = ''): bool
 {
     global $db;
