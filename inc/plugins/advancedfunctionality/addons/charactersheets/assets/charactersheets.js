@@ -552,6 +552,26 @@
           var blockProgress = sheet.querySelector('[data-afcs-block="progress"]');
           if (blockProgress) blockProgress.innerHTML = payload.progress_html;
         }
+        if (payload.abilities_html) {
+          var abilitiesBlock = sheet.querySelector('[data-afcs-block="abilities"]');
+          if (abilitiesBlock) abilitiesBlock.innerHTML = payload.abilities_html;
+        }
+        if (payload.inventory_html) {
+          var inventoryBlock = sheet.querySelector('[data-afcs-block="inventory"]');
+          if (inventoryBlock) inventoryBlock.innerHTML = payload.inventory_html;
+        }
+        if (payload.augmentations_html) {
+          var augmentsBlock = sheet.querySelector('[data-afcs-block="augmentations"]');
+          if (augmentsBlock) augmentsBlock.innerHTML = payload.augmentations_html;
+        }
+        if (payload.equipment_html) {
+          var equipmentBlock = sheet.querySelector('[data-afcs-block="equipment"]');
+          if (equipmentBlock) equipmentBlock.innerHTML = payload.equipment_html;
+        }
+        if (payload.mechanics_html) {
+          var mechanicsBlock = sheet.querySelector('[data-afcs-block="mechanics"]');
+          if (mechanicsBlock) mechanicsBlock.innerHTML = payload.mechanics_html;
+        }
         if (payload.view) {
           var levelValue = sheet.querySelector('[data-afcs-level-value]');
           var levelExp = sheet.querySelector('[data-afcs-level-exp]');
@@ -731,6 +751,130 @@
           var keyRemove = knowledgeRemove.getAttribute('data-afcs-knowledge-key');
           if (typeRemove && keyRemove) {
             sendAction('remove_knowledge', { type: typeRemove, key: keyRemove }).then(function (payload) {
+              if (!payload.success) {
+                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                return;
+              }
+              applyViewUpdate(payload);
+            });
+          }
+          return;
+        }
+
+        var abilityToggle = event.target.closest('[data-afcs-ability-toggle]');
+        if (abilityToggle) {
+          event.preventDefault();
+          var abilityType = abilityToggle.getAttribute('data-afcs-ability-type');
+          var abilityKey = abilityToggle.getAttribute('data-afcs-ability-key');
+          var abilityEquipped = abilityToggle.getAttribute('data-afcs-ability-equipped');
+          if (abilityType && abilityKey) {
+            sendAction('toggle_ability', {
+              type: abilityType,
+              key: abilityKey,
+              equipped: abilityEquipped === '1' ? 1 : 0
+            }).then(function (payload) {
+              if (!payload.success) {
+                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                return;
+              }
+              applyViewUpdate(payload);
+            });
+          }
+          return;
+        }
+
+        var inventoryToggle = event.target.closest('[data-afcs-inventory-toggle]');
+        if (inventoryToggle) {
+          event.preventDefault();
+          var itemType = inventoryToggle.getAttribute('data-afcs-item-type');
+          var itemKey = inventoryToggle.getAttribute('data-afcs-item-key');
+          var itemEquipped = inventoryToggle.getAttribute('data-afcs-item-equipped');
+          if (itemType && itemKey) {
+            sendAction('inventory_toggle_item', {
+              type: itemType,
+              key: itemKey,
+              equipped: itemEquipped === '1' ? 1 : 0
+            }).then(function (payload) {
+              if (!payload.success) {
+                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                return;
+              }
+              applyViewUpdate(payload);
+            });
+          }
+          return;
+        }
+
+        var augEquip = event.target.closest('[data-afcs-augmentation-equip]');
+        if (augEquip) {
+          event.preventDefault();
+          var augType = augEquip.getAttribute('data-afcs-augmentation-type');
+          var augKey = augEquip.getAttribute('data-afcs-augmentation-key');
+          var augSelect = augEquip.closest('.af-cs-augmentation-item') || augEquip.parentElement;
+          var augSlotSelect = augSelect ? augSelect.querySelector('[data-afcs-augmentation-slot-select]') : null;
+          var augSlot = augSlotSelect ? augSlotSelect.value : '';
+          if (augType && augKey && augSlot) {
+            sendAction('equip_augmentation', {
+              slot: augSlot,
+              type: augType,
+              key: augKey
+            }).then(function (payload) {
+              if (!payload.success) {
+                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                return;
+              }
+              applyViewUpdate(payload);
+            });
+          }
+          return;
+        }
+
+        var augUnequip = event.target.closest('[data-afcs-augmentation-unequip]');
+        if (augUnequip) {
+          event.preventDefault();
+          var augSlotKey = augUnequip.getAttribute('data-afcs-augmentation-slot');
+          if (augSlotKey) {
+            sendAction('unequip_augmentation', { slot: augSlotKey }).then(function (payload) {
+              if (!payload.success) {
+                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                return;
+              }
+              applyViewUpdate(payload);
+            });
+          }
+          return;
+        }
+
+        var equipEquip = event.target.closest('[data-afcs-equipment-equip]');
+        if (equipEquip) {
+          event.preventDefault();
+          var eqType = equipEquip.getAttribute('data-afcs-equipment-type');
+          var eqKey = equipEquip.getAttribute('data-afcs-equipment-key');
+          var eqSelectWrap = equipEquip.closest('.af-cs-augmentation-item') || equipEquip.parentElement;
+          var eqSlotSelect = eqSelectWrap ? eqSelectWrap.querySelector('[data-afcs-equipment-slot-select]') : null;
+          var eqSlot = eqSlotSelect ? eqSlotSelect.value : '';
+          if (eqType && eqKey && eqSlot) {
+            sendAction('equip_equipment', {
+              slot: eqSlot,
+              type: eqType,
+              key: eqKey
+            }).then(function (payload) {
+              if (!payload.success) {
+                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                return;
+              }
+              applyViewUpdate(payload);
+            });
+          }
+          return;
+        }
+
+        var equipUnequip = event.target.closest('[data-afcs-equipment-unequip]');
+        if (equipUnequip) {
+          event.preventDefault();
+          var eqSlotKey = equipUnequip.getAttribute('data-afcs-equipment-slot');
+          if (eqSlotKey) {
+            sendAction('unequip_equipment', { slot: eqSlotKey }).then(function (payload) {
               if (!payload.success) {
                 alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
                 return;
