@@ -596,8 +596,13 @@
     });
 
     sheet.addEventListener('submit', function (event) {
-      var form = event.target.closest('[data-afcs-award-form]');
-      if (!form) return;
+      // Ловим ЛЮБОЙ submit формы внутри панели ручного начисления
+      var form = event.target;
+      if (!form || String(form.nodeName).toUpperCase() !== 'FORM') return;
+
+      if (!form.closest('[data-afcs-award-panel]')) {
+        return; // это не наша форма — выходим
+      }
 
       event.preventDefault();
 
@@ -617,38 +622,18 @@
         reason: reasonEl ? reasonEl.value : ''
       };
 
-      // Фолбэк по именам do=... (на случай если бэк ждёт другое действие)
-      var actions = ['grant_exp', 'manual_award', 'award_exp'];
-
-      function tryNext(i) {
-        if (i >= actions.length) {
-          alert('Ошибка начисления: сервер не принял запрос (неизвестное действие).');
+      // ВАЖНО: бэкенд у тебя ждёт 'grant_exp' (см. ajax.php)
+      sendAction('grant_exp', payloadBase).then(function (payload) {
+        if (!payload || !payload.success) {
+          alert((payload && (payload.error || payload.errors) ? (payload.error || payload.errors) : 'Ошибка начисления').toString());
           return;
         }
 
-        sendAction(actions[i], payloadBase).then(function (payload) {
-          if (!payload || !payload.success) {
-            // если это "не то действие" — пробуем следующее
-            var msg = String((payload && (payload.error || payload.errors)) || '');
-            if (/unknown|invalid|action|do|not\s+allowed|permission/i.test(msg)) {
-              tryNext(i + 1);
-              return;
-            }
-            alert((payload && (payload.error || payload.errors) ? (payload.error || payload.errors) : 'Ошибка начисления').toString());
-            return;
-          }
-
-          if (amountEl) amountEl.value = '';
-          if (reasonEl) reasonEl.value = '';
-          applyViewUpdate(payload);
-        }).catch(function () {
-          tryNext(i + 1);
-        });
-      }
-
-      tryNext(0);
+        if (amountEl) amountEl.value = '';
+        if (reasonEl) reasonEl.value = '';
+        applyViewUpdate(payload);
+      });
     });
-
 
     updatePool();
     initAttributesUI();
