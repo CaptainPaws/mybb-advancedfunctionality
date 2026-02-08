@@ -290,7 +290,7 @@ function af_charactersheets_build_progress_html(array $view, array $sheet, bool 
         $ledger_html = implode('', $ledger_items);
 
         // toggle + block (как ты просила)
-        $ledger_toggle_html = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-ledger-toggle>История начислений</button>';
+        $ledger_toggle_html = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-ledger-toggle><i class="fa-solid fa-clock-rotate-left"></i></button>';
         $ledger_block_html = '<div class="af-cs-ledger" data-afcs-ledger hidden>' . $ledger_html . '</div>';
     }
 
@@ -644,23 +644,23 @@ function af_charactersheets_build_header_actions_html(
 
     if ($profile_url !== '') {
         $items[] = '<a class="af-cs-btn af-cs-btn--compact" href="' . htmlspecialchars_uni($profile_url)
-            . '" title="Профиль" aria-label="Профиль">Профиль</a>';
+            . '" title="Профиль" aria-label="Профиль"><i class="fa-regular fa-user"></i></a>';
     }
 
     if ($thread_url !== '') {
         $items[] = '<a class="af-cs-btn af-cs-btn--compact" href="' . htmlspecialchars_uni($thread_url)
-            . '" title="Анкета" aria-label="Анкета">Анкета</a>';
+            . '" title="Анкета" aria-label="Анкета"><i class="fa-regular fa-id-card"></i></a>';
     }
 
     if ($can_award) {
         $items[] = '<button type="button" class="af-cs-btn af-cs-btn--compact af-cs-btn--icon" data-afcs-award-toggle'
-            . ' title="Ручное начисление" aria-label="Ручное начисление">+</button>';
+            . ' title="Ручное начисление" aria-label="Ручное начисление"><i class="fa-solid fa-plus"></i></button>';
     }
 
     if ($can_delete) {
         $items[] = '<button type="button" class="af-cs-btn af-cs-btn--compact af-cs-btn--danger" data-afcs-delete-sheet'
             . ' data-afcs-delete-redirect="' . htmlspecialchars_uni($delete_redirect) . '" title="Удалить"'
-            . ' aria-label="Удалить">Удалить</button>';
+            . ' aria-label="Удалить"><i class="fa-solid fa-xmark"></i></button>';
     }
 
     if (empty($items)) {
