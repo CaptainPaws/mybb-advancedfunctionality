@@ -84,6 +84,32 @@ function af_charactersheets_grant_exp(int $sheet_id, float $amount, string $even
         $progress['skill_points_free'] = (int)($progress['skill_points_free'] ?? 0) + $delta * $skill_points_per_level;
     }
 
+    // --- ledger meta normalize (reason + awarded by) ---
+    if (!isset($meta['reason'])) {
+        $meta['reason'] = '';
+    } else {
+        $meta['reason'] = trim((string)$meta['reason']);
+    }
+
+    // "Кто начислил" имеет смысл прежде всего для ручных/админских начислений.
+    // Если бэк при grant_exp не положил by_* сам — добавим.
+    if (!isset($meta['by_uid']) && !isset($meta['by_username'])) {
+        $actor_uid = (int)($mybb->user['uid'] ?? 0);
+
+        // считаем "ручным", если event_type явно manual/award/grant/admin/moderator
+        $manual_types = ['manual', 'award', 'grant', 'grant_exp', 'admin', 'moderator'];
+        $is_manual = in_array($event_type, $manual_types, true);
+
+        if ($is_manual && $actor_uid > 0) {
+            $meta['by_uid'] = $actor_uid;
+            $meta['by_username'] = (string)($mybb->user['username'] ?? '');
+        } else {
+            // автособытия (посты/регистрация) — можно показывать как "Система"
+            $meta['by_uid'] = 0;
+            $meta['by_username'] = 'Система';
+        }
+    }
+
     $db->insert_query(AF_CS_EXP_LEDGER_TABLE, [
         'sheet_id' => $sheet_id,
         'uid' => (int)($sheet['uid'] ?? 0),
@@ -287,4 +313,78 @@ function af_charactersheets_is_exp_forum_allowed(int $fid): bool
         return true;
     }
     return in_array($fid, $selected, true);
+}
+
+function af_charactersheets_render_exp_ledger_html(int $sheet_id, int $limit = 30): string
+{
+    global $db, $lang;
+
+    if ($sheet_id <= 0 || !$db->table_exists(AF_CS_EXP_LEDGER_TABLE)) {
+        return '';
+    }
+
+    $rows = [];
+    $query = $db->simple_select(
+        AF_CS_EXP_LEDGER_TABLE,
+        '*',
+        "sheet_id=".(int)$sheet_id,
+        ['order_by' => 'created_at', 'order_dir' => 'DESC', 'limit' => (int)$limit]
+    );
+
+    while ($r = $db->fetch_array($query)) {
+        $meta = af_charactersheets_json_decode((string)($r['meta_json'] ?? ''));
+        if (!is_array($meta)) $meta = [];
+
+        $reason = trim((string)($meta['reason'] ?? ''));
+        if ($reason === '') {
+            // фолбэк — если причины нет (старые записи/автонаграды)
+            $reason = (string)($r['event_type'] ?? $r['event_key'] ?? '');
+        }
+
+        $by = trim((string)($meta['by_username'] ?? ''));
+        if ($by === '') $by = '—';
+
+        $ts = (int)($r['created_at'] ?? 0);
+        $date = $ts > 0 ? my_date('d.m.Y', $ts) : '—';
+        $time = $ts > 0 ? my_date('H:i', $ts) : '—';
+
+        $amount = (float)($r['amount'] ?? 0);
+        $amount_label = ($amount > 0 ? '+' : '') . (string)(int)$amount;
+
+        $rows[] = [
+            'reason' => htmlspecialchars_uni($reason),
+            'amount' => htmlspecialchars_uni($amount_label),
+            'date'   => htmlspecialchars_uni($date),
+            'time'   => htmlspecialchars_uni($time),
+            'by'     => htmlspecialchars_uni($by),
+        ];
+    }
+
+    if (!$rows) {
+        return '<div class="af-cs-ledger" data-afcs-ledger hidden><div class="af-cs-ledger__empty">История пуста.</div></div>';
+    }
+
+    $html = '<div class="af-cs-ledger" data-afcs-ledger hidden>';
+    $html .= '<table class="tborder af-cs-ledger__table" cellspacing="0" cellpadding="6" border="0">';
+    $html .= '<thead><tr>';
+    $html .= '<th>Причина</th>';
+    $html .= '<th style="width:110px;">Значение</th>';
+    $html .= '<th style="width:110px;">Дата</th>';
+    $html .= '<th style="width:80px;">Время</th>';
+    $html .= '<th style="width:180px;">Кто начислил</th>';
+    $html .= '</tr></thead><tbody>';
+
+    foreach ($rows as $row) {
+        $html .= '<tr>';
+        $html .= '<td>'.$row['reason'].'</td>';
+        $html .= '<td style="white-space:nowrap;">'.$row['amount'].'</td>';
+        $html .= '<td style="white-space:nowrap;">'.$row['date'].'</td>';
+        $html .= '<td style="white-space:nowrap;">'.$row['time'].'</td>';
+        $html .= '<td>'.$row['by'].'</td>';
+        $html .= '</tr>';
+    }
+
+    $html .= '</tbody></table></div>';
+
+    return $html;
 }
