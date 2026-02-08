@@ -784,17 +784,32 @@ function af_charactersheets_render_sheet_page(string $slug): void
 
     $accept_row = af_charactersheets_get_accept_row_by_slug($slug);
     if (empty($accept_row)) {
-        error_no_permission(); // или error("Not found")
+        error_no_permission();
         exit;
     }
 
     $tid = (int)($accept_row['tid'] ?? 0);
     $uid = (int)($accept_row['uid'] ?? 0);
 
+    // ВАЖНО: берем uid из threads тоже, но accept_row приоритетнее как “источник истины”
     $thread = [];
     if ($tid > 0) {
-        $thread = $db->fetch_array($db->simple_select('threads', 'tid,fid,subject', 'tid=' . $tid, ['limit' => 1]));
+        $thread = $db->fetch_array($db->simple_select(
+            'threads',
+            'tid,fid,uid,username,subject',
+            'tid=' . $tid,
+            ['limit' => 1]
+        ));
         if (!is_array($thread)) $thread = [];
+    }
+
+    // Если в threads uid есть — ок, если нет/0 — используем accept_row uid
+    if ($uid > 0 && (int)($thread['uid'] ?? 0) !== $uid) {
+        $thread['uid'] = $uid;
+    } elseif ((int)($thread['uid'] ?? 0) > 0 && $uid <= 0) {
+        $uid = (int)$thread['uid'];
+    } else {
+        $thread['uid'] = (int)($thread['uid'] ?? 0);
     }
 
     $user = [];
@@ -823,6 +838,7 @@ function af_charactersheets_render_sheet_page(string $slug): void
 
     $sheet = af_charactersheets_get_sheet_by_slug($slug);
     if (empty($sheet)) {
+        // ВАЖНО: автосоздаём с корректным uid
         $sheet = af_charactersheets_autocreate_sheet($tid, $thread);
     }
 
@@ -855,8 +871,8 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $page_title = 'Лист персонажа';
     if (!empty($user['username'])) {
         $page_title .= ' — ' . $user['username'];
-    } elseif (!empty($character_name)) {
-        $page_title .= ' — ' . $character_name;
+    } elseif (!empty($character_name_en)) {
+        $page_title .= ' — ' . $character_name_en;
     }
 
     $assets = af_charactersheets_get_asset_urls();
@@ -1045,8 +1061,12 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
         return [];
     }
 
+    // uid=0 (или <0) считаем “нет пользователя”
+    $uid = (int)$uid;
+    $hasUid = ($uid > 0);
+
     $existing = [];
-    if ($uid > 0) {
+    if ($hasUid) {
         $existing = af_charactersheets_get_sheet_by_uid($uid);
     }
     if (empty($existing) && $tid > 0) {
@@ -1061,9 +1081,12 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
         if ($tid > 0 && (int)($existing['tid'] ?? 0) !== $tid) {
             $updates['tid'] = $tid;
         }
-        if ($uid > 0 && (int)($existing['uid'] ?? 0) !== $uid) {
+
+        // uid обновляем только если валидный
+        if ($hasUid && (int)($existing['uid'] ?? 0) !== $uid) {
             $updates['uid'] = $uid;
         }
+
         if ($updates) {
             $updates['updated_at'] = TIME_NOW;
             $db->update_query(AF_CS_SHEETS_TABLE, af_charactersheets_db_escape_array($updates), 'id=' . (int)$existing['id']);
@@ -1101,8 +1124,9 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
         'skill_points_free' => 0,
     ];
 
+    // ВАЖНО: если нет uid — пишем NULL, а не 0 (после миграции схемы)
     $row = [
-        'uid' => $uid,
+        'uid' => $hasUid ? $uid : null,
         'tid' => $tid,
         'slug' => $slug,
         'base_json' => $db->escape_string(af_charactersheets_json_encode($base)),
@@ -1115,10 +1139,11 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
     if ($id <= 0) {
         return [];
     }
+
     $sheet = af_charactersheets_get_sheet_by_id($id);
 
     $exp_on_register = (float)($mybb->settings['af_charactersheets_exp_on_register'] ?? 0);
-    if ($exp_on_register > 0 && $uid > 0) {
+    if ($exp_on_register > 0 && $hasUid) {
         af_charactersheets_grant_exp(
             $id,
             $exp_on_register,
@@ -1179,16 +1204,24 @@ function af_charactersheets_user_can_award_exp(array $user): bool
         return false;
     }
 
+    // Админы/супермоды — всегда да
     if (!empty($user['issupermod']) || !empty($user['cancp'])) {
         return true;
     }
 
-    $groups = af_charactersheets_csv_to_ids($mybb->settings['af_charactersheets_exp_manual_groups'] ?? '');
-    if (!$groups) {
+    // Разрешённые группы (CSV из настроек)
+    $allowed = af_charactersheets_csv_to_ids($mybb->settings['af_charactersheets_exp_manual_groups'] ?? '');
+    if (!$allowed) {
         return false;
     }
 
-    return is_member($groups, $user);
+    // Группы пользователя: основная + дополнительные
+    $usergroups = [(int)($user['usergroup'] ?? 0)];
+    $additional = af_charactersheets_csv_to_ids((string)($user['additionalgroups'] ?? ''));
+    $usergroups = array_values(array_unique(array_filter(array_merge($usergroups, $additional))));
+
+    // Есть пересечение — можно
+    return !empty(array_intersect($allowed, $usergroups));
 }
 
 function af_charactersheets_get_attribute_labels(): array
