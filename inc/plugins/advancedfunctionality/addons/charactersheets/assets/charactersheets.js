@@ -583,9 +583,77 @@
 
         updatePool();
         initAttributesUI();
+        initInventoryUI(sheet);
+      }
+
+      function setActiveInventoryTab(root, key) {
+        if (!root || !key) return;
+        var tabs = root.querySelectorAll('[data-afcs-inventory-tab]');
+        var panels = root.querySelectorAll('[data-afcs-inventory-panel]');
+        tabs.forEach(function (tab) {
+          tab.classList.toggle('is-active', tab.getAttribute('data-afcs-inventory-tab') === key);
+        });
+        panels.forEach(function (panel) {
+          panel.classList.toggle('is-active', panel.getAttribute('data-afcs-inventory-panel') === key);
+        });
+      }
+
+      function updateInventoryInfo(panel, card) {
+        if (!panel || !card) return;
+        var info = panel.querySelector('[data-afcs-inventory-info]');
+        if (!info) return;
+
+        var title = card.getAttribute('data-afcs-item-title') || '';
+        var desc = card.getAttribute('data-afcs-item-desc') || '';
+        var qty = card.getAttribute('data-afcs-item-qty') || '0';
+        var effects = card.getAttribute('data-afcs-item-effects') || '';
+        var action = card.getAttribute('data-afcs-item-action') || '';
+
+        var html = '<div class="af-cs-inventory-title">' + title + '</div>';
+        if (desc) html += '<div class="af-cs-inventory-desc">' + desc + '</div>';
+        html += '<div class="af-cs-inventory-row"><span>Количество</span><strong>' + qty + '</strong></div>';
+        if (effects) html += '<div class="af-cs-inventory-bonus">' + effects + '</div>';
+        if (action) html += '<div class="af-cs-ability-actions">' + action + '</div>';
+
+        info.innerHTML = html;
+
+        var cards = panel.querySelectorAll('[data-afcs-item-card]');
+        cards.forEach(function (item) {
+          item.classList.toggle('is-active', item === card);
+        });
+      }
+
+      function initInventoryUI(root) {
+        if (!root) return;
+        var inventory = root.querySelector('[data-afcs-block="inventory"]') || root;
+        if (!inventory) return;
+        var activeTab = inventory.querySelector('.af-cs-tab-btn.is-active');
+        if (!activeTab) {
+          activeTab = inventory.querySelector('[data-afcs-inventory-tab]');
+          if (activeTab) activeTab.classList.add('is-active');
+        }
+        if (activeTab) {
+          setActiveInventoryTab(inventory, activeTab.getAttribute('data-afcs-inventory-tab'));
+        }
       }
 
       sheet.addEventListener('click', function (event) {
+        var inventoryTab = event.target.closest('[data-afcs-inventory-tab]');
+        if (inventoryTab) {
+          event.preventDefault();
+          var tabKey = inventoryTab.getAttribute('data-afcs-inventory-tab');
+          setActiveInventoryTab(sheet, tabKey);
+          return;
+        }
+
+        var inventoryCard = event.target.closest('[data-afcs-item-card]');
+        if (inventoryCard) {
+          event.preventDefault();
+          var panel = inventoryCard.closest('[data-afcs-inventory-panel]');
+          updateInventoryInfo(panel, inventoryCard);
+          return;
+        }
+
         // +/− атрибутов (как у навыков)
         var attrChange = event.target.closest('[data-afcs-attr-change]');
         if (attrChange) {
@@ -810,8 +878,11 @@
           event.preventDefault();
           var augType = augEquip.getAttribute('data-afcs-augmentation-type');
           var augKey = augEquip.getAttribute('data-afcs-augmentation-key');
-          var augSelect = augEquip.closest('.af-cs-augmentation-item') || augEquip.parentElement;
+          var augSelect = augEquip.closest('.af-cs-augment-card') || augEquip.parentElement;
           var augSlotSelect = augSelect ? augSelect.querySelector('[data-afcs-augmentation-slot-select]') : null;
+          if (augSlotSelect && !augSlotSelect.value && augSlotSelect.options && augSlotSelect.options.length === 2) {
+            augSlotSelect.value = augSlotSelect.options[1].value;
+          }
           var augSlot = augSlotSelect ? augSlotSelect.value : '';
           if (augType && augKey && augSlot) {
             sendAction('equip_augmentation', {
@@ -850,8 +921,11 @@
           event.preventDefault();
           var eqType = equipEquip.getAttribute('data-afcs-equipment-type');
           var eqKey = equipEquip.getAttribute('data-afcs-equipment-key');
-          var eqSelectWrap = equipEquip.closest('.af-cs-augmentation-item') || equipEquip.parentElement;
+          var eqSelectWrap = equipEquip.closest('.af-cs-augment-card') || equipEquip.parentElement;
           var eqSlotSelect = eqSelectWrap ? eqSelectWrap.querySelector('[data-afcs-equipment-slot-select]') : null;
+          if (eqSlotSelect && !eqSlotSelect.value && eqSlotSelect.options && eqSlotSelect.options.length === 2) {
+            eqSlotSelect.value = eqSlotSelect.options[1].value;
+          }
           var eqSlot = eqSlotSelect ? eqSlotSelect.value : '';
           if (eqType && eqKey && eqSlot) {
             sendAction('equip_equipment', {
@@ -930,6 +1004,7 @@
 
       updatePool();
       initAttributesUI();
+      initInventoryUI(sheet);
     })();
   });
 })();

@@ -1987,7 +1987,35 @@ function af_charactersheets_normalize_build(array $build): array
     } elseif (array_values($inventory_raw) === $inventory_raw) {
         $inventory_items = $inventory_raw;
     }
-    $build['inventory']['items'] = array_values(array_filter($inventory_items, 'is_array'));
+    $inventory_items = array_values(array_filter($inventory_items, 'is_array'));
+    $stacked_inventory = [];
+    foreach ($inventory_items as $item) {
+        $type = (string)($item['type'] ?? '');
+        $key = (string)($item['key'] ?? '');
+        if ($type === '' || $key === '') {
+            continue;
+        }
+        $qty = (int)($item['qty'] ?? 0);
+        if ($qty <= 0) {
+            continue;
+        }
+        $stack_key = $type . ':' . $key;
+        if (!isset($stacked_inventory[$stack_key])) {
+            $stacked_inventory[$stack_key] = [
+                'type' => $type,
+                'key' => $key,
+                'qty' => $qty,
+                'equipped' => !empty($item['equipped']),
+                'slot' => (string)($item['slot'] ?? ''),
+            ];
+        } else {
+            $stacked_inventory[$stack_key]['qty'] += $qty;
+            if (!empty($item['equipped'])) {
+                $stacked_inventory[$stack_key]['equipped'] = true;
+            }
+        }
+    }
+    $build['inventory']['items'] = array_values($stacked_inventory);
 
     $abilities_owned = [];
     $abilities_raw = (array)($build['abilities'] ?? []);
