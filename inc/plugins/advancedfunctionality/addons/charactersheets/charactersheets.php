@@ -401,9 +401,11 @@ function af_charactersheets_pre_output(&$page): void
         $page = af_charactersheets_inject_assets($page);
     }
 
-    if (!empty($GLOBALS['af_charactersheets_needs_modal'])) {
-        $page = af_charactersheets_inject_modal($page);
+    // Дедуп ассетов на showthread тоже
+    if (!empty($GLOBALS['af_charactersheets_needs_assets'])) {
+        $page = af_charactersheets_canonicalize_assets_html($page);
     }
+
 
     if (empty($GLOBALS['af_charactersheets_accept_button'])) {
         return;
@@ -876,11 +878,9 @@ function af_charactersheets_render_sheet_page(string $slug): void
         $page_title .= ' — ' . $character_name_en;
     }
 
-    $assets = af_charactersheets_get_asset_urls();
-    $asset_version = af_charactersheets_get_asset_version();
-    $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n"
-        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '?v=' . $asset_version . '" />' . "\n"
-        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '?v=' . $asset_version . '"></script>' . "\n";
+    $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n";
+    af_charactersheets_ensure_assets_in_headerinclude();
+
 
     $tplInner = $templates->get('charactersheet_inner');
     eval("\$sheet_inner = \"" . $tplInner . "\";");
@@ -894,8 +894,12 @@ function af_charactersheets_render_sheet_page(string $slug): void
         eval("\$page = \"" . $tplFull . "\";");
     }
 
+    // Вырезаем дубли ассетов (в т.ч. если кто-то другой добавил ?v=...)
+    $page = af_charactersheets_canonicalize_assets_html($page);
+
     output_page($page);
     exit;
+
 }
 
 /* -------------------- HELPERS -------------------- */
@@ -1181,19 +1185,29 @@ function af_charactersheets_update_sheet_json(int $sheet_id, array $base, array 
 
 function af_charactersheets_user_can_edit_sheet(array $sheet, array $user): bool
 {
+    global $mybb;
+
     $uid = (int)($user['uid'] ?? 0);
     if ($uid <= 0) {
         return false;
     }
 
-    if (!empty($user['uid']) && (int)($sheet['uid'] ?? 0) === $uid) {
+    // 1) владелец листа → 1
+    if ((int)($sheet['uid'] ?? 0) === $uid) {
         return true;
     }
 
-    if (function_exists('is_moderator')) {
-        return is_moderator((int)($sheet['tid'] ?? 0), 'canmoderate');
+    // 2) админы и модеры → 1 на всех листах
+    // (берём и из $mybb->usergroup, и из $user на всякий случай)
+    $is_admin = !empty($mybb->usergroup['cancp']) || !empty($user['cancp']);
+    $is_modcp = !empty($mybb->usergroup['canmodcp']) || !empty($user['canmodcp']);
+    $is_supermod = !empty($user['issupermod']);
+
+    if ($is_admin || $is_modcp || $is_supermod) {
+        return true;
     }
 
+    // 3) остальные → 0
     return false;
 }
 
@@ -1698,10 +1712,13 @@ function af_charactersheets_build_attributes_html(array $view, bool $can_edit): 
         ? '<button type="button" class="af-cs-btn" data-afcs-save-attributes="1">Сохранить распределение</button>'
         : '<div class="af-cs-muted">Редактирование недоступно.</div>';
 
+    $attributes_can_edit = $can_edit ? 1 : 0;
+
     global $templates;
     $tpl = $templates->get('charactersheet_attributes');
     eval("\$out = \"" . $tpl . "\";");
     return $out;
+
 }
 
 function af_charactersheets_build_progress_html(array $view, array $sheet, bool $can_award): string
@@ -2244,21 +2261,84 @@ function af_charactersheets_get_asset_version(): string
     return (string)max($timestamps);
 }
 
+function af_charactersheets_ensure_assets_in_headerinclude(): void
+{
+    global $headerinclude;
+
+    // уже вставляли этим хелпером
+    if (!empty($GLOBALS['af_charactersheets_assets_included'])) {
+        return;
+    }
+
+    $assets = af_charactersheets_get_asset_urls();
+
+    // если в headerinclude уже есть эти файлы (с ?v= или без) — не дублируем
+    $hasCss = (stripos($headerinclude, 'charactersheets.css') !== false);
+    $hasJs  = (stripos($headerinclude, 'charactersheets.js') !== false);
+
+    if (!$hasCss) {
+        $headerinclude .= "\n" . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '" />' . "\n";
+    }
+    if (!$hasJs) {
+        $headerinclude .= "\n" . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '"></script>' . "\n";
+    }
+
+    // маркер — чтобы не пытаться добавить второй раз
+    $GLOBALS['af_charactersheets_assets_included'] = true;
+}
+
+function af_charactersheets_canonicalize_assets_html(string $html): string
+{
+    $assets = af_charactersheets_get_asset_urls();
+
+    // 1) вырезаем ВСЕ варианты charactersheets.css (с ?v=, без, с другими параметрами)
+    $html = preg_replace(
+        '~<link\b[^>]*href=("|\')[^"\']*charactersheets\.css(?:\?[^"\']*)?\1[^>]*>\s*~i',
+        '',
+        $html
+    );
+
+    // 2) вырезаем ВСЕ варианты charactersheets.js
+    $html = preg_replace(
+        '~<script\b[^>]*src=("|\')[^"\']*charactersheets\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i',
+        '',
+        $html
+    );
+
+    // 3) вставляем каноничный набор один раз
+    $inject = "\n" . AF_CS_ASSET_MARK . "\n"
+        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '" />' . "\n"
+        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '"></script>' . "\n";
+
+    if (stripos($html, '</head>') !== false) {
+        $html2 = preg_replace('~</head>~i', $inject . '</head>', $html, 1);
+        return is_string($html2) ? $html2 : ($inject . $html);
+    }
+
+    return $inject . $html;
+}
+
 function af_charactersheets_inject_assets(string $page): string
 {
+    // если уже вставляли маркером — выходим
     if (strpos($page, AF_CS_ASSET_MARK) !== false) {
         return $page;
     }
 
+    // если уже есть ссылки/скрипты на эти ассеты (с ?v= или без) — тоже выходим
+    if (stripos($page, 'charactersheets.css') !== false || stripos($page, 'charactersheets.js') !== false) {
+        return $page;
+    }
+
     $assets = af_charactersheets_get_asset_urls();
-    $asset_version = af_charactersheets_get_asset_version();
+
     $inject = "\n" . AF_CS_ASSET_MARK . "\n"
-        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '?v=' . $asset_version . '" />' . "\n"
-        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '?v=' . $asset_version . '"></script>' . "\n";
+        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '" />' . "\n"
+        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '"></script>' . "\n";
 
     if (stripos($page, '</head>') !== false) {
-        $page = preg_replace('~</head>~i', $inject . '</head>', $page, 1);
-        return $page;
+        $page2 = preg_replace('~</head>~i', $inject . '</head>', $page, 1);
+        return is_string($page2) ? $page2 : ($inject . $page);
     }
 
     return $inject . $page;
