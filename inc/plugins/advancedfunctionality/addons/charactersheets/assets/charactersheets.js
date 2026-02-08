@@ -1,647 +1,791 @@
 (function () {
-  var modal = document.querySelector('[data-afcs-modal]');
-  var frame = modal ? modal.querySelector('[data-afcs-frame]') : null;
+  'use strict';
+
+  if (window.__afCharactersheetsInit) return;
+  window.__afCharactersheetsInit = true;
+
+  function onReady(fn) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fn, { once: true });
+    } else {
+      fn();
+    }
+  }
+
+  function ensureModal() {
+    var modal = document.querySelector('[data-afcs-modal]');
+    if (modal) {
+      var frame = modal.querySelector('[data-afcs-frame]');
+      if (frame) return { modal: modal, frame: frame };
+    }
+
+    var wrap = document.createElement('div');
+    wrap.setAttribute('data-afcs-modal', '1');
+    wrap.className = 'af-cs-modal';
+
+    wrap.innerHTML =
+      '<div class="af-cs-modal__backdrop" data-afcs-close="1"></div>' +
+      '<div class="af-cs-modal__dialog" role="dialog" aria-modal="true">' +
+        '<button type="button" class="af-cs-modal__close" data-afcs-close="1" aria-label="Закрыть">×</button>' +
+        '<iframe class="af-cs-modal__frame" data-afcs-frame="1" src="" loading="lazy"></iframe>' +
+      '</div>';
+
+    document.body.appendChild(wrap);
+
+    return {
+      modal: wrap,
+      frame: wrap.querySelector('[data-afcs-frame]')
+    };
+  }
 
   function closeModal() {
-    if (!modal) {
-      return;
-    }
-    modal.classList.remove('is-open');
-    if (frame) {
-      frame.removeAttribute('src');
-    }
+    var m = document.querySelector('[data-afcs-modal]');
+    if (!m) return;
+
+    m.classList.remove('is-open');
+
+    var f = m.querySelector('[data-afcs-frame]');
+    if (f) f.removeAttribute('src');
   }
 
   function openModal(url) {
-    if (!modal || !frame) {
-      window.open(url, '_blank');
-      return;
-    }
-    var loadUrl = url;
+    if (!url) return;
+
+    var mf = ensureModal();
+    var loadUrl = String(url);
+
     if (loadUrl.indexOf('ajax=1') === -1) {
       loadUrl += (loadUrl.indexOf('?') === -1 ? '?' : '&') + 'ajax=1';
     }
-    frame.setAttribute('src', loadUrl);
-    modal.classList.add('is-open');
+
+    mf.frame.setAttribute('src', loadUrl);
+    mf.modal.classList.add('is-open');
   }
 
   document.addEventListener('click', function (event) {
-    var plaque = event.target.closest('.af-cs-plaque__btn[data-afcs-open="1"]');
-    if (plaque) {
+    if (event.target.closest('[data-afcs-close]')) {
+      event.preventDefault();
+      closeModal();
+      return;
+    }
+
+    var opener = event.target.closest('[data-afcs-open="1"]');
+    if (opener) {
       event.preventDefault();
       event.stopPropagation();
-      var plaqueUrl = plaque.getAttribute('data-afcs-sheet') || plaque.getAttribute('href');
-      if (plaqueUrl) {
-        openModal(plaqueUrl);
-        return;
+      if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+
+      var url =
+        opener.getAttribute('data-afcs-sheet') ||
+        opener.getAttribute('href') ||
+        '';
+
+      if (!url) {
+        var slug = opener.getAttribute('data-slug') || '';
+        if (slug) {
+          url = 'misc.php?action=af_charactersheet&slug=' + encodeURIComponent(slug);
+        }
       }
-      var slug = plaque.getAttribute('data-slug');
-      if (slug) {
-        openModal('misc.php?action=af_charactersheet&slug=' + encodeURIComponent(slug));
-      }
+
+      if (url) openModal(url);
       return;
     }
 
     var trigger = event.target.closest('[data-afcs-sheet]');
     if (trigger) {
-      event.preventDefault();
-      var url = trigger.getAttribute('data-afcs-sheet');
-      if (url) {
-        openModal(url);
-      }
-      return;
-    }
-
-    if (event.target.closest('[data-afcs-close]')) {
-      closeModal();
-    }
-  });
-
-  document.querySelectorAll('[data-afcs-tabs]').forEach(function (tabs) {
-    var buttons = tabs.querySelectorAll('[data-afcs-tab]');
-    var panels = tabs.querySelectorAll('[data-afcs-tab-content]');
-
-    function activateTab(name) {
-      buttons.forEach(function (btn) {
-        btn.classList.toggle('is-active', btn.getAttribute('data-afcs-tab') === name);
-      });
-      panels.forEach(function (panel) {
-        panel.classList.toggle('is-active', panel.getAttribute('data-afcs-tab-content') === name);
-      });
-    }
-
-    buttons.forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var name = btn.getAttribute('data-afcs-tab');
-        if (name) {
-          activateTab(name);
-        }
-      });
-    });
-  });
-
-  var catalog = document.querySelector('[data-afcs-catalog]');
-  if (catalog) {
-    var searchInput = document.querySelector('[data-afcs-search]');
-    var filterRace = document.querySelector('[data-afcs-filter="race"]');
-    var filterClass = document.querySelector('[data-afcs-filter="class"]');
-    var filterTheme = document.querySelector('[data-afcs-filter="theme"]');
-    var cards = Array.prototype.slice.call(catalog.querySelectorAll('[data-afcs-card]'));
-
-    function normalize(value) {
-      return (value || '').toLowerCase();
-    }
-
-    function collectOptions(select, key) {
-      var values = {};
-      cards.forEach(function (card) {
-        var val = card.getAttribute('data-' + key) || '';
-        val = val.trim();
-        if (val) {
-          values[val] = true;
-        }
-      });
-      Object.keys(values).sort().forEach(function (val) {
-        var option = document.createElement('option');
-        option.value = val;
-        option.textContent = val;
-        select.appendChild(option);
-      });
-    }
-
-    if (filterRace) {
-      collectOptions(filterRace, 'race');
-    }
-    if (filterClass) {
-      collectOptions(filterClass, 'class');
-    }
-    if (filterTheme) {
-      collectOptions(filterTheme, 'theme');
-    }
-
-    function applyFilters() {
-      var query = normalize(searchInput ? searchInput.value : '');
-      var race = normalize(filterRace ? filterRace.value : '');
-      var klass = normalize(filterClass ? filterClass.value : '');
-      var theme = normalize(filterTheme ? filterTheme.value : '');
-
-      cards.forEach(function (card) {
-        var name = normalize(card.getAttribute('data-name'));
-        var cardRace = normalize(card.getAttribute('data-race'));
-        var cardClass = normalize(card.getAttribute('data-class'));
-        var cardTheme = normalize(card.getAttribute('data-theme'));
-
-        var matches = true;
-        if (query && name.indexOf(query) === -1) {
-          matches = false;
-        }
-        if (race && cardRace !== race) {
-          matches = false;
-        }
-        if (klass && cardClass !== klass) {
-          matches = false;
-        }
-        if (theme && cardTheme !== theme) {
-          matches = false;
-        }
-        card.style.display = matches ? '' : 'none';
-      });
-    }
-
-    if (searchInput) {
-      searchInput.addEventListener('input', applyFilters);
-    }
-    [filterRace, filterClass, filterTheme].forEach(function (select) {
-      if (select) {
-        select.addEventListener('change', applyFilters);
-      }
-    });
-  }
-
-  var sheet = document.querySelector('[data-afcs-sheet]');
-  if (sheet) {
-    var sheetId = sheet.getAttribute('data-afcs-sheet-id');
-    var postKey = sheet.getAttribute('data-afcs-post-key');
-
-  function sendAction(action, payload) {
-    if (!sheetId || !postKey) {
-      alert('sheet_id/my_post_key missing in DOM');
-      return Promise.reject(new Error('sheet_id/my_post_key missing in DOM'));
-    }
-
-    payload = payload || {};
-    payload.do = action;
-    payload.sheet_id = sheetId;
-    payload.my_post_key = postKey;
-    payload.ajax = 1; // важно: просим "ajax=1", чтобы сервер не инжектил ассеты
-
-    function stripTags(s) {
-      return String(s || '')
-        .replace(/<script[\s\S]*?<\/script>/gi, '')
-        .replace(/<style[\s\S]*?<\/style>/gi, '')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-    }
-
-    function safeUserMessage(raw, fallback) {
-      var t = String(raw || '').trim();
-      if (!t) return fallback || 'Ошибка запроса';
-
-      // если это HTML/мусор — отрежем до человеческого
-      var cleaned = stripTags(t);
-
-      // частые маркеры, чтобы не показывать простыню
-      if (/af_assets_begin|<link|<script|<!doctype|<html/i.test(t)) {
-        cleaned = cleaned || 'Сервер вернул HTML вместо JSON. Проверь инъекцию ассетов для ajax=1.';
-      }
-
-      // ограничим длину, чтобы не взрывать alert
-      if (cleaned.length > 320) cleaned = cleaned.slice(0, 320) + '…';
-      return cleaned;
-    }
-
-  function extractJsonFromMixed(text) {
-    var s = String(text || '');
-
-    // 1) попробуем как чистый JSON
-    try { return JSON.parse(s); } catch (e) {}
-
-    // 2) найдём ПЕРВЫЙ корректно закрытый JSON-объект "{...}" в тексте
-    var start = s.indexOf('{');
-    if (start === -1) return null;
-
-    var i = start;
-    var depth = 0;
-    var inStr = false;
-    var esc = false;
-
-    for (; i < s.length; i++) {
-      var ch = s.charAt(i);
-
-      if (inStr) {
-        if (esc) { esc = false; continue; }
-        if (ch === '\\') { esc = true; continue; }
-        if (ch === '"') { inStr = false; continue; }
-        continue;
-      }
-
-      if (ch === '"') { inStr = true; continue; }
-
-      if (ch === '{') {
-        depth++;
-        continue;
-      }
-      if (ch === '}') {
-        depth--;
-        if (depth === 0) {
-          var candidate = s.slice(start, i + 1);
-          try { return JSON.parse(candidate); } catch (e2) { return null; }
-        }
-      }
-    }
-
-    return null;
-  }
-
-    var data = new FormData();
-    Object.keys(payload).forEach(function (key) {
-      var value = payload[key];
-      if (typeof value === 'object' && value !== null) {
-        Object.keys(value).forEach(function (sub) {
-          data.append(key + '[' + sub + ']', value[sub]);
-        });
-        return;
-      }
-      data.append(key, value);
-    });
-
-    return fetch('misc.php?action=af_charactersheet_api&ajax=1', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {
-        'Accept': 'application/json, text/plain, */*',
-        'X-Requested-With': 'XMLHttpRequest'
-      },
-      body: data
-    }).then(function (resp) {
-      return resp.text().then(function (text) {
-        if (!resp.ok) {
-          // HTTP ошибка — покажем коротко, полный ответ в консоль
-          console.error('[AF CS] HTTP error response:', resp.status, text);
-          throw new Error(safeUserMessage(text, 'HTTP ' + resp.status));
-        }
-
-        var payloadObj = extractJsonFromMixed(text);
-        if (!payloadObj) {
-          console.error('[AF CS] Non-JSON response:', text);
-          throw new Error(safeUserMessage(text, 'Некорректный ответ сервера'));
-        }
-
-        return payloadObj;
-      });
-    }).catch(function (error) {
-      // здесь больше НЕ будет вывода простыни
-      alert(error && error.message ? error.message : 'Ошибка запроса');
-      console.error('[AF CS] Request failed:', error);
-      throw error;
-    });
-  }
-
-    function applyViewUpdate(payload) {
-      if (payload.attributes_html) {
-        var block = sheet.querySelector('[data-afcs-block="attributes"]');
-        if (block) {
-          block.innerHTML = payload.attributes_html;
-        }
-      }
-      if (payload.skills_html) {
-        var skillsBlock = sheet.querySelector('[data-afcs-block="skills"]');
-        if (skillsBlock) {
-          skillsBlock.innerHTML = payload.skills_html;
-        }
-      }
-      if (payload.knowledge_html) {
-        var knowledgeBlock = sheet.querySelector('[data-afcs-block="knowledge"]');
-        if (knowledgeBlock) {
-          knowledgeBlock.innerHTML = payload.knowledge_html;
-        }
-      }
-      if (payload.progress_html) {
-        var blockProgress = sheet.querySelector('[data-afcs-block="progress"]');
-        if (blockProgress) {
-          blockProgress.innerHTML = payload.progress_html;
-        }
-      }
-      if (payload.view) {
-        var levelValue = sheet.querySelector('[data-afcs-level-value]');
-        var levelExp = sheet.querySelector('[data-afcs-level-exp]');
-        var levelBar = sheet.querySelector('[data-afcs-level-bar]');
-        if (levelValue) {
-          levelValue.textContent = payload.view.level;
-        }
-        if (levelExp) {
-          levelExp.textContent = payload.view.level_exp_label;
-        }
-        if (levelBar) {
-          levelBar.style.width = payload.view.level_percent + '%';
-        }
-      }
-      updatePool();
-      initAttributesUI();
-    }
-
-    function updatePool() {
-      var poolContainer = sheet.querySelector('[data-afcs-pool-max]');
-      if (!poolContainer) {
-        return;
-      }
-      var poolMax = parseInt(poolContainer.getAttribute('data-afcs-pool-max'), 10);
-      if (isNaN(poolMax)) {
-        poolMax = 0;
-      }
-      var inputs = sheet.querySelectorAll('[data-afcs-attr-input]');
-      var spent = 0;
-      inputs.forEach(function (input) {
-        var value = parseInt(input.value || '0', 10);
-        if (!isNaN(value)) {
-          spent += value;
-        }
-      });
-      var remaining = poolMax - spent;
-      var spentEl = sheet.querySelector('[data-afcs-pool-spent]');
-      var remainingEl = sheet.querySelector('[data-afcs-pool-remaining]');
-      if (spentEl) {
-        spentEl.textContent = spent;
-      }
-      if (remainingEl) {
-        remainingEl.textContent = remaining;
-      }
-      var warning = sheet.querySelector('[data-afcs-pool-warning]');
-      if (warning) {
-        warning.hidden = remaining >= 0;
-      }
-      var saveButton = sheet.querySelector('[data-afcs-save-attributes]');
-      if (saveButton) {
-        saveButton.disabled = remaining < 0;
-      }
-    }
-
-    function buildCompactAttributes(attrsRoot) {
-      var compact = attrsRoot.querySelector('[data-afcs-attr-compact]');
-      if (!compact) return;
-
-      // Достаём значения/лейблы из уже отрендеренных карточек
-      // Берём финальные числа из .af-cs-attr-final, лейблы из .af-cs-attr-label
-      var cards = attrsRoot.querySelectorAll('.af-cs-attr-card');
-      var html = '';
-
-      cards.forEach(function (card) {
-        var labelEl = card.querySelector('.af-cs-attr-label');
-        var valueEl = card.querySelector('.af-cs-attr-final');
-
-        var label = labelEl ? labelEl.textContent.trim() : '';
-        var value = valueEl ? valueEl.textContent.trim() : '0';
-
-        if (!label) return;
-
-        html +=
-          '<div class="af-cs-attr-compact__cell">' +
-            '<div class="af-cs-attr-compact__label">' + escapeHtml(label) + '</div>' +
-            '<div class="af-cs-attr-compact__value">' + escapeHtml(value) + '</div>' +
-          '</div>';
-      });
-
-      compact.innerHTML = html;
-    }
-
-    function initAttributesUI() {
-      var attrsRoot = sheet.querySelector('[data-afcs-attrs]');
-      if (!attrsRoot) return;
-
-      // Права: берём с сервера (data-afcs-can-edit="1|0")
-      var canEdit = String(attrsRoot.getAttribute('data-afcs-can-edit') || '0') === '1';
-
-      var gear = attrsRoot.querySelector('[data-afcs-attrs-toggle]');
-      if (!gear) return;
-
-      // Компактную сетку строим всегда (она нужна и гостям)
-      buildCompactAttributes(attrsRoot);
-
-      // если нельзя — гарантированно выключаем редактирование
-      if (!canEdit) {
-        attrsRoot.classList.remove('is-editing');
-        gear.classList.remove('is-active');
-        return;
-      }
-
-      // Состояние запоминаем локально (чтобы не бесило каждый раз)
-      var key = 'afcs_attr_edit_' + String(sheetId || '');
-      var saved = null;
-      try { saved = localStorage.getItem(key); } catch (e) {}
-
-      var isEditing = saved === '1';
-      attrsRoot.classList.toggle('is-editing', isEditing);
-      gear.classList.toggle('is-active', isEditing);
-
-      // клики
-      if (!gear.__afBound) {
-        gear.__afBound = true;
-        gear.addEventListener('click', function () {
-          var now = !attrsRoot.classList.contains('is-editing');
-          attrsRoot.classList.toggle('is-editing', now);
-          gear.classList.toggle('is-active', now);
-
-          try { localStorage.setItem(key, now ? '1' : '0'); } catch (e) {}
-
-          // когда открыли редактирование — пересчитать пул (чтобы disabled/лимиты были верные)
-          if (now) updatePool();
-        });
-      }
-    }
-
-    // безопасное экранирование для innerHTML
-    function escapeHtml(s) {
-      return String(s || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-    }
-
-    sheet.addEventListener('click', function (event) {
-      var deleteButton = event.target.closest('[data-afcs-delete-sheet]');
-      if (deleteButton) {
+      var tUrl = trigger.getAttribute('data-afcs-sheet');
+      if (tUrl && String(tUrl).trim() !== '') {
         event.preventDefault();
-        if (!confirm('Удалить лист персонажа?')) {
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+        openModal(tUrl);
+      }
+    }
+  }, true);
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') closeModal();
+  });
+
+  onReady(function () {
+    function findTabsRoot(btn) {
+      var root = btn.closest('[data-afcs-tabs]');
+      if (root) return root;
+
+      root = btn.closest('.af-cs-tabs');
+      if (root) return root;
+
+      root = btn.closest('[data-afcs-sheet]');
+      if (root) return root;
+
+      return document;
+    }
+
+    function activateTabInRoot(root, name) {
+      if (!name) return;
+
+      var buttons = root.querySelectorAll('[data-afcs-tab]');
+      var panels = root.querySelectorAll('[data-afcs-tab-content]');
+
+      if (!panels.length) {
+        var wider = root.closest('.af-cs-tabs') || root;
+        panels = wider.querySelectorAll('[data-afcs-tab-content]');
+        buttons = wider.querySelectorAll('[data-afcs-tab]');
+        root = wider;
+      }
+
+      buttons.forEach(function (b) {
+        b.classList.toggle('is-active', b.getAttribute('data-afcs-tab') === name);
+      });
+      panels.forEach(function (p) {
+        p.classList.toggle('is-active', p.getAttribute('data-afcs-tab-content') === name);
+      });
+    }
+
+    document.addEventListener('click', function (event) {
+      var tabBtn = event.target.closest('[data-afcs-tab]');
+      if (!tabBtn) return;
+
+      event.preventDefault();
+
+      var name = tabBtn.getAttribute('data-afcs-tab');
+      var root = findTabsRoot(tabBtn);
+      activateTabInRoot(root, name);
+    });
+
+    (function initCatalog() {
+      var catalog = document.querySelector('[data-afcs-catalog]');
+      if (!catalog) return;
+
+      var searchInput = document.querySelector('[data-afcs-search]');
+      var filterRace = document.querySelector('[data-afcs-filter="race"]');
+      var filterClass = document.querySelector('[data-afcs-filter="class"]');
+      var filterTheme = document.querySelector('[data-afcs-filter="theme"]');
+      var cards = Array.prototype.slice.call(catalog.querySelectorAll('[data-afcs-card]'));
+
+      function normalize(value) { return (value || '').toLowerCase(); }
+
+      function collectOptions(select, key) {
+        var values = {};
+        cards.forEach(function (card) {
+          var val = (card.getAttribute('data-' + key) || '').trim();
+          if (val) values[val] = true;
+        });
+        Object.keys(values).sort().forEach(function (val) {
+          var option = document.createElement('option');
+          option.value = val;
+          option.textContent = val;
+          select.appendChild(option);
+        });
+      }
+
+      if (filterRace) collectOptions(filterRace, 'race');
+      if (filterClass) collectOptions(filterClass, 'class');
+      if (filterTheme) collectOptions(filterTheme, 'theme');
+
+      function applyFilters() {
+        var query = normalize(searchInput ? searchInput.value : '');
+        var race = normalize(filterRace ? filterRace.value : '');
+        var klass = normalize(filterClass ? filterClass.value : '');
+        var theme = normalize(filterTheme ? filterTheme.value : '');
+
+        cards.forEach(function (card) {
+          var name = normalize(card.getAttribute('data-name'));
+          var cardRace = normalize(card.getAttribute('data-race'));
+          var cardClass = normalize(card.getAttribute('data-class'));
+          var cardTheme = normalize(card.getAttribute('data-theme'));
+
+          var matches = true;
+          if (query && name.indexOf(query) === -1) matches = false;
+          if (race && cardRace !== race) matches = false;
+          if (klass && cardClass !== klass) matches = false;
+          if (theme && cardTheme !== theme) matches = false;
+
+          card.style.display = matches ? '' : 'none';
+        });
+      }
+
+      if (searchInput) searchInput.addEventListener('input', applyFilters);
+      [filterRace, filterClass, filterTheme].forEach(function (select) {
+        if (select) select.addEventListener('change', applyFilters);
+      });
+    })();
+
+    (function initSheet() {
+      var sheet = document.querySelector('[data-afcs-sheet]');
+      if (!sheet) return;
+
+      var sheetId = sheet.getAttribute('data-afcs-sheet-id');
+      var postKey = sheet.getAttribute('data-afcs-post-key');
+
+      function getInt(val, def) {
+        var n = parseInt(String(val || ''), 10);
+        return isNaN(n) ? (def || 0) : n;
+      }
+
+      function stripTags(s) {
+        return String(s || '')
+          .replace(/<script[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[\s\S]*?<\/style>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
+      function safeUserMessage(raw, fallback) {
+        var t = String(raw || '').trim();
+        if (!t) return fallback || 'Ошибка запроса';
+
+        var cleaned = stripTags(t);
+        if (/af_assets_begin|<link|<script|<!doctype|<html/i.test(t)) {
+          cleaned = cleaned || 'Сервер вернул HTML вместо JSON. Проверь инъекцию ассетов для ajax=1.';
+        }
+        if (cleaned.length > 320) cleaned = cleaned.slice(0, 320) + '…';
+        return cleaned;
+      }
+
+      function extractJsonFromMixed(text) {
+        var s = String(text || '');
+        try { return JSON.parse(s); } catch (e) {}
+
+        var start = s.indexOf('{');
+        if (start === -1) return null;
+
+        var i = start;
+        var depth = 0;
+        var inStr = false;
+        var esc = false;
+
+        for (; i < s.length; i++) {
+          var ch = s.charAt(i);
+
+          if (inStr) {
+            if (esc) { esc = false; continue; }
+            if (ch === '\\') { esc = true; continue; }
+            if (ch === '"') { inStr = false; continue; }
+            continue;
+          }
+
+          if (ch === '"') { inStr = true; continue; }
+
+          if (ch === '{') { depth++; continue; }
+          if (ch === '}') {
+            depth--;
+            if (depth === 0) {
+              var candidate = s.slice(start, i + 1);
+              try { return JSON.parse(candidate); } catch (e2) { return null; }
+            }
+          }
+        }
+        return null;
+      }
+
+      function sendAction(action, payload) {
+        if (!sheetId || !postKey) {
+          alert('sheet_id/my_post_key missing in DOM');
+          return Promise.reject(new Error('sheet_id/my_post_key missing in DOM'));
+        }
+
+        payload = payload || {};
+        payload.do = action;
+        payload.sheet_id = sheetId;
+        payload.my_post_key = postKey;
+        payload.ajax = 1;
+
+        var data = new FormData();
+        Object.keys(payload).forEach(function (key) {
+          var value = payload[key];
+          if (typeof value === 'object' && value !== null) {
+            Object.keys(value).forEach(function (sub) {
+              data.append(key + '[' + sub + ']', value[sub]);
+            });
+            return;
+          }
+          data.append(key, value);
+        });
+
+        return fetch('misc.php?action=af_charactersheet_api&ajax=1', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Accept': 'application/json, text/plain, */*',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          body: data
+        }).then(function (resp) {
+          return resp.text().then(function (text) {
+            if (!resp.ok) {
+              console.error('[AF CS] HTTP error response:', resp.status, text);
+              throw new Error(safeUserMessage(text, 'HTTP ' + resp.status));
+            }
+
+            var payloadObj = extractJsonFromMixed(text);
+            if (!payloadObj) {
+              console.error('[AF CS] Non-JSON response:', text);
+              throw new Error(safeUserMessage(text, 'Некорректный ответ сервера'));
+            }
+            return payloadObj;
+          });
+        }).catch(function (error) {
+          alert(error && error.message ? error.message : 'Ошибка запроса');
+          console.error('[AF CS] Request failed:', error);
+          throw error;
+        });
+      }
+
+      function escapeHtml(s) {
+        return String(s || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function buildCompactAttributes(attrsRoot) {
+        var compact = attrsRoot.querySelector('[data-afcs-attr-compact]');
+        if (!compact) return;
+
+        var cards = attrsRoot.querySelectorAll('.af-cs-attr-card');
+        var html = '';
+
+        cards.forEach(function (card) {
+          var labelEl = card.querySelector('.af-cs-attr-label');
+          var valueEl = card.querySelector('.af-cs-attr-final');
+
+          var label = labelEl ? labelEl.textContent.trim() : '';
+          var value = valueEl ? valueEl.textContent.trim() : '0';
+
+          if (!label) return;
+
+          html +=
+            '<div class="af-cs-attr-compact__cell">' +
+              '<div class="af-cs-attr-compact__label">' + escapeHtml(label) + '</div>' +
+              '<div class="af-cs-attr-compact__value">' + escapeHtml(value) + '</div>' +
+            '</div>';
+        });
+
+        compact.innerHTML = html;
+      }
+
+      // ====== NEW: инъекция степперов +/- для атрибутов ======
+      function ensureAttrSteppers(attrsRoot) {
+        if (!attrsRoot) return;
+
+        var canEdit = String(attrsRoot.getAttribute('data-afcs-can-edit') || '0') === '1';
+        var isEditing = attrsRoot.classList.contains('is-editing');
+
+        // Плюсы/минусы показываем только когда можно редактировать и включен режим редактирования
+        var shouldShow = canEdit && isEditing;
+
+        var inputs = attrsRoot.querySelectorAll('input[data-afcs-attr-input]');
+        inputs.forEach(function (input) {
+          var key = input.getAttribute('data-afcs-attr-input');
+          if (!key) return;
+
+          // уже создано
+          if (input.__afStepperMade) {
+            // только переключаем видимость в зависимости от режима
+            if (input.__afStepperEl) {
+              input.__afStepperEl.hidden = !shouldShow;
+            }
+            // сам input всегда прячем, чтобы не было "стрелочек" как на скрине 2
+            input.style.display = 'none';
+            return;
+          }
+
+          // создаем UI
+          var stepper = document.createElement('div');
+          stepper.className = 'af-cs-attr-stepper';
+          stepper.setAttribute('data-afcs-attr-stepper', key);
+          stepper.hidden = !shouldShow;
+
+          stepper.innerHTML =
+            '<button type="button" class="af-cs-attr-stepper__btn is-minus" data-afcs-attr-change="1" data-key="' + escapeHtml(key) + '" data-delta="-1" aria-label="Уменьшить">−</button>' +
+            '<div class="af-cs-attr-stepper__value" data-afcs-attr-alloc="' + escapeHtml(key) + '">0</div>' +
+            '<button type="button" class="af-cs-attr-stepper__btn is-plus" data-afcs-attr-change="1" data-key="' + escapeHtml(key) + '" data-delta="1" aria-label="Увеличить">+</button>';
+
+          // прячем инпут (чтобы не было стандартных стрелок)
+          input.style.display = 'none';
+
+          // вставляем сразу после input (в той же карточке)
+          if (input.parentNode) {
+            input.parentNode.insertBefore(stepper, input.nextSibling);
+          }
+
+          input.__afStepperMade = true;
+          input.__afStepperEl = stepper;
+
+          // первичная синхронизация
+          var v = getInt(input.value, 0);
+          var valEl = stepper.querySelector('[data-afcs-attr-alloc="' + key + '"]');
+          if (valEl) valEl.textContent = String(v);
+        });
+      }
+
+      function syncAttrRowUI(key) {
+        var input = sheet.querySelector('[data-afcs-attr-input="' + key + '"]');
+        if (!input) return;
+
+        var v = getInt(input.value, 0);
+        if (v < 0) v = 0;
+        input.value = String(v);
+
+        var alloc = sheet.querySelector('[data-afcs-attr-alloc="' + key + '"]');
+        if (alloc) alloc.textContent = String(v);
+      }
+
+      function updatePool() {
+        var poolContainer = sheet.querySelector('[data-afcs-pool-max]');
+        if (!poolContainer) return;
+
+        var poolMax = getInt(poolContainer.getAttribute('data-afcs-pool-max'), 0);
+
+        var inputs = sheet.querySelectorAll('[data-afcs-attr-input]');
+        var spent = 0;
+        inputs.forEach(function (input) {
+          spent += getInt(input.value, 0);
+        });
+
+        var remaining = poolMax - spent;
+
+        var spentEl = sheet.querySelector('[data-afcs-pool-spent]');
+        var remainingEl = sheet.querySelector('[data-afcs-pool-remaining]');
+        if (spentEl) spentEl.textContent = String(spent);
+        if (remainingEl) remainingEl.textContent = String(remaining);
+
+        var warning = sheet.querySelector('[data-afcs-pool-warning]');
+        if (warning) warning.hidden = remaining >= 0;
+
+        var saveButton = sheet.querySelector('[data-afcs-save-attributes]');
+        if (saveButton) saveButton.disabled = remaining < 0;
+
+        // Блокируем/разблокируем +/− у атрибутов
+        var plusBtns = sheet.querySelectorAll('[data-afcs-attr-change][data-delta="1"]');
+        plusBtns.forEach(function (btn) {
+          btn.disabled = remaining <= 0;
+        });
+
+        var minusBtns = sheet.querySelectorAll('[data-afcs-attr-change][data-delta="-1"]');
+        minusBtns.forEach(function (btn) {
+          var key = btn.getAttribute('data-key') || '';
+          if (!key) return;
+          var input = sheet.querySelector('[data-afcs-attr-input="' + key + '"]');
+          var v = input ? getInt(input.value, 0) : 0;
+          btn.disabled = v <= 0;
+        });
+      }
+
+      function initAttributesUI() {
+        var attrsRoot = sheet.querySelector('[data-afcs-attrs]');
+        if (!attrsRoot) return;
+
+        var canEdit = String(attrsRoot.getAttribute('data-afcs-can-edit') || '0') === '1';
+
+        var gear = attrsRoot.querySelector('[data-afcs-attrs-toggle]');
+        if (!gear) {
+          buildCompactAttributes(attrsRoot);
           return;
         }
-        var reason = prompt('Причина удаления (необязательно):', '') || '';
-        var redirect = deleteButton.getAttribute('data-afcs-delete-redirect') || '';
-        sendAction('delete_sheet', { reason: reason, redirect: redirect }).then(function (payload) {
-          if (!payload.success) {
-            alert((payload.error || payload.errors || 'Ошибка удаления').toString());
-            return;
-          }
-          if (payload.redirect) {
-            window.location.href = payload.redirect;
+
+        buildCompactAttributes(attrsRoot);
+
+        if (!canEdit) {
+          attrsRoot.classList.remove('is-editing');
+          gear.classList.remove('is-active');
+          // даже в read-only режиме прячем стандартные инпуты (если они вдруг попали)
+          ensureAttrSteppers(attrsRoot);
+          updatePool();
+          return;
+        }
+
+        var key = 'afcs_attr_edit_' + String(sheetId || '');
+        var saved = null;
+        try { saved = localStorage.getItem(key); } catch (e) {}
+
+        var isEditing = saved === '1';
+        attrsRoot.classList.toggle('is-editing', isEditing);
+        gear.classList.toggle('is-active', isEditing);
+
+        // NEW: в режиме редактирования инжектим +/- и прячем number input
+        ensureAttrSteppers(attrsRoot);
+
+        // Синк визуальных alloc из скрытых input
+        var allInputs = sheet.querySelectorAll('[data-afcs-attr-input]');
+        allInputs.forEach(function (inp) {
+          var k = inp.getAttribute('data-afcs-attr-input');
+          if (k) syncAttrRowUI(k);
+        });
+
+        if (!gear.__afBound) {
+          gear.__afBound = true;
+          gear.addEventListener('click', function (e) {
+            e.preventDefault();
+            var now = !attrsRoot.classList.contains('is-editing');
+            attrsRoot.classList.toggle('is-editing', now);
+            gear.classList.toggle('is-active', now);
+
+            try { localStorage.setItem(key, now ? '1' : '0'); } catch (e2) {}
+
+            // NEW: показать/скрыть степперы
+            ensureAttrSteppers(attrsRoot);
+
+            if (now) updatePool();
+          });
+        }
+      }
+
+      function applyViewUpdate(payload) {
+        if (payload.attributes_html) {
+          var block = sheet.querySelector('[data-afcs-block="attributes"]');
+          if (block) block.innerHTML = payload.attributes_html;
+        }
+        if (payload.skills_html) {
+          var skillsBlock = sheet.querySelector('[data-afcs-block="skills"]');
+          if (skillsBlock) skillsBlock.innerHTML = payload.skills_html;
+        }
+        if (payload.knowledge_html) {
+          var knowledgeBlock = sheet.querySelector('[data-afcs-block="knowledge"]');
+          if (knowledgeBlock) knowledgeBlock.innerHTML = payload.knowledge_html;
+        }
+        if (payload.progress_html) {
+          var blockProgress = sheet.querySelector('[data-afcs-block="progress"]');
+          if (blockProgress) blockProgress.innerHTML = payload.progress_html;
+        }
+        if (payload.view) {
+          var levelValue = sheet.querySelector('[data-afcs-level-value]');
+          var levelExp = sheet.querySelector('[data-afcs-level-exp]');
+          var levelBar = sheet.querySelector('[data-afcs-level-bar]');
+          if (levelValue) levelValue.textContent = payload.view.level;
+          if (levelExp) levelExp.textContent = payload.view.level_exp_label;
+          if (levelBar) levelBar.style.width = payload.view.level_percent + '%';
+        }
+
+        updatePool();
+        initAttributesUI();
+      }
+
+      sheet.addEventListener('click', function (event) {
+        // +/− атрибутов (как у навыков)
+        var attrChange = event.target.closest('[data-afcs-attr-change]');
+        if (attrChange) {
+          event.preventDefault();
+
+          var key = attrChange.getAttribute('data-key') || '';
+          var delta = getInt(attrChange.getAttribute('data-delta'), 0);
+          if (!key || (delta !== 1 && delta !== -1)) return;
+
+          var input = sheet.querySelector('[data-afcs-attr-input="' + key + '"]');
+          if (!input) return;
+
+          var poolContainer = sheet.querySelector('[data-afcs-pool-max]');
+          var poolMax = poolContainer ? getInt(poolContainer.getAttribute('data-afcs-pool-max'), 0) : 0;
+
+          var inputs = sheet.querySelectorAll('[data-afcs-attr-input]');
+          var spent = 0;
+          inputs.forEach(function (i) { spent += getInt(i.value, 0); });
+
+          var remaining = poolMax - spent;
+
+          var cur = getInt(input.value, 0);
+          if (cur < 0) cur = 0;
+
+          if (delta === 1) {
+            if (remaining <= 0) return;
+            cur += 1;
           } else {
-            window.location.reload();
+            if (cur <= 0) return;
+            cur -= 1;
           }
-        });
-        return;
-      }
 
-      var saveAttrs = event.target.closest('[data-afcs-save-attributes]');
-      if (saveAttrs) {
-        var inputs = sheet.querySelectorAll('[data-afcs-attr-input]');
-        var allocations = {};
-        inputs.forEach(function (input) {
-          allocations[input.getAttribute('data-afcs-attr-input')] = input.value || 0;
-        });
-        sendAction('save_attributes', { allocations: allocations }).then(function (payload) {
-          if (!payload.success) {
-            alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
-            return;
-          }
-          applyViewUpdate(payload);
-        });
-        return;
-      }
-
-      var choiceSave = event.target.closest('[data-afcs-choice-save]');
-      if (choiceSave) {
-        var choiceKey = choiceSave.getAttribute('data-afcs-choice-save');
-        var select = sheet.querySelector('[data-afcs-choice-key="' + choiceKey + '"]');
-        var choiceValue = select ? select.value : '';
-        sendAction('save_choice', { choice_key: choiceKey, choice_value: choiceValue }).then(function (payload) {
-          if (!payload.success) {
-            alert((payload.error || 'Ошибка сохранения').toString());
-            return;
-          }
-          applyViewUpdate(payload);
-        });
-        return;
-      }
-
-      var ledgerToggle = event.target.closest('[data-afcs-ledger-toggle]');
-      if (ledgerToggle) {
-        var ledger = sheet.querySelector('[data-afcs-ledger]');
-        if (ledger) {
-          ledger.hidden = !ledger.hidden;
+          input.value = String(cur);
+          syncAttrRowUI(key);
+          updatePool();
+          return;
         }
-        return;
-      }
 
-      var awardToggle = event.target.closest('[data-afcs-award-toggle]');
-      if (awardToggle) {
-        var awardPanel = sheet.querySelector('[data-afcs-award-panel]');
-        if (awardPanel) {
-          awardPanel.hidden = !awardPanel.hidden;
+        var deleteButton = event.target.closest('[data-afcs-delete-sheet]');
+        if (deleteButton) {
+          event.preventDefault();
+          if (!confirm('Удалить лист персонажа?')) return;
 
-          // FIX: если сервер отрендерил форму без data-атрибута — пометим её, чтобы submit-хендлер сработал
-          var f = awardPanel.querySelector('form');
-          if (f && !f.hasAttribute('data-afcs-award-form')) {
-            f.setAttribute('data-afcs-award-form', '1');
+          var reason = prompt('Причина удаления (необязательно):', '') || '';
+          var redirect = deleteButton.getAttribute('data-afcs-delete-redirect') || '';
+
+          sendAction('delete_sheet', { reason: reason, redirect: redirect }).then(function (payload) {
+            if (!payload.success) {
+              alert((payload.error || payload.errors || 'Ошибка удаления').toString());
+              return;
+            }
+            if (payload.redirect) window.location.href = payload.redirect;
+            else window.location.reload();
+          });
+          return;
+        }
+
+        var ledgerToggle = event.target.closest('[data-afcs-ledger-toggle]');
+        if (ledgerToggle) {
+          event.preventDefault();
+          var ledger = sheet.querySelector('[data-afcs-ledger]');
+          if (ledger) ledger.hidden = !ledger.hidden;
+          return;
+        }
+
+        var awardToggle = event.target.closest('[data-afcs-award-toggle]');
+        if (awardToggle) {
+          event.preventDefault();
+          var awardPanel = sheet.querySelector('[data-afcs-award-panel]');
+          if (awardPanel) {
+            awardPanel.hidden = !awardPanel.hidden;
+            var f = awardPanel.querySelector('form');
+            if (f && !f.hasAttribute('data-afcs-award-form')) {
+              f.setAttribute('data-afcs-award-form', '1');
+            }
           }
+          return;
         }
-        return;
-      }
 
-      var skillToggle = event.target.closest('[data-afcs-skill-toggle]');
-      if (skillToggle) {
-        var skillItem = skillToggle.closest('.af-cs-skill-item');
-        if (skillItem) {
-          skillItem.classList.toggle('is-controls-open');
-        }
-        return;
-      }
+        var saveAttrs = event.target.closest('[data-afcs-save-attributes]');
+        if (saveAttrs) {
+          event.preventDefault();
+          var inputs2 = sheet.querySelectorAll('[data-afcs-attr-input]');
+          var allocations = {};
+          inputs2.forEach(function (input2) {
+            allocations[input2.getAttribute('data-afcs-attr-input')] = input2.value || 0;
+          });
 
-      var skillChange = event.target.closest('[data-afcs-skill-change]');
-      if (skillChange) {
-        var slug = skillChange.getAttribute('data-slug');
-        var delta = parseInt(skillChange.getAttribute('data-delta') || '0', 10);
-        if (slug && (delta === 1 || delta === -1)) {
-          sendAction('update_skill', { slug: slug, delta: delta }).then(function (payload) {
+          sendAction('save_attributes', { allocations: allocations }).then(function (payload) {
             if (!payload.success) {
               alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
               return;
             }
             applyViewUpdate(payload);
           });
-        }
-        return;
-      }
-
-      var knowledgeAdd = event.target.closest('[data-afcs-knowledge-add]');
-      if (knowledgeAdd) {
-        var type = knowledgeAdd.getAttribute('data-afcs-knowledge-type');
-        var select = sheet.querySelector('[data-afcs-knowledge-select="' + type + '"]');
-        var key = select ? select.value : '';
-        if (type && key) {
-          sendAction('add_knowledge', { type: type, key: key }).then(function (payload) {
-            if (!payload.success) {
-              alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
-              return;
-            }
-            applyViewUpdate(payload);
-          });
-        }
-        return;
-      }
-
-      var knowledgeRemove = event.target.closest('[data-afcs-knowledge-remove]');
-      if (knowledgeRemove) {
-        var typeRemove = knowledgeRemove.getAttribute('data-afcs-knowledge-type');
-        var keyRemove = knowledgeRemove.getAttribute('data-afcs-knowledge-key');
-        if (typeRemove && keyRemove) {
-          sendAction('remove_knowledge', { type: typeRemove, key: keyRemove }).then(function (payload) {
-            if (!payload.success) {
-              alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
-              return;
-            }
-            applyViewUpdate(payload);
-          });
-        }
-        return;
-      }
-
-    });
-
-    sheet.addEventListener('input', function (event) {
-      if (event.target.closest('[data-afcs-attr-input]')) {
-        updatePool();
-      }
-    });
-
-    sheet.addEventListener('submit', function (event) {
-      // Ловим ЛЮБОЙ submit формы внутри панели ручного начисления
-      var form = event.target;
-      if (!form || String(form.nodeName).toUpperCase() !== 'FORM') return;
-
-      if (!form.closest('[data-afcs-award-panel]')) {
-        return; // это не наша форма — выходим
-      }
-
-      event.preventDefault();
-
-      var amountEl =
-        form.querySelector('input[name="amount"]') ||
-        form.querySelector('input[name="exp"]') ||
-        form.querySelector('input[data-afcs-award-amount]');
-
-      var reasonEl =
-        form.querySelector('input[name="reason"]') ||
-        form.querySelector('textarea[name="reason"]') ||
-        form.querySelector('textarea[name="comment"]') ||
-        form.querySelector('[data-afcs-award-reason]');
-
-      var payloadBase = {
-        amount: amountEl ? amountEl.value : '',
-        reason: reasonEl ? reasonEl.value : ''
-      };
-
-      // ВАЖНО: бэкенд у тебя ждёт 'grant_exp' (см. ajax.php)
-      sendAction('grant_exp', payloadBase).then(function (payload) {
-        if (!payload || !payload.success) {
-          alert((payload && (payload.error || payload.errors) ? (payload.error || payload.errors) : 'Ошибка начисления').toString());
           return;
         }
 
-        if (amountEl) amountEl.value = '';
-        if (reasonEl) reasonEl.value = '';
-        applyViewUpdate(payload);
+        var choiceSave = event.target.closest('[data-afcs-choice-save]');
+        if (choiceSave) {
+          event.preventDefault();
+          var choiceKey = choiceSave.getAttribute('data-afcs-choice-save');
+          var select = sheet.querySelector('[data-afcs-choice-key="' + choiceKey + '"]');
+          var choiceValue = select ? select.value : '';
+
+          sendAction('save_choice', { choice_key: choiceKey, choice_value: choiceValue }).then(function (payload) {
+            if (!payload.success) {
+              alert((payload.error || 'Ошибка сохранения').toString());
+              return;
+            }
+            applyViewUpdate(payload);
+          });
+          return;
+        }
+
+        var skillToggle = event.target.closest('[data-afcs-skill-toggle]');
+        if (skillToggle) {
+          event.preventDefault();
+          var skillItem = skillToggle.closest('.af-cs-skill-item');
+          if (skillItem) skillItem.classList.toggle('is-controls-open');
+          return;
+        }
+
+        var skillChange = event.target.closest('[data-afcs-skill-change]');
+        if (skillChange) {
+          event.preventDefault();
+          var slug = skillChange.getAttribute('data-slug');
+          var delta2 = parseInt(skillChange.getAttribute('data-delta') || '0', 10);
+          if (slug && (delta2 === 1 || delta2 === -1)) {
+            sendAction('update_skill', { slug: slug, delta: delta2 }).then(function (payload) {
+              if (!payload.success) {
+                alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
+                return;
+              }
+              applyViewUpdate(payload);
+            });
+          }
+          return;
+        }
+
+        var knowledgeAdd = event.target.closest('[data-afcs-knowledge-add]');
+        if (knowledgeAdd) {
+          event.preventDefault();
+          var type = knowledgeAdd.getAttribute('data-afcs-knowledge-type');
+          var selectK = sheet.querySelector('[data-afcs-knowledge-select="' + type + '"]');
+          var keyK = selectK ? selectK.value : '';
+          if (type && keyK) {
+            sendAction('add_knowledge', { type: type, key: keyK }).then(function (payload) {
+              if (!payload.success) {
+                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                return;
+              }
+              applyViewUpdate(payload);
+            });
+          }
+          return;
+        }
+
+        var knowledgeRemove = event.target.closest('[data-afcs-knowledge-remove]');
+        if (knowledgeRemove) {
+          event.preventDefault();
+          var typeRemove = knowledgeRemove.getAttribute('data-afcs-knowledge-type');
+          var keyRemove = knowledgeRemove.getAttribute('data-afcs-knowledge-key');
+          if (typeRemove && keyRemove) {
+            sendAction('remove_knowledge', { type: typeRemove, key: keyRemove }).then(function (payload) {
+              if (!payload.success) {
+                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                return;
+              }
+              applyViewUpdate(payload);
+            });
+          }
+          return;
+        }
       });
-    });
 
-    updatePool();
-    initAttributesUI();
-  }
+      sheet.addEventListener('input', function (event) {
+        // на всякий случай: если где-то остались видимые инпуты
+        if (event.target && event.target.closest('[data-afcs-attr-input]')) {
+          updatePool();
+        }
+      });
 
-  document.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape') {
-      closeModal();
-    }
+      sheet.addEventListener('submit', function (event) {
+        var form = event.target;
+        if (!form || String(form.nodeName).toUpperCase() !== 'FORM') return;
+        if (!form.closest('[data-afcs-award-panel]')) return;
+
+        event.preventDefault();
+
+        var amountEl =
+          form.querySelector('input[name="amount"]') ||
+          form.querySelector('input[name="exp"]') ||
+          form.querySelector('input[data-afcs-award-amount]');
+
+        var reasonEl =
+          form.querySelector('input[name="reason"]') ||
+          form.querySelector('textarea[name="reason"]') ||
+          form.querySelector('textarea[name="comment"]') ||
+          form.querySelector('[data-afcs-award-reason]');
+
+        var payloadBase = {
+          amount: amountEl ? amountEl.value : '',
+          reason: reasonEl ? reasonEl.value : ''
+        };
+
+        sendAction('grant_exp', payloadBase).then(function (payload) {
+          if (!payload || !payload.success) {
+            alert((payload && (payload.error || payload.errors) ? (payload.error || payload.errors) : 'Ошибка начисления').toString());
+            return;
+          }
+
+          if (amountEl) amountEl.value = '';
+          if (reasonEl) reasonEl.value = '';
+          applyViewUpdate(payload);
+        });
+      });
+
+      updatePool();
+      initAttributesUI();
+    })();
   });
 })();
