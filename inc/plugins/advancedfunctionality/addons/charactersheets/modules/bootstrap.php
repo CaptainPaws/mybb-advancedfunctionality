@@ -95,11 +95,8 @@ function af_charactersheets_uninstall_impl(): void
         'af_charactersheets_exp_allow_overdraw',
         'af_charactersheets_knowledge_base_choices',
         'af_charactersheets_knowledge_per_int',
-        'af_charactersheets_hp_base',
-        'af_charactersheets_hp_per_con',
-        'af_charactersheets_hp_per_level',
         'af_charactersheets_humanity_base',
-        'af_charactersheets_humanity_loss_per_aug'
+        'af_charactersheets_aug_slots_json'
     )");
     $db->delete_query('settinggroups', "name='af_charactersheets'");
     $db->delete_query('templates', "title LIKE 'charactersheets_%'");
@@ -129,6 +126,11 @@ function af_charactersheets_ensure_settings(): void
         'af_charactersheets',
         $lang->af_charactersheets_group ?? 'AF: CharacterSheets',
         $lang->af_charactersheets_group_desc ?? 'CharacterSheets settings.'
+    );
+
+    $db->delete_query(
+        'settings',
+        "name IN ('af_charactersheets_hp_base','af_charactersheets_hp_per_con','af_charactersheets_hp_per_level','af_charactersheets_humanity_loss_per_aug')"
     );
 
     af_charactersheets_ensure_setting(
@@ -367,48 +369,21 @@ function af_charactersheets_ensure_settings(): void
     );
     af_charactersheets_ensure_setting(
         $gid,
-        'af_charactersheets_hp_base',
-        $lang->af_charactersheets_hp_base ?? 'HP base',
-        $lang->af_charactersheets_hp_base_desc ?? 'Base HP for all characters.',
-        'text',
-        '10',
-        49
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_hp_per_con',
-        $lang->af_charactersheets_hp_per_con ?? 'HP per CON',
-        $lang->af_charactersheets_hp_per_con_desc ?? 'HP gain per CON (final).',
-        'text',
-        '1',
-        50
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_hp_per_level',
-        $lang->af_charactersheets_hp_per_level ?? 'HP per level',
-        $lang->af_charactersheets_hp_per_level_desc ?? 'HP gain per level.',
-        'text',
-        '2',
-        51
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
         'af_charactersheets_humanity_base',
         $lang->af_charactersheets_humanity_base ?? 'Humanity base',
         $lang->af_charactersheets_humanity_base_desc ?? 'Base Humanity for all characters.',
         'text',
-        '10',
-        52
+        '100',
+        49
     );
     af_charactersheets_ensure_setting(
         $gid,
-        'af_charactersheets_humanity_loss_per_aug',
-        $lang->af_charactersheets_humanity_loss_per_aug ?? 'Humanity loss per augmentation',
-        $lang->af_charactersheets_humanity_loss_per_aug_desc ?? 'Penalty per equipped augmentation.',
-        'text',
-        '0',
-        53
+        'af_charactersheets_aug_slots_json',
+        $lang->af_charactersheets_aug_slots_json ?? 'Augmentation slots',
+        $lang->af_charactersheets_aug_slots_json_desc ?? 'JSON list of augmentation slots (slot_key, titles, icon, sortorder, max_equipped).',
+        'textarea',
+        '[{"slot_key":"head","title_ru":"Голова","title_en":"Head","icon":"fa-solid fa-helmet-safety","sortorder":10,"max_equipped":1},{"slot_key":"eyes","title_ru":"Глаза","title_en":"Eyes","icon":"fa-solid fa-eye","sortorder":20,"max_equipped":1},{"slot_key":"arms","title_ru":"Руки","title_en":"Arms","icon":"fa-solid fa-hand","sortorder":30,"max_equipped":1},{"slot_key":"body","title_ru":"Торс","title_en":"Body","icon":"fa-solid fa-heart","sortorder":40,"max_equipped":1},{"slot_key":"legs","title_ru":"Ноги","title_en":"Legs","icon":"fa-solid fa-person-walking","sortorder":50,"max_equipped":1},{"slot_key":"nervous","title_ru":"Нервная система","title_en":"Nervous system","icon":"fa-solid fa-brain","sortorder":60,"max_equipped":1},{"slot_key":"skin","title_ru":"Кожа","title_en":"Skin","icon":"fa-solid fa-hand-sparkles","sortorder":70,"max_equipped":1},{"slot_key":"implant","title_ru":"Имплант","title_en":"Implant","icon":"fa-solid fa-microchip","sortorder":80,"max_equipped":1}]',
+        50
     );
     af_charactersheets_ensure_setting(
         $gid,
@@ -1911,16 +1886,49 @@ function af_charactersheets_get_kb_entries_by_type(string $type): array
 
 function af_charactersheets_get_augmentation_slots(): array
 {
-    return [
-        'head' => 'Голова',
-        'eyes' => 'Глаза',
-        'arms' => 'Руки',
-        'body' => 'Торс',
-        'legs' => 'Ноги',
-        'nervous' => 'Нервная система',
-        'skin' => 'Кожа',
-        'implant' => 'Имплант',
-    ];
+    global $mybb;
+
+    $raw = (string)($mybb->settings['af_charactersheets_aug_slots_json'] ?? '');
+    $slots = af_charactersheets_json_decode($raw);
+    if (!is_array($slots)) {
+        $slots = [];
+    }
+
+    $normalized = [];
+    foreach ($slots as $slot) {
+        if (!is_array($slot)) {
+            continue;
+        }
+        $key = trim((string)($slot['slot_key'] ?? $slot['key'] ?? ''));
+        if ($key === '') {
+            continue;
+        }
+        $title_ru = (string)($slot['title_ru'] ?? $slot['title'] ?? '');
+        $title_en = (string)($slot['title_en'] ?? $slot['title'] ?? '');
+        $title = af_charactersheets_is_ru() ? $title_ru : $title_en;
+        if ($title === '') {
+            $title = $title_ru !== '' ? $title_ru : ($title_en !== '' ? $title_en : $key);
+        }
+        $normalized[$key] = [
+            'slot_key' => $key,
+            'title' => $title,
+            'title_ru' => $title_ru,
+            'title_en' => $title_en,
+            'icon' => (string)($slot['icon'] ?? ''),
+            'sortorder' => (int)($slot['sortorder'] ?? $slot['sort_order'] ?? 0),
+            'max_equipped' => max(1, (int)($slot['max_equipped'] ?? 1)),
+        ];
+    }
+
+    uasort($normalized, function (array $a, array $b): int {
+        $sort = ($a['sortorder'] ?? 0) <=> ($b['sortorder'] ?? 0);
+        if ($sort !== 0) {
+            return $sort;
+        }
+        return strcmp((string)$a['slot_key'], (string)$b['slot_key']);
+    });
+
+    return $normalized;
 }
 
 function af_charactersheets_get_equipment_slots(): array
@@ -1932,11 +1940,45 @@ function af_charactersheets_get_equipment_slots(): array
     ];
 }
 
+function af_charactersheets_get_inventory_item_type(array $item): string
+{
+    return (string)($item['kb_type'] ?? $item['type'] ?? '');
+}
+
+function af_charactersheets_get_inventory_item_key(array $item): string
+{
+    return (string)($item['kb_key'] ?? $item['key'] ?? '');
+}
+
+function af_charactersheets_normalize_slot_items($slot_value): array
+{
+    if (empty($slot_value)) {
+        return [];
+    }
+    if (is_array($slot_value) && (isset($slot_value['type']) || isset($slot_value['key']) || isset($slot_value['kb_type']) || isset($slot_value['kb_key']))) {
+        return [$slot_value];
+    }
+    if (is_array($slot_value) && array_values($slot_value) === $slot_value) {
+        return array_values(array_filter($slot_value, 'is_array'));
+    }
+    if (is_array($slot_value)) {
+        return [$slot_value];
+    }
+    return [];
+}
+
+function af_charactersheets_get_augmentation_slot_config(string $slot_key): array
+{
+    $slots = af_charactersheets_get_augmentation_slots();
+    return $slots[$slot_key] ?? [];
+}
+
 function af_charactersheets_default_build(): array
 {
     $augmentation_slots = [];
-    foreach (af_charactersheets_get_augmentation_slots() as $slot => $label) {
-        $augmentation_slots[$slot] = null;
+    foreach (af_charactersheets_get_augmentation_slots() as $slot => $config) {
+        $max_equipped = (int)($config['max_equipped'] ?? 1);
+        $augmentation_slots[$slot] = $max_equipped > 1 ? [] : null;
     }
     $equipment_slots = [];
     foreach (af_charactersheets_get_equipment_slots() as $slot => $label) {
@@ -1990,8 +2032,8 @@ function af_charactersheets_normalize_build(array $build): array
     $inventory_items = array_values(array_filter($inventory_items, 'is_array'));
     $stacked_inventory = [];
     foreach ($inventory_items as $item) {
-        $type = (string)($item['type'] ?? '');
-        $key = (string)($item['key'] ?? '');
+        $type = af_charactersheets_get_inventory_item_type($item);
+        $key = af_charactersheets_get_inventory_item_key($item);
         if ($type === '' || $key === '') {
             continue;
         }
@@ -2002,8 +2044,8 @@ function af_charactersheets_normalize_build(array $build): array
         $stack_key = $type . ':' . $key;
         if (!isset($stacked_inventory[$stack_key])) {
             $stacked_inventory[$stack_key] = [
-                'type' => $type,
-                'key' => $key,
+                'kb_type' => $type,
+                'kb_key' => $key,
                 'qty' => $qty,
                 'equipped' => !empty($item['equipped']),
                 'slot' => (string)($item['slot'] ?? ''),
@@ -2028,7 +2070,23 @@ function af_charactersheets_normalize_build(array $build): array
     $build['abilities']['slots_total'] = (int)($build['abilities']['slots_total'] ?? 0);
 
     $augmentation_defaults = $defaults['augmentations']['slots'];
-    $augmentation_slots = array_merge($augmentation_defaults, (array)($build['augmentations']['slots'] ?? []));
+    $augmentation_slots = $augmentation_defaults;
+    foreach ((array)($build['augmentations']['slots'] ?? []) as $slot_key => $slot_value) {
+        if (!array_key_exists($slot_key, $augmentation_defaults)) {
+            continue;
+        }
+        $augmentation_slots[$slot_key] = $slot_value;
+    }
+    foreach ($augmentation_slots as $slot_key => $slot_value) {
+        $config = af_charactersheets_get_augmentation_slot_config((string)$slot_key);
+        $max_equipped = (int)($config['max_equipped'] ?? 1);
+        $normalized_items = af_charactersheets_normalize_slot_items($slot_value);
+        if ($max_equipped <= 1) {
+            $augmentation_slots[$slot_key] = $normalized_items ? $normalized_items[0] : null;
+        } else {
+            $augmentation_slots[$slot_key] = array_slice($normalized_items, 0, $max_equipped);
+        }
+    }
     $build['augmentations']['slots'] = $augmentation_slots;
     $build['augmentations']['owned'] = array_values(array_filter((array)($build['augmentations']['owned'] ?? []), 'is_array'));
 

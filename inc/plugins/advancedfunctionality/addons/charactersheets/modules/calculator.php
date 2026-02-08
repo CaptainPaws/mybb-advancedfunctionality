@@ -237,8 +237,8 @@ function af_charactersheets_collect_build_bonus_items(array $build): array
         if (empty($item['equipped'])) {
             continue;
         }
-        $type = (string)($item['type'] ?? '');
-        $key = (string)($item['key'] ?? '');
+        $type = af_charactersheets_get_inventory_item_type($item);
+        $key = af_charactersheets_get_inventory_item_key($item);
         if ($type === '' || $key === '') {
             continue;
         }
@@ -247,15 +247,17 @@ function af_charactersheets_collect_build_bonus_items(array $build): array
 
     $augmentations = (array)($build['augmentations'] ?? []);
     foreach ((array)($augmentations['slots'] ?? []) as $slotItem) {
-        if (!is_array($slotItem)) {
-            continue;
+        foreach (af_charactersheets_normalize_slot_items($slotItem) as $slot_entry) {
+            if (!is_array($slot_entry)) {
+                continue;
+            }
+            $type = (string)($slot_entry['type'] ?? $slot_entry['kb_type'] ?? '');
+            $key = (string)($slot_entry['key'] ?? $slot_entry['kb_key'] ?? '');
+            if ($type === '' || $key === '') {
+                continue;
+            }
+            $items = array_merge($items, af_charactersheets_normalize_bonus_items($type, $key));
         }
-        $type = (string)($slotItem['type'] ?? '');
-        $key = (string)($slotItem['key'] ?? '');
-        if ($type === '' || $key === '') {
-            continue;
-        }
-        $items = array_merge($items, af_charactersheets_normalize_bonus_items($type, $key));
     }
 
     $equipment = (array)($build['equipment'] ?? []);
@@ -320,6 +322,54 @@ function af_charactersheets_extract_hp_from_data(array $data): float
     }
 
     return $hp;
+}
+
+function af_charactersheets_extract_humanity_cost_from_entry(array $entry): float
+{
+    if (empty($entry)) {
+        return 0.0;
+    }
+
+    $cost = 0.0;
+    $meta = af_charactersheets_json_decode((string)($entry['meta_json'] ?? ''));
+    $cost += af_charactersheets_extract_humanity_cost_from_data($meta);
+
+    $blocks = af_charactersheets_kb_get_blocks($entry);
+    foreach ($blocks as $block) {
+        $data = af_charactersheets_json_decode((string)($block['data_json'] ?? ''));
+        $cost += af_charactersheets_extract_humanity_cost_from_data($data);
+    }
+
+    return max(0.0, $cost);
+}
+
+function af_charactersheets_extract_humanity_cost_from_data(array $data): float
+{
+    if (empty($data)) {
+        return 0.0;
+    }
+
+    $cost = 0.0;
+    if (isset($data['humanity_cost'])) {
+        $cost += (float)$data['humanity_cost'];
+    }
+    foreach (['bonuses', 'modifiers'] as $listKey) {
+        if (empty($data[$listKey]) || !is_array($data[$listKey])) {
+            continue;
+        }
+        foreach ($data[$listKey] as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $type = (string)($item['type'] ?? '');
+            if ($type !== 'humanity_cost') {
+                continue;
+            }
+            $cost += (float)($item['value'] ?? $item['amount'] ?? 0);
+        }
+    }
+
+    return $cost;
 }
 
 function af_charactersheets_compute_sheet_view(array $sheet): array
@@ -642,31 +692,27 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $hp_race = af_charactersheets_extract_hp_from_entry($race_entry);
     $hp_class = af_charactersheets_extract_hp_from_entry($class_entry);
     $hp_con = (float)($final['con'] ?? 0);
-    $hp_bonus_kb = (float)$bonus_hp;
 
     $augmentation_slots = (array)($build['augmentations']['slots'] ?? []);
     $humanity_from_augments = 0.0;
     foreach ($augmentation_slots as $slotItem) {
-        if (!is_array($slotItem)) {
-            continue;
-        }
-        $aug_type = (string)($slotItem['type'] ?? '');
-        $aug_key = (string)($slotItem['key'] ?? '');
-        if ($aug_type === '' || $aug_key === '') {
-            continue;
-        }
-        $aug_bonus_items = af_charactersheets_normalize_bonus_items($aug_type, $aug_key);
-        foreach ($aug_bonus_items as $bonus_item) {
-            if ((string)($bonus_item['type'] ?? '') === 'humanity_bonus') {
-                $humanity_from_augments += (float)($bonus_item['value'] ?? 0);
+        foreach (af_charactersheets_normalize_slot_items($slotItem) as $slot_entry) {
+            if (!is_array($slot_entry)) {
+                continue;
             }
+            $aug_type = (string)($slot_entry['type'] ?? $slot_entry['kb_type'] ?? '');
+            $aug_key = (string)($slot_entry['key'] ?? $slot_entry['kb_key'] ?? '');
+            if ($aug_type === '' || $aug_key === '') {
+                continue;
+            }
+            $entry = af_charactersheets_kb_get_entry($aug_type, $aug_key);
+            $humanity_from_augments += af_charactersheets_extract_humanity_cost_from_entry($entry);
         }
     }
-    $humanity_penalty = abs(min(0.0, $humanity_from_augments));
-    $humanity_bonus = (float)$bonus_humanity - min(0.0, $humanity_from_augments);
+    $humanity_penalty = max(0.0, $humanity_from_augments);
 
-    $hp_total = (int)floor($hp_race + $hp_class + $hp_con + $hp_bonus_kb);
-    $humanity_total = (int)floor($humanity_base - $humanity_penalty + $humanity_bonus);
+    $hp_total = (int)floor($hp_race + $hp_class + $hp_con);
+    $humanity_total = (int)floor($humanity_base - $humanity_penalty);
 
     return [
         'base' => $attributes_base,
@@ -705,12 +751,10 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
                 'race' => $hp_race,
                 'class' => $hp_class,
                 'from_con' => $hp_con,
-                'from_kb' => $hp_bonus_kb,
             ],
             'humanity_breakdown' => [
                 'base' => $humanity_base,
                 'from_augs' => $humanity_penalty,
-                'from_kb' => $humanity_bonus,
             ],
             'saves' => [
                 'reflex' => $dex_mod,
