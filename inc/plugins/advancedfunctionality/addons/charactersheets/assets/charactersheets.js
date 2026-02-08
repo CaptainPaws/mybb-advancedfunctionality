@@ -30,6 +30,11 @@
     if (plaque) {
       event.preventDefault();
       event.stopPropagation();
+      var plaqueUrl = plaque.getAttribute('data-afcs-sheet') || plaque.getAttribute('href');
+      if (plaqueUrl) {
+        openModal(plaqueUrl);
+        return;
+      }
       var slug = plaque.getAttribute('data-slug');
       if (slug) {
         openModal('misc.php?action=af_charactersheet&slug=' + encodeURIComponent(slug));
@@ -520,6 +525,15 @@
           if (f && !f.hasAttribute('data-afcs-award-form')) {
             f.setAttribute('data-afcs-award-form', '1');
           }
+        }
+        return;
+      }
+
+      var skillToggle = event.target.closest('[data-afcs-skill-toggle]');
+      if (skillToggle) {
+        var skillItem = skillToggle.closest('.af-cs-skill-item');
+        if (skillItem) {
+          skillItem.classList.toggle('is-controls-open');
         }
         return;
       }
