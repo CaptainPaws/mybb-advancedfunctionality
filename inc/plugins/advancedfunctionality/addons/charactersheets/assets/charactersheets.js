@@ -446,6 +446,28 @@
     }
 
     sheet.addEventListener('click', function (event) {
+      var deleteButton = event.target.closest('[data-afcs-delete-sheet]');
+      if (deleteButton) {
+        event.preventDefault();
+        if (!confirm('Удалить лист персонажа?')) {
+          return;
+        }
+        var reason = prompt('Причина удаления (необязательно):', '') || '';
+        var redirect = deleteButton.getAttribute('data-afcs-delete-redirect') || '';
+        sendAction('delete_sheet', { reason: reason, redirect: redirect }).then(function (payload) {
+          if (!payload.success) {
+            alert((payload.error || payload.errors || 'Ошибка удаления').toString());
+            return;
+          }
+          if (payload.redirect) {
+            window.location.href = payload.redirect;
+          } else {
+            window.location.reload();
+          }
+        });
+        return;
+      }
+
       var saveAttrs = event.target.closest('[data-afcs-save-attributes]');
       if (saveAttrs) {
         var inputs = sheet.querySelectorAll('[data-afcs-attr-input]');
