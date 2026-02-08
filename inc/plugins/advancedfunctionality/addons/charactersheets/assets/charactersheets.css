@@ -863,3 +863,33 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+
+/* ===== FIX: progress in hero should be full width ===== */
+.af-cs-level {
+  /* раньше было grid-template-columns: auto 1fr; */
+  grid-template-columns: 1fr;
+}
+
+.af-cs-level > [data-afcs-block="progress"] {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+}
+
+.af-cs-progress__bar {
+  width: 100%;
+}
+
+
+/* ===== FIX: hidden must really hide ===== */
+.af-cs-ledger[hidden],
+.af-cs-award-panel[hidden] {
+  display: none !important;
+}
+
+/* ===== Ledger spoiler box ===== */
+.af-cs-ledger {
+  max-height: 100px;
+  overflow: auto;
+}
