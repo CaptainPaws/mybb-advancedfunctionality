@@ -5,7 +5,12 @@
     </div>
     <div class="af-cs-summary">
       <div class="af-cs-summary__head">
-        <h1>{$sheet_title}</h1>
+        <div class="af-cs-summary__title-row">
+          <h1>{$sheet_title}</h1>
+          <div class="af-cs-header-actions">
+            {$sheet_header_actions_html}
+          </div>
+        </div>
         <div class="af-cs-name-ru">
           <span class="af-cs-name-ru__main">{$sheet_name_ru}</span>
           <span class="af-cs-name-ru__nick">{$sheet_nicknames}</span>
@@ -17,9 +22,6 @@
         </div>
       </div>
 
-      <div class="af-cs-summary__buttons">
-        {$sheet_base_html}
-      </div>
       <div class="af-cs-summary__info">
         {$sheet_info_table_html}
       </div>

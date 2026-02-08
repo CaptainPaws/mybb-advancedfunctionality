@@ -14,58 +14,9 @@
 
   <div class="af-cs-progress__actions">
     {$ledger_toggle_html}
-
-    <!-- Ручное начисление EXP: НОРМАЛЬНАЯ кнопка, которую JS точно поймает -->
-    <button type="button"
-            class="button button--secondary af-cs-btn af-cs-btn--award"
-            data-afcs-award-toggle>
-      Ручное начисление
-    </button>
+    {$manual_award_toggle_html}
   </div>
 
   {$ledger_block_html}
-
-  <!-- Панель ручного начисления EXP -->
-  <div class="af-cs-award-panel" data-afcs-award-panel hidden>
-    <form class="af-cs-award-form"
-          data-afcs-award-form="1"
-          autocomplete="off">
-      <div class="af-cs-award-form__row">
-        <label class="af-cs-award-form__label" for="afcs_award_amount">EXP</label>
-        <input id="afcs_award_amount"
-               class="textbox af-cs-award-form__input"
-               type="number"
-               name="amount"
-               step="1"
-               inputmode="numeric"
-               placeholder="Например: 100"
-               required>
-      </div>
-
-      <div class="af-cs-award-form__row">
-        <label class="af-cs-award-form__label" for="afcs_award_reason">Причина</label>
-        <input id="afcs_award_reason"
-              class="textbox af-cs-award-form__input"
-              type="text"
-              name="reason"
-              maxlength="255"
-              placeholder="Например: квест, ивент, награда"
-              required>
-      </div>
-
-
-      <div class="af-cs-award-form__actions">
-        <button type="submit"
-                class="button button--primary af-cs-btn af-cs-btn--submit">
-          Отправить
-        </button>
-
-        <button type="button"
-                class="button button--secondary af-cs-btn af-cs-btn--cancel"
-                data-afcs-award-toggle>
-          Закрыть
-        </button>
-      </div>
-    </form>
-  </div>
+  {$manual_award_html}
 </div>
