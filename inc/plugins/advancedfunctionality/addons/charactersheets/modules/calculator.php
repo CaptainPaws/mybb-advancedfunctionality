@@ -38,6 +38,10 @@ function af_charactersheets_normalize_bonus_items(string $source, string $key): 
     if (!empty($meta['modifiers']) && is_array($meta['modifiers'])) {
         $sets[] = $meta['modifiers'];
     }
+    $items = array_merge($items, af_charactersheets_rules_to_bonus_items($meta, $source, $attributes));
+    if (!empty($meta['rules']) && is_array($meta['rules'])) {
+        $items = array_merge($items, af_charactersheets_rules_to_bonus_items($meta['rules'], $source, $attributes));
+    }
     foreach (['stats', 'attributes'] as $metaKey) {
         if (!empty($meta[$metaKey]) && is_array($meta[$metaKey])) {
             foreach ($meta[$metaKey] as $stat => $value) {
@@ -59,6 +63,10 @@ function af_charactersheets_normalize_bonus_items(string $source, string $key): 
         $data = af_charactersheets_json_decode((string)($block['data_json'] ?? ''));
         if (empty($data)) {
             continue;
+        }
+        $items = array_merge($items, af_charactersheets_rules_to_bonus_items($data, $source, $attributes));
+        if (!empty($data['rules']) && is_array($data['rules'])) {
+            $items = array_merge($items, af_charactersheets_rules_to_bonus_items($data['rules'], $source, $attributes));
         }
         if (!empty($data['bonuses']) && is_array($data['bonuses'])) {
             $sets[] = $data['bonuses'];
@@ -123,6 +131,65 @@ function af_charactersheets_normalize_bonus_items(string $source, string $key): 
     }
 
     return $normalized;
+}
+
+function af_charactersheets_rules_to_bonus_items(array $rules, string $source, array $attributes): array
+{
+    if (empty($rules)) {
+        return [];
+    }
+
+    $schema = (string)($rules['schema'] ?? '');
+    if ($schema !== '' && $schema !== 'af_kb.rules.v1') {
+        return [];
+    }
+
+    $items = [];
+    $choices = $rules['choices'] ?? [];
+    if (is_array($choices)) {
+        foreach ($choices as $choice) {
+            if (!is_array($choice)) {
+                continue;
+            }
+            $type = (string)($choice['type'] ?? '');
+            $value = (float)($choice['value'] ?? 0);
+            $pick = (int)($choice['pick'] ?? 1);
+            if ($pick <= 0) {
+                $pick = 1;
+            }
+            if (in_array($type, ['stat_bonus', 'stat_plus_2', 'stat_plus', 'attribute_points'], true)) {
+                $items[] = [
+                    'source' => $source,
+                    'type' => 'attribute_points',
+                    'target' => null,
+                    'value' => (float)($value * $pick),
+                    'requires_choice' => true,
+                ];
+            }
+        }
+    }
+
+    $fixed = $rules['fixed_bonuses'] ?? [];
+    if (is_array($fixed)) {
+        foreach (['stats', 'attributes'] as $fixedKey) {
+            if (empty($fixed[$fixedKey]) || !is_array($fixed[$fixedKey])) {
+                continue;
+            }
+            foreach ($fixed[$fixedKey] as $stat => $value) {
+                if (array_key_exists($stat, $attributes)) {
+                    $items[] = [
+                        'source' => $source,
+                        'type' => 'attribute_bonus',
+                        'target' => $stat,
+                        'value' => (float)$value,
+                        'requires_choice' => false,
+                    ];
+                }
+            }
+        }
+    }
+
+    return $items;
 }
 
 function af_charactersheets_collect_bonus_items(array $base): array
@@ -369,7 +436,13 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $int_value = (float)($final['int'] ?? 0);
     $knowledge_from_int = (int)floor($int_value * $knowledge_per_int);
     $knowledge_total_choices = $knowledge_base_choices + $knowledge_from_int + $bonus_knowledge_choices;
-    $language_total_choices = $bonus_language_choices;
+    if ($knowledge_total_choices < 1) {
+        $knowledge_total_choices = 1;
+    }
+    $language_total_choices = 1 + $bonus_language_choices;
+    if ($language_total_choices < 1) {
+        $language_total_choices = 1;
+    }
 
     $knowledge_remaining = $knowledge_total_choices - count($knowledge_selected);
     $language_remaining = $language_total_choices - count($language_selected);
@@ -379,6 +452,16 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     if ($language_remaining < 0) {
         $errors[] = 'Превышен лимит языков.';
     }
+
+    $dex_mod = (int)floor((float)($final['dex'] ?? 0));
+    $con_mod = (int)floor((float)($final['con'] ?? 0));
+    $wis_mod = (int)floor((float)($final['wis'] ?? 0));
+    $int_mod = (int)floor((float)($final['int'] ?? 0));
+    $equipment = (array)($build['equipment'] ?? $build['equipment_bonuses'] ?? $build['inventory'] ?? []);
+    $armor_bonus = (int)($equipment['armor_bonus'] ?? 0);
+    $shield_bonus = (int)($equipment['shield_bonus'] ?? 0);
+    $weapon_bonus = (int)($equipment['weapon_bonus'] ?? 0);
+    $ac_total = 10 + $dex_mod + $armor_bonus + $shield_bonus;
 
     return [
         'base' => $attributes_base,
@@ -402,9 +485,22 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         'skill_pool_total' => $skill_pool_total,
         'skill_pool_spent' => $skills_spent,
         'skill_pool_remaining' => $skill_pool_remaining,
+        'bonus_items' => $bonus_items,
         'bonus_attr_points' => $bonus_attr_points,
         'bonus_skill_points' => $bonus_skill_points,
         'bonus_sources' => $bonus_source_labels,
+        'mechanics' => [
+            'armor_bonus' => $armor_bonus,
+            'shield_bonus' => $shield_bonus,
+            'weapon_bonus' => $weapon_bonus,
+            'ac_total' => $ac_total,
+            'saves' => [
+                'reflex' => $dex_mod,
+                'will' => $wis_mod,
+                'fortitude' => $con_mod,
+                'perception' => $int_mod,
+            ],
+        ],
         'knowledge' => [
             'selected' => $knowledge_selected,
             'bonus' => $bonus_knowledges,

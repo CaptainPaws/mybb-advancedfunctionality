@@ -19,6 +19,7 @@ function af_charactersheets_handle_api(): void
     }
 
     $can_edit = af_charactersheets_user_can_edit_sheet($sheet, $mybb->user ?? []);
+    $can_manage = af_cs_can_manage_sheet((int)($mybb->user['uid'] ?? 0), (int)($sheet['uid'] ?? 0));
     $can_award = af_charactersheets_user_can_award_exp($mybb->user ?? []);
 
     if (in_array($do, ['save_attributes', 'save_choice', 'grant_exp', 'update_skill', 'add_knowledge', 'remove_knowledge', 'delete_sheet'], true)) {
@@ -52,7 +53,7 @@ function af_charactersheets_handle_api(): void
     $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
 
     if ($do === 'save_attributes') {
-        if (!$can_edit) {
+        if (!$can_manage) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
         }
 
@@ -120,7 +121,7 @@ function af_charactersheets_handle_api(): void
         $build['choices'][$choice_key] = $choice_value;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
     } elseif ($do === 'update_skill') {
-        if (!$can_edit) {
+        if (!$can_manage) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
         }
         $slug = (string)$mybb->get_input('slug');
@@ -243,7 +244,7 @@ function af_charactersheets_handle_api(): void
 
     $attributes_html = af_charactersheets_build_attributes_html($view, $can_edit, $can_view_ledger);
     $progress_html = af_charactersheets_build_progress_html($view, $sheet, $can_award, $can_view_ledger);
-    $skills_html = af_charactersheets_build_skills_html($view, $can_edit, $can_view_ledger);
+    $skills_html = af_charactersheets_build_skills_html($view, $can_manage, $can_view_ledger);
     $knowledge_html = af_charactersheets_build_knowledge_html($view, $can_edit, $can_view_ledger);
 
     af_charactersheets_json_response([

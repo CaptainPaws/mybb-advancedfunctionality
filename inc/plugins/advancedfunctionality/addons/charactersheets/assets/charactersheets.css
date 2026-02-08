@@ -897,21 +897,27 @@
 /* ===== Skills ===== */
 .af-cs-skill-pool {
   margin-bottom: 14px;
-  display: grid;
-  gap: 4px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 18px;
+  align-items: center;
   font-size: 13px;
   opacity: 0.85;
 }
 
 .af-cs-skill-item {
   display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 12px;
-  padding: 12px 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 10px 12px;
   border-radius: 12px;
   background: rgba(0, 0, 0, 0.18);
   border: 1px solid rgba(255, 255, 255, 0.12);
   margin-bottom: 10px;
+}
+
+.af-cs-skill-left {
+  min-width: 0;
 }
 
 .af-cs-skill-name {
@@ -925,24 +931,36 @@
   font-weight: 500;
 }
 
-.af-cs-skill-meta {
-  display: flex;
-  gap: 12px;
-  font-size: 12px;
-  opacity: 0.8;
-}
-
 .af-cs-skill-right {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 16px;
+  display: grid;
+  justify-items: end;
+  gap: 6px;
 }
 
 .af-cs-skill-controls {
-  display: inline-flex;
+  display: none;
   align-items: center;
   gap: 6px;
+}
+
+.af-cs-skill-item.is-controls-open .af-cs-skill-controls {
+  display: inline-flex;
+}
+
+.af-cs-skill-gear {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.af-cs-skill-total {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
 .af-cs-skill-btn {
@@ -958,6 +976,12 @@
 .af-cs-skill-invested {
   min-width: 20px;
   text-align: center;
+}
+
+@media (max-width: 680px) {
+  .af-cs-skill-pool {
+    flex-wrap: wrap;
+  }
 }
 
 /* ===== Knowledge ===== */
@@ -993,17 +1017,40 @@
 }
 
 .af-cs-knowledge-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 999px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "title action"
+    "desc action";
+  gap: 4px 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.16);
   font-size: 12px;
+  min-width: 180px;
+}
+
+.af-cs-knowledge-title {
+  grid-area: title;
+  font-weight: 600;
+}
+
+.af-cs-knowledge-desc {
+  grid-area: desc;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.af-cs-knowledge-badge {
+  grid-area: action;
+  font-style: normal;
+  font-size: 10px;
+  opacity: 0.7;
 }
 
 .af-cs-knowledge-chip button {
+  grid-area: action;
   background: none;
   border: none;
   color: #fff;

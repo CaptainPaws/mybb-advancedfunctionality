@@ -371,7 +371,7 @@ function af_charactersheets_ensure_settings(): void
         $lang->af_charactersheets_knowledge_base_choices ?? 'Knowledge choices base',
         $lang->af_charactersheets_knowledge_base_choices_desc ?? 'Base number of knowledge choices.',
         'text',
-        '0',
+        '1',
         47
     );
     af_charactersheets_ensure_setting(
@@ -947,6 +947,7 @@ function af_charactersheets_render_sheet_page(string $slug): void
 
     $sheet_view = af_charactersheets_compute_sheet_view($sheet);
     $can_edit_sheet = af_charactersheets_user_can_edit_sheet($sheet, $mybb->user ?? []);
+    $can_manage_sheet = af_cs_can_manage_sheet((int)($mybb->user['uid'] ?? 0), (int)($sheet['uid'] ?? 0));
     $can_award_exp = af_charactersheets_user_can_award_exp($mybb->user ?? []);
     // fid нужен для is_moderator(), возьмём из threads если можем
     $fid_for_mod = (int)($thread['fid'] ?? 0);
@@ -961,12 +962,12 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $sheet_info_table_html = af_charactersheets_build_info_table_html($atf_index);
     $sheet_attributes_html = af_charactersheets_build_attributes_html($sheet_view, $can_edit_sheet, $can_view_ledger);
     $sheet_bonus_html = af_charactersheets_build_bonus_html($atf_index);
-    $sheet_skills_html = af_charactersheets_build_skills_html($sheet_view, $can_edit_sheet, $can_view_ledger);
+    $sheet_skills_html = af_charactersheets_build_skills_html($sheet_view, $can_manage_sheet, $can_view_ledger);
     $sheet_knowledge_html = af_charactersheets_build_knowledge_html($sheet_view, $can_edit_sheet, $can_view_ledger);
     $sheet_feats_html = af_charactersheets_build_feats_html($atf_index);
     $sheet_inventory_html = af_charactersheets_build_inventory_html();
     $sheet_augments_html = af_charactersheets_build_augments_html();
-    $sheet_mechanics_html = af_charactersheets_build_mechanics_html();
+    $sheet_mechanics_html = af_charactersheets_build_mechanics_html($sheet_view);
 
     $sheet_progress_html = af_charactersheets_build_progress_html($sheet_view, $sheet, $can_award_exp, $can_view_ledger);
 
@@ -978,6 +979,7 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $sheet_nicknames = htmlspecialchars_uni($character_nicknames !== '' ? $character_nicknames : '—');
     $sheet_id = (int)($sheet['id'] ?? 0);
     $sheet_post_key = htmlspecialchars_uni($mybb->post_code);
+    $bonus_items_json = htmlspecialchars_uni(af_charactersheets_json_encode((array)($sheet_view['bonus_items'] ?? [])));
 
     $page_title = 'Лист персонажа';
     if (!empty($user['username'])) {
@@ -1079,6 +1081,25 @@ function af_charactersheets_user_can_edit_sheet(array $sheet, array $user): bool
 
     // 3) остальные → 0
     return false;
+}
+
+function af_cs_can_manage_sheet(int $viewerUid, int $sheetUid): bool
+{
+    global $mybb;
+
+    if ($viewerUid <= 0) {
+        return false;
+    }
+
+    if ($viewerUid === $sheetUid) {
+        return true;
+    }
+
+    $is_admin = !empty($mybb->usergroup['cancp']);
+    $is_modcp = !empty($mybb->usergroup['canmodcp']);
+    $is_supermod = !empty($mybb->user['issupermod']);
+
+    return $is_admin || $is_modcp || $is_supermod;
 }
 
 function af_charactersheets_user_can_award_exp(array $user): bool
@@ -2225,7 +2246,17 @@ function af_charactersheets_render_stat_value(string $label, string $value): str
         . '</div>';
 }
 
-function af_charactersheets_build_skills_html(array $view, bool $can_edit, bool $can_view_pool): string
+function af_charactersheets_format_signed($value): string
+{
+    $num = (float)$value;
+    if (abs($num - round($num)) < 0.0001) {
+        $num = (int)round($num);
+    }
+    $prefix = $num > 0 ? '+' : '';
+    return $prefix . (string)$num;
+}
+
+function af_charactersheets_build_skills_html(array $view, bool $can_manage, bool $can_view_pool): string
 {
     $skills = (array)($view['skills'] ?? []);
     $items = [];
@@ -2233,33 +2264,33 @@ function af_charactersheets_build_skills_html(array $view, bool $can_edit, bool 
         $slug = (string)($skill['slug'] ?? '');
         $title = (string)($skill['title'] ?? '');
         $attr_label = (string)($skill['attr_label'] ?? '');
-        $base = (int)($skill['base'] ?? 0);
         $invested = (int)($skill['invested'] ?? 0);
-        $bonus = (float)($skill['bonus'] ?? 0);
         $total = (float)($skill['total'] ?? 0);
 
         $controls = '';
-        if ($can_edit && $slug !== '') {
-            $controls = '<div class="af-cs-skill-controls">'
+        $gear = '';
+        if ($can_manage && $slug !== '') {
+            $gear = '<button type="button" class="af-cs-skill-gear" data-afcs-skill-toggle aria-label="Управление навыком">'
+                . '<i class="fa fa-cog" aria-hidden="true"></i>'
+                . '</button>';
+            $controls = '<div class="af-cs-skill-controls" data-afcs-skill-controls>'
                 . '<button type="button" class="af-cs-skill-btn" data-afcs-skill-change="1" data-slug="' . htmlspecialchars_uni($slug) . '" data-delta="-1">−</button>'
                 . '<span class="af-cs-skill-invested">' . htmlspecialchars_uni((string)$invested) . '</span>'
                 . '<button type="button" class="af-cs-skill-btn" data-afcs-skill-change="1" data-slug="' . htmlspecialchars_uni($slug) . '" data-delta="1">+</button>'
                 . '</div>';
-        } else {
-            $controls = '<div class="af-cs-skill-controls"><span class="af-cs-skill-invested">' . htmlspecialchars_uni((string)$invested) . '</span></div>';
         }
+        $total_label = af_charactersheets_format_signed($total);
 
         $items[] = '<div class="af-cs-skill-item">'
+            . '<div class="af-cs-skill-left">'
             . '<div class="af-cs-skill-name">' . htmlspecialchars_uni($title)
-            . '<span>(от ' . htmlspecialchars_uni($attr_label) . ')</span>'
+            . '<span>(' . htmlspecialchars_uni($attr_label) . ')</span>'
             . '</div>'
-            . '<div class="af-cs-skill-meta">'
-            . '<div class="af-cs-skill-base">База: <strong>' . htmlspecialchars_uni((string)$base) . '</strong></div>'
-            . '<div class="af-cs-skill-bonus">Бонус: <strong>' . htmlspecialchars_uni((string)$bonus) . '</strong></div>'
             . '</div>'
             . '<div class="af-cs-skill-right">'
+            . '<div class="af-cs-skill-total">' . htmlspecialchars_uni($total_label) . '</div>'
+            . $gear
             . $controls
-            . '<div class="af-cs-skill-total">Итог: <strong>' . htmlspecialchars_uni((string)$total) . '</strong></div>'
             . '</div>'
             . '</div>';
     }
@@ -2280,7 +2311,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_edit, bool 
     }
 
     $choice_html = '';
-    if ($can_edit && !empty($view['skill_choice_details'])) {
+    if ($can_manage && !empty($view['skill_choice_details'])) {
         $options = '';
         foreach ($skills as $skill) {
             $slug = (string)($skill['slug'] ?? '');
@@ -2337,11 +2368,13 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
     $knowledge_bonus = (array)($view['knowledge']['bonus'] ?? []);
     $knowledge_remaining = (int)($view['knowledge']['remaining'] ?? 0);
     $knowledge_total = (int)($view['knowledge']['total_choices'] ?? 0);
+    $knowledge_selected_count = count($knowledge_selected);
 
     $language_selected = (array)($view['languages']['selected'] ?? []);
     $language_bonus = (array)($view['languages']['bonus'] ?? []);
     $language_remaining = (int)($view['languages']['remaining'] ?? 0);
     $language_total = (int)($view['languages']['total_choices'] ?? 0);
+    $language_selected_count = count($language_selected);
 
     $knowledge_options = '<option value="">— выбрать знание —</option>';
     foreach ($knowledge_entries as $entry) {
@@ -2367,19 +2400,29 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
     foreach ($knowledge_bonus as $key) {
         $entry = af_charactersheets_kb_get_entry('knowledge', $key);
         $label = af_charactersheets_kb_pick_text($entry, 'title');
+        $desc = af_charactersheets_kb_pick_text($entry, 'short');
+        if ($desc === '') {
+            $desc = af_charactersheets_kb_pick_text($entry, 'description');
+        }
         $knowledge_items[] = '<div class="af-cs-knowledge-chip">'
-            . '<span>' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
-            . '<em>Бонус</em>'
+            . '<span class="af-cs-knowledge-title">' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
+            . ($desc !== '' ? '<small class="af-cs-knowledge-desc">' . htmlspecialchars_uni($desc) . '</small>' : '')
+            . '<em class="af-cs-knowledge-badge">Бонус</em>'
             . '</div>';
     }
     foreach ($knowledge_selected as $key) {
         $entry = af_charactersheets_kb_get_entry('knowledge', $key);
         $label = af_charactersheets_kb_pick_text($entry, 'title');
+        $desc = af_charactersheets_kb_pick_text($entry, 'short');
+        if ($desc === '') {
+            $desc = af_charactersheets_kb_pick_text($entry, 'description');
+        }
         $remove = $can_edit
             ? '<button type="button" data-afcs-knowledge-remove="1" data-afcs-knowledge-type="knowledge" data-afcs-knowledge-key="' . htmlspecialchars_uni($key) . '">×</button>'
             : '';
         $knowledge_items[] = '<div class="af-cs-knowledge-chip">'
-            . '<span>' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
+            . '<span class="af-cs-knowledge-title">' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
+            . ($desc !== '' ? '<small class="af-cs-knowledge-desc">' . htmlspecialchars_uni($desc) . '</small>' : '')
             . $remove
             . '</div>';
     }
@@ -2391,19 +2434,29 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
     foreach ($language_bonus as $key) {
         $entry = af_charactersheets_kb_get_entry('language', $key);
         $label = af_charactersheets_kb_pick_text($entry, 'title');
+        $desc = af_charactersheets_kb_pick_text($entry, 'short');
+        if ($desc === '') {
+            $desc = af_charactersheets_kb_pick_text($entry, 'description');
+        }
         $language_items[] = '<div class="af-cs-knowledge-chip">'
-            . '<span>' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
-            . '<em>Бонус</em>'
+            . '<span class="af-cs-knowledge-title">' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
+            . ($desc !== '' ? '<small class="af-cs-knowledge-desc">' . htmlspecialchars_uni($desc) . '</small>' : '')
+            . '<em class="af-cs-knowledge-badge">Бонус</em>'
             . '</div>';
     }
     foreach ($language_selected as $key) {
         $entry = af_charactersheets_kb_get_entry('language', $key);
         $label = af_charactersheets_kb_pick_text($entry, 'title');
+        $desc = af_charactersheets_kb_pick_text($entry, 'short');
+        if ($desc === '') {
+            $desc = af_charactersheets_kb_pick_text($entry, 'description');
+        }
         $remove = $can_edit
             ? '<button type="button" data-afcs-knowledge-remove="1" data-afcs-knowledge-type="language" data-afcs-knowledge-key="' . htmlspecialchars_uni($key) . '">×</button>'
             : '';
         $language_items[] = '<div class="af-cs-knowledge-chip">'
-            . '<span>' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
+            . '<span class="af-cs-knowledge-title">' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
+            . ($desc !== '' ? '<small class="af-cs-knowledge-desc">' . htmlspecialchars_uni($desc) . '</small>' : '')
             . $remove
             . '</div>';
     }
@@ -2430,6 +2483,7 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
     if ($can_view_pool) {
         $knowledge_pool_html = '<div class="af-cs-knowledge-pool">'
             . '<div>Доступно знаний: <strong>' . htmlspecialchars_uni((string)$knowledge_total) . '</strong></div>'
+            . '<div>Выбрано: <strong>' . htmlspecialchars_uni((string)$knowledge_selected_count) . '</strong></div>'
             . '<div>Осталось: <strong>' . htmlspecialchars_uni((string)$knowledge_remaining) . '</strong></div>'
             . '</div>';
     }
@@ -2438,6 +2492,7 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
     if ($can_view_pool) {
         $language_pool_html = '<div class="af-cs-knowledge-pool">'
             . '<div>Доступно языков: <strong>' . htmlspecialchars_uni((string)$language_total) . '</strong></div>'
+            . '<div>Выбрано: <strong>' . htmlspecialchars_uni((string)$language_selected_count) . '</strong></div>'
             . '<div>Осталось: <strong>' . htmlspecialchars_uni((string)$language_remaining) . '</strong></div>'
             . '</div>';
     }
@@ -2782,31 +2837,44 @@ function af_charactersheets_build_bonus_html(array $index): string
     return '<div class="af-cs-bonus-grid">' . implode('', $columns) . '</div>';
 }
 
-function af_charactersheets_build_mechanics_html(): string
+function af_charactersheets_build_mechanics_html(array $view): string
 {
+    $mechanics = (array)($view['mechanics'] ?? []);
+    $armor_bonus = (int)($mechanics['armor_bonus'] ?? 0);
+    $shield_bonus = (int)($mechanics['shield_bonus'] ?? 0);
+    $weapon_bonus = (int)($mechanics['weapon_bonus'] ?? 0);
+    $ac_total = (int)($mechanics['ac_total'] ?? 0);
+    $saves = (array)($mechanics['saves'] ?? []);
+    $reflex = af_charactersheets_format_signed($saves['reflex'] ?? 0);
+    $will = af_charactersheets_format_signed($saves['will'] ?? 0);
+    $fortitude = af_charactersheets_format_signed($saves['fortitude'] ?? 0);
+    $perception = af_charactersheets_format_signed($saves['perception'] ?? 0);
+
     $col1 = '<div class="af-cs-mech-card">'
         . '<div class="af-cs-mech-title">Класс брони</div>'
-        . '<div class="af-cs-mech-row"><span>Броня</span><span>0</span></div>'
-        . '<div class="af-cs-mech-row"><span>Щит</span><span>0</span></div>'
-        . '<div class="af-cs-mech-row af-cs-mech-total"><span>Итоговый AC</span><span>0</span></div>'
+        . '<div class="af-cs-mech-row"><span>Броня</span><span>' . htmlspecialchars_uni(af_charactersheets_format_signed($armor_bonus)) . '</span></div>'
+        . '<div class="af-cs-mech-row"><span>Щит</span><span>' . htmlspecialchars_uni(af_charactersheets_format_signed($shield_bonus)) . '</span></div>'
+        . '<div class="af-cs-mech-row af-cs-mech-total"><span>Итоговый AC</span><span>' . htmlspecialchars_uni((string)$ac_total) . '</span></div>'
         . '</div>';
 
     $col2 = '<div class="af-cs-mech-card">'
         . '<div class="af-cs-mech-title">Спасброски</div>'
-        . '<div class="af-cs-mech-row"><span>Рефлекс</span><span>0</span></div>'
-        . '<div class="af-cs-mech-row"><span>Воля</span><span>0</span></div>'
-        . '<div class="af-cs-mech-row"><span>Стойкость</span><span>0</span></div>'
-        . '<div class="af-cs-mech-row"><span>Восприятие</span><span>0</span></div>'
+        . '<div class="af-cs-mech-row"><span>Рефлекс</span><span>' . htmlspecialchars_uni($reflex) . '</span></div>'
+        . '<div class="af-cs-mech-row"><span>Воля</span><span>' . htmlspecialchars_uni($will) . '</span></div>'
+        . '<div class="af-cs-mech-row"><span>Стойкость</span><span>' . htmlspecialchars_uni($fortitude) . '</span></div>'
+        . '<div class="af-cs-mech-row"><span>Восприятие</span><span>' . htmlspecialchars_uni($perception) . '</span></div>'
         . '<div class="af-cs-mech-divider"></div>'
         . '<div class="af-cs-mech-row"><span>HP</span><span>—</span></div>'
         . '<div class="af-cs-mech-row"><span>Человечность</span><span>—</span></div>'
         . '</div>';
 
+    $weapon_bonus_label = af_charactersheets_format_signed($weapon_bonus);
+    $damage_total = '1d4 + ' . $weapon_bonus_label;
     $col3 = '<div class="af-cs-mech-card">'
         . '<div class="af-cs-mech-title">Урон</div>'
-        . '<div class="af-cs-mech-row"><span>Базовый</span><span>0</span></div>'
-        . '<div class="af-cs-mech-row"><span>Бонус оружия</span><span>0</span></div>'
-        . '<div class="af-cs-mech-row af-cs-mech-total"><span>Итог</span><span>0</span></div>'
+        . '<div class="af-cs-mech-row"><span>Базовый</span><span>1d4</span></div>'
+        . '<div class="af-cs-mech-row"><span>Бонус оружия</span><span>' . htmlspecialchars_uni($weapon_bonus_label) . '</span></div>'
+        . '<div class="af-cs-mech-row af-cs-mech-total"><span>Итог</span><span>' . htmlspecialchars_uni($damage_total) . '</span></div>'
         . '</div>';
 
     return '<div class="af-cs-mechanics-grid">' . $col1 . $col2 . $col3 . '</div>';
