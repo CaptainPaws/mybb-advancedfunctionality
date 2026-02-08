@@ -120,6 +120,11 @@
   cursor: pointer;
 }
 
+.af-cs-btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .af-cs-btn--ghost {
   background: transparent;
 }
@@ -179,39 +184,59 @@
   gap: 16px;
 }
 
-.af-cs-attr-table {
-  display: grid;
-  gap: 8px;
-}
-
-.af-cs-attr-table__head,
-.af-cs-attr-row {
-  display: grid;
-  grid-template-columns: 1.2fr repeat(4, minmax(80px, 1fr));
-  gap: 8px;
-  align-items: center;
-}
-
-.af-cs-attr-table__head {
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.6;
-}
-
-.af-cs-attr-table__body {
-  display: grid;
-  gap: 8px;
-}
-
-.af-cs-attr-row {
+.af-cs-attr-pool {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 13px;
 }
 
-.af-cs-attr-table__body input {
+.af-cs-attr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.af-cs-attr-card {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: grid;
+  gap: 10px;
+}
+
+.af-cs-attr-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.af-cs-attr-card__meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  font-size: 12px;
+}
+
+.af-cs-attr-card__stat {
+  display: grid;
+  gap: 4px;
+}
+
+.af-cs-attr-card__stat span {
+  opacity: 0.6;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+}
+
+.af-cs-attr-input {
   width: 100%;
   padding: 6px 8px;
   border-radius: 8px;
@@ -230,12 +255,6 @@
 
 .af-cs-attr-label {
   font-weight: 600;
-}
-
-.af-cs-attr-meta {
-  display: flex;
-  gap: 16px;
-  font-size: 13px;
 }
 
 .af-cs-attr-actions {
@@ -284,6 +303,14 @@
   font-size: 14px;
 }
 
+.af-cs-progress__points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
 .af-cs-progress__bar {
   height: 8px;
   border-radius: 999px;
@@ -300,6 +327,19 @@
 .af-cs-ledger {
   display: grid;
   gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.af-cs-progress__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.af-cs-award-panel {
   padding: 10px 12px;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.12);
@@ -440,7 +480,10 @@
 }
 
 .af-cs-plaque {
-  margin-top: 8px;
+  display: block;
+  margin-top: 6px;
+  position: relative;
+  z-index: 1;
 }
 
 .af-cs-plaque__btn {
@@ -449,12 +492,20 @@
   justify-content: center;
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: inherit;
+  background: rgba(50, 120, 255, 0.2);
+  border: 1px solid rgba(130, 190, 255, 0.5);
+  color: #f4f8ff;
   text-decoration: none;
   font-size: 12px;
   letter-spacing: 0.02em;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.af-cs-plaque__btn:hover,
+.af-cs-plaque__btn:focus {
+  background: rgba(80, 150, 255, 0.35);
+  border-color: rgba(170, 220, 255, 0.8);
+  color: #ffffff;
 }
 
 .af-cs-chip {

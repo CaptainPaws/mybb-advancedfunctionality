@@ -3,12 +3,19 @@
     <div class="af-cs-progress__level">Уровень {$level}</div>
     <div class="af-cs-progress__exp">{$exp_label}</div>
   </div>
+  <div class="af-cs-progress__points">
+    <div>Свободные очки атрибутов: <strong>{$attr_points_free}</strong></div>
+    <div>Свободные очки навыков: <strong>{$skill_points_free}</strong></div>
+  </div>
   <div class="af-cs-progress__bar"><span style="width: {$percent}%"></span></div>
   <div class="af-cs-progress__actions">
     <button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-ledger-toggle>История начислений</button>
+    {$manual_award_toggle_html}
   </div>
   <div class="af-cs-ledger" data-afcs-ledger hidden>
     {$ledger_html}
   </div>
-  {$manual_award_html}
+  <div class="af-cs-award-panel" data-afcs-award-panel hidden>
+    {$manual_award_html}
+  </div>
 </div>
