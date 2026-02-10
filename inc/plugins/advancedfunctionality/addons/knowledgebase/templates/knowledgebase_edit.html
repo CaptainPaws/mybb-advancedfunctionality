@@ -65,6 +65,14 @@
         </details>
         <div class="af-kb-row">
             <div>
+                <div class="af-kb-row-ip">
+                <label>Порядок</label>
+                <input type="text" name="sortorder" value="{$kb_sortorder}" />
+                <div class="af-kb-inline">
+                    <label>Активно</label>
+                    <input type="checkbox" name="active" value="1" {$kb_active_checked} />
+                </div>
+                </div>
                 <label>Meta JSON (структурно)</label>
                 <div id="af-kb-meta-ui"></div>
                 <details class="af-kb-collapsible">
@@ -78,14 +86,6 @@
                     <textarea id="af-kb-data-json-raw">{$kb_data_json}</textarea>
                 </details>
                 <input type="hidden" name="entry_data_json" id="af-kb-data-json" value="{$kb_data_json_hidden}" />
-            </div>
-            <div>
-                <label>Порядок</label>
-                <input type="text" name="sortorder" value="{$kb_sortorder}" />
-                <div class="af-kb-inline">
-                    <label>Активно</label>
-                    <input type="checkbox" name="active" value="1" {$kb_active_checked} />
-                </div>
             </div>
         </div>
         <div class="af-kb-row">
