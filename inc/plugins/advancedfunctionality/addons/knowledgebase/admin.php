@@ -7,8 +7,12 @@ class AF_Admin_KnowledgeBase
     {
         global $db;
 
-        $tab = isset($_GET['tab']) ? (string)$_GET['tab'] : 'types';
+        $tab = isset($_GET['action']) ? (string)$_GET['action'] : (isset($_GET['tab']) ? (string)$_GET['tab'] : 'types');
         $act = isset($_GET['act']) ? (string)$_GET['act'] : '';
+        if ($tab !== 'kinds' && $tab !== 'types') {
+            $tab = 'types';
+        }
+
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             verify_post_check((string)($_POST['my_post_key'] ?? ''));
@@ -28,8 +32,9 @@ class AF_Admin_KnowledgeBase
 
         echo '<div class="group"><h3>Knowledge Base</h3>';
         echo '<div class="border_wrapper" style="padding:12px;">';
-        echo '<p><a class="button" href="index.php?module=config-advancedfunctionality-knowledgebase&tab=types">KB → Типы</a> ';
-        echo '<a class="button" href="index.php?module=config-advancedfunctionality-knowledgebase&tab=kinds">KB → Подтипы предметов</a></p>';
+        echo '<p><a class="button" href="index.php?module=config-advancedfunctionality-knowledgebase&action=types">KB → Типы</a> ';
+        echo '<a class="button" href="index.php?module=config-advancedfunctionality-knowledgebase&action=kinds">KB → Подтипы предметов</a></p>';
+
 
         if ($tab === 'kinds') {
             self::renderKinds($act);
@@ -70,7 +75,7 @@ class AF_Admin_KnowledgeBase
             return;
         }
 
-        echo '<p><a class="button" href="index.php?module=config-advancedfunctionality-knowledgebase&tab=types&act=new">Добавить тип</a></p>';
+        echo '<p><a class="button" href="index.php?module=config-advancedfunctionality-knowledgebase&action=types&act=new">Добавить тип</a></p>';
         echo '<table class="table"><tr><th>type_key</th><th>RU</th><th>EN</th><th>schema</th><th>active</th><th>sort</th><th></th></tr>';
         $q = $db->simple_select('af_kb_types', '*', '', ['order_by' => 'sortorder, type']);
         while ($row = $db->fetch_array($q)) {
@@ -82,8 +87,8 @@ class AF_Admin_KnowledgeBase
             echo '<td>'.htmlspecialchars_uni((string)($row['rules_schema'] ?: 'af_kb.rules.v1')).'</td>';
             echo '<td>'.(!empty($row['is_active']) ? '1' : '0').'</td>';
             echo '<td>'.(int)$row['sortorder'].'</td>';
-            echo '<td><a href="index.php?module=config-advancedfunctionality-knowledgebase&tab=types&act=edit&id='.(int)$row['id'].'">edit</a> | '
-                .'<a href="index.php?module=config-advancedfunctionality-knowledgebase&tab=types&act=delete&id='.(int)$row['id'].'&my_post_key='.htmlspecialchars_uni($mybb->post_code).'">delete</a></td>';
+            echo '<td><a href="index.php?module=config-advancedfunctionality-knowledgebase&action=types&act=edit&id='.(int)$row['id'].'">edit</a> | '
+                .'<a href="index.php?module=config-advancedfunctionality-knowledgebase&action=types&act=delete&id='.(int)$row['id'].'&my_post_key='.htmlspecialchars_uni($mybb->post_code).'">delete</a></td>';
             echo '</tr>';
         }
         echo '</table>';
@@ -113,11 +118,11 @@ class AF_Admin_KnowledgeBase
             return;
         }
 
-        echo '<p><a class="button" href="index.php?module=config-advancedfunctionality-knowledgebase&tab=kinds&act=new">Добавить подтип</a></p>';
+        echo '<p><a class="button" href="index.php?module=config-advancedfunctionality-knowledgebase&action=kinds&act=new">Добавить подтип</a></p>';
         echo '<table class="table"><tr><th>kind_key</th><th>RU</th><th>EN</th><th>active</th><th>sort</th><th></th></tr>';
         $q = $db->simple_select('af_kb_item_kinds', '*', '', ['order_by' => 'sortorder, kind_key']);
         while ($row = $db->fetch_array($q)) {
-            echo '<tr><td>'.htmlspecialchars_uni((string)$row['kind_key']).'</td><td>'.htmlspecialchars_uni((string)$row['title_ru']).'</td><td>'.htmlspecialchars_uni((string)$row['title_en']).'</td><td>'.(!empty($row['is_active']) ? '1' : '0').'</td><td>'.(int)$row['sortorder'].'</td><td><a href="index.php?module=config-advancedfunctionality-knowledgebase&tab=kinds&act=edit&id='.(int)$row['id'].'">edit</a> | <a href="index.php?module=config-advancedfunctionality-knowledgebase&tab=kinds&act=delete&id='.(int)$row['id'].'&my_post_key='.htmlspecialchars_uni($mybb->post_code).'">delete</a></td></tr>';
+            echo '<tr><td>'.htmlspecialchars_uni((string)$row['kind_key']).'</td><td>'.htmlspecialchars_uni((string)$row['title_ru']).'</td><td>'.htmlspecialchars_uni((string)$row['title_en']).'</td><td>'.(!empty($row['is_active']) ? '1' : '0').'</td><td>'.(int)$row['sortorder'].'</td><td><a href="index.php?module=config-advancedfunctionality-knowledgebase&action=kinds&act=edit&id='.(int)$row['id'].'">edit</a> | <a href="index.php?module=config-advancedfunctionality-knowledgebase&action=kinds&act=delete&id='.(int)$row['id'].'&my_post_key='.htmlspecialchars_uni($mybb->post_code).'">delete</a></td></tr>';
         }
         echo '</table>';
     }
@@ -131,7 +136,7 @@ class AF_Admin_KnowledgeBase
         json_decode($schema, true);
         if (json_last_error() !== JSON_ERROR_NONE || $key === '') {
             flash_message('Ошибка JSON или type_key.', 'error');
-            admin_redirect('index.php?module=config-advancedfunctionality-knowledgebase&tab=types'.($id ? '&act=edit&id='.$id : '&act=new'));
+            admin_redirect('index.php?module=config-advancedfunctionality-knowledgebase&action=types'.($id ? '&act=edit&id='.$id : '&act=new'));
         }
 
         $data = [
@@ -150,7 +155,7 @@ class AF_Admin_KnowledgeBase
         ];
         if ($id > 0) { $db->update_query('af_kb_types', $data, 'id='.$id); } else { $db->insert_query('af_kb_types', $data); }
         flash_message('Тип сохранён.', 'success');
-        admin_redirect('index.php?module=config-advancedfunctionality-knowledgebase&tab=types');
+        admin_redirect('index.php?module=config-advancedfunctionality-knowledgebase&action=types');
     }
 
     private static function saveKind(): void
@@ -162,7 +167,7 @@ class AF_Admin_KnowledgeBase
         json_decode($schema, true);
         if (json_last_error() !== JSON_ERROR_NONE || $key === '') {
             flash_message('Ошибка JSON или kind_key.', 'error');
-            admin_redirect('index.php?module=config-advancedfunctionality-knowledgebase&tab=kinds'.($id ? '&act=edit&id='.$id : '&act=new'));
+            admin_redirect('index.php?module=config-advancedfunctionality-knowledgebase&action=kinds'.($id ? '&act=edit&id='.$id : '&act=new'));
         }
 
         $data = [
@@ -176,7 +181,7 @@ class AF_Admin_KnowledgeBase
         ];
         if ($id > 0) { $db->update_query('af_kb_item_kinds', $data, 'id='.$id); } else { $db->insert_query('af_kb_item_kinds', $data); }
         flash_message('Подтип сохранён.', 'success');
-        admin_redirect('index.php?module=config-advancedfunctionality-knowledgebase&tab=kinds');
+        admin_redirect('index.php?module=config-advancedfunctionality-knowledgebase&action=kinds');
     }
 
     private static function deleteType(): void
@@ -203,14 +208,14 @@ class AF_Admin_KnowledgeBase
         verify_post_check((string)($_GET['my_post_key'] ?? ''));
         $id = (int)($_GET['id'] ?? 0);
         $row = $db->fetch_array($db->simple_select('af_kb_item_kinds', '*', 'id='.$id, ['limit' => 1]));
-        if (!$row) { admin_redirect('index.php?module=config-advancedfunctionality-knowledgebase&tab=kinds'); }
+        if (!$row) { admin_redirect('index.php?module=config-advancedfunctionality-knowledgebase&action=kinds'); }
         $cnt = (int)$db->fetch_field($db->simple_select('af_kb_entries', 'COUNT(*) AS cnt', "item_kind='".$db->escape_string((string)$row['kind_key'])."'"), 'cnt');
         if ($cnt > 0) {
             flash_message('Нельзя удалить: есть item-записи с этим kind.', 'error');
-            admin_redirect('index.php?module=config-advancedfunctionality-knowledgebase&tab=kinds');
+            admin_redirect('index.php?module=config-advancedfunctionality-knowledgebase&action=kinds');
         }
         $db->delete_query('af_kb_item_kinds', 'id='.$id);
         flash_message('Подтип удалён.', 'success');
-        admin_redirect('index.php?module=config-advancedfunctionality-knowledgebase&tab=kinds');
+        admin_redirect('index.php?module=config-advancedfunctionality-knowledgebase&action=kinds');
     }
 }
