@@ -834,6 +834,36 @@ function af_kb_get_template(string $name): string
 
     return $tpl;
 }
+/**
+ * Гарантированно добавляет CSS/JS KB в $headerinclude (один раз).
+ * Важно: без ?v=..., всегда “последний файл”.
+ */
+function af_kb_ensure_header_bits(): void
+{
+    global $mybb, $headerinclude;
+
+    static $done = false;
+    if ($done) return;
+    $done = true;
+
+    $assetBase = rtrim((string)($mybb->asset_url ?? ''), '/');
+    if ($assetBase === '') {
+        // fallback: относительные пути
+        $assetBase = '';
+    }
+
+    $css = $assetBase . '/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase.css';
+    $js  = $assetBase . '/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase.js';
+
+    // marker чтобы не плодить дубли даже если $done сорвут
+    if (strpos((string)$headerinclude, '<!-- af_kb_assets -->') !== false) {
+        return;
+    }
+
+    $headerinclude .= "\n<!-- af_kb_assets -->\n";
+    $headerinclude .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($css) . '" />' . "\n";
+    $headerinclude .= '<script type="text/javascript" src="' . htmlspecialchars_uni($js) . '"></script>' . "\n";
+}
 
 /* -------------------- ACCESS -------------------- */
 
@@ -954,13 +984,35 @@ function kb_entry_localize(array $row): array
     ];
 }
 
-function af_kb_render_fullpage(string $content, string $templateName = 'knowledgebase_page'): void
+/**
+ * Рендерит полноценную страницу (режим B): один output_page().
+ * $fullpageTplName — имя шаблона ПОЛНОЙ страницы (с <!DOCTYPE ... {$headerinclude}{$header}{$footer}).
+ */
+function af_kb_render_fullpage(string $innerHtml, string $fullpageTplName): void
 {
-    $af_kb_content = $content;
-    eval("\$page = \"" . af_kb_get_template($templateName) . "\";");
+    global $templates;
+
+    // ассеты
+    if (function_exists('af_kb_ensure_header_bits')) {
+        af_kb_ensure_header_bits();
+    }
+
+    // ВАЖНО: поддерживаем оба варианта шаблонов
+    $kb_content = $innerHtml;
+    $af_kb_content = $innerHtml;
+
+    $page = '';
+    $tpl = af_kb_get_template($fullpageTplName);
+    if ($tpl === '') {
+        $tpl = af_kb_get_template('knowledgebase_page');
+    }
+
+    eval("\$page = \"" . $tpl . "\";");
     output_page($page);
     exit;
 }
+
+
 
 function af_kb_sanitize_url(string $url): string
 {
@@ -1835,7 +1887,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
     }
 }
 
-function af_kb_parse_message_end(&$message): void
+function af_kb_parse_message_end(&$message, &$options = null): void
 {
     global $mybb;
 
@@ -1847,29 +1899,32 @@ function af_kb_parse_message_end(&$message): void
         return;
     }
 
-    if (stripos($message, '[kb=') === false) {
+    if (!is_string($message) || stripos($message, '[kb=') === false) {
         return;
     }
 
     $message = preg_replace_callback(
         '/\\[kb=([a-z0-9_-]{2,64}):([a-z0-9_-]{2,64})\\]/i',
-        function (array $matches): string {
+        static function (array $matches): string {
             $type = strtolower($matches[1]);
-            $key = strtolower($matches[2]);
+            $key  = strtolower($matches[2]);
+
             $summary = af_kb_get_entry_summary($type, $key);
-            $title = $summary['title'] ?? ($type . ':' . $key);
+            $title   = $summary['title'] ?? ($type . ':' . $key);
+
             $iconHtml = af_kb_build_icon_html($summary['icon_url'] ?? '', $summary['icon_class'] ?? '');
             $iconWrap = $iconHtml !== '' ? '<span class="af-kb-chip-icon">' . $iconHtml . '</span>' : '';
+
             $techHint = $summary['tech_hint'] ?? '';
 
             $attrs = ' data-kb-type="' . htmlspecialchars_uni($type) . '" data-kb-key="' . htmlspecialchars_uni($key) . '"'
-                . ' data-kb-title="' . htmlspecialchars_uni($title) . '"';
+                   . ' data-kb-title="' . htmlspecialchars_uni($title) . '"';
             if ($techHint !== '') {
                 $attrs .= ' data-tech-hint="' . htmlspecialchars_uni($techHint) . '"';
             }
 
             return '<span class="af-kb-chip"' . $attrs . '>' . $iconWrap
-                . '<span class="af-kb-chip-label">' . htmlspecialchars_uni($title) . '</span></span>';
+                 . '<span class="af-kb-chip-label">' . htmlspecialchars_uni($title) . '</span></span>';
         },
         $message
     );
@@ -3307,6 +3362,12 @@ function af_kb_handle_edit(): void
     }
 
     $kb_content = '';
+    // страховка от фаталов в шаблонах (минимальный набор)
+    $kb_can_edit = '1';
+    $kb_page_bg = $kb_page_bg ?? '';
+    $kb_body_style = $kb_body_style ?? '';
+    $kb_help_link = $kb_help_link ?? '';
+    $kb_errors = $kb_errors ?? '';
     eval("\$kb_content = \"" . af_kb_get_template('knowledgebase_edit') . "\";");
     af_kb_render_fullpage($kb_content, 'af_kb_edit_fullpage');
 }
