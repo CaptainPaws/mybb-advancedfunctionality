@@ -14,6 +14,8 @@ define('AF_KB_ASSETS', AF_KB_BASE . 'assets/');
 define('AF_KB_TPL_DIR', AF_KB_BASE . 'templates/');
 define('AF_KB_MARK', '<!--af_kb_assets-->');
 define('AF_KB_RULES_SCHEMA', 'af_kb.rules.v1');
+define('AF_KB_TRAITS_SCHEMA', 'af_kb.traits.v1');
+define('AF_KB_GRANTS_SCHEMA', 'af_kb.grants.v1');
 
 define('AF_KB_KEY_PATTERN', '/^[a-z0-9_-]{2,64}$/');
 define('AF_KB_PERPAGE', 20);
@@ -990,7 +992,7 @@ function kb_entry_localize(array $row): array
  */
 function af_kb_render_fullpage(string $innerHtml, string $fullpageTplName): void
 {
-    global $templates;
+    global $templates, $headerinclude, $header, $footer, $theme, $lang, $mybb;
 
     // ассеты
     if (function_exists('af_kb_ensure_header_bits')) {
@@ -1519,6 +1521,96 @@ function af_kb_normalize_rules_json(string $raw): string
     }
 
     return (string)json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+function af_kb_validate_key_token(string $value): bool
+{
+    return (bool)preg_match('/^[a-z0-9_]+$/', $value);
+}
+
+function af_kb_normalize_traits_json($rawTraits, array &$errors): array
+{
+    $traits = $rawTraits;
+    if (is_array($traits) && array_key_exists('schema', $traits)) {
+        if ((string)($traits['schema'] ?? '') !== AF_KB_TRAITS_SCHEMA) {
+            $errors[] = 'Traits JSON schema mismatch.';
+        }
+        $traits = $traits['traits'] ?? [];
+    }
+    if (!is_array($traits)) {
+        $errors[] = 'Traits JSON must contain an array of traits.';
+        return [];
+    }
+
+    $normalized = [];
+    foreach ($traits as $index => $trait) {
+        if (!is_array($trait)) {
+            $errors[] = 'Trait #' . ($index + 1) . ' must be an object.';
+            continue;
+        }
+        $key = trim((string)($trait['key'] ?? ''));
+        if ($key !== '' && !af_kb_validate_key_token($key)) {
+            $errors[] = 'Trait key must use [a-z0-9_].';
+        }
+        $titleRu = trim((string)($trait['title_ru'] ?? ''));
+        $titleEn = trim((string)($trait['title_en'] ?? ''));
+        if ($titleRu === '' && $titleEn === '') {
+            $errors[] = 'Trait #' . ($index + 1) . ' requires title_ru or title_en.';
+        }
+        $normalized[] = [
+            'key' => $key,
+            'title_ru' => $titleRu,
+            'title_en' => $titleEn,
+            'desc_ru' => trim((string)($trait['desc_ru'] ?? '')),
+            'desc_en' => trim((string)($trait['desc_en'] ?? '')),
+            'tags' => isset($trait['tags']) && is_array($trait['tags']) ? array_values($trait['tags']) : [],
+            'meta' => isset($trait['meta']) && is_array($trait['meta']) ? $trait['meta'] : [],
+        ];
+    }
+
+    return $normalized;
+}
+
+function af_kb_normalize_grants_json($rawGrants, array &$errors): array
+{
+    $grants = $rawGrants;
+    if (is_array($grants) && array_key_exists('schema', $grants)) {
+        if ((string)($grants['schema'] ?? '') !== AF_KB_GRANTS_SCHEMA) {
+            $errors[] = 'Grants JSON schema mismatch.';
+        }
+        $grants = $grants['grants'] ?? [];
+    }
+    if (!is_array($grants)) {
+        $errors[] = 'Grants JSON must contain an array of grants.';
+        return [];
+    }
+
+    $allowedOps = ['stat_add', 'hp_add', 'skill_add', 'resist_add', 'tag_add', 'grant_kb'];
+    $normalized = [];
+    foreach ($grants as $index => $grant) {
+        if (!is_array($grant)) {
+            $errors[] = 'Grant #' . ($index + 1) . ' must be an object.';
+            continue;
+        }
+        $op = trim((string)($grant['op'] ?? ''));
+        if (!in_array($op, $allowedOps, true)) {
+            $errors[] = 'Grant #' . ($index + 1) . ' has unsupported op.';
+        }
+        if ($op === 'stat_add') {
+            $stat = trim((string)($grant['stat'] ?? ''));
+            if (!in_array($stat, ['str', 'dex', 'con', 'int', 'wis', 'cha'], true)) {
+                $errors[] = 'Grant #' . ($index + 1) . ' stat_add requires valid stat.';
+            }
+        }
+        if ($op === 'grant_kb') {
+            if (trim((string)($grant['type'] ?? '')) === '' || trim((string)($grant['key'] ?? '')) === '') {
+                $errors[] = 'Grant #' . ($index + 1) . ' grant_kb requires type and key.';
+            }
+        }
+        $normalized[] = $grant;
+    }
+
+    return $normalized;
 }
 
 function af_kb_get_entry_data_json(int $entryId): string
@@ -2155,7 +2247,7 @@ function af_kb_render_entry_ui(array $entry, array $typeRow, bool $isRu): string
     $blocks = kb_collect_blocks($entry);
     $vm = kb_resolve_data_for_ui($rules, $blocks, $schema);
 
-    $html = '<div class="kb-layout">';
+    $html = '';
     foreach ((array)($schema['sections'] ?? []) as $section) {
         if (!is_array($section)) continue;
         $title = $isRu ? (string)($section['title']['ru'] ?? '') : (string)($section['title']['en'] ?? '');
@@ -2168,7 +2260,7 @@ function af_kb_render_entry_ui(array $entry, array $typeRow, bool $isRu): string
         if (trim(strip_tags($parts)) === '') continue;
         $html .= '<section class="kb-section kb-section--'.htmlspecialchars_uni($layout).'"><h3>'.htmlspecialchars_uni($title).'</h3>'.$parts.'</section>';
     }
-    return $html.'</div>';
+    return trim($html);
 }
 function af_kb_get_nested(array $data, string $path)
 {
@@ -3019,11 +3111,21 @@ function af_kb_handle_edit(): void
             }
         }
 
-        if (!$errors && in_array($type, ['race', 'class'], true)) {
+        if (!$errors) {
             $rulesData = af_kb_decode_json($entryDataJsonNormalized);
             if ((string)($rulesData['schema'] ?? '') !== AF_KB_RULES_SCHEMA) {
                 $errors[] = 'Data JSON schema mismatch.';
             }
+            $rulesData['traits'] = af_kb_normalize_traits_json($rulesData['traits'] ?? [], $errors);
+            $rulesData['grants'] = af_kb_normalize_grants_json($rulesData['grants'] ?? [], $errors);
+
+            if (!$errors) {
+                $entryDataJsonNormalized = json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+            }
+        }
+
+        if (!$errors && in_array($type, ['race', 'class'], true)) {
+            $rulesData = af_kb_decode_json($entryDataJsonNormalized);
             foreach (['fixed_bonuses', 'choices', 'traits'] as $requiredKey) {
                 if (!array_key_exists($requiredKey, $rulesData)) {
                     $errors[] = 'Required data field missing: ' . $requiredKey;
@@ -3341,6 +3443,14 @@ function af_kb_handle_edit(): void
     $kb_tech_template = htmlspecialchars_uni($lang->af_kb_tech_template_value ?? '[icon=URL_OR_CLASS] Short technical hint here (1–2 sentences).');
     $kb_page_bg = '';
     $kb_body_style = '';
+    $kb_header_debug = '';
+    if (af_kb_is_admin()) {
+        af_kb_ensure_header_bits();
+        global $headerinclude;
+        $markerPresent = strpos((string)$headerinclude, '<!-- af_kb_assets -->') !== false;
+        $headerNotEmpty = trim((string)$headerinclude) !== '';
+        $kb_header_debug = '<div class="af-kb-help"><strong>KB debug</strong>: headerinclude_non_empty=' . ($headerNotEmpty ? 'yes' : 'no') . ', kb_assets_marker=' . ($markerPresent ? 'yes' : 'no') . '</div>';
+    }
 
     if (function_exists('add_breadcrumb')) {
         add_breadcrumb($lang->af_kb_catalog_title ?? 'Knowledge Base', 'misc.php?action=kb');
@@ -3534,6 +3644,14 @@ function af_kb_handle_type_edit(): void
     }
     $kb_page_bg = '';
     $kb_body_style = '';
+    $kb_header_debug = '';
+    if (af_kb_is_admin()) {
+        af_kb_ensure_header_bits();
+        global $headerinclude;
+        $markerPresent = strpos((string)$headerinclude, '<!-- af_kb_assets -->') !== false;
+        $headerNotEmpty = trim((string)$headerinclude) !== '';
+        $kb_header_debug = '<div class="af-kb-help"><strong>KB debug</strong>: headerinclude_non_empty=' . ($headerNotEmpty ? 'yes' : 'no') . ', kb_assets_marker=' . ($markerPresent ? 'yes' : 'no') . '</div>';
+    }
 
     if (function_exists('add_breadcrumb')) {
         add_breadcrumb($lang->af_kb_catalog_title ?? 'Knowledge Base', 'misc.php?action=kb');
@@ -3545,11 +3663,9 @@ function af_kb_handle_type_edit(): void
         add_breadcrumb($editLabel, 'misc.php?action=kb_type_edit&type=' . urlencode($typeRow['type']));
     }
 
-    $af_kb_content = '';
-    eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_type_edit') . "\";");
-    eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
-    output_page($page);
-    exit;
+    $kb_content = '';
+    eval("\$kb_content = \"" . af_kb_get_template('knowledgebase_type_edit') . "\";");
+    af_kb_render_fullpage($kb_content, 'af_kb_edit_fullpage');
 }
 
 function af_kb_handle_type_delete(): void
