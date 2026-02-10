@@ -370,122 +370,182 @@
 })();
 
 (function () {
-    function setByPath(obj, path, value) {
-        var parts = String(path || '').split('.');
-        var cursor = obj;
-        for (var i = 0; i < parts.length - 1; i++) {
-            if (!cursor[parts[i]] || typeof cursor[parts[i]] !== 'object') {
-                cursor[parts[i]] = {};
-            }
-            cursor = cursor[parts[i]];
+    function readJson(text, fallback) {
+        try {
+            var parsed = JSON.parse(text || '');
+            return parsed && typeof parsed === 'object' ? parsed : fallback;
+        } catch (e) {
+            return fallback;
         }
-        cursor[parts[parts.length - 1]] = value;
     }
 
-    function getByPath(obj, path) {
-        var parts = String(path || '').split('.');
-        var cursor = obj;
-        for (var i = 0; i < parts.length; i++) {
-            if (!cursor || typeof cursor !== 'object' || !(parts[i] in cursor)) {
-                return undefined;
-            }
-            cursor = cursor[parts[i]];
-        }
-        return cursor;
+    function numberOrZero(value) {
+        var n = Number(value);
+        return Number.isFinite(n) ? n : 0;
     }
 
-    function initSchemaUI() {
-        var root = document.getElementById('af-kb-schema-ui');
-        var metaField = document.getElementById('af-kb-meta-json');
-        if (!root || !metaField) {
+    function ensureStats(stats) {
+        var source = stats && typeof stats === 'object' ? stats : {};
+        return {
+            str: numberOrZero(source.str),
+            dex: numberOrZero(source.dex),
+            con: numberOrZero(source.con),
+            int: numberOrZero(source.int),
+            wis: numberOrZero(source.wis),
+            cha: numberOrZero(source.cha)
+        };
+    }
+
+    function splitCsv(value) {
+        return String(value || '').split(',').map(function (item) { return item.trim(); }).filter(Boolean);
+    }
+
+    function initMetaUi() {
+        var root = document.getElementById('af-kb-meta-ui');
+        var raw = document.getElementById('af-kb-meta-json');
+        if (!root || !raw) {
             return;
         }
 
-        var schema = {};
-        var data = {};
-        var itemKinds = [];
-        try { schema = JSON.parse(root.getAttribute('data-type-schema') || '{}'); } catch (e) {}
-        try { data = JSON.parse(metaField.value || '{}'); } catch (e2) {}
-        try { itemKinds = JSON.parse(root.getAttribute('data-item-kinds') || '[]'); } catch (e3) {}
+        var meta = readJson(raw.value, {});
+        if (!meta.ui || typeof meta.ui !== 'object') {
+            meta.ui = {};
+        }
+        if (!Array.isArray(meta.tags)) {
+            meta.tags = [];
+        }
+        if (!meta.links || typeof meta.links !== 'object') {
+            meta.links = {};
+        }
 
-        if (!schema || !Array.isArray(schema.fields) || !schema.fields.length) {
-            root.innerHTML = '<div class="af-kb-help">UI-схема недоступна, используйте raw JSON.</div>';
+        root.innerHTML = [
+            '<div class="af-kb-row"><div><label>Tags (через запятую)</label><input type="text" id="af-kb-meta-tags" /></div><div><label>Wiki link</label><input type="url" id="af-kb-meta-wiki" /></div></div>',
+            '<div class="af-kb-row"><div><label>Icon URL</label><input type="url" id="af-kb-meta-icon-url" /></div><div><label>Icon class</label><input type="text" id="af-kb-meta-icon-class" /></div></div>',
+            '<div class="af-kb-row"><div><label>Background URL</label><input type="url" id="af-kb-meta-bg-url" /></div><div><label>Background tab URL</label><input type="url" id="af-kb-meta-bg-tab-url" /></div></div>'
+        ].join('');
+
+        var fields = {
+            tags: root.querySelector('#af-kb-meta-tags'),
+            wiki: root.querySelector('#af-kb-meta-wiki'),
+            iconUrl: root.querySelector('#af-kb-meta-icon-url'),
+            iconClass: root.querySelector('#af-kb-meta-icon-class'),
+            bgUrl: root.querySelector('#af-kb-meta-bg-url'),
+            bgTabUrl: root.querySelector('#af-kb-meta-bg-tab-url')
+        };
+
+        fields.tags.value = (meta.tags || []).join(', ');
+        fields.wiki.value = meta.links.wiki || '';
+        fields.iconUrl.value = meta.ui.icon_url || '';
+        fields.iconClass.value = meta.ui.icon_class || '';
+        fields.bgUrl.value = meta.ui.background_url || '';
+        fields.bgTabUrl.value = meta.background_tab_url || meta.ui.background_tab_url || '';
+
+        function syncMeta() {
+            meta.tags = splitCsv(fields.tags.value);
+            meta.links.wiki = fields.wiki.value.trim();
+            meta.ui.icon_url = fields.iconUrl.value.trim();
+            meta.ui.icon_class = fields.iconClass.value.trim();
+            meta.ui.background_url = fields.bgUrl.value.trim();
+            meta.ui.background_tab_url = fields.bgTabUrl.value.trim();
+            meta.background_tab_url = fields.bgTabUrl.value.trim();
+            raw.value = JSON.stringify(meta, null, 2);
+        }
+
+        Object.keys(fields).forEach(function (key) {
+            fields[key].addEventListener('input', syncMeta);
+        });
+    }
+
+    function initDataUi() {
+        var root = document.getElementById('af-kb-data-ui');
+        var hidden = document.getElementById('af-kb-data-json');
+        var raw = document.getElementById('af-kb-data-json-raw');
+        if (!root || !hidden || !raw) {
             return;
         }
 
-        function render() {
-            root.innerHTML = '';
-            schema.fields.forEach(function (f) {
-                var wrap = document.createElement('div');
-                wrap.className = 'af-kb-row';
-                var label = document.createElement('label');
-                label.textContent = f.label_ru || f.label_en || f.path;
-                wrap.appendChild(label);
+        var type = (root.getAttribute('data-type') || '').trim();
+        var data = readJson(raw.value || root.getAttribute('data-data-json') || '{}', {});
+        data.schema = 'af_kb.rules.v1';
 
-                var val = getByPath(data, f.path);
-                if (val === undefined && f.default !== undefined) {
-                    val = f.default;
-                    setByPath(data, f.path, val);
-                }
+        if (type === 'race') {
+            root.innerHTML = [
+                '<div class="af-kb-row"><div><label>Size</label><select id="kb-size"><option>tiny</option><option>small</option><option>medium</option><option>large</option><option>huge</option></select></div><div><label>Creature type</label><input type="text" id="kb-creature" /></div></div>',
+                '<div class="af-kb-row"><div><label>Speed</label><input type="number" id="kb-speed" /></div><div><label>HP base</label><input type="number" id="kb-hp-base" /></div></div>',
+                '<div class="af-kb-row"><div><label>Languages (csv)</label><input type="text" id="kb-languages" /></div><div><label>Resistances (csv)</label><input type="text" id="kb-resistances" /></div></div>',
+                '<div class="af-kb-row"><div><label>Traits JSON</label><textarea id="kb-traits"></textarea></div><div><label>Choices JSON</label><textarea id="kb-choices"></textarea></div></div>',
+                '<div class="af-kb-row"><div><label>Grants JSON</label><textarea id="kb-grants"></textarea></div></div>',
+                '<div class="af-kb-row"><div><label>STR</label><input type="number" id="kb-str" /></div><div><label>DEX</label><input type="number" id="kb-dex" /></div><div><label>CON</label><input type="number" id="kb-con" /></div></div>',
+                '<div class="af-kb-row"><div><label>INT</label><input type="number" id="kb-int" /></div><div><label>WIS</label><input type="number" id="kb-wis" /></div><div><label>CHA</label><input type="number" id="kb-cha" /></div></div>',
+                '<div class="af-kb-row"><div><label>Fixed HP</label><input type="number" id="kb-fixed-hp" /></div><div><label>Fixed EP</label><input type="number" id="kb-fixed-ep" /></div></div>'
+            ].join('');
 
-                var input;
-                if (f.type === 'bool') {
-                    input = document.createElement('input'); input.type = 'checkbox'; input.checked = !!val;
-                    input.addEventListener('change', function () { setByPath(data, f.path, !!input.checked); sync(); });
-                } else if (f.type === 'number') {
-                    input = document.createElement('input'); input.type = 'number'; input.value = (val === undefined ? '' : val);
-                    input.addEventListener('input', function () { setByPath(data, f.path, input.value === '' ? null : Number(input.value)); sync(); });
-                } else if (f.type === 'select') {
-                    input = document.createElement('select');
-                    var options = Array.isArray(f.options) ? f.options : [];
-                    if (f.path === 'item_kind' && itemKinds.length) { options = itemKinds; }
-                    options.forEach(function (op) {
-                        var o = document.createElement('option');
-                        o.value = op.value; o.textContent = op.label_ru || op.label_en || op.value;
-                        if (String(val) === String(op.value)) o.selected = true;
-                        input.appendChild(o);
-                    });
-                    input.addEventListener('change', function () { setByPath(data, f.path, input.value); sync(); });
-                } else if (f.type === 'multiselect') {
-                    input = document.createElement('select'); input.multiple = true;
-                    (f.options || []).forEach(function (op) {
-                        var o = document.createElement('option'); o.value = op.value; o.textContent = op.label_ru || op.label_en || op.value;
-                        if (Array.isArray(val) && val.indexOf(op.value) !== -1) o.selected = true;
-                        input.appendChild(o);
-                    });
-                    input.addEventListener('change', function () {
-                        var v = Array.from(input.options).filter(function (o) { return o.selected; }).map(function (o) { return o.value; });
-                        setByPath(data, f.path, v); sync();
-                    });
-                } else if (f.type === 'array' || f.type === 'object' || f.type === 'i18n') {
-                    input = document.createElement('textarea');
-                    input.value = JSON.stringify(val !== undefined ? val : (f.default !== undefined ? f.default : (f.type === 'array' ? [] : {})), null, 2);
-                    input.addEventListener('input', function () {
-                        try { setByPath(data, f.path, JSON.parse(input.value || (f.type === 'array' ? '[]' : '{}'))); input.style.borderColor = ''; sync(); }
-                        catch (e) { input.style.borderColor = '#d00'; }
-                    });
-                } else {
-                    input = document.createElement('input'); input.type = 'text'; input.value = val == null ? '' : String(val);
-                    if (f.readonly) input.readOnly = true;
-                    input.addEventListener('input', function () { setByPath(data, f.path, input.value); sync(); });
-                }
+            var stats = ensureStats(((data.fixed_bonuses || {}).stats) || {});
+            var fields = {
+                size: root.querySelector('#kb-size'), creature: root.querySelector('#kb-creature'), speed: root.querySelector('#kb-speed'), hpBase: root.querySelector('#kb-hp-base'),
+                languages: root.querySelector('#kb-languages'), resistances: root.querySelector('#kb-resistances'), traits: root.querySelector('#kb-traits'), choices: root.querySelector('#kb-choices'), grants: root.querySelector('#kb-grants'),
+                str: root.querySelector('#kb-str'), dex: root.querySelector('#kb-dex'), con: root.querySelector('#kb-con'), int: root.querySelector('#kb-int'), wis: root.querySelector('#kb-wis'), cha: root.querySelector('#kb-cha'),
+                hp: root.querySelector('#kb-fixed-hp'), ep: root.querySelector('#kb-fixed-ep')
+            };
 
-                if (f.required) { label.innerHTML += ' <span style="color:#d00">*</span>'; }
-                wrap.appendChild(input);
-                if (f.hint_ru) { var hint = document.createElement('div'); hint.className = 'af-kb-help'; hint.textContent = f.hint_ru; wrap.appendChild(hint); }
-                root.appendChild(wrap);
+            fields.size.value = data.size || 'medium';
+            fields.creature.value = data.creature_type || 'humanoid';
+            fields.speed.value = numberOrZero(data.speed || 30);
+            fields.hpBase.value = numberOrZero(data.hp_base || 10);
+            fields.languages.value = (data.languages || []).join(', ');
+            fields.resistances.value = (data.resistances || []).join(', ');
+            fields.traits.value = JSON.stringify(Array.isArray(data.traits) ? data.traits : [], null, 2);
+            fields.choices.value = JSON.stringify(Array.isArray(data.choices) ? data.choices : [], null, 2);
+            fields.grants.value = JSON.stringify(Array.isArray(data.grants) ? data.grants : [], null, 2);
+            ['str','dex','con','int','wis','cha'].forEach(function (k) { fields[k].value = stats[k]; });
+            fields.hp.value = numberOrZero((data.fixed_bonuses || {}).hp || 0);
+            fields.ep.value = numberOrZero((data.fixed_bonuses || {}).ep || 0);
+
+            function syncRace() {
+                var next = {
+                    schema: 'af_kb.rules.v1',
+                    size: fields.size.value || 'medium',
+                    creature_type: fields.creature.value.trim() || 'humanoid',
+                    speed: numberOrZero(fields.speed.value),
+                    hp_base: numberOrZero(fields.hpBase.value),
+                    languages: splitCsv(fields.languages.value),
+                    resistances: splitCsv(fields.resistances.value),
+                    choices: readJson(fields.choices.value, []),
+                    traits: readJson(fields.traits.value, []),
+                    grants: readJson(fields.grants.value, []),
+                    fixed_bonuses: {
+                        stats: ensureStats({ str: fields.str.value, dex: fields.dex.value, con: fields.con.value, int: fields.int.value, wis: fields.wis.value, cha: fields.cha.value }),
+                        hp: numberOrZero(fields.hp.value),
+                        ep: numberOrZero(fields.ep.value)
+                    },
+                    visibility: 'technical',
+                    is_technical: true
+                };
+                raw.value = JSON.stringify(next, null, 2);
+                hidden.value = JSON.stringify(next);
+            }
+
+            Object.keys(fields).forEach(function (key) {
+                fields[key].addEventListener('input', syncRace);
+                fields[key].addEventListener('change', syncRace);
             });
-            sync();
+            syncRace();
+            return;
         }
 
-        function sync() {
-            if (!data.schema) data.schema = 'af_kb.rules.v1';
-            metaField.value = JSON.stringify(data, null, 2);
+        root.innerHTML = '<div class="af-kb-help">Для этого типа используйте Raw Data JSON (advanced).</div>';
+        function syncRaw() {
+            var parsed = readJson(raw.value, {});
+            parsed.schema = 'af_kb.rules.v1';
+            hidden.value = JSON.stringify(parsed);
+            raw.value = JSON.stringify(parsed, null, 2);
         }
-
-        data = Object.assign({}, schema.root_defaults || {}, data || {});
-        render();
+        raw.addEventListener('input', syncRaw);
+        syncRaw();
     }
 
-    document.addEventListener('DOMContentLoaded', initSchemaUI);
+    document.addEventListener('DOMContentLoaded', function () {
+        initMetaUi();
+        initDataUi();
+    });
 })();

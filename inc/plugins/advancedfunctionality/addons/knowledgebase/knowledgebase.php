@@ -1404,6 +1404,72 @@ function af_kb_is_empty_json(string $raw): bool
     return in_array($raw, ['{}', '[]'], true);
 }
 
+function af_kb_is_technical_block(array $block): bool
+{
+    $blockKey = strtolower(trim((string)($block['block_key'] ?? '')));
+    if ($blockKey === 'data' || $blockKey === 'rules' || $blockKey === 'tech' || $blockKey === 'tech_hint' || $blockKey === 'meta_json' || strpos($blockKey, 'meta') === 0) {
+        return true;
+    }
+
+    $dataJson = trim((string)($block['data_json'] ?? ''));
+    if ($dataJson === '') {
+        return false;
+    }
+    $decoded = json_decode($dataJson, true);
+    if (!is_array($decoded)) {
+        return false;
+    }
+
+    return !empty($decoded['is_technical']) || (($decoded['visibility'] ?? '') === 'technical');
+}
+
+function af_kb_normalize_rules_json(string $raw): string
+{
+    $decoded = af_kb_decode_json($raw);
+    if (!$decoded) {
+        return '{}';
+    }
+
+    $decoded['schema'] = AF_KB_RULES_SCHEMA;
+    if (!isset($decoded['fixed_bonuses']) || !is_array($decoded['fixed_bonuses'])) {
+        $decoded['fixed_bonuses'] = [];
+    }
+    if (!isset($decoded['fixed_bonuses']['stats']) || !is_array($decoded['fixed_bonuses']['stats'])) {
+        $decoded['fixed_bonuses']['stats'] = [];
+    }
+    foreach (['str', 'dex', 'con', 'int', 'wis', 'cha'] as $stat) {
+        $decoded['fixed_bonuses']['stats'][$stat] = (int)($decoded['fixed_bonuses']['stats'][$stat] ?? 0);
+    }
+    $decoded['fixed_bonuses']['hp'] = (int)($decoded['fixed_bonuses']['hp'] ?? 0);
+    $decoded['fixed_bonuses']['ep'] = (int)($decoded['fixed_bonuses']['ep'] ?? 0);
+
+    foreach (['languages', 'resistances', 'choices', 'traits', 'grants'] as $arrayKey) {
+        if (!isset($decoded[$arrayKey]) || !is_array($decoded[$arrayKey])) {
+            $decoded[$arrayKey] = [];
+        }
+    }
+
+    return (string)json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+function af_kb_get_entry_data_json(int $entryId): string
+{
+    global $db;
+
+    if ($entryId <= 0) {
+        return '{}';
+    }
+
+    $q = $db->simple_select('af_kb_blocks', '*', 'entry_id=' . $entryId, ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
+    while ($row = $db->fetch_array($q)) {
+        if (strtolower(trim((string)($row['block_key'] ?? ''))) === 'data') {
+            return af_kb_normalize_rules_json((string)($row['data_json'] ?? '{}'));
+        }
+    }
+
+    return '{}';
+}
+
 function af_kb_render_data_table(string $json): string
 {
     $decoded = json_decode($json, true);
@@ -1680,17 +1746,6 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                 // KB base css/js
                 $cssTag .= '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase.css?ver='.AF_KB_VER.'" />';
                 $jsTag  .= '<script src="'.$assetsBase.'/knowledgebase.js?ver='.AF_KB_VER.'"></script>';
-
-                // Если тебе реально нужно подцеплять кастомный файл темы — ОК.
-                // Но жесткий theme2 может быть не твоим активным ID. Оставляю как есть, но учти.
-                $themeDirRel = '/cache/themes/theme2';
-                $themeDirAbs = rtrim(MYBB_ROOT, '/\\') . str_replace('/', DIRECTORY_SEPARATOR, $themeDirRel);
-
-                $themestyleAbs = $themeDirAbs . DIRECTORY_SEPARATOR . 'themestyle.css';
-                $castomAbs     = $themeDirAbs . DIRECTORY_SEPARATOR . 'castom.css';
-
-                $cssTag .= '<link rel="stylesheet" type="text/css" href="'.$bburl.$themeDirRel.'/themestyle.css?v='.$verFor($themestyleAbs, AF_KB_VER).'" />';
-                $cssTag .= '<link rel="stylesheet" type="text/css" href="'.$bburl.$themeDirRel.'/castom.css?v='.$verFor($castomAbs, AF_KB_VER).'" />';
 
                 // ✅ ВАЖНО: фон для body — инжектим в конец <head>, с !important
                 // и только для action=kb (витрина категории/записи)
@@ -2532,17 +2587,14 @@ function af_kb_handle_view(): void
 
     $kb_blocks = '';
     foreach ($blocks as $block) {
+        if (af_kb_is_technical_block($block)) {
+            continue;
+        }
         $blockIconHtml = af_kb_build_icon_html($block['icon_url'] ?? '', $block['icon_class'] ?? '');
         $block_icon = $blockIconHtml !== '' ? '<span class="af-kb-icon">' . $blockIconHtml . '</span>' : '';
         $block_title = htmlspecialchars_uni(af_kb_pick_text($block, 'title'));
         $block_content = af_kb_parse_message(af_kb_pick_text($block, 'content'));
         $block_data_table = '';
-        if (af_kb_can_edit() && !empty($block['data_json'])) {
-            $block_data_table = af_kb_render_tech_details(
-                $lang->af_kb_technical_data ?? 'Technical data',
-                $block['data_json']
-            );
-        }
         eval("\$kb_blocks .= \"" . af_kb_get_template('knowledgebase_blocks_item') . "\";");
     }
 
@@ -2626,11 +2678,17 @@ function af_kb_handle_view(): void
         : '';
     $kb_meta_details = '';
     if (af_kb_can_edit()) {
-        $kb_meta_details = af_kb_render_tech_details(
-            $lang->af_kb_technical_data ?? 'Technical data',
+        $metaDetails = af_kb_render_tech_details(
+            'Meta JSON',
             (string)($entry['meta_json'] ?? ''),
             $lang->af_kb_copy_json ?? 'Copy JSON'
         );
+        $dataDetails = af_kb_render_tech_details(
+            'Data JSON',
+            af_kb_get_entry_data_json((int)$entry['id']),
+            $lang->af_kb_copy_json ?? 'Copy JSON'
+        );
+        $kb_meta_details = $metaDetails . $dataDetails;
     }
     $kb_tech_details = af_kb_render_tech_note_details(
         $lang->af_kb_tech_label ?? 'Technical note',
@@ -2731,8 +2789,17 @@ function af_kb_handle_edit(): void
 
         $metaPayload = af_kb_decode_json($metaJson);
         if (empty($metaPayload['schema'])) {
-            $metaPayload['schema'] = AF_KB_RULES_SCHEMA;
+            $metaPayload['schema'] = 'af_kb.meta.v1';
         }
+
+        $entryDataJsonRaw = trim((string)$mybb->get_input('entry_data_json'));
+        if ($entryDataJsonRaw === '') {
+            $entryDataJsonRaw = '{}';
+        }
+        if (!af_kb_validate_json($entryDataJsonRaw)) {
+            $errors[] = $lang->af_kb_invalid_json ?? 'Invalid JSON.';
+        }
+        $entryDataJsonNormalized = af_kb_normalize_rules_json($entryDataJsonRaw);
 
         $itemKind = trim((string)($metaPayload['item_kind'] ?? $mybb->get_input('item_kind')));
         if ($type === 'item') {
@@ -2775,6 +2842,9 @@ function af_kb_handle_edit(): void
                     continue;
                 }
                 $blockKey = trim((string)($block['block_key'] ?? ''));
+                if (strtolower($blockKey) === 'data') {
+                    continue;
+                }
                 $titleRu = trim((string)($block['title_ru'] ?? ''));
                 $titleEn = trim((string)($block['title_en'] ?? ''));
                 $contentRu = trim((string)($block['content_ru'] ?? ''));
@@ -2849,6 +2919,18 @@ function af_kb_handle_edit(): void
                     'meta_json' => af_kb_normalize_json($meta),
                     'sortorder' => $sortorder,
                 ];
+            }
+        }
+
+        if (!$errors && in_array($type, ['race', 'class'], true)) {
+            $rulesData = af_kb_decode_json($entryDataJsonNormalized);
+            if ((string)($rulesData['schema'] ?? '') !== AF_KB_RULES_SCHEMA) {
+                $errors[] = 'Data JSON schema mismatch.';
+            }
+            foreach (['fixed_bonuses', 'choices', 'traits'] as $requiredKey) {
+                if (!array_key_exists($requiredKey, $rulesData)) {
+                    $errors[] = 'Required data field missing: ' . $requiredKey;
+                }
             }
         }
 
@@ -2928,6 +3010,20 @@ function af_kb_handle_edit(): void
                 ]);
             }
 
+            $db->insert_query('af_kb_blocks', [
+                'entry_id'   => $entryId,
+                'block_key'  => 'data',
+                'title_ru'   => '',
+                'title_en'   => '',
+                'content_ru' => '',
+                'content_en' => '',
+                'data_json'  => $db->escape_string($entryDataJsonNormalized),
+                'icon_class' => '',
+                'icon_url'   => '',
+                'active'     => 1,
+                'sortorder'  => 9999,
+            ]);
+
             $db->delete_query('af_kb_relations', "from_type='".$db->escape_string($type)."' AND from_key='".$db->escape_string($key)."'");
             foreach ($parsedRelations as $rel) {
                 $db->insert_query('af_kb_relations', [
@@ -2980,6 +3076,9 @@ function af_kb_handle_edit(): void
     if (!empty($entry['id'])) {
         $bq = $db->simple_select('af_kb_blocks', '*', 'entry_id='.(int)$entry['id'], ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
         while ($row = $db->fetch_array($bq)) {
+            if (strtolower(trim((string)($row['block_key'] ?? ''))) === 'data') {
+                continue;
+            }
             $blocks[] = $row;
         }
     }
@@ -3071,6 +3170,9 @@ function af_kb_handle_edit(): void
     $kb_tech_ru = htmlspecialchars_uni($entry['tech_ru'] ?? '');
     $kb_tech_en = htmlspecialchars_uni($entry['tech_en'] ?? '');
     $kb_meta_json = htmlspecialchars_uni($entry['meta_json'] ?: '{}');
+    $entryDataJson = af_kb_get_entry_data_json((int)($entry['id'] ?? 0));
+    $kb_data_json = htmlspecialchars_uni($entryDataJson);
+    $kb_data_json_hidden = htmlspecialchars_uni($entryDataJson);
 
     $kb_type_schema = htmlspecialchars_uni(json_encode(af_kb_get_type_schema($entry['type']), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     $kb_item_kind_value = htmlspecialchars_uni((string)($entry['item_kind'] ?? ''));
@@ -3406,19 +3508,8 @@ function af_kb_handle_json_get(): void
         if (!$row['active'] && !af_kb_can_edit()) {
             continue;
         }
-        $blockKey = strtolower((string)($row['block_key'] ?? ''));
-        if ($blockKey === 'tech' || $blockKey === 'tech_hint' || $blockKey === 'meta_json' || strpos($blockKey, 'meta') === 0) {
+        if (af_kb_is_technical_block($row)) {
             continue;
-        }
-
-        $dataJson = trim((string)($row['data_json'] ?? ''));
-        if ($dataJson !== '') {
-            $decoded = json_decode($dataJson, true);
-            if (is_array($decoded)) {
-                if (!empty($decoded['is_technical']) || ($decoded['visibility'] ?? '') === 'technical') {
-                    continue;
-                }
-            }
         }
 
         $blockTitle = af_kb_pick_text($row, 'title');
