@@ -56,40 +56,19 @@
         </div>
         <div class="af-kb-row">
             <div>
-                <label>Правила/Параметры (Schema UI)</label>
-                <div id="af-kb-schema-ui" data-type-schema="{$kb_type_schema}" data-item-kinds="{$kb_item_kinds_json}" data-item-kind="{$kb_item_kind_value}"></div>
-                <label>Meta JSON</label>
-                <textarea name="meta_json" id="af-kb-meta-json">{$kb_meta_json}</textarea>
-                <div class="af-kb-help">Meta JSON — структурные данные для механик (статы, теги, ссылки, ограничения). Это не обязательное поле.</div>
-                <div class="af-kb-code">
-<pre>{
-  "tags": ["humanoid", "common"],
-  "stats": { "str": 0, "dex": 0, "int": 0 },
-  "bonuses": [
-    { "type": "resistance", "value": "poison" }
-  ],
-  "links": {
-    "wiki": "https://example.com/wiki/human"
-  }
-}</pre>
-                </div>
-                <div class="af-kb-code">
-<pre>{
-  "skill": {
-    "category": "combat",
-    "rank_max": 5,
-    "cooldown": 2,
-    "cost": { "mana": 10 },
-    "effects": [
-      { "type": "damage", "value": "2d6", "damage_type": "fire" }
-    ],
-    "requirements": {
-      "level": 3,
-      "tags_any": ["pyromancer"]
-    }
-  }
-}</pre>
-                </div>
+                <label>Meta JSON (структурно)</label>
+                <div id="af-kb-meta-ui"></div>
+                <details>
+                    <summary>Raw Meta JSON (advanced)</summary>
+                    <textarea name="meta_json" id="af-kb-meta-json">{$kb_meta_json}</textarea>
+                </details>
+                <label>Data JSON (rules/mechanics)</label>
+                <div id="af-kb-data-ui" data-type="{$kb_type_value}" data-type-schema="{$kb_type_schema}" data-item-kinds="{$kb_item_kinds_json}" data-item-kind="{$kb_item_kind_value}" data-data-json="{$kb_data_json}"></div>
+                <details>
+                    <summary>Raw Data JSON (advanced)</summary>
+                    <textarea id="af-kb-data-json-raw">{$kb_data_json}</textarea>
+                </details>
+                <input type="hidden" name="entry_data_json" id="af-kb-data-json" value="{$kb_data_json_hidden}" />
             </div>
             <div>
                 <label>Порядок</label>
