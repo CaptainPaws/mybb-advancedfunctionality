@@ -945,6 +945,23 @@ function af_kb_pick_text(array $row, string $field): string
     return $value;
 }
 
+function kb_entry_localize(array $row): array
+{
+    return [
+        'title' => af_kb_pick_text($row, 'title'),
+        'short' => af_kb_pick_text($row, 'short'),
+        'body'  => af_kb_pick_text($row, 'body'),
+    ];
+}
+
+function af_kb_render_fullpage(string $content, string $templateName = 'knowledgebase_page'): void
+{
+    $af_kb_content = $content;
+    eval("\$page = \"" . af_kb_get_template($templateName) . "\";");
+    output_page($page);
+    exit;
+}
+
 function af_kb_sanitize_url(string $url): string
 {
     $url = trim($url);
@@ -2558,16 +2575,17 @@ function af_kb_handle_view(): void
 
     $typeTitle = af_kb_pick_text($typeRow, 'title') ?: $type;
 
-    $title = af_kb_pick_text($entry, 'title');
+    $entryLocalized = kb_entry_localize($entry);
+    $title = $entryLocalized['title'];
     if ($title === '') {
         $title = $entry['key'];
     }
 
-    $short = af_kb_parse_message(af_kb_pick_text($entry, 'short'));
+    $short = af_kb_parse_message($entryLocalized['short']);
     $isRu = af_kb_is_ru();
     $body = af_kb_render_entry_ui($entry, $typeRow, $isRu);
     if ($body === '') {
-        $body = af_kb_parse_message(af_kb_pick_text($entry, 'body'));
+        $body = af_kb_parse_message($entryLocalized['body']);
     }
 
     if (function_exists('add_breadcrumb')) {
@@ -2595,6 +2613,30 @@ function af_kb_handle_view(): void
         $block_title = htmlspecialchars_uni(af_kb_pick_text($block, 'title'));
         $block_content = af_kb_parse_message(af_kb_pick_text($block, 'content'));
         $block_data_table = '';
+        $blockData = af_kb_decode_json((string)($block['data_json'] ?? '{}'));
+        if ($type === 'theme' && (string)($block['block_key'] ?? '') === 'knowledges') {
+            $timeline = [];
+            $progression = isset($blockData['progression']) && is_array($blockData['progression']) ? $blockData['progression'] : [];
+            foreach ($progression as $step) {
+                if (!is_array($step)) { continue; }
+                $lvl = (int)($step['level'] ?? 0);
+                $stepTitle = (string)($step['title_ru'] ?? $step['title_en'] ?? '');
+                $timeline[] = '<li><strong>Lv ' . $lvl . '</strong> ' . htmlspecialchars_uni($stepTitle) . '</li>';
+            }
+            if ($timeline) {
+                $block_data_table = '<ul class="af-kb-timeline">' . implode('', $timeline) . '</ul>';
+            }
+        }
+        if ((string)($block['block_key'] ?? '') === 'bonus' && isset($blockData['effects']) && is_array($blockData['effects'])) {
+            $cards = [];
+            foreach ($blockData['effects'] as $effect) {
+                if (!is_array($effect)) { continue; }
+                $cards[] = '<li>' . htmlspecialchars_uni((string)($effect['op'] ?? 'effect')) . ': ' . htmlspecialchars_uni((string)($effect['value'] ?? '')) . '</li>';
+            }
+            if ($cards) {
+                $block_data_table .= '<ul class="af-kb-bonus-list">' . implode('', $cards) . '</ul>';
+            }
+        }
         eval("\$kb_blocks .= \"" . af_kb_get_template('knowledgebase_blocks_item') . "\";");
     }
 
@@ -2655,7 +2697,7 @@ function af_kb_handle_view(): void
     $kb_page_title = htmlspecialchars_uni($title);
     $kb_title = htmlspecialchars_uni($title);
     $kb_short = '';
-    $kb_body = $body;
+    $kb_entry_body = $body;
     $kb_banner = '';
     $bannerUrl = af_kb_sanitize_url((string)($entry['banner_url'] ?? ''));
     if ($bannerUrl !== '') {
@@ -2953,6 +2995,20 @@ function af_kb_handle_edit(): void
             if (!isset($metaPayload['ui']) || !is_array($metaPayload['ui'])) {
                 $metaPayload['ui'] = [];
             }
+            $metaPayload['blocks'] = [];
+            foreach ($parsedBlocks as $metaBlock) {
+                $blockData = af_kb_decode_json((string)($metaBlock['data_json'] ?? '{}'));
+                $metaPayload['blocks'][] = [
+                    'block_key' => (string)($metaBlock['block_key'] ?? ''),
+                    'level' => (int)($blockData['level'] ?? 0),
+                    'title' => [
+                        'ru' => (string)($metaBlock['title_ru'] ?? ''),
+                        'en' => (string)($metaBlock['title_en'] ?? ''),
+                    ],
+                    'effects' => isset($blockData['effects']) && is_array($blockData['effects']) ? $blockData['effects'] : [],
+                    'data' => $blockData,
+                ];
+            }
             $metaPayload['ui']['icon_class'] = $entryIconClass;
             $metaPayload['ui']['icon_url'] = $entryIconUrl;
             $metaPayload['ui']['background_url'] = $entryBgUrl;
@@ -3084,16 +3140,41 @@ function af_kb_handle_edit(): void
     }
 
     if (!$blocks) {
+        $metaBlocks = af_kb_decode_json((string)($entry['meta_json'] ?? '{}'));
+        if (isset($metaBlocks['blocks']) && is_array($metaBlocks['blocks'])) {
+            foreach ($metaBlocks['blocks'] as $metaBlock) {
+                if (!is_array($metaBlock)) {
+                    continue;
+                }
+                $blocks[] = [
+                    'block_key' => (string)($metaBlock['block_key'] ?? ''),
+                    'title_ru' => (string)($metaBlock['title']['ru'] ?? ''),
+                    'title_en' => (string)($metaBlock['title']['en'] ?? ''),
+                    'content_ru' => '',
+                    'content_en' => '',
+                    'data_json' => json_encode($metaBlock['data'] ?? $metaBlock, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'icon_class' => '',
+                    'icon_url' => '',
+                    'active' => 1,
+                    'sortorder' => 0,
+                ];
+            }
+        }
+    }
+
+    if (!$blocks) {
         $blocks[] = [
             'block_key' => '',
             'title_ru' => '',
             'title_en' => '',
             'content_ru' => '',
             'content_en' => '',
-        'data_json' => '',
-        'active' => 1,
-        'sortorder' => 0,
-    ];
+            'data_json' => '',
+            'icon_class' => '',
+            'icon_url' => '',
+            'active' => 1,
+            'sortorder' => 0,
+        ];
     }
 
     $blockIndex = 0;
@@ -3225,11 +3306,9 @@ function af_kb_handle_edit(): void
         add_breadcrumb($editLabel, 'misc.php?action=kb_edit&type=' . urlencode($entry['type']) . '&key=' . urlencode($entry['key']));
     }
 
-    $af_kb_content = '';
-    eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_edit') . "\";");
-    eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
-    output_page($page);
-    exit;
+    $kb_content = '';
+    eval("\$kb_content = \"" . af_kb_get_template('knowledgebase_edit') . "\";");
+    af_kb_render_fullpage($kb_content, 'af_kb_edit_fullpage');
 }
 
 function af_kb_handle_type_edit(): void
@@ -3525,8 +3604,9 @@ function af_kb_handle_json_get(): void
     }
 
     $entryUi = af_kb_get_entry_ui($entry);
-    $entryShort = af_kb_pick_text($entry, 'short');
-    $entryBody = af_kb_pick_text($entry, 'body');
+    $entryLocalized = kb_entry_localize($entry);
+    $entryShort = $entryLocalized['short'];
+    $entryBody = $entryLocalized['body'];
     $entryTech = af_kb_pick_text($entry, 'tech');
     $tooltipText = af_kb_strip_tech_icon_tag($entryTech);
     $shortRendered = af_kb_render_block($entryShort);
@@ -3536,7 +3616,7 @@ function af_kb_handle_json_get(): void
         'entry' => [
             'type'      => $entry['type'],
             'key'       => $entry['key'],
-            'title'     => af_kb_pick_text($entry, 'title'),
+            'title'     => $entryLocalized['title'],
             'short_html' => $shortRendered,
             'body_html' => $bodyRendered,
             'sections_html' => $sectionsHtml,

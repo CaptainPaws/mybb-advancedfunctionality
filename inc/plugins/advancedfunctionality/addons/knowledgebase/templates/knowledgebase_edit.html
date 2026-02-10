@@ -32,40 +32,49 @@
                 <input type="text" name="title_en" value="{$kb_title_en}" />
             </div>
         </div>
-        <label>Краткое описание (RU)</label>
-        <div class="af-kb-help">Публичное короткое описание для людей.</div>
-        <textarea class="af-kb-editor" name="short_ru">{$kb_short_ru}</textarea>
-        <label>Краткое описание (EN)</label>
-        <div class="af-kb-help">Публичное короткое описание для людей.</div>
-        <textarea class="af-kb-editor" name="short_en">{$kb_short_en}</textarea>
-        <label>Полное описание (RU)</label>
-        <textarea class="af-kb-editor" name="body_ru">{$kb_body_ru}</textarea>
-        <label>Полное описание (EN)</label>
-        <textarea class="af-kb-editor" name="body_en">{$kb_body_en}</textarea>
-        <label>Техническое описание (RU)</label>
-        <div class="af-kb-help">Тех. подсказка для редакторов, тултипов и поиска.</div>
-        <div class="af-kb-inline af-kb-inline--align">
-            <textarea class="af-kb-editor" name="tech_ru" data-kb-tech="tech_ru">{$kb_tech_ru}</textarea>
-            <button type="button" class="af-kb-add af-kb-tech-template" data-target="tech_ru" data-template="{$kb_tech_template}">{$kb_tech_template_label}</button>
-        </div>
-        <label>Техническое описание (EN)</label>
-        <div class="af-kb-help">Тех. подсказка для редакторов, тултипов и поиска.</div>
-        <div class="af-kb-inline af-kb-inline--align">
-            <textarea class="af-kb-editor" name="tech_en" data-kb-tech="tech_en">{$kb_tech_en}</textarea>
-            <button type="button" class="af-kb-add af-kb-tech-template" data-target="tech_en" data-template="{$kb_tech_template}">{$kb_tech_template_label}</button>
-        </div>
+        <details open="open" class="af-kb-collapsible">
+            <summary>Краткое описание</summary>
+            <label>Краткое описание (RU)</label>
+            <div class="af-kb-help">Публичное короткое описание для людей.</div>
+            <textarea class="af-kb-editor" name="short_ru">{$kb_short_ru}</textarea>
+            <label>Краткое описание (EN)</label>
+            <div class="af-kb-help">Публичное короткое описание для людей.</div>
+            <textarea class="af-kb-editor" name="short_en">{$kb_short_en}</textarea>
+        </details>
+        <details class="af-kb-collapsible">
+            <summary>Полное описание</summary>
+            <label>Полное описание (RU)</label>
+            <textarea class="af-kb-editor" name="body_ru">{$kb_body_ru}</textarea>
+            <label>Полное описание (EN)</label>
+            <textarea class="af-kb-editor" name="body_en">{$kb_body_en}</textarea>
+        </details>
+        <details class="af-kb-collapsible">
+            <summary>Техническое описание</summary>
+            <label>Техническое описание (RU)</label>
+            <div class="af-kb-help">Тех. подсказка для редакторов, тултипов и поиска.</div>
+            <div class="af-kb-inline af-kb-inline--align">
+                <textarea class="af-kb-editor" name="tech_ru" data-kb-tech="tech_ru">{$kb_tech_ru}</textarea>
+                <button type="button" class="af-kb-add af-kb-tech-template" data-target="tech_ru" data-template="{$kb_tech_template}">{$kb_tech_template_label}</button>
+            </div>
+            <label>Техническое описание (EN)</label>
+            <div class="af-kb-help">Тех. подсказка для редакторов, тултипов и поиска.</div>
+            <div class="af-kb-inline af-kb-inline--align">
+                <textarea class="af-kb-editor" name="tech_en" data-kb-tech="tech_en">{$kb_tech_en}</textarea>
+                <button type="button" class="af-kb-add af-kb-tech-template" data-target="tech_en" data-template="{$kb_tech_template}">{$kb_tech_template_label}</button>
+            </div>
+        </details>
         <div class="af-kb-row">
             <div>
                 <label>Meta JSON (структурно)</label>
                 <div id="af-kb-meta-ui"></div>
-                <details>
-                    <summary>Raw Meta JSON (advanced)</summary>
-                    <textarea name="meta_json" id="af-kb-meta-json">{$kb_meta_json}</textarea>
+                <details class="af-kb-collapsible">
+                    <summary>Расширенные → Исходные JSON</summary>
+                    <label>meta_json (raw)</label><textarea name="meta_json" id="af-kb-meta-json">{$kb_meta_json}</textarea>
                 </details>
                 <label>Data JSON (rules/mechanics)</label>
                 <div id="af-kb-data-ui" data-type="{$kb_type_value}" data-type-schema="{$kb_type_schema}" data-item-kinds="{$kb_item_kinds_json}" data-item-kind="{$kb_item_kind_value}" data-data-json="{$kb_data_json}"></div>
                 <details>
-                    <summary>Raw Data JSON (advanced)</summary>
+                    <summary>rules_json (raw)</summary>
                     <textarea id="af-kb-data-json-raw">{$kb_data_json}</textarea>
                 </details>
                 <input type="hidden" name="entry_data_json" id="af-kb-data-json" value="{$kb_data_json_hidden}" />
@@ -116,7 +125,7 @@
         </div>
     </section>
     <section>
-        <h3>Блоки</h3>
+        <h3>Дополнительные блоки (Blocks)</h3>
         <div class="af-kb-help">
             <p>Блоки — это дополнительные секции внутри записи. Они помогают структурировать контент: «Бонусы», «Лор», «Способности», «Ограничения», «Примеры», «Синергии».</p>
             <p>Блоки можно сортировать, включать/выключать и добавлять сколько нужно.</p>

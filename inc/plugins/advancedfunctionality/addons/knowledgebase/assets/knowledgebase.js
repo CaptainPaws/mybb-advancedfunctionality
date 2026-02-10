@@ -465,28 +465,75 @@
         }
 
         var type = (root.getAttribute('data-type') || '').trim();
-        var data = readJson(raw.value || root.getAttribute('data-data-json') || '{}', {});
+        var rawPayload = raw.value || root.getAttribute('data-data-json') || '{}';
+        var data = readJson(rawPayload, {});
         data.schema = 'af_kb.rules.v1';
+        try { JSON.parse(rawPayload || '{}'); } catch (err) { root.insertAdjacentHTML('afterbegin', '<div class="af-kb-help">⚠ JSON parse warning: используются значения по умолчанию, страницу это не ломает.</div>'); }
+        if (!Array.isArray(data.choices)) {
+            data.choices = [];
+        }
+
+        function syncRaw(next) {
+            raw.value = JSON.stringify(next, null, 2);
+            hidden.value = JSON.stringify(next);
+        }
 
         if (type === 'race') {
             root.innerHTML = [
                 '<div class="af-kb-row"><div><label>Size</label><select id="kb-size"><option>tiny</option><option>small</option><option>medium</option><option>large</option><option>huge</option></select></div><div><label>Creature type</label><input type="text" id="kb-creature" /></div></div>',
                 '<div class="af-kb-row"><div><label>Speed</label><input type="number" id="kb-speed" /></div><div><label>HP base</label><input type="number" id="kb-hp-base" /></div></div>',
                 '<div class="af-kb-row"><div><label>Languages (csv)</label><input type="text" id="kb-languages" /></div><div><label>Resistances (csv)</label><input type="text" id="kb-resistances" /></div></div>',
-                '<div class="af-kb-row"><div><label>Traits JSON</label><textarea id="kb-traits"></textarea></div><div><label>Choices JSON</label><textarea id="kb-choices"></textarea></div></div>',
-                '<div class="af-kb-row"><div><label>Grants JSON</label><textarea id="kb-grants"></textarea></div></div>',
-                '<div class="af-kb-row"><div><label>STR</label><input type="number" id="kb-str" /></div><div><label>DEX</label><input type="number" id="kb-dex" /></div><div><label>CON</label><input type="number" id="kb-con" /></div></div>',
-                '<div class="af-kb-row"><div><label>INT</label><input type="number" id="kb-int" /></div><div><label>WIS</label><input type="number" id="kb-wis" /></div><div><label>CHA</label><input type="number" id="kb-cha" /></div></div>',
-                '<div class="af-kb-row"><div><label>Fixed HP</label><input type="number" id="kb-fixed-hp" /></div><div><label>Fixed EP</label><input type="number" id="kb-fixed-ep" /></div></div>'
+                '<details open="open" class="af-kb-collapsible"><summary>Bonuses</summary><table class="af-kb-bonuses-table"><tr><th>Stat</th><th>Value</th></tr><tr><td>STR</td><td><input type="number" id="kb-str" /></td></tr><tr><td>DEX</td><td><input type="number" id="kb-dex" /></td></tr><tr><td>CON</td><td><input type="number" id="kb-con" /></td></tr><tr><td>INT</td><td><input type="number" id="kb-int" /></td></tr><tr><td>WIS</td><td><input type="number" id="kb-wis" /></td></tr><tr><td>CHA</td><td><input type="number" id="kb-cha" /></td></tr><tr><td>HP</td><td><input type="number" id="kb-fixed-hp" /></td></tr><tr><td>EP</td><td><input type="number" id="kb-fixed-ep" /></td></tr></table></details>',
+                '<details open="open" class="af-kb-collapsible"><summary>Choices</summary><div class="af-kb-inline"><button type="button" class="af-kb-add" id="kb-choice-add-stat">Добавить stat_bonus</button><button type="button" class="af-kb-add" id="kb-choice-add-kb">Добавить kb_pick</button><button type="button" class="af-kb-add" id="kb-choice-add-language">Добавить language_pick</button></div><div id="kb-choices-ui"></div></details>',
+                '<div class="af-kb-row"><div><label>Traits JSON</label><textarea id="kb-traits"></textarea></div><div><label>Grants JSON</label><textarea id="kb-grants"></textarea></div></div>',
+                '<details class="af-kb-collapsible"><summary>Исходные данные</summary><textarea id="kb-choices" readonly="readonly"></textarea></details>'
             ].join('');
 
             var stats = ensureStats(((data.fixed_bonuses || {}).stats) || {});
             var fields = {
                 size: root.querySelector('#kb-size'), creature: root.querySelector('#kb-creature'), speed: root.querySelector('#kb-speed'), hpBase: root.querySelector('#kb-hp-base'),
-                languages: root.querySelector('#kb-languages'), resistances: root.querySelector('#kb-resistances'), traits: root.querySelector('#kb-traits'), choices: root.querySelector('#kb-choices'), grants: root.querySelector('#kb-grants'),
+                languages: root.querySelector('#kb-languages'), resistances: root.querySelector('#kb-resistances'), traits: root.querySelector('#kb-traits'), choicesRaw: root.querySelector('#kb-choices'), grants: root.querySelector('#kb-grants'),
                 str: root.querySelector('#kb-str'), dex: root.querySelector('#kb-dex'), con: root.querySelector('#kb-con'), int: root.querySelector('#kb-int'), wis: root.querySelector('#kb-wis'), cha: root.querySelector('#kb-cha'),
-                hp: root.querySelector('#kb-fixed-hp'), ep: root.querySelector('#kb-fixed-ep')
+                hp: root.querySelector('#kb-fixed-hp'), ep: root.querySelector('#kb-fixed-ep'), choicesUi: root.querySelector('#kb-choices-ui')
             };
+
+            var typeOptions = ['skill','knowledge','class','item','race','theme','perk','condition','spell','language'].map(function (opt) { return '<option value="'+opt+'">'+opt+'</option>'; }).join('');
+            var choices = Array.isArray(data.choices) ? data.choices : [];
+            function choiceTemplate(kind) {
+                if (kind === 'kb') return {id:'new_kb_pick', type:'kb_pick', pick:1, kb_type:'skill'};
+                if (kind === 'language') return {id:'new_language_pick', type:'language_pick', pick:1, options:[], exclude:['common']};
+                return {id:'new_choice', type:'stat_bonus', pick:1, options:['str','dex','con','int','wis','cha'], value:1};
+            }
+            function renderChoices() {
+                fields.choicesUi.innerHTML = '';
+                choices.forEach(function (choice, index) {
+                    var row = document.createElement('div');
+                    row.className = 'af-kb-block-item';
+                    row.innerHTML = '<div class="af-kb-row">'
+                        + '<div><label>id</label><input type="text" data-field="id" value="'+(choice.id||'')+'" /></div>'
+                        + '<div><label>type</label><select data-field="type"><option value="stat_bonus">stat_bonus</option><option value="kb_pick">kb_pick</option><option value="language_pick">language_pick</option></select></div>'
+                        + '<div><label>pick</label><input type="number" data-field="pick" value="'+(choice.pick||1)+'" /></div></div>'
+                        + '<div class="af-kb-row"><div><label>options (line by line)</label><textarea data-field="options">'+((choice.options||[]).join('\n'))+'</textarea></div>'
+                        + '<div><label>exclude (line by line)</label><textarea data-field="exclude">'+((choice.exclude||[]).join('\n'))+'</textarea></div></div>'
+                        + '<div class="af-kb-row"><div><label>value</label><input type="number" data-field="value" value="'+(choice.value||0)+'" /></div>'
+                        + '<div><label>kb_type</label><select data-field="kb_type">'+typeOptions+'</select></div></div>'
+                        + '<button type="button" class="af-kb-remove">Удалить выбор</button>';
+                    fields.choicesUi.appendChild(row);
+                    row.querySelector('[data-field="type"]').value = choice.type || 'stat_bonus';
+                    row.querySelector('[data-field="kb_type"]').value = choice.kb_type || 'skill';
+                    row.addEventListener('input', function () {
+                        choice.id = row.querySelector('[data-field="id"]').value.trim();
+                        choice.type = row.querySelector('[data-field="type"]').value;
+                        choice.pick = numberOrZero(row.querySelector('[data-field="pick"]').value) || 1;
+                        choice.options = row.querySelector('[data-field="options"]').value.split(/\n+/).map(function (v) { return v.trim(); }).filter(Boolean);
+                        choice.exclude = row.querySelector('[data-field="exclude"]').value.split(/\n+/).map(function (v) { return v.trim(); }).filter(Boolean);
+                        choice.value = numberOrZero(row.querySelector('[data-field="value"]').value);
+                        choice.kb_type = row.querySelector('[data-field="kb_type"]').value;
+                        syncRace();
+                    });
+                    row.querySelector('.af-kb-remove').addEventListener('click', function () { choices.splice(index,1); renderChoices(); syncRace(); });
+                });
+            }
 
             fields.size.value = data.size || 'medium';
             fields.creature.value = data.creature_type || 'humanoid';
@@ -495,7 +542,6 @@
             fields.languages.value = (data.languages || []).join(', ');
             fields.resistances.value = (data.resistances || []).join(', ');
             fields.traits.value = JSON.stringify(Array.isArray(data.traits) ? data.traits : [], null, 2);
-            fields.choices.value = JSON.stringify(Array.isArray(data.choices) ? data.choices : [], null, 2);
             fields.grants.value = JSON.stringify(Array.isArray(data.grants) ? data.grants : [], null, 2);
             ['str','dex','con','int','wis','cha'].forEach(function (k) { fields[k].value = stats[k]; });
             fields.hp.value = numberOrZero((data.fixed_bonuses || {}).hp || 0);
@@ -510,7 +556,7 @@
                     hp_base: numberOrZero(fields.hpBase.value),
                     languages: splitCsv(fields.languages.value),
                     resistances: splitCsv(fields.resistances.value),
-                    choices: readJson(fields.choices.value, []),
+                    choices: choices,
                     traits: readJson(fields.traits.value, []),
                     grants: readJson(fields.grants.value, []),
                     fixed_bonuses: {
@@ -521,27 +567,31 @@
                     visibility: 'technical',
                     is_technical: true
                 };
-                raw.value = JSON.stringify(next, null, 2);
-                hidden.value = JSON.stringify(next);
+                fields.choicesRaw.value = JSON.stringify(choices, null, 2);
+                syncRaw(next);
             }
 
             Object.keys(fields).forEach(function (key) {
+                if (key === 'choicesUi' || key === 'choicesRaw') return;
                 fields[key].addEventListener('input', syncRace);
                 fields[key].addEventListener('change', syncRace);
             });
+            root.querySelector('#kb-choice-add-stat').addEventListener('click', function () { choices.push(choiceTemplate('stat')); renderChoices(); syncRace(); });
+            root.querySelector('#kb-choice-add-kb').addEventListener('click', function () { choices.push(choiceTemplate('kb')); renderChoices(); syncRace(); });
+            root.querySelector('#kb-choice-add-language').addEventListener('click', function () { choices.push(choiceTemplate('language')); renderChoices(); syncRace(); });
+            renderChoices();
             syncRace();
             return;
         }
 
         root.innerHTML = '<div class="af-kb-help">Для этого типа используйте Raw Data JSON (advanced).</div>';
-        function syncRaw() {
+        function syncRawOnly() {
             var parsed = readJson(raw.value, {});
             parsed.schema = 'af_kb.rules.v1';
-            hidden.value = JSON.stringify(parsed);
-            raw.value = JSON.stringify(parsed, null, 2);
+            syncRaw(parsed);
         }
-        raw.addEventListener('input', syncRaw);
-        syncRaw();
+        raw.addEventListener('input', syncRawOnly);
+        syncRawOnly();
     }
 
     document.addEventListener('DOMContentLoaded', function () {
