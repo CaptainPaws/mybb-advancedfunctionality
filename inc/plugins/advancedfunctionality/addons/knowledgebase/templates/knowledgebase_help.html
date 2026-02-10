@@ -37,6 +37,44 @@
         </ul>
     </section>
 
+    <section id="kb-traits-json">
+        <h3>Traits JSON (af_kb.traits.v1)</h3>
+        <p>Traits описывают постоянные свойства сущности и используются внешними модулями.</p>
+        <div class="af-kb-code">
+<pre>{
+  "schema": "af_kb.traits.v1",
+  "traits": [
+    {
+      "key": "humanoid",
+      "title_ru": "Гуманоид",
+      "title_en": "Humanoid",
+      "desc_ru": "Обычная биология, двуногая морфология.",
+      "desc_en": "Standard biology, bipedal morphology.",
+      "tags": ["type"],
+      "meta": {}
+    }
+  ]
+}</pre>
+        </div>
+        <p>Правила: <code>key</code> — только <code>[a-z0-9_]</code>, хотя бы один из <code>title_ru/title_en</code> обязателен.</p>
+    </section>
+
+    <section id="kb-grants-json">
+        <h3>Grants JSON (af_kb.grants.v1)</h3>
+        <p>Grants описывают выдачу бонусов/эффектов для калькуляторов и карточек персонажей.</p>
+        <div class="af-kb-code">
+<pre>{
+  "schema": "af_kb.grants.v1",
+  "grants": [
+    {"op":"stat_add","stat":"str","value":2,"note_ru":"Сила +2","note_en":"Strength +2"},
+    {"op":"hp_add","value":4,"note_ru":"Базовые ОЗ +4","note_en":"Base HP +4"},
+    {"op":"tag_add","tag":"darkvision","value":true,"note_ru":"Тёмное зрение","note_en":"Darkvision"}
+  ]
+}</pre>
+        </div>
+        <p>Поддерживаемые <code>op</code>: <code>stat_add</code>, <code>hp_add</code>, <code>skill_add</code>, <code>resist_add</code>, <code>tag_add</code>, <code>grant_kb</code>.</p>
+    </section>
+
     <section>
         <h3>Meta JSON</h3>
         <p>Meta JSON хранит технические данные (grants, modifiers, tags, ui). Примеры:</p>

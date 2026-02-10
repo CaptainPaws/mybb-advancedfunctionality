@@ -485,7 +485,7 @@
                 '<div class="af-kb-row"><div><label>Languages (csv)</label><input type="text" id="kb-languages" /></div><div><label>Resistances (csv)</label><input type="text" id="kb-resistances" /></div></div>',
                 '<details open="open" class="af-kb-collapsible"><summary>Bonuses</summary><table class="af-kb-bonuses-table"><tr><th>Stat</th><th>Value</th></tr><tr><td>STR</td><td><input type="number" id="kb-str" /></td></tr><tr><td>DEX</td><td><input type="number" id="kb-dex" /></td></tr><tr><td>CON</td><td><input type="number" id="kb-con" /></td></tr><tr><td>INT</td><td><input type="number" id="kb-int" /></td></tr><tr><td>WIS</td><td><input type="number" id="kb-wis" /></td></tr><tr><td>CHA</td><td><input type="number" id="kb-cha" /></td></tr><tr><td>HP</td><td><input type="number" id="kb-fixed-hp" /></td></tr><tr><td>EP</td><td><input type="number" id="kb-fixed-ep" /></td></tr></table></details>',
                 '<details open="open" class="af-kb-collapsible"><summary>Choices</summary><div class="af-kb-inline"><button type="button" class="af-kb-add" id="kb-choice-add-stat">Добавить stat_bonus</button><button type="button" class="af-kb-add" id="kb-choice-add-kb">Добавить kb_pick</button><button type="button" class="af-kb-add" id="kb-choice-add-language">Добавить language_pick</button></div><div id="kb-choices-ui"></div></details>',
-                '<div class="af-kb-row"><div><label>Traits JSON</label><textarea id="kb-traits"></textarea></div><div><label>Grants JSON</label><textarea id="kb-grants"></textarea></div></div>',
+                '<div class="af-kb-row"><div><label>Traits JSON</label><textarea id="kb-traits"></textarea><div class="af-kb-inline"><button type="button" class="af-kb-add" id="kb-traits-example">Вставить пример</button><a class="af-kb-help-link" href="misc.php?action=kb_help#kb-traits-json" target="_blank" rel="noopener">Справка по формату</a></div></div><div><label>Grants JSON</label><textarea id="kb-grants"></textarea><div class="af-kb-inline"><button type="button" class="af-kb-add" id="kb-grants-example">Вставить пример</button><a class="af-kb-help-link" href="misc.php?action=kb_help#kb-grants-json" target="_blank" rel="noopener">Справка по формату</a></div></div></div>',
                 '<details class="af-kb-collapsible"><summary>Исходные данные</summary><textarea id="kb-choices" readonly="readonly"></textarea></details>'
             ].join('');
 
@@ -497,6 +497,29 @@
                 hp: root.querySelector('#kb-fixed-hp'), ep: root.querySelector('#kb-fixed-ep'), choicesUi: root.querySelector('#kb-choices-ui')
             };
 
+
+            var traitsExample = {
+                schema: 'af_kb.traits.v1',
+                traits: [
+                    {
+                        key: 'humanoid',
+                        title_ru: 'Гуманоид',
+                        title_en: 'Humanoid',
+                        desc_ru: 'Обычная биология, двуногая морфология.',
+                        desc_en: 'Standard biology, bipedal morphology.',
+                        tags: ['type'],
+                        meta: {}
+                    }
+                ]
+            };
+            var grantsExample = {
+                schema: 'af_kb.grants.v1',
+                grants: [
+                    { op: 'stat_add', stat: 'str', value: 2, note_ru: 'Сила +2', note_en: 'Strength +2' },
+                    { op: 'hp_add', value: 4, note_ru: 'Базовые ОЗ +4', note_en: 'Base HP +4' },
+                    { op: 'tag_add', tag: 'darkvision', value: true, note_ru: 'Тёмное зрение', note_en: 'Darkvision' }
+                ]
+            };
             var typeOptions = ['skill','knowledge','class','item','race','theme','perk','condition','spell','language'].map(function (opt) { return '<option value="'+opt+'">'+opt+'</option>'; }).join('');
             var choices = Array.isArray(data.choices) ? data.choices : [];
             function choiceTemplate(kind) {
@@ -541,8 +564,8 @@
             fields.hpBase.value = numberOrZero(data.hp_base || 10);
             fields.languages.value = (data.languages || []).join(', ');
             fields.resistances.value = (data.resistances || []).join(', ');
-            fields.traits.value = JSON.stringify(Array.isArray(data.traits) ? data.traits : [], null, 2);
-            fields.grants.value = JSON.stringify(Array.isArray(data.grants) ? data.grants : [], null, 2);
+            fields.traits.value = JSON.stringify((data.traits && typeof data.traits === 'object') ? data.traits : [], null, 2);
+            fields.grants.value = JSON.stringify((data.grants && typeof data.grants === 'object') ? data.grants : [], null, 2);
             ['str','dex','con','int','wis','cha'].forEach(function (k) { fields[k].value = stats[k]; });
             fields.hp.value = numberOrZero((data.fixed_bonuses || {}).hp || 0);
             fields.ep.value = numberOrZero((data.fixed_bonuses || {}).ep || 0);
@@ -579,6 +602,20 @@
             root.querySelector('#kb-choice-add-stat').addEventListener('click', function () { choices.push(choiceTemplate('stat')); renderChoices(); syncRace(); });
             root.querySelector('#kb-choice-add-kb').addEventListener('click', function () { choices.push(choiceTemplate('kb')); renderChoices(); syncRace(); });
             root.querySelector('#kb-choice-add-language').addEventListener('click', function () { choices.push(choiceTemplate('language')); renderChoices(); syncRace(); });
+            var traitsExampleButton = root.querySelector('#kb-traits-example');
+            var grantsExampleButton = root.querySelector('#kb-grants-example');
+            if (traitsExampleButton) {
+                traitsExampleButton.addEventListener('click', function () {
+                    fields.traits.value = JSON.stringify(traitsExample, null, 2);
+                    syncRace();
+                });
+            }
+            if (grantsExampleButton) {
+                grantsExampleButton.addEventListener('click', function () {
+                    fields.grants.value = JSON.stringify(grantsExample, null, 2);
+                    syncRace();
+                });
+            }
             renderChoices();
             syncRace();
             return;
