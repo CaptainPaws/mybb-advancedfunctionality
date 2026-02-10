@@ -40,7 +40,7 @@ function af_kb_default_type_definitions(): array
     $typeMap = [
         'race' => ['Расы', 'Races'],
         'class' => ['Классы', 'Classes'],
-        'themes' => ['Темы', 'Themes'],
+        'theme' => ['Темы', 'Themes'],
         'skill' => ['Навыки', 'Skills'],
         'knowledge' => ['Знания', 'Knowledge'],
         'language' => ['Языки', 'Languages'],
@@ -115,13 +115,12 @@ function af_kb_default_type_definitions(): array
 function af_kb_default_item_kind_definitions(): array
 {
     return [
-        ['kind_key' => 'misc', 'title_ru' => 'Прочее', 'title_en' => 'Misc', 'ui_schema_json' => '{}', 'sortorder' => 0],
-        ['kind_key' => 'weapon', 'title_ru' => 'Оружие', 'title_en' => 'Weapon', 'ui_schema_json' => json_encode(['schema' => 'af_kb.ui.overlay.v1', 'version' => 1, 'patch' => [['op' => 'set_required', 'path' => 'equip.slot', 'required' => true], ['op' => 'set_defaults', 'defaults' => ['equip' => ['slot' => 'weapon_main', 'unique' => true]]]]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'sortorder' => 10],
-        ['kind_key' => 'armor', 'title_ru' => 'Броня', 'title_en' => 'Armor', 'ui_schema_json' => json_encode(['schema' => 'af_kb.ui.overlay.v1', 'version' => 1, 'patch' => [['op' => 'set_required', 'path' => 'equip.slot', 'required' => true], ['op' => 'set_defaults', 'defaults' => ['equip' => ['slot' => 'armor_body', 'unique' => true]]]]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'sortorder' => 20],
-        ['kind_key' => 'augmentation', 'title_ru' => 'Аугментации', 'title_en' => 'Augmentation', 'ui_schema_json' => json_encode(['schema' => 'af_kb.ui.overlay.v1', 'version' => 1, 'patch' => [['op' => 'set_required', 'path' => 'equip.slot', 'required' => true], ['op' => 'set_defaults', 'defaults' => ['equip' => ['slot' => 'augmentation', 'unique' => true]]]]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'sortorder' => 30],
-        ['kind_key' => 'consumable', 'title_ru' => 'Расходники', 'title_en' => 'Consumable', 'ui_schema_json' => '{}', 'sortorder' => 40],
-        ['kind_key' => 'material', 'title_ru' => 'Материалы', 'title_en' => 'Material', 'ui_schema_json' => '{}', 'sortorder' => 50],
-        ['kind_key' => 'quest', 'title_ru' => 'Квестовые', 'title_en' => 'Quest', 'ui_schema_json' => '{}', 'sortorder' => 60],
+        ['kind_key' => 'weapon', 'title_ru' => 'Оружие', 'title_en' => 'Weapon', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"weapon_main","unique":true,"two_handed":false,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true}]}', 'sortorder' => 10],
+        ['kind_key' => 'weapon_offhand', 'title_ru' => 'Оружие/оффхенд', 'title_en' => 'Weapon/Offhand', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"weapon_off","unique":true,"two_handed":false,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true}]}', 'sortorder' => 20],
+        ['kind_key' => 'armor', 'title_ru' => 'Броня', 'title_en' => 'Armor', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"armor_body","unique":true,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true}]}', 'sortorder' => 30],
+        ['kind_key' => 'helmet', 'title_ru' => 'Шлем', 'title_en' => 'Helmet', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"armor_head","unique":true,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true}]}', 'sortorder' => 40],
+        ['kind_key' => 'implant', 'title_ru' => 'Имплант', 'title_en' => 'Implant', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"augment","unique":true,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true},{"op":"set_ui_hint","path":"equip.slot","hint":{"ru":"Аугментации устанавливаются и влияют на человечность.","en":"Augments are installed and affect humanity."}}]}', 'sortorder' => 50],
+        ['kind_key' => 'consumable', 'title_ru' => 'Расходник', 'title_en' => 'Consumable', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"none","unique":false,"stackable":true}}}]}', 'sortorder' => 60],
     ];
 }
 
@@ -611,7 +610,7 @@ function af_kb_seed_defaults(): void
 {
     global $db;
 
-    $requiredTypes = ['race', 'class', 'themes', 'skill', 'knowledge', 'language', 'item'];
+    $requiredTypes = ['race', 'class', 'theme', 'skill', 'knowledge', 'language', 'item'];
     $defaultsByType = [];
     foreach (af_kb_default_type_definitions() as $row) {
         $defaultsByType[(string)$row['type_key']] = $row;
@@ -701,42 +700,50 @@ function af_kb_default_stats_dictionary(): array
     ];
 }
 
+function af_kb_default_equip_slots_dictionary(): array
+{
+    return [
+        'none' => ['ru' => 'Нет', 'en' => 'None'],
+        'weapon_main' => ['ru' => 'Основное оружие', 'en' => 'Main Hand'],
+        'weapon_off' => ['ru' => 'Второе оружие', 'en' => 'Off Hand'],
+        'armor_body' => ['ru' => 'Броня', 'en' => 'Body Armor'],
+        'armor_head' => ['ru' => 'Шлем', 'en' => 'Headgear'],
+        'augment' => ['ru' => 'Аугментация', 'en' => 'Augmentation'],
+        'gadget' => ['ru' => 'Гаджет', 'en' => 'Gadget'],
+        'accessory' => ['ru' => 'Аксессуар', 'en' => 'Accessory'],
+    ];
+}
+
+function af_kb_l10n_label(string $dict, string $key, bool $isRu): string
+{
+    $maps = [
+        'stats' => af_kb_default_stats_dictionary(),
+        'equip_slots' => af_kb_default_equip_slots_dictionary(),
+    ];
+    $row = $maps[$dict][$key] ?? null;
+    if (!is_array($row)) {
+        return $key;
+    }
+    return (string)($isRu ? ($row['ru'] ?? $key) : ($row['en'] ?? $key));
+}
+
 function af_kb_default_ui_schema_for_type(string $typeKey): array
 {
-    $dictionaries = ['stats' => af_kb_default_stats_dictionary()];
-    $map = [
-        'race' => [
-            ['id' => 'summary', 'title_ru' => 'Кратко', 'title_en' => 'Summary', 'blocks' => ['title', 'short', 'tags']],
-            ['id' => 'rules_core', 'title_ru' => 'Характеристики', 'title_en' => 'Stats', 'blocks' => ['rules.hp_base', 'rules.speed', 'rules.size', 'rules.creature_type', 'rules.languages']],
-            ['id' => 'bonuses', 'title_ru' => 'Бонусы', 'title_en' => 'Bonuses', 'blocks' => ['rules.fixed_bonuses', 'rules.resistances', 'rules.grants']],
-            ['id' => 'choices', 'title_ru' => 'Выбор', 'title_en' => 'Choices', 'blocks' => ['rules.choices']],
-            ['id' => 'traits', 'title_ru' => 'Черты', 'title_en' => 'Traits', 'blocks' => ['rules.traits']],
-            ['id' => 'lore', 'title_ru' => 'Описание', 'title_en' => 'Description', 'blocks' => ['body']],
-        ],
-        'class' => [
-            ['id' => 'summary', 'title_ru' => 'Кратко', 'title_en' => 'Summary', 'blocks' => ['title', 'short', 'tags']],
-            ['id' => 'features', 'title_ru' => 'Особенности', 'title_en' => 'Features', 'blocks' => ['rules.grants', 'rules.traits']],
-            ['id' => 'progression', 'title_ru' => 'Прогрессия', 'title_en' => 'Progression', 'blocks' => ['rules.choices']],
-            ['id' => 'lore', 'title_ru' => 'Описание', 'title_en' => 'Description', 'blocks' => ['body']],
-        ],
-        'item' => [
-            ['id' => 'summary', 'title_ru' => 'Кратко', 'title_en' => 'Summary', 'blocks' => ['title', 'short', 'tags']],
-            ['id' => 'equip', 'title_ru' => 'Экипировка', 'title_en' => 'Equip', 'blocks' => ['equip.slot', 'equip.unique', 'equip.stack', 'equip.requirements']],
-            ['id' => 'effects', 'title_ru' => 'Эффекты', 'title_en' => 'Effects', 'blocks' => ['rules.fixed_bonuses', 'rules.grants', 'rules.traits', 'rules.choices']],
-            ['id' => 'lore', 'title_ru' => 'Описание', 'title_en' => 'Description', 'blocks' => ['body']],
-        ],
+    $schemas = [
+        'race' => '{"schema":"af_kb.ui.schema.v1","version":1,"sections":[{"id":"race_overview","title":{"ru":"Кратко","en":"Overview"},"layout":"two_col","blocks":[{"id":"short","source":"entry","path":"short"},{"id":"tags","source":"rules","path":"creature_type"}]},{"id":"race_stats","title":{"ru":"Характеристики","en":"Stats"},"layout":"sidebar_grid","blocks":[{"id":"size","source":"rules","path":"size"},{"id":"creature_type","source":"rules","path":"creature_type"},{"id":"speed","source":"rules","path":"speed"},{"id":"hp_base","source":"rules","path":"hp_base"},{"id":"languages","source":"rules","path":"languages"}]},{"id":"race_bonuses","title":{"ru":"Бонусы","en":"Bonuses"},"layout":"cards","blocks":[{"id":"fixed_stats","source":"rules","path":"fixed_bonuses.stats"},{"id":"fixed_other","source":"rules","path":"fixed_bonuses"},{"id":"resistances","source":"rules","path":"resistances"}]},{"id":"race_choices","title":{"ru":"Выборы","en":"Choices"},"layout":"cards","blocks":[{"id":"choices","source":"rules","path":"choices"}]},{"id":"race_traits","title":{"ru":"Черты","en":"Traits"},"layout":"stack","blocks":[{"id":"traits","source":"rules","path":"traits"}]},{"id":"race_description","title":{"ru":"Описание","en":"Description"},"layout":"full","blocks":[{"id":"body","source":"entry","path":"body"}]},{"id":"race_raw","title":{"ru":"Исходные данные","en":"Raw Data"},"layout":"accordion","blocks":[{"id":"rules_raw","source":"raw","path":"rules_json"},{"id":"meta_raw","source":"raw","path":"meta_json"}]}]}' ,
+        'class' => '{"schema":"af_kb.ui.schema.v1","version":1,"sections":[{"id":"class_overview","title":{"ru":"Кратко","en":"Overview"},"layout":"two_col","blocks":[{"id":"short","source":"entry","path":"short"},{"id":"role","source":"rules","path":"role"}]},{"id":"class_core","title":{"ru":"База класса","en":"Class Core"},"layout":"sidebar_grid","blocks":[{"id":"hp_base","source":"rules","path":"hp_base"},{"id":"ep_base","source":"rules","path":"ep_base"},{"id":"key_ability","source":"rules","path":"key_ability"},{"id":"proficiencies","source":"rules","path":"proficiencies"}]},{"id":"class_progression","title":{"ru":"Прогрессия","en":"Progression"},"layout":"timeline","blocks":[{"id":"features","source":"blocks","path":"features"}]},{"id":"class_description","title":{"ru":"Описание","en":"Description"},"layout":"full","blocks":[{"id":"body","source":"entry","path":"body"}]},{"id":"class_raw","title":{"ru":"Исходные данные","en":"Raw Data"},"layout":"accordion","blocks":[{"id":"rules_raw","source":"raw","path":"rules_json"},{"id":"meta_raw","source":"raw","path":"meta_json"}]}]}' ,
+        'theme' => '{"schema":"af_kb.ui.schema.v1","version":1,"sections":[{"id":"theme_overview","title":{"ru":"Кратко","en":"Overview"},"layout":"two_col","blocks":[{"id":"short","source":"entry","path":"short"},{"id":"tags","source":"rules","path":"tags"}]},{"id":"theme_bonus","title":{"ru":"Бонусы темы","en":"Theme Bonuses"},"layout":"cards","blocks":[{"id":"bonus_block","source":"blocks","path":"bonus"}]},{"id":"theme_knowledges","title":{"ru":"Тематические знания","en":"Theme Knowledge"},"layout":"timeline","blocks":[{"id":"knowledges_block","source":"blocks","path":"knowledges"}]},{"id":"theme_description","title":{"ru":"Описание","en":"Description"},"layout":"full","blocks":[{"id":"body","source":"entry","path":"body"}]},{"id":"theme_raw","title":{"ru":"Исходные данные","en":"Raw Data"},"layout":"accordion","blocks":[{"id":"rules_raw","source":"raw","path":"rules_json"},{"id":"meta_raw","source":"raw","path":"meta_json"}]}]}' ,
+        'skill' => '{"schema":"af_kb.ui.schema.v1","version":1,"sections":[{"id":"skill_overview","title":{"ru":"Навык","en":"Skill"},"layout":"two_col","blocks":[{"id":"short","source":"entry","path":"short"},{"id":"key_stat","source":"rules","path":"key_stat"}]},{"id":"skill_rules","title":{"ru":"Механика","en":"Rules"},"layout":"cards","blocks":[{"id":"trained_only","source":"rules","path":"trained_only"},{"id":"use_cases","source":"rules","path":"use_cases"}]},{"id":"skill_description","title":{"ru":"Описание","en":"Description"},"layout":"full","blocks":[{"id":"body","source":"entry","path":"body"}]}]}' ,
+        'knowledge' => '{"schema":"af_kb.ui.schema.v1","version":1,"sections":[{"id":"knowledge_overview","title":{"ru":"Знание","en":"Knowledge"},"layout":"two_col","blocks":[{"id":"short","source":"entry","path":"short"},{"id":"tags","source":"rules","path":"topic_tags"}]},{"id":"knowledge_description","title":{"ru":"Описание","en":"Description"},"layout":"full","blocks":[{"id":"body","source":"entry","path":"body"}]}]}' ,
+        'item' => '{"schema":"af_kb.ui.schema.v1","version":1,"sections":[{"id":"item_overview","title":{"ru":"Предмет","en":"Item"},"layout":"two_col","blocks":[{"id":"short","source":"entry","path":"short"},{"id":"kind","source":"entry","path":"item_kind"}]},{"id":"item_equip","title":{"ru":"Экипировка","en":"Equipment"},"layout":"sidebar_grid","blocks":[{"id":"equip_slot","source":"equip","path":"slot"},{"id":"equip_unique","source":"equip","path":"unique"},{"id":"equip_two_handed","source":"equip","path":"two_handed"},{"id":"equip_stack","source":"equip","path":"stackable"}]},{"id":"item_bonuses","title":{"ru":"Эффекты","en":"Effects"},"layout":"cards","blocks":[{"id":"grants","source":"rules","path":"grants"},{"id":"resistances","source":"rules","path":"resistances"},{"id":"choices","source":"rules","path":"choices"}]},{"id":"item_description","title":{"ru":"Описание","en":"Description"},"layout":"full","blocks":[{"id":"body","source":"entry","path":"body"}]},{"id":"item_raw","title":{"ru":"Исходные данные","en":"Raw Data"},"layout":"accordion","blocks":[{"id":"rules_raw","source":"raw","path":"rules_json"},{"id":"meta_raw","source":"raw","path":"meta_json"}]}]}'
     ];
-
-    return [
-        'schema' => 'af_kb.ui.type.v1',
-        'version' => 1,
-        'type' => $typeKey,
-        'sections' => $map[$typeKey] ?? [
-            ['id' => 'summary', 'title_ru' => 'Кратко', 'title_en' => 'Summary', 'blocks' => ['title', 'short']],
-            ['id' => 'lore', 'title_ru' => 'Описание', 'title_en' => 'Description', 'blocks' => ['body']],
-        ],
-        'dictionaries' => $dictionaries,
-    ];
+    $schema = af_kb_decode_json((string)($schemas[$typeKey] ?? ''));
+    if (!$schema) {
+        $schema = ['schema' => 'af_kb.ui.schema.v1', 'version' => 1, 'sections' => [[
+            'id' => 'description', 'title' => ['ru' => 'Описание', 'en' => 'Description'], 'layout' => 'full', 'blocks' => [['id' => 'body', 'source' => 'entry', 'path' => 'body']]
+        ]]];
+    }
+    return $schema;
 }
 
 function af_kb_get_type_schema(string $typeKey): array
@@ -1817,6 +1824,225 @@ function af_kb_find_item_kind_row(string $kindKey): ?array
     return $row ?: null;
 }
 
+
+function kb_parse_rules(array $entry): array
+{
+    $candidates = [];
+    if (!empty($entry['rules_json'])) {
+        $candidates[] = af_kb_decode_json((string)$entry['rules_json']);
+    }
+    $meta = af_kb_decode_json((string)($entry['meta_json'] ?? '{}'));
+    if (($meta['schema'] ?? '') === AF_KB_RULES_SCHEMA) {
+        $candidates[] = $meta;
+    }
+    if (is_array($meta['rules'] ?? null)) {
+        $candidates[] = (array)$meta['rules'];
+    }
+    if (is_array($entry['rules'] ?? null)) {
+        $candidates[] = (array)$entry['rules'];
+    }
+    foreach ($candidates as $rules) {
+        if (is_array($rules) && $rules) {
+            return $rules;
+        }
+    }
+    return [];
+}
+
+function kb_collect_blocks(array $entry): array
+{
+    $out = [];
+    foreach (['meta_json', 'data_json'] as $field) {
+        $payload = af_kb_decode_json((string)($entry[$field] ?? '{}'));
+        foreach ((array)($payload['blocks'] ?? $payload['blockdata'] ?? []) as $block) {
+            if (!is_array($block)) continue;
+            $key = (string)($block['block_key'] ?? '');
+            if ($key !== '') $out[$key] = $block;
+        }
+        foreach ($payload as $k => $v) {
+            if (strpos((string)$k, 'block_') === 0 && is_array($v)) {
+                $out[substr((string)$k, 6)] = $v;
+            }
+        }
+    }
+    return $out;
+}
+
+function kb_resolve_ui_schema(array $typeRow, ?array $kindRow): array
+{
+    $typeKey = (string)($typeRow['type_key'] ?? $typeRow['type'] ?? '');
+    $schema = af_kb_decode_json((string)($typeRow['ui_schema_json'] ?? ''));
+    if (!$schema) {
+        $schema = af_kb_default_ui_schema_for_type($typeKey);
+    }
+    if ($kindRow) {
+        $schema = af_kb_apply_overlay_to_schema($schema, af_kb_decode_json((string)($kindRow['ui_schema_json'] ?? '{}')));
+    }
+    return $schema;
+}
+
+function kb_resolve_data_for_ui(array $rules, array $blocks, array $overlay): array
+{
+    $defaults = (array)($overlay['root_defaults'] ?? []);
+    $resolved = array_replace_recursive($defaults, $rules);
+    $equip = (array)($resolved['equip'] ?? []);
+    return ['rules' => $resolved, 'blocks' => $blocks, 'equip' => $equip];
+}
+
+function af_kb_humanize_effect(array $effect, bool $isRu): string
+{
+    $op = (string)($effect['op'] ?? '');
+    $skill = (string)($effect['skill'] ?? '');
+    $scope = (string)($effect['scope'] ?? '');
+    $value = (string)($effect['value'] ?? '');
+    if ($op === 'stat_bonus') {
+        $stat = af_kb_l10n_label('stats', (string)($effect['stat'] ?? ''), $isRu);
+        return ($isRu ? '+' : '+') . $value . ' ' . ($isRu ? 'к' : 'to') . ' ' . $stat;
+    }
+    $map = [
+        'dc_modifier' => ($isRu ? 'Модификатор сложности' : 'DC modifier') . ': '.$skill.'/'.$scope.' '.$value,
+        'grant_skill_class' => ($isRu ? 'Навык ' : 'Skill ') . $skill . ($isRu ? ' становится классовым' : ' becomes class skill'),
+        'skill_bonus_if_already_class' => ($isRu ? 'Если ' : 'If ') . $skill . ($isRu ? ' уже классовый: +' : ' already class: +') . $value,
+        'penalty_reduction' => ($isRu ? 'Снижение штрафа' : 'Penalty reduction') . ': '.$skill.' '.$value,
+        'threshold_shift' => ($isRu ? 'Сдвиг порога' : 'Threshold shift') . ': '.($effect['check'] ?? '').' '.($effect['from'] ?? '').'→'.($effect['to'] ?? ''),
+        'limited_triggered_restore' => (string)($effect['uses_per_day'] ?? '') . ($isRu ? '/день: при ' : '/day: on ') . (string)($effect['trigger'] ?? '') . ' ' . (string)($effect['restore'] ?? ''),
+        'special_rule' => ($isRu ? 'Особое правило: ' : 'Special rule: ') . (string)($effect['id'] ?? ''),
+        'choice_ref' => ($isRu ? 'Связано с выбором: ' : 'Linked choice: ') . (string)($effect['choice_id'] ?? ''),
+    ];
+    return $map[$op] ?? (($isRu ? 'Неизвестный эффект: op=' : 'Unknown effect: op=') . $op);
+}
+
+function af_kb_render_ui_block(array $block, array $vm, array $entry, bool $isRu): string
+{
+    $source = (string)($block['source'] ?? '');
+    $path = (string)($block['path'] ?? '');
+    if ($source === 'entry') {
+        if ($path === 'body') {
+            $body = af_kb_pick_text($entry, 'body');
+            return $body !== '' ? '<div class="kb-card">'.af_kb_parse_message($body).'</div>' : '';
+        }
+        if ($path === 'short') {
+            $short = af_kb_pick_text($entry, 'short');
+            return $short !== '' ? '<div class="kb-card">'.af_kb_parse_message($short).'</div>' : '';
+        }
+        if ($path === 'item_kind') {
+            $kind = trim((string)($entry['item_kind'] ?? ''));
+            return $kind !== '' ? '<div class="kb-chip">'.htmlspecialchars_uni($kind).'</div>' : '';
+        }
+    }
+    if ($source === 'rules') {
+        $v = af_kb_get_nested((array)$vm['rules'], $path);
+        if ($v === null || $v === '' || $v === []) return '';
+        if ($path === 'choices' && is_array($v)) {
+            $cards = '';
+            foreach ($v as $choice) {
+                if (!is_array($choice)) continue;
+                $type = (string)($choice['type'] ?? '');
+                $pick = (int)($choice['pick'] ?? 1);
+                $text = $type;
+                if ($type === 'kb_pick') $text = ($isRu ? 'Выберите ' : 'Pick ') . $pick . ': ' . (string)($choice['kb_type'] ?? '');
+                if ($type === 'language_pick') $text = ($isRu ? 'Выберите ' : 'Pick ') . $pick . ($isRu ? ' язык' : ' language');
+                if ($type === 'stat_bonus') $text = ($isRu ? 'Выберите ' : 'Pick ') . $pick . ($isRu ? ' атрибут: +' : ' stat: +') . (string)($choice['value'] ?? '2');
+                $cards .= '<div class="kb-choice-card" id="choice-'.htmlspecialchars_uni((string)($choice['id'] ?? '')).'">'.htmlspecialchars_uni($text).'</div>';
+            }
+            return $cards;
+        }
+        if ($path === 'traits' && is_array($v)) {
+            $items = '';
+            foreach ($v as $tr) {
+                if (!is_array($tr)) continue;
+                $title = $isRu ? (($tr['title']['ru'] ?? '') ?: ($tr['id'] ?? 'Trait')) : (($tr['title']['en'] ?? '') ?: ($tr['id'] ?? 'Trait'));
+                $desc = $isRu ? ($tr['desc']['ru'] ?? '') : ($tr['desc']['en'] ?? '');
+                $links = [];
+                foreach ((array)($tr['effects'] ?? []) as $ef) {
+                    if (is_array($ef) && ($ef['op'] ?? '') === 'choice_ref' && !empty($ef['choice_id'])) {
+                        $cid = (string)$ef['choice_id'];
+                        $links[] = '<a href="#choice-'.htmlspecialchars_uni($cid).'">'.htmlspecialchars_uni($cid).'</a>';
+                    }
+                }
+                $items .= '<div class="kb-card"><strong>'.htmlspecialchars_uni((string)$title).'</strong><div>'.af_kb_parse_message((string)$desc).'</div>';
+                if ($links) { $items .= '<div class="kb-muted">'.($isRu ? 'Связано с выборами: ' : 'Linked choices: ').implode(', ', $links).'</div>'; }
+                $items .= '</div>';
+            }
+            return $items;
+        }
+        if ($path === 'fixed_bonuses.stats' && is_array($v)) {
+            $cells = '';
+            foreach (['str','dex','int','con','wis','cha'] as $k) {
+                $val = (int)($v[$k] ?? 0);
+                if ($val === 0) continue;
+                $cells .= '<div class="kb-stat"><span>'.htmlspecialchars_uni(af_kb_l10n_label('stats',$k,$isRu)).'</span><strong>'.($val>0?'+':'').$val.'</strong></div>';
+            }
+            return $cells !== '' ? '<div class="kb-stats-grid">'.$cells.'</div>' : '';
+        }
+        if ($path === 'grants' && is_array($v)) {
+            $lines = '';
+            foreach ($v as $eff) {
+                if (is_array($eff)) $lines .= '<div class="kb-effect-line">'.htmlspecialchars_uni(af_kb_humanize_effect($eff,$isRu)).'</div>';
+            }
+            return $lines;
+        }
+        return '<div class="kb-card">'.af_kb_render_value_html($v, $isRu).'</div>';
+    }
+    if ($source === 'equip') {
+        $v = af_kb_get_nested((array)$vm['equip'], $path);
+        if ($v === null || $v === '') return '';
+        $label = $path === 'slot' ? af_kb_l10n_label('equip_slots', (string)$v, $isRu) : (is_bool($v) ? ($v ? ($isRu?'Да':'Yes') : ($isRu?'Нет':'No')) : (string)$v);
+        return '<div class="kb-card"><strong>'.htmlspecialchars_uni($path).':</strong> '.htmlspecialchars_uni((string)$label).'</div>';
+    }
+    if ($source === 'blocks') {
+        $b = (array)($vm['blocks'][$path] ?? []);
+        if (!$b) return '';
+        $prog = (array)($b['progression'] ?? []);
+        if (!$prog) return '<div class="kb-card">'.htmlspecialchars_uni(json_encode($b, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?: '').'</div>';
+        $rows = [];
+        foreach ($prog as $row) {
+            if (!is_array($row)) continue;
+            $lvl = (string)($row['level'] ?? '');
+            $title = $isRu ? ((string)($row['title_ru'] ?? $row['title'] ?? '')) : ((string)($row['title_en'] ?? $row['title'] ?? ''));
+            $effects = '';
+            foreach ((array)($row['effects'] ?? []) as $eff) {
+                if (is_array($eff)) $effects .= '<div class="kb-effect-line">'.htmlspecialchars_uni(af_kb_humanize_effect($eff, $isRu)).'</div>';
+            }
+            $rows[] = '<div class="kb-level"><div class="kb-level-head">'.($lvl!==''?($isRu?'Уровень ':'Level ').htmlspecialchars_uni($lvl).': ':'').htmlspecialchars_uni($title).'</div>'.$effects.'</div>';
+        }
+        return '<div class="kb-timeline">'.implode('', $rows).'</div>';
+    }
+    if ($source === 'raw') {
+        $json = $path === 'rules_json' ? (array)$vm['rules'] : af_kb_decode_json((string)($entry['meta_json'] ?? '{}'));
+        return '<details class="kb-raw"><summary>'.htmlspecialchars_uni($isRu ? 'Показать JSON' : 'Show JSON').'</summary><pre>'.htmlspecialchars_uni(json_encode($json, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) ?: '{}').'</pre></details>';
+    }
+    return '';
+}
+
+function af_kb_render_entry_ui(array $entry, array $typeRow, bool $isRu): string
+{
+    $itemKind = trim((string)($entry['item_kind'] ?? ''));
+    if ($itemKind === '') {
+        $meta = af_kb_decode_json((string)($entry['meta_json'] ?? '{}'));
+        $itemKind = trim((string)($meta['item_kind'] ?? ''));
+    }
+    $kindRow = af_kb_find_item_kind_row($itemKind);
+    $schema = kb_resolve_ui_schema($typeRow, $kindRow);
+    $rules = kb_parse_rules($entry);
+    $blocks = kb_collect_blocks($entry);
+    $vm = kb_resolve_data_for_ui($rules, $blocks, $schema);
+
+    $html = '<div class="kb-layout">';
+    foreach ((array)($schema['sections'] ?? []) as $section) {
+        if (!is_array($section)) continue;
+        $title = $isRu ? (string)($section['title']['ru'] ?? '') : (string)($section['title']['en'] ?? '');
+        $layout = (string)($section['layout'] ?? 'stack');
+        $parts = '';
+        foreach ((array)($section['blocks'] ?? []) as $block) {
+            if (!is_array($block)) continue;
+            $parts .= af_kb_render_ui_block($block, $vm, $entry, $isRu);
+        }
+        if (trim(strip_tags($parts)) === '') continue;
+        $html .= '<section class="kb-section kb-section--'.htmlspecialchars_uni($layout).'"><h3>'.htmlspecialchars_uni($title).'</h3>'.$parts.'</section>';
+    }
+    return $html.'</div>';
+}
 function af_kb_get_nested(array $data, string $path)
 {
     if ($path === '') {
@@ -2284,7 +2510,7 @@ function af_kb_handle_view(): void
 
     $short = af_kb_parse_message(af_kb_pick_text($entry, 'short'));
     $isRu = af_kb_is_ru();
-    $body = af_kb_render_structured_rules($entry, $typeRow, $isRu);
+    $body = af_kb_render_entry_ui($entry, $typeRow, $isRu);
     if ($body === '') {
         $body = af_kb_parse_message(af_kb_pick_text($entry, 'body'));
     }
