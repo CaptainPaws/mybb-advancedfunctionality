@@ -953,6 +953,14 @@ function af_kb_can_view(): bool
     return af_kb_can_edit() || af_kb_is_admin();
 }
 
+function af_kb_is_staff_viewer(): bool
+{
+    global $mybb;
+
+    return (int)($mybb->usergroup['cancp'] ?? 0) === 1
+        || (int)($mybb->usergroup['canmodcp'] ?? 0) === 1;
+}
+
 /* -------------------- UTILITIES -------------------- */
 
 function af_kb_is_ru(): bool
@@ -1714,7 +1722,9 @@ function af_kb_get_entry_summary(string $type, string $key): array
 
     $ui = af_kb_get_entry_ui($entry);
     $title = af_kb_pick_text($entry, 'title') ?: $entry['key'];
-    $techHint = af_kb_build_tech_hint(af_kb_pick_text($entry, 'tech'));
+    $techHint = af_kb_is_staff_viewer()
+        ? af_kb_build_tech_hint(af_kb_pick_text($entry, 'tech'))
+        : '';
 
     $cache[$cacheKey] = [
         'title' => $title,
@@ -2827,7 +2837,7 @@ function af_kb_handle_view(): void
             $rel_to_key = htmlspecialchars_uni($rel['to_key']);
             $rel_title = htmlspecialchars_uni($toTitle);
             $rel_meta_details = '';
-            if (af_kb_can_edit() && !empty($rel['meta_json'])) {
+            if (af_kb_is_staff_viewer() && !empty($rel['meta_json'])) {
                 $rel_meta_details = af_kb_render_tech_details(
                     $lang->af_kb_technical_data ?? 'Technical data',
                     $rel['meta_json']
@@ -2866,7 +2876,7 @@ function af_kb_handle_view(): void
         ? '<a class="af-kb-help-link" href="misc.php?action=kb_help" title="'.htmlspecialchars_uni($lang->af_kb_help_title ?? 'KB help').'"><i class="fa-regular fa-circle-question"></i></a>'
         : '';
     $kb_meta_details = '';
-    if (af_kb_can_edit()) {
+    if (af_kb_is_staff_viewer()) {
         $metaDetails = af_kb_render_tech_details(
             'Meta JSON',
             (string)($entry['meta_json'] ?? ''),
@@ -2879,10 +2889,13 @@ function af_kb_handle_view(): void
         );
         $kb_meta_details = $metaDetails . $dataDetails;
     }
-    $kb_tech_details = af_kb_render_tech_note_details(
-        $lang->af_kb_tech_label ?? 'Technical note',
-        af_kb_pick_text($entry, 'tech')
-    );
+    $kb_tech_details = '';
+    if (af_kb_is_staff_viewer()) {
+        $kb_tech_details = af_kb_render_tech_note_details(
+            $lang->af_kb_tech_label ?? 'Technical note',
+            af_kb_pick_text($entry, 'tech')
+        );
+    }
     $kb_page_bg = '';
     $bodyBgUrl = $entryUi['background_url'] ?: ($typeRow ? ($typeRow['bg_url'] ?? '') : '');
     $kb_body_style = af_kb_build_body_bg_style($bodyBgUrl);
@@ -3782,22 +3795,20 @@ function af_kb_handle_json_get(): void
 
     $entryUi = af_kb_get_entry_ui($entry);
     $entryLocalized = kb_entry_localize($entry);
-    $entryShort = $entryLocalized['short'];
     $entryBody = $entryLocalized['body'];
     $entryTech = af_kb_pick_text($entry, 'tech');
     $tooltipText = af_kb_strip_tech_icon_tag($entryTech);
-    $shortRendered = af_kb_render_block($entryShort);
     $bodyRendered  = af_kb_render_block($entryBody);
-    $tooltipHtml   = af_kb_render_block($tooltipText);
+    $tooltipHtml   = af_kb_is_staff_viewer() ? af_kb_render_block($tooltipText) : '';
+    $techHint = af_kb_is_staff_viewer() ? af_kb_build_tech_hint(af_kb_pick_text($entry, 'tech')) : '';
     $payload = [
         'entry' => [
             'type'      => $entry['type'],
             'key'       => $entry['key'],
             'title'     => $entryLocalized['title'],
-            'short_html' => $shortRendered,
             'body_html' => $bodyRendered,
             'sections_html' => $sectionsHtml,
-            'tech_hint' => af_kb_build_tech_hint(af_kb_pick_text($entry, 'tech')),
+            'tech_hint' => $techHint,
             'tooltip_html' => $tooltipHtml,
             'icon_url'  => $entryUi['icon_url'],
             'icon_class'=> $entryUi['icon_class'],
@@ -3840,7 +3851,7 @@ function af_kb_handle_json_list(): void
             'type'  => $row['type'],
             'key'   => $row['key'],
             'title' => af_kb_pick_text($row, 'title') ?: $row['key'],
-            'tech' => af_kb_build_tech_hint(af_kb_pick_text($row, 'tech')),
+            'tech' => af_kb_is_staff_viewer() ? af_kb_build_tech_hint(af_kb_pick_text($row, 'tech')) : '',
             'icon_url' => $entryUi['icon_url'],
             'icon_class' => $entryUi['icon_class'],
             'banner_url' => $row['banner_url'] ?? '',
