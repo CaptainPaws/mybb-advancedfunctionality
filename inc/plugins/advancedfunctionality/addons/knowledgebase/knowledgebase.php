@@ -3455,13 +3455,19 @@ function af_kb_handle_edit(): void
     $kb_page_bg = '';
     $kb_body_style = '';
     $kb_header_debug = '';
-    if (af_kb_is_admin()) {
+    if (af_kb_is_admin() && (int)$mybb->get_input('kb_debug', MyBB::INPUT_INT) === 1) {
         af_kb_ensure_header_bits();
         global $headerinclude;
+
         $markerPresent = strpos((string)$headerinclude, '<!-- af_kb_assets -->') !== false;
         $headerNotEmpty = trim((string)$headerinclude) !== '';
-        $kb_header_debug = '<div class="af-kb-help"><strong>KB debug</strong>: headerinclude_non_empty=' . ($headerNotEmpty ? 'yes' : 'no') . ', kb_assets_marker=' . ($markerPresent ? 'yes' : 'no') . '</div>';
+
+        $kb_header_debug = '<div class="af-kb-help"><strong>KB debug</strong>: headerinclude_non_empty='
+            . ($headerNotEmpty ? 'yes' : 'no')
+            . ', kb_assets_marker=' . ($markerPresent ? 'yes' : 'no')
+            . '</div>';
     }
+
 
     if (function_exists('add_breadcrumb')) {
         add_breadcrumb($lang->af_kb_catalog_title ?? 'Knowledge Base', 'misc.php?action=kb');
@@ -3656,13 +3662,19 @@ function af_kb_handle_type_edit(): void
     $kb_page_bg = '';
     $kb_body_style = '';
     $kb_header_debug = '';
-    if (af_kb_is_admin()) {
+    if (af_kb_is_admin() && (int)$mybb->get_input('kb_debug', MyBB::INPUT_INT) === 1) {
         af_kb_ensure_header_bits();
         global $headerinclude;
+
         $markerPresent = strpos((string)$headerinclude, '<!-- af_kb_assets -->') !== false;
         $headerNotEmpty = trim((string)$headerinclude) !== '';
-        $kb_header_debug = '<div class="af-kb-help"><strong>KB debug</strong>: headerinclude_non_empty=' . ($headerNotEmpty ? 'yes' : 'no') . ', kb_assets_marker=' . ($markerPresent ? 'yes' : 'no') . '</div>';
+
+        $kb_header_debug = '<div class="af-kb-help"><strong>KB debug</strong>: headerinclude_non_empty='
+            . ($headerNotEmpty ? 'yes' : 'no')
+            . ', kb_assets_marker=' . ($markerPresent ? 'yes' : 'no')
+            . '</div>';
     }
+
 
     if (function_exists('add_breadcrumb')) {
         add_breadcrumb($lang->af_kb_catalog_title ?? 'Knowledge Base', 'misc.php?action=kb');
