@@ -430,9 +430,7 @@ background: #000;
   color: #aeaeae;
 }
 .af-kb-row-ip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
-  gap: 12px;
+display: inline-block;
 }
 
 .kb-layout { display:grid; gap:14px; grid-template-columns: minmax(0,1fr); }
