@@ -1722,9 +1722,7 @@ function af_kb_get_entry_summary(string $type, string $key): array
 
     $ui = af_kb_get_entry_ui($entry);
     $title = af_kb_pick_text($entry, 'title') ?: $entry['key'];
-    $techHint = af_kb_is_staff_viewer()
-        ? af_kb_build_tech_hint(af_kb_pick_text($entry, 'tech'))
-        : '';
+    $techHint = af_kb_build_tech_hint(af_kb_pick_text($entry, 'tech'));
 
     $cache[$cacheKey] = [
         'title' => $title,
@@ -3799,8 +3797,8 @@ function af_kb_handle_json_get(): void
     $entryTech = af_kb_pick_text($entry, 'tech');
     $tooltipText = af_kb_strip_tech_icon_tag($entryTech);
     $bodyRendered  = af_kb_render_block($entryBody);
-    $tooltipHtml   = af_kb_is_staff_viewer() ? af_kb_render_block($tooltipText) : '';
-    $techHint = af_kb_is_staff_viewer() ? af_kb_build_tech_hint(af_kb_pick_text($entry, 'tech')) : '';
+    $tooltipHtml   = af_kb_render_block($tooltipText);
+    $techHint = af_kb_build_tech_hint(af_kb_pick_text($entry, 'tech'));
     $payload = [
         'entry' => [
             'type'      => $entry['type'],
@@ -3851,7 +3849,7 @@ function af_kb_handle_json_list(): void
             'type'  => $row['type'],
             'key'   => $row['key'],
             'title' => af_kb_pick_text($row, 'title') ?: $row['key'],
-            'tech' => af_kb_is_staff_viewer() ? af_kb_build_tech_hint(af_kb_pick_text($row, 'tech')) : '',
+            'tech' => af_kb_build_tech_hint(af_kb_pick_text($row, 'tech')),
             'icon_url' => $entryUi['icon_url'],
             'icon_class' => $entryUi['icon_class'],
             'banner_url' => $row['banner_url'] ?? '',
