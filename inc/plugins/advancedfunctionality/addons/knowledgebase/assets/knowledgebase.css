@@ -254,7 +254,7 @@
 
 .af-kb-help {
     font-size: 0.9em;
-    color: #56607a;
+    color: #97989b;
     margin-top: 6px;
 }
 
@@ -263,11 +263,11 @@
 }
 
 .af-kb-code {
-    background: #f5f7fb;
-    border: 1px solid #d5d9e2;
-    padding: 10px;
-    border-radius: 6px;
-    margin: 8px 0 12px;
+background: #000;
+  border: 1px solid #424242;
+  padding: 10px;
+  border-radius: 6px;
+  margin: 8px 0 12px;
 }
 
 .af-kb-code pre {
@@ -278,11 +278,12 @@
 }
 
 .af-kb-form section {
-    margin-bottom: 20px;
-    padding: 12px;
-    border: 1px solid #dcdfe6;
-    border-radius: 6px;
-    background: #fff;
+  margin-bottom: 20px;
+  padding: 30px;
+  border: 1px solid #424242;
+  border-radius: 6px;
+  background: #171616;
+  color: #aeaeae;
 }
 
 .af-kb-form label {
@@ -294,15 +295,17 @@
 .af-kb-form input[type="text"],
 .af-kb-form textarea,
 .af-kb-form select {
-    width: 100%;
-    padding: 8px 10px;
-    border-radius: 4px;
-    border: 1px solid #ccd2dd;
-    margin-bottom: 12px;
+  width: 99%;
+  padding: 5px;
+  border-radius: 4px;
+  border: 1px solid #424242;
+  margin-bottom: 12px;
+  background: #000;
+  color: #aeaeae;
 }
 
 .af-kb-form textarea {
-    min-height: 120px;
+   max-width: 98% !important;
 }
 
 .af-kb-row {
@@ -328,11 +331,11 @@
 
 .af-kb-block-item,
 .af-kb-rel-item-edit {
-    border: 1px dashed #c0c6d4;
+    border: 1px solid #424242;
     padding: 12px;
     border-radius: 6px;
     margin-bottom: 12px;
-    background: #f9fafc;
+    background: #0d0d0d;
 }
 
 .af-kb-remove {
@@ -415,6 +418,21 @@
     border-radius: 6px;
     padding: 12px;
     margin-bottom: 16px;
+}
+
+.af-kb-row input {
+    width: 99%;
+  padding: 5px;
+  border-radius: 4px;
+  border: 1px solid #424242;
+  margin-bottom: 12px;
+  background: #000;
+  color: #aeaeae;
+}
+.af-kb-row-ip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
+  gap: 12px;
 }
 
 .kb-layout { display:grid; gap:14px; grid-template-columns: minmax(0,1fr); }
