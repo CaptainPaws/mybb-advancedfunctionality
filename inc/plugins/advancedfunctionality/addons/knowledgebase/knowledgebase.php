@@ -13,9 +13,115 @@ define('AF_KB_BASE', AF_ADDONS . AF_KB_ID . '/');
 define('AF_KB_ASSETS', AF_KB_BASE . 'assets/');
 define('AF_KB_TPL_DIR', AF_KB_BASE . 'templates/');
 define('AF_KB_MARK', '<!--af_kb_assets-->');
+define('AF_KB_RULES_SCHEMA', 'af_kb.rules.v1');
 
 define('AF_KB_KEY_PATTERN', '/^[a-z0-9_-]{2,64}$/');
 define('AF_KB_PERPAGE', 20);
+
+function af_kb_default_type_definitions(): array
+{
+    $statsFields = [
+        ['path' => 'fixed_bonuses.stats.str', 'type' => 'number', 'label_ru' => 'STR', 'label_en' => 'STR', 'required' => true, 'default' => 0],
+        ['path' => 'fixed_bonuses.stats.dex', 'type' => 'number', 'label_ru' => 'DEX', 'label_en' => 'DEX', 'required' => true, 'default' => 0],
+        ['path' => 'fixed_bonuses.stats.con', 'type' => 'number', 'label_ru' => 'CON', 'label_en' => 'CON', 'required' => true, 'default' => 0],
+        ['path' => 'fixed_bonuses.stats.int', 'type' => 'number', 'label_ru' => 'INT', 'label_en' => 'INT', 'required' => true, 'default' => 0],
+        ['path' => 'fixed_bonuses.stats.wis', 'type' => 'number', 'label_ru' => 'WIS', 'label_en' => 'WIS', 'required' => true, 'default' => 0],
+        ['path' => 'fixed_bonuses.stats.cha', 'type' => 'number', 'label_ru' => 'CHA', 'label_en' => 'CHA', 'required' => true, 'default' => 0],
+    ];
+
+    $base = [
+        'schema' => 'af_kb.ui.v1',
+        'version' => 1,
+        'fields' => [
+            ['path' => 'schema', 'type' => 'string', 'label_ru' => 'Схема', 'label_en' => 'Schema', 'required' => true, 'readonly' => true, 'default' => AF_KB_RULES_SCHEMA],
+        ],
+    ];
+
+    $typeMap = [
+        'race' => ['Расы', 'Races'],
+        'class' => ['Классы', 'Classes'],
+        'skill' => ['Навыки', 'Skills'],
+        'knowledge' => ['Знания', 'Knowledge'],
+        'item' => ['Предметы', 'Items'],
+        'condition' => ['Состояния', 'Conditions'],
+        'faction' => ['Фракции', 'Factions'],
+        'perk' => ['Перки', 'Perks'],
+        'spell' => ['Заклинания/ритуалы', 'Spells/Rituals'],
+    ];
+
+    $defs = [];
+    foreach ($typeMap as $key => $titles) {
+        $schema = $base;
+        $schema['title_ru'] = $titles[0] . ': параметры (af_kb.rules.v1)';
+        $schema['title_en'] = $titles[1] . ': rules (af_kb.rules.v1)';
+        $schema['root_defaults'] = ['schema' => AF_KB_RULES_SCHEMA];
+
+        if (in_array($key, ['race', 'class', 'skill', 'knowledge', 'perk', 'condition', 'spell'], true)) {
+            $schema['root_defaults']['fixed_bonuses'] = ['stats' => ['str' => 0, 'dex' => 0, 'con' => 0, 'int' => 0, 'wis' => 0, 'cha' => 0], 'hp' => 0, 'ep' => 0];
+            $schema['fields'] = array_merge($schema['fields'], $statsFields, [
+                ['path' => 'fixed_bonuses.hp', 'type' => 'number', 'label_ru' => 'HP', 'label_en' => 'HP', 'required' => true, 'default' => 0],
+                ['path' => 'fixed_bonuses.ep', 'type' => 'number', 'label_ru' => 'EP', 'label_en' => 'EP', 'required' => true, 'default' => 0],
+                ['path' => 'effects', 'type' => 'array', 'label_ru' => 'Эффекты', 'label_en' => 'Effects', 'item' => ['type' => 'object', 'fields' => [
+                    ['path' => 'op', 'type' => 'string', 'label_ru' => 'Операция', 'label_en' => 'Operation', 'required' => true],
+                    ['path' => 'value', 'type' => 'number', 'label_ru' => 'Значение', 'label_en' => 'Value'],
+                ]], 'default' => []],
+            ]);
+        }
+
+        if ($key === 'race') {
+            $schema['root_defaults'] += ['size' => 'medium', 'creature_type' => 'humanoid', 'speed' => 30, 'languages' => ['common'], 'hp_base' => 10, 'choices' => [], 'traits' => []];
+            $schema['fields'][] = ['path' => 'size', 'type' => 'select', 'label_ru' => 'Размер', 'label_en' => 'Size', 'required' => true, 'options' => [['value'=>'tiny'],['value'=>'small'],['value'=>'medium'],['value'=>'large'],['value'=>'huge']], 'default' => 'medium'];
+            $schema['fields'][] = ['path' => 'creature_type', 'type' => 'select', 'label_ru' => 'Тип существа', 'label_en' => 'Creature type', 'required' => true, 'options' => [['value'=>'humanoid'],['value'=>'android'],['value'=>'construct'],['value'=>'mutant'],['value'=>'outsider'],['value'=>'beast'],['value'=>'undead'],['value'=>'other']], 'default' => 'humanoid'];
+            $schema['fields'][] = ['path' => 'speed', 'type' => 'number', 'required' => true, 'default' => 30];
+            $schema['fields'][] = ['path' => 'languages', 'type' => 'array', 'required' => true, 'item' => ['type' => 'string'], 'default' => ['common']];
+            $schema['fields'][] = ['path' => 'hp_base', 'type' => 'number', 'required' => true, 'default' => 10];
+            $schema['fields'][] = ['path' => 'choices', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'id','type'=>'string','required'=>true], ['path'=>'type','type'=>'select','required'=>true,'options'=>[['value'=>'language_pick'],['value'=>'stat_bonus'],['value'=>'kb_pick']]], ['path'=>'pick','type'=>'number','required'=>true,'default'=>1], ['path'=>'kb_type','type'=>'string'], ['path'=>'options','type'=>'array','item'=>['type'=>'string']]]], 'default' => []];
+            $schema['fields'][] = ['path' => 'traits', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'id','type'=>'string','required'=>true], ['path'=>'title','type'=>'i18n','required'=>true], ['path'=>'desc','type'=>'i18n','required'=>true], ['path'=>'effects','type'=>'array','item'=>['type'=>'object','fields'=>[['path'=>'op','type'=>'select','options'=>[['value'=>'choice_ref']],'required'=>true],['path'=>'choice_id','type'=>'string','required'=>true]]]]]], 'default' => []];
+        }
+
+        if ($key === 'item') {
+            $schema['root_defaults'] = ['schema' => AF_KB_RULES_SCHEMA, 'item_kind' => 'misc', 'rarity' => 'common', 'price' => 0, 'stackable' => false, 'equip' => ['slot' => '', 'unique' => false], 'humanity_cost' => 0, 'effects' => []];
+            $schema['fields'] = [
+                ['path' => 'schema', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => AF_KB_RULES_SCHEMA],
+                ['path' => 'item_kind', 'type' => 'select', 'label_ru' => 'Подтип предмета', 'label_en' => 'Item kind', 'required' => true, 'options_dynamic' => ['source' => 'kb_item_kinds'], 'default' => 'misc'],
+                ['path' => 'rarity', 'type' => 'select', 'required' => true, 'options' => [['value'=>'common'],['value'=>'uncommon'],['value'=>'rare'],['value'=>'epic'],['value'=>'legendary']], 'default' => 'common'],
+                ['path' => 'price', 'type' => 'number', 'default' => 0],
+                ['path' => 'stackable', 'type' => 'bool', 'default' => false],
+                ['path' => 'equip.slot', 'type' => 'select', 'options' => [['value'=>''],['value'=>'head'],['value'=>'eyes'],['value'=>'arms'],['value'=>'hands'],['value'=>'chest'],['value'=>'back'],['value'=>'skin'],['value'=>'spine'],['value'=>'legs'],['value'=>'feet'],['value'=>'weapon_main'],['value'=>'weapon_side'],['value'=>'implant'],['value'=>'utility']]],
+                ['path' => 'equip.unique', 'type' => 'bool', 'default' => false],
+                ['path' => 'humanity_cost', 'type' => 'number', 'default' => 0],
+                ['path' => 'effects', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'op','type'=>'select','required'=>true,'options'=>[['value'=>'add_stat'],['value'=>'add_hp'],['value'=>'add_ep'],['value'=>'kb_grant'],['value'=>'set_flag']]],['path'=>'stat','type'=>'select','options'=>[['value'=>'str'],['value'=>'dex'],['value'=>'con'],['value'=>'int'],['value'=>'wis'],['value'=>'cha']]],['path'=>'value','type'=>'number'],['path'=>'kb_type','type'=>'string'],['path'=>'kb_key','type'=>'string'],['path'=>'flag','type'=>'string']]], 'default' => []],
+            ];
+        }
+
+        $defs[] = [
+            'type_key' => $key,
+            'title_ru' => $titles[0],
+            'title_en' => $titles[1],
+            'desc_ru' => '',
+            'desc_en' => '',
+            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'ui_schema_json' => json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'is_active' => $key === 'spell' ? 0 : 1,
+            'sortorder' => count($defs),
+        ];
+    }
+
+    return $defs;
+}
+
+function af_kb_default_item_kind_definitions(): array
+{
+    return [
+        ['kind_key' => 'misc', 'title_ru' => 'Прочее', 'title_en' => 'Misc', 'ui_schema_json' => '{}', 'sortorder' => 0],
+        ['kind_key' => 'weapon', 'title_ru' => 'Оружие', 'title_en' => 'Weapon', 'ui_schema_json' => json_encode(['schema' => 'af_kb.ui.overlay.v1', 'version' => 1, 'patch' => [['op' => 'set_required', 'path' => 'equip.slot', 'required' => true], ['op' => 'set_defaults', 'defaults' => ['equip' => ['slot' => 'weapon_main', 'unique' => true]]]]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'sortorder' => 10],
+        ['kind_key' => 'armor', 'title_ru' => 'Броня', 'title_en' => 'Armor', 'ui_schema_json' => json_encode(['schema' => 'af_kb.ui.overlay.v1', 'version' => 1, 'patch' => [['op' => 'set_required', 'path' => 'equip.slot', 'required' => true], ['op' => 'set_defaults', 'defaults' => ['equip' => ['slot' => 'chest', 'unique' => true]]]]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'sortorder' => 20],
+        ['kind_key' => 'augmentation', 'title_ru' => 'Аугментации', 'title_en' => 'Augmentation', 'ui_schema_json' => json_encode(['schema' => 'af_kb.ui.overlay.v1', 'version' => 1, 'patch' => [['op' => 'set_required', 'path' => 'humanity_cost', 'required' => true, 'min' => 0], ['op' => 'set_required', 'path' => 'equip.slot', 'required' => true], ['op' => 'set_defaults', 'defaults' => ['stackable' => false, 'equip' => ['unique' => true]]]]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'sortorder' => 30],
+        ['kind_key' => 'consumable', 'title_ru' => 'Расходники', 'title_en' => 'Consumable', 'ui_schema_json' => '{}', 'sortorder' => 40],
+        ['kind_key' => 'material', 'title_ru' => 'Материалы', 'title_en' => 'Material', 'ui_schema_json' => '{}', 'sortorder' => 50],
+        ['kind_key' => 'quest', 'title_ru' => 'Квестовые', 'title_en' => 'Quest', 'ui_schema_json' => '{}', 'sortorder' => 60],
+    ];
+}
 
 /* -------------------- LANG -------------------- */
 
@@ -146,6 +252,25 @@ SQL;
         $db->write_query(str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql));
     }
 
+
+    if (!$db->table_exists('af_kb_item_kinds')) {
+        $sql = <<<SQL
+CREATE TABLE {TABLE_PREFIX}af_kb_item_kinds (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  kind_key VARCHAR(64) NOT NULL UNIQUE,
+  title_ru VARCHAR(255) NOT NULL,
+  title_en VARCHAR(255) NOT NULL,
+  desc_ru TEXT NULL,
+  desc_en TEXT NULL,
+  ui_schema_json MEDIUMTEXT NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  sortorder INT NOT NULL DEFAULT 0,
+  updated_at INT UNSIGNED NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+        $db->write_query(str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql));
+    }
+
     if (!$db->table_exists('af_kb_entries')) {
         $sql = <<<SQL
 CREATE TABLE {TABLE_PREFIX}af_kb_entries (
@@ -161,6 +286,7 @@ CREATE TABLE {TABLE_PREFIX}af_kb_entries (
   tech_ru TEXT NOT NULL,
   tech_en TEXT NOT NULL,
   meta_json MEDIUMTEXT NOT NULL,
+  item_kind VARCHAR(64) NULL,
   icon_class VARCHAR(128) NOT NULL DEFAULT '',
   icon_url VARCHAR(255) NOT NULL DEFAULT '',
   banner_url VARCHAR(255) NOT NULL DEFAULT '',
@@ -169,7 +295,8 @@ CREATE TABLE {TABLE_PREFIX}af_kb_entries (
   sortorder INT NOT NULL DEFAULT 0,
   updated_at INT UNSIGNED NOT NULL DEFAULT 0,
   UNIQUE KEY uniq_type_key (type, `key`),
-  KEY type_active_sort (type, active, sortorder)
+  KEY type_active_sort (type, active, sortorder),
+  KEY item_kind (item_kind)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 SQL;
         $db->write_query(str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql));
@@ -300,6 +427,7 @@ SQL;
 
     af_kb_templates_install_or_update();
     af_kb_ensure_schema();
+    af_kb_seed_defaults();
 
     return true;
 }
@@ -310,6 +438,7 @@ function af_knowledgebase_uninstall(): bool
 
     $db->drop_table('af_kb_types', true);
     $db->drop_table('af_kb_entries', true);
+    $db->drop_table('af_kb_item_kinds', true);
     $db->drop_table('af_kb_blocks', true);
     $db->drop_table('af_kb_relations', true);
     $db->drop_table('af_kb_log', true);
@@ -332,6 +461,7 @@ function af_knowledgebase_activate(): bool
 {
     af_kb_templates_install_or_update();
     af_kb_ensure_schema();
+    af_kb_seed_defaults();
     return true;
 }
 
@@ -390,6 +520,31 @@ function af_kb_ensure_schema(): void
     global $db;
 
     if ($db->table_exists('af_kb_types')) {
+
+        if (!$db->field_exists('type_key', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'type_key', "VARCHAR(64) NOT NULL DEFAULT ''");
+            $db->write_query("UPDATE ".TABLE_PREFIX."af_kb_types SET type_key=type WHERE type_key=''");
+        }
+        if (!$db->field_exists('desc_ru', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'desc_ru', "TEXT NULL");
+        }
+        if (!$db->field_exists('desc_en', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'desc_en', "TEXT NULL");
+        }
+        if (!$db->field_exists('rules_schema', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'rules_schema', "VARCHAR(64) NOT NULL DEFAULT 'af_kb.rules.v1'");
+        }
+        if (!$db->field_exists('ui_schema_json', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'ui_schema_json', "MEDIUMTEXT NOT NULL");
+            $db->write_query("UPDATE ".TABLE_PREFIX."af_kb_types SET ui_schema_json='{}' WHERE ui_schema_json=''");
+        }
+        if (!$db->field_exists('is_active', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'is_active', "TINYINT(1) NOT NULL DEFAULT 1");
+            $db->write_query("UPDATE ".TABLE_PREFIX."af_kb_types SET is_active=active");
+        }
+        if (!$db->field_exists('updated_at', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'updated_at', "INT UNSIGNED NOT NULL DEFAULT 0");
+        }
         if (!$db->field_exists('icon_class', 'af_kb_types')) {
             $db->add_column('af_kb_types', 'icon_class', "VARCHAR(128) NOT NULL DEFAULT ''");
         }
@@ -414,6 +569,11 @@ function af_kb_ensure_schema(): void
     }
 
     if ($db->table_exists('af_kb_entries')) {
+
+        if (!$db->field_exists('item_kind', 'af_kb_entries')) {
+            $db->add_column('af_kb_entries', 'item_kind', "VARCHAR(64) NULL");
+            $db->write_query("ALTER TABLE ".TABLE_PREFIX."af_kb_entries ADD KEY item_kind (item_kind)");
+        }
         if (!$db->field_exists('icon_class', 'af_kb_entries')) {
             $db->add_column('af_kb_entries', 'icon_class', "VARCHAR(128) NOT NULL DEFAULT ''");
         }
@@ -442,6 +602,116 @@ function af_kb_ensure_schema(): void
             $db->add_column('af_kb_blocks', 'icon_url', "VARCHAR(255) NOT NULL DEFAULT ''");
         }
     }
+}
+
+
+function af_kb_seed_defaults(): void
+{
+    global $db;
+
+    $typesCount = (int)$db->fetch_field($db->simple_select('af_kb_types', 'COUNT(*) AS cnt'), 'cnt');
+    if ($typesCount === 0) {
+        foreach (af_kb_default_type_definitions() as $row) {
+            $db->insert_query('af_kb_types', [
+                'type' => $db->escape_string($row['type_key']),
+                'type_key' => $db->escape_string($row['type_key']),
+                'title_ru' => $db->escape_string($row['title_ru']),
+                'title_en' => $db->escape_string($row['title_en']),
+                'short_ru' => '',
+                'short_en' => '',
+                'description_ru' => '',
+                'description_en' => '',
+                'desc_ru' => '',
+                'desc_en' => '',
+                'rules_schema' => $db->escape_string($row['rules_schema']),
+                'ui_schema_json' => $db->escape_string($row['ui_schema_json']),
+                'active' => (int)$row['is_active'],
+                'is_active' => (int)$row['is_active'],
+                'sortorder' => (int)$row['sortorder'],
+                'updated_at' => TIME_NOW,
+            ]);
+        }
+    }
+
+    if ($db->table_exists('af_kb_item_kinds')) {
+        $kindsCount = (int)$db->fetch_field($db->simple_select('af_kb_item_kinds', 'COUNT(*) AS cnt'), 'cnt');
+        if ($kindsCount === 0) {
+            foreach (af_kb_default_item_kind_definitions() as $row) {
+                $db->insert_query('af_kb_item_kinds', [
+                    'kind_key' => $db->escape_string($row['kind_key']),
+                    'title_ru' => $db->escape_string($row['title_ru']),
+                    'title_en' => $db->escape_string($row['title_en']),
+                    'desc_ru' => '',
+                    'desc_en' => '',
+                    'ui_schema_json' => $db->escape_string($row['ui_schema_json']),
+                    'is_active' => 1,
+                    'sortorder' => (int)$row['sortorder'],
+                    'updated_at' => TIME_NOW,
+                ]);
+            }
+        }
+    }
+}
+
+function af_kb_get_type_schema(string $typeKey): array
+{
+    global $db;
+
+    $row = $db->fetch_array($db->simple_select('af_kb_types', 'ui_schema_json', "type='".$db->escape_string($typeKey)."'", ['limit' => 1]));
+    if (!$row) {
+        return [];
+    }
+    return af_kb_decode_json((string)($row['ui_schema_json'] ?? '{}'));
+}
+
+function af_kb_get_item_kind_overlay(string $kindKey): array
+{
+    global $db;
+
+    if (!$db->table_exists('af_kb_item_kinds') || $kindKey === '') {
+        return [];
+    }
+
+    $row = $db->fetch_array($db->simple_select('af_kb_item_kinds', 'ui_schema_json', "kind_key='".$db->escape_string($kindKey)."'", ['limit' => 1]));
+    if (!$row) {
+        return [];
+    }
+
+    return af_kb_decode_json((string)($row['ui_schema_json'] ?? '{}'));
+}
+
+function af_kb_apply_overlay_to_schema(array $schema, array $overlay): array
+{
+    $patch = $overlay['patch'] ?? [];
+    if (!is_array($patch) || !isset($schema['fields']) || !is_array($schema['fields'])) {
+        return $schema;
+    }
+
+    foreach ($patch as $op) {
+        if (!is_array($op) || empty($op['path'])) {
+            continue;
+        }
+        foreach ($schema['fields'] as &$field) {
+            if (($field['path'] ?? '') !== $op['path']) {
+                continue;
+            }
+            if (($op['op'] ?? '') === 'set_required') {
+                $field['required'] = !empty($op['required']);
+                if (isset($op['min'])) {
+                    $field['min'] = $op['min'];
+                }
+            } elseif (($op['op'] ?? '') === 'set_hint') {
+                if (isset($op['hint_ru'])) { $field['hint_ru'] = $op['hint_ru']; }
+                if (isset($op['hint_en'])) { $field['hint_en'] = $op['hint_en']; }
+            }
+        }
+        unset($field);
+        if (($op['op'] ?? '') === 'set_defaults' && is_array($op['defaults'] ?? null)) {
+            $schema['root_defaults'] = array_replace_recursive((array)($schema['root_defaults'] ?? []), $op['defaults']);
+        }
+    }
+
+    return $schema;
 }
 
 function af_kb_get_template(string $name): string
@@ -1937,6 +2207,42 @@ function af_kb_handle_edit(): void
             $errors[] = $lang->af_kb_invalid_json ?? 'Invalid JSON.';
         }
 
+        $metaPayload = af_kb_decode_json($metaJson);
+        if (empty($metaPayload['schema'])) {
+            $metaPayload['schema'] = AF_KB_RULES_SCHEMA;
+        }
+
+        $itemKind = trim((string)($metaPayload['item_kind'] ?? $mybb->get_input('item_kind')));
+        if ($type === 'item') {
+            if ($itemKind === '') {
+                $itemKind = 'misc';
+            }
+            $metaPayload['item_kind'] = $itemKind;
+
+            $schema = af_kb_get_type_schema('item');
+            if ($itemKind !== '') {
+                $schema = af_kb_apply_overlay_to_schema($schema, af_kb_get_item_kind_overlay($itemKind));
+            }
+            foreach ((array)($schema['fields'] ?? []) as $field) {
+                if (empty($field['required']) || empty($field['path'])) {
+                    continue;
+                }
+                $parts = explode('.', (string)$field['path']);
+                $cursor = $metaPayload;
+                $present = true;
+                foreach ($parts as $part) {
+                    if (!is_array($cursor) || !array_key_exists($part, $cursor)) {
+                        $present = false;
+                        break;
+                    }
+                    $cursor = $cursor[$part];
+                }
+                if (!$present || $cursor === '' || $cursor === null || (is_array($cursor) && $cursor === [])) {
+                    $errors[] = 'Required meta field missing: '.$field['path'];
+                }
+            }
+        }
+
         $blocksInput = $mybb->get_input('blocks', MyBB::INPUT_ARRAY);
         $relationsInput = $mybb->get_input('relations', MyBB::INPUT_ARRAY);
 
@@ -2040,7 +2346,6 @@ function af_kb_handle_edit(): void
         }
 
         if (!$errors) {
-            $metaPayload = af_kb_decode_json($metaJson);
             if (!isset($metaPayload['ui']) || !is_array($metaPayload['ui'])) {
                 $metaPayload['ui'] = [];
             }
@@ -2072,6 +2377,7 @@ function af_kb_handle_edit(): void
                 'active'     => (int)$mybb->get_input('active', MyBB::INPUT_INT) ? 1 : 0,
                 'sortorder'  => (int)$mybb->get_input('sortorder', MyBB::INPUT_INT),
                 'updated_at' => TIME_NOW,
+                'item_kind'  => $db->escape_string($itemKind ?? ''),
             ];
 
             if ($entry) {
@@ -2138,6 +2444,7 @@ function af_kb_handle_edit(): void
         'tech_ru'   => '',
         'tech_en'   => '',
         'meta_json' => '{}',
+        'item_kind' => '',
         'icon_class' => '',
         'icon_url' => '',
         'banner_url' => '',
@@ -2242,6 +2549,17 @@ function af_kb_handle_edit(): void
     $kb_tech_ru = htmlspecialchars_uni($entry['tech_ru'] ?? '');
     $kb_tech_en = htmlspecialchars_uni($entry['tech_en'] ?? '');
     $kb_meta_json = htmlspecialchars_uni($entry['meta_json'] ?: '{}');
+
+    $kb_type_schema = htmlspecialchars_uni(json_encode(af_kb_get_type_schema($entry['type']), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    $kb_item_kind_value = htmlspecialchars_uni((string)($entry['item_kind'] ?? ''));
+    $itemKinds = [];
+    if ($db->table_exists('af_kb_item_kinds')) {
+        $qKinds = $db->simple_select('af_kb_item_kinds', 'kind_key,title_ru,title_en,is_active', 'is_active=1', ['order_by' => 'sortorder, kind_key']);
+        while ($krow = $db->fetch_array($qKinds)) {
+            $itemKinds[] = ['value' => (string)$krow['kind_key'], 'label_ru' => (string)$krow['title_ru'], 'label_en' => (string)$krow['title_en']];
+        }
+    }
+    $kb_item_kinds_json = htmlspecialchars_uni(json_encode($itemKinds, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     $entryUi = af_kb_get_entry_ui($entry);
     $kb_icon_class = htmlspecialchars_uni($entryUi['icon_class'] ?? '');
     $kb_icon_url = htmlspecialchars_uni($entryUi['icon_url'] ?? '');
@@ -2735,4 +3053,95 @@ function af_kb_handle_json_children(): void
     }
 
     af_kb_send_json(['items' => $items]);
+}
+
+function af_kb_get_entry(string $type, string $key): ?array
+{
+    global $db;
+    static $cache = [];
+    $idx = $type . ':' . $key;
+    if (array_key_exists($idx, $cache)) {
+        return $cache[$idx];
+    }
+
+    $row = $db->fetch_array($db->simple_select('af_kb_entries', '*', "type='".$db->escape_string($type)."' AND `key`='".$db->escape_string($key)."'", ['limit' => 1]));
+    if (!$row) {
+        $cache[$idx] = null;
+        return null;
+    }
+
+    $cache[$idx] = [
+        'type' => (string)$row['type'],
+        'key' => (string)$row['key'],
+        'title_ru' => (string)$row['title_ru'],
+        'title_en' => (string)$row['title_en'],
+        'short_ru' => (string)$row['short_ru'],
+        'short_en' => (string)$row['short_en'],
+        'body_ru' => (string)$row['body_ru'],
+        'body_en' => (string)$row['body_en'],
+        'item_kind' => (string)($row['item_kind'] ?? ''),
+        'meta' => af_kb_decode_json((string)($row['meta_json'] ?? '{}')),
+    ];
+
+    return $cache[$idx];
+}
+
+function af_kb_get_meta(string $type, string $key): array
+{
+    $entry = af_kb_get_entry($type, $key);
+    return is_array($entry['meta'] ?? null) ? $entry['meta'] : [];
+}
+
+function af_kb_resolve_title(string $type, string $key, string $lang = 'ru'): string
+{
+    $entry = af_kb_get_entry($type, $key);
+    if (!$entry) {
+        return $key;
+    }
+
+    if ($lang === 'en' && !empty($entry['title_en'])) {
+        return (string)$entry['title_en'];
+    }
+
+    return (string)($entry['title_ru'] ?: $entry['title_en'] ?: $key);
+}
+
+function af_kb_list(string $type, array $opts = []): array
+{
+    global $db;
+
+    $page = max(1, (int)($opts['page'] ?? 1));
+    $perpage = max(1, min(200, (int)($opts['perpage'] ?? 50)));
+    $activeOnly = array_key_exists('active_only', $opts) ? (bool)$opts['active_only'] : true;
+
+    $where = "type='".$db->escape_string($type)."'";
+    if ($activeOnly) {
+        $where .= " AND active=1";
+    }
+
+    if (!empty($opts['q'])) {
+        $q = $db->escape_string((string)$opts['q']);
+        $where .= " AND (`key` LIKE '%{$q}%' OR title_ru LIKE '%{$q}%' OR title_en LIKE '%{$q}%')";
+    }
+
+    $rows = [];
+    $query = $db->simple_select('af_kb_entries', '*', $where, [
+        'order_by' => 'sortorder, `key`',
+        'order_dir' => 'ASC',
+        'limit_start' => ($page - 1) * $perpage,
+        'limit' => $perpage,
+    ]);
+
+    while ($row = $db->fetch_array($query)) {
+        $rows[] = [
+            'type' => (string)$row['type'],
+            'key' => (string)$row['key'],
+            'title_ru' => (string)$row['title_ru'],
+            'title_en' => (string)$row['title_en'],
+            'item_kind' => (string)($row['item_kind'] ?? ''),
+            'meta' => af_kb_decode_json((string)($row['meta_json'] ?? '{}')),
+        ];
+    }
+
+    return $rows;
 }

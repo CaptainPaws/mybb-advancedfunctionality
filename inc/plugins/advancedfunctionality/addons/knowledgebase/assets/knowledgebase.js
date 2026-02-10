@@ -368,3 +368,124 @@
         initTechTemplateButtons();
     });
 })();
+
+(function () {
+    function setByPath(obj, path, value) {
+        var parts = String(path || '').split('.');
+        var cursor = obj;
+        for (var i = 0; i < parts.length - 1; i++) {
+            if (!cursor[parts[i]] || typeof cursor[parts[i]] !== 'object') {
+                cursor[parts[i]] = {};
+            }
+            cursor = cursor[parts[i]];
+        }
+        cursor[parts[parts.length - 1]] = value;
+    }
+
+    function getByPath(obj, path) {
+        var parts = String(path || '').split('.');
+        var cursor = obj;
+        for (var i = 0; i < parts.length; i++) {
+            if (!cursor || typeof cursor !== 'object' || !(parts[i] in cursor)) {
+                return undefined;
+            }
+            cursor = cursor[parts[i]];
+        }
+        return cursor;
+    }
+
+    function initSchemaUI() {
+        var root = document.getElementById('af-kb-schema-ui');
+        var metaField = document.getElementById('af-kb-meta-json');
+        if (!root || !metaField) {
+            return;
+        }
+
+        var schema = {};
+        var data = {};
+        var itemKinds = [];
+        try { schema = JSON.parse(root.getAttribute('data-type-schema') || '{}'); } catch (e) {}
+        try { data = JSON.parse(metaField.value || '{}'); } catch (e2) {}
+        try { itemKinds = JSON.parse(root.getAttribute('data-item-kinds') || '[]'); } catch (e3) {}
+
+        if (!schema || !Array.isArray(schema.fields) || !schema.fields.length) {
+            root.innerHTML = '<div class="af-kb-help">UI-схема недоступна, используйте raw JSON.</div>';
+            return;
+        }
+
+        function render() {
+            root.innerHTML = '';
+            schema.fields.forEach(function (f) {
+                var wrap = document.createElement('div');
+                wrap.className = 'af-kb-row';
+                var label = document.createElement('label');
+                label.textContent = f.label_ru || f.label_en || f.path;
+                wrap.appendChild(label);
+
+                var val = getByPath(data, f.path);
+                if (val === undefined && f.default !== undefined) {
+                    val = f.default;
+                    setByPath(data, f.path, val);
+                }
+
+                var input;
+                if (f.type === 'bool') {
+                    input = document.createElement('input'); input.type = 'checkbox'; input.checked = !!val;
+                    input.addEventListener('change', function () { setByPath(data, f.path, !!input.checked); sync(); });
+                } else if (f.type === 'number') {
+                    input = document.createElement('input'); input.type = 'number'; input.value = (val === undefined ? '' : val);
+                    input.addEventListener('input', function () { setByPath(data, f.path, input.value === '' ? null : Number(input.value)); sync(); });
+                } else if (f.type === 'select') {
+                    input = document.createElement('select');
+                    var options = Array.isArray(f.options) ? f.options : [];
+                    if (f.path === 'item_kind' && itemKinds.length) { options = itemKinds; }
+                    options.forEach(function (op) {
+                        var o = document.createElement('option');
+                        o.value = op.value; o.textContent = op.label_ru || op.label_en || op.value;
+                        if (String(val) === String(op.value)) o.selected = true;
+                        input.appendChild(o);
+                    });
+                    input.addEventListener('change', function () { setByPath(data, f.path, input.value); sync(); });
+                } else if (f.type === 'multiselect') {
+                    input = document.createElement('select'); input.multiple = true;
+                    (f.options || []).forEach(function (op) {
+                        var o = document.createElement('option'); o.value = op.value; o.textContent = op.label_ru || op.label_en || op.value;
+                        if (Array.isArray(val) && val.indexOf(op.value) !== -1) o.selected = true;
+                        input.appendChild(o);
+                    });
+                    input.addEventListener('change', function () {
+                        var v = Array.from(input.options).filter(function (o) { return o.selected; }).map(function (o) { return o.value; });
+                        setByPath(data, f.path, v); sync();
+                    });
+                } else if (f.type === 'array' || f.type === 'object' || f.type === 'i18n') {
+                    input = document.createElement('textarea');
+                    input.value = JSON.stringify(val !== undefined ? val : (f.default !== undefined ? f.default : (f.type === 'array' ? [] : {})), null, 2);
+                    input.addEventListener('input', function () {
+                        try { setByPath(data, f.path, JSON.parse(input.value || (f.type === 'array' ? '[]' : '{}'))); input.style.borderColor = ''; sync(); }
+                        catch (e) { input.style.borderColor = '#d00'; }
+                    });
+                } else {
+                    input = document.createElement('input'); input.type = 'text'; input.value = val == null ? '' : String(val);
+                    if (f.readonly) input.readOnly = true;
+                    input.addEventListener('input', function () { setByPath(data, f.path, input.value); sync(); });
+                }
+
+                if (f.required) { label.innerHTML += ' <span style="color:#d00">*</span>'; }
+                wrap.appendChild(input);
+                if (f.hint_ru) { var hint = document.createElement('div'); hint.className = 'af-kb-help'; hint.textContent = f.hint_ru; wrap.appendChild(hint); }
+                root.appendChild(wrap);
+            });
+            sync();
+        }
+
+        function sync() {
+            if (!data.schema) data.schema = 'af_kb.rules.v1';
+            metaField.value = JSON.stringify(data, null, 2);
+        }
+
+        data = Object.assign({}, schema.root_defaults || {}, data || {});
+        render();
+    }
+
+    document.addEventListener('DOMContentLoaded', initSchemaUI);
+})();

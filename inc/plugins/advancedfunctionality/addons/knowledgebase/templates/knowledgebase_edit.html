@@ -56,8 +56,10 @@
         </div>
         <div class="af-kb-row">
             <div>
+                <label>Правила/Параметры (Schema UI)</label>
+                <div id="af-kb-schema-ui" data-type-schema="{$kb_type_schema}" data-item-kinds="{$kb_item_kinds_json}" data-item-kind="{$kb_item_kind_value}"></div>
                 <label>Meta JSON</label>
-                <textarea name="meta_json">{$kb_meta_json}</textarea>
+                <textarea name="meta_json" id="af-kb-meta-json">{$kb_meta_json}</textarea>
                 <div class="af-kb-help">Meta JSON — структурные данные для механик (статы, теги, ссылки, ограничения). Это не обязательное поле.</div>
                 <div class="af-kb-code">
 <pre>{
