@@ -384,21 +384,33 @@
         return Number.isFinite(n) ? n : 0;
     }
 
-    function ensureStats(stats) {
-        var source = stats && typeof stats === 'object' ? stats : {};
-        return {
-            str: numberOrZero(source.str),
-            dex: numberOrZero(source.dex),
-            con: numberOrZero(source.con),
-            int: numberOrZero(source.int),
-            wis: numberOrZero(source.wis),
-            cha: numberOrZero(source.cha)
-        };
-    }
-
     function splitCsv(value) {
         return String(value || '').split(',').map(function (item) { return item.trim(); }).filter(Boolean);
     }
+
+    function splitLines(value) {
+        return String(value || '').split(/\n+/).map(function (item) { return item.trim(); }).filter(Boolean);
+    }
+
+    function debounce(fn, delay) {
+        var timer = null;
+        return function () {
+            var args = arguments;
+            clearTimeout(timer);
+            timer = setTimeout(function () { fn.apply(null, args); }, delay);
+        };
+    }
+
+    function esc(value) {
+        return String(value || '').replace(/[&<>"']/g, function (ch) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[ch] || ch;
+        });
+    }
+
+    var stats = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+    var rankOptions = ['trained', 'expert', 'master', 'legendary', '0', '1', '2', '3', '4'];
+    var kbTypes = ['skill', 'language', 'perk', 'item', 'spell', 'condition', 'trait', 'proficiency', 'weapon', 'armor'];
+    var slugPattern = /^[a-z0-9_\-:.]+$/;
 
     function initMetaUi() {
         var root = document.getElementById('af-kb-meta-ui');
@@ -465,170 +477,606 @@
         }
 
         var type = (root.getAttribute('data-type') || '').trim();
-        var rawPayload = raw.value || root.getAttribute('data-data-json') || '{}';
-        var data = readJson(rawPayload, {});
-        data.schema = 'af_kb.rules.v1';
-        try { JSON.parse(rawPayload || '{}'); } catch (err) { root.insertAdjacentHTML('afterbegin', '<div class="af-kb-help">⚠ JSON parse warning: используются значения по умолчанию, страницу это не ломает.</div>'); }
-        if (!Array.isArray(data.choices)) {
-            data.choices = [];
-        }
-
-        function syncRaw(next) {
-            raw.value = JSON.stringify(next, null, 2);
-            hidden.value = JSON.stringify(next);
-        }
-
-        if (type === 'race') {
-            root.innerHTML = [
-                '<div class="af-kb-row"><div><label>Size</label><select id="kb-size"><option>tiny</option><option>small</option><option>medium</option><option>large</option><option>huge</option></select></div><div><label>Creature type</label><input type="text" id="kb-creature" /></div></div>',
-                '<div class="af-kb-row"><div><label>Speed</label><input type="number" id="kb-speed" /></div><div><label>HP base</label><input type="number" id="kb-hp-base" /></div></div>',
-                '<div class="af-kb-row"><div><label>Languages (csv)</label><input type="text" id="kb-languages" /></div><div><label>Resistances (csv)</label><input type="text" id="kb-resistances" /></div></div>',
-                '<details open="open" class="af-kb-collapsible"><summary>Bonuses</summary><table class="af-kb-bonuses-table"><tr><th>Stat</th><th>Value</th></tr><tr><td>STR</td><td><input type="number" id="kb-str" /></td></tr><tr><td>DEX</td><td><input type="number" id="kb-dex" /></td></tr><tr><td>CON</td><td><input type="number" id="kb-con" /></td></tr><tr><td>INT</td><td><input type="number" id="kb-int" /></td></tr><tr><td>WIS</td><td><input type="number" id="kb-wis" /></td></tr><tr><td>CHA</td><td><input type="number" id="kb-cha" /></td></tr><tr><td>HP</td><td><input type="number" id="kb-fixed-hp" /></td></tr><tr><td>EP</td><td><input type="number" id="kb-fixed-ep" /></td></tr></table></details>',
-                '<details open="open" class="af-kb-collapsible"><summary>Choices</summary><div class="af-kb-inline"><button type="button" class="af-kb-add" id="kb-choice-add-stat">Добавить stat_bonus</button><button type="button" class="af-kb-add" id="kb-choice-add-kb">Добавить kb_pick</button><button type="button" class="af-kb-add" id="kb-choice-add-language">Добавить language_pick</button></div><div id="kb-choices-ui"></div></details>',
-                '<div class="af-kb-row"><div><label>Traits JSON</label><textarea id="kb-traits"></textarea><div class="af-kb-inline"><button type="button" class="af-kb-add" id="kb-traits-example">Вставить пример</button><a class="af-kb-help-link" href="misc.php?action=kb_help#kb-traits-json" target="_blank" rel="noopener"><i class="fa-regular fa-circle-question"></i></a></div></div><div><label>Grants JSON</label><textarea id="kb-grants"></textarea><div class="af-kb-inline"><button type="button" class="af-kb-add" id="kb-grants-example">Вставить пример</button><a class="af-kb-help-link" href="misc.php?action=kb_help#kb-grants-json" target="_blank" rel="noopener"><i class="fa-regular fa-circle-question"></i></a></div></div></div>',
-                '<details class="af-kb-collapsible"><summary>Исходные данные</summary><textarea id="kb-choices" readonly="readonly"></textarea></details>'
-            ].join('');
-
-            var stats = ensureStats(((data.fixed_bonuses || {}).stats) || {});
-            var fields = {
-                size: root.querySelector('#kb-size'), creature: root.querySelector('#kb-creature'), speed: root.querySelector('#kb-speed'), hpBase: root.querySelector('#kb-hp-base'),
-                languages: root.querySelector('#kb-languages'), resistances: root.querySelector('#kb-resistances'), traits: root.querySelector('#kb-traits'), choicesRaw: root.querySelector('#kb-choices'), grants: root.querySelector('#kb-grants'),
-                str: root.querySelector('#kb-str'), dex: root.querySelector('#kb-dex'), con: root.querySelector('#kb-con'), int: root.querySelector('#kb-int'), wis: root.querySelector('#kb-wis'), cha: root.querySelector('#kb-cha'),
-                hp: root.querySelector('#kb-fixed-hp'), ep: root.querySelector('#kb-fixed-ep'), choicesUi: root.querySelector('#kb-choices-ui')
-            };
-
-
-            var traitsExample = {
-                schema: 'af_kb.traits.v1',
-                traits: [
-                    {
-                        key: 'humanoid',
-                        title_ru: 'Гуманоид',
-                        title_en: 'Humanoid',
-                        desc_ru: 'Обычная биология, двуногая морфология.',
-                        desc_en: 'Standard biology, bipedal morphology.',
-                        tags: ['type'],
-                        meta: {}
-                    }
-                ]
-            };
-            var grantsExample = {
-                schema: 'af_kb.grants.v1',
-                grants: [
-                    { op: 'stat_add', stat: 'str', value: 2, note_ru: 'Сила +2', note_en: 'Strength +2' },
-                    { op: 'hp_add', value: 4, note_ru: 'Базовые ОЗ +4', note_en: 'Base HP +4' },
-                    { op: 'tag_add', tag: 'darkvision', value: true, note_ru: 'Тёмное зрение', note_en: 'Darkvision' }
-                ]
-            };
-            var typeOptions = ['skill','knowledge','class','item','race','theme','perk','condition','spell','language'].map(function (opt) { return '<option value="'+opt+'">'+opt+'</option>'; }).join('');
-            var choices = Array.isArray(data.choices) ? data.choices : [];
-            function choiceTemplate(kind) {
-                if (kind === 'kb') return {id:'new_kb_pick', type:'kb_pick', pick:1, kb_type:'skill'};
-                if (kind === 'language') return {id:'new_language_pick', type:'language_pick', pick:1, options:[], exclude:['common']};
-                return {id:'new_choice', type:'stat_bonus', pick:1, options:['str','dex','con','int','wis','cha'], value:1};
-            }
-            function renderChoices() {
-                fields.choicesUi.innerHTML = '';
-                choices.forEach(function (choice, index) {
-                    var row = document.createElement('div');
-                    row.className = 'af-kb-block-item';
-                    row.innerHTML = '<div class="af-kb-row">'
-                        + '<div><label>id</label><input type="text" data-field="id" value="'+(choice.id||'')+'" /></div>'
-                        + '<div><label>type</label><select data-field="type"><option value="stat_bonus">stat_bonus</option><option value="kb_pick">kb_pick</option><option value="language_pick">language_pick</option></select></div>'
-                        + '<div><label>pick</label><input type="number" data-field="pick" value="'+(choice.pick||1)+'" /></div></div>'
-                        + '<div class="af-kb-row"><div><label>options (line by line)</label><textarea data-field="options">'+((choice.options||[]).join('\n'))+'</textarea></div>'
-                        + '<div><label>exclude (line by line)</label><textarea data-field="exclude">'+((choice.exclude||[]).join('\n'))+'</textarea></div></div>'
-                        + '<div class="af-kb-row"><div><label>value</label><input type="number" data-field="value" value="'+(choice.value||0)+'" /></div>'
-                        + '<div><label>kb_type</label><select data-field="kb_type">'+typeOptions+'</select></div></div>'
-                        + '<button type="button" class="af-kb-remove">Удалить выбор</button>';
-                    fields.choicesUi.appendChild(row);
-                    row.querySelector('[data-field="type"]').value = choice.type || 'stat_bonus';
-                    row.querySelector('[data-field="kb_type"]').value = choice.kb_type || 'skill';
-                    row.addEventListener('input', function () {
-                        choice.id = row.querySelector('[data-field="id"]').value.trim();
-                        choice.type = row.querySelector('[data-field="type"]').value;
-                        choice.pick = numberOrZero(row.querySelector('[data-field="pick"]').value) || 1;
-                        choice.options = row.querySelector('[data-field="options"]').value.split(/\n+/).map(function (v) { return v.trim(); }).filter(Boolean);
-                        choice.exclude = row.querySelector('[data-field="exclude"]').value.split(/\n+/).map(function (v) { return v.trim(); }).filter(Boolean);
-                        choice.value = numberOrZero(row.querySelector('[data-field="value"]').value);
-                        choice.kb_type = row.querySelector('[data-field="kb_type"]').value;
-                        syncRace();
-                    });
-                    row.querySelector('.af-kb-remove').addEventListener('click', function () { choices.splice(index,1); renderChoices(); syncRace(); });
-                });
-            }
-
-            fields.size.value = data.size || 'medium';
-            fields.creature.value = data.creature_type || 'humanoid';
-            fields.speed.value = numberOrZero(data.speed || 30);
-            fields.hpBase.value = numberOrZero(data.hp_base || 10);
-            fields.languages.value = (data.languages || []).join(', ');
-            fields.resistances.value = (data.resistances || []).join(', ');
-            fields.traits.value = JSON.stringify((data.traits && typeof data.traits === 'object') ? data.traits : [], null, 2);
-            fields.grants.value = JSON.stringify((data.grants && typeof data.grants === 'object') ? data.grants : [], null, 2);
-            ['str','dex','con','int','wis','cha'].forEach(function (k) { fields[k].value = stats[k]; });
-            fields.hp.value = numberOrZero((data.fixed_bonuses || {}).hp || 0);
-            fields.ep.value = numberOrZero((data.fixed_bonuses || {}).ep || 0);
-
-            function syncRace() {
-                var next = {
-                    schema: 'af_kb.rules.v1',
-                    size: fields.size.value || 'medium',
-                    creature_type: fields.creature.value.trim() || 'humanoid',
-                    speed: numberOrZero(fields.speed.value),
-                    hp_base: numberOrZero(fields.hpBase.value),
-                    languages: splitCsv(fields.languages.value),
-                    resistances: splitCsv(fields.resistances.value),
-                    choices: choices,
-                    traits: readJson(fields.traits.value, []),
-                    grants: readJson(fields.grants.value, []),
-                    fixed_bonuses: {
-                        stats: ensureStats({ str: fields.str.value, dex: fields.dex.value, con: fields.con.value, int: fields.int.value, wis: fields.wis.value, cha: fields.cha.value }),
-                        hp: numberOrZero(fields.hp.value),
-                        ep: numberOrZero(fields.ep.value)
-                    },
-                    visibility: 'technical',
-                    is_technical: true
-                };
-                fields.choicesRaw.value = JSON.stringify(choices, null, 2);
-                syncRaw(next);
-            }
-
-            Object.keys(fields).forEach(function (key) {
-                if (key === 'choicesUi' || key === 'choicesRaw') return;
-                fields[key].addEventListener('input', syncRace);
-                fields[key].addEventListener('change', syncRace);
-            });
-            root.querySelector('#kb-choice-add-stat').addEventListener('click', function () { choices.push(choiceTemplate('stat')); renderChoices(); syncRace(); });
-            root.querySelector('#kb-choice-add-kb').addEventListener('click', function () { choices.push(choiceTemplate('kb')); renderChoices(); syncRace(); });
-            root.querySelector('#kb-choice-add-language').addEventListener('click', function () { choices.push(choiceTemplate('language')); renderChoices(); syncRace(); });
-            var traitsExampleButton = root.querySelector('#kb-traits-example');
-            var grantsExampleButton = root.querySelector('#kb-grants-example');
-            if (traitsExampleButton) {
-                traitsExampleButton.addEventListener('click', function () {
-                    fields.traits.value = JSON.stringify(traitsExample, null, 2);
-                    syncRace();
-                });
-            }
-            if (grantsExampleButton) {
-                grantsExampleButton.addEventListener('click', function () {
-                    fields.grants.value = JSON.stringify(grantsExample, null, 2);
-                    syncRace();
-                });
-            }
-            renderChoices();
-            syncRace();
+        if (type !== 'race') {
+            root.innerHTML = '<div class="af-kb-help">Для этого типа используйте Raw Data JSON (advanced).</div>';
+            hidden.value = raw.value || '{}';
+            raw.addEventListener('input', function () { hidden.value = raw.value; });
             return;
         }
 
-        root.innerHTML = '<div class="af-kb-help">Для этого типа используйте Raw Data JSON (advanced).</div>';
-        function syncRawOnly() {
-            var parsed = readJson(raw.value, {});
-            parsed.schema = 'af_kb.rules.v1';
-            syncRaw(parsed);
+        var parsedRaw = readJson(raw.value || '{}', {});
+        var state = {
+            schema: 'af_kb.rules.v1',
+            size: parsedRaw.size || 'medium',
+            creature_type: parsedRaw.creature_type || 'humanoid',
+            speed: numberOrZero(parsedRaw.speed || 30),
+            hp_base: numberOrZero(parsedRaw.hp_base || 10),
+            fixed_bonuses: Object.assign({
+                stats: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+                hp: 0,
+                ep: 0,
+                skill_points: 0,
+                feat_points: 0,
+                perk_points: 0,
+                language_slots: 0
+            }, parsedRaw.fixed_bonuses || {}),
+            choices: Array.isArray(parsedRaw.choices) ? parsedRaw.choices.slice() : [],
+            grants: Array.isArray(parsedRaw.grants) ? parsedRaw.grants.slice() : [],
+            traits: Array.isArray(parsedRaw.traits) ? parsedRaw.traits.slice() : [],
+            visibility: parsedRaw.visibility || 'technical',
+            is_technical: true
+        };
+        state.fixed_bonuses.stats = (function (src) {
+            var out = {};
+            stats.forEach(function (key) { out[key] = numberOrZero(src && src[key]); });
+            return out;
+        })(state.fixed_bonuses.stats);
+
+        var syncError = '';
+        var rawError = '';
+
+        var templates = {
+            stat_bonus_choice: { type: 'stat_bonus_choice', id: 'boost_1', pick: 1, options: stats.slice(), value: 2, mode: 'add', exclude: [] },
+            skill_pick_choice: { type: 'skill_pick_choice', id: 'skills_pick', pick: 2, options: [], exclude: [], grant_mode: 'rank', rank_value: 1, points_value: 2 },
+            language_pick_choice: { type: 'language_pick_choice', id: 'lang_pick', pick: 1, exclude: ['common'], allow_custom: false, value: 1 },
+            proficiency_pick_choice: { type: 'proficiency_pick_choice', id: 'prof_pick', pick: 1, prof_type: 'weapon', options: [], rank: 'trained', exclude: [] },
+            feat_pick_choice: { type: 'feat_pick_choice', id: 'perk_pick', pick: 1, kb_type: 'perk', tag_filter: [], exclude: [] },
+            equipment_pick_choice: { type: 'equipment_pick_choice', id: 'item_pick', pick: 1, kb_type: 'item', options: [], exclude: [], quantity: 1, grant: { type: 'item_grant', qty: 1 } },
+            spell_pick_choice: { type: 'spell_pick_choice', id: 'spell_pick', pick: 1, kb_type: 'spell', tradition: '', school: '', level_min: 0, level_max: 1, grant: { type: 'spell_known', amount: 1 } },
+            kb_pick_choice: { type: 'kb_pick_choice', id: 'kb_pick', kb_type: 'skill', pick: 1, options: [], exclude: [], grant: { type: 'kb_grant', amount: 1 } },
+            skill_rank: { type: 'skill_rank', kb_type: 'skill', kb_key: 'athletics', rank: 'trained', mode: 'max' },
+            resource_gain: { type: 'resource_gain', resource: 'skill_points', value: 2, stack_mode: 'add' },
+            item_grant: { type: 'item_grant', kb_key: 'starter_kit', qty: 1, bind: false, equipped: false, slot: '' },
+            resistance_grant: { type: 'resistance_grant', damage_type: 'fire', value: 5 },
+            sense_grant: { type: 'sense_grant', sense_type: 'darkvision', range: 60 },
+            speed_grant: { type: 'speed_grant', speed_type: 'swim', value: 20, condition: '' },
+            trait: { key: 'humanoid', title_ru: 'Гуманоид', title_en: 'Humanoid', desc_ru: '', desc_en: '', tags: ['species'], meta: {} }
+        };
+
+        function normalizeChoice(choice) {
+            var out = choice && typeof choice === 'object' ? JSON.parse(JSON.stringify(choice)) : {};
+            if (out.type === 'stat_bonus') {
+                out.type = 'stat_bonus_choice';
+            }
+            if (out.type === 'kb_pick') {
+                out.type = 'kb_pick_choice';
+            }
+            if (out.type === 'language_pick') {
+                out.type = 'language_pick_choice';
+            }
+            return out;
         }
-        raw.addEventListener('input', syncRawOnly);
-        syncRawOnly();
+        state.choices = state.choices.map(normalizeChoice);
+
+        var choiceDefs = [
+            { key: 'stat_bonus_choice', label: 'Stat bonus choice', desc: 'Выбор атрибутов + бонус', fields: [
+                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора', help: 'Используется для сохранения выбора персонажа.' },
+                { name: 'pick', type: 'number', required: true, hint: 'Сколько вариантов выбрать' },
+                { name: 'options', type: 'lines', hint: 'Какие статы доступны (по одному в строке)' },
+                { name: 'value', type: 'number', required: true, hint: 'Размер бонуса за выбор' },
+                { name: 'mode', type: 'select', options: ['add', 'set'], hint: 'Как применять бонус' },
+                { name: 'exclude', type: 'lines', hint: 'Список запрещённых ключей' }
+            ] },
+            { key: 'kb_pick_choice', label: 'KB pick choice', desc: 'Универсальный выбор из KB', fields: [
+                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора' },
+                { name: 'kb_type', type: 'select', options: kbTypes, required: true, hint: 'Каталог KB для выбора' },
+                { name: 'pick', type: 'number', required: true, hint: 'Сколько элементов выбрать' },
+                { name: 'options', type: 'lines', hint: 'Ограничить только этими key' },
+                { name: 'exclude', type: 'lines', hint: 'Исключить key' },
+                { name: 'grant', type: 'json', hint: 'Что выдать за каждый выбранный объект' }
+            ] },
+            { key: 'language_pick_choice', label: 'Language pick', desc: 'Выбор языков', fields: [
+                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора' },
+                { name: 'pick', type: 'number', required: true, hint: 'Сколько языков выбрать' },
+                { name: 'exclude', type: 'lines', hint: 'Исключить языки (например common)' },
+                { name: 'allow_custom', type: 'checkbox', hint: 'Разрешить ручной ввод языка' },
+                { name: 'value', type: 'number', hint: 'Сколько языков даётся за один выбор' }
+            ] },
+            { key: 'skill_pick_choice', label: 'Skill pick', desc: 'Частый кейс выбора навыков', fields: [
+                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора' },
+                { name: 'pick', type: 'number', required: true, hint: 'Сколько навыков выбрать' },
+                { name: 'options', type: 'lines', hint: 'Ограничить доступные навыки' },
+                { name: 'exclude', type: 'lines', hint: 'Запретить навыки' },
+                { name: 'grant_mode', type: 'select', options: ['rank', 'skill_points'], hint: 'Что начислять: ранг или очки навыков' },
+                { name: 'rank_value', type: 'number', hint: 'Ранг при grant_mode=rank' },
+                { name: 'points_value', type: 'number', hint: 'Очки при grant_mode=skill_points' }
+            ] },
+            { key: 'proficiency_pick_choice', label: 'Proficiency pick', desc: 'Выбор категории владения', fields: [
+                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора' },
+                { name: 'pick', type: 'number', required: true, hint: 'Сколько выбрать' },
+                { name: 'prof_type', type: 'select', options: ['weapon', 'armor', 'tool', 'save', 'skill'], hint: 'Тип профы' },
+                { name: 'options', type: 'lines', hint: 'Разрешённые категории' },
+                { name: 'rank', type: 'select', options: rankOptions, hint: 'Какой ранг дать' },
+                { name: 'exclude', type: 'lines', hint: 'Исключения' }
+            ] },
+            { key: 'feat_pick_choice', label: 'Feat/perk pick', desc: 'Выбор фита/перка', fields: [
+                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора' },
+                { name: 'pick', type: 'number', required: true, hint: 'Сколько выбрать' },
+                { name: 'kb_type', type: 'fixed', value: 'perk', hint: 'Всегда perk' },
+                { name: 'tag_filter', type: 'lines', hint: 'Фильтр по тегам' },
+                { name: 'exclude', type: 'lines', hint: 'Исключить key' }
+            ] },
+            { key: 'equipment_pick_choice', label: 'Equipment pick', desc: 'Выбор стартового предмета', fields: [
+                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора' },
+                { name: 'pick', type: 'number', required: true, hint: 'Сколько выбрать' },
+                { name: 'kb_type', type: 'fixed', value: 'item', hint: 'Всегда item' },
+                { name: 'options', type: 'lines', hint: 'Разрешённые предметы' },
+                { name: 'exclude', type: 'lines', hint: 'Исключить предметы' },
+                { name: 'quantity', type: 'number', hint: 'Количество по умолчанию' },
+                { name: 'grant', type: 'json', hint: 'item_grant блок' }
+            ] },
+            { key: 'spell_pick_choice', label: 'Spell pick', desc: 'Выбор заклинаний', fields: [
+                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора' },
+                { name: 'pick', type: 'number', required: true, hint: 'Сколько выбрать' },
+                { name: 'kb_type', type: 'fixed', value: 'spell', hint: 'Всегда spell' },
+                { name: 'tradition', type: 'text', hint: 'Фильтр tradition' },
+                { name: 'school', type: 'text', hint: 'Фильтр school' },
+                { name: 'level_min', type: 'number', hint: 'Минимальный уровень' },
+                { name: 'level_max', type: 'number', hint: 'Максимальный уровень' },
+                { name: 'grant', type: 'json', hint: 'spell_known блок' }
+            ] }
+        ];
+
+        var grantDefs = [
+            { key: 'resource_gain', label: 'Resource gain', fields: [
+                { name: 'resource', type: 'select', options: ['hp', 'ep', 'skill_points', 'feat_points', 'perk_points', 'language_slots'] },
+                { name: 'value', type: 'number', required: true },
+                { name: 'stack_mode', type: 'select', options: ['add', 'set'] }
+            ] },
+            { key: 'skill_rank', label: 'Skill rank', fields: [
+                { name: 'kb_type', type: 'fixed', value: 'skill' },
+                { name: 'kb_key', type: 'kb_key', kbTypeField: 'kb_type', required: true },
+                { name: 'rank', type: 'select', options: rankOptions },
+                { name: 'mode', type: 'select', options: ['set', 'max', 'add'] }
+            ] },
+            { key: 'proficiency_grant', label: 'Proficiency grant', fields: [
+                { name: 'prof_type', type: 'select', options: ['weapon', 'armor', 'tool', 'save', 'skill'] },
+                { name: 'target_key', type: 'text', required: true },
+                { name: 'rank', type: 'select', options: rankOptions },
+                { name: 'mode', type: 'select', options: ['set', 'max', 'add'] }
+            ] },
+            { key: 'kb_grant', label: 'KB grant', fields: [
+                { name: 'kb_type', type: 'select', options: kbTypes },
+                { name: 'kb_key', type: 'kb_key', kbTypeField: 'kb_type', required: true },
+                { name: 'amount', type: 'number' },
+                { name: 'flags', type: 'json' }
+            ] },
+            { key: 'item_grant', label: 'Item grant', fields: [
+                { name: 'kb_type', type: 'fixed', value: 'item' },
+                { name: 'kb_key', type: 'kb_key', kbTypeField: 'kb_type', required: true },
+                { name: 'qty', type: 'number' },
+                { name: 'bind', type: 'checkbox' },
+                { name: 'equipped', type: 'checkbox' },
+                { name: 'slot', type: 'text' }
+            ] },
+            { key: 'condition_grant', label: 'Condition grant', fields: [
+                { name: 'kb_type', type: 'fixed', value: 'condition' },
+                { name: 'kb_key', type: 'kb_key', kbTypeField: 'kb_type', required: true },
+                { name: 'duration', type: 'text' },
+                { name: 'stacks', type: 'number' },
+                { name: 'intensity', type: 'number' }
+            ] },
+            { key: 'resistance_grant', label: 'Resistance grant', fields: [
+                { name: 'damage_type', type: 'text', required: true },
+                { name: 'value', type: 'number', required: true }
+            ] },
+            { key: 'weakness_grant', label: 'Weakness grant', fields: [
+                { name: 'damage_type', type: 'text', required: true },
+                { name: 'value', type: 'number', required: true }
+            ] },
+            { key: 'speed_grant', label: 'Speed grant', fields: [
+                { name: 'speed_type', type: 'select', options: ['walk', 'fly', 'swim', 'climb', 'burrow'] },
+                { name: 'value', type: 'number', required: true },
+                { name: 'condition', type: 'text' }
+            ] },
+            { key: 'sense_grant', label: 'Sense grant', fields: [
+                { name: 'sense_type', type: 'text', required: true },
+                { name: 'range', type: 'number' }
+            ] }
+        ];
+
+        var traitFields = [
+            { name: 'key', type: 'text', required: true, hint: 'Ключ особенности (slug)' },
+            { name: 'title_ru', type: 'text' },
+            { name: 'title_en', type: 'text' },
+            { name: 'desc_ru', type: 'textarea' },
+            { name: 'desc_en', type: 'textarea' },
+            { name: 'tags', type: 'lines' },
+            { name: 'meta', type: 'json' }
+        ];
+
+        root.innerHTML = [
+            '<div id="kb-rules-errors" class="af-kb-errors"></div>',
+            '<div class="af-kb-row"><div><label>Size</label><select id="kb-size"><option>tiny</option><option>small</option><option>medium</option><option>large</option><option>huge</option></select></div><div><label>Creature type</label><input type="text" id="kb-creature" /></div></div>',
+            '<div class="af-kb-row"><div><label>Speed (base walk)</label><input type="number" id="kb-speed" /></div><div><label>HP base</label><input type="number" id="kb-hp-base" /></div></div>',
+            '<details open="open" class="af-kb-collapsible"><summary>Fixed bonuses</summary><div id="kb-fixed-bonuses"></div></details>',
+            '<details open="open" class="af-kb-collapsible"><summary>Choices</summary><div class="af-kb-inline"><button type="button" class="af-kb-add" data-add-choice="stat_bonus_choice">+2 к одному атрибуту</button><button type="button" class="af-kb-add" data-add-choice="skill_pick_choice">2 навыка trained</button><button type="button" class="af-kb-add" data-add-choice="language_pick_choice">1 язык (кроме common)</button><button type="button" class="af-kb-add" data-add-choice="kb_pick_choice">KB pick</button><button type="button" class="af-kb-add" data-add-choice="proficiency_pick_choice">Proficiency pick</button><button type="button" class="af-kb-add" data-add-choice="feat_pick_choice">Feat/perk pick</button><button type="button" class="af-kb-add" data-add-choice="equipment_pick_choice">Equipment pick</button><button type="button" class="af-kb-add" data-add-choice="spell_pick_choice">Spell pick</button></div><div id="kb-choices-list"></div></details>',
+            '<details open="open" class="af-kb-collapsible"><summary>Grants</summary><div class="af-kb-inline"><button type="button" class="af-kb-add" data-add-grant="resource_gain">Выдать 2 skill_points</button><button type="button" class="af-kb-add" data-add-grant="skill_rank">Фиксированный навык trained</button><button type="button" class="af-kb-add" data-add-grant="item_grant">Стартовый предмет x1</button><button type="button" class="af-kb-add" data-add-grant="resistance_grant">Сопротивление огню 5</button><button type="button" class="af-kb-add" data-add-grant="sense_grant">Darkvision</button><button type="button" class="af-kb-add" data-add-grant="speed_grant">Скорость плавания 20</button></div><div id="kb-grants-list"></div></details>',
+            '<details open="open" class="af-kb-collapsible"><summary>Traits</summary><div class="af-kb-inline"><button type="button" class="af-kb-add" id="kb-add-trait">Добавить trait</button><button type="button" class="af-kb-add" id="kb-add-trait-example">Вставить пример trait</button></div><div id="kb-traits-list"></div></details>',
+            '<details class="af-kb-collapsible"><summary>Raw sync</summary><div class="af-kb-inline"><button type="button" class="af-kb-add" id="kb-sync-from-raw">Синхронизировать из raw</button><span class="af-kb-help">Raw остаётся source-of-truth и всегда доступен.</span></div><div id="kb-raw-error" class="af-kb-help"></div></details>'
+        ].join('');
+
+        var fields = {
+            size: root.querySelector('#kb-size'),
+            creature: root.querySelector('#kb-creature'),
+            speed: root.querySelector('#kb-speed'),
+            hpBase: root.querySelector('#kb-hp-base'),
+            fixed: root.querySelector('#kb-fixed-bonuses'),
+            choices: root.querySelector('#kb-choices-list'),
+            grants: root.querySelector('#kb-grants-list'),
+            traits: root.querySelector('#kb-traits-list'),
+            errors: root.querySelector('#kb-rules-errors'),
+            rawError: root.querySelector('#kb-raw-error')
+        };
+
+        fields.size.value = state.size;
+        fields.creature.value = state.creature_type;
+        fields.speed.value = state.speed;
+        fields.hpBase.value = state.hp_base;
+
+        function getDef(defs, key) {
+            for (var i = 0; i < defs.length; i += 1) {
+                if (defs[i].key === key) {
+                    return defs[i];
+                }
+            }
+            return null;
+        }
+
+        function createInput(def, obj, onChange) {
+            var wrap = document.createElement('div');
+            var label = document.createElement('label');
+            label.textContent = def.name;
+            wrap.appendChild(label);
+            var input;
+            var value = obj[def.name];
+            if (def.type === 'textarea') {
+                input = document.createElement('textarea');
+                input.value = value || '';
+            } else if (def.type === 'lines') {
+                input = document.createElement('textarea');
+                input.value = Array.isArray(value) ? value.join('\n') : (value || '');
+            } else if (def.type === 'json') {
+                input = document.createElement('textarea');
+                input.value = JSON.stringify(value || {}, null, 2);
+            } else if (def.type === 'number') {
+                input = document.createElement('input');
+                input.type = 'number';
+                input.value = value != null ? String(value) : '0';
+            } else if (def.type === 'select') {
+                input = document.createElement('select');
+                (def.options || []).forEach(function (opt) {
+                    var option = document.createElement('option');
+                    option.value = String(opt);
+                    option.textContent = String(opt);
+                    input.appendChild(option);
+                });
+                input.value = value != null ? String(value) : String((def.options && def.options[0]) || '');
+            } else if (def.type === 'checkbox') {
+                input = document.createElement('input');
+                input.type = 'checkbox';
+                input.checked = !!value;
+            } else if (def.type === 'fixed') {
+                input = document.createElement('input');
+                input.type = 'text';
+                input.value = def.value || '';
+                input.readOnly = true;
+                obj[def.name] = def.value;
+            } else {
+                input = document.createElement('input');
+                input.type = 'text';
+                input.value = value || '';
+                if (def.type === 'kb_key') {
+                    var datalistId = 'kb-list-' + Math.random().toString(16).slice(2);
+                    var list = document.createElement('datalist');
+                    list.id = datalistId;
+                    input.setAttribute('list', datalistId);
+                    wrap.appendChild(list);
+                    var typeName = def.kbTypeField ? obj[def.kbTypeField] : obj.kb_type;
+                    input.addEventListener('input', debounce(function () {
+                        fetch('misc.php?action=kb_json_list&type=' + encodeURIComponent(typeName || '') + '&q=' + encodeURIComponent(input.value || ''), { credentials: 'same-origin' })
+                            .then(function (res) { return res.json(); })
+                            .then(function (payload) {
+                                list.innerHTML = '';
+                                if (!payload || !Array.isArray(payload.items)) {
+                                    return;
+                                }
+                                payload.items.slice(0, 25).forEach(function (item) {
+                                    var opt = document.createElement('option');
+                                    opt.value = item.key;
+                                    opt.label = (item.title || item.key) + ' (' + item.key + ')';
+                                    list.appendChild(opt);
+                                });
+                            }).catch(function () {});
+                    }, 250));
+                }
+            }
+            input.dataset.field = def.name;
+            input.addEventListener('input', function () {
+                if (def.type === 'lines') {
+                    obj[def.name] = splitLines(input.value);
+                } else if (def.type === 'json') {
+                    obj[def.name] = readJson(input.value, {});
+                } else if (def.type === 'number') {
+                    obj[def.name] = numberOrZero(input.value);
+                } else if (def.type === 'checkbox') {
+                    obj[def.name] = input.checked;
+                } else {
+                    obj[def.name] = input.value;
+                }
+                onChange();
+            });
+            wrap.appendChild(input);
+            if (def.hint) {
+                wrap.insertAdjacentHTML('beforeend', '<div class="af-kb-help">' + esc(def.hint) + '</div>');
+            }
+            return wrap;
+        }
+
+        function validate() {
+            var errors = [];
+            function validateSlugList(values, prefix) {
+                (values || []).forEach(function (value) {
+                    if (!slugPattern.test(value)) {
+                        errors.push(prefix + ': invalid key ' + value);
+                    }
+                });
+            }
+            state.choices.forEach(function (item, i) {
+                if (!item.type) {
+                    errors.push('choices[' + i + ']: missing type');
+                    return;
+                }
+                var def = getDef(choiceDefs, item.type);
+                if (!def) {
+                    return;
+                }
+                def.fields.forEach(function (field) {
+                    if (field.required && (item[field.name] == null || item[field.name] === '')) {
+                        errors.push('choices[' + i + '].' + field.name + ': required');
+                    }
+                });
+                validateSlugList(item.options, 'choices[' + i + '].options');
+                validateSlugList(item.exclude, 'choices[' + i + '].exclude');
+            });
+            state.traits.forEach(function (item, i) {
+                if (!item.key) {
+                    errors.push('traits[' + i + '].key: required');
+                }
+            });
+            fields.errors.innerHTML = errors.length ? ('<div class="af-kb-help">Ошибки схемы:<br>' + errors.map(esc).join('<br>') + '</div>') : '';
+            return errors;
+        }
+
+        function toPayload() {
+            var payload = JSON.parse(JSON.stringify(state));
+            payload.fixed_bonuses.stats = {};
+            stats.forEach(function (key) { payload.fixed_bonuses.stats[key] = numberOrZero(state.fixed_bonuses.stats[key]); });
+            payload.choices = state.choices.map(function (choice) {
+                var out = JSON.parse(JSON.stringify(choice));
+                if (out.type === 'stat_bonus_choice') {
+                    out.type = 'stat_bonus';
+                } else if (out.type === 'kb_pick_choice') {
+                    out.type = 'kb_pick';
+                } else if (out.type === 'language_pick_choice') {
+                    out.type = 'language_pick';
+                }
+                return out;
+            });
+            return payload;
+        }
+
+        var syncRawDebounced = debounce(function () {
+            validate();
+            var payload = toPayload();
+            raw.value = JSON.stringify(payload, null, 2);
+            hidden.value = JSON.stringify(payload);
+        }, 350);
+
+        function syncStateFromHead() {
+            state.size = fields.size.value;
+            state.creature_type = fields.creature.value.trim() || 'humanoid';
+            state.speed = numberOrZero(fields.speed.value);
+            state.hp_base = numberOrZero(fields.hpBase.value);
+            syncRawDebounced();
+        }
+
+        function renderFixedBonuses() {
+            fields.fixed.innerHTML = '';
+            var rowStats = document.createElement('div');
+            rowStats.className = 'af-kb-row';
+            stats.forEach(function (key) {
+                var box = document.createElement('div');
+                box.innerHTML = '<label>' + key + '</label><input type="number" data-stat="' + key + '" value="' + numberOrZero(state.fixed_bonuses.stats[key]) + '" /><div class="af-kb-help">Фиксированный бонус к атрибуту.</div>';
+                rowStats.appendChild(box);
+            });
+            fields.fixed.appendChild(rowStats);
+            var resources = ['hp', 'ep', 'skill_points', 'feat_points', 'perk_points', 'language_slots'];
+            var rowResources = document.createElement('div');
+            rowResources.className = 'af-kb-row';
+            resources.forEach(function (key) {
+                var hint = key === 'hp' ? 'Доп. очки здоровья от расы/класса/темы.' : (key === 'skill_points' ? 'Очки навыков для прокачки навыков.' : 'Ресурсное значение.');
+                var box = document.createElement('div');
+                box.innerHTML = '<label>' + key + '</label><input type="number" data-resource="' + key + '" value="' + numberOrZero(state.fixed_bonuses[key]) + '" /><div class="af-kb-help">' + hint + '</div>';
+                rowResources.appendChild(box);
+            });
+            fields.fixed.appendChild(rowResources);
+            fields.fixed.querySelectorAll('[data-stat]').forEach(function (input) {
+                input.addEventListener('input', function () {
+                    state.fixed_bonuses.stats[input.getAttribute('data-stat')] = numberOrZero(input.value);
+                    syncRawDebounced();
+                });
+            });
+            fields.fixed.querySelectorAll('[data-resource]').forEach(function (input) {
+                input.addEventListener('input', function () {
+                    state.fixed_bonuses[input.getAttribute('data-resource')] = numberOrZero(input.value);
+                    syncRawDebounced();
+                });
+            });
+        }
+
+        function renderTypedList(container, dataList, defs, typeName) {
+            container.innerHTML = '';
+            dataList.forEach(function (item, index) {
+                var card = document.createElement('div');
+                card.className = 'af-kb-rule-card';
+                var def = getDef(defs, item.type || item.key);
+                if (!def) {
+                    card.innerHTML = '<div class="af-kb-help"><strong>Unknown type:</strong> ' + esc(item.type || 'unknown') + '</div><label>Raw</label><textarea data-raw-index="' + index + '">' + esc(JSON.stringify(item, null, 2)) + '</textarea><button type="button" class="af-kb-remove" data-remove-index="' + index + '">Удалить</button>';
+                    container.appendChild(card);
+                    return;
+                }
+                var title = '<div class="af-kb-rule-card__title"><strong>' + esc(def.label) + '</strong><span class="af-kb-help">' + esc(def.desc || '') + '</span></div>';
+                card.innerHTML = title;
+                var grid = document.createElement('div');
+                grid.className = 'af-kb-row';
+                def.fields.forEach(function (field) {
+                    grid.appendChild(createInput(field, item, syncRawDebounced));
+                });
+                card.appendChild(grid);
+                var remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'af-kb-remove';
+                remove.textContent = 'Удалить';
+                remove.addEventListener('click', function () {
+                    dataList.splice(index, 1);
+                    if (typeName === 'choice') {
+                        renderChoices();
+                    } else if (typeName === 'grant') {
+                        renderGrants();
+                    }
+                    syncRawDebounced();
+                });
+                card.appendChild(remove);
+                container.appendChild(card);
+            });
+            container.querySelectorAll('textarea[data-raw-index]').forEach(function (ta) {
+                ta.addEventListener('input', function () {
+                    dataList[Number(ta.getAttribute('data-raw-index'))] = readJson(ta.value, dataList[Number(ta.getAttribute('data-raw-index'))]);
+                    syncRawDebounced();
+                });
+            });
+            container.querySelectorAll('[data-remove-index]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    dataList.splice(Number(btn.getAttribute('data-remove-index')), 1);
+                    if (typeName === 'choice') {
+                        renderChoices();
+                    } else if (typeName === 'grant') {
+                        renderGrants();
+                    }
+                    syncRawDebounced();
+                });
+            });
+        }
+
+        function renderChoices() {
+            renderTypedList(fields.choices, state.choices, choiceDefs, 'choice');
+        }
+
+        function renderGrants() {
+            renderTypedList(fields.grants, state.grants, grantDefs, 'grant');
+        }
+
+        function renderTraits() {
+            fields.traits.innerHTML = '';
+            state.traits.forEach(function (trait, index) {
+                var card = document.createElement('div');
+                card.className = 'af-kb-rule-card';
+                card.innerHTML = '<div class="af-kb-rule-card__title"><strong>Trait</strong></div>';
+                var row = document.createElement('div');
+                row.className = 'af-kb-row';
+                traitFields.forEach(function (field) {
+                    row.appendChild(createInput(field, trait, syncRawDebounced));
+                });
+                card.appendChild(row);
+                var remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'af-kb-remove';
+                remove.textContent = 'Удалить';
+                remove.addEventListener('click', function () {
+                    state.traits.splice(index, 1);
+                    renderTraits();
+                    syncRawDebounced();
+                });
+                card.appendChild(remove);
+                fields.traits.appendChild(card);
+            });
+        }
+
+        root.addEventListener('click', function (event) {
+            var target = event.target;
+            if (!(target instanceof HTMLElement)) {
+                return;
+            }
+            var addChoiceType = target.getAttribute('data-add-choice');
+            if (addChoiceType) {
+                state.choices.push(JSON.parse(JSON.stringify(templates[addChoiceType] || { type: addChoiceType })));
+                renderChoices();
+                syncRawDebounced();
+                return;
+            }
+            var addGrantType = target.getAttribute('data-add-grant');
+            if (addGrantType) {
+                state.grants.push(JSON.parse(JSON.stringify(templates[addGrantType] || { type: addGrantType })));
+                renderGrants();
+                syncRawDebounced();
+                return;
+            }
+            if (target.id === 'kb-add-trait') {
+                state.traits.push({ key: '', title_ru: '', title_en: '', desc_ru: '', desc_en: '', tags: [], meta: {} });
+                renderTraits();
+                syncRawDebounced();
+                return;
+            }
+            if (target.id === 'kb-add-trait-example') {
+                state.traits.push(JSON.parse(JSON.stringify(templates.trait)));
+                renderTraits();
+                syncRawDebounced();
+                return;
+            }
+            if (target.id === 'kb-sync-from-raw') {
+                var parsed = null;
+                try {
+                    parsed = JSON.parse(raw.value || '{}');
+                    fields.rawError.textContent = '';
+                } catch (err) {
+                    fields.rawError.textContent = 'Ошибка JSON: ' + err.message;
+                    return;
+                }
+                state.size = parsed.size || 'medium';
+                state.creature_type = parsed.creature_type || 'humanoid';
+                state.speed = numberOrZero(parsed.speed || 30);
+                state.hp_base = numberOrZero(parsed.hp_base || 10);
+                state.fixed_bonuses = Object.assign(state.fixed_bonuses, parsed.fixed_bonuses || {});
+                if (!state.fixed_bonuses.stats) {
+                    state.fixed_bonuses.stats = {};
+                }
+                stats.forEach(function (key) { state.fixed_bonuses.stats[key] = numberOrZero(state.fixed_bonuses.stats[key]); });
+                state.choices = (Array.isArray(parsed.choices) ? parsed.choices : []).map(normalizeChoice);
+                state.grants = Array.isArray(parsed.grants) ? parsed.grants : [];
+                state.traits = Array.isArray(parsed.traits) ? parsed.traits : [];
+                fields.size.value = state.size;
+                fields.creature.value = state.creature_type;
+                fields.speed.value = state.speed;
+                fields.hpBase.value = state.hp_base;
+                renderFixedBonuses();
+                renderChoices();
+                renderGrants();
+                renderTraits();
+                syncRawDebounced();
+            }
+        });
+
+        [fields.size, fields.creature, fields.speed, fields.hpBase].forEach(function (field) {
+            field.addEventListener('input', syncStateFromHead);
+            field.addEventListener('change', syncStateFromHead);
+        });
+
+        renderFixedBonuses();
+        renderChoices();
+        renderGrants();
+        renderTraits();
+        syncRawDebounced();
     }
 
     document.addEventListener('DOMContentLoaded', function () {
