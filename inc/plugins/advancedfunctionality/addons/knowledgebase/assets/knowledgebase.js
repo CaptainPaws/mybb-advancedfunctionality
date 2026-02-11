@@ -477,10 +477,22 @@
         }
 
         var type = (root.getAttribute('data-type') || '').trim();
-        if (type !== 'race') {
-            root.innerHTML = '<div class="af-kb-help">Для этого типа используйте Raw Data JSON (advanced).</div>';
+        var typeSchema = readJson(root.getAttribute('data-type-schema') || '{}', {});
+        var rulesEditorEnabled = typeSchema.ui_rules_editor !== false;
+
+        function bindRawOnlyMode(message) {
+            root.innerHTML = '<div class="af-kb-help">' + esc(message) + '</div>';
             hidden.value = raw.value || '{}';
-            raw.addEventListener('input', function () { hidden.value = raw.value; });
+            raw.addEventListener('input', function () { hidden.value = raw.value || '{}'; });
+        }
+
+        if (!rulesEditorEnabled) {
+            bindRawOnlyMode('Для этого типа rules_json не используется. Доступен только raw-режим (advanced).');
+            return;
+        }
+
+        if (type !== 'race') {
+            bindRawOnlyMode('Универсальный режим rules_json: используйте raw JSON (advanced) или шаблон ниже.');
             return;
         }
 

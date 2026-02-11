@@ -748,16 +748,71 @@ function af_kb_default_ui_schema_for_type(string $typeKey): array
     return $schema;
 }
 
+function af_kb_default_type_rules_config(string $typeKey): array
+{
+    $defaults = [
+        'rules_enabled' => true,
+        'rules_schema' => '',
+        'rules_required_keys' => [],
+        'ui_rules_editor' => true,
+    ];
+
+    $typeConfig = [
+        'race' => [
+            'rules_enabled' => true,
+            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'rules_required_keys' => ['fixed_bonuses', 'choices', 'traits'],
+            'ui_rules_editor' => true,
+        ],
+        'class' => [
+            'rules_enabled' => true,
+            'rules_schema' => '',
+            'rules_required_keys' => [],
+            'ui_rules_editor' => true,
+        ],
+        'theme' => [
+            'rules_enabled' => true,
+            'rules_schema' => '',
+            'rules_required_keys' => [],
+            'ui_rules_editor' => true,
+        ],
+        'lore' => [
+            'rules_enabled' => false,
+            'rules_schema' => '',
+            'rules_required_keys' => [],
+            'ui_rules_editor' => false,
+        ],
+    ];
+
+    return array_replace($defaults, (array)($typeConfig[$typeKey] ?? []));
+}
+
 function af_kb_get_type_schema(string $typeKey): array
 {
     global $db;
 
     $safeType = $db->escape_string($typeKey);
-    $row = $db->fetch_array($db->simple_select('af_kb_types', 'ui_schema_json', "(type='".$safeType."' OR type_key='".$safeType."')", ['limit' => 1]));
+    $row = $db->fetch_array($db->simple_select('af_kb_types', 'ui_schema_json,rules_schema', "(type='".$safeType."' OR type_key='".$safeType."')", ['limit' => 1]));
     $schema = $row ? af_kb_decode_json((string)($row['ui_schema_json'] ?? '{}')) : [];
     if (empty($schema)) {
         $schema = af_kb_default_ui_schema_for_type($typeKey);
     }
+
+    $rulesConfig = af_kb_default_type_rules_config($typeKey);
+    if (!array_key_exists('rules_schema', $rulesConfig)) {
+        $rulesConfig['rules_schema'] = '';
+    }
+    $dbRulesSchema = trim((string)($row['rules_schema'] ?? ''));
+    if ($dbRulesSchema !== '' && !isset($schema['rules_schema'])) {
+        $rulesConfig['rules_schema'] = $dbRulesSchema;
+    }
+
+    $schema['rules_enabled'] = isset($schema['rules_enabled']) ? !empty($schema['rules_enabled']) : !empty($rulesConfig['rules_enabled']);
+    $schema['rules_schema'] = (string)($schema['rules_schema'] ?? $rulesConfig['rules_schema'] ?? '');
+    $schema['rules_required_keys'] = isset($schema['rules_required_keys']) && is_array($schema['rules_required_keys'])
+        ? array_values($schema['rules_required_keys'])
+        : array_values((array)($rulesConfig['rules_required_keys'] ?? []));
+    $schema['ui_rules_editor'] = isset($schema['ui_rules_editor']) ? !empty($schema['ui_rules_editor']) : !empty($rulesConfig['ui_rules_editor']);
 
     return $schema;
 }
@@ -1529,6 +1584,45 @@ function af_kb_normalize_rules_json(string $raw): string
     }
 
     return (string)json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson, array &$errors): string
+{
+    $typeSchema = af_kb_get_type_schema($type);
+    $rulesEnabled = !empty($typeSchema['rules_enabled']);
+
+    if (!$rulesEnabled) {
+        return '{}';
+    }
+
+    $rulesData = af_kb_decode_json($normalizedJson);
+    $expectedSchema = trim((string)($typeSchema['rules_schema'] ?? ''));
+    if ($expectedSchema !== '' && (string)($rulesData['schema'] ?? '') !== $expectedSchema) {
+        $errors[] = 'Data JSON schema mismatch.';
+    }
+
+    $requiredKeys = (array)($typeSchema['rules_required_keys'] ?? []);
+    foreach ($requiredKeys as $requiredKey) {
+        if (!array_key_exists((string)$requiredKey, $rulesData)) {
+            $errors[] = 'Required data field missing: ' . $requiredKey;
+        }
+    }
+
+    if (!array_key_exists('traits', $rulesData)) {
+        $rulesData['traits'] = [];
+    }
+    if (!array_key_exists('grants', $rulesData)) {
+        $rulesData['grants'] = [];
+    }
+
+    $rulesData['traits'] = af_kb_normalize_traits_json($rulesData['traits'], $errors);
+    $rulesData['grants'] = af_kb_normalize_grants_json($rulesData['grants'], $errors);
+
+    if ($expectedSchema !== '' && !array_key_exists('schema', $rulesData)) {
+        $rulesData['schema'] = $expectedSchema;
+    }
+
+    return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
 }
 
 function af_kb_validate_key_token(string $value): bool
@@ -2999,7 +3093,7 @@ function af_kb_handle_edit(): void
         if (!af_kb_validate_json($entryDataJsonRaw)) {
             $errors[] = $lang->af_kb_invalid_json ?? 'Invalid JSON.';
         }
-        $entryDataJsonNormalized = af_kb_normalize_rules_json($entryDataJsonRaw);
+        $entryDataJsonNormalized = af_kb_normalize_json($entryDataJsonRaw);
 
         $itemKind = trim((string)($metaPayload['item_kind'] ?? $mybb->get_input('item_kind')));
         if ($type === 'item') {
@@ -3123,25 +3217,7 @@ function af_kb_handle_edit(): void
         }
 
         if (!$errors) {
-            $rulesData = af_kb_decode_json($entryDataJsonNormalized);
-            if ((string)($rulesData['schema'] ?? '') !== AF_KB_RULES_SCHEMA) {
-                $errors[] = 'Data JSON schema mismatch.';
-            }
-            $rulesData['traits'] = af_kb_normalize_traits_json($rulesData['traits'] ?? [], $errors);
-            $rulesData['grants'] = af_kb_normalize_grants_json($rulesData['grants'] ?? [], $errors);
-
-            if (!$errors) {
-                $entryDataJsonNormalized = json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
-            }
-        }
-
-        if (!$errors && in_array($type, ['race', 'class'], true)) {
-            $rulesData = af_kb_decode_json($entryDataJsonNormalized);
-            foreach (['fixed_bonuses', 'choices', 'traits'] as $requiredKey) {
-                if (!array_key_exists($requiredKey, $rulesData)) {
-                    $errors[] = 'Required data field missing: ' . $requiredKey;
-                }
-            }
+            $entryDataJsonNormalized = af_kb_validate_rules_json_by_type($type, $entryDataJsonNormalized, $errors);
         }
 
         if (!$errors) {
