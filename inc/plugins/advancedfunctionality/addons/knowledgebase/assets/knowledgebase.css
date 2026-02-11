@@ -320,6 +320,39 @@ background: #000;
     gap: 8px;
 }
 
+.af-kb-errors {
+    margin-bottom: 12px;
+}
+
+.af-kb-rule-card {
+    border: 1px solid #424242;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: #0f0f0f;
+}
+
+.af-kb-rule-card__title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.af-kb-field-help-wrap {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.af-kb-help-toggle summary {
+    cursor: pointer;
+    list-style: none;
+    color: #9fb6ff;
+    font-weight: 700;
+}
+
 .af-kb-inline--align {
     align-items: flex-start;
 }
