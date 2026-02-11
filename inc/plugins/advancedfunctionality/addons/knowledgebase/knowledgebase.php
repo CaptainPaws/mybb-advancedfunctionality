@@ -766,12 +766,60 @@ function af_kb_default_type_rules_config(string $typeKey): array
         ],
         'class' => [
             'rules_enabled' => true,
-            'rules_schema' => '',
-            'rules_required_keys' => [],
+            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'rules_required_keys' => ['schema', 'type_profile', 'version', 'fixed', 'grants', 'choices', 'progression'],
             'ui_rules_editor' => true,
         ],
         'theme' => [
             'rules_enabled' => true,
+            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'rules_required_keys' => ['schema', 'type_profile', 'version', 'fixed', 'grants', 'choices'],
+            'ui_rules_editor' => true,
+        ],
+        'skill' => [
+            'rules_enabled' => true,
+            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'rules_required_keys' => ['schema', 'type_profile', 'version', 'skill'],
+            'ui_rules_editor' => true,
+        ],
+        'knowledge' => [
+            'rules_enabled' => true,
+            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'rules_required_keys' => ['schema', 'type_profile', 'version', 'skill', 'knowledge_group'],
+            'ui_rules_editor' => true,
+        ],
+        'language' => [
+            'rules_enabled' => true,
+            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'rules_required_keys' => ['schema', 'type_profile', 'version'],
+            'ui_rules_editor' => true,
+        ],
+        'item' => [
+            'rules_enabled' => true,
+            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'rules_required_keys' => ['schema', 'type_profile', 'version', 'item_kind'],
+            'ui_rules_editor' => true,
+        ],
+        'spell' => [
+            'rules_enabled' => true,
+            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'rules_required_keys' => ['schema', 'type_profile', 'version', 'spell', 'effects'],
+            'ui_rules_editor' => true,
+        ],
+        'condition' => [
+            'rules_enabled' => true,
+            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'rules_required_keys' => ['schema', 'type_profile', 'version', 'condition'],
+            'ui_rules_editor' => true,
+        ],
+        'perk' => [
+            'rules_enabled' => true,
+            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'rules_required_keys' => ['schema', 'type_profile', 'version', 'effects'],
+            'ui_rules_editor' => true,
+        ],
+        'faction' => [
+            'rules_enabled' => false,
             'rules_schema' => '',
             'rules_required_keys' => [],
             'ui_rules_editor' => true,
@@ -785,6 +833,42 @@ function af_kb_default_type_rules_config(string $typeKey): array
     ];
 
     return array_replace($defaults, (array)($typeConfig[$typeKey] ?? []));
+}
+
+function af_kb_get_type_profile_definition(string $typeKey): array
+{
+    $fixedStats = ['str' => 0, 'dex' => 0, 'con' => 0, 'int' => 0, 'wis' => 0, 'cha' => 0];
+    $base = [
+        'schema' => AF_KB_RULES_SCHEMA,
+        'type_profile' => $typeKey,
+        'version' => '1.0',
+        'fixed' => ['stats' => $fixedStats, 'hp' => 0, 'speed' => 0, 'ep' => 0, 'armor' => 0, 'initiative' => 0, 'carry' => 0],
+        'grants' => [],
+        'choices' => [],
+        'traits' => [],
+    ];
+
+    $profiles = [
+        'race' => ['ui_profile' => 'race', 'rules_enabled' => true, 'defaults' => $base + ['size' => 'medium', 'creature_type' => 'humanoid', 'speed' => 30, 'hp_base' => 10, 'languages' => ['common']]],
+        'class' => ['ui_profile' => 'class', 'rules_enabled' => true, 'defaults' => $base + ['hp_per_level' => 6, 'key_ability' => 'str', 'proficiencies' => new stdClass(), 'progression' => []]],
+        'theme' => ['ui_profile' => 'theme', 'rules_enabled' => true, 'defaults' => $base],
+        'skill' => ['ui_profile' => 'skill', 'rules_enabled' => true, 'defaults' => $base + ['skill' => ['attribute' => 'int', 'trained_only' => false, 'untrained_allowed' => true, 'armor_check_penalty_applies' => false, 'rank_mode' => 'ranked', 'max_rank' => 10, 'rank_bonus' => 1, 'base_formula' => 'attribute', 'can_buy_rank' => true]]],
+        'knowledge' => ['ui_profile' => 'knowledge', 'rules_enabled' => true, 'defaults' => $base + ['knowledge_group' => 'lore', 'skill' => ['attribute' => 'int', 'rank_mode' => 'ranked', 'max_rank' => 10, 'rank_bonus' => 1, 'base_formula' => 'attribute', 'can_buy_rank' => true]]],
+        'language' => ['ui_profile' => 'language', 'rules_enabled' => true, 'defaults' => $base + ['script' => '', 'rarity' => 'common', 'family' => '', 'requires' => []]],
+        'spell' => ['ui_profile' => 'spell', 'rules_enabled' => true, 'defaults' => $base + ['spell' => ['rank' => 1, 'tradition' => 'arcane', 'casting_time' => '1_action', 'range' => '', 'duration' => '', 'area' => '', 'requires_check' => false, 'check_stat' => 'int', 'dc' => 0], 'effects' => []]],
+        'item' => ['ui_profile' => 'item', 'rules_enabled' => true, 'defaults' => $base + ['item_kind' => 'gear', 'rarity' => 'common', 'price' => 0, 'weight' => 0, 'slots' => [], 'on_equip' => [], 'on_use' => [], 'requirements' => []]],
+        'condition' => ['ui_profile' => 'condition', 'rules_enabled' => true, 'defaults' => $base + ['condition' => ['severity' => 1, 'duration_default' => '', 'stacking' => 'none', 'effects' => []]]],
+        'perk' => ['ui_profile' => 'perk', 'rules_enabled' => true, 'defaults' => $base + ['tier' => 1, 'level_req' => 1, 'prereq' => [], 'effects' => []]],
+        'faction' => ['ui_profile' => 'faction', 'rules_enabled' => false, 'defaults' => ['meta' => []]],
+        'lore' => ['ui_profile' => 'lore', 'rules_enabled' => false, 'defaults' => ['meta' => []]],
+    ];
+
+    $profile = (array)($profiles[$typeKey] ?? ['ui_profile' => $typeKey, 'rules_enabled' => true, 'defaults' => $base]);
+    $profile['allowed_choices'] = ['kb_pick', 'stat_bonus', 'language_pick', 'proficiency_pick', 'equipment_pick', 'spell_pick'];
+    $profile['allowed_grants'] = ['resource', 'kb_ref', 'sense', 'resistance', 'movement', 'proficiency'];
+    $profile['validators'] = ['schema' => AF_KB_RULES_SCHEMA];
+
+    return $profile;
 }
 
 function af_kb_get_type_schema(string $typeKey): array
@@ -807,12 +891,20 @@ function af_kb_get_type_schema(string $typeKey): array
         $rulesConfig['rules_schema'] = $dbRulesSchema;
     }
 
-    $schema['rules_enabled'] = isset($schema['rules_enabled']) ? !empty($schema['rules_enabled']) : !empty($rulesConfig['rules_enabled']);
+    $profileSchema = af_kb_get_type_profile_definition($typeKey);
+
+    $schema['rules_enabled'] = isset($schema['rules_enabled']) ? !empty($schema['rules_enabled']) : !empty($profileSchema['rules_enabled']);
     $schema['rules_schema'] = (string)($schema['rules_schema'] ?? $rulesConfig['rules_schema'] ?? '');
     $schema['rules_required_keys'] = isset($schema['rules_required_keys']) && is_array($schema['rules_required_keys'])
         ? array_values($schema['rules_required_keys'])
         : array_values((array)($rulesConfig['rules_required_keys'] ?? []));
     $schema['ui_rules_editor'] = isset($schema['ui_rules_editor']) ? !empty($schema['ui_rules_editor']) : !empty($rulesConfig['ui_rules_editor']);
+    $schema['type_profile'] = (string)($schema['type_profile'] ?? $typeKey);
+    $schema['ui_profile'] = (string)($schema['ui_profile'] ?? ($profileSchema['ui_profile'] ?? $typeKey));
+    $schema['defaults'] = array_replace_recursive((array)($profileSchema['defaults'] ?? []), (array)($schema['defaults'] ?? []));
+    $schema['allowed_choices'] = array_values((array)($schema['allowed_choices'] ?? $profileSchema['allowed_choices'] ?? []));
+    $schema['allowed_grants'] = array_values((array)($schema['allowed_grants'] ?? $profileSchema['allowed_grants'] ?? []));
+    $schema['validators'] = array_replace_recursive((array)($profileSchema['validators'] ?? []), (array)($schema['validators'] ?? []));
 
     return $schema;
 }
@@ -1564,20 +1656,7 @@ function af_kb_normalize_rules_json(string $raw): string
         return '{}';
     }
 
-    $decoded['schema'] = AF_KB_RULES_SCHEMA;
-    if (!isset($decoded['fixed_bonuses']) || !is_array($decoded['fixed_bonuses'])) {
-        $decoded['fixed_bonuses'] = [];
-    }
-    if (!isset($decoded['fixed_bonuses']['stats']) || !is_array($decoded['fixed_bonuses']['stats'])) {
-        $decoded['fixed_bonuses']['stats'] = [];
-    }
-    foreach (['str', 'dex', 'con', 'int', 'wis', 'cha'] as $stat) {
-        $decoded['fixed_bonuses']['stats'][$stat] = (int)($decoded['fixed_bonuses']['stats'][$stat] ?? 0);
-    }
-    $decoded['fixed_bonuses']['hp'] = (int)($decoded['fixed_bonuses']['hp'] ?? 0);
-    $decoded['fixed_bonuses']['ep'] = (int)($decoded['fixed_bonuses']['ep'] ?? 0);
-
-    foreach (['languages', 'resistances', 'choices', 'traits', 'grants'] as $arrayKey) {
+    foreach (['choices', 'traits', 'grants'] as $arrayKey) {
         if (!isset($decoded[$arrayKey]) || !is_array($decoded[$arrayKey])) {
             $decoded[$arrayKey] = [];
         }
@@ -1591,14 +1670,22 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
     $typeSchema = af_kb_get_type_schema($type);
     $rulesEnabled = !empty($typeSchema['rules_enabled']);
 
-    if (!$rulesEnabled) {
-        return '{}';
+    $rulesData = af_kb_decode_json($normalizedJson);
+    if (!is_array($rulesData)) {
+        $rulesData = [];
     }
 
-    $rulesData = af_kb_decode_json($normalizedJson);
-    $expectedSchema = trim((string)($typeSchema['rules_schema'] ?? ''));
+    if (!$rulesEnabled) {
+        return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+    }
+
+    $expectedSchema = trim((string)($typeSchema['rules_schema'] ?? AF_KB_RULES_SCHEMA));
     if ($expectedSchema !== '' && (string)($rulesData['schema'] ?? '') !== $expectedSchema) {
         $errors[] = 'Data JSON schema mismatch.';
+    }
+
+    if ((string)($rulesData['type_profile'] ?? '') !== $type) {
+        $errors[] = 'Data JSON type_profile mismatch.';
     }
 
     $requiredKeys = (array)($typeSchema['rules_required_keys'] ?? []);
@@ -1608,18 +1695,23 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
         }
     }
 
-    if (!array_key_exists('traits', $rulesData)) {
+    if (!array_key_exists('traits', $rulesData) || !is_array($rulesData['traits'])) {
         $rulesData['traits'] = [];
     }
-    if (!array_key_exists('grants', $rulesData)) {
+    if (!array_key_exists('grants', $rulesData) || !is_array($rulesData['grants'])) {
         $rulesData['grants'] = [];
+    }
+    if (!array_key_exists('choices', $rulesData) || !is_array($rulesData['choices'])) {
+        $rulesData['choices'] = [];
     }
 
     $rulesData['traits'] = af_kb_normalize_traits_json($rulesData['traits'], $errors);
     $rulesData['grants'] = af_kb_normalize_grants_json($rulesData['grants'], $errors);
 
-    if ($expectedSchema !== '' && !array_key_exists('schema', $rulesData)) {
-        $rulesData['schema'] = $expectedSchema;
+    $rulesData['schema'] = $expectedSchema;
+    $rulesData['type_profile'] = $type;
+    if (!isset($rulesData['version'])) {
+        $rulesData['version'] = '1.0';
     }
 
     return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';

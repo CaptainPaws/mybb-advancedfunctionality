@@ -379,93 +379,223 @@
         }
     }
 
-    function numberOrZero(value) {
-        var n = Number(value);
-        return Number.isFinite(n) ? n : 0;
-    }
-
-    function splitCsv(value) {
-        return String(value || '').split(',').map(function (item) { return item.trim(); }).filter(Boolean);
-    }
-
-    function splitLines(value) {
-        return String(value || '').split(/\n+/).map(function (item) { return item.trim(); }).filter(Boolean);
-    }
-
-    function debounce(fn, delay) {
-        var timer = null;
-        return function () {
-            var args = arguments;
-            clearTimeout(timer);
-            timer = setTimeout(function () { fn.apply(null, args); }, delay);
-        };
-    }
-
     function esc(value) {
         return String(value || '').replace(/[&<>"']/g, function (ch) {
             return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[ch] || ch;
         });
     }
 
-    var stats = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
-    var rankOptions = ['trained', 'expert', 'master', 'legendary', '0', '1', '2', '3', '4'];
-    var kbTypes = ['skill', 'language', 'perk', 'item', 'spell', 'condition', 'trait', 'proficiency', 'weapon', 'armor'];
-    var slugPattern = /^[a-z0-9_\-:.]+$/;
+    function splitLines(value) {
+        return String(value || '').split(/\n+/).map(function (item) { return item.trim(); }).filter(Boolean);
+    }
 
-    function initMetaUi() {
-        var root = document.getElementById('af-kb-meta-ui');
-        var raw = document.getElementById('af-kb-meta-json');
-        if (!root || !raw) {
+    function deepGet(obj, path) {
+        var parts = String(path || '').split('.');
+        var ref = obj;
+        for (var i = 0; i < parts.length; i++) {
+            if (!parts[i]) {
+                continue;
+            }
+            if (!ref || typeof ref !== 'object' || !(parts[i] in ref)) {
+                return undefined;
+            }
+            ref = ref[parts[i]];
+        }
+        return ref;
+    }
+
+    function deepSet(obj, path, value) {
+        var parts = String(path || '').split('.');
+        var ref = obj;
+        for (var i = 0; i < parts.length - 1; i++) {
+            if (!parts[i]) {
+                continue;
+            }
+            if (!ref[parts[i]] || typeof ref[parts[i]] !== 'object') {
+                ref[parts[i]] = {};
+            }
+            ref = ref[parts[i]];
+        }
+        ref[parts[parts.length - 1]] = value;
+    }
+
+    function defaultRawForSchema(typeSchema, type) {
+        var defaults = typeSchema.defaults && typeof typeSchema.defaults === 'object' ? JSON.parse(JSON.stringify(typeSchema.defaults)) : {};
+        if (!defaults.schema) {
+            defaults.schema = 'af_kb.rules.v1';
+        }
+        if (!defaults.type_profile) {
+            defaults.type_profile = type;
+        }
+        if (!defaults.version) {
+            defaults.version = '1.0';
+        }
+        return defaults;
+    }
+
+    function validateRules(data, type, typeSchema) {
+        var errors = [];
+        if (typeSchema.rules_enabled === false) {
+            return errors;
+        }
+        if (String(data.schema || '') !== 'af_kb.rules.v1') {
+            errors.push('schema должен быть af_kb.rules.v1');
+        }
+        if (String(data.type_profile || '') !== String(type || '')) {
+            errors.push('type_profile должен совпадать с type записи');
+        }
+        var required = Array.isArray(typeSchema.rules_required_keys) ? typeSchema.rules_required_keys : [];
+        required.forEach(function (key) {
+            if (!(key in data)) {
+                errors.push('Отсутствует обязательное поле: ' + key);
+            }
+        });
+        return errors;
+    }
+
+    function createInputRow(label, hint) {
+        var wrap = document.createElement('div');
+        wrap.className = 'af-kb-rule-row';
+        var title = document.createElement('label');
+        title.textContent = label;
+        wrap.appendChild(title);
+        if (hint) {
+            var help = document.createElement('div');
+            help.className = 'af-kb-help';
+            help.textContent = hint;
+            wrap.appendChild(help);
+        }
+        return wrap;
+    }
+
+    function createJsonEditor(root, state, onChange) {
+        var ta = document.createElement('textarea');
+        ta.value = JSON.stringify(state.raw, null, 2);
+        ta.addEventListener('input', function () {
+            try {
+                state.raw = readJson(ta.value, state.raw);
+                onChange();
+            } catch (e) {}
+        });
+        root.appendChild(ta);
+        return ta;
+    }
+
+    function buildProfileSections(uiRoot, state, typeSchema, onChange) {
+        var profile = typeSchema.ui_profile || state.type;
+        var section = document.createElement('div');
+        section.className = 'af-kb-rule-card';
+        var title = document.createElement('h4');
+        title.textContent = 'UI profile: ' + profile;
+        section.appendChild(title);
+
+        var profileMap = {
+            race: [
+                { path: 'size', label: 'size', hint: 'Размер (rules.size)' },
+                { path: 'creature_type', label: 'creature_type', hint: 'Тип существа (rules.creature_type)' },
+                { path: 'speed', label: 'speed', hint: 'Базовая скорость (rules.speed)' },
+                { path: 'hp_base', label: 'hp_base', hint: 'Базовое HP (rules.hp_base)' },
+                { path: 'languages', label: 'languages', hint: 'Список языков (rules.languages)' }
+            ],
+            class: [
+                { path: 'hp_per_level', label: 'hp_per_level', hint: 'HP за уровень (rules.hp_per_level)' },
+                { path: 'key_ability', label: 'key_ability', hint: 'Ключевая характеристика (rules.key_ability)' },
+                { path: 'proficiencies', label: 'proficiencies', hint: 'Базовые профы (rules.proficiencies)' },
+                { path: 'progression', label: 'progression', hint: 'Прогрессия по уровням (rules.progression)' }
+            ],
+            theme: [
+                { path: 'fixed', label: 'fixed', hint: 'Фиксированные бонусы (rules.fixed)' },
+                { path: 'grants', label: 'grants', hint: 'Автовыдачи (rules.grants)' },
+                { path: 'choices', label: 'choices', hint: 'Выборы (rules.choices)' }
+            ],
+            skill: [
+                { path: 'skill.attribute', label: 'attribute', hint: 'Ключевой атрибут (rules.skill.attribute)' },
+                { path: 'skill.rank_mode', label: 'rank_mode', hint: 'binary|ranked (rules.skill.rank_mode)' },
+                { path: 'skill.max_rank', label: 'max_rank', hint: 'Макс. ранг (rules.skill.max_rank)' },
+                { path: 'skill.rank_bonus', label: 'rank_bonus', hint: 'Бонус за ранг (rules.skill.rank_bonus)' },
+                { path: 'skill.can_buy_rank', label: 'can_buy_rank', hint: 'Можно покупать ранги (rules.skill.can_buy_rank)' }
+            ],
+            knowledge: [
+                { path: 'knowledge_group', label: 'knowledge_group', hint: 'Группа знаний (rules.knowledge_group)' },
+                { path: 'skill.attribute', label: 'attribute', hint: 'Ключевой атрибут (rules.skill.attribute)' },
+                { path: 'skill.rank_mode', label: 'rank_mode', hint: 'Режим рангов (rules.skill.rank_mode)' }
+            ],
+            language: [
+                { path: 'script', label: 'script', hint: 'Письменность (rules.script)' },
+                { path: 'rarity', label: 'rarity', hint: 'common/uncommon/rare (rules.rarity)' },
+                { path: 'family', label: 'family', hint: 'Семья языка (rules.family)' },
+                { path: 'requires', label: 'requires', hint: 'Требования KB refs (rules.requires)' }
+            ],
+            spell: [
+                { path: 'spell.rank', label: 'rank', hint: 'Ранг (rules.spell.rank)' },
+                { path: 'spell.tradition', label: 'tradition', hint: 'Традиция (rules.spell.tradition)' },
+                { path: 'spell.casting_time', label: 'casting_time', hint: 'Время каста (rules.spell.casting_time)' },
+                { path: 'effects', label: 'effects', hint: 'Эффекты (rules.effects)' }
+            ],
+            item: [
+                { path: 'item_kind', label: 'item_kind', hint: 'weapon/armor/consumable/gear/cyberware (rules.item_kind)' },
+                { path: 'price', label: 'price', hint: 'Цена (rules.price)' },
+                { path: 'weight', label: 'weight', hint: 'Вес (rules.weight)' },
+                { path: 'on_equip', label: 'on_equip', hint: 'Эффекты при экипировке (rules.on_equip)' },
+                { path: 'on_use', label: 'on_use', hint: 'Эффекты при использовании (rules.on_use)' }
+            ],
+            condition: [
+                { path: 'condition.severity', label: 'severity', hint: 'Тяжесть (rules.condition.severity)' },
+                { path: 'condition.duration_default', label: 'duration_default', hint: 'Длительность по умолчанию' },
+                { path: 'condition.stacking', label: 'stacking', hint: 'none/refresh/stack' },
+                { path: 'condition.effects', label: 'effects', hint: 'Эффекты состояния' }
+            ],
+            perk: [
+                { path: 'tier', label: 'tier', hint: 'Тир перка (rules.tier)' },
+                { path: 'level_req', label: 'level_req', hint: 'Требуемый уровень (rules.level_req)' },
+                { path: 'prereq', label: 'prereq', hint: 'Требования (rules.prereq)' },
+                { path: 'effects', label: 'effects', hint: 'Эффекты (rules.effects)' }
+            ],
+            faction: [
+                { path: 'starting_rep', label: 'starting_rep', hint: 'Стартовая репутация' },
+                { path: 'rep_gain', label: 'rep_gain', hint: 'Прирост репутации' },
+                { path: 'faction_perks', label: 'faction_perks', hint: 'Перки по репе' }
+            ],
+            lore: []
+        };
+
+        var fields = profileMap[profile] || [];
+        if (!fields.length) {
+            section.insertAdjacentHTML('beforeend', '<div class="af-kb-help">Для этого профиля используйте raw JSON.</div>');
+            uiRoot.appendChild(section);
             return;
         }
 
-        var meta = readJson(raw.value, {});
-        if (!meta.ui || typeof meta.ui !== 'object') {
-            meta.ui = {};
-        }
-        if (!Array.isArray(meta.tags)) {
-            meta.tags = [];
-        }
-        if (!meta.links || typeof meta.links !== 'object') {
-            meta.links = {};
-        }
-
-        root.innerHTML = [
-            '<div class="af-kb-row"><div><label>Tags (через запятую)</label><input type="text" id="af-kb-meta-tags" /></div><div><label>Wiki link</label><input type="url" id="af-kb-meta-wiki" /></div></div>',
-            '<div class="af-kb-row"><div><label>Icon URL</label><input type="url" id="af-kb-meta-icon-url" /></div><div><label>Icon class</label><input type="text" id="af-kb-meta-icon-class" /></div></div>',
-            '<div class="af-kb-row"><div><label>Background URL</label><input type="url" id="af-kb-meta-bg-url" /></div><div><label>Background tab URL</label><input type="url" id="af-kb-meta-bg-tab-url" /></div></div>'
-        ].join('');
-
-        var fields = {
-            tags: root.querySelector('#af-kb-meta-tags'),
-            wiki: root.querySelector('#af-kb-meta-wiki'),
-            iconUrl: root.querySelector('#af-kb-meta-icon-url'),
-            iconClass: root.querySelector('#af-kb-meta-icon-class'),
-            bgUrl: root.querySelector('#af-kb-meta-bg-url'),
-            bgTabUrl: root.querySelector('#af-kb-meta-bg-tab-url')
-        };
-
-        fields.tags.value = (meta.tags || []).join(', ');
-        fields.wiki.value = meta.links.wiki || '';
-        fields.iconUrl.value = meta.ui.icon_url || '';
-        fields.iconClass.value = meta.ui.icon_class || '';
-        fields.bgUrl.value = meta.ui.background_url || '';
-        fields.bgTabUrl.value = meta.background_tab_url || meta.ui.background_tab_url || '';
-
-        function syncMeta() {
-            meta.tags = splitCsv(fields.tags.value);
-            meta.links.wiki = fields.wiki.value.trim();
-            meta.ui.icon_url = fields.iconUrl.value.trim();
-            meta.ui.icon_class = fields.iconClass.value.trim();
-            meta.ui.background_url = fields.bgUrl.value.trim();
-            meta.ui.background_tab_url = fields.bgTabUrl.value.trim();
-            meta.background_tab_url = fields.bgTabUrl.value.trim();
-            raw.value = JSON.stringify(meta, null, 2);
-        }
-
-        Object.keys(fields).forEach(function (key) {
-            fields[key].addEventListener('input', syncMeta);
+        fields.forEach(function (fieldDef) {
+            var row = createInputRow(fieldDef.label, fieldDef.hint);
+            var currentValue = deepGet(state.raw, fieldDef.path);
+            var input = document.createElement('textarea');
+            if (typeof currentValue === 'string') {
+                input.value = currentValue;
+            } else if (Array.isArray(currentValue)) {
+                input.value = currentValue.join('\n');
+            } else {
+                input.value = JSON.stringify(currentValue != null ? currentValue : '', null, 2);
+            }
+            input.addEventListener('input', function () {
+                var next = input.value;
+                if (/^\s*[\[{]/.test(next)) {
+                    next = readJson(next, currentValue);
+                } else if (next === 'true' || next === 'false') {
+                    next = next === 'true';
+                } else if (next !== '' && !isNaN(Number(next))) {
+                    next = Number(next);
+                } else if (next.indexOf('\n') !== -1) {
+                    next = splitLines(next);
+                }
+                deepSet(state.raw, fieldDef.path, next);
+                onChange();
+            });
+            row.appendChild(input);
+            section.appendChild(row);
         });
+
+        uiRoot.appendChild(section);
     }
 
     function initDataUi() {
@@ -478,617 +608,90 @@
 
         var type = (root.getAttribute('data-type') || '').trim();
         var typeSchema = readJson(root.getAttribute('data-type-schema') || '{}', {});
-        var rulesEditorEnabled = typeSchema.ui_rules_editor !== false;
-
-        function bindRawOnlyMode(message) {
-            root.innerHTML = '<div class="af-kb-help">' + esc(message) + '</div>';
-            hidden.value = raw.value || '{}';
-            raw.addEventListener('input', function () { hidden.value = raw.value || '{}'; });
-        }
-
-        if (!rulesEditorEnabled) {
-            bindRawOnlyMode('Для этого типа rules_json не используется. Доступен только raw-режим (advanced).');
-            return;
-        }
-
-        if (type !== 'race') {
-            bindRawOnlyMode('Универсальный режим rules_json: используйте raw JSON (advanced) или шаблон ниже.');
-            return;
-        }
-
         var parsedRaw = readJson(raw.value || '{}', {});
         var state = {
-            schema: 'af_kb.rules.v1',
-            size: parsedRaw.size || 'medium',
-            creature_type: parsedRaw.creature_type || 'humanoid',
-            speed: numberOrZero(parsedRaw.speed || 30),
-            hp_base: numberOrZero(parsedRaw.hp_base || 10),
-            fixed_bonuses: Object.assign({
-                stats: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
-                hp: 0,
-                ep: 0,
-                skill_points: 0,
-                feat_points: 0,
-                perk_points: 0,
-                language_slots: 0
-            }, parsedRaw.fixed_bonuses || {}),
-            choices: Array.isArray(parsedRaw.choices) ? parsedRaw.choices.slice() : [],
-            grants: Array.isArray(parsedRaw.grants) ? parsedRaw.grants.slice() : [],
-            traits: Array.isArray(parsedRaw.traits) ? parsedRaw.traits.slice() : [],
-            visibility: parsedRaw.visibility || 'technical',
-            is_technical: true
-        };
-        state.fixed_bonuses.stats = (function (src) {
-            var out = {};
-            stats.forEach(function (key) { out[key] = numberOrZero(src && src[key]); });
-            return out;
-        })(state.fixed_bonuses.stats);
-
-        var syncError = '';
-        var rawError = '';
-
-        var templates = {
-            stat_bonus_choice: { type: 'stat_bonus_choice', id: 'boost_1', pick: 1, options: stats.slice(), value: 2, mode: 'add', exclude: [] },
-            skill_pick_choice: { type: 'skill_pick_choice', id: 'skills_pick', pick: 2, options: [], exclude: [], grant_mode: 'rank', rank_value: 1, points_value: 2 },
-            language_pick_choice: { type: 'language_pick_choice', id: 'lang_pick', pick: 1, exclude: ['common'], allow_custom: false, value: 1 },
-            proficiency_pick_choice: { type: 'proficiency_pick_choice', id: 'prof_pick', pick: 1, prof_type: 'weapon', options: [], rank: 'trained', exclude: [] },
-            feat_pick_choice: { type: 'feat_pick_choice', id: 'perk_pick', pick: 1, kb_type: 'perk', tag_filter: [], exclude: [] },
-            equipment_pick_choice: { type: 'equipment_pick_choice', id: 'item_pick', pick: 1, kb_type: 'item', options: [], exclude: [], quantity: 1, grant: { type: 'item_grant', qty: 1 } },
-            spell_pick_choice: { type: 'spell_pick_choice', id: 'spell_pick', pick: 1, kb_type: 'spell', tradition: '', school: '', level_min: 0, level_max: 1, grant: { type: 'spell_known', amount: 1 } },
-            kb_pick_choice: { type: 'kb_pick_choice', id: 'kb_pick', kb_type: 'skill', pick: 1, options: [], exclude: [], grant: { type: 'kb_grant', amount: 1 } },
-            skill_rank: { type: 'skill_rank', kb_type: 'skill', kb_key: 'athletics', rank: 'trained', mode: 'max' },
-            resource_gain: { type: 'resource_gain', resource: 'skill_points', value: 2, stack_mode: 'add' },
-            item_grant: { type: 'item_grant', kb_key: 'starter_kit', qty: 1, bind: false, equipped: false, slot: '' },
-            resistance_grant: { type: 'resistance_grant', damage_type: 'fire', value: 5 },
-            sense_grant: { type: 'sense_grant', sense_type: 'darkvision', range: 60 },
-            speed_grant: { type: 'speed_grant', speed_type: 'swim', value: 20, condition: '' },
-            trait: { key: 'humanoid', title_ru: 'Гуманоид', title_en: 'Humanoid', desc_ru: '', desc_en: '', tags: ['species'], meta: {} }
+            type: type,
+            raw: Object.assign(defaultRawForSchema(typeSchema, type), parsedRaw)
         };
 
-        function normalizeChoice(choice) {
-            var out = choice && typeof choice === 'object' ? JSON.parse(JSON.stringify(choice)) : {};
-            if (out.type === 'stat_bonus') {
-                out.type = 'stat_bonus_choice';
-            }
-            if (out.type === 'kb_pick') {
-                out.type = 'kb_pick_choice';
-            }
-            if (out.type === 'language_pick') {
-                out.type = 'language_pick_choice';
-            }
-            return out;
-        }
-        state.choices = state.choices.map(normalizeChoice);
-
-        var choiceDefs = [
-            { key: 'stat_bonus_choice', label: 'Stat bonus choice', desc: 'Выбор атрибутов + бонус', fields: [
-                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора', help: 'Используется для сохранения выбора персонажа.' },
-                { name: 'pick', type: 'number', required: true, hint: 'Сколько вариантов выбрать' },
-                { name: 'options', type: 'lines', hint: 'Какие статы доступны (по одному в строке)' },
-                { name: 'value', type: 'number', required: true, hint: 'Размер бонуса за выбор' },
-                { name: 'mode', type: 'select', options: ['add', 'set'], hint: 'Как применять бонус' },
-                { name: 'exclude', type: 'lines', hint: 'Список запрещённых ключей' }
-            ] },
-            { key: 'kb_pick_choice', label: 'KB pick choice', desc: 'Универсальный выбор из KB', fields: [
-                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора' },
-                { name: 'kb_type', type: 'select', options: kbTypes, required: true, hint: 'Каталог KB для выбора' },
-                { name: 'pick', type: 'number', required: true, hint: 'Сколько элементов выбрать' },
-                { name: 'options', type: 'lines', hint: 'Ограничить только этими key' },
-                { name: 'exclude', type: 'lines', hint: 'Исключить key' },
-                { name: 'grant', type: 'json', hint: 'Что выдать за каждый выбранный объект' }
-            ] },
-            { key: 'language_pick_choice', label: 'Language pick', desc: 'Выбор языков', fields: [
-                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора' },
-                { name: 'pick', type: 'number', required: true, hint: 'Сколько языков выбрать' },
-                { name: 'exclude', type: 'lines', hint: 'Исключить языки (например common)' },
-                { name: 'allow_custom', type: 'checkbox', hint: 'Разрешить ручной ввод языка' },
-                { name: 'value', type: 'number', hint: 'Сколько языков даётся за один выбор' }
-            ] },
-            { key: 'skill_pick_choice', label: 'Skill pick', desc: 'Частый кейс выбора навыков', fields: [
-                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора' },
-                { name: 'pick', type: 'number', required: true, hint: 'Сколько навыков выбрать' },
-                { name: 'options', type: 'lines', hint: 'Ограничить доступные навыки' },
-                { name: 'exclude', type: 'lines', hint: 'Запретить навыки' },
-                { name: 'grant_mode', type: 'select', options: ['rank', 'skill_points'], hint: 'Что начислять: ранг или очки навыков' },
-                { name: 'rank_value', type: 'number', hint: 'Ранг при grant_mode=rank' },
-                { name: 'points_value', type: 'number', hint: 'Очки при grant_mode=skill_points' }
-            ] },
-            { key: 'proficiency_pick_choice', label: 'Proficiency pick', desc: 'Выбор категории владения', fields: [
-                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора' },
-                { name: 'pick', type: 'number', required: true, hint: 'Сколько выбрать' },
-                { name: 'prof_type', type: 'select', options: ['weapon', 'armor', 'tool', 'save', 'skill'], hint: 'Тип профы' },
-                { name: 'options', type: 'lines', hint: 'Разрешённые категории' },
-                { name: 'rank', type: 'select', options: rankOptions, hint: 'Какой ранг дать' },
-                { name: 'exclude', type: 'lines', hint: 'Исключения' }
-            ] },
-            { key: 'feat_pick_choice', label: 'Feat/perk pick', desc: 'Выбор фита/перка', fields: [
-                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора' },
-                { name: 'pick', type: 'number', required: true, hint: 'Сколько выбрать' },
-                { name: 'kb_type', type: 'fixed', value: 'perk', hint: 'Всегда perk' },
-                { name: 'tag_filter', type: 'lines', hint: 'Фильтр по тегам' },
-                { name: 'exclude', type: 'lines', hint: 'Исключить key' }
-            ] },
-            { key: 'equipment_pick_choice', label: 'Equipment pick', desc: 'Выбор стартового предмета', fields: [
-                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора' },
-                { name: 'pick', type: 'number', required: true, hint: 'Сколько выбрать' },
-                { name: 'kb_type', type: 'fixed', value: 'item', hint: 'Всегда item' },
-                { name: 'options', type: 'lines', hint: 'Разрешённые предметы' },
-                { name: 'exclude', type: 'lines', hint: 'Исключить предметы' },
-                { name: 'quantity', type: 'number', hint: 'Количество по умолчанию' },
-                { name: 'grant', type: 'json', hint: 'item_grant блок' }
-            ] },
-            { key: 'spell_pick_choice', label: 'Spell pick', desc: 'Выбор заклинаний', fields: [
-                { name: 'id', type: 'text', required: true, hint: 'Уникальный ключ выбора' },
-                { name: 'pick', type: 'number', required: true, hint: 'Сколько выбрать' },
-                { name: 'kb_type', type: 'fixed', value: 'spell', hint: 'Всегда spell' },
-                { name: 'tradition', type: 'text', hint: 'Фильтр tradition' },
-                { name: 'school', type: 'text', hint: 'Фильтр school' },
-                { name: 'level_min', type: 'number', hint: 'Минимальный уровень' },
-                { name: 'level_max', type: 'number', hint: 'Максимальный уровень' },
-                { name: 'grant', type: 'json', hint: 'spell_known блок' }
-            ] }
-        ];
-
-        var grantDefs = [
-            { key: 'resource_gain', label: 'Resource gain', fields: [
-                { name: 'resource', type: 'select', options: ['hp', 'ep', 'skill_points', 'feat_points', 'perk_points', 'language_slots'] },
-                { name: 'value', type: 'number', required: true },
-                { name: 'stack_mode', type: 'select', options: ['add', 'set'] }
-            ] },
-            { key: 'skill_rank', label: 'Skill rank', fields: [
-                { name: 'kb_type', type: 'fixed', value: 'skill' },
-                { name: 'kb_key', type: 'kb_key', kbTypeField: 'kb_type', required: true },
-                { name: 'rank', type: 'select', options: rankOptions },
-                { name: 'mode', type: 'select', options: ['set', 'max', 'add'] }
-            ] },
-            { key: 'proficiency_grant', label: 'Proficiency grant', fields: [
-                { name: 'prof_type', type: 'select', options: ['weapon', 'armor', 'tool', 'save', 'skill'] },
-                { name: 'target_key', type: 'text', required: true },
-                { name: 'rank', type: 'select', options: rankOptions },
-                { name: 'mode', type: 'select', options: ['set', 'max', 'add'] }
-            ] },
-            { key: 'kb_grant', label: 'KB grant', fields: [
-                { name: 'kb_type', type: 'select', options: kbTypes },
-                { name: 'kb_key', type: 'kb_key', kbTypeField: 'kb_type', required: true },
-                { name: 'amount', type: 'number' },
-                { name: 'flags', type: 'json' }
-            ] },
-            { key: 'item_grant', label: 'Item grant', fields: [
-                { name: 'kb_type', type: 'fixed', value: 'item' },
-                { name: 'kb_key', type: 'kb_key', kbTypeField: 'kb_type', required: true },
-                { name: 'qty', type: 'number' },
-                { name: 'bind', type: 'checkbox' },
-                { name: 'equipped', type: 'checkbox' },
-                { name: 'slot', type: 'text' }
-            ] },
-            { key: 'condition_grant', label: 'Condition grant', fields: [
-                { name: 'kb_type', type: 'fixed', value: 'condition' },
-                { name: 'kb_key', type: 'kb_key', kbTypeField: 'kb_type', required: true },
-                { name: 'duration', type: 'text' },
-                { name: 'stacks', type: 'number' },
-                { name: 'intensity', type: 'number' }
-            ] },
-            { key: 'resistance_grant', label: 'Resistance grant', fields: [
-                { name: 'damage_type', type: 'text', required: true },
-                { name: 'value', type: 'number', required: true }
-            ] },
-            { key: 'weakness_grant', label: 'Weakness grant', fields: [
-                { name: 'damage_type', type: 'text', required: true },
-                { name: 'value', type: 'number', required: true }
-            ] },
-            { key: 'speed_grant', label: 'Speed grant', fields: [
-                { name: 'speed_type', type: 'select', options: ['walk', 'fly', 'swim', 'climb', 'burrow'] },
-                { name: 'value', type: 'number', required: true },
-                { name: 'condition', type: 'text' }
-            ] },
-            { key: 'sense_grant', label: 'Sense grant', fields: [
-                { name: 'sense_type', type: 'text', required: true },
-                { name: 'range', type: 'number' }
-            ] }
-        ];
-
-        var traitFields = [
-            { name: 'key', type: 'text', required: true, hint: 'Ключ особенности (slug)' },
-            { name: 'title_ru', type: 'text' },
-            { name: 'title_en', type: 'text' },
-            { name: 'desc_ru', type: 'textarea' },
-            { name: 'desc_en', type: 'textarea' },
-            { name: 'tags', type: 'lines' },
-            { name: 'meta', type: 'json' }
-        ];
-
-        root.innerHTML = [
+        var wrapper = document.createElement('div');
+        wrapper.className = 'af-kb-rules-wrap';
+        wrapper.innerHTML = [
+            '<div class="af-kb-rule-actions">',
+            '<button type="button" id="kb-build-raw">Собрать Raw из UI</button>',
+            '<button type="button" id="kb-parse-ui">Разобрать UI из Raw</button>',
+            '<button type="button" id="kb-insert-example">Вставить пример (по профилю)</button>',
+            '<button type="button" id="kb-validate-json">Валидировать JSON</button>',
+            '<button type="button" id="kb-reset-defaults">Сбросить к дефолту профиля</button>',
+            '</div>',
             '<div id="kb-rules-errors" class="af-kb-errors"></div>',
-            '<div class="af-kb-row"><div><label>Size</label><select id="kb-size"><option>tiny</option><option>small</option><option>medium</option><option>large</option><option>huge</option></select></div><div><label>Creature type</label><input type="text" id="kb-creature" /></div></div>',
-            '<div class="af-kb-row"><div><label>Speed (base walk)</label><input type="number" id="kb-speed" /></div><div><label>HP base</label><input type="number" id="kb-hp-base" /></div></div>',
-            '<details open="open" class="af-kb-collapsible"><summary>Fixed bonuses</summary><div id="kb-fixed-bonuses"></div></details>',
-            '<details open="open" class="af-kb-collapsible"><summary>Choices</summary><div class="af-kb-inline"><button type="button" class="af-kb-add" data-add-choice="stat_bonus_choice">+2 к одному атрибуту</button><button type="button" class="af-kb-add" data-add-choice="skill_pick_choice">2 навыка trained</button><button type="button" class="af-kb-add" data-add-choice="language_pick_choice">1 язык (кроме common)</button><button type="button" class="af-kb-add" data-add-choice="kb_pick_choice">KB pick</button><button type="button" class="af-kb-add" data-add-choice="proficiency_pick_choice">Proficiency pick</button><button type="button" class="af-kb-add" data-add-choice="feat_pick_choice">Feat/perk pick</button><button type="button" class="af-kb-add" data-add-choice="equipment_pick_choice">Equipment pick</button><button type="button" class="af-kb-add" data-add-choice="spell_pick_choice">Spell pick</button></div><div id="kb-choices-list"></div></details>',
-            '<details open="open" class="af-kb-collapsible"><summary>Grants</summary><div class="af-kb-inline"><button type="button" class="af-kb-add" data-add-grant="resource_gain">Выдать 2 skill_points</button><button type="button" class="af-kb-add" data-add-grant="skill_rank">Фиксированный навык trained</button><button type="button" class="af-kb-add" data-add-grant="item_grant">Стартовый предмет x1</button><button type="button" class="af-kb-add" data-add-grant="resistance_grant">Сопротивление огню 5</button><button type="button" class="af-kb-add" data-add-grant="sense_grant">Darkvision</button><button type="button" class="af-kb-add" data-add-grant="speed_grant">Скорость плавания 20</button></div><div id="kb-grants-list"></div></details>',
-            '<details open="open" class="af-kb-collapsible"><summary>Traits</summary><div class="af-kb-inline"><button type="button" class="af-kb-add" id="kb-add-trait">Добавить trait</button><button type="button" class="af-kb-add" id="kb-add-trait-example">Вставить пример trait</button></div><div id="kb-traits-list"></div></details>',
-            '<details class="af-kb-collapsible"><summary>Raw sync</summary><div class="af-kb-inline"><button type="button" class="af-kb-add" id="kb-sync-from-raw">Синхронизировать из raw</button><span class="af-kb-help">Raw остаётся source-of-truth и всегда доступен.</span></div><div id="kb-raw-error" class="af-kb-help"></div></details>'
+            '<div id="kb-ui-profile"></div>'
         ].join('');
+        root.innerHTML = '';
+        root.appendChild(wrapper);
 
-        var fields = {
-            size: root.querySelector('#kb-size'),
-            creature: root.querySelector('#kb-creature'),
-            speed: root.querySelector('#kb-speed'),
-            hpBase: root.querySelector('#kb-hp-base'),
-            fixed: root.querySelector('#kb-fixed-bonuses'),
-            choices: root.querySelector('#kb-choices-list'),
-            grants: root.querySelector('#kb-grants-list'),
-            traits: root.querySelector('#kb-traits-list'),
-            errors: root.querySelector('#kb-rules-errors'),
-            rawError: root.querySelector('#kb-raw-error')
-        };
+        var errorsNode = wrapper.querySelector('#kb-rules-errors');
+        var profileNode = wrapper.querySelector('#kb-ui-profile');
 
-        fields.size.value = state.size;
-        fields.creature.value = state.creature_type;
-        fields.speed.value = state.speed;
-        fields.hpBase.value = state.hp_base;
+        function syncRawArea() {
+            raw.value = JSON.stringify(state.raw, null, 2);
+            hidden.value = raw.value;
+        }
 
-        function getDef(defs, key) {
-            for (var i = 0; i < defs.length; i += 1) {
-                if (defs[i].key === key) {
-                    return defs[i];
-                }
+        function renderUi() {
+            profileNode.innerHTML = '';
+            buildProfileSections(profileNode, state, typeSchema, syncRawArea);
+            syncRawArea();
+        }
+
+        function showErrors(errors) {
+            if (!errors.length) {
+                errorsNode.innerHTML = '';
+                return;
             }
-            return null;
+            errorsNode.innerHTML = '<div class="af-kb-help" style="color:#c62828">' + errors.map(esc).join('<br>') + '</div>';
         }
 
-        function createInput(def, obj, onChange) {
-            var wrap = document.createElement('div');
-            var label = document.createElement('label');
-            label.textContent = def.name;
-            wrap.appendChild(label);
-            var input;
-            var value = obj[def.name];
-            if (def.type === 'textarea') {
-                input = document.createElement('textarea');
-                input.value = value || '';
-            } else if (def.type === 'lines') {
-                input = document.createElement('textarea');
-                input.value = Array.isArray(value) ? value.join('\n') : (value || '');
-            } else if (def.type === 'json') {
-                input = document.createElement('textarea');
-                input.value = JSON.stringify(value || {}, null, 2);
-            } else if (def.type === 'number') {
-                input = document.createElement('input');
-                input.type = 'number';
-                input.value = value != null ? String(value) : '0';
-            } else if (def.type === 'select') {
-                input = document.createElement('select');
-                (def.options || []).forEach(function (opt) {
-                    var option = document.createElement('option');
-                    option.value = String(opt);
-                    option.textContent = String(opt);
-                    input.appendChild(option);
-                });
-                input.value = value != null ? String(value) : String((def.options && def.options[0]) || '');
-            } else if (def.type === 'checkbox') {
-                input = document.createElement('input');
-                input.type = 'checkbox';
-                input.checked = !!value;
-            } else if (def.type === 'fixed') {
-                input = document.createElement('input');
-                input.type = 'text';
-                input.value = def.value || '';
-                input.readOnly = true;
-                obj[def.name] = def.value;
-            } else {
-                input = document.createElement('input');
-                input.type = 'text';
-                input.value = value || '';
-                if (def.type === 'kb_key') {
-                    var datalistId = 'kb-list-' + Math.random().toString(16).slice(2);
-                    var list = document.createElement('datalist');
-                    list.id = datalistId;
-                    input.setAttribute('list', datalistId);
-                    wrap.appendChild(list);
-                    var typeName = def.kbTypeField ? obj[def.kbTypeField] : obj.kb_type;
-                    input.addEventListener('input', debounce(function () {
-                        fetch('misc.php?action=kb_json_list&type=' + encodeURIComponent(typeName || '') + '&q=' + encodeURIComponent(input.value || ''), { credentials: 'same-origin' })
-                            .then(function (res) { return res.json(); })
-                            .then(function (payload) {
-                                list.innerHTML = '';
-                                if (!payload || !Array.isArray(payload.items)) {
-                                    return;
-                                }
-                                payload.items.slice(0, 25).forEach(function (item) {
-                                    var opt = document.createElement('option');
-                                    opt.value = item.key;
-                                    opt.label = (item.title || item.key) + ' (' + item.key + ')';
-                                    list.appendChild(opt);
-                                });
-                            }).catch(function () {});
-                    }, 250));
-                }
-            }
-            input.dataset.field = def.name;
-            input.addEventListener('input', function () {
-                if (def.type === 'lines') {
-                    obj[def.name] = splitLines(input.value);
-                } else if (def.type === 'json') {
-                    obj[def.name] = readJson(input.value, {});
-                } else if (def.type === 'number') {
-                    obj[def.name] = numberOrZero(input.value);
-                } else if (def.type === 'checkbox') {
-                    obj[def.name] = input.checked;
-                } else {
-                    obj[def.name] = input.value;
-                }
-                onChange();
-            });
-            wrap.appendChild(input);
-            if (def.hint) {
-                wrap.insertAdjacentHTML('beforeend', '<div class="af-kb-help">' + esc(def.hint) + '</div>');
-            }
-            return wrap;
-        }
-
-        function validate() {
-            var errors = [];
-            function validateSlugList(values, prefix) {
-                (values || []).forEach(function (value) {
-                    if (!slugPattern.test(value)) {
-                        errors.push(prefix + ': invalid key ' + value);
-                    }
-                });
-            }
-            state.choices.forEach(function (item, i) {
-                if (!item.type) {
-                    errors.push('choices[' + i + ']: missing type');
-                    return;
-                }
-                var def = getDef(choiceDefs, item.type);
-                if (!def) {
-                    return;
-                }
-                def.fields.forEach(function (field) {
-                    if (field.required && (item[field.name] == null || item[field.name] === '')) {
-                        errors.push('choices[' + i + '].' + field.name + ': required');
-                    }
-                });
-                validateSlugList(item.options, 'choices[' + i + '].options');
-                validateSlugList(item.exclude, 'choices[' + i + '].exclude');
-            });
-            state.traits.forEach(function (item, i) {
-                if (!item.key) {
-                    errors.push('traits[' + i + '].key: required');
-                }
-            });
-            fields.errors.innerHTML = errors.length ? ('<div class="af-kb-help">Ошибки схемы:<br>' + errors.map(esc).join('<br>') + '</div>') : '';
-            return errors;
-        }
-
-        function toPayload() {
-            var payload = JSON.parse(JSON.stringify(state));
-            payload.fixed_bonuses.stats = {};
-            stats.forEach(function (key) { payload.fixed_bonuses.stats[key] = numberOrZero(state.fixed_bonuses.stats[key]); });
-            payload.choices = state.choices.map(function (choice) {
-                var out = JSON.parse(JSON.stringify(choice));
-                if (out.type === 'stat_bonus_choice') {
-                    out.type = 'stat_bonus';
-                } else if (out.type === 'kb_pick_choice') {
-                    out.type = 'kb_pick';
-                } else if (out.type === 'language_pick_choice') {
-                    out.type = 'language_pick';
-                }
-                return out;
-            });
-            return payload;
-        }
-
-        var syncRawDebounced = debounce(function () {
-            validate();
-            var payload = toPayload();
-            raw.value = JSON.stringify(payload, null, 2);
-            hidden.value = JSON.stringify(payload);
-        }, 350);
-
-        function syncStateFromHead() {
-            state.size = fields.size.value;
-            state.creature_type = fields.creature.value.trim() || 'humanoid';
-            state.speed = numberOrZero(fields.speed.value);
-            state.hp_base = numberOrZero(fields.hpBase.value);
-            syncRawDebounced();
-        }
-
-        function renderFixedBonuses() {
-            fields.fixed.innerHTML = '';
-            var rowStats = document.createElement('div');
-            rowStats.className = 'af-kb-row';
-            stats.forEach(function (key) {
-                var box = document.createElement('div');
-                box.innerHTML = '<label>' + key + '</label><input type="number" data-stat="' + key + '" value="' + numberOrZero(state.fixed_bonuses.stats[key]) + '" /><div class="af-kb-help">Фиксированный бонус к атрибуту.</div>';
-                rowStats.appendChild(box);
-            });
-            fields.fixed.appendChild(rowStats);
-            var resources = ['hp', 'ep', 'skill_points', 'feat_points', 'perk_points', 'language_slots'];
-            var rowResources = document.createElement('div');
-            rowResources.className = 'af-kb-row';
-            resources.forEach(function (key) {
-                var hint = key === 'hp' ? 'Доп. очки здоровья от расы/класса/темы.' : (key === 'skill_points' ? 'Очки навыков для прокачки навыков.' : 'Ресурсное значение.');
-                var box = document.createElement('div');
-                box.innerHTML = '<label>' + key + '</label><input type="number" data-resource="' + key + '" value="' + numberOrZero(state.fixed_bonuses[key]) + '" /><div class="af-kb-help">' + hint + '</div>';
-                rowResources.appendChild(box);
-            });
-            fields.fixed.appendChild(rowResources);
-            fields.fixed.querySelectorAll('[data-stat]').forEach(function (input) {
-                input.addEventListener('input', function () {
-                    state.fixed_bonuses.stats[input.getAttribute('data-stat')] = numberOrZero(input.value);
-                    syncRawDebounced();
-                });
-            });
-            fields.fixed.querySelectorAll('[data-resource]').forEach(function (input) {
-                input.addEventListener('input', function () {
-                    state.fixed_bonuses[input.getAttribute('data-resource')] = numberOrZero(input.value);
-                    syncRawDebounced();
-                });
-            });
-        }
-
-        function renderTypedList(container, dataList, defs, typeName) {
-            container.innerHTML = '';
-            dataList.forEach(function (item, index) {
-                var card = document.createElement('div');
-                card.className = 'af-kb-rule-card';
-                var def = getDef(defs, item.type || item.key);
-                if (!def) {
-                    card.innerHTML = '<div class="af-kb-help"><strong>Unknown type:</strong> ' + esc(item.type || 'unknown') + '</div><label>Raw</label><textarea data-raw-index="' + index + '">' + esc(JSON.stringify(item, null, 2)) + '</textarea><button type="button" class="af-kb-remove" data-remove-index="' + index + '">Удалить</button>';
-                    container.appendChild(card);
-                    return;
-                }
-                var title = '<div class="af-kb-rule-card__title"><strong>' + esc(def.label) + '</strong><span class="af-kb-help">' + esc(def.desc || '') + '</span></div>';
-                card.innerHTML = title;
-                var grid = document.createElement('div');
-                grid.className = 'af-kb-row';
-                def.fields.forEach(function (field) {
-                    grid.appendChild(createInput(field, item, syncRawDebounced));
-                });
-                card.appendChild(grid);
-                var remove = document.createElement('button');
-                remove.type = 'button';
-                remove.className = 'af-kb-remove';
-                remove.textContent = 'Удалить';
-                remove.addEventListener('click', function () {
-                    dataList.splice(index, 1);
-                    if (typeName === 'choice') {
-                        renderChoices();
-                    } else if (typeName === 'grant') {
-                        renderGrants();
-                    }
-                    syncRawDebounced();
-                });
-                card.appendChild(remove);
-                container.appendChild(card);
-            });
-            container.querySelectorAll('textarea[data-raw-index]').forEach(function (ta) {
-                ta.addEventListener('input', function () {
-                    dataList[Number(ta.getAttribute('data-raw-index'))] = readJson(ta.value, dataList[Number(ta.getAttribute('data-raw-index'))]);
-                    syncRawDebounced();
-                });
-            });
-            container.querySelectorAll('[data-remove-index]').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    dataList.splice(Number(btn.getAttribute('data-remove-index')), 1);
-                    if (typeName === 'choice') {
-                        renderChoices();
-                    } else if (typeName === 'grant') {
-                        renderGrants();
-                    }
-                    syncRawDebounced();
-                });
-            });
-        }
-
-        function renderChoices() {
-            renderTypedList(fields.choices, state.choices, choiceDefs, 'choice');
-        }
-
-        function renderGrants() {
-            renderTypedList(fields.grants, state.grants, grantDefs, 'grant');
-        }
-
-        function renderTraits() {
-            fields.traits.innerHTML = '';
-            state.traits.forEach(function (trait, index) {
-                var card = document.createElement('div');
-                card.className = 'af-kb-rule-card';
-                card.innerHTML = '<div class="af-kb-rule-card__title"><strong>Trait</strong></div>';
-                var row = document.createElement('div');
-                row.className = 'af-kb-row';
-                traitFields.forEach(function (field) {
-                    row.appendChild(createInput(field, trait, syncRawDebounced));
-                });
-                card.appendChild(row);
-                var remove = document.createElement('button');
-                remove.type = 'button';
-                remove.className = 'af-kb-remove';
-                remove.textContent = 'Удалить';
-                remove.addEventListener('click', function () {
-                    state.traits.splice(index, 1);
-                    renderTraits();
-                    syncRawDebounced();
-                });
-                card.appendChild(remove);
-                fields.traits.appendChild(card);
-            });
-        }
-
-        root.addEventListener('click', function (event) {
+        wrapper.addEventListener('click', function (event) {
             var target = event.target;
             if (!(target instanceof HTMLElement)) {
                 return;
             }
-            var addChoiceType = target.getAttribute('data-add-choice');
-            if (addChoiceType) {
-                state.choices.push(JSON.parse(JSON.stringify(templates[addChoiceType] || { type: addChoiceType })));
-                renderChoices();
-                syncRawDebounced();
+            if (target.id === 'kb-build-raw') {
+                syncRawArea();
+                showErrors([]);
                 return;
             }
-            var addGrantType = target.getAttribute('data-add-grant');
-            if (addGrantType) {
-                state.grants.push(JSON.parse(JSON.stringify(templates[addGrantType] || { type: addGrantType })));
-                renderGrants();
-                syncRawDebounced();
+            if (target.id === 'kb-parse-ui') {
+                state.raw = readJson(raw.value || '{}', state.raw);
+                renderUi();
+                showErrors([]);
                 return;
             }
-            if (target.id === 'kb-add-trait') {
-                state.traits.push({ key: '', title_ru: '', title_en: '', desc_ru: '', desc_en: '', tags: [], meta: {} });
-                renderTraits();
-                syncRawDebounced();
+            if (target.id === 'kb-insert-example') {
+                state.raw = defaultRawForSchema(typeSchema, type);
+                renderUi();
+                showErrors([]);
                 return;
             }
-            if (target.id === 'kb-add-trait-example') {
-                state.traits.push(JSON.parse(JSON.stringify(templates.trait)));
-                renderTraits();
-                syncRawDebounced();
+            if (target.id === 'kb-reset-defaults') {
+                state.raw = defaultRawForSchema(typeSchema, type);
+                renderUi();
+                showErrors([]);
                 return;
             }
-            if (target.id === 'kb-sync-from-raw') {
-                var parsed = null;
-                try {
-                    parsed = JSON.parse(raw.value || '{}');
-                    fields.rawError.textContent = '';
-                } catch (err) {
-                    fields.rawError.textContent = 'Ошибка JSON: ' + err.message;
-                    return;
-                }
-                state.size = parsed.size || 'medium';
-                state.creature_type = parsed.creature_type || 'humanoid';
-                state.speed = numberOrZero(parsed.speed || 30);
-                state.hp_base = numberOrZero(parsed.hp_base || 10);
-                state.fixed_bonuses = Object.assign(state.fixed_bonuses, parsed.fixed_bonuses || {});
-                if (!state.fixed_bonuses.stats) {
-                    state.fixed_bonuses.stats = {};
-                }
-                stats.forEach(function (key) { state.fixed_bonuses.stats[key] = numberOrZero(state.fixed_bonuses.stats[key]); });
-                state.choices = (Array.isArray(parsed.choices) ? parsed.choices : []).map(normalizeChoice);
-                state.grants = Array.isArray(parsed.grants) ? parsed.grants : [];
-                state.traits = Array.isArray(parsed.traits) ? parsed.traits : [];
-                fields.size.value = state.size;
-                fields.creature.value = state.creature_type;
-                fields.speed.value = state.speed;
-                fields.hpBase.value = state.hp_base;
-                renderFixedBonuses();
-                renderChoices();
-                renderGrants();
-                renderTraits();
-                syncRawDebounced();
+            if (target.id === 'kb-validate-json') {
+                var data = readJson(raw.value || '{}', {});
+                var errors = validateRules(data, type, typeSchema);
+                showErrors(errors);
             }
         });
 
-        [fields.size, fields.creature, fields.speed, fields.hpBase].forEach(function (field) {
-            field.addEventListener('input', syncStateFromHead);
-            field.addEventListener('change', syncStateFromHead);
+        raw.addEventListener('input', function () {
+            hidden.value = raw.value || '{}';
         });
 
-        renderFixedBonuses();
-        renderChoices();
-        renderGrants();
-        renderTraits();
-        syncRawDebounced();
+        renderUi();
     }
 
     document.addEventListener('DOMContentLoaded', function () {
