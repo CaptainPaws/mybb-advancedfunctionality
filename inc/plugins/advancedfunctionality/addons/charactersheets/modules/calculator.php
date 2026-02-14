@@ -147,7 +147,7 @@ function af_charactersheets_collect_bonus_items(array $base): array
     $sources = [
         'race' => (string)($base['race_key'] ?? ''),
         'class' => (string)($base['class_key'] ?? ''),
-        'themes' => (string)($base['theme_key'] ?? ''),
+        'theme' => (string)($base['theme_key'] ?? ''),
     ];
     foreach ($sources as $source => $key) {
         if ($key === '') {
@@ -315,6 +315,20 @@ function af_charactersheets_extract_humanity_cost_from_data(array $data): float
     return $cost;
 }
 
+
+function cs_build_character_state($uid, $sheet_id): array
+{
+    $sheet = af_charactersheets_get_sheet_by_id((int)$sheet_id);
+    if (empty($sheet)) {
+        return [];
+    }
+    if ((int)($uid ?? 0) > 0 && (int)($sheet['uid'] ?? 0) !== (int)$uid) {
+        // allow admins/moderators downstream; state build itself is read-only
+    }
+
+    return af_charactersheets_compute_sheet_view($sheet);
+}
+
 function af_charactersheets_compute_sheet_view(array $sheet): array
 {
     global $mybb;
@@ -355,13 +369,13 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $sources = [
         'race' => (string)($base['race_key'] ?? ''),
         'class' => (string)($base['class_key'] ?? ''),
-        'themes' => (string)($base['theme_key'] ?? ''),
+        'theme' => (string)($base['theme_key'] ?? ''),
     ];
 
     $choice_map = [
         'race' => 'race_attr_bonus_choice',
         'class' => 'class_attr_bonus_choice',
-        'themes' => 'theme_attr_bonus_choice',
+        'theme' => 'theme_attr_bonus_choice',
     ];
 
     $bonus_items = af_charactersheets_collect_bonus_items($base);
@@ -496,10 +510,10 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     foreach ($attributes_allocated as $value) {
         $spent += (int)$value;
     }
-    $pool_remaining = (int)($progress['attr_points_free'] ?? 0) + $bonus_attr_points;
-    $pool_max = $pool_remaining + $spent;
-    $remaining = $pool_remaining;
-    if ($pool_remaining < 0) {
+    $attr_base_pool = (int)($mybb->settings['af_charactersheets_attr_pool_max'] ?? 0);
+    $pool_max = $attr_base_pool + $bonus_attr_points;
+    $remaining = $pool_max - $spent;
+    if ($remaining < 0) {
         $errors[] = 'Превышен лимит очков пула.';
     }
 
@@ -543,6 +557,46 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     }
 
     $kb_context = cs_resolve_character_kb_context((int)($sheet['id'] ?? 0));
+    $kb_debug = [];
+    $source_rules_map = [];
+    foreach (['race', 'class', 'theme'] as $src) {
+        $resolved = (array)($kb_context[$src] ?? []);
+        $rules = cs_kb_rules_normalize((array)($resolved['data'] ?? []));
+        $source_rules_map[$src] = $rules;
+        foreach (['str','dex','con','int','wis','cha'] as $statKey) {
+            $bonus[$statKey] += (float)($rules['fixed']['stats'][$statKey] ?? 0);
+            $bonus[$statKey] += (float)($rules['fixed_bonuses']['stats'][$statKey] ?? 0);
+        }
+        $bonus_skill_points += (int)($rules['fixed']['skill_points'] ?? 0) + (int)($rules['fixed_bonuses']['skill_points'] ?? 0);
+        $bonus_language_choices += (int)($rules['fixed']['language_slots'] ?? 0) + (int)($rules['fixed_bonuses']['language_slots'] ?? 0);
+
+        foreach ((array)($rules['choices'] ?? []) as $choice) {
+            if (!is_array($choice)) {
+                continue;
+            }
+            $ctype = (string)($choice['type'] ?? '');
+            if ($ctype === 'stat_bonus') {
+                $pick = max(0, (int)($choice['pick'] ?? 0));
+                $value = max(0, (int)($choice['value'] ?? 1));
+                $bonus_attr_points += $pick * $value;
+            }
+            if ($ctype === 'skill_pick_choice' && (string)($choice['grant_mode'] ?? '') === 'skill_points') {
+                $bonus_skill_points += max(0, (int)($choice['points_value'] ?? 0));
+            }
+            if ($ctype === 'language_pick') {
+                $bonus_language_choices += max(0, (int)($choice['pick'] ?? 0));
+            }
+        }
+
+        $kb_debug[$src] = [
+            'key' => (string)($sources[$src] ?? ''),
+            'schema' => (string)($rules['schema'] ?? ''),
+            'fixed' => $rules['fixed'],
+            'fixed_bonuses' => $rules['fixed_bonuses'],
+            'choices' => (array)($rules['choices'] ?? []),
+        ];
+    }
+
     $kb_attr_points = af_charactersheets_extract_attribute_points_from_sources($kb_context);
     $kb_skill_points = af_charactersheets_extract_skill_points_from_sources($kb_context);
     $bonus_attr_points += $kb_attr_points;
@@ -593,7 +647,10 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     }
 
     $skill_pool_spent = $manual_spent;
-    $skill_pool_total = (int)($progress['skill_points_free'] ?? 0) + $bonus_skill_points + $skill_pool_spent;
+    $level = (int)($level_data['level'] ?? 1);
+    $skill_base_per_level = (int)($mybb->settings['af_charactersheets_skill_points_per_level'] ?? 0);
+    $skill_base_start = (int)($mybb->settings['af_charactersheets_skill_points_start'] ?? 0);
+    $skill_pool_total = ($skill_base_per_level * max(1, $level)) + $skill_base_start + $bonus_skill_points;
     $skill_pool_remaining = $skill_pool_total - $skill_pool_spent;
     if ($skill_pool_remaining < 0) {
         $errors[] = 'Превышен лимит очков навыков.';
@@ -605,7 +662,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $bonus_languages = array_values(array_unique($bonus_languages));
     $bonus_knowledges = array_values(array_unique($bonus_knowledges));
 
-    $knowledge_base_choices = (int)($mybb->settings['af_charactersheets_knowledge_base_choices'] ?? 0);
+    $knowledge_base_choices = 0;
     $knowledge_per_int = (float)($mybb->settings['af_charactersheets_knowledge_per_int'] ?? 0);
     $int_value = (float)($final['int'] ?? 0);
     $knowledge_from_int = (int)floor($int_value * $knowledge_per_int);
@@ -652,15 +709,14 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $armor_bonus = (int)($legacy_equipment['armor_bonus'] ?? 0) + (int)$bonus_armor;
     $shield_bonus = (int)($legacy_equipment['shield_bonus'] ?? 0) + (int)$bonus_shield;
     $weapon_bonus = (int)($legacy_equipment['weapon_bonus'] ?? 0) + (int)$bonus_weapon;
-    $ac_total = 10 + $dex_mod + $armor_bonus + $shield_bonus + (int)$bonus_ac;
+    $base_ac = (int)($mybb->settings['af_charactersheets_base_ac'] ?? 10);
+    $ac_total = $base_ac + $dex_mod + $con_mod + $armor_bonus + $shield_bonus + (int)$bonus_ac;
 
-    $humanity_setting = $mybb->settings['af_charactersheets_humanity_base'] ?? null;
-    $humanity_base = $humanity_setting === '' || $humanity_setting === null ? 100.0 : (float)$humanity_setting;
+    $humanity_base = 100.0;
 
-    $race_entry = af_charactersheets_kb_get_entry('race', (string)($base['race_key'] ?? ''));
-    $class_entry = af_charactersheets_kb_get_entry('class', (string)($base['class_key'] ?? ''));
-    $hp_race = af_charactersheets_extract_hp_from_entry($race_entry);
-    $hp_class = af_charactersheets_extract_hp_from_entry($class_entry);
+    $hp_race = (float)(($source_rules_map['race']['hp_base'] ?? 0) + ($source_rules_map['race']['fixed']['hp'] ?? 0) + ($source_rules_map['race']['fixed_bonuses']['hp'] ?? 0));
+    $hp_class = (float)(($source_rules_map['class']['hp_base'] ?? 0) + ($source_rules_map['class']['fixed']['hp'] ?? 0) + ($source_rules_map['class']['fixed_bonuses']['hp'] ?? 0));
+    $hp_theme = (float)(($source_rules_map['theme']['hp_base'] ?? 0) + ($source_rules_map['theme']['fixed']['hp'] ?? 0) + ($source_rules_map['theme']['fixed_bonuses']['hp'] ?? 0));
     $hp_con = (float)($final['con'] ?? 0);
 
     $augmentation_slots = (array)($build['augmentations']['slots'] ?? []);
@@ -681,7 +737,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     }
     $humanity_penalty = max(0.0, $humanity_from_augments);
 
-    $hp_total = (int)floor($hp_race + $hp_class + $hp_con);
+    $hp_total = (int)floor($hp_race + $hp_class + $hp_theme + $hp_con);
     $humanity_total = (int)floor($humanity_base - $humanity_penalty);
 
     return [
@@ -721,6 +777,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'hp_breakdown' => [
                 'race' => $hp_race,
                 'class' => $hp_class,
+                'theme' => $hp_theme,
                 'from_con' => $hp_con,
             ],
             'humanity_breakdown' => [
@@ -740,6 +797,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'total_choices' => $knowledge_total_choices,
             'remaining' => $knowledge_remaining,
         ],
+        'debug' => $kb_debug,
         'languages' => [
             'selected' => $language_selected,
             'bonus' => $bonus_languages,

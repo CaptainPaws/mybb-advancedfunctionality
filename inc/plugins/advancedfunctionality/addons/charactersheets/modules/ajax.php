@@ -39,6 +39,7 @@ function af_charactersheets_handle_api(): void
         'save_choice',
         'grant_exp',
         'cs_skill_buy',
+        'buy_skill',
         'cs_skill_set_rank',
         'cs_skill_unbuy',
         'add_knowledge',
@@ -114,11 +115,10 @@ function af_charactersheets_handle_api(): void
         }
         $delta = $new_spent - $prev_spent;
         $view = af_charactersheets_compute_sheet_view($sheet);
-        $available = (int)($progress['attr_points_free'] ?? 0) + (int)($view['bonus_attr_points'] ?? 0);
+        $available = (int)($view['pool_max'] ?? 0) - $prev_spent;
         if ($delta > $available) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Not enough attribute points']);
         }
-        $progress['attr_points_free'] = (int)($progress['attr_points_free'] ?? 0) - $delta;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
         if ($delta !== 0) {
             af_charactersheets_log_points(
@@ -154,7 +154,8 @@ function af_charactersheets_handle_api(): void
         }
         $build['choices'][$choice_key] = $choice_value;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
-    } elseif (in_array($do, ['cs_skill_buy', 'cs_skill_set_rank', 'cs_skill_unbuy'], true)) {
+    } elseif (in_array($do, ['cs_skill_buy',
+        'buy_skill', 'cs_skill_set_rank', 'cs_skill_unbuy'], true)) {
         if (!$can_manage) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
         }
@@ -190,7 +191,7 @@ function af_charactersheets_handle_api(): void
         $skill_data = (array)($skill_map[$skill_key]['data']['skill'] ?? []);
         $rank_max = max(1, (int)($skill_data['rank_max'] ?? 1));
 
-        if ($do === 'cs_skill_buy') {
+        if ($do === 'cs_skill_buy' || $do === 'buy_skill') {
             if (!empty($existing) && (int)($existing['is_active'] ?? 0) === 1) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Skill already active']);
             }
