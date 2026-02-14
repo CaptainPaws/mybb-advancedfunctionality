@@ -357,40 +357,70 @@ function af_charactersheets_render_stat_value(string $label, string $value): str
 function af_charactersheets_build_skills_html(array $view, bool $can_manage, bool $can_view_pool): string
 {
     $skills = (array)($view['skills'] ?? []);
-    $items = [];
+    $grouped = [];
     foreach ($skills as $skill) {
-        $slug = (string)($skill['slug'] ?? '');
-        $title = (string)($skill['title'] ?? '');
-        $attr_label = (string)($skill['attr_label'] ?? '');
-        $invested = (int)($skill['invested'] ?? 0);
-        $total = (float)($skill['total'] ?? 0);
+        $category = (string)($skill['category'] ?? 'general');
+        if (!isset($grouped[$category])) {
+            $grouped[$category] = [];
+        }
+        $grouped[$category][] = $skill;
+    }
 
-        $controls = '';
-        $gear = '';
-        if ($can_manage && $slug !== '') {
-            $gear = '<button type="button" class="af-cs-skill-gear" data-afcs-skill-toggle aria-label="Управление навыком">'
-                . '<i class="fa fa-cog" aria-hidden="true"></i>'
-                . '</button>';
-            $controls = '<div class="af-cs-skill-controls" data-afcs-skill-controls>'
-                . '<button type="button" class="af-cs-skill-btn" data-afcs-skill-change="1" data-slug="' . htmlspecialchars_uni($slug) . '" data-delta="-1">−</button>'
-                . '<span class="af-cs-skill-invested">' . htmlspecialchars_uni((string)$invested) . '</span>'
-                . '<button type="button" class="af-cs-skill-btn" data-afcs-skill-change="1" data-slug="' . htmlspecialchars_uni($slug) . '" data-delta="1">+</button>'
+    $items = [];
+    foreach ($grouped as $category => $rows) {
+        $items[] = '<div class="af-cs-skill-category">' . htmlspecialchars_uni($category) . '</div>';
+        foreach ($rows as $skill) {
+            $skill_key = (string)($skill['skill_key'] ?? '');
+            $title = (string)($skill['title'] ?? $skill_key);
+            $attr_label = (string)($skill['attr_label'] ?? '');
+            $rank = (int)($skill['rank'] ?? 0);
+            $rank_max = max(1, (int)($skill['rank_max'] ?? 1));
+            $is_active = !empty($skill['is_active']);
+            $source = (string)($skill['source'] ?? 'manual');
+            $notes = (string)($skill['notes'] ?? '');
+            $total_label = af_charactersheets_format_signed((float)($skill['total'] ?? 0));
+
+            $select = '';
+            $controls = '';
+            if ($can_manage && $skill_key !== '') {
+                $options = '';
+                for ($i = 0; $i <= $rank_max; $i++) {
+                    $selected = $i === $rank ? ' selected' : '';
+                    $options .= '<option value="' . $i . '"' . $selected . '>' . $i . '</option>';
+                }
+                $disabled = $source !== 'manual' ? ' disabled' : '';
+                $select = '<label class="af-cs-skill-select-wrap">Ранг '
+                    . '<select data-afcs-skill-rank="1" data-skill-key="' . htmlspecialchars_uni($skill_key) . '"' . $disabled . '>' . $options . '</select>'
+                    . '</label>';
+
+                $buy_btn = '';
+                if (!$is_active) {
+                    $buy_btn = '<button type="button" class="af-cs-skill-btn" data-afcs-skill-buy="1" data-skill-key="' . htmlspecialchars_uni($skill_key) . '">Купить</button>';
+                }
+                $reset_btn = '';
+                if ($is_active && $source === 'manual') {
+                    $reset_btn = '<button type="button" class="af-cs-skill-btn" data-afcs-skill-unbuy="1" data-skill-key="' . htmlspecialchars_uni($skill_key) . '">Сброс</button>';
+                }
+                $controls = '<div class="af-cs-skill-controls-inline">' . $buy_btn . $reset_btn . '</div>';
+            }
+
+            $item_class = $is_active ? 'af-cs-skill-item' : 'af-cs-skill-item is-disabled';
+            $rank_chip = $is_active ? '<span class="af-cs-rank-chip">Ранг ' . $rank . '</span>' : '<span class="af-cs-rank-chip is-muted">Неактивен</span>';
+            $source_chip = $source !== '' ? '<span class="af-cs-rank-chip is-source">' . htmlspecialchars_uni($source) . '</span>' : '';
+
+            $items[] = '<div class="' . $item_class . '">'
+                . '<div class="af-cs-skill-left">'
+                . '<div class="af-cs-skill-name">' . htmlspecialchars_uni($title) . '<span>(' . htmlspecialchars_uni($attr_label) . ')</span></div>'
+                . ($notes !== '' ? '<div class="af-cs-muted">' . htmlspecialchars_uni($notes) . '</div>' : '')
+                . '<div class="af-cs-skill-meta">' . $rank_chip . $source_chip . '</div>'
+                . '</div>'
+                . '<div class="af-cs-skill-right">'
+                . '<div class="af-cs-skill-total">' . htmlspecialchars_uni($total_label) . '</div>'
+                . $select
+                . $controls
+                . '</div>'
                 . '</div>';
         }
-        $total_label = af_charactersheets_format_signed($total);
-
-        $items[] = '<div class="af-cs-skill-item">'
-            . '<div class="af-cs-skill-left">'
-            . '<div class="af-cs-skill-name">' . htmlspecialchars_uni($title)
-            . '<span>(' . htmlspecialchars_uni($attr_label) . ')</span>'
-            . '</div>'
-            . '</div>'
-            . '<div class="af-cs-skill-right">'
-            . '<div class="af-cs-skill-total">' . htmlspecialchars_uni($total_label) . '</div>'
-            . $gear
-            . $controls
-            . '</div>'
-            . '</div>';
     }
 
     if (!$items) {
@@ -403,53 +433,12 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
     if ($can_view_pool) {
         $skill_pool_html = '<div class="af-cs-skill-pool">'
             . '<div>Пул навыков: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_total'] ?? 0)) . '</strong></div>'
-            . '<div>Распределено: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_spent'] ?? 0)) . '</strong></div>'
-            . '<div>Осталось: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_remaining'] ?? 0)) . '</strong></div>'
+            . '<div>Потрачено: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_spent'] ?? 0)) . '</strong></div>'
+            . '<div>Доступно: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_remaining'] ?? 0)) . '</strong></div>'
             . '</div>';
     }
 
     $choice_html = '';
-    if ($can_manage && !empty($view['skill_choice_details'])) {
-        $options = '';
-        foreach ($skills as $skill) {
-            $slug = (string)($skill['slug'] ?? '');
-            $title = (string)($skill['title'] ?? '');
-            if ($slug === '') {
-                continue;
-            }
-            $options .= '<option value="' . htmlspecialchars_uni($slug) . '">' . htmlspecialchars_uni($title) . '</option>';
-        }
-
-        $rows = [];
-        foreach ($view['skill_choice_details'] as $choice) {
-            $choice_key = (string)($choice['choice_key'] ?? '');
-            $chosen = (string)($choice['chosen'] ?? '');
-            if ($choice_key === '') {
-                continue;
-            }
-            $select = '<select data-afcs-choice-key="' . htmlspecialchars_uni($choice_key) . '">';
-            $select .= '<option value="">— выбрать навык —</option>';
-            foreach ($skills as $skill) {
-                $slug = (string)($skill['slug'] ?? '');
-                $title = (string)($skill['title'] ?? '');
-                if ($slug === '') {
-                    continue;
-                }
-                $selected = $chosen === $slug ? ' selected' : '';
-                $select .= '<option value="' . htmlspecialchars_uni($slug) . '"' . $selected . '>' . htmlspecialchars_uni($title) . '</option>';
-            }
-            $select .= '</select>';
-
-            $rows[] = '<div class="af-cs-choice-row">'
-                . '<label>Бонус к любому навыку</label>'
-                . $select
-                . '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-choice-save="' . htmlspecialchars_uni($choice_key) . '">Применить</button>'
-                . '</div>';
-        }
-        if ($rows) {
-            $choice_html = '<div class="af-cs-choices">' . implode('', $rows) . '</div>';
-        }
-    }
 
     global $templates;
     $tpl = $templates->get('charactersheet_skills');

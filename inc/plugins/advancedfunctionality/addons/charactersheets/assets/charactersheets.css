@@ -1587,3 +1587,54 @@
 .af-cs-attr-card__meta {
   grid-template-columns: 1fr !important;
 }
+
+.af-cs-skill-item.is-disabled {
+  opacity: 0.55;
+}
+
+.af-cs-skill-category {
+  margin: 10px 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  opacity: .7;
+}
+
+.af-cs-skill-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.af-cs-rank-chip {
+  display: inline-block;
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: rgba(98, 219, 176, 0.22);
+  border: 1px solid rgba(98, 219, 176, 0.4);
+}
+
+.af-cs-rank-chip.is-muted {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.af-cs-rank-chip.is-source {
+  background: rgba(124, 161, 255, 0.2);
+  border-color: rgba(124, 161, 255, 0.35);
+}
+
+.af-cs-skill-select-wrap {
+  font-size: 12px;
+  opacity: .9;
+}
+
+.af-cs-skill-select-wrap select {
+  margin-left: 6px;
+}
+
+.af-cs-skill-controls-inline {
+  display: flex;
+  gap: 6px;
+}

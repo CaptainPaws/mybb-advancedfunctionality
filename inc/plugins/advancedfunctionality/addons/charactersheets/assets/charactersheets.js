@@ -637,6 +637,24 @@
         }
       }
 
+
+      sheet.addEventListener('change', function (event) {
+        var rankSelect = event.target.closest('[data-afcs-skill-rank]');
+        if (!rankSelect) return;
+
+        var skillKey = rankSelect.getAttribute('data-skill-key');
+        var rank = parseInt(rankSelect.value || '0', 10);
+        if (!skillKey || Number.isNaN(rank)) return;
+
+        sendAction('cs_skill_set_rank', { skill_key: skillKey, rank: rank }).then(function (payload) {
+          if (!payload.success) {
+            alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
+            return;
+          }
+          applyViewUpdate(payload);
+        });
+      });
+
       sheet.addEventListener('click', function (event) {
         var inventoryTab = event.target.closest('[data-afcs-inventory-tab]');
         if (inventoryTab) {
@@ -769,21 +787,28 @@
           return;
         }
 
-        var skillToggle = event.target.closest('[data-afcs-skill-toggle]');
-        if (skillToggle) {
+        var skillBuy = event.target.closest('[data-afcs-skill-buy]');
+        if (skillBuy) {
           event.preventDefault();
-          var skillItem = skillToggle.closest('.af-cs-skill-item');
-          if (skillItem) skillItem.classList.toggle('is-controls-open');
+          var buyKey = skillBuy.getAttribute('data-skill-key');
+          if (buyKey) {
+            sendAction('cs_skill_buy', { skill_key: buyKey }).then(function (payload) {
+              if (!payload.success) {
+                alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
+                return;
+              }
+              applyViewUpdate(payload);
+            });
+          }
           return;
         }
 
-        var skillChange = event.target.closest('[data-afcs-skill-change]');
-        if (skillChange) {
+        var skillUnbuy = event.target.closest('[data-afcs-skill-unbuy]');
+        if (skillUnbuy) {
           event.preventDefault();
-          var slug = skillChange.getAttribute('data-slug');
-          var delta2 = parseInt(skillChange.getAttribute('data-delta') || '0', 10);
-          if (slug && (delta2 === 1 || delta2 === -1)) {
-            sendAction('update_skill', { slug: slug, delta: delta2 }).then(function (payload) {
+          var unbuyKey = skillUnbuy.getAttribute('data-skill-key');
+          if (unbuyKey) {
+            sendAction('cs_skill_unbuy', { skill_key: unbuyKey }).then(function (payload) {
               if (!payload.success) {
                 alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
                 return;

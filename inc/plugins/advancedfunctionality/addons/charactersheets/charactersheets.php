@@ -14,6 +14,7 @@ const AF_CS_SHEETS_TABLE = 'af_cs_sheets';
 const AF_CS_EXP_LEDGER_TABLE = 'af_cs_exp_ledger';
 const AF_CS_POINTS_LEDGER_TABLE = 'af_cs_points_ledger';
 const AF_CS_SKILLS_CATALOG_TABLE = 'af_cs_skills_catalog';
+const AF_CS_SKILLS_TABLE = 'af_cs_skills';
 const AF_CS_TPL_MARK = '<!--AF_CS_ACCEPT-->';
 const AF_CS_ASSET_MARK = '<!--AF_CS_ASSETS-->';
 const AF_CS_MODAL_MARK = '<!--AF_CS_MODAL-->';
