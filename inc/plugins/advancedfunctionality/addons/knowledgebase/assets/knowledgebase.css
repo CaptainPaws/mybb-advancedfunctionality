@@ -399,8 +399,10 @@ background: #000;
 
 .af-kb-data-table {
     width: 100%;
+    max-width: 100%;
     border-collapse: collapse;
     margin-top: 10px;
+    table-layout: fixed; /* ключ: не даём контенту раздувать таблицу */
 }
 
 .af-kb-data-table th,
@@ -408,6 +410,27 @@ background: #000;
     border: 1px solid #d5d9e2;
     padding: 6px 8px;
     text-align: left;
+    vertical-align: top;
+}
+
+.af-kb-data-table th {
+    width: 180px;          /* чтобы “ключи” были стабильной ширины */
+    white-space: nowrap;   /* schema/type_profile/version и т.п. не ломаем */
+}
+
+.af-kb-data-table td {
+    overflow-wrap: anywhere; /* ключ: ломаем длинные JSON-строки */
+    word-break: break-word;
+    white-space: normal;
+}
+
+/* если внутри td вдруг отрисован code/pre — тоже держим */
+.af-kb-data-table td pre,
+.af-kb-data-table td code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 100%;
 }
 
 .af-kb-rel-group ul {
