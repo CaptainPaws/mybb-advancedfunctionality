@@ -643,10 +643,10 @@
         if (!rankSelect) return;
 
         var skillKey = rankSelect.getAttribute('data-skill-key');
-        var rank = parseInt(rankSelect.value || '0', 10);
-        if (!skillKey || Number.isNaN(rank)) return;
+        var skill_rank = parseInt(rankSelect.value || '0', 10);
+        if (!skillKey || Number.isNaN(skill_rank)) return;
 
-        sendAction('cs_skill_set_rank', { skill_key: skillKey, rank: rank }).then(function (payload) {
+        sendAction('cs_skill_set_rank', { skill_key: skillKey, skill_rank: skill_rank }).then(function (payload) {
           if (!payload.success) {
             alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
             return;
