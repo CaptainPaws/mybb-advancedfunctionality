@@ -4,7 +4,7 @@ if (!defined('IN_MYBB')) {
 }
 
 /**
- * Contract for bonuses in KB JSON (meta_json or blocks[].data_json):
+ * Contract for bonuses in KB rules data JSON (af_kb.rules.v1):
  * {
  *   "bonuses": [
  *     {"type":"attribute_bonus","target":"str","value":1},
@@ -28,29 +28,29 @@ if (!defined('IN_MYBB')) {
  */
 function af_charactersheets_normalize_bonus_items(string $source, string $key): array
 {
-    $entry = af_charactersheets_kb_get_entry($source, $key);
-    if (empty($entry)) {
+    $resolved = af_charactersheets_kb_resolve_entry($source, $key);
+    if (empty($resolved)) {
         return [];
     }
 
     $items = [];
     $attributes = af_charactersheets_default_attributes();
 
-    $meta = af_charactersheets_json_decode((string)($entry['meta_json'] ?? ''));
+    $data = (array)($resolved['data'] ?? []);
     $sets = [];
-    if (!empty($meta['bonuses']) && is_array($meta['bonuses'])) {
-        $sets[] = $meta['bonuses'];
+    if (!empty($data['bonuses']) && is_array($data['bonuses'])) {
+        $sets[] = $data['bonuses'];
     }
-    if (!empty($meta['modifiers']) && is_array($meta['modifiers'])) {
-        $sets[] = $meta['modifiers'];
+    if (!empty($data['modifiers']) && is_array($data['modifiers'])) {
+        $sets[] = $data['modifiers'];
     }
-    $items = array_merge($items, af_charactersheets_rules_to_bonus_items($meta, $source, $attributes));
-    if (!empty($meta['rules']) && is_array($meta['rules'])) {
-        $items = array_merge($items, af_charactersheets_rules_to_bonus_items($meta['rules'], $source, $attributes));
+    $items = array_merge($items, af_charactersheets_rules_to_bonus_items($data, $source, $attributes));
+    if (!empty($data['rules']) && is_array($data['rules'])) {
+        $items = array_merge($items, af_charactersheets_rules_to_bonus_items($data['rules'], $source, $attributes));
     }
-    foreach (['stats', 'attributes'] as $metaKey) {
-        if (!empty($meta[$metaKey]) && is_array($meta[$metaKey])) {
-            foreach ($meta[$metaKey] as $stat => $value) {
+    foreach (['stats', 'attributes'] as $dataKey) {
+        if (!empty($data[$dataKey]) && is_array($data[$dataKey])) {
+            foreach ($data[$dataKey] as $stat => $value) {
                 if (array_key_exists($stat, $attributes)) {
                     $items[] = [
                         'source' => $source,
@@ -59,39 +59,6 @@ function af_charactersheets_normalize_bonus_items(string $source, string $key): 
                         'value' => (float)$value,
                         'requires_choice' => false,
                     ];
-                }
-            }
-        }
-    }
-
-    $blocks = af_charactersheets_kb_get_blocks($entry);
-    foreach ($blocks as $block) {
-        $data = af_charactersheets_json_decode((string)($block['data_json'] ?? ''));
-        if (empty($data)) {
-            continue;
-        }
-        $items = array_merge($items, af_charactersheets_rules_to_bonus_items($data, $source, $attributes));
-        if (!empty($data['rules']) && is_array($data['rules'])) {
-            $items = array_merge($items, af_charactersheets_rules_to_bonus_items($data['rules'], $source, $attributes));
-        }
-        if (!empty($data['bonuses']) && is_array($data['bonuses'])) {
-            $sets[] = $data['bonuses'];
-        }
-        if (!empty($data['modifiers']) && is_array($data['modifiers'])) {
-            $sets[] = $data['modifiers'];
-        }
-        foreach (['stats', 'attributes'] as $blockKey) {
-            if (!empty($data[$blockKey]) && is_array($data[$blockKey])) {
-                foreach ($data[$blockKey] as $stat => $value) {
-                    if (array_key_exists($stat, $attributes)) {
-                        $items[] = [
-                            'source' => $source,
-                            'type' => 'attribute_bonus',
-                            'target' => $stat,
-                            'value' => (float)$value,
-                            'requires_choice' => false,
-                        ];
-                    }
                 }
             }
         }
@@ -151,30 +118,6 @@ function af_charactersheets_rules_to_bonus_items(array $rules, string $source, a
     }
 
     $items = [];
-    $choices = $rules['choices'] ?? [];
-    if (is_array($choices)) {
-        foreach ($choices as $choice) {
-            if (!is_array($choice)) {
-                continue;
-            }
-            $type = (string)($choice['type'] ?? '');
-            $value = (float)($choice['value'] ?? 0);
-            $pick = (int)($choice['pick'] ?? 1);
-            if ($pick <= 0) {
-                $pick = 1;
-            }
-            if (in_array($type, ['stat_bonus', 'stat_plus_2', 'stat_plus', 'attribute_points'], true)) {
-                $items[] = [
-                    'source' => $source,
-                    'type' => 'attribute_points',
-                    'target' => null,
-                    'value' => (float)($value * $pick),
-                    'requires_choice' => true,
-                ];
-            }
-        }
-    }
-
     $fixed = $rules['fixed_bonuses'] ?? [];
     if (is_array($fixed)) {
         foreach (['stats', 'attributes'] as $fixedKey) {
@@ -600,6 +543,10 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     }
 
     $kb_context = cs_resolve_character_kb_context((int)($sheet['id'] ?? 0));
+    $kb_attr_points = af_charactersheets_extract_attribute_points_from_sources($kb_context);
+    $kb_skill_points = af_charactersheets_extract_skill_points_from_sources($kb_context);
+    $bonus_attr_points += $kb_attr_points;
+    $bonus_skill_points += $kb_skill_points;
     $skills_rows = af_charactersheets_get_sheet_skills((int)($sheet['id'] ?? 0));
     $skills_map = [];
     foreach ($skills_rows as $row) {
@@ -645,8 +592,8 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         ];
     }
 
-    $skill_pool_total = af_charactersheets_extract_skill_points_from_sources($kb_context);
     $skill_pool_spent = $manual_spent;
+    $skill_pool_total = (int)($progress['skill_points_free'] ?? 0) + $bonus_skill_points + $skill_pool_spent;
     $skill_pool_remaining = $skill_pool_total - $skill_pool_spent;
     if ($skill_pool_remaining < 0) {
         $errors[] = 'Превышен лимит очков навыков.';

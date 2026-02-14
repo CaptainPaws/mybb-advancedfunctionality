@@ -366,6 +366,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
         $grouped[$category][] = $skill;
     }
 
+    $available_skill_points = max(0, (int)($view['skill_pool_remaining'] ?? 0));
     $items = [];
     foreach ($grouped as $category => $rows) {
         $items[] = '<div class="af-cs-skill-category">' . htmlspecialchars_uni($category) . '</div>';
@@ -395,7 +396,8 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
 
                 $buy_btn = '';
                 if (!$is_active) {
-                    $buy_btn = '<button type="button" class="af-cs-skill-btn" data-afcs-skill-buy="1" data-skill-key="' . htmlspecialchars_uni($skill_key) . '">Купить</button>';
+                    $buy_disabled = $available_skill_points > 0 ? '' : ' disabled';
+                    $buy_btn = '<button type="button" class="af-cs-skill-btn" data-afcs-skill-buy="1" data-skill-key="' . htmlspecialchars_uni($skill_key) . '"' . $buy_disabled . '>Купить</button>';
                 }
                 $reset_btn = '';
                 if ($is_active && $source === 'manual') {
@@ -431,10 +433,12 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
 
     $skill_pool_html = '';
     if ($can_view_pool) {
+        $buy_disabled = $available_skill_points > 0 ? '' : ' disabled';
         $skill_pool_html = '<div class="af-cs-skill-pool">'
             . '<div>Пул навыков: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_total'] ?? 0)) . '</strong></div>'
             . '<div>Потрачено: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_spent'] ?? 0)) . '</strong></div>'
             . '<div>Доступно: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_remaining'] ?? 0)) . '</strong></div>'
+            . ($can_manage ? '<button type="button" class="af-cs-skill-btn"' . $buy_disabled . '>Купить навык</button>' : '')
             . '</div>';
     }
 
@@ -832,11 +836,18 @@ function af_charactersheets_build_bonus_html(array $index): string
         $key = (string)($field['value'] ?? '');
         $entry = $key !== '' ? af_charactersheets_kb_get_entry((string)$data['type'], $key) : [];
         $title = (string)$data['label'];
-        $text_html = af_charactersheets_kb_get_block_html($entry, 'bonuses');
+        $text_html = trim(af_charactersheets_kb_get_block_html($entry, 'bonuses'));
+        if ($text_html === '') {
+            continue;
+        }
         $columns[] = '<div class="af-cs-bonus-card">'
             . '<div class="af-cs-bonus-title">' . htmlspecialchars_uni($title) . '</div>'
             . '<div class="af-cs-bonus-body">' . $text_html . '</div>'
             . '</div>';
+    }
+
+    if (!$columns) {
+        return '';
     }
 
     return '<div class="af-cs-bonus-grid">' . implode('', $columns) . '</div>';
