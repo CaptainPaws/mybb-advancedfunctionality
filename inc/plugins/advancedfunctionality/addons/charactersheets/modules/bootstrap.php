@@ -1974,7 +1974,130 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
         $grants[$skill_key] = ['skill_key' => $skill_key, 'rank' => $rank, 'source' => $source];
     }
 
+    foreach ((array)($data['grants'] ?? []) as $grant) {
+        if (!is_array($grant)) {
+            continue;
+        }
+        $grant_type = (string)($grant['type'] ?? $grant['kb_type'] ?? '');
+        if (!in_array($grant_type, ['skill', 'skills'], true)) {
+            continue;
+        }
+        $skill_key = trim((string)($grant['kb_key'] ?? $grant['key'] ?? ''));
+        if ($skill_key === '') {
+            continue;
+        }
+        $rank = max(1, (int)($grant['rank'] ?? $grant['value'] ?? 1));
+        $grants[$skill_key] = ['skill_key' => $skill_key, 'rank' => $rank, 'source' => $source];
+    }
+
+    foreach ((array)($data['traits'] ?? []) as $trait) {
+        if (!is_array($trait)) {
+            continue;
+        }
+        foreach ((array)($trait['grants'] ?? []) as $grant) {
+            if (!is_array($grant)) {
+                continue;
+            }
+            $grant_type = (string)($grant['type'] ?? $grant['kb_type'] ?? '');
+            if (!in_array($grant_type, ['skill', 'skills'], true)) {
+                continue;
+            }
+            $skill_key = trim((string)($grant['kb_key'] ?? $grant['key'] ?? ''));
+            if ($skill_key === '') {
+                continue;
+            }
+            $rank = max(1, (int)($grant['rank'] ?? $grant['value'] ?? 1));
+            $grants[$skill_key] = ['skill_key' => $skill_key, 'rank' => $rank, 'source' => $source];
+        }
+    }
+
     return array_values($grants);
+}
+
+function cs_rules_get_first_int(array $rules, array $paths): int
+{
+    foreach ($paths as $path) {
+        $node = $rules;
+        $ok = true;
+        foreach (explode('.', $path) as $segment) {
+            if (!is_array($node) || !array_key_exists($segment, $node)) {
+                $ok = false;
+                break;
+            }
+            $node = $node[$segment];
+        }
+        if ($ok && (is_numeric($node) || is_string($node))) {
+            return max(0, (int)$node);
+        }
+    }
+
+    return 0;
+}
+
+function cs_get_skill_points_from_rules($rules): int
+{
+    if (!is_array($rules)) {
+        return 0;
+    }
+
+    $points = cs_rules_get_first_int($rules, [
+        'fixed.skill_points',
+        'fixed.points.skill',
+        'fixed_bonuses.skill_points',
+        'skill_points',
+        'race.skill_points',
+        'class.skill_points',
+        'theme.skill_points',
+        'points.skill',
+    ]);
+
+    foreach ((array)($rules['choices'] ?? []) as $choice) {
+        if (!is_array($choice)) {
+            continue;
+        }
+        $choice_type = (string)($choice['type'] ?? '');
+        if (!in_array($choice_type, ['skill_pick', 'skill_points', 'skills_pick', 'kb_pick'], true)) {
+            continue;
+        }
+        $kb_type = (string)($choice['kb_type'] ?? '');
+        if ($choice_type === 'kb_pick' && !in_array($kb_type, ['skill', 'skills'], true)) {
+            continue;
+        }
+        $points += max(0, (int)($choice['pick'] ?? $choice['value'] ?? 0));
+    }
+
+    return $points;
+}
+
+function cs_get_attribute_points_from_rules($rules): int
+{
+    if (!is_array($rules)) {
+        return 0;
+    }
+
+    $points = cs_rules_get_first_int($rules, [
+        'fixed.attribute_points',
+        'fixed.points.attribute',
+        'fixed_bonuses.attribute_points',
+        'attribute_points',
+        'race.attribute_points',
+        'class.attribute_points',
+        'theme.attribute_points',
+        'points.attribute',
+    ]);
+
+    foreach ((array)($rules['choices'] ?? []) as $choice) {
+        if (!is_array($choice)) {
+            continue;
+        }
+        $choice_type = (string)($choice['type'] ?? '');
+        if (!in_array($choice_type, ['attribute_points'], true)) {
+            continue;
+        }
+        $points += max(0, (int)($choice['pick'] ?? $choice['value'] ?? 0));
+    }
+
+    return $points;
 }
 
 function af_charactersheets_extract_skill_points_from_sources(array $context): int
@@ -1983,7 +2106,18 @@ function af_charactersheets_extract_skill_points_from_sources(array $context): i
     foreach (['race', 'class', 'theme'] as $source) {
         $resolved = (array)($context[$source] ?? []);
         $data = (array)($resolved['data'] ?? []);
-        $total += (int)($data['skill_points'] ?? 0);
+        $total += cs_get_skill_points_from_rules($data);
+    }
+    return $total;
+}
+
+function af_charactersheets_extract_attribute_points_from_sources(array $context): int
+{
+    $total = 0;
+    foreach (['race', 'class', 'theme'] as $source) {
+        $resolved = (array)($context[$source] ?? []);
+        $data = (array)($resolved['data'] ?? []);
+        $total += cs_get_attribute_points_from_rules($data);
     }
     return $total;
 }
