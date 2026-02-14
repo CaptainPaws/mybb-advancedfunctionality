@@ -340,7 +340,7 @@ function af_charactersheets_get_sheet_skills(int $sheet_id): array
     return $rows;
 }
 
-function af_charactersheets_upsert_sheet_skill(int $sheet_id, int $uid, string $skill_key, int $rank, int $is_active, string $source): void
+function af_charactersheets_upsert_sheet_skill(int $sheet_id, int $uid, string $skill_key, int $skill_rank, int $is_active, string $source): void
 {
     global $db;
 
@@ -360,7 +360,7 @@ function af_charactersheets_upsert_sheet_skill(int $sheet_id, int $uid, string $
         'uid' => $uid,
         'sheet_id' => $sheet_id,
         'skill_key' => $skill_key,
-        'rank' => max(0, $rank),
+        'skill_rank' => max(0, $skill_rank),
         'is_active' => $is_active ? 1 : 0,
         'source' => $source !== '' ? $source : 'manual',
         'updated_at' => TIME_NOW,
@@ -407,7 +407,7 @@ function af_charactersheets_sync_fixed_skills(int $sheet_id): void
                 continue;
             }
             $grants[$skill_key] = [
-                'rank' => max(1, (int)($grant['rank'] ?? 1)),
+                'skill_rank' => max(1, (int)($grant['skill_rank'] ?? 1)),
                 'source' => $source,
             ];
         }
@@ -426,6 +426,6 @@ function af_charactersheets_sync_fixed_skills(int $sheet_id): void
     }
 
     foreach ($grants as $skill_key => $grant) {
-        af_charactersheets_upsert_sheet_skill($sheet_id, $uid, $skill_key, (int)$grant['rank'], 1, (string)$grant['source']);
+        af_charactersheets_upsert_sheet_skill($sheet_id, $uid, $skill_key, (int)$grant['skill_rank'], 1, (string)$grant['source']);
     }
 }
