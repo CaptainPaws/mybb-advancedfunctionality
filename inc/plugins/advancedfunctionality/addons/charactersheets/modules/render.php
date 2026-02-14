@@ -374,7 +374,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
             $skill_key = (string)($skill['skill_key'] ?? '');
             $title = (string)($skill['title'] ?? $skill_key);
             $attr_label = (string)($skill['attr_label'] ?? '');
-            $rank = (int)($skill['rank'] ?? 0);
+            $skill_rank = (int)($skill['skill_rank'] ?? 0);
             $rank_max = max(1, (int)($skill['rank_max'] ?? 1));
             $is_active = !empty($skill['is_active']);
             $source = (string)($skill['source'] ?? 'manual');
@@ -386,7 +386,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
             if ($can_manage && $skill_key !== '') {
                 $options = '';
                 for ($i = 0; $i <= $rank_max; $i++) {
-                    $selected = $i === $rank ? ' selected' : '';
+                    $selected = $i === $skill_rank ? ' selected' : '';
                     $options .= '<option value="' . $i . '"' . $selected . '>' . $i . '</option>';
                 }
                 $disabled = $source !== 'manual' ? ' disabled' : '';
@@ -407,7 +407,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
             }
 
             $item_class = $is_active ? 'af-cs-skill-item' : 'af-cs-skill-item is-disabled';
-            $rank_chip = $is_active ? '<span class="af-cs-rank-chip">Ранг ' . $rank . '</span>' : '<span class="af-cs-rank-chip is-muted">Неактивен</span>';
+            $rank_chip = $is_active ? '<span class="af-cs-rank-chip">Ранг ' . $skill_rank . '</span>' : '<span class="af-cs-rank-chip is-muted">Неактивен</span>';
             $source_chip = $source !== '' ? '<span class="af-cs-rank-chip is-source">' . htmlspecialchars_uni($source) . '</span>' : '';
 
             $items[] = '<div class="' . $item_class . '">'
