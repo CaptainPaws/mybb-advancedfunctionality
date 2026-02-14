@@ -1297,7 +1297,23 @@ function af_charactersheets_ensure_schema(): void
     }
 
     if (!$db->table_exists(AF_CS_SKILLS_TABLE)) {
-        $db->write_query("\n            CREATE TABLE " . TABLE_PREFIX . "" . AF_CS_SKILLS_TABLE . " (\n              id INT UNSIGNED NOT NULL AUTO_INCREMENT,\n              uid INT UNSIGNED NOT NULL,\n              sheet_id INT UNSIGNED NOT NULL,\n              skill_key VARCHAR(64) NOT NULL,\n              rank TINYINT UNSIGNED NOT NULL DEFAULT 0,\n              is_active TINYINT(1) NOT NULL DEFAULT 0,\n              source VARCHAR(32) NOT NULL DEFAULT 'manual',\n              created_at INT UNSIGNED NOT NULL DEFAULT 0,\n              updated_at INT UNSIGNED NOT NULL DEFAULT 0,\n              PRIMARY KEY (id),\n              UNIQUE KEY sheet_skill (sheet_id, skill_key),\n              KEY uid (uid),\n              KEY skill_key (skill_key)\n            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n        ");
+        $db->write_query("
+            CREATE TABLE " . TABLE_PREFIX . AF_CS_SKILLS_TABLE . " (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            uid INT UNSIGNED NOT NULL,
+            sheet_id INT UNSIGNED NOT NULL,
+            skill_key VARCHAR(64) NOT NULL,
+            skill_rank TINYINT UNSIGNED NOT NULL DEFAULT 0,
+            is_active TINYINT(1) NOT NULL DEFAULT 0,
+            source VARCHAR(32) NOT NULL DEFAULT 'manual',
+            created_at INT UNSIGNED NOT NULL DEFAULT 0,
+            updated_at INT UNSIGNED NOT NULL DEFAULT 0,
+            PRIMARY KEY (id),
+            UNIQUE KEY sheet_skill (sheet_id, skill_key),
+            KEY uid (uid),
+            KEY skill_key (skill_key)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
     }
 
 
@@ -2029,7 +2045,7 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
         if ($skill_key === '') {
             continue;
         }
-        $grants[$skill_key] = ['skill_key' => $skill_key, 'rank' => 1, 'source' => $source];
+        $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => 1, 'source' => $source];
     }
 
     foreach ((array)($data['skills_grants'] ?? []) as $grant) {
@@ -2040,8 +2056,8 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
         if ($skill_key === '') {
             continue;
         }
-        $rank = max(1, (int)($grant['rank'] ?? 1));
-        $grants[$skill_key] = ['skill_key' => $skill_key, 'rank' => $rank, 'source' => $source];
+        $skill_rank = max(1, (int)($grant['skill_rank'] ?? 1));
+        $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => $skill_rank, 'source' => $source];
     }
 
     foreach ((array)($data['grants'] ?? []) as $grant) {
@@ -2056,8 +2072,8 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
         if ($skill_key === '') {
             continue;
         }
-        $rank = max(1, (int)($grant['rank'] ?? $grant['value'] ?? 1));
-        $grants[$skill_key] = ['skill_key' => $skill_key, 'rank' => $rank, 'source' => $source];
+        $skill_rank = max(1, (int)($grant['skill_rank'] ?? $grant['value'] ?? 1));
+        $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => $skill_rank, 'source' => $source];
     }
 
     foreach ((array)($data['traits'] ?? []) as $trait) {
@@ -2076,8 +2092,8 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
             if ($skill_key === '') {
                 continue;
             }
-            $rank = max(1, (int)($grant['rank'] ?? $grant['value'] ?? 1));
-            $grants[$skill_key] = ['skill_key' => $skill_key, 'rank' => $rank, 'source' => $source];
+            $skill_rank = max(1, (int)($grant['skill_rank'] ?? $grant['value'] ?? 1));
+            $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => $skill_rank, 'source' => $source];
         }
     }
 
