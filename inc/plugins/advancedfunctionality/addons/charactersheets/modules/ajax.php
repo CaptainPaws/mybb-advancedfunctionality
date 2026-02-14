@@ -200,8 +200,8 @@ function af_charactersheets_handle_api(): void
             }
             af_charactersheets_upsert_sheet_skill($sheet_id, (int)($sheet['uid'] ?? 0), $skill_key, 1, 1, 'manual');
         } elseif ($do === 'cs_skill_set_rank') {
-            $next_rank = (int)$mybb->get_input('rank');
-            $current_rank = max(0, (int)($existing['rank'] ?? 0));
+            $next_rank = (int)$mybb->get_input('skill_rank');
+            $current_rank = max(0, (int)($existing['skill_rank'] ?? 0));
             $source = (string)($existing['source'] ?? 'manual');
             if ($next_rank < 0 || $next_rank > $rank_max) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Rank out of bounds']);
