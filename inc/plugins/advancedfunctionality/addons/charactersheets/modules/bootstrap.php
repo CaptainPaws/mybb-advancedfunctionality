@@ -66,6 +66,9 @@ function af_charactersheets_uninstall_impl(): void
     if ($db->table_exists(AF_CS_SKILLS_CATALOG_TABLE)) {
         $db->drop_table(AF_CS_SKILLS_CATALOG_TABLE);
     }
+    if ($db->table_exists(AF_CS_SKILLS_TABLE)) {
+        $db->drop_table(AF_CS_SKILLS_TABLE);
+    }
 
     $db->delete_query('settings', "name IN (
         'af_charactersheets_enabled',
@@ -1293,6 +1296,11 @@ function af_charactersheets_ensure_schema(): void
         ");
     }
 
+    if (!$db->table_exists(AF_CS_SKILLS_TABLE)) {
+        $db->write_query("\n            CREATE TABLE " . TABLE_PREFIX . "" . AF_CS_SKILLS_TABLE . " (\n              id INT UNSIGNED NOT NULL AUTO_INCREMENT,\n              uid INT UNSIGNED NOT NULL,\n              sheet_id INT UNSIGNED NOT NULL,\n              skill_key VARCHAR(64) NOT NULL,\n              rank TINYINT UNSIGNED NOT NULL DEFAULT 0,\n              is_active TINYINT(1) NOT NULL DEFAULT 0,\n              source VARCHAR(32) NOT NULL DEFAULT 'manual',\n              created_at INT UNSIGNED NOT NULL DEFAULT 0,\n              updated_at INT UNSIGNED NOT NULL DEFAULT 0,\n              PRIMARY KEY (id),\n              UNIQUE KEY sheet_skill (sheet_id, skill_key),\n              KEY uid (uid),\n              KEY skill_key (skill_key)\n            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;\n        ");
+    }
+
+
     $exists = (int)$db->fetch_field($db->simple_select(AF_CS_CONFIG_TABLE, 'id', 'id=1', ['limit' => 1]), 'id');
     if (!$exists) {
         $db->insert_query(AF_CS_CONFIG_TABLE, [
@@ -1860,6 +1868,180 @@ function af_charactersheets_kb_get_entry(string $type, string $key): array
     ));
 
     return is_array($row) ? $row : [];
+}
+
+function af_charactersheets_kb_normalize_entry(array $entry): array
+{
+    $meta = af_charactersheets_json_decode((string)($entry['meta_json'] ?? ''));
+    $data = af_charactersheets_json_decode((string)($entry['data_json'] ?? ''));
+
+    if ((string)($meta['schema'] ?? '') !== 'af_kb.meta.v1') {
+        $meta = [];
+    }
+
+    if ((string)($data['schema'] ?? '') === 'af_kb.rules.v1') {
+        // ok
+    } elseif (!empty($meta['rules']) && is_array($meta['rules'])) {
+        $data = $meta['rules'];
+    } else {
+        $data = [];
+    }
+
+    return [
+        'entry' => $entry,
+        'type_key' => (string)($entry['type_key'] ?? $entry['type'] ?? ''),
+        'key' => (string)($entry['key'] ?? ''),
+        'title' => af_charactersheets_kb_pick_text($entry, 'title'),
+        'short' => af_charactersheets_kb_pick_text($entry, 'short'),
+        'body' => af_charactersheets_kb_pick_text($entry, 'body'),
+        'meta' => $meta,
+        'data' => is_array($data) ? $data : [],
+    ];
+}
+
+function af_charactersheets_kb_resolve_entry(string $type_key, string $key): array
+{
+    static $cache = [];
+
+    $type_key = trim($type_key);
+    $key = trim($key);
+    if ($type_key === '' || $key === '') {
+        return [];
+    }
+
+    $cache_key = $type_key . ':' . $key;
+    if (isset($cache[$cache_key])) {
+        return $cache[$cache_key];
+    }
+
+    $candidate_types = [$type_key];
+    if ($type_key === 'theme') {
+        $candidate_types[] = 'themes';
+    } elseif ($type_key === 'themes') {
+        $candidate_types[] = 'theme';
+    }
+
+    foreach ($candidate_types as $candidate_type) {
+        $entry = af_charactersheets_kb_get_entry($candidate_type, $key);
+        if (!empty($entry)) {
+            return $cache[$cache_key] = af_charactersheets_kb_normalize_entry($entry);
+        }
+    }
+
+    return $cache[$cache_key] = [];
+}
+
+function af_charactersheets_kb_get_resolved_by_type(string $type_key): array
+{
+    $rows = af_charactersheets_get_kb_entries_by_type($type_key);
+    if (!$rows && $type_key === 'skill') {
+        $rows = af_charactersheets_get_kb_entries_by_type('skills');
+    }
+
+    $result = [];
+    foreach ($rows as $entry) {
+        $normalized = af_charactersheets_kb_normalize_entry($entry);
+        if (!empty($normalized['key'])) {
+            $result[] = $normalized;
+        }
+    }
+    return $result;
+}
+
+function af_charactersheets_extract_skill_grants(array $resolved, string $source): array
+{
+    $data = (array)($resolved['data'] ?? []);
+    $grants = [];
+
+    $fixed = (array)($data['skills_fixed'] ?? []);
+    foreach ($fixed as $skill_key) {
+        $skill_key = trim((string)$skill_key);
+        if ($skill_key === '') {
+            continue;
+        }
+        $grants[$skill_key] = ['skill_key' => $skill_key, 'rank' => 1, 'source' => $source];
+    }
+
+    foreach ((array)($data['skills_grants'] ?? []) as $grant) {
+        if (!is_array($grant)) {
+            continue;
+        }
+        $skill_key = trim((string)($grant['key'] ?? ''));
+        if ($skill_key === '') {
+            continue;
+        }
+        $rank = max(1, (int)($grant['rank'] ?? 1));
+        $grants[$skill_key] = ['skill_key' => $skill_key, 'rank' => $rank, 'source' => $source];
+    }
+
+    return array_values($grants);
+}
+
+function af_charactersheets_extract_skill_points_from_sources(array $context): int
+{
+    $total = 0;
+    foreach (['race', 'class', 'theme'] as $source) {
+        $resolved = (array)($context[$source] ?? []);
+        $data = (array)($resolved['data'] ?? []);
+        $total += (int)($data['skill_points'] ?? 0);
+    }
+    return $total;
+}
+
+function cs_resolve_character_kb_context(int $sheet_id): array
+{
+    $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
+    if (empty($sheet)) {
+        return [];
+    }
+
+    $base = af_charactersheets_json_decode((string)($sheet['base_json'] ?? ''));
+    $build = af_charactersheets_normalize_build(
+        af_charactersheets_json_decode((string)($sheet['build_json'] ?? ''))
+    );
+
+    $race = af_charactersheets_kb_resolve_entry('race', (string)($base['race_key'] ?? ''));
+    $class = af_charactersheets_kb_resolve_entry('class', (string)($base['class_key'] ?? ''));
+    $theme = af_charactersheets_kb_resolve_entry('theme', (string)($base['theme_key'] ?? ''));
+
+    $skills_all = af_charactersheets_kb_get_resolved_by_type('skill');
+    $skills_all_map = [];
+    foreach ($skills_all as $item) {
+        $k = (string)($item['key'] ?? '');
+        if ($k !== '') {
+            $skills_all_map[$k] = $item;
+        }
+    }
+
+    $skills_active = [];
+    foreach (af_charactersheets_get_sheet_skills($sheet_id) as $row) {
+        $skill_key = (string)($row['skill_key'] ?? '');
+        if ($skill_key === '') {
+            continue;
+        }
+        $resolved = (array)($skills_all_map[$skill_key] ?? af_charactersheets_kb_resolve_entry('skill', $skill_key));
+        $skills_active[] = [
+            'row' => $row,
+            'resolved' => $resolved,
+        ];
+    }
+
+    $languages = [];
+    foreach ((array)($build['knowledge']['languages'] ?? []) as $language_key) {
+        $item = af_charactersheets_kb_resolve_entry('language', (string)$language_key);
+        if (!empty($item)) {
+            $languages[] = $item;
+        }
+    }
+
+    return [
+        'race' => $race,
+        'class' => $class,
+        'theme' => $theme,
+        'skills_all' => $skills_all,
+        'skills_active' => $skills_active,
+        'languages' => $languages,
+    ];
 }
 
 function af_charactersheets_get_kb_entries_by_type(string $type): array

@@ -321,3 +321,111 @@ function af_charactersheets_delete_sheet(int $sheet_id, array $actor, string $re
 
     return true;
 }
+
+function af_charactersheets_get_sheet_skills(int $sheet_id): array
+{
+    global $db;
+
+    if ($sheet_id <= 0 || !$db->table_exists(AF_CS_SKILLS_TABLE)) {
+        return [];
+    }
+
+    $rows = [];
+    $q = $db->simple_select(AF_CS_SKILLS_TABLE, '*', 'sheet_id=' . $sheet_id, ['order_by' => 'skill_key', 'order_dir' => 'ASC']);
+    while ($row = $db->fetch_array($q)) {
+        if (is_array($row)) {
+            $rows[] = $row;
+        }
+    }
+    return $rows;
+}
+
+function af_charactersheets_upsert_sheet_skill(int $sheet_id, int $uid, string $skill_key, int $rank, int $is_active, string $source): void
+{
+    global $db;
+
+    if ($sheet_id <= 0 || $skill_key === '' || !$db->table_exists(AF_CS_SKILLS_TABLE)) {
+        return;
+    }
+
+    $skill_key = trim($skill_key);
+    $existing = $db->fetch_array($db->simple_select(
+        AF_CS_SKILLS_TABLE,
+        '*',
+        "sheet_id=" . $sheet_id . " AND skill_key='" . $db->escape_string($skill_key) . "'",
+        ['limit' => 1]
+    ));
+
+    $payload = af_charactersheets_db_escape_array([
+        'uid' => $uid,
+        'sheet_id' => $sheet_id,
+        'skill_key' => $skill_key,
+        'rank' => max(0, $rank),
+        'is_active' => $is_active ? 1 : 0,
+        'source' => $source !== '' ? $source : 'manual',
+        'updated_at' => TIME_NOW,
+    ]);
+
+    if (is_array($existing) && !empty($existing)) {
+        $db->update_query(AF_CS_SKILLS_TABLE, $payload, 'id=' . (int)$existing['id']);
+        return;
+    }
+
+    $payload['created_at'] = TIME_NOW;
+    $db->insert_query(AF_CS_SKILLS_TABLE, $payload);
+}
+
+function af_charactersheets_delete_sheet_skill(int $sheet_id, string $skill_key): void
+{
+    global $db;
+
+    if ($sheet_id <= 0 || $skill_key === '' || !$db->table_exists(AF_CS_SKILLS_TABLE)) {
+        return;
+    }
+
+    $db->delete_query(
+        AF_CS_SKILLS_TABLE,
+        "sheet_id=" . $sheet_id . " AND skill_key='" . $db->escape_string($skill_key) . "'"
+    );
+}
+
+function af_charactersheets_sync_fixed_skills(int $sheet_id): void
+{
+    $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
+    if (empty($sheet)) {
+        return;
+    }
+
+    $uid = (int)($sheet['uid'] ?? 0);
+    $context = cs_resolve_character_kb_context($sheet_id);
+    $grants = [];
+    foreach (['race', 'class', 'theme'] as $source) {
+        $resolved = (array)($context[$source] ?? []);
+        foreach (af_charactersheets_extract_skill_grants($resolved, $source) as $grant) {
+            $skill_key = (string)($grant['skill_key'] ?? '');
+            if ($skill_key === '') {
+                continue;
+            }
+            $grants[$skill_key] = [
+                'rank' => max(1, (int)($grant['rank'] ?? 1)),
+                'source' => $source,
+            ];
+        }
+    }
+
+    $rows = af_charactersheets_get_sheet_skills($sheet_id);
+    foreach ($rows as $row) {
+        $skill_key = (string)($row['skill_key'] ?? '');
+        $source = (string)($row['source'] ?? 'manual');
+        if (!in_array($source, ['race', 'class', 'theme'], true)) {
+            continue;
+        }
+        if (!isset($grants[$skill_key])) {
+            af_charactersheets_delete_sheet_skill($sheet_id, $skill_key);
+        }
+    }
+
+    foreach ($grants as $skill_key => $grant) {
+        af_charactersheets_upsert_sheet_skill($sheet_id, $uid, $skill_key, (int)$grant['rank'], 1, (string)$grant['source']);
+    }
+}

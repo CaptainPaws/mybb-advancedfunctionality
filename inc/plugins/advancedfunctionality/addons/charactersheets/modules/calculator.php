@@ -376,6 +376,11 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
 {
     global $mybb;
 
+    $sheet_id = (int)($sheet['id'] ?? 0);
+    if ($sheet_id > 0) {
+        af_charactersheets_sync_fixed_skills($sheet_id);
+    }
+
     $base = af_charactersheets_json_decode((string)($sheet['base_json'] ?? ''));
     $build = af_charactersheets_json_decode((string)($sheet['build_json'] ?? ''));
     $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
@@ -594,37 +599,55 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $bonus_source_labels[] = $label;
     }
 
-    $skills_catalog = af_charactersheets_get_skills_catalog(true);
-    $skills_invested = (array)($build['skills'] ?? []);
+    $kb_context = cs_resolve_character_kb_context((int)($sheet['id'] ?? 0));
+    $skills_rows = af_charactersheets_get_sheet_skills((int)($sheet['id'] ?? 0));
+    $skills_map = [];
+    foreach ($skills_rows as $row) {
+        $skills_map[(string)($row['skill_key'] ?? '')] = $row;
+    }
+
     $skills_view = [];
-    $skills_spent = 0;
-    foreach ($skills_catalog as $skill) {
-        $slug = (string)$skill['slug'];
-        $attr_key = (string)$skill['attr_key'];
-        $base_val = (float)($final[$attr_key] ?? 0);
-        $base_mod = (int)floor($base_val);
-        $invested = (int)($skills_invested[$slug] ?? 0);
-        if ($invested < 0) {
-            $invested = 0;
+    $manual_spent = 0;
+    foreach ((array)($kb_context['skills_all'] ?? []) as $skill_resolved) {
+        $skill_key = (string)($skill_resolved['key'] ?? '');
+        $data = (array)($skill_resolved['data'] ?? []);
+        if ((string)($data['type_profile'] ?? '') !== 'skill') {
+            continue;
         }
-        $skills_spent += $invested;
-        $bonus_val = (float)($bonus_skill_map[$slug] ?? 0);
-        $total = $base_mod + $invested + $bonus_val;
+        $skill_data = (array)($data['skill'] ?? []);
+        $attr_key = (string)($skill_data['key_stat'] ?? '');
+        $base_mod = (int)floor((float)($final[$attr_key] ?? 0));
+        $row = (array)($skills_map[$skill_key] ?? []);
+        $rank = max(0, (int)($row['rank'] ?? 0));
+        $is_active = (int)($row['is_active'] ?? 0) === 1;
+        $source = (string)($row['source'] ?? '');
+        $bonus_val = (float)($bonus_skill_map[$skill_key] ?? 0);
+        $total = $base_mod + ($is_active ? $rank : 0) + $bonus_val;
+        if ($source === 'manual' && $is_active) {
+            $manual_spent += $rank;
+        }
 
         $skills_view[] = [
-            'slug' => $slug,
-            'title' => (string)$skill['title'],
+            'skill_key' => $skill_key,
+            'title' => (string)($skill_resolved['title'] ?? $skill_key),
+            'category' => (string)($skill_data['category'] ?? 'general'),
+            'rank' => $rank,
+            'rank_max' => max(1, (int)($skill_data['rank_max'] ?? 1)),
+            'source' => $source,
+            'is_active' => $is_active,
+            'trained_only' => !empty($skill_data['trained_only']),
+            'notes' => (string)($skill_data['notes'] ?? ''),
             'attr_key' => $attr_key,
             'attr_label' => $attributes_labels[$attr_key] ?? $attr_key,
             'base' => $base_mod,
-            'invested' => $invested,
             'bonus' => $bonus_val,
             'total' => $total,
         ];
     }
 
-    $skill_pool_remaining = (int)($progress['skill_points_free'] ?? 0) + $bonus_skill_points;
-    $skill_pool_total = $skill_pool_remaining + $skills_spent;
+    $skill_pool_total = af_charactersheets_extract_skill_points_from_sources($kb_context);
+    $skill_pool_spent = $manual_spent;
+    $skill_pool_remaining = $skill_pool_total - $skill_pool_spent;
     if ($skill_pool_remaining < 0) {
         $errors[] = 'Превышен лимит очков навыков.';
     }
@@ -733,8 +756,9 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         'exp' => $exp,
         'next_req' => $level_data['next_req'],
         'skills' => $skills_view,
+        'kb_context' => $kb_context,
         'skill_pool_total' => $skill_pool_total,
-        'skill_pool_spent' => $skills_spent,
+        'skill_pool_spent' => $skill_pool_spent,
         'skill_pool_remaining' => $skill_pool_remaining,
         'bonus_items' => $bonus_items,
         'bonus_attr_points' => $bonus_attr_points,
