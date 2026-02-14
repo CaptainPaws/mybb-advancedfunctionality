@@ -1886,6 +1886,63 @@ function af_charactersheets_kb_get_entry(string $type, string $key): array
     return is_array($row) ? $row : [];
 }
 
+function cs_kb_get_entry($type, $key): ?array
+{
+    $entry = af_charactersheets_kb_get_entry((string)$type, (string)$key);
+    return !empty($entry) ? $entry : null;
+}
+
+function cs_kb_get_data_rules($entry): array
+{
+    if (!is_array($entry)) {
+        return [];
+    }
+
+    $raw = (string)($entry['data_json'] ?? $entry['rules_json'] ?? '');
+    $decoded = af_charactersheets_json_decode($raw);
+    if ((string)($decoded['schema'] ?? '') !== 'af_kb.rules.v1') {
+        return [];
+    }
+
+    return cs_kb_rules_normalize($decoded);
+}
+
+function cs_kb_get_meta($entry): array
+{
+    if (!is_array($entry)) {
+        return [];
+    }
+
+    $decoded = af_charactersheets_json_decode((string)($entry['meta_json'] ?? ''));
+    if ((string)($decoded['schema'] ?? '') !== 'af_kb.meta.v1') {
+        return [];
+    }
+
+    return $decoded;
+}
+
+function cs_kb_get_block_text($meta, $block_key, $lang = ''): string
+{
+    if (!is_array($meta) || !is_array($meta['blocks'] ?? null)) {
+        return '';
+    }
+
+    $lang = $lang !== '' ? $lang : (af_charactersheets_is_ru() ? 'ru' : 'en');
+    foreach ((array)$meta['blocks'] as $block) {
+        if (!is_array($block) || (string)($block['key'] ?? '') !== (string)$block_key) {
+            continue;
+        }
+
+        $value = (string)($block['content_' . $lang] ?? '');
+        if ($value === '') {
+            $value = (string)($block['content_ru'] ?? $block['content_en'] ?? $block['content'] ?? '');
+        }
+        return trim($value);
+    }
+
+    return '';
+}
+
 
 function cs_kb_rules_normalize($dataJson): array
 {
@@ -2200,6 +2257,73 @@ function af_charactersheets_extract_attribute_points_from_sources(array $context
     return $total;
 }
 
+function cs_get_sheet_kb_sources(array $sheet): array
+{
+    $tid = (int)($sheet['tid'] ?? 0);
+    $index = [];
+    if ($tid > 0) {
+        $index = af_charactersheets_index_fields(af_charactersheets_get_atf_fields($tid));
+    }
+
+    return [
+        'race' => af_charactersheets_pick_field_value($index, ['character_race', 'race'], false),
+        'class' => af_charactersheets_pick_field_value($index, ['character_class', 'class'], false),
+        'theme' => af_charactersheets_pick_field_value($index, ['character_themes', 'character_theme', 'theme'], false),
+    ];
+}
+
+function cs_build_resolved_rules($raceRules, $classRules, $themeRules, $build, $settings): array
+{
+    $stats = af_charactersheets_default_attributes();
+    $fixed = [
+        'stats' => $stats,
+        'hp' => 0,
+        'armor' => 0,
+        'initiative' => 0,
+        'speed' => 0,
+        'carry' => 0,
+        'ep' => 0,
+        'damage' => 0,
+        'skill_points' => 0,
+        'language_slots' => 0,
+    ];
+    $fixed_bonuses = $fixed + ['attribute_points' => 0];
+    $fixed_bonuses['stats'] = $stats;
+    $hp_base = ['race' => 0, 'class' => 0, 'theme' => 0];
+    $grants = [];
+    $choices = [];
+
+    foreach (['race' => $raceRules, 'class' => $classRules, 'theme' => $themeRules] as $source => $rules) {
+        $rules = cs_kb_rules_normalize(is_array($rules) ? $rules : []);
+        $hp_base[$source] = (int)($rules['hp_base'] ?? 0);
+
+        foreach (array_keys($stats) as $stat) {
+            $fixed['stats'][$stat] += (int)($rules['fixed']['stats'][$stat] ?? 0);
+            $fixed_bonuses['stats'][$stat] += (int)($rules['fixed_bonuses']['stats'][$stat] ?? 0);
+        }
+        foreach (['hp','armor','initiative','speed','carry','ep','damage','skill_points','language_slots'] as $k) {
+            $fixed[$k] += (int)($rules['fixed'][$k] ?? 0);
+            $fixed_bonuses[$k] += (int)($rules['fixed_bonuses'][$k] ?? 0);
+        }
+        $fixed_bonuses['attribute_points'] += (int)($rules['fixed_bonuses']['attribute_points'] ?? 0);
+        $grants = array_merge($grants, (array)($rules['grants'] ?? []));
+        foreach ((array)($rules['choices'] ?? []) as $choice) {
+            if (is_array($choice)) {
+                $choice['source'] = $source;
+                $choices[] = $choice;
+            }
+        }
+    }
+
+    return [
+        'hp_base' => $hp_base,
+        'fixed' => $fixed,
+        'fixed_bonuses' => $fixed_bonuses,
+        'grants' => $grants,
+        'choices' => $choices,
+    ];
+}
+
 function cs_resolve_character_kb_context(int $sheet_id): array
 {
     $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
@@ -2207,14 +2331,14 @@ function cs_resolve_character_kb_context(int $sheet_id): array
         return [];
     }
 
-    $base = af_charactersheets_json_decode((string)($sheet['base_json'] ?? ''));
+    $kb_sources = cs_get_sheet_kb_sources($sheet);
     $build = af_charactersheets_normalize_build(
         af_charactersheets_json_decode((string)($sheet['build_json'] ?? ''))
     );
 
-    $race = af_charactersheets_kb_resolve_entry('race', (string)($base['race_key'] ?? ''));
-    $class = af_charactersheets_kb_resolve_entry('class', (string)($base['class_key'] ?? ''));
-    $theme = af_charactersheets_kb_resolve_entry('theme', (string)($base['theme_key'] ?? ''));
+    $race = af_charactersheets_kb_resolve_entry('race', (string)($kb_sources['race'] ?? ''));
+    $class = af_charactersheets_kb_resolve_entry('class', (string)($kb_sources['class'] ?? ''));
+    $theme = af_charactersheets_kb_resolve_entry('theme', (string)($kb_sources['theme'] ?? ''));
 
     $skills_all = af_charactersheets_kb_get_resolved_by_type('skill');
     $skills_all_map = [];
@@ -2253,6 +2377,7 @@ function cs_resolve_character_kb_context(int $sheet_id): array
         'skills_all' => $skills_all,
         'skills_active' => $skills_active,
         'languages' => $languages,
+        'kb_sources' => $kb_sources,
     ];
 }
 
@@ -2380,8 +2505,11 @@ function af_charactersheets_default_build(): array
     }
 
     return [
+        'allocated_stats' => af_charactersheets_default_attributes(),
         'attributes_allocated' => af_charactersheets_default_attributes(),
+        'picks' => [],
         'choices' => [],
+        'active_skills' => [],
         'skills' => [],
         'knowledge' => [
             'languages' => [],
@@ -2410,6 +2538,21 @@ function af_charactersheets_normalize_build(array $build): array
     $defaults = af_charactersheets_default_build();
 
     $build = array_merge($defaults, $build);
+    if (isset($build['allocated_stats']) && is_array($build['allocated_stats'])) {
+        $build['attributes_allocated'] = array_merge((array)$build['attributes_allocated'], (array)$build['allocated_stats']);
+    }
+    $build['allocated_stats'] = array_merge(af_charactersheets_default_attributes(), (array)($build['attributes_allocated'] ?? []));
+
+    if (isset($build['picks']) && is_array($build['picks'])) {
+        $build['choices'] = array_merge((array)$build['choices'], (array)$build['picks']);
+    }
+    $build['picks'] = (array)($build['choices'] ?? []);
+
+    if (isset($build['active_skills']) && is_array($build['active_skills']) && empty($build['skills'])) {
+        $build['skills'] = (array)$build['active_skills'];
+    }
+    $build['active_skills'] = (array)($build['skills'] ?? []);
+
     $build['knowledge'] = array_merge($defaults['knowledge'], (array)($build['knowledge'] ?? []));
     $build['inventory'] = array_merge($defaults['inventory'], (array)($build['inventory'] ?? []));
     $build['abilities'] = array_merge($defaults['abilities'], (array)($build['abilities'] ?? []));
