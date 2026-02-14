@@ -1870,6 +1870,80 @@ function af_charactersheets_kb_get_entry(string $type, string $key): array
     return is_array($row) ? $row : [];
 }
 
+
+function cs_kb_rules_normalize($dataJson): array
+{
+    $rules = is_array($dataJson) ? $dataJson : [];
+
+    $statsZero = [
+        'str' => 0,
+        'dex' => 0,
+        'con' => 0,
+        'int' => 0,
+        'wis' => 0,
+        'cha' => 0,
+    ];
+
+    $fixed = is_array($rules['fixed'] ?? null) ? $rules['fixed'] : [];
+    $fixedBonuses = is_array($rules['fixed_bonuses'] ?? null) ? $rules['fixed_bonuses'] : [];
+
+    $fixedStats = $statsZero;
+    foreach (['stats', 'attributes'] as $k) {
+        if (!empty($fixed[$k]) && is_array($fixed[$k])) {
+            foreach ($statsZero as $stat => $_) {
+                if (isset($fixed[$k][$stat])) {
+                    $fixedStats[$stat] = (int)$fixed[$k][$stat];
+                }
+            }
+        }
+    }
+
+    $fixedBonusStats = $statsZero;
+    foreach (['stats', 'attributes'] as $k) {
+        if (!empty($fixedBonuses[$k]) && is_array($fixedBonuses[$k])) {
+            foreach ($statsZero as $stat => $_) {
+                if (isset($fixedBonuses[$k][$stat])) {
+                    $fixedBonusStats[$stat] = (int)$fixedBonuses[$k][$stat];
+                }
+            }
+        }
+    }
+
+    return [
+        'schema' => (string)($rules['schema'] ?? ''),
+        'fixed' => [
+            'stats' => $fixedStats,
+            'hp' => (int)($fixed['hp'] ?? 0),
+            'armor' => (int)($fixed['armor'] ?? 0),
+            'initiative' => (int)($fixed['initiative'] ?? 0),
+            'speed' => (int)($fixed['speed'] ?? 0),
+            'carry' => (int)($fixed['carry'] ?? 0),
+            'ep' => (int)($fixed['ep'] ?? 0),
+            'damage' => (int)($fixed['damage'] ?? 0),
+            'skill_points' => (int)($fixed['skill_points'] ?? 0),
+            'language_slots' => (int)($fixed['language_slots'] ?? 0),
+        ],
+        'fixed_bonuses' => [
+            'stats' => $fixedBonusStats,
+            'hp' => (int)($fixedBonuses['hp'] ?? 0),
+            'armor' => (int)($fixedBonuses['armor'] ?? 0),
+            'initiative' => (int)($fixedBonuses['initiative'] ?? 0),
+            'speed' => (int)($fixedBonuses['speed'] ?? 0),
+            'carry' => (int)($fixedBonuses['carry'] ?? 0),
+            'ep' => (int)($fixedBonuses['ep'] ?? 0),
+            'damage' => (int)($fixedBonuses['damage'] ?? 0),
+            'skill_points' => (int)($fixedBonuses['skill_points'] ?? 0),
+            'language_slots' => (int)($fixedBonuses['language_slots'] ?? 0),
+            'attribute_points' => (int)($fixedBonuses['attribute_points'] ?? 0),
+        ],
+        'hp_base' => (int)($rules['hp_base'] ?? 0),
+        'languages' => is_array($rules['languages'] ?? null) ? array_values($rules['languages']) : [],
+        'choices' => is_array($rules['choices'] ?? null) ? array_values($rules['choices']) : [],
+        'grants' => is_array($rules['grants'] ?? null) ? array_values($rules['grants']) : [],
+        'traits' => is_array($rules['traits'] ?? null) ? array_values($rules['traits']) : [],
+    ];
+}
+
 function af_charactersheets_kb_normalize_entry(array $entry): array
 {
     $meta = af_charactersheets_json_decode((string)($entry['meta_json'] ?? ''));
@@ -1879,11 +1953,7 @@ function af_charactersheets_kb_normalize_entry(array $entry): array
         $meta = [];
     }
 
-    if ((string)($data['schema'] ?? '') === 'af_kb.rules.v1') {
-        // ok
-    } elseif (!empty($meta['rules']) && is_array($meta['rules'])) {
-        $data = $meta['rules'];
-    } else {
+    if ((string)($data['schema'] ?? '') !== 'af_kb.rules.v1') {
         $data = [];
     }
 
@@ -1895,7 +1965,7 @@ function af_charactersheets_kb_normalize_entry(array $entry): array
         'short' => af_charactersheets_kb_pick_text($entry, 'short'),
         'body' => af_charactersheets_kb_pick_text($entry, 'body'),
         'meta' => $meta,
-        'data' => is_array($data) ? $data : [],
+        'data' => cs_kb_rules_normalize(is_array($data) ? $data : []),
     ];
 }
 
@@ -2040,22 +2110,18 @@ function cs_get_skill_points_from_rules($rules): int
         return 0;
     }
 
-    $points = cs_rules_get_first_int($rules, [
-        'fixed.skill_points',
-        'fixed.points.skill',
-        'fixed_bonuses.skill_points',
-        'skill_points',
-        'race.skill_points',
-        'class.skill_points',
-        'theme.skill_points',
-        'points.skill',
-    ]);
+    $points = max(0, (int)($rules['fixed']['skill_points'] ?? 0))
+        + max(0, (int)($rules['fixed_bonuses']['skill_points'] ?? 0));
 
     foreach ((array)($rules['choices'] ?? []) as $choice) {
         if (!is_array($choice)) {
             continue;
         }
         $choice_type = (string)($choice['type'] ?? '');
+        if ($choice_type === 'skill_pick_choice' && (string)($choice['grant_mode'] ?? '') === 'skill_points') {
+            $points += max(0, (int)($choice['points_value'] ?? 0));
+            continue;
+        }
         if (!in_array($choice_type, ['skill_pick', 'skill_points', 'skills_pick', 'kb_pick'], true)) {
             continue;
         }
@@ -2075,22 +2141,18 @@ function cs_get_attribute_points_from_rules($rules): int
         return 0;
     }
 
-    $points = cs_rules_get_first_int($rules, [
-        'fixed.attribute_points',
-        'fixed.points.attribute',
-        'fixed_bonuses.attribute_points',
-        'attribute_points',
-        'race.attribute_points',
-        'class.attribute_points',
-        'theme.attribute_points',
-        'points.attribute',
-    ]);
+    $points = max(0, (int)($rules['fixed']['attribute_points'] ?? 0))
+        + max(0, (int)($rules['fixed_bonuses']['attribute_points'] ?? 0));
 
     foreach ((array)($rules['choices'] ?? []) as $choice) {
         if (!is_array($choice)) {
             continue;
         }
         $choice_type = (string)($choice['type'] ?? '');
+        if ($choice_type === 'stat_bonus') {
+            $points += max(0, (int)($choice['pick'] ?? 0)) * max(0, (int)($choice['value'] ?? 1));
+            continue;
+        }
         if (!in_array($choice_type, ['attribute_points'], true)) {
             continue;
         }
