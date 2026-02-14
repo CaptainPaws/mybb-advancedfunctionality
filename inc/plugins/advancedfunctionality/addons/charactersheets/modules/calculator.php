@@ -619,20 +619,20 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $attr_key = (string)($skill_data['key_stat'] ?? '');
         $base_mod = (int)floor((float)($final[$attr_key] ?? 0));
         $row = (array)($skills_map[$skill_key] ?? []);
-        $rank = max(0, (int)($row['rank'] ?? 0));
+        $skill_rank = max(0, (int)($row['skill_rank'] ?? 0));
         $is_active = (int)($row['is_active'] ?? 0) === 1;
         $source = (string)($row['source'] ?? '');
         $bonus_val = (float)($bonus_skill_map[$skill_key] ?? 0);
-        $total = $base_mod + ($is_active ? $rank : 0) + $bonus_val;
+        $total = $base_mod + ($is_active ? $skill_rank : 0) + $bonus_val;
         if ($source === 'manual' && $is_active) {
-            $manual_spent += $rank;
+            $manual_spent += $skill_rank;
         }
 
         $skills_view[] = [
             'skill_key' => $skill_key,
             'title' => (string)($skill_resolved['title'] ?? $skill_key),
             'category' => (string)($skill_data['category'] ?? 'general'),
-            'rank' => $rank,
+            'skill_rank' => $skill_rank,
             'rank_max' => max(1, (int)($skill_data['rank_max'] ?? 1)),
             'source' => $source,
             'is_active' => $is_active,
