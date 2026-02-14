@@ -787,6 +787,14 @@
           return;
         }
 
+        var skillCatalogOpen = event.target.closest('[data-afcs-skill-catalog-open]');
+        if (skillCatalogOpen) {
+          event.preventDefault();
+          var firstBuy = sheet.querySelector('[data-afcs-skill-buy]');
+          if (firstBuy && typeof firstBuy.focus === 'function') firstBuy.focus();
+          return;
+        }
+
         var skillBuy = event.target.closest('[data-afcs-skill-buy]');
         if (skillBuy) {
           event.preventDefault();

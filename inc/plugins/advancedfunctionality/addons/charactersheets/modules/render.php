@@ -438,7 +438,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
             . '<div>Пул навыков: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_total'] ?? 0)) . '</strong></div>'
             . '<div>Потрачено: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_spent'] ?? 0)) . '</strong></div>'
             . '<div>Доступно: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_remaining'] ?? 0)) . '</strong></div>'
-            . ($can_manage ? '<button type="button" class="af-cs-skill-btn"' . $buy_disabled . '>Купить навык</button>' : '')
+            . ($can_manage ? '<button type="button" class="af-cs-skill-btn" data-afcs-skill-catalog-open="1"' . $buy_disabled . '>Купить навык</button>' : '')
             . '</div>';
     }
 
@@ -835,11 +835,15 @@ function af_charactersheets_build_bonus_html(array $index): string
         $field = $index[$fieldName] ?? [];
         $key = (string)($field['value'] ?? '');
         $entry = $key !== '' ? af_charactersheets_kb_get_entry((string)$data['type'], $key) : [];
-        $title = (string)$data['label'];
-        $text_html = trim(af_charactersheets_kb_get_block_html($entry, 'bonuses'));
-        if ($text_html === '') {
-            continue;
+        $title = af_charactersheets_kb_pick_text($entry, 'title');
+        if ($title === '') {
+            $title = (string)$data['label'];
         }
+
+        $meta = cs_kb_get_meta($entry);
+        $text = cs_kb_get_block_text($meta, 'bonuses', af_charactersheets_is_ru() ? 'ru' : 'en');
+        $text_html = $text !== '' ? af_charactersheets_parse_bbcode($text) : '<div class="af-cs-muted">Нет данных</div>';
+
         $columns[] = '<div class="af-cs-bonus-card">'
             . '<div class="af-cs-bonus-title">' . htmlspecialchars_uni($title) . '</div>'
             . '<div class="af-cs-bonus-body">' . $text_html . '</div>'
@@ -887,11 +891,13 @@ function af_charactersheets_build_mechanics_html(array $view): string
         . '</div>';
 
     $weapon_bonus_label = af_charactersheets_format_signed($weapon_bonus);
-    $damage_total = '1d4 + ' . $weapon_bonus_label;
+    $str_bonus_label = af_charactersheets_format_signed((float)($view['final']['str'] ?? 0));
+    $damage_total = '1d4 + ' . $weapon_bonus_label . ' + ' . $str_bonus_label;
     $col3 = '<div class="af-cs-mech-card">'
         . '<div class="af-cs-mech-title">Урон</div>'
         . '<div class="af-cs-mech-row"><span>Базовый</span><span>1d4</span></div>'
         . '<div class="af-cs-mech-row"><span>Бонус оружия</span><span>' . htmlspecialchars_uni($weapon_bonus_label) . '</span></div>'
+        . '<div class="af-cs-mech-row"><span>Сила</span><span>' . htmlspecialchars_uni($str_bonus_label) . '</span></div>'
         . '<div class="af-cs-mech-row af-cs-mech-total"><span>Итог</span><span>' . htmlspecialchars_uni($damage_total) . '</span></div>'
         . '</div>';
 

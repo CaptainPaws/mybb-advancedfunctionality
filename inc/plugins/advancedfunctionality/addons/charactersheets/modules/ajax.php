@@ -105,6 +105,7 @@ function af_charactersheets_handle_api(): void
 
         $prev_build = $build;
         $build['attributes_allocated'] = $sanitized;
+        $build['allocated_stats'] = $sanitized;
         $prev_spent = 0;
         foreach ((array)($prev_build['attributes_allocated'] ?? []) as $value) {
             $prev_spent += (int)$value;
@@ -153,6 +154,7 @@ function af_charactersheets_handle_api(): void
             af_charactersheets_json_response(['success' => false, 'error' => 'Invalid choice']);
         }
         $build['choices'][$choice_key] = $choice_value;
+        $build['picks'][$choice_key] = $choice_value;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
     } elseif (in_array($do, ['cs_skill_buy',
         'buy_skill', 'cs_skill_set_rank', 'cs_skill_unbuy'], true)) {
