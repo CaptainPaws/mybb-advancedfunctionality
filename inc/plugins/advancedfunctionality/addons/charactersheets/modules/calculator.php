@@ -505,18 +505,17 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $kb_context = cs_resolve_character_kb_context((int)($sheet['id'] ?? 0));
     $source_rules_map = [];
     foreach (['race', 'class', 'theme'] as $src) {
-        $resolved = (array)($kb_context[$src] ?? []);
-        $rules = cs_kb_rules_normalize((array)($resolved['data'] ?? []));
-        $source_rules_map[$src] = $rules;
-        foreach (['str','dex','con','int','wis','cha'] as $statKey) {
-            $bonus[$statKey] += (float)($rules['fixed']['stats'][$statKey] ?? 0);
-            $bonus[$statKey] += (float)($rules['fixed_bonuses']['stats'][$statKey] ?? 0);
-        }
-        $bonus_skill_points += (int)($rules['fixed']['skill_points'] ?? 0) + (int)($rules['fixed_bonuses']['skill_points'] ?? 0);
-        $bonus_language_choices += (int)($rules['fixed']['language_slots'] ?? 0) + (int)($rules['fixed_bonuses']['language_slots'] ?? 0);
+        $source_rules_map[$src] = cs_kb_rules_normalize((array)($kb_context['sources'][$src]['rules'] ?? []));
     }
-    $bonus_attr_points += af_charactersheets_extract_attribute_points_from_sources($kb_context);
-    $bonus_skill_points += af_charactersheets_extract_skill_points_from_sources($kb_context);
+
+    $rules_aggregate = (array)($kb_context['aggregate'] ?? af_cs_aggregate_rules(array_values((array)($kb_context['sources'] ?? []))));
+    foreach (['str','dex','con','int','wis','cha'] as $statKey) {
+        $bonus[$statKey] += (float)($rules_aggregate['fixed']['stats'][$statKey] ?? 0);
+        $bonus[$statKey] += (float)($rules_aggregate['fixed_bonuses']['stats'][$statKey] ?? 0);
+    }
+    $bonus_attr_points += (int)($rules_aggregate['points_pools']['attribute_points'] ?? 0);
+    $bonus_skill_points += (int)($rules_aggregate['points_pools']['skill_points'] ?? 0);
+    $bonus_language_choices += (int)($rules_aggregate['points_pools']['language_slots'] ?? 0);
 
     $final = [];
     foreach ($attributes_base as $key => $value) {
@@ -639,6 +638,12 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $errors[] = 'Превышен лимит очков навыков.';
     }
 
+    $resolved_rules = [
+        'fixed' => (array)($rules_aggregate['fixed'] ?? []),
+        'fixed_bonuses' => (array)($rules_aggregate['fixed_bonuses'] ?? []),
+        'hp_base_total' => (int)($rules_aggregate['hp_base_total'] ?? 0),
+    ];
+
     $knowledge_build = (array)($build['knowledge'] ?? []);
     $knowledge_selected = array_values(array_unique(array_filter((array)($knowledge_build['knowledges'] ?? []))));
     $language_selected = array_values(array_unique(array_filter((array)($knowledge_build['languages'] ?? []))));
@@ -671,14 +676,6 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $con_mod = (int)floor((float)($final['con'] ?? 0));
     $wis_mod = (int)floor((float)($final['wis'] ?? 0));
     $int_mod = (int)floor((float)($final['int'] ?? 0));
-
-    $resolved_rules = cs_build_resolved_rules(
-        (array)($source_rules_map['race'] ?? []),
-        (array)($source_rules_map['class'] ?? []),
-        (array)($source_rules_map['theme'] ?? []),
-        $build,
-        $mybb->settings ?? []
-    );
     $legacy_equipment = [];
     if (!empty($build['equipment_bonuses']) && is_array($build['equipment_bonuses'])) {
         $legacy_equipment = $build['equipment_bonuses'];
@@ -705,9 +702,8 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
 
     $humanity_base = 100.0;
 
-    $hp_race = (float)(($resolved_rules['hp_base']['race'] ?? 0) + ($source_rules_map['race']['fixed']['hp'] ?? 0) + ($source_rules_map['race']['fixed_bonuses']['hp'] ?? 0));
-    $hp_class = (float)(($source_rules_map['class']['fixed']['hp'] ?? 0) + ($source_rules_map['class']['fixed_bonuses']['hp'] ?? 0));
-    $hp_theme = (float)(($source_rules_map['theme']['fixed']['hp'] ?? 0) + ($source_rules_map['theme']['fixed_bonuses']['hp'] ?? 0));
+    $hp_base_total = (float)($resolved_rules['hp_base_total'] ?? 0);
+    $hp_fixed_total = (float)(($resolved_rules['fixed']['hp'] ?? 0) + ($resolved_rules['fixed_bonuses']['hp'] ?? 0) + $bonus_hp);
     $hp_con = (float)($final['con'] ?? 0);
 
     $augmentation_slots = (array)($build['augmentations']['slots'] ?? []);
@@ -728,7 +724,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     }
     $humanity_penalty = max(0.0, $humanity_from_augments);
 
-    $hp_total = (int)floor($hp_race + $hp_class + $hp_theme + $hp_con);
+    $hp_total = (int)floor($hp_base_total + $hp_fixed_total + $hp_con);
     $humanity_total = (int)floor($humanity_base - $humanity_penalty);
 
     return [
@@ -751,6 +747,12 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         'next_req' => $level_data['next_req'],
         'skills' => $skills_view,
         'kb_context' => $kb_context,
+        'ctx' => [
+            'sources' => (array)($kb_context['sources'] ?? []),
+            'aggregate' => $rules_aggregate,
+            'build' => $build,
+            'progress' => $progress,
+        ],
         'skill_pool_total' => $skill_pool_total,
         'skill_pool_spent' => $skill_pool_spent,
         'skill_pool_remaining' => $skill_pool_remaining,
@@ -766,11 +768,11 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'damage_total' => '1d4 + ' . (string)$weapon_bonus . ' + ' . (string)$final['str'],
             'ac_total' => $ac_total,
             'hp_total' => $hp_total,
+            'speed_total' => (int)(($rules_aggregate['speed_base_total'] ?? 0) + ($resolved_rules['fixed']['speed'] ?? 0) + ($resolved_rules['fixed_bonuses']['speed'] ?? 0)),
             'humanity_total' => $humanity_total,
             'hp_breakdown' => [
-                'race' => $hp_race,
-                'class' => $hp_class,
-                'theme' => $hp_theme,
+                'hp_base_total' => $hp_base_total,
+                'fixed_total' => $hp_fixed_total,
                 'from_con' => $hp_con,
             ],
             'humanity_breakdown' => [
@@ -790,7 +792,11 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'total_choices' => $knowledge_total_choices,
             'remaining' => $knowledge_remaining,
         ],
-        'debug' => $kb_debug,
+        'debug' => $kb_debug + [
+            'hp_base_total' => (int)($rules_aggregate['hp_base_total'] ?? 0),
+            'bonus_attribute_points' => (int)($rules_aggregate['bonus_attribute_points'] ?? 0),
+            'bonus_skill_points' => (int)($rules_aggregate['bonus_skill_points'] ?? 0),
+        ],
         'languages' => [
             'selected' => $language_selected,
             'bonus' => $bonus_languages,
