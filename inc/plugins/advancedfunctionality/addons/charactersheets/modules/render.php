@@ -840,9 +840,10 @@ function af_charactersheets_build_bonus_html(array $index): string
             $title = (string)$data['label'];
         }
 
-        $meta = cs_kb_get_meta($entry);
-        $text = cs_kb_get_block_text($meta, 'bonuses', af_charactersheets_is_ru() ? 'ru' : 'en');
-        $text_html = $text !== '' ? af_charactersheets_parse_bbcode($text) : '<div class="af-cs-muted">Нет данных</div>';
+        $text_html = af_cs_render_kb_bonuses_text((string)$data['type'], $key, af_charactersheets_is_ru());
+        if ($text_html === '') {
+            $text_html = '<div class="af-cs-muted">Нет данных</div>';
+        }
 
         $columns[] = '<div class="af-cs-bonus-card">'
             . '<div class="af-cs-bonus-title">' . htmlspecialchars_uni($title) . '</div>'
