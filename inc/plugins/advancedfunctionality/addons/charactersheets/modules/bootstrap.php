@@ -1943,6 +1943,162 @@ function cs_kb_get_block_text($meta, $block_key, $lang = ''): string
     return '';
 }
 
+function af_cs_kb_get_meta_blocks($type, $key): array
+{
+    $type = trim((string)$type);
+    $key = trim((string)$key);
+    if ($type === '' || $key === '') {
+        return [];
+    }
+
+    $candidate_types = [$type];
+    if ($type === 'theme') {
+        $candidate_types[] = 'themes';
+    } elseif ($type === 'themes') {
+        $candidate_types[] = 'theme';
+    }
+
+    $entry = [];
+    foreach ($candidate_types as $candidate) {
+        $entry = af_charactersheets_kb_get_entry($candidate, $key);
+        if (!empty($entry)) {
+            break;
+        }
+    }
+
+    if (empty($entry)) {
+        return [];
+    }
+
+    $meta = cs_kb_get_meta($entry);
+    $blocks = $meta['blocks'] ?? [];
+    return is_array($blocks) ? $blocks : [];
+}
+
+function af_cs_kb_extract_block_content(array $block, bool $isRu): string
+{
+    $lang = $isRu ? 'ru' : 'en';
+
+    $extract_value = static function ($value) use ($lang): string {
+        if (is_string($value) || is_numeric($value)) {
+            return trim((string)$value);
+        }
+
+        if (!is_array($value)) {
+            return '';
+        }
+
+        $localized = (string)($value[$lang] ?? '');
+        if ($localized !== '') {
+            return trim($localized);
+        }
+
+        foreach (['ru', 'en'] as $fallback_lang) {
+            $candidate = (string)($value[$fallback_lang] ?? '');
+            if ($candidate !== '') {
+                return trim($candidate);
+            }
+        }
+
+        foreach (['text', 'value', 'html', 'content', 'body'] as $key) {
+            $candidate = $value[$key] ?? null;
+            if (is_string($candidate) || is_numeric($candidate)) {
+                $candidate = trim((string)$candidate);
+                if ($candidate !== '') {
+                    return $candidate;
+                }
+            } elseif (is_array($candidate)) {
+                $localized = (string)($candidate[$lang] ?? $candidate['ru'] ?? $candidate['en'] ?? '');
+                if ($localized !== '') {
+                    return trim($localized);
+                }
+            }
+        }
+
+        return '';
+    };
+
+    $content_keys = [
+        'data_' . $lang,
+        'content_' . $lang,
+        'body_' . $lang,
+        'text_' . $lang,
+        'html_' . $lang,
+        'data',
+        'content',
+        'text',
+        'body',
+        'html',
+    ];
+
+    foreach ($content_keys as $field) {
+        if (!array_key_exists($field, $block)) {
+            continue;
+        }
+
+        $raw = $block[$field];
+        if (is_array($raw)) {
+            $parts = [];
+            foreach ($raw as $item) {
+                $piece = $extract_value($item);
+                if ($piece !== '') {
+                    $parts[] = $piece;
+                }
+            }
+            if (!empty($parts)) {
+                return trim(implode("\n", $parts));
+            }
+            continue;
+        }
+
+        $text = $extract_value($raw);
+        if ($text !== '') {
+            return $text;
+        }
+    }
+
+    return '';
+}
+
+function af_cs_render_kb_bonuses_text($type, $key, $isRu): string
+{
+    $blocks = af_cs_kb_get_meta_blocks((string)$type, (string)$key);
+    if (empty($blocks)) {
+        return '';
+    }
+
+    $bonuses_block = [];
+    $is_list = array_keys($blocks) === range(0, count($blocks) - 1);
+    if ($is_list) {
+        foreach ($blocks as $block) {
+            if (!is_array($block)) {
+                continue;
+            }
+            $block_key = (string)($block['block_key'] ?? $block['key'] ?? '');
+            if ($block_key === 'bonuses') {
+                $bonuses_block = $block;
+                break;
+            }
+        }
+    } else {
+        $candidate = $blocks['bonuses'] ?? null;
+        if (is_array($candidate)) {
+            $bonuses_block = $candidate;
+        }
+    }
+
+    if (empty($bonuses_block)) {
+        return '';
+    }
+
+    $text = af_cs_kb_extract_block_content($bonuses_block, (bool)$isRu);
+    if ($text === '') {
+        return '';
+    }
+
+    return af_charactersheets_parse_bbcode($text);
+}
+
 
 function cs_kb_rules_normalize($dataJson): array
 {
