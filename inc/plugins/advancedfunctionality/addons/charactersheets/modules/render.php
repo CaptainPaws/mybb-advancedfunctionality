@@ -873,8 +873,8 @@ function af_charactersheets_build_mechanics_html(array $view): string
 
     $col1 = '<div class="af-cs-mech-card">'
         . '<div class="af-cs-mech-title">Класс брони</div>'
-        . '<div class="af-cs-mech-row"><span>Броня</span><span>' . htmlspecialchars_uni(af_charactersheets_format_signed($armor_bonus)) . '</span></div>'
-        . '<div class="af-cs-mech-row"><span>Щит</span><span>' . htmlspecialchars_uni(af_charactersheets_format_signed($shield_bonus)) . '</span></div>'
+        . '<div class="af-cs-mech-row"><span>Броня</span><span>' . htmlspecialchars_uni((string)$armor_bonus) . '</span></div>'
+        . '<div class="af-cs-mech-row"><span>Щит</span><span>' . htmlspecialchars_uni((string)$shield_bonus) . '</span></div>'
         . '<div class="af-cs-mech-row af-cs-mech-total"><span>Итоговый AC</span><span>' . htmlspecialchars_uni((string)$ac_total) . '</span></div>'
         . '</div>';
 
@@ -887,35 +887,61 @@ function af_charactersheets_build_mechanics_html(array $view): string
         . '<div class="af-cs-mech-divider"></div>'
         . '<div class="af-cs-mech-row"><span>HP</span><span>' . htmlspecialchars_uni((string)$hp_total) . '</span></div>'
         . '<div class="af-cs-mech-row"><span>Скорость</span><span>' . htmlspecialchars_uni((string)$speed_total) . '</span></div>'
-        . '<div class="af-cs-mech-row"><span>Человечность</span><span>' . htmlspecialchars_uni((string)$humanity_total) . '</span></div>'
+        . '<div class="af-cs-mech-row"><span>Человечность</span><span>' . htmlspecialchars_uni((string)$humanity_total) . '%</span></div>'
         . '</div>';
 
 
     $debug = (array)($view['debug'] ?? []);
-    $debug_sources = [];
+    $debug_lines = [];
     foreach (['race', 'class', 'theme'] as $src) {
         $entry = (array)($debug[$src] ?? []);
-        $is_ok = !empty($entry['valid']) ? 1 : 0;
-        $reason = (string)($entry['reason'] ?? ($is_ok ? 'OK' : 'NO_ROW'));
+        $key = (string)($entry['key'] ?? '-');
         $schema = (string)($entry['schema'] ?? '');
-        $source_line = $src . '/' . (string)($entry['key'] ?? '-') . ': ok=' . $is_ok . ' reason=' . $reason;
-        if ($schema !== '') {
-            $source_line .= ' schema=' . $schema;
+        if ($schema !== 'af_kb.rules.v1') {
+            $debug_lines[] = $src . '_key=' . $key . ' schema=' . ($schema !== '' ? $schema : '-') . ' ' . $src . ' schema invalid / empty rules';
+            continue;
         }
-        if ($is_ok === 1) {
-            $rules = (array)($entry['rules'] ?? []);
-            $source_line .= ' hp_base=' . (int)($rules['hp_base'] ?? 0);
-            $source_line .= ' fixed_hp=' . (int)($rules['fixed']['hp'] ?? 0);
-            $source_line .= ' choices=' . count((array)($rules['choices'] ?? []));
+
+        $rules = (array)($entry['rules'] ?? []);
+        $line = $src . '_key=' . $key
+            . ' schema=' . $schema
+            . ' hp_base=' . (int)($rules['hp_base'] ?? 0)
+            . ' speed=' . (int)($rules['speed'] ?? 0)
+            . ' fixed_hp=' . (int)($rules['fixed_bonuses']['hp'] ?? 0);
+
+        foreach ((array)($rules['choices'] ?? []) as $choice) {
+            if (!is_array($choice)) {
+                continue;
+            }
+            $choice_type = (string)($choice['type'] ?? '');
+            if ($choice_type === 'stat_bonus' && (string)($choice['mode'] ?? 'add') === 'add') {
+                $pick = max(0, (int)($choice['pick'] ?? 0));
+                $value = max(0, (int)($choice['value'] ?? 1));
+                $line .= ' | stat_bonus[id=' . (string)($choice['id'] ?? '-') . ' pick=' . $pick . ' value=' . $value . '] => bonus_attr_points=' . ($pick * $value);
+            }
+            if ($choice_type === 'skill_pick_choice' && (string)($choice['grant_mode'] ?? '') === 'skill_points') {
+                $pick = max(0, (int)($choice['pick'] ?? 0));
+                $points_value = max(0, (int)($choice['points_value'] ?? 0));
+                $line .= ' | skill_pick_choice[id=' . (string)($choice['id'] ?? '-') . ' pick=' . $pick . ' points_value=' . $points_value . ' grant_mode=skill_points] => bonus_skill_points=' . ($pick * $points_value);
+            }
         }
-        $debug_sources[] = $source_line;
+
+        $debug_lines[] = $line;
     }
-    $debug_comment = '<!-- AF_CS_DEBUG kb: '
-        . htmlspecialchars_uni(implode(' | ', $debug_sources))
-        . ' hp_base_total=' . htmlspecialchars_uni((string)($debug['hp_base_total'] ?? 0))
-        . ' bonus_attribute_points=' . htmlspecialchars_uni((string)($debug['bonus_attribute_points'] ?? 0))
-        . ' bonus_skill_points=' . htmlspecialchars_uni((string)($debug['bonus_skill_points'] ?? 0))
-        . ' -->';
+
+    $debug_lines[] = 'TOTAL: hp_base_total=' . (int)($debug['hp_base_total'] ?? 0)
+        . ' fixed_hp_total=' . (int)($debug['fixed_hp_total'] ?? 0)
+        . ' speed_total=' . (int)($debug['speed_total'] ?? 0)
+        . ' bonus_attribute_points=' . (int)($debug['bonus_attribute_points'] ?? 0)
+        . ' bonus_skill_points=' . (int)($debug['bonus_skill_points'] ?? 0);
+
+    $debug_comment = "
+<!-- AF_CS_DEBUG
+"
+        . implode("
+", $debug_lines)
+        . "
+-->";
 
     $weapon_bonus_label = af_charactersheets_format_signed($weapon_bonus);
     $str_bonus_label = af_charactersheets_format_signed((float)($view['final']['str'] ?? 0));

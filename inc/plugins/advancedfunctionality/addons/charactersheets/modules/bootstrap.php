@@ -2244,7 +2244,7 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
 
     $entry = $db->fetch_array($db->simple_select(
         'af_kb_entries',
-        'id,type,`key`,meta_json,active',
+        'id,type,`key`,meta_json,data_json,rules_json_raw,rules_json,active',
         "type='" . $db->escape_string($kbType) . "' AND `key`='" . $db->escape_string($kbKey) . "' AND active=1",
         ['limit' => 1]
     ));
@@ -2259,8 +2259,15 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
         ];
     }
 
-    $raw_data_json = '';
-    if ($db->table_exists('af_kb_blocks')) {
+    $raw_data_json = trim((string)($entry['data_json'] ?? ''));
+    if ($raw_data_json === '') {
+        $raw_data_json = trim((string)($entry['rules_json_raw'] ?? ''));
+    }
+    if ($raw_data_json === '') {
+        $raw_data_json = trim((string)($entry['rules_json'] ?? ''));
+    }
+
+    if ($raw_data_json === '' && $db->table_exists('af_kb_blocks')) {
         $block = $db->fetch_array($db->simple_select(
             'af_kb_blocks',
             'data_json',
@@ -2268,11 +2275,11 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
             ['order_by' => 'sortorder,id', 'order_dir' => 'ASC', 'limit' => 1]
         ));
         if (is_array($block)) {
-            $raw_data_json = (string)($block['data_json'] ?? '');
+            $raw_data_json = trim((string)($block['data_json'] ?? ''));
         }
     }
 
-    if (trim($raw_data_json) === '') {
+    if ($raw_data_json === '') {
         return $cache[$cache_key] = [
             'ok' => false,
             'reason' => 'EMPTY_DATA',
@@ -2473,7 +2480,7 @@ function cs_get_skill_points_from_rules($rules): int
         }
         $choice_type = (string)($choice['type'] ?? '');
         if ($choice_type === 'skill_pick_choice' && (string)($choice['grant_mode'] ?? '') === 'skill_points') {
-            $points += max(0, (int)($choice['points_value'] ?? 0));
+            $points += max(0, (int)($choice['pick'] ?? 0)) * max(0, (int)($choice['points_value'] ?? 0));
             continue;
         }
         if (!in_array($choice_type, ['skill_pick', 'skill_points', 'skills_pick', 'kb_pick'], true)) {
@@ -2564,7 +2571,9 @@ function af_cs_aggregate_rules(array $sources): array
 
     $totals = [
         'hp_base_total' => 0,
+        'fixed_hp_total' => 0,
         'speed_base_total' => 0,
+        'speed_total' => 0,
         'bonus_attribute_points' => 0,
         'bonus_skill_points' => 0,
         'points_pools' => [
@@ -2593,7 +2602,9 @@ function af_cs_aggregate_rules(array $sources): array
         }
 
         $totals['hp_base_total'] += (int)($rules['hp_base'] ?? 0);
+        $totals['fixed_hp_total'] += (int)($rules['fixed_bonuses']['hp'] ?? 0);
         $totals['speed_base_total'] += (int)($rules['speed'] ?? 0);
+        $totals['speed_total'] += (int)($rules['speed'] ?? 0) + (int)($rules['fixed_bonuses']['speed'] ?? 0);
         $totals['points_pools']['attribute_points'] += (int)($rules['fixed']['attribute_points'] ?? 0) + (int)($rules['fixed_bonuses']['attribute_points'] ?? 0);
         $totals['points_pools']['skill_points'] += (int)($rules['fixed']['skill_points'] ?? 0) + (int)($rules['fixed_bonuses']['skill_points'] ?? 0);
         $totals['points_pools']['feat_points'] += (int)($rules['fixed_bonuses']['feat_points'] ?? 0);
@@ -2611,7 +2622,7 @@ function af_cs_aggregate_rules(array $sources): array
                 $totals['bonus_attribute_points'] += max(0, (int)($choice['pick'] ?? 0)) * max(0, (int)($choice['value'] ?? 1));
             }
             if ((string)($choice['type'] ?? '') === 'skill_pick_choice' && (string)($choice['grant_mode'] ?? '') === 'skill_points') {
-                $totals['bonus_skill_points'] += max(0, (int)($choice['points_value'] ?? 0));
+                $totals['bonus_skill_points'] += max(0, (int)($choice['pick'] ?? 0)) * max(0, (int)($choice['points_value'] ?? 0));
             }
         }
 
@@ -2625,7 +2636,9 @@ function af_cs_aggregate_rules(array $sources): array
         'fixed' => $fixed,
         'fixed_bonuses' => $fixed_bonuses,
         'hp_base_total' => $totals['hp_base_total'],
+        'fixed_hp_total' => $totals['fixed_hp_total'],
         'speed_base_total' => $totals['speed_base_total'],
+        'speed_total' => $totals['speed_total'],
         'bonus_attribute_points' => $totals['bonus_attribute_points'],
         'bonus_skill_points' => $totals['bonus_skill_points'],
         'points_pools' => $totals['points_pools'],

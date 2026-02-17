@@ -574,10 +574,14 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
 
     $kb_debug = [];
     foreach (['race', 'class', 'theme'] as $src) {
+        $source_debug = (array)($kb_context['sources'][$src] ?? []);
         $rules = (array)($source_rules_map[$src] ?? []);
         $kb_debug[$src] = [
             'key' => (string)($sources[$src] ?? ''),
-            'schema' => (string)($rules['schema'] ?? ''),
+            'schema' => (string)($source_debug['schema'] ?? ($rules['schema'] ?? '')),
+            'valid' => !empty($source_debug['valid']),
+            'reason' => (string)($source_debug['reason'] ?? ''),
+            'rules' => $rules,
             'fixed' => (array)($rules['fixed'] ?? []),
             'fixed_bonuses' => (array)($rules['fixed_bonuses'] ?? []),
             'choices' => (array)($rules['choices'] ?? []),
@@ -672,10 +676,14 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $errors[] = 'Превышен лимит языков.';
     }
 
-    $dex_mod = (int)floor((float)($final['dex'] ?? 0));
-    $con_mod = (int)floor((float)($final['con'] ?? 0));
-    $wis_mod = (int)floor((float)($final['wis'] ?? 0));
-    $int_mod = (int)floor((float)($final['int'] ?? 0));
+    $dex_score = (float)($final['dex'] ?? 0);
+    $con_score = (float)($final['con'] ?? 0);
+    $wis_score = (float)($final['wis'] ?? 0);
+    $int_score = (float)($final['int'] ?? 0);
+    $dex_mod = (int)floor(($dex_score - 10) / 2);
+    $con_mod = (int)floor(($con_score - 10) / 2);
+    $wis_mod = (int)floor(($wis_score - 10) / 2);
+    $int_mod = (int)floor(($int_score - 10) / 2);
     $legacy_equipment = [];
     if (!empty($build['equipment_bonuses']) && is_array($build['equipment_bonuses'])) {
         $legacy_equipment = $build['equipment_bonuses'];
@@ -698,13 +706,14 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $shield_bonus = (int)($legacy_equipment['shield_bonus'] ?? 0) + (int)$bonus_shield;
     $weapon_bonus = (int)($legacy_equipment['weapon_bonus'] ?? 0) + (int)$bonus_weapon;
     $armor_rules_bonus = (int)($resolved_rules['fixed']['armor'] ?? 0) + (int)($resolved_rules['fixed_bonuses']['armor'] ?? 0) + (int)$bonus_ac;
-    $ac_total = $armor_from_equipped + $dex_mod + $con_mod + $armor_rules_bonus + $shield_bonus;
+    $armor_equip_bonus_total = $armor_from_equipped + $armor_rules_bonus + $shield_bonus;
+    $ac_total = 10 + $dex_mod + $con_mod + $armor_equip_bonus_total;
 
     $humanity_base = 100.0;
 
     $hp_base_total = (float)($resolved_rules['hp_base_total'] ?? 0);
-    $hp_fixed_total = (float)(($resolved_rules['fixed']['hp'] ?? 0) + ($resolved_rules['fixed_bonuses']['hp'] ?? 0) + $bonus_hp);
-    $hp_con = (float)($final['con'] ?? 0);
+    $hp_fixed_total = (float)(($rules_aggregate['fixed_hp_total'] ?? ($resolved_rules['fixed_bonuses']['hp'] ?? 0)) + $bonus_hp);
+    $hp_con = (float)$con_mod;
 
     $augmentation_slots = (array)($build['augmentations']['slots'] ?? []);
     $humanity_from_augments = 0.0;
@@ -768,12 +777,12 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'damage_total' => '1d4 + ' . (string)$weapon_bonus . ' + ' . (string)$final['str'],
             'ac_total' => $ac_total,
             'hp_total' => $hp_total,
-            'speed_total' => (int)(($rules_aggregate['speed_base_total'] ?? 0) + ($resolved_rules['fixed']['speed'] ?? 0) + ($resolved_rules['fixed_bonuses']['speed'] ?? 0)),
+            'speed_total' => (int)($rules_aggregate['speed_total'] ?? (($rules_aggregate['speed_base_total'] ?? 0) + ($resolved_rules['fixed_bonuses']['speed'] ?? 0))),
             'humanity_total' => $humanity_total,
             'hp_breakdown' => [
                 'hp_base_total' => $hp_base_total,
                 'fixed_total' => $hp_fixed_total,
-                'from_con' => $hp_con,
+                'from_con_mod' => $hp_con,
             ],
             'humanity_breakdown' => [
                 'base' => $humanity_base,
@@ -794,8 +803,13 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         ],
         'debug' => $kb_debug + [
             'hp_base_total' => (int)($rules_aggregate['hp_base_total'] ?? 0),
+            'fixed_hp_total' => (int)($rules_aggregate['fixed_hp_total'] ?? 0),
+            'speed_total' => (int)($rules_aggregate['speed_total'] ?? 0),
             'bonus_attribute_points' => (int)($rules_aggregate['bonus_attribute_points'] ?? 0),
             'bonus_skill_points' => (int)($rules_aggregate['bonus_skill_points'] ?? 0),
+            'con_mod' => $con_mod,
+            'dex_mod' => $dex_mod,
+            'armor_equip_bonus_total' => $armor_equip_bonus_total,
         ],
         'languages' => [
             'selected' => $language_selected,
