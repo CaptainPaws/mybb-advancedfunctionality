@@ -895,10 +895,23 @@ function af_charactersheets_build_mechanics_html(array $view): string
     $debug_sources = [];
     foreach (['race', 'class', 'theme'] as $src) {
         $entry = (array)($debug[$src] ?? []);
-        $debug_sources[] = $src . ':' . (string)($entry['key'] ?? '-') . '[' . (string)($entry['schema'] ?? '-') . ']';
+        $is_ok = !empty($entry['valid']) ? 1 : 0;
+        $reason = (string)($entry['reason'] ?? ($is_ok ? 'OK' : 'NO_ROW'));
+        $schema = (string)($entry['schema'] ?? '');
+        $source_line = $src . '/' . (string)($entry['key'] ?? '-') . ': ok=' . $is_ok . ' reason=' . $reason;
+        if ($schema !== '') {
+            $source_line .= ' schema=' . $schema;
+        }
+        if ($is_ok === 1) {
+            $rules = (array)($entry['rules'] ?? []);
+            $source_line .= ' hp_base=' . (int)($rules['hp_base'] ?? 0);
+            $source_line .= ' fixed_hp=' . (int)($rules['fixed']['hp'] ?? 0);
+            $source_line .= ' choices=' . count((array)($rules['choices'] ?? []));
+        }
+        $debug_sources[] = $source_line;
     }
-    $debug_comment = '<!-- af_cs_mechanics_debug '
-        . 'sources=' . htmlspecialchars_uni(implode(';', $debug_sources))
+    $debug_comment = '<!-- AF_CS_DEBUG kb: '
+        . htmlspecialchars_uni(implode(' | ', $debug_sources))
         . ' hp_base_total=' . htmlspecialchars_uni((string)($debug['hp_base_total'] ?? 0))
         . ' bonus_attribute_points=' . htmlspecialchars_uni((string)($debug['bonus_attribute_points'] ?? 0))
         . ' bonus_skill_points=' . htmlspecialchars_uni((string)($debug['bonus_skill_points'] ?? 0))
