@@ -2188,22 +2188,9 @@ function cs_kb_rules_normalize($dataJson): array
 function af_charactersheets_kb_normalize_entry(array $entry): array
 {
     $meta = af_charactersheets_json_decode((string)($entry['meta_json'] ?? ''));
-    $raw_data = [
-        $entry['data_json'] ?? '',
-        $entry['rules_json_raw'] ?? '',
-        $entry['rules_json'] ?? '',
-    ];
-    $data = [];
-    foreach ($raw_data as $raw_candidate) {
-        if (!is_string($raw_candidate) || trim($raw_candidate) === '') {
-            continue;
-        }
-        $decoded = af_charactersheets_json_decode($raw_candidate);
-        if ((string)($decoded['schema'] ?? '') === 'af_kb.rules.v1') {
-            $data = $decoded;
-            break;
-        }
-    }
+    $entry_type = (string)($entry['type_key'] ?? $entry['type'] ?? '');
+    $entry_key = (string)($entry['key'] ?? '');
+    $data = af_cs_kb_get_data_rules($entry_type, $entry_key);
 
     if ((string)($meta['schema'] ?? '') !== 'af_kb.meta.v1') {
         $meta = [];
@@ -2211,14 +2198,129 @@ function af_charactersheets_kb_normalize_entry(array $entry): array
 
     return [
         'entry' => $entry,
-        'type_key' => (string)($entry['type_key'] ?? $entry['type'] ?? ''),
-        'key' => (string)($entry['key'] ?? ''),
+        'type_key' => $entry_type,
+        'key' => $entry_key,
         'title' => af_charactersheets_kb_pick_text($entry, 'title'),
         'short' => af_charactersheets_kb_pick_text($entry, 'short'),
         'body' => af_charactersheets_kb_pick_text($entry, 'body'),
         'meta' => $meta,
         'data' => cs_kb_rules_normalize(is_array($data) ? $data : []),
     ];
+}
+
+function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
+{
+    static $cache = [];
+
+    $kbType = trim($kbType);
+    $kbKey = trim($kbKey);
+    if ($kbType === '' || $kbKey === '') {
+        return [
+            'ok' => false,
+            'reason' => 'NO_ROW',
+            'schema' => '',
+            'rules' => [],
+            'meta' => [],
+            'entry' => [],
+        ];
+    }
+
+    $cache_key = $kbType . ':' . $kbKey;
+    if (isset($cache[$cache_key])) {
+        return $cache[$cache_key];
+    }
+
+    global $db;
+    if (!is_object($db) || !$db->table_exists('af_kb_entries')) {
+        return $cache[$cache_key] = [
+            'ok' => false,
+            'reason' => 'NO_ROW',
+            'schema' => '',
+            'rules' => [],
+            'meta' => [],
+            'entry' => [],
+        ];
+    }
+
+    $entry = $db->fetch_array($db->simple_select(
+        'af_kb_entries',
+        'id,type,`key`,meta_json,active',
+        "type='" . $db->escape_string($kbType) . "' AND `key`='" . $db->escape_string($kbKey) . "' AND active=1",
+        ['limit' => 1]
+    ));
+    if (!is_array($entry) || empty($entry['id'])) {
+        return $cache[$cache_key] = [
+            'ok' => false,
+            'reason' => 'NO_ROW',
+            'schema' => '',
+            'rules' => [],
+            'meta' => [],
+            'entry' => [],
+        ];
+    }
+
+    $raw_data_json = '';
+    if ($db->table_exists('af_kb_blocks')) {
+        $block = $db->fetch_array($db->simple_select(
+            'af_kb_blocks',
+            'data_json',
+            "entry_id=" . (int)$entry['id'] . " AND block_key='data' AND active=1",
+            ['order_by' => 'sortorder,id', 'order_dir' => 'ASC', 'limit' => 1]
+        ));
+        if (is_array($block)) {
+            $raw_data_json = (string)($block['data_json'] ?? '');
+        }
+    }
+
+    if (trim($raw_data_json) === '') {
+        return $cache[$cache_key] = [
+            'ok' => false,
+            'reason' => 'EMPTY_DATA',
+            'schema' => '',
+            'rules' => [],
+            'meta' => cs_kb_get_meta($entry),
+            'entry' => $entry,
+        ];
+    }
+
+    $decoded = af_charactersheets_json_decode($raw_data_json);
+    if (!is_array($decoded)) {
+        return $cache[$cache_key] = [
+            'ok' => false,
+            'reason' => 'BAD_JSON',
+            'schema' => '',
+            'rules' => [],
+            'meta' => cs_kb_get_meta($entry),
+            'entry' => $entry,
+        ];
+    }
+
+    $schema = (string)($decoded['schema'] ?? '');
+    if ($schema !== 'af_kb.rules.v1') {
+        return $cache[$cache_key] = [
+            'ok' => false,
+            'reason' => 'BAD_SCHEMA',
+            'schema' => $schema,
+            'rules' => [],
+            'meta' => cs_kb_get_meta($entry),
+            'entry' => $entry,
+        ];
+    }
+
+    return $cache[$cache_key] = [
+        'ok' => true,
+        'reason' => 'OK',
+        'schema' => $schema,
+        'rules' => cs_kb_rules_normalize($decoded),
+        'meta' => cs_kb_get_meta($entry),
+        'entry' => $entry,
+    ];
+}
+
+function af_cs_kb_get_data_rules(string $kbType, string $kbKey): array
+{
+    $result = af_cs_kb_get_data_rules_result($kbType, $kbKey);
+    return (array)($result['rules'] ?? []);
 }
 
 function af_charactersheets_kb_resolve_entry(string $type_key, string $key): array
@@ -2405,14 +2507,27 @@ function af_cs_build_rules_sources(array $sheet): array
             continue;
         }
 
-        $entry = af_charactersheets_kb_resolve_entry($type, $key);
-        $rules = cs_kb_rules_normalize((array)($entry['data'] ?? []));
-        $schema = (string)($rules['schema'] ?? '');
-        $is_valid = $schema === 'af_kb.rules.v1';
-
-        if (!$is_valid && function_exists('error_log')) {
-            error_log('[af_charactersheets] Invalid KB schema for ' . $type . ':' . $key . ' => ' . $schema);
+        $candidate_types = [$type];
+        if ($type === 'theme') {
+            $candidate_types[] = 'themes';
+        } elseif ($type === 'themes') {
+            $candidate_types[] = 'theme';
         }
+
+        $source_result = [];
+        $resolved_type = $type;
+        foreach ($candidate_types as $candidate_type) {
+            $source_result = af_cs_kb_get_data_rules_result($candidate_type, $key);
+            $resolved_type = $candidate_type;
+            if (!empty($source_result['entry']) || (string)($source_result['reason'] ?? '') !== 'NO_ROW') {
+                break;
+            }
+        }
+
+        $rules = cs_kb_rules_normalize((array)($source_result['rules'] ?? []));
+        $schema = (string)($source_result['schema'] ?? '');
+        $is_valid = (bool)($source_result['ok'] ?? false);
+        $reason = (string)($source_result['reason'] ?? ($is_valid ? 'OK' : 'BAD_JSON'));
 
         $result[$type] = [
             'type' => $type,
@@ -2420,7 +2535,9 @@ function af_cs_build_rules_sources(array $sheet): array
             'schema' => $schema,
             'rules' => $is_valid ? $rules : cs_kb_rules_normalize([]),
             'valid' => $is_valid,
-            'entry' => $entry,
+            'reason' => $reason,
+            'resolved_type' => $resolved_type,
+            'entry' => (array)($source_result['entry'] ?? []),
         ];
     }
 
