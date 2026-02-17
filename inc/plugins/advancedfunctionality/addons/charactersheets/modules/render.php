@@ -237,16 +237,13 @@ function af_charactersheets_build_progress_html(array $view, array $sheet, bool 
     $percent = (int)($view['level_percent'] ?? 0);
     $exp_label = htmlspecialchars_uni((string)($view['level_exp_label'] ?? ''));
 
-    $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
-    $attr_points_free = (int)($progress['attr_points_free'] ?? 0);
-    $skill_points_free = (int)($progress['skill_points_free'] ?? 0);
-    $bonus_attr_points = (int)($view['bonus_attr_points'] ?? 0);
-    $bonus_skill_points = (int)($view['bonus_skill_points'] ?? 0);
+    $attr_points_free = (int)($view['remaining'] ?? 0);
+    $skill_points_free = (int)($view['skill_pool_remaining'] ?? 0);
 
     $points_html = '';
     if ($can_view_ledger) {
-        $points_html = '<div>Свободные очки атрибутов: <strong>' . htmlspecialchars_uni((string)($attr_points_free + $bonus_attr_points)) . '</strong></div>'
-            . '<div>Свободные очки навыков: <strong>' . htmlspecialchars_uni((string)($skill_points_free + $bonus_skill_points)) . '</strong></div>';
+        $points_html = '<div>Свободные очки атрибутов: <strong>' . htmlspecialchars_uni((string)$attr_points_free) . '</strong></div>'
+            . '<div>Свободные очки навыков: <strong>' . htmlspecialchars_uni((string)$skill_points_free) . '</strong></div>';
         $bonus_sources = (array)($view['bonus_sources'] ?? []);
         if ($bonus_sources) {
             $points_html .= '<div class="af-cs-muted">Источник бонусов: '
@@ -867,6 +864,7 @@ function af_charactersheets_build_mechanics_html(array $view): string
     $ac_total = (int)($mechanics['ac_total'] ?? 0);
     $hp_total = (int)($mechanics['hp_total'] ?? 0);
     $humanity_total = (int)($mechanics['humanity_total'] ?? 0);
+    $speed_total = (int)($mechanics['speed_total'] ?? 0);
     $saves = (array)($mechanics['saves'] ?? []);
     $reflex = af_charactersheets_format_signed($saves['reflex'] ?? 0);
     $will = af_charactersheets_format_signed($saves['will'] ?? 0);
@@ -888,8 +886,23 @@ function af_charactersheets_build_mechanics_html(array $view): string
         . '<div class="af-cs-mech-row"><span>Восприятие</span><span>' . htmlspecialchars_uni($perception) . '</span></div>'
         . '<div class="af-cs-mech-divider"></div>'
         . '<div class="af-cs-mech-row"><span>HP</span><span>' . htmlspecialchars_uni((string)$hp_total) . '</span></div>'
+        . '<div class="af-cs-mech-row"><span>Скорость</span><span>' . htmlspecialchars_uni((string)$speed_total) . '</span></div>'
         . '<div class="af-cs-mech-row"><span>Человечность</span><span>' . htmlspecialchars_uni((string)$humanity_total) . '</span></div>'
         . '</div>';
+
+
+    $debug = (array)($view['debug'] ?? []);
+    $debug_sources = [];
+    foreach (['race', 'class', 'theme'] as $src) {
+        $entry = (array)($debug[$src] ?? []);
+        $debug_sources[] = $src . ':' . (string)($entry['key'] ?? '-') . '[' . (string)($entry['schema'] ?? '-') . ']';
+    }
+    $debug_comment = '<!-- af_cs_mechanics_debug '
+        . 'sources=' . htmlspecialchars_uni(implode(';', $debug_sources))
+        . ' hp_base_total=' . htmlspecialchars_uni((string)($debug['hp_base_total'] ?? 0))
+        . ' bonus_attribute_points=' . htmlspecialchars_uni((string)($debug['bonus_attribute_points'] ?? 0))
+        . ' bonus_skill_points=' . htmlspecialchars_uni((string)($debug['bonus_skill_points'] ?? 0))
+        . ' -->';
 
     $weapon_bonus_label = af_charactersheets_format_signed($weapon_bonus);
     $str_bonus_label = af_charactersheets_format_signed((float)($view['final']['str'] ?? 0));
@@ -902,7 +915,7 @@ function af_charactersheets_build_mechanics_html(array $view): string
         . '<div class="af-cs-mech-row af-cs-mech-total"><span>Итог</span><span>' . htmlspecialchars_uni($damage_total) . '</span></div>'
         . '</div>';
 
-    return '<div class="af-cs-mechanics-grid">' . $col1 . $col2 . $col3 . '</div>';
+    return '<div class="af-cs-mechanics-grid">' . $col1 . $col2 . $col3 . '</div>' . $debug_comment;
 }
 
 function af_charactersheets_build_inventory_html(array $build, bool $can_edit): string

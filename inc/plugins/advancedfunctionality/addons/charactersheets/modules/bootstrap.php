@@ -2188,14 +2188,25 @@ function cs_kb_rules_normalize($dataJson): array
 function af_charactersheets_kb_normalize_entry(array $entry): array
 {
     $meta = af_charactersheets_json_decode((string)($entry['meta_json'] ?? ''));
-    $data = af_charactersheets_json_decode((string)($entry['data_json'] ?? ''));
+    $raw_data = [
+        $entry['data_json'] ?? '',
+        $entry['rules_json_raw'] ?? '',
+        $entry['rules_json'] ?? '',
+    ];
+    $data = [];
+    foreach ($raw_data as $raw_candidate) {
+        if (!is_string($raw_candidate) || trim($raw_candidate) === '') {
+            continue;
+        }
+        $decoded = af_charactersheets_json_decode($raw_candidate);
+        if ((string)($decoded['schema'] ?? '') === 'af_kb.rules.v1') {
+            $data = $decoded;
+            break;
+        }
+    }
 
     if ((string)($meta['schema'] ?? '') !== 'af_kb.meta.v1') {
         $meta = [];
-    }
-
-    if ((string)($data['schema'] ?? '') !== 'af_kb.rules.v1') {
-        $data = [];
     }
 
     return [
@@ -2376,6 +2387,136 @@ function cs_get_skill_points_from_rules($rules): int
     return $points;
 }
 
+function af_cs_build_rules_sources(array $sheet): array
+{
+    $kb_sources = cs_get_sheet_kb_sources($sheet);
+    $result = [];
+
+    foreach (['race', 'class', 'theme'] as $type) {
+        $key = trim((string)($kb_sources[$type] ?? ''));
+        if ($key === '') {
+            $result[$type] = [
+                'type' => $type,
+                'key' => '',
+                'schema' => '',
+                'rules' => cs_kb_rules_normalize([]),
+                'valid' => false,
+            ];
+            continue;
+        }
+
+        $entry = af_charactersheets_kb_resolve_entry($type, $key);
+        $rules = cs_kb_rules_normalize((array)($entry['data'] ?? []));
+        $schema = (string)($rules['schema'] ?? '');
+        $is_valid = $schema === 'af_kb.rules.v1';
+
+        if (!$is_valid && function_exists('error_log')) {
+            error_log('[af_charactersheets] Invalid KB schema for ' . $type . ':' . $key . ' => ' . $schema);
+        }
+
+        $result[$type] = [
+            'type' => $type,
+            'key' => $key,
+            'schema' => $schema,
+            'rules' => $is_valid ? $rules : cs_kb_rules_normalize([]),
+            'valid' => $is_valid,
+            'entry' => $entry,
+        ];
+    }
+
+    return $result;
+}
+
+function af_cs_aggregate_rules(array $sources): array
+{
+    $stats = af_charactersheets_default_attributes();
+    $fixed = [
+        'stats' => $stats,
+        'hp' => 0,
+        'armor' => 0,
+        'initiative' => 0,
+        'speed' => 0,
+        'carry' => 0,
+        'ep' => 0,
+        'damage' => 0,
+        'skill_points' => 0,
+        'language_slots' => 0,
+    ];
+    $fixed_bonuses = $fixed + ['attribute_points' => 0, 'feat_points' => 0, 'perk_points' => 0];
+    $fixed_bonuses['stats'] = $stats;
+
+    $totals = [
+        'hp_base_total' => 0,
+        'speed_base_total' => 0,
+        'bonus_attribute_points' => 0,
+        'bonus_skill_points' => 0,
+        'points_pools' => [
+            'attribute_points' => 0,
+            'skill_points' => 0,
+            'feat_points' => 0,
+            'perk_points' => 0,
+            'language_slots' => 0,
+        ],
+        'choices' => [],
+        'grants' => [],
+    ];
+
+    foreach ($sources as $source) {
+        $rules = cs_kb_rules_normalize((array)($source['rules'] ?? []));
+        foreach (array_keys($stats) as $stat) {
+            $fixed['stats'][$stat] += (int)($rules['fixed']['stats'][$stat] ?? 0);
+            $fixed_bonuses['stats'][$stat] += (int)($rules['fixed_bonuses']['stats'][$stat] ?? 0);
+        }
+        foreach (['hp', 'armor', 'initiative', 'speed', 'carry', 'ep', 'damage', 'skill_points', 'language_slots'] as $k) {
+            $fixed[$k] += (int)($rules['fixed'][$k] ?? 0);
+            $fixed_bonuses[$k] += (int)($rules['fixed_bonuses'][$k] ?? 0);
+        }
+        foreach (['attribute_points', 'feat_points', 'perk_points'] as $k) {
+            $fixed_bonuses[$k] += (int)($rules['fixed_bonuses'][$k] ?? 0);
+        }
+
+        $totals['hp_base_total'] += (int)($rules['hp_base'] ?? 0);
+        $totals['speed_base_total'] += (int)($rules['speed'] ?? 0);
+        $totals['points_pools']['attribute_points'] += (int)($rules['fixed']['attribute_points'] ?? 0) + (int)($rules['fixed_bonuses']['attribute_points'] ?? 0);
+        $totals['points_pools']['skill_points'] += (int)($rules['fixed']['skill_points'] ?? 0) + (int)($rules['fixed_bonuses']['skill_points'] ?? 0);
+        $totals['points_pools']['feat_points'] += (int)($rules['fixed_bonuses']['feat_points'] ?? 0);
+        $totals['points_pools']['perk_points'] += (int)($rules['fixed_bonuses']['perk_points'] ?? 0);
+        $totals['points_pools']['language_slots'] += (int)($rules['fixed']['language_slots'] ?? 0) + (int)($rules['fixed_bonuses']['language_slots'] ?? 0);
+
+        foreach ((array)($rules['choices'] ?? []) as $choice) {
+            if (!is_array($choice)) {
+                continue;
+            }
+            $choice['source'] = (string)($source['type'] ?? '');
+            $totals['choices'][] = $choice;
+
+            if ((string)($choice['type'] ?? '') === 'stat_bonus' && (string)($choice['mode'] ?? 'add') === 'add') {
+                $totals['bonus_attribute_points'] += max(0, (int)($choice['pick'] ?? 0)) * max(0, (int)($choice['value'] ?? 1));
+            }
+            if ((string)($choice['type'] ?? '') === 'skill_pick_choice' && (string)($choice['grant_mode'] ?? '') === 'skill_points') {
+                $totals['bonus_skill_points'] += max(0, (int)($choice['points_value'] ?? 0));
+            }
+        }
+
+        $totals['grants'] = array_merge($totals['grants'], (array)($rules['grants'] ?? []));
+    }
+
+    $totals['points_pools']['attribute_points'] += $totals['bonus_attribute_points'];
+    $totals['points_pools']['skill_points'] += $totals['bonus_skill_points'];
+
+    return [
+        'fixed' => $fixed,
+        'fixed_bonuses' => $fixed_bonuses,
+        'hp_base_total' => $totals['hp_base_total'],
+        'speed_base_total' => $totals['speed_base_total'],
+        'bonus_attribute_points' => $totals['bonus_attribute_points'],
+        'bonus_skill_points' => $totals['bonus_skill_points'],
+        'points_pools' => $totals['points_pools'],
+        'choices' => $totals['choices'],
+        'grants' => $totals['grants'],
+    ];
+}
+
 function cs_get_attribute_points_from_rules($rules): int
 {
     if (!is_array($rules)) {
@@ -2500,6 +2641,8 @@ function cs_resolve_character_kb_context(int $sheet_id): array
     }
 
     $kb_sources = cs_get_sheet_kb_sources($sheet);
+    $rule_sources = af_cs_build_rules_sources($sheet);
+    $aggregate = af_cs_aggregate_rules(array_values($rule_sources));
     $build = af_charactersheets_normalize_build(
         af_charactersheets_json_decode((string)($sheet['build_json'] ?? ''))
     );
@@ -2542,6 +2685,8 @@ function cs_resolve_character_kb_context(int $sheet_id): array
         'race' => $race,
         'class' => $class,
         'theme' => $theme,
+        'sources' => $rule_sources,
+        'aggregate' => $aggregate,
         'skills_all' => $skills_all,
         'skills_active' => $skills_active,
         'languages' => $languages,
