@@ -2062,38 +2062,50 @@ function af_cs_kb_extract_block_content(array $block, bool $isRu): string
 
 function af_cs_render_kb_bonuses_text($type, $key, $isRu): string
 {
-    $blocks = af_cs_kb_get_meta_blocks((string)$type, (string)$key);
-    if (empty($blocks)) {
+    global $db;
+
+    $type = trim((string)$type);
+    $key = trim((string)$key);
+    if ($type === '' || $key === '') {
         return '';
     }
 
-    $bonuses_block = [];
-    $is_list = array_keys($blocks) === range(0, count($blocks) - 1);
-    if ($is_list) {
-        foreach ($blocks as $block) {
-            if (!is_array($block)) {
-                continue;
-            }
-            $block_key = (string)($block['block_key'] ?? $block['key'] ?? '');
-            if ($block_key === 'bonuses') {
-                $bonuses_block = $block;
-                break;
-            }
-        }
-    } else {
-        $candidate = $blocks['bonuses'] ?? null;
-        if (is_array($candidate)) {
-            $bonuses_block = $candidate;
-        }
-    }
-
-    if (empty($bonuses_block)) {
+    $entry = af_charactersheets_kb_get_entry($type, $key);
+    if (empty($entry['id'])) {
         return '';
     }
 
-    $text = af_cs_kb_extract_block_content($bonuses_block, (bool)$isRu);
+    if (!is_object($db) || !$db->table_exists('af_kb_blocks')) {
+        return '';
+    }
+
+    $where = "entry_id=" . (int)$entry['id']
+        . " AND block_key='bonuses'";
+    if (!function_exists('af_kb_can_edit') || !af_kb_can_edit()) {
+        $where .= ' AND active=1';
+    }
+
+    $block = $db->fetch_array($db->simple_select(
+        'af_kb_blocks',
+        'content_ru, content_en',
+        $where,
+        ['limit' => 1]
+    ));
+    if (!is_array($block)) {
+        return '';
+    }
+
+    $localized_field = (bool)$isRu ? 'content_ru' : 'content_en';
+    $text = trim((string)($block[$localized_field] ?? ''));
+    if ($text === '') {
+        $text = af_charactersheets_kb_pick_text($block, 'content');
+    }
     if ($text === '') {
         return '';
+    }
+
+    if (function_exists('af_kb_parse_message')) {
+        return trim((string)af_kb_parse_message($text));
     }
 
     return af_charactersheets_parse_bbcode($text);
