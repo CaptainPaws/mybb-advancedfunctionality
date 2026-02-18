@@ -195,10 +195,6 @@ function af_charactersheets_handle_api(): void
         if (!$can_manage) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
         }
-        if (!empty($build['locked_skills']) && !$is_staff) {
-            af_charactersheets_json_response(['success' => false, 'error' => 'Skills are locked']);
-        }
-
         $skill_key = trim((string)$mybb->get_input('skill_key'));
         if ($skill_key === '') {
             af_charactersheets_json_response(['success' => false, 'error' => 'Invalid skill']);
@@ -228,7 +224,7 @@ function af_charactersheets_handle_api(): void
         $view = af_charactersheets_compute_sheet_view($sheet);
         $available = (int)($view['skill_pool_remaining'] ?? 0);
         $skill_data = (array)($skill_map[$skill_key]['data']['skill'] ?? []);
-        $rank_max = max(1, (int)($skill_data['rank_max'] ?? 1));
+        $rank_max = max(1, (int)($skill_data['rank_max'] ?? $skill_data['max_rank'] ?? 1));
 
         if ($do === 'cs_skill_buy' || $do === 'buy_skill') {
             $current_rank = max(0, (int)($existing['skill_rank'] ?? 0));
@@ -268,7 +264,7 @@ function af_charactersheets_handle_api(): void
             }
             af_charactersheets_delete_sheet_skill($sheet_id, $skill_key);
         }
-        $build['locked_skills'] = $is_staff ? 0 : 1;
+        $build['locked_skills'] = 0;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
     } elseif ($do === 'add_knowledge' || $do === 'remove_knowledge') {
         if (!$can_edit) {

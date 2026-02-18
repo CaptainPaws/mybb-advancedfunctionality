@@ -540,13 +540,27 @@
       }
 
       function applyViewUpdate(payload) {
+        var skillCatalogWasOpen = false;
+        var currentCatalogPanel = sheet.querySelector('[data-afcs-skill-catalog-panel]');
+        if (currentCatalogPanel && !currentCatalogPanel.hidden) {
+          skillCatalogWasOpen = true;
+        }
+
         if (payload.attributes_html) {
           var block = sheet.querySelector('[data-afcs-block="attributes"]');
           if (block) block.innerHTML = payload.attributes_html;
         }
         if (payload.skills_html) {
           var skillsBlock = sheet.querySelector('[data-afcs-block="skills"]');
-          if (skillsBlock) skillsBlock.innerHTML = payload.skills_html;
+          if (skillsBlock) {
+            skillsBlock.innerHTML = payload.skills_html;
+            if (skillCatalogWasOpen) {
+              var nextCatalogPanel = sheet.querySelector('[data-afcs-skill-catalog-panel]');
+              if (nextCatalogPanel) {
+                nextCatalogPanel.hidden = false;
+              }
+            }
+          }
         }
         if (payload.knowledge_html) {
           var knowledgeBlock = sheet.querySelector('[data-afcs-block="knowledge"]');

@@ -678,6 +678,13 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $skills_map[$skill_key] = $row;
     }
 
+    $skill_rank_bonus_map = [
+        0 => 0,
+        1 => 2,
+        2 => 5,
+        3 => 10,
+        4 => 15,
+    ];
     $skills_view = [];
     $skills_all = (array)($kb_context['skills_all'] ?? []);
     $skills_catalog_fetched = count($skills_all);
@@ -708,14 +715,18 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             continue;
         }
 
-        $attr_key = (string)($skill_data['key_stat'] ?? '');
+        $attr_key = (string)($skill_data['key_stat'] ?? $skill_data['attribute'] ?? '');
         $base_mod = (int)floor((float)($final[$attr_key] ?? 0));
         $row = (array)($skills_map[$skill_key] ?? []);
         $skill_rank = max(0, (int)($row['skill_rank'] ?? 0));
         $is_active = (int)($row['is_active'] ?? 0) === 1;
         $source = (string)($row['source'] ?? '');
         $bonus_val = (float)($bonus_skill_map[$skill_key] ?? 0);
-        $total = $base_mod + ($is_active ? $skill_rank : 0) + $bonus_val;
+        $rank_bonus = (float)($skill_rank_bonus_map[$skill_rank] ?? 0);
+        if (!array_key_exists($skill_rank, $skill_rank_bonus_map) && $skill_rank > 4) {
+            $rank_bonus = 15 + (($skill_rank - 4) * 5);
+        }
+        $total = $base_mod + ($is_active ? $rank_bonus : 0) + $bonus_val;
         if ($is_active) {
             $grant_rank = max(0, (int)($grant_skill_ranks[$skill_key] ?? 0));
             if ($source === 'manual') {
@@ -730,7 +741,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'title' => (string)($skill_resolved['title'] ?? $skill_key),
             'category' => (string)($skill_data['category'] ?? 'general'),
             'skill_rank' => $skill_rank,
-            'rank_max' => max(1, (int)($skill_data['rank_max'] ?? 1)),
+            'rank_max' => max(1, (int)($skill_data['rank_max'] ?? $skill_data['max_rank'] ?? 1)),
             'source' => $source,
             'is_active' => $is_active,
             'trained_only' => !empty($skill_data['trained_only']),
@@ -738,6 +749,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'attr_key' => $attr_key,
             'attr_label' => $attributes_labels[$attr_key] ?? $attr_key,
             'base' => $base_mod,
+            'rank_bonus' => $rank_bonus,
             'bonus' => $bonus_val,
             'total' => $total,
         ];
