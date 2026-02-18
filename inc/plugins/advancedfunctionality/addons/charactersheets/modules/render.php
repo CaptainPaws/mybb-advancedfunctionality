@@ -382,7 +382,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
     $skills = (array)($view['skills'] ?? []);
     $active_grouped = [];
     $catalog_grouped = [];
-    $fixed_sources = ['race' => 'раса', 'class' => 'класс', 'theme' => 'тема'];
+    $fixed_sources = ['race' => 'раса', 'class' => 'класс', 'theme' => 'тема', 'race_choice' => 'выбор расы', 'class_choice' => 'выбор класса', 'theme_choice' => 'выбор темы'];
     $rank_names = [
         0 => 'Необученный',
         1 => 'Обученный',
@@ -556,6 +556,68 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
     }
 
     $choice_html = '';
+    $skill_pick_choice_items = [];
+    $skill_choice_source_labels = [
+        'race' => 'раса',
+        'class' => 'класс',
+        'theme' => 'тема',
+    ];
+    foreach ((array)($view['skill_pick_choice_details'] ?? []) as $choice) {
+        $choice_key = (string)($choice['choice_key'] ?? '');
+        if ($choice_key === '') {
+            continue;
+        }
+        $pick = max(1, (int)($choice['pick'] ?? 1));
+        $source = (string)($choice['source'] ?? '');
+        $source_label = (string)($skill_choice_source_labels[$source] ?? $source);
+        $id_label = (string)($choice['id'] ?? '');
+        $label = 'Выбор навыка' . ($id_label !== '' ? (' (' . $id_label . ')') : '');
+        if ($source_label !== '') {
+            $label .= ' · ' . $source_label;
+        }
+
+        $selected = array_values(array_unique(array_filter((array)($choice['selected'] ?? []))));
+        $options = (array)($choice['options'] ?? []);
+        $selects = [];
+        for ($i = 0; $i < $pick; $i++) {
+            $current = (string)($selected[$i] ?? '');
+            $option_html = '<option value="">— выбрать навык —</option>';
+            foreach ($options as $option_key => $option_title) {
+                $is_used = in_array((string)$option_key, $selected, true) && $current !== (string)$option_key;
+                $selected_attr = $current === (string)$option_key ? ' selected' : '';
+                $disabled_attr = $is_used ? ' disabled' : '';
+                $option_html .= '<option value="' . htmlspecialchars_uni((string)$option_key) . '"' . $selected_attr . $disabled_attr . '>' . htmlspecialchars_uni((string)$option_title) . '</option>';
+            }
+            $selects[] = '<select data-afcs-choice-key="' . htmlspecialchars_uni($choice_key) . '" data-afcs-choice-index="' . $i . '">' . $option_html . '</select>';
+        }
+
+        $status = 'Не выбрано';
+        if ($selected) {
+            $labels = [];
+            foreach ($selected as $selected_key) {
+                $labels[] = (string)($options[$selected_key] ?? $selected_key);
+            }
+            $status = 'Выбрано: ' . implode(', ', $labels);
+        }
+
+        $grant_mode = (string)($choice['grant_mode'] ?? 'rank');
+        $grant_hint = $grant_mode === 'points'
+            ? 'Бонус: +' . max(0, (int)($choice['points_value'] ?? 0)) . ' очк. навыков за выбор'
+            : 'Бонус: ранг ' . max(1, (int)($choice['rank_value'] ?? 1)) . ' за выбор';
+
+        $apply_btn = $can_manage
+            ? '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-choice-save="' . htmlspecialchars_uni($choice_key) . '">Применить выбор</button>'
+            : '';
+
+        $skill_pick_choice_items[] = '<div class="af-cs-choice-row">'
+            . '<div><strong>' . htmlspecialchars_uni($label) . '</strong><div class="af-cs-muted">Выбрать: ' . $pick . '. ' . htmlspecialchars_uni($grant_hint) . '</div><div class="af-cs-muted">' . htmlspecialchars_uni($status) . '</div></div>'
+            . '<div class="af-cs-choice-row__selects">' . implode('', $selects) . '</div>'
+            . $apply_btn
+            . '</div>';
+    }
+    if ($skill_pick_choice_items) {
+        $choice_html = '<div class="af-cs-skill-pool"><div><strong>Бесплатные выборы</strong></div><div class="af-cs-choices">' . implode('', $skill_pick_choice_items) . '</div></div>';
+    }
 
     global $templates;
     $tpl = $templates->get('charactersheet_skills');
