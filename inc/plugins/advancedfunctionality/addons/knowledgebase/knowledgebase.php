@@ -1875,7 +1875,10 @@ function af_kb_normalize_grants_json($rawGrants, array &$errors): array
         return [];
     }
 
-    $allowedOps = ['stat_add', 'hp_add', 'skill_add', 'resist_add', 'tag_add', 'grant_kb'];
+    $allowedOps = [
+        'stat_add', 'hp_add', 'skill_add', 'resist_add', 'tag_add', 'grant_kb',
+        'skill', 'language', 'knowledge', 'item', 'resistance', 'sense',
+    ];
     $normalized = [];
     foreach ($grants as $index => $grant) {
         if (!is_array($grant)) {
@@ -1897,6 +1900,57 @@ function af_kb_normalize_grants_json($rawGrants, array &$errors): array
                 $errors[] = 'Grant #' . ($index + 1) . ' grant_kb requires type and key.';
             }
         }
+        if ($op === 'skill') {
+            $skillKey = trim((string)($grant['skill_key'] ?? $grant['kb_key'] ?? $grant['key'] ?? ''));
+            $rank = max(1, (int)($grant['rank'] ?? $grant['skill_rank'] ?? $grant['value'] ?? 1));
+            if ($skillKey === '') {
+                $errors[] = 'Grant #' . ($index + 1) . ' skill requires skill_key.';
+            }
+            $normalized[] = ['op' => 'skill', 'skill_key' => $skillKey, 'rank' => $rank];
+            continue;
+        }
+        if ($op === 'language') {
+            $languageKey = trim((string)($grant['language_key'] ?? $grant['kb_key'] ?? $grant['key'] ?? ''));
+            if ($languageKey === '') {
+                $errors[] = 'Grant #' . ($index + 1) . ' language requires language_key.';
+            }
+            $normalized[] = ['op' => 'language', 'language_key' => $languageKey];
+            continue;
+        }
+        if ($op === 'knowledge') {
+            $knowledgeKey = trim((string)($grant['knowledge_key'] ?? $grant['kb_key'] ?? $grant['key'] ?? ''));
+            if ($knowledgeKey === '') {
+                $errors[] = 'Grant #' . ($index + 1) . ' knowledge requires knowledge_key.';
+            }
+            $normalized[] = ['op' => 'knowledge', 'knowledge_key' => $knowledgeKey];
+            continue;
+        }
+        if ($op === 'item') {
+            $normalized[] = [
+                'op' => 'item',
+                'kb_type' => trim((string)($grant['kb_type'] ?? '')),
+                'kb_key' => trim((string)($grant['kb_key'] ?? $grant['key'] ?? '')),
+                'qty' => max(1, (int)($grant['qty'] ?? 1)),
+            ];
+            continue;
+        }
+        if ($op === 'resistance') {
+            $normalized[] = [
+                'op' => 'resistance',
+                'key' => trim((string)($grant['key'] ?? '')),
+                'value' => (int)($grant['value'] ?? 0),
+            ];
+            continue;
+        }
+        if ($op === 'sense') {
+            $normalized[] = [
+                'op' => 'sense',
+                'key' => trim((string)($grant['key'] ?? '')),
+                'range' => max(0, (int)($grant['range'] ?? 0)),
+            ];
+            continue;
+        }
+
         $normalized[] = $grant;
     }
 

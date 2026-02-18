@@ -90,6 +90,7 @@ function af_charactersheets_handle_api(): void
     $build = af_charactersheets_json_decode((string)($sheet['build_json'] ?? ''));
     $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
     $build = af_charactersheets_normalize_build($build);
+    $updated_skill_key = '';
 
     if ($do === 'save_attributes') {
         if (!$can_manage) {
@@ -128,8 +129,13 @@ function af_charactersheets_handle_api(): void
         if ($delta > $available) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Not enough attribute points']);
         }
-        $build['attributes_locked'] = 1;
-        $build['locked_attributes'] = 1;
+        if ($is_staff) {
+            $build['attributes_locked'] = 0;
+            $build['locked_attributes'] = 0;
+        } else {
+            $build['attributes_locked'] = 1;
+            $build['locked_attributes'] = 1;
+        }
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
         if ($delta !== 0) {
             af_charactersheets_log_points(
@@ -225,13 +231,20 @@ function af_charactersheets_handle_api(): void
         $rank_max = max(1, (int)($skill_data['rank_max'] ?? 1));
 
         if ($do === 'cs_skill_buy' || $do === 'buy_skill') {
-            if (!empty($existing) && (int)($existing['is_active'] ?? 0) === 1) {
-                af_charactersheets_json_response(['success' => false, 'error' => 'Skill already active']);
+            $current_rank = max(0, (int)($existing['skill_rank'] ?? 0));
+            $source = (string)($existing['source'] ?? 'manual');
+            $next_rank = $current_rank + 1;
+            if ($next_rank > $rank_max) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Rank max reached']);
             }
             if ($available < 1) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Not enough skill points']);
             }
-            af_charactersheets_upsert_sheet_skill($sheet_id, (int)($sheet['uid'] ?? 0), $skill_key, 1, 1, 'manual');
+            if ($source === '' || $source === 'manual') {
+                $source = 'manual';
+            }
+            af_charactersheets_upsert_sheet_skill($sheet_id, (int)($sheet['uid'] ?? 0), $skill_key, $next_rank, 1, $source);
+            $updated_skill_key = $skill_key;
         } elseif ($do === 'cs_skill_set_rank') {
             $next_rank = (int)$mybb->get_input('skill_rank');
             $current_rank = max(0, (int)($existing['skill_rank'] ?? 0));
@@ -248,13 +261,14 @@ function af_charactersheets_handle_api(): void
             }
             $is_active = $next_rank > 0 ? 1 : 0;
             af_charactersheets_upsert_sheet_skill($sheet_id, (int)($sheet['uid'] ?? 0), $skill_key, $next_rank, $is_active, 'manual');
+            $updated_skill_key = $skill_key;
         } else {
             if (empty($existing) || (string)($existing['source'] ?? 'manual') !== 'manual') {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Only manual skill can be reset']);
             }
             af_charactersheets_delete_sheet_skill($sheet_id, $skill_key);
         }
-        $build['locked_skills'] = 1;
+        $build['locked_skills'] = $is_staff ? 0 : 1;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
     } elseif ($do === 'add_knowledge' || $do === 'remove_knowledge') {
         if (!$can_edit) {
@@ -658,7 +672,9 @@ function af_charactersheets_handle_api(): void
             'total' => (int)($view['skill_pool_total'] ?? 0),
             'spent' => (int)($view['skill_pool_spent'] ?? 0),
             'available' => (int)($view['skill_pool_remaining'] ?? 0),
+            'remaining' => (int)($view['skill_pool_remaining'] ?? 0),
         ],
+        'skill_row' => $updated_skill_key !== '' ? af_charactersheets_find_skill_view_row($view, $updated_skill_key) : null,
         'view' => $view,
         'attributes_html' => $attributes_html,
         'progress_html' => $progress_html,
@@ -678,4 +694,20 @@ function af_charactersheets_json_response(array $data): void
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
+}
+
+function af_charactersheets_find_skill_view_row(array $view, string $skill_key): ?array
+{
+    if ($skill_key === '') {
+        return null;
+    }
+    foreach ((array)($view['skills'] ?? []) as $skill) {
+        if (!is_array($skill)) {
+            continue;
+        }
+        if ((string)($skill['skill_key'] ?? '') === $skill_key) {
+            return $skill;
+        }
+    }
+    return null;
 }

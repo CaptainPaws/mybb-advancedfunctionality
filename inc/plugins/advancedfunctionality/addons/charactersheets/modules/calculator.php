@@ -491,6 +491,16 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     }
 
     $rules_aggregate = (array)($kb_context['aggregate'] ?? af_cs_aggregate_rules(array_values((array)($kb_context['sources'] ?? []))));
+    foreach (['race', 'class', 'theme'] as $sourceKey) {
+        $resolved = (array)($kb_context[$sourceKey] ?? []);
+        foreach (af_charactersheets_extract_knowledge_grants($resolved, 'knowledge') as $key) {
+            $bonus_knowledges[] = $key;
+        }
+        foreach (af_charactersheets_extract_knowledge_grants($resolved, 'language') as $key) {
+            $bonus_languages[] = $key;
+        }
+    }
+
     foreach (['str','dex','con','int','wis','cha'] as $statKey) {
         $bonus[$statKey] += (float)($rules_aggregate['fixed']['stats'][$statKey] ?? 0);
         $bonus[$statKey] += (float)($rules_aggregate['fixed_bonuses']['stats'][$statKey] ?? 0);
@@ -626,7 +636,31 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $skills_rows = af_charactersheets_get_sheet_skills((int)($sheet['id'] ?? 0));
     $skills_map = [];
     foreach ($skills_rows as $row) {
-        $skills_map[(string)($row['skill_key'] ?? '')] = $row;
+        $skill_key = (string)($row['skill_key'] ?? '');
+        if ($skill_key === '') {
+            continue;
+        }
+
+        $source = (string)($row['source'] ?? 'manual');
+        $existing = (array)($skills_map[$skill_key] ?? []);
+        if (!empty($existing)) {
+            $fixedSources = ['race', 'class', 'theme'];
+            $existingSource = (string)($existing['source'] ?? 'manual');
+            if (in_array($existingSource, $fixedSources, true)) {
+                if (in_array($source, $fixedSources, true)
+                    && (int)($row['skill_rank'] ?? 0) > (int)($existing['skill_rank'] ?? 0)
+                ) {
+                    $skills_map[$skill_key] = $row;
+                }
+                continue;
+            }
+            if (!in_array($source, $fixedSources, true)
+                && (int)($row['skill_rank'] ?? 0) <= (int)($existing['skill_rank'] ?? 0)
+            ) {
+                continue;
+            }
+        }
+        $skills_map[$skill_key] = $row;
     }
 
     $skills_view = [];
