@@ -799,6 +799,18 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         }
 
         $attr_key = af_charactersheets_resolve_skill_attribute_key($skill_data, $data);
+        $skill_entry = af_charactersheets_kb_get_entry('skill', $skill_key);
+        $skill_entry_data = (array)($skill_entry['data'] ?? []);
+        $skill_entry_data_skill = (array)($skill_entry_data['skill'] ?? []);
+        $key_stat = (string)($skill_entry_data_skill['key_stat'] ?? '');
+        if (trim($key_stat) === '') {
+            $key_stat = (string)($skill_entry_data_skill['attribute'] ?? '');
+        }
+        $key_stat = strtolower(trim($key_stat));
+        if (!in_array($key_stat, ['str', 'dex', 'con', 'int', 'wis', 'cha'], true)) {
+            $key_stat = '';
+        }
+        $key_stat_label = $key_stat !== '' ? (string)($attributes_labels[$key_stat] ?? '') : '';
         $base_mod = (int)floor((float)($final[$attr_key] ?? 0));
         $row = (array)($skills_map[$skill_key] ?? []);
         $skill_rank = max(0, (int)($row['skill_rank'] ?? 0));
@@ -842,6 +854,8 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'notes' => (string)($skill_data['notes'] ?? ''),
             'attr_key' => $attr_key,
             'attr_label' => $attributes_labels[$attr_key] ?? $attr_key,
+            'key_stat' => $key_stat,
+            'key_stat_label' => $key_stat_label,
             'base' => $base_mod,
             'rank_bonus' => $rank_bonus,
             'bonus' => $bonus_val,
