@@ -2592,14 +2592,30 @@ function af_charactersheets_collect_skill_pick_choices(array $context, array $bu
 function af_charactersheets_skill_rank_cost_for_target(int $target_rank): int
 {
     $target_rank = max(0, $target_rank);
-    $cost_map = [1 => 1, 2 => 2, 3 => 3, 4 => 5];
+    $cost_map = [1 => 1, 2 => 2, 3 => 3, 4 => 5, 5 => 8];
     if (isset($cost_map[$target_rank])) {
         return $cost_map[$target_rank];
     }
     if ($target_rank <= 0) {
         return 0;
     }
-    return 5 + (($target_rank - 4) * 5);
+    return 8 + (($target_rank - 5) * 5);
+}
+
+function af_charactersheets_resolve_skill_attribute_key(array $skill_data, array $entry_data = []): string
+{
+    $default = 'int';
+    $attribute_key = trim((string)($skill_data['key_stat'] ?? ''));
+    if ($attribute_key === '') {
+        $attribute_key = trim((string)($skill_data['attribute'] ?? $entry_data['attribute'] ?? ''));
+    }
+
+    $allowed = af_charactersheets_default_attributes();
+    if ($attribute_key === '' || !array_key_exists($attribute_key, $allowed)) {
+        return $default;
+    }
+
+    return $attribute_key;
 }
 
 function af_charactersheets_skill_rank_total_cost(int $rank): int
@@ -3406,7 +3422,7 @@ function af_charactersheets_get_skills_catalog(bool $activeOnly = true): array
             'slug' => $key,
             'title_ru' => (string)($entry['title_ru'] ?? ''),
             'title_en' => (string)($entry['title_en'] ?? ''),
-            'attribute' => (string)($skill['key_stat'] ?? $skill['attribute'] ?? $data['attribute'] ?? 'int'),
+            'attribute' => af_charactersheets_resolve_skill_attribute_key($skill, $data),
             'description_ru' => (string)($entry['short_ru'] ?? ''),
             'description_en' => (string)($entry['short_en'] ?? ''),
             'active' => (int)($entry['active'] ?? 1),

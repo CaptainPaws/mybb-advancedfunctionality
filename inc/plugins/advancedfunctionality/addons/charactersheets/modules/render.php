@@ -389,6 +389,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
         2 => 'Эксперт',
         3 => 'Мастер',
         4 => 'Легендарный',
+        5 => 'Мифический',
     ];
 
     foreach ($skills as $skill) {
@@ -415,7 +416,8 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
 
     $build_rank_chip = static function (int $rank, int $rank_max, array $rank_names): string {
         $rank_name = (string)($rank_names[$rank] ?? ('Ранг ' . $rank));
-        return '<span class="af-cs-rank-chip">' . htmlspecialchars_uni($rank_name) . ' (' . $rank . '/' . $rank_max . ')</span>';
+        $rank_class = 'af-cs-rank-chip--rank-' . max(0, $rank);
+        return '<span class="af-cs-rank-chip ' . htmlspecialchars_uni($rank_class) . '">' . htmlspecialchars_uni($rank_name) . ' (' . $rank . '/' . $rank_max . ')</span>';
     };
 
     $build_attr_label = static function (string $attr_label): string {

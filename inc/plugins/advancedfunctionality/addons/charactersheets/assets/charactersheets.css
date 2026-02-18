@@ -1694,6 +1694,36 @@
   border: 1px solid rgba(98, 219, 176, 0.4);
 }
 
+.af-cs-rank-chip--rank-0 {
+  background: rgba(173, 181, 189, 0.22);
+  border-color: rgba(173, 181, 189, 0.42);
+}
+
+.af-cs-rank-chip--rank-1 {
+  background: rgba(98, 219, 176, 0.22);
+  border-color: rgba(98, 219, 176, 0.4);
+}
+
+.af-cs-rank-chip--rank-2 {
+  background: rgba(92, 166, 255, 0.22);
+  border-color: rgba(92, 166, 255, 0.45);
+}
+
+.af-cs-rank-chip--rank-3 {
+  background: rgba(177, 130, 255, 0.24);
+  border-color: rgba(177, 130, 255, 0.45);
+}
+
+.af-cs-rank-chip--rank-4 {
+  background: rgba(255, 190, 82, 0.26);
+  border-color: rgba(255, 190, 82, 0.5);
+}
+
+.af-cs-rank-chip--rank-5 {
+  background: rgba(255, 99, 99, 0.26);
+  border-color: rgba(255, 99, 99, 0.5);
+}
+
 .af-cs-rank-chip.is-muted {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.2);
