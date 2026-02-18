@@ -1608,8 +1608,13 @@ function af_atf_build_input_html(array $field, string $value): string
 
     switch ($type) {
         case 'kb_race':
-        case 'kb_class': {
-            $kbType = $type === 'kb_race' ? 'race' : 'class';
+        case 'kb_class':
+        case 'kb_theme': {
+            $kbTypeMap = ['kb_race' => 'race', 'kb_class' => 'class', 'kb_theme' => 'theme'];
+            $kbType = $kbTypeMap[$type] ?? '';
+            if ($kbType === '') {
+                return '';
+            }
             $list = af_atf_kb_get_list_by_type($kbType);
 
             $html = '<div class="af-atf-kb-select" data-kb-type="'.htmlspecialchars_uni($kbType).'">';
@@ -1822,7 +1827,7 @@ function af_atf_parse_options(string $raw): array
 
 function af_atf_kb_allowed_types(): array
 {
-    return ['race', 'class'];
+    return ['race', 'class', 'theme'];
 }
 
 function af_atf_kb_is_ru(): bool
@@ -2327,11 +2332,17 @@ function af_atf_newthread_do_end(): void
         }
 
         $type = (string)$f['type'];
-        if ($type === 'kb_race' || $type === 'kb_class') {
+        if ($type === 'kb_race' || $type === 'kb_class' || $type === 'kb_theme') {
             if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
                 $val = '';
             } elseif ($val !== '') {
-                $kbType = $type === 'kb_race' ? 'race' : 'class';
+                $kbTypeMap = ['kb_race' => 'race', 'kb_class' => 'class', 'kb_theme' => 'theme'];
+                $kbType = $kbTypeMap[$type] ?? '';
+                if ($kbType === '') {
+                    $val = '';
+                    $values[$fieldid] = $val;
+                    continue;
+                }
                 $list = af_atf_kb_get_list_by_type($kbType);
                 $known = [];
                 foreach ($list as $item) {
@@ -2408,11 +2419,17 @@ function af_atf_editpost_do_end(): void
         }
 
         $type = (string)$f['type'];
-        if ($type === 'kb_race' || $type === 'kb_class') {
+        if ($type === 'kb_race' || $type === 'kb_class' || $type === 'kb_theme') {
             if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
                 $val = '';
             } elseif ($val !== '') {
-                $kbType = $type === 'kb_race' ? 'race' : 'class';
+                $kbTypeMap = ['kb_race' => 'race', 'kb_class' => 'class', 'kb_theme' => 'theme'];
+                $kbType = $kbTypeMap[$type] ?? '';
+                if ($kbType === '') {
+                    $val = '';
+                    $values[$fieldid] = $val;
+                    continue;
+                }
                 $list = af_atf_kb_get_list_by_type($kbType);
                 $known = [];
                 foreach ($list as $item) {
@@ -2587,7 +2604,7 @@ function af_atf_dh_validate(&$ph): void
             continue;
         }
 
-        if ($type === 'kb_race' || $type === 'kb_class') {
+        if ($type === 'kb_race' || $type === 'kb_class' || $type === 'kb_theme') {
             $val = is_string($raw) ? trim($raw) : '';
             if ((int)$f['required'] === 1 && $val === '') {
                 $ph->set_error('missing_required_field_'.$fieldid);
@@ -2600,7 +2617,12 @@ function af_atf_dh_validate(&$ph): void
                     continue;
                 }
 
-                $kbType = $type === 'kb_race' ? 'race' : 'class';
+                $kbTypeMap = ['kb_race' => 'race', 'kb_class' => 'class', 'kb_theme' => 'theme'];
+                $kbType = $kbTypeMap[$type] ?? '';
+                if ($kbType === '') {
+                    $ph->set_error('invalid_field_'.$fieldid);
+                    continue;
+                }
                 $list = af_atf_kb_get_list_by_type($kbType);
                 $known = [];
                 foreach ($list as $item) {
@@ -2863,8 +2885,12 @@ function af_atf_format_value_for_display(array $field, string $val): string
     $type = (string)$field['type'];
     $val  = (string)$val;
 
-    if ($type === 'kb_race' || $type === 'kb_class') {
-        $kbType = $type === 'kb_race' ? 'race' : 'class';
+    if ($type === 'kb_race' || $type === 'kb_class' || $type === 'kb_theme') {
+        $kbTypeMap = ['kb_race' => 'race', 'kb_class' => 'class', 'kb_theme' => 'theme'];
+        $kbType = $kbTypeMap[$type] ?? '';
+        if ($kbType === '') {
+            return '';
+        }
         return af_atf_kb_build_chip($kbType, $val, (string)$field['options']);
     }
 
