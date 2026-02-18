@@ -658,7 +658,7 @@
 
 .af-cs-mechanics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
 }
 
@@ -673,6 +673,12 @@
 
 .af-cs-mech-title {
   font-weight: 700;
+}
+
+.af-cs-mech-value {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .af-cs-mech-row {
@@ -690,6 +696,26 @@
 
 .af-cs-mech-total {
   font-weight: 700;
+}
+
+.af-cs-mech-pill {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 6px 10px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.af-cs-mech-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.af-cs-choice-row__selects {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
 }
 
 .af-cs-tabs__nav {

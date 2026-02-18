@@ -2152,6 +2152,7 @@ function cs_kb_rules_normalize($dataJson): array
 
     return [
         'schema' => (string)($rules['schema'] ?? ''),
+        'speed' => (int)($rules['speed'] ?? $fixed['speed'] ?? 0),
         'fixed' => [
             'stats' => $fixedStats,
             'hp' => (int)($fixed['hp'] ?? 0),
@@ -2668,9 +2669,6 @@ function af_cs_aggregate_rules(array $sources): array
             $choice['source'] = (string)($source['type'] ?? '');
             $totals['choices'][] = $choice;
 
-            if ((string)($choice['type'] ?? '') === 'stat_bonus' && (string)($choice['mode'] ?? 'add') === 'add') {
-                $totals['bonus_attribute_points'] += max(0, (int)($choice['pick'] ?? 0)) * max(0, (int)($choice['value'] ?? 1));
-            }
             if ((string)($choice['type'] ?? '') === 'skill_pick_choice' && (string)($choice['grant_mode'] ?? '') === 'skill_points') {
                 $totals['bonus_skill_points'] += max(0, (int)($choice['pick'] ?? 0)) * max(0, (int)($choice['points_value'] ?? 0));
             }
@@ -2679,7 +2677,6 @@ function af_cs_aggregate_rules(array $sources): array
         $totals['grants'] = array_merge($totals['grants'], (array)($rules['grants'] ?? []));
     }
 
-    $totals['points_pools']['attribute_points'] += $totals['bonus_attribute_points'];
     $totals['points_pools']['skill_points'] += $totals['bonus_skill_points'];
 
     return [
@@ -2711,10 +2708,6 @@ function cs_get_attribute_points_from_rules($rules): int
             continue;
         }
         $choice_type = (string)($choice['type'] ?? '');
-        if ($choice_type === 'stat_bonus') {
-            $points += max(0, (int)($choice['pick'] ?? 0)) * max(0, (int)($choice['value'] ?? 1));
-            continue;
-        }
         if (!in_array($choice_type, ['attribute_points'], true)) {
             continue;
         }

@@ -315,6 +315,17 @@ function af_charactersheets_extract_humanity_cost_from_data(array $data): float
     return $cost;
 }
 
+function af_charactersheets_format_damage_total(string $base, int $bonus): string
+{
+    if ($bonus === 0) {
+        return $base;
+    }
+
+    return $bonus > 0
+        ? $base . '+' . $bonus
+        : $base . $bonus;
+}
+
 
 function cs_build_character_state($uid, $sheet_id): array
 {
@@ -373,12 +384,6 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         'theme' => (string)($kb_sources['theme'] ?? ''),
     ];
 
-    $choice_map = [
-        'race' => 'race_attr_bonus_choice',
-        'class' => 'class_attr_bonus_choice',
-        'theme' => 'theme_attr_bonus_choice',
-    ];
-
     $bonus_items = af_charactersheets_collect_bonus_items($kb_sources);
     $bonus_items = array_merge($bonus_items, af_charactersheets_collect_build_bonus_items($build));
     foreach ($bonus_items as $item) {
@@ -393,7 +398,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
 
         if ($type === 'attribute_bonus') {
             if ($requires_choice) {
-                $choice_key = $choice_map[$source] ?? '';
+                $choice_key = $source !== '' ? ($source . '_attr_bonus_choice') : '';
                 $chosen = $choice_key !== '' ? (string)($choices[$choice_key] ?? '') : '';
                 $choice_requirements[$source] = [
                     'choice_key' => $choice_key,
@@ -513,6 +518,55 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $bonus[$statKey] += (float)($rules_aggregate['fixed']['stats'][$statKey] ?? 0);
         $bonus[$statKey] += (float)($rules_aggregate['fixed_bonuses']['stats'][$statKey] ?? 0);
     }
+
+    foreach (['race', 'class', 'theme'] as $src) {
+        $source_choices = (array)($source_rules_map[$src]['choices'] ?? []);
+        foreach ($source_choices as $choice) {
+            if (!is_array($choice) || (string)($choice['type'] ?? '') !== 'stat_bonus') {
+                continue;
+            }
+            if ((string)($choice['mode'] ?? 'add') !== 'add') {
+                continue;
+            }
+            $pick = max(0, (int)($choice['pick'] ?? 0));
+            $value = (float)($choice['value'] ?? 0);
+            if ($pick < 1 || $value == 0.0) {
+                continue;
+            }
+
+            $choice_id = trim((string)($choice['id'] ?? ''));
+            $choice_key = $src . '_stat_bonus_choice' . ($choice_id !== '' ? ('_' . $choice_id) : '');
+            $selected = $choices[$choice_key] ?? [];
+            if (is_string($selected)) {
+                $selected = array_filter(array_map('trim', explode(',', $selected)));
+            }
+            if (!is_array($selected)) {
+                $selected = [];
+            }
+            $selected = array_values(array_unique(array_filter($selected, static function ($stat) use ($bonus) {
+                return is_string($stat) && array_key_exists($stat, $bonus);
+            })));
+            if (count($selected) > $pick) {
+                $selected = array_slice($selected, 0, $pick);
+            }
+
+            $choice_requirements[] = [
+                'source' => $src,
+                'choice_key' => $choice_key,
+                'chosen' => $selected,
+                'pick' => $pick,
+            ];
+
+            if (count($selected) < $pick) {
+                $errors[] = 'Не выбран бонус атрибутов для ' . $src;
+                continue;
+            }
+
+            foreach ($selected as $stat) {
+                $bonus[$stat] += $value;
+            }
+        }
+    }
     $bonus_attr_points += (int)($rules_aggregate['points_pools']['attribute_points'] ?? 0);
     $bonus_skill_points += (int)($rules_aggregate['points_pools']['skill_points'] ?? 0);
     $bonus_language_choices += (int)($rules_aggregate['points_pools']['language_slots'] ?? 0);
@@ -548,7 +602,8 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
 
     $attributes_labels = af_charactersheets_get_attribute_labels();
     $choice_details = [];
-    foreach ($choice_requirements as $source => $data) {
+    foreach ($choice_requirements as $data) {
+        $source = (string)($data['source'] ?? '');
         $entry = af_charactersheets_kb_get_entry($source, (string)$sources[$source]);
         $label = af_charactersheets_kb_pick_text($entry, 'title');
         if ($label === '') {
@@ -557,8 +612,9 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $choice_details[] = [
             'source' => $source,
             'label' => $label,
-            'choice_key' => $data['choice_key'],
+            'choice_key' => (string)($data['choice_key'] ?? ''),
             'chosen' => $data['chosen'],
+            'pick' => (int)($data['pick'] ?? 1),
         ];
     }
 
@@ -676,14 +732,10 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $errors[] = 'Превышен лимит языков.';
     }
 
-    $dex_score = (float)($final['dex'] ?? 0);
-    $con_score = (float)($final['con'] ?? 0);
-    $wis_score = (float)($final['wis'] ?? 0);
-    $int_score = (float)($final['int'] ?? 0);
-    $dex_mod = (int)floor(($dex_score - 10) / 2);
-    $con_mod = (int)floor(($con_score - 10) / 2);
-    $wis_mod = (int)floor(($wis_score - 10) / 2);
-    $int_mod = (int)floor(($int_score - 10) / 2);
+    $dex_final = (int)floor((float)($final['dex'] ?? 0));
+    $con_final = (int)floor((float)($final['con'] ?? 0));
+    $wis_final = (int)floor((float)($final['wis'] ?? 0));
+    $int_final = (int)floor((float)($final['int'] ?? 0));
     $legacy_equipment = [];
     if (!empty($build['equipment_bonuses']) && is_array($build['equipment_bonuses'])) {
         $legacy_equipment = $build['equipment_bonuses'];
@@ -707,7 +759,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $weapon_bonus = (int)($legacy_equipment['weapon_bonus'] ?? 0) + (int)$bonus_weapon;
     $armor_rules_bonus = (int)($resolved_rules['fixed']['armor'] ?? 0) + (int)($resolved_rules['fixed_bonuses']['armor'] ?? 0) + (int)$bonus_ac;
     $armor_equip_bonus_total = $armor_from_equipped + $armor_rules_bonus + $shield_bonus;
-    $ac_total = 10 + $dex_mod + $con_mod + $armor_equip_bonus_total;
+    $ac_total = $dex_final + $con_final + $armor_equip_bonus_total;
 
     $humanity_base = 100.0;
 
@@ -724,7 +776,9 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     ];
     $hp_base_total = array_sum($hp_base_breakdown);
     $hp_fixed_total = array_sum($hp_fixed_breakdown);
-    $hp_con = (float)$con_mod;
+    $hp_con = (float)$con_final;
+    $race_speed = (int)($source_rules_map['race']['speed'] ?? 0);
+    $damage_bonus_total = $weapon_bonus + (int)floor((float)($final['str'] ?? 0));
 
     $augmentation_slots = (array)($build['augmentations']['slots'] ?? []);
     $humanity_from_augments = 0.0;
@@ -785,28 +839,29 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'shield_bonus' => $shield_bonus,
             'weapon_bonus' => $weapon_bonus,
             'damage_base' => '1d4',
-            'damage_total' => '1d4 + ' . (string)$weapon_bonus . ' + ' . (string)$final['str'],
+            'damage_bonus' => $damage_bonus_total,
+            'damage_total' => af_charactersheets_format_damage_total('1d4', $damage_bonus_total),
             'ac_total' => $ac_total,
             'hp_total' => $hp_total,
-            'speed_total' => (int)($rules_aggregate['speed_total'] ?? (($rules_aggregate['speed_base_total'] ?? 0) + ($resolved_rules['fixed_bonuses']['speed'] ?? 0))),
+            'speed_total' => $race_speed,
             'humanity_total' => $humanity_total,
             'hp_breakdown' => [
                 'hp_base_total' => $hp_base_total,
                 'hp_base' => $hp_base_breakdown,
                 'fixed_total' => $hp_fixed_total,
                 'fixed_bonuses_hp' => $hp_fixed_breakdown,
-                'from_con_mod' => $hp_con,
+                'from_con' => $hp_con,
             ],
             'humanity_breakdown' => [
                 'base' => $humanity_base,
                 'from_augs' => $humanity_penalty,
             ],
             'saves' => [
-                'reflex' => $dex_mod,
-                'will' => $wis_mod,
-                'fortitude' => $con_mod,
-                'fort' => $con_mod,
-                'perception' => $int_mod,
+                'reflex' => $dex_final,
+                'will' => $wis_final,
+                'fortitude' => $con_final,
+                'fort' => $con_final,
+                'perception' => $int_final,
             ],
         ],
         'knowledge' => [
@@ -821,8 +876,10 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'speed_total' => (int)($rules_aggregate['speed_total'] ?? 0),
             'bonus_attribute_points' => (int)($rules_aggregate['bonus_attribute_points'] ?? 0),
             'bonus_skill_points' => (int)($rules_aggregate['bonus_skill_points'] ?? 0),
-            'con_mod' => $con_mod,
-            'dex_mod' => $dex_mod,
+            'con_final' => $con_final,
+            'dex_final' => $dex_final,
+            'race_speed' => $race_speed,
+            'damage_bonus' => $damage_bonus_total,
             'armor_equip_bonus_total' => $armor_equip_bonus_total,
             'hp_base_breakdown' => $hp_base_breakdown,
             'fixed_hp_breakdown' => $hp_fixed_breakdown,
