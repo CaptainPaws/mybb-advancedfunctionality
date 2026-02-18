@@ -34,6 +34,7 @@ function af_charactersheets_handle_api(): void
     $can_manage = af_cs_can_manage_sheet((int)($mybb->user['uid'] ?? 0), (int)($sheet['uid'] ?? 0));
     $can_award = af_charactersheets_user_can_award_exp($mybb->user ?? [], $fid_for_mod);
     $can_staff_reset = af_charactersheets_user_can_staff_reset($mybb->user ?? [], $fid_for_mod);
+    $is_staff = af_cs_is_staff($mybb->user ?? [], $fid_for_mod);
 
     if (in_array($do, [
         'save_attributes',
@@ -106,7 +107,7 @@ function af_charactersheets_handle_api(): void
             $sanitized[$key] = $value;
         }
 
-        if (!empty($build['attributes_locked'])) {
+        if (!empty($build['attributes_locked']) && !$is_staff) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Attributes are locked']);
         }
 
@@ -150,7 +151,7 @@ function af_charactersheets_handle_api(): void
         }));
         $allowed_attr_choices = ['race_attr_bonus_choice', 'class_attr_bonus_choice', 'theme_attr_bonus_choice'];
         $is_stat_bonus_choice = (bool)preg_match('/^(race|class|theme)_stat_bonus_choice(?:_.+)?$/', $choice_key);
-        if (!empty($build['attributes_locked']) && (in_array($choice_key, $allowed_attr_choices, true) || $is_stat_bonus_choice)) {
+        if (!empty($build['attributes_locked']) && !$is_staff && (in_array($choice_key, $allowed_attr_choices, true) || $is_stat_bonus_choice)) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Attributes are locked']);
         }
 
@@ -630,7 +631,7 @@ function af_charactersheets_handle_api(): void
     $can_view_ledger = af_charactersheets_user_can_view_ledger($sheet, $mybb->user ?? [], $fid_for_mod);
     $build = af_charactersheets_normalize_build(af_charactersheets_json_decode((string)($sheet['build_json'] ?? '')));
     $attributes_locked = !empty($build['attributes_locked']);
-    $can_edit_attributes = $can_edit && !$attributes_locked;
+    $can_edit_attributes = $can_edit && (!$attributes_locked || $is_staff);
 
     $attributes_html = af_charactersheets_build_attributes_html($view, $can_edit_attributes, $can_view_ledger, $can_staff_reset, $attributes_locked);
     $progress_html = af_charactersheets_build_progress_html($view, $sheet, $can_award, $can_view_ledger);

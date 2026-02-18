@@ -76,8 +76,9 @@ function af_charactersheets_render_sheet_page(string $slug): void
     // fid нужен для is_moderator(), возьмём из threads если можем
     $fid_for_mod = (int)($thread['fid'] ?? 0);
     $can_staff_reset = af_charactersheets_user_can_staff_reset($mybb->user ?? [], $fid_for_mod);
+    $is_staff = af_cs_is_staff($mybb->user ?? [], $fid_for_mod);
     $attributes_locked = !empty($build['attributes_locked']);
-    $can_edit_attributes = $can_edit_sheet && !$attributes_locked;
+    $can_edit_attributes = $can_edit_sheet && (!$attributes_locked || $is_staff);
     $can_award_exp = af_charactersheets_user_can_award_exp($mybb->user ?? [], $fid_for_mod);
     $can_view_ledger = af_charactersheets_user_can_view_ledger($sheet, $mybb->user ?? [], $fid_for_mod);
 
@@ -103,6 +104,7 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $sheet_augments_html = af_charactersheets_build_augments_html($build, $can_edit_sheet, $sheet_view);
     $sheet_equipment_html = af_charactersheets_build_equipment_html($build, $can_edit_sheet);
     $sheet_mechanics_html = af_charactersheets_build_mechanics_html($sheet_view);
+    $sheet_mechanics_title = htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mechanics_title', 'Механика'));
 
     $sheet_progress_html = af_charactersheets_build_progress_html($sheet_view, $sheet, $can_award_exp, $can_view_ledger);
 
@@ -878,25 +880,33 @@ function af_charactersheets_build_bonus_html(array $index): string
     return '<div class="af-cs-bonus-grid">' . implode('', $columns) . '</div>';
 }
 
+function af_charactersheets_lang(string $key, string $fallback = ''): string
+{
+    global $lang;
+
+    $value = '';
+    if (is_object($lang) && isset($lang->$key)) {
+        $value = (string)$lang->$key;
+    }
+
+    if ($value === '') {
+        return $fallback;
+    }
+
+    return $value;
+}
+
 function af_charactersheets_build_mechanics_html(array $view): string
 {
     $mechanics = (array)($view['mechanics'] ?? []);
-    $armor_bonus = (int)($mechanics['armor_bonus'] ?? 0);
-    $shield_bonus = (int)($mechanics['shield_bonus'] ?? 0);
-    $weapon_bonus = (int)($mechanics['weapon_bonus'] ?? 0);
     $ac_total = (int)($mechanics['ac_total'] ?? 0);
     $hp_total = (int)($mechanics['hp_total'] ?? 0);
-    $humanity_total = (int)($mechanics['humanity_total'] ?? 0);
     $speed_total = (int)($mechanics['speed_total'] ?? 0);
     $saves = (array)($mechanics['saves'] ?? []);
-    $dex_final = (int)($view['debug']['dex_final'] ?? 0);
-    $con_final = (int)($view['debug']['con_final'] ?? 0);
-    $armor_equip_bonus_total = (int)($view['debug']['armor_equip_bonus_total'] ?? 0);
     $reflex = (int)($saves['reflex'] ?? 0);
     $will = (int)($saves['will'] ?? 0);
     $fortitude = (int)($saves['fortitude'] ?? 0);
     $perception = (int)($saves['perception'] ?? 0);
-
 
     $debug = (array)($view['debug'] ?? []);
     $debug_lines = [];
@@ -962,58 +972,34 @@ function af_charactersheets_build_mechanics_html(array $view): string
         . "
 -->";
 
-    $damage_base = (string)($mechanics['damage_base'] ?? '1d4');
-    $damage_total = (string)($mechanics['damage_total'] ?? $damage_base);
-    $damage_bonus = (int)($mechanics['damage_bonus'] ?? 0);
-    $resistances = (array)($mechanics['resistances'] ?? []);
-    $resistances_html = $resistances
-        ? '<div class="af-cs-mech-tags">' . implode('', array_map(static function ($item) {
-            return '<span class="af-cs-chip">' . htmlspecialchars_uni((string)$item) . '</span>';
-        }, $resistances)) . '</div>'
-        : '<div class="af-cs-muted">No Resistances / Immunities</div>';
+    $damage_total = (string)($mechanics['damage_total'] ?? '1d4');
 
     $cards = [];
     $cards[] = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">Armor Class</div>'
-        . '<div class="af-cs-mech-value">' . htmlspecialchars_uni((string)$ac_total) . '</div>'
-        . '<div class="af-cs-mech-row"><span>DEX</span><span>' . htmlspecialchars_uni((string)$dex_final) . '</span></div>'
-        . '<div class="af-cs-mech-row"><span>CON</span><span>' . htmlspecialchars_uni((string)$con_final) . '</span></div>'
-        . '<div class="af-cs-mech-row"><span>Armor+Shield</span><span>' . htmlspecialchars_uni((string)$armor_equip_bonus_total) . '</span></div>'
+        . '<div class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_ac', 'Класс брони')) . '</div>'
+        . '<div class="af-cs-staticon"><i class="fa-solid fa-shield-halved af-cs-staticon__icon" aria-hidden="true"></i><span class="af-cs-staticon__value">' . htmlspecialchars_uni((string)$ac_total) . '</span></div>'
         . '</div>';
     $cards[] = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">Saving Throws</div>'
-        . '<div class="af-cs-mech-row"><span>Fortitude</span><span>' . htmlspecialchars_uni((string)$fortitude) . '</span></div>'
-        . '<div class="af-cs-mech-row"><span>Reflex</span><span>' . htmlspecialchars_uni((string)$reflex) . '</span></div>'
-        . '<div class="af-cs-mech-row"><span>Will</span><span>' . htmlspecialchars_uni((string)$will) . '</span></div>'
-        . '<div class="af-cs-mech-divider"></div>'
-        . '<div class="af-cs-mech-pill">Perception: <strong>' . htmlspecialchars_uni((string)$perception) . '</strong></div>'
+        . '<div class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_hp', 'Здоровье')) . '</div>'
+        . '<div class="af-cs-staticon"><i class="fa-solid fa-heart af-cs-staticon__icon" aria-hidden="true"></i><span class="af-cs-staticon__value">' . htmlspecialchars_uni((string)$hp_total) . '</span></div>'
         . '</div>';
     $cards[] = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">Hit Points</div>'
-        . '<div class="af-cs-mech-value">' . htmlspecialchars_uni((string)$hp_total) . '</div>'
-        . '<div class="af-cs-muted">Max HP</div>'
+        . '<div class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_damage', 'Урон')) . '</div>'
+        . '<div class="af-cs-staticon"><i class="fa-solid fa-gun af-cs-staticon__icon" aria-hidden="true"></i><span class="af-cs-staticon__value">' . htmlspecialchars_uni($damage_total) . '</span></div>'
         . '</div>';
     $cards[] = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">Speed</div>'
-        . '<div class="af-cs-mech-value">' . htmlspecialchars_uni((string)$speed_total) . '</div>'
+        . '<div class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_speed', 'Скорость')) . '</div>'
+        . '<div class="af-cs-staticon"><i class="fa-solid fa-person-running af-cs-staticon__icon" aria-hidden="true"></i><span class="af-cs-staticon__value">' . htmlspecialchars_uni((string)$speed_total) . '</span></div>'
         . '</div>';
+
     $cards[] = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">Damage</div>'
-        . '<div class="af-cs-mech-row"><span>Base</span><span>' . htmlspecialchars_uni($damage_base) . '</span></div>'
-        . '<div class="af-cs-mech-row"><span>Bonus</span><span>' . htmlspecialchars_uni((string)$damage_bonus) . '</span></div>'
-        . '<div class="af-cs-mech-row af-cs-mech-total"><span>Total</span><span>' . htmlspecialchars_uni($damage_total) . '</span></div>'
-        . '</div>';
-    $cards[] = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">Conditions & Active effects</div>'
-        . '<div class="af-cs-muted">No Active Effects</div>'
-        . '</div>';
-    $cards[] = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">Resistances & Immunities</div>'
-        . $resistances_html
-        . '</div>';
-    $cards[] = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">Humanity</div>'
-        . '<div class="af-cs-mech-value">' . htmlspecialchars_uni((string)$humanity_total) . '%</div>'
+        . '<div class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_saves', 'Спасброски')) . '</div>'
+        . '<div class="af-cs-save-grid">'
+        . '<div class="af-cs-save-card"><span>' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_fortitude', 'Стойкость / Fortitude')) . '</span><strong>' . htmlspecialchars_uni(sprintf('%+d', $fortitude)) . '</strong></div>'
+        . '<div class="af-cs-save-card"><span>' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_reflex', 'Рефлекс / Reflex')) . '</span><strong>' . htmlspecialchars_uni(sprintf('%+d', $reflex)) . '</strong></div>'
+        . '<div class="af-cs-save-card"><span>' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_will', 'Воля / Will')) . '</span><strong>' . htmlspecialchars_uni(sprintf('%+d', $will)) . '</strong></div>'
+        . '<div class="af-cs-save-card"><span>' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_perception', 'Восприятие / Perception')) . '</span><strong>' . htmlspecialchars_uni(sprintf('%+d', $perception)) . '</strong></div>'
+        . '</div>'
         . '</div>';
 
     $debug_line = '<!-- AF_CS_DEBUG mechanics: race=' . htmlspecialchars_uni((string)($debug['race']['key'] ?? ''))
@@ -1023,7 +1009,6 @@ function af_charactersheets_build_mechanics_html(array $view): string
         . ' con=' . (int)($debug['con_final'] ?? 0)
         . ' AC=' . $ac_total
         . ' speed=' . $speed_total
-        . ' damage_bonus=' . $damage_bonus
         . ' -->';
 
     return '<div class="af-cs-mechanics-grid">' . implode('', $cards) . '</div>' . $debug_comment . $debug_line;

@@ -681,6 +681,47 @@
   line-height: 1;
 }
 
+.af-cs-staticon {
+  position: relative;
+  width: 92px;
+  height: 92px;
+  display: grid;
+  place-items: center;
+}
+
+.af-cs-staticon__icon {
+  font-size: 72px;
+  color: rgba(133, 199, 255, 0.9);
+}
+
+.af-cs-staticon__value {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
+.af-cs-save-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.af-cs-save-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
 .af-cs-mech-row {
   display: flex;
   justify-content: space-between;
