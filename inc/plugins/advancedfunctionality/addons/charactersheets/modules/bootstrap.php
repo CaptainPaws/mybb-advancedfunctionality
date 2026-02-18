@@ -3249,38 +3249,35 @@ function af_charactersheets_get_skills_catalog(bool $activeOnly = true): array
 {
     global $db;
 
-    if (is_object($db) && $db->table_exists('af_kb_entries')) {
-        $where = "type='skill'";
-        if ($activeOnly) {
-            $where .= ' AND active=1';
+    $resolved_rows = af_charactersheets_kb_get_resolved_by_type('skill');
+    if (!$resolved_rows) {
+        $resolved_rows = af_charactersheets_kb_get_resolved_by_type('skills');
+    }
+
+    $rows = [];
+    foreach ($resolved_rows as $resolved) {
+        $entry = (array)($resolved['entry'] ?? []);
+        $data = (array)($resolved['data'] ?? []);
+        $skill = is_array($data['skill'] ?? null) ? $data['skill'] : [];
+        $key = (string)($resolved['key'] ?? $entry['key'] ?? '');
+        if ($key === '') {
+            continue;
         }
-        $rows = [];
-        $q = $db->simple_select('af_kb_entries', '*', $where, ['order_by' => 'sortorder, title_ru, title_en', 'order_dir' => 'ASC']);
-        while ($row = $db->fetch_array($q)) {
-            if (!is_array($row)) {
-                continue;
-            }
-            $rules = function_exists('af_kb_decode_json') ? af_kb_decode_json((string)($row['data_json'] ?? '{}')) : json_decode((string)($row['data_json'] ?? '{}'), true);
-            if (!is_array($rules)) {
-                $rules = [];
-            }
-            $skill = is_array($rules['skill'] ?? null) ? $rules['skill'] : [];
-            $rows[] = [
-                'slug' => (string)($row['key'] ?? ''),
-                'title_ru' => (string)($row['title_ru'] ?? ''),
-                'title_en' => (string)($row['title_en'] ?? ''),
-                'attribute' => (string)($skill['attribute'] ?? $rules['attribute'] ?? 'int'),
-                'description_ru' => (string)($row['short_ru'] ?? ''),
-                'description_en' => (string)($row['short_en'] ?? ''),
-                'active' => (int)($row['active'] ?? 1),
-                'sort_order' => (int)($row['sortorder'] ?? 0),
-                'kb_type' => 'skill',
-                'kb_key' => (string)($row['key'] ?? ''),
-            ];
-        }
-        if (!empty($rows)) {
-            return $rows;
-        }
+        $rows[] = [
+            'slug' => $key,
+            'title_ru' => (string)($entry['title_ru'] ?? ''),
+            'title_en' => (string)($entry['title_en'] ?? ''),
+            'attribute' => (string)($skill['key_stat'] ?? $skill['attribute'] ?? $data['attribute'] ?? 'int'),
+            'description_ru' => (string)($entry['short_ru'] ?? ''),
+            'description_en' => (string)($entry['short_en'] ?? ''),
+            'active' => (int)($entry['active'] ?? 1),
+            'sort_order' => (int)($entry['sortorder'] ?? 0),
+            'kb_type' => (string)($resolved['type_key'] ?? $entry['type'] ?? 'skill'),
+            'kb_key' => $key,
+        ];
+    }
+    if (!empty($rows)) {
+        return $rows;
     }
 
     if (!$db->table_exists(AF_CS_SKILLS_CATALOG_TABLE)) {
