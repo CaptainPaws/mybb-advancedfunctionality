@@ -11,7 +11,7 @@ function af_cs_get_attribute_catalog(): array
         return [
             'str' => 'Сила',
             'dex' => 'Ловкость',
-            'con' => 'Конституция',
+            'con' => 'Телосложение',
             'int' => 'Интеллект',
             'wis' => 'Мудрость',
             'cha' => 'Харизма',

@@ -2606,15 +2606,15 @@ function af_charactersheets_skill_rank_cost_for_target(int $target_rank): int
 
 function af_charactersheets_resolve_skill_attribute_key(array $skill_data, array $entry_data = []): string
 {
-    $default = 'int';
     $attribute_key = trim((string)($skill_data['key_stat'] ?? ''));
     if ($attribute_key === '') {
         $attribute_key = trim((string)($skill_data['attribute'] ?? $entry_data['attribute'] ?? ''));
     }
+    $attribute_key = strtolower($attribute_key);
 
     $allowed = af_charactersheets_default_attributes();
     if ($attribute_key === '' || !array_key_exists($attribute_key, $allowed)) {
-        return $default;
+        return '';
     }
 
     return $attribute_key;
