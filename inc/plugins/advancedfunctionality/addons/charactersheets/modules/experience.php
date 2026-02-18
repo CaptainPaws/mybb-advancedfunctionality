@@ -118,9 +118,7 @@ function af_charactersheets_grant_exp(int $sheet_id, float $amount, string $even
 
     $delta = $level_data['level'] - $prev_level;
     if ($delta > 0) {
-        $attr_points_per_level = (int)($mybb->settings['af_charactersheets_attr_points_per_level'] ?? 0);
         $skill_points_per_level = (int)($mybb->settings['af_charactersheets_skill_points_per_level'] ?? 0);
-        $progress['attr_points_free'] = (int)($progress['attr_points_free'] ?? 0) + $delta * $attr_points_per_level;
         $progress['skill_points_free'] = (int)($progress['skill_points_free'] ?? 0) + $delta * $skill_points_per_level;
     }
 

@@ -114,6 +114,32 @@ function af_cs_can_manage_sheet(int $viewerUid, int $sheetUid): bool
     return $is_admin || $is_modcp || $is_supermod;
 }
 
+function af_charactersheets_user_can_staff_reset(array $user, int $fid = 0): bool
+{
+    global $mybb;
+
+    $uid = (int)($user['uid'] ?? 0);
+    if ($uid <= 0) {
+        return false;
+    }
+
+    $configured = af_charactersheets_csv_to_ids((string)($mybb->settings['af_charactersheets_staff_groups'] ?? ''));
+    if (!empty($configured)) {
+        $primary = (int)($user['usergroup'] ?? 0);
+        if ($primary > 0 && in_array($primary, $configured, true)) {
+            return true;
+        }
+        $additional = array_filter(array_map('intval', explode(',', (string)($user['additionalgroups'] ?? ''))));
+        foreach ($additional as $gid) {
+            if (in_array($gid, $configured, true)) {
+                return true;
+            }
+        }
+    }
+
+    return af_charactersheets_user_is_admin_or_moderator($user, $fid);
+}
+
 function af_charactersheets_user_can_accept(array $user, int $fid): bool
 {
     global $mybb;
