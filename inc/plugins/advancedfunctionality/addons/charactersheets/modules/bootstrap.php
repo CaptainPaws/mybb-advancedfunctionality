@@ -2155,6 +2155,7 @@ function cs_kb_rules_normalize($dataJson): array
             'ep' => (int)($fixed['ep'] ?? 0),
             'damage' => (int)($fixed['damage'] ?? 0),
             'skill_points' => (int)($fixed['skill_points'] ?? 0),
+            'knowledge_slots' => (int)($fixed['knowledge_slots'] ?? 0),
             'language_slots' => (int)($fixed['language_slots'] ?? 0),
         ],
         'fixed_bonuses' => [
@@ -2167,6 +2168,7 @@ function cs_kb_rules_normalize($dataJson): array
             'ep' => (int)($fixedBonuses['ep'] ?? 0),
             'damage' => (int)($fixedBonuses['damage'] ?? 0),
             'skill_points' => (int)($fixedBonuses['skill_points'] ?? 0),
+            'knowledge_slots' => (int)($fixedBonuses['knowledge_slots'] ?? 0),
             'language_slots' => (int)($fixedBonuses['language_slots'] ?? 0),
             'attribute_points' => (int)($fixedBonuses['attribute_points'] ?? 0),
         ],
@@ -2822,6 +2824,7 @@ function af_cs_aggregate_rules(array $sources): array
         'ep' => 0,
         'damage' => 0,
         'skill_points' => 0,
+        'knowledge_slots' => 0,
         'language_slots' => 0,
     ];
     $fixed_bonuses = $fixed + ['attribute_points' => 0, 'feat_points' => 0, 'perk_points' => 0];
@@ -2839,6 +2842,7 @@ function af_cs_aggregate_rules(array $sources): array
             'skill_points' => 0,
             'feat_points' => 0,
             'perk_points' => 0,
+            'knowledge_slots' => 0,
             'language_slots' => 0,
         ],
         'choices' => [],
@@ -2851,7 +2855,7 @@ function af_cs_aggregate_rules(array $sources): array
             $fixed['stats'][$stat] += (int)($rules['fixed']['stats'][$stat] ?? 0);
             $fixed_bonuses['stats'][$stat] += (int)($rules['fixed_bonuses']['stats'][$stat] ?? 0);
         }
-        foreach (['hp', 'armor', 'initiative', 'speed', 'carry', 'ep', 'damage', 'skill_points', 'language_slots'] as $k) {
+        foreach (['hp', 'armor', 'initiative', 'speed', 'carry', 'ep', 'damage', 'skill_points', 'knowledge_slots', 'language_slots'] as $k) {
             $fixed[$k] += (int)($rules['fixed'][$k] ?? 0);
             $fixed_bonuses[$k] += (int)($rules['fixed_bonuses'][$k] ?? 0);
         }
@@ -2867,6 +2871,7 @@ function af_cs_aggregate_rules(array $sources): array
         $totals['points_pools']['skill_points'] += (int)($rules['fixed']['skill_points'] ?? 0) + (int)($rules['fixed_bonuses']['skill_points'] ?? 0);
         $totals['points_pools']['feat_points'] += (int)($rules['fixed_bonuses']['feat_points'] ?? 0);
         $totals['points_pools']['perk_points'] += (int)($rules['fixed_bonuses']['perk_points'] ?? 0);
+        $totals['points_pools']['knowledge_slots'] += (int)($rules['fixed']['knowledge_slots'] ?? 0) + (int)($rules['fixed_bonuses']['knowledge_slots'] ?? 0);
         $totals['points_pools']['language_slots'] += (int)($rules['fixed']['language_slots'] ?? 0) + (int)($rules['fixed_bonuses']['language_slots'] ?? 0);
 
         foreach ((array)($rules['choices'] ?? []) as $choice) {

@@ -196,6 +196,39 @@ function af_charactersheets_collect_build_bonus_items(array $build): array
     return $items;
 }
 
+function af_charactersheets_sum_resource_slots_from_grants(array $grants, string $resource_key): int
+{
+    $resource_key = trim($resource_key);
+    if ($resource_key === '') {
+        return 0;
+    }
+
+    $slots = 0;
+    foreach ($grants as $grant) {
+        if (!is_array($grant)) {
+            continue;
+        }
+
+        if ((string)($grant['op'] ?? '') !== 'resource') {
+            continue;
+        }
+
+        if ((string)($grant['key'] ?? '') !== $resource_key) {
+            continue;
+        }
+
+        $value = (int)($grant['value'] ?? 0);
+        if ((string)($grant['mode'] ?? 'add') === 'set') {
+            $slots = $value;
+            continue;
+        }
+
+        $slots += $value;
+    }
+
+    return $slots;
+}
+
 function af_charactersheets_extract_hp_from_entry(array $entry): float
 {
     if (empty($entry)) {
@@ -593,7 +626,8 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $bonus_attr_points += (int)($rules_aggregate['points_pools']['attribute_points'] ?? 0);
     $bonus_skill_points += (int)($rules_aggregate['fixed']['skill_points'] ?? 0)
         + (int)($rules_aggregate['fixed_bonuses']['skill_points'] ?? 0);
-    $bonus_language_choices += (int)($rules_aggregate['points_pools']['language_slots'] ?? 0);
+    $bonus_knowledge_choices += af_charactersheets_sum_resource_slots_from_grants((array)($rules_aggregate['grants'] ?? []), 'knowledge_slots');
+    $bonus_language_choices += af_charactersheets_sum_resource_slots_from_grants((array)($rules_aggregate['grants'] ?? []), 'language_slots');
 
     $exp = (float)($progress['exp'] ?? 0);
     $level_data = af_charactersheets_compute_level($exp);
@@ -853,18 +887,18 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $bonus_languages = array_values(array_unique($bonus_languages));
     $bonus_knowledges = array_values(array_unique($bonus_knowledges));
 
-    $knowledge_base_choices = 0;
+    $knowledge_base_choices = (int)($mybb->settings['af_charactersheets_knowledge_base_choices'] ?? 0);
     $knowledge_per_int = (float)($mybb->settings['af_charactersheets_knowledge_per_int'] ?? 0);
     $int_value = (float)($final['int'] ?? 0);
     $knowledge_from_int = (int)floor($int_value * $knowledge_per_int);
-    $knowledge_total_choices = $knowledge_base_choices + $knowledge_from_int + $bonus_knowledge_choices;
-    if ($knowledge_total_choices < 1) {
-        $knowledge_total_choices = 1;
-    }
-    $language_total_choices = (int)($resolved_rules['fixed']['language_slots'] ?? 0) + (int)($resolved_rules['fixed_bonuses']['language_slots'] ?? 0) + $bonus_language_choices;
-    if ($language_total_choices < 1) {
-        $language_total_choices = 1;
-    }
+    $knowledge_total_choices = $knowledge_base_choices
+        + (int)($resolved_rules['fixed']['knowledge_slots'] ?? 0)
+        + (int)($resolved_rules['fixed_bonuses']['knowledge_slots'] ?? 0)
+        + $knowledge_from_int
+        + $bonus_knowledge_choices;
+    $language_total_choices = (int)($resolved_rules['fixed']['language_slots'] ?? 0)
+        + (int)($resolved_rules['fixed_bonuses']['language_slots'] ?? 0)
+        + $bonus_language_choices;
 
     $knowledge_remaining = $knowledge_total_choices - count($knowledge_selected);
     $language_remaining = $language_total_choices - count($language_selected);
