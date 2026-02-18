@@ -3,29 +3,6 @@ if (!defined('IN_MYBB')) {
     die('No direct access');
 }
 
-/**
- * Contract for bonuses in KB rules data JSON (af_kb.rules.v1):
- * {
- *   "bonuses": [
- *     {"type":"attribute_bonus","target":"str","value":1},
- *     {"type":"attribute_bonus","requires_choice":true,"value":2},
- *     {"type":"attribute_points","value":2},
- *     {"type":"skill_points","value":1},
- *     {"type":"skill_bonus","target":"analysis","value":1},
- *     {"type":"skill_bonus","requires_choice":true,"value":1},
- *     {"type":"knowledge_choice","value":1},
- *     {"type":"language_choice","value":1},
- *     {"type":"knowledge","target":"lore_key"},
- *     {"type":"language","target":"common"},
- *     {"type":"hp_bonus","value":5},
- *     {"type":"humanity_bonus","value":-1},
- *     {"type":"armor_bonus","value":1},
- *     {"type":"shield_bonus","value":1},
- *     {"type":"weapon_bonus","value":2},
- *     {"type":"ac_bonus","value":1}
- *   ]
- * }
- */
 function af_charactersheets_normalize_bonus_items(string $source, string $key): array
 {
     $resolved = af_charactersheets_kb_resolve_entry($source, $key);
