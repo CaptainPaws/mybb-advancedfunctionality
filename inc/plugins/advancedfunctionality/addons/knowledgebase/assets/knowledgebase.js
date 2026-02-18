@@ -805,7 +805,7 @@
                 base.hp_base = 10;
                 base.fixed_bonuses = {
                     stats: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
-                    hp: 0, ep: 0, skill_points: 0, feat_points: 0, perk_points: 0, language_slots: 0
+                    hp: 0, ep: 0, skill_points: 0, feat_points: 0, perk_points: 0, language_slots: 0, knowledge_slots: 0
                 };
                 base.choices = [];
                 base.grants = [];
@@ -1009,12 +1009,12 @@
             html.push(detailsBlock(
                 'Grants',
                 '<div class="af-kb-inline">' +
-                    '<button type="button" class="af-kb-add" data-add-grant="resource_gain">Выдать 2 skill_points</button>' +
-                    '<button type="button" class="af-kb-add" data-add-grant="skill_rank">Фиксированный навык trained</button>' +
-                    '<button type="button" class="af-kb-add" data-add-grant="item_grant">Стартовый предмет x1</button>' +
-                    '<button type="button" class="af-kb-add" data-add-grant="resistance_grant">Сопротивление огню 5</button>' +
-                    '<button type="button" class="af-kb-add" data-add-grant="sense_grant">Darkvision</button>' +
-                    '<button type="button" class="af-kb-add" data-add-grant="speed_grant">Скорость плавания 20</button>' +
+                    '<button type="button" class="af-kb-add" data-add-grant="resource">Выдать 2 skill_points</button>' +
+                    '<button type="button" class="af-kb-add" data-add-grant="skill">Фиксированный навык (rank)</button>' +
+                    '<button type="button" class="af-kb-add" data-add-grant="item">Стартовый предмет x1</button>' +
+                    '<button type="button" class="af-kb-add" data-add-grant="resistance">Сопротивление огню 5</button>' +
+                    '<button type="button" class="af-kb-add" data-add-grant="sense">Darkvision</button>' +
+                    '<button type="button" class="af-kb-add" data-add-grant="speed">Скорость плавания 20</button>' +
                 '</div>' +
                 '<div id="kb-grants-list"></div>',
                 true
@@ -1181,12 +1181,12 @@
             equipment_pick_choice: { type: 'equipment_pick_choice', id: 'item_pick', pick: 1, kb_type: 'item', options: [], exclude: [], quantity: 1, grant: { type: 'item_grant', qty: 1 } },
             spell_pick_choice: { type: 'spell_pick_choice', id: 'spell_pick', pick: 1, kb_type: 'spell', tradition: '', school: '', level_min: 0, level_max: 1, grant: { type: 'spell_known', amount: 1 } },
 
-            resource_gain: { type: 'resource_gain', resource: 'skill_points', value: 2, stack_mode: 'add' },
-            skill_rank: { type: 'skill_rank', kb_type: 'skill', kb_key: 'athletics', rank: 'trained', mode: 'max' },
-            item_grant: { type: 'item_grant', kb_key: 'starter_kit', qty: 1, bind: false, equipped: false, slot: '' },
-            resistance_grant: { type: 'resistance_grant', damage_type: 'fire', value: 5 },
-            sense_grant: { type: 'sense_grant', sense_type: 'darkvision', range: 60 },
-            speed_grant: { type: 'speed_grant', speed_type: 'swim', value: 20, condition: '' },
+            resource: { op: 'resource', key: 'skill_points', value: 2, mode: 'add' },
+            skill: { op: 'skill', key: 'athletics', rank: 1 },
+            item: { op: 'item', key: 'starter_kit', amount: 1 },
+            resistance: { op: 'resistance', key: 'fire', value: 5 },
+            sense: { op: 'sense', key: 'darkvision', value: 60 },
+            speed: { op: 'speed', kind: 'swim', value: 20, mode: 'set' },
 
             trait: { key: 'humanoid', title_ru: 'Гуманоид', title_en: 'Humanoid', desc_ru: '', desc_en: '', tags: ['species'], meta: {} }
         };
@@ -1201,6 +1201,7 @@
         }
         if (uiProfile === 'heritage') {
             state.choices = (state.choices || []).map(normalizeChoice);
+            state.grants = (state.grants || []).map(normalizeGrant);
         }
 
         var choiceDefs = [
@@ -1273,56 +1274,79 @@
         ];
 
         var grantDefs = [
-            { key: 'resource_gain', label: 'Resource gain', fields: [
-                { name: 'resource', label: 'resource', type: 'select', options: ['hp', 'ep', 'skill_points', 'feat_points', 'perk_points', 'language_slots'] },
+            { key: 'resource', label: 'Resource', fields: [
+                { name: 'key', label: 'key', type: 'select', options: ['hp', 'ep', 'skill_points', 'feat_points', 'perk_points', 'language_slots', 'knowledge_slots'] },
                 { name: 'value', label: 'value', type: 'number', required: true },
-                { name: 'stack_mode', label: 'stack_mode', type: 'select', options: ['add', 'set'] }
+                { name: 'mode', label: 'mode', type: 'select', options: ['add', 'set'] }
             ] },
-            { key: 'skill_rank', label: 'Skill rank', fields: [
-                { name: 'kb_type', label: 'kb_type', type: 'fixed', value: 'skill' },
-                { name: 'kb_key', label: 'kb_key', type: 'kb_key', kbTypeField: 'kb_type', required: true },
-                { name: 'rank', label: 'rank', type: 'select', options: rankOptions },
-                { name: 'mode', label: 'mode', type: 'select', options: ['set', 'max', 'add'] }
+            { key: 'skill', label: 'Skill rank', fields: [
+                { name: 'key', label: 'skill key', type: 'kb_key', kbTypeValue: 'skill', required: true },
+                { name: 'rank', label: 'rank (0..4)', type: 'select', options: ['0', '1', '2', '3', '4'], required: true },
+                { name: 'rank_max', label: 'rank_max', type: 'number', hint: 'Опционально: ограничение максимума ранга' }
             ] },
-            { key: 'kb_grant', label: 'KB grant', fields: [
-                { name: 'kb_type', label: 'kb_type', type: 'select', options: kbTypes },
-                { name: 'kb_key', label: 'kb_key', type: 'kb_key', kbTypeField: 'kb_type', required: true },
-                { name: 'amount', label: 'amount', type: 'number' },
-                { name: 'flags', label: 'flags', type: 'json' }
+            { key: 'item', label: 'Item', fields: [
+                { name: 'key', label: 'item key', type: 'kb_key', kbTypeValue: 'item', required: true },
+                { name: 'amount', label: 'amount', type: 'number' }
             ] },
-            { key: 'item_grant', label: 'Item grant', fields: [
-                { name: 'kb_type', label: 'kb_type', type: 'fixed', value: 'item' },
-                { name: 'kb_key', label: 'kb_key', type: 'kb_key', kbTypeField: 'kb_type', required: true },
-                { name: 'qty', label: 'qty', type: 'number' },
-                { name: 'bind', label: 'bind', type: 'checkbox' },
-                { name: 'equipped', label: 'equipped', type: 'checkbox' },
-                { name: 'slot', label: 'slot', type: 'text' }
-            ] },
-            { key: 'condition_grant', label: 'Condition grant', fields: [
-                { name: 'kb_type', label: 'kb_type', type: 'fixed', value: 'condition' },
-                { name: 'kb_key', label: 'kb_key', type: 'kb_key', kbTypeField: 'kb_type', required: true },
-                { name: 'duration', label: 'duration', type: 'text' },
-                { name: 'stacks', label: 'stacks', type: 'number' },
-                { name: 'intensity', label: 'intensity', type: 'number' }
-            ] },
-            { key: 'resistance_grant', label: 'Resistance grant', fields: [
-                { name: 'damage_type', label: 'damage_type', type: 'text', required: true },
+            { key: 'resistance', label: 'Resistance', fields: [
+                { name: 'key', label: 'key', type: 'text', required: true },
                 { name: 'value', label: 'value', type: 'number', required: true }
             ] },
-            { key: 'weakness_grant', label: 'Weakness grant', fields: [
-                { name: 'damage_type', label: 'damage_type', type: 'text', required: true },
-                { name: 'value', label: 'value', type: 'number', required: true }
-            ] },
-            { key: 'speed_grant', label: 'Speed grant', fields: [
-                { name: 'speed_type', label: 'speed_type', type: 'select', options: ['walk', 'fly', 'swim', 'climb', 'burrow'] },
+            { key: 'speed', label: 'Speed', fields: [
+                { name: 'kind', label: 'kind', type: 'select', options: ['walk', 'fly', 'swim', 'climb', 'burrow'] },
                 { name: 'value', label: 'value', type: 'number', required: true },
-                { name: 'condition', label: 'condition', type: 'text' }
+                { name: 'mode', label: 'mode', type: 'select', options: ['set', 'add'] }
             ] },
-            { key: 'sense_grant', label: 'Sense grant', fields: [
-                { name: 'sense_type', label: 'sense_type', type: 'text', required: true },
-                { name: 'range', label: 'range', type: 'number' }
+            { key: 'sense', label: 'Sense', fields: [
+                { name: 'key', label: 'key', type: 'text', required: true },
+                { name: 'value', label: 'value', type: 'number' }
             ] }
         ];
+
+        function normalizeGrant(grant) {
+            var out = grant && typeof grant === 'object' ? JSON.parse(JSON.stringify(grant)) : {};
+            if (!out.op && out.type === 'resource_gain') out.op = 'resource';
+            if (!out.op && out.type === 'skill_rank') out.op = 'skill';
+            if (!out.op && out.type === 'item_grant') out.op = 'item';
+            if (!out.op && out.type === 'resistance_grant') out.op = 'resistance';
+            if (!out.op && out.type === 'sense_grant') out.op = 'sense';
+            if (!out.op && out.type === 'speed_grant') out.op = 'speed';
+
+            if (out.op === 'resource') {
+                if (!out.key) out.key = out.resource || 'skill_points';
+                if (out.mode == null) out.mode = out.stack_mode || 'add';
+            } else if (out.op === 'skill') {
+                if (!out.key) out.key = out.kb_key || out.skill_key || '';
+                if (out.rank == null) out.rank = out.skill_rank != null ? out.skill_rank : out.value;
+                if (out.rank == null) out.rank = 1;
+            } else if (out.op === 'item') {
+                if (!out.key) out.key = out.kb_key || '';
+                if (out.amount == null) out.amount = out.qty != null ? out.qty : 1;
+            } else if (out.op === 'resistance') {
+                if (!out.key) out.key = out.damage_type || '';
+            } else if (out.op === 'sense') {
+                if (!out.key) out.key = out.sense_type || '';
+                if (out.value == null) out.value = out.range != null ? out.range : 0;
+            } else if (out.op === 'speed') {
+                if (!out.kind) out.kind = out.speed_type || 'walk';
+                if (out.mode == null) out.mode = 'set';
+            }
+
+            delete out.type;
+            delete out.resource;
+            delete out.stack_mode;
+            delete out.kb_type;
+            delete out.kb_key;
+            delete out.skill_key;
+            delete out.skill_rank;
+            delete out.qty;
+            delete out.damage_type;
+            delete out.sense_type;
+            delete out.range;
+            delete out.speed_type;
+
+            return out;
+        }
 
         var traitFields = [
             { name: 'key', label: 'key', type: 'text', required: true, hint: 'Ключ особенности (slug)' },
@@ -1615,7 +1639,7 @@
             });
             fields.fixed.appendChild(rowStats);
 
-            var resources = ['hp', 'ep', 'skill_points', 'feat_points', 'perk_points', 'language_slots'];
+            var resources = ['hp', 'ep', 'skill_points', 'feat_points', 'perk_points', 'language_slots', 'knowledge_slots'];
             var rowRes = document.createElement('div');
             rowRes.className = 'af-kb-row';
             resources.forEach(function (key) {
@@ -1655,10 +1679,11 @@
                 var card = document.createElement('div');
                 card.className = 'af-kb-rule-card';
 
-                var def = getDef(defs, item.type);
+                var itemType = typeName === 'grant' ? (item.op || item.type) : item.type;
+                var def = getDef(defs, itemType);
                 if (!def) {
                     card.innerHTML =
-                        '<div class="af-kb-help"><strong>Unknown type:</strong> ' + esc(item.type || 'unknown') + '</div>' +
+                        '<div class="af-kb-help"><strong>Unknown type:</strong> ' + esc(itemType || 'unknown') + '</div>' +
                         '<label>Raw</label>' +
                         '<textarea data-raw-index="' + index + '">' + esc(JSON.stringify(item, null, 2)) + '</textarea>' +
                         '<button type="button" class="af-kb-remove" data-remove-index="' + index + '">Удалить</button>';
@@ -2179,7 +2204,7 @@
                 }
                 var addGrantType = target.getAttribute('data-add-grant');
                 if (addGrantType) {
-                    state.grants.push(deepClone(templates[addGrantType] || { type: addGrantType }));
+                    state.grants.push(deepClone(templates[addGrantType] || { op: addGrantType }));
                     renderGrants();
                     syncRawDebounced();
                     return;
@@ -2224,6 +2249,7 @@
                     if (!Array.isArray(state.grants)) state.grants = [];
                     if (!Array.isArray(state.traits)) state.traits = [];
                     state.choices = state.choices.map(normalizeChoice);
+                    state.grants = state.grants.map(normalizeGrant);
 
                     if (isRaceHead) {
                         fields.size.value = state.size || 'medium';

@@ -760,6 +760,7 @@ function af_kb_default_ui_schema_for_type(string $typeKey): array
                 {"id":"hp_base","source":"rules","path":"hp_base"},
                 {"id":"languages","source":"rules","path":"languages"},
                 {"id":"language_slots","source":"rules","path":"fixed_bonuses.language_slots"},
+                {"id":"knowledge_slots","source":"rules","path":"fixed_bonuses.knowledge_slots"},
                 {"id":"visibility","source":"rules","path":"visibility"}
             ]},
             {"id":"race_bonuses","title":{"ru":"Бонусы","en":"Bonuses"},"layout":"cards","blocks":[
@@ -953,7 +954,7 @@ function af_kb_get_type_profile_definition(string $typeKey): array
 
     $profile = (array)($profiles[$typeKey] ?? ['ui_profile' => $typeKey, 'rules_enabled' => true, 'defaults' => $base]);
     $profile['allowed_choices'] = ['kb_pick', 'stat_bonus', 'language_pick', 'proficiency_pick', 'equipment_pick', 'spell_pick'];
-    $profile['allowed_grants'] = ['resource', 'kb_ref', 'sense', 'resistance', 'movement', 'proficiency'];
+    $profile['allowed_grants'] = ['resource', 'skill', 'item', 'sense', 'resistance', 'speed'];
     $profile['validators'] = ['schema' => AF_KB_RULES_SCHEMA];
 
     return $profile;
@@ -1875,9 +1876,8 @@ function af_kb_normalize_grants_json($rawGrants, array &$errors): array
         return [];
     }
 
-    $allowedOps = [
-        'skill_points', 'skill', 'language', 'knowledge', 'item', 'resistance', 'sense', 'speed',
-    ];
+    $allowedOps = ['resource', 'skill', 'language', 'knowledge', 'item', 'resistance', 'sense', 'speed'];
+    $allowedResourceKeys = ['hp', 'ep', 'skill_points', 'feat_points', 'perk_points', 'language_slots', 'knowledge_slots'];
     $normalized = [];
     foreach ($grants as $index => $grant) {
         if (!is_array($grant)) {
@@ -1887,8 +1887,8 @@ function af_kb_normalize_grants_json($rawGrants, array &$errors): array
         $op = trim((string)($grant['op'] ?? ''));
         $legacyType = trim((string)($grant['type'] ?? ''));
         if ($op === '' && $legacyType !== '') {
-            if ($legacyType === 'resource_gain' && (string)($grant['resource'] ?? '') === 'skill_points') {
-                $op = 'skill_points';
+            if ($legacyType === 'resource_gain') {
+                $op = 'resource';
             } elseif ($legacyType === 'skill_rank') {
                 $op = 'skill';
             } elseif ($legacyType === 'item_grant') {
@@ -1912,10 +1912,21 @@ function af_kb_normalize_grants_json($rawGrants, array &$errors): array
             continue;
         }
 
-        if ($op === 'skill_points') {
+        if ($op === 'resource') {
+            $resourceKey = trim((string)($grant['key'] ?? $grant['resource'] ?? ''));
+            if (!in_array($resourceKey, $allowedResourceKeys, true)) {
+                $errors[] = 'Grant #' . ($index + 1) . ' resource requires valid key.';
+                continue;
+            }
+            $mode = trim((string)($grant['mode'] ?? $grant['stack_mode'] ?? 'add'));
+            if (!in_array($mode, ['add', 'set'], true)) {
+                $mode = 'add';
+            }
             $normalized[] = [
-                'op' => 'skill_points',
-                'amount' => (int)($grant['amount'] ?? $grant['value'] ?? 0),
+                'op' => 'resource',
+                'key' => $resourceKey,
+                'value' => (int)($grant['value'] ?? $grant['amount'] ?? 0),
+                'mode' => $mode,
             ];
             continue;
         }
@@ -1926,11 +1937,17 @@ function af_kb_normalize_grants_json($rawGrants, array &$errors): array
                 $errors[] = 'Grant #' . ($index + 1) . ' skill requires key.';
                 continue;
             }
-            $rankRaw = $grant['rank'] ?? $grant['skill_rank'] ?? $grant['value'] ?? 1;
-            $rank = is_numeric($rankRaw) ? (int)$rankRaw : 1;
-            $normalized[] = ['op' => 'skill', 'key' => $skillKey, 'rank' => max(1, $rank)];
+            $rankRaw = $grant['rank'] ?? $grant['skill_rank'] ?? $grant['value'] ?? 0;
+            $rank = is_numeric($rankRaw) ? (int)$rankRaw : 0;
+            $rank = max(0, min(4, $rank));
+            $normalizedGrant = ['op' => 'skill', 'key' => $skillKey, 'rank' => $rank];
+            if (isset($grant['rank_max']) && is_numeric($grant['rank_max'])) {
+                $normalizedGrant['rank_max'] = max(0, (int)$grant['rank_max']);
+            }
+            $normalized[] = $normalizedGrant;
             continue;
         }
+
 
         if ($op === 'language') {
             $languageKey = trim((string)($grant['key'] ?? $grant['language_key'] ?? $grant['kb_key'] ?? ''));
@@ -1951,7 +1968,6 @@ function af_kb_normalize_grants_json($rawGrants, array &$errors): array
             $normalized[] = ['op' => 'knowledge', 'key' => $knowledgeKey];
             continue;
         }
-
         if ($op === 'item') {
             $itemKey = trim((string)($grant['key'] ?? $grant['kb_key'] ?? ''));
             if ($itemKey === '') {
