@@ -679,14 +679,35 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     }
 
     $skills_view = [];
+    $skills_all = (array)($kb_context['skills_all'] ?? []);
+    $skills_catalog_fetched = count($skills_all);
+    $skills_catalog_keys = [];
+    $skills_filter_reason_counts = [
+        'missing_key' => 0,
+        'not_skill' => 0,
+    ];
     $manual_spent = 0;
-    foreach ((array)($kb_context['skills_all'] ?? []) as $skill_resolved) {
+    foreach ($skills_all as $skill_resolved) {
         $skill_key = (string)($skill_resolved['key'] ?? '');
-        $data = (array)($skill_resolved['data'] ?? []);
-        if ((string)($data['type_profile'] ?? '') !== 'skill') {
+        if ($skill_key === '') {
+            $skills_filter_reason_counts['missing_key']++;
             continue;
         }
+        if (count($skills_catalog_keys) < 5) {
+            $skills_catalog_keys[] = $skill_key;
+        }
+
+        $data = (array)($skill_resolved['data'] ?? []);
         $skill_data = (array)($data['skill'] ?? []);
+        $resolved_type = (string)($skill_resolved['type_key'] ?? $skill_resolved['entry']['type'] ?? '');
+        $is_skill = ($resolved_type === 'skill')
+            || ((string)($data['type_profile'] ?? '') === 'skill')
+            || !empty($skill_data);
+        if (!$is_skill) {
+            $skills_filter_reason_counts['not_skill']++;
+            continue;
+        }
+
         $attr_key = (string)($skill_data['key_stat'] ?? '');
         $base_mod = (int)floor((float)($final[$attr_key] ?? 0));
         $row = (array)($skills_map[$skill_key] ?? []);
@@ -720,6 +741,22 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'bonus' => $bonus_val,
             'total' => $total,
         ];
+    }
+
+    $skills_catalog_after_filter = count($skills_view);
+    if ($skills_catalog_fetched <= 0 || $skills_catalog_after_filter <= 0) {
+        af_charactersheets_log('skills_catalog: fetched=' . $skills_catalog_fetched . ' type=skill', [
+            'first_keys' => $skills_catalog_keys,
+        ]);
+        if ($skills_catalog_after_filter <= 0) {
+            $reason = [];
+            foreach ($skills_filter_reason_counts as $reason_key => $reason_count) {
+                if ($reason_count > 0) {
+                    $reason[] = $reason_key . ':' . $reason_count;
+                }
+            }
+            af_charactersheets_log('skills_catalog: after_filter=' . $skills_catalog_after_filter . ' reason=' . ($reason ? implode(',', $reason) : 'none'));
+        }
     }
 
     $skill_pool_spent = $manual_spent;
