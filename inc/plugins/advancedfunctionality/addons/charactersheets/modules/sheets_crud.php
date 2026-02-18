@@ -203,11 +203,9 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
 
     $build = af_charactersheets_default_build();
 
-    $starting_attr_pool = (int)($mybb->settings['af_charactersheets_attr_pool_max'] ?? 0);
     $progress = [
         'level' => 1,
         'exp' => 0,
-        'attr_points_free' => $starting_attr_pool,
         'skill_points_free' => 0,
         'bonus_attr_points' => 0,
         'bonus_skill_points' => 0,

@@ -87,9 +87,9 @@ function af_charactersheets_uninstall_impl(): void
         'af_charactersheets_level_cap',
         'af_charactersheets_level_req_base',
         'af_charactersheets_level_req_step',
-        'af_charactersheets_attr_points_per_level',
         'af_charactersheets_skill_points_per_level',
         'af_charactersheets_exp_manual_groups',
+        'af_charactersheets_staff_groups',
         'af_charactersheets_exp_forum_categories',
         'af_charactersheets_exp_forum_forums',
         'af_charactersheets_exp_forum_exclude',
@@ -98,7 +98,6 @@ function af_charactersheets_uninstall_impl(): void
         'af_charactersheets_exp_allow_overdraw',
         'af_charactersheets_knowledge_base_choices',
         'af_charactersheets_knowledge_per_int',
-        'af_charactersheets_humanity_base',
         'af_charactersheets_aug_slots_json'
     )");
     $db->delete_query('settinggroups', "name='af_charactersheets'");
@@ -318,15 +317,6 @@ function af_charactersheets_ensure_settings(): void
     );
     af_charactersheets_ensure_setting(
         $gid,
-        'af_charactersheets_attr_points_per_level',
-        $lang->af_charactersheets_attr_points_per_level ?? 'Attribute points per level',
-        $lang->af_charactersheets_attr_points_per_level_desc ?? 'Points granted on each level up.',
-        'text',
-        '0',
-        43
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
         'af_charactersheets_skill_points_per_level',
         $lang->af_charactersheets_skill_points_per_level ?? 'Skill points per level',
         $lang->af_charactersheets_skill_points_per_level_desc ?? 'Skill points granted on each level up.',
@@ -372,21 +362,21 @@ function af_charactersheets_ensure_settings(): void
     );
     af_charactersheets_ensure_setting(
         $gid,
-        'af_charactersheets_humanity_base',
-        $lang->af_charactersheets_humanity_base ?? 'Humanity base',
-        $lang->af_charactersheets_humanity_base_desc ?? 'Base Humanity for all characters.',
-        'text',
-        '100',
-        49
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
         'af_charactersheets_aug_slots_json',
         $lang->af_charactersheets_aug_slots_json ?? 'Augmentation slots',
         $lang->af_charactersheets_aug_slots_json_desc ?? 'JSON list of augmentation slots (slot_key, titles, icon, sortorder, max_equipped).',
         'textarea',
         '[{"slot_key":"head","title_ru":"Голова","title_en":"Head","icon":"fa-solid fa-helmet-safety","sortorder":10,"max_equipped":1},{"slot_key":"eyes","title_ru":"Глаза","title_en":"Eyes","icon":"fa-solid fa-eye","sortorder":20,"max_equipped":1},{"slot_key":"arms","title_ru":"Руки","title_en":"Arms","icon":"fa-solid fa-hand","sortorder":30,"max_equipped":1},{"slot_key":"body","title_ru":"Торс","title_en":"Body","icon":"fa-solid fa-heart","sortorder":40,"max_equipped":1},{"slot_key":"legs","title_ru":"Ноги","title_en":"Legs","icon":"fa-solid fa-person-walking","sortorder":50,"max_equipped":1},{"slot_key":"nervous","title_ru":"Нервная система","title_en":"Nervous system","icon":"fa-solid fa-brain","sortorder":60,"max_equipped":1},{"slot_key":"skin","title_ru":"Кожа","title_en":"Skin","icon":"fa-solid fa-hand-sparkles","sortorder":70,"max_equipped":1},{"slot_key":"implant","title_ru":"Имплант","title_en":"Implant","icon":"fa-solid fa-microchip","sortorder":80,"max_equipped":1}]',
         50
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
+        'af_charactersheets_staff_groups',
+        $lang->af_charactersheets_staff_groups ?? 'Staff reset groups',
+        $lang->af_charactersheets_staff_groups_desc ?? 'CSV group ids allowed to reset attributes/skills.',
+        'text',
+        '4,3,6',
+        53
     );
     af_charactersheets_ensure_setting(
         $gid,
@@ -397,6 +387,8 @@ function af_charactersheets_ensure_settings(): void
         '4,3,6',
         54
     );
+
+    $db->delete_query('settings', "name IN ('af_charactersheets_attr_points_per_level','af_charactersheets_humanity_base')");
 
     $db->delete_query('settings', "name='af_charactersheets_accept_post_template'");
 }
@@ -2993,6 +2985,7 @@ function af_charactersheets_default_build(): array
     return [
         'allocated_stats' => af_charactersheets_zero_attributes(),
         'attributes_allocated' => af_charactersheets_zero_attributes(),
+        'attributes_locked' => 0,
         'picks' => [],
         'choices' => [],
         'active_skills' => [],
@@ -3028,6 +3021,8 @@ function af_charactersheets_normalize_build(array $build): array
         $build['attributes_allocated'] = array_merge((array)$build['attributes_allocated'], (array)$build['allocated_stats']);
     }
     $build['allocated_stats'] = array_merge(af_charactersheets_zero_attributes(), (array)($build['attributes_allocated'] ?? []));
+
+    $build['attributes_locked'] = !empty($build['attributes_locked']) ? 1 : 0;
 
     if (isset($build['picks']) && is_array($build['picks'])) {
         $build['choices'] = array_merge((array)$build['choices'], (array)$build['picks']);
@@ -3119,6 +3114,58 @@ function af_charactersheets_normalize_build(array $build): array
     $build['equipment']['owned'] = array_values(array_filter((array)($build['equipment']['owned'] ?? []), 'is_array'));
 
     return $build;
+}
+
+function af_charactersheets_reset_attributes(int $sheet_id): bool
+{
+    $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
+    if (empty($sheet)) {
+        return false;
+    }
+
+    $base = af_charactersheets_json_decode((string)($sheet['base_json'] ?? ''));
+    $build = af_charactersheets_normalize_build(af_charactersheets_json_decode((string)($sheet['build_json'] ?? '')));
+    $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
+
+    $build['allocated_stats'] = af_charactersheets_zero_attributes();
+    $build['attributes_allocated'] = af_charactersheets_zero_attributes();
+    $build['attributes_locked'] = 0;
+
+    $choices = (array)($build['choices'] ?? []);
+    foreach ($choices as $choice_key => $choice_value) {
+        if (preg_match('/^(race|class|theme)_stat_bonus_choice(?:_.+)?$/', (string)$choice_key)) {
+            unset($choices[$choice_key]);
+        }
+    }
+    $build['choices'] = $choices;
+    $build['picks'] = $choices;
+
+    af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
+
+    return true;
+}
+
+function af_charactersheets_reset_skills(int $sheet_id): bool
+{
+    global $db;
+
+    if ($sheet_id <= 0 || !$db->table_exists(AF_CS_SKILLS_TABLE)) {
+        return false;
+    }
+
+    $db->delete_query(AF_CS_SKILLS_TABLE, 'sheet_id=' . $sheet_id);
+
+    return true;
+}
+
+function cs_reset_attributes(int $sheet_id): bool
+{
+    return af_charactersheets_reset_attributes($sheet_id);
+}
+
+function cs_reset_skills(int $sheet_id): bool
+{
+    return af_charactersheets_reset_skills($sheet_id);
 }
 
 function af_charactersheets_get_skills_catalog(bool $activeOnly = true): array

@@ -75,6 +75,9 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $can_manage_sheet = af_cs_can_manage_sheet((int)($mybb->user['uid'] ?? 0), (int)($sheet['uid'] ?? 0));
     // fid нужен для is_moderator(), возьмём из threads если можем
     $fid_for_mod = (int)($thread['fid'] ?? 0);
+    $can_staff_reset = af_charactersheets_user_can_staff_reset($mybb->user ?? [], $fid_for_mod);
+    $attributes_locked = !empty($build['attributes_locked']);
+    $can_edit_attributes = $can_edit_sheet && !$attributes_locked;
     $can_award_exp = af_charactersheets_user_can_award_exp($mybb->user ?? [], $fid_for_mod);
     $can_view_ledger = af_charactersheets_user_can_view_ledger($sheet, $mybb->user ?? [], $fid_for_mod);
 
@@ -91,9 +94,9 @@ function af_charactersheets_render_sheet_page(string $slug): void
         $can_award_exp
     );
     $sheet_info_table_html = af_charactersheets_build_info_table_html($atf_index);
-    $sheet_attributes_html = af_charactersheets_build_attributes_html($sheet_view, $can_edit_sheet, $can_view_ledger);
+    $sheet_attributes_html = af_charactersheets_build_attributes_html($sheet_view, $can_edit_attributes, $can_view_ledger, $can_staff_reset, $attributes_locked);
     $sheet_bonus_html = af_charactersheets_build_bonus_html($atf_index);
-    $sheet_skills_html = af_charactersheets_build_skills_html($sheet_view, $can_manage_sheet, $can_view_ledger);
+    $sheet_skills_html = af_charactersheets_build_skills_html($sheet_view, $can_manage_sheet, $can_view_ledger, $can_staff_reset);
     $sheet_knowledge_html = af_charactersheets_build_knowledge_html($sheet_view, $can_edit_sheet, $can_view_ledger);
     $sheet_abilities_html = af_charactersheets_build_abilities_html($build, $can_edit_sheet);
     $sheet_inventory_html = af_charactersheets_build_inventory_html($build, $can_edit_sheet);
@@ -146,7 +149,7 @@ function af_charactersheets_render_sheet_page(string $slug): void
 
 /* -------------------- HELPERS -------------------- */
 
-function af_charactersheets_build_attributes_html(array $view, bool $can_edit, bool $can_view_pool): string
+function af_charactersheets_build_attributes_html(array $view, bool $can_edit, bool $can_view_pool, bool $can_staff_reset = false, bool $attributes_locked = false): string
 {
     $rows = [];
     $labels = (array)($view['labels'] ?? []);
@@ -167,7 +170,7 @@ function af_charactersheets_build_attributes_html(array $view, bool $can_edit, b
             . '<div class="af-cs-attr-final">' . htmlspecialchars_uni((string)$final) . '</div>'
             . '</div>'
             . '<div class="af-cs-attr-card__meta">'
-            . '<div class="af-cs-attr-card__stat"><span>База</span><strong>' . htmlspecialchars_uni((string)$base) . '</strong></div>'
+            . '<div class="af-cs-attr-card__stat"><span>Авто (ур.)</span><strong>' . htmlspecialchars_uni((string)$base) . '</strong></div>'
             . '<div class="af-cs-attr-card__stat"><span>Бонус</span><strong>' . htmlspecialchars_uni((string)$bonus) . '</strong></div>'
             . '<div class="af-cs-attr-card__stat"><span>Распределено</span>' . $input . '</div>'
             . '</div>'
@@ -231,9 +234,16 @@ function af_charactersheets_build_attributes_html(array $view, bool $can_edit, b
         : '';
     $attributes_actions_html = $can_edit
         ? '<button type="button" class="af-cs-btn" data-afcs-save-attributes="1">Сохранить распределение</button>'
-        : '<div class="af-cs-muted">Редактирование недоступно.</div>';
+        : '<div class="af-cs-muted">' . ($attributes_locked ? 'Распределение зафиксировано.' : 'Редактирование недоступно.') . '</div>';
+
+    if ($can_staff_reset) {
+        $attributes_actions_html .= '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-reset-attributes="1">Сброс</button>';
+    }
 
     $attributes_can_edit = $can_edit ? 1 : 0;
+    $attributes_gear_html = $can_edit
+        ? '<button type="button" class="af-cs-attrs__gear" data-afcs-attrs-toggle aria-label="Редактировать распределение" title="Редактировать распределение"><i class="fa-solid fa-gear" aria-hidden="true"></i></button>'
+        : '';
 
     global $templates;
     $tpl = $templates->get('charactersheet_attributes');
@@ -251,13 +261,11 @@ function af_charactersheets_build_progress_html(array $view, array $sheet, bool 
     $percent = (int)($view['level_percent'] ?? 0);
     $exp_label = htmlspecialchars_uni((string)($view['level_exp_label'] ?? ''));
 
-    $attr_points_free = (int)($view['remaining'] ?? 0);
     $skill_points_free = (int)($view['skill_pool_remaining'] ?? 0);
 
     $points_html = '';
     if ($can_view_ledger) {
-        $points_html = '<div>Свободные очки атрибутов: <strong>' . htmlspecialchars_uni((string)$attr_points_free) . '</strong></div>'
-            . '<div>Свободные очки навыков: <strong>' . htmlspecialchars_uni((string)$skill_points_free) . '</strong></div>';
+        $points_html = '<div>Свободные очки навыков: <strong>' . htmlspecialchars_uni((string)$skill_points_free) . '</strong></div>';
         $bonus_sources = (array)($view['bonus_sources'] ?? []);
         if ($bonus_sources) {
             $points_html .= '<div class="af-cs-muted">Источник бонусов: '
@@ -365,7 +373,7 @@ function af_charactersheets_render_stat_value(string $label, string $value): str
         . '</div>';
 }
 
-function af_charactersheets_build_skills_html(array $view, bool $can_manage, bool $can_view_pool): string
+function af_charactersheets_build_skills_html(array $view, bool $can_manage, bool $can_view_pool, bool $can_staff_reset = false): string
 {
     $skills = (array)($view['skills'] ?? []);
     $grouped = [];
@@ -450,6 +458,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
             . '<div>Потрачено: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_spent'] ?? 0)) . '</strong></div>'
             . '<div>Доступно: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_remaining'] ?? 0)) . '</strong></div>'
             . ($can_manage ? '<button type="button" class="af-cs-skill-btn" data-afcs-skill-catalog-open="1"' . $buy_disabled . '>Купить навык</button>' : '')
+            . ($can_staff_reset ? '<button type="button" class="af-cs-skill-btn" data-afcs-reset-skills="1">Сброс</button>' : '')
             . '</div>';
     }
 

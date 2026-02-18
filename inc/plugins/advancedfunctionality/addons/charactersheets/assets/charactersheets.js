@@ -754,6 +754,11 @@
         var saveAttrs = event.target.closest('[data-afcs-save-attributes]');
         if (saveAttrs) {
           event.preventDefault();
+          var confirmed = window.confirm('Убедитесь, что вы распределили всё правильно: после сохранения перераспределение будет доступно только на платной основе.');
+          if (!confirmed) {
+            return;
+          }
+
           var inputs2 = sheet.querySelectorAll('[data-afcs-attr-input]');
           var allocations = {};
           inputs2.forEach(function (input2) {
@@ -763,6 +768,34 @@
           sendAction('save_attributes', { allocations: allocations }).then(function (payload) {
             if (!payload.success) {
               alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
+              return;
+            }
+            applyViewUpdate(payload);
+          });
+          return;
+        }
+
+        var resetAttrs = event.target.closest('[data-afcs-reset-attributes]');
+        if (resetAttrs) {
+          event.preventDefault();
+          if (!window.confirm('Сбросить атрибуты и открыть распределение заново?')) return;
+          sendAction('reset_attributes', {}).then(function (payload) {
+            if (!payload.success) {
+              alert((payload.error || 'Ошибка сброса').toString());
+              return;
+            }
+            applyViewUpdate(payload);
+          });
+          return;
+        }
+
+        var resetSkills = event.target.closest('[data-afcs-reset-skills]');
+        if (resetSkills) {
+          event.preventDefault();
+          if (!window.confirm('Сбросить навыки персонажа?')) return;
+          sendAction('reset_skills', {}).then(function (payload) {
+            if (!payload.success) {
+              alert((payload.error || 'Ошибка сброса').toString());
               return;
             }
             applyViewUpdate(payload);

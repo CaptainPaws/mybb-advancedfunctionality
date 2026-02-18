@@ -571,9 +571,14 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $bonus_skill_points += (int)($rules_aggregate['points_pools']['skill_points'] ?? 0);
     $bonus_language_choices += (int)($rules_aggregate['points_pools']['language_slots'] ?? 0);
 
+    $exp = (float)($progress['exp'] ?? 0);
+    $level_data = af_charactersheets_compute_level($exp);
+    $progress['level'] = (int)($progress['level'] ?? $level_data['level']);
+    $auto_stat_bonus = max(0, ((int)($level_data['level'] ?? 1)) - 1);
+
     $final = [];
     foreach ($attributes_base as $key => $value) {
-        $final[$key] = (float)$value + (float)($attributes_allocated[$key] ?? 0) + (float)($bonus[$key] ?? 0);
+        $final[$key] = (float)($attributes_allocated[$key] ?? 0) + (float)($bonus[$key] ?? 0) + (float)$auto_stat_bonus;
     }
 
     $spent = 0;
@@ -596,9 +601,6 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         }
     }
 
-    $exp = (float)($progress['exp'] ?? 0);
-    $level_data = af_charactersheets_compute_level($exp);
-    $progress['level'] = (int)($progress['level'] ?? $level_data['level']);
 
     $attributes_labels = af_charactersheets_get_attribute_labels();
     $choice_details = [];
@@ -802,8 +804,8 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $humanity_total = (int)floor($humanity_base - $humanity_penalty);
 
     return [
-        'base' => $attributes_base,
         'allocated' => $attributes_allocated,
+        'base' => array_fill_keys(array_keys($attributes_base), (float)$auto_stat_bonus),
         'bonus' => $bonus,
         'final' => $final,
         'pool_max' => $pool_max,
@@ -840,6 +842,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'weapon_bonus' => $weapon_bonus,
             'damage_base' => '1d4',
             'damage_bonus' => $damage_bonus_total,
+            'auto_stat_bonus' => $auto_stat_bonus,
             'damage_total' => af_charactersheets_format_damage_total('1d4', $damage_bonus_total),
             'ac_total' => $ac_total,
             'hp_total' => $hp_total,
@@ -880,6 +883,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'dex_final' => $dex_final,
             'race_speed' => $race_speed,
             'damage_bonus' => $damage_bonus_total,
+            'auto_stat_bonus' => $auto_stat_bonus,
             'armor_equip_bonus_total' => $armor_equip_bonus_total,
             'hp_base_breakdown' => $hp_base_breakdown,
             'fixed_hp_breakdown' => $hp_fixed_breakdown,
