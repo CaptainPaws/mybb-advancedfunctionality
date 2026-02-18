@@ -1717,3 +1717,50 @@
   display: flex;
   gap: 6px;
 }
+
+.af-cs-confirm-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.af-cs-confirm-modal.is-open {
+  display: flex;
+}
+
+.af-cs-confirm-modal__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 8, 16, 0.72);
+}
+
+.af-cs-confirm-modal__dialog {
+  position: relative;
+  z-index: 1;
+  width: min(560px, calc(100vw - 32px));
+  border-radius: 14px;
+  border: 1px solid rgba(151, 187, 255, 0.3);
+  background: #111826;
+  box-shadow: 0 24px 52px rgba(0, 0, 0, 0.45);
+  padding: 20px;
+}
+
+.af-cs-confirm-modal__title {
+  margin: 0 0 10px;
+  font-size: 20px;
+}
+
+.af-cs-confirm-modal__body {
+  opacity: 0.92;
+  line-height: 1.45;
+}
+
+.af-cs-confirm-modal__actions {
+  margin-top: 18px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}

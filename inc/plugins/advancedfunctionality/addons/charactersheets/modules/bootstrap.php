@@ -2452,6 +2452,16 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
         if (!is_array($grant)) {
             continue;
         }
+        $op = (string)($grant['op'] ?? '');
+        if ($op === 'skill') {
+            $skill_key = trim((string)($grant['skill_key'] ?? $grant['kb_key'] ?? $grant['key'] ?? ''));
+            if ($skill_key === '') {
+                continue;
+            }
+            $skill_rank = max(1, (int)($grant['rank'] ?? $grant['skill_rank'] ?? $grant['value'] ?? 1));
+            $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => $skill_rank, 'source' => $source];
+            continue;
+        }
         $grant_type = (string)($grant['type'] ?? $grant['kb_type'] ?? '');
         if (!in_array($grant_type, ['skill', 'skills'], true)) {
             continue;
@@ -2486,6 +2496,52 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
     }
 
     return array_values($grants);
+}
+
+function af_charactersheets_extract_knowledge_grants(array $resolved, string $target): array
+{
+    $target = $target === 'language' ? 'language' : 'knowledge';
+    $data = (array)($resolved['data'] ?? []);
+    $keys = [];
+
+    foreach ((array)($data['grants'] ?? []) as $grant) {
+        if (!is_array($grant)) {
+            continue;
+        }
+        $op = (string)($grant['op'] ?? '');
+        if ($target === 'knowledge' && $op === 'knowledge') {
+            $key = trim((string)($grant['knowledge_key'] ?? $grant['kb_key'] ?? $grant['key'] ?? ''));
+            if ($key !== '') {
+                $keys[$key] = true;
+            }
+            continue;
+        }
+        if ($target === 'language' && $op === 'language') {
+            $key = trim((string)($grant['language_key'] ?? $grant['kb_key'] ?? $grant['key'] ?? ''));
+            if ($key !== '') {
+                $keys[$key] = true;
+            }
+            continue;
+        }
+
+        $grantType = (string)($grant['type'] ?? $grant['kb_type'] ?? '');
+        if ($target === 'knowledge' && in_array($grantType, ['knowledge', 'knowledges'], true)) {
+            $key = trim((string)($grant['knowledge_key'] ?? $grant['kb_key'] ?? $grant['key'] ?? ''));
+            if ($key !== '') {
+                $keys[$key] = true;
+            }
+            continue;
+        }
+        if ($target === 'language' && in_array($grantType, ['language', 'languages'], true)) {
+            $key = trim((string)($grant['language_key'] ?? $grant['kb_key'] ?? $grant['key'] ?? ''));
+            if ($key !== '') {
+                $keys[$key] = true;
+            }
+            continue;
+        }
+    }
+
+    return array_keys($keys);
 }
 
 function cs_rules_get_first_int(array $rules, array $paths): int

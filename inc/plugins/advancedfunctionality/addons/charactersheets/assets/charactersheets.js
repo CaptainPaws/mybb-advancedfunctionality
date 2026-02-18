@@ -104,7 +104,11 @@
   }, true);
 
   document.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape') closeModal();
+    if (event.key !== 'Escape') return;
+    closeModal();
+    document.querySelectorAll('[data-afcs-attr-confirm-modal].is-open').forEach(function (node) {
+      node.classList.remove('is-open');
+    });
   });
 
   onReady(function () {
@@ -623,6 +627,66 @@
         });
       }
 
+      function closeAttributeConfirmModal() {
+        var modal = sheet.querySelector('[data-afcs-attr-confirm-modal]');
+        if (!modal) return;
+        modal.classList.remove('is-open');
+      }
+
+      function ensureAttributeConfirmModal() {
+        var modal = sheet.querySelector('[data-afcs-attr-confirm-modal]');
+        if (modal) return modal;
+
+        modal = document.createElement('div');
+        modal.className = 'af-cs-confirm-modal';
+        modal.setAttribute('data-afcs-attr-confirm-modal', '1');
+        modal.innerHTML =
+          '<div class="af-cs-confirm-modal__overlay" data-afcs-attr-confirm-close="1"></div>' +
+          '<div class="af-cs-confirm-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="af-cs-confirm-title">' +
+            '<h3 class="af-cs-confirm-modal__title" id="af-cs-confirm-title">Подтверждение</h3>' +
+            '<div class="af-cs-confirm-modal__body">Убедитесь, что вы распределили всё правильно. После сохранения перераспределение будет доступно только на платной основе.</div>' +
+            '<div class="af-cs-confirm-modal__actions">' +
+              '<button type="button" class="af-cs-btn" data-afcs-attr-confirm-save="1">Сохранить</button>' +
+              '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-attr-confirm-close="1">Продолжить редактировать</button>' +
+            '</div>' +
+          '</div>';
+
+        sheet.appendChild(modal);
+        return modal;
+      }
+
+      function closeAttributesEditorAfterSave() {
+        var attrsRoot = sheet.querySelector('[data-afcs-attrs]');
+        if (!attrsRoot) return;
+
+        attrsRoot.classList.remove('is-editing');
+        var gear = attrsRoot.querySelector('[data-afcs-attrs-toggle]');
+        if (gear) gear.classList.remove('is-active');
+
+        var key = 'afcs_attr_edit_' + String(sheetId || '');
+        try { localStorage.setItem(key, '0'); } catch (e) {}
+
+        ensureAttrSteppers(attrsRoot);
+      }
+
+      function submitAttributesSave() {
+        var inputs2 = sheet.querySelectorAll('[data-afcs-attr-input]');
+        var allocations = {};
+        inputs2.forEach(function (input2) {
+          allocations[input2.getAttribute('data-afcs-attr-input')] = input2.value || 0;
+        });
+
+        sendAction('save_attributes', { allocations: allocations }).then(function (payload) {
+          if (!payload.success) {
+            alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
+            return;
+          }
+          closeAttributeConfirmModal();
+          applyViewUpdate(payload);
+          closeAttributesEditorAfterSave();
+        });
+      }
+
       function initInventoryUI(root) {
         if (!root) return;
         var inventory = root.querySelector('[data-afcs-block="inventory"]') || root;
@@ -754,24 +818,22 @@
         var saveAttrs = event.target.closest('[data-afcs-save-attributes]');
         if (saveAttrs) {
           event.preventDefault();
-          var confirmed = window.confirm('Убедитесь, что вы распределили всё правильно: после сохранения перераспределение будет доступно только на платной основе.');
-          if (!confirmed) {
-            return;
-          }
+          var modal = ensureAttributeConfirmModal();
+          modal.classList.add('is-open');
+          return;
+        }
 
-          var inputs2 = sheet.querySelectorAll('[data-afcs-attr-input]');
-          var allocations = {};
-          inputs2.forEach(function (input2) {
-            allocations[input2.getAttribute('data-afcs-attr-input')] = input2.value || 0;
-          });
+        var attrConfirmClose = event.target.closest('[data-afcs-attr-confirm-close]');
+        if (attrConfirmClose) {
+          event.preventDefault();
+          closeAttributeConfirmModal();
+          return;
+        }
 
-          sendAction('save_attributes', { allocations: allocations }).then(function (payload) {
-            if (!payload.success) {
-              alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
-              return;
-            }
-            applyViewUpdate(payload);
-          });
+        var attrConfirmSave = event.target.closest('[data-afcs-attr-confirm-save]');
+        if (attrConfirmSave) {
+          event.preventDefault();
+          submitAttributesSave();
           return;
         }
 
@@ -839,7 +901,7 @@
           event.preventDefault();
           var buyKey = skillBuy.getAttribute('data-skill-key');
           if (buyKey) {
-            sendAction('cs_skill_buy', { skill_key: buyKey }).then(function (payload) {
+            sendAction('buy_skill', { skill_key: buyKey }).then(function (payload) {
               if (!payload.success) {
                 alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
                 return;
@@ -1074,6 +1136,14 @@
           if (reasonEl) reasonEl.value = '';
           applyViewUpdate(payload);
         });
+      });
+
+      sheet.addEventListener('keydown', function (event) {
+        if (event.key !== 'Escape') return;
+        var modal = sheet.querySelector('[data-afcs-attr-confirm-modal]');
+        if (!modal || !modal.classList.contains('is-open')) return;
+        event.preventDefault();
+        closeAttributeConfirmModal();
       });
 
       updatePool();
