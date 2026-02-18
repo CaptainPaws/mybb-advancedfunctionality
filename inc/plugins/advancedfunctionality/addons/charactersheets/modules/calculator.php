@@ -732,6 +732,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         2 => 5,
         3 => 10,
         4 => 15,
+        5 => 20,
     ];
     $skills_view = [];
     $skills_all = (array)($kb_context['skills_all'] ?? []);
@@ -763,7 +764,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             continue;
         }
 
-        $attr_key = (string)($skill_data['key_stat'] ?? $skill_data['attribute'] ?? '');
+        $attr_key = af_charactersheets_resolve_skill_attribute_key($skill_data, $data);
         $base_mod = (int)floor((float)($final[$attr_key] ?? 0));
         $row = (array)($skills_map[$skill_key] ?? []);
         $skill_rank = max(0, (int)($row['skill_rank'] ?? 0));
@@ -771,8 +772,8 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $source = (string)($row['source'] ?? '');
         $bonus_val = (float)($bonus_skill_map[$skill_key] ?? 0);
         $rank_bonus = (float)($skill_rank_bonus_map[$skill_rank] ?? 0);
-        if (!array_key_exists($skill_rank, $skill_rank_bonus_map) && $skill_rank > 4) {
-            $rank_bonus = 15 + (($skill_rank - 4) * 5);
+        if (!array_key_exists($skill_rank, $skill_rank_bonus_map) && $skill_rank > 5) {
+            $rank_bonus = 20 + (($skill_rank - 5) * 5);
         }
         $total = $base_mod + ($is_active ? $rank_bonus : 0) + $bonus_val;
         $grant_rank = max(0, (int)($grant_skill_ranks[$skill_key] ?? 0));
@@ -783,7 +784,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             );
         }
 
-        $kb_rank_max = max(0, (int)($skill_data['rank_max'] ?? $skill_data['max_rank'] ?? 0));
+        $kb_rank_max = max(0, (int)($skill_data['rank_max_final'] ?? $skill_data['rank_max'] ?? $skill_data['max_rank'] ?? 0));
         $rank_max_from_sources = max(0, (int)($grant_skill_rank_maxes[$skill_key] ?? 0));
         $rank_max_candidates = [];
         if ($kb_rank_max > 0) {
@@ -792,7 +793,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         if ($rank_max_from_sources > 0) {
             $rank_max_candidates[] = $rank_max_from_sources;
         }
-        $rank_max = $rank_max_candidates ? max($rank_max_candidates) : 4;
+        $rank_max = $rank_max_candidates ? max($rank_max_candidates) : 5;
 
         $skills_view[] = [
             'skill_key' => $skill_key,

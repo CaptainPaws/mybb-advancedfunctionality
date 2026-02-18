@@ -258,7 +258,7 @@ function af_charactersheets_handle_api(): void
                 break;
             }
         }
-        $rank_max = max(1, (int)($view_skill['rank_max'] ?? $skill_data['rank_max'] ?? $skill_data['max_rank'] ?? 4));
+        $rank_max = max(1, (int)($view_skill['rank_max'] ?? $skill_data['rank_max_final'] ?? $skill_data['rank_max'] ?? $skill_data['max_rank'] ?? 5));
         $rank_min = max(0, (int)($view_skill['rank_min'] ?? 0));
 
         if ($do === 'cs_skill_buy' || $do === 'buy_skill') {
