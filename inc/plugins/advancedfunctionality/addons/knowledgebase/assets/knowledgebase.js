@@ -353,6 +353,35 @@
 })();
 
 (function () {
+    var SKILL_STAT_OPTIONS = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+
+    function normalizeSkillStatValue(skillObj) {
+        if (!skillObj || typeof skillObj !== 'object') {
+            return '';
+        }
+
+        var keyStat = String(skillObj.key_stat || '').trim().toLowerCase();
+        var attribute = String(skillObj.attribute || '').trim().toLowerCase();
+        var canonical = '';
+
+        if (SKILL_STAT_OPTIONS.indexOf(keyStat) !== -1) {
+            canonical = keyStat;
+        } else if (SKILL_STAT_OPTIONS.indexOf(attribute) !== -1) {
+            canonical = attribute;
+        }
+
+        if (canonical) {
+            skillObj.key_stat = canonical;
+            // Backward compatibility for consumers that still read skill.attribute.
+            skillObj.attribute = canonical;
+        } else {
+            delete skillObj.key_stat;
+            delete skillObj.attribute;
+        }
+
+        return canonical;
+    }
+
     function readJson(text, fallback) {
         try {
             var parsed = JSON.parse(text || '');
@@ -601,6 +630,12 @@
                 input.value = value != null ? String(value) : '0';
             } else if (def.type === 'select') {
                 input = document.createElement('select');
+                if (def.allowEmpty) {
+                    var emptyOption = document.createElement('option');
+                    emptyOption.value = '';
+                    emptyOption.textContent = def.emptyLabel || '—';
+                    input.appendChild(emptyOption);
+                }
                 (def.options || []).forEach(function (opt) {
                     var option = document.createElement('option');
                     option.value = String(opt);
@@ -891,7 +926,6 @@
                 base.knowledge_group = '';
                 base.skill = {
                     category: 'knowledge',
-                    key_stat: 'int',
                     rank_max: 4,
                     armor_check_penalty: false,
                     trained_only: true,
@@ -1098,7 +1132,7 @@
         if (uiProfile === 'skill') {
         ensureObj('skill', {});
         if (!state.skill.category) state.skill.category = 'general';
-        if (!state.skill.key_stat) state.skill.key_stat = 'dex';
+        normalizeSkillStatValue(state.skill);
         state.skill.rank_max = numberOrZero(state.skill.rank_max != null ? state.skill.rank_max : 4);
         state.skill.armor_check_penalty = !!state.skill.armor_check_penalty;
         state.skill.trained_only = !!state.skill.trained_only;
@@ -1149,7 +1183,7 @@
             // knowledge хранится в state.skill + state.knowledge_group
             ensureObj('skill', {});
             if (!state.skill.category) state.skill.category = 'knowledge';
-            if (!state.skill.key_stat) state.skill.key_stat = 'int';
+            normalizeSkillStatValue(state.skill);
             state.skill.rank_max = numberOrZero(state.skill.rank_max != null ? state.skill.rank_max : 4);
             state.skill.armor_check_penalty = !!state.skill.armor_check_penalty;
             state.skill.trained_only = !!state.skill.trained_only;
@@ -1462,13 +1496,15 @@
 
             if (profile === 'skill') {
                 var skill = (p.skill && typeof p.skill === 'object') ? p.skill : {};
+                var keyStat = normalizeSkillStatValue(skill);
                 return {
                     schema: p.schema,
                     type_profile: expectedTypeProfile || 'skill',
                     version: p.version,
                     skill: {
                         category: String(skill.category || 'general'),
-                        key_stat: String(skill.key_stat || 'dex'),
+                        key_stat: keyStat || null,
+                        attribute: keyStat || null,
                         rank_max: numberOrZero(skill.rank_max != null ? skill.rank_max : 4),
                         armor_check_penalty: !!skill.armor_check_penalty,
                         trained_only: !!skill.trained_only,
@@ -1552,6 +1588,7 @@
 
             if (profile === 'knowledge') {
                 var skillK = (p.skill && typeof p.skill === 'object') ? p.skill : {};
+                var keyStatK = normalizeSkillStatValue(skillK);
                 return {
                     schema: p.schema,
                     type_profile: 'knowledge',
@@ -1559,7 +1596,8 @@
                     knowledge_group: String(p.knowledge_group || ''),
                     skill: {
                         category: 'knowledge',
-                        key_stat: String(skillK.key_stat || 'int'),
+                        key_stat: keyStatK || null,
+                        attribute: keyStatK || null,
                         rank_max: numberOrZero(skillK.rank_max != null ? skillK.rank_max : 4),
                         armor_check_penalty: !!skillK.armor_check_penalty,
                         trained_only: !!skillK.trained_only,
@@ -1781,7 +1819,7 @@
             if (uiProfile === 'skill') {
             var def = [
                 { name: 'category', label: 'Category', type: 'text', hint: 'combat/social/tech/knowledge/psi/cyber/...' },
-                { name: 'key_stat', label: 'Key stat', type: 'select', options: ['str','dex','con','int','wis','cha'], hint: 'Какой атрибут даёт модификатор навыка' },
+                { name: 'key_stat', label: 'Ключевой атрибут навыка', type: 'select', allowEmpty: true, emptyLabel: '— не выбран —', options: ['str','dex','con','int','wis','cha'], hint: 'Какой атрибут даёт модификатор навыка' },
                 { name: 'rank_max', label: 'Rank max', type: 'number', hint: 'Обычно 4 (0..4)' }
             ];
 
@@ -2067,7 +2105,7 @@
                 ];
 
                 var defK = [
-                    { name: 'key_stat', label: 'Key stat', type: 'select', options: ['int','wis','cha','dex','str','con'], hint: 'Обычно INT' },
+                    { name: 'key_stat', label: 'Ключевой атрибут навыка', type: 'select', allowEmpty: true, emptyLabel: '— не выбран —', options: ['str','dex','con','int','wis','cha'], hint: 'Ключевой атрибут проверки по знанию' },
                     { name: 'rank_max', label: 'Rank max', type: 'number', hint: 'Обычно 4 (0..4)' }
                 ];
 

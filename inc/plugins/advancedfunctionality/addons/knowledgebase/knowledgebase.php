@@ -941,8 +941,8 @@ function af_kb_get_type_profile_definition(string $typeKey): array
         'race' => ['ui_profile' => 'race', 'rules_enabled' => true, 'defaults' => $base + ['size' => 'medium', 'creature_type' => 'humanoid', 'speed' => 30, 'hp_base' => 10, 'languages' => ['common']]],
         'class' => ['ui_profile' => 'class', 'rules_enabled' => true, 'defaults' => $base + ['hp_base' => 0, 'hp_per_level' => 6, 'key_ability' => 'str', 'proficiencies' => new stdClass(), 'progression' => []]],
         'theme' => ['ui_profile' => 'theme', 'rules_enabled' => true, 'defaults' => $base + ['hp_base' => 0]],
-        'skill' => ['ui_profile' => 'skill', 'rules_enabled' => true, 'defaults' => $base + ['skill' => ['attribute' => 'int', 'trained_only' => false, 'untrained_allowed' => true, 'armor_check_penalty_applies' => false, 'rank_mode' => 'ranked', 'max_rank' => 10, 'rank_bonus' => 1, 'base_formula' => 'attribute', 'can_buy_rank' => true]]],
-        'knowledge' => ['ui_profile' => 'knowledge', 'rules_enabled' => true, 'defaults' => $base + ['knowledge_group' => 'lore', 'skill' => ['attribute' => 'int', 'rank_mode' => 'ranked', 'max_rank' => 10, 'rank_bonus' => 1, 'base_formula' => 'attribute', 'can_buy_rank' => true]]],
+        'skill' => ['ui_profile' => 'skill', 'rules_enabled' => true, 'defaults' => $base + ['skill' => ['trained_only' => false, 'untrained_allowed' => true, 'armor_check_penalty_applies' => false, 'rank_mode' => 'ranked', 'max_rank' => 10, 'rank_bonus' => 1, 'base_formula' => 'attribute', 'can_buy_rank' => true]]],
+        'knowledge' => ['ui_profile' => 'knowledge', 'rules_enabled' => true, 'defaults' => $base + ['knowledge_group' => 'lore', 'skill' => ['rank_mode' => 'ranked', 'max_rank' => 10, 'rank_bonus' => 1, 'base_formula' => 'attribute', 'can_buy_rank' => true]]],
         'language' => ['ui_profile' => 'language', 'rules_enabled' => true, 'defaults' => $base + ['script' => '', 'rarity' => 'common', 'family' => '', 'requires' => []]],
         'spell' => ['ui_profile' => 'spell', 'rules_enabled' => true, 'defaults' => $base + ['spell' => ['rank' => 1, 'tradition' => 'arcane', 'casting_time' => '1_action', 'range' => '', 'duration' => '', 'area' => '', 'requires_check' => false, 'check_stat' => 'int', 'dc' => 0], 'effects' => []]],
         'item' => ['ui_profile' => 'item', 'rules_enabled' => true, 'defaults' => $base + ['item_kind' => 'gear', 'rarity' => 'common', 'price' => 0, 'weight' => 0, 'slots' => [], 'on_equip' => [], 'on_use' => [], 'requirements' => []]],
@@ -1791,6 +1791,10 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
         }
     }
 
+    if (in_array($type, ['skill', 'knowledge'], true)) {
+        $rulesData['skill'] = af_kb_normalize_skill_payload((array)($rulesData['skill'] ?? []));
+    }
+
     // effects: по твоему ТЗ это реально “общая штука” для spell/perk и иногда item/condition
     // Если defaults содержат effects или тип требует effects — держим массив.
     $requiredKeys = (array)($typeSchema['rules_required_keys'] ?? []);
@@ -1812,6 +1816,30 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
     $rulesData['grants'] = af_kb_normalize_grants_json($rulesData['grants'], $errors);
 
     return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+}
+
+function af_kb_normalize_skill_payload(array $skillData): array
+{
+    $allowedStats = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+
+    $keyStat = strtolower(trim((string)($skillData['key_stat'] ?? '')));
+    $attribute = strtolower(trim((string)($skillData['attribute'] ?? '')));
+
+    $canonical = '';
+    if (in_array($keyStat, $allowedStats, true)) {
+        $canonical = $keyStat;
+    } elseif (in_array($attribute, $allowedStats, true)) {
+        $canonical = $attribute;
+    }
+
+    if ($canonical !== '') {
+        $skillData['key_stat'] = $canonical;
+        $skillData['attribute'] = $canonical;
+    } else {
+        unset($skillData['key_stat'], $skillData['attribute']);
+    }
+
+    return $skillData;
 }
 
 function af_kb_validate_key_token(string $value): bool
