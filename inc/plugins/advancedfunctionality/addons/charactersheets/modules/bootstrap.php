@@ -2214,6 +2214,7 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
 
     $kbType = trim($kbType);
     $kbKey = trim($kbKey);
+
     if ($kbType === '' || $kbKey === '') {
         return [
             'ok' => false,
@@ -2242,12 +2243,39 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
         ];
     }
 
+    // 1) Собираем список полей ТОЛЬКО из тех, что реально существуют в БД
+    $fields = ['id', 'type', '`key`'];
+
+    if ($db->field_exists('meta_json', 'af_kb_entries')) {
+        $fields[] = 'meta_json';
+    }
+    if ($db->field_exists('data_json', 'af_kb_entries')) {
+        $fields[] = 'data_json';
+    }
+    if ($db->field_exists('rules_json_raw', 'af_kb_entries')) {
+        $fields[] = 'rules_json_raw';
+    }
+    if ($db->field_exists('rules_json', 'af_kb_entries')) {
+        $fields[] = 'rules_json';
+    }
+    if ($db->field_exists('active', 'af_kb_entries')) {
+        $fields[] = 'active';
+    }
+
+    $select_fields = implode(',', $fields);
+
+    $where = "type='" . $db->escape_string($kbType) . "' AND `key`='" . $db->escape_string($kbKey) . "'";
+    if (in_array('active', $fields, true)) {
+        $where .= " AND active=1";
+    }
+
     $entry = $db->fetch_array($db->simple_select(
         'af_kb_entries',
-        'id,type,`key`,meta_json,data_json,rules_json_raw,rules_json,active',
-        "type='" . $db->escape_string($kbType) . "' AND `key`='" . $db->escape_string($kbKey) . "' AND active=1",
+        $select_fields,
+        $where,
         ['limit' => 1]
     ));
+
     if (!is_array($entry) || empty($entry['id'])) {
         return $cache[$cache_key] = [
             'ok' => false,
@@ -2259,23 +2287,45 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
         ];
     }
 
-    $raw_data_json = trim((string)($entry['data_json'] ?? ''));
-    if ($raw_data_json === '') {
-        $raw_data_json = trim((string)($entry['rules_json_raw'] ?? ''));
+    // 2) Канон источника rules: data_json -> rules_json_raw -> rules_json
+    $raw_data_json = '';
+
+    if (isset($entry['data_json'])) {
+        $raw_data_json = trim((string)$entry['data_json']);
     }
-    if ($raw_data_json === '') {
-        $raw_data_json = trim((string)($entry['rules_json'] ?? ''));
+    if ($raw_data_json === '' && isset($entry['rules_json_raw'])) {
+        $raw_data_json = trim((string)$entry['rules_json_raw']);
+    }
+    if ($raw_data_json === '' && isset($entry['rules_json'])) {
+        $raw_data_json = trim((string)$entry['rules_json']);
     }
 
+    // 3) Опциональный fallback в blocks (НО тоже безопасно по полям)
     if ($raw_data_json === '' && $db->table_exists('af_kb_blocks')) {
-        $block = $db->fetch_array($db->simple_select(
-            'af_kb_blocks',
-            'data_json',
-            "entry_id=" . (int)$entry['id'] . " AND block_key='data' AND active=1",
-            ['order_by' => 'sortorder,id', 'order_dir' => 'ASC', 'limit' => 1]
-        ));
-        if (is_array($block)) {
-            $raw_data_json = trim((string)($block['data_json'] ?? ''));
+        $blockFields = [];
+        if ($db->field_exists('data_json', 'af_kb_blocks')) {
+            $blockFields[] = 'data_json';
+        }
+        if ($db->field_exists('content', 'af_kb_blocks')) {
+            // вдруг у тебя rules хранятся в content (на всякий)
+            $blockFields[] = 'content';
+        }
+
+        if (!empty($blockFields)) {
+            $block = $db->fetch_array($db->simple_select(
+                'af_kb_blocks',
+                implode(',', $blockFields),
+                "entry_id=" . (int)$entry['id'] . " AND block_key='data' " . ($db->field_exists('active', 'af_kb_blocks') ? "AND active=1" : ""),
+                ['order_by' => 'sortorder,id', 'order_dir' => 'ASC', 'limit' => 1]
+            ));
+
+            if (is_array($block)) {
+                if (isset($block['data_json']) && trim((string)$block['data_json']) !== '') {
+                    $raw_data_json = trim((string)$block['data_json']);
+                } elseif (isset($block['content']) && trim((string)$block['content']) !== '') {
+                    $raw_data_json = trim((string)$block['content']);
+                }
+            }
         }
     }
 
