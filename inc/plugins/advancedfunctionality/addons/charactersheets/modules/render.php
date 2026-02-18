@@ -882,6 +882,15 @@ function af_charactersheets_build_bonus_html(array $index): string
 
 function af_charactersheets_lang(string $key, string $fallback = ''): string
 {
+    static $loaded = false;
+
+    if (!$loaded) {
+        $loaded = true;
+        if (function_exists('af_charactersheets_load_lang')) {
+            af_charactersheets_load_lang();
+        }
+    }
+
     global $lang;
 
     $value = '';
@@ -889,12 +898,9 @@ function af_charactersheets_lang(string $key, string $fallback = ''): string
         $value = (string)$lang->$key;
     }
 
-    if ($value === '') {
-        return $fallback;
-    }
-
-    return $value;
+    return $value !== '' ? $value : $fallback;
 }
+
 
 function af_charactersheets_build_mechanics_html(array $view): string
 {
