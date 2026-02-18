@@ -2458,7 +2458,7 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
             if ($skill_key === '') {
                 continue;
             }
-            $skill_rank = max(1, (int)($grant['rank'] ?? $grant['skill_rank'] ?? $grant['value'] ?? 1));
+            $skill_rank = max(0, min(4, (int)($grant['rank'] ?? $grant['skill_rank'] ?? $grant['value'] ?? 0)));
             $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => $skill_rank, 'source' => $source];
             continue;
         }
@@ -2470,7 +2470,7 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
         if ($skill_key === '') {
             continue;
         }
-        $skill_rank = max(1, (int)($grant['skill_rank'] ?? $grant['value'] ?? 1));
+        $skill_rank = max(0, min(4, (int)($grant['skill_rank'] ?? $grant['value'] ?? 0)));
         $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => $skill_rank, 'source' => $source];
     }
 
@@ -2490,7 +2490,7 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
             if ($skill_key === '') {
                 continue;
             }
-            $skill_rank = max(1, (int)($grant['skill_rank'] ?? $grant['value'] ?? 1));
+            $skill_rank = max(0, min(4, (int)($grant['skill_rank'] ?? $grant['value'] ?? 0)));
             $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => $skill_rank, 'source' => $source];
         }
     }
@@ -2677,6 +2677,35 @@ function cs_get_skill_points_from_rules($rules): int
             continue;
         }
         $points += max(0, (int)($choice['pick'] ?? $choice['value'] ?? 0));
+    }
+
+    foreach ((array)($rules['grants'] ?? []) as $grant) {
+        if (!is_array($grant)) {
+            continue;
+        }
+
+        $op = (string)($grant['op'] ?? '');
+        if ($op === 'resource') {
+            if ((string)($grant['key'] ?? '') !== 'skill_points') {
+                continue;
+            }
+            $value = max(0, (int)($grant['value'] ?? 0));
+            if ((string)($grant['mode'] ?? 'add') === 'set') {
+                $points = $value;
+            } else {
+                $points += $value;
+            }
+            continue;
+        }
+
+        if ($op === 'skill_points') {
+            $points += max(0, (int)($grant['amount'] ?? $grant['value'] ?? 0));
+            continue;
+        }
+
+        if ((string)($grant['type'] ?? '') === 'resource_gain' && (string)($grant['resource'] ?? '') === 'skill_points') {
+            $points += max(0, (int)($grant['value'] ?? $grant['amount'] ?? 0));
+        }
     }
 
     return $points;
