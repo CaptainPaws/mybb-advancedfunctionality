@@ -377,6 +377,85 @@ function af_charactersheets_render_stat_value(string $label, string $value): str
         . '</div>';
 }
 
+function af_cs_kb_skill_meta(string $skillKey): array
+{
+    static $cache = [];
+
+    $skillKey = trim($skillKey);
+    if ($skillKey === '') {
+        return [
+            'key_stat' => '',
+            'rank_max' => 5,
+            'title_ru' => '',
+            'title_en' => '',
+        ];
+    }
+
+    if (isset($cache[$skillKey])) {
+        return $cache[$skillKey];
+    }
+
+    $meta = [
+        'key_stat' => '',
+        'rank_max' => 5,
+        'title_ru' => '',
+        'title_en' => '',
+    ];
+
+    $entry = af_charactersheets_kb_get_entry('skill', $skillKey);
+    if (empty($entry)) {
+        $entry = af_charactersheets_kb_get_entry('skills', $skillKey);
+    }
+    if (empty($entry)) {
+        return $cache[$skillKey] = $meta;
+    }
+
+    $meta['title_ru'] = trim((string)($entry['title_ru'] ?? ''));
+    $meta['title_en'] = trim((string)($entry['title_en'] ?? ''));
+
+    $rawDataJson = trim((string)($entry['data_json'] ?? $entry['rules_json_raw'] ?? $entry['rules_json'] ?? ''));
+
+    if ($rawDataJson === '' && !empty($entry['id'])) {
+        global $db;
+        if (is_object($db) && $db->table_exists('af_kb_blocks')) {
+            $blockFields = [];
+            if ($db->field_exists('data_json', 'af_kb_blocks')) {
+                $blockFields[] = 'data_json';
+            }
+            if ($db->field_exists('content', 'af_kb_blocks')) {
+                $blockFields[] = 'content';
+            }
+            if (!empty($blockFields)) {
+                $block = $db->fetch_array($db->simple_select(
+                    'af_kb_blocks',
+                    implode(',', $blockFields),
+                    "entry_id=" . (int)$entry['id'] . " AND block_key='data'" . ($db->field_exists('active', 'af_kb_blocks') ? ' AND active=1' : ''),
+                    ['order_by' => 'sortorder,id', 'order_dir' => 'ASC', 'limit' => 1]
+                ));
+                if (is_array($block)) {
+                    $rawDataJson = trim((string)($block['data_json'] ?? $block['content'] ?? ''));
+                }
+            }
+        }
+    }
+
+    $decoded = af_charactersheets_json_decode($rawDataJson);
+    $skill = is_array($decoded['skill'] ?? null) ? $decoded['skill'] : [];
+
+    $keyStat = strtolower(trim((string)($skill['key_stat'] ?? $skill['attribute'] ?? '')));
+    $allowed = af_charactersheets_default_attributes();
+    if ($keyStat !== '' && array_key_exists($keyStat, $allowed)) {
+        $meta['key_stat'] = $keyStat;
+    }
+
+    $rankMax = (int)($skill['rank_max'] ?? 0);
+    if ($rankMax > 0) {
+        $meta['rank_max'] = $rankMax;
+    }
+
+    return $cache[$skillKey] = $meta;
+}
+
 function af_charactersheets_build_skills_html(array $view, bool $can_manage, bool $can_view_pool, bool $can_staff_reset = false, bool $skills_locked = false): string
 {
     $skills = (array)($view['skills'] ?? []);
@@ -428,6 +507,17 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
         return '<span>(' . htmlspecialchars_uni($attr_label) . ')</span>';
     };
 
+    $skill_attribute_labels = [
+        'str' => 'Сила',
+        'dex' => 'Ловкость',
+        'con' => 'Телосложение',
+        'int' => 'Интеллект',
+        'wis' => 'Мудрость',
+        'cha' => 'Харизма',
+    ];
+    $skill_rank_bonus_map = [0 => 0, 1 => 2, 2 => 5, 3 => 10, 4 => 15, 5 => 20];
+    $sheet_attributes = (array)($view['final'] ?? []);
+
     $items = [];
     $catalog_items = [];
 
@@ -439,12 +529,19 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
         foreach ($rows as $skill) {
             $skill_key = (string)($skill['skill_key'] ?? '');
             $title = (string)($skill['title'] ?? $skill_key);
-            $attr_label = (string)($skill['key_stat_label'] ?? '');
+            $skill_meta = af_cs_kb_skill_meta($skill_key);
+            $key_stat = (string)($skill_meta['key_stat'] ?? '');
+            $attr_label = (string)($skill_attribute_labels[$key_stat] ?? '');
             $skill_rank = max(0, (int)($skill['skill_rank'] ?? 0));
-            $rank_max = max(1, (int)($skill['rank_max'] ?? 1));
+            $rank_max = max(1, (int)($skill_meta['rank_max'] ?? $skill['rank_max'] ?? 5));
             $source = (string)($skill['source'] ?? 'manual');
             $notes = (string)($skill['notes'] ?? '');
-            $total_label = af_charactersheets_format_signed((float)($skill['total_bonus'] ?? $skill['total'] ?? 0));
+            $rank_bonus = (float)($skill_rank_bonus_map[$skill_rank] ?? 0);
+            if (!array_key_exists($skill_rank, $skill_rank_bonus_map) && $skill_rank > 5) {
+                $rank_bonus = 20 + (($skill_rank - 5) * 5);
+            }
+            $sheet_attr_value = (float)($sheet_attributes[$key_stat] ?? 0);
+            $total_label = af_charactersheets_format_signed($rank_bonus + $sheet_attr_value);
             $source_chip = '';
             if (isset($fixed_sources[$source])) {
                 $source_chip = '<span class="af-cs-rank-chip is-source">Получено: ' . htmlspecialchars_uni($fixed_sources[$source]) . '</span>';
@@ -495,9 +592,11 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
                 continue;
             }
             $title = (string)($skill['title'] ?? $skill_key);
-            $attr_label = (string)($skill['key_stat_label'] ?? '');
+            $skill_meta = af_cs_kb_skill_meta($skill_key);
+            $key_stat = (string)($skill_meta['key_stat'] ?? '');
+            $attr_label = (string)($skill_attribute_labels[$key_stat] ?? '');
             $skill_rank = max(0, (int)($skill['skill_rank'] ?? 0));
-            $rank_max = max(1, (int)($skill['rank_max'] ?? 1));
+            $rank_max = max(1, (int)($skill_meta['rank_max'] ?? $skill['rank_max'] ?? 5));
             $source = (string)($skill['source'] ?? 'manual');
             $notes = (string)($skill['notes'] ?? '');
 
