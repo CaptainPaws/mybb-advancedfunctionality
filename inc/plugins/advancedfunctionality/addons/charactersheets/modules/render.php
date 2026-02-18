@@ -94,7 +94,7 @@ function af_charactersheets_render_sheet_page(string $slug): void
         $delete_redirect,
         $can_award_exp
     );
-    $sheet_info_table_html = af_charactersheets_build_info_table_html($atf_index);
+    $sheet_info_table_html = af_charactersheets_build_info_table_html($atf_index, $sheet_view);
     $sheet_attributes_html = af_charactersheets_build_attributes_html($sheet_view, $can_edit_attributes, $can_view_ledger, $can_staff_reset, $attributes_locked);
     $sheet_bonus_html = af_charactersheets_build_bonus_html($atf_index);
     $skills_locked = !empty($build['locked_skills']);
@@ -975,7 +975,84 @@ function af_charactersheets_build_kb_cards_html(array $fields): string
     return $out;
 }
 
-function af_charactersheets_build_info_table_html(array $index): string
+function af_charactersheets_resolve_effect_kb_entry(string $op, string $key): array
+{
+    $op = trim($op);
+    $key = trim($key);
+    if ($op === '' || $key === '') {
+        return [];
+    }
+
+    $types = [$op, 'effect', 'condition'];
+    foreach ($types as $type) {
+        $entry = af_charactersheets_kb_get_entry($type, $key);
+        if (!empty($entry)) {
+            return $entry;
+        }
+    }
+
+    return [];
+}
+
+function af_charactersheets_build_effects_chip_html(array $sheet_view): string
+{
+    $grants = (array)($sheet_view['ctx']['aggregate']['grants'] ?? []);
+    if (!$grants) {
+        return '<span class="af-cs-muted">—</span>';
+    }
+
+    $chips = [];
+    foreach ($grants as $grant) {
+        if (!is_array($grant)) {
+            continue;
+        }
+
+        $op = trim((string)($grant['op'] ?? ''));
+        if (!in_array($op, ['sense', 'resistance'], true)) {
+            continue;
+        }
+
+        $key = trim((string)($grant['key'] ?? ''));
+        if ($key === '') {
+            continue;
+        }
+
+        $value = trim((string)($grant['value'] ?? ''));
+        $entry = af_charactersheets_resolve_effect_kb_entry($op, $key);
+        $title = af_charactersheets_kb_pick_text($entry, 'title');
+        if ($title === '') {
+            $title = ucfirst(str_replace('_', ' ', $key));
+        }
+
+        $label = $title;
+        if ($op === 'resistance') {
+            $label .= ' res';
+        }
+        if ($value !== '') {
+            $label .= ' ' . $value;
+        }
+
+        $hint = af_charactersheets_kb_pick_text($entry, 'short');
+        if ($hint === '') {
+            $hint = af_charactersheets_kb_pick_text($entry, 'description');
+        }
+        if ($hint !== '') {
+            $tooltip = $title . "\n" . trim(strip_tags($hint));
+        } else {
+            $tooltip = $label;
+        }
+
+        $chips[] = '<span class="af-cs-chip" title="' . htmlspecialchars_uni($tooltip) . '">' . htmlspecialchars_uni($label) . '</span>';
+    }
+
+    if (!$chips) {
+        return '<span class="af-cs-muted">—</span>';
+    }
+
+    return implode('', $chips);
+}
+
+function af_charactersheets_build_info_table_html(array $index, array $sheet_view = []): string
 {
     $age = af_charactersheets_pick_field_value($index, ['character_age', 'age']);
     $gender = af_charactersheets_pick_field_value($index, ['character_gen', 'character_gender', 'gender']);
@@ -998,6 +1075,7 @@ function af_charactersheets_build_info_table_html(array $index): string
         $chip_html = '<span class="af-cs-muted">—</span>';
     }
     $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Чипы</div><div class="af-cs-info-value">' . $chip_html . '</div></div>';
+    $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Эффекты</div><div class="af-cs-info-value">' . af_charactersheets_build_effects_chip_html($sheet_view) . '</div></div>';
     $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Кошелёк</div><div class="af-cs-info-value">0 ₵</div></div>';
 
     return '<div class="af-cs-info-table">' . implode('', $items) . '</div>';
