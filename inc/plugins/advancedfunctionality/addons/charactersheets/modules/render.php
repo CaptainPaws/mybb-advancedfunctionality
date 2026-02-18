@@ -392,6 +392,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
     $available_skill_points = max(0, (int)($view['skill_pool_remaining'] ?? 0));
     $fixed_sources = ['race' => 'раса', 'class' => 'класс', 'theme' => 'тема'];
     $items = [];
+    $catalog_items = [];
     foreach ($grouped as $category => $rows) {
         $items[] = '<div class="af-cs-skill-category">' . htmlspecialchars_uni($category) . '</div>';
         foreach ($rows as $skill) {
@@ -404,6 +405,12 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
             $source = (string)($skill['source'] ?? 'manual');
             $notes = (string)($skill['notes'] ?? '');
             $total_label = af_charactersheets_format_signed((float)($skill['total'] ?? 0));
+            $source_chip = '';
+            if (isset($fixed_sources[$source])) {
+                $source_chip = '<span class="af-cs-rank-chip is-source">Получено: ' . htmlspecialchars_uni($fixed_sources[$source]) . '</span>';
+            } elseif ($source !== '') {
+                $source_chip = '<span class="af-cs-rank-chip is-source">' . htmlspecialchars_uni($source) . '</span>';
+            }
 
             $select = '';
             $controls = '';
@@ -423,16 +430,37 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
                 if ($can_increase) {
                     $buy_disabled = $available_skill_points > 0 ? '' : ' disabled';
                     $action_label = $skill_rank > 0 ? 'Улучшить' : 'Купить';
-                    $action_btn = '<button type="button" class="af-cs-skill-btn" data-afcs-skill-buy="1" data-skill-key="' . htmlspecialchars_uni($skill_key) . '"' . $buy_disabled . '>' . $action_label . '</button>';
+                    $action_btn = '<button type="button" class="af-cs-skill-btn af-cs-skill-btn--wide" data-afcs-skill-buy="1" data-skill-key="' . htmlspecialchars_uni($skill_key) . '"' . $buy_disabled . '>' . $action_label . '</button>';
                 } else {
-                    $action_btn = '<button type="button" class="af-cs-skill-btn" disabled>Макс.</button>';
+                    $action_btn = '<button type="button" class="af-cs-skill-btn af-cs-skill-btn--wide" disabled>Макс.</button>';
                 }
 
                 $reset_btn = '';
                 if ($is_active && $source === 'manual') {
-                    $reset_btn = '<button type="button" class="af-cs-skill-btn" data-afcs-skill-unbuy="1" data-skill-key="' . htmlspecialchars_uni($skill_key) . '">Сброс</button>';
+                    $reset_btn = '<button type="button" class="af-cs-skill-btn af-cs-skill-btn--wide" data-afcs-skill-unbuy="1" data-skill-key="' . htmlspecialchars_uni($skill_key) . '">Сброс</button>';
                 }
                 $controls = '<div class="af-cs-skill-controls-inline">' . $action_btn . $reset_btn . '</div>';
+
+                $catalog_action_btn = '';
+                if ($can_increase) {
+                    $buy_disabled = $available_skill_points > 0 ? '' : ' disabled';
+                    $action_label = $skill_rank > 0 ? 'Улучшить' : 'Купить';
+                    $catalog_action_btn = '<button type="button" class="af-cs-skill-btn af-cs-skill-btn--wide" data-afcs-skill-buy="1" data-skill-key="' . htmlspecialchars_uni($skill_key) . '"' . $buy_disabled . '>' . $action_label . '</button>';
+                } else {
+                    $catalog_action_btn = '<button type="button" class="af-cs-skill-btn af-cs-skill-btn--wide" disabled>Макс.</button>';
+                }
+
+                $catalog_items[] = '<div class="af-cs-skill-catalog-item">'
+                    . '<div class="af-cs-skill-catalog-item__main">'
+                    . '<div class="af-cs-skill-name">' . htmlspecialchars_uni($title) . '<span>(' . htmlspecialchars_uni($attr_label) . ')</span></div>'
+                    . ($notes !== '' ? '<div class="af-cs-muted">' . htmlspecialchars_uni($notes) . '</div>' : '')
+                    . '<div class="af-cs-skill-meta">'
+                    . '<span class="af-cs-rank-chip">Ранг ' . $skill_rank . '/' . $rank_max . '</span>'
+                    . $source_chip
+                    . '</div>'
+                    . '</div>'
+                    . '<div class="af-cs-skill-catalog-item__action">' . $catalog_action_btn . '</div>'
+                    . '</div>';
             }
 
             $item_class = $is_active ? 'af-cs-skill-item' : 'af-cs-skill-item is-disabled';
@@ -440,14 +468,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
             if (!$is_active) {
                 $rank_chip = '<span class="af-cs-rank-chip is-muted">Неактивен</span>';
             }
-            $source_chip = '';
-            if (isset($fixed_sources[$source])) {
-                $source_chip = '<span class="af-cs-rank-chip is-source">Получено: ' . htmlspecialchars_uni($fixed_sources[$source]) . '</span>';
-            } elseif ($source !== '') {
-                $source_chip = '<span class="af-cs-rank-chip is-source">' . htmlspecialchars_uni($source) . '</span>';
-            }
-
-            $items[] = '<div class="' . $item_class . '">'
+            $items[] = '<div class="' . $item_class . '">' 
                 . '<div class="af-cs-skill-left">'
                 . '<div class="af-cs-skill-name">' . htmlspecialchars_uni($title) . '<span>(' . htmlspecialchars_uni($attr_label) . ')</span></div>'
                 . ($notes !== '' ? '<div class="af-cs-muted">' . htmlspecialchars_uni($notes) . '</div>' : '')
@@ -467,6 +488,18 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
     }
 
     $skills_html = implode('', $items);
+    $catalog_html = '';
+    if ($can_manage) {
+        $catalog_html = '<div class="af-cs-skill-catalog" data-afcs-skill-catalog-panel hidden>'
+            . '<div class="af-cs-skill-catalog__head">'
+            . '<strong>Каталог навыков</strong>'
+            . '<button type="button" class="af-cs-skill-btn af-cs-skill-btn--wide" data-afcs-skill-catalog-close="1">Закрыть</button>'
+            . '</div>'
+            . '<div class="af-cs-skill-catalog__list">'
+            . ($catalog_items ? implode('', $catalog_items) : '<div class="af-cs-muted">Навыки не найдены.</div>')
+            . '</div>'
+            . '</div>';
+    }
 
     $skill_pool_html = '';
     if ($can_view_pool) {
@@ -475,8 +508,8 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
             . '<div>Пул навыков: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_total'] ?? 0)) . '</strong></div>'
             . '<div>Потрачено: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_spent'] ?? 0)) . '</strong></div>'
             . '<div>Доступно: <strong>' . htmlspecialchars_uni((string)($view['skill_pool_remaining'] ?? 0)) . '</strong></div>'
-            . ($can_manage ? '<button type="button" class="af-cs-skill-btn" data-afcs-skill-catalog-open="1"' . $buy_disabled . '>Купить навык</button>' : '')
-            . ($can_staff_reset ? '<button type="button" class="af-cs-skill-btn" data-afcs-reset-skills="1">Сброс</button>' : '')
+            . ($can_manage ? '<button type="button" class="af-cs-skill-btn af-cs-skill-btn--wide" data-afcs-skill-catalog-open="1"' . $buy_disabled . '>Купить навык</button>' : '')
+            . ($can_staff_reset ? '<button type="button" class="af-cs-skill-btn af-cs-skill-btn--wide" data-afcs-reset-skills="1">Сброс</button>' : '')
             . '</div>';
     }
 
