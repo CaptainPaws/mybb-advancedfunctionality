@@ -813,6 +813,11 @@
                 return base;
             }
 
+            if (profile === 'class' || profile === 'theme') {
+                base.hp_base = 0;
+                return base;
+            }
+
             if (profile === 'skill') {
                 base.skill = {
                     category: 'general',
@@ -882,7 +887,6 @@
                 };
                 return base;
             }
-
             if (profile === 'knowledge') {
                 base.knowledge_group = '';
                 base.skill = {
@@ -1515,6 +1519,11 @@
                         requirements: reqI
                     }
                 };
+            }
+
+            if (profile === 'class' || profile === 'theme') {
+                p.hp_base = numberOrZero(p.hp_base != null ? p.hp_base : 0);
+                return p;
             }
 
             if (profile === 'knowledge') {

@@ -2998,8 +2998,8 @@ function af_charactersheets_default_build(): array
     }
 
     return [
-        'allocated_stats' => af_charactersheets_default_attributes(),
-        'attributes_allocated' => af_charactersheets_default_attributes(),
+        'allocated_stats' => af_charactersheets_zero_attributes(),
+        'attributes_allocated' => af_charactersheets_zero_attributes(),
         'picks' => [],
         'choices' => [],
         'active_skills' => [],
@@ -3034,7 +3034,7 @@ function af_charactersheets_normalize_build(array $build): array
     if (isset($build['allocated_stats']) && is_array($build['allocated_stats'])) {
         $build['attributes_allocated'] = array_merge((array)$build['attributes_allocated'], (array)$build['allocated_stats']);
     }
-    $build['allocated_stats'] = array_merge(af_charactersheets_default_attributes(), (array)($build['attributes_allocated'] ?? []));
+    $build['allocated_stats'] = array_merge(af_charactersheets_zero_attributes(), (array)($build['attributes_allocated'] ?? []));
 
     if (isset($build['picks']) && is_array($build['picks'])) {
         $build['choices'] = array_merge((array)$build['choices'], (array)$build['picks']);

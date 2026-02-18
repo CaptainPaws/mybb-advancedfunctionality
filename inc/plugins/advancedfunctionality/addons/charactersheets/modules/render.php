@@ -866,6 +866,10 @@ function af_charactersheets_build_mechanics_html(array $view): string
     $humanity_total = (int)($mechanics['humanity_total'] ?? 0);
     $speed_total = (int)($mechanics['speed_total'] ?? 0);
     $saves = (array)($mechanics['saves'] ?? []);
+    $dex_mod = (int)($view['debug']['dex_mod'] ?? 0);
+    $con_mod = (int)($view['debug']['con_mod'] ?? 0);
+    $armor_equip_bonus_total = (int)($view['debug']['armor_equip_bonus_total'] ?? 0);
+    $ac_breakdown = '10 + ' . af_charactersheets_format_signed($dex_mod) . ' + ' . af_charactersheets_format_signed($con_mod) . ' + ' . af_charactersheets_format_signed($armor_equip_bonus_total);
     $reflex = af_charactersheets_format_signed($saves['reflex'] ?? 0);
     $will = af_charactersheets_format_signed($saves['will'] ?? 0);
     $fortitude = af_charactersheets_format_signed($saves['fortitude'] ?? 0);
@@ -876,6 +880,7 @@ function af_charactersheets_build_mechanics_html(array $view): string
         . '<div class="af-cs-mech-row"><span>Броня</span><span>' . htmlspecialchars_uni((string)$armor_bonus) . '</span></div>'
         . '<div class="af-cs-mech-row"><span>Щит</span><span>' . htmlspecialchars_uni((string)$shield_bonus) . '</span></div>'
         . '<div class="af-cs-mech-row af-cs-mech-total"><span>Итоговый AC</span><span>' . htmlspecialchars_uni((string)$ac_total) . '</span></div>'
+        . '<div class="af-cs-muted" style="font-size:11px;margin-top:6px;">' . htmlspecialchars_uni($ac_breakdown) . '</div>'
         . '</div>';
 
     $col2 = '<div class="af-cs-mech-card">'
@@ -928,6 +933,18 @@ function af_charactersheets_build_mechanics_html(array $view): string
 
         $debug_lines[] = $line;
     }
+
+    $hp_base_breakdown = (array)($debug['hp_base_breakdown'] ?? []);
+    $fixed_hp_breakdown = (array)($debug['fixed_hp_breakdown'] ?? []);
+    $debug_lines[] = 'HP BREAKDOWN: race.hp_base=' . (int)($hp_base_breakdown['race'] ?? 0)
+        . ' class.hp_base=' . (int)($hp_base_breakdown['class'] ?? 0)
+        . ' theme.hp_base=' . (int)($hp_base_breakdown['theme'] ?? 0)
+        . ' race.fixed_bonuses.hp=' . (int)($fixed_hp_breakdown['race'] ?? 0)
+        . ' class.fixed_bonuses.hp=' . (int)($fixed_hp_breakdown['class'] ?? 0)
+        . ' theme.fixed_bonuses.hp=' . (int)($fixed_hp_breakdown['theme'] ?? 0)
+        . ' extra.fixed_bonuses.hp=' . (int)($fixed_hp_breakdown['extra'] ?? 0)
+        . ' con_mod=' . (int)($debug['con_mod'] ?? 0)
+        . ' hp_total=' . (int)($debug['hp_total'] ?? 0);
 
     $debug_lines[] = 'TOTAL: hp_base_total=' . (int)($debug['hp_base_total'] ?? 0)
         . ' fixed_hp_total=' . (int)($debug['fixed_hp_total'] ?? 0)

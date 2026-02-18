@@ -83,6 +83,12 @@ function af_kb_default_type_definitions(): array
             $schema['fields'][] = ['path' => 'traits', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'id','type'=>'string','required'=>true], ['path'=>'title','type'=>'i18n','required'=>true], ['path'=>'desc','type'=>'i18n','required'=>true], ['path'=>'effects','type'=>'array','item'=>['type'=>'object','fields'=>[['path'=>'op','type'=>'select','options'=>[['value'=>'choice_ref']],'required'=>true],['path'=>'choice_id','type'=>'string','required'=>true]]]]]], 'default' => []];
         }
 
+
+        if (in_array($key, ['class', 'theme'], true)) {
+            $schema['root_defaults']['hp_base'] = 0;
+            $schema['fields'][] = ['path' => 'hp_base', 'type' => 'number', 'label_ru' => 'Базовое HP', 'label_en' => 'Base HP', 'required' => true, 'default' => 0];
+        }
+
         if ($key === 'item') {
             $schema['root_defaults'] = ['schema' => AF_KB_RULES_SCHEMA, 'item_kind' => 'misc', 'rarity' => 'common', 'price' => 0, 'stackable' => false, 'equip' => ['slot' => '', 'unique' => false], 'humanity_cost' => 0, 'effects' => []];
             $schema['fields'] = [
@@ -932,8 +938,8 @@ function af_kb_get_type_profile_definition(string $typeKey): array
 
     $profiles = [
         'race' => ['ui_profile' => 'race', 'rules_enabled' => true, 'defaults' => $base + ['size' => 'medium', 'creature_type' => 'humanoid', 'speed' => 30, 'hp_base' => 10, 'languages' => ['common']]],
-        'class' => ['ui_profile' => 'class', 'rules_enabled' => true, 'defaults' => $base + ['hp_per_level' => 6, 'key_ability' => 'str', 'proficiencies' => new stdClass(), 'progression' => []]],
-        'theme' => ['ui_profile' => 'theme', 'rules_enabled' => true, 'defaults' => $base],
+        'class' => ['ui_profile' => 'class', 'rules_enabled' => true, 'defaults' => $base + ['hp_base' => 0, 'hp_per_level' => 6, 'key_ability' => 'str', 'proficiencies' => new stdClass(), 'progression' => []]],
+        'theme' => ['ui_profile' => 'theme', 'rules_enabled' => true, 'defaults' => $base + ['hp_base' => 0]],
         'skill' => ['ui_profile' => 'skill', 'rules_enabled' => true, 'defaults' => $base + ['skill' => ['attribute' => 'int', 'trained_only' => false, 'untrained_allowed' => true, 'armor_check_penalty_applies' => false, 'rank_mode' => 'ranked', 'max_rank' => 10, 'rank_bonus' => 1, 'base_formula' => 'attribute', 'can_buy_rank' => true]]],
         'knowledge' => ['ui_profile' => 'knowledge', 'rules_enabled' => true, 'defaults' => $base + ['knowledge_group' => 'lore', 'skill' => ['attribute' => 'int', 'rank_mode' => 'ranked', 'max_rank' => 10, 'rank_bonus' => 1, 'base_formula' => 'attribute', 'can_buy_rank' => true]]],
         'language' => ['ui_profile' => 'language', 'rules_enabled' => true, 'defaults' => $base + ['script' => '', 'rarity' => 'common', 'family' => '', 'requires' => []]],

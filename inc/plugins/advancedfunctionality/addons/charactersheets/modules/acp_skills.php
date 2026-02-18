@@ -36,5 +36,11 @@ function af_charactersheets_get_attribute_labels(): array
 function af_charactersheets_default_attributes(): array
 {
     $catalog = af_cs_get_attribute_catalog();
+    return array_fill_keys(array_keys($catalog), 10);
+}
+
+function af_charactersheets_zero_attributes(): array
+{
+    $catalog = af_cs_get_attribute_catalog();
     return array_fill_keys(array_keys($catalog), 0);
 }

@@ -343,11 +343,11 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $build = af_charactersheets_normalize_build($build);
 
     $attributes_base = af_charactersheets_default_attributes();
-    $attributes_allocated = array_merge(af_charactersheets_default_attributes(), (array)($build['allocated_stats'] ?? $build['attributes_allocated'] ?? []));
+    $attributes_allocated = array_merge(af_charactersheets_zero_attributes(), (array)($build['allocated_stats'] ?? $build['attributes_allocated'] ?? []));
 
     $choices = (array)($build['choices'] ?? []);
     $errors = [];
-    $bonus = af_charactersheets_default_attributes();
+    $bonus = af_charactersheets_zero_attributes();
     $choice_requirements = [];
     $skill_choice_requirements = [];
     $bonus_attr_points = 0;
@@ -711,8 +711,19 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
 
     $humanity_base = 100.0;
 
-    $hp_base_total = (float)($resolved_rules['hp_base_total'] ?? 0);
-    $hp_fixed_total = (float)(($rules_aggregate['fixed_hp_total'] ?? ($resolved_rules['fixed_bonuses']['hp'] ?? 0)) + $bonus_hp);
+    $hp_base_breakdown = [
+        'race' => (float)($source_rules_map['race']['hp_base'] ?? 0),
+        'class' => (float)($source_rules_map['class']['hp_base'] ?? 0),
+        'theme' => (float)($source_rules_map['theme']['hp_base'] ?? 0),
+    ];
+    $hp_fixed_breakdown = [
+        'race' => (float)($source_rules_map['race']['fixed_bonuses']['hp'] ?? 0),
+        'class' => (float)($source_rules_map['class']['fixed_bonuses']['hp'] ?? 0),
+        'theme' => (float)($source_rules_map['theme']['fixed_bonuses']['hp'] ?? 0),
+        'extra' => (float)$bonus_hp,
+    ];
+    $hp_base_total = array_sum($hp_base_breakdown);
+    $hp_fixed_total = array_sum($hp_fixed_breakdown);
     $hp_con = (float)$con_mod;
 
     $augmentation_slots = (array)($build['augmentations']['slots'] ?? []);
@@ -781,7 +792,9 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'humanity_total' => $humanity_total,
             'hp_breakdown' => [
                 'hp_base_total' => $hp_base_total,
+                'hp_base' => $hp_base_breakdown,
                 'fixed_total' => $hp_fixed_total,
+                'fixed_bonuses_hp' => $hp_fixed_breakdown,
                 'from_con_mod' => $hp_con,
             ],
             'humanity_breakdown' => [
@@ -792,6 +805,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
                 'reflex' => $dex_mod,
                 'will' => $wis_mod,
                 'fortitude' => $con_mod,
+                'fort' => $con_mod,
                 'perception' => $int_mod,
             ],
         ],
@@ -810,6 +824,9 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'con_mod' => $con_mod,
             'dex_mod' => $dex_mod,
             'armor_equip_bonus_total' => $armor_equip_bonus_total,
+            'hp_base_breakdown' => $hp_base_breakdown,
+            'fixed_hp_breakdown' => $hp_fixed_breakdown,
+            'hp_total' => $hp_total,
         ],
         'languages' => [
             'selected' => $language_selected,
