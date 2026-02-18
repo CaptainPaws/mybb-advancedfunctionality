@@ -2433,7 +2433,7 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
         if ($skill_key === '') {
             continue;
         }
-        $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => 1, 'source' => $source];
+        $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => 1, 'rank_max' => 0, 'source' => $source];
     }
 
     foreach ((array)($data['skills_grants'] ?? []) as $grant) {
@@ -2445,7 +2445,7 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
             continue;
         }
         $skill_rank = max(1, (int)($grant['skill_rank'] ?? 1));
-        $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => $skill_rank, 'source' => $source];
+        $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => $skill_rank, 'rank_max' => 0, 'source' => $source];
     }
 
     foreach ((array)($data['grants'] ?? []) as $grant) {
@@ -2459,7 +2459,8 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
                 continue;
             }
             $skill_rank = max(0, min(4, (int)($grant['rank'] ?? $grant['skill_rank'] ?? $grant['value'] ?? 0)));
-            $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => $skill_rank, 'source' => $source];
+            $rank_max = max(0, (int)($grant['rank_max'] ?? $grant['max_rank'] ?? 0));
+            $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => $skill_rank, 'rank_max' => $rank_max, 'source' => $source];
             continue;
         }
         $grant_type = (string)($grant['type'] ?? $grant['kb_type'] ?? '');
@@ -2471,7 +2472,8 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
             continue;
         }
         $skill_rank = max(0, min(4, (int)($grant['skill_rank'] ?? $grant['value'] ?? 0)));
-        $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => $skill_rank, 'source' => $source];
+        $rank_max = max(0, (int)($grant['rank_max'] ?? $grant['max_rank'] ?? 0));
+        $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => $skill_rank, 'rank_max' => $rank_max, 'source' => $source];
     }
 
     foreach ((array)($data['traits'] ?? []) as $trait) {
@@ -2491,7 +2493,8 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
                 continue;
             }
             $skill_rank = max(0, min(4, (int)($grant['skill_rank'] ?? $grant['value'] ?? 0)));
-            $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => $skill_rank, 'source' => $source];
+            $rank_max = max(0, (int)($grant['rank_max'] ?? $grant['max_rank'] ?? 0));
+            $grants[$skill_key] = ['skill_key' => $skill_key, 'skill_rank' => $skill_rank, 'rank_max' => $rank_max, 'source' => $source];
         }
     }
 
@@ -2577,12 +2580,36 @@ function af_charactersheets_collect_skill_pick_choices(array $context, array $bu
                 'selected' => $selected_values,
                 'grant_mode' => $grant_mode,
                 'rank_value' => max(1, (int)($choice['rank_value'] ?? 1)),
+                'rank_max_value' => max(0, (int)($choice['rank_max'] ?? $choice['rank_max_value'] ?? $choice['max_rank'] ?? 0)),
                 'points_value' => max(0, (int)($choice['points_value'] ?? 0)),
             ];
         }
     }
 
     return $result;
+}
+
+function af_charactersheets_skill_rank_cost_for_target(int $target_rank): int
+{
+    $target_rank = max(0, $target_rank);
+    $cost_map = [1 => 1, 2 => 2, 3 => 3, 4 => 5];
+    if (isset($cost_map[$target_rank])) {
+        return $cost_map[$target_rank];
+    }
+    if ($target_rank <= 0) {
+        return 0;
+    }
+    return 5 + (($target_rank - 4) * 5);
+}
+
+function af_charactersheets_skill_rank_total_cost(int $rank): int
+{
+    $rank = max(0, $rank);
+    $total = 0;
+    for ($i = 1; $i <= $rank; $i++) {
+        $total += af_charactersheets_skill_rank_cost_for_target($i);
+    }
+    return $total;
 }
 
 function af_charactersheets_extract_knowledge_grants(array $resolved, string $target): array
