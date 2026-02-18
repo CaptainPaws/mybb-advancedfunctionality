@@ -122,7 +122,7 @@ function af_charactersheets_ensure_settings(): void
 {
     global $db, $lang;
 
-    af_charactersheets_lang();
+    af_charactersheets_load_lang();
 
     $gid = af_charactersheets_ensure_group(
         'af_charactersheets',
@@ -412,7 +412,7 @@ function af_charactersheets_showthread_start_impl(): void
         return;
     }
 
-    af_charactersheets_lang();
+    af_charactersheets_load_lang();
 
     $tid = (int)($thread['tid'] ?? 0);
     $fid = (int)($thread['fid'] ?? 0);
@@ -589,18 +589,18 @@ function af_charactersheets_misc_start_impl(): void
 
     $action = (string)$mybb->get_input('action');
     if ($action === 'af_charactersheet') {
-        af_charactersheets_lang();
+        af_charactersheets_load_lang();
         $slug = (string)$mybb->get_input('slug');
         af_charactersheets_render_sheet_page($slug);
         exit;
     }
     if ($action === 'af_charactersheets') {
-        af_charactersheets_lang();
+        af_charactersheets_load_lang();
         af_charactersheets_render_catalog_page();
         exit;
     }
     if ($action === 'af_charactersheet_api') {
-        af_charactersheets_lang();
+        af_charactersheets_load_lang();
         af_charactersheets_handle_api();
         exit;
     }
@@ -609,7 +609,7 @@ function af_charactersheets_misc_start_impl(): void
         return;
     }
 
-    af_charactersheets_lang();
+    af_charactersheets_load_lang();
 
     if (!af_charactersheets_is_enabled()) {
         af_charactersheets_deny('Addon disabled');
@@ -1474,7 +1474,7 @@ function af_charactersheets_inject_modal(string $page): string
     }
 
     if (!isset($lang->af_charactersheets_name)) {
-        af_charactersheets_lang();
+        af_charactersheets_load_lang();
     }
 
     $modal_title = htmlspecialchars_uni($lang->af_charactersheets_sheet_modal_title ?? 'Лист персонажа');
@@ -3393,7 +3393,7 @@ function af_charactersheets_deny(string $message, array $context = []): void
     error_no_permission();
 }
 
-function af_charactersheets_lang(): void
+function af_charactersheets_load_lang(): void
 {
     if (function_exists('af_load_addon_lang')) {
         af_load_addon_lang(AF_CS_ID);
