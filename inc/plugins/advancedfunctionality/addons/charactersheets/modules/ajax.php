@@ -184,6 +184,33 @@ function af_charactersheets_handle_api(): void
             if ($choice_value === '' || !in_array($choice_value, $allowed, true)) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Invalid skill']);
             }
+        } elseif (preg_match('/^(race|class|theme)_skill_pick_choice_/', $choice_key)) {
+            $context = cs_resolve_character_kb_context($sheet_id);
+            $choice_config = [];
+            foreach (af_charactersheets_collect_skill_pick_choices($context, $build) as $item) {
+                if ((string)($item['choice_key'] ?? '') === $choice_key) {
+                    $choice_config = $item;
+                    break;
+                }
+            }
+            if (!$choice_config) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Unknown skill choice']);
+            }
+
+            $allowed_options = array_keys((array)($choice_config['options'] ?? []));
+            $pick_limit = max(1, (int)($choice_config['pick'] ?? 1));
+            if (empty($choice_values)) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Select at least one skill']);
+            }
+            if (count($choice_values) > $pick_limit) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Too many selected skills']);
+            }
+            foreach ($choice_values as $value) {
+                if (!in_array($value, $allowed_options, true)) {
+                    af_charactersheets_json_response(['success' => false, 'error' => 'Invalid skill']);
+                }
+            }
+            $choice_value = implode(',', array_values(array_unique($choice_values)));
         } else {
             af_charactersheets_json_response(['success' => false, 'error' => 'Invalid choice']);
         }

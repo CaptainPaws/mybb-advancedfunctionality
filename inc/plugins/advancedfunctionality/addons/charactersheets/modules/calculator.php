@@ -491,6 +491,36 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     }
 
     $rules_aggregate = (array)($kb_context['aggregate'] ?? af_cs_aggregate_rules(array_values((array)($kb_context['sources'] ?? []))));
+    $skill_pick_choices = af_charactersheets_collect_skill_pick_choices($kb_context, $build);
+    $skill_choice_grant_ranks = [];
+    $skill_pick_choice_details = [];
+    foreach ($skill_pick_choices as $choice) {
+        $selected_values = (array)($choice['selected'] ?? []);
+        $grant_mode = (string)($choice['grant_mode'] ?? 'rank');
+        $rank_value = max(1, (int)($choice['rank_value'] ?? 1));
+        $points_value = max(0, (int)($choice['points_value'] ?? 0));
+
+        if ($grant_mode === 'rank') {
+            foreach ($selected_values as $skill_key) {
+                $skill_choice_grant_ranks[$skill_key] = max((int)($skill_choice_grant_ranks[$skill_key] ?? 0), $rank_value);
+            }
+        } elseif ($grant_mode === 'points' && $points_value > 0) {
+            $bonus_skill_points += count($selected_values) * $points_value;
+        }
+
+        $skill_pick_choice_details[] = [
+            'source' => (string)($choice['source'] ?? ''),
+            'id' => (string)($choice['id'] ?? ''),
+            'choice_key' => (string)($choice['choice_key'] ?? ''),
+            'pick' => max(1, (int)($choice['pick'] ?? 1)),
+            'options' => (array)($choice['options'] ?? []),
+            'selected' => $selected_values,
+            'grant_mode' => $grant_mode,
+            'rank_value' => $rank_value,
+            'points_value' => $points_value,
+        ];
+    }
+
     foreach (['race', 'class', 'theme'] as $sourceKey) {
         $resolved = (array)($kb_context[$sourceKey] ?? []);
         foreach (af_charactersheets_extract_knowledge_grants($resolved, 'knowledge') as $key) {
@@ -555,7 +585,8 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         }
     }
     $bonus_attr_points += (int)($rules_aggregate['points_pools']['attribute_points'] ?? 0);
-    $bonus_skill_points += (int)($rules_aggregate['points_pools']['skill_points'] ?? 0);
+    $bonus_skill_points += (int)($rules_aggregate['fixed']['skill_points'] ?? 0)
+        + (int)($rules_aggregate['fixed_bonuses']['skill_points'] ?? 0);
     $bonus_language_choices += (int)($rules_aggregate['points_pools']['language_slots'] ?? 0);
 
     $exp = (float)($progress['exp'] ?? 0);
@@ -648,6 +679,9 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             );
         }
     }
+    foreach ($skill_choice_grant_ranks as $skill_key => $skill_rank) {
+        $grant_skill_ranks[(string)$skill_key] = max((int)($grant_skill_ranks[(string)$skill_key] ?? 0), (int)$skill_rank);
+    }
 
     $skills_map = [];
     foreach ($skills_rows as $row) {
@@ -659,7 +693,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $source = (string)($row['source'] ?? 'manual');
         $existing = (array)($skills_map[$skill_key] ?? []);
         if (!empty($existing)) {
-            $fixedSources = ['race', 'class', 'theme'];
+            $fixedSources = ['race', 'class', 'theme', 'race_choice', 'class_choice', 'theme_choice'];
             $existingSource = (string)($existing['source'] ?? 'manual');
             if (in_array($existingSource, $fixedSources, true)) {
                 if (in_array($source, $fixedSources, true)
@@ -729,11 +763,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $total = $base_mod + ($is_active ? $rank_bonus : 0) + $bonus_val;
         if ($is_active) {
             $grant_rank = max(0, (int)($grant_skill_ranks[$skill_key] ?? 0));
-            if ($source === 'manual') {
-                $manual_spent += $skill_rank;
-            } else {
-                $manual_spent += max(0, $skill_rank - $grant_rank);
-            }
+            $manual_spent += max(0, $skill_rank - $grant_rank);
         }
 
         $skills_view[] = [
@@ -896,6 +926,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         'choices' => $choices,
         'choice_details' => $choice_details,
         'skill_choice_details' => $skill_choice_requirements,
+        'skill_pick_choice_details' => $skill_pick_choice_details,
         'labels' => $attributes_labels,
         'level' => $level_data['level'],
         'level_percent' => $level_data['percent'],

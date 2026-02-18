@@ -2498,6 +2498,93 @@ function af_charactersheets_extract_skill_grants(array $resolved, string $source
     return array_values($grants);
 }
 
+function af_charactersheets_collect_skill_pick_choices(array $context, array $build = []): array
+{
+    $choices_state = (array)($build['choices'] ?? []);
+    $skills_map = [];
+    foreach ((array)($context['skills_all'] ?? []) as $resolved) {
+        $key = trim((string)($resolved['key'] ?? ''));
+        if ($key === '') {
+            continue;
+        }
+        $skills_map[$key] = (string)($resolved['title'] ?? $key);
+    }
+
+    $result = [];
+    foreach (['race', 'class', 'theme'] as $source) {
+        $rules = cs_kb_rules_normalize((array)($context['sources'][$source]['rules'] ?? []));
+        foreach ((array)($rules['choices'] ?? []) as $idx => $choice) {
+            if (!is_array($choice) || (string)($choice['type'] ?? '') !== 'skill_pick_choice') {
+                continue;
+            }
+
+            $choice_id = trim((string)($choice['id'] ?? ''));
+            $suffix = $choice_id !== '' ? $choice_id : ('idx_' . $idx);
+            $choice_key = $source . '_skill_pick_choice_' . $suffix;
+            $pick = max(1, (int)($choice['pick'] ?? 1));
+            $grant_mode = (string)($choice['grant_mode'] ?? 'rank');
+            if ($grant_mode === 'skill_points') {
+                $grant_mode = 'points';
+            }
+            if (!in_array($grant_mode, ['rank', 'points'], true)) {
+                $grant_mode = 'rank';
+            }
+
+            $options = [];
+            foreach ((array)($choice['options'] ?? []) as $option) {
+                $skill_key = trim((string)$option);
+                if ($skill_key === '') {
+                    continue;
+                }
+                $options[$skill_key] = $skills_map[$skill_key] ?? $skill_key;
+            }
+
+            $exclude = [];
+            foreach ((array)($choice['exclude'] ?? []) as $excluded) {
+                $excluded_key = trim((string)$excluded);
+                if ($excluded_key !== '') {
+                    $exclude[$excluded_key] = true;
+                }
+            }
+            foreach (array_keys($exclude) as $excluded_key) {
+                unset($options[$excluded_key]);
+            }
+
+            if (!$options) {
+                af_charactersheets_log('CharacterSheets: skill_pick_choice has no available options', [
+                    'source' => $source,
+                    'choice_id' => $choice_id,
+                    'choice_key' => $choice_key,
+                ]);
+                continue;
+            }
+
+            $selected = (string)($choices_state[$choice_key] ?? '');
+            $selected_values = array_values(array_unique(array_filter(array_map('trim', explode(',', $selected)), static function ($value) use ($options) {
+                return $value !== '' && isset($options[$value]);
+            })));
+            if (count($selected_values) > $pick) {
+                $selected_values = array_slice($selected_values, 0, $pick);
+            }
+
+            $result[] = [
+                'source' => $source,
+                'id' => $choice_id,
+                'choice_key' => $choice_key,
+                'pick' => $pick,
+                'options' => $options,
+                'exclude' => array_keys($exclude),
+                'selected' => $selected_values,
+                'grant_mode' => $grant_mode,
+                'rank_value' => max(1, (int)($choice['rank_value'] ?? 1)),
+                'points_value' => max(0, (int)($choice['points_value'] ?? 0)),
+            ];
+        }
+    }
+
+    return $result;
+}
+
 function af_charactersheets_extract_knowledge_grants(array $resolved, string $target): array
 {
     $target = $target === 'language' ? 'language' : 'knowledge';
@@ -2717,15 +2804,11 @@ function af_cs_aggregate_rules(array $sources): array
             $choice['source'] = (string)($source['type'] ?? '');
             $totals['choices'][] = $choice;
 
-            if ((string)($choice['type'] ?? '') === 'skill_pick_choice' && (string)($choice['grant_mode'] ?? '') === 'skill_points') {
-                $totals['bonus_skill_points'] += max(0, (int)($choice['pick'] ?? 0)) * max(0, (int)($choice['points_value'] ?? 0));
-            }
         }
 
         $totals['grants'] = array_merge($totals['grants'], (array)($rules['grants'] ?? []));
     }
 
-    $totals['points_pools']['skill_points'] += $totals['bonus_skill_points'];
 
     return [
         'fixed' => $fixed,
