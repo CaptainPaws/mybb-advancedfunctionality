@@ -78,7 +78,7 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $can_staff_reset = af_charactersheets_user_can_staff_reset($mybb->user ?? [], $fid_for_mod);
     $is_staff = af_cs_is_staff($mybb->user ?? [], $fid_for_mod);
     $attributes_locked = !empty($build['attributes_locked']);
-    $can_edit_attributes = $can_edit_sheet && (!$attributes_locked || $is_staff);
+    $can_edit_attributes = ($can_edit_sheet && !$attributes_locked) || $is_staff;
     $can_award_exp = af_charactersheets_user_can_award_exp($mybb->user ?? [], $fid_for_mod);
     $can_view_ledger = af_charactersheets_user_can_view_ledger($sheet, $mybb->user ?? [], $fid_for_mod);
 
@@ -97,7 +97,9 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $sheet_info_table_html = af_charactersheets_build_info_table_html($atf_index);
     $sheet_attributes_html = af_charactersheets_build_attributes_html($sheet_view, $can_edit_attributes, $can_view_ledger, $can_staff_reset, $attributes_locked);
     $sheet_bonus_html = af_charactersheets_build_bonus_html($atf_index);
-    $sheet_skills_html = af_charactersheets_build_skills_html($sheet_view, $can_manage_sheet, $can_view_ledger, $can_staff_reset);
+    $skills_locked = !empty($build['locked_skills']);
+    $can_manage_skills = $can_manage_sheet && (!$skills_locked || $is_staff);
+    $sheet_skills_html = af_charactersheets_build_skills_html($sheet_view, $can_manage_skills, $can_view_ledger, $can_staff_reset, $skills_locked);
     $sheet_knowledge_html = af_charactersheets_build_knowledge_html($sheet_view, $can_edit_sheet, $can_view_ledger);
     $sheet_abilities_html = af_charactersheets_build_abilities_html($build, $can_edit_sheet);
     $sheet_inventory_html = af_charactersheets_build_inventory_html($build, $can_edit_sheet);
@@ -375,7 +377,7 @@ function af_charactersheets_render_stat_value(string $label, string $value): str
         . '</div>';
 }
 
-function af_charactersheets_build_skills_html(array $view, bool $can_manage, bool $can_view_pool, bool $can_staff_reset = false): string
+function af_charactersheets_build_skills_html(array $view, bool $can_manage, bool $can_view_pool, bool $can_staff_reset = false, bool $skills_locked = false): string
 {
     $skills = (array)($view['skills'] ?? []);
     $grouped = [];
@@ -982,31 +984,22 @@ function af_charactersheets_build_mechanics_html(array $view): string
 
     $cards = [];
     $cards[] = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_ac', 'Класс брони')) . '</div>'
-        . '<div class="af-cs-staticon"><i class="fa-solid fa-shield-halved af-cs-staticon__icon" aria-hidden="true"></i><span class="af-cs-staticon__value">' . htmlspecialchars_uni((string)$ac_total) . '</span></div>'
+        . '<div class="af-cs-staticon"><i class="fa-solid fa-shield-halved af-cs-staticon__icon" aria-hidden="true"></i><div class="af-cs-staticon__content"><div class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_ac', 'Класс брони')) . '</div><span class="af-cs-staticon__value">' . htmlspecialchars_uni((string)$ac_total) . '</span></div></div>'
         . '</div>';
     $cards[] = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_hp', 'Здоровье')) . '</div>'
-        . '<div class="af-cs-staticon"><i class="fa-solid fa-heart af-cs-staticon__icon" aria-hidden="true"></i><span class="af-cs-staticon__value">' . htmlspecialchars_uni((string)$hp_total) . '</span></div>'
+        . '<div class="af-cs-staticon"><i class="fa-solid fa-heart af-cs-staticon__icon" aria-hidden="true"></i><div class="af-cs-staticon__content"><div class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_hp', 'Здоровье')) . '</div><span class="af-cs-staticon__value">' . htmlspecialchars_uni((string)$hp_total) . '</span></div></div>'
         . '</div>';
     $cards[] = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_damage', 'Урон')) . '</div>'
-        . '<div class="af-cs-staticon"><i class="fa-solid fa-gun af-cs-staticon__icon" aria-hidden="true"></i><span class="af-cs-staticon__value">' . htmlspecialchars_uni($damage_total) . '</span></div>'
+        . '<div class="af-cs-staticon"><i class="fa-solid fa-gun af-cs-staticon__icon" aria-hidden="true"></i><div class="af-cs-staticon__content"><div class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_damage', 'Урон')) . '</div><span class="af-cs-staticon__value">' . htmlspecialchars_uni($damage_total) . '</span></div></div>'
         . '</div>';
     $cards[] = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_speed', 'Скорость')) . '</div>'
-        . '<div class="af-cs-staticon"><i class="fa-solid fa-person-running af-cs-staticon__icon" aria-hidden="true"></i><span class="af-cs-staticon__value">' . htmlspecialchars_uni((string)$speed_total) . '</span></div>'
+        . '<div class="af-cs-staticon"><i class="fa-solid fa-person-running af-cs-staticon__icon" aria-hidden="true"></i><div class="af-cs-staticon__content"><div class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_speed', 'Скорость')) . '</div><span class="af-cs-staticon__value">' . htmlspecialchars_uni((string)$speed_total) . '</span></div></div>'
         . '</div>';
 
-    $cards[] = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_saves', 'Спасброски')) . '</div>'
-        . '<div class="af-cs-save-grid">'
-        . '<div class="af-cs-save-card"><span>' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_fortitude', 'Стойкость / Fortitude')) . '</span><strong>' . htmlspecialchars_uni(sprintf('%+d', $fortitude)) . '</strong></div>'
-        . '<div class="af-cs-save-card"><span>' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_reflex', 'Рефлекс / Reflex')) . '</span><strong>' . htmlspecialchars_uni(sprintf('%+d', $reflex)) . '</strong></div>'
-        . '<div class="af-cs-save-card"><span>' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_will', 'Воля / Will')) . '</span><strong>' . htmlspecialchars_uni(sprintf('%+d', $will)) . '</strong></div>'
-        . '<div class="af-cs-save-card"><span>' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_perception', 'Восприятие / Perception')) . '</span><strong>' . htmlspecialchars_uni(sprintf('%+d', $perception)) . '</strong></div>'
-        . '</div>'
-        . '</div>';
+    $cards[] = '<div class="af-cs-save-card"><i class="fa-solid fa-heart-pulse af-cs-save-card__icon" aria-hidden="true"></i><div class="af-cs-save-card__content"><span class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_fortitude', 'Стойкость / Fortitude')) . '</span><strong>' . htmlspecialchars_uni(sprintf('%+d', $fortitude)) . '</strong></div></div>';
+    $cards[] = '<div class="af-cs-save-card"><i class="fa-solid fa-bolt af-cs-save-card__icon" aria-hidden="true"></i><div class="af-cs-save-card__content"><span class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_reflex', 'Рефлекс / Reflex')) . '</span><strong>' . htmlspecialchars_uni(sprintf('%+d', $reflex)) . '</strong></div></div>';
+    $cards[] = '<div class="af-cs-save-card"><i class="fa-solid fa-brain af-cs-save-card__icon" aria-hidden="true"></i><div class="af-cs-save-card__content"><span class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_will', 'Воля / Will')) . '</span><strong>' . htmlspecialchars_uni(sprintf('%+d', $will)) . '</strong></div></div>';
+    $cards[] = '<div class="af-cs-save-card"><i class="fa-solid fa-eye af-cs-save-card__icon" aria-hidden="true"></i><div class="af-cs-save-card__content"><span class="af-cs-mech-title">' . htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mech_perception', 'Восприятие / Perception')) . '</span><strong>' . htmlspecialchars_uni(sprintf('%+d', $perception)) . '</strong></div></div>';
 
     $debug_line = '<!-- AF_CS_DEBUG mechanics: race=' . htmlspecialchars_uni((string)($debug['race']['key'] ?? ''))
         . ' schema=' . htmlspecialchars_uni((string)($debug['race']['schema'] ?? ''))
