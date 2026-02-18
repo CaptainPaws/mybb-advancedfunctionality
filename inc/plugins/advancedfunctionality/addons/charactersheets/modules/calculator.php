@@ -798,20 +798,10 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             continue;
         }
 
-        $attr_key = af_charactersheets_resolve_skill_attribute_key($skill_data, $data);
         $skill_entry = af_charactersheets_kb_get_entry('skill', $skill_key);
-        $skill_entry_data = (array)($skill_entry['data'] ?? []);
-        $skill_entry_data_skill = (array)($skill_entry_data['skill'] ?? []);
-        $key_stat = (string)($skill_entry_data_skill['key_stat'] ?? '');
-        if (trim($key_stat) === '') {
-            $key_stat = (string)($skill_entry_data_skill['attribute'] ?? '');
-        }
-        $key_stat = strtolower(trim($key_stat));
-        if (!in_array($key_stat, ['str', 'dex', 'con', 'int', 'wis', 'cha'], true)) {
-            $key_stat = '';
-        }
+        $key_stat = af_charactersheets_extract_skill_key_stat((array)$skill_entry);
         $key_stat_label = $key_stat !== '' ? (string)($attributes_labels[$key_stat] ?? '') : '';
-        $base_mod = (int)floor((float)($final[$attr_key] ?? 0));
+        $attr_mod = $key_stat !== '' ? (int)floor((float)($final[$key_stat] ?? 0)) : 0;
         $row = (array)($skills_map[$skill_key] ?? []);
         $skill_rank = max(0, (int)($row['skill_rank'] ?? 0));
         $is_active = (int)($row['is_active'] ?? 0) === 1;
@@ -821,7 +811,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         if (!array_key_exists($skill_rank, $skill_rank_bonus_map) && $skill_rank > 5) {
             $rank_bonus = 20 + (($skill_rank - 5) * 5);
         }
-        $total = $base_mod + ($is_active ? $rank_bonus : 0) + $bonus_val;
+        $total = $attr_mod + $rank_bonus + $bonus_val;
         $grant_rank = max(0, (int)($grant_skill_ranks[$skill_key] ?? 0));
         if ($is_active) {
             $manual_spent += max(
@@ -852,14 +842,16 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'is_active' => $is_active,
             'trained_only' => !empty($skill_data['trained_only']),
             'notes' => (string)($skill_data['notes'] ?? ''),
-            'attr_key' => $attr_key,
-            'attr_label' => $attributes_labels[$attr_key] ?? $attr_key,
+            'attr_key' => $key_stat,
+            'attr_label' => $key_stat_label,
             'key_stat' => $key_stat,
             'key_stat_label' => $key_stat_label,
-            'base' => $base_mod,
+            'base' => $attr_mod,
+            'attr_mod' => $attr_mod,
             'rank_bonus' => $rank_bonus,
             'bonus' => $bonus_val,
             'total' => $total,
+            'total_bonus' => $total,
         ];
     }
 

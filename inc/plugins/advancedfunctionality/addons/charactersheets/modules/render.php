@@ -444,7 +444,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
             $rank_max = max(1, (int)($skill['rank_max'] ?? 1));
             $source = (string)($skill['source'] ?? 'manual');
             $notes = (string)($skill['notes'] ?? '');
-            $total_label = af_charactersheets_format_signed((float)($skill['total'] ?? 0));
+            $total_label = af_charactersheets_format_signed((float)($skill['total_bonus'] ?? $skill['total'] ?? 0));
             $source_chip = '';
             if (isset($fixed_sources[$source])) {
                 $source_chip = '<span class="af-cs-rank-chip is-source">Получено: ' . htmlspecialchars_uni($fixed_sources[$source]) . '</span>';

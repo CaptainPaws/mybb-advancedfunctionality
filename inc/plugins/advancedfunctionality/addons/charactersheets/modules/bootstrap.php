@@ -2620,6 +2620,25 @@ function af_charactersheets_resolve_skill_attribute_key(array $skill_data, array
     return $attribute_key;
 }
 
+function af_charactersheets_extract_skill_key_stat(array $entry): string
+{
+    $entry_data = (array)($entry['data'] ?? []);
+    $skill_data = (array)($entry_data['skill'] ?? []);
+
+    $key_stat = trim((string)($skill_data['key_stat'] ?? ''));
+    if ($key_stat === '') {
+        $key_stat = trim((string)($skill_data['attribute'] ?? ''));
+    }
+    $key_stat = strtolower($key_stat);
+
+    $allowed = af_charactersheets_default_attributes();
+    if ($key_stat === '' || !array_key_exists($key_stat, $allowed)) {
+        return '';
+    }
+
+    return $key_stat;
+}
+
 function af_charactersheets_skill_rank_total_cost(int $rank): int
 {
     $rank = max(0, $rank);
