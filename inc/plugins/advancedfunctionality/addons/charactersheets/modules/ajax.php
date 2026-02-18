@@ -137,11 +137,25 @@ function af_charactersheets_handle_api(): void
 
         $choice_key = (string)$mybb->get_input('choice_key');
         $choice_value = (string)$mybb->get_input('choice_value');
+        $choice_values = array_values(array_filter(array_map('trim', explode(',', $choice_value)), static function ($value) {
+            return $value !== '';
+        }));
         $allowed_attr_choices = ['race_attr_bonus_choice', 'class_attr_bonus_choice', 'theme_attr_bonus_choice'];
+        $is_stat_bonus_choice = (bool)preg_match('/^(race|class|theme)_stat_bonus_choice(?:_.+)?$/', $choice_key);
         if (in_array($choice_key, $allowed_attr_choices, true)) {
             if (!array_key_exists($choice_value, af_charactersheets_default_attributes())) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Invalid attribute']);
             }
+        } elseif ($is_stat_bonus_choice) {
+            if (empty($choice_values)) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Invalid attributes']);
+            }
+            foreach ($choice_values as $value) {
+                if (!array_key_exists($value, af_charactersheets_default_attributes())) {
+                    af_charactersheets_json_response(['success' => false, 'error' => 'Invalid attribute']);
+                }
+            }
+            $choice_value = implode(',', $choice_values);
         } elseif (strpos($choice_key, 'skill_bonus_choice_') === 0) {
             $skills = af_charactersheets_get_skills_catalog(true);
             $allowed = array_map(static function ($row) {

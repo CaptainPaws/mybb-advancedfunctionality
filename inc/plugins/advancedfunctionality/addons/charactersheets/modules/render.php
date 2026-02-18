@@ -197,18 +197,32 @@ function af_charactersheets_build_attributes_html(array $view, bool $can_edit, b
     foreach ((array)($view['choice_details'] ?? []) as $choice) {
         $choice_key = (string)($choice['choice_key'] ?? '');
         $label = (string)($choice['label'] ?? '');
+        $pick = max(1, (int)($choice['pick'] ?? 1));
         if ($choice_key === '') {
             continue;
         }
-        $select_options = '';
-        foreach ($labels as $key => $attrLabel) {
-            $selected = ((string)($view['choices'][$choice_key] ?? '') === $key) ? ' selected' : '';
-            $select_options .= '<option value="' . htmlspecialchars_uni($key) . '"' . $selected . '>'
-                . htmlspecialchars_uni($attrLabel) . '</option>';
+        $chosen_values = $view['choices'][$choice_key] ?? ($choice['chosen'] ?? []);
+        if (is_string($chosen_values)) {
+            $chosen_values = array_filter(array_map('trim', explode(',', $chosen_values)));
+        }
+        if (!is_array($chosen_values)) {
+            $chosen_values = [$chosen_values];
+        }
+        $chosen_values = array_values(array_unique(array_filter($chosen_values, 'is_string')));
+
+        $selects = [];
+        for ($i = 0; $i < $pick; $i++) {
+            $select_options = '<option value="">—</option>';
+            foreach ($labels as $key => $attrLabel) {
+                $selected = (($chosen_values[$i] ?? '') === $key) ? ' selected' : '';
+                $select_options .= '<option value="' . htmlspecialchars_uni($key) . '"' . $selected . '>'
+                    . htmlspecialchars_uni($attrLabel) . '</option>';
+            }
+            $selects[] = '<select data-afcs-choice-key="' . htmlspecialchars_uni($choice_key) . '" data-afcs-choice-index="' . $i . '">' . $select_options . '</select>';
         }
         $choice_items[] = '<div class="af-cs-choice-row">'
-            . '<label>' . htmlspecialchars_uni($label) . '</label>'
-            . '<select data-afcs-choice-key="' . htmlspecialchars_uni($choice_key) . '">' . $select_options . '</select>'
+            . '<label>' . htmlspecialchars_uni($label) . ($pick > 1 ? ' (выбрать ' . $pick . ')' : '') . '</label>'
+            . '<div class="af-cs-choice-row__selects">' . implode('', $selects) . '</div>'
             . '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-choice-save="' . htmlspecialchars_uni($choice_key) . '">Применить</button>'
             . '</div>';
     }
@@ -866,34 +880,13 @@ function af_charactersheets_build_mechanics_html(array $view): string
     $humanity_total = (int)($mechanics['humanity_total'] ?? 0);
     $speed_total = (int)($mechanics['speed_total'] ?? 0);
     $saves = (array)($mechanics['saves'] ?? []);
-    $dex_mod = (int)($view['debug']['dex_mod'] ?? 0);
-    $con_mod = (int)($view['debug']['con_mod'] ?? 0);
+    $dex_final = (int)($view['debug']['dex_final'] ?? 0);
+    $con_final = (int)($view['debug']['con_final'] ?? 0);
     $armor_equip_bonus_total = (int)($view['debug']['armor_equip_bonus_total'] ?? 0);
-    $ac_breakdown = '10 + ' . af_charactersheets_format_signed($dex_mod) . ' + ' . af_charactersheets_format_signed($con_mod) . ' + ' . af_charactersheets_format_signed($armor_equip_bonus_total);
-    $reflex = af_charactersheets_format_signed($saves['reflex'] ?? 0);
-    $will = af_charactersheets_format_signed($saves['will'] ?? 0);
-    $fortitude = af_charactersheets_format_signed($saves['fortitude'] ?? 0);
-    $perception = af_charactersheets_format_signed($saves['perception'] ?? 0);
-
-    $col1 = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">Класс брони</div>'
-        . '<div class="af-cs-mech-row"><span>Броня</span><span>' . htmlspecialchars_uni((string)$armor_bonus) . '</span></div>'
-        . '<div class="af-cs-mech-row"><span>Щит</span><span>' . htmlspecialchars_uni((string)$shield_bonus) . '</span></div>'
-        . '<div class="af-cs-mech-row af-cs-mech-total"><span>Итоговый AC</span><span>' . htmlspecialchars_uni((string)$ac_total) . '</span></div>'
-        . '<div class="af-cs-muted" style="font-size:11px;margin-top:6px;">' . htmlspecialchars_uni($ac_breakdown) . '</div>'
-        . '</div>';
-
-    $col2 = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">Спасброски</div>'
-        . '<div class="af-cs-mech-row"><span>Рефлекс</span><span>' . htmlspecialchars_uni($reflex) . '</span></div>'
-        . '<div class="af-cs-mech-row"><span>Воля</span><span>' . htmlspecialchars_uni($will) . '</span></div>'
-        . '<div class="af-cs-mech-row"><span>Стойкость</span><span>' . htmlspecialchars_uni($fortitude) . '</span></div>'
-        . '<div class="af-cs-mech-row"><span>Восприятие</span><span>' . htmlspecialchars_uni($perception) . '</span></div>'
-        . '<div class="af-cs-mech-divider"></div>'
-        . '<div class="af-cs-mech-row"><span>HP</span><span>' . htmlspecialchars_uni((string)$hp_total) . '</span></div>'
-        . '<div class="af-cs-mech-row"><span>Скорость</span><span>' . htmlspecialchars_uni((string)$speed_total) . '</span></div>'
-        . '<div class="af-cs-mech-row"><span>Человечность</span><span>' . htmlspecialchars_uni((string)$humanity_total) . '%</span></div>'
-        . '</div>';
+    $reflex = (int)($saves['reflex'] ?? 0);
+    $will = (int)($saves['will'] ?? 0);
+    $fortitude = (int)($saves['fortitude'] ?? 0);
+    $perception = (int)($saves['perception'] ?? 0);
 
 
     $debug = (array)($view['debug'] ?? []);
@@ -943,7 +936,7 @@ function af_charactersheets_build_mechanics_html(array $view): string
         . ' class.fixed_bonuses.hp=' . (int)($fixed_hp_breakdown['class'] ?? 0)
         . ' theme.fixed_bonuses.hp=' . (int)($fixed_hp_breakdown['theme'] ?? 0)
         . ' extra.fixed_bonuses.hp=' . (int)($fixed_hp_breakdown['extra'] ?? 0)
-        . ' con_mod=' . (int)($debug['con_mod'] ?? 0)
+        . ' con=' . (int)($debug['con_final'] ?? 0)
         . ' hp_total=' . (int)($debug['hp_total'] ?? 0);
 
     $debug_lines[] = 'TOTAL: hp_base_total=' . (int)($debug['hp_base_total'] ?? 0)
@@ -960,18 +953,71 @@ function af_charactersheets_build_mechanics_html(array $view): string
         . "
 -->";
 
-    $weapon_bonus_label = af_charactersheets_format_signed($weapon_bonus);
-    $str_bonus_label = af_charactersheets_format_signed((float)($view['final']['str'] ?? 0));
-    $damage_total = '1d4 + ' . $weapon_bonus_label . ' + ' . $str_bonus_label;
-    $col3 = '<div class="af-cs-mech-card">'
-        . '<div class="af-cs-mech-title">Урон</div>'
-        . '<div class="af-cs-mech-row"><span>Базовый</span><span>1d4</span></div>'
-        . '<div class="af-cs-mech-row"><span>Бонус оружия</span><span>' . htmlspecialchars_uni($weapon_bonus_label) . '</span></div>'
-        . '<div class="af-cs-mech-row"><span>Сила</span><span>' . htmlspecialchars_uni($str_bonus_label) . '</span></div>'
-        . '<div class="af-cs-mech-row af-cs-mech-total"><span>Итог</span><span>' . htmlspecialchars_uni($damage_total) . '</span></div>'
+    $damage_base = (string)($mechanics['damage_base'] ?? '1d4');
+    $damage_total = (string)($mechanics['damage_total'] ?? $damage_base);
+    $damage_bonus = (int)($mechanics['damage_bonus'] ?? 0);
+    $resistances = (array)($mechanics['resistances'] ?? []);
+    $resistances_html = $resistances
+        ? '<div class="af-cs-mech-tags">' . implode('', array_map(static function ($item) {
+            return '<span class="af-cs-chip">' . htmlspecialchars_uni((string)$item) . '</span>';
+        }, $resistances)) . '</div>'
+        : '<div class="af-cs-muted">No Resistances / Immunities</div>';
+
+    $cards = [];
+    $cards[] = '<div class="af-cs-mech-card">'
+        . '<div class="af-cs-mech-title">Armor Class</div>'
+        . '<div class="af-cs-mech-value">' . htmlspecialchars_uni((string)$ac_total) . '</div>'
+        . '<div class="af-cs-mech-row"><span>DEX</span><span>' . htmlspecialchars_uni((string)$dex_final) . '</span></div>'
+        . '<div class="af-cs-mech-row"><span>CON</span><span>' . htmlspecialchars_uni((string)$con_final) . '</span></div>'
+        . '<div class="af-cs-mech-row"><span>Armor+Shield</span><span>' . htmlspecialchars_uni((string)$armor_equip_bonus_total) . '</span></div>'
+        . '</div>';
+    $cards[] = '<div class="af-cs-mech-card">'
+        . '<div class="af-cs-mech-title">Saving Throws</div>'
+        . '<div class="af-cs-mech-row"><span>Fortitude</span><span>' . htmlspecialchars_uni((string)$fortitude) . '</span></div>'
+        . '<div class="af-cs-mech-row"><span>Reflex</span><span>' . htmlspecialchars_uni((string)$reflex) . '</span></div>'
+        . '<div class="af-cs-mech-row"><span>Will</span><span>' . htmlspecialchars_uni((string)$will) . '</span></div>'
+        . '<div class="af-cs-mech-divider"></div>'
+        . '<div class="af-cs-mech-pill">Perception: <strong>' . htmlspecialchars_uni((string)$perception) . '</strong></div>'
+        . '</div>';
+    $cards[] = '<div class="af-cs-mech-card">'
+        . '<div class="af-cs-mech-title">Hit Points</div>'
+        . '<div class="af-cs-mech-value">' . htmlspecialchars_uni((string)$hp_total) . '</div>'
+        . '<div class="af-cs-muted">Max HP</div>'
+        . '</div>';
+    $cards[] = '<div class="af-cs-mech-card">'
+        . '<div class="af-cs-mech-title">Speed</div>'
+        . '<div class="af-cs-mech-value">' . htmlspecialchars_uni((string)$speed_total) . '</div>'
+        . '</div>';
+    $cards[] = '<div class="af-cs-mech-card">'
+        . '<div class="af-cs-mech-title">Damage</div>'
+        . '<div class="af-cs-mech-row"><span>Base</span><span>' . htmlspecialchars_uni($damage_base) . '</span></div>'
+        . '<div class="af-cs-mech-row"><span>Bonus</span><span>' . htmlspecialchars_uni((string)$damage_bonus) . '</span></div>'
+        . '<div class="af-cs-mech-row af-cs-mech-total"><span>Total</span><span>' . htmlspecialchars_uni($damage_total) . '</span></div>'
+        . '</div>';
+    $cards[] = '<div class="af-cs-mech-card">'
+        . '<div class="af-cs-mech-title">Conditions & Active effects</div>'
+        . '<div class="af-cs-muted">No Active Effects</div>'
+        . '</div>';
+    $cards[] = '<div class="af-cs-mech-card">'
+        . '<div class="af-cs-mech-title">Resistances & Immunities</div>'
+        . $resistances_html
+        . '</div>';
+    $cards[] = '<div class="af-cs-mech-card">'
+        . '<div class="af-cs-mech-title">Humanity</div>'
+        . '<div class="af-cs-mech-value">' . htmlspecialchars_uni((string)$humanity_total) . '%</div>'
         . '</div>';
 
-    return '<div class="af-cs-mechanics-grid">' . $col1 . $col2 . $col3 . '</div>' . $debug_comment;
+    $debug_line = '<!-- AF_CS_DEBUG mechanics: race=' . htmlspecialchars_uni((string)($debug['race']['key'] ?? ''))
+        . ' schema=' . htmlspecialchars_uni((string)($debug['race']['schema'] ?? ''))
+        . ' hp_base=' . (int)($debug['hp_base_total'] ?? 0)
+        . ' hp_fixed=' . (int)($debug['fixed_hp_total'] ?? 0)
+        . ' con=' . (int)($debug['con_final'] ?? 0)
+        . ' AC=' . $ac_total
+        . ' speed=' . $speed_total
+        . ' damage_bonus=' . $damage_bonus
+        . ' -->';
+
+    return '<div class="af-cs-mechanics-grid">' . implode('', $cards) . '</div>' . $debug_comment . $debug_line;
 }
 
 function af_charactersheets_build_inventory_html(array $build, bool $can_edit): string

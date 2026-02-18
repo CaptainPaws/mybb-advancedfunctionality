@@ -774,8 +774,14 @@
         if (choiceSave) {
           event.preventDefault();
           var choiceKey = choiceSave.getAttribute('data-afcs-choice-save');
-          var select = sheet.querySelector('[data-afcs-choice-key="' + choiceKey + '"]');
-          var choiceValue = select ? select.value : '';
+          var selects = sheet.querySelectorAll('[data-afcs-choice-key="' + choiceKey + '"]');
+          var values = [];
+          if (selects && selects.length) {
+            selects.forEach(function (node) {
+              if (node && node.value) values.push(node.value);
+            });
+          }
+          var choiceValue = values.length > 1 ? values.join(',') : (values[0] || '');
 
           sendAction('save_choice', { choice_key: choiceKey, choice_value: choiceValue }).then(function (payload) {
             if (!payload.success) {
