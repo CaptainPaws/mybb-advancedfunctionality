@@ -140,6 +140,11 @@ function af_charactersheets_user_can_staff_reset(array $user, int $fid = 0): boo
     return af_charactersheets_user_is_admin_or_moderator($user, $fid);
 }
 
+function af_cs_is_staff(array $user, int $fid = 0): bool
+{
+    return af_charactersheets_user_can_staff_reset($user, $fid);
+}
+
 function af_charactersheets_user_can_accept(array $user, int $fid): bool
 {
     global $mybb;

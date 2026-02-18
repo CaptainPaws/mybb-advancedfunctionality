@@ -574,7 +574,8 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $exp = (float)($progress['exp'] ?? 0);
     $level_data = af_charactersheets_compute_level($exp);
     $progress['level'] = (int)($progress['level'] ?? $level_data['level']);
-    $auto_stat_bonus = max(0, ((int)($level_data['level'] ?? 1)) - 1);
+    $level_for_bonus = max(1, (int)($level_data['level'] ?? 1));
+    $auto_stat_bonus = 1 + (int)floor(($level_for_bonus - 1) / 5);
 
     $final = [];
     foreach ($attributes_base as $key => $value) {
