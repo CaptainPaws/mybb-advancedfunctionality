@@ -2986,6 +2986,8 @@ function af_charactersheets_default_build(): array
         'allocated_stats' => af_charactersheets_zero_attributes(),
         'attributes_allocated' => af_charactersheets_zero_attributes(),
         'attributes_locked' => 0,
+        'locked_attributes' => 0,
+        'locked_skills' => 0,
         'picks' => [],
         'choices' => [],
         'active_skills' => [],
@@ -3022,7 +3024,10 @@ function af_charactersheets_normalize_build(array $build): array
     }
     $build['allocated_stats'] = array_merge(af_charactersheets_zero_attributes(), (array)($build['attributes_allocated'] ?? []));
 
-    $build['attributes_locked'] = !empty($build['attributes_locked']) ? 1 : 0;
+    $locked_attributes = !empty($build['attributes_locked']) || !empty($build['locked_attributes']);
+    $build['attributes_locked'] = $locked_attributes ? 1 : 0;
+    $build['locked_attributes'] = $build['attributes_locked'];
+    $build['locked_skills'] = !empty($build['locked_skills']) ? 1 : 0;
 
     if (isset($build['picks']) && is_array($build['picks'])) {
         $build['choices'] = array_merge((array)$build['choices'], (array)$build['picks']);
@@ -3130,6 +3135,7 @@ function af_charactersheets_reset_attributes(int $sheet_id): bool
     $build['allocated_stats'] = af_charactersheets_zero_attributes();
     $build['attributes_allocated'] = af_charactersheets_zero_attributes();
     $build['attributes_locked'] = 0;
+    $build['locked_attributes'] = 0;
 
     $choices = (array)($build['choices'] ?? []);
     foreach ($choices as $choice_key => $choice_value) {
@@ -3153,7 +3159,22 @@ function af_charactersheets_reset_skills(int $sheet_id): bool
         return false;
     }
 
-    $db->delete_query(AF_CS_SKILLS_TABLE, 'sheet_id=' . $sheet_id);
+    $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
+    if (empty($sheet)) {
+        return false;
+    }
+
+    $base = af_charactersheets_json_decode((string)($sheet['base_json'] ?? ''));
+    $build = af_charactersheets_normalize_build(af_charactersheets_json_decode((string)($sheet['build_json'] ?? '')));
+    $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
+
+    $build['locked_skills'] = 0;
+    af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
+
+    $db->delete_query(
+        AF_CS_SKILLS_TABLE,
+        'sheet_id=' . $sheet_id . " AND source='manual'"
+    );
 
     return true;
 }

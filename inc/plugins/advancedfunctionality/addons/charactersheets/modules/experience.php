@@ -16,15 +16,21 @@ function af_charactersheets_compute_level(float $exp): array
             'level' => 1,
             'percent' => 0,
             'next_req' => 0,
+            'prev_req_total' => 0,
+            'next_req_total' => 0,
+            'exp_in_level' => 0,
+            'exp_need' => 0,
         ];
     }
 
     $level = 1;
     $next_req = $base;
     $remaining = $exp;
+    $prev_req_total = 0.0;
 
     while ($remaining >= $next_req && ($level_cap <= 0 || $level < $level_cap)) {
         $remaining -= $next_req;
+        $prev_req_total += $next_req;
         $level++;
         $next_req = $base + (($level - 2) * $step);
         if ($next_req <= 0) {
@@ -32,9 +38,13 @@ function af_charactersheets_compute_level(float $exp): array
         }
     }
 
+    $next_req_total = $prev_req_total + max(0.0, $next_req);
+    $exp_in_level = max(0.0, $exp - $prev_req_total);
+    $exp_need = max(0.0, $next_req_total - $prev_req_total);
+
     $percent = 0;
-    if ($next_req > 0) {
-        $percent = (int)floor(($remaining / $next_req) * 100);
+    if ($exp_need > 0) {
+        $percent = (int)floor(($exp_in_level / $exp_need) * 100);
         if ($percent < 0) {
             $percent = 0;
         } elseif ($percent > 100) {
@@ -46,6 +56,10 @@ function af_charactersheets_compute_level(float $exp): array
         'level' => $level,
         'percent' => $percent,
         'next_req' => $next_req,
+        'prev_req_total' => $prev_req_total,
+        'next_req_total' => $next_req_total,
+        'exp_in_level' => $exp_in_level,
+        'exp_need' => $exp_need,
     ];
 }
 

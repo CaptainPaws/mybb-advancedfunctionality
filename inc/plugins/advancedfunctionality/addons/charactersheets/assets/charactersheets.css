@@ -667,8 +667,6 @@
   border-radius: 12px;
   background: rgba(0, 0, 0, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  display: grid;
-  gap: 8px;
 }
 
 .af-cs-mech-title {
@@ -682,44 +680,58 @@
 }
 
 .af-cs-staticon {
-  position: relative;
-  width: 92px;
-  height: 92px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
 }
 
 .af-cs-staticon__icon {
-  font-size: 72px;
-  color: rgba(133, 199, 255, 0.9);
+  width: 42px;
+  font-size: 30px;
+  color: rgba(133, 199, 255, 0.95);
+  text-align: center;
+  flex: 0 0 42px;
+}
+
+.af-cs-staticon__content {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
 }
 
 .af-cs-staticon__value {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 800;
   color: #fff;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
-}
-
-.af-cs-save-grid {
-  display: grid;
-  gap: 8px;
+  line-height: 1;
 }
 
 .af-cs-save-card {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
-  border-radius: 10px;
-  padding: 8px 10px;
+  border-radius: 12px;
+  padding: 10px 12px;
   font-size: 13px;
+}
+
+.af-cs-save-card__icon {
+  width: 34px;
+  font-size: 24px;
+  color: rgba(133, 199, 255, 0.95);
+  text-align: center;
+  flex: 0 0 34px;
+}
+
+.af-cs-save-card__content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex: 1;
 }
 
 .af-cs-mech-row {

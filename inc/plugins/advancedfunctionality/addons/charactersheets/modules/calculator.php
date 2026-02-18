@@ -552,7 +552,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $level_data = af_charactersheets_compute_level($exp);
     $progress['level'] = (int)($progress['level'] ?? $level_data['level']);
     $level_for_bonus = max(1, (int)($level_data['level'] ?? 1));
-    $auto_stat_bonus = 1 + (int)floor(($level_for_bonus - 1) / 5);
+    $auto_stat_bonus = 1 + intdiv($level_for_bonus, 5);
 
     $final = [];
     foreach ($attributes_base as $key => $value) {
@@ -796,9 +796,13 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         'labels' => $attributes_labels,
         'level' => $level_data['level'],
         'level_percent' => $level_data['percent'],
-        'level_exp_label' => number_format($exp, 2, '.', ' ') . ' / ' . number_format($level_data['next_req'], 2, '.', ' '),
+        'level_exp_label' => number_format((float)($level_data['exp_in_level'] ?? 0), 2, '.', ' ') . ' / ' . number_format((float)($level_data['exp_need'] ?? 0), 2, '.', ' '),
         'exp' => $exp,
         'next_req' => $level_data['next_req'],
+        'prev_req_total' => (float)($level_data['prev_req_total'] ?? 0),
+        'next_req_total' => (float)($level_data['next_req_total'] ?? 0),
+        'exp_in_level' => (float)($level_data['exp_in_level'] ?? 0),
+        'exp_need' => (float)($level_data['exp_need'] ?? 0),
         'skills' => $skills_view,
         'kb_context' => $kb_context,
         'ctx' => [

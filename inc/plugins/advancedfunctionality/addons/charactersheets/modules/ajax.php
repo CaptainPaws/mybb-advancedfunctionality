@@ -129,6 +129,7 @@ function af_charactersheets_handle_api(): void
             af_charactersheets_json_response(['success' => false, 'error' => 'Not enough attribute points']);
         }
         $build['attributes_locked'] = 1;
+        $build['locked_attributes'] = 1;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
         if ($delta !== 0) {
             af_charactersheets_log_points(
@@ -187,6 +188,9 @@ function af_charactersheets_handle_api(): void
         'buy_skill', 'cs_skill_set_rank', 'cs_skill_unbuy'], true)) {
         if (!$can_manage) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
+        }
+        if (!empty($build['locked_skills']) && !$is_staff) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Skills are locked']);
         }
 
         $skill_key = trim((string)$mybb->get_input('skill_key'));
@@ -250,6 +254,8 @@ function af_charactersheets_handle_api(): void
             }
             af_charactersheets_delete_sheet_skill($sheet_id, $skill_key);
         }
+        $build['locked_skills'] = 1;
+        af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
     } elseif ($do === 'add_knowledge' || $do === 'remove_knowledge') {
         if (!$can_edit) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
@@ -631,11 +637,13 @@ function af_charactersheets_handle_api(): void
     $can_view_ledger = af_charactersheets_user_can_view_ledger($sheet, $mybb->user ?? [], $fid_for_mod);
     $build = af_charactersheets_normalize_build(af_charactersheets_json_decode((string)($sheet['build_json'] ?? '')));
     $attributes_locked = !empty($build['attributes_locked']);
-    $can_edit_attributes = $can_edit && (!$attributes_locked || $is_staff);
+    $can_edit_attributes = ($can_edit && !$attributes_locked) || $is_staff;
 
     $attributes_html = af_charactersheets_build_attributes_html($view, $can_edit_attributes, $can_view_ledger, $can_staff_reset, $attributes_locked);
     $progress_html = af_charactersheets_build_progress_html($view, $sheet, $can_award, $can_view_ledger);
-    $skills_html = af_charactersheets_build_skills_html($view, $can_manage, $can_view_ledger, $can_staff_reset);
+    $skills_locked = !empty($build['locked_skills']);
+    $can_manage_skills = $can_manage && (!$skills_locked || $is_staff);
+    $skills_html = af_charactersheets_build_skills_html($view, $can_manage_skills, $can_view_ledger, $can_staff_reset, $skills_locked);
     $knowledge_html = af_charactersheets_build_knowledge_html($view, $can_edit, $can_view_ledger);
     $abilities_html = af_charactersheets_build_abilities_html($build, $can_edit);
     $inventory_html = af_charactersheets_build_inventory_html($build, $can_edit);
