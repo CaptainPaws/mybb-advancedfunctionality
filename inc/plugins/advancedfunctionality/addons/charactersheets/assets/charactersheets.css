@@ -1718,6 +1718,57 @@
   gap: 6px;
 }
 
+
+.af-cs-skill-btn--wide {
+  width: auto;
+  height: auto;
+  padding: 6px 10px;
+  line-height: 1.2;
+}
+
+.af-cs-skill-catalog {
+  margin-bottom: 14px;
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid rgba(124, 161, 255, 0.35);
+  background: rgba(17, 24, 38, 0.75);
+  display: grid;
+  gap: 10px;
+}
+
+.af-cs-skill-catalog[hidden] {
+  display: none !important;
+}
+
+.af-cs-skill-catalog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.af-cs-skill-catalog__list {
+  display: grid;
+  gap: 8px;
+  max-height: 360px;
+  overflow: auto;
+}
+
+.af-cs-skill-catalog-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.af-cs-skill-catalog-item__main {
+  min-width: 0;
+}
+
 .af-cs-confirm-modal {
   position: fixed;
   inset: 0;

@@ -397,6 +397,7 @@ function af_charactersheets_sync_fixed_skills(int $sheet_id): void
     $uid = (int)($sheet['uid'] ?? 0);
     $context = cs_resolve_character_kb_context($sheet_id);
     $grants = [];
+    $source_priority = ['race' => 1, 'class' => 2, 'theme' => 3];
     foreach (['race', 'class', 'theme'] as $source) {
         $resolved = (array)($context[$source] ?? []);
         foreach (af_charactersheets_extract_skill_grants($resolved, $source) as $grant) {
@@ -404,17 +405,54 @@ function af_charactersheets_sync_fixed_skills(int $sheet_id): void
             if ($skill_key === '') {
                 continue;
             }
-            $grants[$skill_key] = [
-                'skill_rank' => max(1, (int)($grant['skill_rank'] ?? 1)),
-                'source' => $source,
-            ];
+            $skill_rank = max(1, (int)($grant['skill_rank'] ?? 1));
+            $existing = (array)($grants[$skill_key] ?? []);
+
+            if (empty($existing)) {
+                $grants[$skill_key] = [
+                    'skill_rank' => $skill_rank,
+                    'source' => $source,
+                ];
+                continue;
+            }
+
+            $existing_rank = (int)($existing['skill_rank'] ?? 0);
+            $existing_source = (string)($existing['source'] ?? 'race');
+            if ($skill_rank > $existing_rank) {
+                $grants[$skill_key] = [
+                    'skill_rank' => $skill_rank,
+                    'source' => $source,
+                ];
+                continue;
+            }
+
+            if ($skill_rank === $existing_rank
+                && ($source_priority[$source] ?? 0) < ($source_priority[$existing_source] ?? 100)
+            ) {
+                $grants[$skill_key]['source'] = $source;
+            }
         }
     }
 
+    af_charactersheets_log('CharacterSheets skill grants resolved', [
+        'sheet_id' => $sheet_id,
+        'grants' => array_map(static function ($skill_key, $grant) {
+            return [
+                'skill_key' => (string)$skill_key,
+                'rank' => (int)($grant['skill_rank'] ?? 1),
+                'source' => (string)($grant['source'] ?? ''),
+            ];
+        }, array_keys($grants), array_values($grants)),
+    ]);
+
     $rows = af_charactersheets_get_sheet_skills($sheet_id);
+    $rows_by_key = [];
     foreach ($rows as $row) {
         $skill_key = (string)($row['skill_key'] ?? '');
         $source = (string)($row['source'] ?? 'manual');
+        if ($skill_key !== '') {
+            $rows_by_key[$skill_key] = $row;
+        }
         if (!in_array($source, ['race', 'class', 'theme'], true)) {
             continue;
         }
@@ -424,6 +462,25 @@ function af_charactersheets_sync_fixed_skills(int $sheet_id): void
     }
 
     foreach ($grants as $skill_key => $grant) {
-        af_charactersheets_upsert_sheet_skill($sheet_id, $uid, $skill_key, (int)$grant['skill_rank'], 1, (string)$grant['source']);
+        $existing = (array)($rows_by_key[$skill_key] ?? []);
+        $existing_rank = max(0, (int)($existing['skill_rank'] ?? 0));
+        $source = (string)($existing['source'] ?? '');
+        if (!empty($existing) && !in_array($source, ['race', 'class', 'theme'], true)) {
+            continue;
+        }
+
+        $apply_rank = max($existing_rank, (int)$grant['skill_rank']);
+        $apply_source = (string)($grant['source'] ?? $source ?: 'race');
+        af_charactersheets_upsert_sheet_skill($sheet_id, $uid, $skill_key, $apply_rank, 1, $apply_source);
+        af_charactersheets_log(
+            'grant skill ' . $skill_key . ' rank=' . (int)$grant['skill_rank'] . ' source=' . $apply_source . ' applied to sheet_id=' . $sheet_id,
+            [
+                'sheet_id' => $sheet_id,
+                'skill_key' => $skill_key,
+                'rank' => $apply_rank,
+                'grant_rank' => (int)$grant['skill_rank'],
+                'source' => $apply_source,
+            ]
+        );
     }
 }

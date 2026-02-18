@@ -907,8 +907,22 @@
         var skillCatalogOpen = event.target.closest('[data-afcs-skill-catalog-open]');
         if (skillCatalogOpen) {
           event.preventDefault();
-          var firstBuy = sheet.querySelector('[data-afcs-skill-buy]');
+          var skillCatalogPanel = sheet.querySelector('[data-afcs-skill-catalog-panel]');
+          if (skillCatalogPanel) {
+            skillCatalogPanel.hidden = false;
+          }
+          var firstBuy = sheet.querySelector('[data-afcs-skill-catalog-panel] [data-afcs-skill-buy]') || sheet.querySelector('[data-afcs-skill-buy]');
           if (firstBuy && typeof firstBuy.focus === 'function') firstBuy.focus();
+          return;
+        }
+
+        var skillCatalogClose = event.target.closest('[data-afcs-skill-catalog-close]');
+        if (skillCatalogClose) {
+          event.preventDefault();
+          var openedCatalog = sheet.querySelector('[data-afcs-skill-catalog-panel]');
+          if (openedCatalog) {
+            openedCatalog.hidden = true;
+          }
           return;
         }
 

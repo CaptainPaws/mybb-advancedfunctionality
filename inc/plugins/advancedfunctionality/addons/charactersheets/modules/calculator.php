@@ -634,6 +634,21 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         ];
     }
     $skills_rows = af_charactersheets_get_sheet_skills((int)($sheet['id'] ?? 0));
+    $grant_skill_ranks = [];
+    foreach (['race', 'class', 'theme'] as $source) {
+        $resolved = (array)($kb_context[$source] ?? []);
+        foreach (af_charactersheets_extract_skill_grants($resolved, $source) as $grant) {
+            $skill_key = (string)($grant['skill_key'] ?? '');
+            if ($skill_key === '') {
+                continue;
+            }
+            $grant_skill_ranks[$skill_key] = max(
+                (int)($grant_skill_ranks[$skill_key] ?? 0),
+                max(1, (int)($grant['skill_rank'] ?? 1))
+            );
+        }
+    }
+
     $skills_map = [];
     foreach ($skills_rows as $row) {
         $skill_key = (string)($row['skill_key'] ?? '');
@@ -680,8 +695,13 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $source = (string)($row['source'] ?? '');
         $bonus_val = (float)($bonus_skill_map[$skill_key] ?? 0);
         $total = $base_mod + ($is_active ? $skill_rank : 0) + $bonus_val;
-        if ($source === 'manual' && $is_active) {
-            $manual_spent += $skill_rank;
+        if ($is_active) {
+            $grant_rank = max(0, (int)($grant_skill_ranks[$skill_key] ?? 0));
+            if ($source === 'manual') {
+                $manual_spent += $skill_rank;
+            } else {
+                $manual_spent += max(0, $skill_rank - $grant_rank);
+            }
         }
 
         $skills_view[] = [
