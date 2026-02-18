@@ -251,7 +251,15 @@ function af_charactersheets_handle_api(): void
         $view = af_charactersheets_compute_sheet_view($sheet);
         $available = (int)($view['skill_pool_remaining'] ?? 0);
         $skill_data = (array)($skill_map[$skill_key]['data']['skill'] ?? []);
-        $rank_max = max(1, (int)($skill_data['rank_max'] ?? $skill_data['max_rank'] ?? 1));
+        $view_skill = [];
+        foreach ((array)($view['skills'] ?? []) as $item) {
+            if ((string)($item['skill_key'] ?? '') === $skill_key) {
+                $view_skill = (array)$item;
+                break;
+            }
+        }
+        $rank_max = max(1, (int)($view_skill['rank_max'] ?? $skill_data['rank_max'] ?? $skill_data['max_rank'] ?? 4));
+        $rank_min = max(0, (int)($view_skill['rank_min'] ?? 0));
 
         if ($do === 'cs_skill_buy' || $do === 'buy_skill') {
             $current_rank = max(0, (int)($existing['skill_rank'] ?? 0));
@@ -260,10 +268,11 @@ function af_charactersheets_handle_api(): void
             if ($next_rank > $rank_max) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Rank max reached']);
             }
-            if ($available < 1) {
+            $cost = af_charactersheets_skill_rank_cost_for_target($next_rank);
+            if ($available < $cost) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Not enough skill points']);
             }
-            if ($source === '' || $source === 'manual') {
+            if ($source === '') {
                 $source = 'manual';
             }
             af_charactersheets_upsert_sheet_skill($sheet_id, (int)($sheet['uid'] ?? 0), $skill_key, $next_rank, 1, $source);
@@ -272,24 +281,37 @@ function af_charactersheets_handle_api(): void
             $next_rank = (int)$mybb->get_input('skill_rank');
             $current_rank = max(0, (int)($existing['skill_rank'] ?? 0));
             $source = (string)($existing['source'] ?? 'manual');
-            if ($next_rank < 0 || $next_rank > $rank_max) {
+            if ($next_rank < $rank_min || $next_rank > $rank_max) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Rank out of bounds']);
             }
-            if ($source !== 'manual') {
-                af_charactersheets_json_response(['success' => false, 'error' => 'Fixed skill cannot be modified']);
-            }
-            $delta = $next_rank - $current_rank;
-            if ($delta > $available) {
+            $cost_delta = af_charactersheets_skill_rank_total_cost($next_rank) - af_charactersheets_skill_rank_total_cost($current_rank);
+            if ($cost_delta > $available) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Not enough skill points']);
             }
+            if ($source === '') {
+                $source = 'manual';
+            }
             $is_active = $next_rank > 0 ? 1 : 0;
-            af_charactersheets_upsert_sheet_skill($sheet_id, (int)($sheet['uid'] ?? 0), $skill_key, $next_rank, $is_active, 'manual');
+            af_charactersheets_upsert_sheet_skill($sheet_id, (int)($sheet['uid'] ?? 0), $skill_key, $next_rank, $is_active, $source);
             $updated_skill_key = $skill_key;
         } else {
-            if (empty($existing) || (string)($existing['source'] ?? 'manual') !== 'manual') {
-                af_charactersheets_json_response(['success' => false, 'error' => 'Only manual skill can be reset']);
+            if (!$can_staff_reset) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'no_permission']);
             }
-            af_charactersheets_delete_sheet_skill($sheet_id, $skill_key);
+            if (empty($existing)) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Skill not found']);
+            }
+            $current_rank = max(0, (int)($existing['skill_rank'] ?? 0));
+            $source = (string)($existing['source'] ?? 'manual');
+            if ($current_rank <= $rank_min) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Rank already at minimum']);
+            }
+            if ($rank_min <= 0) {
+                af_charactersheets_delete_sheet_skill($sheet_id, $skill_key);
+            } else {
+                af_charactersheets_upsert_sheet_skill($sheet_id, (int)($sheet['uid'] ?? 0), $skill_key, $rank_min, 1, $source !== '' ? $source : 'manual');
+            }
+            $updated_skill_key = $skill_key;
         }
         $build['locked_skills'] = 0;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
@@ -643,14 +665,14 @@ function af_charactersheets_handle_api(): void
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
     } elseif ($do === 'reset_attributes') {
         if (!$can_staff_reset) {
-            af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
+            af_charactersheets_json_response(['success' => false, 'error' => 'no_permission']);
         }
         if (!af_charactersheets_reset_attributes($sheet_id)) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Reset failed']);
         }
     } elseif ($do === 'reset_skills') {
         if (!$can_staff_reset) {
-            af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
+            af_charactersheets_json_response(['success' => false, 'error' => 'no_permission']);
         }
         if (!af_charactersheets_reset_skills($sheet_id)) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Reset failed']);

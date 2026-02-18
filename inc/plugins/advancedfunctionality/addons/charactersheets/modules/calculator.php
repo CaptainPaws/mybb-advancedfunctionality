@@ -493,16 +493,21 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $rules_aggregate = (array)($kb_context['aggregate'] ?? af_cs_aggregate_rules(array_values((array)($kb_context['sources'] ?? []))));
     $skill_pick_choices = af_charactersheets_collect_skill_pick_choices($kb_context, $build);
     $skill_choice_grant_ranks = [];
+    $skill_choice_rank_maxes = [];
     $skill_pick_choice_details = [];
     foreach ($skill_pick_choices as $choice) {
         $selected_values = (array)($choice['selected'] ?? []);
         $grant_mode = (string)($choice['grant_mode'] ?? 'rank');
         $rank_value = max(1, (int)($choice['rank_value'] ?? 1));
+        $rank_max_value = max(0, (int)($choice['rank_max_value'] ?? 0));
         $points_value = max(0, (int)($choice['points_value'] ?? 0));
 
         if ($grant_mode === 'rank') {
             foreach ($selected_values as $skill_key) {
                 $skill_choice_grant_ranks[$skill_key] = max((int)($skill_choice_grant_ranks[$skill_key] ?? 0), $rank_value);
+                if ($rank_max_value > 0) {
+                    $skill_choice_rank_maxes[$skill_key] = max((int)($skill_choice_rank_maxes[$skill_key] ?? 0), $rank_max_value);
+                }
             }
         } elseif ($grant_mode === 'points' && $points_value > 0) {
             $bonus_skill_points += count($selected_values) * $points_value;
@@ -517,6 +522,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'selected' => $selected_values,
             'grant_mode' => $grant_mode,
             'rank_value' => $rank_value,
+            'rank_max_value' => $rank_max_value,
             'points_value' => $points_value,
         ];
     }
@@ -666,6 +672,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     }
     $skills_rows = af_charactersheets_get_sheet_skills((int)($sheet['id'] ?? 0));
     $grant_skill_ranks = [];
+    $grant_skill_rank_maxes = [];
     foreach (['race', 'class', 'theme'] as $source) {
         $resolved = (array)($kb_context[$source] ?? []);
         foreach (af_charactersheets_extract_skill_grants($resolved, $source) as $grant) {
@@ -677,10 +684,17 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
                 (int)($grant_skill_ranks[$skill_key] ?? 0),
                 max(1, (int)($grant['skill_rank'] ?? 1))
             );
+            $grant_skill_rank_maxes[$skill_key] = max(
+                (int)($grant_skill_rank_maxes[$skill_key] ?? 0),
+                max(0, (int)($grant['rank_max'] ?? 0))
+            );
         }
     }
     foreach ($skill_choice_grant_ranks as $skill_key => $skill_rank) {
         $grant_skill_ranks[(string)$skill_key] = max((int)($grant_skill_ranks[(string)$skill_key] ?? 0), (int)$skill_rank);
+    }
+    foreach ($skill_choice_rank_maxes as $skill_key => $rank_max) {
+        $grant_skill_rank_maxes[(string)$skill_key] = max((int)($grant_skill_rank_maxes[(string)$skill_key] ?? 0), (int)$rank_max);
     }
 
     $skills_map = [];
@@ -761,17 +775,32 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             $rank_bonus = 15 + (($skill_rank - 4) * 5);
         }
         $total = $base_mod + ($is_active ? $rank_bonus : 0) + $bonus_val;
+        $grant_rank = max(0, (int)($grant_skill_ranks[$skill_key] ?? 0));
         if ($is_active) {
-            $grant_rank = max(0, (int)($grant_skill_ranks[$skill_key] ?? 0));
-            $manual_spent += max(0, $skill_rank - $grant_rank);
+            $manual_spent += max(
+                0,
+                af_charactersheets_skill_rank_total_cost($skill_rank) - af_charactersheets_skill_rank_total_cost($grant_rank)
+            );
         }
+
+        $kb_rank_max = max(0, (int)($skill_data['rank_max'] ?? $skill_data['max_rank'] ?? 0));
+        $rank_max_from_sources = max(0, (int)($grant_skill_rank_maxes[$skill_key] ?? 0));
+        $rank_max_candidates = [];
+        if ($kb_rank_max > 0) {
+            $rank_max_candidates[] = $kb_rank_max;
+        }
+        if ($rank_max_from_sources > 0) {
+            $rank_max_candidates[] = $rank_max_from_sources;
+        }
+        $rank_max = $rank_max_candidates ? max($rank_max_candidates) : 4;
 
         $skills_view[] = [
             'skill_key' => $skill_key,
             'title' => (string)($skill_resolved['title'] ?? $skill_key),
             'category' => (string)($skill_data['category'] ?? 'general'),
             'skill_rank' => $skill_rank,
-            'rank_max' => max(1, (int)($skill_data['rank_max'] ?? $skill_data['max_rank'] ?? 1)),
+            'rank_max' => max(1, $rank_max),
+            'rank_min' => $grant_rank,
             'source' => $source,
             'is_active' => $is_active,
             'trained_only' => !empty($skill_data['trained_only']),
