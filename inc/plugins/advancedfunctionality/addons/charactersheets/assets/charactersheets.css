@@ -1758,6 +1758,17 @@
   line-height: 1.45;
 }
 
+.af-cs-confirm-modal__error {
+  margin-top: 12px;
+  border: 1px solid rgba(255, 126, 140, 0.45);
+  background: rgba(255, 66, 66, 0.16);
+  color: #ffd3d9;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
 .af-cs-confirm-modal__actions {
   margin-top: 18px;
   display: flex;

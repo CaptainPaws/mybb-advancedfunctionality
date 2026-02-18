@@ -631,6 +631,11 @@
         var modal = sheet.querySelector('[data-afcs-attr-confirm-modal]');
         if (!modal) return;
         modal.classList.remove('is-open');
+        var errorNode = modal.querySelector('[data-afcs-attr-confirm-error]');
+        if (errorNode) {
+          errorNode.textContent = '';
+          errorNode.hidden = true;
+        }
       }
 
       function ensureAttributeConfirmModal() {
@@ -645,6 +650,7 @@
           '<div class="af-cs-confirm-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="af-cs-confirm-title">' +
             '<h3 class="af-cs-confirm-modal__title" id="af-cs-confirm-title">Подтверждение</h3>' +
             '<div class="af-cs-confirm-modal__body">Убедитесь, что вы распределили всё правильно. После сохранения перераспределение будет доступно только на платной основе.</div>' +
+            '<div class="af-cs-confirm-modal__error" data-afcs-attr-confirm-error="1" hidden></div>' +
             '<div class="af-cs-confirm-modal__actions">' +
               '<button type="button" class="af-cs-btn" data-afcs-attr-confirm-save="1">Сохранить</button>' +
               '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-attr-confirm-close="1">Продолжить редактировать</button>' +
@@ -670,6 +676,13 @@
       }
 
       function submitAttributesSave() {
+        var modal = ensureAttributeConfirmModal();
+        var errorNode = modal.querySelector('[data-afcs-attr-confirm-error]');
+        if (errorNode) {
+          errorNode.textContent = '';
+          errorNode.hidden = true;
+        }
+
         var inputs2 = sheet.querySelectorAll('[data-afcs-attr-input]');
         var allocations = {};
         inputs2.forEach(function (input2) {
@@ -678,7 +691,10 @@
 
         sendAction('save_attributes', { allocations: allocations }).then(function (payload) {
           if (!payload.success) {
-            alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
+            if (errorNode) {
+              errorNode.textContent = (payload.errors || payload.error || 'Ошибка сохранения').toString();
+              errorNode.hidden = false;
+            }
             return;
           }
           closeAttributeConfirmModal();
