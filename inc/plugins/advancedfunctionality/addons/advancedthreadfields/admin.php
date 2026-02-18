@@ -683,6 +683,7 @@ class AF_Admin_Advancedthreadfields
             'usernames' => 'Users (search + tags)',
             'kb_race'   => $lang->af_atf_type_kb_race ?? 'KB select: Race',
             'kb_class'  => $lang->af_atf_type_kb_class ?? 'KB select: Class',
+            'kb_theme'  => $lang->af_atf_type_kb_theme ?? 'KB select: Theme',
             'sf_attributes_pointbuy' => $lang->af_atf_type_sf_attributes_pointbuy ?? 'SF attributes point-buy',
         ];
 
