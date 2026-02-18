@@ -439,7 +439,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
         foreach ($rows as $skill) {
             $skill_key = (string)($skill['skill_key'] ?? '');
             $title = (string)($skill['title'] ?? $skill_key);
-            $attr_label = (string)($skill['attr_label'] ?? '');
+            $attr_label = (string)($skill['key_stat_label'] ?? '');
             $skill_rank = max(0, (int)($skill['skill_rank'] ?? 0));
             $rank_max = max(1, (int)($skill['rank_max'] ?? 1));
             $source = (string)($skill['source'] ?? 'manual');
@@ -495,7 +495,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
                 continue;
             }
             $title = (string)($skill['title'] ?? $skill_key);
-            $attr_label = (string)($skill['attr_label'] ?? '');
+            $attr_label = (string)($skill['key_stat_label'] ?? '');
             $skill_rank = max(0, (int)($skill['skill_rank'] ?? 0));
             $rank_max = max(1, (int)($skill['rank_max'] ?? 1));
             $source = (string)($skill['source'] ?? 'manual');
