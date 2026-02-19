@@ -102,7 +102,7 @@ function af_charactersheets_uninstall_impl(): void
     )");
     $db->delete_query('settinggroups', "name='af_charactersheets'");
     $db->delete_query('templates', "title LIKE 'charactersheets_%'");
-    $db->delete_query('templates', "title IN ('charactersheet_fullpage','charactersheet_inner','charactersheet_modal','postbit_plaque','charactersheet_rct_cards','charactersheet_stats_bars','charactersheet_attributes','charactersheet_progress','charactersheet_skills','charactersheet_feats','charactersheet_abilities','charactersheet_inventory','charactersheet_augmentations','charactersheet_equipment','charactersheet_knowledge','charactersheets_catalog','charactersheets_catalog_card')");
+    $db->delete_query('templates', "title IN ('charactersheet_fullpage','charactersheet_inner','charactersheet_modal','af_cs_modal_fullpage','postbit_plaque','charactersheet_rct_cards','charactersheet_stats_bars','charactersheet_attributes','charactersheet_progress','charactersheet_skills','charactersheet_feats','charactersheet_abilities','charactersheet_inventory','charactersheet_augmentations','charactersheet_equipment','charactersheet_knowledge','charactersheets_catalog','charactersheets_catalog_card')");
 
     if (file_exists(MYBB_ROOT . 'inc/adminfunctions_templates.php')) {
         require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
@@ -346,11 +346,8 @@ function af_charactersheets_render_modal_profile_page(): void
         error_no_permission();
     }
 
-    $page = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-        . '<style>html,body{margin:0;padding:0;background:#0f0f0f;color:#efefef}.pun{margin:0 auto;max-width:960px;padding:12px;box-sizing:border-box}</style>'
-        . '</head><body>' . $html . '</body></html>';
-
-    output_page($page);
+    $content = '<div class="cs-modal-profile">' . $html . '</div>';
+    af_charactersheets_output_modal_page($content, 'Профиль персонажа');
 }
 
 function af_charactersheets_fetch_local_html(string $url): string
@@ -432,7 +429,7 @@ function af_charactersheets_extract_pun_block(string $html): string
 
 function af_charactersheets_render_modal_application_page(): void
 {
-    global $mybb, $db;
+    global $mybb;
 
     $tid = (int)$mybb->get_input('tid');
     if ($tid <= 0) {
@@ -460,12 +457,24 @@ function af_charactersheets_render_modal_application_page(): void
         error_no_permission();
     }
 
-    $parsed = af_charactersheets_parse_bbcode((string)($post['message'] ?? ''));
+    $forum = get_forum((int)($thread['fid'] ?? 0));
+    $parsed = af_charactersheets_parse_post_message((array)$post, (array)$forum);
     $content = '<div class="cs-modal-application"><div class="post_content">' . $parsed . '</div></div>';
-    $page = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-        . '<style>html,body{margin:0;padding:16px;background:#0f0f0f;color:#efefef}.post_content{max-width:960px;margin:0 auto;line-height:1.5}</style>'
-        . '</head><body>' . $content . '</body></html>';
+    af_charactersheets_output_modal_page($content, (string)($thread['subject'] ?? 'Анкета персонажа'));
+}
 
+function af_charactersheets_output_modal_page(string $content, string $title = ''): void
+{
+    global $templates, $headerinclude;
+
+    $page_title = $title !== '' ? $title : 'Character sheet';
+    $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n";
+    af_charactersheets_ensure_assets_in_headerinclude();
+
+    $tpl = $templates->get('af_cs_modal_fullpage');
+    eval("\$page = \"" . $tpl . "\";");
+
+    $page = af_charactersheets_canonicalize_assets_html($page);
     output_page($page);
 }
 
@@ -1909,6 +1918,35 @@ function af_charactersheets_parse_bbcode(string $text): string
         'allow_html' => 0,
         'allow_mycode' => 1,
         'allow_smilies' => 0,
+        'allow_imgcode' => 1,
+        'filter_badwords' => 1,
+        'nl2br' => 1,
+    ];
+
+    return $parser->parse_message($text, $options);
+}
+
+function af_charactersheets_parse_post_message(array $post, array $forum = []): string
+{
+    global $mybb;
+
+    $text = trim((string)($post['message'] ?? ''));
+    if ($text === '') {
+        return '';
+    }
+
+    require_once MYBB_ROOT . 'inc/class_parser.php';
+    $parser = new postParser;
+
+    $allowHtml = !empty($forum['allowhtml']) && !empty($mybb->usergroup['canposthtml']);
+    $allowMyCode = !isset($forum['allowmycode']) || (int)$forum['allowmycode'] === 1;
+    $allowSmilies = ((int)($post['smilieoff'] ?? 0) !== 1)
+        && (!isset($forum['allowsmilies']) || (int)$forum['allowsmilies'] === 1);
+
+    $options = [
+        'allow_html' => $allowHtml ? 1 : 0,
+        'allow_mycode' => $allowMyCode ? 1 : 0,
+        'allow_smilies' => $allowSmilies ? 1 : 0,
         'allow_imgcode' => 1,
         'filter_badwords' => 1,
         'nl2br' => 1,
