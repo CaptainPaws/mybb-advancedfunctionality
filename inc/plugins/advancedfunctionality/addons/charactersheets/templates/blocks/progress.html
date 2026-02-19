@@ -1,15 +1,14 @@
 <div class="af-cs-progress af-cs-progress--hero" data-afcs-progress>
   <div class="af-cs-progress__summary">
-    <div class="af-cs-progress__level">Уровень {$level}</div>
-    <div class="af-cs-progress__exp">{$exp_label}</div>
-    <div class="af-cs-progress__exp">Credits: {$credits_label}</div>
+    <div class="af-cs-progress__level" data-afcs-level>Уровень {$level}</div>
+    <div class="af-cs-progress__exp" data-afcs-exp-label>{$exp_label}</div>
   </div>
 
   <div class="af-cs-progress__points">
     {$points_html}
   </div>
 
-  <div class="af-cs-progress__bar">
+  <div class="af-cs-progress__bar" data-afcs-level-bar>
     <span style="width: {$percent}%"></span>
   </div>
 

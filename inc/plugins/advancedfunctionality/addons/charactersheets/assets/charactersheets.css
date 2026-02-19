@@ -1856,3 +1856,37 @@
   gap: 10px;
   justify-content: flex-end;
 }
+
+.af-cs-postbit-stats {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.af-cs-postbit-stats__level {
+  opacity: 0.9;
+}
+
+.af-cs-postbit-stats__bar {
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.af-cs-postbit-stats__bar span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-width: 92px;
+  background: linear-gradient(90deg, #5cc3ff, #7bffb8);
+  color: #0f1114;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.af-cs-postbit-stats__credits {
+  opacity: 0.9;
+}

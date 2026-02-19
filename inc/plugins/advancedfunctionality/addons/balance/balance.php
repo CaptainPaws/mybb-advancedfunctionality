@@ -14,6 +14,9 @@ function af_balance_uninstall(): void {}
 function af_balance_init(): void
 {
     global $plugins;
+    $plugins->add_hook('datahandler_user_insert', 'af_balance_datahandler_user_insert');
+    $plugins->add_hook('datahandler_post_insert_post', 'af_balance_datahandler_post_insert');
+    $plugins->add_hook('datahandler_post_insert_thread', 'af_balance_datahandler_post_insert');
     $plugins->add_hook('member_do_register_end', 'af_balance_member_do_register_end');
     $plugins->add_hook('post_do_newpost_end', 'af_balance_post_do_newpost_end');
 }
@@ -64,7 +67,7 @@ function af_balance_ensure_settings(): void
         ['af_balance_exp_enabled','EXP enabled','yesno','1',1],['af_balance_exp_per_char','EXP per char','text','0.02',2],['af_balance_exp_on_register','EXP on register','text','0',3],['af_balance_exp_on_accept','EXP on accept','text','0',4],
         ['af_balance_exp_categories_csv','EXP categories CSV','text','',5],['af_balance_exp_forums_csv','EXP forums CSV','text','',6],['af_balance_exp_mode','EXP mode',"select\ninclude=include\nexclude=exclude",'include',7],
         ['af_balance_exp_allow_negative_award','EXP allow negative award','yesno','0',8],['af_balance_exp_allow_balance_negative','EXP allow negative balance','yesno','0',9],['af_balance_exp_manual_groups','EXP manual groups','text','4',10],
-        ['af_balance_credits_enabled','Credits enabled','yesno','1',20],['af_balance_credits_per_char','Credits per char','text','0',21],['af_balance_credits_on_register','Credits on register','text','0',22],['af_balance_credits_on_accept','Credits on accept','text','0',23],
+        ['af_balance_credits_enabled','Credits enabled','yesno','1',20],['af_balance_credits_per_char','Credits per char (whole credits, use >=1 for visible gain)','text','0',21],['af_balance_credits_on_register','Credits on register','text','0',22],['af_balance_credits_on_accept','Credits on accept','text','0',23],
         ['af_balance_credits_categories_csv','Credits categories CSV','text','',24],['af_balance_credits_forums_csv','Credits forums CSV','text','',25],['af_balance_credits_mode','Credits mode',"select\ninclude=include\nexclude=exclude",'include',26],
         ['af_balance_credits_allow_negative_award','Credits allow negative award','yesno','0',27],['af_balance_credits_allow_balance_negative','Credits allow negative balance','yesno','0',28],['af_balance_credits_manual_groups','Credits manual groups','text','4',29],
         ['af_balance_tx_keep_limit','TX keep limit','text','5000',30],['af_balance_tx_enable','Enable tx log','yesno','1',31],
@@ -142,9 +145,36 @@ function af_balance_can_manual_adjust($uid, string $kind): bool
 
 function af_balance_member_do_register_end(): void
 {
-    global $mybb;
-    $uid = (int)($mybb->user['uid'] ?? 0);
+    global $mybb, $user_info;
+    $uid = (int)($user_info['uid'] ?? 0);
+    if ($uid <= 0) {
+        $uid = (int)($mybb->input['regid'] ?? 0);
+    }
     if ($uid <= 0) return;
+    af_balance_apply_register_awards($uid);
+}
+
+function af_balance_datahandler_user_insert($userhandler): void
+{
+    if (!is_object($userhandler)) {
+        return;
+    }
+
+    $uid = (int)($userhandler->uid ?? 0);
+    if ($uid <= 0) {
+        $uid = (int)($userhandler->data['uid'] ?? 0);
+    }
+    if ($uid <= 0) {
+        return;
+    }
+
+    af_balance_apply_register_awards($uid);
+}
+
+function af_balance_apply_register_awards(int $uid): void
+{
+    global $mybb;
+
     if (!empty($mybb->settings['af_balance_exp_enabled'])) {
         $amt = (float)($mybb->settings['af_balance_exp_on_register'] ?? 0);
         if ($amt != 0.0) af_balance_add_exp($uid, $amt, ['reason'=>'register','source'=>'balance','ref_type'=>'uid','ref_id'=>$uid]);
@@ -155,17 +185,48 @@ function af_balance_member_do_register_end(): void
     }
 }
 
+function af_balance_datahandler_post_insert($posthandler): void
+{
+    if (!is_object($posthandler)) {
+        return;
+    }
+
+    $insert = is_array($posthandler->post_insert_data ?? null) ? $posthandler->post_insert_data : [];
+    $data = is_array($posthandler->data ?? null) ? $posthandler->data : [];
+
+    $uid = (int)($insert['uid'] ?? $data['uid'] ?? 0);
+    $fid = (int)($insert['fid'] ?? $data['fid'] ?? 0);
+    $visible = (int)($insert['visible'] ?? $data['visible'] ?? 0);
+    $pid = (int)($insert['pid'] ?? 0);
+    if ($pid <= 0) {
+        $pid = (int)($posthandler->pid ?? 0);
+    }
+    $message = (string)($insert['message'] ?? $data['message'] ?? '');
+
+    af_balance_award_for_post($uid, $fid, $message, $visible, $pid);
+}
+
 function af_balance_post_do_newpost_end(): void
 {
-    global $mybb, $db;
-    $pid = (int)($mybb->input['pid'] ?? 0);
-    if ($pid <= 0) return;
-    $post = $db->fetch_array($db->simple_select('posts', '*', 'pid=' . $pid, ['limit' => 1]));
-    if (!$post || (int)$post['visible'] !== 1) return;
-    $uid = (int)$post['uid']; $fid = (int)$post['fid'];
-    $msg = (string)($post['message'] ?? '');
-    $chars = function_exists('my_strlen') ? my_strlen($msg) : strlen($msg);
-    if ($uid <= 0 || $chars <= 0) return;
+    global $mybb, $db, $pid, $newpid;
+    $resolved_pid = (int)($pid ?? $newpid ?? $mybb->input['pid'] ?? 0);
+    if ($resolved_pid <= 0) return;
+    $post = $db->fetch_array($db->simple_select('posts', 'pid,uid,fid,message,visible', 'pid=' . $resolved_pid, ['limit' => 1]));
+    if (!$post) return;
+    af_balance_award_for_post((int)$post['uid'], (int)$post['fid'], (string)($post['message'] ?? ''), (int)$post['visible'], $resolved_pid);
+}
+
+function af_balance_award_for_post(int $uid, int $fid, string $message, int $visible, int $pid = 0): void
+{
+    global $mybb;
+    if ($visible !== 1 || $uid <= 0) {
+        return;
+    }
+
+    $chars = function_exists('my_strlen') ? my_strlen($message) : strlen($message);
+    if ($chars <= 0) {
+        return;
+    }
 
     if (!empty($mybb->settings['af_balance_exp_enabled']) && af_balance_is_forum_allowed($fid, 'exp')) {
         $rate = (float)($mybb->settings['af_balance_exp_per_char'] ?? 0);

@@ -604,6 +604,29 @@
         initInventoryUI(sheet);
       }
 
+
+      function applyManualAwardSnapshot(payload) {
+        var levelNode = sheet.querySelector('[data-afcs-level]');
+        if (levelNode && typeof payload.level !== 'undefined') {
+          levelNode.textContent = 'Уровень ' + String(payload.level);
+        }
+
+        var expNode = sheet.querySelector('[data-afcs-exp-label]');
+        if (expNode && payload.exp_display && payload.exp_next_display) {
+          expNode.textContent = String(payload.exp_display) + ' / ' + String(payload.exp_next_display);
+        }
+
+        var barNode = sheet.querySelector('[data-afcs-level-bar] span');
+        if (barNode && typeof payload.progress_percent !== 'undefined') {
+          barNode.style.width = String(payload.progress_percent) + '%';
+        }
+
+        var walletNode = sheet.querySelector('[data-afcs-wallet-value]');
+        if (walletNode && typeof payload.credits_display !== 'undefined') {
+          walletNode.textContent = String(payload.credits_display) + ' ¢';
+        }
+      }
+
       function setActiveInventoryTab(root, key) {
         if (!root || !key) return;
         var tabs = root.querySelectorAll('[data-afcs-inventory-tab]');
@@ -1178,7 +1201,13 @@
 
           if (amountEl) amountEl.value = '';
           if (reasonEl) reasonEl.value = '';
-          applyViewUpdate(payload);
+
+          applyManualAwardSnapshot(payload);
+
+          var awardPanel = sheet.querySelector('[data-afcs-award-panel]');
+          if (awardPanel) {
+            awardPanel.hidden = true;
+          }
         });
       });
 

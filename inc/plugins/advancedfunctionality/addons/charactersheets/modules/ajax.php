@@ -687,6 +687,10 @@ function af_charactersheets_handle_api(): void
             }
             af_charactersheets_json_response(['success' => false, 'error' => $result['error'] ?? 'EXP update failed']);
         }
+
+        $target_uid = (int)($sheet['uid'] ?? 0);
+        $snapshot = af_charactersheets_balance_snapshot($target_uid);
+        af_charactersheets_json_response(array_merge(['success' => true], $snapshot));
     } else {
         af_charactersheets_json_response(['success' => false, 'error' => 'Unknown action']);
     }
