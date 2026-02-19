@@ -316,7 +316,11 @@ function af_charactersheets_is_enabled(): bool
 
 function af_charactersheets_render_modal_profile_page(): void
 {
-    global $mybb, $db;
+    global $mybb;
+
+    if (empty($mybb->usergroup['canviewprofiles'])) {
+        error_no_permission();
+    }
 
     $uid = (int)$mybb->get_input('uid');
     if ($uid <= 0) {
@@ -328,29 +332,18 @@ function af_charactersheets_render_modal_profile_page(): void
         error_no_permission();
     }
 
-    $profileUrl = function_exists('get_profile_link') ? get_profile_link($uid) : ('member.php?action=profile&uid=' . $uid);
+    $profileUrl = 'member.php?action=profile&uid=' . $uid . '&cs_modal=1';
     $html = '';
     if ($profileUrl !== '') {
         $absolute = af_charactersheets_make_absolute_url($profileUrl);
-        $ctx = stream_context_create(['http' => ['timeout' => 10], 'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]]);
-        $raw = @file_get_contents($absolute, false, $ctx);
+        $raw = af_charactersheets_fetch_local_html($absolute);
         if (is_string($raw) && $raw !== '') {
-            if (preg_match('~(<div\s+class=("|\')pun\2[^>]*>.*?</div>)~is', $raw, $m)) {
-                $html = $m[1];
-            }
+            $html = af_charactersheets_extract_pun_block($raw);
         }
     }
 
     if ($html === '') {
-        $username = htmlspecialchars_uni((string)($user['username'] ?? ''));
-        $avatar = trim((string)($user['avatar'] ?? ''));
-        if ($avatar === '') {
-            $avatar = 'images/default_avatar.png';
-        }
-        $html = '<div class="pun"><div class="thead"><strong>' . $username . '</strong></div><div class="trow1" style="padding:16px">'
-            . '<img src="' . htmlspecialchars_uni($avatar) . '" alt="" style="max-width:120px;border-radius:8px;display:block;margin-bottom:12px">'
-            . '<div><a href="' . htmlspecialchars_uni($profileUrl) . '" target="_blank" rel="noopener">Открыть полный профиль</a></div>'
-            . '</div></div>';
+        error_no_permission();
     }
 
     $page = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -358,6 +351,83 @@ function af_charactersheets_render_modal_profile_page(): void
         . '</head><body>' . $html . '</body></html>';
 
     output_page($page);
+}
+
+function af_charactersheets_fetch_local_html(string $url): string
+{
+    $url = trim($url);
+    if ($url === '') {
+        return '';
+    }
+
+    $cookiePairs = [];
+    foreach ($_COOKIE as $name => $value) {
+        $cookiePairs[] = $name . '=' . rawurlencode((string)$value);
+    }
+    $cookieHeader = implode('; ', $cookiePairs);
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        if ($ch !== false) {
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            if ($cookieHeader !== '') {
+                curl_setopt($ch, CURLOPT_HTTPHEADER, ['Cookie: ' . $cookieHeader]);
+            }
+            $raw = curl_exec($ch);
+            curl_close($ch);
+            if (is_string($raw) && $raw !== '') {
+                return $raw;
+            }
+        }
+    }
+
+    $context = stream_context_create([
+        'http' => [
+            'timeout' => 10,
+            'header' => $cookieHeader !== '' ? ('Cookie: ' . $cookieHeader . "\r\n") : '',
+        ],
+        'ssl' => [
+            'verify_peer' => false,
+            'verify_peer_name' => false,
+        ],
+    ]);
+    $raw = @file_get_contents($url, false, $context);
+
+    return is_string($raw) ? $raw : '';
+}
+
+function af_charactersheets_extract_pun_block(string $html): string
+{
+    $html = trim($html);
+    if ($html === '') {
+        return '';
+    }
+
+    if (!class_exists('DOMDocument')) {
+        if (preg_match('~(<div\s+class=("|\')[^>]*\bpun\b[^>]*>.*</div>)~is', $html, $m)) {
+            return $m[1];
+        }
+        return '';
+    }
+
+    libxml_use_internal_errors(true);
+    $dom = new DOMDocument();
+    $dom->loadHTML($html);
+    $xpath = new DOMXPath($dom);
+    $nodes = $xpath->query("//div[contains(concat(' ', normalize-space(@class), ' '), ' pun ')]");
+    if ($nodes instanceof DOMNodeList && $nodes->length > 0) {
+        $node = $nodes->item(0);
+        if ($node instanceof DOMNode) {
+            return $dom->saveHTML($node) ?: '';
+        }
+    }
+
+    return '';
 }
 
 function af_charactersheets_render_modal_application_page(): void
@@ -391,7 +461,7 @@ function af_charactersheets_render_modal_application_page(): void
     }
 
     $parsed = af_charactersheets_parse_bbcode((string)($post['message'] ?? ''));
-    $content = '<div class="post_content">' . $parsed . '</div>';
+    $content = '<div class="cs-modal-application"><div class="post_content">' . $parsed . '</div></div>';
     $page = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
         . '<style>html,body{margin:0;padding:16px;background:#0f0f0f;color:#efefef}.post_content{max-width:960px;margin:0 auto;line-height:1.5}</style>'
         . '</head><body>' . $content . '</body></html>';
