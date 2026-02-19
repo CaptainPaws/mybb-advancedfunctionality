@@ -69,8 +69,6 @@ function af_charactersheets_init(): void
     $plugins->add_hook('postbit', 'af_charactersheets_postbit_button');
     $plugins->add_hook('postbit_prev', 'af_charactersheets_postbit_button');
     $plugins->add_hook('postbit_pm', 'af_charactersheets_postbit_button');
-    $plugins->add_hook('member_do_register_end', 'af_charactersheets_member_do_register_end');
-    $plugins->add_hook('post_do_newpost_end', 'af_charactersheets_post_do_newpost_end');
 }
 
 function af_charactersheets_showthread_start(): void

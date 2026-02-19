@@ -264,6 +264,7 @@ function af_charactersheets_build_progress_html(array $view, array $sheet, bool 
     $next = (float)($view['next_req'] ?? 0);
     $percent = (int)($view['level_percent'] ?? 0);
     $exp_label = htmlspecialchars_uni((string)($view['level_exp_label'] ?? ''));
+    $credits_label = htmlspecialchars_uni((string)((int)($view['credits'] ?? 0)));
 
     $skill_points_free = (int)($view['skill_pool_remaining'] ?? 0);
 
