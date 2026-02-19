@@ -1175,7 +1175,8 @@ function af_charactersheets_build_info_table_html(array $index, array $sheet_vie
     }
     $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Чипы</div><div class="af-cs-info-value">' . $chip_html . '</div></div>';
     $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Эффекты</div><div class="af-cs-info-value">' . af_charactersheets_build_effects_chip_html($sheet_view) . '</div></div>';
-    $wallet = (string)((int)($sheet_view['credits'] ?? 0));
+    $wallet_raw = (int)($sheet_view['credits'] ?? 0);
+    $wallet = function_exists('af_balance_format_credits') ? af_balance_format_credits($wallet_raw) : number_format($wallet_raw / 100, 2, '.', ' ');
     $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Кошелёк</div><div class="af-cs-info-value" data-afcs-wallet-value>' . htmlspecialchars_uni($wallet) . ' ¢</div></div>';
 
     return '<div class="af-cs-info-table">' . implode('', $items) . '</div>';

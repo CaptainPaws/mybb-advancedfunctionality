@@ -1890,3 +1890,5 @@
 .af-cs-postbit-stats__credits {
   opacity: 0.9;
 }
+
+.af-cs-inline-error{margin:8px 0;padding:8px 10px;border:1px solid #b84a4a;background:rgba(184,74,74,.15);color:#ffd4d4;border-radius:8px;font-size:13px}

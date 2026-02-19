@@ -36,13 +36,15 @@ function af_charactersheets_postbit_button(array &$post): void
 
     af_charactersheets_postbit_preload_balances();
     $bal = af_charactersheets_postbit_get_balance($uid);
-    $exp_total = ((float)($bal['exp'] ?? 0)) / 100;
+    $exp_total = ((float)($bal['exp'] ?? 0)) / (defined('AF_BALANCE_EXP_SCALE') ? AF_BALANCE_EXP_SCALE : 100);
     $level_data = af_charactersheets_compute_level($exp_total);
     $level = (int)($level_data['level'] ?? 1);
     $exp_current = htmlspecialchars_uni(number_format((float)($level_data['exp_in_level'] ?? 0), 2, '.', ' '));
     $exp_need = htmlspecialchars_uni(number_format((float)($level_data['exp_need'] ?? 0), 2, '.', ' '));
     $progress_percent = max(0, min(100, (int)($level_data['percent'] ?? 0)));
-    $credits = htmlspecialchars_uni((string)(int)($bal['credits'] ?? 0));
+    $currency_symbol = htmlspecialchars_uni((string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'));
+    $credits_raw = (int)($bal['credits'] ?? 0);
+    $credits = htmlspecialchars_uni(function_exists('af_balance_format_credits') ? af_balance_format_credits($credits_raw) : number_format($credits_raw / 100, 2, '.', ' '));
 
     $tpl = $templates->get('postbit_plaque');
     eval("\$plaque_html = \"" . $tpl . "\";");

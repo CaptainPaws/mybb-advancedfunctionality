@@ -222,6 +222,27 @@
       var sheetId = sheet.getAttribute('data-afcs-sheet-id');
       var postKey = sheet.getAttribute('data-afcs-post-key');
 
+      function ensureInlineErrorNode() {
+        var node = sheet.querySelector('[data-afcs-inline-error]');
+        if (node) return node;
+        node = document.createElement('div');
+        node.className = 'af-cs-inline-error';
+        node.setAttribute('data-afcs-inline-error', '1');
+        sheet.insertBefore(node, sheet.firstChild);
+        return node;
+      }
+
+      function showInlineError(message) {
+        var node = ensureInlineErrorNode();
+        node.textContent = String(message || 'Ошибка запроса');
+      }
+
+      function clearInlineError() {
+        var node = sheet.querySelector('[data-afcs-inline-error]');
+        if (!node) return;
+        node.textContent = '';
+      }
+
       function getInt(val, def) {
         var n = parseInt(String(val || ''), 10);
         return isNaN(n) ? (def || 0) : n;
@@ -284,9 +305,9 @@
         return null;
       }
 
-      function sendAction(action, payload) {
+      function afCsAjax(action, payload) {
         if (!sheetId || !postKey) {
-          alert('sheet_id/my_post_key missing in DOM');
+          showInlineError('sheet_id/my_post_key missing in DOM');
           return Promise.reject(new Error('sheet_id/my_post_key missing in DOM'));
         }
 
@@ -331,7 +352,7 @@
             return payloadObj;
           });
         }).catch(function (error) {
-          alert(error && error.message ? error.message : 'Ошибка запроса');
+          showInlineError(error && error.message ? error.message : 'Ошибка запроса');
           console.error('[AF CS] Request failed:', error);
           throw error;
         });
@@ -726,7 +747,7 @@
           allocations[input2.getAttribute('data-afcs-attr-input')] = input2.value || 0;
         });
 
-        sendAction('save_attributes', { allocations: allocations }).then(function (payload) {
+        afCsAjax('save_attributes', { allocations: allocations }).then(function (payload) {
           if (!payload.success) {
             if (errorNode) {
               errorNode.textContent = (payload.errors || payload.error || 'Ошибка сохранения').toString();
@@ -763,9 +784,9 @@
         var skill_rank = parseInt(rankSelect.value || '0', 10);
         if (!skillKey || Number.isNaN(skill_rank)) return;
 
-        sendAction('cs_skill_set_rank', { skill_key: skillKey, skill_rank: skill_rank }).then(function (payload) {
+        afCsAjax('cs_skill_set_rank', { skill_key: skillKey, skill_rank: skill_rank }).then(function (payload) {
           if (!payload.success) {
-            alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
+            showInlineError((payload.errors || payload.error || 'Ошибка сохранения').toString());
             return;
           }
           applyViewUpdate(payload);
@@ -835,9 +856,9 @@
           var reason = prompt('Причина удаления (необязательно):', '') || '';
           var redirect = deleteButton.getAttribute('data-afcs-delete-redirect') || '';
 
-          sendAction('delete_sheet', { reason: reason, redirect: redirect }).then(function (payload) {
+          afCsAjax('delete_sheet', { reason: reason, redirect: redirect }).then(function (payload) {
             if (!payload.success) {
-              alert((payload.error || payload.errors || 'Ошибка удаления').toString());
+              showInlineError((payload.error || payload.errors || 'Ошибка удаления').toString());
               return;
             }
             if (payload.redirect) window.location.href = payload.redirect;
@@ -893,10 +914,9 @@
         var resetAttrs = event.target.closest('[data-afcs-reset-attributes]');
         if (resetAttrs) {
           event.preventDefault();
-          if (!window.confirm('Сбросить атрибуты и открыть распределение заново?')) return;
-          sendAction('reset_attributes', {}).then(function (payload) {
+          afCsAjax('reset_attributes', {}).then(function (payload) {
             if (!payload.success) {
-              alert((payload.error || 'Ошибка сброса').toString());
+              showInlineError((payload.error || 'Ошибка сброса').toString());
               return;
             }
             applyViewUpdate(payload);
@@ -907,10 +927,9 @@
         var resetSkills = event.target.closest('[data-afcs-reset-skills]');
         if (resetSkills) {
           event.preventDefault();
-          if (!window.confirm('Сбросить навыки персонажа?')) return;
-          sendAction('reset_skills', {}).then(function (payload) {
+          afCsAjax('reset_skills', {}).then(function (payload) {
             if (!payload.success) {
-              alert((payload.error || 'Ошибка сброса').toString());
+              showInlineError((payload.error || 'Ошибка сброса').toString());
               return;
             }
             applyViewUpdate(payload);
@@ -931,9 +950,9 @@
           }
           var choiceValue = values.length > 1 ? values.join(',') : (values[0] || '');
 
-          sendAction('save_choice', { choice_key: choiceKey, choice_value: choiceValue }).then(function (payload) {
+          afCsAjax('save_choice', { choice_key: choiceKey, choice_value: choiceValue }).then(function (payload) {
             if (!payload.success) {
-              alert((payload.error || 'Ошибка сохранения').toString());
+              showInlineError((payload.error || 'Ошибка сохранения').toString());
               return;
             }
             applyViewUpdate(payload);
@@ -968,9 +987,9 @@
           event.preventDefault();
           var buyKey = skillBuy.getAttribute('data-skill-key');
           if (buyKey) {
-            sendAction('buy_skill', { skill_key: buyKey }).then(function (payload) {
+            afCsAjax('buy_skill', { skill_key: buyKey }).then(function (payload) {
               if (!payload.success) {
-                alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
+                showInlineError((payload.errors || payload.error || 'Ошибка сохранения').toString());
                 return;
               }
               applyViewUpdate(payload);
@@ -984,9 +1003,9 @@
           event.preventDefault();
           var unbuyKey = skillUnbuy.getAttribute('data-skill-key');
           if (unbuyKey) {
-            sendAction('cs_skill_unbuy', { skill_key: unbuyKey }).then(function (payload) {
+            afCsAjax('cs_skill_unbuy', { skill_key: unbuyKey }).then(function (payload) {
               if (!payload.success) {
-                alert((payload.errors || payload.error || 'Ошибка сохранения').toString());
+                showInlineError((payload.errors || payload.error || 'Ошибка сохранения').toString());
                 return;
               }
               applyViewUpdate(payload);
@@ -1002,9 +1021,9 @@
           var selectK = sheet.querySelector('[data-afcs-knowledge-select="' + type + '"]');
           var keyK = selectK ? selectK.value : '';
           if (type && keyK) {
-            sendAction('add_knowledge', { type: type, key: keyK }).then(function (payload) {
+            afCsAjax('add_knowledge', { type: type, key: keyK }).then(function (payload) {
               if (!payload.success) {
-                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
                 return;
               }
               applyViewUpdate(payload);
@@ -1019,9 +1038,9 @@
           var typeRemove = knowledgeRemove.getAttribute('data-afcs-knowledge-type');
           var keyRemove = knowledgeRemove.getAttribute('data-afcs-knowledge-key');
           if (typeRemove && keyRemove) {
-            sendAction('remove_knowledge', { type: typeRemove, key: keyRemove }).then(function (payload) {
+            afCsAjax('remove_knowledge', { type: typeRemove, key: keyRemove }).then(function (payload) {
               if (!payload.success) {
-                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
                 return;
               }
               applyViewUpdate(payload);
@@ -1037,13 +1056,13 @@
           var abilityKey = abilityToggle.getAttribute('data-afcs-ability-key');
           var abilityEquipped = abilityToggle.getAttribute('data-afcs-ability-equipped');
           if (abilityType && abilityKey) {
-            sendAction('toggle_ability', {
+            afCsAjax('toggle_ability', {
               type: abilityType,
               key: abilityKey,
               equipped: abilityEquipped === '1' ? 1 : 0
             }).then(function (payload) {
               if (!payload.success) {
-                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
                 return;
               }
               applyViewUpdate(payload);
@@ -1059,13 +1078,13 @@
           var itemKey = inventoryToggle.getAttribute('data-afcs-item-key');
           var itemEquipped = inventoryToggle.getAttribute('data-afcs-item-equipped');
           if (itemType && itemKey) {
-            sendAction('inventory_toggle_item', {
+            afCsAjax('inventory_toggle_item', {
               type: itemType,
               key: itemKey,
               equipped: itemEquipped === '1' ? 1 : 0
             }).then(function (payload) {
               if (!payload.success) {
-                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
                 return;
               }
               applyViewUpdate(payload);
@@ -1087,13 +1106,13 @@
           }
           var augSlot = augSlotSelect ? augSlotSelect.value : augDefaultSlot;
           if (augType && augKey && augSlot) {
-            sendAction('equip_augmentation', {
+            afCsAjax('equip_augmentation', {
               slot: augSlot,
               type: augType,
               key: augKey
             }).then(function (payload) {
               if (!payload.success) {
-                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
                 return;
               }
               applyViewUpdate(payload);
@@ -1108,9 +1127,9 @@
           var augSlotKey = augUnequip.getAttribute('data-afcs-augmentation-slot');
           var augKey = augUnequip.getAttribute('data-afcs-augmentation-key');
           if (augSlotKey) {
-            sendAction('unequip_augmentation', { slot: augSlotKey, key: augKey || '' }).then(function (payload) {
+            afCsAjax('unequip_augmentation', { slot: augSlotKey, key: augKey || '' }).then(function (payload) {
               if (!payload.success) {
-                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
                 return;
               }
               applyViewUpdate(payload);
@@ -1131,13 +1150,13 @@
           }
           var eqSlot = eqSlotSelect ? eqSlotSelect.value : '';
           if (eqType && eqKey && eqSlot) {
-            sendAction('equip_equipment', {
+            afCsAjax('equip_equipment', {
               slot: eqSlot,
               type: eqType,
               key: eqKey
             }).then(function (payload) {
               if (!payload.success) {
-                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
                 return;
               }
               applyViewUpdate(payload);
@@ -1151,9 +1170,9 @@
           event.preventDefault();
           var eqSlotKey = equipUnequip.getAttribute('data-afcs-equipment-slot');
           if (eqSlotKey) {
-            sendAction('unequip_equipment', { slot: eqSlotKey }).then(function (payload) {
+            afCsAjax('unequip_equipment', { slot: eqSlotKey }).then(function (payload) {
               if (!payload.success) {
-                alert((payload.error || payload.errors || 'Ошибка сохранения').toString());
+                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
                 return;
               }
               applyViewUpdate(payload);
@@ -1193,9 +1212,9 @@
           reason: reasonEl ? reasonEl.value : ''
         };
 
-        sendAction('grant_exp', payloadBase).then(function (payload) {
+        afCsAjax('grant_exp', payloadBase).then(function (payload) {
           if (!payload || !payload.success) {
-            alert((payload && (payload.error || payload.errors) ? (payload.error || payload.errors) : 'Ошибка начисления').toString());
+            showInlineError((payload && (payload.error || payload.errors) ? (payload.error || payload.errors) : 'Ошибка начисления').toString());
             return;
           }
 
