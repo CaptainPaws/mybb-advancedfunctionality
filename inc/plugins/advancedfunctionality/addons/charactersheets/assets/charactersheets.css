@@ -1877,21 +1877,34 @@
 
 .af-cs-postbit-stats__bar {
   height: 18px;
+}
+
+.af-expbar {
+  position: relative;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.12);
   overflow: hidden;
 }
 
-.af-cs-postbit-stats__bar span {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-width: 92px;
+.af-expbar__fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
   background: linear-gradient(90deg, #5cc3ff, #7bffb8);
+}
+
+.af-expbar__text {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
   color: #0f1114;
   font-weight: lighter;
-  white-space: nowrap;
   font-size: 9px;
 }
 
