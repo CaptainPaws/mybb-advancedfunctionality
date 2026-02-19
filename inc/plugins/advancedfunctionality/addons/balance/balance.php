@@ -472,32 +472,190 @@ function af_balance_misc_start(): void
 
 function af_balance_handle_manage_adjust(): void
 {
-    global $mybb;
-    verify_post_check($mybb->get_input('my_post_key'));
-    $uid = (int)$mybb->get_input('uid');
-    $kind = (string)$mybb->get_input('kind');
-    $op = (string)$mybb->get_input('op');
-    $amount = (float)$mybb->get_input('amount');
-    $reason = trim((string)$mybb->get_input('reason'));
-    if (!in_array($kind, ['exp', 'credits'], true) || $uid <= 0 || $amount <= 0) {
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['success' => false, 'error' => 'Bad request']);
+    global $mybb, $db;
+
+    /**
+     * ВАЖНО:
+     * - Некоторые аддоны печатают HTML/CSS в global_start/pre_output_page.
+     * - Это попадает в буфер и "прилипает" перед JSON.
+     * Поэтому: чистим ВСЕ выходные буферы перед тем как слать JSON.
+     */
+    while (ob_get_level() > 0) {
+        @ob_end_clean();
+    }
+
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+
+    // Требуем POST
+    if (strtoupper($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        echo json_encode(['success' => false, 'error' => 'Method not allowed'], JSON_UNESCAPED_UNICODE);
         exit;
     }
-    $signed = $op === 'sub' ? -$amount : $amount;
-    $meta = ['reason' => $reason !== '' ? $reason : 'manual_adjust', 'source' => 'balance_manage', 'actor_uid' => (int)($mybb->user['uid'] ?? 0), 'ref_type' => 'uid', 'ref_id' => $uid];
-    $bal = $kind === 'exp' ? af_balance_add_exp($uid, $signed, $meta) : af_balance_add_credits($uid, $signed, $meta);
-    $expFloat = ((int)$bal['exp']) / AF_BALANCE_EXP_SCALE;
-    $levelData = function_exists('af_charactersheets_compute_level') ? af_charactersheets_compute_level($expFloat) : ['level' => 1, 'percent' => 0];
-    header('Content-Type: application/json; charset=utf-8');
+
+    // Проверка post key (без verify_post_check, т.к. он может печатать HTML)
+    $postKey = (string)$mybb->get_input('my_post_key');
+    if ($postKey === '' || $postKey !== (string)$mybb->post_code) {
+        echo json_encode(['success' => false, 'error' => 'Bad post key'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $uid    = (int)$mybb->get_input('uid');
+    $kind   = (string)$mybb->get_input('kind');     // exp|credits
+    $op     = (string)$mybb->get_input('op');       // add|sub
+    $amount = (float)$mybb->get_input('amount');
+    $reason = trim((string)$mybb->get_input('reason'));
+
+    // ---- Idempotency: защита от двойного POST (двойной клик / двойной обработчик / повтор fetch)
+    $reqId = trim((string)$mybb->get_input('req_id'));
+    if ($reqId !== '') {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            @session_start();
+        }
+        if (!isset($_SESSION['af_balance_req'])) {
+            $_SESSION['af_balance_req'] = [];
+        }
+
+        $key = (string)$uid . ':' . $kind . ':' . $reqId;
+
+        // если уже был такой req — просто вернём текущий баланс без повторного списания/начисления
+        if (!empty($_SESSION['af_balance_req'][$key])) {
+            $bal2 = af_balance_get($uid);
+
+            $expFloat = ((int)($bal2['exp'] ?? 0)) / AF_BALANCE_EXP_SCALE;
+            $levelData = function_exists('af_charactersheets_compute_level')
+                ? af_charactersheets_compute_level($expFloat)
+                : ['level' => 1, 'percent' => 0];
+
+            echo json_encode([
+                'success' => true,
+                'uid' => $uid,
+                'kind' => $kind,
+                'exp_display' => af_balance_format_exp((int)($bal2['exp'] ?? 0)),
+                'credits_display' => af_balance_format_credits((int)($bal2['credits'] ?? 0)),
+                'level' => (int)($levelData['level'] ?? 1),
+                'progress_percent' => (int)($levelData['percent'] ?? 0),
+                'deduped' => 1
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
+
+        // помечаем как использованный
+        $_SESSION['af_balance_req'][$key] = TIME_NOW;
+
+        // чистим старьё (например старше 10 минут)
+        foreach ($_SESSION['af_balance_req'] as $k => $t) {
+            if ((int)$t < (TIME_NOW - 600)) {
+                unset($_SESSION['af_balance_req'][$k]);
+            }
+        }
+    }
+
+
+    if ($uid <= 0 || !in_array($kind, ['exp', 'credits'], true)) {
+        echo json_encode(['success' => false, 'error' => 'Bad request'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($op !== 'add' && $op !== 'sub') {
+        $op = 'add';
+    }
+
+    if (!is_finite($amount) || $amount <= 0) {
+        echo json_encode(['success' => false, 'error' => 'Amount must be > 0'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // Скалирование
+    $scale = ($kind === 'exp') ? AF_BALANCE_EXP_SCALE : AF_BALANCE_CREDITS_SCALE;
+
+    // Округление вниз тебе не нужно для ручных операций: 480.01 должно стать 48001, а не 48000.
+    // Поэтому: round до "копеек" (scale=100).
+    $scaledAbs = (int)round($amount * $scale);
+
+    if ($scaledAbs <= 0) {
+        echo json_encode(['success' => false, 'error' => 'Amount too small'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // Берём текущий баланс
+    $bal = af_balance_get($uid);
+    $old = (int)($bal[$kind] ?? 0);
+
+    // Списание: НИКОГДА не уводим в минус на этой странице управления
+    $delta = ($op === 'sub') ? -$scaledAbs : $scaledAbs;
+
+    // Если списываем больше, чем есть — зажимаем до нуля (или можно ошибку; ты просила "исправь", делаю безопасно)
+    $new = $old + $delta;
+    if ($new < 0) {
+        $delta = -$old; // списываем ровно то, что есть
+        $new = 0;
+    }
+
+    // Обновляем баланс
+    $db->update_query(AF_BALANCE_TABLE, [
+        $kind => $new,
+        'updated_at' => TIME_NOW,
+    ], 'uid=' . (int)$uid);
+
+    // Лог транзакций (если включён)
+    if (!empty($mybb->settings['af_balance_tx_enable']) && $db->table_exists(AF_BALANCE_TX_TABLE)) {
+        $meta = [
+            'reason'    => ($reason !== '' ? $reason : 'manual_adjust'),
+            'source'    => 'balance_manage',
+            'actor_uid' => (int)($mybb->user['uid'] ?? 0),
+            'ref_type'  => 'uid',
+            'ref_id'    => $uid,
+            'op'        => $op,
+            'amount_ui' => $amount,
+        ];
+
+        $db->insert_query(AF_BALANCE_TX_TABLE, [
+            'uid'          => (int)$uid,
+            'kind'         => $db->escape_string($kind),
+            'amount'       => (int)$delta,
+            'balance_after'=> (int)$new,
+            'reason'       => $db->escape_string(substr((string)$meta['reason'], 0, 64)),
+            'source'       => $db->escape_string('balance_manage'),
+            'ref_type'     => $db->escape_string('uid'),
+            'ref_id'       => (int)$uid,
+            'meta_json'    => $db->escape_string(json_encode($meta, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)),
+            'actor_uid'    => (int)($mybb->user['uid'] ?? 0),
+            'created_at'   => TIME_NOW,
+        ]);
+
+        af_balance_trim_tx();
+    }
+
+    // EXP: если есть интеграция с листом персонажа
+    if ($kind === 'exp' && function_exists('af_charactersheets_on_exp_changed')) {
+        af_charactersheets_on_exp_changed($uid, $old, $new, [
+            'reason' => ($reason !== '' ? $reason : 'manual_adjust'),
+            'source' => 'balance_manage',
+            'actor_uid' => (int)($mybb->user['uid'] ?? 0),
+            'ref_type' => 'uid',
+            'ref_id' => $uid,
+        ]);
+    }
+
+    // Для ответа нам нужен актуальный бал
+    $bal2 = af_balance_get($uid);
+    $expScaled = (int)($bal2['exp'] ?? 0);
+
+    $expFloat = $expScaled / AF_BALANCE_EXP_SCALE;
+    $levelData = function_exists('af_charactersheets_compute_level')
+        ? af_charactersheets_compute_level($expFloat)
+        : ['level' => 1, 'percent' => 0];
+
     echo json_encode([
-        'success' => true,
-        'uid' => $uid,
-        'kind' => $kind,
-        'exp_display' => af_balance_format_exp((int)$bal['exp']),
-        'credits_display' => af_balance_format_credits((int)$bal['credits']),
-        'level' => (int)($levelData['level'] ?? 1),
-        'progress_percent' => (int)($levelData['percent'] ?? 0),
+        'success'         => true,
+        'uid'             => $uid,
+        'kind'            => $kind,
+        'exp_display'     => af_balance_format_exp((int)($bal2['exp'] ?? 0)),
+        'credits_display' => af_balance_format_credits((int)($bal2['credits'] ?? 0)),
+        'level'           => (int)($levelData['level'] ?? 1),
+        'progress_percent'=> (int)($levelData['percent'] ?? 0),
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
@@ -521,52 +679,134 @@ function af_balance_migrate_from_charactersheets(): void
     }
 }
 
-
 function af_balance_render_manage_page(): void
 {
-    global $db, $mybb, $templates, $headerinclude, $header, $footer, $theme;
+    global $db, $mybb, $headerinclude, $header, $footer;
 
     $kind = (string)$mybb->get_input('kind');
-    if (!in_array($kind, ['exp', 'credits'], true)) $kind = 'exp';
-    $q = trim((string)$mybb->get_input('q'));
-    $race = trim((string)$mybb->get_input('race'));
+    if (!in_array($kind, ['exp', 'credits'], true)) {
+        $kind = 'exp';
+    }
+
+    $qRaw = trim((string)$mybb->get_input('q'));
+    $raceRaw = trim((string)$mybb->get_input('race'));
 
     $where = 'u.uid>0';
-    if ($q !== '') {
-        $where .= " AND u.username LIKE '%" . $db->escape_string_like($q) . "%'";
+    if ($qRaw !== '') {
+        // Без escape_string_like, чтобы не зависеть от драйвера
+        $like = $db->escape_string($qRaw);
+        $like = str_replace(['%', '_'], ['\\%', '\\_'], $like);
+        $where .= " AND u.username LIKE '%{$like}%'";
     }
 
     $rows = [];
-    $sql = "SELECT u.uid,u.username,u.avatar,b.exp,b.credits,s.progress_json FROM " . TABLE_PREFIX . "users u "
-        . "LEFT JOIN " . TABLE_PREFIX . AF_BALANCE_TABLE . " b ON b.uid=u.uid "
-        . "LEFT JOIN " . TABLE_PREFIX . "af_cs_sheets s ON s.uid=u.uid "
-        . "WHERE " . $where . " ORDER BY u.username ASC LIMIT 200";
+    $sql = "SELECT u.uid,u.username,u.avatar,b.exp,b.credits,s.progress_json
+            FROM " . TABLE_PREFIX . "users u
+            LEFT JOIN " . TABLE_PREFIX . AF_BALANCE_TABLE . " b ON b.uid=u.uid
+            LEFT JOIN " . TABLE_PREFIX . "af_cs_sheets s ON s.uid=u.uid
+            WHERE {$where}
+            ORDER BY u.username ASC
+            LIMIT 200";
     $res = $db->query($sql);
+
     while ($row = $db->fetch_array($res)) {
         $progress = json_decode((string)($row['progress_json'] ?? ''), true);
+        if (!is_array($progress)) $progress = [];
+
         $rowRace = trim((string)($progress['race'] ?? ''));
-        if ($race !== '' && mb_stripos($rowRace, $race) === false) {
-            continue;
+
+        if ($raceRaw !== '') {
+            $hay = function_exists('mb_strtolower') ? mb_strtolower($rowRace, 'UTF-8') : strtolower($rowRace);
+            $needle = function_exists('mb_strtolower') ? mb_strtolower($raceRaw, 'UTF-8') : strtolower($raceRaw);
+            if ($rowRace === '' || strpos($hay, $needle) === false) {
+                continue;
+            }
         }
+
         $uid = (int)$row['uid'];
         $exp = (int)($row['exp'] ?? 0);
         $credits = (int)($row['credits'] ?? 0);
-        $levelData = function_exists('af_charactersheets_compute_level') ? af_charactersheets_compute_level($exp / AF_BALANCE_EXP_SCALE) : ['level' => 1];
+
+        $levelData = function_exists('af_charactersheets_compute_level')
+            ? af_charactersheets_compute_level($exp / AF_BALANCE_EXP_SCALE)
+            : ['level' => 1];
+
         $avatar = trim((string)($row['avatar'] ?? ''));
         if ($avatar === '') $avatar = 'images/default_avatar.png';
-        $rows[] = '<tr data-af-balance-row="' . $uid . '"><td><img src="' . htmlspecialchars_uni($avatar) . '" width="34" height="34" style="border-radius:50%"></td>'
-            . '<td><a href="member.php?action=profile&uid=' . $uid . '">' . htmlspecialchars_uni((string)$row['username']) . '</a><div class="smalltext">' . htmlspecialchars_uni($rowRace) . '</div></td>'
+
+        $rows[] =
+            '<tr data-af-balance-row="' . $uid . '">'
+            . '<td><img src="' . htmlspecialchars_uni($avatar) . '" width="34" height="34" style="border-radius:50%"></td>'
+            . '<td><a href="member.php?action=profile&amp;uid=' . $uid . '">' . htmlspecialchars_uni((string)$row['username']) . '</a>'
+            . '<div class="smalltext">' . htmlspecialchars_uni($rowRace) . '</div></td>'
             . '<td data-af-balance-exp>' . af_balance_format_exp($exp) . '</td>'
             . '<td data-af-balance-credits>' . af_balance_format_credits($credits) . '</td>'
             . '<td data-af-balance-level>' . (int)($levelData['level'] ?? 1) . '</td>'
-            . '<td><button type="button" class="button" data-af-balance-adjust="1" data-uid="' . $uid . '">Начислить</button></td></tr>';
+            . '<td><button type="button" class="button" data-af-balance-adjust="1" data-uid="' . $uid . '">Начислить</button></td>'
+            . '</tr>';
     }
 
-    $rows_html = $rows ? implode('', $rows) : '<tr><td colspan="6">Нет результатов</td></tr>';
+    $rows_html = $rows ? implode("\n", $rows) : '<tr><td colspan="6">Нет результатов</td></tr>';
+
     $kind_exp_active = $kind === 'exp' ? 'is-active' : '';
     $kind_credits_active = $kind === 'credits' ? 'is-active' : '';
     $currency_symbol = htmlspecialchars_uni((string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'));
+    $bburl = htmlspecialchars_uni((string)($mybb->settings['bburl'] ?? ''));
     $my_post_key = htmlspecialchars_uni($mybb->post_code);
-    eval('$page = "' . $templates->get('balance') . '";');
+
+    $q = htmlspecialchars_uni($qRaw);
+    $race = htmlspecialchars_uni($raceRaw);
+
+    $page = '<!DOCTYPE html><html lang="ru"><head>'
+        . '<meta charset="utf-8">'
+        . '<title>Balance manage</title>'
+        // jQuery ПЕРЕД всем
+        . '<script src="' . $bburl . '/jscripts/jquery.js?ver=1823"></script>'
+        . $headerinclude
+        . '<link rel="stylesheet" href="' . $bburl . '/inc/plugins/advancedfunctionality/addons/balance/assets/balance.css">'
+        . '</head><body>'
+        . $header
+        . '<div class="af-balance-page">'
+        . '<h1>Balance management</h1>'
+
+        . '<form method="get" class="af-balance-filters">'
+        . '<input type="hidden" name="action" value="balance_manage">'
+        . '<input type="text" name="q" value="' . $q . '" placeholder="Поиск по имени">'
+        . '<input type="text" name="race" value="' . $race . '" placeholder="Поиск по расе">'
+        . '<button type="submit" class="button">Фильтр</button>'
+        . '</form>'
+
+        . '<div class="af-balance-tabs">'
+        . '<a class="' . $kind_exp_active . '" href="misc.php?action=balance_manage&amp;kind=exp">EXP</a>'
+        . '<a class="' . $kind_credits_active . '" href="misc.php?action=balance_manage&amp;kind=credits">Credits</a>'
+        . '</div>'
+
+        . '<table class="tborder af-balance-table">'
+        . '<tr><th></th><th>User</th><th>EXP</th><th>Credits (' . $currency_symbol . ')</th><th>Level</th><th></th></tr>'
+        . $rows_html
+        . '</table>'
+        . '</div>'
+
+        . '<div class="af-balance-modal" data-af-balance-modal hidden>'
+        . '  <div class="af-balance-modal__backdrop" data-af-balance-close></div>'
+        . '  <div class="af-balance-modal__dialog">'
+        . '    <h3>Изменить баланс</h3>'
+        . '    <div class="af-balance-modal__error" data-af-balance-error></div>'
+        . '    <input type="hidden" data-af-balance-uid>'
+        . '    <label><input type="radio" name="af-balance-op" value="add" checked> Начислить</label>'
+        . '    <label><input type="radio" name="af-balance-op" value="sub"> Списать</label>'
+        . '    <input type="number" step="0.01" data-af-balance-amount placeholder="Сумма">'
+        . '    <input type="text" data-af-balance-reason placeholder="Причина">'
+        . '    <button type="button" class="button" data-af-balance-apply>Применить</button>'
+        . '    <button type="button" class="button" data-af-balance-close>Отмена</button>'
+        . '  </div>'
+        . '</div>'
+
+        . '<script>window.afBalanceConfig={kind:' . json_encode($kind) . ',postKey:' . json_encode($mybb->post_code) . '};</script>'
+        . '<script src="' . $bburl . '/inc/plugins/advancedfunctionality/addons/balance/assets/balance.js"></script>'
+
+        . $footer
+        . '</body></html>';
+
     output_page($page);
 }
