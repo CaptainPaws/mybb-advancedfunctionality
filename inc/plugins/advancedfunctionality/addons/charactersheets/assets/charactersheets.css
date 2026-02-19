@@ -1878,7 +1878,7 @@
 .af-cs-postbit-stats__bar {
   height: 18px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.12);
   overflow: hidden;
 }
 
@@ -1890,8 +1890,9 @@
   min-width: 92px;
   background: linear-gradient(90deg, #5cc3ff, #7bffb8);
   color: #0f1114;
-  font-weight: 600;
+  font-weight: lighter;
   white-space: nowrap;
+  font-size: 9px;
 }
 
 .af-cs-postbit-stats__credits {
