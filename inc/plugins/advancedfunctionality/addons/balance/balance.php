@@ -1,0 +1,228 @@
+<?php
+if (!defined('IN_MYBB')) { die('No direct access'); }
+
+const AF_BALANCE_TABLE = 'af_balance';
+const AF_BALANCE_TX_TABLE = 'af_balance_tx';
+const AF_BALANCE_SCALE = 100;
+
+function af_balance_is_installed(): bool { global $db; return $db->table_exists(AF_BALANCE_TABLE); }
+function af_balance_install(): void { af_balance_ensure_schema(); af_balance_ensure_settings(); if (function_exists('rebuild_settings')) rebuild_settings(); }
+function af_balance_activate(): bool { af_balance_ensure_schema(); af_balance_ensure_settings(); af_balance_migrate_from_charactersheets(); return true; }
+function af_balance_deactivate(): bool { return true; }
+function af_balance_uninstall(): void {}
+
+function af_balance_init(): void
+{
+    global $plugins;
+    $plugins->add_hook('member_do_register_end', 'af_balance_member_do_register_end');
+    $plugins->add_hook('post_do_newpost_end', 'af_balance_post_do_newpost_end');
+}
+
+function af_balance_ensure_schema(): void
+{
+    global $db;
+    if (!$db->table_exists(AF_BALANCE_TABLE)) {
+        $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_BALANCE_TABLE . " (
+            uid INT UNSIGNED NOT NULL,
+            exp BIGINT NOT NULL DEFAULT 0,
+            credits BIGINT NOT NULL DEFAULT 0,
+            updated_at INT UNSIGNED NOT NULL DEFAULT 0,
+            PRIMARY KEY (uid)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+    if (!$db->table_exists(AF_BALANCE_TX_TABLE)) {
+        $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_BALANCE_TX_TABLE . " (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            uid INT UNSIGNED NOT NULL,
+            kind ENUM('exp','credits') NOT NULL,
+            amount BIGINT NOT NULL,
+            balance_after BIGINT NOT NULL,
+            reason VARCHAR(64) NOT NULL,
+            source VARCHAR(64) NOT NULL,
+            ref_type VARCHAR(32) NOT NULL DEFAULT '',
+            ref_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            meta_json MEDIUMTEXT NULL,
+            actor_uid INT UNSIGNED NOT NULL DEFAULT 0,
+            created_at INT UNSIGNED NOT NULL,
+            PRIMARY KEY (id),
+            KEY uid_kind (uid, kind),
+            KEY created_at (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+}
+
+function af_balance_ensure_settings(): void
+{
+    global $db;
+    $gid = (int)$db->fetch_field($db->simple_select('settinggroups', 'gid', "name='af_balance'", ['limit' => 1]), 'gid');
+    if ($gid <= 0) {
+        $gid = (int)$db->insert_query('settinggroups', [
+            'name' => 'af_balance', 'title' => 'AF: Balance', 'description' => 'EXP and Credits settings', 'disporder' => 60, 'isdefault' => 0,
+        ]);
+    }
+    $defs = [
+        ['af_balance_exp_enabled','EXP enabled','yesno','1',1],['af_balance_exp_per_char','EXP per char','text','0.02',2],['af_balance_exp_on_register','EXP on register','text','0',3],['af_balance_exp_on_accept','EXP on accept','text','0',4],
+        ['af_balance_exp_categories_csv','EXP categories CSV','text','',5],['af_balance_exp_forums_csv','EXP forums CSV','text','',6],['af_balance_exp_mode','EXP mode',"select\ninclude=include\nexclude=exclude",'include',7],
+        ['af_balance_exp_allow_negative_award','EXP allow negative award','yesno','0',8],['af_balance_exp_allow_balance_negative','EXP allow negative balance','yesno','0',9],['af_balance_exp_manual_groups','EXP manual groups','text','4',10],
+        ['af_balance_credits_enabled','Credits enabled','yesno','1',20],['af_balance_credits_per_char','Credits per char','text','0',21],['af_balance_credits_on_register','Credits on register','text','0',22],['af_balance_credits_on_accept','Credits on accept','text','0',23],
+        ['af_balance_credits_categories_csv','Credits categories CSV','text','',24],['af_balance_credits_forums_csv','Credits forums CSV','text','',25],['af_balance_credits_mode','Credits mode',"select\ninclude=include\nexclude=exclude",'include',26],
+        ['af_balance_credits_allow_negative_award','Credits allow negative award','yesno','0',27],['af_balance_credits_allow_balance_negative','Credits allow negative balance','yesno','0',28],['af_balance_credits_manual_groups','Credits manual groups','text','4',29],
+        ['af_balance_tx_keep_limit','TX keep limit','text','5000',30],['af_balance_tx_enable','Enable tx log','yesno','1',31],
+    ];
+    foreach ($defs as [$name,$title,$opt,$val,$order]) {
+        $exists = $db->fetch_field($db->simple_select('settings', 'sid', "name='".$db->escape_string($name)."'", ['limit'=>1]), 'sid');
+        $row = ['name'=>$name,'title'=>$title,'description'=>$title,'optionscode'=>$opt,'value'=>$val,'disporder'=>$order,'gid'=>$gid,'isdefault'=>0];
+        if ($exists) { $db->update_query('settings',$row,"sid=".(int)$exists); } else { $db->insert_query('settings',$row); }
+    }
+}
+
+function af_balance_get(int $uid): array
+{
+    global $db;
+    if ($uid <= 0) return ['uid'=>0,'exp'=>0,'credits'=>0];
+    $row = $db->fetch_array($db->simple_select(AF_BALANCE_TABLE, '*', 'uid='.(int)$uid, ['limit'=>1]));
+    if (!$row) {
+        $db->insert_query(AF_BALANCE_TABLE, ['uid'=>$uid, 'exp'=>0, 'credits'=>0, 'updated_at'=>TIME_NOW]);
+        return ['uid'=>$uid,'exp'=>0,'credits'=>0];
+    }
+    return ['uid'=>$uid,'exp'=>(int)$row['exp'],'credits'=>(int)$row['credits']];
+}
+
+function af_balance_add($uid, string $kind, $amount, array $meta = []): array
+{
+    global $db, $mybb;
+    $uid = (int)$uid;
+    if ($uid <= 0 || !in_array($kind, ['exp','credits'], true)) return af_balance_get($uid);
+    $is_exp = $kind === 'exp';
+    $scaled = $is_exp ? (int)floor(((float)$amount) * AF_BALANCE_SCALE) : (int)floor((float)$amount);
+    if ($scaled < 0 && empty($mybb->settings['af_balance_'.$kind.'_allow_negative_award'])) return af_balance_get($uid);
+
+    $bal = af_balance_get($uid);
+    $old = (int)$bal[$kind];
+    $new = $old + $scaled;
+    if ($new < 0 && empty($mybb->settings['af_balance_'.$kind.'_allow_balance_negative'])) $new = 0;
+
+    $db->update_query(AF_BALANCE_TABLE, [$kind => $new, 'updated_at'=>TIME_NOW], 'uid=' . $uid);
+
+    if (!empty($mybb->settings['af_balance_tx_enable']) && $db->table_exists(AF_BALANCE_TX_TABLE)) {
+        $reason = substr((string)($meta['reason'] ?? ''), 0, 64);
+        $source = substr((string)($meta['source'] ?? 'balance'), 0, 64);
+        $refType = substr((string)($meta['ref_type'] ?? ''), 0, 32);
+        $db->insert_query(AF_BALANCE_TX_TABLE, [
+            'uid' => $uid, 'kind' => $db->escape_string($kind), 'amount' => ($new - $old), 'balance_after' => $new,
+            'reason' => $db->escape_string($reason), 'source' => $db->escape_string($source),
+            'ref_type' => $db->escape_string($refType), 'ref_id' => (int)($meta['ref_id'] ?? 0),
+            'meta_json' => $db->escape_string(json_encode($meta, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)),
+            'actor_uid' => (int)($meta['actor_uid'] ?? 0), 'created_at' => TIME_NOW,
+        ]);
+        af_balance_trim_tx();
+    }
+
+    if ($is_exp && function_exists('af_charactersheets_on_exp_changed')) {
+        af_charactersheets_on_exp_changed($uid, $old, $new, $meta);
+    }
+
+    return af_balance_get($uid);
+}
+
+function af_balance_add_exp($uid, $amount, array $meta = []): array { return af_balance_add((int)$uid, 'exp', $amount, $meta); }
+function af_balance_add_credits($uid, $amount, array $meta = []): array { return af_balance_add((int)$uid, 'credits', $amount, $meta); }
+
+function af_balance_can_manual_adjust($uid, string $kind): bool
+{
+    global $mybb;
+    $kind = $kind === 'credits' ? 'credits' : 'exp';
+    $csv = (string)($mybb->settings['af_balance_'.$kind.'_manual_groups'] ?? '');
+    $allowed = af_balance_csv_to_ids($csv);
+    if (!$allowed) return false;
+    $groups = [(int)($mybb->user['usergroup'] ?? 0)];
+    foreach (explode(',', (string)($mybb->user['additionalgroups'] ?? '')) as $g) { $groups[] = (int)$g; }
+    return (bool)array_intersect(array_filter($groups), $allowed);
+}
+
+function af_balance_member_do_register_end(): void
+{
+    global $mybb;
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    if ($uid <= 0) return;
+    if (!empty($mybb->settings['af_balance_exp_enabled'])) {
+        $amt = (float)($mybb->settings['af_balance_exp_on_register'] ?? 0);
+        if ($amt != 0.0) af_balance_add_exp($uid, $amt, ['reason'=>'register','source'=>'balance','ref_type'=>'uid','ref_id'=>$uid]);
+    }
+    if (!empty($mybb->settings['af_balance_credits_enabled'])) {
+        $amt = (float)($mybb->settings['af_balance_credits_on_register'] ?? 0);
+        if ($amt != 0.0) af_balance_add_credits($uid, $amt, ['reason'=>'register','source'=>'balance','ref_type'=>'uid','ref_id'=>$uid]);
+    }
+}
+
+function af_balance_post_do_newpost_end(): void
+{
+    global $mybb, $db;
+    $pid = (int)($mybb->input['pid'] ?? 0);
+    if ($pid <= 0) return;
+    $post = $db->fetch_array($db->simple_select('posts', '*', 'pid=' . $pid, ['limit' => 1]));
+    if (!$post || (int)$post['visible'] !== 1) return;
+    $uid = (int)$post['uid']; $fid = (int)$post['fid'];
+    $msg = (string)($post['message'] ?? '');
+    $chars = function_exists('my_strlen') ? my_strlen($msg) : strlen($msg);
+    if ($uid <= 0 || $chars <= 0) return;
+
+    if (!empty($mybb->settings['af_balance_exp_enabled']) && af_balance_is_forum_allowed($fid, 'exp')) {
+        $rate = (float)($mybb->settings['af_balance_exp_per_char'] ?? 0);
+        if ($rate != 0.0) af_balance_add_exp($uid, $chars * $rate, ['reason'=>'post_chars','source'=>'balance','ref_type'=>'pid','ref_id'=>$pid,'fid'=>$fid,'chars'=>$chars]);
+    }
+    if (!empty($mybb->settings['af_balance_credits_enabled']) && af_balance_is_forum_allowed($fid, 'credits')) {
+        $rate = (float)($mybb->settings['af_balance_credits_per_char'] ?? 0);
+        if ($rate != 0.0) af_balance_add_credits($uid, $chars * $rate, ['reason'=>'post_chars','source'=>'balance','ref_type'=>'pid','ref_id'=>$pid,'fid'=>$fid,'chars'=>$chars]);
+    }
+}
+
+function af_balance_handle_accept(int $uid, int $tid, int $actor_uid = 0): void
+{
+    global $mybb;
+    if ($uid <= 0) return;
+    if (!empty($mybb->settings['af_balance_exp_enabled'])) {
+        $amt = (float)($mybb->settings['af_balance_exp_on_accept'] ?? 0);
+        if ($amt != 0.0) af_balance_add_exp($uid, $amt, ['reason'=>'accept','source'=>'balance','actor_uid'=>$actor_uid,'ref_type'=>'tid','ref_id'=>$tid]);
+    }
+    if (!empty($mybb->settings['af_balance_credits_enabled'])) {
+        $amt = (float)($mybb->settings['af_balance_credits_on_accept'] ?? 0);
+        if ($amt != 0.0) af_balance_add_credits($uid, $amt, ['reason'=>'accept','source'=>'balance','actor_uid'=>$actor_uid,'ref_type'=>'tid','ref_id'=>$tid]);
+    }
+}
+
+function af_balance_csv_to_ids(string $csv): array { $out=[]; foreach (explode(',', $csv) as $p){$id=(int)trim($p); if($id>0)$out[$id]=$id;} return array_values($out);} 
+function af_balance_expand_forum_ids_with_children(array $ids): array
+{ global $db; if(!$ids)return[]; $all=$ids; $pending=$ids; while($pending){ $pid=array_pop($pending); $q=$db->simple_select('forums','fid','pid='.(int)$pid); while($r=$db->fetch_array($q)){ $fid=(int)$r['fid']; if($fid>0 && !in_array($fid,$all,true)){ $all[]=$fid; $pending[]=$fid; } } } return $all; }
+function af_balance_is_forum_allowed(int $fid, string $kind): bool
+{
+    global $mybb; if ($fid<=0) return false;
+    $mode = (string)($mybb->settings['af_balance_'.$kind.'_mode'] ?? 'include');
+    $cats = af_balance_csv_to_ids((string)($mybb->settings['af_balance_'.$kind.'_categories_csv'] ?? ''));
+    $forums = af_balance_csv_to_ids((string)($mybb->settings['af_balance_'.$kind.'_forums_csv'] ?? ''));
+    $selected = array_values(array_unique(array_merge($forums, af_balance_expand_forum_ids_with_children($cats))));
+    if ($mode === 'exclude') return !$selected || !in_array($fid, $selected, true);
+    return !$selected || in_array($fid, $selected, true);
+}
+
+function af_balance_trim_tx(): void
+{ global $db, $mybb; $limit=(int)($mybb->settings['af_balance_tx_keep_limit'] ?? 0); if($limit<=0)return; $cnt=(int)$db->fetch_field($db->simple_select(AF_BALANCE_TX_TABLE,'COUNT(*) AS c'),'c'); if($cnt <= $limit)return; $over=$cnt-$limit; $db->write_query("DELETE FROM ".TABLE_PREFIX.AF_BALANCE_TX_TABLE." ORDER BY id ASC LIMIT ".(int)$over); }
+
+function af_balance_migrate_from_charactersheets(): void
+{
+    global $db;
+    if (!$db->table_exists('af_cs_sheets') || !$db->table_exists(AF_BALANCE_TABLE)) return;
+    $q = $db->simple_select('af_cs_sheets', 'uid, progress_json', 'uid IS NOT NULL AND uid>0');
+    while ($row = $db->fetch_array($q)) {
+        $uid = (int)$row['uid'];
+        if ($uid <= 0) continue;
+        $existing = af_balance_get($uid);
+        if ((int)$existing['exp'] !== 0) continue;
+        $progress = json_decode((string)($row['progress_json'] ?? ''), true);
+        $expLegacy = (float)($progress['exp'] ?? 0);
+        if ($expLegacy > 0) {
+            $scaled = (int)floor($expLegacy * AF_BALANCE_SCALE);
+            $db->update_query(AF_BALANCE_TABLE, ['exp' => $scaled, 'updated_at' => TIME_NOW], 'uid=' . $uid);
+        }
+    }
+}

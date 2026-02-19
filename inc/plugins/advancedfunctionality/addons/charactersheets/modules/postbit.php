@@ -8,6 +8,7 @@ function af_charactersheets_postbit_button(array &$post): void
     global $mybb, $templates, $lang;
 
     $post['af_cs_plaque'] = '';
+    $post['postbit_balance_html'] = '';
 
     if (!af_charactersheets_is_enabled()) {
         return;
@@ -33,6 +34,15 @@ function af_charactersheets_postbit_button(array &$post): void
     $button_label = htmlspecialchars_uni($button_label);
     $sheet_slug = htmlspecialchars_uni($slug);
 
+    af_charactersheets_postbit_preload_balances();
+    $bal = af_charactersheets_postbit_get_balance($uid);
+    $sheet = af_charactersheets_get_sheet_by_uid($uid);
+    $view = $sheet ? af_charactersheets_compute_sheet_view($sheet) : ['level' => 1, 'level_exp_label' => '0 / 0'];
+    $level = (int)($view['level'] ?? 1);
+    $expLabel = htmlspecialchars_uni((string)($view['level_exp_label'] ?? '0 / 0'));
+    $credits = htmlspecialchars_uni((string)(int)($bal['credits'] ?? 0));
+    $postbit_balance_html = '<div class="af-cs-postbit-stats"><div>Level: '.$level.'</div><div>EXP: '.$expLabel.'</div><div>Credits: '.$credits.'</div></div>';
+
     $tpl = $templates->get('postbit_plaque');
     eval("\$plaque_html = \"" . $tpl . "\";");
 
@@ -40,6 +50,51 @@ function af_charactersheets_postbit_button(array &$post): void
 
     $GLOBALS['af_charactersheets_needs_assets'] = true;
     $GLOBALS['af_charactersheets_needs_modal'] = true;
+}
+
+function af_charactersheets_postbit_preload_balances(): void
+{
+    static $done = false;
+    if ($done || !function_exists('af_balance_get')) {
+        return;
+    }
+
+    global $db;
+    $uids = [];
+    if (!empty($GLOBALS['posts']) && is_array($GLOBALS['posts'])) {
+        foreach ($GLOBALS['posts'] as $p) {
+            $u = (int)($p['uid'] ?? 0);
+            if ($u > 0) $uids[$u] = $u;
+        }
+    }
+    if (!$uids) {
+        $done = true;
+        return;
+    }
+
+    $list = implode(',', array_map('intval', array_values($uids)));
+    $cache = [];
+    if ($db->table_exists('af_balance')) {
+        $q = $db->simple_select('af_balance', 'uid,exp,credits', 'uid IN ('.$list.')');
+        while ($row = $db->fetch_array($q)) {
+            $cache[(int)$row['uid']] = ['uid'=>(int)$row['uid'],'exp'=>(int)$row['exp'],'credits'=>(int)$row['credits']];
+        }
+    }
+    foreach ($uids as $uid) {
+        if (!isset($cache[$uid])) {
+            $cache[$uid] = af_balance_get($uid);
+        }
+    }
+
+    $GLOBALS['af_cs_postbit_balance_cache'] = $cache;
+    $done = true;
+}
+
+function af_charactersheets_postbit_get_balance(int $uid): array
+{
+    $cache = (array)($GLOBALS['af_cs_postbit_balance_cache'] ?? []);
+    if (isset($cache[$uid])) return $cache[$uid];
+    return function_exists('af_balance_get') ? af_balance_get($uid) : ['uid'=>$uid,'exp'=>0,'credits'=>0];
 }
 
 function af_charactersheets_get_sheet_slug_by_uid(int $uid): string

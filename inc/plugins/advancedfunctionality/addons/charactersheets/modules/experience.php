@@ -65,10 +65,8 @@ function af_charactersheets_compute_level(float $exp): array
 
 function af_charactersheets_award_exp_manual(array $sheet, array $user, int $fid, string $amount_raw, string $reason): array
 {
-    global $mybb;
-
-    if (!af_charactersheets_user_can_award_exp($user, $fid)) {
-        return ['success' => false, 'error' => 'Permission denied'];
+    if (!function_exists('af_balance_add_exp') || !function_exists('af_balance_can_manual_adjust')) {
+        return ['success' => false, 'error' => 'Balance addon is required'];
     }
 
     $amount = af_charactersheets_to_number($amount_raw);
@@ -76,29 +74,23 @@ function af_charactersheets_award_exp_manual(array $sheet, array $user, int $fid
         return ['success' => false, 'error' => 'Amount is invalid'];
     }
 
-    if ($amount < 0 && empty($mybb->settings['af_charactersheets_exp_allow_negative'])) {
-        return ['success' => false, 'error' => 'Negative EXP not allowed'];
+    if (!af_balance_can_manual_adjust((int)($user['uid'] ?? 0), 'exp')) {
+        return ['success' => false, 'error' => 'Permission denied'];
     }
 
-    $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
-    if ($amount < 0 && empty($mybb->settings['af_charactersheets_exp_allow_overdraw'])) {
-        $current_exp = (float)($progress['exp'] ?? 0);
-        if ($current_exp + $amount < 0) {
-            return ['success' => false, 'error' => 'Not enough EXP to subtract'];
-        }
+    $target_uid = (int)($sheet['uid'] ?? 0);
+    if ($target_uid <= 0) {
+        return ['success' => false, 'error' => 'Target UID is invalid'];
     }
 
-    $sheet_id = (int)($sheet['id'] ?? 0);
-    $event_key = 'manual:' . $sheet_id . ':' . TIME_NOW . ':' . mt_rand(1000, 9999);
-    $meta = [
-        'reason' => trim($reason),
-        'awarded_by' => (int)($user['uid'] ?? 0),
-        'awarded_by_username' => (string)($user['username'] ?? ''),
-    ];
-
-    if (!af_charactersheets_grant_exp($sheet_id, (float)$amount, $event_key, 'manual', $meta)) {
-        return ['success' => false, 'error' => 'EXP update failed'];
-    }
+    af_balance_add_exp($target_uid, $amount, [
+        'reason' => 'manual',
+        'source' => 'charactersheets',
+        'actor_uid' => (int)($user['uid'] ?? 0),
+        'comment' => trim($reason),
+        'ref_type' => 'sheet',
+        'ref_id' => (int)($sheet['id'] ?? 0),
+    ]);
 
     return ['success' => true];
 }
@@ -179,10 +171,7 @@ function af_charactersheets_grant_exp(int $sheet_id, float $amount, string $even
 
 function af_charactersheets_handle_accept_exp(int $tid, int $accepted_by_uid): void
 {
-    global $mybb;
-
-    $exp_on_accept = (float)($mybb->settings['af_charactersheets_exp_on_accept'] ?? 0);
-    if ($exp_on_accept <= 0) {
+    if (!function_exists('af_balance_handle_accept')) {
         return;
     }
 
@@ -191,13 +180,7 @@ function af_charactersheets_handle_accept_exp(int $tid, int $accepted_by_uid): v
         return;
     }
 
-    af_charactersheets_grant_exp(
-        (int)$sheet['id'],
-        $exp_on_accept,
-        'accept:' . $tid,
-        'accept',
-        ['tid' => $tid, 'accepted_by' => $accepted_by_uid]
-    );
+    af_balance_handle_accept((int)($sheet['uid'] ?? 0), $tid, $accepted_by_uid);
 }
 
 function af_charactersheets_log_points(int $sheet_id, string $type, int $amount, string $reason, array $meta = []): void
@@ -272,88 +255,12 @@ function af_charactersheets_spend_points(int $sheet_id, string $type, int $amoun
 
 function af_charactersheets_member_do_register_end(): void
 {
-    global $mybb;
-
-    if (!af_charactersheets_is_enabled()) {
-        return;
-    }
-
-    $uid = (int)($mybb->user['uid'] ?? 0);
-    if ($uid <= 0) {
-        return;
-    }
-
-    $exp_on_register = (float)($mybb->settings['af_charactersheets_exp_on_register'] ?? 0);
-    if ($exp_on_register <= 0) {
-        return;
-    }
-
-    $sheet = af_charactersheets_get_sheet_by_uid($uid);
-    if (empty($sheet)) {
-        return;
-    }
-
-    af_charactersheets_grant_exp(
-        (int)$sheet['id'],
-        $exp_on_register,
-        'register:' . $uid,
-        'register',
-        ['uid' => $uid]
-    );
+    // Moved to Balance addon.
 }
 
 function af_charactersheets_post_do_newpost_end(): void
 {
-    global $mybb, $db;
-
-    if (!af_charactersheets_is_enabled()) {
-        return;
-    }
-
-    $exp_per_char = (float)($mybb->settings['af_charactersheets_exp_per_char'] ?? 0);
-    if ($exp_per_char <= 0) {
-        return;
-    }
-
-    $pid = (int)($mybb->input['pid'] ?? 0);
-    if ($pid <= 0) {
-        return;
-    }
-
-    $post_row = $db->fetch_array($db->simple_select('posts', '*', 'pid=' . $pid, ['limit' => 1]));
-    if (empty($post_row['uid'])) {
-        return;
-    }
-
-    if ((int)($post_row['visible'] ?? 1) !== 1) {
-        return;
-    }
-
-    $fid = (int)($post_row['fid'] ?? 0);
-    if (!af_charactersheets_is_exp_forum_allowed($fid)) {
-        return;
-    }
-
-    $uid = (int)($post_row['uid'] ?? 0);
-    $sheet = af_charactersheets_get_sheet_by_uid($uid);
-    if (empty($sheet)) {
-        return;
-    }
-
-    $message = (string)($post_row['message'] ?? $mybb->get_input('message'));
-    $chars = function_exists('my_strlen') ? my_strlen($message) : strlen($message);
-    if ($chars <= 0) {
-        return;
-    }
-
-    $amount = $chars * $exp_per_char;
-    af_charactersheets_grant_exp(
-        (int)$sheet['id'],
-        $amount,
-        'post:' . $pid,
-        'post',
-        ['pid' => $pid, 'chars' => $chars, 'fid' => $fid]
-    );
+    // Moved to Balance addon.
 }
 
 function af_charactersheets_is_exp_forum_allowed(int $fid): bool
@@ -462,4 +369,41 @@ function af_charactersheets_render_exp_ledger_html(int $sheet_id, int $limit = 3
     $html .= '</tbody></table></div>';
 
     return $html;
+}
+
+
+function af_charactersheets_on_exp_changed($uid, $oldExp, $newExp, $meta): void
+{
+    $uid = (int)$uid;
+    if ($uid <= 0) {
+        return;
+    }
+
+    $sheet = af_charactersheets_get_sheet_by_uid($uid);
+    if (empty($sheet)) {
+        return;
+    }
+
+    $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
+    $oldFloat = ((float)$oldExp) / 100;
+    $newFloat = ((float)$newExp) / 100;
+    $progress['exp'] = $newFloat;
+
+    $level_data = af_charactersheets_compute_level($newFloat);
+    $prev_level = (int)($progress['level'] ?? 1);
+    $progress['level'] = (int)$level_data['level'];
+
+    $delta = (int)$level_data['level'] - $prev_level;
+    if ($delta > 0) {
+        global $mybb;
+        $skill_points_per_level = (int)($mybb->settings['af_charactersheets_skill_points_per_level'] ?? 0);
+        $progress['skill_points_free'] = (int)($progress['skill_points_free'] ?? 0) + $delta * $skill_points_per_level;
+    }
+
+    af_charactersheets_update_sheet_json(
+        (int)$sheet['id'],
+        af_charactersheets_json_decode((string)($sheet['base_json'] ?? '')),
+        af_charactersheets_json_decode((string)($sheet['build_json'] ?? '')),
+        $progress
+    );
 }

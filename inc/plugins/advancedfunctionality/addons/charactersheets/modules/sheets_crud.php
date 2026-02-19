@@ -228,18 +228,6 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
 
     $sheet = af_charactersheets_get_sheet_by_id($id);
 
-    $exp_on_register = (float)($mybb->settings['af_charactersheets_exp_on_register'] ?? 0);
-    if ($exp_on_register > 0 && $hasUid) {
-        af_charactersheets_grant_exp(
-            $id,
-            $exp_on_register,
-            'register:' . $uid,
-            'register',
-            ['uid' => $uid]
-        );
-        $sheet = af_charactersheets_get_sheet_by_id($id);
-    }
-
     return $sheet;
 }
 

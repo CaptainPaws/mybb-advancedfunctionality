@@ -363,6 +363,11 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
     $build = af_charactersheets_normalize_build($build);
 
+    $balance = function_exists('af_balance_get') ? af_balance_get((int)($sheet['uid'] ?? 0)) : ['exp' => null, 'credits' => 0];
+    if (isset($balance['exp']) && $balance['exp'] !== null) {
+        $progress['exp'] = ((int)$balance['exp']) / 100;
+    }
+
     $attributes_base = af_charactersheets_default_attributes();
     $attributes_allocated = array_merge(af_charactersheets_zero_attributes(), (array)($build['allocated_stats'] ?? $build['attributes_allocated'] ?? []));
 
@@ -1007,6 +1012,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         'next_req_total' => (float)($level_data['next_req_total'] ?? 0),
         'exp_in_level' => (float)($level_data['exp_in_level'] ?? 0),
         'exp_need' => (float)($level_data['exp_need'] ?? 0),
+        'credits' => (int)($balance['credits'] ?? 0),
         'skills' => $skills_view,
         'kb_context' => $kb_context,
         'ctx' => [
