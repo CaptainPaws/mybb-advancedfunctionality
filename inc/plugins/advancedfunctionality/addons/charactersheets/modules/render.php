@@ -264,7 +264,6 @@ function af_charactersheets_build_progress_html(array $view, array $sheet, bool 
     $next = (float)($view['next_req'] ?? 0);
     $percent = (int)($view['level_percent'] ?? 0);
     $exp_label = htmlspecialchars_uni((string)($view['level_exp_label'] ?? ''));
-    $credits_label = htmlspecialchars_uni((string)((int)($view['credits'] ?? 0)));
 
     $skill_points_free = (int)($view['skill_pool_remaining'] ?? 0);
 
@@ -1176,7 +1175,8 @@ function af_charactersheets_build_info_table_html(array $index, array $sheet_vie
     }
     $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Чипы</div><div class="af-cs-info-value">' . $chip_html . '</div></div>';
     $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Эффекты</div><div class="af-cs-info-value">' . af_charactersheets_build_effects_chip_html($sheet_view) . '</div></div>';
-    $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Кошелёк</div><div class="af-cs-info-value">0 ₵</div></div>';
+    $wallet = (string)((int)($sheet_view['credits'] ?? 0));
+    $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Кошелёк</div><div class="af-cs-info-value" data-afcs-wallet-value>' . htmlspecialchars_uni($wallet) . ' ¢</div></div>';
 
     return '<div class="af-cs-info-table">' . implode('', $items) . '</div>';
 }

@@ -95,6 +95,24 @@ function af_charactersheets_award_exp_manual(array $sheet, array $user, int $fid
     return ['success' => true];
 }
 
+
+function af_charactersheets_balance_snapshot(int $uid): array
+{
+    $uid = (int)$uid;
+    $balance = function_exists('af_balance_get') ? af_balance_get($uid) : ['exp' => 0, 'credits' => 0];
+    $exp_total = ((float)($balance['exp'] ?? 0)) / 100;
+    $level_data = af_charactersheets_compute_level($exp_total);
+
+    return [
+        'exp' => $exp_total,
+        'exp_display' => number_format($level_data['exp_in_level'] ?? 0, 2, '.', ' '),
+        'exp_next_display' => number_format($level_data['exp_need'] ?? 0, 2, '.', ' '),
+        'level' => (int)($level_data['level'] ?? 1),
+        'progress_percent' => (int)($level_data['percent'] ?? 0),
+        'credits_display' => (string)((int)($balance['credits'] ?? 0)),
+    ];
+}
+
 function af_charactersheets_grant_exp(int $sheet_id, float $amount, string $event_key, string $event_type, array $meta): bool
 {
     global $db, $mybb;
