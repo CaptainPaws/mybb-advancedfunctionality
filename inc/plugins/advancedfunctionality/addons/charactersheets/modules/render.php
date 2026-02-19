@@ -90,6 +90,8 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $sheet_header_actions_html = af_charactersheets_build_header_actions_html(
         $profile_url,
         $thread_url,
+        $uid,
+        $tid,
         $can_delete_sheet,
         $delete_redirect,
         $can_award_exp
@@ -1001,6 +1003,8 @@ function af_charactersheets_render_kb_chip(string $type, string $key, string $fa
 function af_charactersheets_build_header_actions_html(
     string $profile_url,
     string $thread_url,
+    int $uid,
+    int $tid,
     bool $can_delete,
     string $delete_redirect,
     bool $can_award
@@ -1008,13 +1012,17 @@ function af_charactersheets_build_header_actions_html(
 {
     $items = [];
 
-    if ($profile_url !== '') {
-        $items[] = '<a class="af-cs-btn af-cs-btn--compact" href="' . htmlspecialchars_uni($profile_url)
+    if ($profile_url !== '' && $uid > 0) {
+        $modalProfileUrl = 'misc.php?action=cs_modal_profile&uid=' . $uid;
+        $items[] = '<a class="af-cs-btn af-cs-btn--compact" href="' . htmlspecialchars_uni($modalProfileUrl)
+            . '" data-afcs-open="1" data-afcs-sheet="' . htmlspecialchars_uni($modalProfileUrl)
             . '" title="Профиль" aria-label="Профиль"><i class="fa-regular fa-user"></i></a>';
     }
 
-    if ($thread_url !== '') {
-        $items[] = '<a class="af-cs-btn af-cs-btn--compact" href="' . htmlspecialchars_uni($thread_url)
+    if ($thread_url !== '' && $tid > 0) {
+        $modalAppUrl = 'misc.php?action=cs_modal_application&tid=' . $tid;
+        $items[] = '<a class="af-cs-btn af-cs-btn--compact" href="' . htmlspecialchars_uni($modalAppUrl)
+            . '" data-afcs-open="1" data-afcs-sheet="' . htmlspecialchars_uni($modalAppUrl)
             . '" title="Анкета" aria-label="Анкета"><i class="fa-regular fa-id-card"></i></a>';
     }
 
