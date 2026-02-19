@@ -15,13 +15,20 @@ function af_balance_uninstall(): void {}
 function af_balance_init(): void
 {
     global $plugins;
-    $plugins->add_hook('datahandler_user_insert', 'af_balance_datahandler_user_insert');
+
+    // Регистрация: оставляем только один хук (иначе задваивает)
+    $plugins->add_hook('member_do_register_end', 'af_balance_member_do_register_end');
+
+    // Посты/темы: оставляем datahandler — он уже даёт uid/fid/message/visible
     $plugins->add_hook('datahandler_post_insert_post', 'af_balance_datahandler_post_insert');
     $plugins->add_hook('datahandler_post_insert_thread', 'af_balance_datahandler_post_insert');
-    $plugins->add_hook('member_do_register_end', 'af_balance_member_do_register_end');
-    $plugins->add_hook('post_do_newpost_end', 'af_balance_post_do_newpost_end');
+
+    // УБРАТЬ (дублирует начисление поверх datahandler):
+    // $plugins->add_hook('post_do_newpost_end', 'af_balance_post_do_newpost_end');
+
     $plugins->add_hook('misc_start', 'af_balance_misc_start');
 }
+
 
 function af_balance_ensure_schema(): void
 {
@@ -228,19 +235,56 @@ function af_balance_datahandler_user_insert($userhandler): void
     af_balance_apply_register_awards($uid);
 }
 
+function af_balance_count_award_chars(string $message): int
+{
+    $s = (string)$message;
+
+    // вырежем quote-блоки целиком (в анкетах часто тонна цитат/вставок)
+    $s = preg_replace('~\[(quote|code)(?:=[^\]]+)?\].*?\[/\1\]~si', '', $s);
+
+    // вырежем основные mycode теги, оставив их содержимое
+    $s = preg_replace('~\[(\/?)(b|i|u|s|center|left|right|size|color|font|url|img|table|tr|td|th|tbody|thead|list|\*|spoiler|hide|mention)(?:=[^\]]+)?\]~i', '', $s);
+
+    // уберём остаточные [xxx] теги
+    $s = preg_replace('~\[[^\]]+\]~', '', $s);
+
+    // HTML теги тоже уберём
+    $s = strip_tags($s);
+
+    // нормализуем пробелы
+    $s = html_entity_decode($s, ENT_QUOTES, 'UTF-8');
+    $s = preg_replace('~\s+~u', ' ', $s);
+    $s = trim($s);
+
+    if ($s === '') return 0;
+
+    return function_exists('my_strlen') ? my_strlen($s) : strlen($s);
+}
+
 function af_balance_apply_register_awards(int $uid): void
 {
     global $mybb;
 
+    static $done = [];
+    if ($uid <= 0) return;
+    if (!empty($done[$uid])) return; // защита от повторного вызова в одном запросе
+    $done[$uid] = 1;
+
     if (!empty($mybb->settings['af_balance_exp_enabled'])) {
         $amt = (float)($mybb->settings['af_balance_exp_on_register'] ?? 0);
-        if ($amt != 0.0) af_balance_add_exp($uid, $amt, ['reason'=>'register','source'=>'balance','ref_type'=>'uid','ref_id'=>$uid]);
+        if ($amt != 0.0) {
+            af_balance_add_exp($uid, $amt, ['reason'=>'register','source'=>'balance','ref_type'=>'uid','ref_id'=>$uid]);
+        }
     }
+
     if (!empty($mybb->settings['af_balance_credits_enabled'])) {
         $amt = (float)($mybb->settings['af_balance_credits_on_register'] ?? 0);
-        if ($amt != 0.0) af_balance_add_credits($uid, $amt, ['reason'=>'register','source'=>'balance','ref_type'=>'uid','ref_id'=>$uid]);
+        if ($amt != 0.0) {
+            af_balance_add_credits($uid, $amt, ['reason'=>'register','source'=>'balance','ref_type'=>'uid','ref_id'=>$uid]);
+        }
     }
 }
+
 
 function af_balance_datahandler_post_insert($posthandler): void
 {
@@ -273,25 +317,69 @@ function af_balance_post_do_newpost_end(): void
     af_balance_award_for_post((int)$post['uid'], (int)$post['fid'], (string)($post['message'] ?? ''), (int)$post['visible'], $resolved_pid);
 }
 
+function af_balance_already_awarded(int $pid, int $uid, int $fid, int $chars): bool
+{
+    static $seen = [];
+
+    // Если pid есть — ключ по pid самый надёжный
+    if ($pid > 0) {
+        $k = 'pid:' . $pid;
+    } else {
+        // fallback, если pid вдруг не проставился (редко, но бывает)
+        $k = 'u:' . $uid . '|f:' . $fid . '|c:' . $chars . '|t:' . TIME_NOW;
+    }
+
+    if (!empty($seen[$k])) {
+        return true;
+    }
+    $seen[$k] = 1;
+    return false;
+}
+
 function af_balance_award_for_post(int $uid, int $fid, string $message, int $visible, int $pid = 0): void
 {
     global $mybb;
+
     if ($visible !== 1 || $uid <= 0) {
         return;
     }
 
-    $chars = function_exists('my_strlen') ? my_strlen($message) : strlen($message);
+    $chars = af_balance_count_award_chars($message);
     if ($chars <= 0) {
+        return;
+    }
+
+    // Дедуп: если тот же pid уже обработали — ничего не начисляем
+    if (af_balance_already_awarded($pid, $uid, $fid, $chars)) {
         return;
     }
 
     if (!empty($mybb->settings['af_balance_exp_enabled']) && af_balance_is_forum_allowed($fid, 'exp')) {
         $rate = (float)($mybb->settings['af_balance_exp_per_char'] ?? 0);
-        if ($rate != 0.0) af_balance_add_exp($uid, $chars * $rate, ['reason'=>'post_chars','source'=>'balance','ref_type'=>'pid','ref_id'=>$pid,'fid'=>$fid,'chars'=>$chars]);
+        if ($rate != 0.0) {
+            af_balance_add_exp($uid, $chars * $rate, [
+                'reason'   => 'post_chars',
+                'source'   => 'balance',
+                'ref_type' => 'pid',
+                'ref_id'   => $pid,
+                'fid'      => $fid,
+                'chars'    => $chars,
+            ]);
+        }
     }
+
     if (!empty($mybb->settings['af_balance_credits_enabled']) && af_balance_is_forum_allowed($fid, 'credits')) {
         $rate = (float)($mybb->settings['af_balance_credits_per_char'] ?? 0);
-        if ($rate != 0.0) af_balance_add_credits($uid, $chars * $rate, ['reason'=>'post_chars','source'=>'balance','ref_type'=>'pid','ref_id'=>$pid,'fid'=>$fid,'chars'=>$chars]);
+        if ($rate != 0.0) {
+            af_balance_add_credits($uid, $chars * $rate, [
+                'reason'   => 'post_chars',
+                'source'   => 'balance',
+                'ref_type' => 'pid',
+                'ref_id'   => $pid,
+                'fid'      => $fid,
+                'chars'    => $chars,
+            ]);
+        }
     }
 }
 
