@@ -100,7 +100,7 @@ function af_charactersheets_balance_snapshot(int $uid): array
 {
     $uid = (int)$uid;
     $balance = function_exists('af_balance_get') ? af_balance_get($uid) : ['exp' => 0, 'credits' => 0];
-    $exp_total = ((float)($balance['exp'] ?? 0)) / 100;
+    $exp_total = ((float)($balance['exp'] ?? 0)) / (defined('AF_BALANCE_EXP_SCALE') ? AF_BALANCE_EXP_SCALE : 100);
     $level_data = af_charactersheets_compute_level($exp_total);
 
     return [
@@ -109,7 +109,7 @@ function af_charactersheets_balance_snapshot(int $uid): array
         'exp_next_display' => number_format($level_data['exp_need'] ?? 0, 2, '.', ' '),
         'level' => (int)($level_data['level'] ?? 1),
         'progress_percent' => (int)($level_data['percent'] ?? 0),
-        'credits_display' => (string)((int)($balance['credits'] ?? 0)),
+        'credits_display' => function_exists('af_balance_format_credits') ? af_balance_format_credits((int)($balance['credits'] ?? 0)) : number_format(((int)($balance['credits'] ?? 0))/100, 2, '.', ' '),
     ];
 }
 
@@ -403,8 +403,8 @@ function af_charactersheets_on_exp_changed($uid, $oldExp, $newExp, $meta): void
     }
 
     $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
-    $oldFloat = ((float)$oldExp) / 100;
-    $newFloat = ((float)$newExp) / 100;
+    $oldFloat = ((float)$oldExp) / (defined('AF_BALANCE_EXP_SCALE') ? AF_BALANCE_EXP_SCALE : 100);
+    $newFloat = ((float)$newExp) / (defined('AF_BALANCE_EXP_SCALE') ? AF_BALANCE_EXP_SCALE : 100);
     $progress['exp'] = $newFloat;
 
     $level_data = af_charactersheets_compute_level($newFloat);

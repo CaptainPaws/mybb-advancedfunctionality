@@ -1,1 +1,45 @@
-<div class="af-balance"></div>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<title>Balance manage</title>
+{$headerinclude}
+<link rel="stylesheet" href="{$mybb->settings['bburl']}/inc/plugins/advancedfunctionality/addons/balance/assets/balance.css">
+</head>
+<body>
+{$header}
+<div class="af-balance-page">
+  <h1>Balance management</h1>
+  <form method="get" class="af-balance-filters">
+    <input type="hidden" name="action" value="balance_manage">
+    <input type="text" name="q" value="{$q}" placeholder="Поиск по имени">
+    <input type="text" name="race" value="{$race}" placeholder="Поиск по расе">
+    <button type="submit" class="button">Фильтр</button>
+  </form>
+  <div class="af-balance-tabs">
+    <a class="{$kind_exp_active}" href="misc.php?action=balance_manage&kind=exp">EXP</a>
+    <a class="{$kind_credits_active}" href="misc.php?action=balance_manage&kind=credits">Credits</a>
+  </div>
+  <table class="tborder af-balance-table">
+    <tr><th></th><th>User</th><th>EXP</th><th>Credits ({$currency_symbol})</th><th>Level</th><th></th></tr>
+    {$rows_html}
+  </table>
+</div>
+<div class="af-balance-modal" data-af-balance-modal hidden>
+  <div class="af-balance-modal__backdrop" data-af-balance-close></div>
+  <div class="af-balance-modal__dialog">
+    <h3>Изменить баланс</h3>
+    <div class="af-balance-modal__error" data-af-balance-error></div>
+    <input type="hidden" data-af-balance-uid>
+    <label><input type="radio" name="af-balance-op" value="add" checked> Начислить</label>
+    <label><input type="radio" name="af-balance-op" value="sub"> Списать</label>
+    <input type="number" step="0.01" data-af-balance-amount placeholder="Сумма">
+    <input type="text" data-af-balance-reason placeholder="Причина">
+    <button type="button" class="button" data-af-balance-apply>Применить</button>
+    <button type="button" class="button" data-af-balance-close>Отмена</button>
+  </div>
+</div>
+<script>window.afBalanceConfig={kind:'{$kind}',postKey:'{$my_post_key}'};</script>
+<script src="{$mybb->settings['bburl']}/inc/plugins/advancedfunctionality/addons/balance/assets/balance.js"></script>
+{$footer}
+</body>
+</html>
