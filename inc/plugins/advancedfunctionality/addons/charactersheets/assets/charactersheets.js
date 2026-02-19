@@ -27,7 +27,9 @@
       '<div class="af-cs-modal__backdrop" data-afcs-close="1"></div>' +
       '<div class="af-cs-modal__dialog" role="dialog" aria-modal="true">' +
         '<button type="button" class="af-cs-modal__close" data-afcs-close="1" aria-label="Закрыть">×</button>' +
-        '<iframe class="af-cs-modal__frame" data-afcs-frame="1" src="" loading="lazy"></iframe>' +
+        '<div class="af-cs-modal__body">' +
+          '<iframe class="af-cs-modal__frame" data-afcs-frame="1" src="" loading="lazy"></iframe>' +
+        '</div>' +
       '</div>';
 
     document.body.appendChild(wrap);

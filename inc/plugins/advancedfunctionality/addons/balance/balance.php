@@ -59,6 +59,7 @@ function af_balance_ensure_schema(): void
 function af_balance_ensure_settings(): void
 {
     global $db;
+    $needsRebuild = false;
     $gid = (int)$db->fetch_field($db->simple_select('settinggroups', 'gid', "name='af_balance'", ['limit' => 1]), 'gid');
     if ($gid <= 0) {
         $gid = (int)$db->insert_query('settinggroups', [
@@ -73,15 +74,65 @@ function af_balance_ensure_settings(): void
         ['af_balance_credits_categories_csv','Credits categories CSV','text','',24],['af_balance_credits_forums_csv','Credits forums CSV','text','',25],['af_balance_credits_mode','Credits mode',"select\ninclude=include\nexclude=exclude",'include',26],
         ['af_balance_credits_allow_negative_award','Credits allow negative award','yesno','0',27],['af_balance_credits_allow_balance_negative','Credits allow negative balance','yesno','0',28],['af_balance_credits_manual_groups','Credits manual groups','text','4',29],
         ['af_balance_tx_keep_limit','TX keep limit','text','5000',30],['af_balance_tx_enable','Enable tx log','yesno','1',31],
-        ['af_balance_migrated_credits_scale','Credits scale migrated','yesno','0',32],
+        ['af_balance_credits_scale_migrated','Credits scale migrated','yesno','0',32],
         ['af_balance_currency_symbol','Currency symbol','text','¢',33],
         ['af_balance_manage_groups','Balance manage groups','text','3,4',34],
     ];
-    foreach ($defs as [$name,$title,$opt,$val,$order]) {
-        $exists = $db->fetch_field($db->simple_select('settings', 'sid', "name='".$db->escape_string($name)."'", ['limit'=>1]), 'sid');
-        $row = ['name'=>$name,'title'=>$title,'description'=>$title,'optionscode'=>$opt,'value'=>$val,'disporder'=>$order,'gid'=>$gid,'isdefault'=>0];
-        if ($exists) { $db->update_query('settings',$row,"sid=".(int)$exists); } else { $db->insert_query('settings',$row); }
+    $legacyMigratedSid = af_balance_pick_setting_sid('af_balance_migrated_credits_scale', $needsRebuild);
+    if ($legacyMigratedSid > 0) {
+        $legacyMigratedValue = $db->fetch_field($db->simple_select('settings', 'value', 'sid=' . $legacyMigratedSid, ['limit' => 1]), 'value');
+        $targetSid = af_balance_pick_setting_sid('af_balance_credits_scale_migrated', $needsRebuild);
+        if ($targetSid > 0) {
+            if ($legacyMigratedValue !== null && $legacyMigratedValue !== '') {
+                $db->update_query('settings', ['value' => $legacyMigratedValue], 'sid=' . $targetSid);
+            }
+            $db->delete_query('settings', 'sid=' . $legacyMigratedSid);
+            $needsRebuild = true;
+        } else {
+            $db->update_query('settings', ['name' => 'af_balance_credits_scale_migrated'], 'sid=' . $legacyMigratedSid);
+            $needsRebuild = true;
+        }
     }
+
+    foreach ($defs as [$name,$title,$opt,$val,$order]) {
+        $sid = af_balance_pick_setting_sid($name, $needsRebuild);
+        $row = ['name'=>$name,'title'=>$title,'description'=>$title,'optionscode'=>$opt,'disporder'=>$order,'gid'=>$gid,'isdefault'=>0];
+        if ($sid > 0) {
+            $db->update_query('settings',$row,"sid=".$sid);
+        } else {
+            $row['value'] = $val;
+            $db->insert_query('settings',$row);
+            $needsRebuild = true;
+        }
+    }
+
+    if ($needsRebuild && function_exists('rebuild_settings')) {
+        rebuild_settings();
+    }
+}
+
+function af_balance_pick_setting_sid(string $name, bool &$deduped = false): int
+{
+    global $db;
+
+    $escaped = $db->escape_string($name);
+    $q = $db->simple_select('settings', 'sid', "name='" . $escaped . "'", ['order_by' => 'sid', 'order_dir' => 'ASC']);
+
+    $keepSid = 0;
+    while ($row = $db->fetch_array($q)) {
+        $sid = (int)($row['sid'] ?? 0);
+        if ($sid <= 0) {
+            continue;
+        }
+        if ($keepSid === 0) {
+            $keepSid = $sid;
+            continue;
+        }
+        $db->delete_query('settings', 'sid=' . $sid);
+        $deduped = true;
+    }
+
+    return $keepSid;
 }
 
 function af_balance_get(int $uid): array
@@ -288,7 +339,7 @@ function af_balance_format_credits(int $scaledCredits): string
 function af_balance_migrate_credits_scale(): void
 {
     global $db, $mybb;
-    if ((int)($mybb->settings['af_balance_migrated_credits_scale'] ?? 0) === 1) {
+    if ((int)($mybb->settings['af_balance_credits_scale_migrated'] ?? 0) === 1) {
         return;
     }
 
@@ -298,7 +349,7 @@ function af_balance_migrate_credits_scale(): void
     if ($db->table_exists(AF_BALANCE_TX_TABLE)) {
         $db->write_query("UPDATE " . TABLE_PREFIX . AF_BALANCE_TX_TABLE . " SET amount=amount*" . AF_BALANCE_CREDITS_SCALE . ", balance_after=balance_after*" . AF_BALANCE_CREDITS_SCALE . " WHERE kind='credits'");
     }
-    $db->update_query('settings', ['value' => '1'], "name='af_balance_migrated_credits_scale'");
+    $db->update_query('settings', ['value' => '1'], "name='af_balance_credits_scale_migrated'");
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
     }

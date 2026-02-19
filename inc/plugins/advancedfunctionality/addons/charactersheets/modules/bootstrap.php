@@ -227,69 +227,6 @@ function af_charactersheets_ensure_settings(): void
     );
     af_charactersheets_ensure_setting(
         $gid,
-        'af_charactersheets_exp_per_char',
-        $lang->af_charactersheets_exp_per_char ?? 'EXP per character',
-        $lang->af_charactersheets_exp_per_char_desc ?? 'Experience granted per post character.',
-        'text',
-        '0.02',
-        30
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_exp_forum_categories',
-        $lang->af_charactersheets_exp_forum_categories ?? 'EXP forums: categories',
-        $lang->af_charactersheets_exp_forum_categories_desc ?? 'CSV category fids. All child forums are included.',
-        'text',
-        '',
-        31
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_exp_forum_forums',
-        $lang->af_charactersheets_exp_forum_forums ?? 'EXP forums: forums',
-        $lang->af_charactersheets_exp_forum_forums_desc ?? 'CSV forum fids included.',
-        'text',
-        '',
-        32
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_exp_forum_exclude',
-        $lang->af_charactersheets_exp_forum_exclude ?? 'EXP forums: exclude',
-        $lang->af_charactersheets_exp_forum_exclude_desc ?? 'CSV forum fids excluded.',
-        'text',
-        '',
-        33
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_exp_forum_mode',
-        $lang->af_charactersheets_exp_forum_mode ?? 'EXP forums: mode',
-        $lang->af_charactersheets_exp_forum_mode_desc ?? 'include = only selected, exclude = all except selected.',
-        "select\ninclude=include\nexclude=exclude",
-        'include',
-        34
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_exp_on_register',
-        $lang->af_charactersheets_exp_on_register ?? 'EXP on register',
-        $lang->af_charactersheets_exp_on_register_desc ?? 'Experience granted after registration.',
-        'text',
-        '0',
-        31
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_exp_on_accept',
-        $lang->af_charactersheets_exp_on_accept ?? 'EXP on accept',
-        $lang->af_charactersheets_exp_on_accept_desc ?? 'Experience granted after sheet acceptance.',
-        'text',
-        '0',
-        35
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
         'af_charactersheets_level_cap',
         $lang->af_charactersheets_level_cap ?? 'Level cap',
         $lang->af_charactersheets_level_cap_desc ?? 'Maximum level.',
@@ -323,24 +260,6 @@ function af_charactersheets_ensure_settings(): void
         'text',
         '0',
         44
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_exp_allow_negative',
-        $lang->af_charactersheets_exp_allow_negative ?? 'Allow negative EXP awards',
-        $lang->af_charactersheets_exp_allow_negative_desc ?? 'Allow manual EXP subtraction.',
-        'yesno',
-        '0',
-        45
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_exp_allow_overdraw',
-        $lang->af_charactersheets_exp_allow_overdraw ?? 'Allow EXP to go below zero',
-        $lang->af_charactersheets_exp_allow_overdraw_desc ?? 'If disabled, EXP cannot drop below zero.',
-        'yesno',
-        '0',
-        46
     );
     af_charactersheets_ensure_setting(
         $gid,
@@ -378,15 +297,10 @@ function af_charactersheets_ensure_settings(): void
         '4,3,6',
         53
     );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_exp_manual_groups',
-        $lang->af_charactersheets_exp_manual_groups ?? 'EXP manual award groups',
-        $lang->af_charactersheets_exp_manual_groups_desc ?? 'CSV group ids allowed to grant experience manually.',
-        'text',
-        '4,3,6',
-        54
-    );
+
+
+    $db->delete_query('settings', "name IN ('af_charactersheets_exp_per_char','af_charactersheets_exp_on_register','af_charactersheets_exp_on_accept','af_charactersheets_exp_manual_groups','af_charactersheets_exp_forum_categories','af_charactersheets_exp_forum_forums','af_charactersheets_exp_forum_exclude','af_charactersheets_exp_forum_mode','af_charactersheets_exp_allow_negative','af_charactersheets_exp_allow_overdraw')");
+    $db->delete_query('settings', "name LIKE 'af_charactersheets_credits_%'");
 
     $db->delete_query('settings', "name IN ('af_charactersheets_attr_points_per_level','af_charactersheets_humanity_base')");
 
@@ -397,6 +311,92 @@ function af_charactersheets_is_enabled(): bool
 {
     global $mybb;
     return !empty($mybb->settings['af_charactersheets_enabled']);
+}
+
+
+function af_charactersheets_render_modal_profile_page(): void
+{
+    global $mybb, $db;
+
+    $uid = (int)$mybb->get_input('uid');
+    if ($uid <= 0) {
+        error_no_permission();
+    }
+
+    $user = get_user($uid);
+    if (empty($user) || (int)($user['uid'] ?? 0) <= 0) {
+        error_no_permission();
+    }
+
+    $profileUrl = function_exists('get_profile_link') ? get_profile_link($uid) : ('member.php?action=profile&uid=' . $uid);
+    $html = '';
+    if ($profileUrl !== '') {
+        $absolute = af_charactersheets_make_absolute_url($profileUrl);
+        $ctx = stream_context_create(['http' => ['timeout' => 10], 'ssl' => ['verify_peer' => false, 'verify_peer_name' => false]]);
+        $raw = @file_get_contents($absolute, false, $ctx);
+        if (is_string($raw) && $raw !== '') {
+            if (preg_match('~(<div\s+class=("|\')pun\2[^>]*>.*?</div>)~is', $raw, $m)) {
+                $html = $m[1];
+            }
+        }
+    }
+
+    if ($html === '') {
+        $username = htmlspecialchars_uni((string)($user['username'] ?? ''));
+        $avatar = trim((string)($user['avatar'] ?? ''));
+        if ($avatar === '') {
+            $avatar = 'images/default_avatar.png';
+        }
+        $html = '<div class="pun"><div class="thead"><strong>' . $username . '</strong></div><div class="trow1" style="padding:16px">'
+            . '<img src="' . htmlspecialchars_uni($avatar) . '" alt="" style="max-width:120px;border-radius:8px;display:block;margin-bottom:12px">'
+            . '<div><a href="' . htmlspecialchars_uni($profileUrl) . '" target="_blank" rel="noopener">Открыть полный профиль</a></div>'
+            . '</div></div>';
+    }
+
+    $page = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+        . '<style>html,body{margin:0;padding:0;background:#0f0f0f;color:#efefef}.pun{margin:0 auto;max-width:960px;padding:12px;box-sizing:border-box}</style>'
+        . '</head><body>' . $html . '</body></html>';
+
+    output_page($page);
+}
+
+function af_charactersheets_render_modal_application_page(): void
+{
+    global $mybb, $db;
+
+    $tid = (int)$mybb->get_input('tid');
+    if ($tid <= 0) {
+        error_no_permission();
+    }
+
+    $thread = get_thread($tid);
+    if (empty($thread) || (int)($thread['tid'] ?? 0) <= 0) {
+        error_no_permission();
+    }
+
+    $fid = (int)($thread['fid'] ?? 0);
+    $permissions = forum_permissions($fid);
+    if (empty($permissions['canview']) || empty($permissions['canviewthreads'])) {
+        error_no_permission();
+    }
+
+    $firstPid = (int)($thread['firstpost'] ?? 0);
+    if ($firstPid <= 0) {
+        error_no_permission();
+    }
+
+    $post = get_post($firstPid);
+    if (empty($post) || (int)($post['pid'] ?? 0) <= 0) {
+        error_no_permission();
+    }
+
+    $parsed = af_charactersheets_parse_bbcode((string)($post['message'] ?? ''));
+    $content = '<div class="post_content">' . $parsed . '</div>';
+    $page = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+        . '<style>html,body{margin:0;padding:16px;background:#0f0f0f;color:#efefef}.post_content{max-width:960px;margin:0 auto;line-height:1.5}</style>'
+        . '</head><body>' . $content . '</body></html>';
+
+    output_page($page);
 }
 
 /* -------------------- SHOWTHREAD BUTTON -------------------- */
@@ -602,6 +602,14 @@ function af_charactersheets_misc_start_impl(): void
     if ($action === 'af_charactersheet_api') {
         af_charactersheets_load_lang();
         af_charactersheets_handle_api();
+        exit;
+    }
+    if ($action === 'cs_modal_profile') {
+        af_charactersheets_render_modal_profile_page();
+        exit;
+    }
+    if ($action === 'cs_modal_application') {
+        af_charactersheets_render_modal_application_page();
         exit;
     }
 
