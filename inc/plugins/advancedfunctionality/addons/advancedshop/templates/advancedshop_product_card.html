@@ -1,6 +1,6 @@
 <div class="af-shop-card rarity-{$slot_rarity}">
   <div class="af-shop-card__icon"><img src="{$slot_icon}" alt=""></div>
-  <h3><a href="misc.php?action=knowledgebase_entry&id={$slot_kb_id}" data-afkb-open="1" data-kb-id="{$slot_kb_id}">{$slot_title}</a></h3>
+  <h3><a href="{$slot_kb_url}" data-afkb-open="1" data-kb-id="{$slot_kb_id}" data-kb-type="{$slot_kb_type}" data-kb-key="{$slot_kb_key}">{$slot_title}</a></h3>
   <p>{$slot_short}</p>
   <div class="af-shop-card__price">{$slot_price} {$slot_currency_symbol}</div>
   <div class="af-shop-card__rarity">{$lang->af_advancedshop_rarity_label}: {$slot_rarity_label}</div>
