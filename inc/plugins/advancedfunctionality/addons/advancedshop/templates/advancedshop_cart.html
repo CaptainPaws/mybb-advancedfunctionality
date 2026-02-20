@@ -1,10 +1,12 @@
 <div class="af-cart" data-shop="{$shop_code}">
   <h1>{$lang->af_advancedshop_cart_title}</h1>
+  <a class="af-shop-back" href="{$shop_url}">← {$lang->af_advancedshop_back_to_shop}</a>
   <div class="af-cart-items">{$itemsHtml}</div>
   <div class="af-cart-total">
-    <div>{$lang->af_advancedshop_balance}: {$balance}</div>
-    <div>{$lang->af_advancedshop_total}: {$total}</div>
+    <div>{$lang->af_advancedshop_balance}: {$balance} {$currency_symbol}</div>
+    <div>{$lang->af_advancedshop_total}: {$total} {$currency_symbol}</div>
     {$msg}
     <button class="af-shop-btn af-checkout" {$can_checkout}>{$lang->af_advancedshop_btn_checkout}</button>
   </div>
+  <div class="af-shop-toasts" aria-live="polite"></div>
 </div>

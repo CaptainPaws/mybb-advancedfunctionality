@@ -22,3 +22,10 @@
 .af-status-ok{color:#6fdc8c}
 #af-kb-picker-results{display:grid;gap:6px;margin-top:8px}
 .af-kb-pick-item{text-align:left}
+.af-shop-card__rarity{font-size:12px;opacity:.9;margin-bottom:8px}
+.af-shop-back{display:inline-block;margin-bottom:10px}
+.af-shop-toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:9999}
+.af-shop-toast{padding:10px 12px;border-radius:8px;color:#fff;box-shadow:0 6px 16px rgba(0,0,0,.25);transition:opacity .2s ease,transform .2s ease}
+.af-shop-toast--success{background:#2d9f57}
+.af-shop-toast--error{background:#b13b3b}
+.af-shop-toast.is-hide{opacity:0;transform:translateY(6px)}
