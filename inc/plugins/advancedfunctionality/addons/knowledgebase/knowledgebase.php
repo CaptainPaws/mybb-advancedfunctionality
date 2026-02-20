@@ -90,17 +90,29 @@ function af_kb_default_type_definitions(): array
         }
 
         if ($key === 'item') {
-            $schema['root_defaults'] = ['schema' => AF_KB_RULES_SCHEMA, 'item_kind' => 'misc', 'rarity' => 'common', 'price' => 0, 'stackable' => false, 'equip' => ['slot' => '', 'unique' => false], 'humanity_cost' => 0, 'effects' => []];
+            $schema['root_defaults'] = [
+                'schema' => AF_KB_RULES_SCHEMA,
+                'item' => [
+                    'item_kind' => 'misc',
+                    'rarity' => 'common',
+                    'price' => 0,
+                    'currency' => '',
+                    'weight' => 0,
+                    'stack_max' => 1,
+                    'slot' => '',
+                    'tags' => [],
+                    'on_use' => ['cooldown' => 0, 'cost' => (object)[], 'effects' => []],
+                    'on_equip' => ['effects' => [], 'grants' => []],
+                    'requirements' => ['level' => 0, 'tags_any' => [], 'tags_all' => []],
+                ],
+            ];
             $schema['fields'] = [
                 ['path' => 'schema', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => AF_KB_RULES_SCHEMA],
-                ['path' => 'item_kind', 'type' => 'select', 'label_ru' => 'Подтип предмета', 'label_en' => 'Item kind', 'required' => true, 'options_dynamic' => ['source' => 'kb_item_kinds'], 'default' => 'misc'],
-                ['path' => 'rarity', 'type' => 'select', 'required' => true, 'options' => [['value'=>'common'],['value'=>'uncommon'],['value'=>'rare'],['value'=>'epic'],['value'=>'legendary']], 'default' => 'common'],
-                ['path' => 'price', 'type' => 'number', 'default' => 0],
-                ['path' => 'stackable', 'type' => 'bool', 'default' => false],
-                ['path' => 'equip.slot', 'type' => 'select', 'options' => [['value'=>''],['value'=>'head'],['value'=>'eyes'],['value'=>'arms'],['value'=>'hands'],['value'=>'chest'],['value'=>'back'],['value'=>'skin'],['value'=>'spine'],['value'=>'legs'],['value'=>'feet'],['value'=>'weapon_main'],['value'=>'weapon_side'],['value'=>'implant'],['value'=>'utility']]],
-                ['path' => 'equip.unique', 'type' => 'bool', 'default' => false],
-                ['path' => 'humanity_cost', 'type' => 'number', 'default' => 0],
-                ['path' => 'effects', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'op','type'=>'select','required'=>true,'options'=>[['value'=>'add_stat'],['value'=>'add_hp'],['value'=>'add_ep'],['value'=>'kb_grant'],['value'=>'set_flag']]],['path'=>'stat','type'=>'select','options'=>[['value'=>'str'],['value'=>'dex'],['value'=>'con'],['value'=>'int'],['value'=>'wis'],['value'=>'cha']]],['path'=>'value','type'=>'number'],['path'=>'kb_type','type'=>'string'],['path'=>'kb_key','type'=>'string'],['path'=>'flag','type'=>'string']]], 'default' => []],
+                ['path' => 'item.item_kind', 'type' => 'select', 'label_ru' => 'Подтип предмета', 'label_en' => 'Item kind', 'required' => true, 'options_dynamic' => ['source' => 'kb_item_kinds'], 'default' => 'misc'],
+                ['path' => 'item.rarity', 'type' => 'select', 'required' => true, 'options' => [['value'=>'common'],['value'=>'uncommon'],['value'=>'rare'],['value'=>'epic'],['value'=>'legendary']], 'default' => 'common'],
+                ['path' => 'item.price', 'type' => 'number', 'default' => 0],
+                ['path' => 'item.slot', 'type' => 'select', 'options' => [['value'=>''],['value'=>'head'],['value'=>'eyes'],['value'=>'arms'],['value'=>'hands'],['value'=>'chest'],['value'=>'back'],['value'=>'skin'],['value'=>'spine'],['value'=>'legs'],['value'=>'feet'],['value'=>'weapon_main'],['value'=>'weapon_side'],['value'=>'implant'],['value'=>'utility']]],
+                ['path' => 'item.on_use.effects', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'op','type'=>'select','required'=>true,'options'=>[['value'=>'add_stat'],['value'=>'add_hp'],['value'=>'add_ep'],['value'=>'kb_grant'],['value'=>'set_flag']]],['path'=>'stat','type'=>'select','options'=>[['value'=>'str'],['value'=>'dex'],['value'=>'con'],['value'=>'int'],['value'=>'wis'],['value'=>'cha']]],['path'=>'value','type'=>'number'],['path'=>'kb_type','type'=>'string'],['path'=>'kb_key','type'=>'string'],['path'=>'flag','type'=>'string']]], 'default' => []],
             ];
         }
 
@@ -886,7 +898,7 @@ function af_kb_default_type_rules_config(string $typeKey): array
         'item' => [
             'rules_enabled' => true,
             'rules_schema' => AF_KB_RULES_SCHEMA,
-            'rules_required_keys' => ['schema', 'type_profile', 'version', 'item_kind'],
+            'rules_required_keys' => ['schema', 'type_profile', 'version', 'item'],
             'ui_rules_editor' => true,
         ],
         'spell' => [
@@ -1772,6 +1784,11 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
     $expectedSchema = trim((string)($typeSchema['rules_schema'] ?? AF_KB_RULES_SCHEMA));
     $defaults       = (array)($typeSchema['defaults'] ?? []);
 
+    if ($type === 'item') {
+        $rulesData = af_kb_normalize_item_rules_payload($rulesData);
+        $defaults = af_kb_normalize_item_rules_payload($defaults);
+    }
+
     // КЛЮЧЕВОЙ ФИКС:
     // всегда подставляем defaults, а пользовательские значения кладём поверх.
     // так item_kind/effects и прочие обязательные поля появляются автоматически.
@@ -1795,6 +1812,10 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
         $rulesData['skill'] = af_kb_normalize_skill_payload((array)($rulesData['skill'] ?? []));
     }
 
+    if ($type === 'item') {
+        $rulesData = af_kb_normalize_item_rules_payload($rulesData);
+    }
+
     // effects: по твоему ТЗ это реально “общая штука” для spell/perk и иногда item/condition
     // Если defaults содержат effects или тип требует effects — держим массив.
     $requiredKeys = (array)($typeSchema['rules_required_keys'] ?? []);
@@ -1816,6 +1837,70 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
     $rulesData['grants'] = af_kb_normalize_grants_json($rulesData['grants'], $errors);
 
     return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+}
+
+function af_kb_item_root_fields(): array
+{
+    return ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'tags', 'on_use', 'on_equip', 'requirements'];
+}
+
+function af_kb_normalize_item_rules_payload(array $payload): array
+{
+    $rootFields = af_kb_item_root_fields();
+    $hasItem = isset($payload['item']) && is_array($payload['item']);
+
+    if (!$hasItem) {
+        $item = [];
+        foreach ($rootFields as $field) {
+            if (array_key_exists($field, $payload)) {
+                $item[$field] = $payload[$field];
+            }
+        }
+        if ($item !== []) {
+            $payload['item'] = $item;
+        }
+    }
+
+    foreach ($rootFields as $field) {
+        unset($payload[$field]);
+    }
+
+    return $payload;
+}
+
+function af_kb_normalize_item_entries_bulk(): array
+{
+    global $db;
+
+    $updated = 0;
+    $seen = 0;
+
+    $q = $db->simple_select('af_kb_entries', 'id, type', "type='item'");
+    while ($entry = $db->fetch_array($q)) {
+        $entryId = (int)($entry['id'] ?? 0);
+        if ($entryId <= 0) {
+            continue;
+        }
+        $seen++;
+
+        $dataRow = $db->fetch_array($db->simple_select('af_kb_blocks', 'id, data_json', "entry_id={$entryId} AND block_key='data'", ['limit' => 1]));
+        if (!$dataRow) {
+            continue;
+        }
+
+        $raw = (string)($dataRow['data_json'] ?? '{}');
+        $errors = [];
+        $normalized = af_kb_validate_rules_json_by_type('item', af_kb_normalize_json($raw), $errors);
+        $normalized = af_kb_normalize_json($normalized);
+        if ($normalized === af_kb_normalize_json($raw)) {
+            continue;
+        }
+
+        $db->update_query('af_kb_blocks', ['data_json' => $db->escape_string($normalized)], 'id=' . (int)$dataRow['id']);
+        $updated++;
+    }
+
+    return ['seen' => $seen, 'updated' => $updated];
 }
 
 function af_kb_normalize_skill_payload(array $skillData): array
@@ -3060,7 +3145,7 @@ function af_kb_misc_route(): void
     global $mybb;
 
     $action = $mybb->get_input('action');
-    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry'], true)) {
+    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_normalize_items'], true)) {
         return;
     }
 
@@ -3097,6 +3182,10 @@ function af_kb_misc_route(): void
 
     if ($action === 'kb_help') {
         af_kb_handle_help();
+    }
+
+    if ($action === 'kb_normalize_items') {
+        af_kb_handle_normalize_items();
     }
 
     if ($action === 'knowledgebase_entry') {
@@ -3341,6 +3430,13 @@ function af_kb_handle_view(): void
         $actions = [];
         if (af_kb_can_edit()) {
             $actions[] = '<a class="af-kb-btn af-kb-btn--create af-kb-btn-create" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_create ?? 'Create').'</a>';
+            if ($type === 'item') {
+                $normalizeConfirm = htmlspecialchars_uni('Нормализовать JSON всех предметов?');
+                $actions[] = '<form method="post" action="misc.php?action=kb_normalize_items" style="display:inline">'
+                    . '<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'" />'
+                    . '<button type="submit" class="af-kb-btn" onclick="return confirm(\''.$normalizeConfirm.'\');">Нормализовать JSON (items)</button>'
+                    . '</form>';
+            }
         }
         if (af_kb_can_manage_types()) {
             $actions[] = '<a class="af-kb-btn af-kb-btn--edit af-kb-btn-edit" href="misc.php?action=kb_type_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_type_edit ?? 'Edit category').'</a>';
@@ -4360,6 +4456,35 @@ function af_kb_handle_type_delete(): void
     $db->delete_query('af_kb_types', 'id='.(int)$typeRow['id']);
 
     redirect('misc.php?action=kb', $lang->af_kb_type_deleted ?? 'Category deleted.');
+}
+
+function af_kb_handle_normalize_items(): void
+{
+    global $mybb, $db;
+
+    if (!af_kb_can_edit()) {
+        error_no_permission();
+    }
+    if ($mybb->request_method !== 'post') {
+        error_no_permission();
+    }
+
+    verify_post_check($mybb->get_input('my_post_key'));
+
+    $result = af_kb_normalize_item_entries_bulk();
+    $updated = (int)($result['updated'] ?? 0);
+    $seen = (int)($result['seen'] ?? 0);
+
+    $db->insert_query('af_kb_log', [
+        'uid' => (int)$mybb->user['uid'],
+        'action' => $db->escape_string('normalize_items'),
+        'type' => $db->escape_string('item'),
+        'key' => $db->escape_string('*'),
+        'diff_json' => $db->escape_string(json_encode(['seen' => $seen, 'updated' => $updated], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}'),
+        'dateline' => TIME_NOW,
+    ]);
+
+    redirect('misc.php?action=kb&type=item', 'JSON normalized: ' . $updated . ' of ' . $seen . ' entries updated.');
 }
 
 function af_kb_handle_help(): void

@@ -959,8 +959,36 @@
             return base;
         }
 
+        function normalizeItemCanonical(payload) {
+            if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+                return payload;
+            }
+
+            var rootFields = ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'tags', 'on_use', 'on_equip', 'requirements'];
+            var hasItem = payload.item && typeof payload.item === 'object' && !Array.isArray(payload.item);
+
+            if (!hasItem) {
+                var rootItem = {};
+                rootFields.forEach(function (k) {
+                    if (Object.prototype.hasOwnProperty.call(payload, k)) {
+                        rootItem[k] = payload[k];
+                    }
+                });
+                if (Object.keys(rootItem).length) {
+                    payload.item = rootItem;
+                }
+            }
+
+            rootFields.forEach(function (k) { delete payload[k]; });
+            return payload;
+        }
+
         var parsedRaw = readJson(getFieldValue(raw) || '{}', {});
         var schemaDefaults = (typeSchema.defaults && typeof typeSchema.defaults === 'object') ? deepClone(typeSchema.defaults) : {};
+        if (uiProfile === 'item') {
+            parsedRaw = normalizeItemCanonical(parsedRaw || {});
+            schemaDefaults = normalizeItemCanonical(schemaDefaults || {});
+        }
         var profileDefaults = defaultsForProfile(uiProfile, expectedTypeProfile);
 
         function isPlainObject(v) {
@@ -1561,7 +1589,7 @@
                 if (!Array.isArray(onEquip.effects)) onEquip.effects = [];
                 if (!Array.isArray(onEquip.grants)) onEquip.grants = [];
 
-                return {
+                var canonicalItemPayload = {
                     schema: p.schema,
                     type_profile: expectedTypeProfile || 'item',
                     version: p.version,
@@ -1579,6 +1607,7 @@
                         requirements: reqI
                     }
                 };
+                return normalizeItemCanonical(canonicalItemPayload);
             }
 
             if (profile === 'class' || profile === 'theme') {
@@ -2265,6 +2294,9 @@
                 var parsed = null;
                 try {
                     parsed = JSON.parse(getFieldValue(raw) || '{}');
+                    if (uiProfile === 'item') {
+                        parsed = normalizeItemCanonical(parsed || {});
+                    }
                     fields.rawError.textContent = '';
                 } catch (err) {
                     fields.rawError.textContent = 'Ошибка JSON: ' + err.message;
