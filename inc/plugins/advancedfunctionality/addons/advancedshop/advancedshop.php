@@ -503,15 +503,12 @@ function af_advancedshop_render_shop(): void
     $shopId = (int)$shop['shop_id'];
     $catId = (int)$mybb->get_input('cat');
 
-    $cats = '';
-    $qCats = $db->simple_select('af_shop_categories', '*', 'shop_id=' . $shopId . ' AND enabled=1', ['order_by' => 'sortorder,title', 'order_dir' => 'ASC']);
+    $flatCats = [];
+    $qCats = $db->simple_select('af_shop_categories', '*', 'shop_id=' . $shopId . ' AND enabled=1', ['order_by' => 'sortorder ASC, title ASC, cat_id ASC']);
     while ($cat = $db->fetch_array($qCats)) {
-        $rowCatId = (int)$cat['cat_id'];
-        $activeClass = $catId === $rowCatId ? 'is-active' : '';
-        $cat_url = 'misc.php?action=shop_category&amp;shop=' . urlencode($shop['code']) . '&amp;cat=' . $rowCatId;
-        $cat_title = htmlspecialchars_uni($cat['title']);
-        eval('$cats .= "' . af_advancedshop_tpl('advancedshop_shop_category') . '";');
+        $flatCats[] = $cat;
     }
+    $cats = af_advancedshop_render_shop_categories_tree($flatCats, (string)$shop['code'], $catId);
 
     $slotsHtml = '';
     $where = 's.shop_id=' . $shopId . ' AND s.enabled=1';
@@ -582,6 +579,10 @@ function af_advancedshop_render_shop(): void
     $shop_code = htmlspecialchars_uni((string)$shop['code']);
     $shop_title = htmlspecialchars_uni($lang->af_advancedshop_shop_title ?? 'Shop');
     $cart_url = 'misc.php?action=shop_cart&amp;shop=' . urlencode($shop['code']);
+    $inventory_link = '';
+    if ((int)($mybb->user['uid'] ?? 0) > 0) {
+        $inventory_link = '<a class="af-shop-btn" href="misc.php?action=inventory">Инвентарь</a>';
+    }
     $assets = af_advancedshop_assets_html();
     eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_shop') . '";');
     eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
@@ -789,7 +790,22 @@ function af_advancedshop_checkout(): void
         af_advancedshop_json_err('checkout_failed', 500);
     }
 
-    af_advancedshop_json_ok(['message' => $lang->af_advancedshop_success_checkout ?? 'Checkout complete', 'redirect' => 'misc.php?action=shop_cart&shop=' . urlencode((string)$shop['code'])]);
+    $balanceAfter = max(0, (int)$balance - (int)$total);
+    af_advancedshop_json_ok([
+        'checkout' => [
+            'total_minor' => (int)$total,
+            'total_major' => af_advancedshop_money_format((int)$total),
+            'currency' => $currency,
+            'currency_symbol' => af_advancedshop_currency_symbol($currency),
+            'order_id' => (int)$orderId,
+            'balance_minor' => $balanceAfter,
+            'balance_major' => af_advancedshop_money_format($balanceAfter),
+        ],
+        'links' => [
+            'shop' => 'misc.php?action=shop&shop=' . urlencode((string)$shop['code']),
+            'inventory' => 'misc.php?action=inventory',
+        ],
+    ]);
 }
 
 function af_advancedshop_checkout_collect_items(int $cartId): array
@@ -1425,6 +1441,53 @@ function af_advancedshop_currency_symbol(string $slug): string
         return '¢';
     }
     return $slug;
+}
+
+
+function af_advancedshop_render_shop_categories_tree(array $rows, string $shopCode, int $activeCatId): string
+{
+    $childrenByParent = [];
+    foreach ($rows as $row) {
+        $parentId = max(0, (int)($row['parent_id'] ?? 0));
+        if (!isset($childrenByParent[$parentId])) {
+            $childrenByParent[$parentId] = [];
+        }
+        $childrenByParent[$parentId][] = $row;
+    }
+
+    $rendered = [];
+    $walk = static function (int $parentId, int $depth) use (&$walk, $childrenByParent, $shopCode, $activeCatId, &$rendered): string {
+        $html = '';
+        foreach ($childrenByParent[$parentId] ?? [] as $cat) {
+            $rowCatId = (int)$cat['cat_id'];
+            $rendered[$rowCatId] = true;
+            $hasChildren = !empty($childrenByParent[$rowCatId]);
+            $activeClass = $activeCatId === $rowCatId ? 'is-active' : '';
+            $cat_url = 'misc.php?action=shop_category&amp;shop=' . urlencode($shopCode) . '&amp;cat=' . $rowCatId;
+            $cat_title = htmlspecialchars_uni((string)$cat['title']);
+            $cat_depth = $depth;
+            $cat_toggle = '';
+            if ($hasChildren) {
+                $cat_toggle = '<button type="button" class="af-cat-toggle" data-cat="' . $rowCatId . '" aria-expanded="true"><span class="af-cat-toggle__icon">▾</span></button>';
+            }
+            $cat_children = '';
+            if ($hasChildren) {
+                $childHtml = $walk($rowCatId, $depth + 1);
+                $cat_children = '<div class="af-cat-children" data-parent="' . $rowCatId . '">' . $childHtml . '</div>';
+            }
+            eval('$html .= "' . af_advancedshop_tpl('advancedshop_shop_category') . '";');
+        }
+        return $html;
+    };
+
+    $html = $walk(0, 0);
+    foreach ($rows as $row) {
+        if (!isset($rendered[(int)$row['cat_id']])) {
+            $parentId = max(0, (int)($row['parent_id'] ?? 0));
+            $html .= $walk($parentId, 0);
+        }
+    }
+    return $html;
 }
 
 function af_advancedshop_category_tree_rows(array $rows): array
