@@ -1,0 +1,12 @@
+<div class="af-manage" data-shop="{$shop_code}">
+  <h1>{$lang->af_advancedshop_manage_title}</h1>
+  <div class="af-manage-links">
+    <a class="button" href="misc.php?action=shop_manage_slots&amp;shop={$shop_code}">Slots API</a>
+    <a class="button" href="misc.php?action=shop_kb_search&amp;shop={$shop_code}">KB API</a>
+  </div>
+  <form id="af-manage-category-form" method="post">
+    <input type="hidden" name="my_post_key" value="{$mybb->post_code}">
+    <input type="text" name="title" placeholder="Category title">
+    <button type="submit" class="af-shop-btn">Create category</button>
+  </form>
+</div>
