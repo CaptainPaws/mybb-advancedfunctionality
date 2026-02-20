@@ -2,11 +2,15 @@
 {$assets}
 {$header}
 {$af_advancedshop_content}
-<div class="af-kb-modal" id="af-kb-modal" hidden>
-  <div class="af-kb-modal__overlay" data-af-kb-close="1"></div>
-  <div class="af-kb-modal__dialog" role="dialog" aria-modal="true">
-    <button type="button" class="af-kb-modal__close" data-af-kb-close="1">×</button>
-    <iframe src="about:blank" id="af-kb-modal-frame" title="KB entry"></iframe>
+<div class="af-kb-modal-backdrop af-kb-chip-modal" data-afkb-modal hidden>
+  <div class="af-kb-modal" role="dialog" aria-modal="true" aria-label="KB entry">
+    <div class="af-kb-modal-header">
+      <h3></h3>
+      <button type="button" class="af-kb-modal-close" data-afkb-close="1">&times;</button>
+    </div>
+    <div class="af-kb-modal-body af-shop-kb-modal-body">
+      <iframe data-afkb-frame title="KB entry"></iframe>
+    </div>
   </div>
 </div>
 {$footer}
