@@ -2330,6 +2330,7 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
             'rules' => [],
             'meta' => [],
             'entry' => [],
+            'data_source' => 'none',
         ];
     }
 
@@ -2347,6 +2348,7 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
             'rules' => [],
             'meta' => [],
             'entry' => [],
+            'data_source' => 'none',
         ];
     }
 
@@ -2391,20 +2393,31 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
             'rules' => [],
             'meta' => [],
             'entry' => [],
+            'data_source' => 'none',
         ];
     }
 
     // 2) Канон источника rules: data_json -> rules_json_raw -> rules_json
     $raw_data_json = '';
+    $data_source = 'none';
 
     if (isset($entry['data_json'])) {
         $raw_data_json = trim((string)$entry['data_json']);
+        if ($raw_data_json !== '') {
+            $data_source = 'entries.data_json';
+        }
     }
     if ($raw_data_json === '' && isset($entry['rules_json_raw'])) {
         $raw_data_json = trim((string)$entry['rules_json_raw']);
+        if ($raw_data_json !== '') {
+            $data_source = 'entries.rules_json_raw';
+        }
     }
     if ($raw_data_json === '' && isset($entry['rules_json'])) {
         $raw_data_json = trim((string)$entry['rules_json']);
+        if ($raw_data_json !== '') {
+            $data_source = 'entries.rules_json';
+        }
     }
 
     // 3) Опциональный fallback в blocks (НО тоже безопасно по полям)
@@ -2429,8 +2442,14 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
             if (is_array($block)) {
                 if (isset($block['data_json']) && trim((string)$block['data_json']) !== '') {
                     $raw_data_json = trim((string)$block['data_json']);
+                    $data_source = 'af_kb_blocks.data_json';
                 } elseif (isset($block['content']) && trim((string)$block['content']) !== '') {
                     $raw_data_json = trim((string)$block['content']);
+                    $data_source = 'af_kb_blocks.content';
+                }
+
+                if ($raw_data_json !== '' && function_exists('trigger_error')) {
+                    @trigger_error('CharacterSheets deprecated KB rules source used: ' . $data_source . ' for ' . $kbType . ':' . $kbKey, E_USER_NOTICE);
                 }
             }
         }
@@ -2444,6 +2463,7 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
             'rules' => [],
             'meta' => cs_kb_get_meta($entry),
             'entry' => $entry,
+            'data_source' => $data_source,
         ];
     }
 
@@ -2456,6 +2476,7 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
             'rules' => [],
             'meta' => cs_kb_get_meta($entry),
             'entry' => $entry,
+            'data_source' => $data_source,
         ];
     }
 
@@ -2468,6 +2489,7 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
             'rules' => [],
             'meta' => cs_kb_get_meta($entry),
             'entry' => $entry,
+            'data_source' => $data_source,
         ];
     }
 
@@ -2478,6 +2500,7 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
         'rules' => cs_kb_rules_normalize($decoded),
         'meta' => cs_kb_get_meta($entry),
         'entry' => $entry,
+        'data_source' => $data_source,
     ];
 }
 

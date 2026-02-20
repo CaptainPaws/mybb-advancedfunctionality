@@ -307,6 +307,7 @@ CREATE TABLE {TABLE_PREFIX}af_kb_entries (
   tech_ru TEXT NOT NULL,
   tech_en TEXT NOT NULL,
   meta_json MEDIUMTEXT NOT NULL,
+  data_json MEDIUMTEXT NOT NULL,
   item_kind VARCHAR(64) NULL,
   icon_class VARCHAR(128) NOT NULL DEFAULT '',
   icon_url VARCHAR(255) NOT NULL DEFAULT '',
@@ -591,6 +592,10 @@ function af_kb_ensure_schema(): void
 
     if ($db->table_exists('af_kb_entries')) {
 
+        if (!$db->field_exists('data_json', 'af_kb_entries')) {
+            $db->write_query("ALTER TABLE " . TABLE_PREFIX . "af_kb_entries ADD COLUMN data_json MEDIUMTEXT NOT NULL AFTER meta_json");
+        }
+
         if (!$db->field_exists('item_kind', 'af_kb_entries')) {
             $db->add_column('af_kb_entries', 'item_kind', "VARCHAR(64) NULL");
             $db->write_query("ALTER TABLE ".TABLE_PREFIX."af_kb_entries ADD KEY item_kind (item_kind)");
@@ -613,6 +618,8 @@ function af_kb_ensure_schema(): void
         if (!$db->field_exists('tech_en', 'af_kb_entries')) {
             $db->add_column('af_kb_entries', 'tech_en', "TEXT NOT NULL");
         }
+
+        af_kb_migrate_data_json_once();
     }
 
     if ($db->table_exists('af_kb_blocks')) {
@@ -622,6 +629,61 @@ function af_kb_ensure_schema(): void
         if (!$db->field_exists('icon_url', 'af_kb_blocks')) {
             $db->add_column('af_kb_blocks', 'icon_url', "VARCHAR(255) NOT NULL DEFAULT ''");
         }
+    }
+}
+
+function af_kb_migration_flag_key(): string
+{
+    return 'af_kb_data_json_migrated_v1';
+}
+
+function af_kb_migrate_data_json_once(): void
+{
+    global $cache;
+
+    $flagKey = af_kb_migration_flag_key();
+    $flags = [];
+    if (is_object($cache)) {
+        $cached = $cache->read('af_kb_schema_flags');
+        if (is_array($cached)) {
+            $flags = $cached;
+        }
+    }
+
+    if (!empty($flags[$flagKey])) {
+        return;
+    }
+
+    af_kb_migrate_data_json();
+
+    $flags[$flagKey] = TIME_NOW;
+    if (is_object($cache)) {
+        $cache->update('af_kb_schema_flags', $flags);
+    }
+}
+
+function af_kb_migrate_data_json(): void
+{
+    global $db;
+
+    if (!$db->table_exists('af_kb_entries') || !$db->field_exists('data_json', 'af_kb_entries')) {
+        return;
+    }
+
+    $where = "active=1";
+    if ($db->field_exists('type', 'af_kb_entries')) {
+        $where .= " AND `type`='item'";
+    }
+
+    $q = $db->simple_select('af_kb_entries', '*', $where);
+    while ($entry = $db->fetch_array($q)) {
+        $detected = af_kb_detect_entry_data_json((array)$entry);
+        $normalized = af_kb_normalize_rules_json((string)($detected['json'] ?? '{}'));
+        $db->update_query(
+            'af_kb_entries',
+            ['data_json' => $db->escape_string($normalized), 'updated_at' => TIME_NOW],
+            'id=' . (int)$entry['id']
+        );
     }
 }
 
@@ -2153,14 +2215,45 @@ function af_kb_get_entry_data_json(int $entryId): string
         return '{}';
     }
 
-    $q = $db->simple_select('af_kb_blocks', '*', 'entry_id=' . $entryId, ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
-    while ($row = $db->fetch_array($q)) {
-        if (strtolower(trim((string)($row['block_key'] ?? ''))) === 'data') {
-            return af_kb_normalize_rules_json((string)($row['data_json'] ?? '{}'));
+    $entry = $db->fetch_array($db->simple_select('af_kb_entries', '*', 'id=' . $entryId, ['limit' => 1]));
+    if (!$entry) {
+        return '{}';
+    }
+
+    $detected = af_kb_detect_entry_data_json((array)$entry);
+    return af_kb_normalize_rules_json((string)($detected['json'] ?? '{}'));
+}
+
+function af_kb_detect_entry_data_json(array $entry): array
+{
+    global $db;
+
+    $default = ['source' => 'none', 'json' => '{}'];
+
+    if (!empty($entry['data_json']) && !af_kb_is_empty_json((string)$entry['data_json'])) {
+        return ['source' => 'entries.data_json', 'json' => (string)$entry['data_json']];
+    }
+
+    $meta = af_kb_decode_json((string)($entry['meta_json'] ?? '{}'));
+    if (!empty($meta['rules']) && is_array($meta['rules'])) {
+        $json = json_encode($meta['rules'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json !== false) {
+            return ['source' => 'entries.meta_json.rules', 'json' => $json];
         }
     }
 
-    return '{}';
+    if (!empty($entry['id']) && $db->table_exists('af_kb_blocks') && $db->field_exists('data_json', 'af_kb_blocks')) {
+        $where = 'entry_id=' . (int)$entry['id'] . " AND block_key='data'";
+        if ($db->field_exists('active', 'af_kb_blocks')) {
+            $where .= ' AND active=1';
+        }
+        $block = $db->fetch_array($db->simple_select('af_kb_blocks', 'data_json', $where, ['order_by' => 'sortorder,id', 'order_dir' => 'ASC', 'limit' => 1]));
+        if ($block && !af_kb_is_empty_json((string)($block['data_json'] ?? ''))) {
+            return ['source' => 'af_kb_blocks.data_json(block_key=data)', 'json' => (string)$block['data_json']];
+        }
+    }
+
+    return $default;
 }
 
 function af_kb_render_data_table(string $json): string
@@ -3145,7 +3238,7 @@ function af_kb_misc_route(): void
     global $mybb;
 
     $action = $mybb->get_input('action');
-    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_normalize_items'], true)) {
+    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_normalize_items', 'kb_debug_entry'], true)) {
         return;
     }
 
@@ -3186,6 +3279,10 @@ function af_kb_misc_route(): void
 
     if ($action === 'kb_normalize_items') {
         af_kb_handle_normalize_items();
+    }
+
+    if ($action === 'kb_debug_entry') {
+        af_kb_handle_debug_entry();
     }
 
     if ($action === 'knowledgebase_entry') {
@@ -3932,6 +4029,7 @@ function af_kb_handle_edit(): void
                 'tech_ru'    => $db->escape_string((string)$mybb->get_input('tech_ru')),
                 'tech_en'    => $db->escape_string((string)$mybb->get_input('tech_en')),
                 'meta_json'  => $db->escape_string(af_kb_normalize_json($metaJsonNormalized)),
+                'data_json'  => $db->escape_string($entryDataJsonNormalized),
                 'icon_class' => $db->escape_string($entryIconClass),
                 'icon_url'   => $db->escape_string($entryIconUrl),
                 'banner_url' => $db->escape_string($entryBannerUrl),
@@ -4492,6 +4590,137 @@ function af_kb_handle_normalize_items(): void
     ]);
 
     redirect('misc.php?action=kb&type=item', 'JSON normalized: ' . $updated . ' of ' . $seen . ' entries updated.');
+}
+
+
+function af_kb_handle_debug_entry(): void
+{
+    global $mybb, $db, $cache;
+
+    if (!af_kb_is_admin() && !af_kb_can_edit()) {
+        error_no_permission();
+    }
+
+    $entryId = (int)$mybb->get_input('entry_id', MyBB::INPUT_INT);
+    if ($entryId <= 0) {
+        af_kb_send_json(['success' => false, 'error' => 'Missing entry_id']);
+    }
+
+    $entry = $db->fetch_array($db->simple_select('af_kb_entries', '*', 'id=' . $entryId, ['limit' => 1]));
+    if (!$entry) {
+        af_kb_send_json(['success' => false, 'error' => 'Entry not found']);
+    }
+
+    $entryRow = [
+        'id' => (int)($entry['id'] ?? 0),
+        'type' => (string)($entry['type'] ?? ''),
+        'key' => (string)($entry['key'] ?? ''),
+        'title_ru' => (string)($entry['title_ru'] ?? ''),
+        'title_en' => (string)($entry['title_en'] ?? ''),
+        'meta_json' => (string)($entry['meta_json'] ?? ''),
+        'data_json' => (string)($entry['data_json'] ?? ''),
+        'updated_at' => (int)($entry['updated_at'] ?? 0),
+        'item_kind' => (string)($entry['item_kind'] ?? ''),
+    ];
+
+    $sources = [];
+    $append = static function (string $source, string $json) use (&$sources): void {
+        $sources[] = [
+            'source' => $source,
+            'len' => function_exists('mb_strlen') ? mb_strlen($json) : strlen($json),
+            'preview' => (function_exists('mb_substr') ? mb_substr($json, 0, 200) : substr($json, 0, 200)),
+        ];
+    };
+
+    if (!af_kb_is_empty_json((string)($entry['data_json'] ?? ''))) {
+        $append('entries.data_json', (string)$entry['data_json']);
+    }
+
+    $meta = af_kb_decode_json((string)($entry['meta_json'] ?? '{}'));
+    if (!empty($meta['rules']) && is_array($meta['rules'])) {
+        $json = json_encode($meta['rules'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+        $append('entries.meta_json.rules', $json);
+    }
+
+    $tablePrefix = TABLE_PREFIX . 'af_kb_';
+    $like = $db->escape_string($tablePrefix . '%');
+    $res = $db->query("SHOW TABLES LIKE '{$like}'");
+    while ($tblRow = $db->fetch_array($res)) {
+        $tableName = '';
+        foreach ($tblRow as $v) { $tableName = (string)$v; break; }
+        if ($tableName === '') {
+            continue;
+        }
+
+        $cols = [];
+        $colRes = $db->query('SHOW COLUMNS FROM ' . $tableName);
+        while ($colRow = $db->fetch_array($colRes)) {
+            $field = (string)($colRow['Field'] ?? '');
+            if ($field !== '') {
+                $cols[] = $field;
+            }
+        }
+
+        $idCol = '';
+        foreach (['entry_id', 'kb_id'] as $candidate) {
+            if (in_array($candidate, $cols, true)) {
+                $idCol = $candidate;
+                break;
+            }
+        }
+        if ($idCol === '') {
+            continue;
+        }
+
+        $jsonCol = '';
+        foreach (['data_json', 'rules_json', 'data', 'json'] as $candidate) {
+            if (in_array($candidate, $cols, true)) {
+                $jsonCol = $candidate;
+                break;
+            }
+        }
+        if ($jsonCol === '') {
+            continue;
+        }
+
+        $row = $db->fetch_array($db->query('SELECT ' . $jsonCol . ' AS payload FROM ' . $tableName . ' WHERE ' . $idCol . '=' . $entryId . ' LIMIT 1'));
+        if ($row && trim((string)($row['payload'] ?? '')) !== '') {
+            $append($tableName . '.' . $jsonCol . ' via ' . $idCol, (string)$row['payload']);
+        }
+    }
+
+    $cacheHit = null;
+    if (is_object($cache)) {
+        $cacheKey = 'af_kb_entry_data_' . $entryId;
+        $cacheValue = $cache->read($cacheKey);
+        if ($cacheValue !== null && $cacheValue !== false) {
+            $raw = json_encode($cacheValue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
+            if ($raw !== '') {
+                $cacheHit = ['key' => $cacheKey, 'len' => strlen($raw)];
+            }
+        }
+    }
+
+    $final = af_kb_detect_entry_data_json((array)$entry);
+
+    $charsheets = ['source' => 'unavailable', 'value' => '{}'];
+    if (function_exists('af_cs_kb_get_data_rules_result')) {
+        $result = af_cs_kb_get_data_rules_result((string)($entry['type'] ?? ''), (string)($entry['key'] ?? ''));
+        $charsheets['source'] = (string)($result['data_source'] ?? $result['reason'] ?? 'unknown');
+        $charsheets['value'] = json_encode((array)($result['rules'] ?? []), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+    }
+
+    af_kb_send_json([
+        'success' => true,
+        'entry_row' => $entryRow,
+        'detected_data_sources' => $sources,
+        'cache_source' => $cacheHit,
+        'final_data_json' => [
+            'source' => (string)($final['source'] ?? 'none'),
+            'value' => af_kb_normalize_rules_json((string)($final['json'] ?? '{}')),
+        ],
+        'charactersheets_current_source' => $charsheets,
+    ]);
 }
 
 function af_kb_handle_help(): void
