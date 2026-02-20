@@ -1,14 +1,20 @@
 <div class="af-manage" data-shop="{$shop_code}">
   <h1>{$lang->af_advancedshop_manage_title}</h1>
-  <div class="af-manage-links">
-    <a class="button" href="misc.php?action=shop_manage_slots&amp;shop={$shop_code}">Slots API</a>
-    <a class="button" href="misc.php?action=shop_kb_search&amp;shop={$shop_code}">KB API</a>
-  </div>
+  <input type="hidden" id="af_shop_post_key" value="{$mybb->post_code}">
+  <script>
+    window.AFSHOP = window.AFSHOP || {};
+    window.AFSHOP.postKey = "{$mybb->post_code}";
+  </script>
+
   <form id="af-manage-category-form" method="post" data-shop="{$shop_code}">
-    <input type="hidden" name="my_post_key" value="{$mybb->post_code}">
-    <input type="text" name="name" placeholder="Category title">
-    <input type="number" name="parent_id" placeholder="Parent ID (optional)">
+    <input type="text" name="title" id="af-manage-category-title" placeholder="Category title" maxlength="255">
+    <input type="number" name="parent_id" placeholder="Parent ID (optional)" min="0">
+    <input type="number" name="sortorder" placeholder="Sort order" min="0" value="0">
     <button type="submit" class="af-shop-btn">Create category</button>
     <div id="af-manage-category-status" aria-live="polite"></div>
   </form>
+
+  <div id="af-manage-categories-wrap">
+    {$categories_table}
+  </div>
 </div>
