@@ -522,6 +522,7 @@ function af_advancedshop_render_shop(): void
     if (empty($kbCols['body_ru']) && empty($kbCols['body_en']) && !empty($kbCols['body'])) { $kbSelect[] = 'e.' . $kbCols['body'] . ' AS kb_body'; }
     if (!empty($kbCols['meta_json'])) { $kbSelect[] = 'e.' . $kbCols['meta_json'] . ' AS kb_meta'; }
     if (!empty($kbCols['data_json'])) { $kbSelect[] = 'e.' . $kbCols['data_json'] . ' AS kb_data'; }
+    else { $kbSelect[] = "'' AS kb_data"; }
     if (!empty($kbCols['type'])) { $kbSelect[] = 'e.' . ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS kb_type'; }
     if (!empty($kbCols['key'])) { $kbSelect[] = 'e.' . ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS kb_key'; }
     if ($slotHasKbType) { $kbSelect[] = 's.kb_type AS slot_kb_type'; }
@@ -548,11 +549,15 @@ function af_advancedshop_render_shop(): void
         }
         $slot_short = htmlspecialchars_uni($shortText);
         $meta = @json_decode((string)($slot['kb_meta'] ?? '{}'), true);
-        $data = @json_decode((string)($slot['kb_data'] ?? '{}'), true);
+        $profile = af_advancedshop_kb_item_profile($slot);
         $slot_icon = htmlspecialchars_uni((string)($meta['ui']['icon_url'] ?? ($slot['icon_url'] ?? '')));
-        $slot_rarity_value = af_advancedshop_extract_rarity($data);
+        $slot['rarity'] = $profile['rarity'];
+        $slot_rarity_value = (string)$slot['rarity'];
         $slot_rarity = htmlspecialchars_uni($slot_rarity_value);
-        $slot_rarity_label = htmlspecialchars_uni(af_advancedshop_rarity_label($slot_rarity_value));
+        $slot['rarity_label'] = af_advancedshop_rarity_label($slot_rarity_value);
+        $slot_rarity_label = htmlspecialchars_uni((string)$slot['rarity_label']);
+        $slot['rarity_class'] = 'af-rarity-' . $slot_rarity_value;
+        $slot_rarity_class = htmlspecialchars_uni((string)$slot['rarity_class']);
         $slot_kb_id = (int)$slot['kb_id'];
         $slot_kb_type = (string)($slot['slot_kb_type'] ?? ($slot['kb_type'] ?? 'item'));
         if ($slot_kb_type === '') { $slot_kb_type = 'item'; }
@@ -788,19 +793,18 @@ function af_advancedshop_grant_inventory_item(int $uid, int $kbId, int $qty): vo
     $kbCols = af_advancedshop_kb_cols();
     $kbIdCol = $kbCols['id'] ?? 'id';
     $select = [$kbIdCol . ' AS kb_id'];
-    if (!empty($kbCols['data_json'])) {
-        $select[] = $kbCols['data_json'] . ' AS kb_data';
-    }
+    if (!empty($kbCols['data_json'])) { $select[] = $kbCols['data_json'] . ' AS kb_data'; }
+    else { $select[] = "'' AS kb_data"; }
     if ($db->field_exists('item_kind', 'af_kb_entries')) {
         $select[] = 'item_kind';
     }
     $kb = $db->fetch_array($db->query("SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
     if (!$kb) { return; }
-    $data = @json_decode((string)($kb['kb_data'] ?? '{}'), true);
-    $stackMax = max(1, (int)($data['item']['stack_max'] ?? 1));
-    $rarity = af_advancedshop_extract_rarity($data);
-    $slotCode = (string)($data['item']['slot'] ?? '');
-    $itemKind = (string)($kb['item_kind'] ?? ($data['item_kind'] ?? ''));
+    $profile = af_advancedshop_kb_item_profile($kb);
+    $stackMax = max(1, (int)$profile['stack_max']);
+    $rarity = (string)$profile['rarity'];
+    $slotCode = (string)$profile['slot'];
+    $itemKind = (string)($kb['item_kind'] ?? $profile['item_kind']);
 
     $left = $qty;
     while ($left > 0) {
@@ -1051,6 +1055,7 @@ function af_advancedshop_manage_slots(): void
         if ($db->field_exists('kb_type', 'af_shop_slots')) { $titleSelect[] = 's.kb_type AS slot_kb_type'; }
         if ($db->field_exists('kb_key', 'af_shop_slots')) { $titleSelect[] = 's.kb_key AS slot_kb_key'; }
         if (!empty($kbCols['data_json'])) { $titleSelect[] = 'e.' . $kbCols['data_json'] . ' AS kb_data'; }
+        else { $titleSelect[] = "'' AS kb_data"; }
         if (!$titleSelect) { $titleSelect[] = "'' AS kb_title"; }
         $q = $db->query("SELECT s.*, " . implode(', ', $titleSelect) . " FROM " . TABLE_PREFIX . "af_shop_slots s
             LEFT JOIN " . af_advancedshop_kb_table() . " e ON(e." . $kbIdCol . "=s.kb_id)
@@ -1059,7 +1064,7 @@ function af_advancedshop_manage_slots(): void
             $title = af_advancedshop_pick_lang((string)($r['kb_title_ru'] ?? ''), (string)($r['kb_title_en'] ?? ''));
             if ($title === '') { $title = (string)($r['kb_title'] ?? ''); }
             $meta = @json_decode((string)($r['kb_meta'] ?? '{}'), true);
-            $data = @json_decode((string)($r['kb_data'] ?? '{}'), true);
+            $profile = af_advancedshop_kb_item_profile($r);
             $rows[] = [
                 'slot_id' => (int)$r['slot_id'],
                 'kb_id' => (int)$r['kb_id'],
@@ -1067,7 +1072,12 @@ function af_advancedshop_manage_slots(): void
                 'kb_key' => (string)($r['slot_kb_key'] ?? ($r['kb_key'] ?? '')),
                 'title' => $title,
                 'icon_url' => (string)($meta['ui']['icon_url'] ?? ''),
-                'rarity' => af_advancedshop_extract_rarity($data),
+                'rarity' => (string)$profile['rarity'],
+                'rarity_label' => af_advancedshop_rarity_label((string)$profile['rarity']),
+                'rarity_class' => 'af-rarity-' . (string)$profile['rarity'],
+                'debug_rarity_raw' => (string)$profile['rarity_raw'],
+                'debug_rarity_final' => (string)$profile['rarity'],
+                'debug_data_json_present' => (string)$profile['data_json_present'],
                 'price' => (int)$r['price'],
                 'price_major' => af_advancedshop_money_format((int)$r['price']),
                 'cat_id' => (int)$r['cat_id'],
@@ -1230,15 +1240,14 @@ function af_advancedshop_kb_search(): void
         ($typeCol ? (($typeCol === 'type' ? '`type`' : $typeCol) . ' AS kb_type') : "'item' AS kb_type"),
         ($keyCol ? (($keyCol === 'key' ? '`key`' : $keyCol) . ' AS kb_key') : "'' AS kb_key"),
     ];
-    if (!empty($kbCols['data_json'])) {
-        $select[] = $kbCols['data_json'] . ' AS kb_data';
-    }
+    if (!empty($kbCols['data_json'])) { $select[] = $kbCols['data_json'] . ' AS kb_data'; }
+    else { $select[] = "'' AS kb_data"; }
     $orderSort = !empty($kbCols['sortorder']) ? $kbCols['sortorder'] . ' ASC, ' : '';
     $sql = "SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE {$where} ORDER BY {$orderSort}{$kbIdCol} DESC LIMIT 50";
     $res = $db->query($sql);
     $items = [];
     while ($row = $db->fetch_array($res)) {
-        $data = @json_decode((string)($row['kb_data'] ?? '{}'), true);
+        $profile = af_advancedshop_kb_item_profile($row);
         $meta = @json_decode((string)($row['kb_meta'] ?? '{}'), true);
         $title = af_advancedshop_pick_lang((string)($row['kb_title_ru'] ?? ''), (string)($row['kb_title_en'] ?? ''));
         if ($title === '') { $title = (string)($row['kb_title'] ?? ''); }
@@ -1250,8 +1259,8 @@ function af_advancedshop_kb_search(): void
             'kb_key' => (string)($row['kb_key'] ?? ''),
             'title' => $title,
             'icon_url' => (string)($meta['ui']['icon_url'] ?? ''),
-            'rarity' => af_advancedshop_extract_rarity($data),
-            'stack_max' => (int)($data['item']['stack_max'] ?? 1),
+            'rarity' => (string)$profile['rarity'],
+            'stack_max' => (int)$profile['stack_max'],
             'short' => $short,
         ];
     }
@@ -1433,17 +1442,57 @@ function af_advancedshop_health_ping(): void
     af_advancedshop_json_ok(['ping' => 'ok']);
 }
 
+function af_advancedshop_kb_item_profile(array $kbRow): array
+{
+    $default = [
+        'rarity' => 'common',
+        'item_kind' => '',
+        'slot' => '',
+        'stack_max' => 1,
+        'currency' => 'credits',
+        'price' => 0,
+        'tags' => [],
+        'rarity_raw' => '',
+        'data_json_present' => 'no',
+    ];
+    $jsonRaw = (string)($kbRow['kb_data'] ?? $kbRow['data_json'] ?? '');
+    if (trim($jsonRaw) === '') {
+        return $default;
+    }
+
+    $data = @json_decode($jsonRaw, true);
+    if (!is_array($data)) {
+        return $default;
+    }
+
+    $default['data_json_present'] = 'yes';
+    $item = is_array($data['item'] ?? null) ? $data['item'] : [];
+    $rawRarity = '';
+    if ($item && !empty($item['rarity'])) {
+        $rawRarity = (string)$item['rarity'];
+    } elseif (!empty($data['rarity'])) {
+        $rawRarity = (string)$data['rarity'];
+    }
+
+    $tags = $data['tags'] ?? ($item['tags'] ?? []);
+    if (!is_array($tags)) { $tags = []; }
+
+    return [
+        'rarity' => af_advancedshop_normalize_rarity($rawRarity),
+        'item_kind' => (string)($item['item_kind'] ?? ($data['item_kind'] ?? '')),
+        'slot' => (string)($item['slot'] ?? ($data['slot'] ?? '')),
+        'stack_max' => max(1, (int)($item['stack_max'] ?? ($data['stack_max'] ?? 1))),
+        'currency' => (string)($item['currency'] ?? ($data['currency'] ?? 'credits')),
+        'price' => max(0, (int)($item['price'] ?? ($data['price'] ?? 0))),
+        'tags' => $tags,
+        'rarity_raw' => $rawRarity,
+        'data_json_present' => 'yes',
+    ];
+}
+
 function af_advancedshop_extract_rarity(array $data): string
 {
-    $raw = '';
-    if (!empty($data['item']['rarity'])) {
-        $raw = (string)$data['item']['rarity'];
-    } elseif (!empty($data['rarity'])) {
-        $raw = (string)$data['rarity'];
-    } elseif (!empty($data['item_kind']['rarity'])) {
-        $raw = (string)$data['item_kind']['rarity'];
-    }
-    return af_advancedshop_normalize_rarity($raw);
+    return af_advancedshop_kb_item_profile(['kb_data' => json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)])['rarity'];
 }
 
 function af_advancedshop_normalize_rarity(string $rarity): string
