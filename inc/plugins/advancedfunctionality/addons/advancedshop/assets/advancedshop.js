@@ -1,4 +1,7 @@
 (function(){
+  if(window.__afShopBound){ return; }
+  window.__afShopBound = true;
+
   function post(url, data){
     data = data || {};
     if(!data.my_post_key){ data.my_post_key = key(); }
@@ -28,36 +31,60 @@
 
   function setStatus(node, text, ok){ if(!node){ return; } node.textContent = text; node.className = ok ? 'af-status-ok' : 'af-status-error'; }
 
+  window.afShopToast = function(msg, type){
+    var root = document.querySelector('.af-shop-toasts');
+    if(!root){ return; }
+    var item = document.createElement('div');
+    item.className = 'af-shop-toast af-shop-toast--' + (type === 'error' ? 'error' : 'success');
+    item.textContent = msg || '';
+    root.appendChild(item);
+    setTimeout(function(){ item.classList.add('is-hide'); }, 2200);
+    setTimeout(function(){ if(item.parentNode){ item.parentNode.removeChild(item); } }, 2800);
+  };
+
+  function withLoading(btn, promise){
+    if(!btn || btn.dataset.loading === '1'){ return Promise.resolve({ok:false, error:'busy'}); }
+    btn.disabled = true;
+    btn.dataset.loading = '1';
+    return promise.finally(function(){
+      btn.disabled = false;
+      delete btn.dataset.loading;
+    });
+  }
+
   document.addEventListener('click', function(e){
     var add = e.target.closest('.af-add-cart');
     if(add){
-      e.preventDefault();
+      e.preventDefault(); e.stopPropagation();
       var wrap = add.closest('[data-shop]');
       var shop = wrap ? wrap.getAttribute('data-shop') : 'game';
-      post('misc.php?action=shop_add_to_cart&shop=' + encodeURIComponent(shop), {slot:add.getAttribute('data-slot'), qty:1}).then(function(res){ alert(res.ok ? 'Added' : (res.error || 'Error')); });
+      withLoading(add, post('misc.php?action=shop_add_to_cart&shop=' + encodeURIComponent(shop), {slot:add.getAttribute('data-slot'), qty:1}))
+        .then(function(res){ if(res.ok){ afShopToast('Added to cart', 'success'); } else if(res.error !== 'busy'){ afShopToast(res.error || 'Error', 'error'); } });
       return;
     }
 
     var buy = e.target.closest('.af-buy-now');
     if(buy){
-      e.preventDefault();
+      e.preventDefault(); e.stopPropagation();
       var wrap2 = buy.closest('[data-shop]');
       var shop2 = wrap2 ? wrap2.getAttribute('data-shop') : 'game';
-      post('misc.php?action=shop_add_to_cart&shop=' + encodeURIComponent(shop2), {slot:buy.getAttribute('data-slot'), qty:1}).then(function(res){ if(res.ok){ window.location='misc.php?action=shop_cart&shop='+encodeURIComponent(shop2); } else { alert(res.error || 'Error'); } });
+      withLoading(buy, post('misc.php?action=shop_add_to_cart&shop=' + encodeURIComponent(shop2), {slot:buy.getAttribute('data-slot'), qty:1}))
+        .then(function(res){ if(res.ok){ window.location='misc.php?action=shop_cart&shop='+encodeURIComponent(shop2); } else if(res.error !== 'busy'){ afShopToast(res.error || 'Error', 'error'); } });
       return;
     }
 
     var checkout = e.target.closest('.af-checkout');
     if(checkout){
-      e.preventDefault();
+      e.preventDefault(); e.stopPropagation();
       var shop3 = (checkout.closest('[data-shop]') || document.body).getAttribute('data-shop') || 'game';
-      post('misc.php?action=shop_checkout&shop=' + encodeURIComponent(shop3), {}).then(function(res){ if(res.ok){ window.location = res.redirect || location.href; } else { alert(res.error || 'Error'); } });
+      withLoading(checkout, post('misc.php?action=shop_checkout&shop=' + encodeURIComponent(shop3), {}))
+        .then(function(res){ if(res.ok){ window.location = res.redirect || location.href; } else if(res.error !== 'busy'){ afShopToast(res.error || 'Error', 'error'); } });
       return;
     }
 
     var qtyBtn = e.target.closest('.af-cart-qty');
     if(qtyBtn){
-      e.preventDefault();
+      e.preventDefault(); e.stopPropagation();
       var item = qtyBtn.closest('.af-cart-item');
       var id = item.getAttribute('data-item-id');
       var curr = parseInt((item.querySelector('.af-cart-item__qty span')||{}).textContent||'1',10);
@@ -68,7 +95,7 @@
 
     var remove = e.target.closest('.af-cart-remove');
     if(remove){
-      e.preventDefault();
+      e.preventDefault(); e.stopPropagation();
       var item2 = remove.closest('.af-cart-item');
       post('misc.php?action=shop_update_cart', {item_id:item2.getAttribute('data-item-id'), qty:0}).then(function(){ location.reload(); });
       return;
@@ -227,7 +254,7 @@
         return '<div class="af-slot-card" data-slot-id="'+row.slot_id+'">'
           + '<div><strong>#'+row.slot_id+'</strong> KB#'+row.kb_id+' '+icon+'</div>'
           + '<div>'+escapeHtml(row.title || '')+' <em>['+escapeHtml(row.rarity || 'common')+']</em></div>'
-          + '<label>Price <input type="number" class="af-slot-price" value="'+(row.price||0)+'" min="0"></label>'
+          + '<label>Price <input type="number" class="af-slot-price" value="'+escapeHtml(row.price_major || '0.00')+'" min="0" step="0.01"></label>'
           + '<label>Currency <input type="text" class="af-slot-currency" value="'+escapeHtml(row.currency || 'credits')+'"></label>'
           + '<label>Stock <input type="number" class="af-slot-stock" value="'+(row.stock==null?-1:row.stock)+'"></label>'
           + '<label>Limit/user <input type="number" class="af-slot-limit" value="'+(row.limit_per_user||0)+'" min="0"></label>'

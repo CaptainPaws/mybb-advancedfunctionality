@@ -44,6 +44,8 @@ function af_advancedshop_kb_cols(): array
         'short_en' => $pick(['short_en']),
         'meta_json' => $pick(['meta_json', 'meta']),
         'data_json' => $pick(['data_json', 'rules_json', 'data', 'rules', 'content_json']),
+        'type' => $pick(['type', 'kb_type']),
+        'key' => $pick(['key', 'slug', 'entry_key']),
         'active' => $pick(['active', 'enabled']),
         'sortorder' => $pick(['sortorder', 'displayorder']),
     ];
@@ -431,6 +433,7 @@ function af_advancedshop_render_shop(): void
         error_no_permission();
     }
     $shop = af_advancedshop_current_shop();
+    add_breadcrumb($lang->af_advancedshop_shop_title ?? 'Shop', 'misc.php?action=shop&shop=' . urlencode((string)$shop['code']));
     $shopId = (int)$shop['shop_id'];
     $catId = (int)$mybb->get_input('cat');
 
@@ -461,6 +464,8 @@ function af_advancedshop_render_shop(): void
     if (empty($kbCols['body_ru']) && empty($kbCols['body_en']) && !empty($kbCols['body'])) { $kbSelect[] = 'e.' . $kbCols['body'] . ' AS kb_body'; }
     if (!empty($kbCols['meta_json'])) { $kbSelect[] = 'e.' . $kbCols['meta_json'] . ' AS kb_meta'; }
     if (!empty($kbCols['data_json'])) { $kbSelect[] = 'e.' . $kbCols['data_json'] . ' AS kb_data'; }
+    if (!empty($kbCols['type'])) { $kbSelect[] = 'e.' . ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS kb_type'; }
+    if (!empty($kbCols['key'])) { $kbSelect[] = 'e.' . ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS kb_key'; }
     $qSlots = $db->query("SELECT s.*, " . implode(', ', $kbSelect) . "
         FROM " . TABLE_PREFIX . "af_shop_slots s
         LEFT JOIN " . af_advancedshop_kb_table() . " e ON(e." . $kbIdCol . "=s.kb_id)
@@ -469,7 +474,8 @@ function af_advancedshop_render_shop(): void
 
     while ($slot = $db->fetch_array($qSlots)) {
         $slot_id = (int)$slot['slot_id'];
-        $slot_price = (int)$slot['price'];
+        $slot_price = af_advancedshop_money_format((int)$slot['price']);
+        $slot_currency_symbol = htmlspecialchars_uni(af_advancedshop_currency_symbol((string)$slot['currency']));
         $kbTitle = af_advancedshop_pick_lang((string)($slot['kb_title_ru'] ?? ''), (string)($slot['kb_title_en'] ?? ''));
         if ($kbTitle === '') { $kbTitle = (string)($slot['kb_title'] ?? ''); }
         $slot_title = htmlspecialchars_uni($kbTitle ?: ('#' . (int)$slot['kb_id']));
@@ -484,11 +490,17 @@ function af_advancedshop_render_shop(): void
         $meta = @json_decode((string)($slot['kb_meta'] ?? '{}'), true);
         $data = @json_decode((string)($slot['kb_data'] ?? '{}'), true);
         $slot_icon = htmlspecialchars_uni((string)($meta['ui']['icon_url'] ?? ($slot['icon_url'] ?? '')));
-        $slot_rarity = htmlspecialchars_uni((string)($data['item']['rarity'] ?? ($data['rarity'] ?? 'common')));
+        $slot_rarity_value = (string)($data['item']['rarity'] ?? ($data['rarity'] ?? ''));
+        $slot_rarity = htmlspecialchars_uni($slot_rarity_value === '' ? 'common' : $slot_rarity_value);
+        $slot_rarity_label = htmlspecialchars_uni(af_advancedshop_rarity_label($slot_rarity_value));
+        $slot_kb_url = htmlspecialchars_uni(af_advancedshop_kb_entry_url((int)$slot['kb_id'], (string)($slot['kb_type'] ?? ''), (string)($slot['kb_key'] ?? '')));
         eval('$slotsHtml .= "' . af_advancedshop_tpl('advancedshop_product_card') . '";');
     }
 
     $balance = (int)af_shop_get_balance((int)($mybb->user['uid'] ?? 0), (string)($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits'));
+    $currencySlug = (string)($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits');
+    $currency_symbol = htmlspecialchars_uni(af_advancedshop_currency_symbol($currencySlug));
+    $balance = af_advancedshop_money_format($balance);
     $shop_code = htmlspecialchars_uni((string)$shop['code']);
     $shop_title = htmlspecialchars_uni($lang->af_advancedshop_shop_title ?? 'Shop');
     $cart_url = 'misc.php?action=shop_cart&amp;shop=' . urlencode($shop['code']);
@@ -511,6 +523,8 @@ function af_advancedshop_render_cart(): void
     global $db, $mybb, $lang, $headerinclude, $header, $footer;
     if ((int)($mybb->user['uid'] ?? 0) <= 0) { error_no_permission(); }
     $shop = af_advancedshop_current_shop();
+    add_breadcrumb($lang->af_advancedshop_shop_title ?? 'Shop', 'misc.php?action=shop&shop=' . urlencode((string)$shop['code']));
+    add_breadcrumb($lang->af_advancedshop_cart_title ?? 'Cart', 'misc.php?action=shop_cart&shop=' . urlencode((string)$shop['code']));
     $cart = af_advancedshop_get_or_create_cart((int)$shop['shop_id'], (int)$mybb->user['uid']);
     [$itemsHtml, $total] = af_advancedshop_build_cart_items($cart);
     $balance = (int)af_shop_get_balance((int)$mybb->user['uid'], (string)($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits'));
@@ -518,6 +532,11 @@ function af_advancedshop_render_cart(): void
     $msg = $balance >= $total ? '' : '<div class="af-shop-error">' . htmlspecialchars_uni($lang->af_advancedshop_error_not_enough_money ?? 'Not enough money') . '</div>';
     $assets = af_advancedshop_assets_html();
     $shop_code = htmlspecialchars_uni((string)$shop['code']);
+    $shop_url = 'misc.php?action=shop&amp;shop=' . urlencode((string)$shop['code']);
+    $currencySlug = (string)($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits');
+    $currency_symbol = htmlspecialchars_uni(af_advancedshop_currency_symbol($currencySlug));
+    $balance = af_advancedshop_money_format($balance);
+    $total = af_advancedshop_money_format($total);
     eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_cart') . '";');
     eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
     output_page($page);
@@ -538,7 +557,7 @@ function af_advancedshop_build_cart_items(array $cart): array
     global $db;
     $itemsHtml = '';
     $total = 0;
-    $q = $db->query("SELECT ci.*, s.price, s.kb_id, e.title_ru, e.title_en, e.meta_json
+    $q = $db->query("SELECT ci.*, s.price, s.currency, s.kb_id, e.title_ru, e.title_en, e.meta_json
         FROM " . TABLE_PREFIX . "af_shop_cart_items ci
         INNER JOIN " . TABLE_PREFIX . "af_shop_slots s ON(s.slot_id=ci.slot_id)
         LEFT JOIN " . TABLE_PREFIX . "af_kb_entries e ON(e.id=s.kb_id)
@@ -553,6 +572,9 @@ function af_advancedshop_build_cart_items(array $cart): array
         $meta = @json_decode((string)($row['meta_json'] ?? '{}'), true);
         $item_icon = htmlspecialchars_uni((string)($meta['ui']['icon_url'] ?? ''));
         $item_title = htmlspecialchars_uni(af_advancedshop_pick_lang((string)($row['title_ru'] ?? ''), (string)($row['title_en'] ?? '')));
+        $price = af_advancedshop_money_format($price);
+        $sum = af_advancedshop_money_format($sum);
+        $currency_symbol = htmlspecialchars_uni(af_advancedshop_currency_symbol((string)($row['currency'] ?? 'credits')));
         eval('$itemsHtml .= "' . af_advancedshop_tpl('advancedshop_cart_item') . '";');
     }
     return [$itemsHtml, $total];
@@ -920,6 +942,7 @@ function af_advancedshop_manage_slots(): void
                 'icon_url' => (string)($meta['ui']['icon_url'] ?? ''),
                 'rarity' => (string)($data['item']['rarity'] ?? ($data['rarity'] ?? 'common')),
                 'price' => (int)$r['price'],
+                'price_major' => af_advancedshop_money_format((int)$r['price']),
                 'cat_id' => (int)$r['cat_id'],
                 'currency' => (string)$r['currency'],
                 'stock' => (int)$r['stock'],
@@ -949,12 +972,14 @@ function af_advancedshop_manage_slot_create(): void
     $duplicate = $db->fetch_array($db->simple_select('af_shop_slots', 'slot_id', 'shop_id=' . (int)$shop['shop_id'] . ' AND cat_id=' . $catId . ' AND kb_id=' . $kbId, ['limit' => 1]));
     if ($duplicate) { af_advancedshop_json_err('Slot with this KB item already exists in category', 409); }
 
+    // Slots store prices in minor units (e.g. 150 = 1.50).
+    $priceMinor = af_advancedshop_money_to_minor((string)$mybb->get_input('price'));
     $slotId = (int)$db->insert_query('af_shop_slots', [
         'shop_id' => (int)$shop['shop_id'],
         'cat_id' => $catId,
         'kb_type' => 'item',
         'kb_id' => $kbId,
-        'price' => max(0, (int)$mybb->get_input('price')),
+        'price' => $priceMinor,
         'currency' => $db->escape_string((string)($mybb->get_input('currency') ?: $mybb->settings['af_advancedshop_currency_slug'])),
         'stock' => (int)$mybb->get_input('stock', MyBB::INPUT_INT),
         'limit_per_user' => max(0, (int)$mybb->get_input('limit_per_user', MyBB::INPUT_INT)),
@@ -967,7 +992,8 @@ function af_advancedshop_manage_slot_create(): void
         'slot_id' => $slotId,
         'cat_id' => $catId,
         'kb_id' => $kbId,
-        'price' => max(0, (int)$mybb->get_input('price')),
+        'price' => $priceMinor,
+        'price_major' => af_advancedshop_money_format($priceMinor),
         'currency' => (string)($mybb->get_input('currency') ?: $mybb->settings['af_advancedshop_currency_slug']),
         'stock' => (int)$mybb->get_input('stock', MyBB::INPUT_INT),
         'limit_per_user' => max(0, (int)$mybb->get_input('limit_per_user', MyBB::INPUT_INT)),
@@ -987,8 +1013,9 @@ function af_advancedshop_manage_slot_update(): void
     $slot = $db->fetch_array($db->simple_select('af_shop_slots', '*', 'slot_id=' . $slotId . ' AND shop_id=' . (int)$shop['shop_id'], ['limit' => 1]));
     if (!$slot) { af_advancedshop_json_err('Slot not found', 404); }
 
+    $priceMinor = af_advancedshop_money_to_minor((string)$mybb->get_input('price'));
     $update = [
-        'price' => max(0, (int)$mybb->get_input('price')),
+        'price' => $priceMinor,
         'currency' => $db->escape_string((string)($mybb->get_input('currency') ?: $slot['currency'])),
         'stock' => (int)$mybb->get_input('stock', MyBB::INPUT_INT),
         'limit_per_user' => max(0, (int)$mybb->get_input('limit_per_user', MyBB::INPUT_INT)),
@@ -1002,6 +1029,7 @@ function af_advancedshop_manage_slot_update(): void
         'cat_id' => (int)$slot['cat_id'],
         'kb_id' => (int)$slot['kb_id'],
         'price' => (int)$update['price'],
+        'price_major' => af_advancedshop_money_format((int)$update['price']),
         'currency' => (string)($mybb->get_input('currency') ?: $slot['currency']),
         'stock' => (int)$update['stock'],
         'limit_per_user' => (int)$update['limit_per_user'],
@@ -1165,6 +1193,53 @@ function af_advancedshop_pick_lang(string $ru, string $en): string
     global $mybb;
     $lang = (string)($mybb->settings['bblanguage'] ?? 'russian');
     return $lang === 'english' ? ($en ?: $ru) : ($ru ?: $en);
+}
+
+function af_advancedshop_money_scale(): int
+{
+    global $mybb;
+    $scale = (int)($mybb->settings['af_advancedshop_money_scale'] ?? 100);
+    return $scale > 0 ? $scale : 100;
+}
+
+function af_advancedshop_money_format(int $amountMinor): string
+{
+    $value = $amountMinor / af_advancedshop_money_scale();
+    return number_format($value, 2, '.', '');
+}
+
+function af_advancedshop_money_to_minor(string $amount): int
+{
+    $value = (float)str_replace(',', '.', trim($amount));
+    return max(0, (int)round($value * af_advancedshop_money_scale()));
+}
+
+function af_advancedshop_currency_symbol(string $slug): string
+{
+    $slug = trim($slug);
+    if ($slug === 'credits') {
+        return '¢';
+    }
+    return $slug;
+}
+
+function af_advancedshop_rarity_label(string $rarity): string
+{
+    global $lang;
+    $normalized = strtolower(trim($rarity));
+    if ($normalized === '') {
+        return $lang->af_advancedshop_rarity_unknown ?? '—';
+    }
+    $key = 'af_advancedshop_rarity_' . $normalized;
+    return $lang->{$key} ?? ucfirst($normalized);
+}
+
+function af_advancedshop_kb_entry_url(int $kbId, string $type = '', string $entryKey = ''): string
+{
+    if ($type !== '' && $entryKey !== '') {
+        return 'misc.php?action=kb&type=' . urlencode($type) . '&key=' . urlencode($entryKey);
+    }
+    return 'misc.php?action=kb';
 }
 
 function af_shop_get_balance(int $uid, string $currency_slug): int

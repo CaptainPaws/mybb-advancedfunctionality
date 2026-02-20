@@ -2,10 +2,11 @@
   <h1>{$shop_title}</h1>
   <div class="af-shop-top">
     <a class="button" href="{$cart_url}">{$lang->af_advancedshop_btn_go_to_cart}</a>
-    <span>{$lang->af_advancedshop_balance}: {$balance}</span>
+    <span>{$lang->af_advancedshop_balance}: {$balance} {$currency_symbol}</span>
   </div>
   <div class="af-shop-layout">
     <aside class="af-shop-cats">{$cats}</aside>
     <section class="af-shop-grid">{$slotsHtml}</section>
   </div>
+  <div class="af-shop-toasts" aria-live="polite"></div>
 </div>
