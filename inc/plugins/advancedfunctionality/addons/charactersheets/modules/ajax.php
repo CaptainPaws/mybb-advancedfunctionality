@@ -61,7 +61,9 @@ function af_charactersheets_handle_api(): void
         'reset_attributes',
         'reset_skills',
     ], true)) {
-        verify_post_check($mybb->get_input('my_post_key'));
+        if (!verify_post_check($mybb->get_input('my_post_key'), true)) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Invalid post key']);
+        }
     }
 
     if ($do === 'delete_sheet') {
@@ -740,7 +742,21 @@ function af_charactersheets_handle_api(): void
 
 function af_charactersheets_json_response(array $data): void
 {
+    while (ob_get_level() > 0) {
+        @ob_end_clean();
+    }
+
+    if (function_exists('http_response_code') && !headers_sent()) {
+        $status_code = (int)http_response_code();
+        if ($status_code < 100) {
+            http_response_code(200);
+        }
+    }
+
     header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('X-Content-Type-Options: nosniff');
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }

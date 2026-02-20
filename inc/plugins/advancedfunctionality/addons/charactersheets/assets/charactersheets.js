@@ -316,9 +316,16 @@
           },
           body: data
         }).then(function (resp) {
-          return resp.json().catch(function () {
-            throw new Error('Некорректный ответ сервера');
-          }).then(function (payloadObj) {
+          return resp.text().then(function (rawText) {
+            var payloadObj = null;
+            try {
+              payloadObj = JSON.parse(rawText);
+            } catch (parseError) {
+              var sample = String(rawText || '').slice(0, 300);
+              console.error('[AF CS] Invalid JSON response sample:', sample);
+              throw new Error('Некорректный ответ сервера');
+            }
+
             if (!resp.ok) {
               throw new Error(responseError(payloadObj, 'HTTP ' + resp.status));
             }
