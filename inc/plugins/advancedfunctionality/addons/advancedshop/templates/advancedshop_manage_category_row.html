@@ -1,6 +1,6 @@
-<tr data-cat-id="{$cat_id}">
+<tr data-cat-id="{$cat_id}" data-depth="{$cat_depth}">
   <td>{$cat_id}</td>
-  <td><input type="text" class="af-cat-title-input" value="{$cat_title}" maxlength="255"></td>
+  <td class="af-cat-title-cell" style="padding-left: calc(6px + {$cat_depth} * 20px)"><input type="text" class="af-cat-title-input" value="{$cat_title}" maxlength="255"></td>
   <td><input type="text" class="af-cat-description-input" value="{$cat_description}"></td>
   <td>
     <input type="number" class="af-cat-parent-input" min="0" value="{$cat_parent}" title="{$cat_parent_title}">

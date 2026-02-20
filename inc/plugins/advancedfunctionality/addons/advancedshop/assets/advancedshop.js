@@ -1,6 +1,8 @@
 (function(){
   if(window.__afShopBound){ return; }
   window.__afShopBound = true;
+  window.AFSHOP = window.AFSHOP || {};
+  window.AFSHOP.loaded = true;
 
   function post(url, data){
     data = data || {};
@@ -53,6 +55,22 @@
   }
 
   document.addEventListener('click', function(e){
+
+    var kbOpen = e.target.closest('[data-afshop-kb-open="1"]');
+    if(kbOpen){
+      e.preventDefault();
+      var kbId = kbOpen.getAttribute('data-kb-id') || '0';
+      openKbModal(kbId);
+      return;
+    }
+
+    var kbClose = e.target.closest('[data-af-kb-close="1"]');
+    if(kbClose){
+      e.preventDefault();
+      closeKbModal();
+      return;
+    }
+
     var add = e.target.closest('.af-add-cart');
     if(add){
       e.preventDefault(); e.stopPropagation();
@@ -203,6 +221,8 @@
     }
   });
 
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape'){ closeKbModal(); } });
+
   var categoryForm = document.getElementById('af-manage-category-form');
   if(categoryForm){
     var statusNode = document.getElementById('af-manage-category-status');
@@ -218,6 +238,22 @@
       });
     });
   }
+
+  var rebuild = document.getElementById('af-rebuild-sortorder');
+  if(rebuild){
+    rebuild.addEventListener('click', function(){
+      var wrap = document.querySelector('.af-manage[data-shop]');
+      if(!wrap){ return; }
+      var shop = wrap.getAttribute('data-shop') || 'game';
+      post('misc.php?action=shop_manage_sortorder_rebuild&shop=' + encodeURIComponent(shop), {}).then(function(r){
+        var status = document.getElementById('af-manage-category-status');
+        setStatus(status, r.ok ? 'Sortorder rebuilt' : (r.error || 'Failed'), !!r.ok);
+        if(r.ok){ setTimeout(function(){ location.reload(); }, 300); }
+      });
+    });
+  }
+
+  runHealthCheck();
 
   var slotsRoot = document.querySelector('.af-manage-slots[data-shop]');
   if(slotsRoot){
@@ -265,4 +301,37 @@
       }).join('');
     });
   }
+
+  function openKbModal(kbId){
+    var modal = document.getElementById('af-kb-modal');
+    var frame = document.getElementById('af-kb-modal-frame');
+    if(!modal || !frame || !kbId){ return; }
+    frame.src = 'misc.php?action=knowledgebase_entry&id=' + encodeURIComponent(kbId) + '&ajax=1';
+    modal.hidden = false;
+  }
+
+  function closeKbModal(){
+    var modal = document.getElementById('af-kb-modal');
+    var frame = document.getElementById('af-kb-modal-frame');
+    if(!modal || modal.hidden){ return; }
+    modal.hidden = true;
+    if(frame){ frame.src = 'about:blank'; }
+  }
+
+  function runHealthCheck(){
+    var root = document.getElementById('af-shop-health');
+    if(!root){ return; }
+    var jsNode = root.querySelector('[data-health-js]');
+    var keyNode = root.querySelector('[data-health-postkey]');
+    var apiNode = root.querySelector('[data-health-api]');
+    if(jsNode){ jsNode.textContent = 'JS loaded: ' + (window.AFSHOP && window.AFSHOP.loaded ? 'yes' : 'no'); }
+    var hasPostKey = !!key();
+    if(keyNode){ keyNode.textContent = 'postKey present: ' + (hasPostKey ? 'yes' : 'no'); }
+    fetch('misc.php?action=shop_health', {credentials:'same-origin'})
+      .then(function(r){ return r.text(); })
+      .then(parseJSON)
+      .then(function(res){ if(apiNode){ apiNode.textContent = 'API ping: ' + (res && res.ok ? 'ok' : 'no'); } })
+      .catch(function(){ if(apiNode){ apiNode.textContent = 'API ping: no'; } });
+  }
+
 })();
