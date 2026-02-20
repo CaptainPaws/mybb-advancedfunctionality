@@ -274,9 +274,17 @@
       if(!rows.length){ body.innerHTML = '<div>No slots yet</div>'; return; }
       body.innerHTML = rows.map(function(row){
         var icon = row.icon_url ? '<img src="'+escapeHtml(row.icon_url)+'" alt="" style="width:32px;height:32px;">' : '';
-        return '<div class="af-slot-card" data-slot-id="'+row.slot_id+'">'
+        var rarity = row.rarity || 'common';
+        var rarityClass = row.rarity_class || ('af-rarity-' + rarity);
+        var rarityLabel = row.rarity_label || rarity;
+        var debugInfo = 'debug: rarity_raw = ' + escapeHtml(row.debug_rarity_raw || '')
+          + ', rarity_final = ' + escapeHtml(row.debug_rarity_final || rarity)
+          + ', data_json_present: ' + escapeHtml(row.debug_data_json_present || 'no');
+        return '<div class="af-slot-card '+escapeHtml(rarityClass)+'" data-slot-id="'+row.slot_id+'">'
           + '<div><strong>#'+row.slot_id+'</strong> KB#'+row.kb_id+' '+icon+'</div>'
-          + '<div>'+escapeHtml(row.title || '')+' <em>['+escapeHtml(row.rarity || 'common')+']</em></div>'
+          + '<div>'+escapeHtml(row.title || '')+'</div>'
+          + '<div><strong>Rarity:</strong> <span class="'+escapeHtml(rarityClass)+'">'+escapeHtml(rarityLabel)+'</span></div>'
+          + '<div><small>'+debugInfo+'</small></div>'
           + '<label>Price <input type="number" class="af-slot-price" value="'+escapeHtml(row.price_major || '0.00')+'" min="0" step="0.01"></label>'
           + '<label>Currency <input type="text" class="af-slot-currency" value="'+escapeHtml(row.currency || 'credits')+'"></label>'
           + '<label>Stock <input type="number" class="af-slot-stock" value="'+(row.stock==null?-1:row.stock)+'"></label>'
