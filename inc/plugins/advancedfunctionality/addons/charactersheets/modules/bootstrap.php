@@ -447,19 +447,15 @@ function af_charactersheets_render_modal_application_page(): void
         error_no_permission();
     }
 
-    $firstPid = (int)($thread['firstpost'] ?? 0);
-    if ($firstPid <= 0) {
-        error_no_permission();
+    $content = '';
+    if (function_exists('af_atf_build_display_block_for_tid_fid')) {
+        $content = (string)af_atf_build_display_block_for_tid_fid($tid, $fid);
     }
 
-    $post = get_post($firstPid);
-    if (empty($post) || (int)($post['pid'] ?? 0) <= 0) {
-        error_no_permission();
+    if ($content === '') {
+        $content = '<div class="cs-modal-application"><div class="post_content">Анкета недоступна.</div></div>';
     }
 
-    $forum = get_forum((int)($thread['fid'] ?? 0));
-    $parsed = af_charactersheets_parse_post_message((array)$post, (array)$forum);
-    $content = '<div class="cs-modal-application"><div class="post_content">' . $parsed . '</div></div>';
     af_charactersheets_output_modal_page($content, (string)($thread['subject'] ?? 'Анкета персонажа'));
 }
 
