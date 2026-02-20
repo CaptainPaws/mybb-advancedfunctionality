@@ -33,6 +33,84 @@
 
   function setStatus(node, text, ok){ if(!node){ return; } node.textContent = text; node.className = ok ? 'af-status-ok' : 'af-status-error'; }
 
+  function afShopModalRoot(){
+    return document.querySelector('[data-af-shop-modal]');
+  }
+
+  function afShopHideCheckoutSuccessModal(){
+    var modal = afShopModalRoot();
+    if(!modal){ return; }
+    modal.hidden = true;
+    document.body.classList.remove('af-shop-modal-open');
+  }
+
+  window.afShopShowCheckoutSuccessModal = function(checkout, links){
+    var modal = afShopModalRoot();
+    if(!modal){
+      if(links && links.shop){ window.location = links.shop; }
+      return;
+    }
+    checkout = checkout || {};
+    links = links || {};
+    var content = modal.querySelector('[data-af-shop-modal-content]');
+    if(content){
+      var rows = '<p class="af-shop-modal__title" id="af-shop-modal-title">Покупка успешна</p>'
+        + '<p>Списано: <strong>' + escapeHtml(checkout.total_major || '0.00') + ' ' + escapeHtml(checkout.currency_symbol || '') + '</strong></p>';
+      if(checkout.balance_major != null){
+        rows += '<p>Текущий баланс: <strong>' + escapeHtml(checkout.balance_major) + ' ' + escapeHtml(checkout.currency_symbol || '') + '</strong></p>';
+      }
+      rows += '<div class="af-shop-modal__actions">'
+        + '<button type="button" class="af-shop-btn" data-af-modal-shop>Вернуться в магазин</button>'
+        + '<button type="button" class="af-shop-btn" data-af-modal-inventory>Перейти в инвентарь</button>'
+        + '</div>';
+      content.innerHTML = rows;
+    }
+
+    var shopBtn = modal.querySelector('[data-af-modal-shop]');
+    if(shopBtn){
+      shopBtn.onclick = function(){
+        afShopHideCheckoutSuccessModal();
+        window.location = links.shop || 'misc.php?action=shop&shop=game';
+      };
+    }
+    var invBtn = modal.querySelector('[data-af-modal-inventory]');
+    if(invBtn){
+      invBtn.onclick = function(){ window.location = links.inventory || 'misc.php?action=inventory'; };
+    }
+
+    modal.hidden = false;
+    document.body.classList.add('af-shop-modal-open');
+  };
+
+  function treeStorageKey(shop, catId){
+    return 'af_shop_tree_' + String(shop || 'game') + '_' + String(catId || 0);
+  }
+
+  function applyCatState(toggle, collapsed){
+    var catId = toggle.getAttribute('data-cat');
+    var root = toggle.closest('.af-shop-cat-node');
+    var children = root ? root.querySelector(':scope > .af-cat-children[data-parent="' + catId + '"]') : null;
+    if(!root || !children){ return; }
+    root.classList.toggle('is-collapsed', !!collapsed);
+    root.classList.toggle('is-expanded', !collapsed);
+    children.hidden = !!collapsed;
+    toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    var icon = toggle.querySelector('.af-cat-toggle__icon');
+    if(icon){ icon.textContent = collapsed ? '▸' : '▾'; }
+  }
+
+  function initCategoryTree(){
+    var shopRoot = document.querySelector('.af-shop-wrap[data-shop]');
+    if(!shopRoot){ return; }
+    var shop = shopRoot.getAttribute('data-shop') || 'game';
+    shopRoot.querySelectorAll('.af-cat-toggle[data-cat]').forEach(function(toggle){
+      var catId = toggle.getAttribute('data-cat');
+      var st = '';
+      try { st = localStorage.getItem(treeStorageKey(shop, catId)) || ''; } catch(err) { st = ''; }
+      applyCatState(toggle, st === 'collapsed');
+    });
+  }
+
   window.afShopToast = function(msg, type){
     var root = document.querySelector('.af-shop-toasts');
     if(!root){ return; }
@@ -56,6 +134,24 @@
 
   document.addEventListener('click', function(e){
 
+
+    var modalClose = e.target.closest('[data-af-shop-modal-close]');
+    if(modalClose){
+      e.preventDefault();
+      afShopHideCheckoutSuccessModal();
+      return;
+    }
+
+    var catToggle = e.target.closest('.af-cat-toggle[data-cat]');
+    if(catToggle){
+      e.preventDefault();
+      var wrap = catToggle.closest('.af-shop-wrap[data-shop]');
+      var shop = wrap ? (wrap.getAttribute('data-shop') || 'game') : 'game';
+      var collapsed = catToggle.getAttribute('aria-expanded') === 'true';
+      applyCatState(catToggle, collapsed);
+      try { localStorage.setItem(treeStorageKey(shop, catToggle.getAttribute('data-cat')), collapsed ? 'collapsed' : 'expanded'); } catch(err) {}
+      return;
+    }
 
     var add = e.target.closest('.af-add-cart');
     if(add){
@@ -82,7 +178,7 @@
       e.preventDefault(); e.stopPropagation();
       var shop3 = (checkout.closest('[data-shop]') || document.body).getAttribute('data-shop') || 'game';
       withLoading(checkout, post('misc.php?action=shop_checkout&shop=' + encodeURIComponent(shop3), {}))
-        .then(function(res){ if(res.ok){ window.location = res.redirect || location.href; } else if(res.error !== 'busy'){ afShopToast(res.error || 'Error', 'error'); } });
+        .then(function(res){ if(res.ok){ afShopShowCheckoutSuccessModal(res.checkout || {}, res.links || {}); } else if(res.error !== 'busy'){ afShopToast(res.error || 'Error', 'error'); } });
       return;
     }
 
@@ -240,6 +336,9 @@
     });
   }
 
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape'){ afShopHideCheckoutSuccessModal(); } });
+
+  initCategoryTree();
   runHealthCheck();
 
   var slotsRoot = document.querySelector('.af-manage-slots[data-shop]');
