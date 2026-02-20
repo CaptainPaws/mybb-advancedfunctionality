@@ -6,11 +6,14 @@
     window.AFSHOP.postKey = "{$mybb->post_code}";
   </script>
 
+  {$health_block}
+
   <form id="af-manage-category-form" method="post" data-shop="{$shop_code}">
     <input type="text" name="title" id="af-manage-category-title" placeholder="Category title" maxlength="255">
     <input type="number" name="parent_id" placeholder="Parent ID (optional)" min="0">
     <input type="number" name="sortorder" placeholder="Sort order" min="0" value="0">
     <button type="submit" class="af-shop-btn">Create category</button>
+    <button type="button" class="af-shop-btn" id="af-rebuild-sortorder">Rebuild sortorder</button>
     <div id="af-manage-category-status" aria-live="polite"></div>
   </form>
 

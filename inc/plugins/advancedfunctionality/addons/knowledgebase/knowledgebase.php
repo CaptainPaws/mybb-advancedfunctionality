@@ -3060,7 +3060,7 @@ function af_kb_misc_route(): void
     global $mybb;
 
     $action = $mybb->get_input('action');
-    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types'], true)) {
+    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry'], true)) {
         return;
     }
 
@@ -3099,10 +3099,52 @@ function af_kb_misc_route(): void
         af_kb_handle_help();
     }
 
+    if ($action === 'knowledgebase_entry') {
+        af_kb_handle_entry_modal();
+    }
+
     af_kb_handle_view();
 }
 
 /* -------------------- VIEW HANDLERS -------------------- */
+
+function af_kb_handle_entry_modal(): void
+{
+    global $mybb, $db, $lang;
+
+    if (!af_kb_can_view()) {
+        error($lang->af_kb_no_access ?? 'No access.');
+    }
+
+    $id = (int)$mybb->get_input('id', MyBB::INPUT_INT);
+    if ($id <= 0) {
+        error($lang->af_kb_not_found ?? 'Not found');
+    }
+
+    $entry = $db->fetch_array($db->simple_select('af_kb_entries', '*', 'id=' . $id, ['limit' => 1]));
+    if (!$entry) {
+        error($lang->af_kb_not_found ?? 'Not found');
+    }
+
+    $title = af_kb_pick_text($entry, 'title');
+    if ($title === '') {
+        $title = (string)($entry['key'] ?? ('#' . $id));
+    }
+    $short = af_kb_pick_text($entry, 'short');
+    $body = af_kb_parse_message(af_kb_pick_text($entry, 'body'));
+
+    if ((int)$mybb->get_input('ajax', MyBB::INPUT_INT) === 1) {
+        echo '<div class="af-kb-modal-entry">'
+            . '<h1>' . htmlspecialchars_uni($title) . '</h1>'
+            . ($short !== '' ? '<p>' . af_kb_parse_message($short) . '</p>' : '')
+            . '<div>' . $body . '</div>'
+            . '</div>';
+        exit;
+    }
+
+    redirect('misc.php?action=kb&type=' . urlencode((string)$entry['type']) . '&key=' . urlencode((string)$entry['key']));
+}
+
 function af_kb_handle_view(): void
 {
     global $mybb, $db, $lang, $headerinclude, $header, $footer, $theme, $templates;
