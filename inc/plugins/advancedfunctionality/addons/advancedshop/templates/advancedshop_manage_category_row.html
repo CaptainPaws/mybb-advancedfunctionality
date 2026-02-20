@@ -1,7 +1,17 @@
 <tr data-cat-id="{$cat_id}">
   <td>{$cat_id}</td>
-  <td class="af-cat-title">{$cat_title}</td>
-  <td>{$cat_parent}</td>
-  <td>{$cat_sortorder}</td>
-  <td><a class="button" href="{$slots_url}">Slots</a></td>
+  <td><input type="text" class="af-cat-title-input" value="{$cat_title}" maxlength="255"></td>
+  <td><input type="text" class="af-cat-description-input" value="{$cat_description}"></td>
+  <td>
+    <input type="number" class="af-cat-parent-input" min="0" value="{$cat_parent}" title="{$cat_parent_title}">
+  </td>
+  <td>
+    <label><input type="checkbox" class="af-cat-enabled-input" value="1" {$cat_enabled_checked}> Enabled</label>
+  </td>
+  <td><input type="number" class="af-cat-sortorder-input" value="{$cat_sortorder}"></td>
+  <td>
+    <button type="button" class="af-shop-btn af-cat-save">Edit</button>
+    <button type="button" class="af-shop-btn af-cat-delete">Delete</button>
+    <a class="button" href="{$slots_url}">Manage Slots</a>
+  </td>
 </tr>
