@@ -1,0 +1,12 @@
+<div class="af-inventory" data-uid="{$inventory_uid}">
+  <h1>{$lang->af_advancedshop_inventory_title}</h1>
+  <form method="get" action="misc.php">
+    <input type="hidden" name="action" value="inventory">
+    <input type="hidden" name="uid" value="{$inventory_uid}">
+    <input type="text" name="q" value="{$mybb->input['q']}" placeholder="Search">
+    <input type="text" name="rarity" value="{$mybb->input['rarity']}" placeholder="rarity">
+    <input type="text" name="slot_code" value="{$mybb->input['slot_code']}" placeholder="slot_code">
+    <button type="submit">Filter</button>
+  </form>
+  {$inventory_grid}
+</div>

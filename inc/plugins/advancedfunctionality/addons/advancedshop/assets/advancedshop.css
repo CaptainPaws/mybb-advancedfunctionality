@@ -1,0 +1,17 @@
+.af-shop-layout{display:grid;grid-template-columns:240px 1fr;gap:16px}
+.af-shop-cats{display:flex;flex-direction:column;gap:6px}
+.af-shop-cat{display:block;padding:8px 10px;background:#1f1f1f;border-radius:8px}
+.af-shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.af-shop-card{background:#151515;border:1px solid #2c2c2c;border-radius:10px;padding:10px}
+.af-shop-card__icon img{width:64px;height:64px;object-fit:cover}
+.af-shop-btn{padding:7px 10px;border:0;border-radius:8px;cursor:pointer}
+.af-cart-item{display:grid;grid-template-columns:56px 1fr auto;gap:12px;align-items:center;padding:8px;border:1px solid #2c2c2c;border-radius:8px;margin-bottom:8px}
+.af-cart-item img{width:56px;height:56px}
+.af-inventory-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:8px}
+.af-inventory-slot{position:relative;background:#161616;border:2px solid #555;border-radius:8px;aspect-ratio:1/1;padding:4px}
+.af-inventory-slot img{width:100%;height:100%;object-fit:cover}
+.af-inventory-qty{position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.75);padding:1px 4px;border-radius:4px;font-size:11px}
+.af-inventory-tooltip{display:none;position:absolute;left:0;bottom:100%;width:280px;background:#111;border:1px solid #333;padding:8px;z-index:20}
+.af-inventory-slot:hover .af-inventory-tooltip{display:block}
+.rarity-common{border-color:#9aa0a6}.rarity-uncommon{border-color:#5fbf5f}.rarity-rare{border-color:#5f8bff}.rarity-epic{border-color:#b561ff}.rarity-legendary{border-color:#ffb347}
+@media (max-width:800px){.af-shop-layout{grid-template-columns:1fr}}
