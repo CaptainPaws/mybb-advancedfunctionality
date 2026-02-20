@@ -1,1 +1,7 @@
-<a class="af-shop-cat {$activeClass}" href="{$cat_url}">{$cat_title}</a>
+<tr data-cat-id="{$cat_id}">
+  <td>{$cat_id}</td>
+  <td class="af-cat-title">{$cat_title}</td>
+  <td>{$cat_parent}</td>
+  <td>{$cat_sortorder}</td>
+  <td><a class="button" href="{$slots_url}">Slots</a></td>
+</tr>

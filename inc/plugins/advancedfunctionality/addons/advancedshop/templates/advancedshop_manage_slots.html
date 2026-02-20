@@ -1,1 +1,26 @@
-<div id="af-manage-slots"></div>
+<div class="af-manage-slots" data-shop="{$shop_code}" data-cat-id="{$cat_id}">
+  <h1>Manage Slots (Category #{$cat_id})</h1>
+  <input type="hidden" id="af_shop_post_key" value="{$mybb->post_code}">
+  <script>
+    window.AFSHOP = window.AFSHOP || {};
+    window.AFSHOP.postKey = "{$mybb->post_code}";
+  </script>
+
+  <div class="af-manage-slots-toolbar">
+    <button type="button" class="af-shop-btn" id="af-add-slot-btn">Add Slot</button>
+    <button type="button" class="af-shop-btn" id="af-pick-kb-btn">Pick from KB</button>
+    <span id="af-manage-slot-status" aria-live="polite"></span>
+  </div>
+
+  <table class="af-manage-table">
+    <thead>
+      <tr><th>Slot</th><th>KB</th><th>Title</th><th>Price</th></tr>
+    </thead>
+    <tbody id="af-manage-slots-body"></tbody>
+  </table>
+
+  <div id="af-kb-picker" hidden>
+    <input type="text" id="af-kb-picker-q" placeholder="Search KB items">
+    <div id="af-kb-picker-results"></div>
+  </div>
+</div>
