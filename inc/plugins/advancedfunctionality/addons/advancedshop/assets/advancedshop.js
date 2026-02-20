@@ -1,6 +1,12 @@
 (function(){
   function post(url, data){
-    return fetch(url, {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8'}, body:new URLSearchParams(data)}).then(function(r){return r.json();});
+    return fetch(url, {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8'}, body:new URLSearchParams(data)})
+      .then(function(r){
+        return r.text().then(function(text){
+          try { return JSON.parse(text); }
+          catch(err){ return {ok:false, error:'Invalid JSON response'}; }
+        });
+      });
   }
   function key(){
     var el = document.querySelector('input[name="my_post_key"]');
@@ -56,11 +62,19 @@
 
   var categoryForm = document.getElementById('af-manage-category-form');
   if(categoryForm){
+    var statusNode = document.getElementById('af-manage-category-status');
     categoryForm.addEventListener('submit', function(e){
       e.preventDefault();
       var fd = new FormData(categoryForm);
-      fd.append('do', 'create');
-      post('misc.php?action=shop_manage_categories&shop=game', Object.fromEntries(fd.entries())).then(function(r){ if(r.ok){ location.reload(); } });
+      var shop = categoryForm.getAttribute('data-shop') || 'game';
+      post('misc.php?action=shop_manage_category_create&shop=' + encodeURIComponent(shop), Object.fromEntries(fd.entries())).then(function(r){
+        if(r.ok){
+          if(statusNode){ statusNode.textContent = 'Category created'; statusNode.className = 'af-status-ok'; }
+          location.reload();
+          return;
+        }
+        if(statusNode){ statusNode.textContent = r.error || 'Failed to create category'; statusNode.className = 'af-status-error'; }
+      });
     });
   }
 })();
