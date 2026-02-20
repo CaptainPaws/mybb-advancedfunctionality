@@ -8,7 +8,45 @@ define('AF_ADVSHOP_TPL_DIR', AF_ADVSHOP_BASE . 'templates/');
 
 function af_advancedshop_kb_table(): string
 {
-    return TABLE_PREFIX . 'af_kb_entries';
+    $meta = af_advancedshop_kb_schema_meta();
+    return (string)$meta['kb_table'];
+}
+
+function af_advancedshop_kb_schema_meta(): array
+{
+    global $db;
+
+    static $meta = null;
+    if (is_array($meta)) {
+        return $meta;
+    }
+
+    $baseTable = 'af_kb_entries';
+    $prefixedTable = TABLE_PREFIX . $baseTable;
+    $tableCandidates = [$baseTable, $prefixedTable];
+    $kbTable = $prefixedTable;
+    if ($db->table_exists($baseTable)) {
+        $kbTable = $baseTable;
+    } elseif ($db->table_exists($prefixedTable)) {
+        $kbTable = $prefixedTable;
+    }
+
+    $columns = [];
+    $res = $db->query("SHOW COLUMNS FROM " . $kbTable);
+    while ($row = $db->fetch_array($res)) {
+        $fieldName = (string)($row['Field'] ?? '');
+        if ($fieldName !== '') {
+            $columns[] = $fieldName;
+        }
+    }
+
+    $meta = [
+        'kb_table' => $kbTable,
+        'table_candidates' => $tableCandidates,
+        'columns' => $columns,
+    ];
+
+    return $meta;
 }
 
 function af_advancedshop_kb_cols(): array
@@ -20,12 +58,18 @@ function af_advancedshop_kb_cols(): array
         return $cols;
     }
 
-    $table = af_advancedshop_kb_table();
-    $checkTable = strpos($table, TABLE_PREFIX) === 0 ? substr($table, strlen(TABLE_PREFIX)) : $table;
-    $pick = static function (array $candidates) use ($db, $checkTable): ?string {
+    $schema = af_advancedshop_kb_schema_meta();
+    $columns = $schema['columns'] ?? [];
+    $checkTables = $schema['table_candidates'] ?? ['af_kb_entries', TABLE_PREFIX . 'af_kb_entries'];
+    $pick = static function (array $candidates) use ($db, $checkTables, $columns): ?string {
         foreach ($candidates as $candidate) {
-            if ($db->field_exists($candidate, $checkTable)) {
+            if (in_array($candidate, $columns, true)) {
                 return $candidate;
+            }
+            foreach ($checkTables as $checkTable) {
+                if ($db->field_exists($candidate, $checkTable)) {
+                    return $candidate;
+                }
             }
         }
         return null;
@@ -43,7 +87,7 @@ function af_advancedshop_kb_cols(): array
         'short_ru' => $pick(['short_ru']),
         'short_en' => $pick(['short_en']),
         'meta_json' => $pick(['meta_json', 'meta']),
-        'data_json' => $pick(['data_json', 'rules_json', 'data', 'rules', 'content_json']),
+        'data_json' => $pick(['data_json', 'rules_json', 'data', 'rules', 'content_json', 'data_ru', 'data_en', 'data_blob', 'rules_blob', 'json_data']),
         'type' => $pick(['type', 'kb_type']),
         'key' => $pick(['key', 'slug', 'entry_key']),
         'active' => $pick(['active', 'enabled']),
@@ -298,12 +342,12 @@ function af_advancedshop_misc_router(): void
     if (($mybb->input['action'] ?? '') === '') { return; }
 
     $action = (string)$mybb->get_input('action');
-    $routes = ['shop','shop_category','shop_cart','shop_checkout','shop_add_to_cart','shop_update_cart','shop_manage','shop_manage_categories','shop_manage_category_create','shop_manage_category_update','shop_manage_category_delete','shop_manage_sortorder_rebuild','shop_manage_slots','shop_manage_slot_create','shop_manage_slot_update','shop_manage_slot_delete','shop_kb_search','shop_health','inventory'];
+    $routes = ['shop','shop_category','shop_cart','shop_checkout','shop_add_to_cart','shop_update_cart','shop_manage','shop_manage_categories','shop_manage_category_create','shop_manage_category_update','shop_manage_category_delete','shop_manage_sortorder_rebuild','shop_manage_slots','shop_manage_slot_create','shop_manage_slot_update','shop_manage_slot_delete','shop_kb_search','shop_kb_schema','shop_health','inventory'];
     if (!in_array($action, $routes, true)) { return; }
 
-    $apiActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_health'];
+    $apiActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_kb_schema', 'shop_health'];
     $buyActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart'];
-    $manageActions = ['shop_manage', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_health'];
+    $manageActions = ['shop_manage', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_kb_schema', 'shop_health'];
 
     if ((int)($mybb->settings['af_advancedshop_enabled'] ?? 1) !== 1 && $action !== 'inventory') {
         if (in_array($action, $apiActions, true)) { af_advancedshop_json_err('Not allowed', 403); }
@@ -350,6 +394,7 @@ function af_advancedshop_misc_router(): void
             case 'shop_manage_slot_update': af_advancedshop_manage_slot_update(); return;
             case 'shop_manage_slot_delete': af_advancedshop_manage_slot_delete(); return;
             case 'shop_kb_search': af_advancedshop_kb_search(); return;
+            case 'shop_kb_schema': af_advancedshop_kb_schema(); return;
             case 'shop_health': af_advancedshop_health_ping(); return;
             case 'inventory': af_advancedshop_render_inventory(); return;
         }
@@ -658,10 +703,28 @@ function af_advancedshop_build_cart_items(array $cart): array
     global $db;
     $itemsHtml = '';
     $total = 0;
-    $q = $db->query("SELECT ci.*, s.price, s.currency, s.kb_id, e.title_ru, e.title_en, e.meta_json
+    $kbCols = af_advancedshop_kb_cols();
+    $kbIdCol = $kbCols['id'] ?? 'id';
+    $titleRuCol = $kbCols['title_ru'] ?? null;
+    $titleEnCol = $kbCols['title_en'] ?? null;
+    $titleCol = $kbCols['title'] ?? null;
+    $metaCol = $kbCols['meta_json'] ?? null;
+
+    $select = [
+        'ci.*',
+        's.price',
+        's.currency',
+        's.kb_id',
+        ($titleRuCol ? 'e.' . $titleRuCol . ' AS kb_title_ru' : "'' AS kb_title_ru"),
+        ($titleEnCol ? 'e.' . $titleEnCol . ' AS kb_title_en' : "'' AS kb_title_en"),
+        ($titleCol ? 'e.' . $titleCol . ' AS kb_title' : "'' AS kb_title"),
+        ($metaCol ? 'e.' . $metaCol . ' AS kb_meta' : "'' AS kb_meta"),
+    ];
+
+    $q = $db->query("SELECT " . implode(', ', $select) . "
         FROM " . TABLE_PREFIX . "af_shop_cart_items ci
         INNER JOIN " . TABLE_PREFIX . "af_shop_slots s ON(s.slot_id=ci.slot_id)
-        LEFT JOIN " . TABLE_PREFIX . "af_kb_entries e ON(e.id=s.kb_id)
+        LEFT JOIN " . af_advancedshop_kb_table() . " e ON(e." . $kbIdCol . "=s.kb_id)
         WHERE ci.cart_id=" . (int)$cart['cart_id'] . " ORDER BY ci.id ASC");
     while ($row = $db->fetch_array($q)) {
         $item_id = (int)$row['id'];
@@ -670,9 +733,11 @@ function af_advancedshop_build_cart_items(array $cart): array
         $price = (int)$row['price'];
         $sum = $qty * $price;
         $total += $sum;
-        $meta = @json_decode((string)($row['meta_json'] ?? '{}'), true);
+        $meta = @json_decode((string)($row['kb_meta'] ?? '{}'), true);
         $item_icon = htmlspecialchars_uni((string)($meta['ui']['icon_url'] ?? ''));
-        $item_title = htmlspecialchars_uni(af_advancedshop_pick_lang((string)($row['title_ru'] ?? ''), (string)($row['title_en'] ?? '')));
+        $item_title_raw = af_advancedshop_pick_lang((string)($row['kb_title_ru'] ?? ''), (string)($row['kb_title_en'] ?? ''));
+        if ($item_title_raw === '') { $item_title_raw = (string)($row['kb_title'] ?? ''); }
+        $item_title = htmlspecialchars_uni($item_title_raw);
         $price = af_advancedshop_money_format($price);
         $sum = af_advancedshop_money_format($sum);
         $currency_symbol = htmlspecialchars_uni(af_advancedshop_currency_symbol((string)($row['currency'] ?? 'credits')));
@@ -795,16 +860,13 @@ function af_advancedshop_grant_inventory_item(int $uid, int $kbId, int $qty): vo
     $select = [$kbIdCol . ' AS kb_id'];
     if (!empty($kbCols['data_json'])) { $select[] = $kbCols['data_json'] . ' AS kb_data'; }
     else { $select[] = "'' AS kb_data"; }
-    if ($db->field_exists('item_kind', 'af_kb_entries')) {
-        $select[] = 'item_kind';
-    }
     $kb = $db->fetch_array($db->query("SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
     if (!$kb) { return; }
     $profile = af_advancedshop_kb_item_profile($kb);
     $stackMax = max(1, (int)$profile['stack_max']);
     $rarity = (string)$profile['rarity'];
     $slotCode = (string)$profile['slot'];
-    $itemKind = (string)($kb['item_kind'] ?? $profile['item_kind']);
+    $itemKind = (string)$profile['item_kind'];
 
     $left = $qty;
     while ($left > 0) {
@@ -1281,28 +1343,59 @@ function af_advancedshop_render_inventory(): void
     $slotFilter = trim((string)$mybb->get_input('slot_code'));
     $search = trim((string)$mybb->get_input('q'));
 
+    $kbCols = af_advancedshop_kb_cols();
+    $kbIdCol = $kbCols['id'] ?? 'id';
+    $titleRuCol = $kbCols['title_ru'] ?? null;
+    $titleEnCol = $kbCols['title_en'] ?? null;
+    $titleCol = $kbCols['title'] ?? null;
+    $bodyRuCol = $kbCols['body_ru'] ?? null;
+    $bodyEnCol = $kbCols['body_en'] ?? null;
+    $bodyCol = $kbCols['body'] ?? null;
+    $metaCol = $kbCols['meta_json'] ?? null;
+
     $where = 'i.uid=' . $targetUid;
     if ($rarityFilter !== '') { $where .= " AND i.rarity='" . $db->escape_string($rarityFilter) . "'"; }
     if ($slotFilter !== '') { $where .= " AND i.slot_code='" . $db->escape_string($slotFilter) . "'"; }
     if ($search !== '') {
         $s = $db->escape_string($search);
-        $where .= " AND (e.title_ru LIKE '%{$s}%' OR e.title_en LIKE '%{$s}%')";
+        $searchParts = [];
+        foreach (array_filter([$titleRuCol, $titleEnCol, $titleCol]) as $column) {
+            $searchParts[] = 'e.' . $column . " LIKE '%{$s}%'";
+        }
+        if ($searchParts) {
+            $where .= ' AND (' . implode(' OR ', $searchParts) . ')';
+        }
     }
 
+    $select = [
+        'i.*',
+        ($titleRuCol ? 'e.' . $titleRuCol . ' AS kb_title_ru' : "'' AS kb_title_ru"),
+        ($titleEnCol ? 'e.' . $titleEnCol . ' AS kb_title_en' : "'' AS kb_title_en"),
+        ($titleCol ? 'e.' . $titleCol . ' AS kb_title' : "'' AS kb_title"),
+        ($bodyRuCol ? 'e.' . $bodyRuCol . ' AS kb_body_ru' : "'' AS kb_body_ru"),
+        ($bodyEnCol ? 'e.' . $bodyEnCol . ' AS kb_body_en' : "'' AS kb_body_en"),
+        ($bodyCol ? 'e.' . $bodyCol . ' AS kb_body' : "'' AS kb_body"),
+        ($metaCol ? 'e.' . $metaCol . ' AS kb_meta' : "'' AS kb_meta"),
+    ];
+
     $grid = '';
-    $q = $db->query("SELECT i.*, e.title_ru, e.title_en, e.body_ru, e.body_en, e.meta_json
+    $q = $db->query("SELECT " . implode(', ', $select) . "
         FROM " . TABLE_PREFIX . "af_inventory_items i
-        LEFT JOIN " . TABLE_PREFIX . "af_kb_entries e ON(e.id=i.kb_id)
+        LEFT JOIN " . af_advancedshop_kb_table() . " e ON(e." . $kbIdCol . "=i.kb_id)
         WHERE {$where}
         ORDER BY i.updated_at DESC, i.inv_id DESC");
     while ($row = $db->fetch_array($q)) {
         $inv_id = (int)$row['inv_id'];
         $inv_qty = (int)$row['qty'];
-        $inv_title = htmlspecialchars_uni(af_advancedshop_pick_lang((string)$row['title_ru'], (string)$row['title_en']));
-        $meta = @json_decode((string)($row['meta_json'] ?? '{}'), true);
+        $invTitleRaw = af_advancedshop_pick_lang((string)($row['kb_title_ru'] ?? ''), (string)($row['kb_title_en'] ?? ''));
+        if ($invTitleRaw === '') { $invTitleRaw = (string)($row['kb_title'] ?? ''); }
+        $inv_title = htmlspecialchars_uni($invTitleRaw);
+        $meta = @json_decode((string)($row['kb_meta'] ?? '{}'), true);
         $inv_icon = htmlspecialchars_uni((string)($meta['ui']['icon_url'] ?? ''));
         $inv_rarity = htmlspecialchars_uni((string)($row['rarity'] ?? 'common'));
-        $tooltip_body = af_advancedshop_parse_bbcode((string)af_advancedshop_pick_lang((string)$row['body_ru'], (string)$row['body_en']));
+        $bodyRaw = af_advancedshop_pick_lang((string)($row['kb_body_ru'] ?? ''), (string)($row['kb_body_en'] ?? ''));
+        if ($bodyRaw === '') { $bodyRaw = (string)($row['kb_body'] ?? ''); }
+        $tooltip_body = af_advancedshop_parse_bbcode($bodyRaw);
         eval('$grid .= "' . af_advancedshop_tpl('advancedshop_inventory_slot') . '";');
     }
 
@@ -1434,6 +1527,25 @@ function af_advancedshop_manage_sortorder_rebuild(): void
     }
 
     af_advancedshop_json_ok(['rebuilt' => true]);
+}
+
+function af_advancedshop_kb_schema(): void
+{
+    if (!af_advancedshop_can_manage()) { af_advancedshop_json_err('Not allowed', 403); }
+    $schema = af_advancedshop_kb_schema_meta();
+    $cols = af_advancedshop_kb_cols();
+
+    af_advancedshop_json_ok([
+        'kb_table' => (string)($schema['kb_table'] ?? ''),
+        'columns' => array_values($schema['columns'] ?? []),
+        'picked' => [
+            'id' => (string)($cols['id'] ?? ''),
+            'type' => (string)($cols['type'] ?? ''),
+            'key' => (string)($cols['key'] ?? ''),
+            'meta_json' => (string)($cols['meta_json'] ?? ''),
+            'data_json' => (string)($cols['data_json'] ?? ''),
+        ],
+    ]);
 }
 
 function af_advancedshop_health_ping(): void
