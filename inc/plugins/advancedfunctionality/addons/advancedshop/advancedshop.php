@@ -56,9 +56,45 @@ function af_advancedshop_kb_cols(): array
 function af_advancedshop_init(): void
 {
     global $plugins;
+    af_advancedshop_ensure_slots_schema();
     $plugins->add_hook('global_start', 'af_advancedshop_register_routes', 10);
     $plugins->add_hook('misc_start', 'af_advancedshop_misc_router', 10);
     $plugins->add_hook('pre_output_page', 'af_advancedshop_pre_output', 10);
+}
+
+function af_advancedshop_ensure_slots_schema(): void
+{
+    global $db;
+
+    if (!$db->table_exists('af_shop_slots')) {
+        return;
+    }
+
+    if (!$db->field_exists('kb_type', 'af_shop_slots')) {
+        $db->write_query("ALTER TABLE " . TABLE_PREFIX . "af_shop_slots ADD COLUMN kb_type VARCHAR(32) NOT NULL DEFAULT 'item' AFTER cat_id");
+    }
+    if (!$db->field_exists('kb_key', 'af_shop_slots')) {
+        $db->write_query("ALTER TABLE " . TABLE_PREFIX . "af_shop_slots ADD COLUMN kb_key VARCHAR(128) NOT NULL DEFAULT '' AFTER kb_id");
+    }
+
+    $kbCols = af_advancedshop_kb_cols();
+    $kbIdCol = $kbCols['id'] ?? '';
+    $kbTypeCol = $kbCols['type'] ?? '';
+    $kbKeyCol = $kbCols['key'] ?? '';
+    if ($kbIdCol === '' || $kbTypeCol === '' || $kbKeyCol === '') {
+        return;
+    }
+
+    $safeTypeCol = $kbTypeCol === 'type' ? '`type`' : $kbTypeCol;
+    $safeKeyCol = $kbKeyCol === 'key' ? '`key`' : $kbKeyCol;
+    $db->write_query(
+        "UPDATE " . TABLE_PREFIX . "af_shop_slots s
+        INNER JOIN " . af_advancedshop_kb_table() . " e ON(e." . $kbIdCol . "=s.kb_id)
+        SET s.kb_type=COALESCE(NULLIF(e." . $safeTypeCol . ", ''), s.kb_type),
+            s.kb_key=COALESCE(NULLIF(e." . $safeKeyCol . ", ''), s.kb_key)
+        WHERE s.kb_key='' OR s.kb_type=''
+        "
+    );
 }
 
 function af_advancedshop_register_routes(): void
@@ -113,6 +149,7 @@ function af_advancedshop_install(): void
             cat_id INT UNSIGNED NOT NULL,
             kb_type VARCHAR(32) NOT NULL DEFAULT 'item',
             kb_id INT UNSIGNED NOT NULL,
+            kb_key VARCHAR(128) NOT NULL DEFAULT '',
             price INT NOT NULL DEFAULT 0,
             currency VARCHAR(32) NOT NULL DEFAULT 'credits',
             stock INT NOT NULL DEFAULT -1,
@@ -209,6 +246,7 @@ function af_advancedshop_install(): void
     }
 
     af_advancedshop_templates_install_or_update();
+    af_advancedshop_ensure_slots_schema();
     if (function_exists('rebuild_settings')) { rebuild_settings(); }
 }
 
@@ -227,6 +265,7 @@ function af_advancedshop_activate(): void
     af_advancedshop_ensure_setting('af_advancedshop_currency_slug', $lang->af_advancedshop_currency_slug ?? 'Currency', $lang->af_advancedshop_currency_slug_desc ?? 'credits', 'text', 'credits', 3, $gid);
     af_advancedshop_ensure_setting('af_advancedshop_items_per_page', 'Items per page', 'Shop page size', 'numeric', '24', 4, $gid);
     af_advancedshop_ensure_setting('af_advancedshop_allow_guest_view', 'Allow guest view', 'Guests may browse the shop', 'yesno', '1', 5, $gid);
+    af_advancedshop_ensure_slots_schema();
     af_advancedshop_templates_install_or_update();
     if (function_exists('rebuild_settings')) { rebuild_settings(); }
 }
@@ -469,6 +508,8 @@ function af_advancedshop_render_shop(): void
     if ($catId > 0) { $where .= ' AND s.cat_id=' . $catId; }
     $kbCols = af_advancedshop_kb_cols();
     $kbIdCol = $kbCols['id'] ?? 'id';
+    $slotHasKbType = $db->field_exists('kb_type', 'af_shop_slots');
+    $slotHasKbKey = $db->field_exists('kb_key', 'af_shop_slots');
     $kbSelect = ['e.' . $kbIdCol . ' AS kb_id'];
     if (!empty($kbCols['title_ru'])) { $kbSelect[] = 'e.' . $kbCols['title_ru'] . ' AS kb_title_ru'; }
     if (!empty($kbCols['title_en'])) { $kbSelect[] = 'e.' . $kbCols['title_en'] . ' AS kb_title_en'; }
@@ -483,6 +524,8 @@ function af_advancedshop_render_shop(): void
     if (!empty($kbCols['data_json'])) { $kbSelect[] = 'e.' . $kbCols['data_json'] . ' AS kb_data'; }
     if (!empty($kbCols['type'])) { $kbSelect[] = 'e.' . ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS kb_type'; }
     if (!empty($kbCols['key'])) { $kbSelect[] = 'e.' . ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS kb_key'; }
+    if ($slotHasKbType) { $kbSelect[] = 's.kb_type AS slot_kb_type'; }
+    if ($slotHasKbKey) { $kbSelect[] = 's.kb_key AS slot_kb_key'; }
     $qSlots = $db->query("SELECT s.*, " . implode(', ', $kbSelect) . "
         FROM " . TABLE_PREFIX . "af_shop_slots s
         LEFT JOIN " . af_advancedshop_kb_table() . " e ON(e." . $kbIdCol . "=s.kb_id)
@@ -511,6 +554,10 @@ function af_advancedshop_render_shop(): void
         $slot_rarity = htmlspecialchars_uni($slot_rarity_value);
         $slot_rarity_label = htmlspecialchars_uni(af_advancedshop_rarity_label($slot_rarity_value));
         $slot_kb_id = (int)$slot['kb_id'];
+        $slot_kb_type = (string)($slot['slot_kb_type'] ?? ($slot['kb_type'] ?? 'item'));
+        if ($slot_kb_type === '') { $slot_kb_type = 'item'; }
+        $slot_kb_key = (string)($slot['slot_kb_key'] ?? ($slot['kb_key'] ?? ''));
+        $slot_kb_url = htmlspecialchars_uni(af_advancedshop_kb_entry_url($slot_kb_id, $slot_kb_type, $slot_kb_key));
         eval('$slotsHtml .= "' . af_advancedshop_tpl('advancedshop_product_card') . '";');
     }
 
@@ -999,6 +1046,10 @@ function af_advancedshop_manage_slots(): void
         if (!empty($kbCols['title_en'])) { $titleSelect[] = 'e.' . $kbCols['title_en'] . ' AS kb_title_en'; }
         if (empty($titleSelect) && !empty($kbCols['title'])) { $titleSelect[] = 'e.' . $kbCols['title'] . ' AS kb_title'; }
         if (!empty($kbCols['meta_json'])) { $titleSelect[] = 'e.' . $kbCols['meta_json'] . ' AS kb_meta'; }
+        if (!empty($kbCols['type'])) { $titleSelect[] = 'e.' . ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS kb_type'; }
+        if (!empty($kbCols['key'])) { $titleSelect[] = 'e.' . ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS kb_key'; }
+        if ($db->field_exists('kb_type', 'af_shop_slots')) { $titleSelect[] = 's.kb_type AS slot_kb_type'; }
+        if ($db->field_exists('kb_key', 'af_shop_slots')) { $titleSelect[] = 's.kb_key AS slot_kb_key'; }
         if (!empty($kbCols['data_json'])) { $titleSelect[] = 'e.' . $kbCols['data_json'] . ' AS kb_data'; }
         if (!$titleSelect) { $titleSelect[] = "'' AS kb_title"; }
         $q = $db->query("SELECT s.*, " . implode(', ', $titleSelect) . " FROM " . TABLE_PREFIX . "af_shop_slots s
@@ -1012,6 +1063,8 @@ function af_advancedshop_manage_slots(): void
             $rows[] = [
                 'slot_id' => (int)$r['slot_id'],
                 'kb_id' => (int)$r['kb_id'],
+                'kb_type' => (string)($r['slot_kb_type'] ?? ($r['kb_type'] ?? 'item')),
+                'kb_key' => (string)($r['slot_kb_key'] ?? ($r['kb_key'] ?? '')),
                 'title' => $title,
                 'icon_url' => (string)($meta['ui']['icon_url'] ?? ''),
                 'rarity' => af_advancedshop_extract_rarity($data),
@@ -1038,6 +1091,9 @@ function af_advancedshop_manage_slot_create(): void
 
     $catId = (int)$mybb->get_input('cat_id');
     $kbId = (int)$mybb->get_input('kb_id');
+    $kbType = trim((string)$mybb->get_input('kb_type'));
+    $kbKey = trim((string)$mybb->get_input('kb_key'));
+    if ($kbType === '') { $kbType = 'item'; }
     if ($catId <= 0 || $kbId <= 0) { af_advancedshop_json_err('cat_id and kb_id required', 422); }
 
     $cat = $db->fetch_array($db->simple_select('af_shop_categories', 'cat_id', 'cat_id=' . $catId . ' AND shop_id=' . (int)$shop['shop_id'], ['limit' => 1]));
@@ -1051,8 +1107,9 @@ function af_advancedshop_manage_slot_create(): void
     $slotId = (int)$db->insert_query('af_shop_slots', [
         'shop_id' => (int)$shop['shop_id'],
         'cat_id' => $catId,
-        'kb_type' => 'item',
+        'kb_type' => $db->escape_string($kbType),
         'kb_id' => $kbId,
+        'kb_key' => $db->escape_string($kbKey),
         'price' => $priceMinor,
         'currency' => $db->escape_string((string)($mybb->get_input('currency') ?: $mybb->settings['af_advancedshop_currency_slug'])),
         'stock' => (int)$mybb->get_input('stock', MyBB::INPUT_INT),
@@ -1066,6 +1123,8 @@ function af_advancedshop_manage_slot_create(): void
         'slot_id' => $slotId,
         'cat_id' => $catId,
         'kb_id' => $kbId,
+        'kb_type' => $kbType,
+        'kb_key' => $kbKey,
         'price' => $priceMinor,
         'price_major' => af_advancedshop_money_format($priceMinor),
         'currency' => (string)($mybb->get_input('currency') ?: $mybb->settings['af_advancedshop_currency_slug']),
@@ -1102,6 +1161,8 @@ function af_advancedshop_manage_slot_update(): void
         'slot_id' => $slotId,
         'cat_id' => (int)$slot['cat_id'],
         'kb_id' => (int)$slot['kb_id'],
+        'kb_type' => (string)($slot['kb_type'] ?? 'item'),
+        'kb_key' => (string)($slot['kb_key'] ?? ''),
         'price' => (int)$update['price'],
         'price_major' => af_advancedshop_money_format((int)$update['price']),
         'currency' => (string)($mybb->get_input('currency') ?: $slot['currency']),
@@ -1136,6 +1197,8 @@ function af_advancedshop_kb_search(): void
     $shortRuCol = $kbCols['short_ru'] ?? null;
     $shortEnCol = $kbCols['short_en'] ?? null;
     $shortCol = $kbCols['short'] ?? null;
+    $typeCol = $kbCols['type'] ?? null;
+    $keyCol = $kbCols['key'] ?? null;
     $q = trim((string)$mybb->get_input('q'));
     $escaped = $db->escape_string($q);
     $where = '1=1';
@@ -1164,6 +1227,8 @@ function af_advancedshop_kb_search(): void
         ($shortEnCol ? $shortEnCol . ' AS kb_short_en' : "'' AS kb_short_en"),
         ($shortCol ? $shortCol . ' AS kb_short' : "'' AS kb_short"),
         (!empty($kbCols['meta_json']) ? $kbCols['meta_json'] . ' AS kb_meta' : "'' AS kb_meta"),
+        ($typeCol ? (($typeCol === 'type' ? '`type`' : $typeCol) . ' AS kb_type') : "'item' AS kb_type"),
+        ($keyCol ? (($keyCol === 'key' ? '`key`' : $keyCol) . ' AS kb_key') : "'' AS kb_key"),
     ];
     if (!empty($kbCols['data_json'])) {
         $select[] = $kbCols['data_json'] . ' AS kb_data';
@@ -1181,6 +1246,8 @@ function af_advancedshop_kb_search(): void
         if ($short === '') { $short = (string)($row['kb_short'] ?? ''); }
         $items[] = [
             'kb_id' => (int)$row['kb_id'],
+            'kb_type' => (string)($row['kb_type'] ?? 'item'),
+            'kb_key' => (string)($row['kb_key'] ?? ''),
             'title' => $title,
             'icon_url' => (string)($meta['ui']['icon_url'] ?? ''),
             'rarity' => af_advancedshop_extract_rarity($data),

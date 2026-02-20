@@ -3245,6 +3245,7 @@ function af_kb_handle_view(): void
     $type = trim((string)$mybb->get_input('type'));
     $key = trim((string)$mybb->get_input('key'));
     $query = trim((string)$mybb->get_input('q'));
+    $isAjax = (int)$mybb->get_input('ajax', MyBB::INPUT_INT) === 1;
 
     if ($type === '') {
         if (function_exists('add_breadcrumb')) {
@@ -3644,6 +3645,12 @@ function af_kb_handle_view(): void
     $kb_body_style = af_kb_build_body_bg_style($bodyBgUrl);
     $af_kb_content = '';
     eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_view') . "\";");
+
+    if ($isAjax) {
+        echo $af_kb_content;
+        exit;
+    }
+
     eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
     output_page($page);
     exit;
@@ -4599,6 +4606,7 @@ function af_kb_handle_json_list(): void
     }
 
     $query = trim((string)$mybb->get_input('q'));
+    $isAjax = (int)$mybb->get_input('ajax', MyBB::INPUT_INT) === 1;
     $where = "type='".$db->escape_string($type)."'";
     if (!af_kb_can_edit()) {
         $where .= ' AND active=1';

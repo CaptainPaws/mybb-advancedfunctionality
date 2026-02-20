@@ -158,6 +158,8 @@
       post('misc.php?action=shop_manage_slot_create&shop=' + encodeURIComponent(shop6), {
         cat_id: catId,
         kb_id: kbItem.getAttribute('data-kb-id'),
+        kb_type: kbItem.getAttribute('data-kb-type') || 'item',
+        kb_key: kbItem.getAttribute('data-kb-key') || '',
         price: 0,
         currency: 'credits',
         stock: -1,
@@ -256,7 +258,7 @@
           if(!resNode){ return; }
           if(!r.ok){ resNode.textContent = r.error || 'Search failed'; return; }
           resNode.innerHTML = (r.items || []).map(function(item){
-            return '<div class="af-kb-item"><span>#'+item.kb_id+' '+escapeHtml(item.title || '')+' ['+escapeHtml(item.rarity || 'common')+']</span> <button class="af-kb-pick-item" data-kb-id="'+item.kb_id+'" type="button">Select</button></div>';
+            return '<div class="af-kb-item"><span>#'+item.kb_id+' '+escapeHtml(item.title || '')+' ['+escapeHtml(item.rarity || 'common')+']</span> <button class="af-kb-pick-item" data-kb-id="'+item.kb_id+'" data-kb-type="'+escapeHtml(item.kb_type || 'item')+'" data-kb-key="'+escapeHtml(item.kb_key || '')+'" type="button">Select</button></div>';
           }).join('');
         });
       });
@@ -302,11 +304,29 @@
       frame.setAttribute('src', '');
     }
 
-    function openModal(kbId){
-      if(!kbId){ return; }
-      frame.setAttribute('src', 'misc.php?action=knowledgebase_entry&id=' + encodeURIComponent(kbId) + '&ajax=1');
+    function openModal(url){
+      if(!url){ return; }
+      frame.setAttribute('src', url);
       modal.hidden = false;
       modal.classList.add('is-active');
+    }
+
+    function buildKbUrl(openTrigger){
+      var kbType = (openTrigger.getAttribute('data-kb-type') || '').trim();
+      var kbKey = (openTrigger.getAttribute('data-kb-key') || '').trim();
+      if(kbType && kbKey){
+        return 'misc.php?action=kb&type=' + encodeURIComponent(kbType) + '&key=' + encodeURIComponent(kbKey) + '&ajax=1';
+      }
+
+      var kbId = (openTrigger.getAttribute('data-kb-id') || '').trim();
+      if(kbId){
+        return 'misc.php?action=knowledgebase_entry&id=' + encodeURIComponent(kbId) + '&ajax=1';
+      }
+
+      if(window.afShopToast){
+        window.afShopToast('Запись KB не найдена (нет key)', 'error');
+      }
+      return '';
     }
 
     document.addEventListener('click', function(event){
@@ -317,8 +337,9 @@
         if(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 
         event.preventDefault();
-        var kbId = openTrigger.getAttribute('data-kb-id') || '0';
-        openModal(kbId);
+        var kbUrl = buildKbUrl(openTrigger);
+        if(!kbUrl){ return; }
+        openModal(kbUrl);
         return;
       }
 
