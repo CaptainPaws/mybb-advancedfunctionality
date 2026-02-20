@@ -4,9 +4,11 @@
     <a class="button" href="misc.php?action=shop_manage_slots&amp;shop={$shop_code}">Slots API</a>
     <a class="button" href="misc.php?action=shop_kb_search&amp;shop={$shop_code}">KB API</a>
   </div>
-  <form id="af-manage-category-form" method="post">
+  <form id="af-manage-category-form" method="post" data-shop="{$shop_code}">
     <input type="hidden" name="my_post_key" value="{$mybb->post_code}">
-    <input type="text" name="title" placeholder="Category title">
+    <input type="text" name="name" placeholder="Category title">
+    <input type="number" name="parent_id" placeholder="Parent ID (optional)">
     <button type="submit" class="af-shop-btn">Create category</button>
+    <div id="af-manage-category-status" aria-live="polite"></div>
   </form>
 </div>
