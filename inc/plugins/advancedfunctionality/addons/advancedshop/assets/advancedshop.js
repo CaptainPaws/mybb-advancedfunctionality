@@ -240,7 +240,6 @@
     });
   }
 
-  initKbModal();
   runHealthCheck();
 
   var slotsRoot = document.querySelector('.af-manage-slots[data-shop]');
@@ -287,78 +286,6 @@
           + '<div><button type="button" class="af-shop-btn af-slot-save">Save</button> <button type="button" class="af-shop-btn af-slot-delete">Delete</button></div>'
           + '</div>';
       }).join('');
-    });
-  }
-
-  function initKbModal(){
-    if(window.__afShopKbModalBound){ return; }
-    window.__afShopKbModalBound = true;
-
-    var modal = document.querySelector('[data-afkb-modal]');
-    var frame = document.querySelector('[data-afkb-frame]');
-    if(!modal || !frame){ return; }
-
-    function closeModal(){
-      modal.classList.remove('is-active');
-      modal.hidden = true;
-      frame.setAttribute('src', '');
-    }
-
-    function openModal(url){
-      if(!url){ return; }
-      frame.setAttribute('src', url);
-      modal.hidden = false;
-      modal.classList.add('is-active');
-    }
-
-    function buildKbUrl(openTrigger){
-      var kbType = (openTrigger.getAttribute('data-kb-type') || '').trim();
-      var kbKey = (openTrigger.getAttribute('data-kb-key') || '').trim();
-      if(kbType && kbKey){
-        return 'misc.php?action=kb&type=' + encodeURIComponent(kbType) + '&key=' + encodeURIComponent(kbKey) + '&ajax=1';
-      }
-
-      var kbId = (openTrigger.getAttribute('data-kb-id') || '').trim();
-      if(kbId){
-        return 'misc.php?action=knowledgebase_entry&id=' + encodeURIComponent(kbId) + '&ajax=1';
-      }
-
-      if(window.afShopToast){
-        window.afShopToast('Запись KB не найдена (нет key)', 'error');
-      }
-      return '';
-    }
-
-    document.addEventListener('click', function(event){
-      var openTrigger = event.target && event.target.closest ? event.target.closest('[data-afkb-open="1"]') : null;
-      if(openTrigger){
-        if(event.defaultPrevented) return;
-        if(typeof event.button === 'number' && event.button !== 0) return;
-        if(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-
-        event.preventDefault();
-        var kbUrl = buildKbUrl(openTrigger);
-        if(!kbUrl){ return; }
-        openModal(kbUrl);
-        return;
-      }
-
-      var closeTrigger = event.target && event.target.closest ? event.target.closest('[data-afkb-close="1"]') : null;
-      if(closeTrigger){
-        event.preventDefault();
-        closeModal();
-        return;
-      }
-
-      if(event.target === modal){
-        closeModal();
-      }
-    });
-
-    document.addEventListener('keydown', function(event){
-      if(event.key === 'Escape' && modal.classList.contains('is-active')){
-        closeModal();
-      }
     });
   }
 
