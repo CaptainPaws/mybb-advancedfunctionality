@@ -53,9 +53,12 @@
   function openModal(url) {
     if (!url) return;
 
-    var mf = ensureModal();
     var loadUrl = String(url);
+    if (/action=af_charactersheet_api|action=cs_.*_ajax/i.test(loadUrl)) {
+      return;
+    }
 
+    var mf = ensureModal();
     if (loadUrl.indexOf('ajax=1') === -1) {
       loadUrl += (loadUrl.indexOf('?') === -1 ? '?' : '&') + 'ajax=1';
     }
@@ -225,11 +228,11 @@
       var postKey = sheet.getAttribute('data-afcs-post-key');
 
       function ensureInlineErrorNode() {
-        var node = sheet.querySelector('[data-afcs-inline-error]');
+        var node = sheet.querySelector('[data-afcs-error]') || sheet.querySelector('[data-afcs-inline-error]');
         if (node) return node;
         node = document.createElement('div');
         node.className = 'af-cs-inline-error';
-        node.setAttribute('data-afcs-inline-error', '1');
+        node.setAttribute('data-afcs-error', '1');
         sheet.insertBefore(node, sheet.firstChild);
         return node;
       }
@@ -237,74 +240,47 @@
       function showInlineError(message) {
         var node = ensureInlineErrorNode();
         node.textContent = String(message || 'Ошибка запроса');
+        node.hidden = false;
       }
 
       function clearInlineError() {
-        var node = sheet.querySelector('[data-afcs-inline-error]');
+        var node = sheet.querySelector('[data-afcs-error]') || sheet.querySelector('[data-afcs-inline-error]');
         if (!node) return;
         node.textContent = '';
+        node.hidden = true;
+      }
+
+      function showToast(message) {
+        var node = sheet.querySelector('[data-afcs-toast]');
+        if (!node) return;
+        node.textContent = String(message || 'Готово');
+        node.hidden = false;
+        if (node.__afHideTimer) {
+          clearTimeout(node.__afHideTimer);
+        }
+        node.__afHideTimer = setTimeout(function () {
+          node.hidden = true;
+          node.textContent = '';
+        }, 1800);
+      }
+
+      function responseError(payload, fallback) {
+        if (!payload || typeof payload !== 'object') return fallback || 'Ошибка запроса';
+        var raw = payload.errors || payload.error || fallback || 'Ошибка запроса';
+        if (Array.isArray(raw)) return raw.join(', ');
+        return String(raw);
+      }
+
+      function isErrorPayload(payload) {
+        if (!payload || typeof payload !== 'object') return true;
+        if (payload.success === false) return true;
+        if (Object.prototype.hasOwnProperty.call(payload, 'ok') && payload.ok === false) return true;
+        return false;
       }
 
       function getInt(val, def) {
         var n = parseInt(String(val || ''), 10);
         return isNaN(n) ? (def || 0) : n;
-      }
-
-      function stripTags(s) {
-        return String(s || '')
-          .replace(/<script[\s\S]*?<\/script>/gi, '')
-          .replace(/<style[\s\S]*?<\/style>/gi, '')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-      }
-
-      function safeUserMessage(raw, fallback) {
-        var t = String(raw || '').trim();
-        if (!t) return fallback || 'Ошибка запроса';
-
-        var cleaned = stripTags(t);
-        if (/af_assets_begin|<link|<script|<!doctype|<html/i.test(t)) {
-          cleaned = cleaned || 'Сервер вернул HTML вместо JSON. Проверь инъекцию ассетов для ajax=1.';
-        }
-        if (cleaned.length > 320) cleaned = cleaned.slice(0, 320) + '…';
-        return cleaned;
-      }
-
-      function extractJsonFromMixed(text) {
-        var s = String(text || '');
-        try { return JSON.parse(s); } catch (e) {}
-
-        var start = s.indexOf('{');
-        if (start === -1) return null;
-
-        var i = start;
-        var depth = 0;
-        var inStr = false;
-        var esc = false;
-
-        for (; i < s.length; i++) {
-          var ch = s.charAt(i);
-
-          if (inStr) {
-            if (esc) { esc = false; continue; }
-            if (ch === '\\') { esc = true; continue; }
-            if (ch === '"') { inStr = false; continue; }
-            continue;
-          }
-
-          if (ch === '"') { inStr = true; continue; }
-
-          if (ch === '{') { depth++; continue; }
-          if (ch === '}') {
-            depth--;
-            if (depth === 0) {
-              var candidate = s.slice(start, i + 1);
-              try { return JSON.parse(candidate); } catch (e2) { return null; }
-            }
-          }
-        }
-        return null;
       }
 
       function afCsAjax(action, payload) {
@@ -335,21 +311,16 @@
           method: 'POST',
           credentials: 'same-origin',
           headers: {
-            'Accept': 'application/json, text/plain, */*',
+            'Accept': 'application/json',
             'X-Requested-With': 'XMLHttpRequest'
           },
           body: data
         }).then(function (resp) {
-          return resp.text().then(function (text) {
+          return resp.json().catch(function () {
+            throw new Error('Некорректный ответ сервера');
+          }).then(function (payloadObj) {
             if (!resp.ok) {
-              console.error('[AF CS] HTTP error response:', resp.status, text);
-              throw new Error(safeUserMessage(text, 'HTTP ' + resp.status));
-            }
-
-            var payloadObj = extractJsonFromMixed(text);
-            if (!payloadObj) {
-              console.error('[AF CS] Non-JSON response:', text);
-              throw new Error(safeUserMessage(text, 'Некорректный ответ сервера'));
+              throw new Error(responseError(payloadObj, 'HTTP ' + resp.status));
             }
             return payloadObj;
           });
@@ -750,15 +721,16 @@
         });
 
         afCsAjax('save_attributes', { allocations: allocations }).then(function (payload) {
-          if (!payload.success) {
+          if (isErrorPayload(payload)) {
             if (errorNode) {
-              errorNode.textContent = (payload.errors || payload.error || 'Ошибка сохранения').toString();
+              errorNode.textContent = responseError(payload, 'Ошибка сохранения');
               errorNode.hidden = false;
             }
             return;
           }
           closeAttributeConfirmModal();
-          applyViewUpdate(payload);
+            clearInlineError();
+            applyViewUpdate(payload);
           closeAttributesEditorAfterSave();
         });
       }
@@ -787,11 +759,12 @@
         if (!skillKey || Number.isNaN(skill_rank)) return;
 
         afCsAjax('cs_skill_set_rank', { skill_key: skillKey, skill_rank: skill_rank }).then(function (payload) {
-          if (!payload.success) {
-            showInlineError((payload.errors || payload.error || 'Ошибка сохранения').toString());
+          if (isErrorPayload(payload)) {
+            showInlineError(responseError(payload, 'Ошибка сохранения'));
             return;
           }
-          applyViewUpdate(payload);
+            clearInlineError();
+            applyViewUpdate(payload);
         });
       });
 
@@ -859,8 +832,8 @@
           var redirect = deleteButton.getAttribute('data-afcs-delete-redirect') || '';
 
           afCsAjax('delete_sheet', { reason: reason, redirect: redirect }).then(function (payload) {
-            if (!payload.success) {
-              showInlineError((payload.error || payload.errors || 'Ошибка удаления').toString());
+            if (isErrorPayload(payload)) {
+              showInlineError(responseError(payload, 'Ошибка удаления'));
               return;
             }
             if (payload.redirect) window.location.href = payload.redirect;
@@ -917,11 +890,13 @@
         if (resetAttrs) {
           event.preventDefault();
           afCsAjax('reset_attributes', {}).then(function (payload) {
-            if (!payload.success) {
-              showInlineError((payload.error || 'Ошибка сброса').toString());
+            if (isErrorPayload(payload)) {
+              showInlineError(responseError(payload, 'Ошибка сброса'));
               return;
             }
+            clearInlineError();
             applyViewUpdate(payload);
+            showToast('Сброс выполнен');
           });
           return;
         }
@@ -930,11 +905,13 @@
         if (resetSkills) {
           event.preventDefault();
           afCsAjax('reset_skills', {}).then(function (payload) {
-            if (!payload.success) {
-              showInlineError((payload.error || 'Ошибка сброса').toString());
+            if (isErrorPayload(payload)) {
+              showInlineError(responseError(payload, 'Ошибка сброса'));
               return;
             }
+            clearInlineError();
             applyViewUpdate(payload);
+            showToast('Сброс выполнен');
           });
           return;
         }
@@ -953,10 +930,11 @@
           var choiceValue = values.length > 1 ? values.join(',') : (values[0] || '');
 
           afCsAjax('save_choice', { choice_key: choiceKey, choice_value: choiceValue }).then(function (payload) {
-            if (!payload.success) {
-              showInlineError((payload.error || 'Ошибка сохранения').toString());
+            if (isErrorPayload(payload)) {
+              showInlineError(responseError(payload, 'Ошибка сохранения'));
               return;
             }
+            clearInlineError();
             applyViewUpdate(payload);
           });
           return;
@@ -990,11 +968,13 @@
           var buyKey = skillBuy.getAttribute('data-skill-key');
           if (buyKey) {
             afCsAjax('buy_skill', { skill_key: buyKey }).then(function (payload) {
-              if (!payload.success) {
-                showInlineError((payload.errors || payload.error || 'Ошибка сохранения').toString());
+              if (isErrorPayload(payload)) {
+                showInlineError(responseError(payload, 'Ошибка сохранения'));
                 return;
               }
+              clearInlineError();
               applyViewUpdate(payload);
+              showToast('Навык обновлён');
             });
           }
           return;
@@ -1006,11 +986,13 @@
           var unbuyKey = skillUnbuy.getAttribute('data-skill-key');
           if (unbuyKey) {
             afCsAjax('cs_skill_unbuy', { skill_key: unbuyKey }).then(function (payload) {
-              if (!payload.success) {
-                showInlineError((payload.errors || payload.error || 'Ошибка сохранения').toString());
+              if (isErrorPayload(payload)) {
+                showInlineError(responseError(payload, 'Ошибка сохранения'));
                 return;
               }
+              clearInlineError();
               applyViewUpdate(payload);
+              showToast('Навык обновлён');
             });
           }
           return;
@@ -1024,10 +1006,11 @@
           var keyK = selectK ? selectK.value : '';
           if (type && keyK) {
             afCsAjax('add_knowledge', { type: type, key: keyK }).then(function (payload) {
-              if (!payload.success) {
-                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
+              if (isErrorPayload(payload)) {
+                showInlineError(responseError(payload, 'Ошибка сохранения'));
                 return;
               }
+              clearInlineError();
               applyViewUpdate(payload);
             });
           }
@@ -1041,10 +1024,11 @@
           var keyRemove = knowledgeRemove.getAttribute('data-afcs-knowledge-key');
           if (typeRemove && keyRemove) {
             afCsAjax('remove_knowledge', { type: typeRemove, key: keyRemove }).then(function (payload) {
-              if (!payload.success) {
-                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
+              if (isErrorPayload(payload)) {
+                showInlineError(responseError(payload, 'Ошибка сохранения'));
                 return;
               }
+              clearInlineError();
               applyViewUpdate(payload);
             });
           }
@@ -1063,10 +1047,11 @@
               key: abilityKey,
               equipped: abilityEquipped === '1' ? 1 : 0
             }).then(function (payload) {
-              if (!payload.success) {
-                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
+              if (isErrorPayload(payload)) {
+                showInlineError(responseError(payload, 'Ошибка сохранения'));
                 return;
               }
+              clearInlineError();
               applyViewUpdate(payload);
             });
           }
@@ -1085,10 +1070,11 @@
               key: itemKey,
               equipped: itemEquipped === '1' ? 1 : 0
             }).then(function (payload) {
-              if (!payload.success) {
-                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
+              if (isErrorPayload(payload)) {
+                showInlineError(responseError(payload, 'Ошибка сохранения'));
                 return;
               }
+              clearInlineError();
               applyViewUpdate(payload);
             });
           }
@@ -1113,10 +1099,11 @@
               type: augType,
               key: augKey
             }).then(function (payload) {
-              if (!payload.success) {
-                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
+              if (isErrorPayload(payload)) {
+                showInlineError(responseError(payload, 'Ошибка сохранения'));
                 return;
               }
+              clearInlineError();
               applyViewUpdate(payload);
             });
           }
@@ -1130,10 +1117,11 @@
           var augKey = augUnequip.getAttribute('data-afcs-augmentation-key');
           if (augSlotKey) {
             afCsAjax('unequip_augmentation', { slot: augSlotKey, key: augKey || '' }).then(function (payload) {
-              if (!payload.success) {
-                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
+              if (isErrorPayload(payload)) {
+                showInlineError(responseError(payload, 'Ошибка сохранения'));
                 return;
               }
+              clearInlineError();
               applyViewUpdate(payload);
             });
           }
@@ -1157,10 +1145,11 @@
               type: eqType,
               key: eqKey
             }).then(function (payload) {
-              if (!payload.success) {
-                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
+              if (isErrorPayload(payload)) {
+                showInlineError(responseError(payload, 'Ошибка сохранения'));
                 return;
               }
+              clearInlineError();
               applyViewUpdate(payload);
             });
           }
@@ -1173,10 +1162,11 @@
           var eqSlotKey = equipUnequip.getAttribute('data-afcs-equipment-slot');
           if (eqSlotKey) {
             afCsAjax('unequip_equipment', { slot: eqSlotKey }).then(function (payload) {
-              if (!payload.success) {
-                showInlineError((payload.error || payload.errors || 'Ошибка сохранения').toString());
+              if (isErrorPayload(payload)) {
+                showInlineError(responseError(payload, 'Ошибка сохранения'));
                 return;
               }
+              clearInlineError();
               applyViewUpdate(payload);
             });
           }
@@ -1215,8 +1205,8 @@
         };
 
         afCsAjax('grant_exp', payloadBase).then(function (payload) {
-          if (!payload || !payload.success) {
-            showInlineError((payload && (payload.error || payload.errors) ? (payload.error || payload.errors) : 'Ошибка начисления').toString());
+          if (isErrorPayload(payload)) {
+            showInlineError(responseError(payload, 'Ошибка начисления'));
             return;
           }
 
@@ -1224,6 +1214,7 @@
           if (reasonEl) reasonEl.value = '';
 
           applyManualAwardSnapshot(payload);
+          showToast('Готово');
 
           var awardPanel = sheet.querySelector('[data-afcs-award-panel]');
           if (awardPanel) {
