@@ -9,7 +9,11 @@ define('AF_ADVSHOP_TPL_DIR', AF_ADVSHOP_BASE . 'templates/');
 function af_advancedshop_kb_table(): string
 {
     $meta = af_advancedshop_kb_schema_meta();
-    return (string)$meta['kb_table'];
+    if (!empty($meta['kb_table_sql'])) {
+        return (string)$meta['kb_table_sql'];
+    }
+    // последний фолбэк (стандартное имя)
+    return TABLE_PREFIX . 'af_kb_entries';
 }
 
 function af_advancedshop_kb_schema_meta(): array
@@ -21,38 +25,63 @@ function af_advancedshop_kb_schema_meta(): array
         return $meta;
     }
 
-    $baseTable = 'af_kb_entries';
-    $prefixedTable = TABLE_PREFIX . $baseTable;
-    $tableCandidates = [$baseTable, $prefixedTable];
-    $kbTable = $prefixedTable;
-    if ($db->table_exists($baseTable)) {
-        $kbTable = $baseTable;
-    } elseif ($db->table_exists($prefixedTable)) {
-        $kbTable = $prefixedTable;
+    // 1) Пытаемся найти KB-таблицу безопасно
+    $unpref = 'af_kb_entries';
+    $kbTableSql = '';
+    $exists = false;
+
+    // MyBB table_exists работает по UNPREFIXED имени
+    if ($db->table_exists($unpref)) {
+        $kbTableSql = TABLE_PREFIX . $unpref;
+        $exists = true;
+    } else {
+        // Фолбэк: ищем похожую таблицу по SHOW TABLES LIKE
+        // (в разных сборках KB могли назвать иначе)
+        $like = $db->escape_string(TABLE_PREFIX . 'af_kb_%');
+        $res = $db->query("SHOW TABLES LIKE '{$like}'");
+        $candidates = [];
+        while ($row = $db->fetch_array($res)) {
+            // SHOW TABLES LIKE возвращает 1 колонку с именем таблицы
+            $tbl = '';
+            foreach ($row as $v) { $tbl = (string)$v; break; }
+            if ($tbl !== '') { $candidates[] = $tbl; }
+        }
+
+        // выбираем таблицу, которая больше всего похожа на entries
+        foreach ($candidates as $tbl) {
+            if (stripos($tbl, 'entries') !== false || stripos($tbl, 'entry') !== false) {
+                $kbTableSql = $tbl;
+                $exists = true;
+                break;
+            }
+        }
+        // если не нашли entries — берём первую подходящую
+        if (!$exists && !empty($candidates)) {
+            $kbTableSql = $candidates[0];
+            $exists = true;
+        }
     }
 
+    // 2) Считываем колонки (если таблица найдена)
     $columns = [];
-    $res = $db->query("SHOW COLUMNS FROM " . $kbTable);
-    while ($row = $db->fetch_array($res)) {
-        $fieldName = (string)($row['Field'] ?? '');
-        if ($fieldName !== '') {
-            $columns[] = $fieldName;
+    if ($exists && $kbTableSql !== '') {
+        $resCols = $db->query("SHOW COLUMNS FROM {$kbTableSql}");
+        while ($row = $db->fetch_array($resCols)) {
+            $field = (string)($row['Field'] ?? '');
+            if ($field !== '') { $columns[] = $field; }
         }
     }
 
     $meta = [
-        'kb_table' => $kbTable,
-        'table_candidates' => $tableCandidates,
+        'kb_table_sql' => $kbTableSql, // SQL-ready (с префиксом)
         'columns' => $columns,
+        'exists' => $exists,
     ];
-
     return $meta;
 }
 
 function af_advancedshop_kb_cols(): array
 {
-    global $db;
-
     static $cols = null;
     if (is_array($cols)) {
         return $cols;
@@ -60,37 +89,56 @@ function af_advancedshop_kb_cols(): array
 
     $schema = af_advancedshop_kb_schema_meta();
     $columns = $schema['columns'] ?? [];
-    $checkTables = $schema['table_candidates'] ?? ['af_kb_entries', TABLE_PREFIX . 'af_kb_entries'];
-    $pick = static function (array $candidates) use ($db, $checkTables, $columns): ?string {
-        foreach ($candidates as $candidate) {
-            if (in_array($candidate, $columns, true)) {
-                return $candidate;
-            }
-            foreach ($checkTables as $checkTable) {
-                if ($db->field_exists($candidate, $checkTable)) {
-                    return $candidate;
-                }
+
+    $pick = static function (array $candidates) use ($columns): ?string {
+        foreach ($candidates as $c) {
+            if (in_array($c, $columns, true)) {
+                return $c;
             }
         }
         return null;
     };
 
+    // базовые поля
+    $id   = $pick(['id', 'entry_id', 'kb_id']);
+    $type = $pick(['type', 'kb_type']);
+    $key  = $pick(['key', 'slug', 'entry_key']);
+    $meta = $pick(['meta_json', 'meta']);
+
+    // !!! ключевое: data_json авто-детект
+    $data = $pick(['data_json', 'rules_json', 'json_data', 'data', 'rules', 'content_json', 'content', 'ruleset_json']);
+
+    // если по точным именам не нашли — пробуем по “похожести”
+    if ($data === null && !empty($columns)) {
+        foreach ($columns as $col) {
+            $lc = strtolower($col);
+            // самое частое: *data*json* или *rules*json* или *content*json*
+            if ((strpos($lc, 'data') !== false && strpos($lc, 'json') !== false)
+                || (strpos($lc, 'rules') !== false && strpos($lc, 'json') !== false)
+                || (strpos($lc, 'content') !== false && strpos($lc, 'json') !== false)
+            ) {
+                $data = $col;
+                break;
+            }
+        }
+    }
+
     $cols = [
-        'id' => $pick(['id', 'entry_id', 'kb_id']),
-        'title' => $pick(['title_ru', 'title_en', 'title']),
-        'title_ru' => $pick(['title_ru']),
-        'title_en' => $pick(['title_en']),
-        'body' => $pick(['body_ru', 'body_en', 'body']),
-        'body_ru' => $pick(['body_ru']),
-        'body_en' => $pick(['body_en']),
-        'short' => $pick(['short_ru', 'short_en', 'short']),
-        'short_ru' => $pick(['short_ru']),
-        'short_en' => $pick(['short_en']),
-        'meta_json' => $pick(['meta_json', 'meta']),
-        'data_json' => $pick(['data_json', 'rules_json', 'data', 'rules', 'content_json', 'data_ru', 'data_en', 'data_blob', 'rules_blob', 'json_data']),
-        'type' => $pick(['type', 'kb_type']),
-        'key' => $pick(['key', 'slug', 'entry_key']),
-        'active' => $pick(['active', 'enabled']),
+        'id'        => $id,
+        'type'      => $type,
+        'key'       => $key,
+        'title_ru'  => $pick(['title_ru']),
+        'title_en'  => $pick(['title_en']),
+        'title'     => $pick(['title']),
+        'short_ru'  => $pick(['short_ru']),
+        'short_en'  => $pick(['short_en']),
+        'short'     => $pick(['short']),
+        'body_ru'   => $pick(['body_ru']),
+        'body_en'   => $pick(['body_en']),
+        'body'      => $pick(['body']),
+        'meta_json' => $meta,
+        'data_json' => $data,
+        'active'    => $pick(['active', 'enabled']),
         'sortorder' => $pick(['sortorder', 'displayorder']),
     ];
 
