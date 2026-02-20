@@ -8,11 +8,6 @@ define('AF_ADVSHOP_TPL_DIR', AF_ADVSHOP_BASE . 'templates/');
 
 function af_advancedshop_kb_table(): string
 {
-    $meta = af_advancedshop_kb_schema_meta();
-    if (!empty($meta['kb_table_sql'])) {
-        return (string)$meta['kb_table_sql'];
-    }
-    // последний фолбэк (стандартное имя)
     return TABLE_PREFIX . 'af_kb_entries';
 }
 
@@ -25,124 +20,46 @@ function af_advancedshop_kb_schema_meta(): array
         return $meta;
     }
 
-    // 1) Пытаемся найти KB-таблицу безопасно
-    $unpref = 'af_kb_entries';
-    $kbTableSql = '';
-    $exists = false;
-
-    // MyBB table_exists работает по UNPREFIXED имени
-    if ($db->table_exists($unpref)) {
-        $kbTableSql = TABLE_PREFIX . $unpref;
-        $exists = true;
-    } else {
-        // Фолбэк: ищем похожую таблицу по SHOW TABLES LIKE
-        // (в разных сборках KB могли назвать иначе)
-        $like = $db->escape_string(TABLE_PREFIX . 'af_kb_%');
-        $res = $db->query("SHOW TABLES LIKE '{$like}'");
-        $candidates = [];
-        while ($row = $db->fetch_array($res)) {
-            // SHOW TABLES LIKE возвращает 1 колонку с именем таблицы
-            $tbl = '';
-            foreach ($row as $v) { $tbl = (string)$v; break; }
-            if ($tbl !== '') { $candidates[] = $tbl; }
-        }
-
-        // выбираем таблицу, которая больше всего похожа на entries
-        foreach ($candidates as $tbl) {
-            if (stripos($tbl, 'entries') !== false || stripos($tbl, 'entry') !== false) {
-                $kbTableSql = $tbl;
-                $exists = true;
-                break;
-            }
-        }
-        // если не нашли entries — берём первую подходящую
-        if (!$exists && !empty($candidates)) {
-            $kbTableSql = $candidates[0];
-            $exists = true;
-        }
-    }
-
-    // 2) Считываем колонки (если таблица найдена)
+    $kbTableSql = af_advancedshop_kb_table();
     $columns = [];
-    if ($exists && $kbTableSql !== '') {
+    if ($db->table_exists('af_kb_entries')) {
         $resCols = $db->query("SHOW COLUMNS FROM {$kbTableSql}");
         while ($row = $db->fetch_array($resCols)) {
             $field = (string)($row['Field'] ?? '');
-            if ($field !== '') { $columns[] = $field; }
+            if ($field !== '') {
+                $columns[] = $field;
+            }
         }
     }
 
     $meta = [
-        'kb_table_sql' => $kbTableSql, // SQL-ready (с префиксом)
+        'kb_table_sql' => $kbTableSql,
         'columns' => $columns,
-        'exists' => $exists,
+        'exists' => $db->table_exists('af_kb_entries'),
     ];
     return $meta;
 }
 
 function af_advancedshop_kb_cols(): array
 {
-    static $cols = null;
-    if (is_array($cols)) {
-        return $cols;
-    }
-
-    $schema = af_advancedshop_kb_schema_meta();
-    $columns = $schema['columns'] ?? [];
-
-    $pick = static function (array $candidates) use ($columns): ?string {
-        foreach ($candidates as $c) {
-            if (in_array($c, $columns, true)) {
-                return $c;
-            }
-        }
-        return null;
-    };
-
-    // базовые поля
-    $id   = $pick(['id', 'entry_id', 'kb_id']);
-    $type = $pick(['type', 'kb_type']);
-    $key  = $pick(['key', 'slug', 'entry_key']);
-    $meta = $pick(['meta_json', 'meta']);
-
-    // !!! ключевое: data_json авто-детект
-    $data = $pick(['data_json', 'rules_json', 'json_data', 'data', 'rules', 'content_json', 'content', 'ruleset_json']);
-
-    // если по точным именам не нашли — пробуем по “похожести”
-    if ($data === null && !empty($columns)) {
-        foreach ($columns as $col) {
-            $lc = strtolower($col);
-            // самое частое: *data*json* или *rules*json* или *content*json*
-            if ((strpos($lc, 'data') !== false && strpos($lc, 'json') !== false)
-                || (strpos($lc, 'rules') !== false && strpos($lc, 'json') !== false)
-                || (strpos($lc, 'content') !== false && strpos($lc, 'json') !== false)
-            ) {
-                $data = $col;
-                break;
-            }
-        }
-    }
-
-    $cols = [
-        'id'        => $id,
-        'type'      => $type,
-        'key'       => $key,
-        'title_ru'  => $pick(['title_ru']),
-        'title_en'  => $pick(['title_en']),
-        'title'     => $pick(['title']),
-        'short_ru'  => $pick(['short_ru']),
-        'short_en'  => $pick(['short_en']),
-        'short'     => $pick(['short']),
-        'body_ru'   => $pick(['body_ru']),
-        'body_en'   => $pick(['body_en']),
-        'body'      => $pick(['body']),
-        'meta_json' => $meta,
-        'data_json' => $data,
-        'active'    => $pick(['active', 'enabled']),
-        'sortorder' => $pick(['sortorder', 'displayorder']),
+    return [
+        'id' => 'id',
+        'type' => '`type`',
+        'key' => '`key`',
+        'title_ru' => 'title_ru',
+        'title_en' => 'title_en',
+        'title' => '',
+        'short_ru' => 'short_ru',
+        'short_en' => 'short_en',
+        'short' => '',
+        'body_ru' => 'body_ru',
+        'body_en' => 'body_en',
+        'body' => '',
+        'meta_json' => 'meta_json',
+        'data_json' => 'data_json',
+        'active' => 'active',
+        'sortorder' => 'sortorder',
     ];
-
-    return $cols;
 }
 
 function af_advancedshop_init(): void
@@ -615,7 +532,6 @@ function af_advancedshop_render_shop(): void
     if (empty($kbCols['body_ru']) && empty($kbCols['body_en']) && !empty($kbCols['body'])) { $kbSelect[] = 'e.' . $kbCols['body'] . ' AS kb_body'; }
     if (!empty($kbCols['meta_json'])) { $kbSelect[] = 'e.' . $kbCols['meta_json'] . ' AS kb_meta'; }
     if (!empty($kbCols['data_json'])) { $kbSelect[] = 'e.' . $kbCols['data_json'] . ' AS kb_data'; }
-    else { $kbSelect[] = "'' AS kb_data"; }
     if (!empty($kbCols['type'])) { $kbSelect[] = 'e.' . ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS kb_type'; }
     if (!empty($kbCols['key'])) { $kbSelect[] = 'e.' . ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS kb_key'; }
     if ($slotHasKbType) { $kbSelect[] = 's.kb_type AS slot_kb_type'; }
@@ -907,7 +823,6 @@ function af_advancedshop_grant_inventory_item(int $uid, int $kbId, int $qty): vo
     $kbIdCol = $kbCols['id'] ?? 'id';
     $select = [$kbIdCol . ' AS kb_id'];
     if (!empty($kbCols['data_json'])) { $select[] = $kbCols['data_json'] . ' AS kb_data'; }
-    else { $select[] = "'' AS kb_data"; }
     $kb = $db->fetch_array($db->query("SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
     if (!$kb) { return; }
     $profile = af_advancedshop_kb_item_profile($kb);
@@ -1165,7 +1080,6 @@ function af_advancedshop_manage_slots(): void
         if ($db->field_exists('kb_type', 'af_shop_slots')) { $titleSelect[] = 's.kb_type AS slot_kb_type'; }
         if ($db->field_exists('kb_key', 'af_shop_slots')) { $titleSelect[] = 's.kb_key AS slot_kb_key'; }
         if (!empty($kbCols['data_json'])) { $titleSelect[] = 'e.' . $kbCols['data_json'] . ' AS kb_data'; }
-        else { $titleSelect[] = "'' AS kb_data"; }
         if (!$titleSelect) { $titleSelect[] = "'' AS kb_title"; }
         $q = $db->query("SELECT s.*, " . implode(', ', $titleSelect) . " FROM " . TABLE_PREFIX . "af_shop_slots s
             LEFT JOIN " . af_advancedshop_kb_table() . " e ON(e." . $kbIdCol . "=s.kb_id)
@@ -1351,7 +1265,6 @@ function af_advancedshop_kb_search(): void
         ($keyCol ? (($keyCol === 'key' ? '`key`' : $keyCol) . ' AS kb_key') : "'' AS kb_key"),
     ];
     if (!empty($kbCols['data_json'])) { $select[] = $kbCols['data_json'] . ' AS kb_data'; }
-    else { $select[] = "'' AS kb_data"; }
     $orderSort = !empty($kbCols['sortorder']) ? $kbCols['sortorder'] . ' ASC, ' : '';
     $sql = "SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE {$where} ORDER BY {$orderSort}{$kbIdCol} DESC LIMIT 50";
     $res = $db->query($sql);
@@ -1584,7 +1497,7 @@ function af_advancedshop_kb_schema(): void
     $cols = af_advancedshop_kb_cols();
 
     af_advancedshop_json_ok([
-        'kb_table' => (string)($schema['kb_table'] ?? ''),
+        'kb_table' => (string)($schema['kb_table_sql'] ?? ''),
         'columns' => array_values($schema['columns'] ?? []),
         'picked' => [
             'id' => (string)($cols['id'] ?? ''),
