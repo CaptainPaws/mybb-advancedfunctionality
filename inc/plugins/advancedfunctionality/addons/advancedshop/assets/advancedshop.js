@@ -56,20 +56,6 @@
 
   document.addEventListener('click', function(e){
 
-    var kbOpen = e.target.closest('[data-afshop-kb-open="1"]');
-    if(kbOpen){
-      e.preventDefault();
-      var kbId = kbOpen.getAttribute('data-kb-id') || '0';
-      openKbModal(kbId);
-      return;
-    }
-
-    var kbClose = e.target.closest('[data-af-kb-close="1"]');
-    if(kbClose){
-      e.preventDefault();
-      closeKbModal();
-      return;
-    }
 
     var add = e.target.closest('.af-add-cart');
     if(add){
@@ -221,7 +207,6 @@
     }
   });
 
-  document.addEventListener('keydown', function(e){ if(e.key === 'Escape'){ closeKbModal(); } });
 
   var categoryForm = document.getElementById('af-manage-category-form');
   if(categoryForm){
@@ -253,6 +238,7 @@
     });
   }
 
+  initKbModal();
   runHealthCheck();
 
   var slotsRoot = document.querySelector('.af-manage-slots[data-shop]');
@@ -302,20 +288,57 @@
     });
   }
 
-  function openKbModal(kbId){
-    var modal = document.getElementById('af-kb-modal');
-    var frame = document.getElementById('af-kb-modal-frame');
-    if(!modal || !frame || !kbId){ return; }
-    frame.src = 'misc.php?action=knowledgebase_entry&id=' + encodeURIComponent(kbId) + '&ajax=1';
-    modal.hidden = false;
-  }
+  function initKbModal(){
+    if(window.__afShopKbModalBound){ return; }
+    window.__afShopKbModalBound = true;
 
-  function closeKbModal(){
-    var modal = document.getElementById('af-kb-modal');
-    var frame = document.getElementById('af-kb-modal-frame');
-    if(!modal || modal.hidden){ return; }
-    modal.hidden = true;
-    if(frame){ frame.src = 'about:blank'; }
+    var modal = document.querySelector('[data-afkb-modal]');
+    var frame = document.querySelector('[data-afkb-frame]');
+    if(!modal || !frame){ return; }
+
+    function closeModal(){
+      modal.classList.remove('is-active');
+      modal.hidden = true;
+      frame.setAttribute('src', '');
+    }
+
+    function openModal(kbId){
+      if(!kbId){ return; }
+      frame.setAttribute('src', 'misc.php?action=knowledgebase_entry&id=' + encodeURIComponent(kbId) + '&ajax=1');
+      modal.hidden = false;
+      modal.classList.add('is-active');
+    }
+
+    document.addEventListener('click', function(event){
+      var openTrigger = event.target && event.target.closest ? event.target.closest('[data-afkb-open="1"]') : null;
+      if(openTrigger){
+        if(event.defaultPrevented) return;
+        if(typeof event.button === 'number' && event.button !== 0) return;
+        if(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+        event.preventDefault();
+        var kbId = openTrigger.getAttribute('data-kb-id') || '0';
+        openModal(kbId);
+        return;
+      }
+
+      var closeTrigger = event.target && event.target.closest ? event.target.closest('[data-afkb-close="1"]') : null;
+      if(closeTrigger){
+        event.preventDefault();
+        closeModal();
+        return;
+      }
+
+      if(event.target === modal){
+        closeModal();
+      }
+    });
+
+    document.addEventListener('keydown', function(event){
+      if(event.key === 'Escape' && modal.classList.contains('is-active')){
+        closeModal();
+      }
+    });
   }
 
   function runHealthCheck(){
