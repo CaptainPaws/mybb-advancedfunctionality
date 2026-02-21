@@ -212,6 +212,38 @@
     });
   }
 
+
+  function renderInventoryItemModal(item){
+    var title = (item && item.title) ? item.title : 'Предмет';
+    var rarity = (item && item.rarity) ? item.rarity : 'common';
+    var icon = (item && item.icon_url) ? item.icon_url : '';
+    var desc = (item && item.description_html) ? item.description_html : '<em>Описание отсутствует</em>';
+    var canEquip = !!(item && item.is_equippable);
+    var invId = item && item.inv_id ? String(item.inv_id) : '0';
+    var html = '<p class="af-shop-modal__title" id="af-shop-modal-title">' + escapeHtml(title) + '</p>'
+      + '<p><strong>Редкость:</strong> ' + escapeHtml(rarity) + '</p>'
+      + (icon ? '<p><img src="' + escapeHtml(icon) + '" alt="' + escapeHtml(title) + '" class="af-equip-modal-icon"></p>' : '')
+      + '<div class="af-shop-modal__desc">' + desc + '</div>';
+    if (canEquip) {
+      html += '<p><strong>Можно экипировать</strong></p>'
+        + '<div class="af-shop-modal__actions"><button type="button" class="af-shop-btn" data-af-equip-btn data-inv-id="' + escapeHtml(invId) + '">Надеть</button></div>';
+    }
+    showInventoryModal(html);
+  }
+
+  function handleInventorySlotClick(slotNode){
+    if(!slotNode){ return; }
+    var invId = parseInt(slotNode.getAttribute('data-inv-id') || '0', 10);
+    if(invId <= 0){ return; }
+    getJSON('misc.php?action=inventory_item_info&inv_id=' + encodeURIComponent(invId)).then(function(r){
+      if(!r || !r.ok || !r.item){
+        afShopToast((r && r.error) || 'Не удалось загрузить предмет', 'error');
+        return;
+      }
+      renderInventoryItemModal(r.item || {});
+    });
+  }
+
   function handleEquipmentSlotClick(slotNode){
     if(!slotNode){ return; }
     var invId = parseInt(slotNode.getAttribute('data-inv-id') || '0', 10);
@@ -247,10 +279,35 @@
       return;
     }
 
+    var invSlot = e.target.closest('.af-inv-slot[data-inv-id]');
+    if(invSlot){
+      e.preventDefault();
+      handleInventorySlotClick(invSlot);
+      return;
+    }
+
     var equipSlot = e.target.closest('[data-af-equip-slot][data-slot-code]');
     if(equipSlot){
       e.preventDefault();
       handleEquipmentSlotClick(equipSlot);
+      return;
+    }
+
+    var equipBtn = e.target.closest('[data-af-equip-btn][data-inv-id]');
+    if(equipBtn){
+      e.preventDefault();
+      var invIdEquip = parseInt(equipBtn.getAttribute('data-inv-id') || '0', 10);
+      if(invIdEquip <= 0){ return; }
+      withLoading(equipBtn, post('misc.php?action=inventory_equip', {inv_id:invIdEquip})).then(function(r){
+        if(r && r.ok){
+          afShopHideCheckoutSuccessModal();
+          if(r.equipped){ renderEquipmentState(r.equipped); }
+          else { loadEquipped(); }
+          afShopToast('Предмет экипирован', 'success');
+        } else if(r && r.error !== 'busy'){
+          afShopToast(r.error || 'Не удалось надеть предмет', 'error');
+        }
+      });
       return;
     }
 
