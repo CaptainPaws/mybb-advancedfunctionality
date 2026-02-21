@@ -561,7 +561,7 @@ function af_advancedshop_can_edit_inventory(int $targetUid): bool
         return false;
     }
 
-    return $viewerUid === $targetUid || af_advancedshop_can_manage();
+    return $viewerUid === $targetUid || af_advancedshop_can_manage() || af_advancedshop_can_moderate_inventory();
 }
 
 function af_advancedshop_inventory_target_uid_for_view(): int
@@ -1561,7 +1561,7 @@ function af_advancedshop_render_inventory(): void
     exit;
 }
 
-function af_advancedshop_inventory_fetch_rows(int $targetUid): array
+function af_advancedshop_inventory_fetch_rows(int $targetUid, array &$debug = []): array
 {
     global $db;
 
@@ -1595,6 +1595,7 @@ function af_advancedshop_inventory_fetch_rows(int $targetUid): array
     ];
 
     $rows = [];
+    $sqlStarted = microtime(true);
     $q = $db->query("SELECT " . implode(', ', $select) . "
         FROM " . TABLE_PREFIX . "af_inventory_items i
         LEFT JOIN " . af_advancedshop_kb_table() . " e ON(e." . $kbIdCol . "=i.kb_id)
@@ -1626,21 +1627,67 @@ function af_advancedshop_inventory_fetch_rows(int $targetUid): array
             'icon_url' => (string)($meta['ui']['icon_url'] ?? ''),
             'item_kind' => $itemKind,
             'equip_slot' => (string)($profile['equip_slot'] ?? ''),
+            'slot_code' => (string)($profile['equip_slot'] ?? ''),
             'is_equippable' => !empty($equipInfo['is_equippable']),
+            'tech' => strip_tags(af_advancedshop_parse_bbcode($tooltipSource)),
             'tooltip_html' => af_advancedshop_parse_bbcode($tooltipSource),
             'tooltip_text' => strip_tags(af_advancedshop_parse_bbcode($tooltipSource)),
         ];
     }
 
+    $debug['sql_count_items'] = count($rows);
+    $debug['timings_ms']['items_query'] = (int)round((microtime(true) - $sqlStarted) * 1000);
+
     return $rows;
 }
 
-function af_advancedshop_inventory_state_payload(int $uid): array
+function af_advancedshop_inventory_state_payload(int $uid, bool $includeDebug = false): array
 {
-    return [
-        'inventory' => af_advancedshop_inventory_fetch_rows($uid),
-        'equipment' => af_advancedshop_inventory_equipped_fetch($uid),
+    $payloadStart = microtime(true);
+    $debug = [
+        'uid' => $uid,
+        'can_edit' => af_advancedshop_can_edit_inventory($uid),
+        'sql_count_items' => 0,
+        'sql_count_equipped' => 0,
+        'used_tables' => [
+            TABLE_PREFIX . 'af_inventory_items',
+            TABLE_PREFIX . 'af_inventory_equipped',
+            af_advancedshop_kb_table(),
+        ],
+        'timings_ms' => [],
     ];
+    $items = af_advancedshop_inventory_fetch_rows($uid, $debug);
+    $equipStart = microtime(true);
+    $equipment = af_advancedshop_inventory_equipped_fetch($uid);
+    $equipment['weapon_mainhand'] = $equipment['mainhand'] ?? null;
+    $equipment['weapon_offhand'] = $equipment['offhand'] ?? null;
+    $equipment['weapon_twohand'] = $equipment['twohand'] ?? null;
+    $debug['sql_count_equipped'] = count(array_filter($equipment));
+    $debug['timings_ms']['equipment_query'] = (int)round((microtime(true) - $equipStart) * 1000);
+    $debug['timings_ms']['total'] = (int)round((microtime(true) - $payloadStart) * 1000);
+
+    $slotLabels = af_advancedshop_inventory_slot_labels();
+    $metaLabels = [];
+    foreach ($slotLabels as $slotCode => $meta) {
+        $metaLabels[$slotCode] = (string)($meta['label'] ?? $slotCode);
+    }
+
+    $payload = [
+        'uid' => $uid,
+        'can_edit' => $debug['can_edit'],
+        'items' => $items,
+        'inventory' => $items,
+        'equipment' => $equipment,
+        'meta' => [
+            'labels' => $metaLabels,
+        ],
+    ];
+
+    if ($includeDebug) {
+        $payload['debug'] = $debug;
+    }
+
+    return $payload;
 }
 
 function af_advancedshop_inventory_slots_canonical(): array
@@ -1805,6 +1852,9 @@ function af_advancedshop_inventory_equipped_fetch(int $uid): array
     ];
 
     $out = [];
+    foreach (af_advancedshop_inventory_slots_canonical() as $slotCode) {
+        $out[$slotCode] = null;
+    }
     $q = $db->query("SELECT " . implode(', ', $select) . "
         FROM " . TABLE_PREFIX . "af_inventory_equipped eq
         LEFT JOIN " . TABLE_PREFIX . "af_inventory_items i ON(i.inv_id=eq.inv_id AND i.uid=eq.uid)
@@ -1845,8 +1895,10 @@ function af_advancedshop_inventory_equipped_get(): void
 
 function af_advancedshop_inventory_state(): void
 {
+    global $mybb;
     $targetUid = af_advancedshop_inventory_target_uid_for_view();
-    af_advancedshop_json_ok(af_advancedshop_inventory_state_payload($targetUid));
+    $debug = (int)$mybb->get_input('af_debug') === 1;
+    af_advancedshop_json_ok(af_advancedshop_inventory_state_payload($targetUid, $debug));
 }
 
 function af_advancedshop_inventory_item_info(): void
