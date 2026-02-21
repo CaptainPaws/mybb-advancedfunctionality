@@ -1,8 +1,10 @@
 <div class="af-cart" data-shop="{$shop_code}">
   <h1>{$lang->af_advancedshop_cart_title}</h1>
-  <div class="af-cart-top-links">
-    <a class="af-shop-back" href="{$shop_url}">← {$lang->af_advancedshop_back_to_shop}</a>
-    <a class="af-shop-btn" href="misc.php?action=inventory">Инвентарь</a>
+  <div class="af-shop-toolbar af-cart-top-links">
+    <div class="af-shop-toolbar__left">
+      <a class="af-shop-btn" href="{$shop_url}">← {$lang->af_advancedshop_back_to_shop}</a>
+      <a class="af-shop-btn" href="misc.php?action=inventory">Инвентарь</a>
+    </div>
   </div>
   <div class="af-cart-items">{$itemsHtml}</div>
   <div class="af-cart-total">

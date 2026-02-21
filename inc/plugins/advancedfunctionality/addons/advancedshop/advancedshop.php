@@ -52,6 +52,9 @@ function af_advancedshop_kb_cols(): array
         'short_ru' => 'short_ru',
         'short_en' => 'short_en',
         'short' => '',
+        'tech_ru' => 'tech_ru',
+        'tech_en' => 'tech_en',
+        'tech' => '',
         'body_ru' => 'body_ru',
         'body_en' => 'body_en',
         'body' => '',
@@ -583,6 +586,7 @@ function af_advancedshop_render_shop(): void
     if ((int)($mybb->user['uid'] ?? 0) > 0) {
         $inventory_link = '<a class="af-shop-btn" href="misc.php?action=inventory">Инвентарь</a>';
     }
+    $balance_badge = '<span class="af-shop-balance">' . htmlspecialchars_uni($lang->af_advancedshop_balance ?? 'Balance') . ': <strong>' . $balance . '</strong> ' . $currency_symbol . '</span>';
     $assets = af_advancedshop_assets_html();
     eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_shop') . '";');
     eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
@@ -1317,7 +1321,6 @@ function af_advancedshop_render_inventory(): void
     if ($targetUid !== $viewerUid && !$canViewAny) { error_no_permission(); }
 
     $rarityFilter = trim((string)$mybb->get_input('rarity'));
-    $slotFilter = trim((string)$mybb->get_input('slot_code'));
     $search = trim((string)$mybb->get_input('q'));
 
     $kbCols = af_advancedshop_kb_cols();
@@ -1328,11 +1331,17 @@ function af_advancedshop_render_inventory(): void
     $bodyRuCol = $kbCols['body_ru'] ?? null;
     $bodyEnCol = $kbCols['body_en'] ?? null;
     $bodyCol = $kbCols['body'] ?? null;
+    $shortRuCol = $kbCols['short_ru'] ?? null;
+    $shortEnCol = $kbCols['short_en'] ?? null;
+    $shortCol = $kbCols['short'] ?? null;
+    $techRuCol = $kbCols['tech_ru'] ?? null;
+    $techEnCol = $kbCols['tech_en'] ?? null;
+    $techCol = $kbCols['tech'] ?? null;
+    $dataCol = $kbCols['data_json'] ?? null;
     $metaCol = $kbCols['meta_json'] ?? null;
 
     $where = 'i.uid=' . $targetUid;
     if ($rarityFilter !== '') { $where .= " AND i.rarity='" . $db->escape_string($rarityFilter) . "'"; }
-    if ($slotFilter !== '') { $where .= " AND i.slot_code='" . $db->escape_string($slotFilter) . "'"; }
     if ($search !== '') {
         $s = $db->escape_string($search);
         $searchParts = [];
@@ -1352,10 +1361,25 @@ function af_advancedshop_render_inventory(): void
         ($bodyRuCol ? 'e.' . $bodyRuCol . ' AS kb_body_ru' : "'' AS kb_body_ru"),
         ($bodyEnCol ? 'e.' . $bodyEnCol . ' AS kb_body_en' : "'' AS kb_body_en"),
         ($bodyCol ? 'e.' . $bodyCol . ' AS kb_body' : "'' AS kb_body"),
+        ($shortRuCol ? 'e.' . $shortRuCol . ' AS kb_short_ru' : "'' AS kb_short_ru"),
+        ($shortEnCol ? 'e.' . $shortEnCol . ' AS kb_short_en' : "'' AS kb_short_en"),
+        ($shortCol ? 'e.' . $shortCol . ' AS kb_short' : "'' AS kb_short"),
+        ($techRuCol ? 'e.' . $techRuCol . ' AS kb_tech_ru' : "'' AS kb_tech_ru"),
+        ($techEnCol ? 'e.' . $techEnCol . ' AS kb_tech_en' : "'' AS kb_tech_en"),
+        ($techCol ? 'e.' . $techCol . ' AS kb_tech' : "'' AS kb_tech"),
+        ($dataCol ? 'e.' . $dataCol . ' AS kb_data' : "'' AS kb_data"),
         ($metaCol ? 'e.' . $metaCol . ' AS kb_meta' : "'' AS kb_meta"),
     ];
 
-    $grid = '';
+    $tabsOrder = ['weapon', 'armor', 'consumable', 'gear', 'misc'];
+    $tabLabels = [
+        'weapon' => 'Weapon',
+        'armor' => 'Armor',
+        'consumable' => 'Consumable',
+        'gear' => 'Gear',
+        'misc' => 'Misc',
+    ];
+    $tabsGrid = [];
     $q = $db->query("SELECT " . implode(', ', $select) . "
         FROM " . TABLE_PREFIX . "af_inventory_items i
         LEFT JOIN " . af_advancedshop_kb_table() . " e ON(e." . $kbIdCol . "=i.kb_id)
@@ -1370,14 +1394,61 @@ function af_advancedshop_render_inventory(): void
         $meta = @json_decode((string)($row['kb_meta'] ?? '{}'), true);
         $inv_icon = htmlspecialchars_uni((string)($meta['ui']['icon_url'] ?? ''));
         $inv_rarity = htmlspecialchars_uni((string)($row['rarity'] ?? 'common'));
-        $bodyRaw = af_advancedshop_pick_lang((string)($row['kb_body_ru'] ?? ''), (string)($row['kb_body_en'] ?? ''));
-        if ($bodyRaw === '') { $bodyRaw = (string)($row['kb_body'] ?? ''); }
-        $tooltip_body = af_advancedshop_parse_bbcode($bodyRaw);
-        eval('$grid .= "' . af_advancedshop_tpl('advancedshop_inventory_slot') . '";');
+        $tooltipSource = af_advancedshop_pick_lang((string)($row['kb_tech_ru'] ?? ''), (string)($row['kb_tech_en'] ?? ''));
+        if ($tooltipSource === '') { $tooltipSource = (string)($row['kb_tech'] ?? ''); }
+        if ($tooltipSource === '') {
+            $tooltipSource = af_advancedshop_pick_lang((string)($row['kb_short_ru'] ?? ''), (string)($row['kb_short_en'] ?? ''));
+            if ($tooltipSource === '') { $tooltipSource = (string)($row['kb_short'] ?? ''); }
+        }
+        $tooltip_body = af_advancedshop_parse_bbcode($tooltipSource);
+
+        $kbData = @json_decode((string)($row['kb_data'] ?? '{}'), true);
+        $resolvedKind = '';
+        if (is_array($kbData)) {
+            $resolvedKind = (string)($kbData['item']['item_kind'] ?? ($kbData['item_kind'] ?? ''));
+        }
+        if ($resolvedKind === '') { $resolvedKind = (string)($row['item_kind'] ?? ''); }
+        $resolvedKind = strtolower(trim($resolvedKind));
+        if ($resolvedKind === '') { $resolvedKind = 'misc'; }
+
+        $slotHtml = '';
+        eval('$slotHtml = "' . af_advancedshop_tpl('advancedshop_inventory_slot') . '";');
+        if (!isset($tabsGrid[$resolvedKind])) {
+            $tabsGrid[$resolvedKind] = '';
+            if (!isset($tabLabels[$resolvedKind])) {
+                $tabLabels[$resolvedKind] = ucfirst($resolvedKind);
+            }
+            if (!in_array($resolvedKind, $tabsOrder, true)) {
+                $tabsOrder[] = $resolvedKind;
+            }
+        }
+        $tabsGrid[$resolvedKind] .= $slotHtml;
+    }
+
+    $inventory_tabs = '';
+    $inventory_panels = '';
+    foreach ($tabsOrder as $kind) {
+        $grid = $tabsGrid[$kind] ?? '';
+        if ($grid === '') {
+            continue;
+        }
+        $kindEsc = htmlspecialchars_uni($kind);
+        $kindLabel = htmlspecialchars_uni((string)($tabLabels[$kind] ?? ucfirst($kind)));
+        $inventory_tabs .= '<button type="button" class="af-inventory-tab" data-kind="' . $kindEsc . '">' . $kindLabel . '</button>';
+        $inventory_panels .= '<section class="af-inventory-panel" data-kind="' . $kindEsc . '"><div class="af-inventory-grid">' . $grid . '</div></section>';
+    }
+    if ($inventory_tabs === '') {
+        $inventory_tabs = '<button type="button" class="af-inventory-tab is-active" data-kind="misc">Misc</button>';
+        $inventory_panels = '<section class="af-inventory-panel is-active" data-kind="misc"><div class="af-inventory-empty">No items</div></section>';
     }
 
     $assets = af_advancedshop_assets_html();
     $inventory_uid = $targetUid;
+    $rarity_common_selected = $rarityFilter === 'common' ? 'selected="selected"' : '';
+    $rarity_uncommon_selected = $rarityFilter === 'uncommon' ? 'selected="selected"' : '';
+    $rarity_rare_selected = $rarityFilter === 'rare' ? 'selected="selected"' : '';
+    $rarity_epic_selected = $rarityFilter === 'epic' ? 'selected="selected"' : '';
+    $rarity_legendary_selected = $rarityFilter === 'legendary' ? 'selected="selected"' : '';
     eval('$inventory_grid = "' . af_advancedshop_tpl('advancedshop_inventory_grid') . '";');
     eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_inventory') . '";');
 
@@ -1466,10 +1537,7 @@ function af_advancedshop_render_shop_categories_tree(array $rows, string $shopCo
             $cat_url = 'misc.php?action=shop_category&amp;shop=' . urlencode($shopCode) . '&amp;cat=' . $rowCatId;
             $cat_title = htmlspecialchars_uni((string)$cat['title']);
             $cat_depth = $depth;
-            $cat_toggle = '';
-            if ($hasChildren) {
-                $cat_toggle = '<button type="button" class="af-cat-toggle" data-cat="' . $rowCatId . '" aria-expanded="true"><span class="af-cat-toggle__icon">▾</span></button>';
-            }
+            $cat_toggle = '<button type="button" class="af-cat-toggle' . ($hasChildren ? '' : ' is-empty') . '" data-cat="' . $rowCatId . '" aria-expanded="true"' . ($hasChildren ? '' : ' aria-hidden="true" tabindex="-1"') . '><span class="af-cat-toggle__icon">' . ($hasChildren ? '▾' : '') . '</span></button>';
             $cat_children = '';
             if ($hasChildren) {
                 $childHtml = $walk($rowCatId, $depth + 1);
