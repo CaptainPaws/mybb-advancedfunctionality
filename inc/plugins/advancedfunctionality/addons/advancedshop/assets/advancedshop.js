@@ -157,15 +157,14 @@
   }
 
   var AF_EQUIP_META = {
-    weapon_main:{label:'Main Hand', icon:'⚔️'}, weapon_off:{label:'Off Hand', icon:'🛡️'}, armor:{label:'Armor', icon:'🛡️'},
-    head:{label:'Head', icon:'⛑️'}, body:{label:'Body', icon:'🦺'}, hands:{label:'Hands', icon:'🧤'},
-    legs:{label:'Legs', icon:'👖'}, feet:{label:'Feet', icon:'🥾'}, back:{label:'Back', icon:'🎒'}, belt:{label:'Belt', icon:'🧷'}
+    head:{label:'Голова'}, body:{label:'Тело'}, hands:{label:'Руки'}, legs:{label:'Ноги'}, feet:{label:'Ступни'}, back:{label:'Спина'}, belt:{label:'Пояс'},
+    mainhand:{label:'Основная рука'}, offhand:{label:'Вторая рука'}, twohand:{label:'Двуручное'}, ranged:{label:'Дистанционное'}, melee:{label:'Ближний бой'}, accessory:{label:'Аксессуар'}
   };
 
   function updateEquipmentSlot(node, data){
     if(!node){ return; }
     var slotCode = node.getAttribute('data-slot-code') || '';
-    var meta = AF_EQUIP_META[slotCode] || {label:slotCode, icon:'⬜'};
+    var meta = AF_EQUIP_META[slotCode] || {label:slotCode};
     var entry = data || null;
     var rarity = (entry && entry.rarity) ? entry.rarity : 'common';
     var title = (entry && entry.title) ? entry.title : 'Пусто';
@@ -177,7 +176,6 @@
     node.setAttribute('data-item-icon', iconUrl);
     node.setAttribute('data-item-rarity', rarity);
     node.setAttribute('data-slot-label', meta.label || slotCode);
-    node.setAttribute('data-slot-icon', meta.icon || '⬜');
     var iconNode = node.querySelector('.af-equip-slot__item-icon');
     if(iconNode){
       iconNode.innerHTML = iconUrl ? ('<img src="' + escapeHtml(iconUrl) + '" alt="' + escapeHtml(title) + '">') : '<span class="af-equip-slot__placeholder">Пусто</span>';

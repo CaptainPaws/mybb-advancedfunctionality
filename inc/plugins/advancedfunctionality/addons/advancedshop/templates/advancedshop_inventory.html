@@ -3,16 +3,19 @@
   <form method="get" action="misc.php" class="af-inventory-filters">
     <input type="hidden" name="action" value="inventory">
     <input type="hidden" name="uid" value="{$inventory_uid}">
-    <input type="text" name="q" value="{$mybb->input['q']}" placeholder="Search">
+    <input type="text" name="q" value="{$mybb->input['q']}" placeholder="Поиск">
     <select name="rarity">
       <option value="">Все редкости</option>
-      <option value="common" {$rarity_common_selected}>common</option>
-      <option value="uncommon" {$rarity_uncommon_selected}>uncommon</option>
-      <option value="rare" {$rarity_rare_selected}>rare</option>
-      <option value="epic" {$rarity_epic_selected}>epic</option>
-      <option value="legendary" {$rarity_legendary_selected}>legendary</option>
+      <option value="common" {$rarity_common_selected}>Обычная</option>
+      <option value="uncommon" {$rarity_uncommon_selected}>Необычная</option>
+      <option value="rare" {$rarity_rare_selected}>Редкая</option>
+      <option value="unique" {$rarity_unique_selected}>Уникальная</option>
+      <option value="illegal" {$rarity_illegal_selected}>Незаконная</option>
+      <option value="restricted" {$rarity_restricted_selected}>Ограниченная</option>
+      <option value="legendary" {$rarity_legendary_selected}>Легендарная</option>
+      <option value="mythic" {$rarity_mythic_selected}>Мифическая</option>
     </select>
-    <button type="submit" class="af-shop-btn">Filter</button>
+    <button type="submit" class="af-shop-btn">Фильтр</button>
   </form>
 
   {$equipment_panel}
