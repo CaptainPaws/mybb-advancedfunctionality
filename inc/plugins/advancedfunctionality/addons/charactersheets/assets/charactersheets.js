@@ -742,6 +742,57 @@
         });
       }
 
+      function ensureInventoryEmbed(root, forceReload) {
+        if (!root) return;
+        var embedRoot = root.querySelector('[data-afcs-inventory-embed-root]');
+        if (!embedRoot) return;
+
+        var embedUrl = embedRoot.getAttribute('data-afcs-inventory-embed-url') || '';
+        var content = embedRoot.querySelector('[data-afcs-inventory-embed-content]');
+        if (!content) return;
+
+        var fullscreenLink = embedRoot.querySelector('.af-cs-inventory-embed__fullscreen');
+        if (fullscreenLink) {
+          fullscreenLink.hidden = !embedUrl;
+        }
+
+        if (!embedUrl) {
+          content.innerHTML = '<div class="af-cs-muted">Инвентарь недоступен.</div>';
+          return;
+        }
+
+        var alreadyLoaded = embedRoot.getAttribute('data-afcs-inventory-embed-loaded') === '1';
+        var inProgress = embedRoot.getAttribute('data-afcs-inventory-embed-loading') === '1';
+        if ((alreadyLoaded && !forceReload) || inProgress) return;
+
+        embedRoot.setAttribute('data-afcs-inventory-embed-loading', '1');
+        content.innerHTML = '<div class="af-cs-muted">Загрузка инвентаря...</div>';
+
+        fetch(embedUrl, {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        }).then(function (resp) {
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          return resp.text();
+        }).then(function (html) {
+          content.innerHTML = html || '<div class="af-cs-muted">Инвентарь пуст.</div>';
+          embedRoot.setAttribute('data-afcs-inventory-embed-loaded', '1');
+        }).catch(function () {
+          var fallbackHtml = ''
+            + '<div class="af-cs-inventory-embed__fallback">'
+            + '<div class="af-cs-muted">Не удалось загрузить инвентарь как HTML. Показан fallback.</div>'
+            + '<iframe class="af-cs-inventory-embed__iframe" src="' + escapeHtml(embedUrl) + '" loading="lazy" referrerpolicy="same-origin"></iframe>'
+            + '</div>';
+          content.innerHTML = fallbackHtml;
+          embedRoot.setAttribute('data-afcs-inventory-embed-loaded', '1');
+        }).then(function () {
+          embedRoot.setAttribute('data-afcs-inventory-embed-loading', '0');
+        });
+      }
+
       function initInventoryUI(root) {
         if (!root) return;
         var inventory = root.querySelector('[data-afcs-block="inventory"]') || root;
@@ -753,6 +804,11 @@
         }
         if (activeTab) {
           setActiveInventoryTab(inventory, activeTab.getAttribute('data-afcs-inventory-tab'));
+        }
+
+        var tabPanel = sheet.querySelector('[data-afcs-tab-content="inventory"]');
+        if (tabPanel && tabPanel.classList.contains('is-active')) {
+          ensureInventoryEmbed(tabPanel);
         }
       }
 
@@ -776,6 +832,12 @@
       });
 
       sheet.addEventListener('click', function (event) {
+        var topInventoryTab = event.target.closest('[data-afcs-tab="inventory"]');
+        if (topInventoryTab) {
+          var panel = sheet.querySelector('[data-afcs-tab-content="inventory"]');
+          ensureInventoryEmbed(panel || sheet);
+        }
+
         var inventoryTab = event.target.closest('[data-afcs-inventory-tab]');
         if (inventoryTab) {
           event.preventDefault();
@@ -1061,16 +1123,6 @@
               clearInlineError();
               applyViewUpdate(payload);
             });
-          }
-          return;
-        }
-
-        var inventoryOpen = event.target.closest('[data-afcs-inventory-open]');
-        if (inventoryOpen) {
-          event.preventDefault();
-          var inventoryUrl = inventoryOpen.getAttribute('data-afcs-sheet') || inventoryOpen.getAttribute('href') || '';
-          if (inventoryUrl) {
-            openModal(inventoryUrl);
           }
           return;
         }

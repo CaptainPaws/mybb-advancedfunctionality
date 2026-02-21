@@ -1354,18 +1354,15 @@ function af_charactersheets_build_mechanics_html(array $view): string
 
 function af_charactersheets_build_inventory_html(int $uid): string
 {
-    $inventory_url = '';
+    $inventory_embed_url = '';
+    $inventory_full_url = '';
     if ($uid > 0) {
-        $inventory_url = 'misc.php?action=inventory&uid=' . $uid . '&embed=1';
+        $inventory_embed_url = 'misc.php?action=inventory&uid=' . $uid . '&embed=1';
+        $inventory_full_url = 'misc.php?action=inventory&uid=' . $uid;
     }
 
-    $inventory_button_html = '<div class="af-cs-muted">Инвентарь недоступен.</div>';
-    if ($inventory_url !== '') {
-        $inventory_button_html = '<button type="button" class="af-cs-btn af-cs-btn--compact"'
-            . ' data-afcs-inventory-open="1" data-afcs-sheet="' . htmlspecialchars_uni($inventory_url) . '">'
-            . '<i class="fa-solid fa-box-open"></i> Открыть инвентарь'
-            . '</button>';
-    }
+    $inventory_embed_url_attr = htmlspecialchars_uni($inventory_embed_url);
+    $inventory_full_url_attr = htmlspecialchars_uni($inventory_full_url);
     global $templates;
     $tpl = $templates->get('charactersheet_inventory');
     eval("\$out = \"" . $tpl . "\";");

@@ -1,6 +1,11 @@
-<div class="af-cs-inventory">
-  <div class="af-cs-inventory-launcher">
-    <div class="af-cs-inventory-launcher__text">Откройте инвентарь персонажа в модальном окне.</div>
-    <div class="af-cs-inventory-launcher__action">{$inventory_button_html}</div>
+<div class="af-cs-inventory" data-afcs-inventory-embed-root="1" data-afcs-inventory-embed-url="{$inventory_embed_url_attr}">
+  <div class="af-cs-inventory-embed__toolbar">
+    <span class="af-cs-inventory-embed__title">Инвентарь персонажа</span>
+    <a class="af-cs-inventory-embed__fullscreen" href="{$inventory_full_url_attr}" target="_blank" rel="noopener" title="Открыть на весь экран" aria-label="Открыть на весь экран">
+      <i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i>
+    </a>
+  </div>
+  <div class="af-cs-inventory-embed" data-afcs-inventory-embed-content="1">
+    <div class="af-cs-muted">Откройте вкладку «Инвентарь», чтобы загрузить содержимое.</div>
   </div>
 </div>
