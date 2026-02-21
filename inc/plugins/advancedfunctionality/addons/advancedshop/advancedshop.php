@@ -114,20 +114,41 @@ function af_advancedshop_ensure_equipped_schema(): void
 {
     global $db;
 
-    if ($db->table_exists('af_inventory_equipped')) {
+    if (!$db->table_exists('af_inventory_equipped')) {
+        $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_inventory_equipped (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            uid INT UNSIGNED NOT NULL,
+            slot_code VARCHAR(32) NOT NULL,
+            inv_id INT UNSIGNED NOT NULL,
+            kb_id INT UNSIGNED NOT NULL,
+            equipped_at INT UNSIGNED NOT NULL DEFAULT 0,
+            UNIQUE KEY uniq_uid_slot (uid, slot_code),
+            UNIQUE KEY uniq_uid_inv (uid, inv_id),
+            KEY uid_idx (uid)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         return;
     }
 
-    $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_inventory_equipped (
-        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-        uid INT UNSIGNED NOT NULL,
-        slot_code VARCHAR(32) NOT NULL,
-        inv_id INT UNSIGNED NOT NULL,
-        kb_id INT UNSIGNED NOT NULL,
-        equipped_at INT UNSIGNED NOT NULL DEFAULT 0,
-        UNIQUE KEY uniq_uid_slot (uid, slot_code),
-        KEY uid_idx (uid)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $hasUidInv = false;
+    $idxRes = $db->query("SHOW INDEX FROM " . TABLE_PREFIX . "af_inventory_equipped WHERE Key_name='uniq_uid_inv'");
+    while ($idx = $db->fetch_array($idxRes)) {
+        if (!empty($idx['Key_name'])) {
+            $hasUidInv = true;
+            break;
+        }
+    }
+
+    if (!$hasUidInv) {
+        $dupRes = $db->query("SELECT uid, inv_id, MAX(id) AS keep_id
+            FROM " . TABLE_PREFIX . "af_inventory_equipped
+            GROUP BY uid, inv_id
+            HAVING COUNT(*) > 1");
+        while ($dup = $db->fetch_array($dupRes)) {
+            $db->write_query("DELETE FROM " . TABLE_PREFIX . "af_inventory_equipped
+                WHERE uid=" . (int)$dup['uid'] . " AND inv_id=" . (int)$dup['inv_id'] . " AND id<>" . (int)$dup['keep_id']);
+        }
+        $db->write_query("ALTER TABLE " . TABLE_PREFIX . "af_inventory_equipped ADD UNIQUE KEY uniq_uid_inv (uid, inv_id)");
+    }
 }
 
 function af_advancedshop_register_routes(): void
@@ -1545,6 +1566,7 @@ function af_advancedshop_render_inventory(): void
     $equipmentSlotsMeta = [
         'weapon_main' => ['label' => 'Main Hand', 'icon' => '⚔️'],
         'weapon_off' => ['label' => 'Off Hand', 'icon' => '🛡️'],
+        'armor' => ['label' => 'Armor', 'icon' => '🛡️'],
         'head' => ['label' => 'Head', 'icon' => '⛑️'],
         'body' => ['label' => 'Body', 'icon' => '🦺'],
         'hands' => ['label' => 'Hands', 'icon' => '🧤'],
@@ -1606,7 +1628,7 @@ function af_advancedshop_render_inventory(): void
 
 function af_advancedshop_inventory_slots_canonical(): array
 {
-    return ['weapon_main', 'weapon_off', 'head', 'body', 'hands', 'legs', 'feet', 'back', 'belt'];
+    return ['weapon_main', 'weapon_off', 'armor', 'head', 'body', 'hands', 'legs', 'feet', 'back', 'belt'];
 }
 
 function af_advancedshop_inventory_normalize_slot_code(string $slot): string
@@ -1684,29 +1706,18 @@ function af_advancedshop_inventory_equippable_info(array $profile): array
 {
     $slots = af_advancedshop_inventory_slots_canonical();
     $slot = af_advancedshop_inventory_normalize_slot_code((string)($profile['slot'] ?? ''));
-    $tags = af_advancedshop_inventory_tags_normalized($profile['tags'] ?? []);
-    $tagsMap = array_fill_keys($tags, true);
+    $itemKind = mb_strtolower(trim((string)($profile['item_kind'] ?? '')));
+
+    if ($itemKind === 'armor') {
+        return ['is_equippable' => true, 'allowed_slots' => ['armor'], 'default_slot' => 'armor'];
+    }
 
     if (in_array($slot, $slots, true)) {
         return ['is_equippable' => true, 'allowed_slots' => [$slot], 'default_slot' => $slot];
     }
 
     if ($slot === 'armor') {
-        $default = 'body';
-        if (isset($tagsMap['helmet']) || isset($tagsMap['head'])) {
-            $default = 'head';
-        } elseif (isset($tagsMap['boots']) || isset($tagsMap['feet'])) {
-            $default = 'feet';
-        } elseif (isset($tagsMap['gloves']) || isset($tagsMap['hands'])) {
-            $default = 'hands';
-        } elseif (isset($tagsMap['pants']) || isset($tagsMap['legs'])) {
-            $default = 'legs';
-        } elseif (isset($tagsMap['back']) || isset($tagsMap['cloak'])) {
-            $default = 'back';
-        } elseif (isset($tagsMap['belt']) || isset($tagsMap['waist'])) {
-            $default = 'belt';
-        }
-        return ['is_equippable' => true, 'allowed_slots' => [$default], 'default_slot' => $default];
+        return ['is_equippable' => true, 'allowed_slots' => ['armor'], 'default_slot' => 'armor'];
     }
 
     if ($slot === 'weapon') {
@@ -1940,6 +1951,17 @@ function af_advancedshop_inventory_equip(): void
     $profile = af_advancedshop_kb_item_profile($row);
     $resolved = af_advancedshop_inventory_resolve_slot($profile, $requestedSlot);
     $slotCode = (string)$resolved['slot_code'];
+
+    $alreadyEquipped = $db->fetch_array($db->query("SELECT slot_code
+        FROM " . TABLE_PREFIX . "af_inventory_equipped
+        WHERE uid=" . $targetUid . " AND inv_id=" . (int)$row['inv_id'] . "
+        LIMIT 1"));
+    if ($alreadyEquipped) {
+        $existingSlot = (string)($alreadyEquipped['slot_code'] ?? '');
+        if ($existingSlot !== $slotCode) {
+            af_advancedshop_json_err('Предмет уже экипирован', 409);
+        }
+    }
 
     $db->write_query("INSERT INTO " . TABLE_PREFIX . "af_inventory_equipped (uid, slot_code, inv_id, kb_id, equipped_at)
         VALUES (" . $targetUid . ", '" . $db->escape_string($slotCode) . "', " . (int)$row['inv_id'] . ", " . (int)$row['kb_id'] . ", " . TIME_NOW . ")

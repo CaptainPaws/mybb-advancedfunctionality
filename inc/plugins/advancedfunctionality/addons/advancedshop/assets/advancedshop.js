@@ -157,7 +157,7 @@
   }
 
   var AF_EQUIP_META = {
-    weapon_main:{label:'Main Hand', icon:'⚔️'}, weapon_off:{label:'Off Hand', icon:'🛡️'},
+    weapon_main:{label:'Main Hand', icon:'⚔️'}, weapon_off:{label:'Off Hand', icon:'🛡️'}, armor:{label:'Armor', icon:'🛡️'},
     head:{label:'Head', icon:'⛑️'}, body:{label:'Body', icon:'🦺'}, hands:{label:'Hands', icon:'🧤'},
     legs:{label:'Legs', icon:'👖'}, feet:{label:'Feet', icon:'🥾'}, back:{label:'Back', icon:'🎒'}, belt:{label:'Belt', icon:'🧷'}
   };
