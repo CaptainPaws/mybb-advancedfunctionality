@@ -191,29 +191,36 @@
     document.body.classList.add('af-shop-modal-open');
   }
 
-  function renderEquipmentState(equipped){
-    document.querySelectorAll('[data-af-equip-slot][data-slot-code]').forEach(function(node){
+  function renderEquipmentState(equipped, scope){
+    var root = scope && scope.querySelector ? scope : document;
+    root.querySelectorAll('[data-af-equip-slot][data-slot-code]').forEach(function(node){
       var slotCode = node.getAttribute('data-slot-code') || '';
       updateEquipmentSlot(node, equipped && equipped[slotCode] ? equipped[slotCode] : null);
     });
   }
 
 
-  function inventoryContext(){
-    var root = document.querySelector('.af-inventory[data-uid]');
+  function inventoryContext(sourceNode){
+    var root = null;
+    if(sourceNode && sourceNode.closest){
+      root = sourceNode.closest('.af-inventory[data-uid]');
+    }
+    if(!root){
+      root = document.querySelector('.af-inventory[data-uid]');
+    }
     var uid = root ? (root.getAttribute('data-uid') || '0') : '0';
     var canEdit = !!(root && root.getAttribute('data-can-edit') === '1');
-    return {uid: uid, canEdit: canEdit};
+    return {uid: uid, canEdit: canEdit, root: root};
   }
 
-  function loadEquipped(){
-    var panel = document.querySelector('[data-af-equipment-panel][data-uid]');
+  function loadEquipped(scope){
+    var panel = scope && scope.querySelector ? scope.querySelector('[data-af-equipment-panel][data-uid]') : document.querySelector('[data-af-equipment-panel][data-uid]');
     if(!panel){ return Promise.resolve(); }
-    var ctx = inventoryContext();
+    var ctx = inventoryContext(panel);
     var uid = panel.getAttribute('data-uid') || ctx.uid || '0';
     return getJSON('misc.php?action=inventory_equipped_get&uid=' + encodeURIComponent(uid)).then(function(r){
       if(!r || !r.ok){ afShopToast((r && r.error) || 'Не удалось загрузить экипировку', 'error'); return; }
-      renderEquipmentState(r.equipped || {});
+      renderEquipmentState(r.equipped || {}, panel.closest('.af-inventory') || scope || document);
     });
   }
 
@@ -248,7 +255,7 @@
 
   function handleEquipmentSlotClick(slotNode){
     if(!slotNode){ return; }
-    var ctx = inventoryContext();
+    var ctx = inventoryContext(slotNode);
     if(!ctx.canEdit){ return; }
     var invId = parseInt(slotNode.getAttribute('data-inv-id') || '0', 10);
     var slotCode = slotNode.getAttribute('data-slot-code') || '';
@@ -340,13 +347,13 @@
         afShopToast('Этот предмет нельзя экипировать.', 'error');
         return;
       }
-      var ctxEquip = inventoryContext();
+      var ctxEquip = inventoryContext(equipBtn);
       withLoading(equipBtn, post('misc.php?action=inventory_equip', {uid:ctxEquip.uid || '0', inv_id:invIdEquip, slot_code:equipBtn.getAttribute('data-slot-code') || ''})).then(function(r){
         if(r && r.ok){
           hideItemPopover();
-          if(r.state && r.state.equipment){ renderEquipmentState(r.state.equipment); }
-          else if(r.equipped){ renderEquipmentState(r.equipped); }
-          else { loadEquipped(); }
+          if(r.state && r.state.equipment){ renderEquipmentState(r.state.equipment, ctxEquip.root || document); }
+          else if(r.equipped){ renderEquipmentState(r.equipped, ctxEquip.root || document); }
+          else { loadEquipped(ctxEquip.root || document); }
           afShopToast('Предмет экипирован', 'success');
         } else if(r && r.error !== 'busy'){
           afShopToast(r.error || 'Не удалось надеть предмет', 'error');
@@ -368,12 +375,12 @@
       var invIdSlotEquip = parseInt(slotEquipBtn.getAttribute('data-inv-id') || '0', 10);
       var slotCodeEquip = slotEquipBtn.getAttribute('data-slot-code') || '';
       if(invIdSlotEquip <= 0 || !slotCodeEquip){ return; }
-      var ctxSlotEquip = inventoryContext();
+      var ctxSlotEquip = inventoryContext(slotEquipBtn);
       withLoading(slotEquipBtn, post('misc.php?action=inventory_equip', {uid:ctxSlotEquip.uid || '0', inv_id:invIdSlotEquip, slot_code:slotCodeEquip})).then(function(r){
         if(r && r.ok){
           afShopHideCheckoutSuccessModal();
-          if(r.equipped){ renderEquipmentState(r.equipped); }
-          else { loadEquipped(); }
+          if(r.equipped){ renderEquipmentState(r.equipped, ctxSlotEquip.root || document); }
+          else { loadEquipped(ctxSlotEquip.root || document); }
           afShopToast('Предмет экипирован', 'success');
         } else if(r && r.error !== 'busy'){
           afShopToast(r.error || 'Не удалось надеть предмет', 'error');
@@ -386,13 +393,13 @@
     if(unequipBtn){
       e.preventDefault();
       var slotCode = unequipBtn.getAttribute('data-slot-code') || '';
-      var ctxUnequip = inventoryContext();
+      var ctxUnequip = inventoryContext(unequipBtn);
       withLoading(unequipBtn, post('misc.php?action=inventory_unequip', {uid:ctxUnequip.uid || '0', slot_code:slotCode})).then(function(r){
         if(r && r.ok){
           afShopHideCheckoutSuccessModal();
           hideItemPopover();
-          if(r.state && r.state.equipment){ renderEquipmentState(r.state.equipment); }
-          else { loadEquipped(); }
+          if(r.state && r.state.equipment){ renderEquipmentState(r.state.equipment, ctxUnequip.root || document); }
+          else { loadEquipped(ctxUnequip.root || document); }
           afShopToast('Слот освобожден', 'success');
         } else if(r && r.error !== 'busy'){
           afShopToast(r.error || 'Не удалось снять предмет', 'error');
@@ -607,8 +614,7 @@
 
   initCategoryTree();
   restoreCheckoutSuccessModal();
-  initInventoryTabs();
-  loadEquipped();
+  window.AFSHOP.mountInventory(document);
   runHealthCheck();
 
   var slotsRoot = document.querySelector('.af-manage-slots[data-shop]');
@@ -668,16 +674,88 @@
 
 
 
-  function initInventoryTabs(){
-    var root = document.querySelector('[data-af-inventory-tabs]');
+  function renderInventorySlot(item){
+    var invId = String(item && item.inv_id ? item.inv_id : 0);
+    var kbId = String(item && item.kb_id ? item.kb_id : 0);
+    var rarity = item && item.rarity ? item.rarity : 'common';
+    var kind = item && item.item_kind ? item.item_kind : 'misc';
+    var equipSlot = item && item.equip_slot ? item.equip_slot : '';
+    var canEquip = item && item.is_equippable ? '1' : '0';
+    var title = item && item.title ? item.title : '';
+    var icon = item && item.icon_url ? item.icon_url : '';
+    var qty = item && item.qty ? String(item.qty) : '1';
+    var tooltip = item && item.tooltip_text ? item.tooltip_text : '';
+    var iconHtml = icon ? ('<img src="' + escapeHtml(icon) + '" alt="' + escapeHtml(title) + '">') : '<span class="af-equip-slot__placeholder">?</span>';
+    return '<div class="af-inventory-slot af-inv-slot rarity-' + escapeHtml(rarity) + '" draggable="true" data-inv-id="' + escapeHtml(invId) + '" data-kb-id="' + escapeHtml(kbId) + '" data-rarity="' + escapeHtml(rarity) + '" data-kind="' + escapeHtml(kind) + '" data-equip-slot="' + escapeHtml(equipSlot) + '" data-is-equippable="' + escapeHtml(canEquip) + '" data-title="' + escapeHtml(title) + '" data-tooltip="' + escapeHtml(tooltip) + '">' + iconHtml + '<span class="af-inventory-qty">' + escapeHtml(qty) + '</span></div>';
+  }
+
+  function renderInventoryGrid(root, inventoryItems){
     if(!root){ return; }
-    var tabs = Array.prototype.slice.call(document.querySelectorAll('.af-inventory-tab[data-kind]'));
-    var panels = Array.prototype.slice.call(root.querySelectorAll('.af-inventory-panel[data-kind]'));
-    var search = document.querySelector('[data-af-inventory-search]');
-    var rarity = document.querySelector('[data-af-inventory-rarity]');
-    if(!tabs.length || !panels.length){ return; }
+    var tabsNav = root.querySelector('[data-af-inventory-tabs-nav]');
+    var tabsRoot = root.querySelector('[data-af-inventory-tabs]');
+    var panelsWrap = tabsRoot ? tabsRoot.querySelector('.af-inventory-tabs__panels') : null;
+    if(!tabsNav || !panelsWrap){ return; }
+
+    var labels = {
+      all: 'Всё',
+      weapon: 'Оружие',
+      armor: 'Броня',
+      consumable: 'Расходники',
+      gear: 'Снаряжение',
+      misc: 'Другое'
+    };
+    var order = ['all', 'weapon', 'armor', 'consumable', 'gear', 'misc'];
+    var grouped = {all: []};
+    (Array.isArray(inventoryItems) ? inventoryItems : []).forEach(function(item){
+      var kind = item && item.item_kind ? String(item.item_kind) : 'misc';
+      if(!grouped[kind]){
+        grouped[kind] = [];
+        if(order.indexOf(kind) === -1){ order.push(kind); }
+      }
+      grouped.all.push(item);
+      grouped[kind].push(item);
+    });
+
+    tabsNav.innerHTML = '';
+    panelsWrap.innerHTML = '';
+    order.forEach(function(kind){
+      var tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = 'af-inventory-tab';
+      tab.setAttribute('data-kind', kind);
+      tab.textContent = labels[kind] || kind;
+      tabsNav.appendChild(tab);
+
+      var panel = document.createElement('section');
+      panel.className = 'af-inventory-panel';
+      panel.setAttribute('data-kind', kind);
+      var html = (grouped[kind] || []).map(renderInventorySlot).join('');
+      panel.innerHTML = '<div class="af-inventory-grid">' + (html || '<div class="af-inventory-empty">Нет предметов</div>') + '</div>';
+      panelsWrap.appendChild(panel);
+    });
+  }
+
+  function initInventoryTabs(scope){
+    var root = scope && scope.querySelector ? scope.querySelector('[data-af-inventory-tabs]') : document.querySelector('[data-af-inventory-tabs]');
+    if(!root){ return; }
+    var inventoryRoot = root.closest('.af-inventory') || scope || document;
+    if(inventoryRoot.getAttribute && inventoryRoot.getAttribute('data-af-tabs-init') === '1'){ return; }
+    if(inventoryRoot.setAttribute){ inventoryRoot.setAttribute('data-af-tabs-init', '1'); }
+
+    var search = inventoryRoot.querySelector('[data-af-inventory-search]');
+    var rarity = inventoryRoot.querySelector('[data-af-inventory-rarity]');
+
+    function collectTabs(){
+      return Array.prototype.slice.call(inventoryRoot.querySelectorAll('.af-inventory-tab[data-kind]'));
+    }
+
+    function collectPanels(){
+      return Array.prototype.slice.call(root.querySelectorAll('.af-inventory-panel[data-kind]'));
+    }
 
     function activate(kind){
+      var tabs = collectTabs();
+      var panels = collectPanels();
       tabs.forEach(function(tab){ tab.classList.toggle('is-active', tab.getAttribute('data-kind') === kind); });
       panels.forEach(function(panel){ panel.classList.toggle('is-active', panel.getAttribute('data-kind') === kind); });
       try { localStorage.setItem('af_inv_tab', kind); } catch(err) {}
@@ -686,7 +764,7 @@
     function applyFilters(){
       var q = (search && search.value ? search.value : '').toLowerCase();
       var rr = rarity && rarity.value ? rarity.value : '';
-      panels.forEach(function(panel){
+      collectPanels().forEach(function(panel){
         panel.querySelectorAll('.af-inv-slot').forEach(function(slot){
           var txt = ((slot.getAttribute('data-title') || '') + ' ' + (slot.getAttribute('data-tooltip') || '')).toLowerCase();
           var matchQ = !q || txt.indexOf(q) !== -1;
@@ -696,13 +774,18 @@
       });
     }
 
+    inventoryRoot.addEventListener('click', function(e){
+      var tab = e.target.closest('.af-inventory-tab[data-kind]');
+      if(!tab || !inventoryRoot.contains(tab)){ return; }
+      activate(tab.getAttribute('data-kind') || 'all');
+    });
+
     var preferred = '';
     try { preferred = localStorage.getItem('af_inv_tab') || ''; } catch(err) { preferred = ''; }
-    if(!tabs.some(function(tab){ return tab.getAttribute('data-kind') === preferred; })){
+    if(!collectTabs().some(function(tab){ return tab.getAttribute('data-kind') === preferred; })){
       preferred = 'all';
     }
     activate(preferred);
-    tabs.forEach(function(tab){ tab.addEventListener('click', function(){ activate(tab.getAttribute('data-kind')); }); });
     if(search){ search.addEventListener('input', applyFilters); }
     if(rarity){ rarity.addEventListener('change', applyFilters); }
     applyFilters();
@@ -713,7 +796,9 @@
       }
     });
 
-    document.querySelectorAll('.af-inv-slot[data-inv-id]').forEach(function(slot){
+    inventoryRoot.querySelectorAll('.af-inv-slot[data-inv-id]').forEach(function(slot){
+      if(slot.getAttribute('data-af-dnd-init') === '1'){ return; }
+      slot.setAttribute('data-af-dnd-init', '1');
       slot.addEventListener('dragstart', function(e){
         var payload = {
           inv_id: slot.getAttribute('data-inv-id') || '0',
@@ -724,7 +809,9 @@
       });
     });
 
-    document.querySelectorAll('[data-af-equip-slot][data-slot-code]').forEach(function(slot){
+    inventoryRoot.querySelectorAll('[data-af-equip-slot][data-slot-code]').forEach(function(slot){
+      if(slot.getAttribute('data-af-dnd-init') === '1'){ return; }
+      slot.setAttribute('data-af-dnd-init', '1');
       slot.addEventListener('dragover', function(e){
         e.preventDefault();
         var data = {};
@@ -745,11 +832,11 @@
           afShopToast('Этот предмет нельзя надеть в этот слот.', 'error');
           return;
         }
-        var ctx = inventoryContext();
+        var ctx = inventoryContext(slot);
         post('misc.php?action=inventory_equip', {uid:ctx.uid || '0', inv_id:invId, slot_code:targetSlot}).then(function(r){
           if(r && r.ok){
-            if(r.state && r.state.equipment){ renderEquipmentState(r.state.equipment); }
-            else if(r.equipped){ renderEquipmentState(r.equipped); }
+            if(r.state && r.state.equipment){ renderEquipmentState(r.state.equipment, ctx.root || inventoryRoot); }
+            else if(r.equipped){ renderEquipmentState(r.equipped, ctx.root || inventoryRoot); }
             afShopToast('Предмет экипирован', 'success');
           } else {
             afShopToast((r && r.error) || 'Этот предмет нельзя надеть в этот слот.', 'error');
@@ -758,6 +845,31 @@
       });
     });
   }
+
+  function loadInventoryState(scope){
+    var root = scope && scope.closest ? scope.closest('.af-inventory') : null;
+    if(!root){ root = scope && scope.querySelector ? scope.querySelector('.af-inventory') : null; }
+    if(!root){ root = document.querySelector('.af-inventory[data-uid]'); }
+    if(!root){ return Promise.resolve(); }
+    var uid = root.getAttribute('data-uid') || '0';
+    return getJSON('misc.php?action=inventory_state&uid=' + encodeURIComponent(uid)).then(function(r){
+      if(!r || !r.ok){
+        afShopToast((r && r.error) || 'Не удалось загрузить инвентарь', 'error');
+        return;
+      }
+      renderInventoryGrid(root, r.inventory || []);
+      renderEquipmentState(r.equipment || {}, root);
+      initInventoryTabs(root);
+    });
+  }
+
+  window.AFSHOP.renderInventoryGrid = renderInventoryGrid;
+  window.AFSHOP.renderEquipment = renderEquipmentState;
+  window.AFSHOP.mountInventory = function(scope){
+    var root = scope && scope.querySelector ? scope : document;
+    initInventoryTabs(root);
+    return loadInventoryState(root);
+  };
 
   function runHealthCheck(){
     var root = document.getElementById('af-shop-health');

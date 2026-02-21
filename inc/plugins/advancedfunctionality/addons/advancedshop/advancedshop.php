@@ -730,7 +730,7 @@ function af_advancedshop_pre_output(string &$page = ''): void
 {
     global $mybb;
     $action = (string)($mybb->input['action'] ?? '');
-    if (!in_array($action, ['shop', 'shop_category', 'shop_cart', 'shop_manage', 'shop_manage_slots', 'inventory'], true)) {
+    if (!in_array($action, ['shop', 'shop_category', 'shop_cart', 'shop_manage', 'shop_manage_slots', 'inventory', 'af_charactersheet'], true)) {
         return;
     }
 

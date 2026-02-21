@@ -779,6 +779,9 @@
           return resp.text();
         }).then(function (html) {
           content.innerHTML = html || '<div class="af-cs-muted">Инвентарь пуст.</div>';
+          if (window.AFSHOP && typeof window.AFSHOP.mountInventory === 'function') {
+            window.AFSHOP.mountInventory(content);
+          }
           embedRoot.setAttribute('data-afcs-inventory-embed-loaded', '1');
         }).catch(function () {
           var fallbackHtml = ''
