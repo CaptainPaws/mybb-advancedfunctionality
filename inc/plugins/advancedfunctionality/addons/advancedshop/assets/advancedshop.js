@@ -44,6 +44,30 @@
     document.body.classList.remove('af-shop-modal-open');
   }
 
+
+  function checkoutStorageKey(){
+    return 'af_shop_checkout_success';
+  }
+
+  function persistCheckoutSuccess(res){
+    try {
+      var payload = {checkout:(res && res.checkout) || {}, links:(res && res.links) || {}};
+      sessionStorage.setItem(checkoutStorageKey(), JSON.stringify(payload));
+    } catch(err) {}
+  }
+
+  function restoreCheckoutSuccessModal(){
+    var cartRoot = document.querySelector('.af-cart[data-shop]');
+    if(!cartRoot){ return; }
+    var raw = '';
+    try { raw = sessionStorage.getItem(checkoutStorageKey()) || ''; } catch(err) { raw = ''; }
+    if(!raw){ return; }
+    try { sessionStorage.removeItem(checkoutStorageKey()); } catch(err) {}
+    var data = parseJSON(raw);
+    if(!data || typeof data !== 'object'){ return; }
+    afShopShowCheckoutSuccessModal(data.checkout || {}, data.links || {});
+  }
+
   window.afShopShowCheckoutSuccessModal = function(checkout, links){
     var modal = afShopModalRoot();
     if(!modal){
@@ -145,6 +169,7 @@
     var catToggle = e.target.closest('.af-cat-toggle[data-cat]');
     if(catToggle){
       e.preventDefault();
+      e.stopPropagation();
       var wrap = catToggle.closest('.af-shop-wrap[data-shop]');
       var shop = wrap ? (wrap.getAttribute('data-shop') || 'game') : 'game';
       var collapsed = catToggle.getAttribute('aria-expanded') === 'true';
@@ -178,7 +203,14 @@
       e.preventDefault(); e.stopPropagation();
       var shop3 = (checkout.closest('[data-shop]') || document.body).getAttribute('data-shop') || 'game';
       withLoading(checkout, post('misc.php?action=shop_checkout&shop=' + encodeURIComponent(shop3), {}))
-        .then(function(res){ if(res.ok){ afShopShowCheckoutSuccessModal(res.checkout || {}, res.links || {}); } else if(res.error !== 'busy'){ afShopToast(res.error || 'Error', 'error'); } });
+        .then(function(res){
+          if(res.ok){
+            persistCheckoutSuccess(res);
+            window.location.reload();
+          } else if(res.error !== 'busy'){
+            afShopToast(res.error || 'Error', 'error');
+          }
+        });
       return;
     }
 
@@ -339,6 +371,8 @@
   document.addEventListener('keydown', function(e){ if(e.key === 'Escape'){ afShopHideCheckoutSuccessModal(); } });
 
   initCategoryTree();
+  restoreCheckoutSuccessModal();
+  initInventoryTabs();
   runHealthCheck();
 
   var slotsRoot = document.querySelector('.af-manage-slots[data-shop]');
@@ -393,6 +427,30 @@
           + '<div><button type="button" class="af-shop-btn af-slot-save">Save</button> <button type="button" class="af-shop-btn af-slot-delete">Delete</button></div>'
           + '</div>';
       }).join('');
+    });
+  }
+
+
+
+  function initInventoryTabs(){
+    var root = document.querySelector('[data-af-inventory-tabs]');
+    if(!root){ return; }
+    var tabs = Array.prototype.slice.call(root.querySelectorAll('.af-inventory-tab[data-kind]'));
+    var panels = Array.prototype.slice.call(root.querySelectorAll('.af-inventory-panel[data-kind]'));
+    if(!tabs.length || !panels.length){ return; }
+    function activate(kind){
+      tabs.forEach(function(tab){ tab.classList.toggle('is-active', tab.getAttribute('data-kind') === kind); });
+      panels.forEach(function(panel){ panel.classList.toggle('is-active', panel.getAttribute('data-kind') === kind); });
+      try { localStorage.setItem('af_inv_tab', kind); } catch(err) {}
+    }
+    var preferred = '';
+    try { preferred = localStorage.getItem('af_inv_tab') || ''; } catch(err) { preferred = ''; }
+    if(!tabs.some(function(tab){ return tab.getAttribute('data-kind') === preferred; })){
+      preferred = tabs[0].getAttribute('data-kind');
+    }
+    activate(preferred);
+    tabs.forEach(function(tab){
+      tab.addEventListener('click', function(){ activate(tab.getAttribute('data-kind')); });
     });
   }
 

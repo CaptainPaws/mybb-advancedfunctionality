@@ -1,9 +1,11 @@
 <div class="af-shop-wrap" data-shop="{$shop_code}">
   <h1>{$shop_title}</h1>
-  <div class="af-shop-top">
-    <a class="button" href="{$cart_url}">{$lang->af_advancedshop_btn_go_to_cart}</a>
-    {$inventory_link}
-    <span>{$lang->af_advancedshop_balance}: {$balance} {$currency_symbol}</span>
+  <div class="af-shop-toolbar">
+    <div class="af-shop-toolbar__left">
+      <a class="af-shop-btn" href="{$cart_url}">{$lang->af_advancedshop_btn_go_to_cart}</a>
+      {$inventory_link}
+    </div>
+    <div class="af-shop-toolbar__right">{$balance_badge}</div>
   </div>
   <div class="af-shop-layout">
     <aside class="af-shop-cats">{$cats}</aside>

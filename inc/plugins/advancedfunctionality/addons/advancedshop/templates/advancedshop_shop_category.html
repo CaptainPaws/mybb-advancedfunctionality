@@ -1,7 +1,7 @@
 <div class="af-shop-cat-node depth-{$cat_depth} {$activeClass}">
-  <div class="af-shop-cat-row">
+  <a class="af-shop-cat-link {$activeClass}" href="{$cat_url}">
+    <span class="af-shop-cat-title">{$cat_title}</span>
     {$cat_toggle}
-    <a class="af-shop-cat-link {$activeClass}" href="{$cat_url}">{$cat_title}</a>
-  </div>
+  </a>
   {$cat_children}
 </div>
