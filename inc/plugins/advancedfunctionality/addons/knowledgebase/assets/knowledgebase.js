@@ -522,11 +522,11 @@
     }
 
     // ---------- RULES UI (главная часть правки) ----------
-    function initDataUi() {
-        var root = document.getElementById('af-kb-data-ui');
-        var hidden = document.getElementById('af-kb-data-json');
-        var raw = document.getElementById('af-kb-data-json-raw');
-        if (!root || !hidden || !raw) {
+    function initRulesUi() {
+        var root = document.getElementById('af-kb-rules-ui');
+        var raw = document.getElementById('af-kb-rules-json-raw');
+        var metaRaw = document.getElementById('af-kb-meta-json');
+        if (!root || !raw || !metaRaw) {
             return;
         }
 
@@ -588,10 +588,10 @@
 
         function bindRawOnlyMode(message) {
             root.innerHTML = '<div class="af-kb-help">' + esc(message) + '</div>';
-            setFieldValue(hidden, getFieldValue(raw) || '{}');
+            syncRulesToMeta(readJson(getFieldValue(raw) || '{}', {}));
 
             var sync = function () {
-                setFieldValue(hidden, getFieldValue(raw) || '{}');
+                syncRulesToMeta(readJson(getFieldValue(raw) || '{}', {}));
             };
 
             // input может не стрелять у sceditor, поэтому страхуемся
@@ -1693,11 +1693,20 @@
             return payload;
         }
 
+        function syncRulesToMeta(payload) {
+            var meta = readJson(getFieldValue(metaRaw) || '{}', {});
+            if (!meta || typeof meta !== 'object' || Array.isArray(meta)) {
+                meta = {};
+            }
+            meta.rules = payload;
+            setFieldValue(metaRaw, JSON.stringify(meta, null, 2));
+        }
+
         function syncRawNow() {
             validate();
             var payload = toPayload();
             setFieldValue(raw, JSON.stringify(payload, null, 2));
-            setFieldValue(hidden, JSON.stringify(payload));
+            syncRulesToMeta(payload);
         }
 
 
@@ -2411,6 +2420,6 @@
 
     document.addEventListener('DOMContentLoaded', function () {
         initMetaUi();
-        initDataUi();
+        initRulesUi();
     });
 })();
