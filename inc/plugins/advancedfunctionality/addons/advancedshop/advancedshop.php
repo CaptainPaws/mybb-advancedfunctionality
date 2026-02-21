@@ -59,7 +59,7 @@ function af_advancedshop_kb_cols(): array
         'body_en' => 'body_en',
         'body' => '',
         'meta_json' => 'meta_json',
-        'data_json' => 'data_json',
+        'data_json' => '',
         'active' => 'active',
         'sortorder' => 'sortorder',
     ];
@@ -354,10 +354,10 @@ function af_advancedshop_misc_router(): void
     if (($mybb->input['action'] ?? '') === '') { return; }
 
     $action = (string)$mybb->get_input('action');
-    $routes = ['shop','shop_category','shop_cart','shop_checkout','shop_add_to_cart','shop_update_cart','shop_manage','shop_manage_categories','shop_manage_category_create','shop_manage_category_update','shop_manage_category_delete','shop_manage_sortorder_rebuild','shop_manage_slots','shop_manage_slot_create','shop_manage_slot_update','shop_manage_slot_delete','shop_kb_search','shop_kb_schema','shop_health','inventory','inventory_item_info','inventory_equipped_get','inventory_equippable_list','inventory_state','inventory_equip','inventory_unequip'];
+    $routes = ['shop','shop_category','shop_cart','shop_checkout','shop_add_to_cart','shop_update_cart','shop_manage','shop_manage_categories','shop_manage_category_create','shop_manage_category_update','shop_manage_category_delete','shop_manage_sortorder_rebuild','shop_manage_slots','shop_manage_slot_create','shop_manage_slot_update','shop_manage_slot_delete','shop_kb_search','shop_kb_schema','shop_kb_probe','shop_health','inventory','inventory_item_info','inventory_equipped_get','inventory_equippable_list','inventory_state','inventory_equip','inventory_unequip'];
     if (!in_array($action, $routes, true)) { return; }
 
-    $apiActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_kb_schema', 'shop_health', 'inventory_item_info', 'inventory_equipped_get', 'inventory_equippable_list', 'inventory_state', 'inventory_equip', 'inventory_unequip'];
+    $apiActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_kb_schema', 'shop_kb_probe', 'shop_health', 'inventory_item_info', 'inventory_equipped_get', 'inventory_equippable_list', 'inventory_state', 'inventory_equip', 'inventory_unequip'];
     $buyActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart'];
     $manageActions = ['shop_manage', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_kb_schema', 'shop_health'];
 
@@ -407,6 +407,7 @@ function af_advancedshop_misc_router(): void
             case 'shop_manage_slot_delete': af_advancedshop_manage_slot_delete(); return;
             case 'shop_kb_search': af_advancedshop_kb_search(); return;
             case 'shop_kb_schema': af_advancedshop_kb_schema(); return;
+            case 'shop_kb_probe': af_advancedshop_kb_probe(); return;
             case 'shop_health': af_advancedshop_health_ping(); return;
             case 'inventory': af_advancedshop_render_inventory(); return;
             case 'inventory_item_info': af_advancedshop_inventory_item_info(); return;
@@ -1383,9 +1384,8 @@ function af_advancedshop_kb_search(): void
             $where .= ' AND (' . implode(' OR ', $searchParts) . ')';
         }
     }
-    if (!empty($kbCols['data_json'])) {
-        $needle = $db->escape_string('"type_profile":"item"');
-        $where .= " AND " . $kbCols['data_json'] . " LIKE '%{$needle}%'";
+    if (!empty($typeCol)) {
+        $where .= " AND " . ($typeCol === 'type' ? '`type`' : $typeCol) . "='item'";
     }
     $select = [
         $kbIdCol . ' AS kb_id',
@@ -1399,7 +1399,6 @@ function af_advancedshop_kb_search(): void
         ($typeCol ? (($typeCol === 'type' ? '`type`' : $typeCol) . ' AS kb_type') : "'item' AS kb_type"),
         ($keyCol ? (($keyCol === 'key' ? '`key`' : $keyCol) . ' AS kb_key') : "'' AS kb_key"),
     ];
-    if (!empty($kbCols['data_json'])) { $select[] = $kbCols['data_json'] . ' AS kb_data'; }
     $orderSort = !empty($kbCols['sortorder']) ? $kbCols['sortorder'] . ' ASC, ' : '';
     $sql = "SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE {$where} ORDER BY {$orderSort}{$kbIdCol} DESC LIMIT 50";
     $res = $db->query($sql);
@@ -1423,6 +1422,66 @@ function af_advancedshop_kb_search(): void
         ];
     }
     af_advancedshop_json_ok(['items' => $items]);
+}
+
+function af_advancedshop_kb_probe(): void
+{
+    global $mybb, $db;
+    if (!af_advancedshop_can_manage() && !af_advancedshop_can_moderate_inventory()) {
+        af_advancedshop_json_err('Not allowed', 403);
+    }
+
+    $kbId = (int)$mybb->get_input('id');
+    if ($kbId <= 0) {
+        af_advancedshop_json_err('id required', 422);
+    }
+
+    $kbCols = af_advancedshop_kb_cols();
+    $kbIdCol = $kbCols['id'] ?? 'id';
+    $select = [
+        'e.' . $kbIdCol . ' AS id',
+        'e.' . ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS type',
+        'e.' . ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS `key`',
+        'e.' . $kbCols['title_ru'] . ' AS title_ru',
+        'e.' . $kbCols['title_en'] . ' AS title_en',
+        'e.' . $kbCols['short_ru'] . ' AS short_ru',
+        'e.' . $kbCols['short_en'] . ' AS short_en',
+        'e.' . $kbCols['body_ru'] . ' AS body_ru',
+        'e.' . $kbCols['body_en'] . ' AS body_en',
+        'e.' . $kbCols['tech_ru'] . ' AS tech_ru',
+        'e.' . $kbCols['tech_en'] . ' AS tech_en',
+        'e.' . $kbCols['meta_json'] . ' AS meta_json',
+        'e.' . $kbCols['active'] . ' AS active',
+        'e.' . $kbCols['sortorder'] . ' AS sortorder',
+    ];
+    if ($db->field_exists('icon_url', 'af_kb_entries')) {
+        $select[] = 'e.icon_url AS icon_url';
+    }
+    if ($db->field_exists('bg_url', 'af_kb_entries')) {
+        $select[] = 'e.bg_url AS bg_url';
+    }
+
+    $row = $db->fetch_array($db->query("SELECT " . implode(', ', $select) . "\n        FROM " . af_advancedshop_kb_table() . " e\n        WHERE e." . $kbIdCol . "=" . $kbId . "\n        LIMIT 1"));
+    if (!$row) {
+        af_advancedshop_json_err('Entry not found', 404);
+    }
+
+    $resolved = af_advancedshop_kb_resolve_data_json($row);
+    $profile = af_advancedshop_kb_item_profile(array_merge($row, $resolved));
+
+    af_advancedshop_json_ok([
+        'kb_entry_row' => $row,
+        'data_json_source' => [
+            'found_in_column' => (string)($resolved['kb_data_column'] ?? '') !== '' ? (string)$resolved['kb_data_column'] : null,
+            'found_in_meta_json' => !empty($resolved['kb_data_from_meta']),
+            'found_in_other_table' => (string)($resolved['kb_data_other_table'] ?? '') !== '' ? (string)$resolved['kb_data_other_table'] : null,
+        ],
+        'data_json_preview' => mb_substr((string)($resolved['kb_data'] ?? ''), 0, 200),
+        'parsed_ok' => (string)($profile['data_json_present'] ?? 'no') === 'yes',
+        'parsed_item_rarity' => (string)($profile['rarity'] ?? 'common'),
+        'parsed_item_kind' => (string)($profile['item_kind'] ?? ''),
+        'parsed_equip_slot' => (string)($profile['equip_slot'] ?? ''),
+    ]);
 }
 
 function af_advancedshop_render_inventory(): void
@@ -2296,6 +2355,128 @@ function af_advancedshop_health_ping(): void
     af_advancedshop_json_ok(['ping' => 'ok']);
 }
 
+function af_advancedshop_kb_data_json_from_meta($metaRaw): string
+{
+    if (!is_string($metaRaw) || trim($metaRaw) === '') {
+        return '';
+    }
+
+    $meta = @json_decode($metaRaw, true);
+    if (!is_array($meta)) {
+        return '';
+    }
+
+    foreach (['data_json', 'rules_json_raw', 'rules_json'] as $field) {
+        if (!empty($meta[$field]) && is_string($meta[$field])) {
+            return trim((string)$meta[$field]);
+        }
+    }
+
+    foreach (['data', 'rules'] as $field) {
+        if (!empty($meta[$field])) {
+            if (is_string($meta[$field])) {
+                return trim((string)$meta[$field]);
+            }
+            if (is_array($meta[$field])) {
+                return (string)json_encode($meta[$field], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+        }
+    }
+
+    if (isset($meta['item']) || isset($meta['item_kind']) || isset($meta['slot'])) {
+        return (string)json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    return '';
+}
+
+function af_advancedshop_kb_data_json_from_blocks(int $kbId): array
+{
+    global $db;
+
+    static $cache = [];
+    if (isset($cache[$kbId])) {
+        return $cache[$kbId];
+    }
+
+    $empty = ['raw' => '', 'table' => '', 'column' => null];
+    if ($kbId <= 0 || !$db->table_exists('af_kb_blocks')) {
+        $cache[$kbId] = $empty;
+        return $empty;
+    }
+
+    $fields = ['entry_id'];
+    if ($db->field_exists('data_json', 'af_kb_blocks')) {
+        $fields[] = 'data_json';
+    }
+    if ($db->field_exists('content', 'af_kb_blocks')) {
+        $fields[] = 'content';
+    }
+    if ($db->field_exists('sortorder', 'af_kb_blocks')) {
+        $fields[] = 'sortorder';
+    }
+
+    $orderBy = $db->field_exists('sortorder', 'af_kb_blocks') ? ['order_by' => 'sortorder', 'order_dir' => 'ASC'] : ['order_by' => 'id', 'order_dir' => 'ASC'];
+    $res = $db->simple_select('af_kb_blocks', implode(',', $fields), 'entry_id=' . $kbId, $orderBy);
+    while ($row = $db->fetch_array($res)) {
+        if (isset($row['data_json']) && trim((string)$row['data_json']) !== '') {
+            $cache[$kbId] = ['raw' => trim((string)$row['data_json']), 'table' => 'af_kb_blocks', 'column' => 'data_json'];
+            return $cache[$kbId];
+        }
+        if (isset($row['content']) && trim((string)$row['content']) !== '') {
+            $raw = trim((string)$row['content']);
+            if (in_array(substr($raw, 0, 1), ['{', '['], true)) {
+                $cache[$kbId] = ['raw' => $raw, 'table' => 'af_kb_blocks', 'column' => 'content'];
+                return $cache[$kbId];
+            }
+        }
+    }
+
+    $cache[$kbId] = $empty;
+    return $empty;
+}
+
+function af_advancedshop_kb_resolve_data_json(array $kbRow): array
+{
+    $resolved = [
+        'kb_data' => '',
+        'kb_data_column' => null,
+        'kb_data_from_meta' => false,
+        'kb_data_other_table' => '',
+    ];
+
+    $columnCandidates = ['kb_data', 'data_json', 'rules_json_raw', 'rules_json'];
+    foreach ($columnCandidates as $column) {
+        $raw = trim((string)($kbRow[$column] ?? ''));
+        if ($raw !== '') {
+            $resolved['kb_data'] = $raw;
+            $resolved['kb_data_column'] = $column;
+            return $resolved;
+        }
+    }
+
+    foreach (['kb_meta', 'meta_json'] as $metaField) {
+        $rawMeta = (string)($kbRow[$metaField] ?? '');
+        $metaJsonRaw = af_advancedshop_kb_data_json_from_meta($rawMeta);
+        if ($metaJsonRaw !== '') {
+            $resolved['kb_data'] = $metaJsonRaw;
+            $resolved['kb_data_from_meta'] = true;
+            $resolved['kb_data_column'] = $metaField;
+            return $resolved;
+        }
+    }
+
+    $kbId = (int)($kbRow['kb_id'] ?? $kbRow['id'] ?? 0);
+    $blocks = af_advancedshop_kb_data_json_from_blocks($kbId);
+    if ($blocks['raw'] !== '') {
+        $resolved['kb_data'] = (string)$blocks['raw'];
+        $resolved['kb_data_other_table'] = (string)$blocks['table'];
+        $resolved['kb_data_column'] = (string)($blocks['column'] ?? '');
+    }
+
+    return $resolved;
+}
+
 function af_advancedshop_kb_item_profile(array $kbRow): array
 {
     $default = [
@@ -2311,7 +2492,9 @@ function af_advancedshop_kb_item_profile(array $kbRow): array
         'rarity_raw' => '',
         'data_json_present' => 'no',
     ];
-    $jsonRaw = (string)($kbRow['kb_data'] ?? $kbRow['data_json'] ?? '');
+
+    $resolved = af_advancedshop_kb_resolve_data_json($kbRow);
+    $jsonRaw = (string)($resolved['kb_data'] ?? '');
     if (trim($jsonRaw) === '') {
         return $default;
     }
@@ -2321,11 +2504,12 @@ function af_advancedshop_kb_item_profile(array $kbRow): array
         return $default;
     }
 
-    $default['data_json_present'] = 'yes';
     $item = is_array($data['item'] ?? null) ? $data['item'] : [];
     $rawRarity = '';
-    if ($item && !empty($item['rarity'])) {
+    if (!empty($item['rarity'])) {
         $rawRarity = (string)$item['rarity'];
+    } elseif (!empty($data['rarity'])) {
+        $rawRarity = (string)$data['rarity'];
     }
 
     $tags = $data['tags'] ?? ($item['tags'] ?? []);
