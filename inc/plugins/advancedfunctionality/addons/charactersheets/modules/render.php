@@ -415,34 +415,8 @@ function af_cs_kb_skill_meta(string $skillKey): array
     $meta['title_ru'] = trim((string)($entry['title_ru'] ?? ''));
     $meta['title_en'] = trim((string)($entry['title_en'] ?? ''));
 
-    $rawDataJson = trim((string)($entry['data_json'] ?? $entry['rules_json_raw'] ?? $entry['rules_json'] ?? ''));
-
-    if ($rawDataJson === '' && !empty($entry['id'])) {
-        global $db;
-        if (is_object($db) && $db->table_exists('af_kb_blocks')) {
-            $blockFields = [];
-            if ($db->field_exists('data_json', 'af_kb_blocks')) {
-                $blockFields[] = 'data_json';
-            }
-            if ($db->field_exists('content', 'af_kb_blocks')) {
-                $blockFields[] = 'content';
-            }
-            if (!empty($blockFields)) {
-                $block = $db->fetch_array($db->simple_select(
-                    'af_kb_blocks',
-                    implode(',', $blockFields),
-                    "entry_id=" . (int)$entry['id'] . " AND block_key='data'" . ($db->field_exists('active', 'af_kb_blocks') ? ' AND active=1' : ''),
-                    ['order_by' => 'sortorder,id', 'order_dir' => 'ASC', 'limit' => 1]
-                ));
-                if (is_array($block)) {
-                    $rawDataJson = trim((string)($block['data_json'] ?? $block['content'] ?? ''));
-                }
-            }
-        }
-    }
-
-    $decoded = af_charactersheets_json_decode($rawDataJson);
-    $skill = is_array($decoded['skill'] ?? null) ? $decoded['skill'] : [];
+    $rules = cs_kb_get_data_rules($entry);
+    $skill = is_array($rules['skill'] ?? null) ? $rules['skill'] : [];
 
     $keyStat = strtolower(trim((string)($skill['key_stat'] ?? $skill['attribute'] ?? '')));
     $allowed = af_charactersheets_default_attributes();
