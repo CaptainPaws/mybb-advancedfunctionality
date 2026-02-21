@@ -1426,19 +1426,51 @@
 }
 
 
-.af-cs-inventory-launcher {
-  display: grid;
-  gap: 12px;
-  max-width: 420px;
-  padding: 16px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(92, 195, 255, 0.25);
+.af-cs-inventory-embed__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
-.af-cs-inventory-launcher__text {
+.af-cs-inventory-embed__title {
   font-size: 14px;
-  opacity: 0.8;
+  opacity: 0.85;
+}
+
+.af-cs-inventory-embed__fullscreen {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(92, 195, 255, 0.35);
+  background: rgba(4, 10, 16, 0.65);
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.af-cs-inventory-embed {
+  border-radius: 12px;
+  border: 1px solid rgba(92, 195, 255, 0.2);
+  background: rgba(4, 10, 16, 0.45);
+  padding: 8px;
+  min-height: 320px;
+}
+
+.af-cs-inventory-embed__fallback {
+  display: grid;
+  gap: 10px;
+}
+
+.af-cs-inventory-embed__iframe {
+  width: 100%;
+  min-height: 620px;
+  border: 0;
+  border-radius: 10px;
+  background: #0a0f15;
 }
 
 .af-cs-inventory-ui {
