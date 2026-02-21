@@ -1425,6 +1425,22 @@
   color: inherit;
 }
 
+
+.af-cs-inventory-launcher {
+  display: grid;
+  gap: 12px;
+  max-width: 420px;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(92, 195, 255, 0.25);
+}
+
+.af-cs-inventory-launcher__text {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
 .af-cs-inventory-ui {
   display: grid;
   gap: 16px;

@@ -104,7 +104,7 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $sheet_skills_html = af_charactersheets_build_skills_html($sheet_view, $can_manage_skills, $can_view_ledger, $can_staff_reset, $skills_locked);
     $sheet_knowledge_html = af_charactersheets_build_knowledge_html($sheet_view, $can_edit_sheet, $can_view_ledger);
     $sheet_abilities_html = af_charactersheets_build_abilities_html($build, $can_edit_sheet);
-    $sheet_inventory_html = af_charactersheets_build_inventory_html($build, $can_edit_sheet);
+    $sheet_inventory_html = af_charactersheets_build_inventory_html($uid);
     $sheet_augments_html = af_charactersheets_build_augments_html($build, $can_edit_sheet, $sheet_view);
     $sheet_equipment_html = af_charactersheets_build_equipment_html($build, $can_edit_sheet);
     $sheet_mechanics_html = af_charactersheets_build_mechanics_html($sheet_view);
@@ -1026,13 +1026,6 @@ function af_charactersheets_build_header_actions_html(
             . '" title="Анкета" aria-label="Анкета"><i class="fa-regular fa-id-card"></i></a>';
     }
 
-    if ($uid > 0) {
-        $modalInventoryUrl = 'misc.php?action=inventory&uid=' . $uid . '&ajax=1';
-        $items[] = '<a class="af-cs-btn af-cs-btn--compact" href="' . htmlspecialchars_uni($modalInventoryUrl)
-            . '" data-afcs-open="1" data-afcs-sheet="' . htmlspecialchars_uni($modalInventoryUrl)
-            . '" title="Инвентарь" aria-label="Инвентарь"><i class="fa-solid fa-box-open"></i></a>';
-    }
-
     if ($can_award) {
         $items[] = '<button type="button" class="af-cs-btn af-cs-btn--compact af-cs-btn--icon" data-afcs-award-toggle'
             . ' title="Ручное начисление" aria-label="Ручное начисление"><i class="fa-solid fa-plus"></i></button>';
@@ -1359,121 +1352,20 @@ function af_charactersheets_build_mechanics_html(array $view): string
     return '<div class="af-cs-mechanics-grid">' . implode('', $cards) . '</div>' . $debug_comment . $debug_line;
 }
 
-function af_charactersheets_build_inventory_html(array $build, bool $can_edit): string
+function af_charactersheets_build_inventory_html(int $uid): string
 {
-    $inventory = (array)($build['inventory'] ?? []);
-    $items = (array)($inventory['items'] ?? []);
-
-    $category_labels = [
-        'weapon' => 'Оружие',
-        'armor' => 'Броня',
-        'tools' => 'Инструменты',
-        'consumables' => 'Расходники',
-        'craft' => 'Ремесленная сумка',
-        'augmentations' => 'Аугментации',
-    ];
-    $category_keys = array_keys($category_labels);
-    $categories = array_fill_keys($category_keys, []);
-
-    $cards = [];
-    foreach ($items as $item) {
-        if (!is_array($item)) {
-            continue;
-        }
-        $type = af_charactersheets_get_inventory_item_type($item);
-        $key = af_charactersheets_get_inventory_item_key($item);
-        $qty = (int)($item['qty'] ?? 0);
-        if ($type === '' || $key === '') {
-            continue;
-        }
-        $entry = af_charactersheets_kb_get_entry($type, $key);
-        $category = af_charactersheets_pick_inventory_category($entry);
-        if (!isset($categories[$category])) {
-            $category = 'tools';
-        }
-        $title = af_charactersheets_kb_pick_text($entry, 'title');
-        $desc = af_charactersheets_kb_pick_text($entry, 'short');
-        if ($desc === '') {
-            $desc = af_charactersheets_kb_pick_text($entry, 'description');
-        }
-        $bonus_html = af_charactersheets_kb_get_block_html($entry, 'bonuses');
-        $equipped = !empty($item['equipped']);
-        $equip_action = $can_edit
-            ? '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-inventory-toggle="1"'
-                . ' data-afcs-item-type="' . htmlspecialchars_uni($type) . '"'
-                . ' data-afcs-item-key="' . htmlspecialchars_uni($key) . '"'
-                . ' data-afcs-item-equipped="' . ($equipped ? '0' : '1') . '">'
-                . ($equipped ? 'Снять' : 'Надеть') . '</button>'
-            : '';
-
-        $cards[] = [
-            'category' => $category,
-            'title' => $title !== '' ? $title : $key,
-            'desc' => $desc,
-            'bonus_html' => $bonus_html,
-            'qty' => $qty,
-            'icon' => af_charactersheets_render_kb_icon($entry, $title),
-            'equip_action' => $equip_action,
-            'equipped' => $equipped,
-            'type' => $type,
-            'key' => $key,
-        ];
+    $inventory_url = '';
+    if ($uid > 0) {
+        $inventory_url = 'misc.php?action=inventory&uid=' . $uid;
     }
 
-    foreach ($cards as $card) {
-        $categories[$card['category']][] = $card;
+    $inventory_button_html = '<div class="af-cs-muted">Инвентарь недоступен.</div>';
+    if ($inventory_url !== '') {
+        $inventory_button_html = '<button type="button" class="af-cs-btn af-cs-btn--compact"'
+            . ' data-afcs-inventory-open="1" data-afcs-sheet="' . htmlspecialchars_uni($inventory_url) . '">'
+            . '<i class="fa-solid fa-box-open"></i> Открыть инвентарь'
+            . '</button>';
     }
-
-    $tabs = [];
-    $panels = [];
-    $active_key = '';
-    foreach ($category_labels as $key => $label) {
-        if ($active_key === '' && !empty($categories[$key])) {
-            $active_key = $key;
-        }
-    }
-    if ($active_key === '') {
-        $active_key = array_key_first($category_labels) ?: '';
-    }
-    foreach ($category_labels as $key => $label) {
-        $tab_active = $key === $active_key;
-        $tab_class = $tab_active ? ' is-active' : '';
-        $tabs[] = '<button type="button" class="af-cs-tab-btn' . $tab_class . '" data-afcs-inventory-tab="' . htmlspecialchars_uni($key) . '">' . htmlspecialchars_uni($label) . '</button>';
-        $panel_items = [];
-        foreach ($categories[$key] as $card) {
-            $panel_items[] = '<button type="button" class="af-cs-slot af-cs-slot--item"'
-                . ' data-afcs-item-card="1"'
-                . ' data-afcs-item-title="' . htmlspecialchars_uni($card['title']) . '"'
-                . ' data-afcs-item-desc="' . htmlspecialchars_uni($card['desc']) . '"'
-                . ' data-afcs-item-qty="' . htmlspecialchars_uni((string)$card['qty']) . '"'
-                . ' data-afcs-item-effects="' . htmlspecialchars_uni($card['bonus_html']) . '"'
-                . ' data-afcs-item-type="' . htmlspecialchars_uni($card['type']) . '"'
-                . ' data-afcs-item-key="' . htmlspecialchars_uni($card['key']) . '"'
-                . ' data-afcs-item-equipped="' . ($card['equipped'] ? '1' : '0') . '"'
-                . ' data-afcs-item-action="' . htmlspecialchars_uni($card['equip_action']) . '"'
-                . ' title="' . htmlspecialchars_uni($card['title']) . '">'
-                . '<span class="af-cs-slot-icon">' . $card['icon'] . '</span>'
-                . '<span class="af-cs-slot-qty">' . htmlspecialchars_uni((string)$card['qty']) . '</span>'
-                . '<span class="af-cs-slot-name">' . htmlspecialchars_uni($card['title']) . '</span>'
-                . '</button>';
-        }
-        if (!$panel_items) {
-            $panel_items[] = '<div class="af-cs-muted">Нет предметов.</div>';
-        }
-        $panel_class = $tab_active ? ' is-active' : '';
-        $panels[] = '<div class="af-cs-inventory-panel' . $panel_class . '" data-afcs-inventory-panel="' . htmlspecialchars_uni($key) . '">'
-            . '<div class="af-cs-inventory-grid">' . implode('', $panel_items) . '</div>'
-            . '<div class="af-cs-inventory-info" data-afcs-inventory-info>'
-            . '<div class="af-cs-muted">Выберите предмет, чтобы увидеть детали.</div>'
-            . '</div>'
-            . '</div>';
-    }
-
-    $inventory_html = '<div class="af-cs-inventory-ui">'
-        . '<div class="af-cs-inventory-tabs">' . implode('', $tabs) . '</div>'
-        . '<div class="af-cs-inventory-panels">' . implode('', $panels) . '</div>'
-        . '</div>';
-
     global $templates;
     $tpl = $templates->get('charactersheet_inventory');
     eval("\$out = \"" . $tpl . "\";");
