@@ -2235,6 +2235,40 @@ function af_kb_get_entry_data_json(int $entryId): string
     return af_kb_normalize_rules_json($json);
 }
 
+function af_kb_get_entry_data_json_for_editor(array $entry): string
+{
+    $metaRules = af_kb_extract_rules_from_meta_json((string)($entry['meta_json'] ?? '{}'));
+    if (is_array($metaRules)) {
+        $json = json_encode($metaRules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json !== false) {
+            return af_kb_normalize_rules_json($json);
+        }
+    }
+
+    $legacyCandidates = [];
+    $legacyCandidates[] = trim((string)($entry['data_json'] ?? ''));
+
+    $entryId = (int)($entry['id'] ?? 0);
+    if ($entryId > 0) {
+        $blocksMap = af_kb_migration_discover_block_columns();
+        $found = af_kb_migration_find_rules_in_blocks($entryId, $blocksMap);
+        $legacyCandidates[] = trim((string)($found['raw'] ?? ''));
+    }
+
+    foreach ($legacyCandidates as $candidate) {
+        if ($candidate === '' || !af_kb_validate_json($candidate)) {
+            continue;
+        }
+        $decoded = json_decode($candidate, true);
+        if (!is_array($decoded)) {
+            continue;
+        }
+        return af_kb_normalize_rules_json($candidate);
+    }
+
+    return '{}';
+}
+
 function af_kb_extract_rules_from_meta_json(string $metaJson): ?array
 {
     $meta = af_kb_decode_json($metaJson);
@@ -4155,8 +4189,22 @@ function af_kb_handle_edit(): void
         }
 
         $metaPayload = af_kb_decode_json($metaJson);
-        if (empty($metaPayload['schema'])) {
-            $metaPayload['schema'] = 'af_kb.meta.v1';
+        $metaBeforeRaw = '';
+        if (!empty($entry['id'])) {
+            $metaBeforeRow = $db->fetch_array($db->simple_select('af_kb_entries', 'meta_json', 'id='.(int)$entry['id'], ['limit' => 1]));
+            $metaBeforeRaw = (string)($metaBeforeRow['meta_json'] ?? '');
+        }
+        $metaBefore = af_kb_decode_json($metaBeforeRaw);
+        if (!is_array($metaBefore)) {
+            $metaBefore = [];
+        }
+
+        if (!is_array($metaPayload)) {
+            $metaPayload = [];
+        }
+        $metaPayload = array_replace_recursive($metaBefore, $metaPayload);
+        if (empty($metaPayload['schema']) || (string)$metaPayload['schema'] === 'af_kb.meta.v1') {
+            $metaPayload['schema'] = 'af_kb.meta.v2';
         }
 
         $entryDataJsonRaw = trim((string)$mybb->get_input('entry_data_json'));
@@ -4330,12 +4378,37 @@ function af_kb_handle_edit(): void
             $metaPayload['ui']['icon_url'] = $entryIconUrl;
             $metaPayload['ui']['background_url'] = $entryBgUrl;
             $metaPayload['background_tab_url'] = $entryBgTabUrl;
-            $metaJsonNormalized = json_encode($metaPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            if ($metaJsonNormalized === false) {
-                $metaJsonNormalized = '{}';
+
+            $rulesObject = af_kb_decode_json($entryDataJsonNormalized);
+            if (!is_array($rulesObject) || empty($rulesObject['schema']) || empty($rulesObject['type_profile'])) {
+                $errors[] = 'Rules JSON must be an object with schema and type_profile.';
             }
 
-            $data = [
+            if (!$errors) {
+                $metaPayload['rules'] = $rulesObject;
+                $metaJsonNormalized = json_encode($metaPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                if ($metaJsonNormalized === false) {
+                    $metaJsonNormalized = '{}';
+                }
+
+                if (af_kb_is_admin() && (int)$mybb->get_input('kb_debug_rules', MyBB::INPUT_INT) === 1) {
+                    $rulesPreview = (string)json_encode($rulesObject, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    if ($rulesPreview === '') {
+                        $rulesPreview = '{}';
+                    }
+                    $debugPayload = [
+                        'entry_id' => (int)($entry['id'] ?? 0),
+                        'strlen(meta_json_before)' => strlen($metaBeforeRaw),
+                        'has_rules_before' => (is_array($metaBefore['rules'] ?? null) ? 1 : 0),
+                        'has_rules_after' => (is_array($metaPayload['rules'] ?? null) ? 1 : 0),
+                        'rules_schema' => (string)($rulesObject['schema'] ?? ''),
+                        'type_profile' => (string)($rulesObject['type_profile'] ?? ''),
+                        'rules_preview_200' => substr($rulesPreview, 0, 200),
+                    ];
+                    error_log('[af_kb_rules_save_debug] ' . json_encode($debugPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                }
+
+                $data = [
                 'type'       => $db->escape_string($type),
                 'key'        => $db->escape_string($key),
                 'title_ru'   => $db->escape_string((string)$mybb->get_input('title_ru')),
@@ -4358,18 +4431,18 @@ function af_kb_handle_edit(): void
                 'item_kind'  => $db->escape_string($itemKind ?? ''),
             ];
 
-            if ($entry) {
-                $db->update_query('af_kb_entries', $data, 'id='.(int)$entry['id']);
-                $entryId = (int)$entry['id'];
-                $action = 'update';
-            } else {
-                $entryId = (int)$db->insert_query('af_kb_entries', $data);
-                $action = 'create';
-            }
+                if ($entry) {
+                    $db->update_query('af_kb_entries', $data, 'id='.(int)$entry['id']);
+                    $entryId = (int)$entry['id'];
+                    $action = 'update';
+                } else {
+                    $entryId = (int)$db->insert_query('af_kb_entries', $data);
+                    $action = 'create';
+                }
 
-            $db->delete_query('af_kb_blocks', 'entry_id=' . $entryId);
-            foreach ($parsedBlocks as $block) {
-                $db->insert_query('af_kb_blocks', [
+                $db->delete_query('af_kb_blocks', 'entry_id=' . $entryId);
+                foreach ($parsedBlocks as $block) {
+                    $db->insert_query('af_kb_blocks', [
                     'entry_id'   => $entryId,
                     'block_key'  => $db->escape_string($block['block_key']),
                     'title_ru'   => $db->escape_string($block['title_ru']),
@@ -4381,10 +4454,10 @@ function af_kb_handle_edit(): void
                     'icon_url'   => $db->escape_string($block['icon_url']),
                     'active'     => (int)$block['active'],
                     'sortorder'  => (int)$block['sortorder'],
-                ]);
-            }
+                    ]);
+                }
 
-            $db->insert_query('af_kb_blocks', [
+                $db->insert_query('af_kb_blocks', [
                 'entry_id'   => $entryId,
                 'block_key'  => 'data',
                 'title_ru'   => '',
@@ -4396,11 +4469,11 @@ function af_kb_handle_edit(): void
                 'icon_url'   => '',
                 'active'     => 1,
                 'sortorder'  => 9999,
-            ]);
+                ]);
 
-            $db->delete_query('af_kb_relations', "from_type='".$db->escape_string($type)."' AND from_key='".$db->escape_string($key)."'");
-            foreach ($parsedRelations as $rel) {
-                $db->insert_query('af_kb_relations', [
+                $db->delete_query('af_kb_relations', "from_type='".$db->escape_string($type)."' AND from_key='".$db->escape_string($key)."'");
+                foreach ($parsedRelations as $rel) {
+                    $db->insert_query('af_kb_relations', [
                     'from_type' => $db->escape_string($type),
                     'from_key'  => $db->escape_string($key),
                     'rel_type'  => $db->escape_string($rel['rel_type']),
@@ -4408,19 +4481,20 @@ function af_kb_handle_edit(): void
                     'to_key'    => $db->escape_string($rel['to_key']),
                     'meta_json' => $db->escape_string($rel['meta_json']),
                     'sortorder' => (int)$rel['sortorder'],
-                ]);
-            }
+                    ]);
+                }
 
-            $db->insert_query('af_kb_log', [
+                $db->insert_query('af_kb_log', [
                 'uid'      => (int)$mybb->user['uid'],
                 'action'   => $db->escape_string($action),
                 'type'     => $db->escape_string($type),
                 'key'      => $db->escape_string($key),
                 'diff_json'=> $db->escape_string('{}'),
                 'dateline' => TIME_NOW,
-            ]);
+                ]);
 
-            redirect('misc.php?action=kb&type='.urlencode($type).'&key='.urlencode($key), 'Saved');
+                redirect('misc.php?action=kb&type='.urlencode($type).'&key='.urlencode($key), 'Saved');
+            }
         }
     }
 
@@ -4569,7 +4643,7 @@ function af_kb_handle_edit(): void
     $kb_tech_ru = htmlspecialchars_uni($entry['tech_ru'] ?? '');
     $kb_tech_en = htmlspecialchars_uni($entry['tech_en'] ?? '');
     $kb_meta_json = htmlspecialchars_uni($entry['meta_json'] ?: '{}');
-    $entryDataJson = af_kb_get_entry_data_json((int)($entry['id'] ?? 0));
+    $entryDataJson = af_kb_get_entry_data_json_for_editor((array)$entry);
     $kb_data_json = htmlspecialchars_uni($entryDataJson);
     $kb_data_json_hidden = htmlspecialchars_uni($entryDataJson);
 
