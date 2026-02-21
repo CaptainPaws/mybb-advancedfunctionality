@@ -156,6 +156,87 @@
     });
   }
 
+  var AF_EQUIP_META = {
+    weapon_main:{label:'Main Hand', icon:'⚔️'}, weapon_off:{label:'Off Hand', icon:'🛡️'},
+    head:{label:'Head', icon:'⛑️'}, body:{label:'Body', icon:'🦺'}, hands:{label:'Hands', icon:'🧤'},
+    legs:{label:'Legs', icon:'👖'}, feet:{label:'Feet', icon:'🥾'}, back:{label:'Back', icon:'🎒'}, belt:{label:'Belt', icon:'🧷'}
+  };
+
+  function updateEquipmentSlot(node, data){
+    if(!node){ return; }
+    var slotCode = node.getAttribute('data-slot-code') || '';
+    var meta = AF_EQUIP_META[slotCode] || {label:slotCode, icon:'⬜'};
+    var entry = data || null;
+    var rarity = (entry && entry.rarity) ? entry.rarity : 'common';
+    var title = (entry && entry.title) ? entry.title : 'Пусто';
+    var iconUrl = (entry && entry.icon_url) ? entry.icon_url : '';
+    node.className = 'af-equip-slot rarity-' + rarity;
+    node.setAttribute('data-inv-id', entry && entry.inv_id ? String(entry.inv_id) : '0');
+    node.setAttribute('data-kb-id', entry && entry.kb_id ? String(entry.kb_id) : '0');
+    node.setAttribute('data-item-title', title);
+    node.setAttribute('data-item-icon', iconUrl);
+    node.setAttribute('data-item-rarity', rarity);
+    node.setAttribute('data-slot-label', meta.label || slotCode);
+    node.setAttribute('data-slot-icon', meta.icon || '⬜');
+    var iconNode = node.querySelector('.af-equip-slot__item-icon');
+    if(iconNode){
+      iconNode.innerHTML = iconUrl ? ('<img src="' + escapeHtml(iconUrl) + '" alt="' + escapeHtml(title) + '">') : '<span class="af-equip-slot__placeholder">Пусто</span>';
+    }
+    var titleNode = node.querySelector('.af-equip-slot__item-title');
+    if(titleNode){ titleNode.textContent = title; }
+  }
+
+  function showInventoryModal(html){
+    var modal = afShopModalRoot();
+    if(!modal){ return; }
+    var content = modal.querySelector('[data-af-shop-modal-content]');
+    if(content){ content.innerHTML = html; }
+    modal.hidden = false;
+    document.body.classList.add('af-shop-modal-open');
+  }
+
+  function renderEquipmentState(equipped){
+    document.querySelectorAll('[data-af-equip-slot][data-slot-code]').forEach(function(node){
+      var slotCode = node.getAttribute('data-slot-code') || '';
+      updateEquipmentSlot(node, equipped && equipped[slotCode] ? equipped[slotCode] : null);
+    });
+  }
+
+  function loadEquipped(){
+    var panel = document.querySelector('[data-af-equipment-panel][data-uid]');
+    if(!panel){ return Promise.resolve(); }
+    var uid = panel.getAttribute('data-uid') || '0';
+    return getJSON('misc.php?action=inventory_equipped_get&uid=' + encodeURIComponent(uid)).then(function(r){
+      if(!r || !r.ok){ afShopToast((r && r.error) || 'Не удалось загрузить экипировку', 'error'); return; }
+      renderEquipmentState(r.equipped || {});
+    });
+  }
+
+  function handleEquipmentSlotClick(slotNode){
+    if(!slotNode){ return; }
+    var invId = parseInt(slotNode.getAttribute('data-inv-id') || '0', 10);
+    var slotCode = slotNode.getAttribute('data-slot-code') || '';
+    var slotLabel = slotNode.getAttribute('data-slot-label') || slotCode;
+    var title = slotNode.getAttribute('data-item-title') || 'Пусто';
+    var icon = slotNode.getAttribute('data-item-icon') || '';
+    var rarity = slotNode.getAttribute('data-item-rarity') || 'common';
+    if(invId > 0){
+      showInventoryModal(
+        '<p class="af-shop-modal__title" id="af-shop-modal-title">' + escapeHtml(title) + '</p>'
+        + '<p><strong>Слот:</strong> ' + escapeHtml(slotLabel) + '</p>'
+        + '<p><strong>Редкость:</strong> ' + escapeHtml(rarity) + '</p>'
+        + (icon ? '<p><img src="' + escapeHtml(icon) + '" alt="' + escapeHtml(title) + '" class="af-equip-modal-icon"></p>' : '')
+        + '<div class="af-shop-modal__actions"><button type="button" class="af-shop-btn" data-af-unequip-btn data-slot-code="' + escapeHtml(slotCode) + '">Снять</button></div>'
+      );
+      return;
+    }
+    showInventoryModal(
+      '<p class="af-shop-modal__title" id="af-shop-modal-title">' + escapeHtml(slotLabel) + '</p>'
+      + '<p>Выберите предмет для этого слота.</p>'
+      + '<p><em>Stub: выбор предмета добавим в следующем ТЗ.</em></p>'
+    );
+  }
+
   document.addEventListener('click', function(e){
 
 
@@ -163,6 +244,29 @@
     if(modalClose){
       e.preventDefault();
       afShopHideCheckoutSuccessModal();
+      return;
+    }
+
+    var equipSlot = e.target.closest('[data-af-equip-slot][data-slot-code]');
+    if(equipSlot){
+      e.preventDefault();
+      handleEquipmentSlotClick(equipSlot);
+      return;
+    }
+
+    var unequipBtn = e.target.closest('[data-af-unequip-btn][data-slot-code]');
+    if(unequipBtn){
+      e.preventDefault();
+      var slotCode = unequipBtn.getAttribute('data-slot-code') || '';
+      withLoading(unequipBtn, post('misc.php?action=inventory_unequip', {slot_code:slotCode})).then(function(r){
+        if(r && r.ok){
+          afShopHideCheckoutSuccessModal();
+          loadEquipped();
+          afShopToast('Слот освобожден', 'success');
+        } else if(r && r.error !== 'busy'){
+          afShopToast(r.error || 'Не удалось снять предмет', 'error');
+        }
+      });
       return;
     }
 
@@ -373,6 +477,7 @@
   initCategoryTree();
   restoreCheckoutSuccessModal();
   initInventoryTabs();
+  loadEquipped();
   runHealthCheck();
 
   var slotsRoot = document.querySelector('.af-manage-slots[data-shop]');

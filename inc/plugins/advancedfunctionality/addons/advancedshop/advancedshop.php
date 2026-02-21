@@ -1503,6 +1503,46 @@ function af_advancedshop_render_inventory(): void
         $inventory_panels = '<section class="af-inventory-panel is-active" data-kind="misc"><div class="af-inventory-empty">No items</div></section>';
     }
 
+    $equipmentSlotsMeta = [
+        'weapon_main' => ['label' => 'Main Hand', 'icon' => '⚔️'],
+        'weapon_off' => ['label' => 'Off Hand', 'icon' => '🛡️'],
+        'head' => ['label' => 'Head', 'icon' => '⛑️'],
+        'body' => ['label' => 'Body', 'icon' => '🦺'],
+        'hands' => ['label' => 'Hands', 'icon' => '🧤'],
+        'legs' => ['label' => 'Legs', 'icon' => '👖'],
+        'feet' => ['label' => 'Feet', 'icon' => '🥾'],
+        'back' => ['label' => 'Back', 'icon' => '🎒'],
+        'belt' => ['label' => 'Belt', 'icon' => '🧷'],
+    ];
+    $equipped = af_advancedshop_inventory_equipped_fetch($targetUid);
+    $equipment_slots_html = '';
+    foreach (af_advancedshop_inventory_slots_canonical() as $slotCode) {
+        $slotMeta = $equipmentSlotsMeta[$slotCode] ?? ['label' => ucfirst(str_replace('_', ' ', $slotCode)), 'icon' => '⬜'];
+        $entry = $equipped[$slotCode] ?? null;
+        $equip_slot_code = htmlspecialchars_uni($slotCode);
+        $equip_slot_label = htmlspecialchars_uni((string)($slotMeta['label'] ?? $slotCode));
+        $equip_slot_icon = htmlspecialchars_uni((string)($slotMeta['icon'] ?? '⬜'));
+        $equip_inv_id = (string)(int)($entry['inv_id'] ?? 0);
+        $equip_kb_id = (string)(int)($entry['kb_id'] ?? 0);
+        $equip_rarity_raw = (string)($entry['rarity'] ?? 'common');
+        $equip_rarity = htmlspecialchars_uni($equip_rarity_raw !== '' ? $equip_rarity_raw : 'common');
+        $equip_item_title_raw = trim((string)($entry['title'] ?? ''));
+        if ($equip_item_title_raw === '') {
+            $equip_item_title_raw = 'Пусто';
+        }
+        $equip_item_title = htmlspecialchars_uni($equip_item_title_raw);
+        $equip_item_title_html = $equip_item_title;
+        $equip_item_icon = htmlspecialchars_uni((string)($entry['icon_url'] ?? ''));
+        if ($equip_item_icon !== '') {
+            $equip_item_icon_html = '<img src="' . $equip_item_icon . '" alt="' . $equip_item_title . '">';
+        } else {
+            $equip_item_icon_html = '<span class="af-equip-slot__placeholder">Пусто</span>';
+        }
+        $slotHtml = '';
+        eval('$slotHtml = "' . af_advancedshop_tpl('advancedshop_inventory_equipment_slot') . '";');
+        $equipment_slots_html .= $slotHtml;
+    }
+
     $assets = af_advancedshop_assets_html();
     $inventory_uid = $targetUid;
     $rarity_common_selected = $rarityFilter === 'common' ? 'selected="selected"' : '';
@@ -1510,6 +1550,8 @@ function af_advancedshop_render_inventory(): void
     $rarity_rare_selected = $rarityFilter === 'rare' ? 'selected="selected"' : '';
     $rarity_epic_selected = $rarityFilter === 'epic' ? 'selected="selected"' : '';
     $rarity_legendary_selected = $rarityFilter === 'legendary' ? 'selected="selected"' : '';
+    $equipment_panel = '';
+    eval('$equipment_panel = "' . af_advancedshop_tpl('advancedshop_inventory_equipment') . '";');
     eval('$inventory_grid = "' . af_advancedshop_tpl('advancedshop_inventory_grid') . '";');
     eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_inventory') . '";');
 
