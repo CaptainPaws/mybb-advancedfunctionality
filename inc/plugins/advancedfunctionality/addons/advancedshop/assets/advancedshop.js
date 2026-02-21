@@ -158,7 +158,7 @@
 
   var AF_EQUIP_META = {
     head:{label:'Голова'}, body:{label:'Тело'}, hands:{label:'Руки'}, legs:{label:'Ноги'}, feet:{label:'Ступни'}, back:{label:'Спина'}, belt:{label:'Пояс'},
-    mainhand:{label:'Основная рука'}, offhand:{label:'Вторая рука'}, twohand:{label:'Двуручное'}, ranged:{label:'Дистанционное'}, melee:{label:'Ближний бой'}, accessory:{label:'Аксессуар'}
+    mainhand:{label:'Основная рука'}, offhand:{label:'Вторая рука'}, twohand:{label:'Двуручное'}, ranged:{label:'Дистанционное'}, melee:{label:'Ближний бой'}, accessory:{label:'Аксессуар'}, unique:{label:'Уникалка'}, artifact:{label:'Артефакт'}
   };
 
   function updateEquipmentSlot(node, data){
@@ -169,7 +169,7 @@
     var rarity = (entry && entry.rarity) ? entry.rarity : 'common';
     var title = (entry && entry.title) ? entry.title : 'Пусто';
     var iconUrl = (entry && entry.icon_url) ? entry.icon_url : '';
-    node.className = 'af-equip-slot rarity-' + rarity;
+    node.className = 'af-eq-slot af-equip-slot rarity-' + rarity + (entry ? '' : ' is-empty');
     node.setAttribute('data-inv-id', entry && entry.inv_id ? String(entry.inv_id) : '0');
     node.setAttribute('data-kb-id', entry && entry.kb_id ? String(entry.kb_id) : '0');
     node.setAttribute('data-item-title', title);
@@ -180,8 +180,6 @@
     if(iconNode){
       iconNode.innerHTML = iconUrl ? ('<img src="' + escapeHtml(iconUrl) + '" alt="' + escapeHtml(title) + '">') : '<span class="af-equip-slot__placeholder">Пусто</span>';
     }
-    var titleNode = node.querySelector('.af-equip-slot__item-title');
-    if(titleNode){ titleNode.textContent = title; }
   }
 
   function showInventoryModal(html){
@@ -732,13 +730,13 @@
         var data = {};
         try { data = JSON.parse(e.dataTransfer.getData('text/plain') || '{}'); } catch(err) { data = {}; }
         var valid = !!data.equip_slot && data.equip_slot === (slot.getAttribute('data-slot-code') || '');
-        slot.classList.toggle('is-drag-valid', valid);
-        slot.classList.toggle('is-drag-invalid', !valid);
+        slot.classList.toggle('is-hover-valid', valid);
+        slot.classList.toggle('is-hover-invalid', !valid);
       });
-      slot.addEventListener('dragleave', function(){ slot.classList.remove('is-drag-valid', 'is-drag-invalid'); });
+      slot.addEventListener('dragleave', function(){ slot.classList.remove('is-hover-valid', 'is-hover-invalid'); });
       slot.addEventListener('drop', function(e){
         e.preventDefault();
-        slot.classList.remove('is-drag-valid', 'is-drag-invalid');
+        slot.classList.remove('is-hover-valid', 'is-hover-invalid');
         var data = {};
         try { data = JSON.parse(e.dataTransfer.getData('text/plain') || '{}'); } catch(err) { data = {}; }
         var invId = parseInt(data.inv_id || '0', 10);

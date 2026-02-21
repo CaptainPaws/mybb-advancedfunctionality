@@ -97,3 +97,34 @@ body.af-shop-modal-open{overflow:hidden}
 .af-item-popover__meta{font-size:12px;opacity:.85}
 .af-item-popover__actions{display:flex;gap:8px;margin-top:10px}
 @media (max-width:980px){.af-inv-layout{grid-template-columns:1fr}}
+
+.af-inventory-equipment{margin-bottom:14px}
+.af-eq-panel{display:flex;flex-direction:column;gap:14px}
+.af-eq-title{font-size:18px;font-weight:700}
+.af-eq-body{position:relative;height:420px;border:1px solid #303544;border-radius:12px;background:linear-gradient(180deg,#131822 0,#0f141d 100%)}
+.af-eq-silhouette{position:absolute;left:50%;top:0;transform:translateX(-50%);width:240px;height:420px;border-radius:20px;background:radial-gradient(circle at top,#364052 0,#242d3a 40%,#1b2330 100%);opacity:.5;border:1px solid #3a4558}
+.af-eq-slot,.af-equip-slot{position:absolute;display:flex;align-items:center;justify-content:center;width:64px;height:64px;padding:6px;background:#161b24;border:2px solid #555;border-radius:10px;cursor:pointer;color:inherit}
+.af-eq-slot__icon,.af-equip-slot__item-icon{width:48px;height:48px;display:flex;align-items:center;justify-content:center;background:#232a36;border-radius:8px;overflow:hidden}
+.af-eq-slot__icon img,.af-equip-slot__item-icon img{width:100%;height:100%;object-fit:cover}
+.af-equip-slot__placeholder{font-size:11px;opacity:.75;text-transform:lowercase}
+.af-eq-slot.is-empty{opacity:.9}
+.af-eq-slot.is-hover-valid{border-color:#59d081;box-shadow:0 0 0 2px rgba(89,208,129,.25)}
+.af-eq-slot.is-hover-invalid{border-color:#df5d5d;box-shadow:0 0 0 2px rgba(223,93,93,.25)}
+.af-eq-slot[data-slot="head"]{left:50%;top:10px;transform:translateX(-50%)}
+.af-eq-slot[data-slot="body"]{left:50%;top:110px;transform:translateX(-50%)}
+.af-eq-slot[data-slot="hands"]{left:calc(50% - 150px);top:130px}
+.af-eq-slot[data-slot="legs"]{left:50%;top:220px;transform:translateX(-50%)}
+.af-eq-slot[data-slot="feet"]{left:50%;bottom:12px;transform:translateX(-50%)}
+.af-eq-slot[data-slot="back"]{left:calc(50% + 86px);top:72px}
+.af-eq-slot[data-slot="belt"]{left:50%;top:170px;transform:translateX(-50%)}
+.af-eq-slot[data-slot="accessory"]{left:calc(50% + 120px);top:168px}
+.af-eq-slot[data-slot="unique"]{left:calc(50% + 120px);top:244px}
+.af-eq-slot[data-slot="artifact"]{left:calc(50% + 120px);top:320px}
+.af-eq-weapons{display:flex;flex-direction:column;gap:8px}
+.af-eq-weapons-title{font-size:14px;font-weight:700;opacity:.95}
+.af-eq-weapons-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.af-eq-weapons-grid .af-eq-slot{position:relative;left:auto;top:auto;bottom:auto;transform:none;width:64px;justify-self:start}
+@media (max-width:1160px){
+  .af-eq-slot[data-slot="hands"]{left:16px}
+  .af-eq-slot[data-slot="back"],.af-eq-slot[data-slot="accessory"],.af-eq-slot[data-slot="unique"],.af-eq-slot[data-slot="artifact"]{left:auto;right:16px}
+}
