@@ -532,6 +532,23 @@
 
         var type = (root.getAttribute('data-type') || '').trim(); // race/class/theme/lore/...
         var typeSchema = readJson(root.getAttribute('data-type-schema') || '{}', {});
+        var itemKindOptionsRaw = readJson(root.getAttribute('data-item-kinds') || '[]', []);
+        var itemKindOptions = (Array.isArray(itemKindOptionsRaw) && itemKindOptionsRaw.length ? itemKindOptionsRaw : [
+            { value: 'weapon' }, { value: 'armor' }, { value: 'gear' }, { value: 'consumable' },
+            { value: 'ammo' }, { value: 'cyberware' }, { value: 'artifact' }, { value: 'unique' }
+        ]).map(function (opt) {
+            if (opt && typeof opt === 'object') return String(opt.value || '');
+            return String(opt || '');
+        });
+        var slotByKind = {
+            armor: ['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt'],
+            weapon: ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_ranged', 'weapon_melee'],
+            consumable: ['', 'consumable_1', 'consumable_2'],
+            ammo: ['ammo', 'ammo_pouch'],
+            gear: ['', 'gear', 'accessory'],
+            artifact: ['', 'artifact', 'accessory'],
+            unique: ['', 'unique', 'accessory']
+        };
 
         // ВАЖНО: мы больше НЕ делаем один и тот же UI на все типы.
         // Профиль UI: либо задаётся схемой (ui_profile), либо определяется по type.
@@ -638,8 +655,13 @@
                 }
                 (def.options || []).forEach(function (opt) {
                     var option = document.createElement('option');
-                    option.value = String(opt);
-                    option.textContent = String(opt);
+                    if (opt && typeof opt === 'object') {
+                        option.value = String(opt.value);
+                        option.textContent = String(opt.label != null ? opt.label : opt.value);
+                    } else {
+                        option.value = String(opt);
+                        option.textContent = String(opt);
+                    }
                     input.appendChild(option);
                 });
                 input.value = value != null ? String(value) : String((def.options && def.options[0]) || '');
@@ -886,8 +908,12 @@
                     item_kind: 'gear',
                     rarity: 'common',
                     equip: { slot: '', armor: { ac_bonus: 0, armor_type: 'light' } },
+                    weapon: { damage_bonus: 0, damage_type: 'kinetic', rate_of_fire: 0, range: '', ammo_type_key: '' },
+                    ammo: { ammo_type: '', damage_type: 'kinetic', damage_bonus: 0 },
+                    gear: { subtype: '' },
+                    cyberware: { slot: '', grade: '' },
                     price: 0,
-                    currency: '',
+                    currency: 'credits',
                     weight: 0,
                     stack_max: 1,
                     tags: [],
@@ -964,7 +990,7 @@
                 return payload;
             }
 
-            var rootFields = ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'equip', 'tags', 'on_use', 'on_equip', 'requirements'];
+            var rootFields = ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'equip', 'weapon', 'ammo', 'gear', 'cyberware', 'tags', 'on_use', 'on_equip', 'requirements'];
             var hasItem = payload.item && typeof payload.item === 'object' && !Array.isArray(payload.item);
 
             if (!hasItem) {
@@ -1190,6 +1216,18 @@
             if (!state.item.equip.armor || typeof state.item.equip.armor !== 'object') state.item.equip.armor = {};
             if (state.item.equip.armor.ac_bonus == null) state.item.equip.armor.ac_bonus = 0;
             if (!state.item.equip.armor.armor_type) state.item.equip.armor.armor_type = 'light';
+            if (!state.item.weapon || typeof state.item.weapon !== 'object') state.item.weapon = {};
+            if (state.item.weapon.damage_bonus == null) state.item.weapon.damage_bonus = 0;
+            if (!state.item.weapon.damage_type) state.item.weapon.damage_type = 'kinetic';
+            if (!state.item.ammo || typeof state.item.ammo !== 'object') state.item.ammo = {};
+            if (!state.item.ammo.ammo_type) state.item.ammo.ammo_type = '';
+            if (!state.item.ammo.damage_type) state.item.ammo.damage_type = 'kinetic';
+            if (state.item.ammo.damage_bonus == null) state.item.ammo.damage_bonus = 0;
+            if (!state.item.gear || typeof state.item.gear !== 'object') state.item.gear = {};
+            if (!state.item.gear.subtype) state.item.gear.subtype = '';
+            if (!state.item.cyberware || typeof state.item.cyberware !== 'object') state.item.cyberware = {};
+            if (!state.item.cyberware.slot) state.item.cyberware.slot = '';
+            if (!state.item.cyberware.grade) state.item.cyberware.grade = '';
             if (!Array.isArray(state.item.tags)) state.item.tags = [];
             ensureObj('item.on_use', {});
             ensureArr('item.on_use.effects');
@@ -1491,13 +1529,19 @@
                 if (rarityAllowed.indexOf(rarity) === -1) {
                     errors.push('item.rarity: unsupported value');
                 }
-                var slotAllowed = ['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt', 'mainhand', 'offhand', 'twohand', 'ranged', 'melee', 'accessory'];
+                var kind = String((state.item && state.item.item_kind) || 'gear').toLowerCase();
                 var equipSlot = String((state.item && state.item.equip && state.item.equip.slot) || '').trim().toLowerCase();
-                if (equipSlot !== '' && slotAllowed.indexOf(equipSlot) === -1) {
-                    errors.push('item.equip.slot: unsupported value');
+                var allowed = slotByKind[kind] || [''];
+                if (kind === 'cyberware') {
+                    if (equipSlot) errors.push('item.equip.slot: not used for cyberware');
+                    if (!String((state.item.cyberware && state.item.cyberware.slot) || '').trim()) {
+                        errors.push('item.cyberware.slot: required for cyberware');
+                    }
+                } else if (equipSlot && allowed.indexOf(equipSlot) === -1) {
+                    errors.push('item.equip.slot: incompatible with item_kind=' + kind);
                 }
-                if (String((state.item && state.item.item_kind) || '').toLowerCase() === 'armor' && equipSlot === '') {
-                    errors.push('Для брони нужно указать часть (слот экипировки).');
+                if ((kind === 'armor' || kind === 'weapon') && !equipSlot) {
+                    errors.push('item.equip.slot: required for armor/weapon');
                 }
             }
 
@@ -1610,31 +1654,37 @@
                 if (!Array.isArray(onEquip.effects)) onEquip.effects = [];
                 if (!Array.isArray(onEquip.grants)) onEquip.grants = [];
 
-                var canonicalItemPayload = {
-                    schema: p.schema,
-                    type_profile: expectedTypeProfile || 'item',
-                    version: p.version,
-                    item: {
-                        item_kind: String(it.item_kind || 'gear'),
-                        rarity: String(it.rarity || 'common'),
-                        equip: {
-                            slot: String((it.equip && it.equip.slot) || it.slot || ''),
-                            armor: {
-                                ac_bonus: numberOrZero((it.equip && it.equip.armor && it.equip.armor.ac_bonus) != null ? it.equip.armor.ac_bonus : 0),
-                                armor_type: String((it.equip && it.equip.armor && it.equip.armor.armor_type) || 'light')
-                            }
-                        },
-                        price: numberOrZero(it.price != null ? it.price : 0),
-                        currency: String(it.currency || ''),
-                        weight: numberOrZero(it.weight != null ? it.weight : 0),
-                        stack_max: numberOrZero(it.stack_max != null ? it.stack_max : 1),
-                        tags: Array.isArray(it.tags) ? it.tags : [],
-                        on_use: onUse,
-                        on_equip: onEquip,
-                        requirements: reqI
+                var itemOut = deepClone(it);
+                itemOut.item_kind = String(it.item_kind || 'gear');
+                itemOut.rarity = String(it.rarity || 'common');
+                itemOut.equip = {
+                    slot: String((it.equip && it.equip.slot) || it.slot || ''),
+                    armor: {
+                        ac_bonus: numberOrZero((it.equip && it.equip.armor && it.equip.armor.ac_bonus) != null ? it.equip.armor.ac_bonus : 0),
+                        armor_type: String((it.equip && it.equip.armor && it.equip.armor.armor_type) || 'light')
                     }
                 };
-                return normalizeItemCanonical(canonicalItemPayload);
+                itemOut.weapon = (it.weapon && typeof it.weapon === 'object') ? it.weapon : {};
+                itemOut.weapon.damage_bonus = numberOrZero(itemOut.weapon.damage_bonus != null ? itemOut.weapon.damage_bonus : 0);
+                itemOut.weapon.damage_type = String(itemOut.weapon.damage_type || 'kinetic');
+                itemOut.ammo = (it.ammo && typeof it.ammo === 'object') ? it.ammo : {};
+                itemOut.ammo.ammo_type = String(itemOut.ammo.ammo_type || '');
+                itemOut.ammo.damage_type = String(itemOut.ammo.damage_type || 'kinetic');
+                itemOut.ammo.damage_bonus = numberOrZero(itemOut.ammo.damage_bonus != null ? itemOut.ammo.damage_bonus : 0);
+                itemOut.gear = (it.gear && typeof it.gear === 'object') ? it.gear : {};
+                itemOut.gear.subtype = String(itemOut.gear.subtype || '');
+                itemOut.cyberware = (it.cyberware && typeof it.cyberware === 'object') ? it.cyberware : {};
+                itemOut.cyberware.slot = String(itemOut.cyberware.slot || '');
+                itemOut.cyberware.grade = String(itemOut.cyberware.grade || '');
+                itemOut.price = numberOrZero(it.price != null ? it.price : 0);
+                itemOut.currency = String(it.currency || 'credits');
+                itemOut.weight = numberOrZero(it.weight != null ? it.weight : 0);
+                itemOut.stack_max = numberOrZero(it.stack_max != null ? it.stack_max : 1);
+                itemOut.tags = Array.isArray(it.tags) ? it.tags : [];
+                itemOut.on_use = onUse;
+                itemOut.on_equip = onEquip;
+                itemOut.requirements = reqI;
+                return normalizeItemCanonical({ schema: p.schema, type_profile: expectedTypeProfile || 'item', version: p.version, item: itemOut });
             }
 
             if (profile === 'class' || profile === 'theme') {
@@ -1969,8 +2019,9 @@
             }
 
             if (uiProfile === 'item') {
+                var kind = String((state.item && state.item.item_kind) || 'gear').toLowerCase();
                 var defI = [
-                    { name: 'item_kind', label: 'Тип предмета', type: 'select', options: ['weapon', 'armor', 'gear', 'consumable', 'cyberware', 'ammo', 'mod', 'implant', 'service'] },
+                    { name: 'item_kind', label: 'Тип предмета', type: 'select', options: itemKindOptions },
                     { name: 'rarity', label: 'Редкость', type: 'select', options: ['common', 'uncommon', 'rare', 'unique', 'illegal', 'restricted', 'legendary', 'mythic'] },
                     { name: 'price', label: 'Цена', type: 'number' },
                     { name: 'currency', label: 'Валюта', type: 'text', hint: 'credits/eddies/gold/...' },
@@ -1979,23 +2030,47 @@
                     { name: 'tags', label: 'Теги', type: 'lines' }
                 ];
 
-                var equipDef = [
-                    { name: 'slot', label: 'Слот экипировки', type: 'select', options: ['', 'head', 'body', 'hands', 'legs', 'feet', 'back', 'belt', 'mainhand', 'offhand', 'twohand', 'ranged', 'melee', 'accessory'] },
-                    { name: 'ac_bonus', label: 'Бонус брони', type: 'number' },
-                    { name: 'armor_type', label: 'Тип брони', type: 'select', options: ['light', 'medium', 'heavy'] }
-                ];
-
                 var gridI = document.createElement('div');
                 gridI.className = 'af-kb-row';
-                defI.forEach(function (d) { gridI.appendChild(createInput(d, state.item, syncRawDebounced)); });
+                defI.forEach(function (d) {
+                    gridI.appendChild(createInput(d, state.item, function () {
+                        if (d.name === 'item_kind') renderProfile();
+                        syncRawDebounced();
+                    }));
+                });
                 fields.profileFields.appendChild(gridI);
 
                 var equipGrid = document.createElement('div');
                 equipGrid.className = 'af-kb-row';
-                equipGrid.appendChild(createInput(equipDef[0], state.item.equip, syncRawDebounced));
-                equipGrid.appendChild(createInput(equipDef[1], state.item.equip.armor, syncRawDebounced));
-                equipGrid.appendChild(createInput(equipDef[2], state.item.equip.armor, syncRawDebounced));
+                if (kind === 'armor') {
+                    equipGrid.appendChild(createInput({ name: 'slot', label: 'Слот экипировки', type: 'select', options: slotByKind.armor }, state.item.equip, syncRawDebounced));
+                    equipGrid.appendChild(createInput({ name: 'ac_bonus', label: 'Бонус брони', type: 'number' }, state.item.equip.armor, syncRawDebounced));
+                    equipGrid.appendChild(createInput({ name: 'armor_type', label: 'Тип брони', type: 'select', options: ['light', 'medium', 'heavy'] }, state.item.equip.armor, syncRawDebounced));
+                } else if (kind === 'weapon') {
+                    equipGrid.appendChild(createInput({ name: 'slot', label: 'Слот экипировки', type: 'select', options: slotByKind.weapon }, state.item.equip, syncRawDebounced));
+                    equipGrid.appendChild(createInput({ name: 'damage_bonus', label: 'Damage bonus', type: 'number' }, state.item.weapon, syncRawDebounced));
+                    equipGrid.appendChild(createInput({ name: 'damage_type', label: 'Damage type', type: 'select', options: ['kinetic', 'thermal', 'electric', 'chemical', 'emp', 'explosive'] }, state.item.weapon, syncRawDebounced));
+                } else if (kind === 'consumable') {
+                    equipGrid.appendChild(createInput({ name: 'slot', label: 'Quick slot', type: 'select', options: slotByKind.consumable }, state.item.equip, syncRawDebounced));
+                } else if (kind === 'ammo') {
+                    equipGrid.appendChild(createInput({ name: 'slot', label: 'Слот экипировки', type: 'select', options: slotByKind.ammo }, state.item.equip, syncRawDebounced));
+                    equipGrid.appendChild(createInput({ name: 'ammo_type', label: 'Ammo type', type: 'select', options: ['', 'pistol', 'rifle', 'shotgun', 'sniper', 'energy'] }, state.item.ammo, syncRawDebounced));
+                    equipGrid.appendChild(createInput({ name: 'damage_type', label: 'Damage type', type: 'select', options: ['kinetic', 'thermal', 'electric', 'chemical', 'emp', 'explosive'] }, state.item.ammo, syncRawDebounced));
+                    equipGrid.appendChild(createInput({ name: 'damage_bonus', label: 'Damage bonus', type: 'number' }, state.item.ammo, syncRawDebounced));
+                } else if (kind === 'gear') {
+                    equipGrid.appendChild(createInput({ name: 'subtype', label: 'Gear subtype', type: 'select', options: ['', 'cyberdeck', 'scanner', 'drone', 'medkit', 'toolkit', 'jammer', 'cloak', 'hacking_module'] }, state.item.gear, syncRawDebounced));
+                    equipGrid.appendChild(createInput({ name: 'slot', label: 'Слот экипировки', type: 'select', options: slotByKind.gear }, state.item.equip, syncRawDebounced));
+                } else if (kind === 'cyberware') {
+                    equipGrid.appendChild(createInput({ name: 'slot', label: 'Cyberware slot', type: 'select', options: ['', 'nervous_system', 'circulatory_system', 'immune_system', 'integumentary_system', 'operating_system', 'skeleton', 'arms', 'hands', 'legs', 'eyes', 'frontal_cortex', 'cyberaudio'] }, state.item.cyberware, syncRawDebounced));
+                    equipGrid.appendChild(createInput({ name: 'grade', label: 'Cyberware grade', type: 'text' }, state.item.cyberware, syncRawDebounced));
+                } else if (kind === 'artifact' || kind === 'unique') {
+                    equipGrid.appendChild(createInput({ name: 'slot', label: 'Слот экипировки', type: 'select', options: slotByKind[kind] }, state.item.equip, syncRawDebounced));
+                }
                 fields.profileFields.appendChild(equipGrid);
+                var currentSlot = String((state.item.equip && state.item.equip.slot) || '');
+                if (kind !== 'cyberware' && currentSlot && (slotByKind[kind] || ['']).indexOf(currentSlot) === -1) {
+                    fields.profileFields.insertAdjacentHTML('beforeend', '<div class="af-kb-help">⚠ Несовместимый slot для item_kind: ' + esc(currentSlot) + '</div>');
+                }
 
                 // on_use
                 var useBox = document.createElement('div');
