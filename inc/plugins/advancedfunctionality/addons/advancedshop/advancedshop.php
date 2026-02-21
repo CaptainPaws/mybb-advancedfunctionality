@@ -1501,11 +1501,21 @@ function af_advancedshop_render_inventory(): void
 
     $equipmentSlotsMeta = af_advancedshop_inventory_slot_labels();
     $equipped = af_advancedshop_inventory_equipped_fetch($targetUid);
-    $equipment_slots_html = '';
-    foreach (['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt', 'mainhand', 'offhand', 'twohand'] as $slotCode) {
+    $equipment_visual_slots_html = '';
+    $equipment_weapon_slots_html = '';
+    $visualSlots = ['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt', 'accessory', 'unique', 'artifact'];
+    $weaponSlots = ['mainhand', 'offhand', 'twohand'];
+    $slotDomAliases = [
+        'mainhand' => 'weapon_mainhand',
+        'offhand' => 'weapon_offhand',
+        'twohand' => 'weapon_twohand',
+    ];
+
+    foreach (array_merge($visualSlots, $weaponSlots) as $slotCode) {
         $slotMeta = $equipmentSlotsMeta[$slotCode] ?? ['label' => af_advancedshop_inventory_slot_label($slotCode)];
         $entry = $equipped[$slotCode] ?? null;
         $equip_slot_code = htmlspecialchars_uni($slotCode);
+        $equip_slot_dom = htmlspecialchars_uni((string)($slotDomAliases[$slotCode] ?? $slotCode));
         $equip_slot_label = htmlspecialchars_uni((string)($slotMeta['label'] ?? $slotCode));
         $equip_inv_id = (string)(int)($entry['inv_id'] ?? 0);
         $equip_kb_id = (string)(int)($entry['kb_id'] ?? 0);
@@ -1516,7 +1526,6 @@ function af_advancedshop_render_inventory(): void
             $equip_item_title_raw = 'Пусто';
         }
         $equip_item_title = htmlspecialchars_uni($equip_item_title_raw);
-        $equip_item_title_html = $equip_item_title;
         $equip_item_icon = htmlspecialchars_uni((string)($entry['icon_url'] ?? ''));
         $equip_item_tech = htmlspecialchars_uni((string)($entry['tooltip_text'] ?? ''));
         if ($equip_item_icon !== '') {
@@ -1524,9 +1533,14 @@ function af_advancedshop_render_inventory(): void
         } else {
             $equip_item_icon_html = '<span class="af-equip-slot__placeholder">Пусто</span>';
         }
+        $equip_slot_state_class = ((int)$equip_inv_id > 0) ? '' : 'is-empty';
         $slotHtml = '';
         eval('$slotHtml = "' . af_advancedshop_tpl('advancedshop_inventory_equipment_slot') . '";');
-        $equipment_slots_html .= $slotHtml;
+        if (in_array($slotCode, $weaponSlots, true)) {
+            $equipment_weapon_slots_html .= $slotHtml;
+        } else {
+            $equipment_visual_slots_html .= $slotHtml;
+        }
     }
 
     $assets = af_advancedshop_assets_html();
@@ -1631,7 +1645,7 @@ function af_advancedshop_inventory_state_payload(int $uid): array
 
 function af_advancedshop_inventory_slots_canonical(): array
 {
-    return ['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt', 'mainhand', 'offhand', 'twohand', 'ranged', 'melee', 'accessory'];
+    return ['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt', 'mainhand', 'offhand', 'twohand', 'ranged', 'melee', 'accessory', 'unique', 'artifact'];
 }
 
 function af_advancedshop_inventory_slot_labels(): array
@@ -1650,6 +1664,8 @@ function af_advancedshop_inventory_slot_labels(): array
         'ranged' => ['label' => 'Дистанционное'],
         'melee' => ['label' => 'Ближний бой'],
         'accessory' => ['label' => 'Аксессуар'],
+        'unique' => ['label' => 'Уникалка'],
+        'artifact' => ['label' => 'Артефакт'],
     ];
 }
 
