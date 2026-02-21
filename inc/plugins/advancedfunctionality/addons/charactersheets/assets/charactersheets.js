@@ -1065,6 +1065,16 @@
           return;
         }
 
+        var inventoryOpen = event.target.closest('[data-afcs-inventory-open]');
+        if (inventoryOpen) {
+          event.preventDefault();
+          var inventoryUrl = inventoryOpen.getAttribute('data-afcs-sheet') || inventoryOpen.getAttribute('href') || '';
+          if (inventoryUrl) {
+            openModal(inventoryUrl);
+          }
+          return;
+        }
+
         var inventoryToggle = event.target.closest('[data-afcs-inventory-toggle]');
         if (inventoryToggle) {
           event.preventDefault();
