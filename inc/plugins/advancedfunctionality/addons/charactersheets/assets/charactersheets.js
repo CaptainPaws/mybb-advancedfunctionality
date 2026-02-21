@@ -59,7 +59,7 @@
     }
 
     var mf = ensureModal();
-    if (loadUrl.indexOf('ajax=1') === -1) {
+    if (loadUrl.indexOf('embed=1') === -1 && loadUrl.indexOf('ajax=1') === -1) {
       loadUrl += (loadUrl.indexOf('?') === -1 ? '?' : '&') + 'ajax=1';
     }
 

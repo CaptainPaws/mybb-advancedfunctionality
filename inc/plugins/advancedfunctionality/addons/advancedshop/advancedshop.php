@@ -525,25 +525,55 @@ function af_advancedshop_can_moderate_inventory(): bool
     return (bool)array_intersect(af_advancedshop_inventory_moderator_groups(), af_advancedshop_user_group_ids());
 }
 
-function af_advancedshop_inventory_target_uid(): int
+function af_advancedshop_can_view_inventory(int $targetUid): bool
+{
+    return $targetUid > 0;
+}
+
+function af_advancedshop_can_edit_inventory(int $targetUid): bool
 {
     global $mybb;
 
     $viewerUid = (int)($mybb->user['uid'] ?? 0);
-    if ($viewerUid <= 0) {
-        af_advancedshop_json_err('auth', 403);
+    if ($viewerUid <= 0 || $targetUid <= 0) {
+        return false;
     }
 
+    return $viewerUid === $targetUid || af_advancedshop_can_manage();
+}
+
+function af_advancedshop_inventory_target_uid_for_view(): int
+{
+    global $mybb;
+
+    $viewerUid = (int)($mybb->user['uid'] ?? 0);
     $targetUid = (int)$mybb->get_input('uid');
     if ($targetUid <= 0) {
         $targetUid = $viewerUid;
     }
 
-    if ($targetUid !== $viewerUid && !af_advancedshop_can_moderate_inventory()) {
+    if (!af_advancedshop_can_view_inventory($targetUid)) {
         af_advancedshop_json_err('Not allowed', 403);
     }
 
     return $targetUid;
+}
+
+function af_advancedshop_inventory_target_uid_for_edit(): int
+{
+    $targetUid = af_advancedshop_inventory_target_uid_for_view();
+    if (!af_advancedshop_can_edit_inventory($targetUid)) {
+        af_advancedshop_json_err('Not allowed', 403);
+    }
+
+    return $targetUid;
+}
+
+function af_advancedshop_inventory_render_access_error_html(string $message): void
+{
+    http_response_code(403);
+    echo '<div class="af-inventory af-inventory--error"><div class="af-status-error">' . htmlspecialchars_uni($message) . '</div></div>';
+    exit;
 }
 
 function af_advancedshop_current_shop(): array
@@ -1376,12 +1406,18 @@ function af_advancedshop_kb_search(): void
 function af_advancedshop_render_inventory(): void
 {
     global $mybb, $db, $headerinclude, $header, $footer;
+    $isEmbed = (int)$mybb->get_input('embed') === 1;
+    $isAjax = (int)$mybb->get_input('ajax') === 1;
     $requestUid = (int)$mybb->get_input('uid');
     $viewerUid = (int)($mybb->user['uid'] ?? 0);
     $targetUid = $requestUid > 0 ? $requestUid : $viewerUid;
-    if ($targetUid <= 0) { error_no_permission(); }
-    $canViewAny = af_advancedshop_can_moderate_inventory();
-    if ($targetUid !== $viewerUid && !$canViewAny) { error_no_permission(); }
+    if ($targetUid <= 0 || !af_advancedshop_can_view_inventory($targetUid)) {
+        if ($isEmbed || $isAjax) {
+            af_advancedshop_inventory_render_access_error_html('Инвентарь недоступен.');
+        }
+        error_no_permission();
+    }
+    $inventory_can_edit = af_advancedshop_can_edit_inventory($targetUid) ? '1' : '0';
 
     $rarityFilter = trim((string)$mybb->get_input('rarity'));
     $search = trim((string)$mybb->get_input('q'));
@@ -1558,7 +1594,7 @@ function af_advancedshop_render_inventory(): void
     eval('$inventory_grid = "' . af_advancedshop_tpl('advancedshop_inventory_grid') . '";');
     eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_inventory') . '";');
 
-    if ((int)$mybb->get_input('ajax') === 1) {
+    if ($isEmbed || $isAjax) {
         echo $af_advancedshop_content;
         exit;
     }
@@ -1732,7 +1768,7 @@ function af_advancedshop_inventory_equipped_fetch(int $uid): array
 
 function af_advancedshop_inventory_equipped_get(): void
 {
-    $targetUid = af_advancedshop_inventory_target_uid();
+    $targetUid = af_advancedshop_inventory_target_uid_for_view();
     af_advancedshop_json_ok(['equipped' => af_advancedshop_inventory_equipped_fetch($targetUid)]);
 }
 
@@ -1740,7 +1776,7 @@ function af_advancedshop_inventory_item_info(): void
 {
     global $mybb, $db;
 
-    $targetUid = af_advancedshop_inventory_target_uid();
+    $targetUid = af_advancedshop_inventory_target_uid_for_view();
     $invId = (int)$mybb->get_input('inv_id');
     if ($invId <= 0) {
         af_advancedshop_json_err('inv_id required', 422);
@@ -1811,6 +1847,7 @@ function af_advancedshop_inventory_item_info(): void
             'is_equippable' => (bool)($equipInfo['is_equippable'] ?? false),
             'default_slot_code' => (string)($equipInfo['default_slot'] ?? ''),
             'allowed_slots' => array_values($equipInfo['allowed_slots'] ?? []),
+            'can_edit' => af_advancedshop_can_edit_inventory($targetUid),
         ],
     ]);
 }
@@ -1819,7 +1856,7 @@ function af_advancedshop_inventory_equippable_list(): void
 {
     global $mybb, $db;
 
-    $targetUid = af_advancedshop_inventory_target_uid();
+    $targetUid = af_advancedshop_inventory_target_uid_for_edit();
     $slotCode = af_advancedshop_inventory_normalize_slot_code((string)$mybb->get_input('slot_code'));
     if (!in_array($slotCode, af_advancedshop_inventory_slots_canonical(), true)) {
         af_advancedshop_json_err('Invalid slot_code', 422);
@@ -1880,7 +1917,7 @@ function af_advancedshop_inventory_equip(): void
 {
     global $mybb, $db;
 
-    $targetUid = af_advancedshop_inventory_target_uid();
+    $targetUid = af_advancedshop_inventory_target_uid_for_edit();
     $invId = (int)$mybb->get_input('inv_id');
     if ($invId <= 0) {
         af_advancedshop_json_err('inv_id required', 422);
@@ -1916,7 +1953,7 @@ function af_advancedshop_inventory_unequip(): void
 {
     global $mybb, $db;
 
-    $targetUid = af_advancedshop_inventory_target_uid();
+    $targetUid = af_advancedshop_inventory_target_uid_for_edit();
     $slotCode = af_advancedshop_inventory_normalize_slot_code((string)$mybb->get_input('slot_code'));
     if (!in_array($slotCode, af_advancedshop_inventory_slots_canonical(), true)) {
         af_advancedshop_json_err('Invalid slot_code', 422);
