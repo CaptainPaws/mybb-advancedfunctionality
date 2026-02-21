@@ -1356,7 +1356,7 @@ function af_charactersheets_build_inventory_html(int $uid): string
 {
     $inventory_url = '';
     if ($uid > 0) {
-        $inventory_url = 'misc.php?action=inventory&uid=' . $uid;
+        $inventory_url = 'misc.php?action=inventory&uid=' . $uid . '&embed=1';
     }
 
     $inventory_button_html = '<div class="af-cs-muted">Инвентарь недоступен.</div>';
