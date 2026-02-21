@@ -1493,11 +1493,11 @@ function af_advancedshop_render_inventory(): void
 
     $tabsOrder = ['weapon', 'armor', 'consumable', 'gear', 'misc'];
     $tabLabels = [
-        'weapon' => 'Weapon',
-        'armor' => 'Armor',
-        'consumable' => 'Consumable',
-        'gear' => 'Gear',
-        'misc' => 'Misc',
+        'weapon' => 'Оружие',
+        'armor' => 'Броня',
+        'consumable' => 'Расходники',
+        'gear' => 'Снаряжение',
+        'misc' => 'Прочее',
     ];
     $tabsGrid = [];
     $q = $db->query("SELECT " . implode(', ', $select) . "
@@ -1559,30 +1559,18 @@ function af_advancedshop_render_inventory(): void
         $inventory_panels .= '<section class="af-inventory-panel" data-kind="' . $kindEsc . '"><div class="af-inventory-grid">' . $grid . '</div></section>';
     }
     if ($inventory_tabs === '') {
-        $inventory_tabs = '<button type="button" class="af-inventory-tab is-active" data-kind="misc">Misc</button>';
-        $inventory_panels = '<section class="af-inventory-panel is-active" data-kind="misc"><div class="af-inventory-empty">No items</div></section>';
+        $inventory_tabs = '<button type="button" class="af-inventory-tab is-active" data-kind="misc">Прочее</button>';
+        $inventory_panels = '<section class="af-inventory-panel is-active" data-kind="misc"><div class="af-inventory-empty">Нет предметов</div></section>';
     }
 
-    $equipmentSlotsMeta = [
-        'weapon_main' => ['label' => 'Main Hand', 'icon' => '⚔️'],
-        'weapon_off' => ['label' => 'Off Hand', 'icon' => '🛡️'],
-        'armor' => ['label' => 'Armor', 'icon' => '🛡️'],
-        'head' => ['label' => 'Head', 'icon' => '⛑️'],
-        'body' => ['label' => 'Body', 'icon' => '🦺'],
-        'hands' => ['label' => 'Hands', 'icon' => '🧤'],
-        'legs' => ['label' => 'Legs', 'icon' => '👖'],
-        'feet' => ['label' => 'Feet', 'icon' => '🥾'],
-        'back' => ['label' => 'Back', 'icon' => '🎒'],
-        'belt' => ['label' => 'Belt', 'icon' => '🧷'],
-    ];
+    $equipmentSlotsMeta = af_advancedshop_inventory_slot_labels();
     $equipped = af_advancedshop_inventory_equipped_fetch($targetUid);
     $equipment_slots_html = '';
     foreach (af_advancedshop_inventory_slots_canonical() as $slotCode) {
-        $slotMeta = $equipmentSlotsMeta[$slotCode] ?? ['label' => ucfirst(str_replace('_', ' ', $slotCode)), 'icon' => '⬜'];
+        $slotMeta = $equipmentSlotsMeta[$slotCode] ?? ['label' => af_advancedshop_inventory_slot_label($slotCode)];
         $entry = $equipped[$slotCode] ?? null;
         $equip_slot_code = htmlspecialchars_uni($slotCode);
         $equip_slot_label = htmlspecialchars_uni((string)($slotMeta['label'] ?? $slotCode));
-        $equip_slot_icon = htmlspecialchars_uni((string)($slotMeta['icon'] ?? '⬜'));
         $equip_inv_id = (string)(int)($entry['inv_id'] ?? 0);
         $equip_kb_id = (string)(int)($entry['kb_id'] ?? 0);
         $equip_rarity_raw = (string)($entry['rarity'] ?? 'common');
@@ -1609,8 +1597,11 @@ function af_advancedshop_render_inventory(): void
     $rarity_common_selected = $rarityFilter === 'common' ? 'selected="selected"' : '';
     $rarity_uncommon_selected = $rarityFilter === 'uncommon' ? 'selected="selected"' : '';
     $rarity_rare_selected = $rarityFilter === 'rare' ? 'selected="selected"' : '';
-    $rarity_epic_selected = $rarityFilter === 'epic' ? 'selected="selected"' : '';
+    $rarity_unique_selected = $rarityFilter === 'unique' ? 'selected="selected"' : '';
+    $rarity_illegal_selected = $rarityFilter === 'illegal' ? 'selected="selected"' : '';
+    $rarity_restricted_selected = $rarityFilter === 'restricted' ? 'selected="selected"' : '';
     $rarity_legendary_selected = $rarityFilter === 'legendary' ? 'selected="selected"' : '';
+    $rarity_mythic_selected = $rarityFilter === 'mythic' ? 'selected="selected"' : '';
     $equipment_panel = '';
     eval('$equipment_panel = "' . af_advancedshop_tpl('advancedshop_inventory_equipment') . '";');
     eval('$inventory_grid = "' . af_advancedshop_tpl('advancedshop_inventory_grid') . '";');
@@ -1628,12 +1619,47 @@ function af_advancedshop_render_inventory(): void
 
 function af_advancedshop_inventory_slots_canonical(): array
 {
-    return ['weapon_main', 'weapon_off', 'armor', 'head', 'body', 'hands', 'legs', 'feet', 'back', 'belt'];
+    return ['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt', 'mainhand', 'offhand', 'twohand', 'ranged', 'melee', 'accessory'];
+}
+
+function af_advancedshop_inventory_slot_labels(): array
+{
+    return [
+        'head' => ['label' => 'Голова'],
+        'body' => ['label' => 'Тело'],
+        'hands' => ['label' => 'Руки'],
+        'legs' => ['label' => 'Ноги'],
+        'feet' => ['label' => 'Ступни'],
+        'back' => ['label' => 'Спина'],
+        'belt' => ['label' => 'Пояс'],
+        'mainhand' => ['label' => 'Основная рука'],
+        'offhand' => ['label' => 'Вторая рука'],
+        'twohand' => ['label' => 'Двуручное'],
+        'ranged' => ['label' => 'Дистанционное'],
+        'melee' => ['label' => 'Ближний бой'],
+        'accessory' => ['label' => 'Аксессуар'],
+    ];
+}
+
+function af_advancedshop_inventory_slot_label(string $slotCode): string
+{
+    $labels = af_advancedshop_inventory_slot_labels();
+    return (string)($labels[$slotCode]['label'] ?? ucfirst(str_replace('_', ' ', $slotCode)));
 }
 
 function af_advancedshop_inventory_normalize_slot_code(string $slot): string
 {
-    return mb_strtolower(trim($slot));
+    $slot = mb_strtolower(trim($slot));
+    $aliases = [
+        'weapon_main' => 'mainhand',
+        'weapon_off' => 'offhand',
+        'weapon_side' => 'offhand',
+        'weapon' => 'mainhand',
+        'armor' => 'body',
+        'armor_body' => 'body',
+        'armor_head' => 'head',
+    ];
+    return $aliases[$slot] ?? $slot;
 }
 
 function af_advancedshop_inventory_tags_normalized($tags): array
@@ -1705,23 +1731,18 @@ function af_advancedshop_inventory_resolve_slot(array $profile, string $requeste
 function af_advancedshop_inventory_equippable_info(array $profile): array
 {
     $slots = af_advancedshop_inventory_slots_canonical();
-    $slot = af_advancedshop_inventory_normalize_slot_code((string)($profile['slot'] ?? ''));
+    $slot = af_advancedshop_inventory_normalize_slot_code((string)($profile['equip_slot'] ?? $profile['slot'] ?? ''));
     $itemKind = mb_strtolower(trim((string)($profile['item_kind'] ?? '')));
 
     if ($itemKind === 'armor') {
-        return ['is_equippable' => true, 'allowed_slots' => ['armor'], 'default_slot' => 'armor'];
+        if (!in_array($slot, ['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt'], true)) {
+            return ['is_equippable' => false, 'allowed_slots' => [], 'default_slot' => ''];
+        }
+        return ['is_equippable' => true, 'allowed_slots' => [$slot], 'default_slot' => $slot];
     }
 
     if (in_array($slot, $slots, true)) {
         return ['is_equippable' => true, 'allowed_slots' => [$slot], 'default_slot' => $slot];
-    }
-
-    if ($slot === 'armor') {
-        return ['is_equippable' => true, 'allowed_slots' => ['armor'], 'default_slot' => 'armor'];
-    }
-
-    if ($slot === 'weapon') {
-        return ['is_equippable' => true, 'allowed_slots' => ['weapon_main', 'weapon_off'], 'default_slot' => 'weapon_main'];
     }
 
     return ['is_equippable' => false, 'allowed_slots' => [], 'default_slot' => ''];
@@ -1769,7 +1790,7 @@ function af_advancedshop_inventory_equipped_fetch(int $uid): array
             'kb_id' => (int)($row['kb_id'] ?? 0),
             'title' => $title,
             'icon_url' => (string)($meta['ui']['icon_url'] ?? ''),
-            'rarity' => (string)($row['inv_rarity'] ?? 'common'),
+            'rarity' => af_advancedshop_normalize_rarity((string)($row['inv_rarity'] ?? 'common')),
             'slot_code' => $slotCode,
         ];
     }
@@ -1853,7 +1874,7 @@ function af_advancedshop_inventory_item_info(): void
             'kb_id' => (int)($row['kb_id'] ?? 0),
             'title' => $title,
             'icon_url' => (string)($meta['ui']['icon_url'] ?? ''),
-            'rarity' => (string)($row['rarity'] ?? 'common'),
+            'rarity' => af_advancedshop_normalize_rarity((string)($row['rarity'] ?? 'common')),
             'description_html' => af_advancedshop_parse_bbcode($tooltipSource),
             'is_equippable' => (bool)($equipInfo['is_equippable'] ?? false),
             'default_slot_code' => (string)($equipInfo['default_slot'] ?? ''),
@@ -1892,6 +1913,12 @@ function af_advancedshop_inventory_equippable_list(): void
         ($dataCol ? 'e.' . $dataCol . ' AS kb_data' : "'' AS kb_data"),
     ];
 
+    $equippedInvIds = [];
+    $eqRes = $db->query("SELECT inv_id FROM " . TABLE_PREFIX . "af_inventory_equipped WHERE uid=" . $targetUid);
+    while ($eq = $db->fetch_array($eqRes)) {
+        $equippedInvIds[(int)($eq['inv_id'] ?? 0)] = true;
+    }
+
     $items = [];
     $res = $db->query("SELECT " . implode(', ', $select) . "
         FROM " . TABLE_PREFIX . "af_inventory_items i
@@ -1900,6 +1927,9 @@ function af_advancedshop_inventory_equippable_list(): void
         ORDER BY i.inv_id DESC");
 
     while ($row = $db->fetch_array($res)) {
+        if (!empty($equippedInvIds[(int)($row['inv_id'] ?? 0)])) {
+            continue;
+        }
         $profile = af_advancedshop_kb_item_profile($row);
         $equipInfo = af_advancedshop_inventory_equippable_info($profile);
         if (empty($equipInfo['is_equippable']) || !in_array($slotCode, $equipInfo['allowed_slots'] ?? [], true)) {
@@ -1917,7 +1947,7 @@ function af_advancedshop_inventory_equippable_list(): void
             'kb_id' => (int)($row['kb_id'] ?? 0),
             'title' => $title,
             'icon_url' => (string)($meta['ui']['icon_url'] ?? ''),
-            'rarity' => (string)($row['rarity'] ?? 'common'),
+            'rarity' => af_advancedshop_normalize_rarity((string)($row['rarity'] ?? 'common')),
         ];
     }
 
@@ -2175,6 +2205,8 @@ function af_advancedshop_kb_item_profile(array $kbRow): array
         'rarity' => 'common',
         'item_kind' => '',
         'slot' => '',
+        'equip_slot' => '',
+        'armor_ac_bonus' => 0,
         'stack_max' => 1,
         'currency' => 'credits',
         'price' => 0,
@@ -2197,17 +2229,20 @@ function af_advancedshop_kb_item_profile(array $kbRow): array
     $rawRarity = '';
     if ($item && !empty($item['rarity'])) {
         $rawRarity = (string)$item['rarity'];
-    } elseif (!empty($data['rarity'])) {
-        $rawRarity = (string)$data['rarity'];
     }
 
     $tags = $data['tags'] ?? ($item['tags'] ?? []);
     if (!is_array($tags)) { $tags = []; }
 
+    $equip = is_array($item['equip'] ?? null) ? $item['equip'] : [];
+    $equipArmor = is_array($equip['armor'] ?? null) ? $equip['armor'] : [];
+
     return [
         'rarity' => af_advancedshop_normalize_rarity($rawRarity),
         'item_kind' => (string)($item['item_kind'] ?? ($data['item_kind'] ?? '')),
         'slot' => (string)($item['slot'] ?? ($data['slot'] ?? '')),
+        'equip_slot' => af_advancedshop_inventory_normalize_slot_code((string)($equip['slot'] ?? ($item['slot'] ?? ($data['slot'] ?? '')))),
+        'armor_ac_bonus' => max(0, (int)($equipArmor['ac_bonus'] ?? 0)),
         'stack_max' => max(1, (int)($item['stack_max'] ?? ($data['stack_max'] ?? 1))),
         'currency' => (string)($item['currency'] ?? ($data['currency'] ?? 'credits')),
         'price' => max(0, (int)($item['price'] ?? ($data['price'] ?? 0))),
@@ -2234,14 +2269,17 @@ function af_advancedshop_normalize_rarity(string $rarity): string
         'обыкновенная' => 'common',
         'необычная' => 'uncommon',
         'редкая' => 'rare',
-        'эпическая' => 'epic',
+        'уникальная' => 'unique',
+        'незаконная' => 'illegal',
+        'ограниченная' => 'restricted',
         'легендарная' => 'legendary',
+        'мифическая' => 'mythic',
     ];
     if (isset($map[$value])) {
         return $map[$value];
     }
 
-    if (in_array($value, ['common', 'uncommon', 'rare', 'epic', 'legendary'], true)) {
+    if (in_array($value, ['common', 'uncommon', 'rare', 'unique', 'illegal', 'restricted', 'legendary', 'mythic'], true)) {
         return $value;
     }
 

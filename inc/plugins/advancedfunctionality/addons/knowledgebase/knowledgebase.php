@@ -99,7 +99,7 @@ function af_kb_default_type_definitions(): array
                     'currency' => '',
                     'weight' => 0,
                     'stack_max' => 1,
-                    'slot' => '',
+                    'equip' => ['slot' => '', 'armor' => ['ac_bonus' => 0, 'armor_type' => 'light']],
                     'tags' => [],
                     'on_use' => ['cooldown' => 0, 'cost' => (object)[], 'effects' => []],
                     'on_equip' => ['effects' => [], 'grants' => []],
@@ -109,9 +109,11 @@ function af_kb_default_type_definitions(): array
             $schema['fields'] = [
                 ['path' => 'schema', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => AF_KB_RULES_SCHEMA],
                 ['path' => 'item.item_kind', 'type' => 'select', 'label_ru' => 'Подтип предмета', 'label_en' => 'Item kind', 'required' => true, 'options_dynamic' => ['source' => 'kb_item_kinds'], 'default' => 'misc'],
-                ['path' => 'item.rarity', 'type' => 'select', 'required' => true, 'options' => [['value'=>'common'],['value'=>'uncommon'],['value'=>'rare'],['value'=>'epic'],['value'=>'legendary']], 'default' => 'common'],
+                ['path' => 'item.rarity', 'type' => 'select', 'required' => true, 'options' => [['value'=>'common'],['value'=>'uncommon'],['value'=>'rare'],['value'=>'unique'],['value'=>'illegal'],['value'=>'restricted'],['value'=>'legendary'],['value'=>'mythic']], 'default' => 'common'],
                 ['path' => 'item.price', 'type' => 'number', 'default' => 0],
-                ['path' => 'item.slot', 'type' => 'select', 'options' => [['value'=>''],['value'=>'head'],['value'=>'eyes'],['value'=>'arms'],['value'=>'hands'],['value'=>'chest'],['value'=>'back'],['value'=>'skin'],['value'=>'spine'],['value'=>'legs'],['value'=>'feet'],['value'=>'weapon_main'],['value'=>'weapon_side'],['value'=>'implant'],['value'=>'utility']]],
+                ['path' => 'item.equip.slot', 'type' => 'select', 'required' => true, 'options' => [['value'=>''],['value'=>'head'],['value'=>'body'],['value'=>'hands'],['value'=>'legs'],['value'=>'feet'],['value'=>'back'],['value'=>'belt'],['value'=>'mainhand'],['value'=>'offhand'],['value'=>'twohand'],['value'=>'ranged'],['value'=>'melee'],['value'=>'accessory']]],
+                ['path' => 'item.equip.armor.ac_bonus', 'type' => 'number', 'default' => 0],
+                ['path' => 'item.equip.armor.armor_type', 'type' => 'select', 'options' => [['value'=>'light'],['value'=>'medium'],['value'=>'heavy']], 'default' => 'light'],
                 ['path' => 'item.on_use.effects', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'op','type'=>'select','required'=>true,'options'=>[['value'=>'add_stat'],['value'=>'add_hp'],['value'=>'add_ep'],['value'=>'kb_grant'],['value'=>'set_flag']]],['path'=>'stat','type'=>'select','options'=>[['value'=>'str'],['value'=>'dex'],['value'=>'con'],['value'=>'int'],['value'=>'wis'],['value'=>'cha']]],['path'=>'value','type'=>'number'],['path'=>'kb_type','type'=>'string'],['path'=>'kb_key','type'=>'string'],['path'=>'flag','type'=>'string']]], 'default' => []],
             ];
         }
@@ -135,11 +137,11 @@ function af_kb_default_type_definitions(): array
 function af_kb_default_item_kind_definitions(): array
 {
     return [
-        ['kind_key' => 'weapon', 'title_ru' => 'Оружие', 'title_en' => 'Weapon', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"weapon_main","unique":true,"two_handed":false,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true}]}', 'sortorder' => 10],
-        ['kind_key' => 'weapon_offhand', 'title_ru' => 'Оружие/оффхенд', 'title_en' => 'Weapon/Offhand', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"weapon_off","unique":true,"two_handed":false,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true}]}', 'sortorder' => 20],
-        ['kind_key' => 'armor', 'title_ru' => 'Броня', 'title_en' => 'Armor', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"armor_body","unique":true,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true}]}', 'sortorder' => 30],
-        ['kind_key' => 'helmet', 'title_ru' => 'Шлем', 'title_en' => 'Helmet', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"armor_head","unique":true,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true}]}', 'sortorder' => 40],
-        ['kind_key' => 'implant', 'title_ru' => 'Имплант', 'title_en' => 'Implant', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"augment","unique":true,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true},{"op":"set_ui_hint","path":"equip.slot","hint":{"ru":"Аугментации устанавливаются и влияют на человечность.","en":"Augments are installed and affect humanity."}}]}', 'sortorder' => 50],
+        ['kind_key' => 'weapon', 'title_ru' => 'Оружие', 'title_en' => 'Weapon', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"mainhand","unique":true,"two_handed":false,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true}]}', 'sortorder' => 10],
+        ['kind_key' => 'weapon_offhand', 'title_ru' => 'Оружие/оффхенд', 'title_en' => 'Weapon/Offhand', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"offhand","unique":true,"two_handed":false,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true}]}', 'sortorder' => 20],
+        ['kind_key' => 'armor', 'title_ru' => 'Броня', 'title_en' => 'Armor', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"body","unique":true,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true}]}', 'sortorder' => 30],
+        ['kind_key' => 'helmet', 'title_ru' => 'Шлем', 'title_en' => 'Helmet', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"head","unique":true,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true}]}', 'sortorder' => 40],
+        ['kind_key' => 'implant', 'title_ru' => 'Имплант', 'title_en' => 'Implant', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"accessory","unique":true,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true},{"op":"set_ui_hint","path":"equip.slot","hint":{"ru":"Аугментации устанавливаются и влияют на человечность.","en":"Augments are installed and affect humanity."}}]}', 'sortorder' => 50],
         ['kind_key' => 'consumable', 'title_ru' => 'Расходник', 'title_en' => 'Consumable', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"none","unique":false,"stackable":true}}}]}', 'sortorder' => 60],
     ];
 }
@@ -1019,7 +1021,7 @@ function af_kb_get_type_profile_definition(string $typeKey): array
         'knowledge' => ['ui_profile' => 'knowledge', 'rules_enabled' => true, 'defaults' => $base + ['knowledge_group' => 'lore', 'skill' => ['rank_mode' => 'ranked', 'max_rank' => 10, 'rank_bonus' => 1, 'base_formula' => 'attribute', 'can_buy_rank' => true]]],
         'language' => ['ui_profile' => 'language', 'rules_enabled' => true, 'defaults' => $base + ['script' => '', 'rarity' => 'common', 'family' => '', 'requires' => []]],
         'spell' => ['ui_profile' => 'spell', 'rules_enabled' => true, 'defaults' => $base + ['spell' => ['rank' => 1, 'tradition' => 'arcane', 'casting_time' => '1_action', 'range' => '', 'duration' => '', 'area' => '', 'requires_check' => false, 'check_stat' => 'int', 'dc' => 0], 'effects' => []]],
-        'item' => ['ui_profile' => 'item', 'rules_enabled' => true, 'defaults' => $base + ['item_kind' => 'gear', 'rarity' => 'common', 'price' => 0, 'weight' => 0, 'slots' => [], 'on_equip' => [], 'on_use' => [], 'requirements' => []]],
+        'item' => ['ui_profile' => 'item', 'rules_enabled' => true, 'defaults' => $base + ['item_kind' => 'gear', 'rarity' => 'common', 'price' => 0, 'weight' => 0, 'equip' => ['slot' => '', 'armor' => ['ac_bonus' => 0, 'armor_type' => 'light']], 'on_equip' => [], 'on_use' => [], 'requirements' => []]],
         'condition' => ['ui_profile' => 'condition', 'rules_enabled' => true, 'defaults' => $base + ['condition' => ['severity' => 1, 'duration_default' => '', 'stacking' => 'none', 'effects' => []]]],
         'perk' => ['ui_profile' => 'perk', 'rules_enabled' => true, 'defaults' => $base + ['tier' => 1, 'level_req' => 1, 'prereq' => [], 'effects' => []]],
         'faction' => ['ui_profile' => 'faction', 'rules_enabled' => false, 'defaults' => ['meta' => []]],
@@ -1903,7 +1905,7 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
 
 function af_kb_item_root_fields(): array
 {
-    return ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'tags', 'on_use', 'on_equip', 'requirements'];
+    return ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'equip', 'tags', 'on_use', 'on_equip', 'requirements'];
 }
 
 function af_kb_normalize_item_rules_payload(array $payload): array

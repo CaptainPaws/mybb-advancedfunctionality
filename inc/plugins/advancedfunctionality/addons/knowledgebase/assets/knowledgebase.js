@@ -885,7 +885,7 @@
                 base.item = {
                     item_kind: 'gear',
                     rarity: 'common',
-                    slot: '',
+                    equip: { slot: '', armor: { ac_bonus: 0, armor_type: 'light' } },
                     price: 0,
                     currency: '',
                     weight: 0,
@@ -964,7 +964,7 @@
                 return payload;
             }
 
-            var rootFields = ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'tags', 'on_use', 'on_equip', 'requirements'];
+            var rootFields = ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'equip', 'tags', 'on_use', 'on_equip', 'requirements'];
             var hasItem = payload.item && typeof payload.item === 'object' && !Array.isArray(payload.item);
 
             if (!hasItem) {
@@ -1185,6 +1185,11 @@
             }
             if (!state.item.item_kind) state.item.item_kind = 'gear';
 
+            if (!state.item.equip || typeof state.item.equip !== 'object') state.item.equip = {};
+            if (!state.item.equip.slot && state.item.slot) state.item.equip.slot = state.item.slot;
+            if (!state.item.equip.armor || typeof state.item.equip.armor !== 'object') state.item.equip.armor = {};
+            if (state.item.equip.armor.ac_bonus == null) state.item.equip.armor.ac_bonus = 0;
+            if (!state.item.equip.armor.armor_type) state.item.equip.armor.armor_type = 'light';
             if (!Array.isArray(state.item.tags)) state.item.tags = [];
             ensureObj('item.on_use', {});
             ensureArr('item.on_use.effects');
@@ -1480,6 +1485,22 @@
                 }
             }
 
+            if (uiProfile === 'item') {
+                var rarityAllowed = ['common', 'uncommon', 'rare', 'unique', 'illegal', 'restricted', 'legendary', 'mythic'];
+                var rarity = String((state.item && state.item.rarity) || 'common').trim().toLowerCase();
+                if (rarityAllowed.indexOf(rarity) === -1) {
+                    errors.push('item.rarity: unsupported value');
+                }
+                var slotAllowed = ['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt', 'mainhand', 'offhand', 'twohand', 'ranged', 'melee', 'accessory'];
+                var equipSlot = String((state.item && state.item.equip && state.item.equip.slot) || '').trim().toLowerCase();
+                if (equipSlot !== '' && slotAllowed.indexOf(equipSlot) === -1) {
+                    errors.push('item.equip.slot: unsupported value');
+                }
+                if (String((state.item && state.item.item_kind) || '').toLowerCase() === 'armor' && equipSlot === '') {
+                    errors.push('Для брони нужно указать часть (слот экипировки).');
+                }
+            }
+
             // Heritage validation
             if (uiProfile === 'heritage') {
                 function validateSlugList(values, prefix) {
@@ -1596,7 +1617,13 @@
                     item: {
                         item_kind: String(it.item_kind || 'gear'),
                         rarity: String(it.rarity || 'common'),
-                        slot: String(it.slot || ''),
+                        equip: {
+                            slot: String((it.equip && it.equip.slot) || it.slot || ''),
+                            armor: {
+                                ac_bonus: numberOrZero((it.equip && it.equip.armor && it.equip.armor.ac_bonus) != null ? it.equip.armor.ac_bonus : 0),
+                                armor_type: String((it.equip && it.equip.armor && it.equip.armor.armor_type) || 'light')
+                            }
+                        },
                         price: numberOrZero(it.price != null ? it.price : 0),
                         currency: String(it.currency || ''),
                         weight: numberOrZero(it.weight != null ? it.weight : 0),
@@ -1934,20 +1961,32 @@
 
             if (uiProfile === 'item') {
                 var defI = [
-                    { name: 'item_kind', label: 'Item kind', type: 'select', options: ['weapon', 'armor', 'gear', 'consumable', 'cyberware', 'ammo', 'mod', 'implant', 'service'] },
-                    { name: 'rarity', label: 'Rarity', type: 'select', options: ['common', 'uncommon', 'rare', 'unique', 'illegal', 'restricted'] },
-                    { name: 'slot', label: 'Slot', type: 'text', hint: 'head/body/hand/implant/weapon_mount/etc' },
-                    { name: 'price', label: 'Price', type: 'number' },
-                    { name: 'currency', label: 'Currency', type: 'text', hint: 'credits/eddies/gold/...' },
-                    { name: 'weight', label: 'Weight', type: 'number' },
-                    { name: 'stack_max', label: 'Stack max', type: 'number' },
-                    { name: 'tags', label: 'Tags', type: 'lines' }
+                    { name: 'item_kind', label: 'Тип предмета', type: 'select', options: ['weapon', 'armor', 'gear', 'consumable', 'cyberware', 'ammo', 'mod', 'implant', 'service'] },
+                    { name: 'rarity', label: 'Редкость', type: 'select', options: ['common', 'uncommon', 'rare', 'unique', 'illegal', 'restricted', 'legendary', 'mythic'] },
+                    { name: 'price', label: 'Цена', type: 'number' },
+                    { name: 'currency', label: 'Валюта', type: 'text', hint: 'credits/eddies/gold/...' },
+                    { name: 'weight', label: 'Вес', type: 'number' },
+                    { name: 'stack_max', label: 'Макс. в стаке', type: 'number' },
+                    { name: 'tags', label: 'Теги', type: 'lines' }
+                ];
+
+                var equipDef = [
+                    { name: 'slot', label: 'Слот экипировки', type: 'select', options: ['', 'head', 'body', 'hands', 'legs', 'feet', 'back', 'belt', 'mainhand', 'offhand', 'twohand', 'ranged', 'melee', 'accessory'] },
+                    { name: 'ac_bonus', label: 'Бонус брони', type: 'number' },
+                    { name: 'armor_type', label: 'Тип брони', type: 'select', options: ['light', 'medium', 'heavy'] }
                 ];
 
                 var gridI = document.createElement('div');
                 gridI.className = 'af-kb-row';
                 defI.forEach(function (d) { gridI.appendChild(createInput(d, state.item, syncRawDebounced)); });
                 fields.profileFields.appendChild(gridI);
+
+                var equipGrid = document.createElement('div');
+                equipGrid.className = 'af-kb-row';
+                equipGrid.appendChild(createInput(equipDef[0], state.item.equip, syncRawDebounced));
+                equipGrid.appendChild(createInput(equipDef[1], state.item.equip.armor, syncRawDebounced));
+                equipGrid.appendChild(createInput(equipDef[2], state.item.equip.armor, syncRawDebounced));
+                fields.profileFields.appendChild(equipGrid);
 
                 // on_use
                 var useBox = document.createElement('div');
