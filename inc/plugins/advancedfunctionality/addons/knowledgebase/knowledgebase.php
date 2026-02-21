@@ -4075,12 +4075,20 @@ function af_kb_handle_view(): void
             (string)($entry['meta_json'] ?? ''),
             $lang->af_kb_copy_json ?? 'Copy JSON'
         );
-        $dataDetails = af_kb_render_tech_details(
-            'Data JSON',
-            af_kb_get_entry_data_json((int)$entry['id']),
-            $lang->af_kb_copy_json ?? 'Copy JSON'
-        );
-        $kb_meta_details = $metaDetails . $dataDetails;
+        $kb_meta_details = $metaDetails;
+
+        if (af_kb_is_admin() && af_kb_can_edit() && (int)$mybb->get_input('debug_rules', MyBB::INPUT_INT) === 1) {
+            $rules = af_kb_extract_rules_from_meta_json((string)($entry['meta_json'] ?? ''));
+            $rulesJson = is_array($rules) ? json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : '{}';
+            if ($rulesJson === false || $rulesJson === '') {
+                $rulesJson = '{}';
+            }
+            $kb_meta_details .= af_kb_render_tech_details(
+                'Data JSON (debug)',
+                $rulesJson,
+                $lang->af_kb_copy_json ?? 'Copy JSON'
+            );
+        }
     }
     $kb_tech_details = '';
     if (af_kb_is_staff_viewer()) {
@@ -4207,14 +4215,11 @@ function af_kb_handle_edit(): void
             $metaPayload['schema'] = 'af_kb.meta.v2';
         }
 
-        $entryDataJsonRaw = trim((string)$mybb->get_input('entry_data_json'));
-        if ($entryDataJsonRaw === '') {
-            $entryDataJsonRaw = '{}';
+        $entryRulesRaw = $metaPayload['rules'] ?? null;
+        if (!is_array($entryRulesRaw)) {
+            $entryRulesRaw = [];
         }
-        if (!af_kb_validate_json($entryDataJsonRaw)) {
-            $errors[] = $lang->af_kb_invalid_json ?? 'Invalid JSON.';
-        }
-        $entryDataJsonNormalized = af_kb_normalize_json($entryDataJsonRaw);
+        $entryDataJsonNormalized = af_kb_normalize_json(json_encode($entryRulesRaw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}');
 
         $itemKind = trim((string)($metaPayload['item_kind'] ?? $mybb->get_input('item_kind')));
         if ($type === 'item') {
@@ -4643,9 +4648,8 @@ function af_kb_handle_edit(): void
     $kb_tech_ru = htmlspecialchars_uni($entry['tech_ru'] ?? '');
     $kb_tech_en = htmlspecialchars_uni($entry['tech_en'] ?? '');
     $kb_meta_json = htmlspecialchars_uni($entry['meta_json'] ?: '{}');
-    $entryDataJson = af_kb_get_entry_data_json_for_editor((array)$entry);
-    $kb_data_json = htmlspecialchars_uni($entryDataJson);
-    $kb_data_json_hidden = htmlspecialchars_uni($entryDataJson);
+    $entryRulesJson = af_kb_get_entry_data_json_for_editor((array)$entry);
+    $kb_rules_json = htmlspecialchars_uni($entryRulesJson);
 
     $kb_type_schema = htmlspecialchars_uni(json_encode(af_kb_get_type_schema($entry['type']), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     $kb_item_kind_value = htmlspecialchars_uni((string)($entry['item_kind'] ?? ''));
