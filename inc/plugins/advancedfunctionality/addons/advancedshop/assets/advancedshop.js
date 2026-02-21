@@ -264,9 +264,43 @@
     }
     showInventoryModal(
       '<p class="af-shop-modal__title" id="af-shop-modal-title">' + escapeHtml(slotLabel) + '</p>'
-      + '<p>Выберите предмет для этого слота.</p>'
-      + '<p><em>Stub: выбор предмета добавим в следующем ТЗ.</em></p>'
+      + '<p>Подбираем предметы для слота…</p>'
     );
+
+    getJSON('misc.php?action=inventory_equippable_list&slot_code=' + encodeURIComponent(slotCode)).then(function(r){
+      if(!r || !r.ok){
+        showInventoryModal(
+          '<p class="af-shop-modal__title" id="af-shop-modal-title">' + escapeHtml(slotLabel) + '</p>'
+          + '<p class="af-status-error">' + escapeHtml((r && r.error) || 'Не удалось загрузить список предметов') + '</p>'
+        );
+        return;
+      }
+
+      var items = Array.isArray(r.items) ? r.items : [];
+      if(!items.length){
+        showInventoryModal(
+          '<p class="af-shop-modal__title" id="af-shop-modal-title">' + escapeHtml(slotLabel) + '</p>'
+          + '<p><em>Нет подходящих предметов.</em></p>'
+        );
+        return;
+      }
+
+      var html = '<p class="af-shop-modal__title" id="af-shop-modal-title">' + escapeHtml(slotLabel) + '</p>'
+        + '<div class="af-equip-picker-grid">'
+        + items.map(function(item){
+            var title = item && item.title ? item.title : ('#' + String(item && item.kb_id ? item.kb_id : '0'));
+            var rarity = item && item.rarity ? item.rarity : 'common';
+            var icon = item && item.icon_url ? item.icon_url : '';
+            var invIdItem = item && item.inv_id ? String(item.inv_id) : '0';
+            return '<div class="af-equip-picker-item rarity-' + escapeHtml(rarity) + '">'
+              + (icon ? '<img src="' + escapeHtml(icon) + '" alt="' + escapeHtml(title) + '" class="af-equip-picker-item__icon">' : '<div class="af-equip-picker-item__icon af-equip-picker-item__icon--empty">?</div>')
+              + '<div class="af-equip-picker-item__meta"><div class="af-equip-picker-item__title">' + escapeHtml(title) + '</div><div class="af-equip-picker-item__rarity">' + escapeHtml(rarity) + '</div></div>'
+              + '<button type="button" class="af-shop-btn" data-af-slot-equip-btn data-inv-id="' + escapeHtml(invIdItem) + '" data-slot-code="' + escapeHtml(slotCode) + '">Надеть</button>'
+              + '</div>';
+          }).join('')
+        + '</div>';
+      showInventoryModal(html);
+    });
   }
 
   document.addEventListener('click', function(e){
@@ -299,6 +333,25 @@
       var invIdEquip = parseInt(equipBtn.getAttribute('data-inv-id') || '0', 10);
       if(invIdEquip <= 0){ return; }
       withLoading(equipBtn, post('misc.php?action=inventory_equip', {inv_id:invIdEquip})).then(function(r){
+        if(r && r.ok){
+          afShopHideCheckoutSuccessModal();
+          if(r.equipped){ renderEquipmentState(r.equipped); }
+          else { loadEquipped(); }
+          afShopToast('Предмет экипирован', 'success');
+        } else if(r && r.error !== 'busy'){
+          afShopToast(r.error || 'Не удалось надеть предмет', 'error');
+        }
+      });
+      return;
+    }
+
+    var slotEquipBtn = e.target.closest('[data-af-slot-equip-btn][data-inv-id][data-slot-code]');
+    if(slotEquipBtn){
+      e.preventDefault();
+      var invIdSlotEquip = parseInt(slotEquipBtn.getAttribute('data-inv-id') || '0', 10);
+      var slotCodeEquip = slotEquipBtn.getAttribute('data-slot-code') || '';
+      if(invIdSlotEquip <= 0 || !slotCodeEquip){ return; }
+      withLoading(slotEquipBtn, post('misc.php?action=inventory_equip', {inv_id:invIdSlotEquip, slot_code:slotCodeEquip})).then(function(r){
         if(r && r.ok){
           afShopHideCheckoutSuccessModal();
           if(r.equipped){ renderEquipmentState(r.equipped); }

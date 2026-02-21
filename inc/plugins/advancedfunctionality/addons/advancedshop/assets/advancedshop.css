@@ -77,3 +77,10 @@ body.af-shop-modal-open{overflow:hidden}
 .af-equip-slot__item-title{font-size:12px;text-align:center;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .af-equip-slot__placeholder{font-size:12px;opacity:.75}
 .af-equip-modal-icon{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #3a3f4b}
+.af-equip-picker-grid{display:grid;gap:10px}
+.af-equip-picker-item{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid #3a3f4b;border-radius:8px;background:#171a20}
+.af-equip-picker-item__icon{width:44px;height:44px;border-radius:6px;object-fit:cover;border:1px solid #3a3f4b;background:#23262e;display:flex;align-items:center;justify-content:center}
+.af-equip-picker-item__icon--empty{font-weight:700;opacity:.8}
+.af-equip-picker-item__meta{flex:1;min-width:0}
+.af-equip-picker-item__title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.af-equip-picker-item__rarity{font-size:12px;opacity:.8}
