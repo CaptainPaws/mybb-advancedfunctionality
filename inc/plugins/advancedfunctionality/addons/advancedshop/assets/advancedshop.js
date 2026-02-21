@@ -220,36 +220,32 @@
   }
 
 
-  function renderInventoryItemModal(item){
-    var title = (item && item.title) ? item.title : 'Предмет';
-    var rarity = (item && item.rarity) ? item.rarity : 'common';
-    var icon = (item && item.icon_url) ? item.icon_url : '';
-    var desc = (item && item.description_html) ? item.description_html : '<em>Описание отсутствует</em>';
-    var canEquip = !!(item && item.is_equippable && item.can_edit);
-    var invId = item && item.inv_id ? String(item.inv_id) : '0';
-    var html = '<p class="af-shop-modal__title" id="af-shop-modal-title">' + escapeHtml(title) + '</p>'
-      + '<p><strong>Редкость:</strong> ' + escapeHtml(rarity) + '</p>'
-      + (icon ? '<p><img src="' + escapeHtml(icon) + '" alt="' + escapeHtml(title) + '" class="af-equip-modal-icon"></p>' : '')
-      + '<div class="af-shop-modal__desc">' + desc + '</div>';
-    if (canEquip) {
-      html += '<p><strong>Можно экипировать</strong></p>'
-        + '<div class="af-shop-modal__actions"><button type="button" class="af-shop-btn" data-af-equip-btn data-inv-id="' + escapeHtml(invId) + '">Надеть</button></div>';
-    }
-    showInventoryModal(html);
+  function hideItemPopover(){
+    var pop = document.querySelector('[data-af-item-popover]');
+    if(pop){ pop.hidden = true; pop.innerHTML = ''; }
   }
 
   function handleInventorySlotClick(slotNode){
     if(!slotNode){ return; }
     var invId = parseInt(slotNode.getAttribute('data-inv-id') || '0', 10);
     if(invId <= 0){ return; }
-    var ctx = inventoryContext();
-    getJSON('misc.php?action=inventory_item_info&inv_id=' + encodeURIComponent(invId) + '&uid=' + encodeURIComponent(ctx.uid || '0')).then(function(r){
-      if(!r || !r.ok || !r.item){
-        afShopToast((r && r.error) || 'Не удалось загрузить предмет', 'error');
-        return;
-      }
-      renderInventoryItemModal(r.item || {});
-    });
+    var title = slotNode.getAttribute('data-title') || 'Предмет';
+    var rarity = slotNode.getAttribute('data-rarity') || 'common';
+    var qty = (slotNode.querySelector('.af-inventory-qty') || {}).textContent || '1';
+    var equipSlot = slotNode.getAttribute('data-equip-slot') || '';
+    var canEquip = slotNode.getAttribute('data-is-equippable') === '1';
+    var pop = document.querySelector('[data-af-item-popover]');
+    if(!pop){ return; }
+    pop.innerHTML = '<div class="af-item-popover__title">' + escapeHtml(title) + '</div>'
+      + '<div class="af-item-popover__meta">Редкость: ' + escapeHtml(rarity) + ' · Кол-во: ' + escapeHtml(qty) + '</div>'
+      + '<div class="af-item-popover__actions">'
+      + '<button type="button" class="af-shop-btn" data-af-equip-btn data-can-equip="' + (canEquip ? '1' : '0') + '" data-inv-id="' + escapeHtml(String(invId)) + '" data-slot-code="' + escapeHtml(equipSlot) + '">Надеть</button>'
+      + '<button type="button" class="af-shop-btn" data-af-sell-btn>Продать</button>'
+      + '</div>';
+    var rect = slotNode.getBoundingClientRect();
+    pop.style.left = (window.scrollX + rect.left) + 'px';
+    pop.style.top = (window.scrollY + rect.bottom + 8) + 'px';
+    pop.hidden = false;
   }
 
   function handleEquipmentSlotClick(slotNode){
@@ -342,17 +338,29 @@
       e.preventDefault();
       var invIdEquip = parseInt(equipBtn.getAttribute('data-inv-id') || '0', 10);
       if(invIdEquip <= 0){ return; }
+      if(equipBtn.getAttribute('data-can-equip') === '0'){
+        afShopToast('Этот предмет нельзя экипировать.', 'error');
+        return;
+      }
       var ctxEquip = inventoryContext();
-      withLoading(equipBtn, post('misc.php?action=inventory_equip', {uid:ctxEquip.uid || '0', inv_id:invIdEquip})).then(function(r){
+      withLoading(equipBtn, post('misc.php?action=inventory_equip', {uid:ctxEquip.uid || '0', inv_id:invIdEquip, slot_code:equipBtn.getAttribute('data-slot-code') || ''})).then(function(r){
         if(r && r.ok){
-          afShopHideCheckoutSuccessModal();
-          if(r.equipped){ renderEquipmentState(r.equipped); }
+          hideItemPopover();
+          if(r.state && r.state.equipment){ renderEquipmentState(r.state.equipment); }
+          else if(r.equipped){ renderEquipmentState(r.equipped); }
           else { loadEquipped(); }
           afShopToast('Предмет экипирован', 'success');
         } else if(r && r.error !== 'busy'){
           afShopToast(r.error || 'Не удалось надеть предмет', 'error');
         }
       });
+      return;
+    }
+
+    var sellBtn = e.target.closest('[data-af-sell-btn]');
+    if(sellBtn){
+      e.preventDefault();
+      afShopToast('Скоро', 'success');
       return;
     }
 
@@ -384,7 +392,9 @@
       withLoading(unequipBtn, post('misc.php?action=inventory_unequip', {uid:ctxUnequip.uid || '0', slot_code:slotCode})).then(function(r){
         if(r && r.ok){
           afShopHideCheckoutSuccessModal();
-          loadEquipped();
+          hideItemPopover();
+          if(r.state && r.state.equipment){ renderEquipmentState(r.state.equipment); }
+          else { loadEquipped(); }
           afShopToast('Слот освобожден', 'success');
         } else if(r && r.error !== 'busy'){
           afShopToast(r.error || 'Не удалось снять предмет', 'error');
@@ -663,22 +673,91 @@
   function initInventoryTabs(){
     var root = document.querySelector('[data-af-inventory-tabs]');
     if(!root){ return; }
-    var tabs = Array.prototype.slice.call(root.querySelectorAll('.af-inventory-tab[data-kind]'));
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.af-inventory-tab[data-kind]'));
     var panels = Array.prototype.slice.call(root.querySelectorAll('.af-inventory-panel[data-kind]'));
+    var search = document.querySelector('[data-af-inventory-search]');
+    var rarity = document.querySelector('[data-af-inventory-rarity]');
     if(!tabs.length || !panels.length){ return; }
+
     function activate(kind){
       tabs.forEach(function(tab){ tab.classList.toggle('is-active', tab.getAttribute('data-kind') === kind); });
       panels.forEach(function(panel){ panel.classList.toggle('is-active', panel.getAttribute('data-kind') === kind); });
       try { localStorage.setItem('af_inv_tab', kind); } catch(err) {}
     }
+
+    function applyFilters(){
+      var q = (search && search.value ? search.value : '').toLowerCase();
+      var rr = rarity && rarity.value ? rarity.value : '';
+      panels.forEach(function(panel){
+        panel.querySelectorAll('.af-inv-slot').forEach(function(slot){
+          var txt = ((slot.getAttribute('data-title') || '') + ' ' + (slot.getAttribute('data-tooltip') || '')).toLowerCase();
+          var matchQ = !q || txt.indexOf(q) !== -1;
+          var matchR = !rr || (slot.getAttribute('data-rarity') || '') === rr;
+          slot.style.display = (matchQ && matchR) ? '' : 'none';
+        });
+      });
+    }
+
     var preferred = '';
     try { preferred = localStorage.getItem('af_inv_tab') || ''; } catch(err) { preferred = ''; }
     if(!tabs.some(function(tab){ return tab.getAttribute('data-kind') === preferred; })){
-      preferred = tabs[0].getAttribute('data-kind');
+      preferred = 'all';
     }
     activate(preferred);
-    tabs.forEach(function(tab){
-      tab.addEventListener('click', function(){ activate(tab.getAttribute('data-kind')); });
+    tabs.forEach(function(tab){ tab.addEventListener('click', function(){ activate(tab.getAttribute('data-kind')); }); });
+    if(search){ search.addEventListener('input', applyFilters); }
+    if(rarity){ rarity.addEventListener('change', applyFilters); }
+    applyFilters();
+
+    document.addEventListener('click', function(e){
+      if(!e.target.closest('.af-inv-slot') && !e.target.closest('[data-af-item-popover]')){
+        hideItemPopover();
+      }
+    });
+
+    document.querySelectorAll('.af-inv-slot[data-inv-id]').forEach(function(slot){
+      slot.addEventListener('dragstart', function(e){
+        var payload = {
+          inv_id: slot.getAttribute('data-inv-id') || '0',
+          kb_id: slot.getAttribute('data-kb-id') || '0',
+          equip_slot: slot.getAttribute('data-equip-slot') || ''
+        };
+        e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+      });
+    });
+
+    document.querySelectorAll('[data-af-equip-slot][data-slot-code]').forEach(function(slot){
+      slot.addEventListener('dragover', function(e){
+        e.preventDefault();
+        var data = {};
+        try { data = JSON.parse(e.dataTransfer.getData('text/plain') || '{}'); } catch(err) { data = {}; }
+        var valid = !!data.equip_slot && data.equip_slot === (slot.getAttribute('data-slot-code') || '');
+        slot.classList.toggle('is-drag-valid', valid);
+        slot.classList.toggle('is-drag-invalid', !valid);
+      });
+      slot.addEventListener('dragleave', function(){ slot.classList.remove('is-drag-valid', 'is-drag-invalid'); });
+      slot.addEventListener('drop', function(e){
+        e.preventDefault();
+        slot.classList.remove('is-drag-valid', 'is-drag-invalid');
+        var data = {};
+        try { data = JSON.parse(e.dataTransfer.getData('text/plain') || '{}'); } catch(err) { data = {}; }
+        var invId = parseInt(data.inv_id || '0', 10);
+        var targetSlot = slot.getAttribute('data-slot-code') || '';
+        if(invId <= 0 || !data.equip_slot || data.equip_slot !== targetSlot){
+          afShopToast('Этот предмет нельзя надеть в этот слот.', 'error');
+          return;
+        }
+        var ctx = inventoryContext();
+        post('misc.php?action=inventory_equip', {uid:ctx.uid || '0', inv_id:invId, slot_code:targetSlot}).then(function(r){
+          if(r && r.ok){
+            if(r.state && r.state.equipment){ renderEquipmentState(r.state.equipment); }
+            else if(r.equipped){ renderEquipmentState(r.equipped); }
+            afShopToast('Предмет экипирован', 'success');
+          } else {
+            afShopToast((r && r.error) || 'Этот предмет нельзя надеть в этот слот.', 'error');
+          }
+        });
+      });
     });
   }
 

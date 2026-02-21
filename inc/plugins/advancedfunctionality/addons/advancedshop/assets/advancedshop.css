@@ -83,3 +83,17 @@ body.af-shop-modal-open{overflow:hidden}
 .af-equip-picker-item__meta{flex:1;min-width:0}
 .af-equip-picker-item__title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .af-equip-picker-item__rarity{font-size:12px;opacity:.8}
+
+.af-inv-layout{display:grid;grid-template-columns:minmax(0,3fr) minmax(280px,2fr);gap:16px;align-items:start}
+.af-inv-left,.af-inv-right{background:#14171d;border:1px solid #303544;border-radius:12px;padding:12px}
+.af-equip-silhouette{position:relative;min-height:560px}
+.af-equip-silhouette__body{position:absolute;inset:20px 30% 20px;border-radius:20px;background:radial-gradient(circle at top,#2f3542 0,#1f2530 40%,#161b24 100%);opacity:.45;border:1px solid #3a3f4b}
+.af-inventory-equipment__grid{position:relative;display:grid;grid-template-columns:repeat(2,minmax(120px,1fr));gap:10px;z-index:2}
+.af-equip-slot.is-drag-valid{border-color:#59d081;box-shadow:0 0 0 2px rgba(89,208,129,.25)}
+.af-equip-slot.is-drag-invalid{border-color:#df5d5d;box-shadow:0 0 0 2px rgba(223,93,93,.25)}
+.af-item-popover[hidden]{display:none}
+.af-item-popover{position:absolute;z-index:12000;max-width:260px;background:#1b1f28;border:1px solid #3a3f4b;border-radius:10px;padding:10px;color:#eef2f8;box-shadow:0 18px 32px rgba(0,0,0,.35)}
+.af-item-popover__title{font-weight:700;margin-bottom:6px}
+.af-item-popover__meta{font-size:12px;opacity:.85}
+.af-item-popover__actions{display:flex;gap:8px;margin-top:10px}
+@media (max-width:980px){.af-inv-layout{grid-template-columns:1fr}}
