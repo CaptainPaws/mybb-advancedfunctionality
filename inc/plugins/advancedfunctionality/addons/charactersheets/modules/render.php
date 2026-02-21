@@ -1026,6 +1026,13 @@ function af_charactersheets_build_header_actions_html(
             . '" title="Анкета" aria-label="Анкета"><i class="fa-regular fa-id-card"></i></a>';
     }
 
+    if ($uid > 0) {
+        $modalInventoryUrl = 'misc.php?action=inventory&uid=' . $uid . '&ajax=1';
+        $items[] = '<a class="af-cs-btn af-cs-btn--compact" href="' . htmlspecialchars_uni($modalInventoryUrl)
+            . '" data-afcs-open="1" data-afcs-sheet="' . htmlspecialchars_uni($modalInventoryUrl)
+            . '" title="Инвентарь" aria-label="Инвентарь"><i class="fa-solid fa-box-open"></i></a>';
+    }
+
     if ($can_award) {
         $items[] = '<button type="button" class="af-cs-btn af-cs-btn--compact af-cs-btn--icon" data-afcs-award-toggle'
             . ' title="Ручное начисление" aria-label="Ручное начисление"><i class="fa-solid fa-plus"></i></button>';
