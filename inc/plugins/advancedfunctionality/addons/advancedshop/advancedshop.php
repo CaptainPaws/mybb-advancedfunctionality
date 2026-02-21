@@ -333,10 +333,10 @@ function af_advancedshop_misc_router(): void
     if (($mybb->input['action'] ?? '') === '') { return; }
 
     $action = (string)$mybb->get_input('action');
-    $routes = ['shop','shop_category','shop_cart','shop_checkout','shop_add_to_cart','shop_update_cart','shop_manage','shop_manage_categories','shop_manage_category_create','shop_manage_category_update','shop_manage_category_delete','shop_manage_sortorder_rebuild','shop_manage_slots','shop_manage_slot_create','shop_manage_slot_update','shop_manage_slot_delete','shop_kb_search','shop_kb_schema','shop_health','inventory','inventory_equipped_get','inventory_equip','inventory_unequip'];
+    $routes = ['shop','shop_category','shop_cart','shop_checkout','shop_add_to_cart','shop_update_cart','shop_manage','shop_manage_categories','shop_manage_category_create','shop_manage_category_update','shop_manage_category_delete','shop_manage_sortorder_rebuild','shop_manage_slots','shop_manage_slot_create','shop_manage_slot_update','shop_manage_slot_delete','shop_kb_search','shop_kb_schema','shop_health','inventory','inventory_item_info','inventory_equipped_get','inventory_equip','inventory_unequip'];
     if (!in_array($action, $routes, true)) { return; }
 
-    $apiActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_kb_schema', 'shop_health', 'inventory_equipped_get', 'inventory_equip', 'inventory_unequip'];
+    $apiActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_kb_schema', 'shop_health', 'inventory_item_info', 'inventory_equipped_get', 'inventory_equip', 'inventory_unequip'];
     $buyActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart'];
     $manageActions = ['shop_manage', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_kb_schema', 'shop_health'];
 
@@ -388,6 +388,7 @@ function af_advancedshop_misc_router(): void
             case 'shop_kb_schema': af_advancedshop_kb_schema(); return;
             case 'shop_health': af_advancedshop_health_ping(); return;
             case 'inventory': af_advancedshop_render_inventory(); return;
+            case 'inventory_item_info': af_advancedshop_inventory_item_info(); return;
             case 'inventory_equipped_get': af_advancedshop_inventory_equipped_get(); return;
             case 'inventory_equip': af_advancedshop_inventory_equip(); return;
             case 'inventory_unequip': af_advancedshop_inventory_unequip(); return;
@@ -1448,6 +1449,7 @@ function af_advancedshop_render_inventory(): void
         ORDER BY i.updated_at DESC, i.inv_id DESC");
     while ($row = $db->fetch_array($q)) {
         $inv_id = (int)$row['inv_id'];
+        $inv_kb_id = (string)(int)($row['kb_id'] ?? 0);
         $inv_qty = (int)$row['qty'];
         $invTitleRaw = af_advancedshop_pick_lang((string)($row['kb_title_ru'] ?? ''), (string)($row['kb_title_en'] ?? ''));
         if ($invTitleRaw === '') { $invTitleRaw = (string)($row['kb_title'] ?? ''); }
@@ -1619,39 +1621,14 @@ function af_advancedshop_inventory_tags_normalized($tags): array
 function af_advancedshop_inventory_resolve_slot(array $profile, string $requestedSlot = ''): array
 {
     $requestedSlot = af_advancedshop_inventory_normalize_slot_code($requestedSlot);
-    $slots = af_advancedshop_inventory_slots_canonical();
-    $slot = af_advancedshop_inventory_normalize_slot_code((string)($profile['slot'] ?? ''));
-    $tags = af_advancedshop_inventory_tags_normalized($profile['tags'] ?? []);
-    $tagsMap = array_fill_keys($tags, true);
-
-    $allowed = [];
-    $default = '';
-    if (in_array($slot, $slots, true)) {
-        $allowed[] = $slot;
-        $default = $slot;
-    } elseif ($slot === 'armor') {
-        if (isset($tagsMap['helmet']) || isset($tagsMap['head'])) {
-            $default = 'head';
-        } elseif (isset($tagsMap['boots']) || isset($tagsMap['feet'])) {
-            $default = 'feet';
-        } elseif (isset($tagsMap['gloves']) || isset($tagsMap['hands'])) {
-            $default = 'hands';
-        } elseif (isset($tagsMap['pants']) || isset($tagsMap['legs'])) {
-            $default = 'legs';
-        } elseif (isset($tagsMap['back']) || isset($tagsMap['cloak'])) {
-            $default = 'back';
-        } elseif (isset($tagsMap['belt']) || isset($tagsMap['waist'])) {
-            $default = 'belt';
-        } else {
-            $default = 'body';
-        }
-        $allowed[] = $default;
-    } elseif ($slot === 'weapon') {
-        $allowed = ['weapon_main', 'weapon_off'];
-        $default = 'weapon_main';
-    } else {
+    $equippable = af_advancedshop_inventory_equippable_info($profile);
+    if (empty($equippable['is_equippable'])) {
         af_advancedshop_json_err('Item is not equippable', 422);
     }
+
+    $allowed = $equippable['allowed_slots'];
+    $default = (string)$equippable['default_slot'];
+    $slots = af_advancedshop_inventory_slots_canonical();
 
     if ($requestedSlot !== '') {
         if (!in_array($requestedSlot, $slots, true)) {
@@ -1664,6 +1641,42 @@ function af_advancedshop_inventory_resolve_slot(array $profile, string $requeste
     }
 
     return ['slot_code' => $default, 'allowed_slots' => $allowed];
+}
+
+function af_advancedshop_inventory_equippable_info(array $profile): array
+{
+    $slots = af_advancedshop_inventory_slots_canonical();
+    $slot = af_advancedshop_inventory_normalize_slot_code((string)($profile['slot'] ?? ''));
+    $tags = af_advancedshop_inventory_tags_normalized($profile['tags'] ?? []);
+    $tagsMap = array_fill_keys($tags, true);
+
+    if (in_array($slot, $slots, true)) {
+        return ['is_equippable' => true, 'allowed_slots' => [$slot], 'default_slot' => $slot];
+    }
+
+    if ($slot === 'armor') {
+        $default = 'body';
+        if (isset($tagsMap['helmet']) || isset($tagsMap['head'])) {
+            $default = 'head';
+        } elseif (isset($tagsMap['boots']) || isset($tagsMap['feet'])) {
+            $default = 'feet';
+        } elseif (isset($tagsMap['gloves']) || isset($tagsMap['hands'])) {
+            $default = 'hands';
+        } elseif (isset($tagsMap['pants']) || isset($tagsMap['legs'])) {
+            $default = 'legs';
+        } elseif (isset($tagsMap['back']) || isset($tagsMap['cloak'])) {
+            $default = 'back';
+        } elseif (isset($tagsMap['belt']) || isset($tagsMap['waist'])) {
+            $default = 'belt';
+        }
+        return ['is_equippable' => true, 'allowed_slots' => [$default], 'default_slot' => $default];
+    }
+
+    if ($slot === 'weapon') {
+        return ['is_equippable' => true, 'allowed_slots' => ['weapon_main', 'weapon_off'], 'default_slot' => 'weapon_main'];
+    }
+
+    return ['is_equippable' => false, 'allowed_slots' => [], 'default_slot' => ''];
 }
 
 function af_advancedshop_inventory_equipped_fetch(int $uid): array
@@ -1720,6 +1733,85 @@ function af_advancedshop_inventory_equipped_get(): void
 {
     $targetUid = af_advancedshop_inventory_target_uid();
     af_advancedshop_json_ok(['equipped' => af_advancedshop_inventory_equipped_fetch($targetUid)]);
+}
+
+function af_advancedshop_inventory_item_info(): void
+{
+    global $mybb, $db;
+
+    $targetUid = af_advancedshop_inventory_target_uid();
+    $invId = (int)$mybb->get_input('inv_id');
+    if ($invId <= 0) {
+        af_advancedshop_json_err('inv_id required', 422);
+    }
+
+    $kbCols = af_advancedshop_kb_cols();
+    $kbIdCol = $kbCols['id'] ?? 'id';
+    $titleRuCol = $kbCols['title_ru'] ?? null;
+    $titleEnCol = $kbCols['title_en'] ?? null;
+    $titleCol = $kbCols['title'] ?? null;
+    $techRuCol = $kbCols['tech_ru'] ?? null;
+    $techEnCol = $kbCols['tech_en'] ?? null;
+    $techCol = $kbCols['tech'] ?? null;
+    $shortRuCol = $kbCols['short_ru'] ?? null;
+    $shortEnCol = $kbCols['short_en'] ?? null;
+    $shortCol = $kbCols['short'] ?? null;
+    $metaCol = $kbCols['meta_json'] ?? null;
+    $dataCol = $kbCols['data_json'] ?? null;
+
+    $select = [
+        'i.inv_id',
+        'i.kb_id',
+        'i.rarity',
+        ($titleRuCol ? 'e.' . $titleRuCol . ' AS kb_title_ru' : "'' AS kb_title_ru"),
+        ($titleEnCol ? 'e.' . $titleEnCol . ' AS kb_title_en' : "'' AS kb_title_en"),
+        ($titleCol ? 'e.' . $titleCol . ' AS kb_title' : "'' AS kb_title"),
+        ($techRuCol ? 'e.' . $techRuCol . ' AS kb_tech_ru' : "'' AS kb_tech_ru"),
+        ($techEnCol ? 'e.' . $techEnCol . ' AS kb_tech_en' : "'' AS kb_tech_en"),
+        ($techCol ? 'e.' . $techCol . ' AS kb_tech' : "'' AS kb_tech"),
+        ($shortRuCol ? 'e.' . $shortRuCol . ' AS kb_short_ru' : "'' AS kb_short_ru"),
+        ($shortEnCol ? 'e.' . $shortEnCol . ' AS kb_short_en' : "'' AS kb_short_en"),
+        ($shortCol ? 'e.' . $shortCol . ' AS kb_short' : "'' AS kb_short"),
+        ($metaCol ? 'e.' . $metaCol . ' AS kb_meta' : "'' AS kb_meta"),
+        ($dataCol ? 'e.' . $dataCol . ' AS kb_data' : "'' AS kb_data"),
+    ];
+
+    $row = $db->fetch_array($db->query("SELECT " . implode(', ', $select) . "
+        FROM " . TABLE_PREFIX . "af_inventory_items i
+        LEFT JOIN " . af_advancedshop_kb_table() . " e ON(e." . $kbIdCol . "=i.kb_id)
+        WHERE i.inv_id=" . $invId . " AND i.uid=" . $targetUid . " LIMIT 1"));
+    if (!$row) {
+        af_advancedshop_json_err('Item not found', 404);
+    }
+
+    $title = af_advancedshop_pick_lang((string)($row['kb_title_ru'] ?? ''), (string)($row['kb_title_en'] ?? ''));
+    if ($title === '') {
+        $title = (string)($row['kb_title'] ?? '');
+    }
+    $meta = @json_decode((string)($row['kb_meta'] ?? '{}'), true);
+    $tooltipSource = af_advancedshop_pick_lang((string)($row['kb_tech_ru'] ?? ''), (string)($row['kb_tech_en'] ?? ''));
+    if ($tooltipSource === '') { $tooltipSource = (string)($row['kb_tech'] ?? ''); }
+    if ($tooltipSource === '') {
+        $tooltipSource = af_advancedshop_pick_lang((string)($row['kb_short_ru'] ?? ''), (string)($row['kb_short_en'] ?? ''));
+        if ($tooltipSource === '') { $tooltipSource = (string)($row['kb_short'] ?? ''); }
+    }
+
+    $profile = af_advancedshop_kb_item_profile($row);
+    $equipInfo = af_advancedshop_inventory_equippable_info($profile);
+
+    af_advancedshop_json_ok([
+        'item' => [
+            'inv_id' => (int)($row['inv_id'] ?? 0),
+            'kb_id' => (int)($row['kb_id'] ?? 0),
+            'title' => $title,
+            'icon_url' => (string)($meta['ui']['icon_url'] ?? ''),
+            'rarity' => (string)($row['rarity'] ?? 'common'),
+            'description_html' => af_advancedshop_parse_bbcode($tooltipSource),
+            'is_equippable' => (bool)($equipInfo['is_equippable'] ?? false),
+            'default_slot_code' => (string)($equipInfo['default_slot'] ?? ''),
+            'allowed_slots' => array_values($equipInfo['allowed_slots'] ?? []),
+        ],
+    ]);
 }
 
 function af_advancedshop_inventory_equip(): void
