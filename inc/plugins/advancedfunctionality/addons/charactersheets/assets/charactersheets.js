@@ -780,7 +780,8 @@
         }).then(function (html) {
           content.innerHTML = html || '<div class="af-cs-muted">Инвентарь пуст.</div>';
           if (window.AFSHOP && typeof window.AFSHOP.mountInventory === 'function') {
-            window.AFSHOP.mountInventory(content);
+            var inventoryRoot = content.querySelector('.af-inventory');
+            window.AFSHOP.mountInventory(inventoryRoot || content);
           }
           embedRoot.setAttribute('data-afcs-inventory-embed-loaded', '1');
         }).catch(function () {
