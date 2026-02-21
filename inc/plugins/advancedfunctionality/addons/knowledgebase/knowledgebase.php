@@ -2222,36 +2222,63 @@ function af_kb_get_entry_data_json(int $entryId): string
         return '{}';
     }
 
-    $detected = af_kb_detect_entry_data_json((array)$entry);
-    return af_kb_normalize_rules_json((string)($detected['json'] ?? '{}'));
+    $rules = af_kb_get_rules_by_entry_id($entryId);
+    if (!is_array($rules) || empty($rules)) {
+        return '{}';
+    }
+
+    $json = json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        return '{}';
+    }
+
+    return af_kb_normalize_rules_json($json);
+}
+
+function af_kb_extract_rules_from_meta_json(string $metaJson): ?array
+{
+    $meta = af_kb_decode_json($metaJson);
+    if (!is_array($meta)) {
+        return null;
+    }
+
+    $rules = $meta['rules'] ?? null;
+    if (!is_array($rules)) {
+        return null;
+    }
+
+    if (!isset($rules['schema']) && !isset($rules['type_profile'])) {
+        return null;
+    }
+
+    return $rules;
+}
+
+function af_kb_get_rules_by_entry_id(int $entryId): ?array
+{
+    global $db;
+
+    if ($entryId <= 0 || !$db->table_exists('af_kb_entries')) {
+        return null;
+    }
+
+    $entry = $db->fetch_array($db->simple_select('af_kb_entries', 'meta_json', 'id=' . $entryId, ['limit' => 1]));
+    if (!is_array($entry)) {
+        return null;
+    }
+
+    return af_kb_extract_rules_from_meta_json((string)($entry['meta_json'] ?? ''));
 }
 
 function af_kb_detect_entry_data_json(array $entry): array
 {
-    global $db;
-
     $default = ['source' => 'none', 'json' => '{}'];
-
-    if (!empty($entry['data_json']) && !af_kb_is_empty_json((string)$entry['data_json'])) {
-        return ['source' => 'entries.data_json', 'json' => (string)$entry['data_json']];
-    }
 
     $meta = af_kb_decode_json((string)($entry['meta_json'] ?? '{}'));
     if (!empty($meta['rules']) && is_array($meta['rules'])) {
         $json = json_encode($meta['rules'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if ($json !== false) {
             return ['source' => 'entries.meta_json.rules', 'json' => $json];
-        }
-    }
-
-    if (!empty($entry['id']) && $db->table_exists('af_kb_blocks') && $db->field_exists('data_json', 'af_kb_blocks')) {
-        $where = 'entry_id=' . (int)$entry['id'] . " AND block_key='data'";
-        if ($db->field_exists('active', 'af_kb_blocks')) {
-            $where .= ' AND active=1';
-        }
-        $block = $db->fetch_array($db->simple_select('af_kb_blocks', 'data_json', $where, ['order_by' => 'sortorder,id', 'order_dir' => 'ASC', 'limit' => 1]));
-        if ($block && !af_kb_is_empty_json((string)($block['data_json'] ?? ''))) {
-            return ['source' => 'af_kb_blocks.data_json(block_key=data)', 'json' => (string)$block['data_json']];
         }
     }
 
@@ -3233,6 +3260,291 @@ function af_kb_render_structured_rules(array $entry, array $typeRow, bool $isRu)
     return '<div class="af-kb-structured-rules">' . implode('', $chunks) . $rawToggle . '</div>';
 }
 
+
+
+function af_kb_migration_table_columns(string $table): array
+{
+    global $db;
+
+    $columns = [];
+    $query = $db->write_query("SHOW COLUMNS FROM " . TABLE_PREFIX . $table);
+    while ($row = $db->fetch_array($query)) {
+        $name = (string)($row['Field'] ?? '');
+        if ($name !== '') {
+            $columns[$name] = $name;
+        }
+    }
+
+    return $columns;
+}
+
+function af_kb_migration_discover_block_columns(): array
+{
+    $columns = af_kb_migration_table_columns('af_kb_blocks');
+
+    $entryIdCol = '';
+    foreach (['entry_id', 'kb_id', 'eid', 'entryid'] as $candidate) {
+        if (isset($columns[$candidate])) {
+            $entryIdCol = $candidate;
+            break;
+        }
+    }
+
+    $blockKeyCol = '';
+    foreach (['block_key', 'code', 'name', 'slug', 'type'] as $candidate) {
+        if (isset($columns[$candidate])) {
+            $blockKeyCol = $candidate;
+            break;
+        }
+    }
+
+    $contentCol = '';
+    foreach (['content', 'body', 'value', 'text', 'data_json'] as $candidate) {
+        if (isset($columns[$candidate])) {
+            $contentCol = $candidate;
+            break;
+        }
+    }
+
+    return [
+        'all' => array_keys($columns),
+        'entry_id' => $entryIdCol,
+        'block_key' => $blockKeyCol,
+        'content' => $contentCol,
+    ];
+}
+
+function af_kb_migration_find_rules_in_blocks(int $entryId, array $mapping): array
+{
+    global $db;
+
+    $entryCol = (string)($mapping['entry_id'] ?? '');
+    $keyCol = (string)($mapping['block_key'] ?? '');
+    $contentCol = (string)($mapping['content'] ?? '');
+    if ($entryId <= 0 || $entryCol === '' || $contentCol === '') {
+        return ['raw' => '', 'reason' => 'no block mapping'];
+    }
+
+    $fields = [$contentCol . ' AS payload'];
+    if ($keyCol !== '') {
+        $fields[] = $keyCol . ' AS block_key';
+    }
+
+    $where = $entryCol . '=' . $entryId;
+    if ($db->field_exists('active', 'af_kb_blocks')) {
+        $where .= ' AND active=1';
+    }
+
+    $priority = ['data_json', 'rules_json', 'rules', 'data', 'item_rules', 'payload_json'];
+    if ($keyCol !== '') {
+        foreach ($priority as $candidate) {
+            $row = $db->fetch_array($db->simple_select('af_kb_blocks', implode(',', $fields), $where . " AND " . $keyCol . "='" . $db->escape_string($candidate) . "'", ['limit' => 1]));
+            if (!is_array($row)) {
+                continue;
+            }
+            $raw = trim((string)($row['payload'] ?? ''));
+            if ($raw !== '') {
+                return ['raw' => $raw, 'reason' => 'block:' . $candidate];
+            }
+        }
+    }
+
+    $query = $db->simple_select('af_kb_blocks', implode(',', $fields), $where, ['order_by' => 'id', 'order_dir' => 'ASC']);
+    while ($row = $db->fetch_array($query)) {
+        $raw = trim((string)($row['payload'] ?? ''));
+        if ($raw === '' || substr($raw, 0, 1) !== '{') {
+            continue;
+        }
+        if (strpos($raw, '"schema":"af_kb.rules.v1"') !== false || strpos($raw, '"type_profile"') !== false) {
+            return ['raw' => $raw, 'reason' => 'fallback-json-pattern'];
+        }
+    }
+
+    return ['raw' => '', 'reason' => 'no blocks'];
+}
+
+function af_kb_migration_log(int $entryId, string $status, string $reason, array $extra = []): void
+{
+    global $db, $mybb;
+
+    if (!$db->table_exists('af_kb_log')) {
+        return;
+    }
+
+    $payload = array_merge([
+        'entry_id' => $entryId,
+        'status' => $status,
+        'reason' => $reason,
+    ], $extra);
+
+    $db->insert_query('af_kb_log', [
+        'uid' => (int)($mybb->user['uid'] ?? 0),
+        'action' => 'migrate_rules',
+        'type' => 'entry',
+        'key' => (string)$entryId,
+        'diff_json' => $db->escape_string(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}'),
+        'dateline' => TIME_NOW,
+    ]);
+}
+
+function af_kb_migration_backup_tables(): array
+{
+    global $db;
+
+    $suffix = date('Ymd_His');
+    $created = [];
+    foreach (['af_kb_entries', 'af_kb_blocks'] as $table) {
+        if (!$db->table_exists($table)) {
+            continue;
+        }
+        $backup = $table . '_bak_' . $suffix;
+        $db->write_query('CREATE TABLE ' . TABLE_PREFIX . $backup . ' LIKE ' . TABLE_PREFIX . $table);
+        $db->write_query('INSERT INTO ' . TABLE_PREFIX . $backup . ' SELECT * FROM ' . TABLE_PREFIX . $table);
+        $created[] = $backup;
+    }
+
+    return $created;
+}
+
+function af_kb_handle_migrate_rules(): void
+{
+    global $db, $mybb;
+
+    if (!af_kb_can_edit() || (int)($mybb->user['uid'] ?? 0) <= 0) {
+        af_kb_render_json_error('No access', 403);
+    }
+
+    $dry = (int)$mybb->get_input('dry', MyBB::INPUT_INT) === 1;
+    $limit = max(1, (int)$mybb->get_input('limit', MyBB::INPUT_INT));
+    $limit = min($limit, 500);
+    $offset = max(0, (int)$mybb->get_input('offset', MyBB::INPUT_INT));
+    $onlyId = max(0, (int)$mybb->get_input('only_id', MyBB::INPUT_INT));
+
+    $entriesCols = af_kb_migration_table_columns('af_kb_entries');
+    $blocksMap = af_kb_migration_discover_block_columns();
+
+    $where = '1=1';
+    if ($onlyId > 0) {
+        $where .= ' AND id=' . $onlyId;
+    }
+
+    $totalRow = $db->fetch_array($db->simple_select('af_kb_entries', 'COUNT(*) AS cnt', $where, ['limit' => 1]));
+    $total = (int)($totalRow['cnt'] ?? 0);
+
+    $query = $db->simple_select('af_kb_entries', '*', $where, ['order_by' => 'id', 'order_dir' => 'ASC', 'limit_start' => $offset, 'limit' => $limit]);
+
+    $stats = [
+        'total' => $total,
+        'processed' => 0,
+        'already_migrated' => 0,
+        'found_rules_in_blocks' => 0,
+        'migrated' => 0,
+        'skipped_no_rules' => 0,
+        'invalid_json' => 0,
+    ];
+
+    $updated = [];
+    $backupTables = [];
+    $backupDone = $dry;
+
+    while ($entry = $db->fetch_array($query)) {
+        $stats['processed']++;
+        $entryId = (int)($entry['id'] ?? 0);
+        $metaRaw = (string)($entry['meta_json'] ?? '');
+        $meta = af_kb_decode_json($metaRaw);
+        if (!is_array($meta)) {
+            $meta = [];
+        }
+
+        $existingRules = is_array($meta['rules'] ?? null) ? $meta['rules'] : null;
+        if (is_array($existingRules) && (isset($existingRules['schema']) || isset($existingRules['type_profile']))) {
+            $stats['already_migrated']++;
+            af_kb_migration_log($entryId, 'skip', 'already migrated');
+            continue;
+        }
+
+        $found = af_kb_migration_find_rules_in_blocks($entryId, $blocksMap);
+        $rawRules = trim((string)($found['raw'] ?? ''));
+        if ($rawRules === '') {
+            $stats['skipped_no_rules']++;
+            af_kb_migration_log($entryId, 'skip', (string)($found['reason'] ?? 'no blocks'));
+            continue;
+        }
+
+        $stats['found_rules_in_blocks']++;
+        $rules = json_decode($rawRules, true);
+        if (!is_array($rules)) {
+            $stats['invalid_json']++;
+            af_kb_migration_log($entryId, 'fail', 'invalid json', ['source' => (string)($found['reason'] ?? '')]);
+            continue;
+        }
+
+        if (!is_array($meta['ui'] ?? null)) {
+            $meta['ui'] = [];
+        }
+
+        foreach (['icon_url', 'bg_url', 'banner_url', 'icon_class'] as $field) {
+            if (!isset($entriesCols[$field])) {
+                continue;
+            }
+            if (!empty($meta['ui'][$field])) {
+                continue;
+            }
+            $value = trim((string)($entry[$field] ?? ''));
+            if ($value !== '') {
+                $meta['ui'][$field] = $value;
+            }
+        }
+
+        $meta['schema'] = 'af_kb.meta.v2';
+        $meta['rules'] = $rules;
+
+        if (!empty($entriesCols['item_kind']) && trim((string)($entry['item_kind'] ?? '')) === '') {
+            $kind = trim((string)($rules['item']['item_kind'] ?? ''));
+            if ($kind !== '') {
+                $entry['item_kind'] = $kind;
+            }
+        }
+
+        $update = [
+            'meta_json' => $db->escape_string(json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{"schema":"af_kb.meta.v2"}'),
+            'updated_at' => TIME_NOW,
+        ];
+
+        if (!empty($entriesCols['item_kind']) && !empty($entry['item_kind'])) {
+            $update['item_kind'] = $db->escape_string((string)$entry['item_kind']);
+        }
+        if (!empty($entriesCols['rarity'])) {
+            $rarity = trim((string)($rules['item']['rarity'] ?? ''));
+            if ($rarity !== '') {
+                $update['rarity'] = $db->escape_string($rarity);
+            }
+        }
+
+        if (!$dry) {
+            if (!$backupDone) {
+                $backupTables = af_kb_migration_backup_tables();
+                $backupDone = true;
+            }
+            $db->update_query('af_kb_entries', $update, 'id=' . $entryId);
+            $stats['migrated']++;
+            $updated[] = $entryId;
+            af_kb_migration_log($entryId, 'ok', 'migrated', ['source' => (string)($found['reason'] ?? '')]);
+        }
+    }
+
+    af_kb_send_json([
+        'success' => true,
+        'dry_run' => $dry,
+        'params' => ['limit' => $limit, 'offset' => $offset, 'only_id' => $onlyId],
+        'diagnostics' => $stats,
+        'blocks_mapping' => $blocksMap,
+        'backup_tables' => $backupTables,
+        'updated_ids' => $updated,
+    ]);
+}
+
+
 /* -------------------- ROUTER -------------------- */
 
 function af_kb_misc_route(): void
@@ -3240,7 +3552,7 @@ function af_kb_misc_route(): void
     global $mybb;
 
     $action = $mybb->get_input('action');
-    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_normalize_items', 'kb_debug_entry'], true)) {
+    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_normalize_items', 'kb_debug_entry', 'kb_migrate_rules'], true)) {
         return;
     }
 
@@ -3285,6 +3597,10 @@ function af_kb_misc_route(): void
 
     if ($action === 'kb_debug_entry') {
         af_kb_handle_debug_entry();
+    }
+
+    if ($action === 'kb_migrate_rules') {
+        af_kb_handle_migrate_rules();
     }
 
     if ($action === 'knowledgebase_entry') {

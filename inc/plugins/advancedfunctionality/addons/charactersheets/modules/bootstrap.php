@@ -936,19 +936,13 @@ function af_charactersheets_get_by_slug(string $slug): array
 function af_charactersheets_kb_get_blocks(array $entry): array
 {
     $blocks = [];
-    if (empty($entry['id'])) {
-        return $blocks;
-    }
 
-    global $db;
-    if ($db->table_exists('af_kb_blocks')) {
-        $q = $db->simple_select('af_kb_blocks', '*', 'entry_id=' . (int)$entry['id']);
-        while ($row = $db->fetch_array($q)) {
-            if (!is_array($row)) {
-                continue;
-            }
-            $blocks[] = $row;
-        }
+    $rules = cs_kb_get_data_rules($entry);
+    if (!empty($rules)) {
+        $blocks[] = [
+            'block_key' => 'rules',
+            'data_json' => json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
+        ];
     }
 
     $meta = af_charactersheets_json_decode((string)($entry['meta_json'] ?? ''));
@@ -2002,13 +1996,21 @@ function cs_kb_get_data_rules($entry): array
         return [];
     }
 
-    $raw = (string)($entry['data_json'] ?? $entry['rules_json'] ?? '');
-    $decoded = af_charactersheets_json_decode($raw);
-    if ((string)($decoded['schema'] ?? '') !== 'af_kb.rules.v1') {
+    $metaRaw = (string)($entry['meta_json'] ?? '');
+    $rules = null;
+    if (function_exists('af_kb_extract_rules_from_meta_json')) {
+        $rules = af_kb_extract_rules_from_meta_json($metaRaw);
+    }
+    if (!is_array($rules)) {
+        $meta = af_charactersheets_json_decode($metaRaw);
+        $rules = is_array($meta['rules'] ?? null) ? (array)$meta['rules'] : [];
+    }
+
+    if ((string)($rules['schema'] ?? '') !== 'af_kb.rules.v1') {
         return [];
     }
 
-    return cs_kb_rules_normalize($decoded);
+    return cs_kb_rules_normalize($rules);
 }
 
 function cs_kb_get_meta($entry): array
@@ -2339,52 +2341,7 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
         return $cache[$cache_key];
     }
 
-    global $db;
-    if (!is_object($db) || !$db->table_exists('af_kb_entries')) {
-        return $cache[$cache_key] = [
-            'ok' => false,
-            'reason' => 'NO_ROW',
-            'schema' => '',
-            'rules' => [],
-            'meta' => [],
-            'entry' => [],
-            'data_source' => 'none',
-        ];
-    }
-
-    // 1) Собираем список полей ТОЛЬКО из тех, что реально существуют в БД
-    $fields = ['id', 'type', '`key`'];
-
-    if ($db->field_exists('meta_json', 'af_kb_entries')) {
-        $fields[] = 'meta_json';
-    }
-    if ($db->field_exists('data_json', 'af_kb_entries')) {
-        $fields[] = 'data_json';
-    }
-    if ($db->field_exists('rules_json_raw', 'af_kb_entries')) {
-        $fields[] = 'rules_json_raw';
-    }
-    if ($db->field_exists('rules_json', 'af_kb_entries')) {
-        $fields[] = 'rules_json';
-    }
-    if ($db->field_exists('active', 'af_kb_entries')) {
-        $fields[] = 'active';
-    }
-
-    $select_fields = implode(',', $fields);
-
-    $where = "type='" . $db->escape_string($kbType) . "' AND `key`='" . $db->escape_string($kbKey) . "'";
-    if (in_array('active', $fields, true)) {
-        $where .= " AND active=1";
-    }
-
-    $entry = $db->fetch_array($db->simple_select(
-        'af_kb_entries',
-        $select_fields,
-        $where,
-        ['limit' => 1]
-    ));
-
+    $entry = af_charactersheets_kb_get_entry($kbType, $kbKey);
     if (!is_array($entry) || empty($entry['id'])) {
         return $cache[$cache_key] = [
             'ok' => false,
@@ -2397,65 +2354,8 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
         ];
     }
 
-    // 2) Канон источника rules: data_json -> rules_json_raw -> rules_json
-    $raw_data_json = '';
-    $data_source = 'none';
-
-    if (isset($entry['data_json'])) {
-        $raw_data_json = trim((string)$entry['data_json']);
-        if ($raw_data_json !== '') {
-            $data_source = 'entries.data_json';
-        }
-    }
-    if ($raw_data_json === '' && isset($entry['rules_json_raw'])) {
-        $raw_data_json = trim((string)$entry['rules_json_raw']);
-        if ($raw_data_json !== '') {
-            $data_source = 'entries.rules_json_raw';
-        }
-    }
-    if ($raw_data_json === '' && isset($entry['rules_json'])) {
-        $raw_data_json = trim((string)$entry['rules_json']);
-        if ($raw_data_json !== '') {
-            $data_source = 'entries.rules_json';
-        }
-    }
-
-    // 3) Опциональный fallback в blocks (НО тоже безопасно по полям)
-    if ($raw_data_json === '' && $db->table_exists('af_kb_blocks')) {
-        $blockFields = [];
-        if ($db->field_exists('data_json', 'af_kb_blocks')) {
-            $blockFields[] = 'data_json';
-        }
-        if ($db->field_exists('content', 'af_kb_blocks')) {
-            // вдруг у тебя rules хранятся в content (на всякий)
-            $blockFields[] = 'content';
-        }
-
-        if (!empty($blockFields)) {
-            $block = $db->fetch_array($db->simple_select(
-                'af_kb_blocks',
-                implode(',', $blockFields),
-                "entry_id=" . (int)$entry['id'] . " AND block_key='data' " . ($db->field_exists('active', 'af_kb_blocks') ? "AND active=1" : ""),
-                ['order_by' => 'sortorder,id', 'order_dir' => 'ASC', 'limit' => 1]
-            ));
-
-            if (is_array($block)) {
-                if (isset($block['data_json']) && trim((string)$block['data_json']) !== '') {
-                    $raw_data_json = trim((string)$block['data_json']);
-                    $data_source = 'af_kb_blocks.data_json';
-                } elseif (isset($block['content']) && trim((string)$block['content']) !== '') {
-                    $raw_data_json = trim((string)$block['content']);
-                    $data_source = 'af_kb_blocks.content';
-                }
-
-                if ($raw_data_json !== '' && function_exists('trigger_error')) {
-                    @trigger_error('CharacterSheets deprecated KB rules source used: ' . $data_source . ' for ' . $kbType . ':' . $kbKey, E_USER_NOTICE);
-                }
-            }
-        }
-    }
-
-    if ($raw_data_json === '') {
+    $rules = cs_kb_get_data_rules($entry);
+    if (empty($rules)) {
         return $cache[$cache_key] = [
             'ok' => false,
             'reason' => 'EMPTY_DATA',
@@ -2463,24 +2363,11 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
             'rules' => [],
             'meta' => cs_kb_get_meta($entry),
             'entry' => $entry,
-            'data_source' => $data_source,
+            'data_source' => 'entries.meta_json.rules',
         ];
     }
 
-    $decoded = af_charactersheets_json_decode($raw_data_json);
-    if (!is_array($decoded)) {
-        return $cache[$cache_key] = [
-            'ok' => false,
-            'reason' => 'BAD_JSON',
-            'schema' => '',
-            'rules' => [],
-            'meta' => cs_kb_get_meta($entry),
-            'entry' => $entry,
-            'data_source' => $data_source,
-        ];
-    }
-
-    $schema = (string)($decoded['schema'] ?? '');
+    $schema = (string)($rules['schema'] ?? '');
     if ($schema !== 'af_kb.rules.v1') {
         return $cache[$cache_key] = [
             'ok' => false,
@@ -2489,7 +2376,7 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
             'rules' => [],
             'meta' => cs_kb_get_meta($entry),
             'entry' => $entry,
-            'data_source' => $data_source,
+            'data_source' => 'entries.meta_json.rules',
         ];
     }
 
@@ -2497,10 +2384,10 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
         'ok' => true,
         'reason' => 'OK',
         'schema' => $schema,
-        'rules' => cs_kb_rules_normalize($decoded),
+        'rules' => cs_kb_rules_normalize($rules),
         'meta' => cs_kb_get_meta($entry),
         'entry' => $entry,
-        'data_source' => $data_source,
+        'data_source' => 'entries.meta_json.rules',
     ];
 }
 
