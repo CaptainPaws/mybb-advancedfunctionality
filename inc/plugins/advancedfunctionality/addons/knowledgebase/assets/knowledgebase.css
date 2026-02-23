@@ -521,12 +521,12 @@ display: inline-block;
 .af-kb-cat-toggle { color: #8892aa; }
 
 
-.af-kb-cats-layout { display: block; }
-.af-kb-cats-layout.af-kb-cats--sidebar { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 16px; align-items: start; }
-.af-kb-cats-layout.af-kb-cats--sidebar .af-kb-cats-panel { position: sticky; top: 8px; }
-.af-kb-cats-layout.af-kb-cats--top .af-kb-cats-panel { margin-bottom: 14px; }
-.af-kb-cats-layout .af-kb-cats-panel:empty { display: none; }
+.af-kb-layout--sidebar { display: flex; gap: 16px; align-items: flex-start; }
+.af-kb-sidebar { width: 260px; flex: 0 0 260px; }
+.af-kb-content { flex: 1 1 auto; min-width: 0; }
+.af-kb-layout--top .af-kb-topcats { margin-bottom: 12px; }
+.af-kb-layout--full .af-kb-content { width: 100%; }
 @media (max-width: 900px) {
-  .af-kb-cats-layout.af-kb-cats--sidebar { grid-template-columns: 1fr; }
-  .af-kb-cats-layout.af-kb-cats--sidebar .af-kb-cats-panel { position: static; }
+  .af-kb-layout--sidebar { flex-direction: column; }
+  .af-kb-sidebar { width: 100%; flex-basis: auto; }
 }
