@@ -1219,6 +1219,14 @@ function af_charactersheets_lang(string $key, string $fallback = ''): string
 
 function af_charactersheets_build_mechanics_html(array $view): string
 {
+    global $mybb;
+
+    $debug_enabled = false;
+    if (function_exists('af_cs_is_staff')) {
+        $debug_enabled = af_cs_is_staff((array)($mybb->user ?? []));
+    }
+    $debug_enabled = $debug_enabled && (int)($mybb->get_input('af_cs_debug') ?? 0) === 1;
+
     $mechanics = (array)($view['mechanics'] ?? []);
     $ac_total = (int)($mechanics['ac_total'] ?? 0);
     $hp_total = (int)($mechanics['hp_total'] ?? 0);
@@ -1285,6 +1293,15 @@ function af_charactersheets_build_mechanics_html(array $view): string
         . ' bonus_attribute_points=' . (int)($debug['bonus_attribute_points'] ?? 0)
         . ' bonus_skill_points=' . (int)($debug['bonus_skill_points'] ?? 0);
 
+    foreach ((array)($debug['rules_trace'] ?? []) as $trace) {
+        if (!is_array($trace)) {
+            continue;
+        }
+        $debug_lines[] = 'TRACE source=' . (string)($trace['source'] ?? '-')
+            . ' kind=' . (string)($trace['kind'] ?? '-')
+            . ' payload=' . json_encode((array)($trace['payload'] ?? []), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
     $debug_comment = "
 <!-- AF_CS_DEBUG
 "
@@ -1323,7 +1340,7 @@ function af_charactersheets_build_mechanics_html(array $view): string
         . ' speed=' . $speed_total
         . ' -->';
 
-    return '<div class="af-cs-mechanics-grid">' . implode('', $cards) . '</div>' . $debug_comment . $debug_line;
+    return '<div class="af-cs-mechanics-grid">' . implode('', $cards) . '</div>' . ($debug_enabled ? ($debug_comment . $debug_line) : '');
 }
 
 function af_charactersheets_build_inventory_html(int $uid): string

@@ -2020,7 +2020,8 @@ function cs_kb_get_meta($entry): array
     }
 
     $decoded = af_charactersheets_json_decode((string)($entry['meta_json'] ?? ''));
-    if ((string)($decoded['schema'] ?? '') !== 'af_kb.meta.v1') {
+    $schema = (string)($decoded['schema'] ?? '');
+    if (!in_array($schema, ['af_kb.meta.v1', 'af_kb.meta.v2'], true)) {
         return [];
     }
 
@@ -2258,6 +2259,8 @@ function cs_kb_rules_normalize($dataJson): array
 
     return [
         'schema' => (string)($rules['schema'] ?? ''),
+        'type_profile' => (string)($rules['type_profile'] ?? ''),
+        'version' => (string)($rules['version'] ?? ''),
         'speed' => (int)($rules['speed'] ?? $fixed['speed'] ?? 0),
         'fixed' => [
             'stats' => $fixedStats,
@@ -2291,6 +2294,14 @@ function cs_kb_rules_normalize($dataJson): array
         'choices' => is_array($rules['choices'] ?? null) ? array_values($rules['choices']) : [],
         'grants' => is_array($rules['grants'] ?? null) ? array_values($rules['grants']) : [],
         'traits' => is_array($rules['traits'] ?? null) ? array_values($rules['traits']) : [],
+        'modifiers' => is_array($rules['modifiers'] ?? null) ? array_values($rules['modifiers']) : [],
+        'effects' => is_array($rules['effects'] ?? null) ? array_values($rules['effects']) : [],
+        'resources' => is_array($rules['resources'] ?? null) ? (array)$rules['resources'] : [],
+        'resistances' => is_array($rules['resistances'] ?? null) ? (array)$rules['resistances'] : [],
+        'immunities' => is_array($rules['immunities'] ?? null) ? array_values($rules['immunities']) : [],
+        'weaknesses' => is_array($rules['weaknesses'] ?? null) ? (array)$rules['weaknesses'] : [],
+        'spell' => is_array($rules['spell'] ?? null) ? (array)$rules['spell'] : [],
+        'cyberware' => is_array($rules['cyberware'] ?? null) ? (array)$rules['cyberware'] : [],
     ];
 }
 
@@ -2301,7 +2312,7 @@ function af_charactersheets_kb_normalize_entry(array $entry): array
     $entry_key = (string)($entry['key'] ?? '');
     $data = af_cs_kb_get_data_rules($entry_type, $entry_key);
 
-    if ((string)($meta['schema'] ?? '') !== 'af_kb.meta.v1') {
+    if (!in_array((string)($meta['schema'] ?? ''), ['af_kb.meta.v1', 'af_kb.meta.v2'], true)) {
         $meta = [];
     }
 
