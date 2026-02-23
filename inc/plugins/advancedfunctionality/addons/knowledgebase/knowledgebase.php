@@ -4656,11 +4656,32 @@ function af_kb_handle_view(): void
         $kb_categories_tree = $catTreeHtml ?? '';
         $kb_categories_enabled = af_kb_categories_enabled() ? '1' : '0';
         $uiPositionRaw = (string)af_kb_get_setting('af_kb_categories_ui_position', af_kb_get_setting('af_kb_categories_ui', 'sidebar'));
-        $kb_categories_ui_position = $uiPositionRaw === 'top' ? 'top' : 'sidebar';
-        $kb_categories_wrapper_class = 'af-kb-cats--' . $kb_categories_ui_position;
-        $kb_categories_panel = $kb_categories_tree !== ''
-            ? '<div class="af-kb-cats-layout ' . $kb_categories_wrapper_class . '"><aside class="af-kb-cats-panel">' . $kb_categories_tree . '</aside></div>'
-            : '';
+        $kb_ui_position = $uiPositionRaw === 'top' ? 'top' : 'sidebar';
+
+        $currentCatId = 0;
+        if ($catKey !== '') {
+            $currentCat = $db->fetch_array($db->simple_select('af_kb_categories', 'cat_id', "type='" . $escapedType . "' AND `key`='" . $db->escape_string($catKey) . "'", ['limit' => 1]));
+            if (!empty($currentCat['cat_id'])) {
+                $currentCatId = (int)$currentCat['cat_id'];
+            }
+        }
+
+        $childrenWhere = "type='" . $escapedType . "' AND parent_id=" . (int)$currentCatId;
+        if (!af_kb_can_edit()) {
+            $childrenWhere .= ' AND active=1';
+        }
+        $childrenCount = (int)$db->fetch_field($db->simple_select('af_kb_categories', 'COUNT(*) AS cnt', $childrenWhere), 'cnt');
+        $has_children = $childrenCount > 0;
+        $sidebar_enabled = $kb_ui_position === 'sidebar' && $has_children;
+        $top_enabled = $kb_ui_position === 'top' && $has_children;
+        $kb_layout_class = 'af-kb-layout--full';
+        if ($sidebar_enabled) {
+            $kb_layout_class = 'af-kb-layout--sidebar';
+        } elseif ($top_enabled) {
+            $kb_layout_class = 'af-kb-layout--top';
+        }
+        $kb_sidebar_html = $sidebar_enabled ? '<aside class="af-kb-sidebar">' . $kb_categories_tree . '</aside>' : '';
+        $kb_topcats_html = $top_enabled ? '<div class="af-kb-topcats">' . $kb_categories_tree . '</div>' : '';
         $paginationUrl = 'misc.php?action=kb&type=' . urlencode($type);
         if ($query !== '') {
             $paginationUrl .= '&q=' . urlencode($query);
