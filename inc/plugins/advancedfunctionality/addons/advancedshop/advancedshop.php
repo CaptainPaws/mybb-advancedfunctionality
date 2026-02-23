@@ -354,12 +354,12 @@ function af_advancedshop_misc_router(): void
     if (($mybb->input['action'] ?? '') === '') { return; }
 
     $action = (string)$mybb->get_input('action');
-    $routes = ['shop','shop_category','shop_cart','shop_checkout','shop_add_to_cart','shop_update_cart','shop_manage','shop_manage_categories','shop_manage_category_create','shop_manage_category_update','shop_manage_category_delete','shop_manage_sortorder_rebuild','shop_manage_slots','shop_manage_slot_create','shop_manage_slot_update','shop_manage_slot_delete','shop_kb_search','shop_kb_schema','shop_kb_probe','shop_health','inventory','inventory_item_info','inventory_equipped_get','inventory_equippable_list','inventory_state','inventory_equip','inventory_unequip'];
+    $routes = ['shop','shop_category','shop_cart','shop_checkout','shop_add_to_cart','shop_update_cart','shop_manage','shop_manage_categories','shop_manage_category_create','shop_manage_category_update','shop_manage_category_delete','kb_category_update','kb_category_delete','shop_manage_sortorder_rebuild','shop_manage_slots','shop_manage_slot_create','shop_manage_slot_update','shop_manage_slot_delete','shop_kb_search','shop_kb_schema','shop_kb_probe','shop_health','inventory','inventory_item_info','inventory_equipped_get','inventory_equippable_list','inventory_state','inventory_equip','inventory_unequip'];
     if (!in_array($action, $routes, true)) { return; }
 
-    $apiActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_kb_schema', 'shop_kb_probe', 'shop_health', 'inventory_item_info', 'inventory_equipped_get', 'inventory_equippable_list', 'inventory_state', 'inventory_equip', 'inventory_unequip'];
+    $apiActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'kb_category_update', 'kb_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_kb_schema', 'shop_kb_probe', 'shop_health', 'inventory_item_info', 'inventory_equipped_get', 'inventory_equippable_list', 'inventory_state', 'inventory_equip', 'inventory_unequip'];
     $buyActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart'];
-    $manageActions = ['shop_manage', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_kb_schema', 'shop_health'];
+    $manageActions = ['shop_manage', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'kb_category_update', 'kb_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_kb_schema', 'shop_health'];
 
     if ((int)($mybb->settings['af_advancedshop_enabled'] ?? 1) !== 1 && $action !== 'inventory') {
         if (in_array($action, $apiActions, true)) { af_advancedshop_json_err('Not allowed', 403); }
@@ -379,7 +379,7 @@ function af_advancedshop_misc_router(): void
         error_no_permission();
     }
 
-    $postKeyActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'inventory_equip', 'inventory_unequip'];
+    $postKeyActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'kb_category_update', 'kb_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'inventory_equip', 'inventory_unequip'];
     if (in_array($action, $postKeyActions, true)) {
         af_advancedshop_assert_post_key();
     }
@@ -398,8 +398,10 @@ function af_advancedshop_misc_router(): void
             case 'shop_manage': af_advancedshop_render_manage(); return;
             case 'shop_manage_categories': af_advancedshop_manage_categories(); return;
             case 'shop_manage_category_create': af_advancedshop_manage_category_create(); return;
-            case 'shop_manage_category_update': af_advancedshop_manage_category_update(); return;
-            case 'shop_manage_category_delete': af_advancedshop_manage_category_delete(); return;
+            case 'shop_manage_category_update':
+            case 'kb_category_update': af_advancedshop_manage_category_update(); return;
+            case 'shop_manage_category_delete':
+            case 'kb_category_delete': af_advancedshop_manage_category_delete(); return;
             case 'shop_manage_sortorder_rebuild': af_advancedshop_manage_sortorder_rebuild(); return;
             case 'shop_manage_slots': af_advancedshop_manage_slots(); return;
             case 'shop_manage_slot_create': af_advancedshop_manage_slot_create(); return;
@@ -1003,11 +1005,12 @@ function af_advancedshop_render_manage(): void
     add_breadcrumb($lang->af_advancedshop_manage_title ?? 'Manage Shop', 'misc.php?action=shop_manage&shop=' . urlencode((string)$shop['code']));
 
     $flat = [];
-    $q = $db->simple_select('af_shop_categories', '*', 'shop_id=' . (int)$shop['shop_id'], ['order_by' => 'sortorder ASC, title ASC, cat_id ASC']);
+    $q = $db->simple_select('af_shop_categories', '*', 'shop_id=' . (int)$shop['shop_id'], ['order_by' => 'parent_id ASC, sortorder ASC, title ASC, cat_id ASC']);
     while ($cat = $db->fetch_array($q)) {
         $flat[] = $cat;
     }
     $ordered = af_advancedshop_category_tree_rows($flat);
+    $descendantsMap = af_advancedshop_category_descendants_map($flat);
 
     $parentMap = [0 => '—'];
     foreach ($flat as $cat) {
@@ -1028,6 +1031,9 @@ function af_advancedshop_render_manage(): void
         $cat_sortorder = (int)$cat['sortorder'];
         $slots_url = 'misc.php?action=shop_manage_slots&amp;shop=' . urlencode((string)$shop['code']) . '&amp;cat=' . $cat_id;
         $cat_depth = $depth;
+        $blockedParents = $descendantsMap[$cat_id] ?? [];
+        $blockedParents[$cat_id] = true;
+        $cat_parent_options = af_advancedshop_parent_options_html($ordered, $cat_parent, $blockedParents);
         eval('$rows .= "' . af_advancedshop_tpl('advancedshop_manage_category_row') . '";');
     }
 
@@ -1115,6 +1121,7 @@ function af_advancedshop_manage_category_update(): void
 {
     global $mybb, $db;
     if (!af_advancedshop_can_manage()) { af_advancedshop_json_err('Not allowed', 403); }
+    af_advancedshop_assert_post_key();
     $shop = af_advancedshop_current_shop();
 
     $catId = (int)$mybb->get_input('cat_id');
@@ -1129,6 +1136,17 @@ function af_advancedshop_manage_category_update(): void
     if ($parentId <= 0) { $parentId = max(0, (int)$mybb->get_input('parent')); }
     if ($parentId <= 0) { $parentId = max(0, (int)$mybb->get_input('parentid')); }
     if ($parentId === $catId) { af_advancedshop_json_err('Invalid parent category', 422); }
+    if ($parentId > 0) {
+        $flat = [];
+        $q = $db->simple_select('af_shop_categories', 'cat_id,parent_id', 'shop_id=' . (int)$shop['shop_id']);
+        while ($row = $db->fetch_array($q)) {
+            $flat[] = $row;
+        }
+        $descendantsMap = af_advancedshop_category_descendants_map($flat);
+        if (!empty($descendantsMap[$catId][$parentId])) {
+            af_advancedshop_json_err('Invalid parent category', 422);
+        }
+    }
 
     $db->update_query('af_shop_categories', [
         'parent_id' => $parentId,
@@ -1138,22 +1156,14 @@ function af_advancedshop_manage_category_update(): void
         'enabled' => (int)$mybb->get_input('enabled') ? 1 : 0,
     ], 'cat_id=' . $catId . ' AND shop_id=' . (int)$shop['shop_id']);
 
-    af_advancedshop_json_ok([
-        'cat' => [
-            'cat_id' => $catId,
-            'title' => $title,
-            'description' => (string)$mybb->get_input('description'),
-            'parent_id' => $parentId,
-            'sortorder' => (int)$mybb->get_input('sortorder'),
-            'enabled' => (int)$mybb->get_input('enabled') ? 1 : 0,
-        ],
-    ]);
+    af_advancedshop_json_ok();
 }
 
 function af_advancedshop_manage_category_delete(): void
 {
     global $mybb, $db;
     if (!af_advancedshop_can_manage()) { af_advancedshop_json_err('Not allowed', 403); }
+    af_advancedshop_assert_post_key();
     $shop = af_advancedshop_current_shop();
 
     $catId = (int)$mybb->get_input('cat_id');
@@ -1161,13 +1171,18 @@ function af_advancedshop_manage_category_delete(): void
     $existing = $db->fetch_array($db->simple_select('af_shop_categories', 'cat_id', 'cat_id=' . $catId . ' AND shop_id=' . (int)$shop['shop_id'], ['limit' => 1]));
     if (!$existing) { af_advancedshop_json_err('Category not found', 404); }
 
+    $hasChildren = (int)$db->fetch_field($db->simple_select('af_shop_categories', 'COUNT(*) AS c', 'parent_id=' . $catId . ' AND shop_id=' . (int)$shop['shop_id']), 'c');
+    if ($hasChildren > 0) {
+        af_advancedshop_json_err('Category has children', 409);
+    }
+
     $hasSlots = (int)$db->fetch_field($db->simple_select('af_shop_slots', 'COUNT(*) AS c', 'cat_id=' . $catId . ' AND shop_id=' . (int)$shop['shop_id']), 'c');
     if ($hasSlots > 0) {
-        af_advancedshop_json_err('Category not empty', 409);
+        af_advancedshop_json_err('Category in use', 409);
     }
 
     $db->delete_query('af_shop_categories', 'cat_id=' . $catId . ' AND shop_id=' . (int)$shop['shop_id']);
-    af_advancedshop_json_ok(['deleted' => $catId]);
+    af_advancedshop_json_ok();
 }
 
 function af_advancedshop_manage_slots(): void
@@ -2291,6 +2306,61 @@ function af_advancedshop_category_tree_rows(array $rows): array
     }
 
     return $out;
+}
+
+
+function af_advancedshop_category_descendants_map(array $rows): array
+{
+    $childrenByParent = [];
+    foreach ($rows as $row) {
+        $parentId = max(0, (int)($row['parent_id'] ?? 0));
+        $catId = (int)($row['cat_id'] ?? 0);
+        if ($catId <= 0) {
+            continue;
+        }
+        if (!isset($childrenByParent[$parentId])) {
+            $childrenByParent[$parentId] = [];
+        }
+        $childrenByParent[$parentId][] = $catId;
+    }
+
+    $walk = static function (int $catId) use (&$walk, &$childrenByParent): array {
+        $result = [];
+        foreach ($childrenByParent[$catId] ?? [] as $childId) {
+            $result[$childId] = true;
+            foreach ($walk($childId) as $descendantId => $trueValue) {
+                $result[$descendantId] = $trueValue;
+            }
+        }
+        return $result;
+    };
+
+    $map = [];
+    foreach ($rows as $row) {
+        $catId = (int)($row['cat_id'] ?? 0);
+        if ($catId <= 0) {
+            continue;
+        }
+        $map[$catId] = $walk($catId);
+    }
+
+    return $map;
+}
+
+function af_advancedshop_parent_options_html(array $treeRows, int $selectedParentId, array $blockedParents = []): string
+{
+    $html = '<option value="0"' . ($selectedParentId === 0 ? ' selected="selected"' : '') . '>— Root —</option>';
+    foreach ($treeRows as $treeRow) {
+        $row = $treeRow['row'] ?? [];
+        $catId = (int)($row['cat_id'] ?? 0);
+        if ($catId <= 0 || isset($blockedParents[$catId])) {
+            continue;
+        }
+        $depth = max(0, (int)($treeRow['depth'] ?? 0));
+        $title = str_repeat('— ', $depth) . (string)($row['title'] ?? '');
+        $html .= '<option value="' . $catId . '"' . ($selectedParentId === $catId ? ' selected="selected"' : '') . '>' . htmlspecialchars_uni($title) . '</option>';
+    }
+    return $html;
 }
 
 function af_advancedshop_manage_sortorder_rebuild(): void
