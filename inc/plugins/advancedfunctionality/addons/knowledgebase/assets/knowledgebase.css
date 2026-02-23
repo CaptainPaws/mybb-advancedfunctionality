@@ -513,3 +513,9 @@ display: inline-block;
 .af-kb-timeline li, .af-kb-bonus-list li { margin: 4px 0; }
 
 
+
+.af-kb-cat-tree { list-style: none; margin: 0 0 14px; padding: 10px 12px; background: #fff; border: 1px solid #dcdfe6; border-radius: 6px; }
+.af-kb-cat-tree ul { list-style: none; margin: 4px 0 0 14px; padding: 0; }
+.af-kb-cat-node > a { text-decoration: none; color: #334; display: inline-flex; gap: 6px; align-items: center; padding: 2px 0; }
+.af-kb-cat-node.is-active > a { font-weight: 700; color: #2f4e96; }
+.af-kb-cat-toggle { color: #8892aa; }

@@ -18,6 +18,7 @@ define('AF_KB_TRAITS_SCHEMA', 'af_kb.traits.v1');
 define('AF_KB_GRANTS_SCHEMA', 'af_kb.grants.v1');
 
 define('AF_KB_KEY_PATTERN', '/^[a-z0-9_-]{2,64}$/');
+define('AF_KB_CAT_KEY_PATTERN', '/^[a-z0-9_-]{1,64}$/');
 define('AF_KB_PERPAGE', 20);
 
 function af_kb_default_type_definitions(): array
@@ -350,6 +351,44 @@ SQL;
         $db->write_query(str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql));
     }
 
+    if (!$db->table_exists('af_kb_categories')) {
+        $sql = <<<SQL
+CREATE TABLE {TABLE_PREFIX}af_kb_categories (
+  cat_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  type VARCHAR(64) NOT NULL,
+  parent_id INT UNSIGNED NOT NULL DEFAULT 0,
+  `key` VARCHAR(64) NOT NULL,
+  title_ru VARCHAR(255) NOT NULL DEFAULT '',
+  title_en VARCHAR(255) NOT NULL DEFAULT '',
+  description_ru MEDIUMTEXT NULL,
+  description_en MEDIUMTEXT NULL,
+  sortorder INT NOT NULL DEFAULT 0,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  updated_at INT UNSIGNED NOT NULL DEFAULT 0,
+  UNIQUE KEY uniq_type_key (type, `key`),
+  KEY type_parent_sort (type, parent_id, sortorder),
+  KEY type_active (type, active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+        $db->write_query(str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql));
+    }
+
+    if (!$db->table_exists('af_kb_entry_categories')) {
+        $sql = <<<SQL
+CREATE TABLE {TABLE_PREFIX}af_kb_entry_categories (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  entry_id INT UNSIGNED NOT NULL,
+  cat_id INT UNSIGNED NOT NULL,
+  is_primary TINYINT(1) NOT NULL DEFAULT 0,
+  UNIQUE KEY uniq_entry_cat (entry_id, cat_id),
+  KEY cat_id_idx (cat_id),
+  KEY entry_id_idx (entry_id),
+  KEY entry_primary (entry_id, is_primary)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+        $db->write_query(str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql));
+    }
+
     if (!$db->table_exists('af_kb_relations')) {
         $sql = <<<SQL
 CREATE TABLE {TABLE_PREFIX}af_kb_relations (
@@ -443,6 +482,42 @@ SQL;
         '{}',
         6
     );
+    af_kb_ensure_setting(
+        $gid,
+        'af_kb_manage_groups',
+        'KB categories management groups',
+        'CSV of group IDs that can manage KB categories and entry mappings.',
+        'text',
+        '3,4',
+        7
+    );
+    af_kb_ensure_setting(
+        $gid,
+        'af_kb_categories_enabled',
+        'Enable KB categories',
+        'Yes/No',
+        'yesno',
+        '1',
+        8
+    );
+    af_kb_ensure_setting(
+        $gid,
+        'af_kb_categories_require_primary',
+        'Require primary category',
+        'Yes/No',
+        'yesno',
+        '0',
+        9
+    );
+    af_kb_ensure_setting(
+        $gid,
+        'af_kb_categories_ui',
+        'KB categories UI position',
+        'Sidebar or top block for categories tree.',
+        'select\nsidebar=Sidebar\ntop=Top',
+        'sidebar',
+        10
+    );
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -469,7 +544,7 @@ function af_knowledgebase_uninstall(): bool
     $db->drop_table('af_kb_relations', true);
     $db->drop_table('af_kb_log', true);
 
-    $db->delete_query('settings', "name IN ('af_knowledgebase_enabled','af_kb_public_catalog','af_kb_nav_link_enabled','af_kb_editor_groups','af_kb_types_manage_groups','af_kb_atf_map')");
+    $db->delete_query('settings', "name IN ('af_knowledgebase_enabled','af_kb_public_catalog','af_kb_nav_link_enabled','af_kb_editor_groups','af_kb_types_manage_groups','af_kb_atf_map','af_kb_manage_groups','af_kb_categories_enabled','af_kb_categories_require_primary','af_kb_categories_ui')");
     $db->delete_query('settinggroups', "name='af_knowledgebase'");
     $db->delete_query('templates', "title LIKE 'knowledgebase_%'");
 
@@ -624,6 +699,64 @@ function af_kb_ensure_schema(): void
         }
 
         af_kb_migrate_data_json_once();
+    }
+
+    if (!$db->table_exists('af_kb_categories')) {
+        $sql = "CREATE TABLE " . TABLE_PREFIX . "af_kb_categories (
+"
+            . "  cat_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+"
+            . "  type VARCHAR(64) NOT NULL,
+"
+            . "  parent_id INT UNSIGNED NOT NULL DEFAULT 0,
+"
+            . "  `key` VARCHAR(64) NOT NULL,
+"
+            . "  title_ru VARCHAR(255) NOT NULL DEFAULT '',
+"
+            . "  title_en VARCHAR(255) NOT NULL DEFAULT '',
+"
+            . "  description_ru MEDIUMTEXT NULL,
+"
+            . "  description_en MEDIUMTEXT NULL,
+"
+            . "  sortorder INT NOT NULL DEFAULT 0,
+"
+            . "  active TINYINT(1) NOT NULL DEFAULT 1,
+"
+            . "  updated_at INT UNSIGNED NOT NULL DEFAULT 0,
+"
+            . "  UNIQUE KEY uniq_type_key (type, `key`),
+"
+            . "  KEY type_parent_sort (type, parent_id, sortorder),
+"
+            . "  KEY type_active (type, active)
+"
+            . ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+        $db->write_query($sql);
+    }
+
+    if (!$db->table_exists('af_kb_entry_categories')) {
+        $sql = "CREATE TABLE " . TABLE_PREFIX . "af_kb_entry_categories (
+"
+            . "  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+"
+            . "  entry_id INT UNSIGNED NOT NULL,
+"
+            . "  cat_id INT UNSIGNED NOT NULL,
+"
+            . "  is_primary TINYINT(1) NOT NULL DEFAULT 0,
+"
+            . "  UNIQUE KEY uniq_entry_cat (entry_id, cat_id),
+"
+            . "  KEY cat_id_idx (cat_id),
+"
+            . "  KEY entry_id_idx (entry_id),
+"
+            . "  KEY entry_primary (entry_id, is_primary)
+"
+            . ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+        $db->write_query($sql);
     }
 
     if ($db->table_exists('af_kb_blocks')) {
@@ -1266,6 +1399,265 @@ function af_kb_can_view(): bool
 
     return af_kb_can_edit() || af_kb_is_admin();
 }
+
+function af_kb_cat_can_manage(): bool
+{
+    if (af_kb_is_admin()) {
+        return true;
+    }
+
+    $csv = (string)af_kb_get_setting('af_kb_manage_groups', '3,4');
+    return af_kb_user_in_groups($csv);
+}
+
+function af_kb_categories_enabled(): bool
+{
+    return (int)af_kb_get_setting('af_kb_categories_enabled', 1) === 1;
+}
+
+function af_kb_cat_validate_key($key): bool
+{
+    $key = trim((string)$key);
+    return $key !== '' && preg_match(AF_KB_CAT_KEY_PATTERN, $key) === 1;
+}
+
+function af_kb_cat_cache_key(string $type, bool $onlyActive): string
+{
+    return 'af_kb_cat_tree_' . md5($type . '|' . ($onlyActive ? '1' : '0'));
+}
+
+function af_kb_cat_clear_cache(string $type): void
+{
+    global $cache;
+    if (!is_object($cache)) {
+        return;
+    }
+    $cache->delete(af_kb_cat_cache_key($type, true));
+    $cache->delete(af_kb_cat_cache_key($type, false));
+}
+
+function af_kb_cat_get_flat(string $type, bool $onlyActive = false): array
+{
+    global $db;
+
+    if (!$db->table_exists('af_kb_categories') || $type === '') {
+        return [];
+    }
+
+    $where = "type='" . $db->escape_string($type) . "'";
+    if ($onlyActive) {
+        $where .= ' AND active=1';
+    }
+
+    $list = [];
+    $q = $db->simple_select('af_kb_categories', '*', $where, ['order_by' => 'parent_id, sortorder, cat_id', 'order_dir' => 'ASC']);
+    while ($row = $db->fetch_array($q)) {
+        $list[(int)$row['cat_id']] = $row;
+    }
+    return $list;
+}
+
+function af_kb_cat_get_tree(string $type, bool $onlyActive = true): array
+{
+    global $cache;
+
+    if ($type === '') {
+        return [];
+    }
+
+    $cacheKey = af_kb_cat_cache_key($type, $onlyActive);
+    if (is_object($cache)) {
+        $cached = $cache->read($cacheKey);
+        if (is_array($cached)) {
+            return $cached;
+        }
+    }
+
+    $flat = af_kb_cat_get_flat($type, $onlyActive);
+    $nodes = [];
+    foreach ($flat as $catId => $row) {
+        $row['cat_id'] = (int)$catId;
+        $row['parent_id'] = (int)($row['parent_id'] ?? 0);
+        $row['children'] = [];
+        $nodes[$catId] = $row;
+    }
+
+    $tree = [];
+    foreach ($nodes as $catId => $node) {
+        $parentId = (int)$node['parent_id'];
+        if ($parentId > 0 && isset($nodes[$parentId])) {
+            $nodes[$parentId]['children'][] = &$nodes[$catId];
+        } else {
+            $tree[] = &$nodes[$catId];
+        }
+    }
+    unset($node);
+
+    if (is_object($cache)) {
+        $cache->update($cacheKey, $tree);
+    }
+
+    return $tree;
+}
+
+function af_kb_cat_create($type, $parent_id, $key, $title_ru, $title_en, $description_ru = '', $description_en = '', $sortorder = 0, $active = 1): int
+{
+    global $db;
+
+    if (!af_kb_cat_validate_key($key) || trim((string)$type) === '') {
+        return 0;
+    }
+
+    $db->insert_query('af_kb_categories', [
+        'type' => $db->escape_string((string)$type),
+        'parent_id' => (int)$parent_id,
+        'key' => $db->escape_string((string)$key),
+        'title_ru' => $db->escape_string((string)$title_ru),
+        'title_en' => $db->escape_string((string)$title_en),
+        'description_ru' => $db->escape_string((string)$description_ru),
+        'description_en' => $db->escape_string((string)$description_en),
+        'sortorder' => (int)$sortorder,
+        'active' => (int)$active === 1 ? 1 : 0,
+        'updated_at' => TIME_NOW,
+    ]);
+
+    af_kb_cat_clear_cache((string)$type);
+    return (int)$db->insert_id();
+}
+
+function af_kb_cat_update($cat_id, array $data): bool
+{
+    global $db;
+
+    $catId = (int)$cat_id;
+    if ($catId <= 0) {
+        return false;
+    }
+
+    $existing = $db->fetch_array($db->simple_select('af_kb_categories', '*', 'cat_id=' . $catId, ['limit' => 1]));
+    if (!$existing) {
+        return false;
+    }
+
+    $update = [
+        'parent_id' => (int)($data['parent_id'] ?? $existing['parent_id']),
+        'title_ru' => $db->escape_string((string)($data['title_ru'] ?? $existing['title_ru'])),
+        'title_en' => $db->escape_string((string)($data['title_en'] ?? $existing['title_en'])),
+        'description_ru' => $db->escape_string((string)($data['description_ru'] ?? $existing['description_ru'])),
+        'description_en' => $db->escape_string((string)($data['description_en'] ?? $existing['description_en'])),
+        'sortorder' => (int)($data['sortorder'] ?? $existing['sortorder']),
+        'active' => (int)($data['active'] ?? $existing['active']) === 1 ? 1 : 0,
+        'updated_at' => TIME_NOW,
+    ];
+    if (isset($data['key']) && af_kb_cat_validate_key((string)$data['key'])) {
+        $update['key'] = $db->escape_string((string)$data['key']);
+    }
+
+    $db->update_query('af_kb_categories', $update, 'cat_id=' . $catId);
+    af_kb_cat_clear_cache((string)$existing['type']);
+    return true;
+}
+
+function af_kb_cat_delete($cat_id): array
+{
+    global $db;
+
+    $catId = (int)$cat_id;
+    $row = $db->fetch_array($db->simple_select('af_kb_categories', '*', 'cat_id=' . $catId, ['limit' => 1]));
+    if (!$row) {
+        return ['ok' => false, 'error' => 'Category not found'];
+    }
+
+    $hasChild = (int)$db->fetch_field($db->simple_select('af_kb_categories', 'COUNT(*) AS cnt', 'parent_id=' . $catId), 'cnt') > 0;
+    if ($hasChild) {
+        return ['ok' => false, 'error' => 'Category has children'];
+    }
+
+    $hasEntries = (int)$db->fetch_field($db->simple_select('af_kb_entry_categories', 'COUNT(*) AS cnt', 'cat_id=' . $catId), 'cnt') > 0;
+    if ($hasEntries) {
+        return ['ok' => false, 'error' => 'Category has linked entries'];
+    }
+
+    $db->delete_query('af_kb_categories', 'cat_id=' . $catId);
+    af_kb_cat_clear_cache((string)$row['type']);
+    return ['ok' => true];
+}
+
+function af_kb_cat_collect_descendant_ids(int $cat_id, array $flatCats): array
+{
+    $all = [$cat_id];
+    $changed = true;
+    while ($changed) {
+        $changed = false;
+        foreach ($flatCats as $row) {
+            $id = (int)($row['cat_id'] ?? 0);
+            $parent = (int)($row['parent_id'] ?? 0);
+            if ($id > 0 && in_array($parent, $all, true) && !in_array($id, $all, true)) {
+                $all[] = $id;
+                $changed = true;
+            }
+        }
+    }
+    return $all;
+}
+
+function af_kb_entry_get_categories(int $entry_id): array
+{
+    global $db;
+
+    $result = ['cat_ids' => [], 'primary' => 0];
+    if ($entry_id <= 0 || !$db->table_exists('af_kb_entry_categories')) {
+        return $result;
+    }
+
+    $q = $db->simple_select('af_kb_entry_categories', 'cat_id,is_primary', 'entry_id=' . $entry_id);
+    while ($row = $db->fetch_array($q)) {
+        $catId = (int)$row['cat_id'];
+        $result['cat_ids'][] = $catId;
+        if ((int)$row['is_primary'] === 1) {
+            $result['primary'] = $catId;
+        }
+    }
+    return $result;
+}
+
+function af_kb_entry_set_categories(int $entry_id, array $cat_ids, int $primary_cat_id = 0): void
+{
+    global $db;
+
+    if ($entry_id <= 0 || !$db->table_exists('af_kb_entry_categories')) {
+        return;
+    }
+
+    $entry = $db->fetch_array($db->simple_select('af_kb_entries', 'id,type', 'id=' . $entry_id, ['limit' => 1]));
+    if (!$entry) {
+        return;
+    }
+
+    $type = (string)$entry['type'];
+    $valid = [];
+    foreach ($cat_ids as $catId) {
+        $catId = (int)$catId;
+        if ($catId <= 0) {
+            continue;
+        }
+        $cat = $db->fetch_array($db->simple_select('af_kb_categories', 'cat_id,type', 'cat_id=' . $catId, ['limit' => 1]));
+        if ($cat && (string)$cat['type'] === $type) {
+            $valid[] = $catId;
+        }
+    }
+    $valid = array_values(array_unique($valid));
+
+    $db->delete_query('af_kb_entry_categories', 'entry_id=' . $entry_id);
+    foreach ($valid as $catId) {
+        $db->insert_query('af_kb_entry_categories', [
+            'entry_id' => $entry_id,
+            'cat_id' => $catId,
+            'is_primary' => ($primary_cat_id > 0 && $primary_cat_id === $catId) ? 1 : 0,
+        ]);
+    }
+}
+
 
 function af_kb_is_staff_viewer(): bool
 {
@@ -3588,7 +3980,7 @@ function af_kb_misc_route(): void
     global $mybb;
 
     $action = $mybb->get_input('action');
-    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_normalize_items', 'kb_debug_entry', 'kb_migrate_rules'], true)) {
+    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_normalize_items', 'kb_debug_entry', 'kb_migrate_rules', 'kb_manage_categories', 'kb_manage_categories_save', 'kb_entry_categories_save'], true)) {
         return;
     }
 
@@ -3643,8 +4035,186 @@ function af_kb_misc_route(): void
         af_kb_handle_entry_modal();
     }
 
+
+    if ($action === 'kb_manage_categories') {
+        af_kb_handle_manage_categories();
+    }
+
+    if ($action === 'kb_manage_categories_save') {
+        af_kb_handle_manage_categories_save();
+    }
+
+    if ($action === 'kb_entry_categories_save') {
+        af_kb_handle_entry_categories_save();
+    }
+
     af_kb_handle_view();
 }
+
+
+function af_kb_render_category_tree_html(array $nodes, string $type, string $activeKey = '', int $level = 0): string
+{
+    $html = '';
+    foreach ($nodes as $node) {
+        $catKey = (string)($node['key'] ?? '');
+        $title = af_kb_pick_text($node, 'title');
+        if ($title === '') {
+            $title = $catKey;
+        }
+        $isActive = $activeKey !== '' && $activeKey === $catKey;
+        $childHtml = !empty($node['children']) ? af_kb_render_category_tree_html((array)$node['children'], $type, $activeKey, $level + 1) : '';
+        $toggle = $childHtml !== '' ? '<span class="af-kb-cat-toggle" aria-hidden="true">▾</span>' : '';
+        $html .= '<li class="af-kb-cat-node level-' . (int)$level . ($isActive ? ' is-active' : '') . '">'
+            . '<a href="misc.php?action=kb&type=' . urlencode($type) . '&cat=' . urlencode($catKey) . '">' . $toggle . htmlspecialchars_uni($title) . '</a>'
+            . ($childHtml !== '' ? '<ul>' . $childHtml . '</ul>' : '')
+            . '</li>';
+    }
+    return $html;
+}
+
+function af_kb_handle_manage_categories(): void
+{
+    global $mybb, $lang, $db;
+
+    if (!af_kb_categories_enabled() || !af_kb_cat_can_manage()) {
+        error_no_permission();
+    }
+
+    $type = trim((string)$mybb->get_input('type'));
+    if ($type === '') {
+        error('Type is required');
+    }
+
+    $flat = af_kb_cat_get_flat($type, false);
+    $rows = '';
+    foreach ($flat as $cat) {
+        $catId = (int)$cat['cat_id'];
+        $title = af_kb_pick_text($cat, 'title') ?: (string)$cat['key'];
+        $rows .= '<tr>'
+            . '<td>' . $catId . '</td>'
+            . '<td>' . htmlspecialchars_uni((string)$cat['key']) . '</td>'
+            . '<td style="padding-left:' . ((int)$cat['parent_id'] > 0 ? '24' : '4') . 'px">' . htmlspecialchars_uni($title) . '</td>'
+            . '<td>' . (int)$cat['sortorder'] . '</td>'
+            . '<td>' . ((int)$cat['active'] === 1 ? 'Yes' : 'No') . '</td>'
+            . '<td><form method="post" action="misc.php?action=kb_manage_categories_save" style="display:inline">'
+            . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '" />'
+            . '<input type="hidden" name="type" value="' . htmlspecialchars_uni($type) . '" />'
+            . '<input type="hidden" name="cat_id" value="' . $catId . '" />'
+            . '<button class="af-kb-btn" name="mode" value="edit">Edit</button> '
+            . '<button class="af-kb-btn af-kb-btn--delete" name="mode" value="delete" onclick="return confirm(\'Delete category?\');">Delete</button>'
+            . '</form></td>'
+            . '</tr>';
+    }
+
+    $opts = '<option value="0">—</option>';
+    foreach ($flat as $cat) {
+        $opts .= '<option value="' . (int)$cat['cat_id'] . '">' . htmlspecialchars_uni(af_kb_pick_text($cat, 'title') ?: (string)$cat['key']) . '</option>';
+    }
+
+    $content = '<div class="af-kb-header"><h1>Manage KB categories: ' . htmlspecialchars_uni($type) . '</h1></div>'
+        . '<table class="tborder" cellspacing="1" cellpadding="6" width="100%"><tr><th>ID</th><th>Key</th><th>Title</th><th>Sort</th><th>Active</th><th>Actions</th></tr>' . $rows . '</table>'
+        . '<form class="af-kb-form" method="post" action="misc.php?action=kb_manage_categories_save">'
+        . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '" />'
+        . '<input type="hidden" name="type" value="' . htmlspecialchars_uni($type) . '" />'
+        . '<input type="hidden" name="cat_id" value="0" />'
+        . '<h3>Create / edit</h3>'
+        . '<label>Parent</label><select name="parent_id">' . $opts . '</select>'
+        . '<label>Key</label><input type="text" name="key" value="" />'
+        . '<label>Title RU</label><input type="text" name="title_ru" value="" />'
+        . '<label>Title EN</label><input type="text" name="title_en" value="" />'
+        . '<label>Description RU</label><textarea name="description_ru"></textarea>'
+        . '<label>Description EN</label><textarea name="description_en"></textarea>'
+        . '<label>Sortorder</label><input type="number" name="sortorder" value="0" />'
+        . '<label><input type="checkbox" name="active" value="1" checked="checked" /> Active</label>'
+        . '<div><button class="af-kb-btn" name="mode" value="save">Save</button></div>'
+        . '</form>';
+
+    af_kb_render_fullpage($content, 'af_kb_edit_fullpage');
+}
+
+function af_kb_handle_manage_categories_save(): void
+{
+    global $mybb;
+
+    if (!af_kb_categories_enabled() || !af_kb_cat_can_manage()) {
+        error_no_permission();
+    }
+
+    if ($mybb->request_method !== 'post') {
+        error_no_permission();
+    }
+
+    verify_post_check($mybb->get_input('my_post_key'));
+
+    $mode = trim((string)$mybb->get_input('mode'));
+    $type = trim((string)$mybb->get_input('type'));
+    $catId = (int)$mybb->get_input('cat_id', MyBB::INPUT_INT);
+
+    if ($mode === 'delete') {
+        $res = af_kb_cat_delete($catId);
+        if (empty($res['ok'])) {
+            error((string)($res['error'] ?? 'Unable to delete category'));
+        }
+        redirect('misc.php?action=kb_manage_categories&type=' . urlencode($type), 'Category deleted');
+    }
+
+    if ($mode === 'edit') {
+        redirect('misc.php?action=kb_manage_categories&type=' . urlencode($type), 'Use the form below to update category data.');
+    }
+
+    $key = trim((string)$mybb->get_input('key'));
+    if (!af_kb_cat_validate_key($key)) {
+        error('Invalid category key');
+    }
+
+    $payload = [
+        'parent_id' => (int)$mybb->get_input('parent_id', MyBB::INPUT_INT),
+        'key' => $key,
+        'title_ru' => trim((string)$mybb->get_input('title_ru')),
+        'title_en' => trim((string)$mybb->get_input('title_en')),
+        'description_ru' => trim((string)$mybb->get_input('description_ru')),
+        'description_en' => trim((string)$mybb->get_input('description_en')),
+        'sortorder' => (int)$mybb->get_input('sortorder', MyBB::INPUT_INT),
+        'active' => (int)$mybb->get_input('active', MyBB::INPUT_INT) === 1 ? 1 : 0,
+    ];
+
+    if ($catId > 0) {
+        af_kb_cat_update($catId, $payload);
+    } else {
+        af_kb_cat_create($type, $payload['parent_id'], $payload['key'], $payload['title_ru'], $payload['title_en'], $payload['description_ru'], $payload['description_en'], $payload['sortorder'], $payload['active']);
+    }
+
+    redirect('misc.php?action=kb_manage_categories&type=' . urlencode($type), 'Saved');
+}
+
+function af_kb_handle_entry_categories_save(): void
+{
+    global $mybb;
+
+    if (!af_kb_categories_enabled() || !af_kb_cat_can_manage()) {
+        error_no_permission();
+    }
+
+    if ($mybb->request_method !== 'post') {
+        error_no_permission();
+    }
+
+    verify_post_check($mybb->get_input('my_post_key'));
+
+    $entryId = (int)$mybb->get_input('entry_id', MyBB::INPUT_INT);
+    $catIds = $mybb->get_input('cat_ids', MyBB::INPUT_ARRAY);
+    $primary = (int)$mybb->get_input('primary_cat_id', MyBB::INPUT_INT);
+    if (!is_array($catIds)) {
+        $catIds = [];
+    }
+
+    af_kb_entry_set_categories($entryId, $catIds, $primary);
+
+    $type = trim((string)$mybb->get_input('type'));
+    $key = trim((string)$mybb->get_input('key'));
+    redirect('misc.php?action=kb_edit&type=' . urlencode($type) . '&key=' . urlencode($key), 'Сохранено');
+}
+
 
 /* -------------------- VIEW HANDLERS -------------------- */
 
@@ -3696,6 +4266,7 @@ function af_kb_handle_view(): void
     $type = trim((string)$mybb->get_input('type'));
     $key = trim((string)$mybb->get_input('key'));
     $query = trim((string)$mybb->get_input('q'));
+    $catKey = trim((string)$mybb->get_input('cat'));
     $isAjax = (int)$mybb->get_input('ajax', MyBB::INPUT_INT) === 1;
 
     if ($type === '') {
@@ -3783,35 +4354,43 @@ function af_kb_handle_view(): void
 
     if ($key === '') {
         $escapedType = $db->escape_string($type);
-        $where = "type='{$escapedType}'";
+        $where = "e.type='{$escapedType}'";
         if (!af_kb_can_edit()) {
-            $where .= " AND active=1";
+            $where .= " AND e.active=1";
         }
         if ($query !== '') {
             $safeQuery = $db->escape_string($query);
-            $where .= " AND (title_ru LIKE '%{$safeQuery}%' OR title_en LIKE '%{$safeQuery}%')";
+            $where .= " AND (e.title_ru LIKE '%{$safeQuery}%' OR e.title_en LIKE '%{$safeQuery}%')";
+        }
+
+        $catFilterIds = [];
+        $catTreeHtml = '';
+        if (af_kb_categories_enabled()) {
+            $catTreeHtml = '<ul class="af-kb-cat-tree">' . af_kb_render_category_tree_html(af_kb_cat_get_tree($type, !af_kb_can_edit()), $type, $catKey) . '</ul>';
+            if ($catKey !== '') {
+                $cat = $db->fetch_array($db->simple_select('af_kb_categories', '*', "type='" . $escapedType . "' AND `key`='" . $db->escape_string($catKey) . "'", ['limit' => 1]));
+                if ($cat) {
+                    $flat = af_kb_cat_get_flat($type, false);
+                    $catFilterIds = af_kb_cat_collect_descendant_ids((int)$cat['cat_id'], $flat);
+                }
+            }
+        }
+
+        if (!empty($catFilterIds)) {
+            $where .= ' AND ec.cat_id IN (' . implode(',', array_map('intval', $catFilterIds)) . ')';
         }
 
         $page = max(1, (int)$mybb->get_input('page', MyBB::INPUT_INT));
         $perpage = AF_KB_PERPAGE;
-        $total = (int)$db->fetch_field(
-            $db->simple_select('af_kb_entries', 'COUNT(*) AS cnt', $where),
-            'cnt'
-        );
         $start = ($page - 1) * $perpage;
 
+        $join = !empty($catFilterIds) ? ' LEFT JOIN ' . TABLE_PREFIX . 'af_kb_entry_categories ec ON ec.entry_id=e.id ' : '';
+        $totalRow = $db->fetch_array($db->write_query('SELECT COUNT(DISTINCT e.id) AS cnt FROM ' . TABLE_PREFIX . 'af_kb_entries e' . $join . ' WHERE ' . $where));
+        $total = (int)($totalRow['cnt'] ?? 0);
+
         $entries = [];
-        $q = $db->simple_select(
-            'af_kb_entries',
-            '*',
-            $where,
-            [
-                'order_by' => 'sortorder, title_ru, title_en',
-                'order_dir' => 'ASC',
-                'limit' => $perpage,
-                'limit_start' => $start,
-            ]
-        );
+        $sql = 'SELECT DISTINCT e.* FROM ' . TABLE_PREFIX . 'af_kb_entries e' . $join . ' WHERE ' . $where . ' ORDER BY e.sortorder ASC, e.title_ru ASC, e.title_en ASC LIMIT ' . $start . ',' . $perpage;
+        $q = $db->write_query($sql);
         while ($row = $db->fetch_array($q)) {
             $entries[] = $row;
         }
@@ -3871,9 +4450,14 @@ function af_kb_handle_view(): void
         $kb_entries_rows = $rows;
         $kb_entries_style = '';
         $kb_entries_class = '';
+        $kb_categories_tree = $catTreeHtml ?? '';
+        $kb_categories_enabled = af_kb_categories_enabled() ? '1' : '0';
         $paginationUrl = 'misc.php?action=kb&type=' . urlencode($type);
         if ($query !== '') {
             $paginationUrl .= '&q=' . urlencode($query);
+        }
+        if ($catKey !== '') {
+            $paginationUrl .= '&cat=' . urlencode($catKey);
         }
         $kb_pagination = $total > $perpage && function_exists('multipage')
             ? multipage($total, $perpage, $page, $paginationUrl)
@@ -3889,6 +4473,9 @@ function af_kb_handle_view(): void
                     . '<button type="submit" class="af-kb-btn" onclick="return confirm(\''.$normalizeConfirm.'\');">Нормализовать JSON (items)</button>'
                     . '</form>';
             }
+        }
+        if (af_kb_cat_can_manage() && af_kb_categories_enabled()) {
+            $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb_manage_categories&type=' . htmlspecialchars_uni($type) . '">Manage categories</a>';
         }
         if (af_kb_can_manage_types()) {
             $actions[] = '<a class="af-kb-btn af-kb-btn--edit af-kb-btn-edit" href="misc.php?action=kb_type_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_type_edit ?? 'Edit category').'</a>';
@@ -4663,6 +5250,33 @@ function af_kb_handle_edit(): void
         }
     }
     $kb_item_kinds_json = htmlspecialchars_uni(json_encode($itemKinds, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+
+    $kb_categories_editor = '';
+    if (af_kb_categories_enabled() && !empty($entry['id'])) {
+        $flatCats = af_kb_cat_get_flat((string)$entry['type'], false);
+        $links = af_kb_entry_get_categories((int)$entry['id']);
+        $selected = array_map('intval', (array)($links['cat_ids'] ?? []));
+        $primaryCat = (int)($links['primary'] ?? 0);
+        $itemsHtml = '';
+        $primaryOptions = '<option value="0">—</option>';
+        foreach ($flatCats as $cat) {
+            $catId = (int)$cat['cat_id'];
+            $title = af_kb_pick_text($cat, 'title') ?: (string)$cat['key'];
+            $checked = in_array($catId, $selected, true) ? ' checked="checked"' : '';
+            $itemsHtml .= '<label><input type="checkbox" name="cat_ids[]" value="' . $catId . '"' . $checked . ' /> ' . htmlspecialchars_uni($title) . '</label><br />';
+            $primaryOptions .= '<option value="' . $catId . '"' . ($primaryCat === $catId ? ' selected="selected"' : '') . '>' . htmlspecialchars_uni($title) . '</option>';
+        }
+        $kb_categories_editor = '<section><h3>Categories</h3>'
+            . '<form method="post" action="misc.php?action=kb_entry_categories_save">'
+            . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '" />'
+            . '<input type="hidden" name="entry_id" value="' . (int)$entry['id'] . '" />'
+            . '<input type="hidden" name="type" value="' . htmlspecialchars_uni((string)$entry['type']) . '" />'
+            . '<input type="hidden" name="key" value="' . htmlspecialchars_uni((string)$entry['key']) . '" />'
+            . '<div>' . $itemsHtml . '</div>'
+            . '<label>Primary category</label><select name="primary_cat_id">' . $primaryOptions . '</select>'
+            . '<div><button type="submit" class="af-kb-btn">Save categories</button></div>'
+            . '</form></section>';
+    }
     $entryUi = af_kb_get_entry_ui($entry);
     $kb_icon_class = htmlspecialchars_uni($entryUi['icon_class'] ?? '');
     $kb_icon_url = htmlspecialchars_uni($entryUi['icon_url'] ?? '');
@@ -5233,6 +5847,7 @@ function af_kb_handle_json_list(): void
     }
 
     $query = trim((string)$mybb->get_input('q'));
+    $catKey = trim((string)$mybb->get_input('cat'));
     $isAjax = (int)$mybb->get_input('ajax', MyBB::INPUT_INT) === 1;
     $where = "type='".$db->escape_string($type)."'";
     if (!af_kb_can_edit()) {
