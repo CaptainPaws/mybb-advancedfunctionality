@@ -4636,18 +4636,56 @@ function af_kb_handle_view(): void
 
         $catFilterIds = [];
         $catTreeHtml = '';
+        $catSidebarTreeHtml = '';
+        $currentCatId = 0;
         if (af_kb_categories_enabled()) {
-            $catTreeNodes = af_kb_cat_get_tree($type, !af_kb_can_edit());
+            $onlyActiveCats = !af_kb_can_edit();
+            $catFlat = af_kb_cat_get_flat($type, $onlyActiveCats);
+            $catTreeNodes = af_kb_cat_get_tree($type, $onlyActiveCats);
             $catTreeBody = af_kb_render_category_tree_html($catTreeNodes, $type, $catKey);
             if ($catTreeBody !== '') {
                 $catTreeHtml = '<ul class="af-kb-cat-tree">' . $catTreeBody . '</ul>';
             }
+
+            $sidebarNodes = $catTreeNodes;
             if ($catKey !== '') {
-                $cat = $db->fetch_array($db->simple_select('af_kb_categories', '*', "type='" . $escapedType . "' AND `key`='" . $db->escape_string($catKey) . "'", ['limit' => 1]));
-                if ($cat) {
-                    $flat = af_kb_cat_get_flat($type, false);
-                    $catFilterIds = af_kb_cat_collect_descendant_ids((int)$cat['cat_id'], $flat);
+                $currentCat = null;
+                foreach ($catFlat as $flatRow) {
+                    if ((string)($flatRow['key'] ?? '') === $catKey) {
+                        $currentCat = $flatRow;
+                        break;
+                    }
                 }
+
+                if ($currentCat) {
+                    $currentCatId = (int)$currentCat['cat_id'];
+                    $catFilterIds = af_kb_cat_collect_descendant_ids($currentCatId, $catFlat);
+
+                    $parentId = (int)($currentCat['parent_id'] ?? 0);
+                    $rootCatId = $parentId > 0 ? $parentId : $currentCatId;
+                    if ($rootCatId > 0 && isset($catFlat[$rootCatId])) {
+                        $rootNode = $catFlat[$rootCatId];
+                        $rootNode['cat_id'] = $rootCatId;
+                        $rootNode['parent_id'] = (int)($rootNode['parent_id'] ?? 0);
+                        $rootNode['children'] = [];
+                        foreach ($catFlat as $flatCatId => $flatCat) {
+                            if ((int)($flatCat['parent_id'] ?? 0) === $rootCatId) {
+                                $flatCat['cat_id'] = (int)$flatCatId;
+                                $flatCat['parent_id'] = (int)($flatCat['parent_id'] ?? 0);
+                                $flatCat['children'] = [];
+                                $rootNode['children'][] = $flatCat;
+                            }
+                        }
+                        if (!empty($rootNode['children'])) {
+                            $sidebarNodes = [$rootNode];
+                        }
+                    }
+                }
+            }
+
+            $sidebarBody = af_kb_render_category_tree_html($sidebarNodes, $type, $catKey);
+            if ($sidebarBody !== '') {
+                $catSidebarTreeHtml = '<ul class="af-kb-cat-tree">' . $sidebarBody . '</ul>';
             }
         }
 
@@ -4726,33 +4764,22 @@ function af_kb_handle_view(): void
         $kb_entries_style = '';
         $kb_entries_class = '';
         $kb_categories_tree = $catTreeHtml ?? '';
+        $kb_categories_tree_sidebar = $catSidebarTreeHtml ?: $kb_categories_tree;
         $kb_categories_enabled = af_kb_categories_enabled() ? '1' : '0';
         $uiPositionRaw = (string)af_kb_get_setting('af_kb_categories_ui_position', af_kb_get_setting('af_kb_categories_ui', 'sidebar'));
         $kb_ui_position = $uiPositionRaw === 'top' ? 'top' : 'sidebar';
 
-        $currentCatId = 0;
-        if ($catKey !== '') {
-            $currentCat = $db->fetch_array($db->simple_select('af_kb_categories', 'cat_id', "type='" . $escapedType . "' AND `key`='" . $db->escape_string($catKey) . "'", ['limit' => 1]));
-            if (!empty($currentCat['cat_id'])) {
-                $currentCatId = (int)$currentCat['cat_id'];
-            }
-        }
-
-        $childrenWhere = "type='" . $escapedType . "' AND parent_id=" . (int)$currentCatId;
-        if (!af_kb_can_edit()) {
-            $childrenWhere .= ' AND active=1';
-        }
-        $childrenCount = (int)$db->fetch_field($db->simple_select('af_kb_categories', 'COUNT(*) AS cnt', $childrenWhere), 'cnt');
-        $has_children = $childrenCount > 0;
-        $sidebar_enabled = $kb_ui_position === 'sidebar' && $has_children;
-        $top_enabled = $kb_ui_position === 'top' && $has_children;
+        $has_sidebar_tree = $kb_categories_tree_sidebar !== '';
+        $has_top_tree = $kb_categories_tree !== '';
+        $sidebar_enabled = $kb_ui_position === 'sidebar' && $has_sidebar_tree;
+        $top_enabled = $kb_ui_position === 'top' && $has_top_tree;
         $kb_layout_class = 'af-kb-layout--full';
         if ($sidebar_enabled) {
             $kb_layout_class = 'af-kb-layout--sidebar';
         } elseif ($top_enabled) {
             $kb_layout_class = 'af-kb-layout--top';
         }
-        $kb_sidebar_html = $sidebar_enabled ? '<aside class="af-kb-sidebar">' . $kb_categories_tree . '</aside>' : '';
+        $kb_sidebar_html = $sidebar_enabled ? '<aside class="af-kb-sidebar">' . $kb_categories_tree_sidebar . '</aside>' : '';
         $kb_topcats_html = $top_enabled ? '<div class="af-kb-topcats">' . $kb_categories_tree . '</div>' : '';
         $paginationUrl = 'misc.php?action=kb&type=' . urlencode($type);
         if ($query !== '') {
