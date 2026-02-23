@@ -1581,6 +1581,21 @@ function af_kb_cat_get_tree(string $type, bool $onlyActive = true): array
     return $tree;
 }
 
+function af_kb_cat_flatten_tree_with_level(array $nodes, int $level = 0): array
+{
+    $flat = [];
+    foreach ($nodes as $node) {
+        $node['level'] = $level;
+        $children = (array)($node['children'] ?? []);
+        $node['children'] = [];
+        $flat[] = $node;
+        if ($children) {
+            $flat = array_merge($flat, af_kb_cat_flatten_tree_with_level($children, $level + 1));
+        }
+    }
+    return $flat;
+}
+
 function af_kb_cat_create($type, $parent_id, $key, $title_ru, $title_en, $description_ru = '', $description_en = '', $sortorder = 0, $active = 1): int
 {
     global $db;
@@ -1606,22 +1621,40 @@ function af_kb_cat_create($type, $parent_id, $key, $title_ru, $title_en, $descri
     return (int)$db->insert_id();
 }
 
-function af_kb_cat_update($cat_id, array $data): bool
+function af_kb_cat_update($cat_id, array $data): array
 {
     global $db;
 
     $catId = (int)$cat_id;
     if ($catId <= 0) {
-        return false;
+        return ['ok' => false, 'error' => 'Category not found'];
     }
 
     $existing = $db->fetch_array($db->simple_select('af_kb_categories', '*', 'cat_id=' . $catId, ['limit' => 1]));
     if (!$existing) {
-        return false;
+        return ['ok' => false, 'error' => 'Category not found'];
+    }
+
+    $targetParentId = (int)($data['parent_id'] ?? $existing['parent_id']);
+    if ($targetParentId === $catId) {
+        return ['ok' => false, 'error' => 'Invalid parent category'];
+    }
+
+    if ($targetParentId > 0) {
+        $parentRow = $db->fetch_array($db->simple_select('af_kb_categories', 'cat_id,type', 'cat_id=' . $targetParentId, ['limit' => 1]));
+        if (!$parentRow || (string)$parentRow['type'] !== (string)$existing['type']) {
+            return ['ok' => false, 'error' => 'Invalid parent category'];
+        }
+
+        $flatCats = af_kb_cat_get_flat((string)$existing['type'], false);
+        $descendants = af_kb_cat_collect_descendant_ids($catId, $flatCats);
+        if (in_array($targetParentId, $descendants, true)) {
+            return ['ok' => false, 'error' => 'Invalid parent category'];
+        }
     }
 
     $update = [
-        'parent_id' => (int)($data['parent_id'] ?? $existing['parent_id']),
+        'parent_id' => $targetParentId,
         'title_ru' => $db->escape_string((string)($data['title_ru'] ?? $existing['title_ru'])),
         'title_en' => $db->escape_string((string)($data['title_en'] ?? $existing['title_en'])),
         'description_ru' => $db->escape_string((string)($data['description_ru'] ?? $existing['description_ru'])),
@@ -1636,7 +1669,7 @@ function af_kb_cat_update($cat_id, array $data): bool
 
     $db->update_query('af_kb_categories', $update, 'cat_id=' . $catId);
     af_kb_cat_clear_cache((string)$existing['type']);
-    return true;
+    return ['ok' => true];
 }
 
 function af_kb_cat_delete($cat_id): array
@@ -1656,7 +1689,7 @@ function af_kb_cat_delete($cat_id): array
 
     $hasEntries = (int)$db->fetch_field($db->simple_select('af_kb_entry_categories', 'COUNT(*) AS cnt', 'cat_id=' . $catId), 'cnt') > 0;
     if ($hasEntries) {
-        return ['ok' => false, 'error' => 'Category has linked entries'];
+        return ['ok' => false, 'error' => 'Category in use'];
     }
 
     $db->delete_query('af_kb_categories', 'cat_id=' . $catId);
@@ -4228,48 +4261,84 @@ function af_kb_handle_manage_categories(): void
         error('Type is required');
     }
 
-    $flat = af_kb_cat_get_flat($type, false);
+    $editCatId = (int)$mybb->get_input('edit_cat_id', MyBB::INPUT_INT);
+
+    $tree = af_kb_cat_get_tree($type, false);
+    $flat = af_kb_cat_flatten_tree_with_level($tree);
+    $flatById = [];
+    foreach ($flat as $cat) {
+        $flatById[(int)$cat['cat_id']] = $cat;
+    }
+
+    $editing = $editCatId > 0 && isset($flatById[$editCatId]) ? $flatById[$editCatId] : null;
+
     $rows = '';
     foreach ($flat as $cat) {
         $catId = (int)$cat['cat_id'];
         $title = af_kb_pick_text($cat, 'title') ?: (string)$cat['key'];
+        $indent = max(0, (int)($cat['level'] ?? 0)) * 22;
         $rows .= '<tr>'
             . '<td>' . $catId . '</td>'
             . '<td>' . htmlspecialchars_uni((string)$cat['key']) . '</td>'
-            . '<td style="padding-left:' . ((int)$cat['parent_id'] > 0 ? '24' : '4') . 'px">' . htmlspecialchars_uni($title) . '</td>'
+            . '<td style="padding-left:' . (4 + $indent) . 'px">' . ($indent > 0 ? '↳ ' : '') . htmlspecialchars_uni($title) . '</td>'
             . '<td>' . (int)$cat['sortorder'] . '</td>'
             . '<td>' . ((int)$cat['active'] === 1 ? 'Yes' : 'No') . '</td>'
-            . '<td><form method="post" action="misc.php?action=kb_manage_categories_save" style="display:inline">'
+            . '<td>'
+            . '<a class="af-kb-btn" href="misc.php?action=kb_manage_categories&type=' . urlencode($type) . '&edit_cat_id=' . $catId . '">Edit</a> '
+            . '<form method="post" action="misc.php?action=kb_manage_categories_save" style="display:inline">'
             . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '" />'
             . '<input type="hidden" name="type" value="' . htmlspecialchars_uni($type) . '" />'
             . '<input type="hidden" name="cat_id" value="' . $catId . '" />'
-            . '<button class="af-kb-btn" name="mode" value="edit">Edit</button> '
             . '<button class="af-kb-btn af-kb-btn--delete" name="mode" value="delete" onclick="return confirm(\'Delete category?\');">Delete</button>'
-            . '</form></td>'
+            . '</form>'
+            . '</td>'
             . '</tr>';
     }
 
     $opts = '<option value="0">—</option>';
-    foreach ($flat as $cat) {
-        $opts .= '<option value="' . (int)$cat['cat_id'] . '">' . htmlspecialchars_uni(af_kb_pick_text($cat, 'title') ?: (string)$cat['key']) . '</option>';
+    $excludeIds = [];
+    if ($editing) {
+        $excludeIds = af_kb_cat_collect_descendant_ids((int)$editing['cat_id'], $flat);
     }
+    foreach ($flat as $cat) {
+        $candidateId = (int)$cat['cat_id'];
+        if (in_array($candidateId, $excludeIds, true)) {
+            continue;
+        }
+        $level = max(0, (int)($cat['level'] ?? 0));
+        $prefix = str_repeat('— ', $level);
+        $selected = $editing && (int)$editing['parent_id'] === $candidateId ? ' selected="selected"' : '';
+        $opts .= '<option value="' . $candidateId . '"' . $selected . '>' . htmlspecialchars_uni($prefix . (af_kb_pick_text($cat, 'title') ?: (string)$cat['key'])) . '</option>';
+    }
+
+    $formCatId = $editing ? (int)$editing['cat_id'] : 0;
+    $formKey = $editing ? htmlspecialchars_uni((string)$editing['key']) : '';
+    $formTitleRu = $editing ? htmlspecialchars_uni((string)$editing['title_ru']) : '';
+    $formTitleEn = $editing ? htmlspecialchars_uni((string)$editing['title_en']) : '';
+    $formDescriptionRu = $editing ? htmlspecialchars_uni((string)$editing['description_ru']) : '';
+    $formDescriptionEn = $editing ? htmlspecialchars_uni((string)$editing['description_en']) : '';
+    $formSortorder = $editing ? (int)$editing['sortorder'] : 0;
+    $formActive = !$editing || (int)$editing['active'] === 1 ? 'checked="checked"' : '';
+    $titleSuffix = $editing ? ' (editing #' . $formCatId . ')' : '';
+    $baseManageUrl = 'misc.php?action=kb_manage_categories&type=' . urlencode($type);
+    $cancelEditLink = $editing ? '<a class="af-kb-btn" href="' . $baseManageUrl . '">Cancel edit</a>' : '';
 
     $content = '<div class="af-kb-header"><h1>Manage KB categories: ' . htmlspecialchars_uni($type) . '</h1></div>'
         . '<table class="tborder" cellspacing="1" cellpadding="6" width="100%"><tr><th>ID</th><th>Key</th><th>Title</th><th>Sort</th><th>Active</th><th>Actions</th></tr>' . $rows . '</table>'
         . '<form class="af-kb-form" method="post" action="misc.php?action=kb_manage_categories_save">'
         . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '" />'
         . '<input type="hidden" name="type" value="' . htmlspecialchars_uni($type) . '" />'
-        . '<input type="hidden" name="cat_id" value="0" />'
-        . '<h3>Create / edit</h3>'
+        . '<input type="hidden" name="cat_id" value="' . $formCatId . '" />'
+        . '<h3>Create / edit' . $titleSuffix . '</h3>'
         . '<label>Parent</label><select name="parent_id">' . $opts . '</select>'
-        . '<label>Key</label><input type="text" name="key" value="" />'
-        . '<label>Title RU</label><input type="text" name="title_ru" value="" />'
-        . '<label>Title EN</label><input type="text" name="title_en" value="" />'
-        . '<label>Description RU</label><textarea name="description_ru"></textarea>'
-        . '<label>Description EN</label><textarea name="description_en"></textarea>'
-        . '<label>Sortorder</label><input type="number" name="sortorder" value="0" />'
-        . '<label><input type="checkbox" name="active" value="1" checked="checked" /> Active</label>'
-        . '<div><button class="af-kb-btn" name="mode" value="save">Save</button></div>'
+        . '<label>Key</label><input type="text" name="key" value="' . $formKey . '" ' . ($editing ? 'readonly="readonly"' : '') . ' />'
+        . '<label>Title RU</label><input type="text" name="title_ru" value="' . $formTitleRu . '" />'
+        . '<label>Title EN</label><input type="text" name="title_en" value="' . $formTitleEn . '" />'
+        . '<label>Description RU</label><textarea name="description_ru">' . $formDescriptionRu . '</textarea>'
+        . '<label>Description EN</label><textarea name="description_en">' . $formDescriptionEn . '</textarea>'
+        . '<label>Sortorder</label><input type="number" name="sortorder" value="' . $formSortorder . '" />'
+        . '<label><input type="checkbox" name="active" value="1" ' . $formActive . ' /> Active</label>'
+        . '<div><button class="af-kb-btn" name="mode" value="save">Save</button> ' . $cancelEditLink . '</div>'
         . '</form>';
 
     af_kb_render_fullpage($content, 'af_kb_edit_fullpage');
@@ -4302,7 +4371,7 @@ function af_kb_handle_manage_categories_save(): void
     }
 
     if ($mode === 'edit') {
-        redirect('misc.php?action=kb_manage_categories&type=' . urlencode($type), 'Use the form below to update category data.');
+        redirect('misc.php?action=kb_manage_categories&type=' . urlencode($type) . '&edit_cat_id=' . $catId, 'Use the form below to update category data.');
     }
 
     $key = trim((string)$mybb->get_input('key'));
@@ -4322,7 +4391,10 @@ function af_kb_handle_manage_categories_save(): void
     ];
 
     if ($catId > 0) {
-        af_kb_cat_update($catId, $payload);
+        $updateResult = af_kb_cat_update($catId, $payload);
+        if (empty($updateResult['ok'])) {
+            error((string)($updateResult['error'] ?? 'Unable to update category'));
+        }
     } else {
         af_kb_cat_create($type, $payload['parent_id'], $payload['key'], $payload['title_ru'], $payload['title_en'], $payload['description_ru'], $payload['description_en'], $payload['sortorder'], $payload['active']);
     }
