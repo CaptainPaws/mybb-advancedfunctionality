@@ -1621,41 +1621,77 @@ function af_kb_entry_get_categories(int $entry_id): array
     return $result;
 }
 
-function af_kb_entry_set_categories(int $entry_id, array $cat_ids, int $primary_cat_id = 0): void
+function af_kb_entry_set_categories(int $entry_id, array $cat_ids, int $primary_cat_id = 0): array
 {
     global $db;
 
     if ($entry_id <= 0 || !$db->table_exists('af_kb_entry_categories')) {
-        return;
+        return ['ok' => false, 'error' => 'Invalid entry id or categories table missing'];
     }
 
     $entry = $db->fetch_array($db->simple_select('af_kb_entries', 'id,type', 'id=' . $entry_id, ['limit' => 1]));
     if (!$entry) {
-        return;
+        return ['ok' => false, 'error' => 'Entry not found'];
     }
 
     $type = (string)$entry['type'];
     $valid = [];
+    $postedCatIds = [];
     foreach ($cat_ids as $catId) {
         $catId = (int)$catId;
         if ($catId <= 0) {
             continue;
         }
+        $postedCatIds[] = $catId;
         $cat = $db->fetch_array($db->simple_select('af_kb_categories', 'cat_id,type', 'cat_id=' . $catId, ['limit' => 1]));
         if ($cat && (string)$cat['type'] === $type) {
             $valid[] = $catId;
         }
     }
     $valid = array_values(array_unique($valid));
+    $postedCatIds = array_values(array_unique($postedCatIds));
 
-    $db->delete_query('af_kb_entry_categories', 'entry_id=' . $entry_id);
-    foreach ($valid as $catId) {
-        $db->insert_query('af_kb_entry_categories', [
-            'entry_id' => $entry_id,
-            'cat_id' => $catId,
-            'is_primary' => ($primary_cat_id > 0 && $primary_cat_id === $catId) ? 1 : 0,
-        ]);
+    if ($postedCatIds && count($postedCatIds) !== count($valid)) {
+        return ['ok' => false, 'error' => 'One or more categories do not belong to entry type'];
     }
+
+    if ($primary_cat_id > 0 && !in_array($primary_cat_id, $valid, true)) {
+        $primary_cat_id = 0;
+    }
+
+    $existing = [];
+    $qExisting = $db->simple_select('af_kb_entry_categories', 'cat_id', 'entry_id=' . $entry_id);
+    while ($row = $db->fetch_array($qExisting)) {
+        $existing[] = (int)$row['cat_id'];
+    }
+
+    $toDelete = array_values(array_diff($existing, $valid));
+    $toInsert = array_values(array_diff($valid, $existing));
+
+    if (method_exists($db, 'write_query')) {
+        $db->write_query('START TRANSACTION');
+    }
+
+    if (!empty($toDelete)) {
+        $db->delete_query('af_kb_entry_categories', 'entry_id=' . $entry_id . ' AND cat_id IN (' . implode(',', array_map('intval', $toDelete)) . ')');
+    }
+
+    foreach ($toInsert as $catId) {
+        $sql = 'INSERT IGNORE INTO ' . TABLE_PREFIX . 'af_kb_entry_categories (entry_id, cat_id, is_primary) VALUES ('
+            . $entry_id . ', ' . (int)$catId . ', 0)';
+        $db->write_query($sql);
+    }
+
+    $db->update_query('af_kb_entry_categories', ['is_primary' => 0], 'entry_id=' . $entry_id);
+    if ($primary_cat_id > 0) {
+        $db->update_query('af_kb_entry_categories', ['is_primary' => 1], 'entry_id=' . $entry_id . ' AND cat_id=' . $primary_cat_id);
+    }
+
+    if (method_exists($db, 'write_query')) {
+        $db->write_query('COMMIT');
+    }
+
+    return ['ok' => true, 'cat_ids' => $valid, 'primary_cat_id' => $primary_cat_id];
 }
 
 
@@ -2137,6 +2173,37 @@ function af_kb_send_json(array $payload, int $code = 200): void
     header('Cache-Control: no-store, no-cache, must-revalidate');
     echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
+}
+
+function af_kb_debug_entry_cats_log_path(): string
+{
+    return MYBB_ROOT . 'inc/plugins/advancedfunctionality/cache/af_kb_entry_cats_last_post.json';
+}
+
+function af_kb_debug_entry_cats_store_last_post(array $payload): void
+{
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        return;
+    }
+
+    @file_put_contents(af_kb_debug_entry_cats_log_path(), $json, LOCK_EX);
+}
+
+function af_kb_debug_entry_cats_read_last_post(): ?array
+{
+    $path = af_kb_debug_entry_cats_log_path();
+    if (!is_file($path)) {
+        return null;
+    }
+
+    $raw = (string)@file_get_contents($path);
+    if ($raw === '') {
+        return null;
+    }
+
+    $decoded = json_decode($raw, true);
+    return is_array($decoded) ? $decoded : null;
 }
 
 function af_kb_validate_json(string $raw): bool
@@ -3980,7 +4047,7 @@ function af_kb_misc_route(): void
     global $mybb;
 
     $action = $mybb->get_input('action');
-    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_normalize_items', 'kb_debug_entry', 'kb_migrate_rules', 'kb_manage_categories', 'kb_manage_categories_save', 'kb_entry_categories_save'], true)) {
+    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_normalize_items', 'kb_debug_entry', 'kb_migrate_rules', 'kb_manage_categories', 'kb_manage_categories_save', 'kb_entry_categories_save', 'kb_debug_entry_cats'], true)) {
         return;
     }
 
@@ -4046,6 +4113,10 @@ function af_kb_misc_route(): void
 
     if ($action === 'kb_entry_categories_save') {
         af_kb_handle_entry_categories_save();
+    }
+
+    if ($action === 'kb_debug_entry_cats') {
+        af_kb_handle_debug_entry_categories();
     }
 
     af_kb_handle_view();
@@ -4189,9 +4260,9 @@ function af_kb_handle_manage_categories_save(): void
 
 function af_kb_handle_entry_categories_save(): void
 {
-    global $mybb;
+    global $mybb, $db;
 
-    if (!af_kb_categories_enabled() || !af_kb_cat_can_manage()) {
+    if (!af_kb_categories_enabled() || !af_kb_can_edit()) {
         error_no_permission();
     }
 
@@ -4202,17 +4273,73 @@ function af_kb_handle_entry_categories_save(): void
     verify_post_check($mybb->get_input('my_post_key'));
 
     $entryId = (int)$mybb->get_input('entry_id', MyBB::INPUT_INT);
+    $entry = $db->fetch_array($db->simple_select('af_kb_entries', 'id,type', 'id=' . $entryId, ['limit' => 1]));
+    if (!$entry) {
+        af_kb_send_json(['ok' => false, 'error' => 'Entry not found'], 404);
+    }
+
+    $type = trim((string)$mybb->get_input('type'));
+    if ($type !== '' && $type !== (string)$entry['type']) {
+        af_kb_send_json(['ok' => false, 'error' => 'Type mismatch'], 400);
+    }
+
     $catIds = $mybb->get_input('cat_ids', MyBB::INPUT_ARRAY);
     $primary = (int)$mybb->get_input('primary_cat_id', MyBB::INPUT_INT);
     if (!is_array($catIds)) {
         $catIds = [];
     }
 
-    af_kb_entry_set_categories($entryId, $catIds, $primary);
+    $catIds = array_values(array_filter(array_map('intval', $catIds), static function (int $value): bool {
+        return $value > 0;
+    }));
 
-    $type = trim((string)$mybb->get_input('type'));
-    $key = trim((string)$mybb->get_input('key'));
-    redirect('misc.php?action=kb_edit&type=' . urlencode($type) . '&key=' . urlencode($key), 'Сохранено');
+    $saveResult = af_kb_entry_set_categories($entryId, $catIds, $primary);
+    if (empty($saveResult['ok'])) {
+        af_kb_send_json(['ok' => false, 'error' => (string)($saveResult['error'] ?? 'Unable to save categories')], 400);
+    }
+
+    af_kb_debug_entry_cats_store_last_post([
+        'entry_id' => $entryId,
+        'type' => (string)$entry['type'],
+        'cat_ids' => $catIds,
+        'primary_cat_id' => $primary,
+        'saved_at' => TIME_NOW,
+    ]);
+
+    af_kb_send_json(['ok' => true, 'message' => 'Сохранено']);
+}
+
+function af_kb_handle_debug_entry_categories(): void
+{
+    global $mybb, $db;
+
+    if (!af_kb_categories_enabled() || !af_kb_cat_can_manage()) {
+        error_no_permission();
+    }
+
+    $entryId = (int)$mybb->get_input('entry_id', MyBB::INPUT_INT);
+    if ($entryId <= 0) {
+        af_kb_send_json(['ok' => false, 'error' => 'entry_id is required'], 400);
+    }
+
+    $entry = $db->fetch_array($db->simple_select('af_kb_entries', 'id,type,`key`', 'id=' . $entryId, ['limit' => 1]));
+    if (!$entry) {
+        af_kb_send_json(['ok' => false, 'error' => 'Entry not found'], 404);
+    }
+
+    $linked = af_kb_entry_get_categories($entryId);
+
+    af_kb_send_json([
+        'ok' => true,
+        'entry' => [
+            'id' => (int)$entry['id'],
+            'type' => (string)$entry['type'],
+            'key' => (string)$entry['key'],
+        ],
+        'linked_cat_ids' => array_values(array_map('intval', (array)($linked['cat_ids'] ?? []))),
+        'primary_cat_id' => (int)($linked['primary'] ?? 0),
+        'last_post_payload' => af_kb_debug_entry_cats_read_last_post(),
+    ]);
 }
 
 
@@ -4452,6 +4579,8 @@ function af_kb_handle_view(): void
         $kb_entries_class = '';
         $kb_categories_tree = $catTreeHtml ?? '';
         $kb_categories_enabled = af_kb_categories_enabled() ? '1' : '0';
+        $kb_categories_ui_position = (string)af_kb_get_setting('af_kb_categories_ui', 'sidebar') === 'top' ? 'top' : 'sidebar';
+        $kb_categories_wrapper_class = 'af-kb-cats--' . $kb_categories_ui_position;
         $paginationUrl = 'misc.php?action=kb&type=' . urlencode($type);
         if ($query !== '') {
             $paginationUrl .= '&q=' . urlencode($query);
@@ -5267,15 +5396,24 @@ function af_kb_handle_edit(): void
             $primaryOptions .= '<option value="' . $catId . '"' . ($primaryCat === $catId ? ' selected="selected"' : '') . '>' . htmlspecialchars_uni($title) . '</option>';
         }
         $kb_categories_editor = '<section><h3>Categories</h3>'
-            . '<form method="post" action="misc.php?action=kb_entry_categories_save">'
+            . '<form method="post" action="misc.php?action=kb_entry_categories_save" data-af-kb-entry-cats-form="1">'
             . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '" />'
             . '<input type="hidden" name="entry_id" value="' . (int)$entry['id'] . '" />'
             . '<input type="hidden" name="type" value="' . htmlspecialchars_uni((string)$entry['type']) . '" />'
-            . '<input type="hidden" name="key" value="' . htmlspecialchars_uni((string)$entry['key']) . '" />'
             . '<div>' . $itemsHtml . '</div>'
-            . '<label>Primary category</label><select name="primary_cat_id">' . $primaryOptions . '</select>'
-            . '<div><button type="submit" class="af-kb-btn">Save categories</button></div>'
-            . '</form></section>';
+            . '<label>Primary category</label><select name="primary_cat_id" data-af-kb-primary="1">' . $primaryOptions . '</select>'
+            . '<div><button type="submit" class="af-kb-btn">Save categories</button> <span data-af-kb-entry-cats-status="1" style="margin-left:8px;color:#2b6;display:none;">Сохранено</span></div>'
+            . '</form>'
+            . '<script>(function(){'
+            . 'var form=document.querySelector("[data-af-kb-entry-cats-form=\"1\"]");if(!form){return;}'
+            . 'var status=form.querySelector("[data-af-kb-entry-cats-status=\"1\"]");'
+            . 'var primary=form.querySelector("select[name=\"primary_cat_id\"]");'
+            . 'function selectedCats(){return Array.prototype.slice.call(form.querySelectorAll("input[name=\"cat_ids[]\"]:checked")).map(function(el){return String(el.value||"0");});}'
+            . 'function syncPrimary(){if(!primary){return;}var selected=selectedCats();Array.prototype.forEach.call(primary.options,function(opt){if(opt.value==="0"){opt.hidden=false;return;}opt.hidden=selected.indexOf(String(opt.value))===-1;});if(primary.value!=="0"&&selected.indexOf(String(primary.value))===-1){primary.value="0";}}'
+            . 'Array.prototype.forEach.call(form.querySelectorAll("input[name=\"cat_ids[]\"]"),function(cb){cb.addEventListener("change",syncPrimary);});syncPrimary();'
+            . 'form.addEventListener("submit",function(e){e.preventDefault();var data=new FormData(form);fetch(form.action,{method:"POST",body:data,credentials:"same-origin"}).then(function(r){return r.json();}).then(function(payload){if(payload&&payload.ok){if(status){status.style.display="inline";setTimeout(function(){status.style.display="none";},1800);}return;}alert((payload&&payload.error)?payload.error:"Unable to save categories");}).catch(function(){alert("Unable to save categories");});});'
+            . '})();</script>'
+            . '</section>';
     }
     $entryUi = af_kb_get_entry_ui($entry);
     $kb_icon_class = htmlspecialchars_uni($entryUi['icon_class'] ?? '');
