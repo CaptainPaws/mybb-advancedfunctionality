@@ -284,6 +284,10 @@ function af_charactersheets_extract_humanity_cost_from_entry(array $entry): floa
     }
 
     $cost = 0.0;
+    if (function_exists('af_kb_item_get_humanity_cost')) {
+        $cost += (float)af_kb_item_get_humanity_cost($entry);
+    }
+
     $meta = af_charactersheets_json_decode((string)($entry['meta_json'] ?? ''));
     $cost += af_charactersheets_extract_humanity_cost_from_data($meta);
 
@@ -305,6 +309,11 @@ function af_charactersheets_extract_humanity_cost_from_data(array $data): float
     $cost = 0.0;
     if (isset($data['humanity_cost'])) {
         $cost += (float)$data['humanity_cost'];
+    }
+    $item = (array)($data['item'] ?? []);
+    $cyberware = (array)($item['cyberware'] ?? []);
+    if (isset($cyberware['humanity_cost_percent'])) {
+        $cost += (float)$cyberware['humanity_cost_percent'];
     }
     foreach (['bonuses', 'modifiers'] as $listKey) {
         if (empty($data[$listKey]) || !is_array($data[$listKey])) {

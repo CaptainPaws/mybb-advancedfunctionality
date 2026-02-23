@@ -911,7 +911,7 @@
                     weapon: { damage_bonus: 0, damage_type: 'kinetic', rate_of_fire: 0, range: '', ammo_type_key: '' },
                     ammo: { ammo_type: '', damage_type: 'kinetic', damage_bonus: 0 },
                     gear: { subtype: '' },
-                    cyberware: { slot: '', grade: '' },
+                    cyberware: { slot: '', grade: '', humanity_cost_percent: 0, modifiers: [], effects: [], grants: [], requirements: {}, conflicts: {} },
                     price: 0,
                     currency: 'credits',
                     weight: 0,
@@ -921,6 +921,7 @@
                     on_equip: { effects: [], grants: [] },
                     requirements: { level: 0, tags_any: [], tags_all: [] }
                 };
+                base.schema = 'af_kb.item.v2';
                 return base;
             }
 
@@ -1228,6 +1229,12 @@
             if (!state.item.cyberware || typeof state.item.cyberware !== 'object') state.item.cyberware = {};
             if (!state.item.cyberware.slot) state.item.cyberware.slot = '';
             if (!state.item.cyberware.grade) state.item.cyberware.grade = '';
+            if (state.item.cyberware.humanity_cost_percent == null) state.item.cyberware.humanity_cost_percent = 0;
+            if (!Array.isArray(state.item.cyberware.modifiers)) state.item.cyberware.modifiers = [];
+            if (!Array.isArray(state.item.cyberware.effects)) state.item.cyberware.effects = [];
+            if (!Array.isArray(state.item.cyberware.grants)) state.item.cyberware.grants = [];
+            if (!state.item.cyberware.requirements || typeof state.item.cyberware.requirements !== 'object') state.item.cyberware.requirements = {};
+            if (!state.item.cyberware.conflicts || typeof state.item.cyberware.conflicts !== 'object') state.item.cyberware.conflicts = {};
             if (!Array.isArray(state.item.tags)) state.item.tags = [];
             ensureObj('item.on_use', {});
             ensureArr('item.on_use.effects');
@@ -1530,6 +1537,7 @@
                     errors.push('item.rarity: unsupported value');
                 }
                 var kind = String((state.item && state.item.item_kind) || 'gear').toLowerCase();
+                var cyberwareMode = (kind === 'cyberware') || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '';
                 var equipSlot = String((state.item && state.item.equip && state.item.equip.slot) || '').trim().toLowerCase();
                 var allowed = slotByKind[kind] || [''];
                 if (kind === 'cyberware') {
@@ -1542,6 +1550,12 @@
                 }
                 if ((kind === 'armor' || kind === 'weapon') && !equipSlot) {
                     errors.push('item.equip.slot: required for armor/weapon');
+                }
+                if (kind === 'cyberware' || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '') {
+                    var humanityCost = numberOrZero((state.item.cyberware && state.item.cyberware.humanity_cost_percent) || 0);
+                    if (humanityCost < 0 || humanityCost > 100) {
+                        errors.push('item.cyberware.humanity_cost_percent: range 0..100');
+                    }
                 }
             }
 
@@ -1676,6 +1690,12 @@
                 itemOut.cyberware = (it.cyberware && typeof it.cyberware === 'object') ? it.cyberware : {};
                 itemOut.cyberware.slot = String(itemOut.cyberware.slot || '');
                 itemOut.cyberware.grade = String(itemOut.cyberware.grade || '');
+                itemOut.cyberware.humanity_cost_percent = Math.max(0, Math.min(100, numberOrZero(itemOut.cyberware.humanity_cost_percent != null ? itemOut.cyberware.humanity_cost_percent : 0)));
+                itemOut.cyberware.modifiers = Array.isArray(itemOut.cyberware.modifiers) ? itemOut.cyberware.modifiers.filter(function (row) { return row && row.type; }) : [];
+                itemOut.cyberware.effects = Array.isArray(itemOut.cyberware.effects) ? itemOut.cyberware.effects.filter(function (row) { return row && row.event && row.effect_type; }) : [];
+                itemOut.cyberware.grants = Array.isArray(itemOut.cyberware.grants) ? itemOut.cyberware.grants.filter(function (row) { return row && row.grant_type; }) : [];
+                itemOut.cyberware.requirements = (itemOut.cyberware.requirements && typeof itemOut.cyberware.requirements === 'object') ? itemOut.cyberware.requirements : {};
+                itemOut.cyberware.conflicts = (itemOut.cyberware.conflicts && typeof itemOut.cyberware.conflicts === 'object') ? itemOut.cyberware.conflicts : {};
                 itemOut.price = numberOrZero(it.price != null ? it.price : 0);
                 itemOut.currency = String(it.currency || 'credits');
                 itemOut.weight = numberOrZero(it.weight != null ? it.weight : 0);
@@ -1684,7 +1704,7 @@
                 itemOut.on_use = onUse;
                 itemOut.on_equip = onEquip;
                 itemOut.requirements = reqI;
-                return normalizeItemCanonical({ schema: p.schema, type_profile: expectedTypeProfile || 'item', version: p.version, item: itemOut });
+                return normalizeItemCanonical({ schema: 'af_kb.item.v2', type_profile: expectedTypeProfile || 'item', version: p.version, item: itemOut });
             }
 
             if (profile === 'class' || profile === 'theme') {
@@ -2020,6 +2040,7 @@
 
             if (uiProfile === 'item') {
                 var kind = String((state.item && state.item.item_kind) || 'gear').toLowerCase();
+                var cyberwareMode = (kind === 'cyberware') || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '';
                 var defI = [
                     { name: 'item_kind', label: 'Тип предмета', type: 'select', options: itemKindOptions },
                     { name: 'rarity', label: 'Редкость', type: 'select', options: ['common', 'uncommon', 'rare', 'unique', 'illegal', 'restricted', 'legendary', 'mythic'] },
@@ -2060,15 +2081,16 @@
                 } else if (kind === 'gear') {
                     equipGrid.appendChild(createInput({ name: 'subtype', label: 'Gear subtype', type: 'select', options: ['', 'cyberdeck', 'scanner', 'drone', 'medkit', 'toolkit', 'jammer', 'cloak', 'hacking_module'] }, state.item.gear, syncRawDebounced));
                     equipGrid.appendChild(createInput({ name: 'slot', label: 'Слот экипировки', type: 'select', options: slotByKind.gear }, state.item.equip, syncRawDebounced));
-                } else if (kind === 'cyberware') {
+                } else if (cyberwareMode) {
                     equipGrid.appendChild(createInput({ name: 'slot', label: 'Cyberware slot', type: 'select', options: ['', 'nervous_system', 'circulatory_system', 'immune_system', 'integumentary_system', 'operating_system', 'skeleton', 'arms', 'hands', 'legs', 'eyes', 'frontal_cortex', 'cyberaudio'] }, state.item.cyberware, syncRawDebounced));
                     equipGrid.appendChild(createInput({ name: 'grade', label: 'Cyberware grade', type: 'text' }, state.item.cyberware, syncRawDebounced));
+                    equipGrid.appendChild(createInput({ name: 'humanity_cost_percent', label: 'Humanity cost / Влияние на человечность (%)', type: 'number', hint: 'При надевании уменьшает человечность на X%' }, state.item.cyberware, syncRawDebounced));
                 } else if (kind === 'artifact' || kind === 'unique') {
                     equipGrid.appendChild(createInput({ name: 'slot', label: 'Слот экипировки', type: 'select', options: slotByKind[kind] }, state.item.equip, syncRawDebounced));
                 }
                 fields.profileFields.appendChild(equipGrid);
                 var currentSlot = String((state.item.equip && state.item.equip.slot) || '');
-                if (kind !== 'cyberware' && currentSlot && (slotByKind[kind] || ['']).indexOf(currentSlot) === -1) {
+                if (!cyberwareMode && currentSlot && (slotByKind[kind] || ['']).indexOf(currentSlot) === -1) {
                     fields.profileFields.insertAdjacentHTML('beforeend', '<div class="af-kb-help">⚠ Несовместимый slot для item_kind: ' + esc(currentSlot) + '</div>');
                 }
 
@@ -2145,7 +2167,56 @@
                     syncRawDebounced();
                 }, { type: '', payload: {} });
 
+
                 fields.profileLists.appendChild(equipBox);
+
+                if (cyberwareMode) {
+                    var cyberBox = document.createElement('div');
+                    cyberBox.className = 'af-kb-rule-card';
+                    cyberBox.innerHTML = '<div class="af-kb-rule-card__title"><strong>Cyberware → Effects</strong></div>';
+
+                    var modifierFieldsCyber = [
+                        { name: 'type', label: 'Type', type: 'select', options: ['attribute_bonus_str','attribute_bonus_dex','attribute_bonus_con','attribute_bonus_int','attribute_bonus_wis','attribute_bonus_cha','hp_max','hp_regen_flat','hp_regen_percent','stamina_max','stamina_regen','energy_max','energy_regen','armor_flat','armor_percent','evasion','mitigation_chance','mitigation_strength','speed_flat','speed_percent','jump_height','dash_cost_reduction','carry_capacity','loot_radius','interaction_range','perception','detection_range','enemy_visibility_reduction','crit_chance','crit_damage','accuracy','ads_speed','recoil_reduction','spread_reduction','reload_speed','damage_percent','damage_melee_percent','damage_ranged_percent','headshot_damage_percent','stealth_damage_percent','damage_fire_percent','damage_electric_percent','damage_chemical_percent','resist_fire','resist_electric','resist_chemical','resist_poison','resist_bleed','dot_damage_percent','dot_resist_percent','attack_speed','block_efficiency','parry_window','ram_max','ram_recovery_rate','quickhack_damage_percent','quickhack_upload_speed','quickhack_crit_chance','quickhack_crit_damage','cyberware_cooldown_reduction','ability_cooldown_reduction','scan_speed','ice_resistance','trace_time_increase'] },
+                        { name: 'value', label: 'Value', type: 'number' },
+                        { name: 'unit', label: 'Unit', type: 'select', options: ['', '%', 'flat', 'sec', 'points'] },
+                        { name: 'scope', label: 'Scope', type: 'select', options: ['always', 'while_equipped', 'while_active'] }
+                    ];
+                    var effectsFieldsCyber = [
+                        { name: 'event', label: 'Event', type: 'select', options: ['on_kill', 'on_hit', 'on_crit', 'on_damage_taken', 'on_low_hp', 'on_enter_combat', 'on_exit_combat', 'on_scan', 'on_quickhack', 'on_dash'] },
+                        { name: 'effect_type', label: 'Action/Effect type', type: 'select', options: ['reduce_cooldown', 'apply_status', 'shield_or_heal', 'low_hp_bonus', 'active_ability'] },
+                        { name: 'chance', label: 'Chance %', type: 'number' },
+                        { name: 'cooldown_sec', label: 'Cooldown sec', type: 'number' },
+                        { name: 'params', label: 'Params', type: 'json' }
+                    ];
+                    var grantsFieldsCyber = [
+                        { name: 'grant_type', label: 'Grant type', type: 'select', options: ['perk', 'skill', 'resistance', 'action', 'kb_pick'] },
+                        { name: 'target', label: 'Target', type: 'text' },
+                        { name: 'value', label: 'Amount / Rank / Value', type: 'number' }
+                    ];
+
+                    var modsWrap = document.createElement('div');
+                    modsWrap.className = 'af-kb-rule-card';
+                    cyberBox.appendChild(modsWrap);
+                    renderObjectList(modsWrap, state.item.cyberware.modifiers, 'Modifiers', modifierFieldsCyber, syncRawDebounced, { type: '', value: 0, unit: '', scope: 'while_equipped' });
+
+                    var fxWrap = document.createElement('div');
+                    fxWrap.className = 'af-kb-rule-card';
+                    cyberBox.appendChild(fxWrap);
+                    renderObjectList(fxWrap, state.item.cyberware.effects, 'Effects', effectsFieldsCyber, syncRawDebounced, { event: 'on_kill', effect_type: 'reduce_cooldown', chance: 0, cooldown_sec: 0, params: {} });
+
+                    var grantsWrap = document.createElement('div');
+                    grantsWrap.className = 'af-kb-rule-card';
+                    cyberBox.appendChild(grantsWrap);
+                    renderObjectList(grantsWrap, state.item.cyberware.grants, 'Grants', grantsFieldsCyber, syncRawDebounced, { grant_type: 'perk', target: '', value: 0 });
+
+                    var reqConflictRow = document.createElement('div');
+                    reqConflictRow.className = 'af-kb-row';
+                    reqConflictRow.appendChild(createInput({ name: 'requirements', label: 'Requirements & limits', type: 'json' }, state.item.cyberware, syncRawDebounced));
+                    reqConflictRow.appendChild(createInput({ name: 'conflicts', label: 'Conflicts', type: 'json' }, state.item.cyberware, syncRawDebounced));
+                    cyberBox.appendChild(reqConflictRow);
+
+                    fields.profileLists.appendChild(cyberBox);
+                }
 
                 // requirements
                 var reqBoxI = document.createElement('div');

@@ -1172,7 +1172,7 @@ function af_kb_default_type_rules_config(string $typeKey): array
         ],
         'item' => [
             'rules_enabled' => true,
-            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'rules_schema' => 'af_kb.item.v2',
             'rules_required_keys' => ['schema', 'type_profile', 'version', 'item'],
             'ui_rules_editor' => true,
         ],
@@ -1232,7 +1232,7 @@ function af_kb_get_type_profile_definition(string $typeKey): array
         'knowledge' => ['ui_profile' => 'knowledge', 'rules_enabled' => true, 'defaults' => $base + ['knowledge_group' => 'lore', 'skill' => ['rank_mode' => 'ranked', 'max_rank' => 10, 'rank_bonus' => 1, 'base_formula' => 'attribute', 'can_buy_rank' => true]]],
         'language' => ['ui_profile' => 'language', 'rules_enabled' => true, 'defaults' => $base + ['script' => '', 'rarity' => 'common', 'family' => '', 'requires' => []]],
         'spell' => ['ui_profile' => 'spell', 'rules_enabled' => true, 'defaults' => $base + ['spell' => ['rank' => 1, 'tradition' => 'arcane', 'casting_time' => '1_action', 'range' => '', 'duration' => '', 'area' => '', 'requires_check' => false, 'check_stat' => 'int', 'dc' => 0], 'effects' => []]],
-        'item' => ['ui_profile' => 'item', 'rules_enabled' => true, 'defaults' => $base + ['item_kind' => 'gear', 'rarity' => 'common', 'price' => 0, 'weight' => 0, 'equip' => ['slot' => '', 'armor' => ['ac_bonus' => 0, 'armor_type' => 'light']], 'on_equip' => [], 'on_use' => [], 'requirements' => []]],
+        'item' => ['ui_profile' => 'item', 'rules_enabled' => true, 'defaults' => $base + ['schema' => 'af_kb.item.v2', 'item_kind' => 'gear', 'rarity' => 'common', 'price' => 0, 'weight' => 0, 'equip' => ['slot' => '', 'armor' => ['ac_bonus' => 0, 'armor_type' => 'light']], 'cyberware' => ['slot' => '', 'grade' => '', 'humanity_cost_percent' => 0, 'modifiers' => [], 'effects' => [], 'grants' => [], 'requirements' => [], 'conflicts' => []], 'on_equip' => [], 'on_use' => [], 'requirements' => []]],
         'condition' => ['ui_profile' => 'condition', 'rules_enabled' => true, 'defaults' => $base + ['condition' => ['severity' => 1, 'duration_default' => '', 'stacking' => 'none', 'effects' => []]]],
         'perk' => ['ui_profile' => 'perk', 'rules_enabled' => true, 'defaults' => $base + ['tier' => 1, 'level_req' => 1, 'prereq' => [], 'effects' => []]],
         'faction' => ['ui_profile' => 'faction', 'rules_enabled' => false, 'defaults' => ['meta' => []]],
@@ -2380,6 +2380,26 @@ function af_kb_is_technical_block(array $block): bool
     return !empty($decoded['is_technical']) || (($decoded['visibility'] ?? '') === 'technical');
 }
 
+
+function af_kb_item_get_humanity_cost(array $entry): float
+{
+    $rules = kb_parse_rules($entry);
+    $item = (array)($rules['item'] ?? []);
+    $cyberware = (array)($item['cyberware'] ?? []);
+    if (isset($cyberware['humanity_cost_percent'])) {
+        return max(0.0, min(100.0, (float)$cyberware['humanity_cost_percent']));
+    }
+    if (isset($entry['humanity_cost'])) {
+        return max(0.0, (float)$entry['humanity_cost']);
+    }
+    return 0.0;
+}
+
+function kb_item_get_humanity_cost(array $entry): float
+{
+    return af_kb_item_get_humanity_cost($entry);
+}
+
 function af_kb_normalize_rules_json(string $raw): string
 {
     $decoded = af_kb_decode_json($raw);
@@ -2471,7 +2491,7 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
 
 function af_kb_item_root_fields(): array
 {
-    return ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'equip', 'tags', 'on_use', 'on_equip', 'requirements'];
+    return ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'equip', 'weapon', 'ammo', 'gear', 'cyberware', 'tags', 'on_use', 'on_equip', 'requirements'];
 }
 
 function af_kb_normalize_item_rules_payload(array $payload): array
@@ -3606,6 +3626,74 @@ function af_kb_render_entry_ui(array $entry, array $typeRow, bool $isRu): string
         }
 
         return trim($html);
+    }
+
+
+    if ($typeKey === 'item') {
+        $body  = af_kb_pick_text($entry, 'body');
+        $short = af_kb_pick_text($entry, 'short');
+        $rules = kb_parse_rules($entry);
+        $item = (array)($rules['item'] ?? []);
+        $cyberware = (array)($item['cyberware'] ?? []);
+
+        $parts = [];
+        if ($short !== '') {
+            $parts[] = '<div class="kb-card">' . af_kb_parse_message($short) . '</div>';
+        }
+        if ($body !== '') {
+            $parts[] = '<div class="kb-card">' . af_kb_parse_message($body) . '</div>';
+        }
+
+        $slot = trim((string)($cyberware['slot'] ?? ''));
+        $grade = trim((string)($cyberware['grade'] ?? ''));
+        $humanityCost = af_kb_item_get_humanity_cost($entry);
+        $mods = (array)($cyberware['modifiers'] ?? []);
+        $effects = (array)($cyberware['effects'] ?? []);
+        $grants = (array)($cyberware['grants'] ?? []);
+
+        $metaLines = [];
+        if ($slot !== '') { $metaLines[] = '<li><strong>Slot:</strong> ' . htmlspecialchars_uni($slot) . '</li>'; }
+        if ($grade !== '') { $metaLines[] = '<li><strong>Grade:</strong> ' . htmlspecialchars_uni($grade) . '</li>'; }
+        if ($humanityCost > 0) { $metaLines[] = '<li><strong>Humanity cost:</strong> −' . htmlspecialchars_uni((string)$humanityCost) . '% человечности</li>'; }
+        if ($metaLines) {
+            $parts[] = '<div class="kb-card"><ul>' . implode('', $metaLines) . '</ul></div>';
+        }
+
+        if ($mods) {
+            $lines = [];
+            foreach ($mods as $mod) {
+                if (!is_array($mod)) { continue; }
+                $type = (string)($mod['type'] ?? 'modifier');
+                $value = (string)($mod['value'] ?? '0');
+                $unit = (string)($mod['unit'] ?? '');
+                $lines[] = '<li>' . htmlspecialchars_uni($type . ': ' . $value . $unit) . '</li>';
+            }
+            if ($lines) { $parts[] = '<div class="kb-card"><strong>Modifiers</strong><ul>' . implode('', $lines) . '</ul></div>'; }
+        }
+
+        if ($effects) {
+            $lines = [];
+            foreach ($effects as $effect) {
+                if (!is_array($effect)) { continue; }
+                $event = (string)($effect['event'] ?? '');
+                $effectType = (string)($effect['effect_type'] ?? '');
+                $lines[] = '<li>' . htmlspecialchars_uni($event . ' → ' . $effectType) . '</li>';
+            }
+            if ($lines) { $parts[] = '<div class="kb-card"><strong>Effects</strong><ul>' . implode('', $lines) . '</ul></div>'; }
+        }
+
+        if ($grants) {
+            $lines = [];
+            foreach ($grants as $grant) {
+                if (!is_array($grant)) { continue; }
+                $gType = (string)($grant['grant_type'] ?? '');
+                $target = (string)($grant['target'] ?? '');
+                $lines[] = '<li>' . htmlspecialchars_uni($gType . ($target !== '' ? ': ' . $target : '')) . '</li>';
+            }
+            if ($lines) { $parts[] = '<div class="kb-card"><strong>Grants</strong><ul>' . implode('', $lines) . '</ul></div>'; }
+        }
+
+        return trim(implode('', $parts));
     }
 
     // ----- обычная логика для остальных типов -----
