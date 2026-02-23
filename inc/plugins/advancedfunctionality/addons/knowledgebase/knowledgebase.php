@@ -260,6 +260,48 @@ function af_kb_migrate_legacy_categories_ui_setting(): void
     }
 }
 
+function af_kb_ensure_categories_ui_position_setting(int $gid, string $title, string $desc): void
+{
+    global $db;
+
+    $name = 'af_kb_categories_ui_position';
+    $optionsCode = "select\nsidebar=Sidebar\ntop=Top block";
+
+    $existing = $db->fetch_array($db->simple_select(
+        'settings',
+        'sid,value',
+        "name='" . $db->escape_string($name) . "'",
+        ['limit' => 1]
+    ));
+
+    if (!empty($existing['sid'])) {
+        $updateRow = [
+            'title'       => $db->escape_string($title),
+            'description' => $db->escape_string($desc),
+            'optionscode' => $db->escape_string($optionsCode),
+            'disporder'   => 10,
+            'gid'         => $gid,
+        ];
+
+        if (trim((string)($existing['value'] ?? '')) === '') {
+            $updateRow['value'] = 'sidebar';
+        }
+
+        $db->update_query('settings', $updateRow, "sid=" . (int)$existing['sid']);
+        return;
+    }
+
+    af_kb_ensure_setting(
+        $gid,
+        $name,
+        $title,
+        $desc,
+        $optionsCode,
+        'sidebar',
+        10
+    );
+}
+
 /* -------------------- INSTALL / UNINSTALL -------------------- */
 function af_knowledgebase_install(): bool
 {
@@ -521,14 +563,10 @@ SQL;
         '0',
         9
     );
-    af_kb_ensure_setting(
+    af_kb_ensure_categories_ui_position_setting(
         $gid,
-        'af_kb_categories_ui_position',
         $lang->af_kb_categories_ui_position ?? 'KB categories UI position',
-        $lang->af_kb_categories_ui_position_desc ?? 'Sidebar or top block for categories tree.',
-        'select\nsidebar=Sidebar\ntop=Top block',
-        'sidebar',
-        10
+        $lang->af_kb_categories_ui_position_desc ?? 'Sidebar or top block for categories tree.'
     );
 
     af_kb_migrate_legacy_categories_ui_setting();
@@ -584,14 +622,10 @@ function af_knowledgebase_activate(): bool
         $lang->af_knowledgebase_group_desc ?? 'Settings for Knowledge Base addon.'
     );
 
-    af_kb_ensure_setting(
+    af_kb_ensure_categories_ui_position_setting(
         $gid,
-        'af_kb_categories_ui_position',
         $lang->af_kb_categories_ui_position ?? 'KB categories UI position',
-        $lang->af_kb_categories_ui_position_desc ?? 'Sidebar or top block for categories tree.',
-        'select\nsidebar=Sidebar\ntop=Top block',
-        'sidebar',
-        10
+        $lang->af_kb_categories_ui_position_desc ?? 'Sidebar or top block for categories tree.'
     );
     af_kb_migrate_legacy_categories_ui_setting();
 
