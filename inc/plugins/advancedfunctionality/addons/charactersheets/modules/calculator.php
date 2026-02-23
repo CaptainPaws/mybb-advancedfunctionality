@@ -3,6 +3,89 @@ if (!defined('IN_MYBB')) {
     die('No direct access');
 }
 
+function af_cs_kb_meta_reader(array $entry): array
+{
+    $meta = af_charactersheets_json_decode((string)($entry['meta_json'] ?? ''));
+    if (!is_array($meta)) {
+        $meta = [];
+    }
+
+    $rules = [];
+    if (function_exists('af_kb_extract_rules_from_meta_json')) {
+        $rules = (array)af_kb_extract_rules_from_meta_json((string)($entry['meta_json'] ?? ''));
+    }
+    if (empty($rules) && is_array($meta['rules'] ?? null)) {
+        $rules = (array)$meta['rules'];
+    }
+
+    return [
+        'schema' => (string)($meta['schema'] ?? ''),
+        'meta' => $meta,
+        'rules' => $rules,
+        'rules_schema' => (string)($rules['schema'] ?? ''),
+    ];
+}
+
+function af_cs_rules_engine_init_state(): array
+{
+    return [
+        'resistances' => [],
+        'immunities' => [],
+        'weaknesses' => [],
+        'resources' => [],
+        'active_effects' => [],
+        'perks_traits' => [],
+        'spells' => [],
+        'debug_trace' => [],
+    ];
+}
+
+function af_cs_rules_engine_apply_grants(array $state, array $grants, string $source): array
+{
+    foreach ($grants as $grant) {
+        if (!is_array($grant)) {
+            continue;
+        }
+
+        $op = (string)($grant['op'] ?? $grant['type'] ?? '');
+        if (in_array($op, ['resistance', 'resistances'], true)) {
+            $key = trim((string)($grant['key'] ?? $grant['damage_type'] ?? $grant['value'] ?? ''));
+            if ($key !== '') {
+                $state['resistances'][$key] = ($state['resistances'][$key] ?? 0) + (float)($grant['amount'] ?? $grant['rank'] ?? 0);
+            }
+        } elseif (in_array($op, ['immunity', 'immunities'], true)) {
+            $key = trim((string)($grant['key'] ?? $grant['damage_type'] ?? $grant['value'] ?? ''));
+            if ($key !== '') {
+                $state['immunities'][$key] = true;
+            }
+        } elseif (in_array($op, ['weakness', 'weaknesses'], true)) {
+            $key = trim((string)($grant['key'] ?? $grant['damage_type'] ?? $grant['value'] ?? ''));
+            if ($key !== '') {
+                $state['weaknesses'][$key] = ($state['weaknesses'][$key] ?? 0) + (float)($grant['amount'] ?? $grant['rank'] ?? 0);
+            }
+        } elseif ($op === 'resource') {
+            $resource_key = trim((string)($grant['key'] ?? ''));
+            if ($resource_key !== '') {
+                $mode = (string)($grant['mode'] ?? 'add');
+                $value = (float)($grant['value'] ?? 0);
+                if ($mode === 'set') {
+                    $state['resources'][$resource_key] = $value;
+                } else {
+                    $state['resources'][$resource_key] = ($state['resources'][$resource_key] ?? 0) + $value;
+                }
+            }
+        }
+
+        $state['debug_trace'][] = [
+            'source' => $source,
+            'kind' => 'grant',
+            'payload' => $grant,
+        ];
+    }
+
+    return $state;
+}
+
 function af_charactersheets_normalize_bonus_items(string $source, string $key): array
 {
     $resolved = af_charactersheets_kb_resolve_entry($source, $key);
@@ -14,6 +97,9 @@ function af_charactersheets_normalize_bonus_items(string $source, string $key): 
     $attributes = af_charactersheets_default_attributes();
 
     $data = (array)($resolved['data'] ?? []);
+    $entry = (array)($resolved['entry'] ?? []);
+    $meta_reader = af_cs_kb_meta_reader($entry);
+    $raw_rules = (array)($meta_reader['rules'] ?? []);
     $sets = [];
     if (!empty($data['bonuses']) && is_array($data['bonuses'])) {
         $sets[] = $data['bonuses'];
@@ -22,8 +108,23 @@ function af_charactersheets_normalize_bonus_items(string $source, string $key): 
         $sets[] = $data['modifiers'];
     }
     $items = array_merge($items, af_charactersheets_rules_to_bonus_items($data, $source, $attributes));
+    $items = array_merge($items, af_charactersheets_rules_to_bonus_items($raw_rules, $source, $attributes));
     if (!empty($data['rules']) && is_array($data['rules'])) {
         $items = array_merge($items, af_charactersheets_rules_to_bonus_items($data['rules'], $source, $attributes));
+    }
+    if (!empty($raw_rules['cyberware']) && is_array($raw_rules['cyberware'])) {
+        $cyberware = (array)$raw_rules['cyberware'];
+        foreach (['modifiers', 'effects', 'grants'] as $bucket) {
+            if (!is_array($cyberware[$bucket] ?? null)) {
+                continue;
+            }
+            $items = array_merge($items, af_charactersheets_rules_to_bonus_items([
+                'schema' => 'af_kb.rules.v1',
+                'grants' => $bucket === 'grants' ? $cyberware[$bucket] : [],
+                'modifiers' => $bucket === 'modifiers' ? $cyberware[$bucket] : [],
+                'effects' => $bucket === 'effects' ? $cyberware[$bucket] : [],
+            ], $source, $attributes));
+        }
     }
     foreach (['stats', 'attributes'] as $dataKey) {
         if (!empty($data[$dataKey]) && is_array($data[$dataKey])) {
@@ -89,11 +190,6 @@ function af_charactersheets_rules_to_bonus_items(array $rules, string $source, a
         return [];
     }
 
-    $schema = (string)($rules['schema'] ?? '');
-    if ($schema !== '' && $schema !== 'af_kb.rules.v1') {
-        return [];
-    }
-
     $items = [];
     $fixed = $rules['fixed_bonuses'] ?? [];
     if (is_array($fixed)) {
@@ -112,6 +208,45 @@ function af_charactersheets_rules_to_bonus_items(array $rules, string $source, a
                     ];
                 }
             }
+        }
+
+        foreach (['hp' => 'hp_bonus', 'armor' => 'armor_bonus', 'speed' => 'speed_bonus', 'damage' => 'weapon_bonus'] as $key => $type) {
+            if (isset($fixed[$key]) && (float)$fixed[$key] !== 0.0) {
+                $items[] = [
+                    'source' => $source,
+                    'type' => $type,
+                    'target' => $key,
+                    'value' => (float)$fixed[$key],
+                    'requires_choice' => false,
+                ];
+            }
+        }
+    }
+
+    foreach (['modifiers', 'effects', 'grants'] as $bucket) {
+        foreach ((array)($rules[$bucket] ?? []) as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $type = (string)($item['type'] ?? $item['op'] ?? '');
+            $target = (string)($item['target'] ?? $item['stat'] ?? $item['attribute'] ?? $item['skill'] ?? $item['key'] ?? '');
+            $value = (float)($item['value'] ?? $item['amount'] ?? 0);
+            if ($type === 'stat' && $target !== '' && array_key_exists($target, $attributes)) {
+                $type = 'attribute_bonus';
+            }
+            if ($type === 'resource' && $target !== '') {
+                $type = $target . '_bonus';
+            }
+            if ($type === '') {
+                continue;
+            }
+            $items[] = [
+                'source' => $source,
+                'type' => $type,
+                'target' => $target !== '' ? $target : null,
+                'value' => $value,
+                'requires_choice' => false,
+            ];
         }
     }
 
@@ -399,6 +534,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $bonus_shield = 0;
     $bonus_weapon = 0;
     $bonus_ac = 0;
+    $bonus_speed = 0;
 
     $kb_sources = cs_get_sheet_kb_sources($sheet);
 
@@ -529,6 +665,11 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             $bonus_ac += (float)$value;
             continue;
         }
+
+        if ($type === 'speed_bonus') {
+            $bonus_speed += (float)$value;
+            continue;
+        }
     }
 
     $kb_context = cs_resolve_character_kb_context((int)($sheet['id'] ?? 0));
@@ -538,6 +679,21 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     }
 
     $rules_aggregate = (array)($kb_context['aggregate'] ?? af_cs_aggregate_rules(array_values((array)($kb_context['sources'] ?? []))));
+    $rules_engine_state = af_cs_rules_engine_init_state();
+    foreach (['race', 'class', 'theme'] as $src) {
+        $source_rules = (array)($source_rules_map[$src] ?? []);
+        $rules_engine_state = af_cs_rules_engine_apply_grants($rules_engine_state, (array)($source_rules['grants'] ?? []), $src);
+        foreach ((array)($source_rules['traits'] ?? []) as $trait) {
+            if (!is_array($trait)) {
+                continue;
+            }
+            $traitName = trim((string)($trait['name'] ?? $trait['title'] ?? $trait['id'] ?? ''));
+            if ($traitName !== '') {
+                $rules_engine_state['perks_traits'][] = ['source' => $src, 'name' => $traitName, 'payload' => $trait];
+            }
+            $rules_engine_state = af_cs_rules_engine_apply_grants($rules_engine_state, (array)($trait['grants'] ?? []), $src . '.trait');
+        }
+    }
     $skill_pick_choices = af_charactersheets_collect_skill_pick_choices($kb_context, $build);
     $skill_choice_grant_ranks = [];
     $skill_choice_rank_maxes = [];
@@ -974,7 +1130,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $hp_base_total = array_sum($hp_base_breakdown);
     $hp_fixed_total = array_sum($hp_fixed_breakdown);
     $hp_con = (float)$con_final;
-    $race_speed = (int)($source_rules_map['race']['speed'] ?? 0);
+    $race_speed = (int)($source_rules_map['race']['speed'] ?? 0) + (int)$bonus_speed;
     $damage_bonus_total = $weapon_bonus + (int)floor((float)($final['str'] ?? 0));
 
     $augmentation_slots = (array)($build['augmentations']['slots'] ?? []);
@@ -997,6 +1153,19 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
 
     $hp_total = (int)floor($hp_base_total + $hp_fixed_total + $hp_con);
     $humanity_total = (int)floor($humanity_base - $humanity_penalty);
+
+    $character_computed_state = [
+        'base_stats' => array_fill_keys(array_keys($attributes_base), (float)$auto_stat_bonus),
+        'derived_stats' => ['hp_total' => $hp_total, 'ac_total' => $ac_total, 'speed_total' => $race_speed],
+        'resistances' => (array)($rules_engine_state['resistances'] ?? []),
+        'immunities' => array_keys(array_filter((array)($rules_engine_state['immunities'] ?? []))),
+        'weaknesses' => (array)($rules_engine_state['weaknesses'] ?? []),
+        'skill_bonuses' => $bonus_skill_map,
+        'perks_traits' => (array)($rules_engine_state['perks_traits'] ?? []),
+        'resources' => (array)($rules_engine_state['resources'] ?? []) + ['humanity' => $humanity_total],
+        'active_effects' => (array)($rules_engine_state['active_effects'] ?? []),
+        'debug_trace' => (array)($rules_engine_state['debug_trace'] ?? []),
+    ];
 
     return [
         'allocated' => $attributes_allocated,
@@ -1037,6 +1206,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         'bonus_attr_points' => $bonus_attr_points,
         'bonus_skill_points' => $bonus_skill_points,
         'bonus_sources' => $bonus_source_labels,
+        'character_computed_state' => $character_computed_state,
         'mechanics' => [
             'armor_bonus' => $armor_from_equipped,
             'shield_bonus' => $shield_bonus,
@@ -1075,6 +1245,10 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'remaining' => $knowledge_remaining,
         ],
         'debug' => $kb_debug + [
+            'rules_trace' => (array)($character_computed_state['debug_trace'] ?? []),
+            'resistances' => (array)($character_computed_state['resistances'] ?? []),
+            'immunities' => (array)($character_computed_state['immunities'] ?? []),
+            'weaknesses' => (array)($character_computed_state['weaknesses'] ?? []),
             'hp_base_total' => (int)($rules_aggregate['hp_base_total'] ?? 0),
             'fixed_hp_total' => (int)($rules_aggregate['fixed_hp_total'] ?? 0),
             'speed_total' => (int)($rules_aggregate['speed_total'] ?? 0),
