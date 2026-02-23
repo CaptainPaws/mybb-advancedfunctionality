@@ -14,12 +14,10 @@
         <div class="af-kb-type-desc">{$kb_type_description}</div>
     </div>
 </div>
-<div class="af-kb-cats-layout {$kb_categories_wrapper_class}">
-    <aside class="af-kb-cats-panel">{$kb_categories_tree}</aside>
-    <div class="af-kb-list-main">
-        <div class="af-kb-entries{$kb_entries_class}"{$kb_entries_style}>
-            {$kb_entries_rows}
-        </div>
+{$kb_categories_panel}
+<div class="af-kb-list-main">
+    <div class="af-kb-entries{$kb_entries_class}"{$kb_entries_style}>
+        {$kb_entries_rows}
     </div>
 </div>
 <div class="af-kb-pagination">{$kb_pagination}</div>

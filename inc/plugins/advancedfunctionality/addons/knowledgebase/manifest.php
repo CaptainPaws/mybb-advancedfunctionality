@@ -79,6 +79,8 @@ return [
                 'af_kb_atf_map_desc'                  => 'JSON соответствий поля ATF → тип KB.',
                 'af_kb_nav_link_enabled'              => 'Ссылка KB в навигации',
                 'af_kb_nav_link_enabled_desc'         => 'Показывать ссылку базы знаний в верхнем меню.',
+                'af_kb_categories_ui_position'        => 'KB categories UI position',
+                'af_kb_categories_ui_position_desc'   => 'Sidebar or top block for categories tree.',
             ],
         ],
         'english' => [
@@ -147,6 +149,8 @@ return [
                 'af_kb_atf_map_desc'                  => 'JSON mapping of ATF field → KB type.',
                 'af_kb_nav_link_enabled'              => 'KB nav link',
                 'af_kb_nav_link_enabled_desc'         => 'Show Knowledge Base link in the top navigation.',
+                'af_kb_categories_ui_position'        => 'KB categories UI position',
+                'af_kb_categories_ui_position_desc'   => 'Sidebar or top block for categories tree.',
             ],
         ],
     ],

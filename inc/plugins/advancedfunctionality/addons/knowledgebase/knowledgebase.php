@@ -248,6 +248,18 @@ function af_kb_ensure_setting(int $gid, string $name, string $title, string $des
     }
 }
 
+function af_kb_migrate_legacy_categories_ui_setting(): void
+{
+    global $db;
+
+    $legacyUi = $db->fetch_array($db->simple_select('settings', 'sid,value', "name='af_kb_categories_ui'", ['limit' => 1]));
+    if (!empty($legacyUi['sid'])) {
+        $legacyValue = ((string)($legacyUi['value'] ?? 'sidebar') === 'top') ? 'top' : 'sidebar';
+        $db->update_query('settings', ['value' => $db->escape_string($legacyValue)], "name='af_kb_categories_ui_position'");
+        $db->delete_query('settings', "name='af_kb_categories_ui'");
+    }
+}
+
 /* -------------------- INSTALL / UNINSTALL -------------------- */
 function af_knowledgebase_install(): bool
 {
@@ -511,13 +523,15 @@ SQL;
     );
     af_kb_ensure_setting(
         $gid,
-        'af_kb_categories_ui',
-        'KB categories UI position',
-        'Sidebar or top block for categories tree.',
-        'select\nsidebar=Sidebar\ntop=Top',
+        'af_kb_categories_ui_position',
+        $lang->af_kb_categories_ui_position ?? 'KB categories UI position',
+        $lang->af_kb_categories_ui_position_desc ?? 'Sidebar or top block for categories tree.',
+        'select\nsidebar=Sidebar\ntop=Top block',
         'sidebar',
         10
     );
+
+    af_kb_migrate_legacy_categories_ui_setting();
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -544,7 +558,7 @@ function af_knowledgebase_uninstall(): bool
     $db->drop_table('af_kb_relations', true);
     $db->drop_table('af_kb_log', true);
 
-    $db->delete_query('settings', "name IN ('af_knowledgebase_enabled','af_kb_public_catalog','af_kb_nav_link_enabled','af_kb_editor_groups','af_kb_types_manage_groups','af_kb_atf_map','af_kb_manage_groups','af_kb_categories_enabled','af_kb_categories_require_primary','af_kb_categories_ui')");
+    $db->delete_query('settings', "name IN ('af_knowledgebase_enabled','af_kb_public_catalog','af_kb_nav_link_enabled','af_kb_editor_groups','af_kb_types_manage_groups','af_kb_atf_map','af_kb_manage_groups','af_kb_categories_enabled','af_kb_categories_require_primary','af_kb_categories_ui_position','af_kb_categories_ui')");
     $db->delete_query('settinggroups', "name='af_knowledgebase'");
     $db->delete_query('templates', "title LIKE 'knowledgebase_%'");
 
@@ -560,6 +574,34 @@ function af_knowledgebase_uninstall(): bool
 
 function af_knowledgebase_activate(): bool
 {
+    global $lang;
+
+    af_knowledgebase_load_lang(true);
+
+    $gid = af_kb_ensure_settinggroup(
+        'af_knowledgebase',
+        $lang->af_knowledgebase_group ?? 'AF: Knowledge Base',
+        $lang->af_knowledgebase_group_desc ?? 'Settings for Knowledge Base addon.'
+    );
+
+    af_kb_ensure_setting(
+        $gid,
+        'af_kb_categories_ui_position',
+        $lang->af_kb_categories_ui_position ?? 'KB categories UI position',
+        $lang->af_kb_categories_ui_position_desc ?? 'Sidebar or top block for categories tree.',
+        'select\nsidebar=Sidebar\ntop=Top block',
+        'sidebar',
+        10
+    );
+    af_kb_migrate_legacy_categories_ui_setting();
+
+    if (function_exists('rebuild_settings')) {
+        rebuild_settings();
+    }
+    if (function_exists('af_rebuild_and_reload_settings')) {
+        af_rebuild_and_reload_settings();
+    }
+
     af_kb_templates_install_or_update();
     af_kb_ensure_schema();
     af_kb_seed_defaults();
@@ -1415,6 +1457,11 @@ function af_kb_categories_enabled(): bool
     return (int)af_kb_get_setting('af_kb_categories_enabled', 1) === 1;
 }
 
+function af_kb_categories_require_primary(): bool
+{
+    return (int)af_kb_get_setting('af_kb_categories_require_primary', 0) === 1;
+}
+
 function af_kb_cat_validate_key($key): bool
 {
     $key = trim((string)$key);
@@ -1648,6 +1695,7 @@ function af_kb_entry_set_categories(int $entry_id, array $cat_ids, int $primary_
             $valid[] = $catId;
         }
     }
+
     $valid = array_values(array_unique($valid));
     $postedCatIds = array_values(array_unique($postedCatIds));
 
@@ -1655,40 +1703,30 @@ function af_kb_entry_set_categories(int $entry_id, array $cat_ids, int $primary_
         return ['ok' => false, 'error' => 'One or more categories do not belong to entry type'];
     }
 
-    if ($primary_cat_id > 0 && !in_array($primary_cat_id, $valid, true)) {
-        $primary_cat_id = 0;
-    }
-
-    $existing = [];
-    $qExisting = $db->simple_select('af_kb_entry_categories', 'cat_id', 'entry_id=' . $entry_id);
-    while ($row = $db->fetch_array($qExisting)) {
-        $existing[] = (int)$row['cat_id'];
-    }
-
-    $toDelete = array_values(array_diff($existing, $valid));
-    $toInsert = array_values(array_diff($valid, $existing));
-
-    if (method_exists($db, 'write_query')) {
-        $db->write_query('START TRANSACTION');
-    }
-
-    if (!empty($toDelete)) {
-        $db->delete_query('af_kb_entry_categories', 'entry_id=' . $entry_id . ' AND cat_id IN (' . implode(',', array_map('intval', $toDelete)) . ')');
-    }
-
-    foreach ($toInsert as $catId) {
-        $sql = 'INSERT IGNORE INTO ' . TABLE_PREFIX . 'af_kb_entry_categories (entry_id, cat_id, is_primary) VALUES ('
-            . $entry_id . ', ' . (int)$catId . ', 0)';
-        $db->write_query($sql);
-    }
-
-    $db->update_query('af_kb_entry_categories', ['is_primary' => 0], 'entry_id=' . $entry_id);
     if ($primary_cat_id > 0) {
-        $db->update_query('af_kb_entry_categories', ['is_primary' => 1], 'entry_id=' . $entry_id . ' AND cat_id=' . $primary_cat_id);
+        $primaryRow = $db->fetch_array($db->simple_select('af_kb_categories', 'cat_id,type', 'cat_id=' . $primary_cat_id, ['limit' => 1]));
+        if (!$primaryRow || (string)$primaryRow['type'] !== $type) {
+            return ['ok' => false, 'error' => 'Primary category does not belong to entry type'];
+        }
+        if (!in_array($primary_cat_id, $valid, true)) {
+            $valid[] = $primary_cat_id;
+        }
     }
 
-    if (method_exists($db, 'write_query')) {
-        $db->write_query('COMMIT');
+    if (af_kb_categories_require_primary() && $primary_cat_id <= 0) {
+        return ['ok' => false, 'error' => 'Primary category is required'];
+    }
+
+    $valid = array_values(array_unique(array_map('intval', $valid)));
+
+    $db->delete_query('af_kb_entry_categories', 'entry_id=' . $entry_id);
+
+    foreach ($valid as $catId) {
+        $db->insert_query('af_kb_entry_categories', [
+            'entry_id' => $entry_id,
+            'cat_id' => (int)$catId,
+            'is_primary' => ($primary_cat_id > 0 && (int)$catId === $primary_cat_id) ? 1 : 0,
+        ]);
     }
 
     return ['ok' => true, 'cat_ids' => $valid, 'primary_cat_id' => $primary_cat_id];
@@ -4493,7 +4531,11 @@ function af_kb_handle_view(): void
         $catFilterIds = [];
         $catTreeHtml = '';
         if (af_kb_categories_enabled()) {
-            $catTreeHtml = '<ul class="af-kb-cat-tree">' . af_kb_render_category_tree_html(af_kb_cat_get_tree($type, !af_kb_can_edit()), $type, $catKey) . '</ul>';
+            $catTreeNodes = af_kb_cat_get_tree($type, !af_kb_can_edit());
+            $catTreeBody = af_kb_render_category_tree_html($catTreeNodes, $type, $catKey);
+            if ($catTreeBody !== '') {
+                $catTreeHtml = '<ul class="af-kb-cat-tree">' . $catTreeBody . '</ul>';
+            }
             if ($catKey !== '') {
                 $cat = $db->fetch_array($db->simple_select('af_kb_categories', '*', "type='" . $escapedType . "' AND `key`='" . $db->escape_string($catKey) . "'", ['limit' => 1]));
                 if ($cat) {
@@ -4579,8 +4621,12 @@ function af_kb_handle_view(): void
         $kb_entries_class = '';
         $kb_categories_tree = $catTreeHtml ?? '';
         $kb_categories_enabled = af_kb_categories_enabled() ? '1' : '0';
-        $kb_categories_ui_position = (string)af_kb_get_setting('af_kb_categories_ui', 'sidebar') === 'top' ? 'top' : 'sidebar';
+        $uiPositionRaw = (string)af_kb_get_setting('af_kb_categories_ui_position', af_kb_get_setting('af_kb_categories_ui', 'sidebar'));
+        $kb_categories_ui_position = $uiPositionRaw === 'top' ? 'top' : 'sidebar';
         $kb_categories_wrapper_class = 'af-kb-cats--' . $kb_categories_ui_position;
+        $kb_categories_panel = $kb_categories_tree !== ''
+            ? '<div class="af-kb-cats-layout ' . $kb_categories_wrapper_class . '"><aside class="af-kb-cats-panel">' . $kb_categories_tree . '</aside></div>'
+            : '';
         $paginationUrl = 'misc.php?action=kb&type=' . urlencode($type);
         if ($query !== '') {
             $paginationUrl .= '&q=' . urlencode($query);
@@ -5060,6 +5106,24 @@ function af_kb_handle_edit(): void
             }
         }
 
+        $catIds = [];
+        $primaryCatId = 0;
+        if (af_kb_categories_enabled()) {
+            $catIdsInput = $mybb->get_input('cat_ids', MyBB::INPUT_ARRAY);
+            if (is_array($catIdsInput)) {
+                $catIds = array_values(array_unique(array_filter(array_map('intval', $catIdsInput), static function (int $value): bool {
+                    return $value > 0;
+                })));
+            }
+            $primaryCatId = (int)$mybb->get_input('primary_cat_id', MyBB::INPUT_INT);
+            if (af_kb_categories_require_primary() && $primaryCatId <= 0) {
+                $errors[] = 'Primary category is required.';
+            }
+            if ($primaryCatId > 0 && !in_array($primaryCatId, $catIds, true)) {
+                $catIds[] = $primaryCatId;
+            }
+        }
+
         if (!$errors) {
             $entryDataJsonNormalized = af_kb_validate_rules_json_by_type($type, $entryDataJsonNormalized, $errors);
         }
@@ -5132,91 +5196,115 @@ function af_kb_handle_edit(): void
                 }
 
                 $data = [
-                'type'       => $db->escape_string($type),
-                'key'        => $db->escape_string($key),
-                'title_ru'   => $db->escape_string((string)$mybb->get_input('title_ru')),
-                'title_en'   => $db->escape_string((string)$mybb->get_input('title_en')),
-                'short_ru'   => $db->escape_string((string)$mybb->get_input('short_ru')),
-                'short_en'   => $db->escape_string((string)$mybb->get_input('short_en')),
-                'body_ru'    => $db->escape_string((string)$mybb->get_input('body_ru')),
-                'body_en'    => $db->escape_string((string)$mybb->get_input('body_en')),
-                'tech_ru'    => $db->escape_string((string)$mybb->get_input('tech_ru')),
-                'tech_en'    => $db->escape_string((string)$mybb->get_input('tech_en')),
-                'meta_json'  => $db->escape_string(af_kb_normalize_json($metaJsonNormalized)),
-                'data_json'  => $db->escape_string($entryDataJsonNormalized),
-                'icon_class' => $db->escape_string($entryIconClass),
-                'icon_url'   => $db->escape_string($entryIconUrl),
-                'banner_url' => $db->escape_string($entryBannerUrl),
-                'bg_url'     => $db->escape_string($entryBgUrl),
-                'active'     => (int)$mybb->get_input('active', MyBB::INPUT_INT) ? 1 : 0,
-                'sortorder'  => (int)$mybb->get_input('sortorder', MyBB::INPUT_INT),
-                'updated_at' => TIME_NOW,
-                'item_kind'  => $db->escape_string($itemKind ?? ''),
-            ];
+                    'type'       => $db->escape_string($type),
+                    'key'        => $db->escape_string($key),
+                    'title_ru'   => $db->escape_string((string)$mybb->get_input('title_ru')),
+                    'title_en'   => $db->escape_string((string)$mybb->get_input('title_en')),
+                    'short_ru'   => $db->escape_string((string)$mybb->get_input('short_ru')),
+                    'short_en'   => $db->escape_string((string)$mybb->get_input('short_en')),
+                    'body_ru'    => $db->escape_string((string)$mybb->get_input('body_ru')),
+                    'body_en'    => $db->escape_string((string)$mybb->get_input('body_en')),
+                    'tech_ru'    => $db->escape_string((string)$mybb->get_input('tech_ru')),
+                    'tech_en'    => $db->escape_string((string)$mybb->get_input('tech_en')),
+                    'meta_json'  => $db->escape_string(af_kb_normalize_json($metaJsonNormalized)),
+                    'data_json'  => $db->escape_string($entryDataJsonNormalized),
+                    'icon_class' => $db->escape_string($entryIconClass),
+                    'icon_url'   => $db->escape_string($entryIconUrl),
+                    'banner_url' => $db->escape_string($entryBannerUrl),
+                    'bg_url'     => $db->escape_string($entryBgUrl),
+                    'active'     => (int)$mybb->get_input('active', MyBB::INPUT_INT) ? 1 : 0,
+                    'sortorder'  => (int)$mybb->get_input('sortorder', MyBB::INPUT_INT),
+                    'updated_at' => TIME_NOW,
+                    'item_kind'  => $db->escape_string($itemKind ?? ''),
+                ];
 
-                if ($entry) {
-                    $db->update_query('af_kb_entries', $data, 'id='.(int)$entry['id']);
-                    $entryId = (int)$entry['id'];
-                    $action = 'update';
-                } else {
-                    $entryId = (int)$db->insert_query('af_kb_entries', $data);
-                    $action = 'create';
+                $txStarted = false;
+                if (method_exists($db, 'write_query')) {
+                    $db->write_query('START TRANSACTION');
+                    $txStarted = true;
                 }
 
-                $db->delete_query('af_kb_blocks', 'entry_id=' . $entryId);
-                foreach ($parsedBlocks as $block) {
+                try {
+                    if ($entry) {
+                        $db->update_query('af_kb_entries', $data, 'id=' . (int)$entry['id']);
+                        $entryId = (int)$entry['id'];
+                        $action = 'update';
+                    } else {
+                        $entryId = (int)$db->insert_query('af_kb_entries', $data);
+                        $action = 'create';
+                    }
+
+                    $db->delete_query('af_kb_blocks', 'entry_id=' . $entryId);
+                    foreach ($parsedBlocks as $block) {
+                        $db->insert_query('af_kb_blocks', [
+                            'entry_id'   => $entryId,
+                            'block_key'  => $db->escape_string($block['block_key']),
+                            'title_ru'   => $db->escape_string($block['title_ru']),
+                            'title_en'   => $db->escape_string($block['title_en']),
+                            'content_ru' => $db->escape_string($block['content_ru']),
+                            'content_en' => $db->escape_string($block['content_en']),
+                            'data_json'  => $db->escape_string($block['data_json']),
+                            'icon_class' => $db->escape_string($block['icon_class']),
+                            'icon_url'   => $db->escape_string($block['icon_url']),
+                            'active'     => (int)$block['active'],
+                            'sortorder'  => (int)$block['sortorder'],
+                        ]);
+                    }
+
                     $db->insert_query('af_kb_blocks', [
-                    'entry_id'   => $entryId,
-                    'block_key'  => $db->escape_string($block['block_key']),
-                    'title_ru'   => $db->escape_string($block['title_ru']),
-                    'title_en'   => $db->escape_string($block['title_en']),
-                    'content_ru' => $db->escape_string($block['content_ru']),
-                    'content_en' => $db->escape_string($block['content_en']),
-                    'data_json'  => $db->escape_string($block['data_json']),
-                    'icon_class' => $db->escape_string($block['icon_class']),
-                    'icon_url'   => $db->escape_string($block['icon_url']),
-                    'active'     => (int)$block['active'],
-                    'sortorder'  => (int)$block['sortorder'],
+                        'entry_id'   => $entryId,
+                        'block_key'  => 'data',
+                        'title_ru'   => '',
+                        'title_en'   => '',
+                        'content_ru' => '',
+                        'content_en' => '',
+                        'data_json'  => $db->escape_string($entryDataJsonNormalized),
+                        'icon_class' => '',
+                        'icon_url'   => '',
+                        'active'     => 1,
+                        'sortorder'  => 9999,
                     ]);
-                }
 
-                $db->insert_query('af_kb_blocks', [
-                'entry_id'   => $entryId,
-                'block_key'  => 'data',
-                'title_ru'   => '',
-                'title_en'   => '',
-                'content_ru' => '',
-                'content_en' => '',
-                'data_json'  => $db->escape_string($entryDataJsonNormalized),
-                'icon_class' => '',
-                'icon_url'   => '',
-                'active'     => 1,
-                'sortorder'  => 9999,
-                ]);
+                    $db->delete_query('af_kb_relations', "from_type='" . $db->escape_string($type) . "' AND from_key='" . $db->escape_string($key) . "'");
+                    foreach ($parsedRelations as $rel) {
+                        $db->insert_query('af_kb_relations', [
+                            'from_type' => $db->escape_string($type),
+                            'from_key'  => $db->escape_string($key),
+                            'rel_type'  => $db->escape_string($rel['rel_type']),
+                            'to_type'   => $db->escape_string($rel['to_type']),
+                            'to_key'    => $db->escape_string($rel['to_key']),
+                            'meta_json' => $db->escape_string($rel['meta_json']),
+                            'sortorder' => (int)$rel['sortorder'],
+                        ]);
+                    }
 
-                $db->delete_query('af_kb_relations', "from_type='".$db->escape_string($type)."' AND from_key='".$db->escape_string($key)."'");
-                foreach ($parsedRelations as $rel) {
-                    $db->insert_query('af_kb_relations', [
-                    'from_type' => $db->escape_string($type),
-                    'from_key'  => $db->escape_string($key),
-                    'rel_type'  => $db->escape_string($rel['rel_type']),
-                    'to_type'   => $db->escape_string($rel['to_type']),
-                    'to_key'    => $db->escape_string($rel['to_key']),
-                    'meta_json' => $db->escape_string($rel['meta_json']),
-                    'sortorder' => (int)$rel['sortorder'],
+                    if (af_kb_categories_enabled()) {
+                        $saveCategoriesResult = af_kb_entry_set_categories($entryId, $catIds, $primaryCatId);
+                        if (empty($saveCategoriesResult['ok'])) {
+                            throw new RuntimeException((string)($saveCategoriesResult['error'] ?? 'Unable to save categories'));
+                        }
+                    }
+
+                    $db->insert_query('af_kb_log', [
+                        'uid'      => (int)$mybb->user['uid'],
+                        'action'   => $db->escape_string($action),
+                        'type'     => $db->escape_string($type),
+                        'key'      => $db->escape_string($key),
+                        'diff_json'=> $db->escape_string('{}'),
+                        'dateline' => TIME_NOW,
                     ]);
+
+                    if ($txStarted) {
+                        $db->write_query('COMMIT');
+                    }
+
+                    redirect('misc.php?action=kb&type=' . urlencode($type) . '&key=' . urlencode($key), 'Saved');
+                } catch (Throwable $e) {
+                    if ($txStarted) {
+                        $db->write_query('ROLLBACK');
+                    }
+                    $errors[] = $e->getMessage();
                 }
-
-                $db->insert_query('af_kb_log', [
-                'uid'      => (int)$mybb->user['uid'],
-                'action'   => $db->escape_string($action),
-                'type'     => $db->escape_string($type),
-                'key'      => $db->escape_string($key),
-                'diff_json'=> $db->escape_string('{}'),
-                'dateline' => TIME_NOW,
-                ]);
-
-                redirect('misc.php?action=kb&type='.urlencode($type).'&key='.urlencode($key), 'Saved');
             }
         }
     }
@@ -5381,11 +5469,24 @@ function af_kb_handle_edit(): void
     $kb_item_kinds_json = htmlspecialchars_uni(json_encode($itemKinds, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
     $kb_categories_editor = '';
-    if (af_kb_categories_enabled() && !empty($entry['id'])) {
+    if (af_kb_categories_enabled() && !empty($entry['type'])) {
         $flatCats = af_kb_cat_get_flat((string)$entry['type'], false);
-        $links = af_kb_entry_get_categories((int)$entry['id']);
+        $links = !empty($entry['id']) ? af_kb_entry_get_categories((int)$entry['id']) : ['cat_ids' => [], 'primary' => 0];
         $selected = array_map('intval', (array)($links['cat_ids'] ?? []));
+        if ($mybb->request_method === 'post') {
+            $postedCatIds = $mybb->get_input('cat_ids', MyBB::INPUT_ARRAY);
+            if (is_array($postedCatIds)) {
+                $selected = array_values(array_unique(array_filter(array_map('intval', $postedCatIds), static function (int $value): bool {
+                    return $value > 0;
+                })));
+            }
+        }
+
         $primaryCat = (int)($links['primary'] ?? 0);
+        if ($mybb->request_method === 'post') {
+            $primaryCat = (int)$mybb->get_input('primary_cat_id', MyBB::INPUT_INT);
+        }
+
         $itemsHtml = '';
         $primaryOptions = '<option value="0">—</option>';
         foreach ($flatCats as $cat) {
@@ -5395,23 +5496,16 @@ function af_kb_handle_edit(): void
             $itemsHtml .= '<label><input type="checkbox" name="cat_ids[]" value="' . $catId . '"' . $checked . ' /> ' . htmlspecialchars_uni($title) . '</label><br />';
             $primaryOptions .= '<option value="' . $catId . '"' . ($primaryCat === $catId ? ' selected="selected"' : '') . '>' . htmlspecialchars_uni($title) . '</option>';
         }
+
         $kb_categories_editor = '<section><h3>Categories</h3>'
-            . '<form method="post" action="misc.php?action=kb_entry_categories_save" data-af-kb-entry-cats-form="1">'
-            . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '" />'
-            . '<input type="hidden" name="entry_id" value="' . (int)$entry['id'] . '" />'
-            . '<input type="hidden" name="type" value="' . htmlspecialchars_uni((string)$entry['type']) . '" />'
             . '<div>' . $itemsHtml . '</div>'
             . '<label>Primary category</label><select name="primary_cat_id" data-af-kb-primary="1">' . $primaryOptions . '</select>'
-            . '<div><button type="submit" class="af-kb-btn">Save categories</button> <span data-af-kb-entry-cats-status="1" style="margin-left:8px;color:#2b6;display:none;">Сохранено</span></div>'
-            . '</form>'
             . '<script>(function(){'
-            . 'var form=document.querySelector("[data-af-kb-entry-cats-form=\"1\"]");if(!form){return;}'
-            . 'var status=form.querySelector("[data-af-kb-entry-cats-status=\"1\"]");'
-            . 'var primary=form.querySelector("select[name=\"primary_cat_id\"]");'
+            . 'var form=document.querySelector("form.af-kb-form");if(!form){return;}'
+            . 'var primary=form.querySelector("select[name=\"primary_cat_id\"]");if(!primary){return;}'
             . 'function selectedCats(){return Array.prototype.slice.call(form.querySelectorAll("input[name=\"cat_ids[]\"]:checked")).map(function(el){return String(el.value||"0");});}'
-            . 'function syncPrimary(){if(!primary){return;}var selected=selectedCats();Array.prototype.forEach.call(primary.options,function(opt){if(opt.value==="0"){opt.hidden=false;return;}opt.hidden=selected.indexOf(String(opt.value))===-1;});if(primary.value!=="0"&&selected.indexOf(String(primary.value))===-1){primary.value="0";}}'
+            . 'function syncPrimary(){var selected=selectedCats();Array.prototype.forEach.call(primary.options,function(opt){if(opt.value==="0"){opt.hidden=false;return;}opt.hidden=selected.indexOf(String(opt.value))===-1;});if(primary.value!=="0"&&selected.indexOf(String(primary.value))===-1){primary.value="0";}}'
             . 'Array.prototype.forEach.call(form.querySelectorAll("input[name=\"cat_ids[]\"]"),function(cb){cb.addEventListener("change",syncPrimary);});syncPrimary();'
-            . 'form.addEventListener("submit",function(e){e.preventDefault();var data=new FormData(form);fetch(form.action,{method:"POST",body:data,credentials:"same-origin"}).then(function(r){return r.json();}).then(function(payload){if(payload&&payload.ok){if(status){status.style.display="inline";setTimeout(function(){status.style.display="none";},1800);}return;}alert((payload&&payload.error)?payload.error:"Unable to save categories");}).catch(function(){alert("Unable to save categories");});});'
             . '})();</script>'
             . '</section>';
     }
