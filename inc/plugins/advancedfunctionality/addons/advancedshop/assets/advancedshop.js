@@ -511,7 +511,14 @@
         parent_id: (row.querySelector('.af-cat-parent-input') || {}).value || 0,
         enabled: (row.querySelector('.af-cat-enabled-input') || {}).checked ? 1 : 0,
         sortorder: (row.querySelector('.af-cat-sortorder-input') || {}).value || 0
-      }).then(function(r){ setStatus(status, r.ok ? 'Category updated' : (r.error || 'Update failed'), !!r.ok); });
+      }).then(function(r){
+        if(r.ok){
+          setStatus(status, 'Category updated', true);
+          window.location.reload();
+        } else {
+          setStatus(status, r.error || 'Update failed', false);
+        }
+      });
       return;
     }
 
@@ -524,8 +531,12 @@
       var shop5 = wrap4.getAttribute('data-shop') || 'game';
       var status2 = document.getElementById('af-manage-category-status');
       post('misc.php?action=shop_manage_category_delete&shop=' + encodeURIComponent(shop5), {cat_id: row2.getAttribute('data-cat-id')}).then(function(r){
-        if(r.ok){ row2.remove(); setStatus(status2, 'Category deleted', true); }
-        else { setStatus(status2, r.error || 'Delete failed', false); }
+        if(r.ok){
+          setStatus(status2, 'Category deleted', true);
+          window.location.reload();
+        } else {
+          setStatus(status2, r.error || 'Delete failed', false);
+        }
       });
       return;
     }
