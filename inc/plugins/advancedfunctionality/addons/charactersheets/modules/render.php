@@ -1146,8 +1146,10 @@ function af_charactersheets_build_effects_chip_html(array $sheet_view): string
         }
         $chipAttrs = '';
         if ($hint !== '') {
-            $tooltip = $title . "\n" . trim(strip_tags($hint));
-            $chipAttrs = ' title="' . htmlspecialchars_uni($tooltip) . '"';
+            $tooltip = trim(strip_tags($hint));
+            if ($tooltip !== '') {
+                $chipAttrs = ' title="' . htmlspecialchars_uni($tooltip) . '"';
+            }
         }
 
         $chips[] = '<span class="af-cs-chip"' . $chipAttrs . '>' . htmlspecialchars_uni($label) . '</span>';

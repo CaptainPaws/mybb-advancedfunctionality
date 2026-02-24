@@ -44,6 +44,7 @@
 
   var inner = document.createElement('div');
   inner.className = 'af-title-tip__inner';
+  inner.style.whiteSpace = 'pre-line';
 
   tip.appendChild(inner);
   document.addEventListener('DOMContentLoaded', function () {
