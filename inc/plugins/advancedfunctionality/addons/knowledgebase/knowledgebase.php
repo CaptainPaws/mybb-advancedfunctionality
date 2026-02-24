@@ -2351,6 +2351,22 @@ function af_kb_decode_json(string $raw): array
     return $decoded;
 }
 
+
+function af_kb_cleanup_meta_payload(array $meta): array
+{
+    if (array_key_exists('stats', $meta)) {
+        unset($meta['stats']);
+    }
+    if (array_key_exists('bonuses', $meta)) {
+        unset($meta['bonuses']);
+    }
+    if (array_key_exists('links', $meta)) {
+        unset($meta['links']);
+    }
+
+    return $meta;
+}
+
 function af_kb_is_empty_json(string $raw): bool
 {
     $raw = trim($raw);
@@ -5269,6 +5285,7 @@ function af_kb_handle_edit(): void
         if (empty($metaPayload['schema']) || (string)$metaPayload['schema'] === 'af_kb.meta.v1') {
             $metaPayload['schema'] = 'af_kb.meta.v2';
         }
+        $metaPayload = af_kb_cleanup_meta_payload($metaPayload);
 
         $entryRulesRaw = $metaPayload['rules'] ?? null;
         if (!is_array($entryRulesRaw)) {
@@ -5475,6 +5492,7 @@ function af_kb_handle_edit(): void
 
             if (!$errors) {
                 $metaPayload['rules'] = $rulesObject;
+                $metaPayload = af_kb_cleanup_meta_payload($metaPayload);
                 $metaJsonNormalized = json_encode($metaPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                 if ($metaJsonNormalized === false) {
                     $metaJsonNormalized = '{}';

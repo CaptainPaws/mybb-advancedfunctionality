@@ -233,10 +233,7 @@
                 short_en: 'A playable race with distinct traits and culture.',
                 body_en: 'Describe history, physical traits, and social role. Mention affinities, weaknesses, and relations with other races.',
                 meta_json: JSON.stringify({
-                    tags: ['humanoid', 'common'],
-                    stats: { str: 0, dex: 0, int: 0 },
-                    bonuses: [{ type: 'resistance', value: 'poison' }],
-                    links: { wiki: 'https://example.com/wiki/human' }
+                    tags: ['humanoid', 'common']
                 }, null, 2),
                 blocks: [
                     {
@@ -479,19 +476,15 @@
         if (!Array.isArray(meta.tags)) {
             meta.tags = [];
         }
-        if (!meta.links || typeof meta.links !== 'object') {
-            meta.links = {};
-        }
 
         root.innerHTML = [
-            '<div class="af-kb-row"><div><label>Tags (через запятую)</label><input type="text" id="af-kb-meta-tags" /></div><div><label>Wiki link</label><input type="url" id="af-kb-meta-wiki" /></div></div>',
+            '<div class="af-kb-row"><div><label>Tags (через запятую)</label><input type="text" id="af-kb-meta-tags" /></div></div>',
             '<div class="af-kb-row"><div><label>Icon URL</label><input type="url" id="af-kb-meta-icon-url" /></div><div><label>Icon class</label><input type="text" id="af-kb-meta-icon-class" /></div></div>',
             '<div class="af-kb-row"><div><label>Background URL</label><input type="url" id="af-kb-meta-bg-url" /></div><div><label>Background tab URL</label><input type="url" id="af-kb-meta-bg-tab-url" /></div></div>'
         ].join('');
 
         var fields = {
             tags: root.querySelector('#af-kb-meta-tags'),
-            wiki: root.querySelector('#af-kb-meta-wiki'),
             iconUrl: root.querySelector('#af-kb-meta-icon-url'),
             iconClass: root.querySelector('#af-kb-meta-icon-class'),
             bgUrl: root.querySelector('#af-kb-meta-bg-url'),
@@ -499,7 +492,6 @@
         };
 
         fields.tags.value = (meta.tags || []).join(', ');
-        fields.wiki.value = meta.links.wiki || '';
         fields.iconUrl.value = meta.ui.icon_url || '';
         fields.iconClass.value = meta.ui.icon_class || '';
         fields.bgUrl.value = meta.ui.background_url || '';
@@ -507,7 +499,6 @@
 
         function syncMeta() {
             meta.tags = splitCsv(fields.tags.value);
-            meta.links.wiki = fields.wiki.value.trim();
             meta.ui.icon_url = fields.iconUrl.value.trim();
             meta.ui.icon_class = fields.iconClass.value.trim();
             meta.ui.background_url = fields.bgUrl.value.trim();
