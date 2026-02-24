@@ -266,7 +266,10 @@
 
       function responseError(payload, fallback) {
         if (!payload || typeof payload !== 'object') return fallback || 'Ошибка запроса';
-        var raw = payload.errors || payload.error || fallback || 'Ошибка запроса';
+        var raw = payload.errors || payload.error || payload.message || fallback || 'Ошибка запроса';
+        if (raw && typeof raw === 'object') {
+          raw = raw.message || raw.code || fallback || 'Ошибка запроса';
+        }
         if (Array.isArray(raw)) return raw.join(', ');
         return String(raw);
       }
@@ -318,24 +321,34 @@
         }).then(function (resp) {
           return resp.text().then(function (rawText) {
             var payloadObj = null;
+            var normalizedText = String(rawText || '').replace(/^\uFEFF/, '').trim();
             try {
-              payloadObj = JSON.parse(rawText);
+              payloadObj = JSON.parse(normalizedText);
             } catch (parseError) {
-              var sample = String(rawText || '').slice(0, 300);
-              console.error('[AF CS] Invalid JSON response sample:', sample);
+              var sample = String(rawText || '').slice(0, 600);
+              console.error('[AF CS] JSON parse failed for action:', action, 'status:', resp.status, 'content-type:', resp.headers.get('content-type'), 'raw:', sample);
               throw new Error('Некорректный ответ сервера');
             }
 
-            if (!resp.ok) {
-              throw new Error(responseError(payloadObj, 'HTTP ' + resp.status));
-            }
-            return payloadObj;
+            return handleAjaxResponse(resp, payloadObj);
           });
         }).catch(function (error) {
           showInlineError(error && error.message ? error.message : 'Ошибка запроса');
           console.error('[AF CS] Request failed:', error);
           throw error;
         });
+      }
+
+      function handleAjaxResponse(resp, payloadObj) {
+        if (!payloadObj || typeof payloadObj !== 'object') {
+          throw new Error('Некорректный ответ сервера');
+        }
+
+        if (!resp.ok || isErrorPayload(payloadObj)) {
+          throw new Error(responseError(payloadObj, 'HTTP ' + resp.status));
+        }
+
+        return payloadObj;
       }
 
       function escapeHtml(s) {
