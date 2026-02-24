@@ -39,12 +39,135 @@ function af_advancededitor_assets_rel(): string
 
 function af_advancededitor_bbcodes_rel(): string
 {
-    return af_advancededitor_assets_rel() . 'bbcodes/';
+    $base = af_advancededitor_assets_rel() . 'bbcodes/';
+
+    static $resolved = null;
+    if ($resolved === null) {
+        $dir = af_advancededitor_bbcodes_dir();
+        $primary = af_advancededitor_realpath_safe(MYBB_ROOT . $base);
+        $resolved = (af_advancededitor_realpath_safe($dir) === $primary)
+            ? $base
+            : ($base . 'bbcodes/');
+    }
+
+    return $resolved;
 }
 
 function af_advancededitor_fs_bbcodes_dir(): string
 {
-    return MYBB_ROOT . af_advancededitor_bbcodes_rel();
+    return af_advancededitor_bbcodes_dir();
+}
+
+function af_advancededitor_debug_enabled_for_admin(): bool
+{
+    global $mybb;
+
+    if (defined('IN_ADMINCP') || defined('IN_MODCP')) return true;
+    if (!isset($mybb) || !is_object($mybb)) return false;
+
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    if ($uid <= 0) return false;
+
+    if (function_exists('is_super_admin')) {
+        return (bool)is_super_admin($uid);
+    }
+
+    return !empty($mybb->usergroup['cancp']);
+}
+
+function af_advancededitor_debug_log(string $message, array $ctx = []): void
+{
+    if (!af_advancededitor_debug_enabled_for_admin()) return;
+
+    $line = '[AF AE] ' . $message;
+    if (!empty($ctx)) {
+        $json = @json_encode($ctx, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (is_string($json) && $json !== '') {
+            $line .= ' ' . $json;
+        }
+    }
+
+    @error_log($line);
+}
+
+function af_advancededitor_bbcodes_dir_has_anchor_or_modules(string $dir, array &$debug = []): bool
+{
+    $debug = ['anchors' => [], 'modules' => [], 'entries' => []];
+
+    if (!is_dir($dir)) return false;
+
+    $anchors = ['manifest.json', 'manifest.php', 'registry.json', 'bbcodes.json', 'bbcodes.php'];
+    foreach ($anchors as $a) {
+        if (is_file($dir . $a)) {
+            $debug['anchors'][] = $a;
+            return true;
+        }
+    }
+
+    $entries = @scandir($dir);
+    if (!is_array($entries)) return false;
+
+    foreach ($entries as $e) {
+        if ($e === '.' || $e === '..') continue;
+        $debug['entries'][] = $e;
+        $moduleDir = $dir . $e . '/';
+        if (!is_dir($moduleDir)) continue;
+
+        $moduleEntries = @scandir($moduleDir);
+        if (!is_array($moduleEntries)) continue;
+
+        $hasManifest = false;
+        $hasAsset = false;
+        foreach ($moduleEntries as $m) {
+            if ($m === '.' || $m === '..') continue;
+            if (preg_match('~^manifest\.(php|json)$~i', $m)) $hasManifest = true;
+            if (preg_match('~\.(js|css)$~i', $m)) $hasAsset = true;
+        }
+
+        if ($hasManifest || $hasAsset) {
+            $debug['modules'][] = $e;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function af_advancededitor_bbcodes_dir(): string
+{
+    static $resolved = null;
+    if ($resolved !== null) return $resolved;
+
+    $primary = MYBB_ROOT . af_advancededitor_assets_rel() . 'bbcodes/';
+    $secondary = $primary . 'bbcodes/';
+
+    $dbgPrimary = [];
+    $dbgSecondary = [];
+
+    $primaryValid = af_advancededitor_bbcodes_dir_has_anchor_or_modules($primary, $dbgPrimary);
+    if ($primaryValid) {
+        $resolved = $primary;
+    } else {
+        $secondaryValid = af_advancededitor_bbcodes_dir_has_anchor_or_modules($secondary, $dbgSecondary);
+        if ($secondaryValid) {
+            $resolved = $secondary;
+        } else {
+            $resolved = $primary;
+            af_advancededitor_debug_log('bbcodes dir fallback to primary: no anchors/modules found', [
+                'primary' => $primary,
+                'secondary' => $secondary,
+                'primary_scan' => $dbgPrimary,
+                'secondary_scan' => $dbgSecondary,
+            ]);
+        }
+    }
+
+    return $resolved;
+}
+
+function af_advancededitor_bbcodes_url(): string
+{
+    return af_advancededitor_url(af_advancededitor_bbcodes_rel());
 }
 
 function af_advancededitor_url(string $rel): string
@@ -805,6 +928,14 @@ function af_advancededitor_pre_output(string &$page = ''): void
     $packs = af_advancededitor_discover_bbcode_packs($bburl);
     $packs = af_advancededitor_filter_packs_for_request($packs, $shouldLoadEditorPacks);
 
+    af_advancededitor_debug_log('pre_output bbcodes runtime', [
+        'script' => defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '',
+        'bbcodes_dir' => af_advancededitor_bbcodes_dir(),
+        'bbcodes_base_url' => af_advancededitor_bbcodes_url(),
+        'modules_count' => (int)count($packs['packs'] ?? []),
+        'modules_sample' => array_slice(array_keys($packs['packs'] ?? []), 0, 5),
+    ]);
+
     // Если не нужен редакторный набор и нет глобальных паков — выходим.
     if (!$hasTextarea && empty($packs['css']) && empty($packs['js'])) {
         return;
@@ -967,6 +1098,7 @@ table #post_options, table #postoptions{display:none!important;}
             'bburl'             => $bburl,
             'assetsBase'        => $assetsBase,
             'imgBase'           => $imgBase,
+            'bbcodesBaseUrl'    => af_advancededitor_bbcodes_url(),
 
             'sceditorContentCss'=> $sceditorContentCss,
             'sceditorThemeCss'  => $sceditorThemeCss,
@@ -976,6 +1108,7 @@ table #post_options, table #postoptions{display:none!important;}
             'layout'            => $layout,
             'fonts'             => $fonts,
             'packs'             => $packs,
+            'bbcodesModulesDetected' => (int)count($packs['packs'] ?? []),
             'customDefs'        => $customDefs,
 
             'previewUrl'        => $bburl . '/misc.php?action=af_ae_postpreview',
@@ -992,6 +1125,16 @@ table #post_options, table #postoptions{display:none!important;}
         ];
         if ($editorSelector !== '') {
             $payload['cfg']['editorSelector'] = $editorSelector;
+        }
+
+        if (af_advancededitor_debug_enabled_for_admin()) {
+            $payload['debug'] = [
+                'enabled' => 1,
+                'bbcodesDir' => af_advancededitor_bbcodes_dir(),
+                'bbcodesBaseUrl' => af_advancededitor_bbcodes_url(),
+                'modulesCount' => (int)count($packs['packs'] ?? []),
+                'modulesSample' => array_slice(array_keys($packs['packs'] ?? []), 0, 5),
+            ];
         }
 
         $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -1024,7 +1167,7 @@ table #post_options, table #postoptions{display:none!important;}
  */
 function af_advancededitor_install_pack_mycodes(): void
 {
-    $base = __DIR__ . '/assets/bbcodes';
+    $base = rtrim(af_advancededitor_bbcodes_dir(), '/');
     if (!is_dir($base)) return;
 
     $dirs = @scandir($base);
@@ -1063,7 +1206,7 @@ function af_advancededitor_install_pack_mycodes(): void
 
 function af_advancededitor_uninstall_pack_mycodes(): void
 {
-    $base = __DIR__ . '/assets/bbcodes';
+    $base = rtrim(af_advancededitor_bbcodes_dir(), '/');
     if (!is_dir($base)) return;
 
     $dirs = @scandir($base);
@@ -1333,7 +1476,7 @@ function af_ae_bbcode_dispatch_parse_message_end(&$message): void
     if ($packs === null) {
         $packs = [];
 
-        $base = __DIR__ . '/assets/bbcodes';
+        $base = rtrim(af_advancededitor_bbcodes_dir(), '/');
         if (is_dir($base)) {
             $dirs = @scandir($base);
             if (is_array($dirs)) {
@@ -1422,7 +1565,7 @@ function af_ae_bbcode_dispatch_parse_message_start(&$message): void
     if ($packs === null) {
         $packs = [];
 
-        $base = __DIR__ . '/assets/bbcodes';
+        $base = rtrim(af_advancededitor_bbcodes_dir(), '/');
         if (is_dir($base)) {
             $dirs = @scandir($base);
             if (is_array($dirs)) {
@@ -2064,11 +2207,20 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
     $bburl = rtrim($bburl, '/');
 
     // ВАЖНО: пакеты лежат в assets/bbcodes/*
-    $baseDirAbs = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/bbcodes/';
-    if (is_dir($baseDirAbs . 'bbcodes/')) {
-        $baseDirAbs .= 'bbcodes/';
-    }
+    $baseDirAbs = af_advancededitor_bbcodes_dir();
     $assetsBaseUrl = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/';
+    $bbcodesBaseUrl = af_advancededitor_bbcodes_url();
+
+    $mkAssetUrl = function(string $rel) use ($assetsBaseUrl, $bbcodesBaseUrl): string {
+        $rel = ltrim(trim($rel), '/');
+        if ($rel === '') return '';
+
+        if (stripos($rel, 'bbcodes/') === 0) {
+            return rtrim($bbcodesBaseUrl, '/') . '/' . ltrim(substr($rel, 8), '/');
+        }
+
+        return rtrim($assetsBaseUrl, '/') . '/' . $rel;
+    };
 
     $out = [
         // агрегаты для фронта/ACP
@@ -2120,14 +2272,16 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
             foreach ($m['assets']['css'] as $rel) {
                 $rel = trim((string)$rel);
                 if ($rel === '') continue;
-                $packCss[] = $assetsBaseUrl . ltrim($rel, '/');
+                $url = $mkAssetUrl($rel);
+                if ($url !== '') $packCss[] = $url;
             }
         }
         if (!empty($m['assets']['js']) && is_array($m['assets']['js'])) {
             foreach ($m['assets']['js'] as $rel) {
                 $rel = trim((string)$rel);
                 if ($rel === '') continue;
-                $packJs[] = $assetsBaseUrl . ltrim($rel, '/');
+                $url = $mkAssetUrl($rel);
+                if ($url !== '') $packJs[] = $url;
             }
         }
 
@@ -2160,7 +2314,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
                 $icon = trim((string)($b['icon'] ?? ''));
                 if ($icon !== '') {
                     // icon in your packs is RELATIVE TO assets/
-                    $icon = $assetsBaseUrl . ltrim($icon, '/');
+                    $icon = $mkAssetUrl($icon);
                 }
 
                 $btn = [
@@ -2201,6 +2355,13 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
 
     // parsers тоже дедуп
     $out['parsers'] = array_values(array_unique(array_filter($out['parsers'], 'is_string')));
+
+    af_advancededitor_debug_log('bbcodes discovery', [
+        'dir' => $baseDirAbs,
+        'url' => $bbcodesBaseUrl,
+        'modules_count' => count($out['packs']),
+        'modules_sample' => array_slice(array_keys($out['packs']), 0, 5),
+    ]);
 
     return $out;
 }
