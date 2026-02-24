@@ -1258,6 +1258,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     ];
     $hp_base_total = array_sum($hp_base_breakdown);
     $hp_fixed_total = array_sum($hp_fixed_breakdown);
+    $hp_fixed_sources_total = $hp_fixed_total - (float)$bonus_hp;
     $hp_con = (float)$con_final;
     $race_speed = (int)($source_rules_map['race']['speed'] ?? 0) + (int)$bonus_speed;
     $damage_bonus_total = $weapon_bonus + (int)floor((float)($final['str'] ?? 0));
@@ -1358,6 +1359,8 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'hp_breakdown' => [
                 'hp_base_total' => $hp_base_total,
                 'hp_base' => $hp_base_breakdown,
+                'hp_from_sources' => $hp_fixed_sources_total,
+                'hp_from_items' => (float)$bonus_hp,
                 'fixed_total' => $hp_fixed_total,
                 'fixed_bonuses_hp' => $hp_fixed_breakdown,
                 'from_con' => $hp_con,
@@ -1407,6 +1410,9 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'armor_equip_bonus_total' => $armor_equip_bonus_total,
             'hp_base_breakdown' => $hp_base_breakdown,
             'fixed_hp_breakdown' => $hp_fixed_breakdown,
+            'hp_from_sources' => $hp_fixed_sources_total,
+            'hp_from_items' => (float)$bonus_hp,
+            'hp_from_con' => $hp_con,
             'hp_total' => $hp_total,
         ],
         'languages' => [
