@@ -2151,6 +2151,20 @@
     }, 200);
   };
 
+  window.AFAE._drainQueue = function () {
+    var q = window.__AFAE_QUEUE;
+    if (!Array.isArray(q) || !q.length) return;
+
+    window.__AFAE_QUEUE = [];
+    for (var i = 0; i < q.length; i++) {
+      var fn = q[i];
+      if (typeof fn !== 'function') continue;
+      try { fn(); } catch (eQueue) {}
+    }
+  };
+
+  window.AFAE._drainQueue();
+
   function collectTargets(root) {
     var sel = getEditorSelector();
     if (sel) {
