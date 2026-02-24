@@ -6,8 +6,20 @@
 
   if (window.afAeHtmlbbInitialized) return;
   window.afAeHtmlbbInitialized = true;
-  if (!window.AFAE || typeof window.AFAE.onEditorReady !== 'function') return;
-  window.AFAE.onEditorReady(function () {
+  function afAeRunWhenReady(cb) {
+    if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
+      window.AFAE.onEditorReady(cb);
+      return;
+    }
+    window.__AFAE_QUEUE = window.__AFAE_QUEUE || [];
+    window.__AFAE_QUEUE.push(function () {
+      if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
+        window.AFAE.onEditorReady(cb);
+      }
+    });
+  }
+
+  afAeRunWhenReady(function () {
 
   var ID  = 'htmlbb';
   var CMD = 'af_htmlbb';

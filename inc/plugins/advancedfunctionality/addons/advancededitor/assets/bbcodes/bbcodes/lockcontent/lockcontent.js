@@ -10,8 +10,20 @@
   // one-shot
   if (window.__afAeLockcontentPackLoaded) return;
   window.__afAeLockcontentPackLoaded = true;
-  if (!window.AFAE || typeof window.AFAE.onEditorReady !== 'function') return;
-  window.AFAE.onEditorReady(function () {
+  function afAeRunWhenReady(cb) {
+    if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
+      window.AFAE.onEditorReady(cb);
+      return;
+    }
+    window.__AFAE_QUEUE = window.__AFAE_QUEUE || [];
+    window.__AFAE_QUEUE.push(function () {
+      if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
+        window.AFAE.onEditorReady(cb);
+      }
+    });
+  }
+
+  afAeRunWhenReady(function () {
 
   var ID  = 'lockcontent';
   var CMD = 'af_lockcontent';

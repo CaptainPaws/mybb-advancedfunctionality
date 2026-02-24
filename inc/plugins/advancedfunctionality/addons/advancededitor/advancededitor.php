@@ -779,6 +779,80 @@ function af_advancededitor_strip_own_assets(string &$page): void
     $page = preg_replace('~<link\b[^>]*\bhref=("|\')[^"\']*advancededitor\.css(?:\?[^"\']*)?\1[^>]*>\s*~i', '', $page);
 }
 
+function af_advancededitor_asset_key_from_url(string $url): string
+{
+    $url = html_entity_decode(trim($url), ENT_QUOTES, 'UTF-8');
+    if ($url === '') return '';
+
+    $parts = @parse_url($url);
+    if (is_array($parts) && isset($parts['path'])) {
+        $url = (string)$parts['path'];
+    }
+
+    $url = str_replace('\\', '/', $url);
+    $url = preg_replace('~/{2,}~', '/', $url);
+    $url = strtolower((string)$url);
+
+    return $url;
+}
+
+function af_advancededitor_dedupe_runtime_assets(string &$page): void
+{
+    if ($page === '') return;
+
+    $patterns = [
+        '~<script\b[^>]*\bsrc=("|\')([^"\']*?/inc/plugins/advancedfunctionality/addons/advancededitor/[^"\']*)\1[^>]*>\s*</script>\s*~is',
+        '~<link\b[^>]*\bhref=("|\')([^"\']*?/inc/plugins/advancedfunctionality/addons/advancededitor/[^"\']*)\1[^>]*>\s*~is',
+    ];
+
+    foreach ($patterns as $pattern) {
+        if (!preg_match_all($pattern, $page, $all, PREG_OFFSET_CAPTURE)) {
+            continue;
+        }
+
+        $matches = [];
+        for ($i = 0, $cnt = count($all[0]); $i < $cnt; $i++) {
+            $tag = $all[0][$i][0] ?? '';
+            $offset = (int)($all[0][$i][1] ?? -1);
+            $url = $all[2][$i][0] ?? '';
+            if ($tag === '' || $offset < 0 || $url === '') continue;
+
+            $key = af_advancededitor_asset_key_from_url($url);
+            if ($key === '') continue;
+
+            $matches[] = [
+                'tag' => $tag,
+                'offset' => $offset,
+                'length' => strlen($tag),
+                'key' => $key,
+            ];
+        }
+
+        if (count($matches) <= 1) continue;
+
+        $seen = [];
+        $remove = [];
+        for ($i = count($matches) - 1; $i >= 0; $i--) {
+            $key = $matches[$i]['key'];
+            if (isset($seen[$key])) {
+                $remove[] = $matches[$i];
+                continue;
+            }
+            $seen[$key] = true;
+        }
+
+        if (empty($remove)) continue;
+
+        usort($remove, function(array $a, array $b): int {
+            return $b['offset'] <=> $a['offset'];
+        });
+
+        foreach ($remove as $chunk) {
+            $page = substr_replace($page, '', $chunk['offset'], $chunk['length']);
+        }
+    }
+}
+
 function af_advancededitor_resolve_sceditor_content_css_url(string $bburl): string
 {
     $bburl = rtrim($bburl, '/');
@@ -998,13 +1072,17 @@ function af_advancededitor_pre_output(string &$page = ''): void
         }
     }
 
-    // JS паков (copycode.js должен быть тут всегда, чтобы работал у гостя в showthread)
+    $packJsTags = '';
     if (!empty($packs['js']) && is_array($packs['js'])) {
         foreach ($packs['js'] as $u) {
             $u = (string)$u;
             if ($u === '') continue;
-            $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($u, $buildVer)) . '"></script>' . "\n";
+            $packJsTags .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($u, $buildVer)) . '"></script>' . "\n";
         }
+    }
+
+    if (!$hasTextarea && $packJsTags !== '') {
+        $injectHead .= $packJsTags;
     }
 
     /**
@@ -1145,6 +1223,11 @@ table #post_options, table #postoptions{display:none!important;}
 
         // advancededitor.js
         $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor.js', $buildVer)) . '"></script>' . "\n";
+
+        // JS паков грузим ПОСЛЕ ядра, чтобы AFAE гарантированно был объявлен раньше модулей.
+        if ($packJsTags !== '') {
+            $injectHead .= $packJsTags;
+        }
     }
 
     // ---- вставляем в </head> ----
@@ -1153,6 +1236,8 @@ table #post_options, table #postoptions{display:none!important;}
     } else {
         $page = $injectHead . $page;
     }
+
+    af_advancededitor_dedupe_runtime_assets($page);
 }
 
 /**
