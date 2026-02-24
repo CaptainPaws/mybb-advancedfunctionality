@@ -1312,11 +1312,14 @@ function af_charactersheets_build_mechanics_html(array $view): string
         . ' race.fixed_bonuses.hp=' . (int)($fixed_hp_breakdown['race'] ?? 0)
         . ' class.fixed_bonuses.hp=' . (int)($fixed_hp_breakdown['class'] ?? 0)
         . ' theme.fixed_bonuses.hp=' . (int)($fixed_hp_breakdown['theme'] ?? 0)
-        . ' extra.fixed_bonuses.hp=' . (int)($fixed_hp_breakdown['extra'] ?? 0)
-        . ' con=' . (int)($debug['con_final'] ?? 0)
+        . ' hp_from_items=' . (int)($debug['hp_from_items'] ?? 0)
+        . ' hp_from_con=' . (int)($debug['hp_from_con'] ?? 0)
         . ' hp_total=' . (int)($debug['hp_total'] ?? 0);
 
     $debug_lines[] = 'TOTAL: hp_base_total=' . (int)($debug['hp_base_total'] ?? 0)
+        . ' hp_from_sources=' . (int)($debug['hp_from_sources'] ?? 0)
+        . ' hp_from_items=' . (int)($debug['hp_from_items'] ?? 0)
+        . ' hp_from_con=' . (int)($debug['hp_from_con'] ?? 0)
         . ' fixed_hp_total=' . (int)($debug['fixed_hp_total'] ?? 0)
         . ' speed_total=' . (int)($debug['speed_total'] ?? 0)
         . ' bonus_attribute_points=' . (int)($debug['bonus_attribute_points'] ?? 0)
@@ -1363,8 +1366,9 @@ function af_charactersheets_build_mechanics_html(array $view): string
     $debug_line = '<!-- AF_CS_DEBUG mechanics: race=' . htmlspecialchars_uni((string)($debug['race']['key'] ?? ''))
         . ' schema=' . htmlspecialchars_uni((string)($debug['race']['schema'] ?? ''))
         . ' hp_base=' . (int)($debug['hp_base_total'] ?? 0)
-        . ' hp_fixed=' . (int)($debug['fixed_hp_total'] ?? 0)
-        . ' con=' . (int)($debug['con_final'] ?? 0)
+        . ' hp_from_sources=' . (int)($debug['hp_from_sources'] ?? 0)
+        . ' hp_from_items=' . (int)($debug['hp_from_items'] ?? 0)
+        . ' hp_from_con=' . (int)($debug['hp_from_con'] ?? 0)
         . ' AC=' . $ac_total
         . ' speed=' . $speed_total
         . ' -->';
