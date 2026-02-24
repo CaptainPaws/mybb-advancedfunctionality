@@ -560,7 +560,7 @@
   background: #111;
   border-radius: 14px;
   width: min(1100px, calc(100vw - 24px));
-  height: min(840px, calc(100vh - 24px));
+  height: min(950px, calc(100vh - 24px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
