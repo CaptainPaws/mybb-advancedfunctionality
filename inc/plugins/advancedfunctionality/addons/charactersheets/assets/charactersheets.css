@@ -559,7 +559,7 @@
   position: relative;
   background: #111;
   border-radius: 14px;
-  width: min(73%, calc(100vw));
+  width: min(57%, calc(100vw));
   height: min(90%, calc(100vh));
   display: flex;
   flex-direction: column;
