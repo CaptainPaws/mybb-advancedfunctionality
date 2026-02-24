@@ -8,14 +8,14 @@ function af_charactersheets_handle_api(): void
     global $mybb;
 
     if (!af_charactersheets_is_enabled()) {
-        af_charactersheets_json_response(['success' => false, 'error' => 'Addon disabled']);
+        af_charactersheets_json_error('addon_disabled', 'Addon disabled');
     }
 
     $do = (string)$mybb->get_input('do');
     $sheet_id = (int)$mybb->get_input('sheet_id');
     $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
     if (empty($sheet)) {
-        af_charactersheets_json_response(['success' => false, 'error' => 'Sheet not found']);
+        af_charactersheets_json_error('sheet_not_found', 'Sheet not found', [], 404);
     }
 
     $fid_for_mod = 0;
@@ -62,7 +62,7 @@ function af_charactersheets_handle_api(): void
         'reset_skills',
     ], true)) {
         if (!verify_post_check($mybb->get_input('my_post_key'), true)) {
-            af_charactersheets_json_response(['success' => false, 'error' => 'Invalid post key']);
+            af_charactersheets_json_error('invalid_post_key', 'Invalid post key', [], 403);
         }
     }
 
@@ -298,7 +298,7 @@ function af_charactersheets_handle_api(): void
             $updated_skill_key = $skill_key;
         } else {
             if (!$can_staff_reset) {
-                af_charactersheets_json_response(['success' => false, 'error' => 'no_permission']);
+                af_charactersheets_json_error('no_permission', 'Permission denied', [], 403);
             }
             if (empty($existing)) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Skill not found']);
@@ -667,17 +667,17 @@ function af_charactersheets_handle_api(): void
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
     } elseif ($do === 'reset_attributes') {
         if (!$can_staff_reset) {
-            af_charactersheets_json_response(['success' => false, 'error' => 'no_permission']);
+            af_charactersheets_json_error('no_permission', 'Permission denied', [], 403);
         }
         if (!af_charactersheets_reset_attributes($sheet_id)) {
-            af_charactersheets_json_response(['success' => false, 'error' => 'Reset failed']);
+            af_charactersheets_json_error('reset_failed', 'Reset failed');
         }
     } elseif ($do === 'reset_skills') {
         if (!$can_staff_reset) {
-            af_charactersheets_json_response(['success' => false, 'error' => 'no_permission']);
+            af_charactersheets_json_error('no_permission', 'Permission denied', [], 403);
         }
         if (!af_charactersheets_reset_skills($sheet_id)) {
-            af_charactersheets_json_response(['success' => false, 'error' => 'Reset failed']);
+            af_charactersheets_json_error('reset_failed', 'Reset failed');
         }
     } elseif ($do === 'grant_exp') {
         $amount_raw = (string)$mybb->get_input('amount');
@@ -692,9 +692,9 @@ function af_charactersheets_handle_api(): void
 
         $target_uid = (int)($sheet['uid'] ?? 0);
         $snapshot = af_charactersheets_balance_snapshot($target_uid);
-        af_charactersheets_json_response(array_merge(['success' => true], $snapshot));
+        af_charactersheets_json_ok($snapshot);
     } else {
-        af_charactersheets_json_response(['success' => false, 'error' => 'Unknown action']);
+        af_charactersheets_json_error('unknown_action', 'Unknown action', [], 400);
     }
 
     $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
@@ -742,6 +742,8 @@ function af_charactersheets_handle_api(): void
 
 function af_charactersheets_json_response(array $data): void
 {
+    $data = af_charactersheets_normalize_api_payload($data);
+
     while (ob_get_level() > 0) {
         @ob_end_clean();
     }
@@ -759,6 +761,102 @@ function af_charactersheets_json_response(array $data): void
     header('X-Content-Type-Options: nosniff');
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
+}
+
+function af_charactersheets_json_ok(array $payload = []): void
+{
+    af_charactersheets_json_response(array_merge(['ok' => true, 'success' => true], $payload));
+}
+
+function af_charactersheets_json_error(string $code, string $message, array $debug = [], int $status = 200): void
+{
+    if ($status >= 100 && function_exists('http_response_code')) {
+        http_response_code($status);
+    }
+
+    $payload = [
+        'ok' => false,
+        'success' => false,
+        'error' => [
+            'code' => $code,
+            'message' => $message,
+        ],
+    ];
+
+    if (!empty($debug)) {
+        $payload['_debug'] = $debug;
+    }
+
+    af_charactersheets_json_response($payload);
+}
+
+function af_charactersheets_normalize_api_payload(array $data): array
+{
+    global $mybb;
+
+    $ok = null;
+    if (array_key_exists('ok', $data)) {
+        $ok = (bool)$data['ok'];
+    } elseif (array_key_exists('success', $data)) {
+        $ok = (bool)$data['success'];
+    }
+
+    if ($ok === null) {
+        $ok = !array_key_exists('error', $data);
+    }
+
+    $data['ok'] = $ok;
+    $data['success'] = $ok;
+
+    if ($ok === false) {
+        $rawError = $data['error'] ?? 'Unknown error';
+        if (is_array($rawError)) {
+            $code = (string)($rawError['code'] ?? 'request_failed');
+            $message = (string)($rawError['message'] ?? 'Request failed');
+            $debug = isset($rawError['debug']) && is_array($rawError['debug']) ? $rawError['debug'] : [];
+        } else {
+            $code = 'request_failed';
+            $message = trim((string)$rawError);
+            $debug = [];
+        }
+
+        if ($message === '') {
+            $message = 'Request failed';
+        }
+
+        $data['error'] = [
+            'code' => $code,
+            'message' => $message,
+        ];
+
+        if (!isset($data['message'])) {
+            $data['message'] = $message;
+        }
+
+        if (!empty($debug)) {
+            $data['_debug'] = array_merge((array)($data['_debug'] ?? []), $debug);
+        }
+    }
+
+    if (af_charactersheets_is_api_debug_user()) {
+        $debugMeta = [
+            'action' => (string)$mybb->get_input('action'),
+            'do' => (string)$mybb->get_input('do'),
+            'request_method' => (string)($_SERVER['REQUEST_METHOD'] ?? ''),
+        ];
+        $data['_debug'] = array_merge($debugMeta, (array)($data['_debug'] ?? []));
+    } else {
+        unset($data['_debug']);
+    }
+
+    return $data;
+}
+
+function af_charactersheets_is_api_debug_user(): bool
+{
+    global $mybb;
+
+    return !empty($mybb->usergroup['cancp']) || !empty($mybb->usergroup['issupermod']);
 }
 
 function af_charactersheets_find_skill_view_row(array $view, string $skill_key): ?array
