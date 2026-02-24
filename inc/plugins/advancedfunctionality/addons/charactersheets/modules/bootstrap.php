@@ -2177,7 +2177,8 @@ function af_cs_render_kb_bonuses_text($type, $key, $isRu): string
         return '';
     }
 
-    $entry = af_charactersheets_kb_get_entry($type, $key);
+    $resolved = af_charactersheets_kb_resolve_entry($type, $key);
+    $entry = (array)($resolved['entry'] ?? []);
     if (empty($entry['id'])) {
         return '';
     }
