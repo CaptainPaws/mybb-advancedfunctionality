@@ -729,6 +729,9 @@
                 } else {
                     obj[def.name] = input.value;
                 }
+                if (typeof def.onInput === 'function') {
+                    def.onInput(obj, input.value, input);
+                }
                 onChange();
             });
 
@@ -1401,8 +1404,13 @@
                 { name: 'amount', label: 'amount', type: 'number' }
             ] },
             { key: 'resistance', label: 'Resistance', fields: [
-                { name: 'key', label: 'key', type: 'text', required: true },
-                { name: 'value', label: 'value', type: 'number', required: true }
+                { name: 'key', label: 'key', type: 'select', required: true, options: ['fire', 'cold', 'electric', 'acid', 'poison', 'psychic', 'necrotic', 'radiant', 'sonic'], onInput: function (obj) { applyGrantDictionaryDefaults(obj, true); } },
+                { name: 'value', label: 'value', type: 'number', required: true },
+                { name: 'unit', label: 'unit', type: 'text', hint: 'Например: %, ft, м, клеток' },
+                { name: 'title_ru', label: 'title_ru', type: 'text' },
+                { name: 'title_en', label: 'title_en', type: 'text' },
+                { name: 'desc_ru', label: 'desc_ru', type: 'textarea' },
+                { name: 'desc_en', label: 'desc_en', type: 'textarea' }
             ] },
             { key: 'speed', label: 'Speed', fields: [
                 { name: 'kind', label: 'kind', type: 'select', options: ['walk', 'fly', 'swim', 'climb', 'burrow'] },
@@ -1410,10 +1418,58 @@
                 { name: 'mode', label: 'mode', type: 'select', options: ['set', 'add'] }
             ] },
             { key: 'sense', label: 'Sense', fields: [
-                { name: 'key', label: 'key', type: 'text', required: true },
-                { name: 'value', label: 'value', type: 'number' }
+                { name: 'key', label: 'key', type: 'select', required: true, options: ['darkvision', 'lowlight', 'tremorsense', 'blindsense', 'blindsight', 'thermal', 'sonar', 'true_sight'], onInput: function (obj) { applyGrantDictionaryDefaults(obj, true); } },
+                { name: 'value', label: 'value', type: 'number' },
+                { name: 'unit', label: 'unit', type: 'text', hint: 'По умолчанию: ft' },
+                { name: 'title_ru', label: 'title_ru', type: 'text' },
+                { name: 'title_en', label: 'title_en', type: 'text' },
+                { name: 'desc_ru', label: 'desc_ru', type: 'textarea' },
+                { name: 'desc_en', label: 'desc_en', type: 'textarea' }
             ] }
         ];
+
+        var grantEnumDict = {
+            resistance: {
+                fire: { title_ru: 'Сопротивление огню', title_en: 'Fire resistance', desc_ru: 'Снижает входящий урон огнём.', desc_en: 'Reduces incoming fire damage.', default_unit: '' },
+                cold: { title_ru: 'Сопротивление холоду', title_en: 'Cold resistance', desc_ru: 'Снижает входящий урон холодом.', desc_en: 'Reduces incoming cold damage.', default_unit: '' },
+                electric: { title_ru: 'Сопротивление электричеству', title_en: 'Electric resistance', desc_ru: 'Снижает входящий электрический урон.', desc_en: 'Reduces incoming electric damage.', default_unit: '' },
+                acid: { title_ru: 'Сопротивление кислоте', title_en: 'Acid resistance', desc_ru: 'Снижает входящий кислотный урон.', desc_en: 'Reduces incoming acid damage.', default_unit: '' },
+                poison: { title_ru: 'Сопротивление яду', title_en: 'Poison resistance', desc_ru: 'Снижает эффект яда и токсинов.', desc_en: 'Reduces poison and toxin impact.', default_unit: '' },
+                psychic: { title_ru: 'Сопротивление психическому урону', title_en: 'Psychic resistance', desc_ru: 'Снижает ментальный и психический урон.', desc_en: 'Reduces mental and psychic damage.', default_unit: '' },
+                necrotic: { title_ru: 'Сопротивление некротике', title_en: 'Necrotic resistance', desc_ru: 'Снижает некротический урон.', desc_en: 'Reduces necrotic damage.', default_unit: '' },
+                radiant: { title_ru: 'Сопротивление свету', title_en: 'Radiant resistance', desc_ru: 'Снижает лучистый/световой урон.', desc_en: 'Reduces radiant damage.', default_unit: '' },
+                sonic: { title_ru: 'Сопротивление звуку', title_en: 'Sonic resistance', desc_ru: 'Снижает звуковой урон и контузию.', desc_en: 'Reduces sonic damage and concussive effects.', default_unit: '' }
+            },
+            sense: {
+                darkvision: { title_ru: 'Тёмное зрение', title_en: 'Darkvision', desc_ru: 'Позволяет видеть в темноте на ограниченной дистанции.', desc_en: 'Allows seeing in darkness up to a limited range.', default_unit: 'ft' },
+                lowlight: { title_ru: 'Сумеречное зрение', title_en: 'Low-light vision', desc_ru: 'Улучшает зрение при слабом освещении.', desc_en: 'Improves vision in dim light.', default_unit: 'ft' },
+                tremorsense: { title_ru: 'Чувство вибрации', title_en: 'Tremorsense', desc_ru: 'Обнаруживает цели по вибрациям поверхности.', desc_en: 'Detects targets through surface vibrations.', default_unit: 'ft' },
+                blindsense: { title_ru: 'Слепое чутьё', title_en: 'Blindsense', desc_ru: 'Определяет присутствие существ без прямого зрения.', desc_en: 'Detects creature presence without direct sight.', default_unit: 'ft' },
+                blindsight: { title_ru: 'Слепое зрение', title_en: 'Blindsight', desc_ru: 'Полноценно воспринимает окружение без зрения.', desc_en: 'Fully perceives surroundings without sight.', default_unit: 'ft' },
+                thermal: { title_ru: 'Тепловое зрение', title_en: 'Thermal vision', desc_ru: 'Воспринимает источники тепла.', desc_en: 'Perceives heat signatures.', default_unit: 'ft' },
+                sonar: { title_ru: 'Сонар', title_en: 'Sonar', desc_ru: 'Ориентация по отражённым звуковым волнам.', desc_en: 'Orientation via reflected sound waves.', default_unit: 'ft' },
+                true_sight: { title_ru: 'Истинное зрение', title_en: 'True sight', desc_ru: 'Позволяет видеть скрытое и иллюзии.', desc_en: 'Allows seeing hidden things and through illusions.', default_unit: 'ft' }
+            }
+        };
+
+        function applyGrantDictionaryDefaults(grant, forceFill) {
+            if (!grant || typeof grant !== 'object') {
+                return;
+            }
+            var op = String(grant.op || '').trim();
+            var key = String(grant.key || '').trim();
+            var dict = grantEnumDict[op];
+            var preset = dict && dict[key] ? dict[key] : null;
+            if (!preset) {
+                return;
+            }
+            ['title_ru', 'title_en', 'desc_ru', 'desc_en', 'unit'].forEach(function (field) {
+                var sourceField = field === 'unit' ? 'default_unit' : field;
+                if (forceFill || !String(grant[field] || '').trim()) {
+                    grant[field] = String(preset[sourceField] || '');
+                }
+            });
+        }
 
         function normalizeGrant(grant) {
             var out = grant && typeof grant === 'object' ? JSON.parse(JSON.stringify(grant)) : {};
@@ -1456,6 +1512,8 @@
             delete out.sense_type;
             delete out.range;
             delete out.speed_type;
+
+            applyGrantDictionaryDefaults(out, false);
 
             return out;
         }
