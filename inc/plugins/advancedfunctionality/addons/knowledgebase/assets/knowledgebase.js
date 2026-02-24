@@ -1784,9 +1784,20 @@
             setFieldValue(metaRaw, JSON.stringify(meta, null, 2));
         }
 
+        function shouldLogRulesDebug() {
+            try {
+                return /(?:^|[?&])kb_debug_rules=1(?:&|$)/.test(window.location.search || '');
+            } catch (e) {
+                return false;
+            }
+        }
+
         function syncRawNow() {
             validate();
             var payload = toPayload();
+            if (shouldLogRulesDebug()) {
+                console.log('KB save payload grants', payload && payload.grants ? payload.grants : []);
+            }
             setFieldValue(raw, JSON.stringify(payload, null, 2));
             syncRulesToMeta(payload);
         }

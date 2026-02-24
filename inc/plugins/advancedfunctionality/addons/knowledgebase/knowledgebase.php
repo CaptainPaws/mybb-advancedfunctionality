@@ -2582,6 +2582,51 @@ function af_kb_validate_key_token(string $value): bool
     return (bool)preg_match('/^[a-z0-9_]+$/', $value);
 }
 
+function af_kb_trimmed_string($value, int $maxLen = 0): string
+{
+    $text = trim((string)$value);
+    if ($maxLen > 0 && function_exists('mb_substr')) {
+        return mb_substr($text, 0, $maxLen);
+    }
+    if ($maxLen > 0) {
+        return substr($text, 0, $maxLen);
+    }
+    return $text;
+}
+
+function af_kb_normalize_grant_meta_fields(array $grant): array
+{
+    $meta = [];
+
+    $titleRu = af_kb_trimmed_string($grant['title_ru'] ?? '', 500);
+    $titleEn = af_kb_trimmed_string($grant['title_en'] ?? '', 500);
+    $descRu = af_kb_trimmed_string($grant['desc_ru'] ?? '', 2000);
+    $descEn = af_kb_trimmed_string($grant['desc_en'] ?? '', 2000);
+    $unit = af_kb_trimmed_string($grant['unit'] ?? '', 16);
+    $format = af_kb_trimmed_string($grant['format'] ?? '', 64);
+
+    if ($titleRu !== '') {
+        $meta['title_ru'] = $titleRu;
+    }
+    if ($titleEn !== '') {
+        $meta['title_en'] = $titleEn;
+    }
+    if ($descRu !== '') {
+        $meta['desc_ru'] = $descRu;
+    }
+    if ($descEn !== '') {
+        $meta['desc_en'] = $descEn;
+    }
+    if ($unit !== '') {
+        $meta['unit'] = $unit;
+    }
+    if ($format !== '') {
+        $meta['format'] = $format;
+    }
+
+    return $meta;
+}
+
 function af_kb_normalize_traits_json($rawTraits, array &$errors): array
 {
     $traits = $rawTraits;
@@ -2751,11 +2796,13 @@ function af_kb_normalize_grants_json($rawGrants, array &$errors): array
                 $errors[] = 'Grant #' . ($index + 1) . ' resistance requires key.';
                 continue;
             }
-            $normalized[] = [
+            $normalizedGrant = [
                 'op' => 'resistance',
                 'key' => $resistanceKey,
                 'value' => (int)($grant['value'] ?? 0),
             ];
+            $normalizedGrant = array_merge($normalizedGrant, af_kb_normalize_grant_meta_fields($grant));
+            $normalized[] = $normalizedGrant;
             continue;
         }
 
@@ -2765,11 +2812,13 @@ function af_kb_normalize_grants_json($rawGrants, array &$errors): array
                 $errors[] = 'Grant #' . ($index + 1) . ' sense requires key.';
                 continue;
             }
-            $normalized[] = [
+            $normalizedGrant = [
                 'op' => 'sense',
                 'key' => $senseKey,
                 'value' => (int)($grant['value'] ?? $grant['range'] ?? 0),
             ];
+            $normalizedGrant = array_merge($normalizedGrant, af_kb_normalize_grant_meta_fields($grant));
+            $normalized[] = $normalizedGrant;
             continue;
         }
 
@@ -5225,6 +5274,17 @@ function af_kb_handle_edit(): void
         if (!is_array($entryRulesRaw)) {
             $entryRulesRaw = [];
         }
+
+        if (af_kb_is_admin() && (int)$mybb->get_input('kb_debug_rules', MyBB::INPUT_INT) === 1) {
+            $rawGrantsBeforeNormalize = isset($entryRulesRaw['grants']) && is_array($entryRulesRaw['grants'])
+                ? $entryRulesRaw['grants']
+                : [];
+            error_log('[af_kb_rules_save_debug_raw_grants] ' . json_encode([
+                'entry_id' => (int)($entry['id'] ?? 0),
+                'type' => $type,
+                'grants' => $rawGrantsBeforeNormalize,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        }
         $entryDataJsonNormalized = af_kb_normalize_json(json_encode($entryRulesRaw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}');
 
         $itemKind = trim((string)($metaPayload['item_kind'] ?? $mybb->get_input('item_kind')));
@@ -5432,6 +5492,7 @@ function af_kb_handle_edit(): void
                         'has_rules_after' => (is_array($metaPayload['rules'] ?? null) ? 1 : 0),
                         'rules_schema' => (string)($rulesObject['schema'] ?? ''),
                         'type_profile' => (string)($rulesObject['type_profile'] ?? ''),
+                        'grants_after_normalize' => isset($rulesObject['grants']) && is_array($rulesObject['grants']) ? $rulesObject['grants'] : [],
                         'rules_preview_200' => substr($rulesPreview, 0, 200),
                     ];
                     error_log('[af_kb_rules_save_debug] ' . json_encode($debugPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
