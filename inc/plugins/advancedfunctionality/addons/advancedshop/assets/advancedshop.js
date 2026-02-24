@@ -20,6 +20,25 @@
     window.console.log.apply(window.console, args);
   }
 
+  function afShopWarn(){
+    if(!window.console || typeof window.console.warn !== 'function'){ return; }
+    var args = Array.prototype.slice.call(arguments);
+    args.unshift('[AFSHOP]');
+    window.console.warn.apply(window.console, args);
+  }
+
+  function safeMountInventory(scope){
+    if(typeof window.AFSHOP.mountInventory === 'function'){
+      return window.AFSHOP.mountInventory(scope);
+    }
+    if(typeof mountInventory === 'function'){
+      afShopWarn('window.AFSHOP.mountInventory отсутствует, используется локальный fallback.');
+      return mountInventory(scope);
+    }
+    afShopWarn('mountInventory недоступен, пропускаем монтирование инвентаря.');
+    return Promise.resolve();
+  }
+
 
   function post(url, data){
     data = data || {};
@@ -646,7 +665,7 @@
 
   initCategoryTree();
   restoreCheckoutSuccessModal();
-  window.AFSHOP.mountInventory(document);
+  safeMountInventory(document);
   runHealthCheck();
 
   var slotsRoot = document.querySelector('.af-manage-slots[data-shop]');
@@ -975,13 +994,15 @@
 
   window.AFSHOP.renderInventoryGrid = renderInventoryGrid;
   window.AFSHOP.renderEquipment = renderEquipmentState;
-  window.AFSHOP.mountInventory = function(scope){
+  function mountInventory(scope){
     var root = scope && scope.classList && scope.classList.contains('af-inventory') ? scope : (scope && scope.querySelector ? scope.querySelector('.af-inventory') : null);
     afShopDebug('mountInventory: root found?', !!root);
     if(!root){ return Promise.resolve(); }
     initInventoryTabs(root);
     return loadInventoryState(root);
-  };
+  }
+
+  window.AFSHOP.mountInventory = mountInventory;
 
   function runHealthCheck(){
     var root = document.getElementById('af-shop-health');
