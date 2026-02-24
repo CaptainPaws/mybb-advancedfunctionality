@@ -32,26 +32,125 @@ function af_cs_rules_engine_init_state(): array
         'resistances' => [],
         'immunities' => [],
         'weaknesses' => [],
+        'senses' => [],
+        'skills' => [],
         'resources' => [],
+        'fixed' => [],
+        'fixed_bonuses' => [],
         'active_effects' => [],
+        'modifiers' => [],
         'perks_traits' => [],
+        'passive_abilities' => [],
+        'languages' => [],
         'spells' => [],
         'debug_trace' => [],
     ];
 }
 
-function af_cs_rules_engine_apply_grants(array $state, array $grants, string $source): array
+function apply_kb_rules_to_character_state(array $state, array $kb_entry_rules, string $source_tag): array
 {
+    $rules = cs_kb_rules_normalize($kb_entry_rules);
+
+    foreach (['fixed', 'fixed_bonuses'] as $fixed_bucket) {
+        $bucket = (array)($rules[$fixed_bucket] ?? []);
+        if (!isset($state[$fixed_bucket]) || !is_array($state[$fixed_bucket])) {
+            $state[$fixed_bucket] = [];
+        }
+
+        foreach ($bucket as $key => $value) {
+            if (is_array($value)) {
+                if (!isset($state[$fixed_bucket][$key]) || !is_array($state[$fixed_bucket][$key])) {
+                    $state[$fixed_bucket][$key] = [];
+                }
+                foreach ($value as $nested_key => $nested_value) {
+                    $state[$fixed_bucket][$key][$nested_key] = (float)($state[$fixed_bucket][$key][$nested_key] ?? 0) + (float)$nested_value;
+                }
+            } else {
+                $state[$fixed_bucket][$key] = (float)($state[$fixed_bucket][$key] ?? 0) + (float)$value;
+            }
+        }
+    }
+
+    foreach ((array)($rules['languages'] ?? []) as $lang_key) {
+        $lang_key = trim((string)$lang_key);
+        if ($lang_key !== '') {
+            $state['languages'][$lang_key] = true;
+            $state['debug_trace'][] = ['source' => $source_tag, 'kind' => 'language', 'payload' => ['key' => $lang_key]];
+        }
+    }
+
+    foreach ((array)($rules['resistances'] ?? []) as $key => $value) {
+        if (is_int($key)) {
+            $resKey = trim((string)$value);
+            $resVal = 1.0;
+        } else {
+            $resKey = trim((string)$key);
+            $resVal = (float)$value;
+        }
+        if ($resKey !== '') {
+            $state['resistances'][$resKey] = (float)($state['resistances'][$resKey] ?? 0) + $resVal;
+            $state['debug_trace'][] = ['source' => $source_tag, 'kind' => 'resistance', 'payload' => ['key' => $resKey, 'value' => $resVal]];
+        }
+    }
+
+    foreach ((array)($rules['immunities'] ?? []) as $immunity) {
+        $immunity = trim((string)$immunity);
+        if ($immunity !== '') {
+            $state['immunities'][$immunity] = true;
+            $state['debug_trace'][] = ['source' => $source_tag, 'kind' => 'immunity', 'payload' => ['key' => $immunity]];
+        }
+    }
+
+    foreach ((array)($rules['weaknesses'] ?? []) as $key => $value) {
+        if (is_int($key)) {
+            $weakKey = trim((string)$value);
+            $weakVal = 1.0;
+        } else {
+            $weakKey = trim((string)$key);
+            $weakVal = (float)$value;
+        }
+        if ($weakKey !== '') {
+            $state['weaknesses'][$weakKey] = (float)($state['weaknesses'][$weakKey] ?? 0) + $weakVal;
+            $state['debug_trace'][] = ['source' => $source_tag, 'kind' => 'weakness', 'payload' => ['key' => $weakKey, 'value' => $weakVal]];
+        }
+    }
+
+    foreach ((array)($rules['modifiers'] ?? []) as $modifier) {
+        if (!is_array($modifier)) {
+            continue;
+        }
+        $state['modifiers'][] = ['source' => $source_tag, 'payload' => $modifier];
+        $state['debug_trace'][] = ['source' => $source_tag, 'kind' => 'modifier', 'payload' => $modifier];
+    }
+
+    foreach ((array)($rules['effects'] ?? []) as $effect) {
+        if (!is_array($effect)) {
+            continue;
+        }
+        $state['active_effects'][] = ['source' => $source_tag, 'payload' => $effect];
+        $state['debug_trace'][] = ['source' => $source_tag, 'kind' => 'effect', 'payload' => $effect];
+    }
+
+    foreach ((array)($rules['resources'] ?? []) as $resource_key => $resource_value) {
+        $resource_key = trim((string)$resource_key);
+        if ($resource_key === '') {
+            continue;
+        }
+        $state['resources'][$resource_key] = (float)($state['resources'][$resource_key] ?? 0) + (float)$resource_value;
+        $state['debug_trace'][] = ['source' => $source_tag, 'kind' => 'resource', 'payload' => ['key' => $resource_key, 'value' => (float)$resource_value]];
+    }
+
+    $grants = (array)($rules['grants'] ?? []);
     foreach ($grants as $grant) {
         if (!is_array($grant)) {
             continue;
         }
-
         $op = (string)($grant['op'] ?? $grant['type'] ?? '');
+
         if (in_array($op, ['resistance', 'resistances'], true)) {
             $key = trim((string)($grant['key'] ?? $grant['damage_type'] ?? $grant['value'] ?? ''));
             if ($key !== '') {
-                $state['resistances'][$key] = ($state['resistances'][$key] ?? 0) + (float)($grant['amount'] ?? $grant['rank'] ?? 0);
+                $state['resistances'][$key] = (float)($state['resistances'][$key] ?? 0) + (float)($grant['amount'] ?? $grant['rank'] ?? 0);
             }
         } elseif (in_array($op, ['immunity', 'immunities'], true)) {
             $key = trim((string)($grant['key'] ?? $grant['damage_type'] ?? $grant['value'] ?? ''));
@@ -61,7 +160,32 @@ function af_cs_rules_engine_apply_grants(array $state, array $grants, string $so
         } elseif (in_array($op, ['weakness', 'weaknesses'], true)) {
             $key = trim((string)($grant['key'] ?? $grant['damage_type'] ?? $grant['value'] ?? ''));
             if ($key !== '') {
-                $state['weaknesses'][$key] = ($state['weaknesses'][$key] ?? 0) + (float)($grant['amount'] ?? $grant['rank'] ?? 0);
+                $state['weaknesses'][$key] = (float)($state['weaknesses'][$key] ?? 0) + (float)($grant['amount'] ?? $grant['rank'] ?? 0);
+            }
+        } elseif (in_array($op, ['sense', 'senses'], true)) {
+            $sense_key = trim((string)($grant['sense_key'] ?? $grant['key'] ?? $grant['value'] ?? ''));
+            if ($sense_key !== '') {
+                $state['senses'][$sense_key] = ['source' => $source_tag, 'payload' => $grant];
+            }
+        } elseif (in_array($op, ['skill', 'skills'], true)) {
+            $skill_key = trim((string)($grant['skill_key'] ?? $grant['kb_key'] ?? $grant['key'] ?? ''));
+            if ($skill_key !== '') {
+                $state['skills'][$skill_key] = [
+                    'source' => $source_tag,
+                    'rank' => (int)($grant['rank'] ?? $grant['skill_rank'] ?? $grant['value'] ?? 1),
+                    'rank_max' => (int)($grant['rank_max'] ?? $grant['max_rank'] ?? 0),
+                ];
+            }
+        } elseif (in_array($op, ['perk', 'trait', 'traits', 'feature'], true)) {
+            $name = trim((string)($grant['name'] ?? $grant['title'] ?? $grant['key'] ?? $grant['value'] ?? ''));
+            if ($name !== '') {
+                $state['perks_traits'][] = ['source' => $source_tag, 'name' => $name, 'payload' => $grant];
+            }
+        } elseif (in_array($op, ['language', 'knowledge'], true)) {
+            $kind = $op === 'language' ? 'language' : 'knowledge';
+            $key = trim((string)($grant[$kind . '_key'] ?? $grant['kb_key'] ?? $grant['key'] ?? ''));
+            if ($key !== '') {
+                $state['passive_abilities'][] = ['source' => $source_tag, 'kind' => $kind, 'key' => $key, 'payload' => $grant];
             }
         } elseif ($op === 'resource') {
             $resource_key = trim((string)($grant['key'] ?? ''));
@@ -71,16 +195,31 @@ function af_cs_rules_engine_apply_grants(array $state, array $grants, string $so
                 if ($mode === 'set') {
                     $state['resources'][$resource_key] = $value;
                 } else {
-                    $state['resources'][$resource_key] = ($state['resources'][$resource_key] ?? 0) + $value;
+                    $state['resources'][$resource_key] = (float)($state['resources'][$resource_key] ?? 0) + $value;
                 }
             }
+        } else {
+            $state['passive_abilities'][] = ['source' => $source_tag, 'kind' => $op !== '' ? $op : 'grant', 'payload' => $grant];
         }
 
         $state['debug_trace'][] = [
-            'source' => $source,
+            'source' => $source_tag,
             'kind' => 'grant',
             'payload' => $grant,
         ];
+    }
+
+    foreach ((array)($rules['traits'] ?? []) as $trait) {
+        if (!is_array($trait)) {
+            continue;
+        }
+        $trait_name = trim((string)($trait['name'] ?? $trait['title'] ?? $trait['id'] ?? ''));
+        if ($trait_name !== '') {
+            $state['perks_traits'][] = ['source' => $source_tag, 'name' => $trait_name, 'payload' => $trait];
+        }
+        $state['passive_abilities'][] = ['source' => $source_tag, 'kind' => 'trait', 'key' => $trait_name, 'payload' => $trait];
+        $state['debug_trace'][] = ['source' => $source_tag, 'kind' => 'trait', 'payload' => $trait];
+        $state = apply_kb_rules_to_character_state($state, ['grants' => (array)($trait['grants'] ?? [])], $source_tag . '.trait');
     }
 
     return $state;
@@ -682,17 +821,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $rules_engine_state = af_cs_rules_engine_init_state();
     foreach (['race', 'class', 'theme'] as $src) {
         $source_rules = (array)($source_rules_map[$src] ?? []);
-        $rules_engine_state = af_cs_rules_engine_apply_grants($rules_engine_state, (array)($source_rules['grants'] ?? []), $src);
-        foreach ((array)($source_rules['traits'] ?? []) as $trait) {
-            if (!is_array($trait)) {
-                continue;
-            }
-            $traitName = trim((string)($trait['name'] ?? $trait['title'] ?? $trait['id'] ?? ''));
-            if ($traitName !== '') {
-                $rules_engine_state['perks_traits'][] = ['source' => $src, 'name' => $traitName, 'payload' => $trait];
-            }
-            $rules_engine_state = af_cs_rules_engine_apply_grants($rules_engine_state, (array)($trait['grants'] ?? []), $src . '.trait');
-        }
+        $rules_engine_state = apply_kb_rules_to_character_state($rules_engine_state, $source_rules, $src);
     }
     $skill_pick_choices = af_charactersheets_collect_skill_pick_choices($kb_context, $build);
     $skill_choice_grant_ranks = [];
@@ -1160,10 +1289,17 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         'resistances' => (array)($rules_engine_state['resistances'] ?? []),
         'immunities' => array_keys(array_filter((array)($rules_engine_state['immunities'] ?? []))),
         'weaknesses' => (array)($rules_engine_state['weaknesses'] ?? []),
+        'senses' => (array)($rules_engine_state['senses'] ?? []),
         'skill_bonuses' => $bonus_skill_map,
+        'granted_skills' => (array)($rules_engine_state['skills'] ?? []),
         'perks_traits' => (array)($rules_engine_state['perks_traits'] ?? []),
+        'passive_abilities' => (array)($rules_engine_state['passive_abilities'] ?? []),
         'resources' => (array)($rules_engine_state['resources'] ?? []) + ['humanity' => $humanity_total],
+        'fixed' => (array)($rules_engine_state['fixed'] ?? []),
+        'fixed_bonuses' => (array)($rules_engine_state['fixed_bonuses'] ?? []),
         'active_effects' => (array)($rules_engine_state['active_effects'] ?? []),
+        'modifiers' => (array)($rules_engine_state['modifiers'] ?? []),
+        'languages' => array_keys(array_filter((array)($rules_engine_state['languages'] ?? []))),
         'debug_trace' => (array)($rules_engine_state['debug_trace'] ?? []),
     ];
 
@@ -1249,6 +1385,15 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'resistances' => (array)($character_computed_state['resistances'] ?? []),
             'immunities' => (array)($character_computed_state['immunities'] ?? []),
             'weaknesses' => (array)($character_computed_state['weaknesses'] ?? []),
+            'senses' => (array)($character_computed_state['senses'] ?? []),
+            'granted_skills' => (array)($character_computed_state['granted_skills'] ?? []),
+            'passive_abilities' => (array)($character_computed_state['passive_abilities'] ?? []),
+            'modifiers' => (array)($character_computed_state['modifiers'] ?? []),
+            'active_effects' => (array)($character_computed_state['active_effects'] ?? []),
+            'resources' => (array)($character_computed_state['resources'] ?? []),
+            'languages_from_rules' => (array)($character_computed_state['languages'] ?? []),
+            'fixed_from_rules_engine' => (array)($character_computed_state['fixed'] ?? []),
+            'fixed_bonuses_from_rules_engine' => (array)($character_computed_state['fixed_bonuses'] ?? []),
             'hp_base_total' => (int)($rules_aggregate['hp_base_total'] ?? 0),
             'fixed_hp_total' => (int)($rules_aggregate['fixed_hp_total'] ?? 0),
             'speed_total' => (int)($rules_aggregate['speed_total'] ?? 0),

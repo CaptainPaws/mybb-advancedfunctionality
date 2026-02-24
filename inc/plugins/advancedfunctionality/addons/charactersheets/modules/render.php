@@ -1340,7 +1340,13 @@ function af_charactersheets_build_mechanics_html(array $view): string
         . ' speed=' . $speed_total
         . ' -->';
 
-    return '<div class="af-cs-mechanics-grid">' . implode('', $cards) . '</div>' . ($debug_enabled ? ($debug_comment . $debug_line) : '');
+    $debug_panel = '';
+    if ($debug_enabled) {
+        $debug_json = htmlspecialchars_uni(json_encode($debug, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) ?: '{}');
+        $debug_panel = '<details class="af-cs-debug-rules"><summary>Debug applied rules</summary><pre>' . $debug_json . '</pre></details>';
+    }
+
+    return '<div class="af-cs-mechanics-grid">' . implode('', $cards) . '</div>' . $debug_panel . ($debug_enabled ? ($debug_comment . $debug_line) : '');
 }
 
 function af_charactersheets_build_inventory_html(int $uid): string
