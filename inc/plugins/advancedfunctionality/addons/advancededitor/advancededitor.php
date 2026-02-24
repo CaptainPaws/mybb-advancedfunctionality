@@ -698,6 +698,90 @@ function af_advancededitor_resolve_sceditor_theme_css_url(string $bburl): string
     return $bburl . '/jscripts/sceditor/themes/default.min.css';
 }
 
+function af_advancededitor_is_editor_whitelist_request(): bool
+{
+    global $mybb;
+
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    if ($script === '' || $script === 'index.php') return false;
+
+    if (in_array($script, ['newthread.php', 'newreply.php', 'editpost.php', 'showthread.php'], true)) {
+        return true;
+    }
+
+    if ($script === 'private.php') {
+        $action = strtolower((string)($mybb->input['action'] ?? ''));
+        $pmid = (int)($mybb->input['pmid'] ?? 0);
+        return ($action === 'read' && $pmid > 0);
+    }
+
+    if ($script === 'misc.php') {
+        $action = strtolower((string)($mybb->input['action'] ?? ''));
+        return in_array($action, ['kb', 'af_charactersheet'], true);
+    }
+
+    return false;
+}
+
+function af_advancededitor_page_has_editor_dom(string $page): bool
+{
+    return (
+        (bool)preg_match('~<textarea[^>]+(?:name|id)\s*=\s*["\']message["\']~i', $page) ||
+        (stripos($page, 'class="sceditor-container') !== false) ||
+        (stripos($page, "class='sceditor-container") !== false)
+    );
+}
+
+function af_advancededitor_filter_packs_for_request(array $packs, bool $loadEditorPacks): array
+{
+    if (empty($packs['packs']) || !is_array($packs['packs'])) {
+        return $packs;
+    }
+
+    $alwaysPackIds = ['fontfamily' => true];
+    $allowedIds = $alwaysPackIds;
+
+    if ($loadEditorPacks) {
+        foreach ($packs['packs'] as $packId => $_pack) {
+            $allowedIds[(string)$packId] = true;
+        }
+    }
+
+    $filteredPacks = [];
+    $filteredButtons = [];
+    $filteredCss = [];
+    $filteredJs = [];
+    $filteredParsers = [];
+
+    foreach ($packs['packs'] as $packId => $pack) {
+        $packId = (string)$packId;
+        if (!isset($allowedIds[$packId])) continue;
+
+        $filteredPacks[$packId] = $pack;
+
+        if (!empty($pack['buttons']) && is_array($pack['buttons'])) {
+            foreach ($pack['buttons'] as $btn) $filteredButtons[] = $btn;
+        }
+        if (!empty($pack['assets']['css']) && is_array($pack['assets']['css'])) {
+            foreach ($pack['assets']['css'] as $u) $filteredCss[] = (string)$u;
+        }
+        if (!empty($pack['assets']['js']) && is_array($pack['assets']['js'])) {
+            foreach ($pack['assets']['js'] as $u) $filteredJs[] = (string)$u;
+        }
+        if (!empty($pack['parser_abs']) && is_string($pack['parser_abs'])) {
+            $filteredParsers[] = $pack['parser_abs'];
+        }
+    }
+
+    $packs['packs'] = $filteredPacks;
+    $packs['buttons'] = $filteredButtons;
+    $packs['css'] = array_values(array_unique(array_filter($filteredCss, 'is_string')));
+    $packs['js'] = array_values(array_unique(array_filter($filteredJs, 'is_string')));
+    $packs['parsers'] = array_values(array_unique(array_filter($filteredParsers, 'is_string')));
+
+    return $packs;
+}
+
 function af_advancededitor_pre_output(string &$page = ''): void
 {
     global $mybb;
@@ -712,24 +796,17 @@ function af_advancededitor_pre_output(string &$page = ''): void
     if ($bburl === '') return;
 
     // ---- определяем режим ----
+    $isEditorScript = af_advancededitor_is_editor_whitelist_request();
     $hasTextarea = (stripos($page, '<textarea') !== false);
-
-    // быстрый признак "есть контент постов"
-    $looksLikeContentPage =
-        (stripos($page, 'class="post ') !== false) ||
-        (stripos($page, 'class="post_body"') !== false) ||
-        (stripos($page, 'id="posts"') !== false) ||
-        (stripos($page, 'showthread.php') !== false) ||
-        (stripos($page, 'forumdisplay.php') !== false) ||
-        (stripos($page, 'private.php') !== false) ||
-        (stripos($page, 'search.php') !== false);
+    $hasEditorDom = af_advancededitor_page_has_editor_dom($page);
+    $shouldLoadEditorPacks = ($isEditorScript && $hasEditorDom);
 
     // Пакеты BB-кнопок/стилей (включая copycode)
     $packs = af_advancededitor_discover_bbcode_packs($bburl);
+    $packs = af_advancededitor_filter_packs_for_request($packs, $shouldLoadEditorPacks);
 
-    // Если это не страница с редактором и не похоже на страницу с контентом — не грузим ничего,
-    // чтобы не раздувать абсолютно все страницы.
-    if (!$hasTextarea && !$looksLikeContentPage) {
+    // Если не нужен редакторный набор и нет глобальных паков — выходим.
+    if (!$hasTextarea && empty($packs['css']) && empty($packs['js'])) {
         return;
     }
 
@@ -1988,6 +2065,9 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
 
     // ВАЖНО: пакеты лежат в assets/bbcodes/*
     $baseDirAbs = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/bbcodes/';
+    if (is_dir($baseDirAbs . 'bbcodes/')) {
+        $baseDirAbs .= 'bbcodes/';
+    }
     $assetsBaseUrl = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/';
 
     $out = [

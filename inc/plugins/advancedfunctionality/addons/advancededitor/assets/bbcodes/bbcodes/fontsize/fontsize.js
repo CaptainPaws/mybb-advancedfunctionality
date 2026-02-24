@@ -5,6 +5,7 @@
 
   var ID = 'fontsize';
   var CMD = 'af_fontsize';
+  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
 
   // Диапазон для конвертации/нормализации (не для списка!)
   var MIN_PX = 8;

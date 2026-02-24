@@ -10,6 +10,7 @@
   // one-shot
   if (window.__afAeLockcontentPackLoaded) return;
   window.__afAeLockcontentPackLoaded = true;
+  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
 
   var ID  = 'lockcontent';
   var CMD = 'af_lockcontent';

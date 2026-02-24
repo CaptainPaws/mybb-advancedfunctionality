@@ -10,6 +10,7 @@
   // one-shot
   if (window.__afAeSpoilerPackLoaded) return;
   window.__afAeSpoilerPackLoaded = true;
+  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
 
   var ID  = 'spoiler';
   var CMD = 'af_spoiler';

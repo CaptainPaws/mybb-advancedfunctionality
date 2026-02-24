@@ -8,6 +8,7 @@
   // one-shot
   if (window.afAeIndentInitialized) return;
   window.afAeIndentInitialized = true;
+  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
 
   var ID  = 'indent';
   var CMD = 'af_indent';

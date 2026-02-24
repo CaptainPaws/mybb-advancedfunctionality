@@ -2028,6 +2028,28 @@
     return sel;
   }
 
+  function af_ae_has_editor(root) {
+    root = root || document;
+    if (!root || !root.querySelector) return false;
+
+    var sel = getEditorSelector();
+    if (sel) {
+      try {
+        if (root.querySelector(sel)) return true;
+      } catch (e) {}
+    }
+
+    return !!(
+      root.querySelector('textarea[name="message"]') ||
+      root.querySelector('textarea#message') ||
+      root.querySelector('.sceditor-container')
+    );
+  }
+
+  window.af_ae_has_editor = af_ae_has_editor;
+  window.AFAE = window.AFAE || {};
+  window.AFAE.hasEditor = function () { return af_ae_has_editor(document); };
+
   function collectTargets(root) {
     var sel = getEditorSelector();
     if (sel) {

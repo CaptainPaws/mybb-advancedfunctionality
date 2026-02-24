@@ -4,6 +4,7 @@
   // one-shot
   if (window.__afCopyCodeLoaded) return;
   window.__afCopyCodeLoaded = true;
+  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
 
   function asText(x) { return String(x == null ? '' : x); }
 

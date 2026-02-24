@@ -6,6 +6,7 @@
 
   if (window.afAeHtmlbbInitialized) return;
   window.afAeHtmlbbInitialized = true;
+  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
 
   var ID  = 'htmlbb';
   var CMD = 'af_htmlbb';

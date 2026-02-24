@@ -8,6 +8,7 @@
   // one-shot
   if (window.__afAeTquoteLoaded) return;
   window.__afAeTquoteLoaded = true;
+  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
 
   var ID  = 'tquote';
   var CMD = 'af_tquote';
