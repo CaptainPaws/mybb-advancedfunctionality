@@ -8,6 +8,7 @@
   // one-shot
   if (window.afAeEmbedVideosInitialized) return;
   window.afAeEmbedVideosInitialized = true;
+  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
 
   // НЕ ТРОГАЕМ: чтобы не сломать кнопку/конструктор/manifest
   var ID  = 'embedvideos';
