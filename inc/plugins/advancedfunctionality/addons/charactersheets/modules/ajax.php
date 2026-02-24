@@ -716,9 +716,7 @@ function af_charactersheets_handle_api(): void
     $equipment_html = af_charactersheets_build_equipment_html($build, $can_edit);
     $mechanics_html = af_charactersheets_build_mechanics_html($view);
 
-    af_charactersheets_json_response([
-        'success' => true,
-        'ok' => true,
+    $response_payload = [
         'pool' => [
             'total' => (int)($view['skill_pool_total'] ?? 0),
             'spent' => (int)($view['skill_pool_spent'] ?? 0),
@@ -737,42 +735,64 @@ function af_charactersheets_handle_api(): void
         'augmentations_html' => $augmentations_html,
         'equipment_html' => $equipment_html,
         'mechanics_html' => $mechanics_html,
-    ]);
+    ];
+
+    af_cs_json_ok(array_merge($response_payload, [
+        'payload' => $response_payload,
+    ]));
 }
 
-function af_charactersheets_json_response(array $data): void
+function af_charactersheets_json_response(array $data, int $status = 200): void
 {
     $data = af_charactersheets_normalize_api_payload($data);
 
+    $buffered = 0;
     while (ob_get_level() > 0) {
+        $buffered += (int)ob_get_length();
         @ob_end_clean();
     }
 
-    if (function_exists('http_response_code') && !headers_sent()) {
-        $status_code = (int)http_response_code();
-        if ($status_code < 100) {
-            http_response_code(200);
-        }
+    if ($buffered > 0) {
+        error_log('[AF CS] Cleared buffered output before JSON response: ' . $buffered . ' bytes');
     }
 
-    header('Content-Type: application/json; charset=utf-8');
-    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-    header('Pragma: no-cache');
-    header('X-Content-Type-Options: nosniff');
+    if (function_exists('http_response_code') && !headers_sent()) {
+        if ($status < 100) {
+            $status = 200;
+        }
+        http_response_code($status);
+    }
+
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=UTF-8');
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('X-Content-Type-Options: nosniff');
+    }
+
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
 
 function af_charactersheets_json_ok(array $payload = []): void
 {
-    af_charactersheets_json_response(array_merge(['ok' => true, 'success' => true], $payload));
+    af_cs_json_ok($payload);
+}
+
+function af_cs_json_ok(array $payload = []): void
+{
+    af_charactersheets_json_response(array_merge(['ok' => true, 'success' => true], $payload), 200);
 }
 
 function af_charactersheets_json_error(string $code, string $message, array $debug = [], int $status = 200): void
 {
-    if ($status >= 100 && function_exists('http_response_code')) {
-        http_response_code($status);
-    }
+    af_cs_json_err($message, array_merge(['code' => $code], $debug), $status);
+}
+
+function af_cs_json_err(string $message, array $extra = [], int $http = 400): void
+{
+    $code = (string)($extra['code'] ?? 'request_failed');
+    unset($extra['code']);
 
     $payload = [
         'ok' => false,
@@ -783,11 +803,11 @@ function af_charactersheets_json_error(string $code, string $message, array $deb
         ],
     ];
 
-    if (!empty($debug)) {
-        $payload['_debug'] = $debug;
+    if (!empty($extra)) {
+        $payload['_debug'] = $extra;
     }
 
-    af_charactersheets_json_response($payload);
+    af_charactersheets_json_response($payload, $http);
 }
 
 function af_charactersheets_normalize_api_payload(array $data): array
