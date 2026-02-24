@@ -165,8 +165,8 @@ function af_advancedjsbandle_pre_output(string &$page = ''): void
         return;
     }
 
-    $styles  = af_ajsb_build_link_tags($allowedCss);
-    $scripts = af_ajsb_build_script_tags($allowedJs);
+    $styles  = af_ajsb_build_link_tags($allowedCss, false);
+    $scripts = af_ajsb_build_script_tags($allowedJs, false);
     $cleanBlock = "\n" . AF_AJSB_MARK_START . "\n"
         . ($styles ? $styles . "\n" : '')
         . ($scripts ? $scripts . "\n" : '')
@@ -192,22 +192,14 @@ function af_ajsb_install_or_update_headerinclude(): void
     // 1) удаляем старый блок
     af_ajsb_remove_headerinclude();
 
-    // 2) строим 
-    $styles  = af_ajsb_build_link_tags();
-    $scripts = af_ajsb_build_script_tags();
-
-    if ($styles === '' && $scripts === '') {
-        return;
-    }
-
-    // 3) вставка строго ПОСЛЕ {$stylesheets}
+    // 2) вставляем ТОЛЬКО маркеры (без link/script), строго после {$stylesheets}
     $block =
         "\n" . AF_AJSB_MARK_START . "\n" .
-        ($styles ? $styles . "\n" : '') .
-        ($scripts ? $scripts . "\n" : '') .
         AF_AJSB_MARK_END . "\n";
 
+    // ВАЖНО: в replacement для preg_replace нужно экранировать $
     $insert = '{$stylesheets}' . $block;
+    $insert = str_replace('$', '\\$', $insert);
 
     find_replace_templatesets('headerinclude', '#\{\$stylesheets\}#i', $insert);
 }
@@ -254,27 +246,50 @@ function af_ajsb_list_js_files(): array
     return $cache;
 }
 
-function af_ajsb_build_script_tags(array $files = []): string
+function af_ajsb_asset_url_base(bool $template = false): string
+{
+    if ($template) {
+        // Для headerinclude (шаблон MyBB)
+        return '{$mybb->asset_url}/inc/plugins/advancedfunctionality/addons/' . AF_AJSB_ID . '/assets/';
+    }
+
+    // Для pre_output_page (финальный HTML)
+    global $mybb;
+
+    $base = '';
+    if (is_object($mybb) && isset($mybb->asset_url) && $mybb->asset_url !== '') {
+        $base = (string)$mybb->asset_url;
+    } else {
+        // Фолбэк на bburl если asset_url не определён
+        $base = (string)($mybb->settings['bburl'] ?? '');
+    }
+
+    $base = rtrim($base, "/");
+    return $base . '/inc/plugins/advancedfunctionality/addons/' . AF_AJSB_ID . '/assets/';
+}
+
+function af_ajsb_build_script_tags(array $files = [], bool $template = true): string
 {
     if (!$files) {
         $files = af_ajsb_list_js_files();
     }
-
     if (!$files) {
         return '';
     }
 
+    $base = af_ajsb_asset_url_base($template);
+
     $out = [];
     foreach ($files as $fname) {
-        // БЕЗ ?v=... (как ты требуешь)
-        // + defer: чтобы даже если наш блок стоит раньше jQuery, скрипты выполнялись после парсинга (и jQuery уже будет загружен)
-        $src = '{$mybb->asset_url}/inc/plugins/advancedfunctionality/addons/' . AF_AJSB_ID . '/assets/' . $fname;
-        $out[] = '<script type="text/javascript" src="' . $src . '" defer></script>';
+        // Без ?v=..., как ты требуешь
+        $src = $base . $fname;
+
+        // defer оставляем
+        $out[] = '<script type="text/javascript" src="' . htmlspecialchars($src, ENT_QUOTES) . '" defer></script>';
     }
 
     return implode("\n", $out);
 }
-
 /**
  * Удаляет из HTML любые <script ...src=".../advancedjsbandle/assets/<fname>.js[?...]">...</script>
  */
@@ -349,20 +364,21 @@ function af_ajsb_list_css_files(): array
     return $cache;
 }
 
-function af_ajsb_build_link_tags(array $files = []): string
+function af_ajsb_build_link_tags(array $files = [], bool $template = true): string
 {
     if (!$files) {
         $files = af_ajsb_list_css_files();
     }
-
     if (!$files) {
         return '';
     }
 
+    $base = af_ajsb_asset_url_base($template);
+
     $out = [];
     foreach ($files as $fname) {
-        $href = '{$mybb->asset_url}/inc/plugins/advancedfunctionality/addons/' . AF_AJSB_ID . '/assets/' . $fname;
-        $out[] = '<link rel="stylesheet" type="text/css" href="' . $href . '" />';
+        $href = $base . $fname;
+        $out[] = '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars($href, ENT_QUOTES) . '" />';
     }
 
     return implode("\n", $out);
@@ -381,4 +397,3 @@ function af_ajsb_remove_link_tags_for_file(string $html, string $fname): string
 
     return preg_replace($pattern, '', $html);
 }
-
