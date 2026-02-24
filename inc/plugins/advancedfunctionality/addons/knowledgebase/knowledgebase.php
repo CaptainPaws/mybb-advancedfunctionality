@@ -4305,7 +4305,7 @@ function af_kb_misc_route(): void
     global $mybb;
 
     $action = $mybb->get_input('action');
-    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_normalize_items', 'kb_debug_entry', 'kb_migrate_rules', 'kb_manage_categories', 'kb_manage_categories_save', 'kb_entry_categories_save', 'kb_debug_entry_cats'], true)) {
+    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_debug_entry', 'kb_migrate_rules', 'kb_manage_categories', 'kb_manage_categories_save', 'kb_entry_categories_save', 'kb_debug_entry_cats'], true)) {
         return;
     }
 
@@ -4342,10 +4342,6 @@ function af_kb_misc_route(): void
 
     if ($action === 'kb_help') {
         af_kb_handle_help();
-    }
-
-    if ($action === 'kb_normalize_items') {
-        af_kb_handle_normalize_items();
     }
 
     if ($action === 'kb_debug_entry') {
@@ -4948,13 +4944,6 @@ function af_kb_handle_view(): void
         $actions = [];
         if (af_kb_can_edit()) {
             $actions[] = '<a class="af-kb-btn af-kb-btn--create af-kb-btn-create" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_create ?? 'Create').'</a>';
-            if ($type === 'item') {
-                $normalizeConfirm = htmlspecialchars_uni('Нормализовать JSON всех предметов?');
-                $actions[] = '<form method="post" action="misc.php?action=kb_normalize_items" style="display:inline">'
-                    . '<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'" />'
-                    . '<button type="submit" class="af-kb-btn" onclick="return confirm(\''.$normalizeConfirm.'\');">Нормализовать JSON (items)</button>'
-                    . '</form>';
-            }
         }
         if (af_kb_cat_can_manage() && af_kb_categories_enabled()) {
             $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb_manage_categories&type=' . htmlspecialchars_uni($type) . '">Manage categories</a>';
@@ -6127,36 +6116,6 @@ function af_kb_handle_type_delete(): void
 
     redirect('misc.php?action=kb', $lang->af_kb_type_deleted ?? 'Category deleted.');
 }
-
-function af_kb_handle_normalize_items(): void
-{
-    global $mybb, $db;
-
-    if (!af_kb_can_edit()) {
-        error_no_permission();
-    }
-    if ($mybb->request_method !== 'post') {
-        error_no_permission();
-    }
-
-    verify_post_check($mybb->get_input('my_post_key'));
-
-    $result = af_kb_normalize_item_entries_bulk();
-    $updated = (int)($result['updated'] ?? 0);
-    $seen = (int)($result['seen'] ?? 0);
-
-    $db->insert_query('af_kb_log', [
-        'uid' => (int)$mybb->user['uid'],
-        'action' => $db->escape_string('normalize_items'),
-        'type' => $db->escape_string('item'),
-        'key' => $db->escape_string('*'),
-        'diff_json' => $db->escape_string(json_encode(['seen' => $seen, 'updated' => $updated], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}'),
-        'dateline' => TIME_NOW,
-    ]);
-
-    redirect('misc.php?action=kb&type=item', 'JSON normalized: ' . $updated . ' of ' . $seen . ' entries updated.');
-}
-
 
 function af_kb_handle_debug_entry(): void
 {
