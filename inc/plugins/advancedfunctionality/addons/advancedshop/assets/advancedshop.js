@@ -656,20 +656,53 @@
     loadSlots(shopCode, catId);
 
     var kbQ = document.getElementById('af-kb-picker-q');
-    if(kbQ){
-      kbQ.addEventListener('input', function(){
-        var q = kbQ.value || '';
-        getJSON('misc.php?action=shop_kb_search&shop=' + encodeURIComponent(shopCode) + '&q=' + encodeURIComponent(q)).then(function(r){
-          var resNode = document.getElementById('af-kb-picker-results');
-          if(!resNode){ return; }
-          if(!r.ok){ resNode.textContent = r.error || 'Search failed'; return; }
-          resNode.innerHTML = (r.items || []).map(function(item){
-            return '<div class="af-kb-item"><span>#'+item.kb_id+' '+escapeHtml(item.title || '')+' ['+escapeHtml(item.rarity || 'common')+']</span> <button class="af-kb-pick-item" data-kb-id="'+item.kb_id+'" data-kb-type="'+escapeHtml(item.kb_type || 'item')+'" data-kb-key="'+escapeHtml(item.kb_key || '')+'" type="button">Select</button></div>';
-          }).join('');
-        });
-      });
-      kbQ.dispatchEvent(new Event('input'));
+    var kbType = document.getElementById('af-kb-picker-type');
+    var kbRarity = document.getElementById('af-kb-picker-rarity');
+    var kbItemType = document.getElementById('af-kb-picker-item-type');
+    var kbSpellLevel = document.getElementById('af-kb-picker-spell-level');
+    var kbSpellSchool = document.getElementById('af-kb-picker-spell-school');
+    var searchTimer = null;
+
+    function renderKbResults(r){
+      var resNode = document.getElementById('af-kb-picker-results');
+      if(!resNode){ return; }
+      if(!r.ok){ resNode.textContent = r.error || 'Search failed'; return; }
+      var items = r.items || [];
+      if(!items.length){
+        resNode.innerHTML = '<div class="af-kb-item">Nothing found.</div>';
+        return;
+      }
+      resNode.innerHTML = items.map(function(item){
+        var desc = item.short ? ('<small>' + escapeHtml(item.short) + '</small>') : '';
+        var price = (item.price_major && item.price_minor > 0) ? ('<small>' + escapeHtml(item.price_major) + ' ' + escapeHtml(item.currency || 'credits') + '</small>') : '';
+        return '<div class="af-kb-item">'
+          + '<span>#'+item.kb_id+' '+escapeHtml(item.title || '')+' ['+escapeHtml(item.kb_type || 'item')+'] ['+escapeHtml(item.rarity || 'common')+']</span>'
+          + desc + price
+          + ' <button class="af-kb-pick-item" data-kb-id="'+item.kb_id+'" data-kb-type="'+escapeHtml(item.kb_type || 'item')+'" data-kb-key="'+escapeHtml(item.kb_key || '')+'" type="button">Добавить</button></div>';
+      }).join('');
     }
+
+    function runKbSearch(){
+      var q = kbQ ? (kbQ.value || '') : '';
+      var query = 'misc.php?action=shop_kb_search&shop=' + encodeURIComponent(shopCode)
+        + '&q=' + encodeURIComponent(q)
+        + '&kb_type=' + encodeURIComponent(kbType ? (kbType.value || 'all') : 'all')
+        + '&rarity=' + encodeURIComponent(kbRarity ? (kbRarity.value || '') : '')
+        + '&item_type=' + encodeURIComponent(kbItemType ? (kbItemType.value || '') : '')
+        + '&spell_level=' + encodeURIComponent(kbSpellLevel ? (kbSpellLevel.value || '') : '')
+        + '&spell_school=' + encodeURIComponent(kbSpellSchool ? (kbSpellSchool.value || '') : '');
+      getJSON(query).then(renderKbResults);
+    }
+
+    [kbQ, kbType, kbRarity, kbItemType, kbSpellLevel, kbSpellSchool].forEach(function(node){
+      if(!node){ return; }
+      node.addEventListener('input', function(){
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(runKbSearch, 150);
+      });
+      node.addEventListener('change', runKbSearch);
+    });
+    runKbSearch();
   }
 
   function loadSlots(shop, catId){
@@ -688,7 +721,7 @@
           + ', rarity_final = ' + escapeHtml(row.debug_rarity_final || rarity)
           + ', data_json_present: ' + escapeHtml(row.debug_data_json_present || 'no');
         return '<div class="af-slot-card '+escapeHtml(rarityClass)+'" data-slot-id="'+row.slot_id+'">'
-          + '<div><strong>#'+row.slot_id+'</strong> KB#'+row.kb_id+' '+icon+'</div>'
+          + '<div><strong>#'+row.slot_id+'</strong> KB#'+row.kb_id+' ('+escapeHtml(row.kb_type || 'item')+') '+icon+'</div>'
           + '<div>'+escapeHtml(row.title || '')+'</div>'
           + '<div><strong>Rarity:</strong> <span class="'+escapeHtml(rarityClass)+'">'+escapeHtml(rarityLabel)+'</span></div>'
           + '<div><small>'+debugInfo+'</small></div>'
