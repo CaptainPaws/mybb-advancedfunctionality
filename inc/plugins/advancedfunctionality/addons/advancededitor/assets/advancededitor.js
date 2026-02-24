@@ -6,6 +6,11 @@
 
   var P = window.afAePayload || window.afAdvancedEditorPayload || {};
   var CFG = (P && P.cfg) ? P.cfg : {};
+  var AE_DEBUG = !!(P && P.debug && P.debug.enabled);
+
+  if (AE_DEBUG) {
+    window.__afAeDebug = true;
+  }
 
   if (typeof window.__afAeGlobalToggling === 'undefined') window.__afAeGlobalToggling = 0;
   if (typeof window.__afAeIgnoreMutationsUntil === 'undefined') window.__afAeIgnoreMutationsUntil = 0;
@@ -2118,6 +2123,13 @@
     (function wait() {
       tries++;
       if (hasSceditor()) {
+        if (AE_DEBUG && af_ae_has_editor(document)) {
+          try {
+            console.debug('[AF AE] bbcodes base url: ' + String(P.bbcodesBaseUrl || ''));
+            console.debug('[AF AE] modules detected: ' + String(P.bbcodesModulesDetected || 0));
+          } catch (eDbg) {}
+        }
+
         scanAndInit(document);
         observeDynamicEditors();
         return;
