@@ -2169,53 +2169,37 @@ function af_cs_kb_extract_block_content(array $block, bool $isRu): string
 
 function af_cs_render_kb_bonuses_text($type, $key, $isRu): string
 {
-    global $db;
-
     $type = trim((string)$type);
     $key = trim((string)$key);
     if ($type === '' || $key === '') {
         return '';
     }
 
-    $entry = af_charactersheets_kb_get_entry($type, $key);
-    if (empty($entry['id'])) {
+    $candidate_types = [$type];
+    if ($type === 'theme') {
+        $candidate_types[] = 'themes';
+    } elseif ($type === 'themes') {
+        $candidate_types[] = 'theme';
+    }
+
+    $entry = [];
+    foreach ($candidate_types as $candidateType) {
+        $entry = af_charactersheets_kb_get_entry($candidateType, $key);
+        if (!empty($entry)) {
+            break;
+        }
+    }
+
+    if (empty($entry)) {
         return '';
     }
 
-    if (!is_object($db) || !$db->table_exists('af_kb_blocks')) {
+    $html = af_charactersheets_kb_get_block_html($entry, 'bonuses');
+    if (strpos($html, 'af-cs-muted') !== false) {
         return '';
     }
 
-    $where = "entry_id=" . (int)$entry['id']
-        . " AND block_key='bonuses'";
-    if (!function_exists('af_kb_can_edit') || !af_kb_can_edit()) {
-        $where .= ' AND active=1';
-    }
-
-    $block = $db->fetch_array($db->simple_select(
-        'af_kb_blocks',
-        'content_ru, content_en',
-        $where,
-        ['limit' => 1]
-    ));
-    if (!is_array($block)) {
-        return '';
-    }
-
-    $localized_field = (bool)$isRu ? 'content_ru' : 'content_en';
-    $text = trim((string)($block[$localized_field] ?? ''));
-    if ($text === '') {
-        $text = af_charactersheets_kb_pick_text($block, 'content');
-    }
-    if ($text === '') {
-        return '';
-    }
-
-    if (function_exists('af_kb_parse_message')) {
-        return trim((string)af_kb_parse_message($text));
-    }
-
-    return af_charactersheets_parse_bbcode($text);
+    return $html;
 }
 
 
