@@ -1075,34 +1075,7 @@ function af_charactersheets_resolve_effect_kb_entry(string $op, string $key): ar
     return [];
 }
 
-function af_charactersheets_grant_enum_catalog(): array
-{
-    return [
-        'resistance' => [
-            'fire' => ['title_ru' => 'Сопротивление огню', 'title_en' => 'Fire resistance', 'desc_ru' => 'Снижает входящий урон огнём.', 'desc_en' => 'Reduces incoming fire damage.', 'default_unit' => ''],
-            'cold' => ['title_ru' => 'Сопротивление холоду', 'title_en' => 'Cold resistance', 'desc_ru' => 'Снижает входящий урон холодом.', 'desc_en' => 'Reduces incoming cold damage.', 'default_unit' => ''],
-            'electric' => ['title_ru' => 'Сопротивление электричеству', 'title_en' => 'Electric resistance', 'desc_ru' => 'Снижает входящий электрический урон.', 'desc_en' => 'Reduces incoming electric damage.', 'default_unit' => ''],
-            'acid' => ['title_ru' => 'Сопротивление кислоте', 'title_en' => 'Acid resistance', 'desc_ru' => 'Снижает входящий кислотный урон.', 'desc_en' => 'Reduces incoming acid damage.', 'default_unit' => ''],
-            'poison' => ['title_ru' => 'Сопротивление яду', 'title_en' => 'Poison resistance', 'desc_ru' => 'Снижает эффект яда и токсинов.', 'desc_en' => 'Reduces poison and toxin impact.', 'default_unit' => ''],
-            'psychic' => ['title_ru' => 'Сопротивление психическому урону', 'title_en' => 'Psychic resistance', 'desc_ru' => 'Снижает ментальный и психический урон.', 'desc_en' => 'Reduces mental and psychic damage.', 'default_unit' => ''],
-            'necrotic' => ['title_ru' => 'Сопротивление некротике', 'title_en' => 'Necrotic resistance', 'desc_ru' => 'Снижает некротический урон.', 'desc_en' => 'Reduces necrotic damage.', 'default_unit' => ''],
-            'radiant' => ['title_ru' => 'Сопротивление свету', 'title_en' => 'Radiant resistance', 'desc_ru' => 'Снижает лучистый/световой урон.', 'desc_en' => 'Reduces radiant damage.', 'default_unit' => ''],
-            'sonic' => ['title_ru' => 'Сопротивление звуку', 'title_en' => 'Sonic resistance', 'desc_ru' => 'Снижает звуковой урон и контузию.', 'desc_en' => 'Reduces sonic damage and concussive effects.', 'default_unit' => ''],
-        ],
-        'sense' => [
-            'darkvision' => ['title_ru' => 'Тёмное зрение', 'title_en' => 'Darkvision', 'desc_ru' => 'Позволяет видеть в темноте на ограниченной дистанции.', 'desc_en' => 'Allows seeing in darkness up to a limited range.', 'default_unit' => 'ft'],
-            'lowlight' => ['title_ru' => 'Сумеречное зрение', 'title_en' => 'Low-light vision', 'desc_ru' => 'Улучшает зрение при слабом освещении.', 'desc_en' => 'Improves vision in dim light.', 'default_unit' => 'ft'],
-            'tremorsense' => ['title_ru' => 'Чувство вибрации', 'title_en' => 'Tremorsense', 'desc_ru' => 'Обнаруживает цели по вибрациям поверхности.', 'desc_en' => 'Detects targets through surface vibrations.', 'default_unit' => 'ft'],
-            'blindsense' => ['title_ru' => 'Слепое чутьё', 'title_en' => 'Blindsense', 'desc_ru' => 'Определяет присутствие существ без прямого зрения.', 'desc_en' => 'Detects creature presence without direct sight.', 'default_unit' => 'ft'],
-            'blindsight' => ['title_ru' => 'Слепое зрение', 'title_en' => 'Blindsight', 'desc_ru' => 'Полноценно воспринимает окружение без зрения.', 'desc_en' => 'Fully perceives surroundings without sight.', 'default_unit' => 'ft'],
-            'thermal' => ['title_ru' => 'Тепловое зрение', 'title_en' => 'Thermal vision', 'desc_ru' => 'Воспринимает источники тепла.', 'desc_en' => 'Perceives heat signatures.', 'default_unit' => 'ft'],
-            'sonar' => ['title_ru' => 'Сонар', 'title_en' => 'Sonar', 'desc_ru' => 'Ориентация по отражённым звуковым волнам.', 'desc_en' => 'Orientation via reflected sound waves.', 'default_unit' => 'ft'],
-            'true_sight' => ['title_ru' => 'Истинное зрение', 'title_en' => 'True sight', 'desc_ru' => 'Позволяет видеть скрытое и иллюзии.', 'desc_en' => 'Allows seeing hidden things and through illusions.', 'default_unit' => 'ft'],
-        ],
-    ];
-}
-
-function af_charactersheets_grant_pick_text(array $grant, string $op, string $key, string $field): string
+function af_charactersheets_grant_pick_text(array $grant, string $field): string
 {
     $isRu = af_charactersheets_is_ru();
     $localizedField = $field . ($isRu ? '_ru' : '_en');
@@ -1111,27 +1084,18 @@ function af_charactersheets_grant_pick_text(array $grant, string $op, string $ke
         return $raw;
     }
 
-    $catalog = af_charactersheets_grant_enum_catalog();
-    $fromDict = trim((string)($catalog[$op][$key][$localizedField] ?? ''));
-    if ($fromDict !== '') {
-        return $fromDict;
-    }
-
     return '';
 }
 
-function af_charactersheets_format_grant_value(array $grant, string $op, string $key): string
+function af_charactersheets_format_grant_value(array $grant): string
 {
     $value = trim((string)($grant['value'] ?? ''));
     if ($value === '') {
         return '';
     }
 
-    $catalog = af_charactersheets_grant_enum_catalog();
     $unit = trim((string)($grant['unit'] ?? ''));
-    if ($unit === '') {
-        $unit = trim((string)($catalog[$op][$key]['default_unit'] ?? ''));
-    }
+
     return $unit !== '' ? ($value . ' ' . $unit) : $value;
 }
 
@@ -1159,34 +1123,34 @@ function af_charactersheets_build_effects_chip_html(array $sheet_view): string
         }
 
         $entry = af_charactersheets_resolve_effect_kb_entry($op, $key);
-        $title = af_charactersheets_grant_pick_text($grant, $op, $key, 'title');
+        $title = af_charactersheets_grant_pick_text($grant, 'title');
         if ($title === '') {
             $title = af_charactersheets_kb_pick_text($entry, 'title');
         }
         if ($title === '') {
-            $title = ucfirst(str_replace('_', ' ', $key));
+            $title = $key;
         }
 
         $label = $title;
-        $formattedValue = af_charactersheets_format_grant_value($grant, $op, $key);
+        $formattedValue = af_charactersheets_format_grant_value($grant);
         if ($formattedValue !== '') {
             $label .= ': ' . $formattedValue;
         }
 
-        $hint = af_charactersheets_grant_pick_text($grant, $op, $key, 'desc');
+        $hint = af_charactersheets_grant_pick_text($grant, 'desc');
         if ($hint === '') {
             $hint = af_charactersheets_kb_pick_text($entry, 'short');
         }
         if ($hint === '') {
             $hint = af_charactersheets_kb_pick_text($entry, 'description');
         }
+        $chipAttrs = '';
         if ($hint !== '') {
             $tooltip = $title . "\n" . trim(strip_tags($hint));
-        } else {
-            $tooltip = $label;
+            $chipAttrs = ' title="' . htmlspecialchars_uni($tooltip) . '"';
         }
 
-        $chips[] = '<span class="af-cs-chip" title="' . htmlspecialchars_uni($tooltip) . '">' . htmlspecialchars_uni($label) . '</span>';
+        $chips[] = '<span class="af-cs-chip"' . $chipAttrs . '>' . htmlspecialchars_uni($label) . '</span>';
     }
 
     if (!$chips) {
