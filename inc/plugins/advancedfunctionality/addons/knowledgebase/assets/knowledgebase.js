@@ -840,6 +840,7 @@
         }
 
         function defaultsForProfile(profile, typeProfile) {
+            var canonicalType = (typeProfile || profile || '').toLowerCase();
             var base = {
                 schema: 'af_kb.rules.v1',
                 type_profile: typeProfile || profile,
@@ -847,22 +848,23 @@
             };
 
             if (profile === 'heritage') {
-                base.size = 'medium';
-                base.creature_type = 'humanoid';
-                base.speed = 30;
-                base.hp_base = 10;
                 base.fixed_bonuses = {
                     stats: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
                     hp: 0, ep: 0, skill_points: 0, feat_points: 0, perk_points: 0, language_slots: 0, knowledge_slots: 0
                 };
+                base.fixed = {
+                    stats: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+                    hp: 0, speed: 0, ep: 0, armor: 0, initiative: 0, carry: 0
+                };
                 base.choices = [];
                 base.grants = [];
                 base.traits = [];
-                return base;
-            }
-
-            if (profile === 'class' || profile === 'theme') {
-                base.hp_base = 0;
+                if (canonicalType === 'race') {
+                    base.size = 'medium';
+                    base.creature_type = 'humanoid';
+                    base.speed = 30;
+                    base.hp_base = 10;
+                }
                 return base;
             }
 
@@ -1048,29 +1050,34 @@
 
         // ---------- UI layout (разный по профилям) ----------
         // Heritage: race/class/theme (как ты и хотела: одинаковый “расовый” UI только там)
-        var isRaceHead = (type === 'race'); // только race получает size/creature/speed/hp
+        var isRaceHead = (type === 'race');
 
         // Сборка HTML-контейнеров
         var html = [];
         html.push('<div class="af-kb-help">Rules UI: <strong>' + esc(type || 'unknown') + '</strong> (profile: <strong>' + esc(uiProfile) + '</strong>)</div>');
         html.push('<div id="kb-rules-errors" class="af-kb-errors"></div>');
 
-        if (uiProfile === 'heritage' && isRaceHead) {
+        if (uiProfile === 'heritage') {
             html.push(
                 '<div class="af-kb-row">' +
-                    '<div><label>Size</label><select id="kb-size"><option>tiny</option><option>small</option><option>medium</option><option>large</option><option>huge</option></select></div>' +
-                    '<div><label>Creature type</label><input type="text" id="kb-creature" /></div>' +
+                    '<div><label>Type profile</label><input type="text" id="kb-type-profile" readonly="readonly" /></div>' +
+                    '<div><label>Size</label><select id="kb-size"><option value=""></option><option>tiny</option><option>small</option><option>medium</option><option>large</option><option>huge</option></select></div>' +
                 '</div>' +
                 '<div class="af-kb-row">' +
+                    '<div><label>Creature type</label><input type="text" id="kb-creature" /></div>' +
                     '<div><label>Speed (base walk)</label><input type="number" id="kb-speed" /></div>' +
+                '</div>' +
+                '<div class="af-kb-row">' +
                     '<div><label>HP base</label><input type="number" id="kb-hp-base" /></div>' +
-                '</div>'
+                '</div>' +
+                '<div class="af-kb-help">Пустое значение удаляет поле из rules. 0 сохраняется как 0.</div>'
             );
         }
 
         // Контент по профилям
         if (uiProfile === 'heritage') {
             html.push(detailsBlock('Fixed bonuses', '<div id="kb-fixed-bonuses"></div>', true));
+            html.push(detailsBlock('Fixed (derived baseline)', '<div id="kb-fixed-derived"></div>', true));
             html.push(detailsBlock(
                 'Choices',
                 '<div class="af-kb-inline">' +
@@ -1168,6 +1175,17 @@
                 state.fixed_bonuses.stats = {};
             }
             stats.forEach(function (k) { state.fixed_bonuses.stats[k] = numberOrZero(state.fixed_bonuses.stats[k]); });
+
+            if (!state.fixed || typeof state.fixed !== 'object') {
+                state.fixed = { stats: {} };
+            }
+            if (!state.fixed.stats || typeof state.fixed.stats !== 'object') {
+                state.fixed.stats = {};
+            }
+            stats.forEach(function (k) { state.fixed.stats[k] = numberOrZero(state.fixed.stats[k]); });
+            ['hp', 'speed', 'ep', 'armor', 'initiative', 'carry'].forEach(function (k) {
+                state.fixed[k] = numberOrZero(state.fixed[k]);
+            });
 
             if (!Array.isArray(state.choices)) state.choices = [];
             if (!Array.isArray(state.grants)) state.grants = [];
@@ -1494,12 +1512,14 @@
             errors: root.querySelector('#kb-rules-errors'),
             rawError: root.querySelector('#kb-raw-error'),
 
+            typeProfile: root.querySelector('#kb-type-profile'),
             size: root.querySelector('#kb-size'),
             creature: root.querySelector('#kb-creature'),
             speed: root.querySelector('#kb-speed'),
             hpBase: root.querySelector('#kb-hp-base'),
 
             fixed: root.querySelector('#kb-fixed-bonuses'),
+            fixedDerived: root.querySelector('#kb-fixed-derived'),
             choices: root.querySelector('#kb-choices-list'),
             grants: root.querySelector('#kb-grants-list'),
             traits: root.querySelector('#kb-traits-list'),
@@ -1508,11 +1528,12 @@
             profileLists: root.querySelector('#kb-profile-lists')
         };
 
-        if (uiProfile === 'heritage' && isRaceHead) {
-            fields.size.value = state.size || 'medium';
-            fields.creature.value = state.creature_type || 'humanoid';
-            fields.speed.value = numberOrZero(state.speed != null ? state.speed : 30);
-            fields.hpBase.value = numberOrZero(state.hp_base != null ? state.hp_base : 10);
+        if (uiProfile === 'heritage') {
+            if (fields.typeProfile) fields.typeProfile.value = expectedTypeProfile || '';
+            if (fields.size) fields.size.value = state.size != null ? String(state.size) : (isRaceHead ? 'medium' : '');
+            if (fields.creature) fields.creature.value = state.creature_type != null ? String(state.creature_type) : (isRaceHead ? 'humanoid' : '');
+            if (fields.speed) fields.speed.value = state.speed != null ? String(state.speed) : (isRaceHead ? '30' : '');
+            if (fields.hpBase) fields.hpBase.value = state.hp_base != null ? String(state.hp_base) : (isRaceHead ? '10' : '');
         }
 
         // ---------- validation / payload ----------
@@ -1710,11 +1731,6 @@
                 return normalizeItemCanonical({ schema: 'af_kb.item.v2', type_profile: expectedTypeProfile || 'item', version: p.version, item: itemOut });
             }
 
-            if (profile === 'class' || profile === 'theme') {
-                p.hp_base = numberOrZero(p.hp_base != null ? p.hp_base : 0);
-                return p;
-            }
-
             if (profile === 'knowledge') {
                 var skillK = (p.skill && typeof p.skill === 'object') ? p.skill : {};
                 var keyStatK = normalizeSkillStatValue(skillK);
@@ -1736,6 +1752,13 @@
             }
 
             if (profile === 'heritage') {
+                ['size', 'creature_type', 'speed', 'hp_base'].forEach(function (k) {
+                    if (p[k] === '') delete p[k];
+                });
+                if (typeof p.size !== 'string' || !p.size.trim()) delete p.size;
+                if (typeof p.creature_type !== 'string' || !p.creature_type.trim()) delete p.creature_type;
+                if (p.speed == null || p.speed === '') delete p.speed;
+                if (p.hp_base == null || p.hp_base === '') delete p.hp_base;
                 return p;
             }
 
@@ -1751,6 +1774,10 @@
                 if (!payload.fixed_bonuses) payload.fixed_bonuses = { stats: {} };
                 if (!payload.fixed_bonuses.stats) payload.fixed_bonuses.stats = {};
                 stats.forEach(function (k) { payload.fixed_bonuses.stats[k] = numberOrZero(payload.fixed_bonuses.stats[k]); });
+                if (!payload.fixed) payload.fixed = { stats: {} };
+                if (!payload.fixed.stats) payload.fixed.stats = {};
+                stats.forEach(function (k) { payload.fixed.stats[k] = numberOrZero(payload.fixed.stats[k]); });
+                ['hp', 'speed', 'ep', 'armor', 'initiative', 'carry'].forEach(function (k) { payload.fixed[k] = numberOrZero(payload.fixed[k]); });
 
                 payload.choices = (payload.choices || []).map(function (c) {
                     var out = deepClone(c);
@@ -1796,16 +1823,36 @@
 
         var syncRawDebounced = debounce(syncRawNow, 250);
 
+        function optionalNumberOrUndefined(value) {
+            var str = String(value == null ? '' : value).trim();
+            if (str === '') return undefined;
+            return numberOrZero(str);
+        }
 
-        function syncFromRaceHead() {
-            if (!(uiProfile === 'heritage' && isRaceHead)) {
+
+        function syncFromHeritageBase() {
+            if (uiProfile !== 'heritage') {
                 syncRawDebounced();
                 return;
             }
-            state.size = fields.size.value;
-            state.creature_type = (fields.creature.value || '').trim() || 'humanoid';
-            state.speed = numberOrZero(fields.speed.value);
-            state.hp_base = numberOrZero(fields.hpBase.value);
+
+            var size = (fields.size && fields.size.value ? String(fields.size.value).trim() : '');
+            var creature = (fields.creature && fields.creature.value ? String(fields.creature.value).trim() : '');
+            var speed = optionalNumberOrUndefined(fields.speed ? fields.speed.value : '');
+            var hpBase = optionalNumberOrUndefined(fields.hpBase ? fields.hpBase.value : '');
+
+            if (size === '') delete state.size;
+            else state.size = size;
+
+            if (creature === '') delete state.creature_type;
+            else state.creature_type = creature;
+
+            if (speed === undefined) delete state.speed;
+            else state.speed = speed;
+
+            if (hpBase === undefined) delete state.hp_base;
+            else state.hp_base = hpBase;
+
             syncRawDebounced();
         }
 
@@ -1853,6 +1900,44 @@
             fields.fixed.querySelectorAll('[data-resource]').forEach(function (input) {
                 input.addEventListener('input', function () {
                     state.fixed_bonuses[input.getAttribute('data-resource')] = numberOrZero(input.value);
+                    syncRawDebounced();
+                });
+            });
+        }
+
+        function renderFixedDerived() {
+            if (!fields.fixedDerived) return;
+            fields.fixedDerived.innerHTML = '';
+
+            var rowStats = document.createElement('div');
+            rowStats.className = 'af-kb-row';
+            stats.forEach(function (key) {
+                var box = document.createElement('div');
+                box.innerHTML = '<label>stats.' + key + '</label>' +
+                    '<input type="number" data-fixed-stat="' + key + '" value="' + numberOrZero(state.fixed.stats[key]) + '" />';
+                rowStats.appendChild(box);
+            });
+            fields.fixedDerived.appendChild(rowStats);
+
+            var rowBase = document.createElement('div');
+            rowBase.className = 'af-kb-row';
+            ['hp', 'speed', 'ep', 'armor', 'initiative', 'carry'].forEach(function (key) {
+                var box = document.createElement('div');
+                box.innerHTML = '<label>' + key + '</label>' +
+                    '<input type="number" data-fixed-value="' + key + '" value="' + numberOrZero(state.fixed[key]) + '" />';
+                rowBase.appendChild(box);
+            });
+            fields.fixedDerived.appendChild(rowBase);
+
+            fields.fixedDerived.querySelectorAll('[data-fixed-stat]').forEach(function (input) {
+                input.addEventListener('input', function () {
+                    state.fixed.stats[input.getAttribute('data-fixed-stat')] = numberOrZero(input.value);
+                    syncRawDebounced();
+                });
+            });
+            fields.fixedDerived.querySelectorAll('[data-fixed-value]').forEach(function (input) {
+                input.addEventListener('input', function () {
+                    state.fixed[input.getAttribute('data-fixed-value')] = numberOrZero(input.value);
                     syncRawDebounced();
                 });
             });
@@ -2523,20 +2608,23 @@
                     if (!state.fixed_bonuses) state.fixed_bonuses = { stats: {} };
                     if (!state.fixed_bonuses.stats) state.fixed_bonuses.stats = {};
                     stats.forEach(function (k) { state.fixed_bonuses.stats[k] = numberOrZero(state.fixed_bonuses.stats[k]); });
+                    if (!state.fixed) state.fixed = { stats: {} };
+                    if (!state.fixed.stats) state.fixed.stats = {};
+                    stats.forEach(function (k) { state.fixed.stats[k] = numberOrZero(state.fixed.stats[k]); });
+                    ['hp', 'speed', 'ep', 'armor', 'initiative', 'carry'].forEach(function (k) { state.fixed[k] = numberOrZero(state.fixed[k]); });
                     if (!Array.isArray(state.choices)) state.choices = [];
                     if (!Array.isArray(state.grants)) state.grants = [];
                     if (!Array.isArray(state.traits)) state.traits = [];
                     state.choices = state.choices.map(normalizeChoice);
                     state.grants = state.grants.map(normalizeGrant);
 
-                    if (isRaceHead) {
-                        fields.size.value = state.size || 'medium';
-                        fields.creature.value = state.creature_type || 'humanoid';
-                        fields.speed.value = numberOrZero(state.speed != null ? state.speed : 30);
-                        fields.hpBase.value = numberOrZero(state.hp_base != null ? state.hp_base : 10);
-                    }
+                    if (fields.size) fields.size.value = state.size != null ? String(state.size) : (isRaceHead ? 'medium' : '');
+                    if (fields.creature) fields.creature.value = state.creature_type != null ? String(state.creature_type) : (isRaceHead ? 'humanoid' : '');
+                    if (fields.speed) fields.speed.value = state.speed != null ? String(state.speed) : (isRaceHead ? '30' : '');
+                    if (fields.hpBase) fields.hpBase.value = state.hp_base != null ? String(state.hp_base) : (isRaceHead ? '10' : '');
 
                     renderFixedBonuses();
+                    renderFixedDerived();
                     renderChoices();
                     renderGrants();
                     renderTraits();
@@ -2557,17 +2645,18 @@
             });
         }
 
-        if (uiProfile === 'heritage' && isRaceHead) {
+        if (uiProfile === 'heritage') {
             [fields.size, fields.creature, fields.speed, fields.hpBase].forEach(function (field) {
                 if (!field) return;
-                field.addEventListener('input', syncFromRaceHead);
-                field.addEventListener('change', syncFromRaceHead);
+                field.addEventListener('input', syncFromHeritageBase);
+                field.addEventListener('change', syncFromHeritageBase);
             });
         }
 
         // ---------- first render ----------
         if (uiProfile === 'heritage') {
             renderFixedBonuses();
+            renderFixedDerived();
             renderChoices();
             renderGrants();
             renderTraits();

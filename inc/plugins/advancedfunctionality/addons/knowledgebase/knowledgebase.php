@@ -61,7 +61,7 @@ function af_kb_default_type_definitions(): array
         $schema['title_en'] = $titles[1] . ': rules (af_kb.rules.v1)';
         $schema['root_defaults'] = ['schema' => AF_KB_RULES_SCHEMA];
 
-        if (in_array($key, ['race', 'class', 'skill', 'knowledge', 'perk', 'condition', 'spell'], true)) {
+        if (in_array($key, ['race', 'class', 'theme', 'skill', 'knowledge', 'perk', 'condition', 'spell'], true)) {
             $schema['root_defaults']['fixed_bonuses'] = ['stats' => ['str' => 0, 'dex' => 0, 'con' => 0, 'int' => 0, 'wis' => 0, 'cha' => 0], 'hp' => 0, 'ep' => 0];
             $schema['fields'] = array_merge($schema['fields'], $statsFields, [
                 ['path' => 'fixed_bonuses.hp', 'type' => 'number', 'label_ru' => 'HP', 'label_en' => 'HP', 'required' => true, 'default' => 0],
@@ -86,8 +86,7 @@ function af_kb_default_type_definitions(): array
 
 
         if (in_array($key, ['class', 'theme'], true)) {
-            $schema['root_defaults']['hp_base'] = 0;
-            $schema['fields'][] = ['path' => 'hp_base', 'type' => 'number', 'label_ru' => 'Базовое HP', 'label_en' => 'Base HP', 'required' => true, 'default' => 0];
+            $schema['fields'][] = ['path' => 'hp_base', 'type' => 'number', 'label_ru' => 'Базовое HP', 'label_en' => 'Base HP', 'required' => false, 'default' => null];
         }
 
         if ($key === 'item') {
@@ -1226,8 +1225,8 @@ function af_kb_get_type_profile_definition(string $typeKey): array
 
     $profiles = [
         'race' => ['ui_profile' => 'race', 'rules_enabled' => true, 'defaults' => $base + ['size' => 'medium', 'creature_type' => 'humanoid', 'speed' => 30, 'hp_base' => 10, 'languages' => ['common']]],
-        'class' => ['ui_profile' => 'class', 'rules_enabled' => true, 'defaults' => $base + ['hp_base' => 0, 'hp_per_level' => 6, 'key_ability' => 'str', 'proficiencies' => new stdClass(), 'progression' => []]],
-        'theme' => ['ui_profile' => 'theme', 'rules_enabled' => true, 'defaults' => $base + ['hp_base' => 0]],
+        'class' => ['ui_profile' => 'class', 'rules_enabled' => true, 'defaults' => $base + ['hp_per_level' => 6, 'key_ability' => 'str', 'proficiencies' => new stdClass(), 'progression' => []]],
+        'theme' => ['ui_profile' => 'theme', 'rules_enabled' => true, 'defaults' => $base],
         'skill' => ['ui_profile' => 'skill', 'rules_enabled' => true, 'defaults' => $base + ['skill' => ['trained_only' => false, 'untrained_allowed' => true, 'armor_check_penalty_applies' => false, 'rank_mode' => 'ranked', 'max_rank' => 10, 'rank_bonus' => 1, 'base_formula' => 'attribute', 'can_buy_rank' => true]]],
         'knowledge' => ['ui_profile' => 'knowledge', 'rules_enabled' => true, 'defaults' => $base + ['knowledge_group' => 'lore', 'skill' => ['rank_mode' => 'ranked', 'max_rank' => 10, 'rank_bonus' => 1, 'base_formula' => 'attribute', 'can_buy_rank' => true]]],
         'language' => ['ui_profile' => 'language', 'rules_enabled' => true, 'defaults' => $base + ['script' => '', 'rarity' => 'common', 'family' => '', 'requires' => []]],
@@ -2455,10 +2454,10 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
         $defaults = af_kb_normalize_item_rules_payload($defaults);
     }
 
-    // КЛЮЧЕВОЙ ФИКС:
-    // всегда подставляем defaults, а пользовательские значения кладём поверх.
-    // так item_kind/effects и прочие обязательные поля появляются автоматически.
-    $rulesData = array_replace_recursive($defaults, $rulesData);
+    $shouldMergeDefaults = !in_array($type, ['class', 'theme'], true);
+    if ($shouldMergeDefaults) {
+        $rulesData = array_replace_recursive($defaults, $rulesData);
+    }
 
     // schema/type_profile/version — приводим к канону
     $rulesData['schema']       = $expectedSchema !== '' ? $expectedSchema : AF_KB_RULES_SCHEMA;
@@ -2493,6 +2492,9 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
     // Проверка required keys — ПОСЛЕ подстановки defaults
     foreach ($requiredKeys as $requiredKey) {
         $rk = (string)$requiredKey;
+        if (!$shouldMergeDefaults && in_array($rk, ['fixed', 'grants', 'choices', 'progression'], true)) {
+            continue;
+        }
         if (!array_key_exists($rk, $rulesData)) {
             $errors[] = 'Required data field missing: ' . $rk;
         }
