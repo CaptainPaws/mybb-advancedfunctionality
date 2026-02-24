@@ -556,17 +556,26 @@
 }
 
 .af-cs-modal__dialog {
-  position: relative;
+ position: relative;
   background: #111;
   border-radius: 14px;
-  width: min(57%, calc(100vw));
-  height: min(90%, calc(100vh));
+  width: min(1280px, calc(100vw));
+  height: min(900px, calc(100vh));
   display: flex;
   flex-direction: column;
   overflow: hidden;
   z-index: 1;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  top: 5%;
+  top: 15%;
+}
+}
+
+.af-cs-modal__dialog .af-cs-modal__body {
+  transform: scale(.99);
+  transform-origin: center left;
+  width: calc(100% / .95);
+  height: calc(100% / .95);
+  margin-left: -30px;
 }
 
 .af-cs-modal__header {
