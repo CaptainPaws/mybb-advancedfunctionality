@@ -1402,7 +1402,13 @@
             ] },
             { key: 'resistance', label: 'Resistance', fields: [
                 { name: 'key', label: 'key', type: 'text', required: true },
-                { name: 'value', label: 'value', type: 'number', required: true }
+                { name: 'value', label: 'value', type: 'number', required: true },
+                { name: 'title_ru', label: 'title_ru', type: 'text' },
+                { name: 'title_en', label: 'title_en', type: 'text' },
+                { name: 'desc_ru', label: 'desc_ru', type: 'textarea' },
+                { name: 'desc_en', label: 'desc_en', type: 'textarea' },
+                { name: 'unit', label: 'unit', type: 'text' },
+                { name: 'format', label: 'format', type: 'text', hint: 'например value / value+unit' }
             ] },
             { key: 'speed', label: 'Speed', fields: [
                 { name: 'kind', label: 'kind', type: 'select', options: ['walk', 'fly', 'swim', 'climb', 'burrow'] },
@@ -1411,7 +1417,13 @@
             ] },
             { key: 'sense', label: 'Sense', fields: [
                 { name: 'key', label: 'key', type: 'text', required: true },
-                { name: 'value', label: 'value', type: 'number' }
+                { name: 'value', label: 'value', type: 'number' },
+                { name: 'title_ru', label: 'title_ru', type: 'text' },
+                { name: 'title_en', label: 'title_en', type: 'text' },
+                { name: 'desc_ru', label: 'desc_ru', type: 'textarea' },
+                { name: 'desc_en', label: 'desc_en', type: 'textarea' },
+                { name: 'unit', label: 'unit', type: 'text' },
+                { name: 'format', label: 'format', type: 'text', hint: 'например value / value+unit' }
             ] }
         ];
 
