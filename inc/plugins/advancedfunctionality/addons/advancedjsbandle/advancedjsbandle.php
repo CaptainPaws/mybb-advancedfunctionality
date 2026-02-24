@@ -50,6 +50,84 @@ function af_advancedjsbandle_init(): void
     $plugins->add_hook('pre_output_page', 'af_advancedjsbandle_pre_output');
 }
 
+function af_is_script(string $name): bool
+{
+    if (!defined('THIS_SCRIPT')) {
+        return false;
+    }
+
+    return strtolower((string)THIS_SCRIPT) === strtolower($name);
+}
+
+function af_this_script_is(array $names): bool
+{
+    foreach ($names as $name) {
+        if (af_is_script((string)$name)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function af_get_action(): string
+{
+    global $mybb;
+
+    return strtolower(trim((string)$mybb->get_input('action')));
+}
+
+function af_ajsb_is_private_read_with_pmid(): bool
+{
+    global $mybb;
+
+    if (!af_is_script('private.php')) {
+        return false;
+    }
+
+    $pmid = (int)$mybb->get_input('pmid', MyBB::INPUT_INT);
+
+    return af_get_action() === 'read' && $pmid > 0;
+}
+
+function af_ajsb_allowed_assets_for_page(): array
+{
+    $css = ['scroll-buttons.css'];
+    $js  = ['scroll-buttons.js'];
+
+    $isShowthread  = af_is_script('showthread.php');
+    $isForumdisplay = af_is_script('forumdisplay.php');
+    $isPmRead = af_ajsb_is_private_read_with_pmid();
+
+    if ($isShowthread) {
+        $js[] = 'af_popup_detach.js';
+    }
+
+    if ($isShowthread || $isForumdisplay) {
+        $css[] = 'af_quickquote.css';
+        $js[] = 'af_quickquote.js';
+        $css[] = 'fimp.css';
+        $js[] = 'fimp.js';
+        $js[] = 'kill-threaded-mode-link.js';
+    }
+
+    if ($isShowthread || $isForumdisplay || $isPmRead) {
+        $css[] = 'postbit-fa-icons.css';
+        $js[] = 'postbit-fa-icons.js';
+        $js[] = 'postcontrols-tooltips.js';
+    }
+
+    if ($isShowthread || $isPmRead) {
+        $css[] = 'quote-avatars.css';
+        $js[] = 'quote-avatars.js';
+    }
+
+    return [
+        'css' => array_values(array_unique($css)),
+        'js' => array_values(array_unique($js)),
+    ];
+}
+
 
 /**
  * pre_output_page:
@@ -78,31 +156,21 @@ function af_advancedjsbandle_pre_output(string &$page = ''): void
 
     $jsFiles  = af_ajsb_list_js_files();
     $cssFiles = af_ajsb_list_css_files();
+    $allowed  = af_ajsb_allowed_assets_for_page();
+
+    $allowedJs = array_values(array_intersect($jsFiles, $allowed['js']));
+    $allowedCss = array_values(array_intersect($cssFiles, $allowed['css']));
 
     if (!$jsFiles && !$cssFiles) {
         return;
     }
 
-    // 1) вычищаем query-параметры внутри блока для наших файлов (если вдруг они там есть)
-    $cleanBlock = $blockHtml;
-
-    foreach ($jsFiles as $fname) {
-        $qf = preg_quote($fname, '#');
-        $cleanBlock = preg_replace(
-            '#(/assets/' . $qf . ')(\?[^"\']+)(["\'])#i',
-            '$1$3',
-            $cleanBlock
-        );
-    }
-
-    foreach ($cssFiles as $fname) {
-        $qf = preg_quote($fname, '#');
-        $cleanBlock = preg_replace(
-            '#(/assets/' . $qf . ')(\?[^"\']+)(["\'])#i',
-            '$1$3',
-            $cleanBlock
-        );
-    }
+    $styles  = af_ajsb_build_link_tags($allowedCss);
+    $scripts = af_ajsb_build_script_tags($allowedJs);
+    $cleanBlock = "\n" . AF_AJSB_MARK_START . "\n"
+        . ($styles ? $styles . "\n" : '')
+        . ($scripts ? $scripts . "\n" : '')
+        . AF_AJSB_MARK_END . "\n";
 
     // 2) вырезаем ВСЕ наши скрипты/стили по всей странице (и с query и без)
     foreach ($jsFiles as $fname) {
@@ -186,9 +254,12 @@ function af_ajsb_list_js_files(): array
     return $cache;
 }
 
-function af_ajsb_build_script_tags(): string
+function af_ajsb_build_script_tags(array $files = []): string
 {
-    $files = af_ajsb_list_js_files();
+    if (!$files) {
+        $files = af_ajsb_list_js_files();
+    }
+
     if (!$files) {
         return '';
     }
@@ -278,9 +349,12 @@ function af_ajsb_list_css_files(): array
     return $cache;
 }
 
-function af_ajsb_build_link_tags(): string
+function af_ajsb_build_link_tags(array $files = []): string
 {
-    $files = af_ajsb_list_css_files();
+    if (!$files) {
+        $files = af_ajsb_list_css_files();
+    }
+
     if (!$files) {
         return '';
     }
