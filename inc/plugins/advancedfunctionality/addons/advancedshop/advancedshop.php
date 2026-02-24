@@ -934,7 +934,7 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
     global $db;
     $items = [];
     $total = 0;
-    $q = $db->query("SELECT ci.qty, s.slot_id, s.kb_id, s.price, s.currency
+    $q = $db->query("SELECT ci.qty, s.slot_id, s.kb_id, s.kb_type, s.kb_key, s.price, s.currency
         FROM " . TABLE_PREFIX . "af_shop_cart_items ci
         INNER JOIN " . TABLE_PREFIX . "af_shop_slots s ON(s.slot_id=ci.slot_id)
         WHERE ci.cart_id={$cartId} AND s.enabled=1");
@@ -944,6 +944,8 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
         $items[] = [
             'slot_id' => (int)$row['slot_id'],
             'kb_id' => (int)$row['kb_id'],
+            'kb_type' => (string)($row['kb_type'] ?? 'item'),
+            'kb_key' => (string)($row['kb_key'] ?? ''),
             'qty' => $qty,
             'price_each' => $price,
             'currency' => (string)$row['currency'],
@@ -959,6 +961,9 @@ function af_advancedshop_grant_inventory_item(int $uid, int $kbId, int $qty): vo
     $kbCols = af_advancedshop_kb_cols();
     $kbIdCol = $kbCols['id'] ?? 'id';
     $select = [$kbIdCol . ' AS kb_id'];
+    if (!empty($kbCols['type'])) { $select[] = ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS kb_type'; }
+    if (!empty($kbCols['key'])) { $select[] = ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS kb_key'; }
+    if (!empty($kbCols['meta_json'])) { $select[] = $kbCols['meta_json'] . ' AS kb_meta'; }
     $kb = $db->fetch_array($db->query("SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
     if (!$kb) { return; }
     $profile = af_advancedshop_kb_item_profile($kb);
@@ -966,6 +971,9 @@ function af_advancedshop_grant_inventory_item(int $uid, int $kbId, int $qty): vo
     $rarity = (string)$profile['rarity'];
     $slotCode = (string)$profile['slot'];
     $itemKind = (string)$profile['item_kind'];
+    if ($itemKind === '') {
+        $itemKind = af_advancedshop_normalize_kb_type((string)($kb['kb_type'] ?? 'item'));
+    }
 
     $left = $qty;
     while ($left > 0) {
@@ -1273,7 +1281,7 @@ function af_advancedshop_manage_slot_create(): void
 
     $catId = (int)$mybb->get_input('cat_id');
     $kbId = (int)$mybb->get_input('kb_id');
-    $kbType = trim((string)$mybb->get_input('kb_type'));
+    $kbType = af_advancedshop_normalize_kb_type((string)$mybb->get_input('kb_type'));
     $kbKey = trim((string)$mybb->get_input('kb_key'));
     if ($kbType === '') { $kbType = 'item'; }
     if ($catId <= 0 || $kbId <= 0) { af_advancedshop_json_err('cat_id and kb_id required', 422); }
@@ -1281,11 +1289,44 @@ function af_advancedshop_manage_slot_create(): void
     $cat = $db->fetch_array($db->simple_select('af_shop_categories', 'cat_id', 'cat_id=' . $catId . ' AND shop_id=' . (int)$shop['shop_id'], ['limit' => 1]));
     if (!$cat) { af_advancedshop_json_err('Category not found', 404); }
 
+    $kbCols = af_advancedshop_kb_cols();
+    $kbIdCol = $kbCols['id'] ?? 'id';
+    $kbSelect = [$kbIdCol . ' AS kb_id'];
+    if (!empty($kbCols['type'])) { $kbSelect[] = ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS kb_type'; }
+    if (!empty($kbCols['key'])) { $kbSelect[] = ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS kb_key'; }
+    if (!empty($kbCols['meta_json'])) { $kbSelect[] = $kbCols['meta_json'] . ' AS kb_meta'; }
+    $kbRow = $db->fetch_array($db->query("SELECT " . implode(', ', $kbSelect) . " FROM " . af_advancedshop_kb_table() . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
+    if (!$kbRow) {
+        af_advancedshop_json_err('KB entry not found', 404);
+    }
+
+    $kbTypeResolved = af_advancedshop_normalize_kb_type((string)($kbRow['kb_type'] ?? $kbType));
+    if ($kbTypeResolved !== '') {
+        $kbType = $kbTypeResolved;
+    }
+    $kbKeyResolved = trim((string)($kbRow['kb_key'] ?? ''));
+    if ($kbKeyResolved !== '') {
+        $kbKey = $kbKeyResolved;
+    }
+
     $duplicate = $db->fetch_array($db->simple_select('af_shop_slots', 'slot_id', 'shop_id=' . (int)$shop['shop_id'] . ' AND cat_id=' . $catId . ' AND kb_id=' . $kbId, ['limit' => 1]));
     if ($duplicate) { af_advancedshop_json_err('Slot with this KB item already exists in category', 409); }
 
     // Slots store prices in minor units (e.g. 150 = 1.50).
+    $profile = af_advancedshop_kb_item_profile($kbRow);
     $priceMinor = af_advancedshop_money_to_minor((string)$mybb->get_input('price'));
+    if ($priceMinor <= 0 && (int)$profile['price'] > 0) {
+        $priceMinor = (int)$profile['price'];
+    }
+    $currency = (string)$mybb->get_input('currency');
+    if ($currency === '') {
+        $currency = (string)$profile['currency'];
+    }
+    if ($currency === '') {
+        $currency = (string)$mybb->settings['af_advancedshop_currency_slug'];
+    }
+
+    // Canonical mode A: shop slot keeps KB link only and resolves af_kb.meta.v2/rules on render/purchase.
     $slotId = (int)$db->insert_query('af_shop_slots', [
         'shop_id' => (int)$shop['shop_id'],
         'cat_id' => $catId,
@@ -1293,7 +1334,7 @@ function af_advancedshop_manage_slot_create(): void
         'kb_id' => $kbId,
         'kb_key' => $db->escape_string($kbKey),
         'price' => $priceMinor,
-        'currency' => $db->escape_string((string)($mybb->get_input('currency') ?: $mybb->settings['af_advancedshop_currency_slug'])),
+        'currency' => $db->escape_string($currency),
         'stock' => (int)$mybb->get_input('stock', MyBB::INPUT_INT),
         'limit_per_user' => max(0, (int)$mybb->get_input('limit_per_user', MyBB::INPUT_INT)),
         'enabled' => (int)$mybb->get_input('enabled') ? 1 : 0,
@@ -1309,7 +1350,7 @@ function af_advancedshop_manage_slot_create(): void
         'kb_key' => $kbKey,
         'price' => $priceMinor,
         'price_major' => af_advancedshop_money_format($priceMinor),
-        'currency' => (string)($mybb->get_input('currency') ?: $mybb->settings['af_advancedshop_currency_slug']),
+        'currency' => $currency,
         'stock' => (int)$mybb->get_input('stock', MyBB::INPUT_INT),
         'limit_per_user' => max(0, (int)$mybb->get_input('limit_per_user', MyBB::INPUT_INT)),
         'enabled' => (int)$mybb->get_input('enabled') ? 1 : 0,
@@ -1382,6 +1423,17 @@ function af_advancedshop_kb_search(): void
     $typeCol = $kbCols['type'] ?? null;
     $keyCol = $kbCols['key'] ?? null;
     $q = trim((string)$mybb->get_input('q'));
+    $typeFilter = af_advancedshop_normalize_kb_type((string)$mybb->get_input('kb_type'));
+    if ($typeFilter === '' || $typeFilter === 'all') {
+        $typeFilter = 'all';
+    }
+    $rarityFilter = mb_strtolower(trim((string)$mybb->get_input('rarity')));
+    $itemTypeFilter = mb_strtolower(trim((string)$mybb->get_input('item_type')));
+    $spellLevelFilter = trim((string)$mybb->get_input('spell_level'));
+    $spellSchoolFilter = mb_strtolower(trim((string)$mybb->get_input('spell_school')));
+    $limit = (int)$mybb->get_input('limit', MyBB::INPUT_INT);
+    if ($limit <= 0) { $limit = 50; }
+    $limit = min(100, max(1, $limit));
     $escaped = $db->escape_string($q);
     $where = '1=1';
     if (!empty($kbCols['active'])) {
@@ -1389,15 +1441,19 @@ function af_advancedshop_kb_search(): void
     }
     if ($escaped !== '') {
         $searchParts = [];
-        foreach (array_filter([$titleRuCol, $titleEnCol, $titleCol, $shortRuCol, $shortEnCol, $shortCol]) as $column) {
+        foreach (array_filter([$titleRuCol, $titleEnCol, $titleCol, $shortRuCol, $shortEnCol, $shortCol, $keyCol]) as $column) {
             $searchParts[] = $column . " LIKE '%{$escaped}%'";
         }
         if ($searchParts) {
             $where .= ' AND (' . implode(' OR ', $searchParts) . ')';
         }
     }
-    if (!empty($typeCol)) {
-        $where .= " AND " . ($typeCol === 'type' ? '`type`' : $typeCol) . "='item'";
+    if (!empty($typeCol) && $typeFilter !== 'all') {
+        if ($typeFilter === 'spell') {
+            $where .= " AND " . ($typeCol === 'type' ? '`type`' : $typeCol) . " IN('spell','ritual')";
+        } else {
+            $where .= " AND " . ($typeCol === 'type' ? '`type`' : $typeCol) . "='item'";
+        }
     }
     $select = [
         $kbIdCol . ' AS kb_id',
@@ -1412,7 +1468,7 @@ function af_advancedshop_kb_search(): void
         ($keyCol ? (($keyCol === 'key' ? '`key`' : $keyCol) . ' AS kb_key') : "'' AS kb_key"),
     ];
     $orderSort = !empty($kbCols['sortorder']) ? $kbCols['sortorder'] . ' ASC, ' : '';
-    $sql = "SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE {$where} ORDER BY {$orderSort}{$kbIdCol} DESC LIMIT 50";
+    $sql = "SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE {$where} ORDER BY {$orderSort}{$kbIdCol} DESC LIMIT " . ($limit * 2);
     $res = $db->query($sql);
     $items = [];
     while ($row = $db->fetch_array($res)) {
@@ -1422,6 +1478,15 @@ function af_advancedshop_kb_search(): void
         if ($title === '') { $title = (string)($row['kb_title'] ?? ''); }
         $short = af_advancedshop_pick_lang((string)($row['kb_short_ru'] ?? ''), (string)($row['kb_short_en'] ?? ''));
         if ($short === '') { $short = (string)($row['kb_short'] ?? ''); }
+        $itemType = mb_strtolower(trim((string)($meta['rules']['item']['item_kind'] ?? $meta['rules']['item']['type'] ?? '')));
+        $spellLevel = (string)($meta['rules']['spell']['level'] ?? $meta['rules']['ritual']['level'] ?? '');
+        $spellSchool = mb_strtolower(trim((string)($meta['rules']['spell']['school'] ?? $meta['rules']['ritual']['school'] ?? '')));
+
+        if ($rarityFilter !== '' && mb_strtolower((string)$profile['rarity']) !== $rarityFilter) { continue; }
+        if ($itemTypeFilter !== '' && $itemType !== $itemTypeFilter) { continue; }
+        if ($spellLevelFilter !== '' && $spellLevel !== $spellLevelFilter) { continue; }
+        if ($spellSchoolFilter !== '' && $spellSchool !== $spellSchoolFilter) { continue; }
+
         $items[] = [
             'kb_id' => (int)$row['kb_id'],
             'kb_type' => (string)($row['kb_type'] ?? 'item'),
@@ -1431,9 +1496,33 @@ function af_advancedshop_kb_search(): void
             'rarity' => (string)$profile['rarity'],
             'stack_max' => (int)$profile['stack_max'],
             'short' => $short,
+            'price_minor' => max(0, (int)($profile['price'] ?? 0)),
+            'price_major' => af_advancedshop_money_format(max(0, (int)($profile['price'] ?? 0))),
+            'currency' => (string)($profile['currency'] ?? 'credits'),
+            'item_type' => $itemType,
+            'spell_level' => $spellLevel,
+            'spell_school' => $spellSchool,
         ];
+        if (count($items) >= $limit) {
+            break;
+        }
     }
     af_advancedshop_json_ok(['items' => $items]);
+}
+
+function af_advancedshop_normalize_kb_type(string $type): string
+{
+    $normalized = mb_strtolower(trim($type));
+    if (in_array($normalized, ['spell', 'ritual'], true)) {
+        return 'spell';
+    }
+    if ($normalized === 'all') {
+        return 'all';
+    }
+    if ($normalized === '' || $normalized === 'item') {
+        return 'item';
+    }
+    return $normalized;
 }
 
 function af_advancedshop_kb_probe(): void
@@ -2593,8 +2682,16 @@ function af_advancedshop_json_ok(array $payload = []): void
 
 function af_advancedshop_json_err(string $message, int $code = 400, array $extra = []): void
 {
+    af_advancedshop_debug_log('shop_json_error', ['code' => $code, 'error' => $message, 'action' => (string)($_REQUEST['action'] ?? '')]);
     if (function_exists('http_response_code')) {
         http_response_code($code);
     }
     af_advancedshop_json(array_merge(['ok' => false, 'error' => $message, 'code' => $code], $extra));
+}
+
+function af_advancedshop_debug_log(string $event, array $context = []): void
+{
+    $line = '[' . date('Y-m-d H:i:s') . '] ' . $event . ' ' . json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+    $path = MYBB_ROOT . 'inc/plugins/advancedfunctionality/cache/advancedshop.log';
+    @file_put_contents($path, $line, FILE_APPEND);
 }

@@ -128,3 +128,8 @@ body.af-shop-modal-open{overflow:hidden}
   .af-eq-slot[data-slot="hands"]{left:16px}
   .af-eq-slot[data-slot="back"],.af-eq-slot[data-slot="accessory"],.af-eq-slot[data-slot="unique"],.af-eq-slot[data-slot="artifact"]{left:auto;right:16px}
 }
+.af-kb-picker-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;align-items:end}
+.af-kb-picker-filters label{display:flex;flex-direction:column;gap:4px}
+.af-kb-item{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:6px 8px;border:1px solid #2c2c2c;border-radius:8px;flex-wrap:wrap}
+.af-kb-item span{font-weight:600}
+.af-kb-item small{display:block;opacity:.8}
