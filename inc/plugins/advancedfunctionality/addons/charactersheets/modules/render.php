@@ -1261,7 +1261,7 @@ function af_charactersheets_build_bonus_html(array $index): string
     return '<div class="af-cs-bonus-grid">' . implode('', $columns) . '</div>';
 }
 
-function af_charactersheets_lang(string $key, string $fallback = ''): string
+function af_charactersheets_lang(?string $key = null, string $fallback = ''): string
 {
     static $loaded = false;
 
@@ -1270,6 +1270,11 @@ function af_charactersheets_lang(string $key, string $fallback = ''): string
         if (function_exists('af_charactersheets_load_lang')) {
             af_charactersheets_load_lang();
         }
+    }
+
+    // Если вызвали без ключа — просто возвращаем fallback (или пустую строку)
+    if ($key === null || $key === '') {
+        return $fallback;
     }
 
     global $lang;
