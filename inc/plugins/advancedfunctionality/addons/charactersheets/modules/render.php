@@ -1195,11 +1195,18 @@ function af_charactersheets_build_info_table_html(array $index, array $sheet_vie
 
 function af_charactersheets_build_bonus_html(array $index): string
 {
+    global $mybb;
+
     $mapping = af_charactersheets_kb_mapping();
     $columns = [];
     foreach ($mapping as $fieldName => $data) {
         $field = $index[$fieldName] ?? [];
         $key = (string)($field['value'] ?? '');
+
+        if ((string)($data['type'] ?? '') === 'themes' && $key === '') {
+            $key = af_charactersheets_pick_field_value($index, ['character_themes', 'character_theme', 'theme'], false);
+        }
+
         $entry = $key !== '' ? af_charactersheets_kb_get_entry((string)$data['type'], $key) : [];
         $title = af_charactersheets_kb_pick_text($entry, 'title');
         if ($title === '') {
@@ -1207,6 +1214,36 @@ function af_charactersheets_build_bonus_html(array $index): string
         }
 
         $text_html = af_cs_render_kb_bonuses_text((string)$data['type'], $key, af_charactersheets_is_ru());
+
+        if ((string)($data['type'] ?? '') === 'themes' && function_exists('af_cs_is_staff') && af_cs_is_staff((array)($mybb->user ?? []))) {
+            $theme_entry_id = (int)($entry['id'] ?? 0);
+            $theme_block_found = 0;
+            $theme_bonus_len = 0;
+
+            if ($theme_entry_id > 0) {
+                global $db;
+                if (is_object($db) && $db->table_exists('af_kb_blocks')) {
+                    $where = "entry_id={$theme_entry_id} AND block_key='bonuses'";
+                    if (!function_exists('af_kb_can_edit') || !af_kb_can_edit()) {
+                        $where .= ' AND active=1';
+                    }
+                    $block = $db->fetch_array($db->simple_select('af_kb_blocks', 'content_ru,content_en', $where, ['limit' => 1]));
+                    if (is_array($block) && !empty($block)) {
+                        $theme_block_found = 1;
+                        $theme_bonus_len = strlen(trim((string)($block[af_charactersheets_is_ru() ? 'content_ru' : 'content_en'] ?? '')));
+                    }
+                }
+            }
+
+            af_charactersheets_log('bonus theme diagnostics', [
+                'theme_key' => $key,
+                'theme_entry_found' => $theme_entry_id > 0 ? 1 : 0,
+                'theme_entry_id' => $theme_entry_id,
+                'theme_bonuses_block_found' => $theme_block_found,
+                'theme_bonuses_content_len' => $theme_bonus_len,
+            ]);
+        }
+
         if ($text_html === '') {
             $text_html = '<div class="af-cs-muted">Нет данных</div>';
         }
