@@ -330,7 +330,11 @@
               throw new Error('Некорректный ответ сервера');
             }
 
-            return handleAjaxResponse(resp, payloadObj);
+            var normalizedPayload = handleAjaxResponse(resp, payloadObj);
+            if (normalizedPayload && typeof normalizedPayload.payload === 'object' && normalizedPayload.payload !== null) {
+              return Object.assign({}, normalizedPayload, normalizedPayload.payload);
+            }
+            return normalizedPayload;
           });
         }).catch(function (error) {
           showInlineError(error && error.message ? error.message : 'Ошибка запроса');

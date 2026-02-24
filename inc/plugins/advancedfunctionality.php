@@ -1181,9 +1181,32 @@ function af_apply_preoutput_filters(string $page): string
     return $page;
 }
 
+function af_is_ajax_request(): bool
+{
+    global $mybb;
+
+    if (defined('IN_MYBB') && isset($mybb) && is_object($mybb)) {
+        if ((int)$mybb->get_input('ajax', MyBB::INPUT_INT) === 1) {
+            return true;
+        }
+    }
+
+    $xrw = strtolower(trim((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')));
+    if ($xrw === 'xmlhttprequest') {
+        return true;
+    }
+
+    $accept = strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? ''));
+    return strpos($accept, 'application/json') !== false;
+}
+
 function af_should_skip_preoutput(): bool
 {
     if (!empty($GLOBALS['af_disable_pre_output'])) {
+        return true;
+    }
+
+    if (af_is_ajax_request()) {
         return true;
     }
 
