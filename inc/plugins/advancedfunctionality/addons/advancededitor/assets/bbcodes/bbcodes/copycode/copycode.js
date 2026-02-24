@@ -4,7 +4,8 @@
   // one-shot
   if (window.__afCopyCodeLoaded) return;
   window.__afCopyCodeLoaded = true;
-  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
+  if (!window.AFAE || typeof window.AFAE.onEditorReady !== 'function') return;
+  window.AFAE.onEditorReady(function () {
 
   function asText(x) { return String(x == null ? '' : x); }
 
@@ -282,4 +283,5 @@
 
     mo.observe(document.documentElement || document.body, { childList: true, subtree: true });
   } catch (e1) {}
+  });
 })();

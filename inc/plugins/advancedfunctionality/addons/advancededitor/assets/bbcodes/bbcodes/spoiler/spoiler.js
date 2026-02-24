@@ -10,7 +10,8 @@
   // one-shot
   if (window.__afAeSpoilerPackLoaded) return;
   window.__afAeSpoilerPackLoaded = true;
-  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
+  if (!window.AFAE || typeof window.AFAE.onEditorReady !== 'function') return;
+  window.AFAE.onEditorReady(function () {
 
   var ID  = 'spoiler';
   var CMD = 'af_spoiler';
@@ -434,4 +435,5 @@
     boot();
   }
 
+  });
 })();

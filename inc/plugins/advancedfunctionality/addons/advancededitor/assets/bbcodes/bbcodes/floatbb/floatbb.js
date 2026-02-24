@@ -8,7 +8,8 @@
   // one-shot
   if (window.afAeFloatbbInitialized) return;
   window.afAeFloatbbInitialized = true;
-  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
+  if (!window.AFAE || typeof window.AFAE.onEditorReady !== 'function') return;
+  window.AFAE.onEditorReady(function () {
 
   // НЕ ТРОГАЕМ: чтобы не сломать кнопку/конструктор/manifest
   var ID  = 'floatbb';
@@ -234,4 +235,5 @@
   registerHandlers();
   for (var i = 1; i <= 20; i++) setTimeout(registerHandlers, i * 250);
 
+  });
 })();

@@ -3,7 +3,8 @@
 
   if (window.__afAeCharCountAndPrewLoaded) return;
   window.__afAeCharCountAndPrewLoaded = true;
-  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
+  if (!window.AFAE || typeof window.AFAE.onEditorReady !== 'function') return;
+  window.AFAE.onEditorReady(function () {
 
   function asText(x) { return String(x == null ? '' : x); }
 
@@ -569,4 +570,5 @@
     setTimeout(initFormCounterAndPreview, 900);
   });
 
+  });
 })();
