@@ -5,6 +5,30 @@ if (!defined('IN_MYBB')) {
 
 function af_charactersheets_handle_api(): void
 {
+    try {
+        af_charactersheets_handle_api_impl();
+    } catch (Throwable $e) {
+        $debug = [];
+        if (af_charactersheets_is_api_debug_user()) {
+            $debug = [
+                'exception' => get_class($e),
+                'file' => (string)$e->getFile(),
+                'line' => (int)$e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ];
+        }
+
+        af_charactersheets_json_error(
+            'internal_error',
+            'Internal server error',
+            $debug,
+            500
+        );
+    }
+}
+
+function af_charactersheets_handle_api_impl(): void
+{
     global $mybb;
 
     if (!af_charactersheets_is_enabled()) {
@@ -711,7 +735,8 @@ function af_charactersheets_handle_api(): void
     $skills_html = af_charactersheets_build_skills_html($view, $can_manage_skills, $can_view_ledger, $can_staff_reset, $skills_locked);
     $knowledge_html = af_charactersheets_build_knowledge_html($view, $can_edit, $can_view_ledger);
     $abilities_html = af_charactersheets_build_abilities_html($build, $can_edit);
-    $inventory_html = af_charactersheets_build_inventory_html($build, $can_edit);
+    $inventory_uid = (int)($sheet['uid'] ?? 0);
+    $inventory_html = af_charactersheets_build_inventory_html($inventory_uid);
     $augmentations_html = af_charactersheets_build_augments_html($build, $can_edit, $view);
     $equipment_html = af_charactersheets_build_equipment_html($build, $can_edit);
     $mechanics_html = af_charactersheets_build_mechanics_html($view);
