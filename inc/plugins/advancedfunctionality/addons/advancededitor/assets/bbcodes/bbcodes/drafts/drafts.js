@@ -3,7 +3,8 @@
 
   if (window.__afAeDraftsBooted) return;
   window.__afAeDraftsBooted = true;
-  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
+  if (!window.AFAE || typeof window.AFAE.onEditorReady !== 'function') return;
+  window.AFAE.onEditorReady(function () {
 
   // ====== CONFIG ======
   var SUBMIT_SS_PREFIX = 'af_ae_drafts_just_submitted::';
@@ -370,4 +371,5 @@
     } catch (e2) {}
   }, true);
 
+  });
 })();

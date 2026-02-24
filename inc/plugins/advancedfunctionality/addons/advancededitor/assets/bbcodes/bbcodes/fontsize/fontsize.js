@@ -5,7 +5,8 @@
 
   var ID = 'fontsize';
   var CMD = 'af_fontsize';
-  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
+  if (!window.AFAE || typeof window.AFAE.onEditorReady !== 'function') return;
+  window.AFAE.onEditorReady(function () {
 
   // Диапазон для конвертации/нормализации (не для списка!)
   var MIN_PX = 8;
@@ -464,4 +465,5 @@
     document.addEventListener('click', captureClick, true);
   })();
 
+  });
 })();

@@ -8,7 +8,8 @@
   // one-shot
   if (window.__afAeTablePackLoaded) return;
   window.__afAeTablePackLoaded = true;
-  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
+  if (!window.AFAE || typeof window.AFAE.onEditorReady !== 'function') return;
+  window.AFAE.onEditorReady(function () {
 
   // НЕ ТРОГАЕМ: чтобы не сломать кнопку/конструктор/manifest
   var ID  = 'table';
@@ -563,4 +564,5 @@
     }
   };
 
+  });
 })();

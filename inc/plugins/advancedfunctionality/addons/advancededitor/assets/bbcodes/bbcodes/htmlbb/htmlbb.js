@@ -6,7 +6,8 @@
 
   if (window.afAeHtmlbbInitialized) return;
   window.afAeHtmlbbInitialized = true;
-  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
+  if (!window.AFAE || typeof window.AFAE.onEditorReady !== 'function') return;
+  window.AFAE.onEditorReady(function () {
 
   var ID  = 'htmlbb';
   var CMD = 'af_htmlbb';
@@ -214,4 +215,5 @@
     } catch (e) {}
   }
 
+  });
 })();

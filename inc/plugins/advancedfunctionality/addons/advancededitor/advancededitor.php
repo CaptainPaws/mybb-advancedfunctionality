@@ -922,7 +922,7 @@ function af_advancededitor_pre_output(string &$page = ''): void
     $isEditorScript = af_advancededitor_is_editor_whitelist_request();
     $hasTextarea = (stripos($page, '<textarea') !== false);
     $hasEditorDom = af_advancededitor_page_has_editor_dom($page);
-    $shouldLoadEditorPacks = ($isEditorScript && $hasEditorDom);
+    $shouldLoadEditorPacks = $isEditorScript;
 
     // Пакеты BB-кнопок/стилей (включая copycode)
     $packs = af_advancededitor_discover_bbcode_packs($bburl);

@@ -6,7 +6,8 @@
 
   if (window.__afAeListsInitialized) return;
   window.__afAeListsInitialized = true;
-  if (!window.AFAE || typeof window.AFAE.hasEditor !== 'function' || !window.AFAE.hasEditor()) return;
+  if (!window.AFAE || typeof window.AFAE.onEditorReady !== 'function') return;
+  window.AFAE.onEditorReady(function () {
 
   function asText(x) { return String(x == null ? '' : x); }
 
@@ -548,4 +549,5 @@
     if (tries2 < 60) setTimeout(tick2, 150);
   })();
 
+  });
 })();
