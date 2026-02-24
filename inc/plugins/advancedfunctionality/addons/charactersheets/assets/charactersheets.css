@@ -559,13 +559,14 @@
   position: relative;
   background: #111;
   border-radius: 14px;
-  width: min(1100px, calc(100vw - 24px));
-  height: min(950px, calc(100vh - 24px));
+  width: min(73%, calc(100vw));
+  height: min(90%, calc(100vh));
   display: flex;
   flex-direction: column;
   overflow: hidden;
   z-index: 1;
   border: 1px solid rgba(255, 255, 255, 0.2);
+  top: 5%;
 }
 
 .af-cs-modal__header {
