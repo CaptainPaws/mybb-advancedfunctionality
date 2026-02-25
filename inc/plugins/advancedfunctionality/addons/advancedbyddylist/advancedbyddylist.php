@@ -40,10 +40,6 @@ function af_advancedbyddylist_init(): void
 {
     global $plugins;
     $plugins->add_hook('misc_start', 'af_abdl_hook_misc_start');
-
-    // ВАЖНО: грузим ассеты на обычных страницах, где пользователь кликает "buddylink".
-    // НЕЛЬЗЯ рассчитывать на <script> внутри HTML-фрагмента popupWindow — он не выполнится.
-    $plugins->add_hook('pre_output_page', 'af_abdl_hook_pre_output_page');
 }
 
 
@@ -72,52 +68,6 @@ function af_abdl_hook_misc_start(): void
     // Теперь мы в том самом окне popupWindow(modal=1).
     // Дальше: готовим переменные, которые будут использоваться в misc_buddypopup (наш переписанный шаблон).
     af_abdl_prepare_popup_vars();
-}
-
-function af_abdl_hook_pre_output_page(string &$page): void
-{
-    global $mybb;
-
-    if (!af_abdl_is_enabled()) return;
-
-    // Не грузим в ACP/ModCP
-    if (defined('IN_ADMINCP')) return;
-    if (defined('THIS_SCRIPT') && (THIS_SCRIPT === 'modcp.php')) return;
-
-    // Гости не откроют buddylist нормально — не грузим
-    if ((int)$mybb->user['uid'] <= 0) return;
-
-    // Идемпотентность
-    if (strpos($page, '<!--af_abdl_assets-->') !== false) return;
-
-    $bburl = rtrim((string)$mybb->settings['bburl'], '/');
-
-    // URL к ассетам
-    $assetsUrl  = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_ABDL_ID . '/assets/';
-
-    // ФС-пути (для filemtime)
-    $assetsPath = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_ABDL_ID . '/assets/';
-    $cssPath = $assetsPath . 'advancedbyddylist.css';
-    $jsPath  = $assetsPath . 'advancedbyddylist.js';
-
-    // Версии = время изменения файла (всегда актуально)
-    $cssVer = @filemtime($cssPath);
-    $jsVer  = @filemtime($jsPath);
-
-    // Фоллбек, если что-то не так с путём/правами
-    if (!$cssVer) $cssVer = TIME_NOW;
-    if (!$jsVer)  $jsVer  = TIME_NOW;
-
-    $inject = "\n<!--af_abdl_assets-->"
-        . "\n<link rel=\"stylesheet\" href=\"" . htmlspecialchars_uni($assetsUrl . "advancedbyddylist.css?v=" . (int)$cssVer) . "\" />"
-        . "\n<script src=\"" . htmlspecialchars_uni($assetsUrl . "advancedbyddylist.js?v=" . (int)$jsVer) . "\"></script>\n";
-
-    // Вставляем перед </head> (если вдруг нет — просто в начало страницы)
-    if (stripos($page, '</head>') !== false) {
-        $page = preg_replace('~</head>~i', $inject . '</head>', $page, 1);
-    } else {
-        $page = $inject . $page;
-    }
 }
 
 /**
