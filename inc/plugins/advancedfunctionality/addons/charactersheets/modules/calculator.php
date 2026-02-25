@@ -1059,14 +1059,6 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $skills_map[$skill_key] = $row;
     }
 
-    $skill_rank_bonus_map = [
-        0 => 0,
-        1 => 2,
-        2 => 5,
-        3 => 10,
-        4 => 15,
-        5 => 20,
-    ];
     $skills_view = [];
     $skills_all = (array)($kb_context['skills_all'] ?? []);
     $skills_catalog_fetched = count($skills_all);
@@ -1098,18 +1090,27 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         }
 
         $skill_entry = af_charactersheets_kb_get_entry('skill', $skill_key);
+        if (empty($skill_entry)) {
+            $skill_entry = af_charactersheets_kb_get_entry('skills', $skill_key);
+        }
         $key_stat = af_charactersheets_extract_skill_key_stat((array)$skill_entry);
         $key_stat_label = $key_stat !== '' ? (string)($attributes_labels[$key_stat] ?? '') : '';
+        if ($key_stat === '') {
+            static $missing_skill_key_stats = [];
+            if (!isset($missing_skill_key_stats[$skill_key])) {
+                af_charactersheets_log('skills: missing key_stat in KB rules', [
+                    'skill_key' => $skill_key,
+                ]);
+                $missing_skill_key_stats[$skill_key] = true;
+            }
+        }
         $attr_mod = $key_stat !== '' ? (int)floor((float)($final[$key_stat] ?? 0)) : 0;
         $row = (array)($skills_map[$skill_key] ?? []);
         $skill_rank = max(0, (int)($row['skill_rank'] ?? 0));
         $is_active = (int)($row['is_active'] ?? 0) === 1;
         $source = (string)($row['source'] ?? '');
         $bonus_val = (float)($bonus_skill_map[$skill_key] ?? 0);
-        $rank_bonus = (float)($skill_rank_bonus_map[$skill_rank] ?? 0);
-        if (!array_key_exists($skill_rank, $skill_rank_bonus_map) && $skill_rank > 5) {
-            $rank_bonus = 20 + (($skill_rank - 5) * 5);
-        }
+        $rank_bonus = af_charactersheets_skill_rank_bonus_for_rank($skill_rank);
         $total = $attr_mod + $rank_bonus + $bonus_val;
         $grant_rank = max(0, (int)($grant_skill_ranks[$skill_key] ?? 0));
         if ($is_active) {

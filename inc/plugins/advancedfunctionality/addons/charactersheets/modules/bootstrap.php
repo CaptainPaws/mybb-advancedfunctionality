@@ -2745,6 +2745,25 @@ function af_charactersheets_skill_rank_cost_for_target(int $target_rank): int
     return 8 + (($target_rank - 5) * 5);
 }
 
+function af_charactersheets_skill_rank_bonus_map(): array
+{
+    return [
+        0 => 0,
+        1 => 2,
+        2 => 5,
+        3 => 10,
+        4 => 20,
+        5 => 30,
+    ];
+}
+
+function af_charactersheets_skill_rank_bonus_for_rank(int $rank): float
+{
+    $rank = max(0, min(5, $rank));
+    $map = af_charactersheets_skill_rank_bonus_map();
+    return (float)($map[$rank] ?? 0);
+}
+
 function af_charactersheets_resolve_skill_attribute_key(array $skill_data, array $entry_data = []): string
 {
     $attribute_key = trim((string)($skill_data['key_stat'] ?? ''));
@@ -2765,8 +2784,16 @@ function af_charactersheets_extract_skill_key_stat(array $entry): string
 {
     $entry_data = (array)($entry['data'] ?? []);
     $skill_data = (array)($entry_data['skill'] ?? []);
+    $rules = cs_kb_get_data_rules($entry);
+    $rules_skill = is_array($rules['skill'] ?? null) ? (array)$rules['skill'] : [];
 
-    $key_stat = trim((string)($skill_data['key_stat'] ?? ''));
+    $key_stat = trim((string)($rules_skill['key_stat'] ?? $rules['key_stat'] ?? ''));
+    if ($key_stat === '') {
+        $key_stat = trim((string)($rules_skill['attribute'] ?? $rules['attribute'] ?? ''));
+    }
+    if ($key_stat === '') {
+        $key_stat = trim((string)($skill_data['key_stat'] ?? ''));
+    }
     if ($key_stat === '') {
         $key_stat = trim((string)($skill_data['attribute'] ?? ''));
     }
