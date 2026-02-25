@@ -28,7 +28,7 @@ function af_charactersheets_postbit_button(array &$post): void
         af_charactersheets_lang();
     }
 
-    $sheet_url = 'misc.php?action=af_charactersheet&slug=' . rawurlencode($slug);
+    $sheet_url = af_charactersheets_url(['slug' => $slug]);
     $button_label = $lang->af_charactersheets_sheet_button ?? 'Лист персонажа';
     $sheet_url = htmlspecialchars_uni($sheet_url);
     $button_label = htmlspecialchars_uni($button_label);
