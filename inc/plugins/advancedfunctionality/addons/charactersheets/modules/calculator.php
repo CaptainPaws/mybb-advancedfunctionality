@@ -1060,6 +1060,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     }
 
     $skills_view = [];
+    $debug_skills_key_stats = [];
     $skills_all = (array)($kb_context['skills_all'] ?? []);
     $skills_kb_keys = [];
     foreach ($skills_all as $skill_resolved) {
@@ -1159,6 +1160,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'total' => $total,
             'total_bonus' => $total,
         ];
+        $debug_skills_key_stats[$skill_key] = $key_stat;
     }
 
     $skills_catalog_after_filter = count($skills_view);
@@ -1311,6 +1313,10 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         'debug_trace' => (array)($rules_engine_state['debug_trace'] ?? []),
     ];
 
+    $is_debug_user = !empty($mybb->usergroup['cancp'])
+        || !empty($mybb->usergroup['issupermod'])
+        || !empty($mybb->usergroup['canmodcp']);
+
     return [
         'allocated' => $attributes_allocated,
         'base' => array_fill_keys(array_keys($attributes_base), (float)$auto_stat_bonus),
@@ -1336,6 +1342,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         'exp_need' => (float)($level_data['exp_need'] ?? 0),
         'credits' => (int)($balance['credits'] ?? 0),
         'skills' => $skills_view,
+        'debug_skills_key_stats' => $is_debug_user ? $debug_skills_key_stats : [],
         'rank_bonus_map' => af_charactersheets_skill_rank_bonus_map(),
         'kb_context' => $kb_context,
         'ctx' => [
