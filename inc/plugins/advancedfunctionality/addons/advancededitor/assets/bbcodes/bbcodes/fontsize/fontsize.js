@@ -5,20 +5,6 @@
 
   var ID = 'fontsize';
   var CMD = 'af_fontsize';
-  function afAeRunWhenReady(cb) {
-    if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-      window.AFAE.onEditorReady(cb);
-      return;
-    }
-    window.__AFAE_QUEUE = window.__AFAE_QUEUE || [];
-    window.__AFAE_QUEUE.push(function () {
-      if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-        window.AFAE.onEditorReady(cb);
-      }
-    });
-  }
-
-  afAeRunWhenReady(function () {
 
   // Диапазон для конвертации/нормализации (не для списка!)
   var MIN_PX = 8;
@@ -477,5 +463,4 @@
     document.addEventListener('click', captureClick, true);
   })();
 
-  });
 })();
