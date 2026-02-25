@@ -1884,7 +1884,7 @@ function af_collect_enabled_addon_assets(): array
 
         // Эти аддоны управляют ассетами сами через pre_output.
         // В авто-сканере отключаем их полностью, чтобы не получать дубль версий.
-        if ($id === 'advancededitor' || $id === 'advancedprofilefields') {
+        if ($id === 'advancededitor' || $id === 'advancedprofilefields' || $id === 'advancedalertsandmentions') {
             continue;
         }
 

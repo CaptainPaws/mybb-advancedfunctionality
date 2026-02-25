@@ -996,10 +996,77 @@ function af_aam_should_load_mentions_js(): bool
     return true;
 }
 
+/**
+ * Единый источник cache-buster для ассетов AAM.
+ */
+function af_aam_asset_ver(string $assetFile): string
+{
+    $assetFile = ltrim($assetFile, '/\\');
+    $path = MYBB_ROOT . AF_AAM_BASE . 'assets/' . $assetFile;
+
+    if (is_file($path)) {
+        $mtime = (int)@filemtime($path);
+        if ($mtime > 0) {
+            return (string)$mtime;
+        }
+    }
+
+    $manifest = MYBB_ROOT . AF_AAM_BASE . 'manifest.php';
+    if (is_file($manifest)) {
+        $meta = @include $manifest;
+        if (is_array($meta) && !empty($meta['version'])) {
+            return (string)$meta['version'];
+        }
+    }
+
+    return (string)TIME_NOW;
+}
+
+function af_aam_asset_url(string $assetFile): string
+{
+    global $mybb;
+
+    $assetFile = ltrim($assetFile, '/\\');
+    $base = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+    $url = $base . '/' . AF_AAM_BASE . 'assets/' . $assetFile;
+
+    return $url . '?v=' . rawurlencode(af_aam_asset_ver($assetFile));
+}
+
+/**
+ * Добавляет asset-тег один раз за запрос.
+ */
+function af_aam_add_asset_once(string $type, string $url, string $key): string
+{
+    if (!isset($GLOBALS['af_js_loaded']) || !is_array($GLOBALS['af_js_loaded'])) {
+        $GLOBALS['af_js_loaded'] = [];
+    }
+
+    if (!isset($GLOBALS['af_js_loaded_normalized']) || !is_array($GLOBALS['af_js_loaded_normalized'])) {
+        $GLOBALS['af_js_loaded_normalized'] = [];
+    }
+
+    $cleanPath = (string)parse_url($url, PHP_URL_PATH);
+    $cleanPath = '/' . ltrim($cleanPath, '/');
+
+    if (!empty($GLOBALS['af_js_loaded'][$key]) || !empty($GLOBALS['af_js_loaded_normalized'][$cleanPath])) {
+        return '';
+    }
+
+    $GLOBALS['af_js_loaded'][$key] = true;
+    $GLOBALS['af_js_loaded_normalized'][$cleanPath] = true;
+
+    if ($type === 'css') {
+        return '<link rel="stylesheet" href="' . $url . '" />';
+    }
+
+    return '<script type="text/javascript" src="' . $url . '"></script>';
+}
+
 function af_aam_bootstrap(): void
 {
     global $mybb, $db, $templates, $lang;
-    global $af_aam_js, $af_aam_css, $af_aam_header_icon, $af_aam_modal, $af_aam_mentions_js;
+    global $af_aam_js, $af_aam_css, $af_aam_header_icon, $af_aam_modal, $af_aam_mentions_js, $af_aam_main_js;
     global $af_aam_unread, $af_aam_modal_list, $af_aam_new_indicator;
     global $af_aam_asset_base, $af_aam_autorefresh;
     global $af_aam_sound_enabled, $af_aam_toast_limit;
@@ -1025,27 +1092,24 @@ function af_aam_bootstrap(): void
     $af_aam_autorefresh = (int)($mybb->settings['af_aam_autorefresh'] ?? 0);
 
     // cache-bust по mtime (после переносов это реально спасает нервы)
-    $cssFile = MYBB_ROOT . AF_AAM_BASE . 'assets/advancedalertsandmentions.css';
-    $cssVer  = is_file($cssFile) ? (int)@filemtime($cssFile) : TIME_NOW;
-
-    $af_aam_css = '<link rel="stylesheet" href="' . $assetsUrl . 'advancedalertsandmentions.css?v=' . $cssVer . '" />';
+    $af_aam_css = af_aam_add_asset_once('css', af_aam_asset_url('advancedalertsandmentions.css'), 'advancedalertsandmentions.css');
 
     $af_aam_sound_enabled = (int)($mybb->settings['af_aam_sound'] ?? 1);
     $af_aam_toast_limit   = (int)($mybb->settings['af_aam_toast_limit'] ?? 5);
 
     // mentions js теперь тоже в assets/
-    $mentionsFile = MYBB_ROOT . AF_AAM_BASE . 'assets/aam_mentions.js';
-    $mentionsVer  = is_file($mentionsFile) ? (int)@filemtime($mentionsFile) : TIME_NOW;
-
     $af_aam_mentions_js = af_aam_should_load_mentions_js()
-        ? '<script type="text/javascript" src="' . $assetsUrl . 'aam_mentions.js?v=' . $mentionsVer . '"></script>'
+        ? af_aam_add_asset_once('js', af_aam_asset_url('aam_mentions.js'), 'aam_mentions.js')
         : '';
+
+    $af_aam_main_js = af_aam_add_asset_once('js', af_aam_asset_url('advancedalertsandmentions.js'), 'advancedalertsandmentions.js');
 
     // гость — ничего
     if (empty($mybb->user['uid'])) {
         $af_aam_header_icon = '';
         $af_aam_modal       = '';
         $af_aam_js          = '';
+        $af_aam_main_js     = '';
         return;
     }
 
