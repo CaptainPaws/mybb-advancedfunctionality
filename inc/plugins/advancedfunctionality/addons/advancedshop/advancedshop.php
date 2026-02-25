@@ -172,6 +172,7 @@ function af_advancedshop_install(): void
     af_advancedshop_ensure_setting('af_advancedshop_currency_slug', $lang->af_advancedshop_currency_slug ?? 'Currency', $lang->af_advancedshop_currency_slug_desc ?? 'credits', 'text', 'credits', 3, $gid);
     af_advancedshop_ensure_setting('af_advancedshop_items_per_page', 'Items per page', 'Shop page size', 'numeric', '24', 4, $gid);
     af_advancedshop_ensure_setting('af_advancedshop_allow_guest_view', 'Allow guest view', 'Guests may browse the shop', 'yesno', '1', 5, $gid);
+    af_advancedshop_ensure_setting('af_shop_assets_blacklist', 'Assets blacklist', 'Disable AdvancedShop JS/CSS on listed scripts (one per line).', 'textarea', 'index.php', 6, $gid);
 
     if (!$db->table_exists('af_shop')) {
         $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_shop (
@@ -320,6 +321,7 @@ function af_advancedshop_activate(): void
     af_advancedshop_ensure_setting('af_advancedshop_currency_slug', $lang->af_advancedshop_currency_slug ?? 'Currency', $lang->af_advancedshop_currency_slug_desc ?? 'credits', 'text', 'credits', 3, $gid);
     af_advancedshop_ensure_setting('af_advancedshop_items_per_page', 'Items per page', 'Shop page size', 'numeric', '24', 4, $gid);
     af_advancedshop_ensure_setting('af_advancedshop_allow_guest_view', 'Allow guest view', 'Guests may browse the shop', 'yesno', '1', 5, $gid);
+    af_advancedshop_ensure_setting('af_shop_assets_blacklist', 'Assets blacklist', 'Disable AdvancedShop JS/CSS on listed scripts (one per line).', 'textarea', 'index.php', 6, $gid);
     af_advancedshop_ensure_slots_schema();
     af_advancedshop_ensure_equipped_schema();
     af_advancedshop_templates_install_or_update();
@@ -713,8 +715,58 @@ function af_advancedshop_render_shop(): void
 
 function af_advancedshop_assets_html(): string
 {
+    if (af_shop_assets_disabled_for_current_page()) {
+        return '';
+    }
+
     [$cssUrl, $jsUrl] = af_advancedshop_asset_urls();
     return '<link rel="stylesheet" href="' . htmlspecialchars_uni($cssUrl) . '"><script defer src="' . htmlspecialchars_uni($jsUrl) . '"></script>';
+}
+
+function af_shop_assets_disabled_for_current_page(): bool
+{
+    global $mybb;
+
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    if ($script !== '') {
+        $script = strtolower(basename(str_replace('\\', '/', $script)));
+    }
+    if ($script === '') {
+        return false;
+    }
+
+    if ($script === 'index.php') {
+        return true;
+    }
+
+    $defaultBlacklist = [
+        'forumdisplay.php',
+        'postsactivity.php',
+        'usercp.php',
+        'userlist.php',
+        'search.php',
+        'gallery.php',
+    ];
+
+    $customRaw = (string)($mybb->settings['af_shop_assets_blacklist'] ?? 'index.php');
+    $lines = preg_split('~\R~', $customRaw);
+    if (!is_array($lines)) {
+        $lines = [];
+    }
+
+    $customBlacklist = [];
+    foreach ($lines as $line) {
+        $entry = strtolower(trim((string)$line));
+        if ($entry !== '') {
+            $customBlacklist[$entry] = true;
+        }
+    }
+
+    foreach ($defaultBlacklist as $item) {
+        $customBlacklist[$item] = true;
+    }
+
+    return isset($customBlacklist[$script]);
 }
 
 function af_advancedshop_asset_urls(): array
@@ -731,6 +783,10 @@ function af_advancedshop_asset_urls(): array
 function af_advancedshop_pre_output(string &$page = ''): void
 {
     global $mybb;
+    if (af_shop_assets_disabled_for_current_page()) {
+        return;
+    }
+
     $action = (string)($mybb->input['action'] ?? '');
     if (!in_array($action, ['shop', 'shop_category', 'shop_cart', 'shop_manage', 'shop_manage_slots', 'inventory', 'af_charactersheet'], true)) {
         return;
