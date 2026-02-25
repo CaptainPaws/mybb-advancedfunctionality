@@ -27,25 +27,8 @@ function af_ae_admin_builtin_buttons(string $bburl): array
 {
     $bburl = rtrim($bburl, '/');
 
-    $bbcodesDir = function_exists('af_advancededitor_bbcodes_dir')
-        ? af_advancededitor_bbcodes_dir()
-        : (MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/bbcodes/');
-
+    $bbcodesDir = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/bbcodes/';
     $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/';
-    $bbcodesBase = function_exists('af_advancededitor_bbcodes_url')
-        ? af_advancededitor_bbcodes_url()
-        : ($assetsBase . 'bbcodes/');
-
-    $mkAssetUrl = function(string $rel) use ($assetsBase, $bbcodesBase): string {
-        $rel = ltrim(trim($rel), '/');
-        if ($rel === '') return '';
-
-        if (stripos($rel, 'bbcodes/') === 0) {
-            return rtrim($bbcodesBase, '/') . '/' . ltrim(substr($rel, 8), '/');
-        }
-
-        return rtrim($assetsBase, '/') . '/' . $rel;
-    };
 
     $out = [];
 
@@ -119,7 +102,7 @@ function af_ae_admin_builtin_buttons(string $bburl): array
                 } elseif (isset($icon[0]) && $icon[0] === '/') {
                     $icon = $bburl . $icon;
                 } else {
-                    $icon = $mkAssetUrl($icon);
+                    $icon = $assetsBase . ltrim($icon, '/');
                 }
             }
 
@@ -128,16 +111,14 @@ function af_ae_admin_builtin_buttons(string $bburl): array
             foreach ($assetsCss as $c) {
                 $c = trim((string)$c);
                 if ($c === '') continue;
-                $url = $mkAssetUrl($c);
-                if ($url !== '') $cssUrls[] = $url;
+                $cssUrls[] = $assetsBase . ltrim($c, '/');
             }
 
             $jsUrls = [];
             foreach ($assetsJs as $j) {
                 $j = trim((string)$j);
                 if ($j === '') continue;
-                $url = $mkAssetUrl($j);
-                if ($url !== '') $jsUrls[] = $url;
+                $jsUrls[] = $assetsBase . ltrim($j, '/');
             }
 
             $out[] = [
