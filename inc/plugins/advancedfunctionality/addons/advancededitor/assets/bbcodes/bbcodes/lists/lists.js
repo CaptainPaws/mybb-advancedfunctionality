@@ -6,20 +6,6 @@
 
   if (window.__afAeListsInitialized) return;
   window.__afAeListsInitialized = true;
-  function afAeRunWhenReady(cb) {
-    if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-      window.AFAE.onEditorReady(cb);
-      return;
-    }
-    window.__AFAE_QUEUE = window.__AFAE_QUEUE || [];
-    window.__AFAE_QUEUE.push(function () {
-      if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-        window.AFAE.onEditorReady(cb);
-      }
-    });
-  }
-
-  afAeRunWhenReady(function () {
 
   function asText(x) { return String(x == null ? '' : x); }
 
@@ -561,5 +547,4 @@
     if (tries2 < 60) setTimeout(tick2, 150);
   })();
 
-  });
 })();
