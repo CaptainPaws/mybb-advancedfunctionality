@@ -365,25 +365,6 @@ function af_advancedaccountswitcher_init()
 
     $bburl = rtrim((string)$mybb->settings['bburl'], '/');
 
-    // ассеты
-    $css = $bburl . '/inc/plugins/advancedfunctionality/addons/advancedaccountswitcher/assets/advancedaccountswitcher.css';
-    $js  = $bburl . '/inc/plugins/advancedfunctionality/addons/advancedaccountswitcher/assets/advancedaccountswitcher.js';
-
-    if (strpos($page, 'advancedaccountswitcher.css') === false) {
-        $page = str_replace(
-            '</head>',
-            '<link rel="stylesheet" href="' . htmlspecialchars_uni($css) . '?v=1.1.11" />' . "\n</head>",
-            $page
-        );
-    }
-    if (strpos($page, 'advancedaccountswitcher.js') === false) {
-        $page = str_replace(
-            '</body>',
-            '<script src="' . htmlspecialchars_uni($js) . '?v=1.1.11"></script>' . "\n</body>",
-            $page
-        );
-    }
-
     // ====== Навигация: МЕНЯЕМ memberlist.php -> userlist.php ВЕЗДЕ В HTML
     $prettyUserlistUrl = $bburl . '/userlist.php';
     $newHref = htmlspecialchars_uni($prettyUserlistUrl);
