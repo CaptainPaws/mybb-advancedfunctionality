@@ -16,6 +16,7 @@ define('AF_KB_MARK', '<!--af_kb_assets-->');
 define('AF_KB_RULES_SCHEMA', 'af_kb.rules.v1');
 define('AF_KB_TRAITS_SCHEMA', 'af_kb.traits.v1');
 define('AF_KB_GRANTS_SCHEMA', 'af_kb.grants.v1');
+define('AF_KB_ALIAS_MARKER', "define('AF_KB_PAGE_ALIAS', 1);");
 
 define('AF_KB_KEY_PATTERN', '/^[a-z0-9_-]{2,64}$/');
 define('AF_KB_CAT_KEY_PATTERN', '/^[a-z0-9_-]{1,64}$/');
@@ -589,6 +590,7 @@ SQL;
     af_kb_templates_install_or_update();
     af_kb_ensure_schema();
     af_kb_seed_defaults();
+    af_kb_ensure_alias_file();
 
     return true;
 }
@@ -596,17 +598,13 @@ SQL;
 function af_knowledgebase_uninstall(): bool
 {
     global $db;
-
-    $db->drop_table('af_kb_types', true);
-    $db->drop_table('af_kb_entries', true);
-    $db->drop_table('af_kb_item_kinds', true);
-    $db->drop_table('af_kb_blocks', true);
-    $db->drop_table('af_kb_relations', true);
-    $db->drop_table('af_kb_log', true);
+    // DO NOT DROP KB TABLES OR DELETE ENTRIES ON UNINSTALL (Hanna requirement)
 
     $db->delete_query('settings', "name IN ('af_knowledgebase_enabled','af_kb_public_catalog','af_kb_nav_link_enabled','af_kb_assets_blacklist','af_kb_editor_groups','af_kb_types_manage_groups','af_kb_atf_map','af_kb_manage_groups','af_kb_categories_enabled','af_kb_categories_require_primary','af_kb_categories_ui_position','af_kb_categories_ui')");
     $db->delete_query('settinggroups', "name='af_knowledgebase'");
     $db->delete_query('templates', "title LIKE 'knowledgebase_%'");
+
+    af_kb_remove_alias_file_if_owned();
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -654,14 +652,93 @@ function af_knowledgebase_activate(): bool
     }
 
     af_kb_templates_install_or_update();
-    af_kb_ensure_schema();
-    af_kb_seed_defaults();
+    af_kb_ensure_alias_file();
     return true;
 }
 
 function af_knowledgebase_deactivate(): bool
 {
+    af_kb_remove_alias_file_if_owned();
     return true;
+}
+
+function af_kb_alias_target_path(): string
+{
+    return MYBB_ROOT . 'kb.php';
+}
+
+function af_kb_alias_asset_path(): string
+{
+    return AF_KB_ASSETS . 'kb.php';
+}
+
+function af_kb_alias_is_ours(?string $path = null): bool
+{
+    $path = $path ?? af_kb_alias_target_path();
+    if (!is_file($path) || !is_readable($path)) {
+        return false;
+    }
+
+    $content = (string)@file_get_contents($path);
+    return strpos($content, AF_KB_ALIAS_MARKER) !== false;
+}
+
+function af_kb_alias_available(): bool
+{
+    if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'kb.php') {
+        return true;
+    }
+
+    return af_kb_alias_is_ours();
+}
+
+function af_kb_ensure_alias_file(): bool
+{
+    $target = af_kb_alias_target_path();
+    $asset = af_kb_alias_asset_path();
+
+    if (!is_file($asset) || !is_readable($asset)) {
+        return false;
+    }
+
+    if (is_file($target) && !af_kb_alias_is_ours($target)) {
+        if (defined('IN_ADMINCP') && function_exists('flash_message')) {
+            flash_message('KnowledgeBase: kb.php already exists and is not managed by AF, alias was not installed. Fallback to misc.php is enabled.', 'error');
+        }
+        return false;
+    }
+
+    return (bool)@copy($asset, $target);
+}
+
+function af_kb_remove_alias_file_if_owned(): void
+{
+    $target = af_kb_alias_target_path();
+    if (af_kb_alias_is_ours($target)) {
+        @unlink($target);
+    }
+}
+
+function af_kb_url(array $params = [], bool $html = false): string
+{
+    $useAlias = af_kb_alias_available();
+    $script = $useAlias ? 'kb.php' : 'misc.php';
+
+    if (!$useAlias) {
+        $params = array_merge(['action' => 'kb'], $params);
+    }
+
+    if ($useAlias && (($params['action'] ?? '') === 'kb' || ($params['action'] ?? '') === 'index')) {
+        unset($params['action']);
+    }
+
+    $url = $script;
+    if (!empty($params)) {
+        $query = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+        $url .= '?' . ($html ? str_replace('&', '&amp;', $query) : $query);
+    }
+
+    return $url;
 }
 
 /* -------------------- TEMPLATES -------------------- */
@@ -3373,6 +3450,11 @@ function af_knowledgebase_pre_output(string &$page = ''): void
     global $mybb, $lang;
 
     $action = $mybb->get_input('action');
+    $thisScript = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    $isKbScript = $thisScript === 'kb.php';
+    if ($isKbScript && $action === '') {
+        $action = 'kb';
+    }
     $is_kb_page = in_array(
         $action,
         ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types'],
@@ -3428,6 +3510,13 @@ function af_knowledgebase_pre_output(string &$page = ''): void
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
             $langTag = $langPayload !== false ? '<script>window.afKbLang='.$langPayload.';</script>' : '';
+            $endpointTag = '<script>window.afKbEndpoints=' . json_encode([
+                'get' => af_kb_url(['action' => 'kb_get']),
+                'list' => af_kb_url(['action' => 'kb_list']),
+                'types' => af_kb_url(['action' => 'kb_types']),
+                'children' => af_kb_url(['action' => 'kb_children']),
+                'json_list' => af_kb_url(['action' => 'kb_json_list']),
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';</script>';
 
             $kbUiCss  = '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase_kbui.css?v='.af_kb_asset_version('knowledgebase_kbui.css').'" />';
             $chipsJs  = '<script src="'.$assetsBase.'/knowledgebase_chips.js?v='.af_kb_asset_version('knowledgebase_chips.js').'"></script>';
@@ -3441,6 +3530,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                 . $chipsJs
                 . $insertJs
                 . $langTag
+                . $endpointTag
                 . $editorInit
                 . $bodyBgCss
                 . AF_KB_MARK;
@@ -3458,7 +3548,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
         if (strpos($page, '<!--af_kb_nav-->') === false) {
             af_knowledgebase_load_lang(false);
             $linkText = $lang->af_knowledgebase_name ?? 'KB';
-            $li = '<li class="af-kb-link"><a href="misc.php?action=kb">'.htmlspecialchars_uni($linkText).'</a></li><!--af_kb_nav-->';
+            $li = '<li class="af-kb-link"><a href="' . af_kb_url() . '">'.htmlspecialchars_uni($linkText).'</a></li><!--af_kb_nav-->';
             $patched = preg_replace(
                 '~(<ul[^>]*class="[^"]*\bmenu\b[^"]*\btop_links\b[^"]*"[^>]*>)(.*?)(</ul>)~is',
                 '$1$2'.$li.'$3',
@@ -3470,6 +3560,29 @@ function af_knowledgebase_pre_output(string &$page = ''): void
             }
         }
     }
+
+    if ($enabled && af_kb_alias_available()) {
+        $page = af_kb_normalize_legacy_misc_kb_urls($page);
+    }
+}
+
+function af_kb_normalize_legacy_misc_kb_urls(string $html): string
+{
+    return preg_replace_callback(
+        '~misc\.php\?(?:[^"\'\s<>]*?)action=(kb(?:_[a-z0-9_]+)?)([^"\'\s<>]*)~i',
+        static function (array $m): string {
+            $action = strtolower((string)($m[1] ?? 'kb'));
+            $tail = html_entity_decode((string)($m[2] ?? ''), ENT_QUOTES, 'UTF-8');
+            $tail = ltrim($tail, '&');
+            parse_str($tail, $params);
+            if ($action !== 'kb') {
+                $params = array_merge(['action' => $action], $params);
+            }
+
+            return af_kb_url($params);
+        },
+        $html
+    ) ?? $html;
 }
 
 function af_kb_parse_message_end(&$message, &$options = null): void
@@ -4467,6 +4580,41 @@ function af_kb_misc_route(): void
         error_no_permission();
     }
 
+    if (
+        $action === 'kb'
+        && af_kb_alias_available()
+        && (defined('THIS_SCRIPT') ? THIS_SCRIPT : '') === 'misc.php'
+        && strtoupper((string)($mybb->request_method ?? 'GET')) === 'GET'
+    ) {
+        $params = $mybb->input;
+        unset($params['action']);
+        redirect(af_kb_url($params), '', '', true);
+    }
+
+    af_kb_dispatch();
+}
+
+function af_kb_render_kb_page(): void
+{
+    global $mybb;
+
+    if (empty($mybb->settings['af_knowledgebase_enabled'])) {
+        error_no_permission();
+    }
+
+    af_knowledgebase_load_lang(false);
+    af_kb_dispatch();
+}
+
+function af_kb_dispatch(): void
+{
+    global $mybb;
+
+    $action = trim((string)$mybb->get_input('action'));
+    if ($action === '' || $action === 'index' || $action === 'kb') {
+        $action = 'view';
+    }
+
     af_knowledgebase_load_lang(false);
 
     if ($action === 'kb_get') {
@@ -4670,11 +4818,11 @@ function af_kb_handle_manage_categories_save(): void
         if (empty($res['ok'])) {
             error((string)($res['error'] ?? 'Unable to delete category'));
         }
-        redirect('misc.php?action=kb_manage_categories&type=' . urlencode($type), 'Category deleted');
+        redirect(af_kb_url(['action' => 'kb_manage_categories', 'type' => $type]), 'Category deleted');
     }
 
     if ($mode === 'edit') {
-        redirect('misc.php?action=kb_manage_categories&type=' . urlencode($type) . '&edit_cat_id=' . $catId, 'Use the form below to update category data.');
+        redirect(af_kb_url(['action' => 'kb_manage_categories', 'type' => $type, 'edit_cat_id' => $catId]), 'Use the form below to update category data.');
     }
 
     $key = trim((string)$mybb->get_input('key'));
@@ -4702,7 +4850,7 @@ function af_kb_handle_manage_categories_save(): void
         af_kb_cat_create($type, $payload['parent_id'], $payload['key'], $payload['title_ru'], $payload['title_en'], $payload['description_ru'], $payload['description_en'], $payload['sortorder'], $payload['active']);
     }
 
-    redirect('misc.php?action=kb_manage_categories&type=' . urlencode($type), 'Saved');
+    redirect(af_kb_url(['action' => 'kb_manage_categories', 'type' => $type]), 'Saved');
 }
 
 function af_kb_handle_entry_categories_save(): void
@@ -4826,7 +4974,7 @@ function af_kb_handle_entry_modal(): void
         exit;
     }
 
-    redirect('misc.php?action=kb&type=' . urlencode((string)$entry['type']) . '&key=' . urlencode((string)$entry['key']));
+    redirect(af_kb_url(['type' => (string)$entry['type'], 'key' => (string)$entry['key']]));
 }
 
 function af_kb_handle_view(): void
@@ -5387,7 +5535,7 @@ function af_kb_handle_edit(): void
                 'dateline' => TIME_NOW,
             ]);
 
-            redirect('misc.php?action=kb&type='.urlencode($type), 'Deleted');
+            redirect(af_kb_url(['type' => $type]), 'Deleted');
         }
 
         if ($type === '') {
@@ -5762,7 +5910,7 @@ function af_kb_handle_edit(): void
                         $db->write_query('COMMIT');
                     }
 
-                    redirect('misc.php?action=kb&type=' . urlencode($type) . '&key=' . urlencode($key), 'Saved');
+                    redirect(af_kb_url(['type' => $type, 'key' => $key]), 'Saved');
                 } catch (Throwable $e) {
                     if ($txStarted) {
                         $db->write_query('ROLLBACK');
@@ -6133,7 +6281,7 @@ function af_kb_handle_type_edit(): void
                 $db->insert_query('af_kb_types', $data);
             }
 
-            redirect('misc.php?action=kb&type='.urlencode($type), $lang->af_kb_type_saved ?? 'Category saved.');
+            redirect(af_kb_url(['type' => $type]), $lang->af_kb_type_saved ?? 'Category saved.');
         }
     }
 
@@ -6268,7 +6416,7 @@ function af_kb_handle_type_delete(): void
     $db->delete_query('af_kb_log', "type='".$db->escape_string($type)."'");
     $db->delete_query('af_kb_types', 'id='.(int)$typeRow['id']);
 
-    redirect('misc.php?action=kb', $lang->af_kb_type_deleted ?? 'Category deleted.');
+    redirect(af_kb_url(), $lang->af_kb_type_deleted ?? 'Category deleted.');
 }
 
 function af_kb_handle_debug_entry(): void

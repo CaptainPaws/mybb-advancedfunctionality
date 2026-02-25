@@ -3,6 +3,11 @@
 
     var cache = { types: null, lists: {} };
 
+    function afKbEndpoint(name, fallback) {
+        var map = (window && window.afKbEndpoints) ? window.afKbEndpoints : null;
+        return (map && map[name]) ? map[name] : fallback;
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Active target tracking + SCEditor instance discovery
     // ─────────────────────────────────────────────────────────────
@@ -121,7 +126,7 @@
 
     function fetchTypes() {
         if (cache.types) return Promise.resolve(cache.types);
-        return fetch('misc.php?action=kb_types')
+        return fetch(afKbEndpoint('types', 'misc.php?action=kb_types'))
             .then(function (res) {
                 var ct = res.headers.get('content-type') || '';
                 if (!res.ok || ct.indexOf('application/json') === -1) throw new Error('Invalid response');
@@ -138,7 +143,7 @@
         var cacheKey = type + ':' + (query || '');
         if (cache.lists[cacheKey]) return Promise.resolve(cache.lists[cacheKey]);
 
-        var url = 'misc.php?action=kb_list&type=' + encodeURIComponent(type);
+        var url = afKbEndpoint('list', 'misc.php?action=kb_list') + '&type=' + encodeURIComponent(type);
         if (query) url += '&q=' + encodeURIComponent(query);
 
         return fetch(url)

@@ -1,4 +1,9 @@
 (function () {
+    function afKbEndpoint(name, fallback) {
+        var map = (window && window.afKbEndpoints) ? window.afKbEndpoints : null;
+        return (map && map[name]) ? map[name] : fallback;
+    }
+
     function getEditorInstance(field) {
         if (!field) {
             return null;
@@ -685,7 +690,7 @@
 
                 input.addEventListener('input', debounce(function () {
                     var typeName = getTypeName();
-                    fetch('misc.php?action=kb_json_list&type=' + encodeURIComponent(typeName || '') + '&q=' + encodeURIComponent(input.value || ''), { credentials: 'same-origin' })
+                    fetch(afKbEndpoint('json_list', 'misc.php?action=kb_json_list') + '&type=' + encodeURIComponent(typeName || '') + '&q=' + encodeURIComponent(input.value || ''), { credentials: 'same-origin' })
                         .then(function (res) { return res.json(); })
                         .then(function (payload) {
                             list.innerHTML = '';
