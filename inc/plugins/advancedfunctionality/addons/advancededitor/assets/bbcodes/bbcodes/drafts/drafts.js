@@ -3,20 +3,6 @@
 
   if (window.__afAeDraftsBooted) return;
   window.__afAeDraftsBooted = true;
-  function afAeRunWhenReady(cb) {
-    if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-      window.AFAE.onEditorReady(cb);
-      return;
-    }
-    window.__AFAE_QUEUE = window.__AFAE_QUEUE || [];
-    window.__AFAE_QUEUE.push(function () {
-      if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-        window.AFAE.onEditorReady(cb);
-      }
-    });
-  }
-
-  afAeRunWhenReady(function () {
 
   // ====== CONFIG ======
   var SUBMIT_SS_PREFIX = 'af_ae_drafts_just_submitted::';
@@ -383,5 +369,4 @@
     } catch (e2) {}
   }, true);
 
-  });
 })();
