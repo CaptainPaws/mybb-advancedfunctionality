@@ -1884,7 +1884,7 @@ function af_collect_enabled_addon_assets(): array
 
         // Эти аддоны управляют ассетами сами через pre_output.
         // В авто-сканере отключаем их полностью, чтобы не получать дубль версий.
-        if ($id === 'advancededitor' || $id === 'advancedprofilefields' || $id === 'advancedalertsandmentions') {
+        if ($id === 'advancededitor' || $id === 'advancedprofilefields' || $id === 'advancedalertsandmentions' || $id === 'advancedfontawesome') {
             continue;
         }
 
@@ -1902,6 +1902,11 @@ function af_collect_enabled_addon_assets(): array
 
             $ext = strtolower(pathinfo($f, PATHINFO_EXTENSION));
             if ($ext !== 'css' && $ext !== 'js') continue;
+
+            // Frontend: не тащим явные admin-ассеты аддонов.
+            if (!defined('IN_ADMINCP') && preg_match('~(?:^|[._-])admin(?:[._-]|$)~i', pathinfo($f, PATHINFO_FILENAME))) {
+                continue;
+            }
 
             $mt = @filemtime($assetsDir.$f) ?: 0;
             $rel = 'inc/plugins/'.AF_PLUGIN_ID.'/addons/'.$id.'/assets/'.$f;

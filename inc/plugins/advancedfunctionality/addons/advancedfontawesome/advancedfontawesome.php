@@ -122,12 +122,43 @@ function af_advancedfontawesome_init(): void
     $plugins->add_hook('pre_output_page', 'af_advancedfontawesome_pre_output');
 
     // ACP: гарантированно цепляемся к шапке любой админ-страницы
-    if (defined('IN_ADMINCP') && IN_ADMINCP) {
+    if (af_afo_is_admincp_context()) {
         $plugins->add_hook('admin_page_output_header', 'af_afo_admin_page_output_header');
         // Сохранение оставляем — но оно будет работать только если файл реально загружен в ACP (а мы его теперь грузим через header-hook)
         $plugins->add_hook('admin_forum_management_add_start', 'af_afo_admin_forum_save_add');
         $plugins->add_hook('admin_forum_management_edit_commit', 'af_afo_admin_forum_save_edit');
     }
+}
+
+function af_afo_is_admincp_context(): bool
+{
+    if ((defined('IN_ADMINCP') && IN_ADMINCP) || (defined('ADMIN_CP') && ADMIN_CP)) {
+        return true;
+    }
+
+    $self = (string)($_SERVER['PHP_SELF'] ?? '');
+    return $self !== '' && strpos(str_replace('\\', '/', $self), '/admin/') !== false;
+}
+
+function af_afo_asset_cache_buster(string $assetRelativePath): int
+{
+    $file = AF_AFO_BASE . ltrim($assetRelativePath, '/\\');
+    $mtime = @filemtime($file);
+    if (is_int($mtime) && $mtime > 0) {
+        return $mtime;
+    }
+
+    if (defined('AF_AFO_VER') && AF_AFO_VER !== '') {
+        return (int)preg_replace('/\D+/', '', AF_AFO_VER) ?: (int)TIME_NOW;
+    }
+
+    return (int)TIME_NOW;
+}
+
+function af_afo_page_has_asset(string $page, string $assetRelativePath): bool
+{
+    $needle = '/inc/plugins/advancedfunctionality/addons/' . AF_AFO_ID . '/assets/' . ltrim($assetRelativePath, '/');
+    return (bool)preg_match('~["\']' . preg_quote($needle, '~') . '(?:\?[^"\']*)?["\']~i', $page);
 }
 
 /**
@@ -263,6 +294,8 @@ function af_afo_ensure_thread_status_setting(): void
 
 function af_advancedfontawesome_pre_output(string &$page = ''): void
 {
+    static $loaded = false;
+
     global $mybb;
 
     if (!af_afo_is_frontend()) {
@@ -284,8 +317,9 @@ function af_advancedfontawesome_pre_output(string &$page = ''): void
 
     $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AFO_ID . '/assets';
 
-    $cssTag = '<link rel="stylesheet" type="text/css" href="' . $assetsBase . '/advancedfontawesome.css?ver=' . AF_AFO_VER . '" />';
-    if (stripos($page, '</head>') !== false && strpos($page, 'advancedfontawesome.css') === false) {
+    $cssVersion = af_afo_asset_cache_buster('assets/advancedfontawesome.css');
+    $cssTag = '<link rel="stylesheet" type="text/css" href="' . $assetsBase . '/advancedfontawesome.css?v=' . $cssVersion . '" />';
+    if (stripos($page, '</head>') !== false && !af_afo_page_has_asset($page, 'advancedfontawesome.css')) {
         $page = str_ireplace('</head>', $cssTag . '</head>', $page);
     }
 
@@ -309,11 +343,19 @@ function af_advancedfontawesome_pre_output(string &$page = ''): void
 
         $cfgJson = json_encode($cfg, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $cfgTag = '<script>window.afAdvancedFontAwesomeConfig=' . $cfgJson . ';</script>';
-        $jsTag  = '<script src="' . $assetsBase . '/advancedfontawesome.js?ver=' . AF_AFO_VER . '"></script>';
+        $jsVersion = af_afo_asset_cache_buster('assets/advancedfontawesome.js');
+        $jsPath = '/inc/plugins/advancedfunctionality/addons/' . AF_AFO_ID . '/assets/advancedfontawesome.js';
+        $jsTag  = '<script src="' . $assetsBase . '/advancedfontawesome.js?v=' . $jsVersion . '"></script>';
+
+        if (!isset($GLOBALS['af_assets_loaded'])) {
+            $GLOBALS['af_assets_loaded'] = [];
+        }
+
+        $alreadyLoaded = !empty($GLOBALS['af_assets_loaded'][$jsPath]) || $loaded || af_afo_page_has_asset($page, 'advancedfontawesome.js');
 
         $inserted = false;
 
-        if ($needsEditor && strpos($page, 'advancedfontawesome.js') === false) {
+        if (!$alreadyLoaded && $needsEditor) {
             $pattern = '~(<script[^>]+bbcodes_sceditor\.js[^>]*></script>)~i';
             if (preg_match($pattern, $page)) {
                 $page = preg_replace($pattern, '$1' . $cfgTag . $jsTag, $page, 1);
@@ -321,13 +363,19 @@ function af_advancedfontawesome_pre_output(string &$page = ''): void
             }
         }
 
-        if (!$inserted && strpos($page, 'advancedfontawesome.js') === false && stripos($page, '</head>') !== false) {
+        if (!$inserted && !$alreadyLoaded && stripos($page, '</head>') !== false) {
             $page = str_ireplace('</head>', $cfgTag . $jsTag . '</head>', $page);
             $inserted = true;
         }
 
-        if (!$inserted && strpos($page, 'advancedfontawesome.js') === false && stripos($page, '</body>') !== false) {
+        if (!$inserted && !$alreadyLoaded && stripos($page, '</body>') !== false) {
             $page = str_ireplace('</body>', $cfgTag . $jsTag . '</body>', $page);
+            $inserted = true;
+        }
+
+        if ($inserted) {
+            $loaded = true;
+            $GLOBALS['af_assets_loaded'][$jsPath] = true;
         }
     }
 
@@ -336,7 +384,7 @@ function af_advancedfontawesome_pre_output(string &$page = ''): void
 
 function af_afo_is_frontend(): bool
 {
-    if (defined('IN_ADMINCP') && IN_ADMINCP) {
+    if (af_afo_is_admincp_context()) {
         return false;
     }
 
