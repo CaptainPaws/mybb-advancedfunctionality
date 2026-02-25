@@ -367,7 +367,7 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
     }
 
     /* -------------------- 1) ASSETS (как было) -------------------- */
-    if (strpos($page, AF_ATF_MARK) === false) {
+    if (strpos($page, AF_ATF_MARK) === false && !af_atf_assets_disabled_for_current_page()) {
         global $mybb;
 
         $base = rtrim((string)$mybb->settings['bburl'], '/');
@@ -883,6 +883,96 @@ function af_atf_is_enabled(): bool
 {
     global $mybb;
     return !empty($mybb->settings['af_advancedthreadfields_enabled']);
+}
+
+function af_atf_parse_assets_blacklist(string $raw): array
+{
+    $out = [];
+    $lines = preg_split('~\R~', $raw);
+    if (!is_array($lines)) {
+        return $out;
+    }
+
+    foreach ($lines as $line) {
+        $line = trim((string)$line);
+        if ($line === '') {
+            continue;
+        }
+
+        $script = '';
+        $action = null;
+
+        $qPos = strpos($line, '?');
+        if ($qPos === false) {
+            $script = strtolower($line);
+        } else {
+            $script = strtolower(trim(substr($line, 0, $qPos)));
+            $query = trim(substr($line, $qPos + 1));
+            if ($query !== '') {
+                $parts = explode('&', $query);
+                foreach ($parts as $part) {
+                    $part = trim((string)$part);
+                    if ($part === '') {
+                        continue;
+                    }
+
+                    $eqPos = strpos($part, '=');
+                    if ($eqPos === false) {
+                        continue;
+                    }
+
+                    $k = strtolower(trim(substr($part, 0, $eqPos)));
+                    $v = trim(substr($part, $eqPos + 1));
+                    if ($k === 'action') {
+                        $action = strtolower($v);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($script === '') {
+            continue;
+        }
+
+        $out[] = ['script' => $script, 'action' => $action];
+    }
+
+    return $out;
+}
+
+function af_atf_assets_disabled_for_current_page(): bool
+{
+    global $mybb;
+
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    if ($script !== '') {
+        $script = strtolower(basename(str_replace('\\', '/', $script)));
+    }
+    if ($script === '') {
+        return false;
+    }
+
+    $action = strtolower((string)($mybb->input['action'] ?? ''));
+    $blacklistRaw = (string)($mybb->settings['af_atf_assets_blacklist'] ?? '');
+    $conditions = af_atf_parse_assets_blacklist($blacklistRaw);
+
+    foreach ($conditions as $cond) {
+        $condScript = strtolower((string)($cond['script'] ?? ''));
+        if ($condScript === '' || $condScript !== $script) {
+            continue;
+        }
+
+        $condAction = $cond['action'] ?? null;
+        if ($condAction === null || $condAction === '') {
+            return true;
+        }
+        if ($action === strtolower((string)$condAction)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 function af_atf_is_relevant_script(): bool
@@ -3285,6 +3375,18 @@ function af_atf_ensure_settings(): void
             'value' => '0',
             'disporder' => 16,
         ],
+        'af_atf_assets_blacklist' => [
+            'title' => 'ATF assets blacklist (one rule per line)',
+            'description' => 'Disable ATF JS/CSS on listed pages. Format: script.php or script.php?action=name.',
+            'optionscode' => 'textarea',
+            'value' => "index.php
+usercp.php
+userlist.php
+search.php
+gallery.php
+misc.php?action=kb",
+            'disporder' => 17,
+        ],
     ];
 
     foreach ($settings as $name => $row) {
@@ -3310,7 +3412,7 @@ function af_atf_remove_settings(): void
 
     $db->delete_query(
         'settings',
-        "name IN ('af_advancedthreadfields_enabled','af_atf_sf_total_points','af_atf_sf_min_value','af_atf_sf_max_value','af_atf_sf_base_value','af_atf_sf_cost_curve','af_atf_sf_allow_negative_remaining','af_atf_sf_require_exact_spend')"
+        "name IN ('af_advancedthreadfields_enabled','af_atf_sf_total_points','af_atf_sf_min_value','af_atf_sf_max_value','af_atf_sf_base_value','af_atf_sf_cost_curve','af_atf_sf_allow_negative_remaining','af_atf_sf_require_exact_spend','af_atf_assets_blacklist')"
     );
     $db->delete_query('settinggroups', "name='af_advancedthreadfields'");
 
