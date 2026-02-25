@@ -4,20 +4,6 @@
   // one-shot
   if (window.__afCopyCodeLoaded) return;
   window.__afCopyCodeLoaded = true;
-  function afAeRunWhenReady(cb) {
-    if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-      window.AFAE.onEditorReady(cb);
-      return;
-    }
-    window.__AFAE_QUEUE = window.__AFAE_QUEUE || [];
-    window.__AFAE_QUEUE.push(function () {
-      if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-        window.AFAE.onEditorReady(cb);
-      }
-    });
-  }
-
-  afAeRunWhenReady(function () {
 
   function asText(x) { return String(x == null ? '' : x); }
 
@@ -295,5 +281,4 @@
 
     mo.observe(document.documentElement || document.body, { childList: true, subtree: true });
   } catch (e1) {}
-  });
 })();
