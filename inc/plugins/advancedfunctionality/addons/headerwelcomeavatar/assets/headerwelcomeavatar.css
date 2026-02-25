@@ -1,0 +1,180 @@
+/* =========================================
+   AF: Header Welcome + Avatar (PHP addon)
+   ========================================= */
+
+.af-hw-wrap{
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 400px;
+}
+
+/* avatar */
+.af-hw-avatarlink{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  border-radius: 12px;
+  flex: 0 0 65px;
+}
+
+.af-hw-avatar{
+  width: 65px;
+  height: 65px;
+  border-radius: 14px;
+  object-fit: cover;
+  display: block;
+}
+
+/* right column */
+.af-hw-body{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 280px;
+  min-width: 0;
+}
+
+/* welcome container becomes column */
+.af-hw-welcome{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  font-size: 10px;
+  font-variant: small-caps;
+}
+
+/* lines */
+.af-hw-line1,
+.af-hw-line2{
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+
+  /* нормальный перенос: не режем слова как попало */
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: auto;
+}
+
+
+/* actions row */
+.af-hw-actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* =========================================
+   Buttons (anchors styled as buttons)
+   ========================================= */
+
+.af-hw-welcome a.af-hw-btn{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+
+  padding: 8px 10px;
+  border-radius: 10px;
+
+  text-decoration: none;
+  line-height: 1.1;
+  white-space: nowrap;
+
+  border: 1px solid rgba(255,255,255,0.22);
+  background-color: rgba(255,255,255,0.10);
+
+  background-image: none;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+}
+
+/* icon inside */
+.af-hw-ico{
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* variants */
+.af-hw-btn--login{ background-color: rgba(255,255,255,0.10); }
+.af-hw-btn--reg{ background-color: rgba(255,255,255,0.14); }
+.af-hw-btn--logout{ background-color: rgba(255,255,255,0.08); }
+
+.af-hw-welcome a.af-hw-btn:hover{
+  background-color: rgba(255,255,255,0.18);
+}
+
+/* =========================================
+   HARD sprite killer
+   ========================================= */
+
+#header .af-hw-wrap a,
+#header .af-hw-wrap a:link,
+#header .af-hw-wrap a:visited,
+#header .af-hw-wrap a:hover,
+#header .af-hw-wrap a:active{
+  background-image: none;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+}
+
+#header .af-hw-wrap a.af-hw-btn{
+  padding-left: 10px;
+}
+
+/* =========================================
+   HARD sprite killer + specificity for PANEL too
+   ========================================= */
+
+#header .af-hw-wrap a,
+#header .af-hw-wrap a:link,
+#header .af-hw-wrap a:visited,
+#header .af-hw-wrap a:hover,
+#header .af-hw-wrap a:active,
+#panel .af-hw-wrap a,
+#panel .af-hw-wrap a:link,
+#panel .af-hw-wrap a:visited,
+#panel .af-hw-wrap a:hover,
+#panel .af-hw-wrap a:active,
+.panel .af-hw-wrap a,
+.panel .af-hw-wrap a:link,
+.panel .af-hw-wrap a:visited,
+.panel .af-hw-wrap a:hover,
+.panel .af-hw-wrap a:active{
+  background-image: none !important;
+  background-repeat: no-repeat !important;
+  background-position: 0 0 !important;
+}
+
+
+#header .af-hw-wrap a.af-hw-btn,
+#panel  .af-hw-wrap a.af-hw-btn,
+.panel  .af-hw-wrap a.af-hw-btn{
+  padding-left: 10px !important;
+}
+
+/* =========================================
+   ONLINE.PHP: не превращаем welcome в "лесенку"
+   ========================================= */
+
+.af-hw-wrap.af-hw--online .af-hw-line1,
+.af-hw-wrap.af-hw--online .af-hw-line2{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* если на online.php панель прям душит ширину — пусть блок может занять больше */
+.af-hw-wrap.af-hw--online{
+  max-width: none;
+}
+
+.af-hw-wrap.af-hw--online .af-hw-body{
+  max-width: none;
+}
