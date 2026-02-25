@@ -14,6 +14,7 @@ define('AF_AG_ASSETS', AF_AG_BASE . 'assets/');
 define('AF_AG_TPL_FILE', AF_AG_BASE . 'templates/advancedgallery.html');
 define('AF_AG_ALIAS_SIGNATURE', 'AF_PAGE_ALIAS: advancedgallery');
 define('AF_AG_MARK_DONE', '<!--af_advancedgallery_done-->');
+define('AF_AG_ASSETS_BLACKLIST_DEFAULT', "index.php\nusercp.php\nuserlist.php\nsearch.php\nmisc.php");
 
 /* -------------------- INFO -------------------- */
 
@@ -84,6 +85,107 @@ function af_ag_get_setting(string $key, $default = null)
     global $mybb;
     $name = af_ag_setting_name($key);
     return $mybb->settings[$name] ?? $default;
+}
+
+function af_ag_parse_assets_blacklist(string $raw): array
+{
+    $out = [];
+    $lines = preg_split('~\R~', $raw);
+    if (!is_array($lines)) {
+        return $out;
+    }
+
+    foreach ($lines as $line) {
+        $line = trim((string)$line);
+        if ($line === '') {
+            continue;
+        }
+
+        $script = '';
+        $action = null;
+
+        $qPos = strpos($line, '?');
+        if ($qPos === false) {
+            $script = strtolower($line);
+        } else {
+            $script = strtolower(trim(substr($line, 0, $qPos)));
+            $query = trim(substr($line, $qPos + 1));
+            if ($query !== '') {
+                $parts = explode('&', $query);
+                foreach ($parts as $part) {
+                    $part = trim((string)$part);
+                    if ($part === '') {
+                        continue;
+                    }
+
+                    $eqPos = strpos($part, '=');
+                    if ($eqPos === false) {
+                        continue;
+                    }
+
+                    $k = strtolower(trim(substr($part, 0, $eqPos)));
+                    $v = trim(substr($part, $eqPos + 1));
+                    if ($k === 'action') {
+                        $action = strtolower($v);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($script === '') {
+            continue;
+        }
+
+        $script = strtolower(basename(str_replace('\\', '/', $script)));
+        if ($script === '') {
+            continue;
+        }
+
+        $out[] = ['script' => $script, 'action' => $action];
+    }
+
+    return $out;
+}
+
+function af_gallery_assets_disabled_for_current_page(): bool
+{
+    global $mybb;
+
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    if ($script !== '') {
+        $script = strtolower(basename(str_replace('\\', '/', $script)));
+    }
+    if ($script === '') {
+        return false;
+    }
+
+    $action = strtolower((string)($mybb->input['action'] ?? ''));
+    $lines = [AF_AG_ASSETS_BLACKLIST_DEFAULT];
+
+    $customRaw = trim((string)($mybb->settings['af_gallery_assets_blacklist'] ?? ''));
+    if ($customRaw !== '') {
+        $lines[] = $customRaw;
+    }
+
+    $conditions = af_ag_parse_assets_blacklist(implode("\n", $lines));
+    foreach ($conditions as $cond) {
+        $condScript = strtolower((string)($cond['script'] ?? ''));
+        if ($condScript === '' || $condScript !== $script) {
+            continue;
+        }
+
+        $condAction = $cond['action'] ?? null;
+        if ($condAction === null || $condAction === '') {
+            return true;
+        }
+
+        if ($action === strtolower((string)$condAction)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 function af_ag_ensure_group(string $name, string $title, string $desc): int
@@ -416,6 +518,16 @@ SQL;
         17
     );
 
+    af_ag_ensure_setting(
+        $gid,
+        'af_gallery_assets_blacklist',
+        $lang->af_gallery_assets_blacklist ?? 'Assets blacklist (страницы без JS/CSS)',
+        $lang->af_gallery_assets_blacklist_desc ?? 'По одной строке: script.php или script.php?action=name. На совпавших страницах AdvancedGallery JS/CSS не подключаются.',
+        'textarea',
+        AF_AG_ASSETS_BLACKLIST_DEFAULT,
+        18
+    );
+
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
     }
@@ -473,7 +585,8 @@ function af_advancedgallery_uninstall(): bool
         'af_advancedgallery_remote_whitelist_domains',
         'af_advancedgallery_remote_allow_oembed',
         'af_advancedgallery_remote_cache_preview',
-        'af_advancedgallery_remote_max_url_len'
+        'af_advancedgallery_remote_max_url_len',
+        'af_gallery_assets_blacklist'
     )");
     $db->delete_query('settinggroups', "name='af_advancedgallery'");
 
@@ -505,8 +618,35 @@ function af_advancedgallery_uninstall(): bool
 
 function af_advancedgallery_activate(): bool
 {
+    global $lang;
+
     // На существующих установках тоже добавим поле is_default
     ag_ensure_default_album_schema();
+
+    af_advancedgallery_load_lang(true);
+
+    $gid = af_ag_ensure_group(
+        'af_advancedgallery',
+        $lang->af_advancedgallery_group ?? 'AF: Галерея',
+        $lang->af_advancedgallery_group_desc ?? 'Настройки аддона AdvancedGallery.'
+    );
+
+    af_ag_ensure_setting(
+        $gid,
+        'af_gallery_assets_blacklist',
+        $lang->af_gallery_assets_blacklist ?? 'Assets blacklist (страницы без JS/CSS)',
+        $lang->af_gallery_assets_blacklist_desc ?? 'По одной строке: script.php или script.php?action=name. На совпавших страницах AdvancedGallery JS/CSS не подключаются.',
+        'textarea',
+        AF_AG_ASSETS_BLACKLIST_DEFAULT,
+        18
+    );
+
+    if (function_exists('rebuild_settings')) {
+        rebuild_settings();
+    }
+    if (function_exists('af_rebuild_and_reload_settings')) {
+        af_rebuild_and_reload_settings();
+    }
 
     af_ag_templates_install_or_update();
     return true;
@@ -537,6 +677,10 @@ function af_advancedgallery_pre_output(string &$page = ''): void
     }
 
     if (empty($mybb->settings['af_advancedgallery_enabled'])) {
+        return;
+    }
+
+    if (af_gallery_assets_disabled_for_current_page()) {
         return;
     }
 
