@@ -5,6 +5,11 @@
     var tooltip = null;
     var tooltipTimer = null;
 
+    function afKbEndpoint(name, fallback) {
+        var map = (window && window.afKbEndpoints) ? window.afKbEndpoints : null;
+        return (map && map[name]) ? map[name] : fallback;
+    }
+
     function escapeHtml(text) {
         return String(text || '')
             .replace(/&/g, '&amp;')
@@ -18,7 +23,7 @@
         var cacheKey = type + ':' + key;
         if (cache[cacheKey]) return Promise.resolve(cache[cacheKey]);
 
-        var url = 'misc.php?action=kb_get&type=' + encodeURIComponent(type) + '&key=' + encodeURIComponent(key);
+        var url = afKbEndpoint('get', 'misc.php?action=kb_get') + '&type=' + encodeURIComponent(type) + '&key=' + encodeURIComponent(key);
 
         return fetch(url, { credentials: 'same-origin' })
             .then(function (res) {
