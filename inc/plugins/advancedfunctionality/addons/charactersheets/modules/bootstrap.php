@@ -1602,12 +1602,47 @@ function af_charactersheets_get_asset_version(): string
 
 function af_cs_assets_disabled_for_current_page(): bool
 {
+    if (af_charactersheets_should_force_assets_for_modal_request()) {
+        return false;
+    }
+
     $script = defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '';
     if (function_exists('af_is_blacklisted')) {
         return af_is_blacklisted(AF_CS_ID, $script);
     }
 
     return false;
+}
+
+function af_charactersheets_should_force_assets_for_modal_request(): bool
+{
+    global $mybb;
+
+    $ajax = (string)$mybb->get_input('ajax');
+    if ($ajax !== '1') {
+        return false;
+    }
+
+    $script = strtolower(defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '');
+    if ($script !== 'charactersheets.php' && $script !== 'misc.php') {
+        return false;
+    }
+
+    $action = strtolower((string)$mybb->get_input('action'));
+    if ($action === '') {
+        $action = 'view';
+    }
+
+    $modalActions = [
+        'view',
+        'af_charactersheet',
+        'profile',
+        'application',
+        'cs_modal_profile',
+        'cs_modal_application',
+    ];
+
+    return in_array($action, $modalActions, true);
 }
 
 function af_charactersheets_enqueue_assets(): void
