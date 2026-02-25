@@ -10,20 +10,6 @@
   // one-shot
   if (window.__afAeLockcontentPackLoaded) return;
   window.__afAeLockcontentPackLoaded = true;
-  function afAeRunWhenReady(cb) {
-    if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-      window.AFAE.onEditorReady(cb);
-      return;
-    }
-    window.__AFAE_QUEUE = window.__AFAE_QUEUE || [];
-    window.__AFAE_QUEUE.push(function () {
-      if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-        window.AFAE.onEditorReady(cb);
-      }
-    });
-  }
-
-  afAeRunWhenReady(function () {
 
   var ID  = 'lockcontent';
   var CMD = 'af_lockcontent';
@@ -328,5 +314,4 @@
   install();
   for (var i = 1; i <= 20; i++) setTimeout(install, i * 250);
 
-  });
 })();
