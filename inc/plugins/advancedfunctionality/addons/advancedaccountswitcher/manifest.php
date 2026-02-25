@@ -9,6 +9,17 @@ return [
     'version'     => '1.0.0',
     'bootstrap'   => 'advancedaccountswitcher.php',
 
+    'assets'      => [
+        'front' => [
+            'js'  => ['assets/advancedaccountswitcher.js'],
+            'css' => ['assets/advancedaccountswitcher.css'],
+        ],
+        'admin' => [
+            'js'  => [],
+            'css' => [],
+        ],
+    ],
+
     'admin'       => [
         'slug'       => 'advancedaccountswitcher',
         'controller' => 'admin.php',

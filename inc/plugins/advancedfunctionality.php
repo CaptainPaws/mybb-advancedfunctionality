@@ -1809,20 +1809,12 @@ function af_inject_enabled_addon_assets(string $page): string
         return $page . "\n<!--af_assets_done-->";
     }
 
-    $tags = "\n<!--af_assets_begin-->\n";
-
-    foreach ($css as $href) {
-        if ($href === '') continue;
-        if (stripos($page, $href) !== false) continue;
-        $tags .= '<link rel="stylesheet" type="text/css" href="'.htmlspecialchars_uni($href).'" />'."\n";
-    }
-    foreach ($js as $src) {
-        if ($src === '') continue;
-        if (stripos($page, $src) !== false) continue;
-        $tags .= '<script type="text/javascript" src="'.htmlspecialchars_uni($src).'" defer></script>'."\n";
+    $tags = af_assets_build_tags($assets, $page);
+    if ($tags === '') {
+        return $page . "\n<!--af_assets_done-->";
     }
 
-    $tags .= "<!--af_assets_end-->\n";
+    af_assets_inject_headerinclude($assets);
 
     $page = af_inject_into_head($page, $tags);
 
@@ -1830,6 +1822,219 @@ function af_inject_enabled_addon_assets(string $page): string
     $page .= "\n<!--af_assets_done-->";
 
     return $page;
+}
+
+/**
+ * Контекст Asset Manager.
+ */
+function af_assets_init_context(): array
+{
+    global $mybb;
+
+    static $ctx = null;
+    if (is_array($ctx)) {
+        return $ctx;
+    }
+
+    $script = (string)(defined('THIS_SCRIPT') ? THIS_SCRIPT : basename((string)($_SERVER['SCRIPT_NAME'] ?? '')));
+    $self   = strtolower((string)($_SERVER['PHP_SELF'] ?? ''));
+    $uri    = strtolower((string)($_SERVER['REQUEST_URI'] ?? ''));
+
+    $isAdmin = (defined('IN_ADMINCP') && IN_ADMINCP)
+        || (defined('ADMIN_CP') && ADMIN_CP)
+        || (strpos($self, '/admin/') !== false)
+        || (strpos($uri, '/admin/') !== false)
+        || ($script === 'index.php' && (strpos($self, '/admin/index.php') !== false || strpos($uri, '/admin/index.php') !== false));
+
+    $isAjax = false;
+    if (defined('IN_MYBB') && isset($mybb) && is_object($mybb)) {
+        $isAjax = ((int)$mybb->get_input('ajax', MyBB::INPUT_INT) === 1);
+    } elseif (isset($_REQUEST['ajax'])) {
+        $isAjax = ((int)$_REQUEST['ajax'] === 1);
+    }
+
+    $ctx = [
+        'is_admincp' => $isAdmin,
+        'script'     => $script,
+        'is_ajax'    => $isAjax,
+        'bburl'      => rtrim((string)($mybb->settings['bburl'] ?? ''), '/'),
+    ];
+
+    return $ctx;
+}
+
+function af_asset_clean_path(string $urlOrPath): string
+{
+    $urlOrPath = trim($urlOrPath);
+    if ($urlOrPath === '') {
+        return '';
+    }
+
+    $urlOrPath = str_replace('\\', '/', $urlOrPath);
+    $path = (string)parse_url($urlOrPath, PHP_URL_PATH);
+    if ($path === '') {
+        $path = $urlOrPath;
+    }
+
+    $ctx = af_assets_init_context();
+    $bburl = (string)($ctx['bburl'] ?? '');
+    if ($bburl !== '' && strpos($urlOrPath, $bburl) === 0) {
+        $path = substr($urlOrPath, strlen($bburl));
+    }
+
+    if ($path === '') {
+        return '';
+    }
+
+    $path = '/'.ltrim($path, '/');
+    $path = preg_replace('~/+~', '/', $path);
+    return $path;
+}
+
+function af_asset_build_url(string $cleanPath, array $opts = []): string
+{
+    $cleanPath = af_asset_clean_path($cleanPath);
+    if ($cleanPath === '') {
+        return '';
+    }
+
+    $ctx = af_assets_init_context();
+    $bburl = (string)($ctx['bburl'] ?? '');
+
+    $absPath = rtrim((string)MYBB_ROOT, '/\\') . $cleanPath;
+    $buster = @filemtime($absPath);
+    if (!$buster) {
+        $buster = trim((string)($opts['version'] ?? ''));
+    }
+    if ($buster === '' || $buster === null) {
+        $buster = TIME_NOW;
+    }
+
+    $url = ($bburl !== '' ? $bburl : '') . $cleanPath;
+    return $url . '?v=' . rawurlencode((string)$buster);
+}
+
+function af_asset_is_admin_only(string $cleanPath): bool
+{
+    $cleanPath = af_asset_clean_path($cleanPath);
+    if ($cleanPath === '') {
+        return false;
+    }
+
+    if (preg_match('~/(?:admin)(?:/|$)~i', $cleanPath)) {
+        return true;
+    }
+
+    $file = strtolower((string)pathinfo($cleanPath, PATHINFO_FILENAME));
+    if (preg_match('~(?:^|[._-])admin(?:[._-]|$)~i', $file)) {
+        return true;
+    }
+
+    $patterns = [
+        '~/(?:acp|admincp)/~i',
+        '~/(?:assets|js|css)/.*(?:^|[._-])admin(?:[._-]|$)~i',
+    ];
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $cleanPath)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function af_add_js_once(string $urlOrPath, array $meta = []): void
+{
+    af_add_asset_once('js', $urlOrPath, $meta);
+}
+
+function af_add_css_once(string $urlOrPath, array $meta = []): void
+{
+    af_add_asset_once('css', $urlOrPath, $meta);
+}
+
+function af_add_asset_once(string $type, string $urlOrPath, array $meta = []): void
+{
+    $cleanPath = af_asset_clean_path($urlOrPath);
+    if ($cleanPath === '' || ($type !== 'js' && $type !== 'css')) {
+        return;
+    }
+
+    $ctx = af_assets_init_context();
+    $scope = strtolower((string)($meta['scope'] ?? 'both'));
+    if ($scope === 'admin' && empty($ctx['is_admincp'])) {
+        return;
+    }
+    if ($scope === 'front' && !empty($ctx['is_admincp'])) {
+        return;
+    }
+
+    if (empty($ctx['is_admincp']) && af_asset_is_admin_only($cleanPath)) {
+        return;
+    }
+
+    if (!isset($GLOBALS['af_assets_loaded']) || !is_array($GLOBALS['af_assets_loaded'])) {
+        $GLOBALS['af_assets_loaded'] = ['js' => [], 'css' => []];
+    }
+    if (!empty($GLOBALS['af_assets_loaded'][$type][$cleanPath])) {
+        return;
+    }
+    $GLOBALS['af_assets_loaded'][$type][$cleanPath] = true;
+
+    if (!isset($GLOBALS['af_assets_queue']) || !is_array($GLOBALS['af_assets_queue'])) {
+        $GLOBALS['af_assets_queue'] = ['js' => [], 'css' => []];
+    }
+
+    $url = af_asset_build_url($cleanPath, $meta);
+    if ($url === '') {
+        return;
+    }
+    $GLOBALS['af_assets_queue'][$type][$cleanPath] = $url;
+}
+
+function af_assets_build_tags(array $assets = [], string $page = ''): string
+{
+    $queueCss = $GLOBALS['af_assets_queue']['css'] ?? [];
+    $queueJs  = $GLOBALS['af_assets_queue']['js'] ?? [];
+
+    $tags = "\n<!--af_assets_begin-->\n";
+
+    foreach ($queueCss as $cleanPath => $href) {
+        if (!empty($page) && stripos($page, (string)$cleanPath) !== false) continue;
+        $tags .= '<link rel="stylesheet" type="text/css" href="'.htmlspecialchars_uni((string)$href).'" />'."\n";
+    }
+    foreach ($queueJs as $cleanPath => $src) {
+        if (!empty($page) && stripos($page, (string)$cleanPath) !== false) continue;
+        $tags .= '<script type="text/javascript" src="'.htmlspecialchars_uni((string)$src).'" defer></script>'."\n";
+    }
+
+    $tags .= "<!--af_assets_end-->\n";
+
+    if ($tags === "\n<!--af_assets_begin-->\n<!--af_assets_end-->\n") {
+        return '';
+    }
+
+    return $tags;
+}
+
+function af_assets_inject_headerinclude(array $assets): void
+{
+    global $headerinclude;
+
+    $tags = af_assets_build_tags($assets);
+    if ($tags === '') {
+        return;
+    }
+
+    if (!is_string($headerinclude)) {
+        $headerinclude = '';
+    }
+
+    if (strpos($headerinclude, '<!--af_assets_begin-->') !== false) {
+        return;
+    }
+
+    $headerinclude .= "\n" . $tags;
 }
 
 /**
@@ -1867,11 +2072,8 @@ function af_inject_core_stylesheets_if_missing(string $page): string
  */
 function af_collect_enabled_addon_assets(): array
 {
-    global $mybb;
-
-    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
-    if ($bburl === '') {
-        return ['css'=>[], 'js'=>[]];
+    if (!isset($GLOBALS['af_assets_queue']) || !is_array($GLOBALS['af_assets_queue'])) {
+        $GLOBALS['af_assets_queue'] = ['css' => [], 'js' => []];
     }
 
     $css = [];
@@ -1882,9 +2084,23 @@ function af_collect_enabled_addon_assets(): array
         $id = $meta['id'] ?? '';
         if ($id === '' || !af_is_addon_enabled($id)) continue;
 
-        // Эти аддоны управляют ассетами сами через pre_output.
-        // В авто-сканере отключаем их полностью, чтобы не получать дубль версий.
-        if ($id === 'advancededitor' || $id === 'advancedprofilefields' || $id === 'advancedalertsandmentions' || $id === 'advancedfontawesome') {
+        $manifestAssets = $meta['assets'] ?? null;
+        if (is_array($manifestAssets)) {
+            $version = (string)($meta['version'] ?? '');
+            foreach (['front' => 'front', 'admin' => 'admin', 'both' => 'both'] as $section => $scope) {
+                if (empty($manifestAssets[$section]) || !is_array($manifestAssets[$section])) {
+                    continue;
+                }
+                foreach (['css', 'js'] as $type) {
+                    foreach ((array)($manifestAssets[$section][$type] ?? []) as $relAsset) {
+                        $relAsset = trim((string)$relAsset);
+                        if ($relAsset === '') continue;
+                        $cleanPath = '/inc/plugins/'.AF_PLUGIN_ID.'/addons/'.$id.'/'.ltrim(str_replace('\\', '/', $relAsset), '/');
+                        if ($type === 'css') af_add_css_once($cleanPath, ['scope' => $scope, 'version' => $version]);
+                        if ($type === 'js') af_add_js_once($cleanPath, ['scope' => $scope, 'version' => $version]);
+                    }
+                }
+            }
             continue;
         }
 
@@ -1903,26 +2119,14 @@ function af_collect_enabled_addon_assets(): array
             $ext = strtolower(pathinfo($f, PATHINFO_EXTENSION));
             if ($ext !== 'css' && $ext !== 'js') continue;
 
-            // Frontend: не тащим явные admin-ассеты аддонов.
-            if (!defined('IN_ADMINCP') && preg_match('~(?:^|[._-])admin(?:[._-]|$)~i', pathinfo($f, PATHINFO_FILENAME))) {
-                continue;
-            }
-
-            $mt = @filemtime($assetsDir.$f) ?: 0;
-            $rel = 'inc/plugins/'.AF_PLUGIN_ID.'/addons/'.$id.'/assets/'.$f;
-            $url = $bburl.'/'.ltrim($rel,'/');
-            if ($mt > 0) {
-                $url .= '?v='.$mt;
-            }
-
-            if ($ext === 'css') $css[] = $url;
-            if ($ext === 'js')  $js[]  = $url;
+            $cleanPath = '/inc/plugins/'.AF_PLUGIN_ID.'/addons/'.$id.'/assets/'.$f;
+            if ($ext === 'css') af_add_css_once($cleanPath, ['scope' => 'both', 'version' => (string)($meta['version'] ?? '')]);
+            if ($ext === 'js')  af_add_js_once($cleanPath, ['scope' => 'both', 'version' => (string)($meta['version'] ?? '')]);
         }
     }
 
-    // дедуп + стабильность
-    $css = array_values(array_unique($css));
-    $js  = array_values(array_unique($js));
+    $css = array_values($GLOBALS['af_assets_queue']['css'] ?? []);
+    $js  = array_values($GLOBALS['af_assets_queue']['js'] ?? []);
 
     return ['css'=>$css, 'js'=>$js];
 }
