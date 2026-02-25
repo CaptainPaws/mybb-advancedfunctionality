@@ -17,6 +17,7 @@ define('AF_AE_SETTING_HIDE_POSTOPTIONS','af_advancededitor_hide_postoptions');
 define('AF_AE_SETTING_POSTCOUNT_FORUMS', 'af_advancededitor_postcount_forum_ids');
 define('AF_AE_SETTING_FORMFEATURE_FORUMS', 'af_advancededitor_formfeature_forum_ids');
 define('AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS', 'af_ae_htmlbb_allowed_groups');
+define('AF_AE_SETTING_DISABLE_ON', 'af_advancededitor_disable_on');
 
 
 
@@ -698,6 +699,91 @@ function af_advancededitor_resolve_sceditor_theme_css_url(string $bburl): string
     return $bburl . '/jscripts/sceditor/themes/default.min.css';
 }
 
+function af_advancededitor_parse_disable_conditions(string $raw): array
+{
+    $out = [];
+    $lines = preg_split('~\R~', $raw);
+    if (!is_array($lines)) return $out;
+
+    foreach ($lines as $line) {
+        $line = trim((string)$line);
+        if ($line === '') continue;
+
+        $script = '';
+        $action = null;
+
+        $qPos = strpos($line, '?');
+        if ($qPos === false) {
+            $script = strtolower($line);
+        } else {
+            $script = strtolower(trim(substr($line, 0, $qPos)));
+            $query = trim(substr($line, $qPos + 1));
+            if ($query !== '') {
+                $parts = explode('&', $query);
+                foreach ($parts as $part) {
+                    $part = trim((string)$part);
+                    if ($part === '') continue;
+
+                    $eqPos = strpos($part, '=');
+                    if ($eqPos === false) continue;
+
+                    $k = strtolower(trim(substr($part, 0, $eqPos)));
+                    $v = trim(substr($part, $eqPos + 1));
+                    if ($k === 'action') {
+                        $action = strtolower($v);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($script === '') continue;
+        $out[] = ['script' => $script, 'action' => $action];
+    }
+
+    return $out;
+}
+
+function af_advancededitor_assets_disabled_for_current_page(): bool
+{
+    global $mybb;
+
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    if ($script === '') return false;
+
+    // usercp.php отключаем всегда, независимо от action.
+    if ($script === 'usercp.php') return true;
+
+    $action = strtolower((string)($mybb->input['action'] ?? ''));
+
+    $lines = [
+        'index.php',
+        'forumdisplay.php',
+        'postsactivity.php',
+        'usercp.php',
+        'userlist.php',
+        'search.php',
+        'gallery.php',
+    ];
+
+    $customRaw = trim((string)($mybb->settings[AF_AE_SETTING_DISABLE_ON] ?? ''));
+    if ($customRaw !== '') {
+        $lines[] = $customRaw;
+    }
+
+    $conditions = af_advancededitor_parse_disable_conditions(implode("\n", $lines));
+    foreach ($conditions as $cond) {
+        $condScript = strtolower((string)($cond['script'] ?? ''));
+        if ($condScript === '' || $condScript !== $script) continue;
+
+        $condAction = $cond['action'] ?? null;
+        if ($condAction === null || $condAction === '') return true;
+        if ($action === strtolower((string)$condAction)) return true;
+    }
+
+    return false;
+}
+
 function af_advancededitor_pre_output(string &$page = ''): void
 {
     global $mybb;
@@ -710,6 +796,25 @@ function af_advancededitor_pre_output(string &$page = ''): void
 
     $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
     if ($bburl === '') return;
+
+    // ---- чистим возможный старый мусор (чтобы можно было переинжектить) ----
+    af_advancededitor_strip_own_assets($page);
+
+    // Шрифты по ТЗ грузим на всех страницах.
+    $injectHead = "\n<!--af_advancededitor-->\n";
+    $fontsCssUrl = af_advancededitor_ensure_local_fonts_css_file();
+    if ($fontsCssUrl !== '') {
+        $injectHead .= '<link rel="stylesheet" id="af-ae-local-fonts" href="' . htmlspecialchars_uni($fontsCssUrl) . "\" />\n";
+    }
+
+    if (af_advancededitor_assets_disabled_for_current_page()) {
+        if (stripos($page, '</head>') !== false) {
+            $page = preg_replace('~</head>~i', $injectHead . '</head>', $page, 1);
+        } else {
+            $page = $injectHead . $page;
+        }
+        return;
+    }
 
     // ---- определяем режим ----
     $hasTextarea = (stripos($page, '<textarea') !== false);
@@ -727,14 +832,16 @@ function af_advancededitor_pre_output(string &$page = ''): void
     // Пакеты BB-кнопок/стилей (включая copycode)
     $packs = af_advancededitor_discover_bbcode_packs($bburl);
 
-    // Если это не страница с редактором и не похоже на страницу с контентом — не грузим ничего,
-    // чтобы не раздувать абсолютно все страницы.
+    // Если это не страница с редактором и не похоже на страницу с контентом —
+    // оставляем только шрифты.
     if (!$hasTextarea && !$looksLikeContentPage) {
+        if (stripos($page, '</head>') !== false) {
+            $page = preg_replace('~</head>~i', $injectHead . '</head>', $page, 1);
+        } else {
+            $page = $injectHead . $page;
+        }
         return;
     }
-
-    // ---- чистим возможный старый мусор (чтобы можно было переинжектить) ----
-    af_advancededitor_strip_own_assets($page);
 
     // В режиме редактора: гасим MyBB clickable editor + вычищаем SCEditor ассеты MyBB
     // (в VIEW режиме это не трогаем вообще)
@@ -753,8 +860,6 @@ function af_advancededitor_pre_output(string &$page = ''): void
     $verJs    = af_advancededitor_asset_ver($aeJsAbs);
     $buildVer = max($verCss, $verJs, 1);
 
-    $injectHead  = "\n<!--af_advancededitor-->\n";
-
     /**
      * ===== ВСЕГДА (контентные страницы + страницы с textarea) =====
      * ВАЖНО: именно тут грузим copycode.js/css для гостей.
@@ -763,22 +868,6 @@ function af_advancededitor_pre_output(string &$page = ''): void
     // базовый CSS аддона (общие правила/переменные/иконки тулбара и т.п.)
     $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor.css', $buildVer)) . '" />' . "\n";
 
-    // локальные @font-face — лучше отдельным файлом, а не inline style
-    $fontsCssUrl = af_advancededitor_ensure_local_fonts_css_file(); // должна вернуть абсолютный URL или '' 
-    if ($fontsCssUrl !== '') {
-        $injectHead .= '<link rel="stylesheet" id="af-ae-local-fonts" href="' 
-            . htmlspecialchars_uni(af_advancededitor_add_ver($fontsCssUrl, $buildVer)) 
-            . "\" />\n";
-    } else {
-        // fallback: если не хочешь inline вообще — просто ничего.
-        // если хочешь оставить запасной вариант — можешь вернуть старый build_fonts_css тут.
-        /*
-        $fontsCss = af_advancededitor_build_fonts_css($bburl);
-        if ($fontsCss !== '') {
-            $injectHead .= "<style id=\"af-ae-local-fonts\">\n" . $fontsCss . "\n</style>\n";
-        }
-        */
-    }
 
 
     // CSS паков (table/float/copycode/…)
@@ -1154,6 +1243,21 @@ function af_advancededitor_install(): void
         60
     );
 
+    $ensure(
+        AF_AE_SETTING_DISABLE_ON,
+        'Отключить AdvancedEditor JS/CSS на страницах',
+        'По одной строке: script.php или script.php?action=xxx. JS/CSS AdvancedEditor не будут загружаться на совпавших страницах. Шрифты загружаются всегда.',
+        'textarea',
+        "index.php
+forumdisplay.php
+postsactivity.php
+usercp.php
+userlist.php
+search.php
+gallery.php",
+        70
+    );
+
     // === HTMLBB: кто может ИСПОЛЬЗОВАТЬ тег [html] ===
     $ensure(
         AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS,
@@ -1161,7 +1265,7 @@ function af_advancededitor_install(): void
         'ID групп через запятую, которым разрешено использовать тег [html] (и кнопку в тулбаре). Просмотр HTMLBB доступен всем.',
         'text',
         '3,4,6',
-        70
+        80
     );
 
 
@@ -1206,6 +1310,7 @@ function af_advancededitor_uninstall(): void
     // НОВОЕ
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_POSTCOUNT_FORUMS) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_FORMFEATURE_FORUMS) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_DISABLE_ON) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS) . "'");
 
 
