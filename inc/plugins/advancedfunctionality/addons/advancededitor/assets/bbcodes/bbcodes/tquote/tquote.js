@@ -8,20 +8,6 @@
   // one-shot
   if (window.__afAeTquoteLoaded) return;
   window.__afAeTquoteLoaded = true;
-  function afAeRunWhenReady(cb) {
-    if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-      window.AFAE.onEditorReady(cb);
-      return;
-    }
-    window.__AFAE_QUEUE = window.__AFAE_QUEUE || [];
-    window.__AFAE_QUEUE.push(function () {
-      if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-        window.AFAE.onEditorReady(cb);
-      }
-    });
-  }
-
-  afAeRunWhenReady(function () {
 
   var ID  = 'tquote';
   var CMD = 'af_tquote';
@@ -388,5 +374,4 @@
   registerHandlers();
   for (var i = 1; i <= 20; i++) setTimeout(registerHandlers, i * 250);
 
-  });
 })();
