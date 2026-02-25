@@ -752,42 +752,89 @@ function af_shop_assets_disabled_for_current_page(): bool
 {
     global $mybb;
 
-    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
-    if ($script !== '') {
-        $script = strtolower(basename(str_replace('\\', '/', $script)));
-    }
+    $script = af_advancedshop_normalize_script_name(defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '');
     if ($script === '') {
         return false;
     }
 
-    if ($script === 'index.php') {
-        return true;
-    }
+    $action = af_advancedshop_normalize_action_name((string)$mybb->get_input('action'));
 
-    $defaultBlacklist = preg_split('~\R~', strtolower(AF_ADVSHOP_ASSETS_BLACKLIST_DEFAULT));
-    if (!is_array($defaultBlacklist)) {
-        $defaultBlacklist = [];
-    }
+    $defaultBlacklist = preg_split('~\R~', AF_ADVSHOP_ASSETS_BLACKLIST_DEFAULT) ?: [];
 
     $customRaw = (string)($mybb->settings['af_shop_assets_blacklist'] ?? AF_ADVSHOP_ASSETS_BLACKLIST_DEFAULT);
-    $lines = preg_split('~\R~', $customRaw);
-    if (!is_array($lines)) {
-        $lines = [];
-    }
+    $lines = preg_split('~\R~', $customRaw) ?: [];
 
-    $customBlacklist = [];
-    foreach ($lines as $line) {
-        $entry = strtolower(trim((string)$line));
-        if ($entry !== '') {
-            $customBlacklist[$entry] = true;
+    $entries = array_merge($defaultBlacklist, $lines);
+    foreach ($entries as $line) {
+        $entry = af_advancedshop_parse_assets_blacklist_entry((string)$line);
+        if ($entry['script'] === '' || $entry['script'] !== $script) {
+            continue;
+        }
+
+        if ($entry['action'] === null || $entry['action'] === $action) {
+            return true;
         }
     }
 
-    foreach ($defaultBlacklist as $item) {
-        $customBlacklist[$item] = true;
+    return false;
+}
+
+function af_advancedshop_parse_assets_blacklist_entry(string $line): array
+{
+    $entry = trim($line);
+    if ($entry === '') {
+        return ['script' => '', 'action' => null];
     }
 
-    return isset($customBlacklist[$script]);
+    $scriptPart = $entry;
+    $actionPart = null;
+
+    $questionPos = strpos($entry, '?');
+    if ($questionPos !== false) {
+        $scriptPart = substr($entry, 0, $questionPos);
+        $query = substr($entry, $questionPos + 1);
+
+        foreach (explode('&', $query) as $pair) {
+            if (trim($pair) === '') {
+                continue;
+            }
+
+            $parts = explode('=', $pair, 2);
+            $key = isset($parts[0]) ? strtolower(trim(urldecode((string)$parts[0]))) : '';
+            if ($key !== 'action') {
+                continue;
+            }
+
+            $value = isset($parts[1]) ? urldecode((string)$parts[1]) : '';
+            $actionPart = $value;
+            break;
+        }
+    }
+
+    return [
+        'script' => af_advancedshop_normalize_script_name($scriptPart),
+        'action' => $actionPart === null ? null : af_advancedshop_normalize_action_name($actionPart),
+    ];
+}
+
+function af_advancedshop_normalize_script_name(string $script): string
+{
+    $script = trim($script);
+    if ($script === '') {
+        return '';
+    }
+
+    return strtolower(basename(str_replace('\\', '/', $script)));
+}
+
+function af_advancedshop_normalize_action_name(string $action): string
+{
+    $action = trim($action);
+    if ($action === '') {
+        return '';
+    }
+
+    return strtolower($action);
 }
 
 function af_advancedshop_asset_urls(): array
