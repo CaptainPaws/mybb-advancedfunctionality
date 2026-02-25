@@ -2061,6 +2061,14 @@ function af_is_blacklisted(string $addonId): bool
         'af_' . $addonId . '_disable_on',
     ];
 
+    // Backward compatibility: legacy setting keys in old addons.
+    $legacySettingsByAddon = [
+        'advancedprofilefields' => ['af_apf_assets_blacklist'],
+    ];
+    foreach (($legacySettingsByAddon[$addonId] ?? []) as $legacySettingName) {
+        $settings[] = (string)$legacySettingName;
+    }
+
     $defaultBySetting = [
         'af_advancededitor_disable_on' => "index.php\nforumdisplay.php\npostsactivity.php\nusercp.php\nuserlist.php\nsearch.php\ngallery.php",
     ];

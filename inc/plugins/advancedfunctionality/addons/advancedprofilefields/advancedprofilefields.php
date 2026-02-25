@@ -120,6 +120,12 @@ function af_apf_parse_disable_conditions(string $raw): array
 
 function af_apf_assets_disabled_for_current_page(): bool
 {
+    if (function_exists('af_is_blacklisted')) {
+        if (af_is_blacklisted(AF_APF_ID)) {
+            return true;
+        }
+    }
+
     global $mybb;
 
     $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
@@ -834,8 +840,6 @@ function af_advancedprofilefields_init(): void
 
 function af_advancedprofilefields_pre_output(&$page = ''): void
 {
-    global $mybb;
-
     if (!af_apf_is_enabled()) {
         return;
     }
@@ -844,34 +848,8 @@ function af_advancedprofilefields_pre_output(&$page = ''): void
         return;
     }
 
+    // Legacy cleanup: удаляем возможный ручной инжект аддона.
+    // Дальнейшую загрузку CSS/JS выполняет только единый AF Asset Manager.
     af_apf_strip_own_assets($page);
-
-    if (af_apf_assets_disabled_for_current_page()) {
-        af_apf_dedupe_own_assets($page);
-        return;
-    }
-
-    $baseUrl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
-    if ($baseUrl === '') {
-        return;
-    }
-
-    $cssUrl  = $baseUrl . '/inc/plugins/advancedfunctionality/addons/' . AF_APF_ID . '/assets/advancedprofilefields.css';
-    $jsUrl   = $baseUrl . '/inc/plugins/advancedfunctionality/addons/' . AF_APF_ID . '/assets/advancedprofilefields.js';
-    $cssAbs  = AF_APF_ASSETS_DIR . 'advancedprofilefields.css';
-    $jsAbs   = AF_APF_ASSETS_DIR . 'advancedprofilefields.js';
-    $buildVer = max(af_apf_asset_ver($cssAbs), af_apf_asset_ver($jsAbs), 1);
-
-    $inject = "\n" . AF_APF_ASSET_MARK . "\n"
-        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni(af_apf_add_ver($cssUrl, $buildVer)) . '" />' . "\n"
-        . '<script type="text/javascript" src="' . htmlspecialchars_uni(af_apf_add_ver($jsUrl, $buildVer)) . '"></script>' . "\n";
-
-    if (stripos($page, '</head>') !== false) {
-        $page = preg_replace('~</head>~i', $inject . '</head>', $page, 1);
-    } else {
-        // fallback
-        $page = $inject . $page;
-    }
-
     af_apf_dedupe_own_assets($page);
 }
