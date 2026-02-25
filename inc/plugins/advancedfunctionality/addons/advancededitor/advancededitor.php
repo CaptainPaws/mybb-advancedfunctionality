@@ -2370,6 +2370,27 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
             }
         }
 
+        // fallback/канон для модулей: <module>/<module>.js и <module>/<module>.css
+        // (чтобы CSS-пайплайн был 1:1 с JS и не зависел только от manifest assets)
+        $moduleBase = $packDir . $d;
+        $moduleJsAbs = $moduleBase . '.js';
+        $moduleCssAbs = $moduleBase . '.css';
+
+        $moduleJsUrl = '';
+        if (is_file($moduleJsAbs)) {
+            $moduleJsUrl = rtrim($bbcodesBaseUrl, '/') . '/' . rawurlencode($d) . '/' . rawurlencode($d) . '.js';
+            $packJs[] = $moduleJsUrl;
+        }
+
+        $moduleCssUrl = '';
+        if (is_file($moduleCssAbs)) {
+            $moduleCssUrl = rtrim($bbcodesBaseUrl, '/') . '/' . rawurlencode($d) . '/' . rawurlencode($d) . '.css';
+            $packCss[] = $moduleCssUrl;
+        }
+
+        $packCss = array_values(array_unique(array_filter($packCss, 'is_string')));
+        $packJs  = array_values(array_unique(array_filter($packJs, 'is_string')));
+
         // parser path in manifest: RELATIVE TO pack folder
         $parserAbs = '';
         if (!empty($m['parser'])) {
@@ -2428,6 +2449,11 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
             'title'         => $packTitle,
             'tags'          => $tags,
             'buttons'       => $packButtons,
+            'module_dir'    => $d,
+            'has_js'        => ($moduleJsUrl !== ''),
+            'has_css'       => ($moduleCssUrl !== ''),
+            'js_url'        => $moduleJsUrl,
+            'css_url'       => $moduleCssUrl,
             'assets'        => ['css' => $packCss, 'js' => $packJs],
             'parser_abs'    => $parserAbs,
             'manifest_path' => $manifestFile,
