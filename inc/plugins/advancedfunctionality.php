@@ -1178,7 +1178,42 @@ function af_apply_preoutput_filters(string $page): string
     // 3) Страховка: если внезапно нет НИ ОДНОГО rel="stylesheet" — вклеим $stylesheets
     $page = af_inject_core_stylesheets_if_missing($page);
 
+    // 4) Last-resort дедуп <script src> по clean path (предохранитель против ручных инжекторов)
+    $page = af_hard_dedup_script_src_tags($page);
+
     return $page;
+}
+
+/**
+ * Last-resort дедупликация одинаковых <script src="..."> по clean path.
+ * Нужна как предохранитель, если какой-то аддон обошёл AF Asset Manager.
+ */
+function af_hard_dedup_script_src_tags(string $page): string
+{
+    if ($page === '' || stripos($page, '<script') === false) {
+        return $page;
+    }
+
+    $seen = [];
+
+    return (string)preg_replace_callback(
+        '~<script\b[^>]*\bsrc\s*=\s*("|\')(.*?)\1[^>]*>\s*</script>~is',
+        static function (array $m) use (&$seen): string {
+            $src = html_entity_decode((string)($m[2] ?? ''), ENT_QUOTES, 'UTF-8');
+            $cleanPath = af_asset_clean_path($src);
+            if ($cleanPath === '') {
+                return $m[0];
+            }
+
+            if (isset($seen[$cleanPath])) {
+                return '';
+            }
+
+            $seen[$cleanPath] = true;
+            return $m[0];
+        },
+        $page
+    );
 }
 
 function af_is_ajax_request(): bool
