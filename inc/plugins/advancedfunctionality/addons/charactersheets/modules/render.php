@@ -438,14 +438,18 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
     $active_grouped = [];
     $catalog_grouped = [];
     $fixed_sources = ['race' => 'раса', 'class' => 'класс', 'theme' => 'тема', 'race_choice' => 'выбор расы', 'class_choice' => 'выбор класса', 'theme_choice' => 'выбор темы'];
-    $rank_names = [
-        0 => 'Необученный',
-        1 => 'Обученный',
-        2 => 'Эксперт',
-        3 => 'Мастер',
-        4 => 'Легендарный',
-        5 => 'Мифический',
-    ];
+    $rank_names = [];
+    $rank_config = af_charactersheets_skill_rank_config();
+    foreach ($rank_config as $rank => $row) {
+        $rank = (int)$rank;
+        $title = af_charactersheets_is_ru()
+            ? trim((string)($row['title_ru'] ?? ''))
+            : trim((string)($row['title_en'] ?? ''));
+        if ($title === '') {
+            $title = trim((string)($row['title_ru'] ?? $row['title_en'] ?? ''));
+        }
+        $rank_names[$rank] = $title !== '' ? $title : ('Ранг ' . $rank);
+    }
 
     foreach ($skills as $skill) {
         $category_raw = trim((string)($skill['category'] ?? ''));
@@ -504,11 +508,10 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
         foreach ($rows as $skill) {
             $skill_key = (string)($skill['skill_key'] ?? '');
             $title = (string)($skill['title'] ?? $skill_key);
-            $skill_meta = af_cs_kb_skill_meta($skill_key);
-            $key_stat = strtolower(trim((string)($skill['key_stat'] ?? $skill['attr_key'] ?? $skill_meta['key_stat'] ?? '')));
+            $key_stat = strtolower(trim((string)($skill['key_stat'] ?? $skill['attr_key'] ?? '')));
             $attr_label = (string)($skill_attribute_labels[$key_stat] ?? '');
             $skill_rank = max(0, (int)($skill['skill_rank'] ?? 0));
-            $rank_max = max(1, (int)($skill['rank_max'] ?? $skill_meta['rank_max'] ?? 5));
+            $rank_max = max(1, (int)($skill['rank_max'] ?? 5));
             $source = (string)($skill['source'] ?? 'manual');
             $notes = (string)($skill['notes'] ?? '');
             $rank_bonus = af_charactersheets_skill_rank_bonus_for_rank($skill_rank);
@@ -564,11 +567,10 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
                 continue;
             }
             $title = (string)($skill['title'] ?? $skill_key);
-            $skill_meta = af_cs_kb_skill_meta($skill_key);
-            $key_stat = strtolower(trim((string)($skill['key_stat'] ?? $skill['attr_key'] ?? $skill_meta['key_stat'] ?? '')));
+            $key_stat = strtolower(trim((string)($skill['key_stat'] ?? $skill['attr_key'] ?? '')));
             $attr_label = (string)($skill_attribute_labels[$key_stat] ?? '');
             $skill_rank = max(0, (int)($skill['skill_rank'] ?? 0));
-            $rank_max = max(1, (int)($skill['rank_max'] ?? $skill_meta['rank_max'] ?? 5));
+            $rank_max = max(1, (int)($skill['rank_max'] ?? 5));
             $source = (string)($skill['source'] ?? 'manual');
             $notes = (string)($skill['notes'] ?? '');
 

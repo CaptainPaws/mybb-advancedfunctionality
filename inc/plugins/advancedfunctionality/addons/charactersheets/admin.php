@@ -16,6 +16,7 @@ class AF_Admin_Charactersheets
 
         $baseUrl = 'index.php?module=advancedfunctionality&af_view=charactersheets';
         $skillsUrl = $baseUrl . '&cs_view=skills';
+        $skillRanksUrl = $baseUrl . '&cs_view=skill_ranks';
 
         self::ensureBootstrapIncluded();
         af_charactersheets_lang();
@@ -27,6 +28,10 @@ class AF_Admin_Charactersheets
         $view = (string)$mybb->get_input('cs_view');
         if ($view === 'skills') {
             self::renderSkillsCatalog($skillsUrl);
+            return;
+        }
+        if ($view === 'skill_ranks') {
+            self::renderSkillRanks($skillRanksUrl);
             return;
         }
 
@@ -64,6 +69,7 @@ class AF_Admin_Charactersheets
         echo '<p style="margin-top:4px;">' . htmlspecialchars_uni($subtitle) . '</p>';
 
         echo '<p><a href="' . htmlspecialchars($skillsUrl, ENT_QUOTES) . '">' . htmlspecialchars_uni($lang->af_charactersheets_admin_skills ?? 'Навыки') . '</a></p>';
+        echo '<p><a href="' . htmlspecialchars($skillRanksUrl, ENT_QUOTES) . '">' . htmlspecialchars_uni($lang->af_charactersheets_admin_skill_ranks ?? 'Ранги навыков') . '</a></p>';
 
         echo '<form action="' . htmlspecialchars($baseUrl, ENT_QUOTES) . '" method="post">';
         echo '<input type="hidden" name="my_post_key" value="' . $postKey . '" />';
@@ -79,6 +85,70 @@ class AF_Admin_Charactersheets
         echo '<button type="submit" class="button">' . htmlspecialchars_uni($save) . '</button>';
         echo '</div>';
 
+        echo '</form>';
+        echo '</div>';
+    }
+
+    private static function renderSkillRanks(string $skillRanksUrl): void
+    {
+        global $mybb, $lang, $db;
+
+        if ($mybb->request_method === 'post') {
+            if (function_exists('check_post_check')) {
+                check_post_check($mybb->input['my_post_key'] ?? '');
+            }
+
+            $defaults = af_charactersheets_skill_rank_defaults();
+            $payload = [];
+            for ($rank = 0; $rank <= 5; $rank++) {
+                $title_ru = trim((string)($mybb->input['title_ru_' . $rank] ?? ($defaults[(string)$rank]['title_ru'] ?? '')));
+                $title_en = trim((string)($mybb->input['title_en_' . $rank] ?? ($defaults[(string)$rank]['title_en'] ?? '')));
+                $bonus = (int)($mybb->input['bonus_' . $rank] ?? ($defaults[(string)$rank]['bonus'] ?? 0));
+                $payload[(string)$rank] = [
+                    'title_ru' => $title_ru,
+                    'title_en' => $title_en,
+                    'bonus' => $bonus,
+                ];
+            }
+
+            $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if ($json === false) {
+                flash_message($lang->af_charactersheets_admin_skill_ranks_invalid ?? 'Некорректные данные рангов.', 'error');
+                admin_redirect($skillRanksUrl);
+            }
+
+            $db->update_query(
+                'settings',
+                ['value' => $db->escape_string($json)],
+                "name='af_cs_skill_ranks_json'"
+            );
+            rebuild_settings();
+
+            flash_message($lang->af_charactersheets_admin_skill_ranks_saved ?? 'Ранги навыков сохранены.', 'success');
+            admin_redirect($skillRanksUrl);
+        }
+
+        $config = af_charactersheets_skill_rank_config();
+        $postKey = htmlspecialchars((string)($mybb->post_code ?? ''), ENT_QUOTES);
+
+        echo '<div class="form_container">';
+        echo '<h2>' . htmlspecialchars_uni($lang->af_charactersheets_admin_skill_ranks ?? 'Ранги навыков') . '</h2>';
+        echo '<p><a href="index.php?module=advancedfunctionality&af_view=charactersheets">' . htmlspecialchars_uni($lang->af_charactersheets_admin_back ?? 'Назад') . '</a></p>';
+        echo '<form action="' . htmlspecialchars($skillRanksUrl, ENT_QUOTES) . '" method="post">';
+        echo '<input type="hidden" name="my_post_key" value="' . $postKey . '" />';
+        echo '<table class="general">';
+        echo '<tr><th>Rank</th><th>Название (RU)</th><th>Title (EN)</th><th>Бонус</th></tr>';
+        for ($rank = 0; $rank <= 5; $rank++) {
+            $row = (array)($config[(string)$rank] ?? []);
+            echo '<tr>';
+            echo '<td><input type="text" readonly value="' . $rank . '" style="width:40px" /></td>';
+            echo '<td><input type="text" name="title_ru_' . $rank . '" value="' . htmlspecialchars_uni((string)($row['title_ru'] ?? '')) . '" style="width:100%" /></td>';
+            echo '<td><input type="text" name="title_en_' . $rank . '" value="' . htmlspecialchars_uni((string)($row['title_en'] ?? '')) . '" style="width:100%" /></td>';
+            echo '<td><input type="number" name="bonus_' . $rank . '" value="' . (int)($row['bonus'] ?? 0) . '" style="width:80px" /></td>';
+            echo '</tr>';
+        }
+        echo '</table>';
+        echo '<div class="form_row" style="margin-top:12px;"><button type="submit" class="button">' . htmlspecialchars_uni($lang->af_charactersheets_admin_save ?? 'Сохранить') . '</button></div>';
         echo '</form>';
         echo '</div>';
     }
