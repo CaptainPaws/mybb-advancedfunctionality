@@ -1591,192 +1591,58 @@ function af_charactersheets_get_asset_version(): string
     return (string)max($timestamps);
 }
 
-function af_charactersheets_parse_assets_blacklist_conditions(string $raw): array
-{
-    $out = [];
-    $lines = preg_split('~\R~', $raw);
-    if (!is_array($lines)) {
-        return $out;
-    }
-
-    foreach ($lines as $line) {
-        $line = trim((string)$line);
-        if ($line === '') {
-            continue;
-        }
-
-        $script = '';
-        $action = null;
-
-        $qPos = strpos($line, '?');
-        if ($qPos === false) {
-            $script = strtolower($line);
-        } else {
-            $script = strtolower(trim(substr($line, 0, $qPos)));
-            $query = trim(substr($line, $qPos + 1));
-            if ($query !== '') {
-                $parts = explode('&', $query);
-                foreach ($parts as $part) {
-                    $part = trim((string)$part);
-                    if ($part === '') {
-                        continue;
-                    }
-
-                    $eqPos = strpos($part, '=');
-                    if ($eqPos === false) {
-                        continue;
-                    }
-
-                    $k = strtolower(trim(substr($part, 0, $eqPos)));
-                    $v = trim(substr($part, $eqPos + 1));
-                    if ($k === 'action') {
-                        $action = strtolower($v);
-                        break;
-                    }
-                }
-            }
-        }
-
-        if ($script === '') {
-            continue;
-        }
-
-        $out[] = ['script' => $script, 'action' => $action];
-    }
-
-    return $out;
-}
-
 function af_cs_assets_disabled_for_current_page(): bool
 {
-    global $mybb;
-
-    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
-    if ($script !== '') {
-        $script = strtolower(basename(str_replace('\\', '/', $script)));
-    }
-    if ($script === '') {
-        return false;
-    }
-
-    $raw = trim((string)($mybb->settings[AF_CS_SETTING_ASSETS_BLACKLIST] ?? ''));
-    if ($raw === '') {
-        return false;
-    }
-
-    $action = strtolower((string)($mybb->input['action'] ?? ''));
-    $conditions = af_charactersheets_parse_assets_blacklist_conditions($raw);
-    foreach ($conditions as $condition) {
-        $conditionScript = strtolower((string)($condition['script'] ?? ''));
-        if ($conditionScript === '' || $conditionScript !== $script) {
-            continue;
-        }
-
-        $conditionAction = $condition['action'] ?? null;
-        if ($conditionAction === null || $conditionAction === '') {
-            return true;
-        }
-        if ($action === strtolower((string)$conditionAction)) {
-            return true;
-        }
+    $script = defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '';
+    if (function_exists('af_is_blacklisted')) {
+        return af_is_blacklisted(AF_CS_ID, $script);
     }
 
     return false;
 }
 
-function af_charactersheets_ensure_assets_in_headerinclude(): void
+function af_charactersheets_enqueue_assets(): void
 {
-    global $headerinclude;
-
     if (af_cs_assets_disabled_for_current_page()) {
         return;
     }
 
-    // уже вставляли этим хелпером
-    if (!empty($GLOBALS['af_charactersheets_assets_included'])) {
-        return;
-    }
-
     $assets = af_charactersheets_get_asset_urls();
-
-    // если в headerinclude уже есть эти файлы (с ?v= или без) — не дублируем
-    $hasCss = (stripos($headerinclude, 'charactersheets.css') !== false);
-    $hasJs  = (stripos($headerinclude, 'charactersheets.js') !== false);
-
-    if (!$hasCss) {
-        $headerinclude .= "\n" . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '" />' . "\n";
+    if (function_exists('af_add_css_once')) {
+        af_add_css_once((string)($assets['css'] ?? ''));
     }
-    if (!$hasJs) {
-        $headerinclude .= "\n" . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '"></script>' . "\n";
+    if (function_exists('af_add_js_once')) {
+        af_add_js_once((string)($assets['js'] ?? ''));
     }
+}
 
-    // маркер — чтобы не пытаться добавить второй раз
-    $GLOBALS['af_charactersheets_assets_included'] = true;
+function af_charactersheets_ensure_assets_in_headerinclude(): void
+{
+    af_charactersheets_enqueue_assets();
 }
 
 function af_charactersheets_canonicalize_assets_html(string $html): string
 {
-    $assets = af_charactersheets_get_asset_urls();
-
-    // 1) вырезаем ВСЕ варианты charactersheets.css (с ?v=, без, с другими параметрами)
-    $html = preg_replace(
-        '~<link\b[^>]*href=("|\')[^"\']*charactersheets\.css(?:\?[^"\']*)?\1[^>]*>\s*~i',
-        '',
-        $html
-    );
-
-    // 2) вырезаем ВСЕ варианты charactersheets.js
-    $html = preg_replace(
-        '~<script\b[^>]*src=("|\')[^"\']*charactersheets\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i',
-        '',
-        $html
-    );
-
     if (af_cs_assets_disabled_for_current_page()) {
-        return $html;
+        $html = preg_replace(
+            '~<link\b[^>]*href=("|\')[^"\']*charactersheets\.css(?:\?[^"\']*)?\1[^>]*>\s*~i',
+            '',
+            $html
+        );
+        $html = preg_replace(
+            '~<script\b[^>]*src=("|\')[^"\']*charactersheets\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i',
+            '',
+            $html
+        );
     }
 
-    // 3) вставляем каноничный набор один раз
-    $inject = "\n" . AF_CS_ASSET_MARK . "\n"
-        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '" />' . "\n"
-        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '"></script>' . "\n";
-
-    if (stripos($html, '</head>') !== false) {
-        $html2 = preg_replace('~</head>~i', $inject . '</head>', $html, 1);
-        return is_string($html2) ? $html2 : ($inject . $html);
-    }
-
-    return $inject . $html;
+    return $html;
 }
 
 function af_charactersheets_inject_assets(string $page): string
 {
-    if (af_cs_assets_disabled_for_current_page()) {
-        return af_charactersheets_canonicalize_assets_html($page);
-    }
-
-    // если уже вставляли маркером — выходим
-    if (strpos($page, AF_CS_ASSET_MARK) !== false) {
-        return $page;
-    }
-
-    // если уже есть ссылки/скрипты на эти ассеты (с ?v= или без) — тоже выходим
-    if (stripos($page, 'charactersheets.css') !== false || stripos($page, 'charactersheets.js') !== false) {
-        return $page;
-    }
-
-    $assets = af_charactersheets_get_asset_urls();
-
-    $inject = "\n" . AF_CS_ASSET_MARK . "\n"
-        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '" />' . "\n"
-        . '<script type="text/javascript" src="' . htmlspecialchars_uni($assets['js']) . '"></script>' . "\n";
-
-    if (stripos($page, '</head>') !== false) {
-        $page2 = preg_replace('~</head>~i', $inject . '</head>', $page, 1);
-        return is_string($page2) ? $page2 : ($inject . $page);
-    }
-
-    return $inject . $page;
+    af_charactersheets_enqueue_assets();
+    return af_charactersheets_canonicalize_assets_html($page);
 }
 
 function af_charactersheets_inject_modal(string $page): string
