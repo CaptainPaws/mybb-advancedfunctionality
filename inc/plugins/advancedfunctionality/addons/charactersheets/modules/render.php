@@ -7,6 +7,10 @@ function af_charactersheets_render_sheet_page(string $slug): void
 {
     global $db, $lang, $templates, $header, $headerinclude, $footer, $mybb;
 
+    if (function_exists('af_front_ensure_header_bits')) {
+        af_front_ensure_header_bits();
+    }
+
     $accept_row = af_charactersheets_get_accept_row_by_slug($slug);
     if (empty($accept_row)) {
         error_no_permission();
@@ -131,6 +135,9 @@ function af_charactersheets_render_sheet_page(string $slug): void
 
     $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n";
     af_charactersheets_ensure_assets_in_headerinclude();
+    if (function_exists('af_assets_inject_headerinclude')) {
+        af_assets_inject_headerinclude([]);
+    }
 
 
     $tplInner = $templates->get('charactersheet_inner');
@@ -138,7 +145,8 @@ function af_charactersheets_render_sheet_page(string $slug): void
 
     $ajax = (string)$mybb->get_input('ajax');
     if ($ajax === '1') {
-        $tplModal = $templates->get('charactersheet_modal');
+        $af_cs_content = $sheet_inner;
+        $tplModal = $templates->get('af_cs_page_modal');
         eval("\$page = \"" . $tplModal . "\";");
     } else {
         $tplFull = $templates->get('charactersheet_fullpage');

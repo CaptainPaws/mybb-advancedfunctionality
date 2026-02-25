@@ -86,7 +86,7 @@ function af_charactersheets_uninstall_impl(): void
     )");
     $db->delete_query('settinggroups', "name='af_charactersheets'");
     $db->delete_query('templates', "title LIKE 'charactersheets_%'");
-    $db->delete_query('templates', "title IN ('charactersheet_fullpage','charactersheet_inner','charactersheet_modal','af_cs_modal_fullpage','postbit_plaque','charactersheet_rct_cards','charactersheet_stats_bars','charactersheet_attributes','charactersheet_progress','charactersheet_skills','charactersheet_feats','charactersheet_abilities','charactersheet_inventory','charactersheet_augmentations','charactersheet_equipment','charactersheet_knowledge','charactersheets_catalog','charactersheets_catalog_card')");
+    $db->delete_query('templates', "title IN ('charactersheet_fullpage','charactersheet_inner','charactersheet_modal','af_cs_modal_fullpage','af_cs_page_modal','postbit_plaque','charactersheet_rct_cards','charactersheet_stats_bars','charactersheet_attributes','charactersheet_progress','charactersheet_skills','charactersheet_feats','charactersheet_abilities','charactersheet_inventory','charactersheet_augmentations','charactersheet_equipment','charactersheet_knowledge','charactersheets_catalog','charactersheets_catalog_card')");
 
     if (file_exists(MYBB_ROOT . 'inc/adminfunctions_templates.php')) {
         require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
@@ -603,11 +603,19 @@ function af_charactersheets_output_modal_page(string $content, string $title = '
 {
     global $templates, $headerinclude;
 
+    if (function_exists('af_front_ensure_header_bits')) {
+        af_front_ensure_header_bits();
+    }
+
     $page_title = $title !== '' ? $title : 'Character sheet';
     $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n";
     af_charactersheets_ensure_assets_in_headerinclude();
+    if (function_exists('af_assets_inject_headerinclude')) {
+        af_assets_inject_headerinclude([]);
+    }
 
-    $tpl = $templates->get('af_cs_modal_fullpage');
+    $af_cs_content = $content;
+    $tpl = $templates->get('af_cs_page_modal');
     eval("\$page = \"" . $tpl . "\";");
 
     $page = af_charactersheets_canonicalize_assets_html($page);
@@ -1624,7 +1632,11 @@ function af_charactersheets_should_force_assets_for_modal_request(): bool
     }
 
     $script = strtolower(defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '');
-    if ($script !== 'charactersheets.php' && $script !== 'misc.php') {
+    if ($script === 'charactersheets.php') {
+        return trim((string)$mybb->get_input('slug')) !== '';
+    }
+
+    if ($script !== 'misc.php') {
         return false;
     }
 
