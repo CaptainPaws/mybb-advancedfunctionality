@@ -8,20 +8,6 @@
   // one-shot
   if (window.afAeFloatbbInitialized) return;
   window.afAeFloatbbInitialized = true;
-  function afAeRunWhenReady(cb) {
-    if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-      window.AFAE.onEditorReady(cb);
-      return;
-    }
-    window.__AFAE_QUEUE = window.__AFAE_QUEUE || [];
-    window.__AFAE_QUEUE.push(function () {
-      if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-        window.AFAE.onEditorReady(cb);
-      }
-    });
-  }
-
-  afAeRunWhenReady(function () {
 
   // НЕ ТРОГАЕМ: чтобы не сломать кнопку/конструктор/manifest
   var ID  = 'floatbb';
@@ -247,5 +233,4 @@
   registerHandlers();
   for (var i = 1; i <= 20; i++) setTimeout(registerHandlers, i * 250);
 
-  });
 })();
