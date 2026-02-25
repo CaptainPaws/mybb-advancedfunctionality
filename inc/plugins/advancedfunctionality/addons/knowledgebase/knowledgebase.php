@@ -510,12 +510,21 @@ SQL;
     );
     af_kb_ensure_setting(
         $gid,
+        'af_kb_assets_blacklist',
+        'KB assets blacklist',
+        'One per line: script.php or script.php?action=value. KB JS/CSS will not be injected on matching pages.',
+        'textarea',
+        'index.php',
+        4
+    );
+    af_kb_ensure_setting(
+        $gid,
         'af_kb_editor_groups',
         $lang->af_kb_editor_groups ?? 'Editor groups',
         $lang->af_kb_editor_groups_desc ?? 'CSV of group IDs that can edit.',
         'text',
         '',
-        4
+        5
     );
     af_kb_ensure_setting(
         $gid,
@@ -524,7 +533,7 @@ SQL;
         $lang->af_kb_types_manage_groups_desc ?? 'CSV of group IDs that can manage types.',
         'text',
         '',
-        5
+        6
     );
     af_kb_ensure_setting(
         $gid,
@@ -533,7 +542,7 @@ SQL;
         $lang->af_kb_atf_map_desc ?? 'JSON mapping of ATF field → KB type.',
         'textarea',
         '{}',
-        6
+        7
     );
     af_kb_ensure_setting(
         $gid,
@@ -542,7 +551,7 @@ SQL;
         'CSV of group IDs that can manage KB categories and entry mappings.',
         'text',
         '3,4',
-        7
+        8
     );
     af_kb_ensure_setting(
         $gid,
@@ -551,7 +560,7 @@ SQL;
         'Yes/No',
         'yesno',
         '1',
-        8
+        9
     );
     af_kb_ensure_setting(
         $gid,
@@ -560,7 +569,7 @@ SQL;
         'Yes/No',
         'yesno',
         '0',
-        9
+        10
     );
     af_kb_ensure_categories_ui_position_setting(
         $gid,
@@ -595,7 +604,7 @@ function af_knowledgebase_uninstall(): bool
     $db->drop_table('af_kb_relations', true);
     $db->drop_table('af_kb_log', true);
 
-    $db->delete_query('settings', "name IN ('af_knowledgebase_enabled','af_kb_public_catalog','af_kb_nav_link_enabled','af_kb_editor_groups','af_kb_types_manage_groups','af_kb_atf_map','af_kb_manage_groups','af_kb_categories_enabled','af_kb_categories_require_primary','af_kb_categories_ui_position','af_kb_categories_ui')");
+    $db->delete_query('settings', "name IN ('af_knowledgebase_enabled','af_kb_public_catalog','af_kb_nav_link_enabled','af_kb_assets_blacklist','af_kb_editor_groups','af_kb_types_manage_groups','af_kb_atf_map','af_kb_manage_groups','af_kb_categories_enabled','af_kb_categories_require_primary','af_kb_categories_ui_position','af_kb_categories_ui')");
     $db->delete_query('settinggroups', "name='af_knowledgebase'");
     $db->delete_query('templates', "title LIKE 'knowledgebase_%'");
 
@@ -625,6 +634,15 @@ function af_knowledgebase_activate(): bool
         $gid,
         $lang->af_kb_categories_ui_position ?? 'KB categories UI position',
         $lang->af_kb_categories_ui_position_desc ?? 'Sidebar or top block for categories tree.'
+    );
+    af_kb_ensure_setting(
+        $gid,
+        'af_kb_assets_blacklist',
+        'KB assets blacklist',
+        'One per line: script.php or script.php?action=value. KB JS/CSS will not be injected on matching pages.',
+        'textarea',
+        'index.php',
+        4
     );
     af_kb_migrate_legacy_categories_ui_setting();
 
@@ -1358,13 +1376,153 @@ function af_kb_get_template(string $name): string
 
     return $tpl;
 }
+
+function af_kb_parse_assets_blacklist(string $raw): array
+{
+    $out = [];
+    $lines = preg_split('~\R~', $raw);
+    if (!is_array($lines)) {
+        return $out;
+    }
+
+    foreach ($lines as $line) {
+        $line = trim((string)$line);
+        if ($line === '') {
+            continue;
+        }
+
+        $script = '';
+        $action = null;
+
+        $qPos = strpos($line, '?');
+        if ($qPos === false) {
+            $script = strtolower($line);
+        } else {
+            $script = strtolower(trim(substr($line, 0, $qPos)));
+            $query = trim(substr($line, $qPos + 1));
+            if ($query !== '') {
+                $parts = explode('&', $query);
+                foreach ($parts as $part) {
+                    $part = trim((string)$part);
+                    if ($part === '') {
+                        continue;
+                    }
+
+                    $eqPos = strpos($part, '=');
+                    if ($eqPos === false) {
+                        continue;
+                    }
+
+                    $key = strtolower(trim(substr($part, 0, $eqPos)));
+                    $val = strtolower(trim(substr($part, $eqPos + 1)));
+                    if ($key === 'action') {
+                        $action = $val;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($script === '') {
+            continue;
+        }
+
+        $script = strtolower(basename(str_replace('\\', '/', $script)));
+        if ($script === '') {
+            continue;
+        }
+
+        $out[] = ['script' => $script, 'action' => $action];
+    }
+
+    return $out;
+}
+
+function af_kb_assets_disabled_for_current_page(): bool
+{
+    global $mybb;
+
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    if ($script !== '') {
+        $script = strtolower(basename(str_replace('\\', '/', $script)));
+    }
+    if ($script === '') {
+        return false;
+    }
+
+    // index.php — hard-disable always.
+    if ($script === 'index.php') {
+        return true;
+    }
+
+    $action = strtolower((string)($mybb->input['action'] ?? ''));
+    $raw = trim((string)af_kb_get_setting('af_kb_assets_blacklist', 'index.php'));
+    if ($raw === '') {
+        return false;
+    }
+
+    $conditions = af_kb_parse_assets_blacklist($raw);
+    foreach ($conditions as $cond) {
+        $condScript = strtolower((string)($cond['script'] ?? ''));
+        if ($condScript === '' || $condScript !== $script) {
+            continue;
+        }
+
+        $condAction = $cond['action'] ?? null;
+        if ($condAction === null || $condAction === '') {
+            return true;
+        }
+
+        if ($action === strtolower((string)$condAction)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function af_kb_asset_version(string $filename): string
+{
+    $abs = AF_KB_ASSETS . ltrim($filename, '/');
+    if (is_file($abs)) {
+        $mtime = (int)@filemtime($abs);
+        if ($mtime > 0) {
+            return (string)$mtime;
+        }
+    }
+
+    return AF_KB_VER;
+}
+
+function af_kb_strip_assets_from_html(string &$html): void
+{
+    if ($html === '') {
+        return;
+    }
+
+    $patterns = [
+        '~\s*<!--\s*af_kb_assets\s*-->\s*~i',
+        '~\s*' . preg_quote(AF_KB_MARK, '~') . '\s*~i',
+        '~\s*<link[^>]+href=["\"][^"\"]*/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase(?:_kbui)?\.css(?:\?[^"\"]*)?["\"][^>]*>\s*~i',
+        '~\s*<script[^>]+src=["\"][^"\"]*/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase(?:_chips|_insert)?\.js(?:\?[^"\"]*)?["\"][^>]*>\s*</script>\s*~i',
+        '~\s*<script[^>]*>\s*window\.afKbLang\s*=.*?</script>\s*~is',
+    ];
+
+    foreach ($patterns as $pattern) {
+        $html = (string)preg_replace($pattern, '', $html);
+    }
+}
 /**
  * Гарантированно добавляет CSS/JS KB в $headerinclude (один раз).
- * Важно: без ?v=..., всегда “последний файл”.
+ * Важно: единая версия — filemtime.
  */
 function af_kb_ensure_header_bits(): void
 {
     global $mybb, $headerinclude;
+
+    if (af_kb_assets_disabled_for_current_page()) {
+        return;
+    }
 
     static $done = false;
     if ($done) return;
@@ -1376,8 +1534,8 @@ function af_kb_ensure_header_bits(): void
         $assetBase = '';
     }
 
-    $css = $assetBase . '/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase.css';
-    $js  = $assetBase . '/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase.js';
+    $css = $assetBase . '/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase.css?v=' . af_kb_asset_version('knowledgebase.css');
+    $js  = $assetBase . '/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase.js?v=' . af_kb_asset_version('knowledgebase.js');
 
     // marker чтобы не плодить дубли даже если $done сорвут
     if (strpos((string)$headerinclude, '<!-- af_kb_assets -->') !== false) {
@@ -3222,21 +3380,15 @@ function af_knowledgebase_pre_output(string &$page = ''): void
     );
 
     $enabled = !empty($mybb->settings['af_knowledgebase_enabled']);
-    $hasMark = strpos($page, AF_KB_MARK) !== false;
+    $assetsDisabled = af_kb_assets_disabled_for_current_page();
 
-    if ($enabled && !$hasMark) {
+    // Dedupe KB assets/markers regardless of source of injection.
+    af_kb_strip_assets_from_html($page);
+
+    if ($enabled && !$assetsDisabled) {
         $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
         if ($bburl !== '') {
             $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_KB_ID . '/assets';
-
-            // cache-bust helper (by filemtime when possible)
-            $verFor = function (string $absPath, string $fallback): string {
-                if ($absPath !== '' && @is_file($absPath)) {
-                    $t = @filemtime($absPath);
-                    if ($t) return (string)$t;
-                }
-                return $fallback;
-            };
 
             $cssTag = '';
             $jsTag = '';
@@ -3246,8 +3398,8 @@ function af_knowledgebase_pre_output(string &$page = ''): void
 
             if ($is_kb_page) {
                 // KB base css/js
-                $cssTag .= '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase.css?ver='.AF_KB_VER.'" />';
-                $jsTag  .= '<script src="'.$assetsBase.'/knowledgebase.js?ver='.AF_KB_VER.'"></script>';
+                $cssTag .= '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase.css?v='.af_kb_asset_version('knowledgebase.css').'" />';
+                $jsTag  .= '<script src="'.$assetsBase.'/knowledgebase.js?v='.af_kb_asset_version('knowledgebase.js').'"></script>';
 
                 // ✅ ВАЖНО: фон для body — инжектим в конец <head>, с !important
                 // и только для action=kb (витрина категории/записи)
@@ -3277,9 +3429,9 @@ function af_knowledgebase_pre_output(string &$page = ''): void
 
             $langTag = $langPayload !== false ? '<script>window.afKbLang='.$langPayload.';</script>' : '';
 
-            $kbUiCss  = '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase_kbui.css?ver='.AF_KB_VER.'" />';
-            $chipsJs  = '<script src="'.$assetsBase.'/knowledgebase_chips.js?ver='.AF_KB_VER.'"></script>';
-            $insertJs = '<script src="'.$assetsBase.'/knowledgebase_insert.js?ver='.AF_KB_VER.'"></script>';
+            $kbUiCss  = '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase_kbui.css?v='.af_kb_asset_version('knowledgebase_kbui.css').'" />';
+            $chipsJs  = '<script src="'.$assetsBase.'/knowledgebase_chips.js?v='.af_kb_asset_version('knowledgebase_chips.js').'"></script>';
+            $insertJs = '<script src="'.$assetsBase.'/knowledgebase_insert.js?v='.af_kb_asset_version('knowledgebase_insert.js').'"></script>';
 
             // ✅ bodyBgCss ставим ближе к концу head, чтобы перебить тему
             $inject = $cssTag
