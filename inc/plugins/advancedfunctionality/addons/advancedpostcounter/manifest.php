@@ -32,6 +32,8 @@ return [
                 'af_advancedpostcounter_show_postbit_desc'     => 'Выводит счётчик в блоке автора (postbit).',
                 'af_advancedpostcounter_show_profile'          => 'Показывать в профиле',
                 'af_advancedpostcounter_show_profile_desc'     => 'Выводит счётчик в профиле пользователя.',
+                'af_apc_assets_blacklist'                      => 'Blacklist отключения ассетов',
+                'af_apc_assets_blacklist_desc'                 => 'По одной строке: script.php или script.php?action=name. На совпавших страницах APC JS/CSS не подключаются.',
             ],
         ],
 
@@ -56,6 +58,8 @@ return [
                 'af_advancedpostcounter_show_postbit_desc'     => 'Displays the counter in postbit author area.',
                 'af_advancedpostcounter_show_profile'          => 'Show in profile',
                 'af_advancedpostcounter_show_profile_desc'     => 'Displays the counter in member profile.',
+                'af_apc_assets_blacklist'                      => 'Assets blacklist',
+                'af_apc_assets_blacklist_desc'                 => 'One condition per line: script.php or script.php?action=name. APC JS/CSS are disabled on matching pages.',
             ],
         ],
     ],

@@ -17,6 +17,8 @@ const AF_APC_COL = 'af_advancedpostcounter';
 const AF_APC_MARK_POST = '<af_apc_uid_%d>';
 const AF_APC_MARK_PROF = '<af_apc_profile_uid_%d>';
 
+const AF_APC_DEFAULT_ASSETS_BLACKLIST = "index.php\nforumdisplay.php\nusercp.php\nuserlist.php\nsearch.php\ngallery.php\nmisc.php?action=kb";
+
 /* -------------------- INSTALL / UNINSTALL -------------------- */
 
 function af_advancedpostcounter_is_installed(): bool
@@ -58,7 +60,8 @@ function af_advancedpostcounter_uninstall(): void
             'af_advancedpostcounter_include_children',
             'af_advancedpostcounter_count_firstpost',
             'af_advancedpostcounter_show_postbit',
-            'af_advancedpostcounter_show_profile'
+            'af_advancedpostcounter_show_profile',
+            'af_apc_assets_blacklist'
         )"
     );
 
@@ -105,6 +108,136 @@ function af_advancedpostcounter_show_profile(): bool
 {
     global $mybb;
     return !empty($mybb->settings['af_advancedpostcounter_show_profile']);
+}
+
+function af_apc_parse_disable_conditions(string $raw): array
+{
+    $out = [];
+    $lines = preg_split('~\R~', $raw);
+    if (!is_array($lines)) {
+        return $out;
+    }
+
+    foreach ($lines as $line) {
+        $line = trim((string)$line);
+        if ($line === '') {
+            continue;
+        }
+
+        $script = '';
+        $action = null;
+
+        $qPos = strpos($line, '?');
+        if ($qPos === false) {
+            $script = strtolower($line);
+        } else {
+            $script = strtolower(trim(substr($line, 0, $qPos)));
+            $query = trim(substr($line, $qPos + 1));
+            if ($query !== '') {
+                $parts = explode('&', $query);
+                foreach ($parts as $part) {
+                    $part = trim((string)$part);
+                    if ($part === '') {
+                        continue;
+                    }
+
+                    $eqPos = strpos($part, '=');
+                    if ($eqPos === false) {
+                        continue;
+                    }
+
+                    $k = strtolower(trim(substr($part, 0, $eqPos)));
+                    $v = trim(substr($part, $eqPos + 1));
+                    if ($k === 'action') {
+                        $action = strtolower($v);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($script === '') {
+            continue;
+        }
+
+        $out[] = ['script' => $script, 'action' => $action];
+    }
+
+    return $out;
+}
+
+function af_apc_assets_disabled_for_current_page(): bool
+{
+    global $mybb;
+
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    if ($script !== '') {
+        $script = strtolower(basename(str_replace('\\', '/', $script)));
+    }
+    if ($script === '') {
+        return false;
+    }
+
+    $action = strtolower((string)($mybb->input['action'] ?? ''));
+
+    $lines = [AF_APC_DEFAULT_ASSETS_BLACKLIST];
+    $customRaw = trim((string)($mybb->settings['af_apc_assets_blacklist'] ?? ''));
+    if ($customRaw !== '') {
+        $lines[] = $customRaw;
+    }
+
+    $conditions = af_apc_parse_disable_conditions(implode("\n", $lines));
+    foreach ($conditions as $cond) {
+        $condScript = strtolower((string)($cond['script'] ?? ''));
+        if ($condScript === '' || $condScript !== $script) {
+            continue;
+        }
+
+        $condAction = $cond['action'] ?? null;
+        if ($condAction === null || $condAction === '') {
+            return true;
+        }
+        if ($action === strtolower((string)$condAction)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function af_apc_build_asset_url(string $file): string
+{
+    global $mybb;
+
+    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+    if ($bburl === '') {
+        return '';
+    }
+
+    $rel = 'inc/plugins/advancedfunctionality/addons/advancedpostcounter/assets/' . ltrim($file, '/');
+    $abs = MYBB_ROOT . str_replace('/', DIRECTORY_SEPARATOR, $rel);
+    $mtime = is_file($abs) ? (int)@filemtime($abs) : 0;
+
+    return $bburl . '/' . $rel . '?v=' . $mtime;
+}
+
+function af_apc_dedupe_assets_in_html(string &$page): void
+{
+    $patterns = [
+        '~<link\b[^>]*href=["\"][^"\"]*advancedpostcounter\.css(?:\?[^"\"]*)?["\"][^>]*>\s*~iu',
+        '~<script\b[^>]*src=["\"][^"\"]*advancedpostcounter\.js(?:\?[^"\"]*)?["\"][^>]*>\s*</script>\s*~iu',
+    ];
+
+    foreach ($patterns as $pattern) {
+        $seen = false;
+        $page = (string)preg_replace_callback($pattern, static function ($m) use (&$seen) {
+            if ($seen) {
+                return '';
+            }
+            $seen = true;
+            return $m[0];
+        }, $page);
+    }
 }
 
 function af_advancedpostcounter_categories_optionscode(): string
@@ -183,6 +316,13 @@ function af_advancedpostcounter_ensure_settings(): void
             'optionscode' => 'yesno',
             'value'       => '1',
             'disporder'   => 50,
+        ],
+        'af_apc_assets_blacklist' => [
+            'title'       => $lang->af_apc_assets_blacklist ?? 'Assets blacklist (disable on pages)',
+            'description' => $lang->af_apc_assets_blacklist_desc ?? 'One condition per line: script.php or script.php?action=name. APC assets are disabled when current page matches.',
+            'optionscode' => 'textarea',
+            'value'       => AF_APC_DEFAULT_ASSETS_BLACKLIST,
+            'disporder'   => 60,
         ],
     ];
 
@@ -1321,25 +1461,37 @@ function af_advancedpostcounter_pre_output(&$page): void
         return;
     }
 
-    // -------------------- 1) Подключаем ассеты один раз --------------------
-    $bburl = rtrim((string)$mybb->settings['bburl'], '/');
-    $css = $bburl . '/inc/plugins/advancedfunctionality/addons/advancedpostcounter/assets/advancedpostcounter.css';
-    $js  = $bburl . '/inc/plugins/advancedfunctionality/addons/advancedpostcounter/assets/advancedpostcounter.js';
+    // -------------------- 1) Подключаем ассеты с filemtime-версией --------------------
+    $assetsDisabled = af_apc_assets_disabled_for_current_page();
 
-    if (strpos($page, 'advancedpostcounter.css') === false) {
-        $page = str_replace(
-            '</head>',
-            '<link rel="stylesheet" href="' . htmlspecialchars_uni($css) . '?v=1.0.0" />' . "\n</head>",
-            $page
-        );
+    // Удаляем предыдущие инжекты APC (включая старые ?v), чтобы в финале оставить только каноничную версию.
+    $page = (string)preg_replace('~<link\b[^>]*href=["\"][^"\"]*advancedpostcounter\.css(?:\?[^"\"]*)?["\"][^>]*>\s*~iu', '', (string)$page);
+    $page = (string)preg_replace('~<script\b[^>]*src=["\"][^"\"]*advancedpostcounter\.js(?:\?[^"\"]*)?["\"][^>]*>\s*</script>\s*~iu', '', (string)$page);
+
+    if (!$assetsDisabled) {
+        $css = af_apc_build_asset_url('advancedpostcounter.css');
+        $js  = af_apc_build_asset_url('advancedpostcounter.js');
+
+        if ($css !== '' && stripos((string)$page, '</head>') !== false) {
+            $page = preg_replace(
+                '~</head>~i',
+                '<link rel="stylesheet" href="' . htmlspecialchars_uni($css) . '" />' . "\n</head>",
+                (string)$page,
+                1
+            );
+        }
+
+        if ($js !== '' && stripos((string)$page, '</body>') !== false) {
+            $page = preg_replace(
+                '~</body>~i',
+                '<script src="' . htmlspecialchars_uni($js) . '"></script>' . "\n</body>",
+                (string)$page,
+                1
+            );
+        }
     }
-    if (strpos($page, 'advancedpostcounter.js') === false) {
-        $page = str_replace(
-            '</body>',
-            '<script src="' . htmlspecialchars_uni($js) . '?v=1.0.0"></script>' . "\n</body>",
-            $page
-        );
-    }
+
+    af_apc_dedupe_assets_in_html($page);
 
     // -------------------- 2) Ищем маркеры на странице --------------------
     $uids = [];
