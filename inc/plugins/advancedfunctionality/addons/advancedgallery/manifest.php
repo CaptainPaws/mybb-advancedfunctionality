@@ -90,6 +90,8 @@ return [
                 'af_advancedgallery_remote_cache_preview_desc' => 'Кешировать preview/thumbnail для remote (если возможно безопасно).',
                 'af_advancedgallery_remote_max_url_len' => 'Макс. длина URL',
                 'af_advancedgallery_remote_max_url_len_desc' => 'Максимальная длина URL.',
+                'af_gallery_assets_blacklist' => 'Blacklist отключения ассетов',
+                'af_gallery_assets_blacklist_desc' => 'По одной строке: script.php или script.php?action=name. На совпавших страницах AdvancedGallery JS/CSS не подключаются.',
             ],
         ],
         'english' => [
@@ -165,6 +167,8 @@ return [
                 'af_advancedgallery_remote_cache_preview_desc' => 'Cache remote previews/thumbnails when possible.',
                 'af_advancedgallery_remote_max_url_len' => 'Max URL length',
                 'af_advancedgallery_remote_max_url_len_desc' => 'Maximum allowed URL length.',
+                'af_gallery_assets_blacklist' => 'Assets blacklist',
+                'af_gallery_assets_blacklist_desc' => 'One condition per line: script.php or script.php?action=name. AdvancedGallery JS/CSS are disabled on matching pages.',
             ],
         ],
     ],
