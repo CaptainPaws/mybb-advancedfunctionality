@@ -8,20 +8,6 @@
   // one-shot
   if (window.afAeEmbedVideosInitialized) return;
   window.afAeEmbedVideosInitialized = true;
-  function afAeRunWhenReady(cb) {
-    if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-      window.AFAE.onEditorReady(cb);
-      return;
-    }
-    window.__AFAE_QUEUE = window.__AFAE_QUEUE || [];
-    window.__AFAE_QUEUE.push(function () {
-      if (window.AFAE && typeof window.AFAE.onEditorReady === 'function') {
-        window.AFAE.onEditorReady(cb);
-      }
-    });
-  }
-
-  afAeRunWhenReady(function () {
 
   // НЕ ТРОГАЕМ: чтобы не сломать кнопку/конструктор/manifest
   var ID  = 'embedvideos';
@@ -522,5 +508,4 @@
     } catch (e) {}
   }
 
-  });
 })();
