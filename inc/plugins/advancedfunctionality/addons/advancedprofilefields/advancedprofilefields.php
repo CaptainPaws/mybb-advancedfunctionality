@@ -56,6 +56,166 @@ function af_apf_is_enabled(): bool
     return !empty($mybb->settings[$key]);
 }
 
+function af_apf_parse_disable_conditions(string $raw): array
+{
+    $out = [];
+    $lines = preg_split('~\R~', $raw);
+    if (!is_array($lines)) {
+        return $out;
+    }
+
+    foreach ($lines as $line) {
+        $line = trim((string)$line);
+        if ($line === '') {
+            continue;
+        }
+
+        $script = '';
+        $action = null;
+
+        $qPos = strpos($line, '?');
+        if ($qPos === false) {
+            $script = strtolower($line);
+        } else {
+            $script = strtolower(trim(substr($line, 0, $qPos)));
+            $query  = trim(substr($line, $qPos + 1));
+
+            if ($query !== '') {
+                $parts = explode('&', $query);
+                foreach ($parts as $part) {
+                    $part = trim((string)$part);
+                    if ($part === '') {
+                        continue;
+                    }
+
+                    $eqPos = strpos($part, '=');
+                    if ($eqPos === false) {
+                        continue;
+                    }
+
+                    $k = strtolower(trim(substr($part, 0, $eqPos)));
+                    $v = strtolower(trim(substr($part, $eqPos + 1)));
+                    if ($k === 'action') {
+                        $action = $v;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($script === '') {
+            continue;
+        }
+
+        $script = strtolower(basename(str_replace('\\', '/', $script)));
+        if ($script === '') {
+            continue;
+        }
+
+        $out[] = ['script' => $script, 'action' => $action];
+    }
+
+    return $out;
+}
+
+function af_apf_assets_disabled_for_current_page(): bool
+{
+    global $mybb;
+
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    if ($script !== '') {
+        $script = strtolower(basename(str_replace('\\', '/', $script)));
+    }
+    if ($script === '') {
+        return false;
+    }
+
+    // Жёсткое правило по ТЗ.
+    if ($script === 'index.php') {
+        return true;
+    }
+
+    $action = strtolower((string)($mybb->input['action'] ?? ''));
+    $lines = ['index.php'];
+
+    $customRaw = trim((string)($mybb->settings['af_apf_assets_blacklist'] ?? ''));
+    if ($customRaw !== '') {
+        $lines[] = $customRaw;
+    }
+
+    $conditions = af_apf_parse_disable_conditions(implode("\n", $lines));
+    foreach ($conditions as $cond) {
+        $condScript = strtolower((string)($cond['script'] ?? ''));
+        if ($condScript === '' || $condScript !== $script) {
+            continue;
+        }
+
+        $condAction = $cond['action'] ?? null;
+        if ($condAction === null || $condAction === '') {
+            return true;
+        }
+
+        if ($action === strtolower((string)$condAction)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function af_apf_asset_ver(string $absPath): int
+{
+    return is_file($absPath) ? (int)@filemtime($absPath) : 0;
+}
+
+function af_apf_add_ver(string $url, int $ver): string
+{
+    if ($ver <= 0) {
+        return $url;
+    }
+    return $url.(strpos($url, '?') === false ? '?' : '&').'v='.$ver;
+}
+
+function af_apf_strip_own_assets(string &$page): void
+{
+    if ($page === '') {
+        return;
+    }
+
+    $page = str_replace(AF_APF_ASSET_MARK, '', $page);
+    $page = preg_replace('~<link\b[^>]*\bhref=("|\')[^"\']*?/inc/plugins/advancedfunctionality/addons/advancedprofilefields/assets/[^"\']+\.css(?:\?[^"\']*)?\1[^>]*>\s*~i', '', $page);
+    $page = preg_replace('~<script\b[^>]*\bsrc=("|\')[^"\']*?/inc/plugins/advancedfunctionality/addons/advancedprofilefields/assets/[^"\']+\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i', '', $page);
+}
+
+function af_apf_dedupe_own_assets(string &$page): void
+{
+    if ($page === '') {
+        return;
+    }
+
+    $seen = [];
+    $pattern = '~<(link|script)\b[^>]*(?:href|src)=("|\')([^"\']*?/inc/plugins/advancedfunctionality/addons/advancedprofilefields/assets/[^"\']+)\2[^>]*>(?:\s*</script>)?~i';
+
+    $page = preg_replace_callback($pattern, static function (array $m) use (&$seen) {
+        $url = html_entity_decode((string)($m[3] ?? ''), ENT_QUOTES, 'UTF-8');
+        if ($url === '') {
+            return $m[0];
+        }
+
+        $path = strtolower((string)parse_url($url, PHP_URL_PATH));
+        if ($path === '') {
+            $path = strtolower((string)preg_replace('~\?.*$~', '', $url));
+        }
+
+        if (isset($seen[$path])) {
+            return '';
+        }
+
+        $seen[$path] = true;
+        return $m[0];
+    }, $page) ?? $page;
+}
+
 /* -------------------- INSTALL / UNINSTALL -------------------- */
 
 function af_advancedprofilefields_install(): void
@@ -99,6 +259,22 @@ function af_advancedprofilefields_install(): void
         $db->insert_query('settings', $setting);
     }
 
+    $assetsBlacklistSid = (int)$db->fetch_field(
+        $db->simple_select('settings', 'sid', "name='af_apf_assets_blacklist'", ['limit' => 1]),
+        'sid'
+    );
+    if (!$assetsBlacklistSid) {
+        $db->insert_query('settings', [
+            'name'        => 'af_apf_assets_blacklist',
+            'title'       => 'Asset blacklist (страницы без JS/CSS)',
+            'description' => "По одному условию в строке: script.php или script.php?action=xxx.\nindex.php отключён всегда (жёстко).",
+            'optionscode' => "textarea\n6|70",
+            'value'       => 'index.php',
+            'disporder'   => 2,
+            'gid'         => $gid,
+        ]);
+    }
+
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
     }
@@ -119,6 +295,7 @@ function af_advancedprofilefields_uninstall(): void
 
     // remove settings
     $db->delete_query('settings', "name LIKE 'af_".AF_APF_ID."_%'");
+    $db->delete_query('settings', "name='af_apf_assets_blacklist'");
     $db->delete_query('settinggroups', "name='af_".AF_APF_ID."'");
 
     if (function_exists('rebuild_settings')) {
@@ -663,23 +840,38 @@ function af_advancedprofilefields_pre_output(&$page = ''): void
         return;
     }
 
-    if (!is_string($page) || $page === '' || strpos($page, AF_APF_ASSET_MARK) !== false) {
+    if (!is_string($page) || $page === '') {
         return;
     }
 
-    $baseUrl = rtrim((string)$mybb->settings['bburl'], '/');
+    af_apf_strip_own_assets($page);
+
+    if (af_apf_assets_disabled_for_current_page()) {
+        af_apf_dedupe_own_assets($page);
+        return;
+    }
+
+    $baseUrl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+    if ($baseUrl === '') {
+        return;
+    }
+
     $cssUrl  = $baseUrl . '/inc/plugins/advancedfunctionality/addons/' . AF_APF_ID . '/assets/advancedprofilefields.css';
     $jsUrl   = $baseUrl . '/inc/plugins/advancedfunctionality/addons/' . AF_APF_ID . '/assets/advancedprofilefields.js';
+    $cssAbs  = AF_APF_ASSETS_DIR . 'advancedprofilefields.css';
+    $jsAbs   = AF_APF_ASSETS_DIR . 'advancedprofilefields.js';
+    $buildVer = max(af_apf_asset_ver($cssAbs), af_apf_asset_ver($jsAbs), 1);
 
     $inject = "\n" . AF_APF_ASSET_MARK . "\n"
-        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($cssUrl) . '?v=1.0.0" />' . "\n"
-        . '<script type="text/javascript" src="' . htmlspecialchars_uni($jsUrl) . '?v=1.0.0"></script>' . "\n";
+        . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni(af_apf_add_ver($cssUrl, $buildVer)) . '" />' . "\n"
+        . '<script type="text/javascript" src="' . htmlspecialchars_uni(af_apf_add_ver($jsUrl, $buildVer)) . '"></script>' . "\n";
 
     if (stripos($page, '</head>') !== false) {
         $page = preg_replace('~</head>~i', $inject . '</head>', $page, 1);
-        return;
+    } else {
+        // fallback
+        $page = $inject . $page;
     }
 
-    // fallback
-    $page = $inject . $page;
+    af_apf_dedupe_own_assets($page);
 }
