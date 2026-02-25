@@ -2835,9 +2835,9 @@ function af_charactersheets_skill_rank_bonus_for_rank(int $rank): float
 
 function af_charactersheets_resolve_skill_attribute_key(array $skill_data, array $entry_data = []): string
 {
-    $attribute_key = trim((string)($skill_data['key_stat'] ?? ''));
+    $attribute_key = trim((string)($skill_data['attribute'] ?? $entry_data['attribute'] ?? ''));
     if ($attribute_key === '') {
-        $attribute_key = trim((string)($skill_data['attribute'] ?? $entry_data['attribute'] ?? ''));
+        $attribute_key = trim((string)($skill_data['key_stat'] ?? ''));
     }
     return af_charactersheets_normalize_attribute_key($attribute_key);
 }
@@ -2848,18 +2848,31 @@ function af_charactersheets_extract_skill_key_stat(array $entry): string
     $rules = is_array($meta['rules'] ?? null) ? (array)$meta['rules'] : [];
     $rules_skill = is_array($rules['skill'] ?? null) ? (array)$rules['skill'] : [];
 
-    $key_stat = trim((string)($rules_skill['key_stat'] ?? ''));
-    if ($key_stat === '') {
-        $key_stat = trim((string)($rules_skill['attribute'] ?? ''));
-    }
-    if ($key_stat === '') {
-        $key_stat = trim((string)($rules['key_stat'] ?? ''));
-    }
-    if ($key_stat === '') {
-        $key_stat = trim((string)($rules['attribute'] ?? ''));
+    $attribute = trim((string)($rules_skill['attribute'] ?? ''));
+    if ($attribute === '') {
+        $attribute = trim((string)($rules_skill['key_stat'] ?? ''));
     }
 
-    return af_charactersheets_normalize_attribute_key($key_stat);
+    $attribute = af_charactersheets_normalize_attribute_key(strtolower($attribute));
+    if ($attribute === '') {
+        static $invalid_skill_attribute_logged = [];
+        $kb_key = trim((string)($entry['key'] ?? ''));
+        $raw_attr = trim((string)($rules_skill['attribute'] ?? $rules_skill['key_stat'] ?? ''));
+        $log_key = $kb_key . '|' . $raw_attr;
+        if (!isset($invalid_skill_attribute_logged[$log_key])) {
+            af_charactersheets_log('skills_kb_meta_invalid_attribute', [
+                'kb_key' => $kb_key,
+                'raw_attribute' => $raw_attr,
+                'rules_skill' => [
+                    'attribute' => (string)($rules_skill['attribute'] ?? ''),
+                    'key_stat' => (string)($rules_skill['key_stat'] ?? ''),
+                ],
+            ]);
+            $invalid_skill_attribute_logged[$log_key] = true;
+        }
+    }
+
+    return $attribute;
 }
 
 function af_charactersheets_get_skill_kb_meta_map(array $kb_keys): array
@@ -2894,7 +2907,7 @@ function af_charactersheets_get_skill_kb_meta_map(array $kb_keys): array
         'kb_key' => $acrobatics_key,
         'entry_found' => false,
         'rules_skill' => [],
-        'key_stat' => '',
+        'attribute' => '',
     ];
     $q = $db->simple_select(
         'af_kb_entries',
@@ -2923,11 +2936,11 @@ function af_charactersheets_get_skill_kb_meta_map(array $kb_keys): array
         }
 
         $returned_keys[$kb_key] = true;
-        $key_stat = af_charactersheets_extract_skill_key_stat((array)$row);
+        $attribute = af_charactersheets_extract_skill_key_stat((array)$row);
         $rank_max = (int)($rules_skill['rank_max'] ?? 0);
 
         $map[$kb_key] = [
-            'key_stat' => $key_stat,
+            'attribute' => $attribute,
             'rank_max' => $rank_max > 0 ? $rank_max : 0,
         ];
 
@@ -2941,7 +2954,7 @@ function af_charactersheets_get_skill_kb_meta_map(array $kb_keys): array
                     'attribute' => (string)($rules_skill['attribute'] ?? ''),
                     'rank_max' => (int)($rules_skill['rank_max'] ?? 0),
                 ],
-                'key_stat' => $key_stat,
+                'attribute' => $attribute,
             ];
         }
     }
