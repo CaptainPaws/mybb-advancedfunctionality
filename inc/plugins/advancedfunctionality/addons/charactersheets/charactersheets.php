@@ -19,6 +19,7 @@ const AF_CS_TPL_MARK = '<!--AF_CS_ACCEPT-->';
 const AF_CS_ASSET_MARK = '<!--AF_CS_ASSETS-->';
 const AF_CS_MODAL_MARK = '<!--AF_CS_MODAL-->';
 const AF_CS_ASSET_FALLBACK_VERSION = '1.1.0';
+const AF_CS_SETTING_ASSETS_BLACKLIST = 'af_cs_assets_blacklist';
 
 define('AF_CS_BASE', MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/charactersheets/');
 define('AF_CS_TPL_DIR', AF_CS_BASE . 'templates/');
