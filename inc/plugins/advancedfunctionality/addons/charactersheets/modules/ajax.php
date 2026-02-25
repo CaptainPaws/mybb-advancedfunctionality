@@ -102,7 +102,7 @@ function af_charactersheets_handle_api_impl(): void
 
         $redirect = (string)$mybb->get_input('redirect');
         if ($redirect === '') {
-            $redirect = 'misc.php?action=af_charactersheets';
+            $redirect = af_charactersheets_url(['action' => 'list']);
         }
 
         af_charactersheets_json_response([

@@ -20,10 +20,12 @@ const AF_CS_ASSET_MARK = '<!--AF_CS_ASSETS-->';
 const AF_CS_MODAL_MARK = '<!--AF_CS_MODAL-->';
 const AF_CS_ASSET_FALLBACK_VERSION = '1.1.0';
 const AF_CS_SETTING_ASSETS_BLACKLIST = 'af_cs_assets_blacklist';
+const AF_CS_ALIAS_MARKER = "define('AF_CHARACTERSHEETS_PAGE_ALIAS', 1);";
 
 define('AF_CS_BASE', MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/charactersheets/');
 define('AF_CS_TPL_DIR', AF_CS_BASE . 'templates/');
 define('AF_CS_MODULES', AF_CS_BASE . 'modules/');
+define('AF_CS_ASSETS', AF_CS_BASE . 'assets/');
 
 require_once AF_CS_MODULES . 'permissions.php';
 require_once AF_CS_MODULES . 'experience.php';

@@ -25,6 +25,7 @@ function af_charactersheets_install_impl(): void
     af_charactersheets_ensure_settings();
     af_charactersheets_templates_install_or_update();
     af_charactersheets_ensure_postbit_placeholder();
+    af_charactersheets_alias_install_or_update();
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -36,11 +37,13 @@ function af_charactersheets_activate_impl(): bool
     af_charactersheets_templates_install_or_update();
     af_charactersheets_ensure_schema();
     af_charactersheets_ensure_postbit_placeholder();
+    af_charactersheets_alias_install_or_update();
     return true;
 }
 
 function af_charactersheets_deactivate_impl(): bool
 {
+    af_charactersheets_alias_remove_if_owned();
     return true;
 }
 
@@ -48,27 +51,7 @@ function af_charactersheets_uninstall_impl(): void
 {
     global $db;
 
-    if ($db->table_exists(AF_CS_TABLE)) {
-        $db->drop_table(AF_CS_TABLE);
-    }
-    if ($db->table_exists(AF_CS_CONFIG_TABLE)) {
-        $db->drop_table(AF_CS_CONFIG_TABLE);
-    }
-    if ($db->table_exists(AF_CS_SHEETS_TABLE)) {
-        $db->drop_table(AF_CS_SHEETS_TABLE);
-    }
-    if ($db->table_exists(AF_CS_EXP_LEDGER_TABLE)) {
-        $db->drop_table(AF_CS_EXP_LEDGER_TABLE);
-    }
-    if ($db->table_exists(AF_CS_POINTS_LEDGER_TABLE)) {
-        $db->drop_table(AF_CS_POINTS_LEDGER_TABLE);
-    }
-    if ($db->table_exists(AF_CS_SKILLS_CATALOG_TABLE)) {
-        $db->drop_table(AF_CS_SKILLS_CATALOG_TABLE);
-    }
-    if ($db->table_exists(AF_CS_SKILLS_TABLE)) {
-        $db->drop_table(AF_CS_SKILLS_TABLE);
-    }
+    af_charactersheets_alias_remove_if_owned();
 
     $db->delete_query('settings', "name IN (
         'af_charactersheets_enabled',
@@ -317,6 +300,144 @@ function af_charactersheets_ensure_settings(): void
     $db->delete_query('settings', "name='af_charactersheets_accept_post_template'");
 }
 
+
+function af_charactersheets_alias_target_path(): string
+{
+    return MYBB_ROOT . 'charactersheets.php';
+}
+
+function af_charactersheets_alias_asset_path(): string
+{
+    return AF_CS_ASSETS . 'charactersheets.php';
+}
+
+function af_charactersheets_alias_is_ours(string $path): bool
+{
+    if (!is_file($path) || !is_readable($path)) {
+        return false;
+    }
+
+    $content = (string)file_get_contents($path);
+    return strpos($content, AF_CS_ALIAS_MARKER) !== false;
+}
+
+function af_charactersheets_alias_install_or_update(): bool
+{
+    $target = af_charactersheets_alias_target_path();
+    $asset = af_charactersheets_alias_asset_path();
+
+    if (!is_file($asset) || !is_readable($asset)) {
+        return false;
+    }
+
+    if (is_file($target) && !af_charactersheets_alias_is_ours($target)) {
+        if (defined('IN_ADMINCP') && function_exists('flash_message')) {
+            flash_message('CharacterSheets: charactersheets.php already exists and is not managed by AF, alias was not installed.', 'error');
+        }
+        return false;
+    }
+
+    return @copy($asset, $target);
+}
+
+function af_charactersheets_alias_remove_if_owned(): bool
+{
+    $target = af_charactersheets_alias_target_path();
+    if (!af_charactersheets_alias_is_ours($target)) {
+        return false;
+    }
+
+    return @unlink($target);
+}
+
+function af_charactersheets_alias_available(): bool
+{
+    if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'charactersheets.php') {
+        return true;
+    }
+
+    return af_charactersheets_alias_is_ours(af_charactersheets_alias_target_path());
+}
+
+function af_charactersheets_url(array $params = []): string
+{
+    $useAlias = af_charactersheets_alias_available();
+    $script = $useAlias ? 'charactersheets.php' : 'misc.php';
+
+    if (!$useAlias) {
+        $legacyAction = (string)($params['action'] ?? 'af_charactersheets');
+        unset($params['action']);
+        $params = array_merge(['action' => $legacyAction], $params);
+    }
+
+    if (!$params && !$useAlias) {
+        $params = ['action' => 'af_charactersheets'];
+    }
+
+    $url = $script;
+    if ($params) {
+        $url .= '?' . http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+    }
+
+    return $url;
+}
+
+function af_charactersheets_render_page(): void
+{
+    if (!af_charactersheets_is_enabled()) {
+        error_no_permission();
+        exit;
+    }
+
+    af_charactersheets_load_lang();
+    af_charactersheets_dispatch();
+}
+
+function af_charactersheets_dispatch(): void
+{
+    global $mybb;
+
+    $action = (string)$mybb->get_input('action');
+    if ($action === '' || $action === 'view' || $action === 'af_charactersheet') {
+        $slug = (string)$mybb->get_input('slug');
+        if ($slug !== '') {
+            af_charactersheets_render_sheet_page($slug);
+            return;
+        }
+
+        af_charactersheets_render_catalog_page();
+        return;
+    }
+
+    if ($action === 'list' || $action === 'af_charactersheets') {
+        af_charactersheets_render_catalog_page();
+        return;
+    }
+
+    if ($action === 'profile' || $action === 'cs_modal_profile') {
+        af_charactersheets_render_modal_profile_page();
+        return;
+    }
+
+    if ($action === 'application' || $action === 'cs_modal_application') {
+        af_charactersheets_render_modal_application_page();
+        return;
+    }
+
+    if ($action === 'api' || $action === 'af_charactersheet_api' || strpos($action, 'ajax_') === 0) {
+        af_charactersheets_handle_api();
+        return;
+    }
+
+    if ($action === 'af_charactersheets_accept') {
+        af_charactersheets_handle_accept_action();
+        return;
+    }
+
+    error_no_permission();
+    exit;
+}
+
 function af_charactersheets_is_enabled(): bool
 {
     global $mybb;
@@ -518,8 +639,6 @@ function af_charactersheets_showthread_start_impl(): void
     // Если тему вернули обратно в pending после принятия —
     // открываем (чтобы можно было редактировать). Делать это безопасно только для тех,
     // кто имеет право принимать.
-    $accept_row = af_charactersheets_get_accept_row($tid);
-    $was_accepted = !empty($accept_row['accepted']);
 
     if ($was_accepted) {
         // В MyBB поле closed: '' или '0' = открыта, '1' = закрыта
@@ -544,7 +663,7 @@ function af_charactersheets_showthread_start_impl(): void
         ? ($lang->af_charactersheets_accept_button_reaccept ?? 'Принять заново')
         : ($lang->af_charactersheets_accept_button ?? 'Принять анкету');
 
-    $url = 'misc.php?action=af_charactersheets_accept&tid=' . $tid . '&my_post_key=' . $mybb->post_code;
+    $url = af_charactersheets_url(['action' => 'af_charactersheets_accept', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
 
     // ВАЖНО: не оборачиваем в div — чтобы кнопка вставлялась в один ряд с input-кнопками
     $GLOBALS['af_charactersheets_accept_button'] =
@@ -672,37 +791,51 @@ function af_charactersheets_pre_output_impl(&$page): void
 
 function af_charactersheets_misc_start_impl(): void
 {
-    global $mybb, $db, $lang, $session;
+    global $mybb;
 
     $action = (string)$mybb->get_input('action');
-    if ($action === 'af_charactersheet') {
+    $legacyRoutes = [
+        'af_charactersheet',
+        'af_charactersheets',
+        'af_charactersheet_api',
+        'cs_modal_profile',
+        'cs_modal_application',
+    ];
+
+    if (in_array($action, $legacyRoutes, true)) {
+        $isSafeRedirectMethod = strtoupper((string)($mybb->request_method ?? 'GET')) === 'GET';
+        if ($isSafeRedirectMethod && af_charactersheets_alias_available()) {
+            $params = $_GET;
+            unset($params['action']);
+
+            if ($action === 'af_charactersheets') {
+                $params['action'] = 'list';
+            } elseif ($action === 'af_charactersheet_api') {
+                $params['action'] = 'api';
+            } elseif ($action === 'cs_modal_profile') {
+                $params['action'] = 'profile';
+            } elseif ($action === 'cs_modal_application') {
+                $params['action'] = 'application';
+            }
+
+            $target = af_charactersheets_url($params);
+            header('Location: ' . $target, true, 302);
+            exit;
+        }
+
         af_charactersheets_load_lang();
-        $slug = (string)$mybb->get_input('slug');
-        af_charactersheets_render_sheet_page($slug);
-        exit;
-    }
-    if ($action === 'af_charactersheets') {
-        af_charactersheets_load_lang();
-        af_charactersheets_render_catalog_page();
-        exit;
-    }
-    if ($action === 'af_charactersheet_api') {
-        af_charactersheets_load_lang();
-        af_charactersheets_handle_api();
-        exit;
-    }
-    if ($action === 'cs_modal_profile') {
-        af_charactersheets_render_modal_profile_page();
-        exit;
-    }
-    if ($action === 'cs_modal_application') {
-        af_charactersheets_render_modal_application_page();
+        af_charactersheets_dispatch();
         exit;
     }
 
-    if ($mybb->get_input('action') !== 'af_charactersheets_accept') {
-        return;
+    if ($action === 'af_charactersheets_accept') {
+        af_charactersheets_handle_accept_action();
     }
+}
+
+function af_charactersheets_handle_accept_action(): void
+{
+    global $mybb, $db, $lang, $session;
 
     af_charactersheets_load_lang();
 
@@ -735,16 +868,8 @@ function af_charactersheets_misc_start_impl(): void
         af_charactersheets_deny('User cannot accept', ['tid' => $tid, 'uid' => $mybb->user['uid'] ?? 0]);
     }
 
-    $accept_row = af_charactersheets_get_accept_row($tid);
-    $was_accepted = !empty($accept_row['accepted']);
 
-    // 1) Убеждаемся, что лист существует (но НЕ пересоздаём, если уже есть)
-    $sheet = ['ok' => true, 'slug' => ''];
-    if (!empty($mybb->settings['af_charactersheets_sheet_autocreate'])) {
-        $sheet = af_charactersheets_autocreate_sheet($tid, $thread);
-    }
 
-    // 2) Всегда публикуем сообщение принятия (и при первичном принятии, и при повторном)
     $message = af_charactersheets_build_accept_message($thread);
 
     require_once MYBB_ROOT . 'inc/datahandlers/post.php';
@@ -762,8 +887,6 @@ function af_charactersheets_misc_start_impl(): void
         'message' => $message,
         'ipaddress' => $session->ipaddress ?? '',
         'longipaddress' => $session->packedip ?? '',
-
-        // ВАЖНО (PHP8+): options обязателен массивом
         'options' => [
             'signature' => 0,
             'disablesmilies' => 0,
@@ -790,13 +913,10 @@ function af_charactersheets_misc_start_impl(): void
         redirect('showthread.php?tid=' . $tid, $msg);
     }
 
-    // Обновляем строку: accepted_pid теперь “последнее сообщение принятия”
     af_charactersheets_upsert_accept_row($tid, [
         'uid' => (int)$thread['uid'],
         'accepted_pid' => $accepted_pid,
-        // sheet_slug/sheet_created сохранятся из autocreate_sheet, если он отработал
     ]);
-
 
     if (!empty($mybb->settings['af_charactersheets_accept_move_thread'])) {
         $target_fid = (int)($mybb->settings['af_charactersheets_accepted_forum'] ?? 0);
@@ -862,7 +982,7 @@ function af_charactersheets_build_accept_message(array $thread): string
         // если ещё нет — ожидаемо, но мы всё равно подставим будущий
         $sheet_slug = af_charactersheets_slugify((string)($thread['subject'] ?? ''), $tid);
     }
-    $sheet_url = af_charactersheets_make_absolute_url('misc.php?action=af_charactersheet&slug=' . rawurlencode($sheet_slug));
+    $sheet_url = af_charactersheets_make_absolute_url(af_charactersheets_url(['slug' => $sheet_slug]));
 
     // Упоминание в BBCode (надёжно, если НЕ оборачивать в [html])
     $mention_bb = '[mention=' . $uid . ']' . $username . '[/mention]';

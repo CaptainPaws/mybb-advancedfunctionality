@@ -86,7 +86,7 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $sheet_subtitle = htmlspecialchars_uni((string)($user['username'] ?? ''));
 
     $can_delete_sheet = af_charactersheets_user_can_delete_sheet($sheet, $mybb->user ?? []);
-    $delete_redirect = $thread_url !== '' ? $thread_url : 'misc.php?action=af_charactersheets';
+    $delete_redirect = $thread_url !== '' ? $thread_url : af_charactersheets_url(['action' => 'list']);
     $sheet_header_actions_html = af_charactersheets_build_header_actions_html(
         $profile_url,
         $thread_url,
@@ -987,14 +987,14 @@ function af_charactersheets_build_header_actions_html(
     $items = [];
 
     if ($profile_url !== '' && $uid > 0) {
-        $modalProfileUrl = 'misc.php?action=cs_modal_profile&uid=' . $uid;
+        $modalProfileUrl = af_charactersheets_url(['action' => 'profile', 'uid' => $uid]);
         $items[] = '<a class="af-cs-btn af-cs-btn--compact" href="' . htmlspecialchars_uni($modalProfileUrl)
             . '" data-afcs-open="1" data-afcs-sheet="' . htmlspecialchars_uni($modalProfileUrl)
             . '" title="Профиль" aria-label="Профиль"><i class="fa-regular fa-user"></i></a>';
     }
 
     if ($thread_url !== '' && $tid > 0) {
-        $modalAppUrl = 'misc.php?action=cs_modal_application&tid=' . $tid;
+        $modalAppUrl = af_charactersheets_url(['action' => 'application', 'tid' => $tid]);
         $items[] = '<a class="af-cs-btn af-cs-btn--compact" href="' . htmlspecialchars_uni($modalAppUrl)
             . '" data-afcs-open="1" data-afcs-sheet="' . htmlspecialchars_uni($modalAppUrl)
             . '" title="Анкета" aria-label="Анкета"><i class="fa-regular fa-id-card"></i></a>';
@@ -1847,7 +1847,7 @@ function af_charactersheets_render_catalog_page(): void
         $theme = af_charactersheets_pick_field_value($index, ['character_themes', 'character_theme', 'theme']);
         $portrait = af_charactersheets_get_portrait_url($index);
 
-        $sheet_url = 'misc.php?action=af_charactersheet&slug=' . rawurlencode($slug);
+        $sheet_url = af_charactersheets_url(['slug' => $slug]);
         $sheet_url = htmlspecialchars_uni($sheet_url);
         $card_name_en = htmlspecialchars_uni($name_en !== '' ? $name_en : $slug);
         $card_name_ru = htmlspecialchars_uni($name_ru);

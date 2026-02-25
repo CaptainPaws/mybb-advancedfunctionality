@@ -12,6 +12,43 @@
     }
   }
 
+
+  function normalizeActionUrl(url) {
+    var raw = String(url || '');
+    if (!raw) return 'charactersheets.php';
+
+    var parts = raw.split('?');
+    var path = parts[0] || '';
+    var query = parts[1] || '';
+    var params = new URLSearchParams(query);
+    var action = params.get('action') || '';
+
+    if (/misc\.php$/i.test(path) || path === '') {
+      if (action === 'af_charactersheet') {
+        params.delete('action');
+        path = 'charactersheets.php';
+      } else if (action === 'af_charactersheets') {
+        params.set('action', 'list');
+        path = 'charactersheets.php';
+      } else if (action === 'af_charactersheet_api') {
+        params.set('action', 'api');
+        path = 'charactersheets.php';
+      } else if (action === 'cs_modal_profile') {
+        params.set('action', 'profile');
+        path = 'charactersheets.php';
+      } else if (action === 'cs_modal_application') {
+        params.set('action', 'application');
+        path = 'charactersheets.php';
+      }
+    }
+
+    if (/charactersheets\.php$/i.test(path)) {
+      return path + (params.toString() ? ('?' + params.toString()) : '');
+    }
+
+    return raw;
+  }
+
   function ensureModal() {
     var modal = document.querySelector('[data-afcs-modal]');
     if (modal) {
@@ -53,7 +90,7 @@
   function openModal(url) {
     if (!url) return;
 
-    var loadUrl = String(url);
+    var loadUrl = normalizeActionUrl(url);
     if (/action=af_charactersheet_api|action=cs_.*_ajax/i.test(loadUrl)) {
       return;
     }
@@ -88,7 +125,7 @@
       if (!url) {
         var slug = opener.getAttribute('data-slug') || '';
         if (slug) {
-          url = 'misc.php?action=af_charactersheet&slug=' + encodeURIComponent(slug);
+          url = normalizeActionUrl('charactersheets.php?slug=' + encodeURIComponent(slug));
         }
       }
 
@@ -310,7 +347,7 @@
           data.append(key, value);
         });
 
-        return fetch('misc.php?action=af_charactersheet_api&ajax=1', {
+        return fetch(normalizeActionUrl('charactersheets.php?action=api&ajax=1'), {
           method: 'POST',
           credentials: 'same-origin',
           headers: {
