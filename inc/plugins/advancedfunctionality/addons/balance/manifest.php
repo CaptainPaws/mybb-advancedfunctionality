@@ -111,6 +111,8 @@ return [
                 'af_balance_tx_enable_desc'  => 'Записывать все изменения EXP/кредитов в таблицу транзакций.',
                 'af_balance_tx_keep_limit'   => 'Лимит транзакций (хранить записей)',
                 'af_balance_tx_keep_limit_desc'=> 'Если записей станет больше лимита — самые старые будут удаляться (по механике аддона).',
+                'af_balance_blacklist'       => 'Blacklist ассетов Balance',
+                'af_balance_blacklist_desc'  => 'По одной строке: script.php. На совпавших страницах assets Balance не подключаются.',
 
                 // ACP страницы (если будешь выводить)
                 'af_balance_admin_title'         => 'Баланс',
@@ -194,6 +196,8 @@ return [
                 'af_balance_tx_enable_desc'   => 'Log every EXP/credits change into transactions table.',
                 'af_balance_tx_keep_limit'    => 'Transaction keep limit',
                 'af_balance_tx_keep_limit_desc'=> 'If the number of logs exceeds this limit, oldest entries are removed.',
+                'af_balance_blacklist'          => 'Balance assets blacklist',
+                'af_balance_blacklist_desc'     => 'One script.php per line. Balance assets are disabled on matched pages.',
 
                 'af_balance_admin_title'        => 'Balance',
                 'af_balance_admin_transactions' => 'Transactions',
