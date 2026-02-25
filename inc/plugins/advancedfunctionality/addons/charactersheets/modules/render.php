@@ -386,7 +386,7 @@ function af_cs_kb_skill_meta(string $skillKey): array
     $skillKey = trim($skillKey);
     if ($skillKey === '') {
         return [
-            'key_stat' => '',
+            'attribute' => '',
             'rank_max' => 5,
             'title_ru' => '',
             'title_en' => '',
@@ -398,7 +398,7 @@ function af_cs_kb_skill_meta(string $skillKey): array
     }
 
     $meta = [
-        'key_stat' => '',
+        'attribute' => '',
         'rank_max' => 5,
         'title_ru' => '',
         'title_en' => '',
@@ -418,10 +418,13 @@ function af_cs_kb_skill_meta(string $skillKey): array
     $rules = cs_kb_get_data_rules($entry);
     $skill = is_array($rules['skill'] ?? null) ? $rules['skill'] : [];
 
-    $keyStat = strtolower(trim((string)($skill['key_stat'] ?? $rules['key_stat'] ?? $skill['attribute'] ?? $rules['attribute'] ?? '')));
+    $attribute = strtolower(trim((string)($skill['attribute'] ?? '')));
+    if ($attribute === '') {
+        $attribute = strtolower(trim((string)($skill['key_stat'] ?? '')));
+    }
     $allowed = af_charactersheets_default_attributes();
-    if ($keyStat !== '' && array_key_exists($keyStat, $allowed)) {
-        $meta['key_stat'] = $keyStat;
+    if ($attribute !== '' && array_key_exists($attribute, $allowed)) {
+        $meta['attribute'] = $attribute;
     }
 
     $rankMax = (int)($skill['rank_max'] ?? $rules['rank_max'] ?? 0);
@@ -511,14 +514,14 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
         foreach ($rows as $skill) {
             $skill_key = (string)($skill['skill_key'] ?? '');
             $title = (string)($skill['title'] ?? $skill_key);
-            $key_stat = strtolower(trim((string)($skill['key_stat'] ?? $skill['attr_key'] ?? '')));
-            $attr_label = trim((string)($skill['key_stat_label'] ?? $skill['attr_label'] ?? ($skill_attribute_labels[$key_stat] ?? '')));
+            $attribute = strtolower(trim((string)($skill['attribute'] ?? $skill['attr_key'] ?? $skill['key_stat'] ?? '')));
+            $attr_label = trim((string)($skill['attribute_label'] ?? $skill['attr_label'] ?? ($skill_attribute_labels[$attribute] ?? '')));
             $skill_rank = max(0, (int)($skill['skill_rank'] ?? 0));
             $rank_max = max(1, (int)($skill['rank_max'] ?? 5));
             $source = (string)($skill['source'] ?? 'manual');
             $notes = (string)($skill['notes'] ?? '');
             $rank_bonus = af_charactersheets_skill_rank_bonus_for_rank($skill_rank);
-            $sheet_attr_value = (float)($sheet_attributes[$key_stat] ?? 0);
+            $sheet_attr_value = (float)($sheet_attributes[$attribute] ?? 0);
             $total_value = (float)($skill['total'] ?? ($rank_bonus + $sheet_attr_value));
             $total_label = af_charactersheets_format_signed($total_value);
             $source_chip = '';
@@ -546,12 +549,12 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
                 $controls = '<div class="af-cs-skill-controls-inline">' . $action_btn . $reset_btn . '</div>';
             }
 
-            $debug_key_stat = $is_debug_user ? '<div class="af-cs-muted">key_stat: ' . htmlspecialchars_uni($key_stat !== '' ? $key_stat : '—') . '</div>' : '';
-            $items[] = '<div class="af-cs-skill-item" data-key-stat="' . htmlspecialchars_uni($key_stat) . '">'
+            $debug_attribute = $is_debug_user ? '<!-- afcs skill ' . htmlspecialchars_uni($skill_key) . ' attribute=' . htmlspecialchars_uni($attribute !== '' ? $attribute : '—') . ' -->' : '';
+            $items[] = '<div class="af-cs-skill-item" data-attribute="' . htmlspecialchars_uni($attribute) . '">'
                 . '<div class="af-cs-skill-left">'
                 . '<div class="af-cs-skill-name">' . htmlspecialchars_uni($title) . $build_attr_label($attr_label) . '</div>'
                 . ($notes !== '' ? '<div class="af-cs-muted">' . htmlspecialchars_uni($notes) . '</div>' : '')
-                . $debug_key_stat
+                . $debug_attribute
                 . '<div class="af-cs-skill-meta">' . $build_rank_chip($skill_rank, $rank_max, $rank_names) . $source_chip . '</div>'
                 . '</div>'
                 . '<div class="af-cs-skill-right">'
@@ -573,8 +576,8 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
                 continue;
             }
             $title = (string)($skill['title'] ?? $skill_key);
-            $key_stat = strtolower(trim((string)($skill['key_stat'] ?? $skill['attr_key'] ?? '')));
-            $attr_label = trim((string)($skill['key_stat_label'] ?? $skill['attr_label'] ?? ($skill_attribute_labels[$key_stat] ?? '')));
+            $attribute = strtolower(trim((string)($skill['attribute'] ?? $skill['attr_key'] ?? $skill['key_stat'] ?? '')));
+            $attr_label = trim((string)($skill['attribute_label'] ?? $skill['attr_label'] ?? ($skill_attribute_labels[$attribute] ?? '')));
             $skill_rank = max(0, (int)($skill['skill_rank'] ?? 0));
             $rank_max = max(1, (int)($skill['rank_max'] ?? 5));
             $source = (string)($skill['source'] ?? 'manual');
@@ -591,12 +594,12 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
             $action_label = $skill_rank > 0 ? 'Улучшить' : 'Купить';
             $catalog_action_btn = '<button type="button" class="af-cs-skill-btn af-cs-skill-btn--wide" data-afcs-skill-buy="1" data-skill-key="' . htmlspecialchars_uni($skill_key) . '"' . $buy_disabled . '>' . $action_label . '</button>';
 
-            $catalog_debug_key_stat = $is_debug_user ? '<div class="af-cs-muted">key_stat: ' . htmlspecialchars_uni($key_stat !== '' ? $key_stat : '—') . '</div>' : '';
-            $catalog_items[] = '<div class="af-cs-skill-catalog-item" data-key-stat="' . htmlspecialchars_uni($key_stat) . '">'
+            $catalog_debug_attribute = $is_debug_user ? '<!-- afcs skill ' . htmlspecialchars_uni($skill_key) . ' attribute=' . htmlspecialchars_uni($attribute !== '' ? $attribute : '—') . ' -->' : '';
+            $catalog_items[] = '<div class="af-cs-skill-catalog-item" data-attribute="' . htmlspecialchars_uni($attribute) . '">'
                 . '<div class="af-cs-skill-catalog-item__main">'
                 . '<div class="af-cs-skill-name">' . htmlspecialchars_uni($title) . $build_attr_label($attr_label) . '</div>'
                 . ($notes !== '' ? '<div class="af-cs-muted">' . htmlspecialchars_uni($notes) . '</div>' : '')
-                . $catalog_debug_key_stat
+                . $catalog_debug_attribute
                 . '<div class="af-cs-skill-meta">'
                 . $build_rank_chip($skill_rank, $rank_max, $rank_names)
                 . $source_chip
@@ -611,9 +614,9 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
         $items[] = '<div class="af-cs-muted">Навыков пока нет.</div>';
     }
 
-    if ($is_debug_user && !empty($view['debug_skills_key_stats']) && is_array($view['debug_skills_key_stats'])) {
-        foreach ((array)$view['debug_skills_key_stats'] as $dbgKey => $dbgStat) {
-            $items[] = '<!-- afcs skill: ' . htmlspecialchars_uni((string)$dbgKey) . ' key_stat=' . htmlspecialchars_uni((string)$dbgStat) . ' -->';
+    if ($is_debug_user && !empty($view['debug_skills_attributes']) && is_array($view['debug_skills_attributes'])) {
+        foreach ((array)$view['debug_skills_attributes'] as $dbgKey => $dbgStat) {
+            $items[] = '<!-- afcs skill: ' . htmlspecialchars_uni((string)$dbgKey) . ' attribute=' . htmlspecialchars_uni((string)$dbgStat) . ' -->';
         }
     }
 

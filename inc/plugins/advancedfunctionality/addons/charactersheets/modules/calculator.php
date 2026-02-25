@@ -1060,7 +1060,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     }
 
     $skills_view = [];
-    $debug_skills_key_stats = [];
+    $debug_skills_attributes = [];
     $skills_all = (array)($kb_context['skills_all'] ?? []);
     $skills_kb_keys = [];
     foreach ($skills_all as $skill_resolved) {
@@ -1099,18 +1099,18 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         }
 
         $skill_meta = (array)($skill_meta_map[$skill_key] ?? []);
-        $key_stat = (string)($skill_meta['key_stat'] ?? '');
-        $key_stat_label = $key_stat !== '' ? (string)($attributes_labels[$key_stat] ?? '') : '';
-        if ($key_stat === '') {
-            static $missing_skill_key_stats = [];
-            if (!isset($missing_skill_key_stats[$skill_key])) {
-                af_charactersheets_log('skills: missing key_stat in KB rules', [
+        $attribute = (string)($skill_meta['attribute'] ?? '');
+        $attribute_label = $attribute !== '' ? (string)($attributes_labels[$attribute] ?? '') : '';
+        if ($attribute === '') {
+            static $missing_skill_attributes = [];
+            if (!isset($missing_skill_attributes[$skill_key])) {
+                af_charactersheets_log('skills: missing attribute in KB rules.skill', [
                     'kb_key' => $skill_key,
                 ]);
-                $missing_skill_key_stats[$skill_key] = true;
+                $missing_skill_attributes[$skill_key] = true;
             }
         }
-        $attr_mod = $key_stat !== '' ? (int)floor((float)($final[$key_stat] ?? 0)) : 0;
+        $attr_mod = $attribute !== '' ? (int)floor((float)($final[$attribute] ?? 0)) : 0;
         $row = (array)($skills_map[$skill_key] ?? []);
         $skill_rank = max(0, (int)($row['skill_rank'] ?? 0));
         $is_active = (int)($row['is_active'] ?? 0) === 1;
@@ -1149,10 +1149,12 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'is_active' => $is_active,
             'trained_only' => !empty($skill_data['trained_only']),
             'notes' => (string)($skill_data['notes'] ?? ''),
-            'attr_key' => $key_stat,
-            'attr_label' => $key_stat_label,
-            'key_stat' => $key_stat,
-            'key_stat_label' => $key_stat_label,
+            'attribute' => $attribute,
+            'attribute_label' => $attribute_label,
+            'attr_key' => $attribute,
+            'attr_label' => $attribute_label,
+            'key_stat' => $attribute,
+            'key_stat_label' => $attribute_label,
             'base' => $attr_mod,
             'attr_mod' => $attr_mod,
             'rank_bonus' => $rank_bonus,
@@ -1160,7 +1162,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             'total' => $total,
             'total_bonus' => $total,
         ];
-        $debug_skills_key_stats[$skill_key] = $key_stat;
+        $debug_skills_attributes[$skill_key] = $attribute;
     }
 
     $skills_catalog_after_filter = count($skills_view);
@@ -1342,7 +1344,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         'exp_need' => (float)($level_data['exp_need'] ?? 0),
         'credits' => (int)($balance['credits'] ?? 0),
         'skills' => $skills_view,
-        'debug_skills_key_stats' => $is_debug_user ? $debug_skills_key_stats : [],
+        'debug_skills_attributes' => $is_debug_user ? $debug_skills_attributes : [],
         'rank_bonus_map' => af_charactersheets_skill_rank_bonus_map(),
         'kb_context' => $kb_context,
         'ctx' => [
