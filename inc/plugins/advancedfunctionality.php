@@ -1949,6 +1949,132 @@ function af_asset_build_url(string $cleanPath, array $opts = []): string
     return $url . '?v=' . rawurlencode((string)$buster);
 }
 
+function af_current_script_name_from_this_script(): string
+{
+    if (!defined('THIS_SCRIPT')) {
+        return '';
+    }
+
+    $script = strtolower((string)THIS_SCRIPT);
+    $script = basename(str_replace('\\', '/', $script));
+
+    return $script;
+}
+
+function af_parse_assets_blacklist_conditions(string $raw): array
+{
+    $out = [];
+    $lines = preg_split('~\R~', $raw);
+    if (!is_array($lines)) {
+        return $out;
+    }
+
+    foreach ($lines as $line) {
+        $line = trim((string)$line);
+        if ($line === '') {
+            continue;
+        }
+
+        $script = '';
+        $action = null;
+        $qPos = strpos($line, '?');
+        if ($qPos === false) {
+            $script = strtolower($line);
+        } else {
+            $script = strtolower(trim(substr($line, 0, $qPos)));
+            $query = trim(substr($line, $qPos + 1));
+            if ($query !== '') {
+                foreach (explode('&', $query) as $part) {
+                    $part = trim((string)$part);
+                    if ($part === '') {
+                        continue;
+                    }
+
+                    $eqPos = strpos($part, '=');
+                    if ($eqPos === false) {
+                        continue;
+                    }
+
+                    $k = strtolower(trim(substr($part, 0, $eqPos)));
+                    $v = strtolower(trim(substr($part, $eqPos + 1)));
+                    if ($k === 'action') {
+                        $action = $v;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($script === '') {
+            continue;
+        }
+
+        $out[] = ['script' => basename(str_replace('\\', '/', $script)), 'action' => $action];
+    }
+
+    return $out;
+}
+
+function af_setting_blacklist_disabled_for_current_page(string $settingName, string $defaultRaw = ''): bool
+{
+    global $mybb;
+
+    $script = af_current_script_name_from_this_script();
+    if ($script === '') {
+        return false;
+    }
+
+    $raw = trim((string)($mybb->settings[$settingName] ?? ''));
+    if ($raw === '') {
+        $raw = trim($defaultRaw);
+    }
+    if ($raw === '') {
+        return false;
+    }
+
+    $action = strtolower((string)($mybb->input['action'] ?? ''));
+    $conditions = af_parse_assets_blacklist_conditions($raw);
+    foreach ($conditions as $cond) {
+        $condScript = strtolower((string)($cond['script'] ?? ''));
+        if ($condScript === '' || $condScript !== $script) {
+            continue;
+        }
+
+        $condAction = strtolower((string)($cond['action'] ?? ''));
+        if ($condAction === '' || $condAction === $action) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function af_is_blacklisted(string $addonId): bool
+{
+    $addonId = strtolower(trim($addonId));
+    if ($addonId === '') {
+        return false;
+    }
+
+    $settings = [
+        'af_' . $addonId . '_assets_blacklist',
+        'af_' . $addonId . '_disable_on',
+    ];
+
+    $defaultBySetting = [
+        'af_advancededitor_disable_on' => "index.php\nforumdisplay.php\npostsactivity.php\nusercp.php\nuserlist.php\nsearch.php\ngallery.php",
+    ];
+
+    foreach ($settings as $settingName) {
+        $defaultRaw = $defaultBySetting[$settingName] ?? '';
+        if (af_setting_blacklist_disabled_for_current_page($settingName, $defaultRaw)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function af_asset_is_admin_only(string $cleanPath): bool
 {
     $cleanPath = af_asset_clean_path($cleanPath);
@@ -2118,6 +2244,7 @@ function af_collect_enabled_addon_assets(): array
     foreach ($addons as $meta) {
         $id = $meta['id'] ?? '';
         if ($id === '' || !af_is_addon_enabled($id)) continue;
+        if (af_is_blacklisted($id)) continue;
 
         $manifestAssets = $meta['assets'] ?? null;
         if (is_array($manifestAssets)) {

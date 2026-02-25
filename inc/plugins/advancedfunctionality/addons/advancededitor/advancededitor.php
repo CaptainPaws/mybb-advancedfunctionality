@@ -699,90 +699,22 @@ function af_advancededitor_resolve_sceditor_theme_css_url(string $bburl): string
     return $bburl . '/jscripts/sceditor/themes/default.min.css';
 }
 
-function af_advancededitor_parse_disable_conditions(string $raw): array
-{
-    $out = [];
-    $lines = preg_split('~\R~', $raw);
-    if (!is_array($lines)) return $out;
-
-    foreach ($lines as $line) {
-        $line = trim((string)$line);
-        if ($line === '') continue;
-
-        $script = '';
-        $action = null;
-
-        $qPos = strpos($line, '?');
-        if ($qPos === false) {
-            $script = strtolower($line);
-        } else {
-            $script = strtolower(trim(substr($line, 0, $qPos)));
-            $query = trim(substr($line, $qPos + 1));
-            if ($query !== '') {
-                $parts = explode('&', $query);
-                foreach ($parts as $part) {
-                    $part = trim((string)$part);
-                    if ($part === '') continue;
-
-                    $eqPos = strpos($part, '=');
-                    if ($eqPos === false) continue;
-
-                    $k = strtolower(trim(substr($part, 0, $eqPos)));
-                    $v = trim(substr($part, $eqPos + 1));
-                    if ($k === 'action') {
-                        $action = strtolower($v);
-                        break;
-                    }
-                }
-            }
-        }
-
-        if ($script === '') continue;
-        $out[] = ['script' => $script, 'action' => $action];
-    }
-
-    return $out;
-}
-
 function af_advancededitor_assets_disabled_for_current_page(): bool
 {
-    global $mybb;
-
-    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
-    if ($script !== '') {
-        // На некоторых инсталлах THIS_SCRIPT может прийти как путь (/forum/index.php).
-        $script = strtolower(basename(str_replace('\\', '/', $script)));
-    }
-    if ($script === '') return false;
-
-    // usercp.php отключаем всегда, независимо от action.
-    if ($script === 'usercp.php') return true;
-
-    $action = strtolower((string)($mybb->input['action'] ?? ''));
-
-    $lines = [
-        'index.php',
-        'forumdisplay.php',
-        'postsactivity.php',
-        'usercp.php',
-        'userlist.php',
-        'search.php',
-        'gallery.php',
-    ];
-
-    $customRaw = trim((string)($mybb->settings[AF_AE_SETTING_DISABLE_ON] ?? ''));
-    if ($customRaw !== '') {
-        $lines[] = $customRaw;
+    if (function_exists('af_is_blacklisted')) {
+        return af_is_blacklisted(AF_AE_ID);
     }
 
-    $conditions = af_advancededitor_parse_disable_conditions(implode("\n", $lines));
-    foreach ($conditions as $cond) {
-        $condScript = strtolower((string)($cond['script'] ?? ''));
-        if ($condScript === '' || $condScript !== $script) continue;
+    $defaults = "index.php
+forumdisplay.php
+postsactivity.php
+usercp.php
+userlist.php
+search.php
+gallery.php";
 
-        $condAction = $cond['action'] ?? null;
-        if ($condAction === null || $condAction === '') return true;
-        if ($action === strtolower((string)$condAction)) return true;
+    if (function_exists('af_setting_blacklist_disabled_for_current_page')) {
+        return af_setting_blacklist_disabled_for_current_page(AF_AE_SETTING_DISABLE_ON, $defaults);
     }
 
     return false;
