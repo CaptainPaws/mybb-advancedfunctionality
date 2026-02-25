@@ -2078,6 +2078,7 @@ function af_is_blacklisted(string $addonId, string $script = ''): bool
     $legacySettingsByAddon = [
         'advancedprofilefields' => ['af_apf_assets_blacklist'],
         'advancedthreadfields' => ['af_atf_assets_blacklist'],
+        'charactersheets' => ['af_cs_assets_blacklist'],
     ];
     foreach (($legacySettingsByAddon[$addonId] ?? []) as $legacySettingName) {
         $settings[] = (string)$legacySettingName;
