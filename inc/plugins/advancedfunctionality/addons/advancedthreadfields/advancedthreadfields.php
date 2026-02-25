@@ -356,6 +356,12 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         return;
     }
 
+    if (function_exists('af_is_blacklisted')
+        && af_is_blacklisted(AF_ATF_ID, defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '')
+    ) {
+        return;
+    }
+
     // Не грузим/не трогаем нерелевантные страницы
     if (!af_atf_is_relevant_script()) {
         return;
@@ -943,6 +949,12 @@ function af_atf_parse_assets_blacklist(string $raw): array
 
 function af_atf_assets_disabled_for_current_page(): bool
 {
+    if (function_exists('af_is_blacklisted')
+        && af_is_blacklisted(AF_ATF_ID, defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '')
+    ) {
+        return true;
+    }
+
     global $mybb;
 
     $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
