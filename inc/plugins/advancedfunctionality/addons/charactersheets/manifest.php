@@ -77,6 +77,8 @@ return [
 
                 'af_charactersheets_sheet_autocreate'        => 'Автосоздание листа персонажа',
                 'af_charactersheets_sheet_autocreate_desc'   => 'Если включено, после принятия срабатывает генератор листа персонажа (заглушка).',
+                'af_cs_assets_blacklist'                 => 'Blacklist ассетов CharacterSheets',
+                'af_cs_assets_blacklist_desc'            => "Одна строка = одно правило: script.php или script.php?action=... . На указанных страницах не подключаются charactersheets.css/js.",
                 'af_charactersheets_exp_per_char'            => 'EXP за символ',
                 'af_charactersheets_exp_per_char_desc'       => 'Опыт начисляется за символ в посте.',
                 'af_charactersheets_exp_forum_categories'    => 'EXP: категории форумов',
@@ -172,6 +174,8 @@ return [
 
                 'af_charactersheets_sheet_autocreate'        => 'Auto-create character sheet',
                 'af_charactersheets_sheet_autocreate_desc'   => 'If enabled, triggers the character sheet generator (stub).',
+                'af_cs_assets_blacklist'                 => 'CharacterSheets assets blacklist',
+                'af_cs_assets_blacklist_desc'            => 'One rule per line: script.php or script.php?action=... . CharacterSheets CSS/JS will not be included on matched pages.',
                 'af_charactersheets_exp_per_char'            => 'EXP per character',
                 'af_charactersheets_exp_per_char_desc'       => 'Experience granted per post character.',
                 'af_charactersheets_exp_forum_categories'    => 'EXP forums: categories',

@@ -51,8 +51,10 @@ function af_charactersheets_postbit_button(array &$post): void
 
     $post['af_cs_plaque'] = $plaque_html;
 
-    $GLOBALS['af_charactersheets_needs_assets'] = true;
-    $GLOBALS['af_charactersheets_needs_modal'] = true;
+    if (!af_cs_assets_disabled_for_current_page()) {
+        $GLOBALS['af_charactersheets_needs_assets'] = true;
+        $GLOBALS['af_charactersheets_needs_modal'] = true;
+    }
 }
 
 function af_charactersheets_postbit_preload_balances(): void

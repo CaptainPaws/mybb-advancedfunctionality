@@ -98,7 +98,8 @@ function af_charactersheets_uninstall_impl(): void
         'af_charactersheets_exp_allow_overdraw',
         'af_charactersheets_knowledge_base_choices',
         'af_charactersheets_knowledge_per_int',
-        'af_charactersheets_aug_slots_json'
+        'af_charactersheets_aug_slots_json',
+        'af_cs_assets_blacklist'
     )");
     $db->delete_query('settinggroups', "name='af_charactersheets'");
     $db->delete_query('templates', "title LIKE 'charactersheets_%'");
@@ -296,6 +297,15 @@ function af_charactersheets_ensure_settings(): void
         'text',
         '4,3,6',
         53
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
+        AF_CS_SETTING_ASSETS_BLACKLIST,
+        $lang->af_cs_assets_blacklist ?? 'Asset blacklist (disable CharacterSheets assets on listed pages)',
+        $lang->af_cs_assets_blacklist_desc ?? "One rule per line: script.php or script.php?action=... .\nDefault pages disable CharacterSheets on non-sheet screens.",
+        'textarea',
+        "index.php\nusercp.php\nuserlist.php\nsearch.php\ngallery.php\nmisc.php?action=kb",
+        54
     );
 
 
@@ -549,7 +559,9 @@ function af_charactersheets_pre_output_impl(&$page): void
         return;
     }
 
-    if (!empty($GLOBALS['af_charactersheets_needs_assets'])) {
+    $assetsDisabled = af_cs_assets_disabled_for_current_page();
+
+    if (!$assetsDisabled && !empty($GLOBALS['af_charactersheets_needs_assets'])) {
         $page = af_charactersheets_inject_assets($page);
     }
 
@@ -558,7 +570,7 @@ function af_charactersheets_pre_output_impl(&$page): void
         $page = af_charactersheets_canonicalize_assets_html($page);
     }
 
-    if (!empty($GLOBALS['af_charactersheets_needs_modal'])) {
+    if (!$assetsDisabled && !empty($GLOBALS['af_charactersheets_needs_modal'])) {
         $page = af_charactersheets_inject_modal($page);
     }
 
@@ -1459,9 +1471,106 @@ function af_charactersheets_get_asset_version(): string
     return (string)max($timestamps);
 }
 
+function af_charactersheets_parse_assets_blacklist_conditions(string $raw): array
+{
+    $out = [];
+    $lines = preg_split('~\R~', $raw);
+    if (!is_array($lines)) {
+        return $out;
+    }
+
+    foreach ($lines as $line) {
+        $line = trim((string)$line);
+        if ($line === '') {
+            continue;
+        }
+
+        $script = '';
+        $action = null;
+
+        $qPos = strpos($line, '?');
+        if ($qPos === false) {
+            $script = strtolower($line);
+        } else {
+            $script = strtolower(trim(substr($line, 0, $qPos)));
+            $query = trim(substr($line, $qPos + 1));
+            if ($query !== '') {
+                $parts = explode('&', $query);
+                foreach ($parts as $part) {
+                    $part = trim((string)$part);
+                    if ($part === '') {
+                        continue;
+                    }
+
+                    $eqPos = strpos($part, '=');
+                    if ($eqPos === false) {
+                        continue;
+                    }
+
+                    $k = strtolower(trim(substr($part, 0, $eqPos)));
+                    $v = trim(substr($part, $eqPos + 1));
+                    if ($k === 'action') {
+                        $action = strtolower($v);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($script === '') {
+            continue;
+        }
+
+        $out[] = ['script' => $script, 'action' => $action];
+    }
+
+    return $out;
+}
+
+function af_cs_assets_disabled_for_current_page(): bool
+{
+    global $mybb;
+
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    if ($script !== '') {
+        $script = strtolower(basename(str_replace('\\', '/', $script)));
+    }
+    if ($script === '') {
+        return false;
+    }
+
+    $raw = trim((string)($mybb->settings[AF_CS_SETTING_ASSETS_BLACKLIST] ?? ''));
+    if ($raw === '') {
+        return false;
+    }
+
+    $action = strtolower((string)($mybb->input['action'] ?? ''));
+    $conditions = af_charactersheets_parse_assets_blacklist_conditions($raw);
+    foreach ($conditions as $condition) {
+        $conditionScript = strtolower((string)($condition['script'] ?? ''));
+        if ($conditionScript === '' || $conditionScript !== $script) {
+            continue;
+        }
+
+        $conditionAction = $condition['action'] ?? null;
+        if ($conditionAction === null || $conditionAction === '') {
+            return true;
+        }
+        if ($action === strtolower((string)$conditionAction)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function af_charactersheets_ensure_assets_in_headerinclude(): void
 {
     global $headerinclude;
+
+    if (af_cs_assets_disabled_for_current_page()) {
+        return;
+    }
 
     // уже вставляли этим хелпером
     if (!empty($GLOBALS['af_charactersheets_assets_included'])) {
@@ -1503,6 +1612,10 @@ function af_charactersheets_canonicalize_assets_html(string $html): string
         $html
     );
 
+    if (af_cs_assets_disabled_for_current_page()) {
+        return $html;
+    }
+
     // 3) вставляем каноничный набор один раз
     $inject = "\n" . AF_CS_ASSET_MARK . "\n"
         . '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($assets['css']) . '" />' . "\n"
@@ -1518,6 +1631,10 @@ function af_charactersheets_canonicalize_assets_html(string $html): string
 
 function af_charactersheets_inject_assets(string $page): string
 {
+    if (af_cs_assets_disabled_for_current_page()) {
+        return af_charactersheets_canonicalize_assets_html($page);
+    }
+
     // если уже вставляли маркером — выходим
     if (strpos($page, AF_CS_ASSET_MARK) !== false) {
         return $page;
@@ -1545,6 +1662,10 @@ function af_charactersheets_inject_assets(string $page): string
 function af_charactersheets_inject_modal(string $page): string
 {
     global $lang;
+
+    if (af_cs_assets_disabled_for_current_page()) {
+        return $page;
+    }
 
     if (strpos($page, AF_CS_MODAL_MARK) !== false) {
         return $page;
