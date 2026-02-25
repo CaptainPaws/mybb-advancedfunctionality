@@ -2116,7 +2116,7 @@ function af_atf_sf_pointbuy_get_attr_groups(): array
 {
     global $lang;
 
-    $attrLabel = static function(string $key, string $fallback): string use ($lang): string {
+    $attrLabel = static function(string $key, string $fallback) use ($lang): string {
         if (!empty($lang->{$key})) {
             return (string)$lang->{$key};
         }
