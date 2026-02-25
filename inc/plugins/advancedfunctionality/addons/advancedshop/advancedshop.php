@@ -5,6 +5,8 @@ if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 define('AF_ADVSHOP_ID', 'advancedshop');
 define('AF_ADVSHOP_BASE', AF_ADDONS . AF_ADVSHOP_ID . '/');
 define('AF_ADVSHOP_TPL_DIR', AF_ADVSHOP_BASE . 'templates/');
+define('AF_ADVSHOP_ASSETS_BLACKLIST_DEFAULT', "index.php\nforumdisplay.php\npostsactivity.php\nusercp.php\nuserlist.php\nsearch.php\ngallery.php");
+define('AF_ADVSHOP_ASSETS_BLACKLIST_DESC', 'По одной строке. Форматы: `script.php` или `script.php?action=xxx`.');
 
 function af_advancedshop_kb_table(): string
 {
@@ -172,7 +174,16 @@ function af_advancedshop_install(): void
     af_advancedshop_ensure_setting('af_advancedshop_currency_slug', $lang->af_advancedshop_currency_slug ?? 'Currency', $lang->af_advancedshop_currency_slug_desc ?? 'credits', 'text', 'credits', 3, $gid);
     af_advancedshop_ensure_setting('af_advancedshop_items_per_page', 'Items per page', 'Shop page size', 'numeric', '24', 4, $gid);
     af_advancedshop_ensure_setting('af_advancedshop_allow_guest_view', 'Allow guest view', 'Guests may browse the shop', 'yesno', '1', 5, $gid);
-    af_advancedshop_ensure_setting('af_shop_assets_blacklist', 'Assets blacklist', 'Disable AdvancedShop JS/CSS on listed scripts (one per line).', 'textarea', 'index.php', 6, $gid);
+    af_advancedshop_ensure_setting(
+        'af_shop_assets_blacklist',
+        'Assets blacklist',
+        AF_ADVSHOP_ASSETS_BLACKLIST_DESC,
+        'textarea',
+        AF_ADVSHOP_ASSETS_BLACKLIST_DEFAULT,
+        6,
+        $gid,
+        true
+    );
 
     if (!$db->table_exists('af_shop')) {
         $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_shop (
@@ -321,7 +332,16 @@ function af_advancedshop_activate(): void
     af_advancedshop_ensure_setting('af_advancedshop_currency_slug', $lang->af_advancedshop_currency_slug ?? 'Currency', $lang->af_advancedshop_currency_slug_desc ?? 'credits', 'text', 'credits', 3, $gid);
     af_advancedshop_ensure_setting('af_advancedshop_items_per_page', 'Items per page', 'Shop page size', 'numeric', '24', 4, $gid);
     af_advancedshop_ensure_setting('af_advancedshop_allow_guest_view', 'Allow guest view', 'Guests may browse the shop', 'yesno', '1', 5, $gid);
-    af_advancedshop_ensure_setting('af_shop_assets_blacklist', 'Assets blacklist', 'Disable AdvancedShop JS/CSS on listed scripts (one per line).', 'textarea', 'index.php', 6, $gid);
+    af_advancedshop_ensure_setting(
+        'af_shop_assets_blacklist',
+        'Assets blacklist',
+        AF_ADVSHOP_ASSETS_BLACKLIST_DESC,
+        'textarea',
+        AF_ADVSHOP_ASSETS_BLACKLIST_DEFAULT,
+        6,
+        $gid,
+        true
+    );
     af_advancedshop_ensure_slots_schema();
     af_advancedshop_ensure_equipped_schema();
     af_advancedshop_templates_install_or_update();
@@ -474,12 +494,17 @@ function af_advancedshop_ensure_setting_group(string $title, string $desc): int
     return (int)$db->insert_id();
 }
 
-function af_advancedshop_ensure_setting(string $name, string $title, string $desc, string $code, string $value, int $order, int $gid): void
+function af_advancedshop_ensure_setting(string $name, string $title, string $desc, string $code, string $value, int $order, int $gid, bool $preserveExistingValue = false): void
 {
     global $db;
     $sid = (int)$db->fetch_field($db->simple_select('settings', 'sid', "name='".$db->escape_string($name)."'", ['limit' => 1]), 'sid');
     $row = ['name' => $db->escape_string($name), 'title' => $db->escape_string($title), 'description' => $db->escape_string($desc), 'optionscode' => $db->escape_string($code), 'value' => $db->escape_string($value), 'disporder' => $order, 'gid' => $gid, 'isdefault' => 0];
-    if ($sid > 0) { $db->update_query('settings', $row, 'sid=' . $sid); }
+    if ($sid > 0) {
+        if ($preserveExistingValue) {
+            unset($row['value']);
+        }
+        $db->update_query('settings', $row, 'sid=' . $sid);
+    }
     else { $db->insert_query('settings', $row); }
 }
 
@@ -739,16 +764,12 @@ function af_shop_assets_disabled_for_current_page(): bool
         return true;
     }
 
-    $defaultBlacklist = [
-        'forumdisplay.php',
-        'postsactivity.php',
-        'usercp.php',
-        'userlist.php',
-        'search.php',
-        'gallery.php',
-    ];
+    $defaultBlacklist = preg_split('~\R~', strtolower(AF_ADVSHOP_ASSETS_BLACKLIST_DEFAULT));
+    if (!is_array($defaultBlacklist)) {
+        $defaultBlacklist = [];
+    }
 
-    $customRaw = (string)($mybb->settings['af_shop_assets_blacklist'] ?? 'index.php');
+    $customRaw = (string)($mybb->settings['af_shop_assets_blacklist'] ?? AF_ADVSHOP_ASSETS_BLACKLIST_DEFAULT);
     $lines = preg_split('~\R~', $customRaw);
     if (!is_array($lines)) {
         $lines = [];
@@ -784,6 +805,7 @@ function af_advancedshop_pre_output(string &$page = ''): void
 {
     global $mybb;
     if (af_shop_assets_disabled_for_current_page()) {
+        af_advancedshop_strip_assets_from_html($page);
         return;
     }
 
@@ -804,6 +826,25 @@ function af_advancedshop_pre_output(string &$page = ''): void
     } else {
         $page = $bits . $page;
     }
+}
+
+function af_advancedshop_strip_assets_from_html(string &$page): void
+{
+    if ($page === '') {
+        return;
+    }
+
+    $basePattern = '[^"\']*?/inc/plugins/advancedfunctionality/addons/advancedshop/assets/[^"\']+';
+    $page = (string)preg_replace(
+        '~<script\b[^>]*\bsrc=("|\')' . $basePattern . '\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i',
+        '',
+        $page
+    );
+    $page = (string)preg_replace(
+        '~<link\b[^>]*\bhref=("|\')' . $basePattern . '\.css(?:\?[^"\']*)?\1[^>]*>\s*~i',
+        '',
+        $page
+    );
 }
 
 function af_advancedshop_render_cart(): void
