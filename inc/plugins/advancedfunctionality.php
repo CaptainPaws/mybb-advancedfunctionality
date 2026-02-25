@@ -1882,6 +1882,27 @@ function af_collect_enabled_addon_assets(): array
         $id = $meta['id'] ?? '';
         if ($id === '' || !af_is_addon_enabled($id)) continue;
 
+        // AdvancedEditor управляет ассетами сам через af_advancededitor_pre_output().
+        // Если оставить общий авто-скан assets/, в страницу попадают лишние файлы
+        // (advancededitor.js, admin toolbar и т.п.) на blacklist-страницах.
+        if ($id === 'advancededitor') {
+            if (!empty($meta['bootstrap']) && is_file($meta['bootstrap'])) {
+                require_once $meta['bootstrap'];
+            }
+
+            if (function_exists('af_advancededitor_assets_disabled_for_current_page')
+                && af_advancededitor_assets_disabled_for_current_page()) {
+                // На blacklist-страницах для AE в автоинжекторе не добавляем ничего.
+                // Шрифты AE подключаются отдельно внутри af_advancededitor_pre_output().
+                continue;
+            }
+
+            // Даже вне blacklist AE подключает нужные файлы в своём pre_output.
+            // Поэтому общий скан assets/ для этого аддона отключаем полностью,
+            // чтобы избежать дублей и случайной загрузки неподходящих файлов.
+            continue;
+        }
+
         $assetsDir = rtrim((string)($meta['path'] ?? ''), '/\\').'/assets/';
         if (!is_dir($assetsDir)) continue;
 

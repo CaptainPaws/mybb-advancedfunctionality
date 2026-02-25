@@ -749,6 +749,10 @@ function af_advancededitor_assets_disabled_for_current_page(): bool
     global $mybb;
 
     $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    if ($script !== '') {
+        // На некоторых инсталлах THIS_SCRIPT может прийти как путь (/forum/index.php).
+        $script = strtolower(basename(str_replace('\\', '/', $script)));
+    }
     if ($script === '') return false;
 
     // usercp.php отключаем всегда, независимо от action.
