@@ -1061,6 +1061,14 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
 
     $skills_view = [];
     $skills_all = (array)($kb_context['skills_all'] ?? []);
+    $skills_kb_keys = [];
+    foreach ($skills_all as $skill_resolved) {
+        $skill_key = trim((string)($skill_resolved['key'] ?? ''));
+        if ($skill_key !== '') {
+            $skills_kb_keys[] = $skill_key;
+        }
+    }
+    $skill_meta_map = af_charactersheets_get_skill_kb_meta_map($skills_kb_keys);
     $skills_catalog_fetched = count($skills_all);
     $skills_catalog_keys = [];
     $skills_filter_reason_counts = [
@@ -1089,17 +1097,14 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             continue;
         }
 
-        $skill_entry = af_charactersheets_kb_get_entry('skill', $skill_key);
-        if (empty($skill_entry)) {
-            $skill_entry = af_charactersheets_kb_get_entry('skills', $skill_key);
-        }
-        $key_stat = af_charactersheets_extract_skill_key_stat((array)$skill_entry);
+        $skill_meta = (array)($skill_meta_map[$skill_key] ?? []);
+        $key_stat = (string)($skill_meta['key_stat'] ?? '');
         $key_stat_label = $key_stat !== '' ? (string)($attributes_labels[$key_stat] ?? '') : '';
         if ($key_stat === '') {
             static $missing_skill_key_stats = [];
             if (!isset($missing_skill_key_stats[$skill_key])) {
                 af_charactersheets_log('skills: missing key_stat in KB rules', [
-                    'skill_key' => $skill_key,
+                    'kb_key' => $skill_key,
                 ]);
                 $missing_skill_key_stats[$skill_key] = true;
             }
@@ -1120,7 +1125,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
             );
         }
 
-        $kb_rank_max = max(0, (int)($skill_data['rank_max_final'] ?? $skill_data['rank_max'] ?? $skill_data['max_rank'] ?? 0));
+        $kb_rank_max = max(0, (int)($skill_meta['rank_max'] ?? 0));
         $rank_max_from_sources = max(0, (int)($grant_skill_rank_maxes[$skill_key] ?? 0));
         $rank_max_candidates = [];
         if ($kb_rank_max > 0) {
@@ -1133,6 +1138,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
 
         $skills_view[] = [
             'skill_key' => $skill_key,
+            'kb_key' => $skill_key,
             'title' => (string)($skill_resolved['title'] ?? $skill_key),
             'category' => (string)($skill_data['category'] ?? 'general'),
             'skill_rank' => $skill_rank,
@@ -1330,6 +1336,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         'exp_need' => (float)($level_data['exp_need'] ?? 0),
         'credits' => (int)($balance['credits'] ?? 0),
         'skills' => $skills_view,
+        'rank_bonus_map' => af_charactersheets_skill_rank_bonus_map(),
         'kb_context' => $kb_context,
         'ctx' => [
             'sources' => (array)($kb_context['sources'] ?? []),

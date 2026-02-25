@@ -748,6 +748,7 @@ function af_charactersheets_handle_api_impl(): void
             'available' => (int)($view['skill_pool_remaining'] ?? 0),
             'remaining' => (int)($view['skill_pool_remaining'] ?? 0),
         ],
+        'rank_bonus_map' => (array)($view['rank_bonus_map'] ?? []),
         'skill_row' => $updated_skill_key !== '' ? af_charactersheets_find_skill_view_row($view, $updated_skill_key) : null,
         'view' => $view,
         'attributes_html' => $attributes_html,

@@ -247,6 +247,15 @@ function af_charactersheets_ensure_settings(): void
     );
     af_charactersheets_ensure_setting(
         $gid,
+        'af_cs_skill_ranks_json',
+        $lang->af_cs_skill_ranks_json ?? 'Ранги навыков (JSON)',
+        $lang->af_cs_skill_ranks_json_desc ?? 'JSON-конфиг рангов 0..5: title_ru/title_en + bonus.',
+        'textarea',
+        json_encode(af_charactersheets_skill_rank_defaults(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        45
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
         'af_charactersheets_knowledge_base_choices',
         $lang->af_charactersheets_knowledge_base_choices ?? 'Knowledge choices base',
         $lang->af_charactersheets_knowledge_base_choices_desc ?? 'Base number of knowledge choices.',
@@ -2745,16 +2754,76 @@ function af_charactersheets_skill_rank_cost_for_target(int $target_rank): int
     return 8 + (($target_rank - 5) * 5);
 }
 
-function af_charactersheets_skill_rank_bonus_map(): array
+function af_charactersheets_normalize_attribute_key(string $attribute_key): string
+{
+    $attribute_key = strtolower(trim($attribute_key));
+    $allowed = af_charactersheets_default_attributes();
+    if ($attribute_key === '' || !array_key_exists($attribute_key, $allowed)) {
+        return '';
+    }
+    return $attribute_key;
+}
+
+function af_charactersheets_skill_rank_defaults(): array
 {
     return [
-        0 => 0,
-        1 => 2,
-        2 => 5,
-        3 => 10,
-        4 => 20,
-        5 => 30,
+        '0' => ['title_ru' => 'Не обучен', 'title_en' => 'Untrained', 'bonus' => 0],
+        '1' => ['title_ru' => 'Обучен', 'title_en' => 'Trained', 'bonus' => 2],
+        '2' => ['title_ru' => 'Эксперт', 'title_en' => 'Expert', 'bonus' => 5],
+        '3' => ['title_ru' => 'Мастер', 'title_en' => 'Master', 'bonus' => 10],
+        '4' => ['title_ru' => 'Легендарный', 'title_en' => 'Legendary', 'bonus' => 20],
+        '5' => ['title_ru' => 'Мифический', 'title_en' => 'Mythic', 'bonus' => 30],
     ];
+}
+
+function af_charactersheets_skill_rank_config(): array
+{
+    global $mybb;
+
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+
+    $defaults = af_charactersheets_skill_rank_defaults();
+    $raw = trim((string)($mybb->settings['af_cs_skill_ranks_json'] ?? ''));
+    if ($raw === '') {
+        return $cache = $defaults;
+    }
+
+    $decoded = af_charactersheets_json_decode($raw);
+    if (!is_array($decoded)) {
+        af_charactersheets_log('skills: invalid af_cs_skill_ranks_json, fallback defaults');
+        return $cache = $defaults;
+    }
+
+    $result = $defaults;
+    for ($rank = 0; $rank <= 5; $rank++) {
+        $key = (string)$rank;
+        $row = is_array($decoded[$key] ?? null) ? $decoded[$key] : [];
+        if (isset($row['bonus'])) {
+            $result[$key]['bonus'] = (int)$row['bonus'];
+        }
+        if (isset($row['title_ru']) && trim((string)$row['title_ru']) !== '') {
+            $result[$key]['title_ru'] = trim((string)$row['title_ru']);
+        }
+        if (isset($row['title_en']) && trim((string)$row['title_en']) !== '') {
+            $result[$key]['title_en'] = trim((string)$row['title_en']);
+        }
+    }
+
+    return $cache = $result;
+}
+
+function af_charactersheets_skill_rank_bonus_map(): array
+{
+    $config = af_charactersheets_skill_rank_config();
+    $map = [];
+    for ($rank = 0; $rank <= 5; $rank++) {
+        $row = is_array($config[(string)$rank] ?? null) ? $config[(string)$rank] : [];
+        $map[$rank] = (int)($row['bonus'] ?? 0);
+    }
+    return $map;
 }
 
 function af_charactersheets_skill_rank_bonus_for_rank(int $rank): float
@@ -2770,41 +2839,71 @@ function af_charactersheets_resolve_skill_attribute_key(array $skill_data, array
     if ($attribute_key === '') {
         $attribute_key = trim((string)($skill_data['attribute'] ?? $entry_data['attribute'] ?? ''));
     }
-    $attribute_key = strtolower($attribute_key);
-
-    $allowed = af_charactersheets_default_attributes();
-    if ($attribute_key === '' || !array_key_exists($attribute_key, $allowed)) {
-        return '';
-    }
-
-    return $attribute_key;
+    return af_charactersheets_normalize_attribute_key($attribute_key);
 }
 
 function af_charactersheets_extract_skill_key_stat(array $entry): string
 {
-    $entry_data = (array)($entry['data'] ?? []);
-    $skill_data = (array)($entry_data['skill'] ?? []);
-    $rules = cs_kb_get_data_rules($entry);
+    $meta = af_charactersheets_json_decode((string)($entry['meta_json'] ?? ''));
+    $rules = is_array($meta['rules'] ?? null) ? (array)$meta['rules'] : [];
     $rules_skill = is_array($rules['skill'] ?? null) ? (array)$rules['skill'] : [];
 
-    $key_stat = trim((string)($rules_skill['key_stat'] ?? $rules['key_stat'] ?? ''));
+    $key_stat = trim((string)($rules_skill['key_stat'] ?? ''));
     if ($key_stat === '') {
-        $key_stat = trim((string)($rules_skill['attribute'] ?? $rules['attribute'] ?? ''));
+        $key_stat = trim((string)($rules_skill['attribute'] ?? ''));
     }
     if ($key_stat === '') {
-        $key_stat = trim((string)($skill_data['key_stat'] ?? ''));
+        $key_stat = trim((string)($rules['key_stat'] ?? ''));
     }
     if ($key_stat === '') {
-        $key_stat = trim((string)($skill_data['attribute'] ?? ''));
-    }
-    $key_stat = strtolower($key_stat);
-
-    $allowed = af_charactersheets_default_attributes();
-    if ($key_stat === '' || !array_key_exists($key_stat, $allowed)) {
-        return '';
+        $key_stat = trim((string)($rules['attribute'] ?? ''));
     }
 
-    return $key_stat;
+    return af_charactersheets_normalize_attribute_key($key_stat);
+}
+
+function af_charactersheets_get_skill_kb_meta_map(array $kb_keys): array
+{
+    global $db;
+
+    $keys = array_values(array_unique(array_filter(array_map(static function ($item) {
+        return trim((string)$item);
+    }, $kb_keys), static function ($item) {
+        return $item !== '';
+    })));
+
+    if (empty($keys) || !$db->table_exists('af_kb_entries')) {
+        return [];
+    }
+
+    $escaped = array_map([$db, 'escape_string'], $keys);
+    $in_list = "'" . implode("','", $escaped) . "'";
+
+    $map = [];
+    $q = $db->simple_select(
+        'af_kb_entries',
+        '`key`, type, meta_json',
+        "type IN ('skill','skills') AND `key` IN ({$in_list})"
+    );
+
+    while ($row = $db->fetch_array($q)) {
+        $kb_key = trim((string)($row['key'] ?? ''));
+        if ($kb_key === '') {
+            continue;
+        }
+        $key_stat = af_charactersheets_extract_skill_key_stat((array)$row);
+        $meta = af_charactersheets_json_decode((string)($row['meta_json'] ?? ''));
+        $rules = is_array($meta['rules'] ?? null) ? (array)$meta['rules'] : [];
+        $rules_skill = is_array($rules['skill'] ?? null) ? (array)$rules['skill'] : [];
+        $rank_max = (int)($rules_skill['rank_max'] ?? 0);
+
+        $map[$kb_key] = [
+            'key_stat' => $key_stat,
+            'rank_max' => $rank_max > 0 ? $rank_max : 0,
+        ];
+    }
+
+    return $map;
 }
 
 function af_charactersheets_skill_rank_total_cost(int $rank): int
