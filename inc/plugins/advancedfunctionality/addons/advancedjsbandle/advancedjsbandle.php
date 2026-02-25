@@ -93,7 +93,7 @@ function af_ajsb_is_private_read_with_pmid(): bool
 function af_ajsb_allowed_assets_for_page(): array
 {
     $css = ['scroll-buttons.css'];
-    $js  = ['scroll-buttons.js'];
+    $js  = ['scroll-buttons.js', 'postcontrols-tooltips.js'];
 
     $isShowthread  = af_is_script('showthread.php');
     $isForumdisplay = af_is_script('forumdisplay.php');
@@ -114,7 +114,6 @@ function af_ajsb_allowed_assets_for_page(): array
     if ($isShowthread || $isForumdisplay || $isPmRead) {
         $css[] = 'postbit-fa-icons.css';
         $js[] = 'postbit-fa-icons.js';
-        $js[] = 'postcontrols-tooltips.js';
     }
 
     if ($isShowthread || $isPmRead) {
