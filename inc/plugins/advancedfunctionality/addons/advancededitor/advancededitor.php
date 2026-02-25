@@ -39,135 +39,12 @@ function af_advancededitor_assets_rel(): string
 
 function af_advancededitor_bbcodes_rel(): string
 {
-    $base = af_advancededitor_assets_rel() . 'bbcodes/';
-
-    static $resolved = null;
-    if ($resolved === null) {
-        $dir = af_advancededitor_bbcodes_dir();
-        $primary = af_advancededitor_realpath_safe(MYBB_ROOT . $base);
-        $resolved = (af_advancededitor_realpath_safe($dir) === $primary)
-            ? $base
-            : ($base . 'bbcodes/');
-    }
-
-    return $resolved;
+    return af_advancededitor_assets_rel() . 'bbcodes/';
 }
 
 function af_advancededitor_fs_bbcodes_dir(): string
 {
-    return af_advancededitor_bbcodes_dir();
-}
-
-function af_advancededitor_debug_enabled_for_admin(): bool
-{
-    global $mybb;
-
-    if (defined('IN_ADMINCP') || defined('IN_MODCP')) return true;
-    if (!isset($mybb) || !is_object($mybb)) return false;
-
-    $uid = (int)($mybb->user['uid'] ?? 0);
-    if ($uid <= 0) return false;
-
-    if (function_exists('is_super_admin')) {
-        return (bool)is_super_admin($uid);
-    }
-
-    return !empty($mybb->usergroup['cancp']);
-}
-
-function af_advancededitor_debug_log(string $message, array $ctx = []): void
-{
-    if (!af_advancededitor_debug_enabled_for_admin()) return;
-
-    $line = '[AF AE] ' . $message;
-    if (!empty($ctx)) {
-        $json = @json_encode($ctx, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if (is_string($json) && $json !== '') {
-            $line .= ' ' . $json;
-        }
-    }
-
-    @error_log($line);
-}
-
-function af_advancededitor_bbcodes_dir_has_anchor_or_modules(string $dir, array &$debug = []): bool
-{
-    $debug = ['anchors' => [], 'modules' => [], 'entries' => []];
-
-    if (!is_dir($dir)) return false;
-
-    $anchors = ['manifest.json', 'manifest.php', 'registry.json', 'bbcodes.json', 'bbcodes.php'];
-    foreach ($anchors as $a) {
-        if (is_file($dir . $a)) {
-            $debug['anchors'][] = $a;
-            return true;
-        }
-    }
-
-    $entries = @scandir($dir);
-    if (!is_array($entries)) return false;
-
-    foreach ($entries as $e) {
-        if ($e === '.' || $e === '..') continue;
-        $debug['entries'][] = $e;
-        $moduleDir = $dir . $e . '/';
-        if (!is_dir($moduleDir)) continue;
-
-        $moduleEntries = @scandir($moduleDir);
-        if (!is_array($moduleEntries)) continue;
-
-        $hasManifest = false;
-        $hasAsset = false;
-        foreach ($moduleEntries as $m) {
-            if ($m === '.' || $m === '..') continue;
-            if (preg_match('~^manifest\.(php|json)$~i', $m)) $hasManifest = true;
-            if (preg_match('~\.(js|css)$~i', $m)) $hasAsset = true;
-        }
-
-        if ($hasManifest || $hasAsset) {
-            $debug['modules'][] = $e;
-            return true;
-        }
-    }
-
-    return false;
-}
-
-function af_advancededitor_bbcodes_dir(): string
-{
-    static $resolved = null;
-    if ($resolved !== null) return $resolved;
-
-    $primary = MYBB_ROOT . af_advancededitor_assets_rel() . 'bbcodes/';
-    $secondary = $primary . 'bbcodes/';
-
-    $dbgPrimary = [];
-    $dbgSecondary = [];
-
-    $primaryValid = af_advancededitor_bbcodes_dir_has_anchor_or_modules($primary, $dbgPrimary);
-    if ($primaryValid) {
-        $resolved = $primary;
-    } else {
-        $secondaryValid = af_advancededitor_bbcodes_dir_has_anchor_or_modules($secondary, $dbgSecondary);
-        if ($secondaryValid) {
-            $resolved = $secondary;
-        } else {
-            $resolved = $primary;
-            af_advancededitor_debug_log('bbcodes dir fallback to primary: no anchors/modules found', [
-                'primary' => $primary,
-                'secondary' => $secondary,
-                'primary_scan' => $dbgPrimary,
-                'secondary_scan' => $dbgSecondary,
-            ]);
-        }
-    }
-
-    return $resolved;
-}
-
-function af_advancededitor_bbcodes_url(): string
-{
-    return af_advancededitor_url(af_advancededitor_bbcodes_rel());
+    return MYBB_ROOT . af_advancededitor_bbcodes_rel();
 }
 
 function af_advancededitor_url(string $rel): string
@@ -779,80 +656,6 @@ function af_advancededitor_strip_own_assets(string &$page): void
     $page = preg_replace('~<link\b[^>]*\bhref=("|\')[^"\']*advancededitor\.css(?:\?[^"\']*)?\1[^>]*>\s*~i', '', $page);
 }
 
-function af_advancededitor_asset_key_from_url(string $url): string
-{
-    $url = html_entity_decode(trim($url), ENT_QUOTES, 'UTF-8');
-    if ($url === '') return '';
-
-    $parts = @parse_url($url);
-    if (is_array($parts) && isset($parts['path'])) {
-        $url = (string)$parts['path'];
-    }
-
-    $url = str_replace('\\', '/', $url);
-    $url = preg_replace('~/{2,}~', '/', $url);
-    $url = strtolower((string)$url);
-
-    return $url;
-}
-
-function af_advancededitor_dedupe_runtime_assets(string &$page): void
-{
-    if ($page === '') return;
-
-    $patterns = [
-        '~<script\b[^>]*\bsrc=("|\')([^"\']*?/inc/plugins/advancedfunctionality/addons/advancededitor/[^"\']*)\1[^>]*>\s*</script>\s*~is',
-        '~<link\b[^>]*\bhref=("|\')([^"\']*?/inc/plugins/advancedfunctionality/addons/advancededitor/[^"\']*)\1[^>]*>\s*~is',
-    ];
-
-    foreach ($patterns as $pattern) {
-        if (!preg_match_all($pattern, $page, $all, PREG_OFFSET_CAPTURE)) {
-            continue;
-        }
-
-        $matches = [];
-        for ($i = 0, $cnt = count($all[0]); $i < $cnt; $i++) {
-            $tag = $all[0][$i][0] ?? '';
-            $offset = (int)($all[0][$i][1] ?? -1);
-            $url = $all[2][$i][0] ?? '';
-            if ($tag === '' || $offset < 0 || $url === '') continue;
-
-            $key = af_advancededitor_asset_key_from_url($url);
-            if ($key === '') continue;
-
-            $matches[] = [
-                'tag' => $tag,
-                'offset' => $offset,
-                'length' => strlen($tag),
-                'key' => $key,
-            ];
-        }
-
-        if (count($matches) <= 1) continue;
-
-        $seen = [];
-        $remove = [];
-        for ($i = count($matches) - 1; $i >= 0; $i--) {
-            $key = $matches[$i]['key'];
-            if (isset($seen[$key])) {
-                $remove[] = $matches[$i];
-                continue;
-            }
-            $seen[$key] = true;
-        }
-
-        if (empty($remove)) continue;
-
-        usort($remove, function(array $a, array $b): int {
-            return $b['offset'] <=> $a['offset'];
-        });
-
-        foreach ($remove as $chunk) {
-            $page = substr_replace($page, '', $chunk['offset'], $chunk['length']);
-        }
-    }
-}
-
 function af_advancededitor_resolve_sceditor_content_css_url(string $bburl): string
 {
     $bburl = rtrim($bburl, '/');
@@ -895,90 +698,6 @@ function af_advancededitor_resolve_sceditor_theme_css_url(string $bburl): string
     return $bburl . '/jscripts/sceditor/themes/default.min.css';
 }
 
-function af_advancededitor_is_editor_whitelist_request(): bool
-{
-    global $mybb;
-
-    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
-    if ($script === '' || $script === 'index.php') return false;
-
-    if (in_array($script, ['newthread.php', 'newreply.php', 'editpost.php', 'showthread.php'], true)) {
-        return true;
-    }
-
-    if ($script === 'private.php') {
-        $action = strtolower((string)($mybb->input['action'] ?? ''));
-        $pmid = (int)($mybb->input['pmid'] ?? 0);
-        return ($action === 'read' && $pmid > 0);
-    }
-
-    if ($script === 'misc.php') {
-        $action = strtolower((string)($mybb->input['action'] ?? ''));
-        return in_array($action, ['kb', 'af_charactersheet'], true);
-    }
-
-    return false;
-}
-
-function af_advancededitor_page_has_editor_dom(string $page): bool
-{
-    return (
-        (bool)preg_match('~<textarea[^>]+(?:name|id)\s*=\s*["\']message["\']~i', $page) ||
-        (stripos($page, 'class="sceditor-container') !== false) ||
-        (stripos($page, "class='sceditor-container") !== false)
-    );
-}
-
-function af_advancededitor_filter_packs_for_request(array $packs, bool $loadEditorPacks): array
-{
-    if (empty($packs['packs']) || !is_array($packs['packs'])) {
-        return $packs;
-    }
-
-    $alwaysPackIds = ['fontfamily' => true];
-    $allowedIds = $alwaysPackIds;
-
-    if ($loadEditorPacks) {
-        foreach ($packs['packs'] as $packId => $_pack) {
-            $allowedIds[(string)$packId] = true;
-        }
-    }
-
-    $filteredPacks = [];
-    $filteredButtons = [];
-    $filteredCss = [];
-    $filteredJs = [];
-    $filteredParsers = [];
-
-    foreach ($packs['packs'] as $packId => $pack) {
-        $packId = (string)$packId;
-        if (!isset($allowedIds[$packId])) continue;
-
-        $filteredPacks[$packId] = $pack;
-
-        if (!empty($pack['buttons']) && is_array($pack['buttons'])) {
-            foreach ($pack['buttons'] as $btn) $filteredButtons[] = $btn;
-        }
-        if (!empty($pack['assets']['css']) && is_array($pack['assets']['css'])) {
-            foreach ($pack['assets']['css'] as $u) $filteredCss[] = (string)$u;
-        }
-        if (!empty($pack['assets']['js']) && is_array($pack['assets']['js'])) {
-            foreach ($pack['assets']['js'] as $u) $filteredJs[] = (string)$u;
-        }
-        if (!empty($pack['parser_abs']) && is_string($pack['parser_abs'])) {
-            $filteredParsers[] = $pack['parser_abs'];
-        }
-    }
-
-    $packs['packs'] = $filteredPacks;
-    $packs['buttons'] = $filteredButtons;
-    $packs['css'] = array_values(array_unique(array_filter($filteredCss, 'is_string')));
-    $packs['js'] = array_values(array_unique(array_filter($filteredJs, 'is_string')));
-    $packs['parsers'] = array_values(array_unique(array_filter($filteredParsers, 'is_string')));
-
-    return $packs;
-}
-
 function af_advancededitor_pre_output(string &$page = ''): void
 {
     global $mybb;
@@ -993,25 +712,24 @@ function af_advancededitor_pre_output(string &$page = ''): void
     if ($bburl === '') return;
 
     // ---- определяем режим ----
-    $isEditorScript = af_advancededitor_is_editor_whitelist_request();
     $hasTextarea = (stripos($page, '<textarea') !== false);
-    $hasEditorDom = af_advancededitor_page_has_editor_dom($page);
-    $shouldLoadEditorPacks = $isEditorScript;
+
+    // быстрый признак "есть контент постов"
+    $looksLikeContentPage =
+        (stripos($page, 'class="post ') !== false) ||
+        (stripos($page, 'class="post_body"') !== false) ||
+        (stripos($page, 'id="posts"') !== false) ||
+        (stripos($page, 'showthread.php') !== false) ||
+        (stripos($page, 'forumdisplay.php') !== false) ||
+        (stripos($page, 'private.php') !== false) ||
+        (stripos($page, 'search.php') !== false);
 
     // Пакеты BB-кнопок/стилей (включая copycode)
     $packs = af_advancededitor_discover_bbcode_packs($bburl);
-    $packs = af_advancededitor_filter_packs_for_request($packs, $shouldLoadEditorPacks);
 
-    af_advancededitor_debug_log('pre_output bbcodes runtime', [
-        'script' => defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '',
-        'bbcodes_dir' => af_advancededitor_bbcodes_dir(),
-        'bbcodes_base_url' => af_advancededitor_bbcodes_url(),
-        'modules_count' => (int)count($packs['packs'] ?? []),
-        'modules_sample' => array_slice(array_keys($packs['packs'] ?? []), 0, 5),
-    ]);
-
-    // Если не нужен редакторный набор и нет глобальных паков — выходим.
-    if (!$hasTextarea && empty($packs['css']) && empty($packs['js'])) {
+    // Если это не страница с редактором и не похоже на страницу с контентом — не грузим ничего,
+    // чтобы не раздувать абсолютно все страницы.
+    if (!$hasTextarea && !$looksLikeContentPage) {
         return;
     }
 
@@ -1072,17 +790,13 @@ function af_advancededitor_pre_output(string &$page = ''): void
         }
     }
 
-    $packJsTags = '';
+    // JS паков (copycode.js должен быть тут всегда, чтобы работал у гостя в showthread)
     if (!empty($packs['js']) && is_array($packs['js'])) {
         foreach ($packs['js'] as $u) {
             $u = (string)$u;
             if ($u === '') continue;
-            $packJsTags .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($u, $buildVer)) . '"></script>' . "\n";
+            $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($u, $buildVer)) . '"></script>' . "\n";
         }
-    }
-
-    if (!$hasTextarea && $packJsTags !== '') {
-        $injectHead .= $packJsTags;
     }
 
     /**
@@ -1176,7 +890,6 @@ table #post_options, table #postoptions{display:none!important;}
             'bburl'             => $bburl,
             'assetsBase'        => $assetsBase,
             'imgBase'           => $imgBase,
-            'bbcodesBaseUrl'    => af_advancededitor_bbcodes_url(),
 
             'sceditorContentCss'=> $sceditorContentCss,
             'sceditorThemeCss'  => $sceditorThemeCss,
@@ -1186,7 +899,6 @@ table #post_options, table #postoptions{display:none!important;}
             'layout'            => $layout,
             'fonts'             => $fonts,
             'packs'             => $packs,
-            'bbcodesModulesDetected' => (int)count($packs['packs'] ?? []),
             'customDefs'        => $customDefs,
 
             'previewUrl'        => $bburl . '/misc.php?action=af_ae_postpreview',
@@ -1205,16 +917,6 @@ table #post_options, table #postoptions{display:none!important;}
             $payload['cfg']['editorSelector'] = $editorSelector;
         }
 
-        if (af_advancededitor_debug_enabled_for_admin()) {
-            $payload['debug'] = [
-                'enabled' => 1,
-                'bbcodesDir' => af_advancededitor_bbcodes_dir(),
-                'bbcodesBaseUrl' => af_advancededitor_bbcodes_url(),
-                'modulesCount' => (int)count($packs['packs'] ?? []),
-                'modulesSample' => array_slice(array_keys($packs['packs'] ?? []), 0, 5),
-            ];
-        }
-
         $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if (!is_string($json) || $json === '') $json = '{}';
 
@@ -1223,11 +925,6 @@ table #post_options, table #postoptions{display:none!important;}
 
         // advancededitor.js
         $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor.js', $buildVer)) . '"></script>' . "\n";
-
-        // JS паков грузим ПОСЛЕ ядра, чтобы AFAE гарантированно был объявлен раньше модулей.
-        if ($packJsTags !== '') {
-            $injectHead .= $packJsTags;
-        }
     }
 
     // ---- вставляем в </head> ----
@@ -1236,8 +933,6 @@ table #post_options, table #postoptions{display:none!important;}
     } else {
         $page = $injectHead . $page;
     }
-
-    af_advancededitor_dedupe_runtime_assets($page);
 }
 
 /**
@@ -1252,7 +947,7 @@ table #post_options, table #postoptions{display:none!important;}
  */
 function af_advancededitor_install_pack_mycodes(): void
 {
-    $base = rtrim(af_advancededitor_bbcodes_dir(), '/');
+    $base = __DIR__ . '/assets/bbcodes';
     if (!is_dir($base)) return;
 
     $dirs = @scandir($base);
@@ -1291,7 +986,7 @@ function af_advancededitor_install_pack_mycodes(): void
 
 function af_advancededitor_uninstall_pack_mycodes(): void
 {
-    $base = rtrim(af_advancededitor_bbcodes_dir(), '/');
+    $base = __DIR__ . '/assets/bbcodes';
     if (!is_dir($base)) return;
 
     $dirs = @scandir($base);
@@ -1561,7 +1256,7 @@ function af_ae_bbcode_dispatch_parse_message_end(&$message): void
     if ($packs === null) {
         $packs = [];
 
-        $base = rtrim(af_advancededitor_bbcodes_dir(), '/');
+        $base = __DIR__ . '/assets/bbcodes';
         if (is_dir($base)) {
             $dirs = @scandir($base);
             if (is_array($dirs)) {
@@ -1650,7 +1345,7 @@ function af_ae_bbcode_dispatch_parse_message_start(&$message): void
     if ($packs === null) {
         $packs = [];
 
-        $base = rtrim(af_advancededitor_bbcodes_dir(), '/');
+        $base = __DIR__ . '/assets/bbcodes';
         if (is_dir($base)) {
             $dirs = @scandir($base);
             if (is_array($dirs)) {
@@ -2292,20 +1987,8 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
     $bburl = rtrim($bburl, '/');
 
     // ВАЖНО: пакеты лежат в assets/bbcodes/*
-    $baseDirAbs = af_advancededitor_bbcodes_dir();
+    $baseDirAbs = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/bbcodes/';
     $assetsBaseUrl = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/';
-    $bbcodesBaseUrl = af_advancededitor_bbcodes_url();
-
-    $mkAssetUrl = function(string $rel) use ($assetsBaseUrl, $bbcodesBaseUrl): string {
-        $rel = ltrim(trim($rel), '/');
-        if ($rel === '') return '';
-
-        if (stripos($rel, 'bbcodes/') === 0) {
-            return rtrim($bbcodesBaseUrl, '/') . '/' . ltrim(substr($rel, 8), '/');
-        }
-
-        return rtrim($assetsBaseUrl, '/') . '/' . $rel;
-    };
 
     $out = [
         // агрегаты для фронта/ACP
@@ -2357,39 +2040,16 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
             foreach ($m['assets']['css'] as $rel) {
                 $rel = trim((string)$rel);
                 if ($rel === '') continue;
-                $url = $mkAssetUrl($rel);
-                if ($url !== '') $packCss[] = $url;
+                $packCss[] = $assetsBaseUrl . ltrim($rel, '/');
             }
         }
         if (!empty($m['assets']['js']) && is_array($m['assets']['js'])) {
             foreach ($m['assets']['js'] as $rel) {
                 $rel = trim((string)$rel);
                 if ($rel === '') continue;
-                $url = $mkAssetUrl($rel);
-                if ($url !== '') $packJs[] = $url;
+                $packJs[] = $assetsBaseUrl . ltrim($rel, '/');
             }
         }
-
-        // fallback/канон для модулей: <module>/<module>.js и <module>/<module>.css
-        // (чтобы CSS-пайплайн был 1:1 с JS и не зависел только от manifest assets)
-        $moduleBase = $packDir . $d;
-        $moduleJsAbs = $moduleBase . '.js';
-        $moduleCssAbs = $moduleBase . '.css';
-
-        $moduleJsUrl = '';
-        if (is_file($moduleJsAbs)) {
-            $moduleJsUrl = rtrim($bbcodesBaseUrl, '/') . '/' . rawurlencode($d) . '/' . rawurlencode($d) . '.js';
-            $packJs[] = $moduleJsUrl;
-        }
-
-        $moduleCssUrl = '';
-        if (is_file($moduleCssAbs)) {
-            $moduleCssUrl = rtrim($bbcodesBaseUrl, '/') . '/' . rawurlencode($d) . '/' . rawurlencode($d) . '.css';
-            $packCss[] = $moduleCssUrl;
-        }
-
-        $packCss = array_values(array_unique(array_filter($packCss, 'is_string')));
-        $packJs  = array_values(array_unique(array_filter($packJs, 'is_string')));
 
         // parser path in manifest: RELATIVE TO pack folder
         $parserAbs = '';
@@ -2420,7 +2080,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
                 $icon = trim((string)($b['icon'] ?? ''));
                 if ($icon !== '') {
                     // icon in your packs is RELATIVE TO assets/
-                    $icon = $mkAssetUrl($icon);
+                    $icon = $assetsBaseUrl . ltrim($icon, '/');
                 }
 
                 $btn = [
@@ -2449,11 +2109,6 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
             'title'         => $packTitle,
             'tags'          => $tags,
             'buttons'       => $packButtons,
-            'module_dir'    => $d,
-            'has_js'        => ($moduleJsUrl !== ''),
-            'has_css'       => ($moduleCssUrl !== ''),
-            'js_url'        => $moduleJsUrl,
-            'css_url'       => $moduleCssUrl,
             'assets'        => ['css' => $packCss, 'js' => $packJs],
             'parser_abs'    => $parserAbs,
             'manifest_path' => $manifestFile,
@@ -2466,13 +2121,6 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
 
     // parsers тоже дедуп
     $out['parsers'] = array_values(array_unique(array_filter($out['parsers'], 'is_string')));
-
-    af_advancededitor_debug_log('bbcodes discovery', [
-        'dir' => $baseDirAbs,
-        'url' => $bbcodesBaseUrl,
-        'modules_count' => count($out['packs']),
-        'modules_sample' => array_slice(array_keys($out['packs']), 0, 5),
-    ]);
 
     return $out;
 }
