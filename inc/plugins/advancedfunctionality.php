@@ -1949,16 +1949,23 @@ function af_asset_build_url(string $cleanPath, array $opts = []): string
     return $url . '?v=' . rawurlencode((string)$buster);
 }
 
+function af_normalize_script_name(string $script): string
+{
+    $script = strtolower(trim($script));
+    if ($script === '') {
+        return '';
+    }
+
+    return basename(str_replace('\\', '/', $script));
+}
+
 function af_current_script_name_from_this_script(): string
 {
     if (!defined('THIS_SCRIPT')) {
         return '';
     }
 
-    $script = strtolower((string)THIS_SCRIPT);
-    $script = basename(str_replace('\\', '/', $script));
-
-    return $script;
+    return af_normalize_script_name((string)THIS_SCRIPT);
 }
 
 function af_parse_assets_blacklist_conditions(string $raw): array
@@ -2015,11 +2022,17 @@ function af_parse_assets_blacklist_conditions(string $raw): array
     return $out;
 }
 
-function af_setting_blacklist_disabled_for_current_page(string $settingName, string $defaultRaw = ''): bool
+function af_setting_blacklist_disabled_for_current_page(string $settingName, string $defaultRaw = '', string $script = ''): bool
 {
     global $mybb;
 
-    $script = af_current_script_name_from_this_script();
+    $script = af_normalize_script_name($script);
+    if ($script === '') {
+        $script = af_current_script_name_from_this_script();
+    }
+    if ($script === '') {
+        $script = af_normalize_script_name((string)basename((string)($_SERVER['SCRIPT_NAME'] ?? '')));
+    }
     if ($script === '') {
         return false;
     }
@@ -2049,7 +2062,7 @@ function af_setting_blacklist_disabled_for_current_page(string $settingName, str
     return false;
 }
 
-function af_is_blacklisted(string $addonId): bool
+function af_is_blacklisted(string $addonId, string $script = ''): bool
 {
     $addonId = strtolower(trim($addonId));
     if ($addonId === '') {
@@ -2064,6 +2077,7 @@ function af_is_blacklisted(string $addonId): bool
     // Backward compatibility: legacy setting keys in old addons.
     $legacySettingsByAddon = [
         'advancedprofilefields' => ['af_apf_assets_blacklist'],
+        'advancedthreadfields' => ['af_atf_assets_blacklist'],
     ];
     foreach (($legacySettingsByAddon[$addonId] ?? []) as $legacySettingName) {
         $settings[] = (string)$legacySettingName;
@@ -2075,7 +2089,7 @@ function af_is_blacklisted(string $addonId): bool
 
     foreach ($settings as $settingName) {
         $defaultRaw = $defaultBySetting[$settingName] ?? '';
-        if (af_setting_blacklist_disabled_for_current_page($settingName, $defaultRaw)) {
+        if (af_setting_blacklist_disabled_for_current_page($settingName, $defaultRaw, $script)) {
             return true;
         }
     }
