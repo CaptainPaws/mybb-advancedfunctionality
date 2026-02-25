@@ -5,6 +5,7 @@ const AF_BALANCE_TABLE = 'af_balance';
 const AF_BALANCE_TX_TABLE = 'af_balance_tx';
 const AF_BALANCE_EXP_SCALE = 100;
 const AF_BALANCE_CREDITS_SCALE = 100;
+const AF_BALANCE_BLACKLIST_DEFAULT = "index.php\nusercp.php\nuserlist.php\nsearch.php\ngallery.php\nkb.php\nforumdisplay.php";
 
 function af_balance_is_installed(): bool { global $db; return $db->table_exists(AF_BALANCE_TABLE); }
 function af_balance_install(): void { af_balance_ensure_schema(); af_balance_ensure_settings(); if (function_exists('rebuild_settings')) rebuild_settings(); }
@@ -27,6 +28,7 @@ function af_balance_init(): void
     // $plugins->add_hook('post_do_newpost_end', 'af_balance_post_do_newpost_end');
 
     $plugins->add_hook('misc_start', 'af_balance_misc_start');
+    $plugins->add_hook('pre_output_page', 'af_balance_pre_output_page', 10);
 }
 
 
@@ -84,6 +86,7 @@ function af_balance_ensure_settings(): void
         ['af_balance_credits_scale_migrated','Credits scale migrated','yesno','0',32],
         ['af_balance_currency_symbol','Currency symbol','text','¢',33],
         ['af_balance_manage_groups','Balance manage groups','text','3,4',34],
+        ['af_balance_blacklist','Balance assets blacklist','textarea',AF_BALANCE_BLACKLIST_DEFAULT,35],
     ];
     $legacyMigratedSid = af_balance_pick_setting_sid('af_balance_migrated_credits_scale', $needsRebuild);
     if ($legacyMigratedSid > 0) {
@@ -140,6 +143,94 @@ function af_balance_pick_setting_sid(string $name, bool &$deduped = false): int
     }
 
     return $keepSid;
+}
+
+function af_balance_parse_blacklist(string $raw): array
+{
+    $rules = [];
+    $lines = preg_split('~\R~', $raw);
+    if (!is_array($lines)) {
+        return $rules;
+    }
+
+    foreach ($lines as $line) {
+        $line = trim((string)$line);
+        if ($line === '') {
+            continue;
+        }
+
+        $script = strtolower(basename(str_replace('\\', '/', strtok($line, '?') ?: '')));
+        if ($script === '') {
+            continue;
+        }
+
+        $rules[$script] = true;
+    }
+
+    return $rules;
+}
+
+function af_balance_assets_disabled_for_current_page(): bool
+{
+    global $mybb;
+
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    $script = strtolower(basename(str_replace('\\', '/', $script)));
+    if ($script === '') {
+        return false;
+    }
+
+    if (function_exists('af_is_blacklisted') && af_is_blacklisted('balance', $script)) {
+        return true;
+    }
+
+    $raw = trim((string)($mybb->settings['af_balance_blacklist'] ?? ''));
+    if ($raw === '') {
+        $raw = AF_BALANCE_BLACKLIST_DEFAULT;
+    }
+    $rules = af_balance_parse_blacklist($raw);
+
+    return !empty($rules[$script]);
+}
+
+function af_balance_enqueue_assets(): void
+{
+    global $mybb;
+
+    if (af_balance_assets_disabled_for_current_page()) {
+        return;
+    }
+
+    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+    if ($bburl === '') {
+        return;
+    }
+
+    $base = $bburl . '/inc/plugins/advancedfunctionality/addons/balance/assets';
+    if (function_exists('af_add_css_once')) {
+        af_add_css_once($base . '/balance.css');
+    }
+    if (function_exists('af_add_js_once')) {
+        af_add_js_once($base . '/balance.js');
+    }
+}
+
+function af_balance_pre_output_page(string &$page): void
+{
+    if (!af_balance_assets_disabled_for_current_page()) {
+        return;
+    }
+
+    $page = preg_replace(
+        '~<link\b[^>]*href=("|\')[^"\']*?/inc/plugins/advancedfunctionality/addons/balance/assets/[^"\']+\.css(?:\?[^"\']*)?\1[^>]*>\s*~i',
+        '',
+        $page
+    );
+    $page = preg_replace(
+        '~<script\b[^>]*src=("|\')[^"\']*?/inc/plugins/advancedfunctionality/addons/balance/assets/[^"\']+\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i',
+        '',
+        $page
+    );
 }
 
 function af_balance_get(int $uid): array
@@ -757,13 +848,14 @@ function af_balance_render_manage_page(): void
     $q = htmlspecialchars_uni($qRaw);
     $race = htmlspecialchars_uni($raceRaw);
 
+    af_balance_enqueue_assets();
+
     $page = '<!DOCTYPE html><html lang="ru"><head>'
         . '<meta charset="utf-8">'
         . '<title>Balance manage</title>'
         // jQuery ПЕРЕД всем
         . '<script src="' . $bburl . '/jscripts/jquery.js?ver=1823"></script>'
         . $headerinclude
-        . '<link rel="stylesheet" href="' . $bburl . '/inc/plugins/advancedfunctionality/addons/balance/assets/balance.css">'
         . '</head><body>'
         . $header
         . '<div class="af-balance-page">'
@@ -803,7 +895,6 @@ function af_balance_render_manage_page(): void
         . '</div>'
 
         . '<script>window.afBalanceConfig={kind:' . json_encode($kind) . ',postKey:' . json_encode($mybb->post_code) . '};</script>'
-        . '<script src="' . $bburl . '/inc/plugins/advancedfunctionality/addons/balance/assets/balance.js"></script>'
 
         . $footer
         . '</body></html>';

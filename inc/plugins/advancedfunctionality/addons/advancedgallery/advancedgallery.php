@@ -14,7 +14,7 @@ define('AF_AG_ASSETS', AF_AG_BASE . 'assets/');
 define('AF_AG_TPL_FILE', AF_AG_BASE . 'templates/advancedgallery.html');
 define('AF_AG_ALIAS_SIGNATURE', 'AF_PAGE_ALIAS: advancedgallery');
 define('AF_AG_MARK_DONE', '<!--af_advancedgallery_done-->');
-define('AF_AG_ASSETS_BLACKLIST_DEFAULT', "index.php\nusercp.php\nuserlist.php\nsearch.php\nmisc.php");
+define('AF_AG_ASSETS_BLACKLIST_DEFAULT', "index.php\nusercp.php\nuserlist.php\nsearch.php\nmisc.php\nkb.php\nforumdisplay.php\ncharactersheets.php\nshop.php");
 
 /* -------------------- INFO -------------------- */
 
@@ -681,6 +681,16 @@ function af_advancedgallery_pre_output(string &$page = ''): void
     }
 
     if (af_gallery_assets_disabled_for_current_page()) {
+        $page = preg_replace(
+            '~<link\b[^>]*href=("|\')[^"\']*?/inc/plugins/advancedfunctionality/addons/advancedgallery/assets/[^"\']+\.css(?:\?[^"\']*)?\1[^>]*>\s*~i',
+            '',
+            $page
+        );
+        $page = preg_replace(
+            '~<script\b[^>]*src=("|\')[^"\']*?/inc/plugins/advancedfunctionality/addons/advancedgallery/assets/[^"\']+\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~i',
+            '',
+            $page
+        );
         return;
     }
 
