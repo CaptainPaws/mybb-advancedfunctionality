@@ -555,10 +555,7 @@ function af_ae_htmlbb_asset_url(string $file): string
         }
     }
 
-    // 2) дефолтный путь через резолвер AE (поддерживает bbcodes/ и bbcodes/bbcodes/)
-    if (function_exists('af_advancededitor_bbcodes_url')) {
-        return rtrim((string)af_advancededitor_bbcodes_url(), '/') . '/htmlbb/' . $file;
-    }
-
+    // 2) дефолтный путь (популярный в AE pack’ах)
+    //    ПОДСТАВЬ тут реальный путь, если у тебя htmlbb.js/css лежат в другом месте.
     return $bburl . '/inc/plugins/advancedfunctionality/addons/advancededitor/assets/bbcodes/htmlbb/' . $file;
 }
