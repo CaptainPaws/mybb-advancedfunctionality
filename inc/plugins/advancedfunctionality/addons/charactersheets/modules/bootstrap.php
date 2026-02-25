@@ -2880,10 +2880,26 @@ function af_charactersheets_get_skill_kb_meta_map(array $kb_keys): array
     $in_list = "'" . implode("','", $escaped) . "'";
 
     $map = [];
+    $returned_keys = [];
+    $input_key_set = array_fill_keys($keys, true);
+    $acrobatics_key = 'acrobatics';
+    foreach ($keys as $candidate_key) {
+        if (preg_match('/acrobat|акроб/ui', $candidate_key)) {
+            $acrobatics_key = (string)$candidate_key;
+            break;
+        }
+    }
+    $acrobatics_debug = [
+        'requested' => isset($input_key_set[$acrobatics_key]),
+        'kb_key' => $acrobatics_key,
+        'entry_found' => false,
+        'rules_skill' => [],
+        'key_stat' => '',
+    ];
     $q = $db->simple_select(
         'af_kb_entries',
-        '`key`, type, meta_json',
-        "type IN ('skill','skills') AND `key` IN ({$in_list})"
+        '`key`, type, item_kind, meta_json',
+        "`key` IN ({$in_list})"
     );
 
     while ($row = $db->fetch_array($q)) {
@@ -2891,16 +2907,63 @@ function af_charactersheets_get_skill_kb_meta_map(array $kb_keys): array
         if ($kb_key === '') {
             continue;
         }
-        $key_stat = af_charactersheets_extract_skill_key_stat((array)$row);
+
         $meta = af_charactersheets_json_decode((string)($row['meta_json'] ?? ''));
         $rules = is_array($meta['rules'] ?? null) ? (array)$meta['rules'] : [];
         $rules_skill = is_array($rules['skill'] ?? null) ? (array)$rules['skill'] : [];
+        $type = strtolower(trim((string)($row['type'] ?? '')));
+        $item_kind = strtolower(trim((string)($row['item_kind'] ?? '')));
+        $type_profile = strtolower(trim((string)($rules['type_profile'] ?? '')));
+        $is_skill = in_array($type, ['skill', 'skills'], true)
+            || in_array($item_kind, ['skill', 'skills'], true)
+            || in_array($type_profile, ['skill', 'skills'], true)
+            || !empty($rules_skill);
+        if (!$is_skill) {
+            continue;
+        }
+
+        $returned_keys[$kb_key] = true;
+        $key_stat = af_charactersheets_extract_skill_key_stat((array)$row);
         $rank_max = (int)($rules_skill['rank_max'] ?? 0);
 
         $map[$kb_key] = [
             'key_stat' => $key_stat,
             'rank_max' => $rank_max > 0 ? $rank_max : 0,
         ];
+
+        if ($kb_key === $acrobatics_key) {
+            $acrobatics_debug = [
+                'requested' => true,
+                'kb_key' => $kb_key,
+                'entry_found' => true,
+                'rules_skill' => [
+                    'key_stat' => (string)($rules_skill['key_stat'] ?? ''),
+                    'attribute' => (string)($rules_skill['attribute'] ?? ''),
+                    'rank_max' => (int)($rules_skill['rank_max'] ?? 0),
+                ],
+                'key_stat' => $key_stat,
+            ];
+        }
+    }
+
+    static $lookup_debug_once = [];
+    $lookup_hash = md5(implode('|', $keys));
+    if (!isset($lookup_debug_once[$lookup_hash])) {
+        $missing = [];
+        foreach ($keys as $key) {
+            if (!isset($returned_keys[$key])) {
+                $missing[] = $key;
+            }
+        }
+
+        af_charactersheets_log('skills_kb_lookup', [
+            'requested_count' => count($keys),
+            'returned_count' => count($map),
+            'missing_top_5' => array_slice($missing, 0, 5),
+            'acrobatics' => $acrobatics_debug,
+        ]);
+
+        $lookup_debug_once[$lookup_hash] = true;
     }
 
     return $map;
