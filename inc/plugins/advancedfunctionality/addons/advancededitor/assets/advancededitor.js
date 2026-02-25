@@ -6,16 +6,6 @@
 
   var P = window.afAePayload || window.afAdvancedEditorPayload || {};
   var CFG = (P && P.cfg) ? P.cfg : {};
-  var AE_DEBUG = !!(P && P.debug && P.debug.enabled);
-  try {
-    if (!AE_DEBUG && window.location && typeof window.location.search === 'string') {
-      AE_DEBUG = /(?:\?|&)afdebug=1(?:&|$)/.test(window.location.search);
-    }
-  } catch (e0) {}
-
-  if (AE_DEBUG) {
-    window.__afAeDebug = true;
-  }
 
   if (typeof window.__afAeGlobalToggling === 'undefined') window.__afAeGlobalToggling = 0;
   if (typeof window.__afAeIgnoreMutationsUntil === 'undefined') window.__afAeIgnoreMutationsUntil = 0;
@@ -2038,133 +2028,6 @@
     return sel;
   }
 
-  function af_ae_has_editor(root) {
-    root = root || document;
-    if (!root || !root.querySelector) return false;
-
-    var sel = getEditorSelector();
-    if (sel) {
-      try {
-        if (root.querySelector(sel)) return true;
-      } catch (e) {}
-    }
-
-    var candidates = [
-      'textarea[name="message"]',
-      'textarea#message',
-      '.sceditor-container',
-      'textarea.sceditor-textarea',
-      'textarea.sceditor-source',
-      'textarea.sceditor'
-    ];
-
-    for (var i = 0; i < candidates.length; i++) {
-      var selector = candidates[i];
-      try {
-        if (root.querySelector(selector)) {
-          if (window.__afAeDebug) {
-            console.debug('[AFAE] editor found by selector:', selector);
-          }
-          return true;
-        }
-      } catch (eSel) {}
-    }
-
-    try {
-      var allTextareas = root.querySelectorAll('form textarea');
-      for (var j = 0; j < allTextareas.length; j++) {
-        var ta = allTextareas[j];
-        if (!ta || ta.nodeType !== 1) continue;
-        var cls = String(ta.className || '');
-        if (/\bsceditor\b|\bsceditor-source\b|\bsceditor-textarea\b/i.test(cls)) return true;
-
-        var hasNearbyContainer =
-          (ta.closest && ta.closest('.sceditor-container')) ||
-          (ta.parentElement && ta.parentElement.querySelector && ta.parentElement.querySelector('.sceditor-container'));
-        if (hasNearbyContainer) return true;
-
-        var name = String(ta.getAttribute('name') || '').toLowerCase();
-        if (name === 'message' || ta.id === 'message') return true;
-      }
-    } catch (eTa) {}
-
-    return false;
-  }
-
-  window.af_ae_has_editor = af_ae_has_editor;
-  window.AFAE = window.AFAE || {};
-  window.AFAE.hasEditorNow = function () {
-    var hasEditor = af_ae_has_editor(document);
-    if (window.__afAeDebug) console.debug('[AFAE] hasEditorNow:', hasEditor);
-    return hasEditor;
-  };
-  window.AFAE.hasEditor = window.AFAE.hasEditorNow;
-  window.AFAE.onEditorReady = function (cb, opts) {
-    if (typeof cb !== 'function') return;
-    opts = opts || {};
-
-    var called = false;
-    var timeoutMs = (typeof opts.timeoutMs === 'number' && opts.timeoutMs > 0) ? opts.timeoutMs : 8000;
-    var startedAt = now();
-
-    function done(reason) {
-      if (called) return;
-      called = true;
-      if (obs) obs.disconnect();
-      if (timer) clearInterval(timer);
-      if (window.__afAeDebug) console.debug('[AFAE] onEditorReady resolved:', reason);
-      cb();
-    }
-
-    if (window.AFAE.hasEditorNow()) {
-      done('immediate');
-      return;
-    }
-
-    if (window.__afAeDebug) console.debug('[AFAE] waiting editor...');
-
-    var obs = null;
-    if (window.MutationObserver) {
-      obs = new MutationObserver(function () {
-        if (window.AFAE.hasEditorNow()) done('mutation');
-      });
-      obs.observe(document.body || document.documentElement, { childList: true, subtree: true });
-    }
-
-    function onDomReady() {
-      if (window.AFAE.hasEditorNow()) done('domready');
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', onDomReady, { once: true });
-    } else {
-      onDomReady();
-    }
-
-    var timer = setInterval(function () {
-      if (window.AFAE.hasEditorNow()) return done('poll');
-      if (now() - startedAt >= timeoutMs) {
-        if (window.__afAeDebug) console.debug('[AFAE] editor wait timeout');
-        if (obs) obs.disconnect();
-        clearInterval(timer);
-      }
-    }, 200);
-  };
-
-  window.AFAE._drainQueue = function () {
-    var q = window.__AFAE_QUEUE;
-    if (!Array.isArray(q) || !q.length) return;
-
-    window.__AFAE_QUEUE = [];
-    for (var i = 0; i < q.length; i++) {
-      var fn = q[i];
-      if (typeof fn !== 'function') continue;
-      try { fn(); } catch (eQueue) {}
-    }
-  };
-
-  window.AFAE._drainQueue();
-
   function collectTargets(root) {
     var sel = getEditorSelector();
     if (sel) {
@@ -2229,20 +2092,10 @@
   }
 
   function boot() {
-    if (window.__afAeDebug) {
-      console.debug('[AFAE] page whitelist ok:', !!P.isEditorPage);
-    }
     var tries = 0;
     (function wait() {
       tries++;
       if (hasSceditor()) {
-        if (AE_DEBUG && af_ae_has_editor(document)) {
-          try {
-            console.debug('[AF AE] bbcodes base url: ' + String(P.bbcodesBaseUrl || ''));
-            console.debug('[AF AE] modules detected: ' + String(P.bbcodesModulesDetected || 0));
-          } catch (eDbg) {}
-        }
-
         scanAndInit(document);
         observeDynamicEditors();
         return;
