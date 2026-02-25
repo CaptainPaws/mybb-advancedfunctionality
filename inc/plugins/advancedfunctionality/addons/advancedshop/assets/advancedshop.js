@@ -40,7 +40,38 @@
   }
 
 
+
+  function afShopEndpointScript(){
+    if(window.AFSHOP && window.AFSHOP.endpointScript){ return window.AFSHOP.endpointScript; }
+    var path = (window.location && window.location.pathname) ? window.location.pathname.toLowerCase() : '';
+    return /\/shop\.php$/.test(path) ? 'shop.php' : 'misc.php';
+  }
+
+  function buildActionUrl(action, query){
+    var endpoint = afShopEndpointScript();
+    if(endpoint === 'shop.php'){
+      var params = [];
+      if(action && action !== 'shop' && action !== 'view'){
+        params.push('action=' + encodeURIComponent(action));
+      }
+      if(query){ params.push(query); }
+      return 'shop.php' + (params.length ? ('?' + params.join('&')) : '');
+    }
+    return 'misc.php?action=' + encodeURIComponent(action || 'shop') + (query ? ('&' + query) : '');
+  }
+
+  function normalizeActionUrl(url){
+    if(typeof url !== 'string'){ return url; }
+    if(url.indexOf('misc.php?action=') !== 0){ return url; }
+    var raw = url.slice('misc.php?action='.length);
+    var amp = raw.indexOf('&');
+    var action = amp === -1 ? raw : raw.slice(0, amp);
+    var query = amp === -1 ? '' : raw.slice(amp + 1);
+    return buildActionUrl(decodeURIComponent(action || 'shop'), query);
+  }
+
   function post(url, data){
+    url = normalizeActionUrl(url);
     data = data || {};
     if(!data.my_post_key){ data.my_post_key = key(); }
     return fetch(url, {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8'}, body:new URLSearchParams(data)})
@@ -49,6 +80,7 @@
   }
 
   function getJSON(url){
+    url = normalizeActionUrl(url);
     return fetch(url, {credentials:'same-origin'}).then(function(r){ return r.text(); }).then(parseJSON);
   }
 
@@ -130,12 +162,12 @@
     if(shopBtn){
       shopBtn.onclick = function(){
         afShopHideCheckoutSuccessModal();
-        window.location = links.shop || 'misc.php?action=shop&shop=game';
+        window.location = normalizeActionUrl(links.shop || 'misc.php?action=shop&shop=game');
       };
     }
     var invBtn = modal.querySelector('[data-af-modal-inventory]');
     if(invBtn){
-      invBtn.onclick = function(){ window.location = links.inventory || 'misc.php?action=inventory'; };
+      invBtn.onclick = function(){ window.location = normalizeActionUrl(links.inventory || 'misc.php?action=inventory'); };
     }
 
     modal.hidden = false;
@@ -476,7 +508,7 @@
       var wrap2 = buy.closest('[data-shop]');
       var shop2 = wrap2 ? wrap2.getAttribute('data-shop') : 'game';
       withLoading(buy, post('misc.php?action=shop_add_to_cart&shop=' + encodeURIComponent(shop2), {slot:buy.getAttribute('data-slot'), qty:1}))
-        .then(function(res){ if(res.ok){ window.location='misc.php?action=shop_cart&shop='+encodeURIComponent(shop2); } else if(res.error !== 'busy'){ afShopToast(res.error || 'Error', 'error'); } });
+        .then(function(res){ if(res.ok){ window.location=normalizeActionUrl('misc.php?action=shop_cart&shop='+encodeURIComponent(shop2)); } else if(res.error !== 'busy'){ afShopToast(res.error || 'Error', 'error'); } });
       return;
     }
 
@@ -955,7 +987,7 @@
       return Promise.resolve();
     }
     var uid = root.getAttribute('data-uid') || '0';
-    var url = 'misc.php?action=inventory_state&uid=' + encodeURIComponent(uid);
+    var url = normalizeActionUrl('misc.php?action=inventory_state&uid=' + encodeURIComponent(uid));
     if(afShopDebugEnabled()){
       url += '&af_debug=1';
     }
@@ -1013,7 +1045,7 @@
     if(jsNode){ jsNode.textContent = 'JS loaded: ' + (window.AFSHOP && window.AFSHOP.loaded ? 'yes' : 'no'); }
     var hasPostKey = !!key();
     if(keyNode){ keyNode.textContent = 'postKey present: ' + (hasPostKey ? 'yes' : 'no'); }
-    fetch('misc.php?action=shop_health', {credentials:'same-origin'})
+    fetch(normalizeActionUrl('misc.php?action=shop_health'), {credentials:'same-origin'})
       .then(function(r){ return r.text(); })
       .then(parseJSON)
       .then(function(res){ if(apiNode){ apiNode.textContent = 'API ping: ' + (res && res.ok ? 'ok' : 'no'); } })

@@ -23,9 +23,9 @@ class AF_Admin_Advancedshop
         $html .= '<h2>Advanced Shop</h2>';
         $html .= '<p>' . htmlspecialchars_uni($lang->af_advancedshop_description ?? 'Game shop and inventory addon.') . '</p>';
         $html .= '<ul>';
-        $html .= '<li><a href="../misc.php?action=shop&amp;shop=game">misc.php?action=shop&shop=game</a></li>';
-        $html .= '<li><a href="../misc.php?action=shop_manage&amp;shop=game">misc.php?action=shop_manage&shop=game</a></li>';
-        $html .= '<li><a href="../misc.php?action=inventory">misc.php?action=inventory</a></li>';
+        $html .= '<li><a href="../shop.php?shop=game">shop.php?shop=game</a></li>';
+        $html .= '<li><a href="../shop.php?action=shop_manage&amp;shop=game">shop.php?action=shop_manage&shop=game</a></li>';
+        $html .= '<li><a href="../shop.php?action=inventory">shop.php?action=inventory</a></li>';
         $html .= '</ul>';
         $html .= '<p><a class="button button-primary" href="' . htmlspecialchars_uni($settingsUrl) . '">Settings</a></p>';
         $html .= '</div>';
