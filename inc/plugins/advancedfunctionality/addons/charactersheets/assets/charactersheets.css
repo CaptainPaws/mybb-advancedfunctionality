@@ -167,6 +167,8 @@
   cursor: pointer;
 }
 
+.af-cs-choice-row .af-cs-btn {min-width: 100px;}
+
 .af-cs-btn[disabled] {
   opacity: 0.5;
   cursor: not-allowed;
@@ -320,6 +322,7 @@
 .af-cs-choices {
   display: grid;
   gap: 8px;
+  padding: 5px 20px;
 }
 
 .af-cs-choice-row {
@@ -333,8 +336,8 @@
   width: 100%;
   padding: 6px 8px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgb(48, 48, 48);
+  background: rgb(20, 20, 20);
   color: #efefef;
 }
 
@@ -577,6 +580,8 @@
   height: calc(100% / .95);
   margin-left: -30px;
 }
+
+
 
 .af-cs-modal__header {
   display: flex;
