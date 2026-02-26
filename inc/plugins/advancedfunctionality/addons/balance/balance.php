@@ -1753,8 +1753,28 @@ function af_balance_member_profile_end(): void
         return;
     }
 
-    if (isset($profilefields) && is_string($profilefields) && strpos($profilefields, $rows) === false) {
-        $profilefields .= "\n" . $rows . "\n";
+    $appendRowsToTable = static function (string &$tableHtml, string $rowsHtml): bool {
+        if ($tableHtml === '' || strpos($tableHtml, '<tr') === false || strpos($tableHtml, $rowsHtml) !== false) {
+            return false;
+        }
+
+        $count = 0;
+        $updated = preg_replace('~</table>\s*$~i', $rowsHtml . "\n</table>", $tableHtml, 1, $count);
+        if ($count > 0 && is_string($updated)) {
+            $tableHtml = $updated;
+            return true;
+        }
+
+        $tableHtml .= "\n" . $rowsHtml . "\n";
+        return true;
+    };
+
+    if (isset($profilefields) && is_string($profilefields) && $appendRowsToTable($profilefields, $rows)) {
+        return;
+    }
+
+    if (isset($memprofile['profilefields']) && is_string($memprofile['profilefields'])) {
+        $appendRowsToTable($memprofile['profilefields'], $rows);
     }
 }
 
