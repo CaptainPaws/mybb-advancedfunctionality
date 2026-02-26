@@ -16,6 +16,10 @@ return [
                 'af_advancedpostcounter_name'        => 'AdvancedPostCounter',
                 'af_advancedpostcounter_description' => 'Счётчик постов в выбранных форумах.',
                 'af_advancedpostcounter_label'       => 'Игровых постов:',
+                'af_apc_find_posts'                  => 'Найти все посты',
+                'af_apc_postsbyuser_title'           => 'Посты пользователя',
+                'af_apc_postsbyuser_empty'           => 'Постов не найдено.',
+                'af_apc_postsbyuser_not_configured'  => 'Форумы для подсчёта не выбраны.',
             ],
             'admin' => [
                 'af_advancedpostcounter_group'                 => 'AF: AdvancedPostCounter',
@@ -42,6 +46,10 @@ return [
                 'af_advancedpostcounter_name'        => 'AdvancedPostCounter',
                 'af_advancedpostcounter_description' => 'Counts posts in selected forums.',
                 'af_advancedpostcounter_label'       => 'Counted posts:',
+                'af_apc_find_posts'                  => 'Find all posts',
+                'af_apc_postsbyuser_title'           => 'User posts',
+                'af_apc_postsbyuser_empty'           => 'No posts found.',
+                'af_apc_postsbyuser_not_configured'  => 'No tracked forums configured.',
             ],
             'admin' => [
                 'af_advancedpostcounter_group'                 => 'AF: AdvancedPostCounter',
