@@ -287,74 +287,10 @@ function af_charactersheets_build_progress_html(array $view, array $sheet, bool 
                 . '</div>';
         }
     }
-    // ---- LEDGER (только если есть права) ----
-    $ledger_html = '';
     $ledger_toggle_html = '';
     $ledger_block_html = '';
-
-    if ($can_view_ledger) {
-        $ledger_items = [];
-        foreach (af_charactersheets_get_ledger($sheet_id, 10) as $row) {
-            $meta = af_charactersheets_json_decode((string)($row['meta_json'] ?? ''));
-            $desc = (string)($meta['reason'] ?? $meta['source'] ?? '');
-
-            if ($desc === '' && !empty($meta['tid'])) {
-                $desc = 'Тема #' . (int)$meta['tid'];
-            }
-            if ($desc === '') {
-                $desc = strtoupper((string)($row['event_type'] ?? 'exp'));
-            }
-
-            $by_uid = (int)($meta['by_uid'] ?? $meta['awarded_by'] ?? $meta['accepted_by'] ?? 0);
-            $by_name = $by_uid > 0 ? af_charactersheets_username_by_uid($by_uid) : '';
-            $by_label = $by_name !== '' ? $by_name : ($by_uid > 0 ? ('UID ' . $by_uid) : 'Система');
-
-            $amount_label = af_charactersheets_format_decimal($row['amount']);
-
-            $ledger_items[] = '<div class="af-cs-ledger-row">'
-                . '<div class="af-cs-ledger-desc">' . htmlspecialchars_uni($desc) . '</div>'
-                . '<div class="af-cs-ledger-amount">' . htmlspecialchars_uni($amount_label) . '</div>'
-                . '<div class="af-cs-ledger-by">' . htmlspecialchars_uni($by_label) . '</div>'
-                . '<div class="af-cs-ledger-date">' . htmlspecialchars_uni(date('d.m.Y H:i', (int)$row['created_at'])) . '</div>'
-                . '</div>';
-
-        }
-
-        if (!$ledger_items) {
-            $ledger_items[] = '<div class="af-cs-muted">Нет начислений.</div>';
-        }
-
-        $ledger_html = implode('', $ledger_items);
-
-        // toggle + block (как ты просила)
-        $ledger_toggle_html = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-ledger-toggle><i class="fa-solid fa-clock-rotate-left"></i></button>';
-        $ledger_block_html = '<div class="af-cs-ledger" data-afcs-ledger hidden>' . $ledger_html . '</div>';
-    }
-
-    // ---- MANUAL AWARD (только если can_award) ----
     $manual_award_html = '';
     $manual_award_toggle_html = '';
-    if ($can_award) {
-        $manual_award_html = '<div class="af-cs-award-panel" data-afcs-award-panel hidden>'
-            . '<form class="af-cs-award-form" data-afcs-award-form="1" autocomplete="off">'
-            . '<div class="af-cs-award-form__row">'
-            . '<label class="af-cs-award-form__label" for="afcs_award_amount">EXP</label>'
-            . '<input id="afcs_award_amount" class="textbox af-cs-award-form__input" type="number" name="amount"'
-            . ' step="1" inputmode="numeric" placeholder="Например: 100" required>'
-            . '</div>'
-            . '<div class="af-cs-award-form__row">'
-            . '<label class="af-cs-award-form__label" for="afcs_award_reason">Причина</label>'
-            . '<input id="afcs_award_reason" class="textbox af-cs-award-form__input" type="text" name="reason"'
-            . ' maxlength="255" placeholder="Например: квест, ивент, награда" required>'
-            . '</div>'
-            . '<div class="af-cs-award-form__actions">'
-            . '<button type="submit" class="button button--primary af-cs-btn af-cs-btn--submit">Отправить</button>'
-            . '<button type="button" class="button button--secondary af-cs-btn af-cs-btn--cancel"'
-            . ' data-afcs-award-toggle>Закрыть</button>'
-            . '</div>'
-            . '</form>'
-            . '</div>';
-    }
 
     global $templates;
     $tpl = $templates->get('charactersheet_progress');
@@ -1021,11 +957,6 @@ function af_charactersheets_build_header_actions_html(
         $items[] = '<a class="af-cs-btn af-cs-btn--compact" href="' . htmlspecialchars_uni($modalAppUrl)
             . '" data-afcs-open="1" data-afcs-sheet="' . htmlspecialchars_uni($modalAppUrl)
             . '" title="Анкета" aria-label="Анкета"><i class="fa-regular fa-id-card"></i></a>';
-    }
-
-    if ($can_award) {
-        $items[] = '<button type="button" class="af-cs-btn af-cs-btn--compact af-cs-btn--icon" data-afcs-award-toggle'
-            . ' title="Ручное начисление" aria-label="Ручное начисление"><i class="fa-solid fa-plus"></i></button>';
     }
 
     if ($can_delete) {

@@ -381,14 +381,6 @@
   background: linear-gradient(90deg, #5cc3ff, #7bffb8);
 }
 
-.af-cs-ledger {
-  display: grid;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
 
 .af-cs-progress__actions {
   display: flex;
@@ -396,42 +388,11 @@
   gap: 8px;
 }
 
-.af-cs-award-panel {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
 
-.af-cs-ledger-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 12px;
-  font-size: 12px;
-  opacity: 0.9;
-}
 
-.af-cs-ledger-amount {
-  font-weight: 600;
-}
 
-.af-cs-ledger-date {
-  opacity: 0.6;
-}
 
-.af-cs-award {
-  display: grid;
-  grid-template-columns: minmax(120px, 180px) minmax(160px, 1fr) auto;
-  gap: 8px;
-}
 
-.af-cs-award input {
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
-  color: #efefef;
-}
 
 .af-cs-skills,
 .af-cs-feats {
@@ -1125,16 +1086,8 @@
 
 
 /* ===== FIX: hidden must really hide ===== */
-.af-cs-ledger[hidden],
-.af-cs-award-panel[hidden] {
-  display: none !important;
-}
 
 /* ===== Ledger spoiler box ===== */
-.af-cs-ledger {
-  max-height: 100px;
-  overflow: auto;
-}
 
 /* ===== Skills ===== */
 .af-cs-skill-pool {
