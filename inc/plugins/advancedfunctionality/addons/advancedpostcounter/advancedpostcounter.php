@@ -61,6 +61,7 @@ function af_advancedpostcounter_uninstall(): void
             'af_advancedpostcounter_count_firstpost',
             'af_advancedpostcounter_show_postbit',
             'af_advancedpostcounter_show_profile',
+            'af_advancedpostcounter_postbit_label_html',
             'af_apc_assets_blacklist'
         )"
     );
@@ -316,6 +317,13 @@ function af_advancedpostcounter_ensure_settings(): void
             'optionscode' => 'yesno',
             'value'       => '1',
             'disporder'   => 50,
+        ],
+        'af_advancedpostcounter_postbit_label_html' => [
+            'title'       => $lang->af_advancedpostcounter_postbit_label_html ?? 'Postbit label html',
+            'description' => $lang->af_advancedpostcounter_postbit_label_html_desc ?? 'HTML/FontAwesome для лейбла в постбите. Пусто = текст «Постов:»',
+            'optionscode' => 'text',
+            'value'       => '<i class="fa-solid fa-feather"></i>:',
+            'disporder'   => 55,
         ],
         'af_apc_assets_blacklist' => [
             'title'       => $lang->af_apc_assets_blacklist ?? 'Assets blacklist (disable on pages)',
@@ -1556,7 +1564,16 @@ function af_advancedpostcounter_pre_output(&$page): void
 
 function af_apc_build_snapshot_payload(int $uid, int $total, int $week, int $month): array
 {
+    global $mybb;
+
     $labelPlain = 'Постов:';
+    $labelHtml = '<span class="af-apc-label-text">' . htmlspecialchars_uni($labelPlain) . '</span>';
+
+    $settingLabelHtml = af_apc_sanitize_label_html((string)($mybb->settings['af_advancedpostcounter_postbit_label_html'] ?? ''), 200);
+    if ($settingLabelHtml !== '') {
+        $labelHtml = $settingLabelHtml;
+    }
+
     $tooltip = 'за месяц: ' . my_number_format($month) . ' || за неделю: ' . my_number_format($week);
 
     return [
@@ -1566,9 +1583,24 @@ function af_apc_build_snapshot_payload(int $uid, int $total, int $week, int $mon
         'month' => $month,
         'tooltip' => $tooltip,
         'label_plain' => htmlspecialchars_uni($labelPlain),
-        'label_html' => '<span class="af-apc-label-text">' . htmlspecialchars_uni($labelPlain) . '</span>',
+        'label_html' => $labelHtml,
         'total_formatted' => htmlspecialchars_uni(my_number_format($total)),
     ];
+}
+
+function af_apc_sanitize_label_html(string $value, int $maxLen = 200): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    $value = substr($value, 0, max(1, $maxLen));
+    $value = preg_replace('~<\s*script\b~iu', '', $value);
+    $value = preg_replace('~on(?:error|load)\s*=~iu', '', $value);
+    $value = preg_replace('~javascript\s*:\s*~iu', '', $value);
+
+    return trim((string)$value);
 }
 
 function af_apc_render_postbit_html(array $snapshot): string

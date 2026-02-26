@@ -1,12 +1,12 @@
 <div class="af-cs-postbit-stats" data-af-balance-plaque="1" data-pid="{$post['pid']}" data-uid="{$post['uid']}">
   <div class="af-cs-postbit-stats__grid">
     <div class="af-cs-postbit-stat af-cs-postbit-stat--credits" data-af-balance-credits="1">
-      <div class="af-cs-postbit-stat__icon"><i class="fa-solid fa-wallet" title="Кредиты"></i></div>
+      <div class="af-cs-postbit-stat__icon">{$postbit_label_credits_html}</div>
       <div class="af-cs-postbit-stat__value" data-af-balance-credits-value="1">{$credits_display} {$currency_symbol}</div>
     </div>
     {$ability_tokens_postbit_html}
     <div class="af-cs-postbit-stat af-cs-postbit-stat--level" data-af-balance-level="1">
-      <div class="af-cs-postbit-stat__icon"><i class="fa-solid fa-diamond" title="Уровень"></i></div>
+      <div class="af-cs-postbit-stat__icon">{$postbit_label_level_html}</div>
       <div class="af-cs-postbit-stat__value" data-af-balance-level-value="1">{$level}</div>
     </div>
     <div class="af-cs-postbit-stat af-cs-postbit-stat--posts" data-af-balance-posts="1">
@@ -15,6 +15,6 @@
   </div>
   <div class="af-expbar af-cs-postbit-stats__bar" data-af-balance-expbar="1" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{$progress_percent}">
     <span class="af-expbar__fill" style="width: {$progress_percent}%"></span>
-    <span class="af-expbar__text" data-af-balance-exptext="1">{$exp_display} / {$exp_need_display}</span>
+    <span class="af-expbar__text" data-af-balance-exptext="1">{$postbit_label_exp_html}: {$exp_display} / {$exp_need_display}</span>
   </div>
 </div>
