@@ -37,6 +37,7 @@ function af_advancedpostcounter_install(): void
 
     af_advancedpostcounter_ensure_settings();
     af_advancedpostcounter_templates_install();
+    af_advancedpostcounter_cleanup_legacy_profile_placeholders();
     af_advancedpostcounter_pages_install(); // <-- создаём /postsactivity.php в корне
 
     if (function_exists('rebuild_settings')) {
@@ -44,6 +45,20 @@ function af_advancedpostcounter_install(): void
     }
 }
 
+
+function af_advancedpostcounter_cleanup_legacy_profile_placeholders(): void
+{
+    if (!function_exists('find_replace_templatesets')) {
+        require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
+    }
+
+    find_replace_templatesets('member_profile_customfields', "#\{\$memprofile\['advancedpostcounter'\]\}#i", '');
+    find_replace_templatesets('member_profile_customfields_field', "#\{\$memprofile\['advancedpostcounter'\]\}#i", '');
+
+    if (function_exists('cache_templatesets')) {
+        cache_templatesets();
+    }
+}
 
 function af_advancedpostcounter_uninstall(): void
 {
@@ -946,7 +961,7 @@ function af_advancedpostcounter_postbit(array &$post): void
 
 function af_advancedpostcounter_member_profile_end(): void
 {
-    global $memprofile, $templates;
+    global $memprofile;
 
     if (!af_advancedpostcounter_is_enabled() || !af_advancedpostcounter_show_profile()) {
         $memprofile['advancedpostcounter'] = '';
@@ -964,26 +979,7 @@ function af_advancedpostcounter_member_profile_end(): void
     // Всегда задаём переменную для шаблона member_profile (если она там есть)
     $memprofile['advancedpostcounter'] = $marker;
 
-    // Если профильные шаблоны уже содержат {$memprofile['advancedpostcounter']},
-    // то НЕ дописываем маркер в $profilefields — иначе будет дубль и разъезд верстки.
-    $tplHasPlaceholder = false;
-    $re = '~\{\$memprofile\[(?:\'|")advancedpostcounter(?:\'|")\]\}~i';
-
-    if (isset($templates) && is_object($templates) && method_exists($templates, 'get')) {
-        foreach (['member_profile_customfields', 'member_profile_customfields_field', 'member_profile'] as $tplTitle) {
-            $t = (string)$templates->get($tplTitle);
-            if ($t !== '' && preg_match($re, $t)) {
-                $tplHasPlaceholder = true;
-                break;
-            }
-        }
-    }
-
-    if ($tplHasPlaceholder) {
-        return;
-    }
-
-    // -------- FALLBACK (только если шаблон НЕ содержит переменную) --------
+    // -------- Каноничный путь вывода в member.php: fallback-маркер в $profilefields --------
     if (!isset($GLOBALS['profilefields']) || !is_string($GLOBALS['profilefields'])) {
         return;
     }
@@ -1278,46 +1274,8 @@ function af_advancedpostcounter_templates_install(): void
         }
     }
 
-    // -------------------- PROFILE customfields: вставляем {$memprofile['advancedpostcounter']} в блок доп. полей --------------------
-    $needle_profile = '{$memprofile[\'advancedpostcounter\']}';
-    $profileTargets = ['member_profile_customfields', 'member_profile_customfields_field'];
-
-    foreach ($profileTargets as $profileTitle) {
-        $q3 = $db->simple_select('templates', 'tid,template', "title='".$db->escape_string($profileTitle)."'");
-        while ($row = $db->fetch_array($q3)) {
-            $tid = (int)$row['tid'];
-            $tpl = (string)$row['template'];
-
-            if ($tid <= 0 || $tpl === '') {
-                continue;
-            }
-
-            if (strpos($tpl, $needle_profile) !== false) {
-                continue;
-            }
-
-            $new = $tpl;
-            $count = 0;
-
-            // Основной якорь: вывод строк кастомных полей.
-            $new = preg_replace(
-                '#(\{\$(?:profile_)?customfields\}|\{\$GLOBALS\[(?:\'|")profilefields(?:\'|")\]\})#i',
-                '$1' . "\n" . $needle_profile,
-                $new,
-                1,
-                $count
-            );
-
-            // Fallback: вставляем перед закрывающим </table> блока доп. информации.
-            if (!$count) {
-                $new = preg_replace('#</table>#i', $needle_profile . "\n</table>", $new, 1, $count);
-            }
-
-            if ($count && is_string($new) && $new !== '' && $new !== $tpl) {
-                af_apc_templates_update_tid($tid, $new, false);
-            }
-        }
-    }
+    // Чистим legacy-вставки {$memprofile['advancedpostcounter']} из customfields-шаблонов.
+    af_advancedpostcounter_cleanup_legacy_profile_placeholders();
 
     // -------------------- postbit / postbit_classic: вставляем {$post['advancedpostcounter']} после {$post['user_details']} --------------------
     $needle_post = '{$post[\'advancedpostcounter\']}';
@@ -1932,6 +1890,8 @@ function af_advancedpostcounter_admin_selfheal(): void
     }
 
     /* ---------- 2) TEMPLATES SELFHEAL ---------- */
+
+    af_advancedpostcounter_cleanup_legacy_profile_placeholders();
 
     $needFix = false;
 
