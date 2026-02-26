@@ -1333,69 +1333,85 @@ function af_advancedpostcounter_templates_uninstall(): void
             'advancedpostcounter_profile_bit',
             'advancedpostcounter_postsactivity',
             'advancedpostcounter_postsactivity_row',
-            'af_apc_postsactivity_page'
+            'af_apc_postsactivity_page',
+            'advancedpostcounter_postsbyuser',
+            'advancedpostcounter_postsbyuser_row',
+            'af_apc_postsbyuser_page'
         ) AND sid='-1'"
     );
 }
 
 function af_advancedpostcounter_pages_install(): void
 {
-    // источник внутри аддона
-    $src = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/advancedpostcounter/assets/postsactivity.php';
+    $aliases = [
+        [
+            'src' => MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/advancedpostcounter/assets/postsactivity.php',
+            'dst' => MYBB_ROOT . 'postsactivity.php',
+            'signature' => 'AF_APC_PAGE_ALIAS',
+        ],
+        [
+            'src' => MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/advancedpostcounter/assets/postsbyuser.php',
+            'dst' => MYBB_ROOT . 'postsbyuser.php',
+            'signature' => 'AF_APC_POSTSBYUSER_ALIAS',
+        ],
+    ];
 
-    // назначение — корень форума
-    $dst = MYBB_ROOT . 'postsactivity.php';
+    foreach ($aliases as $alias) {
+        $src = (string)$alias['src'];
+        $dst = (string)$alias['dst'];
+        $signature = (string)$alias['signature'];
 
-    if (!file_exists($src)) {
-        return;
-    }
+        if (!file_exists($src)) {
+            continue;
+        }
 
-    $srcCode = @file_get_contents($src);
-    if ($srcCode === false || trim($srcCode) === '') {
-        return;
-    }
+        $srcCode = @file_get_contents($src);
+        if ($srcCode === false || trim($srcCode) === '') {
+            continue;
+        }
 
-    // Если уже есть postsactivity.php и он НЕ наш — не трогаем.
-    if (file_exists($dst)) {
-        $dstCode = @file_get_contents($dst);
-        if ($dstCode !== false) {
-            $isOur = (strpos($dstCode, 'AF_APC_PAGE_ALIAS') !== false);
-            if (!$isOur) {
-                return;
+        if (file_exists($dst)) {
+            $dstCode = @file_get_contents($dst);
+            if ($dstCode !== false && strpos($dstCode, $signature) === false) {
+                continue;
+            }
+            if ($dstCode !== false && hash('sha256', $dstCode) === hash('sha256', $srcCode)) {
+                continue;
             }
         }
-    }
 
-    // Если наш и содержимое одинаковое — не пишем
-    if (file_exists($dst)) {
-        $dstCode = @file_get_contents($dst);
-        if ($dstCode !== false && hash('sha256', $dstCode) === hash('sha256', $srcCode)) {
-            return;
-        }
+        @file_put_contents($dst, $srcCode);
     }
-
-    @file_put_contents($dst, $srcCode);
 }
 
 function af_advancedpostcounter_pages_uninstall(): void
 {
-    $dst = MYBB_ROOT . 'postsactivity.php';
+    $aliases = [
+        [
+            'dst' => MYBB_ROOT . 'postsactivity.php',
+            'signature' => 'AF_APC_PAGE_ALIAS',
+        ],
+        [
+            'dst' => MYBB_ROOT . 'postsbyuser.php',
+            'signature' => 'AF_APC_POSTSBYUSER_ALIAS',
+        ],
+    ];
 
-    if (!file_exists($dst)) {
-        return;
+    foreach ($aliases as $alias) {
+        $dst = (string)$alias['dst'];
+        $signature = (string)$alias['signature'];
+
+        if (!file_exists($dst)) {
+            continue;
+        }
+
+        $code = @file_get_contents($dst);
+        if ($code === false || strpos($code, $signature) === false) {
+            continue;
+        }
+
+        @unlink($dst);
     }
-
-    $code = @file_get_contents($dst);
-    if ($code === false) {
-        return;
-    }
-
-    // удаляем только если это НАШ автофайл
-    if (strpos($code, 'AF_APC_PAGE_ALIAS') === false) {
-        return;
-    }
-
-    @unlink($dst);
 }
 
 
@@ -1462,7 +1478,7 @@ function af_advancedpostcounter_init(): void
 
 function af_advancedpostcounter_pre_output(&$page): void
 {
-    global $mybb, $db;
+    global $mybb, $db, $lang;
 
     if (!af_advancedpostcounter_is_enabled()) {
         return;
@@ -1547,12 +1563,21 @@ function af_advancedpostcounter_pre_output(&$page): void
         $snapshot = af_apc_build_snapshot_payload($uid, (int)($totals[$uid] ?? 0), (int)($periods[$uid]['week'] ?? 0), (int)($periods[$uid]['month'] ?? 0));
         $bitHtml = af_apc_render_postbit_html($snapshot);
 
+        $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+        $findPostsLabel = 'Найти все посты';
+        if (!empty($lang->af_apc_find_posts)) {
+            $findPostsLabel = (string)$lang->af_apc_find_posts;
+        }
+        $findPostsUrl = ($bburl !== '' ? $bburl : '') . '/postsbyuser.php?uid=' . (int)$uid;
+        $findPostsLink = '<a class="smalltext" href="' . htmlspecialchars_uni($findPostsUrl) . '">(' . htmlspecialchars_uni($findPostsLabel) . ')</a>';
+
         // Профильная строка (табличная)
         $profileHtml = '<tr>'
             . '<td class="trow1"><strong>' . $snapshot['label_plain'] . '</strong></td>'
             . '<td class="trow1">'
                 . '<span class="af-apc-count">'
                     . '<span class="af-apc-num">' . $snapshot['total_formatted'] . '</span>'
+                    . ' ' . $findPostsLink
                 . '</span>'
             . '</td>'
         . '</tr>';
@@ -1944,18 +1969,36 @@ function af_advancedpostcounter_admin_selfheal(): void
         }
     }
 
-    /* ---------- 3) PAGES SELFHEAL/UPDATE (только если это НАШ postsactivity.php) ---------- */
+    /* ---------- 3) PAGES SELFHEAL/UPDATE (только если это НАШИ alias-файлы) ---------- */
 
-    $dst = MYBB_ROOT . 'postsactivity.php';
-    $signature = 'AF: AdvancedPostCounter postsactivity page';
+    $shouldInstall = false;
+    $aliases = [
+        [
+            'dst' => MYBB_ROOT . 'postsactivity.php',
+            'signature' => 'AF: AdvancedPostCounter postsactivity page',
+        ],
+        [
+            'dst' => MYBB_ROOT . 'postsbyuser.php',
+            'signature' => 'AF: AdvancedPostCounter postsbyuser page',
+        ],
+    ];
 
-    if (!is_file($dst)) {
-        af_advancedpostcounter_pages_install();
-        return;
+    foreach ($aliases as $alias) {
+        $dst = (string)$alias['dst'];
+        $signature = (string)$alias['signature'];
+
+        if (!is_file($dst)) {
+            $shouldInstall = true;
+            continue;
+        }
+
+        $existing = (string)@file_get_contents($dst);
+        if ($existing !== '' && strpos($existing, $signature) !== false) {
+            $shouldInstall = true;
+        }
     }
 
-    $existing = (string)@file_get_contents($dst);
-    if ($existing !== '' && strpos($existing, $signature) !== false) {
+    if ($shouldInstall) {
         af_advancedpostcounter_pages_install();
     }
 }
@@ -2465,6 +2508,191 @@ function af_apc_render_postsactivity_page(): void
     if (function_exists('error_no_permission')) {
         error_no_permission();
     }
+    exit;
+}
+
+function af_advancedpostcounter_render_postsbyuser_page(): void
+{
+    if (function_exists('af_advancedpostcounter_postsbyuser_page')) {
+        af_advancedpostcounter_postsbyuser_page();
+        exit;
+    }
+
+    if (function_exists('error_no_permission')) {
+        error_no_permission();
+    }
+    exit;
+}
+
+function af_advancedpostcounter_postsbyuser_page(): void
+{
+    global $mybb, $db, $lang;
+
+    if (!af_advancedpostcounter_is_enabled()) {
+        error_no_permission();
+    }
+
+    if ((int)($mybb->usergroup['canviewmemberlist'] ?? 0) !== 1) {
+        error_no_permission();
+    }
+
+    af_advancedpostcounter_lang();
+    af_apc_ensure_header_bits();
+
+    $uid = (int)$mybb->get_input('uid', MyBB::INPUT_INT);
+    if ($uid <= 0) {
+        error_no_permission();
+    }
+
+    $user = get_user($uid);
+    if (empty($user) || (int)($user['uid'] ?? 0) !== $uid) {
+        error_no_permission();
+    }
+
+    $trackedFids = af_advancedpostcounter_get_tracked_forums();
+    $trackedFids = array_values(array_unique(array_filter(array_map('intval', $trackedFids), static fn($fid): bool => $fid > 0)));
+
+    $perpage = (int)$mybb->get_input('perpage', MyBB::INPUT_INT);
+    if ($perpage < 1) {
+        $perpage = 20;
+    }
+    if ($perpage > 100) {
+        $perpage = 100;
+    }
+
+    $pageNum = (int)$mybb->get_input('page', MyBB::INPUT_INT);
+    if ($pageNum < 1) {
+        $pageNum = 1;
+    }
+    $start = ($pageNum - 1) * $perpage;
+
+    $title = !empty($lang->af_apc_postsbyuser_title)
+        ? (string)$lang->af_apc_postsbyuser_title
+        : 'Посты пользователя';
+
+    $emptyLabel = !empty($lang->af_apc_postsbyuser_empty)
+        ? (string)$lang->af_apc_postsbyuser_empty
+        : 'Постов не найдено.';
+
+    $notConfiguredLabel = !empty($lang->af_apc_postsbyuser_not_configured)
+        ? (string)$lang->af_apc_postsbyuser_not_configured
+        : 'Форумы для подсчёта не выбраны.';
+
+    $goToPostLabel = 'Перейти к сообщению';
+
+    $esc = static function ($value): string {
+        return function_exists('htmlspecialchars_uni')
+            ? htmlspecialchars_uni((string)$value)
+            : htmlspecialchars((string)$value, ENT_QUOTES);
+    };
+
+    $total = 0;
+    $rows = '';
+    $multipage = '';
+
+    if (empty($trackedFids)) {
+        $rows = '<tr><td class="trow1"><em>' . $esc($notConfiguredLabel) . '</em></td></tr>';
+    } else {
+        $fidList = implode(',', $trackedFids);
+        $countWhere = "p.uid='{$uid}' AND p.visible='1' AND t.visible='1' AND p.fid IN ({$fidList})";
+
+        if (!af_advancedpostcounter_count_firstpost_enabled()) {
+            $countWhere .= ' AND p.pid<>t.firstpost';
+        }
+
+        $qTotal = $db->simple_select('posts p LEFT JOIN ' . TABLE_PREFIX . "threads t ON (t.tid=p.tid)", 'COUNT(*) AS cnt', $countWhere);
+        $total = (int)($db->fetch_field($qTotal, 'cnt') ?? 0);
+
+        if ($total > 0) {
+            require_once MYBB_ROOT . 'inc/class_parser.php';
+            $parser = new postParser();
+
+            $query = $db->query(
+                "SELECT p.pid, p.tid, p.dateline, p.message, p.subject AS post_subject, t.subject AS thread_subject\n"
+                . "FROM " . TABLE_PREFIX . "posts p\n"
+                . "LEFT JOIN " . TABLE_PREFIX . "threads t ON (t.tid=p.tid)\n"
+                . "WHERE {$countWhere}\n"
+                . "ORDER BY p.dateline DESC, p.pid DESC\n"
+                . "LIMIT {$start}, {$perpage}"
+            );
+
+            $i = 0;
+            while ($post = $db->fetch_array($query)) {
+                $i++;
+                $row_bg = ($i % 2 === 0) ? 'trow2' : 'trow1';
+
+                $pid = (int)($post['pid'] ?? 0);
+                $tid = (int)($post['tid'] ?? 0);
+                $subject = trim((string)($post['thread_subject'] ?? ''));
+                if ($subject === '') {
+                    $subject = trim((string)($post['post_subject'] ?? ''));
+                }
+                if ($subject === '') {
+                    $subject = '#' . $pid;
+                }
+
+                $message = trim((string)($post['message'] ?? ''));
+                if (my_strlen($message) > 600) {
+                    $message = my_substr($message, 0, 600) . '…';
+                }
+
+                $preview = $parser->parse_message($message, [
+                    'allow_html' => 0,
+                    'allow_mycode' => 1,
+                    'allow_smilies' => 1,
+                    'allow_imgcode' => 0,
+                    'filter_badwords' => 1,
+                ]);
+
+                $postUrl = function_exists('get_post_link')
+                    ? get_post_link($pid, $tid)
+                    : ('showthread.php?pid=' . $pid . '#pid' . $pid);
+
+                $row_thread_link = '<a href="' . $esc($postUrl) . '">' . $esc($subject) . '</a>';
+                $row_post_link = '<a class="smalltext" href="' . $esc($postUrl) . '">' . $esc($goToPostLabel) . '</a>';
+
+                $dateline = (int)($post['dateline'] ?? 0);
+                $row_date = $dateline > 0
+                    ? my_date($mybb->settings['dateformat'], $dateline) . ' ' . my_date($mybb->settings['timeformat'], $dateline)
+                    : '';
+                $row_date = $esc($row_date);
+                $row_subject = $esc($subject);
+                $row_preview = $preview;
+
+                $rowHtml = af_apc_render_template('advancedpostcounter_postsbyuser_row', get_defined_vars());
+                if ($rowHtml === '') {
+                    $rowHtml = '<tr><td class="' . $row_bg . '">' . $row_thread_link . '<br /><span class="smalltext">' . $row_date . '</span><div>' . $row_preview . '</div>' . $row_post_link . '</td></tr>';
+                }
+
+                $rows .= $rowHtml;
+            }
+
+            $baseUrl = 'postsbyuser.php?uid=' . $uid . '&perpage=' . $perpage;
+            $multipage = multipage($total, $perpage, $pageNum, $baseUrl);
+        }
+
+        if ($rows === '') {
+            $rows = '<tr><td class="trow1"><em>' . $esc($emptyLabel) . '</em></td></tr>';
+        }
+    }
+
+    $username = build_profile_link(format_name($user['username'], (int)$user['usergroup'], (int)$user['displaygroup']), $uid);
+    $pageTitle = $title . ': ' . strip_tags((string)$user['username']);
+    add_breadcrumb($title, 'postsbyuser.php?uid=' . $uid);
+
+    $af_apc_content = af_apc_render_template('advancedpostcounter_postsbyuser', get_defined_vars());
+    if ($af_apc_content === '') {
+        $af_apc_content = '<div class="wrapper"><table class="tborder" width="100%">' . $rows . '</table>' . $multipage . '</div>';
+    }
+
+    $af_apc_page_title = $pageTitle;
+    $page = af_apc_render_template('af_apc_postsbyuser_page', get_defined_vars());
+    if ($page === '') {
+        global $header, $footer;
+        $page = (string)$header . $af_apc_content . (string)$footer;
+    }
+
+    output_page($page);
     exit;
 }
 

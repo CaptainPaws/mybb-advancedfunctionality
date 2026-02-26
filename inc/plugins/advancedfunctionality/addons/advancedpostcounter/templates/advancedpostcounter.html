@@ -81,6 +81,8 @@
     <td class="{$row_bg}" style="text-align:center; white-space:nowrap;">{$row_week}</td>
     <td class="{$row_bg}">{$row_last}</td>
 </tr>
+<!-- /TEMPLATE -->
+
 <!-- TEMPLATE: af_apc_postsactivity_page -->
 <!DOCTYPE html>
 <html>
@@ -96,3 +98,46 @@
 </html>
 <!-- /TEMPLATE -->
 
+
+<!-- TEMPLATE: advancedpostcounter_postsbyuser -->
+<div class="af-apc-postsbyuser-page">
+    <div class="float_right">{$multipage}</div>
+    <h2>{$title}: {$username}</h2>
+    <br class="clear" />
+
+    <table class="tborder" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" border="0" width="100%">
+        <tr>
+            <td class="thead"><strong>{$title}</strong></td>
+        </tr>
+        {$rows}
+    </table>
+
+    {$multipage}
+</div>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: advancedpostcounter_postsbyuser_row -->
+<tr>
+    <td class="{$row_bg}">
+        <div><strong>{$row_thread_link}</strong></div>
+        <div class="smalltext" style="margin:2px 0 6px 0;">{$row_date}</div>
+        <div class="af-apc-post-preview">{$row_preview}</div>
+        <div style="margin-top:6px;">{$row_post_link}</div>
+    </td>
+</tr>
+<!-- /TEMPLATE -->
+
+<!-- TEMPLATE: af_apc_postsbyuser_page -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{$af_apc_page_title} - {$mybb->settings['bbname']}</title>
+    {$headerinclude}
+</head>
+<body>
+{$header}
+{$af_apc_content}
+{$footer}
+</body>
+</html>
+<!-- /TEMPLATE -->
