@@ -1144,6 +1144,13 @@ function af_charactersheets_build_info_table_html(array $index, array $sheet_vie
     $wallet = function_exists('af_balance_format_credits') ? af_balance_format_credits($wallet_raw) : number_format($wallet_raw / 100, 2, '.', ' ');
     $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Кошелёк</div><div class="af-cs-info-value" data-afcs-wallet-value>' . htmlspecialchars_uni($wallet) . ' ¢</div></div>';
 
+    if (!empty($mybb->settings['af_balance_ability_tokens_show_sheet'])) {
+        $ability_raw = (int)($sheet_view['ability_tokens'] ?? 0);
+        $ability_wallet = function_exists('af_balance_format_ability_tokens') ? af_balance_format_ability_tokens($ability_raw) : number_format($ability_raw / 100, 2, '.', ' ');
+        $ability_symbol = htmlspecialchars_uni((string)($mybb->settings['af_balance_ability_tokens_symbol'] ?? '♦'));
+        $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Ability Tokens</div><div class="af-cs-info-value">' . htmlspecialchars_uni($ability_wallet) . ' ' . $ability_symbol . '</div></div>';
+    }
+
     return '<div class="af-cs-info-table">' . implode('', $items) . '</div>';
 }
 

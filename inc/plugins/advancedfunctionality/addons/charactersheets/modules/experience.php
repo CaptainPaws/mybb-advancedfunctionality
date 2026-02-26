@@ -105,7 +105,7 @@ function af_charactersheets_award_exp_manual(array $sheet, array $user, int $fid
 function af_charactersheets_balance_snapshot(int $uid): array
 {
     $uid = (int)$uid;
-    $balance = function_exists('af_balance_get') ? af_balance_get($uid) : ['exp' => 0, 'credits' => 0];
+    $balance = function_exists('af_balance_get') ? af_balance_get($uid) : ['exp' => 0, 'credits' => 0, 'ability_tokens' => 0];
     $exp_total = ((float)($balance['exp'] ?? 0)) / (defined('AF_BALANCE_EXP_SCALE') ? AF_BALANCE_EXP_SCALE : 100);
     $level_data = af_charactersheets_compute_level($exp_total);
 
@@ -117,6 +117,8 @@ function af_charactersheets_balance_snapshot(int $uid): array
         'level' => (int)($level_data['level'] ?? 1),
         'progress_percent' => (int)($level_data['progress_percent'] ?? $level_data['percent'] ?? 0),
         'credits_display' => function_exists('af_balance_format_credits') ? af_balance_format_credits((int)($balance['credits'] ?? 0)) : number_format(((int)($balance['credits'] ?? 0))/100, 2, '.', ' '),
+        'ability_tokens_display' => function_exists('af_balance_format_ability_tokens') ? af_balance_format_ability_tokens((int)($balance['ability_tokens'] ?? 0)) : number_format(((int)($balance['ability_tokens'] ?? 0))/100, 2, '.', ' '),
+        'ability_tokens_symbol' => (string)($GLOBALS['mybb']->settings['af_balance_ability_tokens_symbol'] ?? '♦'),
     ];
 }
 

@@ -39,9 +39,16 @@ function af_charactersheets_postbit_button(array &$post): void
         $credits_display = htmlspecialchars_uni((string)($balance_data['credits_display'] ?? '0.00'));
         $currency_symbol = htmlspecialchars_uni((string)($balance_data['currency_symbol'] ?? '¢'));
         $level = (int)($balance_data['level'] ?? 1);
+        $ability_tokens_display = htmlspecialchars_uni((string)($balance_data['ability_tokens_display'] ?? '0.00'));
+        $ability_tokens_symbol = htmlspecialchars_uni((string)($balance_data['ability_tokens_symbol'] ?? '♦'));
         $progress_percent = max(0, min(100, (int)($balance_data['progress_percent'] ?? 0)));
         $exp_display = htmlspecialchars_uni((string)($balance_data['exp_display'] ?? '0'));
         $exp_need_display = htmlspecialchars_uni((string)($balance_data['exp_need_display'] ?? '0'));
+
+        $ability_tokens_postbit_html = '';
+        if (!empty($balance_data['ability_tokens_show_postbit'])) {
+            $ability_tokens_postbit_html = '<div class="af-cs-postbit-stats__credits" data-af-balance-ability="1"><i class="fa-solid fa-star" title="Ability Tokens"></i><br> ' . $ability_tokens_display . ' ' . $ability_tokens_symbol . '</div>';
+        }
 
         $tpl_balance = $templates->get('af_balance_postbit');
         if ($tpl_balance === '') {
