@@ -18,17 +18,11 @@ function af_balance_init(): void
 {
     global $plugins;
 
-    // Регистрация: оставляем только один хук (иначе задваивает)
     $plugins->add_hook('member_do_register_end', 'af_balance_member_do_register_end');
-
-    // Посты/темы: оставляем datahandler — он уже даёт uid/fid/message/visible
+    $plugins->add_hook('post_do_newpost_end', 'af_balance_post_do_newpost_end');
     $plugins->add_hook('datahandler_post_insert_post', 'af_balance_datahandler_post_insert');
     $plugins->add_hook('datahandler_post_insert_thread', 'af_balance_datahandler_post_insert');
     $plugins->add_hook('datahandler_post_update', 'af_balance_datahandler_post_update');
-
-    // УБРАТЬ (дублирует начисление поверх datahandler):
-    // $plugins->add_hook('post_do_newpost_end', 'af_balance_post_do_newpost_end');
-
     $plugins->add_hook('misc_start', 'af_balance_misc_start');
     $plugins->add_hook('pre_output_page', 'af_balance_pre_output_page', 10);
 }
@@ -65,21 +59,46 @@ function af_balance_ensure_schema(): void
             KEY created_at (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
+
     if (!$db->table_exists(AF_BALANCE_POST_REWARDS_TABLE)) {
         $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_BALANCE_POST_REWARDS_TABLE . " (
             pid INT UNSIGNED NOT NULL,
             uid INT UNSIGNED NOT NULL,
-            tid INT UNSIGNED NOT NULL,
             fid INT UNSIGNED NOT NULL,
             chars_count INT NOT NULL DEFAULT 0,
-            reward_exp INT NOT NULL DEFAULT 0,
-            reward_credits INT NOT NULL DEFAULT 0,
+            exp_scaled BIGINT NOT NULL DEFAULT 0,
+            credits_scaled BIGINT NOT NULL DEFAULT 0,
             last_hash CHAR(40) NULL,
             updated_at INT UNSIGNED NOT NULL DEFAULT 0,
             PRIMARY KEY (pid),
-            KEY uid (uid)
+            KEY uid (uid),
+            KEY fid (fid)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    }
+    } else {
+        // Таблица уже есть (старый формат) — делаем миграцию колонок безопасно
+        $table = TABLE_PREFIX . AF_BALANCE_POST_REWARDS_TABLE;
+
+        $cols = [];
+        $q = $db->write_query("SHOW COLUMNS FROM {$table}");
+        while ($r = $db->fetch_array($q)) {
+            $cols[strtolower((string)$r['Field'])] = true;
+        }
+
+        if (empty($cols['exp_scaled'])) {
+            $db->write_query("ALTER TABLE {$table} ADD COLUMN exp_scaled BIGINT NOT NULL DEFAULT 0");
+        }
+        if (empty($cols['credits_scaled'])) {
+            $db->write_query("ALTER TABLE {$table} ADD COLUMN credits_scaled BIGINT NOT NULL DEFAULT 0");
+        }
+        if (empty($cols['last_hash'])) {
+            $db->write_query("ALTER TABLE {$table} ADD COLUMN last_hash CHAR(40) NULL");
+        }
+        if (empty($cols['updated_at'])) {
+            $db->write_query("ALTER TABLE {$table} ADD COLUMN updated_at INT UNSIGNED NOT NULL DEFAULT 0");
+        }
+
+        // Если вдруг у старой схемы были reward_exp/reward_credits — можно оставить, не мешает.
+    }   
 }
 
 function af_balance_ensure_settings(): void
@@ -104,7 +123,6 @@ function af_balance_ensure_settings(): void
         ['af_balance_currency_symbol','Currency symbol','text','¢',33],
         ['af_balance_manage_groups','Balance manage groups','text','3,4',34],
         ['af_balance_blacklist','Balance assets blacklist','textarea',AF_BALANCE_BLACKLIST_DEFAULT,35],
-        ['af_balance_debug_rewards','Debug rewards recalculation logs','yesno','0',36],
     ];
     $legacyMigratedSid = af_balance_pick_setting_sid('af_balance_migrated_credits_scale', $needsRebuild);
     if ($legacyMigratedSid > 0) {
@@ -263,30 +281,70 @@ function af_balance_get(int $uid): array
     return ['uid'=>$uid,'exp'=>(int)$row['exp'],'credits'=>(int)$row['credits']];
 }
 
+function af_balance_add($uid, string $kind, $amount, array $meta = []): array
+{
+    global $mybb;
+
+    $uid = (int)$uid;
+    if ($uid <= 0 || !in_array($kind, ['exp','credits'], true)) {
+        return af_balance_get($uid);
+    }
+
+    $scale = ($kind === 'exp') ? AF_BALANCE_EXP_SCALE : AF_BALANCE_CREDITS_SCALE;
+    $scaled = (int)floor(((float)$amount) * $scale);
+
+    // если это отрицательное начисление и запрещено — отклоняем (обычное начисление)
+    if ($scaled < 0 && empty($mybb->settings['af_balance_'.$kind.'_allow_negative_award'])) {
+        return af_balance_get($uid);
+    }
+
+    return af_balance_apply_scaled_delta($uid, $kind, $scaled, $meta, false);
+}
+
 function af_balance_apply_scaled_delta(int $uid, string $kind, int $scaled, array $meta = [], bool $bypassNegativeAwardRule = false): array
 {
     global $db, $mybb;
-    if ($uid <= 0 || !in_array($kind, ['exp','credits'], true)) return af_balance_get($uid);
-    if ($scaled < 0 && empty($mybb->settings['af_balance_'.$kind.'_allow_negative_award']) && !$bypassNegativeAwardRule) return af_balance_get($uid);
+
+    $uid = (int)$uid;
+    if ($uid <= 0 || !in_array($kind, ['exp','credits'], true)) {
+        return af_balance_get($uid);
+    }
+
+    // если это отрицательная дельта и правило запрещает, то пропускаем (кроме bypass)
+    if ($scaled < 0 && empty($mybb->settings['af_balance_'.$kind.'_allow_negative_award']) && !$bypassNegativeAwardRule) {
+        return af_balance_get($uid);
+    }
 
     $bal = af_balance_get($uid);
     $old = (int)$bal[$kind];
     $new = $old + $scaled;
-    if ($new < 0 && empty($mybb->settings['af_balance_'.$kind.'_allow_balance_negative'])) $new = 0;
 
-    $db->update_query(AF_BALANCE_TABLE, [$kind => $new, 'updated_at'=>TIME_NOW], 'uid=' . $uid);
+    // баланс в минус — только если allow_balance_negative=1
+    if ($new < 0 && empty($mybb->settings['af_balance_'.$kind.'_allow_balance_negative'])) {
+        $new = 0;
+    }
+
+    $db->update_query(AF_BALANCE_TABLE, [$kind => $new, 'updated_at' => TIME_NOW], 'uid=' . $uid);
 
     if (!empty($mybb->settings['af_balance_tx_enable']) && $db->table_exists(AF_BALANCE_TX_TABLE)) {
         $reason = substr((string)($meta['reason'] ?? ''), 0, 64);
         $source = substr((string)($meta['source'] ?? 'balance'), 0, 64);
         $refType = substr((string)($meta['ref_type'] ?? ''), 0, 32);
+
         $db->insert_query(AF_BALANCE_TX_TABLE, [
-            'uid' => $uid, 'kind' => $db->escape_string($kind), 'amount' => ($new - $old), 'balance_after' => $new,
-            'reason' => $db->escape_string($reason), 'source' => $db->escape_string($source),
-            'ref_type' => $db->escape_string($refType), 'ref_id' => (int)($meta['ref_id'] ?? 0),
+            'uid' => $uid,
+            'kind' => $db->escape_string($kind),
+            'amount' => ($new - $old),
+            'balance_after' => $new,
+            'reason' => $db->escape_string($reason),
+            'source' => $db->escape_string($source),
+            'ref_type' => $db->escape_string($refType),
+            'ref_id' => (int)($meta['ref_id'] ?? 0),
             'meta_json' => $db->escape_string(json_encode($meta, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)),
-            'actor_uid' => (int)($meta['actor_uid'] ?? 0), 'created_at' => TIME_NOW,
+            'actor_uid' => (int)($meta['actor_uid'] ?? 0),
+            'created_at' => TIME_NOW,
         ]);
+
         af_balance_trim_tx();
     }
 
@@ -295,14 +353,6 @@ function af_balance_apply_scaled_delta(int $uid, string $kind, int $scaled, arra
     }
 
     return af_balance_get($uid);
-}
-
-function af_balance_add($uid, string $kind, $amount, array $meta = []): array
-{
-    $uid = (int)$uid;
-    $scale = $kind === 'exp' ? AF_BALANCE_EXP_SCALE : AF_BALANCE_CREDITS_SCALE;
-    $scaled = (int)floor(((float)$amount) * $scale);
-    return af_balance_apply_scaled_delta($uid, $kind, $scaled, $meta, false);
 }
 
 function af_balance_add_exp($uid, $amount, array $meta = []): array { return af_balance_add((int)$uid, 'exp', $amount, $meta); }
@@ -350,15 +400,6 @@ function af_balance_datahandler_user_insert($userhandler): void
 
 function af_balance_count_award_chars(string $message): int
 {
-    $s = af_balance_normalize_award_text($message);
-
-    if ($s === '') return 0;
-
-    return function_exists('my_strlen') ? my_strlen($s) : strlen($s);
-}
-
-function af_balance_normalize_award_text(string $message): string
-{
     $s = (string)$message;
 
     // вырежем quote-блоки целиком (в анкетах часто тонна цитат/вставок)
@@ -378,7 +419,9 @@ function af_balance_normalize_award_text(string $message): string
     $s = preg_replace('~\s+~u', ' ', $s);
     $s = trim($s);
 
-    return $s;
+    if ($s === '') return 0;
+
+    return function_exists('my_strlen') ? my_strlen($s) : strlen($s);
 }
 
 function af_balance_apply_register_awards(int $uid): void
@@ -405,68 +448,96 @@ function af_balance_apply_register_awards(int $uid): void
     }
 }
 
-
 function af_balance_datahandler_post_insert($posthandler): void
 {
+    global $db;
+
     if (!is_object($posthandler)) {
         return;
     }
 
     $insert = is_array($posthandler->post_insert_data ?? null) ? $posthandler->post_insert_data : [];
-    $data = is_array($posthandler->data ?? null) ? $posthandler->data : [];
+    $data   = is_array($posthandler->data ?? null) ? $posthandler->data : [];
 
-    $uid = (int)($insert['uid'] ?? $data['uid'] ?? 0);
-    $fid = (int)($insert['fid'] ?? $data['fid'] ?? 0);
-    $visible = (int)($insert['visible'] ?? $data['visible'] ?? 0);
+    $uid     = (int)($insert['uid'] ?? $data['uid'] ?? 0);
+    $fid     = (int)($insert['fid'] ?? $data['fid'] ?? 0);
+
+    // ✅ ВАЖНО: default = 1, а не 0
+    $visible = (int)($insert['visible'] ?? $data['visible'] ?? 1);
+
     $pid = (int)($insert['pid'] ?? 0);
     if ($pid <= 0) {
         $pid = (int)($posthandler->pid ?? 0);
     }
+    if ($pid <= 0 && is_object($db) && method_exists($db, 'insert_id')) {
+        $pid = (int)$db->insert_id();
+    }
+
     $message = (string)($insert['message'] ?? $data['message'] ?? '');
 
-    $tid = (int)($insert['tid'] ?? $data['tid'] ?? 0);
-    af_rewards_recalc_for_post_edit($pid, $uid, $message, [
-        'pid' => $pid,
-        'uid' => $uid,
-        'tid' => $tid,
-        'fid' => $fid,
-        'visible' => $visible,
-    ], ['source' => 'datahandler_post_insert']);
+    // Если всё ещё не хватает данных — добираем из posts (после insert pid уже есть)
+    if ($pid > 0 && ($uid <= 0 || $fid <= 0 || $message === '' || $visible !== 1)) {
+        $row = $db->fetch_array($db->simple_select('posts', 'pid,uid,fid,visible,message', 'pid=' . (int)$pid, ['limit' => 1]));
+        if (is_array($row)) {
+            if ($uid <= 0) $uid = (int)($row['uid'] ?? 0);
+            if ($fid <= 0) $fid = (int)($row['fid'] ?? 0);
+            if ($message === '') $message = (string)($row['message'] ?? '');
+            $visible = (int)($row['visible'] ?? $visible);
+        }
+    }
+
+    af_balance_recalc_post_awards($pid, $uid, $fid, $visible, $message, 'insert');
 }
 
 function af_balance_datahandler_post_update($posthandler): void
 {
+    global $db;
+
     if (!is_object($posthandler)) {
         return;
     }
 
     $update = is_array($posthandler->post_update_data ?? null) ? $posthandler->post_update_data : [];
-    $data = is_array($posthandler->data ?? null) ? $posthandler->data : [];
+    $data   = is_array($posthandler->data ?? null) ? $posthandler->data : [];
 
-    $pid = (int)($update['pid'] ?? $data['pid'] ?? $posthandler->pid ?? 0);
-    $uid = (int)($update['uid'] ?? $data['uid'] ?? 0);
-    $fid = (int)($update['fid'] ?? $data['fid'] ?? 0);
-    $tid = (int)($update['tid'] ?? $data['tid'] ?? 0);
+    $pid     = (int)($update['pid'] ?? $data['pid'] ?? $posthandler->pid ?? 0);
+    $uid     = (int)($update['uid'] ?? $data['uid'] ?? 0);
+    $fid     = (int)($update['fid'] ?? $data['fid'] ?? 0);
     $visible = (int)($update['visible'] ?? $data['visible'] ?? 1);
     $message = (string)($update['message'] ?? $data['message'] ?? '');
 
-    af_rewards_recalc_for_post_edit($pid, $uid, $message, [
-        'pid' => $pid,
-        'uid' => $uid,
-        'tid' => $tid,
-        'fid' => $fid,
-        'visible' => $visible,
-    ], ['source' => 'datahandler_post_update']);
+    // если datahandler не дал message/fid/uid — берём из БД
+    if ($pid > 0 && ($uid <= 0 || $fid <= 0 || $message === '')) {
+        $row = $db->fetch_array($db->simple_select('posts', 'pid,uid,fid,visible,message', 'pid=' . $pid, ['limit' => 1]));
+        if (is_array($row)) {
+            if ($uid <= 0) $uid = (int)($row['uid'] ?? 0);
+            if ($fid <= 0) $fid = (int)($row['fid'] ?? 0);
+            if ($message === '') $message = (string)($row['message'] ?? '');
+            $visible = (int)($row['visible'] ?? $visible);
+        }
+    }
+
+    af_balance_recalc_post_awards($pid, $uid, $fid, $visible, $message, 'update');
 }
 
 function af_balance_post_do_newpost_end(): void
 {
     global $mybb, $db, $pid, $newpid;
+
     $resolved_pid = (int)($pid ?? $newpid ?? $mybb->input['pid'] ?? 0);
     if ($resolved_pid <= 0) return;
-    $post = $db->fetch_array($db->simple_select('posts', 'pid,uid,fid,message,visible', 'pid=' . $resolved_pid, ['limit' => 1]));
+
+    $post = $db->fetch_array($db->simple_select('posts', 'pid,uid,fid,visible,message', 'pid=' . $resolved_pid, ['limit' => 1]));
     if (!$post) return;
-    af_balance_award_for_post((int)$post['uid'], (int)$post['fid'], (string)($post['message'] ?? ''), (int)$post['visible'], $resolved_pid);
+
+    af_balance_recalc_post_awards(
+        (int)$post['pid'],
+        (int)$post['uid'],
+        (int)$post['fid'],
+        (int)$post['visible'],
+        (string)($post['message'] ?? ''),
+        'post_do_newpost_end'
+    );
 }
 
 function af_balance_already_awarded(int $pid, int $uid, int $fid, int $chars): bool
@@ -535,150 +606,136 @@ function af_balance_award_for_post(int $uid, int $fid, string $message, int $vis
     }
 }
 
-function af_balance_calc_post_reward_scaled(int $chars, int $fid, string $kind): int
-{
-    global $mybb;
-
-    if ($chars <= 0) {
-        return 0;
-    }
-    if (empty($mybb->settings['af_balance_'.$kind.'_enabled']) || !af_balance_is_forum_allowed($fid, $kind)) {
-        return 0;
-    }
-
-    $rate = (float)($mybb->settings['af_balance_'.$kind.'_per_char'] ?? 0);
-    if ($rate == 0.0) {
-        return 0;
-    }
-
-    $scale = $kind === 'exp' ? AF_BALANCE_EXP_SCALE : AF_BALANCE_CREDITS_SCALE;
-    return (int)floor($chars * $rate * $scale);
-}
-
 function af_balance_get_post_reward_row(int $pid): array
 {
     global $db;
-
-    if ($pid <= 0) {
+    if ($pid <= 0 || !$db->table_exists(AF_BALANCE_POST_REWARDS_TABLE)) {
         return [];
     }
-
-    $row = $db->fetch_array($db->simple_select(AF_BALANCE_POST_REWARDS_TABLE, '*', 'pid=' . $pid, ['limit' => 1]));
+    $row = $db->fetch_array($db->simple_select(AF_BALANCE_POST_REWARDS_TABLE, '*', 'pid=' . (int)$pid, ['limit' => 1]));
     return is_array($row) ? $row : [];
 }
 
-function af_balance_upsert_post_reward_row(int $pid, int $uid, int $tid, int $fid, int $chars, int $rewardExp, int $rewardCredits, string $hash): void
+function af_balance_upsert_post_reward_row(int $pid, int $uid, int $fid, int $chars, int $expScaled, int $creditsScaled, string $hash): void
 {
     global $db;
 
-    if ($pid <= 0) {
+    if ($pid <= 0 || !$db->table_exists(AF_BALANCE_POST_REWARDS_TABLE)) {
         return;
+    }
+
+    static $cols = null;
+    if ($cols === null) {
+        $cols = [];
+        $table = TABLE_PREFIX . AF_BALANCE_POST_REWARDS_TABLE;
+        $q = $db->write_query("SHOW COLUMNS FROM {$table}");
+        while ($r = $db->fetch_array($q)) {
+            $cols[strtolower((string)$r['Field'])] = true;
+        }
     }
 
     $data = [
         'pid' => $pid,
         'uid' => $uid,
-        'tid' => $tid,
         'fid' => $fid,
         'chars_count' => $chars,
-        'reward_exp' => $rewardExp,
-        'reward_credits' => $rewardCredits,
         'last_hash' => $hash,
         'updated_at' => TIME_NOW,
     ];
 
-    $exists = $db->fetch_field($db->simple_select(AF_BALANCE_POST_REWARDS_TABLE, 'pid', 'pid=' . $pid, ['limit' => 1]), 'pid');
-    if ((int)$exists > 0) {
-        $db->update_query(AF_BALANCE_POST_REWARDS_TABLE, $data, 'pid=' . $pid);
-        return;
+    // новые поля (после миграции)
+    if (!empty($cols['exp_scaled'])) {
+        $data['exp_scaled'] = $expScaled;
+    }
+    if (!empty($cols['credits_scaled'])) {
+        $data['credits_scaled'] = $creditsScaled;
     }
 
-    $db->insert_query(AF_BALANCE_POST_REWARDS_TABLE, $data);
+    // фоллбек на старую схему, если она была reward_exp/reward_credits
+    if (empty($cols['exp_scaled']) && !empty($cols['reward_exp'])) {
+        $data['reward_exp'] = $expScaled;
+    }
+    if (empty($cols['credits_scaled']) && !empty($cols['reward_credits'])) {
+        $data['reward_credits'] = $creditsScaled;
+    }
+
+    $exists = (int)$db->fetch_field($db->simple_select(AF_BALANCE_POST_REWARDS_TABLE, 'pid', 'pid=' . $pid, ['limit' => 1]), 'pid');
+    if ($exists > 0) {
+        $db->update_query(AF_BALANCE_POST_REWARDS_TABLE, $data, 'pid=' . $pid);
+    } else {
+        $db->insert_query(AF_BALANCE_POST_REWARDS_TABLE, $data);
+    }
 }
 
-function af_balance_debug_reward_event(array $context): void
+function af_balance_calc_post_reward_scaled(int $chars, int $fid, string $kind): int
 {
     global $mybb;
 
-    if (empty($mybb->settings['af_balance_debug_rewards'])) {
-        return;
+    if ($chars <= 0) return 0;
+    if (empty($mybb->settings['af_balance_'.$kind.'_enabled']) || !af_balance_is_forum_allowed($fid, $kind)) {
+        return 0;
     }
 
-    @error_log('[AF_BALANCE_REWARD] ' . json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    $rate = (float)($mybb->settings['af_balance_'.$kind.'_per_char'] ?? 0);
+    if ($rate == 0.0) return 0;
+
+    $scale = ($kind === 'exp') ? AF_BALANCE_EXP_SCALE : AF_BALANCE_CREDITS_SCALE;
+    return (int)floor($chars * $rate * $scale);
 }
 
-function af_rewards_recalc_for_post_edit(int $pid, int $uid, string $new_message, array $post_row, array $opts = []): void
+function af_balance_recalc_post_awards(int $pid, int $uid, int $fid, int $visible, string $message, string $source): void
 {
-    $visible = (int)($post_row['visible'] ?? 1);
-    $fid = (int)($post_row['fid'] ?? 0);
-    $tid = (int)($post_row['tid'] ?? 0);
-
-    if ($pid <= 0 || $uid <= 0 || $visible !== 1 || $fid <= 0) {
+    if ($pid <= 0 || $uid <= 0 || $fid <= 0 || $visible !== 1) {
         return;
     }
 
-    $normalized = af_balance_normalize_award_text($new_message);
-    $newChars = $normalized === '' ? 0 : (function_exists('my_strlen') ? my_strlen($normalized) : strlen($normalized));
-    $newHash = sha1($normalized);
+    $chars = af_balance_count_award_chars($message);
+    $norm = (string)$message;
+    $norm = html_entity_decode($norm, ENT_QUOTES, 'UTF-8');
+    $hash = sha1((string)$chars . '|' . sha1($norm)); // достаточно для антидубля
 
     $tracked = af_balance_get_post_reward_row($pid);
-    $oldChars = (int)($tracked['chars_count'] ?? 0);
-    $oldRewardExp = (int)($tracked['reward_exp'] ?? 0);
-    $oldRewardCredits = (int)($tracked['reward_credits'] ?? 0);
     $oldHash = (string)($tracked['last_hash'] ?? '');
 
-    if ($oldHash !== '' && hash_equals($oldHash, $newHash)) {
-        af_balance_debug_reward_event(['pid' => $pid, 'uid' => $uid, 'skip' => 'same_hash', 'source' => (string)($opts['source'] ?? '')]);
+    // если уже пересчитывали этот exact контент — ничего не делаем
+    if ($oldHash !== '' && hash_equals($oldHash, $hash)) {
         return;
     }
 
-    $newRewardExp = af_balance_calc_post_reward_scaled($newChars, $fid, 'exp');
-    $newRewardCredits = af_balance_calc_post_reward_scaled($newChars, $fid, 'credits');
-    $deltaChars = $newChars - $oldChars;
-    $deltaExp = $newRewardExp - $oldRewardExp;
-    $deltaCredits = $newRewardCredits - $oldRewardCredits;
+    $oldExp = (int)($tracked['exp_scaled'] ?? $tracked['reward_exp'] ?? 0);
+    $oldCr  = (int)($tracked['credits_scaled'] ?? $tracked['reward_credits'] ?? 0);
+
+    $newExp = af_balance_calc_post_reward_scaled($chars, $fid, 'exp');
+    $newCr  = af_balance_calc_post_reward_scaled($chars, $fid, 'credits');
+
+    $deltaExp = $newExp - $oldExp;
+    $deltaCr  = $newCr - $oldCr;
 
     if ($deltaExp !== 0) {
         af_balance_apply_scaled_delta($uid, 'exp', $deltaExp, [
-            'reason' => 'post_chars_edit',
+            'reason' => 'post_chars_recalc',
             'source' => 'balance',
             'ref_type' => 'pid',
             'ref_id' => $pid,
             'fid' => $fid,
-            'tid' => $tid,
-            'chars_old' => $oldChars,
-            'chars_new' => $newChars,
-            'delta_chars' => $deltaChars,
-        ], true);
+            'chars' => $chars,
+            'recalc_source' => $source,
+        ], true); //  bypass: умеем уменьшать
     }
 
-    if ($deltaCredits !== 0) {
-        af_balance_apply_scaled_delta($uid, 'credits', $deltaCredits, [
-            'reason' => 'post_chars_edit',
+    if ($deltaCr !== 0) {
+        af_balance_apply_scaled_delta($uid, 'credits', $deltaCr, [
+            'reason' => 'post_chars_recalc',
             'source' => 'balance',
             'ref_type' => 'pid',
             'ref_id' => $pid,
             'fid' => $fid,
-            'tid' => $tid,
-            'chars_old' => $oldChars,
-            'chars_new' => $newChars,
-            'delta_chars' => $deltaChars,
+            'chars' => $chars,
+            'recalc_source' => $source,
         ], true);
     }
 
-    af_balance_upsert_post_reward_row($pid, $uid, $tid, $fid, $newChars, $newRewardExp, $newRewardCredits, $newHash);
-    af_balance_debug_reward_event([
-        'pid' => $pid,
-        'uid' => $uid,
-        'fid' => $fid,
-        'tid' => $tid,
-        'old_chars' => $oldChars,
-        'new_chars' => $newChars,
-        'delta_chars' => $deltaChars,
-        'delta_exp_scaled' => $deltaExp,
-        'delta_credits_scaled' => $deltaCredits,
-        'source' => (string)($opts['source'] ?? ''),
-    ]);
+    af_balance_upsert_post_reward_row($pid, $uid, $fid, $chars, $newExp, $newCr, $hash);
 }
 
 function af_balance_handle_accept(int $uid, int $tid, int $actor_uid = 0): void
