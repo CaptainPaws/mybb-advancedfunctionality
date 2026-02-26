@@ -31,20 +31,6 @@
   </div>
 
   <section class="af-cs-section">
-    <div data-afcs-block="attributes">
-      {$sheet_attributes_html}
-    </div>
-  </section>
-
-
-  <section class="af-cs-section">
-    <h2>{$sheet_mechanics_title}</h2>
-    <div data-afcs-block="mechanics">
-      {$sheet_mechanics_html}
-    </div>
-  </section>
-
-  <section class="af-cs-section">
     <div class="af-cs-tabs" data-afcs-tabs>
       <div class="af-cs-tabs__nav">
         <button class="is-active" type="button" data-afcs-tab="main">Основная информация</button>
@@ -57,7 +43,18 @@
       </div>
       <div class="af-cs-tabs__content">
         <div class="af-cs-tab is-active" data-afcs-tab-content="main">
-          <h3>Бонусы</h3>
+            <section class="af-cs-section">
+            <div data-afcs-block="attributes">
+              {$sheet_attributes_html}
+            </div>
+            </section>
+
+            <section class="af-cs-section">
+              <h2>{$sheet_mechanics_title}</h2>
+              <div data-afcs-block="mechanics">
+                {$sheet_mechanics_html}
+              </div>
+            </section>
           {$sheet_bonus_html}
         </div>
         <div class="af-cs-tab" data-afcs-tab-content="skills">
