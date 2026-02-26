@@ -981,11 +981,35 @@ function af_advancedpostcounter_member_profile_end(): void
     }
 
     // -------- FALLBACK (только если шаблон НЕ содержит переменную) --------
-    if (isset($GLOBALS['profilefields']) && is_string($GLOBALS['profilefields'])) {
-        if (strpos($GLOBALS['profilefields'], $marker) === false) {
-            $GLOBALS['profilefields'] .= "\n" . $marker . "\n";
-        }
+    if (!isset($GLOBALS['profilefields']) || !is_string($GLOBALS['profilefields'])) {
+        return;
     }
+
+    $profilefields = (string)$GLOBALS['profilefields'];
+
+    // Защита от дублей: если маркер/строка APC уже присутствует — ничего не делаем.
+    if (strpos($profilefields, $marker) !== false || stripos($profilefields, 'af-apc-count') !== false) {
+        return;
+    }
+
+    // 1) Пытаемся вставить строго после последнего кастомного поля AdvancedProfileFields.
+    $apfRowPattern = '~<tr\s+class="[^"]*\baf-apf-row\b[^"]*"[^>]*>.*?</tr>~si';
+    if (preg_match_all($apfRowPattern, $profilefields, $matches, PREG_OFFSET_CAPTURE) && !empty($matches[0])) {
+        $lastMatch = $matches[0][count($matches[0]) - 1];
+        $insertPos = (int)$lastMatch[1] + strlen((string)$lastMatch[0]);
+        $GLOBALS['profilefields'] = substr_replace($profilefields, "\n" . $marker . "\n", $insertPos, 0);
+        return;
+    }
+
+    // 2) Fallback: перед последним </table>.
+    $tableClosePos = strripos($profilefields, '</table>');
+    if ($tableClosePos !== false) {
+        $GLOBALS['profilefields'] = substr_replace($profilefields, "\n" . $marker . "\n", $tableClosePos, 0);
+        return;
+    }
+
+    // 3) Fallback: в конец profilefields.
+    $GLOBALS['profilefields'] = $profilefields . "\n" . $marker . "\n";
 }
 
 
