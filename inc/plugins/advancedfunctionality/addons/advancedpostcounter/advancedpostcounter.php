@@ -1439,6 +1439,7 @@ function af_advancedpostcounter_init(): void
     /* -------- display hooks -------- */
     $p->add_hook('postbit',             'af_advancedpostcounter_postbit');
     $p->add_hook('member_profile_end',  'af_advancedpostcounter_member_profile_end');
+    $p->add_hook('xmlhttp',             'af_advancedpostcounter_xmlhttp');
 
     /* -------- marker replace (страховка) --------
        Даже если AF ядро само вызывает *_pre_output, этот хук лишним не будет,
@@ -1529,38 +1530,18 @@ function af_advancedpostcounter_pre_output(&$page): void
     $periods = af_advancedpostcounter_fetch_period_counts($uids);
 
     // -------------------- 4) Рендерим HTML и заменяем маркеры --------------------
-    $esc = static function ($s): string {
-        return htmlspecialchars_uni((string)$s);
-    };
-
-    // подписи (можешь потом вынести в lang, но сейчас — как ты просила)
-    $label = 'Постов:';
-
     $repl = [];
 
     foreach ($uids as $uid) {
-        $total = (int)($totals[$uid] ?? 0);
-        $week  = (int)($periods[$uid]['week'] ?? 0);
-        $month = (int)($periods[$uid]['month'] ?? 0);
-
-        $tip = 'за месяц: ' . my_number_format($month) . ' || за неделю: ' . my_number_format($week);
-
-        // Постбит-блок
-        $bitHtml = '<div class="af-apc">'
-            . '<span class="af-apc-label">' . $esc($label) . '</span> '
-            . '<span class="af-apc-count">'
-                . '<span class="af-apc-num">' . $esc(my_number_format($total)) . '</span>'
-                . '<span class="af-apc-tooltip">' . $esc($tip) . '</span>'
-            . '</span>'
-        . '</div>';
+        $snapshot = af_apc_build_snapshot_payload($uid, (int)($totals[$uid] ?? 0), (int)($periods[$uid]['week'] ?? 0), (int)($periods[$uid]['month'] ?? 0));
+        $bitHtml = af_apc_render_postbit_html($snapshot);
 
         // Профильная строка (табличная)
         $profileHtml = '<tr>'
-            . '<td class="trow1"><strong>' . $esc($label) . '</strong></td>'
+            . '<td class="trow1"><strong>' . $snapshot['label_plain'] . '</strong></td>'
             . '<td class="trow1">'
                 . '<span class="af-apc-count">'
-                    . '<span class="af-apc-num">' . $esc(my_number_format($total)) . '</span>'
-                    . '<span class="af-apc-tooltip">' . $esc($tip) . '</span>'
+                    . '<span class="af-apc-num">' . $snapshot['total_formatted'] . '</span>'
                 . '</span>'
             . '</td>'
         . '</tr>';
@@ -1571,6 +1552,88 @@ function af_advancedpostcounter_pre_output(&$page): void
 
     // strtr быстрее пачкой, чем 1000 str_replace
     $page = strtr($page, $repl);
+}
+
+function af_apc_build_snapshot_payload(int $uid, int $total, int $week, int $month): array
+{
+    $labelPlain = 'Постов:';
+    $tooltip = 'за месяц: ' . my_number_format($month) . ' || за неделю: ' . my_number_format($week);
+
+    return [
+        'uid' => $uid,
+        'total' => $total,
+        'week' => $week,
+        'month' => $month,
+        'tooltip' => $tooltip,
+        'label_plain' => htmlspecialchars_uni($labelPlain),
+        'label_html' => '<span class="af-apc-label-text">' . htmlspecialchars_uni($labelPlain) . '</span>',
+        'total_formatted' => htmlspecialchars_uni(my_number_format($total)),
+    ];
+}
+
+function af_apc_render_postbit_html(array $snapshot): string
+{
+    $uid = (int)($snapshot['uid'] ?? 0);
+    $tooltip = htmlspecialchars_uni((string)($snapshot['tooltip'] ?? ''));
+    $labelHtml = (string)($snapshot['label_html'] ?? '<span class="af-apc-label-text">Постов:</span>');
+    $totalFormatted = htmlspecialchars_uni((string)($snapshot['total_formatted'] ?? '0'));
+
+    return '<div class="af-apc" data-af-apc="1" data-uid="' . $uid . '" title="' . $tooltip . '" data-af-title="' . $tooltip . '">'
+        . '<span class="af-apc-label">' . $labelHtml . '</span> '
+        . '<span class="af-apc-count">'
+            . '<span class="af-apc-num">' . $totalFormatted . '</span>'
+        . '</span>'
+    . '</div>';
+}
+
+function af_advancedpostcounter_xmlhttp(): void
+{
+    global $mybb, $db;
+
+    $action = (string)($mybb->input['action'] ?? '');
+    if ($action !== 'af_apc_snapshot') {
+        return;
+    }
+
+    while (ob_get_level() > 0) {
+        @ob_end_clean();
+    }
+
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+
+    $uid = (int)($mybb->input['uid'] ?? 0);
+    if ($uid <= 0) {
+        echo json_encode(['success' => false, 'error' => 'Bad uid'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    $user = $db->fetch_array($db->simple_select('users', 'uid,' . AF_APC_COL, 'uid=' . $uid, ['limit' => 1]));
+    $dbUid = (int)($user['uid'] ?? 0);
+    if ($dbUid <= 0) {
+        echo json_encode(['success' => false, 'error' => 'User not found'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+
+    $periods = af_advancedpostcounter_fetch_period_counts([$dbUid]);
+    $week = (int)($periods[$dbUid]['week'] ?? 0);
+    $month = (int)($periods[$dbUid]['month'] ?? 0);
+    $total = (int)($user[AF_APC_COL] ?? 0);
+
+    $snapshot = af_apc_build_snapshot_payload($dbUid, $total, $week, $month);
+
+    echo json_encode([
+        'success' => true,
+        'uid' => $dbUid,
+        'total' => $total,
+        'week' => $week,
+        'month' => $month,
+        'label_html' => (string)$snapshot['label_html'],
+        'tooltip' => (string)$snapshot['tooltip'],
+        'html' => af_apc_render_postbit_html($snapshot),
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
 }
 
 /**
