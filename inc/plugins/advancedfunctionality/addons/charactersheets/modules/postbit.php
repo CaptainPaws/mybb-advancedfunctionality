@@ -46,9 +46,34 @@ function af_charactersheets_postbit_button(array &$post): void
         $exp_display = htmlspecialchars_uni((string)($balance_data['exp_display'] ?? '0'));
         $exp_need_display = htmlspecialchars_uni((string)($balance_data['exp_need_display'] ?? '0'));
 
+        $labels = function_exists('af_balance_default_labels') ? af_balance_default_labels() : [
+            'credits' => 'Кредиты',
+            'ability_tokens' => 'Токены',
+            'level' => 'Уровень',
+            'exp' => 'Опыт',
+        ];
+
+        $label_credits = (string)($labels['credits'] ?? 'Кредиты');
+        $label_ability_tokens = (string)($labels['ability_tokens'] ?? 'Токены');
+        $label_level = (string)($labels['level'] ?? 'Уровень');
+        $label_exp = (string)($labels['exp'] ?? 'Опыт');
+
+        $postbit_label_credits_html = function_exists('af_balance_resolve_postbit_label_html')
+            ? af_balance_resolve_postbit_label_html($label_credits, (string)($GLOBALS['mybb']->settings['af_balance_postbit_icon_credits_html'] ?? ''), 300)
+            : htmlspecialchars_uni($label_credits);
+        $postbit_label_level_html = function_exists('af_balance_resolve_postbit_label_html')
+            ? af_balance_resolve_postbit_label_html($label_level, (string)($GLOBALS['mybb']->settings['af_balance_postbit_icon_level_html'] ?? ''), 300)
+            : htmlspecialchars_uni($label_level);
+        $postbit_label_exp_html = function_exists('af_balance_resolve_postbit_label_html')
+            ? af_balance_resolve_postbit_label_html($label_exp, (string)($GLOBALS['mybb']->settings['af_balance_postbit_icon_exp_html'] ?? ''), 300)
+            : htmlspecialchars_uni($label_exp);
+        $postbit_label_ability_tokens_html = function_exists('af_balance_resolve_postbit_label_html')
+            ? af_balance_resolve_postbit_label_html($label_ability_tokens, (string)($GLOBALS['mybb']->settings['af_balance_postbit_icon_ability_tokens_html'] ?? ''), 300)
+            : htmlspecialchars_uni($label_ability_tokens);
+
         $ability_tokens_postbit_html = '';
         if (!empty($balance_data['ability_tokens_show_postbit'])) {
-            $ability_tokens_postbit_html = '<div class="af-cs-postbit-stat af-cs-postbit-stat--ability" data-af-balance-ability="1" data-af-balance-ability-scaled="' . $ability_tokens_scaled . '"><div class="af-cs-postbit-stat__icon"><i class="fa-solid fa-star" title="Ability Tokens"></i></div><div class="af-cs-postbit-stat__value" data-af-balance-ability-value="1">' . $ability_tokens_display . ' ' . $ability_tokens_symbol . '</div></div>';
+            $ability_tokens_postbit_html = '<div class="af-cs-postbit-stat af-cs-postbit-stat--ability" data-af-balance-ability="1" data-af-balance-ability-scaled="' . $ability_tokens_scaled . '"><div class="af-cs-postbit-stat__icon">' . $postbit_label_ability_tokens_html . '</div><div class="af-cs-postbit-stat__value" data-af-balance-ability-value="1">' . $ability_tokens_display . ' ' . $ability_tokens_symbol . '</div></div>';
         }
 
         $isQuickReplyContext = (defined('THIS_SCRIPT') && strtolower((string)THIS_SCRIPT) === 'newreply.php') || defined('IN_XMLHTTP');

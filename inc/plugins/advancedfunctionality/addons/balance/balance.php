@@ -118,6 +118,7 @@ function af_balance_init(): void
     $plugins->add_hook('xmlhttp', 'af_balance_xmlhttp');
     $plugins->add_hook('misc_start', 'af_balance_misc_start');
     $plugins->add_hook('pre_output_page', 'af_balance_pre_output_page', 10);
+    $plugins->add_hook('member_profile_end', 'af_balance_member_profile_end');
 }
 
 function af_balance_xmlhttp_init(): void
@@ -324,6 +325,42 @@ function af_balance_get_postbit_data(int $uid): array
     ];
 }
 
+
+function af_balance_default_labels(): array
+{
+    return [
+        'credits' => 'Кредиты',
+        'ability_tokens' => 'Токены',
+        'level' => 'Уровень',
+        'exp' => 'Опыт',
+    ];
+}
+
+function af_balance_sanitize_label_html(string $value, int $maxLen = 300): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    $value = substr($value, 0, max(1, $maxLen));
+    $value = preg_replace('~<\s*script\b~iu', '', $value);
+    $value = preg_replace('~on[a-z0-9_\-]+\s*=~iu', '', $value);
+    $value = preg_replace('~javascript\s*:\s*~iu', '', $value);
+
+    return trim((string)$value);
+}
+
+function af_balance_resolve_postbit_label_html(string $plainLabel, string $settingHtml, int $maxLen = 300): string
+{
+    $safeHtml = af_balance_sanitize_label_html($settingHtml, $maxLen);
+    if ($safeHtml !== '') {
+        return $safeHtml;
+    }
+
+    return htmlspecialchars_uni($plainLabel);
+}
+
 function af_balance_level_settings(): array
 {
     global $mybb;
@@ -429,6 +466,10 @@ function af_balance_ensure_settings(): void
         ['af_balance_level_req_base','Level requirement base','text','2000',51],
         ['af_balance_level_req_step','Level requirement step','text','1000',52],
         ['af_balance_history_limit','History rows limit','text','2000',53],
+        ['af_balance_postbit_icon_credits_html','Postbit icon HTML: credits','text','',54],
+        ['af_balance_postbit_icon_ability_tokens_html','Postbit icon HTML: ability tokens','text','',55],
+        ['af_balance_postbit_icon_level_html','Postbit icon HTML: level','text','',56],
+        ['af_balance_postbit_icon_exp_html','Postbit icon HTML: exp','text','',57],
     ];
     $legacyMigratedSid = af_balance_pick_setting_sid('af_balance_migrated_credits_scale', $needsRebuild);
     if ($legacyMigratedSid > 0) {
@@ -451,6 +492,14 @@ function af_balance_ensure_settings(): void
         $description = $title;
         if ($name === 'af_balance_history_limit') {
             $description = 'Сколько последних записей показывать во вкладке История (окно логов)';
+        } elseif ($name === 'af_balance_postbit_icon_credits_html') {
+            $description = 'HTML/FontAwesome для лейбла Credits в postbit. Пусто = текст.';
+        } elseif ($name === 'af_balance_postbit_icon_ability_tokens_html') {
+            $description = 'HTML/FontAwesome для лейбла Ability Tokens в postbit. Пусто = текст.';
+        } elseif ($name === 'af_balance_postbit_icon_level_html') {
+            $description = 'HTML/FontAwesome для лейбла Level в postbit. Пусто = текст.';
+        } elseif ($name === 'af_balance_postbit_icon_exp_html') {
+            $description = 'HTML/FontAwesome для лейбла EXP в postbit. Пусто = текст.';
         }
         $row = ['name'=>$name,'title'=>$title,'description'=>$description,'optionscode'=>$opt,'disporder'=>$order,'gid'=>$gid,'isdefault'=>0];
         if ($sid > 0) {
@@ -1663,6 +1712,50 @@ function af_balance_handle_manage_adjust(): void
         'progress_percent'=> (int)($data['progress_percent'] ?? 0),
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
+}
+
+
+function af_balance_member_profile_end(): void
+{
+    global $memprofile, $profilefields, $templates;
+
+    $uid = (int)($memprofile['uid'] ?? 0);
+    if ($uid <= 0 || !function_exists('af_balance_get_postbit_data')) {
+        $memprofile['balance'] = '';
+        return;
+    }
+
+    $labels = af_balance_default_labels();
+    $data = af_balance_get_postbit_data($uid);
+
+    $rows = '';
+    $rows .= '<tr><td class="trow1"><strong>' . htmlspecialchars_uni($labels['credits']) . ':</strong></td><td class="trow1">' . htmlspecialchars_uni((string)($data['credits_display'] ?? '0.00')) . ' ' . htmlspecialchars_uni((string)($data['currency_symbol'] ?? '¢')) . '</td></tr>';
+
+    if (!empty($data['ability_tokens_show_postbit'])) {
+        $rows .= '<tr><td class="trow1"><strong>' . htmlspecialchars_uni($labels['ability_tokens']) . ':</strong></td><td class="trow1">' . htmlspecialchars_uni((string)($data['ability_tokens_display'] ?? '0.00')) . '</td></tr>';
+    }
+
+    $rows .= '<tr><td class="trow1"><strong>' . htmlspecialchars_uni($labels['level']) . ':</strong></td><td class="trow1">' . (int)($data['level'] ?? 1) . '</td></tr>';
+    $rows .= '<tr><td class="trow1"><strong>' . htmlspecialchars_uni($labels['exp']) . ':</strong></td><td class="trow1">' . htmlspecialchars_uni((string)($data['exp_display'] ?? '0')) . ' / ' . htmlspecialchars_uni((string)($data['exp_need_display'] ?? '0')) . '</td></tr>';
+
+    $memprofile['balance'] = $rows;
+
+    $tplHasPlaceholder = false;
+    $re = '~\{\$memprofile\[(?:\'|\")balance(?:\'|\")\]\}~i';
+    if (isset($templates) && is_object($templates) && method_exists($templates, 'get')) {
+        $t = (string)$templates->get('member_profile');
+        if ($t !== '' && preg_match($re, $t)) {
+            $tplHasPlaceholder = true;
+        }
+    }
+
+    if ($tplHasPlaceholder) {
+        return;
+    }
+
+    if (isset($profilefields) && is_string($profilefields) && strpos($profilefields, $rows) === false) {
+        $profilefields .= "\n" . $rows . "\n";
+    }
 }
 
 function af_balance_migrate_from_charactersheets(): void
