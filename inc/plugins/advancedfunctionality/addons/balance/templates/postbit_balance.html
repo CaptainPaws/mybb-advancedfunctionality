@@ -9,7 +9,9 @@
       <div class="af-cs-postbit-stat__icon"><i class="fa-solid fa-diamond" title="Уровень"></i></div>
       <div class="af-cs-postbit-stat__value" data-af-balance-level-value="1">{$level}</div>
     </div>
-    <div class="af-cs-postbit-stat af-cs-postbit-stat--posts" data-af-balance-posts="1"><div class="af-apc-slot" data-af-apc-slot="1" data-uid="{$post['uid']}">{$af_apc_postbit_html}</div></div>
+    <div class="af-cs-postbit-stat af-cs-postbit-stat--posts" data-af-balance-posts="1">
+      <div class="af-apc-slot" data-af-apc-slot="1" data-uid="{$post['uid']}">{$af_apc_postbit_html}</div>
+    </div>
   </div>
   <div class="af-expbar af-cs-postbit-stats__bar" data-af-balance-expbar="1" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{$progress_percent}">
     <span class="af-expbar__fill" style="width: {$progress_percent}%"></span>
