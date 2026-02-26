@@ -19,15 +19,34 @@ function af_balance_init(): void
     global $plugins;
 
     $plugins->add_hook('member_do_register_end', 'af_balance_member_do_register_end');
-    $plugins->add_hook('post_do_newpost_end', 'af_balance_post_do_newpost_end');
-    $plugins->add_hook('datahandler_post_insert_post', 'af_balance_datahandler_post_insert');
-    $plugins->add_hook('datahandler_post_insert_thread', 'af_balance_datahandler_post_insert');
+
+    // INSERT: используем *_end — на этом этапе пост уже в БД и pid гарантированно доступен
+    $plugins->add_hook('datahandler_post_insert_post_end', 'af_balance_datahandler_post_insert');
+    $plugins->add_hook('datahandler_post_insert_thread_end', 'af_balance_datahandler_post_insert');
+
+    // UPDATE: quick edit часто вызывает datahandler_post_update (без _end)
     $plugins->add_hook('datahandler_post_update', 'af_balance_datahandler_post_update');
+    $plugins->add_hook('datahandler_post_update_end', 'af_balance_datahandler_post_update');
+
+    // Safety net (на всякий случай)
+    $plugins->add_hook('post_do_newpost_end', 'af_balance_post_do_newpost_end');
+
     $plugins->add_hook('xmlhttp', 'af_balance_xmlhttp');
     $plugins->add_hook('misc_start', 'af_balance_misc_start');
     $plugins->add_hook('pre_output_page', 'af_balance_pre_output_page', 10);
 }
 
+function af_balance_xmlhttp_init(): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+
+    // Регистрируем все нужные хуки (datahandler_post_update* и т.д.)
+    af_balance_init();
+}
 
 function af_balance_ensure_schema(): void
 {
@@ -464,112 +483,229 @@ function af_balance_datahandler_post_insert($posthandler): void
     $insert = is_array($posthandler->post_insert_data ?? null) ? $posthandler->post_insert_data : [];
     $data   = is_array($posthandler->data ?? null) ? $posthandler->data : [];
 
-    $uid     = (int)($insert['uid'] ?? $data['uid'] ?? 0);
-    $fid     = (int)($insert['fid'] ?? $data['fid'] ?? 0);
-
-    // ✅ ВАЖНО: default = 1, а не 0
-    $visible = (int)($insert['visible'] ?? $data['visible'] ?? 1);
-
-    $pid = (int)($insert['pid'] ?? 0);
+    // На *_end pid должен быть, но делаем железобетон
+    $pid = (int)($posthandler->pid ?? 0);
     if ($pid <= 0) {
-        $pid = (int)($posthandler->pid ?? 0);
-    }
-    if ($pid <= 0 && is_object($db) && method_exists($db, 'insert_id')) {
-        $pid = (int)$db->insert_id();
+        $pid = (int)($insert['pid'] ?? $data['pid'] ?? 0);
     }
 
-    $message = (string)($insert['message'] ?? $data['message'] ?? '');
-
-    // Если всё ещё не хватает данных — добираем из posts (после insert pid уже есть)
-    if ($pid > 0 && ($uid <= 0 || $fid <= 0 || $message === '' || $visible !== 1)) {
-        $row = $db->fetch_array($db->simple_select('posts', 'pid,uid,fid,visible,message', 'pid=' . (int)$pid, ['limit' => 1]));
-        if (is_array($row)) {
-            if ($uid <= 0) $uid = (int)($row['uid'] ?? 0);
-            if ($fid <= 0) $fid = (int)($row['fid'] ?? 0);
-            if ($message === '') $message = (string)($row['message'] ?? '');
-            $visible = (int)($row['visible'] ?? $visible);
+    // Для insert_thread_end иногда удобнее восстановиться через firstpost
+    if ($pid <= 0) {
+        $tid = (int)($posthandler->tid ?? $insert['tid'] ?? $data['tid'] ?? 0);
+        if ($tid > 0) {
+            $pid = (int)$db->fetch_field(
+                $db->simple_select('threads', 'firstpost', 'tid=' . (int)$tid, ['limit' => 1]),
+                'firstpost'
+            );
         }
     }
 
-    af_balance_recalc_post_awards($pid, $uid, $fid, $visible, $message, 'insert');
+    if ($pid <= 0) {
+        af_balance_debug_log('insert_end:pid_not_resolved', [
+            'handler_pid' => (int)($posthandler->pid ?? 0),
+            'insert_pid'  => (int)($insert['pid'] ?? 0),
+            'data_pid'    => (int)($data['pid'] ?? 0),
+            'tid'         => (int)($posthandler->tid ?? $insert['tid'] ?? $data['tid'] ?? 0),
+        ]);
+        return;
+    }
+
+    // Берём фактические данные из posts (самый надёжный источник на *_end)
+    $post = $db->fetch_array($db->simple_select(
+        'posts',
+        'pid,uid,fid,visible,message',
+        'pid=' . (int)$pid,
+        ['limit' => 1]
+    ));
+
+    if (!is_array($post)) {
+        af_balance_debug_log('insert_end:post_not_found', ['pid' => $pid]);
+        return;
+    }
+
+    af_balance_recalc_post_awards(
+        (int)($post['pid'] ?? 0),
+        (int)($post['uid'] ?? 0),
+        (int)($post['fid'] ?? 0),
+        (int)($post['visible'] ?? 0),
+        (string)($post['message'] ?? ''),
+        'insert_end'
+    );
 }
 
 function af_balance_datahandler_post_update($posthandler): void
 {
-    global $db;
+    global $db, $mybb;
 
     if (!is_object($posthandler)) {
         return;
     }
 
-    af_balance_debug_log('datahandler_post_update:enter', [
-        'pid' => (int)($posthandler->pid ?? 0),
-        'script' => defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '',
-    ]);
-
     $update = is_array($posthandler->post_update_data ?? null) ? $posthandler->post_update_data : [];
     $data   = is_array($posthandler->data ?? null) ? $posthandler->data : [];
 
-    $pid     = (int)($update['pid'] ?? $data['pid'] ?? $posthandler->pid ?? 0);
+    $pid = (int)($posthandler->pid ?? $update['pid'] ?? $data['pid'] ?? 0);
+    if ($pid <= 0) {
+        af_balance_debug_log('update:pid_not_resolved', [
+            'handler_pid' => (int)($posthandler->pid ?? 0),
+            'script' => defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '',
+        ]);
+        return;
+    }
+
+    // КРИТИЧНО: для quick edit берём новый текст из datahandler (в БД он может быть ещё старым)
+    $message = (string)($update['message'] ?? $data['message'] ?? '');
+
     $uid     = (int)($update['uid'] ?? $data['uid'] ?? 0);
     $fid     = (int)($update['fid'] ?? $data['fid'] ?? 0);
     $visible = (int)($update['visible'] ?? $data['visible'] ?? 1);
-    $message = (string)($update['message'] ?? $data['message'] ?? '');
 
-    // если datahandler не дал message/fid/uid — берём из БД
-    if ($pid > 0 && ($uid <= 0 || $fid <= 0 || $message === '')) {
-        $row = $db->fetch_array($db->simple_select('posts', 'pid,uid,fid,visible,message', 'pid=' . $pid, ['limit' => 1]));
+    // Если не хватает uid/fid/visible — добираем из БД (это ок даже в quick edit)
+    if ($uid <= 0 || $fid <= 0) {
+        $row = $db->fetch_array($db->simple_select('posts', 'pid,uid,fid,visible,message', 'pid=' . (int)$pid, ['limit' => 1]));
         if (is_array($row)) {
             if ($uid <= 0) $uid = (int)($row['uid'] ?? 0);
             if ($fid <= 0) $fid = (int)($row['fid'] ?? 0);
-            if ($message === '') $message = (string)($row['message'] ?? '');
             $visible = (int)($row['visible'] ?? $visible);
+
+            // message добираем из БД только если datahandler его не дал
+            if ($message === '') {
+                $message = (string)($row['message'] ?? '');
+            }
         }
     }
 
-    af_balance_recalc_post_awards($pid, $uid, $fid, $visible, $message, 'update');
+    if ($uid <= 0 || $fid <= 0 || $message === '') {
+        af_balance_debug_log('update:missing_data', [
+            'pid' => $pid,
+            'uid' => $uid,
+            'fid' => $fid,
+            'has_message' => ($message !== '') ? 1 : 0,
+            'script' => defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '',
+        ]);
+        return;
+    }
+
+    // Источник (для дебага/мета)
+    $source = 'update';
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    if ($script === 'xmlhttp.php') {
+        $action = (string)($mybb->input['action'] ?? '');
+        $do     = (string)($mybb->input['do'] ?? '');
+        if ($action === 'edit_post' && ($do === 'update_post' || $do === 'update')) {
+            $source = 'quick_edit';
+        } else {
+            $source = 'xmlhttp';
+        }
+    } elseif ($script === 'editpost.php') {
+        $source = 'editpost';
+    }
+
+    af_balance_recalc_post_awards($pid, $uid, $fid, $visible, $message, $source);
 }
 
 function af_balance_xmlhttp(): void
 {
-    global $mybb;
+    global $mybb, $db;
 
     $action = (string)($mybb->input['action'] ?? '');
-    $do = (string)($mybb->input['do'] ?? '');
+    $do     = (string)($mybb->input['do'] ?? '');
 
-    if ($action !== 'edit_post' && $do !== 'update_post') {
-        return;
+    // ---- API: получить свежие цифры баланса для поста (после quick edit)
+    if ($action === 'af_balance_snapshot') {
+        while (ob_get_level() > 0) {
+            @ob_end_clean();
+        }
+
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+
+        $pid = (int)($mybb->input['pid'] ?? 0);
+        if ($pid <= 0) {
+            echo json_encode(['success' => false, 'error' => 'Bad pid'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
+
+        $row = $db->fetch_array($db->simple_select('posts', 'pid,uid', 'pid=' . (int)$pid, ['limit' => 1]));
+        $uid = (int)($row['uid'] ?? 0);
+        if ($uid <= 0) {
+            echo json_encode(['success' => false, 'error' => 'Post not found'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
+
+        $bal = af_balance_get($uid);
+        $expScaled = (int)($bal['exp'] ?? 0);
+        $crScaled  = (int)($bal['credits'] ?? 0);
+
+        echo json_encode([
+            'success' => true,
+            'pid' => $pid,
+            'uid' => $uid,
+            'exp_scaled' => $expScaled,
+            'credits_scaled' => $crScaled,
+            'exp_display' => af_balance_format_exp($expScaled),
+            'credits_display' => af_balance_format_credits($crScaled),
+            'currency_symbol' => (string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'),
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
     }
 
-    $pid = (int)($mybb->input['pid'] ?? $mybb->input['post_id'] ?? 0);
-    af_balance_debug_log('xmlhttp:quick_edit_detected', [
-        'action' => $action,
-        'do' => $do,
-        'pid' => $pid,
-    ]);
-
-    if ($pid <= 0) {
+    // ---- Quick edit detection (оставляем как safety-net; на пересчёт влияет datahandler)
+    if ($action === 'edit_post' && ($do === 'update_post' || $do === 'update')) {
+        $pid = (int)($mybb->input['pid'] ?? $mybb->input['post_id'] ?? 0);
+        if ($pid > 0) {
+            // не обязателен, но безопасный фоллбек (дедупит last_hash)
+            af_balance_schedule_post_recalc_after_request($pid, 'quick_edit');
+        }
         return;
     }
-
-    af_balance_schedule_post_recalc_after_request($pid, 'quick_edit');
 }
 
 function af_balance_post_do_newpost_end(): void
 {
-    global $mybb, $db, $pid, $newpid;
+    global $mybb, $db, $posthandler;
 
-    $resolved_pid = (int)($pid ?? $newpid ?? $mybb->input['pid'] ?? 0);
-    if ($resolved_pid <= 0) return;
+    $resolved_pid = 0;
 
-    $post = $db->fetch_array($db->simple_select('posts', 'pid,uid,fid,visible,message', 'pid=' . $resolved_pid, ['limit' => 1]));
-    if (!$post) return;
+    // 1) Самый надёжный вариант — posthandler
+    if (isset($posthandler) && is_object($posthandler)) {
+        $resolved_pid = (int)($posthandler->pid ?? 0);
+    }
+
+    // 2) Fallback: глобальные переменные, которые MyBB часто использует
+    if ($resolved_pid <= 0) {
+        $resolved_pid = (int)($GLOBALS['newpid'] ?? 0);
+    }
+    if ($resolved_pid <= 0) {
+        $resolved_pid = (int)($GLOBALS['pid'] ?? 0);
+    }
+
+    // 3) Fallback: input (на некоторых путях может быть)
+    if ($resolved_pid <= 0) {
+        $resolved_pid = (int)($mybb->input['pid'] ?? $mybb->input['newpid'] ?? 0);
+    }
+
+    if ($resolved_pid <= 0) {
+        return;
+    }
+
+    $post = $db->fetch_array($db->simple_select(
+        'posts',
+        'pid,uid,fid,visible,message',
+        'pid=' . (int)$resolved_pid,
+        ['limit' => 1]
+    ));
+
+    if (!is_array($post)) {
+        return;
+    }
 
     af_balance_recalc_post_awards(
-        (int)$post['pid'],
-        (int)$post['uid'],
-        (int)$post['fid'],
-        (int)$post['visible'],
+        (int)($post['pid'] ?? 0),
+        (int)($post['uid'] ?? 0),
+        (int)($post['fid'] ?? 0),
+        (int)($post['visible'] ?? 0),
         (string)($post['message'] ?? ''),
         'post_do_newpost_end'
     );
@@ -627,8 +763,32 @@ function af_balance_debug_log(string $message, array $context = []): void
     }
     $line .= "\n";
 
-    $logFile = MYBB_ROOT . 'inc/plugins/advancedfunctionality/cache/af_balance_hooks.log';
-    @file_put_contents($logFile, $line, FILE_APPEND);
+    $primaryDir = MYBB_ROOT . 'inc/plugins/advancedfunctionality/cache/';
+    $primaryFile = $primaryDir . 'af_balance_hooks.log';
+
+    $fallbackDir = MYBB_ROOT . 'cache/';
+    $fallbackFile = $fallbackDir . 'af_balance_hooks.log';
+
+    // попытка создать директории, если их нет
+    if (!is_dir($primaryDir)) {
+        @mkdir($primaryDir, 0755, true);
+    }
+    if (!is_dir($fallbackDir)) {
+        @mkdir($fallbackDir, 0755, true);
+    }
+
+    // пишем туда, где можно
+    if (is_dir($primaryDir) && is_writable($primaryDir)) {
+        @file_put_contents($primaryFile, $line, FILE_APPEND);
+        return;
+    }
+
+    if (is_dir($fallbackDir) && is_writable($fallbackDir)) {
+        @file_put_contents($fallbackFile, $line, FILE_APPEND);
+        return;
+    }
+
+    // если вообще никуда — молча (чтобы не ломать вывод)
 }
 
 function af_balance_already_awarded(int $pid, int $uid, int $fid, int $chars): bool
