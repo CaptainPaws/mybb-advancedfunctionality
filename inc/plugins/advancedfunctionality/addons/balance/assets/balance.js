@@ -123,14 +123,13 @@
 
       var text = barDiv.querySelector('[data-af-balance-exptext="1"]') || barDiv.querySelector('.af-expbar__text');
       if (text && snapshot.exp_display != null) {
-        // У тебя формат "X / Y". Меняем левую часть, правую оставляем как было.
-        var old = toStr(text.textContent).trim();
         var expNow = toStr(snapshot.exp_display).trim();
+        var expNeed = (snapshot.exp_need_display != null)
+          ? toStr(snapshot.exp_need_display).trim()
+          : toStr(snapshot.exp_need).trim();
 
-        if (old.indexOf('/') !== -1) {
-          var parts = old.split('/');
-          var right = parts.slice(1).join('/').trim();
-          text.textContent = expNow + ' / ' + right;
+        if (expNeed !== '') {
+          text.textContent = expNow + ' / ' + expNeed;
         } else {
           text.textContent = expNow;
         }

@@ -10,7 +10,7 @@ const AF_BALANCE_BLACKLIST_DEFAULT = "index.php\nusercp.php\nuserlist.php\nsearc
 
 function af_balance_is_installed(): bool { global $db; return $db->table_exists(AF_BALANCE_TABLE); }
 function af_balance_install(): void { af_balance_ensure_schema(); af_balance_ensure_settings(); af_balance_templates_install_or_update(); if (function_exists('rebuild_settings')) rebuild_settings(); }
-function af_balance_activate(): bool { af_balance_ensure_schema(); af_balance_ensure_settings(); af_balance_templates_install_or_update(); af_balance_migrate_from_charactersheets(); af_balance_migrate_credits_scale(); return true; }
+function af_balance_activate(): bool { af_balance_ensure_schema(); af_balance_ensure_settings(); af_balance_templates_install_or_update(); af_balance_migrate_from_charactersheets(); af_balance_migrate_credits_scale(); af_balance_migrate_level_settings_from_charactersheets(); return true; }
 function af_balance_deactivate(): bool { return true; }
 function af_balance_uninstall(): void {}
 
@@ -181,27 +181,99 @@ function af_balance_get_postbit_data(int $uid): array
             'currency_symbol' => (string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'),
             'level' => 1,
             'progress_percent' => 0,
-            'exp_display' => '0.00',
+            'percent' => 0,
+            'exp_current' => 0,
+            'exp_need' => 0,
+            'exp_display' => '0',
+            'exp_need_display' => '0',
         ];
     }
 
     $bal = af_balance_get($uid);
     $expScaled = (int)($bal['exp'] ?? 0);
 
-    $levelData = ['level' => 1, 'percent' => 0];
-    if (function_exists('af_charactersheets_compute_level')) {
-        $computed = af_charactersheets_compute_level($expScaled / AF_BALANCE_EXP_SCALE);
-        if (is_array($computed)) {
-            $levelData = $computed;
-        }
-    }
+    $levelData = af_balance_compute_level($expScaled / AF_BALANCE_EXP_SCALE);
+    $expCurrent = (int)($levelData['exp_current'] ?? 0);
+    $expNeed = (int)($levelData['exp_need'] ?? 0);
 
     return [
         'credits_display' => af_balance_format_credits((int)($bal['credits'] ?? 0)),
         'currency_symbol' => (string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'),
         'level' => (int)($levelData['level'] ?? 1),
-        'progress_percent' => max(0, min(100, (int)($levelData['percent'] ?? 0))),
-        'exp_display' => af_balance_format_exp($expScaled),
+        'progress_percent' => max(0, min(100, (int)($levelData['progress_percent'] ?? 0))),
+        'percent' => max(0, min(100, (int)($levelData['progress_percent'] ?? 0))),
+        'exp_current' => $expCurrent,
+        'exp_need' => $expNeed,
+        'exp_display' => number_format((float)$expCurrent, 0, '.', ' '),
+        'exp_need_display' => number_format((float)$expNeed, 0, '.', ' '),
+    ];
+}
+
+function af_balance_level_settings(): array
+{
+    global $mybb;
+
+    $cap = (int)($mybb->settings['af_balance_level_cap'] ?? 60);
+    $base = (int)($mybb->settings['af_balance_level_req_base'] ?? 2000);
+    $step = (int)($mybb->settings['af_balance_level_req_step'] ?? 1000);
+
+    if ($cap < 1) {
+        $cap = 60;
+    }
+    if ($base < 1) {
+        $base = 2000;
+    }
+    if ($step < 0) {
+        $step = 0;
+    }
+
+    return [
+        'cap' => $cap,
+        'base' => $base,
+        'step' => $step,
+    ];
+}
+
+function af_balance_compute_level(float $exp): array
+{
+    $settings = af_balance_level_settings();
+    $cap = (int)$settings['cap'];
+    $base = (int)$settings['base'];
+    $step = (int)$settings['step'];
+
+    $expCurrent = (int)floor(max(0, $exp));
+    $level = 1;
+    $remaining = $expCurrent;
+    $needForNext = $base;
+
+    while ($remaining >= $needForNext && $level < $cap) {
+        $remaining -= $needForNext;
+        $level++;
+        $needForNext = $base + (($level - 1) * $step);
+        if ($needForNext < 0) {
+            $needForNext = 0;
+        }
+    }
+
+    $progressPercent = 100;
+    if ($needForNext > 0) {
+        $progressPercent = (int)floor(($expCurrent / $needForNext) * 100);
+        if ($progressPercent < 0) {
+            $progressPercent = 0;
+        } elseif ($progressPercent > 100) {
+            $progressPercent = 100;
+        }
+    }
+
+    return [
+        'level' => $level,
+        'cap' => $cap,
+        'exp_current' => $expCurrent,
+        'exp_need' => $needForNext,
+        'progress_percent' => $progressPercent,
+        // compatibility aliases
+        'percent' => $progressPercent,
+        'exp_in_level' => $expCurrent,
     ];
 }
 
@@ -228,6 +300,9 @@ function af_balance_ensure_settings(): void
         ['af_balance_manage_groups','Balance manage groups','text','3,4',34],
         ['af_balance_blacklist','Balance assets blacklist','textarea',AF_BALANCE_BLACKLIST_DEFAULT,35],
         ['af_balance_debug_hooks','Debug post hooks','yesno','0',36],
+        ['af_balance_level_cap','Level cap','text','60',37],
+        ['af_balance_level_req_base','Level requirement base','text','2000',38],
+        ['af_balance_level_req_step','Level requirement step','text','1000',39],
     ];
     $legacyMigratedSid = af_balance_pick_setting_sid('af_balance_migrated_credits_scale', $needsRebuild);
     if ($legacyMigratedSid > 0) {
@@ -258,6 +333,51 @@ function af_balance_ensure_settings(): void
     }
 
     if ($needsRebuild && function_exists('rebuild_settings')) {
+        rebuild_settings();
+    }
+
+    af_balance_migrate_level_settings_from_charactersheets();
+}
+
+function af_balance_migrate_level_settings_from_charactersheets(): void
+{
+    global $db;
+
+    $pairs = [
+        'af_charactersheets_level_cap' => 'af_balance_level_cap',
+        'af_charactersheets_level_req_base' => 'af_balance_level_req_base',
+        'af_charactersheets_level_req_step' => 'af_balance_level_req_step',
+    ];
+
+    $defaults = [
+        'af_balance_level_cap' => '60',
+        'af_balance_level_req_base' => '2000',
+        'af_balance_level_req_step' => '1000',
+    ];
+
+    $changed = false;
+    foreach ($pairs as $oldKey => $newKey) {
+        $oldSid = af_balance_pick_setting_sid($oldKey, $changed);
+        $newSid = af_balance_pick_setting_sid($newKey, $changed);
+        if ($oldSid <= 0 || $newSid <= 0) {
+            continue;
+        }
+
+        $oldVal = (string)$db->fetch_field($db->simple_select('settings', 'value', 'sid=' . $oldSid, ['limit' => 1]), 'value');
+        $newVal = (string)$db->fetch_field($db->simple_select('settings', 'value', 'sid=' . $newSid, ['limit' => 1]), 'value');
+        $default = (string)($defaults[$newKey] ?? '');
+
+        if ($oldVal === '') {
+            continue;
+        }
+
+        if ($newVal === '' || $newVal === $default) {
+            $db->update_query('settings', ['value' => $oldVal], 'sid=' . $newSid);
+            $changed = true;
+        }
+    }
+
+    if ($changed && function_exists('rebuild_settings')) {
         rebuild_settings();
     }
 }
@@ -724,7 +844,10 @@ function af_balance_xmlhttp(): void
             'uid' => $uid,
             'exp_scaled' => (int)($bal['exp'] ?? 0),
             'credits_scaled' => (int)($bal['credits'] ?? 0),
-            'exp_display' => (string)($data['exp_display'] ?? '0.00'),
+            'exp_current' => (int)($data['exp_current'] ?? 0),
+            'exp_need' => (int)($data['exp_need'] ?? 0),
+            'exp_display' => (string)($data['exp_display'] ?? '0'),
+            'exp_need_display' => (string)($data['exp_need_display'] ?? '0'),
             'credits_display' => (string)($data['credits_display'] ?? '0.00'),
             'currency_symbol' => (string)($data['currency_symbol'] ?? '¢'),
             'level' => (int)($data['level'] ?? 1),
@@ -1214,7 +1337,10 @@ function af_balance_handle_manage_adjust(): void
                 'success' => true,
                 'uid' => $uid,
                 'kind' => $kind,
-                'exp_display' => (string)($data['exp_display'] ?? '0.00'),
+                'exp_current' => (int)($data['exp_current'] ?? 0),
+                'exp_need' => (int)($data['exp_need'] ?? 0),
+                'exp_display' => (string)($data['exp_display'] ?? '0'),
+                'exp_need_display' => (string)($data['exp_need_display'] ?? '0'),
                 'credits_display' => (string)($data['credits_display'] ?? '0.00'),
                 'currency_symbol' => (string)($data['currency_symbol'] ?? '¢'),
                 'level' => (int)($data['level'] ?? 1),
@@ -1328,7 +1454,10 @@ function af_balance_handle_manage_adjust(): void
         'success'         => true,
         'uid'             => $uid,
         'kind'            => $kind,
-        'exp_display'     => (string)($data['exp_display'] ?? '0.00'),
+        'exp_current'    => (int)($data['exp_current'] ?? 0),
+        'exp_need'       => (int)($data['exp_need'] ?? 0),
+        'exp_display'     => (string)($data['exp_display'] ?? '0'),
+        'exp_need_display'=> (string)($data['exp_need_display'] ?? '0'),
         'credits_display' => (string)($data['credits_display'] ?? '0.00'),
         'currency_symbol' => (string)($data['currency_symbol'] ?? '¢'),
         'level'           => (int)($data['level'] ?? 1),
@@ -1404,9 +1533,7 @@ function af_balance_render_manage_page(): void
         $exp = (int)($row['exp'] ?? 0);
         $credits = (int)($row['credits'] ?? 0);
 
-        $levelData = function_exists('af_charactersheets_compute_level')
-            ? af_charactersheets_compute_level($exp / AF_BALANCE_EXP_SCALE)
-            : ['level' => 1];
+        $levelData = af_balance_compute_level($exp / AF_BALANCE_EXP_SCALE);
 
         $avatar = trim((string)($row['avatar'] ?? ''));
         if ($avatar === '') $avatar = 'images/default_avatar.png';

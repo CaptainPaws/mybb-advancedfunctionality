@@ -3,7 +3,7 @@ if (!defined('IN_MYBB')) {
     die('No direct access');
 }
 
-function af_charactersheets_compute_level(float $exp): array
+function af_charactersheets_compute_level_legacy(float $exp): array
 {
     global $mybb;
 
@@ -20,6 +20,9 @@ function af_charactersheets_compute_level(float $exp): array
             'next_req_total' => 0,
             'exp_in_level' => 0,
             'exp_need' => 0,
+            'exp_current' => 0,
+            'progress_percent' => 0,
+            'cap' => max(1, $level_cap),
         ];
     }
 
@@ -32,7 +35,7 @@ function af_charactersheets_compute_level(float $exp): array
         $remaining -= $next_req;
         $prev_req_total += $next_req;
         $level++;
-        $next_req = $base + (($level - 2) * $step);
+        $next_req = $base + (($level - 1) * $step);
         if ($next_req <= 0) {
             break;
         }
@@ -55,12 +58,42 @@ function af_charactersheets_compute_level(float $exp): array
     return [
         'level' => $level,
         'percent' => $percent,
+        'progress_percent' => $percent,
         'next_req' => $next_req,
         'prev_req_total' => $prev_req_total,
         'next_req_total' => $next_req_total,
         'exp_in_level' => $exp_in_level,
+        'exp_current' => $exp_in_level,
         'exp_need' => $exp_need,
+        'cap' => max(1, $level_cap),
     ];
+}
+
+function af_charactersheets_compute_level(float $exp): array
+{
+    if (function_exists('af_balance_compute_level')) {
+        $computed = af_balance_compute_level($exp);
+        if (is_array($computed)) {
+            $percent = (int)($computed['progress_percent'] ?? $computed['percent'] ?? 0);
+            $expCurrent = (float)($computed['exp_current'] ?? 0);
+            $expNeed = (float)($computed['exp_need'] ?? 0);
+
+            return [
+                'level' => (int)($computed['level'] ?? 1),
+                'cap' => (int)($computed['cap'] ?? 1),
+                'percent' => $percent,
+                'progress_percent' => $percent,
+                'next_req' => $expNeed,
+                'prev_req_total' => 0,
+                'next_req_total' => $expNeed,
+                'exp_in_level' => $expCurrent,
+                'exp_current' => $expCurrent,
+                'exp_need' => $expNeed,
+            ];
+        }
+    }
+
+    return af_charactersheets_compute_level_legacy($exp);
 }
 
 function af_charactersheets_award_exp_manual(array $sheet, array $user, int $fid, string $amount_raw, string $reason): array
@@ -107,8 +140,9 @@ function af_charactersheets_balance_snapshot(int $uid): array
         'exp' => $exp_total,
         'exp_display' => number_format($level_data['exp_in_level'] ?? 0, 2, '.', ' '),
         'exp_next_display' => number_format($level_data['exp_need'] ?? 0, 2, '.', ' '),
+        'exp_need' => (float)($level_data['exp_need'] ?? 0),
         'level' => (int)($level_data['level'] ?? 1),
-        'progress_percent' => (int)($level_data['percent'] ?? 0),
+        'progress_percent' => (int)($level_data['progress_percent'] ?? $level_data['percent'] ?? 0),
         'credits_display' => function_exists('af_balance_format_credits') ? af_balance_format_credits((int)($balance['credits'] ?? 0)) : number_format(((int)($balance['credits'] ?? 0))/100, 2, '.', ' '),
     ];
 }
