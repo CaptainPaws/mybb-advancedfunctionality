@@ -51,7 +51,8 @@ function af_charactersheets_postbit_button(array &$post): void
             $ability_tokens_postbit_html = '<div class="af-cs-postbit-stat af-cs-postbit-stat--ability" data-af-balance-ability="1" data-af-balance-ability-scaled="' . $ability_tokens_scaled . '"><div class="af-cs-postbit-stat__icon"><i class="fa-solid fa-star" title="Ability Tokens"></i></div><div class="af-cs-postbit-stat__value" data-af-balance-ability-value="1">' . $ability_tokens_display . ' ' . $ability_tokens_symbol . '</div></div>';
         }
 
-        $af_apc_postbit_html = '<af_apc_uid_' . $uid . '>';
+        $isQuickReplyContext = (defined('THIS_SCRIPT') && strtolower((string)THIS_SCRIPT) === 'newreply.php') || defined('IN_XMLHTTP');
+        $af_apc_postbit_html = $isQuickReplyContext ? '' : '<af_apc_uid_' . $uid . '>';
 
         $tpl_balance = $templates->get('af_balance_postbit');
         if ($tpl_balance === '') {
