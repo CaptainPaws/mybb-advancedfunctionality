@@ -218,10 +218,10 @@ function af_balance_level_settings(): array
     $step = (int)($mybb->settings['af_balance_level_req_step'] ?? 1000);
 
     if ($cap < 1) {
-        $cap = 60;
+        $cap = 1;
     }
-    if ($base < 1) {
-        $base = 2000;
+    if ($base < 0) {
+        $base = 0;
     }
     if ($step < 0) {
         $step = 0;
@@ -243,17 +243,23 @@ function af_balance_compute_level(float $exp): array
 
     $expCurrent = (int)floor(max(0, $exp));
     $level = 1;
-    $remaining = $expCurrent;
-    $needForNext = $base;
 
-    while ($remaining >= $needForNext && $level < $cap) {
-        $remaining -= $needForNext;
-        $level++;
-        $needForNext = $base + (($level - 1) * $step);
-        if ($needForNext < 0) {
-            $needForNext = 0;
+    $reqForLevel = static function (int $targetLevel) use ($base, $step): int {
+        if ($targetLevel <= 1) {
+            return 0;
         }
+
+        $need = $base + (($targetLevel - 2) * $step);
+
+        return (int)max(0, $need);
+    };
+
+    while ($level < $cap && $expCurrent >= $reqForLevel($level + 1)) {
+        $level++;
     }
+
+    $nextLevel = min($level + 1, $cap);
+    $needForNext = $reqForLevel($nextLevel);
 
     $progressPercent = 100;
     if ($needForNext > 0) {
