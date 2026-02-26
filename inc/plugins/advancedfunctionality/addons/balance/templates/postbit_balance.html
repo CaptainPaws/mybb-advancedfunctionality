@@ -1,6 +1,6 @@
 <div class="af-cs-postbit-stats" data-af-balance-plaque="1" data-pid="{$post['pid']}" data-uid="{$post['uid']}">
-  <div class="af-cs-postbit-stats__credits" data-af-balance-credits="1"><i class="fa-solid fa-wallet"></i>: {$credits_display} {$currency_symbol}</div>
-  <div class="af-cs-postbit-stats__level" data-af-balance-level="1">Level {$level}</div>
+  <div class="af-cs-postbit-stats__credits" data-af-balance-credits="1"><i class="fa-solid fa-wallet" title="Баланс"></i><br> {$credits_display} {$currency_symbol}</div>
+  <div class="af-cs-postbit-stats__level" data-af-balance-level="1"><i class="fa-solid fa-diamond" title="Уровень"></i><br> {$level}</div>
   <div class="af-expbar af-cs-postbit-stats__bar" data-af-balance-expbar="1" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{$progress_percent}">
     <span class="af-expbar__fill" style="width: {$progress_percent}%"></span>
     <span class="af-expbar__text" data-af-balance-exptext="1">{$exp_display} / {$exp_need_display}</span>
