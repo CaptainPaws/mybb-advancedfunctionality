@@ -2328,13 +2328,14 @@ function af_advancedpostcounter_postsactivity_page(): void
     $th_month = $esc('За месяц');
     $th_week  = $esc('За неделю');
     $th_last  = $esc('Последний пост');
+    $th_all_posts = $esc(!empty($lang->af_apc_th_all_posts) ? (string)$lang->af_apc_th_all_posts : 'Все посты пользователя');
 
     // rows
     $rows = '';
     $rowTpl = (string)$templates->get('advancedpostcounter_postsactivity_row');
 
     if (empty($uids)) {
-        $rows = '<tr><td class="trow1" colspan="6"><em>'.$esc('Нет данных.').'</em></td></tr>';
+        $rows = '<tr><td class="trow1" colspan="7"><em>'.$esc('Нет данных.').'</em></td></tr>';
     } else {
         foreach ($uids as $uid) {
             $u = $users[$uid];
@@ -2408,6 +2409,9 @@ function af_advancedpostcounter_postsactivity_page(): void
                 $row_last = '<span class="smalltext" style="opacity:.75;">'.$esc('Никогда').'</span>';
             }
 
+            $row_all_posts_url = rtrim((string)$mybb->settings['bburl'], '/') . '/postsbyuser.php?uid=' . (int)$uid;
+            $row_all_posts_label = $esc(!empty($lang->af_apc_btn_all_posts) ? (string)$lang->af_apc_btn_all_posts : 'Посты');
+
             if ($rowTpl !== '') {
                 eval("\$rows .= \"".$rowTpl."\";");
             } else {
@@ -2418,6 +2422,7 @@ function af_advancedpostcounter_postsactivity_page(): void
                     .'<td class="'.$row_bg.'" style="text-align:center; white-space:nowrap;">'.$row_month.'</td>'
                     .'<td class="'.$row_bg.'" style="text-align:center; white-space:nowrap;">'.$row_week.'</td>'
                     .'<td class="'.$row_bg.'">'.$row_last.'</td>'
+                    .'<td class="'.$row_bg.'" style="text-align:center; white-space:nowrap;"><a class="button" href="'.$esc($row_all_posts_url).'">'.$row_all_posts_label.'</a></td>'
                     .'</tr>';
             }
         }
@@ -2865,5 +2870,4 @@ function af_apc_install_postsactivity_alias(bool $force = false): void
 
     @file_put_contents($dst, $srcCode);
 }
-
 
