@@ -80,13 +80,15 @@
     var postEl = findPostContainer(pid);
     if (!postEl) return;
 
-    // Ищем блок плакетки/стат
-    var plaque = postEl.querySelector('.af-cs-plaque') || postEl.querySelector('.af-cs-postbit-stats') || null;
+    // New selectors (data markers) + fallback на legacy классы
+    var plaque = postEl.querySelector('[data-af-balance-plaque="1"]') || postEl.querySelector('.af-cs-postbit-stats') || null;
     if (!plaque) return;
 
-    var creditsDiv = postEl.querySelector('.af-cs-postbit-stats__credits');
-    var levelDiv   = postEl.querySelector('.af-cs-postbit-stats__level');
-    var barDiv     = postEl.querySelector('.af-expbar.af-cs-postbit-stats__bar') || postEl.querySelector('.af-cs-postbit-stats__bar.af-expbar');
+    var creditsDiv = plaque.querySelector('[data-af-balance-credits="1"]') || postEl.querySelector('.af-cs-postbit-stats__credits');
+    var levelDiv   = plaque.querySelector('[data-af-balance-level="1"]') || postEl.querySelector('.af-cs-postbit-stats__level');
+    var barDiv     = plaque.querySelector('[data-af-balance-expbar="1"]')
+      || postEl.querySelector('.af-expbar.af-cs-postbit-stats__bar')
+      || postEl.querySelector('.af-cs-postbit-stats__bar.af-expbar');
 
     // credits
     if (creditsDiv) {
@@ -119,7 +121,7 @@
         }
       }
 
-      var text = barDiv.querySelector('.af-expbar__text');
+      var text = barDiv.querySelector('[data-af-balance-exptext="1"]') || barDiv.querySelector('.af-expbar__text');
       if (text && snapshot.exp_display != null) {
         // У тебя формат "X / Y". Меняем левую часть, правую оставляем как было.
         var old = toStr(text.textContent).trim();
