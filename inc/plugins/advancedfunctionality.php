@@ -1005,6 +1005,8 @@ $plugins->add_hook('pre_output_page', 'advancedfunctionality_bootstrap_addons_pr
 // Буфер-страховка для страниц, которые печатаются без output_page() (особенно usercp/misc)
 $plugins->add_hook('global_start', 'advancedfunctionality_outputbuffer_start', -5);
 
+$plugins->add_hook('xmlhttp', 'af_core_xmlhttp_bootstrap_addons', 1);
+
 
 // XMLHTTP роутинг (аналог MyAlerts)
 $plugins->add_hook('xmlhttp', 'af_xmlhttp_router', -1);
@@ -1088,6 +1090,76 @@ function advancedfunctionality_outputbuffer_start()
 
     // shutdown сработает даже если кто-то делает exit;
     register_shutdown_function('advancedfunctionality_outputbuffer_flush');
+}
+
+function af_core_xmlhttp_bootstrap_addons(): void
+{
+    global $mybb;
+
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+
+    if (!defined('THIS_SCRIPT') || THIS_SCRIPT !== 'xmlhttp.php') {
+        return;
+    }
+    if (!defined('AF_ADDONS')) {
+        return;
+    }
+
+    $base = rtrim((string)AF_ADDONS, '/');
+    if ($base === '' || !is_dir($base)) {
+        return;
+    }
+
+    $manifestFiles = glob($base . '/*/manifest.php');
+    if (!$manifestFiles || !is_array($manifestFiles)) {
+        return;
+    }
+
+    foreach ($manifestFiles as $mf) {
+        if (!is_string($mf) || $mf === '' || !is_file($mf)) {
+            continue;
+        }
+
+        $manifest = require $mf;
+        if (!is_array($manifest)) {
+            continue;
+        }
+
+        $id = (string)($manifest['id'] ?? '');
+        if ($id === '') {
+            // fallback по папке
+            $id = basename(dirname($mf));
+        }
+        if ($id === '') {
+            continue;
+        }
+
+        // включён ли аддон (канон AF: af_{id}_enabled)
+        $enabledKey = 'af_' . $id . '_enabled';
+        if (empty($mybb->settings[$enabledKey])) {
+            continue;
+        }
+
+        $bootstrap = (string)($manifest['bootstrap'] ?? ($id . '.php'));
+        if ($bootstrap === '') {
+            continue;
+        }
+
+        $bootstrapPath = $base . '/' . $id . '/' . $bootstrap;
+        if (is_file($bootstrapPath)) {
+            require_once $bootstrapPath;
+        }
+
+        // ВАЖНО: в xmlhttp-рантайме зовём ТОЛЬКО явную xmlhttp-инициализацию аддона
+        $xmlInitFn = 'af_' . $id . '_xmlhttp_init';
+        if (function_exists($xmlInitFn)) {
+            $xmlInitFn();
+        }
+    }
 }
 
 function advancedfunctionality_outputbuffer_flush()
