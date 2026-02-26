@@ -9,8 +9,8 @@ const AF_BALANCE_CREDITS_SCALE = 100;
 const AF_BALANCE_BLACKLIST_DEFAULT = "index.php\nusercp.php\nuserlist.php\nsearch.php\ngallery.php\nkb.php\nforumdisplay.php";
 
 function af_balance_is_installed(): bool { global $db; return $db->table_exists(AF_BALANCE_TABLE); }
-function af_balance_install(): void { af_balance_ensure_schema(); af_balance_ensure_settings(); if (function_exists('rebuild_settings')) rebuild_settings(); }
-function af_balance_activate(): bool { af_balance_ensure_schema(); af_balance_ensure_settings(); af_balance_migrate_from_charactersheets(); af_balance_migrate_credits_scale(); return true; }
+function af_balance_install(): void { af_balance_ensure_schema(); af_balance_ensure_settings(); af_balance_templates_install_or_update(); if (function_exists('rebuild_settings')) rebuild_settings(); }
+function af_balance_activate(): bool { af_balance_ensure_schema(); af_balance_ensure_settings(); af_balance_templates_install_or_update(); af_balance_migrate_from_charactersheets(); af_balance_migrate_credits_scale(); return true; }
 function af_balance_deactivate(): bool { return true; }
 function af_balance_uninstall(): void {}
 
@@ -122,6 +122,87 @@ function af_balance_ensure_schema(): void
 
         // Если вдруг у старой схемы были reward_exp/reward_credits — можно оставить, не мешает.
     }   
+}
+
+function af_balance_templates_install_or_update(): void
+{
+    global $db;
+
+    $tplDir = __DIR__ . '/templates';
+    if (!is_dir($tplDir)) {
+        return;
+    }
+
+    $map = [
+        'postbit_balance' => ['af_balance_postbit', 'af_balance_postbit_plaque'],
+    ];
+
+    foreach ($map as $basename => $titles) {
+        $path = $tplDir . '/' . $basename . '.html';
+        if (!is_file($path)) {
+            continue;
+        }
+
+        $tpl = @file_get_contents($path);
+        if ($tpl === false) {
+            continue;
+        }
+
+        foreach ($titles as $titleRaw) {
+            $title = $db->escape_string($titleRaw);
+            $existing = $db->simple_select('templates', 'tid', "title='{$title}' AND sid='-1'", ['limit' => 1]);
+            $tid = (int)$db->fetch_field($existing, 'tid');
+
+            $row = [
+                'title'    => $title,
+                'template' => $db->escape_string($tpl),
+                'sid'      => -1,
+                'version'  => '1839',
+                'dateline' => TIME_NOW,
+            ];
+
+            if ($tid) {
+                $db->update_query('templates', $row, "tid='{$tid}'");
+            } else {
+                $db->insert_query('templates', $row);
+            }
+        }
+    }
+}
+
+function af_balance_get_postbit_data(int $uid): array
+{
+    global $mybb;
+
+    $uid = (int)$uid;
+    if ($uid <= 0) {
+        return [
+            'credits_display' => '0.00',
+            'currency_symbol' => (string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'),
+            'level' => 1,
+            'progress_percent' => 0,
+            'exp_display' => '0.00',
+        ];
+    }
+
+    $bal = af_balance_get($uid);
+    $expScaled = (int)($bal['exp'] ?? 0);
+
+    $levelData = ['level' => 1, 'percent' => 0];
+    if (function_exists('af_charactersheets_compute_level')) {
+        $computed = af_charactersheets_compute_level($expScaled / AF_BALANCE_EXP_SCALE);
+        if (is_array($computed)) {
+            $levelData = $computed;
+        }
+    }
+
+    return [
+        'credits_display' => af_balance_format_credits((int)($bal['credits'] ?? 0)),
+        'currency_symbol' => (string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'),
+        'level' => (int)($levelData['level'] ?? 1),
+        'progress_percent' => max(0, min(100, (int)($levelData['percent'] ?? 0))),
+        'exp_display' => af_balance_format_exp($expScaled),
+    ];
 }
 
 function af_balance_ensure_settings(): void
@@ -635,32 +716,19 @@ function af_balance_xmlhttp(): void
         }
 
         $bal = af_balance_get($uid);
-        $expScaled = (int)($bal['exp'] ?? 0);
-        $crScaled  = (int)($bal['credits'] ?? 0);
-
-        $level = 1;
-        $percent = 0;
-
-        if (function_exists('af_charactersheets_compute_level')) {
-            $expFloat = $expScaled / AF_BALANCE_EXP_SCALE;
-            $ld = af_charactersheets_compute_level($expFloat);
-            if (is_array($ld)) {
-                if (isset($ld['level'])) $level = (int)$ld['level'];
-                if (isset($ld['percent'])) $percent = (int)$ld['percent'];
-            }
-        }
+        $data = af_balance_get_postbit_data($uid);
 
         echo json_encode([
             'success' => true,
             'pid' => $pid,
             'uid' => $uid,
-            'exp_scaled' => $expScaled,
-            'credits_scaled' => $crScaled,
-            'exp_display' => af_balance_format_exp($expScaled),
-            'credits_display' => af_balance_format_credits($crScaled),
-            'currency_symbol' => (string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'),
-            'level' => $level,
-            'progress_percent' => $percent,
+            'exp_scaled' => (int)($bal['exp'] ?? 0),
+            'credits_scaled' => (int)($bal['credits'] ?? 0),
+            'exp_display' => (string)($data['exp_display'] ?? '0.00'),
+            'credits_display' => (string)($data['credits_display'] ?? '0.00'),
+            'currency_symbol' => (string)($data['currency_symbol'] ?? '¢'),
+            'level' => (int)($data['level'] ?? 1),
+            'progress_percent' => (int)($data['progress_percent'] ?? 0),
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }
@@ -1140,21 +1208,17 @@ function af_balance_handle_manage_adjust(): void
 
         // если уже был такой req — просто вернём текущий баланс без повторного списания/начисления
         if (!empty($_SESSION['af_balance_req'][$key])) {
-            $bal2 = af_balance_get($uid);
-
-            $expFloat = ((int)($bal2['exp'] ?? 0)) / AF_BALANCE_EXP_SCALE;
-            $levelData = function_exists('af_charactersheets_compute_level')
-                ? af_charactersheets_compute_level($expFloat)
-                : ['level' => 1, 'percent' => 0];
+            $data = af_balance_get_postbit_data($uid);
 
             echo json_encode([
                 'success' => true,
                 'uid' => $uid,
                 'kind' => $kind,
-                'exp_display' => af_balance_format_exp((int)($bal2['exp'] ?? 0)),
-                'credits_display' => af_balance_format_credits((int)($bal2['credits'] ?? 0)),
-                'level' => (int)($levelData['level'] ?? 1),
-                'progress_percent' => (int)($levelData['percent'] ?? 0),
+                'exp_display' => (string)($data['exp_display'] ?? '0.00'),
+                'credits_display' => (string)($data['credits_display'] ?? '0.00'),
+                'currency_symbol' => (string)($data['currency_symbol'] ?? '¢'),
+                'level' => (int)($data['level'] ?? 1),
+                'progress_percent' => (int)($data['progress_percent'] ?? 0),
                 'deduped' => 1
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             exit;
@@ -1258,23 +1322,17 @@ function af_balance_handle_manage_adjust(): void
         ]);
     }
 
-    // Для ответа нам нужен актуальный бал
-    $bal2 = af_balance_get($uid);
-    $expScaled = (int)($bal2['exp'] ?? 0);
-
-    $expFloat = $expScaled / AF_BALANCE_EXP_SCALE;
-    $levelData = function_exists('af_charactersheets_compute_level')
-        ? af_charactersheets_compute_level($expFloat)
-        : ['level' => 1, 'percent' => 0];
+    $data = af_balance_get_postbit_data($uid);
 
     echo json_encode([
         'success'         => true,
         'uid'             => $uid,
         'kind'            => $kind,
-        'exp_display'     => af_balance_format_exp((int)($bal2['exp'] ?? 0)),
-        'credits_display' => af_balance_format_credits((int)($bal2['credits'] ?? 0)),
-        'level'           => (int)($levelData['level'] ?? 1),
-        'progress_percent'=> (int)($levelData['percent'] ?? 0),
+        'exp_display'     => (string)($data['exp_display'] ?? '0.00'),
+        'credits_display' => (string)($data['credits_display'] ?? '0.00'),
+        'currency_symbol' => (string)($data['currency_symbol'] ?? '¢'),
+        'level'           => (int)($data['level'] ?? 1),
+        'progress_percent'=> (int)($data['progress_percent'] ?? 0),
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }

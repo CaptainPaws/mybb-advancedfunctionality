@@ -1937,55 +1937,6 @@
   gap: 10px;
   justify-content: flex-end;
 }
-
-.af-cs-postbit-stats {
-  margin-top: 8px;
-  display: grid;
-  gap: 6px;
-  font-size: 12px;
-}
-
-.af-cs-postbit-stats__level {
-  opacity: 0.9;
-}
-
-.af-cs-postbit-stats__bar {
-  height: 18px;
-}
-
-.af-expbar {
-  position: relative;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.12);
-  overflow: hidden;
-}
-
-.af-expbar__fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  z-index: 1;
-  background: linear-gradient(90deg, #5cc3ff, #7bffb8);
-}
-
-.af-expbar__text {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: 2;
-  color: #0f1114;
-  font-weight: lighter;
-  font-size: 9px;
-}
-
-.af-cs-postbit-stats__credits {
-  opacity: 0.9;
-}
-
 .af-cs-inline-error{margin:8px 0;padding:8px 10px;border:1px solid #b84a4a;background:rgba(184,74,74,.15);color:#ffd4d4;border-radius:8px;font-size:13px}
 
 .af-cs-toast{position:sticky;top:10px;z-index:5;margin:8px 0;padding:8px 10px;border:1px solid #3f7d4f;background:rgba(56,125,79,.2);color:#d8ffe2;border-radius:8px;font-size:13px}
