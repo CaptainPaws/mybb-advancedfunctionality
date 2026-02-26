@@ -1489,12 +1489,19 @@ function af_advancedpostcounter_pre_output(&$page): void
         return;
     }
 
+    // Cупер-дешёвый early return: если APC-маркеров нет, дальше ничего не делаем.
+    if (strpos((string)$page, '<af_apc_') === false) {
+        return;
+    }
+
     // -------------------- 1) Подключаем ассеты с filemtime-версией --------------------
     $assetsDisabled = af_apc_assets_disabled_for_current_page();
 
-    // Удаляем предыдущие инжекты APC (включая старые ?v), чтобы в финале оставить только каноничную версию.
-    $page = (string)preg_replace('~<link\b[^>]*href=["\"][^"\"]*advancedpostcounter\.css(?:\?[^"\"]*)?["\"][^>]*>\s*~iu', '', (string)$page);
-    $page = (string)preg_replace('~<script\b[^>]*src=["\"][^"\"]*advancedpostcounter\.js(?:\?[^"\"]*)?["\"][^>]*>\s*</script>\s*~iu', '', (string)$page);
+    if (strpos((string)$page, 'advancedpostcounter.') !== false) {
+        // Удаляем предыдущие инжекты APC (включая старые ?v), чтобы в финале оставить только каноничную версию.
+        $page = (string)preg_replace('~<link\b[^>]*href=["\"][^"\"]*advancedpostcounter\.css(?:\?[^"\"]*)?["\"][^>]*>\s*~iu', '', (string)$page);
+        $page = (string)preg_replace('~<script\b[^>]*src=["\"][^"\"]*advancedpostcounter\.js(?:\?[^"\"]*)?["\"][^>]*>\s*</script>\s*~iu', '', (string)$page);
+    }
 
     if (!$assetsDisabled) {
         $css = af_apc_build_asset_url('advancedpostcounter.css');
@@ -1519,7 +1526,9 @@ function af_advancedpostcounter_pre_output(&$page): void
         }
     }
 
-    af_apc_dedupe_assets_in_html($page);
+    if (strpos((string)$page, 'advancedpostcounter.') !== false) {
+        af_apc_dedupe_assets_in_html($page);
+    }
 
     // -------------------- 2) Ищем маркеры на странице --------------------
     $uids = [];
