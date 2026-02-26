@@ -23,6 +23,7 @@ function af_balance_init(): void
     $plugins->add_hook('datahandler_post_insert_post', 'af_balance_datahandler_post_insert');
     $plugins->add_hook('datahandler_post_insert_thread', 'af_balance_datahandler_post_insert');
     $plugins->add_hook('datahandler_post_update', 'af_balance_datahandler_post_update');
+    $plugins->add_hook('xmlhttp', 'af_balance_xmlhttp');
     $plugins->add_hook('misc_start', 'af_balance_misc_start');
     $plugins->add_hook('pre_output_page', 'af_balance_pre_output_page', 10);
 }
@@ -96,6 +97,9 @@ function af_balance_ensure_schema(): void
         if (empty($cols['updated_at'])) {
             $db->write_query("ALTER TABLE {$table} ADD COLUMN updated_at INT UNSIGNED NOT NULL DEFAULT 0");
         }
+        if (empty($cols['chars_count'])) {
+            $db->write_query("ALTER TABLE {$table} ADD COLUMN chars_count INT NOT NULL DEFAULT 0");
+        }
 
         // Если вдруг у старой схемы были reward_exp/reward_credits — можно оставить, не мешает.
     }   
@@ -123,6 +127,7 @@ function af_balance_ensure_settings(): void
         ['af_balance_currency_symbol','Currency symbol','text','¢',33],
         ['af_balance_manage_groups','Balance manage groups','text','3,4',34],
         ['af_balance_blacklist','Balance assets blacklist','textarea',AF_BALANCE_BLACKLIST_DEFAULT,35],
+        ['af_balance_debug_hooks','Debug post hooks','yesno','0',36],
     ];
     $legacyMigratedSid = af_balance_pick_setting_sid('af_balance_migrated_credits_scale', $needsRebuild);
     if ($legacyMigratedSid > 0) {
@@ -497,6 +502,11 @@ function af_balance_datahandler_post_update($posthandler): void
         return;
     }
 
+    af_balance_debug_log('datahandler_post_update:enter', [
+        'pid' => (int)($posthandler->pid ?? 0),
+        'script' => defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '',
+    ]);
+
     $update = is_array($posthandler->post_update_data ?? null) ? $posthandler->post_update_data : [];
     $data   = is_array($posthandler->data ?? null) ? $posthandler->data : [];
 
@@ -520,6 +530,31 @@ function af_balance_datahandler_post_update($posthandler): void
     af_balance_recalc_post_awards($pid, $uid, $fid, $visible, $message, 'update');
 }
 
+function af_balance_xmlhttp(): void
+{
+    global $mybb;
+
+    $action = (string)($mybb->input['action'] ?? '');
+    $do = (string)($mybb->input['do'] ?? '');
+
+    if ($action !== 'edit_post' && $do !== 'update_post') {
+        return;
+    }
+
+    $pid = (int)($mybb->input['pid'] ?? $mybb->input['post_id'] ?? 0);
+    af_balance_debug_log('xmlhttp:quick_edit_detected', [
+        'action' => $action,
+        'do' => $do,
+        'pid' => $pid,
+    ]);
+
+    if ($pid <= 0) {
+        return;
+    }
+
+    af_balance_schedule_post_recalc_after_request($pid, 'quick_edit');
+}
+
 function af_balance_post_do_newpost_end(): void
 {
     global $mybb, $db, $pid, $newpid;
@@ -538,6 +573,62 @@ function af_balance_post_do_newpost_end(): void
         (string)($post['message'] ?? ''),
         'post_do_newpost_end'
     );
+}
+
+function af_balance_schedule_post_recalc_after_request(int $pid, string $source): void
+{
+    static $scheduled = [];
+
+    if ($pid <= 0) {
+        return;
+    }
+
+    $key = $pid . ':' . $source;
+    if (isset($scheduled[$key])) {
+        return;
+    }
+    $scheduled[$key] = true;
+
+    register_shutdown_function(static function () use ($pid, $source): void {
+        global $db;
+
+        $post = $db->fetch_array($db->simple_select('posts', 'pid,uid,fid,visible,message', 'pid=' . (int)$pid, ['limit' => 1]));
+        if (!is_array($post)) {
+            af_balance_debug_log('shutdown_recalc:post_not_found', ['pid' => $pid, 'source' => $source]);
+            return;
+        }
+
+        af_balance_recalc_post_awards(
+            (int)($post['pid'] ?? 0),
+            (int)($post['uid'] ?? 0),
+            (int)($post['fid'] ?? 0),
+            (int)($post['visible'] ?? 0),
+            (string)($post['message'] ?? ''),
+            $source
+        );
+        af_balance_debug_log('shutdown_recalc:done', ['pid' => $pid, 'source' => $source]);
+    });
+}
+
+function af_balance_debug_log(string $message, array $context = []): void
+{
+    global $mybb;
+
+    if (empty($mybb->settings['af_balance_debug_hooks'])) {
+        return;
+    }
+
+    $line = '[' . date('Y-m-d H:i:s') . '] ' . $message;
+    if (!empty($context)) {
+        $json = json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (is_string($json) && $json !== '') {
+            $line .= ' ' . $json;
+        }
+    }
+    $line .= "\n";
+
+    $logFile = MYBB_ROOT . 'inc/plugins/advancedfunctionality/cache/af_balance_hooks.log';
+    @file_put_contents($logFile, $line, FILE_APPEND);
 }
 
 function af_balance_already_awarded(int $pid, int $uid, int $fid, int $chars): bool
