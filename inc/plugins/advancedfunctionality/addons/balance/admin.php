@@ -18,7 +18,7 @@ class AF_Admin_Balance
             $reason = trim((string)$mybb->get_input('reason'));
             $where = '1=1';
             if ($uid > 0) $where .= ' AND uid=' . $uid;
-            if (in_array($kind, ['exp','credits'], true)) $where .= " AND kind='" . $db->escape_string($kind) . "'";
+            if (in_array($kind, ['exp','credits','ability_tokens'], true)) $where .= " AND kind='" . $db->escape_string($kind) . "'";
             if ($reason !== '') $where .= " AND reason='" . $db->escape_string($reason) . "'";
             echo '<h2>Balance transactions</h2><p><a href="' . htmlspecialchars_uni($baseUrl) . '">Settings</a></p>';
             $q = $db->simple_select(AF_BALANCE_TX_TABLE, '*', $where, ['order_by'=>'id', 'order_dir'=>'DESC', 'limit'=>50]);

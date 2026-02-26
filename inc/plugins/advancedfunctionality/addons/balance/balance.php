@@ -6,6 +6,7 @@ const AF_BALANCE_TX_TABLE = 'af_balance_tx';
 const AF_BALANCE_POST_REWARDS_TABLE = 'af_post_rewards';
 const AF_BALANCE_EXP_SCALE = 100;
 const AF_BALANCE_CREDITS_SCALE = 100;
+const AF_BALANCE_ABILITY_SCALE = 100;
 const AF_BALANCE_BLACKLIST_DEFAULT = "index.php\nusercp.php\nuserlist.php\nsearch.php\ngallery.php\nkb.php\nforumdisplay.php";
 const AF_BALANCE_PAGE_ALIAS_SIGNATURE = 'AF_BALANCE_PAGE_ALIAS';
 const AF_BALANCE_PAGE_ALIAS_FILE = 'balancemanage.php';
@@ -139,15 +140,26 @@ function af_balance_ensure_schema(): void
             uid INT UNSIGNED NOT NULL,
             exp BIGINT NOT NULL DEFAULT 0,
             credits BIGINT NOT NULL DEFAULT 0,
+            ability_tokens BIGINT NOT NULL DEFAULT 0,
             updated_at INT UNSIGNED NOT NULL DEFAULT 0,
             PRIMARY KEY (uid)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } else {
+        $table = TABLE_PREFIX . AF_BALANCE_TABLE;
+        $cols = [];
+        $q = $db->write_query("SHOW COLUMNS FROM {$table}");
+        while ($r = $db->fetch_array($q)) {
+            $cols[strtolower((string)$r['Field'])] = true;
+        }
+        if (empty($cols['ability_tokens'])) {
+            $db->write_query("ALTER TABLE {$table} ADD COLUMN ability_tokens BIGINT NOT NULL DEFAULT 0");
+        }
     }
     if (!$db->table_exists(AF_BALANCE_TX_TABLE)) {
         $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_BALANCE_TX_TABLE . " (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             uid INT UNSIGNED NOT NULL,
-            kind ENUM('exp','credits') NOT NULL,
+            kind VARCHAR(32) NOT NULL,
             amount BIGINT NOT NULL,
             balance_after BIGINT NOT NULL,
             reason VARCHAR(64) NOT NULL,
@@ -161,6 +173,12 @@ function af_balance_ensure_schema(): void
             KEY uid_kind (uid, kind),
             KEY created_at (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } else {
+        $kindColumn = $db->fetch_array($db->write_query("SHOW COLUMNS FROM " . TABLE_PREFIX . AF_BALANCE_TX_TABLE . " LIKE 'kind'"));
+        $type = strtolower((string)($kindColumn['Type'] ?? ''));
+        if ($type !== '' && strpos($type, 'varchar') !== 0) {
+            $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_BALANCE_TX_TABLE . " MODIFY kind VARCHAR(32) NOT NULL");
+        }
     }
 
     if (!$db->table_exists(AF_BALANCE_POST_REWARDS_TABLE)) {
@@ -171,6 +189,7 @@ function af_balance_ensure_schema(): void
             chars_count INT NOT NULL DEFAULT 0,
             exp_scaled BIGINT NOT NULL DEFAULT 0,
             credits_scaled BIGINT NOT NULL DEFAULT 0,
+            ability_tokens_scaled BIGINT NOT NULL DEFAULT 0,
             last_hash CHAR(40) NULL,
             updated_at INT UNSIGNED NOT NULL DEFAULT 0,
             PRIMARY KEY (pid),
@@ -195,6 +214,9 @@ function af_balance_ensure_schema(): void
         }
         if (empty($cols['last_hash'])) {
             $db->write_query("ALTER TABLE {$table} ADD COLUMN last_hash CHAR(40) NULL");
+        }
+        if (empty($cols['ability_tokens_scaled'])) {
+            $db->write_query("ALTER TABLE {$table} ADD COLUMN ability_tokens_scaled BIGINT NOT NULL DEFAULT 0");
         }
         if (empty($cols['updated_at'])) {
             $db->write_query("ALTER TABLE {$table} ADD COLUMN updated_at INT UNSIGNED NOT NULL DEFAULT 0");
@@ -262,6 +284,10 @@ function af_balance_get_postbit_data(int $uid): array
         return [
             'credits_display' => '0.00',
             'currency_symbol' => (string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'),
+            'ability_tokens_display' => '0.00',
+            'ability_tokens_symbol' => (string)($mybb->settings['af_balance_ability_tokens_symbol'] ?? '♦'),
+            'ability_tokens_show_postbit' => !empty($mybb->settings['af_balance_ability_tokens_show_postbit']),
+            'ability_tokens_show_sheet' => !empty($mybb->settings['af_balance_ability_tokens_show_sheet']),
             'level' => 1,
             'progress_percent' => 0,
             'percent' => 0,
@@ -282,6 +308,10 @@ function af_balance_get_postbit_data(int $uid): array
     return [
         'credits_display' => af_balance_format_credits((int)($bal['credits'] ?? 0)),
         'currency_symbol' => (string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'),
+        'ability_tokens_display' => af_balance_format_ability_tokens((int)($bal['ability_tokens'] ?? 0)),
+        'ability_tokens_symbol' => (string)($mybb->settings['af_balance_ability_tokens_symbol'] ?? '♦'),
+        'ability_tokens_show_postbit' => !empty($mybb->settings['af_balance_ability_tokens_show_postbit']),
+        'ability_tokens_show_sheet' => !empty($mybb->settings['af_balance_ability_tokens_show_sheet']),
         'level' => (int)($levelData['level'] ?? 1),
         'progress_percent' => max(0, min(100, (int)($levelData['progress_percent'] ?? 0))),
         'percent' => max(0, min(100, (int)($levelData['progress_percent'] ?? 0))),
@@ -383,16 +413,20 @@ function af_balance_ensure_settings(): void
         ['af_balance_credits_enabled','Credits enabled','yesno','1',20],['af_balance_credits_per_char','Credits per char','text','0',21],['af_balance_credits_on_register','Credits on register','text','0',22],['af_balance_credits_on_accept','Credits on accept','text','0',23],
         ['af_balance_credits_categories_csv','Credits categories CSV','text','',24],['af_balance_credits_forums_csv','Credits forums CSV','text','',25],['af_balance_credits_mode','Credits mode',"select\ninclude=include\nexclude=exclude",'include',26],
         ['af_balance_credits_allow_negative_award','Credits allow negative award','yesno','0',27],['af_balance_credits_allow_balance_negative','Credits allow negative balance','yesno','0',28],['af_balance_credits_manual_groups','Credits manual groups','text','4',29],
-        ['af_balance_tx_keep_limit','TX keep limit','text','5000',30],['af_balance_tx_enable','Enable tx log','yesno','1',31],
-        ['af_balance_credits_scale_migrated','Credits scale migrated','yesno','0',32],
-        ['af_balance_currency_symbol','Currency symbol','text','¢',33],
-        ['af_balance_manage_groups','Balance manage groups','text','3,4',34],
-        ['af_balance_blacklist','Balance assets blacklist','textarea',AF_BALANCE_BLACKLIST_DEFAULT,35],
-        ['af_balance_debug_hooks','Debug post hooks','yesno','0',36],
-        ['af_balance_level_cap','Level cap','text','60',37],
-        ['af_balance_level_req_base','Level requirement base','text','2000',38],
-        ['af_balance_level_req_step','Level requirement step','text','1000',39],
-        ['af_balance_history_limit','History rows limit','text','2000',40],
+        ['af_balance_ability_tokens_enabled','Ability tokens enabled','yesno','1',30],['af_balance_ability_tokens_per_char','Ability tokens per char','text','0',31],['af_balance_ability_tokens_on_register','Ability tokens on register','text','0',32],['af_balance_ability_tokens_on_accept','Ability tokens on accept','text','0',33],
+        ['af_balance_ability_tokens_categories_csv','Ability tokens categories CSV','text','',34],['af_balance_ability_tokens_forums_csv','Ability tokens forums CSV','text','',35],['af_balance_ability_tokens_mode','Ability tokens mode',"select\ninclude=include\nexclude=exclude",'include',36],
+        ['af_balance_ability_tokens_allow_negative_award','Ability tokens allow negative award','yesno','0',37],['af_balance_ability_tokens_allow_balance_negative','Ability tokens allow negative balance','yesno','0',38],['af_balance_ability_tokens_manual_groups','Ability tokens manual groups','text','4',39],
+        ['af_balance_ability_tokens_symbol','Ability tokens symbol','text','♦',40],['af_balance_ability_tokens_show_postbit','Ability tokens show in postbit','yesno','1',41],['af_balance_ability_tokens_show_sheet','Ability tokens show in sheet','yesno','1',42],
+        ['af_balance_tx_keep_limit','TX keep limit','text','5000',43],['af_balance_tx_enable','Enable tx log','yesno','1',44],
+        ['af_balance_credits_scale_migrated','Credits scale migrated','yesno','0',45],
+        ['af_balance_currency_symbol','Currency symbol','text','¢',46],
+        ['af_balance_manage_groups','Balance manage groups','text','3,4',47],
+        ['af_balance_blacklist','Balance assets blacklist','textarea',AF_BALANCE_BLACKLIST_DEFAULT,48],
+        ['af_balance_debug_hooks','Debug post hooks','yesno','0',49],
+        ['af_balance_level_cap','Level cap','text','60',50],
+        ['af_balance_level_req_base','Level requirement base','text','2000',51],
+        ['af_balance_level_req_step','Level requirement step','text','1000',52],
+        ['af_balance_history_limit','History rows limit','text','2000',53],
     ];
     $legacyMigratedSid = af_balance_pick_setting_sid('af_balance_migrated_credits_scale', $needsRebuild);
     if ($legacyMigratedSid > 0) {
@@ -591,13 +625,13 @@ function af_balance_pre_output_page(string &$page): void
 function af_balance_get(int $uid): array
 {
     global $db;
-    if ($uid <= 0) return ['uid'=>0,'exp'=>0,'credits'=>0];
+    if ($uid <= 0) return ['uid'=>0,'exp'=>0,'credits'=>0,'ability_tokens'=>0];
     $row = $db->fetch_array($db->simple_select(AF_BALANCE_TABLE, '*', 'uid='.(int)$uid, ['limit'=>1]));
     if (!$row) {
-        $db->insert_query(AF_BALANCE_TABLE, ['uid'=>$uid, 'exp'=>0, 'credits'=>0, 'updated_at'=>TIME_NOW]);
-        return ['uid'=>$uid,'exp'=>0,'credits'=>0];
+        $db->insert_query(AF_BALANCE_TABLE, ['uid'=>$uid, 'exp'=>0, 'credits'=>0, 'ability_tokens'=>0, 'updated_at'=>TIME_NOW]);
+        return ['uid'=>$uid,'exp'=>0,'credits'=>0,'ability_tokens'=>0];
     }
-    return ['uid'=>$uid,'exp'=>(int)$row['exp'],'credits'=>(int)$row['credits']];
+    return ['uid'=>$uid,'exp'=>(int)$row['exp'],'credits'=>(int)$row['credits'],'ability_tokens'=>(int)($row['ability_tokens'] ?? 0)];
 }
 
 function af_balance_add($uid, string $kind, $amount, array $meta = []): array
@@ -605,11 +639,11 @@ function af_balance_add($uid, string $kind, $amount, array $meta = []): array
     global $mybb;
 
     $uid = (int)$uid;
-    if ($uid <= 0 || !in_array($kind, ['exp','credits'], true)) {
+    if ($uid <= 0 || !in_array($kind, ['exp','credits','ability_tokens'], true)) {
         return af_balance_get($uid);
     }
 
-    $scale = ($kind === 'exp') ? AF_BALANCE_EXP_SCALE : AF_BALANCE_CREDITS_SCALE;
+    $scale = ($kind === 'exp') ? AF_BALANCE_EXP_SCALE : (($kind === 'credits') ? AF_BALANCE_CREDITS_SCALE : AF_BALANCE_ABILITY_SCALE);
     $scaled = (int)floor(((float)$amount) * $scale);
 
     // если это отрицательное начисление и запрещено — отклоняем (обычное начисление)
@@ -625,7 +659,7 @@ function af_balance_apply_scaled_delta(int $uid, string $kind, int $scaled, arra
     global $db, $mybb;
 
     $uid = (int)$uid;
-    if ($uid <= 0 || !in_array($kind, ['exp','credits'], true)) {
+    if ($uid <= 0 || !in_array($kind, ['exp','credits','ability_tokens'], true)) {
         return af_balance_get($uid);
     }
 
@@ -676,11 +710,12 @@ function af_balance_apply_scaled_delta(int $uid, string $kind, int $scaled, arra
 
 function af_balance_add_exp($uid, $amount, array $meta = []): array { return af_balance_add((int)$uid, 'exp', $amount, $meta); }
 function af_balance_add_credits($uid, $amount, array $meta = []): array { return af_balance_add((int)$uid, 'credits', $amount, $meta); }
+function af_balance_add_ability_tokens($uid, $amount, array $meta = []): array { return af_balance_add((int)$uid, 'ability_tokens', $amount, $meta); }
 
 function af_balance_can_manual_adjust($uid, string $kind): bool
 {
     global $mybb;
-    $kind = $kind === 'credits' ? 'credits' : 'exp';
+    $kind = in_array($kind, ['exp','credits','ability_tokens'], true) ? $kind : 'exp';
     $csv = (string)($mybb->settings['af_balance_'.$kind.'_manual_groups'] ?? '');
     $allowed = af_balance_csv_to_ids($csv);
     if (!$allowed) return false;
@@ -763,6 +798,13 @@ function af_balance_apply_register_awards(int $uid): void
         $amt = (float)($mybb->settings['af_balance_credits_on_register'] ?? 0);
         if ($amt != 0.0) {
             af_balance_add_credits($uid, $amt, ['reason'=>'register','source'=>'balance','ref_type'=>'uid','ref_id'=>$uid]);
+        }
+    }
+
+    if (!empty($mybb->settings['af_balance_ability_tokens_enabled'])) {
+        $amt = (float)($mybb->settings['af_balance_ability_tokens_on_register'] ?? 0);
+        if ($amt != 0.0) {
+            af_balance_add_ability_tokens($uid, $amt, ['reason'=>'register','source'=>'balance','ref_type'=>'uid','ref_id'=>$uid]);
         }
     }
 }
@@ -938,12 +980,15 @@ function af_balance_xmlhttp(): void
             'uid' => $uid,
             'exp_scaled' => (int)($bal['exp'] ?? 0),
             'credits_scaled' => (int)($bal['credits'] ?? 0),
+            'ability_tokens_scaled' => (int)($bal['ability_tokens'] ?? 0),
             'exp_current' => (int)($data['exp_current'] ?? 0),
             'exp_need' => (int)($data['exp_need'] ?? 0),
             'exp_display' => (string)($data['exp_display'] ?? '0'),
             'exp_need_display' => (string)($data['exp_need_display'] ?? '0'),
             'credits_display' => (string)($data['credits_display'] ?? '0.00'),
             'currency_symbol' => (string)($data['currency_symbol'] ?? '¢'),
+            'ability_tokens_display' => (string)($data['ability_tokens_display'] ?? '0.00'),
+            'ability_tokens_symbol' => (string)($data['ability_tokens_symbol'] ?? '♦'),
             'level' => (int)($data['level'] ?? 1),
             'progress_percent' => (int)($data['progress_percent'] ?? 0),
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -1165,7 +1210,7 @@ function af_balance_get_post_reward_row(int $pid): array
     return is_array($row) ? $row : [];
 }
 
-function af_balance_upsert_post_reward_row(int $pid, int $uid, int $fid, int $chars, int $expScaled, int $creditsScaled, string $hash): void
+function af_balance_upsert_post_reward_row(int $pid, int $uid, int $fid, int $chars, int $expScaled, int $creditsScaled, int $abilityScaled, string $hash): void
 {
     global $db;
 
@@ -1199,6 +1244,9 @@ function af_balance_upsert_post_reward_row(int $pid, int $uid, int $fid, int $ch
     if (!empty($cols['credits_scaled'])) {
         $data['credits_scaled'] = $creditsScaled;
     }
+    if (!empty($cols['ability_tokens_scaled'])) {
+        $data['ability_tokens_scaled'] = $abilityScaled;
+    }
 
     // фоллбек на старую схему, если она была reward_exp/reward_credits
     if (empty($cols['exp_scaled']) && !empty($cols['reward_exp'])) {
@@ -1220,6 +1268,7 @@ function af_balance_calc_post_reward_scaled(int $chars, int $fid, string $kind):
 {
     global $mybb;
 
+    if (!in_array($kind, ['exp','credits','ability_tokens'], true)) return 0;
     if ($chars <= 0) return 0;
     if (empty($mybb->settings['af_balance_'.$kind.'_enabled']) || !af_balance_is_forum_allowed($fid, $kind)) {
         return 0;
@@ -1228,7 +1277,7 @@ function af_balance_calc_post_reward_scaled(int $chars, int $fid, string $kind):
     $rate = (float)($mybb->settings['af_balance_'.$kind.'_per_char'] ?? 0);
     if ($rate == 0.0) return 0;
 
-    $scale = ($kind === 'exp') ? AF_BALANCE_EXP_SCALE : AF_BALANCE_CREDITS_SCALE;
+    $scale = ($kind === 'exp') ? AF_BALANCE_EXP_SCALE : (($kind === 'credits') ? AF_BALANCE_CREDITS_SCALE : AF_BALANCE_ABILITY_SCALE);
     return (int)floor($chars * $rate * $scale);
 }
 
@@ -1253,12 +1302,15 @@ function af_balance_recalc_post_awards(int $pid, int $uid, int $fid, int $visibl
 
     $oldExp = (int)($tracked['exp_scaled'] ?? $tracked['reward_exp'] ?? 0);
     $oldCr  = (int)($tracked['credits_scaled'] ?? $tracked['reward_credits'] ?? 0);
+    $oldAbility = (int)($tracked['ability_tokens_scaled'] ?? 0);
 
     $newExp = af_balance_calc_post_reward_scaled($chars, $fid, 'exp');
     $newCr  = af_balance_calc_post_reward_scaled($chars, $fid, 'credits');
+    $newAbility  = af_balance_calc_post_reward_scaled($chars, $fid, 'ability_tokens');
 
     $deltaExp = $newExp - $oldExp;
     $deltaCr  = $newCr - $oldCr;
+    $deltaAbility = $newAbility - $oldAbility;
 
     if ($deltaExp !== 0) {
         af_balance_apply_scaled_delta($uid, 'exp', $deltaExp, [
@@ -1284,7 +1336,19 @@ function af_balance_recalc_post_awards(int $pid, int $uid, int $fid, int $visibl
         ], true);
     }
 
-    af_balance_upsert_post_reward_row($pid, $uid, $fid, $chars, $newExp, $newCr, $hash);
+    if ($deltaAbility !== 0) {
+        af_balance_apply_scaled_delta($uid, 'ability_tokens', $deltaAbility, [
+            'reason' => 'post_chars_recalc',
+            'source' => 'balance',
+            'ref_type' => 'pid',
+            'ref_id' => $pid,
+            'fid' => $fid,
+            'chars' => $chars,
+            'recalc_source' => $source,
+        ], true);
+    }
+
+    af_balance_upsert_post_reward_row($pid, $uid, $fid, $chars, $newExp, $newCr, $newAbility, $hash);
 }
 
 function af_balance_handle_accept(int $uid, int $tid, int $actor_uid = 0): void
@@ -1298,6 +1362,10 @@ function af_balance_handle_accept(int $uid, int $tid, int $actor_uid = 0): void
     if (!empty($mybb->settings['af_balance_credits_enabled'])) {
         $amt = (float)($mybb->settings['af_balance_credits_on_accept'] ?? 0);
         if ($amt != 0.0) af_balance_add_credits($uid, $amt, ['reason'=>'accept','source'=>'balance','actor_uid'=>$actor_uid,'ref_type'=>'tid','ref_id'=>$tid]);
+    }
+    if (!empty($mybb->settings['af_balance_ability_tokens_enabled'])) {
+        $amt = (float)($mybb->settings['af_balance_ability_tokens_on_accept'] ?? 0);
+        if ($amt != 0.0) af_balance_add_ability_tokens($uid, $amt, ['reason'=>'accept','source'=>'balance','actor_uid'=>$actor_uid,'ref_type'=>'tid','ref_id'=>$tid]);
     }
 }
 
@@ -1326,6 +1394,11 @@ function af_balance_format_exp(int $scaledExp): string
 function af_balance_format_credits(int $scaledCredits): string
 {
     return number_format($scaledCredits / AF_BALANCE_CREDITS_SCALE, 2, '.', ' ');
+}
+
+function af_balance_format_ability_tokens(int $scaledTokens): string
+{
+    return number_format($scaledTokens / AF_BALANCE_ABILITY_SCALE, 2, '.', ' ');
 }
 
 function af_balance_migrate_credits_scale(): void
@@ -1373,9 +1446,9 @@ function af_balance_misc_start(): void
     }
 
     $tab = (string)$mybb->get_input('tab');
-    if (!in_array($tab, ['exp', 'credits', 'history'], true)) {
+    if (!in_array($tab, ['exp', 'credits', 'ability_tokens', 'history'], true)) {
         $legacy_kind = (string)$mybb->get_input('kind');
-        if (in_array($legacy_kind, ['exp', 'credits'], true)) {
+        if (in_array($legacy_kind, ['exp', 'credits', 'ability_tokens'], true)) {
             $mybb->input['tab'] = $legacy_kind;
         }
     }
@@ -1463,6 +1536,8 @@ function af_balance_handle_manage_adjust(): void
                 'exp_need_display' => (string)($data['exp_need_display'] ?? '0'),
                 'credits_display' => (string)($data['credits_display'] ?? '0.00'),
                 'currency_symbol' => (string)($data['currency_symbol'] ?? '¢'),
+                'ability_tokens_display' => (string)($data['ability_tokens_display'] ?? '0.00'),
+                'ability_tokens_symbol' => (string)($data['ability_tokens_symbol'] ?? '♦'),
                 'level' => (int)($data['level'] ?? 1),
                 'progress_percent' => (int)($data['progress_percent'] ?? 0),
                 'deduped' => 1
@@ -1482,7 +1557,7 @@ function af_balance_handle_manage_adjust(): void
     }
 
 
-    if ($uid <= 0 || !in_array($kind, ['exp', 'credits'], true)) {
+    if ($uid <= 0 || !in_array($kind, ['exp', 'credits', 'ability_tokens'], true)) {
         echo json_encode(['success' => false, 'error' => 'Bad request'], JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -1497,7 +1572,7 @@ function af_balance_handle_manage_adjust(): void
     }
 
     // Скалирование
-    $scale = ($kind === 'exp') ? AF_BALANCE_EXP_SCALE : AF_BALANCE_CREDITS_SCALE;
+    $scale = ($kind === 'exp') ? AF_BALANCE_EXP_SCALE : (($kind === 'credits') ? AF_BALANCE_CREDITS_SCALE : AF_BALANCE_ABILITY_SCALE);
 
     // Округление вниз тебе не нужно для ручных операций: 480.01 должно стать 48001, а не 48000.
     // Поэтому: round до "копеек" (scale=100).
@@ -1580,6 +1655,8 @@ function af_balance_handle_manage_adjust(): void
         'exp_need_display'=> (string)($data['exp_need_display'] ?? '0'),
         'credits_display' => (string)($data['credits_display'] ?? '0.00'),
         'currency_symbol' => (string)($data['currency_symbol'] ?? '¢'),
+        'ability_tokens_display' => (string)($data['ability_tokens_display'] ?? '0.00'),
+        'ability_tokens_symbol' => (string)($data['ability_tokens_symbol'] ?? '♦'),
         'level'           => (int)($data['level'] ?? 1),
         'progress_percent'=> (int)($data['progress_percent'] ?? 0),
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -1639,17 +1716,18 @@ function af_balance_render_manage_page(): void
     global $db, $mybb, $headerinclude, $header, $footer;
 
     $tab = (string)$mybb->get_input('tab');
-    if (!in_array($tab, ['exp', 'credits', 'history'], true)) {
+    if (!in_array($tab, ['exp', 'credits', 'ability_tokens', 'history'], true)) {
         $tab = '';
     }
 
     if ($tab === '') {
         $legacy_kind = (string)$mybb->get_input('kind');
-        $tab = in_array($legacy_kind, ['exp', 'credits'], true) ? $legacy_kind : 'exp';
+        $tab = in_array($legacy_kind, ['exp', 'credits', 'ability_tokens'], true) ? $legacy_kind : 'exp';
     }
 
     $kind_exp_active = $tab === 'exp' ? 'is-active' : '';
     $kind_credits_active = $tab === 'credits' ? 'is-active' : '';
+    $kind_ability_active = $tab === 'ability_tokens' ? 'is-active' : '';
     $history_active = $tab === 'history' ? 'is-active' : '';
 
     $currency_symbol = htmlspecialchars_uni((string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'));
@@ -1679,6 +1757,17 @@ function af_balance_render_manage_page(): void
         $credits_tab_params['race'] = $raceRaw;
     }
 
+
+    $ability_tab_params = [
+        'tab' => 'ability_tokens',
+    ];
+    if ($qRaw !== '') {
+        $ability_tab_params['q'] = $qRaw;
+    }
+    if ($raceRaw !== '') {
+        $ability_tab_params['race'] = $raceRaw;
+    }
+
     $history_tab_params = [
         'tab' => 'history',
     ];
@@ -1694,7 +1783,7 @@ function af_balance_render_manage_page(): void
     if ($history_actor_tab !== '') {
         $history_tab_params['actor'] = $history_actor_tab;
     }
-    if (in_array($history_kind_tab, ['exp', 'credits', 'any'], true) && $history_kind_tab !== 'any') {
+    if (in_array($history_kind_tab, ['exp', 'credits', 'ability_tokens', 'any'], true) && $history_kind_tab !== 'any') {
         $history_tab_params['history_kind'] = $history_kind_tab;
     }
     if (in_array($amount_type_tab, ['plus', 'minus', 'all'], true) && $amount_type_tab !== 'all') {
@@ -1706,6 +1795,7 @@ function af_balance_render_manage_page(): void
 
     $exp_tab_url = htmlspecialchars_uni(af_balance_build_manage_url($exp_tab_params));
     $credits_tab_url = htmlspecialchars_uni(af_balance_build_manage_url($credits_tab_params));
+    $ability_tab_url = htmlspecialchars_uni(af_balance_build_manage_url($ability_tab_params));
     $history_tab_url = htmlspecialchars_uni(af_balance_build_manage_url($history_tab_params));
 
     $content_html = '';
@@ -1723,7 +1813,7 @@ function af_balance_render_manage_page(): void
         $history_uid_raw = trim((string)$mybb->get_input('uid'));
         $history_actor_raw = trim((string)$mybb->get_input('actor'));
         $history_kind = (string)$mybb->get_input('history_kind');
-        if (!in_array($history_kind, ['exp', 'credits'], true)) {
+        if (!in_array($history_kind, ['exp', 'credits', 'ability_tokens'], true)) {
             $history_kind = 'any';
         }
         $amount_type = (string)$mybb->get_input('amount_type');
@@ -1803,11 +1893,22 @@ function af_balance_render_manage_page(): void
             $amount = (int)($row['amount'] ?? 0);
             $balance_after = (int)($row['balance_after'] ?? 0);
 
-            $kind_badge = '<span class="af-balance-kind af-balance-kind--' . htmlspecialchars_uni($kind_val) . '">' . htmlspecialchars_uni(strtoupper($kind_val)) . '</span>';
+            $kindLabels = ['exp' => 'EXP', 'credits' => 'Credits', 'ability_tokens' => 'Ability Tokens'];
+            $kind_label = $kindLabels[$kind_val] ?? strtoupper($kind_val);
+            $kind_badge = '<span class="af-balance-kind af-balance-kind--' . htmlspecialchars_uni($kind_val) . '">' . htmlspecialchars_uni($kind_label) . '</span>';
             $amount_class = $amount < 0 ? 'is-minus' : ($amount > 0 ? 'is-plus' : '');
 
-            $amount_label = $kind_val === 'credits' ? af_balance_format_credits($amount) : af_balance_format_exp($amount);
-            $balance_after_label = $kind_val === 'credits' ? af_balance_format_credits($balance_after) : af_balance_format_exp($balance_after);
+            if ($kind_val === 'credits') {
+                $amount_label = af_balance_format_credits($amount) . ' ' . $currency_symbol;
+                $balance_after_label = af_balance_format_credits($balance_after) . ' ' . $currency_symbol;
+            } elseif ($kind_val === 'ability_tokens') {
+                $ability_symbol = (string)($mybb->settings['af_balance_ability_tokens_symbol'] ?? '♦');
+                $amount_label = af_balance_format_ability_tokens($amount) . ' ' . $ability_symbol;
+                $balance_after_label = af_balance_format_ability_tokens($balance_after) . ' ' . $ability_symbol;
+            } else {
+                $amount_label = af_balance_format_exp($amount);
+                $balance_after_label = af_balance_format_exp($balance_after);
+            }
 
             $target_name = trim((string)($row['target_username'] ?? ''));
             if ($target_name === '' && $target_uid > 0) {
@@ -1875,6 +1976,7 @@ function af_balance_render_manage_page(): void
             . '<option value="any"' . ($history_kind === 'any' ? ' selected' : '') . '>Все типы</option>'
             . '<option value="exp"' . ($history_kind === 'exp' ? ' selected' : '') . '>EXP</option>'
             . '<option value="credits"' . ($history_kind === 'credits' ? ' selected' : '') . '>Credits</option>'
+            . '<option value="ability_tokens"' . ($history_kind === 'ability_tokens' ? ' selected' : '') . '>Ability Tokens</option>'
             . '</select>'
             . '<select name="amount_type">'
             . '<option value="all"' . ($amount_type === 'all' ? ' selected' : '') . '>Все суммы</option>'
@@ -1901,7 +2003,7 @@ function af_balance_render_manage_page(): void
         }
 
         $rows = [];
-        $sql = "SELECT u.uid,u.username,u.avatar,b.exp,b.credits,s.progress_json
+        $sql = "SELECT u.uid,u.username,u.avatar,b.exp,b.credits,b.ability_tokens,s.progress_json
                 FROM " . TABLE_PREFIX . "users u
                 LEFT JOIN " . TABLE_PREFIX . AF_BALANCE_TABLE . " b ON b.uid=u.uid
                 LEFT JOIN " . TABLE_PREFIX . "af_cs_sheets s ON s.uid=u.uid
@@ -1927,6 +2029,7 @@ function af_balance_render_manage_page(): void
             $uid = (int)$row['uid'];
             $exp = (int)($row['exp'] ?? 0);
             $credits = (int)($row['credits'] ?? 0);
+            $ability_tokens = (int)($row['ability_tokens'] ?? 0);
 
             $levelData = af_balance_compute_level($exp / AF_BALANCE_EXP_SCALE);
 
@@ -1943,8 +2046,10 @@ function af_balance_render_manage_page(): void
             if ($kind === 'exp') {
                 $value_columns .= '<td data-af-balance-exp>' . af_balance_format_exp($exp) . '</td>';
                 $value_columns .= '<td data-af-balance-level>' . (int)($levelData['level'] ?? 1) . '</td>';
-            } else {
+            } elseif ($kind === 'credits') {
                 $value_columns .= '<td data-af-balance-credits>' . af_balance_format_credits($credits) . '</td>';
+            } else {
+                $value_columns .= '<td data-af-balance-ability>' . af_balance_format_ability_tokens($ability_tokens) . '</td>';
             }
 
             $rows[] =
@@ -1963,8 +2068,10 @@ function af_balance_render_manage_page(): void
         $table_head = '';
         if ($kind === 'exp') {
             $table_head = '<tr><th></th><th>User</th><th>EXP</th><th>Level</th><th>Actions</th></tr>';
-        } else {
+        } elseif ($kind === 'credits') {
             $table_head = '<tr><th></th><th>User</th><th>Credits (' . $currency_symbol . ')</th><th>Actions</th></tr>';
+        } else {
+            $table_head = '<tr><th></th><th>User</th><th>Ability Tokens (' . htmlspecialchars_uni((string)($mybb->settings['af_balance_ability_tokens_symbol'] ?? '♦')) . ')</th><th>Actions</th></tr>';
         }
 
         $content_html = ''
@@ -2010,6 +2117,7 @@ function af_balance_render_manage_page(): void
         . '<div class="af-balance-tabs">'
         . '<a class="af-balance-tab ' . $kind_exp_active . '" href="' . $exp_tab_url . '">EXP</a>'
         . '<a class="af-balance-tab ' . $kind_credits_active . '" href="' . $credits_tab_url . '">Credits</a>'
+        . '<a class="af-balance-tab ' . $kind_ability_active . '" href="' . $ability_tab_url . '">Ability Tokens</a>'
         . '<a class="af-balance-tab ' . $history_active . '" href="' . $history_tab_url . '">История</a>'
         . '</div>'
         . $content_html

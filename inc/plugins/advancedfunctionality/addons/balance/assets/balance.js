@@ -86,6 +86,7 @@
 
     var creditsDiv = plaque.querySelector('[data-af-balance-credits="1"]') || postEl.querySelector('.af-cs-postbit-stats__credits');
     var levelDiv   = plaque.querySelector('[data-af-balance-level="1"]') || postEl.querySelector('.af-cs-postbit-stats__level');
+    var abilityDiv = plaque.querySelector('[data-af-balance-ability="1"]');
     var barDiv     = plaque.querySelector('[data-af-balance-expbar="1"]')
       || postEl.querySelector('.af-expbar.af-cs-postbit-stats__bar')
       || postEl.querySelector('.af-cs-postbit-stats__bar.af-expbar');
@@ -98,6 +99,14 @@
       var sym = toStr(snapshot.currency_symbol);
       // Сохраняем иконку, перерисовываем текст
       creditsDiv.innerHTML = (iconHtml ? iconHtml + ': ' : '') + cr + (sym ? ' ' + sym : '');
+    }
+
+    if (abilityDiv && snapshot.ability_tokens_display != null) {
+      var aicon = abilityDiv.querySelector('i');
+      var aiconHtml = aicon ? aicon.outerHTML : '';
+      var av = toStr(snapshot.ability_tokens_display);
+      var asym = toStr(snapshot.ability_tokens_symbol);
+      abilityDiv.innerHTML = (aiconHtml ? aiconHtml + ': ' : '') + av + (asym ? ' ' + asym : '');
     }
 
     // level
@@ -305,7 +314,7 @@
       }
 
       var cfg = window.afBalanceConfig || {};
-      var kind = (cfg.kind === 'credits') ? 'credits' : 'exp';
+      var kind = (cfg.kind === 'credits' || cfg.kind === 'ability_tokens') ? cfg.kind : 'exp';
       var postKey = String(cfg.postKey || '');
 
       var fd = new FormData();
@@ -361,6 +370,9 @@
 
             var lvlEl = row.querySelector('[data-af-balance-level]');
             if (lvlEl && typeof data.level !== 'undefined') lvlEl.textContent = String(data.level);
+
+            var abilityEl = row.querySelector('[data-af-balance-ability]');
+            if (abilityEl && typeof data.ability_tokens_display !== 'undefined') abilityEl.textContent = data.ability_tokens_display;
           }
 
           close();
