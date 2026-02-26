@@ -182,6 +182,8 @@ function af_balance_ensure_schema(): void
         }
     }
 
+    af_balance_ensure_tx_index('uid_id', 'uid,id');
+
     if (!$db->table_exists(AF_BALANCE_POST_REWARDS_TABLE)) {
         $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_BALANCE_POST_REWARDS_TABLE . " (
             pid INT UNSIGNED NOT NULL,
@@ -228,6 +230,24 @@ function af_balance_ensure_schema(): void
 
         // Если вдруг у старой схемы были reward_exp/reward_credits — можно оставить, не мешает.
     }   
+}
+
+function af_balance_ensure_tx_index(string $indexName, string $columnsSql): void
+{
+    global $db;
+
+    if (!$db->table_exists(AF_BALANCE_TX_TABLE)) {
+        return;
+    }
+
+    $table = TABLE_PREFIX . AF_BALANCE_TX_TABLE;
+    $indexEscaped = $db->escape_string($indexName);
+    $exists = $db->fetch_field($db->write_query("SHOW INDEX FROM {$table} WHERE Key_name='" . $indexEscaped . "'"), 'Key_name');
+    if ($exists !== null && $exists !== '') {
+        return;
+    }
+
+    $db->write_query("ALTER TABLE {$table} ADD INDEX {$indexName} ({$columnsSql})");
 }
 
 function af_balance_templates_install_or_update(): void
@@ -465,7 +485,7 @@ function af_balance_ensure_settings(): void
         ['af_balance_level_cap','Level cap','text','60',50],
         ['af_balance_level_req_base','Level requirement base','text','2000',51],
         ['af_balance_level_req_step','Level requirement step','text','1000',52],
-        ['af_balance_history_limit','History rows limit','text','2000',53],
+        ['af_balance_history_perpage','History per page','text','50',53],
         ['af_balance_postbit_icon_credits_html','Postbit icon HTML: credits','text','',54],
         ['af_balance_postbit_icon_ability_tokens_html','Postbit icon HTML: ability tokens','text','',55],
         ['af_balance_postbit_icon_level_html','Postbit icon HTML: level','text','',56],
@@ -487,11 +507,28 @@ function af_balance_ensure_settings(): void
         }
     }
 
+
+    $legacyHistoryLimitSid = af_balance_pick_setting_sid('af_balance_history_limit', $needsRebuild);
+    $historyPerpageSid = af_balance_pick_setting_sid('af_balance_history_perpage', $needsRebuild);
+    if ($legacyHistoryLimitSid > 0 && $historyPerpageSid > 0) {
+        $legacyHistoryLimitValue = (int)$db->fetch_field($db->simple_select('settings', 'value', 'sid=' . $legacyHistoryLimitSid, ['limit' => 1]), 'value');
+        if ($legacyHistoryLimitValue > 0) {
+            if ($legacyHistoryLimitValue < 20) {
+                $legacyHistoryLimitValue = 20;
+            } elseif ($legacyHistoryLimitValue > 200) {
+                $legacyHistoryLimitValue = 200;
+            }
+            $db->update_query('settings', ['value' => (string)$legacyHistoryLimitValue], 'sid=' . $historyPerpageSid);
+        }
+        $db->delete_query('settings', 'sid=' . $legacyHistoryLimitSid);
+        $needsRebuild = true;
+    }
+
     foreach ($defs as [$name,$title,$opt,$val,$order]) {
         $sid = af_balance_pick_setting_sid($name, $needsRebuild);
         $description = $title;
-        if ($name === 'af_balance_history_limit') {
-            $description = 'Сколько последних записей показывать во вкладке История (окно логов)';
+        if ($name === 'af_balance_history_perpage') {
+            $description = 'Сколько записей показывать на странице во вкладке История (20-200)';
         } elseif ($name === 'af_balance_postbit_icon_credits_html') {
             $description = 'HTML/FontAwesome для лейбла Credits в postbit. Пусто = текст.';
         } elseif ($name === 'af_balance_postbit_icon_ability_tokens_html') {
@@ -1807,35 +1844,6 @@ function af_balance_migrate_from_charactersheets(): void
     }
 }
 
-function af_balance_history_limit_window_where(int $historyLimit = 2000): string
-{
-    global $db;
-
-    if (!$db->table_exists(AF_BALANCE_TX_TABLE)) {
-        return '1=0';
-    }
-
-    if ($historyLimit < 100) {
-        $historyLimit = 100;
-    } elseif ($historyLimit > 20000) {
-        $historyLimit = 20000;
-    }
-
-    $threshold = 0;
-    $offset = $historyLimit - 1;
-    $q = $db->query('SELECT id FROM ' . TABLE_PREFIX . AF_BALANCE_TX_TABLE . ' ORDER BY id DESC LIMIT 1 OFFSET ' . (int)$offset);
-    $row = $db->fetch_array($q);
-    if (!empty($row['id'])) {
-        $threshold = (int)$row['id'];
-    }
-
-    if ($threshold > 0) {
-        return 'tx.id>=' . $threshold;
-    }
-
-    return '1=1';
-}
-
 function af_balance_render_manage_page(): void
 {
     global $db, $mybb, $headerinclude, $header, $footer;
@@ -1927,12 +1935,21 @@ function af_balance_render_manage_page(): void
 
     if ($tab === 'history') {
         $page = max(1, (int)$mybb->get_input('page'));
-        $per_page = 50;
-        $history_limit = (int)($mybb->settings['af_balance_history_limit'] ?? 2000);
-        if ($history_limit < 100) {
-            $history_limit = 100;
-        } elseif ($history_limit > 20000) {
-            $history_limit = 20000;
+        $default_per_page = (int)($mybb->settings['af_balance_history_perpage'] ?? 50);
+        if ($default_per_page < 20) {
+            $default_per_page = 20;
+        } elseif ($default_per_page > 200) {
+            $default_per_page = 200;
+        }
+
+        $per_page = (int)$mybb->get_input('perpage');
+        if ($per_page <= 0) {
+            $per_page = $default_per_page;
+        }
+        if ($per_page < 20) {
+            $per_page = 20;
+        } elseif ($per_page > 200) {
+            $per_page = 200;
         }
 
         $history_uid_raw = trim((string)$mybb->get_input('uid'));
@@ -1947,7 +1964,7 @@ function af_balance_render_manage_page(): void
         }
         $reason_q = trim((string)$mybb->get_input('reason'));
 
-        $where_parts = [af_balance_history_limit_window_where($history_limit)];
+        $where_parts = ['1=1'];
 
         if ($history_kind !== 'any') {
             $where_parts[] = "tx.kind='" . $db->escape_string($history_kind) . "'";
@@ -1999,6 +2016,13 @@ function af_balance_render_manage_page(): void
         }
         $offset = ($page - 1) * $per_page;
 
+        $limit_sql = '';
+        if ((string)$db->type === 'pgsql' || (string)$db->type === 'sqlite') {
+            $limit_sql = 'LIMIT ' . (int)$per_page . ' OFFSET ' . (int)$offset;
+        } else {
+            $limit_sql = 'LIMIT ' . (int)$offset . ', ' . (int)$per_page;
+        }
+
         $sql = "SELECT tx.id,tx.created_at,tx.actor_uid,tx.uid,tx.kind,tx.amount,tx.balance_after,tx.reason,tx.source,tx.ref_type,tx.ref_id,tx.meta_json,
                        u.username AS target_username,
                        au.username AS actor_username
@@ -2007,7 +2031,7 @@ function af_balance_render_manage_page(): void
                 LEFT JOIN " . TABLE_PREFIX . "users au ON au.uid=tx.actor_uid
                 WHERE {$where_sql}
                 ORDER BY tx.id DESC
-                LIMIT {$offset}, {$per_page}";
+                {$limit_sql}";
 
         $result = $db->query($sql);
         $rows_html = [];
@@ -2073,23 +2097,12 @@ function af_balance_render_manage_page(): void
             'history_kind' => $history_kind,
             'amount_type' => $amount_type,
             'reason' => $reason_q,
+            'perpage' => $per_page,
         ];
 
-        $pagination = '';
-        if ($total_pages > 1) {
-            $links = [];
-            for ($p = max(1, $page - 3); $p <= min($total_pages, $page + 3); $p++) {
-                $params = $base_params;
-                $params['page'] = $p;
-                $url = htmlspecialchars_uni(af_balance_build_manage_url($params));
-                if ($p === $page) {
-                    $links[] = '<strong>' . $p . '</strong>';
-                } else {
-                    $links[] = '<a href="' . $url . '">' . $p . '</a>';
-                }
-            }
-            $pagination = '<div class="af-balance-pagination">Страницы: ' . implode(' ', $links) . '</div>';
-        }
+        $pagination_url = af_balance_build_manage_url($base_params);
+        $multipage_top = $total_rows > $per_page ? multipage($total_rows, $per_page, $page, $pagination_url) : '';
+        $multipage_bottom = $multipage_top === '' ? '' : '<div class="af-balance-pagination">' . $multipage_top . '</div>';
 
         $content_html = ''
             . '<form method="get" class="af-balance-filters">'
@@ -2108,15 +2121,17 @@ function af_balance_render_manage_page(): void
             . '<option value="plus"' . ($amount_type === 'plus' ? ' selected' : '') . '>Начисления (+)</option>'
             . '<option value="minus"' . ($amount_type === 'minus' ? ' selected' : '') . '>Списания (-)</option>'
             . '</select>'
+            . '<input type="number" min="20" max="200" name="perpage" value="' . (int)$per_page . '" placeholder="На странице">'
             . '<input type="text" name="reason" value="' . htmlspecialchars_uni($reason_q) . '" placeholder="Причина содержит">'
             . '<button type="submit" class="button">Фильтр</button>'
             . '</form>'
+            . $multipage_bottom
             . '<table class="tborder af-balance-table af-balance-history-table">'
             . '<tr><th>Date</th><th>Actor</th><th>Target</th><th>Kind</th><th>Amount</th><th>Balance after</th><th>Reason</th><th>Source</th></tr>'
             . implode("
 ", $rows_html)
             . '</table>'
-            . $pagination;
+            . $multipage_bottom;
     } else {
         $kind = $tab;
 
