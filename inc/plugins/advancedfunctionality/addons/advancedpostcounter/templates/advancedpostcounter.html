@@ -35,7 +35,7 @@
 
         <table class="tborder" cellspacing="{$theme['borderwidth']}" cellpadding="{$theme['tablespace']}" border="0" width="100%" style="width:100%">
             <tr>
-                <td class="thead" colspan="6"><strong>{$activity_title}</strong></td>
+                <td class="thead" colspan="7"><strong>{$activity_title}</strong></td>
             </tr>
             <tr>
                 <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$lang->avatar}</strong></td>
@@ -44,6 +44,7 @@
                 <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$th_month}</strong></td>
                 <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$th_week}</strong></td>
                 <td class="tcat"><strong>{$th_last}</strong></td>
+                <td class="tcat" style="width:1%; white-space:nowrap; text-align:center;"><strong>{$th_all_posts}</strong></td>
             </tr>
 
             {$rows}
@@ -80,6 +81,9 @@
     <td class="{$row_bg}" style="text-align:center; white-space:nowrap;">{$row_month}</td>
     <td class="{$row_bg}" style="text-align:center; white-space:nowrap;">{$row_week}</td>
     <td class="{$row_bg}">{$row_last}</td>
+    <td class="{$row_bg}" style="text-align:center; white-space:nowrap;">
+        <a class="button" href="{$row_all_posts_url}">{$row_all_posts_label}</a>
+    </td>
 </tr>
 <!-- /TEMPLATE -->
 
