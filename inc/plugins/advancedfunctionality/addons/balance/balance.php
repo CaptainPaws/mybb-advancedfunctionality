@@ -7,12 +7,95 @@ const AF_BALANCE_POST_REWARDS_TABLE = 'af_post_rewards';
 const AF_BALANCE_EXP_SCALE = 100;
 const AF_BALANCE_CREDITS_SCALE = 100;
 const AF_BALANCE_BLACKLIST_DEFAULT = "index.php\nusercp.php\nuserlist.php\nsearch.php\ngallery.php\nkb.php\nforumdisplay.php";
+const AF_BALANCE_PAGE_ALIAS_SIGNATURE = 'AF_BALANCE_PAGE_ALIAS';
+const AF_BALANCE_PAGE_ALIAS_FILE = 'balancemanage.php';
 
 function af_balance_is_installed(): bool { global $db; return $db->table_exists(AF_BALANCE_TABLE); }
-function af_balance_install(): void { af_balance_ensure_schema(); af_balance_ensure_settings(); af_balance_templates_install_or_update(); if (function_exists('rebuild_settings')) rebuild_settings(); }
-function af_balance_activate(): bool { af_balance_ensure_schema(); af_balance_ensure_settings(); af_balance_templates_install_or_update(); af_balance_migrate_from_charactersheets(); af_balance_migrate_credits_scale(); af_balance_migrate_level_settings_from_charactersheets(); return true; }
+function af_balance_install(): void { af_balance_ensure_schema(); af_balance_ensure_settings(); af_balance_templates_install_or_update(); af_balance_ensure_page_alias(); if (function_exists('rebuild_settings')) rebuild_settings(); }
+function af_balance_activate(): bool { af_balance_ensure_schema(); af_balance_ensure_settings(); af_balance_templates_install_or_update(); af_balance_ensure_page_alias(); af_balance_migrate_from_charactersheets(); af_balance_migrate_credits_scale(); af_balance_migrate_level_settings_from_charactersheets(); return true; }
 function af_balance_deactivate(): bool { return true; }
-function af_balance_uninstall(): void {}
+function af_balance_uninstall(): void { af_balance_remove_page_alias_if_owned(); }
+
+function af_balance_alias_asset_path(): string
+{
+    return __DIR__ . '/assets/' . AF_BALANCE_PAGE_ALIAS_FILE;
+}
+
+function af_balance_alias_root_path(): string
+{
+    return MYBB_ROOT . AF_BALANCE_PAGE_ALIAS_FILE;
+}
+
+function af_balance_is_our_alias_file(string $path): bool
+{
+    if (!is_file($path) || !is_readable($path)) {
+        return false;
+    }
+
+    $content = @file_get_contents($path);
+    if ($content === false) {
+        return false;
+    }
+
+    return strpos($content, AF_BALANCE_PAGE_ALIAS_SIGNATURE) !== false;
+}
+
+function af_balance_notice_alias_conflict(): void
+{
+    if (defined('IN_ADMINCP') && function_exists('flash_message')) {
+        flash_message('Balance alias conflict: /balancemanage.php exists and is not owned by Advanced Functionality Balance addon.', 'error');
+    }
+}
+
+function af_balance_ensure_page_alias(): void
+{
+    $assetPath = af_balance_alias_asset_path();
+    $rootPath = af_balance_alias_root_path();
+
+    if (!is_file($assetPath)) {
+        return;
+    }
+
+    if (is_file($rootPath) && !af_balance_is_our_alias_file($rootPath)) {
+        af_balance_notice_alias_conflict();
+        return;
+    }
+
+    $copied = @copy($assetPath, $rootPath);
+    if ($copied === false) {
+        return;
+    }
+
+    @chmod($rootPath, 0644);
+}
+
+function af_balance_remove_page_alias_if_owned(): void
+{
+    $rootPath = af_balance_alias_root_path();
+    if (!is_file($rootPath)) {
+        return;
+    }
+
+    if (!af_balance_is_our_alias_file($rootPath)) {
+        return;
+    }
+
+    @unlink($rootPath);
+}
+
+function af_balance_build_manage_url(array $params = []): string
+{
+    global $mybb;
+
+    $base = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+    $url = $base . '/' . AF_BALANCE_PAGE_ALIAS_FILE;
+
+    if ($params) {
+        $url .= '?' . http_build_query($params);
+    }
+
+    return $url;
+}
 
 function af_balance_init(): void
 {
@@ -1276,8 +1359,12 @@ function af_balance_misc_start(): void
     if ((string)$mybb->get_input('action') !== 'balance_manage') {
         return;
     }
-    if (!af_balance_can_manage()) {
-        error_no_permission();
+
+    if ((string)$mybb->get_input('do') !== 'adjust' && is_file(af_balance_alias_root_path())) {
+        $query = $_GET;
+        unset($query['action']);
+        header('Location: ' . af_balance_build_manage_url($query), true, 302);
+        exit;
     }
 
     $tab = (string)$mybb->get_input('tab');
@@ -1289,8 +1376,21 @@ function af_balance_misc_start(): void
     }
 
     if ((string)$mybb->get_input('do') === 'adjust') {
+        if (!af_balance_can_manage()) {
+            error_no_permission();
+        }
         af_balance_handle_manage_adjust();
     }
+
+    af_balance_render_balancemanage();
+}
+
+function af_balance_render_balancemanage(): void
+{
+    if (!af_balance_can_manage()) {
+        error_no_permission();
+    }
+
     af_balance_render_manage_page();
     exit;
 }
@@ -1542,11 +1642,12 @@ function af_balance_render_manage_page(): void
 
     $currency_symbol = htmlspecialchars_uni((string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'));
     $bburl = htmlspecialchars_uni((string)($mybb->settings['bburl'] ?? ''));
+    $is_misc_script = strtolower((string)(defined('THIS_SCRIPT') ? THIS_SCRIPT : '')) === 'misc.php';
+    $action_hidden_input = $is_misc_script ? '<input type="hidden" name="action" value="balance_manage">' : '';
     $qRaw = trim((string)$mybb->get_input('q'));
     $raceRaw = trim((string)$mybb->get_input('race'));
 
     $exp_tab_params = [
-        'action' => 'balance_manage',
         'tab' => 'exp',
     ];
     if ($qRaw !== '') {
@@ -1557,7 +1658,6 @@ function af_balance_render_manage_page(): void
     }
 
     $credits_tab_params = [
-        'action' => 'balance_manage',
         'tab' => 'credits',
     ];
     if ($qRaw !== '') {
@@ -1568,7 +1668,6 @@ function af_balance_render_manage_page(): void
     }
 
     $history_tab_params = [
-        'action' => 'balance_manage',
         'tab' => 'history',
     ];
 
@@ -1593,9 +1692,9 @@ function af_balance_render_manage_page(): void
         $history_tab_params['reason'] = $history_reason_tab;
     }
 
-    $exp_tab_url = 'misc.php?' . htmlspecialchars_uni(http_build_query($exp_tab_params));
-    $credits_tab_url = 'misc.php?' . htmlspecialchars_uni(http_build_query($credits_tab_params));
-    $history_tab_url = 'misc.php?' . htmlspecialchars_uni(http_build_query($history_tab_params));
+    $exp_tab_url = htmlspecialchars_uni(af_balance_build_manage_url($exp_tab_params));
+    $credits_tab_url = htmlspecialchars_uni(af_balance_build_manage_url($credits_tab_params));
+    $history_tab_url = htmlspecialchars_uni(af_balance_build_manage_url($history_tab_params));
 
     $content_html = '';
 
@@ -1704,8 +1803,8 @@ function af_balance_render_manage_page(): void
             $target_link = $target_uid > 0 ? '<a href="member.php?action=profile&amp;uid=' . $target_uid . '">' . htmlspecialchars_uni($target_name) . '</a>' : htmlspecialchars_uni($target_name);
             $actor_link = $actor_uid > 0 ? '<a href="member.php?action=profile&amp;uid=' . $actor_uid . '">' . htmlspecialchars_uni($actor_name) . '</a>' : htmlspecialchars_uni($actor_name);
 
-            $actor_filter_url = 'misc.php?action=balance_manage&amp;tab=history&amp;actor=' . rawurlencode((string)$actor_uid);
-            $target_filter_url = 'misc.php?action=balance_manage&amp;tab=history&amp;uid=' . rawurlencode((string)$target_uid);
+            $actor_filter_url = af_balance_build_manage_url(['tab' => 'history', 'actor' => (string)$actor_uid]);
+            $target_filter_url = af_balance_build_manage_url(['tab' => 'history', 'uid' => (string)$target_uid]);
 
             $rows_html[] = '<tr>'
                 . '<td>' . htmlspecialchars_uni(my_date('d.m.Y H:i', (int)($row['created_at'] ?? 0))) . '</td>'
@@ -1724,7 +1823,6 @@ function af_balance_render_manage_page(): void
         }
 
         $base_params = [
-            'action' => 'balance_manage',
             'tab' => 'history',
             'uid' => $history_uid_raw,
             'actor' => $history_actor_raw,
@@ -1739,7 +1837,7 @@ function af_balance_render_manage_page(): void
             for ($p = max(1, $page - 3); $p <= min($total_pages, $page + 3); $p++) {
                 $params = $base_params;
                 $params['page'] = $p;
-                $url = 'misc.php?' . htmlspecialchars_uni(http_build_query($params));
+                $url = htmlspecialchars_uni(af_balance_build_manage_url($params));
                 if ($p === $page) {
                     $links[] = '<strong>' . $p . '</strong>';
                 } else {
@@ -1751,7 +1849,7 @@ function af_balance_render_manage_page(): void
 
         $content_html = ''
             . '<form method="get" class="af-balance-filters">'
-            . '<input type="hidden" name="action" value="balance_manage">'
+            . $action_hidden_input
             . '<input type="hidden" name="tab" value="history">'
             . '<input type="text" name="uid" value="' . htmlspecialchars_uni($history_uid_raw) . '" placeholder="Кому (uid/username)">'
             . '<input type="text" name="actor" value="' . htmlspecialchars_uni($history_actor_raw) . '" placeholder="Кто (uid/username)">'
@@ -1817,7 +1915,7 @@ function af_balance_render_manage_page(): void
             $avatar = trim((string)($row['avatar'] ?? ''));
             if ($avatar === '') $avatar = 'images/default_avatar.png';
 
-            $history_url = 'misc.php?action=balance_manage&amp;tab=history&amp;uid=' . $uid;
+            $history_url = htmlspecialchars_uni(af_balance_build_manage_url(['tab' => 'history', 'uid' => $uid]));
 
             $add_button = '<button type="button" class="button af-balance-action" data-af-balance-adjust="1" data-op="add" data-uid="' . $uid . '">Начислить</button>';
             $sub_button = '<button type="button" class="button af-balance-action" data-af-balance-adjust="1" data-op="sub" data-uid="' . $uid . '">Списать</button>';
@@ -1853,7 +1951,7 @@ function af_balance_render_manage_page(): void
 
         $content_html = ''
             . '<form method="get" class="af-balance-filters">'
-            . '<input type="hidden" name="action" value="balance_manage">'
+            . $action_hidden_input
             . '<input type="hidden" name="tab" value="' . htmlspecialchars_uni($tab) . '">'
             . '<input type="text" name="q" value="' . htmlspecialchars_uni($qRaw) . '" placeholder="Поиск по имени">'
             . '<input type="text" name="race" value="' . htmlspecialchars_uni($raceRaw) . '" placeholder="Поиск по расе">'
