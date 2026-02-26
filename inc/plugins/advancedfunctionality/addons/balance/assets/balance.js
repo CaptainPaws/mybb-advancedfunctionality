@@ -85,33 +85,47 @@
     if (!plaque) return;
 
     var creditsDiv = plaque.querySelector('[data-af-balance-credits="1"]') || postEl.querySelector('.af-cs-postbit-stats__credits');
+    var creditsValue = plaque.querySelector('[data-af-balance-credits-value="1"]');
     var levelDiv   = plaque.querySelector('[data-af-balance-level="1"]') || postEl.querySelector('.af-cs-postbit-stats__level');
+    var levelValue = plaque.querySelector('[data-af-balance-level-value="1"]');
     var abilityDiv = plaque.querySelector('[data-af-balance-ability="1"]');
+    var abilityValue = plaque.querySelector('[data-af-balance-ability-value="1"]');
     var barDiv     = plaque.querySelector('[data-af-balance-expbar="1"]')
       || postEl.querySelector('.af-expbar.af-cs-postbit-stats__bar')
       || postEl.querySelector('.af-cs-postbit-stats__bar.af-expbar');
 
     // credits
     if (creditsDiv) {
-      var icon = creditsDiv.querySelector('i');
-      var iconHtml = icon ? icon.outerHTML : '';
       var cr = toStr(snapshot.credits_display);
       var sym = toStr(snapshot.currency_symbol);
-      // Сохраняем иконку, перерисовываем текст
-      creditsDiv.innerHTML = (iconHtml ? iconHtml + ': ' : '') + cr + (sym ? ' ' + sym : '');
+      if (creditsValue) {
+        creditsValue.textContent = cr + (sym ? ' ' + sym : '');
+      } else {
+        var icon = creditsDiv.querySelector('i');
+        var iconHtml = icon ? icon.outerHTML : '';
+        creditsDiv.innerHTML = (iconHtml ? iconHtml + ': ' : '') + cr + (sym ? ' ' + sym : '');
+      }
     }
 
     if (abilityDiv && snapshot.ability_tokens_display != null) {
-      var aicon = abilityDiv.querySelector('i');
-      var aiconHtml = aicon ? aicon.outerHTML : '';
       var av = toStr(snapshot.ability_tokens_display);
       var asym = toStr(snapshot.ability_tokens_symbol);
-      abilityDiv.innerHTML = (aiconHtml ? aiconHtml + ': ' : '') + av + (asym ? ' ' + asym : '');
+      if (abilityValue) {
+        abilityValue.textContent = av + (asym ? ' ' + asym : '');
+      } else {
+        var aicon = abilityDiv.querySelector('i');
+        var aiconHtml = aicon ? aicon.outerHTML : '';
+        abilityDiv.innerHTML = (aiconHtml ? aiconHtml + ': ' : '') + av + (asym ? ' ' + asym : '');
+      }
     }
 
     // level
-    if (levelDiv && snapshot.level != null) {
-      levelDiv.textContent = 'Level ' + toInt(snapshot.level);
+    if (snapshot.level != null) {
+      if (levelValue) {
+        levelValue.textContent = String(toInt(snapshot.level));
+      } else if (levelDiv) {
+        levelDiv.textContent = 'Level ' + toInt(snapshot.level);
+      }
     }
 
     // exp bar
