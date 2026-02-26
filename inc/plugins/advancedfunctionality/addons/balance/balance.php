@@ -1279,6 +1279,15 @@ function af_balance_misc_start(): void
     if (!af_balance_can_manage()) {
         error_no_permission();
     }
+
+    $tab = (string)$mybb->get_input('tab');
+    if (!in_array($tab, ['exp', 'credits', 'history'], true)) {
+        $legacy_kind = (string)$mybb->get_input('kind');
+        if (in_array($legacy_kind, ['exp', 'credits'], true)) {
+            $mybb->input['tab'] = $legacy_kind;
+        }
+    }
+
     if ((string)$mybb->get_input('do') === 'adjust') {
         af_balance_handle_manage_adjust();
     }
@@ -1522,13 +1531,9 @@ function af_balance_render_manage_page(): void
         $tab = '';
     }
 
-    $kind = (string)$mybb->get_input('kind');
-    if (!in_array($kind, ['exp', 'credits'], true)) {
-        $kind = 'exp';
-    }
-
     if ($tab === '') {
-        $tab = $kind;
+        $legacy_kind = (string)$mybb->get_input('kind');
+        $tab = in_array($legacy_kind, ['exp', 'credits'], true) ? $legacy_kind : 'exp';
     }
 
     $kind_exp_active = $tab === 'exp' ? 'is-active' : '';
@@ -1537,6 +1542,60 @@ function af_balance_render_manage_page(): void
 
     $currency_symbol = htmlspecialchars_uni((string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'));
     $bburl = htmlspecialchars_uni((string)($mybb->settings['bburl'] ?? ''));
+    $qRaw = trim((string)$mybb->get_input('q'));
+    $raceRaw = trim((string)$mybb->get_input('race'));
+
+    $exp_tab_params = [
+        'action' => 'balance_manage',
+        'tab' => 'exp',
+    ];
+    if ($qRaw !== '') {
+        $exp_tab_params['q'] = $qRaw;
+    }
+    if ($raceRaw !== '') {
+        $exp_tab_params['race'] = $raceRaw;
+    }
+
+    $credits_tab_params = [
+        'action' => 'balance_manage',
+        'tab' => 'credits',
+    ];
+    if ($qRaw !== '') {
+        $credits_tab_params['q'] = $qRaw;
+    }
+    if ($raceRaw !== '') {
+        $credits_tab_params['race'] = $raceRaw;
+    }
+
+    $history_tab_params = [
+        'action' => 'balance_manage',
+        'tab' => 'history',
+    ];
+
+    $history_uid_tab = trim((string)$mybb->get_input('uid'));
+    $history_actor_tab = trim((string)$mybb->get_input('actor'));
+    $history_kind_tab = (string)$mybb->get_input('history_kind');
+    $amount_type_tab = (string)$mybb->get_input('amount_type');
+    $history_reason_tab = trim((string)$mybb->get_input('reason'));
+    if ($history_uid_tab !== '') {
+        $history_tab_params['uid'] = $history_uid_tab;
+    }
+    if ($history_actor_tab !== '') {
+        $history_tab_params['actor'] = $history_actor_tab;
+    }
+    if (in_array($history_kind_tab, ['exp', 'credits', 'any'], true) && $history_kind_tab !== 'any') {
+        $history_tab_params['history_kind'] = $history_kind_tab;
+    }
+    if (in_array($amount_type_tab, ['plus', 'minus', 'all'], true) && $amount_type_tab !== 'all') {
+        $history_tab_params['amount_type'] = $amount_type_tab;
+    }
+    if ($history_reason_tab !== '') {
+        $history_tab_params['reason'] = $history_reason_tab;
+    }
+
+    $exp_tab_url = 'misc.php?' . htmlspecialchars_uni(http_build_query($exp_tab_params));
+    $credits_tab_url = 'misc.php?' . htmlspecialchars_uni(http_build_query($credits_tab_params));
+    $history_tab_url = 'misc.php?' . htmlspecialchars_uni(http_build_query($history_tab_params));
 
     $content_html = '';
 
@@ -1717,8 +1776,6 @@ function af_balance_render_manage_page(): void
             . $pagination;
     } else {
         $kind = $tab;
-        $qRaw = trim((string)$mybb->get_input('q'));
-        $raceRaw = trim((string)$mybb->get_input('race'));
 
         $where = 'u.uid>0';
         if ($qRaw !== '') {
@@ -1762,21 +1819,37 @@ function af_balance_render_manage_page(): void
 
             $history_url = 'misc.php?action=balance_manage&amp;tab=history&amp;uid=' . $uid;
 
+            $add_button = '<button type="button" class="button af-balance-action" data-af-balance-adjust="1" data-op="add" data-uid="' . $uid . '">Начислить</button>';
+            $sub_button = '<button type="button" class="button af-balance-action" data-af-balance-adjust="1" data-op="sub" data-uid="' . $uid . '">Списать</button>';
+            $history_button = '<a class="button af-balance-action" href="' . $history_url . '">История</a>';
+
+            $value_columns = '';
+            if ($kind === 'exp') {
+                $value_columns .= '<td data-af-balance-exp>' . af_balance_format_exp($exp) . '</td>';
+                $value_columns .= '<td data-af-balance-level>' . (int)($levelData['level'] ?? 1) . '</td>';
+            } else {
+                $value_columns .= '<td data-af-balance-credits>' . af_balance_format_credits($credits) . '</td>';
+            }
+
             $rows[] =
                 '<tr data-af-balance-row="' . $uid . '">'
                 . '<td><img src="' . htmlspecialchars_uni($avatar) . '" width="34" height="34" style="border-radius:50%"></td>'
                 . '<td><a href="member.php?action=profile&amp;uid=' . $uid . '">' . htmlspecialchars_uni((string)$row['username']) . '</a>'
                 . '<div class="smalltext">' . htmlspecialchars_uni($rowRace) . '</div></td>'
-                . '<td data-af-balance-exp>' . af_balance_format_exp($exp) . '</td>'
-                . '<td data-af-balance-credits>' . af_balance_format_credits($credits) . '</td>'
-                . '<td data-af-balance-level>' . (int)($levelData['level'] ?? 1) . '</td>'
-                . '<td><button type="button" class="button" data-af-balance-adjust="1" data-uid="' . $uid . '">Начислить</button> '
-                . '<a class="button" href="' . $history_url . '">История</a></td>'
+                . $value_columns
+                . '<td>' . $add_button . ' ' . $sub_button . ' ' . $history_button . '</td>'
                 . '</tr>';
         }
 
-        $rows_html = $rows ? implode("
-", $rows) : '<tr><td colspan="6">Нет результатов</td></tr>';
+        $colspan = $kind === 'exp' ? 5 : 4;
+        $rows_html = $rows ? implode("\n", $rows) : '<tr><td colspan="' . $colspan . '">Нет результатов</td></tr>';
+
+        $table_head = '';
+        if ($kind === 'exp') {
+            $table_head = '<tr><th></th><th>User</th><th>EXP</th><th>Level</th><th>Actions</th></tr>';
+        } else {
+            $table_head = '<tr><th></th><th>User</th><th>Credits (' . $currency_symbol . ')</th><th>Actions</th></tr>';
+        }
 
         $content_html = ''
             . '<form method="get" class="af-balance-filters">'
@@ -1787,7 +1860,7 @@ function af_balance_render_manage_page(): void
             . '<button type="submit" class="button">Фильтр</button>'
             . '</form>'
             . '<table class="tborder af-balance-table">'
-            . '<tr><th></th><th>User</th><th>EXP</th><th>Credits (' . $currency_symbol . ')</th><th>Level</th><th></th></tr>'
+            . $table_head
             . $rows_html
             . '</table>'
             . '<div class="af-balance-modal" data-af-balance-modal hidden>'
@@ -1819,9 +1892,9 @@ function af_balance_render_manage_page(): void
         . '<div class="af-balance-page">'
         . '<h1>Balance management</h1>'
         . '<div class="af-balance-tabs">'
-        . '<a class="' . $kind_exp_active . '" href="misc.php?action=balance_manage&amp;tab=exp&amp;kind=exp">EXP</a>'
-        . '<a class="' . $kind_credits_active . '" href="misc.php?action=balance_manage&amp;tab=credits&amp;kind=credits">Credits</a>'
-        . '<a class="' . $history_active . '" href="misc.php?action=balance_manage&amp;tab=history">История</a>'
+        . '<a class="af-balance-tab ' . $kind_exp_active . '" href="' . $exp_tab_url . '">EXP</a>'
+        . '<a class="af-balance-tab ' . $kind_credits_active . '" href="' . $credits_tab_url . '">Credits</a>'
+        . '<a class="af-balance-tab ' . $history_active . '" href="' . $history_tab_url . '">История</a>'
         . '</div>'
         . $content_html
         . '</div>'
