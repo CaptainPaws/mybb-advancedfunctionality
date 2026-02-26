@@ -392,6 +392,7 @@ function af_balance_ensure_settings(): void
         ['af_balance_level_cap','Level cap','text','60',37],
         ['af_balance_level_req_base','Level requirement base','text','2000',38],
         ['af_balance_level_req_step','Level requirement step','text','1000',39],
+        ['af_balance_history_limit','History rows limit','text','2000',40],
     ];
     $legacyMigratedSid = af_balance_pick_setting_sid('af_balance_migrated_credits_scale', $needsRebuild);
     if ($legacyMigratedSid > 0) {
@@ -411,7 +412,11 @@ function af_balance_ensure_settings(): void
 
     foreach ($defs as [$name,$title,$opt,$val,$order]) {
         $sid = af_balance_pick_setting_sid($name, $needsRebuild);
-        $row = ['name'=>$name,'title'=>$title,'description'=>$title,'optionscode'=>$opt,'disporder'=>$order,'gid'=>$gid,'isdefault'=>0];
+        $description = $title;
+        if ($name === 'af_balance_history_limit') {
+            $description = 'Сколько последних записей показывать во вкладке История (окно логов)';
+        }
+        $row = ['name'=>$name,'title'=>$title,'description'=>$description,'optionscode'=>$opt,'disporder'=>$order,'gid'=>$gid,'isdefault'=>0];
         if ($sid > 0) {
             $db->update_query('settings',$row,"sid=".$sid);
         } else {
@@ -1600,7 +1605,7 @@ function af_balance_migrate_from_charactersheets(): void
     }
 }
 
-function af_balance_history_limit_window_where(): string
+function af_balance_history_limit_window_where(int $historyLimit = 2000): string
 {
     global $db;
 
@@ -1608,8 +1613,15 @@ function af_balance_history_limit_window_where(): string
         return '1=0';
     }
 
+    if ($historyLimit < 100) {
+        $historyLimit = 100;
+    } elseif ($historyLimit > 20000) {
+        $historyLimit = 20000;
+    }
+
     $threshold = 0;
-    $q = $db->query('SELECT id FROM ' . TABLE_PREFIX . AF_BALANCE_TX_TABLE . ' ORDER BY id DESC LIMIT 1 OFFSET 1999');
+    $offset = $historyLimit - 1;
+    $q = $db->query('SELECT id FROM ' . TABLE_PREFIX . AF_BALANCE_TX_TABLE . ' ORDER BY id DESC LIMIT 1 OFFSET ' . (int)$offset);
     $row = $db->fetch_array($q);
     if (!empty($row['id'])) {
         $threshold = (int)$row['id'];
@@ -1701,6 +1713,12 @@ function af_balance_render_manage_page(): void
     if ($tab === 'history') {
         $page = max(1, (int)$mybb->get_input('page'));
         $per_page = 50;
+        $history_limit = (int)($mybb->settings['af_balance_history_limit'] ?? 2000);
+        if ($history_limit < 100) {
+            $history_limit = 100;
+        } elseif ($history_limit > 20000) {
+            $history_limit = 20000;
+        }
 
         $history_uid_raw = trim((string)$mybb->get_input('uid'));
         $history_actor_raw = trim((string)$mybb->get_input('actor'));
@@ -1714,7 +1732,7 @@ function af_balance_render_manage_page(): void
         }
         $reason_q = trim((string)$mybb->get_input('reason'));
 
-        $where_parts = [af_balance_history_limit_window_where()];
+        $where_parts = [af_balance_history_limit_window_where($history_limit)];
 
         if ($history_kind !== 'any') {
             $where_parts[] = "tx.kind='" . $db->escape_string($history_kind) . "'";
