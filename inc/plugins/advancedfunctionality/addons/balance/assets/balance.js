@@ -235,14 +235,15 @@
       elError.style.display = (msg && msg !== '') ? 'block' : '';
     }
 
-    function open(uid) {
+    function open(uid, op) {
       modal.hidden = false;
       if (elUid) elUid.value = String(uid || '');
       if (elAmount) elAmount.value = '';
       if (elReason) elReason.value = '';
 
-      var add = modal.querySelector('input[name="af-balance-op"][value="add"]');
-      if (add) add.checked = true;
+      var opValue = (op === 'sub') ? 'sub' : 'add';
+      var radio = modal.querySelector('input[name="af-balance-op"][value="' + opValue + '"]');
+      if (radio) radio.checked = true;
 
       setBusy(false);
       err('');
@@ -376,7 +377,8 @@
         e.preventDefault();
         e.stopPropagation();
         var uid2 = btn.getAttribute('data-uid') || '';
-        open(uid2);
+        var op = btn.getAttribute('data-op') || 'add';
+        open(uid2, op);
         return;
       }
 
