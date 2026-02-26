@@ -143,22 +143,112 @@
   function processNodeForApc(node) {
     if (!node || node.nodeType !== 1) return;
 
+    var handled = false;
+
     if (node.matches && node.matches('[data-af-apc-slot="1"]')) {
       updateSlot(node);
+      handled = true;
     }
 
     if (node.querySelectorAll) {
       node.querySelectorAll('[data-af-apc-slot="1"]').forEach(function (slot) {
         updateSlot(slot);
-      });
-
-      node.querySelectorAll('[id^="post_"], .post').forEach(function (postNode) {
-        var slot = postNode.querySelector('[data-af-apc-slot="1"]');
-        if (slot) {
-          updateSlot(slot);
-        }
+        handled = true;
       });
     }
+
+    var candidatePosts = [];
+    if (node.matches && node.matches('[id^="post_"], .post')) {
+      candidatePosts.push(node);
+    }
+    if (node.querySelectorAll) {
+      node.querySelectorAll('[id^="post_"], .post').forEach(function (postNode) {
+        candidatePosts.push(postNode);
+      });
+    }
+
+    candidatePosts.forEach(function (postNode) {
+      var slot = postNode.querySelector('[data-af-apc-slot="1"]');
+      if (slot) {
+        updateSlot(slot);
+        handled = true;
+        return;
+      }
+
+      var plaque = postNode.querySelector('[data-af-balance-plaque="1"]') || postNode.querySelector('.af-cs-postbit-stats');
+      if (!plaque) return;
+
+      var uid = toInt(plaque.getAttribute('data-uid')) || extractUidFromPost(postNode);
+      if (!uid) return;
+
+      var postsCell = plaque.querySelector('[data-af-balance-posts="1"]');
+      if (!postsCell) {
+        var grid = plaque.querySelector('.af-cs-postbit-stats__grid') || plaque;
+        postsCell = document.createElement('div');
+        postsCell.className = 'af-cs-postbit-stat af-cs-postbit-stat--posts';
+        postsCell.setAttribute('data-af-balance-posts', '1');
+        grid.appendChild(postsCell);
+      }
+
+      slot = document.createElement('div');
+      slot.className = 'af-apc-slot';
+      slot.setAttribute('data-af-apc-slot', '1');
+      slot.setAttribute('data-uid', String(uid));
+      postsCell.appendChild(slot);
+
+      updateSlot(slot);
+      handled = true;
+    });
+
+    if (!handled && node.matches && node.matches('[id^="post_"], .post')) {
+      var uid = extractUidFromPost(node);
+      if (uid) {
+        fetchSnapshot(uid);
+      }
+    }
+  }
+
+  function findLatestPostNode() {
+    var posts = Array.prototype.slice.call(document.querySelectorAll('[id^="post_"], .post'));
+    if (!posts.length) return null;
+
+    posts.sort(function (a, b) {
+      var aid = toInt(String(a.id || '').replace(/^post_/, ''));
+      var bid = toInt(String(b.id || '').replace(/^post_/, ''));
+      if (aid && bid) return aid - bid;
+      return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
+    });
+
+    return posts[posts.length - 1] || null;
+  }
+
+  function findPostNodeByPid(pid) {
+    pid = toInt(pid);
+    if (!pid) return null;
+
+    return document.getElementById('post_' + pid)
+      || document.querySelector('[id="post_' + pid + '"]')
+      || document.querySelector('[data-pid="' + pid + '"]');
+  }
+
+  function extractPidFromAjaxResponse(xhr) {
+    if (!xhr) return 0;
+
+    var text = String(xhr.responseText || '');
+    if (!text) return 0;
+
+    var m = text.match(/id\s*=\s*["']post_(\d+)["']/i)
+      || text.match(/(?:^|[?&])pid=(\d+)/i);
+    return m ? toInt(m[1]) : 0;
+  }
+
+  function findQuickReplyPostNode(xhr, params) {
+    var pid = toInt(params.pid || params.newpid || params.lastpid || 0);
+    if (!pid) {
+      pid = extractPidFromAjaxResponse(xhr);
+    }
+
+    return findPostNodeByPid(pid) || findLatestPostNode();
   }
 
   function observeRealtimePosts() {
@@ -237,11 +327,10 @@
 
         console.log('[APC] new post detected');
 
-        document.querySelectorAll('[data-af-apc-slot="1"]').forEach(function (slot) {
-          if (!slot.querySelector('.af-apc')) {
-            updateSlot(slot);
-          }
-        });
+        var postNode = findQuickReplyPostNode(xhr, p);
+        if (postNode) {
+          processNodeForApc(postNode);
+        }
       } catch (e) {}
     });
   }
