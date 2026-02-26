@@ -40,7 +40,8 @@ function af_charactersheets_postbit_button(array &$post): void
         $currency_symbol = htmlspecialchars_uni((string)($balance_data['currency_symbol'] ?? '¢'));
         $level = (int)($balance_data['level'] ?? 1);
         $progress_percent = max(0, min(100, (int)($balance_data['progress_percent'] ?? 0)));
-        $exp_display = htmlspecialchars_uni((string)($balance_data['exp_display'] ?? '0.00'));
+        $exp_display = htmlspecialchars_uni((string)($balance_data['exp_display'] ?? '0'));
+        $exp_need_display = htmlspecialchars_uni((string)($balance_data['exp_need_display'] ?? '0'));
 
         $tpl_balance = $templates->get('af_balance_postbit');
         if ($tpl_balance === '') {
