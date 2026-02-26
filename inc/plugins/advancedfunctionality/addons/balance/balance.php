@@ -1753,15 +1753,25 @@ function af_balance_member_profile_end(): void
         return;
     }
 
-    $appendRowsToTable = static function (string &$tableHtml, string $rowsHtml): bool {
+    $insertRowsIntoProfileFields = static function (string &$tableHtml, string $rowsHtml): bool {
         if ($tableHtml === '' || strpos($tableHtml, '<tr') === false || strpos($tableHtml, $rowsHtml) !== false) {
             return false;
         }
 
-        $count = 0;
-        $updated = preg_replace('~</table>\s*$~i', $rowsHtml . "\n</table>", $tableHtml, 1, $count);
-        if ($count > 0 && is_string($updated)) {
-            $tableHtml = $updated;
+        $pattern = '~(<tr\s+class="af-apf-row\b[^"]*"\s*>.*?</tr>)~si';
+        $matches = [];
+        if (preg_match_all($pattern, $tableHtml, $matches, PREG_OFFSET_CAPTURE) > 0) {
+            $lastMatch = end($matches[0]);
+            if (is_array($lastMatch) && isset($lastMatch[0], $lastMatch[1])) {
+                $insertPos = (int)$lastMatch[1] + strlen((string)$lastMatch[0]);
+                $tableHtml = substr_replace($tableHtml, "\n" . $rowsHtml, $insertPos, 0);
+                return true;
+            }
+        }
+
+        $lastTableClosePos = strripos($tableHtml, '</table>');
+        if ($lastTableClosePos !== false) {
+            $tableHtml = substr_replace($tableHtml, "\n" . $rowsHtml . "\n", $lastTableClosePos, 0);
             return true;
         }
 
@@ -1769,12 +1779,12 @@ function af_balance_member_profile_end(): void
         return true;
     };
 
-    if (isset($profilefields) && is_string($profilefields) && $appendRowsToTable($profilefields, $rows)) {
+    if (isset($profilefields) && is_string($profilefields) && $insertRowsIntoProfileFields($profilefields, $rows)) {
         return;
     }
 
     if (isset($memprofile['profilefields']) && is_string($memprofile['profilefields'])) {
-        $appendRowsToTable($memprofile['profilefields'], $rows);
+        $insertRowsIntoProfileFields($memprofile['profilefields'], $rows);
     }
 }
 
