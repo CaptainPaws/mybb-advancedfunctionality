@@ -638,6 +638,18 @@ function af_balance_xmlhttp(): void
         $expScaled = (int)($bal['exp'] ?? 0);
         $crScaled  = (int)($bal['credits'] ?? 0);
 
+        $level = 1;
+        $percent = 0;
+
+        if (function_exists('af_charactersheets_compute_level')) {
+            $expFloat = $expScaled / AF_BALANCE_EXP_SCALE;
+            $ld = af_charactersheets_compute_level($expFloat);
+            if (is_array($ld)) {
+                if (isset($ld['level'])) $level = (int)$ld['level'];
+                if (isset($ld['percent'])) $percent = (int)$ld['percent'];
+            }
+        }
+
         echo json_encode([
             'success' => true,
             'pid' => $pid,
@@ -647,15 +659,16 @@ function af_balance_xmlhttp(): void
             'exp_display' => af_balance_format_exp($expScaled),
             'credits_display' => af_balance_format_credits($crScaled),
             'currency_symbol' => (string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'),
+            'level' => $level,
+            'progress_percent' => $percent,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }
 
-    // ---- Quick edit detection (оставляем как safety-net; на пересчёт влияет datahandler)
+    // ---- Quick edit detection (safety-net)
     if ($action === 'edit_post' && ($do === 'update_post' || $do === 'update')) {
         $pid = (int)($mybb->input['pid'] ?? $mybb->input['post_id'] ?? 0);
         if ($pid > 0) {
-            // не обязателен, но безопасный фоллбек (дедупит last_hash)
             af_balance_schedule_post_recalc_after_request($pid, 'quick_edit');
         }
         return;
