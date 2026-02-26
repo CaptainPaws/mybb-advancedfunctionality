@@ -98,34 +98,7 @@ function af_charactersheets_compute_level(float $exp): array
 
 function af_charactersheets_award_exp_manual(array $sheet, array $user, int $fid, string $amount_raw, string $reason): array
 {
-    if (!function_exists('af_balance_add_exp') || !function_exists('af_balance_can_manual_adjust')) {
-        return ['success' => false, 'error' => 'Balance addon is required'];
-    }
-
-    $amount = af_charactersheets_to_number($amount_raw);
-    if ($amount === null || $amount == 0.0) {
-        return ['success' => false, 'error' => 'Amount is invalid'];
-    }
-
-    if (!af_balance_can_manual_adjust((int)($user['uid'] ?? 0), 'exp')) {
-        return ['success' => false, 'error' => 'Permission denied'];
-    }
-
-    $target_uid = (int)($sheet['uid'] ?? 0);
-    if ($target_uid <= 0) {
-        return ['success' => false, 'error' => 'Target UID is invalid'];
-    }
-
-    af_balance_add_exp($target_uid, $amount, [
-        'reason' => 'manual',
-        'source' => 'charactersheets',
-        'actor_uid' => (int)($user['uid'] ?? 0),
-        'comment' => trim($reason),
-        'ref_type' => 'sheet',
-        'ref_id' => (int)($sheet['id'] ?? 0),
-    ]);
-
-    return ['success' => true];
+    return ['success' => false, 'error' => 'Manual EXP adjust moved to balance_manage'];
 }
 
 

@@ -1491,132 +1491,342 @@ function af_balance_migrate_from_charactersheets(): void
     }
 }
 
+function af_balance_history_limit_window_where(): string
+{
+    global $db;
+
+    if (!$db->table_exists(AF_BALANCE_TX_TABLE)) {
+        return '1=0';
+    }
+
+    $threshold = 0;
+    $q = $db->query('SELECT id FROM ' . TABLE_PREFIX . AF_BALANCE_TX_TABLE . ' ORDER BY id DESC LIMIT 1 OFFSET 1999');
+    $row = $db->fetch_array($q);
+    if (!empty($row['id'])) {
+        $threshold = (int)$row['id'];
+    }
+
+    if ($threshold > 0) {
+        return 'tx.id>=' . $threshold;
+    }
+
+    return '1=1';
+}
+
 function af_balance_render_manage_page(): void
 {
     global $db, $mybb, $headerinclude, $header, $footer;
+
+    $tab = (string)$mybb->get_input('tab');
+    if (!in_array($tab, ['exp', 'credits', 'history'], true)) {
+        $tab = '';
+    }
 
     $kind = (string)$mybb->get_input('kind');
     if (!in_array($kind, ['exp', 'credits'], true)) {
         $kind = 'exp';
     }
 
-    $qRaw = trim((string)$mybb->get_input('q'));
-    $raceRaw = trim((string)$mybb->get_input('race'));
-
-    $where = 'u.uid>0';
-    if ($qRaw !== '') {
-        // Без escape_string_like, чтобы не зависеть от драйвера
-        $like = $db->escape_string($qRaw);
-        $like = str_replace(['%', '_'], ['\\%', '\\_'], $like);
-        $where .= " AND u.username LIKE '%{$like}%'";
+    if ($tab === '') {
+        $tab = $kind;
     }
 
-    $rows = [];
-    $sql = "SELECT u.uid,u.username,u.avatar,b.exp,b.credits,s.progress_json
-            FROM " . TABLE_PREFIX . "users u
-            LEFT JOIN " . TABLE_PREFIX . AF_BALANCE_TABLE . " b ON b.uid=u.uid
-            LEFT JOIN " . TABLE_PREFIX . "af_cs_sheets s ON s.uid=u.uid
-            WHERE {$where}
-            ORDER BY u.username ASC
-            LIMIT 200";
-    $res = $db->query($sql);
+    $kind_exp_active = $tab === 'exp' ? 'is-active' : '';
+    $kind_credits_active = $tab === 'credits' ? 'is-active' : '';
+    $history_active = $tab === 'history' ? 'is-active' : '';
 
-    while ($row = $db->fetch_array($res)) {
-        $progress = json_decode((string)($row['progress_json'] ?? ''), true);
-        if (!is_array($progress)) $progress = [];
+    $currency_symbol = htmlspecialchars_uni((string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'));
+    $bburl = htmlspecialchars_uni((string)($mybb->settings['bburl'] ?? ''));
 
-        $rowRace = trim((string)($progress['race'] ?? ''));
+    $content_html = '';
 
-        if ($raceRaw !== '') {
-            $hay = function_exists('mb_strtolower') ? mb_strtolower($rowRace, 'UTF-8') : strtolower($rowRace);
-            $needle = function_exists('mb_strtolower') ? mb_strtolower($raceRaw, 'UTF-8') : strtolower($raceRaw);
-            if ($rowRace === '' || strpos($hay, $needle) === false) {
-                continue;
+    if ($tab === 'history') {
+        $page = max(1, (int)$mybb->get_input('page'));
+        $per_page = 50;
+
+        $history_uid_raw = trim((string)$mybb->get_input('uid'));
+        $history_actor_raw = trim((string)$mybb->get_input('actor'));
+        $history_kind = (string)$mybb->get_input('history_kind');
+        if (!in_array($history_kind, ['exp', 'credits'], true)) {
+            $history_kind = 'any';
+        }
+        $amount_type = (string)$mybb->get_input('amount_type');
+        if (!in_array($amount_type, ['all', 'plus', 'minus'], true)) {
+            $amount_type = 'all';
+        }
+        $reason_q = trim((string)$mybb->get_input('reason'));
+
+        $where_parts = [af_balance_history_limit_window_where()];
+
+        if ($history_kind !== 'any') {
+            $where_parts[] = "tx.kind='" . $db->escape_string($history_kind) . "'";
+        }
+
+        if ($amount_type === 'plus') {
+            $where_parts[] = 'tx.amount>0';
+        } elseif ($amount_type === 'minus') {
+            $where_parts[] = 'tx.amount<0';
+        }
+
+        if ($reason_q !== '') {
+            $like = $db->escape_string($reason_q);
+            $like = str_replace(['%', '_'], ['\%', '\_'], $like);
+            $where_parts[] = "tx.reason LIKE '%{$like}%'";
+        }
+
+        if ($history_uid_raw !== '') {
+            if (ctype_digit($history_uid_raw)) {
+                $where_parts[] = 'tx.uid=' . (int)$history_uid_raw;
+            } else {
+                $like = $db->escape_string($history_uid_raw);
+                $like = str_replace(['%', '_'], ['\%', '\_'], $like);
+                $where_parts[] = "u.username LIKE '%{$like}%'";
             }
         }
 
-        $uid = (int)$row['uid'];
-        $exp = (int)($row['exp'] ?? 0);
-        $credits = (int)($row['credits'] ?? 0);
+        if ($history_actor_raw !== '') {
+            if (ctype_digit($history_actor_raw)) {
+                $where_parts[] = 'tx.actor_uid=' . (int)$history_actor_raw;
+            } else {
+                $like = $db->escape_string($history_actor_raw);
+                $like = str_replace(['%', '_'], ['\%', '\_'], $like);
+                $where_parts[] = "au.username LIKE '%{$like}%'";
+            }
+        }
 
-        $levelData = af_balance_compute_level($exp / AF_BALANCE_EXP_SCALE);
+        $where_sql = implode(' AND ', $where_parts);
 
-        $avatar = trim((string)($row['avatar'] ?? ''));
-        if ($avatar === '') $avatar = 'images/default_avatar.png';
+        $count_sql = "SELECT COUNT(*) AS c
+            FROM " . TABLE_PREFIX . AF_BALANCE_TX_TABLE . " tx
+            LEFT JOIN " . TABLE_PREFIX . "users u ON u.uid=tx.uid
+            LEFT JOIN " . TABLE_PREFIX . "users au ON au.uid=tx.actor_uid
+            WHERE {$where_sql}";
+        $total_rows = (int)$db->fetch_field($db->query($count_sql), 'c');
+        $total_pages = max(1, (int)ceil($total_rows / $per_page));
+        if ($page > $total_pages) {
+            $page = $total_pages;
+        }
+        $offset = ($page - 1) * $per_page;
 
-        $rows[] =
-            '<tr data-af-balance-row="' . $uid . '">'
-            . '<td><img src="' . htmlspecialchars_uni($avatar) . '" width="34" height="34" style="border-radius:50%"></td>'
-            . '<td><a href="member.php?action=profile&amp;uid=' . $uid . '">' . htmlspecialchars_uni((string)$row['username']) . '</a>'
-            . '<div class="smalltext">' . htmlspecialchars_uni($rowRace) . '</div></td>'
-            . '<td data-af-balance-exp>' . af_balance_format_exp($exp) . '</td>'
-            . '<td data-af-balance-credits>' . af_balance_format_credits($credits) . '</td>'
-            . '<td data-af-balance-level>' . (int)($levelData['level'] ?? 1) . '</td>'
-            . '<td><button type="button" class="button" data-af-balance-adjust="1" data-uid="' . $uid . '">Начислить</button></td>'
-            . '</tr>';
+        $sql = "SELECT tx.id,tx.created_at,tx.actor_uid,tx.uid,tx.kind,tx.amount,tx.balance_after,tx.reason,tx.source,tx.ref_type,tx.ref_id,tx.meta_json,
+                       u.username AS target_username,
+                       au.username AS actor_username
+                FROM " . TABLE_PREFIX . AF_BALANCE_TX_TABLE . " tx
+                LEFT JOIN " . TABLE_PREFIX . "users u ON u.uid=tx.uid
+                LEFT JOIN " . TABLE_PREFIX . "users au ON au.uid=tx.actor_uid
+                WHERE {$where_sql}
+                ORDER BY tx.id DESC
+                LIMIT {$offset}, {$per_page}";
+
+        $result = $db->query($sql);
+        $rows_html = [];
+        while ($row = $db->fetch_array($result)) {
+            $target_uid = (int)($row['uid'] ?? 0);
+            $actor_uid = (int)($row['actor_uid'] ?? 0);
+            $kind_val = (string)($row['kind'] ?? '');
+            $amount = (int)($row['amount'] ?? 0);
+            $balance_after = (int)($row['balance_after'] ?? 0);
+
+            $kind_badge = '<span class="af-balance-kind af-balance-kind--' . htmlspecialchars_uni($kind_val) . '">' . htmlspecialchars_uni(strtoupper($kind_val)) . '</span>';
+            $amount_class = $amount < 0 ? 'is-minus' : ($amount > 0 ? 'is-plus' : '');
+
+            $amount_label = $kind_val === 'credits' ? af_balance_format_credits($amount) : af_balance_format_exp($amount);
+            $balance_after_label = $kind_val === 'credits' ? af_balance_format_credits($balance_after) : af_balance_format_exp($balance_after);
+
+            $target_name = trim((string)($row['target_username'] ?? ''));
+            if ($target_name === '' && $target_uid > 0) {
+                $target_name = 'UID ' . $target_uid;
+            }
+            $actor_name = trim((string)($row['actor_username'] ?? ''));
+            if ($actor_name === '') {
+                $actor_name = $actor_uid > 0 ? ('UID ' . $actor_uid) : 'System';
+            }
+
+            $target_link = $target_uid > 0 ? '<a href="member.php?action=profile&amp;uid=' . $target_uid . '">' . htmlspecialchars_uni($target_name) . '</a>' : htmlspecialchars_uni($target_name);
+            $actor_link = $actor_uid > 0 ? '<a href="member.php?action=profile&amp;uid=' . $actor_uid . '">' . htmlspecialchars_uni($actor_name) . '</a>' : htmlspecialchars_uni($actor_name);
+
+            $actor_filter_url = 'misc.php?action=balance_manage&amp;tab=history&amp;actor=' . rawurlencode((string)$actor_uid);
+            $target_filter_url = 'misc.php?action=balance_manage&amp;tab=history&amp;uid=' . rawurlencode((string)$target_uid);
+
+            $rows_html[] = '<tr>'
+                . '<td>' . htmlspecialchars_uni(my_date('d.m.Y H:i', (int)($row['created_at'] ?? 0))) . '</td>'
+                . '<td>' . $actor_link . ($actor_uid > 0 ? ' <a class="smalltext" href="' . htmlspecialchars_uni($actor_filter_url) . '">[filter]</a>' : '') . '</td>'
+                . '<td>' . $target_link . ($target_uid > 0 ? ' <a class="smalltext" href="' . htmlspecialchars_uni($target_filter_url) . '">[filter]</a>' : '') . '</td>'
+                . '<td>' . $kind_badge . '</td>'
+                . '<td class="' . $amount_class . '">' . htmlspecialchars_uni($amount_label) . '</td>'
+                . '<td>' . htmlspecialchars_uni($balance_after_label) . '</td>'
+                . '<td>' . htmlspecialchars_uni((string)($row['reason'] ?? '')) . '</td>'
+                . '<td>' . htmlspecialchars_uni((string)($row['source'] ?? '')) . '</td>'
+                . '</tr>';
+        }
+
+        if (!$rows_html) {
+            $rows_html[] = '<tr><td colspan="8">Нет записей</td></tr>';
+        }
+
+        $base_params = [
+            'action' => 'balance_manage',
+            'tab' => 'history',
+            'uid' => $history_uid_raw,
+            'actor' => $history_actor_raw,
+            'history_kind' => $history_kind,
+            'amount_type' => $amount_type,
+            'reason' => $reason_q,
+        ];
+
+        $pagination = '';
+        if ($total_pages > 1) {
+            $links = [];
+            for ($p = max(1, $page - 3); $p <= min($total_pages, $page + 3); $p++) {
+                $params = $base_params;
+                $params['page'] = $p;
+                $url = 'misc.php?' . htmlspecialchars_uni(http_build_query($params));
+                if ($p === $page) {
+                    $links[] = '<strong>' . $p . '</strong>';
+                } else {
+                    $links[] = '<a href="' . $url . '">' . $p . '</a>';
+                }
+            }
+            $pagination = '<div class="af-balance-pagination">Страницы: ' . implode(' ', $links) . '</div>';
+        }
+
+        $content_html = ''
+            . '<form method="get" class="af-balance-filters">'
+            . '<input type="hidden" name="action" value="balance_manage">'
+            . '<input type="hidden" name="tab" value="history">'
+            . '<input type="text" name="uid" value="' . htmlspecialchars_uni($history_uid_raw) . '" placeholder="Кому (uid/username)">'
+            . '<input type="text" name="actor" value="' . htmlspecialchars_uni($history_actor_raw) . '" placeholder="Кто (uid/username)">'
+            . '<select name="history_kind">'
+            . '<option value="any"' . ($history_kind === 'any' ? ' selected' : '') . '>Все типы</option>'
+            . '<option value="exp"' . ($history_kind === 'exp' ? ' selected' : '') . '>EXP</option>'
+            . '<option value="credits"' . ($history_kind === 'credits' ? ' selected' : '') . '>Credits</option>'
+            . '</select>'
+            . '<select name="amount_type">'
+            . '<option value="all"' . ($amount_type === 'all' ? ' selected' : '') . '>Все суммы</option>'
+            . '<option value="plus"' . ($amount_type === 'plus' ? ' selected' : '') . '>Начисления (+)</option>'
+            . '<option value="minus"' . ($amount_type === 'minus' ? ' selected' : '') . '>Списания (-)</option>'
+            . '</select>'
+            . '<input type="text" name="reason" value="' . htmlspecialchars_uni($reason_q) . '" placeholder="Причина содержит">'
+            . '<button type="submit" class="button">Фильтр</button>'
+            . '</form>'
+            . '<table class="tborder af-balance-table af-balance-history-table">'
+            . '<tr><th>Date</th><th>Actor</th><th>Target</th><th>Kind</th><th>Amount</th><th>Balance after</th><th>Reason</th><th>Source</th></tr>'
+            . implode("
+", $rows_html)
+            . '</table>'
+            . $pagination;
+    } else {
+        $kind = $tab;
+        $qRaw = trim((string)$mybb->get_input('q'));
+        $raceRaw = trim((string)$mybb->get_input('race'));
+
+        $where = 'u.uid>0';
+        if ($qRaw !== '') {
+            $like = $db->escape_string($qRaw);
+            $like = str_replace(['%', '_'], ['\%', '\_'], $like);
+            $where .= " AND u.username LIKE '%{$like}%'";
+        }
+
+        $rows = [];
+        $sql = "SELECT u.uid,u.username,u.avatar,b.exp,b.credits,s.progress_json
+                FROM " . TABLE_PREFIX . "users u
+                LEFT JOIN " . TABLE_PREFIX . AF_BALANCE_TABLE . " b ON b.uid=u.uid
+                LEFT JOIN " . TABLE_PREFIX . "af_cs_sheets s ON s.uid=u.uid
+                WHERE {$where}
+                ORDER BY u.username ASC
+                LIMIT 200";
+        $res = $db->query($sql);
+
+        while ($row = $db->fetch_array($res)) {
+            $progress = json_decode((string)($row['progress_json'] ?? ''), true);
+            if (!is_array($progress)) $progress = [];
+
+            $rowRace = trim((string)($progress['race'] ?? ''));
+
+            if ($raceRaw !== '') {
+                $hay = function_exists('mb_strtolower') ? mb_strtolower($rowRace, 'UTF-8') : strtolower($rowRace);
+                $needle = function_exists('mb_strtolower') ? mb_strtolower($raceRaw, 'UTF-8') : strtolower($raceRaw);
+                if ($rowRace === '' || strpos($hay, $needle) === false) {
+                    continue;
+                }
+            }
+
+            $uid = (int)$row['uid'];
+            $exp = (int)($row['exp'] ?? 0);
+            $credits = (int)($row['credits'] ?? 0);
+
+            $levelData = af_balance_compute_level($exp / AF_BALANCE_EXP_SCALE);
+
+            $avatar = trim((string)($row['avatar'] ?? ''));
+            if ($avatar === '') $avatar = 'images/default_avatar.png';
+
+            $history_url = 'misc.php?action=balance_manage&amp;tab=history&amp;uid=' . $uid;
+
+            $rows[] =
+                '<tr data-af-balance-row="' . $uid . '">'
+                . '<td><img src="' . htmlspecialchars_uni($avatar) . '" width="34" height="34" style="border-radius:50%"></td>'
+                . '<td><a href="member.php?action=profile&amp;uid=' . $uid . '">' . htmlspecialchars_uni((string)$row['username']) . '</a>'
+                . '<div class="smalltext">' . htmlspecialchars_uni($rowRace) . '</div></td>'
+                . '<td data-af-balance-exp>' . af_balance_format_exp($exp) . '</td>'
+                . '<td data-af-balance-credits>' . af_balance_format_credits($credits) . '</td>'
+                . '<td data-af-balance-level>' . (int)($levelData['level'] ?? 1) . '</td>'
+                . '<td><button type="button" class="button" data-af-balance-adjust="1" data-uid="' . $uid . '">Начислить</button> '
+                . '<a class="button" href="' . $history_url . '">История</a></td>'
+                . '</tr>';
+        }
+
+        $rows_html = $rows ? implode("
+", $rows) : '<tr><td colspan="6">Нет результатов</td></tr>';
+
+        $content_html = ''
+            . '<form method="get" class="af-balance-filters">'
+            . '<input type="hidden" name="action" value="balance_manage">'
+            . '<input type="hidden" name="tab" value="' . htmlspecialchars_uni($tab) . '">'
+            . '<input type="text" name="q" value="' . htmlspecialchars_uni($qRaw) . '" placeholder="Поиск по имени">'
+            . '<input type="text" name="race" value="' . htmlspecialchars_uni($raceRaw) . '" placeholder="Поиск по расе">'
+            . '<button type="submit" class="button">Фильтр</button>'
+            . '</form>'
+            . '<table class="tborder af-balance-table">'
+            . '<tr><th></th><th>User</th><th>EXP</th><th>Credits (' . $currency_symbol . ')</th><th>Level</th><th></th></tr>'
+            . $rows_html
+            . '</table>'
+            . '<div class="af-balance-modal" data-af-balance-modal hidden>'
+            . '  <div class="af-balance-modal__backdrop" data-af-balance-close></div>'
+            . '  <div class="af-balance-modal__dialog">'
+            . '    <h3>Изменить баланс</h3>'
+            . '    <div class="af-balance-modal__error" data-af-balance-error></div>'
+            . '    <input type="hidden" data-af-balance-uid>'
+            . '    <label><input type="radio" name="af-balance-op" value="add" checked> Начислить</label>'
+            . '    <label><input type="radio" name="af-balance-op" value="sub"> Списать</label>'
+            . '    <input type="number" step="0.01" data-af-balance-amount placeholder="Сумма">'
+            . '    <input type="text" data-af-balance-reason placeholder="Причина">'
+            . '    <button type="button" class="button" data-af-balance-apply>Применить</button>'
+            . '    <button type="button" class="button" data-af-balance-close>Отмена</button>'
+            . '  </div>'
+            . '</div>'
+            . '<script>window.afBalanceConfig={kind:' . json_encode($kind) . ',postKey:' . json_encode($mybb->post_code) . '};</script>';
     }
-
-    $rows_html = $rows ? implode("\n", $rows) : '<tr><td colspan="6">Нет результатов</td></tr>';
-
-    $kind_exp_active = $kind === 'exp' ? 'is-active' : '';
-    $kind_credits_active = $kind === 'credits' ? 'is-active' : '';
-    $currency_symbol = htmlspecialchars_uni((string)($mybb->settings['af_balance_currency_symbol'] ?? '¢'));
-    $bburl = htmlspecialchars_uni((string)($mybb->settings['bburl'] ?? ''));
-    $my_post_key = htmlspecialchars_uni($mybb->post_code);
-
-    $q = htmlspecialchars_uni($qRaw);
-    $race = htmlspecialchars_uni($raceRaw);
 
     af_balance_enqueue_assets();
 
-    $page = '<!DOCTYPE html><html lang="ru"><head>'
+    $page_html = '<!DOCTYPE html><html lang="ru"><head>'
         . '<meta charset="utf-8">'
         . '<title>Balance manage</title>'
-        // jQuery ПЕРЕД всем
         . '<script src="' . $bburl . '/jscripts/jquery.js?ver=1823"></script>'
         . $headerinclude
         . '</head><body>'
         . $header
         . '<div class="af-balance-page">'
         . '<h1>Balance management</h1>'
-
-        . '<form method="get" class="af-balance-filters">'
-        . '<input type="hidden" name="action" value="balance_manage">'
-        . '<input type="text" name="q" value="' . $q . '" placeholder="Поиск по имени">'
-        . '<input type="text" name="race" value="' . $race . '" placeholder="Поиск по расе">'
-        . '<button type="submit" class="button">Фильтр</button>'
-        . '</form>'
-
         . '<div class="af-balance-tabs">'
-        . '<a class="' . $kind_exp_active . '" href="misc.php?action=balance_manage&amp;kind=exp">EXP</a>'
-        . '<a class="' . $kind_credits_active . '" href="misc.php?action=balance_manage&amp;kind=credits">Credits</a>'
+        . '<a class="' . $kind_exp_active . '" href="misc.php?action=balance_manage&amp;tab=exp&amp;kind=exp">EXP</a>'
+        . '<a class="' . $kind_credits_active . '" href="misc.php?action=balance_manage&amp;tab=credits&amp;kind=credits">Credits</a>'
+        . '<a class="' . $history_active . '" href="misc.php?action=balance_manage&amp;tab=history">История</a>'
         . '</div>'
-
-        . '<table class="tborder af-balance-table">'
-        . '<tr><th></th><th>User</th><th>EXP</th><th>Credits (' . $currency_symbol . ')</th><th>Level</th><th></th></tr>'
-        . $rows_html
-        . '</table>'
+        . $content_html
         . '</div>'
-
-        . '<div class="af-balance-modal" data-af-balance-modal hidden>'
-        . '  <div class="af-balance-modal__backdrop" data-af-balance-close></div>'
-        . '  <div class="af-balance-modal__dialog">'
-        . '    <h3>Изменить баланс</h3>'
-        . '    <div class="af-balance-modal__error" data-af-balance-error></div>'
-        . '    <input type="hidden" data-af-balance-uid>'
-        . '    <label><input type="radio" name="af-balance-op" value="add" checked> Начислить</label>'
-        . '    <label><input type="radio" name="af-balance-op" value="sub"> Списать</label>'
-        . '    <input type="number" step="0.01" data-af-balance-amount placeholder="Сумма">'
-        . '    <input type="text" data-af-balance-reason placeholder="Причина">'
-        . '    <button type="button" class="button" data-af-balance-apply>Применить</button>'
-        . '    <button type="button" class="button" data-af-balance-close>Отмена</button>'
-        . '  </div>'
-        . '</div>'
-
-        . '<script>window.afBalanceConfig={kind:' . json_encode($kind) . ',postKey:' . json_encode($mybb->post_code) . '};</script>'
-
         . $footer
         . '</body></html>';
 
-    output_page($page);
+    output_page($page_html);
 }

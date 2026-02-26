@@ -658,30 +658,6 @@
         initAttributesUI();
         initInventoryUI(sheet);
       }
-
-
-      function applyManualAwardSnapshot(payload) {
-        var levelNode = sheet.querySelector('[data-afcs-level]');
-        if (levelNode && typeof payload.level !== 'undefined') {
-          levelNode.textContent = 'Уровень ' + String(payload.level);
-        }
-
-        var expNode = sheet.querySelector('[data-afcs-exp-label]');
-        if (expNode && payload.exp_display && payload.exp_next_display) {
-          expNode.textContent = String(payload.exp_display) + ' / ' + String(payload.exp_next_display);
-        }
-
-        var barNode = sheet.querySelector('[data-afcs-level-bar] span');
-        if (barNode && typeof payload.progress_percent !== 'undefined') {
-          barNode.style.width = String(payload.progress_percent) + '%';
-        }
-
-        var walletNode = sheet.querySelector('[data-afcs-wallet-value]');
-        if (walletNode && typeof payload.credits_display !== 'undefined') {
-          walletNode.textContent = String(payload.credits_display) + ' ¢';
-        }
-      }
-
       function setActiveInventoryTab(root, key) {
         if (!root || !key) return;
         var tabs = root.querySelectorAll('[data-afcs-inventory-tab]');
@@ -966,28 +942,6 @@
             if (payload.redirect) window.location.href = payload.redirect;
             else window.location.reload();
           });
-          return;
-        }
-
-        var ledgerToggle = event.target.closest('[data-afcs-ledger-toggle]');
-        if (ledgerToggle) {
-          event.preventDefault();
-          var ledger = sheet.querySelector('[data-afcs-ledger]');
-          if (ledger) ledger.hidden = !ledger.hidden;
-          return;
-        }
-
-        var awardToggle = event.target.closest('[data-afcs-award-toggle]');
-        if (awardToggle) {
-          event.preventDefault();
-          var awardPanel = sheet.querySelector('[data-afcs-award-panel]');
-          if (awardPanel) {
-            awardPanel.hidden = !awardPanel.hidden;
-            var f = awardPanel.querySelector('form');
-            if (f && !f.hasAttribute('data-afcs-award-form')) {
-              f.setAttribute('data-afcs-award-form', '1');
-            }
-          }
           return;
         }
 
@@ -1306,48 +1260,6 @@
         if (event.target && event.target.closest('[data-afcs-attr-input]')) {
           updatePool();
         }
-      });
-
-      sheet.addEventListener('submit', function (event) {
-        var form = event.target;
-        if (!form || String(form.nodeName).toUpperCase() !== 'FORM') return;
-        if (!form.closest('[data-afcs-award-panel]')) return;
-
-        event.preventDefault();
-
-        var amountEl =
-          form.querySelector('input[name="amount"]') ||
-          form.querySelector('input[name="exp"]') ||
-          form.querySelector('input[data-afcs-award-amount]');
-
-        var reasonEl =
-          form.querySelector('input[name="reason"]') ||
-          form.querySelector('textarea[name="reason"]') ||
-          form.querySelector('textarea[name="comment"]') ||
-          form.querySelector('[data-afcs-award-reason]');
-
-        var payloadBase = {
-          amount: amountEl ? amountEl.value : '',
-          reason: reasonEl ? reasonEl.value : ''
-        };
-
-        afCsAjax('grant_exp', payloadBase).then(function (payload) {
-          if (isErrorPayload(payload)) {
-            showInlineError(responseError(payload, 'Ошибка начисления'));
-            return;
-          }
-
-          if (amountEl) amountEl.value = '';
-          if (reasonEl) reasonEl.value = '';
-
-          applyManualAwardSnapshot(payload);
-          showToast('Готово');
-
-          var awardPanel = sheet.querySelector('[data-afcs-award-panel]');
-          if (awardPanel) {
-            awardPanel.hidden = true;
-          }
-        });
       });
 
       sheet.addEventListener('keydown', function (event) {

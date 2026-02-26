@@ -63,7 +63,6 @@ function af_charactersheets_handle_api_impl(): void
     if (in_array($do, [
         'save_attributes',
         'save_choice',
-        'grant_exp',
         'cs_skill_buy',
         'buy_skill',
         'cs_skill_set_rank',
@@ -704,19 +703,7 @@ function af_charactersheets_handle_api_impl(): void
             af_charactersheets_json_error('reset_failed', 'Reset failed');
         }
     } elseif ($do === 'grant_exp') {
-        $amount_raw = (string)$mybb->get_input('amount');
-        $reason = trim((string)$mybb->get_input('reason'));
-        $result = af_charactersheets_award_exp_manual($sheet, $mybb->user ?? [], $fid_for_mod, $amount_raw, $reason);
-        if (empty($result['success'])) {
-            if (($result['error'] ?? '') === 'Permission denied') {
-                http_response_code(403);
-            }
-            af_charactersheets_json_response(['success' => false, 'error' => $result['error'] ?? 'EXP update failed']);
-        }
-
-        $target_uid = (int)($sheet['uid'] ?? 0);
-        $snapshot = af_charactersheets_balance_snapshot($target_uid);
-        af_charactersheets_json_ok($snapshot);
+        af_charactersheets_json_error('disabled', 'Manual EXP adjust moved to balance_manage', [], 410);
     } else {
         af_charactersheets_json_error('unknown_action', 'Unknown action', [], 400);
     }
