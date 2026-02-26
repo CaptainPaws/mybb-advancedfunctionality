@@ -964,15 +964,18 @@ function af_advancedpostcounter_member_profile_end(): void
     // Всегда задаём переменную для шаблона member_profile (если она там есть)
     $memprofile['advancedpostcounter'] = $marker;
 
-    // Если member_profile уже содержит {$memprofile['advancedpostcounter']},
+    // Если профильные шаблоны уже содержат {$memprofile['advancedpostcounter']},
     // то НЕ дописываем маркер в $profilefields — иначе будет дубль и разъезд верстки.
     $tplHasPlaceholder = false;
     $re = '~\{\$memprofile\[(?:\'|")advancedpostcounter(?:\'|")\]\}~i';
 
     if (isset($templates) && is_object($templates) && method_exists($templates, 'get')) {
-        $t = (string)$templates->get('member_profile');
-        if ($t !== '' && preg_match($re, $t)) {
-            $tplHasPlaceholder = true;
+        foreach (['member_profile_customfields', 'member_profile_customfields_field', 'member_profile'] as $tplTitle) {
+            $t = (string)$templates->get($tplTitle);
+            if ($t !== '' && preg_match($re, $t)) {
+                $tplHasPlaceholder = true;
+                break;
+            }
         }
     }
 
@@ -1275,28 +1278,44 @@ function af_advancedpostcounter_templates_install(): void
         }
     }
 
-    // -------------------- member_profile: вставляем {$memprofile['advancedpostcounter']} после total_posts --------------------
+    // -------------------- PROFILE customfields: вставляем {$memprofile['advancedpostcounter']} в блок доп. полей --------------------
     $needle_profile = '{$memprofile[\'advancedpostcounter\']}';
+    $profileTargets = ['member_profile_customfields', 'member_profile_customfields_field'];
 
-    $q3 = $db->simple_select('templates', 'tid,template', "title='member_profile'");
-    while ($row = $db->fetch_array($q3)) {
-        $tid = (int)$row['tid'];
-        $tpl = (string)$row['template'];
+    foreach ($profileTargets as $profileTitle) {
+        $q3 = $db->simple_select('templates', 'tid,template', "title='".$db->escape_string($profileTitle)."'");
+        while ($row = $db->fetch_array($q3)) {
+            $tid = (int)$row['tid'];
+            $tpl = (string)$row['template'];
 
-        if ($tid <= 0 || $tpl === '') {
-            continue;
-        }
+            if ($tid <= 0 || $tpl === '') {
+                continue;
+            }
 
-        if (strpos($tpl, $needle_profile) !== false) {
-            continue;
-        }
+            if (strpos($tpl, $needle_profile) !== false) {
+                continue;
+            }
 
-        $count = 0;
-        $pattern = '#(<tr>\s*<td\s+class="trow1"><strong>\{\$lang->total_posts\}</strong></td>\s*<td\s+class="trow1">.*?\{\$memprofile\[(?:\'|")postnum(?:\'|")\]\}.*?</td>\s*</tr>)#si';
-        $new = preg_replace($pattern, '$1' . "\n" . $needle_profile . "\n", $tpl, 1, $count);
+            $new = $tpl;
+            $count = 0;
 
-        if ($count && is_string($new) && $new !== '' && $new !== $tpl) {
-            af_apc_templates_update_tid($tid, $new, false);
+            // Основной якорь: вывод строк кастомных полей.
+            $new = preg_replace(
+                '#(\{\$(?:profile_)?customfields\}|\{\$GLOBALS\[(?:\'|")profilefields(?:\'|")\]\})#i',
+                '$1' . "\n" . $needle_profile,
+                $new,
+                1,
+                $count
+            );
+
+            // Fallback: вставляем перед закрывающим </table> блока доп. информации.
+            if (!$count) {
+                $new = preg_replace('#</table>#i', $needle_profile . "\n</table>", $new, 1, $count);
+            }
+
+            if ($count && is_string($new) && $new !== '' && $new !== $tpl) {
+                af_apc_templates_update_tid($tid, $new, false);
+            }
         }
     }
 
@@ -1339,7 +1358,9 @@ function af_advancedpostcounter_templates_uninstall(): void
 
     require_once MYBB_ROOT.'inc/adminfunctions_templates.php';
 
-    // member_profile: убираем нашу переменную
+    // профильные шаблоны: убираем нашу переменную
+    find_replace_templatesets('member_profile_customfields', "#\\{\\$memprofile\\['advancedpostcounter'\\]\\}#i", '');
+    find_replace_templatesets('member_profile_customfields_field', "#\\{\\$memprofile\\['advancedpostcounter'\\]\\}#i", '');
     find_replace_templatesets('member_profile', "#\\{\\$memprofile\\['advancedpostcounter'\\]\\}#i", '');
 
     // postbit/postbit_classic: убираем {$post['advancedpostcounter']}
