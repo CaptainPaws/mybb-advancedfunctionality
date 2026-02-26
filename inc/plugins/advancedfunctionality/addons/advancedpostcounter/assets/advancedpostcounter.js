@@ -1,6 +1,8 @@
 (function () {
   'use strict';
 
+  console.log('[APC] loaded');
+
   function onReady(fn) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
     else fn();
@@ -80,11 +82,11 @@
   function upsertApc(slot, snapshot) {
     if (!slot || !snapshot || !snapshot.success) return;
 
-    var apc = slot.querySelector('.af-apc');
-    if (!apc && snapshot.html) {
+    if (snapshot.html) {
       slot.innerHTML = String(snapshot.html);
-      apc = slot.querySelector('.af-apc');
     }
+
+    var apc = slot.querySelector('.af-apc');
 
     if (!apc) return;
 
@@ -117,6 +119,74 @@
     slots.forEach(function (slot) {
       upsertApc(slot, snapshot);
     });
+  }
+
+  function updateSlot(slot) {
+    if (!slot) return;
+    var uid = toInt(slot.getAttribute('data-uid'));
+    if (!uid) {
+      var postNode = slot.closest('[id^="post_"], .post');
+      uid = extractUidFromPost(postNode);
+      if (uid) {
+        slot.setAttribute('data-uid', String(uid));
+      }
+    }
+
+    if (!uid) return;
+
+    var isEmpty = !slot.querySelector('.af-apc');
+    if (isEmpty || !inFlight[uid]) {
+      fetchSnapshot(uid);
+    }
+  }
+
+  function processNodeForApc(node) {
+    if (!node || node.nodeType !== 1) return;
+
+    if (node.matches && node.matches('[data-af-apc-slot="1"]')) {
+      updateSlot(node);
+    }
+
+    if (node.querySelectorAll) {
+      node.querySelectorAll('[data-af-apc-slot="1"]').forEach(function (slot) {
+        updateSlot(slot);
+      });
+
+      node.querySelectorAll('[id^="post_"], .post').forEach(function (postNode) {
+        var slot = postNode.querySelector('[data-af-apc-slot="1"]');
+        if (slot) {
+          updateSlot(slot);
+        }
+      });
+    }
+  }
+
+  function observeRealtimePosts() {
+    if (window.__afApcObserverStarted || typeof MutationObserver === 'undefined') return;
+
+    var roots = [
+      document.getElementById('posts'),
+      document.getElementById('content'),
+      document.querySelector('.thread'),
+      document.body
+    ].filter(Boolean);
+
+    if (!roots.length) return;
+
+    var observer = new MutationObserver(function (mutations) {
+      mutations.forEach(function (mutation) {
+        if (!mutation.addedNodes || !mutation.addedNodes.length) return;
+        mutation.addedNodes.forEach(function (node) {
+          processNodeForApc(node);
+        });
+      });
+    });
+
+    roots.forEach(function (root) {
+      observer.observe(root, { childList: true, subtree: true });
+    });
+
+    window.__afApcObserverStarted = true;
   }
 
   var inFlight = Object.create(null);
@@ -165,19 +235,13 @@
 
         if (!looksLikeQuickReply) return;
 
-        var responseText = (xhr && typeof xhr.responseText === 'string') ? xhr.responseText : '';
-        if (!responseText) return;
+        console.log('[APC] new post detected');
 
-        var latestPost = document.querySelector('.post:last-of-type, [id^="post_"]:last-of-type');
-        if (!latestPost) {
-          var posts = document.querySelectorAll('[id^="post_"]');
-          latestPost = posts.length ? posts[posts.length - 1] : null;
-        }
-
-        var uid = extractUidFromPost(latestPost);
-        if (!uid) return;
-
-        fetchSnapshot(uid);
+        document.querySelectorAll('[data-af-apc-slot="1"]').forEach(function (slot) {
+          if (!slot.querySelector('.af-apc')) {
+            updateSlot(slot);
+          }
+        });
       } catch (e) {}
     });
   }
@@ -210,6 +274,11 @@
       }
     }
 
+    document.querySelectorAll('[data-af-apc-slot="1"]').forEach(function (slot) {
+      updateSlot(slot);
+    });
+
+    observeRealtimePosts();
     hookQuickReply();
   });
 })();
