@@ -1315,61 +1315,64 @@ function af_advancedshop_slot_lookup(int $slotId): array
     return (array)$db->fetch_array($query);
 }
 
-function af_advancedshop_detect_kb_item_kind(array $kbMeta): array
+function af_advancedshop_detect_inventory_target_from_kb_meta(array $meta): array
 {
-    $rulesItem = is_array($kbMeta['rules']['item'] ?? null) ? (array)$kbMeta['rules']['item'] : [];
+    $rulesItem = is_array($meta['rules']['item'] ?? null) ? (array)$meta['rules']['item'] : [];
+    $supportedKinds = ['weapon', 'armor', 'ammo', 'consumable'];
 
     $kind = mb_strtolower(trim((string)($rulesItem['item_kind'] ?? '')));
-    if ($kind !== '') {
-        return ['kind' => $kind, 'source' => 'rules.item.item_kind'];
+    $kindSource = 'rules.item.item_kind';
+
+    if ($kind === '') {
+        $kind = mb_strtolower(trim((string)($rulesItem['item_type'] ?? '')));
+        $kindSource = 'rules.item.item_type';
     }
 
-    $kind = mb_strtolower(trim((string)($rulesItem['item_type'] ?? '')));
-    if ($kind !== '') {
-        return ['kind' => $kind, 'source' => 'rules.item.item_type'];
-    }
-
-    $supportedKinds = ['weapon', 'armor', 'ammo', 'consumable'];
-    $tags = is_array($rulesItem['tags'] ?? null) ? $rulesItem['tags'] : [];
-    foreach ($tags as $tag) {
-        $tagNorm = mb_strtolower(trim((string)$tag));
-        if (in_array($tagNorm, $supportedKinds, true)) {
-            return ['kind' => $tagNorm, 'source' => 'rules.item.tags'];
+    if ($kind === '') {
+        $tags = is_array($rulesItem['tags'] ?? null) ? $rulesItem['tags'] : [];
+        foreach ($tags as $tag) {
+            $tagNorm = mb_strtolower(trim((string)$tag));
+            if (in_array($tagNorm, $supportedKinds, true)) {
+                $kind = $tagNorm;
+                $kindSource = 'rules.item.tags';
+                break;
+            }
         }
     }
 
-    $kind = mb_strtolower(trim((string)($kbMeta['item_kind'] ?? '')));
-    if ($kind !== '') {
-        return ['kind' => $kind, 'source' => 'meta.item_kind'];
+    if ($kind === '') {
+        $kindSource = 'fallback';
     }
-
-    return ['kind' => 'misc', 'source' => 'fallback.misc'];
-}
-
-function af_advancedshop_map_inventory_target(array $kbMeta, array $shopItem): array
-{
-    $detected = af_advancedshop_detect_kb_item_kind($kbMeta);
-    $kind = (string)($detected['kind'] ?? 'misc');
 
     $slot = 'resources';
     $subtype = 'loot';
-    if (in_array($kind, ['weapon', 'armor', 'ammo', 'consumable'], true)) {
+    if (in_array($kind, $supportedKinds, true)) {
         $slot = 'equipment';
         $subtype = $kind;
+    }
+
+    if ($kind === 'weapon') {
+        $slot = 'equipment';
+        $subtype = 'weapon';
     }
 
     return [
         'slot' => $slot,
         'subtype' => $subtype,
         'kind_detected' => $kind,
-        'kind_source' => (string)($detected['source'] ?? ''),
+        'kind_source' => $kindSource,
     ];
+}
+
+function af_advancedshop_map_inventory_target(array $kbMeta, array $shopItem): array
+{
+    return af_advancedshop_detect_inventory_target_from_kb_meta($kbMeta);
 }
 
 function af_advancedshop_resolve_inventory_target(array $slotRow, array $kbProfile, array $kbRow): array
 {
     $kbMeta = af_advancedshop_json_decode_assoc((string)($kbRow['kb_meta_json'] ?? ''));
-    $mapped = af_advancedshop_map_inventory_target($kbMeta, array_merge($slotRow, $kbProfile));
+    $mapped = af_advancedshop_detect_inventory_target_from_kb_meta($kbMeta);
     return [
         'slot' => (string)$mapped['slot'],
         'subtype' => (string)$mapped['subtype'],
@@ -1486,15 +1489,20 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
     }
 
     $metaPayload = af_advancedshop_json_decode_assoc($metaJson);
-    $target = af_advancedshop_map_inventory_target($metaPayload, $item);
+    $target = af_advancedshop_detect_inventory_target_from_kb_meta($metaPayload);
+
+    if ((string)($target['kind_detected'] ?? '') === 'weapon') {
+        $target['slot'] = 'equipment';
+        $target['subtype'] = 'weapon';
+    }
 
     af_advancedshop_inv_debug('grant_classify', [
         'uid' => $uid,
         'kb_key' => (string)($kb['kb_key'] ?? $kbKeyFromItem),
         'kind_detected' => (string)($target['kind_detected'] ?? ''),
         'kind_source' => (string)($target['kind_source'] ?? ''),
-        'result_slot' => (string)$target['slot'],
-        'result_subtype' => (string)$target['subtype'],
+        'slot' => (string)$target['slot'],
+        'subtype' => (string)$target['subtype'],
     ]);
 
     $metaPayload['shop'] = [
