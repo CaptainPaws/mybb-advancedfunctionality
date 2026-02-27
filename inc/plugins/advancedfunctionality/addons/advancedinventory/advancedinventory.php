@@ -100,6 +100,9 @@ function af_advancedinventory_write_schema_markdown(): void
         if (strpos($tableName, $prefix . 'af_shop_') === 0) {
             $requiredTables[] = $tableName;
         }
+        if (strpos($tableName, $prefix . 'af_kb_') === 0) {
+            $requiredTables[] = $tableName;
+        }
         if (
             strpos($tableName, $prefix . 'af_') === 0
             && (
