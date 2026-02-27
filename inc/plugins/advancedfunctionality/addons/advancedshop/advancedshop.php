@@ -1315,79 +1315,66 @@ function af_advancedshop_slot_lookup(int $slotId): array
     return (array)$db->fetch_array($query);
 }
 
+function af_advancedshop_detect_kb_item_kind(array $kbMeta): array
+{
+    $rulesItem = is_array($kbMeta['rules']['item'] ?? null) ? (array)$kbMeta['rules']['item'] : [];
+
+    $kind = mb_strtolower(trim((string)($rulesItem['item_kind'] ?? '')));
+    if ($kind !== '') {
+        return ['kind' => $kind, 'source' => 'rules.item.item_kind'];
+    }
+
+    $kind = mb_strtolower(trim((string)($rulesItem['item_type'] ?? '')));
+    if ($kind !== '') {
+        return ['kind' => $kind, 'source' => 'rules.item.item_type'];
+    }
+
+    $supportedKinds = ['weapon', 'armor', 'ammo', 'consumable'];
+    $tags = is_array($rulesItem['tags'] ?? null) ? $rulesItem['tags'] : [];
+    foreach ($tags as $tag) {
+        $tagNorm = mb_strtolower(trim((string)$tag));
+        if (in_array($tagNorm, $supportedKinds, true)) {
+            return ['kind' => $tagNorm, 'source' => 'rules.item.tags'];
+        }
+    }
+
+    $kind = mb_strtolower(trim((string)($kbMeta['item_kind'] ?? '')));
+    if ($kind !== '') {
+        return ['kind' => $kind, 'source' => 'meta.item_kind'];
+    }
+
+    return ['kind' => 'misc', 'source' => 'fallback.misc'];
+}
+
+function af_advancedshop_map_inventory_target(array $kbMeta, array $shopItem): array
+{
+    $detected = af_advancedshop_detect_kb_item_kind($kbMeta);
+    $kind = (string)($detected['kind'] ?? 'misc');
+
+    $slot = 'resources';
+    $subtype = 'loot';
+    if (in_array($kind, ['weapon', 'armor', 'ammo', 'consumable'], true)) {
+        $slot = 'equipment';
+        $subtype = $kind;
+    }
+
+    return [
+        'slot' => $slot,
+        'subtype' => $subtype,
+        'kind_detected' => $kind,
+        'kind_source' => (string)($detected['source'] ?? ''),
+    ];
+}
+
 function af_advancedshop_resolve_inventory_target(array $slotRow, array $kbProfile, array $kbRow): array
 {
-    $slotMeta = af_advancedshop_json_decode_assoc((string)($slotRow['meta_json'] ?? ''));
     $kbMeta = af_advancedshop_json_decode_assoc((string)($kbRow['kb_meta_json'] ?? ''));
-
-    $kbType = mb_strtolower(trim((string)($slotRow['kb_type'] ?? ($kbRow['kb_type'] ?? ''))));
-    $kbKey = mb_strtolower(trim((string)($slotRow['kb_key'] ?? ($kbRow['kb_key'] ?? ''))));
-    $catTitle = mb_strtolower(trim((string)($slotRow['cat_title'] ?? '')));
-
-    $itemKinds = [];
-    foreach ([$slotMeta, $kbMeta] as $meta) {
-        $itemKinds[] = mb_strtolower(trim((string)($meta['item_kind'] ?? '')));
-        $itemKinds[] = mb_strtolower(trim((string)($meta['subtype'] ?? '')));
-        $itemKinds[] = mb_strtolower(trim((string)($meta['inventory_subtype'] ?? '')));
-        if (is_array($meta['rules']['item'] ?? null)) {
-            $itemKinds[] = mb_strtolower(trim((string)($meta['rules']['item']['item_kind'] ?? '')));
-            $itemKinds[] = mb_strtolower(trim((string)($meta['rules']['item']['type'] ?? '')));
-            $itemKinds[] = mb_strtolower(trim((string)($meta['rules']['item']['subtype'] ?? '')));
-        }
-    }
-    $itemKinds[] = mb_strtolower(trim((string)($kbProfile['item_kind'] ?? '')));
-    $itemKinds = array_values(array_filter(array_unique($itemKinds), static function ($v) { return $v !== ''; }));
-
-    $explicitSlot = '';
-    foreach ([$slotMeta, $kbMeta] as $meta) {
-        foreach (['inventory_slot', 'slot'] as $slotKey) {
-            $candidate = mb_strtolower(trim((string)($meta[$slotKey] ?? '')));
-            if (in_array($candidate, ['equipment', 'resources', 'pets', 'customization'], true)) {
-                $explicitSlot = $candidate;
-                break 2;
-            }
-        }
-    }
-
-    // Минимальный фикс: оружие всегда в equipment/weapon.
-    if ($kbType === 'item' && (strpos($kbKey, 'gun') === 0 || in_array('weapon', $itemKinds, true))) {
-        return ['slot' => 'equipment', 'subtype' => 'weapon', 'source' => 'weapon_rule'];
-    }
-
-    $equipmentKinds = ['weapon', 'armor', 'ammo', 'consumable'];
-    foreach ($equipmentKinds as $kind) {
-        if (in_array($kind, $itemKinds, true)) {
-            return ['slot' => 'equipment', 'subtype' => $kind, 'source' => 'item_kind'];
-        }
-    }
-
-    $resourceKinds = ['loot', 'stones', 'chests', 'resource', 'resources'];
-    foreach ($resourceKinds as $kind) {
-        if (in_array($kind, $itemKinds, true)) {
-            return ['slot' => 'resources', 'subtype' => $kind === 'resources' ? 'loot' : $kind, 'source' => 'item_kind'];
-        }
-    }
-
-    if ($explicitSlot !== '') {
-        return ['slot' => $explicitSlot, 'subtype' => af_advancedshop_inv_payload_subtype($kbProfile), 'source' => 'slot_meta'];
-    }
-
-    if (strpos($catTitle, 'оруж') !== false) {
-        return ['slot' => 'equipment', 'subtype' => 'weapon', 'source' => 'category'];
-    }
-    if (strpos($catTitle, 'брон') !== false) {
-        return ['slot' => 'equipment', 'subtype' => 'armor', 'source' => 'category'];
-    }
-    if (strpos($catTitle, 'боеприп') !== false || strpos($catTitle, 'ammo') !== false) {
-        return ['slot' => 'equipment', 'subtype' => 'ammo', 'source' => 'category'];
-    }
-    if (strpos($catTitle, 'расход') !== false) {
-        return ['slot' => 'equipment', 'subtype' => 'consumable', 'source' => 'category'];
-    }
-
-    $slot = af_advancedshop_inv_payload_slot($kbProfile);
-    $subtype = af_advancedshop_inv_payload_subtype($kbProfile);
-    return ['slot' => $slot, 'subtype' => $subtype, 'source' => 'kb_profile'];
+    $mapped = af_advancedshop_map_inventory_target($kbMeta, array_merge($slotRow, $kbProfile));
+    return [
+        'slot' => (string)$mapped['slot'],
+        'subtype' => (string)$mapped['subtype'],
+        'source' => (string)($mapped['kind_source'] ?? 'kb_meta'),
+    ];
 }
 
 function af_advancedshop_checkout_collect_items(int $cartId): array
@@ -1493,16 +1480,23 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
         }
     }
 
-    $profile = af_advancedshop_kb_item_profile($kb);
-    $slotRow = af_advancedshop_slot_lookup((int)($item['slot_id'] ?? 0));
-    $target = af_advancedshop_resolve_inventory_target($slotRow, $profile, $kb);
-
     $metaJson = '';
     if (is_string($kb['kb_meta_json'] ?? null) && trim((string)$kb['kb_meta_json']) !== '') {
         $metaJson = (string)$kb['kb_meta_json'];
     }
 
     $metaPayload = af_advancedshop_json_decode_assoc($metaJson);
+    $target = af_advancedshop_map_inventory_target($metaPayload, $item);
+
+    af_advancedshop_inv_debug('grant_classify', [
+        'uid' => $uid,
+        'kb_key' => (string)($kb['kb_key'] ?? $kbKeyFromItem),
+        'kind_detected' => (string)($target['kind_detected'] ?? ''),
+        'kind_source' => (string)($target['kind_source'] ?? ''),
+        'result_slot' => (string)$target['slot'],
+        'result_subtype' => (string)$target['subtype'],
+    ]);
+
     $metaPayload['shop'] = [
         'slot_id' => (int)($item['slot_id'] ?? 0),
         'kb_id' => (int)($item['kb_id'] ?? 0),
@@ -1541,7 +1535,7 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
         'kb_key' => (string)$payload['kb_key'],
         'qty' => (int)$payload['qty'],
         'slot_id' => (int)($item['slot_id'] ?? 0),
-        'target_source' => (string)($target['source'] ?? ''),
+        'target_source' => (string)($target['kind_source'] ?? ($target['source'] ?? '')),
         'title_present' => isset($payload['title']) ? 1 : 0,
         'icon_present' => isset($payload['icon']) ? 1 : 0,
     ]);
