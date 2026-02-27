@@ -1172,7 +1172,7 @@ function af_advancedshop_checkout(): void
 
     $db->write_query('START TRANSACTION');
     try {
-        $orderId = (int)$db->insert_query('af_shop_orders', [
+        $orderPayload = [
             'shop_id' => (int)$shop['shop_id'],
             'uid' => $uid,
             'total' => $total,
@@ -1180,7 +1180,16 @@ function af_advancedshop_checkout(): void
             'created_at' => TIME_NOW,
             'status' => 'paid',
             'items_json' => $db->escape_string(json_encode($items, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
+        ];
+        af_advancedshop_inv_debug('checkout_db_op', [
+            'stage' => 'af_advancedshop_checkout',
+            'op' => 'insert_query',
+            'table' => 'af_shop_orders',
+            'fields' => array_keys($orderPayload),
+            'uid' => $uid,
+            'payload' => $orderPayload,
         ]);
+        $orderId = (int)$db->insert_query('af_shop_orders', $orderPayload);
 
         af_shop_sub_balance($uid, $currency, $total, 'shop_purchase', ['order_id' => $orderId, 'shop' => $shop['code']]);
 
@@ -1191,11 +1200,24 @@ function af_advancedshop_checkout(): void
 
         $db->delete_query('af_shop_cart_items', 'cart_id=' . (int)$cart['cart_id']);
         $db->write_query('COMMIT');
+    } catch (mysqli_sql_exception $e) {
+        $db->write_query('ROLLBACK');
+        af_advancedshop_inv_debug('checkout_failed', [
+            'stage' => 'af_advancedshop_checkout',
+            'uid' => $uid,
+            'error' => $e->getMessage(),
+            'exception' => get_class($e),
+            'items' => $items,
+        ]);
+        af_advancedshop_json_err('Покупка не завершена: ' . $e->getMessage(), 500);
     } catch (Throwable $e) {
         $db->write_query('ROLLBACK');
         af_advancedshop_inv_debug('checkout_failed', [
+            'stage' => 'af_advancedshop_checkout',
             'uid' => $uid,
             'error' => $e->getMessage(),
+            'exception' => get_class($e),
+            'items' => $items,
         ]);
         af_advancedshop_json_err('Покупка не завершена: ' . $e->getMessage(), 500);
     }
@@ -1324,16 +1346,11 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
     if (is_string($kb['kb_meta_json'] ?? null) && trim((string)$kb['kb_meta_json']) !== '') {
         $metaJson = (string)$kb['kb_meta_json'];
     }
-    $meta = @json_decode((string)$metaJson, true);
-    $icon = is_array($meta) ? trim((string)($meta['ui']['icon_url'] ?? $meta['icon_url'] ?? '')) : '';
-
     $payload = [
         'slot' => af_advancedshop_inv_payload_slot($profile),
         'subtype' => af_advancedshop_inv_payload_subtype($profile),
         'kb_type' => (string)($kb['kb_type'] ?? ($item['kb_type'] ?? 'item')),
         'kb_key' => (string)($kb['kb_key'] ?? ($item['kb_key'] ?? '')),
-        'title' => (string)($kb['kb_title'] ?? ''),
-        'icon' => $icon,
         'qty' => max(1, (int)($item['qty'] ?? 1)),
         'meta_json' => $metaJson,
     ];
@@ -1343,8 +1360,12 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
         $invId = (int)af_inv_add_item($uid, $payload);
     } catch (Throwable $e) {
         af_advancedshop_inv_debug('checkout_failed', [
+            'stage' => 'af_advancedshop_grant_inventory_item',
             'uid' => $uid,
             'error' => $e->getMessage(),
+            'exception' => get_class($e),
+            'table' => TABLE_PREFIX . 'af_advinv_items',
+            'fields' => array_keys($payload),
             'payload' => $payload,
         ]);
         throw new RuntimeException('Покупка не завершена: ' . $e->getMessage(), 0, $e);
