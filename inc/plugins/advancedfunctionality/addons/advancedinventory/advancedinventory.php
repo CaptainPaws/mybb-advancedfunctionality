@@ -42,26 +42,8 @@ function af_advancedinventory_install(): void
     af_advancedinventory_ensure_setting('af_advancedinventory_manage_groups', 'Manage groups', 'CSV group IDs that may open inventories.php and manage inventories', 'text', '3,4,6', 5, $gid);
 
     af_advancedinventory_ensure_inventory_storage();
+    af_advancedinventory_upgrade_schema();
 
-    if (!$db->table_exists(AF_ADVINV_TABLE_ITEMS)) {
-        $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS . " (
-            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            uid INT UNSIGNED NOT NULL,
-            slot VARCHAR(32) NOT NULL DEFAULT 'stash',
-            subtype VARCHAR(32) NOT NULL DEFAULT '',
-            kb_type VARCHAR(32) NOT NULL DEFAULT '',
-            kb_key VARCHAR(64) NOT NULL DEFAULT '',
-            title VARCHAR(255) NOT NULL DEFAULT '',
-            icon VARCHAR(255) NOT NULL DEFAULT '',
-            qty INT NOT NULL DEFAULT 1,
-            meta_json MEDIUMTEXT NULL,
-            created_at INT UNSIGNED NOT NULL,
-            updated_at INT UNSIGNED NOT NULL,
-            KEY uid_slot (uid, slot),
-            KEY uid_slot_subtype (uid, slot, subtype),
-            KEY uid_kb (uid, kb_type, kb_key)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    }
     if (!$db->table_exists('af_advinv_equipped')) {
         $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_advinv_equipped (
             uid INT UNSIGNED NOT NULL,
@@ -84,6 +66,7 @@ function af_advancedinventory_install(): void
 
 function af_advancedinventory_activate(): void
 {
+    af_advancedinventory_upgrade_schema();
     af_advancedinventory_templates_install_or_update();
     af_advancedinventory_ensure_inventory_storage();
     af_advancedinventory_migrate_from_shop();
@@ -303,6 +286,107 @@ function af_advancedinventory_ensure_inventory_storage(): void
     if (!$db->table_exists('af_shop_inventory_legacy')) {
         $db->write_query("RENAME TABLE " . TABLE_PREFIX . "af_inventory_items TO " . TABLE_PREFIX . "af_shop_inventory_legacy");
     }
+}
+
+function af_advancedinventory_upgrade_schema(): void
+{
+    global $db;
+
+    af_advinv_debug_log('schema_check_start', ['table' => TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS]);
+
+    if (!$db->table_exists(AF_ADVINV_TABLE_ITEMS)) {
+        $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS . " (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            uid INT UNSIGNED NOT NULL,
+            slot VARCHAR(32) NOT NULL DEFAULT 'stash',
+            subtype VARCHAR(32) NOT NULL DEFAULT '',
+            kb_type VARCHAR(32) NOT NULL DEFAULT '',
+            kb_key VARCHAR(64) NOT NULL DEFAULT '',
+            title VARCHAR(255) NOT NULL DEFAULT '',
+            icon VARCHAR(255) NOT NULL DEFAULT '',
+            qty INT NOT NULL DEFAULT 1,
+            meta_json MEDIUMTEXT NULL,
+            created_at INT UNSIGNED NOT NULL,
+            updated_at INT UNSIGNED NOT NULL,
+            KEY uid_slot (uid, slot),
+            KEY uid_slot_subtype (uid, slot, subtype),
+            KEY uid_kb (uid, kb_type, kb_key)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        af_advinv_debug_log('schema_upgrade_done', ['added_cols' => ['__table_created__'], 'added_keys' => ['uid_slot', 'uid_slot_subtype', 'uid_kb']]);
+        af_advancedinventory_log_schema_columns();
+        return;
+    }
+
+    $columns = af_advancedinventory_fetch_table_columns();
+    af_advinv_debug_log('schema_columns', ['table' => TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS, 'cols' => array_values($columns)]);
+
+    $columnSql = [
+        'uid' => "ADD COLUMN uid INT UNSIGNED NOT NULL",
+        'slot' => "ADD COLUMN slot VARCHAR(32) NOT NULL DEFAULT 'stash'",
+        'subtype' => "ADD COLUMN subtype VARCHAR(32) NOT NULL DEFAULT ''",
+        'kb_type' => "ADD COLUMN kb_type VARCHAR(32) NOT NULL DEFAULT ''",
+        'kb_key' => "ADD COLUMN kb_key VARCHAR(64) NOT NULL DEFAULT ''",
+        'title' => "ADD COLUMN title VARCHAR(255) NOT NULL DEFAULT ''",
+        'icon' => "ADD COLUMN icon VARCHAR(255) NOT NULL DEFAULT ''",
+        'qty' => "ADD COLUMN qty INT NOT NULL DEFAULT 1",
+        'meta_json' => "ADD COLUMN meta_json MEDIUMTEXT NULL",
+        'created_at' => "ADD COLUMN created_at INT UNSIGNED NOT NULL DEFAULT 0",
+        'updated_at' => "ADD COLUMN updated_at INT UNSIGNED NOT NULL DEFAULT 0",
+    ];
+
+    $addedCols = [];
+    foreach ($columnSql as $name => $alterSql) {
+        if (in_array($name, $columns, true)) {
+            continue;
+        }
+        $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS . " " . $alterSql);
+        $addedCols[] = $name;
+    }
+
+    $indexes = [];
+    $indexQuery = $db->write_query("SHOW INDEX FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS);
+    while ($row = $db->fetch_array($indexQuery)) {
+        $indexes[(string)($row['Key_name'] ?? '')] = true;
+    }
+
+    $addedKeys = [];
+    $indexSql = [
+        'uid_slot' => 'ADD KEY uid_slot (uid, slot)',
+        'uid_slot_subtype' => 'ADD KEY uid_slot_subtype (uid, slot, subtype)',
+        'uid_kb' => 'ADD KEY uid_kb (uid, kb_type, kb_key)',
+    ];
+    foreach ($indexSql as $name => $alterSql) {
+        if (isset($indexes[$name])) {
+            continue;
+        }
+        $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS . " " . $alterSql);
+        $addedKeys[] = $name;
+    }
+
+    af_advinv_debug_log('schema_upgrade_done', ['added_cols' => $addedCols, 'added_keys' => $addedKeys]);
+    af_advancedinventory_log_schema_columns();
+}
+
+function af_advancedinventory_fetch_table_columns(): array
+{
+    global $db;
+    $cols = [];
+    $q = $db->write_query("SHOW COLUMNS FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS);
+    while ($row = $db->fetch_array($q)) {
+        $col = trim((string)($row['Field'] ?? ''));
+        if ($col !== '') {
+            $cols[] = $col;
+        }
+    }
+    return $cols;
+}
+
+function af_advancedinventory_log_schema_columns(): void
+{
+    af_advinv_debug_log('schema_columns', [
+        'table' => TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS,
+        'cols' => af_advancedinventory_fetch_table_columns(),
+    ]);
 }
 
 function af_advancedinventory_render_tab(): void
