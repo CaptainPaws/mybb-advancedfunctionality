@@ -272,6 +272,11 @@
     return form.querySelector('input[name="previewpost"]');
   }
 
+  function isAtfHiddenEditorMode() {
+    var meta = document.querySelector('meta[name="af-atf-hide-editor"]');
+    return !!(meta && asText(meta.getAttribute('content')) === '1');
+  }
+
   // ====== Preview extract ======
   function extractPreviewHtmlFromResponse(htmlText) {
     var doc = null;
@@ -435,7 +440,9 @@
     updateCounter(ui, ta, inst);
 
     var previewBtn = findPreviewButton(form);
-    if (previewBtn && !previewBtn.__afCcpBound) {
+    var useNativePreview = isAtfHiddenEditorMode();
+
+    if (previewBtn && !previewBtn.__afCcpBound && !useNativePreview) {
       previewBtn.__afCcpBound = true;
 
       previewBtn.addEventListener('click', function (ev) {
@@ -446,7 +453,7 @@
       }, true);
     }
 
-    if (form && !form.__afCcpSubmitBound) {
+    if (form && !form.__afCcpSubmitBound && !useNativePreview) {
       form.__afCcpSubmitBound = true;
 
       form.addEventListener('submit', function (ev) {
