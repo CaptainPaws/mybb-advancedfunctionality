@@ -10,6 +10,7 @@ define('AF_ADVINV_DEBUG_LOG', AF_CACHE . 'advancedinventory_debug.log');
 define('AF_ADVINV_ALIAS_MARKER', "define('AF_ADVANCEDINVENTORY_PAGE_ALIAS', 1);");
 define('AF_ADVINV_INVENTORIES_ALIAS_MARKER', "define('AF_ADVANCEDINVENTORIES_PAGE_ALIAS', 1);");
 define('AF_ADVINV_TABLE_ITEMS', 'af_advinv_items');
+define('AF_ADVINV_VALID_ENTITIES', ['equipment', 'resources', 'pets', 'customization']);
 
 af_advancedinventory_init();
 
@@ -398,6 +399,7 @@ function af_advancedinventory_upgrade_schema(): void
         $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS . " (
             id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             uid INT UNSIGNED NOT NULL,
+            entity VARCHAR(32) NOT NULL DEFAULT 'equipment',
             slot VARCHAR(32) NOT NULL DEFAULT 'stash',
             subtype VARCHAR(32) NOT NULL DEFAULT '',
             kb_type VARCHAR(32) NOT NULL DEFAULT '',
@@ -408,11 +410,13 @@ function af_advancedinventory_upgrade_schema(): void
             meta_json MEDIUMTEXT NULL,
             created_at INT UNSIGNED NOT NULL,
             updated_at INT UNSIGNED NOT NULL,
+            KEY uid_entity (uid, entity),
+            KEY uid_entity_subtype (uid, entity, subtype),
             KEY uid_slot (uid, slot),
             KEY uid_slot_subtype (uid, slot, subtype),
             KEY uid_kb (uid, kb_type, kb_key)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        af_advinv_debug_log('schema_upgrade_done', ['added_cols' => ['__table_created__'], 'added_keys' => ['uid_slot', 'uid_slot_subtype', 'uid_kb']]);
+        af_advinv_debug_log('schema_upgrade_done', ['added_cols' => ['__table_created__'], 'added_keys' => ['uid_entity', 'uid_entity_subtype', 'uid_slot', 'uid_slot_subtype', 'uid_kb']]);
         af_advancedinventory_log_schema_columns();
         return;
     }
@@ -422,6 +426,7 @@ function af_advancedinventory_upgrade_schema(): void
 
     $columnSql = [
         'uid' => "ADD COLUMN uid INT UNSIGNED NOT NULL",
+        'entity' => "ADD COLUMN entity VARCHAR(32) NOT NULL DEFAULT 'equipment'",
         'slot' => "ADD COLUMN slot VARCHAR(32) NOT NULL DEFAULT 'stash'",
         'subtype' => "ADD COLUMN subtype VARCHAR(32) NOT NULL DEFAULT ''",
         'kb_type' => "ADD COLUMN kb_type VARCHAR(32) NOT NULL DEFAULT ''",
@@ -443,6 +448,14 @@ function af_advancedinventory_upgrade_schema(): void
         $addedCols[] = $name;
     }
 
+    if (in_array('entity', $columns, true)) {
+        $db->write_query("UPDATE " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS . " SET entity = CASE
+            WHEN slot IN ('equipment', 'resources', 'pets', 'customization') THEN slot
+            ELSE 'equipment'
+        END
+        WHERE entity = '' OR entity IS NULL OR entity NOT IN ('equipment', 'resources', 'pets', 'customization')");
+    }
+
     $indexes = [];
     $indexQuery = $db->write_query("SHOW INDEX FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS);
     while ($row = $db->fetch_array($indexQuery)) {
@@ -451,6 +464,8 @@ function af_advancedinventory_upgrade_schema(): void
 
     $addedKeys = [];
     $indexSql = [
+        'uid_entity' => 'ADD KEY uid_entity (uid, entity)',
+        'uid_entity_subtype' => 'ADD KEY uid_entity_subtype (uid, entity, subtype)',
         'uid_slot' => 'ADD KEY uid_slot (uid, slot)',
         'uid_slot_subtype' => 'ADD KEY uid_slot_subtype (uid, slot, subtype)',
         'uid_kb' => 'ADD KEY uid_kb (uid, kb_type, kb_key)',
@@ -503,13 +518,9 @@ function af_advancedinventory_render_tab(): void
     if (!array_key_exists($tab, af_advancedinventory_tabs())) { $tab = 'equipment'; }
     $sub = trim((string)$mybb->get_input('sub'));
 
-    $slot = $tab;
-    if ($tab === 'equipment') { $slot = 'equipment'; }
-    if ($tab === 'resources') { $slot = 'resources'; }
-    if ($tab === 'pets') { $slot = 'pets'; }
-    if ($tab === 'customization') { $slot = 'customization'; }
+    $entity = af_advancedinventory_normalize_entity($tab);
 
-    $filters = ['slot' => $slot, 'subtype' => $sub, 'page' => max(1, (int)$mybb->get_input('page'))];
+    $filters = ['entity' => $entity, 'subtype' => $sub, 'page' => max(1, (int)$mybb->get_input('page'))];
     $data = af_inv_get_items($ownerUid, array_merge($filters, ['enrich' => true]));
 
     $rows = '';
@@ -577,15 +588,18 @@ function af_advancedinventory_render_inventories(): void
     $page = max(1, (int)$mybb->get_input('page'));
     $perPage = 20;
     $username = trim((string)$mybb->get_input('username'));
-    $slot = trim((string)$mybb->get_input('slot'));
+    $entity = trim((string)$mybb->get_input('entity'));
+    if ($entity === '') {
+        $entity = trim((string)$mybb->get_input('slot'));
+    }
     $state = trim((string)$mybb->get_input('state'));
     $where = ['u.uid>0'];
     if ($username !== '') {
         $like = $db->escape_string_like($username);
         $where[] = "u.username LIKE '%{$like}%'";
     }
-    if ($slot !== '') {
-        $where[] = "EXISTS(SELECT 1 FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS . " i2 WHERE i2.uid=u.uid AND i2.slot='" . $db->escape_string($slot) . "')";
+    if ($entity !== '') {
+        $where[] = "EXISTS(SELECT 1 FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS . " i2 WHERE i2.uid=u.uid AND i2.entity='" . $db->escape_string(af_advancedinventory_normalize_entity($entity)) . "')";
     }
     if ($state === 'empty') {
         $where[] = 'COALESCE(inv.total_rows,0)=0';
@@ -604,12 +618,12 @@ function af_advancedinventory_render_inventories(): void
     $pages = max(1, (int)ceil($total / $perPage));
     $pager = '';
     for ($i = 1; $i <= $pages; $i++) {
-        $url = 'inventories.php?page=' . $i . '&username=' . rawurlencode($username) . '&slot=' . rawurlencode($slot) . '&state=' . rawurlencode($state);
+        $url = 'inventories.php?page=' . $i . '&username=' . rawurlencode($username) . '&entity=' . rawurlencode($entity) . '&state=' . rawurlencode($state);
         $pager .= '<a class="af-page' . ($i === $page ? ' is-active' : '') . '" href="' . htmlspecialchars_uni($url) . '">' . $i . '</a> ';
     }
     $headerinclude .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(rtrim((string)$mybb->settings['bburl'], '/') . '/inc/plugins/advancedfunctionality/addons/advancedinventory/assets/advancedinventory.css') . '">';
     $html = '<!DOCTYPE html><html><head><title>Инвентари пользователей</title>' . $headerinclude . '</head><body>' . $header;
-    $html .= '<div class="af-box"><h1>Все инвентари пользователей</h1><form method="get" action="inventories.php"><input type="text" name="username" placeholder="username" value="' . htmlspecialchars_uni($username) . '"> <select name="slot"><option value="">Все tab/slot</option><option value="equipment"' . ($slot === 'equipment' ? ' selected' : '') . '>equipment</option><option value="resources"' . ($slot === 'resources' ? ' selected' : '') . '>resources</option><option value="pets"' . ($slot === 'pets' ? ' selected' : '') . '>pets</option><option value="customization"' . ($slot === 'customization' ? ' selected' : '') . '>customization</option></select> <select name="state"><option value="">Все</option><option value="empty"' . ($state === 'empty' ? ' selected' : '') . '>Пустые</option><option value="nonempty"' . ($state === 'nonempty' ? ' selected' : '') . '>Непустые</option></select> <button type="submit">Фильтр</button></form>';
+    $html .= '<div class="af-box"><h1>Все инвентари пользователей</h1><form method="get" action="inventories.php"><input type="text" name="username" placeholder="username" value="' . htmlspecialchars_uni($username) . '"> <select name="entity"><option value="">Все entity</option><option value="equipment"' . ($entity === 'equipment' ? ' selected' : '') . '>equipment</option><option value="resources"' . ($entity === 'resources' ? ' selected' : '') . '>resources</option><option value="pets"' . ($entity === 'pets' ? ' selected' : '') . '>pets</option><option value="customization"' . ($entity === 'customization' ? ' selected' : '') . '>customization</option></select> <select name="state"><option value="">Все</option><option value="empty"' . ($state === 'empty' ? ' selected' : '') . '>Пустые</option><option value="nonempty"' . ($state === 'nonempty' ? ' selected' : '') . '>Непустые</option></select> <button type="submit">Фильтр</button></form>';
     $html .= '<table class="tborder"><thead><tr><th>User</th><th>Инвентарь</th><th>Rows</th><th>Sum qty</th><th>Updated</th></tr></thead><tbody>' . $rows . '</tbody></table><div>' . $pager . '</div></div>';
     $html .= $footer . '</body></html>';
     output_page($html);
@@ -672,8 +686,13 @@ function af_advancedinventory_api_update(): void
     $uid = (int)$mybb->get_input('uid');
     $itemId = (int)$mybb->get_input('item_id');
     $qty = max(1, (int)$mybb->get_input('qty'));
+    $rawEntity = trim((string)$mybb->get_input('entity'));
+    $entity = af_advancedinventory_normalize_entity($rawEntity);
     $slot = trim((string)$mybb->get_input('slot'));
     $row = ['qty' => $qty, 'updated_at' => TIME_NOW];
+    if ($rawEntity !== '') {
+        $row['entity'] = $db->escape_string($entity);
+    }
     if ($slot !== '') { $row['slot'] = $db->escape_string(substr($slot, 0, 32)); }
     $db->update_query(AF_ADVINV_TABLE_ITEMS, $row, 'id=' . $itemId . ' AND uid=' . $uid);
     af_advancedinventory_json(['ok' => true]);
@@ -700,7 +719,11 @@ function af_advancedinventory_api_list(): void
     if (!af_inv_user_can_view($viewerUid, $ownerUid)) {
         af_advancedinventory_json(['ok' => false, 'error' => 'forbidden'], 403);
     }
-    af_advancedinventory_json(['ok' => true, 'data' => af_inv_get_items($ownerUid, ['slot' => (string)$mybb->get_input('slot'), 'subtype' => (string)$mybb->get_input('subtype'), 'search' => (string)$mybb->get_input('search'), 'page' => (int)$mybb->get_input('page')])]);
+    $entity = (string)$mybb->get_input('entity');
+    if ($entity === '') {
+        $entity = (string)$mybb->get_input('slot');
+    }
+    af_advancedinventory_json(['ok' => true, 'data' => af_inv_get_items($ownerUid, ['entity' => $entity, 'subtype' => (string)$mybb->get_input('subtype'), 'search' => (string)$mybb->get_input('search'), 'page' => (int)$mybb->get_input('page')])]);
 }
 
 function af_advinv_debug_log(string $event, array $context = []): void
@@ -829,7 +852,8 @@ function af_inv_add_item(int $uid, array $item): int
     $uid = max(0, $uid);
     if ($uid <= 0) { return 0; }
     $now = TIME_NOW;
-    $slot = substr(trim((string)($item['slot'] ?? 'stash')), 0, 32);
+    $entity = af_advancedinventory_normalize_entity((string)($item['entity'] ?? ($item['slot'] ?? 'equipment')));
+    $slot = substr(trim((string)($item['slot'] ?? $entity)), 0, 32);
     $subtype = substr(trim((string)($item['subtype'] ?? '')), 0, 32);
     $kbType = substr(trim((string)($item['kb_type'] ?? '')), 0, 32);
     $kbKey = substr(trim((string)($item['kb_key'] ?? '')), 0, 64);
@@ -840,22 +864,23 @@ function af_inv_add_item(int $uid, array $item): int
     $meta = @json_decode((string)$metaJson, true);
     $meta = is_array($meta) ? $meta : [];
 
-    $validSlots = ['stash', 'equipment', 'resources', 'pets', 'customization'];
     $equipmentKinds = ['weapon', 'armor', 'ammo', 'consumable'];
-    if (!in_array($slot, $validSlots, true)) {
-        $slot = 'stash';
+    if ($slot === '') {
+        $slot = $entity;
     }
-    if ($slot === 'resources' && in_array($subtype, $equipmentKinds, true)) {
+    if ($entity === 'resources' && in_array($subtype, $equipmentKinds, true)) {
+        $entity = 'equipment';
         $slot = 'equipment';
     }
 
     $kindFromRules = mb_strtolower(trim((string)($meta['rules']['item']['item_kind'] ?? '')));
     if ($kindFromRules === 'weapon') {
+        $entity = 'equipment';
         $slot = 'equipment';
         $subtype = 'weapon';
     }
 
-    if ($slot === 'equipment' && $subtype === '') {
+    if ($entity === 'equipment' && $subtype === '') {
         $kindFromMeta = mb_strtolower(trim((string)($meta['item_kind'] ?? ($meta['rules']['item']['item_kind'] ?? ''))));
         if (in_array($kindFromMeta, $equipmentKinds, true)) {
             $subtype = $kindFromMeta;
@@ -875,6 +900,7 @@ function af_inv_add_item(int $uid, array $item): int
 
     af_advinv_debug_log('af_inv_add_item_start', [
         'uid' => $uid,
+        'entity' => $entity,
         'slot' => $slot,
         'subtype' => $subtype,
         'kb_type' => $kbType,
@@ -885,6 +911,7 @@ function af_inv_add_item(int $uid, array $item): int
 
     af_advinv_debug_log('af_inv_add_item_input', [
         'uid' => $uid,
+        'entity' => $entity,
         'slot' => $slot,
         'subtype' => $subtype,
         'kb_type' => $kbType,
@@ -893,7 +920,7 @@ function af_inv_add_item(int $uid, array $item): int
         'qty' => $qty,
     ]);
 
-    $where = "uid={$uid} AND slot='" . $db->escape_string($slot) . "' AND subtype='" . $db->escape_string($subtype) . "' AND kb_type='" . $db->escape_string($kbType) . "' AND kb_key='" . $db->escape_string($kbKey) . "' AND MD5(COALESCE(meta_json,''))='" . $db->escape_string($metaHash) . "'";
+    $where = "uid={$uid} AND entity='" . $db->escape_string($entity) . "' AND subtype='" . $db->escape_string($subtype) . "' AND kb_type='" . $db->escape_string($kbType) . "' AND kb_key='" . $db->escape_string($kbKey) . "' AND MD5(COALESCE(meta_json,''))='" . $db->escape_string($metaHash) . "'";
     $row = $db->fetch_array($db->simple_select(AF_ADVINV_TABLE_ITEMS, 'id,qty', $where, ['limit' => 1]));
     if ($row) {
         $id = (int)$row['id'];
@@ -922,6 +949,7 @@ function af_inv_add_item(int $uid, array $item): int
 
     $insertPayload = [
         'uid' => $uid,
+        'entity' => $db->escape_string($entity),
         'slot' => $db->escape_string($slot),
         'subtype' => $db->escape_string($subtype),
         'kb_type' => $db->escape_string($kbType),
@@ -972,8 +1000,9 @@ function af_inv_get_items(int $uid, array $filters = []): array
     $page = max(1, (int)($filters['page'] ?? 1));
     $perPage = max(1, (int)($filters['perPage'] ?? ($mybb->settings['af_advancedinventory_perpage'] ?? 24)));
     $where = ['uid=' . (int)$uid];
-    if (($filters['slot'] ?? '') !== '') {
-        $where[] = "slot='" . $db->escape_string((string)$filters['slot']) . "'";
+    $entityFilter = (string)($filters['entity'] ?? '');
+    if ($entityFilter !== '') {
+        $where[] = "entity='" . $db->escape_string(af_advancedinventory_normalize_entity($entityFilter)) . "'";
     }
     if (($filters['subtype'] ?? '') !== '' && (string)$filters['subtype'] !== 'all') {
         $where[] = "subtype='" . $db->escape_string((string)$filters['subtype']) . "'";
@@ -1050,6 +1079,15 @@ function af_inv_get_equipped(int $uid): array
         $out[(string)$row['equip_slot']] = $row;
     }
     return $out;
+}
+
+function af_advancedinventory_normalize_entity(string $entity): string
+{
+    $entity = trim($entity);
+    if (!in_array($entity, AF_ADVINV_VALID_ENTITIES, true)) {
+        return 'equipment';
+    }
+    return $entity;
 }
 
 function af_inv_candidate_slots_for_item(array $item): array
@@ -1202,7 +1240,8 @@ function af_advancedinventory_migrate_from_shop(): void
             if ($title === '') { $title = trim((string)($row['title_en'] ?? '')); }
             if ($title === '') { $title = trim((string)($row['title_plain'] ?? '')); }
             $payload = [
-                'slot' => (string)($row['slot_code'] ?? 'stash'),
+                'entity' => (string)($row['slot_code'] ?? 'equipment'),
+                'slot' => (string)($row['slot_code'] ?? 'equipment'),
                 'subtype' => (string)($row['item_kind'] ?? ''),
                 'kb_type' => (string)($row['kb_type'] ?? 'item'),
                 'kb_key' => (string)($row['kb_key'] ?? ''),
@@ -1237,7 +1276,8 @@ function af_advancedinventory_migrate_from_shop(): void
                     continue;
                 }
                 $newId = af_inv_add_item($uid, [
-                    'slot' => (string)($item['slot'] ?? 'stash'),
+                    'entity' => (string)($item['entity'] ?? ($item['slot'] ?? 'equipment')),
+                    'slot' => (string)($item['slot'] ?? ($item['entity'] ?? 'equipment')),
                     'subtype' => (string)($item['subtype'] ?? ''),
                     'kb_type' => (string)($item['kb_type'] ?? 'item'),
                     'kb_key' => (string)($item['kb_key'] ?? ''),
