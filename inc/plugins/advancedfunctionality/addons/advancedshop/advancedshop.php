@@ -470,7 +470,7 @@ function af_advancedshop_is_installed(): bool
 
 function af_advancedshop_shop_routes(): array
 {
-    return ['shop','shop_category','shop_cart','shop_checkout','shop_add_to_cart','shop_update_cart','shop_manage','shop_manage_categories','shop_manage_category_create','shop_manage_category_update','shop_manage_category_delete','kb_category_update','kb_category_delete','shop_manage_sortorder_rebuild','shop_manage_slots','shop_manage_slot_create','shop_manage_slot_update','shop_manage_slot_delete','shop_kb_search','shop_kb_schema','shop_kb_probe','shop_health','inventory','inventory_item_info','inventory_equipped_get','inventory_equippable_list','inventory_state','inventory_equip','inventory_unequip'];
+    return ['shop','shop_category','shop_cart','shop_checkout','shop_add_to_cart','shop_update_cart','shop_manage','shop_manage_categories','shop_manage_category_create','shop_manage_category_update','shop_manage_category_delete','kb_category_update','kb_category_delete','shop_manage_sortorder_rebuild','shop_manage_slots','shop_manage_slot_create','shop_manage_slot_update','shop_manage_slot_delete','shop_kb_search','shop_kb_schema','shop_kb_probe','shop_health'];
 }
 
 function af_advancedshop_render_shop_page(): void
@@ -494,11 +494,11 @@ function af_advancedshop_dispatch(string $action): void
         error_no_permission();
     }
 
-    $apiActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'kb_category_update', 'kb_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_kb_schema', 'shop_kb_probe', 'shop_health', 'inventory_item_info', 'inventory_equipped_get', 'inventory_equippable_list', 'inventory_state', 'inventory_equip', 'inventory_unequip'];
+    $apiActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'kb_category_update', 'kb_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_kb_schema', 'shop_kb_probe', 'shop_health'];
     $buyActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart'];
     $manageActions = ['shop_manage', 'shop_manage_categories', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'kb_category_update', 'kb_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slots', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'shop_kb_search', 'shop_kb_schema', 'shop_health'];
 
-    if ((int)($mybb->settings['af_advancedshop_enabled'] ?? 1) !== 1 && $action !== 'inventory') {
+    if ((int)($mybb->settings['af_advancedshop_enabled'] ?? 1) !== 1) {
         if (in_array($action, $apiActions, true)) { af_advancedshop_json_err('Not allowed', 403); }
         error_no_permission();
     }
@@ -516,7 +516,7 @@ function af_advancedshop_dispatch(string $action): void
         error_no_permission();
     }
 
-    $postKeyActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'kb_category_update', 'kb_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete', 'inventory_equip', 'inventory_unequip'];
+    $postKeyActions = ['shop_checkout', 'shop_add_to_cart', 'shop_update_cart', 'shop_manage_category_create', 'shop_manage_category_update', 'shop_manage_category_delete', 'kb_category_update', 'kb_category_delete', 'shop_manage_sortorder_rebuild', 'shop_manage_slot_create', 'shop_manage_slot_update', 'shop_manage_slot_delete'];
     if (in_array($action, $postKeyActions, true)) {
         af_advancedshop_assert_post_key();
     }
@@ -548,13 +548,6 @@ function af_advancedshop_dispatch(string $action): void
             case 'shop_kb_schema': af_advancedshop_kb_schema(); return;
             case 'shop_kb_probe': af_advancedshop_kb_probe(); return;
             case 'shop_health': af_advancedshop_health_ping(); return;
-            case 'inventory': af_advancedshop_render_inventory(); return;
-            case 'inventory_item_info': af_advancedshop_inventory_item_info(); return;
-            case 'inventory_equipped_get': af_advancedshop_inventory_equipped_get(); return;
-            case 'inventory_equippable_list': af_advancedshop_inventory_equippable_list(); return;
-            case 'inventory_state': af_advancedshop_inventory_state(); return;
-            case 'inventory_equip': af_advancedshop_inventory_equip(); return;
-            case 'inventory_unequip': af_advancedshop_inventory_unequip(); return;
         }
     } catch (mysqli_sql_exception $e) {
         if (in_array($action, $apiActions, true)) {
@@ -865,7 +858,7 @@ function af_advancedshop_render_shop(): void
     $cart_url = af_advancedshop_url('shop_cart', ['shop' => (string)$shop['code']], true);
     $inventory_link = '';
     if ((int)($mybb->user['uid'] ?? 0) > 0) {
-        $inventory_link = '<a class="af-shop-btn" href="' . htmlspecialchars_uni(af_advancedshop_url('inventory')) . '">Инвентарь</a>';
+        $inventory_link = '<a class="af-shop-btn" href="' . htmlspecialchars_uni('inventory.php?uid=' . (int)$mybb->user['uid']) . '">Инвентарь</a>';
     }
     $balance_badge = '<span class="af-shop-balance">' . htmlspecialchars_uni($lang->af_advancedshop_balance ?? 'Balance') . ': <strong>' . $balance . '</strong> ' . $currency_symbol . '</span>';
     $assets = af_advancedshop_assets_html();
@@ -999,7 +992,7 @@ function af_advancedshop_pre_output(string &$page = ''): void
     $action = (string)($mybb->input['action'] ?? '');
     $thisScript = defined('THIS_SCRIPT') ? THIS_SCRIPT : '';
     $isShopScript = $thisScript === 'shop.php';
-    if (!$isShopScript && !in_array($action, ['shop', 'shop_category', 'shop_cart', 'shop_manage', 'shop_manage_slots', 'inventory', 'af_charactersheet'], true)) {
+    if (!$isShopScript && !in_array($action, ['shop', 'shop_category', 'shop_cart', 'shop_manage', 'shop_manage_slots', 'af_charactersheet'], true)) {
         return;
     }
 
@@ -1051,7 +1044,7 @@ function af_advancedshop_render_cart(): void
     $assets = af_advancedshop_assets_html();
     $shop_code = htmlspecialchars_uni((string)$shop['code']);
     $shop_url = af_advancedshop_url('shop', ['shop' => (string)$shop['code']], true);
-    $inventory_url = htmlspecialchars_uni(af_advancedshop_url('inventory'));
+    $inventory_url = htmlspecialchars_uni('inventory.php?uid=' . (int)$mybb->user['uid']);
     $currencySlug = (string)($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits');
     $currency_symbol = htmlspecialchars_uni(af_advancedshop_currency_symbol($currencySlug));
     $balance = af_advancedshop_money_format($balance);
@@ -1164,7 +1157,7 @@ function af_advancedshop_checkout(): void
     $uid = (int)($mybb->user['uid'] ?? 0);
     if ($uid <= 0) { af_advancedshop_json_err('auth', 403); }
     if (!function_exists('af_inv_add_item') || (int)($mybb->settings['af_advancedinventory_enabled'] ?? 0) !== 1) {
-        af_advancedshop_json_err('Инвентарь отключён', 400);
+        af_advancedshop_json_err('Покупка недоступна: Advanced Inventory отключён или не установлен.', 400);
     }
     $shop = af_advancedshop_current_shop();
     $currency = (string)($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits');
