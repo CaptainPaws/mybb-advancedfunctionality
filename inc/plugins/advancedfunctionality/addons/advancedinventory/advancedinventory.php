@@ -9,6 +9,7 @@ define('AF_ADVINV_ASSET_DIR', AF_ADVINV_BASE . 'assets/');
 define('AF_ADVINV_DEBUG_LOG', AF_CACHE . 'advancedinventory_debug.log');
 define('AF_ADVINV_ALIAS_MARKER', "define('AF_ADVANCEDINVENTORY_PAGE_ALIAS', 1);");
 define('AF_ADVINV_INVENTORIES_ALIAS_MARKER', "define('AF_ADVANCEDINVENTORIES_PAGE_ALIAS', 1);");
+define('AF_ADVINV_TABLE_ITEMS', 'af_advinv_items');
 
 af_advancedinventory_init();
 
@@ -42,8 +43,8 @@ function af_advancedinventory_install(): void
 
     af_advancedinventory_ensure_inventory_storage();
 
-    if (!$db->table_exists('af_inventory_items')) {
-        $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_inventory_items (
+    if (!$db->table_exists(AF_ADVINV_TABLE_ITEMS)) {
+        $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS . " (
             id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             uid INT UNSIGNED NOT NULL,
             slot VARCHAR(32) NOT NULL DEFAULT 'stash',
@@ -122,7 +123,7 @@ function af_advancedinventory_uninstall(): void
 function af_advancedinventory_is_installed(): bool
 {
     global $db;
-    return $db->table_exists('af_inventory_items');
+    return $db->table_exists(AF_ADVINV_TABLE_ITEMS);
 }
 
 function af_advancedinventory_alias_target_path(): string
@@ -400,7 +401,7 @@ function af_advancedinventory_render_inventories(): void
         $where[] = "u.username LIKE '%{$like}%'";
     }
     if ($slot !== '') {
-        $where[] = "EXISTS(SELECT 1 FROM " . TABLE_PREFIX . "af_inventory_items i2 WHERE i2.uid=u.uid AND i2.slot='" . $db->escape_string($slot) . "')";
+        $where[] = "EXISTS(SELECT 1 FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS . " i2 WHERE i2.uid=u.uid AND i2.slot='" . $db->escape_string($slot) . "')";
     }
     if ($state === 'empty') {
         $where[] = 'COALESCE(inv.total_rows,0)=0';
@@ -408,9 +409,9 @@ function af_advancedinventory_render_inventories(): void
         $where[] = 'COALESCE(inv.total_rows,0)>0';
     }
     $whereSql = implode(' AND ', $where);
-    $total = (int)$db->fetch_field($db->query("SELECT COUNT(*) AS c FROM " . TABLE_PREFIX . "users u LEFT JOIN (SELECT uid, COUNT(*) total_rows, COALESCE(SUM(qty),0) total_qty, MAX(updated_at) updated_at FROM " . TABLE_PREFIX . "af_inventory_items GROUP BY uid) inv ON(inv.uid=u.uid) WHERE {$whereSql}"), 'c');
+    $total = (int)$db->fetch_field($db->query("SELECT COUNT(*) AS c FROM " . TABLE_PREFIX . "users u LEFT JOIN (SELECT uid, COUNT(*) total_rows, COALESCE(SUM(qty),0) total_qty, MAX(updated_at) updated_at FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS . " GROUP BY uid) inv ON(inv.uid=u.uid) WHERE {$whereSql}"), 'c');
     $offset = ($page - 1) * $perPage;
-    $q = $db->query("SELECT u.uid,u.username,COALESCE(inv.total_rows,0) total_rows,COALESCE(inv.total_qty,0) total_qty,COALESCE(inv.updated_at,0) updated_at FROM " . TABLE_PREFIX . "users u LEFT JOIN (SELECT uid, COUNT(*) total_rows, COALESCE(SUM(qty),0) total_qty, MAX(updated_at) updated_at FROM " . TABLE_PREFIX . "af_inventory_items GROUP BY uid) inv ON(inv.uid=u.uid) WHERE {$whereSql} ORDER BY inv.updated_at DESC, u.username ASC LIMIT {$offset},{$perPage}");
+    $q = $db->query("SELECT u.uid,u.username,COALESCE(inv.total_rows,0) total_rows,COALESCE(inv.total_qty,0) total_qty,COALESCE(inv.updated_at,0) updated_at FROM " . TABLE_PREFIX . "users u LEFT JOIN (SELECT uid, COUNT(*) total_rows, COALESCE(SUM(qty),0) total_qty, MAX(updated_at) updated_at FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS . " GROUP BY uid) inv ON(inv.uid=u.uid) WHERE {$whereSql} ORDER BY inv.updated_at DESC, u.username ASC LIMIT {$offset},{$perPage}");
     $rows = '';
     while ($row = $db->fetch_array($q)) {
         $invUrl = af_advancedinventory_url('inventory', ['uid' => (int)$row['uid']], true);
@@ -490,7 +491,7 @@ function af_advancedinventory_api_update(): void
     $slot = trim((string)$mybb->get_input('slot'));
     $row = ['qty' => $qty, 'updated_at' => TIME_NOW];
     if ($slot !== '') { $row['slot'] = $db->escape_string(substr($slot, 0, 32)); }
-    $db->update_query('af_inventory_items', $row, 'id=' . $itemId . ' AND uid=' . $uid);
+    $db->update_query(AF_ADVINV_TABLE_ITEMS, $row, 'id=' . $itemId . ' AND uid=' . $uid);
     af_advancedinventory_json(['ok' => true]);
 }
 
@@ -501,7 +502,7 @@ function af_advancedinventory_api_delete(): void
     if (!af_advancedinventory_user_can_manage()) { af_advancedinventory_json(['ok' => false, 'error' => 'forbidden'], 403); }
     $uid = (int)$mybb->get_input('uid');
     $itemId = (int)$mybb->get_input('item_id');
-    $db->delete_query('af_inventory_items', 'id=' . $itemId . ' AND uid=' . $uid);
+    $db->delete_query(AF_ADVINV_TABLE_ITEMS, 'id=' . $itemId . ' AND uid=' . $uid);
     $db->delete_query('af_advinv_equipped', 'uid=' . $uid . ' AND item_id=' . $itemId);
     af_advancedinventory_json(['ok' => true]);
 }
@@ -665,16 +666,16 @@ function af_inv_add_item(int $uid, array $item): int
     ]);
 
     $where = "uid={$uid} AND slot='" . $db->escape_string($slot) . "' AND subtype='" . $db->escape_string($subtype) . "' AND kb_type='" . $db->escape_string($kbType) . "' AND kb_key='" . $db->escape_string($kbKey) . "' AND MD5(COALESCE(meta_json,''))='" . $db->escape_string($metaHash) . "'";
-    $row = $db->fetch_array($db->simple_select('af_inventory_items', 'id,qty', $where, ['limit' => 1]));
+    $row = $db->fetch_array($db->simple_select(AF_ADVINV_TABLE_ITEMS, 'id,qty', $where, ['limit' => 1]));
     if ($row) {
         $id = (int)$row['id'];
         $newQty = (int)$row['qty'] + $qty;
-        $db->update_query('af_inventory_items', ['qty' => $newQty, 'title' => $db->escape_string($title), 'icon' => $db->escape_string($icon), 'updated_at' => $now], 'id=' . $id);
+        $db->update_query(AF_ADVINV_TABLE_ITEMS, ['qty' => $newQty, 'title' => $db->escape_string($title), 'icon' => $db->escape_string($icon), 'updated_at' => $now], 'id=' . $id);
         af_advinv_debug_log('af_inv_add_item_merged', ['uid' => $uid, 'id' => $id, 'old_qty' => (int)$row['qty'], 'new_qty' => $newQty]);
         return $id;
     }
 
-    $newId = (int)$db->insert_query('af_inventory_items', [
+    $newId = (int)$db->insert_query(AF_ADVINV_TABLE_ITEMS, [
         'uid' => $uid,
         'slot' => $db->escape_string($slot),
         'subtype' => $db->escape_string($subtype),
@@ -694,14 +695,14 @@ function af_inv_add_item(int $uid, array $item): int
 function af_inv_remove_item(int $uid, int $itemId, int $qty = 1): bool
 {
     global $db;
-    $row = $db->fetch_array($db->simple_select('af_inventory_items', 'id,qty', 'id=' . (int)$itemId . ' AND uid=' . (int)$uid, ['limit' => 1]));
+    $row = $db->fetch_array($db->simple_select(AF_ADVINV_TABLE_ITEMS, 'id,qty', 'id=' . (int)$itemId . ' AND uid=' . (int)$uid, ['limit' => 1]));
     if (!$row) { return false; }
     $left = (int)$row['qty'] - max(1, $qty);
     if ($left <= 0) {
-        $db->delete_query('af_inventory_items', 'id=' . (int)$row['id'] . ' AND uid=' . (int)$uid);
+        $db->delete_query(AF_ADVINV_TABLE_ITEMS, 'id=' . (int)$row['id'] . ' AND uid=' . (int)$uid);
         return true;
     }
-    $db->update_query('af_inventory_items', ['qty' => $left, 'updated_at' => TIME_NOW], 'id=' . (int)$row['id'] . ' AND uid=' . (int)$uid);
+    $db->update_query(AF_ADVINV_TABLE_ITEMS, ['qty' => $left, 'updated_at' => TIME_NOW], 'id=' . (int)$row['id'] . ' AND uid=' . (int)$uid);
     return true;
 }
 
@@ -722,10 +723,10 @@ function af_inv_get_items(int $uid, array $filters = []): array
         $where[] = "(title LIKE '%{$like}%' OR kb_key LIKE '%{$like}%')";
     }
     $whereSql = implode(' AND ', $where);
-    $total = (int)$db->fetch_field($db->simple_select('af_inventory_items', 'COUNT(*) AS c', $whereSql), 'c');
+    $total = (int)$db->fetch_field($db->simple_select(AF_ADVINV_TABLE_ITEMS, 'COUNT(*) AS c', $whereSql), 'c');
     $offset = ($page - 1) * $perPage;
     $items = [];
-    $q = $db->simple_select('af_inventory_items', '*', $whereSql, ['order_by' => 'updated_at', 'order_dir' => 'DESC', 'limit' => $perPage, 'start' => $offset]);
+    $q = $db->simple_select(AF_ADVINV_TABLE_ITEMS, '*', $whereSql, ['order_by' => 'updated_at', 'order_dir' => 'DESC', 'limit' => $perPage, 'start' => $offset]);
     while ($row = $db->fetch_array($q)) { $items[] = $row; }
 
     $enrich = (bool)($filters['enrich'] ?? false);
@@ -737,7 +738,7 @@ function af_inv_get_items(int $uid, array $filters = []): array
         'uid' => (int)$uid,
         'filters' => $filters,
         'where' => $whereSql,
-        'table' => TABLE_PREFIX . 'af_inventory_items',
+        'table' => TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS,
         'total' => $total,
         'rows' => count($items),
         'enrich' => $enrich ? 1 : 0,
@@ -820,7 +821,7 @@ function af_inv_find_equipped_slot_by_item(array $equipped, int $itemId): string
 function af_inv_get_item_for_owner(int $uid, int $itemId): ?array
 {
     global $db;
-    $row = $db->fetch_array($db->simple_select('af_inventory_items', '*', 'uid=' . $uid . ' AND id=' . $itemId, ['limit' => 1]));
+    $row = $db->fetch_array($db->simple_select(AF_ADVINV_TABLE_ITEMS, '*', 'uid=' . $uid . ' AND id=' . $itemId, ['limit' => 1]));
     return $row ?: null;
 }
 
@@ -904,7 +905,7 @@ function af_advancedinventory_ensure_setting(string $name, string $title, string
 function af_advancedinventory_migrate_from_shop(): void
 {
     global $db;
-    if (!$db->table_exists('af_inventory_items')) { return; }
+    if (!$db->table_exists(AF_ADVINV_TABLE_ITEMS)) { return; }
     $done = (string)$db->fetch_field($db->simple_select('datacache', 'cache', "title='af_advancedinventory_migrated'", ['limit' => 1]), 'cache');
     if ($done === '1') { return; }
 
@@ -920,7 +921,7 @@ function af_advancedinventory_migrate_from_shop(): void
     $kbMetaExpr = $kbCols['meta_json'] ?: "''";
 
     af_advinv_debug_log('migration_start', [
-        'new_table' => TABLE_PREFIX . 'af_inventory_items',
+        'new_table' => TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS,
         'has_legacy_table' => $db->table_exists('af_shop_inventory_legacy') ? 1 : 0,
         'has_orders_table' => $db->table_exists('af_shop_orders') ? 1 : 0,
     ]);
