@@ -33,9 +33,11 @@ function af_advancedinventory_install(): void
         $lang->af_advancedinventory_group_desc ?? 'Inventory addon settings.'
     );
     af_advancedinventory_ensure_setting('af_advancedinventory_enabled', 'Enable inventory', 'Yes/No', 'yesno', '1', 1, $gid);
-    af_advancedinventory_ensure_setting('af_advancedinventory_view_groups', 'View groups', 'CSV group IDs that may view other inventories', 'text', '', 2, $gid);
+    af_advancedinventory_ensure_setting('af_advancedinventory_view_groups', 'View groups', 'CSV group IDs that may view other inventories', 'text', '2', 2, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_perpage', 'Items per page', 'Per-page limit', 'numeric', '24', 3, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_default_tab', 'Default tab', 'Default tab for inventory page', "select\nequipment=equipment\nresources=resources\npets=pets\ncustomization=customization", 'equipment', 4, $gid);
+
+    af_advancedinventory_ensure_inventory_storage();
 
     if (!$db->table_exists('af_inventory_items')) {
         $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_inventory_items (
@@ -69,6 +71,8 @@ function af_advancedinventory_install(): void
 function af_advancedinventory_activate(): void
 {
     af_advancedinventory_templates_install_or_update();
+    af_advancedinventory_ensure_inventory_storage();
+    af_advancedinventory_migrate_from_shop();
     if (!af_advancedinventory_alias_sync()) {
         af_advancedinventory_alias_sync_notice_on_failure();
     }
@@ -225,9 +229,13 @@ function af_advancedinventory_render_inventory(): void
         $defaultTab = 'equipment';
     }
 
-    $assetBase = 'inc/plugins/advancedfunctionality/addons/advancedinventory/assets/';
-    $headerinclude .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($assetBase . 'advancedinventory.css') . '">';
-    $headerinclude .= '<script src="' . htmlspecialchars_uni($assetBase . 'advancedinventory.js') . '" defer></script>';
+    $assetBase = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedinventory/assets/';
+    $cssFile = AF_ADVINV_ASSET_DIR . 'advancedinventory.css';
+    $jsFile = AF_ADVINV_ASSET_DIR . 'advancedinventory.js';
+    $vCss = @is_file($cssFile) ? (string)@filemtime($cssFile) : '1';
+    $vJs = @is_file($jsFile) ? (string)@filemtime($jsFile) : '1';
+    $headerinclude .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($assetBase . 'advancedinventory.css?v=' . rawurlencode($vCss)) . '">';
+    $headerinclude .= '<script src="' . htmlspecialchars_uni($assetBase . 'advancedinventory.js?v=' . rawurlencode($vJs)) . '" defer></script>';
 
     $tabs = af_advancedinventory_tabs();
     $tabLinks = '';
@@ -237,9 +245,27 @@ function af_advancedinventory_render_inventory(): void
     }
 
     $firstUrl = af_advancedinventory_url('tab', ['uid' => $ownerUid, 'tab' => $defaultTab, 'sub' => 'all', 'ajax' => 1], true);
-    eval('$page = "' . $templates->get('advancedinventory') . '";');
+    eval('$af_inv_content = "' . $templates->get('advancedinventory_inventory_inner') . '";');
+    eval('$page = "' . $templates->get('advancedinventory_inventory_page') . '";');
     output_page($page);
     exit;
+}
+
+function af_advancedinventory_ensure_inventory_storage(): void
+{
+    global $db;
+
+    if (!$db->table_exists('af_inventory_items')) {
+        return;
+    }
+
+    if (!$db->field_exists('inv_id', 'af_inventory_items')) {
+        return;
+    }
+
+    if (!$db->table_exists('af_shop_inventory_legacy')) {
+        $db->write_query("RENAME TABLE " . TABLE_PREFIX . "af_inventory_items TO " . TABLE_PREFIX . "af_shop_inventory_legacy");
+    }
 }
 
 function af_advancedinventory_render_tab(): void
@@ -479,17 +505,49 @@ function af_advancedinventory_migrate_from_shop(): void
     $done = (string)$db->fetch_field($db->simple_select('datacache', 'cache', "title='af_advancedinventory_migrated'", ['limit' => 1]), 'cache');
     if ($done === '1') { return; }
 
-    if ($db->field_exists('inv_id', 'af_inventory_items')) {
-        $q = $db->query("SELECT uid, item_kind, slot_code, qty, created_at, updated_at FROM " . TABLE_PREFIX . "af_inventory_items");
+    if ($db->table_exists('af_shop_inventory_legacy')) {
+        $q = $db->query("SELECT uid, item_kind, slot_code, kb_id, qty, created_at, updated_at FROM " . TABLE_PREFIX . "af_shop_inventory_legacy");
         while ($row = $db->fetch_array($q)) {
+            $kbId = (int)($row['kb_id'] ?? 0);
             af_inv_add_item((int)$row['uid'], [
                 'slot' => (string)($row['slot_code'] ?? 'stash'),
                 'subtype' => (string)($row['item_kind'] ?? ''),
+                'kb_type' => 'item',
+                'kb_key' => $kbId > 0 ? ('legacy_kb_' . $kbId) : '',
                 'title' => '',
                 'icon' => '',
                 'qty' => (int)($row['qty'] ?? 1),
                 'meta_json' => '',
             ]);
+        }
+    }
+
+    if ($db->table_exists('af_shop_orders')) {
+        $qOrders = $db->simple_select('af_shop_orders', 'uid, items_json', "status IN ('paid','completed','issued')", ['order_by' => 'order_id ASC']);
+        while ($order = $db->fetch_array($qOrders)) {
+            $uid = (int)($order['uid'] ?? 0);
+            if ($uid <= 0) {
+                continue;
+            }
+            $items = json_decode((string)($order['items_json'] ?? ''), true);
+            if (!is_array($items)) {
+                continue;
+            }
+            foreach ($items as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                af_inv_add_item($uid, [
+                    'slot' => (string)($item['slot'] ?? 'stash'),
+                    'subtype' => (string)($item['subtype'] ?? ''),
+                    'kb_type' => (string)($item['kb_type'] ?? 'item'),
+                    'kb_key' => (string)($item['kb_key'] ?? ''),
+                    'title' => (string)($item['title'] ?? ''),
+                    'icon' => (string)($item['icon'] ?? ''),
+                    'qty' => max(1, (int)($item['qty'] ?? 1)),
+                    'meta_json' => is_string($item['meta_json'] ?? null) ? (string)$item['meta_json'] : '',
+                ]);
+            }
         }
     }
 
