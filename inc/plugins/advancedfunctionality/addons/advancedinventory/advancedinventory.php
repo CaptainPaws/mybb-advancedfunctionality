@@ -739,6 +739,20 @@ function af_inv_add_item(int $uid, array $item): int
     $metaJson = is_string($item['meta_json'] ?? null) ? (string)$item['meta_json'] : json_encode((array)($item['meta'] ?? []), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     $metaHash = md5((string)$metaJson);
 
+    $columns = af_advancedinventory_fetch_table_columns();
+    $hasTitleColumn = in_array('title', $columns, true);
+    $hasIconColumn = in_array('icon', $columns, true);
+
+    af_advinv_debug_log('af_inv_add_item_start', [
+        'uid' => $uid,
+        'slot' => $slot,
+        'subtype' => $subtype,
+        'kb_type' => $kbType,
+        'kb_key' => $kbKey,
+        'qty' => $qty,
+        'table' => TABLE_PREFIX . AF_ADVINV_TABLE_ITEMS,
+    ]);
+
     af_advinv_debug_log('af_inv_add_item_input', [
         'uid' => $uid,
         'slot' => $slot,
@@ -754,24 +768,56 @@ function af_inv_add_item(int $uid, array $item): int
     if ($row) {
         $id = (int)$row['id'];
         $newQty = (int)$row['qty'] + $qty;
-        $db->update_query(AF_ADVINV_TABLE_ITEMS, ['qty' => $newQty, 'title' => $db->escape_string($title), 'icon' => $db->escape_string($icon), 'updated_at' => $now], 'id=' . $id);
+        $updatePayload = ['qty' => $newQty, 'updated_at' => $now];
+        if ($hasTitleColumn) {
+            $updatePayload['title'] = $db->escape_string($title);
+        }
+        if ($hasIconColumn) {
+            $updatePayload['icon'] = $db->escape_string($icon);
+        }
+
+        af_advinv_debug_log('checkout_db_op', [
+            'stage' => 'af_inv_add_item_update',
+            'op' => 'update_query',
+            'table' => AF_ADVINV_TABLE_ITEMS,
+            'fields' => array_keys($updatePayload),
+            'uid' => $uid,
+            'item_payload' => $item,
+        ]);
+
+        $db->update_query(AF_ADVINV_TABLE_ITEMS, $updatePayload, 'id=' . $id);
         af_advinv_debug_log('af_inv_add_item_merged', ['uid' => $uid, 'id' => $id, 'old_qty' => (int)$row['qty'], 'new_qty' => $newQty]);
         return $id;
     }
 
-    $newId = (int)$db->insert_query(AF_ADVINV_TABLE_ITEMS, [
+    $insertPayload = [
         'uid' => $uid,
         'slot' => $db->escape_string($slot),
         'subtype' => $db->escape_string($subtype),
         'kb_type' => $db->escape_string($kbType),
         'kb_key' => $db->escape_string($kbKey),
-        'title' => $db->escape_string($title),
-        'icon' => $db->escape_string($icon),
         'qty' => $qty,
         'meta_json' => $db->escape_string((string)$metaJson),
         'created_at' => $now,
         'updated_at' => $now,
+    ];
+    if ($hasTitleColumn) {
+        $insertPayload['title'] = $db->escape_string($title);
+    }
+    if ($hasIconColumn) {
+        $insertPayload['icon'] = $db->escape_string($icon);
+    }
+
+    af_advinv_debug_log('checkout_db_op', [
+        'stage' => 'af_inv_add_item_insert',
+        'op' => 'insert_query',
+        'table' => AF_ADVINV_TABLE_ITEMS,
+        'fields' => array_keys($insertPayload),
+        'uid' => $uid,
+        'item_payload' => $item,
     ]);
+
+    $newId = (int)$db->insert_query(AF_ADVINV_TABLE_ITEMS, $insertPayload);
     af_advinv_debug_log('af_inv_add_item_inserted', ['uid' => $uid, 'id' => $newId]);
     return $newId;
 }
