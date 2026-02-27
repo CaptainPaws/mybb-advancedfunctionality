@@ -6,6 +6,7 @@ define('AF_ADVINV_ID', 'advancedinventory');
 define('AF_ADVINV_BASE', AF_ADDONS . AF_ADVINV_ID . '/');
 define('AF_ADVINV_TPL_DIR', AF_ADVINV_BASE . 'templates/');
 define('AF_ADVINV_ASSET_DIR', AF_ADVINV_BASE . 'assets/');
+define('AF_ADVINV_DEBUG_LOG', AF_CACHE . 'advancedinventory_debug.log');
 define('AF_ADVINV_ALIAS_MARKER', "define('AF_ADVANCEDINVENTORY_PAGE_ALIAS', 1);");
 define('AF_ADVINV_INVENTORIES_ALIAS_MARKER', "define('AF_ADVANCEDINVENTORIES_PAGE_ALIAS', 1);");
 
@@ -324,7 +325,7 @@ function af_advancedinventory_render_tab(): void
     if ($tab === 'customization') { $slot = 'customization'; }
 
     $filters = ['slot' => $slot, 'subtype' => $sub, 'page' => max(1, (int)$mybb->get_input('page'))];
-    $data = af_inv_get_items($ownerUid, $filters);
+    $data = af_inv_get_items($ownerUid, array_merge($filters, ['enrich' => true]));
 
     $rows = '';
     $equipped = af_inv_get_equipped($ownerUid);
@@ -517,6 +518,126 @@ function af_advancedinventory_api_list(): void
     af_advancedinventory_json(['ok' => true, 'data' => af_inv_get_items($ownerUid, ['slot' => (string)$mybb->get_input('slot'), 'subtype' => (string)$mybb->get_input('subtype'), 'search' => (string)$mybb->get_input('search'), 'page' => (int)$mybb->get_input('page')])]);
 }
 
+function af_advinv_debug_log(string $event, array $context = []): void
+{
+    $line = '[AF-ADVINV][' . date('c') . '][' . $event . '] ' . json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    @error_log($line);
+    @file_put_contents(AF_ADVINV_DEBUG_LOG, $line . "\n", FILE_APPEND);
+}
+
+function af_advinv_kb_table_sql(): string
+{
+    if (function_exists('af_advancedshop_kb_table')) {
+        return af_advancedshop_kb_table();
+    }
+    return TABLE_PREFIX . 'af_kb_entries';
+}
+
+function af_advinv_kb_cols(): array
+{
+    if (function_exists('af_advancedshop_kb_cols')) {
+        return af_advancedshop_kb_cols();
+    }
+    return [
+        'id' => 'id',
+        'type' => '`type`',
+        'key' => '`key`',
+        'title_ru' => 'title_ru',
+        'title_en' => 'title_en',
+        'title' => '',
+        'meta_json' => 'meta_json',
+    ];
+}
+
+function af_advinv_kb_extract_icon(?string $metaJson): string
+{
+    if (!is_string($metaJson) || trim($metaJson) === '') {
+        return '';
+    }
+    $meta = @json_decode($metaJson, true);
+    if (!is_array($meta)) {
+        return '';
+    }
+    return trim((string)($meta['ui']['icon_url'] ?? $meta['icon_url'] ?? ''));
+}
+
+function af_advinv_enrich_items_from_kb(array $items): array
+{
+    global $db;
+    if (!$items || !$db->table_exists('af_kb_entries')) {
+        return $items;
+    }
+
+    $keys = [];
+    foreach ($items as $item) {
+        $title = trim((string)($item['title'] ?? ''));
+        $icon = trim((string)($item['icon'] ?? ''));
+        $kbKey = trim((string)($item['kb_key'] ?? ''));
+        if ($kbKey === '' || ($title !== '' && $icon !== '')) {
+            continue;
+        }
+        $kbType = trim((string)($item['kb_type'] ?? ''));
+        $keys[$kbType . '||' . $kbKey] = ['kb_type' => $kbType, 'kb_key' => $kbKey];
+    }
+    if (!$keys) {
+        return $items;
+    }
+
+    $kbCols = af_advinv_kb_cols();
+    $keyExpr = $kbCols['key'] ?? '`key`';
+    $typeExpr = $kbCols['type'] ?? '`type`';
+    $titleRuExpr = $kbCols['title_ru'] ?: "''";
+    $titleEnExpr = $kbCols['title_en'] ?: "''";
+    $titleExpr = $kbCols['title'] ?: "''";
+    $metaExpr = $kbCols['meta_json'] ?: "''";
+    $whereOr = [];
+    foreach ($keys as $pair) {
+        $whereOr[] = '(' . $typeExpr . "='" . $db->escape_string($pair['kb_type']) . "' AND " . $keyExpr . "='" . $db->escape_string($pair['kb_key']) . "')";
+    }
+    if (!$whereOr) {
+        return $items;
+    }
+
+    $q = $db->query("SELECT " . $typeExpr . " AS kb_type, " . $keyExpr . " AS kb_key, " . $titleRuExpr . " AS title_ru, " . $titleEnExpr . " AS title_en, " . $titleExpr . " AS title_plain, " . $metaExpr . " AS meta_json FROM " . af_advinv_kb_table_sql() . " WHERE " . implode(' OR ', $whereOr));
+    $kbMap = [];
+    while ($row = $db->fetch_array($q)) {
+        $t = trim((string)($row['title_ru'] ?? ''));
+        if ($t === '') { $t = trim((string)($row['title_en'] ?? '')); }
+        if ($t === '') { $t = trim((string)($row['title_plain'] ?? '')); }
+        $kbType = trim((string)($row['kb_type'] ?? ''));
+        $kbKey = trim((string)($row['kb_key'] ?? ''));
+        $kbMap[$kbType . '||' . $kbKey] = [
+            'title' => $t,
+            'icon' => af_advinv_kb_extract_icon((string)($row['meta_json'] ?? '')),
+        ];
+    }
+
+    foreach ($items as &$item) {
+        $kbType = trim((string)($item['kb_type'] ?? ''));
+        $kbKey = trim((string)($item['kb_key'] ?? ''));
+        if ($kbKey === '') {
+            continue;
+        }
+        $mapKey = $kbType . '||' . $kbKey;
+        $fromKb = $kbMap[$mapKey] ?? null;
+        if (!$fromKb) {
+            if (trim((string)($item['title'] ?? '')) === '') {
+                $item['title'] = $kbKey;
+            }
+            continue;
+        }
+        if (trim((string)($item['title'] ?? '')) === '') {
+            $item['title'] = $fromKb['title'] !== '' ? $fromKb['title'] : $kbKey;
+        }
+        if (trim((string)($item['icon'] ?? '')) === '' && $fromKb['icon'] !== '') {
+            $item['icon'] = $fromKb['icon'];
+        }
+    }
+    unset($item);
+
+    return $items;
+}
+
 function af_inv_add_item(int $uid, array $item): int
 {
     global $db;
@@ -533,15 +654,27 @@ function af_inv_add_item(int $uid, array $item): int
     $metaJson = is_string($item['meta_json'] ?? null) ? (string)$item['meta_json'] : json_encode((array)($item['meta'] ?? []), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     $metaHash = md5((string)$metaJson);
 
+    af_advinv_debug_log('af_inv_add_item_input', [
+        'uid' => $uid,
+        'slot' => $slot,
+        'subtype' => $subtype,
+        'kb_type' => $kbType,
+        'kb_key' => $kbKey,
+        'title' => $title,
+        'qty' => $qty,
+    ]);
+
     $where = "uid={$uid} AND slot='" . $db->escape_string($slot) . "' AND subtype='" . $db->escape_string($subtype) . "' AND kb_type='" . $db->escape_string($kbType) . "' AND kb_key='" . $db->escape_string($kbKey) . "' AND MD5(COALESCE(meta_json,''))='" . $db->escape_string($metaHash) . "'";
     $row = $db->fetch_array($db->simple_select('af_inventory_items', 'id,qty', $where, ['limit' => 1]));
     if ($row) {
         $id = (int)$row['id'];
-        $db->update_query('af_inventory_items', ['qty' => (int)$row['qty'] + $qty, 'title' => $db->escape_string($title), 'icon' => $db->escape_string($icon), 'updated_at' => $now], 'id=' . $id);
+        $newQty = (int)$row['qty'] + $qty;
+        $db->update_query('af_inventory_items', ['qty' => $newQty, 'title' => $db->escape_string($title), 'icon' => $db->escape_string($icon), 'updated_at' => $now], 'id=' . $id);
+        af_advinv_debug_log('af_inv_add_item_merged', ['uid' => $uid, 'id' => $id, 'old_qty' => (int)$row['qty'], 'new_qty' => $newQty]);
         return $id;
     }
 
-    return (int)$db->insert_query('af_inventory_items', [
+    $newId = (int)$db->insert_query('af_inventory_items', [
         'uid' => $uid,
         'slot' => $db->escape_string($slot),
         'subtype' => $db->escape_string($subtype),
@@ -554,6 +687,8 @@ function af_inv_add_item(int $uid, array $item): int
         'created_at' => $now,
         'updated_at' => $now,
     ]);
+    af_advinv_debug_log('af_inv_add_item_inserted', ['uid' => $uid, 'id' => $newId]);
+    return $newId;
 }
 
 function af_inv_remove_item(int $uid, int $itemId, int $qty = 1): bool
@@ -592,6 +727,22 @@ function af_inv_get_items(int $uid, array $filters = []): array
     $items = [];
     $q = $db->simple_select('af_inventory_items', '*', $whereSql, ['order_by' => 'updated_at', 'order_dir' => 'DESC', 'limit' => $perPage, 'start' => $offset]);
     while ($row = $db->fetch_array($q)) { $items[] = $row; }
+
+    $enrich = (bool)($filters['enrich'] ?? false);
+    if ($enrich) {
+        $items = af_advinv_enrich_items_from_kb($items);
+    }
+
+    af_advinv_debug_log('af_inv_get_items', [
+        'uid' => (int)$uid,
+        'filters' => $filters,
+        'where' => $whereSql,
+        'table' => TABLE_PREFIX . 'af_inventory_items',
+        'total' => $total,
+        'rows' => count($items),
+        'enrich' => $enrich ? 1 : 0,
+    ]);
+
     return ['items' => $items, 'total' => $total, 'page' => $page, 'perPage' => $perPage];
 }
 
@@ -757,25 +908,60 @@ function af_advancedinventory_migrate_from_shop(): void
     $done = (string)$db->fetch_field($db->simple_select('datacache', 'cache', "title='af_advancedinventory_migrated'", ['limit' => 1]), 'cache');
     if ($done === '1') { return; }
 
+    $migrated = 0;
+    $sourceDetected = false;
+    $kbCols = af_advinv_kb_cols();
+    $kbIdExpr = $kbCols['id'] ?? 'id';
+    $kbTypeExpr = $kbCols['type'] ?? "''";
+    $kbKeyExpr = $kbCols['key'] ?? "''";
+    $kbTitleRuExpr = $kbCols['title_ru'] ?: "''";
+    $kbTitleEnExpr = $kbCols['title_en'] ?: "''";
+    $kbTitleExpr = $kbCols['title'] ?: "''";
+    $kbMetaExpr = $kbCols['meta_json'] ?: "''";
+
+    af_advinv_debug_log('migration_start', [
+        'new_table' => TABLE_PREFIX . 'af_inventory_items',
+        'has_legacy_table' => $db->table_exists('af_shop_inventory_legacy') ? 1 : 0,
+        'has_orders_table' => $db->table_exists('af_shop_orders') ? 1 : 0,
+    ]);
+
     if ($db->table_exists('af_shop_inventory_legacy')) {
-        $q = $db->query("SELECT uid, item_kind, slot_code, kb_id, qty, created_at, updated_at FROM " . TABLE_PREFIX . "af_shop_inventory_legacy");
+        $sourceDetected = true;
+        $q = $db->query("SELECT l.uid, l.item_kind, l.slot_code, l.kb_id, l.qty, l.created_at, l.updated_at, "
+            . $kbTypeExpr . " AS kb_type, "
+            . $kbKeyExpr . " AS kb_key, "
+            . $kbTitleRuExpr . " AS title_ru, "
+            . $kbTitleEnExpr . " AS title_en, "
+            . $kbTitleExpr . " AS title_plain, "
+            . $kbMetaExpr . " AS meta_json "
+            . "FROM " . TABLE_PREFIX . "af_shop_inventory_legacy l "
+            . "LEFT JOIN " . af_advinv_kb_table_sql() . " e ON(e." . $kbIdExpr . "=l.kb_id)");
         while ($row = $db->fetch_array($q)) {
-            $kbId = (int)($row['kb_id'] ?? 0);
-            af_inv_add_item((int)$row['uid'], [
+            $title = trim((string)($row['title_ru'] ?? ''));
+            if ($title === '') { $title = trim((string)($row['title_en'] ?? '')); }
+            if ($title === '') { $title = trim((string)($row['title_plain'] ?? '')); }
+            $payload = [
                 'slot' => (string)($row['slot_code'] ?? 'stash'),
                 'subtype' => (string)($row['item_kind'] ?? ''),
-                'kb_type' => 'item',
-                'kb_key' => $kbId > 0 ? ('legacy_kb_' . $kbId) : '',
-                'title' => '',
-                'icon' => '',
+                'kb_type' => (string)($row['kb_type'] ?? 'item'),
+                'kb_key' => (string)($row['kb_key'] ?? ''),
+                'title' => $title,
+                'icon' => af_advinv_kb_extract_icon((string)($row['meta_json'] ?? '')),
                 'qty' => (int)($row['qty'] ?? 1),
                 'meta_json' => '',
-            ]);
+            ];
+            $newId = af_inv_add_item((int)$row['uid'], $payload);
+            if ($newId > 0) {
+                $migrated++;
+            }
         }
+        af_advinv_debug_log('migration_source_legacy', ['migrated_rows' => $migrated]);
     }
 
     if ($db->table_exists('af_shop_orders')) {
-        $qOrders = $db->simple_select('af_shop_orders', 'uid, items_json', "status IN ('paid','completed','issued')", ['order_by' => 'order_id ASC']);
+        $sourceDetected = true;
+        $before = $migrated;
+        $qOrders = $db->simple_select('af_shop_orders', 'order_id,uid, items_json', "status IN ('paid','completed','issued')", ['order_by' => 'order_id ASC']);
         while ($order = $db->fetch_array($qOrders)) {
             $uid = (int)($order['uid'] ?? 0);
             if ($uid <= 0) {
@@ -789,7 +975,7 @@ function af_advancedinventory_migrate_from_shop(): void
                 if (!is_array($item)) {
                     continue;
                 }
-                af_inv_add_item($uid, [
+                $newId = af_inv_add_item($uid, [
                     'slot' => (string)($item['slot'] ?? 'stash'),
                     'subtype' => (string)($item['subtype'] ?? ''),
                     'kb_type' => (string)($item['kb_type'] ?? 'item'),
@@ -799,8 +985,22 @@ function af_advancedinventory_migrate_from_shop(): void
                     'qty' => max(1, (int)($item['qty'] ?? 1)),
                     'meta_json' => is_string($item['meta_json'] ?? null) ? (string)$item['meta_json'] : '',
                 ]);
+                if ($newId > 0) {
+                    $migrated++;
+                }
             }
         }
+        af_advinv_debug_log('migration_source_orders', ['migrated_rows' => $migrated - $before]);
+    }
+
+    if (!$sourceDetected) {
+        af_advinv_debug_log('migration_skipped_no_source', []);
+        return;
+    }
+
+    if ($migrated <= 0) {
+        af_advinv_debug_log('migration_skipped_no_rows', []);
+        return;
     }
 
     $exists = (int)$db->fetch_field($db->simple_select('datacache', 'COUNT(*) AS c', "title='af_advancedinventory_migrated'"), 'c');
@@ -809,4 +1009,5 @@ function af_advancedinventory_migrate_from_shop(): void
     } else {
         $db->insert_query('datacache', ['title' => 'af_advancedinventory_migrated', 'cache' => '1']);
     }
+    af_advinv_debug_log('migration_done', ['migrated_total' => $migrated]);
 }

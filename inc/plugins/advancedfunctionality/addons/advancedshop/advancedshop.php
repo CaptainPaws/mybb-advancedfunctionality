@@ -1185,6 +1185,7 @@ function af_advancedshop_checkout(): void
         af_shop_sub_balance($uid, $currency, $total, 'shop_purchase', ['order_id' => $orderId, 'shop' => $shop['code']]);
 
         foreach ($items as $item) {
+            af_advancedshop_inv_debug('checkout_grant_start', ['uid' => $uid, 'item' => $item]);
             af_advancedshop_grant_inventory_item($uid, $item);
         }
 
@@ -1211,6 +1212,58 @@ function af_advancedshop_checkout(): void
             'inventory' => 'inventory.php?uid=' . $uid,
         ],
     ]);
+}
+
+
+function af_advancedshop_inv_debug(string $event, array $context = []): void
+{
+    $line = '[AF-ADVSHOP][' . date('c') . '][' . $event . '] ' . json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    @error_log($line);
+    if (defined('AF_CACHE')) {
+        @file_put_contents(AF_CACHE . 'advancedinventory_debug.log', $line . "\n", FILE_APPEND);
+    }
+}
+
+function af_advancedshop_inv_payload_slot(array $profile): string
+{
+    $slot = trim((string)($profile['slot'] ?? ''));
+    if (in_array($slot, ['equipment', 'resources', 'pets', 'customization'], true)) {
+        return $slot;
+    }
+
+    $kind = mb_strtolower(trim((string)($profile['item_kind'] ?? '')));
+    if (in_array($kind, ['weapon', 'armor', 'ammo', 'consumable'], true)) {
+        return 'equipment';
+    }
+    if (in_array($kind, ['loot', 'chests', 'stones', 'resource', 'resources'], true)) {
+        return 'resources';
+    }
+    if (in_array($kind, ['pet', 'pets', 'egg', 'eggs'], true)) {
+        return 'pets';
+    }
+    if (in_array($kind, ['profile', 'postbit', 'sheet', 'customization'], true)) {
+        return 'customization';
+    }
+
+    $tags = is_array($profile['tags'] ?? null) ? $profile['tags'] : [];
+    $tags = array_map(static function ($v) { return mb_strtolower(trim((string)$v)); }, $tags);
+    if (array_intersect($tags, ['weapon', 'armor', 'ammo', 'consumable'])) {
+        return 'equipment';
+    }
+    if (array_intersect($tags, ['loot', 'chests', 'stones', 'resource', 'resources'])) {
+        return 'resources';
+    }
+
+    return 'resources';
+}
+
+function af_advancedshop_inv_payload_subtype(array $profile): string
+{
+    $sub = mb_strtolower(trim((string)($profile['item_kind'] ?? '')));
+    if ($sub !== '') {
+        return $sub;
+    }
+    return 'loot';
 }
 
 function af_advancedshop_checkout_collect_items(int $cartId): array
@@ -1243,10 +1296,12 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
 {
     global $db;
     if (!function_exists('af_inv_add_item')) {
+        af_advancedshop_inv_debug('checkout_grant_blocked', ['uid' => $uid, 'reason' => 'af_inv_add_item_missing']);
         return;
     }
     $kbId = (int)($item['kb_id'] ?? 0);
     if ($kbId <= 0) {
+        af_advancedshop_inv_debug('checkout_grant_blocked', ['uid' => $uid, 'reason' => 'kb_id_missing', 'item' => $item]);
         return;
     }
 
@@ -1255,22 +1310,35 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
     $select = [$kbIdCol . ' AS kb_id'];
     if (!empty($kbCols['type'])) { $select[] = ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS kb_type'; }
     if (!empty($kbCols['key'])) { $select[] = ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS kb_key'; }
+    if (!empty($kbCols['meta_json'])) { $select[] = $kbCols['meta_json'] . ' AS kb_meta_json'; }
     $select[] = "COALESCE(NULLIF(title_ru,''), NULLIF(title_en,''), NULLIF(title,''), '') AS kb_title";
     $kb = $db->fetch_array($db->query("SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
-    if (!$kb) { return; }
+    if (!$kb) {
+        af_advancedshop_inv_debug('checkout_grant_blocked', ['uid' => $uid, 'reason' => 'kb_row_missing', 'kb_id' => $kbId]);
+        return;
+    }
 
     $profile = af_advancedshop_kb_item_profile($kb);
+    $metaJson = '';
+    if (is_string($kb['kb_meta_json'] ?? null) && trim((string)$kb['kb_meta_json']) !== '') {
+        $metaJson = (string)$kb['kb_meta_json'];
+    }
+    $meta = @json_decode((string)$metaJson, true);
+    $icon = is_array($meta) ? trim((string)($meta['ui']['icon_url'] ?? $meta['icon_url'] ?? '')) : '';
 
-    af_inv_add_item($uid, [
-        'slot' => (string)($profile['slot'] ?? 'stash'),
-        'subtype' => (string)($profile['item_kind'] ?? ''),
-        'kb_type' => (string)($kb['kb_type'] ?? ($item['kb_type'] ?? '')),
+    $payload = [
+        'slot' => af_advancedshop_inv_payload_slot($profile),
+        'subtype' => af_advancedshop_inv_payload_subtype($profile),
+        'kb_type' => (string)($kb['kb_type'] ?? ($item['kb_type'] ?? 'item')),
         'kb_key' => (string)($kb['kb_key'] ?? ($item['kb_key'] ?? '')),
         'title' => (string)($kb['kb_title'] ?? ''),
-        'icon' => '',
+        'icon' => $icon,
         'qty' => max(1, (int)($item['qty'] ?? 1)),
-        'meta_json' => '',
-    ]);
+        'meta_json' => $metaJson,
+    ];
+
+    af_advancedshop_inv_debug('checkout_grant_payload', ['uid' => $uid, 'payload' => $payload]);
+    af_inv_add_item($uid, $payload);
 }
 
 function af_advancedshop_render_manage(): void
