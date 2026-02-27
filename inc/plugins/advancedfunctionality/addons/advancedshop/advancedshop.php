@@ -9,10 +9,37 @@ define('AF_ADVSHOP_ASSETS_DIR', AF_ADVSHOP_BASE . 'assets/');
 define('AF_ADVSHOP_ALIAS_MARKER', "define('AF_ADVANCEDSHOP_PAGE_ALIAS', 1);");
 define('AF_ADVSHOP_ASSETS_BLACKLIST_DEFAULT', "index.php\nforumdisplay.php\npostsactivity.php\nusercp.php\nuserlist.php\nsearch.php\ngallery.php");
 define('AF_ADVSHOP_ASSETS_BLACKLIST_DESC', 'По одной строке. Форматы: `script.php` или `script.php?action=xxx`.');
+define('AF_KB_TABLE_ENTRIES', 'af_kb_entries');
+define('AF_KB_TABLE_ENTRIES_LEGACY', 'kb_entries');
+
+function af_advancedshop_kb_table_entries(): string
+{
+    global $db;
+
+    static $picked = null;
+    if (is_string($picked)) {
+        return $picked;
+    }
+
+    $picked = '';
+    if (is_object($db)) {
+        $candidates = [AF_KB_TABLE_ENTRIES, AF_KB_TABLE_ENTRIES_LEGACY];
+        foreach ($candidates as $candidate) {
+            if ($db->table_exists($candidate)) {
+                $picked = $candidate;
+                break;
+            }
+        }
+    }
+
+    af_advancedshop_inv_debug('kb_table_resolve', ['picked' => $picked]);
+    return $picked;
+}
 
 function af_advancedshop_kb_table(): string
 {
-    return TABLE_PREFIX . 'af_kb_entries';
+    $table = af_advancedshop_kb_table_entries();
+    return $table === '' ? '' : TABLE_PREFIX . $table;
 }
 
 function af_advancedshop_kb_schema_meta(): array
@@ -26,7 +53,8 @@ function af_advancedshop_kb_schema_meta(): array
 
     $kbTableSql = af_advancedshop_kb_table();
     $columns = [];
-    if ($db->table_exists('af_kb_entries')) {
+    $kbTable = af_advancedshop_kb_table_entries();
+    if ($kbTable !== '' && $db->table_exists($kbTable)) {
         $resCols = $db->query("SHOW COLUMNS FROM {$kbTableSql}");
         while ($row = $db->fetch_array($resCols)) {
             $field = (string)($row['Field'] ?? '');
@@ -39,7 +67,7 @@ function af_advancedshop_kb_schema_meta(): array
     $meta = [
         'kb_table_sql' => $kbTableSql,
         'columns' => $columns,
-        'exists' => $db->table_exists('af_kb_entries'),
+        'exists' => $kbTable !== '' && $db->table_exists($kbTable),
     ];
     return $meta;
 }
@@ -1298,17 +1326,23 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
     $kbIdCol = $kbCols['id'] ?? 'id';
     $kb = [];
     if ($kbId > 0) {
+        $kbTableSql = af_advancedshop_kb_table();
         $select = [$kbIdCol . ' AS kb_id'];
         if (!empty($kbCols['type'])) { $select[] = ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS kb_type'; }
         if (!empty($kbCols['key'])) { $select[] = ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS kb_key'; }
         if (!empty($kbCols['meta_json'])) { $select[] = $kbCols['meta_json'] . ' AS kb_meta_json'; }
 
-        $hasTitleRu = $db->field_exists('title_ru', 'kb_entries') || $db->field_exists('title_ru', 'af_kb_entries');
-        $hasTitleEn = $db->field_exists('title_en', 'kb_entries') || $db->field_exists('title_en', 'af_kb_entries');
-        $hasTitle = $db->field_exists('title', 'kb_entries') || $db->field_exists('title', 'af_kb_entries');
-        $hasNameRu = $db->field_exists('name_ru', 'kb_entries') || $db->field_exists('name_ru', 'af_kb_entries');
-        $hasNameEn = $db->field_exists('name_en', 'kb_entries') || $db->field_exists('name_en', 'af_kb_entries');
-        $hasName = $db->field_exists('name', 'kb_entries') || $db->field_exists('name', 'af_kb_entries');
+        $kbTableName = af_advancedshop_kb_table_entries();
+        if ($kbTableName === '') {
+            af_advancedshop_inv_debug('checkout_kb_lookup_warning', ['uid' => $uid, 'kb_id' => $kbId, 'reason' => 'kb_table_unresolved']);
+        }
+
+        $hasTitleRu = $kbTableName !== '' && $db->field_exists('title_ru', $kbTableName);
+        $hasTitleEn = $kbTableName !== '' && $db->field_exists('title_en', $kbTableName);
+        $hasTitle = $kbTableName !== '' && $db->field_exists('title', $kbTableName);
+        $hasNameRu = $kbTableName !== '' && $db->field_exists('name_ru', $kbTableName);
+        $hasNameEn = $kbTableName !== '' && $db->field_exists('name_en', $kbTableName);
+        $hasName = $kbTableName !== '' && $db->field_exists('name', $kbTableName);
 
         if ($hasTitleRu && $hasTitleEn) {
             $select[] = "COALESCE(NULLIF(title_ru,''), NULLIF(title_en,''), '') AS kb_title";
@@ -1320,7 +1354,7 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
             $select[] = "COALESCE(NULLIF(name,''), '') AS kb_title";
         }
 
-        if ($db->field_exists('icon_url', 'kb_entries') || $db->field_exists('icon_url', 'af_kb_entries')) {
+        if ($kbTableName !== '' && $db->field_exists('icon_url', $kbTableName)) {
             $select[] = 'icon_url AS kb_icon';
         }
 
@@ -1333,16 +1367,20 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
             'kb_id' => $kbId,
         ]);
 
-        try {
-            $kb = (array)$db->fetch_array($db->query("SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
-        } catch (Throwable $e) {
-            $kb = [];
-            af_advancedshop_inv_debug('checkout_kb_lookup_warning', [
-                'uid' => $uid,
-                'kb_id' => $kbId,
-                'error' => $e->getMessage(),
-                'exception' => get_class($e),
-            ]);
+        if ($kbTableSql !== '') {
+            try {
+                $kb = (array)$db->fetch_array($db->query("SELECT " . implode(',', $select) . " FROM " . $kbTableSql . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
+            } catch (Throwable $e) {
+                $kb = [];
+                af_advancedshop_inv_debug('checkout_kb_lookup_warning', [
+                    'uid' => $uid,
+                    'kb_id' => $kbId,
+                    'error' => $e->getMessage(),
+                    'exception' => get_class($e),
+                ]);
+            }
+        } else {
+            af_advancedshop_inv_debug('checkout_kb_lookup_warning', ['uid' => $uid, 'kb_id' => $kbId, 'reason' => 'kb_table_unresolved']);
         }
 
         if (!$kb) {
@@ -1992,6 +2030,11 @@ function af_advancedshop_kb_probe(): void
     }
 
     $kbCols = af_advancedshop_kb_cols();
+    $kbTableName = af_advancedshop_kb_table_entries();
+    $kbTableSql = af_advancedshop_kb_table();
+    if ($kbTableName === '' || $kbTableSql === '') {
+        af_advancedshop_json_err('Knowledge base table is not available', 503);
+    }
     $kbIdCol = $kbCols['id'] ?? 'id';
     $select = [
         'e.' . $kbIdCol . ' AS id',
@@ -2009,14 +2052,14 @@ function af_advancedshop_kb_probe(): void
         'e.' . $kbCols['active'] . ' AS active',
         'e.' . $kbCols['sortorder'] . ' AS sortorder',
     ];
-    if ($db->field_exists('icon_url', 'af_kb_entries')) {
+    if ($kbTableName !== '' && $db->field_exists('icon_url', $kbTableName)) {
         $select[] = 'e.icon_url AS icon_url';
     }
-    if ($db->field_exists('bg_url', 'af_kb_entries')) {
+    if ($kbTableName !== '' && $db->field_exists('bg_url', $kbTableName)) {
         $select[] = 'e.bg_url AS bg_url';
     }
 
-    $row = $db->fetch_array($db->query("SELECT " . implode(', ', $select) . "\n        FROM " . af_advancedshop_kb_table() . " e\n        WHERE e." . $kbIdCol . "=" . $kbId . "\n        LIMIT 1"));
+    $row = $db->fetch_array($db->query("SELECT " . implode(', ', $select) . "\n        FROM " . $kbTableSql . " e\n        WHERE e." . $kbIdCol . "=" . $kbId . "\n        LIMIT 1"));
     if (!$row) {
         af_advancedshop_json_err('Entry not found', 404);
     }
