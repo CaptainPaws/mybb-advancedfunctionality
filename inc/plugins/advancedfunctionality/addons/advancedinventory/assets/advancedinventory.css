@@ -8,3 +8,14 @@
 .af-inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
 .af-inv-card{border:1px solid #ddd;padding:10px}
 .af-inv-card img{max-width:100%;height:80px;object-fit:contain;display:block;margin:0 auto 8px}
+.af-inv-grid-wrap{display:grid;grid-template-columns:2fr 1fr;gap:16px;align-items:start}
+.af-inv-card-actions{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+.af-inv-card-actions button{padding:4px 8px}
+.af-inv-card-actions input{width:70px}
+.af-inv-slots{border:1px solid #ddd;padding:10px;background:#fafafa}
+.af-inv-slot{border-bottom:1px solid #e2e2e2;padding:8px 0}
+.af-inv-slot:last-child{border-bottom:none}
+.af-inv-slot-name{font-weight:700}
+.af-inv-empty-slot{color:#888}
+.af-page{display:inline-block;padding:4px 8px;border:1px solid #ccc;margin-right:4px;text-decoration:none}
+.af-page.is-active{background:#e9edf9;border-color:#6d7bb8}
