@@ -7,6 +7,7 @@ define('AF_ADVINV_BASE', AF_ADDONS . AF_ADVINV_ID . '/');
 define('AF_ADVINV_TPL_DIR', AF_ADVINV_BASE . 'templates/');
 define('AF_ADVINV_ASSET_DIR', AF_ADVINV_BASE . 'assets/');
 define('AF_ADVINV_ALIAS_MARKER', "define('AF_ADVANCEDINVENTORY_PAGE_ALIAS', 1);");
+define('AF_ADVINV_INVENTORIES_ALIAS_MARKER', "define('AF_ADVANCEDINVENTORIES_PAGE_ALIAS', 1);");
 
 af_advancedinventory_init();
 
@@ -36,6 +37,7 @@ function af_advancedinventory_install(): void
     af_advancedinventory_ensure_setting('af_advancedinventory_view_groups', 'View groups', 'CSV group IDs that may view other inventories', 'text', '2', 2, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_perpage', 'Items per page', 'Per-page limit', 'numeric', '24', 3, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_default_tab', 'Default tab', 'Default tab for inventory page', "select\nequipment=equipment\nresources=resources\npets=pets\ncustomization=customization", 'equipment', 4, $gid);
+    af_advancedinventory_ensure_setting('af_advancedinventory_manage_groups', 'Manage groups', 'CSV group IDs that may open inventories.php and manage inventories', 'text', '3,4,6', 5, $gid);
 
     af_advancedinventory_ensure_inventory_storage();
 
@@ -56,6 +58,16 @@ function af_advancedinventory_install(): void
             KEY uid_slot (uid, slot),
             KEY uid_slot_subtype (uid, slot, subtype),
             KEY uid_kb (uid, kb_type, kb_key)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+    if (!$db->table_exists('af_advinv_equipped')) {
+        $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_advinv_equipped (
+            uid INT UNSIGNED NOT NULL,
+            equip_slot VARCHAR(64) NOT NULL,
+            item_id INT UNSIGNED NOT NULL,
+            updated_at INT UNSIGNED NOT NULL,
+            PRIMARY KEY (uid, equip_slot),
+            KEY uid_item (uid, item_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
 
@@ -81,9 +93,10 @@ function af_advancedinventory_activate(): void
 
 function af_advancedinventory_deactivate(): void
 {
-    $target = af_advancedinventory_alias_target_path();
-    if (af_advancedinventory_alias_is_ours($target)) {
-        @unlink($target);
+    foreach (af_advancedinventory_alias_definitions() as $alias) {
+        if (af_advancedinventory_alias_is_ours($alias['target'], $alias['marker'])) {
+            @unlink($alias['target']);
+        }
     }
 }
 
@@ -97,9 +110,10 @@ function af_advancedinventory_uninstall(): void
     }
     $db->delete_query('templates', "title LIKE 'advancedinventory_%'");
 
-    $target = af_advancedinventory_alias_target_path();
-    if (af_advancedinventory_alias_is_ours($target)) {
-        @unlink($target);
+    foreach (af_advancedinventory_alias_definitions() as $alias) {
+        if (af_advancedinventory_alias_is_ours($alias['target'], $alias['marker'])) {
+            @unlink($alias['target']);
+        }
     }
     if (function_exists('rebuild_settings')) { rebuild_settings(); }
 }
@@ -115,24 +129,37 @@ function af_advancedinventory_alias_target_path(): string
     return MYBB_ROOT . 'inventory.php';
 }
 
-function af_advancedinventory_alias_asset_path(): string
+function af_advancedinventory_alias_definitions(): array
 {
-    return AF_ADVINV_ASSET_DIR . 'inventory.php';
+    return [
+        [
+            'target' => af_advancedinventory_alias_target_path(),
+            'asset' => AF_ADVINV_ASSET_DIR . 'inventory.php',
+            'marker' => AF_ADVINV_ALIAS_MARKER,
+        ],
+        [
+            'target' => MYBB_ROOT . 'inventories.php',
+            'asset' => AF_ADVINV_ASSET_DIR . 'inventories.php',
+            'marker' => AF_ADVINV_INVENTORIES_ALIAS_MARKER,
+        ],
+    ];
 }
 
-function af_advancedinventory_alias_is_ours(string $path): bool
+function af_advancedinventory_alias_is_ours(string $path, string $marker = AF_ADVINV_ALIAS_MARKER): bool
 {
     if (!is_file($path) || !is_readable($path)) { return false; }
-    return strpos((string)file_get_contents($path), AF_ADVINV_ALIAS_MARKER) !== false;
+    return strpos((string)file_get_contents($path), $marker) !== false;
 }
 
 function af_advancedinventory_alias_sync(): bool
 {
-    $target = af_advancedinventory_alias_target_path();
-    $asset = af_advancedinventory_alias_asset_path();
-    if (!is_file($asset) || !is_readable($asset)) { return false; }
-    if (is_file($target) && !af_advancedinventory_alias_is_ours($target)) { return false; }
-    return (bool)@copy($asset, $target);
+    $ok = true;
+    foreach (af_advancedinventory_alias_definitions() as $alias) {
+        if (!is_file($alias['asset']) || !is_readable($alias['asset'])) { $ok = false; continue; }
+        if (is_file($alias['target']) && !af_advancedinventory_alias_is_ours($alias['target'], $alias['marker'])) { $ok = false; continue; }
+        $ok = (bool)@copy($alias['asset'], $alias['target']) && $ok;
+    }
+    return $ok;
 }
 
 function af_advancedinventory_alias_sync_notice_on_failure(): void
@@ -149,7 +176,7 @@ function af_advancedinventory_alias_available(): bool
     if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'inventory.php') {
         return true;
     }
-    return af_advancedinventory_alias_is_ours(af_advancedinventory_alias_target_path());
+    return af_advancedinventory_alias_is_ours(af_advancedinventory_alias_target_path(), AF_ADVINV_ALIAS_MARKER);
 }
 
 function af_advancedinventory_url(string $action = 'inventory', array $params = [], bool $html = false): string
@@ -171,7 +198,7 @@ function af_advancedinventory_misc_router(): void
 {
     global $mybb;
     $action = (string)$mybb->get_input('action');
-    if (!in_array($action, ['inventory', 'tab', 'api_list', 'api_move', 'api_equip', 'api_unequip'], true)) {
+    if (!in_array($action, ['inventory', 'inventories', 'tab', 'api_list', 'api_move', 'api_equip', 'api_unequip', 'api_update', 'api_delete'], true)) {
         return;
     }
     if (!af_advancedinventory_alias_available()) {
@@ -194,15 +221,23 @@ function af_advancedinventory_render_inventory_page(): void
     af_advancedinventory_dispatch($action);
 }
 
+function af_advancedinventory_render_inventories_page(): void
+{
+    af_advancedinventory_dispatch('inventories');
+}
+
 function af_advancedinventory_dispatch(string $action): void
 {
     switch ($action) {
         case 'inventory': af_advancedinventory_render_inventory(); return;
+        case 'inventories': af_advancedinventory_render_inventories(); return;
         case 'tab': af_advancedinventory_render_tab(); return;
         case 'api_list': af_advancedinventory_api_list(); return;
-        case 'api_move':
-        case 'api_equip':
-        case 'api_unequip': af_advancedinventory_json(['ok' => false, 'error' => 'not_implemented'], 501); return;
+        case 'api_equip': af_advancedinventory_api_equip(); return;
+        case 'api_unequip': af_advancedinventory_api_unequip(); return;
+        case 'api_update': af_advancedinventory_api_update(); return;
+        case 'api_delete': af_advancedinventory_api_delete(); return;
+        case 'api_move': af_advancedinventory_json(['ok' => false, 'error' => 'not_implemented'], 501); return;
     }
     error_no_permission();
 }
@@ -292,13 +327,28 @@ function af_advancedinventory_render_tab(): void
     $data = af_inv_get_items($ownerUid, $filters);
 
     $rows = '';
+    $equipped = af_inv_get_equipped($ownerUid);
     foreach ($data['items'] as $item) {
         $qty = (int)$item['qty'];
         $title = (string)$item['title'];
         $subtype = (string)$item['subtype'];
         $icon = trim((string)$item['icon']);
         $iconHtml = $icon !== '' ? '<img src="' . htmlspecialchars_uni($icon) . '" alt="" loading="lazy">' : '';
-        $rows .= '<div class="af-inv-card">' . $iconHtml . '<div class="af-inv-card-title">' . htmlspecialchars_uni($title) . '</div><div class="af-inv-card-meta">' . htmlspecialchars_uni($subtype) . '</div><div class="af-inv-card-qty">x' . $qty . '</div></div>';
+        $actions = '';
+        if ($tab === 'equipment') {
+            $slotCandidates = af_inv_candidate_slots_for_item($item);
+            $isEquipped = af_inv_find_equipped_slot_by_item($equipped, (int)$item['id']);
+            if ($isEquipped !== '') {
+                $actions .= '<button class="af-inv-action" data-action="unequip" data-item-id="' . (int)$item['id'] . '">Снять</button>';
+            } elseif ($slotCandidates) {
+                $actions .= '<button class="af-inv-action" data-action="equip" data-item-id="' . (int)$item['id'] . '" data-equip-slot="' . htmlspecialchars_uni((string)$slotCandidates[0]) . '">Надеть</button>';
+            }
+        }
+        if (af_advancedinventory_user_can_manage()) {
+            $actions .= '<button class="af-inv-action" data-action="delete" data-item-id="' . (int)$item['id'] . '">Удалить</button>';
+            $actions .= '<label>Qty <input type="number" min="1" class="af-inv-qty" value="' . $qty . '"></label><button class="af-inv-action" data-action="update" data-item-id="' . (int)$item['id'] . '">Сохранить</button>';
+        }
+        $rows .= '<div class="af-inv-card">' . $iconHtml . '<div class="af-inv-card-title">' . htmlspecialchars_uni($title) . '</div><div class="af-inv-card-meta">' . htmlspecialchars_uni($subtype) . '</div><div class="af-inv-card-qty">x' . $qty . '</div><div class="af-inv-card-actions">' . $actions . '</div></div>';
     }
     if ($rows === '') {
         $rows = '<div class="af-inv-empty">Inventory is empty.</div>';
@@ -311,9 +361,148 @@ function af_advancedinventory_render_tab(): void
         $filterButtons .= '<a class="af-inv-subfilter ' . $isActive . '" href="' . $url . '">' . htmlspecialchars_uni($title) . '</a>';
     }
 
-    $html = '<div class="af-inv-subfilters">' . $filterButtons . '</div><div class="af-inv-grid">' . $rows . '</div>';
+    $slotsHtml = '';
+    if ($tab === 'equipment') {
+        foreach (af_inv_equipment_slots() as $slotCode => $slotTitle) {
+            $eqItem = af_inv_find_item_by_id($data['items'], (int)($equipped[$slotCode]['item_id'] ?? 0));
+            if (!$eqItem && !empty($equipped[$slotCode])) {
+                $eqItem = af_inv_get_item_for_owner($ownerUid, (int)$equipped[$slotCode]['item_id']);
+            }
+            $name = $eqItem ? htmlspecialchars_uni((string)$eqItem['title']) : '<span class="af-inv-empty-slot">Пусто</span>';
+            $button = $eqItem ? '<button class="af-inv-action" data-action="unequip" data-equip-slot="' . htmlspecialchars_uni($slotCode) . '">Снять</button>' : '';
+            $slotsHtml .= '<div class="af-inv-slot"><div class="af-inv-slot-name">' . htmlspecialchars_uni($slotTitle) . '</div><div class="af-inv-slot-item">' . $name . '</div>' . $button . '</div>';
+        }
+        $slotsHtml = '<div class="af-inv-slots">' . $slotsHtml . '</div>';
+    }
+
+    $apiBase = af_advancedinventory_url('', [], false);
+    $html = '<div class="af-inv-subfilters">' . $filterButtons . '</div><div class="af-inv-grid-wrap"><div class="af-inv-grid">' . $rows . '</div>' . $slotsHtml . '</div>';
+    $html .= '<script>(function(){var uid=' . $ownerUid . ';document.addEventListener("click",function(e){var b=e.target.closest(".af-inv-action");if(!b){return;}e.preventDefault();var action=b.getAttribute("data-action");var fd=new FormData();fd.append("uid",String(uid));fd.append("my_post_key","' . htmlspecialchars_uni($mybb->post_code) . '");fd.append("post_key","' . htmlspecialchars_uni($mybb->post_code) . '");fd.append("item_id",b.getAttribute("data-item-id")||"");fd.append("equip_slot",b.getAttribute("data-equip-slot")||"");if(action==="update"){var card=b.closest(".af-inv-card");var qty=card?card.querySelector(".af-inv-qty"):null;fd.append("qty",qty?qty.value:"1");}var endpoint="";if(action==="equip"){endpoint="api_equip";}else if(action==="unequip"){endpoint="api_unequip";}else if(action==="delete"){endpoint="api_delete";}else if(action==="update"){endpoint="api_update";}if(!endpoint){return;}fetch("' . htmlspecialchars_uni($apiBase) . '?action="+endpoint,{method:"POST",body:fd,credentials:"same-origin"}).then(function(r){return r.json();}).then(function(j){if(!j.ok){alert(j.error||"error");return;}window.location.reload();}).catch(function(){alert("Request failed");});});})();</script>';
     output_page($html);
     exit;
+}
+
+function af_advancedinventory_render_inventories(): void
+{
+    global $db, $mybb, $headerinclude, $header, $footer;
+    if (!af_advancedinventory_user_can_manage()) {
+        error_no_permission();
+    }
+    $page = max(1, (int)$mybb->get_input('page'));
+    $perPage = 20;
+    $username = trim((string)$mybb->get_input('username'));
+    $slot = trim((string)$mybb->get_input('slot'));
+    $state = trim((string)$mybb->get_input('state'));
+    $where = ['u.uid>0'];
+    if ($username !== '') {
+        $like = $db->escape_string_like($username);
+        $where[] = "u.username LIKE '%{$like}%'";
+    }
+    if ($slot !== '') {
+        $where[] = "EXISTS(SELECT 1 FROM " . TABLE_PREFIX . "af_inventory_items i2 WHERE i2.uid=u.uid AND i2.slot='" . $db->escape_string($slot) . "')";
+    }
+    if ($state === 'empty') {
+        $where[] = 'COALESCE(inv.total_rows,0)=0';
+    } elseif ($state === 'nonempty') {
+        $where[] = 'COALESCE(inv.total_rows,0)>0';
+    }
+    $whereSql = implode(' AND ', $where);
+    $total = (int)$db->fetch_field($db->query("SELECT COUNT(*) AS c FROM " . TABLE_PREFIX . "users u LEFT JOIN (SELECT uid, COUNT(*) total_rows, COALESCE(SUM(qty),0) total_qty, MAX(updated_at) updated_at FROM " . TABLE_PREFIX . "af_inventory_items GROUP BY uid) inv ON(inv.uid=u.uid) WHERE {$whereSql}"), 'c');
+    $offset = ($page - 1) * $perPage;
+    $q = $db->query("SELECT u.uid,u.username,COALESCE(inv.total_rows,0) total_rows,COALESCE(inv.total_qty,0) total_qty,COALESCE(inv.updated_at,0) updated_at FROM " . TABLE_PREFIX . "users u LEFT JOIN (SELECT uid, COUNT(*) total_rows, COALESCE(SUM(qty),0) total_qty, MAX(updated_at) updated_at FROM " . TABLE_PREFIX . "af_inventory_items GROUP BY uid) inv ON(inv.uid=u.uid) WHERE {$whereSql} ORDER BY inv.updated_at DESC, u.username ASC LIMIT {$offset},{$perPage}");
+    $rows = '';
+    while ($row = $db->fetch_array($q)) {
+        $invUrl = af_advancedinventory_url('inventory', ['uid' => (int)$row['uid']], true);
+        $rows .= '<tr><td>' . htmlspecialchars_uni((string)$row['username']) . '</td><td><a href="' . $invUrl . '">Открыть инвентарь</a></td><td>' . (int)$row['total_rows'] . '</td><td>' . (int)$row['total_qty'] . '</td><td>' . ((int)$row['updated_at'] > 0 ? my_date('relative', (int)$row['updated_at']) : '-') . '</td></tr>';
+    }
+    $pages = max(1, (int)ceil($total / $perPage));
+    $pager = '';
+    for ($i = 1; $i <= $pages; $i++) {
+        $url = 'inventories.php?page=' . $i . '&username=' . rawurlencode($username) . '&slot=' . rawurlencode($slot) . '&state=' . rawurlencode($state);
+        $pager .= '<a class="af-page' . ($i === $page ? ' is-active' : '') . '" href="' . htmlspecialchars_uni($url) . '">' . $i . '</a> ';
+    }
+    $headerinclude .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(rtrim((string)$mybb->settings['bburl'], '/') . '/inc/plugins/advancedfunctionality/addons/advancedinventory/assets/advancedinventory.css') . '">';
+    $html = '<!DOCTYPE html><html><head><title>Инвентари пользователей</title>' . $headerinclude . '</head><body>' . $header;
+    $html .= '<div class="af-box"><h1>Все инвентари пользователей</h1><form method="get" action="inventories.php"><input type="text" name="username" placeholder="username" value="' . htmlspecialchars_uni($username) . '"> <select name="slot"><option value="">Все tab/slot</option><option value="equipment"' . ($slot === 'equipment' ? ' selected' : '') . '>equipment</option><option value="resources"' . ($slot === 'resources' ? ' selected' : '') . '>resources</option><option value="pets"' . ($slot === 'pets' ? ' selected' : '') . '>pets</option><option value="customization"' . ($slot === 'customization' ? ' selected' : '') . '>customization</option></select> <select name="state"><option value="">Все</option><option value="empty"' . ($state === 'empty' ? ' selected' : '') . '>Пустые</option><option value="nonempty"' . ($state === 'nonempty' ? ' selected' : '') . '>Непустые</option></select> <button type="submit">Фильтр</button></form>';
+    $html .= '<table class="tborder"><thead><tr><th>User</th><th>Инвентарь</th><th>Rows</th><th>Sum qty</th><th>Updated</th></tr></thead><tbody>' . $rows . '</tbody></table><div>' . $pager . '</div></div>';
+    $html .= $footer . '</body></html>';
+    output_page($html);
+    exit;
+}
+
+function af_advancedinventory_require_post(): void
+{
+    global $mybb;
+    if (strtoupper((string)$_SERVER['REQUEST_METHOD']) !== 'POST') {
+        af_advancedinventory_json(['ok' => false, 'error' => 'method_not_allowed'], 405);
+    }
+    verify_post_check($mybb->get_input('post_key'), true);
+}
+
+function af_advancedinventory_api_equip(): void
+{
+    global $mybb, $db;
+    af_advancedinventory_require_post();
+    $ownerUid = (int)$mybb->get_input('uid');
+    $viewerUid = (int)($mybb->user['uid'] ?? 0);
+    if (!af_inv_can_manage_owner($viewerUid, $ownerUid)) { af_advancedinventory_json(['ok' => false, 'error' => 'forbidden'], 403); }
+    $item = af_inv_get_item_for_owner($ownerUid, (int)$mybb->get_input('item_id'));
+    if (!$item) { af_advancedinventory_json(['ok' => false, 'error' => 'item_not_found'], 404); }
+    $slot = trim((string)$mybb->get_input('equip_slot'));
+    $allowedSlots = af_inv_candidate_slots_for_item($item);
+    if ($slot === '' && $allowedSlots) { $slot = (string)$allowedSlots[0]; }
+    if ($slot === '' || !in_array($slot, $allowedSlots, true)) { af_advancedinventory_json(['ok' => false, 'error' => 'slot_invalid'], 422); }
+    $db->delete_query('af_advinv_equipped', 'uid=' . $ownerUid . ' AND item_id=' . (int)$item['id']);
+    $exists = (int)$db->fetch_field($db->simple_select('af_advinv_equipped', 'COUNT(*) c', "uid={$ownerUid} AND equip_slot='" . $db->escape_string($slot) . "'"), 'c');
+    if ($exists > 0) {
+        $db->update_query('af_advinv_equipped', ['item_id' => (int)$item['id'], 'updated_at' => TIME_NOW], "uid={$ownerUid} AND equip_slot='" . $db->escape_string($slot) . "'");
+    } else {
+        $db->insert_query('af_advinv_equipped', ['uid' => $ownerUid, 'equip_slot' => $db->escape_string($slot), 'item_id' => (int)$item['id'], 'updated_at' => TIME_NOW]);
+    }
+    af_advancedinventory_json(['ok' => true]);
+}
+
+function af_advancedinventory_api_unequip(): void
+{
+    global $mybb, $db;
+    af_advancedinventory_require_post();
+    $ownerUid = (int)$mybb->get_input('uid');
+    $viewerUid = (int)($mybb->user['uid'] ?? 0);
+    if (!af_inv_can_manage_owner($viewerUid, $ownerUid)) { af_advancedinventory_json(['ok' => false, 'error' => 'forbidden'], 403); }
+    $slot = trim((string)$mybb->get_input('equip_slot'));
+    if ($slot !== '') {
+        $db->delete_query('af_advinv_equipped', 'uid=' . $ownerUid . " AND equip_slot='" . $db->escape_string($slot) . "'");
+    } else {
+        $db->delete_query('af_advinv_equipped', 'uid=' . $ownerUid . ' AND item_id=' . (int)$mybb->get_input('item_id'));
+    }
+    af_advancedinventory_json(['ok' => true]);
+}
+
+function af_advancedinventory_api_update(): void
+{
+    global $mybb, $db;
+    af_advancedinventory_require_post();
+    if (!af_advancedinventory_user_can_manage()) { af_advancedinventory_json(['ok' => false, 'error' => 'forbidden'], 403); }
+    $uid = (int)$mybb->get_input('uid');
+    $itemId = (int)$mybb->get_input('item_id');
+    $qty = max(1, (int)$mybb->get_input('qty'));
+    $slot = trim((string)$mybb->get_input('slot'));
+    $row = ['qty' => $qty, 'updated_at' => TIME_NOW];
+    if ($slot !== '') { $row['slot'] = $db->escape_string(substr($slot, 0, 32)); }
+    $db->update_query('af_inventory_items', $row, 'id=' . $itemId . ' AND uid=' . $uid);
+    af_advancedinventory_json(['ok' => true]);
+}
+
+function af_advancedinventory_api_delete(): void
+{
+    global $mybb, $db;
+    af_advancedinventory_require_post();
+    if (!af_advancedinventory_user_can_manage()) { af_advancedinventory_json(['ok' => false, 'error' => 'forbidden'], 403); }
+    $uid = (int)$mybb->get_input('uid');
+    $itemId = (int)$mybb->get_input('item_id');
+    $db->delete_query('af_inventory_items', 'id=' . $itemId . ' AND uid=' . $uid);
+    $db->delete_query('af_advinv_equipped', 'uid=' . $uid . ' AND item_id=' . $itemId);
+    af_advancedinventory_json(['ok' => true]);
 }
 
 function af_advancedinventory_api_list(): void
@@ -418,7 +607,70 @@ function af_inv_user_can_view(int $viewerUid, int $ownerUid): bool
 
 function af_advancedinventory_user_is_staff(): bool
 {
-    return (bool)array_intersect([3, 4, 6], af_advancedinventory_user_group_ids());
+    return af_advancedinventory_user_can_manage();
+}
+
+function af_advancedinventory_user_can_manage(): bool
+{
+    global $mybb;
+    $allowed = af_advancedinventory_parse_groups_csv((string)($mybb->settings['af_advancedinventory_manage_groups'] ?? '3,4,6'));
+    return (bool)array_intersect($allowed, af_advancedinventory_user_group_ids());
+}
+
+function af_inv_can_manage_owner(int $viewerUid, int $ownerUid): bool
+{
+    if ($viewerUid > 0 && $viewerUid === $ownerUid) { return true; }
+    return af_advancedinventory_user_can_manage();
+}
+
+function af_inv_equipment_slots(): array
+{
+    return ['head' => 'Head', 'body' => 'Body', 'hands' => 'Hands', 'legs' => 'Legs', 'feet' => 'Feet', 'weapon_mainhand' => 'Main hand', 'weapon_offhand' => 'Off hand', 'consumable_1' => 'Consumable 1', 'consumable_2' => 'Consumable 2', 'ammo' => 'Ammo', 'artifact' => 'Artifact'];
+}
+
+function af_inv_get_equipped(int $uid): array
+{
+    global $db;
+    $out = [];
+    if (!$db->table_exists('af_advinv_equipped')) { return $out; }
+    $q = $db->simple_select('af_advinv_equipped', '*', 'uid=' . $uid);
+    while ($row = $db->fetch_array($q)) {
+        $out[(string)$row['equip_slot']] = $row;
+    }
+    return $out;
+}
+
+function af_inv_candidate_slots_for_item(array $item): array
+{
+    $sub = (string)($item['subtype'] ?? '');
+    if ($sub === 'weapon') { return ['weapon_mainhand']; }
+    if ($sub === 'armor') { return ['body']; }
+    if ($sub === 'ammo') { return ['ammo']; }
+    if ($sub === 'consumable') { return ['consumable_1', 'consumable_2']; }
+    return ['artifact'];
+}
+
+function af_inv_find_item_by_id(array $items, int $id): ?array
+{
+    foreach ($items as $item) {
+        if ((int)($item['id'] ?? 0) === $id) { return $item; }
+    }
+    return null;
+}
+
+function af_inv_find_equipped_slot_by_item(array $equipped, int $itemId): string
+{
+    foreach ($equipped as $slot => $row) {
+        if ((int)($row['item_id'] ?? 0) === $itemId) { return (string)$slot; }
+    }
+    return '';
+}
+
+function af_inv_get_item_for_owner(int $uid, int $itemId): ?array
+{
+    global $db;
+    $row = $db->fetch_array($db->simple_select('af_inventory_items', '*', 'uid=' . $uid . ' AND id=' . $itemId, ['limit' => 1]));
+    return $row ?: null;
 }
 
 function af_advancedinventory_user_group_ids(): array
