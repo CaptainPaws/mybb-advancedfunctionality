@@ -57,6 +57,32 @@
 | `created_at` | `int unsigned` | `NO` | `NULL` | `` |
 | `updated_at` | `int unsigned` | `NO` | `NULL` | `` |
 
+## Таблица: `mybb_af_kb_entries`
+
+| name | type | null | default | key |
+|---|---|---|---|---|
+| `id` | `int unsigned` | `NO` | `NULL` | `PRI` |
+| `type` | `varchar(64)` | `NO` | `NULL` | `MUL` |
+| `key` | `varchar(64)` | `NO` | `NULL` | `` |
+| `title_ru` | `varchar(255)` | `NO` | `` | `` |
+| `title_en` | `varchar(255)` | `NO` | `` | `` |
+| `short_ru` | `text` | `NO` | `NULL` | `` |
+| `short_en` | `text` | `NO` | `NULL` | `` |
+| `body_ru` | `mediumtext` | `NO` | `NULL` | `` |
+| `body_en` | `mediumtext` | `NO` | `NULL` | `` |
+| `tech_ru` | `text` | `NO` | `NULL` | `` |
+| `tech_en` | `text` | `NO` | `NULL` | `` |
+| `meta_json` | `mediumtext` | `NO` | `NULL` | `` |
+| `data_json` | `mediumtext` | `NO` | `NULL` | `` |
+| `item_kind` | `varchar(64)` | `YES` | `NULL` | `MUL` |
+| `icon_class` | `varchar(128)` | `NO` | `` | `` |
+| `icon_url` | `varchar(255)` | `NO` | `` | `` |
+| `banner_url` | `varchar(255)` | `NO` | `` | `` |
+| `bg_url` | `varchar(255)` | `NO` | `` | `` |
+| `active` | `tinyint(1)` | `NO` | `1` | `MUL` |
+| `sortorder` | `int` | `NO` | `0` | `MUL` |
+| `updated_at` | `int unsigned` | `NO` | `0` | `` |
+
 ## Таблица: `mybb_af_shop_cart_items`
 
 | name | type | null | default | key |

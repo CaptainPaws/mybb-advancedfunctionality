@@ -1291,30 +1291,63 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
     af_advancedshop_grant_legacy_inventory_bypass($uid, $item);
 
     $kbId = (int)($item['kb_id'] ?? 0);
-    if ($kbId <= 0) {
-        af_advancedshop_inv_debug('checkout_grant_blocked', ['uid' => $uid, 'reason' => 'kb_id_missing', 'item' => $item]);
-        throw new RuntimeException('Не удалось выдать предмет: отсутствует kb_id.');
-    }
+    $kbTypeFromItem = trim((string)($item['kb_type'] ?? ''));
+    $kbKeyFromItem = trim((string)($item['kb_key'] ?? ''));
 
     $kbCols = af_advancedshop_kb_cols();
     $kbIdCol = $kbCols['id'] ?? 'id';
-    $select = [$kbIdCol . ' AS kb_id'];
-    if (!empty($kbCols['type'])) { $select[] = ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS kb_type'; }
-    if (!empty($kbCols['key'])) { $select[] = ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS kb_key'; }
-    if (!empty($kbCols['meta_json'])) { $select[] = $kbCols['meta_json'] . ' AS kb_meta_json'; }
-    $select[] = "COALESCE(NULLIF(title_ru,''), NULLIF(title_en,''), NULLIF(title,''), '') AS kb_title";
-    af_advancedshop_inv_debug('checkout_db_op', [
-        'stage' => 'af_advancedshop_grant_inventory_item',
-        'op' => 'select',
-        'table' => af_advancedshop_kb_table(),
-        'fields' => $select,
-        'uid' => $uid,
-        'kb_id' => $kbId,
-    ]);
-    $kb = $db->fetch_array($db->query("SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
-    if (!$kb) {
-        af_advancedshop_inv_debug('checkout_grant_blocked', ['uid' => $uid, 'reason' => 'kb_row_missing', 'kb_id' => $kbId]);
-        throw new RuntimeException('Не удалось выдать предмет: запись KB не найдена.');
+    $kb = [];
+    if ($kbId > 0) {
+        $select = [$kbIdCol . ' AS kb_id'];
+        if (!empty($kbCols['type'])) { $select[] = ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS kb_type'; }
+        if (!empty($kbCols['key'])) { $select[] = ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS kb_key'; }
+        if (!empty($kbCols['meta_json'])) { $select[] = $kbCols['meta_json'] . ' AS kb_meta_json'; }
+
+        $hasTitleRu = $db->field_exists('title_ru', 'kb_entries') || $db->field_exists('title_ru', 'af_kb_entries');
+        $hasTitleEn = $db->field_exists('title_en', 'kb_entries') || $db->field_exists('title_en', 'af_kb_entries');
+        $hasTitle = $db->field_exists('title', 'kb_entries') || $db->field_exists('title', 'af_kb_entries');
+        $hasNameRu = $db->field_exists('name_ru', 'kb_entries') || $db->field_exists('name_ru', 'af_kb_entries');
+        $hasNameEn = $db->field_exists('name_en', 'kb_entries') || $db->field_exists('name_en', 'af_kb_entries');
+        $hasName = $db->field_exists('name', 'kb_entries') || $db->field_exists('name', 'af_kb_entries');
+
+        if ($hasTitleRu && $hasTitleEn) {
+            $select[] = "COALESCE(NULLIF(title_ru,''), NULLIF(title_en,''), '') AS kb_title";
+        } elseif ($hasTitle) {
+            $select[] = "COALESCE(NULLIF(title,''), '') AS kb_title";
+        } elseif ($hasNameRu && $hasNameEn) {
+            $select[] = "COALESCE(NULLIF(name_ru,''), NULLIF(name_en,''), '') AS kb_title";
+        } elseif ($hasName) {
+            $select[] = "COALESCE(NULLIF(name,''), '') AS kb_title";
+        }
+
+        if ($db->field_exists('icon_url', 'kb_entries') || $db->field_exists('icon_url', 'af_kb_entries')) {
+            $select[] = 'icon_url AS kb_icon';
+        }
+
+        af_advancedshop_inv_debug('checkout_db_op', [
+            'stage' => 'af_advancedshop_grant_inventory_item',
+            'op' => 'select',
+            'table' => af_advancedshop_kb_table(),
+            'fields' => $select,
+            'uid' => $uid,
+            'kb_id' => $kbId,
+        ]);
+
+        try {
+            $kb = (array)$db->fetch_array($db->query("SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
+        } catch (Throwable $e) {
+            $kb = [];
+            af_advancedshop_inv_debug('checkout_kb_lookup_warning', [
+                'uid' => $uid,
+                'kb_id' => $kbId,
+                'error' => $e->getMessage(),
+                'exception' => get_class($e),
+            ]);
+        }
+
+        if (!$kb) {
+            af_advancedshop_inv_debug('checkout_kb_lookup_warning', ['uid' => $uid, 'kb_id' => $kbId, 'reason' => 'kb_row_missing_or_lookup_failed']);
+        }
     }
 
     $profile = af_advancedshop_kb_item_profile($kb);
@@ -1325,11 +1358,36 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
     $payload = [
         'slot' => af_advancedshop_inv_payload_slot($profile),
         'subtype' => af_advancedshop_inv_payload_subtype($profile),
-        'kb_type' => (string)($kb['kb_type'] ?? ($item['kb_type'] ?? 'item')),
-        'kb_key' => (string)($kb['kb_key'] ?? ($item['kb_key'] ?? '')),
+        'kb_type' => (string)($kb['kb_type'] ?? ($kbTypeFromItem !== '' ? $kbTypeFromItem : 'item')),
+        'kb_key' => (string)($kb['kb_key'] ?? $kbKeyFromItem),
         'qty' => max(1, (int)($item['qty'] ?? 1)),
         'meta_json' => $metaJson,
     ];
+
+    $kbTitle = trim((string)($kb['kb_title'] ?? ''));
+    $kbIcon = trim((string)($kb['kb_icon'] ?? ''));
+    if ($kbTitle !== '') {
+        $payload['title'] = $kbTitle;
+    }
+    if ($kbIcon !== '') {
+        $payload['icon'] = $kbIcon;
+    }
+
+    if (trim((string)$payload['kb_type']) === '' || trim((string)$payload['kb_key']) === '') {
+        af_advancedshop_inv_debug('checkout_grant_blocked', ['uid' => $uid, 'reason' => 'kb_identity_missing', 'item' => $item, 'kb' => $kb]);
+        throw new RuntimeException('Не удалось выдать предмет: отсутствуют kb_type/kb_key.');
+    }
+
+    af_advancedshop_inv_debug('grant_payload_ready', [
+        'uid' => $uid,
+        'slot' => (string)$payload['slot'],
+        'subtype' => (string)$payload['subtype'],
+        'kb_type' => (string)$payload['kb_type'],
+        'kb_key' => (string)$payload['kb_key'],
+        'qty' => (int)$payload['qty'],
+        'title_present' => isset($payload['title']) ? 1 : 0,
+        'icon_present' => isset($payload['icon']) ? 1 : 0,
+    ]);
 
     af_advancedshop_inv_debug('checkout_grant_payload', ['uid' => $uid, 'payload' => $payload]);
     try {
