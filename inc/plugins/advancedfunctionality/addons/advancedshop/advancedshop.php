@@ -1156,7 +1156,7 @@ function af_advancedshop_checkout(): void
     global $mybb, $db, $lang;
     $uid = (int)($mybb->user['uid'] ?? 0);
     if ($uid <= 0) { af_advancedshop_json_err('auth', 403); }
-    if (!function_exists('af_inv_add_item') || (int)($mybb->settings['af_advancedinventory_enabled'] ?? 0) !== 1) {
+    if ((int)($mybb->settings['af_advancedinventory_enabled'] ?? 0) !== 1) {
         af_advancedshop_json_err('Покупка недоступна: Advanced Inventory отключён или не установлен.', 400);
     }
     $shop = af_advancedshop_current_shop();
@@ -1193,7 +1193,11 @@ function af_advancedshop_checkout(): void
         $db->write_query('COMMIT');
     } catch (Throwable $e) {
         $db->write_query('ROLLBACK');
-        af_advancedshop_json_err('checkout_failed', 500);
+        af_advancedshop_inv_debug('checkout_failed', [
+            'uid' => $uid,
+            'error' => $e->getMessage(),
+        ]);
+        af_advancedshop_json_err('Покупка не завершена: ' . $e->getMessage(), 500);
     }
 
     $balanceAfter = max(0, (int)$balance - (int)$total);
@@ -1295,14 +1299,11 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
 function af_advancedshop_grant_inventory_item(int $uid, array $item): void
 {
     global $db;
-    if (!function_exists('af_inv_add_item')) {
-        af_advancedshop_inv_debug('checkout_grant_blocked', ['uid' => $uid, 'reason' => 'af_inv_add_item_missing']);
-        return;
-    }
+    af_advancedshop_ensure_inventory_grant_available($uid);
     $kbId = (int)($item['kb_id'] ?? 0);
     if ($kbId <= 0) {
         af_advancedshop_inv_debug('checkout_grant_blocked', ['uid' => $uid, 'reason' => 'kb_id_missing', 'item' => $item]);
-        return;
+        throw new RuntimeException('Не удалось выдать предмет: отсутствует kb_id.');
     }
 
     $kbCols = af_advancedshop_kb_cols();
@@ -1315,7 +1316,7 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
     $kb = $db->fetch_array($db->query("SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
     if (!$kb) {
         af_advancedshop_inv_debug('checkout_grant_blocked', ['uid' => $uid, 'reason' => 'kb_row_missing', 'kb_id' => $kbId]);
-        return;
+        throw new RuntimeException('Не удалось выдать предмет: запись KB не найдена.');
     }
 
     $profile = af_advancedshop_kb_item_profile($kb);
@@ -1338,7 +1339,32 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
     ];
 
     af_advancedshop_inv_debug('checkout_grant_payload', ['uid' => $uid, 'payload' => $payload]);
-    af_inv_add_item($uid, $payload);
+    $invId = (int)af_inv_add_item($uid, $payload);
+    af_advancedshop_inv_debug('checkout_grant_done', ['uid' => $uid, 'inv_added' => $invId > 0, 'inv_id' => $invId]);
+    if ($invId <= 0) {
+        throw new RuntimeException('Не удалось выдать предмет в инвентарь.');
+    }
+}
+
+function af_advancedshop_ensure_inventory_grant_available(int $uid): void
+{
+    if (function_exists('af_inv_add_item')) {
+        return;
+    }
+
+    $invBootstrap = AF_ADDONS . 'advancedinventory/advancedinventory.php';
+    if (is_file($invBootstrap)) {
+        require_once $invBootstrap;
+    }
+
+    if (!function_exists('af_inv_add_item')) {
+        af_advancedshop_inv_debug('checkout_grant_blocked', [
+            'uid' => $uid,
+            'reason' => 'af_inv_add_item_missing_after_bootstrap',
+            'bootstrap' => $invBootstrap,
+        ]);
+        throw new RuntimeException('Покупка недоступна: функция af_inv_add_item не найдена.');
+    }
 }
 
 function af_advancedshop_render_manage(): void
