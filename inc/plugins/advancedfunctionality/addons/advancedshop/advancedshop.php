@@ -1163,6 +1163,9 @@ function af_advancedshop_checkout(): void
     global $mybb, $db, $lang;
     $uid = (int)($mybb->user['uid'] ?? 0);
     if ($uid <= 0) { af_advancedshop_json_err('auth', 403); }
+    if (!function_exists('af_inv_add_item') || (int)($mybb->settings['af_advancedinventory_enabled'] ?? 0) !== 1) {
+        af_advancedshop_json_err('Инвентарь отключён', 400);
+    }
     $shop = af_advancedshop_current_shop();
     $currency = (string)($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits');
     $cart = af_advancedshop_get_or_create_cart((int)$shop['shop_id'], $uid);
@@ -1189,7 +1192,7 @@ function af_advancedshop_checkout(): void
         af_shop_sub_balance($uid, $currency, $total, 'shop_purchase', ['order_id' => $orderId, 'shop' => $shop['code']]);
 
         foreach ($items as $item) {
-            af_advancedshop_grant_inventory_item($uid, (int)$item['kb_id'], (int)$item['qty']);
+            af_advancedshop_grant_inventory_item($uid, $item);
         }
 
         $db->delete_query('af_shop_cart_items', 'cart_id=' . (int)$cart['cart_id']);
@@ -1212,7 +1215,7 @@ function af_advancedshop_checkout(): void
         ],
         'links' => [
             'shop' => af_advancedshop_url('shop', ['shop' => (string)$shop['code']]),
-            'inventory' => af_advancedshop_url('inventory'),
+            'inventory' => 'inventory.php?uid=' . $uid,
         ],
     ]);
 }
@@ -1243,53 +1246,38 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
     return [$items, $total];
 }
 
-function af_advancedshop_grant_inventory_item(int $uid, int $kbId, int $qty): void
+function af_advancedshop_grant_inventory_item(int $uid, array $item): void
 {
     global $db;
+    if (!function_exists('af_inv_add_item')) {
+        return;
+    }
+    $kbId = (int)($item['kb_id'] ?? 0);
+    if ($kbId <= 0) {
+        return;
+    }
+
     $kbCols = af_advancedshop_kb_cols();
     $kbIdCol = $kbCols['id'] ?? 'id';
     $select = [$kbIdCol . ' AS kb_id'];
     if (!empty($kbCols['type'])) { $select[] = ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS kb_type'; }
     if (!empty($kbCols['key'])) { $select[] = ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS kb_key'; }
-    if (!empty($kbCols['meta_json'])) { $select[] = $kbCols['meta_json'] . ' AS kb_meta'; }
+    $select[] = "COALESCE(NULLIF(title_ru,''), NULLIF(title_en,''), NULLIF(title,''), '') AS kb_title";
     $kb = $db->fetch_array($db->query("SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
     if (!$kb) { return; }
+
     $profile = af_advancedshop_kb_item_profile($kb);
-    $stackMax = max(1, (int)$profile['stack_max']);
-    $rarity = (string)$profile['rarity'];
-    $slotCode = (string)$profile['slot'];
-    $itemKind = (string)$profile['item_kind'];
-    if ($itemKind === '') {
-        $itemKind = af_advancedshop_normalize_kb_type((string)($kb['kb_type'] ?? 'item'));
-    }
 
-    $left = $qty;
-    while ($left > 0) {
-        $row = $db->fetch_array($db->simple_select('af_inventory_items', '*', 'uid=' . $uid . ' AND kb_id=' . $kbId . ' AND qty < stack_max', ['order_by' => 'inv_id', 'order_dir' => 'ASC', 'limit' => 1]));
-        if ($row && $stackMax > 1) {
-            $can = max(0, (int)$row['stack_max'] - (int)$row['qty']);
-            $add = min($can, $left);
-            if ($add > 0) {
-                $db->update_query('af_inventory_items', ['qty' => (int)$row['qty'] + $add, 'updated_at' => TIME_NOW], 'inv_id=' . (int)$row['inv_id']);
-                $left -= $add;
-                continue;
-            }
-        }
-
-        $pack = $stackMax > 1 ? min($stackMax, $left) : 1;
-        $db->insert_query('af_inventory_items', [
-            'uid' => $uid,
-            'kb_id' => $kbId,
-            'qty' => $pack,
-            'stack_max' => $stackMax,
-            'rarity' => $db->escape_string($rarity),
-            'item_kind' => $db->escape_string($itemKind),
-            'slot_code' => $db->escape_string($slotCode),
-            'created_at' => TIME_NOW,
-            'updated_at' => TIME_NOW,
-        ]);
-        $left -= $pack;
-    }
+    af_inv_add_item($uid, [
+        'slot' => (string)($profile['slot'] ?? 'stash'),
+        'subtype' => (string)($profile['item_kind'] ?? ''),
+        'kb_type' => (string)($kb['kb_type'] ?? ($item['kb_type'] ?? '')),
+        'kb_key' => (string)($kb['kb_key'] ?? ($item['kb_key'] ?? '')),
+        'title' => (string)($kb['kb_title'] ?? ''),
+        'icon' => '',
+        'qty' => max(1, (int)($item['qty'] ?? 1)),
+        'meta_json' => '',
+    ]);
 }
 
 function af_advancedshop_render_manage(): void
