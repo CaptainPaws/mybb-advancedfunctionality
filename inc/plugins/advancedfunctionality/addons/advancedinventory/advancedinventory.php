@@ -848,6 +848,13 @@ function af_inv_add_item(int $uid, array $item): int
     if ($slot === 'resources' && in_array($subtype, $equipmentKinds, true)) {
         $slot = 'equipment';
     }
+
+    $kindFromRules = mb_strtolower(trim((string)($meta['rules']['item']['item_kind'] ?? '')));
+    if ($kindFromRules === 'weapon') {
+        $slot = 'equipment';
+        $subtype = 'weapon';
+    }
+
     if ($slot === 'equipment' && $subtype === '') {
         $kindFromMeta = mb_strtolower(trim((string)($meta['item_kind'] ?? ($meta['rules']['item']['item_kind'] ?? ''))));
         if (in_array($kindFromMeta, $equipmentKinds, true)) {
