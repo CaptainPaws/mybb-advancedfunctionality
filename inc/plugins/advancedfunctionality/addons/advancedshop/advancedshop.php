@@ -1339,8 +1339,17 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
     ];
 
     af_advancedshop_inv_debug('checkout_grant_payload', ['uid' => $uid, 'payload' => $payload]);
-    $invId = (int)af_inv_add_item($uid, $payload);
-    af_advancedshop_inv_debug('checkout_grant_done', ['uid' => $uid, 'inv_added' => $invId > 0, 'inv_id' => $invId]);
+    try {
+        $invId = (int)af_inv_add_item($uid, $payload);
+    } catch (Throwable $e) {
+        af_advancedshop_inv_debug('checkout_failed', [
+            'uid' => $uid,
+            'error' => $e->getMessage(),
+            'payload' => $payload,
+        ]);
+        throw new RuntimeException('Покупка не завершена: ' . $e->getMessage(), 0, $e);
+    }
+    af_advancedshop_inv_debug('checkout_grant_done', ['uid' => $uid, 'inv_item_id' => $invId]);
     if ($invId <= 0) {
         throw new RuntimeException('Не удалось выдать предмет в инвентарь.');
     }
