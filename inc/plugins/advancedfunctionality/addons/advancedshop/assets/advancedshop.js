@@ -859,8 +859,11 @@
     var root = scope && scope.querySelector ? scope.querySelector('[data-af-inventory-tabs]') : document.querySelector('[data-af-inventory-tabs]');
     if(!root){ return; }
     var inventoryRoot = root.closest('.af-inventory') || scope || document;
-    if(inventoryRoot.getAttribute && inventoryRoot.getAttribute('data-af-tabs-init') === '1'){ return; }
-    if(inventoryRoot.setAttribute){ inventoryRoot.setAttribute('data-af-tabs-init', '1'); }
+    if(root.getAttribute && root.getAttribute('data-af-tabs-init') === '1'){
+      applyFilters();
+      return;
+    }
+    if(root.setAttribute){ root.setAttribute('data-af-tabs-init', '1'); }
 
     var search = inventoryRoot.querySelector('[data-af-inventory-search]');
     var rarity = inventoryRoot.querySelector('[data-af-inventory-rarity]');
@@ -910,6 +913,9 @@
     var preferred = '';
     try { preferred = localStorage.getItem('af_inv_tab') || ''; } catch(err) { preferred = ''; }
     if(!collectTabs().some(function(tab){ return tab.getAttribute('data-kind') === preferred; })){
+      preferred = 'all';
+    }
+    if(!preferred){
       preferred = 'all';
     }
     activate(preferred);
@@ -1030,7 +1036,6 @@
     var root = scope && scope.classList && scope.classList.contains('af-inventory') ? scope : (scope && scope.querySelector ? scope.querySelector('.af-inventory') : null);
     afShopDebug('mountInventory: root found?', !!root);
     if(!root){ return Promise.resolve(); }
-    initInventoryTabs(root);
     return loadInventoryState(root);
   }
 

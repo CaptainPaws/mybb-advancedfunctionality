@@ -1091,6 +1091,7 @@ function af_advancedshop_build_cart_items(array $cart): array
         ($titleRuCol ? 'e.' . $titleRuCol . ' AS kb_title_ru' : "'' AS kb_title_ru"),
         ($titleEnCol ? 'e.' . $titleEnCol . ' AS kb_title_en' : "'' AS kb_title_en"),
         ($titleCol ? 'e.' . $titleCol . ' AS kb_title' : "'' AS kb_title"),
+        'e.`key` AS kb_key',
         ($metaCol ? 'e.' . $metaCol . ' AS kb_meta' : "'' AS kb_meta"),
     ];
 
@@ -2028,6 +2029,7 @@ function af_advancedshop_inventory_fetch_rows(int $targetUid, array &$debug = []
 
     $select = [
         'i.*',
+        'e.`key` AS kb_key',
         ($titleRuCol ? 'e.' . $titleRuCol . ' AS kb_title_ru' : "'' AS kb_title_ru"),
         ($titleEnCol ? 'e.' . $titleEnCol . ' AS kb_title_en' : "'' AS kb_title_en"),
         ($titleCol ? 'e.' . $titleCol . ' AS kb_title' : "'' AS kb_title"),
@@ -2072,9 +2074,13 @@ function af_advancedshop_inventory_fetch_rows(int $targetUid, array &$debug = []
             'title' => $title,
             'icon_url' => (string)($meta['ui']['icon_url'] ?? ''),
             'item_kind' => $itemKind,
+            'kb_key' => (string)($profile['kb_key'] ?? ''),
             'equip_slot' => (string)($profile['equip_slot'] ?? ''),
             'slot_code' => (string)($profile['equip_slot'] ?? ''),
             'is_equippable' => !empty($equipInfo['is_equippable']),
+            'ac_bonus' => (int)($profile['armor_ac_bonus'] ?? 0),
+            'dmg_bonus' => (int)($profile['weapon_damage_bonus'] ?? 0),
+            'damage_type' => (string)($profile['weapon_damage_type'] ?? ''),
             'tech' => strip_tags(af_advancedshop_parse_bbcode($tooltipSource)),
             'tooltip_html' => af_advancedshop_parse_bbcode($tooltipSource),
             'tooltip_text' => strip_tags(af_advancedshop_parse_bbcode($tooltipSource)),
@@ -2124,6 +2130,7 @@ function af_advancedshop_inventory_state_payload(int $uid, bool $includeDebug = 
         'items' => $items,
         'inventory' => $items,
         'equipment' => $equipment,
+        'derived' => af_advancedshop_inventory_derived_effects($equipment),
         'meta' => [
             'labels' => $metaLabels,
         ],
@@ -2251,18 +2258,8 @@ function af_advancedshop_inventory_resolve_slot(array $profile, string $requeste
 
 function af_advancedshop_inventory_equippable_info(array $profile): array
 {
-    $slots = af_advancedshop_inventory_slots_canonical();
     $slot = af_advancedshop_inventory_normalize_slot_code((string)($profile['equip_slot'] ?? $profile['slot'] ?? ''));
-    $itemKind = mb_strtolower(trim((string)($profile['item_kind'] ?? '')));
-
-    if ($itemKind === 'armor') {
-        if (!in_array($slot, ['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt'], true)) {
-            return ['is_equippable' => false, 'allowed_slots' => [], 'default_slot' => ''];
-        }
-        return ['is_equippable' => true, 'allowed_slots' => [$slot], 'default_slot' => $slot];
-    }
-
-    if (in_array($slot, $slots, true)) {
+    if ($slot !== '' && in_array($slot, af_advancedshop_inventory_slots_canonical(), true)) {
         return ['is_equippable' => true, 'allowed_slots' => [$slot], 'default_slot' => $slot];
     }
 
@@ -2319,6 +2316,7 @@ function af_advancedshop_inventory_equipped_fetch(int $uid): array
         }
 
         $slotCode = (string)($row['slot_code'] ?? '');
+        $profile = af_advancedshop_kb_item_profile($row);
         $out[$slotCode] = [
             'inv_id' => (int)($row['inv_id'] ?? 0),
             'kb_id' => (int)($row['kb_id'] ?? 0),
@@ -2327,10 +2325,40 @@ function af_advancedshop_inventory_equipped_fetch(int $uid): array
             'tooltip_text' => strip_tags(af_advancedshop_parse_bbcode($tooltipSource)),
             'rarity' => af_advancedshop_normalize_rarity((string)($row['inv_rarity'] ?? 'common')),
             'slot_code' => $slotCode,
+            'kb_key' => (string)($profile['kb_key'] ?? ''),
+            'item_kind' => (string)($profile['item_kind'] ?? ''),
+            'equip_slot' => (string)($profile['equip_slot'] ?? ''),
+            'ac_bonus' => (int)($profile['armor_ac_bonus'] ?? 0),
+            'dmg_bonus' => (int)($profile['weapon_damage_bonus'] ?? 0),
+            'damage_type' => (string)($profile['weapon_damage_type'] ?? ''),
         ];
     }
 
     return $out;
+}
+
+function af_advancedshop_inventory_derived_effects(array $equipment): array
+{
+    $armorBonus = 0;
+    $damageBonus = 0;
+    $damageType = '';
+
+    foreach ($equipment as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        $armorBonus += (int)($item['ac_bonus'] ?? 0);
+        $damageBonus += (int)($item['dmg_bonus'] ?? 0);
+        if ($damageType === '' && (string)($item['damage_type'] ?? '') !== '') {
+            $damageType = (string)$item['damage_type'];
+        }
+    }
+
+    return [
+        'ac_bonus' => $armorBonus,
+        'damage_bonus' => $damageBonus,
+        'damage_type' => $damageType,
+    ];
 }
 
 function af_advancedshop_inventory_equipped_get(): void
@@ -2449,6 +2477,7 @@ function af_advancedshop_inventory_equippable_list(): void
         ($titleRuCol ? 'e.' . $titleRuCol . ' AS kb_title_ru' : "'' AS kb_title_ru"),
         ($titleEnCol ? 'e.' . $titleEnCol . ' AS kb_title_en' : "'' AS kb_title_en"),
         ($titleCol ? 'e.' . $titleCol . ' AS kb_title' : "'' AS kb_title"),
+        'e.`key` AS kb_key',
         ($metaCol ? 'e.' . $metaCol . ' AS kb_meta' : "'' AS kb_meta"),
     ];
 
@@ -2838,9 +2867,12 @@ function af_advancedshop_kb_item_profile(array $kbRow): array
     $default = [
         'rarity' => 'common',
         'item_kind' => '',
+        'kb_key' => '',
         'slot' => '',
         'equip_slot' => '',
         'armor_ac_bonus' => 0,
+        'weapon_damage_bonus' => 0,
+        'weapon_damage_type' => '',
         'stack_max' => 1,
         'currency' => 'credits',
         'price' => 0,
@@ -2867,9 +2899,12 @@ function af_advancedshop_kb_item_profile(array $kbRow): array
     return [
         'rarity' => af_advancedshop_normalize_rarity($rawRarity),
         'item_kind' => (string)($item['item_kind'] ?? ''),
+        'kb_key' => trim((string)($kbRow['kb_key'] ?? $kbRow['key'] ?? '')),
         'slot' => (string)($item['slot'] ?? ''),
         'equip_slot' => af_advancedshop_inventory_normalize_slot_code((string)($equip['slot'] ?? ($item['slot'] ?? ''))),
         'armor_ac_bonus' => max(0, (int)($equipArmor['ac_bonus'] ?? 0)),
+        'weapon_damage_bonus' => (int)($item['weapon']['damage_bonus'] ?? 0),
+        'weapon_damage_type' => trim((string)($item['weapon']['damage_type'] ?? '')),
         'stack_max' => max(1, (int)($item['stack_max'] ?? 1)),
         'currency' => (string)($item['currency'] ?? 'credits'),
         'price' => max(0, (int)($item['price'] ?? 0)),
