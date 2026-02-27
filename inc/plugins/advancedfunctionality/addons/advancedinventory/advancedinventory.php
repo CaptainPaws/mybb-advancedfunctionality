@@ -837,6 +837,29 @@ function af_inv_add_item(int $uid, array $item): int
     $icon = substr(trim((string)($item['icon'] ?? '')), 0, 255);
     $qty = max(1, (int)($item['qty'] ?? 1));
     $metaJson = is_string($item['meta_json'] ?? null) ? (string)$item['meta_json'] : json_encode((array)($item['meta'] ?? []), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $meta = @json_decode((string)$metaJson, true);
+    $meta = is_array($meta) ? $meta : [];
+
+    $validSlots = ['stash', 'equipment', 'resources', 'pets', 'customization'];
+    $equipmentKinds = ['weapon', 'armor', 'ammo', 'consumable'];
+    if (!in_array($slot, $validSlots, true)) {
+        $slot = 'stash';
+    }
+    if ($slot === 'resources' && in_array($subtype, $equipmentKinds, true)) {
+        $slot = 'equipment';
+    }
+    if ($slot === 'equipment' && $subtype === '') {
+        $kindFromMeta = mb_strtolower(trim((string)($meta['item_kind'] ?? ($meta['rules']['item']['item_kind'] ?? ''))));
+        if (in_array($kindFromMeta, $equipmentKinds, true)) {
+            $subtype = $kindFromMeta;
+        } else {
+            $kbKeyNormalized = mb_strtolower($kbKey);
+            if (strpos($kbKeyNormalized, 'gun') === 0) {
+                $subtype = 'weapon';
+            }
+        }
+    }
+
     $metaHash = md5((string)$metaJson);
 
     $columns = af_advancedinventory_fetch_table_columns();
