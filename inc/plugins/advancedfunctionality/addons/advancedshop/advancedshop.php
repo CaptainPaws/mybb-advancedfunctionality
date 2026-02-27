@@ -73,7 +73,6 @@ function af_advancedshop_init(): void
 {
     global $plugins;
     af_advancedshop_ensure_slots_schema();
-    af_advancedshop_ensure_equipped_schema();
     $plugins->add_hook('global_start', 'af_advancedshop_register_routes', 10);
     $plugins->add_hook('misc_start', 'af_advancedshop_misc_router', 10);
     $plugins->add_hook('pre_output_page', 'af_advancedshop_pre_output', 10);
@@ -339,40 +338,6 @@ function af_advancedshop_install(): void
             KEY uid_created (uid, created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
-    if (!$db->table_exists('af_inventory_items')) {
-        $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_inventory_items (
-            inv_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            uid INT UNSIGNED NOT NULL,
-            kb_id INT UNSIGNED NOT NULL,
-            qty INT NOT NULL DEFAULT 1,
-            stack_max INT NOT NULL DEFAULT 1,
-            rarity VARCHAR(32) NOT NULL DEFAULT 'common',
-            item_kind VARCHAR(32) NOT NULL DEFAULT '',
-            slot_code VARCHAR(32) NOT NULL DEFAULT '',
-            created_at INT UNSIGNED NOT NULL DEFAULT 0,
-            updated_at INT UNSIGNED NOT NULL DEFAULT 0,
-            KEY uid_kb (uid, kb_id),
-            KEY uid_filters (uid, rarity, slot_code)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    }
-    if (!$db->table_exists('af_wardrobe_items')) {
-        $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_wardrobe_items (
-            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            uid INT UNSIGNED NOT NULL,
-            kb_id INT UNSIGNED NOT NULL,
-            meta_json MEDIUMTEXT NULL,
-            created_at INT UNSIGNED NOT NULL DEFAULT 0
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    }
-    if (!$db->table_exists('af_treasury_items')) {
-        $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_treasury_items (
-            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            uid INT UNSIGNED NOT NULL,
-            kb_id INT UNSIGNED NOT NULL,
-            meta_json MEDIUMTEXT NULL,
-            created_at INT UNSIGNED NOT NULL DEFAULT 0
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    }
 
     $shops = [
         'game' => 'Game Shop',
@@ -394,7 +359,6 @@ function af_advancedshop_install(): void
 
     af_advancedshop_templates_install_or_update();
     af_advancedshop_ensure_slots_schema();
-    af_advancedshop_ensure_equipped_schema();
     if (!af_advancedshop_alias_sync()) {
         af_advancedshop_alias_sync_notice_on_failure();
     }
@@ -427,7 +391,7 @@ function af_advancedshop_activate(): void
         true
     );
     af_advancedshop_ensure_slots_schema();
-    af_advancedshop_ensure_equipped_schema();
+    af_advancedshop_write_inventory_schema_snapshot();
     af_advancedshop_templates_install_or_update();
     if (!af_advancedshop_alias_sync()) {
         af_advancedshop_alias_sync_notice_on_failure();
@@ -1159,6 +1123,7 @@ function af_advancedshop_checkout(): void
     if ((int)($mybb->settings['af_advancedinventory_enabled'] ?? 0) !== 1) {
         af_advancedshop_json_err('Покупка недоступна: Advanced Inventory отключён или не установлен.', 400);
     }
+    af_advancedshop_write_inventory_schema_snapshot();
     $shop = af_advancedshop_current_shop();
     $currency = (string)($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits');
     $cart = af_advancedshop_get_or_create_cart((int)$shop['shop_id'], $uid);
@@ -1322,6 +1287,9 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
 {
     global $db;
     af_advancedshop_ensure_inventory_grant_available($uid);
+    af_advancedshop_inv_debug('grant_stage', ['step' => 'before_legacy_grant', 'uid' => $uid]);
+    af_advancedshop_grant_legacy_inventory_bypass($uid, $item);
+
     $kbId = (int)($item['kb_id'] ?? 0);
     if ($kbId <= 0) {
         af_advancedshop_inv_debug('checkout_grant_blocked', ['uid' => $uid, 'reason' => 'kb_id_missing', 'item' => $item]);
@@ -1335,6 +1303,14 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
     if (!empty($kbCols['key'])) { $select[] = ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS kb_key'; }
     if (!empty($kbCols['meta_json'])) { $select[] = $kbCols['meta_json'] . ' AS kb_meta_json'; }
     $select[] = "COALESCE(NULLIF(title_ru,''), NULLIF(title_en,''), NULLIF(title,''), '') AS kb_title";
+    af_advancedshop_inv_debug('checkout_db_op', [
+        'stage' => 'af_advancedshop_grant_inventory_item',
+        'op' => 'select',
+        'table' => af_advancedshop_kb_table(),
+        'fields' => $select,
+        'uid' => $uid,
+        'kb_id' => $kbId,
+    ]);
     $kb = $db->fetch_array($db->query("SELECT " . implode(',', $select) . " FROM " . af_advancedshop_kb_table() . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
     if (!$kb) {
         af_advancedshop_inv_debug('checkout_grant_blocked', ['uid' => $uid, 'reason' => 'kb_row_missing', 'kb_id' => $kbId]);
@@ -1394,6 +1370,32 @@ function af_advancedshop_ensure_inventory_grant_available(int $uid): void
             'bootstrap' => $invBootstrap,
         ]);
         throw new RuntimeException('Покупка недоступна: функция af_inv_add_item не найдена.');
+    }
+}
+
+function af_advancedshop_grant_legacy_inventory_bypass(int $uid, array $item): void
+{
+    af_advancedshop_inv_debug('grant_stage', [
+        'step' => 'legacy_grant_disabled',
+        'uid' => $uid,
+        'slot_id' => (int)($item['slot_id'] ?? 0),
+    ]);
+}
+
+function af_advancedshop_write_inventory_schema_snapshot(): void
+{
+    if (function_exists('af_advancedinventory_write_schema_markdown')) {
+        af_advancedinventory_write_schema_markdown();
+        return;
+    }
+
+    $invBootstrap = AF_ADDONS . 'advancedinventory/advancedinventory.php';
+    if (is_file($invBootstrap)) {
+        require_once $invBootstrap;
+    }
+
+    if (function_exists('af_advancedinventory_write_schema_markdown')) {
+        af_advancedinventory_write_schema_markdown();
     }
 }
 

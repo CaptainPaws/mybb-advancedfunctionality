@@ -57,6 +57,7 @@ function af_advancedinventory_install(): void
 
     af_advancedinventory_templates_install_or_update();
     af_advancedinventory_migrate_from_shop();
+    af_advancedinventory_write_schema_markdown();
     if (!af_advancedinventory_alias_sync()) {
         af_advancedinventory_alias_sync_notice_on_failure();
     }
@@ -70,10 +71,106 @@ function af_advancedinventory_activate(): void
     af_advancedinventory_templates_install_or_update();
     af_advancedinventory_ensure_inventory_storage();
     af_advancedinventory_migrate_from_shop();
+    af_advancedinventory_write_schema_markdown();
     if (!af_advancedinventory_alias_sync()) {
         af_advancedinventory_alias_sync_notice_on_failure();
     }
     if (function_exists('rebuild_settings')) { rebuild_settings(); }
+}
+
+function af_advancedinventory_write_schema_markdown(): void
+{
+    global $db;
+
+    if (!defined('AF_CACHE')) {
+        return;
+    }
+
+    $prefix = (string)TABLE_PREFIX;
+    $schemaPath = AF_CACHE . 'advancedinventory_schema.md';
+    $allTables = af_advancedinventory_schema_all_tables();
+
+    $requiredTables = [
+        $prefix . 'af_advinv_items',
+        $prefix . 'af_advinv_equipped',
+        $prefix . 'af_shop_orders',
+    ];
+
+    foreach ($allTables as $tableName) {
+        if (strpos($tableName, $prefix . 'af_shop_') === 0) {
+            $requiredTables[] = $tableName;
+        }
+        if (
+            strpos($tableName, $prefix . 'af_') === 0
+            && (
+                strpos($tableName, 'inventory') !== false
+                || strpos($tableName, 'legacy') !== false
+            )
+        ) {
+            $requiredTables[] = $tableName;
+        }
+    }
+
+    $requiredTables = array_values(array_unique($requiredTables));
+    sort($requiredTables);
+
+    $lines = [];
+    $lines[] = '# Advanced Inventory / Shop DB schema';
+    $lines[] = '';
+    $lines[] = '- generated_at: ' . date('c');
+    $lines[] = '- table_prefix: `' . $prefix . '`';
+    $lines[] = '';
+
+    foreach ($requiredTables as $tableName) {
+        $plainName = substr($tableName, strlen($prefix));
+        $exists = $db->table_exists($plainName);
+
+        $lines[] = '## Таблица: `' . $tableName . '`';
+        $lines[] = '';
+
+        if (!$exists) {
+            $lines[] = '_Не найдена в текущей БД._';
+            $lines[] = '';
+            continue;
+        }
+
+        $lines[] = '| name | type | null | default | key |';
+        $lines[] = '|---|---|---|---|---|';
+
+        $safeTable = str_replace('`', '``', $tableName);
+        $res = $db->query("SHOW COLUMNS FROM `{$safeTable}`");
+        while ($col = $db->fetch_array($res)) {
+            $field = (string)($col['Field'] ?? '');
+            $type = (string)($col['Type'] ?? '');
+            $nullable = (string)($col['Null'] ?? '');
+            $default = array_key_exists('Default', $col) && $col['Default'] !== null ? (string)$col['Default'] : 'NULL';
+            $key = (string)($col['Key'] ?? '');
+            $lines[] = '| `' . $field . '` | `' . $type . '` | `' . $nullable . '` | `' . str_replace('|', '\\|', $default) . '` | `' . $key . '` |';
+        }
+
+        $lines[] = '';
+    }
+
+    @file_put_contents($schemaPath, implode("\n", $lines) . "\n");
+    af_advinv_debug_log('schema_markdown_written', [
+        'path' => $schemaPath,
+        'tables' => $requiredTables,
+    ]);
+}
+
+function af_advancedinventory_schema_all_tables(): array
+{
+    global $db;
+
+    $tables = [];
+    $res = $db->query("SHOW TABLES");
+    while ($row = $db->fetch_array($res)) {
+        $name = (string)reset($row);
+        if ($name !== '') {
+            $tables[] = $name;
+        }
+    }
+    return $tables;
 }
 
 function af_advancedinventory_deactivate(): void
