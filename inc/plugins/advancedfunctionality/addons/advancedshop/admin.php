@@ -61,6 +61,8 @@ class AF_Admin_Advancedshop
                 $code = preg_replace('~[^a-z0-9_\-]~', '', strtolower(trim((string)$mybb->get_input('code'))));
                 $titleRu = trim((string)$mybb->get_input('title_ru'));
                 $titleEn = trim((string)$mybb->get_input('title_en'));
+                $bgUrl = trim((string)$mybb->get_input('bg_url'));
+                $iconUrl = trim((string)$mybb->get_input('icon_url'));
                 $enabled = (int)$mybb->get_input('enabled');
                 $sortorder = (int)$mybb->get_input('sortorder');
 
@@ -72,6 +74,8 @@ class AF_Admin_Advancedshop
                                 'code' => $db->escape_string($code),
                                 'title_ru' => $db->escape_string($titleRu),
                                 'title_en' => $db->escape_string($titleEn),
+                                'bg_url' => $db->escape_string($bgUrl),
+                                'icon_url' => $db->escape_string($iconUrl),
                                 'enabled' => $enabled ? 1 : 0,
                                 'sortorder' => $sortorder,
                                 'settings_json' => null,
@@ -81,6 +85,8 @@ class AF_Admin_Advancedshop
                             $db->insert_query($shopsTable, [
                                 'code' => $db->escape_string($code),
                                 'title' => $db->escape_string($title),
+                                'bg_url' => $db->escape_string($bgUrl),
+                                'icon_url' => $db->escape_string($iconUrl),
                                 'enabled' => $enabled ? 1 : 0,
                                 'created_at' => TIME_NOW,
                                 'updated_at' => TIME_NOW,
@@ -89,6 +95,42 @@ class AF_Admin_Advancedshop
                     }
                 }
                 flash_message('Shop created.', 'success');
+                admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=shops');
+            }
+
+            if ($do === 'update_shop') {
+                $shopId = (int)$mybb->get_input('shop_id');
+                $code = preg_replace('~[^a-z0-9_\-]~', '', strtolower(trim((string)$mybb->get_input('code'))));
+                $titleRu = trim((string)$mybb->get_input('title_ru'));
+                $titleEn = trim((string)$mybb->get_input('title_en'));
+                $bgUrl = trim((string)$mybb->get_input('bg_url'));
+                $iconUrl = trim((string)$mybb->get_input('icon_url'));
+                $enabled = (int)$mybb->get_input('enabled') === 1 ? 1 : 0;
+                $sortorder = (int)$mybb->get_input('sortorder');
+
+                if ($shopId > 0 && $code !== '') {
+                    $update = [
+                        'code' => $db->escape_string($code),
+                        'enabled' => $enabled,
+                    ];
+                    if ($shopsTable === 'af_shop_shops') {
+                        $update['title_ru'] = $db->escape_string($titleRu);
+                        $update['title_en'] = $db->escape_string($titleEn);
+                        $update['bg_url'] = $db->escape_string($bgUrl);
+                        $update['icon_url'] = $db->escape_string($iconUrl);
+                        $update['sortorder'] = $sortorder;
+                    } else {
+                        $title = $titleRu !== '' ? $titleRu : ($titleEn !== '' ? $titleEn : $code);
+                        $update['title'] = $db->escape_string($title);
+                        $update['bg_url'] = $db->escape_string($bgUrl);
+                        $update['icon_url'] = $db->escape_string($iconUrl);
+                        $update['updated_at'] = TIME_NOW;
+                    }
+                    $db->update_query($shopsTable, $update, 'shop_id=' . $shopId);
+                    flash_message('Shop updated.', 'success');
+                } else {
+                    flash_message('Shop update failed: code is required.', 'error');
+                }
                 admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=shops');
             }
 
@@ -148,26 +190,47 @@ class AF_Admin_Advancedshop
         if ($activeTab === 'shops') {
             $html .= '<h3>Shops</h3>';
             $html .= '<table class="tborder" cellpadding="6" cellspacing="1" width="100%"><tr>';
-            $html .= '<th>shop_id</th><th>code</th><th>title_ru</th><th>title_en</th><th>enabled</th><th>sortorder</th><th>manage</th></tr>';
+            $html .= '<th>shop_id</th><th>code</th><th>title_ru</th><th>title_en</th><th>bg_url</th><th>icon_url</th><th>enabled</th><th>sortorder</th><th>manage</th><th>save</th></tr>';
             $allowManageLink = function_exists('af_advancedshop_can_manage') ? af_advancedshop_can_manage() : true;
             foreach ($shops as $shop) {
                 $html .= '<tr>';
+                $html .= '<form method="post" action="index.php?module=advancedfunctionality&amp;af_view=advancedshop&amp;tab=shops">';
+                $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
+                $html .= '<input type="hidden" name="do" value="update_shop">';
+                $html .= '<input type="hidden" name="shop_id" value="' . (int)$shop['shop_id'] . '">';
                 $html .= '<td>' . (int)$shop['shop_id'] . '</td>';
-                $html .= '<td><code>' . htmlspecialchars_uni((string)$shop['code']) . '</code></td>';
+                $html .= '<td><input type="text" name="code" value="' . htmlspecialchars_uni((string)$shop['code']) . '" maxlength="32" required style="width:100%"></td>';
                 if ($shopsTable === 'af_shop_shops') {
-                    $html .= '<td>' . htmlspecialchars_uni((string)$shop['title_ru']) . '</td>';
-                    $html .= '<td>' . htmlspecialchars_uni((string)$shop['title_en']) . '</td>';
-                    $html .= '<td>' . ((int)$shop['enabled'] === 1 ? '1' : '0') . '</td>';
-                    $html .= '<td>' . (int)$shop['sortorder'] . '</td>';
+                    $html .= '<td><input type="text" name="title_ru" value="' . htmlspecialchars_uni((string)$shop['title_ru']) . '" maxlength="255" style="width:100%"></td>';
+                    $html .= '<td><input type="text" name="title_en" value="' . htmlspecialchars_uni((string)$shop['title_en']) . '" maxlength="255" style="width:100%"></td>';
+                    $bg = (string)($shop['bg_url'] ?? '');
+                    $icon = (string)($shop['icon_url'] ?? '');
+                    $bgPreview = $bg !== '' ? '<div><a target="_blank" href="' . htmlspecialchars_uni($bg) . '">preview</a></div>' : '';
+                    $iconPreview = $icon !== '' ? '<div><a target="_blank" href="' . htmlspecialchars_uni($icon) . '">preview</a></div>' : '';
+                    $html .= '<td><input type="text" name="bg_url" value="' . htmlspecialchars_uni($bg) . '" maxlength="255" style="width:100%">' . $bgPreview . '</td>';
+                    $html .= '<td><input type="text" name="icon_url" value="' . htmlspecialchars_uni($icon) . '" maxlength="255" style="width:100%">' . $iconPreview . '</td>';
+                    $html .= '<td><select name="enabled"><option value="1"' . ((int)$shop['enabled'] === 1 ? ' selected' : '') . '>1</option><option value="0"' . ((int)$shop['enabled'] === 0 ? ' selected' : '') . '>0</option></select></td>';
+                    $html .= '<td><input type="number" name="sortorder" value="' . (int)$shop['sortorder'] . '" style="width:90px"></td>';
                 } else {
-                    $title = htmlspecialchars_uni((string)($shop['title'] ?? ''));
-                    $html .= '<td>' . $title . '</td><td>' . $title . '</td><td>' . ((int)$shop['enabled'] === 1 ? '1' : '0') . '</td><td>' . (int)$shop['shop_id'] . '</td>';
+                    $title = (string)($shop['title'] ?? '');
+                    $bg = (string)($shop['bg_url'] ?? '');
+                    $icon = (string)($shop['icon_url'] ?? '');
+                    $bgPreview = $bg !== '' ? '<div><a target="_blank" href="' . htmlspecialchars_uni($bg) . '">preview</a></div>' : '';
+                    $iconPreview = $icon !== '' ? '<div><a target="_blank" href="' . htmlspecialchars_uni($icon) . '">preview</a></div>' : '';
+                    $html .= '<td><input type="text" name="title_ru" value="' . htmlspecialchars_uni($title) . '" maxlength="255" style="width:100%"></td>';
+                    $html .= '<td><input type="text" name="title_en" value="' . htmlspecialchars_uni($title) . '" maxlength="255" style="width:100%"></td>';
+                    $html .= '<td><input type="text" name="bg_url" value="' . htmlspecialchars_uni($bg) . '" maxlength="255" style="width:100%">' . $bgPreview . '</td>';
+                    $html .= '<td><input type="text" name="icon_url" value="' . htmlspecialchars_uni($icon) . '" maxlength="255" style="width:100%">' . $iconPreview . '</td>';
+                    $html .= '<td><select name="enabled"><option value="1"' . ((int)$shop['enabled'] === 1 ? ' selected' : '') . '>1</option><option value="0"' . ((int)$shop['enabled'] === 0 ? ' selected' : '') . '>0</option></select></td>';
+                    $html .= '<td><input type="number" name="sortorder" value="' . (int)$shop['shop_id'] . '" style="width:90px"></td>';
                 }
                 if ($allowManageLink) {
                     $html .= '<td><a class="button" target="_blank" href="../shop_manage.php?shop=' . rawurlencode((string)$shop['code']) . '">Manage (front)</a></td>';
                 } else {
                     $html .= '<td>—</td>';
                 }
+                $html .= '<td><button class="button" type="submit">Save</button></td>';
+                $html .= '</form>';
                 $html .= '</tr>';
             }
             $html .= '</table>';
@@ -179,6 +242,8 @@ class AF_Admin_Advancedshop
             $html .= '<p>Code: <input type="text" name="code" maxlength="32" required> </p>';
             $html .= '<p>Title RU: <input type="text" name="title_ru" maxlength="255"> </p>';
             $html .= '<p>Title EN: <input type="text" name="title_en" maxlength="255"> </p>';
+            $html .= '<p>BG URL: <input type="text" name="bg_url" maxlength="255" style="width:60%"> </p>';
+            $html .= '<p>Icon URL: <input type="text" name="icon_url" maxlength="255" style="width:60%"> </p>';
             $html .= '<p>Sortorder: <input type="number" name="sortorder" value="0"> Enabled: <label><input type="checkbox" name="enabled" value="1" checked> yes</label></p>';
             $html .= '<p><button class="button button-primary" type="submit">Create</button></p>';
             $html .= '</form>';
