@@ -4,17 +4,36 @@ if (!defined('IN_ADMINCP')) { define('IN_ADMINCP', 1); }
 
 class AF_Admin_Advancedinventory
 {
+    private static function baseUrl(string $do = '', array $params = []): string
+    {
+        $query = [
+            'module' => 'advancedfunctionality',
+            'af_view' => 'advancedinventory',
+        ];
+        if ($do !== '') {
+            $query['do'] = $do;
+        }
+        return 'index.php?' . http_build_query(array_merge($query, $params), '', '&');
+    }
+
     public static function dispatch(string $action = ''): string
     {
-        $html = self::render($action);
-        echo $html;
-        return $html;
+        @ini_set('log_errors', '1');
+        try {
+            $html = self::render($action);
+            echo $html;
+            return $html;
+        } catch (\Throwable $e) {
+            error_log('[AF advancedinventory admin] ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            echo '<div class="error">Advanced Inventory admin error. Check PHP error log for details.</div>';
+            return '';
+        }
     }
 
     public static function render(string $action = ''): string
     {
         global $mybb;
-        $view = trim((string)$mybb->get_input('sub'));
+        $view = trim((string)$mybb->get_input('do'));
         if ($view === 'shop_map') {
             return self::render_shop_map();
         }
@@ -69,11 +88,11 @@ class AF_Admin_Advancedinventory
             $rows .= '<tr><td><a href="../member.php?action=profile&amp;uid=' . (int)$row['uid'] . '">' . htmlspecialchars_uni((string)$row['username']) . '</a></td><td>' . (int)$row['total_rows'] . '</td><td>' . (int)$row['total_qty'] . '</td><td><a class="button" href="' . htmlspecialchars_uni($url) . '">Открыть инвентарь</a></td></tr>';
         }
 
-        $mapUrl = 'index.php?module=config-plugins&action=advancedinventory&sub=shop_map';
+        $mapUrl = self::baseUrl('shop_map');
         $html = '';
         $html .= '<div class="af-box"><h2>Инвентари пользователей</h2>';
         $html .= '<p><a class="button" href="' . htmlspecialchars_uni($mapUrl) . '">Мост Shop → Inventory</a></p>';
-        $html .= '<form method="get"><input type="hidden" name="module" value="config-plugins"><input type="hidden" name="action" value="advancedinventory">';
+        $html .= '<form method="get"><input type="hidden" name="module" value="advancedfunctionality"><input type="hidden" name="af_view" value="advancedinventory">';
         $html .= '<input type="text" name="username" placeholder="Username" value="' . htmlspecialchars_uni($search) . '"> ';
         $html .= '<select name="has_items"><option value="">Все</option><option value="yes"' . ($hasItems === 'yes' ? ' selected' : '') . '>Непустые</option><option value="no"' . ($hasItems === 'no' ? ' selected' : '') . '>Пустые</option></select> ';
         $html .= '<button type="submit" class="button">Фильтр</button></form>';
@@ -94,7 +113,7 @@ class AF_Admin_Advancedinventory
         if ($mybb->request_method === 'post') {
             verify_post_check($mybb->get_input('my_post_key'));
             self::handle_shop_map_post();
-            admin_redirect('index.php?module=config-plugins&action=advancedinventory&sub=shop_map');
+            admin_redirect(self::baseUrl('shop_map'));
         }
 
         $editId = (int)$mybb->get_input('edit_id');
@@ -142,7 +161,7 @@ class AF_Admin_Advancedinventory
                 . '<td>' . ((int)$row['enabled'] === 1 ? 'Да' : 'Нет') . '</td>'
                 . '<td>' . (int)$row['sortorder'] . '</td>'
                 . '<td>'
-                    . '<a href="index.php?module=config-plugins&amp;action=advancedinventory&amp;sub=shop_map&amp;edit_id=' . $id . '">Редактировать</a> · '
+                    . '<a href="' . htmlspecialchars_uni(self::baseUrl('shop_map', ['edit_id' => $id])) . '">Редактировать</a> · '
                     . '<form method="post" style="display:inline;margin:0">'
                         . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">'
                         . '<input type="hidden" name="map_action" value="move_up">'
@@ -192,7 +211,7 @@ class AF_Admin_Advancedinventory
 
         $html = '<div class="af-box">';
         $html .= '<h2>Мост Shop → Inventory</h2>';
-        $html .= '<p><a class="button" href="index.php?module=config-plugins&amp;action=advancedinventory">← К списку инвентарей</a></p>';
+        $html .= '<p><a class="button" href="' . htmlspecialchars_uni(self::baseUrl()) . '">← К списку инвентарей</a></p>';
         $html .= '<table class="table"><thead><tr><th>ID</th><th>Магазин</th><th>Категория</th><th>Entity</th><th>Default subtype</th><th>Enabled</th><th>Sort</th><th>Действия</th></tr></thead><tbody>' . ($ruleRows !== '' ? $ruleRows : '<tr><td colspan="8">Правил пока нет.</td></tr>') . '</tbody></table>';
 
         $html .= '<h3>' . ($editId > 0 ? 'Редактировать правило' : 'Добавить правило') . '</h3>';

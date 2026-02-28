@@ -53,6 +53,12 @@ return [
         'slug' => 'advancedinventory',
         'title' => 'Advanced Inventory',
         'controller' => 'admin.php',
+        'menu' => [
+            [
+                'title' => 'Shop map',
+                'do' => 'shop_map',
+            ],
+        ],
         'order' => 36,
     ],
 ];
