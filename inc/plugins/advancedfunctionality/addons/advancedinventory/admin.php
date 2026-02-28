@@ -86,6 +86,23 @@ class AF_Admin_Advancedinventory
     {
         global $db, $mybb;
 
+        if ($mybb->request_method === 'post' && trim((string)$mybb->get_input('do')) === 'reset_test_data') {
+            verify_post_check($mybb->get_input('my_post_key'));
+            $confirm = trim((string)$mybb->get_input('confirm'));
+            if ($confirm !== 'yes') {
+                flash_message('Сброс отменён: отсутствует подтверждение confirm=yes.', 'error');
+                admin_redirect(self::baseUrl());
+            }
+
+            $deleted = self::reset_test_data_tables();
+            $parts = [];
+            foreach ($deleted as $table => $count) {
+                $parts[] = $table . ': ' . $count;
+            }
+            flash_message('Тестовые данные магазина и инвентаря очищены. ' . implode(', ', $parts), 'success');
+            admin_redirect(self::baseUrl());
+        }
+
         $page = max(1, (int)$mybb->get_input('page'));
         $perPage = 20;
         $search = trim((string)$mybb->get_input('username'));
@@ -136,6 +153,12 @@ class AF_Admin_Advancedinventory
         $html = '';
         $html .= '<div class="af-box"><h2>Инвентари пользователей</h2>';
         $html .= '<p><a class="button" href="' . htmlspecialchars_uni($entitiesUrl) . '">Категории инвентаря</a> <a class="button" href="' . htmlspecialchars_uni($filtersUrl) . '">Сабфильтры категорий</a> <a class="button" href="' . htmlspecialchars_uni($mapUrl) . '">Мост Shop → Inventory</a></p>';
+        $html .= '<form method="post" action="' . htmlspecialchars_uni(self::baseUrl()) . '" onsubmit="return confirm(\'Сбросить тестовые данные Shop + Inventory? Действие необратимо.\');" style="margin:0 0 12px 0;">';
+        $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
+        $html .= '<input type="hidden" name="do" value="reset_test_data">';
+        $html .= '<input type="hidden" name="confirm" value="yes">';
+        $html .= '<button type="submit" class="button" style="background:#b94a48;color:#fff;border-color:#953b39;">Сбросить тестовые данные (Shop + Inventory)</button>';
+        $html .= '</form>';
         $html .= '<form method="get"><input type="hidden" name="module" value="advancedfunctionality"><input type="hidden" name="af_view" value="advancedinventory">';
         $html .= '<input type="text" name="username" placeholder="Username" value="' . htmlspecialchars_uni($search) . '"> ';
         $html .= '<select name="has_items"><option value="">Все</option><option value="yes"' . ($hasItems === 'yes' ? ' selected' : '') . '>Непустые</option><option value="no"' . ($hasItems === 'no' ? ' selected' : '') . '>Пустые</option></select> ';
@@ -144,6 +167,35 @@ class AF_Admin_Advancedinventory
         $html .= '<p>Всего: ' . $total . '</p>';
         $html .= '</div>';
         return $html;
+    }
+
+    private static function reset_test_data_tables(): array
+    {
+        global $db;
+
+        $tables = [
+            'af_shop_slots',
+            'af_shop_orders',
+            'af_shop_cart_items',
+            'af_shop_carts',
+            'af_shop_inventory_legacy',
+            'af_advinv_equipped',
+            'af_advinv_items',
+        ];
+
+        $deleted = [];
+        foreach ($tables as $table) {
+            $deleted[$table] = 0;
+            if (!$db->table_exists($table)) {
+                continue;
+            }
+
+            $db->delete_query($table, '1=1');
+            $deleted[$table] = (int)$db->affected_rows();
+        }
+
+        @error_log('[AF-ADVINV][reset_test_data] ' . json_encode($deleted, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        return $deleted;
     }
 
     private static function render_entities(): string
