@@ -3,6 +3,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('IN_ADMINCP')) { define('IN_ADMINCP', 1); }
 if (!defined('AF_ADVINV_TABLE_SHOP_MAP')) { define('AF_ADVINV_TABLE_SHOP_MAP', 'af_advinv_shop_map'); }
 if (!defined('AF_ADVINV_TABLE_ENTITIES')) { define('AF_ADVINV_TABLE_ENTITIES', 'af_advinv_entities'); }
+if (!defined('AF_ADVINV_TABLE_ENTITY_FILTERS')) { define('AF_ADVINV_TABLE_ENTITY_FILTERS', 'af_advinv_entity_filters'); }
 
 class AF_Admin_Advancedinventory
 {
@@ -112,10 +113,21 @@ class AF_Admin_Advancedinventory
     {
         global $db, $mybb;
 
+        if (function_exists('af_advinv_entities_upgrade_schema')) {
+            af_advinv_entities_upgrade_schema();
+        }
+        if (function_exists('af_advinv_entity_filters_upgrade_schema')) {
+            af_advinv_entity_filters_upgrade_schema();
+        }
+
         if ($mybb->request_method === 'post') {
             verify_post_check($mybb->get_input('my_post_key'));
-            self::handle_entity_post();
-            admin_redirect(self::baseUrl('entities'));
+            $targetEntity = self::handle_entity_post();
+            $redirectParams = [];
+            if ($targetEntity !== '') {
+                $redirectParams['edit_entity'] = $targetEntity;
+            }
+            admin_redirect(self::baseUrl('entities', $redirectParams));
         }
 
         $editEntity = trim((string)$mybb->get_input('edit_entity'));
@@ -183,32 +195,43 @@ class AF_Admin_Advancedinventory
         $html .= '<p><label><input type="checkbox" name="enabled" value="1"' . ($selectedEnabled === 1 ? ' checked' : '') . '> Включено</label></p>';
         $html .= '<p><button type="submit" class="button">Сохранить категорию</button></p>';
         $html .= '</form>';
+
+        if ($selectedEntity !== '') {
+            $html .= self::render_entity_subfilters($selectedEntity);
+        }
         $html .= '</div>';
 
         return $html;
     }
 
-    private static function handle_entity_post(): void
+    private static function handle_entity_post(): string
     {
         global $db, $mybb;
 
         $action = trim((string)$mybb->get_input('entity_action'));
         $entity = trim((string)$mybb->get_input('entity'));
 
+        if ($action === 'save_filter' || $action === 'delete_filter' || $action === 'move_up_filter' || $action === 'move_down_filter') {
+            return self::handle_entity_filter_post($action);
+        }
+
         if ($action === 'delete' && $entity !== '') {
             if ($db->table_exists(AF_ADVINV_TABLE_ENTITIES)) {
                 $db->delete_query(AF_ADVINV_TABLE_ENTITIES, "entity='" . $db->escape_string($entity) . "'");
+                if ($db->table_exists(AF_ADVINV_TABLE_ENTITY_FILTERS)) {
+                    $db->delete_query(AF_ADVINV_TABLE_ENTITY_FILTERS, "entity='" . $db->escape_string($entity) . "'");
+                }
             }
-            return;
+            return '';
         }
 
         if ($action === 'move_up' || $action === 'move_down') {
             self::shift_entity_sortorder($entity, $action === 'move_up' ? -1 : 1);
-            return;
+            return $entity;
         }
 
         if ($action !== 'save' || !$db->table_exists(AF_ADVINV_TABLE_ENTITIES)) {
-            return;
+            return '';
         }
 
         $entity = strtolower(trim((string)$mybb->get_input('entity')));
@@ -221,7 +244,7 @@ class AF_Admin_Advancedinventory
         $settingsJson = trim((string)$mybb->get_input('settings_json'));
 
         if (!preg_match('/^[a-z0-9_]{1,32}$/', $entity)) {
-            return;
+            return '';
         }
         if ($renderer === '') {
             $renderer = 'generic';
@@ -243,6 +266,9 @@ class AF_Admin_Advancedinventory
 
         if ($originalEntity !== '' && $originalEntity !== $entity) {
             $db->delete_query(AF_ADVINV_TABLE_ENTITIES, "entity='" . $db->escape_string($originalEntity) . "'");
+            if ($db->table_exists(AF_ADVINV_TABLE_ENTITY_FILTERS)) {
+                $db->update_query(AF_ADVINV_TABLE_ENTITY_FILTERS, ['entity' => $db->escape_string($entity), 'updated_at' => TIME_NOW], "entity='" . $db->escape_string($originalEntity) . "'");
+            }
         }
 
         $exists = (int)$db->fetch_field($db->simple_select(AF_ADVINV_TABLE_ENTITIES, 'COUNT(*) AS c', "entity='" . $db->escape_string($entity) . "'", ['limit' => 1]), 'c');
@@ -251,6 +277,178 @@ class AF_Admin_Advancedinventory
         } else {
             $db->insert_query(AF_ADVINV_TABLE_ENTITIES, $payload);
         }
+
+        return $entity;
+    }
+
+    private static function render_entity_subfilters(string $entity): string
+    {
+        global $db, $mybb;
+
+        if (!$db->table_exists(AF_ADVINV_TABLE_ENTITY_FILTERS)) {
+            return '';
+        }
+
+        $editFilterId = (int)$mybb->get_input('edit_filter_id');
+        $editing = [];
+        if ($editFilterId > 0) {
+            $editing = (array)$db->fetch_array($db->simple_select(AF_ADVINV_TABLE_ENTITY_FILTERS, '*', "id={$editFilterId} AND entity='" . $db->escape_string($entity) . "'", ['limit' => 1]));
+        }
+
+        $rowsHtml = '';
+        $q = $db->simple_select(AF_ADVINV_TABLE_ENTITY_FILTERS, '*', "entity='" . $db->escape_string($entity) . "'", ['order_by' => 'sortorder,id', 'order_dir' => 'ASC']);
+        while ($row = $db->fetch_array($q)) {
+            $id = (int)$row['id'];
+            $rowsHtml .= '<tr><td>' . $id . '</td><td>' . htmlspecialchars_uni((string)$row['code']) . '</td><td>' . htmlspecialchars_uni((string)$row['title_ru']) . '</td><td>' . htmlspecialchars_uni((string)$row['title_en']) . '</td><td>' . ((int)$row['enabled'] === 1 ? 'Да' : 'Нет') . '</td><td>' . (int)$row['sortorder'] . '</td><td>'
+                . '<a href="' . htmlspecialchars_uni(self::baseUrl('entities', ['edit_entity' => $entity, 'edit_filter_id' => $id])) . '">Редактировать</a> · '
+                . '<form method="post" style="display:inline;margin:0">'
+                . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">'
+                . '<input type="hidden" name="entity_action" value="move_up_filter">'
+                . '<input type="hidden" name="entity" value="' . htmlspecialchars_uni($entity) . '">'
+                . '<input type="hidden" name="filter_id" value="' . $id . '">'
+                . '<button type="submit" class="button button_small">↑</button>'
+                . '</form> '
+                . '<form method="post" style="display:inline;margin:0">'
+                . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">'
+                . '<input type="hidden" name="entity_action" value="move_down_filter">'
+                . '<input type="hidden" name="entity" value="' . htmlspecialchars_uni($entity) . '">'
+                . '<input type="hidden" name="filter_id" value="' . $id . '">'
+                . '<button type="submit" class="button button_small">↓</button>'
+                . '</form> '
+                . '<form method="post" style="display:inline;margin:0" onsubmit="return confirm(\'Удалить сабфильтр?\');">'
+                . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">'
+                . '<input type="hidden" name="entity_action" value="delete_filter">'
+                . '<input type="hidden" name="entity" value="' . htmlspecialchars_uni($entity) . '">'
+                . '<input type="hidden" name="filter_id" value="' . $id . '">'
+                . '<button type="submit" class="button button_small">Удалить</button>'
+                . '</form>'
+                . '</td></tr>';
+        }
+
+        $selectedId = (int)($editing['id'] ?? 0);
+        $selectedCode = (string)($editing['code'] ?? '');
+        $selectedTitleRu = (string)($editing['title_ru'] ?? '');
+        $selectedTitleEn = (string)($editing['title_en'] ?? '');
+        $selectedSort = (int)($editing['sortorder'] ?? self::next_filter_sortorder($entity));
+        $selectedEnabled = (int)($editing['enabled'] ?? 1);
+        $selectedMatchJson = (string)($editing['match_json'] ?? '');
+
+        $html = '<hr><h3>Сабфильтры категории: ' . htmlspecialchars_uni($entity) . '</h3>';
+        $html .= '<table class="table"><thead><tr><th>ID</th><th>Code</th><th>Title RU</th><th>Title EN</th><th>Enabled</th><th>Sort</th><th>Действия</th></tr></thead><tbody>' . ($rowsHtml !== '' ? $rowsHtml : '<tr><td colspan="7">Сабфильтров пока нет.</td></tr>') . '</tbody></table>';
+        $html .= '<h4>' . ($selectedId > 0 ? 'Редактировать сабфильтр' : 'Добавить сабфильтр') . '</h4>';
+        $html .= '<form method="post">';
+        $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
+        $html .= '<input type="hidden" name="entity_action" value="save_filter">';
+        $html .= '<input type="hidden" name="entity" value="' . htmlspecialchars_uni($entity) . '">';
+        $html .= '<input type="hidden" name="filter_id" value="' . $selectedId . '">';
+        $html .= '<p><label>Code</label><br><input type="text" maxlength="32" name="filter_code" value="' . htmlspecialchars_uni($selectedCode) . '" required></p>';
+        $html .= '<p><label>Title RU</label><br><input type="text" maxlength="255" name="filter_title_ru" value="' . htmlspecialchars_uni($selectedTitleRu) . '"></p>';
+        $html .= '<p><label>Title EN</label><br><input type="text" maxlength="255" name="filter_title_en" value="' . htmlspecialchars_uni($selectedTitleEn) . '"></p>';
+        $html .= '<p><label>Sortorder</label><br><input type="number" name="filter_sortorder" value="' . $selectedSort . '"></p>';
+        $html .= '<p><label>Match JSON (опционально)</label><br><textarea name="filter_match_json" rows="5" cols="70">' . htmlspecialchars_uni($selectedMatchJson) . '</textarea></p>';
+        $html .= '<p><label><input type="checkbox" name="filter_enabled" value="1"' . ($selectedEnabled === 1 ? ' checked' : '') . '> Включено</label></p>';
+        $html .= '<p><button type="submit" class="button">Сохранить сабфильтр</button></p>';
+        $html .= '</form>';
+
+        return $html;
+    }
+
+    private static function handle_entity_filter_post(string $action): string
+    {
+        global $db, $mybb;
+
+        if (!$db->table_exists(AF_ADVINV_TABLE_ENTITY_FILTERS)) {
+            return '';
+        }
+
+        $entity = strtolower(trim((string)$mybb->get_input('entity')));
+        if (!preg_match('/^[a-z0-9_]{1,32}$/', $entity)) {
+            return '';
+        }
+
+        $filterId = (int)$mybb->get_input('filter_id');
+
+        if ($action === 'delete_filter' && $filterId > 0) {
+            $db->delete_query(AF_ADVINV_TABLE_ENTITY_FILTERS, 'id=' . $filterId . " AND entity='" . $db->escape_string($entity) . "'");
+            return $entity;
+        }
+
+        if (($action === 'move_up_filter' || $action === 'move_down_filter') && $filterId > 0) {
+            self::shift_filter_sortorder($entity, $filterId, $action === 'move_up_filter' ? -1 : 1);
+            return $entity;
+        }
+
+        if ($action !== 'save_filter') {
+            return $entity;
+        }
+
+        $code = strtolower(trim((string)$mybb->get_input('filter_code')));
+        $titleRu = trim((string)$mybb->get_input('filter_title_ru'));
+        $titleEn = trim((string)$mybb->get_input('filter_title_en'));
+        $sortorder = (int)$mybb->get_input('filter_sortorder');
+        $enabled = (int)$mybb->get_input('filter_enabled') === 1 ? 1 : 0;
+        $matchJson = trim((string)$mybb->get_input('filter_match_json'));
+
+        if (!preg_match('/^[a-z0-9_]{1,32}$/', $code) || $code === 'all') {
+            return $entity;
+        }
+        if ($matchJson !== '') {
+            $decoded = @json_decode($matchJson, true);
+            if (!is_array($decoded)) {
+                $matchJson = '';
+            }
+        }
+
+        $payload = [
+            'entity' => $db->escape_string($entity),
+            'code' => $db->escape_string($code),
+            'title_ru' => $db->escape_string(substr($titleRu, 0, 255)),
+            'title_en' => $db->escape_string(substr($titleEn, 0, 255)),
+            'sortorder' => $sortorder,
+            'enabled' => $enabled,
+            'match_json' => $db->escape_string($matchJson),
+            'updated_at' => TIME_NOW,
+        ];
+
+        if ($filterId > 0) {
+            $db->update_query(AF_ADVINV_TABLE_ENTITY_FILTERS, $payload, 'id=' . $filterId . " AND entity='" . $db->escape_string($entity) . "'");
+            return $entity;
+        }
+
+        $exists = (int)$db->fetch_field($db->simple_select(AF_ADVINV_TABLE_ENTITY_FILTERS, 'COUNT(*) AS c', "entity='" . $db->escape_string($entity) . "' AND code='" . $db->escape_string($code) . "'", ['limit' => 1]), 'c');
+        if ($exists > 0) {
+            $db->update_query(AF_ADVINV_TABLE_ENTITY_FILTERS, $payload, "entity='" . $db->escape_string($entity) . "' AND code='" . $db->escape_string($code) . "'");
+        } else {
+            $db->insert_query(AF_ADVINV_TABLE_ENTITY_FILTERS, $payload);
+        }
+
+        return $entity;
+    }
+
+    private static function shift_filter_sortorder(string $entity, int $filterId, int $direction): void
+    {
+        global $db;
+
+        $entityEsc = $db->escape_string($entity);
+        $current = (array)$db->fetch_array($db->simple_select(AF_ADVINV_TABLE_ENTITY_FILTERS, 'id,sortorder', 'id=' . $filterId . " AND entity='" . $entityEsc . "'", ['limit' => 1]));
+        if (!$current) {
+            return;
+        }
+
+        $sort = (int)$current['sortorder'];
+        $neighborWhere = $direction < 0 ? 'sortorder < ' . $sort : 'sortorder > ' . $sort;
+        $neighborOrder = $direction < 0 ? 'sortorder DESC, id DESC' : 'sortorder ASC, id ASC';
+        $neighbor = (array)$db->fetch_array($db->query("SELECT id, sortorder
+            FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_ENTITY_FILTERS . "
+            WHERE entity='" . $entityEsc . "' AND {$neighborWhere}
+            ORDER BY {$neighborOrder}
+            LIMIT 1"));
+        if (!$neighbor) {
+            return;
+        }
+
+        $db->update_query(AF_ADVINV_TABLE_ENTITY_FILTERS, ['sortorder' => (int)$neighbor['sortorder'], 'updated_at' => TIME_NOW], 'id=' . $filterId . " AND entity='" . $entityEsc . "'");
+        $db->update_query(AF_ADVINV_TABLE_ENTITY_FILTERS, ['sortorder' => $sort, 'updated_at' => TIME_NOW], 'id=' . (int)$neighbor['id'] . " AND entity='" . $entityEsc . "'");
     }
 
     private static function render_shop_map(): string
@@ -521,6 +719,16 @@ class AF_Admin_Advancedinventory
             return 10;
         }
         $max = (int)$db->fetch_field($db->simple_select(AF_ADVINV_TABLE_ENTITIES, 'MAX(sortorder) AS m'), 'm');
+        return $max + 10;
+    }
+
+    private static function next_filter_sortorder(string $entity): int
+    {
+        global $db;
+        if (!$db->table_exists(AF_ADVINV_TABLE_ENTITY_FILTERS) || $entity === '') {
+            return 10;
+        }
+        $max = (int)$db->fetch_field($db->simple_select(AF_ADVINV_TABLE_ENTITY_FILTERS, 'MAX(sortorder) AS m', "entity='" . $db->escape_string($entity) . "'"), 'm');
         return $max + 10;
     }
 }
