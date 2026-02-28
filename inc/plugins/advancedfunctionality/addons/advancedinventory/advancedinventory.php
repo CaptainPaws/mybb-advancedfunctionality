@@ -11,6 +11,7 @@ define('AF_ADVINV_DEBUG_LOG', AF_CACHE . 'advancedinventory_debug.log');
 define('AF_ADVINV_ALIAS_MARKER', "define('AF_ADVANCEDINVENTORY_PAGE_ALIAS', 1);");
 define('AF_ADVINV_INVENTORIES_ALIAS_MARKER', "define('AF_ADVANCEDINVENTORIES_PAGE_ALIAS', 1);");
 define('AF_ADVINV_TABLE_ITEMS', 'af_advinv_items');
+define('AF_ADVINV_TABLE_SHOP_MAP', 'af_advinv_shop_map');
 define('AF_ADVINV_VALID_ENTITIES', ['equipment', 'resources', 'pets', 'customization']);
 
 af_advancedinventory_init();
@@ -196,6 +197,9 @@ function af_advancedinventory_uninstall(): void
         $db->delete_query('settinggroups', 'gid=' . $gid);
     }
     $db->delete_query('templates', "title LIKE 'advancedinventory_%'");
+    if ($db->table_exists(AF_ADVINV_TABLE_SHOP_MAP)) {
+        $db->drop_table(AF_ADVINV_TABLE_SHOP_MAP);
+    }
 
     foreach (af_advancedinventory_alias_definitions() as $alias) {
         if (af_advancedinventory_alias_is_ours($alias['target'], $alias['marker'])) {
@@ -419,6 +423,7 @@ function af_advancedinventory_upgrade_schema(): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         af_advinv_debug_log('schema_upgrade_done', ['added_cols' => ['__table_created__'], 'added_keys' => ['uid_entity', 'uid_entity_subtype', 'uid_slot', 'uid_slot_subtype', 'uid_kb']]);
         af_advancedinventory_log_schema_columns();
+        af_advinv_shop_map_upgrade_schema();
         return;
     }
 
@@ -481,6 +486,102 @@ function af_advancedinventory_upgrade_schema(): void
 
     af_advinv_debug_log('schema_upgrade_done', ['added_cols' => $addedCols, 'added_keys' => $addedKeys]);
     af_advancedinventory_log_schema_columns();
+
+    af_advinv_shop_map_upgrade_schema();
+}
+
+function af_advinv_shop_map_upgrade_schema(): void
+{
+    global $db;
+
+    if (!$db->table_exists(AF_ADVINV_TABLE_SHOP_MAP)) {
+        $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            shop_id INT UNSIGNED NOT NULL,
+            cat_id INT UNSIGNED NOT NULL DEFAULT 0,
+            entity VARCHAR(32) NOT NULL DEFAULT 'resources',
+            default_subtype VARCHAR(64) NOT NULL DEFAULT '',
+            enabled TINYINT(1) NOT NULL DEFAULT 1,
+            sortorder INT UNSIGNED NOT NULL DEFAULT 0,
+            updated_at INT UNSIGNED NOT NULL DEFAULT 0,
+            KEY shop_cat_enabled (shop_id, cat_id, enabled, sortorder),
+            KEY enabled_sort (enabled, sortorder)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        return;
+    }
+
+    $columns = [];
+    $q = $db->write_query("SHOW COLUMNS FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP);
+    while ($row = $db->fetch_array($q)) {
+        $col = trim((string)($row['Field'] ?? ''));
+        if ($col !== '') {
+            $columns[$col] = true;
+        }
+    }
+
+    $columnSql = [
+        'shop_id' => "ADD COLUMN shop_id INT UNSIGNED NOT NULL",
+        'cat_id' => "ADD COLUMN cat_id INT UNSIGNED NOT NULL DEFAULT 0",
+        'entity' => "ADD COLUMN entity VARCHAR(32) NOT NULL DEFAULT 'resources'",
+        'default_subtype' => "ADD COLUMN default_subtype VARCHAR(64) NOT NULL DEFAULT ''",
+        'enabled' => "ADD COLUMN enabled TINYINT(1) NOT NULL DEFAULT 1",
+        'sortorder' => "ADD COLUMN sortorder INT UNSIGNED NOT NULL DEFAULT 0",
+        'updated_at' => "ADD COLUMN updated_at INT UNSIGNED NOT NULL DEFAULT 0",
+    ];
+
+    foreach ($columnSql as $col => $sql) {
+        if (!isset($columns[$col])) {
+            $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " " . $sql);
+        }
+    }
+
+    $indexes = [];
+    $idxQ = $db->write_query("SHOW INDEX FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP);
+    while ($idx = $db->fetch_array($idxQ)) {
+        $indexes[(string)($idx['Key_name'] ?? '')] = true;
+    }
+
+    if (!isset($indexes['shop_cat_enabled'])) {
+        $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " ADD KEY shop_cat_enabled (shop_id, cat_id, enabled, sortorder)");
+    }
+    if (!isset($indexes['enabled_sort'])) {
+        $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " ADD KEY enabled_sort (enabled, sortorder)");
+    }
+}
+
+function af_advinv_shop_map_resolve(int $shopId, int $catId): array
+{
+    global $db;
+
+    if ($shopId <= 0 || !$db->table_exists(AF_ADVINV_TABLE_SHOP_MAP)) {
+        return [];
+    }
+
+    $shopId = (int)$shopId;
+    $catId = max(0, (int)$catId);
+
+    $query = $db->query("SELECT id, entity, default_subtype, cat_id
+        FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . "
+        WHERE shop_id={$shopId}
+          AND enabled=1
+          AND (cat_id={$catId} OR cat_id=0)
+        ORDER BY sortorder ASC, id ASC");
+
+    while ($row = $db->fetch_array($query)) {
+        $entity = af_advancedinventory_normalize_entity((string)($row['entity'] ?? ''));
+        if (!in_array($entity, AF_ADVINV_VALID_ENTITIES, true)) {
+            continue;
+        }
+
+        return [
+            'id' => (int)$row['id'],
+            'entity' => $entity,
+            'default_subtype' => trim((string)($row['default_subtype'] ?? '')),
+            'cat_id' => (int)($row['cat_id'] ?? 0),
+        ];
+    }
+
+    return [];
 }
 
 function af_advancedinventory_fetch_table_columns(): array
