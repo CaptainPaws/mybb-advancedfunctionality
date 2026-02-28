@@ -320,18 +320,42 @@ function af_advancedshop_ensure_shops_schema(): void
         }
     }
 
-    $q = $db->simple_select('af_shop_shops', 'shop_id', "code='game'", ['limit' => 1]);
-    $hasGame = (int)$db->fetch_field($q, 'shop_id');
-    if ($hasGame <= 0) {
-        $db->insert_query('af_shop_shops', [
-            'code' => 'game',
-            'title_ru' => 'Игровой магазин',
-            'title_en' => 'Game Shop',
-            'enabled' => 1,
-            'sortorder' => 10,
-            'settings_json' => null,
-        ]);
+    $shopsCount = (int)$db->fetch_field($db->simple_select('af_shop_shops', 'COUNT(*) AS c'), 'c');
+    if ($shopsCount === 0 && af_advancedshop_seed_demo_enabled()) {
+        $demoShops = [
+            ['code' => 'game', 'title_ru' => 'Игровой магазин', 'title_en' => 'Game Shop', 'sortorder' => 10],
+            ['code' => 'customization', 'title_ru' => 'Кастомизация', 'title_en' => 'Customization', 'sortorder' => 20],
+            ['code' => 'other', 'title_ru' => 'Другое', 'title_en' => 'Other', 'sortorder' => 30],
+        ];
+        foreach ($demoShops as $shop) {
+            $db->insert_query('af_shop_shops', [
+                'code' => $db->escape_string((string)$shop['code']),
+                'title_ru' => $db->escape_string((string)$shop['title_ru']),
+                'title_en' => $db->escape_string((string)$shop['title_en']),
+                'enabled' => 1,
+                'sortorder' => (int)$shop['sortorder'],
+                'settings_json' => null,
+            ]);
+        }
     }
+}
+
+function af_advancedshop_seed_demo_enabled(): bool
+{
+    global $db, $mybb;
+
+    $value = isset($mybb->settings['af_advancedshop_seed_demo'])
+        ? (string)$mybb->settings['af_advancedshop_seed_demo']
+        : '';
+
+    if ($value === '' && isset($db) && is_object($db)) {
+        $value = (string)$db->fetch_field(
+            $db->simple_select('settings', 'value', "name='af_advancedshop_seed_demo'", ['limit' => 1]),
+            'value'
+        );
+    }
+
+    return (int)$value === 1;
 }
 
 function af_advancedshop_install(): void
@@ -350,13 +374,14 @@ function af_advancedshop_install(): void
     af_advancedshop_ensure_setting('af_advancedshop_currency_slug', $lang->af_advancedshop_currency_slug ?? 'Currency', $lang->af_advancedshop_currency_slug_desc ?? 'credits', 'text', 'credits', 3, $gid);
     af_advancedshop_ensure_setting('af_advancedshop_items_per_page', 'Items per page', 'Shop page size', 'numeric', '24', 4, $gid);
     af_advancedshop_ensure_setting('af_advancedshop_allow_guest_view', 'Allow guest view', 'Guests may browse the shop', 'yesno', '1', 5, $gid);
+    af_advancedshop_ensure_setting('af_advancedshop_seed_demo', 'Seed demo shops', 'Create demo shops (game/customization/other) on install/activate when no shops exist.', 'yesno', '0', 6, $gid);
     af_advancedshop_ensure_setting(
         'af_shop_assets_blacklist',
         'Assets blacklist',
         AF_ADVSHOP_ASSETS_BLACKLIST_DESC,
         'textarea',
         AF_ADVSHOP_ASSETS_BLACKLIST_DEFAULT,
-        6,
+        7,
         $gid,
         true
     );
@@ -448,13 +473,14 @@ function af_advancedshop_activate(): void
     af_advancedshop_ensure_setting('af_advancedshop_currency_slug', $lang->af_advancedshop_currency_slug ?? 'Currency', $lang->af_advancedshop_currency_slug_desc ?? 'credits', 'text', 'credits', 3, $gid);
     af_advancedshop_ensure_setting('af_advancedshop_items_per_page', 'Items per page', 'Shop page size', 'numeric', '24', 4, $gid);
     af_advancedshop_ensure_setting('af_advancedshop_allow_guest_view', 'Allow guest view', 'Guests may browse the shop', 'yesno', '1', 5, $gid);
+    af_advancedshop_ensure_setting('af_advancedshop_seed_demo', 'Seed demo shops', 'Create demo shops (game/customization/other) on install/activate when no shops exist.', 'yesno', '0', 6, $gid, true);
     af_advancedshop_ensure_setting(
         'af_shop_assets_blacklist',
         'Assets blacklist',
         AF_ADVSHOP_ASSETS_BLACKLIST_DESC,
         'textarea',
         AF_ADVSHOP_ASSETS_BLACKLIST_DEFAULT,
-        6,
+        7,
         $gid,
         true
     );
@@ -560,7 +586,11 @@ function af_advancedshop_dispatch(string $action): void
     try {
         switch ($action) {
             case 'shop':
-            case 'shop_category': af_advancedshop_render_shop(); return;
+                af_advancedshop_render_shop(false);
+                return;
+            case 'shop_category':
+                af_advancedshop_render_shop(true);
+                return;
             case 'shop_cart': af_advancedshop_render_cart(); return;
             case 'shop_checkout': af_advancedshop_checkout(); return;
             case 'shop_add_to_cart': af_advancedshop_add_to_cart(); return;
@@ -791,14 +821,21 @@ function af_advancedshop_inventory_render_access_error_html(string $message): vo
     exit;
 }
 
-function af_advancedshop_current_shop(): array
+function af_advancedshop_current_shop(bool $strictByCode = false): array
 {
     global $mybb, $db;
     $shopsTable = af_advancedshop_shops_table();
     $code = trim((string)$mybb->get_input('shop'));
     $shop = false;
     if ($code !== '') {
-        $shop = $db->fetch_array($db->simple_select($shopsTable, '*', "code='" . $db->escape_string($code) . "'", ['limit' => 1]));
+        $where = "code='" . $db->escape_string($code) . "'";
+        if ($strictByCode) {
+            $where .= ' AND enabled=1';
+        }
+        $shop = $db->fetch_array($db->simple_select($shopsTable, '*', $where, ['limit' => 1]));
+        if ($strictByCode && !$shop) {
+            return [];
+        }
     }
 
     if (!$shop) {
@@ -810,13 +847,16 @@ function af_advancedshop_current_shop(): array
     return $shop;
 }
 
-function af_advancedshop_render_shop(): void
+function af_advancedshop_render_shop(bool $strictByCode = false): void
 {
     global $db, $mybb, $lang, $headerinclude, $header, $footer;
     if (!af_advancedshop_can_view_shop()) {
         error_no_permission();
     }
-    $shop = af_advancedshop_current_shop();
+    $shop = af_advancedshop_current_shop($strictByCode);
+    if (!$shop) {
+        af_advancedshop_render_shop_not_found();
+    }
     add_breadcrumb($lang->af_advancedshop_shop_title ?? 'Shop', af_advancedshop_url('shop', ['shop' => (string)$shop['code']]));
     $shopId = (int)$shop['shop_id'];
     $catId = (int)$mybb->get_input('cat');
@@ -903,6 +943,18 @@ function af_advancedshop_render_shop(): void
     $balance_badge = '<span class="af-shop-balance">' . htmlspecialchars_uni($lang->af_advancedshop_balance ?? 'Balance') . ': <strong>' . $balance . '</strong> ' . $currency_symbol . '</span>';
     $assets = af_advancedshop_assets_html();
     eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_shop') . '";');
+    eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
+    output_page($page);
+    exit;
+}
+
+function af_advancedshop_render_shop_not_found(): void
+{
+    global $headerinclude, $header, $footer;
+
+    http_response_code(404);
+    $shop_home_url = htmlspecialchars_uni(af_advancedshop_url('shop', [], true));
+    eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_shop_not_found') . '";');
     eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
     output_page($page);
     exit;
