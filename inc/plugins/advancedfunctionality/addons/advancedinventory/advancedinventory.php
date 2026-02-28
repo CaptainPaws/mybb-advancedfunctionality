@@ -613,13 +613,16 @@ function af_advinv_entity_filters_upgrade_schema(): void
     if (!$db->table_exists(AF_ADVINV_TABLE_ENTITY_FILTERS)) {
         $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_ENTITY_FILTERS . " (
             id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            entity VARCHAR(64) NOT NULL,
-            code VARCHAR(64) NOT NULL,
-            title_ru VARCHAR(191) NOT NULL DEFAULT '',
-            title_en VARCHAR(191) NOT NULL DEFAULT '',
-            sortorder INT UNSIGNED NOT NULL DEFAULT 0,
+            entity VARCHAR(32) NOT NULL,
+            code VARCHAR(32) NOT NULL,
+            title_ru VARCHAR(255) NOT NULL DEFAULT '',
+            title_en VARCHAR(255) NOT NULL DEFAULT '',
+            sortorder INT NOT NULL DEFAULT 0,
+            enabled TINYINT(1) NOT NULL DEFAULT 1,
             match_json MEDIUMTEXT NULL,
+            updated_at INT UNSIGNED NOT NULL DEFAULT 0,
             KEY entity_sort (entity, sortorder),
+            KEY enabled_sort (entity, enabled, sortorder),
             UNIQUE KEY entity_code (entity, code)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     } else {
@@ -634,12 +637,14 @@ function af_advinv_entity_filters_upgrade_schema(): void
 
         $columnSql = [
             'id' => "ADD COLUMN id INT UNSIGNED NOT NULL AUTO_INCREMENT",
-            'entity' => "ADD COLUMN entity VARCHAR(64) NOT NULL",
-            'code' => "ADD COLUMN code VARCHAR(64) NOT NULL",
-            'title_ru' => "ADD COLUMN title_ru VARCHAR(191) NOT NULL DEFAULT ''",
-            'title_en' => "ADD COLUMN title_en VARCHAR(191) NOT NULL DEFAULT ''",
-            'sortorder' => "ADD COLUMN sortorder INT UNSIGNED NOT NULL DEFAULT 0",
+            'entity' => "ADD COLUMN entity VARCHAR(32) NOT NULL",
+            'code' => "ADD COLUMN code VARCHAR(32) NOT NULL",
+            'title_ru' => "ADD COLUMN title_ru VARCHAR(255) NOT NULL DEFAULT ''",
+            'title_en' => "ADD COLUMN title_en VARCHAR(255) NOT NULL DEFAULT ''",
+            'sortorder' => "ADD COLUMN sortorder INT NOT NULL DEFAULT 0",
+            'enabled' => "ADD COLUMN enabled TINYINT(1) NOT NULL DEFAULT 1",
             'match_json' => "ADD COLUMN match_json MEDIUMTEXT NULL",
+            'updated_at' => "ADD COLUMN updated_at INT UNSIGNED NOT NULL DEFAULT 0",
         ];
         foreach ($columnSql as $name => $sql) {
             if (!isset($columns[$name])) {
@@ -654,6 +659,9 @@ function af_advinv_entity_filters_upgrade_schema(): void
         }
         if (!isset($indexes['entity_sort'])) {
             $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_ENTITY_FILTERS . " ADD KEY entity_sort (entity, sortorder)");
+        }
+        if (!isset($indexes['enabled_sort'])) {
+            $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_ENTITY_FILTERS . " ADD KEY enabled_sort (entity, enabled, sortorder)");
         }
         if (!isset($indexes['entity_code'])) {
             $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_ENTITY_FILTERS . " ADD UNIQUE KEY entity_code (entity, code)");
@@ -673,7 +681,9 @@ function af_advinv_entity_filters_upgrade_schema(): void
             'title_ru' => $db->escape_string((string)$row['title_ru']),
             'title_en' => $db->escape_string((string)$row['title_en']),
             'sortorder' => (int)$row['sortorder'],
+            'enabled' => 1,
             'match_json' => $db->escape_string((string)$row['match_json']),
+            'updated_at' => TIME_NOW,
         ]);
     }
 }
@@ -1551,8 +1561,8 @@ function af_advinv_get_entity_filters(string $entity): array
     if ($db->table_exists(AF_ADVINV_TABLE_ENTITY_FILTERS)) {
         $q = $db->simple_select(
             AF_ADVINV_TABLE_ENTITY_FILTERS,
-            'id,code,title_ru,title_en,sortorder,match_json',
-            "entity='" . $db->escape_string($entity) . "'",
+            'id,code,title_ru,title_en,sortorder,enabled,match_json',
+            "entity='" . $db->escape_string($entity) . "' AND enabled=1",
             ['order_by' => 'sortorder,id', 'order_dir' => 'ASC']
         );
         while ($row = $db->fetch_array($q)) {
