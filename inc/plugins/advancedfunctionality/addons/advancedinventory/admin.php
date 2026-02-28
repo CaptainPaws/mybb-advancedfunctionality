@@ -476,24 +476,41 @@ class AF_Admin_Advancedinventory
         }
 
         $shops = [];
-        $shopTitles = [];
-        if ($db->table_exists('af_shop_shops')) {
+        if ($db->table_exists('af_shop')) {
+            $qShops = $db->simple_select('af_shop', 'shop_id,code,title', '', ['order_by' => 'shop_id', 'order_dir' => 'ASC']);
+            while ($s = $db->fetch_array($qShops)) {
+                $code = trim((string)($s['code'] ?? ''));
+                if ($code === '') { continue; }
+                $shops[$code] = ['code' => $code, 'title' => trim((string)($s['title'] ?? ''))];
+            }
+        } elseif ($db->table_exists('af_shop_shops')) {
             $qShops = $db->simple_select('af_shop_shops', 'id,code,title,title_ru,title_en', '', ['order_by' => 'id', 'order_dir' => 'ASC']);
             while ($s = $db->fetch_array($qShops)) {
-                $shopId = (int)$s['id'];
-                $shops[$shopId] = $s;
-                $shopTitles[$shopId] = trim((string)($s['title_ru'] ?: ($s['title_en'] ?: ($s['title'] ?: $s['code']))));
+                $code = trim((string)($s['code'] ?? ''));
+                if ($code === '') { continue; }
+                $title = trim((string)($s['title_ru'] ?: ($s['title_en'] ?: $s['title'])));
+                $shops[$code] = ['code' => $code, 'title' => $title];
             }
         }
 
-        $catsByShop = [];
-        if ($db->table_exists('af_shop_categories')) {
-            $qCats = $db->simple_select('af_shop_categories', 'id,shop_id,title,title_ru,title_en', '', ['order_by' => 'shop_id,id', 'order_dir' => 'ASC']);
+        $catCols = self::table_columns('af_shop_categories');
+        $catsByShopCode = [];
+        if ($db->table_exists('af_shop_categories') && isset($catCols['shop_id']) && (isset($catCols['cat_id']) || isset($catCols['id'])) && $db->table_exists('af_shop')) {
+            $catIdCol = isset($catCols['cat_id']) ? 'cat_id' : 'id';
+            $qCats = $db->query("SELECT c." . $catIdCol . " AS cat_id, c.shop_id, c.title
+                FROM " . TABLE_PREFIX . "af_shop_categories c
+                ORDER BY c.shop_id ASC, c." . $catIdCol . " ASC");
+            $shopCodeById = [];
+            $qShopCodes = $db->simple_select('af_shop', 'shop_id,code');
+            while ($shop = $db->fetch_array($qShopCodes)) {
+                $shopCodeById[(int)$shop['shop_id']] = trim((string)($shop['code'] ?? ''));
+            }
             while ($c = $db->fetch_array($qCats)) {
-                $shopId = (int)$c['shop_id'];
-                $catsByShop[$shopId][] = [
-                    'cat_id' => (int)$c['id'],
-                    'title' => trim((string)($c['title_ru'] ?: ($c['title_en'] ?: $c['title']))),
+                $shopCode = (string)($shopCodeById[(int)$c['shop_id']] ?? '');
+                if ($shopCode === '') { continue; }
+                $catsByShopCode[$shopCode][] = [
+                    'cat_id' => (int)$c['cat_id'],
+                    'title' => trim((string)($c['title'] ?? '')),
                 ];
             }
         }
@@ -502,13 +519,13 @@ class AF_Admin_Advancedinventory
         $qRules = $db->simple_select(AF_ADVINV_TABLE_SHOP_MAP, '*', '', ['order_by' => 'sortorder,id', 'order_dir' => 'ASC']);
         while ($row = $db->fetch_array($qRules)) {
             $id = (int)$row['id'];
-            $shopId = (int)$row['shop_id'];
-            $catId = (int)$row['cat_id'];
-            $shopTitle = (string)($shopTitles[$shopId] ?? ('#' . $shopId));
+            $shopCode = trim((string)($row['shop_code'] ?? ''));
+            $catId = (int)($row['shop_cat_id'] ?? 0);
+            $shopTitle = (string)($shops[$shopCode]['title'] ?? $shopCode);
 
             $catTitle = 'Все категории';
             if ($catId > 0) {
-                foreach (($catsByShop[$shopId] ?? []) as $catRow) {
+                foreach (($catsByShopCode[$shopCode] ?? []) as $catRow) {
                     if ((int)$catRow['cat_id'] === $catId) {
                         $catTitle = (string)$catRow['title'];
                         break;
@@ -518,9 +535,9 @@ class AF_Admin_Advancedinventory
 
             $ruleRows .= '<tr>'
                 . '<td>' . $id . '</td>'
-                . '<td>' . htmlspecialchars_uni($shopTitle) . '</td>'
+                . '<td>' . htmlspecialchars_uni($shopTitle) . ' <small>(' . htmlspecialchars_uni($shopCode) . ')</small></td>'
                 . '<td>' . htmlspecialchars_uni($catTitle) . '</td>'
-                . '<td>' . htmlspecialchars_uni((string)$row['entity']) . '</td>'
+                . '<td>' . htmlspecialchars_uni((string)$row['inventory_entity']) . '</td>'
                 . '<td>' . htmlspecialchars_uni((string)$row['default_subtype']) . '</td>'
                 . '<td>' . ((int)$row['enabled'] === 1 ? 'Да' : 'Нет') . '</td>'
                 . '<td>' . (int)$row['sortorder'] . '</td>'
@@ -548,22 +565,22 @@ class AF_Admin_Advancedinventory
                 . '</tr>';
         }
 
-        $selectedShop = max(0, (int)($editing['shop_id'] ?? (int)$mybb->get_input('shop_id')));
-        $selectedCat = max(0, (int)($editing['cat_id'] ?? 0));
-        $selectedEntity = (string)($editing['entity'] ?? 'resources');
+        $selectedShopCode = trim((string)($editing['shop_code'] ?? (string)$mybb->get_input('shop_code')));
+        $selectedCat = max(0, (int)($editing['shop_cat_id'] ?? 0));
+        $selectedEntity = (string)($editing['inventory_entity'] ?? 'resources');
         $selectedSubtype = (string)($editing['default_subtype'] ?? '');
         $selectedEnabled = (int)($editing['enabled'] ?? 1);
         $selectedSort = (int)($editing['sortorder'] ?? self::next_sortorder());
 
-        $shopOptions = '<option value="0">Выберите магазин</option>';
-        foreach ($shops as $shopId => $shopRow) {
-            $shopTitle = trim((string)($shopRow['title'] ?? ''));
-            $label = $shopTitle !== '' ? $shopTitle : ('#' . $shopId . ' (' . (string)$shopRow['code'] . ')');
-            $shopOptions .= '<option value="' . $shopId . '"' . ($shopId === $selectedShop ? ' selected' : '') . '>' . htmlspecialchars_uni($label) . '</option>';
+        $shopOptions = '<option value="">Выберите магазин</option>';
+        foreach ($shops as $shopCode => $shopRow) {
+            $label = trim((string)$shopRow['title']);
+            if ($label === '') { $label = $shopCode; }
+            $shopOptions .= '<option value="' . htmlspecialchars_uni($shopCode) . '"' . ($shopCode === $selectedShopCode ? ' selected' : '') . '>' . htmlspecialchars_uni($label . ' (' . $shopCode . ')') . '</option>';
         }
 
         $catOptions = '<option value="0">Все категории магазина</option>';
-        foreach (($catsByShop[$selectedShop] ?? []) as $catRow) {
+        foreach (($catsByShopCode[$selectedShopCode] ?? []) as $catRow) {
             $catId = (int)$catRow['cat_id'];
             $catOptions .= '<option value="' . $catId . '"' . ($catId === $selectedCat ? ' selected' : '') . '>' . htmlspecialchars_uni((string)$catRow['title']) . '</option>';
         }
@@ -572,6 +589,8 @@ class AF_Admin_Advancedinventory
         foreach (array_keys(af_advinv_get_entities(false)) as $entity) {
             $entityOptions .= '<option value="' . htmlspecialchars_uni($entity) . '"' . ($selectedEntity === $entity ? ' selected' : '') . '>' . htmlspecialchars_uni($entity) . '</option>';
         }
+
+        $catsJson = htmlspecialchars_uni(json_encode($catsByShopCode, JSON_UNESCAPED_UNICODE));
 
         $html = '<div class="af-box">';
         $html .= '<h2>Мост Shop → Inventory</h2>';
@@ -583,14 +602,15 @@ class AF_Admin_Advancedinventory
         $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
         $html .= '<input type="hidden" name="map_action" value="save">';
         $html .= '<input type="hidden" name="id" value="' . (int)$editId . '">';
-        $html .= '<p><label>Магазин</label><br><select name="shop_id" required>' . $shopOptions . '</select></p>';
-        $html .= '<p><label>Категория</label><br><select name="cat_id">' . $catOptions . '</select></p>';
-        $html .= '<p><label>Entity</label><br><select name="entity">' . $entityOptions . '</select></p>';
-        $html .= '<p><label>Default subtype (опционально)</label><br><input type="text" name="default_subtype" value="' . htmlspecialchars_uni($selectedSubtype) . '"></p>';
+        $html .= '<p><label>Магазин</label><br><select name="shop_code" id="shop_map_shop_code" required>' . $shopOptions . '</select></p>';
+        $html .= '<p><label>Категория</label><br><select name="shop_cat_id" id="shop_map_shop_cat_id">' . $catOptions . '</select></p>';
+        $html .= '<p><label>Entity</label><br><select name="inventory_entity">' . $entityOptions . '</select></p>';
+        $html .= '<p><label>Default subtype (опционально)</label><br><input type="text" name="default_subtype" value="' . htmlspecialchars_uni($selectedSubtype) . '"><br><small>Если subtype не определится по KB rules, использовать это значение (weapon/armor/loot…).</small></p>';
         $html .= '<p><label>Sortorder</label><br><input type="number" min="0" name="sortorder" value="' . $selectedSort . '"></p>';
         $html .= '<p><label><input type="checkbox" name="enabled" value="1"' . ($selectedEnabled === 1 ? ' checked' : '') . '> Включено</label></p>';
         $html .= '<p><button type="submit" class="button">Сохранить правило</button></p>';
         $html .= '</form>';
+        $html .= '<script>(function(){var cats=' . $catsJson . ';var shop=document.getElementById("shop_map_shop_code");var cat=document.getElementById("shop_map_shop_cat_id");if(!shop||!cat){return;}var selected=' . (int)$selectedCat . ';function render(){var code=shop.value||"";var rows=cats[code]||[];cat.innerHTML="<option value=\"0\">Все категории магазина</option>";for(var i=0;i<rows.length;i++){var o=document.createElement("option");o.value=String(rows[i].cat_id||0);o.textContent=rows[i].title||("#"+o.value);if(parseInt(o.value,10)===selected){o.selected=true;}cat.appendChild(o);}selected=0;}shop.addEventListener("change",render);render();})();</script>';
         $html .= '</div>';
 
         return $html;
@@ -617,22 +637,22 @@ class AF_Admin_Advancedinventory
             return;
         }
 
-        $shopId = (int)$mybb->get_input('shop_id');
-        $catId = max(0, (int)$mybb->get_input('cat_id'));
-        $entity = trim((string)$mybb->get_input('entity'));
+        $shopCode = trim((string)$mybb->get_input('shop_code'));
+        $shopCatId = max(0, (int)$mybb->get_input('shop_cat_id'));
+        $entity = trim((string)$mybb->get_input('inventory_entity'));
         $defaultSubtype = trim((string)$mybb->get_input('default_subtype'));
         $enabled = (int)$mybb->get_input('enabled') === 1 ? 1 : 0;
         $sortorder = max(0, (int)$mybb->get_input('sortorder'));
 
-        if ($shopId <= 0 || !af_advinv_entity_exists($entity)) {
+        if ($shopCode === '' || !af_advinv_entity_exists($entity)) {
             return;
         }
 
         $payload = [
-            'shop_id' => $shopId,
-            'cat_id' => $catId,
-            'entity' => $db->escape_string($entity),
-            'default_subtype' => $db->escape_string($defaultSubtype),
+            'shop_code' => $db->escape_string($shopCode),
+            'shop_cat_id' => $shopCatId,
+            'inventory_entity' => $db->escape_string($entity),
+            'default_subtype' => $defaultSubtype === '' ? null : $db->escape_string($defaultSubtype),
             'enabled' => $enabled,
             'sortorder' => $sortorder,
             'updated_at' => TIME_NOW,
@@ -731,4 +751,21 @@ class AF_Admin_Advancedinventory
         $max = (int)$db->fetch_field($db->simple_select(AF_ADVINV_TABLE_ENTITY_FILTERS, 'MAX(sortorder) AS m', "entity='" . $db->escape_string($entity) . "'"), 'm');
         return $max + 10;
     }
+    private static function table_columns(string $table): array
+    {
+        global $db;
+        if (!$db->table_exists($table)) {
+            return [];
+        }
+        $cols = [];
+        $q = $db->write_query("SHOW COLUMNS FROM " . TABLE_PREFIX . $table);
+        while ($row = $db->fetch_array($q)) {
+            $name = trim((string)($row['Field'] ?? ''));
+            if ($name !== '') {
+                $cols[$name] = true;
+            }
+        }
+        return $cols;
+    }
+
 }

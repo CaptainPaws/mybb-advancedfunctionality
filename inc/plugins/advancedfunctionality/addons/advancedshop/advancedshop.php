@@ -1385,9 +1385,10 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
     global $db;
     $items = [];
     $total = 0;
-    $q = $db->query("SELECT ci.qty, s.slot_id, s.shop_id, s.cat_id, s.kb_id, s.kb_type, s.kb_key, s.price, s.currency
+    $q = $db->query("SELECT ci.qty, s.slot_id, s.shop_id, sh.code AS shop_code, s.cat_id, s.kb_id, s.kb_type, s.kb_key, s.price, s.currency
         FROM " . TABLE_PREFIX . "af_shop_cart_items ci
         INNER JOIN " . TABLE_PREFIX . "af_shop_slots s ON(s.slot_id=ci.slot_id)
+        INNER JOIN " . TABLE_PREFIX . "af_shop sh ON(sh.shop_id=s.shop_id)
         WHERE ci.cart_id={$cartId} AND s.enabled=1");
     while ($row = $db->fetch_array($q)) {
         $qty = max(1, (int)$row['qty']);
@@ -1395,6 +1396,7 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
         $items[] = [
             'slot_id' => (int)$row['slot_id'],
             'shop_id' => (int)$row['shop_id'],
+            'shop_code' => (string)($row['shop_code'] ?? ''),
             'cat_id' => (int)$row['cat_id'],
             'kb_id' => (int)$row['kb_id'],
             'kb_type' => (string)($row['kb_type'] ?? 'item'),
@@ -1410,13 +1412,13 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
 
 function af_advancedshop_apply_shop_map_target(array $target, array $item): array
 {
-    $shopId = (int)($item['shop_id'] ?? 0);
+    $shopCode = trim((string)($item['shop_code'] ?? ''));
     $catId = (int)($item['cat_id'] ?? 0);
-    if ($shopId <= 0 || !function_exists('af_advinv_shop_map_resolve')) {
+    if ($shopCode === '' || !function_exists('af_advinv_shop_map_resolve')) {
         return $target;
     }
 
-    $map = af_advinv_shop_map_resolve($shopId, $catId);
+    $map = af_advinv_shop_map_resolve($shopCode, $catId);
     if (!$map) {
         return $target;
     }
