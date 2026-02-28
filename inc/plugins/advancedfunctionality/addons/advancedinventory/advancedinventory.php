@@ -695,14 +695,14 @@ function af_advinv_shop_map_upgrade_schema(): void
     if (!$db->table_exists(AF_ADVINV_TABLE_SHOP_MAP)) {
         $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " (
             id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            shop_id INT UNSIGNED NOT NULL,
-            cat_id INT UNSIGNED NOT NULL DEFAULT 0,
-            entity VARCHAR(64) NOT NULL DEFAULT 'resources',
-            default_subtype VARCHAR(64) NOT NULL DEFAULT '',
+            shop_code VARCHAR(32) NOT NULL,
+            shop_cat_id INT UNSIGNED NOT NULL DEFAULT 0,
+            inventory_entity VARCHAR(32) NOT NULL,
+            default_subtype VARCHAR(32) NULL,
             enabled TINYINT(1) NOT NULL DEFAULT 1,
             sortorder INT UNSIGNED NOT NULL DEFAULT 0,
             updated_at INT UNSIGNED NOT NULL DEFAULT 0,
-            KEY shop_cat_enabled (shop_id, cat_id, enabled, sortorder),
+            KEY shop_cat_enabled (shop_code, shop_cat_id, enabled, sortorder),
             KEY enabled_sort (enabled, sortorder)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         return;
@@ -718,10 +718,10 @@ function af_advinv_shop_map_upgrade_schema(): void
     }
 
     $columnSql = [
-        'shop_id' => "ADD COLUMN shop_id INT UNSIGNED NOT NULL",
-        'cat_id' => "ADD COLUMN cat_id INT UNSIGNED NOT NULL DEFAULT 0",
-        'entity' => "ADD COLUMN entity VARCHAR(64) NOT NULL DEFAULT 'resources'",
-        'default_subtype' => "ADD COLUMN default_subtype VARCHAR(64) NOT NULL DEFAULT ''",
+        'shop_code' => "ADD COLUMN shop_code VARCHAR(32) NOT NULL DEFAULT ''",
+        'shop_cat_id' => "ADD COLUMN shop_cat_id INT UNSIGNED NOT NULL DEFAULT 0",
+        'inventory_entity' => "ADD COLUMN inventory_entity VARCHAR(32) NOT NULL DEFAULT 'resources'",
+        'default_subtype' => "ADD COLUMN default_subtype VARCHAR(32) NULL",
         'enabled' => "ADD COLUMN enabled TINYINT(1) NOT NULL DEFAULT 1",
         'sortorder' => "ADD COLUMN sortorder INT UNSIGNED NOT NULL DEFAULT 0",
         'updated_at' => "ADD COLUMN updated_at INT UNSIGNED NOT NULL DEFAULT 0",
@@ -740,33 +740,48 @@ function af_advinv_shop_map_upgrade_schema(): void
     }
 
     if (!isset($indexes['shop_cat_enabled'])) {
-        $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " ADD KEY shop_cat_enabled (shop_id, cat_id, enabled, sortorder)");
+        $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " ADD KEY shop_cat_enabled (shop_code, shop_cat_id, enabled, sortorder)");
     }
     if (!isset($indexes['enabled_sort'])) {
         $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " ADD KEY enabled_sort (enabled, sortorder)");
     }
+
+    // Legacy migration: map old shop_id/cat_id/entity to new shop_code/shop_cat_id/inventory_entity.
+    if (isset($columns['shop_id']) && isset($columns['shop_code']) && $db->table_exists('af_shop')) {
+        $db->write_query("UPDATE " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " m
+            INNER JOIN " . TABLE_PREFIX . "af_shop s ON(s.shop_id=m.shop_id)
+            SET m.shop_code=s.code
+            WHERE m.shop_code=''");
+    }
+    if (isset($columns['cat_id']) && isset($columns['shop_cat_id'])) {
+        $db->write_query("UPDATE " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " SET shop_cat_id=cat_id WHERE shop_cat_id=0");
+    }
+    if (isset($columns['entity']) && isset($columns['inventory_entity'])) {
+        $db->write_query("UPDATE " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " SET inventory_entity=entity WHERE inventory_entity='' OR inventory_entity='resources'");
+    }
 }
 
-function af_advinv_shop_map_resolve(int $shopId, int $catId): array
+function af_advinv_shop_map_resolve(string $shopCode, int $shopCatId): array
 {
     global $db;
 
-    if ($shopId <= 0 || !$db->table_exists(AF_ADVINV_TABLE_SHOP_MAP)) {
+    $shopCode = trim((string)$shopCode);
+    if ($shopCode === '' || !$db->table_exists(AF_ADVINV_TABLE_SHOP_MAP)) {
         return [];
     }
 
-    $shopId = (int)$shopId;
-    $catId = max(0, (int)$catId);
+    $shopCodeSql = $db->escape_string($shopCode);
+    $shopCatId = max(0, (int)$shopCatId);
 
-    $query = $db->query("SELECT id, entity, default_subtype, cat_id
+    $query = $db->query("SELECT id, inventory_entity, default_subtype, shop_cat_id
         FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . "
-        WHERE shop_id={$shopId}
+        WHERE shop_code='{$shopCodeSql}'
           AND enabled=1
-          AND (cat_id={$catId} OR cat_id=0)
+          AND (shop_cat_id={$shopCatId} OR shop_cat_id=0)
         ORDER BY sortorder ASC, id ASC");
 
     while ($row = $db->fetch_array($query)) {
-        $entity = af_advancedinventory_normalize_entity((string)($row['entity'] ?? ''));
+        $entity = af_advancedinventory_normalize_entity((string)($row['inventory_entity'] ?? ''));
         if (!af_advinv_entity_exists($entity)) {
             continue;
         }
@@ -775,7 +790,7 @@ function af_advinv_shop_map_resolve(int $shopId, int $catId): array
             'id' => (int)$row['id'],
             'entity' => $entity,
             'default_subtype' => trim((string)($row['default_subtype'] ?? '')),
-            'cat_id' => (int)($row['cat_id'] ?? 0),
+            'cat_id' => (int)($row['shop_cat_id'] ?? 0),
         ];
     }
 
