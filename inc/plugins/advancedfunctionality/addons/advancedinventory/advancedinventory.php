@@ -116,6 +116,9 @@ function af_advancedinventory_write_schema_markdown(): void
     ];
 
     foreach ($allTables as $tableName) {
+        if ($tableName === $prefix . 'af_shop' || $tableName === $prefix . 'af_shop_shops') {
+            $requiredTables[] = $tableName;
+        }
         if (strpos($tableName, $prefix . 'af_shop_') === 0) {
             $requiredTables[] = $tableName;
         }
