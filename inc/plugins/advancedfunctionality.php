@@ -602,6 +602,22 @@ function advancedfunctionality_meta()
             'title' => \$title,
             'link'  => 'index.php?module=advancedfunctionality&af_view='.rawurlencode(\$slug),
         ];
+
+        if (!empty(\$meta['admin']['menu']) && is_array(\$meta['admin']['menu'])) {
+            foreach (\$meta['admin']['menu'] as \$menuItem) {
+                if (!is_array(\$menuItem)) { continue; }
+                \$menuDo = preg_replace('~[^a-z0-9_\\-]+~i', '', (string)(\$menuItem['do'] ?? ''));
+                if (\$menuDo === '') { continue; }
+                \$menuTitle = trim((string)(\$menuItem['title'] ?? ''));
+                if (\$menuTitle === '') { continue; }
+
+                \$sub_menu[] = [
+                    'id'    => 'view_'.\$slug.'_'.\$menuDo,
+                    'title' => \$menuTitle,
+                    'link'  => 'index.php?module=advancedfunctionality&af_view='.rawurlencode(\$slug).'&do='.rawurlencode(\$menuDo),
+                ];
+            }
+        }
     }
 
     // Регистрируем пункт верхнего уровня + подпункты
@@ -619,8 +635,10 @@ function advancedfunctionality_action_handler(\$action)
     \$page->active_module = 'advancedfunctionality';
 
     \$view = \$mybb->get_input('af_view');
+    \$do = preg_replace('~[^a-z0-9_\\-]+~i', '', (string)\$mybb->get_input('do'));
     if (\$view) {
-        \$page->active_action = 'view_'.preg_replace('~[^a-z0-9_\\-]+~i', '', (string)\$view);
+        \$viewSafe = preg_replace('~[^a-z0-9_\\-]+~i', '', (string)\$view);
+        \$page->active_action = 'view_'.\$viewSafe.((\$do !== '') ? ('_'.\$do) : '');
         return 'index.php';
     }
 
