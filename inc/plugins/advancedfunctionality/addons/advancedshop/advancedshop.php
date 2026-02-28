@@ -1472,9 +1472,18 @@ function af_advancedshop_apply_shop_map_target(array $target, array $item): arra
     }
 
     $target['slot'] = (string)($map['entity'] ?? $target['slot']);
-    if (trim((string)($map['default_subtype'] ?? '')) !== '') {
-        $target['subtype'] = trim((string)$map['default_subtype']);
+
+    $defaultSubtype = trim((string)($map['default_subtype'] ?? ''));
+    $kbKind = mb_strtolower(trim((string)($target['kind_detected'] ?? '')));
+
+    // KB rules have the highest priority for weapon subtype inside mapped entity.
+    if ($kbKind === 'weapon') {
+        $target['subtype'] = 'weapon';
+    } elseif ($defaultSubtype !== '') {
+        // For all non-weapon items use bridge fallback subtype.
+        $target['subtype'] = $defaultSubtype;
     }
+
     $target['mapped_rule_id'] = (int)($map['id'] ?? 0);
     $target['mapped_cat_id'] = (int)($map['cat_id'] ?? 0);
     $target['kind_source'] = 'shop_map';
