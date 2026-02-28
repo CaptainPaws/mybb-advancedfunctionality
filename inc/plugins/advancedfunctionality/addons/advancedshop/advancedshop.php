@@ -1568,7 +1568,7 @@ function af_advancedshop_detect_inventory_target_from_kb_meta(array $meta): arra
     }
 
     $slot = 'resources';
-    $subtype = 'loot';
+    $subtype = '';
     if (in_array($kind, $supportedKinds, true)) {
         $slot = 'equipment';
         $subtype = $kind;
@@ -1608,7 +1608,7 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
     global $db;
     $items = [];
     $total = 0;
-    $q = $db->query("SELECT ci.qty, s.slot_id, s.shop_id, sh.code AS shop_code, s.cat_id, s.kb_id, s.kb_type, s.kb_key, s.price, s.currency
+    $q = $db->query("SELECT ci.qty, s.slot_id, s.shop_id, sh.code AS shop_code, s.cat_id, s.kb_id, s.kb_type, s.kb_key, s.meta_json, s.price, s.currency
         FROM " . TABLE_PREFIX . "af_shop_cart_items ci
         INNER JOIN " . TABLE_PREFIX . "af_shop_slots s ON(s.slot_id=ci.slot_id)
         INNER JOIN " . TABLE_PREFIX . af_advancedshop_shops_table() . " sh ON(sh.shop_id=s.shop_id)
@@ -1624,6 +1624,7 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
             'kb_id' => (int)$row['kb_id'],
             'kb_type' => (string)($row['kb_type'] ?? 'item'),
             'kb_key' => (string)($row['kb_key'] ?? ''),
+            'slot_meta_json' => (string)($row['meta_json'] ?? ''),
             'qty' => $qty,
             'price_each' => $price,
             'currency' => (string)$row['currency'],
@@ -1633,7 +1634,7 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
     return [$items, $total];
 }
 
-function af_advancedshop_apply_shop_map_target(array $target, array $item): array
+function af_advancedshop_apply_shop_map_target(array $target, array $item, bool $hasKb): array
 {
     $shopCode = trim((string)($item['shop_code'] ?? ''));
     $catId = (int)($item['cat_id'] ?? 0);
@@ -1646,22 +1647,23 @@ function af_advancedshop_apply_shop_map_target(array $target, array $item): arra
         return $target;
     }
 
-    $target['slot'] = (string)($map['entity'] ?? $target['slot']);
+    $mappedEntity = trim((string)($map['entity'] ?? ''));
+    if ($mappedEntity !== '') {
+        $target['slot'] = $mappedEntity;
+    }
 
     $defaultSubtype = trim((string)($map['default_subtype'] ?? ''));
-    $kbKind = mb_strtolower(trim((string)($target['kind_detected'] ?? '')));
-
-    // KB rules have the highest priority for weapon subtype inside mapped entity.
-    if ($kbKind === 'weapon') {
-        $target['subtype'] = 'weapon';
+    if ($hasKb) {
+        if (trim((string)($target['subtype'] ?? '')) === '' && $defaultSubtype !== '') {
+            $target['subtype'] = $defaultSubtype;
+        }
     } elseif ($defaultSubtype !== '') {
-        // For all non-weapon items use bridge fallback subtype.
         $target['subtype'] = $defaultSubtype;
     }
 
     $target['mapped_rule_id'] = (int)($map['id'] ?? 0);
     $target['mapped_cat_id'] = (int)($map['cat_id'] ?? 0);
-    $target['kind_source'] = 'shop_map';
+    $target['kind_source'] = $hasKb ? 'shop_map_kb' : 'shop_map_nonkb';
 
     return $target;
 }
@@ -1749,14 +1751,26 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
     }
 
     $metaPayload = af_advancedshop_json_decode_assoc($metaJson);
-    $target = af_advancedshop_detect_inventory_target_from_kb_meta($metaPayload);
+    $hasKbIdentity = $kbId > 0 || ($kbTypeFromItem !== '' && $kbKeyFromItem !== '');
+    $hasKbData = $hasKbIdentity && ($metaPayload !== [] || !empty($kb));
+    $target = $hasKbData ? af_advancedshop_detect_inventory_target_from_kb_meta($metaPayload) : ['slot' => 'resources', 'subtype' => '', 'kind_detected' => '', 'kind_source' => 'nonkb'];
 
-    if ((string)($target['kind_detected'] ?? '') === 'weapon') {
+    if ($hasKbData && (string)($target['kind_detected'] ?? '') === 'weapon') {
         $target['slot'] = 'equipment';
         $target['subtype'] = 'weapon';
     }
 
-    $target = af_advancedshop_apply_shop_map_target($target, $item);
+    $target = af_advancedshop_apply_shop_map_target($target, $item, $hasKbData);
+
+    if (!$hasKbData && trim((string)($target['subtype'] ?? '')) === '') {
+        af_advancedshop_inv_debug('checkout_grant_blocked', [
+            'uid' => $uid,
+            'reason' => 'nonkb_subtype_missing',
+            'item' => $item,
+            'mapped_rule_id' => (int)($target['mapped_rule_id'] ?? 0),
+        ]);
+        throw new RuntimeException('Не удалось выдать non-KB товар: в правиле моста требуется default_subtype.');
+    }
 
     af_advancedshop_inv_debug('grant_classify', [
         'uid' => $uid,
@@ -1770,12 +1784,16 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
         'mapped_rule_id' => (int)($target['mapped_rule_id'] ?? 0),
     ]);
 
-    $metaPayload['shop'] = [
-        'slot_id' => (int)($item['slot_id'] ?? 0),
-        'kb_id' => (int)($item['kb_id'] ?? 0),
-        'price_each' => (int)($item['price_each'] ?? 0),
-    ];
-    $metaJson = json_encode($metaPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: $metaJson;
+    if ($hasKbData) {
+        $metaPayload['shop'] = [
+            'slot_id' => (int)($item['slot_id'] ?? 0),
+            'kb_id' => (int)($item['kb_id'] ?? 0),
+            'price_each' => (int)($item['price_each'] ?? 0),
+        ];
+        $metaJson = json_encode($metaPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: $metaJson;
+    } else {
+        $metaJson = (string)($item['slot_meta_json'] ?? '');
+    }
 
     $payload = [
         'slot' => (string)$target['slot'],
@@ -1795,7 +1813,7 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
         $payload['icon'] = $kbIcon;
     }
 
-    if (trim((string)$payload['kb_type']) === '' || trim((string)$payload['kb_key']) === '') {
+    if ($hasKbData && (trim((string)$payload['kb_type']) === '' || trim((string)$payload['kb_key']) === '')) {
         af_advancedshop_inv_debug('checkout_grant_blocked', ['uid' => $uid, 'reason' => 'kb_identity_missing', 'item' => $item, 'kb' => $kb]);
         throw new RuntimeException('Не удалось выдать предмет: отсутствуют kb_type/kb_key.');
     }

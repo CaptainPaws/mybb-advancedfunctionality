@@ -701,6 +701,7 @@ function af_advinv_shop_map_upgrade_schema(): void
             shop_cat_id INT UNSIGNED NOT NULL DEFAULT 0,
             inventory_entity VARCHAR(32) NOT NULL,
             default_subtype VARCHAR(32) NULL,
+            mode VARCHAR(16) NOT NULL DEFAULT 'mixed',
             enabled TINYINT(1) NOT NULL DEFAULT 1,
             sortorder INT UNSIGNED NOT NULL DEFAULT 0,
             updated_at INT UNSIGNED NOT NULL DEFAULT 0,
@@ -724,6 +725,7 @@ function af_advinv_shop_map_upgrade_schema(): void
         'shop_cat_id' => "ADD COLUMN shop_cat_id INT UNSIGNED NOT NULL DEFAULT 0",
         'inventory_entity' => "ADD COLUMN inventory_entity VARCHAR(32) NOT NULL DEFAULT 'resources'",
         'default_subtype' => "ADD COLUMN default_subtype VARCHAR(32) NULL",
+        'mode' => "ADD COLUMN mode VARCHAR(16) NOT NULL DEFAULT 'mixed'",
         'enabled' => "ADD COLUMN enabled TINYINT(1) NOT NULL DEFAULT 1",
         'sortorder' => "ADD COLUMN sortorder INT UNSIGNED NOT NULL DEFAULT 0",
         'updated_at' => "ADD COLUMN updated_at INT UNSIGNED NOT NULL DEFAULT 0",
@@ -775,7 +777,7 @@ function af_advinv_shop_map_resolve(string $shopCode, int $shopCatId): array
     $shopCodeSql = $db->escape_string($shopCode);
     $shopCatId = max(0, (int)$shopCatId);
 
-    $query = $db->query("SELECT id, inventory_entity, default_subtype, shop_cat_id
+    $query = $db->query("SELECT id, inventory_entity, default_subtype, shop_cat_id, mode
         FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . "
         WHERE shop_code='{$shopCodeSql}'
           AND enabled=1
@@ -793,6 +795,7 @@ function af_advinv_shop_map_resolve(string $shopCode, int $shopCatId): array
             'entity' => $entity,
             'default_subtype' => trim((string)($row['default_subtype'] ?? '')),
             'cat_id' => (int)($row['shop_cat_id'] ?? 0),
+            'mode' => trim((string)($row['mode'] ?? 'mixed')),
         ];
     }
 

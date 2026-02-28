@@ -610,6 +610,29 @@ class AF_Admin_Advancedinventory
         }
 
         $shops = [];
+        $shopCodeById = [];
+        if ($db->table_exists('af_shop')) {
+            $shopCols = self::table_columns('af_shop');
+            if (isset($shopCols['shop_id']) && isset($shopCols['code'])) {
+                $qShopRows = $db->query("SELECT shop_id, code, title_ru, title_en FROM " . TABLE_PREFIX . "af_shop ORDER BY shop_id ASC");
+                while ($shopRow = $db->fetch_array($qShopRows)) {
+                    $shopCode = trim((string)($shopRow['code'] ?? ''));
+                    if ($shopCode === '') {
+                        continue;
+                    }
+                    $shopId = (int)($shopRow['shop_id'] ?? 0);
+                    if ($shopId > 0) {
+                        $shopCodeById[$shopId] = $shopCode;
+                    }
+                    $shopTitle = trim((string)($shopRow['title_ru'] ?? $shopRow['title_en'] ?? ''));
+                    if ($shopTitle === '') {
+                        $shopTitle = 'Shop ' . $shopCode;
+                    }
+                    $shops[$shopCode] = ['code' => $shopCode, 'title' => $shopTitle];
+                }
+            }
+        }
+
         $catsByShopCode = [];
         if ($db->table_exists('af_shop_categories')) {
             $catCols = self::table_columns('af_shop_categories');
@@ -619,11 +642,17 @@ class AF_Admin_Advancedinventory
 
                 $qShops = $db->query("SELECT DISTINCT shop_id FROM " . TABLE_PREFIX . "af_shop_categories ORDER BY shop_id ASC");
                 while ($shop = $db->fetch_array($qShops)) {
-                    $shopId = trim((string)($shop['shop_id'] ?? ''));
-                    if ($shopId === '') {
+                    $shopId = (int)($shop['shop_id'] ?? 0);
+                    if ($shopId <= 0) {
                         continue;
                     }
-                    $shops[$shopId] = ['code' => $shopId, 'title' => 'Shop #' . $shopId];
+                    $shopCode = (string)($shopCodeById[$shopId] ?? '');
+                    if ($shopCode === '') {
+                        $shopCode = (string)$shopId;
+                    }
+                    if (!isset($shops[$shopCode])) {
+                        $shops[$shopCode] = ['code' => $shopCode, 'title' => 'Shop ' . $shopCode];
+                    }
                 }
 
                 $titleExpr = $titleCol !== '' ? "COALESCE(NULLIF(c.{$titleCol}, ''), CONCAT('#', c.{$catIdCol}))" : "CONCAT('#', c.{$catIdCol})";
@@ -631,9 +660,13 @@ class AF_Admin_Advancedinventory
                     FROM " . TABLE_PREFIX . "af_shop_categories c
                     ORDER BY c.shop_id ASC, c.{$catIdCol} ASC");
                 while ($c = $db->fetch_array($qCats)) {
-                    $shopCode = trim((string)($c['shop_id'] ?? ''));
-                    if ($shopCode === '') {
+                    $shopId = (int)($c['shop_id'] ?? 0);
+                    if ($shopId <= 0) {
                         continue;
+                    }
+                    $shopCode = (string)($shopCodeById[$shopId] ?? '');
+                    if ($shopCode === '') {
+                        $shopCode = (string)$shopId;
                     }
                     $catsByShopCode[$shopCode][] = [
                         'cat_id' => (int)$c['cat_id'],
@@ -648,11 +681,17 @@ class AF_Admin_Advancedinventory
             if (isset($slotCols['shop_id'])) {
                 $qShops = $db->query("SELECT DISTINCT shop_id FROM " . TABLE_PREFIX . "af_shop_slots ORDER BY shop_id ASC");
                 while ($shop = $db->fetch_array($qShops)) {
-                    $shopId = trim((string)($shop['shop_id'] ?? ''));
-                    if ($shopId === '') {
+                    $shopId = (int)($shop['shop_id'] ?? 0);
+                    if ($shopId <= 0) {
                         continue;
                     }
-                    $shops[$shopId] = ['code' => $shopId, 'title' => 'Shop #' . $shopId];
+                    $shopCode = (string)($shopCodeById[$shopId] ?? '');
+                    if ($shopCode === '') {
+                        $shopCode = (string)$shopId;
+                    }
+                    if (!isset($shops[$shopCode])) {
+                        $shops[$shopCode] = ['code' => $shopCode, 'title' => 'Shop ' . $shopCode];
+                    }
                 }
             }
         }
@@ -744,10 +783,10 @@ class AF_Admin_Advancedinventory
         $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
         $html .= '<input type="hidden" name="map_action" value="save">';
         $html .= '<input type="hidden" name="id" value="' . (int)$editId . '">';
-        $html .= '<p><label>Магазин</label><br><select name="shop_code" id="shop_map_shop_code" required>' . $shopOptions . '</select></p>';
-        $html .= '<p><label>Категория</label><br><select name="shop_cat_id" id="shop_map_shop_cat_id">' . $catOptions . '</select></p>';
+        $html .= '<p><label>Only for shop</label><br><select name="shop_code" id="shop_map_shop_code" required>' . $shopOptions . '</select></p>';
+        $html .= '<p><label>Category</label><br><select name="shop_cat_id" id="shop_map_shop_cat_id">' . $catOptions . '</select></p>';
         $html .= '<p><label>Entity</label><br><select name="inventory_entity">' . $entityOptions . '</select></p>';
-        $html .= '<p><label>Default subtype (опционально)</label><br><input type="text" name="default_subtype" value="' . htmlspecialchars_uni($selectedSubtype) . '"><br><small>Если subtype не определится по KB rules, использовать это значение (weapon/armor/loot…).</small></p>';
+        $html .= '<p><label>Default subtype</label><br><input type="text" name="default_subtype" value="' . htmlspecialchars_uni($selectedSubtype) . '"><br><small>Default subtype используется для non-KB и как fallback, если subtype не определился по KB rules.</small></p>';
         $html .= '<p><label>Sortorder</label><br><input type="number" min="0" name="sortorder" value="' . $selectedSort . '"></p>';
         $html .= '<p><label><input type="checkbox" name="enabled" value="1"' . ($selectedEnabled === 1 ? ' checked' : '') . '> Включено</label></p>';
         $html .= '<p><button type="submit" class="button">Сохранить правило</button></p>';
@@ -795,6 +834,7 @@ class AF_Admin_Advancedinventory
             'shop_cat_id' => $shopCatId,
             'inventory_entity' => $db->escape_string($entity),
             'default_subtype' => $defaultSubtype === '' ? null : $db->escape_string($defaultSubtype),
+            'mode' => 'mixed',
             'enabled' => $enabled,
             'sortorder' => $sortorder,
             'updated_at' => TIME_NOW,
@@ -959,6 +999,7 @@ class AF_Admin_Advancedinventory
                 shop_cat_id INT UNSIGNED NOT NULL DEFAULT 0,
                 inventory_entity VARCHAR(32) NOT NULL,
                 default_subtype VARCHAR(32) NULL,
+                mode VARCHAR(16) NOT NULL DEFAULT 'mixed',
                 enabled TINYINT(1) NOT NULL DEFAULT 1,
                 sortorder INT UNSIGNED NOT NULL DEFAULT 0,
                 updated_at INT UNSIGNED NOT NULL DEFAULT 0,
@@ -974,6 +1015,7 @@ class AF_Admin_Advancedinventory
             'shop_cat_id' => "ADD COLUMN shop_cat_id INT UNSIGNED NOT NULL DEFAULT 0",
             'inventory_entity' => "ADD COLUMN inventory_entity VARCHAR(32) NOT NULL DEFAULT 'resources'",
             'default_subtype' => "ADD COLUMN default_subtype VARCHAR(32) NULL",
+            'mode' => "ADD COLUMN mode VARCHAR(16) NOT NULL DEFAULT 'mixed'",
             'enabled' => "ADD COLUMN enabled TINYINT(1) NOT NULL DEFAULT 1",
             'sortorder' => "ADD COLUMN sortorder INT UNSIGNED NOT NULL DEFAULT 0",
             'updated_at' => "ADD COLUMN updated_at INT UNSIGNED NOT NULL DEFAULT 0",
