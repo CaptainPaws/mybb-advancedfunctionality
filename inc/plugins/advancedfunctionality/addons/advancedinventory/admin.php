@@ -58,6 +58,9 @@ class AF_Admin_Advancedinventory
         if ($view === 'entities') {
             return self::render_entities();
         }
+        if ($view === 'entity_filters') {
+            return self::render_entity_filters();
+        }
         return self::render_inventory_list();
     }
 
@@ -129,9 +132,10 @@ class AF_Admin_Advancedinventory
 
         $mapUrl = self::baseUrl('shop_map');
         $entitiesUrl = self::baseUrl('entities');
+        $filtersUrl = self::baseUrl('entity_filters');
         $html = '';
         $html .= '<div class="af-box"><h2>Инвентари пользователей</h2>';
-        $html .= '<p><a class="button" href="' . htmlspecialchars_uni($entitiesUrl) . '">Категории инвентаря</a> <a class="button" href="' . htmlspecialchars_uni($mapUrl) . '">Мост Shop → Inventory</a></p>';
+        $html .= '<p><a class="button" href="' . htmlspecialchars_uni($entitiesUrl) . '">Категории инвентаря</a> <a class="button" href="' . htmlspecialchars_uni($filtersUrl) . '">Сабфильтры категорий</a> <a class="button" href="' . htmlspecialchars_uni($mapUrl) . '">Мост Shop → Inventory</a></p>';
         $html .= '<form method="get"><input type="hidden" name="module" value="advancedfunctionality"><input type="hidden" name="af_view" value="advancedinventory">';
         $html .= '<input type="text" name="username" placeholder="Username" value="' . htmlspecialchars_uni($search) . '"> ';
         $html .= '<select name="has_items"><option value="">Все</option><option value="yes"' . ($hasItems === 'yes' ? ' selected' : '') . '>Непустые</option><option value="no"' . ($hasItems === 'no' ? ' selected' : '') . '>Пустые</option></select> ';
@@ -182,6 +186,7 @@ class AF_Admin_Advancedinventory
                 . '<td>' . htmlspecialchars_uni((string)($row['renderer'] ?? 'generic')) . '</td>'
                 . '<td>'
                 . '<a href="' . htmlspecialchars_uni(self::baseUrl('entities', ['edit_entity' => $slug])) . '">Редактировать</a> · '
+                . '<a href="' . htmlspecialchars_uni(self::baseUrl('entity_filters', ['entity' => $slug])) . '">Сабфильтры</a> · '
                 . '<form method="post" style="display:inline;margin:0">'
                 . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">'
                 . '<input type="hidden" name="entity_action" value="move_up">'
@@ -231,9 +236,6 @@ class AF_Admin_Advancedinventory
         $html .= '<p><button type="submit" class="button">Сохранить категорию</button></p>';
         $html .= '</form>';
 
-        if ($selectedEntity !== '') {
-            $html .= self::render_entity_subfilters($selectedEntity);
-        }
         $html .= '</div>';
 
         return $html;
@@ -245,10 +247,6 @@ class AF_Admin_Advancedinventory
 
         $action = trim((string)$mybb->get_input('entity_action'));
         $entity = trim((string)$mybb->get_input('entity'));
-
-        if ($action === 'save_filter' || $action === 'delete_filter' || $action === 'move_up_filter' || $action === 'move_down_filter') {
-            return self::handle_entity_filter_post($action);
-        }
 
         if ($action === 'delete' && $entity !== '') {
             if ($db->table_exists(AF_ADVINV_TABLE_ENTITIES)) {
@@ -316,6 +314,53 @@ class AF_Admin_Advancedinventory
         return $entity;
     }
 
+    private static function render_entity_filters(): string
+    {
+        global $db, $mybb;
+
+        if (function_exists('af_advinv_entities_upgrade_schema')) {
+            af_advinv_entities_upgrade_schema();
+        }
+        if (function_exists('af_advinv_entity_filters_upgrade_schema')) {
+            af_advinv_entity_filters_upgrade_schema();
+        }
+
+        $entity = strtolower(trim((string)$mybb->get_input('entity')));
+        if ($entity === '') {
+            $entity = (string)array_key_first(self::load_entity_options());
+        }
+
+        if ($mybb->request_method === 'post') {
+            verify_post_check($mybb->get_input('my_post_key'));
+            $action = trim((string)$mybb->get_input('entity_action'));
+            if (in_array($action, ['save_filter', 'delete_filter', 'move_up_filter', 'move_down_filter'], true)) {
+                $entity = self::handle_entity_filter_post($action);
+            }
+            admin_redirect(self::baseUrl('entity_filters', ['entity' => $entity]));
+        }
+
+        if ($entity === '') {
+            return '<div class="af-box"><h2>Сабфильтры категорий</h2><p>Сначала создайте хотя бы одну категорию инвентаря.</p></div>';
+        }
+
+        $optionsHtml = '';
+        foreach (self::load_entity_options() as $slug => $title) {
+            $selected = $slug === $entity ? ' selected' : '';
+            $optionsHtml .= '<option value="' . htmlspecialchars_uni($slug) . '"' . $selected . '>' . htmlspecialchars_uni($title) . ' (' . htmlspecialchars_uni($slug) . ')</option>';
+        }
+
+        $html = '<div class="af-box">';
+        $html .= '<h2>Сабфильтры категорий</h2>';
+        $html .= '<p><a class="button" href="' . htmlspecialchars_uni(self::baseUrl()) . '">← К списку инвентарей</a> <a class="button" href="' . htmlspecialchars_uni(self::baseUrl('entities')) . '">Категории</a></p>';
+        $html .= '<form method="get"><input type="hidden" name="module" value="advancedfunctionality"><input type="hidden" name="af_view" value="advancedinventory"><input type="hidden" name="do" value="entity_filters">';
+        $html .= '<label>Категория: <select name="entity">' . $optionsHtml . '</select></label> <button type="submit" class="button">Открыть</button>';
+        $html .= '</form>';
+        $html .= self::render_entity_subfilters($entity);
+        $html .= '</div>';
+
+        return $html;
+    }
+
     private static function render_entity_subfilters(string $entity): string
     {
         global $db, $mybb;
@@ -335,7 +380,7 @@ class AF_Admin_Advancedinventory
         while ($row = $db->fetch_array($q)) {
             $id = (int)$row['id'];
             $rowsHtml .= '<tr><td>' . $id . '</td><td>' . htmlspecialchars_uni((string)$row['code']) . '</td><td>' . htmlspecialchars_uni((string)$row['title_ru']) . '</td><td>' . htmlspecialchars_uni((string)$row['title_en']) . '</td><td>' . ((int)$row['enabled'] === 1 ? 'Да' : 'Нет') . '</td><td>' . (int)$row['sortorder'] . '</td><td>'
-                . '<a href="' . htmlspecialchars_uni(self::baseUrl('entities', ['edit_entity' => $entity, 'edit_filter_id' => $id])) . '">Редактировать</a> · '
+                . '<a href="' . htmlspecialchars_uni(self::baseUrl('entity_filters', ['entity' => $entity, 'edit_filter_id' => $id])) . '">Редактировать</a> · '
                 . '<form method="post" style="display:inline;margin:0">'
                 . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">'
                 . '<input type="hidden" name="entity_action" value="move_up_filter">'
@@ -815,7 +860,13 @@ class AF_Admin_Advancedinventory
 
     private static function load_entity_options(): array
     {
-        return array_fill_keys(array_keys(self::load_entities_with_meta()), true);
+        $options = [];
+        foreach (self::load_entities_with_meta() as $entity => $row) {
+            $titleRu = trim((string)($row['title_ru'] ?? ''));
+            $titleEn = trim((string)($row['title_en'] ?? ''));
+            $options[$entity] = $titleRu !== '' ? $titleRu : ($titleEn !== '' ? $titleEn : $entity);
+        }
+        return $options;
     }
 
     private static function load_entities_with_meta(): array
@@ -830,19 +881,6 @@ class AF_Admin_Advancedinventory
                 if ($entity !== '') {
                     $entities[$entity] = $row;
                 }
-            }
-        }
-        if (!$entities) {
-            foreach (['equipment', 'resources', 'pets', 'customization'] as $entity) {
-                $entities[$entity] = [
-                    'entity' => $entity,
-                    'title_ru' => '',
-                    'title_en' => '',
-                    'enabled' => 1,
-                    'sortorder' => 0,
-                    'renderer' => 'generic',
-                    'settings_json' => '{}',
-                ];
             }
         }
         return $entities;
