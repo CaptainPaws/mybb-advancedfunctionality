@@ -95,23 +95,29 @@ class AF_Admin_Advancedshop
             if ($do === 'create_category') {
                 $shopCode = trim((string)$mybb->get_input('shop_code'));
                 $shop = self::resolve_shop_by_code($shopCode);
-                if ($shop) {
-                    $title = trim((string)$mybb->get_input('title'));
-                    $description = trim((string)$mybb->get_input('description'));
-                    $sortorder = (int)$mybb->get_input('sortorder');
-                    if ($title !== '') {
-                        $db->insert_query('af_shop_categories', [
-                            'shop_id' => (int)$shop['shop_id'],
-                            'parent_id' => 0,
-                            'title' => $db->escape_string($title),
-                            'description' => $db->escape_string($description),
-                            'sortorder' => $sortorder,
-                            'enabled' => 1,
-                        ]);
-                    }
+                if (!$shop) {
+                    flash_message('Shop is required for category creation.', 'error');
+                    admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=categories');
                 }
-                flash_message('Category created.', 'success');
-                admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=categories&shop_code=' . rawurlencode($shopCode));
+
+                $title = trim((string)$mybb->get_input('title'));
+                $description = trim((string)$mybb->get_input('description'));
+                $sortorder = (int)$mybb->get_input('sortorder');
+                if ($title !== '') {
+                    $db->insert_query('af_shop_categories', [
+                        'shop_id' => (int)$shop['shop_id'],
+                        'parent_id' => 0,
+                        'title' => $db->escape_string($title),
+                        'description' => $db->escape_string($description),
+                        'sortorder' => $sortorder,
+                        'enabled' => 1,
+                    ]);
+                    flash_message('Category created.', 'success');
+                } else {
+                    flash_message('Category title is required.', 'error');
+                }
+
+                admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=categories&shop_code=' . rawurlencode((string)$shop['code']));
             }
         }
 
@@ -204,11 +210,21 @@ class AF_Admin_Advancedshop
             }
             $html .= '</table>';
 
-            $html .= '<h3>Create Category for ' . htmlspecialchars_uni($selectedCode) . '</h3>';
+            $html .= '<h3>Create Category</h3>';
             $html .= '<form method="post" action="index.php?module=advancedfunctionality&amp;af_view=advancedshop&amp;tab=categories">';
             $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
             $html .= '<input type="hidden" name="do" value="create_category">';
-            $html .= '<input type="hidden" name="shop_code" value="' . htmlspecialchars_uni($selectedCode) . '">';
+            $html .= '<p>Shop: <select name="shop_code" required>';
+            $html .= '<option value="">-- select shop --</option>';
+            foreach ($shops as $shop) {
+                $code = (string)$shop['code'];
+                $titleRu = $shopsTable === 'af_shop_shops' ? (string)($shop['title_ru'] ?? '') : (string)($shop['title'] ?? '');
+                $titleEn = $shopsTable === 'af_shop_shops' ? (string)($shop['title_en'] ?? '') : (string)($shop['title'] ?? '');
+                $label = trim($titleRu) !== '' ? $titleRu : (trim($titleEn) !== '' ? $titleEn : $code);
+                $selected = $code === $selectedCode ? ' selected' : '';
+                $html .= '<option value="' . htmlspecialchars_uni($code) . '"' . $selected . '>' . htmlspecialchars_uni($code . ' — ' . $label) . '</option>';
+            }
+            $html .= '</select></p>';
             $html .= '<p>Title: <input type="text" name="title" maxlength="255" required></p>';
             $html .= '<p>Description: <textarea name="description" rows="3" cols="80"></textarea></p>';
             $html .= '<p>Sortorder: <input type="number" name="sortorder" value="0"></p>';
