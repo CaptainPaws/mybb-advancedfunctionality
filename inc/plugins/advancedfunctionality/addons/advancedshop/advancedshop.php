@@ -1385,7 +1385,7 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
     global $db;
     $items = [];
     $total = 0;
-    $q = $db->query("SELECT ci.qty, s.slot_id, s.kb_id, s.kb_type, s.kb_key, s.price, s.currency
+    $q = $db->query("SELECT ci.qty, s.slot_id, s.shop_id, s.cat_id, s.kb_id, s.kb_type, s.kb_key, s.price, s.currency
         FROM " . TABLE_PREFIX . "af_shop_cart_items ci
         INNER JOIN " . TABLE_PREFIX . "af_shop_slots s ON(s.slot_id=ci.slot_id)
         WHERE ci.cart_id={$cartId} AND s.enabled=1");
@@ -1394,6 +1394,8 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
         $price = max(0, (int)$row['price']);
         $items[] = [
             'slot_id' => (int)$row['slot_id'],
+            'shop_id' => (int)$row['shop_id'],
+            'cat_id' => (int)$row['cat_id'],
             'kb_id' => (int)$row['kb_id'],
             'kb_type' => (string)($row['kb_type'] ?? 'item'),
             'kb_key' => (string)($row['kb_key'] ?? ''),
@@ -1404,6 +1406,30 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
         $total += $qty * $price;
     }
     return [$items, $total];
+}
+
+function af_advancedshop_apply_shop_map_target(array $target, array $item): array
+{
+    $shopId = (int)($item['shop_id'] ?? 0);
+    $catId = (int)($item['cat_id'] ?? 0);
+    if ($shopId <= 0 || !function_exists('af_advinv_shop_map_resolve')) {
+        return $target;
+    }
+
+    $map = af_advinv_shop_map_resolve($shopId, $catId);
+    if (!$map) {
+        return $target;
+    }
+
+    $target['slot'] = (string)($map['entity'] ?? $target['slot']);
+    if (trim((string)($map['default_subtype'] ?? '')) !== '') {
+        $target['subtype'] = trim((string)$map['default_subtype']);
+    }
+    $target['mapped_rule_id'] = (int)($map['id'] ?? 0);
+    $target['mapped_cat_id'] = (int)($map['cat_id'] ?? 0);
+    $target['kind_source'] = 'shop_map';
+
+    return $target;
 }
 
 function af_advancedshop_grant_inventory_item(int $uid, array $item): void
@@ -1496,6 +1522,8 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
         $target['subtype'] = 'weapon';
     }
 
+    $target = af_advancedshop_apply_shop_map_target($target, $item);
+
     af_advancedshop_inv_debug('grant_classify', [
         'uid' => $uid,
         'kb_key' => (string)($kb['kb_key'] ?? $kbKeyFromItem),
@@ -1503,6 +1531,9 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
         'kind_source' => (string)($target['kind_source'] ?? ''),
         'slot' => (string)$target['slot'],
         'subtype' => (string)$target['subtype'],
+        'shop_id' => (int)($item['shop_id'] ?? 0),
+        'cat_id' => (int)($item['cat_id'] ?? 0),
+        'mapped_rule_id' => (int)($target['mapped_rule_id'] ?? 0),
     ]);
 
     $metaPayload['shop'] = [
