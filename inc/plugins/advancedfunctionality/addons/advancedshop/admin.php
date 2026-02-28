@@ -4,6 +4,11 @@ if (!defined('IN_ADMINCP')) { define('IN_ADMINCP', 1); }
 
 class AF_Admin_Advancedshop
 {
+    private static function normalize_shop_code(string $code): string
+    {
+        return preg_replace('~[^a-z0-9_\-]~', '', strtolower(trim($code)));
+    }
+
     public static function dispatch(string $action = ''): string
     {
         $html = self::render($action);
@@ -48,6 +53,31 @@ class AF_Admin_Advancedshop
         return (array)$db->fetch_array($db->simple_select($shopsTable, '*', "code='" . $db->escape_string($code) . "'", ['limit' => 1]));
     }
 
+    private static function resolve_shop_by_id(int $shopId): array
+    {
+        global $db;
+
+        if ($shopId <= 0) {
+            return [];
+        }
+
+        $shopsTable = self::shops_table();
+        return (array)$db->fetch_array($db->simple_select($shopsTable, '*', 'shop_id=' . $shopId, ['limit' => 1]));
+    }
+
+    private static function shop_dependencies_count(int $shopId): array
+    {
+        global $db;
+
+        $categories = (int)$db->fetch_field($db->simple_select('af_shop_categories', 'COUNT(*) AS c', 'shop_id=' . $shopId), 'c');
+        $slots = (int)$db->fetch_field($db->simple_select('af_shop_slots', 'COUNT(*) AS c', 'shop_id=' . $shopId), 'c');
+
+        return [
+            'categories' => $categories,
+            'slots' => $slots,
+        ];
+    }
+
     public static function render(string $action = ''): string
     {
         global $db, $lang, $mybb;
@@ -58,7 +88,7 @@ class AF_Admin_Advancedshop
             $do = trim((string)$mybb->get_input('do'));
 
             if ($do === 'create_shop') {
-                $code = preg_replace('~[^a-z0-9_\-]~', '', strtolower(trim((string)$mybb->get_input('code'))));
+                $code = self::normalize_shop_code((string)$mybb->get_input('code'));
                 $titleRu = trim((string)$mybb->get_input('title_ru'));
                 $titleEn = trim((string)$mybb->get_input('title_en'));
                 $bgUrl = trim((string)$mybb->get_input('bg_url'));
@@ -66,47 +96,75 @@ class AF_Admin_Advancedshop
                 $enabled = (int)$mybb->get_input('enabled');
                 $sortorder = (int)$mybb->get_input('sortorder');
 
-                if ($code !== '') {
-                    $exists = $db->fetch_array($db->simple_select($shopsTable, 'shop_id', "code='" . $db->escape_string($code) . "'", ['limit' => 1]));
-                    if (!$exists) {
-                        if ($shopsTable === 'af_shop_shops') {
-                            $db->insert_query($shopsTable, [
-                                'code' => $db->escape_string($code),
-                                'title_ru' => $db->escape_string($titleRu),
-                                'title_en' => $db->escape_string($titleEn),
-                                'bg_url' => $db->escape_string($bgUrl),
-                                'icon_url' => $db->escape_string($iconUrl),
-                                'enabled' => $enabled ? 1 : 0,
-                                'sortorder' => $sortorder,
-                                'settings_json' => null,
-                            ]);
-                        } else {
-                            $title = $titleRu !== '' ? $titleRu : ($titleEn !== '' ? $titleEn : $code);
-                            $db->insert_query($shopsTable, [
-                                'code' => $db->escape_string($code),
-                                'title' => $db->escape_string($title),
-                                'bg_url' => $db->escape_string($bgUrl),
-                                'icon_url' => $db->escape_string($iconUrl),
-                                'enabled' => $enabled ? 1 : 0,
-                                'created_at' => TIME_NOW,
-                                'updated_at' => TIME_NOW,
-                            ]);
-                        }
-                    }
+                if ($code === '') {
+                    flash_message('Shop create failed: code is required.', 'error');
+                    admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=shops');
                 }
+
+                $exists = $db->fetch_array($db->simple_select($shopsTable, 'shop_id', "code='" . $db->escape_string($code) . "'", ['limit' => 1]));
+                if ($exists) {
+                    flash_message('Shop create failed: code must be unique.', 'error');
+                    admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=shops');
+                }
+
+                if ($shopsTable === 'af_shop_shops') {
+                    $db->insert_query($shopsTable, [
+                        'code' => $db->escape_string($code),
+                        'title_ru' => $db->escape_string($titleRu),
+                        'title_en' => $db->escape_string($titleEn),
+                        'bg_url' => $db->escape_string($bgUrl),
+                        'icon_url' => $db->escape_string($iconUrl),
+                        'enabled' => $enabled ? 1 : 0,
+                        'sortorder' => $sortorder,
+                        'settings_json' => null,
+                    ]);
+                } else {
+                    $title = $titleRu !== '' ? $titleRu : ($titleEn !== '' ? $titleEn : $code);
+                    $db->insert_query($shopsTable, [
+                        'code' => $db->escape_string($code),
+                        'title' => $db->escape_string($title),
+                        'bg_url' => $db->escape_string($bgUrl),
+                        'icon_url' => $db->escape_string($iconUrl),
+                        'enabled' => $enabled ? 1 : 0,
+                        'created_at' => TIME_NOW,
+                        'updated_at' => TIME_NOW,
+                    ]);
+                    }
                 flash_message('Shop created.', 'success');
                 admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=shops');
             }
 
             if ($do === 'update_shop') {
                 $shopId = (int)$mybb->get_input('shop_id');
-                $code = preg_replace('~[^a-z0-9_\-]~', '', strtolower(trim((string)$mybb->get_input('code'))));
+                $code = self::normalize_shop_code((string)$mybb->get_input('code'));
                 $titleRu = trim((string)$mybb->get_input('title_ru'));
                 $titleEn = trim((string)$mybb->get_input('title_en'));
                 $bgUrl = trim((string)$mybb->get_input('bg_url'));
                 $iconUrl = trim((string)$mybb->get_input('icon_url'));
                 $enabled = (int)$mybb->get_input('enabled') === 1 ? 1 : 0;
                 $sortorder = (int)$mybb->get_input('sortorder');
+
+                if ($shopId <= 0) {
+                    flash_message('Shop update failed: invalid shop.', 'error');
+                    admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=shops');
+                }
+
+                if ($code === '') {
+                    flash_message('Shop update failed: code is required.', 'error');
+                    admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=shops&edit_shop_id=' . $shopId);
+                }
+
+                $existingShop = self::resolve_shop_by_id($shopId);
+                if (!$existingShop) {
+                    flash_message('Shop update failed: shop not found.', 'error');
+                    admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=shops');
+                }
+
+                $codeOwner = $db->fetch_array($db->simple_select($shopsTable, 'shop_id', "code='" . $db->escape_string($code) . "'", ['limit' => 1]));
+                if ($codeOwner && (int)$codeOwner['shop_id'] !== $shopId) {
+                    flash_message('Shop update failed: code must be unique.', 'error');
+                    admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=shops&edit_shop_id=' . $shopId);
+                }
 
                 if ($shopId > 0 && $code !== '') {
                     $update = [
@@ -131,6 +189,32 @@ class AF_Admin_Advancedshop
                 } else {
                     flash_message('Shop update failed: code is required.', 'error');
                 }
+                admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=shops');
+            }
+
+            if ($do === 'delete_shop') {
+                $shopId = (int)$mybb->get_input('shop_id');
+                $deleteCascade = (int)$mybb->get_input('delete_cascade') === 1;
+                $shop = self::resolve_shop_by_id($shopId);
+
+                if (!$shop) {
+                    flash_message('Shop delete failed: shop not found.', 'error');
+                    admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=shops');
+                }
+
+                $dependencies = self::shop_dependencies_count($shopId);
+                if (($dependencies['categories'] > 0 || $dependencies['slots'] > 0) && !$deleteCascade) {
+                    flash_message('Shop delete blocked: linked categories (' . $dependencies['categories'] . ') and slots (' . $dependencies['slots'] . ') exist. Use cascade delete to remove them.', 'error');
+                    admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=shops');
+                }
+
+                if ($deleteCascade) {
+                    $db->delete_query('af_shop_slots', 'shop_id=' . $shopId);
+                    $db->delete_query('af_shop_categories', 'shop_id=' . $shopId);
+                }
+
+                $db->delete_query($shopsTable, 'shop_id=' . $shopId);
+                flash_message('Shop deleted.', 'success');
                 admin_redirect('index.php?module=advancedfunctionality&af_view=advancedshop&tab=shops');
             }
 
@@ -188,52 +272,71 @@ class AF_Admin_Advancedshop
         }
 
         if ($activeTab === 'shops') {
+            $editShopId = (int)$mybb->get_input('edit_shop_id');
+            $editShop = self::resolve_shop_by_id($editShopId);
             $html .= '<h3>Shops</h3>';
             $html .= '<table class="tborder" cellpadding="6" cellspacing="1" width="100%"><tr>';
-            $html .= '<th>shop_id</th><th>code</th><th>title_ru</th><th>title_en</th><th>bg_url</th><th>icon_url</th><th>enabled</th><th>sortorder</th><th>manage</th><th>save</th></tr>';
+            $html .= '<th>shop_id</th><th>code</th><th>title_ru</th><th>title_en</th><th>bg_url</th><th>icon_url</th><th>enabled</th><th>sortorder</th><th>manage</th><th>actions</th></tr>';
             $allowManageLink = function_exists('af_advancedshop_can_manage') ? af_advancedshop_can_manage() : true;
             foreach ($shops as $shop) {
+                $dependencies = self::shop_dependencies_count((int)$shop['shop_id']);
+                $titleRu = $shopsTable === 'af_shop_shops' ? (string)($shop['title_ru'] ?? '') : (string)($shop['title'] ?? '');
+                $titleEn = $shopsTable === 'af_shop_shops' ? (string)($shop['title_en'] ?? '') : (string)($shop['title'] ?? '');
+                $bg = (string)($shop['bg_url'] ?? '');
+                $icon = (string)($shop['icon_url'] ?? '');
+                $bgPreview = $bg !== '' ? '<a target="_blank" href="' . htmlspecialchars_uni($bg) . '">preview</a>' : '—';
+                $iconPreview = $icon !== '' ? '<a target="_blank" href="' . htmlspecialchars_uni($icon) . '">preview</a>' : '—';
                 $html .= '<tr>';
-                $html .= '<form method="post" action="index.php?module=advancedfunctionality&amp;af_view=advancedshop&amp;tab=shops">';
-                $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
-                $html .= '<input type="hidden" name="do" value="update_shop">';
-                $html .= '<input type="hidden" name="shop_id" value="' . (int)$shop['shop_id'] . '">';
                 $html .= '<td>' . (int)$shop['shop_id'] . '</td>';
-                $html .= '<td><input type="text" name="code" value="' . htmlspecialchars_uni((string)$shop['code']) . '" maxlength="32" required style="width:100%"></td>';
-                if ($shopsTable === 'af_shop_shops') {
-                    $html .= '<td><input type="text" name="title_ru" value="' . htmlspecialchars_uni((string)$shop['title_ru']) . '" maxlength="255" style="width:100%"></td>';
-                    $html .= '<td><input type="text" name="title_en" value="' . htmlspecialchars_uni((string)$shop['title_en']) . '" maxlength="255" style="width:100%"></td>';
-                    $bg = (string)($shop['bg_url'] ?? '');
-                    $icon = (string)($shop['icon_url'] ?? '');
-                    $bgPreview = $bg !== '' ? '<div><a target="_blank" href="' . htmlspecialchars_uni($bg) . '">preview</a></div>' : '';
-                    $iconPreview = $icon !== '' ? '<div><a target="_blank" href="' . htmlspecialchars_uni($icon) . '">preview</a></div>' : '';
-                    $html .= '<td><input type="text" name="bg_url" value="' . htmlspecialchars_uni($bg) . '" maxlength="255" style="width:100%">' . $bgPreview . '</td>';
-                    $html .= '<td><input type="text" name="icon_url" value="' . htmlspecialchars_uni($icon) . '" maxlength="255" style="width:100%">' . $iconPreview . '</td>';
-                    $html .= '<td><select name="enabled"><option value="1"' . ((int)$shop['enabled'] === 1 ? ' selected' : '') . '>1</option><option value="0"' . ((int)$shop['enabled'] === 0 ? ' selected' : '') . '>0</option></select></td>';
-                    $html .= '<td><input type="number" name="sortorder" value="' . (int)$shop['sortorder'] . '" style="width:90px"></td>';
-                } else {
-                    $title = (string)($shop['title'] ?? '');
-                    $bg = (string)($shop['bg_url'] ?? '');
-                    $icon = (string)($shop['icon_url'] ?? '');
-                    $bgPreview = $bg !== '' ? '<div><a target="_blank" href="' . htmlspecialchars_uni($bg) . '">preview</a></div>' : '';
-                    $iconPreview = $icon !== '' ? '<div><a target="_blank" href="' . htmlspecialchars_uni($icon) . '">preview</a></div>' : '';
-                    $html .= '<td><input type="text" name="title_ru" value="' . htmlspecialchars_uni($title) . '" maxlength="255" style="width:100%"></td>';
-                    $html .= '<td><input type="text" name="title_en" value="' . htmlspecialchars_uni($title) . '" maxlength="255" style="width:100%"></td>';
-                    $html .= '<td><input type="text" name="bg_url" value="' . htmlspecialchars_uni($bg) . '" maxlength="255" style="width:100%">' . $bgPreview . '</td>';
-                    $html .= '<td><input type="text" name="icon_url" value="' . htmlspecialchars_uni($icon) . '" maxlength="255" style="width:100%">' . $iconPreview . '</td>';
-                    $html .= '<td><select name="enabled"><option value="1"' . ((int)$shop['enabled'] === 1 ? ' selected' : '') . '>1</option><option value="0"' . ((int)$shop['enabled'] === 0 ? ' selected' : '') . '>0</option></select></td>';
-                    $html .= '<td><input type="number" name="sortorder" value="' . (int)$shop['shop_id'] . '" style="width:90px"></td>';
-                }
+                $html .= '<td>' . htmlspecialchars_uni((string)$shop['code']) . '</td>';
+                $html .= '<td>' . htmlspecialchars_uni($titleRu) . '</td>';
+                $html .= '<td>' . htmlspecialchars_uni($titleEn) . '</td>';
+                $html .= '<td>' . $bgPreview . '</td>';
+                $html .= '<td>' . $iconPreview . '</td>';
+                $html .= '<td>' . ((int)$shop['enabled'] === 1 ? '1' : '0') . '</td>';
+                $html .= '<td>' . ($shopsTable === 'af_shop_shops' ? (int)$shop['sortorder'] : (int)$shop['shop_id']) . '</td>';
                 if ($allowManageLink) {
                     $html .= '<td><a class="button" target="_blank" href="../shop_manage.php?shop=' . rawurlencode((string)$shop['code']) . '">Manage (front)</a></td>';
                 } else {
                     $html .= '<td>—</td>';
                 }
-                $html .= '<td><button class="button" type="submit">Save</button></td>';
+
+                $html .= '<td>';
+                $html .= '<a class="button" href="index.php?module=advancedfunctionality&amp;af_view=advancedshop&amp;tab=shops&amp;edit_shop_id=' . (int)$shop['shop_id'] . '">Edit</a> ';
+                $html .= '<form method="post" action="index.php?module=advancedfunctionality&amp;af_view=advancedshop&amp;tab=shops" style="display:inline-block;margin-left:6px;">';
+                $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
+                $html .= '<input type="hidden" name="do" value="delete_shop">';
+                $html .= '<input type="hidden" name="shop_id" value="' . (int)$shop['shop_id'] . '">';
+                $html .= '<label style="margin-right:4px;"><input type="checkbox" name="delete_cascade" value="1"> cascade</label>';
+                $html .= '<button class="button" type="submit" onclick="return confirm(\'Delete shop ' . addslashes((string)$shop['code']) . '?\');">Delete</button>';
+                $html .= '<div style="font-size:11px;color:#666;">cats: ' . $dependencies['categories'] . ', slots: ' . $dependencies['slots'] . '</div>';
                 $html .= '</form>';
+                $html .= '</td>';
                 $html .= '</tr>';
             }
             $html .= '</table>';
+
+            if ($editShop) {
+                $html .= '<h3>Edit Shop #' . (int)$editShop['shop_id'] . '</h3>';
+                $html .= '<form method="post" action="index.php?module=advancedfunctionality&amp;af_view=advancedshop&amp;tab=shops&amp;edit_shop_id=' . (int)$editShop['shop_id'] . '">';
+                $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
+                $html .= '<input type="hidden" name="do" value="update_shop">';
+                $html .= '<input type="hidden" name="shop_id" value="' . (int)$editShop['shop_id'] . '">';
+                $html .= '<p>Code: <input type="text" name="code" value="' . htmlspecialchars_uni((string)$editShop['code']) . '" maxlength="32" required style="width:220px"></p>';
+                if ($shopsTable === 'af_shop_shops') {
+                    $html .= '<p>Title RU: <input type="text" name="title_ru" value="' . htmlspecialchars_uni((string)($editShop['title_ru'] ?? '')) . '" maxlength="255" style="width:60%"></p>';
+                    $html .= '<p>Title EN: <input type="text" name="title_en" value="' . htmlspecialchars_uni((string)($editShop['title_en'] ?? '')) . '" maxlength="255" style="width:60%"></p>';
+                } else {
+                    $title = (string)($editShop['title'] ?? '');
+                    $html .= '<p>Title RU: <input type="text" name="title_ru" value="' . htmlspecialchars_uni($title) . '" maxlength="255" style="width:60%"></p>';
+                    $html .= '<p>Title EN: <input type="text" name="title_en" value="' . htmlspecialchars_uni($title) . '" maxlength="255" style="width:60%"></p>';
+                }
+                $html .= '<p>BG URL: <input type="text" name="bg_url" value="' . htmlspecialchars_uni((string)($editShop['bg_url'] ?? '')) . '" maxlength="255" style="width:60%"></p>';
+                $html .= '<p>Icon URL: <input type="text" name="icon_url" value="' . htmlspecialchars_uni((string)($editShop['icon_url'] ?? '')) . '" maxlength="255" style="width:60%"></p>';
+                $html .= '<p>Sortorder: <input type="number" name="sortorder" value="' . ($shopsTable === 'af_shop_shops' ? (int)$editShop['sortorder'] : (int)$editShop['shop_id']) . '" style="width:90px"> Enabled: <label><input type="checkbox" name="enabled" value="1"' . ((int)$editShop['enabled'] === 1 ? ' checked' : '') . '> yes</label></p>';
+                $html .= '<p><button class="button button-primary" type="submit">Save shop</button> <a class="button" href="index.php?module=advancedfunctionality&amp;af_view=advancedshop&amp;tab=shops">Cancel</a></p>';
+                $html .= '</form>';
+            }
 
             $html .= '<h3>Create Shop</h3>';
             $html .= '<form method="post" action="index.php?module=advancedfunctionality&amp;af_view=advancedshop&amp;tab=shops">';
