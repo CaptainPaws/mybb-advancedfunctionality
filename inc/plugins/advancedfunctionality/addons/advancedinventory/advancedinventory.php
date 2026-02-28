@@ -1419,6 +1419,37 @@ function af_advancedinventory_user_is_staff(): bool
     return af_advancedinventory_user_can_manage();
 }
 
+function af_advancedinventory_parse_groups_csv(string $csv): array
+{
+    $groups = [];
+    foreach (explode(',', $csv) as $part) {
+        $id = (int)trim((string)$part);
+        if ($id > 0) {
+            $groups[$id] = $id;
+        }
+    }
+
+    return array_values($groups);
+}
+
+function af_advancedinventory_user_group_ids(): array
+{
+    global $mybb;
+
+    $groups = [];
+    $usergroup = (int)($mybb->user['usergroup'] ?? 0);
+    if ($usergroup > 0) {
+        $groups[$usergroup] = $usergroup;
+    }
+
+    $additionalGroups = af_advancedinventory_parse_groups_csv((string)($mybb->user['additionalgroups'] ?? ''));
+    foreach ($additionalGroups as $gid) {
+        $groups[(int)$gid] = (int)$gid;
+    }
+
+    return array_values($groups);
+}
+
 function af_advancedinventory_user_can_manage(): bool
 {
     global $mybb;
