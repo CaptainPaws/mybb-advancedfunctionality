@@ -1,9 +1,12 @@
 <?php
 if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('IN_ADMINCP')) { define('IN_ADMINCP', 1); }
+if (!defined('AF_ADVINV_TABLE_SHOP_MAP')) { define('AF_ADVINV_TABLE_SHOP_MAP', 'af_advinv_shop_map'); }
 
 class AF_Admin_Advancedinventory
 {
+    private const ENTITY_OPTIONS = ['equipment', 'resources', 'pets', 'customization'];
+
     private static function baseUrl(string $do = '', array $params = []): string
     {
         $query = [
@@ -65,7 +68,7 @@ class AF_Admin_Advancedinventory
             FROM " . TABLE_PREFIX . "users u
             LEFT JOIN (
                 SELECT uid, COUNT(*) AS total_rows, COALESCE(SUM(qty),0) AS total_qty
-                FROM " . TABLE_PREFIX . "af_inventory_items
+                FROM " . TABLE_PREFIX . "af_advinv_items
                 GROUP BY uid
             ) inv ON(inv.uid=u.uid)
             WHERE {$whereSql}"), 'c');
@@ -75,7 +78,7 @@ class AF_Admin_Advancedinventory
             FROM " . TABLE_PREFIX . "users u
             LEFT JOIN (
                 SELECT uid, COUNT(*) AS total_rows, COALESCE(SUM(qty),0) AS total_qty
-                FROM " . TABLE_PREFIX . "af_inventory_items
+                FROM " . TABLE_PREFIX . "af_advinv_items
                 GROUP BY uid
             ) inv ON(inv.uid=u.uid)
             WHERE {$whereSql}
@@ -106,8 +109,13 @@ class AF_Admin_Advancedinventory
     {
         global $db, $mybb;
 
+        error_log('[AF advancedinventory admin] render_shop_map_start');
         if (function_exists('af_advinv_shop_map_upgrade_schema')) {
             af_advinv_shop_map_upgrade_schema();
+        }
+
+        if (!$db->table_exists(AF_ADVINV_TABLE_SHOP_MAP)) {
+            return '<div class="error">Не удалось подготовить таблицу правил моста (af_advinv_shop_map).</div>';
         }
 
         if ($mybb->request_method === 'post') {
@@ -122,19 +130,39 @@ class AF_Admin_Advancedinventory
             $editing = (array)$db->fetch_array($db->simple_select(AF_ADVINV_TABLE_SHOP_MAP, '*', 'id=' . $editId, ['limit' => 1]));
         }
 
+        error_log('[AF advancedinventory admin] load_shops_start');
         $shops = [];
-        $shopQ = $db->simple_select('af_shop', 'shop_id,code,title', '', ['order_by' => 'title ASC, shop_id ASC']);
-        while ($row = $db->fetch_array($shopQ)) {
-            $shops[(int)$row['shop_id']] = $row;
+        if ($db->table_exists('af_shop_categories')) {
+            $shopQ = $db->query("SELECT DISTINCT shop_id FROM " . TABLE_PREFIX . "af_shop_categories ORDER BY shop_id ASC");
+        } elseif ($db->table_exists('af_shop_slots')) {
+            $shopQ = $db->query("SELECT DISTINCT shop_id FROM " . TABLE_PREFIX . "af_shop_slots ORDER BY shop_id ASC");
+        } else {
+            $shopQ = false;
+        }
+        if ($shopQ) {
+            while ($row = $db->fetch_array($shopQ)) {
+                $shopId = (int)($row['shop_id'] ?? 0);
+                if ($shopId <= 0) {
+                    continue;
+                }
+                $shops[$shopId] = [
+                    'shop_id' => $shopId,
+                    'code' => '',
+                    'title' => '#' . $shopId,
+                ];
+            }
         }
 
         $catsByShop = [];
-        $catQ = $db->simple_select('af_shop_categories', 'cat_id,shop_id,title', '', ['order_by' => 'shop_id ASC, sortorder ASC, title ASC, cat_id ASC']);
-        while ($row = $db->fetch_array($catQ)) {
-            $catsByShop[(int)$row['shop_id']][] = $row;
+        if ($db->table_exists('af_shop_categories')) {
+            $catQ = $db->simple_select('af_shop_categories', 'cat_id,shop_id,title', '', ['order_by' => 'shop_id ASC, sortorder ASC, title ASC, cat_id ASC']);
+            while ($row = $db->fetch_array($catQ)) {
+                $catsByShop[(int)$row['shop_id']][] = $row;
+            }
         }
 
         $ruleRows = '';
+        error_log('[AF advancedinventory admin] load_rules_start');
         $q = $db->query("SELECT * FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " ORDER BY sortorder ASC, id ASC");
         while ($row = $db->fetch_array($q)) {
             $id = (int)$row['id'];
@@ -205,7 +233,7 @@ class AF_Admin_Advancedinventory
         }
 
         $entityOptions = '';
-        foreach (array_keys(af_advancedinventory_tabs(false)) as $entity) {
+        foreach (self::ENTITY_OPTIONS as $entity) {
             $entityOptions .= '<option value="' . htmlspecialchars_uni($entity) . '"' . ($selectedEntity === $entity ? ' selected' : '') . '>' . htmlspecialchars_uni($entity) . '</option>';
         }
 
