@@ -299,7 +299,7 @@ function af_advancedinventory_misc_router(): void
 {
     global $mybb;
     $action = (string)$mybb->get_input('action');
-    if (!in_array($action, ['inventory', 'inventories', 'tab', 'api_list', 'api_move', 'api_equip', 'api_unequip', 'api_update', 'api_delete'], true)) {
+    if (!in_array($action, ['inventory', 'inventories', 'tab', 'entity', 'api_list', 'api_move', 'api_equip', 'api_unequip', 'api_update', 'api_delete'], true)) {
         return;
     }
     if (!af_advancedinventory_alias_available()) {
@@ -332,7 +332,8 @@ function af_advancedinventory_dispatch(string $action): void
     switch ($action) {
         case 'inventory': af_advancedinventory_render_inventory(); return;
         case 'inventories': af_advancedinventory_render_inventories(); return;
-        case 'tab': af_advancedinventory_render_tab(); return;
+        case 'tab':
+        case 'entity': af_advancedinventory_render_tab(); return;
         case 'api_list': af_advancedinventory_api_list(); return;
         case 'api_equip': af_advancedinventory_api_equip(); return;
         case 'api_unequip': af_advancedinventory_api_unequip(); return;
@@ -377,10 +378,10 @@ function af_advancedinventory_render_inventory(): void
     $tabLinks = '';
     foreach ($tabs as $code => $title) {
         $active = $code === $defaultTab ? 'is-active' : '';
-        $tabLinks .= '<button type="button" class="af-inv-tab ' . $active . '" data-tab="' . htmlspecialchars_uni($code) . '">' . htmlspecialchars_uni($title) . '</button>';
+        $tabLinks .= '<button type="button" class="af-inv-tab ' . $active . '" data-entity="' . htmlspecialchars_uni($code) . '">' . htmlspecialchars_uni($title) . '</button>';
     }
 
-    $firstUrl = af_advancedinventory_url('tab', ['uid' => $ownerUid, 'tab' => $defaultTab, 'sub' => 'all', 'ajax' => 1], true);
+    $firstUrl = af_advancedinventory_url('entity', ['uid' => $ownerUid, 'entity' => $defaultTab, 'sub' => 'all', 'ajax' => 1], true);
     eval('$af_inv_content = "' . $templates->get('advancedinventory_inventory_inner') . '";');
     eval('$page = "' . $templates->get('advancedinventory_inventory_page') . '";');
     output_page($page);
@@ -536,13 +537,14 @@ function af_advinv_entities_upgrade_schema(): void
 
     if (!$db->table_exists(AF_ADVINV_TABLE_ENTITIES)) {
         $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_ENTITIES . " (
-            entity VARCHAR(64) NOT NULL,
-            title_ru VARCHAR(191) NOT NULL DEFAULT '',
-            title_en VARCHAR(191) NOT NULL DEFAULT '',
+            entity VARCHAR(32) NOT NULL,
+            title_ru VARCHAR(255) NOT NULL DEFAULT '',
+            title_en VARCHAR(255) NOT NULL DEFAULT '',
             enabled TINYINT(1) NOT NULL DEFAULT 1,
-            sortorder INT UNSIGNED NOT NULL DEFAULT 0,
-            renderer VARCHAR(64) NOT NULL DEFAULT 'resources',
+            sortorder INT NOT NULL DEFAULT 0,
+            renderer VARCHAR(32) NOT NULL DEFAULT 'generic',
             settings_json MEDIUMTEXT NULL,
+            updated_at INT UNSIGNED NOT NULL DEFAULT 0,
             PRIMARY KEY (entity),
             KEY enabled_sort (enabled, sortorder)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -557,13 +559,14 @@ function af_advinv_entities_upgrade_schema(): void
         }
 
         $columnSql = [
-            'entity' => "ADD COLUMN entity VARCHAR(64) NOT NULL",
-            'title_ru' => "ADD COLUMN title_ru VARCHAR(191) NOT NULL DEFAULT ''",
-            'title_en' => "ADD COLUMN title_en VARCHAR(191) NOT NULL DEFAULT ''",
+            'entity' => "ADD COLUMN entity VARCHAR(32) NOT NULL",
+            'title_ru' => "ADD COLUMN title_ru VARCHAR(255) NOT NULL DEFAULT ''",
+            'title_en' => "ADD COLUMN title_en VARCHAR(255) NOT NULL DEFAULT ''",
             'enabled' => "ADD COLUMN enabled TINYINT(1) NOT NULL DEFAULT 1",
-            'sortorder' => "ADD COLUMN sortorder INT UNSIGNED NOT NULL DEFAULT 0",
-            'renderer' => "ADD COLUMN renderer VARCHAR(64) NOT NULL DEFAULT 'resources'",
+            'sortorder' => "ADD COLUMN sortorder INT NOT NULL DEFAULT 0",
+            'renderer' => "ADD COLUMN renderer VARCHAR(32) NOT NULL DEFAULT 'generic'",
             'settings_json' => "ADD COLUMN settings_json MEDIUMTEXT NULL",
+            'updated_at' => "ADD COLUMN updated_at INT UNSIGNED NOT NULL DEFAULT 0",
         ];
         foreach ($columnSql as $name => $sql) {
             if (!isset($columns[$name])) {
@@ -598,6 +601,7 @@ function af_advinv_entities_upgrade_schema(): void
             'sortorder' => (int)$entityRow['sortorder'],
             'renderer' => $db->escape_string((string)$entityRow['renderer']),
             'settings_json' => $db->escape_string((string)$entityRow['settings_json']),
+            'updated_at' => TIME_NOW,
         ]);
     }
 }
@@ -801,7 +805,10 @@ function af_advancedinventory_render_tab(): void
     }
 
     $tabs = af_advancedinventory_tabs();
-    $tab = (string)$mybb->get_input('tab');
+    $tab = (string)$mybb->get_input('entity');
+    if ($tab === '') {
+        $tab = (string)$mybb->get_input('tab');
+    }
     if (!isset($tabs[$tab])) {
         $tab = (string)array_key_first($tabs);
     }
@@ -1497,7 +1504,7 @@ function af_advinv_get_entities(bool $enabledOnly = true): array
                 'title' => $titleRu !== '' ? $titleRu : ($titleEn !== '' ? $titleEn : $slug),
                 'title_ru' => $titleRu,
                 'title_en' => $titleEn,
-                'renderer' => trim((string)($row['renderer'] ?? 'resources')),
+                'renderer' => trim((string)($row['renderer'] ?? 'generic')),
                 'settings_json' => (string)($row['settings_json'] ?? ''),
                 'enabled' => (int)($row['enabled'] ?? 0),
             ];
@@ -1589,9 +1596,9 @@ function af_advinv_get_entity_filters(string $entity): array
 function af_advinv_render_entity_tab(string $entity, int $ownerUid, string $sub, int $page, bool $ajax): string
 {
     $meta = af_advinv_get_entity_by_slug($entity);
-    $renderer = trim((string)($meta['renderer'] ?? 'resources'));
+    $renderer = trim((string)($meta['renderer'] ?? 'generic'));
     if ($renderer === '') {
-        $renderer = 'resources';
+        $renderer = 'generic';
     }
 
     $filters = ['entity' => $entity, 'subtype' => $sub, 'page' => max(1, $page)];
@@ -1685,7 +1692,7 @@ function af_advinv_render_subfilter_links(string $tab, int $ownerUid, string $su
     $filterButtons = '';
     foreach ($subfilters as $code => $title) {
         $isActive = ($code === $current) ? 'is-active' : '';
-        $url = af_advancedinventory_url('tab', ['uid' => $ownerUid, 'tab' => $tab, 'sub' => $code, 'ajax' => 1], true);
+        $url = af_advancedinventory_url('entity', ['uid' => $ownerUid, 'entity' => $tab, 'sub' => $code, 'ajax' => 1], true);
         $filterButtons .= '<a class="af-inv-subfilter ' . $isActive . '" href="' . $url . '">' . htmlspecialchars_uni($title) . '</a>';
     }
     return $filterButtons;
