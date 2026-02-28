@@ -2,11 +2,10 @@
 if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('IN_ADMINCP')) { define('IN_ADMINCP', 1); }
 if (!defined('AF_ADVINV_TABLE_SHOP_MAP')) { define('AF_ADVINV_TABLE_SHOP_MAP', 'af_advinv_shop_map'); }
+if (!defined('AF_ADVINV_TABLE_ENTITIES')) { define('AF_ADVINV_TABLE_ENTITIES', 'af_advinv_entities'); }
 
 class AF_Admin_Advancedinventory
 {
-    private const ENTITY_OPTIONS = ['equipment', 'resources', 'pets', 'customization'];
-
     private static function baseUrl(string $do = '', array $params = []): string
     {
         $query = [
@@ -39,6 +38,9 @@ class AF_Admin_Advancedinventory
         $view = trim((string)$mybb->get_input('do'));
         if ($view === 'shop_map') {
             return self::render_shop_map();
+        }
+        if ($view === 'entities') {
+            return self::render_inventory_categories();
         }
         return self::render_inventory_list();
     }
@@ -92,9 +94,10 @@ class AF_Admin_Advancedinventory
         }
 
         $mapUrl = self::baseUrl('shop_map');
+        $entitiesUrl = self::baseUrl('entities');
         $html = '';
         $html .= '<div class="af-box"><h2>Инвентари пользователей</h2>';
-        $html .= '<p><a class="button" href="' . htmlspecialchars_uni($mapUrl) . '">Мост Shop → Inventory</a></p>';
+        $html .= '<p><a class="button" href="' . htmlspecialchars_uni($entitiesUrl) . '">Категории инвентаря</a> <a class="button" href="' . htmlspecialchars_uni($mapUrl) . '">Мост Shop → Inventory</a></p>';
         $html .= '<form method="get"><input type="hidden" name="module" value="advancedfunctionality"><input type="hidden" name="af_view" value="advancedinventory">';
         $html .= '<input type="text" name="username" placeholder="Username" value="' . htmlspecialchars_uni($search) . '"> ';
         $html .= '<select name="has_items"><option value="">Все</option><option value="yes"' . ($hasItems === 'yes' ? ' selected' : '') . '>Непустые</option><option value="no"' . ($hasItems === 'no' ? ' selected' : '') . '>Пустые</option></select> ';
@@ -105,11 +108,155 @@ class AF_Admin_Advancedinventory
         return $html;
     }
 
+    private static function render_inventory_categories(): string
+    {
+        global $db, $mybb;
+
+        if ($mybb->request_method === 'post') {
+            verify_post_check($mybb->get_input('my_post_key'));
+            self::handle_entity_post();
+            admin_redirect(self::baseUrl('entities'));
+        }
+
+        $editEntity = trim((string)$mybb->get_input('edit_entity'));
+        $editing = [];
+        if ($editEntity !== '' && $db->table_exists(AF_ADVINV_TABLE_ENTITIES)) {
+            $editing = (array)$db->fetch_array($db->simple_select(AF_ADVINV_TABLE_ENTITIES, '*', "entity='" . $db->escape_string($editEntity) . "'", ['limit' => 1]));
+        }
+
+        $rowsHtml = '';
+        foreach (af_advinv_get_entities(false) as $slug => $row) {
+            $rowsHtml .= '<tr>'
+                . '<td>' . htmlspecialchars_uni($slug) . '</td>'
+                . '<td>' . htmlspecialchars_uni((string)($row['title_ru'] ?? '')) . '</td>'
+                . '<td>' . htmlspecialchars_uni((string)($row['title_en'] ?? '')) . '</td>'
+                . '<td>' . ((int)($row['enabled'] ?? 0) === 1 ? 'Да' : 'Нет') . '</td>'
+                . '<td>' . (int)($row['sortorder'] ?? 0) . '</td>'
+                . '<td>' . htmlspecialchars_uni((string)($row['renderer'] ?? 'generic')) . '</td>'
+                . '<td>'
+                . '<a href="' . htmlspecialchars_uni(self::baseUrl('entities', ['edit_entity' => $slug])) . '">Редактировать</a> · '
+                . '<form method="post" style="display:inline;margin:0">'
+                . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">'
+                . '<input type="hidden" name="entity_action" value="move_up">'
+                . '<input type="hidden" name="entity" value="' . htmlspecialchars_uni($slug) . '">'
+                . '<button type="submit" class="button button_small">↑</button>'
+                . '</form> '
+                . '<form method="post" style="display:inline;margin:0">'
+                . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">'
+                . '<input type="hidden" name="entity_action" value="move_down">'
+                . '<input type="hidden" name="entity" value="' . htmlspecialchars_uni($slug) . '">'
+                . '<button type="submit" class="button button_small">↓</button>'
+                . '</form> '
+                . '<form method="post" style="display:inline;margin:0" onsubmit="return confirm(\'Удалить категорию?\');">'
+                . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">'
+                . '<input type="hidden" name="entity_action" value="delete">'
+                . '<input type="hidden" name="entity" value="' . htmlspecialchars_uni($slug) . '">'
+                . '<button type="submit" class="button button_small">Удалить</button>'
+                . '</form>'
+                . '</td></tr>';
+        }
+
+        $selectedEntity = (string)($editing['entity'] ?? '');
+        $selectedTitleRu = (string)($editing['title_ru'] ?? '');
+        $selectedTitleEn = (string)($editing['title_en'] ?? '');
+        $selectedEnabled = (int)($editing['enabled'] ?? 1);
+        $selectedSort = (int)($editing['sortorder'] ?? self::next_entity_sortorder());
+        $selectedRenderer = (string)($editing['renderer'] ?? 'generic');
+        $selectedSettingsJson = (string)($editing['settings_json'] ?? '{}');
+
+        $html = '<div class="af-box">';
+        $html .= '<h2>Категории инвентаря</h2>';
+        $html .= '<p><a class="button" href="' . htmlspecialchars_uni(self::baseUrl()) . '">← К списку инвентарей</a></p>';
+        $html .= '<table class="table"><thead><tr><th>Slug</th><th>Title RU</th><th>Title EN</th><th>Enabled</th><th>Sort</th><th>Renderer</th><th>Действия</th></tr></thead><tbody>' . ($rowsHtml !== '' ? $rowsHtml : '<tr><td colspan="7">Категории пока не созданы.</td></tr>') . '</tbody></table>';
+
+        $html .= '<h3>' . ($selectedEntity !== '' ? 'Редактировать категорию' : 'Добавить категорию') . '</h3>';
+        $html .= '<form method="post">';
+        $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
+        $html .= '<input type="hidden" name="entity_action" value="save">';
+        $html .= '<input type="hidden" name="original_entity" value="' . htmlspecialchars_uni($selectedEntity) . '">';
+        $html .= '<p><label>Slug (entity)</label><br><input type="text" name="entity" maxlength="32" value="' . htmlspecialchars_uni($selectedEntity) . '" required></p>';
+        $html .= '<p><label>Title RU</label><br><input type="text" name="title_ru" maxlength="255" value="' . htmlspecialchars_uni($selectedTitleRu) . '"></p>';
+        $html .= '<p><label>Title EN</label><br><input type="text" name="title_en" maxlength="255" value="' . htmlspecialchars_uni($selectedTitleEn) . '"></p>';
+        $html .= '<p><label>Sortorder</label><br><input type="number" name="sortorder" value="' . $selectedSort . '"></p>';
+        $html .= '<p><label>Renderer</label><br><input type="text" name="renderer" maxlength="32" value="' . htmlspecialchars_uni($selectedRenderer) . '"></p>';
+        $html .= '<p><label>Settings JSON</label><br><textarea name="settings_json" rows="5" cols="70">' . htmlspecialchars_uni($selectedSettingsJson) . '</textarea></p>';
+        $html .= '<p><label><input type="checkbox" name="enabled" value="1"' . ($selectedEnabled === 1 ? ' checked' : '') . '> Включено</label></p>';
+        $html .= '<p><button type="submit" class="button">Сохранить категорию</button></p>';
+        $html .= '</form>';
+        $html .= '</div>';
+
+        return $html;
+    }
+
+    private static function handle_entity_post(): void
+    {
+        global $db, $mybb;
+
+        $action = trim((string)$mybb->get_input('entity_action'));
+        $entity = trim((string)$mybb->get_input('entity'));
+
+        if ($action === 'delete' && $entity !== '') {
+            if ($db->table_exists(AF_ADVINV_TABLE_ENTITIES)) {
+                $db->delete_query(AF_ADVINV_TABLE_ENTITIES, "entity='" . $db->escape_string($entity) . "'");
+            }
+            return;
+        }
+
+        if ($action === 'move_up' || $action === 'move_down') {
+            self::shift_entity_sortorder($entity, $action === 'move_up' ? -1 : 1);
+            return;
+        }
+
+        if ($action !== 'save' || !$db->table_exists(AF_ADVINV_TABLE_ENTITIES)) {
+            return;
+        }
+
+        $entity = strtolower(trim((string)$mybb->get_input('entity')));
+        $originalEntity = trim((string)$mybb->get_input('original_entity'));
+        $titleRu = trim((string)$mybb->get_input('title_ru'));
+        $titleEn = trim((string)$mybb->get_input('title_en'));
+        $enabled = (int)$mybb->get_input('enabled') === 1 ? 1 : 0;
+        $sortorder = (int)$mybb->get_input('sortorder');
+        $renderer = trim((string)$mybb->get_input('renderer'));
+        $settingsJson = trim((string)$mybb->get_input('settings_json'));
+
+        if (!preg_match('/^[a-z0-9_]{1,32}$/', $entity)) {
+            return;
+        }
+        if ($renderer === '') {
+            $renderer = 'generic';
+        }
+        if ($settingsJson === '') {
+            $settingsJson = '{}';
+        }
+
+        $payload = [
+            'entity' => $db->escape_string($entity),
+            'title_ru' => $db->escape_string($titleRu),
+            'title_en' => $db->escape_string($titleEn),
+            'enabled' => $enabled,
+            'sortorder' => $sortorder,
+            'renderer' => $db->escape_string(substr($renderer, 0, 32)),
+            'settings_json' => $db->escape_string($settingsJson),
+            'updated_at' => TIME_NOW,
+        ];
+
+        if ($originalEntity !== '' && $originalEntity !== $entity) {
+            $db->delete_query(AF_ADVINV_TABLE_ENTITIES, "entity='" . $db->escape_string($originalEntity) . "'");
+        }
+
+        $exists = (int)$db->fetch_field($db->simple_select(AF_ADVINV_TABLE_ENTITIES, 'COUNT(*) AS c', "entity='" . $db->escape_string($entity) . "'", ['limit' => 1]), 'c');
+        if ($exists > 0) {
+            $db->update_query(AF_ADVINV_TABLE_ENTITIES, $payload, "entity='" . $db->escape_string($entity) . "'");
+        } else {
+            $db->insert_query(AF_ADVINV_TABLE_ENTITIES, $payload);
+        }
+    }
+
     private static function render_shop_map(): string
     {
         global $db, $mybb;
 
-        error_log('[AF advancedinventory admin] render_shop_map_start');
         if (function_exists('af_advinv_shop_map_upgrade_schema')) {
             af_advinv_shop_map_upgrade_schema();
         }
@@ -130,48 +277,39 @@ class AF_Admin_Advancedinventory
             $editing = (array)$db->fetch_array($db->simple_select(AF_ADVINV_TABLE_SHOP_MAP, '*', 'id=' . $editId, ['limit' => 1]));
         }
 
-        error_log('[AF advancedinventory admin] load_shops_start');
         $shops = [];
-        if ($db->table_exists('af_shop_categories')) {
-            $shopQ = $db->query("SELECT DISTINCT shop_id FROM " . TABLE_PREFIX . "af_shop_categories ORDER BY shop_id ASC");
-        } elseif ($db->table_exists('af_shop_slots')) {
-            $shopQ = $db->query("SELECT DISTINCT shop_id FROM " . TABLE_PREFIX . "af_shop_slots ORDER BY shop_id ASC");
-        } else {
-            $shopQ = false;
-        }
-        if ($shopQ) {
-            while ($row = $db->fetch_array($shopQ)) {
-                $shopId = (int)($row['shop_id'] ?? 0);
-                if ($shopId <= 0) {
-                    continue;
-                }
-                $shops[$shopId] = [
-                    'shop_id' => $shopId,
-                    'code' => '',
-                    'title' => '#' . $shopId,
-                ];
+        $shopTitles = [];
+        if ($db->table_exists('af_shop_shops')) {
+            $qShops = $db->simple_select('af_shop_shops', 'id,code,title,title_ru,title_en', '', ['order_by' => 'id', 'order_dir' => 'ASC']);
+            while ($s = $db->fetch_array($qShops)) {
+                $shopId = (int)$s['id'];
+                $shops[$shopId] = $s;
+                $shopTitles[$shopId] = trim((string)($s['title_ru'] ?: ($s['title_en'] ?: ($s['title'] ?: $s['code']))));
             }
         }
 
         $catsByShop = [];
         if ($db->table_exists('af_shop_categories')) {
-            $catQ = $db->simple_select('af_shop_categories', 'cat_id,shop_id,title', '', ['order_by' => 'shop_id ASC, sortorder ASC, title ASC, cat_id ASC']);
-            while ($row = $db->fetch_array($catQ)) {
-                $catsByShop[(int)$row['shop_id']][] = $row;
+            $qCats = $db->simple_select('af_shop_categories', 'id,shop_id,title,title_ru,title_en', '', ['order_by' => 'shop_id,id', 'order_dir' => 'ASC']);
+            while ($c = $db->fetch_array($qCats)) {
+                $shopId = (int)$c['shop_id'];
+                $catsByShop[$shopId][] = [
+                    'cat_id' => (int)$c['id'],
+                    'title' => trim((string)($c['title_ru'] ?: ($c['title_en'] ?: $c['title']))),
+                ];
             }
         }
 
         $ruleRows = '';
-        error_log('[AF advancedinventory admin] load_rules_start');
-        $q = $db->query("SELECT * FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " ORDER BY sortorder ASC, id ASC");
-        while ($row = $db->fetch_array($q)) {
+        $qRules = $db->simple_select(AF_ADVINV_TABLE_SHOP_MAP, '*', '', ['order_by' => 'sortorder,id', 'order_dir' => 'ASC']);
+        while ($row = $db->fetch_array($qRules)) {
             $id = (int)$row['id'];
             $shopId = (int)$row['shop_id'];
             $catId = (int)$row['cat_id'];
-            $shopTitle = (string)($shops[$shopId]['title'] ?? ('#' . $shopId));
+            $shopTitle = (string)($shopTitles[$shopId] ?? ('#' . $shopId));
+
             $catTitle = 'Все категории';
             if ($catId > 0) {
-                $catTitle = '#' . $catId;
                 foreach (($catsByShop[$shopId] ?? []) as $catRow) {
                     if ((int)$catRow['cat_id'] === $catId) {
                         $catTitle = (string)$catRow['title'];
@@ -233,7 +371,7 @@ class AF_Admin_Advancedinventory
         }
 
         $entityOptions = '';
-        foreach (self::ENTITY_OPTIONS as $entity) {
+        foreach (array_keys(af_advinv_get_entities(false)) as $entity) {
             $entityOptions .= '<option value="' . htmlspecialchars_uni($entity) . '"' . ($selectedEntity === $entity ? ' selected' : '') . '>' . htmlspecialchars_uni($entity) . '</option>';
         }
 
@@ -338,10 +476,51 @@ class AF_Admin_Advancedinventory
         $db->update_query(AF_ADVINV_TABLE_SHOP_MAP, ['sortorder' => $targetSort], 'id=' . $id);
     }
 
+    private static function shift_entity_sortorder(string $entity, int $direction): void
+    {
+        global $db;
+
+        if ($entity === '' || !$db->table_exists(AF_ADVINV_TABLE_ENTITIES)) {
+            return;
+        }
+
+        $entityEsc = $db->escape_string($entity);
+        $current = (array)$db->fetch_array($db->simple_select(AF_ADVINV_TABLE_ENTITIES, 'entity,sortorder', "entity='{$entityEsc}'", ['limit' => 1]));
+        if (!$current) {
+            return;
+        }
+
+        $sort = (int)$current['sortorder'];
+        $neighborWhere = $direction < 0 ? 'sortorder < ' . $sort : 'sortorder > ' . $sort;
+        $neighborOrder = $direction < 0 ? 'sortorder DESC, entity DESC' : 'sortorder ASC, entity ASC';
+
+        $neighbor = (array)$db->fetch_array($db->query("SELECT entity, sortorder
+            FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_ENTITIES . "
+            WHERE {$neighborWhere}
+            ORDER BY {$neighborOrder}
+            LIMIT 1"));
+        if (!$neighbor) {
+            return;
+        }
+
+        $db->update_query(AF_ADVINV_TABLE_ENTITIES, ['sortorder' => (int)$neighbor['sortorder'], 'updated_at' => TIME_NOW], "entity='{$entityEsc}'");
+        $db->update_query(AF_ADVINV_TABLE_ENTITIES, ['sortorder' => $sort, 'updated_at' => TIME_NOW], "entity='" . $db->escape_string((string)$neighbor['entity']) . "'");
+    }
+
     private static function next_sortorder(): int
     {
         global $db;
         $max = (int)$db->fetch_field($db->simple_select(AF_ADVINV_TABLE_SHOP_MAP, 'MAX(sortorder) AS m'), 'm');
+        return $max + 10;
+    }
+
+    private static function next_entity_sortorder(): int
+    {
+        global $db;
+        if (!$db->table_exists(AF_ADVINV_TABLE_ENTITIES)) {
+            return 10;
+        }
+        $max = (int)$db->fetch_field($db->simple_select(AF_ADVINV_TABLE_ENTITIES, 'MAX(sortorder) AS m'), 'm');
         return $max + 10;
     }
 }

@@ -55,6 +55,10 @@ return [
         'controller' => 'admin.php',
         'menu' => [
             [
+                'title' => 'Inventory categories',
+                'do' => 'entities',
+            ],
+            [
                 'title' => 'Shop map',
                 'do' => 'shop_map',
             ],

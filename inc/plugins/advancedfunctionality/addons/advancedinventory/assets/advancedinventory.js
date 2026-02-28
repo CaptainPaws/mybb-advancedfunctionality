@@ -11,12 +11,12 @@
       var btn=e.target.closest('.af-inv-tab');
       if(!btn){return;}
       e.preventDefault();
-      var tab=btn.getAttribute('data-tab') || 'equipment';
+      var entity=btn.getAttribute('data-entity') || btn.getAttribute('data-tab') || 'equipment';
       document.querySelectorAll('.af-inv-tab').forEach(function(el){el.classList.remove('is-active');});
       btn.classList.add('is-active');
-      var key=tab + ':all';
+      var key=entity + ':all';
       if(cache[key]){ frame.src=cache[key]; return; }
-      var url='inventory.php?action=tab&uid='+encodeURIComponent(uid)+'&tab='+encodeURIComponent(tab)+'&sub=all&ajax=1';
+      var url='inventory.php?action=entity&uid='+encodeURIComponent(uid)+'&entity='+encodeURIComponent(entity)+'&sub=all&ajax=1';
       cache[key]=url;
       frame.src=url;
     });
