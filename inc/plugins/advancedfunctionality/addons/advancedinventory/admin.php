@@ -108,6 +108,12 @@ class AF_Admin_Advancedinventory
 
             if ($do === 'clear_debug_log') {
                 verify_post_check($mybb->get_input('my_post_key'));
+
+                if (!self::can_manage_debug_log()) {
+                    flash_message('Debug log clear failed: permission_denied', 'error');
+                    admin_redirect(self::baseUrl());
+                }
+
                 $result = self::clear_debug_log();
                 if (!($result['ok'] ?? false)) {
                     $error = trim((string)($result['error'] ?? 'Unable to clear debug log.'));
@@ -193,11 +199,12 @@ class AF_Admin_Advancedinventory
 
     private static function clear_debug_log(): array
     {
-        if (!function_exists('af_advinv_debug_clear') || !defined('AF_ADVINV_DEBUG_LOG')) {
+        $path = self::resolve_debug_log_path();
+        if ($path === '') {
             $result = [
                 'ok' => false,
-                'error' => 'debug_clear_helper_unavailable',
-                'path' => defined('AF_ADVINV_DEBUG_LOG') ? AF_ADVINV_DEBUG_LOG : '',
+                'error' => 'path_invalid',
+                'path' => '',
                 'bytes_before' => 0,
                 'bytes_after' => 0,
             ];
@@ -205,9 +212,105 @@ class AF_Admin_Advancedinventory
             return $result;
         }
 
-        $result = af_advinv_debug_clear();
+        if (!is_file($path)) {
+            $result = [
+                'ok' => true,
+                'error' => '',
+                'path' => $path,
+                'bytes_before' => 0,
+                'bytes_after' => 0,
+            ];
+            @error_log('[AF-ADVINV][debug_clear] ' . json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            return $result;
+        }
+
+        $bytesBefore = (int)@filesize($path);
+        if (!is_writable($path)) {
+            $result = [
+                'ok' => false,
+                'error' => 'not_writable',
+                'path' => $path,
+                'bytes_before' => $bytesBefore,
+                'bytes_after' => $bytesBefore,
+            ];
+            @error_log('[AF-ADVINV][debug_clear] ' . json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            return $result;
+        }
+
+        $written = @file_put_contents($path, '', LOCK_EX);
+        if ($written === false) {
+            $result = [
+                'ok' => false,
+                'error' => 'permission_denied',
+                'path' => $path,
+                'bytes_before' => $bytesBefore,
+                'bytes_after' => (int)@filesize($path),
+            ];
+            @error_log('[AF-ADVINV][debug_clear] ' . json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            return $result;
+        }
+
+        $result = [
+            'ok' => true,
+            'error' => '',
+            'path' => $path,
+            'bytes_before' => $bytesBefore,
+            'bytes_after' => (int)@filesize($path),
+        ];
         @error_log('[AF-ADVINV][debug_clear] ' . json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         return $result;
+    }
+
+    private static function resolve_debug_log_path(): string
+    {
+        if (defined('AF_CACHE')) {
+            return rtrim((string)AF_CACHE, '/\\') . '/advancedinventory_debug.log';
+        }
+
+        if (defined('AF_BASE')) {
+            return rtrim((string)AF_BASE, '/\\') . '/cache/advancedinventory_debug.log';
+        }
+
+        return '';
+    }
+
+    private static function can_manage_debug_log(): bool
+    {
+        global $mybb;
+
+        if (self::is_super_admin()) {
+            return true;
+        }
+
+        $allowed = self::parse_group_ids((string)($mybb->settings['af_advancedinventory_manage_groups'] ?? '3,4,6'));
+        if (!$allowed) {
+            return false;
+        }
+
+        $current = [];
+        $usergroup = (int)($mybb->user['usergroup'] ?? 0);
+        if ($usergroup > 0) {
+            $current[$usergroup] = $usergroup;
+        }
+
+        foreach (self::parse_group_ids((string)($mybb->user['additionalgroups'] ?? '')) as $gid) {
+            $current[$gid] = $gid;
+        }
+
+        return (bool)array_intersect($allowed, array_values($current));
+    }
+
+    private static function parse_group_ids(string $csv): array
+    {
+        $out = [];
+        foreach (explode(',', $csv) as $part) {
+            $gid = (int)trim($part);
+            if ($gid > 0) {
+                $out[$gid] = $gid;
+            }
+        }
+
+        return array_values($out);
     }
 
     private static function reset_test_data_tables(): array
