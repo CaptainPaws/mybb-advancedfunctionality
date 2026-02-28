@@ -20,6 +20,24 @@
 
   function hasJq() { return !!(window.jQuery && window.jQuery.fn); }
   function hasSceditor() { return hasJq() && typeof window.jQuery.fn.sceditor === 'function'; }
+  function isEditPostPage() {
+    try {
+      var p = String((window.location && window.location.pathname) || '').toLowerCase();
+      if (p.indexOf('editpost.php') !== -1) return true;
+      var h = String((window.location && window.location.href) || '').toLowerCase();
+      return h.indexOf('editpost.php') !== -1;
+    } catch (e) {}
+    return false;
+  }
+
+  function editpostDebugEnabled() {
+    return isEditPostPage() && window.__afAeEditpostDebug !== false;
+  }
+
+  function debugEditpost() {
+    if (!editpostDebugEnabled()) return;
+    try { console.log.apply(console, arguments); } catch (e) {}
+  }
 
   function isHidden(el) {
     if (!el || el.nodeType !== 1) return true;
@@ -1804,22 +1822,60 @@
     }
   }
 
-  function bindSubmitSync(form, inst, ta) {
-    if (!form || !inst || !ta) return;
+  function getEditorText(inst, ta) {
+    var value = '';
+    try {
+      if (inst && afAeIsSourceMode(inst)) {
+        var src = afAeGetSourceTextarea(inst);
+        if (src && typeof src.value === 'string') return String(src.value || '');
+      }
+    } catch (e0) {}
+
+    try {
+      if (inst && typeof inst.val === 'function') {
+        value = String(inst.val() || '');
+        return value;
+      }
+    } catch (e1) {}
+
+    try { return String((ta && ta.value) || ''); } catch (e2) {}
+    return '';
+  }
+
+  function bindSubmitSync(form, ta) {
+    if (!form || !ta) return;
 
     var key = '__afAeSubmitBound_' + (ta.name || ta.id || 'message');
     if (form[key]) return;
     form[key] = true;
 
     function syncNow() {
+      var inst = null;
+      var before = String(ta.value || '');
+      var beforeEditor = '';
+
+      try {
+        inst = safeGetInstance(window.jQuery(ta));
+      } catch (eInst) {
+        inst = null;
+      }
+
+      try { beforeEditor = getEditorText(inst, ta); } catch (eGet) { beforeEditor = ''; }
+
+      debugEditpost('[AE] submit_sync', {
+        beforeTextareaLength: before.length,
+        beforeEditorLength: beforeEditor.length,
+        hasInstance: !!inst
+      });
+
       try {
         // 1) стандартный метод SCEditor
-        try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e0) {}
+        try { if (inst && typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e0) {}
 
         // 2) железный фоллбек: значение из инстанса в textarea
         try {
-          if (typeof inst.val === 'function') {
-            var v = inst.val();
+          if (inst && typeof inst.val === 'function') {
+            var v = getEditorText(inst, ta);
             if (typeof v === 'string') {
               v = normalizeLegacyAlignBbcode(v);
               ta.value = v;
@@ -1832,10 +1888,46 @@
           try { ta.value = normalizeLegacyAlignBbcode(ta.value); } catch (e2) {}
         }
       } catch (e3) {}
+
+      debugEditpost('[AE] submit_sync', {
+        afterTextareaLength: String(ta.value || '').length,
+        hasInstance: !!inst
+      });
+
+      return {
+        hasInstance: !!inst,
+        editorText: String(beforeEditor || ''),
+        textareaText: String(ta.value || '')
+      };
     }
 
-    form.addEventListener('submit', function () {
-      syncNow();
+    form.addEventListener('submit', function (e) {
+      var state = syncNow();
+      var editorText = String(state.editorText || '').trim();
+      var textareaText = String(state.textareaText || '').trim();
+
+      if (editorText !== '' && textareaText === '') {
+        try {
+          var reInst = safeGetInstance(window.jQuery(ta));
+          if (reInst && typeof reInst.updateOriginal === 'function') reInst.updateOriginal();
+        } catch (eRetry) {}
+
+        textareaText = String(ta.value || '').trim();
+        if (textareaText === '') {
+          e.preventDefault();
+          debugEditpost('[AE] submit_sync_blocked_empty', {
+            editorLength: editorText.length,
+            textareaLength: textareaText.length
+          });
+          try { window.alert('Editor not ready. Please wait a moment and submit again.'); } catch (eAlert) {}
+        }
+      }
+
+      if (!state.hasInstance && String(ta.value || '').trim() === '' && String(ta.__afAeInitialContent || '').trim() !== '') {
+        e.preventDefault();
+        debugEditpost('[AE] submit_sync_blocked_not_ready', { initialLength: String(ta.__afAeInitialContent).length });
+        try { window.alert('Editor not ready. Please wait a moment and submit again.'); } catch (eAlert2) {}
+      }
     }, true);
 
     form.addEventListener('click', function (e) {
@@ -1848,6 +1940,33 @@
         }
       } catch (e0) {}
     }, true);
+  }
+
+  function bindEditpostFormGuards(root) {
+    if (!isEditPostPage()) return;
+    root = root || document;
+    if (!root.querySelectorAll) return;
+
+    var forms = root.querySelectorAll('form');
+    for (var i = 0; i < forms.length; i++) {
+      var form = forms[i];
+      var ta = form.querySelector('textarea[name="message"]');
+      if (!ta) continue;
+      try { bindSubmitSync(form, ta); } catch (e) {}
+    }
+  }
+
+  function registerPageShowRecovery() {
+    if (window.__afAePageShowBound) return;
+    window.__afAePageShowBound = true;
+
+    window.addEventListener('pageshow', function (event) {
+      var persisted = !!(event && event.persisted);
+      if (!persisted) return;
+      debugEditpost('[AE] pageshow_persisted', { persisted: persisted });
+      scanAndInit(document);
+      bindEditpostFormGuards(document);
+    });
   }
 
   function ensurePostKeyInput(form) {
@@ -1916,6 +2035,10 @@
     var $ = window.jQuery;
     var $ta = $(ta);
 
+    if (typeof ta.__afAeInitialContent === 'undefined') {
+      ta.__afAeInitialContent = String(ta.value || '');
+    }
+
     // === ВОТ ТУТ И ДОЛЖНО БЫТЬ ===
     var layout = sanitizeLayout(P.layout || null);
     var availableMap = buildAvailableMap();
@@ -1944,7 +2067,8 @@
 
       try { patchEditorInstanceForSafeToggle(existing); } catch (e0) {}
       try { ensureDefaultSourceMode(existing); } catch (e0b) {}
-      try { bindSubmitSync(ta.form, existing, ta); } catch (e1) {}
+      try { bindSubmitSync(ta.form, ta); } catch (e1) {}
+      if (isEditPostPage()) debugEditpost('[AE] editor_ready', { textareaName: ta.name || '', existing: true });
 
       try { afAeApplyWysiwygCodeQuoteCss(existing); } catch (e2) {}
       try { afAeApplyWysiwygLocalFontsCss(existing); } catch (e2b) {}
@@ -2005,7 +2129,8 @@
 
         try { patchEditorInstanceForSafeToggle(inst); } catch (e3) {}
         try { ensureDefaultSourceMode(inst); } catch (e3b) {}
-        try { bindSubmitSync(ta.form, inst, ta); } catch (e4) {}
+        try { bindSubmitSync(ta.form, ta); } catch (e4) {}
+        if (isEditPostPage()) debugEditpost('[AE] editor_ready', { textareaName: ta.name || '', existing: false });
 
         try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e5) {}
         try { afAeApplyWysiwygLocalFontsCss(inst); } catch (e5b) {}
@@ -2085,7 +2210,13 @@
       }
     });
 
-    obs.observe(document.documentElement || document.body, {
+    var target = document.documentElement || document.body;
+    if (isEditPostPage()) {
+      var scoped = document.querySelector('#editpost');
+      if (scoped) target = scoped;
+    }
+
+    obs.observe(target, {
       childList: true,
       subtree: true
     });
@@ -2097,7 +2228,9 @@
       tries++;
       if (hasSceditor()) {
         scanAndInit(document);
+        bindEditpostFormGuards(document);
         observeDynamicEditors();
+        registerPageShowRecovery();
         return;
       }
       if (tries < 80) return setTimeout(wait, 50);
