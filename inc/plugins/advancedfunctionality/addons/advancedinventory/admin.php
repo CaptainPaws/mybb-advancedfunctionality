@@ -186,7 +186,7 @@ class AF_Admin_Advancedinventory
         }
 
         $entityOptions = '';
-        foreach (AF_ADVINV_VALID_ENTITIES as $entity) {
+        foreach (array_keys(af_advancedinventory_tabs(false)) as $entity) {
             $entityOptions .= '<option value="' . htmlspecialchars_uni($entity) . '"' . ($selectedEntity === $entity ? ' selected' : '') . '>' . htmlspecialchars_uni($entity) . '</option>';
         }
 
@@ -241,7 +241,7 @@ class AF_Admin_Advancedinventory
         $enabled = (int)$mybb->get_input('enabled') === 1 ? 1 : 0;
         $sortorder = max(0, (int)$mybb->get_input('sortorder'));
 
-        if ($shopId <= 0 || !in_array($entity, AF_ADVINV_VALID_ENTITIES, true)) {
+        if ($shopId <= 0 || !af_advinv_entity_exists($entity)) {
             return;
         }
 
