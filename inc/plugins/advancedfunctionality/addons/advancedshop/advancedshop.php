@@ -751,6 +751,11 @@ function af_advancedshop_user_group_ids(): array
 
 function af_advancedshop_can_manage(): bool
 {
+    return af_advancedshop_user_can_manage();
+}
+
+function af_advancedshop_user_can_manage(): bool
+{
     global $mybb;
 
     if ((int)($mybb->user['uid'] ?? 0) <= 0) {
@@ -960,6 +965,11 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
     $shop_code = htmlspecialchars_uni((string)$shop['code']);
     $shop_title = htmlspecialchars_uni($lang->af_advancedshop_shop_title ?? 'Shop');
     $cart_url = af_advancedshop_url('shop_cart', ['shop' => (string)$shop['code']], true);
+    $shop_manage_button = '';
+    if (af_advancedshop_user_can_manage()) {
+        $manage_url = htmlspecialchars_uni(af_advancedshop_url('shop_manage', ['shop' => (string)$shop['code']], true));
+        $shop_manage_button = '<a class="af-shop-manage-link" href="' . $manage_url . '" title="Manage" aria-label="Manage">⚙</a>';
+    }
     $inventory_link = '';
     if ((int)($mybb->user['uid'] ?? 0) > 0) {
         $inventory_link = '<a class="af-shop-btn" href="' . htmlspecialchars_uni('inventory.php?uid=' . (int)$mybb->user['uid']) . '">Инвентарь</a>';
@@ -1002,6 +1012,11 @@ function af_advancedshop_render_hub(): void
         }
         $shop_title = htmlspecialchars_uni($shop_title_raw);
         $shop_open_url = af_advancedshop_url('shop_category', ['shop' => $code], true);
+        $shop_manage_button = '';
+        if (af_advancedshop_user_can_manage()) {
+            $manage_url = htmlspecialchars_uni(af_advancedshop_url('shop_manage', ['shop' => $code], true));
+            $shop_manage_button = '<a class="af-shop-manage-link" href="' . $manage_url . '" title="Manage" aria-label="Manage">⚙</a>';
+        }
         $shop_open_text = htmlspecialchars_uni($lang->af_advancedshop_hub_open ?? 'Открыть');
         eval('$cards_html .= "' . af_advancedshop_tpl('advancedshop_hub_card') . '";');
     }

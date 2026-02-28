@@ -134,6 +134,10 @@ body.af-shop-modal-open{overflow:hidden}
 .af-kb-item span{font-weight:600}
 .af-kb-item small{display:block;opacity:.8}
 
+.af-shop-title-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.af-shop-manage-link{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid #2c2c2c;background:#1f1f1f;color:#f0f0f0;text-decoration:none;font-size:18px;line-height:1}
+.af-shop-manage-link:hover,.af-shop-manage-link:focus{background:#2a2a2a;color:#fff}
 .af-shop-hub__grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
-.af-shop-hub-card{display:flex;flex-direction:column;gap:10px;align-items:flex-start;background:#151515;border:1px solid #2c2c2c;border-radius:10px;padding:12px}
-.af-shop-hub-card__title{margin:0}
+.af-shop-hub-card{position:relative;display:flex;flex-direction:column;gap:10px;align-items:flex-start;background:#151515;border:1px solid #2c2c2c;border-radius:10px;padding:12px}
+.af-shop-hub-card__manage{position:absolute;top:10px;right:10px}
+.af-shop-hub-card__title{margin:0;padding-right:34px}
