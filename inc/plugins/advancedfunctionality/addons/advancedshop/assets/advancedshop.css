@@ -133,3 +133,7 @@ body.af-shop-modal-open{overflow:hidden}
 .af-kb-item{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:6px 8px;border:1px solid #2c2c2c;border-radius:8px;flex-wrap:wrap}
 .af-kb-item span{font-weight:600}
 .af-kb-item small{display:block;opacity:.8}
+
+.af-shop-hub__grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.af-shop-hub-card{display:flex;flex-direction:column;gap:10px;align-items:flex-start;background:#151515;border:1px solid #2c2c2c;border-radius:10px;padding:12px}
+.af-shop-hub-card__title{margin:0}

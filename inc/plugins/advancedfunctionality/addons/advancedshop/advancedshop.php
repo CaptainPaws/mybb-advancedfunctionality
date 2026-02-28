@@ -586,7 +586,7 @@ function af_advancedshop_dispatch(string $action): void
     try {
         switch ($action) {
             case 'shop':
-                af_advancedshop_render_shop(false);
+                af_advancedshop_render_hub();
                 return;
             case 'shop_category':
                 af_advancedshop_render_shop(true);
@@ -857,7 +857,7 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
     if (!$shop) {
         af_advancedshop_render_shop_not_found();
     }
-    add_breadcrumb($lang->af_advancedshop_shop_title ?? 'Shop', af_advancedshop_url('shop', ['shop' => (string)$shop['code']]));
+    add_breadcrumb($lang->af_advancedshop_hub_title ?? 'Выбор магазина', af_advancedshop_url('shop'));
     $shopId = (int)$shop['shop_id'];
     $catId = (int)$mybb->get_input('cat');
 
@@ -943,6 +943,52 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
     $balance_badge = '<span class="af-shop-balance">' . htmlspecialchars_uni($lang->af_advancedshop_balance ?? 'Balance') . ': <strong>' . $balance . '</strong> ' . $currency_symbol . '</span>';
     $assets = af_advancedshop_assets_html();
     eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_shop') . '";');
+    eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
+    output_page($page);
+    exit;
+}
+
+function af_advancedshop_render_hub(): void
+{
+    global $db, $lang, $headerinclude, $header, $footer;
+
+    if (!af_advancedshop_can_view_shop()) {
+        error_no_permission();
+    }
+
+    $cards_html = '';
+    $shopsTable = af_advancedshop_shops_table();
+    $qShops = $db->simple_select(
+        $shopsTable,
+        'shop_id, code, title_ru, title_en',
+        'enabled=1',
+        ['order_by' => 'sortorder ASC, shop_id ASC']
+    );
+
+    while ($shop = $db->fetch_array($qShops)) {
+        $code = trim((string)($shop['code'] ?? ''));
+        if ($code === '') {
+            continue;
+        }
+
+        $shop_code = htmlspecialchars_uni($code);
+        $shop_title_raw = af_advancedshop_pick_lang((string)($shop['title_ru'] ?? ''), (string)($shop['title_en'] ?? ''));
+        if ($shop_title_raw === '') {
+            $shop_title_raw = $code;
+        }
+        $shop_title = htmlspecialchars_uni($shop_title_raw);
+        $shop_open_url = af_advancedshop_url('shop_category', ['shop' => $code], true);
+        $shop_open_text = htmlspecialchars_uni($lang->af_advancedshop_hub_open ?? 'Открыть');
+        eval('$cards_html .= "' . af_advancedshop_tpl('advancedshop_hub_card') . '";');
+    }
+
+    if ($cards_html === '') {
+        $cards_html = '<div class="af-status-error">' . htmlspecialchars_uni($lang->af_advancedshop_hub_empty ?? 'Нет доступных магазинов') . '</div>';
+    }
+
+    $shop_title = htmlspecialchars_uni($lang->af_advancedshop_hub_title ?? 'Выбор магазина');
+    $assets = af_advancedshop_assets_html();
+    eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_hub_page') . '";');
     eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
     output_page($page);
     exit;
@@ -1126,7 +1172,7 @@ function af_advancedshop_render_cart(): void
     global $db, $mybb, $lang, $headerinclude, $header, $footer;
     if ((int)($mybb->user['uid'] ?? 0) <= 0) { error_no_permission(); }
     $shop = af_advancedshop_current_shop();
-    add_breadcrumb($lang->af_advancedshop_shop_title ?? 'Shop', af_advancedshop_url('shop', ['shop' => (string)$shop['code']]));
+    add_breadcrumb($lang->af_advancedshop_hub_title ?? 'Выбор магазина', af_advancedshop_url('shop'));
     add_breadcrumb($lang->af_advancedshop_cart_title ?? 'Cart', af_advancedshop_url('shop_cart', ['shop' => (string)$shop['code']]));
     $cart = af_advancedshop_get_or_create_cart((int)$shop['shop_id'], (int)$mybb->user['uid']);
     [$itemsHtml, $total] = af_advancedshop_build_cart_items($cart);
@@ -1135,7 +1181,7 @@ function af_advancedshop_render_cart(): void
     $msg = $balance >= $total ? '' : '<div class="af-shop-error">' . htmlspecialchars_uni($lang->af_advancedshop_error_not_enough_money ?? 'Not enough money') . '</div>';
     $assets = af_advancedshop_assets_html();
     $shop_code = htmlspecialchars_uni((string)$shop['code']);
-    $shop_url = af_advancedshop_url('shop', ['shop' => (string)$shop['code']], true);
+    $shop_url = af_advancedshop_url('shop_category', ['shop' => (string)$shop['code']], true);
     $inventory_url = htmlspecialchars_uni('inventory.php?uid=' . (int)$mybb->user['uid']);
     $currencySlug = (string)($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits');
     $currency_symbol = htmlspecialchars_uni(af_advancedshop_currency_symbol($currencySlug));
@@ -1327,7 +1373,7 @@ function af_advancedshop_checkout(): void
             'balance_major' => af_advancedshop_money_format($balanceAfter),
         ],
         'links' => [
-            'shop' => af_advancedshop_url('shop', ['shop' => (string)$shop['code']]),
+            'shop' => af_advancedshop_url('shop_category', ['shop' => (string)$shop['code']]),
             'inventory' => 'inventory.php?uid=' . $uid,
         ],
     ]);
