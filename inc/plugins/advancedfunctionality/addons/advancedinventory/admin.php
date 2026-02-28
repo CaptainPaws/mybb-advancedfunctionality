@@ -108,8 +108,14 @@ class AF_Admin_Advancedinventory
 
             if ($do === 'clear_debug_log') {
                 verify_post_check($mybb->get_input('my_post_key'));
-                self::clear_debug_log();
-                flash_message('Cleared', 'success');
+                $result = self::clear_debug_log();
+                if (!($result['ok'] ?? false)) {
+                    $error = trim((string)($result['error'] ?? 'Unable to clear debug log.'));
+                    flash_message('Debug log clear failed: ' . $error, 'error');
+                    admin_redirect(self::baseUrl());
+                }
+
+                flash_message('Debug log cleared', 'success');
                 admin_redirect(self::baseUrl());
             }
         }
@@ -185,15 +191,23 @@ class AF_Admin_Advancedinventory
         return $html;
     }
 
-    private static function clear_debug_log(): void
+    private static function clear_debug_log(): array
     {
-        if (!defined('AF_ADVINV_DEBUG_LOG')) {
-            return;
+        if (!function_exists('af_advinv_debug_clear') || !defined('AF_ADVINV_DEBUG_LOG')) {
+            $result = [
+                'ok' => false,
+                'error' => 'debug_clear_helper_unavailable',
+                'path' => defined('AF_ADVINV_DEBUG_LOG') ? AF_ADVINV_DEBUG_LOG : '',
+                'bytes_before' => 0,
+                'bytes_after' => 0,
+            ];
+            @error_log('[AF-ADVINV][debug_clear] ' . json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            return $result;
         }
 
-        if (is_file(AF_ADVINV_DEBUG_LOG)) {
-            @file_put_contents(AF_ADVINV_DEBUG_LOG, '');
-        }
+        $result = af_advinv_debug_clear();
+        @error_log('[AF-ADVINV][debug_clear] ' . json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+        return $result;
     }
 
     private static function reset_test_data_tables(): array
