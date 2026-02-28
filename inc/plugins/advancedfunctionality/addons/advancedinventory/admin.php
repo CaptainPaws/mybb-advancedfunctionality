@@ -638,34 +638,79 @@ class AF_Admin_Advancedinventory
 
         $shops = [];
         $shopCodeById = [];
-        if ($db->table_exists('af_shop')) {
-            $shopCols = self::table_columns('af_shop');
-            if (isset($shopCols['shop_id']) && isset($shopCols['code'])) {
-                $qShopRows = $db->query("SELECT shop_id, code, title_ru, title_en FROM " . TABLE_PREFIX . "af_shop ORDER BY shop_id ASC");
-                while ($shopRow = $db->fetch_array($qShopRows)) {
-                    $shopCode = trim((string)($shopRow['code'] ?? ''));
-                    if ($shopCode === '') {
-                        continue;
-                    }
-                    $shopId = (int)($shopRow['shop_id'] ?? 0);
-                    if ($shopId > 0) {
-                        $shopCodeById[$shopId] = $shopCode;
-                    }
-                    $shopTitle = trim((string)($shopRow['title_ru'] ?? $shopRow['title_en'] ?? ''));
-                    if ($shopTitle === '') {
-                        $shopTitle = 'Shop ' . $shopCode;
-                    }
-                    $shops[$shopCode] = ['code' => $shopCode, 'title' => $shopTitle];
+        $shopsTable = '';
+        if ($db->table_exists('af_shop_shops')) {
+            $shopsTable = 'af_shop_shops';
+        } elseif ($db->table_exists('af_shop')) {
+            $shopsTable = 'af_shop';
+        }
+
+        if ($shopsTable !== '' && $db->field_exists('shop_id', $shopsTable)) {
+            $hasShopCode = $db->field_exists('code', $shopsTable);
+            $hasShopTitleRu = $db->field_exists('title_ru', $shopsTable);
+            $hasShopTitleEn = $db->field_exists('title_en', $shopsTable);
+            $hasShopTitle = $db->field_exists('title', $shopsTable);
+
+            $selectCols = ['shop_id'];
+            if ($hasShopCode) {
+                $selectCols[] = 'code';
+            }
+            if ($hasShopTitleRu) {
+                $selectCols[] = 'title_ru';
+            }
+            if ($hasShopTitleEn) {
+                $selectCols[] = 'title_en';
+            }
+            if ($hasShopTitle) {
+                $selectCols[] = 'title';
+            }
+
+            $qShopRows = $db->query("SELECT " . implode(', ', $selectCols) . " FROM " . TABLE_PREFIX . $shopsTable . " ORDER BY shop_id ASC");
+            while ($shopRow = $db->fetch_array($qShopRows)) {
+                $shopId = (int)($shopRow['shop_id'] ?? 0);
+                if ($shopId <= 0) {
+                    continue;
                 }
+
+                $shopCode = $hasShopCode ? trim((string)($shopRow['code'] ?? '')) : '';
+                if ($shopCode === '') {
+                    $shopCode = (string)$shopId;
+                }
+                $shopCodeById[$shopId] = $shopCode;
+
+                $shopTitle = '';
+                if ($hasShopTitleRu) {
+                    $shopTitle = trim((string)($shopRow['title_ru'] ?? ''));
+                }
+                if ($shopTitle === '' && $hasShopTitleEn) {
+                    $shopTitle = trim((string)($shopRow['title_en'] ?? ''));
+                }
+                if ($shopTitle === '' && $hasShopTitle) {
+                    $shopTitle = trim((string)($shopRow['title'] ?? ''));
+                }
+                if ($shopTitle === '' && $hasShopCode) {
+                    $shopTitle = $shopCode;
+                }
+                if ($shopTitle === '') {
+                    $shopTitle = '#' . $shopId;
+                }
+
+                $shops[$shopCode] = ['code' => $shopCode, 'title' => $shopTitle];
             }
         }
 
         $catsByShopCode = [];
         if ($db->table_exists('af_shop_categories')) {
-            $catCols = self::table_columns('af_shop_categories');
-            if (isset($catCols['shop_id']) && (isset($catCols['cat_id']) || isset($catCols['id']))) {
-                $catIdCol = isset($catCols['cat_id']) ? 'cat_id' : 'id';
-                $titleCol = isset($catCols['title_ru']) ? 'title_ru' : (isset($catCols['title']) ? 'title' : (isset($catCols['title_en']) ? 'title_en' : ''));
+            $hasCatShopId = $db->field_exists('shop_id', 'af_shop_categories');
+            $hasCatId = $db->field_exists('cat_id', 'af_shop_categories');
+            $hasLegacyCatId = $db->field_exists('id', 'af_shop_categories');
+            $hasCatTitle = $db->field_exists('title', 'af_shop_categories');
+            $hasCatTitleRu = $db->field_exists('title_ru', 'af_shop_categories');
+            $hasCatTitleEn = $db->field_exists('title_en', 'af_shop_categories');
+
+            if ($hasCatShopId && ($hasCatId || $hasLegacyCatId)) {
+                $catIdCol = $hasCatId ? 'cat_id' : 'id';
+                $catTitleCol = $hasCatTitle ? 'title' : ($hasCatTitleRu ? 'title_ru' : ($hasCatTitleEn ? 'title_en' : ''));
 
                 $qShops = $db->query("SELECT DISTINCT shop_id FROM " . TABLE_PREFIX . "af_shop_categories ORDER BY shop_id ASC");
                 while ($shop = $db->fetch_array($qShops)) {
@@ -678,12 +723,12 @@ class AF_Admin_Advancedinventory
                         $shopCode = (string)$shopId;
                     }
                     if (!isset($shops[$shopCode])) {
-                        $shops[$shopCode] = ['code' => $shopCode, 'title' => 'Shop ' . $shopCode];
+                        $shops[$shopCode] = ['code' => $shopCode, 'title' => '#' . $shopId];
                     }
                 }
 
-                $titleExpr = $titleCol !== '' ? "COALESCE(NULLIF(c.{$titleCol}, ''), CONCAT('#', c.{$catIdCol}))" : "CONCAT('#', c.{$catIdCol})";
-                $qCats = $db->query("SELECT c.{$catIdCol} AS cat_id, c.shop_id, {$titleExpr} AS title
+                $catTitleSelect = $catTitleCol !== '' ? ', c.' . $catTitleCol . ' AS title_raw' : '';
+                $qCats = $db->query("SELECT c.{$catIdCol} AS cat_id, c.shop_id{$catTitleSelect}
                     FROM " . TABLE_PREFIX . "af_shop_categories c
                     ORDER BY c.shop_id ASC, c.{$catIdCol} ASC");
                 while ($c = $db->fetch_array($qCats)) {
@@ -695,9 +740,15 @@ class AF_Admin_Advancedinventory
                     if ($shopCode === '') {
                         $shopCode = (string)$shopId;
                     }
+
+                    $catTitle = trim((string)($c['title_raw'] ?? ''));
+                    if ($catTitle === '') {
+                        $catTitle = '#' . (int)$c['cat_id'];
+                    }
+
                     $catsByShopCode[$shopCode][] = [
                         'cat_id' => (int)$c['cat_id'],
-                        'title' => trim((string)($c['title'] ?? ('#' . (int)$c['cat_id']))),
+                        'title' => $catTitle,
                     ];
                 }
             }
@@ -717,7 +768,7 @@ class AF_Admin_Advancedinventory
                         $shopCode = (string)$shopId;
                     }
                     if (!isset($shops[$shopCode])) {
-                        $shops[$shopCode] = ['code' => $shopCode, 'title' => 'Shop ' . $shopCode];
+                        $shops[$shopCode] = ['code' => $shopCode, 'title' => '#' . $shopId];
                     }
                 }
             }
