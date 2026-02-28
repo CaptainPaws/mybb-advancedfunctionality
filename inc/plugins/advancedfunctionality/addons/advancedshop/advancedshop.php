@@ -594,7 +594,66 @@ function af_advancedshop_render_shop_page(): void
         $action = 'shop';
     }
 
+    af_advancedshop_redirect_legacy_manage_action($action);
+
     af_advancedshop_dispatch($action);
+}
+
+function af_advancedshop_redirect_legacy_manage_action(string $action): void
+{
+    global $db, $mybb;
+
+    $legacyActions = [
+        'shop_manage',
+        'shop_manage_categories',
+        'shop_manage_category_create',
+        'shop_manage_category_update',
+        'shop_manage_category_delete',
+        'shop_manage_sortorder_rebuild',
+        'shop_manage_slots',
+        'shop_manage_slot_create',
+        'shop_manage_slot_update',
+        'shop_manage_slot_delete',
+    ];
+    if (!in_array($action, $legacyActions, true)) {
+        return;
+    }
+
+    $legacyShop = trim((string)$mybb->get_input('shop'));
+    $catId = (int)$mybb->get_input('cat');
+    if ($catId <= 0) {
+        $catId = (int)$mybb->get_input('cat_id');
+    }
+
+    $shopCode = '';
+    if ($legacyShop !== '') {
+        $shopsTable = af_advancedshop_shops_table();
+        if (ctype_digit($legacyShop)) {
+            $row = $db->fetch_array($db->simple_select($shopsTable, 'code', 'shop_id=' . (int)$legacyShop, ['limit' => 1]));
+            $shopCode = (string)($row['code'] ?? '');
+        } else {
+            $row = $db->fetch_array($db->simple_select($shopsTable, 'code', "code='" . $db->escape_string($legacyShop) . "'", ['limit' => 1]));
+            $shopCode = (string)($row['code'] ?? '');
+        }
+    }
+
+    if ($shopCode === '') {
+        header('Location: shop_manage.php');
+        exit;
+    }
+
+    $target = 'shop_manage.php?shop=' . rawurlencode($shopCode);
+    if ($action === 'shop_manage_slots' || $action === 'shop_manage_slot_create' || $action === 'shop_manage_slot_update' || $action === 'shop_manage_slot_delete') {
+        $target .= '&view=slots';
+        if ($catId > 0) {
+            $target .= '&cat_id=' . $catId;
+        }
+    } else {
+        $target .= '&view=categories';
+    }
+
+    header('Location: ' . $target);
+    exit;
 }
 
 function af_advancedshop_dispatch(string $action): void
@@ -928,11 +987,22 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
     $catId = (int)$mybb->get_input('cat');
 
     $flatCats = [];
-    $qCats = $db->simple_select('af_shop_categories', '*', 'shop_id=' . $shopId . ' AND enabled=1', ['order_by' => 'sortorder ASC, title ASC, cat_id ASC']);
+    $isManagerView = af_advancedshop_user_can_manage();
+    $catWhere = 'shop_id=' . $shopId;
+    if (!$isManagerView) {
+        $catWhere .= ' AND enabled=1';
+    }
+    $qCats = $db->simple_select('af_shop_categories', '*', $catWhere, ['order_by' => 'sortorder ASC, cat_id ASC']);
     while ($cat = $db->fetch_array($qCats)) {
         $flatCats[] = $cat;
     }
-    $cats = af_advancedshop_render_shop_categories_tree($flatCats, (string)$shop['code'], $catId);
+    $slotCounts = [];
+    $qSlotCounts = $db->query('SELECT cat_id, COUNT(*) AS cnt FROM ' . TABLE_PREFIX . 'af_shop_slots WHERE shop_id=' . $shopId . ' GROUP BY cat_id');
+    while ($countRow = $db->fetch_array($qSlotCounts)) {
+        $slotCounts[(int)$countRow['cat_id']] = (int)$countRow['cnt'];
+    }
+    $cats = af_advancedshop_render_shop_categories_tree($flatCats, (string)$shop['code'], $catId, $isManagerView, $slotCounts);
+    af_advancedshop_debug_categories((string)$shop['code'], $shopId, $flatCats);
 
     $slotsHtml = '';
     $where = 's.shop_id=' . $shopId . ' AND s.enabled=1';
@@ -3226,16 +3296,46 @@ function af_advancedshop_money_scale(): int
     return $scale > 0 ? $scale : 100;
 }
 
+function af_shop_price_to_storage(string $input): int
+{
+    $normalized = str_replace(',', '.', trim($input));
+    if ($normalized === '') {
+        return 0;
+    }
+    if (!preg_match('/^\d+(?:\.\d{1,2})?$/', $normalized)) {
+        return 0;
+    }
+
+    $parts = explode('.', $normalized, 2);
+    $major = (int)$parts[0];
+    $minor = 0;
+    if (isset($parts[1])) {
+        $minorPart = str_pad(substr($parts[1], 0, 2), 2, '0', STR_PAD_RIGHT);
+        $minor = (int)$minorPart;
+    }
+
+    return max(0, ($major * 100) + $minor);
+}
+
+function af_shop_price_to_display(int $stored): string
+{
+    $stored = max(0, $stored);
+    if ($stored === 0) {
+        return '0';
+    }
+
+    $formatted = number_format($stored / 100, 2, '.', '');
+    return rtrim(rtrim($formatted, '0'), '.');
+}
+
 function af_advancedshop_money_format(int $amountMinor): string
 {
-    $value = $amountMinor / af_advancedshop_money_scale();
-    return number_format($value, 2, '.', '');
+    return af_shop_price_to_display($amountMinor);
 }
 
 function af_advancedshop_money_to_minor(string $amount): int
 {
-    $value = (float)str_replace(',', '.', trim($amount));
-    return max(0, (int)round($value * af_advancedshop_money_scale()));
+    return af_shop_price_to_storage($amount);
 }
 
 function af_advancedshop_currency_symbol(string $slug): string
@@ -3248,7 +3348,7 @@ function af_advancedshop_currency_symbol(string $slug): string
 }
 
 
-function af_advancedshop_render_shop_categories_tree(array $rows, string $shopCode, int $activeCatId): string
+function af_advancedshop_render_shop_categories_tree(array $rows, string $shopCode, int $activeCatId, bool $isManagerView = false, array $slotCounts = []): string
 {
     $childrenByParent = [];
     foreach ($rows as $row) {
@@ -3260,7 +3360,7 @@ function af_advancedshop_render_shop_categories_tree(array $rows, string $shopCo
     }
 
     $rendered = [];
-    $walk = static function (int $parentId, int $depth) use (&$walk, $childrenByParent, $shopCode, $activeCatId, &$rendered): string {
+    $walk = static function (int $parentId, int $depth) use (&$walk, $childrenByParent, $shopCode, $activeCatId, $isManagerView, $slotCounts, &$rendered): string {
         $html = '';
         foreach ($childrenByParent[$parentId] ?? [] as $cat) {
             $rowCatId = (int)$cat['cat_id'];
@@ -3268,7 +3368,20 @@ function af_advancedshop_render_shop_categories_tree(array $rows, string $shopCo
             $hasChildren = !empty($childrenByParent[$rowCatId]);
             $activeClass = $activeCatId === $rowCatId ? 'is-active' : '';
             $cat_url = af_advancedshop_url('shop_category', ['shop' => $shopCode, 'cat' => $rowCatId], true);
-            $cat_title = htmlspecialchars_uni((string)$cat['title']);
+            $catTitleRaw = (string)$cat['title'];
+            if ($isManagerView) {
+                $labels = [];
+                if ((int)($cat['enabled'] ?? 0) !== 1) {
+                    $labels[] = 'disabled';
+                }
+                if (((int)($slotCounts[$rowCatId] ?? 0)) === 0) {
+                    $labels[] = 'empty';
+                }
+                if ($labels) {
+                    $catTitleRaw .= ' [' . implode(', ', $labels) . ']';
+                }
+            }
+            $cat_title = htmlspecialchars_uni($catTitleRaw);
             $cat_depth = $depth;
             $cat_toggle = '<button type="button" class="af-cat-toggle' . ($hasChildren ? '' : ' is-empty') . '" data-cat="' . $rowCatId . '" aria-expanded="true"' . ($hasChildren ? '' : ' aria-hidden="true" tabindex="-1"') . '><span class="af-cat-toggle__icon">' . ($hasChildren ? '▾' : '') . '</span></button>';
             $cat_children = '';
@@ -3289,6 +3402,16 @@ function af_advancedshop_render_shop_categories_tree(array $rows, string $shopCo
         }
     }
     return $html;
+}
+
+function af_advancedshop_debug_categories(string $shopCode, int $shopId, array $categories): void
+{
+    $catIds = [];
+    foreach ($categories as $cat) {
+        $catIds[] = (int)($cat['cat_id'] ?? 0);
+    }
+
+    error_log('[af_advancedshop][shop_category] shop_code=' . $shopCode . ' shop_id=' . $shopId . ' categories_count=' . count($catIds) . ' cat_ids=' . implode(',', $catIds));
 }
 
 function af_advancedshop_category_tree_rows(array $rows): array
@@ -3713,7 +3836,7 @@ function af_advancedshop_render_shop_manage_page(): void
                             'kb_type' => $db->escape_string($kbType),
                             'kb_id' => $kbId > 0 ? $kbId : (int)($kbOk['id'] ?? 0),
                             'kb_key' => $db->escape_string($kbKey !== '' ? $kbKey : (string)($kbOk['key'] ?? '')),
-                            'price' => (int)$mybb->get_input('price'),
+                            'price' => af_shop_price_to_storage((string)$mybb->get_input('price')),
                             'currency' => $db->escape_string((string)$mybb->get_input('currency')),
                             'stock' => (int)$mybb->get_input('stock'),
                             'limit_per_user' => (int)$mybb->get_input('limit_per_user'),
@@ -3729,7 +3852,7 @@ function af_advancedshop_render_shop_manage_page(): void
                     'kb_type' => $db->escape_string(af_advancedshop_normalize_kb_type((string)$mybb->get_input('kb_type')) ?: 'item'),
                     'kb_id' => (int)$mybb->get_input('kb_id'),
                     'kb_key' => $db->escape_string(trim((string)$mybb->get_input('kb_key'))),
-                    'price' => (int)$mybb->get_input('price'),
+                    'price' => af_shop_price_to_storage((string)$mybb->get_input('price')),
                     'currency' => $db->escape_string((string)$mybb->get_input('currency')),
                     'stock' => (int)$mybb->get_input('stock'),
                     'limit_per_user' => (int)$mybb->get_input('limit_per_user'),
@@ -3824,10 +3947,10 @@ function af_advancedshop_render_shop_manage_page(): void
             if ($editSlotId > 0) {
                 $editSlot = $db->fetch_array($db->simple_select('af_shop_slots', '*', 'slot_id=' . $editSlotId . ' AND shop_id=' . (int)$shop['shop_id'] . ' AND cat_id=' . $catId, ['limit' => 1]));
                 if ($editSlot) {
-                    $content .= '<h3>Редактировать слот #' . (int)$editSlot['slot_id'] . '</h3><form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . $catId . '"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="edit"><input type="hidden" name="slot_id" value="' . (int)$editSlot['slot_id'] . '"><p>kb_type <input name="kb_type" value="' . htmlspecialchars_uni((string)$editSlot['kb_type']) . '"> kb_key <input name="kb_key" value="' . htmlspecialchars_uni((string)$editSlot['kb_key']) . '" required> kb_id <input type="number" name="kb_id" value="' . (int)$editSlot['kb_id'] . '"></p><p>price <input type="number" name="price" value="' . (int)$editSlot['price'] . '"> currency <input name="currency" value="' . htmlspecialchars_uni((string)$editSlot['currency']) . '"> stock <input type="number" name="stock" value="' . (int)$editSlot['stock'] . '"> limit_per_user <input type="number" name="limit_per_user" value="' . (int)$editSlot['limit_per_user'] . '"></p><p>sortorder <input type="number" name="sortorder" value="' . (int)$editSlot['sortorder'] . '"> enabled <select name="enabled"><option value="1"' . ((int)$editSlot['enabled'] === 1 ? ' selected' : '') . '>1</option><option value="0"' . ((int)$editSlot['enabled'] === 0 ? ' selected' : '') . '>0</option></select></p><p>meta_json<br><textarea name="meta_json" rows="4" cols="100">' . htmlspecialchars_uni((string)$editSlot['meta_json']) . '</textarea></p><p><button type="submit">Сохранить слот</button> <a class="button" href="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . $catId . '">Отмена</a></p></form>';
+                    $content .= '<h3>Редактировать слот #' . (int)$editSlot['slot_id'] . '</h3><form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . $catId . '"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="edit"><input type="hidden" name="slot_id" value="' . (int)$editSlot['slot_id'] . '"><p>kb_type <input name="kb_type" value="' . htmlspecialchars_uni((string)$editSlot['kb_type']) . '"> kb_key <input name="kb_key" value="' . htmlspecialchars_uni((string)$editSlot['kb_key']) . '" required> kb_id <input type="number" name="kb_id" value="' . (int)$editSlot['kb_id'] . '"></p><p>price <input type="number" name="price" step="0.01" min="0" value="' . htmlspecialchars_uni(af_shop_price_to_display((int)$editSlot['price'])) . '"> currency <input name="currency" value="' . htmlspecialchars_uni((string)$editSlot['currency']) . '"> stock <input type="number" name="stock" value="' . (int)$editSlot['stock'] . '"> limit_per_user <input type="number" name="limit_per_user" value="' . (int)$editSlot['limit_per_user'] . '"></p><p>sortorder <input type="number" name="sortorder" value="' . (int)$editSlot['sortorder'] . '"> enabled <select name="enabled"><option value="1"' . ((int)$editSlot['enabled'] === 1 ? ' selected' : '') . '>1</option><option value="0"' . ((int)$editSlot['enabled'] === 0 ? ' selected' : '') . '>0</option></select></p><p>meta_json<br><textarea name="meta_json" rows="4" cols="100">' . htmlspecialchars_uni((string)$editSlot['meta_json']) . '</textarea></p><p><button type="submit">Сохранить слот</button> <a class="button" href="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . $catId . '">Отмена</a></p></form>';
                 }
             }
-            $content .= '<h3>Add slot</h3><form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . $catId . '"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="add"><input type="hidden" name="cat_id" value="' . $catId . '"><p>kb_type <input name="kb_type" value="item"> kb_key <input name="kb_key" required> kb_id <input type="number" name="kb_id" value="0"></p><p>price <input type="number" name="price" value="0"> currency <input name="currency" value="credits"> stock <input type="number" name="stock" value="-1"> limit_per_user <input type="number" name="limit_per_user" value="0"></p><p>sortorder <input type="number" name="sortorder" value="0"> enabled <select name="enabled"><option value="1">1</option><option value="0">0</option></select></p><p>meta_json<br><textarea name="meta_json" rows="4" cols="100"></textarea></p><p><button type="submit">Add slot</button></p></form>';
+            $content .= '<h3>Add slot</h3><form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . $catId . '"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="add"><input type="hidden" name="cat_id" value="' . $catId . '"><p>kb_type <input name="kb_type" value="item"> kb_key <input name="kb_key" required> kb_id <input type="number" name="kb_id" value="0"></p><p>price <input type="number" step="0.01" min="0" name="price" value="0"> currency <input name="currency" value="credits"> stock <input type="number" name="stock" value="-1"> limit_per_user <input type="number" name="limit_per_user" value="0"></p><p>sortorder <input type="number" name="sortorder" value="0"> enabled <select name="enabled"><option value="1">1</option><option value="0">0</option></select></p><p>meta_json<br><textarea name="meta_json" rows="4" cols="100"></textarea></p><p><button type="submit">Add slot</button></p></form>';
         }
     } else {
         $content .= '<h2>Categories: ' . htmlspecialchars_uni($shopTitle) . '</h2>';
