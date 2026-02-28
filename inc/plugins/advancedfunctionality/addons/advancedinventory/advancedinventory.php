@@ -1626,6 +1626,14 @@ function af_advinv_render_entity_tab(string $entity, int $ownerUid, string $sub,
         $renderer = 'generic';
     }
 
+    if ($renderer !== 'generic') {
+        af_advinv_require_module($renderer);
+        $renderFn = 'af_advinv_entity_' . $renderer . '_render';
+        if (function_exists($renderFn)) {
+            return (string)$renderFn($ownerUid, $sub, $page, $ajax);
+        }
+    }
+
     $filters = ['entity' => $entity, 'subtype' => $sub, 'page' => max(1, $page)];
     $data = af_inv_get_items($ownerUid, array_merge($filters, ['enrich' => true]));
     $canManage = af_advancedinventory_user_can_manage();
