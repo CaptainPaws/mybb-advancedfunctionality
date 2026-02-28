@@ -924,7 +924,7 @@ function af_inv_add_item(int $uid, array $item): int
     $meta = @json_decode((string)$metaJson, true);
     $meta = is_array($meta) ? $meta : [];
 
-    $equipmentKinds = ['weapon', 'armor', 'ammo', 'consumable'];
+    $equipmentKinds = ['weapon', 'armor', 'ammo', 'augmentations', 'consumable'];
     if ($slot === '') {
         $slot = $entity;
     }
@@ -936,7 +936,7 @@ function af_inv_add_item(int $uid, array $item): int
     if ($entity === 'equipment') {
         af_advinv_require_module('equipment');
         $classifyFn = 'af_advinv_entity_equipment_classify_from_kb_meta';
-        if (function_exists($classifyFn)) {
+        if (($subtype === '' || $subtype === 'misc') && function_exists($classifyFn)) {
             $fromMeta = (string)$classifyFn($meta);
             if ($fromMeta !== '' && in_array($fromMeta, $equipmentKinds, true)) {
                 $subtype = $fromMeta;
