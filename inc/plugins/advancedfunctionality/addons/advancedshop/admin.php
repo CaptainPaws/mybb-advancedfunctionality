@@ -148,7 +148,8 @@ class AF_Admin_Advancedshop
         if ($activeTab === 'shops') {
             $html .= '<h3>Shops</h3>';
             $html .= '<table class="tborder" cellpadding="6" cellspacing="1" width="100%"><tr>';
-            $html .= '<th>shop_id</th><th>code</th><th>title_ru</th><th>title_en</th><th>enabled</th><th>sortorder</th></tr>';
+            $html .= '<th>shop_id</th><th>code</th><th>title_ru</th><th>title_en</th><th>enabled</th><th>sortorder</th><th>manage</th></tr>';
+            $allowManageLink = function_exists('af_advancedshop_can_manage') ? af_advancedshop_can_manage() : true;
             foreach ($shops as $shop) {
                 $html .= '<tr>';
                 $html .= '<td>' . (int)$shop['shop_id'] . '</td>';
@@ -161,6 +162,11 @@ class AF_Admin_Advancedshop
                 } else {
                     $title = htmlspecialchars_uni((string)($shop['title'] ?? ''));
                     $html .= '<td>' . $title . '</td><td>' . $title . '</td><td>' . ((int)$shop['enabled'] === 1 ? '1' : '0') . '</td><td>' . (int)$shop['shop_id'] . '</td>';
+                }
+                if ($allowManageLink) {
+                    $html .= '<td><a class="button" target="_blank" href="../shop_manage.php?shop=' . rawurlencode((string)$shop['code']) . '">Manage (front)</a></td>';
+                } else {
+                    $html .= '<td>—</td>';
                 }
                 $html .= '</tr>';
             }
