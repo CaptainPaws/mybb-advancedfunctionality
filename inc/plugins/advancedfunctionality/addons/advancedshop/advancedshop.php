@@ -12,6 +12,9 @@ define('AF_ADVSHOP_ASSETS_BLACKLIST_DEFAULT', "index.php\nforumdisplay.php\npost
 define('AF_ADVSHOP_ASSETS_BLACKLIST_DESC', 'По одной строке. Форматы: `script.php` или `script.php?action=xxx`.');
 define('AF_KB_TABLE_ENTRIES', 'af_kb_entries');
 define('AF_KB_TABLE_ENTRIES_LEGACY', 'kb_entries');
+if (!defined('AF_ADVSHOP_DEBUG_LOG') && defined('AF_CACHE')) {
+    define('AF_ADVSHOP_DEBUG_LOG', AF_CACHE . 'advancedshop_debug.log');
+}
 
 function af_advancedshop_kb_table_entries(): string
 {
@@ -1531,8 +1534,8 @@ function af_advancedshop_inv_debug(string $event, array $context = []): void
 {
     $line = '[AF-ADVSHOP][' . date('c') . '][' . $event . '] ' . json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     @error_log($line);
-    if (defined('AF_CACHE')) {
-        @file_put_contents(AF_CACHE . 'advancedinventory_debug.log', $line . "\n", FILE_APPEND);
+    if (defined('AF_ADVSHOP_DEBUG_LOG')) {
+        @file_put_contents(AF_ADVSHOP_DEBUG_LOG, $line . "\n", FILE_APPEND);
     }
 }
 

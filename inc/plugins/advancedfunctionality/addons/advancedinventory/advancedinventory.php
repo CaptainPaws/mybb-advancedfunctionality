@@ -1042,6 +1042,30 @@ function af_advinv_debug_max_kb(): int
     return max(0, $maxKb);
 }
 
+function af_advinv_debug_write(string $content, int $flags = 0): bool
+{
+    return @file_put_contents(AF_ADVINV_DEBUG_LOG, $content, $flags) !== false;
+}
+
+function af_advinv_debug_clear(): array
+{
+    $bytesBefore = (is_file(AF_ADVINV_DEBUG_LOG) && is_readable(AF_ADVINV_DEBUG_LOG)) ? (int)@filesize(AF_ADVINV_DEBUG_LOG) : 0;
+    $ok = af_advinv_debug_write('', LOCK_EX);
+    $bytesAfter = (is_file(AF_ADVINV_DEBUG_LOG) && is_readable(AF_ADVINV_DEBUG_LOG)) ? (int)@filesize(AF_ADVINV_DEBUG_LOG) : 0;
+
+    if ($ok && $bytesAfter !== 0) {
+        $ok = false;
+    }
+
+    return [
+        'ok' => $ok,
+        'path' => AF_ADVINV_DEBUG_LOG,
+        'bytes_before' => $bytesBefore,
+        'bytes_after' => $bytesAfter,
+        'error' => $ok ? '' : 'failed_to_truncate',
+    ];
+}
+
 function af_advinv_debug_rotate_if_needed(): void
 {
     $maxBytes = af_advinv_debug_max_kb() * 1024;
@@ -1057,11 +1081,11 @@ function af_advinv_debug_rotate_if_needed(): void
     $rotated = AF_ADVINV_DEBUG_LOG . '.1';
     @unlink($rotated);
     if (!@rename(AF_ADVINV_DEBUG_LOG, $rotated)) {
-        @file_put_contents(AF_ADVINV_DEBUG_LOG, '');
+        af_advinv_debug_write('');
     }
 }
 
-function af_advinv_debug_log(string $event, array $context = []): void
+function af_advinv_debug_log(string $tag, array $data = [], string $channel = 'ADVINV'): void
 {
     if (!af_advinv_debug_enabled()) {
         return;
@@ -1069,9 +1093,14 @@ function af_advinv_debug_log(string $event, array $context = []): void
 
     af_advinv_debug_rotate_if_needed();
 
-    $line = '[AF-ADVINV][' . date('c') . '][' . $event . '] ' . json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $normalizedChannel = strtoupper(trim($channel));
+    if ($normalizedChannel === '') {
+        $normalizedChannel = 'ADVINV';
+    }
+
+    $line = '[AF-' . $normalizedChannel . '][' . date('c') . '][' . $tag . '] ' . json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     @error_log($line);
-    @file_put_contents(AF_ADVINV_DEBUG_LOG, $line . "\n", FILE_APPEND);
+    af_advinv_debug_write($line . "\n", FILE_APPEND);
 }
 
 function af_advinv_kb_table_sql(): string
