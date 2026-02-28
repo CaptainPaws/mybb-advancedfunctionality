@@ -779,12 +779,8 @@ function af_advancededitor_pre_output(string &$page = ''): void
         return;
     }
 
-    // В режиме редактора: гасим MyBB clickable editor + вычищаем SCEditor ассеты MyBB
-    // (в VIEW режиме это не трогаем вообще)
-    if ($hasTextarea) {
-        af_advancededitor_force_disable_mybb_clickable_editor();
-        af_advancededitor_strip_mybb_sceditor_assets($page);
-    }
+    // В режиме редактора НЕ трогаем штатную инициализацию MyBB SCEditor.
+    // Advanced Editor должен работать поверх уже созданного инстанса.
 
     $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/';
     $imgBase    = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/img/';
@@ -841,28 +837,11 @@ function af_advancededitor_pre_output(string &$page = ''): void
             . 'window.afAePayload.cfg.formFeatureForumIds=' . json_encode($formfeatureCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
             . '</script>' . "\n";
 
-        // SCEditor: theme css (для тулбара)
-        $sceditorThemeCss = af_advancededitor_resolve_sceditor_theme_css_url($bburl);
-        $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_add_ver($sceditorThemeCss, $buildVer)) . '" />' . "\n";
-
-        // SCEditor: content css (для iframe WYSIWYG)
+        // SCEditor content css URL передаём в payload для совместимости кастомных патчей.
         $sceditorContentCss = af_advancededitor_resolve_sceditor_content_css_url($bburl);
 
-        // SCEditor core + bbcode plugin
-        $core = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.min.js');
-        if ($core === '') $core = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.js');
-
-        $bb = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.bbcode.min.js');
-        if ($bb === '') $bb = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.bbcode.js');
-
-        if ($core !== '') $injectHead .= '<script src="' . htmlspecialchars_uni(af_advancededitor_add_ver($core, $buildVer)) . '"></script>' . "\n";
-        if ($bb !== '')   $injectHead .= '<script src="' . htmlspecialchars_uni(af_advancededitor_add_ver($bb, $buildVer)) . '"></script>' . "\n";
-
-        // MyBB bridge (submit-sync)
-        $mybbBridge = af_advancededitor_resolve_sceditor_mybb_js_url($bburl);
-        if ($mybbBridge !== '') {
-            $injectHead .= '<script src="' . htmlspecialchars_uni(af_advancededitor_add_ver($mybbBridge, $buildVer)) . '"></script>' . "\n";
-        }
+        // Theme URL оставляем в payload, но CSS/JS SCEditor грузит штатный MyBB-поток.
+        $sceditorThemeCss = af_advancededitor_resolve_sceditor_theme_css_url($bburl);
 
         // layout/fonts/settings
         $customDefs = af_advancededitor_get_custom_button_defs($bburl);
@@ -1567,10 +1546,7 @@ function af_advancededitor_init(): void
         return;
     }
 
-    // 1) ГЛАВНОЕ: выключаем Clickable MyCode Editor MyBB (и в рантайме, и при необходимости фиксируем в БД).
-    af_advancededitor_force_disable_mybb_clickable_editor();
-
-    // 2) Разовый авто-ensure MyCode паков (чтобы после добавления indent всё появилось без reinstall)
+    // 1) Разовый авто-ensure MyCode паков (чтобы после добавления indent всё появилось без reinstall)
     // делаем только для супер-админа и не чаще раза в сутки
     $uid = (int)($mybb->user['uid'] ?? 0);
     $isSa = false;
