@@ -29,19 +29,58 @@ function af_advinv_entity_equipment_render(int $ownerUid, string $sub, int $page
 
 function af_advinv_entity_equipment_subfilters(): array
 {
-    return ['all' => 'Все', 'weapon' => 'Оружие', 'armor' => 'Броня', 'ammo' => 'Боеприпасы', 'consumable' => 'Расходники'];
+    return ['all' => 'Все', 'weapon' => 'Оружие', 'armor' => 'Броня', 'ammo' => 'Боеприпасы', 'augmentations' => 'Аугментации', 'consumable' => 'Расходники'];
 }
 
 function af_advinv_entity_equipment_classify_from_kb_meta(array $kbMeta): string
 {
-    $kindFromRules = mb_strtolower(trim((string)($kbMeta['rules']['item']['item_kind'] ?? '')));
-    if (in_array($kindFromRules, ['weapon', 'armor', 'ammo', 'consumable'], true)) {
+    $normalizeKind = static function (string $raw): string {
+        $kind = mb_strtolower(trim($raw));
+        if ($kind === 'augmentation' || $kind === 'cyberware') {
+            return 'augmentations';
+        }
+        if (in_array($kind, ['weapon', 'armor', 'ammo', 'consumable', 'augmentations'], true)) {
+            return $kind;
+        }
+        return '';
+    };
+
+    $rulesItem = is_array($kbMeta['rules']['item'] ?? null) ? (array)$kbMeta['rules']['item'] : [];
+
+    $kindFromRules = $normalizeKind((string)($rulesItem['item_kind'] ?? ''));
+    if ($kindFromRules !== '') {
         return $kindFromRules;
     }
 
-    $kind = mb_strtolower(trim((string)($kbMeta['item_kind'] ?? '')));
-    if (in_array($kind, ['weapon', 'armor', 'ammo', 'consumable'], true)) {
+    $typeFromRules = $normalizeKind((string)($rulesItem['item_type'] ?? ''));
+    if ($typeFromRules !== '') {
+        return $typeFromRules;
+    }
+
+    $tagsFromRules = is_array($rulesItem['tags'] ?? null) ? $rulesItem['tags'] : [];
+    foreach ($tagsFromRules as $tag) {
+        $kindFromTag = $normalizeKind((string)$tag);
+        if ($kindFromTag !== '') {
+            return $kindFromTag;
+        }
+    }
+
+    $kind = $normalizeKind((string)($kbMeta['item_kind'] ?? ''));
+    if ($kind !== '') {
         return $kind;
+    }
+
+    $type = $normalizeKind((string)($kbMeta['item_type'] ?? ''));
+    if ($type !== '') {
+        return $type;
+    }
+
+    $tags = is_array($kbMeta['tags'] ?? null) ? $kbMeta['tags'] : [];
+    foreach ($tags as $tag) {
+        $kindFromTag = $normalizeKind((string)$tag);
+        if ($kindFromTag !== '') {
+            return $kindFromTag;
+        }
     }
 
     return '';
