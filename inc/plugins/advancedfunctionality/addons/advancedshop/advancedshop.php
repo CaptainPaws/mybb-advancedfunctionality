@@ -266,6 +266,74 @@ function af_advancedshop_url(string $action = 'shop', array $params = [], bool $
     return $url;
 }
 
+function af_advancedshop_shops_table(): string
+{
+    global $db;
+
+    if ($db->table_exists('af_shop_shops')) {
+        return 'af_shop_shops';
+    }
+
+    return 'af_shop';
+}
+
+function af_advancedshop_ensure_shops_schema(): void
+{
+    global $db;
+
+    if (!$db->table_exists('af_shop_shops')) {
+        $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_shop_shops (
+            shop_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            code VARCHAR(32) NOT NULL,
+            title_ru VARCHAR(255) NOT NULL DEFAULT '',
+            title_en VARCHAR(255) NOT NULL DEFAULT '',
+            enabled TINYINT(1) NOT NULL DEFAULT 1,
+            sortorder INT NOT NULL DEFAULT 0,
+            settings_json MEDIUMTEXT NULL,
+            UNIQUE KEY uniq_code (code),
+            KEY enabled_sort (enabled, sortorder, shop_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+
+    if ($db->table_exists('af_shop')) {
+        $qLegacy = $db->simple_select('af_shop', 'shop_id, code, title, enabled', '', ['order_by' => 'shop_id ASC']);
+        while ($legacy = $db->fetch_array($qLegacy)) {
+            $code = trim((string)($legacy['code'] ?? ''));
+            if ($code === '') {
+                continue;
+            }
+            $exists = $db->fetch_array($db->simple_select('af_shop_shops', 'shop_id', "code='" . $db->escape_string($code) . "'", ['limit' => 1]));
+            if ($exists) {
+                continue;
+            }
+
+            $legacyTitle = trim((string)($legacy['title'] ?? ''));
+            $db->insert_query('af_shop_shops', [
+                'shop_id' => (int)($legacy['shop_id'] ?? 0),
+                'code' => $db->escape_string($code),
+                'title_ru' => $db->escape_string($legacyTitle),
+                'title_en' => $db->escape_string($legacyTitle),
+                'enabled' => (int)($legacy['enabled'] ?? 1),
+                'sortorder' => (int)($legacy['shop_id'] ?? 0),
+                'settings_json' => null,
+            ]);
+        }
+    }
+
+    $q = $db->simple_select('af_shop_shops', 'shop_id', "code='game'", ['limit' => 1]);
+    $hasGame = (int)$db->fetch_field($q, 'shop_id');
+    if ($hasGame <= 0) {
+        $db->insert_query('af_shop_shops', [
+            'code' => 'game',
+            'title_ru' => 'Игровой магазин',
+            'title_en' => 'Game Shop',
+            'enabled' => 1,
+            'sortorder' => 10,
+            'settings_json' => null,
+        ]);
+    }
+}
+
 function af_advancedshop_install(): void
 {
     global $db, $lang;
@@ -293,17 +361,7 @@ function af_advancedshop_install(): void
         true
     );
 
-    if (!$db->table_exists('af_shop')) {
-        $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_shop (
-            shop_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            code VARCHAR(32) NOT NULL,
-            title VARCHAR(255) NOT NULL,
-            enabled TINYINT(1) NOT NULL DEFAULT 1,
-            created_at INT UNSIGNED NOT NULL DEFAULT 0,
-            updated_at INT UNSIGNED NOT NULL DEFAULT 0,
-            UNIQUE KEY uniq_code (code)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    }
+    af_advancedshop_ensure_shops_schema();
     if (!$db->table_exists('af_shop_categories')) {
         $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_shop_categories (
             cat_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -367,24 +425,6 @@ function af_advancedshop_install(): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
 
-    $shops = [
-        'game' => 'Game Shop',
-        'customization' => 'Customization Shop',
-        'other' => 'Other Shop',
-    ];
-    foreach ($shops as $code => $title) {
-        $row = $db->fetch_array($db->simple_select('af_shop', 'shop_id', "code='" . $db->escape_string($code) . "'", ['limit' => 1]));
-        if (!$row) {
-            $db->insert_query('af_shop', [
-                'code' => $db->escape_string($code),
-                'title' => $db->escape_string($title),
-                'enabled' => 1,
-                'created_at' => TIME_NOW,
-                'updated_at' => TIME_NOW,
-            ]);
-        }
-    }
-
     af_advancedshop_templates_install_or_update();
     af_advancedshop_ensure_slots_schema();
     if (!af_advancedshop_alias_sync()) {
@@ -418,6 +458,7 @@ function af_advancedshop_activate(): void
         $gid,
         true
     );
+    af_advancedshop_ensure_shops_schema();
     af_advancedshop_ensure_slots_schema();
     af_advancedshop_write_inventory_schema_snapshot();
     af_advancedshop_templates_install_or_update();
@@ -457,7 +498,7 @@ function af_advancedshop_uninstall(): void
 function af_advancedshop_is_installed(): bool
 {
     global $db;
-    return $db->table_exists('af_shop');
+    return $db->table_exists('af_shop_shops') || $db->table_exists('af_shop');
 }
 
 function af_advancedshop_shop_routes(): array
@@ -753,9 +794,16 @@ function af_advancedshop_inventory_render_access_error_html(string $message): vo
 function af_advancedshop_current_shop(): array
 {
     global $mybb, $db;
-    $code = $db->escape_string((string)$mybb->get_input('shop'));
-    if ($code === '') { $code = 'game'; }
-    $shop = $db->fetch_array($db->simple_select('af_shop', '*', "code='".$code."'", ['limit' => 1]));
+    $shopsTable = af_advancedshop_shops_table();
+    $code = trim((string)$mybb->get_input('shop'));
+    $shop = false;
+    if ($code !== '') {
+        $shop = $db->fetch_array($db->simple_select($shopsTable, '*', "code='" . $db->escape_string($code) . "'", ['limit' => 1]));
+    }
+
+    if (!$shop) {
+        $shop = $db->fetch_array($db->simple_select($shopsTable, '*', 'enabled=1', ['order_by' => 'sortorder ASC, shop_id ASC', 'limit' => 1]));
+    }
     if (!$shop) {
         error('Shop not found');
     }
@@ -1388,7 +1436,7 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
     $q = $db->query("SELECT ci.qty, s.slot_id, s.shop_id, sh.code AS shop_code, s.cat_id, s.kb_id, s.kb_type, s.kb_key, s.price, s.currency
         FROM " . TABLE_PREFIX . "af_shop_cart_items ci
         INNER JOIN " . TABLE_PREFIX . "af_shop_slots s ON(s.slot_id=ci.slot_id)
-        INNER JOIN " . TABLE_PREFIX . "af_shop sh ON(sh.shop_id=s.shop_id)
+        INNER JOIN " . TABLE_PREFIX . af_advancedshop_shops_table() . " sh ON(sh.shop_id=s.shop_id)
         WHERE ci.cart_id={$cartId} AND s.enabled=1");
     while ($row = $db->fetch_array($q)) {
         $qty = max(1, (int)$row['qty']);
