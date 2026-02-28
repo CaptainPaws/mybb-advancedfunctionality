@@ -293,12 +293,30 @@ function af_advancedshop_ensure_shops_schema(): void
             code VARCHAR(32) NOT NULL,
             title_ru VARCHAR(255) NOT NULL DEFAULT '',
             title_en VARCHAR(255) NOT NULL DEFAULT '',
+            bg_url VARCHAR(255) NOT NULL DEFAULT '',
+            icon_url VARCHAR(255) NOT NULL DEFAULT '',
             enabled TINYINT(1) NOT NULL DEFAULT 1,
             sortorder INT NOT NULL DEFAULT 0,
             settings_json MEDIUMTEXT NULL,
             UNIQUE KEY uniq_code (code),
             KEY enabled_sort (enabled, sortorder, shop_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+
+    if (!$db->field_exists('bg_url', 'af_shop_shops')) {
+        $db->write_query("ALTER TABLE " . TABLE_PREFIX . "af_shop_shops ADD COLUMN bg_url VARCHAR(255) NOT NULL DEFAULT '' AFTER title_en");
+    }
+    if (!$db->field_exists('icon_url', 'af_shop_shops')) {
+        $db->write_query("ALTER TABLE " . TABLE_PREFIX . "af_shop_shops ADD COLUMN icon_url VARCHAR(255) NOT NULL DEFAULT '' AFTER bg_url");
+    }
+
+    if ($db->table_exists('af_shop')) {
+        if (!$db->field_exists('bg_url', 'af_shop')) {
+            $db->write_query("ALTER TABLE " . TABLE_PREFIX . "af_shop ADD COLUMN bg_url VARCHAR(255) NOT NULL DEFAULT '' AFTER title");
+        }
+        if (!$db->field_exists('icon_url', 'af_shop')) {
+            $db->write_query("ALTER TABLE " . TABLE_PREFIX . "af_shop ADD COLUMN icon_url VARCHAR(255) NOT NULL DEFAULT '' AFTER bg_url");
+        }
     }
 
     if ($db->table_exists('af_shop')) {
@@ -319,6 +337,8 @@ function af_advancedshop_ensure_shops_schema(): void
                 'code' => $db->escape_string($code),
                 'title_ru' => $db->escape_string($legacyTitle),
                 'title_en' => $db->escape_string($legacyTitle),
+                'bg_url' => $db->escape_string((string)($legacy['bg_url'] ?? '')),
+                'icon_url' => $db->escape_string((string)($legacy['icon_url'] ?? '')),
                 'enabled' => (int)($legacy['enabled'] ?? 1),
                 'sortorder' => (int)($legacy['shop_id'] ?? 0),
                 'settings_json' => null,
@@ -338,12 +358,29 @@ function af_advancedshop_ensure_shops_schema(): void
                 'code' => $db->escape_string((string)$shop['code']),
                 'title_ru' => $db->escape_string((string)$shop['title_ru']),
                 'title_en' => $db->escape_string((string)$shop['title_en']),
+                'bg_url' => '',
+                'icon_url' => '',
                 'enabled' => 1,
                 'sortorder' => (int)$shop['sortorder'],
                 'settings_json' => null,
             ]);
         }
     }
+}
+
+function af_advancedshop_css_background_style(string $url): string
+{
+    $url = trim($url);
+    if ($url === '') {
+        return '';
+    }
+
+    $safe = str_replace(["\\", '"', "'", ')', '(', "\r", "\n"], '', $url);
+    if ($safe === '') {
+        return '';
+    }
+
+    return ' style="background-image:url(\'' . htmlspecialchars_uni($safe) . '\');"';
 }
 
 function af_advancedshop_seed_demo_enabled(): bool
@@ -994,7 +1031,7 @@ function af_advancedshop_render_hub(): void
     $shopsTable = af_advancedshop_shops_table();
     $qShops = $db->simple_select(
         $shopsTable,
-        'shop_id, code, title_ru, title_en',
+        'shop_id, code, title_ru, title_en, bg_url',
         'enabled=1',
         ['order_by' => 'sortorder ASC, shop_id ASC']
     );
@@ -1011,6 +1048,7 @@ function af_advancedshop_render_hub(): void
             $shop_title_raw = $code;
         }
         $shop_title = htmlspecialchars_uni($shop_title_raw);
+        $shop_bg_style = af_advancedshop_css_background_style((string)($shop['bg_url'] ?? ''));
         $shop_open_url = af_advancedshop_url('shop_category', ['shop' => $code], true);
         $shop_manage_button = '';
         if (af_advancedshop_user_can_manage()) {
