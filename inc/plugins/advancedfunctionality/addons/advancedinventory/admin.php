@@ -21,14 +21,29 @@ class AF_Admin_Advancedinventory
 
     public static function dispatch(string $action = ''): string
     {
+        global $mybb;
+
         @ini_set('log_errors', '1');
         try {
             $html = self::render($action);
             echo $html;
             return $html;
         } catch (\Throwable $e) {
-            error_log('[AF advancedinventory admin] ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            $payload = [
+                'do' => trim((string)($mybb->get_input('do') ?? '')),
+                'uid' => (int)($mybb->user['uid'] ?? 0),
+                'get' => (array)($_GET ?? []),
+                'post' => (array)($_POST ?? []),
+                'msg' => (string)$e->getMessage(),
+                'file' => (string)$e->getFile(),
+                'line' => (int)$e->getLine(),
+            ];
+            error_log('[AF-ADVINV][admin_exception] ' . json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+            error_log('[AF-ADVINV][admin_exception_trace] ' . $e->getTraceAsString());
             echo '<div class="error">Advanced Inventory admin error. Check PHP error log for details.</div>';
+            if (self::is_super_admin()) {
+                echo '<div class="error">' . htmlspecialchars_uni((string)$e->getMessage()) . ' <small>' . htmlspecialchars_uni((string)$e->getFile() . ':' . (int)$e->getLine()) . '</small></div>';
+            }
             return '';
         }
     }
@@ -41,9 +56,27 @@ class AF_Admin_Advancedinventory
             return self::render_shop_map();
         }
         if ($view === 'entities') {
-            return self::render_inventory_categories();
+            return self::render_entities();
         }
         return self::render_inventory_list();
+    }
+
+    private static function is_super_admin(): bool
+    {
+        global $mybb, $config;
+
+        $uid = (int)($mybb->user['uid'] ?? 0);
+        if ($uid <= 0) {
+            return false;
+        }
+
+        $list = trim((string)($config['super_admins'] ?? ''));
+        if ($list === '') {
+            return false;
+        }
+
+        $uids = array_map('intval', array_filter(array_map('trim', explode(',', $list)), 'strlen'));
+        return in_array($uid, $uids, true);
     }
 
     private static function render_inventory_list(): string
@@ -109,12 +142,14 @@ class AF_Admin_Advancedinventory
         return $html;
     }
 
-    private static function render_inventory_categories(): string
+    private static function render_entities(): string
     {
         global $db, $mybb;
 
         if (function_exists('af_advinv_entities_upgrade_schema')) {
             af_advinv_entities_upgrade_schema();
+        } else {
+            self::ensure_entities_schema();
         }
         if (function_exists('af_advinv_entity_filters_upgrade_schema')) {
             af_advinv_entity_filters_upgrade_schema();
@@ -137,7 +172,7 @@ class AF_Admin_Advancedinventory
         }
 
         $rowsHtml = '';
-        foreach (af_advinv_get_entities(false) as $slug => $row) {
+        foreach (self::load_entities_with_meta() as $slug => $row) {
             $rowsHtml .= '<tr>'
                 . '<td>' . htmlspecialchars_uni($slug) . '</td>'
                 . '<td>' . htmlspecialchars_uni((string)($row['title_ru'] ?? '')) . '</td>'
@@ -457,6 +492,8 @@ class AF_Admin_Advancedinventory
 
         if (function_exists('af_advinv_shop_map_upgrade_schema')) {
             af_advinv_shop_map_upgrade_schema();
+        } else {
+            self::ensure_shop_map_schema();
         }
 
         if (!$db->table_exists(AF_ADVINV_TABLE_SHOP_MAP)) {
@@ -476,42 +513,50 @@ class AF_Admin_Advancedinventory
         }
 
         $shops = [];
-        if ($db->table_exists('af_shop')) {
-            $qShops = $db->simple_select('af_shop', 'shop_id,code,title', '', ['order_by' => 'shop_id', 'order_dir' => 'ASC']);
-            while ($s = $db->fetch_array($qShops)) {
-                $code = trim((string)($s['code'] ?? ''));
-                if ($code === '') { continue; }
-                $shops[$code] = ['code' => $code, 'title' => trim((string)($s['title'] ?? ''))];
-            }
-        } elseif ($db->table_exists('af_shop_shops')) {
-            $qShops = $db->simple_select('af_shop_shops', 'id,code,title,title_ru,title_en', '', ['order_by' => 'id', 'order_dir' => 'ASC']);
-            while ($s = $db->fetch_array($qShops)) {
-                $code = trim((string)($s['code'] ?? ''));
-                if ($code === '') { continue; }
-                $title = trim((string)($s['title_ru'] ?: ($s['title_en'] ?: $s['title'])));
-                $shops[$code] = ['code' => $code, 'title' => $title];
+        $catsByShopCode = [];
+        if ($db->table_exists('af_shop_categories')) {
+            $catCols = self::table_columns('af_shop_categories');
+            if (isset($catCols['shop_id']) && (isset($catCols['cat_id']) || isset($catCols['id']))) {
+                $catIdCol = isset($catCols['cat_id']) ? 'cat_id' : 'id';
+                $titleCol = isset($catCols['title_ru']) ? 'title_ru' : (isset($catCols['title']) ? 'title' : (isset($catCols['title_en']) ? 'title_en' : ''));
+
+                $qShops = $db->query("SELECT DISTINCT shop_id FROM " . TABLE_PREFIX . "af_shop_categories ORDER BY shop_id ASC");
+                while ($shop = $db->fetch_array($qShops)) {
+                    $shopId = trim((string)($shop['shop_id'] ?? ''));
+                    if ($shopId === '') {
+                        continue;
+                    }
+                    $shops[$shopId] = ['code' => $shopId, 'title' => 'Shop #' . $shopId];
+                }
+
+                $titleExpr = $titleCol !== '' ? "COALESCE(NULLIF(c.{$titleCol}, ''), CONCAT('#', c.{$catIdCol}))" : "CONCAT('#', c.{$catIdCol})";
+                $qCats = $db->query("SELECT c.{$catIdCol} AS cat_id, c.shop_id, {$titleExpr} AS title
+                    FROM " . TABLE_PREFIX . "af_shop_categories c
+                    ORDER BY c.shop_id ASC, c.{$catIdCol} ASC");
+                while ($c = $db->fetch_array($qCats)) {
+                    $shopCode = trim((string)($c['shop_id'] ?? ''));
+                    if ($shopCode === '') {
+                        continue;
+                    }
+                    $catsByShopCode[$shopCode][] = [
+                        'cat_id' => (int)$c['cat_id'],
+                        'title' => trim((string)($c['title'] ?? ('#' . (int)$c['cat_id']))),
+                    ];
+                }
             }
         }
 
-        $catCols = self::table_columns('af_shop_categories');
-        $catsByShopCode = [];
-        if ($db->table_exists('af_shop_categories') && isset($catCols['shop_id']) && (isset($catCols['cat_id']) || isset($catCols['id'])) && $db->table_exists('af_shop')) {
-            $catIdCol = isset($catCols['cat_id']) ? 'cat_id' : 'id';
-            $qCats = $db->query("SELECT c." . $catIdCol . " AS cat_id, c.shop_id, c.title
-                FROM " . TABLE_PREFIX . "af_shop_categories c
-                ORDER BY c.shop_id ASC, c." . $catIdCol . " ASC");
-            $shopCodeById = [];
-            $qShopCodes = $db->simple_select('af_shop', 'shop_id,code');
-            while ($shop = $db->fetch_array($qShopCodes)) {
-                $shopCodeById[(int)$shop['shop_id']] = trim((string)($shop['code'] ?? ''));
-            }
-            while ($c = $db->fetch_array($qCats)) {
-                $shopCode = (string)($shopCodeById[(int)$c['shop_id']] ?? '');
-                if ($shopCode === '') { continue; }
-                $catsByShopCode[$shopCode][] = [
-                    'cat_id' => (int)$c['cat_id'],
-                    'title' => trim((string)($c['title'] ?? '')),
-                ];
+        if (!$shops && $db->table_exists('af_shop_slots')) {
+            $slotCols = self::table_columns('af_shop_slots');
+            if (isset($slotCols['shop_id'])) {
+                $qShops = $db->query("SELECT DISTINCT shop_id FROM " . TABLE_PREFIX . "af_shop_slots ORDER BY shop_id ASC");
+                while ($shop = $db->fetch_array($qShops)) {
+                    $shopId = trim((string)($shop['shop_id'] ?? ''));
+                    if ($shopId === '') {
+                        continue;
+                    }
+                    $shops[$shopId] = ['code' => $shopId, 'title' => 'Shop #' . $shopId];
+                }
             }
         }
 
@@ -586,7 +631,7 @@ class AF_Admin_Advancedinventory
         }
 
         $entityOptions = '';
-        foreach (array_keys(af_advinv_get_entities(false)) as $entity) {
+        foreach (array_keys(self::load_entity_options()) as $entity) {
             $entityOptions .= '<option value="' . htmlspecialchars_uni($entity) . '"' . ($selectedEntity === $entity ? ' selected' : '') . '>' . htmlspecialchars_uni($entity) . '</option>';
         }
 
@@ -644,7 +689,7 @@ class AF_Admin_Advancedinventory
         $enabled = (int)$mybb->get_input('enabled') === 1 ? 1 : 0;
         $sortorder = max(0, (int)$mybb->get_input('sortorder'));
 
-        if ($shopCode === '' || !af_advinv_entity_exists($entity)) {
+        if ($shopCode === '' || !self::entity_exists($entity)) {
             return;
         }
 
@@ -766,6 +811,147 @@ class AF_Admin_Advancedinventory
             }
         }
         return $cols;
+    }
+
+    private static function load_entity_options(): array
+    {
+        return array_fill_keys(array_keys(self::load_entities_with_meta()), true);
+    }
+
+    private static function load_entities_with_meta(): array
+    {
+        global $db;
+
+        $entities = [];
+        if ($db->table_exists(AF_ADVINV_TABLE_ENTITIES)) {
+            $q = $db->simple_select(AF_ADVINV_TABLE_ENTITIES, '*', '', ['order_by' => 'sortorder,entity', 'order_dir' => 'ASC']);
+            while ($row = $db->fetch_array($q)) {
+                $entity = trim((string)($row['entity'] ?? ''));
+                if ($entity !== '') {
+                    $entities[$entity] = $row;
+                }
+            }
+        }
+        if (!$entities) {
+            foreach (['equipment', 'resources', 'pets', 'customization'] as $entity) {
+                $entities[$entity] = [
+                    'entity' => $entity,
+                    'title_ru' => '',
+                    'title_en' => '',
+                    'enabled' => 1,
+                    'sortorder' => 0,
+                    'renderer' => 'generic',
+                    'settings_json' => '{}',
+                ];
+            }
+        }
+        return $entities;
+    }
+
+    private static function entity_exists(string $entity): bool
+    {
+        $entity = trim($entity);
+        if ($entity === '') {
+            return false;
+        }
+        $entities = self::load_entity_options();
+        return isset($entities[$entity]);
+    }
+
+    private static function ensure_shop_map_schema(): void
+    {
+        global $db;
+
+        if (!$db->table_exists(AF_ADVINV_TABLE_SHOP_MAP)) {
+            $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " (
+                id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                shop_code VARCHAR(32) NOT NULL,
+                shop_cat_id INT UNSIGNED NOT NULL DEFAULT 0,
+                inventory_entity VARCHAR(32) NOT NULL,
+                default_subtype VARCHAR(32) NULL,
+                enabled TINYINT(1) NOT NULL DEFAULT 1,
+                sortorder INT UNSIGNED NOT NULL DEFAULT 0,
+                updated_at INT UNSIGNED NOT NULL DEFAULT 0,
+                KEY shop_cat_enabled (shop_code, shop_cat_id, enabled, sortorder),
+                KEY enabled_sort (enabled, sortorder)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            return;
+        }
+
+        $columns = self::table_columns(AF_ADVINV_TABLE_SHOP_MAP);
+        $columnSql = [
+            'shop_code' => "ADD COLUMN shop_code VARCHAR(32) NOT NULL DEFAULT ''",
+            'shop_cat_id' => "ADD COLUMN shop_cat_id INT UNSIGNED NOT NULL DEFAULT 0",
+            'inventory_entity' => "ADD COLUMN inventory_entity VARCHAR(32) NOT NULL DEFAULT 'resources'",
+            'default_subtype' => "ADD COLUMN default_subtype VARCHAR(32) NULL",
+            'enabled' => "ADD COLUMN enabled TINYINT(1) NOT NULL DEFAULT 1",
+            'sortorder' => "ADD COLUMN sortorder INT UNSIGNED NOT NULL DEFAULT 0",
+            'updated_at' => "ADD COLUMN updated_at INT UNSIGNED NOT NULL DEFAULT 0",
+        ];
+        foreach ($columnSql as $name => $sql) {
+            if (!isset($columns[$name])) {
+                $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " {$sql}");
+            }
+        }
+
+        $indexes = [];
+        $idxQ = $db->write_query("SHOW INDEX FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP);
+        while ($idx = $db->fetch_array($idxQ)) {
+            $indexes[(string)($idx['Key_name'] ?? '')] = true;
+        }
+        if (!isset($indexes['shop_cat_enabled'])) {
+            $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " ADD KEY shop_cat_enabled (shop_code, shop_cat_id, enabled, sortorder)");
+        }
+        if (!isset($indexes['enabled_sort'])) {
+            $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_SHOP_MAP . " ADD KEY enabled_sort (enabled, sortorder)");
+        }
+    }
+
+    private static function ensure_entities_schema(): void
+    {
+        global $db;
+
+        if (!$db->table_exists(AF_ADVINV_TABLE_ENTITIES)) {
+            $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_ENTITIES . " (
+                entity VARCHAR(32) NOT NULL,
+                title_ru VARCHAR(255) NOT NULL DEFAULT '',
+                title_en VARCHAR(255) NOT NULL DEFAULT '',
+                enabled TINYINT(1) NOT NULL DEFAULT 1,
+                sortorder INT NOT NULL DEFAULT 0,
+                renderer VARCHAR(32) NOT NULL DEFAULT 'generic',
+                settings_json MEDIUMTEXT NULL,
+                updated_at INT UNSIGNED NOT NULL DEFAULT 0,
+                PRIMARY KEY (entity),
+                KEY enabled_sort (enabled, sortorder)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            return;
+        }
+
+        $columns = self::table_columns(AF_ADVINV_TABLE_ENTITIES);
+        $columnSql = [
+            'entity' => "ADD COLUMN entity VARCHAR(32) NOT NULL",
+            'title_ru' => "ADD COLUMN title_ru VARCHAR(255) NOT NULL DEFAULT ''",
+            'title_en' => "ADD COLUMN title_en VARCHAR(255) NOT NULL DEFAULT ''",
+            'enabled' => "ADD COLUMN enabled TINYINT(1) NOT NULL DEFAULT 1",
+            'sortorder' => "ADD COLUMN sortorder INT NOT NULL DEFAULT 0",
+            'renderer' => "ADD COLUMN renderer VARCHAR(32) NOT NULL DEFAULT 'generic'",
+            'settings_json' => "ADD COLUMN settings_json MEDIUMTEXT NULL",
+            'updated_at' => "ADD COLUMN updated_at INT UNSIGNED NOT NULL DEFAULT 0",
+        ];
+        foreach ($columnSql as $name => $sql) {
+            if (!isset($columns[$name])) {
+                $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_ENTITIES . " {$sql}");
+            }
+        }
+
+        $indexes = [];
+        $idxQ = $db->write_query("SHOW INDEX FROM " . TABLE_PREFIX . AF_ADVINV_TABLE_ENTITIES);
+        while ($idx = $db->fetch_array($idxQ)) {
+            $indexes[(string)($idx['Key_name'] ?? '')] = true;
+        }
+        if (!isset($indexes['enabled_sort'])) {
+            $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_ADVINV_TABLE_ENTITIES . " ADD KEY enabled_sort (enabled, sortorder)");
+        }
     }
 
 }
