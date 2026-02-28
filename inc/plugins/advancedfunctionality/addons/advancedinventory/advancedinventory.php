@@ -43,6 +43,8 @@ function af_advancedinventory_install(): void
     af_advancedinventory_ensure_setting('af_advancedinventory_perpage', 'Items per page', 'Per-page limit', 'numeric', '24', 3, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_default_tab', 'Default tab', 'Default tab for inventory page', 'text', 'equipment', 4, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_manage_groups', 'Manage groups', 'CSV group IDs that may open inventories.php and manage inventories', 'text', '3,4,6', 5, $gid);
+    af_advancedinventory_ensure_setting('af_advancedinventory_debug_enabled', 'Enable debug logging', 'Write Advanced Inventory debug events to file', 'yesno', '0', 6, $gid);
+    af_advancedinventory_ensure_setting('af_advancedinventory_debug_max_kb', 'Debug log max size (KB)', 'Rotate debug log when size exceeds this limit. Set 0 to disable rotation.', 'numeric', '512', 7, $gid);
 
     af_advancedinventory_ensure_inventory_storage();
     af_advancedinventory_upgrade_schema();
@@ -70,6 +72,17 @@ function af_advancedinventory_install(): void
 
 function af_advancedinventory_activate(): void
 {
+    global $lang;
+    if (function_exists('af_load_addon_lang')) {
+        af_load_addon_lang('advancedinventory');
+    }
+    $gid = af_advancedinventory_ensure_setting_group(
+        $lang->af_advancedinventory_group ?? 'AF: Inventory',
+        $lang->af_advancedinventory_group_desc ?? 'Inventory addon settings.'
+    );
+    af_advancedinventory_ensure_setting('af_advancedinventory_debug_enabled', 'Enable debug logging', 'Write Advanced Inventory debug events to file', 'yesno', '0', 6, $gid);
+    af_advancedinventory_ensure_setting('af_advancedinventory_debug_max_kb', 'Debug log max size (KB)', 'Rotate debug log when size exceeds this limit. Set 0 to disable rotation.', 'numeric', '512', 7, $gid);
+
     af_advancedinventory_upgrade_schema();
     af_advancedinventory_templates_install_or_update();
     af_advancedinventory_ensure_inventory_storage();
@@ -1011,8 +1024,48 @@ function af_advancedinventory_api_list(): void
     af_advancedinventory_json(['ok' => true, 'data' => af_inv_get_items($ownerUid, ['entity' => $entity, 'subtype' => (string)$mybb->get_input('subtype'), 'search' => (string)$mybb->get_input('search'), 'page' => (int)$mybb->get_input('page')])]);
 }
 
+function af_advinv_debug_enabled(): bool
+{
+    global $mybb;
+
+    return (int)($mybb->settings['af_advancedinventory_debug_enabled'] ?? 0) === 1;
+}
+
+function af_advinv_debug_max_kb(): int
+{
+    global $mybb;
+
+    $maxKb = (int)($mybb->settings['af_advancedinventory_debug_max_kb'] ?? 512);
+    return max(0, $maxKb);
+}
+
+function af_advinv_debug_rotate_if_needed(): void
+{
+    $maxBytes = af_advinv_debug_max_kb() * 1024;
+    if ($maxBytes <= 0 || !is_file(AF_ADVINV_DEBUG_LOG)) {
+        return;
+    }
+
+    $size = @filesize(AF_ADVINV_DEBUG_LOG);
+    if ($size === false || (int)$size <= $maxBytes) {
+        return;
+    }
+
+    $rotated = AF_ADVINV_DEBUG_LOG . '.1';
+    @unlink($rotated);
+    if (!@rename(AF_ADVINV_DEBUG_LOG, $rotated)) {
+        @file_put_contents(AF_ADVINV_DEBUG_LOG, '');
+    }
+}
+
 function af_advinv_debug_log(string $event, array $context = []): void
 {
+    if (!af_advinv_debug_enabled()) {
+        return;
+    }
+
+    af_advinv_debug_rotate_if_needed();
+
     $line = '[AF-ADVINV][' . date('c') . '][' . $event . '] ' . json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     @error_log($line);
     @file_put_contents(AF_ADVINV_DEBUG_LOG, $line . "\n", FILE_APPEND);
