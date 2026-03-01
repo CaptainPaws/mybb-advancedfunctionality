@@ -48,6 +48,46 @@
   function hasJq() { return !!(window.jQuery && window.jQuery.fn); }
   function hasSceditor() { return hasJq() && typeof window.jQuery.fn.sceditor === 'function'; }
 
+  var BASE_FALLBACK_CMDS = [
+    'bold', 'italic', 'underline', 'strike', 'subscript', 'superscript',
+    'font', 'size', 'color', 'removeformat',
+    'undo', 'redo', 'pastetext', 'horizontalrule',
+    'left', 'center', 'right', 'justify',
+    'bulletlist', 'orderedlist',
+    'quote', 'code',
+    'link', 'unlink', 'email', 'image', 'youtube', 'emoticon',
+    'maximize'
+  ];
+
+  var BASE_FALLBACK_LAYOUT = {
+    v: 1,
+    sections: [
+      {
+        id: 'main',
+        type: 'group',
+        title: 'Основное',
+        items: [
+          'bold', 'italic', 'underline', 'strike', 'subscript', 'superscript',
+          '|',
+          'font', 'size', 'color', 'removeformat',
+          '|',
+          'undo', 'redo', 'pastetext', 'horizontalrule',
+          '|',
+          'left', 'center', 'right', 'justify',
+          '|',
+          'bulletlist', 'orderedlist',
+          '|',
+          'quote', 'code',
+          '|',
+          'link', 'unlink', 'email', 'image', 'youtube', 'emoticon',
+          '|',
+          'maximize'
+        ]
+      },
+      { id: 'addons', type: 'group', title: 'Доп. кнопки', items: [] }
+    ]
+  };
+
   function appendStylesheetOnce(href, id) {
     href = asText(href).trim();
     if (!href) return true;
@@ -209,6 +249,9 @@
 
   var RAW_LAYOUT = parsePayloadLayout(P.layout);
   if (window.__afAeDebug) {
+    log('AE payload keys', Object.keys(P || {}));
+    log('AE has layout', !!P.layout);
+    log('AE sceditor loaded', !!(window.jQuery && window.jQuery.sceditor));
     log('AE payload', P);
     log('AE layout len', hasValidSections(RAW_LAYOUT) ? RAW_LAYOUT.sections.length : 0);
     log('AE layout diagnostics', {
@@ -222,35 +265,7 @@
 
   function normalizeLayout(x) {
     if (!x || typeof x !== 'object' || !Array.isArray(x.sections) || !x.sections.length) {
-      return {
-        v: 1,
-        sections: [
-          {
-            id: 'main',
-            type: 'group',
-            title: 'Основное',
-            items: [
-              'bold', 'italic', 'underline', 'strike', 'subscript', 'superscript',
-              '|',
-              'font', 'size', 'color', 'removeformat',
-              '|',
-              'undo', 'redo', 'pastetext', 'horizontalrule',
-              '|',
-              'left', 'center', 'right', 'justify',
-              '|',
-              'bulletlist', 'orderedlist',
-              '|',
-              'quote', 'code',
-              '|',
-              'link', 'unlink', 'email', 'image', 'youtube', 'emoticon',
-              '|',
-              // ВАЖНО: больше НЕ добавляем af_togglemode по умолчанию
-              'maximize'
-            ]
-          },
-          { id: 'addons', type: 'group', title: 'Доп. кнопки', items: [] }
-        ]
-      };
+      return JSON.parse(JSON.stringify(BASE_FALLBACK_LAYOUT));
     }
     if (!x.v) x.v = 1;
     if (!Array.isArray(x.sections)) x.sections = [];
@@ -433,6 +448,10 @@
 
   function buildAllowedCmdSet() {
     var s = Object.create(null);
+    BASE_FALLBACK_CMDS.forEach(function (cmd) {
+      s[String(cmd)] = true;
+    });
+
     var list = Array.isArray(P.available) ? P.available : [];
     list.forEach(function (b) {
       if (!b || !b.cmd) return;
@@ -2321,10 +2340,18 @@
     var availableMap = buildAvailableMap();
     var out = buildToolbarFromLayout(layout);
 
+    if (!asText(out.toolbar).trim()) {
+      var fallbackLayout = sanitizeLayout(JSON.parse(JSON.stringify(BASE_FALLBACK_LAYOUT)));
+      out = buildToolbarFromLayout(fallbackLayout);
+    }
+
     if (window.__afAeDebug) {
       var cmdKeys = [];
       try { cmdKeys = Object.keys((window.jQuery && window.jQuery.sceditor && window.jQuery.sceditor.commands) || {}); } catch (eCmd) {}
       log('AE toolbar built', out.toolbar);
+      log('AE toolbar built length', asText(out.toolbar).length);
+      log('AE instance exists', !!existing);
+      log('AE commands count', cmdKeys.length);
       log('AE commands registered', cmdKeys);
     }
 
