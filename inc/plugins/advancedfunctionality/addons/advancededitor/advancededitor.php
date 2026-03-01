@@ -18,6 +18,8 @@ define('AF_AE_SETTING_POSTCOUNT_FORUMS', 'af_advancededitor_postcount_forum_ids'
 define('AF_AE_SETTING_FORMFEATURE_FORUMS', 'af_advancededitor_formfeature_forum_ids');
 define('AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS', 'af_ae_htmlbb_allowed_groups');
 define('AF_AE_SETTING_DISABLE_ON', 'af_advancededitor_disable_on');
+define('AF_AE_SETTING_PREV_CLICKABLE', 'af_ae_prev_clickable_mycode');
+define('AF_AE_SETTING_PREV_CLICKABLE_KEY', 'af_ae_prev_clickable_mycode_key');
 
 
 
@@ -1025,6 +1027,111 @@ function af_advancededitor_uninstall_pack_mycodes(): void
     }
 }
 
+function af_advancededitor_detect_clickable_mycode_setting(): ?string
+{
+    global $db;
+
+    $candidates = ['bbcodeinserter', 'clickable_mycode_editor', 'clickablemycodeeditor', 'clickablemycode'];
+
+    foreach ($candidates as $name) {
+        $q = $db->simple_select('settings', 'name', "name='" . $db->escape_string($name) . "'", ['limit' => 1]);
+        $found = $db->fetch_field($q, 'name');
+        if (is_string($found) && $found !== '') {
+            return $found;
+        }
+    }
+
+    $q = $db->simple_select('settings', 'name,title,description', "title LIKE '%Clickable%MyCode%' OR description LIKE '%Clickable%MyCode%'", ['limit' => 1]);
+    $row = $db->fetch_array($q);
+    if (is_array($row) && !empty($row['name'])) {
+        return (string)$row['name'];
+    }
+
+    return null;
+}
+
+function af_advancededitor_restore_clickable_mycode_setting(): void
+{
+    global $db, $mybb;
+
+    $prevRaw = trim((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_PREV_CLICKABLE));
+    $keyRaw = trim((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_PREV_CLICKABLE_KEY));
+
+    if ($prevRaw === '' || $keyRaw === '') {
+        return;
+    }
+
+    $target = af_advancededitor_detect_clickable_mycode_setting();
+    if ($target === null) {
+        $target = $keyRaw;
+    }
+
+    $safeValue = ((int)$prevRaw === 1) ? '1' : '0';
+    $safeTarget = $db->escape_string($target);
+
+    $db->update_query('settings', ['value' => $safeValue], "name='" . $safeTarget . "'");
+    $db->update_query('settings', ['value' => ''], "name='" . $db->escape_string(AF_AE_SETTING_PREV_CLICKABLE) . "'");
+    $db->update_query('settings', ['value' => ''], "name='" . $db->escape_string(AF_AE_SETTING_PREV_CLICKABLE_KEY) . "'");
+
+    if (!function_exists('rebuild_settings')) {
+        require_once MYBB_ROOT . 'inc/functions.php';
+    }
+    rebuild_settings();
+
+    $settingsFile = MYBB_ROOT . 'inc/settings.php';
+    @clearstatcache(true, $settingsFile);
+    if (function_exists('opcache_invalidate')) {
+        @opcache_invalidate($settingsFile, true);
+    }
+
+    if (isset($mybb->settings[$target])) {
+        $mybb->settings[$target] = $safeValue;
+    }
+}
+
+function af_advancededitor_disable_clickable_mycode_setting(): void
+{
+    global $db, $mybb;
+
+    $target = af_advancededitor_detect_clickable_mycode_setting();
+    if ($target === null) {
+        return;
+    }
+
+    $targetEsc = $db->escape_string($target);
+    $q = $db->simple_select('settings', 'value', "name='" . $targetEsc . "'", ['limit' => 1]);
+    $currentRaw = $db->fetch_field($q, 'value');
+    $current = ((int)trim((string)$currentRaw) === 1) ? '1' : '0';
+
+    $db->update_query('settings', ['value' => $current], "name='" . $db->escape_string(AF_AE_SETTING_PREV_CLICKABLE) . "'");
+    $db->update_query('settings', ['value' => $target], "name='" . $db->escape_string(AF_AE_SETTING_PREV_CLICKABLE_KEY) . "'");
+
+    if ($current !== '0') {
+        $db->update_query('settings', ['value' => '0'], "name='" . $targetEsc . "'");
+    }
+
+    if (!function_exists('rebuild_settings')) {
+        require_once MYBB_ROOT . 'inc/functions.php';
+    }
+    rebuild_settings();
+
+    $settingsFile = MYBB_ROOT . 'inc/settings.php';
+    @clearstatcache(true, $settingsFile);
+    if (function_exists('opcache_invalidate')) {
+        @opcache_invalidate($settingsFile, true);
+    }
+
+    if (isset($mybb->settings[$target])) {
+        $mybb->settings[$target] = 0;
+    }
+}
+
+function af_advancededitor_deactivate(): void
+{
+    af_advancededitor_restore_clickable_mycode_setting();
+}
+
+
 
 function af_advancededitor_install(): void
 {
@@ -1183,6 +1290,24 @@ gallery.php",
         80
     );
 
+    $ensure(
+        AF_AE_SETTING_PREV_CLICKABLE,
+        'AF AE: prev Clickable MyCode value',
+        'System value used to restore Clickable MyCode Editor on deactivation.',
+        'text',
+        '',
+        90
+    );
+
+    $ensure(
+        AF_AE_SETTING_PREV_CLICKABLE_KEY,
+        'AF AE: prev Clickable MyCode setting key',
+        'System value used to restore Clickable MyCode Editor on deactivation.',
+        'text',
+        '',
+        91
+    );
+
 
     if (!function_exists('rebuild_settings')) {
         require_once MYBB_ROOT . 'inc/functions.php';
@@ -1199,12 +1324,16 @@ gallery.php",
     if (function_exists('opcache_invalidate')) {
         @opcache_invalidate($settingsFile, true);
     }
+
+    af_advancededitor_disable_clickable_mycode_setting();
 }
 
 
 function af_advancededitor_uninstall(): void
 {
     global $db;
+
+    af_advancededitor_restore_clickable_mycode_setting();
 
     // сначала убираем MyCode паков (только если пак даёт uninstall-функцию)
     af_advancededitor_uninstall_pack_mycodes();
@@ -1227,6 +1356,8 @@ function af_advancededitor_uninstall(): void
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_FORMFEATURE_FORUMS) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_DISABLE_ON) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_PREV_CLICKABLE) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_PREV_CLICKABLE_KEY) . "'");
 
 
     $db->delete_query('settinggroups', "name='" . $db->escape_string(AF_AE_GROUP) . "'");
