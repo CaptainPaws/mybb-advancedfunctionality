@@ -849,10 +849,14 @@ function af_advancededitor_pre_output(string &$page = ''): void
         $available  = af_advancededitor_get_available_buttons($bburl, $customDefs);
 
         $layoutRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_LAYOUT);
-        $layout = null;
-        if (trim($layoutRaw) !== '') {
-            $decoded = json_decode($layoutRaw, true);
-            if (is_array($decoded)) $layout = $decoded;
+        $layout = af_advancededitor_parse_layout_setting($layoutRaw);
+        $layoutInvalid = false;
+        if ($layout === null) {
+            $layoutInvalid = true;
+            $layout = af_advancededitor_default_layout();
+            if (defined('AF_AE_DEBUG') && AF_AE_DEBUG) {
+                error_log('[AF AE] layout invalid, fallback to default layout');
+            }
         }
 
         $fontsRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_FONTS);
@@ -905,9 +909,11 @@ table #post_options, table #postoptions{display:none!important;}
 
             'available'         => $available,
             'layout'            => $layout,
+            'layoutInvalid'     => $layoutInvalid ? 1 : 0,
             'fonts'             => $fonts,
             'packs'             => $packs,
             'customDefs'        => $customDefs,
+            'dropdownCmdPrefix' => 'af_menu_dropdown',
 
             'previewUrl'        => $bburl . '/misc.php?action=af_ae_postpreview',
             'postKey'           => $postKey,
@@ -919,13 +925,14 @@ table #post_options, table #postoptions{display:none!important;}
                 'fontFamilies' => $fontFamilies,
                 'postcountForumIds'   => $postcountCsv,
                 'formFeatureForumIds' => $formfeatureCsv,
+                'debug' => (defined('AF_AE_DEBUG') && AF_AE_DEBUG) ? 1 : 0,
             ],
         ];
         if ($editorSelector !== '') {
             $payload['cfg']['editorSelector'] = $editorSelector;
         }
 
-        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
         if (!is_string($json) || $json === '') $json = '{}';
 
         $injectHead .= '<script>window.afAdvancedEditorPayload=' . $json . ';</script>' . "\n";
@@ -1989,6 +1996,65 @@ function af_advancededitor_load_setting_value_from_db(string $name): string
 
     if (is_string($raw)) return $raw;
     return (string)($mybb->settings[$name] ?? '');
+}
+
+function af_advancededitor_default_layout(): array
+{
+    return [
+        'v' => 1,
+        'sections' => [
+            [
+                'id' => 'main',
+                'type' => 'group',
+                'title' => 'Main',
+                'items' => [
+                    'bold', 'italic', 'underline', 'strike', 'subscript', 'superscript',
+                    '|',
+                    'font', 'size', 'color', 'removeformat',
+                    '|',
+                    'undo', 'redo', 'pastetext', 'horizontalrule',
+                    '|',
+                    'left', 'center', 'right', 'justify',
+                    '|',
+                    'bulletlist', 'orderedlist',
+                    '|',
+                    'quote', 'code',
+                    '|',
+                    'link', 'unlink', 'email', 'image', 'youtube', 'emoticon',
+                    '|',
+                    'maximize',
+                ],
+            ],
+        ],
+    ];
+}
+
+function af_advancededitor_parse_layout_setting(string $layoutRaw): ?array
+{
+    $layoutRaw = trim($layoutRaw);
+    if ($layoutRaw === '') {
+        return null;
+    }
+
+    $decoded = json_decode($layoutRaw, true);
+    if (!is_array($decoded)) {
+        return null;
+    }
+
+    // Каноничный формат: { v, sections: [...] }
+    if (isset($decoded['sections']) && is_array($decoded['sections'])) {
+        return $decoded;
+    }
+
+    // Backward compatibility: layout может быть просто массивом секций.
+    if (array_is_list($decoded)) {
+        return [
+            'v' => 1,
+            'sections' => $decoded,
+        ];
+    }
+
+    return null;
 }
 
 

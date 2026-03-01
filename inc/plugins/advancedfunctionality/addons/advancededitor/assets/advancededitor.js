@@ -7,6 +7,10 @@
   var P = window.afAePayload || window.afAdvancedEditorPayload || {};
   var CFG = (P && P.cfg) ? P.cfg : {};
 
+  if (typeof window.__afAeDebug === 'undefined') {
+    window.__afAeDebug = !!(CFG && Number(CFG.debug || 0) === 1);
+  }
+
   if (typeof window.__afAeGlobalToggling === 'undefined') window.__afAeGlobalToggling = 0;
   if (typeof window.__afAeIgnoreMutationsUntil === 'undefined') window.__afAeIgnoreMutationsUntil = 0;
 
@@ -18,6 +22,27 @@
   function log() {
     if (!window.__afAeDebug) return;
     try { console.log.apply(console, arguments); } catch (e) {}
+  }
+
+  function parsePayloadLayout(rawLayout) {
+    if (!rawLayout) return null;
+    if (Array.isArray(rawLayout)) return { v: 1, sections: rawLayout };
+    if (typeof rawLayout === 'string') {
+      try {
+        var parsed = JSON.parse(rawLayout);
+        if (Array.isArray(parsed)) return { v: 1, sections: parsed };
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch (e) {
+        return null;
+      }
+      return null;
+    }
+    if (typeof rawLayout === 'object') return rawLayout;
+    return null;
+  }
+
+  function hasValidSections(layout) {
+    return !!(layout && typeof layout === 'object' && Array.isArray(layout.sections) && layout.sections.length);
   }
 
   function hasJq() { return !!(window.jQuery && window.jQuery.fn); }
@@ -182,8 +207,14 @@
     return true;
   }
 
+  var RAW_LAYOUT = parsePayloadLayout(P.layout);
+  if (window.__afAeDebug) {
+    log('AE payload', P);
+    log('AE layout len', hasValidSections(RAW_LAYOUT) ? RAW_LAYOUT.sections.length : 0);
+  }
+
   function normalizeLayout(x) {
-    if (!x || typeof x !== 'object' || !Array.isArray(x.sections)) {
+    if (!x || typeof x !== 'object' || !Array.isArray(x.sections) || !x.sections.length) {
       return {
         v: 1,
         sections: [
@@ -386,6 +417,13 @@
   }
  
 
+  function getDropdownCommandRegex() {
+    var prefix = asText(P.dropdownCmdPrefix || 'af_menu_dropdown').trim();
+    if (!prefix) prefix = 'af_menu_dropdown';
+    prefix = prefix.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
+    return new RegExp('^' + prefix + '\\d+$', 'i');
+  }
+
   function buildAllowedCmdSet() {
     var s = Object.create(null);
     var list = Array.isArray(P.available) ? P.available : [];
@@ -429,7 +467,7 @@
           if (cmd === '|') return true;
 
           // канон dropdown-команд
-          if (/^af_menu_dropdown\d+$/i.test(cmd)) return true;
+          if (getDropdownCommandRegex().test(cmd)) return true;
 
           return !!allowed[cmd];
         });
@@ -2272,9 +2310,16 @@
       ta.__afAeInitialContent = String(ta.value || '');
     }
 
-    var layout = sanitizeLayout(P.layout || null);
+    var layout = sanitizeLayout(RAW_LAYOUT || null);
     var availableMap = buildAvailableMap();
     var out = buildToolbarFromLayout(layout);
+
+    if (window.__afAeDebug) {
+      var cmdKeys = [];
+      try { cmdKeys = Object.keys((window.jQuery && window.jQuery.sceditor && window.jQuery.sceditor.commands) || {}); } catch (eCmd) {}
+      log('AE toolbar built', out.toolbar);
+      log('AE commands registered', cmdKeys);
+    }
 
     logEditpostDomState(ta, 'before_instance_check');
 
@@ -2284,6 +2329,10 @@
 
       ensureSceditorAssets(function (ready) {
         if (!ready) return;
+        try {
+          ensureCustomCommands();
+          ensureToggleCommandDefinition();
+        } catch (ePreReg) {}
         ensureSceditorForTextarea(ta, function (created) {
           if (!created) {
             scheduleInitRetry(ta, 'create_instance_failed');
@@ -2368,11 +2417,29 @@
   }
 
   function collectTargets(root) {
-    var sel = getEditorSelector();
-    if (sel) {
-      try { return root.querySelectorAll(sel); } catch (e) {}
+    var map = new Map();
+
+    function addBySelector(sel) {
+      try {
+        var list = root.querySelectorAll(sel);
+        for (var i = 0; i < list.length; i++) {
+          var node = list[i];
+          if (node && node.tagName === 'TEXTAREA') map.set(node, true);
+        }
+      } catch (e) {}
     }
-    return root.querySelectorAll('textarea');
+
+    var sel = getEditorSelector();
+    if (sel) addBySelector(sel);
+
+    addBySelector('textarea[data-af-kb-insert-ready="1"]');
+    addBySelector('textarea[name="message"]');
+    addBySelector('textarea[name="value"][id^="quickedit_"]');
+    addBySelector('textarea[name="modnotes"]');
+    addBySelector('textarea[name="notepad"].usercp_notepad');
+
+    if (!map.size) addBySelector('textarea');
+    return Array.from(map.keys());
   }
 
   function scanAndInit(root) {
@@ -2424,7 +2491,8 @@
       }
     });
 
-    var target = document.querySelector('#editpost') ||
+    var target = document.querySelector('#af_kb_blocks') ||
+      document.querySelector('#editpost') ||
       document.querySelector('#quickreply_e') ||
       document.querySelector('#content') ||
       document.body ||
