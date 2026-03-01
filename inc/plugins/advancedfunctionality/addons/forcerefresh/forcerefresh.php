@@ -42,10 +42,10 @@ function af_forcerefresh_pre_output(string &$page = ''): void
         return;
     }
 
-    // только showthread.php
+    // showthread.php + editpost.php
     $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
     $script = strtolower(basename(str_replace('\\', '/', $script)));
-    if ($script !== 'showthread.php') {
+    if ($script !== 'showthread.php' && $script !== 'editpost.php') {
         return;
     }
 
@@ -68,6 +68,7 @@ function af_forcerefresh_pre_output(string &$page = ''): void
     // config
     $cfg = '<script>window.afForceRefreshCfg=' . json_encode([
         'delayMs' => $delay,
+        'script'  => $script,
     ], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) . ';</script>';
 
     // вставим перед </body>
