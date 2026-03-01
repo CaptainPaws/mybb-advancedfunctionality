@@ -211,6 +211,13 @@
   if (window.__afAeDebug) {
     log('AE payload', P);
     log('AE layout len', hasValidSections(RAW_LAYOUT) ? RAW_LAYOUT.sections.length : 0);
+    log('AE layout diagnostics', {
+      layout_len: P.layout_len,
+      layout_raw_len: P.layout_raw_len,
+      layout_decode_ok: P.layout_decode_ok,
+      layout_decode_error: P.layout_decode_error,
+      layout_invalid: P.layoutInvalid
+    });
   }
 
   function normalizeLayout(x) {

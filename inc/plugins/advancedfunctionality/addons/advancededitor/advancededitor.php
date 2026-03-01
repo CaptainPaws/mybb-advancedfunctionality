@@ -821,43 +821,53 @@ function af_advancededitor_pre_output(string &$page = ''): void
         }
     }
 
-    /**
-     * ===== ТОЛЬКО ЕСЛИ ЕСТЬ TEXTAREA (редакторный режим) =====
-     */
-    if ($hasTextarea) {
+    // Контракт payload должен быть полным независимо от статуса SCEditor/targets.
+    // Зависимость от textarea оставляем только для включения advancededitor.js.
 
-        // Ограничения по форумам (как было)
-        $postcountCsv   = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_POSTCOUNT_FORUMS));
-        $formfeatureCsv = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_FORMFEATURE_FORUMS));
+    // Ограничения по форумам (как было)
+    $postcountCsv   = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_POSTCOUNT_FORUMS));
+    $formfeatureCsv = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_FORMFEATURE_FORUMS));
 
-        $injectHead .= '<script>'
-            . 'window.afAePayload=window.afAePayload||{};'
-            . 'window.afAePayload.cfg=window.afAePayload.cfg||{};'
-            . 'window.afAePayload.cfg.bburl=' . json_encode($bburl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
-            . 'window.afAePayload.cfg.postcountForumIds=' . json_encode($postcountCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
-            . 'window.afAePayload.cfg.formFeatureForumIds=' . json_encode($formfeatureCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
-            . '</script>' . "\n";
+    $injectHead .= '<script>'
+        . 'window.afAePayload=window.afAePayload||{};'
+        . 'window.afAePayload.cfg=window.afAePayload.cfg||{};'
+        . 'window.afAePayload.cfg.bburl=' . json_encode($bburl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
+        . 'window.afAePayload.cfg.postcountForumIds=' . json_encode($postcountCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
+        . 'window.afAePayload.cfg.formFeatureForumIds=' . json_encode($formfeatureCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
+        . '</script>' . "\n";
 
-        // SCEditor content css URL передаём в payload для совместимости кастомных патчей.
-        $sceditorContentCss = af_advancededitor_resolve_sceditor_content_css_url($bburl);
+    // SCEditor content css URL передаём в payload для совместимости кастомных патчей.
+    $sceditorContentCss = af_advancededitor_resolve_sceditor_content_css_url($bburl);
 
-        // Theme URL оставляем в payload, но CSS/JS SCEditor грузит штатный MyBB-поток.
-        $sceditorThemeCss = af_advancededitor_resolve_sceditor_theme_css_url($bburl);
+    // Theme URL оставляем в payload, но CSS/JS SCEditor грузит штатный MyBB-поток.
+    $sceditorThemeCss = af_advancededitor_resolve_sceditor_theme_css_url($bburl);
 
-        // layout/fonts/settings
-        $customDefs = af_advancededitor_get_custom_button_defs($bburl);
-        $available  = af_advancededitor_get_available_buttons($bburl, $customDefs);
+    // layout/fonts/settings
+    $customDefs = af_advancededitor_get_custom_button_defs($bburl);
+    $available  = af_advancededitor_get_available_buttons($bburl, $customDefs);
+    if (!is_array($available)) {
+        $available = [];
+    }
 
+    $layoutRaw = (string)($mybb->settings[AF_AE_SETTING_LAYOUT] ?? '');
+    if ($layoutRaw === '') {
         $layoutRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_LAYOUT);
-        $layout = af_advancededitor_parse_layout_setting($layoutRaw);
-        $layoutInvalid = false;
-        if ($layout === null) {
-            $layoutInvalid = true;
-            $layout = af_advancededitor_default_layout();
-            if (defined('AF_AE_DEBUG') && AF_AE_DEBUG) {
-                error_log('[AF AE] layout invalid, fallback to default layout');
-            }
+    }
+    $layoutRaw = (string)$layoutRaw;
+
+    $layout = af_advancededitor_parse_layout_setting($layoutRaw);
+    $layoutInvalid = false;
+    $layoutDecodeOk = true;
+    $layoutDecodeError = '';
+    if ($layout === null) {
+        $layoutInvalid = true;
+        $layoutDecodeOk = false;
+        $layoutDecodeError = trim($layoutRaw) === '' ? 'empty layout setting' : json_last_error_msg();
+        $layout = af_advancededitor_default_layout();
+        if (defined('AF_AE_DEBUG') && AF_AE_DEBUG) {
+            error_log('[AF AE] layout invalid, fallback to default layout: ' . $layoutDecodeError);
         }
+    }
 
         $fontsRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_FONTS);
         $fonts = null;
@@ -892,7 +902,8 @@ table #post_options, table #postoptions{display:none!important;}
             }
         }
 
-        $payload = [
+    $layoutSections = (isset($layout['sections']) && is_array($layout['sections'])) ? $layout['sections'] : [];
+    $payload = [
             'v'                => 4,
             'assetVer'          => $buildVer,
 
@@ -909,7 +920,11 @@ table #post_options, table #postoptions{display:none!important;}
 
             'available'         => $available,
             'layout'            => $layout,
-            'layoutInvalid'     => $layoutInvalid ? 1 : 0,
+            'layoutInvalid'     => $layoutInvalid,
+            'layout_len'        => count($layoutSections),
+            'layout_raw_len'    => strlen($layoutRaw),
+            'layout_decode_ok'  => $layoutDecodeOk,
+            'layout_decode_error' => $layoutDecodeError,
             'fonts'             => $fonts,
             'packs'             => $packs,
             'customDefs'        => $customDefs,
@@ -927,17 +942,21 @@ table #post_options, table #postoptions{display:none!important;}
                 'formFeatureForumIds' => $formfeatureCsv,
                 'debug' => (defined('AF_AE_DEBUG') && AF_AE_DEBUG) ? 1 : 0,
             ],
-        ];
-        if ($editorSelector !== '') {
-            $payload['cfg']['editorSelector'] = $editorSelector;
-        }
+    ];
+    if ($editorSelector !== '') {
+        $payload['cfg']['editorSelector'] = $editorSelector;
+    }
 
-        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-        if (!is_string($json) || $json === '') $json = '{}';
+    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+    if (!is_string($json) || $json === '') $json = '{}';
 
-        $injectHead .= '<script>window.afAdvancedEditorPayload=' . $json . ';</script>' . "\n";
-        $injectHead .= '<script>window.afAePayload=window.afAdvancedEditorPayload;</script>' . "\n";
+    $injectHead .= '<script>window.afAdvancedEditorPayload=' . $json . ';</script>' . "\n";
+    $injectHead .= '<script>window.afAePayload=window.afAdvancedEditorPayload;</script>' . "\n";
 
+    /**
+     * ===== ТОЛЬКО ЕСЛИ ЕСТЬ TEXTAREA (редакторный режим) =====
+     */
+    if ($hasTextarea) {
         // advancededitor.js
         $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor.js', $buildVer)) . '"></script>' . "\n";
     }
