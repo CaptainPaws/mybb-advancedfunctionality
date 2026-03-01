@@ -6,7 +6,19 @@
 
   var cfg = window.afForceRefreshCfg || {};
   var delayMs = Number(cfg.delayMs || 0);
+  var debugEnabled = String(cfg.debug || '') === '1';
+  var pendingKey = 'af_forcerefresh_pending';
+
   if (!isFinite(delayMs) || delayMs < 0) delayMs = 0;
+
+  function debugLog(message, payload) {
+    if (!debugEnabled || !window.console || typeof window.console.info !== 'function') return;
+    if (typeof payload === 'undefined') {
+      window.console.info('[ForceRefresh] ' + message);
+      return;
+    }
+    window.console.info('[ForceRefresh] ' + message, payload);
+  }
 
   function scriptName() {
     try {
@@ -64,151 +76,228 @@
     return out;
   }
 
+  function canonicalTid() {
+    var fromCfg = toInt(cfg.tid || 0);
+    if (fromCfg > 0) return fromCfg;
+    var fromUrl = toInt(parseUrlValue(location.href, 'tid') || 0);
+    if (fromUrl > 0) return fromUrl;
+    var el = document.querySelector('[data-tid], input[name="tid"]');
+    if (!el) return 0;
+    return toInt((el.getAttribute('data-tid') || el.value || 0));
+  }
+
   function buildCanonicalShowthreadUrl(tid, pid) {
     var url = 'showthread.php';
-    if (tid > 0 || pid > 0) {
-      var q = [];
-      if (tid > 0) q.push('tid=' + encodeURIComponent(String(tid)));
-      if (pid > 0) q.push('pid=' + encodeURIComponent(String(pid)));
-      url += '?' + q.join('&');
-    }
+    var q = [];
+
+    tid = toInt(tid);
+    pid = toInt(pid);
+
+    if (tid > 0) q.push('tid=' + encodeURIComponent(String(tid)));
+    if (pid > 0) q.push('pid=' + encodeURIComponent(String(pid)));
+
+    if (q.length) url += '?' + q.join('&');
     if (pid > 0) url += '#pid' + pid;
+
     return url;
   }
 
-  function reloadToCanonical(tid, pid) {
-    if (window.__afForceRefreshReloading) return;
-    window.__afForceRefreshReloading = true;
-
-    setTimeout(function () {
-      var target = buildCanonicalShowthreadUrl(tid, pid);
-      try {
-        if (isShowthread) {
-          window.location.reload();
-          return;
-        }
-      } catch (e0) {}
-      try {
-        window.location.href = target;
-      } catch (e1) {
-        try { window.location.assign(target); } catch (e2) {}
-      }
-    }, delayMs);
-  }
-
-  function rememberPendingEditFromForm(form) {
-    if (!form || !window.sessionStorage) return;
-
-    var tid = toInt((form.elements.tid && form.elements.tid.value) || parseUrlValue(location.href, 'tid'));
-    var pid = toInt((form.elements.pid && form.elements.pid.value) || parseUrlValue(location.href, 'pid'));
-
-    var action = String(form.getAttribute('action') || '');
-    var doValue = '';
-    try {
-      if (form.elements.do && form.elements.do.value) doValue = String(form.elements.do.value);
-    } catch (e0) {}
-    if (!doValue) doValue = parseUrlValue(action, 'do') || parseUrlValue(location.href, 'do');
-
-    if (String(doValue).toLowerCase() !== 'updatepost') return;
-
+  function setPending(reason, tid, pid) {
+    if (!window.sessionStorage) return;
     var payload = {
       ts: Date.now(),
-      tid: tid,
-      pid: pid
+      reason: String(reason || ''),
+      tid: toInt(tid || 0),
+      pid: toInt(pid || 0)
     };
 
     try {
-      window.sessionStorage.setItem('af_force_refresh_pending_edit', JSON.stringify(payload));
+      window.sessionStorage.setItem(pendingKey, JSON.stringify(payload));
+      debugLog('pending set', payload);
     } catch (e) {}
   }
 
-  function hookEditpostSubmit() {
-    if (!isEditpost) return;
-    var form = document.querySelector('form[action*="editpost.php"], form#editpost, form[name="editpost"]') || document.querySelector('form');
-    if (!form) return;
-    form.addEventListener('submit', function () {
-      rememberPendingEditFromForm(form);
-    }, true);
-  }
-
-  function consumePendingEditReloadOnShowthread() {
+  function consumePendingOnShowthread() {
     if (!isShowthread || !window.sessionStorage) return;
 
     var raw = '';
-    try { raw = window.sessionStorage.getItem('af_force_refresh_pending_edit') || ''; } catch (e0) { raw = ''; }
+    try {
+      raw = window.sessionStorage.getItem(pendingKey) || '';
+    } catch (e0) {
+      raw = '';
+    }
     if (!raw) return;
 
     var data = null;
-    try { data = JSON.parse(raw); } catch (e1) { data = null; }
+    try {
+      data = JSON.parse(raw);
+    } catch (e1) {
+      data = null;
+    }
+
     if (!data || typeof data !== 'object') {
-      try { window.sessionStorage.removeItem('af_force_refresh_pending_edit'); } catch (e2) {}
+      try { window.sessionStorage.removeItem(pendingKey); } catch (e2) {}
       return;
     }
 
     var ts = toInt(data.ts || 0);
-    if (!ts || (Date.now() - ts) > 180000) {
-      try { window.sessionStorage.removeItem('af_force_refresh_pending_edit'); } catch (e3) {}
+    if (!ts || (Date.now() - ts) > 60000) {
+      try { window.sessionStorage.removeItem(pendingKey); } catch (e3) {}
       return;
     }
 
-    var pid = toInt(data.pid || parseUrlValue(location.href, 'pid') || 0);
-    var tid = toInt(data.tid || parseUrlValue(location.href, 'tid') || 0);
-
-    try { window.sessionStorage.removeItem('af_force_refresh_pending_edit'); } catch (e4) {}
-    reloadToCanonical(tid, pid);
+    debugLog('landed after refresh', data);
+    try { window.sessionStorage.removeItem(pendingKey); } catch (e4) {}
   }
 
-  function looksLikeEditPostQuickEdit(settings) {
-    if (!settings) return false;
-    var url = String(settings.url || '').toLowerCase();
-    if (url.indexOf('xmlhttp.php') === -1) return false;
+  function redirectToCanonical(tid, pid, reason, replaceMode) {
+    if (window.__afForceRefreshRedirecting) return;
+    window.__afForceRefreshRedirecting = true;
 
-    var dataObj = parseBodyString(settings.data || '');
+    var finalTid = toInt(tid || canonicalTid() || 0);
+    var finalPid = toInt(pid || parseUrlValue(location.href, 'pid') || 0);
+    var target = buildCanonicalShowthreadUrl(finalTid, finalPid);
 
-    var action = String(dataObj.action || parseUrlValue(url, 'action') || '').toLowerCase();
-    var doValue = String(dataObj.do || parseUrlValue(url, 'do') || '').toLowerCase();
+    setPending(reason, finalTid, finalPid);
+
+    setTimeout(function () {
+      try {
+        if (replaceMode) {
+          window.location.replace(target);
+        } else {
+          window.location.assign(target);
+        }
+      } catch (e1) {
+        try { window.location.href = target; } catch (e2) {}
+      }
+    }, delayMs);
+  }
+
+  function looksLikeQuickEditRequest(url, bodyData) {
+    var rawUrl = String(url || '').toLowerCase();
+    if (rawUrl.indexOf('xmlhttp.php') === -1) return false;
+
+    var action = String(bodyData.action || parseUrlValue(rawUrl, 'action') || '').toLowerCase();
+    var doValue = String(bodyData.do || parseUrlValue(rawUrl, 'do') || '').toLowerCase();
 
     if (action !== 'edit_post') return false;
     return doValue === 'update_post' || doValue === 'update';
   }
 
-  function pidFromQuickEdit(settings) {
-    var url = String((settings && settings.url) || '');
-    var dataObj = parseBodyString(settings && settings.data ? settings.data : '');
-    return toInt(dataObj.pid || dataObj.post_id || parseUrlValue(url, 'pid') || 0);
+  function extractPid(url, bodyData) {
+    return toInt(bodyData.pid || bodyData.post_id || parseUrlValue(url, 'pid') || 0);
   }
 
-  function responseLooksSuccessful(xhr) {
-    try {
-      if (!xhr) return false;
-      if (xhr.status && xhr.status !== 200) return false;
-      var t = String(xhr.responseText || '');
-      if (/error|permission|no\s+permission|csrf|my_post_key|invalid\s+post/i.test(t) && !/post_\d+/i.test(t)) {
-        return false;
-      }
-      return true;
-    } catch (e) {
-      return true;
+  function responseIsQuickEditSuccess(text, pid) {
+    var body = String(text || '');
+    if (!body) return false;
+    if (/\b(error|no\s+permission|invalid\s+post|my_post_key|security\s+token|csrf)\b/i.test(body)) {
+      return false;
     }
+
+    pid = toInt(pid);
+    if (pid > 0) {
+      var marker = new RegExp('id\\s*=\\s*["\\\']pid_' + pid + '["\\\']', 'i');
+      if (marker.test(body)) return true;
+    }
+
+    if (/\{[\s\S]*"success"\s*:\s*true[\s\S]*\}/i.test(body)) return true;
+    return false;
   }
 
-  function hookQuickEditSuccess() {
-    if (!isShowthread || !window.jQuery) return;
-    var $ = window.jQuery;
+  function hookEditpostSubmitFlow() {
+    if (!isEditpost) return;
 
-    $(document).ajaxComplete(function (event, xhr, settings) {
-      try {
-        if (!looksLikeEditPostQuickEdit(settings)) return;
-        if (!responseLooksSuccessful(xhr)) return;
+    var form = document.querySelector('form[action*="editpost.php"], form#editpost, form[name="editpost"]') || document.querySelector('form');
+    if (!form) return;
 
-        var pid = pidFromQuickEdit(settings);
-        var tid = toInt(parseUrlValue(location.href, 'tid') || 0);
-        reloadToCanonical(tid, pid);
-      } catch (e) {}
+    form.addEventListener('submit', function () {
+      var tid = toInt((form.elements.tid && form.elements.tid.value) || canonicalTid() || 0);
+      var pid = toInt((form.elements.pid && form.elements.pid.value) || parseUrlValue(location.href, 'pid') || 0);
+      setPending('editpost_submit', tid, pid);
+    }, true);
+  }
+
+  function hookShowthreadHistoryFallback() {
+    if (!isShowthread) return;
+
+    window.addEventListener('pageshow', function (event) {
+      if (!event || !event.persisted) return;
+      if (!window.sessionStorage) return;
+
+      var raw = '';
+      try { raw = window.sessionStorage.getItem(pendingKey) || ''; } catch (e) { raw = ''; }
+      if (!raw) return;
+
+      var data = null;
+      try { data = JSON.parse(raw); } catch (e2) { data = null; }
+      if (!data || typeof data !== 'object') return;
+
+      var ts = toInt(data.ts || 0);
+      if (!ts || (Date.now() - ts) > 60000) return;
+
+      var tid = toInt(data.tid || canonicalTid() || 0);
+      var pid = toInt(data.pid || parseUrlValue(location.href, 'pid') || 0);
+      debugLog('pageshow persisted; forcing canonical replace', { tid: tid, pid: pid, reason: data.reason || '' });
+      window.location.replace(buildCanonicalShowthreadUrl(tid, pid));
     });
   }
 
-  hookEditpostSubmit();
-  consumePendingEditReloadOnShowthread();
-  hookQuickEditSuccess();
+  function hookQuickEditByAjaxSuccess() {
+    if (!isShowthread || !window.jQuery || window.__afForceRefreshAjaxHooked) return;
+    window.__afForceRefreshAjaxHooked = true;
+
+    var $ = window.jQuery;
+    var originalAjax = $.ajax;
+
+    if (typeof originalAjax !== 'function') return;
+
+    $.ajax = function patchedAjax(url, options) {
+      var opts;
+
+      if (typeof url === 'object') {
+        opts = url || {};
+      } else {
+        opts = options || {};
+        opts.url = url;
+      }
+
+      var requestUrl = String(opts.url || '');
+      var bodyData = parseBodyString(opts.data || '');
+      var isQuickEdit = looksLikeQuickEditRequest(requestUrl, bodyData);
+      var pid = isQuickEdit ? extractPid(requestUrl, bodyData) : 0;
+      var tid = canonicalTid();
+
+      if (isQuickEdit) {
+        var originalSuccess = opts.success;
+        opts.success = function (responseText, statusText, xhrObj) {
+          if (typeof originalSuccess === 'function') {
+            originalSuccess.apply(this, arguments);
+          }
+
+          if (window.__afForceRefreshQuickEditDone) return;
+
+          var xhr = xhrObj || this;
+          var status = xhr && typeof xhr.status !== 'undefined' ? Number(xhr.status) : 200;
+          if (status !== 200) return;
+
+          var text = typeof responseText === 'string'
+            ? responseText
+            : ((xhr && typeof xhr.responseText === 'string') ? xhr.responseText : '');
+
+          if (!responseIsQuickEditSuccess(text, pid)) return;
+
+          window.__afForceRefreshQuickEditDone = true;
+          redirectToCanonical(tid, pid, 'quickedit_success', false);
+        };
+      }
+
+      return originalAjax.call(this, opts);
+    };
+  }
+
+  consumePendingOnShowthread();
+  hookEditpostSubmitFlow();
+  hookShowthreadHistoryFallback();
+  hookQuickEditByAjaxSuccess();
 })();

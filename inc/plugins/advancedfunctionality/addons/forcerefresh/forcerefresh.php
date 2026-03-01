@@ -22,7 +22,7 @@ function af_forcerefresh_uninstall(): void
     global $db;
 
     // не трогаем БД аддона? тут только settings
-    $db->delete_query('settings', "name IN ('af_forcerefresh_enabled','af_forcerefresh_delay_ms')");
+    $db->delete_query('settings', "name IN ('af_forcerefresh_enabled','af_forcerefresh_delay_ms','af_forcerefresh_debug')");
     $db->delete_query('settinggroups', "name='af_forcerefresh'");
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -66,9 +66,12 @@ function af_forcerefresh_pre_output(string &$page = ''): void
     $src .= '?v=' . $mtime;
 
     // config
+    $debug = !empty($mybb->settings['af_forcerefresh_debug']) ? '1' : '0';
+
     $cfg = '<script>window.afForceRefreshCfg=' . json_encode([
         'delayMs' => $delay,
         'script'  => $script,
+        'debug'   => $debug,
     ], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES) . ';</script>';
 
     // вставим перед </body>
@@ -122,6 +125,8 @@ function af_forcerefresh_ensure_settings(): void
     $enabledDesc  = 'If enabled — reload after successful AJAX quick reply.';
     $delayTitle   = 'Reload delay (ms)';
     $delayDesc    = 'Example 200–600 ms. 0 = immediate.';
+    $debugTitle   = 'Debug mode';
+    $debugDesc    = 'Enable console diagnostics for pending/landed force refresh flow.';
 
     // если язык всё-таки загрузился — используем его
     if (isset($lang) && is_object($lang)) {
@@ -133,6 +138,9 @@ function af_forcerefresh_ensure_settings(): void
 
         if (!empty($lang->af_forcerefresh_delay_ms)) $delayTitle = (string)$lang->af_forcerefresh_delay_ms;
         if (!empty($lang->af_forcerefresh_delay_ms_desc)) $delayDesc = (string)$lang->af_forcerefresh_delay_ms_desc;
+
+        if (!empty($lang->af_forcerefresh_debug)) $debugTitle = (string)$lang->af_forcerefresh_debug;
+        if (!empty($lang->af_forcerefresh_debug_desc)) $debugDesc = (string)$lang->af_forcerefresh_debug_desc;
     }
 
     $gid = (int)$db->fetch_field($db->simple_select('settinggroups', 'gid', "name='af_forcerefresh'", ['limit'=>1]), 'gid');
@@ -168,6 +176,14 @@ function af_forcerefresh_ensure_settings(): void
             'optionscode' => 'text',
             'value' => '250',
             'disporder' => 2,
+        ],
+        [
+            'name' => 'af_forcerefresh_debug',
+            'title' => $debugTitle,
+            'description' => $debugDesc,
+            'optionscode' => 'yesno',
+            'value' => '0',
+            'disporder' => 3,
         ],
     ];
 
