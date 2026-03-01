@@ -10,6 +10,8 @@
   if (typeof window.__afAeGlobalToggling === 'undefined') window.__afAeGlobalToggling = 0;
   if (typeof window.__afAeIgnoreMutationsUntil === 'undefined') window.__afAeIgnoreMutationsUntil = 0;
 
+  var initStateByTextarea = (typeof WeakMap !== 'undefined') ? new WeakMap() : null;
+
   function now() { return Date.now ? Date.now() : +new Date(); }
   function asText(x) { return String(x == null ? '' : x); }
 
@@ -1778,6 +1780,37 @@
     try { return $ta.sceditor('instance'); } catch (e) { return null; }
   }
 
+  function getInitState(ta) {
+    if (!ta) return null;
+    if (initStateByTextarea) return initStateByTextarea.get(ta) || null;
+    return ta.__afAeInitState || null;
+  }
+
+  function setInitState(ta, state) {
+    if (!ta) return;
+    if (initStateByTextarea) initStateByTextarea.set(ta, state || null);
+    ta.__afAeInitState = state || null;
+  }
+
+  function captureEditorSnapshot(inst, ta) {
+    var value = '';
+
+    try { value = getEditorText(inst, ta); } catch (e0) { value = ''; }
+    if (typeof value !== 'string') value = '';
+
+    // Частый race: инстанс уже есть, но val() отдает пусто до полной готовности.
+    // В этом случае берем исходную textarea как fallback-источник.
+    if (value === '') {
+      try {
+        if (ta && typeof ta.value === 'string' && ta.value !== '') {
+          value = String(ta.value);
+        }
+      } catch (e1) {}
+    }
+
+    return value;
+  }
+
   function updateOriginal(inst) {
     if (!inst) return;
     try { inst.updateOriginal(); } catch (e) {}
@@ -2053,7 +2086,7 @@
 
     var beforeValue = '';
     var wasSource = false;
-    try { beforeValue = getEditorText(inst, ta); } catch (e0) {}
+    try { beforeValue = captureEditorSnapshot(inst, ta); } catch (e0) {}
     try { wasSource = afAeIsSourceMode(inst); } catch (e1) {}
 
     var applied = false;
@@ -2074,7 +2107,7 @@
 
     if (applied) {
       try {
-        if (typeof inst.val === 'function' && beforeValue !== '') {
+        if (typeof inst.val === 'function') {
           inst.val(beforeValue);
           debugEditpost('[AE] restore_value_after_toolbar_override', { length: beforeValue.length });
         }
@@ -2107,14 +2140,15 @@
 
   function initOneTextarea(ta) {
     if (!isEligibleTextarea(ta)) return false;
-    if (isHidden(ta)) return false;
-    if (ta.getAttribute('data-af-ae-init') === '1' || ta.__afAeInited) return true;
     if (now() < (window.__afAeIgnoreMutationsUntil || 0)) return false;
     if ((window.__afAeGlobalToggling || 0) > 0) return false;
     if (!hasSceditor()) return false;
 
     var $ = window.jQuery;
     var $ta = $(ta);
+    var existing = safeGetInstance($ta);
+
+    if (isHidden(ta) && !existing) return false;
 
     if (typeof ta.__afAeInitialContent === 'undefined') {
       ta.__afAeInitialContent = String(ta.value || '');
@@ -2126,10 +2160,15 @@
 
     logEditpostDomState(ta, 'before_instance_check');
 
-    var existing = safeGetInstance($ta);
     if (!existing) {
       scheduleInitRetry(ta, 'missing_instance');
       return false;
+    }
+
+    var state = getInitState(ta);
+    if (state && state.instance === existing) {
+      try { bindSubmitSync(ta.form, ta); } catch (eKeepAlive) {}
+      return true;
     }
 
     ta.__afAeInited = true;
@@ -2147,8 +2186,10 @@
     try { afAeEnsureFrontendCodeCss(); } catch (eA1) {}
     try { afAeForceAlignEverywhere(existing); } catch (eAA) {}
 
+    var toolbarApplied = false;
     try {
       var applied = applyToolbarOverrideToExistingInstance(ta, existing, out);
+      toolbarApplied = !!applied;
       if (applied) existing.__afAeToolbarSig = asText(out.toolbar);
     } catch (eTB) {}
 
@@ -2170,6 +2211,13 @@
       decorateDropdownButtons(ta, out);
       decorateCustomButtons(ta);
     } catch (e3) {}
+
+    setInitState(ta, {
+      instance: existing,
+      toolbarSig: asText(out.toolbar || ''),
+      toolbarApplied: toolbarApplied,
+      at: now()
+    });
 
     logEditpostDomState(ta, 'after_init');
     return true;
