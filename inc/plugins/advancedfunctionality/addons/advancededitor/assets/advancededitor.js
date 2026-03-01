@@ -7,14 +7,8 @@
   var P = window.afAePayload || window.afAdvancedEditorPayload || {};
   var CFG = (P && P.cfg) ? P.cfg : {};
 
-  if (typeof window.__afAeDebug === 'undefined') {
-    window.__afAeDebug = !!(CFG && Number(CFG.debug || 0) === 1);
-  }
-
   if (typeof window.__afAeGlobalToggling === 'undefined') window.__afAeGlobalToggling = 0;
   if (typeof window.__afAeIgnoreMutationsUntil === 'undefined') window.__afAeIgnoreMutationsUntil = 0;
-
-  var initStateByTextarea = (typeof WeakMap !== 'undefined') ? new WeakMap() : null;
 
   function now() { return Date.now ? Date.now() : +new Date(); }
   function asText(x) { return String(x == null ? '' : x); }
@@ -24,187 +18,8 @@
     try { console.log.apply(console, arguments); } catch (e) {}
   }
 
-  function parsePayloadLayout(rawLayout) {
-    if (!rawLayout) return null;
-    if (Array.isArray(rawLayout)) return { v: 1, sections: rawLayout };
-    if (typeof rawLayout === 'string') {
-      try {
-        var parsed = JSON.parse(rawLayout);
-        if (Array.isArray(parsed)) return { v: 1, sections: parsed };
-        if (parsed && typeof parsed === 'object') return parsed;
-      } catch (e) {
-        return null;
-      }
-      return null;
-    }
-    if (typeof rawLayout === 'object') return rawLayout;
-    return null;
-  }
-
-  function hasValidSections(layout) {
-    return !!(layout && typeof layout === 'object' && Array.isArray(layout.sections) && layout.sections.length);
-  }
-
   function hasJq() { return !!(window.jQuery && window.jQuery.fn); }
   function hasSceditor() { return hasJq() && typeof window.jQuery.fn.sceditor === 'function'; }
-
-  var BASE_FALLBACK_CMDS = [
-    'bold', 'italic', 'underline', 'strike', 'subscript', 'superscript',
-    'font', 'size', 'color', 'removeformat',
-    'undo', 'redo', 'pastetext', 'horizontalrule',
-    'left', 'center', 'right', 'justify',
-    'bulletlist', 'orderedlist',
-    'quote', 'code',
-    'link', 'unlink', 'email', 'image', 'youtube', 'emoticon',
-    'maximize'
-  ];
-
-  var BASE_FALLBACK_LAYOUT = {
-    v: 1,
-    sections: [
-      {
-        id: 'main',
-        type: 'group',
-        title: 'Основное',
-        items: [
-          'bold', 'italic', 'underline', 'strike', 'subscript', 'superscript',
-          '|',
-          'font', 'size', 'color', 'removeformat',
-          '|',
-          'undo', 'redo', 'pastetext', 'horizontalrule',
-          '|',
-          'left', 'center', 'right', 'justify',
-          '|',
-          'bulletlist', 'orderedlist',
-          '|',
-          'quote', 'code',
-          '|',
-          'link', 'unlink', 'email', 'image', 'youtube', 'emoticon',
-          '|',
-          'maximize'
-        ]
-      },
-      { id: 'addons', type: 'group', title: 'Доп. кнопки', items: [] }
-    ]
-  };
-
-  function appendStylesheetOnce(href, id) {
-    href = asText(href).trim();
-    if (!href) return true;
-    try {
-      if (id && document.getElementById(id)) return true;
-      var links = document.querySelectorAll('link[rel="stylesheet"]');
-      for (var i = 0; i < links.length; i++) {
-        if (asText(links[i].getAttribute('href')).indexOf(href) !== -1) return true;
-      }
-      var l = document.createElement('link');
-      l.rel = 'stylesheet';
-      l.href = href;
-      if (id) l.id = id;
-      (document.head || document.documentElement).appendChild(l);
-      return true;
-    } catch (e) {}
-    return false;
-  }
-
-  function loadScriptOnce(url, done) {
-    url = asText(url).trim();
-    if (!url) { done(false); return; }
-
-    try {
-      var scripts = document.querySelectorAll('script[src]');
-      for (var i = 0; i < scripts.length; i++) {
-        var src = asText(scripts[i].getAttribute('src'));
-        if (src && src.indexOf(url) !== -1) {
-          if (scripts[i].getAttribute('data-af-ae-loaded') === '1' || hasSceditor()) { done(true); return; }
-          scripts[i].addEventListener('load', function () { done(true); }, { once: true });
-          scripts[i].addEventListener('error', function () { done(false); }, { once: true });
-          setTimeout(function () { if (hasSceditor()) done(true); }, 300);
-          return;
-        }
-      }
-
-      var sEl = document.createElement('script');
-      sEl.src = url;
-      sEl.defer = true;
-      sEl.addEventListener('load', function () {
-        try { sEl.setAttribute('data-af-ae-loaded', '1'); } catch (e0) {}
-        done(true);
-      }, { once: true });
-      sEl.addEventListener('error', function () { done(false); }, { once: true });
-      (document.head || document.documentElement).appendChild(sEl);
-    } catch (e) {
-      done(false);
-    }
-  }
-
-  function ensureSceditorAssets(cb) {
-    if (hasSceditor()) { cb(true); return; }
-
-    if (window.__afAeSceditorLoading) {
-      window.__afAeSceditorWaiters = window.__afAeSceditorWaiters || [];
-      window.__afAeSceditorWaiters.push(cb);
-      return;
-    }
-
-    window.__afAeSceditorLoading = true;
-    window.__afAeSceditorWaiters = window.__afAeSceditorWaiters || [];
-    window.__afAeSceditorWaiters.push(cb);
-
-    var ok = true;
-    appendStylesheetOnce(P.sceditorThemeCss || P.sceditorCss || '', 'af-ae-sceditor-theme');
-    appendStylesheetOnce(P.sceditorContentCss || '', 'af-ae-sceditor-content');
-
-    var scripts = [P.sceditorCoreJs, P.sceditorBbcodeJs, P.sceditorMybbJs].filter(function (x) { return !!asText(x).trim(); });
-
-    var i = 0;
-    function doneAll() {
-      window.__afAeSceditorLoading = false;
-      var waiters = window.__afAeSceditorWaiters || [];
-      window.__afAeSceditorWaiters = [];
-      var success = ok && hasSceditor();
-      for (var w = 0; w < waiters.length; w++) {
-        try { waiters[w](success); } catch (e) {}
-      }
-    }
-
-    function next() {
-      if (i >= scripts.length) { doneAll(); return; }
-      var u = scripts[i++];
-      loadScriptOnce(u, function (loaded) {
-        if (!loaded) ok = false;
-        next();
-      });
-    }
-
-    next();
-  }
-
-  function ensureSceditorForTextarea(ta, callback) {
-    var $ = window.jQuery;
-    var $ta = $(ta);
-    var existing = safeGetInstance($ta);
-    if (existing) { callback(existing); return; }
-
-    var opts = {
-      format: 'bbcode',
-      style: asText(P.sceditorContentCss || P.sceditorCss || ''),
-      toolbar: '',
-      emoticonsEnabled: false
-    };
-
-    try { $ta.sceditor(opts); } catch (e0) {}
-
-    var tries = 0;
-    (function waitInst() {
-      tries++;
-      var inst = safeGetInstance($ta);
-      if (inst) { callback(inst); return; }
-      if (tries >= 30) { callback(null); return; }
-      setTimeout(waitInst, 40);
-    })();
-  }
-
   function isEditPostPage() {
     try {
       var p = String((window.location && window.location.pathname) || '').toLowerCase();
@@ -247,25 +62,37 @@
     return true;
   }
 
-  var RAW_LAYOUT = parsePayloadLayout(P.layout);
-  if (window.__afAeDebug) {
-    log('AE payload keys', Object.keys(P || {}));
-    log('AE has layout', !!P.layout);
-    log('AE sceditor loaded', !!(window.jQuery && window.jQuery.sceditor));
-    log('AE payload', P);
-    log('AE layout len', hasValidSections(RAW_LAYOUT) ? RAW_LAYOUT.sections.length : 0);
-    log('AE layout diagnostics', {
-      layout_len: P.layout_len,
-      layout_raw_len: P.layout_raw_len,
-      layout_decode_ok: P.layout_decode_ok,
-      layout_decode_error: P.layout_decode_error,
-      layout_invalid: P.layoutInvalid
-    });
-  }
-
   function normalizeLayout(x) {
-    if (!x || typeof x !== 'object' || !Array.isArray(x.sections) || !x.sections.length) {
-      return JSON.parse(JSON.stringify(BASE_FALLBACK_LAYOUT));
+    if (!x || typeof x !== 'object' || !Array.isArray(x.sections)) {
+      return {
+        v: 1,
+        sections: [
+          {
+            id: 'main',
+            type: 'group',
+            title: 'Основное',
+            items: [
+              'bold', 'italic', 'underline', 'strike', 'subscript', 'superscript',
+              '|',
+              'font', 'size', 'color', 'removeformat',
+              '|',
+              'undo', 'redo', 'pastetext', 'horizontalrule',
+              '|',
+              'left', 'center', 'right', 'justify',
+              '|',
+              'bulletlist', 'orderedlist',
+              '|',
+              'quote', 'code',
+              '|',
+              'link', 'unlink', 'email', 'image', 'youtube', 'emoticon',
+              '|',
+              // ВАЖНО: больше НЕ добавляем af_togglemode по умолчанию
+              'maximize'
+            ]
+          },
+          { id: 'addons', type: 'group', title: 'Доп. кнопки', items: [] }
+        ]
+      };
     }
     if (!x.v) x.v = 1;
     if (!Array.isArray(x.sections)) x.sections = [];
@@ -439,19 +266,8 @@
   }
  
 
-  function getDropdownCommandRegex() {
-    var prefix = asText(P.dropdownCmdPrefix || 'af_menu_dropdown').trim();
-    if (!prefix) prefix = 'af_menu_dropdown';
-    prefix = prefix.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
-    return new RegExp('^' + prefix + '\\d+$', 'i');
-  }
-
   function buildAllowedCmdSet() {
     var s = Object.create(null);
-    BASE_FALLBACK_CMDS.forEach(function (cmd) {
-      s[String(cmd)] = true;
-    });
-
     var list = Array.isArray(P.available) ? P.available : [];
     list.forEach(function (b) {
       if (!b || !b.cmd) return;
@@ -493,7 +309,7 @@
           if (cmd === '|') return true;
 
           // канон dropdown-команд
-          if (getDropdownCommandRegex().test(cmd)) return true;
+          if (/^af_menu_dropdown\d+$/i.test(cmd)) return true;
 
           return !!allowed[cmd];
         });
@@ -1962,37 +1778,6 @@
     try { return $ta.sceditor('instance'); } catch (e) { return null; }
   }
 
-  function getInitState(ta) {
-    if (!ta) return null;
-    if (initStateByTextarea) return initStateByTextarea.get(ta) || null;
-    return ta.__afAeInitState || null;
-  }
-
-  function setInitState(ta, state) {
-    if (!ta) return;
-    if (initStateByTextarea) initStateByTextarea.set(ta, state || null);
-    ta.__afAeInitState = state || null;
-  }
-
-  function captureEditorSnapshot(inst, ta) {
-    var value = '';
-
-    try { value = getEditorText(inst, ta); } catch (e0) { value = ''; }
-    if (typeof value !== 'string') value = '';
-
-    // Частый race: инстанс уже есть, но val() отдает пусто до полной готовности.
-    // В этом случае берем исходную textarea как fallback-источник.
-    if (value === '') {
-      try {
-        if (ta && typeof ta.value === 'string' && ta.value !== '') {
-          value = String(ta.value);
-        }
-      } catch (e1) {}
-    }
-
-    return value;
-  }
-
   function updateOriginal(inst) {
     if (!inst) return;
     try { inst.updateOriginal(); } catch (e) {}
@@ -2237,211 +2022,129 @@
     } catch (e2) {}
   }
 
-  function logEditpostDomState(ta, reason) {
-    if (!isEditPostPage()) return;
-    try {
-      var all = document.querySelectorAll('textarea[name="message"], textarea#message');
-      var visible = 0;
-      var withInstance = 0;
-      for (var i = 0; i < all.length; i++) {
-        if (!isHidden(all[i])) visible++;
-        try { if (safeGetInstance(window.jQuery(all[i]))) withInstance++; } catch (e0) {}
-      }
-      debugEditpost('[AE] dom_probe', {
-        reason: reason || '',
-        textareaCount: all.length,
-        visibleCount: visible,
-        instanceCount: withInstance,
-        targetName: ta && ta.name ? ta.name : '',
-        targetId: ta && ta.id ? ta.id : '',
-        targetHidden: !!(ta && isHidden(ta)),
-        targetLength: ta && typeof ta.value === 'string' ? ta.value.length : 0
-      });
-    } catch (e) {}
-  }
-
-  function applyToolbarOverrideToExistingInstance(ta, inst, out) {
-    if (!ta || !inst || !out) return false;
-
-    var nextToolbar = asText(out.toolbar || '');
-    if (!nextToolbar) return false;
-
-    var beforeValue = '';
-    var wasSource = false;
-    try { beforeValue = captureEditorSnapshot(inst, ta); } catch (e0) {}
-    try { wasSource = afAeIsSourceMode(inst); } catch (e1) {}
-
-    var applied = false;
-    try {
-      if (typeof inst.toolbar === 'function') {
-        inst.toolbar(nextToolbar);
-        applied = true;
-      }
-    } catch (e2) {}
-
-    if (!applied) {
-      try {
-        inst.opts = inst.opts || {};
-        inst.opts.toolbar = nextToolbar;
-        applied = true;
-      } catch (e3) {}
-    }
-
-    if (applied) {
-      try {
-        if (typeof inst.val === 'function') {
-          inst.val(beforeValue);
-          debugEditpost('[AE] restore_value_after_toolbar_override', { length: beforeValue.length });
-        }
-      } catch (e4) {}
-
-      try {
-        if (wasSource && typeof inst.sourceMode === 'function' && !inst.sourceMode()) {
-          inst.sourceMode(true);
-        }
-      } catch (e5) {}
-    }
-
-    return applied;
-  }
-
-  function scheduleInitRetry(ta, why) {
-    if (!ta || ta.__afAeInited) return;
-    var tries = (ta.__afAeWaitTries | 0) + 1;
-    ta.__afAeWaitTries = tries;
-    if (tries > 30) return;
-    if (ta.__afAeWaitTimer) return;
-
-    ta.__afAeWaitTimer = setTimeout(function () {
-      ta.__afAeWaitTimer = null;
-      initOneTextarea(ta);
-    }, 120);
-
-    debugEditpost('[AE] wait_existing_instance', { reason: why || 'unknown', tries: tries, textareaName: ta.name || '' });
-  }
-
   function initOneTextarea(ta) {
     if (!isEligibleTextarea(ta)) return false;
+    if (isHidden(ta)) return false;
+
+    if (ta.__afAeInited) return true;
     if (now() < (window.__afAeIgnoreMutationsUntil || 0)) return false;
     if ((window.__afAeGlobalToggling || 0) > 0) return false;
+
     if (!hasSceditor()) return false;
 
     var $ = window.jQuery;
     var $ta = $(ta);
-    var existing = safeGetInstance($ta);
-
-    if (isHidden(ta) && !existing) return false;
 
     if (typeof ta.__afAeInitialContent === 'undefined') {
       ta.__afAeInitialContent = String(ta.value || '');
     }
 
-    var layout = sanitizeLayout(RAW_LAYOUT || null);
+    // === ВОТ ТУТ И ДОЛЖНО БЫТЬ ===
+    var layout = sanitizeLayout(P.layout || null);
     var availableMap = buildAvailableMap();
     var out = buildToolbarFromLayout(layout);
 
-    if (!asText(out.toolbar).trim()) {
-      var fallbackLayout = sanitizeLayout(JSON.parse(JSON.stringify(BASE_FALLBACK_LAYOUT)));
-      out = buildToolbarFromLayout(fallbackLayout);
-    }
+    var existing = safeGetInstance($ta);
+    if (existing) {
+      ta.__afAeInited = true;
+      existing.__afAeOwned = true;
 
-    if (window.__afAeDebug) {
-      var cmdKeys = [];
-      try { cmdKeys = Object.keys((window.jQuery && window.jQuery.sceditor && window.jQuery.sceditor.commands) || {}); } catch (eCmd) {}
-      log('AE toolbar built', out.toolbar);
-      log('AE toolbar built length', asText(out.toolbar).length);
-      log('AE instance exists', !!existing);
-      log('AE commands count', cmdKeys.length);
-      log('AE commands registered', cmdKeys);
-    }
+      // dropdown-меню (afmenu_*) — чтобы кнопки точно были “живые”
+      try { ensureDropdownCommands(out, availableMap); } catch (eD0) {}
+      // bbcode passthrough для MyCode-тегов (WYSIWYG <-> BBCode) — НА ИМЕННО ЭТОМ инстансе
+      try { afAeEnsureMycodePassthroughBbcode(existing); } catch (eM0) {}
 
-    logEditpostDomState(ta, 'before_instance_check');
+      // остальные кастомные команды (af_*)
+      try { ensureCustomCommands(); } catch (eC0) {}
+      try { ensureToggleCommandDefinition(); } catch (eT0) {}
+      try { ensureMybbTagAliases(); } catch (eTA0) {}
 
-    if (!existing) {
-      var plainSnapshot = '';
-      try { plainSnapshot = String((ta && ta.value) || ''); } catch (eSnap0) { plainSnapshot = ''; }
 
-      ensureSceditorAssets(function (ready) {
-        if (!ready) return;
-        try {
-          ensureCustomCommands();
-          ensureToggleCommandDefinition();
-        } catch (ePreReg) {}
-        ensureSceditorForTextarea(ta, function (created) {
-          if (!created) {
-            scheduleInitRetry(ta, 'create_instance_failed');
-            return;
-          }
-          try {
-            if (typeof created.val === 'function') created.val(plainSnapshot);
-            else ta.value = plainSnapshot;
-          } catch (eRestore0) {
-            try { ta.value = plainSnapshot; } catch (eRestore1) {}
-          }
-          initOneTextarea(ta);
-        });
-      });
+      try { afAeEnsureMybbAlignBbcode(existing); } catch (eA0) {}
+      try { afAePatchAlignCommandsForSourceMode(); } catch (eA0b) {}
+      try { afAeEnsureFrontendCodeCss(); } catch (eA1) {}
+      try { afAeForceAlignEverywhere(existing); } catch (eAA) {}
 
-      scheduleInitRetry(ta, 'missing_instance');
-      return false;
-    }
+      try { patchEditorInstanceForSafeToggle(existing); } catch (e0) {}
+      try { ensureDefaultSourceMode(existing); } catch (e0b) {}
+      try { bindSubmitSync(ta.form, ta); } catch (e1) {}
+      if (isEditPostPage()) debugEditpost('[AE] editor_ready', { textareaName: ta.name || '', existing: true });
 
-    var state = getInitState(ta);
-    if (state && state.instance === existing) {
-      try { bindSubmitSync(ta.form, ta); } catch (eKeepAlive) {}
+      try { afAeApplyWysiwygCodeQuoteCss(existing); } catch (e2) {}
+      try { afAeApplyWysiwygLocalFontsCss(existing); } catch (e2b) {}
+
+      try {
+        decorateDropdownButtons(ta, out);
+        decorateCustomButtons(ta);
+      } catch (e3) {}
+
       return true;
     }
 
-    ta.__afAeInited = true;
-    ta.setAttribute('data-af-ae-init', '1');
-    existing.__afAeOwned = true;
-
-    try { ensurePostKeyInput(ta.form); } catch (ePK) {}
-    try { ensureDropdownCommands(out, availableMap); } catch (eD0) {}
-    try { afAeEnsureMycodePassthroughBbcode(existing); } catch (eM0) {}
-    try { ensureCustomCommands(); } catch (eC0) {}
-    try { ensureToggleCommandDefinition(); } catch (eT0) {}
-    try { ensureMybbTagAliases(); } catch (eTA0) {}
-    try { afAeEnsureMybbAlignBbcode(existing); } catch (eA0) {}
-    try { afAePatchAlignCommandsForSourceMode(); } catch (eA0b) {}
-    try { afAeEnsureFrontendCodeCss(); } catch (eA1) {}
-    try { afAeForceAlignEverywhere(existing); } catch (eAA) {}
-
-    var toolbarApplied = false;
     try {
-      var applied = applyToolbarOverrideToExistingInstance(ta, existing, out);
-      toolbarApplied = !!applied;
-      if (applied) existing.__afAeToolbarSig = asText(out.toolbar);
-    } catch (eTB) {}
+      // регаем всё ДО создания инстанса
+      ensurePostKeyInput(ta.form);
 
-    try { patchEditorInstanceForSafeToggle(existing); } catch (e0) {}
-    try { bindSubmitSync(ta.form, ta); } catch (e1) {}
+      try { ensureDropdownCommands(out, availableMap); } catch (eD1) {}
+      try { ensureCustomCommands(); } catch (eC1) {}
+      try { ensureToggleCommandDefinition(); } catch (eT1) {}
+      try { ensureMybbTagAliases(); } catch (eTA1) {}
 
-    if (isEditPostPage()) {
-      debugEditpost('[AE] editor_ready', {
-        textareaName: ta.name || '',
-        existing: true,
-        textLength: String(getEditorText(existing, ta) || '').length
+
+      // Патчи bbcode (до инициализации) — и потом ещё раз после
+      try { afAeEnsureMybbAlignBbcode(null); } catch (eP0) {}
+      try { afAeForceAlignEverywhere(null); } catch (eX) {}
+
+      $ta.sceditor({
+        format: 'bbcode',
+        toolbar: out.toolbar,
+
+        // ВАЖНО: WYSIWYG iframe CSS
+        style: (P.sceditorContentCss || P.sceditorCss || ''),
+
+        height: 180,
+        width: '100%',
+        resizeEnabled: true,
+        autoExpand: false,
+        startInSourceMode: true
       });
+
+      var inst = safeGetInstance($ta);
+      if (inst) {
+        ta.__afAeInited = true;
+        inst.__afAeOwned = true;
+        inst.__afAeToolbarSig = asText(out.toolbar);
+
+        // bbcode passthrough для MyCode-тегов (WYSIWYG <-> BBCode)
+        try { afAeEnsureMycodePassthroughBbcode(inst); } catch (eM1) {}
+        // алиасы MyBB-тегов и команды — один раз глобально, но тут безопасно
+        try { ensureMybbTagAliases(); } catch (eTA2) {}
+        try { ensureCustomCommands(); } catch (eC2) {}
+
+
+        try { afAeEnsureMybbAlignBbcode(inst); } catch (eP1) {}
+        try { afAePatchAlignCommandsForSourceMode(); } catch (eP1b) {}
+        try { afAeEnsureFrontendCodeCss(); } catch (eP2) {}
+        try { afAeForceAlignEverywhere(inst); } catch (ePP) {}
+
+        try { patchEditorInstanceForSafeToggle(inst); } catch (e3) {}
+        try { ensureDefaultSourceMode(inst); } catch (e3b) {}
+        try { bindSubmitSync(ta.form, ta); } catch (e4) {}
+        if (isEditPostPage()) debugEditpost('[AE] editor_ready', { textareaName: ta.name || '', existing: false });
+
+        try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e5) {}
+        try { afAeApplyWysiwygLocalFontsCss(inst); } catch (e5b) {}
+
+        decorateDropdownButtons(ta, out);
+        decorateCustomButtons(ta);
+
+        return true;
+      }
+    } catch (e) {
+      log('[AE] init error', e);
     }
 
-    try { afAeApplyWysiwygCodeQuoteCss(existing); } catch (e2) {}
-    try { afAeApplyWysiwygLocalFontsCss(existing); } catch (e2b) {}
-
-    try {
-      decorateDropdownButtons(ta, out);
-      decorateCustomButtons(ta);
-    } catch (e3) {}
-
-    setInitState(ta, {
-      instance: existing,
-      toolbarSig: asText(out.toolbar || ''),
-      toolbarApplied: toolbarApplied,
-      at: now()
-    });
-
-    logEditpostDomState(ta, 'after_init');
-    return true;
+    return false;
   }
 
   function getEditorSelector() {
@@ -2451,29 +2154,11 @@
   }
 
   function collectTargets(root) {
-    var map = new Map();
-
-    function addBySelector(sel) {
-      try {
-        var list = root.querySelectorAll(sel);
-        for (var i = 0; i < list.length; i++) {
-          var node = list[i];
-          if (node && node.tagName === 'TEXTAREA') map.set(node, true);
-        }
-      } catch (e) {}
-    }
-
     var sel = getEditorSelector();
-    if (sel) addBySelector(sel);
-
-    addBySelector('textarea[data-af-kb-insert-ready="1"]');
-    addBySelector('textarea[name="message"]');
-    addBySelector('textarea[name="value"][id^="quickedit_"]');
-    addBySelector('textarea[name="modnotes"]');
-    addBySelector('textarea[name="notepad"].usercp_notepad');
-
-    if (!map.size) addBySelector('textarea');
-    return Array.from(map.keys());
+    if (sel) {
+      try { return root.querySelectorAll(sel); } catch (e) {}
+    }
+    return root.querySelectorAll('textarea');
   }
 
   function scanAndInit(root) {
@@ -2525,12 +2210,11 @@
       }
     });
 
-    var target = document.querySelector('#af_kb_blocks') ||
-      document.querySelector('#editpost') ||
-      document.querySelector('#quickreply_e') ||
-      document.querySelector('#content') ||
-      document.body ||
-      document.documentElement;
+    var target = document.documentElement || document.body;
+    if (isEditPostPage()) {
+      var scoped = document.querySelector('#editpost');
+      if (scoped) target = scoped;
+    }
 
     obs.observe(target, {
       childList: true,
@@ -2539,12 +2223,18 @@
   }
 
   function boot() {
-    ensureSceditorAssets(function () {
-      scanAndInit(document);
-      bindEditpostFormGuards(document);
-      observeDynamicEditors();
-      registerPageShowRecovery();
-    });
+    var tries = 0;
+    (function wait() {
+      tries++;
+      if (hasSceditor()) {
+        scanAndInit(document);
+        bindEditpostFormGuards(document);
+        observeDynamicEditors();
+        registerPageShowRecovery();
+        return;
+      }
+      if (tries < 80) return setTimeout(wait, 50);
+    })();
   }
 
   if (document.readyState === 'loading') {
