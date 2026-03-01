@@ -18,7 +18,6 @@ define('AF_AE_SETTING_POSTCOUNT_FORUMS', 'af_advancededitor_postcount_forum_ids'
 define('AF_AE_SETTING_FORMFEATURE_FORUMS', 'af_advancededitor_formfeature_forum_ids');
 define('AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS', 'af_ae_htmlbb_allowed_groups');
 define('AF_AE_SETTING_DISABLE_ON', 'af_advancededitor_disable_on');
-define('AF_AE_CACHE_PREV_CLICKABLE', 'af_ae_clickable_mycode_prev');
 
 
 
@@ -780,8 +779,12 @@ function af_advancededitor_pre_output(string &$page = ''): void
         return;
     }
 
-    // В режиме редактора НЕ трогаем штатную инициализацию MyBB SCEditor.
-    // Advanced Editor должен работать поверх уже созданного инстанса.
+    // В режиме редактора: гасим MyBB clickable editor + вычищаем SCEditor ассеты MyBB
+    // (в VIEW режиме это не трогаем вообще)
+    if ($hasTextarea) {
+        af_advancededitor_force_disable_mybb_clickable_editor();
+        af_advancededitor_strip_mybb_sceditor_assets($page);
+    }
 
     $assetsBase = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/';
     $imgBase    = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/img/';
@@ -821,53 +824,56 @@ function af_advancededitor_pre_output(string &$page = ''): void
         }
     }
 
-    // Контракт payload должен быть полным независимо от статуса SCEditor/targets.
-    // Зависимость от textarea оставляем только для включения advancededitor.js.
+    /**
+     * ===== ТОЛЬКО ЕСЛИ ЕСТЬ TEXTAREA (редакторный режим) =====
+     */
+    if ($hasTextarea) {
 
-    // Ограничения по форумам (как было)
-    $postcountCsv   = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_POSTCOUNT_FORUMS));
-    $formfeatureCsv = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_FORMFEATURE_FORUMS));
+        // Ограничения по форумам (как было)
+        $postcountCsv   = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_POSTCOUNT_FORUMS));
+        $formfeatureCsv = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_FORMFEATURE_FORUMS));
 
-    $injectHead .= '<script>'
-        . 'window.afAePayload=window.afAePayload||{};'
-        . 'window.afAePayload.cfg=window.afAePayload.cfg||{};'
-        . 'window.afAePayload.cfg.bburl=' . json_encode($bburl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
-        . 'window.afAePayload.cfg.postcountForumIds=' . json_encode($postcountCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
-        . 'window.afAePayload.cfg.formFeatureForumIds=' . json_encode($formfeatureCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
-        . '</script>' . "\n";
+        $injectHead .= '<script>'
+            . 'window.afAePayload=window.afAePayload||{};'
+            . 'window.afAePayload.cfg=window.afAePayload.cfg||{};'
+            . 'window.afAePayload.cfg.bburl=' . json_encode($bburl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
+            . 'window.afAePayload.cfg.postcountForumIds=' . json_encode($postcountCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
+            . 'window.afAePayload.cfg.formFeatureForumIds=' . json_encode($formfeatureCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
+            . '</script>' . "\n";
 
-    // SCEditor content css URL передаём в payload для совместимости кастомных патчей.
-    $sceditorContentCss = af_advancededitor_resolve_sceditor_content_css_url($bburl);
+        // SCEditor: theme css (для тулбара)
+        $sceditorThemeCss = af_advancededitor_resolve_sceditor_theme_css_url($bburl);
+        $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_add_ver($sceditorThemeCss, $buildVer)) . '" />' . "\n";
 
-    // Theme URL оставляем в payload, но CSS/JS SCEditor грузит штатный MyBB-поток.
-    $sceditorThemeCss = af_advancededitor_resolve_sceditor_theme_css_url($bburl);
+        // SCEditor: content css (для iframe WYSIWYG)
+        $sceditorContentCss = af_advancededitor_resolve_sceditor_content_css_url($bburl);
 
-    // layout/fonts/settings
-    $customDefs = af_advancededitor_get_custom_button_defs($bburl);
-    $available  = af_advancededitor_get_available_buttons($bburl, $customDefs);
-    if (!is_array($available)) {
-        $available = [];
-    }
+        // SCEditor core + bbcode plugin
+        $core = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.min.js');
+        if ($core === '') $core = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.js');
 
-    $layoutRaw = (string)($mybb->settings[AF_AE_SETTING_LAYOUT] ?? '');
-    if ($layoutRaw === '') {
-        $layoutRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_LAYOUT);
-    }
-    $layoutRaw = (string)$layoutRaw;
+        $bb = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.bbcode.min.js');
+        if ($bb === '') $bb = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.bbcode.js');
 
-    $layout = af_advancededitor_parse_layout_setting($layoutRaw);
-    $layoutInvalid = false;
-    $layoutDecodeOk = true;
-    $layoutDecodeError = '';
-    if ($layout === null) {
-        $layoutInvalid = true;
-        $layoutDecodeOk = false;
-        $layoutDecodeError = trim($layoutRaw) === '' ? 'empty layout setting' : json_last_error_msg();
-        $layout = af_advancededitor_default_layout();
-        if (defined('AF_AE_DEBUG') && AF_AE_DEBUG) {
-            error_log('[AF AE] layout invalid, fallback to default layout: ' . $layoutDecodeError);
+        if ($core !== '') $injectHead .= '<script src="' . htmlspecialchars_uni(af_advancededitor_add_ver($core, $buildVer)) . '"></script>' . "\n";
+        if ($bb !== '')   $injectHead .= '<script src="' . htmlspecialchars_uni(af_advancededitor_add_ver($bb, $buildVer)) . '"></script>' . "\n";
+
+        // MyBB bridge (submit-sync)
+        $mybbBridge = af_advancededitor_resolve_sceditor_mybb_js_url($bburl);
+        if ($mybbBridge !== '') {
+            $injectHead .= '<script src="' . htmlspecialchars_uni(af_advancededitor_add_ver($mybbBridge, $buildVer)) . '"></script>' . "\n";
         }
-    }
+
+        // layout/fonts/settings
+        $customDefs = af_advancededitor_get_custom_button_defs($bburl);
+        $available  = af_advancededitor_get_available_buttons($bburl, $customDefs);
+
+        $layoutRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_LAYOUT);
+        $layout = null;
+        if (trim($layoutRaw) !== '') {
+            $decoded = json_decode($layoutRaw, true);
+            if (is_array($decoded)) $layout = $decoded;
+        }
 
         $fontsRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_FONTS);
         $fonts = null;
@@ -902,8 +908,7 @@ table #post_options, table #postoptions{display:none!important;}
             }
         }
 
-    $layoutSections = (isset($layout['sections']) && is_array($layout['sections'])) ? $layout['sections'] : [];
-    $payload = [
+        $payload = [
             'v'                => 4,
             'assetVer'          => $buildVer,
 
@@ -914,21 +919,12 @@ table #post_options, table #postoptions{display:none!important;}
             'sceditorContentCss'=> $sceditorContentCss,
             'sceditorThemeCss'  => $sceditorThemeCss,
             'sceditorCss'       => $sceditorContentCss,
-            'sceditorCoreJs'    => af_advancededitor_resolve_sceditor_core_js_url($bburl),
-            'sceditorBbcodeJs'  => af_advancededitor_resolve_sceditor_bbcode_js_url($bburl),
-            'sceditorMybbJs'    => af_advancededitor_resolve_sceditor_mybb_js_url($bburl),
 
             'available'         => $available,
             'layout'            => $layout,
-            'layoutInvalid'     => $layoutInvalid,
-            'layout_len'        => count($layoutSections),
-            'layout_raw_len'    => strlen($layoutRaw),
-            'layout_decode_ok'  => $layoutDecodeOk,
-            'layout_decode_error' => $layoutDecodeError,
             'fonts'             => $fonts,
             'packs'             => $packs,
             'customDefs'        => $customDefs,
-            'dropdownCmdPrefix' => 'af_menu_dropdown',
 
             'previewUrl'        => $bburl . '/misc.php?action=af_ae_postpreview',
             'postKey'           => $postKey,
@@ -940,23 +936,18 @@ table #post_options, table #postoptions{display:none!important;}
                 'fontFamilies' => $fontFamilies,
                 'postcountForumIds'   => $postcountCsv,
                 'formFeatureForumIds' => $formfeatureCsv,
-                'debug' => (defined('AF_AE_DEBUG') && AF_AE_DEBUG) ? 1 : 0,
             ],
-    ];
-    if ($editorSelector !== '') {
-        $payload['cfg']['editorSelector'] = $editorSelector;
-    }
+        ];
+        if ($editorSelector !== '') {
+            $payload['cfg']['editorSelector'] = $editorSelector;
+        }
 
-    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-    if (!is_string($json) || $json === '') $json = '{}';
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (!is_string($json) || $json === '') $json = '{}';
 
-    $injectHead .= '<script>window.afAdvancedEditorPayload=' . $json . ';</script>' . "\n";
-    $injectHead .= '<script>window.afAePayload=window.afAdvancedEditorPayload;</script>' . "\n";
+        $injectHead .= '<script>window.afAdvancedEditorPayload=' . $json . ';</script>' . "\n";
+        $injectHead .= '<script>window.afAePayload=window.afAdvancedEditorPayload;</script>' . "\n";
 
-    /**
-     * ===== ТОЛЬКО ЕСЛИ ЕСТЬ TEXTAREA (редакторный режим) =====
-     */
-    if ($hasTextarea) {
         // advancededitor.js
         $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor.js', $buildVer)) . '"></script>' . "\n";
     }
@@ -1054,184 +1045,6 @@ function af_advancededitor_uninstall_pack_mycodes(): void
         }
     }
 }
-
-function af_advancededitor_detect_clickable_mycode_setting(): ?string
-{
-    global $db;
-
-    $candidates = ['bbcodeinserter', 'clickable_mycode_editor', 'clickablemycodeeditor', 'clickablemycode'];
-
-    foreach ($candidates as $name) {
-        $q = $db->simple_select('settings', 'name', "name='" . $db->escape_string($name) . "'", ['limit' => 1]);
-        $found = $db->fetch_field($q, 'name');
-        if (is_string($found) && $found !== '') {
-            return $found;
-        }
-    }
-
-    $q = $db->simple_select('settings', 'name,title,description', "title LIKE '%Clickable%MyCode%' OR description LIKE '%Clickable%MyCode%'", ['limit' => 1]);
-    $row = $db->fetch_array($q);
-    if (is_array($row) && !empty($row['name'])) {
-        return (string)$row['name'];
-    }
-
-    return null;
-}
-
-function af_advancededitor_get_prev_clickable_state(): array
-{
-    global $cache;
-
-    $out = [
-        'key' => '',
-        'value' => '',
-        'saved_at' => 0,
-    ];
-
-    if (!isset($cache) || !is_object($cache) || !method_exists($cache, 'read')) {
-        return $out;
-    }
-
-    $raw = $cache->read(AF_AE_CACHE_PREV_CLICKABLE);
-    if (!is_array($raw)) {
-        return $out;
-    }
-
-    $out['key'] = trim((string)($raw['key'] ?? ''));
-    $out['value'] = ((int)($raw['value'] ?? 0) === 1) ? '1' : '0';
-    $out['saved_at'] = (int)($raw['saved_at'] ?? 0);
-
-    if ($out['key'] === '') {
-        $out['value'] = '';
-        $out['saved_at'] = 0;
-    }
-
-    return $out;
-}
-
-function af_advancededitor_set_prev_clickable_state(string $key, string $value): void
-{
-    global $cache;
-
-    if (!isset($cache) || !is_object($cache) || !method_exists($cache, 'update')) {
-        return;
-    }
-
-    $key = trim($key);
-    if ($key === '') {
-        $cache->update(AF_AE_CACHE_PREV_CLICKABLE, [
-            'key' => '',
-            'value' => '',
-            'saved_at' => 0,
-        ]);
-        return;
-    }
-
-    $cache->update(AF_AE_CACHE_PREV_CLICKABLE, [
-        'key' => $key,
-        'value' => ((int)$value === 1) ? '1' : '0',
-        'saved_at' => defined('TIME_NOW') ? (int)TIME_NOW : time(),
-    ]);
-}
-
-function af_advancededitor_migrate_prev_clickable_settings_to_cache(): void
-{
-    global $db;
-
-    $legacyValueKey = 'af_ae_prev_clickable_mycode';
-    $legacySettingKey = 'af_ae_prev_clickable_mycode_key';
-
-    $legacyValue = trim((string)af_advancededitor_load_setting_value_from_db($legacyValueKey));
-    $legacyKey = trim((string)af_advancededitor_load_setting_value_from_db($legacySettingKey));
-
-    if ($legacyKey !== '') {
-        af_advancededitor_set_prev_clickable_state($legacyKey, $legacyValue);
-    }
-
-    $db->delete_query('settings', "name='" . $db->escape_string($legacyValueKey) . "'");
-    $db->delete_query('settings', "name='" . $db->escape_string($legacySettingKey) . "'");
-}
-
-function af_advancededitor_restore_clickable_mycode_setting(): void
-{
-    global $db, $mybb;
-
-    $prevState = af_advancededitor_get_prev_clickable_state();
-    $prevRaw = (string)$prevState['value'];
-    $keyRaw = (string)$prevState['key'];
-
-    if ($prevRaw === '' || $keyRaw === '') {
-        return;
-    }
-
-    $target = af_advancededitor_detect_clickable_mycode_setting();
-    if ($target === null) {
-        $target = $keyRaw;
-    }
-
-    $safeValue = ((int)$prevRaw === 1) ? '1' : '0';
-    $safeTarget = $db->escape_string($target);
-
-    $db->update_query('settings', ['value' => $safeValue], "name='" . $safeTarget . "'");
-    af_advancededitor_set_prev_clickable_state('', '');
-
-    if (!function_exists('rebuild_settings')) {
-        require_once MYBB_ROOT . 'inc/functions.php';
-    }
-    rebuild_settings();
-
-    $settingsFile = MYBB_ROOT . 'inc/settings.php';
-    @clearstatcache(true, $settingsFile);
-    if (function_exists('opcache_invalidate')) {
-        @opcache_invalidate($settingsFile, true);
-    }
-
-    if (isset($mybb->settings[$target])) {
-        $mybb->settings[$target] = $safeValue;
-    }
-}
-
-function af_advancededitor_disable_clickable_mycode_setting(): void
-{
-    global $db, $mybb;
-
-    $target = af_advancededitor_detect_clickable_mycode_setting();
-    if ($target === null) {
-        return;
-    }
-
-    $targetEsc = $db->escape_string($target);
-    $q = $db->simple_select('settings', 'value', "name='" . $targetEsc . "'", ['limit' => 1]);
-    $currentRaw = $db->fetch_field($q, 'value');
-    $current = ((int)trim((string)$currentRaw) === 1) ? '1' : '0';
-
-    af_advancededitor_set_prev_clickable_state($target, $current);
-
-    if ($current !== '0') {
-        $db->update_query('settings', ['value' => '0'], "name='" . $targetEsc . "'");
-    }
-
-    if (!function_exists('rebuild_settings')) {
-        require_once MYBB_ROOT . 'inc/functions.php';
-    }
-    rebuild_settings();
-
-    $settingsFile = MYBB_ROOT . 'inc/settings.php';
-    @clearstatcache(true, $settingsFile);
-    if (function_exists('opcache_invalidate')) {
-        @opcache_invalidate($settingsFile, true);
-    }
-
-    if (isset($mybb->settings[$target])) {
-        $mybb->settings[$target] = 0;
-    }
-}
-
-function af_advancededitor_deactivate(): void
-{
-    af_advancededitor_restore_clickable_mycode_setting();
-}
-
 
 
 function af_advancededitor_install(): void
@@ -1392,8 +1205,6 @@ gallery.php",
     );
 
 
-    af_advancededitor_migrate_prev_clickable_settings_to_cache();
-
     if (!function_exists('rebuild_settings')) {
         require_once MYBB_ROOT . 'inc/functions.php';
     }
@@ -1409,16 +1220,12 @@ gallery.php",
     if (function_exists('opcache_invalidate')) {
         @opcache_invalidate($settingsFile, true);
     }
-
-    af_advancededitor_disable_clickable_mycode_setting();
 }
 
 
 function af_advancededitor_uninstall(): void
 {
     global $db;
-
-    af_advancededitor_restore_clickable_mycode_setting();
 
     // сначала убираем MyCode паков (только если пак даёт uninstall-функцию)
     af_advancededitor_uninstall_pack_mycodes();
@@ -1444,8 +1251,6 @@ function af_advancededitor_uninstall(): void
 
 
     $db->delete_query('settinggroups', "name='" . $db->escape_string(AF_AE_GROUP) . "'");
-
-    af_advancededitor_set_prev_clickable_state('', '');
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -1762,7 +1567,10 @@ function af_advancededitor_init(): void
         return;
     }
 
-    // 1) Разовый авто-ensure MyCode паков (чтобы после добавления indent всё появилось без reinstall)
+    // 1) ГЛАВНОЕ: выключаем Clickable MyCode Editor MyBB (и в рантайме, и при необходимости фиксируем в БД).
+    af_advancededitor_force_disable_mybb_clickable_editor();
+
+    // 2) Разовый авто-ensure MyCode паков (чтобы после добавления indent всё появилось без reinstall)
     // делаем только для супер-админа и не чаще раза в сутки
     $uid = (int)($mybb->user['uid'] ?? 0);
     $isSa = false;
@@ -2017,65 +1825,6 @@ function af_advancededitor_load_setting_value_from_db(string $name): string
     return (string)($mybb->settings[$name] ?? '');
 }
 
-function af_advancededitor_default_layout(): array
-{
-    return [
-        'v' => 1,
-        'sections' => [
-            [
-                'id' => 'main',
-                'type' => 'group',
-                'title' => 'Main',
-                'items' => [
-                    'bold', 'italic', 'underline', 'strike', 'subscript', 'superscript',
-                    '|',
-                    'font', 'size', 'color', 'removeformat',
-                    '|',
-                    'undo', 'redo', 'pastetext', 'horizontalrule',
-                    '|',
-                    'left', 'center', 'right', 'justify',
-                    '|',
-                    'bulletlist', 'orderedlist',
-                    '|',
-                    'quote', 'code',
-                    '|',
-                    'link', 'unlink', 'email', 'image', 'youtube', 'emoticon',
-                    '|',
-                    'maximize',
-                ],
-            ],
-        ],
-    ];
-}
-
-function af_advancededitor_parse_layout_setting(string $layoutRaw): ?array
-{
-    $layoutRaw = trim($layoutRaw);
-    if ($layoutRaw === '') {
-        return null;
-    }
-
-    $decoded = json_decode($layoutRaw, true);
-    if (!is_array($decoded)) {
-        return null;
-    }
-
-    // Каноничный формат: { v, sections: [...] }
-    if (isset($decoded['sections']) && is_array($decoded['sections'])) {
-        return $decoded;
-    }
-
-    // Backward compatibility: layout может быть просто массивом секций.
-    if (array_is_list($decoded)) {
-        return [
-            'v' => 1,
-            'sections' => $decoded,
-        ];
-    }
-
-    return null;
-}
-
 
 /**
  * Parse CSV of forum ids ("2,3,10") into unique int[].
@@ -2220,41 +1969,6 @@ function af_advancededitor_resolve_sceditor_mybb_js_url(string $bburl): string
     }
     return '';
 }
-
-
-function af_advancededitor_resolve_sceditor_core_js_url(string $bburl): string
-{
-    $bburl = rtrim($bburl, '/');
-
-    $candidates = [
-        'jscripts/sceditor/jquery.sceditor.min.js',
-        'jscripts/sceditor/jquery.sceditor.js',
-    ];
-
-    foreach ($candidates as $rel) {
-        $url = af_advancededitor_url_if_file_exists($bburl, $rel);
-        if ($url !== '') return $url;
-    }
-    return '';
-}
-
-function af_advancededitor_resolve_sceditor_bbcode_js_url(string $bburl): string
-{
-    $bburl = rtrim($bburl, '/');
-
-    $candidates = [
-        'jscripts/sceditor/plugins/bbcode.min.js',
-        'jscripts/sceditor/plugins/bbcode.js',
-    ];
-
-    foreach ($candidates as $rel) {
-        $url = af_advancededitor_url_if_file_exists($bburl, $rel);
-        if ($url !== '') return $url;
-    }
-    return '';
-}
-
-
 
 
 function af_advancededitor_get_custom_button_defs(string $bburl): array
