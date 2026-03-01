@@ -1783,6 +1783,39 @@
     try { inst.updateOriginal(); } catch (e) {}
   }
 
+  function captureEditorState(ta, inst) {
+    return {
+      textareaText: String((ta && ta.value) || ''),
+      editorText: String(getEditorText(inst, ta) || '')
+    };
+  }
+
+  function restoreEditorState(ta, inst, snapshot) {
+    if (!ta || !snapshot) return;
+
+    var textareaText = String(snapshot.textareaText || '');
+    var editorText = String(snapshot.editorText || '');
+
+    // Канон: восстанавливаем непустой источник в пустой
+    var resolved = editorText !== '' ? editorText : textareaText;
+    if (resolved === '') return;
+
+    if (textareaText !== resolved) {
+      ta.value = resolved;
+    }
+
+    try {
+      if (inst && typeof inst.val === 'function') {
+        var currentEditorText = String(getEditorText(inst, ta) || '');
+        if (currentEditorText !== resolved) {
+          inst.val(resolved);
+        }
+      }
+    } catch (e0) {}
+
+    try { updateOriginal(inst); } catch (e1) {}
+  }
+
   function normalizeLegacyAlignBbcode(s) {
     s = String(s == null ? '' : s);
 
@@ -2025,8 +2058,6 @@
   function initOneTextarea(ta) {
     if (!isEligibleTextarea(ta)) return false;
     if (isHidden(ta)) return false;
-
-    if (ta.__afAeInited) return true;
     if (now() < (window.__afAeIgnoreMutationsUntil || 0)) return false;
     if ((window.__afAeGlobalToggling || 0) > 0) return false;
 
@@ -2039,6 +2070,15 @@
       ta.__afAeInitialContent = String(ta.value || '');
     }
 
+    var existingForGuard = safeGetInstance($ta);
+    if (ta.__afAeInited && existingForGuard) {
+      restoreEditorState(ta, existingForGuard, captureEditorState(ta, existingForGuard));
+      return true;
+    }
+    if (ta.__afAeInited && !existingForGuard) {
+      ta.__afAeInited = false;
+    }
+
     // === ВОТ ТУТ И ДОЛЖНО БЫТЬ ===
     var layout = sanitizeLayout(P.layout || null);
     var availableMap = buildAvailableMap();
@@ -2046,6 +2086,8 @@
 
     var existing = safeGetInstance($ta);
     if (existing) {
+      var existingSnapshot = captureEditorState(ta, existing);
+
       ta.__afAeInited = true;
       existing.__afAeOwned = true;
 
@@ -2077,6 +2119,8 @@
         decorateDropdownButtons(ta, out);
         decorateCustomButtons(ta);
       } catch (e3) {}
+
+      restoreEditorState(ta, existing, existingSnapshot);
 
       return true;
     }
