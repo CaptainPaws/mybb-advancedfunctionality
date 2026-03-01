@@ -182,26 +182,3 @@
   cursor: pointer;
   pointer-events: auto;
 }
-
-/* AE KB fixes: prevent broken SCEditor sizing/layout in KB blocks/forms */
-textarea.af-kb-editor,
-textarea[data-af-kb-insert-ready="1"] {
-  width: 100%;
-  min-height: 180px;
-  box-sizing: border-box;
-}
-
-.af-kb-block .sceditor-container,
-#af_kb_blocks .sceditor-container,
-.sceditor-container[data-af-ae-kb="1"] {
-  width: 100% !important;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-
-.af-kb-block .sceditor-container iframe,
-#af_kb_blocks .sceditor-container iframe,
-.af-kb-block .sceditor-container textarea.sceditor-textarea,
-#af_kb_blocks .sceditor-container textarea.sceditor-textarea {
-  min-height: 220px;
-}
