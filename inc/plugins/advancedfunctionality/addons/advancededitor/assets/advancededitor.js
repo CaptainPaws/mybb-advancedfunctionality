@@ -22,6 +22,124 @@
 
   function hasJq() { return !!(window.jQuery && window.jQuery.fn); }
   function hasSceditor() { return hasJq() && typeof window.jQuery.fn.sceditor === 'function'; }
+
+  function appendStylesheetOnce(href, id) {
+    href = asText(href).trim();
+    if (!href) return true;
+    try {
+      if (id && document.getElementById(id)) return true;
+      var links = document.querySelectorAll('link[rel="stylesheet"]');
+      for (var i = 0; i < links.length; i++) {
+        if (asText(links[i].getAttribute('href')).indexOf(href) !== -1) return true;
+      }
+      var l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = href;
+      if (id) l.id = id;
+      (document.head || document.documentElement).appendChild(l);
+      return true;
+    } catch (e) {}
+    return false;
+  }
+
+  function loadScriptOnce(url, done) {
+    url = asText(url).trim();
+    if (!url) { done(false); return; }
+
+    try {
+      var scripts = document.querySelectorAll('script[src]');
+      for (var i = 0; i < scripts.length; i++) {
+        var src = asText(scripts[i].getAttribute('src'));
+        if (src && src.indexOf(url) !== -1) {
+          if (scripts[i].getAttribute('data-af-ae-loaded') === '1' || hasSceditor()) { done(true); return; }
+          scripts[i].addEventListener('load', function () { done(true); }, { once: true });
+          scripts[i].addEventListener('error', function () { done(false); }, { once: true });
+          setTimeout(function () { if (hasSceditor()) done(true); }, 300);
+          return;
+        }
+      }
+
+      var sEl = document.createElement('script');
+      sEl.src = url;
+      sEl.defer = true;
+      sEl.addEventListener('load', function () {
+        try { sEl.setAttribute('data-af-ae-loaded', '1'); } catch (e0) {}
+        done(true);
+      }, { once: true });
+      sEl.addEventListener('error', function () { done(false); }, { once: true });
+      (document.head || document.documentElement).appendChild(sEl);
+    } catch (e) {
+      done(false);
+    }
+  }
+
+  function ensureSceditorAssets(cb) {
+    if (hasSceditor()) { cb(true); return; }
+
+    if (window.__afAeSceditorLoading) {
+      window.__afAeSceditorWaiters = window.__afAeSceditorWaiters || [];
+      window.__afAeSceditorWaiters.push(cb);
+      return;
+    }
+
+    window.__afAeSceditorLoading = true;
+    window.__afAeSceditorWaiters = window.__afAeSceditorWaiters || [];
+    window.__afAeSceditorWaiters.push(cb);
+
+    var ok = true;
+    appendStylesheetOnce(P.sceditorThemeCss || P.sceditorCss || '', 'af-ae-sceditor-theme');
+    appendStylesheetOnce(P.sceditorContentCss || '', 'af-ae-sceditor-content');
+
+    var scripts = [P.sceditorCoreJs, P.sceditorBbcodeJs, P.sceditorMybbJs].filter(function (x) { return !!asText(x).trim(); });
+
+    var i = 0;
+    function doneAll() {
+      window.__afAeSceditorLoading = false;
+      var waiters = window.__afAeSceditorWaiters || [];
+      window.__afAeSceditorWaiters = [];
+      var success = ok && hasSceditor();
+      for (var w = 0; w < waiters.length; w++) {
+        try { waiters[w](success); } catch (e) {}
+      }
+    }
+
+    function next() {
+      if (i >= scripts.length) { doneAll(); return; }
+      var u = scripts[i++];
+      loadScriptOnce(u, function (loaded) {
+        if (!loaded) ok = false;
+        next();
+      });
+    }
+
+    next();
+  }
+
+  function ensureSceditorForTextarea(ta, callback) {
+    var $ = window.jQuery;
+    var $ta = $(ta);
+    var existing = safeGetInstance($ta);
+    if (existing) { callback(existing); return; }
+
+    var opts = {
+      format: 'bbcode',
+      style: asText(P.sceditorContentCss || P.sceditorCss || ''),
+      toolbar: '',
+      emoticonsEnabled: false
+    };
+
+    try { $ta.sceditor(opts); } catch (e0) {}
+
+    var tries = 0;
+    (function waitInst() {
+      tries++;
+      var inst = safeGetInstance($ta);
+      if (inst) { callback(inst); return; }
+      if (tries >= 30) { callback(null); return; }
+      setTimeout(waitInst, 40);
+    })();
+  }
+
   function isEditPostPage() {
     try {
       var p = String((window.location && window.location.pathname) || '').toLowerCase();
@@ -2161,6 +2279,26 @@
     logEditpostDomState(ta, 'before_instance_check');
 
     if (!existing) {
+      var plainSnapshot = '';
+      try { plainSnapshot = String((ta && ta.value) || ''); } catch (eSnap0) { plainSnapshot = ''; }
+
+      ensureSceditorAssets(function (ready) {
+        if (!ready) return;
+        ensureSceditorForTextarea(ta, function (created) {
+          if (!created) {
+            scheduleInitRetry(ta, 'create_instance_failed');
+            return;
+          }
+          try {
+            if (typeof created.val === 'function') created.val(plainSnapshot);
+            else ta.value = plainSnapshot;
+          } catch (eRestore0) {
+            try { ta.value = plainSnapshot; } catch (eRestore1) {}
+          }
+          initOneTextarea(ta);
+        });
+      });
+
       scheduleInitRetry(ta, 'missing_instance');
       return false;
     }
@@ -2299,18 +2437,12 @@
   }
 
   function boot() {
-    var tries = 0;
-    (function wait() {
-      tries++;
-      if (hasSceditor()) {
-        scanAndInit(document);
-        bindEditpostFormGuards(document);
-        observeDynamicEditors();
-        registerPageShowRecovery();
-        return;
-      }
-      if (tries < 80) return setTimeout(wait, 50);
-    })();
+    ensureSceditorAssets(function () {
+      scanAndInit(document);
+      bindEditpostFormGuards(document);
+      observeDynamicEditors();
+      registerPageShowRecovery();
+    });
   }
 
   if (document.readyState === 'loading') {
