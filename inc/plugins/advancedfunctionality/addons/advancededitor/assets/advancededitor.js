@@ -1875,6 +1875,51 @@
     return '';
   }
 
+  function isEditpostMessageTextarea(ta) {
+    if (!isEditPostPage()) return false;
+    if (!ta || ta.nodeType !== 1 || ta.tagName !== 'TEXTAREA') return false;
+    return String(ta.getAttribute('name') || '').toLowerCase() === 'message';
+  }
+
+  function getLengths(ta, inst) {
+    var textareaLen = 0;
+    var editorLen = 0;
+    try { textareaLen = String((ta && ta.value) || '').length; } catch (e0) {}
+    try { editorLen = String(getEditorText(inst, ta) || '').length; } catch (e1) {}
+    return {
+      textareaLength: textareaLen,
+      editorLength: editorLen,
+      hasInstance: !!inst
+    };
+  }
+
+  function debugEditpostStage(stage, ta, inst, extra) {
+    if (!isEditpostMessageTextarea(ta)) return;
+    var payload = getLengths(ta, inst);
+    if (extra && typeof extra === 'object') {
+      for (var k in extra) {
+        if (Object.prototype.hasOwnProperty.call(extra, k)) payload[k] = extra[k];
+      }
+    }
+    debugEditpost('[AE] ' + stage, payload);
+  }
+
+  function reconcileEditpostMessage(ta, inst, stage) {
+    if (!isEditpostMessageTextarea(ta)) return;
+
+    var textareaText = String((ta && ta.value) || '');
+    var editorText = String(getEditorText(inst, ta) || '');
+
+    if (textareaText === '' && editorText !== '') {
+      ta.value = editorText;
+    } else if (editorText === '' && textareaText !== '' && inst && typeof inst.val === 'function') {
+      try { inst.val(textareaText); } catch (e0) {}
+    }
+
+    try { updateOriginal(inst); } catch (e1) {}
+    debugEditpostStage(stage, ta, inst);
+  }
+
   function bindSubmitSync(form, ta) {
     if (!form || !ta) return;
 
@@ -2066,6 +2111,11 @@
     var $ = window.jQuery;
     var $ta = $(ta);
 
+    var preInitInst = safeGetInstance($ta);
+    debugEditpostStage('init_pre', ta, preInitInst, {
+      hasGuardInited: !!ta.__afAeInited
+    });
+
     if (typeof ta.__afAeInitialContent === 'undefined') {
       ta.__afAeInitialContent = String(ta.value || '');
     }
@@ -2087,6 +2137,7 @@
     var existing = safeGetInstance($ta);
     if (existing) {
       var existingSnapshot = captureEditorState(ta, existing);
+      debugEditpostStage('existing_snapshot_before', ta, existing);
 
       ta.__afAeInited = true;
       existing.__afAeOwned = true;
@@ -2106,9 +2157,11 @@
       try { afAePatchAlignCommandsForSourceMode(); } catch (eA0b) {}
       try { afAeEnsureFrontendCodeCss(); } catch (eA1) {}
       try { afAeForceAlignEverywhere(existing); } catch (eAA) {}
+      reconcileEditpostMessage(ta, existing, 'after_existing_patches');
 
       try { patchEditorInstanceForSafeToggle(existing); } catch (e0) {}
       try { ensureDefaultSourceMode(existing); } catch (e0b) {}
+      reconcileEditpostMessage(ta, existing, 'after_existing_toggle_restore');
       try { bindSubmitSync(ta.form, ta); } catch (e1) {}
       if (isEditPostPage()) debugEditpost('[AE] editor_ready', { textareaName: ta.name || '', existing: true });
 
@@ -2119,11 +2172,16 @@
         decorateDropdownButtons(ta, out);
         decorateCustomButtons(ta);
       } catch (e3) {}
+      reconcileEditpostMessage(ta, existing, 'after_existing_toolbar_decorate');
 
       restoreEditorState(ta, existing, existingSnapshot);
+      reconcileEditpostMessage(ta, existing, 'after_existing_restore');
 
       return true;
     }
+
+    var beforeCreateSnapshot = captureEditorState(ta, null);
+    debugEditpostStage('before_create_instance', ta, null);
 
     try {
       // регаем всё ДО создания инстанса
@@ -2158,6 +2216,7 @@
         ta.__afAeInited = true;
         inst.__afAeOwned = true;
         inst.__afAeToolbarSig = asText(out.toolbar);
+        reconcileEditpostMessage(ta, inst, 'after_instance_create');
 
         // bbcode passthrough для MyCode-тегов (WYSIWYG <-> BBCode)
         try { afAeEnsureMycodePassthroughBbcode(inst); } catch (eM1) {}
@@ -2170,9 +2229,11 @@
         try { afAePatchAlignCommandsForSourceMode(); } catch (eP1b) {}
         try { afAeEnsureFrontendCodeCss(); } catch (eP2) {}
         try { afAeForceAlignEverywhere(inst); } catch (ePP) {}
+        reconcileEditpostMessage(ta, inst, 'after_instance_patches');
 
         try { patchEditorInstanceForSafeToggle(inst); } catch (e3) {}
         try { ensureDefaultSourceMode(inst); } catch (e3b) {}
+        reconcileEditpostMessage(ta, inst, 'after_instance_toggle_restore');
         try { bindSubmitSync(ta.form, ta); } catch (e4) {}
         if (isEditPostPage()) debugEditpost('[AE] editor_ready', { textareaName: ta.name || '', existing: false });
 
@@ -2181,6 +2242,10 @@
 
         decorateDropdownButtons(ta, out);
         decorateCustomButtons(ta);
+        reconcileEditpostMessage(ta, inst, 'after_instance_toolbar_decorate');
+
+        restoreEditorState(ta, inst, beforeCreateSnapshot);
+        reconcileEditpostMessage(ta, inst, 'after_instance_restore');
 
         return true;
       }
@@ -2210,6 +2275,12 @@
     if (!root.querySelectorAll) return;
 
     var list = collectTargets(root);
+    if (isEditPostPage()) {
+      debugEditpost('[AE] scan_targets', {
+        total: list.length,
+        messageTargets: root.querySelectorAll ? root.querySelectorAll('textarea[name="message"]').length : 0
+      });
+    }
     for (var i = 0; i < list.length; i++) {
       initOneTextarea(list[i]);
     }
