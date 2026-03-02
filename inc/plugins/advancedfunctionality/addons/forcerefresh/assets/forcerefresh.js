@@ -6,35 +6,19 @@
 
   var cfg = window.afForceRefreshCfg || {};
   var delayMs = Number(cfg.delayMs || 0);
-  var debugEnabled = String(cfg.debug || '') === '1';
-  var pendingKey = 'af_forcerefresh_pending';
-
   if (!isFinite(delayMs) || delayMs < 0) delayMs = 0;
 
-  function debugLog(message, payload) {
-    if (!debugEnabled || !window.console || typeof window.console.info !== 'function') return;
-    if (typeof payload === 'undefined') {
-      window.console.info('[ForceRefresh] ' + message);
-      return;
-    }
-    window.console.info('[ForceRefresh] ' + message, payload);
-  }
+  // pending только для потока editpost -> showthread
+  var pendingKey = 'af_fr_editpost_pending';
 
-  function scriptName() {
-    try {
-      var fromCfg = String(cfg.script || '').toLowerCase();
-      if (fromCfg) return fromCfg;
-      var p = String((window.location && window.location.pathname) || '').toLowerCase();
-      var parts = p.split('/');
-      return String(parts[parts.length - 1] || '');
-    } catch (e) {}
-    return '';
-  }
+  // маркер в URL, чтобы не уйти в цикл replace
+  var markerKey = 'af_fr';
+  var markerVal = '1';
 
-  var currentScript = scriptName();
-  var isShowthread = currentScript === 'showthread.php';
-  var isEditpost = currentScript === 'editpost.php';
-  if (!isShowthread && !isEditpost) return;
+  function toInt(v) {
+    var n = parseInt(String(v == null ? '' : v), 10);
+    return isFinite(n) ? n : 0;
+  }
 
   function parseUrlValue(url, key) {
     try {
@@ -51,174 +35,121 @@
     return '';
   }
 
-  function toInt(v) {
-    var n = parseInt(String(v == null ? '' : v), 10);
-    return isFinite(n) ? n : 0;
+  function isScript(name) {
+    var p = String(location.pathname || '');
+    var h = String(location.href || '');
+    var re = new RegExp(name.replace('.', '\\.') + '$', 'i');
+    return re.test(p) || re.test(h);
   }
 
-  function parseBodyString(data) {
-    var out = {};
-    var src = String(data || '');
-    if (!src) return out;
-    var parts = src.split('&');
-    for (var i = 0; i < parts.length; i++) {
-      var pair = parts[i];
-      if (!pair) continue;
-      var eq = pair.indexOf('=');
-      var k = eq >= 0 ? pair.slice(0, eq) : pair;
-      var v = eq >= 0 ? pair.slice(eq + 1) : '';
-      try {
-        k = decodeURIComponent(String(k || '').replace(/\+/g, ' '));
-        v = decodeURIComponent(String(v || '').replace(/\+/g, ' '));
-      } catch (e) {}
-      if (k) out[k] = v;
+  var isShowthread = isScript('showthread.php');
+  var isEditpost = isScript('editpost.php');
+
+  function hasMarker() {
+    return String(parseUrlValue(location.href, markerKey) || '') === markerVal;
+  }
+
+  function addMarkerToCurrentUrl() {
+    // добавляем af_fr=1 в текущий URL, сохраняя hash
+    var href = String(location.href || '');
+    if (!href) return href;
+
+    var hash = '';
+    var hashPos = href.indexOf('#');
+    if (hashPos >= 0) {
+      hash = href.slice(hashPos);
+      href = href.slice(0, hashPos);
     }
-    return out;
+
+    // уже есть?
+    if (new RegExp('(?:\\?|&)' + markerKey + '=' + markerVal + '(?:&|$)').test(href)) {
+      return href + hash;
+    }
+
+    if (href.indexOf('?') === -1) {
+      href += '?' + markerKey + '=' + markerVal;
+    } else {
+      href += '&' + markerKey + '=' + markerVal;
+    }
+
+    return href + hash;
   }
 
-  function canonicalTid() {
-    var fromCfg = toInt(cfg.tid || 0);
-    if (fromCfg > 0) return fromCfg;
-    var fromUrl = toInt(parseUrlValue(location.href, 'tid') || 0);
-    if (fromUrl > 0) return fromUrl;
-    var el = document.querySelector('[data-tid], input[name="tid"]');
-    if (!el) return 0;
-    return toInt((el.getAttribute('data-tid') || el.value || 0));
-  }
-
-  function buildCanonicalShowthreadUrl(tid, pid) {
-    var url = 'showthread.php';
-    var q = [];
-
-    tid = toInt(tid);
-    pid = toInt(pid);
-
-    if (tid > 0) q.push('tid=' + encodeURIComponent(String(tid)));
-    if (pid > 0) q.push('pid=' + encodeURIComponent(String(pid)));
-
-    if (q.length) url += '?' + q.join('&');
-    if (pid > 0) url += '#pid' + pid;
-
-    return url;
-  }
-
-  function setPending(reason, tid, pid) {
+  // -----------------------------
+  // editpost.php: ставим pending на submit (ОЧЕНЬ лёгкая логика)
+  // -----------------------------
+  function hookEditpostPending() {
+    if (!isEditpost) return;
     if (!window.sessionStorage) return;
-    var payload = {
-      ts: Date.now(),
-      reason: String(reason || ''),
-      tid: toInt(tid || 0),
-      pid: toInt(pid || 0)
-    };
 
-    try {
-      window.sessionStorage.setItem(pendingKey, JSON.stringify(payload));
-      debugLog('pending set', payload);
-    } catch (e) {}
+    var form =
+      document.querySelector('form[action*="editpost.php"], form#editpost, form[name="editpost"]') ||
+      document.querySelector('form');
+
+    if (!form) return;
+
+    form.addEventListener('submit', function () {
+      var tid = toInt((form.elements.tid && form.elements.tid.value) || parseUrlValue(location.href, 'tid') || 0);
+      var pid = toInt((form.elements.pid && form.elements.pid.value) || parseUrlValue(location.href, 'pid') || 0);
+
+      try {
+        window.sessionStorage.setItem(
+          pendingKey,
+          JSON.stringify({ ts: Date.now(), tid: tid, pid: pid })
+        );
+      } catch (e) {}
+    }, true);
   }
 
-  function consumePendingOnShowthread() {
-    if (!isShowthread || !window.sessionStorage) return;
+  // -----------------------------
+  // showthread.php: если пришли после editpost — делаем ОДИН replace на URL+af_fr=1
+  // -----------------------------
+  function consumePendingAndForceReplaceOnShowthread() {
+    if (!isShowthread) return;
+    if (!window.sessionStorage) return;
 
     var raw = '';
-    try {
-      raw = window.sessionStorage.getItem(pendingKey) || '';
-    } catch (e0) {
-      raw = '';
-    }
+    try { raw = window.sessionStorage.getItem(pendingKey) || ''; } catch (e) { raw = ''; }
     if (!raw) return;
 
     var data = null;
-    try {
-      data = JSON.parse(raw);
-    } catch (e1) {
-      data = null;
-    }
-
+    try { data = JSON.parse(raw); } catch (e2) { data = null; }
     if (!data || typeof data !== 'object') {
-      try { window.sessionStorage.removeItem(pendingKey); } catch (e2) {}
+      try { window.sessionStorage.removeItem(pendingKey); } catch (e3) {}
       return;
     }
 
     var ts = toInt(data.ts || 0);
     if (!ts || (Date.now() - ts) > 60000) {
-      try { window.sessionStorage.removeItem(pendingKey); } catch (e3) {}
+      try { window.sessionStorage.removeItem(pendingKey); } catch (e4) {}
       return;
     }
 
-    debugLog('landed after refresh', data);
-    try { window.sessionStorage.removeItem(pendingKey); } catch (e4) {}
-  }
-
-  function redirectToCanonical(tid, pid, reason, replaceMode) {
-    if (window.__afForceRefreshRedirecting) return;
-    window.__afForceRefreshRedirecting = true;
-
-    var finalTid = toInt(tid || canonicalTid() || 0);
-    var finalPid = toInt(pid || parseUrlValue(location.href, 'pid') || 0);
-    var target = buildCanonicalShowthreadUrl(finalTid, finalPid);
-
-    setPending(reason, finalTid, finalPid);
-
-    setTimeout(function () {
-      try {
-        if (replaceMode) {
-          window.location.replace(target);
-        } else {
-          window.location.assign(target);
-        }
-      } catch (e1) {
-        try { window.location.href = target; } catch (e2) {}
-      }
-    }, delayMs);
-  }
-
-  function looksLikeQuickEditRequest(url, bodyData) {
-    var rawUrl = String(url || '').toLowerCase();
-    if (rawUrl.indexOf('xmlhttp.php') === -1) return false;
-
-    var action = String(bodyData.action || parseUrlValue(rawUrl, 'action') || '').toLowerCase();
-    var doValue = String(bodyData.do || parseUrlValue(rawUrl, 'do') || '').toLowerCase();
-
-    if (action !== 'edit_post') return false;
-    return doValue === 'update_post' || doValue === 'update';
-  }
-
-  function extractPid(url, bodyData) {
-    return toInt(bodyData.pid || bodyData.post_id || parseUrlValue(url, 'pid') || 0);
-  }
-
-  function responseIsQuickEditSuccess(text, pid) {
-    var body = String(text || '');
-    if (!body) return false;
-    if (/\b(error|no\s+permission|invalid\s+post|my_post_key|security\s+token|csrf)\b/i.test(body)) {
-      return false;
+    // страховка от "не та тема"
+    var curTid = toInt(parseUrlValue(location.href, 'tid') || 0);
+    var pendTid = toInt(data.tid || 0);
+    if (pendTid > 0 && curTid > 0 && pendTid !== curTid) {
+      try { window.sessionStorage.removeItem(pendingKey); } catch (e5) {}
+      return;
     }
 
-    pid = toInt(pid);
-    if (pid > 0) {
-      var marker = new RegExp('id\\s*=\\s*["\\\']pid_' + pid + '["\\\']', 'i');
-      if (marker.test(body)) return true;
+    // если маркера нет — делаем replace (pending НЕ удаляем, чтобы пережил навигацию)
+    if (!hasMarker()) {
+      var target = addMarkerToCurrentUrl();
+      setTimeout(function () {
+        try { window.location.replace(target); } catch (e6) { try { window.location.href = target; } catch (e7) {} }
+      }, delayMs);
+      return;
     }
 
-    if (/\{[\s\S]*"success"\s*:\s*true[\s\S]*\}/i.test(body)) return true;
-    return false;
+    // если маркер уже есть — значит replace случился, чистим pending
+    try { window.sessionStorage.removeItem(pendingKey); } catch (e8) {}
   }
 
-  function hookEditpostSubmitFlow() {
-    if (!isEditpost) return;
-
-    var form = document.querySelector('form[action*="editpost.php"], form#editpost, form[name="editpost"]') || document.querySelector('form');
-    if (!form) return;
-
-    form.addEventListener('submit', function () {
-      var tid = toInt((form.elements.tid && form.elements.tid.value) || canonicalTid() || 0);
-      var pid = toInt((form.elements.pid && form.elements.pid.value) || parseUrlValue(location.href, 'pid') || 0);
-      setPending('editpost_submit', tid, pid);
-    }, true);
-  }
-
-  function hookShowthreadHistoryFallback() {
+  // -----------------------------
+  // bfcache страховка: если showthread восстановили из cache, но pending ещё есть — replace снова на URL+af_fr=1
+  // -----------------------------
+  function hookBfcacheFallback() {
     if (!isShowthread) return;
 
     window.addEventListener('pageshow', function (event) {
@@ -236,68 +167,108 @@
       var ts = toInt(data.ts || 0);
       if (!ts || (Date.now() - ts) > 60000) return;
 
-      var tid = toInt(data.tid || canonicalTid() || 0);
-      var pid = toInt(data.pid || parseUrlValue(location.href, 'pid') || 0);
-      debugLog('pageshow persisted; forcing canonical replace', { tid: tid, pid: pid, reason: data.reason || '' });
-      window.location.replace(buildCanonicalShowthreadUrl(tid, pid));
+      var target = addMarkerToCurrentUrl();
+      try { window.location.replace(target); } catch (e3) { try { window.location.href = target; } catch (e4) {} }
     });
   }
 
-  function hookQuickEditByAjaxSuccess() {
-    if (!isShowthread || !window.jQuery || window.__afForceRefreshAjaxHooked) return;
-    window.__afForceRefreshAjaxHooked = true;
+  // --- ТВОЙ СТАРЫЙ Quick Reply reload (НЕ ТРОГАЮ) ---
+  function looksLikeQuickReplyRequest(settingsOrUrl, maybeData) {
+    var url = '';
+    var data = '';
 
-    var $ = window.jQuery;
-    var originalAjax = $.ajax;
+    if (typeof settingsOrUrl === 'string') {
+      url = settingsOrUrl;
+      data = String(maybeData || '');
+    } else if (settingsOrUrl && typeof settingsOrUrl === 'object') {
+      url = String(settingsOrUrl.url || '');
+      data = settingsOrUrl.data;
+      if (typeof data !== 'string') data = '';
+    }
 
-    if (typeof originalAjax !== 'function') return;
+    var u = url.toLowerCase();
 
-    $.ajax = function patchedAjax(url, options) {
-      var opts;
+    if (u.indexOf('xmlhttp.php') !== -1 && u.indexOf('action=do_newreply') !== -1) return true;
+    if (u.indexOf('newreply.php') !== -1) return true;
 
-      if (typeof url === 'object') {
-        opts = url || {};
-      } else {
-        opts = options || {};
-        opts.url = url;
-      }
+    var d = String(data || '').toLowerCase();
+    if (d.indexOf('action=do_newreply') !== -1) return true;
 
-      var requestUrl = String(opts.url || '');
-      var bodyData = parseBodyString(opts.data || '');
-      var isQuickEdit = looksLikeQuickEditRequest(requestUrl, bodyData);
-      var pid = isQuickEdit ? extractPid(requestUrl, bodyData) : 0;
-      var tid = canonicalTid();
-
-      if (isQuickEdit) {
-        var originalSuccess = opts.success;
-        opts.success = function (responseText, statusText, xhrObj) {
-          if (typeof originalSuccess === 'function') {
-            originalSuccess.apply(this, arguments);
-          }
-
-          if (window.__afForceRefreshQuickEditDone) return;
-
-          var xhr = xhrObj || this;
-          var status = xhr && typeof xhr.status !== 'undefined' ? Number(xhr.status) : 200;
-          if (status !== 200) return;
-
-          var text = typeof responseText === 'string'
-            ? responseText
-            : ((xhr && typeof xhr.responseText === 'string') ? xhr.responseText : '');
-
-          if (!responseIsQuickEditSuccess(text, pid)) return;
-
-          window.__afForceRefreshQuickEditDone = true;
-          redirectToCanonical(tid, pid, 'quickedit_success', false);
-        };
-      }
-
-      return originalAjax.call(this, opts);
-    };
+    return false;
   }
 
-  consumePendingOnShowthread();
-  hookEditpostSubmitFlow();
-  hookShowthreadHistoryFallback();
-  hookQuickEditByAjaxSuccess();
+  function responseLooksSuccessful(xhr) {
+    try {
+      if (!xhr) return false;
+      if (xhr.status && xhr.status !== 200) return false;
+      var t = String(xhr.responseText || '');
+
+      if (/error|permission|no\s+permission|csrf|my_post_key/i.test(t) && !/post_/i.test(t)) {
+        return false;
+      }
+
+      if (/post_\d+/i.test(t) || /pid\d+/i.test(t) || /<\/textarea>/i.test(t) || /<!-- start: postbit/i.test(t)) {
+        return true;
+      }
+
+      return true;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  function reloadSoon() {
+    if (window.__afForceRefreshReloading) return;
+    window.__afForceRefreshReloading = true;
+
+    setTimeout(function () {
+      try { location.reload(); } catch (e) {}
+    }, delayMs);
+  }
+
+  // порядок:
+  // 1) showthread: если пришли после editpost — сделать replace на URL+af_fr=1 (один раз)
+  // 2) editpost: поставить pending
+  consumePendingAndForceReplaceOnShowthread();
+  hookEditpostPending();
+  hookBfcacheFallback();
+
+  // quick reply logic — только на showthread
+  if (!isShowthread) return;
+
+  if (window.jQuery) {
+    var $ = window.jQuery;
+    $(document).ajaxComplete(function (event, xhr, settings) {
+      try {
+        if (!looksLikeQuickReplyRequest(settings)) return;
+        if (!responseLooksSuccessful(xhr)) return;
+        reloadSoon();
+      } catch (e) {}
+    });
+    return;
+  }
+
+  if (window.fetch) {
+    var _fetch = window.fetch;
+    window.fetch = function () {
+      var args = arguments;
+      var input = args[0];
+      var init = args[1] || {};
+      var url = (typeof input === 'string') ? input : (input && input.url ? input.url : '');
+      var method = String((init && init.method) || 'GET').toUpperCase();
+
+      var isPost = method === 'POST';
+      if (!isPost || !looksLikeQuickReplyRequest(String(url))) {
+        return _fetch.apply(this, args);
+      }
+
+      return _fetch.apply(this, args).then(function (resp) {
+        try {
+          if (!resp || !resp.ok) return resp;
+          reloadSoon();
+        } catch (e) {}
+        return resp;
+      });
+    };
+  }
 })();
