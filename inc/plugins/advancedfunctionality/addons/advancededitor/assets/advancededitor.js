@@ -5,8 +5,17 @@
   window.__afAdvancedEditorLoaded = true;
 
   var $ = window.jQuery;
-  var P = window.afAePayload || window.afAdvancedEditorPayload || {};
-  var CFG = (P && P.cfg) ? P.cfg : {};
+  var PAYLOAD = window.afAePayload || window.afAdvancedEditorPayload || {};
+  var CFG = PAYLOAD.cfg || {};
+
+  var state = {
+    booted: false,
+    observer: null,
+    editors: new WeakMap(),
+    bootAttempts: 0
+  };
+
+  function toText(v) { return String(v == null ? '' : v); }
 
   function log() {
     if (!window.__afAeDebug) return;
@@ -15,456 +24,428 @@
     try { console.log.apply(console, args); } catch (e) {}
   }
 
-  function toText(v) { return String(v == null ? '' : v); }
-
-  function hasScEditor() {
-    return !!($ && $.fn && typeof $.fn.sceditor === 'function' && $.sceditor);
+  function hasScEditorRuntime() {
+    return !!($ && $.fn && typeof $.fn.sceditor === 'function' && $.sceditor && $.sceditor.command);
   }
 
-  var ToolbarUtils = (function createToolbarUtils() {
-    function normalizeLayout(layout) {
-      if (!layout || typeof layout !== 'object' || !Array.isArray(layout.sections)) {
-        return {
-          v: 1,
-          sections: [
-            {
-              id: 'main',
-              type: 'group',
-              title: 'Main',
-              items: ['bold', 'italic', 'underline', '|', 'quote', 'code', '|', 'link', 'image', '|', 'source', 'maximize']
-            }
-          ]
-        };
+  function hasBbcodePlugin() {
+    return !!($.sceditor && $.sceditor.plugins && $.sceditor.plugins.bbcode && $.sceditor.plugins.bbcode.bbcode);
+  }
+
+  function getPayload() {
+    var p = window.afAePayload || window.afAdvancedEditorPayload || PAYLOAD || {};
+    PAYLOAD = p;
+    CFG = p.cfg || CFG || {};
+    return p;
+  }
+
+  function getEditor(textarea) {
+    if (!textarea) return null;
+    if (state.editors.has(textarea)) return state.editors.get(textarea);
+
+    var instance = null;
+    try {
+      if ($ && textarea) {
+        var $ta = $(textarea);
+        instance = $ta.data('sceditor') || $ta.sceditor('instance');
       }
+    } catch (e) { instance = null; }
 
-      layout.v = layout.v || 1;
-      layout.sections = layout.sections || [];
-      return layout;
+    if (!instance && $.sceditor && typeof $.sceditor.instance === 'function') {
+      try { instance = $.sceditor.instance(textarea); } catch (e2) { instance = null; }
     }
 
-    function buildToolbar(layout) {
-      layout = normalizeLayout(layout);
-      var parts = [];
-      var dropdowns = [];
-      var dropdownN = 0;
+    if (instance) state.editors.set(textarea, instance);
+    return instance;
+  }
 
-      (layout.sections || []).forEach(function (section, idx) {
-        if (!section) return;
-
-        var type = toText(section.type || 'group').toLowerCase();
-        var title = toText(section.title || 'Menu');
-        var items = Array.isArray(section.items) ? section.items.map(function (x) { return toText(x).trim(); }).filter(Boolean) : [];
-        if (!items.length) return;
-
-        if (type === 'dropdown') {
-          dropdownN += 1;
-          var cmd = 'af_menu_dropdown' + dropdownN;
-          parts.push(cmd);
-          parts.push('|');
-          dropdowns.push({
-            cmd: cmd,
-            title: title,
-            items: items
-          });
-          return;
-        }
-
-        items.forEach(function (item) {
-          parts.push(item);
-        });
-        parts.push('|');
-      });
-
-      while (parts.length && parts[parts.length - 1] === '|') parts.pop();
-
-      return {
-        toolbar: parts.join(','),
-        dropdowns: dropdowns,
-        layout: layout
-      };
+  function setEditorBinding(textarea, editor) {
+    if (!textarea || !editor) return;
+    state.editors.set(textarea, editor);
+    textarea.__afAeReady = true;
+    if ($) {
+      try { $(textarea).data('sceditor', editor); } catch (e) {}
     }
+  }
 
-    return {
-      normalizeLayout: normalizeLayout,
-      buildToolbar: buildToolbar
-    };
-  })();
-
-  window.afAeToolbarUtils = ToolbarUtils;
+  function normalizeLayout(layout) {
+    if (!layout || typeof layout !== 'object') layout = {};
+    if (!Array.isArray(layout.sections)) layout.sections = [];
+    if (!layout.sections.length) {
+      layout.sections = [{
+        id: 'default',
+        type: 'group',
+        title: 'Main',
+        items: ['bold', 'italic', 'underline', '|', 'quote', 'code', '|', 'link', 'image', '|', 'source']
+      }];
+    }
+    layout.v = layout.v || 1;
+    return layout;
+  }
 
   function mapByCmd(list) {
     var out = Object.create(null);
-    (Array.isArray(list) ? list : []).forEach(function (row) {
-      if (!row || !row.cmd) return;
-      out[toText(row.cmd)] = row;
+    (Array.isArray(list) ? list : []).forEach(function (item) {
+      var cmd = toText(item && item.cmd).trim();
+      if (!cmd || cmd === '|') return;
+      out[cmd] = item;
     });
     return out;
   }
 
-  function setToolbarButtonIcon(cmd, iconUrl) {
+  function ensureCommand(cmd, def) {
+    if (!cmd || !$.sceditor || !$.sceditor.command || typeof $.sceditor.command.set !== 'function') return;
+
+    var open = toText(def && def.opentag).trim();
+    var close = toText(def && def.closetag).trim();
+    var handler = toText(def && def.handler).trim();
+    var title = toText((def && (def.title || def.hint)) || cmd);
+
+    $.sceditor.command.set(cmd, {
+      tooltip: title,
+      exec: function () {
+        if (handler && window.afAeBuiltinHandlers && typeof window.afAeBuiltinHandlers[handler] === 'function') {
+          return window.afAeBuiltinHandlers[handler].call(this, { cmd: cmd, def: def });
+        }
+        if (open || close) this.insertText(open, close);
+      },
+      txtExec: function () {
+        if (open || close) this.insertText(open, close);
+      }
+    });
+  }
+
+  function ensureCommandIcon(cmd, iconUrl) {
+    iconUrl = toText(iconUrl).trim();
     if (!cmd || !iconUrl || !document || !document.head) return;
 
-    var id = 'af-ae-icon-' + cmd.replace(/[^a-z0-9_-]/ig, '_');
-    if (document.getElementById(id)) return;
+    var styleId = 'af-ae-icon-' + cmd.replace(/[^a-z0-9_-]/ig, '_');
+    if (document.getElementById(styleId)) return;
 
-    var css = '' +
-      '.sceditor-button-' + cmd + ' div{background-image:none!important;}' +
-      '.sceditor-button-' + cmd + '::before{' +
-      'content:"";display:block;width:16px;height:16px;margin:0 auto;' +
-      'background-repeat:no-repeat;background-position:center;background-size:contain;' +
-      'background-image:url("' + iconUrl.replace(/"/g, '\\"') + '");' +
-      '}';
+    var css = '.sceditor-button-' + cmd + ' div{background-image:none!important;}' +
+      '.sceditor-button-' + cmd + '::before{content:"";display:block;width:16px;height:16px;margin:0 auto;background-repeat:no-repeat;background-position:center;background-size:contain;background-image:url("' + iconUrl.replace(/"/g, '\\"') + '");}';
 
     var style = document.createElement('style');
-    style.id = id;
+    style.id = styleId;
     style.appendChild(document.createTextNode(css));
     document.head.appendChild(style);
   }
 
-  function registerCommand(cmd, def) {
-    if (!hasScEditor() || !cmd) return;
-    var commandApi = $.sceditor.command;
-    if (!commandApi || typeof commandApi.set !== 'function') return;
+  function registerBbcodes(commandDefs) {
+    if (!hasBbcodePlugin()) return;
+    var api = $.sceditor.plugins.bbcode.bbcode;
 
-    var open = toText(def && def.opentag).trim();
-    var close = toText(def && def.closetag).trim();
-    var title = toText((def && (def.hint || def.title)) || cmd);
+    Object.keys(commandDefs).forEach(function (cmd) {
+      var def = commandDefs[cmd] || {};
+      var open = toText(def.opentag).trim();
+      var close = toText(def.closetag).trim();
+      var m = open.match(/^\[([a-z0-9_]+)(?:=[^\]]*)?\]/i);
+      if (!m) return;
 
-    var userHandler = toText(def && def.handler).trim();
+      var tag = toText(m[1]).toLowerCase();
+      if (!tag) return;
 
-    commandApi.set(cmd, {
-      tooltip: title,
-      exec: function () {
-        if (userHandler && window.afAeBuiltinHandlers && typeof window.afAeBuiltinHandlers[userHandler] === 'function') {
-          return window.afAeBuiltinHandlers[userHandler].call(this, { cmd: cmd, def: def });
-        }
-        if (open || close) {
-          this.insertText(open, close);
-        }
-      },
-      txtExec: function () {
-        if (open || close) {
-          this.insertText(open, close);
-        }
-      }
-    });
-
-    setToolbarButtonIcon(cmd, toText(def && def.icon).trim());
-  }
-
-  function registerDropdownCommands(dropdowns, commandDefs) {
-    if (!hasScEditor() || !Array.isArray(dropdowns)) return;
-
-    dropdowns.forEach(function (dropdown) {
-      var cmd = dropdown.cmd;
-      var title = toText(dropdown.title || cmd);
-      var items = Array.isArray(dropdown.items) ? dropdown.items : [];
-      if (!cmd || !items.length) return;
-
-      var dropDown = {};
-      items.forEach(function (itemCmd) {
-        var d = commandDefs[itemCmd] || {};
-        dropDown[itemCmd] = toText(d.title || d.hint || itemCmd);
-      });
-
-      $.sceditor.command.set(cmd, {
-        tooltip: title,
-        dropDown: dropDown,
-        exec: function (itemCmd) {
-          if (!itemCmd) return;
-          var target = $.sceditor.command.get(itemCmd);
-          if (!target || typeof target.exec !== 'function') return;
-          target.exec.call(this);
+      api.set(tag, {
+        format: function (element, content) {
+          return open + (content || '') + close;
         },
-        txtExec: function (itemCmd) {
-          if (!itemCmd) return;
-          var target = $.sceditor.command.get(itemCmd);
-          if (!target) return;
-          if (typeof target.txtExec === 'function') target.txtExec.call(this);
-          else if (typeof target.exec === 'function') target.exec.call(this);
+        html: function (token, attrs, content) {
+          var defaultAttr = attrs && attrs.defaultattr ? toText(attrs.defaultattr) : '';
+          var safeAttr = defaultAttr ? ' data-attr="' + defaultAttr.replace(/"/g, '&quot;') + '"' : '';
+          return '<span class="af-ae-bb af-ae-bb-' + tag + '" data-tag="' + tag + '"' + safeAttr + '>' + (content || '') + '</span>';
         }
       });
     });
   }
 
-  function parseTag(opentag, closetag) {
-    var open = toText(opentag).trim();
-    var close = toText(closetag).trim();
-    var m = open.match(/^\[([a-z0-9_]+)(?:=[^\]]*)?\]/i);
-    if (!m) return null;
-    var tag = toText(m[1]).toLowerCase();
-    if (!tag) return null;
+  function buildToolbar(layout) {
+    layout = normalizeLayout(layout);
+
+    var toolbar = [];
+    var dropdowns = [];
+    var n = 0;
+
+    layout.sections.forEach(function (section) {
+      if (!section) return;
+      var type = toText(section.type || 'group').toLowerCase();
+      var title = toText(section.title || 'Menu');
+      var items = Array.isArray(section.items) ? section.items.map(function (v) { return toText(v).trim(); }).filter(Boolean) : [];
+      if (!items.length) return;
+
+      if (type === 'dropdown') {
+        n += 1;
+        var dropdownCmd = 'af_dropdown_' + n;
+        dropdowns.push({ cmd: dropdownCmd, title: title, items: items });
+        toolbar.push(dropdownCmd);
+        toolbar.push('|');
+        return;
+      }
+
+      items.forEach(function (item) { toolbar.push(item); });
+      toolbar.push('|');
+    });
+
+    while (toolbar.length && toolbar[toolbar.length - 1] === '|') toolbar.pop();
 
     return {
-      tag: tag,
-      format: function (element, content) {
-        return open + (content || '') + close;
-      },
-      html: function (token, attrs, content) {
-        var dataAttr = attrs && attrs.defaultattr ? ' data-attr="' + toText(attrs.defaultattr).replace(/"/g, '&quot;') + '"' : '';
-        return '<span class="af-ae-bb af-ae-bb-' + tag + '" data-tag="' + tag + '"' + dataAttr + '>' + (content || '') + '</span>';
-      }
+      toolbar: toolbar.join(','),
+      dropdowns: dropdowns,
+      layout: layout
     };
   }
 
-  function registerBbcodes(commandDefs) {
-    if (!hasScEditor()) return;
+  function registerDropdownCommands(dropdowns, commandDefs) {
+    if (!Array.isArray(dropdowns)) return;
 
-    var bb = $.sceditor.plugins && $.sceditor.plugins.bbcode && $.sceditor.plugins.bbcode.bbcode;
-    if (!bb || typeof bb.set !== 'function') return;
+    dropdowns.forEach(function (dropdown) {
+      if (!dropdown || !dropdown.cmd || !Array.isArray(dropdown.items) || !dropdown.items.length) return;
 
-    Object.keys(commandDefs).forEach(function (cmd) {
-      var def = commandDefs[cmd];
-      var parsed = parseTag(def && def.opentag, def && def.closetag);
-      if (!parsed) return;
-      bb.set(parsed.tag, {
-        format: parsed.format,
-        html: parsed.html
+      var dropDownItems = {};
+      dropdown.items.forEach(function (cmd) {
+        var def = commandDefs[cmd] || {};
+        dropDownItems[cmd] = toText(def.title || def.hint || cmd);
+      });
+
+      $.sceditor.command.set(dropdown.cmd, {
+        tooltip: toText(dropdown.title || dropdown.cmd),
+        dropDown: dropDownItems,
+        exec: function (itemCmd) {
+          var command = $.sceditor.command.get(itemCmd);
+          if (command && typeof command.exec === 'function') command.exec.call(this);
+        },
+        txtExec: function (itemCmd) {
+          var command = $.sceditor.command.get(itemCmd);
+          if (!command) return;
+          if (typeof command.txtExec === 'function') command.txtExec.call(this);
+          else if (typeof command.exec === 'function') command.exec.call(this);
+        }
       });
     });
-
-    log('bbcode register complete');
   }
 
-  function getScEditorContentCss() {
-    return toText(P.sceditorContentCss || P.sceditorCss || '').trim();
-  }
-
-  function injectFontsCssOnce() {
-    if (!document || !document.head) return;
-    if (document.getElementById('af-ae-fonts-css')) return;
-
+  function injectFontsCss() {
+    if (!document || !document.head || document.getElementById('af-ae-fonts-css')) return;
+    var p = getPayload();
     var families = (CFG && Array.isArray(CFG.fontFamilies)) ? CFG.fontFamilies : [];
-    var assetsBase = toText(P.assetsBase || '').replace(/\/$/, '');
-    if (!families.length || !assetsBase) return;
+    var base = toText(p.assetsBase || '').replace(/\/$/, '');
+    if (!families.length || !base) return;
 
     var css = '';
     families.forEach(function (font) {
-      if (!font || !font.files || !font.name) return;
-
+      if (!font || !font.name || !font.files) return;
       var src = [];
-      ['woff2', 'woff', 'ttf', 'otf'].forEach(function (ext) {
+      [['woff2', 'woff2'], ['woff', 'woff'], ['ttf', 'truetype'], ['otf', 'opentype']].forEach(function (pair) {
+        var ext = pair[0];
         if (!font.files[ext]) return;
-        src.push('url("' + assetsBase + '/fonts/' + toText(font.files[ext]).replace(/^\/+/, '') + '") format("' + ext + '")');
+        src.push('url("' + base + '/fonts/' + toText(font.files[ext]).replace(/^\/+/, '') + '") format("' + pair[1] + '")');
       });
       if (!src.length) return;
-
       css += '@font-face{font-family:"' + toText(font.name).replace(/"/g, '\\"') + '";src:' + src.join(',') + ';font-display:swap;}';
     });
 
     if (!css) return;
-
     var style = document.createElement('style');
     style.id = 'af-ae-fonts-css';
     style.appendChild(document.createTextNode(css));
     document.head.appendChild(style);
   }
 
-  function injectFontsIntoEditorFrame(editor) {
+  function injectFontsIntoIframe(editor) {
     if (!editor || typeof editor.getBody !== 'function') return;
-    var doc;
-    try {
-      var body = editor.getBody();
-      doc = body && body.ownerDocument;
-    } catch (e) {
-      doc = null;
-    }
-    if (!doc || !doc.head || doc.getElementById('af-ae-fonts-css-frame')) return;
+    var body, doc;
+    try { body = editor.getBody(); doc = body && body.ownerDocument; } catch (e) { doc = null; }
+    if (!doc || !doc.head || doc.getElementById('af-ae-fonts-frame')) return;
 
-    var src = document.getElementById('af-ae-fonts-css');
-    if (!src) return;
+    var source = document.getElementById('af-ae-fonts-css');
+    if (!source) return;
 
     var style = doc.createElement('style');
-    style.id = 'af-ae-fonts-css-frame';
-    style.appendChild(doc.createTextNode(src.textContent || ''));
+    style.id = 'af-ae-fonts-frame';
+    style.appendChild(doc.createTextNode(source.textContent || ''));
     doc.head.appendChild(style);
   }
 
-  var TARGET_NAMES = {
-    message: 1,
-    message_new: 1,
-    post: 1,
-    content: 1
-  };
-
   function isEligibleTextarea(textarea) {
-    if (!textarea || textarea.tagName !== 'TEXTAREA') return false;
-    if (textarea.disabled) return false;
-
-    var type = toText(textarea.type).toLowerCase();
-    if (type === 'hidden') return false;
-
-    var name = toText(textarea.name).toLowerCase();
-    if (name === 'subject' || name === 'captcha') return false;
-
+    if (!textarea || textarea.tagName !== 'TEXTAREA' || textarea.disabled) return false;
     if (textarea.closest && textarea.closest('.sceditor-container')) return false;
-    if ((textarea.className || '').indexOf('sceditor-textarea') !== -1) return false;
 
-    var forcedSelector = toText(CFG.editorSelector || '').trim();
-    if (forcedSelector) {
-      try {
-        return textarea.matches(forcedSelector);
-      } catch (e) {}
+    var n = toText(textarea.name).toLowerCase();
+    if (n === 'subject' || n === 'captcha') return false;
+
+    var forced = toText(CFG.editorSelector || '').trim();
+    if (forced) {
+      try { return textarea.matches(forced); } catch (e) { return false; }
     }
-
-    if (TARGET_NAMES[name]) return true;
 
     return true;
   }
 
-  function syncBeforeSubmit(textarea, editor) {
+  function syncEditorToTextarea(textarea, editor) {
     if (!textarea || !editor) return;
 
-    var form = textarea.form;
-    if (!form || form.__afAeSyncBound) return;
-
-    form.__afAeSyncBound = true;
-    form.addEventListener('submit', function () {
-      try { editor.updateOriginal(); } catch (e) {}
-    });
+    try { editor.updateOriginal(); } catch (e) {}
+    try { textarea.value = editor.val(); } catch (e2) {}
   }
 
-  function initEditorOnTextarea(textarea, toolbarString) {
-    if (!hasScEditor() || !isEligibleTextarea(textarea)) return;
-    if (textarea.dataset.aeInitialized === '1') return;
+  function bindSyncEvents(textarea, editor) {
+    if (!textarea || !editor || textarea.__afAeSyncBound) return;
+    textarea.__afAeSyncBound = true;
 
-    var $textarea = $(textarea);
-    var existing = $textarea.data('sceditor') || ($textarea.sceditor && $textarea.sceditor('instance'));
-    if (existing) {
-      textarea.dataset.aeInitialized = '1';
-      syncBeforeSubmit(textarea, existing);
-      return;
+    var sync = function () { syncEditorToTextarea(textarea, editor); };
+
+    try {
+      editor.bind('valuechanged keyup blur paste input change sourceMode', sync);
+    } catch (e) {}
+
+    if (textarea.form && !textarea.form.__afAeSubmitBound) {
+      textarea.form.__afAeSubmitBound = true;
+      textarea.form.addEventListener('submit', function () {
+        var textareas = this.querySelectorAll('textarea');
+        for (var i = 0; i < textareas.length; i += 1) {
+          var ta = textareas[i];
+          var inst = getEditor(ta);
+          if (inst) syncEditorToTextarea(ta, inst);
+        }
+      });
     }
+  }
 
-    $textarea.sceditor({
+  function buildOptions(toolbarString) {
+    var p = getPayload();
+    return {
       format: 'bbcode',
       toolbar: toolbarString,
-      style: getScEditorContentCss(),
+      style: toText(p.sceditorContentCss || p.sceditorCss || ''),
       resizeEnabled: true,
       autoExpand: false,
       width: '100%',
       height: 180,
       startInSourceMode: true
-    });
-
-    var editor = $textarea.sceditor('instance');
-    if (!editor) return;
-
-    textarea.dataset.aeInitialized = '1';
-    syncBeforeSubmit(textarea, editor);
-
-    try {
-      editor.bind('valuechanged keyup blur', function () {
-        editor.updateOriginal();
-      });
-    } catch (e) {}
-
-    try {
-      editor.bind('sourceMode', function () {
-        editor.updateOriginal();
-      });
-    } catch (e2) {}
-
-    injectFontsIntoEditorFrame(editor);
-    log('editor ready', textarea.name || textarea.id || '(anonymous)');
+    };
   }
 
-  function initOnPage(toolbarString) {
-    var list = document.querySelectorAll('textarea');
-    for (var i = 0; i < list.length; i += 1) {
-      initEditorOnTextarea(list[i], toolbarString);
+  function initTextarea(textarea, toolbarString) {
+    if (!hasScEditorRuntime() || !isEligibleTextarea(textarea)) return;
+
+    var existing = getEditor(textarea);
+    if (existing) {
+      setEditorBinding(textarea, existing);
+      bindSyncEvents(textarea, existing);
+      injectFontsIntoIframe(existing);
+      return;
+    }
+
+    var options = buildOptions(toolbarString);
+    try {
+      $(textarea).sceditor(options);
+    } catch (e) {
+      log('init failed', e && e.message ? e.message : e);
+      return;
+    }
+
+    var editor = getEditor(textarea);
+    if (!editor) {
+      log('instance not found', textarea.name || textarea.id || '(anonymous)');
+      return;
+    }
+
+    setEditorBinding(textarea, editor);
+    bindSyncEvents(textarea, editor);
+    injectFontsIntoIframe(editor);
+    syncEditorToTextarea(textarea, editor);
+  }
+
+  function initExistingTextareas(toolbarString) {
+    var areas = document.querySelectorAll('textarea');
+    for (var i = 0; i < areas.length; i += 1) {
+      initTextarea(areas[i], toolbarString);
     }
   }
 
-  function shouldIgnoreMutationNode(node) {
-    if (!node || node.nodeType !== 1) return true;
-    if (node.matches && (node.matches('iframe') || node.matches('.sceditor-container') || node.matches('.sceditor-toolbar'))) {
-      return true;
-    }
-    return false;
-  }
+  function registerObserver(toolbarString) {
+    if (!window.MutationObserver || state.observer) return;
 
-  function setupObserver(toolbarString) {
-    if (!window.MutationObserver) return;
-
-    var observer = new MutationObserver(function (mutations) {
-      var shouldRescan = false;
-
-      mutations.forEach(function (mutation) {
-        var nodes = mutation.addedNodes || [];
+    state.observer = new MutationObserver(function (mutations) {
+      mutations.forEach(function (m) {
+        var nodes = m.addedNodes || [];
         for (var i = 0; i < nodes.length; i += 1) {
           var node = nodes[i];
-          if (shouldIgnoreMutationNode(node)) continue;
+          if (!node || node.nodeType !== 1) continue;
+          if (node.matches && (node.matches('.sceditor-container') || node.matches('iframe'))) continue;
 
           if (node.tagName === 'TEXTAREA') {
-            shouldRescan = true;
-            break;
+            initTextarea(node, toolbarString);
+            continue;
           }
 
-          if (node.querySelector && node.querySelector('textarea')) {
-            shouldRescan = true;
-            break;
+          if (node.querySelectorAll) {
+            var textareas = node.querySelectorAll('textarea');
+            for (var j = 0; j < textareas.length; j += 1) {
+              initTextarea(textareas[j], toolbarString);
+            }
           }
         }
       });
-
-      if (shouldRescan) initOnPage(toolbarString);
     });
 
-    observer.observe(document.documentElement || document.body, {
+    state.observer.observe(document.documentElement || document.body, {
       childList: true,
       subtree: true
     });
   }
 
-  function registerToggleModeCommand() {
-    if (!hasScEditor()) return;
-    if ($.sceditor.command.get('af_togglemode')) return;
-
-    $.sceditor.command.set('af_togglemode', {
-      tooltip: 'Toggle source/WYSIWYG',
-      exec: function () {
-        if (typeof this.toggleSourceMode === 'function') this.toggleSourceMode();
-      },
-      txtExec: function () {
-        if (typeof this.toggleSourceMode === 'function') this.toggleSourceMode();
-      }
-    });
+  function registerSourceCommand() {
+    if (!$.sceditor.command.get('source')) {
+      $.sceditor.command.set('source', {
+        exec: function () { if (typeof this.toggleSourceMode === 'function') this.toggleSourceMode(); },
+        txtExec: function () { if (typeof this.toggleSourceMode === 'function') this.toggleSourceMode(); },
+        tooltip: 'Source'
+      });
+    }
   }
 
-  function boot() {
-    if (!hasScEditor()) {
-      log('SCEditor is not available');
+  function runBoot() {
+    var p = getPayload();
+
+    if (!hasScEditorRuntime() || !hasBbcodePlugin()) {
+      state.bootAttempts += 1;
+      if (state.bootAttempts <= 20) {
+        window.setTimeout(runBoot, 100);
+      } else {
+        log('SCEditor runtime unavailable after retries');
+      }
       return;
     }
 
-    log('init');
+    if (state.booted) return;
+    state.booted = true;
 
-    injectFontsCssOnce();
+    injectFontsCss();
 
-    var availableDefs = mapByCmd(P.available);
-    var customDefs = mapByCmd(P.customDefs);
-    var commandDefs = Object.assign({}, availableDefs, customDefs);
+    var available = mapByCmd(p.available);
+    var customDefs = mapByCmd(p.customDefs);
+    var commandDefs = Object.assign({}, available, customDefs);
 
-    registerToggleModeCommand();
+    registerSourceCommand();
 
     Object.keys(commandDefs).forEach(function (cmd) {
-      registerCommand(cmd, commandDefs[cmd]);
+      ensureCommand(cmd, commandDefs[cmd]);
+      ensureCommandIcon(cmd, commandDefs[cmd] && commandDefs[cmd].icon);
     });
 
-    var toolbarData = ToolbarUtils.buildToolbar(P.layout);
-    log('toolbar build', toolbarData.toolbar);
-
+    var toolbarData = buildToolbar(p.layout);
     registerDropdownCommands(toolbarData.dropdowns, commandDefs);
     registerBbcodes(commandDefs);
 
-    initOnPage(toolbarData.toolbar);
-    setupObserver(toolbarData.toolbar);
+    initExistingTextareas(toolbarData.toolbar);
+    registerObserver(toolbarData.toolbar);
+
+    log('boot complete', toolbarData.toolbar);
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot, { once: true });
+    document.addEventListener('DOMContentLoaded', runBoot, { once: true });
   } else {
-    boot();
+    runBoot();
   }
 })();
