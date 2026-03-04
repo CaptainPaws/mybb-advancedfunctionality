@@ -5,82 +5,38 @@
   window.__afAdvancedEditorLoaded = true;
 
   var $ = window.jQuery;
-  var PAYLOAD = window.afAePayload || window.afAdvancedEditorPayload || {};
-  var CFG = PAYLOAD.cfg || {};
-
   var state = {
     booted: false,
-    observer: null,
-    editors: new WeakMap(),
-    bootAttempts: 0
+    bootAttempts: 0,
+    submitBoundForms: new WeakMap(),
+    loadedAssets: Object.create(null)
   };
 
-  function toText(v) { return String(v == null ? '' : v); }
-
-  function log() {
-    if (!window.__afAeDebug) return;
-    var args = Array.prototype.slice.call(arguments);
-    args.unshift('[AF-AE]');
-    try { console.log.apply(console, args); } catch (e) {}
+  function toText(value) {
+    return String(value == null ? '' : value);
   }
 
-  function hasScEditorRuntime() {
+  function debugEnabled() {
+    return !!(window.AE_DEBUG || window.__afAeDebug || window.__afAeEditpostDebug);
+  }
+
+  function log() {
+    if (!debugEnabled()) return;
+    var args = Array.prototype.slice.call(arguments);
+    args.unshift('AE:');
+    try { console.log.apply(console, args); } catch (err) {}
+  }
+
+  function getPayload() {
+    return window.afAdvancedEditorPayload || window.afAePayload || {};
+  }
+
+  function hasRuntime() {
     return !!($ && $.fn && typeof $.fn.sceditor === 'function' && $.sceditor && $.sceditor.command);
   }
 
   function hasBbcodePlugin() {
     return !!($.sceditor && $.sceditor.plugins && $.sceditor.plugins.bbcode && $.sceditor.plugins.bbcode.bbcode);
-  }
-
-  function getPayload() {
-    var p = window.afAePayload || window.afAdvancedEditorPayload || PAYLOAD || {};
-    PAYLOAD = p;
-    CFG = p.cfg || CFG || {};
-    return p;
-  }
-
-  function getEditor(textarea) {
-    if (!textarea) return null;
-    if (state.editors.has(textarea)) return state.editors.get(textarea);
-
-    var instance = null;
-    try {
-      if ($ && textarea) {
-        var $ta = $(textarea);
-        instance = $ta.data('sceditor') || $ta.sceditor('instance');
-      }
-    } catch (e) { instance = null; }
-
-    if (!instance && $.sceditor && typeof $.sceditor.instance === 'function') {
-      try { instance = $.sceditor.instance(textarea); } catch (e2) { instance = null; }
-    }
-
-    if (instance) state.editors.set(textarea, instance);
-    return instance;
-  }
-
-  function setEditorBinding(textarea, editor) {
-    if (!textarea || !editor) return;
-    state.editors.set(textarea, editor);
-    textarea.__afAeReady = true;
-    if ($) {
-      try { $(textarea).data('sceditor', editor); } catch (e) {}
-    }
-  }
-
-  function normalizeLayout(layout) {
-    if (!layout || typeof layout !== 'object') layout = {};
-    if (!Array.isArray(layout.sections)) layout.sections = [];
-    if (!layout.sections.length) {
-      layout.sections = [{
-        id: 'default',
-        type: 'group',
-        title: 'Main',
-        items: ['bold', 'italic', 'underline', '|', 'quote', 'code', '|', 'link', 'image', '|', 'source']
-      }];
-    }
-    layout.v = layout.v || 1;
-    return layout;
   }
 
   function mapByCmd(list) {
@@ -91,6 +47,53 @@
       out[cmd] = item;
     });
     return out;
+  }
+
+  function ensureAsset(url, type) {
+    var normalized = toText(url).trim();
+    if (!normalized) return;
+
+    var key = type + ':' + normalized;
+    if (state.loadedAssets[key]) return;
+    state.loadedAssets[key] = true;
+
+    if (type === 'css') {
+      var link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = normalized;
+      link.setAttribute('data-af-ae-pack', '1');
+      document.head.appendChild(link);
+      return;
+    }
+
+    if (type === 'js') {
+      var script = document.createElement('script');
+      script.src = normalized;
+      script.defer = true;
+      script.setAttribute('data-af-ae-pack', '1');
+      document.head.appendChild(script);
+    }
+  }
+
+  function ensurePackAssets(payload) {
+    var packs = payload && payload.packs;
+    if (!packs || typeof packs !== 'object') return;
+
+    var css = Array.isArray(packs.css) ? packs.css : [];
+    var js = Array.isArray(packs.js) ? packs.js : [];
+
+    css.forEach(function (url) { ensureAsset(url, 'css'); });
+    js.forEach(function (url) { ensureAsset(url, 'js'); });
+  }
+
+  function registerSourceCommand() {
+    if (!$.sceditor.command.get('source')) {
+      $.sceditor.command.set('source', {
+        tooltip: 'Source',
+        exec: function () { if (typeof this.toggleSourceMode === 'function') this.toggleSourceMode(); },
+        txtExec: function () { if (typeof this.toggleSourceMode === 'function') this.toggleSourceMode(); }
+      });
+    }
   }
 
   function ensureCommand(cmd, def) {
@@ -107,10 +110,10 @@
         if (handler && window.afAeBuiltinHandlers && typeof window.afAeBuiltinHandlers[handler] === 'function') {
           return window.afAeBuiltinHandlers[handler].call(this, { cmd: cmd, def: def });
         }
-        if (open || close) this.insertText(open, close);
+        this.insertText(open, close);
       },
       txtExec: function () {
-        if (open || close) this.insertText(open, close);
+        this.insertText(open, close);
       }
     });
   }
@@ -139,10 +142,10 @@
       var def = commandDefs[cmd] || {};
       var open = toText(def.opentag).trim();
       var close = toText(def.closetag).trim();
-      var m = open.match(/^\[([a-z0-9_]+)(?:=[^\]]*)?\]/i);
-      if (!m) return;
+      var match = open.match(/^\[([a-z0-9_]+)(?:=[^\]]*)?\]/i);
+      if (!match) return;
 
-      var tag = toText(m[1]).toLowerCase();
+      var tag = toText(match[1]).toLowerCase();
       if (!tag) return;
 
       api.set(tag, {
@@ -158,273 +161,180 @@
     });
   }
 
-  function buildToolbar(layout) {
-    layout = normalizeLayout(layout);
+  function normalizeLayout(layout) {
+    if (!layout || typeof layout !== 'object') layout = {};
+    if (!Array.isArray(layout.sections)) layout.sections = [];
 
-    var toolbar = [];
-    var dropdowns = [];
-    var n = 0;
-
-    layout.sections.forEach(function (section) {
-      if (!section) return;
-      var type = toText(section.type || 'group').toLowerCase();
-      var title = toText(section.title || 'Menu');
-      var items = Array.isArray(section.items) ? section.items.map(function (v) { return toText(v).trim(); }).filter(Boolean) : [];
-      if (!items.length) return;
-
-      if (type === 'dropdown') {
-        n += 1;
-        var dropdownCmd = 'af_dropdown_' + n;
-        dropdowns.push({ cmd: dropdownCmd, title: title, items: items });
-        toolbar.push(dropdownCmd);
-        toolbar.push('|');
-        return;
-      }
-
-      items.forEach(function (item) { toolbar.push(item); });
-      toolbar.push('|');
-    });
-
-    while (toolbar.length && toolbar[toolbar.length - 1] === '|') toolbar.pop();
-
-    return {
-      toolbar: toolbar.join(','),
-      dropdowns: dropdowns,
-      layout: layout
-    };
-  }
-
-  function registerDropdownCommands(dropdowns, commandDefs) {
-    if (!Array.isArray(dropdowns)) return;
-
-    dropdowns.forEach(function (dropdown) {
-      if (!dropdown || !dropdown.cmd || !Array.isArray(dropdown.items) || !dropdown.items.length) return;
-
-      var dropDownItems = {};
-      dropdown.items.forEach(function (cmd) {
-        var def = commandDefs[cmd] || {};
-        dropDownItems[cmd] = toText(def.title || def.hint || cmd);
-      });
-
-      $.sceditor.command.set(dropdown.cmd, {
-        tooltip: toText(dropdown.title || dropdown.cmd),
-        dropDown: dropDownItems,
-        exec: function (itemCmd) {
-          var command = $.sceditor.command.get(itemCmd);
-          if (command && typeof command.exec === 'function') command.exec.call(this);
-        },
-        txtExec: function (itemCmd) {
-          var command = $.sceditor.command.get(itemCmd);
-          if (!command) return;
-          if (typeof command.txtExec === 'function') command.txtExec.call(this);
-          else if (typeof command.exec === 'function') command.exec.call(this);
-        }
-      });
-    });
-  }
-
-  function injectFontsCss() {
-    if (!document || !document.head || document.getElementById('af-ae-fonts-css')) return;
-    var p = getPayload();
-    var families = (CFG && Array.isArray(CFG.fontFamilies)) ? CFG.fontFamilies : [];
-    var base = toText(p.assetsBase || '').replace(/\/$/, '');
-    if (!families.length || !base) return;
-
-    var css = '';
-    families.forEach(function (font) {
-      if (!font || !font.name || !font.files) return;
-      var src = [];
-      [['woff2', 'woff2'], ['woff', 'woff'], ['ttf', 'truetype'], ['otf', 'opentype']].forEach(function (pair) {
-        var ext = pair[0];
-        if (!font.files[ext]) return;
-        src.push('url("' + base + '/fonts/' + toText(font.files[ext]).replace(/^\/+/, '') + '") format("' + pair[1] + '")');
-      });
-      if (!src.length) return;
-      css += '@font-face{font-family:"' + toText(font.name).replace(/"/g, '\\"') + '";src:' + src.join(',') + ';font-display:swap;}';
-    });
-
-    if (!css) return;
-    var style = document.createElement('style');
-    style.id = 'af-ae-fonts-css';
-    style.appendChild(document.createTextNode(css));
-    document.head.appendChild(style);
-  }
-
-  function injectFontsIntoIframe(editor) {
-    if (!editor || typeof editor.getBody !== 'function') return;
-    var body, doc;
-    try { body = editor.getBody(); doc = body && body.ownerDocument; } catch (e) { doc = null; }
-    if (!doc || !doc.head || doc.getElementById('af-ae-fonts-frame')) return;
-
-    var source = document.getElementById('af-ae-fonts-css');
-    if (!source) return;
-
-    var style = doc.createElement('style');
-    style.id = 'af-ae-fonts-frame';
-    style.appendChild(doc.createTextNode(source.textContent || ''));
-    doc.head.appendChild(style);
-  }
-
-  function isEligibleTextarea(textarea) {
-    if (!textarea || textarea.tagName !== 'TEXTAREA' || textarea.disabled) return false;
-    if (textarea.closest && textarea.closest('.sceditor-container')) return false;
-
-    var n = toText(textarea.name).toLowerCase();
-    if (n === 'subject' || n === 'captcha') return false;
-
-    var forced = toText(CFG.editorSelector || '').trim();
-    if (forced) {
-      try { return textarea.matches(forced); } catch (e) { return false; }
+    if (!layout.sections.length) {
+      layout.sections = [{ items: ['bold', 'italic', 'underline', '|', 'quote', 'code', '|', 'link', 'image', '|', 'source'] }];
     }
 
-    return true;
+    return layout;
   }
 
-  function syncEditorToTextarea(textarea, editor) {
-    if (!textarea || !editor) return;
+  function buildToolbar(layout) {
+    var normalized = normalizeLayout(layout);
+    var sectionStrings = [];
 
-    try { editor.updateOriginal(); } catch (e) {}
-    try { textarea.value = editor.val(); } catch (e2) {}
+    normalized.sections.forEach(function (section) {
+      if (!section || !Array.isArray(section.items)) return;
+
+      var sectionItems = [];
+      section.items.forEach(function (item) {
+        var cmd = toText(item).trim();
+        if (!cmd) return;
+
+        if (cmd === '|') {
+          if (sectionItems.length && sectionItems[sectionItems.length - 1] !== '|') {
+            sectionItems.push('|');
+          }
+          return;
+        }
+
+        sectionItems.push(cmd);
+      });
+
+      while (sectionItems.length && sectionItems[sectionItems.length - 1] === '|') sectionItems.pop();
+      if (!sectionItems.length) return;
+
+      sectionStrings.push(sectionItems.join(','));
+    });
+
+    var toolbar = sectionStrings.join('|');
+    log('toolbar built', toolbar);
+    return toolbar;
+  }
+
+  function getEditor(textarea) {
+    if (!textarea) return null;
+
+    try {
+      var $textarea = $(textarea);
+      return $textarea.data('sceditor') || $textarea.sceditor('instance') || null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function bindSubmitSync(textarea, editor) {
+    if (!textarea || !textarea.form || !editor) return;
+
+    var form = textarea.form;
+    if (state.submitBoundForms.get(form)) return;
+
+    state.submitBoundForms.set(form, true);
+    form.addEventListener('submit', function () {
+      var textareas = form.querySelectorAll('textarea');
+      for (var i = 0; i < textareas.length; i += 1) {
+        var ta = textareas[i];
+        var inst = getEditor(ta);
+        if (!inst) continue;
+        try { inst.updateOriginal(); } catch (err) {}
+      }
+    });
   }
 
   function bindSyncEvents(textarea, editor) {
     if (!textarea || !editor || textarea.__afAeSyncBound) return;
     textarea.__afAeSyncBound = true;
 
-    var sync = function () { syncEditorToTextarea(textarea, editor); };
+    var sync = function () {
+      try { editor.updateOriginal(); } catch (err) {}
+    };
 
     try {
-      editor.bind('valuechanged keyup blur paste input change sourceMode', sync);
-    } catch (e) {}
-
-    if (textarea.form && !textarea.form.__afAeSubmitBound) {
-      textarea.form.__afAeSubmitBound = true;
-      textarea.form.addEventListener('submit', function () {
-        var textareas = this.querySelectorAll('textarea');
-        for (var i = 0; i < textareas.length; i += 1) {
-          var ta = textareas[i];
-          var inst = getEditor(ta);
-          if (inst) syncEditorToTextarea(ta, inst);
-        }
+      editor.bind('valuechanged keyup blur paste input change', sync);
+      editor.bind('sourceMode', function () {
+        sync();
       });
-    }
+    } catch (err) {}
+
+    bindSubmitSync(textarea, editor);
   }
 
-  function buildOptions(toolbarString) {
-    var p = getPayload();
+  function isEligibleTextarea(textarea, payload) {
+    if (!textarea || textarea.tagName !== 'TEXTAREA' || textarea.disabled) return false;
+    if (textarea.classList.contains('sceditor-ignore')) return false;
+
+    var forced = toText(payload && payload.cfg && payload.cfg.editorSelector).trim();
+    if (forced) {
+      try { return textarea.matches(forced); } catch (err) { return false; }
+    }
+
+    var name = toText(textarea.name).toLowerCase();
+    return name !== 'subject' && name !== 'captcha';
+  }
+
+  function buildOptions(payload, toolbar) {
     return {
+      plugins: 'bbcode',
+      style: toText(payload.sceditorCss || payload.sceditorContentCss || ''),
+      toolbar: toolbar,
       format: 'bbcode',
-      toolbar: toolbarString,
-      style: toText(p.sceditorContentCss || p.sceditorCss || ''),
-      resizeEnabled: true,
-      autoExpand: false,
+      startInSourceMode: true,
       width: '100%',
       height: 180,
-      startInSourceMode: true
+      resizeEnabled: true,
+      autoExpand: false
     };
   }
 
-  function initTextarea(textarea, toolbarString) {
-    if (!hasScEditorRuntime() || !isEligibleTextarea(textarea)) return;
+  function initTextarea(textarea, payload, toolbar) {
+    if (!isEligibleTextarea(textarea, payload)) return;
 
     var existing = getEditor(textarea);
     if (existing) {
-      setEditorBinding(textarea, existing);
       bindSyncEvents(textarea, existing);
-      injectFontsIntoIframe(existing);
       return;
     }
 
-    var options = buildOptions(toolbarString);
+    var originalContent = textarea.value;
+    log('init', textarea.name || textarea.id || '(textarea)');
+
     try {
-      $(textarea).sceditor(options);
-    } catch (e) {
-      log('init failed', e && e.message ? e.message : e);
+      $(textarea).sceditor(buildOptions(payload, toolbar));
+    } catch (err) {
+      log('init failed', err && err.message ? err.message : err);
       return;
     }
 
     var editor = getEditor(textarea);
     if (!editor) {
-      log('instance not found', textarea.name || textarea.id || '(anonymous)');
+      log('editor missing after init', textarea.name || textarea.id || '(textarea)');
       return;
     }
 
-    setEditorBinding(textarea, editor);
-    bindSyncEvents(textarea, editor);
-    injectFontsIntoIframe(editor);
-    syncEditorToTextarea(textarea, editor);
-  }
+    log('editor created', textarea.name || textarea.id || '(textarea)');
 
-  function initExistingTextareas(toolbarString) {
-    var areas = document.querySelectorAll('textarea');
-    for (var i = 0; i < areas.length; i += 1) {
-      initTextarea(areas[i], toolbarString);
+    if (originalContent) {
+      try { editor.val(originalContent); } catch (err) {}
+      try { editor.updateOriginal(); } catch (err2) {}
+      log('content restored', textarea.name || textarea.id || '(textarea)');
     }
-  }
 
-  function registerObserver(toolbarString) {
-    if (!window.MutationObserver || state.observer) return;
-
-    state.observer = new MutationObserver(function (mutations) {
-      mutations.forEach(function (m) {
-        var nodes = m.addedNodes || [];
-        for (var i = 0; i < nodes.length; i += 1) {
-          var node = nodes[i];
-          if (!node || node.nodeType !== 1) continue;
-          if (node.matches && (node.matches('.sceditor-container') || node.matches('iframe'))) continue;
-
-          if (node.tagName === 'TEXTAREA') {
-            initTextarea(node, toolbarString);
-            continue;
-          }
-
-          if (node.querySelectorAll) {
-            var textareas = node.querySelectorAll('textarea');
-            for (var j = 0; j < textareas.length; j += 1) {
-              initTextarea(textareas[j], toolbarString);
-            }
-          }
-        }
-      });
-    });
-
-    state.observer.observe(document.documentElement || document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
-
-  function registerSourceCommand() {
-    if (!$.sceditor.command.get('source')) {
-      $.sceditor.command.set('source', {
-        exec: function () { if (typeof this.toggleSourceMode === 'function') this.toggleSourceMode(); },
-        txtExec: function () { if (typeof this.toggleSourceMode === 'function') this.toggleSourceMode(); },
-        tooltip: 'Source'
-      });
-    }
-  }
-
-  function runBoot() {
-    var p = getPayload();
-
-    if (!hasScEditorRuntime() || !hasBbcodePlugin()) {
-      state.bootAttempts += 1;
-      if (state.bootAttempts <= 20) {
-        window.setTimeout(runBoot, 100);
-      } else {
-        log('SCEditor runtime unavailable after retries');
+    try {
+      if (!editor.val() && textarea.value) {
+        editor.val(textarea.value);
+        editor.updateOriginal();
+        log('content restored', 'fallback', textarea.name || textarea.id || '(textarea)');
       }
-      return;
+    } catch (err3) {}
+
+    bindSyncEvents(textarea, editor);
+  }
+
+  function initAllTextareas(payload, toolbar) {
+    var textareas = document.querySelectorAll('textarea:not(.sceditor-ignore)');
+    for (var i = 0; i < textareas.length; i += 1) {
+      initTextarea(textareas[i], payload, toolbar);
     }
+  }
 
-    if (state.booted) return;
-    state.booted = true;
-
-    injectFontsCss();
-
-    var available = mapByCmd(p.available);
-    var customDefs = mapByCmd(p.customDefs);
-    var commandDefs = Object.assign({}, available, customDefs);
+  function registerCommands(payload) {
+    var available = mapByCmd(payload.available);
+    var customDefs = mapByCmd(payload.customDefs);
+    var packButtons = mapByCmd(payload.packs && payload.packs.buttons);
+    var commandDefs = Object.assign({}, available, customDefs, packButtons);
 
     registerSourceCommand();
 
@@ -433,19 +343,34 @@
       ensureCommandIcon(cmd, commandDefs[cmd] && commandDefs[cmd].icon);
     });
 
-    var toolbarData = buildToolbar(p.layout);
-    registerDropdownCommands(toolbarData.dropdowns, commandDefs);
     registerBbcodes(commandDefs);
+  }
 
-    initExistingTextareas(toolbarData.toolbar);
-    registerObserver(toolbarData.toolbar);
+  function boot() {
+    if (!hasRuntime() || !hasBbcodePlugin()) {
+      state.bootAttempts += 1;
+      if (state.bootAttempts <= 40) {
+        window.setTimeout(boot, 100);
+      } else {
+        log('runtime unavailable');
+      }
+      return;
+    }
 
-    log('boot complete', toolbarData.toolbar);
+    if (state.booted) return;
+    state.booted = true;
+
+    var payload = getPayload();
+    ensurePackAssets(payload);
+    registerCommands(payload);
+
+    var toolbar = buildToolbar(payload.layout);
+    initAllTextareas(payload, toolbar);
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', runBoot, { once: true });
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
   } else {
-    runBoot();
+    boot();
   }
 })();
