@@ -18,6 +18,7 @@ define('AF_AE_SETTING_POSTCOUNT_FORUMS', 'af_advancededitor_postcount_forum_ids'
 define('AF_AE_SETTING_FORMFEATURE_FORUMS', 'af_advancededitor_formfeature_forum_ids');
 define('AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS', 'af_ae_htmlbb_allowed_groups');
 define('AF_AE_SETTING_DISABLE_ON', 'af_advancededitor_disable_on');
+define('AF_AE_SETTING_WYSIWYG_EXCLUDE', 'af_advancededitor_wysiwyg_exclude_tags');
 
 
 
@@ -792,9 +793,11 @@ function af_advancededitor_pre_output(string &$page = ''): void
     // Версии файлов (cache busting)
     $aeCssAbs = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/advancededitor.css';
     $aeJsAbs  = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/advancededitor.js';
+    $aeWysiwygJsAbs = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/advancededitor_wysiwyg_bbcodes.js';
     $verCss   = af_advancededitor_asset_ver($aeCssAbs);
     $verJs    = af_advancededitor_asset_ver($aeJsAbs);
-    $buildVer = max($verCss, $verJs, 1);
+    $verWysiwygJs = af_advancededitor_asset_ver($aeWysiwygJsAbs);
+    $buildVer = max($verCss, $verJs, $verWysiwygJs, 1);
 
     /**
      * ===== ВСЕГДА (контентные страницы + страницы с textarea) =====
@@ -888,6 +891,8 @@ function af_advancededitor_pre_output(string &$page = ''): void
         $hideOptsRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_HIDE_POSTOPTIONS);
         $hidePostOptions = ((int)trim((string)$hideOptsRaw) === 1) ? 1 : 0;
 
+        $wysiwygExcludeRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_WYSIWYG_EXCLUDE);
+
         if ($hidePostOptions) {
             $injectHead .= "<style id=\"af-ae-hide-postoptions\">
 #post_options, #postoptions, .post_options, .postoptions,
@@ -936,6 +941,7 @@ table #post_options, table #postoptions{display:none!important;}
                 'fontFamilies' => $fontFamilies,
                 'postcountForumIds'   => $postcountCsv,
                 'formFeatureForumIds' => $formfeatureCsv,
+                'wysiwygExclude' => (string)$wysiwygExcludeRaw,
             ],
         ];
         if ($editorSelector !== '') {
@@ -948,7 +954,8 @@ table #post_options, table #postoptions{display:none!important;}
         $injectHead .= '<script>window.afAdvancedEditorPayload=' . $json . ';</script>' . "\n";
         $injectHead .= '<script>window.afAePayload=window.afAdvancedEditorPayload;</script>' . "\n";
 
-        // advancededitor.js
+        // WYSIWYG bbcode bridge + advancededitor.js
+        $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor_wysiwyg_bbcodes.js', $buildVer)) . '"></script>' . "\n";
         $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor.js', $buildVer)) . '"></script>' . "\n";
     }
 
@@ -1194,6 +1201,17 @@ gallery.php",
         70
     );
 
+    $ensure(
+        AF_AE_SETTING_WYSIWYG_EXCLUDE,
+        'WYSIWYG: исключить теги из визуального рендера',
+        'Список тегов/паков через запятую или с новой строки (например: lockcontent, code, html). Для них SCEditor оставляет BBCode без HTML-визуализации.',
+        'textarea',
+        "lockcontent
+code
+html",
+        75
+    );
+
     // === HTMLBB: кто может ИСПОЛЬЗОВАТЬ тег [html] ===
     $ensure(
         AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS,
@@ -1250,6 +1268,7 @@ function af_advancededitor_uninstall(): void
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_POSTCOUNT_FORUMS) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_FORMFEATURE_FORUMS) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_DISABLE_ON) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_WYSIWYG_EXCLUDE) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS) . "'");
 
 

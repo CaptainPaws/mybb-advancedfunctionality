@@ -1790,6 +1790,7 @@
     try { afAeEnsureMybbAlignBbcode(null); } catch (eA) {}
     try { afAePatchAlignCommandsForSourceMode(); } catch (eA2) {}
     try { afAeEnsureMycodePassthroughBbcode(null); } catch (eM) {}
+    try { if (window.afAeWysiwygBbcodes && typeof window.afAeWysiwygBbcodes.init === 'function') window.afAeWysiwygBbcodes.init(null); } catch (eWB) {}
   }
 
   function initOneTextarea(ta) {
@@ -1822,6 +1823,7 @@
 
       try { afAeApplyWysiwygCodeQuoteCss(existing); } catch (e2) {}
       try { afAeApplyWysiwygLocalFontsCss(existing); } catch (e2b) {}
+      try { if (window.afAeWysiwygBbcodes && typeof window.afAeWysiwygBbcodes.applyInstance === 'function') window.afAeWysiwygBbcodes.applyInstance(existing); } catch (eW1) {}
 
       try {
         decorateDropdownButtons(ta, out);
@@ -1861,6 +1863,7 @@
 
         try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e5) {}
         try { afAeApplyWysiwygLocalFontsCss(inst); } catch (e5b) {}
+        try { if (window.afAeWysiwygBbcodes && typeof window.afAeWysiwygBbcodes.applyInstance === 'function') window.afAeWysiwygBbcodes.applyInstance(inst); } catch (eW2) {}
 
         decorateDropdownButtons(ta, out);
         decorateCustomButtons(ta);
