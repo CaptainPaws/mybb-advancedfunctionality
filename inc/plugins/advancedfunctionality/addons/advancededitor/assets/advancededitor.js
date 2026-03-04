@@ -10,10 +10,6 @@
   var AVAILABLE_MAP_CACHE = null;
   var CUSTOM_DEF_MAP_CACHE = null;
 
-  if (typeof window.__afAeGlobalToggling === 'undefined') window.__afAeGlobalToggling = 0;
-  if (typeof window.__afAeIgnoreMutationsUntil === 'undefined') window.__afAeIgnoreMutationsUntil = 0;
-
-  function now() { return Date.now ? Date.now() : +new Date(); }
   function asText(x) { return String(x == null ? '' : x); }
 
   function log() {
@@ -1016,20 +1012,6 @@
     try { afAeForceAlignEverywhere(null); } catch (e) {}
   }
 
-  function ensureDefaultSourceMode(inst) {
-    if (!inst) return;
-    var inSource = false;
-    try {
-      if (typeof inst.sourceMode === 'function') inSource = !!inst.sourceMode();
-      else if (typeof inst.isSourceMode === 'function') inSource = !!inst.isSourceMode();
-      else if (typeof inst.sourceMode === 'boolean') inSource = inst.sourceMode;
-    } catch (e0) { inSource = false; }
-
-    if (!inSource && typeof inst.toggleSourceMode === 'function') {
-      try { inst.toggleSourceMode(); } catch (e1) {}
-    }
-  }
-
   function svgStarMarkup() {
     return '' +
       '<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
@@ -1966,9 +1948,7 @@
 
     window.addEventListener('pageshow', function (event) {
       var persisted = !!(event && event.persisted);
-      if (!persisted) return;
-      debugEditpost('[AE] pageshow_persisted', { persisted: persisted });
-      scanAndInit(document);
+      if (persisted) return;
       bindEditpostFormGuards(document);
     });
   }
@@ -1993,60 +1973,13 @@
 
     if (typeof origToggle === 'function') {
       inst.toggleSourceMode = function () {
-        var contentBefore = '';
-        try { contentBefore = String(inst.val ? (inst.val() || '') : ''); } catch (eV0) { contentBefore = ''; }
-
-        log('AE toggle mode', { beforeLength: contentBefore.length });
-
-        window.__afAeGlobalToggling++;
-        window.__afAeIgnoreMutationsUntil = now() + 1200;
-
-        try { return origToggle.apply(inst, arguments); }
-        finally {
-          // ВАЖНО: iframe может появиться не мгновенно — даём микропаузу и ретраи внутри функций
-          setTimeout(function () {
-            try {
-              var contentAfter = String(inst.val ? (inst.val() || '') : '');
-              if (contentAfter !== contentBefore) {
-                inst.val(contentBefore);
-                contentAfter = String(inst.val ? (inst.val() || '') : '');
-              }
-              if (!contentAfter && contentBefore) {
-                inst.val(contentBefore);
-              }
-            } catch (eKeep) {}
-
-            try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e0) {}
-            try { afAeApplyWysiwygLocalFontsCss(inst); } catch (e0b) {}
-
-            try { afAePatchAlignCommandsForSourceMode(); } catch (eX) {}
-            try { afAeEnsureMybbAlignBbcode(inst); } catch (eY) {}
-            try { afAeForceAlignEverywhere(inst); } catch (eZ) {}
-            try { afAeNormalizeAlignInInstance(inst); } catch (eN) {}
-
-            window.__afAeIgnoreMutationsUntil = now() + 250;
-            window.__afAeGlobalToggling = Math.max(0, (window.__afAeGlobalToggling | 0) - 1);
-
-          }, 30);
-        }
+        return origToggle.apply(inst, arguments);
       };
     }
-
-    // На старте тоже пинаем: иногда инстанс уже есть, но iframe ещё догружается
-    try {
-      setTimeout(function () {
-        try { afAeNormalizeAlignInInstance(inst); } catch (eN2) {}
-        try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e1) {}
-        try { afAeApplyWysiwygLocalFontsCss(inst); } catch (e1b) {}
-      }, 30);
-    } catch (e2) {}
   }
 
   function afAeSafeToggleMode(inst) {
     if (!inst) return;
-
-    var content = '';
-    try { content = String(inst.val ? (inst.val() || '') : ''); } catch (eV0) { content = ''; }
 
     try {
       if (typeof inst.toggleSourceMode === 'function') {
@@ -2057,35 +1990,42 @@
         inst.command.exec('source');
       }
     } catch (e0) {}
+  }
 
-    try {
-      var after = String(inst.val ? (inst.val() || '') : '');
-      if (after !== content) inst.val(content);
-      if (!after && content) inst.val(content);
-    } catch (e1) {}
+  function registerCommandsOnce() {
+    if (window.__afAeCommandsRegistered) return;
+    window.__afAeCommandsRegistered = true;
+
+    var bundle = getToolbarBundle();
+    var availableMap = bundle.availableMap;
+    var out = bundle.out;
+
+    try { ensureDropdownCommands(out, availableMap); } catch (eD) {}
+    try { ensureCustomCommands(); } catch (eC) {}
+    try { ensureToggleCommandDefinition(); } catch (eT) {}
+    try { ensureMybbTagAliases(); } catch (eTA) {}
+    try { afAeEnsureMybbAlignBbcode(null); } catch (eA) {}
+    try { afAePatchAlignCommandsForSourceMode(); } catch (eA2) {}
+    try { afAeForceAlignEverywhere(null); } catch (eF) {}
   }
 
   function initOneTextarea(ta) {
     if (!isEligibleTextarea(ta)) return false;
     if (isHidden(ta)) return false;
 
-    if (ta.__afAeInited) return true;
-    if (now() < (window.__afAeIgnoreMutationsUntil || 0)) return false;
-    if ((window.__afAeGlobalToggling || 0) > 0) return false;
-
     if (!hasSceditor()) return false;
 
     var $ = window.jQuery;
     var $ta = $(ta);
 
+    if ($ta.data('sceditor')) return true;
+    if (ta.__afAeInited) return true;
+
     if (typeof ta.__afAeInitialContent === 'undefined') {
       ta.__afAeInitialContent = String(ta.value || '');
     }
 
-    if ($ta.data('sceditor')) return true;
-
     var bundle = getToolbarBundle();
-    var availableMap = bundle.availableMap;
     var out = bundle.out;
 
     var existing = safeGetInstance($ta);
@@ -2093,16 +2033,8 @@
       ta.__afAeInited = true;
       existing.__afAeOwned = true;
 
-      // dropdown-меню (afmenu_*) — чтобы кнопки точно были “живые”
-      try { ensureDropdownCommands(out, availableMap); } catch (eD0) {}
       // bbcode passthrough для MyCode-тегов (WYSIWYG <-> BBCode) — НА ИМЕННО ЭТОМ инстансе
       try { afAeEnsureMycodePassthroughBbcode(existing); } catch (eM0) {}
-
-      // остальные кастомные команды (af_*)
-      try { ensureCustomCommands(); } catch (eC0) {}
-      try { ensureToggleCommandDefinition(); } catch (eT0) {}
-      try { ensureMybbTagAliases(); } catch (eTA0) {}
-
 
       try { afAeEnsureMybbAlignBbcode(existing); } catch (eA0) {}
       try { afAePatchAlignCommandsForSourceMode(); } catch (eA0b) {}
@@ -2110,7 +2042,6 @@
       try { afAeForceAlignEverywhere(existing); } catch (eAA) {}
 
       try { patchEditorInstanceForSafeToggle(existing); } catch (e0) {}
-      try { ensureDefaultSourceMode(existing); } catch (e0b) {}
       try { bindSubmitSync(ta.form, ta); } catch (e1) {}
       if (isEditPostPage()) debugEditpost('[AE] editor_ready', { textareaName: ta.name || '', existing: true });
       log('AE editor ready', { textareaName: ta.name || '', existing: true });
@@ -2130,16 +2061,6 @@
       // регаем всё ДО создания инстанса
       ensurePostKeyInput(ta.form);
 
-      try { ensureDropdownCommands(out, availableMap); } catch (eD1) {}
-      try { ensureCustomCommands(); } catch (eC1) {}
-      try { ensureToggleCommandDefinition(); } catch (eT1) {}
-      try { ensureMybbTagAliases(); } catch (eTA1) {}
-
-
-      // Патчи bbcode (до инициализации) — и потом ещё раз после
-      try { afAeEnsureMybbAlignBbcode(null); } catch (eP0) {}
-      try { afAeForceAlignEverywhere(null); } catch (eX) {}
-
       $ta.sceditor({
         format: 'bbcode',
         toolbar: out.toolbar,
@@ -2151,7 +2072,7 @@
         width: '100%',
         resizeEnabled: true,
         autoExpand: false,
-        startInSourceMode: true
+        startInSourceMode: false
       });
 
       var inst = safeGetInstance($ta);
@@ -2162,10 +2083,6 @@
 
         // bbcode passthrough для MyCode-тегов (WYSIWYG <-> BBCode)
         try { afAeEnsureMycodePassthroughBbcode(inst); } catch (eM1) {}
-        // алиасы MyBB-тегов и команды — один раз глобально, но тут безопасно
-        try { ensureMybbTagAliases(); } catch (eTA2) {}
-        try { ensureCustomCommands(); } catch (eC2) {}
-
 
         try { afAeEnsureMybbAlignBbcode(inst); } catch (eP1) {}
         try { afAePatchAlignCommandsForSourceMode(); } catch (eP1b) {}
@@ -2173,7 +2090,6 @@
         try { afAeForceAlignEverywhere(inst); } catch (ePP) {}
 
         try { patchEditorInstanceForSafeToggle(inst); } catch (e3) {}
-        try { ensureDefaultSourceMode(inst); } catch (e3b) {}
         try { bindSubmitSync(ta.form, ta); } catch (e4) {}
         if (isEditPostPage()) debugEditpost('[AE] editor_ready', { textareaName: ta.name || '', existing: false });
         log('AE editor ready', { textareaName: ta.name || '', existing: false });
@@ -2208,6 +2124,9 @@
   }
 
   function scanAndInit(root) {
+    if (window.__afAeScanDone) return;
+    window.__afAeScanDone = true;
+
     root = root || document;
     if (!root.querySelectorAll) return;
 
@@ -2223,6 +2142,7 @@
     (function wait() {
       tries++;
       if (hasSceditor()) {
+        registerCommandsOnce();
         scanAndInit(document);
         bindEditpostFormGuards(document);
         registerPageShowRecovery();
