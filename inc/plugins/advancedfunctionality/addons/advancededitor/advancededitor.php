@@ -1213,6 +1213,9 @@ gallery.php",
     // ставим MyCode из паков (включая indent/indent.php)
     af_advancededitor_install_pack_mycodes();
 
+    // При активации аддона гарантированно выключаем конфликтующий Clickable MyCode Editor.
+    af_advancededitor_disable_clickable_editor_setting(true);
+
 
     // OPcache дружелюбие
     $settingsFile = MYBB_ROOT . 'inc/settings.php';
@@ -1264,6 +1267,12 @@ function af_advancededitor_uninstall(): void
     if (function_exists('opcache_invalidate')) {
         @opcache_invalidate($settingsFile, true);
     }
+}
+
+
+function af_advancededitor_activate(): void
+{
+    af_advancededitor_install();
 }
 
 function af_ae_bbcode_dispatch_init(): void
@@ -1461,8 +1470,11 @@ function af_advancededitor_force_disable_mybb_clickable_editor(): void
 {
     global $mybb, $db, $cache;
 
+    // Критичный конфликт: Clickable MyCode Editor должен быть выключен всегда.
+    af_advancededitor_disable_clickable_editor_setting();
+
     // 1) РАНТАЙМ: всегда гасим базовые вставлялки MyBB
-    foreach (['bbcodeeditor', 'bbcodeinserter', 'smilieinserter'] as $k) {
+    foreach (['bbcodeeditor', 'bbcodeinserter', 'smilieinserter', 'clickable_mycode_editor', 'clickableeditor'] as $k) {
         if (isset($mybb->settings[$k])) {
             $mybb->settings[$k] = 0;
         }
@@ -1532,6 +1544,58 @@ function af_advancededitor_force_disable_mybb_clickable_editor(): void
     if (isset($cache) && is_object($cache) && method_exists($cache, 'update')) {
         $cache->update($ck, ['ts' => $now]);
     }
+}
+
+function af_advancededitor_disable_clickable_editor_setting(bool $showAdminNotice = false): bool
+{
+    global $mybb, $db;
+
+    $settingNames = ['clickable_mycode_editor', 'clickableeditor'];
+    $needRebuild = false;
+    $disabled = false;
+
+    foreach ($settingNames as $settingName) {
+        $runtimeValue = isset($mybb->settings[$settingName]) ? (int)$mybb->settings[$settingName] : null;
+        if ($runtimeValue === 1) {
+            $needRebuild = true;
+        }
+
+        if (!isset($db) || !is_object($db)) {
+            continue;
+        }
+
+        $q = $db->simple_select('settings', 'value', "name='" . $db->escape_string($settingName) . "'", ['limit' => 1]);
+        $dbValue = $db->fetch_field($q, 'value');
+
+        if ($dbValue === null) {
+            continue;
+        }
+
+        if ((int)$dbValue !== 0) {
+            $db->update_query('settings', ['value' => '0'], "name='" . $db->escape_string($settingName) . "'");
+            $needRebuild = true;
+            $disabled = true;
+        }
+    }
+
+    if ($needRebuild) {
+        if (!function_exists('rebuild_settings')) {
+            require_once MYBB_ROOT . 'inc/functions.php';
+        }
+        rebuild_settings();
+
+        foreach ($settingNames as $settingName) {
+            if (isset($mybb->settings[$settingName])) {
+                $mybb->settings[$settingName] = 0;
+            }
+        }
+
+        if ($showAdminNotice && function_exists('flash_message')) {
+            flash_message('Clickable MyCode Editor был автоматически отключен, так как он конфликтует с Advanced Editor.', 'success');
+        }
+    }
+
+    return $disabled;
 }
 
 
