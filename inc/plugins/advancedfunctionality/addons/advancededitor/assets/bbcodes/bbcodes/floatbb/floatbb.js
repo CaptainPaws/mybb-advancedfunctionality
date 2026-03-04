@@ -1,28 +1,25 @@
 (function () {
   'use strict';
 
-  // ===== registries =====
-  if (!window.afAeBuiltinHandlers)  window.afAeBuiltinHandlers  = Object.create(null);
+  if (!window.afAeBuiltinHandlers) window.afAeBuiltinHandlers = Object.create(null);
   if (!window.afAqrBuiltinHandlers) window.afAqrBuiltinHandlers = Object.create(null);
 
-  // one-shot
   if (window.afAeFloatbbInitialized) return;
   window.afAeFloatbbInitialized = true;
 
-  // НЕ ТРОГАЕМ: чтобы не сломать кнопку/конструктор/manifest
-  var ID  = 'floatbb';
+  var ID = 'floatbb';
   var CMD = 'af_floatbb';
 
-  function asText(x) { return String(x == null ? '' : x); }
+  function asText(x) {
+    return String(x == null ? '' : x);
+  }
 
   function normDir(x) {
     x = asText(x).trim().toLowerCase();
-    if (x === 'left' || x === 'l' || x === '1') return 'left';
     if (x === 'right' || x === 'r' || x === '2') return 'right';
     return 'left';
   }
 
-  // ===== instance helpers (копия паттерна из indent/fontfamily) =====
   function getTextareaFromCtx(ctx) {
     if (ctx && ctx.textarea && ctx.textarea.nodeType === 1) return ctx.textarea;
     if (ctx && ctx.ta && ctx.ta.nodeType === 1) return ctx.ta;
@@ -37,10 +34,7 @@
 
   function getSceditorInstanceFromCtx(ctx) {
     if (ctx && typeof ctx.insertText === 'function') return ctx;
-    if (ctx && typeof ctx.createDropDown === 'function') return ctx;
     if (ctx && ctx.sceditor && typeof ctx.sceditor.insertText === 'function') return ctx.sceditor;
-    if (ctx && ctx.inst && typeof ctx.inst.insertText === 'function') return ctx.inst;
-    if (ctx && ctx.instance && typeof ctx.instance.insertText === 'function') return ctx.instance;
 
     try {
       if (window.jQuery) {
@@ -48,7 +42,7 @@
         var $ta = $('textarea#message, textarea[name="message"]').first();
         if ($ta.length) {
           var inst = $ta.sceditor && $ta.sceditor('instance');
-          if (inst && typeof inst.insertText === 'function') return inst;
+          if (inst) return inst;
         }
       }
     } catch (e) {}
@@ -58,113 +52,102 @@
 
   function insertWrap(open, close, ctx) {
     var inst = getSceditorInstanceFromCtx(ctx);
-    if (inst && typeof inst.insertText === 'function') {
+
+    if (inst) {
       inst.insertText(open, close);
-      if (typeof inst.focus === 'function') inst.focus();
+      inst.focus();
       return true;
     }
 
     var ta = getTextareaFromCtx(ctx);
     if (!ta) return false;
 
-    try {
-      var start = ta.selectionStart || 0;
-      var end = ta.selectionEnd || 0;
-      var val = String(ta.value || '');
-      var before = val.slice(0, start);
-      var sel = val.slice(start, end);
-      var after = val.slice(end);
+    var start = ta.selectionStart || 0;
+    var end = ta.selectionEnd || 0;
 
-      ta.value = before + open + sel + close + after;
+    var before = ta.value.slice(0, start);
+    var sel = ta.value.slice(start, end);
+    var after = ta.value.slice(end);
 
-      var caret = (sel.length
-        ? (before.length + open.length + sel.length + close.length)
-        : (before.length + open.length)
-      );
+    ta.value = before + open + sel + close + after;
 
-      ta.focus();
-      ta.setSelectionRange(caret, caret);
-      ta.dispatchEvent(new Event('input', { bubbles: true }));
-      return true;
-    } catch (e) {
-      return false;
-    }
+    var caret = before.length + open.length + sel.length + close.length;
+
+    ta.focus();
+    ta.setSelectionRange(caret, caret);
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+
+    return true;
   }
 
   function applyFloat(editor, dir) {
     dir = normDir(dir);
 
-    // ТЕГ ДОЛЖЕН БЫТЬ float
     var open = '[float=' + dir + ']';
     var close = '[/float]';
 
     try {
-      if (editor && typeof editor.insertText === 'function') {
+      if (editor && editor.insertText) {
         editor.insertText(open, close);
-        if (typeof editor.focus === 'function') editor.focus();
+        editor.focus();
         return;
       }
-    } catch (e0) {}
+    } catch (e) {}
 
     insertWrap(open, close, { sceditor: editor });
   }
 
-  // ===== dropdown (ОДИН В ОДИН как indent.js) =====
   function makeDropdown(editor, caller) {
     var wrap = document.createElement('div');
     wrap.className = 'af-floatbb-dd';
 
-    function addItem(dir, title, sample) {
+    function addItem(dir, title) {
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'af-floatbb-item';
-
-      var nm = document.createElement('div');
-      nm.className = 'af-floatbb-name';
-      nm.textContent = title;
-
-      var sm = document.createElement('div');
-      sm.className = 'af-floatbb-sample';
-      sm.textContent = sample;
-
-      btn.appendChild(nm);
-      btn.appendChild(sm);
+      btn.textContent = title;
 
       btn.addEventListener('click', function (ev) {
         ev.preventDefault();
         applyFloat(editor, dir);
-        try { editor.closeDropDown(true); } catch (e0) {}
+        try { editor.closeDropDown(true); } catch (e) {}
       });
 
       wrap.appendChild(btn);
     }
 
-    addItem('left',  'Обтекание слева',  'Блок слева, текст справа');
-    addItem('right', 'Обтекание справа', 'Блок справа, текст слева');
+    addItem('left', 'Обтекание слева');
+    addItem('right', 'Обтекание справа');
 
-    // ВАЖНО: создаём dropdown через SCEditor как в indent.js
     editor.createDropDown(caller, 'sceditor-floatbb-picker', wrap);
   }
 
   function openSceditorDropdown(editor, caller) {
-    if (!editor || typeof editor.createDropDown !== 'function') return false;
-    try { editor.closeDropDown(true); } catch (e0) {}
+    if (!editor || !editor.createDropDown) return false;
+
+    try { editor.closeDropDown(true); } catch (e) {}
+
     makeDropdown(editor, caller);
     return true;
   }
 
-  // ===== SCEditor command =====
-  function patchSceditorFloatbbCommand() {
+  function patchSceditorCommand() {
     if (!window.jQuery) return false;
+
     var $ = window.jQuery;
+
     if (!$.sceditor || !$.sceditor.command) return false;
 
     $.sceditor.command.set(CMD, {
       exec: function (caller) {
-        if (!openSceditorDropdown(this, caller)) insertWrap('[float=left]', '[/float]', { sceditor: this });
+        if (!openSceditorDropdown(this, caller)) {
+          insertWrap('[float=left]', '[/float]', { sceditor: this });
+        }
       },
       txtExec: function (caller) {
-        if (!openSceditorDropdown(this, caller)) insertWrap('[float=left]', '[/float]', { sceditor: this });
+        if (!openSceditorDropdown(this, caller)) {
+          insertWrap('[float=left]', '[/float]', { sceditor: this });
+        }
       },
       tooltip: 'Обтекание (слева/справа)'
     });
@@ -172,21 +155,25 @@
     return true;
   }
 
-  function waitAnd(fn, maxTries) {
+  function waitAnd(fn, max) {
     var tries = 0;
+
     (function tick() {
       tries++;
+
       if (fn()) return;
-      if (tries > (maxTries || 150)) return;
+
+      if (tries > (max || 150)) return;
+
       setTimeout(tick, 100);
     })();
   }
 
-  waitAnd(patchSceditorFloatbbCommand, 150);
+  waitAnd(patchSceditorCommand, 150);
 
-  // ===== handlers for AQR/AE core =====
   function aqrOpen(ctx, ev) {
     var editor = getSceditorInstanceFromCtx(ctx);
+
     var caller =
       (ctx && (ctx.buttonEl || ctx.btn || ctx.caller)) ||
       (ev && (ev.currentTarget || ev.target)) ||
@@ -213,19 +200,18 @@
 
   function handlerFn(inst, caller) {
     var editor = getSceditorInstanceFromCtx(inst || {});
-    if (!editor) editor = getSceditorInstanceFromCtx({});
     if (!editor) return;
 
-    if (caller && caller.nodeType === 1) openSceditorDropdown(editor, caller);
-    else insertWrap('[float=left]', '[/float]', { sceditor: editor });
+    if (caller && caller.nodeType === 1)
+      openSceditorDropdown(editor, caller);
+    else
+      insertWrap('[float=left]', '[/float]', { sceditor: editor });
   }
 
   function registerHandlers() {
-    // AQR
     window.afAqrBuiltinHandlers[ID] = handlerObj;
     window.afAqrBuiltinHandlers[CMD] = handlerObj;
 
-    // AE
     window.afAeBuiltinHandlers[ID] = handlerFn;
     window.afAeBuiltinHandlers[CMD] = handlerFn;
   }
@@ -235,52 +221,92 @@
 
 })();
 
-(function registerFloatbbWysiwyg() {
-  if (!window.jQuery) return;
 
-  var $ = window.jQuery;
 
-  if (!$.sceditor || !$.sceditor.plugins || !$.sceditor.plugins.bbcode) return;
+/* ---------- WYSIWYG BBCode mapping ---------- */
 
-  var bb = $.sceditor.plugins.bbcode.bbcode;
+(function () {
 
-  if (!bb) return;
+  function register() {
 
-  if (bb.__afFloatbbRegistered) return;
-  bb.__afFloatbbRegistered = true;
+    if (!window.jQuery) return false;
 
-  bb.set('float', {
-    isInline: false,
+    var $ = window.jQuery;
 
-    html: function (token, attrs, content) {
-      var dir = 'left';
+    if (!$.sceditor || !$.sceditor.plugins || !$.sceditor.plugins.bbcode) return false;
 
-      if (attrs && attrs.defaultattr) {
-        var v = String(attrs.defaultattr).toLowerCase();
-        if (v === 'right' || v === 'r' || v === '2') dir = 'right';
+    var bb = $.sceditor.plugins.bbcode.bbcode;
+
+    if (!bb) return false;
+
+    if (bb.__afFloatbbRegistered) return true;
+    bb.__afFloatbbRegistered = true;
+
+    bb.set('float', {
+
+      isInline: false,
+
+      html: function (token, attrs, content) {
+
+        var dir = 'left';
+
+        if (attrs && attrs.defaultattr) {
+          var v = String(attrs.defaultattr).toLowerCase();
+          if (v === 'right' || v === 'r' || v === '2') dir = 'right';
+        }
+
+        return '<div class="af-floatbb af-floatbb-' + dir + '" data-af-bb="float" data-af-dir="' + dir + '">' + content + '</div>';
+      },
+
+      format: function (el, content) {
+
+        var dir = 'left';
+
+        if (el.getAttribute) {
+          var a = el.getAttribute('data-af-dir');
+          if (a) dir = a;
+        }
+
+        if ((!dir || dir === 'left') && el.className) {
+          var cls = String(el.className);
+
+          if (cls.indexOf('af-floatbb-right') !== -1) dir = 'right';
+          else if (cls.indexOf('af-floatbb-left') !== -1) dir = 'left';
+        }
+
+        return '[float=' + dir + ']' + content + '[/float]';
       }
 
-      return '<div class="af-floatbb af-floatbb-' + dir + '" data-af-bb="float" data-af-dir="' + dir + '">' + content + '</div>';
-    },
+    });
 
-    format: function (el, content) {
-      var dir = 'left';
+    /* --- ПЕРЕПАРСИТЬ редактор после регистрации --- */
 
-      if (el.getAttribute) {
-        var a = el.getAttribute('data-af-dir');
-        if (a) dir = a;
+    try {
+      var inst = jQuery('textarea#message, textarea[name="message"]').sceditor('instance');
+
+      if (inst) {
+        var val = inst.val();
+        inst.val('');
+        inst.val(val);
       }
 
-      // Fallback for PHP parser output (<div class="af-floatbb af-floatbb-left">)
-      if ((!dir || dir === 'left') && el.className) {
-        var cls = String(el.className);
-        if (cls.indexOf('af-floatbb-right') !== -1) dir = 'right';
-        else if (cls.indexOf('af-floatbb-left') !== -1) dir = 'left';
-      }
+    } catch (e) {}
 
-      if (dir === 'left' || dir === 'right') return '[float=' + dir + ']' + content + '[/float]';
+    return true;
+  }
 
-      return '[float]' + content + '[/float]';
-    }
-  });
+  var tries = 0;
+
+  (function wait() {
+
+    tries++;
+
+    if (register()) return;
+
+    if (tries > 100) return;
+
+    setTimeout(wait, 100);
+
+  })();
+
 })();
