@@ -18,7 +18,6 @@ define('AF_AE_SETTING_POSTCOUNT_FORUMS', 'af_advancededitor_postcount_forum_ids'
 define('AF_AE_SETTING_FORMFEATURE_FORUMS', 'af_advancededitor_formfeature_forum_ids');
 define('AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS', 'af_ae_htmlbb_allowed_groups');
 define('AF_AE_SETTING_DISABLE_ON', 'af_advancededitor_disable_on');
-if (!defined('AF_AE_DEBUG')) define('AF_AE_DEBUG', false);
 
 
 
@@ -948,7 +947,6 @@ table #post_options, table #postoptions{display:none!important;}
 
         $injectHead .= '<script>window.afAdvancedEditorPayload=' . $json . ';</script>' . "\n";
         $injectHead .= '<script>window.afAePayload=window.afAdvancedEditorPayload;</script>' . "\n";
-        $injectHead .= '<script>window.__afAeEditpostDebug=' . (AF_AE_DEBUG ? 'true' : 'false') . ';</script>' . "\n";
 
         // advancededitor.js
         $injectHead .= '<script defer="defer" src="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor.js', $buildVer)) . '"></script>' . "\n";
