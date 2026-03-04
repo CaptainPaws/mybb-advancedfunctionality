@@ -2060,6 +2060,23 @@
       var persisted = !!(event && event.persisted);
       if (!persisted) return;
       debugEditpost('[AE] pageshow_persisted', { persisted: persisted });
+
+      document.querySelectorAll('textarea[name="message"]').forEach(function (ta) {
+        try {
+          var inst = jQuery(ta).sceditor('instance');
+          if (!inst) return;
+
+          if (afAeEditorBroken(ta, inst)) {
+            inst.destroy();
+            ta.__afAeInited = false;
+
+            setTimeout(function () {
+              initOneTextarea(ta);
+            }, 10);
+          }
+        } catch (e) {}
+      });
+
       scanAndInit(document);
       bindEditpostFormGuards(document);
     });
@@ -2077,6 +2094,25 @@
     } catch (e) {}
   }
 
+  function afAeEditorBroken(ta, inst) {
+    if (!ta || !inst) return false;
+
+    var textareaText = String(ta.value || '');
+    var editorText = '';
+
+    try {
+      if (typeof inst.val === 'function') {
+        editorText = String(inst.val() || '');
+      }
+    } catch (e) {}
+
+    if (editorText === '' && textareaText !== '') {
+      return true;
+    }
+
+    return false;
+  }
+
   function patchEditorInstanceForSafeToggle(inst) {
     if (!inst || inst.__afAePatchedToggle) return;
     inst.__afAePatchedToggle = true;
@@ -2086,9 +2122,24 @@
     if (typeof origToggle === 'function') {
       inst.toggleSourceMode = function () {
         window.__afAeGlobalToggling++;
-        window.__afAeIgnoreMutationsUntil = now() + 1200;
+        window.__afAeIgnoreMutationsUntil = now() + 2000;
 
-        try { return origToggle.apply(inst, arguments); }
+        try {
+          var result = origToggle.apply(inst, arguments);
+
+          setTimeout(function () {
+            try {
+              var ta = inst.textarea;
+              reconcileEditorFromTextarea(
+                ta,
+                inst,
+                ta.__afAeInitialContent || ''
+              );
+            } catch (e) {}
+          }, 40);
+
+          return result;
+        }
         finally {
           // ВАЖНО: iframe может появиться не мгновенно — даём микропаузу и ретраи внутри функций
           setTimeout(function () {
@@ -2123,8 +2174,13 @@
     if (isHidden(ta)) return false;
     if (now() < (window.__afAeIgnoreMutationsUntil || 0)) return false;
     if ((window.__afAeGlobalToggling || 0) > 0) return false;
+    if (ta.__afAeInitializing) return false;
+    ta.__afAeInitializing = true;
 
-    if (!hasSceditor()) return false;
+    if (!hasSceditor()) {
+      ta.__afAeInitializing = false;
+      return false;
+    }
 
     var $ = window.jQuery;
     var $ta = $(ta);
@@ -2141,8 +2197,27 @@
 
     var existingForGuard = safeGetInstance($ta);
     if (ta.__afAeInited && existingForGuard) {
-      restoreEditorState(ta, existingForGuard, captureEditorState(ta, existingForGuard));
-      return true;
+
+      if (afAeEditorBroken(ta, existingForGuard)) {
+
+        try {
+          existingForGuard.destroy();
+        } catch (e) {}
+
+        ta.__afAeInited = false;
+
+      } else {
+
+        restoreEditorState(
+          ta,
+          existingForGuard,
+          captureEditorState(ta, existingForGuard)
+        );
+
+        ta.__afAeInitializing = false;
+        return true;
+      }
+
     }
     if (ta.__afAeInited && !existingForGuard) {
       ta.__afAeInited = false;
@@ -2197,6 +2272,7 @@
       reconcileEditpostMessage(ta, existing, 'after_existing_restore');
       reconcileEditorFromTextarea(ta, existing, originalTextareaValue || ta.__afAeInitialContent || '', 'after_existing_reconcile');
 
+      ta.__afAeInitializing = false;
       return true;
     }
 
@@ -2268,10 +2344,13 @@
         reconcileEditpostMessage(ta, inst, 'after_instance_restore');
         reconcileEditorFromTextarea(ta, inst, originalTextareaValue || ta.__afAeInitialContent || '', 'after_instance_reconcile');
 
+        ta.__afAeInitializing = false;
         return true;
       }
     } catch (e) {
       log('[AE] init error', e);
+    } finally {
+      ta.__afAeInitializing = false;
     }
 
     return false;
@@ -2313,8 +2392,12 @@
     window.__afAeObserverAttached = true;
 
     var obs = new MutationObserver(function (muts) {
-      if (now() < (window.__afAeIgnoreMutationsUntil || 0)) return;
-      if ((window.__afAeGlobalToggling || 0) > 0) return;
+      if (
+        now() < (window.__afAeIgnoreMutationsUntil || 0) ||
+        (window.__afAeGlobalToggling || 0) > 0
+      ) {
+        return;
+      }
 
       for (var i = 0; i < muts.length; i++) {
         var m = muts[i];
