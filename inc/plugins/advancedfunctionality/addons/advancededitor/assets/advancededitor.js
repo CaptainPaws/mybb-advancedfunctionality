@@ -10,6 +10,13 @@
   var AVAILABLE_MAP_CACHE = null;
   var CUSTOM_DEF_MAP_CACHE = null;
 
+  if (window.MyBB && MyBB.settings && (
+    Number(MyBB.settings.clickable_mycode_editor) === 1 ||
+    Number(MyBB.settings.clickableeditor) === 1
+  )) {
+    try { console.warn('Clickable MyCode Editor disabled due to Advanced Editor'); } catch (e) {}
+  }
+
   function asText(x) { return String(x == null ? '' : x); }
 
   function log() {
