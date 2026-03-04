@@ -192,6 +192,11 @@
   }
 
   function buildToolbarFromLayout(lay) {
+    if (window.afAeToolbarUtils && typeof window.afAeToolbarUtils.buildToolbar === 'function') {
+      var shared = window.afAeToolbarUtils.buildToolbar(lay);
+      return { toolbar: shared.toolbar, menus: shared.dropdowns || [] };
+    }
+
     var parts = [];
     var menus = [];
 
@@ -212,8 +217,8 @@
 
         parts.push(cmd);
         menus.push({
-          id: id,               // внутренний id секции (для переносов/редакта)
-          cmd: cmd,             // красивое имя команды для SCEditor-кнопки
+          id: id,
+          cmd: cmd,
           title: (title || '★'),
           items: items.slice()
         });
