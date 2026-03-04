@@ -426,19 +426,8 @@
   function afAeForceAlignEverywhere(inst) {
     if (!hasSceditor()) return;
 
-    function isSource(ed) {
-      try {
-        if (!ed) return false;
-        if (typeof ed.sourceMode === 'function') return !!ed.sourceMode();
-        if (typeof ed.isSourceMode === 'function') return !!ed.isSourceMode();
-        if (typeof ed.sourceMode === 'boolean') return !!ed.sourceMode;
-      } catch (e) {}
-      return false;
-    }
-
-    // ---------- 1) HARD OVERRIDE COMMANDS (кнопки) ----------
-    // ВАЖНО: больше НЕ делаем execCommand(justifyLeft).
-    // Вставляем ТОЛЬКО [align=...] — и в source, и в WYSIWYG.
+    // ---------- HARD OVERRIDE COMMANDS (кнопки) ----------
+    // Вставляем только [align=...] — и в source, и в WYSIWYG.
     function hardCmd(cmd, alignVal) {
       try {
         var def = {
@@ -447,8 +436,6 @@
           exec: function () {
             var ed = this;
 
-            // Всегда вставляем MyBB-валидный BBCode.
-            // В WYSIWYG SCEditor bbcode-плагин должен превратить это в HTML <div style="text-align:...">
             try {
               if (ed && typeof ed.insert === 'function') {
                 ed.insert('[align=' + alignVal + ']', '[/align]');
@@ -456,18 +443,15 @@
               }
             } catch (e0) {}
 
-            // fallback: если вдруг insert не доступен — хотя бы в textarea
             try {
               if (ed && typeof ed.val === 'function') {
                 var cur = ed.val();
                 ed.val(String(cur || '') + '[align=' + alignVal + '][/align]');
-                return;
               }
             } catch (e1) {}
           },
 
           txtExec: function () {
-            // source mode: тоже только align
             try {
               if (this && typeof this.insert === 'function') {
                 this.insert('[align=' + alignVal + ']', '[/align]');
@@ -479,7 +463,7 @@
         };
 
         def.__afAeHardAlign = true;
-        setCommand(cmd, def); // перезаписываем всегда
+        setCommand(cmd, def);
       } catch (e) {}
     }
 
@@ -487,131 +471,6 @@
     hardCmd('center', 'center');
     hardCmd('right', 'right');
     hardCmd('justify', 'justify');
-
-    // ---------- 2) HARD OVERRIDE BBCODE MAP (WYSIWYG <-> BBCode) ----------
-    function getBb() {
-      try {
-        var bb = jQuery.sceditor.plugins && jQuery.sceditor.plugins.bbcode
-          ? jQuery.sceditor.plugins.bbcode.bbcode
-          : null;
-        if (bb && typeof bb.set === 'function') return bb;
-      } catch (e0) {}
-
-      try {
-        if (inst && typeof inst.getPlugin === 'function') {
-          var p = inst.getPlugin('bbcode');
-          if (p && p.bbcode && typeof p.bbcode.set === 'function') return p.bbcode;
-        }
-      } catch (e1) {}
-
-      return null;
-    }
-
-    function patchBb(bb) {
-      if (!bb) return;
-
-      // основной тег [align=...]
-      try {
-        bb.set('align', {
-          isInline: false,
-          html: function (token, attrs, content) {
-            var a = '';
-            try { a = (attrs && attrs.defaultattr != null) ? String(attrs.defaultattr) : ''; } catch (e0) { a = ''; }
-            a = (a || '').toLowerCase().trim();
-
-            if (a === 'start') a = 'left';
-            if (a === 'end') a = 'right';
-            if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') a = 'left';
-
-            return '<div style="text-align:' + a + '">' + content + '</div>';
-          },
-          format: function (el, content) {
-            try {
-              var a = '';
-              try { a = (el && el.style && el.style.textAlign) ? String(el.style.textAlign) : ''; } catch (e0) { a = ''; }
-              a = (a || '').toLowerCase().trim();
-
-              if (a === 'start') a = 'left';
-              if (a === 'end') a = 'right';
-              if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') return content;
-
-              return '[align=' + a + ']' + content + '[/align]';
-            } catch (e1) {
-              return '[align=left]' + content + '[/align]';
-            }
-          }
-        });
-      } catch (eA0) {}
-
-      // legacy-теги сериализуем как [align=...]
-      function hardLegacy(tag, val) {
-        try {
-          bb.set(tag, {
-            isInline: false,
-            html: '<div style="text-align:' + val + '">{0}</div>',
-            format: '[align=' + val + ']{0}[/align]'
-          });
-        } catch (e) {}
-      }
-      hardLegacy('left', 'left');
-      hardLegacy('center', 'center');
-      hardLegacy('right', 'right');
-      hardLegacy('justify', 'justify');
-
-      // div/p с text-align -> [align=...]
-      function formatAlignFromEl(el, content) {
-        try {
-          var a = '';
-          try { a = (el && el.style && el.style.textAlign) ? String(el.style.textAlign) : ''; } catch (e0) { a = ''; }
-          a = (a || '').toLowerCase().trim();
-
-          if (a === 'start') a = 'left';
-          if (a === 'end') a = 'right';
-
-          if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') return content;
-          return '[align=' + a + ']' + content + '[/align]';
-        } catch (e1) {
-          return content;
-        }
-      }
-
-      try {
-        bb.set('div', {
-          styles: { 'text-align': 'align' },
-          format: function (el, content) { return formatAlignFromEl(el, content); }
-        });
-      } catch (eD) {}
-
-      try {
-        bb.set('p', {
-          styles: { 'text-align': 'align' },
-          format: function (el, content) { return formatAlignFromEl(el, content); }
-        });
-      } catch (eP) {}
-    }
-
-    // bbcode plugin может быть поздним — ретраи
-    var bb = getBb();
-    if (!bb) {
-      var tries = 0;
-      (function retry() {
-        tries++;
-        var b2 = getBb();
-        if (b2) {
-          patchBb(b2);
-          // и сразу чистим инстанс, если он уже есть
-          try { if (inst) afAeNormalizeAlignInInstance(inst); } catch (e0) {}
-          return;
-        }
-        if (tries < 25) return setTimeout(retry, 120);
-      })();
-      return;
-    }
-
-    patchBb(bb);
-
-    // добиваем уже существующее содержимое редактора (чтобы прямо ВНУТРИ стало [align=...])
-    try { if (inst) afAeNormalizeAlignInInstance(inst); } catch (eZ) {}
   }
 
   function afAeEnsureMycodePassthroughBbcode(inst) {
@@ -636,20 +495,7 @@
     }
 
     var bb = getBb();
-    if (!bb) {
-      // ретраи — bbcode плагин иногда поднимается позже
-      var t = 0;
-      (function retry() {
-        t++;
-        var b2 = getBb();
-        if (b2) {
-          try { afAeEnsureMycodePassthroughBbcode(inst); } catch (e2) {}
-          return;
-        }
-        if (t < 25) return setTimeout(retry, 120);
-      })();
-      return;
-    }
+    if (!bb) return;
 
     if (bb.__afAeMycodePassthroughPatched) return;
     bb.__afAeMycodePassthroughPatched = true;
@@ -906,24 +752,7 @@
     }
 
     var bb = getBb();
-    if (!bb) {
-      if (window.__afAeAlignBbPatchRetrying) return;
-      window.__afAeAlignBbPatchRetrying = true;
-
-      var t = 0;
-      (function retry() {
-        t++;
-        var b2 = getBb();
-        if (b2) {
-          window.__afAeAlignBbPatchRetrying = false;
-          try { afAeEnsureMybbAlignBbcode(inst); } catch (e2) {}
-          return;
-        }
-        if (t < 25) return setTimeout(retry, 120);
-        window.__afAeAlignBbPatchRetrying = false;
-      })();
-      return;
-    }
+    if (!bb) return;
 
     if (bb.__afAeMybbAlignPatched) return;
     bb.__afAeMybbAlignPatched = true;
@@ -1515,38 +1344,27 @@
     try {
       if (!inst || typeof inst.getBody !== 'function') return;
 
-      var tries = 0;
-      (function tick() {
-        tries++;
+      var body = null;
+      try { body = inst.getBody(); } catch (e0) { body = null; }
+      if (!body || !body.ownerDocument) return;
 
-        var body = null;
-        try { body = inst.getBody(); } catch (e0) { body = null; }
-        if (!body || !body.ownerDocument) {
-          if (tries < 40) return setTimeout(tick, 50);
-          return;
-        }
+      var doc = body.ownerDocument;
+      var head = doc.head || doc.getElementsByTagName('head')[0];
+      if (!head) return;
 
-        var doc = body.ownerDocument;
-        var head = doc.head || doc.getElementsByTagName('head')[0];
-        if (!head) {
-          if (tries < 40) return setTimeout(tick, 50);
-          return;
-        }
+      if (doc.getElementById('af-ae-local-fonts-iframe')) return;
 
-        if (doc.getElementById('af-ae-local-fonts-iframe')) return;
+      var hostStyle = document.getElementById('af-ae-local-fonts');
+      if (!hostStyle) return;
 
-        var hostStyle = document.getElementById('af-ae-local-fonts');
-        if (!hostStyle) return;
+      var cssText = hostStyle.textContent || hostStyle.innerText || '';
+      if (!cssText) return;
 
-        var cssText = hostStyle.textContent || hostStyle.innerText || '';
-        if (!cssText) return;
-
-        var st = doc.createElement('style');
-        st.id = 'af-ae-local-fonts-iframe';
-        st.type = 'text/css';
-        st.appendChild(doc.createTextNode(cssText));
-        head.appendChild(st);
-      })();
+      var st = doc.createElement('style');
+      st.id = 'af-ae-local-fonts-iframe';
+      st.type = 'text/css';
+      st.appendChild(doc.createTextNode(cssText));
+      head.appendChild(st);
     } catch (e) {}
   }
 
@@ -1554,55 +1372,34 @@
     try {
       if (!inst || typeof inst.getBody !== 'function') return;
 
-      // Ретраи: iframe может появиться чуть позже
-      var tries = 0;
+      var body = null;
+      try { body = inst.getBody(); } catch (e0) { body = null; }
+      if (!body || !body.ownerDocument) return;
 
-      (function tick() {
-        tries++;
+      var doc = body.ownerDocument;
+      var head = doc.head || doc.getElementsByTagName('head')[0];
+      if (!head) return;
 
-        var body = null;
-        try { body = inst.getBody(); } catch (e0) { body = null; }
-        if (!body || !body.ownerDocument) {
-          if (tries < 40) return setTimeout(tick, 50);
-          return;
-        }
+      if (doc.getElementById('af-ae-wysiwyg-codequote')) return;
 
-        var doc = body.ownerDocument;
-        var head = doc.head || doc.getElementsByTagName('head')[0];
-        if (!head) {
-          if (tries < 40) return setTimeout(tick, 50);
-          return;
-        }
+      var css =
+        "blockquote{padding:10px 12px;margin:10px 0;border-left:4px solid rgba(255,255,255,.15);background:rgba(0,0,0,.18);}\n" +
+        "blockquote cite{display:block;opacity:.75;font-style:normal;margin-bottom:6px;}\n" +
+        "code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;" +
+        "padding:.12em .35em;border-radius:6px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.10);}\n" +
+        "pre,pre code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;}\n" +
+        "pre{padding:10px 12px;margin:10px 0;background:rgba(0,0,0,.28);" +
+        "border:1px solid rgba(255,255,255,.12);border-radius:10px;overflow:auto;white-space:pre;}\n" +
+        "pre code{background:transparent;border:0;padding:0;}\n" +
+        ".codeblock{margin:12px 0;border:1px solid rgba(255,255,255,.12);border-radius:10px;overflow:hidden;background:rgba(0,0,0,.18)}\n" +
+        ".codeblock .title{padding:8px 10px;font-weight:700;opacity:.85;border-bottom:1px solid rgba(255,255,255,.10)}\n" +
+        ".codeblock .body{padding:10px 12px}\n";
 
-        // Если iframe пересоздался — стиль надо вставлять заново (в новом документе)
-        if (doc.getElementById('af-ae-wysiwyg-codequote')) return;
-
-        // CSS именно для WYSIWYG-iframe: blockquote + pre/code + общий читабельный вид
-        var css =
-          "blockquote{padding:10px 12px;margin:10px 0;border-left:4px solid rgba(255,255,255,.15);background:rgba(0,0,0,.18);}\n" +
-          "blockquote cite{display:block;opacity:.75;font-style:normal;margin-bottom:6px;}\n" +
-
-          // inline code
-          "code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;" +
-          "padding:.12em .35em;border-radius:6px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.10);}\n" +
-
-          // pre/code blocks
-          "pre,pre code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;}\n" +
-          "pre{padding:10px 12px;margin:10px 0;background:rgba(0,0,0,.28);" +
-          "border:1px solid rgba(255,255,255,.12);border-radius:10px;overflow:auto;white-space:pre;}\n" +
-          "pre code{background:transparent;border:0;padding:0;}\n" +
-
-          // если в WYSIWYG вдруг попадает mybb-ish разметка codeblock
-          ".codeblock{margin:12px 0;border:1px solid rgba(255,255,255,.12);border-radius:10px;overflow:hidden;background:rgba(0,0,0,.18)}\n" +
-          ".codeblock .title{padding:8px 10px;font-weight:700;opacity:.85;border-bottom:1px solid rgba(255,255,255,.10)}\n" +
-          ".codeblock .body{padding:10px 12px}\n";
-
-        var style = doc.createElement('style');
-        style.id = 'af-ae-wysiwyg-codequote';
-        style.type = 'text/css';
-        style.appendChild(doc.createTextNode(css));
-        head.appendChild(style);
-      })();
+      var style = doc.createElement('style');
+      style.id = 'af-ae-wysiwyg-codequote';
+      style.type = 'text/css';
+      style.appendChild(doc.createTextNode(css));
+      head.appendChild(style);
     } catch (e) {}
   }
 
@@ -1965,36 +1762,15 @@
     } catch (e) {}
   }
 
-  function patchEditorInstanceForSafeToggle(inst) {
-    if (!inst || inst.__afAePatchedToggle) return;
-    inst.__afAePatchedToggle = true;
-
-    var origToggle = inst.toggleSourceMode;
-
-    if (typeof origToggle === 'function') {
-      inst.toggleSourceMode = function () {
-        return origToggle.apply(inst, arguments);
-      };
-    }
-  }
-
   function afAeSafeToggleMode(inst) {
     if (!inst) return;
 
-    try {
-      if (typeof inst.toggleSourceMode === 'function') {
-        inst.toggleSourceMode();
-      } else if (typeof inst.sourceMode === 'function') {
-        inst.sourceMode(!inst.sourceMode());
-      } else if (inst.command && typeof inst.command.exec === 'function') {
-        inst.command.exec('source');
-      }
-    } catch (e0) {}
+    inst.toggleSourceMode();
   }
 
-  function registerCommandsOnce() {
-    if (window.__afAeCommandsRegistered) return;
-    window.__afAeCommandsRegistered = true;
+  function initGlobalEditorEnvironment() {
+    if (window.__afAeGlobalInitDone) return;
+    window.__afAeGlobalInitDone = true;
 
     var bundle = getToolbarBundle();
     var availableMap = bundle.availableMap;
@@ -2006,7 +1782,7 @@
     try { ensureMybbTagAliases(); } catch (eTA) {}
     try { afAeEnsureMybbAlignBbcode(null); } catch (eA) {}
     try { afAePatchAlignCommandsForSourceMode(); } catch (eA2) {}
-    try { afAeForceAlignEverywhere(null); } catch (eF) {}
+    try { afAeEnsureMycodePassthroughBbcode(null); } catch (eM) {}
   }
 
   function initOneTextarea(ta) {
@@ -2033,15 +1809,6 @@
       ta.__afAeInited = true;
       existing.__afAeOwned = true;
 
-      // bbcode passthrough для MyCode-тегов (WYSIWYG <-> BBCode) — НА ИМЕННО ЭТОМ инстансе
-      try { afAeEnsureMycodePassthroughBbcode(existing); } catch (eM0) {}
-
-      try { afAeEnsureMybbAlignBbcode(existing); } catch (eA0) {}
-      try { afAePatchAlignCommandsForSourceMode(); } catch (eA0b) {}
-      try { afAeEnsureFrontendCodeCss(); } catch (eA1) {}
-      try { afAeForceAlignEverywhere(existing); } catch (eAA) {}
-
-      try { patchEditorInstanceForSafeToggle(existing); } catch (e0) {}
       try { bindSubmitSync(ta.form, ta); } catch (e1) {}
       if (isEditPostPage()) debugEditpost('[AE] editor_ready', { textareaName: ta.name || '', existing: true });
       log('AE editor ready', { textareaName: ta.name || '', existing: true });
@@ -2081,15 +1848,6 @@
         inst.__afAeOwned = true;
         inst.__afAeToolbarSig = asText(out.toolbar);
 
-        // bbcode passthrough для MyCode-тегов (WYSIWYG <-> BBCode)
-        try { afAeEnsureMycodePassthroughBbcode(inst); } catch (eM1) {}
-
-        try { afAeEnsureMybbAlignBbcode(inst); } catch (eP1) {}
-        try { afAePatchAlignCommandsForSourceMode(); } catch (eP1b) {}
-        try { afAeEnsureFrontendCodeCss(); } catch (eP2) {}
-        try { afAeForceAlignEverywhere(inst); } catch (ePP) {}
-
-        try { patchEditorInstanceForSafeToggle(inst); } catch (e3) {}
         try { bindSubmitSync(ta.form, ta); } catch (e4) {}
         if (isEditPostPage()) debugEditpost('[AE] editor_ready', { textareaName: ta.name || '', existing: false });
         log('AE editor ready', { textareaName: ta.name || '', existing: false });
@@ -2142,10 +1900,9 @@
     (function wait() {
       tries++;
       if (hasSceditor()) {
-        registerCommandsOnce();
+        initGlobalEditorEnvironment();
         scanAndInit(document);
         bindEditpostFormGuards(document);
-        registerPageShowRecovery();
         return;
       }
       if (tries < 80) return setTimeout(wait, 50);
