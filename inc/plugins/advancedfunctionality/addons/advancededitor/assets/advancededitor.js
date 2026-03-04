@@ -6,6 +6,9 @@
 
   var P = window.afAePayload || window.afAdvancedEditorPayload || {};
   var CFG = (P && P.cfg) ? P.cfg : {};
+  var TOOLBAR_BUILD_CACHE = null;
+  var AVAILABLE_MAP_CACHE = null;
+  var CUSTOM_DEF_MAP_CACHE = null;
 
   if (typeof window.__afAeGlobalToggling === 'undefined') window.__afAeGlobalToggling = 0;
   if (typeof window.__afAeIgnoreMutationsUntil === 'undefined') window.__afAeIgnoreMutationsUntil = 0;
@@ -14,7 +17,7 @@
   function asText(x) { return String(x == null ? '' : x); }
 
   function log() {
-    if (!window.__afAeDebug) return;
+    if (!window.__afAeDebug && !window.AE_DEBUG) return;
     try { console.log.apply(console, arguments); } catch (e) {}
   }
 
@@ -101,23 +104,43 @@
 
 
   function buildAvailableMap() {
+    if (AVAILABLE_MAP_CACHE) return AVAILABLE_MAP_CACHE;
     var map = Object.create(null);
     var list = Array.isArray(P.available) ? P.available : [];
     list.forEach(function (b) {
       if (!b || !b.cmd) return;
       map[String(b.cmd)] = b;
     });
-    return map;
+    AVAILABLE_MAP_CACHE = map;
+    return AVAILABLE_MAP_CACHE;
   }
 
   function buildCustomDefMap() {
+    if (CUSTOM_DEF_MAP_CACHE) return CUSTOM_DEF_MAP_CACHE;
     var map = Object.create(null);
     var list = Array.isArray(P.customDefs) ? P.customDefs : [];
     list.forEach(function (b) {
       if (!b || !b.cmd) return;
       map[String(b.cmd)] = b;
     });
-    return map;
+    CUSTOM_DEF_MAP_CACHE = map;
+    return CUSTOM_DEF_MAP_CACHE;
+  }
+
+  function getToolbarBundle() {
+    if (TOOLBAR_BUILD_CACHE) return TOOLBAR_BUILD_CACHE;
+
+    var layout = sanitizeLayout(P.layout || null);
+    var availableMap = buildAvailableMap();
+    var out = buildToolbarFromLayout(layout);
+
+    TOOLBAR_BUILD_CACHE = {
+      layout: layout,
+      availableMap: availableMap,
+      out: out
+    };
+    log('AE toolbar built', { toolbar: out.toolbar });
+    return TOOLBAR_BUILD_CACHE;
   }
 
   function afAeParseBbTagFromOpenClose(openTag, closeTag) {
@@ -691,18 +714,7 @@
     setCommand('af_togglemode', {
       tooltip: 'BBCode ⇄ Визуальный',
       exec: function () {
-        try {
-          if (typeof this.toggleSourceMode === 'function') {
-            this.toggleSourceMode();
-            return;
-          }
-        } catch (e0) {}
-        try {
-          if (this.command && typeof this.command.exec === 'function') {
-            this.command.exec('source');
-            return;
-          }
-        } catch (e1) {}
+        try { afAeSafeToggleMode(this); } catch (e0) {}
       },
       txtExec: function () {
         try { this.exec(); } catch (e2) {}
@@ -773,26 +785,18 @@
 
       // toggle mode отдельно
       if (cmd === 'af_togglemode') {
+        if (getCommand(cmd)) return;
         setCommand(cmd, {
           tooltip: tooltip || 'BBCode / WYSIWYG',
           exec: function () {
-            try {
-              if (typeof this.toggleSourceMode === 'function') {
-                this.toggleSourceMode();
-                return;
-              }
-            } catch (e0) {}
-            try {
-              if (typeof this.sourceMode === 'function') {
-                this.sourceMode(!this.sourceMode());
-                return;
-              }
-            } catch (e1) {}
+            try { afAeSafeToggleMode(this); } catch (e0) {}
           },
           txtExec: function () { try { this.exec(); } catch (e2) {} }
         });
         return;
       }
+
+      if (getCommand(cmd)) return;
 
       // если есть pack-handler — оставляем как есть (он сам решит что вставлять)
       function tryHandler(ed) {
@@ -1989,6 +1993,11 @@
 
     if (typeof origToggle === 'function') {
       inst.toggleSourceMode = function () {
+        var contentBefore = '';
+        try { contentBefore = String(inst.val ? (inst.val() || '') : ''); } catch (eV0) { contentBefore = ''; }
+
+        log('AE toggle mode', { beforeLength: contentBefore.length });
+
         window.__afAeGlobalToggling++;
         window.__afAeIgnoreMutationsUntil = now() + 1200;
 
@@ -1996,6 +2005,17 @@
         finally {
           // ВАЖНО: iframe может появиться не мгновенно — даём микропаузу и ретраи внутри функций
           setTimeout(function () {
+            try {
+              var contentAfter = String(inst.val ? (inst.val() || '') : '');
+              if (contentAfter !== contentBefore) {
+                inst.val(contentBefore);
+                contentAfter = String(inst.val ? (inst.val() || '') : '');
+              }
+              if (!contentAfter && contentBefore) {
+                inst.val(contentBefore);
+              }
+            } catch (eKeep) {}
+
             try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e0) {}
             try { afAeApplyWysiwygLocalFontsCss(inst); } catch (e0b) {}
 
@@ -2022,6 +2042,29 @@
     } catch (e2) {}
   }
 
+  function afAeSafeToggleMode(inst) {
+    if (!inst) return;
+
+    var content = '';
+    try { content = String(inst.val ? (inst.val() || '') : ''); } catch (eV0) { content = ''; }
+
+    try {
+      if (typeof inst.toggleSourceMode === 'function') {
+        inst.toggleSourceMode();
+      } else if (typeof inst.sourceMode === 'function') {
+        inst.sourceMode(!inst.sourceMode());
+      } else if (inst.command && typeof inst.command.exec === 'function') {
+        inst.command.exec('source');
+      }
+    } catch (e0) {}
+
+    try {
+      var after = String(inst.val ? (inst.val() || '') : '');
+      if (after !== content) inst.val(content);
+      if (!after && content) inst.val(content);
+    } catch (e1) {}
+  }
+
   function initOneTextarea(ta) {
     if (!isEligibleTextarea(ta)) return false;
     if (isHidden(ta)) return false;
@@ -2039,10 +2082,11 @@
       ta.__afAeInitialContent = String(ta.value || '');
     }
 
-    // === ВОТ ТУТ И ДОЛЖНО БЫТЬ ===
-    var layout = sanitizeLayout(P.layout || null);
-    var availableMap = buildAvailableMap();
-    var out = buildToolbarFromLayout(layout);
+    if ($ta.data('sceditor')) return true;
+
+    var bundle = getToolbarBundle();
+    var availableMap = bundle.availableMap;
+    var out = bundle.out;
 
     var existing = safeGetInstance($ta);
     if (existing) {
@@ -2069,6 +2113,7 @@
       try { ensureDefaultSourceMode(existing); } catch (e0b) {}
       try { bindSubmitSync(ta.form, ta); } catch (e1) {}
       if (isEditPostPage()) debugEditpost('[AE] editor_ready', { textareaName: ta.name || '', existing: true });
+      log('AE editor ready', { textareaName: ta.name || '', existing: true });
 
       try { afAeApplyWysiwygCodeQuoteCss(existing); } catch (e2) {}
       try { afAeApplyWysiwygLocalFontsCss(existing); } catch (e2b) {}
@@ -2131,6 +2176,7 @@
         try { ensureDefaultSourceMode(inst); } catch (e3b) {}
         try { bindSubmitSync(ta.form, ta); } catch (e4) {}
         if (isEditPostPage()) debugEditpost('[AE] editor_ready', { textareaName: ta.name || '', existing: false });
+        log('AE editor ready', { textareaName: ta.name || '', existing: false });
 
         try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e5) {}
         try { afAeApplyWysiwygLocalFontsCss(inst); } catch (e5b) {}
@@ -2171,65 +2217,14 @@
     }
   }
 
-  function observeDynamicEditors() {
-    if (!window.MutationObserver) return;
-    if (window.__afAeObserverAttached) return;
-    window.__afAeObserverAttached = true;
-
-    var obs = new MutationObserver(function (muts) {
-      if (now() < (window.__afAeIgnoreMutationsUntil || 0)) return;
-      if ((window.__afAeGlobalToggling || 0) > 0) return;
-
-      for (var i = 0; i < muts.length; i++) {
-        var m = muts[i];
-        if (!m.addedNodes || !m.addedNodes.length) continue;
-
-        for (var j = 0; j < m.addedNodes.length; j++) {
-          var n = m.addedNodes[j];
-          if (!n || n.nodeType !== 1) continue;
-
-          var selector = getEditorSelector();
-          if (selector) {
-            if (n.matches && n.matches(selector)) {
-              initOneTextarea(n);
-            } else if (n.querySelectorAll) {
-              var matched = n.querySelectorAll(selector);
-              if (matched && matched.length) {
-                for (var k = 0; k < matched.length; k++) initOneTextarea(matched[k]);
-              }
-            }
-          } else if (n.tagName === 'TEXTAREA') {
-            initOneTextarea(n);
-          } else if (n.querySelectorAll) {
-            var tas = n.querySelectorAll('textarea');
-            if (tas && tas.length) {
-              for (var k2 = 0; k2 < tas.length; k2++) initOneTextarea(tas[k2]);
-            }
-          }
-        }
-      }
-    });
-
-    var target = document.documentElement || document.body;
-    if (isEditPostPage()) {
-      var scoped = document.querySelector('#editpost');
-      if (scoped) target = scoped;
-    }
-
-    obs.observe(target, {
-      childList: true,
-      subtree: true
-    });
-  }
-
   function boot() {
+    log('AE init');
     var tries = 0;
     (function wait() {
       tries++;
       if (hasSceditor()) {
         scanAndInit(document);
         bindEditpostFormGuards(document);
-        observeDynamicEditors();
         registerPageShowRecovery();
         return;
       }
