@@ -1848,7 +1848,7 @@
         width: '100%',
         resizeEnabled: true,
         autoExpand: false,
-        startInSourceMode: false
+        startInSourceMode: true
       });
 
       var inst = safeGetInstance($ta);
