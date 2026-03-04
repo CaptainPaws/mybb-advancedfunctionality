@@ -2178,7 +2178,7 @@
             try { afAeForceAlignEverywhere(inst); } catch (eZ) {}
             try { afAeNormalizeAlignInInstance(inst); } catch (eN) {}
 
-            window.__afAeIgnoreMutationsUntil = now() + 250;
+            window.__afAeIgnoreMutationsUntil = now() + 1000;
             window.__afAeGlobalToggling = Math.max(0, (window.__afAeGlobalToggling | 0) - 1);
 
           }, 30);
@@ -2199,6 +2199,7 @@
   function initOneTextarea(ta) {
     if (!isEligibleTextarea(ta)) return false;
     if (isHidden(ta)) return false;
+    if (ta.dataset && ta.dataset.afAeInitialized === '1') return false;
     if (now() < (window.__afAeIgnoreMutationsUntil || 0)) return false;
     if ((window.__afAeGlobalToggling || 0) > 0) return false;
     if (ta.__afAeInitializing) return false;
@@ -2226,12 +2227,17 @@
     if (ta.__afAeInited && existingForGuard) {
 
       if (afAeEditorBroken(ta, existingForGuard)) {
+        var brokenSnapshot = captureEditorState(ta, existingForGuard);
 
         try {
           existingForGuard.destroy();
         } catch (e) {}
 
         ta.__afAeInited = false;
+        if (ta.dataset) ta.dataset.afAeInitialized = '0';
+        if (brokenSnapshot && brokenSnapshot.editorText) {
+          ta.value = brokenSnapshot.editorText;
+        }
 
       } else {
 
@@ -2299,6 +2305,7 @@
       reconcileEditorFromTextarea(ta, existing, originalTextareaValue || ta.__afAeInitialContent || '', 'after_existing_reconcile');
 
       ta.__afAeInitializing = false;
+      if (ta.dataset) ta.dataset.afAeInitialized = '1';
       return true;
     }
 
@@ -2334,17 +2341,14 @@
       });
 
       var inst = safeGetInstance($ta);
-      setTimeout(function () {
-        try {
-          reconcileEditorFromTextarea(
-            ta,
-            inst,
-            originalTextareaValue || ta.__afAeInitialContent || ''
-          );
-        } catch (e) {}
-      }, 30);
+      reconcileEditorFromTextarea(
+        ta,
+        inst,
+        originalTextareaValue || ta.__afAeInitialContent || ''
+      );
       if (inst) {
         ta.__afAeInited = true;
+        if (ta.dataset) ta.dataset.afAeInitialized = '1';
         inst.__afAeOwned = true;
         inst.__afAeToolbarSig = asText(out.toolbar);
         reconcileEditpostMessage(ta, inst, 'after_instance_create');
@@ -2451,6 +2455,8 @@
         for (var j = 0; j < m.addedNodes.length; j++) {
           var n = m.addedNodes[j];
           if (!n || n.nodeType !== 1) continue;
+          if (n.classList && n.classList.contains('sceditor-container')) continue;
+          if (n.closest && n.closest('.sceditor-container')) continue;
 
           var selector = getEditorSelector();
           if (selector) {
@@ -2474,11 +2480,10 @@
       }
     });
 
-    var target = document.documentElement || document.body;
-    if (isEditPostPage()) {
-      var scoped = document.querySelector('#editpost');
-      if (scoped) target = scoped;
-    }
+    var target =
+      document.querySelector('#editpost') ||
+      document.querySelector('#quickreply') ||
+      document.body;
 
     obs.observe(target, {
       childList: true,
