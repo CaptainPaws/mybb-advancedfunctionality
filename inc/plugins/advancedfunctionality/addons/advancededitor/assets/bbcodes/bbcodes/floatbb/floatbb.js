@@ -234,3 +234,53 @@
   for (var i = 1; i <= 20; i++) setTimeout(registerHandlers, i * 250);
 
 })();
+
+(function registerFloatbbWysiwyg() {
+  if (!window.jQuery) return;
+
+  var $ = window.jQuery;
+
+  if (!$.sceditor || !$.sceditor.plugins || !$.sceditor.plugins.bbcode) return;
+
+  var bb = $.sceditor.plugins.bbcode.bbcode;
+
+  if (!bb) return;
+
+  if (bb.__afFloatbbRegistered) return;
+  bb.__afFloatbbRegistered = true;
+
+  bb.set('float', {
+    isInline: false,
+
+    html: function (token, attrs, content) {
+      var dir = 'left';
+
+      if (attrs && attrs.defaultattr) {
+        var v = String(attrs.defaultattr).toLowerCase();
+        if (v === 'right' || v === 'r' || v === '2') dir = 'right';
+      }
+
+      return '<div class="af-floatbb af-floatbb-' + dir + '" data-af-bb="float" data-af-dir="' + dir + '">' + content + '</div>';
+    },
+
+    format: function (el, content) {
+      var dir = 'left';
+
+      if (el.getAttribute) {
+        var a = el.getAttribute('data-af-dir');
+        if (a) dir = a;
+      }
+
+      // Fallback for PHP parser output (<div class="af-floatbb af-floatbb-left">)
+      if ((!dir || dir === 'left') && el.className) {
+        var cls = String(el.className);
+        if (cls.indexOf('af-floatbb-right') !== -1) dir = 'right';
+        else if (cls.indexOf('af-floatbb-left') !== -1) dir = 'left';
+      }
+
+      if (dir === 'left' || dir === 'right') return '[float=' + dir + ']' + content + '[/float]';
+
+      return '[float]' + content + '[/float]';
+    }
+  });
+})();
