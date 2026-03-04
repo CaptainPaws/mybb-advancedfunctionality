@@ -1920,6 +1920,24 @@
     debugEditpostStage(stage, ta, inst);
   }
 
+  function reconcileEditorFromTextarea(ta, inst, fallbackValue, stage) {
+    if (!ta || !inst || typeof inst.val !== 'function') return;
+
+    var textareaText = String((ta && ta.value) || '');
+    var editorText = String(getEditorText(inst, ta) || '');
+    var fallbackText = String(fallbackValue || '');
+
+    if (editorText === '' && textareaText !== '') {
+      try { inst.val(textareaText); } catch (e0) {}
+    } else if (editorText === '' && textareaText === '' && fallbackText !== '') {
+      ta.value = fallbackText;
+      try { inst.val(fallbackText); } catch (e1) {}
+    }
+
+    try { updateOriginal(inst); } catch (e2) {}
+    if (stage) debugEditpostStage(stage, ta, inst);
+  }
+
   function bindSubmitSync(form, ta) {
     if (!form || !ta) return;
 
@@ -2110,6 +2128,7 @@
 
     var $ = window.jQuery;
     var $ta = $(ta);
+    var originalTextareaValue = String(ta.value || '');
 
     var preInitInst = safeGetInstance($ta);
     debugEditpostStage('init_pre', ta, preInitInst, {
@@ -2176,6 +2195,7 @@
 
       restoreEditorState(ta, existing, existingSnapshot);
       reconcileEditpostMessage(ta, existing, 'after_existing_restore');
+      reconcileEditorFromTextarea(ta, existing, originalTextareaValue || ta.__afAeInitialContent || '', 'after_existing_reconcile');
 
       return true;
     }
@@ -2246,6 +2266,7 @@
 
         restoreEditorState(ta, inst, beforeCreateSnapshot);
         reconcileEditpostMessage(ta, inst, 'after_instance_restore');
+        reconcileEditorFromTextarea(ta, inst, originalTextareaValue || ta.__afAeInitialContent || '', 'after_instance_reconcile');
 
         return true;
       }
