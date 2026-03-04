@@ -2067,13 +2067,32 @@
           if (!inst) return;
 
           if (afAeEditorBroken(ta, inst)) {
-            inst.destroy();
+
+            try {
+
+              var fallback =
+                ta.value ||
+                ta.__afAeInitialContent ||
+                '';
+
+              if (fallback && typeof inst.val === 'function') {
+                inst.val(fallback);
+                ta.value = fallback;
+                inst.updateOriginal();
+                return;
+              }
+
+            } catch (e) {}
+
+            try { inst.destroy(); } catch (e2) {}
+
             ta.__afAeInited = false;
 
             setTimeout(function () {
               initOneTextarea(ta);
-            }, 10);
+            }, 20);
           }
+
         } catch (e) {}
       });
 
@@ -2095,10 +2114,12 @@
   }
 
   function afAeEditorBroken(ta, inst) {
+
     if (!ta || !inst) return false;
 
     var textareaText = String(ta.value || '');
     var editorText = '';
+    var initialText = String(ta.__afAeInitialContent || '');
 
     try {
       if (typeof inst.val === 'function') {
@@ -2106,7 +2127,13 @@
       }
     } catch (e) {}
 
+    // редактор потерял текст
     if (editorText === '' && textareaText !== '') {
+      return true;
+    }
+
+    // BFCache случай: оба пустые, но был initial
+    if (editorText === '' && textareaText === '' && initialText !== '') {
       return true;
     }
 
@@ -2208,16 +2235,15 @@
 
       } else {
 
-        restoreEditorState(
+        reconcileEditorFromTextarea(
           ta,
           existingForGuard,
-          captureEditorState(ta, existingForGuard)
+          ta.__afAeInitialContent || ''
         );
 
         ta.__afAeInitializing = false;
         return true;
       }
-
     }
     if (ta.__afAeInited && !existingForGuard) {
       ta.__afAeInited = false;
@@ -2308,6 +2334,15 @@
       });
 
       var inst = safeGetInstance($ta);
+      setTimeout(function () {
+        try {
+          reconcileEditorFromTextarea(
+            ta,
+            inst,
+            originalTextareaValue || ta.__afAeInitialContent || ''
+          );
+        } catch (e) {}
+      }, 30);
       if (inst) {
         ta.__afAeInited = true;
         inst.__afAeOwned = true;
@@ -2328,7 +2363,13 @@
         reconcileEditpostMessage(ta, inst, 'after_instance_patches');
 
         try { patchEditorInstanceForSafeToggle(inst); } catch (e3) {}
-        try { ensureDefaultSourceMode(inst); } catch (e3b) {}
+        try { ensureDefaultSourceMode(inst);
+        reconcileEditorFromTextarea(
+          ta,
+          inst,
+          ta.__afAeInitialContent || ''
+        );
+        } catch (e3b) {}
         reconcileEditpostMessage(ta, inst, 'after_instance_toggle_restore');
         try { bindSubmitSync(ta.form, ta); } catch (e4) {}
         if (isEditPostPage()) debugEditpost('[AE] editor_ready', { textareaName: ta.name || '', existing: false });
@@ -2396,6 +2437,10 @@
         now() < (window.__afAeIgnoreMutationsUntil || 0) ||
         (window.__afAeGlobalToggling || 0) > 0
       ) {
+        return;
+      }
+
+      if (document.readyState !== 'complete') {
         return;
       }
 
