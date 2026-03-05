@@ -23,6 +23,9 @@ return [
             'af_advancededitor_wysiwyg_mode'         => 'WYSIWYG Mode / Режим визуального редактора',
             'af_advancededitor_wysiwyg_mode_full'    => 'Full WYSIWYG / Полный визуальный режим (рендер всех BBCode)',
             'af_advancededitor_wysiwyg_mode_partial' => 'Partial WYSIWYG / Частичный режим (сложные BBCode остаются текстом)',
+            'af_advancededitor_help_tab' => 'Подсказка по форматированию',
+            'af_advancededitor_help_title' => 'Заголовок подсказки',
+            'af_advancededitor_help_content' => 'Контент подсказки',
         ],
     ],
 

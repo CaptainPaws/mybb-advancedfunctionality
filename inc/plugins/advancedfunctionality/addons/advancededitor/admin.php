@@ -19,9 +19,14 @@ if (!defined('AF_AE_DO_EDIT'))     define('AF_AE_DO_EDIT',     'button_edit');
 if (!defined('AF_AE_DO_DELETE'))   define('AF_AE_DO_DELETE',   'button_delete');
 if (!defined('AF_AE_DO_TOOLBAR'))  define('AF_AE_DO_TOOLBAR',  'toolbar');
 if (!defined('AF_AE_DO_FONTS'))    define('AF_AE_DO_FONTS',    'fonts');
+if (!defined('AF_AE_DO_HELP'))     define('AF_AE_DO_HELP',     'formatting_help');
 
 if (!defined('AF_AE_SETTING_LAYOUT')) define('AF_AE_SETTING_LAYOUT', 'af_advancededitor_toolbar_layout');
 if (!defined('AF_AE_SETTING_FONTS'))  define('AF_AE_SETTING_FONTS',  'af_advancededitor_fontfamily_json');
+if (!defined('AF_AE_SETTING_HELP_ENABLED'))  define('AF_AE_SETTING_HELP_ENABLED', 'af_advancededitor_help_enabled');
+if (!defined('AF_AE_SETTING_HELP_CONTENT'))  define('AF_AE_SETTING_HELP_CONTENT', 'af_advancededitor_help_content');
+if (!defined('AF_AE_SETTING_HELP_TITLE'))    define('AF_AE_SETTING_HELP_TITLE', 'af_advancededitor_help_title');
+if (!defined('AF_AE_SETTING_HELP_POSITION')) define('AF_AE_SETTING_HELP_POSITION', 'af_advancededitor_help_position');
 
 function af_ae_admin_builtin_buttons(string $bburl): array
 {
@@ -200,6 +205,7 @@ class AF_Admin_AdvancedEditor
             case AF_AE_DO_DELETE:  self::page_delete(); return;
             case AF_AE_DO_TOOLBAR: self::page_toolbar(); return;
             case AF_AE_DO_FONTS:   self::page_fonts(); return;
+            case AF_AE_DO_HELP:    self::page_help(); return;
             case AF_AE_DO_LIST:
             default:               self::page_list(); return;
         }
@@ -253,7 +259,9 @@ class AF_Admin_AdvancedEditor
 
     private static function output_tabs(string $active): void
     {
-        global $page;
+        global $page, $lang;
+
+        $helpTabTitle = isset($lang->af_advancededitor_help_tab) ? (string)$lang->af_advancededitor_help_tab : 'Подсказка по форматированию';
 
         $sub_tabs = [
             'list' => [
@@ -275,6 +283,11 @@ class AF_Admin_AdvancedEditor
                 'title'       => 'Загрузить шрифты',
                 'link'        => self::base_url(AF_AE_DO_FONTS),
                 'description' => 'Загрузка файлов шрифтов в assets/fonts и управление списком.',
+            ],
+            'help' => [
+                'title'       => $helpTabTitle,
+                'link'        => self::base_url(AF_AE_DO_HELP),
+                'description' => 'Контент модального окна с подсказкой по форматированию.',
             ],
         ];
 
@@ -1324,6 +1337,109 @@ class AF_Admin_AdvancedEditor
         }
 
         $table->output('Загруженные шрифты');
+    }
+
+
+    private static function page_help(): void
+    {
+        global $mybb, $db, $lang;
+
+        self::output_tabs('help');
+        af_ae_require_form_libs();
+
+        $readSetting = static function (string $name, string $default = '') use ($db): string {
+            $q = $db->simple_select('settings', 'value', "name='" . $db->escape_string($name) . "'", ['limit' => 1]);
+            $value = $db->fetch_field($q, 'value');
+            return ($value === null) ? $default : (string)$value;
+        };
+
+        if ($mybb->request_method === 'post') {
+            verify_post_check($mybb->get_input('my_post_key'));
+
+            $enabled  = ((int)$mybb->get_input('help_enabled', MyBB::INPUT_INT) === 1) ? '1' : '0';
+            $title    = trim((string)$mybb->get_input('help_title'));
+            $content  = trim((string)$mybb->get_input('help_content'));
+            $position = strtolower(trim((string)$mybb->get_input('help_position')));
+            if (!in_array($position, ['left', 'right'], true)) {
+                $position = 'right';
+            }
+
+            foreach ([
+                AF_AE_SETTING_HELP_ENABLED  => $enabled,
+                AF_AE_SETTING_HELP_TITLE    => $title,
+                AF_AE_SETTING_HELP_CONTENT  => $content,
+                AF_AE_SETTING_HELP_POSITION => $position,
+            ] as $name => $value) {
+                $db->update_query('settings', [
+                    'value' => $db->escape_string((string)$value),
+                ], "name='" . $db->escape_string($name) . "'");
+            }
+
+            if (!function_exists('rebuild_settings')) {
+                require_once MYBB_ROOT . 'inc/functions.php';
+            }
+            rebuild_settings();
+
+            $settingsFile = MYBB_ROOT . 'inc/settings.php';
+            @clearstatcache(true, $settingsFile);
+            if (function_exists('opcache_invalidate')) {
+                @opcache_invalidate($settingsFile, true);
+            }
+
+            flash_message('Подсказка по форматированию сохранена.', 'success');
+            admin_redirect(self::base_url_raw(AF_AE_DO_HELP));
+        }
+
+        $enabledValue = $readSetting(AF_AE_SETTING_HELP_ENABLED, '1');
+        $titleValue = $readSetting(AF_AE_SETTING_HELP_TITLE, 'Подсказка по форматированию');
+        $contentValue = $readSetting(AF_AE_SETTING_HELP_CONTENT, '');
+        $positionValue = $readSetting(AF_AE_SETTING_HELP_POSITION, 'right');
+        if (!in_array($positionValue, ['left', 'right'], true)) {
+            $positionValue = 'right';
+        }
+
+        $helpTabTitle = isset($lang->af_advancededitor_help_tab) ? (string)$lang->af_advancededitor_help_tab : 'Подсказка по форматированию';
+
+        $form = new Form(self::base_url_raw(AF_AE_DO_HELP), 'post', '', 1);
+        echo $form->generate_hidden_field('my_post_key', (string)$mybb->post_code);
+
+        $container = class_exists('FormContainer', false)
+            ? new FormContainer($helpTabTitle)
+            : new AF_AE_FormContainerShim($helpTabTitle);
+
+        $container->output_row(
+            'Включить кнопку ?',
+            'Если выключено или контент пустой, кнопка в тулбаре не показывается.',
+            $form->generate_yes_no_radio('help_enabled', (int)$enabledValue)
+        );
+
+        $container->output_row(
+            'Заголовок модального окна',
+            'Текст заголовка подсказки.',
+            $form->generate_text_box('help_title', htmlspecialchars_uni($titleValue), ['style' => 'width: 100%;'])
+        );
+
+        $container->output_row(
+            'Позиция кнопки в тулбаре',
+            'left — перед кнопками, right — после всех кнопок.',
+            $form->generate_select_box('help_position', [
+                'left' => 'Слева (в начале)',
+                'right' => 'Справа (в конце)',
+            ], $positionValue)
+        );
+
+        $container->output_row(
+            'Контент подсказки (BBCode)',
+            'Можно использовать BBCode. На фронте контент рендерится в HTML серверным парсером MyBB.',
+            $form->generate_text_area('help_content', htmlspecialchars_uni($contentValue), ['rows' => 14, 'style' => 'width: 100%;'])
+        );
+
+        $container->end();
+
+        $buttons = [];
+        $buttons[] = $form->generate_submit_button('Сохранить');
+        $form->output_submit_wrapper($buttons);
+        $form->end();
     }
 
 }

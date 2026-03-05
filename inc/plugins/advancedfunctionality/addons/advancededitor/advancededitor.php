@@ -23,6 +23,10 @@ define('AF_AE_SETTING_WYSIWYG_MODE', 'af_ae_wysiwyg_mode');
 define('AF_AE_SETTING_PARTIAL_WHITELIST', 'af_ae_partial_whitelist');
 define('AF_AE_SETTING_DEFAULT_EDITOR_MODE', 'af_ae_default_editor_mode');
 define('AF_AE_SETTING_WYSIWYG_EXCLUDE_LEGACY', 'af_advancededitor_wysiwyg_exclude_tags');
+define('AF_AE_SETTING_HELP_ENABLED', 'af_advancededitor_help_enabled');
+define('AF_AE_SETTING_HELP_CONTENT', 'af_advancededitor_help_content');
+define('AF_AE_SETTING_HELP_TITLE', 'af_advancededitor_help_title');
+define('AF_AE_SETTING_HELP_POSITION', 'af_advancededitor_help_position');
 
 
 
@@ -426,6 +430,29 @@ function af_advancededitor_collect_font_families_for_payload(): array
     });
 
     return array_merge($system, $custom);
+}
+
+function af_advancededitor_render_help_content_html(string $content): string
+{
+    $content = trim($content);
+    if ($content === '') {
+        return '';
+    }
+
+    require_once MYBB_ROOT . 'inc/class_parser.php';
+    $parser = new postParser();
+
+    $html = $parser->parse_message($content, [
+        'allow_html' => 0,
+        'allow_mycode' => 1,
+        'allow_smilies' => 1,
+        'allow_imgcode' => 1,
+        'allow_videocode' => 1,
+        'filter_badwords' => 1,
+        'nl2br' => 1,
+    ]);
+
+    return is_string($html) ? trim($html) : '';
 }
 
 function af_advancededitor_asset_ver(string $absPath): int
@@ -913,6 +940,22 @@ function af_advancededitor_pre_output(string &$page = ''): void
         }
         $partialWhitelistRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_PARTIAL_WHITELIST);
 
+        $helpEnabled = ((int)trim((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_HELP_ENABLED)) === 1) ? 1 : 0;
+        $helpTitleRaw = trim((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_HELP_TITLE));
+        if ($helpTitleRaw === '') {
+            $helpTitleRaw = 'Подсказка по форматированию';
+        }
+        $helpPositionRaw = strtolower(trim((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_HELP_POSITION)));
+        if (!in_array($helpPositionRaw, ['left', 'right'], true)) {
+            $helpPositionRaw = 'right';
+        }
+        $helpContentRaw = trim((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_HELP_CONTENT));
+        $helpContentHtml = '';
+        if ($helpEnabled && $helpContentRaw !== '') {
+            $helpContentHtml = af_advancededitor_render_help_content_html($helpContentRaw);
+        }
+        $helpFeatureEnabled = ($helpEnabled && $helpContentHtml !== '') ? 1 : 0;
+
         if ($hidePostOptions) {
             $injectHead .= "<style id=\"af-ae-hide-postoptions\">
 #post_options, #postoptions, .post_options, .postoptions,
@@ -931,6 +974,20 @@ table #post_options, table #postoptions{display:none!important;}
             if (in_array($action, ['kb_edit', 'kb_type_edit'], true)) {
                 $editorSelector = 'textarea.af-kb-editor';
             }
+        }
+
+        if ($helpFeatureEnabled) {
+            $helpButtonDef = [
+                'cmd' => 'af_formathelp',
+                'label' => '?',
+                'title' => (string)$helpTitleRaw,
+                'hint' => (string)$helpTitleRaw,
+                'icon' => '',
+                'opentag' => '',
+                'closetag' => '',
+            ];
+            $available[] = $helpButtonDef;
+            $customDefs[] = $helpButtonDef;
         }
 
         $payload = [
@@ -966,12 +1023,26 @@ table #post_options, table #postoptions{display:none!important;}
                 'wysiwygWhitelist' => (string)$partialWhitelistRaw,
                 'defaultEditorMode' => (string)$defaultEditorModeRaw,
             ],
+            'formatHelp' => [
+                'enabled' => $helpFeatureEnabled,
+                'title' => (string)$helpTitleRaw,
+                'content' => (string)$helpContentHtml,
+                'position' => (string)$helpPositionRaw,
+            ],
         ];
         if ($editorSelector !== '') {
             $payload['cfg']['editorSelector'] = $editorSelector;
         }
 
-        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $json = json_encode(
+            $payload,
+            JSON_UNESCAPED_UNICODE
+            | JSON_UNESCAPED_SLASHES
+            | JSON_HEX_TAG
+            | JSON_HEX_AMP
+            | JSON_HEX_APOS
+            | JSON_HEX_QUOT
+        );
         if (!is_string($json) || $json === '') $json = '{}';
 
         $injectHead .= '<script>window.afAdvancedEditorPayload=' . $json . ';</script>' . "\n";
@@ -1283,6 +1354,42 @@ li",
         80
     );
 
+    $ensure(
+        AF_AE_SETTING_HELP_ENABLED,
+        'Formatting help: enabled',
+        'Показывать кнопку "?" в Advanced Editor.',
+        'yesno',
+        '1',
+        82
+    );
+
+    $ensure(
+        AF_AE_SETTING_HELP_TITLE,
+        'Formatting help: title',
+        'Заголовок модального окна подсказки.',
+        'text',
+        'Подсказка по форматированию',
+        83
+    );
+
+    $ensure(
+        AF_AE_SETTING_HELP_POSITION,
+        'Formatting help: button position',
+        'Позиция кнопки: left (слева) или right (справа).',
+        "select\nleft=Left\nright=Right",
+        'right',
+        84
+    );
+
+    $ensure(
+        AF_AE_SETTING_HELP_CONTENT,
+        'Formatting help: content (BBCode)',
+        'Содержимое подсказки в BBCode. Рендерится на фронте в HTML серверным парсером.',
+        'textarea',
+        '',
+        85
+    );
+
 
     if (!function_exists('rebuild_settings')) {
         require_once MYBB_ROOT . 'inc/functions.php';
@@ -1335,6 +1442,10 @@ function af_advancededitor_uninstall(): void
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_PARTIAL_WHITELIST) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_WYSIWYG_EXCLUDE_LEGACY) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_HELP_ENABLED) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_HELP_CONTENT) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_HELP_TITLE) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_HELP_POSITION) . "'");
 
 
     $db->delete_query('settinggroups', "name='" . $db->escape_string(AF_AE_GROUP) . "'");
