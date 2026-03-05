@@ -4,7 +4,7 @@ return [
     'id'    => 'lists',
     'title' => 'Списки',
 
-    'tags' => ['ul', 'li'],
+    'tags' => ['ul', 'ol', 'li'],
 
     'buttons' => [
         [
