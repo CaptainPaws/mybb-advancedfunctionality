@@ -18,8 +18,11 @@ define('AF_AE_SETTING_POSTCOUNT_FORUMS', 'af_advancededitor_postcount_forum_ids'
 define('AF_AE_SETTING_FORMFEATURE_FORUMS', 'af_advancededitor_formfeature_forum_ids');
 define('AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS', 'af_ae_htmlbb_allowed_groups');
 define('AF_AE_SETTING_DISABLE_ON', 'af_advancededitor_disable_on');
-define('AF_AE_SETTING_WYSIWYG_EXCLUDE', 'af_advancededitor_wysiwyg_exclude_tags');
+define('AF_AE_SETTING_WYSIWYG_EXCLUDE', 'af_ae_wysiwyg_exclude');
 define('AF_AE_SETTING_WYSIWYG_MODE', 'af_ae_wysiwyg_mode');
+define('AF_AE_SETTING_PARTIAL_WHITELIST', 'af_ae_partial_whitelist');
+define('AF_AE_SETTING_DEFAULT_EDITOR_MODE', 'af_ae_default_editor_mode');
+define('AF_AE_SETTING_WYSIWYG_EXCLUDE_LEGACY', 'af_advancededitor_wysiwyg_exclude_tags');
 
 
 
@@ -836,8 +839,16 @@ function af_advancededitor_pre_output(string &$page = ''): void
         // Ограничения по форумам (как было)
         $postcountCsv   = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_POSTCOUNT_FORUMS));
         $formfeatureCsv = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_FORMFEATURE_FORUMS));
-        $wysiwygModeRaw = (string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_WYSIWYG_MODE);
-        $wysiwygPartialMode = ($wysiwygModeRaw === 'full') ? 0 : 1;
+
+        $wysiwygModeRaw = strtolower(trim((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_WYSIWYG_MODE)));
+        if (!in_array($wysiwygModeRaw, ['full', 'partial'], true)) {
+            $wysiwygModeRaw = 'partial';
+        }
+
+        $defaultEditorModeRaw = strtolower(trim((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_DEFAULT_EDITOR_MODE)));
+        if (!in_array($defaultEditorModeRaw, ['bbcode', 'wysiwyg_full', 'wysiwyg_partial'], true)) {
+            $defaultEditorModeRaw = 'bbcode';
+        }
 
         $injectHead .= '<script>'
             . 'window.afAePayload=window.afAePayload||{};'
@@ -845,7 +856,8 @@ function af_advancededitor_pre_output(string &$page = ''): void
             . 'window.afAePayload.cfg.bburl=' . json_encode($bburl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
             . 'window.afAePayload.cfg.postcountForumIds=' . json_encode($postcountCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
             . 'window.afAePayload.cfg.formFeatureForumIds=' . json_encode($formfeatureCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
-            . 'window.afAePayload.cfg.wysiwygPartialMode=' . (int)$wysiwygPartialMode . ';'
+            . 'window.afAePayload.cfg.wysiwygMode=' . json_encode($wysiwygModeRaw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
+            . 'window.afAePayload.cfg.defaultEditorMode=' . json_encode($defaultEditorModeRaw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
             . '</script>' . "\n";
 
         // SCEditor: theme css (для тулбара)
@@ -896,6 +908,10 @@ function af_advancededitor_pre_output(string &$page = ''): void
         $hidePostOptions = ((int)trim((string)$hideOptsRaw) === 1) ? 1 : 0;
 
         $wysiwygExcludeRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_WYSIWYG_EXCLUDE);
+        if (trim((string)$wysiwygExcludeRaw) === '') {
+            $wysiwygExcludeRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_WYSIWYG_EXCLUDE_LEGACY);
+        }
+        $partialWhitelistRaw = af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_PARTIAL_WHITELIST);
 
         if ($hidePostOptions) {
             $injectHead .= "<style id=\"af-ae-hide-postoptions\">
@@ -945,8 +961,10 @@ table #post_options, table #postoptions{display:none!important;}
                 'fontFamilies' => $fontFamilies,
                 'postcountForumIds'   => $postcountCsv,
                 'formFeatureForumIds' => $formfeatureCsv,
+                'wysiwygMode' => (string)$wysiwygModeRaw,
                 'wysiwygExclude' => (string)$wysiwygExcludeRaw,
-                'wysiwygPartialMode' => (int)$wysiwygPartialMode,
+                'wysiwygWhitelist' => (string)$partialWhitelistRaw,
+                'defaultEditorMode' => (string)$defaultEditorModeRaw,
             ],
         ];
         if ($editorSelector !== '') {
@@ -1208,12 +1226,13 @@ gallery.php",
 
     $ensure(
         AF_AE_SETTING_WYSIWYG_EXCLUDE,
-        'WYSIWYG: исключить теги из визуального рендера',
-        'Список тегов/паков через запятую или с новой строки (например: lockcontent, code, html). Для них SCEditor оставляет BBCode без HTML-визуализации.',
+        'Full / Partial WYSIWYG — excluded tags',
+        'Список тегов/паков через запятую или с новой строки (например: hide, lockcontent, float, grid). Для них SCEditor оставляет BBCode без HTML-визуализации.',
         'textarea',
-        "lockcontent
-code
-html",
+        "hide
+lockcontent
+float
+grid",
         75
     );
 
@@ -1224,6 +1243,34 @@ html",
         "select\nfull=Full WYSIWYG\npartial=Partial WYSIWYG",
         'partial',
         76
+    );
+
+    $ensure(
+        AF_AE_SETTING_DEFAULT_EDITOR_MODE,
+        'Default editor mode',
+        'Select the startup editor mode: BBCode source, Full WYSIWYG or Partial WYSIWYG.',
+        "select\nbbcode=BBCode (Source mode)\nwysiwyg_full=Full WYSIWYG\nwysiwyg_partial=Partial WYSIWYG",
+        'bbcode',
+        77
+    );
+
+    $ensure(
+        AF_AE_SETTING_PARTIAL_WHITELIST,
+        'Partial WYSIWYG: allowed BBCode tags',
+        'One tag per line (or comma separated). In partial mode only these tags are rendered visually.',
+        'textarea',
+        "b
+i
+u
+s
+font
+size
+color
+url
+email
+ul
+li",
+        78
     );
 
     // === HTMLBB: кто может ИСПОЛЬЗОВАТЬ тег [html] ===
@@ -1284,6 +1331,9 @@ function af_advancededitor_uninstall(): void
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_DISABLE_ON) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_WYSIWYG_EXCLUDE) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_WYSIWYG_MODE) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_DEFAULT_EDITOR_MODE) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_PARTIAL_WHITELIST) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_WYSIWYG_EXCLUDE_LEGACY) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS) . "'");
 
 

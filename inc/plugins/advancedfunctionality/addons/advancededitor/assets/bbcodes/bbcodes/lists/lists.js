@@ -243,76 +243,66 @@
     try {
       bb.set('li', {
         isInline: false,
-        html: function (_token, _attrs, content) {
-          return '<li>' + (content || '') + '</li>';
-        },
-        format: function (_el, content) {
-          return '[li]' + (content || '') + '[/li]';
-        }
+        html: '<li>{0}</li>',
+        format: '[li]{0}[/li]'
       });
     } catch (eLI) {}
 
     // [ul] / [ul=i]  <->  <ul> / <ol>
     try {
       bb.set('ul', {
-        isInline: false,
+
+        isBlock: true,
 
         html: function (_token, attrs, content) {
-          var a = '';
-          try { a = (attrs && attrs.defaultattr != null) ? String(attrs.defaultattr) : ''; } catch (e0) { a = ''; }
-          a = normAttr(a);
+
+          var type = (attrs && attrs.defaultattr != null) ? String(attrs.defaultattr) : 'disc';
+          type = type || 'disc';
 
           var map = {
-            disc: 'disc',
+            disc: ['ul', 'disc'],
+            square: ['ul', 'square'],
+            i: ['ol', 'decimal'],
+            'upper-roman': ['ol', 'upper-roman'],
+            'upper-alpha': ['ol', 'upper-alpha'],
+            'lower-alpha': ['ol', 'lower-alpha']
+          };
+
+          var conf = map[type] || map.disc;
+          var tag = conf[0];
+          var style = conf[1];
+
+          return '<' + tag + ' style="list-style-type:' + style + '; padding-left:1.6em;">' + (content || '') + '</' + tag + '>';
+        },
+
+        format: function (el, content) {
+
+          var style = '';
+          try { style = String((el && el.style && el.style.listStyleType) ? el.style.listStyleType : ''); } catch (e0) { style = ''; }
+
+          if (!style && el && el.ownerDocument && el.ownerDocument.defaultView && el.ownerDocument.defaultView.getComputedStyle) {
+            try {
+              var cs = el.ownerDocument.defaultView.getComputedStyle(el);
+              style = cs && cs.listStyleType ? String(cs.listStyleType) : '';
+            } catch (e1) { style = ''; }
+          }
+
+          style = style.toLowerCase();
+
+          var map = {
+            disc: '',
             square: 'square',
-            i: 'decimal',
+            decimal: 'i',
             'upper-roman': 'upper-roman',
             'upper-alpha': 'upper-alpha',
             'lower-alpha': 'lower-alpha'
           };
 
-          var listType = map[a] || 'disc';
-          if (isOrderedAttr(a)) {
-            return '<ol style="list-style-type:' + listType + '; padding-left:1.6em;">' + (content || '') + '</ol>';
-          }
+          var attr = map[style] || '';
 
-          return '<ul style="list-style-type:' + listType + '; padding-left:1.4em;">' + (content || '') + '</ul>';
-        },
+          if (attr) return '[ul=' + attr + ']' + (content || '') + '[/ul]';
 
-        format: function (el, content) {
-          try {
-            if (!el || !el.tagName) return '[ul]' + (content || '') + '[/ul]';
-
-            var tag = String(el.tagName).toUpperCase();
-
-            // иногда style.listStyleType пустой, берём computed
-            function getListStyleType(node) {
-              var v = '';
-              try { v = (node.style && node.style.listStyleType) ? String(node.style.listStyleType) : ''; } catch (e0) { v = ''; }
-              if (v) return v;
-              try {
-                if (node.ownerDocument && node.ownerDocument.defaultView && node.ownerDocument.defaultView.getComputedStyle) {
-                  var cs = node.ownerDocument.defaultView.getComputedStyle(node);
-                  if (cs && cs.listStyleType) return String(cs.listStyleType);
-                }
-              } catch (e1) {}
-              return '';
-            }
-
-            if (tag === 'OL') {
-              var lstOl = getListStyleType(el);
-              var aOl = attrForOlStyle(lstOl);
-              return '[ul=' + (aOl || 'i') + ']' + (content || '') + '[/ul]';
-            }
-
-            var lstUl = getListStyleType(el);
-            var aUl = attrForUlStyle(lstUl);
-            if (aUl) return '[ul=' + aUl + ']' + (content || '') + '[/ul]';
-
-            return '[ul]' + (content || '') + '[/ul]';
-          } catch (e2) {
-            return '[ul]' + (content || '') + '[/ul]';
-          }
+          return '[ul]' + (content || '') + '[/ul]';
         }
       });
     } catch (eUL) {}

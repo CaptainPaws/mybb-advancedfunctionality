@@ -39,24 +39,41 @@ function escHtml(s){
 /* ------------------------------------------------ */
 /* PARTIAL MODE */
 
-function isPartialMode(){
+function getWysiwygMode(){
   try{
-    return !!(P && P.cfg && P.cfg.wysiwygPartialMode);
+    var mode = String(P && P.cfg && P.cfg.wysiwygMode ? P.cfg.wysiwygMode : '').toLowerCase().trim();
+    if(mode === 'full' || mode === 'partial') return mode;
   }catch(e){}
-  return false;
+  return 'partial';
+}
+
+function isPartialMode(){
+  return getWysiwygMode() === 'partial';
 }
 
 function whitelist(){
   if(PARTIAL_CACHE) return PARTIAL_CACHE;
 
-  PARTIAL_CACHE = {
-    b:1,i:1,u:1,s:1,
-    strong:1,em:1,
-    font:1,size:1,color:1,
-    url:1,email:1,
-    sup:1,sub:1
-  };
+  var raw='';
+  try{ raw = String(P && P.cfg && P.cfg.wysiwygWhitelist ? P.cfg.wysiwygWhitelist : ''); }catch(e){}
 
+  var m=Object.create(null);
+
+  raw.split(/[\n,;\s]+/).forEach(function(x){
+    x = String(x||'').toLowerCase().trim();
+    if(x) m[x]=1;
+  });
+
+  if(!Object.keys(m).length){
+    m = {
+      b:1,i:1,u:1,s:1,
+      font:1,size:1,color:1,
+      url:1,email:1,
+      ul:1,li:1
+    };
+  }
+
+  PARTIAL_CACHE = m;
   return PARTIAL_CACHE;
 }
 
