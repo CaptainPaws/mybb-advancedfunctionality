@@ -10,12 +10,47 @@ if (!defined('IN_MYBB')) { exit; }
 /**
  * НОВОЕ "каноничное" имя для AdvancedEditor.
  */
+
+function af_ae_bbcode_table_parse_start(&$message): void
+{
+    if (!is_string($message) || $message === '' || stripos($message, '[table') === false) {
+        return;
+    }
+
+    $protected = [];
+    $message2 = preg_replace_callback('~\[(code|php)\b[^\]]*\].*?\[/\1\]~is', function ($m) use (&$protected) {
+        $key = '%%AE_TBL_BBCODE_PROTECT_' . count($protected) . '%%';
+        $protected[$key] = $m[0];
+        return $key;
+    }, $message);
+
+    if (!is_string($message2) || $message2 === '') {
+        return;
+    }
+
+    $message2 = preg_replace('~\[(/?)table\b([^\]]*)\]~i', '[$1af_table$2]', $message2);
+    $message2 = preg_replace('~\[(/?)tr\b([^\]]*)\]~i', '[$1af_tr$2]', $message2);
+    $message2 = preg_replace('~\[(/?)td\b([^\]]*)\]~i', '[$1af_td$2]', $message2);
+    $message2 = preg_replace('~\[(/?)th\b([^\]]*)\]~i', '[$1af_th$2]', $message2);
+
+    if (!empty($protected)) {
+        $message2 = strtr($message2, $protected);
+    }
+
+    $message = $message2;
+}
+
+function af_ae_bbcode_table_parse_end(&$message): void
+{
+    af_ae_bbcode_table_parse($message);
+}
+
 function af_ae_bbcode_table_parse(&$message): void
 {
     if (!is_string($message) || $message === '') return;
 
     // быстрый skip
-    if (stripos($message, '[table') === false) return;
+    if (stripos($message, '[table') === false && stripos($message, '[af_table') === false) return;
 
     // защитим <pre>/<code>
     $protected = [];
@@ -26,6 +61,12 @@ function af_ae_bbcode_table_parse(&$message): void
     }, $message);
 
     if (!is_string($message2) || $message2 === '') return;
+
+    // поддержка pre-pass: возвращаем каноничные теги для рендера
+    $message2 = preg_replace('~\[(/?)af_table\b([^\]]*)\]~i', '[$1table$2]', $message2);
+    $message2 = preg_replace('~\[(/?)af_tr\b([^\]]*)\]~i', '[$1tr$2]', $message2);
+    $message2 = preg_replace('~\[(/?)af_td\b([^\]]*)\]~i', '[$1td$2]', $message2);
+    $message2 = preg_replace('~\[(/?)af_th\b([^\]]*)\]~i', '[$1th$2]', $message2);
 
     // ВАЖНО: рендерим вложенные таблицы изнутри наружу
     $guard = 0;
@@ -158,7 +199,7 @@ function af_ae_bbcode_table_parse(&$message): void
                 $dataHeaders = $headers !== '' ? (' data-headers="' . htmlspecialchars_uni($headers) . '"') : '';
 
                 // ВАЖНО: класс/маркер оставляем прежними (если у тебя уже есть CSS под них)
-                return '<table class="af-aqr-table" data-af-aqr-table="1"' . $styleAttr . $dataHeaders . '>' . $x . '</table>';
+                return '<table class="af-ae-table" data-af-table="1"' . $styleAttr . $dataHeaders . '>' . $x . '</table>';
             },
             $message2
         );
@@ -293,6 +334,16 @@ function af_ae_bbcode_table_build_cell_style(array $attrs, bool $isHeader, strin
     $styles[] = 'vertical-align:top';
 
     return implode(';', $styles);
+}
+
+function af_aqr_bbcode_table_parse_start(&$message): void
+{
+    af_ae_bbcode_table_parse_start($message);
+}
+
+function af_aqr_bbcode_table_parse_end(&$message): void
+{
+    af_ae_bbcode_table_parse_end($message);
 }
 
 /**
