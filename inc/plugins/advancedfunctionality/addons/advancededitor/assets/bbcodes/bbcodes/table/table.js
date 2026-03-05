@@ -524,6 +524,30 @@
     return insertAtCursor(ta, bb);
   }
 
+  function getFloatingPanelHostDoc(inst, iframeDoc) {
+    var ownerDoc = document;
+    try {
+      if (inst && typeof inst.getContentAreaContainer === 'function') {
+        var c1 = inst.getContentAreaContainer();
+        if (c1 && c1.ownerDocument) return c1.ownerDocument;
+      }
+    } catch (e1) {}
+    try {
+      if (inst && typeof inst.getEditorContainer === 'function') {
+        var c2 = inst.getEditorContainer();
+        if (c2 && c2.ownerDocument) return c2.ownerDocument;
+      }
+    } catch (e2) {}
+    try {
+      if (inst && typeof inst.getWrapper === 'function') {
+        var c3 = inst.getWrapper();
+        if (c3 && c3.ownerDocument) return c3.ownerDocument;
+      }
+    } catch (e3) {}
+    if (ownerDoc && ownerDoc.nodeType === 9) return ownerDoc;
+    return iframeDoc || ownerDoc;
+  }
+
   function openFloatingEditorForTable(inst, table) {
     if (!inst || !table || table.nodeType !== 1) return;
 
@@ -532,27 +556,38 @@
       if (!body || !body.ownerDocument) return;
 
       var doc = body.ownerDocument;
-      var panel = doc.getElementById('af-ae-table-floating');
+      var hostDoc = getFloatingPanelHostDoc(inst, doc);
+      var panel = hostDoc.getElementById('af-ae-table-floating');
+
+      function syncEditorValue() {
+        try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e0) {}
+        try { if (typeof inst.trigger === 'function') inst.trigger('change'); } catch (e1) {}
+        try { if (typeof inst.trigger === 'function') inst.trigger('valuechanged'); } catch (e2) {}
+      }
 
       function ensurePanelCss() {
-        if (doc.getElementById('af-ae-table-floating-css')) return;
-        var st = doc.createElement('style');
+        if (hostDoc.getElementById('af-ae-table-floating-css')) return;
+        var st = hostDoc.createElement('style');
         st.id = 'af-ae-table-floating-css';
         st.type = 'text/css';
-        st.appendChild(doc.createTextNode(
+        st.appendChild(hostDoc.createTextNode(
           '#af-ae-table-floating{position:fixed;z-index:99999;background:#1f1f1f;border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:6px;display:none;gap:6px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.35);}' +
-          '#af-ae-table-floating .af-ae-tbtn{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 8px;border-radius:8px;border:1px solid rgba(255,255,255,.14);background:#2a2a2a;color:#fff;cursor:pointer;font:600 12px/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}' +
+          '#af-ae-table-floating .af-ae-tbtn{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 6px;border-radius:8px;border:1px solid rgba(255,255,255,.14);background:#2a2a2a;color:#fff;cursor:pointer;font:600 12px/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}' +
           '#af-ae-table-floating .af-ae-tbtn:hover{background:#343434;}' +
+          '#af-ae-table-floating .af-ae-tbtn svg{width:18px;height:18px;display:block;fill:currentColor;}' +
           '#af-ae-table-floating .af-ae-tsep{width:1px;height:20px;background:rgba(255,255,255,.12);margin:0 2px;}' +
           '#af-ae-table-floating .af-ae-tcolors{display:flex;gap:6px;align-items:center;margin-left:4px;}' +
           '#af-ae-table-floating input[type=color]{width:28px;height:28px;border:0;background:transparent;padding:0;cursor:pointer;}' +
           '#af-ae-table-floating .af-ae-tclose{margin-left:2px;}'
         ));
-        (doc.head || doc.getElementsByTagName('head')[0]).appendChild(st);
+        (hostDoc.head || hostDoc.getElementsByTagName('head')[0]).appendChild(st);
+      }
+
+      function icon(path) {
+        return '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="' + path + '"></path></svg>';
       }
 
       function applyAttrsToDom(t, a) {
-        // data-af-* + table style
         try {
           var keys = ['width','align','headers','bgcolor','textcolor','hbgcolor','htextcolor','border','bordercolor','borderwidth'];
           for (var i = 0; i < keys.length; i++) {
@@ -566,7 +601,6 @@
           t.setAttribute('style', buildTableStyle(a));
         } catch (e0) {}
 
-        // cells style
         try {
           for (var r = 0; r < t.rows.length; r++) {
             var row = t.rows[r];
@@ -575,17 +609,14 @@
               var tag = (cell.tagName || '').toLowerCase();
               var isHeaderByMode = false;
 
-              // headers mode (row/col/both)
               if (a.headers === 'row' && r === 0) isHeaderByMode = true;
               if (a.headers === 'col' && c === 0) isHeaderByMode = true;
               if (a.headers === 'both' && (r === 0 || c === 0)) isHeaderByMode = true;
 
-              // th/td normalization according to headers mode
               var shouldBeTh = (tag === 'th') || isHeaderByMode;
               if (shouldBeTh && tag !== 'th') {
                 var th = doc.createElement('th');
                 th.innerHTML = cell.innerHTML;
-                // перенос width, если был
                 try { if (cell.style && cell.style.width) th.style.width = cell.style.width; } catch(eW){}
                 row.replaceChild(th, cell);
                 cell = th;
@@ -609,11 +640,8 @@
       }
 
       function getActiveCell(t) {
-        // 1) из сохранённой ячейки
         var saved = inst.__afAeActiveTableCell;
         if (saved && saved.nodeType === 1 && t.contains(saved) && /^(TD|TH)$/.test(saved.tagName)) return saved;
-
-        // 2) fallback: первая ячейка
         var first = t.querySelector('td,th');
         return first || null;
       }
@@ -621,38 +649,36 @@
       ensurePanelCss();
 
       if (!panel) {
-        panel = doc.createElement('div');
+        panel = hostDoc.createElement('div');
         panel.id = 'af-ae-table-floating';
 
-        // ВАЖНО: type="button", иначе в некоторых окружениях кнопки ведут себя как submit
         panel.innerHTML = '' +
-          '<button type="button" class="af-ae-tbtn" data-a="row-above" title="Добавить строку выше">+R↑</button>' +
-          '<button type="button" class="af-ae-tbtn" data-a="row-below" title="Добавить строку ниже">+R↓</button>' +
-          '<button type="button" class="af-ae-tbtn" data-a="row-del" title="Удалить строку">−R</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="row-above" title="Добавить строку выше">' + icon('M3 10h14v2H3zM9 3h2v14H9z') + '</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="row-below" title="Добавить строку ниже">' + icon('M3 8h14v2H3zm0 4h14v2H3zM9 11h2v6H9z') + '</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="row-del" title="Удалить строку">' + icon('M3 9h14v2H3zm2 4h10v2H5z') + '</button>' +
           '<span class="af-ae-tsep" aria-hidden="true"></span>' +
-          '<button type="button" class="af-ae-tbtn" data-a="col-left" title="Добавить колонку слева">+C←</button>' +
-          '<button type="button" class="af-ae-tbtn" data-a="col-right" title="Добавить колонку справа">+C→</button>' +
-          '<button type="button" class="af-ae-tbtn" data-a="col-del" title="Удалить колонку">−C</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="col-left" title="Добавить колонку слева">' + icon('M9 3h2v14H9zM3 9h6v2H3zM13 9h4v2h-4z') + '</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="col-right" title="Добавить колонку справа">' + icon('M9 3h2v14H9zM3 9h4v2H3zM11 9h6v2h-6z') + '</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="col-del" title="Удалить колонку">' + icon('M9 3h2v14H9zm3 0h2v14h-2z') + '</button>' +
           '<span class="af-ae-tsep" aria-hidden="true"></span>' +
-          '<button type="button" class="af-ae-tbtn" data-a="del-table" title="Удалить таблицу">🗑</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="del-table" title="Удалить таблицу">' + icon('M7 3h6l1 2h3v2H3V5h3l1-2zm-1 6h2v6H6V9zm6 0h2v6h-2V9z') + '</button>' +
           '<span class="af-ae-tsep" aria-hidden="true"></span>' +
-          '<div class="af-ae-tcolors">' +
+          '<div class="af-ae-tcolors" title="Цвета таблицы">' +
           '  <input type="color" data-a="bg" title="Заливка ячеек (bgcolor)">' +
           '  <input type="color" data-a="fg" title="Цвет текста (textcolor)">' +
           '  <input type="color" data-a="hbg" title="Заливка заголовков (hbgcolor)">' +
           '  <input type="color" data-a="hfg" title="Цвет текста заголовков (htextcolor)">' +
           '</div>' +
-          '<button type="button" class="af-ae-tbtn af-ae-tclose" data-a="close" title="Закрыть">×</button>';
+          '<button type="button" class="af-ae-tbtn af-ae-tclose" data-a="close" title="Закрыть">' + icon('M5.2 3.8L10 8.6l4.8-4.8 1.4 1.4L11.4 10l4.8 4.8-1.4 1.4L10 11.4l-4.8 4.8-1.4-1.4L8.6 10 3.8 5.2z') + '</button>';
 
-        doc.body.appendChild(panel);
+        (hostDoc.body || hostDoc.documentElement).appendChild(panel);
 
-        // клики по панели — не отдаём в body (чтобы не было побочных эффектов)
         panel.addEventListener('mousedown', function (ev) {
           ev.stopPropagation();
         }, true);
 
         panel.addEventListener('click', function (ev) {
-          var btn = ev.target && ev.target.closest ? ev.target.closest('[data-a]') : null;
+          var btn = ev.target && ev.target.closest ? ev.target.closest('button[data-a]') : null;
           if (!btn || !inst.__afAeActiveTable) return;
 
           ev.preventDefault();
@@ -673,23 +699,10 @@
               panel.style.display = 'none';
               inst.__afAeActiveTable = null;
             } catch (eD) {}
+            syncEditorValue();
             return;
           }
 
-          // Цвета — меняем table-атрибуты и пересобираем стили
-          if (act === 'bg' || act === 'fg' || act === 'hbg' || act === 'hfg') {
-            var a = parseAttrsFromDom(t);
-            var val = asText(btn.value).trim();
-            if (act === 'bg') a.bgcolor = normColor(val);
-            if (act === 'fg') a.textcolor = normColor(val);
-            if (act === 'hbg') a.hbgcolor = normColor(val);
-            if (act === 'hfg') a.htextcolor = normColor(val);
-            a = normalizeTableAttrs(a);
-            applyAttrsToDom(t, a);
-            return;
-          }
-
-          // row/col ops — берём активную ячейку из сохранённой
           var cell = getActiveCell(t);
           if (!cell) return;
 
@@ -724,23 +737,41 @@
             }
           }
 
-          // после изменений — переапплаим текущие атрибуты, чтобы стили не “разъезжались”
           try {
             var a2 = parseAttrsFromDom(t);
             a2 = normalizeTableAttrs(a2);
             applyAttrsToDom(t, a2);
           } catch (eA) {}
 
+          syncEditorValue();
         }, false);
+
+        var colorHandler = function (ev) {
+          var input = ev.target && ev.target.closest ? ev.target.closest('input[type="color"][data-a]') : null;
+          if (!input || !inst.__afAeActiveTable) return;
+
+          var t = inst.__afAeActiveTable;
+          var act = input.getAttribute('data-a');
+          var a = parseAttrsFromDom(t);
+          var val = asText(input.value).trim();
+          if (act === 'bg') a.bgcolor = normColor(val);
+          if (act === 'fg') a.textcolor = normColor(val);
+          if (act === 'hbg') a.hbgcolor = normColor(val);
+          if (act === 'hfg') a.htextcolor = normColor(val);
+          a = normalizeTableAttrs(a);
+          applyAttrsToDom(t, a);
+          syncEditorValue();
+        };
+
+        panel.addEventListener('input', colorHandler, false);
+        panel.addEventListener('change', colorHandler, false);
       }
 
-      // Позиция панели — НИЖЕ таблицы (а не поверх)
       var rect = table.getBoundingClientRect();
       var top = rect.bottom + 8;
       var left = rect.left;
 
-      // подстрахуем, чтобы не улетело вправо
-      var vw = doc.defaultView ? doc.defaultView.innerWidth : 0;
+      var vw = hostDoc.defaultView ? hostDoc.defaultView.innerWidth : 0;
       if (vw) {
         var maxLeft = Math.max(8, vw - panel.offsetWidth - 8);
         if (left > maxLeft) left = maxLeft;
@@ -752,7 +783,6 @@
 
       inst.__afAeActiveTable = table;
 
-      // синхроним color inputs с текущими attrs таблицы
       try {
         var cur = parseAttrsFromDom(table);
         var bg = panel.querySelector('input[data-a="bg"]'); if (bg && cur.bgcolor) bg.value = cur.bgcolor;
@@ -774,16 +804,16 @@
       if (!body) return;
 
       var doc = body.ownerDocument;
+      var hostDoc = getFloatingPanelHostDoc(inst, doc);
 
       function hidePanel() {
         try {
-          var panel = doc.getElementById('af-ae-table-floating');
+          var panel = hostDoc.getElementById('af-ae-table-floating');
           if (panel) panel.style.display = 'none';
         } catch (e0) {}
         inst.__afAeActiveTable = null;
       }
 
-      // 1) клик по таблице — открыть панель + запомнить активную ячейку
       body.addEventListener('mousedown', function (ev) {
         var cell = ev.target && ev.target.closest ? ev.target.closest('td,th') : null;
         if (cell) inst.__afAeActiveTableCell = cell;
@@ -797,9 +827,8 @@
         }
       }, false);
 
-      // 2) клик мимо — закрыть (но НЕ если клик по панели)
-      doc.addEventListener('mousedown', function (ev) {
-        var panel = doc.getElementById('af-ae-table-floating');
+      hostDoc.addEventListener('mousedown', function (ev) {
+        var panel = hostDoc.getElementById('af-ae-table-floating');
         if (!panel || panel.style.display === 'none') return;
 
         var t = inst.__afAeActiveTable;
@@ -809,7 +838,6 @@
         if (!inPanel && !inTable) hidePanel();
       }, true);
 
-      // 3) blur редактора — закрыть (как было)
       inst.bind('blur', function () {
         hidePanel();
       });
