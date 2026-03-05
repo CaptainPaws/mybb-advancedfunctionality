@@ -9,6 +9,25 @@
   var TOOLBAR_BUILD_CACHE = null;
   var AVAILABLE_MAP_CACHE = null;
   var CUSTOM_DEF_MAP_CACHE = null;
+  var HELP_MODAL_ID = 'af-ae-format-help-modal';
+
+  function getFormatHelpConfig() {
+    var fh = (P && P.formatHelp && typeof P.formatHelp === 'object') ? P.formatHelp : null;
+    if (!fh) return { enabled: false, title: '', content: '', position: 'right' };
+
+    var enabled = Number(fh.enabled) === 1 || fh.enabled === true;
+    var title = asText(fh.title).trim();
+    var content = asText(fh.content).trim();
+    var position = asText(fh.position).toLowerCase().trim();
+    if (position !== 'left' && position !== 'right') position = 'right';
+
+    return {
+      enabled: !!(enabled && content),
+      title: title || 'Подсказка по форматированию',
+      content: content,
+      position: position
+    };
+  }
 
   if (window.MyBB && MyBB.settings && (
     Number(MyBB.settings.clickable_mycode_editor) === 1 ||
@@ -400,6 +419,15 @@
     toolbar = toolbar.replace(/,+\|,+/g, '|').replace(/\|{2,}/g, '|');
     toolbar = toolbar.replace(/^,|,$/g, '').replace(/^\|+|\|+$/g, '');
 
+    var formatHelp = getFormatHelpConfig();
+    if (formatHelp.enabled) {
+      if (formatHelp.position === 'left') {
+        toolbar = toolbar ? ('af_formathelp|' + toolbar) : 'af_formathelp';
+      } else {
+        toolbar = toolbar ? (toolbar + '|af_formathelp') : 'af_formathelp';
+      }
+    }
+
     return { toolbar: toolbar, menus: menus };
   }
 
@@ -428,6 +456,88 @@
       if (jQuery.sceditor.commands) return jQuery.sceditor.commands[name];
     } catch (e1) {}
     return null;
+  }
+
+
+  function ensureFormatHelpCommand() {
+    var cfg = getFormatHelpConfig();
+    if (!cfg.enabled) return;
+
+    setCommand('af_formathelp', {
+      tooltip: cfg.title,
+      exec: function () {
+        afAeOpenFormatHelpModal();
+      },
+      txtExec: function () {
+        afAeOpenFormatHelpModal();
+      }
+    });
+  }
+
+  function afAeEnsureFormatHelpModal() {
+    var cfg = getFormatHelpConfig();
+    if (!cfg.enabled) return null;
+
+    var root = document.getElementById(HELP_MODAL_ID);
+    if (root) return root;
+
+    root = document.createElement('div');
+    root.id = HELP_MODAL_ID;
+    root.className = 'af-ae-help-modal';
+    root.setAttribute('aria-hidden', 'true');
+    root.innerHTML = '' +
+      '<div class="af-ae-help-overlay" data-af-ae-close="1"></div>' +
+      '<div class="af-ae-help-dialog" role="dialog" aria-modal="true" aria-labelledby="af-ae-help-title">' +
+        '<button type="button" class="af-ae-help-close" aria-label="Close" data-af-ae-close="1">×</button>' +
+        '<div class="af-ae-help-title" id="af-ae-help-title"></div>' +
+        '<div class="af-ae-help-body"></div>' +
+      '</div>';
+
+    document.body.appendChild(root);
+
+    root.addEventListener('click', function (e) {
+      var t = e.target;
+      if (t && t.getAttribute && t.getAttribute('data-af-ae-close') === '1') {
+        afAeCloseFormatHelpModal();
+      }
+    });
+
+    return root;
+  }
+
+  function afAeOpenFormatHelpModal() {
+    var cfg = getFormatHelpConfig();
+    if (!cfg.enabled) return;
+
+    var root = afAeEnsureFormatHelpModal();
+    if (!root) return;
+
+    var title = root.querySelector('.af-ae-help-title');
+    var body = root.querySelector('.af-ae-help-body');
+    if (title) title.textContent = cfg.title;
+    if (body) body.innerHTML = cfg.content;
+
+    root.classList.add('is-open');
+    root.setAttribute('aria-hidden', 'false');
+  }
+
+  function afAeBindFormatHelpEsc() {
+    if (window.__afAeHelpEscBound) return;
+    window.__afAeHelpEscBound = true;
+
+    document.addEventListener('keydown', function (e) {
+      if (e && e.key === 'Escape') {
+        afAeCloseFormatHelpModal();
+      }
+    });
+  }
+
+  function afAeCloseFormatHelpModal() {
+    var root = document.getElementById(HELP_MODAL_ID);
+    if (!root) return;
+
+    root.classList.remove('is-open');
+    root.setAttribute('aria-hidden', 'true');
   }
 
   function afAeForceAlignEverywhere(inst) {
@@ -1786,6 +1896,8 @@
     try { ensureDropdownCommands(out, availableMap); } catch (eD) {}
     try { ensureCustomCommands(); } catch (eC) {}
     try { ensureToggleCommandDefinition(); } catch (eT) {}
+    try { ensureFormatHelpCommand(); } catch (eFH) {}
+    try { afAeBindFormatHelpEsc(); } catch (eFE) {}
     try { ensureMybbTagAliases(); } catch (eTA) {}
     try { afAeEnsureMybbAlignBbcode(null); } catch (eA) {}
     try { afAePatchAlignCommandsForSourceMode(); } catch (eA2) {}

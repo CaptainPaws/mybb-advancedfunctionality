@@ -182,3 +182,11 @@
   cursor: pointer;
   pointer-events: auto;
 }
+
+.af-ae-help-modal{display:none;}
+.af-ae-help-modal.is-open{display:block;}
+.af-ae-help-modal .af-ae-help-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99990;}
+.af-ae-help-modal .af-ae-help-dialog{position:fixed;z-index:99991;left:50%;top:50%;transform:translate(-50%,-50%);width:min(760px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;background:#fff;color:#222;border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.35);padding:16px 18px 18px;}
+.af-ae-help-modal .af-ae-help-title{font-size:18px;font-weight:700;margin:0 30px 12px 0;}
+.af-ae-help-modal .af-ae-help-close{position:absolute;top:10px;right:10px;width:28px;height:28px;border:0;background:transparent;font-size:24px;line-height:24px;cursor:pointer;color:#666;}
+.af-ae-help-modal .af-ae-help-body{line-height:1.5;word-wrap:break-word;}
