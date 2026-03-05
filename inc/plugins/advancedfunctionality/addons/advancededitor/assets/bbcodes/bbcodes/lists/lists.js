@@ -61,11 +61,65 @@
     return fmt === 'bbcode';
   }
 
-  function getSceditorInstanceFromCtx(ctx) {
+  function getSceditorInstanceFromCaller(caller) {
+    if (!window.jQuery || !caller || !caller.nodeType || caller.nodeType !== 1) return null;
+    var $ = window.jQuery;
+    try {
+      var container = caller.closest ? caller.closest('.sceditor-container') : null;
+      if (!container) return null;
+      var sibling = container.previousElementSibling;
+      while (sibling) {
+        if (sibling.tagName === 'TEXTAREA') {
+          var i1 = $(sibling).sceditor && $(sibling).sceditor('instance');
+          if (i1 && typeof i1.insertText === 'function') return i1;
+        }
+        sibling = sibling.previousElementSibling;
+      }
+      var taInContainer = container.querySelector('textarea');
+      if (taInContainer) {
+        var i2 = $(taInContainer).sceditor && $(taInContainer).sceditor('instance');
+        if (i2 && typeof i2.insertText === 'function') return i2;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function getActiveSceditorInstance() {
+    if (!window.jQuery) return null;
+    var $ = window.jQuery;
+    try {
+      var ae = document.activeElement;
+      if (ae && ae.classList && ae.classList.contains('sceditor-container')) {
+        var prev = ae.previousElementSibling;
+        if (prev && prev.tagName === 'TEXTAREA') {
+          var inst1 = $(prev).sceditor && $(prev).sceditor('instance');
+          if (inst1 && typeof inst1.insertText === 'function') return inst1;
+        }
+      }
+
+      var activeFrame = document.activeElement && document.activeElement.tagName === 'IFRAME' ? document.activeElement : null;
+      if (activeFrame) {
+        var c = activeFrame.closest ? activeFrame.closest('.sceditor-container') : null;
+        if (c && c.previousElementSibling && c.previousElementSibling.tagName === 'TEXTAREA') {
+          var inst2 = $(c.previousElementSibling).sceditor && $(c.previousElementSibling).sceditor('instance');
+          if (inst2 && typeof inst2.insertText === 'function') return inst2;
+        }
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function getSceditorInstanceFromCtx(ctx, caller) {
     if (ctx && typeof ctx.insertText === 'function') return ctx;
     if (ctx && ctx.sceditor && typeof ctx.sceditor.insertText === 'function') return ctx.sceditor;
     if (ctx && ctx.inst && typeof ctx.inst.insertText === 'function') return ctx.inst;
     if (ctx && ctx.instance && typeof ctx.instance.insertText === 'function') return ctx.instance;
+
+    var fromCaller = getSceditorInstanceFromCaller(caller);
+    if (fromCaller) return fromCaller;
+
+    var activeInst = getActiveSceditorInstance();
+    if (activeInst) return activeInst;
 
     try {
       if (window.jQuery) {
@@ -554,12 +608,86 @@
   // ===============================
   // Insert list (единственная точка)
   // ===============================
-  function insertCanonicalList(editorOrCtx, attr) {
-    var inst = getSceditorInstanceFromCtx(editorOrCtx);
+  function hasUsableIframeBody(inst) {
+    try {
+      if (!inst || typeof inst.getBody !== 'function') return false;
+      var body = inst.getBody();
+      if (!body || body.nodeType !== 1 || !body.ownerDocument) return false;
+      var frame = body.ownerDocument.defaultView && body.ownerDocument.defaultView.frameElement;
+      if (frame && frame.ownerDocument && frame.ownerDocument.documentElement) {
+        return frame.ownerDocument.documentElement.contains(frame);
+      }
+      return !!body.isConnected;
+    } catch (e) {}
+    return false;
+  }
+
+  function describeInstance(inst) {
+    if (!inst) return { exists: false };
+    var out = { exists: true, textareaId: '', textareaName: '', containerClass: '' };
+    try {
+      var ta = inst.getOriginal && inst.getOriginal();
+      if (ta) {
+        out.textareaId = ta.id || '';
+        out.textareaName = ta.name || '';
+      }
+    } catch (e0) {}
+    try {
+      var c = inst.getContainer && inst.getContainer();
+      if (c && c.className) out.containerClass = String(c.className);
+    } catch (e1) {}
+    return out;
+  }
+
+  function insertHtmlViaDom(inst, html) {
+    try {
+      var body = inst && inst.getBody && inst.getBody();
+      var doc = body && body.ownerDocument;
+      if (!doc) return false;
+      var sel = doc.getSelection && doc.getSelection();
+      if (!sel || !sel.rangeCount) return false;
+      var range = sel.getRangeAt(0);
+      range.deleteContents();
+      var wrap = doc.createElement('div');
+      wrap.innerHTML = html;
+      var frag = doc.createDocumentFragment();
+      var node = null;
+      var last = null;
+      while ((node = wrap.firstChild)) {
+        last = frag.appendChild(node);
+      }
+      range.insertNode(frag);
+      if (last) {
+        range.setStartAfter(last);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      return true;
+    } catch (e) {}
+    return false;
+  }
+
+  function insertCanonicalList(editorOrCtx, attr, meta) {
+    meta = meta || {};
+    var inst = getSceditorInstanceFromCtx(editorOrCtx, meta.caller);
+    var sourceFlag = isSourceMode(inst);
+    var hasBody = hasUsableIframeBody(inst);
+    var mode = hasBody ? 'wysiwyg' : 'source';
 
     // без SCEditor
     if (!inst) {
-      return insertIntoTextarea(buildCanonicalChunk(attr), editorOrCtx);
+      var textareaInserted = insertIntoTextarea(buildCanonicalChunk(attr), editorOrCtx);
+      debugLog('[AE-LISTS] insert', {
+        handler: meta.handler || 'unknown',
+        cmd: meta.cmd || '',
+        mode: 'textarea',
+        isSourceMode: sourceFlag,
+        hasIframeBody: false,
+        insertedVia: textareaInserted ? 'textarea-insert' : 'none',
+        instance: describeInstance(inst)
+      });
+      return textareaInserted;
     }
 
     // патчим bbcode и css
@@ -568,19 +696,30 @@
     try { bindToSourceListNormalization(inst); } catch (e2) {}
     try { bindListEnterBehavior(inst); } catch (e3) {}
 
-    // SOURCE + partial WYSIWYG (bbcode-mode): вставляем BBCode
-    if (isSourceMode(inst) || isBbcodeEditorMode(inst)) {
+    // SOURCE mode: вставляем BBCode
+    if (mode !== 'wysiwyg') {
       var chunk = buildCanonicalChunk(attr);
+      var insertedSourceVia = 'none';
       try {
-        if (typeof inst.insertText === 'function') inst.insertText(chunk, '');
-        else if (typeof inst.insert === 'function') inst.insert(chunk, '');
+        if (typeof inst.insertText === 'function') {
+          inst.insertText(chunk, '');
+          insertedSourceVia = 'insertText';
+        } else if (typeof inst.insert === 'function') {
+          inst.insert(chunk, '');
+          insertedSourceVia = 'insert';
+        }
       } catch (e2) {}
       debugLog('[AE-LISTS] insert', {
-        mode: isSourceMode(inst) ? 'source' : 'wysiwyg-bbcode',
+        handler: meta.handler || 'unknown',
+        cmd: meta.cmd || '',
+        mode: mode,
+        isSourceMode: sourceFlag,
+        hasIframeBody: hasBody,
         requestedAttr: attr,
         format: getEditorFormat(inst) || '(unknown)',
-        insertedVia: 'insertText/insert',
-        bbcodeChunk: chunk
+        insertedVia: insertedSourceVia,
+        bbcodeChunk: chunk,
+        instance: describeInstance(inst)
       });
       try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e3) {}
       return true;
@@ -589,19 +728,31 @@
     // true html-mode: вставляем HTML в iframe.
     var html = buildHtmlListChunk(attr);
     var insertedVia = '';
+    var insertedOk = false;
     try {
       if (typeof inst.wysiwygEditorInsertHtml === 'function') {
         inst.wysiwygEditorInsertHtml(html);
         insertedVia = 'wysiwygEditorInsertHtml';
+        insertedOk = true;
       } else if (typeof inst.insertHTML === 'function') {
         inst.insertHTML(html);
         insertedVia = 'insertHTML';
+        insertedOk = true;
       } else {
-        // Фоллбек: если HTML API недоступен, откатываемся к BBCode.
-        inst.insertText(buildCanonicalChunk(attr), '');
-        insertedVia = 'insertText-fallback';
+        insertedOk = insertHtmlViaDom(inst, html);
+        insertedVia = insertedOk ? 'domRangeInsert' : 'no-html-api';
       }
     } catch (e4) {}
+
+    if (!insertedOk && hasBody) {
+      for (var retry = 1; retry <= 3 && !insertedOk; retry++) {
+        try {
+          if (typeof inst.focus === 'function') inst.focus();
+          insertedOk = insertHtmlViaDom(inst, html);
+          if (insertedOk) insertedVia = 'domRangeInsert-retry-' + retry;
+        } catch (eRetry) {}
+      }
+    }
 
     try {
       var bodyHtml = '';
@@ -614,15 +765,20 @@
       }
       debugLog('[AE-LISTS] insert', {
         mode: isSourceMode(inst) ? 'source' : 'wysiwyg',
+        handler: meta.handler || 'unknown',
+        cmd: meta.cmd || '',
+        isSourceMode: sourceFlag,
+        hasIframeBody: hasBody,
         requestedAttr: attr,
         insertedVia: insertedVia,
-        bodyPreview: bodyHtml
+        bodyPreview: bodyHtml,
+        instance: describeInstance(inst)
       });
     } catch (eDbg) {}
 
     try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e5) {}
     try { if (typeof inst.focus === 'function') inst.focus(); } catch (e6) {}
-    return true;
+    return insertedOk;
   }
 
   // ===============================
@@ -660,7 +816,8 @@
   function aeListsHandler(editor, def, caller) {
     var cmd = detectCmd(def, caller);
     var attr = cmdToAttr(cmd);
-    insertCanonicalList(editor || {}, attr);
+    debugLog('[AE-LISTS] handler', { handler: 'afAeBuiltinHandlers.*', cmd: cmd, via: 'aeListsHandler' });
+    insertCanonicalList(editor || {}, attr, { caller: caller, cmd: cmd, handler: 'afAeBuiltinHandlers.*' });
   }
 
   function registerHandlers() {
@@ -706,12 +863,14 @@
       setCmd(it.cmd, {
         tooltip: it.tooltip || it.cmd,
         exec: function () {
+          debugLog('[AE-LISTS] handler', { handler: 'SCEditor command exec', cmd: it.cmd });
           try { afAeEnsureMybbListsBbcode(this); } catch (e0) {}
           try { ensureListCss(this); } catch (e1) {}
-          insertCanonicalList(this, it.attr);
+          insertCanonicalList(this, it.attr, { cmd: it.cmd, handler: 'SCEditor command exec' });
         },
         txtExec: function () {
-          insertCanonicalList(this, it.attr);
+          debugLog('[AE-LISTS] handler', { handler: 'SCEditor command txtExec', cmd: it.cmd });
+          insertCanonicalList(this, it.attr, { cmd: it.cmd, handler: 'SCEditor command txtExec' });
         }
       });
     });
@@ -721,26 +880,30 @@
     setCmd('bulletlist', {
       tooltip: 'Список: точки (•)',
       exec: function () {
+        debugLog('[AE-LISTS] handler', { handler: 'SCEditor command exec', cmd: 'bulletlist' });
         try { afAeEnsureMybbListsBbcode(this); } catch (e0) {}
         try { ensureListCss(this); } catch (e1) {}
         try { bindToSourceListNormalization(this); } catch (e2) {}
-        insertCanonicalList(this, '');
+        insertCanonicalList(this, '', { cmd: 'bulletlist', handler: 'SCEditor command exec' });
       },
       txtExec: function () {
-        insertCanonicalList(this, '');
+        debugLog('[AE-LISTS] handler', { handler: 'SCEditor command txtExec', cmd: 'bulletlist' });
+        insertCanonicalList(this, '', { cmd: 'bulletlist', handler: 'SCEditor command txtExec' });
       }
     });
 
     setCmd('orderedlist', {
       tooltip: 'Список: нумерация (1,2,3)',
       exec: function () {
+        debugLog('[AE-LISTS] handler', { handler: 'SCEditor command exec', cmd: 'orderedlist' });
         try { afAeEnsureMybbListsBbcode(this); } catch (e0) {}
         try { ensureListCss(this); } catch (e1) {}
         try { bindToSourceListNormalization(this); } catch (e2) {}
-        insertCanonicalList(this, 'decimal');
+        insertCanonicalList(this, 'decimal', { cmd: 'orderedlist', handler: 'SCEditor command exec' });
       },
       txtExec: function () {
-        insertCanonicalList(this, 'decimal');
+        debugLog('[AE-LISTS] handler', { handler: 'SCEditor command txtExec', cmd: 'orderedlist' });
+        insertCanonicalList(this, 'decimal', { cmd: 'orderedlist', handler: 'SCEditor command txtExec' });
       }
     });
 
