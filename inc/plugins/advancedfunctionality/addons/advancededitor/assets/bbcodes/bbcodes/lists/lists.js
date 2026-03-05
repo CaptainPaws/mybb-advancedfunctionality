@@ -101,8 +101,7 @@
     attr = asText(attr).trim();
     var open = attr ? ('[ul=' + attr + ']') : '[ul]';
     return open + '\n' +
-      '[li]...[/li]\n' +
-      '[li]...[/li]\n' +
+      '[li][/li]\n' +
       '[/ul]';
   }
 
@@ -118,19 +117,11 @@
   function olStyleForAttr(a) {
     a = normAttr(a);
 
-    // сохраняем регистр для A/I, если прилетит именно так
     var low = a.toLowerCase();
-
     if (low === 'i') return 'decimal';
-    if (a === 'A') return 'upper-alpha';
-    if (low === 'a') return 'lower-alpha';
-    if (a === 'I') return 'upper-roman';
-    if (low === 'r') return 'lower-roman';
-
-    // если админка хранит сразу CSS list-style-type
-    if (low === 'upper-roman' || low === 'lower-roman' ||
-        low === 'upper-alpha' || low === 'lower-alpha' ||
-        low === 'decimal') return low;
+    if (low === 'upper-roman') return 'upper-roman';
+    if (low === 'upper-alpha') return 'upper-alpha';
+    if (low === 'lower-alpha') return 'lower-alpha';
 
     return 'decimal';
   }
@@ -139,20 +130,23 @@
     var t = String(listStyleType || '').trim();
     var low = t.toLowerCase();
 
-    if (!low) return 'i';
+    if (!low || low === 'decimal') return 'i';
+    if (low === 'upper-roman') return 'upper-roman';
+    if (low === 'upper-alpha') return 'upper-alpha';
+    if (low === 'lower-alpha') return 'lower-alpha';
 
-    // буллеты
-    if (low === 'disc' || low === 'circle' || low === 'square') return '';
-
-    // твой канон
-    if (low === 'decimal') return 'i';
-    if (low === 'lower-alpha') return 'a';
-    if (low === 'upper-alpha') return 'A';
-    if (low === 'upper-roman') return 'I';
-    if (low === 'lower-roman') return 'r';
-
-    // если вдруг что-то экзотическое — считаем это “нумерацией”
     return 'i';
+  }
+
+  function attrForUlStyle(listStyleType) {
+    var low = String(listStyleType || '').trim().toLowerCase();
+    if (low === 'square') return 'square';
+    return '';
+  }
+
+  function isOrderedAttr(attr) {
+    var low = String(attr || '').trim().toLowerCase();
+    return low === 'i' || low === 'upper-roman' || low === 'upper-alpha' || low === 'lower-alpha';
   }
 
   function buildHtmlListChunk(attr) {
@@ -161,14 +155,19 @@
     // без атрибута — буллеты
     if (!attr) {
       return '<ul style="list-style-type:disc; padding-left:1.4em;">' +
-        '<li>...</li><li>...</li>' +
+        '<li><br></li>' +
       '</ul>';
     }
 
-    // с атрибутом — нумерация
+    if (attr === 'square') {
+      return '<ul style="list-style-type:square; padding-left:1.4em;">' +
+        '<li><br></li>' +
+      '</ul>';
+    }
+
     var lst = olStyleForAttr(attr);
     return '<ol style="list-style-type:' + lst + '; padding-left:1.6em;">' +
-      '<li>...</li><li>...</li>' +
+      '<li><br></li>' +
     '</ol>';
   }
 
@@ -263,12 +262,21 @@
           try { a = (attrs && attrs.defaultattr != null) ? String(attrs.defaultattr) : ''; } catch (e0) { a = ''; }
           a = normAttr(a);
 
-          if (!a) {
-            return '<ul style="list-style-type:disc; padding-left:1.4em;">' + (content || '') + '</ul>';
+          var map = {
+            disc: 'disc',
+            square: 'square',
+            i: 'decimal',
+            'upper-roman': 'upper-roman',
+            'upper-alpha': 'upper-alpha',
+            'lower-alpha': 'lower-alpha'
+          };
+
+          var listType = map[a] || 'disc';
+          if (isOrderedAttr(a)) {
+            return '<ol style="list-style-type:' + listType + '; padding-left:1.6em;">' + (content || '') + '</ol>';
           }
 
-          var lst = olStyleForAttr(a);
-          return '<ol style="list-style-type:' + lst + '; padding-left:1.6em;">' + (content || '') + '</ol>';
+          return '<ul style="list-style-type:' + listType + '; padding-left:1.4em;">' + (content || '') + '</ul>';
         },
 
         format: function (el, content) {
@@ -292,12 +300,15 @@
             }
 
             if (tag === 'OL') {
-              var lst = getListStyleType(el);
-              var a = attrForOlStyle(lst);
-              return '[ul=' + (a || 'i') + ']' + (content || '') + '[/ul]';
+              var lstOl = getListStyleType(el);
+              var aOl = attrForOlStyle(lstOl);
+              return '[ul=' + (aOl || 'i') + ']' + (content || '') + '[/ul]';
             }
 
-            // UL
+            var lstUl = getListStyleType(el);
+            var aUl = attrForUlStyle(lstUl);
+            if (aUl) return '[ul=' + aUl + ']' + (content || '') + '[/ul]';
+
             return '[ul]' + (content || '') + '[/ul]';
           } catch (e2) {
             return '[ul]' + (content || '') + '[/ul]';
@@ -333,6 +344,101 @@
     } catch (eOL) {}
   }
 
+  function bindListEnterBehavior(inst) {
+    if (!inst || inst.__afAeListEnterBound) return;
+    inst.__afAeListEnterBound = true;
+
+    function closestLi(node) {
+      while (node && node.nodeType === 1) {
+        if (String(node.nodeName).toLowerCase() === 'li') return node;
+        node = node.parentNode;
+      }
+      return null;
+    }
+
+    function isLiEmpty(li) {
+      if (!li) return true;
+      var text = String(li.textContent || '').replace(/\u00a0/g, ' ').trim();
+      if (text.length) return false;
+      var media = li.querySelector && li.querySelector('img,video,audio,iframe,table,blockquote,pre');
+      return !media;
+    }
+
+    function placeCaretAtStart(node, doc) {
+      if (!node || !doc) return;
+      var sel = doc.getSelection && doc.getSelection();
+      if (!sel) return;
+      var range = doc.createRange();
+      range.selectNodeContents(node);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+
+    function onEnter(e) {
+      if (!e || e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+
+      var node = null;
+      try { node = (typeof inst.currentNode === 'function') ? inst.currentNode() : null; } catch (e0) { node = null; }
+      if (!node) return;
+
+      var li = closestLi(node.nodeType === 1 ? node : node.parentNode);
+      if (!li) return;
+
+      e.preventDefault();
+
+      var doc = li.ownerDocument;
+      var list = li.parentNode;
+      if (!doc || !list) return false;
+
+      if (isLiEmpty(li)) {
+        var listParent = list.parentNode;
+        var marker = doc.createElement('p');
+        marker.appendChild(doc.createElement('br'));
+
+        li.parentNode.removeChild(li);
+
+        if (!list.querySelector('li')) {
+          if (listParent) {
+            if (list.nextSibling) listParent.insertBefore(marker, list.nextSibling);
+            else listParent.appendChild(marker);
+            listParent.removeChild(list);
+            placeCaretAtStart(marker, doc);
+          }
+        } else {
+          if (list.nextSibling) listParent.insertBefore(marker, list.nextSibling);
+          else listParent.appendChild(marker);
+          placeCaretAtStart(marker, doc);
+        }
+        return false;
+      }
+
+      var newLi = doc.createElement('li');
+      newLi.appendChild(doc.createElement('br'));
+      if (li.nextSibling) list.insertBefore(newLi, li.nextSibling);
+      else list.appendChild(newLi);
+      placeCaretAtStart(newLi, doc);
+      return false;
+    }
+
+    try {
+      if (typeof inst.keyDown === 'function') {
+        inst.keyDown(onEnter);
+        return;
+      }
+    } catch (e1) {}
+
+    try {
+      if (typeof inst.getBody === 'function') {
+        var body = inst.getBody();
+        if (body && !body.__afAeListEnterBound) {
+          body.__afAeListEnterBound = true;
+          body.addEventListener('keydown', onEnter, false);
+        }
+      }
+    } catch (e2) {}
+  }
+
   // ===============================
   // Insert list (единственная точка)
   // ===============================
@@ -347,6 +453,7 @@
     // патчим bbcode и css
     try { afAeEnsureMybbListsBbcode(inst); } catch (e0) {}
     try { ensureListCss(inst); } catch (e1) {}
+    try { bindListEnterBehavior(inst); } catch (e2) {}
 
     // SOURCE: вставляем BBCode
     if (isSourceMode(inst)) {
@@ -526,6 +633,7 @@
 
         try { afAeEnsureMybbListsBbcode(inst); } catch (e1) {}
         try { ensureListCss(inst); } catch (e2) {}
+        try { bindListEnterBehavior(inst); } catch (e3) {}
       }
     } catch (e3) {}
 
