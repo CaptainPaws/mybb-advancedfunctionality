@@ -10,6 +10,8 @@
   var AVAILABLE_MAP_CACHE = null;
   var CUSTOM_DEF_MAP_CACHE = null;
   var HELP_MODAL_ID = 'af-ae-format-help-modal';
+  var EDITOR_MODE_STORAGE_KEY = 'af_ae_editor_mode';
+
 
   function getFormatHelpConfig() {
     var fh = (P && P.formatHelp && typeof P.formatHelp === 'object') ? P.formatHelp : null;
@@ -1867,6 +1869,115 @@
     });
   }
 
+
+  function normalizeEditorModeValue(mode) {
+    mode = asText(mode).toLowerCase().trim();
+    if (mode === 'source' || mode === 'partial' || mode === 'full') return mode;
+    return '';
+  }
+
+  function isRememberModeEnabled() {
+    try {
+      return Number((CFG && CFG.rememberModeEnabled) ? CFG.rememberModeEnabled : 0) === 1;
+    } catch (e) {}
+    return false;
+  }
+
+  function getWysiwygModeSafe() {
+    var mode = normalizeEditorModeValue((CFG && CFG.wysiwygMode) ? CFG.wysiwygMode : '');
+    if (mode === 'full' || mode === 'partial') return mode;
+    return 'partial';
+  }
+
+  function loadRememberedEditorMode() {
+    if (!isRememberModeEnabled()) return '';
+
+    try {
+      if (!window.localStorage) return '';
+      var mode = normalizeEditorModeValue(window.localStorage.getItem(EDITOR_MODE_STORAGE_KEY));
+      if (!mode) {
+        try { window.localStorage.removeItem(EDITOR_MODE_STORAGE_KEY); } catch (eR) {}
+      }
+      return mode;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function saveRememberedEditorMode(mode) {
+    if (!isRememberModeEnabled()) return;
+
+    mode = normalizeEditorModeValue(mode);
+    if (!mode) return;
+
+    try {
+      if (!window.localStorage) return;
+      window.localStorage.setItem(EDITOR_MODE_STORAGE_KEY, mode);
+    } catch (e) {}
+  }
+
+  function resolveStartupEditorMode() {
+    var remembered = loadRememberedEditorMode();
+    if (remembered) return remembered;
+
+    var dem = String((CFG && CFG.defaultEditorMode) ? CFG.defaultEditorMode : 'bbcode').toLowerCase().trim();
+    if (dem === 'wysiwyg_full') return 'full';
+    if (dem === 'wysiwyg_partial') return 'partial';
+    return 'source';
+  }
+
+  function detectInstanceEditorMode(inst) {
+    if (!inst) return '';
+
+    try {
+      if (typeof inst.sourceMode === 'function' && inst.sourceMode()) return 'source';
+    } catch (e) {}
+
+    return getWysiwygModeSafe();
+  }
+
+  function applyInstanceEditorMode(inst, mode) {
+    mode = normalizeEditorModeValue(mode);
+    if (!inst || !mode) return;
+
+    try {
+      if (mode === 'source') {
+        inst.sourceMode(true);
+      } else {
+        if (CFG) CFG.wysiwygMode = mode;
+        inst.sourceMode(false);
+      }
+    } catch (e) {}
+  }
+
+  function bindRememberModeHooks(inst) {
+    if (!inst || inst.__afAeRememberModePatched) return;
+    inst.__afAeRememberModePatched = true;
+
+    function persistModeAfterChange() {
+      var mode = detectInstanceEditorMode(inst);
+      if (mode) saveRememberedEditorMode(mode);
+    }
+
+    if (typeof inst.toggleSourceMode === 'function') {
+      var origToggle = inst.toggleSourceMode;
+      inst.toggleSourceMode = function () {
+        var out = origToggle.apply(this, arguments);
+        persistModeAfterChange();
+        return out;
+      };
+    }
+
+    if (typeof inst.sourceMode === 'function') {
+      var origSourceMode = inst.sourceMode;
+      inst.sourceMode = function () {
+        var out = origSourceMode.apply(this, arguments);
+        if (arguments.length > 0) persistModeAfterChange();
+        return out;
+      };
+    }
+  }
+
   function ensurePostKeyInput(form) {
     if (!form || !P.postKey) return;
     try {
@@ -1935,6 +2046,7 @@
 
       try { afAeApplyWysiwygCodeQuoteCss(existing); } catch (e2) {}
       try { afAeApplyWysiwygLocalFontsCss(existing); } catch (e2b) {}
+      try { bindRememberModeHooks(existing); } catch (e2c) {}
       try { if (window.afAeWysiwygBbcodes && typeof window.afAeWysiwygBbcodes.applyInstance === 'function') window.afAeWysiwygBbcodes.applyInstance(existing); } catch (eW1) {}
 
       try {
@@ -1949,11 +2061,8 @@
       // регаем всё ДО создания инстанса
       ensurePostKeyInput(ta.form);
 
-      var startInSourceMode = true;
-      try {
-        var dem = String((CFG && CFG.defaultEditorMode) ? CFG.defaultEditorMode : 'bbcode').toLowerCase().trim();
-        if (dem === 'wysiwyg_full' || dem === 'wysiwyg_partial') startInSourceMode = false;
-      } catch (eSM) {}
+      var startupMode = resolveStartupEditorMode();
+      var startInSourceMode = (startupMode === 'source');
 
       $ta.sceditor({
         format: 'bbcode',
@@ -1984,20 +2093,8 @@
         try { if (window.afAeWysiwygBbcodes && typeof window.afAeWysiwygBbcodes.applyInstance === 'function') window.afAeWysiwygBbcodes.applyInstance(inst); } catch (eW2) {}
 
         try {
-          var dem2 = String((CFG && CFG.defaultEditorMode) ? CFG.defaultEditorMode : 'bbcode').toLowerCase().trim();
-          switch (dem2) {
-            case 'bbcode':
-              inst.sourceMode(true);
-              break;
-            case 'wysiwyg_full':
-              if (CFG) CFG.wysiwygMode = 'full';
-              inst.sourceMode(false);
-              break;
-            case 'wysiwyg_partial':
-              if (CFG) CFG.wysiwygMode = 'partial';
-              inst.sourceMode(false);
-              break;
-          }
+          bindRememberModeHooks(inst);
+          applyInstanceEditorMode(inst, startupMode);
         } catch (eDM) {}
 
         decorateDropdownButtons(ta, out);
