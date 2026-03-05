@@ -1837,6 +1837,12 @@
       // регаем всё ДО создания инстанса
       ensurePostKeyInput(ta.form);
 
+      var startInSourceMode = true;
+      try {
+        var dem = String((CFG && CFG.defaultEditorMode) ? CFG.defaultEditorMode : 'bbcode').toLowerCase().trim();
+        if (dem === 'wysiwyg_full' || dem === 'wysiwyg_partial') startInSourceMode = false;
+      } catch (eSM) {}
+
       $ta.sceditor({
         format: 'bbcode',
         toolbar: out.toolbar,
@@ -1848,7 +1854,7 @@
         width: '100%',
         resizeEnabled: true,
         autoExpand: false,
-        startInSourceMode: true
+        startInSourceMode: startInSourceMode
       });
 
       var inst = safeGetInstance($ta);
@@ -1864,6 +1870,23 @@
         try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e5) {}
         try { afAeApplyWysiwygLocalFontsCss(inst); } catch (e5b) {}
         try { if (window.afAeWysiwygBbcodes && typeof window.afAeWysiwygBbcodes.applyInstance === 'function') window.afAeWysiwygBbcodes.applyInstance(inst); } catch (eW2) {}
+
+        try {
+          var dem2 = String((CFG && CFG.defaultEditorMode) ? CFG.defaultEditorMode : 'bbcode').toLowerCase().trim();
+          switch (dem2) {
+            case 'bbcode':
+              inst.sourceMode(true);
+              break;
+            case 'wysiwyg_full':
+              if (CFG) CFG.wysiwygMode = 'full';
+              inst.sourceMode(false);
+              break;
+            case 'wysiwyg_partial':
+              if (CFG) CFG.wysiwygMode = 'partial';
+              inst.sourceMode(false);
+              break;
+          }
+        } catch (eDM) {}
 
         decorateDropdownButtons(ta, out);
         decorateCustomButtons(ta);
