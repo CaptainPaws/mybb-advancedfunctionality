@@ -144,6 +144,31 @@
     return '';
   }
 
+  function extractListStyle(el, fallback) {
+    var style = '';
+
+    try {
+      if (el && typeof el.getAttribute === 'function') {
+        var dataList = el.getAttribute('data-list');
+        if (dataList) style = String(dataList);
+      }
+    } catch (e0) {}
+
+    if (!style) {
+      try { style = String((el && el.style && el.style.listStyleType) ? el.style.listStyleType : ''); } catch (e1) { style = ''; }
+    }
+
+    if (!style && el && el.ownerDocument && el.ownerDocument.defaultView && el.ownerDocument.defaultView.getComputedStyle) {
+      try {
+        var cs = el.ownerDocument.defaultView.getComputedStyle(el);
+        style = cs && cs.listStyleType ? String(cs.listStyleType) : '';
+      } catch (e2) { style = ''; }
+    }
+
+    style = String(style || '').trim().toLowerCase();
+    return style || String(fallback || '').toLowerCase();
+  }
+
   function isOrderedAttr(attr) {
     var low = String(attr || '').trim().toLowerCase();
     return low === 'i' || low === 'upper-roman' || low === 'upper-alpha' || low === 'lower-alpha';
@@ -200,6 +225,28 @@
     } catch (e) {}
   }
 
+  function bindToSourceListNormalization(inst) {
+    if (!inst || inst.__afAeListToSourceBound) return;
+    inst.__afAeListToSourceBound = true;
+
+    try {
+      if (typeof inst.bind !== 'function') return;
+      inst.bind('toSource', function (html) {
+        html = String(html == null ? '' : html);
+
+        html = html.replace(/<ul[^>]*style="[^"]*list-style-type:([^;"]+)[^"]*"[^>]*>/gi, function (_m, type) {
+          return '<ul data-list="' + String(type || '').trim().toLowerCase() + '">';
+        });
+
+        html = html.replace(/<ol[^>]*style="[^"]*list-style-type:([^;"]+)[^"]*"[^>]*>/gi, function (_m, type) {
+          return '<ol data-list="' + String(type || '').trim().toLowerCase() + '">';
+        });
+
+        return html;
+      });
+    } catch (e) {}
+  }
+
   // ===============================
   // BBCode plugin patch (ГЛАВНОЕ)
   // ===============================
@@ -244,7 +291,16 @@
       bb.set('li', {
         isInline: false,
         html: '<li>{0}</li>',
-        format: '[li]{0}[/li]'
+        format: '[li]{0}[/li]',
+        tags: {
+          li: {
+            format: function (el, content) {
+              content = (content || '');
+              if (!String(content).trim()) content = '';
+              return '[li]' + content + '[/li]';
+            }
+          }
+        }
       });
     } catch (eLI) {}
 
@@ -277,17 +333,7 @@
 
         format: function (el, content) {
 
-          var style = '';
-          try { style = String((el && el.style && el.style.listStyleType) ? el.style.listStyleType : ''); } catch (e0) { style = ''; }
-
-          if (!style && el && el.ownerDocument && el.ownerDocument.defaultView && el.ownerDocument.defaultView.getComputedStyle) {
-            try {
-              var cs = el.ownerDocument.defaultView.getComputedStyle(el);
-              style = cs && cs.listStyleType ? String(cs.listStyleType) : '';
-            } catch (e1) { style = ''; }
-          }
-
-          style = style.toLowerCase();
+          var style = extractListStyle(el, 'disc');
 
           var map = {
             disc: '',
@@ -303,6 +349,45 @@
           if (attr) return '[ul=' + attr + ']' + (content || '') + '[/ul]';
 
           return '[ul]' + (content || '') + '[/ul]';
+        },
+
+        tags: {
+          ul: {
+            format: function (el, content) {
+              var style = extractListStyle(el, 'disc');
+
+              var map = {
+                disc: '',
+                square: 'square',
+                decimal: 'i',
+                'upper-roman': 'upper-roman',
+                'upper-alpha': 'upper-alpha',
+                'lower-alpha': 'lower-alpha'
+              };
+
+              var attr = map[style] || '';
+
+              if (attr) return '[ul=' + attr + ']' + (content || '') + '[/ul]';
+
+              return '[ul]' + (content || '') + '[/ul]';
+            }
+          },
+
+          ol: {
+            format: function (el, content) {
+              var style = extractListStyle(el, 'decimal');
+
+              var map = {
+                decimal: 'i',
+                'upper-roman': 'upper-roman',
+                'upper-alpha': 'upper-alpha',
+                'lower-alpha': 'lower-alpha'
+              };
+
+              var attr = map[style] || 'i';
+              return '[ul=' + attr + ']' + (content || '') + '[/ul]';
+            }
+          }
         }
       });
     } catch (eUL) {}
@@ -443,7 +528,8 @@
     // патчим bbcode и css
     try { afAeEnsureMybbListsBbcode(inst); } catch (e0) {}
     try { ensureListCss(inst); } catch (e1) {}
-    try { bindListEnterBehavior(inst); } catch (e2) {}
+    try { bindToSourceListNormalization(inst); } catch (e2) {}
+    try { bindListEnterBehavior(inst); } catch (e3) {}
 
     // SOURCE: вставляем BBCode
     if (isSourceMode(inst)) {
@@ -572,6 +658,7 @@
       exec: function () {
         try { afAeEnsureMybbListsBbcode(this); } catch (e0) {}
         try { ensureListCss(this); } catch (e1) {}
+        try { bindToSourceListNormalization(this); } catch (e2) {}
         insertCanonicalList(this, '');
       },
       txtExec: function () {
@@ -584,6 +671,7 @@
       exec: function () {
         try { afAeEnsureMybbListsBbcode(this); } catch (e0) {}
         try { ensureListCss(this); } catch (e1) {}
+        try { bindToSourceListNormalization(this); } catch (e2) {}
         insertCanonicalList(this, 'i');
       },
       txtExec: function () {
@@ -623,7 +711,8 @@
 
         try { afAeEnsureMybbListsBbcode(inst); } catch (e1) {}
         try { ensureListCss(inst); } catch (e2) {}
-        try { bindListEnterBehavior(inst); } catch (e3) {}
+        try { bindToSourceListNormalization(inst); } catch (e3) {}
+        try { bindListEnterBehavior(inst); } catch (e4) {}
       }
     } catch (e3) {}
 
