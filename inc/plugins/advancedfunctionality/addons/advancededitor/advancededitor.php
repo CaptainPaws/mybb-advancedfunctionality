@@ -19,6 +19,7 @@ define('AF_AE_SETTING_FORMFEATURE_FORUMS', 'af_advancededitor_formfeature_forum_
 define('AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS', 'af_ae_htmlbb_allowed_groups');
 define('AF_AE_SETTING_DISABLE_ON', 'af_advancededitor_disable_on');
 define('AF_AE_SETTING_WYSIWYG_EXCLUDE', 'af_advancededitor_wysiwyg_exclude_tags');
+define('AF_AE_SETTING_WYSIWYG_MODE', 'af_ae_wysiwyg_mode');
 
 
 
@@ -835,6 +836,8 @@ function af_advancededitor_pre_output(string &$page = ''): void
         // Ограничения по форумам (как было)
         $postcountCsv   = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_POSTCOUNT_FORUMS));
         $formfeatureCsv = af_advancededitor_expand_forum_csv((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_FORMFEATURE_FORUMS));
+        $wysiwygModeRaw = (string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_WYSIWYG_MODE);
+        $wysiwygPartialMode = ($wysiwygModeRaw === 'full') ? 0 : 1;
 
         $injectHead .= '<script>'
             . 'window.afAePayload=window.afAePayload||{};'
@@ -842,6 +845,7 @@ function af_advancededitor_pre_output(string &$page = ''): void
             . 'window.afAePayload.cfg.bburl=' . json_encode($bburl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
             . 'window.afAePayload.cfg.postcountForumIds=' . json_encode($postcountCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
             . 'window.afAePayload.cfg.formFeatureForumIds=' . json_encode($formfeatureCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
+            . 'window.afAePayload.cfg.wysiwygPartialMode=' . (int)$wysiwygPartialMode . ';'
             . '</script>' . "\n";
 
         // SCEditor: theme css (для тулбара)
@@ -942,6 +946,7 @@ table #post_options, table #postoptions{display:none!important;}
                 'postcountForumIds'   => $postcountCsv,
                 'formFeatureForumIds' => $formfeatureCsv,
                 'wysiwygExclude' => (string)$wysiwygExcludeRaw,
+                'wysiwygPartialMode' => (int)$wysiwygPartialMode,
             ],
         ];
         if ($editorSelector !== '') {
@@ -1212,6 +1217,15 @@ html",
         75
     );
 
+    $ensure(
+        AF_AE_SETTING_WYSIWYG_MODE,
+        'WYSIWYG Mode',
+        'Select how BBCodes are rendered inside the visual editor.',
+        "select\nfull=Full WYSIWYG\npartial=Partial WYSIWYG",
+        'partial',
+        76
+    );
+
     // === HTMLBB: кто может ИСПОЛЬЗОВАТЬ тег [html] ===
     $ensure(
         AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS,
@@ -1269,6 +1283,7 @@ function af_advancededitor_uninstall(): void
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_FORMFEATURE_FORUMS) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_DISABLE_ON) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_WYSIWYG_EXCLUDE) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_WYSIWYG_MODE) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS) . "'");
 
 
