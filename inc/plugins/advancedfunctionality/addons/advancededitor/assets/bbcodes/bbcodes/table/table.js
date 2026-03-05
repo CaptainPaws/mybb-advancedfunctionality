@@ -607,6 +607,9 @@
           '#af-ae-table-floating .af-ae-tbtn svg{width:18px;height:18px;display:block;fill:currentColor;}' +
           '#af-ae-table-floating .af-ae-tsep{width:1px;height:20px;background:rgba(255,255,255,.12);margin:0 2px;}' +
           '#af-ae-table-floating .af-ae-tcolors{display:flex;gap:6px;align-items:center;margin-left:4px;}' +
+          '#af-ae-table-floating .af-ae-tinputs{display:flex;gap:6px;align-items:center;}' +
+          '#af-ae-table-floating .af-ae-tinp{height:28px;min-width:90px;border-radius:8px;border:1px solid rgba(255,255,255,.14);background:#2a2a2a;color:#fff;padding:0 8px;font:500 12px/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}' +
+          '#af-ae-table-floating .af-ae-tbtn.is-active{background:#4a73ff;border-color:#6f90ff;}' +
           '#af-ae-table-floating input[type=color]{width:28px;height:28px;border:0;background:transparent;padding:0;cursor:pointer;}' +
           '#af-ae-table-floating .af-ae-tclose{margin-left:2px;}'
         ));
@@ -693,6 +696,18 @@
           '<span class="af-ae-tsep" aria-hidden="true"></span>' +
           '<button type="button" class="af-ae-tbtn" data-a="del-table" title="Удалить таблицу">' + icon('M7 4h6l1 2h2v1H4V6h2l1-2zm-1 4h1v7H6V8zm3 0h1v7H9V8zm3 0h1v7h-1V8z') + '</button>' +
           '<span class="af-ae-tsep" aria-hidden="true"></span>' +
+          '<button type="button" class="af-ae-tbtn" data-a="align-left" title="Выравнивание влево">L</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="align-center" title="Выравнивание по центру">C</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="align-right" title="Выравнивание вправо">R</button>' +
+          '<span class="af-ae-tsep" aria-hidden="true"></span>' +
+          '<div class="af-ae-tinputs" title="Ширина таблицы / колонок">' +
+          '  <input type="text" class="af-ae-tinp" data-a="tbl-width" placeholder="100% или 500px">' +
+          '  <button type="button" class="af-ae-tbtn" data-a="apply-width" title="Применить ширину таблицы">W</button>' +
+          '  <input type="text" class="af-ae-tinp" data-a="col-widths" placeholder="120px,200px,...">' +
+          '  <button type="button" class="af-ae-tbtn" data-a="apply-col-widths" title="Применить ширины колонок">CW</button>' +
+          '  <button type="button" class="af-ae-tbtn" data-a="col-width" title="Ширина текущей колонки">C1</button>' +
+          '</div>' +
+          '<span class="af-ae-tsep" aria-hidden="true"></span>' +
           '<div class="af-ae-tcolors" title="Цвета таблицы">' +
           '  <input type="color" data-a="bg" title="Заливка ячеек (bgcolor)">' +
           '  <input type="color" data-a="fg" title="Цвет текста (textcolor)">' +
@@ -737,6 +752,34 @@
 
           var t = inst.__afAeActiveTable;
 
+          function syncPanelStateForTable(tableEl) {
+            try {
+              var attrs = parseAttrsFromDom(tableEl);
+              var widthInput = panel.querySelector('input[data-a="tbl-width"]');
+              if (widthInput) widthInput.value = attrs.width || '';
+
+              var alignBtns = panel.querySelectorAll('button[data-a^="align-"]');
+              for (var ai = 0; ai < alignBtns.length; ai++) {
+                var b = alignBtns[ai];
+                var mode = asText(b.getAttribute('data-a')).replace('align-', '');
+                if (mode === attrs.align) b.classList.add('is-active');
+                else b.classList.remove('is-active');
+              }
+
+              var colInput = panel.querySelector('input[data-a="col-widths"]');
+              if (colInput && tableEl.rows && tableEl.rows.length) {
+                var firstRow = tableEl.rows[0];
+                var widths = [];
+                for (var ci = 0; ci < firstRow.cells.length; ci++) {
+                  var cw = '';
+                  try { cw = normWidthToken(firstRow.cells[ci].style.width || ''); } catch (eW) { cw = ''; }
+                  widths.push(cw || '');
+                }
+                colInput.value = widths.join(',');
+              }
+            } catch (eSync) {}
+          }
+
           if (act === 'close') {
             panel.style.display = 'none';
             inst.__afAeActiveTable = null;
@@ -752,6 +795,78 @@
               tableDebugLog('hide panel', { reason: 'table-deleted' });
             } catch (eD) {}
             syncEditorValue();
+            return;
+          }
+
+          if (act === 'align-left' || act === 'align-center' || act === 'align-right') {
+            try {
+              var aAlign = normalizeTableAttrs(parseAttrsFromDom(t));
+              aAlign.align = act.replace('align-', '');
+              applyAttrsToDom(t, aAlign);
+              syncPanelStateForTable(t);
+            } catch (eAlign) {}
+            syncEditorValue();
+            return;
+          }
+
+          if (act === 'apply-width') {
+            try {
+              var wInput = panel.querySelector('input[data-a="tbl-width"]');
+              var rawWidth = wInput ? wInput.value : '';
+              var aWidth = normalizeTableAttrs(parseAttrsFromDom(t));
+              aWidth.width = normWidthToken(rawWidth);
+              applyAttrsToDom(t, aWidth);
+              if (wInput) wInput.value = aWidth.width || '';
+              syncPanelStateForTable(t);
+            } catch (eTblW) {}
+            syncEditorValue();
+            return;
+          }
+
+          if (act === 'apply-col-widths') {
+            try {
+              var cwInput = panel.querySelector('input[data-a="col-widths"]');
+              var first = t.rows && t.rows.length ? t.rows[0] : null;
+              var cols = first ? first.cells.length : 0;
+              var widthsList = parseWidthList(cwInput ? cwInput.value : '', cols);
+              if (cols > 0) {
+                for (var rrw = 0; rrw < t.rows.length; rrw++) {
+                  for (var ccw = 0; ccw < cols; ccw++) {
+                    var cellW = t.rows[rrw].cells[ccw];
+                    if (!cellW) continue;
+                    cellW.style.width = widthsList[ccw] || '';
+                  }
+                }
+              }
+              var aCols = normalizeTableAttrs(parseAttrsFromDom(t));
+              applyAttrsToDom(t, aCols);
+              syncPanelStateForTable(t);
+            } catch (eColList) {}
+            syncEditorValue();
+            return;
+          }
+
+          if (act === 'col-width') {
+            var activeForWidth = getActiveCell(t);
+            if (activeForWidth && activeForWidth.parentElement) {
+              var colIdxPrompt = Array.prototype.indexOf.call(activeForWidth.parentElement.cells, activeForWidth);
+              var currentW = '';
+              try { currentW = normWidthToken(activeForWidth.style.width || '') || ''; } catch (eCW) {}
+              var rawPrompt = hostDoc.defaultView && hostDoc.defaultView.prompt ? hostDoc.defaultView.prompt('Ширина текущей колонки (например 120px или 20%)', currentW) : null;
+              if (rawPrompt !== null) {
+                var nPrompt = normWidthToken(rawPrompt);
+                for (var rr3 = 0; rr3 < t.rows.length; rr3++) {
+                  var c3 = t.rows[rr3].cells[colIdxPrompt];
+                  if (c3) c3.style.width = nPrompt || '';
+                }
+                try {
+                  var a3 = normalizeTableAttrs(parseAttrsFromDom(t));
+                  applyAttrsToDom(t, a3);
+                  syncPanelStateForTable(t);
+                } catch (eCA) {}
+                syncEditorValue();
+              }
+            }
             return;
           }
 
@@ -799,6 +914,7 @@
             var a2 = parseAttrsFromDom(t);
             a2 = normalizeTableAttrs(a2);
             applyAttrsToDom(t, a2);
+            syncPanelStateForTable(t);
           } catch (eA) {}
 
           syncEditorValue();
@@ -862,6 +978,23 @@
         var fg = panel.querySelector('input[data-a="fg"]'); if (fg && cur.textcolor) fg.value = cur.textcolor;
         var hbg = panel.querySelector('input[data-a="hbg"]'); if (hbg && cur.hbgcolor) hbg.value = cur.hbgcolor;
         var hfg = panel.querySelector('input[data-a="hfg"]'); if (hfg && cur.htextcolor) hfg.value = cur.htextcolor;
+        var tblWidth = panel.querySelector('input[data-a="tbl-width"]'); if (tblWidth) tblWidth.value = cur.width || '';
+        var colWidths = panel.querySelector('input[data-a="col-widths"]');
+        if (colWidths && table.rows && table.rows.length) {
+          var firstRow = table.rows[0];
+          var list = [];
+          for (var ci2 = 0; ci2 < firstRow.cells.length; ci2++) {
+            list.push(normWidthToken(firstRow.cells[ci2].style.width || '') || '');
+          }
+          colWidths.value = list.join(',');
+        }
+        var alignButtons = panel.querySelectorAll('button[data-a^="align-"]');
+        for (var abi = 0; abi < alignButtons.length; abi++) {
+          var ab = alignButtons[abi];
+          var mode2 = asText(ab.getAttribute('data-a')).replace('align-', '');
+          if (mode2 === cur.align) ab.classList.add('is-active');
+          else ab.classList.remove('is-active');
+        }
       } catch (eS) {}
 
     } catch (e) {}

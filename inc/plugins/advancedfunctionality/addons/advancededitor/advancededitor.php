@@ -1514,50 +1514,21 @@ function af_ae_bbcode_dispatch_parse_message_end(&$message): void
 
     static $packs = null;
     if ($packs === null) {
-        $packs = [];
-
-        $base = __DIR__ . '/assets/bbcodes';
-        if (is_dir($base)) {
-            $dirs = @scandir($base);
-            if (is_array($dirs)) {
-                foreach ($dirs as $d) {
-                    if ($d === '.' || $d === '..') continue;
-                    $packDir = $base . '/' . $d;
-                    if (!is_dir($packDir)) continue;
-
-                    $mf = $packDir . '/manifest.php';
-                    if (!is_file($mf)) continue;
-
-                    $manifest = @include $mf;
-                    if (!is_array($manifest) || empty($manifest['id'])) continue;
-
-                    $id = (string)$manifest['id'];
-                    $tags = [];
-                    if (!empty($manifest['tags']) && is_array($manifest['tags'])) {
-                        foreach ($manifest['tags'] as $t) {
-                            $t = trim((string)$t);
-                            if ($t !== '') $tags[] = $t;
-                        }
-                    }
-
-                    $parserRel = !empty($manifest['parser']) ? (string)$manifest['parser'] : '';
-                    $parserPath = $parserRel ? ($packDir . '/' . $parserRel) : '';
-
-                    $packs[] = [
-                        'id'     => $id,
-                        'tags'   => $tags,
-                        'parser' => $parserPath,
-                    ];
-                }
-            }
-        }
+        $packs = af_ae_bbcode_dispatch_collect_packs();
     }
 
     if (empty($packs)) {
         return;
     }
 
-    foreach ($packs as $p) {
+    $packsToRun = $packs;
+    usort($packsToRun, static function (array $a, array $b): int {
+        if (($a['id'] ?? '') === 'table' && ($b['id'] ?? '') !== 'table') return 1;
+        if (($b['id'] ?? '') === 'table' && ($a['id'] ?? '') !== 'table') return -1;
+        return 0;
+    });
+
+    foreach ($packsToRun as $p) {
         if (empty($p['tags'])) continue;
 
         // триггер по тегам пакета (для end тоже)
@@ -1603,43 +1574,7 @@ function af_ae_bbcode_dispatch_parse_message_start(&$message): void
 
     static $packs = null;
     if ($packs === null) {
-        $packs = [];
-
-        $base = __DIR__ . '/assets/bbcodes';
-        if (is_dir($base)) {
-            $dirs = @scandir($base);
-            if (is_array($dirs)) {
-                foreach ($dirs as $d) {
-                    if ($d === '.' || $d === '..') continue;
-                    $packDir = $base . '/' . $d;
-                    if (!is_dir($packDir)) continue;
-
-                    $mf = $packDir . '/manifest.php';
-                    if (!is_file($mf)) continue;
-
-                    $manifest = @include $mf;
-                    if (!is_array($manifest) || empty($manifest['id'])) continue;
-
-                    $id = (string)$manifest['id'];
-                    $tags = [];
-                    if (!empty($manifest['tags']) && is_array($manifest['tags'])) {
-                        foreach ($manifest['tags'] as $t) {
-                            $t = trim((string)$t);
-                            if ($t !== '') $tags[] = $t;
-                        }
-                    }
-
-                    $parserRel = !empty($manifest['parser']) ? (string)$manifest['parser'] : '';
-                    $parserPath = $parserRel ? ($packDir . '/' . $parserRel) : '';
-
-                    $packs[] = [
-                        'id'     => $id,
-                        'tags'   => $tags,
-                        'parser' => $parserPath,
-                    ];
-                }
-            }
-        }
+        $packs = af_ae_bbcode_dispatch_collect_packs();
     }
 
     if (empty($packs)) {
@@ -1670,6 +1605,65 @@ function af_ae_bbcode_dispatch_parse_message_start(&$message): void
             $fnStart($message);
         }
     }
+}
+
+function af_ae_bbcode_dispatch_collect_packs(): array
+{
+    $roots = [
+        __DIR__ . '/assets/bbcodes',
+        __DIR__ . '/assets/bbcodes/bbcodes',
+    ];
+
+    $packs = [];
+    $seen = [];
+
+    foreach ($roots as $base) {
+        if (!is_dir($base)) {
+            continue;
+        }
+
+        $dirs = @scandir($base);
+        if (!is_array($dirs)) {
+            continue;
+        }
+
+        foreach ($dirs as $d) {
+            if ($d === '.' || $d === '..') continue;
+            $packDir = $base . '/' . $d;
+            if (!is_dir($packDir)) continue;
+
+            $mf = $packDir . '/manifest.php';
+            if (!is_file($mf)) continue;
+
+            $manifest = @include $mf;
+            if (!is_array($manifest) || empty($manifest['id'])) continue;
+
+            $id = trim((string)$manifest['id']);
+            if ($id === '' || isset($seen[$id])) {
+                continue;
+            }
+
+            $tags = [];
+            if (!empty($manifest['tags']) && is_array($manifest['tags'])) {
+                foreach ($manifest['tags'] as $t) {
+                    $t = trim((string)$t);
+                    if ($t !== '') $tags[] = $t;
+                }
+            }
+
+            $parserRel = !empty($manifest['parser']) ? (string)$manifest['parser'] : '';
+            $parserPath = $parserRel ? ($packDir . '/' . ltrim($parserRel, '/')) : '';
+
+            $packs[] = [
+                'id'     => $id,
+                'tags'   => $tags,
+                'parser' => $parserPath,
+            ];
+            $seen[$id] = true;
+        }
+    }
+
+    return $packs;
 }
 
 
