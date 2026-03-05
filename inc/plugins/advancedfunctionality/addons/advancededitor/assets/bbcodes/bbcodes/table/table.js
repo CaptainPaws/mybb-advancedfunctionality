@@ -548,6 +548,35 @@
     return iframeDoc || ownerDoc;
   }
 
+  function getEditorIframeElement(inst, iframeDoc) {
+    try {
+      if (inst && typeof inst.getContentAreaContainer === 'function') {
+        var c = inst.getContentAreaContainer();
+        if (c && c.querySelector) {
+          var ifr = c.querySelector('iframe');
+          if (ifr) return ifr;
+        }
+      }
+    } catch (e1) {}
+
+    try {
+      if (iframeDoc && iframeDoc.defaultView && iframeDoc.defaultView.frameElement) {
+        return iframeDoc.defaultView.frameElement;
+      }
+    } catch (e2) {}
+
+    return null;
+  }
+
+  function tableDebugLog() {
+    try {
+      if (!window.__afAeDebug) return;
+      var args = Array.prototype.slice.call(arguments);
+      args.unshift('[AF-AE table]');
+      if (window.console && typeof window.console.log === 'function') window.console.log.apply(window.console, args);
+    } catch (e) {}
+  }
+
   function openFloatingEditorForTable(inst, table) {
     if (!inst || !table || table.nodeType !== 1) return;
 
@@ -557,6 +586,7 @@
 
       var doc = body.ownerDocument;
       var hostDoc = getFloatingPanelHostDoc(inst, doc);
+      var iframeEl = getEditorIframeElement(inst, doc);
       var panel = hostDoc.getElementById('af-ae-table-floating');
 
       function syncEditorValue() {
@@ -653,15 +683,15 @@
         panel.id = 'af-ae-table-floating';
 
         panel.innerHTML = '' +
-          '<button type="button" class="af-ae-tbtn" data-a="row-above" title="Добавить строку выше">' + icon('M3 10h14v2H3zM9 3h2v14H9z') + '</button>' +
-          '<button type="button" class="af-ae-tbtn" data-a="row-below" title="Добавить строку ниже">' + icon('M3 8h14v2H3zm0 4h14v2H3zM9 11h2v6H9z') + '</button>' +
-          '<button type="button" class="af-ae-tbtn" data-a="row-del" title="Удалить строку">' + icon('M3 9h14v2H3zm2 4h10v2H5z') + '</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="row-above" title="Добавить строку выше">' + icon('M4 10h12v1H4zM10 4h1v12h-1zM4 6h12v1H4z') + '</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="row-below" title="Добавить строку ниже">' + icon('M4 10h12v1H4zM4 14h12v1H4zM10 12h1v4h-1z') + '</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="row-del" title="Удалить строку">' + icon('M4 10h12v1H4zM6 14h8v1H6z') + '</button>' +
           '<span class="af-ae-tsep" aria-hidden="true"></span>' +
-          '<button type="button" class="af-ae-tbtn" data-a="col-left" title="Добавить колонку слева">' + icon('M9 3h2v14H9zM3 9h6v2H3zM13 9h4v2h-4z') + '</button>' +
-          '<button type="button" class="af-ae-tbtn" data-a="col-right" title="Добавить колонку справа">' + icon('M9 3h2v14H9zM3 9h4v2H3zM11 9h6v2h-6z') + '</button>' +
-          '<button type="button" class="af-ae-tbtn" data-a="col-del" title="Удалить колонку">' + icon('M9 3h2v14H9zm3 0h2v14h-2z') + '</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="col-left" title="Добавить колонку слева">' + icon('M10 4h1v12h-1zM4 10h4v1H4zM4 4h1v12H4z') + '</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="col-right" title="Добавить колонку справа">' + icon('M10 4h1v12h-1zM12 10h4v1h-4zM15 4h1v12h-1z') + '</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="col-del" title="Удалить колонку">' + icon('M10 4h1v12h-1zM14 4h1v12h-1z') + '</button>' +
           '<span class="af-ae-tsep" aria-hidden="true"></span>' +
-          '<button type="button" class="af-ae-tbtn" data-a="del-table" title="Удалить таблицу">' + icon('M7 3h6l1 2h3v2H3V5h3l1-2zm-1 6h2v6H6V9zm6 0h2v6h-2V9z') + '</button>' +
+          '<button type="button" class="af-ae-tbtn" data-a="del-table" title="Удалить таблицу">' + icon('M7 4h6l1 2h2v1H4V6h2l1-2zm-1 4h1v7H6V8zm3 0h1v7H9V8zm3 0h1v7h-1V8z') + '</button>' +
           '<span class="af-ae-tsep" aria-hidden="true"></span>' +
           '<div class="af-ae-tcolors" title="Цвета таблицы">' +
           '  <input type="color" data-a="bg" title="Заливка ячеек (bgcolor)">' +
@@ -669,7 +699,7 @@
           '  <input type="color" data-a="hbg" title="Заливка заголовков (hbgcolor)">' +
           '  <input type="color" data-a="hfg" title="Цвет текста заголовков (htextcolor)">' +
           '</div>' +
-          '<button type="button" class="af-ae-tbtn af-ae-tclose" data-a="close" title="Закрыть">' + icon('M5.2 3.8L10 8.6l4.8-4.8 1.4 1.4L11.4 10l4.8 4.8-1.4 1.4L10 11.4l-4.8 4.8-1.4-1.4L8.6 10 3.8 5.2z') + '</button>';
+          '<button type="button" class="af-ae-tbtn af-ae-tclose" data-a="close" title="Закрыть">' + icon('M5.2 4.5L10 9.3l4.8-4.8.7.7-4.8 4.8 4.8 4.8-.7.7-4.8-4.8-4.8 4.8-.7-.7 4.8-4.8-4.8-4.8z') + '</button>';
 
         (hostDoc.body || hostDoc.documentElement).appendChild(panel);
 
@@ -708,6 +738,12 @@
 
           var row = cell.parentElement;
           var colIndex = Array.prototype.indexOf.call(row.cells, cell);
+          tableDebugLog('button click', {
+            action: act,
+            hasActiveCell: !!cell,
+            rowIndex: row ? row.rowIndex : -1,
+            colIndex: colIndex
+          });
 
           function cloneCell(base) {
             var n = base.cloneNode(false);
@@ -744,6 +780,7 @@
           } catch (eA) {}
 
           syncEditorValue();
+          try { if (typeof inst.focus === 'function') inst.focus(); } catch (eF) {}
         }, false);
 
         var colorHandler = function (ev) {
@@ -761,6 +798,7 @@
           a = normalizeTableAttrs(a);
           applyAttrsToDom(t, a);
           syncEditorValue();
+          try { if (typeof inst.focus === 'function') inst.focus(); } catch (eF2) {}
         };
 
         panel.addEventListener('input', colorHandler, false);
@@ -768,8 +806,14 @@
       }
 
       var rect = table.getBoundingClientRect();
+      var iframeRect = iframeEl && iframeEl.getBoundingClientRect ? iframeEl.getBoundingClientRect() : null;
       var top = rect.bottom + 8;
       var left = rect.left;
+
+      if (iframeRect) {
+        top = iframeRect.top + rect.bottom + 8;
+        left = iframeRect.left + rect.left;
+      }
 
       var vw = hostDoc.defaultView ? hostDoc.defaultView.innerWidth : 0;
       if (vw) {
@@ -780,6 +824,13 @@
       panel.style.display = 'flex';
       panel.style.top = Math.max(8, top) + 'px';
       panel.style.left = Math.max(8, left) + 'px';
+      tableDebugLog('open panel', {
+        hostIsTopDocument: hostDoc === document,
+        panelOwnerHost: panel.ownerDocument === hostDoc,
+        iframeRect: iframeRect ? { top: iframeRect.top, left: iframeRect.left, bottom: iframeRect.bottom, right: iframeRect.right } : null,
+        tableRect: { top: rect.top, left: rect.left, bottom: rect.bottom, right: rect.right },
+        computed: { top: Math.max(8, top), left: Math.max(8, left) }
+      });
 
       inst.__afAeActiveTable = table;
 
@@ -805,6 +856,7 @@
 
       var doc = body.ownerDocument;
       var hostDoc = getFloatingPanelHostDoc(inst, doc);
+      var iframeEl = getEditorIframeElement(inst, doc);
 
       function hidePanel() {
         try {
@@ -815,6 +867,11 @@
       }
 
       body.addEventListener('mousedown', function (ev) {
+        var cell = ev.target && ev.target.closest ? ev.target.closest('td,th') : null;
+        if (cell) inst.__afAeActiveTableCell = cell;
+      }, true);
+
+      body.addEventListener('click', function (ev) {
         var cell = ev.target && ev.target.closest ? ev.target.closest('td,th') : null;
         if (cell) inst.__afAeActiveTableCell = cell;
       }, true);
@@ -833,10 +890,32 @@
 
         var t = inst.__afAeActiveTable;
         var inPanel = panel.contains(ev.target);
-        var inTable = t && t.contains(ev.target);
+        var hitIframe = !!(iframeEl && (ev.target === iframeEl || (iframeEl.contains && iframeEl.contains(ev.target))));
+        var hitTable = false;
 
-        if (!inPanel && !inTable) hidePanel();
-      }, true);
+        if (t && hitIframe && iframeEl && iframeEl.getBoundingClientRect) {
+          try {
+            var iframeRect = iframeEl.getBoundingClientRect();
+            var x = ev.clientX - iframeRect.left;
+            var y = ev.clientY - iframeRect.top;
+            if (x >= 0 && y >= 0 && x <= iframeRect.width && y <= iframeRect.height) {
+              var elAtPoint = doc.elementFromPoint(x, y);
+              var tableAtPoint = elAtPoint && elAtPoint.closest ? elAtPoint.closest('table[data-af-table="1"],table.af-ae-table') : null;
+              hitTable = !!(tableAtPoint && (tableAtPoint === t || (t.contains && t.contains(tableAtPoint))));
+            }
+          } catch (e1) {}
+        }
+
+        tableDebugLog('outside click', {
+          tag: ev.target && ev.target.tagName,
+          inPanel: inPanel,
+          hitIframe: hitIframe,
+          hitTable: hitTable,
+          shouldHide: (!inPanel && !hitTable)
+        });
+
+        if (!inPanel && !hitTable) hidePanel();
+      }, false);
 
       inst.bind('blur', function () {
         hidePanel();
