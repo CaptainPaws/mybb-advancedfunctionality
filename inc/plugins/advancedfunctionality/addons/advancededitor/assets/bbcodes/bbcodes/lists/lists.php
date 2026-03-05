@@ -101,7 +101,8 @@ if (!function_exists('af_ae_lists_mycode_delete_titles')) {
  * - [li]...[/li] => <li>...</li>
  * - [ul]...[/ul] => <ul style="list-style-type:disc">...</ul>
  * - [ul=square]...[/ul] => <ul style="list-style-type:square">...</ul>
- * - [ul=i]...[/ul] и прочие => <ol style="...">...</ol>
+ * - [ul=upper-alpha]...[/ul] => <ol style="list-style-type:upper-alpha">...</ol>
+ * - [ol]/[ol=...]...[/ol] поддерживаются как каноничные ordered-теги
  *
  * Да, это “ul параметризованный” превращаем в ol — потому что так у тебя задуманы кнопки/разметка.
  */
@@ -141,6 +142,15 @@ if (!function_exists('af_ae_lists_install_mycode')) {
             1
         );
 
+        // [ul=circle]...[/ul]
+        af_ae_lists_mycode_upsert(
+            'AF AE: UL (circle)',
+            '\\[ul=circle\\]([\\s\\S]*?)\\[\\/ul\\]',
+            '<ul style="list-style-type:circle; padding-left: 1.4em;">$1</ul>',
+            20,
+            1
+        );
+
         // [ul=i]...[/ul] => decimal
         af_ae_lists_mycode_upsert(
             'AF AE: UL (decimal)',
@@ -168,12 +178,48 @@ if (!function_exists('af_ae_lists_install_mycode')) {
             1
         );
 
+        // [ul=lower-roman]...[/ul]
+        af_ae_lists_mycode_upsert(
+            'AF AE: UL (lower-roman)',
+            '\\[ul=lower-roman\\]([\\s\\S]*?)\\[\\/ul\\]',
+            '<ol style="list-style-type:lower-roman; padding-left: 1.6em;">$1</ol>',
+            20,
+            1
+        );
+
         // [ul=lower-alpha]...[/ul]
         af_ae_lists_mycode_upsert(
             'AF AE: UL (lower-alpha)',
             '\\[ul=lower-alpha\\]([\\s\\S]*?)\\[\\/ul\\]',
             '<ol style="list-style-type:lower-alpha; padding-left: 1.6em;">$1</ol>',
             20,
+            1
+        );
+
+        // [ol]...[/ol] => decimal
+        af_ae_lists_mycode_upsert(
+            'AF AE: OL (decimal default)',
+            '\\[ol\\]([\\s\\S]*?)\\[\\/ol\\]',
+            '<ol style="list-style-type:decimal; padding-left: 1.6em;">$1</ol>',
+            20,
+            1
+        );
+
+        // [ol=decimal|upper-alpha|upper-roman|lower-alpha|lower-roman|i]...[/ol]
+        af_ae_lists_mycode_upsert(
+            'AF AE: OL (typed)',
+            '\\[ol=(decimal|upper-alpha|upper-roman|lower-alpha|lower-roman|i)\\]([\\s\\S]*?)\\[\\/ol\\]',
+            '<ol style="list-style-type:$1; padding-left: 1.6em;">$2</ol>',
+            20,
+            1
+        );
+
+        // Backward compatibility: [ol=i] should render as decimal
+        af_ae_lists_mycode_upsert(
+            'AF AE: OL (i->decimal)',
+            '\\[ol=i\\]([\\s\\S]*?)\\[\\/ol\\]',
+            '<ol style="list-style-type:decimal; padding-left: 1.6em;">$1</ol>',
+            19,
             1
         );
 
@@ -193,19 +239,29 @@ if (!function_exists('af_ae_lists_uninstall_mycode')) {
             'AF AE Lists: LI',
             'AF AE Lists: UL (disc)',
             'AF AE Lists: UL (square)',
+            'AF AE Lists: UL (circle)',
             'AF AE Lists: UL (decimal)',
             'AF AE Lists: UL (upper-roman)',
             'AF AE Lists: UL (upper-alpha)',
+            'AF AE Lists: UL (lower-roman)',
             'AF AE Lists: UL (lower-alpha)',
+            'AF AE Lists: OL (decimal default)',
+            'AF AE Lists: OL (typed)',
+            'AF AE Lists: OL (i->decimal)',
 
             // легаси/мусор от прошлых попыток (на всякий случай)
             'AF AE: LI',
             'AF AE: UL (disc)',
             'AF AE: UL (square)',
+            'AF AE: UL (circle)',
             'AF AE: UL (decimal)',
             'AF AE: UL (upper-roman)',
             'AF AE: UL (upper-alpha)',
+            'AF AE: UL (lower-roman)',
             'AF AE: UL (lower-alpha)',
+            'AF AE: OL (decimal default)',
+            'AF AE: OL (typed)',
+            'AF AE: OL (i->decimal)',
 
             'AF AE: li',
             'AF AE: af_ul_disc',

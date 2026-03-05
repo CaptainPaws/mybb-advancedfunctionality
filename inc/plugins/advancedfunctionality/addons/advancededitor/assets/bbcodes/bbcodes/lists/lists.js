@@ -46,6 +46,21 @@
     return false;
   }
 
+  function getEditorFormat(inst) {
+    try {
+      if (inst && inst.opts && typeof inst.opts.format === 'string') {
+        return String(inst.opts.format).toLowerCase();
+      }
+    } catch (e) {}
+    return '';
+  }
+
+  function isBbcodeEditorMode(inst) {
+    var fmt = getEditorFormat(inst);
+    if (!fmt) return true;
+    return fmt === 'bbcode';
+  }
+
   function getSceditorInstanceFromCtx(ctx) {
     if (ctx && typeof ctx.insertText === 'function') return ctx;
     if (ctx && ctx.sceditor && typeof ctx.sceditor.insertText === 'function') return ctx.sceditor;
@@ -553,20 +568,25 @@
     try { bindToSourceListNormalization(inst); } catch (e2) {}
     try { bindListEnterBehavior(inst); } catch (e3) {}
 
-    // SOURCE: вставляем BBCode
-    if (isSourceMode(inst)) {
+    // SOURCE + partial WYSIWYG (bbcode-mode): вставляем BBCode
+    if (isSourceMode(inst) || isBbcodeEditorMode(inst)) {
       var chunk = buildCanonicalChunk(attr);
       try {
         if (typeof inst.insertText === 'function') inst.insertText(chunk, '');
         else if (typeof inst.insert === 'function') inst.insert(chunk, '');
       } catch (e2) {}
-      debugLog('[AE-LISTS] insert', { mode: 'source', requestedAttr: attr, insertedVia: 'insertText/insert', bbcodeChunk: chunk });
+      debugLog('[AE-LISTS] insert', {
+        mode: isSourceMode(inst) ? 'source' : 'wysiwyg-bbcode',
+        requestedAttr: attr,
+        format: getEditorFormat(inst) || '(unknown)',
+        insertedVia: 'insertText/insert',
+        bbcodeChunk: chunk
+      });
       try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e3) {}
       return true;
     }
 
-    // WYSIWYG: вставляем HTML в iframe, НИКОГДА не через insert(html),
-    // потому что в bbcode-режиме insert() трактует строку как BBCode/текст.
+    // true html-mode: вставляем HTML в iframe.
     var html = buildHtmlListChunk(attr);
     var insertedVia = '';
     try {
