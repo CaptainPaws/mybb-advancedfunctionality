@@ -71,6 +71,40 @@ function af_ae_bbcode_table_parse(&$message): void
                 $x = preg_replace('~\[/td\]~i', '</td>', $x);
                 $x = preg_replace('~\[/th\]~i', '</th>', $x);
 
+                // Инлайн-стили ячеек для фронта/preview (независимо от загрузки CSS темы).
+                $headersMode = !empty($attrs['headers']) ? $attrs['headers'] : '';
+                $rowIndex = 0;
+                $x = preg_replace_callback('~<tr>(.*?)</tr>~is', function ($mr) use (&$rowIndex, $attrs, $headersMode) {
+                    $rowIndex++;
+                    $colIndex = 0;
+                    $rowHtml = preg_replace_callback('~<(td|th)([^>]*)>(.*?)</\1>~is', function ($mc) use (&$colIndex, $attrs, $headersMode, $rowIndex) {
+                        $colIndex++;
+                        $tag = strtolower((string)$mc[1]);
+                        $extraAttrs = (string)$mc[2];
+                        $innerHtml = (string)$mc[3];
+
+                        $isHeaderByMode = false;
+                        if ($headersMode === 'row' && $rowIndex === 1) $isHeaderByMode = true;
+                        if ($headersMode === 'col' && $colIndex === 1) $isHeaderByMode = true;
+                        if ($headersMode === 'both' && ($rowIndex === 1 || $colIndex === 1)) $isHeaderByMode = true;
+
+                        $shouldHeaderStyle = ($tag === 'th') || $isHeaderByMode;
+
+                        $styleFromCell = '';
+                        if (preg_match('~\bstyle\s*=\s*"([^"]*)"~i', $extraAttrs, $sm)) {
+                            $styleFromCell = trim((string)$sm[1]);
+                        }
+
+                        $cellStyle = af_ae_bbcode_table_build_cell_style($attrs, $shouldHeaderStyle, $styleFromCell);
+                        $newAttrs = preg_replace('~\bstyle\s*=\s*"[^"]*"~i', '', $extraAttrs);
+                        $newAttrs = trim((string)$newAttrs);
+
+                        return '<' . $tag . ($newAttrs !== '' ? ' ' . $newAttrs : '') . ' style="' . htmlspecialchars_uni($cellStyle) . '">' . $innerHtml . '</' . $tag . '>';
+                    }, (string)$mr[1]);
+
+                    return '<tr>' . $rowHtml . '</tr>';
+                }, $x);
+
                 $styles = [];
 
                 // layout
@@ -219,6 +253,46 @@ function af_ae_bbcode_table_parse_attrs(string $raw): array
     }
 
     return $out;
+}
+
+function af_ae_bbcode_table_build_cell_style(array $attrs, bool $isHeader, string $existingStyle = ''): string
+{
+    $styles = [];
+    $existingStyle = trim($existingStyle);
+    if ($existingStyle !== '') {
+        $styles[] = rtrim($existingStyle, ';');
+    }
+
+    if (!empty($attrs['bgcolor'])) {
+        $styles[] = 'background-color:' . $attrs['bgcolor'];
+    }
+    if (!empty($attrs['textcolor'])) {
+        $styles[] = 'color:' . $attrs['textcolor'];
+    }
+
+    if ($isHeader) {
+        if (!empty($attrs['hbgcolor'])) {
+            $styles[] = 'background-color:' . $attrs['hbgcolor'];
+        }
+        if (!empty($attrs['htextcolor'])) {
+            $styles[] = 'color:' . $attrs['htextcolor'];
+        }
+        $styles[] = 'font-weight:700';
+    }
+
+    $borderOn = (!isset($attrs['border']) || $attrs['border'] !== '0');
+    if ($borderOn) {
+        $bw = !empty($attrs['borderwidth']) ? $attrs['borderwidth'] : '1px';
+        $bc = !empty($attrs['bordercolor']) ? $attrs['bordercolor'] : '#888888';
+        $styles[] = 'border:' . $bw . ' solid ' . $bc;
+    } else {
+        $styles[] = 'border:0';
+    }
+
+    $styles[] = 'padding:6px 8px';
+    $styles[] = 'vertical-align:top';
+
+    return implode(';', $styles);
 }
 
 /**
