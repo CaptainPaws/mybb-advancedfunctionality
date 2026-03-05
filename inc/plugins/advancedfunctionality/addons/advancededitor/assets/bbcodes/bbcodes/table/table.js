@@ -83,7 +83,34 @@
     s = asText(s).trim();
     if (!s) return '';
     if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(s)) return s.toLowerCase();
-    return '';
+    return rgbToHex(s) || '';
+  }
+
+
+
+  function rgbToHex(s) {
+    s = asText(s).trim().toLowerCase();
+    if (!s) return '';
+    var m = s.match(/^rgba?\(([^)]+)\)$/i);
+    if (!m) return '';
+    var parts = m[1].split(/\s*,\s*/);
+    if (parts.length < 3) return '';
+    var r = parseInt(parts[0], 10);
+    var g = parseInt(parts[1], 10);
+    var b = parseInt(parts[2], 10);
+    if (!isFinite(r) || !isFinite(g) || !isFinite(b)) return '';
+    if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) return '';
+    var toHex = function (n) {
+      var h = n.toString(16);
+      return h.length === 1 ? ('0' + h) : h;
+    };
+    return ('#' + toHex(r) + toHex(g) + toHex(b));
+  }
+
+  function readColorToken(raw) {
+    raw = asText(raw).trim();
+    if (!raw) return '';
+    return normColor(raw) || rgbToHex(raw) || '';
   }
 
   function normBorderWidth(s) {
@@ -226,8 +253,19 @@
         else if (style.marginRight === 'auto') attrs.align = 'left';
       }
       if (!attrs.borderwidth && style.borderWidth) attrs.borderwidth = asText(style.borderWidth).trim().toLowerCase();
-      if (!attrs.bordercolor && style.borderColor) attrs.bordercolor = normColor(style.borderColor);
+      if (!attrs.bordercolor && style.borderColor) attrs.bordercolor = readColorToken(style.borderColor);
     } catch (e0) {}
+
+    try {
+      var firstTh = tableEl.querySelector('th');
+      var firstTd = tableEl.querySelector('td,th');
+      if (!attrs.hbgcolor && firstTh && firstTh.style) attrs.hbgcolor = readColorToken(firstTh.style.backgroundColor);
+      if (!attrs.htextcolor && firstTh && firstTh.style) attrs.htextcolor = readColorToken(firstTh.style.color);
+      if (!attrs.bgcolor && firstTd && firstTd.style) attrs.bgcolor = readColorToken(firstTd.style.backgroundColor);
+      if (!attrs.textcolor && firstTd && firstTd.style) attrs.textcolor = readColorToken(firstTd.style.color);
+      if (!attrs.borderwidth && firstTd && firstTd.style && firstTd.style.borderWidth) attrs.borderwidth = asText(firstTd.style.borderWidth).trim().toLowerCase();
+      if (!attrs.bordercolor && firstTd && firstTd.style) attrs.bordercolor = readColorToken(firstTd.style.borderColor);
+    } catch (eCell) {}
 
     attrs = normalizeTableAttrs(attrs);
     return attrs;
@@ -393,8 +431,15 @@
 
     var bb = getBb();
     if (!bb) return;
-    if (bb.__afAeTablePatched) return;
-    bb.__afAeTablePatched = true;
+
+    function hasTag(name) {
+      try {
+        if (typeof bb.get === 'function') return !!bb.get(name);
+      } catch (eGet) {}
+      return false;
+    }
+
+    if (bb.__afAeTablePatched && hasTag('table') && hasTag('tr') && hasTag('td') && hasTag('th')) return;
 
     try {
       bb.set('table', {
@@ -453,17 +498,71 @@
           format: function (el, content) {
             var width = '';
             try {
-              width = normWidthToken(el.getAttribute('data-af-width') || (el.style && el.style.width) || '');
+              width = normWidthToken((el.style && el.style.width) || el.getAttribute('data-af-width') || '');
             } catch (e2) { width = ''; }
             return '[' + tag + (width ? ' width=' + width : '') + ']' + (content || '') + '[/' + tag + ']';
           },
-          tags: {}
+          tags: (function () {
+            var t = {};
+            t[tag] = {
+              format: function (el, content) {
+                var width = '';
+                try {
+                  width = normWidthToken((el.style && el.style.width) || el.getAttribute('data-af-width') || '');
+                } catch (e4) { width = ''; }
+                return '[' + tag + (width ? ' width=' + width : '') + ']' + (content || '') + '[/' + tag + ']';
+              }
+            };
+            return t;
+          })()
         });
       } catch (e3) {}
     }
 
     setCell('td');
     setCell('th');
+
+    bb.__afAeTablePatched = true;
+  }
+
+  function bindPreSerializeGuards(inst) {
+    if (!inst || inst.__afAeTableSerializeGuardBound) return;
+    inst.__afAeTableSerializeGuardBound = true;
+
+    function guardPatch() {
+      try { afAeEnsureMybbTableBbcode(inst); } catch (e0) {}
+    }
+
+    try {
+      if (typeof inst.updateOriginal === 'function' && !inst.__afAeTableUpdateOriginalWrapped) {
+        var origUpdate = inst.updateOriginal;
+        inst.updateOriginal = function () {
+          guardPatch();
+          return origUpdate.apply(this, arguments);
+        };
+        inst.__afAeTableUpdateOriginalWrapped = true;
+      }
+    } catch (e1) {}
+
+    try {
+      if (typeof inst.val === 'function' && !inst.__afAeTableValWrapped) {
+        var origVal = inst.val;
+        inst.val = function () {
+          if (!arguments.length) guardPatch();
+          return origVal.apply(this, arguments);
+        };
+        inst.__afAeTableValWrapped = true;
+      }
+    } catch (e2) {}
+
+    try {
+      if (typeof inst.bind === 'function') {
+        inst.bind('toSource', function (html) {
+          guardPatch();
+          return html;
+        });
+      }
+    } catch (e3) {}
   }
 
   function insertTableToEditor(editor, bb, html) {
@@ -505,6 +604,7 @@
         try { ensureTableCss(editor); } catch (e2) {}
         try { bindTableToSourceNormalization(editor); } catch (e3) {}
         try { bindFloatingEditor(editor); } catch (e4) {}
+        try { bindPreSerializeGuards(editor); } catch (e7) {}
 
         if (isSourceMode(editor)) {
           editor.insertText(bb, '');
@@ -1252,6 +1352,7 @@
     ensureTableCss(editor);
     bindTableToSourceNormalization(editor);
     bindFloatingEditor(editor);
+    bindPreSerializeGuards(editor);
 
     var wrap = makeDropdown(editor, caller);
     editor.createDropDown(caller, 'sceditor-table-picker', wrap);
@@ -1309,6 +1410,7 @@
         try { ensureTableCss(inst); } catch (e2) {}
         try { bindTableToSourceNormalization(inst); } catch (e3) {}
         try { bindFloatingEditor(inst); } catch (e4) {}
+        try { bindPreSerializeGuards(inst); } catch (e5) {}
       }
     } catch (e) {}
 
