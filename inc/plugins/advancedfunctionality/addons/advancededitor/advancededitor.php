@@ -22,6 +22,7 @@ define('AF_AE_SETTING_WYSIWYG_EXCLUDE', 'af_ae_wysiwyg_exclude');
 define('AF_AE_SETTING_WYSIWYG_MODE', 'af_ae_wysiwyg_mode');
 define('AF_AE_SETTING_PARTIAL_WHITELIST', 'af_ae_partial_whitelist');
 define('AF_AE_SETTING_DEFAULT_EDITOR_MODE', 'af_ae_default_editor_mode');
+define('AF_AE_SETTING_REMEMBER_MODE_ENABLED', 'af_advancededitor_remember_mode_enabled');
 define('AF_AE_SETTING_WYSIWYG_EXCLUDE_LEGACY', 'af_advancededitor_wysiwyg_exclude_tags');
 define('AF_AE_SETTING_HELP_ENABLED', 'af_advancededitor_help_enabled');
 define('AF_AE_SETTING_HELP_CONTENT', 'af_advancededitor_help_content');
@@ -877,6 +878,8 @@ function af_advancededitor_pre_output(string &$page = ''): void
             $defaultEditorModeRaw = 'bbcode';
         }
 
+        $rememberModeEnabled = ((int)trim((string)af_advancededitor_load_setting_value_from_db(AF_AE_SETTING_REMEMBER_MODE_ENABLED)) === 1) ? 1 : 0;
+
         $injectHead .= '<script>'
             . 'window.afAePayload=window.afAePayload||{};'
             . 'window.afAePayload.cfg=window.afAePayload.cfg||{};'
@@ -885,6 +888,7 @@ function af_advancededitor_pre_output(string &$page = ''): void
             . 'window.afAePayload.cfg.formFeatureForumIds=' . json_encode($formfeatureCsv, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
             . 'window.afAePayload.cfg.wysiwygMode=' . json_encode($wysiwygModeRaw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
             . 'window.afAePayload.cfg.defaultEditorMode=' . json_encode($defaultEditorModeRaw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
+            . 'window.afAePayload.cfg.rememberModeEnabled=' . json_encode($rememberModeEnabled, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';'
             . '</script>' . "\n";
 
         // SCEditor: theme css (для тулбара)
@@ -1022,6 +1026,7 @@ table #post_options, table #postoptions{display:none!important;}
                 'wysiwygExclude' => (string)$wysiwygExcludeRaw,
                 'wysiwygWhitelist' => (string)$partialWhitelistRaw,
                 'defaultEditorMode' => (string)$defaultEditorModeRaw,
+                'rememberModeEnabled' => (int)$rememberModeEnabled,
             ],
             'formatHelp' => [
                 'enabled' => $helpFeatureEnabled,
@@ -1344,6 +1349,15 @@ li",
         78
     );
 
+    $ensure(
+        AF_AE_SETTING_REMEMBER_MODE_ENABLED,
+        'Remember editor mode (localStorage)',
+        'Если включено, фронтенд запоминает выбранный режим редактора (source / partial / full) в localStorage и применяет его для всех инстансов.',
+        'yesno',
+        '1',
+        79
+    );
+
     // === HTMLBB: кто может ИСПОЛЬЗОВАТЬ тег [html] ===
     $ensure(
         AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS,
@@ -1440,6 +1454,7 @@ function af_advancededitor_uninstall(): void
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_WYSIWYG_MODE) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_DEFAULT_EDITOR_MODE) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_PARTIAL_WHITELIST) . "'");
+    $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_REMEMBER_MODE_ENABLED) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_WYSIWYG_EXCLUDE_LEGACY) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_HTMLBB_ALLOWED_GROUPS) . "'");
     $db->delete_query('settings', "name='" . $db->escape_string(AF_AE_SETTING_HELP_ENABLED) . "'");
