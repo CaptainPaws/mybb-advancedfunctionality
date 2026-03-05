@@ -69,9 +69,13 @@ function whitelist(){
       b:1,i:1,u:1,s:1,
       font:1,size:1,color:1,
       url:1,email:1,
-      ul:1,li:1
+      ul:1,ol:1,li:1
     };
   }
+
+  m.ul = 1;
+  m.ol = 1;
+  m.li = 1;
 
   PARTIAL_CACHE = m;
   return PARTIAL_CACHE;
