@@ -421,15 +421,6 @@
     toolbar = toolbar.replace(/,+\|,+/g, '|').replace(/\|{2,}/g, '|');
     toolbar = toolbar.replace(/^,|,$/g, '').replace(/^\|+|\|+$/g, '');
 
-    var formatHelp = getFormatHelpConfig();
-    if (formatHelp.enabled) {
-      if (formatHelp.position === 'left') {
-        toolbar = toolbar ? ('af_formathelp|' + toolbar) : 'af_formathelp';
-      } else {
-        toolbar = toolbar ? (toolbar + '|af_formathelp') : 'af_formathelp';
-      }
-    }
-
     return { toolbar: toolbar, menus: menus };
   }
 
@@ -461,19 +452,46 @@
   }
 
 
-  function ensureFormatHelpCommand() {
+  function afAeEnsureFormatHelpEdge(ta) {
     var cfg = getFormatHelpConfig();
-    if (!cfg.enabled) return;
+    if (!cfg.enabled || !ta) return;
 
-    setCommand('af_formathelp', {
-      tooltip: cfg.title,
-      exec: function () {
+    var cont = ta.previousElementSibling;
+    var tb = cont ? cont.querySelector('.sceditor-toolbar') : null;
+    if (!tb || !tb.parentNode) return;
+
+    var row = null;
+    if (tb.parentNode.classList && tb.parentNode.classList.contains('af-ae-toolbar-row')) {
+      row = tb.parentNode;
+    } else {
+      row = document.createElement('div');
+      row.className = 'af-ae-toolbar-row';
+      tb.parentNode.insertBefore(row, tb);
+      row.appendChild(tb);
+    }
+
+    row.setAttribute('data-af-ae-help-position', cfg.position === 'left' ? 'left' : 'right');
+
+    var edge = row.querySelector('.af-ae-help-edge');
+    if (!edge) {
+      edge = document.createElement('div');
+      edge.className = 'af-ae-help-edge';
+      row.appendChild(edge);
+    }
+
+    var btn = edge.querySelector('button.af-ae-help-edge-btn');
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'af-ae-help-edge-btn';
+      btn.setAttribute('title', 'Подсказка по форматированию');
+      btn.setAttribute('aria-label', 'Подсказка по форматированию');
+      btn.innerHTML = '<i class="fa-regular fa-circle-question" aria-hidden="true"></i>';
+      btn.addEventListener('click', function () {
         afAeOpenFormatHelpModal();
-      },
-      txtExec: function () {
-        afAeOpenFormatHelpModal();
-      }
-    });
+      });
+      edge.appendChild(btn);
+    }
   }
 
   function afAeEnsureFormatHelpModal() {
@@ -2007,7 +2025,6 @@
     try { ensureDropdownCommands(out, availableMap); } catch (eD) {}
     try { ensureCustomCommands(); } catch (eC) {}
     try { ensureToggleCommandDefinition(); } catch (eT) {}
-    try { ensureFormatHelpCommand(); } catch (eFH) {}
     try { afAeBindFormatHelpEsc(); } catch (eFE) {}
     try { ensureMybbTagAliases(); } catch (eTA) {}
     try { afAeEnsureMybbAlignBbcode(null); } catch (eA) {}
@@ -2052,6 +2069,7 @@
       try {
         decorateDropdownButtons(ta, out);
         decorateCustomButtons(ta);
+        afAeEnsureFormatHelpEdge(ta);
       } catch (e3) {}
 
       return true;
@@ -2099,6 +2117,7 @@
 
         decorateDropdownButtons(ta, out);
         decorateCustomButtons(ta);
+        afAeEnsureFormatHelpEdge(ta);
 
         return true;
       }
