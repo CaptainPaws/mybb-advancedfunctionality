@@ -11,12 +11,19 @@
 
   var LIST_BTNS = [
     { cmd: 'af_ul_disc',        attr: '',            tooltip: 'Список: точки (•)' },
+    { cmd: 'af_ul_circle',      attr: 'circle',      tooltip: 'Список: круги (◦)' },
     { cmd: 'af_ul_square',      attr: 'square',      tooltip: 'Список: квадраты (■)' },
     { cmd: 'af_ul_decimal',     attr: 'decimal',     tooltip: 'Список: нумерация (1,2,3)' },
+    { cmd: 'af_ul_lower_roman', attr: 'lower-roman', tooltip: 'Список: римские (i, ii, iii)' },
     { cmd: 'af_ul_upper_roman', attr: 'upper-roman', tooltip: 'Список: римские (I, II, III)' },
     { cmd: 'af_ul_upper_alpha', attr: 'upper-alpha', tooltip: 'Список: буквы (A, B, C)' },
     { cmd: 'af_ul_lower_alpha', attr: 'lower-alpha', tooltip: 'Список: буквы (a, b, c)' }
   ];
+
+  function debugLog() {
+    if (!window.__afAeDebug && !window.AE_DEBUG) return;
+    try { console.log.apply(console, arguments); } catch (e) {}
+  }
 
   function cmdToAttr(cmd) {
     cmd = asText(cmd).trim();
@@ -122,6 +129,7 @@
 
     var low = a.toLowerCase();
     if (low === 'i') return 'decimal';
+    if (low === 'lower-roman') return 'lower-roman';
     if (low === 'upper-roman') return 'upper-roman';
     if (low === 'upper-alpha') return 'upper-alpha';
     if (low === 'lower-alpha') return 'lower-alpha';
@@ -156,7 +164,23 @@
 
   function isOrderedAttr(attr) {
     var low = String(attr || '').trim().toLowerCase();
-    return low === 'i' || low === 'decimal' || low === 'upper-roman' || low === 'upper-alpha' || low === 'lower-alpha';
+    return low === 'i' || low === 'decimal' || low === 'lower-roman' || low === 'upper-roman' || low === 'upper-alpha' || low === 'lower-alpha';
+  }
+
+  function isUnorderedAttr(attr) {
+    var low = String(attr || '').trim().toLowerCase();
+    return low === '' || low === 'disc' || low === 'circle' || low === 'square';
+  }
+
+  function normalizeListAttr(style, fallback) {
+    var low = String(style || '').trim().toLowerCase();
+    if (!low) low = String(fallback || '').trim().toLowerCase();
+    if (low === 'i') low = 'decimal';
+
+    if (isUnorderedAttr(low)) return { type: 'ul', attr: (low === 'disc' ? '' : low) };
+    if (isOrderedAttr(low)) return { type: 'ol', attr: (low === 'decimal' ? 'decimal' : low) };
+
+    return { type: 'ul', attr: '' };
   }
 
   function buildHtmlListChunk(attr) {
@@ -169,8 +193,8 @@
       '</ul>';
     }
 
-    if (attr === 'square') {
-      return '<ul style="list-style-type:square; padding-left:1.4em;">' +
+    if (attr === 'square' || attr === 'circle') {
+      return '<ul style="list-style-type:' + attr + '; padding-left:1.4em;">' +
         '<li><br></li>' +
       '</ul>';
     }
@@ -309,8 +333,10 @@
 
           var map = {
             disc: ['ul', 'disc', '1.4em'],
+            circle: ['ul', 'circle', '1.4em'],
             square: ['ul', 'square', '1.4em'],
             decimal: ['ol', 'decimal', '1.6em'],
+            'lower-roman': ['ol', 'lower-roman', '1.6em'],
             'upper-roman': ['ol', 'upper-roman', '1.6em'],
             'upper-alpha': ['ol', 'upper-alpha', '1.6em'],
             'lower-alpha': ['ol', 'lower-alpha', '1.6em']
@@ -322,13 +348,13 @@
 
         format: function (el, content) {
 
-          var style = extractListStyle(el, 'disc');
+          var norm = normalizeListAttr(extractListStyle(el, 'disc'), 'disc');
 
-          var map = { disc: '', square: 'square' };
+          if (norm.type === 'ol') {
+            return '[ol=' + norm.attr + ']' + (content || '') + '[/ol]';
+          }
 
-          var attr = map[style] || '';
-
-          if (attr) return '[ul=' + attr + ']' + (content || '') + '[/ul]';
+          if (norm.attr) return '[ul=' + norm.attr + ']' + (content || '') + '[/ul]';
 
           return '[ul]' + (content || '') + '[/ul]';
         },
@@ -336,12 +362,12 @@
         tags: {
           ul: {
             format: function (el, content) {
-              var style = extractListStyle(el, 'disc');
-              var map = { disc: '', square: 'square' };
+              var norm = normalizeListAttr(extractListStyle(el, 'disc'), 'disc');
+              if (norm.type === 'ol') {
+                return '[ol=' + norm.attr + ']' + (content || '') + '[/ol]';
+              }
 
-              var attr = map[style] || '';
-
-              if (attr) return '[ul=' + attr + ']' + (content || '') + '[/ul]';
+              if (norm.attr) return '[ul=' + norm.attr + ']' + (content || '') + '[/ul]';
 
               return '[ul]' + (content || '') + '[/ul]';
             }
@@ -360,7 +386,7 @@
 
           var map = {
             decimal: 'decimal',
-            square: 'square',
+            'lower-roman': 'lower-roman',
             'upper-roman': 'upper-roman',
             'upper-alpha': 'upper-alpha',
             'lower-alpha': 'lower-alpha'
@@ -371,17 +397,17 @@
         },
 
         format: function (el, content) {
-          var style = extractListStyle(el, 'decimal');
-          if (style === 'i') style = 'decimal';
-          return '[ol=' + style + ']' + (content || '') + '[/ol]';
+          var norm = normalizeListAttr(extractListStyle(el, 'decimal'), 'decimal');
+          if (norm.type !== 'ol') return '[ul' + (norm.attr ? '=' + norm.attr : '') + ']' + (content || '') + '[/ul]';
+          return '[ol=' + norm.attr + ']' + (content || '') + '[/ol]';
         },
 
         tags: {
           ol: {
             format: function (el, content) {
-              var style = extractListStyle(el, 'decimal');
-              if (style === 'i') style = 'decimal';
-              return '[ol=' + style + ']' + (content || '') + '[/ol]';
+              var norm = normalizeListAttr(extractListStyle(el, 'decimal'), 'decimal');
+              if (norm.type !== 'ol') return '[ul' + (norm.attr ? '=' + norm.attr : '') + ']' + (content || '') + '[/ul]';
+              return '[ol=' + norm.attr + ']' + (content || '') + '[/ol]';
             }
           }
         }
@@ -534,22 +560,45 @@
         if (typeof inst.insertText === 'function') inst.insertText(chunk, '');
         else if (typeof inst.insert === 'function') inst.insert(chunk, '');
       } catch (e2) {}
+      debugLog('[AE-LISTS] insert', { mode: 'source', requestedAttr: attr, insertedVia: 'insertText/insert', bbcodeChunk: chunk });
       try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e3) {}
       return true;
     }
 
-    // WYSIWYG: вставляем HTML, bbcode-плагин сам сериализует в [ul...]
+    // WYSIWYG: вставляем HTML в iframe, НИКОГДА не через insert(html),
+    // потому что в bbcode-режиме insert() трактует строку как BBCode/текст.
     var html = buildHtmlListChunk(attr);
+    var insertedVia = '';
     try {
-      if (typeof inst.insert === 'function') {
-        inst.insert(html, '');
-      } else if (typeof inst.wysiwygEditorInsertHtml === 'function') {
+      if (typeof inst.wysiwygEditorInsertHtml === 'function') {
         inst.wysiwygEditorInsertHtml(html);
+        insertedVia = 'wysiwygEditorInsertHtml';
+      } else if (typeof inst.insertHTML === 'function') {
+        inst.insertHTML(html);
+        insertedVia = 'insertHTML';
       } else {
-        // крайний фоллбек: не красиво, но лучше чем “ничего”
+        // Фоллбек: если HTML API недоступен, откатываемся к BBCode.
         inst.insertText(buildCanonicalChunk(attr), '');
+        insertedVia = 'insertText-fallback';
       }
     } catch (e4) {}
+
+    try {
+      var bodyHtml = '';
+      if (typeof inst.getBody === 'function') {
+        var b = inst.getBody();
+        if (b && typeof b.innerHTML === 'string') {
+          bodyHtml = b.innerHTML;
+          if (bodyHtml.length > 240) bodyHtml = bodyHtml.slice(0, 240) + '…';
+        }
+      }
+      debugLog('[AE-LISTS] insert', {
+        mode: isSourceMode(inst) ? 'source' : 'wysiwyg',
+        requestedAttr: attr,
+        insertedVia: insertedVia,
+        bodyPreview: bodyHtml
+      });
+    } catch (eDbg) {}
 
     try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e5) {}
     try { if (typeof inst.focus === 'function') inst.focus(); } catch (e6) {}
