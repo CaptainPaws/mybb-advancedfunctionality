@@ -12,7 +12,7 @@
   var LIST_BTNS = [
     { cmd: 'af_ul_disc',        attr: '',            tooltip: 'Список: точки (•)' },
     { cmd: 'af_ul_square',      attr: 'square',      tooltip: 'Список: квадраты (■)' },
-    { cmd: 'af_ul_decimal',     attr: 'i',           tooltip: 'Список: нумерация (1,2,3)' },
+    { cmd: 'af_ul_decimal',     attr: 'decimal',     tooltip: 'Список: нумерация (1,2,3)' },
     { cmd: 'af_ul_upper_roman', attr: 'upper-roman', tooltip: 'Список: римские (I, II, III)' },
     { cmd: 'af_ul_upper_alpha', attr: 'upper-alpha', tooltip: 'Список: буквы (A, B, C)' },
     { cmd: 'af_ul_lower_alpha', attr: 'lower-alpha', tooltip: 'Список: буквы (a, b, c)' }
@@ -99,10 +99,13 @@
   // ===============================
   function buildCanonicalChunk(attr) {
     attr = asText(attr).trim();
-    var open = attr ? ('[ul=' + attr + ']') : '[ul]';
+    var open = '[ul]';
+    if (isOrderedAttr(attr)) open = '[ol=' + attr + ']';
+    else if (attr) open = '[ul=' + attr + ']';
+    var close = isOrderedAttr(attr) ? '[/ol]' : '[/ul]';
     return open + '\n' +
       '[li][/li]\n' +
-      '[/ul]';
+      close;
   }
 
   // ===============================
@@ -113,7 +116,7 @@
     return a.trim();
   }
 
-  // ТВОЙ КАНОН: [ul=i] => decimal (да, звучит странно, но это твой договор)
+  // backward compatibility: [ul=i] => decimal
   function olStyleForAttr(a) {
     a = normAttr(a);
 
@@ -124,24 +127,6 @@
     if (low === 'lower-alpha') return 'lower-alpha';
 
     return 'decimal';
-  }
-
-  function attrForOlStyle(listStyleType) {
-    var t = String(listStyleType || '').trim();
-    var low = t.toLowerCase();
-
-    if (!low || low === 'decimal') return 'i';
-    if (low === 'upper-roman') return 'upper-roman';
-    if (low === 'upper-alpha') return 'upper-alpha';
-    if (low === 'lower-alpha') return 'lower-alpha';
-
-    return 'i';
-  }
-
-  function attrForUlStyle(listStyleType) {
-    var low = String(listStyleType || '').trim().toLowerCase();
-    if (low === 'square') return 'square';
-    return '';
   }
 
   function extractListStyle(el, fallback) {
@@ -171,7 +156,7 @@
 
   function isOrderedAttr(attr) {
     var low = String(attr || '').trim().toLowerCase();
-    return low === 'i' || low === 'upper-roman' || low === 'upper-alpha' || low === 'lower-alpha';
+    return low === 'i' || low === 'decimal' || low === 'upper-roman' || low === 'upper-alpha' || low === 'lower-alpha';
   }
 
   function buildHtmlListChunk(attr) {
@@ -304,45 +289,42 @@
       });
     } catch (eLI) {}
 
-    // [ul] / [ul=i]  <->  <ul> / <ol>
+    try {
+      if (jQuery.sceditor && jQuery.sceditor.plugins && jQuery.sceditor.plugins.bbcode && jQuery.sceditor.plugins.bbcode.bbcode) {
+        delete jQuery.sceditor.plugins.bbcode.bbcode.list;
+        delete jQuery.sceditor.plugins.bbcode.bbcode.ul;
+        delete jQuery.sceditor.plugins.bbcode.bbcode.ol;
+      }
+    } catch (eDelete) {}
+
+    // [ul] <-> <ul>
     try {
       bb.set('ul', {
 
         isBlock: true,
 
         html: function (_token, attrs, content) {
-
-          var type = (attrs && attrs.defaultattr != null) ? String(attrs.defaultattr) : 'disc';
-          type = type || 'disc';
+          var type = (attrs && attrs.defaultattr != null) ? String(attrs.defaultattr).trim().toLowerCase() : 'disc';
+          if (type === 'i') type = 'decimal';
 
           var map = {
-            disc: ['ul', 'disc'],
-            square: ['ul', 'square'],
-            i: ['ol', 'decimal'],
-            'upper-roman': ['ol', 'upper-roman'],
-            'upper-alpha': ['ol', 'upper-alpha'],
-            'lower-alpha': ['ol', 'lower-alpha']
+            disc: ['ul', 'disc', '1.4em'],
+            square: ['ul', 'square', '1.4em'],
+            decimal: ['ol', 'decimal', '1.6em'],
+            'upper-roman': ['ol', 'upper-roman', '1.6em'],
+            'upper-alpha': ['ol', 'upper-alpha', '1.6em'],
+            'lower-alpha': ['ol', 'lower-alpha', '1.6em']
           };
 
           var conf = map[type] || map.disc;
-          var tag = conf[0];
-          var style = conf[1];
-
-          return '<' + tag + ' style="list-style-type:' + style + '; padding-left:1.6em;">' + (content || '') + '</' + tag + '>';
+          return '<' + conf[0] + ' style="list-style-type:' + conf[1] + '; padding-left:' + conf[2] + ';">' + (content || '') + '</' + conf[0] + '>';
         },
 
         format: function (el, content) {
 
           var style = extractListStyle(el, 'disc');
 
-          var map = {
-            disc: '',
-            square: 'square',
-            decimal: 'i',
-            'upper-roman': 'upper-roman',
-            'upper-alpha': 'upper-alpha',
-            'lower-alpha': 'lower-alpha'
-          };
+          var map = { disc: '', square: 'square' };
 
           var attr = map[style] || '';
 
@@ -355,15 +337,7 @@
           ul: {
             format: function (el, content) {
               var style = extractListStyle(el, 'disc');
-
-              var map = {
-                disc: '',
-                square: 'square',
-                decimal: 'i',
-                'upper-roman': 'upper-roman',
-                'upper-alpha': 'upper-alpha',
-                'lower-alpha': 'lower-alpha'
-              };
+              var map = { disc: '', square: 'square' };
 
               var attr = map[style] || '';
 
@@ -371,26 +345,48 @@
 
               return '[ul]' + (content || '') + '[/ul]';
             }
-          },
-
-          ol: {
-            format: function (el, content) {
-              var style = extractListStyle(el, 'decimal');
-
-              var map = {
-                decimal: 'i',
-                'upper-roman': 'upper-roman',
-                'upper-alpha': 'upper-alpha',
-                'lower-alpha': 'lower-alpha'
-              };
-
-              var attr = map[style] || 'i';
-              return '[ul=' + attr + ']' + (content || '') + '[/ul]';
-            }
           }
         }
       });
     } catch (eUL) {}
+
+    try {
+      bb.set('ol', {
+        isBlock: true,
+
+        html: function (_token, attrs, content) {
+          var type = (attrs && attrs.defaultattr != null) ? String(attrs.defaultattr).trim().toLowerCase() : 'decimal';
+          if (type === 'i') type = 'decimal';
+
+          var map = {
+            decimal: 'decimal',
+            square: 'square',
+            'upper-roman': 'upper-roman',
+            'upper-alpha': 'upper-alpha',
+            'lower-alpha': 'lower-alpha'
+          };
+          type = map[type] || 'decimal';
+
+          return '<ol style="list-style-type:' + type + '; padding-left:1.6em;">' + (content || '') + '</ol>';
+        },
+
+        format: function (el, content) {
+          var style = extractListStyle(el, 'decimal');
+          if (style === 'i') style = 'decimal';
+          return '[ol=' + style + ']' + (content || '') + '[/ol]';
+        },
+
+        tags: {
+          ol: {
+            format: function (el, content) {
+              var style = extractListStyle(el, 'decimal');
+              if (style === 'i') style = 'decimal';
+              return '[ol=' + style + ']' + (content || '') + '[/ol]';
+            }
+          }
+        }
+      });
+    } catch (eOL2) {}
 
     // ВАЖНО: “bulletlist/orderedlist” иногда сериализуются как [bulletlist]
     // Мы забиваем это и заставляем всё уходить через ul.
@@ -413,7 +409,7 @@
           return '<ol style="list-style-type:decimal; padding-left:1.6em;">' + (c || '') + '</ol>';
         },
         format: function (_el, c) {
-          return '[ul=i]' + (c || '') + '[/ul]';
+          return '[ol=decimal]' + (c || '') + '[/ol]';
         }
       });
     } catch (eOL) {}
@@ -672,10 +668,10 @@
         try { afAeEnsureMybbListsBbcode(this); } catch (e0) {}
         try { ensureListCss(this); } catch (e1) {}
         try { bindToSourceListNormalization(this); } catch (e2) {}
-        insertCanonicalList(this, 'i');
+        insertCanonicalList(this, 'decimal');
       },
       txtExec: function () {
-        insertCanonicalList(this, 'i');
+        insertCanonicalList(this, 'decimal');
       }
     });
 
