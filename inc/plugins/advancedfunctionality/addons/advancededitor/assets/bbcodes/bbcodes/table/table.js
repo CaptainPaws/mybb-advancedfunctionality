@@ -570,7 +570,7 @@
 
   function tableDebugLog() {
     try {
-      if (!window.__afAeDebug) return;
+      if (!window.__AF_AE_DEBUG_TABLE && !window.__afAeDebug) return;
       var args = Array.prototype.slice.call(arguments);
       args.unshift('[AF-AE table]');
       if (window.console && typeof window.console.log === 'function') window.console.log.apply(window.console, args);
@@ -707,19 +707,40 @@
           ev.stopPropagation();
         }, true);
 
+        function markPanelInteractionStart() {
+          inst.__afAeTablePanelPointerDown = true;
+        }
+
+        function markPanelInteractionEnd() {
+          setTimeout(function () {
+            inst.__afAeTablePanelPointerDown = false;
+          }, 0);
+        }
+
+        panel.addEventListener('pointerdown', markPanelInteractionStart, true);
+        panel.addEventListener('mousedown', markPanelInteractionStart, true);
+        panel.addEventListener('pointerup', markPanelInteractionEnd, true);
+        panel.addEventListener('mouseup', markPanelInteractionEnd, true);
+        panel.addEventListener('click', markPanelInteractionEnd, true);
+
         panel.addEventListener('click', function (ev) {
           var btn = ev.target && ev.target.closest ? ev.target.closest('button[data-a]') : null;
+          var act = btn ? btn.getAttribute('data-a') : '';
+          tableDebugLog('toolbar click', {
+            action: act || null,
+            hasActiveTable: !!inst.__afAeActiveTable
+          });
           if (!btn || !inst.__afAeActiveTable) return;
 
           ev.preventDefault();
           ev.stopPropagation();
 
           var t = inst.__afAeActiveTable;
-          var act = btn.getAttribute('data-a');
 
           if (act === 'close') {
             panel.style.display = 'none';
             inst.__afAeActiveTable = null;
+            tableDebugLog('hide panel', { reason: 'close-btn' });
             return;
           }
 
@@ -728,6 +749,7 @@
               t.parentNode && t.parentNode.removeChild(t);
               panel.style.display = 'none';
               inst.__afAeActiveTable = null;
+              tableDebugLog('hide panel', { reason: 'table-deleted' });
             } catch (eD) {}
             syncEditorValue();
             return;
@@ -858,11 +880,12 @@
       var hostDoc = getFloatingPanelHostDoc(inst, doc);
       var iframeEl = getEditorIframeElement(inst, doc);
 
-      function hidePanel() {
+      function hidePanel(reason) {
         try {
           var panel = hostDoc.getElementById('af-ae-table-floating');
           if (panel) panel.style.display = 'none';
         } catch (e0) {}
+        tableDebugLog('hide panel', { reason: reason || 'unknown' });
         inst.__afAeActiveTable = null;
       }
 
@@ -914,11 +937,26 @@
           shouldHide: (!inPanel && !hitTable)
         });
 
-        if (!inPanel && !hitTable) hidePanel();
+        if (!inPanel && !hitTable) hidePanel('outside-click');
       }, false);
 
       inst.bind('blur', function () {
-        hidePanel();
+        var panel = null;
+        try { panel = hostDoc.getElementById('af-ae-table-floating'); } catch (e1) {}
+
+        if (inst.__afAeTablePanelPointerDown) {
+          tableDebugLog('blur ignored', { reason: 'panel-pointerdown' });
+          return;
+        }
+
+        try {
+          if (panel && panel.contains(hostDoc.activeElement)) {
+            tableDebugLog('blur ignored', { reason: 'panel-focus' });
+            return;
+          }
+        } catch (e2) {}
+
+        hidePanel('blur');
       });
 
     } catch (e) {}
