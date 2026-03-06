@@ -220,11 +220,6 @@
     var styles = [];
     if (cellWidth) styles.push('width:' + cellWidth);
 
-    var shouldHeaderStyle = (tag === 'th') || isHeaderByMode;
-    if (shouldHeaderStyle) {
-      styles.push('font-weight:700');
-    }
-
     if (tableAttrs.border === '1') {
       styles.push('border:' + (tableAttrs.borderwidth || '1px') + ' solid ' + (tableAttrs.bordercolor || '#888888'));
     }
@@ -283,6 +278,56 @@
     return attrs;
   }
 
+
+
+  function getCanonicalColumnWidth(cellEl) {
+    if (!cellEl || cellEl.nodeType !== 1 || !cellEl.parentElement || !cellEl.parentElement.cells) return '';
+    var row = cellEl.parentElement;
+    var table = row.closest ? row.closest('table') : null;
+    if (!table || !table.rows) return '';
+
+    var colIndex = -1;
+    try { colIndex = Array.prototype.indexOf.call(row.cells, cellEl); } catch (e0) { colIndex = -1; }
+    if (colIndex < 0) return '';
+
+    for (var r = 0; r < table.rows.length; r++) {
+      var rowCell = table.rows[r] && table.rows[r].cells ? table.rows[r].cells[colIndex] : null;
+      if (!rowCell) continue;
+      var width = '';
+      try {
+        width = normWidthToken((rowCell.style && rowCell.style.width) || rowCell.getAttribute('data-af-width') || '');
+      } catch (e1) { width = ''; }
+      if (width) return width;
+    }
+
+    return '';
+  }
+
+  function cleanupTableInheritedFormatting(cellEl, tag, content) {
+    var out = asText(content);
+    var table = null;
+    try { table = cellEl && cellEl.closest ? cellEl.closest('table[data-af-table="1"],table.af-ae-table') : null; } catch (e0) { table = null; }
+    if (!table) return out;
+
+    var attrs = parseAttrsFromDom(table);
+    var inheritedColor = '';
+    if (tag === 'th') inheritedColor = attrs.htextcolor || attrs.textcolor || '';
+    else inheritedColor = attrs.textcolor || '';
+
+    if (inheritedColor) {
+      var escapedColor = inheritedColor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var colorWrap = new RegExp('^\\[color=' + escapedColor + '\\]([\\s\\S]*)\\[/color\\]$', 'i');
+      var m = out.match(colorWrap);
+      if (m) out = m[1];
+    }
+
+    if (tag === 'th') {
+      var boldWrap = out.match(/^\[b\]([\s\S]*)\[\/b\]$/i);
+      if (boldWrap) out = boldWrap[1];
+    }
+
+    return out;
+  }
   function tableAttrsToBbOpen(attrs) {
     attrs = normalizeTableAttrs(attrs);
     var parts = [];
@@ -517,20 +562,22 @@
           },
           format: function (el, content) {
             var width = '';
+            var safeContent = cleanupTableInheritedFormatting(el, tag, content);
             try {
-              width = normWidthToken((el.style && el.style.width) || el.getAttribute('data-af-width') || '');
+              width = getCanonicalColumnWidth(el) || normWidthToken((el.style && el.style.width) || el.getAttribute('data-af-width') || '');
             } catch (e2) { width = ''; }
-            return '[' + tag + (width ? ' width=' + width : '') + ']' + (content || '') + '[/' + tag + ']';
+            return '[' + tag + (width ? ' width=' + width : '') + ']' + safeContent + '[/' + tag + ']';
           },
           tags: (function () {
             var t = {};
             t[tag] = {
               format: function (el, content) {
                 var width = '';
+                var safeContent = cleanupTableInheritedFormatting(el, tag, content);
                 try {
-                  width = normWidthToken((el.style && el.style.width) || el.getAttribute('data-af-width') || '');
+                  width = getCanonicalColumnWidth(el) || normWidthToken((el.style && el.style.width) || el.getAttribute('data-af-width') || '');
                 } catch (e4) { width = ''; }
-                return '[' + tag + (width ? ' width=' + width : '') + ']' + (content || '') + '[/' + tag + ']';
+                return '[' + tag + (width ? ' width=' + width : '') + ']' + safeContent + '[/' + tag + ']';
               }
             };
             return t;
@@ -742,6 +789,7 @@
 
       function applyAttrsToDom(t, a) {
         try {
+          a = normalizeTableAttrs(a || {});
           for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
             var k = TABLE_ATTR_KEYS[i];
             var v = asText(a[k]).trim();
@@ -749,7 +797,7 @@
             t.setAttribute('data-af-' + k, v);
           }
           t.setAttribute('data-af-table', '1');
-          t.setAttribute('data-headers', asText(a.headers).trim());
+          t.setAttribute('data-headers', asText(a.headers).trim()); // legacy alias
           t.classList.add('af-ae-table');
           t.setAttribute('style', buildTableStyle(a));
         } catch (e0) {}
