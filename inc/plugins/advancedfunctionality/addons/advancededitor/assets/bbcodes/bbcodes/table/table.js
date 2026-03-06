@@ -218,12 +218,21 @@
 
   function buildCellStyle(tag, tableAttrs, cellWidth, isHeaderByMode) {
     var styles = [];
+    var isHeader = (asText(tag).toLowerCase() === 'th') || !!isHeaderByMode;
     if (cellWidth) styles.push('width:' + cellWidth);
+
+    styles.push('background-color:' + (isHeader ? (tableAttrs.hbgcolor || tableAttrs.bgcolor || 'transparent') : (tableAttrs.bgcolor || 'transparent')));
+    styles.push('color:' + (isHeader ? (tableAttrs.htextcolor || tableAttrs.textcolor || 'inherit') : (tableAttrs.textcolor || 'inherit')));
 
     if (tableAttrs.border === '1') {
       styles.push('border:' + (tableAttrs.borderwidth || '1px') + ' solid ' + (tableAttrs.bordercolor || '#888888'));
+    } else {
+      styles.push('border:0');
     }
+
     styles.push('padding:6px 8px');
+    styles.push('vertical-align:top');
+    if (isHeader) styles.push('font-weight:700');
 
     return styles.join(';');
   }
@@ -248,7 +257,6 @@
 
     try {
       var style = tableEl.style || {};
-      if (!attrs.headers) attrs.headers = asText(tableEl.getAttribute('data-headers')).trim().toLowerCase();
       if (!attrs.width && style.width) attrs.width = asText(style.width).trim();
       if (!attrs.align) {
         if (style.marginLeft === 'auto' && style.marginRight === 'auto') attrs.align = 'center';
@@ -257,6 +265,9 @@
       }
       if (!attrs.borderwidth && style.borderWidth) attrs.borderwidth = asText(style.borderWidth).trim().toLowerCase();
       if (!attrs.bordercolor && style.borderColor) attrs.bordercolor = readColorToken(style.borderColor);
+
+      if (!attrs.bgcolor) attrs.bgcolor = readColorToken(style.backgroundColor);
+      if (!attrs.textcolor) attrs.textcolor = readColorToken(style.color);
 
       if (!attrs.bgcolor) attrs.bgcolor = readColorToken(style.getPropertyValue('--af-tbl-bg'));
       if (!attrs.textcolor) attrs.textcolor = readColorToken(style.getPropertyValue('--af-tbl-txt'));
@@ -277,6 +288,15 @@
       if (!attrs.borderwidth && firstTd && firstTd.style && firstTd.style.borderWidth) attrs.borderwidth = asText(firstTd.style.borderWidth).trim().toLowerCase();
       if (!attrs.bordercolor && firstTd && firstTd.style) attrs.bordercolor = readColorToken(firstTd.style.borderColor);
     } catch (eCell) {}
+
+    if (!attrs.headers) {
+      try { attrs.headers = asText(tableEl.getAttribute('data-headers')).trim().toLowerCase(); } catch (e1) {}
+    }
+
+    if (attrs.border === '1') {
+      if (!attrs.bordercolor) attrs.bordercolor = '#888888';
+      if (!attrs.borderwidth) attrs.borderwidth = '1px';
+    }
 
     attrs = normalizeTableAttrs(attrs);
     return attrs;
@@ -371,7 +391,7 @@
         var th = isHeaderCell(r, c);
         var tag = th ? 'th' : 'td';
         var cw = (colWidths && colWidths[c - 1]) ? colWidths[c - 1] : '';
-        var cellStyle = buildCellStyle(tag, attrs, cw, isHeaderCell(r, c));
+        var cellStyle = buildCellStyle(tag, attrs, cw, th);
         html.push('<' + tag + (cellStyle ? ' style="' + cellStyle + '"' : '') + '><br></' + tag + '>');
       }
       html.push('</tr>');
@@ -733,19 +753,29 @@
 
       function applyAttrsToDom(t, a) {
         try {
-          var keys = ['width','align','headers','bgcolor','textcolor','hbgcolor','htextcolor','border','bordercolor','borderwidth'];
-          for (var i = 0; i < keys.length; i++) {
-            var k = keys[i];
+          a = normalizeTableAttrs(a || {});
+          for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
+            var k = TABLE_ATTR_KEYS[i];
             var v = asText(a[k]).trim();
-            if (!v && k !== 'border') t.removeAttribute('data-af-' + k);
-            else t.setAttribute('data-af-' + k, v || (k === 'border' ? '1' : ''));
+            if (k === 'border') v = v || '1';
+            t.setAttribute('data-af-' + k, v);
           }
           t.setAttribute('data-af-table', '1');
+          t.setAttribute('data-headers', asText(a.headers).trim()); // legacy alias
           t.classList.add('af-ae-table');
           t.setAttribute('style', buildTableStyle(a));
         } catch (e0) {}
 
         try {
+          var colWidths = [];
+          for (var rw = 0; rw < t.rows.length; rw++) {
+            var rowW = t.rows[rw];
+            for (var cw = 0; cw < rowW.cells.length; cw++) {
+              var widthToken = normWidthToken((rowW.cells[cw].style && rowW.cells[cw].style.width) || '');
+              if (widthToken && !colWidths[cw]) colWidths[cw] = widthToken;
+            }
+          }
+
           for (var r = 0; r < t.rows.length; r++) {
             var row = t.rows[r];
             for (var c = 0; c < row.cells.length; c++) {
@@ -774,8 +804,7 @@
                 tag = 'td';
               }
 
-              var w = '';
-              try { w = asText(cell.style && cell.style.width).trim(); } catch(e1){ w = ''; }
+              var w = colWidths[c] || '';
               var css = buildCellStyle(tag, a, w, isHeaderByMode);
               cell.setAttribute('style', css);
             }
@@ -1715,12 +1744,21 @@
 
   function buildCellStyle(tag, tableAttrs, cellWidth, isHeaderByMode) {
     var styles = [];
+    var isHeader = (asText(tag).toLowerCase() === 'th') || !!isHeaderByMode;
     if (cellWidth) styles.push('width:' + cellWidth);
+
+    styles.push('background-color:' + (isHeader ? (tableAttrs.hbgcolor || tableAttrs.bgcolor || 'transparent') : (tableAttrs.bgcolor || 'transparent')));
+    styles.push('color:' + (isHeader ? (tableAttrs.htextcolor || tableAttrs.textcolor || 'inherit') : (tableAttrs.textcolor || 'inherit')));
 
     if (tableAttrs.border === '1') {
       styles.push('border:' + (tableAttrs.borderwidth || '1px') + ' solid ' + (tableAttrs.bordercolor || '#888888'));
+    } else {
+      styles.push('border:0');
     }
+
     styles.push('padding:6px 8px');
+    styles.push('vertical-align:top');
+    if (isHeader) styles.push('font-weight:700');
 
     return styles.join(';');
   }
@@ -1743,8 +1781,6 @@
     }
 
     try {
-      if (!attrs.headers) attrs.headers = asText(tableEl.getAttribute('data-headers')).trim().toLowerCase();
-
       var style = tableEl.style || {};
       if (!attrs.width && style.width) attrs.width = asText(style.width).trim();
       if (!attrs.align) {
@@ -1755,6 +1791,9 @@
       if (!attrs.borderwidth && style.borderWidth) attrs.borderwidth = asText(style.borderWidth).trim().toLowerCase();
       if (!attrs.bordercolor && style.borderColor) attrs.bordercolor = readColorToken(style.borderColor);
 
+      if (!attrs.bgcolor) attrs.bgcolor = readColorToken(style.backgroundColor);
+      if (!attrs.textcolor) attrs.textcolor = readColorToken(style.color);
+
       if (!attrs.bgcolor) attrs.bgcolor = readColorToken(style.getPropertyValue('--af-tbl-bg'));
       if (!attrs.textcolor) attrs.textcolor = readColorToken(style.getPropertyValue('--af-tbl-txt'));
       if (!attrs.hbgcolor) attrs.hbgcolor = readColorToken(style.getPropertyValue('--af-tbl-hbg'));
@@ -1764,6 +1803,26 @@
 
       if (attrs.borderwidth === '0px') attrs.border = '0';
     } catch (e0) {}
+
+    try {
+      var firstTh = tableEl.querySelector('th');
+      var firstTd = tableEl.querySelector('td,th');
+      if (!attrs.hbgcolor && firstTh && firstTh.style) attrs.hbgcolor = readColorToken(firstTh.style.backgroundColor);
+      if (!attrs.htextcolor && firstTh && firstTh.style) attrs.htextcolor = readColorToken(firstTh.style.color);
+      if (!attrs.bgcolor && firstTd && firstTd.style) attrs.bgcolor = readColorToken(firstTd.style.backgroundColor);
+      if (!attrs.textcolor && firstTd && firstTd.style) attrs.textcolor = readColorToken(firstTd.style.color);
+      if (!attrs.borderwidth && firstTd && firstTd.style && firstTd.style.borderWidth) attrs.borderwidth = asText(firstTd.style.borderWidth).trim().toLowerCase();
+      if (!attrs.bordercolor && firstTd && firstTd.style) attrs.bordercolor = readColorToken(firstTd.style.borderColor);
+    } catch (eCell) {}
+
+    if (!attrs.headers) {
+      try { attrs.headers = asText(tableEl.getAttribute('data-headers')).trim().toLowerCase(); } catch (e1) {}
+    }
+
+    if (attrs.border === '1') {
+      if (!attrs.bordercolor) attrs.bordercolor = '#888888';
+      if (!attrs.borderwidth) attrs.borderwidth = '1px';
+    }
 
     attrs = normalizeTableAttrs(attrs);
     tableDebugLog('parseAttrsFromDom', {
@@ -1916,7 +1975,7 @@
         var th = isHeaderCell(r, c);
         var tag = th ? 'th' : 'td';
         var cw = (colWidths && colWidths[c - 1]) ? colWidths[c - 1] : '';
-        var cellStyle = buildCellStyle(tag, attrs, cw, isHeaderCell(r, c));
+        var cellStyle = buildCellStyle(tag, attrs, cw, th);
         html.push('<' + tag + (cellStyle ? ' style="' + cellStyle + '"' : '') + '><br></' + tag + '>');
       }
       html.push('</tr>');
@@ -2300,6 +2359,15 @@
         } catch (e0) {}
 
         try {
+          var colWidths = [];
+          for (var rw = 0; rw < t.rows.length; rw++) {
+            var rowW = t.rows[rw];
+            for (var cw = 0; cw < rowW.cells.length; cw++) {
+              var widthToken = normWidthToken((rowW.cells[cw].style && rowW.cells[cw].style.width) || '');
+              if (widthToken && !colWidths[cw]) colWidths[cw] = widthToken;
+            }
+          }
+
           for (var r = 0; r < t.rows.length; r++) {
             var row = t.rows[r];
             for (var c = 0; c < row.cells.length; c++) {
@@ -2328,8 +2396,7 @@
                 tag = 'td';
               }
 
-              var w = '';
-              try { w = asText(cell.style && cell.style.width).trim(); } catch(e1){ w = ''; }
+              var w = colWidths[c] || '';
               var css = buildCellStyle(tag, a, w, isHeaderByMode);
               cell.setAttribute('style', css);
             }
