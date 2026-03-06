@@ -182,6 +182,18 @@
 
     styles.push('border-collapse:collapse');
 
+    if (attrs.bgcolor) styles.push('--af-tbl-bg:' + attrs.bgcolor);
+    if (attrs.textcolor) styles.push('--af-tbl-txt:' + attrs.textcolor);
+    if (attrs.hbgcolor) styles.push('--af-tbl-hbg:' + attrs.hbgcolor);
+    if (attrs.htextcolor) styles.push('--af-tbl-htxt:' + attrs.htextcolor);
+
+    if (attrs.border === '0') {
+      styles.push('--af-tbl-bw:0px');
+    } else {
+      styles.push('--af-tbl-bw:' + (attrs.borderwidth || '1px'));
+      styles.push('--af-tbl-bc:' + (attrs.bordercolor || '#888888'));
+    }
+
     if (attrs.border === '1') {
       var bw = attrs.borderwidth || '1px';
       var bc = attrs.bordercolor || '#888888';
@@ -207,16 +219,6 @@
   function buildCellStyle(tag, tableAttrs, cellWidth, isHeaderByMode) {
     var styles = [];
     if (cellWidth) styles.push('width:' + cellWidth);
-
-    if (tableAttrs.bgcolor) styles.push('background-color:' + tableAttrs.bgcolor);
-    if (tableAttrs.textcolor) styles.push('color:' + tableAttrs.textcolor);
-
-    var shouldHeaderStyle = (tag === 'th') || isHeaderByMode;
-    if (shouldHeaderStyle) {
-      if (tableAttrs.hbgcolor) styles.push('background-color:' + tableAttrs.hbgcolor);
-      if (tableAttrs.htextcolor) styles.push('color:' + tableAttrs.htextcolor);
-      styles.push('font-weight:700');
-    }
 
     if (tableAttrs.border === '1') {
       styles.push('border:' + (tableAttrs.borderwidth || '1px') + ' solid ' + (tableAttrs.bordercolor || '#888888'));
@@ -246,6 +248,7 @@
 
     try {
       var style = tableEl.style || {};
+      if (!attrs.headers) attrs.headers = asText(tableEl.getAttribute('data-headers')).trim().toLowerCase();
       if (!attrs.width && style.width) attrs.width = asText(style.width).trim();
       if (!attrs.align) {
         if (style.marginLeft === 'auto' && style.marginRight === 'auto') attrs.align = 'center';
@@ -254,6 +257,14 @@
       }
       if (!attrs.borderwidth && style.borderWidth) attrs.borderwidth = asText(style.borderWidth).trim().toLowerCase();
       if (!attrs.bordercolor && style.borderColor) attrs.bordercolor = readColorToken(style.borderColor);
+
+      if (!attrs.bgcolor) attrs.bgcolor = readColorToken(style.getPropertyValue('--af-tbl-bg'));
+      if (!attrs.textcolor) attrs.textcolor = readColorToken(style.getPropertyValue('--af-tbl-txt'));
+      if (!attrs.hbgcolor) attrs.hbgcolor = readColorToken(style.getPropertyValue('--af-tbl-hbg'));
+      if (!attrs.htextcolor) attrs.htextcolor = readColorToken(style.getPropertyValue('--af-tbl-htxt'));
+      if (!attrs.borderwidth) attrs.borderwidth = normBorderWidth(style.getPropertyValue('--af-tbl-bw'));
+      if (!attrs.bordercolor) attrs.bordercolor = readColorToken(style.getPropertyValue('--af-tbl-bc'));
+      if (attrs.borderwidth === '0px') attrs.border = '0';
     } catch (e0) {}
 
     try {
@@ -381,9 +392,9 @@
 
       var css = '' +
         'table[data-af-table="1"],table.af-ae-table{border-collapse:collapse;max-width:100%;margin:8px 0;}' +
-        'table[data-af-table="1"] td,table[data-af-table="1"] th,table.af-ae-table td,table.af-ae-table th{padding:6px 8px;vertical-align:top;}' +
-        'table[data-af-table="1"][data-af-border="1"] td,table[data-af-table="1"][data-af-border="1"] th,table.af-ae-table[data-af-border="1"] td,table.af-ae-table[data-af-border="1"] th{border:var(--af-bw,1px) solid var(--af-bc,#888);}' +
-        'table[data-af-table="1"] th,table.af-ae-table th{font-weight:700;}';
+        'table[data-af-table="1"] td,table[data-af-table="1"] th,table.af-ae-table td,table.af-ae-table th{padding:6px 8px;vertical-align:top;background-color:var(--af-tbl-bg,transparent);color:var(--af-tbl-txt,inherit);}' +
+        'table[data-af-table="1"] th,table.af-ae-table th{font-weight:700;background-color:var(--af-tbl-hbg,var(--af-tbl-bg,transparent));color:var(--af-tbl-htxt,var(--af-tbl-txt,inherit));}' +
+        'table[data-af-table="1"][data-af-border="1"] td,table[data-af-table="1"][data-af-border="1"] th,table.af-ae-table[data-af-border="1"] td,table.af-ae-table[data-af-border="1"] th{border:var(--af-tbl-bw,1px) solid var(--af-tbl-bc,#888);}';
 
       var st = doc.createElement('style');
       st.id = 'af-ae-table-css';
