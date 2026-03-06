@@ -9,6 +9,7 @@
 
   var ID = 'table';
   var CMD = 'af_table';
+  var TABLE_ATTR_KEYS = ['width', 'align', 'headers', 'bgcolor', 'textcolor', 'hbgcolor', 'htextcolor', 'border', 'bordercolor', 'borderwidth'];
 
   function asText(x) { return String(x == null ? '' : x); }
 
@@ -193,9 +194,8 @@
 
   function attrsToDataAttrs(attrs) {
     var data = ['data-af-table="1"'];
-    var keys = ['width', 'align', 'headers', 'bgcolor', 'textcolor', 'hbgcolor', 'htextcolor', 'border', 'bordercolor', 'borderwidth'];
-    for (var i = 0; i < keys.length; i++) {
-      var k = keys[i];
+    for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
+      var k = TABLE_ATTR_KEYS[i];
       var v = asText(attrs[k]).trim();
       if (!v && k !== 'border') continue;
       if (k === 'border' && !v) v = '1';
@@ -237,9 +237,8 @@
       try { return asText(tableEl.getAttribute('data-af-' + name)).trim(); } catch (e) { return ''; }
     }
 
-    var keys = ['width', 'align', 'headers', 'bgcolor', 'textcolor', 'hbgcolor', 'htextcolor', 'border', 'bordercolor', 'borderwidth'];
-    for (var i = 0; i < keys.length; i++) {
-      var key = keys[i];
+    for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
+      var key = TABLE_ATTR_KEYS[i];
       var val = pickData(key);
       if (val) attrs[key] = val;
     }
@@ -256,18 +255,13 @@
       if (!attrs.bordercolor && style.borderColor) attrs.bordercolor = readColorToken(style.borderColor);
     } catch (e0) {}
 
-    try {
-      var firstTh = tableEl.querySelector('th');
-      var firstTd = tableEl.querySelector('td,th');
-      if (!attrs.hbgcolor && firstTh && firstTh.style) attrs.hbgcolor = readColorToken(firstTh.style.backgroundColor);
-      if (!attrs.htextcolor && firstTh && firstTh.style) attrs.htextcolor = readColorToken(firstTh.style.color);
-      if (!attrs.bgcolor && firstTd && firstTd.style) attrs.bgcolor = readColorToken(firstTd.style.backgroundColor);
-      if (!attrs.textcolor && firstTd && firstTd.style) attrs.textcolor = readColorToken(firstTd.style.color);
-      if (!attrs.borderwidth && firstTd && firstTd.style && firstTd.style.borderWidth) attrs.borderwidth = asText(firstTd.style.borderWidth).trim().toLowerCase();
-      if (!attrs.bordercolor && firstTd && firstTd.style) attrs.bordercolor = readColorToken(firstTd.style.borderColor);
-    } catch (eCell) {}
-
     attrs = normalizeTableAttrs(attrs);
+    tableDebugLog('parseAttrsFromDom', {
+      hasTable: !!tableEl,
+      hasAfData: !!(tableEl && tableEl.getAttribute && tableEl.getAttribute('data-af-table') === '1'),
+      className: tableEl && tableEl.className ? asText(tableEl.className) : '',
+      attrs: attrs
+    });
     return attrs;
   }
 
@@ -286,7 +280,9 @@
       if (attrs.bordercolor) parts.push('bordercolor=' + attrs.bordercolor);
       if (attrs.borderwidth) parts.push('borderwidth=' + attrs.borderwidth);
     }
-    return '[table' + (parts.length ? ' ' + parts.join(' ') : '') + ']';
+    var open = '[table' + (parts.length ? ' ' + parts.join(' ') : '') + ']';
+    tableDebugLog('tableAttrsToBbOpen', { attrs: attrs, open: open });
+    return open;
   }
 
   function buildBbcode(rows, cols, opts) {
@@ -463,12 +459,14 @@
         },
         format: function (el, content) {
           var a = parseAttrsFromDom(el);
+          tableDebugLog('bb.table.format', { attrs: a, contentLength: asText(content).length });
           return tableAttrsToBbOpen(a) + (content || '') + '[/table]';
         },
         tags: {
           table: {
             format: function (el, content) {
               var a = parseAttrsFromDom(el);
+              tableDebugLog('bb.tags.table.format', { attrs: a, contentLength: asText(content).length });
               return tableAttrsToBbOpen(a) + (content || '') + '[/table]';
             }
           }
@@ -722,12 +720,11 @@
 
       function applyAttrsToDom(t, a) {
         try {
-          var keys = ['width','align','headers','bgcolor','textcolor','hbgcolor','htextcolor','border','bordercolor','borderwidth'];
-          for (var i = 0; i < keys.length; i++) {
-            var k = keys[i];
+          for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
+            var k = TABLE_ATTR_KEYS[i];
             var v = asText(a[k]).trim();
-            if (!v && k !== 'border') t.removeAttribute('data-af-' + k);
-            else t.setAttribute('data-af-' + k, v || (k === 'border' ? '1' : ''));
+            if (k === 'border') v = v || '1';
+            t.setAttribute('data-af-' + k, v);
           }
           t.setAttribute('data-af-table', '1');
           t.classList.add('af-ae-table');
@@ -803,9 +800,10 @@
           '<div class="af-ae-tinputs" title="Ширина таблицы / колонок">' +
           '  <input type="text" class="af-ae-tinp" data-a="tbl-width" placeholder="100% или 500px">' +
           '  <button type="button" class="af-ae-tbtn" data-a="apply-width" title="Применить ширину таблицы">W</button>' +
+          '  <input type="text" class="af-ae-tinp" data-a="col-width-current" placeholder="Текущая колонка">' +
+          '  <button type="button" class="af-ae-tbtn" data-a="apply-col-width-current" title="Применить ширину текущей колонки">C1</button>' +
           '  <input type="text" class="af-ae-tinp" data-a="col-widths" placeholder="120px,200px,...">' +
           '  <button type="button" class="af-ae-tbtn" data-a="apply-col-widths" title="Применить ширины колонок">CW</button>' +
-          '  <button type="button" class="af-ae-tbtn" data-a="col-width" title="Ширина текущей колонки">C1</button>' +
           '</div>' +
           '<span class="af-ae-tsep" aria-hidden="true"></span>' +
           '<div class="af-ae-tcolors" title="Цвета таблицы">' +
@@ -855,8 +853,15 @@
           function syncPanelStateForTable(tableEl) {
             try {
               var attrs = parseAttrsFromDom(tableEl);
+              var activeCell = getActiveCell(tableEl);
               var widthInput = panel.querySelector('input[data-a="tbl-width"]');
               if (widthInput) widthInput.value = attrs.width || '';
+              var colCurrentInput = panel.querySelector('input[data-a="col-width-current"]');
+              if (colCurrentInput && activeCell && activeCell.parentElement) {
+                var cwNow = '';
+                try { cwNow = normWidthToken(activeCell.style.width || '') || ''; } catch (eCWNow) { cwNow = ''; }
+                colCurrentInput.value = cwNow;
+              }
 
               var alignBtns = panel.querySelectorAll('button[data-a^="align-"]');
               for (var ai = 0; ai < alignBtns.length; ai++) {
@@ -946,26 +951,22 @@
             return;
           }
 
-          if (act === 'col-width') {
+          if (act === 'apply-col-width-current') {
             var activeForWidth = getActiveCell(t);
             if (activeForWidth && activeForWidth.parentElement) {
               var colIdxPrompt = Array.prototype.indexOf.call(activeForWidth.parentElement.cells, activeForWidth);
-              var currentW = '';
-              try { currentW = normWidthToken(activeForWidth.style.width || '') || ''; } catch (eCW) {}
-              var rawPrompt = hostDoc.defaultView && hostDoc.defaultView.prompt ? hostDoc.defaultView.prompt('Ширина текущей колонки (например 120px или 20%)', currentW) : null;
-              if (rawPrompt !== null) {
-                var nPrompt = normWidthToken(rawPrompt);
-                for (var rr3 = 0; rr3 < t.rows.length; rr3++) {
-                  var c3 = t.rows[rr3].cells[colIdxPrompt];
-                  if (c3) c3.style.width = nPrompt || '';
-                }
-                try {
-                  var a3 = normalizeTableAttrs(parseAttrsFromDom(t));
-                  applyAttrsToDom(t, a3);
-                  syncPanelStateForTable(t);
-                } catch (eCA) {}
-                syncEditorValue();
+              var curInput = panel.querySelector('input[data-a="col-width-current"]');
+              var nPrompt = normWidthToken(curInput ? curInput.value : '');
+              for (var rr3 = 0; rr3 < t.rows.length; rr3++) {
+                var c3 = t.rows[rr3].cells[colIdxPrompt];
+                if (c3) c3.style.width = nPrompt || '';
               }
+              try {
+                var a3 = normalizeTableAttrs(parseAttrsFromDom(t));
+                applyAttrsToDom(t, a3);
+                syncPanelStateForTable(t);
+              } catch (eCA) {}
+              syncEditorValue();
             }
             return;
           }
