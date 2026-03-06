@@ -332,23 +332,6 @@ function af_ae_bbcode_table_build_cell_style(array $attrs, bool $isHeader, strin
         $styles[] = rtrim($existingStyle, ';');
     }
 
-    if (!empty($attrs['bgcolor'])) {
-        $styles[] = 'background-color:' . $attrs['bgcolor'];
-    }
-    if (!empty($attrs['textcolor'])) {
-        $styles[] = 'color:' . $attrs['textcolor'];
-    }
-
-    if ($isHeader) {
-        if (!empty($attrs['hbgcolor'])) {
-            $styles[] = 'background-color:' . $attrs['hbgcolor'];
-        }
-        if (!empty($attrs['htextcolor'])) {
-            $styles[] = 'color:' . $attrs['htextcolor'];
-        }
-        $styles[] = 'font-weight:700';
-    }
-
     $borderOn = (!isset($attrs['border']) || $attrs['border'] !== '0');
     if ($borderOn) {
         $bw = !empty($attrs['borderwidth']) ? $attrs['borderwidth'] : '1px';
