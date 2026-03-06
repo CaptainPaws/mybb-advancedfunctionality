@@ -195,11 +195,39 @@ function af_ae_bbcode_table_parse(&$message): void
                 $styleAttr = $styles ? (' style="' . htmlspecialchars_uni(implode(';', $styles)) . '"') : '';
 
 
-                $headers = !empty($attrs['headers']) ? $attrs['headers'] : '';
-                $dataHeaders = $headers !== '' ? (' data-headers="' . htmlspecialchars_uni($headers) . '"') : '';
+                $dataAttrs = [' data-af-table="1"'];
+                $map = [
+                    'width' => 'width',
+                    'align' => 'align',
+                    'headers' => 'headers',
+                    'bgcolor' => 'bgcolor',
+                    'textcolor' => 'textcolor',
+                    'hbgcolor' => 'hbgcolor',
+                    'htextcolor' => 'htextcolor',
+                    'border' => 'border',
+                    'bordercolor' => 'bordercolor',
+                    'borderwidth' => 'borderwidth',
+                ];
 
-                // ВАЖНО: класс/маркер оставляем прежними (если у тебя уже есть CSS под них)
-                return '<table class="af-ae-table" data-af-table="1"' . $styleAttr . $dataHeaders . '>' . $x . '</table>';
+                foreach ($map as $src => $dst) {
+                    $value = isset($attrs[$src]) ? trim((string)$attrs[$src]) : '';
+                    if ($dst === 'border') {
+                        if ($value === '') {
+                            $value = '1';
+                        }
+                    } elseif ($value === '') {
+                        continue;
+                    }
+                    $dataAttrs[] = ' data-af-' . $dst . '="' . htmlspecialchars_uni($value) . '"';
+                }
+
+                // legacy alias for older CSS/selectors
+                $headers = !empty($attrs['headers']) ? trim((string)$attrs['headers']) : '';
+                if ($headers !== '') {
+                    $dataAttrs[] = ' data-headers="' . htmlspecialchars_uni($headers) . '"';
+                }
+
+                return '<table class="af-ae-table"' . implode('', $dataAttrs) . $styleAttr . '>' . $x . '</table>';
             },
             $message2
         );
