@@ -243,6 +243,12 @@
     };
 
     if (!tableEl || tableEl.nodeType !== 1) return attrs;
+    if ((tableEl.tagName || '').toLowerCase() !== 'table') {
+      try {
+        var nested = tableEl.querySelector && tableEl.querySelector('table[data-af-table="1"],table.af-ae-table,table');
+        if (nested && nested.nodeType === 1) tableEl = nested;
+      } catch (eFind) {}
+    }
 
     function pickData(name) {
       try { return asText(tableEl.getAttribute('data-af-' + name)).trim(); } catch (e) { return ''; }
@@ -1769,6 +1775,12 @@
     };
 
     if (!tableEl || tableEl.nodeType !== 1) return attrs;
+    if ((tableEl.tagName || '').toLowerCase() !== 'table') {
+      try {
+        var nested = tableEl.querySelector && tableEl.querySelector('table[data-af-table="1"],table.af-ae-table,table');
+        if (nested && nested.nodeType === 1) tableEl = nested;
+      } catch (eFind) {}
+    }
 
     function pickData(name) {
       try { return asText(tableEl.getAttribute('data-af-' + name)).trim(); } catch (e) { return ''; }
@@ -1870,16 +1882,27 @@
     if (tag === 'th') inheritedColor = attrs.htextcolor || attrs.textcolor || '';
     else inheritedColor = attrs.textcolor || '';
 
-    if (inheritedColor) {
-      var escapedColor = inheritedColor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      var colorWrap = new RegExp('^\\[color=' + escapedColor + '\\]([\\s\\S]*)\\[/color\\]$', 'i');
-      var m = out.match(colorWrap);
-      if (m) out = m[1];
+    function stripOuter(regex) {
+      var changed = false;
+      var m = out.match(regex);
+      if (m) {
+        out = m[1];
+        changed = true;
+      }
+      return changed;
     }
 
-    if (tag === 'th') {
-      var boldWrap = out.match(/^\[b\]([\s\S]*)\[\/b\]$/i);
-      if (boldWrap) out = boldWrap[1];
+    var changed = true;
+    while (changed) {
+      changed = false;
+      if (inheritedColor) {
+        var escapedColor = inheritedColor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (stripOuter(new RegExp('^\\s*\\[color=' + escapedColor + '\\]([\\s\\S]*)\\[/color\\]\\s*$', 'i'))) changed = true;
+      }
+
+      if (tag === 'th') {
+        if (stripOuter(/^\s*\[b\]([\s\S]*)\[\/b\]\s*$/i)) changed = true;
+      }
     }
 
     return out;
@@ -1967,7 +1990,7 @@
     }
 
     var html = [];
-    html.push('<table class="af-ae-table" ' + attrsToDataAttrs(attrs) + ' style="' + buildTableStyle(attrs) + '">');
+    html.push('<table class="af-ae-table" ' + attrsToDataAttrs(attrs) + ' data-headers="' + (attrs.headers || '') + '" style="' + buildTableStyle(attrs) + '">');
 
     for (var r = 1; r <= rows; r++) {
       html.push('<tr>');
@@ -2078,7 +2101,7 @@
           });
 
           var style = buildTableStyle(a);
-          return '<table class="af-ae-table" ' + attrsToDataAttrs(a) + (style ? ' style="' + style + '"' : '') + '>' + (content || '') + '</table>';
+          return '<table class="af-ae-table" ' + attrsToDataAttrs(a) + ' data-headers="' + (a.headers || '') + '"' + (style ? ' style="' + style + '"' : '') + '>' + (content || '') + '</table>';
         },
         format: function (el, content) {
           var a = parseAttrsFromDom(el);
@@ -2114,6 +2137,7 @@
             var w = normWidthToken(attrs && attrs.width);
             var style = '';
             if (w) style += 'width:' + w + ';';
+            if (tag === 'th') style += 'font-weight:700;';
             return '<' + tag + (style ? ' style="' + style + '"' : '') + '>' + (content || '') + '</' + tag + '>';
           },
           format: function (el, content) {
