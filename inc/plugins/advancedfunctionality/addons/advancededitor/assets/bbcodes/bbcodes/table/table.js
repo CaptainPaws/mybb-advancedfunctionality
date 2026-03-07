@@ -521,15 +521,89 @@
     if (!inst || inst.__afAeTableToSourceBound || typeof inst.bind !== 'function') return;
     inst.__afAeTableToSourceBound = true;
 
+    function convertCellHtmlToBb(cellEl) {
+      if (!cellEl || cellEl.nodeType !== 1) return '';
+
+      var html = '';
+      try { html = asText(cellEl.innerHTML); } catch (e0) { html = ''; }
+      if (!html) return '';
+
+      var bb = '';
+      try {
+        if (typeof inst.toBBCode === 'function') {
+          bb = asText(inst.toBBCode(html));
+        }
+      } catch (e1) { bb = ''; }
+
+      if (!bb) {
+        try {
+          var plugin = (typeof inst.getPlugin === 'function') ? inst.getPlugin('bbcode') : null;
+          if (plugin && typeof plugin.signalToSource === 'function') bb = asText(plugin.signalToSource(html));
+        } catch (e2) { bb = ''; }
+      }
+
+      if (!bb) {
+        try { bb = asText(cellEl.textContent || ''); } catch (e3) { bb = ''; }
+      }
+
+      bb = bb.replace(/^\s+|\s+$/g, '');
+      if (bb === '[br]' || bb === '[br/]') bb = '';
+      return bb;
+    }
+
+    function serializeAfTableToBb(tableEl) {
+      if (!tableEl || tableEl.nodeType !== 1) return '';
+
+      var attrs = parseAttrsFromDom(tableEl);
+      var out = [tableAttrsToBbOpen(attrs)];
+      var rows = [];
+      try { rows = tableEl.querySelectorAll('tr'); } catch (eRows) { rows = []; }
+
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        out.push('[tr]');
+
+        var cells = [];
+        try { cells = row.querySelectorAll('th,td'); } catch (eCells) { cells = []; }
+        for (var j = 0; j < cells.length; j++) {
+          var cell = cells[j];
+          var tag = ((cell.tagName || '').toLowerCase() === 'th') ? 'th' : 'td';
+          var width = getCanonicalColumnWidth(cell);
+          var content = cleanupTableInheritedFormatting(cell, tag, convertCellHtmlToBb(cell));
+          out.push('[' + tag + (width ? ' width=' + width : '') + ']' + content + '[/' + tag + ']');
+        }
+
+        out.push('[/tr]');
+      }
+
+      out.push('[/table]');
+      return out.join('\n');
+    }
+
     try {
       inst.bind('toSource', function (html) {
         html = asText(html);
-        return html.replace(/<table\b([^>]*)>/gi, function (m, attrs) {
-          if (!/data-af-table\s*=\s*"1"/i.test(attrs) && !/class\s*=\s*"[^"]*af-ae-table/i.test(attrs)) return m;
-          var merged = attrs;
-          if (!/data-af-table\s*=/.test(merged)) merged += ' data-af-table="1"';
-          return '<table' + merged + '>';
-        });
+
+        if (inst.__afAeTablePreSerializing) return html;
+        inst.__afAeTablePreSerializing = true;
+
+        try {
+          var box = document.createElement('div');
+          box.innerHTML = html;
+
+          var tables = [];
+          try { tables = box.querySelectorAll('table[data-af-table="1"],table.af-ae-table'); } catch (eFind) { tables = []; }
+          for (var i = 0; i < tables.length; i++) {
+            var table = tables[i];
+            var bb = serializeAfTableToBb(table);
+
+            table.parentNode.replaceChild(document.createTextNode('\n' + bb + '\n'), table);
+          }
+
+          return box.innerHTML;
+        } finally {
+          inst.__afAeTablePreSerializing = false;
+        }
       });
     } catch (e) {}
   }
