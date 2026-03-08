@@ -163,6 +163,8 @@ function af_ae_bbcode_table_parse(&$message): void
                     }
                 }
 
+                $styles[] = 'border-collapse:collapse';
+
                 // NEW: css variables for rendering
                 // bgcolor/textcolor apply to td/th via CSS
                 if (!empty($attrs['bgcolor'])) {
@@ -184,12 +186,11 @@ function af_ae_bbcode_table_parse(&$message): void
                 if (!$borderOn) {
                     $styles[] = '--af-tbl-bw:0px';
                 } else {
-                    if (!empty($attrs['borderwidth'])) {
-                        $styles[] = '--af-tbl-bw:' . $attrs['borderwidth'];
-                    }
-                    if (!empty($attrs['bordercolor'])) {
-                        $styles[] = '--af-tbl-bc:' . $attrs['bordercolor'];
-                    }
+                    $bw = !empty($attrs['borderwidth']) ? $attrs['borderwidth'] : '1px';
+                    $bc = !empty($attrs['bordercolor']) ? $attrs['bordercolor'] : '#888888';
+                    $styles[] = '--af-tbl-bw:' . $bw;
+                    $styles[] = '--af-tbl-bc:' . $bc;
+                    $styles[] = 'border:' . $bw . ' solid ' . $bc;
                 }
 
                 $styleAttr = $styles ? (' style="' . htmlspecialchars_uni(implode(';', $styles)) . '"') : '';
