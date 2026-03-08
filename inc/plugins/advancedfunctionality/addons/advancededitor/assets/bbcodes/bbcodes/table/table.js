@@ -490,9 +490,11 @@
     inst.bind('toSource', function (html) {
       patchBbcode(inst);
       html = asText(html);
+      if (html.indexOf('af-ae-table') === -1 && html.indexOf('data-af-table') === -1) return html;
       var wrap = document.createElement('div');
       wrap.innerHTML = html;
       var tables = wrap.querySelectorAll('table.af-ae-table, table[data-af-table="1"]');
+      if (!tables.length) return html;
       for (var i = 0; i < tables.length; i++) {
         var bb = serializeTableDomToCanonicalBb(tables[i], inst);
         tables[i].parentNode.replaceChild(document.createTextNode(bb), tables[i]);
@@ -501,11 +503,25 @@
     });
   }
 
+  function syncActiveEditorOnSubmit(inst) {
+    if (!inst || inst.__afAeTableSubmitBound) return;
+    inst.__afAeTableSubmitBound = true;
+
+    var textarea = null;
+    try { textarea = inst.textarea && inst.textarea[0] ? inst.textarea[0] : null; } catch (e0) { textarea = null; }
+    if (!textarea || !textarea.form) return;
+
+    textarea.form.addEventListener('submit', function () {
+      try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e1) {}
+    }, false);
+  }
+
   function openDropdown(editor, caller) {
     if (!editor || typeof editor.createDropDown !== 'function') return false;
     patchBbcode(editor);
     bindModeBridge(editor);
     bindFloatingEditor(editor);
+    syncActiveEditorOnSubmit(editor);
     try { editor.closeDropDown(true); } catch (e) {}
     editor.createDropDown(caller, 'sceditor-table-picker', makeDropdown(editor));
     return true;
