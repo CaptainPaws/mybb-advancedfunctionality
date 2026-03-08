@@ -87,8 +87,6 @@
     return rgbToHex(s) || '';
   }
 
-
-
   function rgbToHex(s) {
     s = asText(s).trim().toLowerCase();
     if (!s) return '';
@@ -405,14 +403,12 @@
       try { return asText(tableEl.getAttribute('data-af-' + name)).trim(); } catch (e) { return ''; }
     }
 
-    // 1. Сначала читаем явные data-af-*.
     for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
       var key = TABLE_ATTR_KEYS[i];
       var val = pickData(key);
       if (val) attrs[key] = val;
     }
 
-    // 2. Потом добираем недостающее из table-level inline styles / css vars.
     try {
       var style = tableEl.style || {};
 
@@ -433,7 +429,6 @@
       if (attrs.borderwidth === '0px') attrs.border = '0';
     } catch (e0) {}
 
-    // 3. Потом ВСЕГДА, а не только при !hasAfData, добираем недостающее из ячеек.
     try {
       var firstHeaderCell = getFirstTableCellByTag(tableEl, 'th');
       var firstBodyCell = getFirstTableCellByTag(tableEl, 'td');
@@ -570,43 +565,6 @@
     return '';
   }
 
-  function cleanupTableInheritedFormatting(cellEl, tag, content) {
-    var out = asText(content);
-    var table = null;
-    try { table = cellEl && cellEl.closest ? cellEl.closest('table') : null; } catch (e0) { table = null; }
-    if (!table) return out;
-
-    var attrs = parseAttrsFromDom(table);
-    var inheritedColor = '';
-    if (tag === 'th') inheritedColor = attrs.htextcolor || attrs.textcolor || '';
-    else inheritedColor = attrs.textcolor || '';
-
-    function stripOuter(regex) {
-      var changed = false;
-      var m = out.match(regex);
-      if (m) {
-        out = m[1];
-        changed = true;
-      }
-      return changed;
-    }
-
-    var changed = true;
-    while (changed) {
-      changed = false;
-      if (inheritedColor) {
-        var escapedColor = inheritedColor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        if (stripOuter(new RegExp('^\\s*\\[color=' + escapedColor + '\\]([\\s\\S]*)\\[/color\\]\\s*$', 'i'))) changed = true;
-      }
-
-      if (tag === 'th') {
-        if (stripOuter(/^\s*\[b\]([\s\S]*)\[\/b\]\s*$/i)) changed = true;
-      }
-    }
-
-    return out;
-  }
-
   function isSerializableTable(table) {
     if (!table || table.nodeType !== 1) return false;
     if ((table.tagName || '').toLowerCase() !== 'table') return false;
@@ -694,26 +652,7 @@
     return out;
   }
 
-  function normalizeAfTablesInHtmlWithInst(html, inst) {
-    html = asText(html);
-    if (!html || html.indexOf('<table') === -1) return html;
-
-    var box = document.createElement('div');
-    box.innerHTML = html;
-
-    var tables = getTopLevelSerializableTables(box);
-    for (var i = 0; i < tables.length; i++) {
-      var table = tables[i];
-      if (!table || !table.parentNode) continue;
-      var bbTable = serializeAfTableToBb(table, inst);
-      tableDebugLog('normalizeAfTablesInHtmlWithInst.replace', { length: bbTable.length });
-      table.parentNode.replaceChild(document.createTextNode('\n' + bbTable + '\n'), table);
-    }
-
-    return box.innerHTML;
-  }
-
-  function serializeHtmlFragmentWithInst(html, inst) {
+  function genericHtmlToBb(inst, html) {
     html = asText(html);
     if (!html) return '';
 
@@ -736,41 +675,29 @@
     return asText(bb);
   }
 
-  function convertCellHtmlToBbWithInst(cellEl, inst) {
+  function replaceTopLevelTablesWithBb(root, inst) {
+    var tables = getTopLevelSerializableTables(root);
+    for (var i = 0; i < tables.length; i++) {
+      var table = tables[i];
+      if (!table || !table.parentNode) continue;
+      var bbTable = serializeTableDomToCanonicalBb(table, inst);
+      table.parentNode.replaceChild(root.ownerDocument.createTextNode('\n' + bbTable + '\n'), table);
+    }
+  }
+
+  function serializeCellContentForTable(cellEl, inst) {
     if (!cellEl || cellEl.nodeType !== 1) return '';
 
     var tag = ((cellEl.tagName || '').toLowerCase() === 'th') ? 'th' : 'td';
-
     var cleanedHtml = stripInheritedCellFormattingDom(cellEl, tag);
     if (!cleanedHtml) return '';
 
     var box = document.createElement('div');
     box.innerHTML = cleanedHtml;
 
-    var parts = [];
-    for (var i = 0; i < box.childNodes.length; i++) {
-      var node = box.childNodes[i];
-      if (!node) continue;
+    replaceTopLevelTablesWithBb(box, inst);
 
-      if (node.nodeType === 1 && (node.tagName || '').toLowerCase() === 'table' && isSerializableTable(node)) {
-        parts.push(serializeAfTableToBb(node, inst));
-        continue;
-      }
-
-      var chunkHtml = '';
-      if (node.nodeType === 1) chunkHtml = node.outerHTML || '';
-      else if (node.nodeType === 3) chunkHtml = node.nodeValue || '';
-      else continue;
-
-      if (!chunkHtml) continue;
-      chunkHtml = normalizeAfTablesInHtmlWithInst(chunkHtml, inst);
-      parts.push(serializeHtmlFragmentWithInst(chunkHtml, inst));
-    }
-
-    var bb = parts.join('');
-    if (!bb) {
-      bb = serializeHtmlFragmentWithInst(normalizeAfTablesInHtmlWithInst(cleanedHtml, inst), inst);
-    }
+    var bb = genericHtmlToBb(inst, box.innerHTML);
     if (!bb) {
       try { bb = asText(box.textContent || cellEl.textContent || ''); } catch (e3) { bb = ''; }
     }
@@ -782,7 +709,7 @@
     return bb;
   }
 
-  function serializeAfTableToBb(tableEl, inst) {
+  function serializeTableDomToCanonicalBb(tableEl, inst) {
     if (!tableEl || tableEl.nodeType !== 1) return '';
 
     var model = {
@@ -801,11 +728,7 @@
         var cell = cells[j];
         var tag = ((cell.tagName || '').toLowerCase() === 'th') ? 'th' : 'td';
         var width = getCanonicalColumnWidth(cell);
-        var content = cleanupTableInheritedFormatting(
-          cell,
-          tag,
-          convertCellHtmlToBbWithInst(cell, inst)
-        );
+        var content = serializeCellContentForTable(cell, inst);
 
         rowModel.cells.push({
           tag: tag,
@@ -818,12 +741,24 @@
     }
 
     var bbcode = modelToCanonicalBbcode(model);
-    tableDebugLog('serializeAfTableToBb', {
+    tableDebugLog('serializeTableDomToCanonicalBb', {
       rows: model.rows.length,
       attrs: model.attrs,
       length: bbcode.length
     });
     return bbcode;
+  }
+
+  function editorHtmlToBbWithOwnedTables(html, inst) {
+    html = asText(html);
+    if (!html) return '';
+
+    var box = document.createElement('div');
+    box.innerHTML = html;
+
+    replaceTopLevelTablesWithBb(box, inst);
+
+    return genericHtmlToBb(inst, box.innerHTML);
   }
 
   function tableAttrsToBbOpen(attrs) {
@@ -973,6 +908,39 @@
     } catch (e) {}
   }
 
+  function syncTextareaFromWysiwyg(inst) {
+    try {
+      if (!inst || isSourceMode(inst) || typeof inst.getBody !== 'function') return '';
+      var body = inst.getBody();
+      var ta = getTextareaFromCtx({ sceditor: inst });
+      if (!body || !ta) return '';
+
+      var bb = editorHtmlToBbWithOwnedTables(body.innerHTML, inst);
+      if (typeof bb !== 'string') bb = asText(bb);
+
+      ta.value = bb;
+      try { ta.dispatchEvent(new Event('input', { bubbles: true })); } catch (e0) {}
+      return bb;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function bindSubmitSync(inst) {
+    if (!inst || inst.__afAeTableSubmitSyncBound) return;
+    inst.__afAeTableSubmitSyncBound = true;
+
+    try {
+      var ta = getTextareaFromCtx({ sceditor: inst });
+      var form = ta && ta.form ? ta.form : null;
+      if (!form) return;
+
+      form.addEventListener('submit', function () {
+        try { syncTextareaFromWysiwyg(inst); } catch (e0) {}
+      }, true);
+    } catch (e) {}
+  }
+
   function bindTableToSourceNormalization(inst) {
     if (!inst || inst.__afAeTableToSourceBound || typeof inst.bind !== 'function') return;
     inst.__afAeTableToSourceBound = true;
@@ -985,19 +953,7 @@
         inst.__afAeTablePreSerializing = true;
 
         try {
-          var box = document.createElement('div');
-          box.innerHTML = html;
-
-          var tables = getTopLevelSerializableTables(box);
-          tableDebugLog('toSource.tables', { count: tables.length });
-          for (var i = 0; i < tables.length; i++) {
-            var table = tables[i];
-            if (!table || !table.parentNode) continue;
-            var bb = serializeAfTableToBb(table, inst);
-            table.parentNode.replaceChild(document.createTextNode('\n' + bb + '\n'), table);
-          }
-
-          return box.innerHTML;
+          return editorHtmlToBbWithOwnedTables(html, inst);
         } finally {
           inst.__afAeTablePreSerializing = false;
         }
@@ -1057,14 +1013,14 @@
           return '<table class="af-ae-table" ' + attrsToDataAttrs(a) + ' data-headers="' + (a.headers || '') + '"' + (style ? ' style="' + style + '"' : '') + '>' + (content || '') + '</table>';
         },
         format: function (el, _content) {
-          var bbcode = serializeAfTableToBb(el, inst);
+          var bbcode = serializeTableDomToCanonicalBb(el, inst);
           tableDebugLog('bb.table.format.atomic', { bbcode: bbcode });
           return bbcode;
         },
         tags: {
           table: {
             format: function (el, _content) {
-              var bbcode = serializeAfTableToBb(el, inst);
+              var bbcode = serializeTableDomToCanonicalBb(el, inst);
               tableDebugLog('bb.tags.table.format.atomic', { bbcode: bbcode });
               return bbcode;
             }
@@ -1077,56 +1033,41 @@
       bb.set('tr', {
         isBlock: true,
         html: '<tr>{0}</tr>',
-        format: '[tr]{0}[/tr]',
-        tags: { tr: { format: function (_el, content) { return '[tr]' + (content || '') + '[/tr]'; } } }
+        format: '[tr]{0}[/tr]'
       });
     } catch (e1) {}
 
-    function setCell(tag) {
-      try {
-        bb.set(tag, {
-          isInline: false,
-          html: function (_token, attrs, content) {
-            var w = normWidthToken(attrs && attrs.width);
-            var style = '';
-            if (w) style += 'width:' + w + ';';
-            if (tag === 'th') style += 'font-weight:700;';
-            return '<' + tag + (style ? ' style="' + style + '"' : '') + '>' + (content || '') + '</' + tag + '>';
-          },
-          format: function (el, content) {
-            var width = '';
-            var safeContent = cleanupTableInheritedFormatting(el, tag, content);
-            try {
-              width = getCanonicalColumnWidth(el) || normWidthToken((el.style && el.style.width) || el.getAttribute('width') || el.getAttribute('data-af-width') || '');
-            } catch (e2) { width = ''; }
-            tableDebugLog('bb.' + tag + '.format', { width: width, contentLength: asText(safeContent).length });
-            return '[' + tag + (width ? ' width=' + width : '') + ']' + safeContent + '[/' + tag + ']';
-          },
-          tags: (function () {
-            var t = {};
-            t[tag] = {
-              format: function (el, content) {
-                var width = '';
-                var safeContent = cleanupTableInheritedFormatting(el, tag, content);
-                try {
-                  width = getCanonicalColumnWidth(el) || normWidthToken((el.style && el.style.width) || el.getAttribute('width') || el.getAttribute('data-af-width') || '');
-                } catch (e4) { width = ''; }
-                tableDebugLog('bb.tags.' + tag + '.format', { width: width, contentLength: asText(safeContent).length });
-                return '[' + tag + (width ? ' width=' + width : '') + ']' + safeContent + '[/' + tag + ']';
-              }
-            };
-            return t;
-          })()
-        });
-      } catch (e3) {}
-    }
+    try {
+      bb.set('td', {
+        isInline: false,
+        html: function (_token, attrs, content) {
+          var w = normWidthToken(attrs && attrs.width);
+          var style = '';
+          if (w) style += 'width:' + w + ';';
+          return '<td' + (style ? ' style="' + style + '"' : '') + '>' + (content || '') + '</td>';
+        },
+        format: '[td]{0}[/td]'
+      });
+    } catch (e2) {}
 
-    setCell('td');
-    setCell('th');
+    try {
+      bb.set('th', {
+        isInline: false,
+        html: function (_token, attrs, content) {
+          var w = normWidthToken(attrs && attrs.width);
+          var style = '';
+          if (w) style += 'width:' + w + ';';
+          style += 'font-weight:700;';
+          return '<th' + (style ? ' style="' + style + '"' : '') + '>' + (content || '') + '</th>';
+        },
+        format: '[th]{0}[/th]'
+      });
+    } catch (e3) {}
 
     try {
       if (bb.tags) {
         bb.tags.table = bb.get ? bb.get('table') : bb.tags.table;
+        bb.tags.tr = bb.get ? bb.get('tr') : bb.tags.tr;
         bb.tags.td = bb.get ? bb.get('td') : bb.tags.td;
         bb.tags.th = bb.get ? bb.get('th') : bb.tags.th;
       }
@@ -1142,14 +1083,17 @@
     function guardPatch() {
       try { afAeEnsureMybbTableBbcode(inst); } catch (e0) {}
       try { bindTableToSourceNormalization(inst); } catch (e1) {}
+      try { bindSubmitSync(inst); } catch (e2) {}
     }
 
     try {
       if (typeof inst.updateOriginal === 'function' && !inst.__afAeTableUpdateOriginalWrapped) {
         var origUpdate = inst.updateOriginal;
         inst.updateOriginal = function () {
+          var result = origUpdate.apply(this, arguments);
           guardPatch();
-          return origUpdate.apply(this, arguments);
+          try { syncTextareaFromWysiwyg(this); } catch (e3) {}
+          return result;
         };
         inst.__afAeTableUpdateOriginalWrapped = true;
       }
@@ -1159,7 +1103,13 @@
       if (typeof inst.val === 'function' && !inst.__afAeTableValWrapped) {
         var origVal = inst.val;
         inst.val = function () {
-          if (!arguments.length) guardPatch();
+          if (!arguments.length) {
+            guardPatch();
+            if (!isSourceMode(this)) {
+              var bb = syncTextareaFromWysiwyg(this);
+              if (bb) return bb;
+            }
+          }
           return origVal.apply(this, arguments);
         };
         inst.__afAeTableValWrapped = true;
@@ -1182,7 +1132,6 @@
 
     function insertHtmlWysiwyg(inst, htmlChunk, bbFallback) {
       try {
-        // ВАЖНО: в WYSIWYG нельзя insertText(html) — это даст "сырой HTML" в редакторе.
         if (typeof inst.wysiwygEditorInsertHtml === 'function') {
           inst.wysiwygEditorInsertHtml(htmlChunk);
           return true;
@@ -1193,7 +1142,6 @@
         }
       } catch (e0) {}
 
-      // Фолбэк: если почему-то HTML API недоступен — вставляем BBCode
       try {
         if (typeof inst.insertText === 'function') {
           inst.insertText(bbFallback, '');
@@ -1210,27 +1158,26 @@
 
     try {
       if (editor && typeof editor.insertText === 'function') {
-        // Патчи и CSS должны быть подцеплены ДО вставки
         try { afAeEnsureMybbTableBbcode(editor); } catch (e1) {}
         try { ensureTableCss(editor); } catch (e2) {}
         try { bindTableToSourceNormalization(editor); } catch (e3) {}
         try { bindFloatingEditor(editor); } catch (e4) {}
         try { bindPreSerializeGuards(editor); } catch (e7) {}
+        try { bindSubmitSync(editor); } catch (e8) {}
 
         if (isSourceMode(editor)) {
           editor.insertText(bb, '');
         } else {
-          // ✅ В WYSIWYG вставляем ТОЛЬКО через HTML API
           insertHtmlWysiwyg(editor, html || bb, bb);
         }
 
         try { if (typeof editor.updateOriginal === 'function') editor.updateOriginal(); } catch (e5) {}
-        try { if (typeof editor.focus === 'function') editor.focus(); } catch (e6) {}
+        try { syncTextareaFromWysiwyg(editor); } catch (e6) {}
+        try { if (typeof editor.focus === 'function') editor.focus(); } catch (e9) {}
         return true;
       }
     } catch (e0) {}
 
-    // Нет SCEditor — вставляем BBCode в textarea
     var ta = getTextareaFromCtx({ sceditor: editor });
     return insertAtCursor(ta, bb);
   }
@@ -1302,6 +1249,7 @@
 
       function syncEditorValue() {
         try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e0) {}
+        try { syncTextareaFromWysiwyg(inst); } catch (e00) {}
         try { if (typeof inst.trigger === 'function') inst.trigger('change'); } catch (e1) {}
         try { if (typeof inst.trigger === 'function') inst.trigger('valuechanged'); } catch (e2) {}
       }
@@ -1341,7 +1289,7 @@
             t.setAttribute('data-af-' + k, v);
           }
           t.setAttribute('data-af-table', '1');
-          t.setAttribute('data-headers', asText(a.headers).trim()); // legacy alias
+          t.setAttribute('data-headers', asText(a.headers).trim());
           t.classList.add('af-ae-table');
           t.setAttribute('style', buildTableStyle(a));
         } catch (e0) {}
@@ -1371,14 +1319,14 @@
               if (shouldBeTh && tag !== 'th') {
                 var th = doc.createElement('th');
                 th.innerHTML = cell.innerHTML;
-                try { if (cell.style && cell.style.width) th.style.width = cell.style.width; } catch(eW){}
+                try { if (cell.style && cell.style.width) th.style.width = cell.style.width; } catch (eW) {}
                 row.replaceChild(th, cell);
                 cell = th;
                 tag = 'th';
               } else if (!shouldBeTh && tag === 'th') {
                 var td = doc.createElement('td');
                 td.innerHTML = cell.innerHTML;
-                try { if (cell.style && cell.style.width) td.style.width = cell.style.width; } catch(eW2){}
+                try { if (cell.style && cell.style.width) td.style.width = cell.style.width; } catch (eW2) {}
                 row.replaceChild(td, cell);
                 cell = td;
                 tag = 'td';
@@ -1977,6 +1925,7 @@
     bindTableToSourceNormalization(editor);
     bindFloatingEditor(editor);
     bindPreSerializeGuards(editor);
+    bindSubmitSync(editor);
 
     var wrap = makeDropdown(editor, caller);
     editor.createDropDown(caller, 'sceditor-table-picker', wrap);
@@ -2008,7 +1957,6 @@
       };
     }
 
-    // ВАЖНО: перебиваем и кастомную, и стандартную команду.
     $.sceditor.command.set('af_table', buildCommand());
     $.sceditor.command.set('table', buildCommand());
 
@@ -2041,6 +1989,8 @@
         try { bindTableToSourceNormalization(inst); } catch (e3) {}
         try { bindFloatingEditor(inst); } catch (e4) {}
         try { bindPreSerializeGuards(inst); } catch (e5) {}
+        try { bindSubmitSync(inst); } catch (e6) {}
+        try { syncTextareaFromWysiwyg(inst); } catch (e7) {}
       }
     } catch (e) {}
 
@@ -2106,13 +2056,17 @@
   registerHandlers();
   for (var i = 1; i <= 20; i++) setTimeout(registerHandlers, i * 250);
 
-  window.afAeTableDebugApi = window.afAeTableDebugApi || {
+  window.afAeTableDebugApi = {
     normalizeTableAttrs: normalizeTableAttrs,
     parseAttrsFromDom: parseAttrsFromDom,
     tableAttrsToBbOpen: tableAttrsToBbOpen,
     modelToCanonicalBbcode: modelToCanonicalBbcode,
     modelToWysiwygHtml: modelToWysiwygHtml,
-    createTableModel: createTableModel
+    createTableModel: createTableModel,
+    serializeCellContentForTable: serializeCellContentForTable,
+    serializeTableDomToCanonicalBb: serializeTableDomToCanonicalBb,
+    editorHtmlToBbWithOwnedTables: editorHtmlToBbWithOwnedTables,
+    syncTextareaFromWysiwyg: syncTextareaFromWysiwyg
   };
 
   window.af_ae_table_exec = function (editor, def, caller) {
@@ -2122,5 +2076,4 @@
       insertTableToEditor(editor, bb, html);
     }
   };
-
 })();
