@@ -1,21 +1,18 @@
 (function () {
   'use strict';
 
-  if (!window.afAeBuiltinHandlers) window.afAeBuiltinHandlers = Object.create(null);
-  if (!window.afAqrBuiltinHandlers) window.afAqrBuiltinHandlers = Object.create(null);
-
   if (window.__afAeTablePackLoaded) return;
   window.__afAeTablePackLoaded = true;
+
+  if (!window.afAeBuiltinHandlers) window.afAeBuiltinHandlers = Object.create(null);
+  if (!window.afAqrBuiltinHandlers) window.afAqrBuiltinHandlers = Object.create(null);
 
   var ID = 'table';
   var CMD = 'af_table';
   var TABLE_ATTR_KEYS = ['width', 'align', 'headers', 'bgcolor', 'textcolor', 'hbgcolor', 'htextcolor', 'border', 'bordercolor', 'borderwidth'];
 
-  function asText(x) { return String(x == null ? '' : x); }
-
-  function hasSceditor() {
-    return !!(window.jQuery && window.jQuery.fn && typeof window.jQuery.fn.sceditor === 'function');
-  }
+  function asText(v) { return String(v == null ? '' : v); }
+  function hasSceditor() { return !!(window.jQuery && window.jQuery.fn && typeof window.jQuery.fn.sceditor === 'function'); }
 
   function isSourceMode(inst) {
     try {
@@ -26,754 +23,73 @@
     return false;
   }
 
-  function getTextareaFromCtx(ctx) {
-    if (ctx && ctx.textarea && ctx.textarea.nodeType === 1) return ctx.textarea;
-    if (ctx && ctx.ta && ctx.ta.nodeType === 1) return ctx.ta;
-
-    var ae = document.activeElement;
-    if (ae && ae.tagName === 'TEXTAREA') return ae;
-
-    return document.querySelector('textarea#message') ||
-      document.querySelector('textarea[name="message"]') ||
-      null;
-  }
-
-  function getSceditorInstanceFromCtx(ctx) {
-    if (ctx && typeof ctx.insertText === 'function') return ctx;
-    if (ctx && typeof ctx.createDropDown === 'function') return ctx;
-    if (ctx && ctx.sceditor && typeof ctx.sceditor.insertText === 'function') return ctx.sceditor;
-    if (ctx && ctx.inst && typeof ctx.inst.insertText === 'function') return ctx.inst;
-    if (ctx && ctx.instance && typeof ctx.instance.insertText === 'function') return ctx.instance;
-
-    try {
-      if (window.jQuery) {
-        var $ = window.jQuery;
-        var $ta = $('textarea#message, textarea[name="message"]').first();
-        if ($ta.length) {
-          var inst = $ta.sceditor && $ta.sceditor('instance');
-          if (inst && typeof inst.insertText === 'function') return inst;
-        }
-      }
-    } catch (e) {}
-
-    return null;
-  }
-
-  function insertAtCursor(ta, text) {
-    if (!ta) return false;
-    text = asText(text);
-
-    try {
-      var start = (typeof ta.selectionStart === 'number') ? ta.selectionStart : 0;
-      var end = (typeof ta.selectionEnd === 'number') ? ta.selectionEnd : start;
-      var val = String(ta.value || '');
-
-      ta.value = val.slice(0, start) + text + val.slice(end);
-
-      var caret = start + text.length;
-      ta.focus();
-      try { ta.setSelectionRange(caret, caret); } catch (e0) {}
-      try { ta.dispatchEvent(new Event('input', { bubbles: true })); } catch (e1) {}
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function normColor(s) {
-    s = asText(s).trim();
-    if (!s) return '';
-    if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(s)) return s.toLowerCase();
-    return rgbToHex(s) || '';
-  }
-
-
-
-  function rgbToHex(s) {
-    s = asText(s).trim().toLowerCase();
-    if (!s) return '';
-    var m = s.match(/^rgba?\(([^)]+)\)$/i);
+  function normColor(v) {
+    v = asText(v).trim();
+    if (!v) return '';
+    if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) return v.toLowerCase();
+    var m = v.toLowerCase().match(/^rgba?\(([^)]+)\)$/);
     if (!m) return '';
-    var parts = m[1].split(/\s*,\s*/);
-    if (parts.length < 3) return '';
-    var r = parseInt(parts[0], 10);
-    var g = parseInt(parts[1], 10);
-    var b = parseInt(parts[2], 10);
+    var p = m[1].split(/\s*,\s*/);
+    if (p.length < 3) return '';
+    var r = parseInt(p[0], 10), g = parseInt(p[1], 10), b = parseInt(p[2], 10);
     if (!isFinite(r) || !isFinite(g) || !isFinite(b)) return '';
-    if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) return '';
-    var toHex = function (n) {
-      var h = n.toString(16);
-      return h.length === 1 ? ('0' + h) : h;
-    };
-    return ('#' + toHex(r) + toHex(g) + toHex(b));
+    function toHex(n) { var h = Math.max(0, Math.min(255, n)).toString(16); return h.length === 1 ? ('0' + h) : h; }
+    return '#' + toHex(r) + toHex(g) + toHex(b);
   }
 
-  function readColorToken(raw) {
-    raw = asText(raw).trim();
-    if (!raw) return '';
-    return normColor(raw) || rgbToHex(raw) || '';
-  }
-
-  function normBorderWidth(s) {
-    s = asText(s).trim();
-    if (!s) return '';
-    if (/^[0-9]{1,2}px$/i.test(s)) return s.toLowerCase();
-    var n = parseInt(s, 10);
-    if (!isFinite(n)) return '';
-    if (n < 0) n = 0;
-    if (n > 20) n = 20;
-    return String(n) + 'px';
-  }
-
-  function normWidthToken(s) {
-    s = asText(s).trim();
-    if (!s) return '';
-    var m = s.match(/^([0-9]{1,4})(px|%|em|rem|vw|vh)?$/i);
+  function normWidth(v) {
+    v = asText(v).trim();
+    if (!v) return '';
+    var m = v.match(/^([0-9]{1,4})(px|%|em|rem|vw|vh)?$/i);
     if (!m) return '';
-    return (m[1] + (m[2] ? m[2].toLowerCase() : 'px'));
+    return m[1] + (m[2] ? m[2].toLowerCase() : 'px');
   }
 
-  function parseWidthList(raw, limit) {
+  function normBorderWidth(v) {
+    v = asText(v).trim();
+    if (!v) return '';
+    if (/^[0-9]{1,2}px$/i.test(v)) return v.toLowerCase();
+    var n = parseInt(v, 10);
+    if (!isFinite(n)) return '';
+    n = Math.max(0, Math.min(20, n));
+    return n + 'px';
+  }
+
+  function parseWidthList(raw, max) {
     raw = asText(raw).trim();
     if (!raw) return [];
-    var parts = raw.split(/[,;]+/g);
     var out = [];
-    for (var i = 0; i < parts.length && out.length < limit; i++) {
-      var w = normWidthToken(parts[i]);
+    var parts = raw.split(/[,;]+/g);
+    for (var i = 0; i < parts.length && out.length < max; i++) {
+      var w = normWidth(parts[i]);
       if (w) out.push(w);
     }
     return out;
   }
 
-  function normalizeTableAttrs(attrs) {
+  function normalizeAttrs(attrs) {
     attrs = attrs || {};
     var out = {
-      width: normWidthToken(attrs.width),
+      width: normWidth(attrs.width),
       align: '',
       headers: '',
       bgcolor: normColor(attrs.bgcolor || attrs.cellBg),
       textcolor: normColor(attrs.textcolor || attrs.textColor),
       hbgcolor: normColor(attrs.hbgcolor || attrs.headBg),
       htextcolor: normColor(attrs.htextcolor || attrs.headText),
-      border: (String(attrs.border) === '0' || attrs.borderOn === false) ? '0' : '1',
+      border: String(attrs.border) === '0' || attrs.borderOn === false ? '0' : '1',
       bordercolor: normColor(attrs.bordercolor || attrs.borderColor),
       borderwidth: normBorderWidth(attrs.borderwidth || attrs.borderWidth)
     };
-
-    var align = asText(attrs.align).trim().toLowerCase();
-    if (align === 'left' || align === 'center' || align === 'right') out.align = align;
-
-    var headers = asText(attrs.headers).trim().toLowerCase();
-    if (headers === 'row' || headers === 'col' || headers === 'both') out.headers = headers;
-
+    var a = asText(attrs.align).toLowerCase().trim();
+    if (a === 'left' || a === 'center' || a === 'right') out.align = a;
+    var h = asText(attrs.headers).toLowerCase().trim();
+    if (h === 'row' || h === 'col' || h === 'both') out.headers = h;
     return out;
   }
 
-  function buildTableStyle(attrs) {
-    var styles = [];
-    if (attrs.width) styles.push('width:' + attrs.width);
-    if (attrs.align === 'center') {
-      styles.push('margin-left:auto');
-      styles.push('margin-right:auto');
-    } else if (attrs.align === 'right') {
-      styles.push('margin-left:auto');
-    } else if (attrs.align === 'left') {
-      styles.push('margin-right:auto');
-    }
-
-    styles.push('border-collapse:collapse');
-
-    if (attrs.bgcolor) styles.push('--af-tbl-bg:' + attrs.bgcolor);
-    if (attrs.textcolor) styles.push('--af-tbl-txt:' + attrs.textcolor);
-    if (attrs.hbgcolor) styles.push('--af-tbl-hbg:' + attrs.hbgcolor);
-    if (attrs.htextcolor) styles.push('--af-tbl-htxt:' + attrs.htextcolor);
-
-    if (attrs.border === '0') {
-      styles.push('--af-tbl-bw:0px');
-    } else {
-      styles.push('--af-tbl-bw:' + (attrs.borderwidth || '1px'));
-      styles.push('--af-tbl-bc:' + (attrs.bordercolor || '#888888'));
-    }
-
-    if (attrs.border === '1') {
-      var bw = attrs.borderwidth || '1px';
-      var bc = attrs.bordercolor || '#888888';
-      styles.push('border:' + bw + ' solid ' + bc);
-    }
-
-    return styles.join(';');
-  }
-
-  function attrsToDataAttrs(attrs) {
-    var data = ['data-af-table="1"'];
-    for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
-      var k = TABLE_ATTR_KEYS[i];
-      var v = asText(attrs[k]).trim();
-      if (!v && k !== 'border') continue;
-      if (k === 'border' && !v) v = '1';
-      data.push('data-af-' + k + '="' + v.replace(/"/g, '&quot;') + '"');
-    }
-    return data.join(' ');
-  }
-
-  function buildCellStyle(tag, tableAttrs, cellWidth, isHeaderByMode) {
-    var styles = [];
-    var isHeader = (asText(tag).toLowerCase() === 'th') || !!isHeaderByMode;
-    if (cellWidth) styles.push('width:' + cellWidth);
-
-    styles.push('background-color:' + (isHeader ? (tableAttrs.hbgcolor || tableAttrs.bgcolor || 'transparent') : (tableAttrs.bgcolor || 'transparent')));
-    styles.push('color:' + (isHeader ? (tableAttrs.htextcolor || tableAttrs.textcolor || 'inherit') : (tableAttrs.textcolor || 'inherit')));
-
-    if (tableAttrs.border === '1') {
-      styles.push('border:' + (tableAttrs.borderwidth || '1px') + ' solid ' + (tableAttrs.bordercolor || '#888888'));
-    } else {
-      styles.push('border:0');
-    }
-
-    styles.push('padding:6px 8px');
-    styles.push('vertical-align:top');
-    if (isHeader) styles.push('font-weight:700');
-
-    return styles.join(';');
-  }
-
-  function getFirstTableCellByTag(tableEl, selector) {
-    if (!tableEl || tableEl.nodeType !== 1) return null;
-    try {
-      return tableEl.querySelector(selector) || null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function readColorFromNode(node) {
-    if (!node || node.nodeType !== 1) return '';
-    try {
-      return readColorToken((node.style && node.style.color) || '');
-    } catch (e) {
-      return '';
-    }
-  }
-
-  function readBackgroundFromNode(node) {
-    if (!node || node.nodeType !== 1) return '';
-    try {
-      return readColorToken((node.style && (node.style.backgroundColor || node.style.background)) || '');
-    } catch (e) {
-      return '';
-    }
-  }
-
-  function readFirstDescendantColor(root) {
-    if (!root || root.nodeType !== 1 || !root.querySelectorAll) return '';
-    try {
-      var nodes = root.querySelectorAll('*');
-      for (var i = 0; i < nodes.length; i++) {
-        var color = readColorFromNode(nodes[i]);
-        if (color) return color;
-      }
-    } catch (e) {}
-    return '';
-  }
-
-  function readFirstDescendantBackground(root) {
-    if (!root || root.nodeType !== 1 || !root.querySelectorAll) return '';
-    try {
-      var nodes = root.querySelectorAll('*');
-      for (var i = 0; i < nodes.length; i++) {
-        var color = readBackgroundFromNode(nodes[i]);
-        if (color) return color;
-      }
-    } catch (e) {}
-    return '';
-  }
-
-  function getSingleElementChildIgnoringWhitespace(root) {
-    if (!root || !root.childNodes) return null;
-
-    var found = null;
-    for (var i = 0; i < root.childNodes.length; i++) {
-      var n = root.childNodes[i];
-
-      if (n.nodeType === 3) {
-        if (String(n.nodeValue || '').trim() !== '') return null;
-        continue;
-      }
-
-      if (n.nodeType !== 1) return null;
-      if (found) return null;
-      found = n;
-    }
-
-    return found;
-  }
-
-  function isBoldWrapperNode(node) {
-    if (!node || node.nodeType !== 1) return false;
-
-    var tag = String(node.tagName || '').toLowerCase();
-    if (tag === 'b' || tag === 'strong') return true;
-
-    var cls = String(node.className || '');
-    if (/\bmycode_b\b/.test(cls)) return true;
-
-    var fw = '';
-    try { fw = String((node.style && node.style.fontWeight) || '').toLowerCase(); } catch (e) { fw = ''; }
-    if (fw === 'bold') return true;
-
-    var fwNum = parseInt(fw, 10);
-    if (isFinite(fwNum) && fwNum >= 600) return true;
-
-    return false;
-  }
-
-  function isColorWrapperNode(node, expectedColor) {
-    if (!node || node.nodeType !== 1 || !expectedColor) return false;
-
-    var declared = readColorFromNode(node);
-    if (declared && declared === expectedColor) return true;
-
-    var cls = String(node.className || '');
-    if (/\bmycode_color\b/.test(cls)) {
-      var inline = readColorFromNode(node);
-      if (inline && inline === expectedColor) return true;
-    }
-
-    return false;
-  }
-
-  function stripInheritedCellFormattingDom(cellEl, tag) {
-    if (!cellEl || cellEl.nodeType !== 1) return '';
-
-    var clone = cellEl.cloneNode(true);
-    var table = null;
-
-    try { table = cellEl.closest ? cellEl.closest('table') : null; } catch (e0) { table = null; }
-
-    var attrs = parseAttrsFromDom(table);
-    var inheritedColor = (tag === 'th')
-      ? (attrs.htextcolor || attrs.textcolor || '')
-      : (attrs.textcolor || '');
-
-    var changed = true;
-    while (changed) {
-      changed = false;
-
-      var only = getSingleElementChildIgnoringWhitespace(clone);
-      if (!only) break;
-
-      if (inheritedColor && isColorWrapperNode(only, inheritedColor)) {
-        clone.innerHTML = only.innerHTML;
-        changed = true;
-        continue;
-      }
-
-      if (tag === 'th' && isBoldWrapperNode(only)) {
-        clone.innerHTML = only.innerHTML;
-        changed = true;
-        continue;
-      }
-    }
-
-    return asText(clone.innerHTML);
-  }
-
-  function parseAttrsFromDom(tableEl) {
-    var attrs = {
-      width: '',
-      align: '',
-      headers: '',
-      bgcolor: '',
-      textcolor: '',
-      hbgcolor: '',
-      htextcolor: '',
-      border: '1',
-      bordercolor: '',
-      borderwidth: ''
-    };
-
-    if (!tableEl || tableEl.nodeType !== 1) return attrs;
-
-    if ((tableEl.tagName || '').toLowerCase() !== 'table') {
-      try {
-        var nested = tableEl.querySelector && tableEl.querySelector('table[data-af-table="1"],table.af-ae-table,table');
-        if (nested && nested.nodeType === 1) tableEl = nested;
-      } catch (eFind) {}
-    }
-
-    function pickData(name) {
-      try { return asText(tableEl.getAttribute('data-af-' + name)).trim(); } catch (e) { return ''; }
-    }
-
-    // 1. Сначала читаем явные data-af-*.
-    for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
-      var key = TABLE_ATTR_KEYS[i];
-      var val = pickData(key);
-      if (val) attrs[key] = val;
-    }
-
-    // 2. Потом добираем недостающее из table-level inline styles / css vars.
-    try {
-      var style = tableEl.style || {};
-
-      if (!attrs.width) attrs.width = normWidthToken(style.width || '');
-      if (!attrs.align) {
-        if (style.marginLeft === 'auto' && style.marginRight === 'auto') attrs.align = 'center';
-        else if (style.marginLeft === 'auto') attrs.align = 'right';
-        else if (style.marginRight === 'auto') attrs.align = 'left';
-      }
-
-      if (!attrs.bgcolor) attrs.bgcolor = readColorToken(style.getPropertyValue('--af-tbl-bg') || style.backgroundColor || '');
-      if (!attrs.textcolor) attrs.textcolor = readColorToken(style.getPropertyValue('--af-tbl-txt') || style.color || '');
-      if (!attrs.hbgcolor) attrs.hbgcolor = readColorToken(style.getPropertyValue('--af-tbl-hbg') || '');
-      if (!attrs.htextcolor) attrs.htextcolor = readColorToken(style.getPropertyValue('--af-tbl-htxt') || '');
-      if (!attrs.bordercolor) attrs.bordercolor = readColorToken(style.getPropertyValue('--af-tbl-bc') || style.borderColor || '');
-      if (!attrs.borderwidth) attrs.borderwidth = normBorderWidth(style.getPropertyValue('--af-tbl-bw') || style.borderWidth || '');
-
-      if (attrs.borderwidth === '0px') attrs.border = '0';
-    } catch (e0) {}
-
-    // 3. Потом ВСЕГДА, а не только при !hasAfData, добираем недостающее из ячеек.
-    try {
-      var firstHeaderCell = getFirstTableCellByTag(tableEl, 'th');
-      var firstBodyCell = getFirstTableCellByTag(tableEl, 'td');
-      var firstAnyCell = firstHeaderCell || firstBodyCell || getFirstTableCellByTag(tableEl, 'td,th');
-
-      if (!attrs.borderwidth && firstAnyCell) {
-        attrs.borderwidth = normBorderWidth(
-          (firstAnyCell.style && firstAnyCell.style.borderWidth) ||
-          ''
-        );
-      }
-
-      if (!attrs.bordercolor && firstAnyCell) {
-        attrs.bordercolor = readColorToken(
-          (firstAnyCell.style && firstAnyCell.style.borderColor) ||
-          ''
-        );
-      }
-
-      if (!attrs.bgcolor && firstBodyCell) {
-        attrs.bgcolor =
-          readBackgroundFromNode(firstBodyCell) ||
-          readFirstDescendantBackground(firstBodyCell) ||
-          '';
-      }
-
-      if (!attrs.textcolor && firstBodyCell) {
-        attrs.textcolor =
-          readColorFromNode(firstBodyCell) ||
-          readFirstDescendantColor(firstBodyCell) ||
-          '';
-      }
-
-      if (!attrs.hbgcolor && firstHeaderCell) {
-        attrs.hbgcolor =
-          readBackgroundFromNode(firstHeaderCell) ||
-          readFirstDescendantBackground(firstHeaderCell) ||
-          '';
-      }
-
-      if (!attrs.htextcolor && firstHeaderCell) {
-        attrs.htextcolor =
-          readColorFromNode(firstHeaderCell) ||
-          readFirstDescendantColor(firstHeaderCell) ||
-          '';
-      }
-
-      if (!attrs.bgcolor && firstAnyCell) {
-        attrs.bgcolor =
-          readBackgroundFromNode(firstAnyCell) ||
-          readFirstDescendantBackground(firstAnyCell) ||
-          '';
-      }
-
-      if (!attrs.textcolor && firstAnyCell) {
-        attrs.textcolor =
-          readColorFromNode(firstAnyCell) ||
-          readFirstDescendantColor(firstAnyCell) ||
-          '';
-      }
-
-      if (!attrs.headers) {
-        var hasTh = false;
-        try { hasTh = !!tableEl.querySelector('th'); } catch (eHasTh) { hasTh = false; }
-
-        if (hasTh) {
-          var rowHasAllTh = false;
-          var rows = tableEl.rows || [];
-          if (rows.length) {
-            var firstRow = rows[0];
-            if (firstRow && firstRow.cells && firstRow.cells.length) {
-              rowHasAllTh = true;
-              for (var ri = 0; ri < firstRow.cells.length; ri++) {
-                if ((firstRow.cells[ri].tagName || '').toLowerCase() !== 'th') {
-                  rowHasAllTh = false;
-                  break;
-                }
-              }
-            }
-          }
-
-          attrs.headers = rowHasAllTh ? 'row' : 'both';
-        }
-      }
-    } catch (eCell) {}
-
-    if (!attrs.headers) {
-      try { attrs.headers = asText(tableEl.getAttribute('data-headers')).trim().toLowerCase(); } catch (e1) {}
-    }
-
-    if (attrs.border === '1') {
-      if (!attrs.bordercolor) attrs.bordercolor = '#888888';
-      if (!attrs.borderwidth) attrs.borderwidth = '1px';
-    }
-
-    attrs = normalizeTableAttrs(attrs);
-
-    tableDebugLog('parseAttrsFromDom', {
-      className: tableEl && tableEl.className ? asText(tableEl.className) : '',
-      attrs: attrs
-    });
-
-    return attrs;
-  }
-
-  function getCanonicalColumnWidth(cellEl) {
-    if (!cellEl || cellEl.nodeType !== 1 || !cellEl.parentElement || !cellEl.parentElement.cells) return '';
-    var row = cellEl.parentElement;
-    var table = row.closest ? row.closest('table') : null;
-    if (!table || !table.rows) return '';
-
-    var colIndex = -1;
-    try { colIndex = Array.prototype.indexOf.call(row.cells, cellEl); } catch (e0) { colIndex = -1; }
-    if (colIndex < 0) return '';
-
-    try {
-      var col = table.querySelector && table.querySelector('colgroup col:nth-child(' + (colIndex + 1) + '), col:nth-child(' + (colIndex + 1) + ')');
-      if (col) {
-        var colWidth = normWidthToken((col.style && col.style.width) || col.getAttribute('width') || col.getAttribute('data-af-width') || '');
-        if (colWidth) return colWidth;
-      }
-    } catch (eCol) {}
-
-    for (var r = 0; r < table.rows.length; r++) {
-      var rowCell = table.rows[r] && table.rows[r].cells ? table.rows[r].cells[colIndex] : null;
-      if (!rowCell) continue;
-      var width = '';
-      try {
-        width = normWidthToken((rowCell.style && rowCell.style.width) || rowCell.getAttribute('width') || rowCell.getAttribute('data-af-width') || '');
-      } catch (e1) { width = ''; }
-      if (width) return width;
-    }
-
-    return '';
-  }
-
-  function cleanupTableInheritedFormatting(cellEl, tag, content) {
-    var out = asText(content);
-    var table = null;
-    try { table = cellEl && cellEl.closest ? cellEl.closest('table') : null; } catch (e0) { table = null; }
-    if (!table) return out;
-
-    var attrs = parseAttrsFromDom(table);
-    var inheritedColor = '';
-    if (tag === 'th') inheritedColor = attrs.htextcolor || attrs.textcolor || '';
-    else inheritedColor = attrs.textcolor || '';
-
-    function stripOuter(regex) {
-      var changed = false;
-      var m = out.match(regex);
-      if (m) {
-        out = m[1];
-        changed = true;
-      }
-      return changed;
-    }
-
-    var changed = true;
-    while (changed) {
-      changed = false;
-      if (inheritedColor) {
-        var escapedColor = inheritedColor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        if (stripOuter(new RegExp('^\\s*\\[color=' + escapedColor + '\\]([\\s\\S]*)\\[/color\\]\\s*$', 'i'))) changed = true;
-      }
-
-      if (tag === 'th') {
-        if (stripOuter(/^\s*\[b\]([\s\S]*)\[\/b\]\s*$/i)) changed = true;
-      }
-    }
-
-    return out;
-  }
-
-  function isSerializableTable(table) {
-    if (!table || table.nodeType !== 1) return false;
-    if ((table.tagName || '').toLowerCase() !== 'table') return false;
-
-    try {
-      if (table.closest && table.closest('pre,code')) return false;
-    } catch (e0) {}
-
-    try {
-      if (table.hasAttribute('data-af-no-table-serialize')) return false;
-    } catch (e1) {}
-
-    try {
-      return !!table.querySelector('tr td, tr th');
-    } catch (e2) {
-      return false;
-    }
-  }
-
-  function getDirectChildRows(tableEl) {
-    if (!tableEl || tableEl.nodeType !== 1) return [];
-
-    var rows = [];
-    var groups = [];
-    try {
-      groups = tableEl.querySelectorAll(':scope > thead,:scope > tbody,:scope > tfoot');
-    } catch (eScope) {
-      groups = [];
-    }
-
-    if (groups && groups.length) {
-      for (var g = 0; g < groups.length; g++) {
-        var groupRows = groups[g].children || [];
-        for (var gr = 0; gr < groupRows.length; gr++) {
-          var rowNode = groupRows[gr];
-          if ((rowNode.tagName || '').toLowerCase() === 'tr') rows.push(rowNode);
-        }
-      }
-    } else {
-      var direct = tableEl.children || [];
-      for (var i = 0; i < direct.length; i++) {
-        var node = direct[i];
-        if ((node.tagName || '').toLowerCase() === 'tr') rows.push(node);
-      }
-    }
-
-    return rows;
-  }
-
-  function getDirectRowCells(rowEl) {
-    if (!rowEl || rowEl.nodeType !== 1) return [];
-    var out = [];
-    var children = rowEl.children || [];
-    for (var i = 0; i < children.length; i++) {
-      var node = children[i];
-      var tag = (node.tagName || '').toLowerCase();
-      if (tag === 'td' || tag === 'th') out.push(node);
-    }
-    return out;
-  }
-
-  function normalizeAfTablesInHtmlWithInst(html, inst) {
-    html = asText(html);
-    if (!html || html.indexOf('<table') === -1) return html;
-
-    var box = document.createElement('div');
-    box.innerHTML = html;
-
-    var tables = [];
-    try { tables = box.querySelectorAll('table'); } catch (eFind) { tables = []; }
-
-    for (var i = 0; i < tables.length; i++) {
-      var table = tables[i];
-      if (!table || !table.parentNode) continue;
-      if (!isSerializableTable(table)) continue;
-
-      var isNested = false;
-      try {
-        isNested = !!(table.parentElement && table.parentElement.closest && table.parentElement.closest('table'));
-      } catch (eNested) {
-        isNested = false;
-      }
-      if (isNested) continue;
-
-      var bbTable = serializeAfTableToBb(table, inst);
-      table.parentNode.replaceChild(document.createTextNode('\n' + bbTable + '\n'), table);
-    }
-
-    return box.innerHTML;
-  }
-
-  function convertCellHtmlToBbWithInst(cellEl, inst) {
-    if (!cellEl || cellEl.nodeType !== 1) return '';
-
-    var tag = ((cellEl.tagName || '').toLowerCase() === 'th') ? 'th' : 'td';
-
-    var html = stripInheritedCellFormattingDom(cellEl, tag);
-    if (!html) return '';
-
-    html = normalizeAfTablesInHtmlWithInst(html, inst);
-
-    var bb = '';
-    try {
-      if (inst && typeof inst.toBBCode === 'function') {
-        bb = asText(inst.toBBCode(html));
-      }
-    } catch (e1) { bb = ''; }
-
-    if (!bb) {
-      try {
-        var plugin = (inst && typeof inst.getPlugin === 'function') ? inst.getPlugin('bbcode') : null;
-        if (plugin && typeof plugin.signalToSource === 'function') {
-          bb = asText(plugin.signalToSource(html));
-        }
-      } catch (e2) { bb = ''; }
-    }
-
-    if (!bb) {
-      try { bb = asText(cellEl.textContent || ''); } catch (e3) { bb = ''; }
-    }
-
-    bb = bb.replace(/^\s+|\s+$/g, '');
-    if (bb === '[br]' || bb === '[br/]') bb = '';
-
-    return bb;
-  }
-
-  function serializeAfTableToBb(tableEl, inst) {
-    if (!tableEl || tableEl.nodeType !== 1) return '';
-
-    var model = {
-      attrs: parseAttrsFromDom(tableEl),
-      rows: []
-    };
-
-    var rows = getDirectChildRows(tableEl);
-
-    for (var i = 0; i < rows.length; i++) {
-      var row = rows[i];
-      var rowModel = { cells: [] };
-
-      var cells = getDirectRowCells(row);
-      for (var j = 0; j < cells.length; j++) {
-        var cell = cells[j];
-        var tag = ((cell.tagName || '').toLowerCase() === 'th') ? 'th' : 'td';
-        var width = getCanonicalColumnWidth(cell);
-        var content = cleanupTableInheritedFormatting(
-          cell,
-          tag,
-          convertCellHtmlToBbWithInst(cell, inst)
-        );
-
-        rowModel.cells.push({
-          tag: tag,
-          width: width,
-          content: content
-        });
-      }
-
-      model.rows.push(rowModel);
-    }
-
-    return modelToCanonicalBbcode(model);
-  }
-
-  function tableAttrsToBbOpen(attrs) {
-    attrs = normalizeTableAttrs(attrs);
+  function tableAttrsToOpen(attrs) {
+    attrs = normalizeAttrs(attrs);
     var parts = [];
     if (attrs.width) parts.push('width=' + attrs.width);
     if (attrs.align) parts.push('align=' + attrs.align);
@@ -787,1296 +103,620 @@
       if (attrs.bordercolor) parts.push('bordercolor=' + attrs.bordercolor);
       if (attrs.borderwidth) parts.push('borderwidth=' + attrs.borderwidth);
     }
-    var open = '[table' + (parts.length ? ' ' + parts.join(' ') : '') + ']';
-    tableDebugLog('tableAttrsToBbOpen', { attrs: attrs, open: open });
-    return open;
+    return '[table' + (parts.length ? ' ' + parts.join(' ') : '') + ']';
   }
 
-  function createTableModel(rows, cols, opts) {
+  function modelToCanonicalBb(model) {
+    var out = [tableAttrsToOpen(model.attrs || {})];
+    var rows = Array.isArray(model.rows) ? model.rows : [];
+    for (var r = 0; r < rows.length; r++) {
+      out.push('[tr]');
+      var cells = Array.isArray(rows[r].cells) ? rows[r].cells : [];
+      for (var c = 0; c < cells.length; c++) {
+        var cell = cells[c] || {};
+        var tag = asText(cell.tag).toLowerCase() === 'th' ? 'th' : 'td';
+        var width = normWidth(cell.width);
+        out.push('[' + tag + (width ? ' width=' + width : '') + ']' + asText(cell.content) + '[/' + tag + ']');
+      }
+      out.push('[/tr]');
+    }
+    out.push('[/table]');
+    return out.join('\n');
+  }
+
+  function buildTableStyle(attrs) {
+    attrs = normalizeAttrs(attrs);
+    var st = ['border-collapse:collapse'];
+    if (attrs.width) st.push('width:' + attrs.width);
+    if (attrs.align === 'center') st.push('margin-left:auto', 'margin-right:auto');
+    else if (attrs.align === 'right') st.push('margin-left:auto');
+    else if (attrs.align === 'left') st.push('margin-right:auto');
+    if (attrs.border === '1') st.push('border:' + (attrs.borderwidth || '1px') + ' solid ' + (attrs.bordercolor || '#888888'));
+    return st.join(';');
+  }
+
+  function attrsToData(attrs) {
+    attrs = normalizeAttrs(attrs);
+    var out = ['data-af-table="1"'];
+    for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
+      var k = TABLE_ATTR_KEYS[i];
+      var v = asText(attrs[k]).trim();
+      if (!v && k !== 'border') continue;
+      if (!v && k === 'border') v = '1';
+      out.push('data-af-' + k + '="' + v.replace(/"/g, '&quot;') + '"');
+    }
+    return out.join(' ');
+  }
+
+  function cellStyle(tag, attrs, width) {
+    attrs = normalizeAttrs(attrs);
+    var isTh = tag === 'th';
+    var st = ['padding:6px 8px', 'vertical-align:top'];
+    if (width) st.push('width:' + width);
+    st.push('background-color:' + (isTh ? (attrs.hbgcolor || attrs.bgcolor || 'transparent') : (attrs.bgcolor || 'transparent')));
+    st.push('color:' + (isTh ? (attrs.htextcolor || attrs.textcolor || 'inherit') : (attrs.textcolor || 'inherit')));
+    if (attrs.border === '1') st.push('border:' + (attrs.borderwidth || '1px') + ' solid ' + (attrs.bordercolor || '#888888'));
+    else st.push('border:0');
+    if (isTh) st.push('font-weight:700');
+    return st.join(';');
+  }
+
+  function modelToWysiwygHtml(model) {
+    var attrs = normalizeAttrs(model.attrs || {});
+    var rows = Array.isArray(model.rows) ? model.rows : [];
+    var out = [];
+    out.push('<table class="af-ae-table" ' + attrsToData(attrs) + ' style="' + buildTableStyle(attrs) + '">');
+    for (var r = 0; r < rows.length; r++) {
+      out.push('<tr>');
+      var cells = rows[r].cells || [];
+      for (var c = 0; c < cells.length; c++) {
+        var cell = cells[c] || {};
+        var tag = asText(cell.tag).toLowerCase() === 'th' ? 'th' : 'td';
+        var w = normWidth(cell.width);
+        var cnt = asText(cell.content).trim();
+        out.push('<' + tag + ' style="' + cellStyle(tag, attrs, w) + '">' + (cnt || '<br>') + '</' + tag + '>');
+      }
+      out.push('</tr>');
+    }
+    out.push('</table><p><br></p>');
+    return out.join('');
+  }
+
+  function createModel(rows, cols, opts) {
     rows = Math.max(1, Math.min(50, rows | 0));
     cols = Math.max(1, Math.min(50, cols | 0));
     opts = opts || {};
-
-    var attrs = normalizeTableAttrs(opts);
-    attrs.width = normWidthToken(opts.width || attrs.width);
-
-    var colWidths = Array.isArray(opts.colWidths) ? opts.colWidths : parseWidthList(opts.colWidths, cols);
+    var attrs = normalizeAttrs(opts);
+    var widths = Array.isArray(opts.colWidths) ? opts.colWidths : parseWidthList(opts.colWidths, cols);
     var model = { attrs: attrs, rows: [] };
 
     function isHeaderCell(r, c) {
       if (attrs.headers === 'row') return r === 1;
       if (attrs.headers === 'col') return c === 1;
-      if (attrs.headers === 'both') return (r === 1 || c === 1);
+      if (attrs.headers === 'both') return r === 1 || c === 1;
       return false;
     }
 
-    var fill = !!opts.fill;
     for (var r = 1; r <= rows; r++) {
-      var rowModel = { cells: [] };
+      var row = { cells: [] };
       for (var c = 1; c <= cols; c++) {
         var tag = isHeaderCell(r, c) ? 'th' : 'td';
         var txt = '';
-
-        if (fill && tag === 'th') {
+        if (opts.fill && tag === 'th') {
           if ((attrs.headers === 'row' || attrs.headers === 'both') && r === 1) txt = 'Header ' + c;
-          if ((attrs.headers === 'col' || attrs.headers === 'both') && c === 1) txt = 'Row ' + r;
-          if (attrs.headers === 'both' && r === 1 && c === 1) txt = ' ';
+          else if ((attrs.headers === 'col' || attrs.headers === 'both') && c === 1) txt = 'Row ' + r;
         }
-
-        rowModel.cells.push({
-          tag: tag,
-          width: (colWidths && colWidths[c - 1]) ? colWidths[c - 1] : '',
-          content: txt
-        });
+        row.cells.push({ tag: tag, width: widths[c - 1] || '', content: txt });
       }
-      model.rows.push(rowModel);
+      model.rows.push(row);
     }
 
     return model;
   }
 
-  function modelToCanonicalBbcode(model) {
-    model = model || { attrs: {}, rows: [] };
-    var out = [tableAttrsToBbOpen(model.attrs || {})];
-    var rows = Array.isArray(model.rows) ? model.rows : [];
+  function getTableAttrsFromDom(tableEl) {
+    var attrs = normalizeAttrs({ border: '1' });
+    if (!tableEl || tableEl.nodeType !== 1) return attrs;
 
-    for (var r = 0; r < rows.length; r++) {
-      var row = rows[r] || {};
-      var cells = Array.isArray(row.cells) ? row.cells : [];
-      out.push('[tr]');
-      for (var c = 0; c < cells.length; c++) {
-        var cell = cells[c] || {};
-        var tag = (asText(cell.tag).toLowerCase() === 'th') ? 'th' : 'td';
-        var width = normWidthToken(cell.width);
-        var content = asText(cell.content);
-        out.push('[' + tag + (width ? ' width=' + width : '') + ']' + content + '[/' + tag + ']');
-      }
-      out.push('[/tr]');
+    for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
+      var k = TABLE_ATTR_KEYS[i];
+      var v = asText(tableEl.getAttribute('data-af-' + k)).trim();
+      if (v) attrs[k] = v;
     }
 
-    out.push('[/table]');
-    return out.join('\n');
-  }
-
-  function modelToWysiwygHtml(model) {
-    model = model || { attrs: {}, rows: [] };
-    var attrs = normalizeTableAttrs(model.attrs || {});
-    var rows = Array.isArray(model.rows) ? model.rows : [];
-    var html = [];
-
-    html.push('<table class="af-ae-table" ' + attrsToDataAttrs(attrs) + ' data-headers="' + (attrs.headers || '') + '" style="' + buildTableStyle(attrs) + '">');
-
-    for (var r = 0; r < rows.length; r++) {
-      var row = rows[r] || {};
-      var cells = Array.isArray(row.cells) ? row.cells : [];
-      html.push('<tr>');
-      for (var c = 0; c < cells.length; c++) {
-        var cell = cells[c] || {};
-        var tag = (asText(cell.tag).toLowerCase() === 'th') ? 'th' : 'td';
-        var cellStyle = buildCellStyle(tag, attrs, normWidthToken(cell.width), tag === 'th');
-        var content = asText(cell.content).trim();
-        html.push('<' + tag + (cellStyle ? ' style="' + cellStyle + '"' : '') + '>' + (content || '<br>') + '</' + tag + '>');
-      }
-      html.push('</tr>');
+    var st = tableEl.style || {};
+    if (!attrs.width) attrs.width = normWidth(st.width || tableEl.getAttribute('width') || '');
+    if (!attrs.align) {
+      if (st.marginLeft === 'auto' && st.marginRight === 'auto') attrs.align = 'center';
+      else if (st.marginLeft === 'auto') attrs.align = 'right';
+      else if (st.marginRight === 'auto') attrs.align = 'left';
     }
 
-    html.push('</table><p><br></p>');
-    return html.join('');
+    if (!attrs.bgcolor) attrs.bgcolor = normColor(st.backgroundColor || '');
+    if (!attrs.textcolor) attrs.textcolor = normColor(st.color || '');
+    if (!attrs.borderwidth) attrs.borderwidth = normBorderWidth(st.borderWidth || '');
+    if (!attrs.bordercolor) attrs.bordercolor = normColor(st.borderColor || '');
+    if (attrs.borderwidth === '0px') attrs.border = '0';
+
+    return normalizeAttrs(attrs);
   }
 
-  function buildBbcode(rows, cols, opts) {
-    return modelToCanonicalBbcode(createTableModel(rows, cols, opts));
+  function getDirectRows(tableEl) {
+    var rows = [];
+    if (!tableEl || tableEl.nodeType !== 1) return rows;
+    var kids = tableEl.children || [];
+    for (var i = 0; i < kids.length; i++) {
+      var tag = (kids[i].tagName || '').toLowerCase();
+      if (tag === 'tr') rows.push(kids[i]);
+      if (tag === 'thead' || tag === 'tbody' || tag === 'tfoot') {
+        var rk = kids[i].children || [];
+        for (var j = 0; j < rk.length; j++) if ((rk[j].tagName || '').toLowerCase() === 'tr') rows.push(rk[j]);
+      }
+    }
+    return rows;
   }
 
-  function buildHtmlFromBbcode(rows, cols, opts) {
-    return modelToWysiwygHtml(createTableModel(rows, cols, opts));
+  function getDirectCells(rowEl) {
+    var out = [];
+    var kids = rowEl && rowEl.children ? rowEl.children : [];
+    for (var i = 0; i < kids.length; i++) {
+      var tag = (kids[i].tagName || '').toLowerCase();
+      if (tag === 'td' || tag === 'th') out.push(kids[i]);
+    }
+    return out;
+  }
+
+  function unwrapInheritedWrappers(root, tag, inheritedColor) {
+    var changed = true;
+    while (changed) {
+      changed = false;
+      var elem = null;
+      var nodes = root.childNodes || [];
+      for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].nodeType === 3 && asText(nodes[i].nodeValue).trim() === '') continue;
+        if (nodes[i].nodeType !== 1 || elem) return;
+        elem = nodes[i];
+      }
+      if (!elem) return;
+
+      var elTag = (elem.tagName || '').toLowerCase();
+      var styleColor = normColor((elem.style && elem.style.color) || '');
+      var isColorWrap = !!(inheritedColor && (styleColor === inheritedColor || /\bmycode_color\b/.test(asText(elem.className))));
+      var fw = asText((elem.style && elem.style.fontWeight) || '').toLowerCase();
+      var isBoldWrap = elTag === 'b' || elTag === 'strong' || /\bmycode_b\b/.test(asText(elem.className)) || fw === 'bold' || (parseInt(fw, 10) >= 600);
+
+      if (isColorWrap || (tag === 'th' && isBoldWrap)) {
+        root.innerHTML = elem.innerHTML;
+        changed = true;
+      }
+    }
+  }
+
+  function cleanupInheritedBbWrappers(bb, tag, inheritedColor) {
+    bb = asText(bb).trim();
+    if (!bb) return '';
+    var changed = true;
+    while (changed) {
+      changed = false;
+      if (inheritedColor) {
+        var esc = inheritedColor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var reColor = new RegExp('^\\s*\\[color=' + esc + '\\]([\\s\\S]*)\\[/color\\]\\s*$', 'i');
+        var mc = bb.match(reColor);
+        if (mc) { bb = mc[1]; changed = true; }
+      }
+      if (tag === 'th') {
+        var mb = bb.match(/^\s*\[b\]([\s\S]*)\[\/b\]\s*$/i);
+        if (mb) { bb = mb[1]; changed = true; }
+      }
+    }
+    return bb;
+  }
+
+  function isSerializableTable(node) {
+    if (!node || node.nodeType !== 1) return false;
+    if ((node.tagName || '').toLowerCase() !== 'table') return false;
+    try { if (node.closest && node.closest('pre,code')) return false; } catch (e) {}
+    return true;
+  }
+
+  function serializeCellDomToBb(cellEl, tag, inheritedColor, inst) {
+    var clone = cellEl.cloneNode(true);
+    unwrapInheritedWrappers(clone, tag, inheritedColor);
+
+    var nested = clone.querySelectorAll ? clone.querySelectorAll('table') : [];
+    for (var i = nested.length - 1; i >= 0; i--) {
+      if (!isSerializableTable(nested[i])) continue;
+      var nestedBb = serializeTableDomToCanonicalBb(nested[i], inst);
+      nested[i].parentNode.replaceChild(clone.ownerDocument.createTextNode('\n' + nestedBb + '\n'), nested[i]);
+    }
+
+    var html = asText(clone.innerHTML).trim();
+    if (!html || html === '<br>' || html === '<br/>') return '';
+
+    var bb = '';
+    try { if (inst && typeof inst.toBBCode === 'function') bb = asText(inst.toBBCode(html)); } catch (e0) { bb = ''; }
+    if (!bb) {
+      try {
+        var plugin = inst && typeof inst.getPlugin === 'function' ? inst.getPlugin('bbcode') : null;
+        if (plugin && typeof plugin.signalToSource === 'function') bb = asText(plugin.signalToSource(html));
+      } catch (e1) { bb = ''; }
+    }
+    if (!bb) bb = asText(clone.textContent || '');
+
+    bb = cleanupInheritedBbWrappers(bb, tag, inheritedColor);
+    bb = bb.replace(/^\s+|\s+$/g, '');
+    if (bb === '[br]' || bb === '[br/]') return '';
+    return bb;
+  }
+
+  // Single owner serializer for table DOM -> canonical BBCode.
+  function serializeTableDomToCanonicalBb(tableEl, inst) {
+    if (!isSerializableTable(tableEl)) return '';
+
+    var attrs = getTableAttrsFromDom(tableEl);
+    var rows = getDirectRows(tableEl);
+    var model = { attrs: attrs, rows: [] };
+
+    for (var r = 0; r < rows.length; r++) {
+      var row = { cells: [] };
+      var cells = getDirectCells(rows[r]);
+      for (var c = 0; c < cells.length; c++) {
+        var cell = cells[c];
+        var tag = (cell.tagName || '').toLowerCase() === 'th' ? 'th' : 'td';
+        var width = normWidth((cell.style && cell.style.width) || cell.getAttribute('width') || cell.getAttribute('data-af-width') || '');
+        var inheritedColor = tag === 'th' ? (attrs.htextcolor || attrs.textcolor || '') : (attrs.textcolor || '');
+        var content = serializeCellDomToBb(cell, tag, inheritedColor, inst);
+        row.cells.push({ tag: tag, width: width, content: content });
+      }
+      model.rows.push(row);
+    }
+
+    return modelToCanonicalBb(model);
+  }
+
+  function bindTableToSourceNormalization(inst) {
+    if (!inst || inst.__afAeTableSourceBound) return;
+    inst.__afAeTableSourceBound = true;
+
+    if (typeof inst.bind !== 'function') return;
+    inst.bind('toSource', function (html) {
+      html = asText(html);
+      if (!html || html.indexOf('<table') === -1) return html;
+
+      var box = document.createElement('div');
+      box.innerHTML = html;
+      var tables = box.querySelectorAll('table');
+      for (var i = tables.length - 1; i >= 0; i--) {
+        var t = tables[i];
+        if (!isSerializableTable(t)) continue;
+        var nested = false;
+        try { nested = !!(t.parentElement && t.parentElement.closest && t.parentElement.closest('table')); } catch (e) { nested = false; }
+        if (nested) continue;
+        var bb = serializeTableDomToCanonicalBb(t, inst);
+        t.parentNode.replaceChild(document.createTextNode('\n' + bb + '\n'), t);
+      }
+      return box.innerHTML;
+    });
   }
 
   function ensureTableCss(inst) {
     try {
-      if (!inst || typeof inst.getBody !== 'function') return;
-      var body = inst.getBody();
+      var body = inst && typeof inst.getBody === 'function' ? inst.getBody() : null;
       if (!body || !body.ownerDocument) return;
       var doc = body.ownerDocument;
-      var head = doc.head || doc.getElementsByTagName('head')[0];
-      if (!head || doc.getElementById('af-ae-table-css')) return;
-
-      var css = '' +
-        'table[data-af-table="1"],table.af-ae-table{border-collapse:collapse;max-width:100%;margin:8px 0;}' +
-        'table[data-af-table="1"] td,table[data-af-table="1"] th,table.af-ae-table td,table.af-ae-table th{padding:6px 8px;vertical-align:top;}' +
-        'table[data-af-table="1"][data-af-border="1"] td,table[data-af-table="1"][data-af-border="1"] th,table.af-ae-table[data-af-border="1"] td,table.af-ae-table[data-af-border="1"] th{border:var(--af-tbl-bw,1px) solid var(--af-tbl-bc,#888);}' +
-        'table[data-af-table="1"] td,table[data-af-table="1"] th,table.af-ae-table td,table.af-ae-table th{background:var(--af-tbl-bg,transparent);color:var(--af-tbl-txt,inherit);}' +
-        'table[data-af-table="1"] th,table.af-ae-table th{font-weight:700;background:var(--af-tbl-hbg,var(--af-tbl-bg,rgba(255,255,255,.06)));color:var(--af-tbl-htxt,var(--af-tbl-txt,inherit));}' +
-        'table[data-af-table="1"][data-af-headers="row"] tr:first-child > *,table.af-ae-table[data-af-headers="row"] tr:first-child > *,table.af-ae-table[data-headers="row"] tr:first-child > *{font-weight:700;background:var(--af-tbl-hbg,var(--af-tbl-bg,rgba(255,255,255,.06)));color:var(--af-tbl-htxt,var(--af-tbl-txt,inherit));}' +
-        'table[data-af-table="1"][data-af-headers="col"] tr > *:first-child,table.af-ae-table[data-af-headers="col"] tr > *:first-child,table.af-ae-table[data-headers="col"] tr > *:first-child{font-weight:700;background:var(--af-tbl-hbg,var(--af-tbl-bg,rgba(255,255,255,.06)));color:var(--af-tbl-htxt,var(--af-tbl-txt,inherit));}' +
-        'table[data-af-table="1"][data-af-headers="both"] tr:first-child > *,table[data-af-table="1"][data-af-headers="both"] tr > *:first-child,table.af-ae-table[data-af-headers="both"] tr:first-child > *,table.af-ae-table[data-af-headers="both"] tr > *:first-child,table.af-ae-table[data-headers="both"] tr:first-child > *,table.af-ae-table[data-headers="both"] tr > *:first-child{font-weight:700;background:var(--af-tbl-hbg,var(--af-tbl-bg,rgba(255,255,255,.06)));color:var(--af-tbl-htxt,var(--af-tbl-txt,inherit));}';
-
-      var st = doc.createElement('style');
-      st.id = 'af-ae-table-css';
-      st.type = 'text/css';
-      st.appendChild(doc.createTextNode(css));
-      head.appendChild(st);
+      if (doc.getElementById('af-ae-table-css')) return;
+      var style = doc.createElement('style');
+      style.id = 'af-ae-table-css';
+      style.type = 'text/css';
+      style.appendChild(doc.createTextNode(
+        'table.af-ae-table{border-collapse:collapse;max-width:100%;margin:8px 0;}' +
+        'table.af-ae-table td,table.af-ae-table th{padding:6px 8px;vertical-align:top;}'
+      ));
+      (doc.head || doc.getElementsByTagName('head')[0]).appendChild(style);
     } catch (e) {}
   }
 
-  function bindTableToSourceNormalization(inst) {
-    if (!inst || inst.__afAeTableToSourceBound || typeof inst.bind !== 'function') return;
-    inst.__afAeTableToSourceBound = true;
+  function patchBbcodeRuntime(inst) {
+    var bb = window.jQuery && window.jQuery.sceditor && window.jQuery.sceditor.plugins && window.jQuery.sceditor.plugins.bbcode;
+    if (!bb || bb.__afAeTablePatched) return;
 
-    try {
-      inst.bind('toSource', function (html) {
-        html = asText(html);
+    function hasTag(tag) { return !!(bb.tags && bb.tags[tag]); }
+    if (!(hasTag('table') && hasTag('tr') && hasTag('td') && hasTag('th'))) return;
 
-        if (inst.__afAeTablePreSerializing) return html;
-        inst.__afAeTablePreSerializing = true;
-
-        try {
-          var box = document.createElement('div');
-          box.innerHTML = html;
-
-          var tables = [];
-          try { tables = box.querySelectorAll('table'); } catch (eFind) { tables = []; }
-
-          for (var i = 0; i < tables.length; i++) {
-            var table = tables[i];
-            if (!table || !table.parentNode) continue;
-            if (!isSerializableTable(table)) continue;
-
-            var isNested = false;
-            try {
-              isNested = !!(table.parentElement && table.parentElement.closest && table.parentElement.closest('table'));
-            } catch (eNested) {
-              isNested = false;
-            }
-            if (isNested) continue;
-
-            var bb = serializeAfTableToBb(table, inst);
-            table.parentNode.replaceChild(document.createTextNode('\n' + bb + '\n'), table);
-          }
-
-          return box.innerHTML;
-        } finally {
-          inst.__afAeTablePreSerializing = false;
-        }
-      });
-    } catch (e) {}
-  }
-
-  function afAeEnsureMybbTableBbcode(inst) {
-    if (!hasSceditor()) return;
-
-    function getBb() {
-      try {
-        var bb = jQuery.sceditor.plugins && jQuery.sceditor.plugins.bbcode ? jQuery.sceditor.plugins.bbcode.bbcode : null;
-        if (bb && typeof bb.set === 'function') return bb;
-      } catch (e0) {}
-
-      try {
-        if (inst && typeof inst.getPlugin === 'function') {
-          var p = inst.getPlugin('bbcode');
-          if (p && p.bbcode && typeof p.bbcode.set === 'function') return p.bbcode;
-        }
-      } catch (e1) {}
-
-      return null;
-    }
-
-    var bb = getBb();
-    if (!bb) return;
-
-    function hasTag(name) {
-      try {
-        if (typeof bb.get === 'function') return !!bb.get(name);
-      } catch (eGet) {}
-      return false;
-    }
-
-    if (bb.__afAeTablePatched && hasTag('table') && hasTag('tr') && hasTag('td') && hasTag('th')) return;
-
-    try {
-      bb.set('table', {
-        isBlock: true,
-        html: function (_token, attrs, content) {
-          var a = normalizeTableAttrs({
-            width: attrs && attrs.width,
-            align: attrs && attrs.align,
-            headers: attrs && attrs.headers,
-            bgcolor: attrs && attrs.bgcolor,
-            textcolor: attrs && attrs.textcolor,
-            hbgcolor: attrs && attrs.hbgcolor,
-            htextcolor: attrs && attrs.htextcolor,
-            border: attrs && attrs.border,
-            bordercolor: attrs && attrs.bordercolor,
-            borderwidth: attrs && attrs.borderwidth
-          });
-
-          var style = buildTableStyle(a);
-          return '<table class="af-ae-table" ' + attrsToDataAttrs(a) + ' data-headers="' + (a.headers || '') + '"' + (style ? ' style="' + style + '"' : '') + '>' + (content || '') + '</table>';
-        },
-        format: function (el, _content) {
-          var bbcode = serializeAfTableToBb(el, inst);
-          tableDebugLog('bb.table.format.atomic', { bbcode: bbcode });
-          return bbcode;
-        },
-        tags: {
-          table: {
-            format: function (el, _content) {
-              var bbcode = serializeAfTableToBb(el, inst);
-              tableDebugLog('bb.tags.table.format.atomic', { bbcode: bbcode });
-              return bbcode;
-            }
+    bb.set('table', {
+      isBlock: true,
+      html: function (_token, attrs, content) {
+        var a = normalizeAttrs(attrs || {});
+        return '<table class="af-ae-table" ' + attrsToData(a) + ' style="' + buildTableStyle(a) + '">' + (content || '') + '</table>';
+      },
+      format: function (el) {
+        return serializeTableDomToCanonicalBb(el, inst);
+      },
+      tags: {
+        table: {
+          format: function (el) {
+            return serializeTableDomToCanonicalBb(el, inst);
           }
         }
-      });
-    } catch (e0) {}
-
-    try {
-      bb.set('tr', {
-        isBlock: true,
-        html: '<tr>{0}</tr>',
-        format: '[tr]{0}[/tr]',
-        tags: { tr: { format: function (_el, content) { return '[tr]' + (content || '') + '[/tr]'; } } }
-      });
-    } catch (e1) {}
-
-    function setCell(tag) {
-      try {
-        bb.set(tag, {
-          isInline: false,
-          html: function (_token, attrs, content) {
-            var w = normWidthToken(attrs && attrs.width);
-            var style = '';
-            if (w) style += 'width:' + w + ';';
-            if (tag === 'th') style += 'font-weight:700;';
-            return '<' + tag + (style ? ' style="' + style + '"' : '') + '>' + (content || '') + '</' + tag + '>';
-          },
-          format: function (el, content) {
-            var width = '';
-            var safeContent = cleanupTableInheritedFormatting(el, tag, content);
-            try {
-              width = getCanonicalColumnWidth(el) || normWidthToken((el.style && el.style.width) || el.getAttribute('width') || el.getAttribute('data-af-width') || '');
-            } catch (e2) { width = ''; }
-            tableDebugLog('bb.' + tag + '.format', { width: width, contentLength: asText(safeContent).length });
-            return '[' + tag + (width ? ' width=' + width : '') + ']' + safeContent + '[/' + tag + ']';
-          },
-          tags: (function () {
-            var t = {};
-            t[tag] = {
-              format: function (el, content) {
-                var width = '';
-                var safeContent = cleanupTableInheritedFormatting(el, tag, content);
-                try {
-                  width = getCanonicalColumnWidth(el) || normWidthToken((el.style && el.style.width) || el.getAttribute('width') || el.getAttribute('data-af-width') || '');
-                } catch (e4) { width = ''; }
-                tableDebugLog('bb.tags.' + tag + '.format', { width: width, contentLength: asText(safeContent).length });
-                return '[' + tag + (width ? ' width=' + width : '') + ']' + safeContent + '[/' + tag + ']';
-              }
-            };
-            return t;
-          })()
-        });
-      } catch (e3) {}
-    }
-
-    setCell('td');
-    setCell('th');
-
-    try {
-      if (bb.tags) {
-        bb.tags.table = bb.get ? bb.get('table') : bb.tags.table;
-        bb.tags.td = bb.get ? bb.get('td') : bb.tags.td;
-        bb.tags.th = bb.get ? bb.get('th') : bb.tags.th;
       }
-    } catch (eTags) {}
+    });
+
+    bb.set('tr', { isBlock: true, html: '<tr>{0}</tr>', format: '[tr]{0}[/tr]' });
+    bb.set('td', { isInline: false, html: '<td>{0}</td>', format: function (_el, c) { return '[td]' + asText(c) + '[/td]'; } });
+    bb.set('th', { isInline: false, html: '<th>{0}</th>', format: function (_el, c) { return '[th]' + asText(c) + '[/th]'; } });
 
     bb.__afAeTablePatched = true;
   }
 
-  function bindPreSerializeGuards(inst) {
-    if (!inst || inst.__afAeTableSerializeGuardBound) return;
-    inst.__afAeTableSerializeGuardBound = true;
-
-    function guardPatch() {
-      try { afAeEnsureMybbTableBbcode(inst); } catch (e0) {}
-    }
-
+  function getSceditorInstanceFromCtx(ctx) {
+    if (ctx && typeof ctx.insertText === 'function') return ctx;
+    if (ctx && ctx.sceditor && typeof ctx.sceditor.insertText === 'function') return ctx.sceditor;
+    if (ctx && ctx.instance && typeof ctx.instance.insertText === 'function') return ctx.instance;
     try {
-      if (typeof inst.updateOriginal === 'function' && !inst.__afAeTableUpdateOriginalWrapped) {
-        var origUpdate = inst.updateOriginal;
-        inst.updateOriginal = function () {
-          guardPatch();
-          return origUpdate.apply(this, arguments);
-        };
-        inst.__afAeTableUpdateOriginalWrapped = true;
-      }
-    } catch (e1) {}
-
-    try {
-      if (typeof inst.val === 'function' && !inst.__afAeTableValWrapped) {
-        var origVal = inst.val;
-        inst.val = function () {
-          if (!arguments.length) guardPatch();
-          return origVal.apply(this, arguments);
-        };
-        inst.__afAeTableValWrapped = true;
-      }
-    } catch (e2) {}
-
-    try {
-      if (typeof inst.bind === 'function') {
-        inst.bind('toSource', function (html) {
-          guardPatch();
-          return html;
-        });
-      }
-    } catch (e3) {}
-  }
-
-  function insertTableToEditor(editor, bb, html) {
-    bb = asText(bb);
-    html = asText(html);
-
-    function insertHtmlWysiwyg(inst, htmlChunk, bbFallback) {
-      try {
-        // ВАЖНО: в WYSIWYG нельзя insertText(html) — это даст "сырой HTML" в редакторе.
-        if (typeof inst.wysiwygEditorInsertHtml === 'function') {
-          inst.wysiwygEditorInsertHtml(htmlChunk);
-          return true;
-        }
-        if (typeof inst.insertHTML === 'function') {
-          inst.insertHTML(htmlChunk);
-          return true;
-        }
-      } catch (e0) {}
-
-      // Фолбэк: если почему-то HTML API недоступен — вставляем BBCode
-      try {
-        if (typeof inst.insertText === 'function') {
-          inst.insertText(bbFallback, '');
-          return true;
-        }
-        if (typeof inst.insert === 'function') {
-          inst.insert(bbFallback, '');
-          return true;
-        }
-      } catch (e1) {}
-
-      return false;
-    }
-
-    try {
-      if (editor && typeof editor.insertText === 'function') {
-        // Патчи и CSS должны быть подцеплены ДО вставки
-        try { afAeEnsureMybbTableBbcode(editor); } catch (e1) {}
-        try { ensureTableCss(editor); } catch (e2) {}
-        try { bindTableToSourceNormalization(editor); } catch (e3) {}
-        try { bindFloatingEditor(editor); } catch (e4) {}
-        try { bindPreSerializeGuards(editor); } catch (e7) {}
-
-        if (isSourceMode(editor)) {
-          editor.insertText(bb, '');
-        } else {
-          // ✅ В WYSIWYG вставляем ТОЛЬКО через HTML API
-          insertHtmlWysiwyg(editor, html || bb, bb);
-        }
-
-        try { if (typeof editor.updateOriginal === 'function') editor.updateOriginal(); } catch (e5) {}
-        try { if (typeof editor.focus === 'function') editor.focus(); } catch (e6) {}
-        return true;
-      }
-    } catch (e0) {}
-
-    // Нет SCEditor — вставляем BBCode в textarea
-    var ta = getTextareaFromCtx({ sceditor: editor });
-    return insertAtCursor(ta, bb);
-  }
-
-  function getFloatingPanelHostDoc(inst, iframeDoc) {
-    var ownerDoc = document;
-    try {
-      if (inst && typeof inst.getContentAreaContainer === 'function') {
-        var c1 = inst.getContentAreaContainer();
-        if (c1 && c1.ownerDocument) return c1.ownerDocument;
-      }
-    } catch (e1) {}
-    try {
-      if (inst && typeof inst.getEditorContainer === 'function') {
-        var c2 = inst.getEditorContainer();
-        if (c2 && c2.ownerDocument) return c2.ownerDocument;
-      }
-    } catch (e2) {}
-    try {
-      if (inst && typeof inst.getWrapper === 'function') {
-        var c3 = inst.getWrapper();
-        if (c3 && c3.ownerDocument) return c3.ownerDocument;
-      }
-    } catch (e3) {}
-    if (ownerDoc && ownerDoc.nodeType === 9) return ownerDoc;
-    return iframeDoc || ownerDoc;
-  }
-
-  function getEditorIframeElement(inst, iframeDoc) {
-    try {
-      if (inst && typeof inst.getContentAreaContainer === 'function') {
-        var c = inst.getContentAreaContainer();
-        if (c && c.querySelector) {
-          var ifr = c.querySelector('iframe');
-          if (ifr) return ifr;
-        }
-      }
-    } catch (e1) {}
-
-    try {
-      if (iframeDoc && iframeDoc.defaultView && iframeDoc.defaultView.frameElement) {
-        return iframeDoc.defaultView.frameElement;
-      }
-    } catch (e2) {}
-
+      if (!window.jQuery) return null;
+      var ta = window.jQuery('textarea#message,textarea[name="message"]').first();
+      if (ta.length) return ta.sceditor('instance');
+    } catch (e) {}
     return null;
   }
 
-  function tableDebugLog() {
-    try {
-      if (!window.__AF_AE_DEBUG_TABLE && !window.__afAeDebug) return;
-      var args = Array.prototype.slice.call(arguments);
-      args.unshift('[AF-AE table]');
-      if (window.console && typeof window.console.log === 'function') window.console.log.apply(window.console, args);
-    } catch (e) {}
+  function insertTable(editor, bb, html) {
+    if (!editor || typeof editor.insertText !== 'function') return false;
+
+    patchBbcodeRuntime(editor);
+    ensureTableCss(editor);
+    bindTableToSourceNormalization(editor);
+    bindFloatingEditor(editor);
+
+    if (isSourceMode(editor)) editor.insertText(bb, '');
+    else if (typeof editor.wysiwygEditorInsertHtml === 'function') editor.wysiwygEditorInsertHtml(html || bb);
+    else if (typeof editor.insertHTML === 'function') editor.insertHTML(html || bb);
+    else editor.insertText(bb, '');
+
+    try { if (typeof editor.updateOriginal === 'function') editor.updateOriginal(); } catch (e0) {}
+    try { if (typeof editor.focus === 'function') editor.focus(); } catch (e1) {}
+    return true;
   }
 
-  function openFloatingEditorForTable(inst, table) {
-    if (!inst || !table || table.nodeType !== 1) return;
-
-    try {
-      var body = inst.getBody && inst.getBody();
-      if (!body || !body.ownerDocument) return;
-
-      var doc = body.ownerDocument;
-      var hostDoc = getFloatingPanelHostDoc(inst, doc);
-      var iframeEl = getEditorIframeElement(inst, doc);
-      var panel = hostDoc.getElementById('af-ae-table-floating');
-
-      function syncEditorValue() {
-        try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e0) {}
-        try { if (typeof inst.trigger === 'function') inst.trigger('change'); } catch (e1) {}
-        try { if (typeof inst.trigger === 'function') inst.trigger('valuechanged'); } catch (e2) {}
-      }
-
-      function ensurePanelCss() {
-        if (hostDoc.getElementById('af-ae-table-floating-css')) return;
-        var st = hostDoc.createElement('style');
-        st.id = 'af-ae-table-floating-css';
-        st.type = 'text/css';
-        st.appendChild(hostDoc.createTextNode(
-          '#af-ae-table-floating{position:fixed;z-index:99999;background:#1f1f1f;border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:6px;display:none;gap:6px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.35);}' +
-          '#af-ae-table-floating .af-ae-tbtn{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 6px;border-radius:8px;border:1px solid rgba(255,255,255,.14);background:#2a2a2a;color:#fff;cursor:pointer;font:600 12px/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}' +
-          '#af-ae-table-floating .af-ae-tbtn:hover{background:#343434;}' +
-          '#af-ae-table-floating .af-ae-tbtn svg{width:18px;height:18px;display:block;fill:currentColor;}' +
-          '#af-ae-table-floating .af-ae-tsep{width:1px;height:20px;background:rgba(255,255,255,.12);margin:0 2px;}' +
-          '#af-ae-table-floating .af-ae-tcolors{display:flex;gap:6px;align-items:center;margin-left:4px;}' +
-          '#af-ae-table-floating .af-ae-tinputs{display:flex;gap:6px;align-items:center;}' +
-          '#af-ae-table-floating .af-ae-tinp{height:28px;min-width:90px;border-radius:8px;border:1px solid rgba(255,255,255,.14);background:#2a2a2a;color:#fff;padding:0 8px;font:500 12px/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}' +
-          '#af-ae-table-floating .af-ae-tbtn.is-active{background:#4a73ff;border-color:#6f90ff;}' +
-          '#af-ae-table-floating input[type=color]{width:28px;height:28px;border:0;background:transparent;padding:0;cursor:pointer;}' +
-          '#af-ae-table-floating .af-ae-tclose{margin-left:2px;}'
-        ));
-        (hostDoc.head || hostDoc.getElementsByTagName('head')[0]).appendChild(st);
-      }
-
-      function icon(path) {
-        return '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="' + path + '"></path></svg>';
-      }
-
-      function applyAttrsToDom(t, a) {
-        try {
-          a = normalizeTableAttrs(a || {});
-          for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
-            var k = TABLE_ATTR_KEYS[i];
-            var v = asText(a[k]).trim();
-            if (k === 'border') v = v || '1';
-            t.setAttribute('data-af-' + k, v);
-          }
-          t.setAttribute('data-af-table', '1');
-          t.setAttribute('data-headers', asText(a.headers).trim()); // legacy alias
-          t.classList.add('af-ae-table');
-          t.setAttribute('style', buildTableStyle(a));
-        } catch (e0) {}
-
-        try {
-          var colWidths = [];
-          for (var rw = 0; rw < t.rows.length; rw++) {
-            var rowW = t.rows[rw];
-            for (var cw = 0; cw < rowW.cells.length; cw++) {
-              var widthToken = normWidthToken((rowW.cells[cw].style && rowW.cells[cw].style.width) || '');
-              if (widthToken && !colWidths[cw]) colWidths[cw] = widthToken;
-            }
-          }
-
-          for (var r = 0; r < t.rows.length; r++) {
-            var row = t.rows[r];
-            for (var c = 0; c < row.cells.length; c++) {
-              var cell = row.cells[c];
-              var tag = (cell.tagName || '').toLowerCase();
-              var isHeaderByMode = false;
-
-              if (a.headers === 'row' && r === 0) isHeaderByMode = true;
-              if (a.headers === 'col' && c === 0) isHeaderByMode = true;
-              if (a.headers === 'both' && (r === 0 || c === 0)) isHeaderByMode = true;
-
-              var shouldBeTh = (tag === 'th') || isHeaderByMode;
-              if (shouldBeTh && tag !== 'th') {
-                var th = doc.createElement('th');
-                th.innerHTML = cell.innerHTML;
-                try { if (cell.style && cell.style.width) th.style.width = cell.style.width; } catch(eW){}
-                row.replaceChild(th, cell);
-                cell = th;
-                tag = 'th';
-              } else if (!shouldBeTh && tag === 'th') {
-                var td = doc.createElement('td');
-                td.innerHTML = cell.innerHTML;
-                try { if (cell.style && cell.style.width) td.style.width = cell.style.width; } catch(eW2){}
-                row.replaceChild(td, cell);
-                cell = td;
-                tag = 'td';
-              }
-
-              var w = colWidths[c] || '';
-              var css = buildCellStyle(tag, a, w, isHeaderByMode);
-              cell.setAttribute('style', css);
-            }
-          }
-        } catch (e2) {}
-      }
-
-      function getActiveCell(t) {
-        var saved = inst.__afAeActiveTableCell;
-        if (saved && saved.nodeType === 1 && t.contains(saved) && /^(TD|TH)$/.test(saved.tagName)) return saved;
-        var first = t.querySelector('td,th');
-        return first || null;
-      }
-
-      ensurePanelCss();
-
-      if (!panel) {
-        panel = hostDoc.createElement('div');
-        panel.id = 'af-ae-table-floating';
-
-        panel.innerHTML = '' +
-          '<button type="button" class="af-ae-tbtn" data-a="row-above" title="Добавить строку выше">' + icon('M4 10h12v1H4zM10 4h1v12h-1zM4 6h12v1H4z') + '</button>' +
-          '<button type="button" class="af-ae-tbtn" data-a="row-below" title="Добавить строку ниже">' + icon('M4 10h12v1H4zM4 14h12v1H4zM10 12h1v4h-1z') + '</button>' +
-          '<button type="button" class="af-ae-tbtn" data-a="row-del" title="Удалить строку">' + icon('M4 10h12v1H4zM6 14h8v1H6z') + '</button>' +
-          '<span class="af-ae-tsep" aria-hidden="true"></span>' +
-          '<button type="button" class="af-ae-tbtn" data-a="col-left" title="Добавить колонку слева">' + icon('M10 4h1v12h-1zM4 10h4v1H4zM4 4h1v12H4z') + '</button>' +
-          '<button type="button" class="af-ae-tbtn" data-a="col-right" title="Добавить колонку справа">' + icon('M10 4h1v12h-1zM12 10h4v1h-4zM15 4h1v12h-1z') + '</button>' +
-          '<button type="button" class="af-ae-tbtn" data-a="col-del" title="Удалить колонку">' + icon('M10 4h1v12h-1zM14 4h1v12h-1z') + '</button>' +
-          '<span class="af-ae-tsep" aria-hidden="true"></span>' +
-          '<button type="button" class="af-ae-tbtn" data-a="del-table" title="Удалить таблицу">' + icon('M7 4h6l1 2h2v1H4V6h2l1-2zm-1 4h1v7H6V8zm3 0h1v7H9V8zm3 0h1v7h-1V8z') + '</button>' +
-          '<span class="af-ae-tsep" aria-hidden="true"></span>' +
-          '<button type="button" class="af-ae-tbtn" data-a="align-left" title="Выравнивание влево">L</button>' +
-          '<button type="button" class="af-ae-tbtn" data-a="align-center" title="Выравнивание по центру">C</button>' +
-          '<button type="button" class="af-ae-tbtn" data-a="align-right" title="Выравнивание вправо">R</button>' +
-          '<span class="af-ae-tsep" aria-hidden="true"></span>' +
-          '<div class="af-ae-tinputs" title="Ширина таблицы / колонок">' +
-          '  <input type="text" class="af-ae-tinp" data-a="tbl-width" placeholder="100% или 500px">' +
-          '  <button type="button" class="af-ae-tbtn" data-a="apply-width" title="Применить ширину таблицы">W</button>' +
-          '  <input type="text" class="af-ae-tinp" data-a="col-width-current" placeholder="Текущая колонка">' +
-          '  <button type="button" class="af-ae-tbtn" data-a="apply-col-width-current" title="Применить ширину текущей колонки">C1</button>' +
-          '  <input type="text" class="af-ae-tinp" data-a="col-widths" placeholder="120px,200px,...">' +
-          '  <button type="button" class="af-ae-tbtn" data-a="apply-col-widths" title="Применить ширины колонок">CW</button>' +
-          '</div>' +
-          '<span class="af-ae-tsep" aria-hidden="true"></span>' +
-          '<div class="af-ae-tcolors" title="Цвета таблицы">' +
-          '  <input type="color" data-a="bg" title="Заливка ячеек (bgcolor)">' +
-          '  <input type="color" data-a="fg" title="Цвет текста (textcolor)">' +
-          '  <input type="color" data-a="hbg" title="Заливка заголовков (hbgcolor)">' +
-          '  <input type="color" data-a="hfg" title="Цвет текста заголовков (htextcolor)">' +
-          '</div>' +
-          '<button type="button" class="af-ae-tbtn af-ae-tclose" data-a="close" title="Закрыть">' + icon('M5.2 4.5L10 9.3l4.8-4.8.7.7-4.8 4.8 4.8 4.8-.7.7-4.8-4.8-4.8 4.8-.7-.7 4.8-4.8-4.8-4.8z') + '</button>';
-
-        (hostDoc.body || hostDoc.documentElement).appendChild(panel);
-
-        panel.addEventListener('mousedown', function (ev) {
-          ev.stopPropagation();
-        }, true);
-
-        function markPanelInteractionStart() {
-          inst.__afAeTablePanelPointerDown = true;
-        }
-
-        function markPanelInteractionEnd() {
-          setTimeout(function () {
-            inst.__afAeTablePanelPointerDown = false;
-          }, 0);
-        }
-
-        panel.addEventListener('pointerdown', markPanelInteractionStart, true);
-        panel.addEventListener('mousedown', markPanelInteractionStart, true);
-        panel.addEventListener('pointerup', markPanelInteractionEnd, true);
-        panel.addEventListener('mouseup', markPanelInteractionEnd, true);
-        panel.addEventListener('click', markPanelInteractionEnd, true);
-
-        panel.addEventListener('click', function (ev) {
-          var btn = ev.target && ev.target.closest ? ev.target.closest('button[data-a]') : null;
-          var act = btn ? btn.getAttribute('data-a') : '';
-          tableDebugLog('toolbar click', {
-            action: act || null,
-            hasActiveTable: !!inst.__afAeActiveTable
-          });
-          if (!btn || !inst.__afAeActiveTable) return;
-
-          ev.preventDefault();
-          ev.stopPropagation();
-
-          var t = inst.__afAeActiveTable;
-
-          function syncPanelStateForTable(tableEl) {
-            try {
-              var attrs = parseAttrsFromDom(tableEl);
-              var activeCell = getActiveCell(tableEl);
-              var widthInput = panel.querySelector('input[data-a="tbl-width"]');
-              if (widthInput) widthInput.value = attrs.width || '';
-              var colCurrentInput = panel.querySelector('input[data-a="col-width-current"]');
-              if (colCurrentInput && activeCell && activeCell.parentElement) {
-                var cwNow = '';
-                try { cwNow = normWidthToken(activeCell.style.width || '') || ''; } catch (eCWNow) { cwNow = ''; }
-                colCurrentInput.value = cwNow;
-              }
-
-              var alignBtns = panel.querySelectorAll('button[data-a^="align-"]');
-              for (var ai = 0; ai < alignBtns.length; ai++) {
-                var b = alignBtns[ai];
-                var mode = asText(b.getAttribute('data-a')).replace('align-', '');
-                if (mode === attrs.align) b.classList.add('is-active');
-                else b.classList.remove('is-active');
-              }
-
-              var colInput = panel.querySelector('input[data-a="col-widths"]');
-              if (colInput && tableEl.rows && tableEl.rows.length) {
-                var firstRow = tableEl.rows[0];
-                var widths = [];
-                for (var ci = 0; ci < firstRow.cells.length; ci++) {
-                  var cw = '';
-                  try { cw = normWidthToken(firstRow.cells[ci].style.width || ''); } catch (eW) { cw = ''; }
-                  widths.push(cw || '');
-                }
-                colInput.value = widths.join(',');
-              }
-            } catch (eSync) {}
-          }
-
-          if (act === 'close') {
-            panel.style.display = 'none';
-            inst.__afAeActiveTable = null;
-            tableDebugLog('hide panel', { reason: 'close-btn' });
-            return;
-          }
-
-          if (act === 'del-table') {
-            try {
-              t.parentNode && t.parentNode.removeChild(t);
-              panel.style.display = 'none';
-              inst.__afAeActiveTable = null;
-              tableDebugLog('hide panel', { reason: 'table-deleted' });
-            } catch (eD) {}
-            syncEditorValue();
-            return;
-          }
-
-          if (act === 'align-left' || act === 'align-center' || act === 'align-right') {
-            try {
-              var aAlign = normalizeTableAttrs(parseAttrsFromDom(t));
-              aAlign.align = act.replace('align-', '');
-              applyAttrsToDom(t, aAlign);
-              syncPanelStateForTable(t);
-            } catch (eAlign) {}
-            syncEditorValue();
-            return;
-          }
-
-          if (act === 'apply-width') {
-            try {
-              var wInput = panel.querySelector('input[data-a="tbl-width"]');
-              var rawWidth = wInput ? wInput.value : '';
-              var aWidth = normalizeTableAttrs(parseAttrsFromDom(t));
-              aWidth.width = normWidthToken(rawWidth);
-              applyAttrsToDom(t, aWidth);
-              if (wInput) wInput.value = aWidth.width || '';
-              syncPanelStateForTable(t);
-            } catch (eTblW) {}
-            syncEditorValue();
-            return;
-          }
-
-          if (act === 'apply-col-widths') {
-            try {
-              var cwInput = panel.querySelector('input[data-a="col-widths"]');
-              var first = t.rows && t.rows.length ? t.rows[0] : null;
-              var cols = first ? first.cells.length : 0;
-              var widthsList = parseWidthList(cwInput ? cwInput.value : '', cols);
-              if (cols > 0) {
-                for (var rrw = 0; rrw < t.rows.length; rrw++) {
-                  for (var ccw = 0; ccw < cols; ccw++) {
-                    var cellW = t.rows[rrw].cells[ccw];
-                    if (!cellW) continue;
-                    cellW.style.width = widthsList[ccw] || '';
-                  }
-                }
-              }
-              var aCols = normalizeTableAttrs(parseAttrsFromDom(t));
-              applyAttrsToDom(t, aCols);
-              syncPanelStateForTable(t);
-            } catch (eColList) {}
-            syncEditorValue();
-            return;
-          }
-
-          if (act === 'apply-col-width-current') {
-            var activeForWidth = getActiveCell(t);
-            if (activeForWidth && activeForWidth.parentElement) {
-              var colIdxPrompt = Array.prototype.indexOf.call(activeForWidth.parentElement.cells, activeForWidth);
-              var curInput = panel.querySelector('input[data-a="col-width-current"]');
-              var nPrompt = normWidthToken(curInput ? curInput.value : '');
-              for (var rr3 = 0; rr3 < t.rows.length; rr3++) {
-                var c3 = t.rows[rr3].cells[colIdxPrompt];
-                if (c3) c3.style.width = nPrompt || '';
-              }
-              try {
-                var a3 = normalizeTableAttrs(parseAttrsFromDom(t));
-                applyAttrsToDom(t, a3);
-                syncPanelStateForTable(t);
-              } catch (eCA) {}
-              syncEditorValue();
-            }
-            return;
-          }
-
-          var cell = getActiveCell(t);
-          if (!cell) return;
-
-          var row = cell.parentElement;
-          var colIndex = Array.prototype.indexOf.call(row.cells, cell);
-          tableDebugLog('button click', {
-            action: act,
-            hasActiveCell: !!cell,
-            rowIndex: row ? row.rowIndex : -1,
-            colIndex: colIndex
-          });
-
-          function cloneCell(base) {
-            var n = base.cloneNode(false);
-            n.innerHTML = '<br>';
-            return n;
-          }
-
-          if (act === 'row-above' || act === 'row-below') {
-            var nr = row.cloneNode(true);
-            for (var i = 0; i < nr.cells.length; i++) nr.cells[i].innerHTML = '<br>';
-            if (act === 'row-above') row.parentNode.insertBefore(nr, row);
-            else row.parentNode.insertBefore(nr, row.nextSibling);
-          } else if (act === 'row-del') {
-            if (t.rows.length > 1) row.parentNode.removeChild(row);
-          } else if (act === 'col-left' || act === 'col-right') {
-            for (var r = 0; r < t.rows.length; r++) {
-              var rr = t.rows[r];
-              var base = rr.cells[Math.min(colIndex, rr.cells.length - 1)] || rr.cells[0];
-              var nc = cloneCell(base);
-              if (act === 'col-left') rr.insertBefore(nc, rr.cells[colIndex] || null);
-              else rr.insertBefore(nc, rr.cells[colIndex + 1] || null);
-            }
-          } else if (act === 'col-del') {
-            for (var r2 = 0; r2 < t.rows.length; r2++) {
-              var rr2 = t.rows[r2];
-              if (rr2.cells.length > 1 && rr2.cells[colIndex]) rr2.removeChild(rr2.cells[colIndex]);
-            }
-          }
-
-          try {
-            var a2 = parseAttrsFromDom(t);
-            a2 = normalizeTableAttrs(a2);
-            applyAttrsToDom(t, a2);
-            syncPanelStateForTable(t);
-          } catch (eA) {}
-
-          syncEditorValue();
-          try { if (typeof inst.focus === 'function') inst.focus(); } catch (eF) {}
-        }, false);
-
-        var colorHandler = function (ev) {
-          var input = ev.target && ev.target.closest ? ev.target.closest('input[type="color"][data-a]') : null;
-          if (!input || !inst.__afAeActiveTable) return;
-
-          var t = inst.__afAeActiveTable;
-          var act = input.getAttribute('data-a');
-          var a = parseAttrsFromDom(t);
-          var val = asText(input.value).trim();
-          if (act === 'bg') a.bgcolor = normColor(val);
-          if (act === 'fg') a.textcolor = normColor(val);
-          if (act === 'hbg') a.hbgcolor = normColor(val);
-          if (act === 'hfg') a.htextcolor = normColor(val);
-          a = normalizeTableAttrs(a);
-          applyAttrsToDom(t, a);
-          syncEditorValue();
-          try { if (typeof inst.focus === 'function') inst.focus(); } catch (eF2) {}
-        };
-
-        panel.addEventListener('input', colorHandler, false);
-        panel.addEventListener('change', colorHandler, false);
-      }
-
-      var rect = table.getBoundingClientRect();
-      var iframeRect = iframeEl && iframeEl.getBoundingClientRect ? iframeEl.getBoundingClientRect() : null;
-      var top = rect.bottom + 8;
-      var left = rect.left;
-
-      if (iframeRect) {
-        top = iframeRect.top + rect.bottom + 8;
-        left = iframeRect.left + rect.left;
-      }
-
-      var vw = hostDoc.defaultView ? hostDoc.defaultView.innerWidth : 0;
-      if (vw) {
-        var maxLeft = Math.max(8, vw - panel.offsetWidth - 8);
-        if (left > maxLeft) left = maxLeft;
-      }
-
-      panel.style.display = 'flex';
-      panel.style.top = Math.max(8, top) + 'px';
-      panel.style.left = Math.max(8, left) + 'px';
-      tableDebugLog('open panel', {
-        hostIsTopDocument: hostDoc === document,
-        panelOwnerHost: panel.ownerDocument === hostDoc,
-        iframeRect: iframeRect ? { top: iframeRect.top, left: iframeRect.left, bottom: iframeRect.bottom, right: iframeRect.right } : null,
-        tableRect: { top: rect.top, left: rect.left, bottom: rect.bottom, right: rect.right },
-        computed: { top: Math.max(8, top), left: Math.max(8, left) }
-      });
-
-      inst.__afAeActiveTable = table;
-
-      try {
-        var cur = parseAttrsFromDom(table);
-        var bg = panel.querySelector('input[data-a="bg"]'); if (bg && cur.bgcolor) bg.value = cur.bgcolor;
-        var fg = panel.querySelector('input[data-a="fg"]'); if (fg && cur.textcolor) fg.value = cur.textcolor;
-        var hbg = panel.querySelector('input[data-a="hbg"]'); if (hbg && cur.hbgcolor) hbg.value = cur.hbgcolor;
-        var hfg = panel.querySelector('input[data-a="hfg"]'); if (hfg && cur.htextcolor) hfg.value = cur.htextcolor;
-        var tblWidth = panel.querySelector('input[data-a="tbl-width"]'); if (tblWidth) tblWidth.value = cur.width || '';
-        var colWidths = panel.querySelector('input[data-a="col-widths"]');
-        if (colWidths && table.rows && table.rows.length) {
-          var firstRow = table.rows[0];
-          var list = [];
-          for (var ci2 = 0; ci2 < firstRow.cells.length; ci2++) {
-            list.push(normWidthToken(firstRow.cells[ci2].style.width || '') || '');
-          }
-          colWidths.value = list.join(',');
-        }
-        var alignButtons = panel.querySelectorAll('button[data-a^="align-"]');
-        for (var abi = 0; abi < alignButtons.length; abi++) {
-          var ab = alignButtons[abi];
-          var mode2 = asText(ab.getAttribute('data-a')).replace('align-', '');
-          if (mode2 === cur.align) ab.classList.add('is-active');
-          else ab.classList.remove('is-active');
-        }
-      } catch (eS) {}
-
-    } catch (e) {}
+  function clampInt(v, min, max, def) {
+    var n = parseInt(v, 10);
+    if (!isFinite(n)) n = def;
+    return Math.max(min, Math.min(max, n));
   }
 
-  function bindFloatingEditor(inst) {
-    if (!inst || inst.__afAeTableFloatingBound) return;
-    inst.__afAeTableFloatingBound = true;
-
-    try {
-      if (typeof inst.bind !== 'function' || typeof inst.getBody !== 'function') return;
-      var body = inst.getBody();
-      if (!body) return;
-
-      var doc = body.ownerDocument;
-      var hostDoc = getFloatingPanelHostDoc(inst, doc);
-      var iframeEl = getEditorIframeElement(inst, doc);
-
-      function hidePanel(reason) {
-        try {
-          var panel = hostDoc.getElementById('af-ae-table-floating');
-          if (panel) panel.style.display = 'none';
-        } catch (e0) {}
-        tableDebugLog('hide panel', { reason: reason || 'unknown' });
-        inst.__afAeActiveTable = null;
-      }
-
-      body.addEventListener('mousedown', function (ev) {
-        var cell = ev.target && ev.target.closest ? ev.target.closest('td,th') : null;
-        if (cell) inst.__afAeActiveTableCell = cell;
-      }, true);
-
-      body.addEventListener('click', function (ev) {
-        var cell = ev.target && ev.target.closest ? ev.target.closest('td,th') : null;
-        if (cell) inst.__afAeActiveTableCell = cell;
-      }, true);
-
-      body.addEventListener('click', function (ev) {
-        var table = ev.target && ev.target.closest ? ev.target.closest('table[data-af-table="1"],table.af-ae-table') : null;
-        if (table) {
-          openFloatingEditorForTable(inst, table);
-          return;
-        }
-      }, false);
-
-      hostDoc.addEventListener('mousedown', function (ev) {
-        var panel = hostDoc.getElementById('af-ae-table-floating');
-        if (!panel || panel.style.display === 'none') return;
-
-        var t = inst.__afAeActiveTable;
-        var inPanel = panel.contains(ev.target);
-        var hitIframe = !!(iframeEl && (ev.target === iframeEl || (iframeEl.contains && iframeEl.contains(ev.target))));
-        var hitTable = false;
-
-        if (t && hitIframe && iframeEl && iframeEl.getBoundingClientRect) {
-          try {
-            var iframeRect = iframeEl.getBoundingClientRect();
-            var x = ev.clientX - iframeRect.left;
-            var y = ev.clientY - iframeRect.top;
-            if (x >= 0 && y >= 0 && x <= iframeRect.width && y <= iframeRect.height) {
-              var elAtPoint = doc.elementFromPoint(x, y);
-              var tableAtPoint = elAtPoint && elAtPoint.closest ? elAtPoint.closest('table[data-af-table="1"],table.af-ae-table') : null;
-              hitTable = !!(tableAtPoint && (tableAtPoint === t || (t.contains && t.contains(tableAtPoint))));
-            }
-          } catch (e1) {}
-        }
-
-        tableDebugLog('outside click', {
-          tag: ev.target && ev.target.tagName,
-          inPanel: inPanel,
-          hitIframe: hitIframe,
-          hitTable: hitTable,
-          shouldHide: (!inPanel && !hitTable)
-        });
-
-        if (!inPanel && !hitTable) hidePanel('outside-click');
-      }, false);
-
-      inst.bind('blur', function () {
-        var panel = null;
-        try { panel = hostDoc.getElementById('af-ae-table-floating'); } catch (e1) {}
-
-        if (inst.__afAeTablePanelPointerDown) {
-          tableDebugLog('blur ignored', { reason: 'panel-pointerdown' });
-          return;
-        }
-
-        try {
-          if (panel && panel.contains(hostDoc.activeElement)) {
-            tableDebugLog('blur ignored', { reason: 'panel-focus' });
-            return;
-          }
-        } catch (e2) {}
-
-        hidePanel('blur');
-      });
-
-    } catch (e) {}
-  }
-
-  function makeDropdown(editor, caller) {
+  function makeDropdown(editor) {
     var wrap = document.createElement('div');
     wrap.className = 'af-table-dd';
+    wrap.style.cssText = 'padding:10px;min-width:290px;display:grid;gap:8px;';
+    wrap.innerHTML = '' +
+      '<label>Columns <input data-k="cols" type="number" min="1" max="50" value="2"></label>' +
+      '<label>Rows <input data-k="rows" type="number" min="1" max="50" value="2"></label>' +
+      '<label>Table width <input data-k="width" placeholder="500px"></label>' +
+      '<label>Column widths <input data-k="colwidths" placeholder="120px,120px"></label>' +
+      '<label>Align <select data-k="align"><option value="">Default</option><option>left</option><option>center</option><option>right</option></select></label>' +
+      '<label>Headers <select data-k="headers"><option value="">none</option><option value="row">row</option><option value="col">col</option><option value="both">both</option></select></label>' +
+      '<label>Fill <select data-k="fill"><option value="0">off</option><option value="1">on</option></select></label>' +
+      '<label>Bg color <input data-k="bg" type="color" value="#ffffff"></label>' +
+      '<label>Text color <input data-k="txt" type="color" value="#000000"></label>' +
+      '<label>Header bg <input data-k="hbg" type="color" value="#ffffff"></label>' +
+      '<label>Header text <input data-k="htxt" type="color" value="#000000"></label>' +
+      '<label>Border <select data-k="border"><option value="1">on</option><option value="0">off</option></select></label>' +
+      '<label>Border color <input data-k="bc" type="color" value="#888888"></label>' +
+      '<label>Border width(px) <input data-k="bw" type="number" min="0" max="20" value="1"></label>' +
+      '<button data-k="insert" type="button">Insert table</button>';
 
-    wrap.innerHTML =
-      '<div class="af-table-dd-hd">' +
-      '  <div class="af-table-dd-title">Таблица</div>' +
-      '</div>' +
-      '<div class="af-table-dd-body">' +
-      '  <div class="af-table-dd-size"><span class="af-table-dd-sizeval">2 × 2</span></div>' +
-      '  <div class="af-table-dd-opts">' +
-      '    <div class="af-table-dd-row is-rc">' +
-      '      <label class="af-table-dd-field"><span>Колонок</span><input type="number" min="1" max="50" step="1" class="af-t-cols" value="2"></label>' +
-      '      <label class="af-table-dd-field"><span>Строк</span><input type="number" min="1" max="50" step="1" class="af-t-rows" value="2"></label>' +
-      '    </div>' +
-      '    <label class="af-table-dd-row"><span>Ширина</span><input type="text" class="af-t-width" placeholder="например 100% или 500px"></label>' +
-      '    <label class="af-table-dd-row"><span>Ширины колонок</span><input type="text" class="af-t-colwidths" placeholder="например 120px,200px,300px"></label>' +
-      '    <label class="af-table-dd-row"><span>Выравнивание</span>' +
-      '      <select class="af-t-align"><option value="">—</option><option value="left">left</option><option value="center">center</option><option value="right">right</option></select>' +
-      '    </label>' +
-      '    <label class="af-table-dd-row"><span>Заголовки</span>' +
-      '      <select class="af-t-headers"><option value="none">none</option><option value="row">row</option><option value="col">col</option><option value="both">both</option></select>' +
-      '    </label>' +
-      '    <label class="af-table-dd-row"><span>Заполнить</span><select class="af-t-fill"><option value="0">нет</option><option value="1">да</option></select></label>' +
-      '    <div class="af-table-dd-row is-rc"><label class="af-table-dd-field"><span><input type="checkbox" class="af-t-cellbg-on"> Заливка</span><input type="color" class="af-t-cellbg" value="#000000" disabled></label><label class="af-table-dd-field"><span><input type="checkbox" class="af-t-textcolor-on"> Цвет текста</span><input type="color" class="af-t-textcolor" value="#000000" disabled></label></div>' +
-      '    <div class="af-table-dd-row is-rc"><label class="af-table-dd-field"><span><input type="checkbox" class="af-t-headbg-on"> Заливка заголовков</span><input type="color" class="af-t-headbg" value="#000000" disabled></label><label class="af-table-dd-field"><span><input type="checkbox" class="af-t-headtext-on"> Текст заголовков</span><input type="color" class="af-t-headtext" value="#000000" disabled></label></div>' +
-      '    <div class="af-table-dd-row is-rc"><label class="af-table-dd-field"><span>Цвет бордера</span><input type="color" class="af-t-bordercolor" value="#ffffff"></label><label class="af-table-dd-field"><span>Бордеры</span><select class="af-t-borderon"><option value="0">нет</option><option value="1" selected>да</option></select></label></div>' +
-      '    <div class="af-table-dd-row is-rc"><label class="af-table-dd-field"><span>Толщина</span><input type="number" min="0" max="20" step="1" class="af-t-borderwidth" value="1"></label><div class="af-table-dd-field" aria-hidden="true"></div></div>' +
-      '    <div class="af-table-dd-actions"><button type="button" class="button af-t-insert">Вставить</button></div>' +
-      '  </div>' +
-      '</div>';
-
-    var sizeEl = wrap.querySelector('.af-table-dd-sizeval');
-    var inpCols = wrap.querySelector('.af-t-cols');
-    var inpRows = wrap.querySelector('.af-t-rows');
-    var inpWidth = wrap.querySelector('.af-t-width');
-    var inpColWidths = wrap.querySelector('.af-t-colwidths');
-    var selAlign = wrap.querySelector('.af-t-align');
-    var selHeaders = wrap.querySelector('.af-t-headers');
-    var selFill = wrap.querySelector('.af-t-fill');
-    var chkCellBg = wrap.querySelector('.af-t-cellbg-on');
-    var inpCellBg = wrap.querySelector('.af-t-cellbg');
-    var chkText = wrap.querySelector('.af-t-textcolor-on');
-    var inpText = wrap.querySelector('.af-t-textcolor');
-    var chkHeadBg = wrap.querySelector('.af-t-headbg-on');
-    var inpHeadBg = wrap.querySelector('.af-t-headbg');
-    var chkHeadText = wrap.querySelector('.af-t-headtext-on');
-    var inpHeadText = wrap.querySelector('.af-t-headtext');
-    var inpBorderColor = wrap.querySelector('.af-t-bordercolor');
-    var selBorderOn = wrap.querySelector('.af-t-borderon');
-    var inpBorderWidth = wrap.querySelector('.af-t-borderwidth');
-    var btnInsert = wrap.querySelector('.af-t-insert');
-
-    function clampInt(v, min, max, fallback) {
-      var n = parseInt(v, 10);
-      if (!isFinite(n)) n = fallback;
-      if (n < min) n = min;
-      if (n > max) n = max;
-      return n;
-    }
-
-    function repaintSize() {
-      var c = clampInt(inpCols && inpCols.value, 1, 50, 2);
-      var r = clampInt(inpRows && inpRows.value, 1, 50, 2);
-      if (inpCols) inpCols.value = String(c);
-      if (inpRows) inpRows.value = String(r);
-      if (sizeEl) sizeEl.textContent = r + ' × ' + c;
-    }
-
-    function updateBorderUi() {
-      var on = (selBorderOn && selBorderOn.value === '1');
-      if (inpBorderColor) inpBorderColor.disabled = !on;
-      if (inpBorderWidth) inpBorderWidth.disabled = !on;
-    }
-
-    function syncColorEnable(chk, inp) {
-      if (!chk || !inp) return;
-      inp.disabled = !chk.checked;
-    }
-
-    function closeDd() {
-      try { editor.closeDropDown(true); } catch (e0) {}
-    }
-
-    function insertNow() {
-      var cols = clampInt(inpCols && inpCols.value, 1, 50, 2);
-      var rows = clampInt(inpRows && inpRows.value, 1, 50, 2);
-      var width = asText(inpWidth && inpWidth.value).trim();
-      var colWidthsRaw = asText(inpColWidths && inpColWidths.value).trim();
-      var align = asText(selAlign && selAlign.value).trim();
-      var headers = asText(selHeaders && selHeaders.value).trim();
-      var fill = asText(selFill && selFill.value) === '1';
-      var cellBg = (chkCellBg && chkCellBg.checked) ? asText(inpCellBg && inpCellBg.value).trim() : '';
-      var textColor = (chkText && chkText.checked) ? asText(inpText && inpText.value).trim() : '';
-      var headBg = (chkHeadBg && chkHeadBg.checked) ? asText(inpHeadBg && inpHeadBg.value).trim() : '';
-      var headText = (chkHeadText && chkHeadText.checked) ? asText(inpHeadText && inpHeadText.value).trim() : '';
-      var borderColor = asText(inpBorderColor && inpBorderColor.value).trim();
-      var borderOn = (selBorderOn && selBorderOn.value === '1');
-      var borderWidth = String(clampInt(inpBorderWidth && inpBorderWidth.value, 0, 20, 1));
-
+    function v(k) { var el = wrap.querySelector('[data-k="' + k + '"]'); return el ? el.value : ''; }
+    wrap.querySelector('[data-k="insert"]').addEventListener('click', function () {
       var opts = {
-        width: width, colWidths: colWidthsRaw, align: align, headers: headers, fill: fill,
-        cellBg: cellBg, textColor: textColor, headBg: headBg, headText: headText,
-        borderOn: borderOn, borderColor: borderColor, borderWidth: borderWidth
+        width: v('width'),
+        colWidths: v('colwidths'),
+        align: v('align'),
+        headers: v('headers'),
+        fill: v('fill') === '1',
+        cellBg: v('bg'),
+        textColor: v('txt'),
+        headBg: v('hbg'),
+        headText: v('htxt'),
+        border: v('border'),
+        borderColor: v('bc'),
+        borderWidth: v('bw') + 'px'
       };
-
-      var bb = buildBbcode(rows, cols, opts);
-      var html = buildHtmlFromBbcode(rows, cols, opts);
-      insertTableToEditor(editor, bb, html);
-      closeDd();
-    }
-
-    repaintSize();
-    updateBorderUi();
-    syncColorEnable(chkCellBg, inpCellBg);
-    syncColorEnable(chkText, inpText);
-    syncColorEnable(chkHeadBg, inpHeadBg);
-    syncColorEnable(chkHeadText, inpHeadText);
-
-    [inpCols, inpRows].forEach(function (el) {
-      if (!el) return;
-      el.addEventListener('input', repaintSize, false);
-      el.addEventListener('change', repaintSize, false);
+      var model = createModel(clampInt(v('rows'), 1, 50, 2), clampInt(v('cols'), 1, 50, 2), opts);
+      insertTable(editor, modelToCanonicalBb(model), modelToWysiwygHtml(model));
+      try { editor.closeDropDown(true); } catch (e) {}
     });
-
-    if (selBorderOn) selBorderOn.addEventListener('change', updateBorderUi, false);
-    [[chkCellBg, inpCellBg], [chkText, inpText], [chkHeadBg, inpHeadBg], [chkHeadText, inpHeadText]].forEach(function (pair) {
-      if (!pair[0]) return;
-      pair[0].addEventListener('change', function () { syncColorEnable(pair[0], pair[1]); }, false);
-    });
-
-    [inpCols, inpRows, inpWidth, inpColWidths, inpBorderWidth].forEach(function (el) {
-      if (!el) return;
-      el.addEventListener('keydown', function (ev) {
-        if (ev.key === 'Enter') {
-          ev.preventDefault();
-          insertNow();
-        }
-      }, false);
-    });
-
-    if (btnInsert) btnInsert.addEventListener('click', function (ev) {
-      ev.preventDefault();
-      insertNow();
-    }, false);
 
     return wrap;
   }
 
-  function openSceditorDropdown(editor, caller) {
+  function openDropdown(editor, caller) {
     if (!editor || typeof editor.createDropDown !== 'function') return false;
-    try { editor.closeDropDown(true); } catch (e0) {}
-
-    afAeEnsureMybbTableBbcode(editor);
+    patchBbcodeRuntime(editor);
     ensureTableCss(editor);
     bindTableToSourceNormalization(editor);
     bindFloatingEditor(editor);
-    bindPreSerializeGuards(editor);
-
-    var wrap = makeDropdown(editor, caller);
-    editor.createDropDown(caller, 'sceditor-table-picker', wrap);
+    try { editor.closeDropDown(true); } catch (e) {}
+    editor.createDropDown(caller, 'sceditor-table-picker', makeDropdown(editor));
     return true;
+  }
+
+  function syncTableDomAttrs(tableEl) {
+    var attrs = normalizeAttrs(getTableAttrsFromDom(tableEl));
+    tableEl.setAttribute('class', 'af-ae-table');
+    tableEl.setAttribute('style', buildTableStyle(attrs));
+    for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
+      var k = TABLE_ATTR_KEYS[i];
+      var v = asText(attrs[k]).trim();
+      if (!v && k !== 'border') tableEl.removeAttribute('data-af-' + k);
+      else tableEl.setAttribute('data-af-' + k, v || '1');
+    }
+  }
+
+  function bindFloatingEditor(inst) {
+    if (!inst || inst.__afAeFloatingBound) return;
+    inst.__afAeFloatingBound = true;
+
+    var body = null;
+    try { body = typeof inst.getBody === 'function' ? inst.getBody() : null; } catch (e0) { body = null; }
+    if (!body || !body.ownerDocument) return;
+    var doc = body.ownerDocument;
+
+    var panel = doc.getElementById('af-ae-table-floating');
+    if (!panel) {
+      panel = doc.createElement('div');
+      panel.id = 'af-ae-table-floating';
+      panel.style.cssText = 'position:fixed;z-index:99999;display:none;gap:6px;background:#1f1f1f;padding:6px;border-radius:8px;';
+      panel.innerHTML = '' +
+        '<button data-a="row-above">+R↑</button><button data-a="row-below">+R↓</button><button data-a="row-del">-R</button>' +
+        '<button data-a="col-left">+C←</button><button data-a="col-right">+C→</button><button data-a="col-del">-C</button>' +
+        '<input data-a="tbl-width" placeholder="500px" style="width:80px">' +
+        '<button data-a="apply-width">W</button>' +
+        '<button data-a="close">×</button>';
+      doc.body.appendChild(panel);
+    }
+
+    function activeTableFromTarget(t) {
+      try { return t && t.closest ? t.closest('table') : null; } catch (e) { return null; }
+    }
+
+    function showFor(table) {
+      if (!table) return;
+      var r = table.getBoundingClientRect();
+      panel.style.left = Math.max(8, r.left) + 'px';
+      panel.style.top = Math.max(8, r.top - 40) + 'px';
+      panel.style.display = 'flex';
+      panel.__table = table;
+      var inp = panel.querySelector('[data-a="tbl-width"]');
+      if (inp) inp.value = normWidth((table.style && table.style.width) || table.getAttribute('data-af-width') || '');
+    }
+
+    body.addEventListener('click', function (ev) {
+      var t = activeTableFromTarget(ev.target);
+      if (t) showFor(t);
+    }, false);
+
+    panel.addEventListener('click', function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest('[data-a]') : null;
+      if (!btn) return;
+      var table = panel.__table;
+      if (!table) return;
+      var act = btn.getAttribute('data-a');
+
+      if (act === 'close') { panel.style.display = 'none'; panel.__table = null; return; }
+      if (act === 'apply-width') {
+        var val = normWidth((panel.querySelector('[data-a="tbl-width"]') || {}).value || '');
+        table.style.width = val;
+        table.setAttribute('data-af-width', val);
+      }
+
+      var sel = null;
+      try { sel = body.querySelector('td:focus,th:focus'); } catch (e0) { sel = null; }
+      if (!sel) sel = table.querySelector('td,th');
+      if (!sel) return;
+      var row = sel.parentElement;
+      var col = Array.prototype.indexOf.call(row.cells, sel);
+
+      if (act === 'row-above' || act === 'row-below') {
+        var nr = row.cloneNode(true);
+        for (var i = 0; i < nr.cells.length; i++) nr.cells[i].innerHTML = '<br>';
+        row.parentNode.insertBefore(nr, act === 'row-above' ? row : row.nextSibling);
+      } else if (act === 'row-del') {
+        if (table.rows.length > 1) row.parentNode.removeChild(row);
+      } else if (act === 'col-left' || act === 'col-right') {
+        for (var r = 0; r < table.rows.length; r++) {
+          var rr = table.rows[r];
+          var base = rr.cells[Math.min(col, rr.cells.length - 1)] || rr.cells[0];
+          var nc = base.cloneNode(false); nc.innerHTML = '<br>';
+          rr.insertBefore(nc, act === 'col-left' ? rr.cells[col] : (rr.cells[col + 1] || null));
+        }
+      } else if (act === 'col-del') {
+        for (var r2 = 0; r2 < table.rows.length; r2++) if (table.rows[r2].cells.length > 1 && table.rows[r2].cells[col]) table.rows[r2].deleteCell(col);
+      }
+
+      syncTableDomAttrs(table);
+      try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e1) {}
+    }, false);
   }
 
   function patchSceditorTableCommand() {
     if (!hasSceditor()) return false;
-
     var $ = window.jQuery;
     if (!$.sceditor || !$.sceditor.command) return false;
 
-    function buildCommand() {
+    function cmd() {
       return {
         exec: function (caller) {
-          if (!openSceditorDropdown(this, caller)) {
-            var bb = buildBbcode(2, 2, { headers: 'none' });
-            var html = buildHtmlFromBbcode(2, 2, { headers: 'none' });
-            insertTableToEditor(this, bb, html);
+          if (!openDropdown(this, caller)) {
+            var m = createModel(2, 2, { headers: '' });
+            insertTable(this, modelToCanonicalBb(m), modelToWysiwygHtml(m));
           }
         },
-        txtExec: function (caller) {
-          if (!openSceditorDropdown(this, caller)) {
-            var bb = buildBbcode(2, 2, { headers: 'none' });
-            insertTableToEditor(this, bb, bb);
-          }
+        txtExec: function () {
+          var m = createModel(2, 2, { headers: '' });
+          insertTable(this, modelToCanonicalBb(m), modelToCanonicalBb(m));
         },
         tooltip: 'Таблица'
       };
     }
 
-    // ВАЖНО: перебиваем и кастомную, и стандартную команду.
-    $.sceditor.command.set('af_table', buildCommand());
-    $.sceditor.command.set('table', buildCommand());
-
+    $.sceditor.command.set('af_table', cmd());
+    $.sceditor.command.set('table', cmd());
     return true;
   }
 
-  function waitAnd(fn, maxTries) {
-    var tries = 0;
+  function patchInstances() {
+    if (!hasSceditor()) return;
+    var $ = window.jQuery;
+    var tas = document.querySelectorAll('textarea');
+    for (var i = 0; i < tas.length; i++) {
+      var inst = null;
+      try { inst = $(tas[i]).sceditor('instance'); } catch (e0) { inst = null; }
+      if (!inst) continue;
+      patchBbcodeRuntime(inst);
+      ensureTableCss(inst);
+      bindTableToSourceNormalization(inst);
+      bindFloatingEditor(inst);
+    }
+  }
+
+  function waitAnd(fn, n) {
+    var i = 0;
     (function tick() {
-      tries++;
+      i++;
       if (fn()) return;
-      if (tries > (maxTries || 150)) return;
-      setTimeout(tick, 100);
+      if (i < (n || 100)) setTimeout(tick, 100);
     })();
   }
 
-  function tryPatchInstances() {
-    if (!hasSceditor() || !window.jQuery) return false;
-    var $ = window.jQuery;
-
-    try {
-      var tas = document.querySelectorAll('textarea');
-      for (var i = 0; i < tas.length; i++) {
-        var inst = null;
-        try { inst = $(tas[i]).sceditor('instance'); } catch (e0) { inst = null; }
-        if (!inst) continue;
-
-        try { afAeEnsureMybbTableBbcode(inst); } catch (e1) {}
-        try { ensureTableCss(inst); } catch (e2) {}
-        try { bindTableToSourceNormalization(inst); } catch (e3) {}
-        try { bindFloatingEditor(inst); } catch (e4) {}
-        try { bindPreSerializeGuards(inst); } catch (e5) {}
-      }
-    } catch (e) {}
-
-    return true;
-  }
-
   waitAnd(patchSceditorTableCommand, 150);
-  var patchTries = 0;
-  (function patchTick() {
-    patchTries++;
-    tryPatchInstances();
-    if (patchTries < 60) setTimeout(patchTick, 150);
-  })();
+  for (var t = 0; t < 60; t++) setTimeout(patchInstances, t * 150);
 
   function aqrOpen(ctx, ev) {
     var editor = getSceditorInstanceFromCtx(ctx);
-    var caller =
-      (ctx && (ctx.buttonEl || ctx.btn || ctx.caller)) ||
-      (ev && (ev.currentTarget || ev.target)) ||
-      null;
-
-    if (editor && caller && caller.nodeType === 1) {
-      if (ev && ev.preventDefault) ev.preventDefault();
-      openSceditorDropdown(editor, caller);
-      return;
-    }
-
-    var bb = buildBbcode(2, 2, { headers: 'none' });
-    var html = buildHtmlFromBbcode(2, 2, { headers: 'none' });
-    insertTableToEditor(editor, bb, html);
+    var caller = (ctx && (ctx.buttonEl || ctx.btn || ctx.caller)) || (ev && (ev.currentTarget || ev.target)) || null;
+    if (editor && caller && caller.nodeType === 1) return openDropdown(editor, caller);
+    var m = createModel(2, 2, { headers: '' });
+    insertTable(editor, modelToCanonicalBb(m), modelToWysiwygHtml(m));
   }
 
-  var handlerObj = {
-    id: ID,
-    title: 'Таблица',
-    onClick: aqrOpen,
-    click: aqrOpen,
-    action: aqrOpen,
-    run: aqrOpen,
-    init: function () {}
-  };
+  var handlerObj = { id: ID, title: 'Таблица', onClick: aqrOpen, click: aqrOpen, action: aqrOpen, run: aqrOpen, init: function () {} };
+  function handlerFn(inst, caller) { var ed = getSceditorInstanceFromCtx(inst || {}) || getSceditorInstanceFromCtx({}); if (ed) openDropdown(ed, caller); }
 
-  function handlerFn(inst, caller) {
-    var editor = getSceditorInstanceFromCtx(inst || {});
-    if (!editor) editor = getSceditorInstanceFromCtx({});
-    if (!editor) return;
-
-    if (caller && caller.nodeType === 1) openSceditorDropdown(editor, caller);
-    else {
-      var bb = buildBbcode(2, 2, { headers: 'none' });
-      var html = buildHtmlFromBbcode(2, 2, { headers: 'none' });
-      insertTableToEditor(editor, bb, html);
-    }
-  }
-
-  function registerHandlers() {
+  function register() {
     window.afAqrBuiltinHandlers[ID] = handlerObj;
     window.afAqrBuiltinHandlers[CMD] = handlerObj;
     window.afAeBuiltinHandlers[ID] = handlerFn;
     window.afAeBuiltinHandlers[CMD] = handlerFn;
   }
 
-  registerHandlers();
-  for (var i = 1; i <= 20; i++) setTimeout(registerHandlers, i * 250);
+  register();
+  for (var i = 1; i <= 20; i++) setTimeout(register, i * 250);
 
-  window.afAeTableDebugApi = window.afAeTableDebugApi || {
-    normalizeTableAttrs: normalizeTableAttrs,
-    parseAttrsFromDom: parseAttrsFromDom,
-    tableAttrsToBbOpen: tableAttrsToBbOpen,
-    modelToCanonicalBbcode: modelToCanonicalBbcode,
+  window.afAeTableDebugApi = {
+    normalizeTableAttrs: normalizeAttrs,
+    modelToCanonicalBbcode: modelToCanonicalBb,
     modelToWysiwygHtml: modelToWysiwygHtml,
-    createTableModel: createTableModel
+    createTableModel: createModel,
+    serializeTableDomToCanonicalBb: serializeTableDomToCanonicalBb
   };
-
-  window.af_ae_table_exec = function (editor, def, caller) {
-    if (!openSceditorDropdown(editor, caller)) {
-      var bb = buildBbcode(2, 2, { headers: 'none' });
-      var html = buildHtmlFromBbcode(2, 2, { headers: 'none' });
-      insertTableToEditor(editor, bb, html);
-    }
-  };
-
 })();
