@@ -387,6 +387,8 @@ function register(inst){
 
   Object.keys(tags).forEach(function(tag){
 
+    if(tag==='table' || tag==='tr' || tag==='td' || tag==='th' || tag==='af_table' || tag==='af_tr' || tag==='af_td' || tag==='af_th') return;
+
     var def=tags[tag];
 
     try{
