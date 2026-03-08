@@ -295,6 +295,41 @@
         var firstTd = tableEl.querySelector('td,th');
         if (!attrs.borderwidth && firstTd && firstTd.style && firstTd.style.borderWidth) attrs.borderwidth = asText(firstTd.style.borderWidth).trim().toLowerCase();
         if (!attrs.bordercolor && firstTd && firstTd.style) attrs.bordercolor = readColorToken(firstTd.style.borderColor);
+
+        var firstHeaderCell = tableEl.querySelector('th');
+        var firstBodyCell = tableEl.querySelector('td');
+        var firstAnyCell = firstHeaderCell || firstBodyCell || firstTd;
+
+        if (!attrs.bgcolor && firstBodyCell && firstBodyCell.style) attrs.bgcolor = readColorToken(firstBodyCell.style.backgroundColor);
+        if (!attrs.textcolor && firstBodyCell && firstBodyCell.style) attrs.textcolor = readColorToken(firstBodyCell.style.color);
+
+        if (!attrs.hbgcolor && firstHeaderCell && firstHeaderCell.style) attrs.hbgcolor = readColorToken(firstHeaderCell.style.backgroundColor);
+        if (!attrs.htextcolor && firstHeaderCell && firstHeaderCell.style) attrs.htextcolor = readColorToken(firstHeaderCell.style.color);
+
+        if (!attrs.bgcolor && firstAnyCell && firstAnyCell.style) attrs.bgcolor = readColorToken(firstAnyCell.style.backgroundColor);
+        if (!attrs.textcolor && firstAnyCell && firstAnyCell.style) attrs.textcolor = readColorToken(firstAnyCell.style.color);
+
+        if (!attrs.headers) {
+          var hasTh = !!tableEl.querySelector('th');
+          if (hasTh) {
+            var rowHasAllTh = false;
+            var rows = tableEl.rows || [];
+            if (rows.length) {
+              var firstRow = rows[0];
+              if (firstRow && firstRow.cells && firstRow.cells.length) {
+                rowHasAllTh = true;
+                for (var ri = 0; ri < firstRow.cells.length; ri++) {
+                  if ((firstRow.cells[ri].tagName || '').toLowerCase() !== 'th') {
+                    rowHasAllTh = false;
+                    break;
+                  }
+                }
+              }
+            }
+
+            attrs.headers = rowHasAllTh ? 'row' : 'both';
+          }
+        }
       } catch (eCell) {}
     }
 
@@ -1786,6 +1821,15 @@
 
   registerHandlers();
   for (var i = 1; i <= 20; i++) setTimeout(registerHandlers, i * 250);
+
+  window.afAeTableDebugApi = window.afAeTableDebugApi || {
+    normalizeTableAttrs: normalizeTableAttrs,
+    parseAttrsFromDom: parseAttrsFromDom,
+    tableAttrsToBbOpen: tableAttrsToBbOpen,
+    modelToCanonicalBbcode: modelToCanonicalBbcode,
+    modelToWysiwygHtml: modelToWysiwygHtml,
+    createTableModel: createTableModel
+  };
 
   window.af_ae_table_exec = function (editor, def, caller) {
     if (!openSceditorDropdown(editor, caller)) {
