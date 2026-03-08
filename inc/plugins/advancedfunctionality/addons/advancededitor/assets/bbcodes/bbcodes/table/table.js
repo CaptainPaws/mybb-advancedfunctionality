@@ -1020,7 +1020,7 @@
     return true;
   }
 
-  function normalizeExistingEditorTables(inst) {
+  function normalizeManagedTablesForEditor(inst, reason) {
     if (!inst || isSourceMode(inst)) return 0;
 
     var body = getInstBodySafe(inst);
@@ -1034,21 +1034,8 @@
       if (applyCanonicalAttrsToTableDom(tables[i], parseAttrsFromDom(tables[i]))) changed++;
     }
 
-    tableDebugLog('normalizeExistingEditorTables', { count: changed });
+    tableDebugLog('normalizeManagedTablesForEditor', { reason: reason || '', count: changed });
     return changed;
-  }
-
-  function queueRehydrate(inst, reason) {
-    if (!inst) return;
-    if (inst.__afAeTableRehydrateQueued) return;
-
-    inst.__afAeTableRehydrateQueued = true;
-    setTimeout(function () {
-      inst.__afAeTableRehydrateQueued = false;
-      try { ensureTableCss(inst); } catch (e0) {}
-      try { normalizeExistingEditorTables(inst); } catch (e1) {}
-      tableDebugLog('rehydrate', { reason: reason || '' });
-    }, 0);
   }
 
   function ensureTableCss(inst) {
@@ -1150,7 +1137,7 @@
           var out = origSourceMode.apply(this, arguments);
 
           if (switchingToWysiwyg) {
-            queueRehydrate(this, 'sourceMode(false)');
+            normalizeManagedTablesForEditor(this, 'sourceMode(false)');
           } else if (arguments.length && arguments[0] === true) {
             resetFloatingTableState(this, null, 'sourceMode(true)');
           }
@@ -1173,7 +1160,7 @@
           var out = origToggleMode.apply(this, arguments);
 
           if (wasSource && !isSourceMode(this)) {
-            queueRehydrate(this, 'toggleSourceMode');
+            normalizeManagedTablesForEditor(this, 'toggleSourceMode');
           } else if (!wasSource && isSourceMode(this)) {
             resetFloatingTableState(this, null, 'toggleSourceMode->source');
           }
@@ -1311,7 +1298,7 @@
     try { bindFloatingEditor(inst); } catch (e5) {}
 
     if (!isSourceMode(inst)) {
-      try { normalizeExistingEditorTables(inst); } catch (e6) {}
+      try { normalizeManagedTablesForEditor(inst, 'ensureInstancePatched'); } catch (e6) {}
     }
 
     return true;
@@ -2045,7 +2032,7 @@
           editor.insertText(bb, '');
         } else {
           insertHtmlWysiwyg(editor, html || bb, bb);
-          queueRehydrate(editor, 'insert');
+          normalizeManagedTablesForEditor(editor, 'insert');
         }
 
         try {
@@ -2097,33 +2084,37 @@
     return true;
   }
 
-  function patchAllCurrentInstances() {
-    if (!hasSceditor() || !window.jQuery) return false;
-
+  function getInstanceFromSceditorNode(node) {
+    if (!node || !window.jQuery || !hasSceditor()) return null;
     var $ = window.jQuery;
+    var container = null;
     try {
-      var tas = document.querySelectorAll('textarea');
-      for (var i = 0; i < tas.length; i++) {
-        var inst = null;
-        try { inst = $(tas[i]).sceditor('instance'); } catch (e0) { inst = null; }
-        if (!inst) continue;
+      container = node.closest ? node.closest('.sceditor-container') : null;
+    } catch (e0) { container = null; }
+    if (!container || !container.parentNode) return null;
 
-        ensureInstancePatched(inst);
-        bindPreSerializeGuards(inst);
-      }
-    } catch (e) {}
+    var ta = null;
+    try {
+      ta = container.parentNode.querySelector('textarea');
+    } catch (e1) { ta = null; }
+    if (!ta) return null;
 
-    return true;
+    try {
+      return $(ta).sceditor('instance');
+    } catch (e2) {
+      return null;
+    }
   }
 
-  var patchAllTimer = 0;
-  function schedulePatchAllInstances() {
-    if (patchAllTimer) return;
-    patchAllTimer = setTimeout(function () {
-      patchAllTimer = 0;
-      try { patchSceditorTableCommand(); } catch (e0) {}
-      try { patchAllCurrentInstances(); } catch (e1) {}
-    }, 0);
+  function patchInstanceFromNode(node, reason) {
+    var inst = getInstanceFromSceditorNode(node);
+    if (!inst) return false;
+
+    try { patchSceditorTableCommand(); } catch (e0) {}
+    try { ensureInstancePatched(inst); } catch (e1) {}
+    try { bindPreSerializeGuards(inst); } catch (e2) {}
+    tableDebugLog('patchInstanceFromNode', { reason: reason || '' });
+    return true;
   }
 
   function aqrOpen(ctx, ev) {
@@ -2188,7 +2179,7 @@
     serializeTableDomToCanonicalBb: serializeTableDomToCanonicalBb,
     normalizeAfTablesInHtmlWithInst: normalizeAfTablesInHtmlWithInst,
     editorHtmlToBbWithOwnedTables: editorHtmlToBbWithOwnedTables,
-    normalizeExistingEditorTables: normalizeExistingEditorTables,
+    normalizeManagedTablesForEditor: normalizeManagedTablesForEditor,
     syncTextareaFromWysiwyg: syncTextareaFromWysiwyg
   };
 
@@ -2201,31 +2192,16 @@
   };
 
   try { patchSceditorTableCommand(); } catch (e0) {}
-  schedulePatchAllInstances();
-
-  window.addEventListener('load', function () {
-    schedulePatchAllInstances();
-  }, { passive: true });
 
   document.addEventListener('focusin', function (ev) {
-    var t = ev.target;
+    var t = ev && ev.target;
     if (!t || !t.nodeType) return;
-
-    var isTextarea = t.tagName === 'TEXTAREA';
-    var inEditor = !!(t.closest && t.closest('.sceditor-container'));
-    if (isTextarea || inEditor) {
-      schedulePatchAllInstances();
-    }
+    patchInstanceFromNode(t, 'focusin');
   }, true);
 
   document.addEventListener('click', function (ev) {
-    var t = ev.target;
+    var t = ev && ev.target;
     if (!t || !t.nodeType) return;
-
-    var inEditor = !!(t.closest && t.closest('.sceditor-container'));
-    if (inEditor) {
-      try { patchSceditorTableCommand(); } catch (e0) {}
-      schedulePatchAllInstances();
-    }
+    patchInstanceFromNode(t, 'click');
   }, true);
 })();
