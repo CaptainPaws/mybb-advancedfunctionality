@@ -235,6 +235,97 @@
     return styles.join(';');
   }
 
+  function applyCanonicalAttrsToTableDom(tableEl, attrs) {
+    if (!tableEl || tableEl.nodeType !== 1) return false;
+    var doc = tableEl.ownerDocument || document;
+    attrs = normalizeTableAttrs(attrs || parseAttrsFromDom(tableEl));
+
+    try {
+      for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
+        var k = TABLE_ATTR_KEYS[i];
+        var v = asText(attrs[k]).trim();
+        if (k === 'border') v = v || '1';
+        tableEl.setAttribute('data-af-' + k, v);
+      }
+      tableEl.setAttribute('data-af-table', '1');
+      tableEl.setAttribute('data-headers', asText(attrs.headers).trim());
+      tableEl.classList.add('af-ae-table');
+      tableEl.setAttribute('style', buildTableStyle(attrs));
+    } catch (e0) {}
+
+    try {
+      for (var r = 0; r < tableEl.rows.length; r++) {
+        var row = tableEl.rows[r];
+        for (var c = 0; c < row.cells.length; c++) {
+          var cell = row.cells[c];
+          var tag = (cell.tagName || '').toLowerCase();
+          var isHeaderByMode = false;
+
+          if (attrs.headers === 'row' && r === 0) isHeaderByMode = true;
+          if (attrs.headers === 'col' && c === 0) isHeaderByMode = true;
+          if (attrs.headers === 'both' && (r === 0 || c === 0)) isHeaderByMode = true;
+
+          var shouldBeTh = (tag === 'th') || isHeaderByMode;
+          if (shouldBeTh && tag !== 'th') {
+            var th = doc.createElement('th');
+            th.innerHTML = cell.innerHTML;
+            try { if (cell.style && cell.style.width) th.style.width = cell.style.width; } catch (eW) {}
+            row.replaceChild(th, cell);
+            cell = th;
+            tag = 'th';
+          } else if (!shouldBeTh && tag === 'th') {
+            var td = doc.createElement('td');
+            td.innerHTML = cell.innerHTML;
+            try { if (cell.style && cell.style.width) td.style.width = cell.style.width; } catch (eW2) {}
+            row.replaceChild(td, cell);
+            cell = td;
+            tag = 'td';
+          }
+
+          var colWidth = getCanonicalColumnWidth(cell);
+          var css = buildCellStyle(tag, attrs, colWidth || '', isHeaderByMode);
+          cell.setAttribute('style', css);
+        }
+      }
+    } catch (e2) {}
+
+    return true;
+  }
+
+  function normalizeExistingEditorTables(inst) {
+    if (!inst || typeof inst.getBody !== 'function') return 0;
+    if (isSourceMode(inst)) return 0;
+
+    var body = null;
+    try { body = inst.getBody(); } catch (e0) { body = null; }
+    if (!body || !body.querySelectorAll) return 0;
+
+    var tables = [];
+    try { tables = body.querySelectorAll('table.af-ae-table,table[data-af-table="1"]'); } catch (e1) { tables = []; }
+
+    var changed = 0;
+    for (var i = 0; i < tables.length; i++) {
+      if (applyCanonicalAttrsToTableDom(tables[i], parseAttrsFromDom(tables[i]))) changed++;
+    }
+
+    tableDebugLog('normalizeExistingEditorTables', { count: changed });
+    return changed;
+  }
+
+  function scheduleTableRehydrate(inst, reason) {
+    if (!inst) return;
+    if (inst.__afAeTableRehydrateTimer) {
+      try { clearTimeout(inst.__afAeTableRehydrateTimer); } catch (e0) {}
+    }
+
+    inst.__afAeTableRehydrateTimer = setTimeout(function () {
+      inst.__afAeTableRehydrateTimer = 0;
+      try { ensureTableCss(inst); } catch (e1) {}
+      try { normalizeExistingEditorTables(inst); } catch (e2) {}
+      tableDebugLog('scheduleTableRehydrate.run', { reason: reason || '' });
+    }, 0);
+  }
+
   function getFirstTableCellByTag(tableEl, selector) {
     if (!tableEl || tableEl.nodeType !== 1) return null;
     try {
@@ -1084,6 +1175,7 @@
       try { afAeEnsureMybbTableBbcode(inst); } catch (e0) {}
       try { bindTableToSourceNormalization(inst); } catch (e1) {}
       try { bindSubmitSync(inst); } catch (e2) {}
+      try { bindTableRehydrateHooks(inst); } catch (e3) {}
     }
 
     try {
@@ -1092,6 +1184,7 @@
         inst.updateOriginal = function () {
           var result = origUpdate.apply(this, arguments);
           guardPatch();
+          try { scheduleTableRehydrate(this, 'updateOriginal'); } catch (e30) {}
           try { syncTextareaFromWysiwyg(this); } catch (e3) {}
           return result;
         };
@@ -1122,6 +1215,46 @@
           guardPatch();
           return html;
         });
+      }
+    } catch (e3) {}
+  }
+
+  function bindTableRehydrateHooks(inst) {
+    if (!inst || inst.__afAeTableRehydrateHooksBound) return;
+    inst.__afAeTableRehydrateHooksBound = true;
+
+    scheduleTableRehydrate(inst, 'bind-hooks');
+
+    try {
+      if (typeof inst.bind === 'function') {
+        inst.bind('toWysiwyg', function (html) {
+          scheduleTableRehydrate(inst, 'toWysiwyg');
+          return html;
+        });
+      }
+    } catch (e1) {}
+
+    try {
+      if (typeof inst.sourceMode === 'function' && !inst.__afAeTableSourceModeWrapped) {
+        var origSourceMode = inst.sourceMode;
+        inst.sourceMode = function () {
+          var out = origSourceMode.apply(this, arguments);
+          if (arguments.length && !isSourceMode(this)) scheduleTableRehydrate(this, 'sourceMode(false)');
+          return out;
+        };
+        inst.__afAeTableSourceModeWrapped = true;
+      }
+    } catch (e2) {}
+
+    try {
+      if (typeof inst.toggleSourceMode === 'function' && !inst.__afAeTableToggleModeWrapped) {
+        var origToggle = inst.toggleSourceMode;
+        inst.toggleSourceMode = function () {
+          var out = origToggle.apply(this, arguments);
+          if (!isSourceMode(this)) scheduleTableRehydrate(this, 'toggleSourceMode');
+          return out;
+        };
+        inst.__afAeTableToggleModeWrapped = true;
       }
     } catch (e3) {}
   }
@@ -1164,6 +1297,7 @@
         try { bindFloatingEditor(editor); } catch (e4) {}
         try { bindPreSerializeGuards(editor); } catch (e7) {}
         try { bindSubmitSync(editor); } catch (e8) {}
+        try { scheduleTableRehydrate(editor, 'insert'); } catch (e10) {}
 
         if (isSourceMode(editor)) {
           editor.insertText(bb, '');
@@ -1280,64 +1414,7 @@
       }
 
       function applyAttrsToDom(t, a) {
-        try {
-          a = normalizeTableAttrs(a || {});
-          for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
-            var k = TABLE_ATTR_KEYS[i];
-            var v = asText(a[k]).trim();
-            if (k === 'border') v = v || '1';
-            t.setAttribute('data-af-' + k, v);
-          }
-          t.setAttribute('data-af-table', '1');
-          t.setAttribute('data-headers', asText(a.headers).trim());
-          t.classList.add('af-ae-table');
-          t.setAttribute('style', buildTableStyle(a));
-        } catch (e0) {}
-
-        try {
-          var colWidths = [];
-          for (var rw = 0; rw < t.rows.length; rw++) {
-            var rowW = t.rows[rw];
-            for (var cw = 0; cw < rowW.cells.length; cw++) {
-              var widthToken = normWidthToken((rowW.cells[cw].style && rowW.cells[cw].style.width) || '');
-              if (widthToken && !colWidths[cw]) colWidths[cw] = widthToken;
-            }
-          }
-
-          for (var r = 0; r < t.rows.length; r++) {
-            var row = t.rows[r];
-            for (var c = 0; c < row.cells.length; c++) {
-              var cell = row.cells[c];
-              var tag = (cell.tagName || '').toLowerCase();
-              var isHeaderByMode = false;
-
-              if (a.headers === 'row' && r === 0) isHeaderByMode = true;
-              if (a.headers === 'col' && c === 0) isHeaderByMode = true;
-              if (a.headers === 'both' && (r === 0 || c === 0)) isHeaderByMode = true;
-
-              var shouldBeTh = (tag === 'th') || isHeaderByMode;
-              if (shouldBeTh && tag !== 'th') {
-                var th = doc.createElement('th');
-                th.innerHTML = cell.innerHTML;
-                try { if (cell.style && cell.style.width) th.style.width = cell.style.width; } catch (eW) {}
-                row.replaceChild(th, cell);
-                cell = th;
-                tag = 'th';
-              } else if (!shouldBeTh && tag === 'th') {
-                var td = doc.createElement('td');
-                td.innerHTML = cell.innerHTML;
-                try { if (cell.style && cell.style.width) td.style.width = cell.style.width; } catch (eW2) {}
-                row.replaceChild(td, cell);
-                cell = td;
-                tag = 'td';
-              }
-
-              var w = colWidths[c] || '';
-              var css = buildCellStyle(tag, a, w, isHeaderByMode);
-              cell.setAttribute('style', css);
-            }
-          }
-        } catch (e2) {}
+        try { applyCanonicalAttrsToTableDom(t, a); } catch (e0) {}
       }
 
       function getActiveCell(t) {
@@ -1926,6 +2003,8 @@
     bindFloatingEditor(editor);
     bindPreSerializeGuards(editor);
     bindSubmitSync(editor);
+    bindTableRehydrateHooks(editor);
+    scheduleTableRehydrate(editor, 'dropdown-open');
 
     var wrap = makeDropdown(editor, caller);
     editor.createDropDown(caller, 'sceditor-table-picker', wrap);
@@ -1990,7 +2069,9 @@
         try { bindFloatingEditor(inst); } catch (e4) {}
         try { bindPreSerializeGuards(inst); } catch (e5) {}
         try { bindSubmitSync(inst); } catch (e6) {}
-        try { syncTextareaFromWysiwyg(inst); } catch (e7) {}
+        try { bindTableRehydrateHooks(inst); } catch (e7) {}
+        try { scheduleTableRehydrate(inst, 'patch-instances'); } catch (e8) {}
+        try { syncTextareaFromWysiwyg(inst); } catch (e9) {}
       }
     } catch (e) {}
 
@@ -2066,6 +2147,8 @@
     serializeCellContentForTable: serializeCellContentForTable,
     serializeTableDomToCanonicalBb: serializeTableDomToCanonicalBb,
     editorHtmlToBbWithOwnedTables: editorHtmlToBbWithOwnedTables,
+    normalizeExistingEditorTables: normalizeExistingEditorTables,
+    scheduleTableRehydrate: scheduleTableRehydrate,
     syncTextareaFromWysiwyg: syncTextareaFromWysiwyg
   };
 
