@@ -521,12 +521,78 @@
     if (!inst || inst.__afAeTableToSourceBound || typeof inst.bind !== 'function') return;
     inst.__afAeTableToSourceBound = true;
 
+    function getDirectChildRows(tableEl) {
+      if (!tableEl || tableEl.nodeType !== 1) return [];
+
+      var rows = [];
+      var groups = [];
+      try {
+        groups = tableEl.querySelectorAll(':scope > thead,:scope > tbody,:scope > tfoot');
+      } catch (eScope) {
+        groups = [];
+      }
+
+      if (groups && groups.length) {
+        for (var g = 0; g < groups.length; g++) {
+          var groupRows = groups[g].children || [];
+          for (var gr = 0; gr < groupRows.length; gr++) {
+            var rowNode = groupRows[gr];
+            if ((rowNode.tagName || '').toLowerCase() === 'tr') rows.push(rowNode);
+          }
+        }
+      } else {
+        var direct = tableEl.children || [];
+        for (var i = 0; i < direct.length; i++) {
+          var node = direct[i];
+          if ((node.tagName || '').toLowerCase() === 'tr') rows.push(node);
+        }
+      }
+
+      return rows;
+    }
+
+    function getDirectRowCells(rowEl) {
+      if (!rowEl || rowEl.nodeType !== 1) return [];
+      var out = [];
+      var children = rowEl.children || [];
+      for (var i = 0; i < children.length; i++) {
+        var node = children[i];
+        var tag = (node.tagName || '').toLowerCase();
+        if (tag === 'td' || tag === 'th') out.push(node);
+      }
+      return out;
+    }
+
+    function normalizeAfTablesInHtml(html) {
+      html = asText(html);
+      if (!html || html.indexOf('<table') === -1) return html;
+
+      var box = document.createElement('div');
+      box.innerHTML = html;
+      var tables = [];
+      try { tables = box.querySelectorAll('table[data-af-table="1"],table.af-ae-table'); } catch (eFind) { tables = []; }
+      for (var i = 0; i < tables.length; i++) {
+        var table = tables[i];
+        if (!table || !table.parentNode) continue;
+        var isNested = false;
+        try { isNested = !!(table.parentElement && table.parentElement.closest && table.parentElement.closest('table[data-af-table="1"],table.af-ae-table')); } catch (eNested) { isNested = false; }
+        if (isNested) continue;
+
+        var bbTable = serializeAfTableToBb(table);
+        table.parentNode.replaceChild(document.createTextNode('\n' + bbTable + '\n'), table);
+      }
+
+      return box.innerHTML;
+    }
+
     function convertCellHtmlToBb(cellEl) {
       if (!cellEl || cellEl.nodeType !== 1) return '';
 
       var html = '';
       try { html = asText(cellEl.innerHTML); } catch (e0) { html = ''; }
       if (!html) return '';
+
+      html = normalizeAfTablesInHtml(html);
 
       var bb = '';
       try {
@@ -556,15 +622,13 @@
 
       var attrs = parseAttrsFromDom(tableEl);
       var out = [tableAttrsToBbOpen(attrs)];
-      var rows = [];
-      try { rows = tableEl.querySelectorAll('tr'); } catch (eRows) { rows = []; }
+      var rows = getDirectChildRows(tableEl);
 
       for (var i = 0; i < rows.length; i++) {
         var row = rows[i];
         out.push('[tr]');
 
-        var cells = [];
-        try { cells = row.querySelectorAll('th,td'); } catch (eCells) { cells = []; }
+        var cells = getDirectRowCells(row);
         for (var j = 0; j < cells.length; j++) {
           var cell = cells[j];
           var tag = ((cell.tagName || '').toLowerCase() === 'th') ? 'th' : 'td';
@@ -595,6 +659,10 @@
           try { tables = box.querySelectorAll('table[data-af-table="1"],table.af-ae-table'); } catch (eFind) { tables = []; }
           for (var i = 0; i < tables.length; i++) {
             var table = tables[i];
+            if (!table || !table.parentNode) continue;
+            var isNested = false;
+            try { isNested = !!(table.parentElement && table.parentElement.closest && table.parentElement.closest('table[data-af-table="1"],table.af-ae-table')); } catch (eNested) { isNested = false; }
+            if (isNested) continue;
             var bb = serializeAfTableToBb(table);
 
             table.parentNode.replaceChild(document.createTextNode('\n' + bb + '\n'), table);
