@@ -368,6 +368,12 @@ function createPassthroughDef(tag,hasClose){
 
 }
 
+function isStructuralTableTag(tag){
+  tag = String(tag||'').toLowerCase().trim();
+  return tag==='table' || tag==='tr' || tag==='td' || tag==='th' ||
+    tag==='af_table' || tag==='af_tr' || tag==='af_td' || tag==='af_th';
+}
+
 /* ------------------------------------------------ */
 /* REGISTER */
 
@@ -386,8 +392,7 @@ function register(inst){
   var partial=isPartialMode();
 
   Object.keys(tags).forEach(function(tag){
-
-    if(tag==='table' || tag==='tr' || tag==='td' || tag==='th' || tag==='af_table' || tag==='af_tr' || tag==='af_td' || tag==='af_th') return;
+    if(isStructuralTableTag(tag)) return;
 
     var def=tags[tag];
 

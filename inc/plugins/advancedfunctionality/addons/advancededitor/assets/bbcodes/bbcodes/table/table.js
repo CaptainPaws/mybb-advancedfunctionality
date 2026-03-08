@@ -388,7 +388,7 @@
   function cleanupTableInheritedFormatting(cellEl, tag, content) {
     var out = asText(content);
     var table = null;
-    try { table = cellEl && cellEl.closest ? cellEl.closest('table[data-af-table="1"],table.af-ae-table') : null; } catch (e0) { table = null; }
+    try { table = cellEl && cellEl.closest ? cellEl.closest('table') : null; } catch (e0) { table = null; }
     if (!table) return out;
 
     var attrs = parseAttrsFromDom(table);
@@ -420,6 +420,25 @@
     }
 
     return out;
+  }
+
+  function isSerializableTable(table) {
+    if (!table || table.nodeType !== 1) return false;
+    if ((table.tagName || '').toLowerCase() !== 'table') return false;
+
+    try {
+      if (table.closest && table.closest('pre,code')) return false;
+    } catch (e0) {}
+
+    try {
+      if (table.hasAttribute('data-af-no-table-serialize')) return false;
+    } catch (e1) {}
+
+    try {
+      return !!table.querySelector('tr td, tr th');
+    } catch (e2) {
+      return false;
+    }
   }
   function tableAttrsToBbOpen(attrs) {
     attrs = normalizeTableAttrs(attrs);
@@ -621,12 +640,13 @@
       var box = document.createElement('div');
       box.innerHTML = html;
       var tables = [];
-      try { tables = box.querySelectorAll('table[data-af-table="1"],table.af-ae-table'); } catch (eFind) { tables = []; }
+      try { tables = box.querySelectorAll('table'); } catch (eFind) { tables = []; }
       for (var i = 0; i < tables.length; i++) {
         var table = tables[i];
         if (!table || !table.parentNode) continue;
+        if (!isSerializableTable(table)) continue;
         var isNested = false;
-        try { isNested = !!(table.parentElement && table.parentElement.closest && table.parentElement.closest('table[data-af-table="1"],table.af-ae-table')); } catch (eNested) { isNested = false; }
+        try { isNested = !!(table.parentElement && table.parentElement.closest && table.parentElement.closest('table')); } catch (eNested) { isNested = false; }
         if (isNested) continue;
 
         var bbTable = serializeAfTableToBb(table);
@@ -708,12 +728,13 @@
           box.innerHTML = html;
 
           var tables = [];
-          try { tables = box.querySelectorAll('table[data-af-table="1"],table.af-ae-table'); } catch (eFind) { tables = []; }
+          try { tables = box.querySelectorAll('table'); } catch (eFind) { tables = []; }
           for (var i = 0; i < tables.length; i++) {
             var table = tables[i];
             if (!table || !table.parentNode) continue;
+            if (!isSerializableTable(table)) continue;
             var isNested = false;
-            try { isNested = !!(table.parentElement && table.parentElement.closest && table.parentElement.closest('table[data-af-table="1"],table.af-ae-table')); } catch (eNested) { isNested = false; }
+            try { isNested = !!(table.parentElement && table.parentElement.closest && table.parentElement.closest('table')); } catch (eNested) { isNested = false; }
             if (isNested) continue;
             var bb = serializeAfTableToBb(table);
 
