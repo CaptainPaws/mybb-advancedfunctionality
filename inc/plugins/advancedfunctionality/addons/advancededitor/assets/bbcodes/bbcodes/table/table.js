@@ -276,16 +276,13 @@
         else if (style.marginLeft === 'auto') attrs.align = 'right';
         else if (style.marginRight === 'auto') attrs.align = 'left';
       }
-      // Для data-af таблиц не угадываем table-level цвета из визуальных style/content.
-      if (!hasAfData) {
-        if (!attrs.bgcolor) attrs.bgcolor = readColorToken(style.backgroundColor);
-        if (!attrs.textcolor) attrs.textcolor = readColorToken(style.color);
-        if (!attrs.bgcolor) attrs.bgcolor = readColorToken(style.getPropertyValue('--af-tbl-bg'));
-        if (!attrs.textcolor) attrs.textcolor = readColorToken(style.getPropertyValue('--af-tbl-txt'));
-        if (!attrs.hbgcolor) attrs.hbgcolor = readColorToken(style.getPropertyValue('--af-tbl-hbg'));
-        if (!attrs.htextcolor) attrs.htextcolor = readColorToken(style.getPropertyValue('--af-tbl-htxt'));
-        if (!attrs.bordercolor) attrs.bordercolor = readColorToken(style.borderColor || style.getPropertyValue('--af-tbl-bc'));
-      }
+
+      // Даже у data-af-table без data-af-* атрибуты должны восстанавливаться из CSS vars.
+      if (!attrs.bgcolor) attrs.bgcolor = readColorToken(style.getPropertyValue('--af-tbl-bg') || style.backgroundColor);
+      if (!attrs.textcolor) attrs.textcolor = readColorToken(style.getPropertyValue('--af-tbl-txt') || style.color);
+      if (!attrs.hbgcolor) attrs.hbgcolor = readColorToken(style.getPropertyValue('--af-tbl-hbg'));
+      if (!attrs.htextcolor) attrs.htextcolor = readColorToken(style.getPropertyValue('--af-tbl-htxt'));
+      if (!attrs.bordercolor) attrs.bordercolor = readColorToken(style.getPropertyValue('--af-tbl-bc') || style.borderColor);
 
       if (!attrs.borderwidth && style.borderWidth) attrs.borderwidth = asText(style.borderWidth).trim().toLowerCase();
       if (!attrs.borderwidth) attrs.borderwidth = normBorderWidth(style.getPropertyValue('--af-tbl-bw'));
@@ -409,7 +406,7 @@
     return open;
   }
 
-  function buildBbcode(rows, cols, opts) {
+  function createTableModel(rows, cols, opts) {
     rows = Math.max(1, Math.min(50, rows | 0));
     cols = Math.max(1, Math.min(50, cols | 0));
     opts = opts || {};
@@ -417,10 +414,8 @@
     var attrs = normalizeTableAttrs(opts);
     attrs.width = normWidthToken(opts.width || attrs.width);
 
-    var fill = !!opts.fill;
     var colWidths = Array.isArray(opts.colWidths) ? opts.colWidths : parseWidthList(opts.colWidths, cols);
-    var open = tableAttrsToBbOpen(attrs);
-    var close = '[/table]';
+    var model = { attrs: attrs, rows: [] };
 
     function isHeaderCell(r, c) {
       if (attrs.headers === 'row') return r === 1;
@@ -429,65 +424,86 @@
       return false;
     }
 
-    var out = [open];
-
+    var fill = !!opts.fill;
     for (var r = 1; r <= rows; r++) {
-      out.push('[tr]');
+      var rowModel = { cells: [] };
       for (var c = 1; c <= cols; c++) {
-        var th = isHeaderCell(r, c);
-        var tag = th ? 'th' : 'td';
+        var tag = isHeaderCell(r, c) ? 'th' : 'td';
         var txt = '';
 
-        if (fill && th) {
+        if (fill && tag === 'th') {
           if ((attrs.headers === 'row' || attrs.headers === 'both') && r === 1) txt = 'Header ' + c;
           if ((attrs.headers === 'col' || attrs.headers === 'both') && c === 1) txt = 'Row ' + r;
           if (attrs.headers === 'both' && r === 1 && c === 1) txt = ' ';
         }
 
-        var cw = (colWidths && colWidths[c - 1]) ? colWidths[c - 1] : '';
-        var openCell = '[' + tag + (cw ? (' width=' + cw) : '') + ']';
-        out.push(openCell + txt + '[/' + tag + ']');
+        rowModel.cells.push({
+          tag: tag,
+          width: (colWidths && colWidths[c - 1]) ? colWidths[c - 1] : '',
+          content: txt
+        });
+      }
+      model.rows.push(rowModel);
+    }
+
+    return model;
+  }
+
+  function modelToCanonicalBbcode(model) {
+    model = model || { attrs: {}, rows: [] };
+    var out = [tableAttrsToBbOpen(model.attrs || {})];
+    var rows = Array.isArray(model.rows) ? model.rows : [];
+
+    for (var r = 0; r < rows.length; r++) {
+      var row = rows[r] || {};
+      var cells = Array.isArray(row.cells) ? row.cells : [];
+      out.push('[tr]');
+      for (var c = 0; c < cells.length; c++) {
+        var cell = cells[c] || {};
+        var tag = (asText(cell.tag).toLowerCase() === 'th') ? 'th' : 'td';
+        var width = normWidthToken(cell.width);
+        var content = asText(cell.content);
+        out.push('[' + tag + (width ? ' width=' + width : '') + ']' + content + '[/' + tag + ']');
       }
       out.push('[/tr]');
     }
 
-    out.push(close);
+    out.push('[/table]');
     return out.join('\n');
   }
 
-  function buildHtmlFromBbcode(rows, cols, opts) {
-    rows = Math.max(1, Math.min(50, rows | 0));
-    cols = Math.max(1, Math.min(50, cols | 0));
-    opts = opts || {};
-
-    var attrs = normalizeTableAttrs(opts);
-    attrs.width = normWidthToken(opts.width || attrs.width);
-    var colWidths = Array.isArray(opts.colWidths) ? opts.colWidths : parseWidthList(opts.colWidths, cols);
-
-    function isHeaderCell(r, c) {
-      if (attrs.headers === 'row') return r === 1;
-      if (attrs.headers === 'col') return c === 1;
-      if (attrs.headers === 'both') return (r === 1 || c === 1);
-      return false;
-    }
-
+  function modelToWysiwygHtml(model) {
+    model = model || { attrs: {}, rows: [] };
+    var attrs = normalizeTableAttrs(model.attrs || {});
+    var rows = Array.isArray(model.rows) ? model.rows : [];
     var html = [];
+
     html.push('<table class="af-ae-table" ' + attrsToDataAttrs(attrs) + ' data-headers="' + (attrs.headers || '') + '" style="' + buildTableStyle(attrs) + '">');
 
-    for (var r = 1; r <= rows; r++) {
+    for (var r = 0; r < rows.length; r++) {
+      var row = rows[r] || {};
+      var cells = Array.isArray(row.cells) ? row.cells : [];
       html.push('<tr>');
-      for (var c = 1; c <= cols; c++) {
-        var th = isHeaderCell(r, c);
-        var tag = th ? 'th' : 'td';
-        var cw = (colWidths && colWidths[c - 1]) ? colWidths[c - 1] : '';
-        var cellStyle = buildCellStyle(tag, attrs, cw, th);
-        html.push('<' + tag + (cellStyle ? ' style="' + cellStyle + '"' : '') + '><br></' + tag + '>');
+      for (var c = 0; c < cells.length; c++) {
+        var cell = cells[c] || {};
+        var tag = (asText(cell.tag).toLowerCase() === 'th') ? 'th' : 'td';
+        var cellStyle = buildCellStyle(tag, attrs, normWidthToken(cell.width), tag === 'th');
+        var content = asText(cell.content).trim();
+        html.push('<' + tag + (cellStyle ? ' style="' + cellStyle + '"' : '') + '>' + (content || '<br>') + '</' + tag + '>');
       }
       html.push('</tr>');
     }
 
     html.push('</table><p><br></p>');
     return html.join('');
+  }
+
+  function buildBbcode(rows, cols, opts) {
+    return modelToCanonicalBbcode(createTableModel(rows, cols, opts));
+  }
+
+  function buildHtmlFromBbcode(rows, cols, opts) {
+    return modelToWysiwygHtml(createTableModel(rows, cols, opts));
   }
 
   function ensureTableCss(inst) {
@@ -620,13 +636,15 @@
     function serializeAfTableToBb(tableEl) {
       if (!tableEl || tableEl.nodeType !== 1) return '';
 
-      var attrs = parseAttrsFromDom(tableEl);
-      var out = [tableAttrsToBbOpen(attrs)];
+      var model = {
+        attrs: parseAttrsFromDom(tableEl),
+        rows: []
+      };
       var rows = getDirectChildRows(tableEl);
 
       for (var i = 0; i < rows.length; i++) {
         var row = rows[i];
-        out.push('[tr]');
+        var rowModel = { cells: [] };
 
         var cells = getDirectRowCells(row);
         for (var j = 0; j < cells.length; j++) {
@@ -634,14 +652,13 @@
           var tag = ((cell.tagName || '').toLowerCase() === 'th') ? 'th' : 'td';
           var width = getCanonicalColumnWidth(cell);
           var content = cleanupTableInheritedFormatting(cell, tag, convertCellHtmlToBb(cell));
-          out.push('[' + tag + (width ? ' width=' + width : '') + ']' + content + '[/' + tag + ']');
+          rowModel.cells.push({ tag: tag, width: width, content: content });
         }
 
-        out.push('[/tr]');
+        model.rows.push(rowModel);
       }
 
-      out.push('[/table]');
-      return out.join('\n');
+      return modelToCanonicalBbcode(model);
     }
 
     try {

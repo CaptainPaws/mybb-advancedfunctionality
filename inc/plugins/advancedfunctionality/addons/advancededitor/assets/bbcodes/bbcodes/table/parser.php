@@ -197,9 +197,10 @@ function af_ae_bbcode_table_parse(&$message): void
 
                 $headers = !empty($attrs['headers']) ? $attrs['headers'] : '';
                 $dataHeaders = $headers !== '' ? (' data-headers="' . htmlspecialchars_uni($headers) . '"') : '';
+                $dataAttrs = af_ae_bbcode_table_build_data_attrs($attrs);
 
                 // ВАЖНО: класс/маркер оставляем прежними (если у тебя уже есть CSS под них)
-                return '<table class="af-ae-table" data-af-table="1"' . $styleAttr . $dataHeaders . '>' . $x . '</table>';
+                return '<table class="af-ae-table" data-af-table="1"' . $dataAttrs . $styleAttr . $dataHeaders . '>' . $x . '</table>';
             },
             $message2
         );
@@ -215,6 +216,37 @@ function af_ae_bbcode_table_parse(&$message): void
     }
 
     $message = $message2;
+}
+
+function af_ae_bbcode_table_build_data_attrs(array $attrs): string
+{
+    $pairs = [];
+
+    $map = [
+        'width'       => (string)($attrs['width'] ?? ''),
+        'align'       => (string)($attrs['align'] ?? ''),
+        'headers'     => (string)($attrs['headers'] ?? ''),
+        'bgcolor'     => (string)($attrs['bgcolor'] ?? ''),
+        'textcolor'   => (string)($attrs['textcolor'] ?? ''),
+        'hbgcolor'    => (string)($attrs['hbgcolor'] ?? ''),
+        'htextcolor'  => (string)($attrs['htextcolor'] ?? ''),
+        'border'      => (string)($attrs['border'] ?? '1'),
+        'bordercolor' => (string)($attrs['bordercolor'] ?? ''),
+        'borderwidth' => (string)($attrs['borderwidth'] ?? ''),
+    ];
+
+    foreach ($map as $key => $value) {
+        $value = trim($value);
+        if ($key === 'border' && $value === '') {
+            $value = '1';
+        }
+        if ($value === '') {
+            continue;
+        }
+        $pairs[] = ' data-af-' . $key . '="' . htmlspecialchars_uni($value) . '"';
+    }
+
+    return implode('', $pairs);
 }
 
 function af_ae_bbcode_table_parse_attrs(string $raw): array
@@ -245,10 +277,9 @@ function af_ae_bbcode_table_parse_attrs(string $raw): array
     }
 
     // width
-    if (preg_match('~\bwidth\s*=\s*([0-9]{1,4})(px|%|em|rem|vw|vh)\b~i', $raw, $m)) {
-        $out['width'] = $m[1] . strtolower($m[2]);
-    } elseif (preg_match('~\bwidth\s*=\s*([0-9]{1,4})(px|%)\b~i', $raw, $m2)) {
-        $out['width'] = $m2[1] . strtolower($m2[2]);
+    if (preg_match('~\bwidth\s*=\s*([0-9]{1,4})(px|%|em|rem|vw|vh)?\b~i', $raw, $m)) {
+        $unit = !empty($m[2]) ? strtolower($m[2]) : 'px';
+        $out['width'] = $m[1] . $unit;
     }
 
     if (preg_match('~\balign\s*=\s*(left|center|right)\b~i', $raw, $m)) {
