@@ -237,12 +237,163 @@
     return styles.join(';');
   }
 
+  function getFirstTableCellByTag(tableEl, selector) {
+    if (!tableEl || tableEl.nodeType !== 1) return null;
+    try {
+      return tableEl.querySelector(selector) || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function readColorFromNode(node) {
+    if (!node || node.nodeType !== 1) return '';
+    try {
+      return readColorToken((node.style && node.style.color) || '');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function readBackgroundFromNode(node) {
+    if (!node || node.nodeType !== 1) return '';
+    try {
+      return readColorToken((node.style && (node.style.backgroundColor || node.style.background)) || '');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function readFirstDescendantColor(root) {
+    if (!root || root.nodeType !== 1 || !root.querySelectorAll) return '';
+    try {
+      var nodes = root.querySelectorAll('*');
+      for (var i = 0; i < nodes.length; i++) {
+        var color = readColorFromNode(nodes[i]);
+        if (color) return color;
+      }
+    } catch (e) {}
+    return '';
+  }
+
+  function readFirstDescendantBackground(root) {
+    if (!root || root.nodeType !== 1 || !root.querySelectorAll) return '';
+    try {
+      var nodes = root.querySelectorAll('*');
+      for (var i = 0; i < nodes.length; i++) {
+        var color = readBackgroundFromNode(nodes[i]);
+        if (color) return color;
+      }
+    } catch (e) {}
+    return '';
+  }
+
+  function getSingleElementChildIgnoringWhitespace(root) {
+    if (!root || !root.childNodes) return null;
+
+    var found = null;
+    for (var i = 0; i < root.childNodes.length; i++) {
+      var n = root.childNodes[i];
+
+      if (n.nodeType === 3) {
+        if (String(n.nodeValue || '').trim() !== '') return null;
+        continue;
+      }
+
+      if (n.nodeType !== 1) return null;
+      if (found) return null;
+      found = n;
+    }
+
+    return found;
+  }
+
+  function isBoldWrapperNode(node) {
+    if (!node || node.nodeType !== 1) return false;
+
+    var tag = String(node.tagName || '').toLowerCase();
+    if (tag === 'b' || tag === 'strong') return true;
+
+    var cls = String(node.className || '');
+    if (/\bmycode_b\b/.test(cls)) return true;
+
+    var fw = '';
+    try { fw = String((node.style && node.style.fontWeight) || '').toLowerCase(); } catch (e) { fw = ''; }
+    if (fw === 'bold') return true;
+
+    var fwNum = parseInt(fw, 10);
+    if (isFinite(fwNum) && fwNum >= 600) return true;
+
+    return false;
+  }
+
+  function isColorWrapperNode(node, expectedColor) {
+    if (!node || node.nodeType !== 1 || !expectedColor) return false;
+
+    var declared = readColorFromNode(node);
+    if (declared && declared === expectedColor) return true;
+
+    var cls = String(node.className || '');
+    if (/\bmycode_color\b/.test(cls)) {
+      var inline = readColorFromNode(node);
+      if (inline && inline === expectedColor) return true;
+    }
+
+    return false;
+  }
+
+  function stripInheritedCellFormattingDom(cellEl, tag) {
+    if (!cellEl || cellEl.nodeType !== 1) return '';
+
+    var clone = cellEl.cloneNode(true);
+    var table = null;
+
+    try { table = cellEl.closest ? cellEl.closest('table') : null; } catch (e0) { table = null; }
+
+    var attrs = parseAttrsFromDom(table);
+    var inheritedColor = (tag === 'th')
+      ? (attrs.htextcolor || attrs.textcolor || '')
+      : (attrs.textcolor || '');
+
+    var changed = true;
+    while (changed) {
+      changed = false;
+
+      var only = getSingleElementChildIgnoringWhitespace(clone);
+      if (!only) break;
+
+      if (inheritedColor && isColorWrapperNode(only, inheritedColor)) {
+        clone.innerHTML = only.innerHTML;
+        changed = true;
+        continue;
+      }
+
+      if (tag === 'th' && isBoldWrapperNode(only)) {
+        clone.innerHTML = only.innerHTML;
+        changed = true;
+        continue;
+      }
+    }
+
+    return asText(clone.innerHTML);
+  }
+
   function parseAttrsFromDom(tableEl) {
     var attrs = {
-      width: '', align: '', headers: '', bgcolor: '', textcolor: '', hbgcolor: '', htextcolor: '', border: '1', bordercolor: '', borderwidth: ''
+      width: '',
+      align: '',
+      headers: '',
+      bgcolor: '',
+      textcolor: '',
+      hbgcolor: '',
+      htextcolor: '',
+      border: '1',
+      bordercolor: '',
+      borderwidth: ''
     };
 
     if (!tableEl || tableEl.nodeType !== 1) return attrs;
+
     if ((tableEl.tagName || '').toLowerCase() !== 'table') {
       try {
         var nested = tableEl.querySelector && tableEl.querySelector('table[data-af-table="1"],table.af-ae-table,table');
@@ -254,84 +405,120 @@
       try { return asText(tableEl.getAttribute('data-af-' + name)).trim(); } catch (e) { return ''; }
     }
 
-    var hasAfData = false;
+    // 1. Сначала читаем явные data-af-*.
     for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
       var key = TABLE_ATTR_KEYS[i];
       var val = pickData(key);
-      if (val) {
-        attrs[key] = val;
-        hasAfData = true;
-      }
+      if (val) attrs[key] = val;
     }
 
-    if (!hasAfData) {
-      try { hasAfData = asText(tableEl.getAttribute('data-af-table')).trim() === '1'; } catch (eData) {}
-    }
-
+    // 2. Потом добираем недостающее из table-level inline styles / css vars.
     try {
       var style = tableEl.style || {};
-      if (!attrs.width && style.width) attrs.width = asText(style.width).trim();
+
+      if (!attrs.width) attrs.width = normWidthToken(style.width || '');
       if (!attrs.align) {
         if (style.marginLeft === 'auto' && style.marginRight === 'auto') attrs.align = 'center';
         else if (style.marginLeft === 'auto') attrs.align = 'right';
         else if (style.marginRight === 'auto') attrs.align = 'left';
       }
 
-      // Даже у data-af-table без data-af-* атрибуты должны восстанавливаться из CSS vars.
-      if (!attrs.bgcolor) attrs.bgcolor = readColorToken(style.getPropertyValue('--af-tbl-bg') || style.backgroundColor);
-      if (!attrs.textcolor) attrs.textcolor = readColorToken(style.getPropertyValue('--af-tbl-txt') || style.color);
-      if (!attrs.hbgcolor) attrs.hbgcolor = readColorToken(style.getPropertyValue('--af-tbl-hbg'));
-      if (!attrs.htextcolor) attrs.htextcolor = readColorToken(style.getPropertyValue('--af-tbl-htxt'));
-      if (!attrs.bordercolor) attrs.bordercolor = readColorToken(style.getPropertyValue('--af-tbl-bc') || style.borderColor);
-
-      if (!attrs.borderwidth && style.borderWidth) attrs.borderwidth = asText(style.borderWidth).trim().toLowerCase();
-      if (!attrs.borderwidth) attrs.borderwidth = normBorderWidth(style.getPropertyValue('--af-tbl-bw'));
+      if (!attrs.bgcolor) attrs.bgcolor = readColorToken(style.getPropertyValue('--af-tbl-bg') || style.backgroundColor || '');
+      if (!attrs.textcolor) attrs.textcolor = readColorToken(style.getPropertyValue('--af-tbl-txt') || style.color || '');
+      if (!attrs.hbgcolor) attrs.hbgcolor = readColorToken(style.getPropertyValue('--af-tbl-hbg') || '');
+      if (!attrs.htextcolor) attrs.htextcolor = readColorToken(style.getPropertyValue('--af-tbl-htxt') || '');
+      if (!attrs.bordercolor) attrs.bordercolor = readColorToken(style.getPropertyValue('--af-tbl-bc') || style.borderColor || '');
+      if (!attrs.borderwidth) attrs.borderwidth = normBorderWidth(style.getPropertyValue('--af-tbl-bw') || style.borderWidth || '');
 
       if (attrs.borderwidth === '0px') attrs.border = '0';
     } catch (e0) {}
 
-    if (!hasAfData) {
-      try {
-        var firstTd = tableEl.querySelector('td,th');
-        if (!attrs.borderwidth && firstTd && firstTd.style && firstTd.style.borderWidth) attrs.borderwidth = asText(firstTd.style.borderWidth).trim().toLowerCase();
-        if (!attrs.bordercolor && firstTd && firstTd.style) attrs.bordercolor = readColorToken(firstTd.style.borderColor);
+    // 3. Потом ВСЕГДА, а не только при !hasAfData, добираем недостающее из ячеек.
+    try {
+      var firstHeaderCell = getFirstTableCellByTag(tableEl, 'th');
+      var firstBodyCell = getFirstTableCellByTag(tableEl, 'td');
+      var firstAnyCell = firstHeaderCell || firstBodyCell || getFirstTableCellByTag(tableEl, 'td,th');
 
-        var firstHeaderCell = tableEl.querySelector('th');
-        var firstBodyCell = tableEl.querySelector('td');
-        var firstAnyCell = firstHeaderCell || firstBodyCell || firstTd;
+      if (!attrs.borderwidth && firstAnyCell) {
+        attrs.borderwidth = normBorderWidth(
+          (firstAnyCell.style && firstAnyCell.style.borderWidth) ||
+          ''
+        );
+      }
 
-        if (!attrs.bgcolor && firstBodyCell && firstBodyCell.style) attrs.bgcolor = readColorToken(firstBodyCell.style.backgroundColor);
-        if (!attrs.textcolor && firstBodyCell && firstBodyCell.style) attrs.textcolor = readColorToken(firstBodyCell.style.color);
+      if (!attrs.bordercolor && firstAnyCell) {
+        attrs.bordercolor = readColorToken(
+          (firstAnyCell.style && firstAnyCell.style.borderColor) ||
+          ''
+        );
+      }
 
-        if (!attrs.hbgcolor && firstHeaderCell && firstHeaderCell.style) attrs.hbgcolor = readColorToken(firstHeaderCell.style.backgroundColor);
-        if (!attrs.htextcolor && firstHeaderCell && firstHeaderCell.style) attrs.htextcolor = readColorToken(firstHeaderCell.style.color);
+      if (!attrs.bgcolor && firstBodyCell) {
+        attrs.bgcolor =
+          readBackgroundFromNode(firstBodyCell) ||
+          readFirstDescendantBackground(firstBodyCell) ||
+          '';
+      }
 
-        if (!attrs.bgcolor && firstAnyCell && firstAnyCell.style) attrs.bgcolor = readColorToken(firstAnyCell.style.backgroundColor);
-        if (!attrs.textcolor && firstAnyCell && firstAnyCell.style) attrs.textcolor = readColorToken(firstAnyCell.style.color);
+      if (!attrs.textcolor && firstBodyCell) {
+        attrs.textcolor =
+          readColorFromNode(firstBodyCell) ||
+          readFirstDescendantColor(firstBodyCell) ||
+          '';
+      }
 
-        if (!attrs.headers) {
-          var hasTh = !!tableEl.querySelector('th');
-          if (hasTh) {
-            var rowHasAllTh = false;
-            var rows = tableEl.rows || [];
-            if (rows.length) {
-              var firstRow = rows[0];
-              if (firstRow && firstRow.cells && firstRow.cells.length) {
-                rowHasAllTh = true;
-                for (var ri = 0; ri < firstRow.cells.length; ri++) {
-                  if ((firstRow.cells[ri].tagName || '').toLowerCase() !== 'th') {
-                    rowHasAllTh = false;
-                    break;
-                  }
+      if (!attrs.hbgcolor && firstHeaderCell) {
+        attrs.hbgcolor =
+          readBackgroundFromNode(firstHeaderCell) ||
+          readFirstDescendantBackground(firstHeaderCell) ||
+          '';
+      }
+
+      if (!attrs.htextcolor && firstHeaderCell) {
+        attrs.htextcolor =
+          readColorFromNode(firstHeaderCell) ||
+          readFirstDescendantColor(firstHeaderCell) ||
+          '';
+      }
+
+      if (!attrs.bgcolor && firstAnyCell) {
+        attrs.bgcolor =
+          readBackgroundFromNode(firstAnyCell) ||
+          readFirstDescendantBackground(firstAnyCell) ||
+          '';
+      }
+
+      if (!attrs.textcolor && firstAnyCell) {
+        attrs.textcolor =
+          readColorFromNode(firstAnyCell) ||
+          readFirstDescendantColor(firstAnyCell) ||
+          '';
+      }
+
+      if (!attrs.headers) {
+        var hasTh = false;
+        try { hasTh = !!tableEl.querySelector('th'); } catch (eHasTh) { hasTh = false; }
+
+        if (hasTh) {
+          var rowHasAllTh = false;
+          var rows = tableEl.rows || [];
+          if (rows.length) {
+            var firstRow = rows[0];
+            if (firstRow && firstRow.cells && firstRow.cells.length) {
+              rowHasAllTh = true;
+              for (var ri = 0; ri < firstRow.cells.length; ri++) {
+                if ((firstRow.cells[ri].tagName || '').toLowerCase() !== 'th') {
+                  rowHasAllTh = false;
+                  break;
                 }
               }
             }
-
-            attrs.headers = rowHasAllTh ? 'row' : 'both';
           }
+
+          attrs.headers = rowHasAllTh ? 'row' : 'both';
         }
-      } catch (eCell) {}
-    }
+      }
+    } catch (eCell) {}
 
     if (!attrs.headers) {
       try { attrs.headers = asText(tableEl.getAttribute('data-headers')).trim().toLowerCase(); } catch (e1) {}
@@ -343,16 +530,14 @@
     }
 
     attrs = normalizeTableAttrs(attrs);
+
     tableDebugLog('parseAttrsFromDom', {
-      hasTable: !!tableEl,
-      hasAfData: !!(tableEl && tableEl.getAttribute && tableEl.getAttribute('data-af-table') === '1'),
       className: tableEl && tableEl.className ? asText(tableEl.className) : '',
       attrs: attrs
     });
+
     return attrs;
   }
-
-
 
   function getCanonicalColumnWidth(cellEl) {
     if (!cellEl || cellEl.nodeType !== 1 || !cellEl.parentElement || !cellEl.parentElement.cells) return '';
@@ -440,6 +625,153 @@
       return false;
     }
   }
+
+  function getDirectChildRows(tableEl) {
+    if (!tableEl || tableEl.nodeType !== 1) return [];
+
+    var rows = [];
+    var groups = [];
+    try {
+      groups = tableEl.querySelectorAll(':scope > thead,:scope > tbody,:scope > tfoot');
+    } catch (eScope) {
+      groups = [];
+    }
+
+    if (groups && groups.length) {
+      for (var g = 0; g < groups.length; g++) {
+        var groupRows = groups[g].children || [];
+        for (var gr = 0; gr < groupRows.length; gr++) {
+          var rowNode = groupRows[gr];
+          if ((rowNode.tagName || '').toLowerCase() === 'tr') rows.push(rowNode);
+        }
+      }
+    } else {
+      var direct = tableEl.children || [];
+      for (var i = 0; i < direct.length; i++) {
+        var node = direct[i];
+        if ((node.tagName || '').toLowerCase() === 'tr') rows.push(node);
+      }
+    }
+
+    return rows;
+  }
+
+  function getDirectRowCells(rowEl) {
+    if (!rowEl || rowEl.nodeType !== 1) return [];
+    var out = [];
+    var children = rowEl.children || [];
+    for (var i = 0; i < children.length; i++) {
+      var node = children[i];
+      var tag = (node.tagName || '').toLowerCase();
+      if (tag === 'td' || tag === 'th') out.push(node);
+    }
+    return out;
+  }
+
+  function normalizeAfTablesInHtmlWithInst(html, inst) {
+    html = asText(html);
+    if (!html || html.indexOf('<table') === -1) return html;
+
+    var box = document.createElement('div');
+    box.innerHTML = html;
+
+    var tables = [];
+    try { tables = box.querySelectorAll('table'); } catch (eFind) { tables = []; }
+
+    for (var i = 0; i < tables.length; i++) {
+      var table = tables[i];
+      if (!table || !table.parentNode) continue;
+      if (!isSerializableTable(table)) continue;
+
+      var isNested = false;
+      try {
+        isNested = !!(table.parentElement && table.parentElement.closest && table.parentElement.closest('table'));
+      } catch (eNested) {
+        isNested = false;
+      }
+      if (isNested) continue;
+
+      var bbTable = serializeAfTableToBb(table, inst);
+      table.parentNode.replaceChild(document.createTextNode('\n' + bbTable + '\n'), table);
+    }
+
+    return box.innerHTML;
+  }
+
+  function convertCellHtmlToBbWithInst(cellEl, inst) {
+    if (!cellEl || cellEl.nodeType !== 1) return '';
+
+    var tag = ((cellEl.tagName || '').toLowerCase() === 'th') ? 'th' : 'td';
+
+    var html = stripInheritedCellFormattingDom(cellEl, tag);
+    if (!html) return '';
+
+    html = normalizeAfTablesInHtmlWithInst(html, inst);
+
+    var bb = '';
+    try {
+      if (inst && typeof inst.toBBCode === 'function') {
+        bb = asText(inst.toBBCode(html));
+      }
+    } catch (e1) { bb = ''; }
+
+    if (!bb) {
+      try {
+        var plugin = (inst && typeof inst.getPlugin === 'function') ? inst.getPlugin('bbcode') : null;
+        if (plugin && typeof plugin.signalToSource === 'function') {
+          bb = asText(plugin.signalToSource(html));
+        }
+      } catch (e2) { bb = ''; }
+    }
+
+    if (!bb) {
+      try { bb = asText(cellEl.textContent || ''); } catch (e3) { bb = ''; }
+    }
+
+    bb = bb.replace(/^\s+|\s+$/g, '');
+    if (bb === '[br]' || bb === '[br/]') bb = '';
+
+    return bb;
+  }
+
+  function serializeAfTableToBb(tableEl, inst) {
+    if (!tableEl || tableEl.nodeType !== 1) return '';
+
+    var model = {
+      attrs: parseAttrsFromDom(tableEl),
+      rows: []
+    };
+
+    var rows = getDirectChildRows(tableEl);
+
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var rowModel = { cells: [] };
+
+      var cells = getDirectRowCells(row);
+      for (var j = 0; j < cells.length; j++) {
+        var cell = cells[j];
+        var tag = ((cell.tagName || '').toLowerCase() === 'th') ? 'th' : 'td';
+        var width = getCanonicalColumnWidth(cell);
+        var content = cleanupTableInheritedFormatting(
+          cell,
+          tag,
+          convertCellHtmlToBbWithInst(cell, inst)
+        );
+
+        rowModel.cells.push({
+          tag: tag,
+          width: width,
+          content: content
+        });
+      }
+
+      model.rows.push(rowModel);
+    }
+
+    return modelToCanonicalBbcode(model);
+  }
+
   function tableAttrsToBbOpen(attrs) {
     attrs = normalizeTableAttrs(attrs);
     var parts = [];
@@ -591,131 +923,6 @@
     if (!inst || inst.__afAeTableToSourceBound || typeof inst.bind !== 'function') return;
     inst.__afAeTableToSourceBound = true;
 
-    function getDirectChildRows(tableEl) {
-      if (!tableEl || tableEl.nodeType !== 1) return [];
-
-      var rows = [];
-      var groups = [];
-      try {
-        groups = tableEl.querySelectorAll(':scope > thead,:scope > tbody,:scope > tfoot');
-      } catch (eScope) {
-        groups = [];
-      }
-
-      if (groups && groups.length) {
-        for (var g = 0; g < groups.length; g++) {
-          var groupRows = groups[g].children || [];
-          for (var gr = 0; gr < groupRows.length; gr++) {
-            var rowNode = groupRows[gr];
-            if ((rowNode.tagName || '').toLowerCase() === 'tr') rows.push(rowNode);
-          }
-        }
-      } else {
-        var direct = tableEl.children || [];
-        for (var i = 0; i < direct.length; i++) {
-          var node = direct[i];
-          if ((node.tagName || '').toLowerCase() === 'tr') rows.push(node);
-        }
-      }
-
-      return rows;
-    }
-
-    function getDirectRowCells(rowEl) {
-      if (!rowEl || rowEl.nodeType !== 1) return [];
-      var out = [];
-      var children = rowEl.children || [];
-      for (var i = 0; i < children.length; i++) {
-        var node = children[i];
-        var tag = (node.tagName || '').toLowerCase();
-        if (tag === 'td' || tag === 'th') out.push(node);
-      }
-      return out;
-    }
-
-    function normalizeAfTablesInHtml(html) {
-      html = asText(html);
-      if (!html || html.indexOf('<table') === -1) return html;
-
-      var box = document.createElement('div');
-      box.innerHTML = html;
-      var tables = [];
-      try { tables = box.querySelectorAll('table'); } catch (eFind) { tables = []; }
-      for (var i = 0; i < tables.length; i++) {
-        var table = tables[i];
-        if (!table || !table.parentNode) continue;
-        if (!isSerializableTable(table)) continue;
-        var isNested = false;
-        try { isNested = !!(table.parentElement && table.parentElement.closest && table.parentElement.closest('table')); } catch (eNested) { isNested = false; }
-        if (isNested) continue;
-
-        var bbTable = serializeAfTableToBb(table);
-        table.parentNode.replaceChild(document.createTextNode('\n' + bbTable + '\n'), table);
-      }
-
-      return box.innerHTML;
-    }
-
-    function convertCellHtmlToBb(cellEl) {
-      if (!cellEl || cellEl.nodeType !== 1) return '';
-
-      var html = '';
-      try { html = asText(cellEl.innerHTML); } catch (e0) { html = ''; }
-      if (!html) return '';
-
-      html = normalizeAfTablesInHtml(html);
-
-      var bb = '';
-      try {
-        if (typeof inst.toBBCode === 'function') {
-          bb = asText(inst.toBBCode(html));
-        }
-      } catch (e1) { bb = ''; }
-
-      if (!bb) {
-        try {
-          var plugin = (typeof inst.getPlugin === 'function') ? inst.getPlugin('bbcode') : null;
-          if (plugin && typeof plugin.signalToSource === 'function') bb = asText(plugin.signalToSource(html));
-        } catch (e2) { bb = ''; }
-      }
-
-      if (!bb) {
-        try { bb = asText(cellEl.textContent || ''); } catch (e3) { bb = ''; }
-      }
-
-      bb = bb.replace(/^\s+|\s+$/g, '');
-      if (bb === '[br]' || bb === '[br/]') bb = '';
-      return bb;
-    }
-
-    function serializeAfTableToBb(tableEl) {
-      if (!tableEl || tableEl.nodeType !== 1) return '';
-
-      var model = {
-        attrs: parseAttrsFromDom(tableEl),
-        rows: []
-      };
-      var rows = getDirectChildRows(tableEl);
-
-      for (var i = 0; i < rows.length; i++) {
-        var row = rows[i];
-        var rowModel = { cells: [] };
-
-        var cells = getDirectRowCells(row);
-        for (var j = 0; j < cells.length; j++) {
-          var cell = cells[j];
-          var tag = ((cell.tagName || '').toLowerCase() === 'th') ? 'th' : 'td';
-          var width = getCanonicalColumnWidth(cell);
-          var content = cleanupTableInheritedFormatting(cell, tag, convertCellHtmlToBb(cell));
-          rowModel.cells.push({ tag: tag, width: width, content: content });
-        }
-
-        model.rows.push(rowModel);
-      }
-
-      return modelToCanonicalBbcode(model);
-    }
-
     try {
       inst.bind('toSource', function (html) {
         html = asText(html);
@@ -729,15 +936,21 @@
 
           var tables = [];
           try { tables = box.querySelectorAll('table'); } catch (eFind) { tables = []; }
+
           for (var i = 0; i < tables.length; i++) {
             var table = tables[i];
             if (!table || !table.parentNode) continue;
             if (!isSerializableTable(table)) continue;
-            var isNested = false;
-            try { isNested = !!(table.parentElement && table.parentElement.closest && table.parentElement.closest('table')); } catch (eNested) { isNested = false; }
-            if (isNested) continue;
-            var bb = serializeAfTableToBb(table);
 
+            var isNested = false;
+            try {
+              isNested = !!(table.parentElement && table.parentElement.closest && table.parentElement.closest('table'));
+            } catch (eNested) {
+              isNested = false;
+            }
+            if (isNested) continue;
+
+            var bb = serializeAfTableToBb(table, inst);
             table.parentNode.replaceChild(document.createTextNode('\n' + bb + '\n'), table);
           }
 
@@ -800,17 +1013,17 @@
           var style = buildTableStyle(a);
           return '<table class="af-ae-table" ' + attrsToDataAttrs(a) + ' data-headers="' + (a.headers || '') + '"' + (style ? ' style="' + style + '"' : '') + '>' + (content || '') + '</table>';
         },
-        format: function (el, content) {
-          var a = parseAttrsFromDom(el);
-          tableDebugLog('bb.table.format', { attrs: a, contentLength: asText(content).length });
-          return tableAttrsToBbOpen(a) + (content || '') + '[/table]';
+        format: function (el, _content) {
+          var bbcode = serializeAfTableToBb(el, inst);
+          tableDebugLog('bb.table.format.atomic', { bbcode: bbcode });
+          return bbcode;
         },
         tags: {
           table: {
-            format: function (el, content) {
-              var a = parseAttrsFromDom(el);
-              tableDebugLog('bb.tags.table.format', { attrs: a, contentLength: asText(content).length });
-              return tableAttrsToBbOpen(a) + (content || '') + '[/table]';
+            format: function (el, _content) {
+              var bbcode = serializeAfTableToBb(el, inst);
+              tableDebugLog('bb.tags.table.format.atomic', { bbcode: bbcode });
+              return bbcode;
             }
           }
         }
@@ -1732,22 +1945,28 @@
     var $ = window.jQuery;
     if (!$.sceditor || !$.sceditor.command) return false;
 
-    $.sceditor.command.set(CMD, {
-      exec: function (caller) {
-        if (!openSceditorDropdown(this, caller)) {
-          var bb = buildBbcode(2, 2, { headers: 'none' });
-          var html = buildHtmlFromBbcode(2, 2, { headers: 'none' });
-          insertTableToEditor(this, bb, html);
-        }
-      },
-      txtExec: function (caller) {
-        if (!openSceditorDropdown(this, caller)) {
-          var bb = buildBbcode(2, 2, { headers: 'none' });
-          insertTableToEditor(this, bb, bb);
-        }
-      },
-      tooltip: 'Таблица'
-    });
+    function buildCommand() {
+      return {
+        exec: function (caller) {
+          if (!openSceditorDropdown(this, caller)) {
+            var bb = buildBbcode(2, 2, { headers: 'none' });
+            var html = buildHtmlFromBbcode(2, 2, { headers: 'none' });
+            insertTableToEditor(this, bb, html);
+          }
+        },
+        txtExec: function (caller) {
+          if (!openSceditorDropdown(this, caller)) {
+            var bb = buildBbcode(2, 2, { headers: 'none' });
+            insertTableToEditor(this, bb, bb);
+          }
+        },
+        tooltip: 'Таблица'
+      };
+    }
+
+    // ВАЖНО: перебиваем и кастомную, и стандартную команду.
+    $.sceditor.command.set('af_table', buildCommand());
+    $.sceditor.command.set('table', buildCommand());
 
     return true;
   }
