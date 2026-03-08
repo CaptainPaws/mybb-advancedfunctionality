@@ -239,100 +239,6 @@
     return styles.join(';');
   }
 
-  function applyCanonicalAttrsToTableDom(tableEl, attrs) {
-    if (!tableEl || tableEl.nodeType !== 1) return false;
-    var doc = tableEl.ownerDocument || document;
-    attrs = normalizeTableAttrs(attrs || parseAttrsFromDom(tableEl));
-
-    try {
-      for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
-        var k = TABLE_ATTR_KEYS[i];
-        var v = asText(attrs[k]).trim();
-        if (k === 'border') v = v || '1';
-        tableEl.setAttribute('data-af-' + k, v);
-      }
-      tableEl.setAttribute('data-af-table', '1');
-      tableEl.setAttribute('data-headers', asText(attrs.headers).trim());
-      tableEl.classList.add('af-ae-table');
-      tableEl.setAttribute('style', buildTableStyle(attrs));
-    } catch (e0) {}
-
-    try {
-      for (var r = 0; r < tableEl.rows.length; r++) {
-        var row = tableEl.rows[r];
-        for (var c = 0; c < row.cells.length; c++) {
-          var cell = row.cells[c];
-          var tag = (cell.tagName || '').toLowerCase();
-          var isHeaderByMode = false;
-
-          if (attrs.headers === 'row' && r === 0) isHeaderByMode = true;
-          if (attrs.headers === 'col' && c === 0) isHeaderByMode = true;
-          if (attrs.headers === 'both' && (r === 0 || c === 0)) isHeaderByMode = true;
-
-          var shouldBeTh = (tag === 'th') || isHeaderByMode;
-          if (shouldBeTh && tag !== 'th') {
-            var th = doc.createElement('th');
-            th.innerHTML = cell.innerHTML;
-            try { if (cell.style && cell.style.width) th.style.width = cell.style.width; } catch (eW) {}
-            row.replaceChild(th, cell);
-            cell = th;
-            tag = 'th';
-          } else if (!shouldBeTh && tag === 'th') {
-            var td = doc.createElement('td');
-            td.innerHTML = cell.innerHTML;
-            try { if (cell.style && cell.style.width) td.style.width = cell.style.width; } catch (eW2) {}
-            row.replaceChild(td, cell);
-            cell = td;
-            tag = 'td';
-          }
-
-          var colWidth = getCanonicalColumnWidth(cell);
-          var css = buildCellStyle(tag, attrs, colWidth || '', isHeaderByMode);
-          cell.setAttribute('style', css);
-        }
-      }
-    } catch (e2) {}
-
-    return true;
-  }
-
-  function normalizeExistingEditorTables(inst) {
-    if (!inst || typeof inst.getBody !== 'function') return 0;
-    if (isSourceMode(inst)) return 0;
-
-    var body = null;
-    try { body = inst.getBody(); } catch (e0) { body = null; }
-    if (!body || !body.querySelectorAll) return 0;
-
-    var tables = [];
-    try { tables = body.querySelectorAll('table.af-ae-table,table[data-af-table="1"]'); } catch (e1) { tables = []; }
-
-    var changed = 0;
-    for (var i = 0; i < tables.length; i++) {
-      if (applyCanonicalAttrsToTableDom(tables[i], parseAttrsFromDom(tables[i]))) changed++;
-    }
-
-    tableDebugLog('normalizeExistingEditorTables', { count: changed });
-    return changed;
-  }
-
-  function scheduleTableRehydrate(inst, reason) {
-    if (!inst) return;
-    if (inst.__afAeTableRehydrateTimer) {
-      try { clearTimeout(inst.__afAeTableRehydrateTimer); } catch (e0) {}
-    }
-
-    inst.__afAeTableRehydrateTimer = setTimeout(function () {
-      inst.__afAeTableRehydrateTimer = 0;
-      try { ensureTableCss(inst); } catch (e1) {}
-      try { normalizeExistingEditorTables(inst); } catch (e2) {}
-      if (!hasManagedTablesInBody(inst)) {
-        try { resetFloatingTableState(inst, null, 'rehydrate-no-table'); } catch (e3) {}
-      }
-      tableDebugLog('scheduleTableRehydrate.run', { reason: reason || '' });
-    }, 0);
-  }
-
   function getFirstTableCellByTag(tableEl, selector) {
     if (!tableEl || tableEl.nodeType !== 1) return null;
     try {
@@ -1010,23 +916,6 @@
     } catch (e) {}
   }
 
-  function syncTextareaFromWysiwyg(inst) {
-    try {
-      if (!inst || isSourceMode(inst) || typeof inst.getBody !== 'function') return '';
-      var body = inst.getBody();
-      var ta = getTextareaFromCtx({ sceditor: inst });
-      if (!body || !ta) return '';
-
-      var bb = editorHtmlToBbWithOwnedTables(body.innerHTML, inst);
-      if (typeof bb !== 'string') bb = asText(bb);
-
-      ta.value = bb;
-      try { ta.dispatchEvent(new Event('input', { bubbles: true })); } catch (e0) {}
-      return bb;
-    } catch (e) {
-      return '';
-    }
-  }
 
   function bindSubmitSync(inst) {
     if (!inst || inst.__afAeTableSubmitSyncBound) return;
@@ -1038,7 +927,13 @@
       if (!form) return;
 
       form.addEventListener('submit', function () {
-        try { syncTextareaFromWysiwyg(inst); } catch (e0) {}
+        try {
+          if (isSourceMode(inst) || typeof inst.getBody !== 'function') return;
+          var body = inst.getBody();
+          if (!body || !ta) return;
+          ta.value = editorHtmlToBbWithOwnedTables(body.innerHTML, inst);
+          try { ta.dispatchEvent(new Event('input', { bubbles: true })); } catch (e0) {}
+        } catch (e1) {}
       }, true);
     } catch (e) {}
   }
@@ -1178,97 +1073,7 @@
     bb.__afAeTablePatched = true;
   }
 
-  function bindPreSerializeGuards(inst) {
-    if (!inst || inst.__afAeTableSerializeGuardBound) return;
-    inst.__afAeTableSerializeGuardBound = true;
 
-    function guardPatch() {
-      try { afAeEnsureMybbTableBbcode(inst); } catch (e0) {}
-      try { bindTableToSourceNormalization(inst); } catch (e1) {}
-      try { bindSubmitSync(inst); } catch (e2) {}
-      try { bindTableRehydrateHooks(inst); } catch (e3) {}
-    }
-
-    try {
-      if (typeof inst.updateOriginal === 'function' && !inst.__afAeTableUpdateOriginalWrapped) {
-        var origUpdate = inst.updateOriginal;
-        inst.updateOriginal = function () {
-          var result = origUpdate.apply(this, arguments);
-          guardPatch();
-          try { scheduleTableRehydrate(this, 'updateOriginal'); } catch (e30) {}
-          try { syncTextareaFromWysiwyg(this); } catch (e3) {}
-          return result;
-        };
-        inst.__afAeTableUpdateOriginalWrapped = true;
-      }
-    } catch (e1) {}
-
-    try {
-      if (typeof inst.val === 'function' && !inst.__afAeTableValWrapped) {
-        var origVal = inst.val;
-        inst.val = function () {
-          if (!arguments.length) {
-            guardPatch();
-            if (!isSourceMode(this)) {
-              var bb = syncTextareaFromWysiwyg(this);
-              if (bb) return bb;
-            }
-          }
-          return origVal.apply(this, arguments);
-        };
-        inst.__afAeTableValWrapped = true;
-      }
-    } catch (e2) {}
-
-    try {
-      if (typeof inst.bind === 'function') {
-        inst.bind('toSource', function (html) {
-          guardPatch();
-          return html;
-        });
-      }
-    } catch (e3) {}
-  }
-
-  function bindTableRehydrateHooks(inst) {
-    if (!inst || inst.__afAeTableRehydrateHooksBound) return;
-    inst.__afAeTableRehydrateHooksBound = true;
-
-    scheduleTableRehydrate(inst, 'bind-hooks');
-
-    try {
-      if (typeof inst.bind === 'function') {
-        inst.bind('toWysiwyg', function (html) {
-          scheduleTableRehydrate(inst, 'toWysiwyg');
-          return html;
-        });
-      }
-    } catch (e1) {}
-
-    try {
-      if (typeof inst.sourceMode === 'function' && !inst.__afAeTableSourceModeWrapped) {
-        var origSourceMode = inst.sourceMode;
-        inst.sourceMode = function () {
-          var out = origSourceMode.apply(this, arguments);
-          if (arguments.length && !isSourceMode(this)) scheduleTableRehydrate(this, 'sourceMode(false)');
-          return out;
-        };
-        inst.__afAeTableSourceModeWrapped = true;
-      }
-    } catch (e2) {}
-
-    try {
-      if (typeof inst.toggleSourceMode === 'function' && !inst.__afAeTableToggleModeWrapped) {
-        var origToggle = inst.toggleSourceMode;
-        inst.toggleSourceMode = function () {
-          var out = origToggle.apply(this, arguments);
-          if (!isSourceMode(this)) scheduleTableRehydrate(this, 'toggleSourceMode');
-          return out;
-        };
-        inst.__afAeTableToggleModeWrapped = true;
-      }
-    } catch (e3) {}
-  }
 
   function insertTableToEditor(editor, bb, html) {
     bb = asText(bb);
@@ -1306,9 +1111,7 @@
         try { ensureTableCss(editor); } catch (e2) {}
         try { bindTableToSourceNormalization(editor); } catch (e3) {}
         try { bindFloatingEditor(editor); } catch (e4) {}
-        try { bindPreSerializeGuards(editor); } catch (e7) {}
         try { bindSubmitSync(editor); } catch (e8) {}
-        try { scheduleTableRehydrate(editor, 'insert'); } catch (e10) {}
 
         if (isSourceMode(editor)) {
           editor.insertText(bb, '');
@@ -1317,7 +1120,6 @@
         }
 
         try { if (typeof editor.updateOriginal === 'function') editor.updateOriginal(); } catch (e5) {}
-        try { syncTextareaFromWysiwyg(editor); } catch (e6) {}
         try { if (typeof editor.focus === 'function') editor.focus(); } catch (e9) {}
         return true;
       }
@@ -1380,70 +1182,65 @@
     } catch (e) {}
   }
 
-  function getManagedTableFromNode(node) {
+
+
+  function getManagedTableFromAny(node) {
     if (!node || node.nodeType !== 1 || !node.closest) return null;
+    try { return node.closest('table.af-ae-table,table[data-af-table="1"]'); } catch (e) { return null; }
+  }
+
+  function applyTableVisualAttrs(tableEl, attrs) {
+    if (!tableEl || tableEl.nodeType !== 1) return;
+    attrs = normalizeTableAttrs(attrs || parseAttrsFromDom(tableEl));
     try {
-      return node.closest('table.af-ae-table,table[data-af-table="1"]');
-    } catch (e) {
-      return null;
-    }
+      tableEl.classList.add('af-ae-table');
+      tableEl.setAttribute('data-af-table', '1');
+      tableEl.setAttribute('data-headers', attrs.headers || '');
+      for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
+        var k = TABLE_ATTR_KEYS[i];
+        var v = asText(attrs[k]).trim();
+        if (k === 'border' && !v) v = '1';
+        tableEl.setAttribute('data-af-' + k, v);
+      }
+      tableEl.setAttribute('style', buildTableStyle(attrs));
+
+      var rows = getDirectChildRows(tableEl);
+      for (var r = 0; r < rows.length; r++) {
+        var cells = getDirectRowCells(rows[r]);
+        for (var c = 0; c < cells.length; c++) {
+          var tag = ((cells[c].tagName || '').toLowerCase() === 'th') ? 'th' : 'td';
+          var colWidth = getCanonicalColumnWidth(cells[c]);
+          cells[c].setAttribute('style', buildCellStyle(tag, attrs, colWidth || '', tag === 'th'));
+        }
+      }
+    } catch (e0) {}
   }
 
-  function isManagedTableNode(node) {
-    var table = getManagedTableFromNode(node);
-    return !!(table && table.nodeType === 1 && (table.tagName || '').toLowerCase() === 'table');
-  }
-
-  function getInstBodySafe(inst) {
+  function findEditorBody(inst) {
     if (!inst || typeof inst.getBody !== 'function') return null;
-    try {
-      var body = inst.getBody();
-      if (!body || body.nodeType !== 1 || !body.querySelectorAll || !body.ownerDocument) return null;
-      return body;
-    } catch (e) {
-      return null;
-    }
+    try { return inst.getBody(); } catch (e) { return null; }
   }
 
-  function isPatchableTableInstance(inst) {
-    if (!inst || typeof inst.bind !== 'function' || typeof inst.getBody !== 'function') return false;
-    if (isSourceMode(inst)) return false;
-    return !!getInstBodySafe(inst);
-  }
-
-  function hasManagedTablesInBody(inst) {
-    var body = getInstBodySafe(inst);
-    if (!body) return false;
-    try {
-      return !!body.querySelector('table.af-ae-table,table[data-af-table="1"]');
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function resetFloatingTableState(inst, hostDoc, reason) {
+  function hideFloatingPanel(inst, hostDoc) {
     if (!inst) return;
-
     try {
       if (hostDoc && hostDoc.getElementById) {
         var panel = hostDoc.getElementById('af-ae-table-floating');
         if (panel) panel.style.display = 'none';
       }
     } catch (e0) {}
-
     inst.__afAeActiveTable = null;
     inst.__afAeActiveTableCell = null;
     inst.__afAeTablePanelPointerDown = false;
-    tableDebugLog('reset floating state', { reason: reason || 'unknown' });
   }
 
   function openFloatingEditorForTable(inst, table) {
     if (!inst || !table || table.nodeType !== 1) return;
     if (isSourceMode(inst)) return;
-    if (!isManagedTableNode(table)) return;
+    if ((table.tagName || '').toLowerCase() !== 'table') return;
 
     try {
-      var body = getInstBodySafe(inst);
+      var body = findEditorBody(inst);
       if (!body || !body.ownerDocument) return;
       if (!body.contains(table)) return;
 
@@ -1454,7 +1251,6 @@
 
       function syncEditorValue() {
         try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e0) {}
-        try { syncTextareaFromWysiwyg(inst); } catch (e00) {}
         try { if (typeof inst.trigger === 'function') inst.trigger('change'); } catch (e1) {}
         try { if (typeof inst.trigger === 'function') inst.trigger('valuechanged'); } catch (e2) {}
       }
@@ -1485,7 +1281,7 @@
       }
 
       function applyAttrsToDom(t, a) {
-        try { applyCanonicalAttrsToTableDom(t, a); } catch (e0) {}
+        try { applyTableVisualAttrs(t, a); } catch (e0) {}
       }
 
       function getActiveCell(t) {
@@ -1825,28 +1621,30 @@
     inst.__afAeTableFloatingBound = true;
 
     try {
-      if (!isPatchableTableInstance(inst)) return;
-      var body = getInstBodySafe(inst);
-      if (!body) return;
+      var body = findEditorBody(inst);
+      if (!body || isSourceMode(inst)) return;
 
       var doc = body.ownerDocument;
       var hostDoc = getFloatingPanelHostDoc(inst, doc);
       var iframeEl = getEditorIframeElement(inst, doc);
 
       function hidePanel(reason) {
-        resetFloatingTableState(inst, hostDoc, reason || 'unknown');
+        hideFloatingPanel(inst, hostDoc);
       }
 
       function ensureInstanceUsable(reason) {
-        if (!isPatchableTableInstance(inst)) {
+        var currentBody = findEditorBody(inst);
+        if (!currentBody || isSourceMode(inst)) {
           hidePanel(reason || 'instance-not-usable');
           return false;
         }
 
-        if (!hasManagedTablesInBody(inst)) {
-          hidePanel(reason || 'no-managed-tables');
-          return false;
-        }
+        try {
+          if (!currentBody.querySelector('table.af-ae-table,table[data-af-table="1"]')) {
+            hidePanel(reason || 'no-managed-tables');
+            return false;
+          }
+        } catch (eQ) {}
 
         return true;
       }
@@ -1854,7 +1652,7 @@
       body.addEventListener('mousedown', function (ev) {
         if (!ensureInstanceUsable('mousedown-no-table')) return;
         var cell = ev.target && ev.target.closest ? ev.target.closest('td,th') : null;
-        var table = getManagedTableFromNode(cell);
+        var table = getManagedTableFromAny(cell);
         if (!cell || !table) return;
         inst.__afAeActiveTableCell = cell;
       }, true);
@@ -1863,10 +1661,10 @@
         if (!ensureInstanceUsable('click-no-table')) return;
 
         var cell = ev.target && ev.target.closest ? ev.target.closest('td,th') : null;
-        var cellTable = getManagedTableFromNode(cell);
+        var cellTable = getManagedTableFromAny(cell);
         if (cell && cellTable) inst.__afAeActiveTableCell = cell;
 
-        var table = getManagedTableFromNode(ev.target);
+        var table = getManagedTableFromAny(ev.target);
         if (!table || !body.contains(table)) {
           hidePanel('click-non-table-target');
           return;
@@ -1892,7 +1690,7 @@
             var y = ev.clientY - iframeRect.top;
             if (x >= 0 && y >= 0 && x <= iframeRect.width && y <= iframeRect.height) {
               var elAtPoint = doc.elementFromPoint(x, y);
-              var tableAtPoint = getManagedTableFromNode(elAtPoint);
+              var tableAtPoint = getManagedTableFromAny(elAtPoint);
               hitTable = !!(tableAtPoint && (tableAtPoint === t || (t.contains && t.contains(tableAtPoint))));
             }
           } catch (e1) {}
@@ -1923,7 +1721,7 @@
       } catch (e3) {}
 
       body.addEventListener('mouseleave', function () {
-        if (!hasManagedTablesInBody(inst)) hidePanel('mouseleave-no-table');
+        try { if (!body.querySelector('table.af-ae-table,table[data-af-table="1"]')) hidePanel('mouseleave-no-table'); } catch (eQ2) {}
       }, true);
 
     } catch (e) {}
@@ -2086,10 +1884,7 @@
     ensureTableCss(editor);
     bindTableToSourceNormalization(editor);
     bindFloatingEditor(editor);
-    bindPreSerializeGuards(editor);
     bindSubmitSync(editor);
-    bindTableRehydrateHooks(editor);
-    scheduleTableRehydrate(editor, 'dropdown-open');
 
     var wrap = makeDropdown(editor, caller);
     editor.createDropDown(caller, 'sceditor-table-picker', wrap);
@@ -2147,32 +1942,22 @@
         var inst = null;
         try { inst = $(tas[i]).sceditor('instance'); } catch (e0) { inst = null; }
         if (!inst) continue;
-        if (!isPatchableTableInstance(inst)) {
-          try { resetFloatingTableState(inst, null, 'patch-skip-nonpatchable'); } catch (e00) {}
-          continue;
-        }
-
         try { afAeEnsureMybbTableBbcode(inst); } catch (e1) {}
         try { ensureTableCss(inst); } catch (e2) {}
         try { bindTableToSourceNormalization(inst); } catch (e3) {}
         try { bindFloatingEditor(inst); } catch (e4) {}
-        try { bindPreSerializeGuards(inst); } catch (e5) {}
         try { bindSubmitSync(inst); } catch (e6) {}
-        try { bindTableRehydrateHooks(inst); } catch (e7) {}
-        try { scheduleTableRehydrate(inst, 'patch-instances'); } catch (e8) {}
       }
     } catch (e) {}
 
     return true;
   }
 
-  waitAnd(patchSceditorTableCommand, 150);
-  var patchTries = 0;
-  (function patchTick() {
-    patchTries++;
+  waitAnd(function () {
+    if (!patchSceditorTableCommand()) return false;
     tryPatchInstances();
-    if (patchTries < 60) setTimeout(patchTick, 150);
-  })();
+    return true;
+  }, 150);
 
   function aqrOpen(ctx, ev) {
     var editor = getSceditorInstanceFromCtx(ctx);
@@ -2234,10 +2019,7 @@
     createTableModel: createTableModel,
     serializeCellContentForTable: serializeCellContentForTable,
     serializeTableDomToCanonicalBb: serializeTableDomToCanonicalBb,
-    editorHtmlToBbWithOwnedTables: editorHtmlToBbWithOwnedTables,
-    normalizeExistingEditorTables: normalizeExistingEditorTables,
-    scheduleTableRehydrate: scheduleTableRehydrate,
-    syncTextareaFromWysiwyg: syncTextareaFromWysiwyg
+    editorHtmlToBbWithOwnedTables: editorHtmlToBbWithOwnedTables
   };
 
   window.af_ae_table_exec = function (editor, def, caller) {
