@@ -1,6 +1,7 @@
 /* ====== Rendered table ====== */
 .af-aqr-table {
   border-collapse: collapse;
+  border-spacing: 0;
   width: 100%;
   max-width: 100%;
   margin: 10px 0;
@@ -22,6 +23,7 @@
 
 .af-aqr-table th {
   font-weight: 700;
+  text-align: left;
 
   /* header bg:
      1) --af-tbl-hbg if set

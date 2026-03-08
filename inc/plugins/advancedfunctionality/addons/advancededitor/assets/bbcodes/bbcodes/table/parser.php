@@ -164,6 +164,7 @@ function af_ae_bbcode_table_parse(&$message): void
                 }
 
                 $styles[] = 'border-collapse:collapse';
+                $styles[] = 'border-spacing:0';
 
                 // NEW: css variables for rendering
                 // bgcolor/textcolor apply to td/th via CSS
@@ -351,6 +352,7 @@ function af_ae_bbcode_table_build_cell_style(array $attrs, bool $isHeader, strin
             $styles[] = 'color:' . $attrs['htextcolor'];
         }
         $styles[] = 'font-weight:700';
+        $styles[] = 'text-align:left';
     }
 
     $borderOn = (!isset($attrs['border']) || $attrs['border'] !== '0');
