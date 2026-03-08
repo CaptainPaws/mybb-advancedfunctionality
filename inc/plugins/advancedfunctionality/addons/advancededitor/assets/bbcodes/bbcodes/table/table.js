@@ -322,6 +322,9 @@
       inst.__afAeTableRehydrateTimer = 0;
       try { ensureTableCss(inst); } catch (e1) {}
       try { normalizeExistingEditorTables(inst); } catch (e2) {}
+      if (!hasManagedTablesInBody(inst)) {
+        try { resetFloatingTableState(inst, null, 'rehydrate-no-table'); } catch (e3) {}
+      }
       tableDebugLog('scheduleTableRehydrate.run', { reason: reason || '' });
     }, 0);
   }
@@ -843,6 +846,10 @@
   function editorHtmlToBbWithOwnedTables(html, inst) {
     html = asText(html);
     if (!html) return '';
+
+    if (!/table\b/i.test(html) || !/af-ae-table|data-af-table\s*=\s*["']?1/i.test(html)) {
+      return genericHtmlToBb(inst, html);
+    }
 
     var box = document.createElement('div');
     box.innerHTML = html;
@@ -1369,12 +1376,72 @@
     } catch (e) {}
   }
 
-  function openFloatingEditorForTable(inst, table) {
-    if (!inst || !table || table.nodeType !== 1) return;
+  function getManagedTableFromNode(node) {
+    if (!node || node.nodeType !== 1 || !node.closest) return null;
+    try {
+      return node.closest('table.af-ae-table,table[data-af-table="1"]');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function isManagedTableNode(node) {
+    var table = getManagedTableFromNode(node);
+    return !!(table && table.nodeType === 1 && (table.tagName || '').toLowerCase() === 'table');
+  }
+
+  function getInstBodySafe(inst) {
+    if (!inst || typeof inst.getBody !== 'function') return null;
+    try {
+      var body = inst.getBody();
+      if (!body || body.nodeType !== 1 || !body.querySelectorAll || !body.ownerDocument) return null;
+      return body;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function isPatchableTableInstance(inst) {
+    if (!inst || typeof inst.bind !== 'function' || typeof inst.getBody !== 'function') return false;
+    if (isSourceMode(inst)) return false;
+    return !!getInstBodySafe(inst);
+  }
+
+  function hasManagedTablesInBody(inst) {
+    var body = getInstBodySafe(inst);
+    if (!body) return false;
+    try {
+      return !!body.querySelector('table.af-ae-table,table[data-af-table="1"]');
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function resetFloatingTableState(inst, hostDoc, reason) {
+    if (!inst) return;
 
     try {
-      var body = inst.getBody && inst.getBody();
+      if (hostDoc && hostDoc.getElementById) {
+        var panel = hostDoc.getElementById('af-ae-table-floating');
+        if (panel) panel.style.display = 'none';
+      }
+    } catch (e0) {}
+
+    inst.__afAeActiveTable = null;
+    inst.__afAeActiveTableCell = null;
+    inst.__afAeTablePanelPointerDown = false;
+    tableDebugLog('reset floating state', { reason: reason || 'unknown' });
+  }
+
+  function openFloatingEditorForTable(inst, table) {
+    if (!inst || !table || table.nodeType !== 1) return;
+    if (isSourceMode(inst)) return;
+    if (!isManagedTableNode(table)) return;
+
+    try {
+      var body = getInstBodySafe(inst);
       if (!body || !body.ownerDocument) return;
+      if (!body.contains(table)) return;
 
       var doc = body.ownerDocument;
       var hostDoc = getFloatingPanelHostDoc(inst, doc);
@@ -1754,8 +1821,8 @@
     inst.__afAeTableFloatingBound = true;
 
     try {
-      if (typeof inst.bind !== 'function' || typeof inst.getBody !== 'function') return;
-      var body = inst.getBody();
+      if (!isPatchableTableInstance(inst)) return;
+      var body = getInstBodySafe(inst);
       if (!body) return;
 
       var doc = body.ownerDocument;
@@ -1763,35 +1830,51 @@
       var iframeEl = getEditorIframeElement(inst, doc);
 
       function hidePanel(reason) {
-        try {
-          var panel = hostDoc.getElementById('af-ae-table-floating');
-          if (panel) panel.style.display = 'none';
-        } catch (e0) {}
-        tableDebugLog('hide panel', { reason: reason || 'unknown' });
-        inst.__afAeActiveTable = null;
+        resetFloatingTableState(inst, hostDoc, reason || 'unknown');
+      }
+
+      function ensureInstanceUsable(reason) {
+        if (!isPatchableTableInstance(inst)) {
+          hidePanel(reason || 'instance-not-usable');
+          return false;
+        }
+
+        if (!hasManagedTablesInBody(inst)) {
+          hidePanel(reason || 'no-managed-tables');
+          return false;
+        }
+
+        return true;
       }
 
       body.addEventListener('mousedown', function (ev) {
+        if (!ensureInstanceUsable('mousedown-no-table')) return;
         var cell = ev.target && ev.target.closest ? ev.target.closest('td,th') : null;
-        if (cell) inst.__afAeActiveTableCell = cell;
+        var table = getManagedTableFromNode(cell);
+        if (!cell || !table) return;
+        inst.__afAeActiveTableCell = cell;
       }, true);
 
       body.addEventListener('click', function (ev) {
-        var cell = ev.target && ev.target.closest ? ev.target.closest('td,th') : null;
-        if (cell) inst.__afAeActiveTableCell = cell;
-      }, true);
+        if (!ensureInstanceUsable('click-no-table')) return;
 
-      body.addEventListener('click', function (ev) {
-        var table = ev.target && ev.target.closest ? ev.target.closest('table[data-af-table="1"],table.af-ae-table') : null;
-        if (table) {
-          openFloatingEditorForTable(inst, table);
+        var cell = ev.target && ev.target.closest ? ev.target.closest('td,th') : null;
+        var cellTable = getManagedTableFromNode(cell);
+        if (cell && cellTable) inst.__afAeActiveTableCell = cell;
+
+        var table = getManagedTableFromNode(ev.target);
+        if (!table || !body.contains(table)) {
+          hidePanel('click-non-table-target');
           return;
         }
+
+        openFloatingEditorForTable(inst, table);
       }, false);
 
       hostDoc.addEventListener('mousedown', function (ev) {
         var panel = hostDoc.getElementById('af-ae-table-floating');
         if (!panel || panel.style.display === 'none') return;
+        if (!ensureInstanceUsable('outside-click-no-table')) return;
 
         var t = inst.__afAeActiveTable;
         var inPanel = panel.contains(ev.target);
@@ -1805,19 +1888,11 @@
             var y = ev.clientY - iframeRect.top;
             if (x >= 0 && y >= 0 && x <= iframeRect.width && y <= iframeRect.height) {
               var elAtPoint = doc.elementFromPoint(x, y);
-              var tableAtPoint = elAtPoint && elAtPoint.closest ? elAtPoint.closest('table[data-af-table="1"],table.af-ae-table') : null;
+              var tableAtPoint = getManagedTableFromNode(elAtPoint);
               hitTable = !!(tableAtPoint && (tableAtPoint === t || (t.contains && t.contains(tableAtPoint))));
             }
           } catch (e1) {}
         }
-
-        tableDebugLog('outside click', {
-          tag: ev.target && ev.target.tagName,
-          inPanel: inPanel,
-          hitIframe: hitIframe,
-          hitTable: hitTable,
-          shouldHide: (!inPanel && !hitTable)
-        });
 
         if (!inPanel && !hitTable) hidePanel('outside-click');
       }, false);
@@ -1826,20 +1901,26 @@
         var panel = null;
         try { panel = hostDoc.getElementById('af-ae-table-floating'); } catch (e1) {}
 
-        if (inst.__afAeTablePanelPointerDown) {
-          tableDebugLog('blur ignored', { reason: 'panel-pointerdown' });
-          return;
-        }
+        if (inst.__afAeTablePanelPointerDown) return;
 
         try {
           if (panel && panel.contains(hostDoc.activeElement)) {
-            tableDebugLog('blur ignored', { reason: 'panel-focus' });
             return;
           }
         } catch (e2) {}
 
         hidePanel('blur');
       });
+
+      try {
+        inst.bind('destroy', function () {
+          hidePanel('destroy');
+        });
+      } catch (e3) {}
+
+      body.addEventListener('mouseleave', function () {
+        if (!hasManagedTablesInBody(inst)) hidePanel('mouseleave-no-table');
+      }, true);
 
     } catch (e) {}
   }
@@ -2062,6 +2143,10 @@
         var inst = null;
         try { inst = $(tas[i]).sceditor('instance'); } catch (e0) { inst = null; }
         if (!inst) continue;
+        if (!isPatchableTableInstance(inst)) {
+          try { resetFloatingTableState(inst, null, 'patch-skip-nonpatchable'); } catch (e00) {}
+          continue;
+        }
 
         try { afAeEnsureMybbTableBbcode(inst); } catch (e1) {}
         try { ensureTableCss(inst); } catch (e2) {}
@@ -2071,7 +2156,6 @@
         try { bindSubmitSync(inst); } catch (e6) {}
         try { bindTableRehydrateHooks(inst); } catch (e7) {}
         try { scheduleTableRehydrate(inst, 'patch-instances'); } catch (e8) {}
-        try { syncTextareaFromWysiwyg(inst); } catch (e9) {}
       }
     } catch (e) {}
 
