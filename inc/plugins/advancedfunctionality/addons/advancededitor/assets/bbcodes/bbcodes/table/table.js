@@ -280,6 +280,12 @@
     try { return node && node.closest && node.closest('table.af-ae-table,table[data-af-table="1"]'); } catch (e) { return null; }
   }
 
+  function isManagedTableEl(node) {
+    if (!node || node.nodeType !== 1) return false;
+    if (asText(node.tagName).toLowerCase() !== 'table') return false;
+    return node.classList.contains('af-ae-table') || asText(node.getAttribute('data-af-table')) === '1';
+  }
+
   function rebuildTableCellStyles(tableEl) {
     applyAttrsToTable(tableEl, readAttrsFromData(tableEl));
   }
@@ -441,19 +447,64 @@
         var a = normalizeAttrs(attrs || {});
         return '<table class="af-ae-table" ' + attrsToDataAttrs(a) + ' style="' + buildTableStyle(a) + '">' + (content || '') + '</table>';
       },
-      format: function (el) { return serializeTableDomToCanonicalBb(el, inst); }
+      format: function (el) {
+        if (!isManagedTableEl(el)) return '';
+        return serializeTableDomToCanonicalBb(el, inst);
+      }
     });
 
     bb.set('tr', { isBlock: true, html: '<tr>{0}</tr>', format: '[tr]{0}[/tr]' });
-    bb.set('td', { html: function (_t, attrs, c) { var w = normWidthToken(attrs && attrs.width); return '<td' + (w ? ' style="width:' + w + '"' : '') + '>' + (c || '') + '</td>'; }, format: '[td]{0}[/td]' });
-    bb.set('th', { html: function (_t, attrs, c) { var w = normWidthToken(attrs && attrs.width); return '<th' + (w ? ' style="width:' + w + ';font-weight:700;text-align:left"' : ' style="font-weight:700;text-align:left"') + '>' + (c || '') + '</th>'; }, format: '[th]{0}[/th]' });
+    bb.set('td', {
+      html: function (_t, attrs, c) {
+        var w = normWidthToken(attrs && attrs.width);
+        return '<td' + (w ? ' style="width:' + w + '"' : '') + '>' + (c || '') + '</td>';
+      },
+      format: function (el, content) {
+        var w = normWidthToken((el && el.style && el.style.width) || (el && el.getAttribute && el.getAttribute('data-af-width')) || '');
+        return '[td' + (w ? ' width=' + w : '') + ']' + (content || '') + '[/td]';
+      }
+    });
+    bb.set('th', {
+      html: function (_t, attrs, c) {
+        var w = normWidthToken(attrs && attrs.width);
+        return '<th' + (w ? ' style="width:' + w + ';font-weight:700;text-align:left"' : ' style="font-weight:700;text-align:left"') + '>' + (c || '') + '</th>';
+      },
+      format: function (el, content) {
+        var w = normWidthToken((el && el.style && el.style.width) || (el && el.getAttribute && el.getAttribute('data-af-width')) || '');
+        return '[th' + (w ? ' width=' + w : '') + ']' + (content || '') + '[/th]';
+      }
+    });
 
     bb.__afAeTablePatched = true;
+  }
+
+  function bindModeBridge(inst) {
+    if (!inst || inst.__afAeTableBridgeBound || typeof inst.bind !== 'function') return;
+    inst.__afAeTableBridgeBound = true;
+
+    inst.bind('toWysiwyg', function (source) {
+      patchBbcode(inst);
+      return asText(source);
+    });
+
+    inst.bind('toSource', function (html) {
+      patchBbcode(inst);
+      html = asText(html);
+      var wrap = document.createElement('div');
+      wrap.innerHTML = html;
+      var tables = wrap.querySelectorAll('table.af-ae-table, table[data-af-table="1"]');
+      for (var i = 0; i < tables.length; i++) {
+        var bb = serializeTableDomToCanonicalBb(tables[i], inst);
+        tables[i].parentNode.replaceChild(document.createTextNode(bb), tables[i]);
+      }
+      return wrap.innerHTML;
+    });
   }
 
   function openDropdown(editor, caller) {
     if (!editor || typeof editor.createDropDown !== 'function') return false;
     patchBbcode(editor);
+    bindModeBridge(editor);
     bindFloatingEditor(editor);
     try { editor.closeDropDown(true); } catch (e) {}
     editor.createDropDown(caller, 'sceditor-table-picker', makeDropdown(editor));
