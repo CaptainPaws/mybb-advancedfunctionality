@@ -11,7 +11,20 @@
   var CMD = 'af_table';
   var TABLE_ATTR_KEYS = ['width', 'align', 'headers', 'bgcolor', 'textcolor', 'hbgcolor', 'htextcolor', 'border', 'bordercolor', 'borderwidth'];
 
-  function asText(x) { return String(x == null ? '' : x); }
+  function asText(x) {
+    return String(x == null ? '' : x);
+  }
+
+  function tableDebugLog() {
+    try {
+      if (!window.__AF_AE_DEBUG_TABLE && !window.__afAeDebug) return;
+      var args = Array.prototype.slice.call(arguments);
+      args.unshift('[AF-AE table]');
+      if (window.console && typeof window.console.log === 'function') {
+        window.console.log.apply(window.console, args);
+      }
+    } catch (e) {}
+  }
 
   function hasSceditor() {
     return !!(window.jQuery && window.jQuery.fn && typeof window.jQuery.fn.sceditor === 'function');
@@ -59,6 +72,27 @@
     return null;
   }
 
+  function getInstBodySafe(inst) {
+    if (!inst || typeof inst.getBody !== 'function') return null;
+    try {
+      var body = inst.getBody();
+      if (!body || body.nodeType !== 1 || !body.querySelectorAll || !body.ownerDocument) return null;
+      return body;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function hasManagedTablesInBody(inst) {
+    var body = getInstBodySafe(inst);
+    if (!body) return false;
+    try {
+      return !!body.querySelector('table.af-ae-table,table[data-af-table="1"]');
+    } catch (e) {
+      return false;
+    }
+  }
+
   function insertAtCursor(ta, text) {
     if (!ta) return false;
     text = asText(text);
@@ -103,7 +137,7 @@
       var h = n.toString(16);
       return h.length === 1 ? ('0' + h) : h;
     };
-    return ('#' + toHex(r) + toHex(g) + toHex(b));
+    return '#' + toHex(r) + toHex(g) + toHex(b);
   }
 
   function readColorToken(raw) {
@@ -128,7 +162,7 @@
     if (!s) return '';
     var m = s.match(/^([0-9]{1,4})(px|%|em|rem|vw|vh)?$/i);
     if (!m) return '';
-    return (m[1] + (m[2] ? m[2].toLowerCase() : 'px'));
+    return m[1] + (m[2] ? m[2].toLowerCase() : 'px');
   }
 
   function parseWidthList(raw, limit) {
@@ -231,6 +265,7 @@
 
     styles.push('padding:6px 8px');
     styles.push('vertical-align:top');
+
     if (isHeader) {
       styles.push('font-weight:700');
       styles.push('text-align:left');
@@ -440,15 +475,13 @@
 
       if (!attrs.borderwidth && firstAnyCell) {
         attrs.borderwidth = normBorderWidth(
-          (firstAnyCell.style && firstAnyCell.style.borderWidth) ||
-          ''
+          (firstAnyCell.style && firstAnyCell.style.borderWidth) || ''
         );
       }
 
       if (!attrs.bordercolor && firstAnyCell) {
         attrs.bordercolor = readColorToken(
-          (firstAnyCell.style && firstAnyCell.style.borderColor) ||
-          ''
+          (firstAnyCell.style && firstAnyCell.style.borderColor) || ''
         );
       }
 
@@ -679,16 +712,6 @@
     return asText(bb);
   }
 
-  function replaceTopLevelTablesWithBb(root, inst) {
-    var tables = getTopLevelSerializableTables(root);
-    for (var i = 0; i < tables.length; i++) {
-      var table = tables[i];
-      if (!table || !table.parentNode) continue;
-      var bbTable = serializeTableDomToCanonicalBb(table, inst);
-      table.parentNode.replaceChild(root.ownerDocument.createTextNode('\n' + bbTable + '\n'), table);
-    }
-  }
-
   function serializeCellContentForTable(cellEl, inst) {
     if (!cellEl || cellEl.nodeType !== 1) return '';
 
@@ -696,7 +719,8 @@
     var cleanedHtml = stripInheritedCellFormattingDom(cellEl, tag);
     if (!cleanedHtml) return '';
 
-    var box = document.createElement('div');
+    var ownerDoc = cellEl.ownerDocument || document;
+    var box = ownerDoc.createElement('div');
     box.innerHTML = cleanedHtml;
 
     replaceTopLevelTablesWithBb(box, inst);
@@ -753,19 +777,37 @@
     return bbcode;
   }
 
+  function replaceTopLevelTablesWithBb(root, inst) {
+    var tables = getTopLevelSerializableTables(root);
+    for (var i = 0; i < tables.length; i++) {
+      var table = tables[i];
+      if (!table || !table.parentNode) continue;
+      var bbTable = serializeTableDomToCanonicalBb(table, inst);
+      table.parentNode.replaceChild((root.ownerDocument || document).createTextNode('\n' + bbTable + '\n'), table);
+    }
+  }
+
+  function normalizeAfTablesInHtmlWithInst(html, inst) {
+    html = asText(html);
+    if (!html || html.indexOf('<table') === -1) return html;
+
+    var box = document.createElement('div');
+    box.innerHTML = html;
+    replaceTopLevelTablesWithBb(box, inst);
+    return box.innerHTML;
+  }
+
   function editorHtmlToBbWithOwnedTables(html, inst) {
     html = asText(html);
     if (!html) return '';
 
-    if (!/table\b/i.test(html) || !/af-ae-table|data-af-table\s*=\s*["']?1/i.test(html)) {
+    if (!/<table\b/i.test(html)) {
       return genericHtmlToBb(inst, html);
     }
 
     var box = document.createElement('div');
     box.innerHTML = html;
-
     replaceTopLevelTablesWithBb(box, inst);
-
     return genericHtmlToBb(inst, box.innerHTML);
   }
 
@@ -889,6 +931,126 @@
     return modelToWysiwygHtml(createTableModel(rows, cols, opts));
   }
 
+  function getManagedTableFromNode(node) {
+    if (!node || node.nodeType !== 1 || !node.closest) return null;
+    try {
+      return node.closest('table.af-ae-table,table[data-af-table="1"]');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function isManagedTableNode(node) {
+    var table = getManagedTableFromNode(node);
+    return !!(table && table.nodeType === 1 && (table.tagName || '').toLowerCase() === 'table');
+  }
+
+  function resetFloatingTableState(inst, hostDoc, reason) {
+    if (!inst) return;
+
+    try {
+      if (hostDoc && hostDoc.getElementById) {
+        var panel = hostDoc.getElementById('af-ae-table-floating');
+        if (panel) panel.style.display = 'none';
+      }
+    } catch (e0) {}
+
+    inst.__afAeActiveTable = null;
+    inst.__afAeActiveTableCell = null;
+    inst.__afAeTablePanelPointerDown = false;
+
+    tableDebugLog('reset floating state', { reason: reason || 'unknown' });
+  }
+
+  function applyCanonicalAttrsToTableDom(tableEl, attrs) {
+    if (!tableEl || tableEl.nodeType !== 1) return false;
+
+    var doc = tableEl.ownerDocument || document;
+    attrs = normalizeTableAttrs(attrs || parseAttrsFromDom(tableEl));
+
+    try {
+      for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
+        var k = TABLE_ATTR_KEYS[i];
+        var v = asText(attrs[k]).trim();
+        if (k === 'border') v = v || '1';
+        tableEl.setAttribute('data-af-' + k, v);
+      }
+      tableEl.setAttribute('data-af-table', '1');
+      tableEl.setAttribute('data-headers', asText(attrs.headers).trim());
+      tableEl.classList.add('af-ae-table');
+      tableEl.setAttribute('style', buildTableStyle(attrs));
+    } catch (e0) {}
+
+    try {
+      for (var r = 0; r < tableEl.rows.length; r++) {
+        var row = tableEl.rows[r];
+        for (var c = 0; c < row.cells.length; c++) {
+          var cell = row.cells[c];
+          var tag = (cell.tagName || '').toLowerCase();
+          var isHeaderByMode = false;
+
+          if (attrs.headers === 'row' && r === 0) isHeaderByMode = true;
+          if (attrs.headers === 'col' && c === 0) isHeaderByMode = true;
+          if (attrs.headers === 'both' && (r === 0 || c === 0)) isHeaderByMode = true;
+
+          var shouldBeTh = (tag === 'th') || isHeaderByMode;
+          if (shouldBeTh && tag !== 'th') {
+            var th = doc.createElement('th');
+            th.innerHTML = cell.innerHTML;
+            try { if (cell.style && cell.style.width) th.style.width = cell.style.width; } catch (eW) {}
+            row.replaceChild(th, cell);
+            cell = th;
+            tag = 'th';
+          } else if (!shouldBeTh && tag === 'th') {
+            var td = doc.createElement('td');
+            td.innerHTML = cell.innerHTML;
+            try { if (cell.style && cell.style.width) td.style.width = cell.style.width; } catch (eW2) {}
+            row.replaceChild(td, cell);
+            cell = td;
+            tag = 'td';
+          }
+
+          var w = getCanonicalColumnWidth(cell) || '';
+          var css = buildCellStyle(tag, attrs, w, isHeaderByMode);
+          cell.setAttribute('style', css);
+        }
+      }
+    } catch (e2) {}
+
+    return true;
+  }
+
+  function normalizeExistingEditorTables(inst) {
+    if (!inst || isSourceMode(inst)) return 0;
+
+    var body = getInstBodySafe(inst);
+    if (!body) return 0;
+
+    var tables = [];
+    try { tables = body.querySelectorAll('table.af-ae-table,table[data-af-table="1"]'); } catch (e1) { tables = []; }
+
+    var changed = 0;
+    for (var i = 0; i < tables.length; i++) {
+      if (applyCanonicalAttrsToTableDom(tables[i], parseAttrsFromDom(tables[i]))) changed++;
+    }
+
+    tableDebugLog('normalizeExistingEditorTables', { count: changed });
+    return changed;
+  }
+
+  function queueRehydrate(inst, reason) {
+    if (!inst) return;
+    if (inst.__afAeTableRehydrateQueued) return;
+
+    inst.__afAeTableRehydrateQueued = true;
+    setTimeout(function () {
+      inst.__afAeTableRehydrateQueued = false;
+      try { ensureTableCss(inst); } catch (e0) {}
+      try { normalizeExistingEditorTables(inst); } catch (e1) {}
+      tableDebugLog('rehydrate', { reason: reason || '' });
+    }, 0);
+  }
+
   function ensureTableCss(inst) {
     try {
       if (!inst || typeof inst.getBody !== 'function') return;
@@ -904,9 +1066,9 @@
         'table[data-af-table="1"][data-af-border="1"] td,table[data-af-table="1"][data-af-border="1"] th,table.af-ae-table[data-af-border="1"] td,table.af-ae-table[data-af-border="1"] th{border:var(--af-tbl-bw,1px) solid var(--af-tbl-bc,#888);}' +
         'table[data-af-table="1"] td,table[data-af-table="1"] th,table.af-ae-table td,table.af-ae-table th{background:var(--af-tbl-bg,transparent);color:var(--af-tbl-txt,inherit);}' +
         'table[data-af-table="1"] th,table.af-ae-table th{font-weight:700;text-align:left;background:var(--af-tbl-hbg,var(--af-tbl-bg,rgba(255,255,255,.06)));color:var(--af-tbl-htxt,var(--af-tbl-txt,inherit));}' +
-        'table[data-af-table="1"][data-af-headers="row"] tr:first-child > *,table.af-ae-table[data-af-headers="row"] tr:first-child > *,table.af-ae-table[data-headers="row"] tr:first-child > *{font-weight:700;background:var(--af-tbl-hbg,var(--af-tbl-bg,rgba(255,255,255,.06)));color:var(--af-tbl-htxt,var(--af-tbl-txt,inherit));}' +
-        'table[data-af-table="1"][data-af-headers="col"] tr > *:first-child,table.af-ae-table[data-af-headers="col"] tr > *:first-child,table.af-ae-table[data-headers="col"] tr > *:first-child{font-weight:700;background:var(--af-tbl-hbg,var(--af-tbl-bg,rgba(255,255,255,.06)));color:var(--af-tbl-htxt,var(--af-tbl-txt,inherit));}' +
-        'table[data-af-table="1"][data-af-headers="both"] tr:first-child > *,table[data-af-table="1"][data-af-headers="both"] tr > *:first-child,table.af-ae-table[data-af-headers="both"] tr:first-child > *,table.af-ae-table[data-af-headers="both"] tr > *:first-child,table.af-ae-table[data-headers="both"] tr:first-child > *,table.af-ae-table[data-headers="both"] tr > *:first-child{font-weight:700;background:var(--af-tbl-hbg,var(--af-tbl-bg,rgba(255,255,255,.06)));color:var(--af-tbl-htxt,var(--af-tbl-txt,inherit));}';
+        'table[data-af-table="1"][data-af-headers="row"] tr:first-child > *,table.af-ae-table[data-af-headers="row"] tr:first-child > *,table.af-ae-table[data-headers="row"] tr:first-child > *{font-weight:700;text-align:left;background:var(--af-tbl-hbg,var(--af-tbl-bg,rgba(255,255,255,.06)));color:var(--af-tbl-htxt,var(--af-tbl-txt,inherit));}' +
+        'table[data-af-table="1"][data-af-headers="col"] tr > *:first-child,table.af-ae-table[data-af-headers="col"] tr > *:first-child,table.af-ae-table[data-headers="col"] tr > *:first-child{font-weight:700;text-align:left;background:var(--af-tbl-hbg,var(--af-tbl-bg,rgba(255,255,255,.06)));color:var(--af-tbl-htxt,var(--af-tbl-txt,inherit));}' +
+        'table[data-af-table="1"][data-af-headers="both"] tr:first-child > *,table[data-af-table="1"][data-af-headers="both"] tr > *:first-child,table.af-ae-table[data-af-headers="both"] tr:first-child > *,table.af-ae-table[data-af-headers="both"] tr > *:first-child,table.af-ae-table[data-headers="both"] tr:first-child > *,table.af-ae-table[data-headers="both"] tr > *:first-child{font-weight:700;text-align:left;background:var(--af-tbl-hbg,var(--af-tbl-bg,rgba(255,255,255,.06)));color:var(--af-tbl-htxt,var(--af-tbl-txt,inherit));}';
 
       var st = doc.createElement('style');
       st.id = 'af-ae-table-css';
@@ -916,6 +1078,30 @@
     } catch (e) {}
   }
 
+  function bindTableToSourceNormalization(inst) {
+    if (!inst || inst.__afAeTableToSourceBound || typeof inst.bind !== 'function') return;
+    inst.__afAeTableToSourceBound = true;
+
+    try {
+      inst.bind('toSource', function (html) {
+        html = asText(html);
+
+        if (!html || html.indexOf('<table') === -1) return html;
+        if (inst.__afAeTablePreSerializing) return html;
+
+        inst.__afAeTablePreSerializing = true;
+        try {
+          var box = document.createElement('div');
+          box.innerHTML = html;
+
+          replaceTopLevelTablesWithBb(box, inst);
+          return box.innerHTML;
+        } finally {
+          inst.__afAeTablePreSerializing = false;
+        }
+      });
+    } catch (e) {}
+  }
 
   function bindSubmitSync(inst) {
     if (!inst || inst.__afAeTableSubmitSyncBound) return;
@@ -928,34 +1114,75 @@
 
       form.addEventListener('submit', function () {
         try {
-          if (isSourceMode(inst) || typeof inst.getBody !== 'function') return;
-          var body = inst.getBody();
-          if (!body || !ta) return;
-          ta.value = editorHtmlToBbWithOwnedTables(body.innerHTML, inst);
-          try { ta.dispatchEvent(new Event('input', { bubbles: true })); } catch (e0) {}
-        } catch (e1) {}
+          if (!isSourceMode(inst) && hasManagedTablesInBody(inst) && typeof inst.updateOriginal === 'function') {
+            inst.updateOriginal();
+          }
+        } catch (e0) {}
       }, true);
     } catch (e) {}
   }
 
-  function bindTableToSourceNormalization(inst) {
-    if (!inst || inst.__afAeTableToSourceBound || typeof inst.bind !== 'function') return;
-    inst.__afAeTableToSourceBound = true;
+  function syncTextareaFromWysiwyg(inst) {
+    try {
+      if (!inst || isSourceMode(inst) || !hasManagedTablesInBody(inst)) return '';
+      var ta = getTextareaFromCtx({ sceditor: inst });
+      if (!ta) return '';
+      if (typeof inst.updateOriginal === 'function') inst.updateOriginal();
+      return asText(ta.value || '');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function bindModeHooks(inst) {
+    if (!inst || inst.__afAeTableModeHooksBound) return;
+    inst.__afAeTableModeHooksBound = true;
 
     try {
-      inst.bind('toSource', function (html) {
-        html = asText(html);
+      if (typeof inst.sourceMode === 'function' && !inst.__afAeTableSourceModeWrapped) {
+        var origSourceMode = inst.sourceMode;
+        inst.sourceMode = function () {
+          var switchingToWysiwyg = (arguments.length && arguments[0] === false);
+          if (switchingToWysiwyg) {
+            try { ensureInstancePatched(this); } catch (e0) {}
+          }
 
-        if (inst.__afAeTablePreSerializing) return html;
-        inst.__afAeTablePreSerializing = true;
+          var out = origSourceMode.apply(this, arguments);
 
-        try {
-          return editorHtmlToBbWithOwnedTables(html, inst);
-        } finally {
-          inst.__afAeTablePreSerializing = false;
-        }
-      });
-    } catch (e) {}
+          if (switchingToWysiwyg) {
+            queueRehydrate(this, 'sourceMode(false)');
+          } else if (arguments.length && arguments[0] === true) {
+            resetFloatingTableState(this, null, 'sourceMode(true)');
+          }
+
+          return out;
+        };
+        inst.__afAeTableSourceModeWrapped = true;
+      }
+    } catch (e1) {}
+
+    try {
+      if (typeof inst.toggleSourceMode === 'function' && !inst.__afAeTableToggleModeWrapped) {
+        var origToggleMode = inst.toggleSourceMode;
+        inst.toggleSourceMode = function () {
+          var wasSource = isSourceMode(this);
+          if (wasSource) {
+            try { ensureInstancePatched(this); } catch (e0) {}
+          }
+
+          var out = origToggleMode.apply(this, arguments);
+
+          if (wasSource && !isSourceMode(this)) {
+            queueRehydrate(this, 'toggleSourceMode');
+          } else if (!wasSource && isSourceMode(this)) {
+            resetFloatingTableState(this, null, 'toggleSourceMode->source');
+          }
+
+          return out;
+        };
+        inst.__afAeTableToggleModeWrapped = true;
+      }
+    } catch (e2) {}
   }
 
   function afAeEnsureMybbTableBbcode(inst) {
@@ -1054,7 +1281,7 @@
           var w = normWidthToken(attrs && attrs.width);
           var style = '';
           if (w) style += 'width:' + w + ';';
-          style += 'font-weight:700;';
+          style += 'font-weight:700;text-align:left;';
           return '<th' + (style ? ' style="' + style + '"' : '') + '>' + (content || '') + '</th>';
         },
         format: '[th]{0}[/th]'
@@ -1073,60 +1300,39 @@
     bb.__afAeTablePatched = true;
   }
 
+  function ensureInstancePatched(inst) {
+    if (!inst) return false;
 
+    try { afAeEnsureMybbTableBbcode(inst); } catch (e0) {}
+    try { bindTableToSourceNormalization(inst); } catch (e1) {}
+    try { bindSubmitSync(inst); } catch (e2) {}
+    try { bindModeHooks(inst); } catch (e3) {}
+    try { ensureTableCss(inst); } catch (e4) {}
+    try { bindFloatingEditor(inst); } catch (e5) {}
 
-  function insertTableToEditor(editor, bb, html) {
-    bb = asText(bb);
-    html = asText(html);
+    if (!isSourceMode(inst)) {
+      try { normalizeExistingEditorTables(inst); } catch (e6) {}
+    }
 
-    function insertHtmlWysiwyg(inst, htmlChunk, bbFallback) {
-      try {
-        if (typeof inst.wysiwygEditorInsertHtml === 'function') {
-          inst.wysiwygEditorInsertHtml(htmlChunk);
-          return true;
-        }
-        if (typeof inst.insertHTML === 'function') {
-          inst.insertHTML(htmlChunk);
-          return true;
-        }
-      } catch (e0) {}
+    return true;
+  }
 
-      try {
-        if (typeof inst.insertText === 'function') {
-          inst.insertText(bbFallback, '');
-          return true;
-        }
-        if (typeof inst.insert === 'function') {
-          inst.insert(bbFallback, '');
-          return true;
-        }
-      } catch (e1) {}
+  function bindPreSerializeGuards(inst) {
+    if (!inst || inst.__afAeTableSerializeGuardBound) return;
+    inst.__afAeTableSerializeGuardBound = true;
 
-      return false;
+    function guardPatch() {
+      try { ensureInstancePatched(inst); } catch (e0) {}
     }
 
     try {
-      if (editor && typeof editor.insertText === 'function') {
-        try { afAeEnsureMybbTableBbcode(editor); } catch (e1) {}
-        try { ensureTableCss(editor); } catch (e2) {}
-        try { bindTableToSourceNormalization(editor); } catch (e3) {}
-        try { bindFloatingEditor(editor); } catch (e4) {}
-        try { bindSubmitSync(editor); } catch (e8) {}
-
-        if (isSourceMode(editor)) {
-          editor.insertText(bb, '');
-        } else {
-          insertHtmlWysiwyg(editor, html || bb, bb);
-        }
-
-        try { if (typeof editor.updateOriginal === 'function') editor.updateOriginal(); } catch (e5) {}
-        try { if (typeof editor.focus === 'function') editor.focus(); } catch (e9) {}
-        return true;
+      if (typeof inst.bind === 'function') {
+        inst.bind('toSource', function (html) {
+          guardPatch();
+          return html;
+        });
       }
-    } catch (e0) {}
-
-    var ta = getTextareaFromCtx({ sceditor: editor });
-    return insertAtCursor(ta, bb);
+    } catch (e1) {}
   }
 
   function getFloatingPanelHostDoc(inst, iframeDoc) {
@@ -1173,76 +1379,14 @@
     return null;
   }
 
-  function tableDebugLog() {
-    try {
-      if (!window.__AF_AE_DEBUG_TABLE && !window.__afAeDebug) return;
-      var args = Array.prototype.slice.call(arguments);
-      args.unshift('[AF-AE table]');
-      if (window.console && typeof window.console.log === 'function') window.console.log.apply(window.console, args);
-    } catch (e) {}
-  }
-
-
-
-  function getManagedTableFromAny(node) {
-    if (!node || node.nodeType !== 1 || !node.closest) return null;
-    try { return node.closest('table.af-ae-table,table[data-af-table="1"]'); } catch (e) { return null; }
-  }
-
-  function applyTableVisualAttrs(tableEl, attrs) {
-    if (!tableEl || tableEl.nodeType !== 1) return;
-    attrs = normalizeTableAttrs(attrs || parseAttrsFromDom(tableEl));
-    try {
-      tableEl.classList.add('af-ae-table');
-      tableEl.setAttribute('data-af-table', '1');
-      tableEl.setAttribute('data-headers', attrs.headers || '');
-      for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
-        var k = TABLE_ATTR_KEYS[i];
-        var v = asText(attrs[k]).trim();
-        if (k === 'border' && !v) v = '1';
-        tableEl.setAttribute('data-af-' + k, v);
-      }
-      tableEl.setAttribute('style', buildTableStyle(attrs));
-
-      var rows = getDirectChildRows(tableEl);
-      for (var r = 0; r < rows.length; r++) {
-        var cells = getDirectRowCells(rows[r]);
-        for (var c = 0; c < cells.length; c++) {
-          var tag = ((cells[c].tagName || '').toLowerCase() === 'th') ? 'th' : 'td';
-          var colWidth = getCanonicalColumnWidth(cells[c]);
-          cells[c].setAttribute('style', buildCellStyle(tag, attrs, colWidth || '', tag === 'th'));
-        }
-      }
-    } catch (e0) {}
-  }
-
-  function findEditorBody(inst) {
-    if (!inst || typeof inst.getBody !== 'function') return null;
-    try { return inst.getBody(); } catch (e) { return null; }
-  }
-
-  function hideFloatingPanel(inst, hostDoc) {
-    if (!inst) return;
-    try {
-      if (hostDoc && hostDoc.getElementById) {
-        var panel = hostDoc.getElementById('af-ae-table-floating');
-        if (panel) panel.style.display = 'none';
-      }
-    } catch (e0) {}
-    inst.__afAeActiveTable = null;
-    inst.__afAeActiveTableCell = null;
-    inst.__afAeTablePanelPointerDown = false;
-  }
-
   function openFloatingEditorForTable(inst, table) {
     if (!inst || !table || table.nodeType !== 1) return;
     if (isSourceMode(inst)) return;
-    if ((table.tagName || '').toLowerCase() !== 'table') return;
+    if (!isManagedTableNode(table)) return;
 
     try {
-      var body = findEditorBody(inst);
-      if (!body || !body.ownerDocument) return;
-      if (!body.contains(table)) return;
+      var body = getInstBodySafe(inst);
+      if (!body || !body.ownerDocument || !body.contains(table)) return;
 
       var doc = body.ownerDocument;
       var hostDoc = getFloatingPanelHostDoc(inst, doc);
@@ -1281,7 +1425,7 @@
       }
 
       function applyAttrsToDom(t, a) {
-        try { applyTableVisualAttrs(t, a); } catch (e0) {}
+        try { applyCanonicalAttrsToTableDom(t, a); } catch (e0) {}
       }
 
       function getActiveCell(t) {
@@ -1354,10 +1498,6 @@
         panel.addEventListener('click', function (ev) {
           var btn = ev.target && ev.target.closest ? ev.target.closest('button[data-a]') : null;
           var act = btn ? btn.getAttribute('data-a') : '';
-          tableDebugLog('toolbar click', {
-            action: act || null,
-            hasActiveTable: !!inst.__afAeActiveTable
-          });
           if (!btn || !inst.__afAeActiveTable) return;
 
           ev.preventDefault();
@@ -1371,6 +1511,7 @@
               var activeCell = getActiveCell(tableEl);
               var widthInput = panel.querySelector('input[data-a="tbl-width"]');
               if (widthInput) widthInput.value = attrs.width || '';
+
               var colCurrentInput = panel.querySelector('input[data-a="col-width-current"]');
               if (colCurrentInput && activeCell && activeCell.parentElement) {
                 var cwNow = '';
@@ -1401,19 +1542,15 @@
           }
 
           if (act === 'close') {
-            panel.style.display = 'none';
-            inst.__afAeActiveTable = null;
-            tableDebugLog('hide panel', { reason: 'close-btn' });
+            resetFloatingTableState(inst, hostDoc, 'close-btn');
             return;
           }
 
           if (act === 'del-table') {
             try {
               t.parentNode && t.parentNode.removeChild(t);
-              panel.style.display = 'none';
-              inst.__afAeActiveTable = null;
-              tableDebugLog('hide panel', { reason: 'table-deleted' });
             } catch (eD) {}
+            resetFloatingTableState(inst, hostDoc, 'table-deleted');
             syncEditorValue();
             return;
           }
@@ -1469,12 +1606,12 @@
           if (act === 'apply-col-width-current') {
             var activeForWidth = getActiveCell(t);
             if (activeForWidth && activeForWidth.parentElement) {
-              var colIdxPrompt = Array.prototype.indexOf.call(activeForWidth.parentElement.cells, activeForWidth);
+              var colIdx = Array.prototype.indexOf.call(activeForWidth.parentElement.cells, activeForWidth);
               var curInput = panel.querySelector('input[data-a="col-width-current"]');
-              var nPrompt = normWidthToken(curInput ? curInput.value : '');
+              var widthVal = normWidthToken(curInput ? curInput.value : '');
               for (var rr3 = 0; rr3 < t.rows.length; rr3++) {
-                var c3 = t.rows[rr3].cells[colIdxPrompt];
-                if (c3) c3.style.width = nPrompt || '';
+                var c3 = t.rows[rr3].cells[colIdx];
+                if (c3) c3.style.width = widthVal || '';
               }
               try {
                 var a3 = normalizeTableAttrs(parseAttrsFromDom(t));
@@ -1491,12 +1628,6 @@
 
           var row = cell.parentElement;
           var colIndex = Array.prototype.indexOf.call(row.cells, cell);
-          tableDebugLog('button click', {
-            action: act,
-            hasActiveCell: !!cell,
-            rowIndex: row ? row.rowIndex : -1,
-            colIndex: colIndex
-          });
 
           function cloneCell(base) {
             var n = base.cloneNode(false);
@@ -1527,8 +1658,7 @@
           }
 
           try {
-            var a2 = parseAttrsFromDom(t);
-            a2 = normalizeTableAttrs(a2);
+            var a2 = normalizeTableAttrs(parseAttrsFromDom(t));
             applyAttrsToDom(t, a2);
             syncPanelStateForTable(t);
           } catch (eA) {}
@@ -1538,17 +1668,19 @@
         }, false);
 
         var colorHandler = function (ev) {
-          var input = ev.target && ev.target.closest ? ev.target.closest('input[type="color"][data-a]') : null;
+          var input = ev.target && ev.target.closest ? ev.target.closest('input[type=color][data-a]') : null;
           if (!input || !inst.__afAeActiveTable) return;
 
           var t = inst.__afAeActiveTable;
           var act = input.getAttribute('data-a');
           var a = parseAttrsFromDom(t);
           var val = asText(input.value).trim();
+
           if (act === 'bg') a.bgcolor = normColor(val);
           if (act === 'fg') a.textcolor = normColor(val);
           if (act === 'hbg') a.hbgcolor = normColor(val);
           if (act === 'hfg') a.htextcolor = normColor(val);
+
           a = normalizeTableAttrs(a);
           applyAttrsToDom(t, a);
           syncEditorValue();
@@ -1578,13 +1710,6 @@
       panel.style.display = 'flex';
       panel.style.top = Math.max(8, top) + 'px';
       panel.style.left = Math.max(8, left) + 'px';
-      tableDebugLog('open panel', {
-        hostIsTopDocument: hostDoc === document,
-        panelOwnerHost: panel.ownerDocument === hostDoc,
-        iframeRect: iframeRect ? { top: iframeRect.top, left: iframeRect.left, bottom: iframeRect.bottom, right: iframeRect.right } : null,
-        tableRect: { top: rect.top, left: rect.left, bottom: rect.bottom, right: rect.right },
-        computed: { top: Math.max(8, top), left: Math.max(8, left) }
-      });
 
       inst.__afAeActiveTable = table;
 
@@ -1594,7 +1719,10 @@
         var fg = panel.querySelector('input[data-a="fg"]'); if (fg && cur.textcolor) fg.value = cur.textcolor;
         var hbg = panel.querySelector('input[data-a="hbg"]'); if (hbg && cur.hbgcolor) hbg.value = cur.hbgcolor;
         var hfg = panel.querySelector('input[data-a="hfg"]'); if (hfg && cur.htextcolor) hfg.value = cur.htextcolor;
-        var tblWidth = panel.querySelector('input[data-a="tbl-width"]'); if (tblWidth) tblWidth.value = cur.width || '';
+
+        var tblWidth = panel.querySelector('input[data-a="tbl-width"]');
+        if (tblWidth) tblWidth.value = cur.width || '';
+
         var colWidths = panel.querySelector('input[data-a="col-widths"]');
         if (colWidths && table.rows && table.rows.length) {
           var firstRow = table.rows[0];
@@ -1604,6 +1732,7 @@
           }
           colWidths.value = list.join(',');
         }
+
         var alignButtons = panel.querySelectorAll('button[data-a^="align-"]');
         for (var abi = 0; abi < alignButtons.length; abi++) {
           var ab = alignButtons[abi];
@@ -1618,65 +1747,51 @@
 
   function bindFloatingEditor(inst) {
     if (!inst || inst.__afAeTableFloatingBound) return;
-    inst.__afAeTableFloatingBound = true;
 
     try {
-      var body = findEditorBody(inst);
-      if (!body || isSourceMode(inst)) return;
+      var body = getInstBodySafe(inst);
+      if (!body) return;
+
+      inst.__afAeTableFloatingBound = true;
 
       var doc = body.ownerDocument;
       var hostDoc = getFloatingPanelHostDoc(inst, doc);
       var iframeEl = getEditorIframeElement(inst, doc);
 
       function hidePanel(reason) {
-        hideFloatingPanel(inst, hostDoc);
-      }
-
-      function ensureInstanceUsable(reason) {
-        var currentBody = findEditorBody(inst);
-        if (!currentBody || isSourceMode(inst)) {
-          hidePanel(reason || 'instance-not-usable');
-          return false;
-        }
-
-        try {
-          if (!currentBody.querySelector('table.af-ae-table,table[data-af-table="1"]')) {
-            hidePanel(reason || 'no-managed-tables');
-            return false;
-          }
-        } catch (eQ) {}
-
-        return true;
+        resetFloatingTableState(inst, hostDoc, reason || 'unknown');
       }
 
       body.addEventListener('mousedown', function (ev) {
-        if (!ensureInstanceUsable('mousedown-no-table')) return;
         var cell = ev.target && ev.target.closest ? ev.target.closest('td,th') : null;
-        var table = getManagedTableFromAny(cell);
-        if (!cell || !table) return;
-        inst.__afAeActiveTableCell = cell;
+        var table = getManagedTableFromNode(cell);
+        if (cell && table) inst.__afAeActiveTableCell = cell;
       }, true);
 
       body.addEventListener('click', function (ev) {
-        if (!ensureInstanceUsable('click-no-table')) return;
-
         var cell = ev.target && ev.target.closest ? ev.target.closest('td,th') : null;
-        var cellTable = getManagedTableFromAny(cell);
-        if (cell && cellTable) inst.__afAeActiveTableCell = cell;
+        var table = getManagedTableFromNode(cell);
+        if (cell && table) inst.__afAeActiveTableCell = cell;
+      }, true);
 
-        var table = getManagedTableFromAny(ev.target);
-        if (!table || !body.contains(table)) {
-          hidePanel('click-non-table-target');
+      body.addEventListener('click', function (ev) {
+        if (isSourceMode(inst)) {
+          hidePanel('click-in-source-mode');
           return;
         }
 
-        openFloatingEditorForTable(inst, table);
+        var table = getManagedTableFromNode(ev.target);
+        if (table && body.contains(table)) {
+          openFloatingEditorForTable(inst, table);
+          return;
+        }
+
+        hidePanel('click-non-table-target');
       }, false);
 
       hostDoc.addEventListener('mousedown', function (ev) {
         var panel = hostDoc.getElementById('af-ae-table-floating');
         if (!panel || panel.style.display === 'none') return;
-        if (!ensureInstanceUsable('outside-click-no-table')) return;
 
         var t = inst.__afAeActiveTable;
         var inPanel = panel.contains(ev.target);
@@ -1690,7 +1805,7 @@
             var y = ev.clientY - iframeRect.top;
             if (x >= 0 && y >= 0 && x <= iframeRect.width && y <= iframeRect.height) {
               var elAtPoint = doc.elementFromPoint(x, y);
-              var tableAtPoint = getManagedTableFromAny(elAtPoint);
+              var tableAtPoint = getManagedTableFromNode(elAtPoint);
               hitTable = !!(tableAtPoint && (tableAtPoint === t || (t.contains && t.contains(tableAtPoint))));
             }
           } catch (e1) {}
@@ -1699,31 +1814,20 @@
         if (!inPanel && !hitTable) hidePanel('outside-click');
       }, false);
 
-      inst.bind('blur', function () {
-        var panel = null;
-        try { panel = hostDoc.getElementById('af-ae-table-floating'); } catch (e1) {}
+      if (typeof inst.bind === 'function') {
+        inst.bind('blur', function () {
+          var panel = null;
+          try { panel = hostDoc.getElementById('af-ae-table-floating'); } catch (e1) {}
 
-        if (inst.__afAeTablePanelPointerDown) return;
+          if (inst.__afAeTablePanelPointerDown) return;
 
-        try {
-          if (panel && panel.contains(hostDoc.activeElement)) {
-            return;
-          }
-        } catch (e2) {}
+          try {
+            if (panel && panel.contains(hostDoc.activeElement)) return;
+          } catch (e2) {}
 
-        hidePanel('blur');
-      });
-
-      try {
-        inst.bind('destroy', function () {
-          hidePanel('destroy');
+          hidePanel('blur');
         });
-      } catch (e3) {}
-
-      body.addEventListener('mouseleave', function () {
-        try { if (!body.querySelector('table.af-ae-table,table[data-af-table="1"]')) hidePanel('mouseleave-no-table'); } catch (eQ2) {}
-      }, true);
-
+      }
     } catch (e) {}
   }
 
@@ -1828,9 +1932,18 @@
       var borderWidth = String(clampInt(inpBorderWidth && inpBorderWidth.value, 0, 20, 1));
 
       var opts = {
-        width: width, colWidths: colWidthsRaw, align: align, headers: headers, fill: fill,
-        cellBg: cellBg, textColor: textColor, headBg: headBg, headText: headText,
-        borderOn: borderOn, borderColor: borderColor, borderWidth: borderWidth
+        width: width,
+        colWidths: colWidthsRaw,
+        align: align,
+        headers: headers,
+        fill: fill,
+        cellBg: cellBg,
+        textColor: textColor,
+        headBg: headBg,
+        headText: headText,
+        borderOn: borderOn,
+        borderColor: borderColor,
+        borderWidth: borderWidth
       };
 
       var bb = buildBbcode(rows, cols, opts);
@@ -1853,9 +1966,12 @@
     });
 
     if (selBorderOn) selBorderOn.addEventListener('change', updateBorderUi, false);
+
     [[chkCellBg, inpCellBg], [chkText, inpText], [chkHeadBg, inpHeadBg], [chkHeadText, inpHeadText]].forEach(function (pair) {
       if (!pair[0]) return;
-      pair[0].addEventListener('change', function () { syncColorEnable(pair[0], pair[1]); }, false);
+      pair[0].addEventListener('change', function () {
+        syncColorEnable(pair[0], pair[1]);
+      }, false);
     });
 
     [inpCols, inpRows, inpWidth, inpColWidths, inpBorderWidth].forEach(function (el) {
@@ -1868,10 +1984,12 @@
       }, false);
     });
 
-    if (btnInsert) btnInsert.addEventListener('click', function (ev) {
-      ev.preventDefault();
-      insertNow();
-    }, false);
+    if (btnInsert) {
+      btnInsert.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        insertNow();
+      }, false);
+    }
 
     return wrap;
   }
@@ -1880,18 +1998,74 @@
     if (!editor || typeof editor.createDropDown !== 'function') return false;
     try { editor.closeDropDown(true); } catch (e0) {}
 
-    afAeEnsureMybbTableBbcode(editor);
-    ensureTableCss(editor);
-    bindTableToSourceNormalization(editor);
-    bindFloatingEditor(editor);
-    bindSubmitSync(editor);
+    ensureInstancePatched(editor);
+    bindPreSerializeGuards(editor);
 
     var wrap = makeDropdown(editor, caller);
     editor.createDropDown(caller, 'sceditor-table-picker', wrap);
     return true;
   }
 
+  function insertTableToEditor(editor, bb, html) {
+    bb = asText(bb);
+    html = asText(html);
+
+    function insertHtmlWysiwyg(inst, htmlChunk, bbFallback) {
+      try {
+        if (typeof inst.wysiwygEditorInsertHtml === 'function') {
+          inst.wysiwygEditorInsertHtml(htmlChunk);
+          return true;
+        }
+        if (typeof inst.insertHTML === 'function') {
+          inst.insertHTML(htmlChunk);
+          return true;
+        }
+      } catch (e0) {}
+
+      try {
+        if (typeof inst.insertText === 'function') {
+          inst.insertText(bbFallback, '');
+          return true;
+        }
+        if (typeof inst.insert === 'function') {
+          inst.insert(bbFallback, '');
+          return true;
+        }
+      } catch (e1) {}
+
+      return false;
+    }
+
+    try {
+      if (editor && typeof editor.insertText === 'function') {
+        ensureInstancePatched(editor);
+        bindPreSerializeGuards(editor);
+
+        if (isSourceMode(editor)) {
+          editor.insertText(bb, '');
+        } else {
+          insertHtmlWysiwyg(editor, html || bb, bb);
+          queueRehydrate(editor, 'insert');
+        }
+
+        try {
+          if (typeof editor.updateOriginal === 'function') editor.updateOriginal();
+        } catch (e5) {}
+
+        try {
+          if (typeof editor.focus === 'function') editor.focus();
+        } catch (e6) {}
+
+        return true;
+      }
+    } catch (e0) {}
+
+    var ta = getTextareaFromCtx({ sceditor: editor });
+    return insertAtCursor(ta, bb);
+  }
+
   function patchSceditorTableCommand() {
+    if (window.__afAeTableCommandPatched) return true;
     if (!hasSceditor()) return false;
 
     var $ = window.jQuery;
@@ -1919,45 +2093,38 @@
     $.sceditor.command.set('af_table', buildCommand());
     $.sceditor.command.set('table', buildCommand());
 
+    window.__afAeTableCommandPatched = true;
     return true;
   }
 
-  function waitAnd(fn, maxTries) {
-    var tries = 0;
-    (function tick() {
-      tries++;
-      if (fn()) return;
-      if (tries > (maxTries || 150)) return;
-      setTimeout(tick, 100);
-    })();
-  }
-
-  function tryPatchInstances() {
+  function patchAllCurrentInstances() {
     if (!hasSceditor() || !window.jQuery) return false;
-    var $ = window.jQuery;
 
+    var $ = window.jQuery;
     try {
       var tas = document.querySelectorAll('textarea');
       for (var i = 0; i < tas.length; i++) {
         var inst = null;
         try { inst = $(tas[i]).sceditor('instance'); } catch (e0) { inst = null; }
         if (!inst) continue;
-        try { afAeEnsureMybbTableBbcode(inst); } catch (e1) {}
-        try { ensureTableCss(inst); } catch (e2) {}
-        try { bindTableToSourceNormalization(inst); } catch (e3) {}
-        try { bindFloatingEditor(inst); } catch (e4) {}
-        try { bindSubmitSync(inst); } catch (e6) {}
+
+        ensureInstancePatched(inst);
+        bindPreSerializeGuards(inst);
       }
     } catch (e) {}
 
     return true;
   }
 
-  waitAnd(function () {
-    if (!patchSceditorTableCommand()) return false;
-    tryPatchInstances();
-    return true;
-  }, 150);
+  var patchAllTimer = 0;
+  function schedulePatchAllInstances() {
+    if (patchAllTimer) return;
+    patchAllTimer = setTimeout(function () {
+      patchAllTimer = 0;
+      try { patchSceditorTableCommand(); } catch (e0) {}
+      try { patchAllCurrentInstances(); } catch (e1) {}
+    }, 0);
+  }
 
   function aqrOpen(ctx, ev) {
     var editor = getSceditorInstanceFromCtx(ctx);
@@ -1992,8 +2159,9 @@
     if (!editor) editor = getSceditorInstanceFromCtx({});
     if (!editor) return;
 
-    if (caller && caller.nodeType === 1) openSceditorDropdown(editor, caller);
-    else {
+    if (caller && caller.nodeType === 1) {
+      openSceditorDropdown(editor, caller);
+    } else {
       var bb = buildBbcode(2, 2, { headers: 'none' });
       var html = buildHtmlFromBbcode(2, 2, { headers: 'none' });
       insertTableToEditor(editor, bb, html);
@@ -2008,7 +2176,6 @@
   }
 
   registerHandlers();
-  for (var i = 1; i <= 20; i++) setTimeout(registerHandlers, i * 250);
 
   window.afAeTableDebugApi = {
     normalizeTableAttrs: normalizeTableAttrs,
@@ -2019,7 +2186,10 @@
     createTableModel: createTableModel,
     serializeCellContentForTable: serializeCellContentForTable,
     serializeTableDomToCanonicalBb: serializeTableDomToCanonicalBb,
-    editorHtmlToBbWithOwnedTables: editorHtmlToBbWithOwnedTables
+    normalizeAfTablesInHtmlWithInst: normalizeAfTablesInHtmlWithInst,
+    editorHtmlToBbWithOwnedTables: editorHtmlToBbWithOwnedTables,
+    normalizeExistingEditorTables: normalizeExistingEditorTables,
+    syncTextareaFromWysiwyg: syncTextareaFromWysiwyg
   };
 
   window.af_ae_table_exec = function (editor, def, caller) {
@@ -2029,4 +2199,33 @@
       insertTableToEditor(editor, bb, html);
     }
   };
+
+  try { patchSceditorTableCommand(); } catch (e0) {}
+  schedulePatchAllInstances();
+
+  window.addEventListener('load', function () {
+    schedulePatchAllInstances();
+  }, { passive: true });
+
+  document.addEventListener('focusin', function (ev) {
+    var t = ev.target;
+    if (!t || !t.nodeType) return;
+
+    var isTextarea = t.tagName === 'TEXTAREA';
+    var inEditor = !!(t.closest && t.closest('.sceditor-container'));
+    if (isTextarea || inEditor) {
+      schedulePatchAllInstances();
+    }
+  }, true);
+
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (!t || !t.nodeType) return;
+
+    var inEditor = !!(t.closest && t.closest('.sceditor-container'));
+    if (inEditor) {
+      try { patchSceditorTableCommand(); } catch (e0) {}
+      schedulePatchAllInstances();
+    }
+  }, true);
 })();
