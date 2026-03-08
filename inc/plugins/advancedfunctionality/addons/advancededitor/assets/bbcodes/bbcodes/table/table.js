@@ -84,20 +84,19 @@
 
   function tableAttrsToBbOpen(attrs) {
     attrs = normalizeAttrs(attrs);
-    var parts = [];
-    if (attrs.width) parts.push('width=' + attrs.width);
-    if (attrs.align) parts.push('align=' + attrs.align);
-    if (attrs.headers) parts.push('headers=' + attrs.headers);
-    if (attrs.bgcolor) parts.push('bgcolor=' + attrs.bgcolor);
-    if (attrs.textcolor) parts.push('textcolor=' + attrs.textcolor);
-    if (attrs.hbgcolor) parts.push('hbgcolor=' + attrs.hbgcolor);
-    if (attrs.htextcolor) parts.push('htextcolor=' + attrs.htextcolor);
-    parts.push('border=' + attrs.border);
-    if (attrs.border === '1') {
-      if (attrs.bordercolor) parts.push('bordercolor=' + attrs.bordercolor);
-      if (attrs.borderwidth) parts.push('borderwidth=' + attrs.borderwidth);
-    }
-    return '[table' + (parts.length ? ' ' + parts.join(' ') : '') + ']';
+    var parts = [
+      'width=' + attrs.width,
+      'align=' + attrs.align,
+      'headers=' + attrs.headers,
+      'bgcolor=' + attrs.bgcolor,
+      'textcolor=' + attrs.textcolor,
+      'hbgcolor=' + attrs.hbgcolor,
+      'htextcolor=' + attrs.htextcolor,
+      'border=' + attrs.border,
+      'bordercolor=' + attrs.bordercolor,
+      'borderwidth=' + attrs.borderwidth
+    ];
+    return '[table ' + parts.join(' ') + ']';
   }
 
   function buildTableStyle(attrs) {
@@ -138,7 +137,6 @@
     for (var i = 0; i < TABLE_ATTR_KEYS.length; i++) {
       var k = TABLE_ATTR_KEYS[i];
       var v = asText(attrs[k]).trim();
-      if (!v && k !== 'border') continue;
       out.push('data-af-' + k + '="' + v.replace(/"/g, '&quot;') + '"');
     }
     return out.join(' ');

@@ -148,8 +148,8 @@ function af_ae_bbcode_table_normalize_attrs(array $attrs): array
 
     $out['bgcolor'] = af_ae_bbcode_table_normalize_color((string)($attrs['bgcolor'] ?? ''));
     $out['textcolor'] = af_ae_bbcode_table_normalize_color((string)($attrs['textcolor'] ?? ''));
-    $out['hbgcolor'] = af_ae_bbcode_table_normalize_color((string)($attrs['hbgcolor'] ?? ($attrs['theadbg'] ?? '')));
-    $out['htextcolor'] = af_ae_bbcode_table_normalize_color((string)($attrs['htextcolor'] ?? ($attrs['theadcolor'] ?? '')));
+    $out['hbgcolor'] = af_ae_bbcode_table_normalize_color((string)($attrs['hbgcolor'] ?? ''));
+    $out['htextcolor'] = af_ae_bbcode_table_normalize_color((string)($attrs['htextcolor'] ?? ''));
     $out['bordercolor'] = af_ae_bbcode_table_normalize_color((string)($attrs['bordercolor'] ?? ''));
 
     $border = trim((string)($attrs['border'] ?? '1'));
@@ -163,6 +163,15 @@ function af_ae_bbcode_table_normalize_attrs(array $attrs): array
         if ($n < 0) { $n = 0; }
         if ($n > 20) { $n = 20; }
         $out['borderwidth'] = $n . 'px';
+    }
+
+    if ($out['border'] === '1') {
+        if ($out['bordercolor'] === '') {
+            $out['bordercolor'] = '#888888';
+        }
+        if ($out['borderwidth'] === '') {
+            $out['borderwidth'] = '1px';
+        }
     }
 
     return $out;
@@ -180,7 +189,7 @@ function af_ae_bbcode_table_normalize_color(string $value): string
 function af_ae_bbcode_table_attrs_to_style(array $attrs): string
 {
     $attrs = af_ae_bbcode_table_normalize_attrs($attrs);
-    $styles = [];
+    $styles = ['border-collapse:collapse', 'border-spacing:0'];
 
     if ($attrs['width'] !== '') {
         $styles[] = 'width:' . $attrs['width'];
@@ -195,15 +204,26 @@ function af_ae_bbcode_table_attrs_to_style(array $attrs): string
         $styles[] = 'margin-right:auto';
     }
 
-    $styles[] = 'border-collapse:collapse';
-    $styles[] = 'border-spacing:0';
+    if ($attrs['bgcolor'] !== '') {
+        $styles[] = '--af-tbl-bg:' . $attrs['bgcolor'];
+    }
+    if ($attrs['textcolor'] !== '') {
+        $styles[] = '--af-tbl-txt:' . $attrs['textcolor'];
+    }
+    if ($attrs['hbgcolor'] !== '') {
+        $styles[] = '--af-tbl-hbg:' . $attrs['hbgcolor'];
+    }
+    if ($attrs['htextcolor'] !== '') {
+        $styles[] = '--af-tbl-htxt:' . $attrs['htextcolor'];
+    }
 
-    if ($attrs['border'] === '0') {
-        $styles[] = 'border:0';
+    if ($attrs['border'] === '1') {
+        $styles[] = '--af-tbl-bw:' . $attrs['borderwidth'];
+        $styles[] = '--af-tbl-bc:' . $attrs['bordercolor'];
+        $styles[] = 'border:' . $attrs['borderwidth'] . ' solid ' . $attrs['bordercolor'];
     } else {
-        $bw = $attrs['borderwidth'] !== '' ? $attrs['borderwidth'] : '1px';
-        $bc = $attrs['bordercolor'] !== '' ? $attrs['bordercolor'] : '#888888';
-        $styles[] = 'border:' . $bw . ' solid ' . $bc;
+        $styles[] = '--af-tbl-bw:0px';
+        $styles[] = 'border:0';
     }
 
     return implode(';', $styles);
@@ -227,39 +247,24 @@ function af_ae_bbcode_table_build_cell_style(array $attrs, bool $isHeader, strin
     $attrs = af_ae_bbcode_table_normalize_attrs($attrs);
     $styles = [];
 
-    $existingStyle = trim($existingStyle);
-    if ($existingStyle !== '') {
-        $styles[] = rtrim($existingStyle, ';');
+    $width = '';
+    if (preg_match('~(?:^|;)\s*width\s*:\s*([^;]+)~i', $existingStyle, $m)) {
+        $width = trim((string)$m[1]);
     }
-
-    if ($attrs['bgcolor'] !== '') {
-        $styles[] = 'background-color:' . $attrs['bgcolor'];
-    }
-    if ($attrs['textcolor'] !== '') {
-        $styles[] = 'color:' . $attrs['textcolor'];
-    }
-
-    if ($isHeader) {
-        if ($attrs['hbgcolor'] !== '') {
-            $styles[] = 'background-color:' . $attrs['hbgcolor'];
-        }
-        if ($attrs['htextcolor'] !== '') {
-            $styles[] = 'color:' . $attrs['htextcolor'];
-        }
-        $styles[] = 'font-weight:700';
-        $styles[] = 'text-align:left';
-    }
-
-    if ($attrs['border'] === '0') {
-        $styles[] = 'border:0';
-    } else {
-        $bw = $attrs['borderwidth'] !== '' ? $attrs['borderwidth'] : '1px';
-        $bc = $attrs['bordercolor'] !== '' ? $attrs['bordercolor'] : '#888888';
-        $styles[] = 'border:' . $bw . ' solid ' . $bc;
+    if ($width !== '' && preg_match('~^([0-9]{1,4})(px|%|em|rem|vw|vh)?$~i', $width, $mw)) {
+        $styles[] = 'width:' . $mw[1] . (!empty($mw[2]) ? strtolower($mw[2]) : 'px');
     }
 
     $styles[] = 'padding:6px 8px';
     $styles[] = 'vertical-align:top';
+    $styles[] = 'background-color:' . ($isHeader ? ($attrs['hbgcolor'] !== '' ? $attrs['hbgcolor'] : ($attrs['bgcolor'] !== '' ? $attrs['bgcolor'] : 'transparent')) : ($attrs['bgcolor'] !== '' ? $attrs['bgcolor'] : 'transparent'));
+    $styles[] = 'color:' . ($isHeader ? ($attrs['htextcolor'] !== '' ? $attrs['htextcolor'] : ($attrs['textcolor'] !== '' ? $attrs['textcolor'] : 'inherit')) : ($attrs['textcolor'] !== '' ? $attrs['textcolor'] : 'inherit'));
+    $styles[] = $attrs['border'] === '1' ? ('border:' . $attrs['borderwidth'] . ' solid ' . $attrs['bordercolor']) : 'border:0';
+
+    if ($isHeader) {
+        $styles[] = 'font-weight:700';
+        $styles[] = 'text-align:left';
+    }
 
     return implode(';', $styles);
 }
