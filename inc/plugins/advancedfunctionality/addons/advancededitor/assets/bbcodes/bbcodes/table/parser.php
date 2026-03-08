@@ -251,6 +251,20 @@ function af_ae_bbcode_table_build_data_attrs(array $attrs): string
     return implode('', $pairs);
 }
 
+function af_ae_bbcode_table_read_attr(string $raw, string $name): string
+{
+    $name = preg_quote($name, '~');
+    if (!preg_match("~\\b" . $name . "\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s\\]]+))~i", $raw, $m)) {
+        return '';
+    }
+
+    if (isset($m[2]) && $m[2] !== '') return trim((string)$m[2]);
+    if (isset($m[3]) && $m[3] !== '') return trim((string)$m[3]);
+    if (isset($m[4]) && $m[4] !== '') return trim((string)$m[4]);
+
+    return '';
+}
+
 function af_ae_bbcode_table_parse_attrs(string $raw): array
 {
     $raw = trim($raw);
@@ -259,17 +273,11 @@ function af_ae_bbcode_table_parse_attrs(string $raw): array
         'width'         => '',
         'align'         => '',
         'headers'       => '',
-
-        // colors (по умолчанию пусто => наследуем от темы)
-        'bgcolor'       => '',   // td/th общий фон (если задан)
-        'textcolor'     => '',   // td/th общий цвет текста (если задан)
-
-        // header-specific (по умолчанию пусто => наследуем/дефолт темы)
-        'hbgcolor'      => '',   // фон только заголовков (th)
-        'htextcolor'    => '',   // цвет текста только заголовков (th)
-
-        // borders
-        'border'        => '1',  // если нет атрибута, оставляем 1 как раньше
+        'bgcolor'       => '',
+        'textcolor'     => '',
+        'hbgcolor'      => '',
+        'htextcolor'    => '',
+        'border'        => '1',
         'bordercolor'   => '',
         'borderwidth'   => '',
     ];
@@ -278,48 +286,47 @@ function af_ae_bbcode_table_parse_attrs(string $raw): array
         return $out;
     }
 
-    // width
-    if (preg_match('~\bwidth\s*=\s*([0-9]{1,4})(px|%|em|rem|vw|vh)?\b~i', $raw, $m)) {
+    $width = af_ae_bbcode_table_read_attr($raw, 'width');
+    if (preg_match('~^([0-9]{1,4})(px|%|em|rem|vw|vh)?$~i', $width, $m)) {
         $unit = !empty($m[2]) ? strtolower($m[2]) : 'px';
         $out['width'] = $m[1] . $unit;
     }
 
-    if (preg_match('~\balign\s*=\s*(left|center|right)\b~i', $raw, $m)) {
-        $out['align'] = strtolower($m[1]);
+    $align = strtolower(af_ae_bbcode_table_read_attr($raw, 'align'));
+    if (in_array($align, ['left', 'center', 'right'], true)) {
+        $out['align'] = $align;
     }
 
-    if (preg_match('~\bheaders\s*=\s*(none|row|col|both)\b~i', $raw, $m)) {
-        $h = strtolower($m[1]);
-        $out['headers'] = ($h === 'none') ? '' : $h;
+    $headers = strtolower(af_ae_bbcode_table_read_attr($raw, 'headers'));
+    if (in_array($headers, ['row', 'col', 'both'], true)) {
+        $out['headers'] = $headers;
     }
 
-    // общие цвета
-    if (preg_match('~\bbgcolor\s*=\s*(#[0-9a-f]{3}(?:[0-9a-f]{3})?)\b~i', $raw, $m)) {
-        $out['bgcolor'] = strtolower($m[1]);
-    }
-    if (preg_match('~\btextcolor\s*=\s*(#[0-9a-f]{3}(?:[0-9a-f]{3})?)\b~i', $raw, $m)) {
-        $out['textcolor'] = strtolower($m[1]);
+    $colorMap = [
+        'bgcolor' => ['bgcolor'],
+        'textcolor' => ['textcolor'],
+        'hbgcolor' => ['hbgcolor', 'theadbg'],
+        'htextcolor' => ['htextcolor', 'theadcolor'],
+        'bordercolor' => ['bordercolor'],
+    ];
+
+    foreach ($colorMap as $target => $keys) {
+        foreach ($keys as $key) {
+            $v = strtolower(af_ae_bbcode_table_read_attr($raw, $key));
+            if ($v !== '' && preg_match('~^#[0-9a-f]{3}(?:[0-9a-f]{3})?$~i', $v)) {
+                $out[$target] = $v;
+                break;
+            }
+        }
     }
 
-    // заголовки: отдельные атрибуты
-    // поддержим два имени на выбор: hbgcolor/theadbg и htextcolor/theadcolor
-    if (preg_match('~\b(hbgcolor|theadbg)\s*=\s*(#[0-9a-f]{3}(?:[0-9a-f]{3})?)\b~i', $raw, $m)) {
-        $out['hbgcolor'] = strtolower($m[2]);
-    }
-    if (preg_match('~\b(htextcolor|theadcolor)\s*=\s*(#[0-9a-f]{3}(?:[0-9a-f]{3})?)\b~i', $raw, $m)) {
-        $out['htextcolor'] = strtolower($m[2]);
+    $border = af_ae_bbcode_table_read_attr($raw, 'border');
+    if ($border === '0' || $border === '1') {
+        $out['border'] = $border;
     }
 
-    // borders
-    if (preg_match('~\bborder\s*=\s*(0|1)\b~i', $raw, $m)) {
-        $out['border'] = $m[1];
-    }
-
-    if (preg_match('~\bbordercolor\s*=\s*(#[0-9a-f]{3}(?:[0-9a-f]{3})?)\b~i', $raw, $m)) {
-        $out['bordercolor'] = strtolower($m[1]);
-    }
-
-    if (preg_match('~\bborderwidth\s*=\s*([0-9]{1,2})px\b~i', $raw, $m)) {
+    $borderWidth = af_ae_bbcode_table_read_attr($raw, 'borderwidth');
+    if (preg_match('~^([0-9]{1,2})px$~i', $borderWidth, $m)) {
         $n = (int)$m[1];
         if ($n < 0) $n = 0;
         if ($n > 20) $n = 20;
