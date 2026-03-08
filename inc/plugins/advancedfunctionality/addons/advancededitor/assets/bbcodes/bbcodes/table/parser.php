@@ -1,10 +1,15 @@
 <?php
 /**
  * AE BBCode Pack: table
- * Каноничный PHP-рендер [table]...[tr][td]/[th] для всех режимов.
+ * Рендерит [table]...[tr][td]... в HTML table.
+ * КРИТИЧНО: чистит <br> которые MyBB вставляет из переносов.
  */
 
 if (!defined('IN_MYBB')) { exit; }
+
+/**
+ * НОВОЕ "каноничное" имя для AdvancedEditor.
+ */
 
 function af_ae_bbcode_table_parse_start(&$message): void
 {
@@ -42,14 +47,12 @@ function af_ae_bbcode_table_parse_end(&$message): void
 
 function af_ae_bbcode_table_parse(&$message): void
 {
-    if (!is_string($message) || $message === '') {
-        return;
-    }
+    if (!is_string($message) || $message === '') return;
 
-    if (stripos($message, '[table') === false && stripos($message, '[af_table') === false) {
-        return;
-    }
+    // быстрый skip
+    if (stripos($message, '[table') === false && stripos($message, '[af_table') === false) return;
 
+    // защитим <pre>/<code>
     $protected = [];
     $message2 = preg_replace_callback('~<(pre|code)\b[^>]*>.*?</\1>~is', function ($m) use (&$protected) {
         $key = '%%AE_TBL_PROTECT_' . count($protected) . '%%';
@@ -57,15 +60,15 @@ function af_ae_bbcode_table_parse(&$message): void
         return $key;
     }, $message);
 
-    if (!is_string($message2) || $message2 === '') {
-        return;
-    }
+    if (!is_string($message2) || $message2 === '') return;
 
+    // поддержка pre-pass: возвращаем каноничные теги для рендера
     $message2 = preg_replace('~\[(/?)af_table\b([^\]]*)\]~i', '[$1table$2]', $message2);
     $message2 = preg_replace('~\[(/?)af_tr\b([^\]]*)\]~i', '[$1tr$2]', $message2);
     $message2 = preg_replace('~\[(/?)af_td\b([^\]]*)\]~i', '[$1td$2]', $message2);
     $message2 = preg_replace('~\[(/?)af_th\b([^\]]*)\]~i', '[$1th$2]', $message2);
 
+    // ВАЖНО: рендерим вложенные таблицы изнутри наружу
     $guard = 0;
     while (stripos($message2, '[table') !== false && $guard++ < 30) {
         $before = $message2;
@@ -73,8 +76,133 @@ function af_ae_bbcode_table_parse(&$message): void
         $message2 = preg_replace_callback(
             '~\[table([^\]]*)\]((?:(?!\[table).)*?)\[/table\]~is',
             function ($m) {
-                $attrs = af_ae_bbcode_table_parse_attrs((string)($m[1] ?? ''));
-                return af_ae_bbcode_table_render_html((string)($m[2] ?? ''), $attrs);
+                $attrRaw = (string)($m[1] ?? '');
+                $body    = (string)($m[2] ?? '');
+
+                $attrs = af_ae_bbcode_table_parse_attrs($attrRaw);
+
+                // УБИВАЕМ <br> которые появились из переносов строк между тегами
+                $body = preg_replace('~\]\s*<br\s*/?>\s*\[~i', '][', $body);
+                $body = preg_replace('~<br\s*/?>\s*\[(\/?(?:tr|td|th)(?:[^\]]*)?)\]~i', '[$1]', $body);
+                $body = preg_replace('~\[(\/?(?:tr|td|th)(?:[^\]]*)?)\]\s*<br\s*/?>~i', '[$1]', $body);
+
+                $body = preg_replace('~^(?:\s*<br\s*/?>\s*)+~i', '', $body);
+                $body = preg_replace('~(?:\s*<br\s*/?>\s*)+$~i', '', $body);
+
+                // tr/td/th
+                $x = $body;
+
+                // tr
+                $x = preg_replace('~\[(\/?)tr\]~i', '<$1tr>', $x);
+
+                // td/th с width=...
+                $x = preg_replace_callback('~\[(td|th)([^\]]*)\]~i', function ($m4) {
+                    $tag = strtolower($m4[1]);
+                    $raw = (string)($m4[2] ?? '');
+
+                    $style = '';
+                    if (preg_match('~\bwidth\s*=\s*([0-9]{1,4})(px|%|em|rem|vw|vh)?\b~i', $raw, $w)) {
+                        $unit = !empty($w[2]) ? strtolower($w[2]) : 'px';
+                        $style = ' style="width:' . htmlspecialchars_uni($w[1] . $unit) . '"';
+                    }
+
+                    return '<' . $tag . $style . '>';
+                }, $x);
+
+                $x = preg_replace('~\[/td\]~i', '</td>', $x);
+                $x = preg_replace('~\[/th\]~i', '</th>', $x);
+
+                // Инлайн-стили ячеек для фронта/preview (независимо от загрузки CSS темы).
+                $headersMode = !empty($attrs['headers']) ? $attrs['headers'] : '';
+                $rowIndex = 0;
+                $x = preg_replace_callback('~<tr>(.*?)</tr>~is', function ($mr) use (&$rowIndex, $attrs, $headersMode) {
+                    $rowIndex++;
+                    $colIndex = 0;
+                    $rowHtml = preg_replace_callback('~<(td|th)([^>]*)>(.*?)</\1>~is', function ($mc) use (&$colIndex, $attrs, $headersMode, $rowIndex) {
+                        $colIndex++;
+                        $tag = strtolower((string)$mc[1]);
+                        $extraAttrs = (string)$mc[2];
+                        $innerHtml = (string)$mc[3];
+
+                        $isHeaderByMode = false;
+                        if ($headersMode === 'row' && $rowIndex === 1) $isHeaderByMode = true;
+                        if ($headersMode === 'col' && $colIndex === 1) $isHeaderByMode = true;
+                        if ($headersMode === 'both' && ($rowIndex === 1 || $colIndex === 1)) $isHeaderByMode = true;
+
+                        $shouldHeaderStyle = ($tag === 'th') || $isHeaderByMode;
+
+                        $styleFromCell = '';
+                        if (preg_match('~\bstyle\s*=\s*"([^"]*)"~i', $extraAttrs, $sm)) {
+                            $styleFromCell = trim((string)$sm[1]);
+                        }
+
+                        $cellStyle = af_ae_bbcode_table_build_cell_style($attrs, $shouldHeaderStyle, $styleFromCell);
+                        $newAttrs = preg_replace('~\bstyle\s*=\s*"[^"]*"~i', '', $extraAttrs);
+                        $newAttrs = trim((string)$newAttrs);
+
+                        return '<' . $tag . ($newAttrs !== '' ? ' ' . $newAttrs : '') . ' style="' . htmlspecialchars_uni($cellStyle) . '">' . $innerHtml . '</' . $tag . '>';
+                    }, (string)$mr[1]);
+
+                    return '<tr>' . $rowHtml . '</tr>';
+                }, $x);
+
+                $styles = [];
+
+                // layout
+                if (!empty($attrs['width'])) {
+                    $styles[] = 'width:' . $attrs['width'];
+                }
+                if (!empty($attrs['align'])) {
+                    if ($attrs['align'] === 'center') {
+                        $styles[] = 'margin-left:auto';
+                        $styles[] = 'margin-right:auto';
+                    } elseif ($attrs['align'] === 'right') {
+                        $styles[] = 'margin-left:auto';
+                    } elseif ($attrs['align'] === 'left') {
+                        $styles[] = 'margin-right:auto';
+                    }
+                }
+
+                $styles[] = 'border-collapse:collapse';
+                $styles[] = 'border-spacing:0';
+
+                // NEW: css variables for rendering
+                // bgcolor/textcolor apply to td/th via CSS
+                if (!empty($attrs['bgcolor'])) {
+                    $styles[] = '--af-tbl-bg:' . $attrs['bgcolor'];
+                }
+                if (!empty($attrs['textcolor'])) {
+                    $styles[] = '--af-tbl-txt:' . $attrs['textcolor'];
+                }
+                // header-specific variables
+                if (!empty($attrs['hbgcolor'])) {
+                    $styles[] = '--af-tbl-hbg:' . $attrs['hbgcolor'];
+                }
+                if (!empty($attrs['htextcolor'])) {
+                    $styles[] = '--af-tbl-htxt:' . $attrs['htextcolor'];
+                }
+
+                // borders: if border=0 -> width 0
+                $borderOn = (!isset($attrs['border']) || $attrs['border'] !== '0');
+                if (!$borderOn) {
+                    $styles[] = '--af-tbl-bw:0px';
+                } else {
+                    $bw = !empty($attrs['borderwidth']) ? $attrs['borderwidth'] : '1px';
+                    $bc = !empty($attrs['bordercolor']) ? $attrs['bordercolor'] : '#888888';
+                    $styles[] = '--af-tbl-bw:' . $bw;
+                    $styles[] = '--af-tbl-bc:' . $bc;
+                    $styles[] = 'border:' . $bw . ' solid ' . $bc;
+                }
+
+                $styleAttr = $styles ? (' style="' . htmlspecialchars_uni(implode(';', $styles)) . '"') : '';
+
+
+                $headers = !empty($attrs['headers']) ? $attrs['headers'] : '';
+                $dataHeaders = $headers !== '' ? (' data-headers="' . htmlspecialchars_uni($headers) . '"') : '';
+                $dataAttrs = af_ae_bbcode_table_build_data_attrs($attrs);
+
+                // ВАЖНО: класс/маркер оставляем прежними (если у тебя уже есть CSS под них)
+                return '<table class="af-ae-table" data-af-table="1"' . $dataAttrs . $styleAttr . $dataHeaders . '>' . $x . '</table>';
             },
             $message2
         );
@@ -92,265 +220,161 @@ function af_ae_bbcode_table_parse(&$message): void
     $message = $message2;
 }
 
-function af_ae_bbcode_table_parse_attrs(string $raw): array
+function af_ae_bbcode_table_build_data_attrs(array $attrs): string
 {
-    $attrs = [];
-    $raw = trim($raw);
+    $pairs = [];
 
-    if ($raw !== '') {
-        preg_match_all('~([a-z_][a-z0-9_-]*)\s*=\s*("([^"]*)"|\'([^\']*)\'|([^\s\]]+))~i', $raw, $matches, PREG_SET_ORDER);
-        foreach ($matches as $m) {
-            $key = strtolower((string)$m[1]);
-            $value = '';
-            if (isset($m[3]) && $m[3] !== '') {
-                $value = (string)$m[3];
-            } elseif (isset($m[4]) && $m[4] !== '') {
-                $value = (string)$m[4];
-            } elseif (isset($m[5])) {
-                $value = (string)$m[5];
-            }
-            $attrs[$key] = trim($value);
-        }
-    }
-
-    return af_ae_bbcode_table_normalize_attrs($attrs);
-}
-
-function af_ae_bbcode_table_normalize_attrs(array $attrs): array
-{
-    $out = [
-        'width' => '',
-        'align' => '',
-        'headers' => '',
-        'bgcolor' => '',
-        'textcolor' => '',
-        'hbgcolor' => '',
-        'htextcolor' => '',
-        'border' => '1',
-        'bordercolor' => '',
-        'borderwidth' => '',
+    $map = [
+        'width'       => (string)($attrs['width'] ?? ''),
+        'align'       => (string)($attrs['align'] ?? ''),
+        'headers'     => (string)($attrs['headers'] ?? ''),
+        'bgcolor'     => (string)($attrs['bgcolor'] ?? ''),
+        'textcolor'   => (string)($attrs['textcolor'] ?? ''),
+        'hbgcolor'    => (string)($attrs['hbgcolor'] ?? ''),
+        'htextcolor'  => (string)($attrs['htextcolor'] ?? ''),
+        'border'      => (string)($attrs['border'] ?? '1'),
+        'bordercolor' => (string)($attrs['bordercolor'] ?? ''),
+        'borderwidth' => (string)($attrs['borderwidth'] ?? ''),
     ];
 
-    $width = trim((string)($attrs['width'] ?? ''));
-    if (preg_match('~^([0-9]{1,4})(px|%|em|rem|vw|vh)?$~i', $width, $m)) {
-        $out['width'] = $m[1] . (!empty($m[2]) ? strtolower($m[2]) : 'px');
-    }
-
-    $align = strtolower(trim((string)($attrs['align'] ?? '')));
-    if (in_array($align, ['left', 'center', 'right'], true)) {
-        $out['align'] = $align;
-    }
-
-    $headers = strtolower(trim((string)($attrs['headers'] ?? '')));
-    if (in_array($headers, ['row', 'col', 'both'], true)) {
-        $out['headers'] = $headers;
-    }
-
-    $out['bgcolor'] = af_ae_bbcode_table_normalize_color((string)($attrs['bgcolor'] ?? ''));
-    $out['textcolor'] = af_ae_bbcode_table_normalize_color((string)($attrs['textcolor'] ?? ''));
-    $out['hbgcolor'] = af_ae_bbcode_table_normalize_color((string)($attrs['hbgcolor'] ?? ''));
-    $out['htextcolor'] = af_ae_bbcode_table_normalize_color((string)($attrs['htextcolor'] ?? ''));
-    $out['bordercolor'] = af_ae_bbcode_table_normalize_color((string)($attrs['bordercolor'] ?? ''));
-
-    $border = trim((string)($attrs['border'] ?? '1'));
-    if ($border === '0' || $border === '1') {
-        $out['border'] = $border;
-    }
-
-    $borderWidth = trim((string)($attrs['borderwidth'] ?? ''));
-    if (preg_match('~^([0-9]{1,2})(px)?$~i', $borderWidth, $m)) {
-        $n = (int)$m[1];
-        if ($n < 0) { $n = 0; }
-        if ($n > 20) { $n = 20; }
-        $out['borderwidth'] = $n . 'px';
-    }
-
-    if ($out['border'] === '1') {
-        if ($out['bordercolor'] === '') {
-            $out['bordercolor'] = '#888888';
+    foreach ($map as $key => $value) {
+        $value = trim($value);
+        if ($key === 'border' && $value === '') {
+            $value = '1';
         }
-        if ($out['borderwidth'] === '') {
-            $out['borderwidth'] = '1px';
+        if ($value === '') {
+            continue;
         }
-    }
-
-    return $out;
-}
-
-function af_ae_bbcode_table_normalize_color(string $value): string
-{
-    $value = strtolower(trim($value));
-    if ($value !== '' && preg_match('~^#[0-9a-f]{3}(?:[0-9a-f]{3})?$~', $value)) {
-        return $value;
-    }
-    return '';
-}
-
-function af_ae_bbcode_table_attrs_to_style(array $attrs): string
-{
-    $attrs = af_ae_bbcode_table_normalize_attrs($attrs);
-    $styles = ['border-collapse:collapse', 'border-spacing:0'];
-
-    if ($attrs['width'] !== '') {
-        $styles[] = 'width:' . $attrs['width'];
-    }
-
-    if ($attrs['align'] === 'center') {
-        $styles[] = 'margin-left:auto';
-        $styles[] = 'margin-right:auto';
-    } elseif ($attrs['align'] === 'right') {
-        $styles[] = 'margin-left:auto';
-    } elseif ($attrs['align'] === 'left') {
-        $styles[] = 'margin-right:auto';
-    }
-
-    if ($attrs['bgcolor'] !== '') {
-        $styles[] = '--af-tbl-bg:' . $attrs['bgcolor'];
-    }
-    if ($attrs['textcolor'] !== '') {
-        $styles[] = '--af-tbl-txt:' . $attrs['textcolor'];
-    }
-    if ($attrs['hbgcolor'] !== '') {
-        $styles[] = '--af-tbl-hbg:' . $attrs['hbgcolor'];
-    }
-    if ($attrs['htextcolor'] !== '') {
-        $styles[] = '--af-tbl-htxt:' . $attrs['htextcolor'];
-    }
-
-    if ($attrs['border'] === '1') {
-        $styles[] = '--af-tbl-bw:' . $attrs['borderwidth'];
-        $styles[] = '--af-tbl-bc:' . $attrs['bordercolor'];
-        $styles[] = 'border:' . $attrs['borderwidth'] . ' solid ' . $attrs['bordercolor'];
-    } else {
-        $styles[] = '--af-tbl-bw:0px';
-        $styles[] = 'border:0';
-    }
-
-    return implode(';', $styles);
-}
-
-function af_ae_bbcode_table_attrs_to_data_attrs(array $attrs): string
-{
-    $attrs = af_ae_bbcode_table_normalize_attrs($attrs);
-    $keys = ['width', 'align', 'headers', 'bgcolor', 'textcolor', 'hbgcolor', 'htextcolor', 'border', 'bordercolor', 'borderwidth'];
-
-    $pairs = [];
-    foreach ($keys as $key) {
-        $pairs[] = ' data-af-' . $key . '="' . htmlspecialchars_uni((string)$attrs[$key]) . '"';
+        $pairs[] = ' data-af-' . $key . '="' . htmlspecialchars_uni($value) . '"';
     }
 
     return implode('', $pairs);
 }
 
+function af_ae_bbcode_table_read_attr(string $raw, string $name): string
+{
+    $name = preg_quote($name, '~');
+    if (!preg_match("~\\b" . $name . "\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s\\]]+))~i", $raw, $m)) {
+        return '';
+    }
+
+    if (isset($m[2]) && $m[2] !== '') return trim((string)$m[2]);
+    if (isset($m[3]) && $m[3] !== '') return trim((string)$m[3]);
+    if (isset($m[4]) && $m[4] !== '') return trim((string)$m[4]);
+
+    return '';
+}
+
+function af_ae_bbcode_table_parse_attrs(string $raw): array
+{
+    $raw = trim($raw);
+
+    $out = [
+        'width'         => '',
+        'align'         => '',
+        'headers'       => '',
+        'bgcolor'       => '',
+        'textcolor'     => '',
+        'hbgcolor'      => '',
+        'htextcolor'    => '',
+        'border'        => '1',
+        'bordercolor'   => '',
+        'borderwidth'   => '',
+    ];
+
+    if ($raw === '') {
+        return $out;
+    }
+
+    $width = af_ae_bbcode_table_read_attr($raw, 'width');
+    if (preg_match('~^([0-9]{1,4})(px|%|em|rem|vw|vh)?$~i', $width, $m)) {
+        $unit = !empty($m[2]) ? strtolower($m[2]) : 'px';
+        $out['width'] = $m[1] . $unit;
+    }
+
+    $align = strtolower(af_ae_bbcode_table_read_attr($raw, 'align'));
+    if (in_array($align, ['left', 'center', 'right'], true)) {
+        $out['align'] = $align;
+    }
+
+    $headers = strtolower(af_ae_bbcode_table_read_attr($raw, 'headers'));
+    if (in_array($headers, ['row', 'col', 'both'], true)) {
+        $out['headers'] = $headers;
+    }
+
+    $colorMap = [
+        'bgcolor' => ['bgcolor'],
+        'textcolor' => ['textcolor'],
+        'hbgcolor' => ['hbgcolor', 'theadbg'],
+        'htextcolor' => ['htextcolor', 'theadcolor'],
+        'bordercolor' => ['bordercolor'],
+    ];
+
+    foreach ($colorMap as $target => $keys) {
+        foreach ($keys as $key) {
+            $v = strtolower(af_ae_bbcode_table_read_attr($raw, $key));
+            if ($v !== '' && preg_match('~^#[0-9a-f]{3}(?:[0-9a-f]{3})?$~i', $v)) {
+                $out[$target] = $v;
+                break;
+            }
+        }
+    }
+
+    $border = af_ae_bbcode_table_read_attr($raw, 'border');
+    if ($border === '0' || $border === '1') {
+        $out['border'] = $border;
+    }
+
+    $borderWidth = af_ae_bbcode_table_read_attr($raw, 'borderwidth');
+    if (preg_match('~^([0-9]{1,2})px$~i', $borderWidth, $m)) {
+        $n = (int)$m[1];
+        if ($n < 0) $n = 0;
+        if ($n > 20) $n = 20;
+        $out['borderwidth'] = $n . 'px';
+    }
+
+    return $out;
+}
+
 function af_ae_bbcode_table_build_cell_style(array $attrs, bool $isHeader, string $existingStyle = ''): string
 {
-    $attrs = af_ae_bbcode_table_normalize_attrs($attrs);
     $styles = [];
-
-    $width = '';
-    if (preg_match('~(?:^|;)\s*width\s*:\s*([^;]+)~i', $existingStyle, $m)) {
-        $width = trim((string)$m[1]);
-    }
-    if ($width !== '' && preg_match('~^([0-9]{1,4})(px|%|em|rem|vw|vh)?$~i', $width, $mw)) {
-        $styles[] = 'width:' . $mw[1] . (!empty($mw[2]) ? strtolower($mw[2]) : 'px');
+    $existingStyle = trim($existingStyle);
+    if ($existingStyle !== '') {
+        $styles[] = rtrim($existingStyle, ';');
     }
 
-    $styles[] = 'padding:6px 8px';
-    $styles[] = 'vertical-align:top';
-    $styles[] = 'background-color:' . ($isHeader ? ($attrs['hbgcolor'] !== '' ? $attrs['hbgcolor'] : ($attrs['bgcolor'] !== '' ? $attrs['bgcolor'] : 'transparent')) : ($attrs['bgcolor'] !== '' ? $attrs['bgcolor'] : 'transparent'));
-    $styles[] = 'color:' . ($isHeader ? ($attrs['htextcolor'] !== '' ? $attrs['htextcolor'] : ($attrs['textcolor'] !== '' ? $attrs['textcolor'] : 'inherit')) : ($attrs['textcolor'] !== '' ? $attrs['textcolor'] : 'inherit'));
-    $styles[] = $attrs['border'] === '1' ? ('border:' . $attrs['borderwidth'] . ' solid ' . $attrs['bordercolor']) : 'border:0';
+    if (!empty($attrs['bgcolor'])) {
+        $styles[] = 'background-color:' . $attrs['bgcolor'];
+    }
+    if (!empty($attrs['textcolor'])) {
+        $styles[] = 'color:' . $attrs['textcolor'];
+    }
 
     if ($isHeader) {
+        if (!empty($attrs['hbgcolor'])) {
+            $styles[] = 'background-color:' . $attrs['hbgcolor'];
+        }
+        if (!empty($attrs['htextcolor'])) {
+            $styles[] = 'color:' . $attrs['htextcolor'];
+        }
         $styles[] = 'font-weight:700';
         $styles[] = 'text-align:left';
     }
 
+    $borderOn = (!isset($attrs['border']) || $attrs['border'] !== '0');
+    if ($borderOn) {
+        $bw = !empty($attrs['borderwidth']) ? $attrs['borderwidth'] : '1px';
+        $bc = !empty($attrs['bordercolor']) ? $attrs['bordercolor'] : '#888888';
+        $styles[] = 'border:' . $bw . ' solid ' . $bc;
+    } else {
+        $styles[] = 'border:0';
+    }
+
+    $styles[] = 'padding:6px 8px';
+    $styles[] = 'vertical-align:top';
+
     return implode(';', $styles);
-}
-
-function af_ae_bbcode_table_render_html(string $bbcodeBody, array $attrs): string
-{
-    $attrs = af_ae_bbcode_table_normalize_attrs($attrs);
-
-    $body = preg_replace('~\]\s*<br\s*/?>\s*\[~i', '][', $bbcodeBody);
-    $body = preg_replace('~<br\s*/?>\s*\[(/?(?:tr|td|th)(?:[^\]]*)?)\]~i', '[$1]', $body);
-    $body = preg_replace('~\[(/?(?:tr|td|th)(?:[^\]]*)?)\]\s*<br\s*/?>~i', '[$1]', $body);
-    $body = preg_replace('~^(?:\s*<br\s*/?>\s*)+~i', '', (string)$body);
-    $body = preg_replace('~(?:\s*<br\s*/?>\s*)+$~i', '', (string)$body);
-
-    $x = (string)$body;
-    $x = preg_replace('~\[(/?)tr\]~i', '<$1tr>', $x);
-
-    $x = preg_replace_callback('~\[(td|th)([^\]]*)\]~i', function ($m) {
-        $tag = strtolower((string)$m[1]);
-        $raw = trim((string)($m[2] ?? ''));
-
-        $style = '';
-        if (preg_match('~\bwidth\s*=\s*("([^"]*)"|\'([^\']*)\'|([^\s\]]+))~i', $raw, $wm)) {
-            $width = '';
-            if (isset($wm[2]) && $wm[2] !== '') {
-                $width = $wm[2];
-            } elseif (isset($wm[3]) && $wm[3] !== '') {
-                $width = $wm[3];
-            } elseif (isset($wm[4])) {
-                $width = $wm[4];
-            }
-
-            if (preg_match('~^([0-9]{1,4})(px|%|em|rem|vw|vh)?$~i', trim($width), $mWidth)) {
-                $unit = !empty($mWidth[2]) ? strtolower($mWidth[2]) : 'px';
-                $style = ' style="width:' . htmlspecialchars_uni($mWidth[1] . $unit) . '"';
-            }
-        }
-
-        return '<' . $tag . $style . '>';
-    }, $x);
-
-    $x = preg_replace('~\[/td\]~i', '</td>', $x);
-    $x = preg_replace('~\[/th\]~i', '</th>', $x);
-
-    $headersMode = $attrs['headers'];
-    $rowIndex = 0;
-    $x = preg_replace_callback('~<tr>(.*?)</tr>~is', function ($mr) use (&$rowIndex, $attrs, $headersMode) {
-        $rowIndex++;
-        $colIndex = 0;
-        $rowHtml = preg_replace_callback('~<(td|th)([^>]*)>(.*?)</\1>~is', function ($mc) use (&$colIndex, $attrs, $headersMode, $rowIndex) {
-            $colIndex++;
-            $tag = strtolower((string)$mc[1]);
-            $extraAttrs = (string)$mc[2];
-            $innerHtml = (string)$mc[3];
-
-            $isHeaderByMode = false;
-            if ($headersMode === 'row' && $rowIndex === 1) { $isHeaderByMode = true; }
-            if ($headersMode === 'col' && $colIndex === 1) { $isHeaderByMode = true; }
-            if ($headersMode === 'both' && ($rowIndex === 1 || $colIndex === 1)) { $isHeaderByMode = true; }
-
-            $isHeader = ($tag === 'th') || $isHeaderByMode;
-
-            $styleFromCell = '';
-            if (preg_match('~\bstyle\s*=\s*"([^"]*)"~i', $extraAttrs, $sm)) {
-                $styleFromCell = trim((string)$sm[1]);
-            }
-
-            $cellStyle = af_ae_bbcode_table_build_cell_style($attrs, $isHeader, $styleFromCell);
-            $newAttrs = preg_replace('~\bstyle\s*=\s*"[^"]*"~i', '', $extraAttrs);
-            $newAttrs = trim((string)$newAttrs);
-
-            return '<' . $tag . ($newAttrs !== '' ? ' ' . $newAttrs : '') . ' style="' . htmlspecialchars_uni($cellStyle) . '">' . $innerHtml . '</' . $tag . '>';
-        }, (string)$mr[1]);
-
-        return '<tr>' . $rowHtml . '</tr>';
-    }, $x);
-
-    $tableStyle = af_ae_bbcode_table_attrs_to_style($attrs);
-    $dataAttrs = af_ae_bbcode_table_attrs_to_data_attrs($attrs);
-
-    return '<table class="af-ae-table" data-af-table="1"' . $dataAttrs . ' style="' . htmlspecialchars_uni($tableStyle) . '">' . $x . '</table>';
-}
-
-function af_ae_bbcode_table_build_data_attrs(array $attrs): string
-{
-    return af_ae_bbcode_table_attrs_to_data_attrs($attrs);
 }
 
 function af_aqr_bbcode_table_parse_start(&$message): void
@@ -363,6 +387,10 @@ function af_aqr_bbcode_table_parse_end(&$message): void
     af_ae_bbcode_table_parse_end($message);
 }
 
+/**
+ * ОБРАТНАЯ СОВМЕСТИМОСТЬ: если диспетчер старый (AQR) — он зовёт это имя.
+ * Мы просто прокидываем на AE-функцию.
+ */
 function af_aqr_bbcode_table_parse(&$message): void
 {
     af_ae_bbcode_table_parse($message);
