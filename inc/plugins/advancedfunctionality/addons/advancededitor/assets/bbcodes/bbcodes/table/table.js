@@ -668,15 +668,12 @@
     return out;
   }
 
-  function normalizeAfTablesInHtmlWithInst(html, inst) {
-    html = asText(html);
-    if (!html || html.indexOf('<table') === -1) return html;
-
-    var box = document.createElement('div');
-    box.innerHTML = html;
+  function getTopLevelSerializableTables(root) {
+    var out = [];
+    if (!root || !root.querySelectorAll) return out;
 
     var tables = [];
-    try { tables = box.querySelectorAll('table'); } catch (eFind) { tables = []; }
+    try { tables = root.querySelectorAll('table'); } catch (eFind) { tables = []; }
 
     for (var i = 0; i < tables.length; i++) {
       var table = tables[i];
@@ -691,22 +688,34 @@
       }
       if (isNested) continue;
 
+      out.push(table);
+    }
+
+    return out;
+  }
+
+  function normalizeAfTablesInHtmlWithInst(html, inst) {
+    html = asText(html);
+    if (!html || html.indexOf('<table') === -1) return html;
+
+    var box = document.createElement('div');
+    box.innerHTML = html;
+
+    var tables = getTopLevelSerializableTables(box);
+    for (var i = 0; i < tables.length; i++) {
+      var table = tables[i];
+      if (!table || !table.parentNode) continue;
       var bbTable = serializeAfTableToBb(table, inst);
+      tableDebugLog('normalizeAfTablesInHtmlWithInst.replace', { length: bbTable.length });
       table.parentNode.replaceChild(document.createTextNode('\n' + bbTable + '\n'), table);
     }
 
     return box.innerHTML;
   }
 
-  function convertCellHtmlToBbWithInst(cellEl, inst) {
-    if (!cellEl || cellEl.nodeType !== 1) return '';
-
-    var tag = ((cellEl.tagName || '').toLowerCase() === 'th') ? 'th' : 'td';
-
-    var html = stripInheritedCellFormattingDom(cellEl, tag);
+  function serializeHtmlFragmentWithInst(html, inst) {
+    html = asText(html);
     if (!html) return '';
-
-    html = normalizeAfTablesInHtmlWithInst(html, inst);
 
     var bb = '';
     try {
@@ -724,12 +733,51 @@
       } catch (e2) { bb = ''; }
     }
 
+    return asText(bb);
+  }
+
+  function convertCellHtmlToBbWithInst(cellEl, inst) {
+    if (!cellEl || cellEl.nodeType !== 1) return '';
+
+    var tag = ((cellEl.tagName || '').toLowerCase() === 'th') ? 'th' : 'td';
+
+    var cleanedHtml = stripInheritedCellFormattingDom(cellEl, tag);
+    if (!cleanedHtml) return '';
+
+    var box = document.createElement('div');
+    box.innerHTML = cleanedHtml;
+
+    var parts = [];
+    for (var i = 0; i < box.childNodes.length; i++) {
+      var node = box.childNodes[i];
+      if (!node) continue;
+
+      if (node.nodeType === 1 && (node.tagName || '').toLowerCase() === 'table' && isSerializableTable(node)) {
+        parts.push(serializeAfTableToBb(node, inst));
+        continue;
+      }
+
+      var chunkHtml = '';
+      if (node.nodeType === 1) chunkHtml = node.outerHTML || '';
+      else if (node.nodeType === 3) chunkHtml = node.nodeValue || '';
+      else continue;
+
+      if (!chunkHtml) continue;
+      chunkHtml = normalizeAfTablesInHtmlWithInst(chunkHtml, inst);
+      parts.push(serializeHtmlFragmentWithInst(chunkHtml, inst));
+    }
+
+    var bb = parts.join('');
     if (!bb) {
-      try { bb = asText(cellEl.textContent || ''); } catch (e3) { bb = ''; }
+      bb = serializeHtmlFragmentWithInst(normalizeAfTablesInHtmlWithInst(cleanedHtml, inst), inst);
+    }
+    if (!bb) {
+      try { bb = asText(box.textContent || cellEl.textContent || ''); } catch (e3) { bb = ''; }
     }
 
     bb = bb.replace(/^\s+|\s+$/g, '');
     if (bb === '[br]' || bb === '[br/]') bb = '';
+    if (/^(?:\s|\[br\]|\[br\/\]|&nbsp;)+$/i.test(bb)) bb = '';
 
     return bb;
   }
@@ -769,7 +817,13 @@
       model.rows.push(rowModel);
     }
 
-    return modelToCanonicalBbcode(model);
+    var bbcode = modelToCanonicalBbcode(model);
+    tableDebugLog('serializeAfTableToBb', {
+      rows: model.rows.length,
+      attrs: model.attrs,
+      length: bbcode.length
+    });
+    return bbcode;
   }
 
   function tableAttrsToBbOpen(attrs) {
@@ -934,22 +988,11 @@
           var box = document.createElement('div');
           box.innerHTML = html;
 
-          var tables = [];
-          try { tables = box.querySelectorAll('table'); } catch (eFind) { tables = []; }
-
+          var tables = getTopLevelSerializableTables(box);
+          tableDebugLog('toSource.tables', { count: tables.length });
           for (var i = 0; i < tables.length; i++) {
             var table = tables[i];
             if (!table || !table.parentNode) continue;
-            if (!isSerializableTable(table)) continue;
-
-            var isNested = false;
-            try {
-              isNested = !!(table.parentElement && table.parentElement.closest && table.parentElement.closest('table'));
-            } catch (eNested) {
-              isNested = false;
-            }
-            if (isNested) continue;
-
             var bb = serializeAfTableToBb(table, inst);
             table.parentNode.replaceChild(document.createTextNode('\n' + bb + '\n'), table);
           }
@@ -1098,6 +1141,7 @@
 
     function guardPatch() {
       try { afAeEnsureMybbTableBbcode(inst); } catch (e0) {}
+      try { bindTableToSourceNormalization(inst); } catch (e1) {}
     }
 
     try {
