@@ -1521,25 +1521,66 @@ function af_ae_bbcode_dispatch_parse_message_end(&$message): void
         return;
     }
 
+    $packHasRelevantTags = static function (string $message, array $tags): bool {
+        foreach ($tags as $tag) {
+            $tag = trim((string)$tag);
+            if ($tag === '') {
+                continue;
+            }
+
+            $variants = [$tag];
+
+            if (stripos($tag, 'af_') === 0) {
+                $plain = substr($tag, 3);
+                if ($plain !== '') {
+                    $variants[] = $plain;
+                }
+            } else {
+                $variants[] = 'af_' . $tag;
+            }
+
+            foreach ($variants as $variant) {
+                if ($variant === '') {
+                    continue;
+                }
+
+                if (
+                    stripos($message, '[' . $variant) !== false ||
+                    stripos($message, '[/' . $variant) !== false
+                ) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    };
+
     $packsToRun = $packs;
     usort($packsToRun, static function (array $a, array $b): int {
-        if (($a['id'] ?? '') === 'table' && ($b['id'] ?? '') !== 'table') return 1;
-        if (($b['id'] ?? '') === 'table' && ($a['id'] ?? '') !== 'table') return -1;
+        $aId = (string)($a['id'] ?? '');
+        $bId = (string)($b['id'] ?? '');
+
+        $aIsTable = in_array($aId, ['table', 'tables'], true);
+        $bIsTable = in_array($bId, ['table', 'tables'], true);
+
+        if ($aIsTable && !$bIsTable) return 1;
+        if ($bIsTable && !$aIsTable) return -1;
+
         return 0;
     });
 
     foreach ($packsToRun as $p) {
-        if (empty($p['tags'])) continue;
-
-        // триггер по тегам пакета (для end тоже)
-        $hit = false;
-        foreach ($p['tags'] as $tag) {
-            if (stripos($message, '[' . $tag) !== false) { $hit = true; break; }
-            if (stripos($message, ']' . $tag) !== false) { $hit = true; break; }
+        if (empty($p['tags']) || !is_array($p['tags'])) {
+            continue;
         }
-        // Для spoiler: после parse_start тегов [spoiler] уже нет — он превращается в [quote] с маркером,
-        // поэтому end должен сработать даже без [spoiler] в тексте.
-        if (!$hit && $p['id'] !== 'spoiler') continue;
+
+        $hit = $packHasRelevantTags($message, $p['tags']);
+
+        // Для spoiler оставляем старое послабление.
+        if (!$hit && ($p['id'] ?? '') !== 'spoiler') {
+            continue;
+        }
 
         if (!empty($p['parser']) && is_file($p['parser'])) {
             require_once $p['parser'];
@@ -1552,7 +1593,7 @@ function af_ae_bbcode_dispatch_parse_message_end(&$message): void
             continue;
         }
 
-        // ФОЛЛБЭК: старый формат одного вызова ..._parse (для паков, где так сделано)
+        // ФОЛЛБЭК: старый формат одного вызова ..._parse
         $fn = 'af_ae_bbcode_' . $p['id'] . '_parse';
         if (function_exists($fn)) {
             $fn($message);
