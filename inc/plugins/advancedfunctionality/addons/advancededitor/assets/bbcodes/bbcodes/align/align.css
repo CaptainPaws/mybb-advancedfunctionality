@@ -1,0 +1,25 @@
+.af-bb-align {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.af-bb-align[data-af-align="left"] {
+  text-align: left;
+}
+
+.af-bb-align[data-af-align="center"] {
+  text-align: center;
+}
+
+.af-bb-align[data-af-align="right"] {
+  text-align: right;
+}
+
+.af-bb-align[data-af-align="justify"] {
+  text-align: justify;
+}
+
+.sceditor-container .af-bb-align {
+  min-height: 1.2em;
+}
