@@ -1,0 +1,111 @@
+.af-resizeimg {
+  max-width: 100%;
+  vertical-align: bottom;
+}
+
+.af-ae-resizeimg-selected {
+  outline: 2px solid rgba(79, 141, 255, 0.95);
+  outline-offset: 2px;
+}
+
+.af-ae-resizeimg-menu {
+  position: fixed;
+  display: none;
+  width: 260px;
+  max-width: calc(100vw - 16px);
+  z-index: 2147483000;
+  box-sizing: border-box;
+  padding: 10px;
+  border: 1px solid rgba(79, 141, 255, 0.35);
+  border-radius: 12px;
+  background: rgba(24, 28, 36, 0.98);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.38);
+  color: #ffffff;
+}
+
+.af-ae-resizeimg-menu.is-visible {
+  display: block;
+}
+
+.af-ae-resizeimg-menu__title {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.af-ae-resizeimg-menu__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.af-ae-resizeimg-menu__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.af-ae-resizeimg-menu__field span {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.af-ae-resizeimg-menu__field input {
+  width: 100%;
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  outline: none;
+  font-size: 12px;
+}
+
+.af-ae-resizeimg-menu__field input:focus {
+  border-color: rgba(79, 141, 255, 0.72);
+  box-shadow: 0 0 0 3px rgba(79, 141, 255, 0.16);
+}
+
+.af-ae-resizeimg-menu__lock {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.af-ae-resizeimg-menu__actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.af-ae-resizeimg-menu__btn {
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.af-ae-resizeimg-menu__btn:hover {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.af-ae-resizeimg-menu__btn--primary {
+  background: #4f8dff;
+  border-color: #4f8dff;
+}
+
+.af-ae-resizeimg-menu__btn--primary:hover {
+  background: #6aa0ff;
+}
