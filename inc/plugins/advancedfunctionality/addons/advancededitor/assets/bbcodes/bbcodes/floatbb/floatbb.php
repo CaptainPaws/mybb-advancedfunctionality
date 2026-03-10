@@ -1,56 +1,79 @@
 <?php
-/**
- * AE BBCode Pack: FloatBB
- * Tag: [float=left|right]...[/float]
- * Converts in parse_message_end (HTML already produced inside).
- */
 
-if (!defined('IN_MYBB')) { die('No direct access'); }
+if (!defined('IN_MYBB')) {
+    die('No direct access');
+}
 
-/**
- * AE dispatch will call: af_ae_bbcode_floatbb_parse_end(&$message)
- */
+function af_ae_bbcode_floatbb_normalize_dir(string $raw): string
+{
+    $raw = strtolower(trim($raw));
+
+    if ($raw === 'right' || $raw === 'r' || $raw === '2') {
+        return 'right';
+    }
+
+    return 'left';
+}
+
 function af_ae_bbcode_floatbb_parse_end(&$message): void
 {
     if (!is_string($message) || $message === '') {
         return;
     }
 
-    // было: [floatbb
-    if (stripos($message, '[float') === false) {
+    if (stripos($message, '[float') === false && stripos($message, '[floatbb') === false) {
         return;
     }
 
-    // Protect <pre> and <code> blocks from replacements
-    $store = [];
-    $i = 0;
-
-    $message = preg_replace_callback('~<(pre|code)\b[^>]*>.*?</\1>~is', function($m) use (&$store, &$i) {
-        $key = '%%AF_FLOATBB_PROTECT_' . (++$i) . '%%';
-        $store[$key] = $m[0];
-        return $key;
-    }, $message);
-
-    // Replace [float=left|right]...[/float]
-    $message = preg_replace_callback(
-        '~\[float=(left|right|l|r|1|2)\](.*?)\[/float\]~is',
-        function($m) {
-            $dir = strtolower($m[1]);
-            if ($dir === 'right' || $dir === 'r' || $dir === '2') {
-                $dir = 'right';
-            } else {
-                $dir = 'left';
-            }
-
-            $inner = $m[2];
-
-            return '<div class="af-floatbb af-floatbb-' . $dir . '">' . $inner . '</div>';
+    $protected = [];
+    $message2 = preg_replace_callback(
+        '~<(pre|code)\b[^>]*>.*?</\1>~is',
+        static function ($m) use (&$protected) {
+            $key = '%%AF_FLOATBB_PROTECT_' . count($protected) . '%%';
+            $protected[$key] = $m[0];
+            return $key;
         },
         $message
     );
 
-    // Restore protected blocks
-    if (!empty($store)) {
-        $message = strtr($message, $store);
+    if (!is_string($message2) || $message2 === '') {
+        return;
     }
+
+    // алиас: [floatbb=...] -> [float=...]
+    $message2 = preg_replace('~\[(/?)floatbb\b~i', '[$1float', $message2);
+
+    $guard = 0;
+
+    while (stripos($message2, '[float=') !== false && $guard++ < 40) {
+        $before = $message2;
+
+        $message2 = preg_replace_callback(
+            // ВАЖНО:
+            // съедаем ОДИН ближайший <br /> после [/float],
+            // чтобы после публикации не появлялась "пустая строка".
+            '~\[float=([^\]]+)\](.*?)\[/float\](?:<br\s*/?>)?~is',
+            static function ($m) {
+                $dir = af_ae_bbcode_floatbb_normalize_dir((string)($m[1] ?? 'left'));
+                $inner = (string)($m[2] ?? '');
+
+                return
+                    '<div class="af-floatbb af-floatbb-' . htmlspecialchars_uni($dir) . '" data-af-bb="float" data-af-dir="' . htmlspecialchars_uni($dir) . '">' .
+                        $inner .
+                    '</div>';
+            },
+            $message2
+        );
+
+        if (!is_string($message2) || $message2 === '' || $message2 === $before) {
+            $message2 = $before;
+            break;
+        }
+    }
+
+    if (!empty($protected)) {
+        $message2 = strtr($message2, $protected);
+    }
+
+    $message = $message2;
 }
