@@ -2336,8 +2336,13 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
 {
     $bburl = rtrim($bburl, '/');
 
-    // ВАЖНО: пакеты лежат в assets/bbcodes/*
-    $baseDirAbs = MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/bbcodes/';
+    // Поддерживаем оба legacy-расположения паков:
+    // - assets/bbcodes/<pack>
+    // - assets/bbcodes/bbcodes/<pack>
+    $baseDirsAbs = [
+        MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/bbcodes/',
+        MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/bbcodes/bbcodes/',
+    ];
     $assetsBaseUrl = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/';
 
     $out = [
@@ -2350,16 +2355,17 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
         'packs'   => [], // id => ['id','title','tags','buttons','assets','parser_abs','manifest_path']
     ];
 
-    if (!is_dir($baseDirAbs)) {
-        return $out;
-    }
+    foreach ($baseDirsAbs as $baseDirAbs) {
+        if (!is_dir($baseDirAbs)) {
+            continue;
+        }
 
-    $dirs = @scandir($baseDirAbs);
-    if (!is_array($dirs)) {
-        return $out;
-    }
+        $dirs = @scandir($baseDirAbs);
+        if (!is_array($dirs)) {
+            continue;
+        }
 
-    foreach ($dirs as $d) {
+        foreach ($dirs as $d) {
         if ($d === '.' || $d === '..') continue;
 
         $packDir = $baseDirAbs . $d . '/';
@@ -2454,6 +2460,10 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
         foreach ($packCss as $u) $out['css'][] = $u;
         foreach ($packJs as $u)  $out['js'][]  = $u;
 
+        if (isset($out['packs'][$packId])) {
+            continue;
+        }
+
         $out['packs'][$packId] = [
             'id'            => $packId,
             'title'         => $packTitle,
@@ -2463,6 +2473,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
             'parser_abs'    => $parserAbs,
             'manifest_path' => $manifestFile,
         ];
+        }
     }
 
     // дедуп ассетов, чтобы не дублировать <link>/<script>
