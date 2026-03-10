@@ -563,6 +563,31 @@
   function afAeForceAlignEverywhere(inst) {
     if (!hasSceditor()) return;
 
+    function insertAlignTag(ed, alignVal) {
+      if (!ed) return;
+
+      try {
+        if (typeof ed.insertText === 'function') {
+          ed.insertText('[align=' + alignVal + ']', '[/align]');
+          return;
+        }
+      } catch (e0) {}
+
+      try {
+        if (typeof ed.insert === 'function') {
+          ed.insert('[align=' + alignVal + ']', '[/align]');
+          return;
+        }
+      } catch (e1) {}
+
+      try {
+        if (typeof ed.val === 'function') {
+          var cur = ed.val();
+          ed.val(String(cur || '') + '[align=' + alignVal + '][/align]');
+        }
+      } catch (e2) {}
+    }
+
     // ---------- HARD OVERRIDE COMMANDS (кнопки) ----------
     // Вставляем только [align=...] — и в source, и в WYSIWYG.
     function hardCmd(cmd, alignVal) {
@@ -571,31 +596,11 @@
           tooltip: cmd,
 
           exec: function () {
-            var ed = this;
-
-            try {
-              if (ed && typeof ed.insert === 'function') {
-                ed.insert('[align=' + alignVal + ']', '[/align]');
-                return;
-              }
-            } catch (e0) {}
-
-            try {
-              if (ed && typeof ed.val === 'function') {
-                var cur = ed.val();
-                ed.val(String(cur || '') + '[align=' + alignVal + '][/align]');
-              }
-            } catch (e1) {}
+            insertAlignTag(this, alignVal);
           },
 
           txtExec: function () {
-            try {
-              if (this && typeof this.insert === 'function') {
-                this.insert('[align=' + alignVal + ']', '[/align]');
-                return;
-              }
-            } catch (e0) {}
-            try { this.exec(); } catch (e1) {}
+            insertAlignTag(this, alignVal);
           }
         };
 
@@ -898,34 +903,36 @@
     // ALIGN: MyBB style [align=...]
     // =========================
 
+    function normalizeAlign(value) {
+      value = String(value || '').toLowerCase().trim();
+      if (value === 'start') return 'left';
+      if (value === 'end') return 'right';
+      if (value === 'left' || value === 'center' || value === 'right' || value === 'justify') return value;
+      return '';
+    }
+
+    function formatAlignTag(value, content) {
+      var align = normalizeAlign(value);
+      if (!align) return content;
+      return '[align=' + align + ']' + content + '[/align]';
+    }
+
     try {
       bb.set('align', {
         isInline: false,
         html: function (token, attrs, content) {
-          var a = '';
-          try { a = (attrs && attrs.defaultattr != null) ? String(attrs.defaultattr) : ''; } catch (e0) { a = ''; }
-          a = (a || '').toLowerCase().trim();
-
-          if (a === 'start') a = 'left';
-          if (a === 'end') a = 'right';
-          if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') a = 'left';
-
-          return '<div style="text-align:' + a + '">' + content + '</div>';
+          var a = normalizeAlign(attrs && attrs.defaultattr);
+          if (!a) a = 'left';
+          return '<div class="af-bb-align" data-af-align="' + a + '" style="text-align:' + a + '">' + content + '</div>';
         },
         format: function (el, content) {
-          try {
-            var a = '';
-            try { a = (el && el.style && el.style.textAlign) ? String(el.style.textAlign) : ''; } catch (e0) { a = ''; }
-            a = (a || '').toLowerCase().trim();
+          var fromData = '';
+          var fromStyle = '';
 
-            if (a === 'start') a = 'left';
-            if (a === 'end') a = 'right';
-            if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') return content;
+          try { fromData = el && el.getAttribute ? el.getAttribute('data-af-align') : ''; } catch (e0) { fromData = ''; }
+          try { fromStyle = el && el.style ? el.style.textAlign : ''; } catch (e1) { fromStyle = ''; }
 
-            return '[align=' + a + ']' + content + '[/align]';
-          } catch (e1) {
-            return '[align=left]' + content + '[/align]';
-          }
+          return formatAlignTag(fromData || fromStyle, content);
         }
       });
     } catch (eA0) {}
@@ -952,22 +959,15 @@
           try {
             var a = '';
             try { a = (el && el.style && el.style.textAlign) ? String(el.style.textAlign) : ''; } catch (e0) { a = ''; }
-            a = a.toLowerCase().trim();
-
-            if (a === 'start') a = 'left';
-            if (a === 'end') a = 'right';
-            if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') return content;
-
-            return '[align=' + a + ']' + content + '[/align]';
+            return formatAlignTag(a, content);
           } catch (e1) {
             return '[align=left]' + content + '[/align]';
           }
         },
         html: function (token, attrs, content) {
-          var a = (attrs && attrs.defaultattr) ? String(attrs.defaultattr) : '';
-          a = a.toLowerCase().trim();
-          if (a !== 'left' && a !== 'center' && a !== 'right' && a !== 'justify') a = 'left';
-          return '<div style="text-align:' + a + '">' + content + '</div>';
+          var a = normalizeAlign(attrs && attrs.defaultattr);
+          if (!a) a = 'left';
+          return '<div class="af-bb-align" data-af-align="' + a + '" style="text-align:' + a + '">' + content + '</div>';
         }
       });
     } catch (eD) {}
