@@ -62,3 +62,8 @@
   opacity: .9;
   margin-top: 2px;
 }
+
+.af-floatbb-item.is-active {
+  background: rgba(0,0,0,.06);
+  border-color: rgba(0,0,0,.12);
+}
