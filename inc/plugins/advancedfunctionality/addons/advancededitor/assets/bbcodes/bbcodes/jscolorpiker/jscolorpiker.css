@@ -1,0 +1,46 @@
+.sceditor-dropdown.af-ae-jscolor-dropdown {
+  min-width: 280px;
+  padding: 10px;
+}
+
+.af-ae-jscolor-wrap { display: grid; gap: 8px; }
+.af-ae-jscolor-top { display: flex; gap: 8px; align-items: center; }
+.af-ae-jscolor-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid rgba(0,0,0,.2);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.af-ae-jscolor-preview {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid rgba(0,0,0,.24);
+  background: #000000;
+}
+.af-ae-jscolor-actions { display: flex; justify-content: flex-end; }
+.af-ae-jscolor-apply {
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.af-ae-jscolor-swatches {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 4px;
+}
+.af-ae-jscolor-swatch {
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(0,0,0,.2);
+  border-radius: 4px;
+  cursor: pointer;
+}
+#jscolor-palette,
+.jscolor-picker,
+.jscolor-wrap {
+  z-index: 99990 !important;
+}
