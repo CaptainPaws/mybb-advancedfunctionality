@@ -1,482 +1,642 @@
-(function () {
+(function (window, document) {
   'use strict';
 
+  if (window.__afAeFontsizePackLoaded) return;
+  window.__afAeFontsizePackLoaded = true;
+
+  if (!window.afAeBuiltinHandlers) window.afAeBuiltinHandlers = Object.create(null);
   if (!window.afAqrBuiltinHandlers) window.afAqrBuiltinHandlers = Object.create(null);
 
-  var ID = 'fontsize';
+  var PACK_ID = 'fontsize';
   var CMD = 'af_fontsize';
-
-  // Диапазон для конвертации/нормализации (не для списка!)
   var MIN_PX = 8;
   var MAX_PX = 36;
+  var DROPDOWN_ID = 'af-ae-fontsize-picker';
+  var DROPDOWN_SIZES = [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 36];
+  var ZWSP = '\u200B';
 
-  // Компактный список, который показываем в дропдауне
-  function getDropdownSizes() {
-    var out = [];
-    for (var i = 8; i <= 32; i += 2) out.push(i);
-    return out;
+  function getSceditorRoot() {
+    if (window.sceditor) return window.sceditor;
+    if (window.jQuery && window.jQuery.sceditor) return window.jQuery.sceditor;
+    return null;
   }
 
-  function buildFontSizesCsvFromList(list) {
-    var out = [];
-    for (var i = 0; i < list.length; i++) out.push(list[i] + 'px');
-    return out.join(',');
+  function trim(value) {
+    return String(value == null ? '' : value).trim();
   }
 
-  function asInt(x, def) {
-    var n = parseInt(String(x), 10);
-    return Number.isFinite(n) ? n : def;
+  function escHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
-  function clamp(n, a, b) {
-    n = asInt(n, a);
-    if (n < a) return a;
-    if (n > b) return b;
+  function clampInt(value, min, max, fallback) {
+    var n = parseInt(value, 10);
+    if (isNaN(n)) return fallback;
+    if (n < min) return min;
+    if (n > max) return max;
     return n;
   }
 
   function normalizeSizeValue(raw) {
-    var v = String(raw == null ? '' : raw).trim().toLowerCase();
-    if (!v) return '';
+    var value = trim(raw).toLowerCase();
 
-    if (/^\d+$/.test(v)) {
-      return clamp(v, MIN_PX, MAX_PX) + 'px';
+    if (!value) return '';
+
+    var legacyMap = {
+      1: '8px',
+      2: '10px',
+      3: '12px',
+      4: '14px',
+      5: '18px',
+      6: '24px',
+      7: '32px'
+    };
+
+    if (/^\d+$/.test(value)) {
+      var n = parseInt(value, 10);
+
+      if (legacyMap[n]) {
+        return legacyMap[n];
+      }
+
+      return clampInt(n, MIN_PX, MAX_PX, 12) + 'px';
     }
 
-    var m = v.match(/^(\d+(?:\.\d+)?)(px|em|rem|%|pt)$/);
-    if (!m) return '';
+    var match = value.match(/^(\d+(?:\.\d+)?)(px|em|rem|%|pt)$/i);
+    if (!match) return '';
 
-    if (m[2] === 'px') {
-      return clamp(parseInt(m[1], 10), MIN_PX, MAX_PX) + 'px';
+    var num = match[1];
+    var unit = match[2].toLowerCase();
+
+    if (unit === 'px') {
+      return clampInt(parseInt(num, 10), MIN_PX, MAX_PX, 12) + 'px';
     }
 
-    return m[1] + m[2];
+    return num + unit;
   }
 
-  function getEditorBodyFontSizePx() {
+  function stripZeroWidth(text) {
+    return String(text == null ? '' : text).replace(/\u200B/g, '');
+  }
+
+  function trimQuoted(value) {
+    value = trim(value);
+    if (!value) return '';
+
+    var first = value.charAt(0);
+    var last = value.charAt(value.length - 1);
+
+    if ((first === '"' && last === '"') || (first === '\'' && last === '\'')) {
+      value = value.slice(1, -1);
+    }
+
+    return trim(value);
+  }
+
+  function unwrapSameOuterSizeBbcode(content, expectedSize) {
+    content = String(content == null ? '' : content);
+    expectedSize = normalizeSizeValue(expectedSize);
+
+    if (!expectedSize || !content) {
+      return content;
+    }
+
+    var guard = 0;
+    var pattern = /^\s*\[size\s*=\s*([^\]]+)\]([\s\S]*?)\[\/size\]\s*$/i;
+
+    while (guard < 20) {
+      guard += 1;
+
+      var match = content.match(pattern);
+      if (!match) {
+        break;
+      }
+
+      var foundSize = normalizeSizeValue(trimQuoted(match[1]));
+      if (foundSize !== expectedSize) {
+        break;
+      }
+
+      content = String(match[2] == null ? '' : match[2]);
+    }
+
+    return content;
+  }
+
+  function isSourceMode(editor) {
     try {
-      if (!window.jQuery) return null;
-      var $ = window.jQuery;
-      var iframe = $('.sceditor-container iframe').first();
-      if (!iframe.length) return null;
-      var body = $('body', iframe.contents());
-      if (!body.length) return null;
-      var fs = body.css('font-size');
-      var px = parseInt(fs, 10);
-      return Number.isFinite(px) ? px : null;
-    } catch (e) {
-      return null;
-    }
+      if (!editor) return false;
+      if (typeof editor.inSourceMode === 'function') return !!editor.inSourceMode();
+      if (typeof editor.sourceMode === 'function') return !!editor.sourceMode();
+    } catch (e) {}
+    return false;
   }
 
-  // ====== дефолтный размер (как "сброс") ======
-  function getDefaultPx() {
-    var px = getEditorBodyFontSizePx();
-    if (!px) px = 12; // фоллбэк
-    return clamp(px, MIN_PX, MAX_PX);
+  function getEditorBodyFontSizePx(editor) {
+    try {
+      if (editor && typeof editor.getBody === 'function') {
+        var body = editor.getBody();
+        if (body && body.ownerDocument && body.ownerDocument.defaultView) {
+          var cs = body.ownerDocument.defaultView.getComputedStyle(body);
+          var px = parseInt(cs.fontSize, 10);
+          if (!isNaN(px)) return px;
+        }
+      }
+    } catch (e) {}
+
+    return 12;
+  }
+
+  function getDefaultPx(editor) {
+    return clampInt(getEditorBodyFontSizePx(editor), MIN_PX, MAX_PX, 12);
+  }
+
+  function resolveEditor(ctx) {
+    if (!ctx) return null;
+    if (typeof ctx.insert === 'function' || typeof ctx.insertText === 'function') return ctx;
+    if (ctx.editor && (typeof ctx.editor.insert === 'function' || typeof ctx.editor.insertText === 'function')) return ctx.editor;
+    if (ctx.instance && (typeof ctx.instance.insert === 'function' || typeof ctx.instance.insertText === 'function')) return ctx.instance;
+    if (ctx.sceditor && (typeof ctx.sceditor.insert === 'function' || typeof ctx.sceditor.insertText === 'function')) return ctx.sceditor;
+    if (ctx.target && (typeof ctx.target.insert === 'function' || typeof ctx.target.insertText === 'function')) return ctx.target;
+    if (ctx.textarea && ctx.textarea.nodeName && ctx.textarea.nodeName.toLowerCase() === 'textarea') return ctx.textarea;
+    return null;
+  }
+
+  function resolveCaller(ctx, fallback) {
+    if (ctx && ctx.caller) return ctx.caller;
+    if (ctx && ctx.button) return ctx.button;
+    if (ctx && ctx.el) return ctx.el;
+    return fallback || null;
   }
 
   function getTextareaFromCtx(ctx) {
     if (ctx && ctx.textarea && ctx.textarea.nodeType === 1) return ctx.textarea;
     if (ctx && ctx.ta && ctx.ta.nodeType === 1) return ctx.ta;
 
-    var ae = document.activeElement;
-    if (ae && ae.tagName === 'TEXTAREA') return ae;
+    var active = document.activeElement;
+    if (active && active.tagName === 'TEXTAREA') return active;
 
     return document.querySelector('textarea#message') ||
       document.querySelector('textarea[name="message"]') ||
       null;
   }
 
-  function getSceditorInstanceFromCtx(ctx) {
-    if (ctx && typeof ctx.insertText === 'function') return ctx;
-    if (ctx && typeof ctx.createDropDown === 'function') return ctx;
-    if (ctx && ctx.sceditor && typeof ctx.sceditor.insertText === 'function') return ctx.sceditor;
-    if (ctx && ctx.inst && typeof ctx.inst.insertText === 'function') return ctx.inst;
-    if (ctx && ctx.instance && typeof ctx.instance.insertText === 'function') return ctx.instance;
+  function insertIntoTextarea(textarea, open, close) {
+    if (!textarea) return false;
+
+    var start = textarea.selectionStart || 0;
+    var end = textarea.selectionEnd || 0;
+    var value = textarea.value || '';
+    var before = value.slice(0, start);
+    var selected = value.slice(start, end);
+    var after = value.slice(end);
+
+    textarea.value = before + open + selected + close + after;
+
+    var caret;
+    if (selected.length) {
+      caret = before.length + open.length + selected.length + close.length;
+    } else {
+      caret = before.length + open.length;
+    }
+
+    textarea.focus();
+    textarea.selectionStart = textarea.selectionEnd = caret;
+
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    textarea.dispatchEvent(new Event('change', { bubbles: true }));
+
+    return true;
+  }
+
+  function insertSizeSource(editorOrTextarea, size) {
+    var open = '[size=' + size + ']';
+    var close = '[/size]';
+
+    if (!editorOrTextarea) return false;
+
+    if (typeof editorOrTextarea.insertText === 'function') {
+      editorOrTextarea.insertText(open, close);
+
+      if (typeof editorOrTextarea.updateOriginal === 'function') {
+        editorOrTextarea.updateOriginal();
+      }
+
+      if (typeof editorOrTextarea.focus === 'function') {
+        editorOrTextarea.focus();
+      }
+
+      return true;
+    }
+
+    if (editorOrTextarea.nodeName && editorOrTextarea.nodeName.toLowerCase() === 'textarea') {
+      return insertIntoTextarea(editorOrTextarea, open, close);
+    }
+
+    return false;
+  }
+
+  function getEditorDom(editor) {
+    if (!editor || typeof editor.getBody !== 'function') return null;
+
+    var body = editor.getBody();
+    if (!body || !body.ownerDocument) return null;
+
+    var doc = body.ownerDocument;
+    var win = doc.defaultView || window;
+    var sel = win.getSelection ? win.getSelection() : null;
+
+    if (!sel) return null;
+
+    return {
+      body: body,
+      doc: doc,
+      win: win,
+      sel: sel
+    };
+  }
+
+  function getCurrentRange(editor) {
+    var dom = getEditorDom(editor);
+    if (!dom || !dom.sel || dom.sel.rangeCount < 1) return null;
 
     try {
-      if (window.jQuery) {
-        var $ = window.jQuery;
-        var $ta = $('textarea#message, textarea[name="message"]').first();
-        if ($ta.length) {
-          var inst = $ta.sceditor && $ta.sceditor('instance');
-          if (inst && typeof inst.insertText === 'function') return inst;
-        }
-      }
-    } catch (e) {}
+      return dom.sel.getRangeAt(0);
+    } catch (e) {
+      return null;
+    }
+  }
 
+  function closestFontsizeSpan(node, stopNode) {
+    while (node && node !== stopNode) {
+      if (
+        node.nodeType === 1 &&
+        node.tagName &&
+        node.tagName.toLowerCase() === 'span' &&
+        node.hasAttribute('data-af-fontsize')
+      ) {
+        return node;
+      }
+      node = node.parentNode;
+    }
     return null;
   }
 
-  function insertWrap(open, close, ctx) {
-    var inst = getSceditorInstanceFromCtx(ctx);
-    if (inst && typeof inst.insertText === 'function') {
-      inst.insertText(open, close);
-      if (typeof inst.focus === 'function') inst.focus();
-      return true;
+  function applySpanSize(span, size) {
+    if (!span || span.nodeType !== 1) return;
+
+    span.classList.add('af-bb-fontsize');
+    span.setAttribute('data-af-fontsize', size);
+    span.style.fontSize = size;
+  }
+
+  function unwrapNode(node) {
+    if (!node || !node.parentNode) return;
+
+    while (node.firstChild) {
+      node.parentNode.insertBefore(node.firstChild, node);
     }
 
-    var ta = getTextareaFromCtx(ctx);
-    if (!ta) return false;
+    node.parentNode.removeChild(node);
+  }
 
-    try {
-      var start = ta.selectionStart || 0;
-      var end = ta.selectionEnd || 0;
-      var val = String(ta.value || '');
-      var before = val.slice(0, start);
-      var sel = val.slice(start, end);
-      var after = val.slice(end);
+  function normalizeNestedFontsizeSpans(root) {
+    if (!root || !root.querySelectorAll) return;
 
-      ta.value = before + open + sel + close + after;
+    var spans = root.querySelectorAll('span[data-af-fontsize]');
 
-      var caret = (sel.length
-        ? (before.length + open.length + sel.length + close.length)
-        : (before.length + open.length)
-      );
+    for (var i = spans.length - 1; i >= 0; i -= 1) {
+      var span = spans[i];
+      var parent = span.parentNode;
 
-      ta.focus();
-      ta.setSelectionRange(caret, caret);
-      ta.dispatchEvent(new Event('input', { bubbles: true }));
-      return true;
-    } catch (e) {
+      if (
+        parent &&
+        parent.nodeType === 1 &&
+        parent.tagName &&
+        parent.tagName.toLowerCase() === 'span' &&
+        parent.hasAttribute('data-af-fontsize') &&
+        trim(parent.getAttribute('data-af-fontsize')) === trim(span.getAttribute('data-af-fontsize'))
+      ) {
+        unwrapNode(span);
+      }
+    }
+  }
+
+  function syncEditor(editor) {
+    if (!editor) return;
+
+    if (typeof editor.updateOriginal === 'function') {
+      editor.updateOriginal();
+    }
+
+    if (typeof editor.focus === 'function') {
+      editor.focus();
+    }
+  }
+
+  function insertCollapsedSizeSpan(editor, size) {
+    var dom = getEditorDom(editor);
+    var range = getCurrentRange(editor);
+
+    if (!dom || !range) return false;
+
+    var span = dom.doc.createElement('span');
+    applySpanSize(span, size);
+
+    var marker = dom.doc.createTextNode(ZWSP);
+    span.appendChild(marker);
+
+    range.deleteContents();
+    range.insertNode(span);
+
+    var newRange = dom.doc.createRange();
+    newRange.setStart(marker, 0);
+    newRange.setEnd(marker, marker.nodeValue.length);
+
+    dom.sel.removeAllRanges();
+    dom.sel.addRange(newRange);
+
+    syncEditor(editor);
+    return true;
+  }
+
+  function wrapSelectedRangeWithSize(editor, size) {
+    var dom = getEditorDom(editor);
+    var range = getCurrentRange(editor);
+
+    if (!dom || !range || range.collapsed) return false;
+
+    var fragment = range.extractContents();
+    var span = dom.doc.createElement('span');
+    applySpanSize(span, size);
+    span.appendChild(fragment);
+
+    range.insertNode(span);
+    normalizeNestedFontsizeSpans(span);
+
+    var newRange = dom.doc.createRange();
+    newRange.selectNodeContents(span);
+
+    dom.sel.removeAllRanges();
+    dom.sel.addRange(newRange);
+
+    syncEditor(editor);
+    return true;
+  }
+
+  function applySizeWysiwyg(editor, rawSize) {
+    var size = normalizeSizeValue(rawSize);
+    if (!size) {
+      size = getDefaultPx(editor) + 'px';
+    }
+
+    if (!editor || isSourceMode(editor)) {
       return false;
     }
-  }
 
-  // ====== 1) Перебиваем формат size на [size=NN] где NN = px ======
-  function patchMybbSizeToPixels() {
-    if (!window.jQuery) return false;
+    var dom = getEditorDom(editor);
+    if (!dom) return false;
 
-    var $ = window.jQuery;
-    if (!$.sceditor || !$.sceditor.formats || !$.sceditor.command) return false;
-    if (!$.sceditor.formats.bbcode) return false;
+    var range = getCurrentRange(editor);
+    if (!range) {
+      if (typeof editor.focus === 'function') editor.focus();
+      range = getCurrentRange(editor);
+    }
+    if (!range) return false;
 
-    // Подсовываем компактный список как "доступные fontSizes" (на всякий)
-    try {
-      var dropSizes = getDropdownSizes();
-      $.sceditor.defaultOptions = $.sceditor.defaultOptions || {};
-      $.sceditor.defaultOptions.fontSizes = buildFontSizesCsvFromList(dropSizes);
-    } catch (e0) {}
-
-    $.sceditor.formats.bbcode.set('size', {
-      format: function (element, content) {
-        var sizeValue = '';
-
-        try {
-          sizeValue = normalizeSizeValue($(element).css('font-size'));
-        } catch (e1) {}
-
-        if (!sizeValue) return content;
-
-        if (/px$/i.test(sizeValue)) {
-          var basePx = getEditorBodyFontSizePx();
-          var px = parseInt(sizeValue, 10);
-          if (basePx && px === basePx) return content;
-        }
-
-        return '[size=' + sizeValue + ']' + content + '[/size]';
-      },
-
-      html: function (token, attrs, content) {
-        var sizeValue = normalizeSizeValue(attrs.defaultattr);
-        if (!sizeValue) return content;
-
-        return '<span data-scefontsize="' +
-          $.sceditor.escapeEntities(String(sizeValue)) +
-          '" style="font-size: ' + $.sceditor.escapeEntities(String(sizeValue)) + ';">' +
-          content +
-          '</span>';
+    if (range.collapsed) {
+      var currentSpan = closestFontsizeSpan(range.startContainer, dom.body);
+      if (currentSpan) {
+        applySpanSize(currentSpan, size);
+        syncEditor(editor);
+        return true;
       }
-    });
 
-    // Базовый size — делаем компактным + добавляем "по умолчанию"
-    $.sceditor.command.set('size', {
-      _dropDown: function (editor, caller, callback) {
-        var content = $('<div />');
-        var sizes = getDropdownSizes();
-
-        content.css({
-          maxHeight: '250px',
-          overflowY: 'auto',
-          overflowX: 'hidden'
-        });
-
-        var clickFunc = function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          callback($(this).data('px'));
-          editor.closeDropDown(true);
-        };
-
-        // ====== "По умолчанию" (ВАЖНО: класс без слова fontsize!) ======
-        var defPx = getDefaultPx();
-        content.append(
-          $('<a class="sceditor-fontsize-option sceditor-font-default" data-px="' + defPx + '" href="#">' +
-            '<span style="line-height:1.1;"><strong>По умолчанию</strong> (' + defPx + 'px)</span>' +
-            '</a>').on('click', clickFunc)
-        );
-
-        content.append($('<div style="height:6px;"></div>'));
-
-        for (var i = 0; i < sizes.length; i++) {
-          var px = sizes[i];
-          content.append(
-            $('<a class="sceditor-fontsize-option" data-px="' + px + '" href="#">' +
-              '<span style="font-size:' + px + 'px; line-height: 1.1;">' + px + 'px</span>' +
-              '</a>').on('click', clickFunc)
-          );
-        }
-
-        editor.createDropDown(caller, 'sceditor-font-picker', content.get(0));
-      },
-
-      exec: function (caller) {
-        var editor = this;
-        $.sceditor.command.get('size')._dropDown(editor, caller, function (px) {
-          px = clamp(px, MIN_PX, MAX_PX);
-          editor.insertText('[size=' + px + ']', '[/size]');
-        });
-      },
-
-      txtExec: function (caller) {
-        var editor = this;
-        $.sceditor.command.get('size')._dropDown(editor, caller, function (px) {
-          px = clamp(px, MIN_PX, MAX_PX);
-          editor.insertText('[size=' + px + ']', '[/size]');
-        });
-      }
-    });
-
-    return true;
-  }
-
-  (function waitAndPatch(tries) {
-    tries = tries || 0;
-    if (patchMybbSizeToPixels()) return;
-    if (tries > 150) return;
-    setTimeout(function () { waitAndPatch(tries + 1); }, 100);
-  })();
-
-  // ====== 2) Наш dropdown как у SCEditor font picker ======
-  function openSceditorDropdown(editor, caller) {
-    if (!editor || typeof editor.createDropDown !== 'function') return false;
-
-    try { editor.closeDropDown(true); } catch (e0) {}
-
-    var sizes = getDropdownSizes();
-    var defPx = getDefaultPx();
-
-    var wrap = document.createElement('div');
-    wrap.className = 'sceditor-font-picker';
-
-    wrap.style.maxHeight = '250px';
-    wrap.style.overflowY = 'auto';
-    wrap.style.overflowX = 'hidden';
-
-    // ====== "По умолчанию" (класс без fontsize) ======
-    (function addDefaultItem() {
-      var a = document.createElement('a');
-      a.href = '#';
-      a.className = 'sceditor-font-option sceditor-font-default';
-      a.setAttribute('data-px', String(defPx));
-
-      var span = document.createElement('span');
-      span.style.lineHeight = '1.1';
-      span.innerHTML = '<strong>По умолчанию</strong> (' + defPx + 'px)';
-
-      a.appendChild(span);
-      wrap.appendChild(a);
-
-      var sep = document.createElement('div');
-      sep.style.height = '6px';
-      wrap.appendChild(sep);
-    })();
-
-    for (var i = 0; i < sizes.length; i++) {
-      var px = sizes[i];
-
-      var a2 = document.createElement('a');
-      a2.href = '#';
-      a2.className = 'sceditor-font-option';
-      a2.setAttribute('data-px', String(px));
-
-      var span2 = document.createElement('span');
-      span2.style.fontSize = px + 'px';
-      span2.style.lineHeight = '1.1';
-      span2.textContent = px + 'px';
-
-      a2.appendChild(span2);
-      wrap.appendChild(a2);
+      return insertCollapsedSizeSpan(editor, size);
     }
 
-    wrap.addEventListener('click', function (e) {
-      var t = e.target;
-      var opt = t && t.closest ? t.closest('a[data-px]') : null;
-      if (!opt) return;
+    return wrapSelectedRangeWithSize(editor, size);
+  }
 
-      e.preventDefault();
-      e.stopPropagation();
+  function applySize(editorOrTextarea, rawSize) {
+    var size = normalizeSizeValue(rawSize);
+    if (!size) {
+      size = getDefaultPx(editorOrTextarea) + 'px';
+    }
 
-      var px = clamp(opt.getAttribute('data-px'), MIN_PX, MAX_PX);
-      editor.insertText('[size=' + px + ']', '[/size]');
-      try { editor.closeDropDown(true); } catch (e2) {}
+    if (
+      editorOrTextarea &&
+      (typeof editorOrTextarea.getBody === 'function') &&
+      !isSourceMode(editorOrTextarea)
+    ) {
+      return applySizeWysiwyg(editorOrTextarea, size);
+    }
+
+    return insertSizeSource(editorOrTextarea, size);
+  }
+
+  function createDropdownNode(editor, closeFn) {
+    var root = document.createElement('div');
+    root.className = 'sceditor-font-picker af-ae-fontsize-picker';
+
+    var defaultPx = getDefaultPx(editor);
+
+    root.innerHTML = [
+      '<div class="af-ae-fontsize-picker__list">',
+      '  <a href="#" class="sceditor-font-option af-ae-fontsize-picker__option af-ae-fontsize-picker__option--default" data-size="' + defaultPx + 'px" title="Размер по умолчанию">',
+      '    <span><strong>По умолчанию</strong> (' + defaultPx + 'px)</span>',
+      '  </a>',
+      DROPDOWN_SIZES.map(function (px) {
+        return '' +
+          '<a href="#" class="sceditor-font-option af-ae-fontsize-picker__option" data-size="' + px + 'px" title="' + px + 'px">' +
+            '<span style="font-size:' + px + 'px;line-height:1.15;">' + px + 'px</span>' +
+          '</a>';
+      }).join(''),
+      '</div>'
+    ].join('');
+
+    root.addEventListener('click', function (event) {
+      var option = event.target && event.target.closest('[data-size]');
+      if (!option) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      applySize(editor, option.getAttribute('data-size'));
+
+      if (typeof closeFn === 'function') {
+        closeFn();
+      }
     });
 
-    editor.createDropDown(caller, 'sceditor-font-picker', wrap);
+    return root;
+  }
+
+  function openDropdown(editor, caller) {
+    if (!editor || typeof editor.createDropDown !== 'function') {
+      return false;
+    }
+
+    var node = createDropdownNode(editor, function () {
+      if (typeof editor.closeDropDown === 'function') {
+        editor.closeDropDown(true);
+      }
+    });
+
+    try {
+      if (typeof editor.closeDropDown === 'function') {
+        editor.closeDropDown(true);
+      }
+    } catch (e) {}
+
+    editor.createDropDown(caller || null, DROPDOWN_ID, node);
     return true;
   }
 
-  // ====== 3) SCEditor command для кнопки CMD ======
-  function registerSceditorCmd() {
-    if (!window.jQuery) return false;
-    var $ = window.jQuery;
-    if (!$.sceditor || !$.sceditor.command) return false;
+  function registerBbcodeFormat() {
+    var sc = getSceditorRoot();
 
-    $.sceditor.command.set(CMD, {
+    if (!sc || !sc.formats || !sc.formats.bbcode || typeof sc.formats.bbcode.set !== 'function') {
+      return false;
+    }
+
+    sc.formats.bbcode.set('size', {
+      tags: {
+        span: {
+          'data-af-fontsize': null
+        }
+      },
+      format: function (element, content) {
+        var raw = trim(
+          element.getAttribute('data-af-fontsize') ||
+          element.style.fontSize ||
+          ''
+        );
+
+        var size = normalizeSizeValue(raw);
+        var cleanedContent = stripZeroWidth(content);
+
+        if (!size) {
+          return cleanedContent;
+        }
+
+        // КЛЮЧЕВОЙ ФИКС:
+        // если внутренний контент уже сериализовался как [size=этот_же_размер]...[/size],
+        // снимаем одинаковую внешнюю обёртку и возвращаем ровно ОДИН size.
+        cleanedContent = unwrapSameOuterSizeBbcode(cleanedContent, size);
+
+        if (!trim(cleanedContent)) {
+          return '';
+        }
+
+        return '[size=' + size + ']' + cleanedContent + '[/size]';
+      },
+      html: function (token, attrs, content) {
+        attrs = attrs || {};
+
+        var size = normalizeSizeValue(attrs.defaultattr || attrs.size || '');
+        if (!size) {
+          return content;
+        }
+
+        return '<span class="af-bb-fontsize" data-af-fontsize="' + escHtml(size) + '" style="font-size:' + escHtml(size) + ';">' + String(content == null ? '' : content) + '</span>';
+      }
+    });
+
+    return true;
+  }
+
+  function registerCommands() {
+    var sc = getSceditorRoot();
+
+    if (!sc || !sc.command || typeof sc.command.set !== 'function') {
+      return false;
+    }
+
+    var commandImpl = {
       exec: function (caller) {
-        if (!openSceditorDropdown(this, caller)) {
-          var defPx = getDefaultPx();
-          insertWrap('[size=' + defPx + ']', '[/size]', { sceditor: this });
+        if (!openDropdown(this, caller)) {
+          applySize(this, getDefaultPx(this) + 'px');
         }
       },
       txtExec: function (caller) {
-        if (!openSceditorDropdown(this, caller)) {
-          var defPx = getDefaultPx();
-          insertWrap('[size=' + defPx + ']', '[/size]', { sceditor: this });
+        if (!openDropdown(this, caller)) {
+          applySize(this, getDefaultPx(this) + 'px');
         }
       },
       tooltip: 'Размер шрифта (px)'
-    });
+    };
+
+    sc.command.set('size', commandImpl);
+    sc.command.set(CMD, commandImpl);
 
     return true;
   }
 
-  (function waitCmd(tries) {
-    tries = tries || 0;
-    if (registerSceditorCmd()) return;
-    if (tries > 150) return;
-    setTimeout(function () { waitCmd(tries + 1); }, 100);
-  })();
+  function registerBuiltinHandlers() {
+    var handlerFn = function (ctx, maybeCaller) {
+      var editor = resolveEditor(ctx) || resolveEditor({ textarea: getTextareaFromCtx(ctx) });
+      var caller = resolveCaller(ctx, maybeCaller);
 
-  // ====== 4) AQR handler ======
-  function aqrOpen(ctx, ev) {
-    var editor = getSceditorInstanceFromCtx(ctx);
-    var caller =
-      (ctx && (ctx.buttonEl || ctx.btn || ctx.caller)) ||
-      (ev && (ev.currentTarget || ev.target)) ||
-      null;
+      if (!editor) return false;
 
-    if (editor && caller && caller.nodeType === 1) {
-      if (ev && ev.preventDefault) ev.preventDefault();
-      openSceditorDropdown(editor, caller);
-      return;
-    }
-
-    var defPx = getDefaultPx();
-    insertWrap('[size=' + defPx + ']', '[/size]', ctx || {});
-  }
-
-  var handler = {
-    id: ID,
-    title: 'Размер шрифта (px)',
-    onClick: aqrOpen,
-    click: aqrOpen,
-    action: aqrOpen,
-    run: aqrOpen,
-    init: function () {}
-  };
-
-  window.afAqrBuiltinHandlers[ID] = handler;
-  window.afAqrBuiltinHandlers[CMD] = handler;
-
-  // ====== 5) СТРАХОВКА capture ======
-  function isInsideDropdown(target) {
-    try {
-      if (!target || !target.closest) return false;
-      return !!target.closest('.sceditor-dropdown, .sceditor-font-picker');
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function findButtonAtPoint(e) {
-    try {
-      var x = e.clientX, y = e.clientY;
-      var el = document.elementFromPoint(x, y);
-      if (!el) return null;
-
-      // если кликнули внутри самого дропдауна — НЕ трогаем
-      if (isInsideDropdown(el)) return null;
-
-      var btn = el.closest ? el.closest('a,button') : el;
-      if (!btn || btn.nodeType !== 1) return null;
-
-      var cls = String(btn.className || '');
-
-      // исключаем элементы опций дропдауна на всякий
-      if (cls.indexOf('sceditor-font-option') !== -1) return null;
-
-      var data =
-        (btn.getAttribute('data-cmd') || btn.getAttribute('data-command') || btn.getAttribute('data-id') || '') +
-        ' ' +
-        (btn.getAttribute('aria-label') || '') +
-        ' ' +
-        (btn.getAttribute('title') || '');
-
-      var s = (cls + ' ' + data).toLowerCase();
-
-      if (s.indexOf(CMD) !== -1) return btn;
-      if (s.indexOf(ID) !== -1) return btn;
-      if (cls.indexOf('sceditor-button-' + CMD) !== -1) return btn;
-      if (cls.indexOf('sceditor-button-' + ID) !== -1) return btn;
-
-      return null;
-    } catch (e0) {
-      return null;
-    }
-  }
-
-  function nearestEditorFromButton(btn) {
-    try {
-      if (!window.jQuery || !btn) return getSceditorInstanceFromCtx({});
-      var $ = window.jQuery;
-
-      var $container = $(btn).closest('.sceditor-container');
-      if ($container.length) {
-        var $ta = $container.prevAll('textarea').first();
-        if ($ta.length) {
-          var inst = $ta.sceditor && $ta.sceditor('instance');
-          if (inst && typeof inst.insertText === 'function') return inst;
-        }
+      if (typeof editor.createDropDown === 'function') {
+        return openDropdown(editor, caller);
       }
-    } catch (e1) {}
 
-    return getSceditorInstanceFromCtx({});
+      return applySize(editor, '12px');
+    };
+
+    var handlerObj = {
+      id: PACK_ID,
+      title: 'Размер шрифта (px)',
+      onClick: function (ctx, ev) {
+        return handlerFn(ctx, ev && (ev.currentTarget || ev.target));
+      },
+      click: function (ctx, ev) {
+        return handlerFn(ctx, ev && (ev.currentTarget || ev.target));
+      },
+      action: function (ctx, ev) {
+        return handlerFn(ctx, ev && (ev.currentTarget || ev.target));
+      },
+      run: function (ctx, ev) {
+        return handlerFn(ctx, ev && (ev.currentTarget || ev.target));
+      },
+      init: function () {}
+    };
+
+    window.afAeBuiltinHandlers.fontsize = handlerFn;
+    window.afAeBuiltinHandlers[CMD] = handlerFn;
+
+    window.afAqrBuiltinHandlers.fontsize = handlerObj;
+    window.afAqrBuiltinHandlers[CMD] = handlerObj;
   }
 
-  function captureClick(e) {
-    // если клик в дропдауне — выходим, не мешаем выбору
-    if (isInsideDropdown(e && e.target)) return;
+  function boot() {
+    registerBuiltinHandlers();
 
-    var btn = findButtonAtPoint(e);
-    if (!btn) return;
+    var tries = 0;
 
-    try { e.preventDefault(); } catch (e2) {}
-    try { e.stopPropagation(); } catch (e3) {}
-    try { e.stopImmediatePropagation(); } catch (e4) {}
+    (function waitForSceditor() {
+      var okFormat = registerBbcodeFormat();
+      var okCmd = registerCommands();
 
-    var inst = nearestEditorFromButton(btn);
-    if (inst) openSceditorDropdown(inst, btn);
+      if (okFormat && okCmd) {
+        return;
+      }
+
+      tries += 1;
+      if (tries > 150) {
+        return;
+      }
+
+      window.setTimeout(waitForSceditor, 100);
+    })();
   }
 
-  (function bindCapture() {
-    if (window.__af_fontsize_capture_bound) return;
-    window.__af_fontsize_capture_bound = true;
-
-    document.addEventListener('pointerdown', captureClick, true);
-    document.addEventListener('mousedown', captureClick, true);
-    document.addEventListener('click', captureClick, true);
-  })();
-
-})();
+  boot();
+})(window, document);
