@@ -35,6 +35,24 @@
     return n;
   }
 
+  function normalizeSizeValue(raw) {
+    var v = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (!v) return '';
+
+    if (/^\d+$/.test(v)) {
+      return clamp(v, MIN_PX, MAX_PX) + 'px';
+    }
+
+    var m = v.match(/^(\d+(?:\.\d+)?)(px|em|rem|%|pt)$/);
+    if (!m) return '';
+
+    if (m[2] === 'px') {
+      return clamp(parseInt(m[1], 10), MIN_PX, MAX_PX) + 'px';
+    }
+
+    return m[1] + m[2];
+  }
+
   function getEditorBodyFontSizePx() {
     try {
       if (!window.jQuery) return null;
@@ -143,32 +161,30 @@
 
     $.sceditor.formats.bbcode.set('size', {
       format: function (element, content) {
-        var px = null;
+        var sizeValue = '';
 
         try {
-          var css = $(element).css('font-size');
-          var parsed = parseInt(css, 10);
-          if (Number.isFinite(parsed)) px = parsed;
+          sizeValue = normalizeSizeValue($(element).css('font-size'));
         } catch (e1) {}
 
-        if (!px) return content;
+        if (!sizeValue) return content;
 
-        var basePx = getEditorBodyFontSizePx();
-        if (basePx && px === basePx) return content;
+        if (/px$/i.test(sizeValue)) {
+          var basePx = getEditorBodyFontSizePx();
+          var px = parseInt(sizeValue, 10);
+          if (basePx && px === basePx) return content;
+        }
 
-        px = clamp(px, MIN_PX, MAX_PX);
-        return '[size=' + px + ']' + content + '[/size]';
+        return '[size=' + sizeValue + ']' + content + '[/size]';
       },
 
       html: function (token, attrs, content) {
-        var n = asInt(attrs.defaultattr, 0);
-        if (!n) return content;
-
-        n = clamp(n, MIN_PX, MAX_PX);
+        var sizeValue = normalizeSizeValue(attrs.defaultattr);
+        if (!sizeValue) return content;
 
         return '<span data-scefontsize="' +
-          $.sceditor.escapeEntities(String(n)) +
-          '" style="font-size: ' + n + 'px;">' +
+          $.sceditor.escapeEntities(String(sizeValue)) +
+          '" style="font-size: ' + $.sceditor.escapeEntities(String(sizeValue)) + ';">' +
           content +
           '</span>';
       }

@@ -229,6 +229,50 @@
     insertWrap(open, close, { sceditor: editor });
   }
 
+  function normalizeFontFamily(value) {
+    value = safeBbValue(value);
+    if (!value) return '';
+    return value;
+  }
+
+  function ensureFontFamilyBbcodeBridge() {
+    if (!window.jQuery) return false;
+    var $ = window.jQuery;
+    if (!$.sceditor || !$.sceditor.formats || !$.sceditor.formats.bbcode) return false;
+
+    $.sceditor.formats.bbcode.set('font', {
+      tags: {
+        font: {
+          style: 'fontFamily'
+        }
+      },
+      styles: {
+        'font-family': 'defaultattr'
+      },
+      isInline: true,
+      format: function (el, content) {
+        var family = '';
+
+        try {
+          family = normalizeFontFamily(el && el.style ? el.style.fontFamily : '');
+        } catch (e0) {
+          family = '';
+        }
+
+        if (!family) return content;
+        return '[font=' + family + ']' + content + '[/font]';
+      },
+      html: function (token, attrs, content) {
+        var family = normalizeFontFamily(attrs && attrs.defaultattr);
+        if (!family) return content;
+
+        return '<span data-af-fontfamily="' + $.sceditor.escapeEntities(family) + '" style="font-family:' + $.sceditor.escapeEntities(family) + ';">' + content + '</span>';
+      }
+    });
+
+    return true;
+  }
+
   // ===== dropdown =====
   function makeDropdown(editor, caller) {
     ensureFontFacesInjected();
@@ -412,6 +456,7 @@
   }
 
   waitAnd(patchSceditorFontCommand, 150);
+  waitAnd(ensureFontFamilyBbcodeBridge, 150);
   ensureFontFacesInjected();
 
   // ===== handler: и объектом, и функцией (на случай разных ядер) =====
