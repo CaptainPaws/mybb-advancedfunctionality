@@ -3,7 +3,11 @@
 return [
     'id'    => 'tquote',
     'title' => 'Типографическая цитата',
-    'tags'  => ['tquote', 'quote'],
+
+    // ВАЖНО:
+    // больше НЕ цепляемся за quote.
+    // tquote живёт как отдельный BBCode.
+    'tags'  => ['tquote'],
 
     'buttons' => [
         [
@@ -24,6 +28,5 @@ return [
         ],
     ],
 
-    // server-side parser пакета
     'parser' => 'tquote.php',
 ];
