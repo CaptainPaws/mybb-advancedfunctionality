@@ -20,6 +20,7 @@ return [
             'bbcodes/tables/tables.css',
         ],
         'js'  => [
+            'bbcodes/jscolorpiker/jscolor.js',
             'bbcodes/tables/tables.js',
         ],
     ],

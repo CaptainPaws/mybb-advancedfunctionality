@@ -866,7 +866,7 @@
       '  <span class="af-ae-color-chip__label">' + createIconLabel(ICONS[iconKey], label) + '</span>',
       '  <div class="af-ae-color af-ae-color--chip">',
       '    <input class="af-ae-color__value" type="text" name="' + name + '" value="" placeholder="' + placeholder + '">',
-      '    <input type="color" data-af-color-for="' + name + '" value="#ffffff" aria-label="' + escHtml(label) + '">',
+      '    <button type="button" class="af-ae-color__pick" data-af-color-for="' + name + '" aria-label="' + escHtml(label) + '"></button>',
       '    <button type="button" class="af-ae-color__clear af-ae-color__clear--mini" data-af-clear-color="' + name + '" aria-label="Сбросить цвет">×</button>',
       '  </div>',
       '</label>'
@@ -888,11 +888,69 @@
       '  <span class="af-ae-color-chip__label">' + createIconLabel(ICONS[iconKey], label) + '</span>',
       '  <div class="af-ae-color af-ae-color--chip">',
       '    <input class="af-ae-color__value" type="text" name="' + name + '" value="" placeholder="' + placeholder + '">',
-      '    <input type="color" data-af-color-for="' + name + '" value="#ffffff" aria-label="' + escHtml(label) + '">',
+      '    <button type="button" class="af-ae-color__pick" data-af-color-for="' + name + '" aria-label="' + escHtml(label) + '"></button>',
       '    <button type="button" class="af-ae-color__clear af-ae-color__clear--mini" data-af-clear-color="' + name + '" aria-label="Сбросить цвет">×</button>',
       '  </div>',
       '</label>'
     ].join('');
+  }
+
+  function getJscolorCtor() {
+    if (window.JSColor && typeof window.JSColor === 'function') return window.JSColor;
+    if (window.jscolor && typeof window.jscolor === 'function') return window.jscolor;
+    return null;
+  }
+
+  function ensureJscolorForInput(root, input) {
+    var Ctor = getJscolorCtor();
+    var pickerBtn;
+    var picker;
+
+    if (!root || !input || !Ctor) return;
+    if (input.__afTableJscolorBound) return;
+
+    pickerBtn = root.querySelector('.af-ae-color__pick[data-af-color-for="' + input.name + '"]');
+    if (!pickerBtn) return;
+
+    input.__afTableJscolorBound = true;
+
+    try {
+      picker = new Ctor(input, {
+        value: input.value || '#ffffff',
+        format: 'hex',
+        alphaChannel: false,
+        hash: true,
+        valueElement: input,
+        previewElement: pickerBtn,
+        showOnClick: false,
+        closeButton: false,
+        paletteCols: 10,
+        paletteHeight: 18,
+        paletteSpacing: 4,
+        zIndex: 100000
+      });
+      input.jscolor = picker;
+      if (input.value && typeof picker.fromString === 'function') {
+        picker.fromString(input.value);
+      }
+    } catch (e) {
+      input.__afTableJscolorBound = false;
+      return;
+    }
+
+    pickerBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      if (input.jscolor && typeof input.jscolor.show === 'function') {
+        input.jscolor.show();
+      }
+    });
+  }
+
+  function initTableJscolor(root) {
+    var textInputs = root.querySelectorAll('.af-ae-color input[type="text"]');
+    for (var i = 0; i < textInputs.length; i += 1) {
+      ensureJscolorForInput(root, textInputs[i]);
+    }
   }
 
   function syncColorControls(root) {
@@ -904,9 +962,9 @@
 
       if (color && /^#([a-f0-9]{3}|[a-f0-9]{6})$/i.test(value)) {
         if (value.length === 4) {
-          color.value = '#' + value.charAt(1) + value.charAt(1) + value.charAt(2) + value.charAt(2) + value.charAt(3) + value.charAt(3);
+          color.style.background = '#' + value.charAt(1) + value.charAt(1) + value.charAt(2) + value.charAt(2) + value.charAt(3) + value.charAt(3);
         } else {
-          color.value = value;
+          color.style.background = value;
         }
       }
     }
@@ -915,14 +973,6 @@
   function attachColorUi(root) {
     root.addEventListener('input', function (event) {
       var target = event.target;
-
-      if (target.matches('.af-ae-color input[type="color"]')) {
-        var name = target.getAttribute('data-af-color-for');
-        var textInput = root.querySelector('.af-ae-color input[type="text"][name="' + name + '"]');
-        if (textInput) {
-          textInput.value = target.value;
-        }
-      }
 
       if (target.matches('.af-ae-color input[type="text"]')) {
         syncColorControls(root);
@@ -938,8 +988,13 @@
       var textInput = root.querySelector('.af-ae-color input[type="text"][name="' + name + '"]');
       var colorInput = root.querySelector('[data-af-color-for="' + name + '"]');
 
-      if (textInput) textInput.value = '';
-      if (colorInput) colorInput.value = '#ffffff';
+      if (textInput) {
+        textInput.value = '';
+        if (textInput.jscolor && typeof textInput.jscolor.fromString === 'function') {
+          textInput.jscolor.fromString('#ffffff');
+        }
+      }
+      if (colorInput) colorInput.style.background = '#ffffff';
     });
   }
 
@@ -993,6 +1048,8 @@
     ].join('');
 
     attachColorUi(root);
+    initTableJscolor(root);
+    syncColorControls(root);
 
     var summary = root.querySelector('.af-ae-tables-dropdown__summary');
 
@@ -1528,6 +1585,7 @@
     toolbar.innerHTML = toolbarTemplate();
 
     attachColorUi(toolbar);
+    initTableJscolor(toolbar);
 
     toolbar.addEventListener('click', function (event) {
       var button = event.target.closest('[data-action]');
