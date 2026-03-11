@@ -5,6 +5,7 @@ return [
     'title' => 'Расширенный выбор цвета (jscolor)',
     'tags'  => ['color'],
     'parser'=> 'jscolorpiker.php',
+
     'buttons' => [
         [
             'cmd'     => 'color',
@@ -14,13 +15,14 @@ return [
             'handler' => 'jscolorpiker',
         ],
     ],
+
     'assets' => [
         'css' => [
-            'bbcodes/bbcodes/jscolorpiker/jscolorpiker.css',
+            'bbcodes/jscolorpiker/jscolorpiker.css',
         ],
         'js'  => [
-            'bbcodes/bbcodes/jscolorpiker/jscolor.js',
-            'bbcodes/bbcodes/jscolorpiker/jscolorpiker.js',
+            'bbcodes/jscolorpiker/jscolor.js',
+            'bbcodes/jscolorpiker/jscolorpiker.js',
         ],
     ],
 ];
