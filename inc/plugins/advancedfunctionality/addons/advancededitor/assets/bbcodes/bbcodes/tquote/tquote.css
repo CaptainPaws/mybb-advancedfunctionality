@@ -1,227 +1,265 @@
-/* ===== Typographic quote block ===== */
+/* ===== Front / preview / rendered block ===== */
 
-.mycode_quote.af-aqr-tquote{
+.af-aqr-tquote,
+.mycode_quote.af-aqr-tquote {
   position: relative;
-  padding: 55px;
-  border-radius: 6px;
-  background: var(--af-tq-bg, rgba(255,255,255,.06));
+  display: block;
+  margin: 10px 0;
+  padding: 40px 35px;
+  border-radius: 10px;
+  background: var(--af-tq-bg, rgba(255, 255, 255, .06));
+  color: var(--af-tq-text, #f5f7fa) !important;
   overflow: hidden;
   text-align: justify;
-  border: none;
+  border: none !important;
+  box-shadow: none !important;
 }
 
-/* Только одна полоса слева/справа (никаких рамок вокруг) */
-.mycode_quote.af-aqr-tquote[data-side="left"]{
-  border-right: 4px solid var(--af-tq-accent, rgba(255,255,255,.35));
-}
-.mycode_quote.af-aqr-tquote[data-side="right"]{
-  border-left: 4px solid var(--af-tq-accent, rgba(255,255,255,.35));
+.af-aqr-tquote *,
+.mycode_quote.af-aqr-tquote * {
+  color: inherit;
 }
 
-/* скрываем cite только у нашей цитаты */
-.mycode_quote.af-aqr-tquote > cite{
-  display: none;
+.af-aqr-tquote[data-side="left"],
+.mycode_quote.af-aqr-tquote[data-side="left"] {
+  border-left: none !important;
+  border-right: 4px solid var(--af-tq-accent, rgba(255, 255, 255, .35)) !important;
 }
 
-/* декоративные кавычки: сверху + акцентный цвет */
-.mycode_quote.af-aqr-tquote::before{
+.af-aqr-tquote[data-side="right"],
+.mycode_quote.af-aqr-tquote[data-side="right"] {
+  border-right: none !important;
+  border-left: 4px solid var(--af-tq-accent, rgba(255, 255, 255, .35)) !important;
+}
+
+.af-aqr-tquote > cite,
+.mycode_quote.af-aqr-tquote > cite {
+  display: none !important;
+}
+
+.af-aqr-tquote::before,
+.mycode_quote.af-aqr-tquote::before {
   content: "";
   position: absolute;
   top: -5px;
-  width: 60px;
-  height: 60px;
+  width: 56px;
+  height: 56px;
   opacity: .16;
   pointer-events: none;
-
-  background-color: var(--af-tq-accent, rgba(255,255,255,.35));
+  background-color: var(--af-tq-accent, rgba(255, 255, 255, .35));
 
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
   -webkit-mask-size: contain;
-
   mask-repeat: no-repeat;
   mask-position: center;
   mask-size: contain;
 
-  /* inline svg (двойные кавычки) */
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='black' d='M10 28c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H10V28zm26 0c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H36V28z'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='black' d='M10 28c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H10V28zm26 0c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H36V28z'/%3E%3C/svg%3E");
 }
 
-.mycode_quote.af-aqr-tquote[data-side="left"]::before{
-  left: 1px;
+.af-aqr-tquote[data-side="left"]::before,
+.mycode_quote.af-aqr-tquote[data-side="left"]::before {
+  left: 2px;
   transform: rotate(-190deg) scaleX(-1);
 }
-.mycode_quote.af-aqr-tquote[data-side="right"]::before{
-  right: 1px;
+
+.af-aqr-tquote[data-side="right"]::before,
+.mycode_quote.af-aqr-tquote[data-side="right"]::before {
+  right: 2px;
   transform: rotate(190deg);
 }
 
-/* мягкая подсветка внутри блока */
-.mycode_quote.af-aqr-tquote::after{
+.af-aqr-tquote::after,
+.mycode_quote.af-aqr-tquote::after {
   content: "";
   position: absolute;
   inset: -40% -30%;
-  background: radial-gradient(closest-side, rgba(255,255,255,.10), transparent 60%);
+  background: radial-gradient(closest-side, rgba(255, 255, 255, .10), transparent 60%);
   opacity: .35;
   pointer-events: none;
 }
 
+/* ===== Shared compact color controls ===== */
 
-/* ===== Dropdown (SCEditor) ===== */
-
-.sceditor-dropdown .af-tquote-dd{
-  width: 380px;
-  max-width: 92vw;
-  color: #eee;
+.af-tquote-ui-color {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
 }
 
-.sceditor-dropdown .af-tquote-dd-hd{
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(255,255,255,.08);
+.af-tquote-ui-value {
+  position: absolute;
+  inset: auto;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.sceditor-dropdown .af-tquote-dd-title{
-  font-weight: 700;
-  font-size: 13px;
-  line-height: 1.2;
-}
-
-.sceditor-dropdown .af-tquote-dd-body{
-  padding: 10px 12px;
-}
-
-.sceditor-dropdown .af-tquote-dd-row{
-  margin-bottom: 10px;
-}
-
-.sceditor-dropdown .af-tquote-dd-label{
-  font-size: 12px;
-  line-height: 1.2;
-  color: rgba(255,255,255,.70);
-  margin-bottom: 6px;
-}
-
-.sceditor-dropdown .af-tquote-dd-seg{
-  display: flex;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(255,255,255,.03);
-}
-
-.sceditor-dropdown .af-tquote-dd-segbtn{
-  flex: 1;
-  border: 1px solid transparent;
-  background: transparent;
-  color: rgba(255,255,255,.82);
-  border-radius: 10px;
-  padding: 8px 10px;
+.af-tquote-ui-swatch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 8px;
+  background: #ffffff;
   cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+}
+
+.af-tquote-ui-swatch:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, .22);
+}
+
+.af-tquote-ui-swatch-icon {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 11px;
+  height: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, .96);
+  pointer-events: none;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .45));
+}
+
+.af-tquote-ui-swatch-icon svg {
+  width: 11px;
+  height: 11px;
+  fill: currentColor;
+}
+
+/* ===== Dropdown ===== */
+
+.sceditor-dropdown .af-tquote-dd {
+  width: 324px;
+  max-width: min(324px, 92vw);
+  color: #eef2f7;
+}
+
+.sceditor-dropdown .af-tquote-dd-head {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+
+.sceditor-dropdown .af-tquote-dd-title {
   font-size: 13px;
   line-height: 1.2;
-  transition: background .12s ease, border-color .12s ease, color .12s ease, transform .12s ease;
-}
-
-.sceditor-dropdown .af-tquote-dd-segbtn:hover{
-  background: rgba(255,255,255,.06);
-}
-
-.sceditor-dropdown .af-tquote-dd-segbtn.is-active{
-  background: rgba(255,255,255,.12);
-  border-color: rgba(255,255,255,.16);
+  font-weight: 700;
   color: #fff;
-  box-shadow: 0 6px 18px rgba(0,0,0,.25);
 }
 
-.sceditor-dropdown .af-tquote-dd-grid{
+.sceditor-dropdown .af-tquote-dd-body {
+  padding: 10px 12px 12px;
+}
+
+.sceditor-dropdown .af-tquote-dd-top {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: auto 1fr;
   gap: 10px;
-}
-
-.sceditor-dropdown .af-tquote-dd-field > span{
-  display: block;
-  font-size: 12px;
-  line-height: 1.2;
-  color: rgba(255,255,255,.70);
-  margin-bottom: 6px;
-}
-
-.sceditor-dropdown .af-tquote-dd-color{
-  display: flex;
-  gap: 8px;
   align-items: center;
 }
 
-.sceditor-dropdown .af-tquote-dd-color input[type="color"]{
-  width: 44px;
-  height: 36px;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,.14);
-  background: rgba(255,255,255,.06);
-  padding: 2px;
+.sceditor-dropdown .af-tquote-dd-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, .10);
+  background: rgba(255, 255, 255, .03);
+}
+
+.sceditor-dropdown .af-tquote-dd-segbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-width: 36px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, .82);
+  border-radius: 8px;
   cursor: pointer;
+  transition: background .12s ease, border-color .12s ease, color .12s ease, transform .12s ease;
 }
 
-.sceditor-dropdown .af-tquote-dd-color input[type="text"]{
-  width: 100%;
-  max-width: 100%;
-  padding: 9px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,.14);
-  background: rgba(255,255,255,.06);
-  color: #eee;
-  outline: none;
-  font-size: 13px;
-  line-height: 1.2;
-  box-sizing: border-box;
-  transition: border-color .12s ease, background .12s ease, box-shadow .12s ease;
+.sceditor-dropdown .af-tquote-dd-segbtn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
 }
 
-.sceditor-dropdown .af-tquote-dd-color input[type="text"]:focus{
-  border-color: rgba(255,255,255,.26);
-  background: rgba(255,255,255,.08);
-  box-shadow: 0 0 0 3px rgba(255,255,255,.06);
+.sceditor-dropdown .af-tquote-dd-segbtn:hover {
+  background: rgba(255, 255, 255, .06);
 }
 
-.sceditor-dropdown .af-tquote-dd-preview{
+.sceditor-dropdown .af-tquote-dd-segbtn.is-active {
+  background: rgba(255, 255, 255, .12);
+  border-color: rgba(255, 255, 255, .16);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .25);
+}
+
+.sceditor-dropdown .af-tquote-dd-colors {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sceditor-dropdown .af-tquote-dd-preview {
   margin-top: 10px;
 }
 
-.sceditor-dropdown .af-tquote-dd-previewbox{
+.sceditor-dropdown .af-tquote-dd-previewbox {
   position: relative;
+  border-radius: 12px;
   padding: 12px 14px;
-  padding-top: 52px; /* место сверху под кавычки в превью */
-  border-radius: 14px;
-
-  border: 0; /* ВАЖНО: убрали тонкую рамку вокруг превью */
-  background: var(--af-tq-bg, rgba(255,255,255,.06));
+  padding-top: 40px;
+  background: var(--af-tq-bg, rgba(255, 255, 255, .06));
+  color: var(--af-tq-text, #f5f7fa);
   overflow: hidden;
-
-  /* дефолты, JS может менять через style */
+  border: none;
   --af-tq-accent: #ffffff;
   --af-tq-bg: #111111;
+  --af-tq-text: #ffffff;
 }
 
-/* только одна полоса слева/справа */
-.sceditor-dropdown .af-tquote-dd-previewbox[data-side="left"]{
-  border-left: 4px solid var(--af-tq-accent);
-  padding-left: 68px; /* под кавычки */
-}
-.sceditor-dropdown .af-tquote-dd-previewbox[data-side="right"]{
+.sceditor-dropdown .af-tquote-dd-previewbox[data-side="left"] {
   border-right: 4px solid var(--af-tq-accent);
-  padding-right: 68px; /* под кавычки */
 }
 
-/* кавычки в превью: сверху */
-.sceditor-dropdown .af-tquote-dd-previewbox::before{
+.sceditor-dropdown .af-tquote-dd-previewbox[data-side="right"] {
+  border-left: 4px solid var(--af-tq-accent);
+}
+
+.sceditor-dropdown .af-tquote-dd-previewbox::before {
   content: "";
   position: absolute;
-  top: 10px;
-  width: 44px;
-  height: 44px;
+  top: 8px;
+  width: 34px;
+  height: 34px;
   opacity: .16;
   pointer-events: none;
   background-color: var(--af-tq-accent);
@@ -229,7 +267,6 @@
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
   -webkit-mask-size: contain;
-
   mask-repeat: no-repeat;
   mask-position: center;
   mask-size: contain;
@@ -238,35 +275,190 @@
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='black' d='M10 28c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H10V28zm26 0c0-10 6-18 18-18v10c-6 0-8 3-8 8h8v20H36V28z'/%3E%3C/svg%3E");
 }
 
-.sceditor-dropdown .af-tquote-dd[data-side="left"] .af-tquote-dd-previewbox::before{
-  left: 12px;
-}
-.sceditor-dropdown .af-tquote-dd[data-side="right"] .af-tquote-dd-previewbox::before{
-  right: 12px;
+.sceditor-dropdown .af-tquote-dd[data-side="left"] .af-tquote-dd-previewbox::before {
+  left: 10px;
+  transform: rotate(-190deg) scaleX(-1);
 }
 
-/* мягкая подсветка в превью */
-.sceditor-dropdown .af-tquote-dd-previewbox::after{
+.sceditor-dropdown .af-tquote-dd[data-side="right"] .af-tquote-dd-previewbox::before {
+  right: 10px;
+  transform: rotate(190deg);
+}
+
+.sceditor-dropdown .af-tquote-dd-previewbox::after {
   content: "";
   position: absolute;
   inset: -40% -30%;
-  background: radial-gradient(closest-side, rgba(255,255,255,.10), transparent 60%);
+  background: radial-gradient(closest-side, rgba(255, 255, 255, .10), transparent 60%);
   opacity: .35;
   pointer-events: none;
 }
 
-.sceditor-dropdown .af-tquote-dd-previewtext{
+.sceditor-dropdown .af-tquote-dd-previewtext {
   position: relative;
   z-index: 1;
   display: block;
-  color: rgba(255,255,255,.85);
-  font-size: 13px;
-  line-height: 1.2;
+  font-size: 12px;
+  line-height: 1.25;
+  color: inherit;
 }
 
-.sceditor-dropdown .af-tquote-dd-actions{
+.sceditor-dropdown .af-tquote-dd-actions {
   margin-top: 10px;
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
+}
+
+.sceditor-dropdown .af-tquote-dd-actions .button {
+  float: none !important;
+  margin: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 6px 11px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  background: rgba(255, 255, 255, .05);
+  color: #eef2f7;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background .12s ease, border-color .12s ease, transform .12s ease;
+}
+
+.sceditor-dropdown .af-tquote-dd-actions .button:hover {
+  background: rgba(255, 255, 255, .08);
+  border-color: rgba(255, 255, 255, .22);
+  transform: translateY(-1px);
+}
+
+.sceditor-dropdown .af-tquote-dd-actions .af-tquote-apply {
+  background: linear-gradient(180deg, rgba(108, 149, 255, .98), rgba(63, 106, 216, .98));
+  border-color: rgba(84, 125, 228, .98);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(63, 106, 216, .22);
+}
+
+.sceditor-dropdown .af-tquote-dd-actions .af-tquote-apply:hover {
+  background: linear-gradient(180deg, rgba(119, 158, 255, 1), rgba(70, 114, 228, 1));
+  border-color: rgba(104, 144, 241, 1);
+}
+
+/* ===== Floating WYSIWYG toolbar ===== */
+
+.sceditor-container.af-ae-has-tquote-toolbar {
+  position: relative;
+}
+
+#af-ae-tquote-toolbar {
+  position: absolute;
+  z-index: 10020;
+  display: none;
+}
+
+#af-ae-tquote-toolbar.is-visible {
+  display: block;
+}
+
+.af-tquote-toolbar__panel {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  min-width: max-content;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, .10);
+  background: rgba(20, 22, 28, .96);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .28);
+  backdrop-filter: blur(8px);
+}
+
+.af-tquote-toolbar__seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, .10);
+  background: rgba(255, 255, 255, .03);
+}
+
+.af-tquote-toolbar__segbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  min-width: 34px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, .82);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease, color .12s ease;
+}
+
+.af-tquote-toolbar__segbtn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.af-tquote-toolbar__segbtn:hover {
+  background: rgba(255, 255, 255, .06);
+}
+
+.af-tquote-toolbar__segbtn.is-active {
+  background: rgba(255, 255, 255, .12);
+  border-color: rgba(255, 255, 255, .16);
+  color: #fff;
+}
+
+.af-tquote-toolbar__colors {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+.af-tquote-toolbar__delete {
+  flex: 0 0 28px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.af-tquote-toolbar__delete svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+/* ===== jscolor ===== */
+
+.jscolor-picker,
+.jscolor-wrap,
+#jscolor-palette,
+[data-af-tquote-color-popup="1"] {
+  z-index: 100000 !important;
+}
+
+@media (max-width: 520px) {
+  .sceditor-dropdown .af-tquote-dd {
+    width: min(324px, 92vw);
+  }
+
+  .sceditor-dropdown .af-tquote-dd-top {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .sceditor-dropdown .af-tquote-dd-colors {
+    justify-content: flex-start;
+  }
 }
