@@ -188,7 +188,37 @@ function af_ae_require_form_libs(): void
         if (file_exists($containerPath)) require_once $containerPath;
     }
 }
+function af_ae_require_stikers_backend(): bool
+{
+    static $loaded = false;
 
+    if (function_exists('af_advancededitor_stikers_ensure_schema')) {
+        return true;
+    }
+
+    if ($loaded) {
+        return false;
+    }
+
+    $loaded = true;
+
+    $paths = [
+        MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/bbcodes/stikers/stikers.php',
+        MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/advancededitor.php',
+    ];
+
+    foreach ($paths as $path) {
+        if (is_file($path)) {
+            require_once $path;
+        }
+
+        if (function_exists('af_advancededitor_stikers_ensure_schema')) {
+            return true;
+        }
+    }
+
+    return false;
+}
 class AF_Admin_AdvancedEditor
 {
     public static function dispatch(): void
@@ -1449,19 +1479,40 @@ class AF_Admin_AdvancedEditor
         $form->end();
     }
 
-
     private static function page_stikers(): void
     {
         global $mybb, $db;
 
         self::output_tabs('stikers');
         af_ae_require_form_libs();
+
+        if (!af_ae_require_stikers_backend()) {
+            echo '<div class="error">';
+            echo '<p><strong>Ошибка:</strong> не удалось загрузить backend модуля стикеров.</p>';
+            echo '<p class="smalltext">Проверь наличие файла:</p>';
+            echo '<ul>';
+            echo '<li>' . htmlspecialchars_uni('inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/bbcodes/stikers/stikers.php') . '</li>';
+            echo '</ul>';
+            echo '</div>';
+            return;
+        }
+
         af_advancededitor_stikers_ensure_schema();
 
         if ($mybb->request_method === 'post') {
             verify_post_check($mybb->get_input('my_post_key'));
             $sub = (string)$mybb->get_input('sub');
             $message = '';
+
+            if ($sub === 'stikers_settings_save') {
+                $ok = af_advancededitor_stikers_save_settings([
+                    'thumb_size' => (int)$mybb->get_input('thumb_size', MyBB::INPUT_INT),
+                    'post_size'  => (int)$mybb->get_input('post_size', MyBB::INPUT_INT),
+                ], $message);
+
+                flash_message($message ?: ($ok ? 'Настройки стикеров сохранены.' : 'Не удалось сохранить настройки стикеров.'), $ok ? 'success' : 'error');
+                admin_redirect(self::base_url_raw(AF_AE_DO_STIKERS));
+            }
 
             if ($sub === 'cat_add') {
                 $ok = af_advancededitor_stikers_create_category((string)$mybb->get_input('title'), $message);
@@ -1470,15 +1521,29 @@ class AF_Admin_AdvancedEditor
             }
 
             if ($sub === 'cat_edit') {
-                $ok = af_advancededitor_stikers_update_category_title((int)$mybb->get_input('id', MyBB::INPUT_INT), (string)$mybb->get_input('title'), $message);
+                $ok = af_advancededitor_stikers_update_category_title(
+                    (int)$mybb->get_input('id', MyBB::INPUT_INT),
+                    (string)$mybb->get_input('title'),
+                    $message
+                );
                 flash_message($message, $ok ? 'success' : 'error');
                 admin_redirect(self::base_url_raw(AF_AE_DO_STIKERS));
             }
 
             if ($sub === 'stiker_upload') {
                 $file = $_FILES['sticker'] ?? [];
-                $ok = is_array($file) ? af_advancededitor_stikers_upload_admin((int)$mybb->get_input('category_id', MyBB::INPUT_INT), $file, $message) : false;
-                flash_message($ok ? ($message ?: 'Стикер загружен.') : ($message ?: 'Файл не выбран.'), $ok ? 'success' : 'error');
+                $ok = is_array($file)
+                    ? af_advancededitor_stikers_upload_admin(
+                        (int)$mybb->get_input('category_id', MyBB::INPUT_INT),
+                        $file,
+                        $message
+                    )
+                    : false;
+
+                flash_message(
+                    $ok ? ($message ?: 'Стикер загружен.') : ($message ?: 'Файл не выбран.'),
+                    $ok ? 'success' : 'error'
+                );
                 admin_redirect(self::base_url_raw(AF_AE_DO_STIKERS));
             }
 
@@ -1489,71 +1554,158 @@ class AF_Admin_AdvancedEditor
             }
 
             if ($sub === 'stiker_move') {
-                $ok = af_advancededitor_stikers_move_admin_sticker((int)$mybb->get_input('id', MyBB::INPUT_INT), (int)$mybb->get_input('move_to', MyBB::INPUT_INT));
+                $ok = af_advancededitor_stikers_move_admin_sticker(
+                    (int)$mybb->get_input('id', MyBB::INPUT_INT),
+                    (int)$mybb->get_input('move_to', MyBB::INPUT_INT)
+                );
                 flash_message($ok ? 'Стикер перемещён.' : 'Не удалось переместить стикер.', $ok ? 'success' : 'error');
                 admin_redirect(self::base_url_raw(AF_AE_DO_STIKERS));
             }
 
             if ($sub === 'cat_delete') {
-                $ok = af_advancededitor_stikers_delete_category_with_move((int)$mybb->get_input('id', MyBB::INPUT_INT), (int)$mybb->get_input('move_to', MyBB::INPUT_INT));
+                $ok = af_advancededitor_stikers_delete_category_with_move(
+                    (int)$mybb->get_input('id', MyBB::INPUT_INT),
+                    (int)$mybb->get_input('move_to', MyBB::INPUT_INT)
+                );
                 flash_message($ok ? 'Категория удалена, стикеры перенесены.' : 'Не удалось удалить категорию.', $ok ? 'success' : 'error');
                 admin_redirect(self::base_url_raw(AF_AE_DO_STIKERS));
             }
         }
 
+        $stikerSettings = function_exists('af_advancededitor_stikers_get_settings')
+            ? af_advancededitor_stikers_get_settings()
+            : ['thumb_size' => 50, 'post_size' => 120];
+
+        $thumbSize = (int)($stikerSettings['thumb_size'] ?? 50);
+        $postSize  = (int)($stikerSettings['post_size'] ?? 120);
+
         $cats = [];
         $cq = $db->simple_select(AF_AE_STIKERS_CATEGORY_TABLE, '*', '1=1', ['order_by' => 'sortorder ASC, id ASC']);
-        while ($c = $db->fetch_array($cq)) $cats[] = $c;
+        while ($c = $db->fetch_array($cq)) {
+            $cats[] = $c;
+        }
 
         $catOptions = [];
-        foreach ($cats as $c) $catOptions[(int)$c['id']] = (string)$c['title'] . ' (' . (string)$c['slug'] . ')';
+        foreach ($cats as $c) {
+            $catOptions[(int)$c['id']] = (string)$c['title'] . ' (' . (string)$c['slug'] . ')';
+        }
 
+        // ===== Настройки размеров =====
+        $formSettings = new Form(self::base_url_raw(AF_AE_DO_STIKERS), 'post');
+        echo $formSettings->generate_hidden_field('my_post_key', (string)$mybb->post_code);
+        echo $formSettings->generate_hidden_field('sub', 'stikers_settings_save');
+
+        $boxSettings = class_exists('FormContainer', false)
+            ? new FormContainer('Настройки размеров стикеров')
+            : new AF_AE_FormContainerShim('Настройки размеров стикеров');
+
+        $boxSettings->output_row(
+            'Размер превью в модалке',
+            'Размер миниатюры стикера в окне выбора. Пример: 50',
+            $formSettings->generate_numeric_field('thumb_size', $thumbSize, ['min' => 24, 'max' => 512, 'step' => 1])
+        );
+
+        $boxSettings->output_row(
+            'Размер стикера в редакторе / предпросмотре / публикации',
+            'Размер отображения после вставки. BBCode остаётся чистым: [img]url[/img]. Пример: 120',
+            $formSettings->generate_numeric_field('post_size', $postSize, ['min' => 24, 'max' => 512, 'step' => 1])
+        );
+
+        $boxSettings->end();
+        $formSettings->output_submit_wrapper([$formSettings->generate_submit_button('Сохранить размеры')]);
+        $formSettings->end();
+
+        echo '<br />';
+
+        // ===== Создание категории =====
         $formCat = new Form(self::base_url_raw(AF_AE_DO_STIKERS), 'post');
         echo $formCat->generate_hidden_field('my_post_key', (string)$mybb->post_code);
         echo $formCat->generate_hidden_field('sub', 'cat_add');
-        $box1 = class_exists('FormContainer', false) ? new FormContainer('Создать категорию') : new AF_AE_FormContainerShim('Создать категорию');
-        $box1->output_row('Название категории', 'Создаёт подпапку в assets/stikers/{slug}.', $formCat->generate_text_box('title', '', ['style' => 'width:280px;']));
+
+        $box1 = class_exists('FormContainer', false)
+            ? new FormContainer('Создать категорию')
+            : new AF_AE_FormContainerShim('Создать категорию');
+
+        $box1->output_row(
+            'Название категории',
+            'Создаёт подпапку в assets/stikers/{slug}.',
+            $formCat->generate_text_box('title', '', ['style' => 'width:280px;'])
+        );
         $box1->end();
+
         $formCat->output_submit_wrapper([$formCat->generate_submit_button('Создать категорию')]);
         $formCat->end();
 
         echo '<br />';
+
+        // ===== Загрузка стикера =====
         $formUpload = new Form(self::base_url_raw(AF_AE_DO_STIKERS), 'post', '', 1);
         echo $formUpload->generate_hidden_field('my_post_key', (string)$mybb->post_code);
         echo $formUpload->generate_hidden_field('sub', 'stiker_upload');
-        $box2 = class_exists('FormContainer', false) ? new FormContainer('Загрузить стикер (ACP)') : new AF_AE_FormContainerShim('Загрузить стикер (ACP)');
-        $box2->output_row('Категория', 'Если не выбрать — fallback «общее».', $formUpload->generate_select_box('category_id', $catOptions, 0));
-        $box2->output_row('Файл', 'Поддержка: webp, gif, png, jpg, jpeg.', $formUpload->generate_file_upload_box('sticker', ['accept' => '.webp,.gif,.png,.jpg,.jpeg']));
+
+        $box2 = class_exists('FormContainer', false)
+            ? new FormContainer('Загрузить стикер (ACP)')
+            : new AF_AE_FormContainerShim('Загрузить стикер (ACP)');
+
+        $box2->output_row(
+            'Категория',
+            'Если не выбрать — fallback «общее».',
+            $formUpload->generate_select_box('category_id', $catOptions, 0)
+        );
+
+        $box2->output_row(
+            'Файл',
+            'Поддержка: webp, gif, png, jpg, jpeg.',
+            $formUpload->generate_file_upload_box('sticker', ['accept' => '.webp,.gif,.png,.jpg,.jpeg'])
+        );
+
         $box2->end();
         $formUpload->output_submit_wrapper([$formUpload->generate_submit_button('Загрузить стикер')]);
         $formUpload->end();
 
         require_once MYBB_ADMIN_DIR . 'inc/class_table.php';
 
+        // ===== Категории =====
         $table = new Table;
         $table->construct_header('ID', ['width' => '5%']);
         $table->construct_header('Title', ['width' => '16%']);
         $table->construct_header('Slug', ['width' => '14%']);
         $table->construct_header('Стикеров', ['width' => '8%']);
         $table->construct_header('Действия');
+
         foreach ($cats as $c) {
             $cid = (int)$c['id'];
-            $cnt = (int)$db->fetch_field($db->simple_select(AF_AE_STIKERS_TABLE, 'COUNT(id) AS c', 'category_id=' . $cid . ' AND is_user_sticker=0'), 'c');
-            $actions = '<form method="post" action="' . self::base_url(AF_AE_DO_STIKERS) . '" style="display:inline-block;margin-right:8px;">'
+            $cnt = (int)$db->fetch_field(
+                $db->simple_select(AF_AE_STIKERS_TABLE, 'COUNT(id) AS c', 'category_id=' . $cid . ' AND is_user_sticker=0'),
+                'c'
+            );
+
+            $actions =
+                '<form method="post" action="' . self::base_url(AF_AE_DO_STIKERS) . '" style="display:inline-block;margin-right:8px;">'
                 . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni((string)$mybb->post_code) . '">'
                 . '<input type="hidden" name="sub" value="cat_edit">'
                 . '<input type="hidden" name="id" value="' . $cid . '">'
                 . '<input type="text" name="title" value="' . htmlspecialchars_uni((string)$c['title']) . '" style="width:140px;"> '
-                . '<button type="submit">Сохранить title</button></form>';
+                . '<button type="submit">Сохранить title</button>'
+                . '</form>';
+
             if ((string)$c['slug'] !== 'obshee') {
-                $actions .= '<form method="post" action="' . self::base_url(AF_AE_DO_STIKERS) . '" style="display:inline-block">'
+                $actions .=
+                    '<form method="post" action="' . self::base_url(AF_AE_DO_STIKERS) . '" style="display:inline-block">'
                     . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni((string)$mybb->post_code) . '">'
                     . '<input type="hidden" name="sub" value="cat_delete">'
                     . '<input type="hidden" name="id" value="' . $cid . '">'
                     . '<select name="move_to">';
-                foreach ($catOptions as $k => $v) if ((int)$k !== $cid) $actions .= '<option value="' . (int)$k . '">' . htmlspecialchars_uni($v) . '</option>';
+
+                foreach ($catOptions as $k => $v) {
+                    if ((int)$k !== $cid) {
+                        $actions .= '<option value="' . (int)$k . '">' . htmlspecialchars_uni($v) . '</option>';
+                    }
+                }
+
                 $actions .= '</select> <button type="submit">Удалить + перенести</button></form>';
             }
+
             $table->construct_cell((string)$cid);
             $table->construct_cell(htmlspecialchars_uni((string)$c['title']));
             $table->construct_cell(htmlspecialchars_uni((string)$c['slug']));
@@ -1561,9 +1713,15 @@ class AF_Admin_AdvancedEditor
             $table->construct_cell($actions);
             $table->construct_row();
         }
-        if ($table->num_rows() === 0) { $table->construct_cell('Категорий пока нет.', ['colspan' => 5]); $table->construct_row(); }
+
+        if ($table->num_rows() === 0) {
+            $table->construct_cell('Категорий пока нет.', ['colspan' => 5]);
+            $table->construct_row();
+        }
+
         $table->output('Категории');
 
+        // ===== Стикеры =====
         $st = new Table;
         $st->construct_header('ID', ['width' => '5%']);
         $st->construct_header('Preview', ['width' => '12%']);
@@ -1571,30 +1729,48 @@ class AF_Admin_AdvancedEditor
         $st->construct_header('Category', ['width' => '20%']);
         $st->construct_header('URL');
         $st->construct_header('Действия', ['width' => '22%']);
+
         $sq = $db->simple_select(AF_AE_STIKERS_TABLE, '*', 'is_user_sticker=0', ['order_by' => 'id', 'order_dir' => 'DESC']);
         while ($r = $db->fetch_array($sq)) {
-            $del = '<form method="post" action="' . self::base_url(AF_AE_DO_STIKERS) . '" style="display:inline-block;margin-right:8px;">'
+            $del =
+                '<form method="post" action="' . self::base_url(AF_AE_DO_STIKERS) . '" style="display:inline-block;margin-right:8px;">'
                 . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni((string)$mybb->post_code) . '">'
                 . '<input type="hidden" name="sub" value="stiker_delete">'
                 . '<input type="hidden" name="id" value="' . (int)$r['id'] . '">'
-                . '<button type="submit">Удалить</button></form>';
-            $move = '<form method="post" action="' . self::base_url(AF_AE_DO_STIKERS) . '" style="display:inline-block">'
+                . '<button type="submit">Удалить</button>'
+                . '</form>';
+
+            $move =
+                '<form method="post" action="' . self::base_url(AF_AE_DO_STIKERS) . '" style="display:inline-block">'
                 . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni((string)$mybb->post_code) . '">'
                 . '<input type="hidden" name="sub" value="stiker_move">'
                 . '<input type="hidden" name="id" value="' . (int)$r['id'] . '">'
                 . '<select name="move_to">';
-            foreach ($catOptions as $k => $v) $move .= '<option value="' . (int)$k . '"' . ((int)$k === (int)$r['category_id'] ? ' selected' : '') . '>' . htmlspecialchars_uni($v) . '</option>';
+
+            foreach ($catOptions as $k => $v) {
+                $move .= '<option value="' . (int)$k . '"' . ((int)$k === (int)$r['category_id'] ? ' selected' : '') . '>' . htmlspecialchars_uni($v) . '</option>';
+            }
+
             $move .= '</select> <button type="submit">Переместить</button></form>';
-            $cid = (int)$r['category_id']; $catTitle = isset($catOptions[$cid]) ? $catOptions[$cid] : '—';
+
+            $cid = (int)$r['category_id'];
+            $catTitle = isset($catOptions[$cid]) ? $catOptions[$cid] : '—';
+
+            $previewStyle = 'width:' . $thumbSize . 'px;height:' . $thumbSize . 'px;object-fit:contain;display:block;margin:0 auto;';
             $st->construct_cell((string)(int)$r['id']);
-            $st->construct_cell('<img src="' . htmlspecialchars_uni((string)$r['url']) . '" alt="" style="max-width:56px;max-height:56px;">');
+            $st->construct_cell('<img src="' . htmlspecialchars_uni((string)$r['url']) . '" alt="" style="' . htmlspecialchars_uni($previewStyle) . '">');
             $st->construct_cell(htmlspecialchars_uni((string)$r['title']));
             $st->construct_cell(htmlspecialchars_uni((string)$catTitle));
             $st->construct_cell(htmlspecialchars_uni((string)$r['url']));
             $st->construct_cell($del . $move);
             $st->construct_row();
         }
-        if ($st->num_rows() === 0) { $st->construct_cell('Стикеров пока нет.', ['colspan' => 6]); $st->construct_row(); }
+
+        if ($st->num_rows() === 0) {
+            $st->construct_cell('Стикеров пока нет.', ['colspan' => 6]);
+            $st->construct_row();
+        }
+
         $st->output('Стикеры категорий');
     }
 
