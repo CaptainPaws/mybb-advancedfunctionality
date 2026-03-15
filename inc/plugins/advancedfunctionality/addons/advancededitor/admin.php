@@ -20,6 +20,7 @@ if (!defined('AF_AE_DO_DELETE'))   define('AF_AE_DO_DELETE',   'button_delete');
 if (!defined('AF_AE_DO_TOOLBAR'))  define('AF_AE_DO_TOOLBAR',  'toolbar');
 if (!defined('AF_AE_DO_FONTS'))    define('AF_AE_DO_FONTS',    'fonts');
 if (!defined('AF_AE_DO_HELP'))     define('AF_AE_DO_HELP',     'formatting_help');
+if (!defined('AF_AE_DO_STIKERS'))  define('AF_AE_DO_STIKERS',  'stikers');
 
 if (!defined('AF_AE_SETTING_LAYOUT')) define('AF_AE_SETTING_LAYOUT', 'af_advancededitor_toolbar_layout');
 if (!defined('AF_AE_SETTING_FONTS'))  define('AF_AE_SETTING_FONTS',  'af_advancededitor_fontfamily_json');
@@ -206,6 +207,7 @@ class AF_Admin_AdvancedEditor
             case AF_AE_DO_TOOLBAR: self::page_toolbar(); return;
             case AF_AE_DO_FONTS:   self::page_fonts(); return;
             case AF_AE_DO_HELP:    self::page_help(); return;
+            case AF_AE_DO_STIKERS: self::page_stikers(); return;
             case AF_AE_DO_LIST:
             default:               self::page_list(); return;
         }
@@ -288,6 +290,11 @@ class AF_Admin_AdvancedEditor
                 'title'       => $helpTabTitle,
                 'link'        => self::base_url(AF_AE_DO_HELP),
                 'description' => 'Контент модального окна с подсказкой по форматированию.',
+            ],
+            'stikers' => [
+                'title'       => 'Стикеры',
+                'link'        => self::base_url(AF_AE_DO_STIKERS),
+                'description' => 'Категории и стикеры Advanced Editor.',
             ],
         ];
 
@@ -1440,6 +1447,237 @@ class AF_Admin_AdvancedEditor
         $buttons[] = $form->generate_submit_button('Сохранить');
         $form->output_submit_wrapper($buttons);
         $form->end();
+    }
+
+
+    private static function page_stikers(): void
+    {
+        global $mybb, $db;
+
+        self::output_tabs('stikers');
+        af_ae_require_form_libs();
+
+        if (function_exists('af_advancededitor_stikers_ensure_schema')) {
+            af_advancededitor_stikers_ensure_schema();
+        }
+
+        if ($mybb->request_method === 'post') {
+            verify_post_check($mybb->get_input('my_post_key'));
+            $sub = (string)$mybb->get_input('sub');
+
+            if ($sub === 'cat_add') {
+                $title = trim((string)$mybb->get_input('title'));
+                if ($title !== '') {
+                    $slug = af_advancededitor_stikers_slugify($title);
+                    $base = af_advancededitor_stikers_abs();
+                    if (!is_dir($base)) @mkdir($base, 0775, true);
+                    $dir = rtrim($base, '/\\') . DIRECTORY_SEPARATOR . $slug;
+                    if (!is_dir($dir)) @mkdir($dir, 0775, true);
+
+                    $q = $db->simple_select(AF_AE_STIKERS_CATEGORY_TABLE, 'id', "slug='" . $db->escape_string($slug) . "'", ['limit' => 1]);
+                    $exists = (int)$db->fetch_field($q, 'id');
+                    if ($exists <= 0) {
+                        $db->insert_query(AF_AE_STIKERS_CATEGORY_TABLE, [
+                            'title' => $db->escape_string($title),
+                            'slug' => $db->escape_string($slug),
+                            'path' => $db->escape_string($dir),
+                            'sortorder' => 0,
+                            'created_at' => TIME_NOW,
+                        ]);
+                        flash_message('Категория создана.', 'success');
+                    } else {
+                        flash_message('Категория с таким slug уже существует.', 'error');
+                    }
+                }
+                admin_redirect(self::base_url_raw(AF_AE_DO_STIKERS));
+            }
+
+            if ($sub === 'stiker_upload') {
+                $categoryId = (int)$mybb->get_input('category_id', MyBB::INPUT_INT);
+                if ($categoryId <= 0) {
+                    $categoryId = function_exists('af_advancededitor_stikers_ensure_default_category') ? af_advancededitor_stikers_ensure_default_category() : 0;
+                }
+
+                $cat = $db->fetch_array($db->simple_select(AF_AE_STIKERS_CATEGORY_TABLE, '*', 'id=' . $categoryId, ['limit' => 1]));
+                if (empty($cat['id'])) {
+                    flash_message('Категория не найдена.', 'error');
+                    admin_redirect(self::base_url_raw(AF_AE_DO_STIKERS));
+                }
+
+                $file = $_FILES['sticker'] ?? null;
+                $error = '';
+                if (!is_array($file) || !af_advancededitor_stikers_is_allowed_upload($file, $error)) {
+                    flash_message($error ?: 'Некорректный файл.', 'error');
+                    admin_redirect(self::base_url_raw(AF_AE_DO_STIKERS));
+                }
+
+                $dir = (string)$cat['path'];
+                if ($dir === '') {
+                    $dir = af_advancededitor_stikers_abs() . (string)$cat['slug'];
+                }
+                if (!is_dir($dir)) @mkdir($dir, 0775, true);
+
+                [$finalName, $ext] = af_advancededitor_stikers_unique_path($dir, (string)$file['name']);
+                $target = rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . $finalName;
+                if (!@move_uploaded_file((string)$file['tmp_name'], $target)) {
+                    flash_message('Не удалось сохранить файл.', 'error');
+                    admin_redirect(self::base_url_raw(AF_AE_DO_STIKERS));
+                }
+
+                $url = af_advancededitor_stikers_url((string)$cat['slug'] . '/' . $finalName);
+                $db->insert_query(AF_AE_STIKERS_TABLE, [
+                    'title' => $db->escape_string((string)pathinfo($finalName, PATHINFO_FILENAME)),
+                    'slug' => $db->escape_string((string)pathinfo($finalName, PATHINFO_FILENAME)),
+                    'path' => $db->escape_string($target),
+                    'url' => $db->escape_string($url),
+                    'ext' => $db->escape_string($ext),
+                    'is_user_sticker' => 0,
+                    'uid' => 0,
+                    'category_id' => (int)$cat['id'],
+                    'sortorder' => 0,
+                    'created_at' => TIME_NOW,
+                ]);
+                flash_message('Стикер загружен.', 'success');
+                admin_redirect(self::base_url_raw(AF_AE_DO_STIKERS));
+            }
+
+            if ($sub === 'stiker_delete') {
+                $id = (int)$mybb->get_input('id', MyBB::INPUT_INT);
+                $row = $db->fetch_array($db->simple_select(AF_AE_STIKERS_TABLE, '*', 'id=' . $id . ' AND is_user_sticker=0', ['limit' => 1]));
+                if (!empty($row['id'])) {
+                    $path = (string)$row['path'];
+                    if ($path !== '' && af_advancededitor_is_path_inside($path, af_advancededitor_stikers_abs()) && is_file($path)) {
+                        @unlink($path);
+                    }
+                    $db->delete_query(AF_AE_STIKERS_TABLE, 'id=' . $id);
+                    flash_message('Стикер удалён.', 'success');
+                }
+                admin_redirect(self::base_url_raw(AF_AE_DO_STIKERS));
+            }
+
+            if ($sub === 'cat_delete') {
+                $id = (int)$mybb->get_input('id', MyBB::INPUT_INT);
+                $moveTo = (int)$mybb->get_input('move_to', MyBB::INPUT_INT);
+                if ($moveTo <= 0) $moveTo = af_advancededitor_stikers_ensure_default_category();
+                if ($id > 0 && $id !== $moveTo) {
+                    $db->update_query(AF_AE_STIKERS_TABLE, ['category_id' => $moveTo], 'category_id=' . $id . ' AND is_user_sticker=0');
+                    $db->delete_query(AF_AE_STIKERS_CATEGORY_TABLE, 'id=' . $id);
+                    flash_message('Категория удалена, стикеры перенесены.', 'success');
+                }
+                admin_redirect(self::base_url_raw(AF_AE_DO_STIKERS));
+            }
+        }
+
+        $form = new Form(self::base_url_raw(AF_AE_DO_STIKERS), 'post', '', 1);
+        echo $form->generate_hidden_field('my_post_key', (string)$mybb->post_code);
+
+        $cats = [];
+        $cq = $db->simple_select(AF_AE_STIKERS_CATEGORY_TABLE, '*', '1=1', ['order_by' => 'sortorder ASC, id ASC']);
+        while ($c = $db->fetch_array($cq)) {
+            $cats[] = $c;
+        }
+
+        $catOptions = [];
+        foreach ($cats as $c) {
+            $catOptions[(int)$c['id']] = (string)$c['title'] . ' (' . (string)$c['slug'] . ')';
+        }
+
+        $box1 = class_exists('FormContainer', false) ? new FormContainer('Категории стикеров') : new AF_AE_FormContainerShim('Категории стикеров');
+        $box1->output_row('Новая категория', 'Будет создана подпапка в assets/stikers/{slug}.',
+            $form->generate_hidden_field('sub', 'cat_add') .
+            $form->generate_text_box('title', '', ['style' => 'width:280px;']) . ' ' .
+            $form->generate_submit_button('Создать')
+        );
+        $box1->end();
+
+        echo '<br />';
+        $box2 = class_exists('FormContainer', false) ? new FormContainer('Загрузить стикер (ACP)') : new AF_AE_FormContainerShim('Загрузить стикер (ACP)');
+        $box2->output_row('Категория', 'Если не выбрать — используется fallback «общее».',
+            $form->generate_select_box('category_id', $catOptions, 0)
+        );
+        $box2->output_row('Файл', 'Поддержка: webp, gif, png, jpg, jpeg.',
+            $form->generate_hidden_field('sub', 'stiker_upload') .
+            $form->generate_file_upload_box('sticker', ['accept' => '.webp,.gif,.png,.jpg,.jpeg'])
+        );
+        $box2->end();
+
+        $form->output_submit_wrapper([$form->generate_submit_button('Загрузить стикер')]);
+        $form->end();
+
+        require_once MYBB_ADMIN_DIR . 'inc/class_table.php';
+
+        $table = new Table;
+        $table->construct_header('ID', ['width' => '5%']);
+        $table->construct_header('Категория', ['width' => '20%']);
+        $table->construct_header('Slug', ['width' => '15%']);
+        $table->construct_header('Стикеров', ['width' => '10%']);
+        $table->construct_header('Действия');
+
+        foreach ($cats as $c) {
+            $cid = (int)$c['id'];
+            $qCnt = $db->simple_select(AF_AE_STIKERS_TABLE, 'COUNT(id) AS c', 'category_id=' . $cid . ' AND is_user_sticker=0');
+            $cnt = (int)$db->fetch_field($qCnt, 'c');
+
+            $actions = '';
+            if ((string)$c['slug'] !== 'obshee') {
+                $actions = '<form method="post" action="' . self::base_url(AF_AE_DO_STIKERS) . '" style="display:inline-block">'
+                    . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni((string)$mybb->post_code) . '">' 
+                    . '<input type="hidden" name="sub" value="cat_delete">'
+                    . '<input type="hidden" name="id" value="' . $cid . '">' 
+                    . '<select name="move_to">';
+                foreach ($catOptions as $k => $v) {
+                    if ((int)$k === $cid) continue;
+                    $actions .= '<option value="' . (int)$k . '">' . htmlspecialchars_uni($v) . '</option>';
+                }
+                $actions .= '</select> <button type="submit">Удалить + перенести</button></form>';
+            } else {
+                $actions = 'Дефолтная категория';
+            }
+
+            $table->construct_cell((string)$cid);
+            $table->construct_cell(htmlspecialchars_uni((string)$c['title']));
+            $table->construct_cell(htmlspecialchars_uni((string)$c['slug']));
+            $table->construct_cell((string)$cnt);
+            $table->construct_cell($actions);
+            $table->construct_row();
+        }
+        if ($table->num_rows() === 0) {
+            $table->construct_cell('Категорий пока нет.', ['colspan' => 5]);
+            $table->construct_row();
+        }
+        $table->output('Категории');
+
+        $st = new Table;
+        $st->construct_header('ID', ['width' => '5%']);
+        $st->construct_header('Превью', ['width' => '12%']);
+        $st->construct_header('URL');
+        $st->construct_header('Категория', ['width' => '18%']);
+        $st->construct_header('Удалить', ['width' => '12%']);
+
+        $sq = $db->simple_select(AF_AE_STIKERS_TABLE, '*', 'is_user_sticker=0', ['order_by' => 'id', 'order_dir' => 'DESC']);
+        while ($r = $db->fetch_array($sq)) {
+            $cid = (int)$r['category_id'];
+            $catTitle = '';
+            foreach ($cats as $c) {
+                if ((int)$c['id'] === $cid) { $catTitle = (string)$c['title']; break; }
+            }
+            $del = '<form method="post" action="' . self::base_url(AF_AE_DO_STIKERS) . '">'
+                . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni((string)$mybb->post_code) . '">' 
+                . '<input type="hidden" name="sub" value="stiker_delete">'
+                . '<input type="hidden" name="id" value="' . (int)$r['id'] . '">' 
+                . '<button type="submit">Удалить</button></form>';
+            $st->construct_cell((string)(int)$r['id']);
+            $st->construct_cell('<img src="' . htmlspecialchars_uni((string)$r['url']) . '" alt="" style="max-width:56px;max-height:56px;">');
+            $st->construct_cell(htmlspecialchars_uni((string)$r['url']));
+            $st->construct_cell(htmlspecialchars_uni($catTitle));
+            $st->construct_cell($del);
+            $st->construct_row();
+        }
+        if ($st->num_rows() === 0) {
+            $st->construct_cell('Стикеров пока нет.', ['colspan' => 5]);
+            $st->construct_row();
+        }
+        $st->output('Стикеры категорий');
     }
 
 }
