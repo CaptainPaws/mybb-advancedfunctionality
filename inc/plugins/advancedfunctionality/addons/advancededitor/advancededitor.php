@@ -33,6 +33,9 @@ define('AF_AE_SETTING_HELP_POSITION', 'af_advancededitor_help_position');
 
 // Таблица кастомных кнопок
 define('AF_AE_TABLE', 'af_ae_buttons');
+define('AF_AE_STIKERS_CATEGORY_TABLE', 'af_ae_stikers_categories');
+define('AF_AE_STIKERS_TABLE', 'af_ae_stikers');
+define('AF_AE_STIKERS_RECENT_TABLE', 'af_ae_stikers_recent');
 
 /**
  * === AE: helper paths/urls ===
@@ -100,6 +103,221 @@ function af_advancededitor_is_path_inside(string $path, string $baseDir): bool
  * - /bbcodes/manifest.php
  * - /bbcodes/manifest.json
  */
+
+function af_advancededitor_stikers_rel(): string
+{
+    return af_advancededitor_assets_rel() . 'stikers/';
+}
+
+function af_advancededitor_stikers_abs(): string
+{
+    return MYBB_ROOT . af_advancededitor_stikers_rel();
+}
+
+function af_advancededitor_stikers_url(string $rel = ''): string
+{
+    $rel = trim($rel);
+    $base = af_advancededitor_url(af_advancededitor_stikers_rel());
+    if ($rel === '') {
+        return rtrim($base, '/') . '/';
+    }
+    return rtrim($base, '/') . '/' . ltrim($rel, '/');
+}
+
+function af_advancededitor_stikers_slugify(string $title): string
+{
+    $title = trim($title);
+    if ($title === '') return 'obshee';
+
+    if (function_exists('iconv')) {
+        $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $title);
+        if (is_string($converted) && $converted !== '') {
+            $title = $converted;
+        }
+    }
+
+    $title = strtolower($title);
+    $title = preg_replace('~[^a-z0-9]+~', '_', $title);
+    $title = trim((string)$title, '_');
+
+    return $title !== '' ? $title : 'obshee';
+}
+
+function af_advancededitor_stikers_allowed_exts(): array
+{
+    return ['webp', 'gif', 'png', 'jpg', 'jpeg'];
+}
+
+function af_advancededitor_stikers_max_size(): int
+{
+    return 5 * 1024 * 1024;
+}
+
+function af_advancededitor_stikers_max_per_user(): int
+{
+    return 60;
+}
+
+function af_advancededitor_stikers_json(array $payload): void
+{
+    @header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+function af_advancededitor_stikers_ensure_schema(): void
+{
+    global $db;
+
+    $collation = $db->build_create_table_collation();
+
+    if (!$db->table_exists(AF_AE_STIKERS_CATEGORY_TABLE)) {
+        $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_AE_STIKERS_CATEGORY_TABLE . " (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            title VARCHAR(255) NOT NULL,
+            slug VARCHAR(190) NOT NULL,
+            path VARCHAR(255) NOT NULL DEFAULT '',
+            sortorder INT UNSIGNED NOT NULL DEFAULT 0,
+            created_at INT UNSIGNED NOT NULL DEFAULT 0,
+            PRIMARY KEY (id),
+            UNIQUE KEY slug (slug)
+        ) ENGINE=MyISAM {$collation};");
+    }
+
+    if (!$db->table_exists(AF_AE_STIKERS_TABLE)) {
+        $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_AE_STIKERS_TABLE . " (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            title VARCHAR(255) NOT NULL,
+            slug VARCHAR(190) NOT NULL,
+            path VARCHAR(255) NOT NULL,
+            url VARCHAR(255) NOT NULL,
+            ext VARCHAR(12) NOT NULL DEFAULT '',
+            is_user_sticker TINYINT(1) NOT NULL DEFAULT 0,
+            uid INT UNSIGNED NOT NULL DEFAULT 0,
+            category_id INT UNSIGNED NOT NULL DEFAULT 0,
+            sortorder INT UNSIGNED NOT NULL DEFAULT 0,
+            created_at INT UNSIGNED NOT NULL DEFAULT 0,
+            PRIMARY KEY (id),
+            KEY category_id (category_id),
+            KEY uid (uid),
+            KEY is_user_sticker (is_user_sticker)
+        ) ENGINE=MyISAM {$collation};");
+    }
+
+    if (!$db->table_exists(AF_AE_STIKERS_RECENT_TABLE)) {
+        $db->write_query("CREATE TABLE " . TABLE_PREFIX . AF_AE_STIKERS_RECENT_TABLE . " (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            uid INT UNSIGNED NOT NULL DEFAULT 0,
+            sticker_id INT UNSIGNED NOT NULL DEFAULT 0,
+            sticker_url VARCHAR(255) NOT NULL DEFAULT '',
+            used_at INT UNSIGNED NOT NULL DEFAULT 0,
+            PRIMARY KEY (id),
+            KEY uid (uid),
+            KEY used_at (used_at)
+        ) ENGINE=MyISAM {$collation};");
+    }
+
+    af_advancededitor_stikers_ensure_default_category();
+}
+
+function af_advancededitor_stikers_ensure_base_dir(): bool
+{
+    $dir = af_advancededitor_stikers_abs();
+    if (is_dir($dir)) return true;
+    @mkdir($dir, 0775, true);
+    return is_dir($dir);
+}
+
+function af_advancededitor_stikers_ensure_default_category(): int
+{
+    global $db;
+
+    af_advancededitor_stikers_ensure_base_dir();
+
+    $slug = 'obshee';
+    $q = $db->simple_select(AF_AE_STIKERS_CATEGORY_TABLE, '*', "slug='" . $db->escape_string($slug) . "'", ['limit' => 1]);
+    $row = $db->fetch_array($q);
+    if (!empty($row['id'])) return (int)$row['id'];
+
+    $absDir = af_advancededitor_stikers_abs() . $slug;
+    if (!is_dir($absDir)) @mkdir($absDir, 0775, true);
+
+    return (int)$db->insert_query(AF_AE_STIKERS_CATEGORY_TABLE, [
+        'title' => $db->escape_string('общее'),
+        'slug' => $db->escape_string($slug),
+        'path' => $db->escape_string($absDir),
+        'sortorder' => 0,
+        'created_at' => TIME_NOW,
+    ]);
+}
+
+function af_advancededitor_stikers_can_manage_acp(): bool
+{
+    return defined('IN_ADMINCP');
+}
+
+function af_advancededitor_stikers_is_allowed_upload(array $file, &$error = ''): bool
+{
+    $error = '';
+    if (empty($file['name']) || empty($file['tmp_name'])) {
+        $error = 'Файл не выбран.';
+        return false;
+    }
+
+    $size = (int)($file['size'] ?? 0);
+    if ($size <= 0 || $size > af_advancededitor_stikers_max_size()) {
+        $error = 'Размер файла превышает лимит.';
+        return false;
+    }
+
+    $name = (string)$file['name'];
+    $ext = strtolower((string)pathinfo($name, PATHINFO_EXTENSION));
+    if (!in_array($ext, af_advancededitor_stikers_allowed_exts(), true)) {
+        $error = 'Недопустимый формат файла.';
+        return false;
+    }
+
+    $mime = '';
+    if (function_exists('mime_content_type')) {
+        $mime = (string)@mime_content_type((string)$file['tmp_name']);
+    }
+    if ($mime !== '' && stripos($mime, 'image/') !== 0) {
+        $error = 'Загружаются только изображения.';
+        return false;
+    }
+
+    return true;
+}
+
+function af_advancededitor_stikers_safe_filename(string $name): string
+{
+    $name = trim($name);
+    $ext = strtolower((string)pathinfo($name, PATHINFO_EXTENSION));
+    $base = strtolower((string)pathinfo($name, PATHINFO_FILENAME));
+    $base = preg_replace('~[^a-z0-9_-]+~', '_', $base);
+    $base = trim((string)$base, '_-');
+    if ($base === '') $base = 'stiker';
+    if ($ext === '' || !in_array($ext, af_advancededitor_stikers_allowed_exts(), true)) {
+        $ext = 'png';
+    }
+    return $base . '.' . $ext;
+}
+
+function af_advancededitor_stikers_unique_path(string $dir, string $filename): array
+{
+    $filename = af_advancededitor_stikers_safe_filename($filename);
+    $ext = strtolower((string)pathinfo($filename, PATHINFO_EXTENSION));
+    $base = (string)pathinfo($filename, PATHINFO_FILENAME);
+    $final = $filename;
+    $i = 1;
+    while (is_file(rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . $final)) {
+        $final = $base . '_' . $i . '.' . $ext;
+        $i++;
+    }
+    return [$final, $ext];
+}
+
+
 function af_advancededitor_collect_bbcode_packs(): array
 {
     $baseFs = af_advancededitor_fs_bbcodes_dir();
@@ -1034,6 +1252,14 @@ table #post_options, table #postoptions{display:none!important;}
                 'content' => (string)$helpContentHtml,
                 'position' => (string)$helpPositionRaw,
             ],
+            'stikers' => [
+                'enabled' => 1,
+                'isAuth' => !empty($mybb->user['uid']) ? 1 : 0,
+                'listUrl' => $bburl . '/misc.php?action=af_ae_stikers_list',
+                'uploadUrl' => $bburl . '/misc.php?action=af_ae_stikers_upload',
+                'deleteUrl' => $bburl . '/misc.php?action=af_ae_stikers_delete',
+                'recentUrl' => $bburl . '/misc.php?action=af_ae_stikers_recent',
+            ],
         ];
         if ($editorSelector !== '') {
             $payload['cfg']['editorSelector'] = $editorSelector;
@@ -1412,6 +1638,7 @@ li",
 
     // ставим MyCode из паков (включая indent/indent.php)
     af_advancededitor_install_pack_mycodes();
+    af_advancededitor_stikers_ensure_schema();
 
     // При активации аддона гарантированно выключаем конфликтующий Clickable MyCode Editor.
     af_advancededitor_disable_clickable_editor_setting(true);
@@ -1438,6 +1665,15 @@ function af_advancededitor_uninstall(): void
     // Таблицу удаляем (это именно наши данные)
     if ($db->table_exists(AF_AE_TABLE)) {
         $db->drop_table(AF_AE_TABLE);
+    }
+    if ($db->table_exists(AF_AE_STIKERS_RECENT_TABLE)) {
+        $db->drop_table(AF_AE_STIKERS_RECENT_TABLE);
+    }
+    if ($db->table_exists(AF_AE_STIKERS_TABLE)) {
+        $db->drop_table(AF_AE_STIKERS_TABLE);
+    }
+    if ($db->table_exists(AF_AE_STIKERS_CATEGORY_TABLE)) {
+        $db->drop_table(AF_AE_STIKERS_CATEGORY_TABLE);
     }
 
     // настройки + группа
@@ -1876,6 +2112,8 @@ function af_advancededitor_init(): void
         return;
     }
 
+    af_advancededitor_stikers_ensure_schema();
+
     // 1) ГЛАВНОЕ: выключаем Clickable MyCode Editor MyBB (и в рантайме, и при необходимости фиксируем в БД).
     af_advancededitor_force_disable_mybb_clickable_editor();
 
@@ -1911,11 +2149,250 @@ function af_advancededitor_init(): void
 
 
 
+
+function af_advancededitor_stikers_get_user_folder(int $uid): string
+{
+    return af_advancededitor_stikers_abs() . 'stikers' . $uid;
+}
+
+function af_advancededitor_stikers_get_front_payload(int $uid): array
+{
+    global $db;
+
+    af_advancededitor_stikers_ensure_schema();
+
+    $cats = [];
+    $q = $db->query("SELECT c.id,c.title,c.slug,c.sortorder,COUNT(s.id) AS cnt
+        FROM " . TABLE_PREFIX . AF_AE_STIKERS_CATEGORY_TABLE . " c
+        LEFT JOIN " . TABLE_PREFIX . AF_AE_STIKERS_TABLE . " s
+            ON s.category_id=c.id AND s.is_user_sticker=0
+        GROUP BY c.id,c.title,c.slug,c.sortorder
+        HAVING cnt > 0
+        ORDER BY c.sortorder ASC, c.id ASC");
+    while ($row = $db->fetch_array($q)) {
+        $catId = (int)$row['id'];
+        $cats[$catId] = [
+            'id' => $catId,
+            'title' => (string)$row['title'],
+            'slug' => (string)$row['slug'],
+            'stickers' => [],
+        ];
+    }
+
+    if (!empty($cats)) {
+        $ids = implode(',', array_map('intval', array_keys($cats)));
+        $sq = $db->query("SELECT id,title,url,category_id FROM " . TABLE_PREFIX . AF_AE_STIKERS_TABLE . "
+            WHERE is_user_sticker=0 AND category_id IN ({$ids})
+            ORDER BY sortorder ASC, id ASC");
+        while ($r = $db->fetch_array($sq)) {
+            $cid = (int)$r['category_id'];
+            if (!isset($cats[$cid])) continue;
+            $cats[$cid]['stickers'][] = [
+                'id' => (int)$r['id'],
+                'title' => (string)$r['title'],
+                'url' => (string)$r['url'],
+                'category_id' => $cid,
+            ];
+        }
+    }
+
+    $user = [];
+    if ($uid > 0) {
+        $uq = $db->simple_select(AF_AE_STIKERS_TABLE, 'id,title,url', "is_user_sticker=1 AND uid=" . (int)$uid, ['order_by' => 'id', 'order_dir' => 'DESC']);
+        while ($r = $db->fetch_array($uq)) {
+            $user[] = [
+                'id' => (int)$r['id'],
+                'title' => (string)$r['title'],
+                'url' => (string)$r['url'],
+            ];
+        }
+    }
+
+    $recent = [];
+    if ($uid > 0) {
+        $rq = $db->query("SELECT r.sticker_id,r.sticker_url,s.title,s.url FROM " . TABLE_PREFIX . AF_AE_STIKERS_RECENT_TABLE . " r
+            LEFT JOIN " . TABLE_PREFIX . AF_AE_STIKERS_TABLE . " s ON s.id=r.sticker_id
+            WHERE r.uid=" . (int)$uid . "
+            ORDER BY r.used_at DESC LIMIT 20");
+        $seen = [];
+        while ($r = $db->fetch_array($rq)) {
+            $url = (string)($r['url'] ?: $r['sticker_url']);
+            if ($url === '' || isset($seen[$url])) continue;
+            $seen[$url] = true;
+            $recent[] = [
+                'id' => (int)$r['sticker_id'],
+                'title' => (string)($r['title'] ?: 'Стикер'),
+                'url' => $url,
+            ];
+        }
+    }
+
+    return [
+        'categories' => array_values($cats),
+        'user_stickers' => $user,
+        'recent' => $recent,
+        'limits' => [
+            'max_size' => af_advancededitor_stikers_max_size(),
+            'max_per_user' => af_advancededitor_stikers_max_per_user(),
+            'ext' => af_advancededitor_stikers_allowed_exts(),
+        ],
+    ];
+}
+
+function af_advancededitor_stikers_handle_ajax(): bool
+{
+    global $mybb, $db;
+
+    $action = (string)($mybb->input['action'] ?? '');
+    $map = [
+        'af_ae_stikers_list',
+        'af_ae_stikers_upload',
+        'af_ae_stikers_delete',
+        'af_ae_stikers_recent',
+    ];
+    if (!in_array($action, $map, true)) return false;
+
+    if (!function_exists('verify_post_check')) {
+        require_once MYBB_ROOT . 'inc/functions.php';
+    }
+
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    $postKey = (string)($mybb->input['my_post_key'] ?? '');
+    if ($postKey === '' || !verify_post_check($postKey, true)) {
+        af_advancededitor_stikers_json(['success' => false, 'message' => 'Неверный my_post_key.', 'data' => null]);
+    }
+
+    af_advancededitor_stikers_ensure_schema();
+
+    if ($action === 'af_ae_stikers_list') {
+        af_advancededitor_stikers_json(['success' => true, 'message' => '', 'data' => af_advancededitor_stikers_get_front_payload($uid)]);
+    }
+
+    if ($action === 'af_ae_stikers_recent') {
+        if ($uid <= 0) {
+            af_advancededitor_stikers_json(['success' => false, 'message' => 'Требуется авторизация.', 'data' => null]);
+        }
+        $stickerId = (int)($mybb->input['sticker_id'] ?? 0);
+        $stickerUrl = trim((string)($mybb->input['sticker_url'] ?? ''));
+        if ($stickerId <= 0 && $stickerUrl === '') {
+            af_advancededitor_stikers_json(['success' => false, 'message' => 'Не передан стикер.', 'data' => null]);
+        }
+
+        if ($stickerId > 0) {
+            $db->delete_query(AF_AE_STIKERS_RECENT_TABLE, 'uid=' . $uid . ' AND sticker_id=' . $stickerId);
+        } elseif ($stickerUrl !== '') {
+            $db->delete_query(AF_AE_STIKERS_RECENT_TABLE, "uid={$uid} AND sticker_url='" . $db->escape_string($stickerUrl) . "'");
+        }
+
+        $db->insert_query(AF_AE_STIKERS_RECENT_TABLE, [
+            'uid' => $uid,
+            'sticker_id' => max(0, $stickerId),
+            'sticker_url' => $db->escape_string($stickerUrl),
+            'used_at' => TIME_NOW,
+        ]);
+
+        $db->query("DELETE FROM " . TABLE_PREFIX . AF_AE_STIKERS_RECENT_TABLE . "
+            WHERE uid={$uid} AND id NOT IN (
+                SELECT id FROM (
+                    SELECT id FROM " . TABLE_PREFIX . AF_AE_STIKERS_RECENT_TABLE . " WHERE uid={$uid} ORDER BY used_at DESC LIMIT 20
+                ) t
+            )");
+
+        af_advancededitor_stikers_json(['success' => true, 'message' => '', 'data' => null]);
+    }
+
+    if ($action === 'af_ae_stikers_upload') {
+        if ($uid <= 0) {
+            af_advancededitor_stikers_json(['success' => false, 'message' => 'Требуется авторизация.', 'data' => null]);
+        }
+
+        $cntQ = $db->simple_select(AF_AE_STIKERS_TABLE, 'COUNT(id) AS c', 'is_user_sticker=1 AND uid=' . $uid);
+        $cnt = (int)$db->fetch_field($cntQ, 'c');
+        if ($cnt >= af_advancededitor_stikers_max_per_user()) {
+            af_advancededitor_stikers_json(['success' => false, 'message' => 'Достигнут лимит пользовательских стикеров.', 'data' => null]);
+        }
+
+        $file = $_FILES['sticker'] ?? null;
+        if (!is_array($file)) {
+            af_advancededitor_stikers_json(['success' => false, 'message' => 'Файл не получен.', 'data' => null]);
+        }
+
+        $error = '';
+        if (!af_advancededitor_stikers_is_allowed_upload($file, $error)) {
+            af_advancededitor_stikers_json(['success' => false, 'message' => $error, 'data' => null]);
+        }
+
+        $dir = af_advancededitor_stikers_get_user_folder($uid);
+        if (!is_dir($dir)) @mkdir($dir, 0775, true);
+        if (!is_dir($dir)) {
+            af_advancededitor_stikers_json(['success' => false, 'message' => 'Не удалось создать папку пользователя.', 'data' => null]);
+        }
+
+        [$finalName, $ext] = af_advancededitor_stikers_unique_path($dir, (string)$file['name']);
+        $target = rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . $finalName;
+
+        if (!@move_uploaded_file((string)$file['tmp_name'], $target)) {
+            af_advancededitor_stikers_json(['success' => false, 'message' => 'Не удалось сохранить файл.', 'data' => null]);
+        }
+
+        $rel = 'stikers' . $uid . '/' . $finalName;
+        $url = af_advancededitor_stikers_url($rel);
+        $id = (int)$db->insert_query(AF_AE_STIKERS_TABLE, [
+            'title' => $db->escape_string((string)pathinfo($finalName, PATHINFO_FILENAME)),
+            'slug' => $db->escape_string((string)pathinfo($finalName, PATHINFO_FILENAME)),
+            'path' => $db->escape_string($target),
+            'url' => $db->escape_string($url),
+            'ext' => $db->escape_string($ext),
+            'is_user_sticker' => 1,
+            'uid' => $uid,
+            'category_id' => 0,
+            'sortorder' => 0,
+            'created_at' => TIME_NOW,
+        ]);
+
+        af_advancededitor_stikers_json(['success' => true, 'message' => 'Стикер загружен.', 'data' => ['id' => $id, 'url' => $url]]);
+    }
+
+    if ($action === 'af_ae_stikers_delete') {
+        if ($uid <= 0) {
+            af_advancededitor_stikers_json(['success' => false, 'message' => 'Требуется авторизация.', 'data' => null]);
+        }
+
+        $id = (int)($mybb->input['id'] ?? 0);
+        if ($id <= 0) {
+            af_advancededitor_stikers_json(['success' => false, 'message' => 'Некорректный ID.', 'data' => null]);
+        }
+
+        $row = $db->fetch_array($db->simple_select(AF_AE_STIKERS_TABLE, '*', 'id=' . $id . ' AND is_user_sticker=1 AND uid=' . $uid, ['limit' => 1]));
+        if (empty($row['id'])) {
+            af_advancededitor_stikers_json(['success' => false, 'message' => 'Стикер не найден.', 'data' => null]);
+        }
+
+        $path = (string)$row['path'];
+        if ($path !== '') {
+            $base = af_advancededitor_stikers_abs();
+            if (af_advancededitor_is_path_inside($path, $base) && is_file($path)) {
+                @unlink($path);
+            }
+        }
+        $db->delete_query(AF_AE_STIKERS_TABLE, 'id=' . $id);
+        $db->delete_query(AF_AE_STIKERS_RECENT_TABLE, 'uid=' . $uid . ' AND sticker_id=' . $id);
+
+        af_advancededitor_stikers_json(['success' => true, 'message' => 'Стикер удалён.', 'data' => ['id' => $id]]);
+    }
+
+    return true;
+}
+
 function af_advancededitor_misc_start(): void
 {
     global $mybb;
 
     $action = (string)($mybb->input['action'] ?? '');
+
+    if (af_advancededitor_stikers_handle_ajax()) {
+        return;
+    }
 
     // поддержим и старое имя на всякий случай (если где-то осталось)
     if ($action !== 'af_ae_postpreview' && $action !== 'af_aqr_postpreview') {

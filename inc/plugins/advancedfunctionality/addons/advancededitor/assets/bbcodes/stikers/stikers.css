@@ -1,0 +1,15 @@
+#af-ae-stikers-modal{position:fixed;inset:0;z-index:99999}
+.af-ae-stikers-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+.af-ae-stikers-modal{position:relative;max-width:760px;height:70vh;margin:8vh auto;background:#1f2125;border:1px solid #3b3f46;border-radius:10px;display:flex;flex-direction:column;color:#fff}
+.af-ae-stikers-head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid #3b3f46}
+.af-ae-stikers-close{background:transparent;border:0;color:#fff;font-size:20px;cursor:pointer}
+.af-ae-stikers-tabs{display:flex;gap:6px;overflow:auto;padding:8px;border-bottom:1px solid #3b3f46}
+.af-ae-stikers-tab{background:#2d3138;color:#fff;border:1px solid #3b3f46;border-radius:6px;padding:6px 10px;cursor:pointer;white-space:nowrap}
+.af-ae-stikers-tab.is-active{background:#3a77ff}
+.af-ae-stikers-body{padding:10px;overflow:auto}
+.af-ae-stikers-tools{display:flex;gap:8px;margin-bottom:10px}
+.af-ae-stikers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px}
+.af-ae-stiker{position:relative;border:1px solid #3b3f46;background:#2a2d33;border-radius:8px;padding:6px;cursor:pointer}
+.af-ae-stiker img{max-width:100%;max-height:64px;display:block;margin:0 auto}
+.af-ae-stiker-del{position:absolute;top:2px;right:4px;background:#d33;color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;text-align:center;font-weight:700}
+.af-ae-stikers-empty{padding:18px;opacity:.8}

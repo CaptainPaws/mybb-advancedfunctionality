@@ -111,7 +111,7 @@
               '|',
               'quote', 'code',
               '|',
-              'link', 'unlink', 'email', 'image', 'youtube', 'emoticon',
+              'link', 'unlink', 'email', 'image', 'youtube', 'emoticon', 'af_stikers',
               '|',
               // ВАЖНО: больше НЕ добавляем af_togglemode по умолчанию
               'maximize'
@@ -420,6 +420,17 @@
     var toolbar = parts.join(',');
     toolbar = toolbar.replace(/,+\|,+/g, '|').replace(/\|{2,}/g, '|');
     toolbar = toolbar.replace(/^,|,$/g, '').replace(/^\|+|\|+$/g, '');
+
+    if (/(^|[,|])af_stikers([,|]|$)/.test(toolbar) === false) {
+      var hasStikers = false;
+      try {
+        var defs = buildCustomDefMap();
+        hasStikers = !!(defs && defs.af_stikers);
+      } catch (e) {}
+      if (hasStikers) {
+        toolbar = toolbar ? (toolbar + ',af_stikers') : 'af_stikers';
+      }
+    }
 
     return { toolbar: toolbar, menus: menus };
   }
