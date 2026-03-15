@@ -32,7 +32,6 @@ if (!function_exists('af_ae_bbcode_tquote_parse_start')) {
             return;
         }
 
-        // Просто прячем tquote от дефолтного MyBB parser
         $message2 = preg_replace(
             '~\[(\/?)tquote([^\]]*)\]~i',
             '[$1af_tquote$2]',
@@ -78,14 +77,14 @@ if (!function_exists('af_ae_bbcode_tquote_parse_start')) {
                 static function ($m) {
                     $attr = '';
                     if (isset($m[1]) && $m[1] !== '') {
-                        $attr = (string)$m[1];
+                        $attr = (string) $m[1];
                     } elseif (isset($m[2]) && $m[2] !== '') {
-                        $attr = (string)$m[2];
+                        $attr = (string) $m[2];
                     }
 
-                    $inner = (string)($m[3] ?? '');
+                    $inner = (string) ($m[3] ?? '');
 
-                    [$side, $accent, $bg] = af_ae_tquote_parse_attrs($attr);
+                    [$side, $accent, $bg, $text] = af_ae_tquote_parse_attrs($attr);
 
                     $styleParts = [];
 
@@ -97,13 +96,25 @@ if (!function_exists('af_ae_bbcode_tquote_parse_start')) {
                         $styleParts[] = '--af-tq-bg:' . $bg;
                     }
 
+                    if ($text !== '') {
+                        $styleParts[] = '--af-tq-text:' . $text;
+                        $styleParts[] = 'color:' . $text;
+                    }
+
                     $styleAttr = '';
                     if (!empty($styleParts)) {
                         $styleAttr = ' style="' . htmlspecialchars_uni(implode(';', $styleParts) . ';') . '"';
                     }
 
                     return
-                        '<blockquote class="mycode_quote af-aqr-tquote" data-af-tquote="1" data-side="' . htmlspecialchars_uni($side) . '" data-accent="' . htmlspecialchars_uni($accent) . '" data-bg="' . htmlspecialchars_uni($bg) . '"' . $styleAttr . '>' .
+                        '<blockquote class="af-aqr-tquote" ' .
+                            'data-af-tquote="1" ' .
+                            'data-side="' . htmlspecialchars_uni($side) . '" ' .
+                            'data-accent="' . htmlspecialchars_uni($accent) . '" ' .
+                            'data-bg="' . htmlspecialchars_uni($bg) . '" ' .
+                            'data-text="' . htmlspecialchars_uni($text) . '"' .
+                            $styleAttr .
+                        '>' .
                             $inner .
                         '</blockquote>';
                 },
@@ -132,15 +143,26 @@ if (!function_exists('af_ae_bbcode_tquote_parse_start')) {
     function af_ae_tquote_norm_hex(string $raw): string
     {
         $x = trim($raw);
+
         if ($x === '') {
             return '';
         }
 
-        if (preg_match('~^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$~', $x)) {
-            return strtolower($x);
+        if (!preg_match('~^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$~', $x)) {
+            return '';
         }
 
-        return '';
+        $hex = strtolower(substr($x, 1));
+
+        if (strlen($hex) === 3 || strlen($hex) === 4) {
+            $expanded = '';
+            foreach (str_split($hex) as $ch) {
+                $expanded .= $ch . $ch;
+            }
+            $hex = $expanded;
+        }
+
+        return '#' . $hex;
     }
 
     function af_ae_tquote_parse_attrs(string $attrRaw): array
@@ -150,22 +172,23 @@ if (!function_exists('af_ae_bbcode_tquote_parse_start')) {
         $side = 'left';
         $accent = '';
         $bg = '';
+        $text = '';
 
         if ($attrRaw === '') {
-            return [$side, $accent, $bg];
+            return [$side, $accent, $bg, $text];
         }
 
         if (preg_match_all('~(\w+)\s*=\s*("([^"]*)"|\'([^\']*)\'|([^\s]+))~', $attrRaw, $m, PREG_SET_ORDER)) {
             foreach ($m as $row) {
-                $k = strtolower((string)$row[1]);
+                $k = strtolower((string) $row[1]);
                 $v = '';
 
                 if (isset($row[3]) && $row[3] !== '') {
-                    $v = (string)$row[3];
+                    $v = (string) $row[3];
                 } elseif (isset($row[4]) && $row[4] !== '') {
-                    $v = (string)$row[4];
+                    $v = (string) $row[4];
                 } else {
-                    $v = (string)($row[5] ?? '');
+                    $v = (string) ($row[5] ?? '');
                 }
 
                 if ($k === 'side' || $k === 'dir' || $k === 'align') {
@@ -174,18 +197,19 @@ if (!function_exists('af_ae_bbcode_tquote_parse_start')) {
                     $accent = af_ae_tquote_norm_hex($v);
                 } elseif ($k === 'bg' || $k === 'background') {
                     $bg = af_ae_tquote_norm_hex($v);
+                } elseif ($k === 'text' || $k === 'textcolor' || $k === 'fg' || $k === 'font') {
+                    $text = af_ae_tquote_norm_hex($v);
                 }
             }
         } else {
             if (preg_match('~^(?:=)?\s*(left|right|l|r|1|2)\s*$~i', $attrRaw, $mm)) {
-                $side = af_ae_tquote_norm_side((string)$mm[1]);
+                $side = af_ae_tquote_norm_side((string) $mm[1]);
             }
         }
 
-        return [$side, $accent, $bg];
+        return [$side, $accent, $bg, $text];
     }
 
-    // aliases
     function af_aqr_bbcode_tquote_parse_start(&$message): void
     {
         af_ae_bbcode_tquote_parse_start($message);
