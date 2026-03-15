@@ -9,7 +9,7 @@ return [
             'cmd' => 'af_stikers',
             'name' => 'stikers',
             'title' => 'Стикеры',
-            'icon' => 'img/img/image.svg',
+            'icon' => 'img/embedvideos.svg',
             'handler' => 'stikers',
         ],
     ],
