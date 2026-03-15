@@ -36,7 +36,14 @@
     cell: null,
     toolbar: null
   };
-
+  var builderState = {
+    isOpen: false,
+    root: null,
+    dropdown: null,
+    editor: null,
+    originalCloseDropDown: null,
+    allowProgrammaticClose: false
+  };
   var ICONS = {
     rowBefore: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h12v2H4V3zm0 4h12v6H4V7zm6-4h2v8h3l-4 4-4-4h3V3zM4 15h12v2H4v-2z"/></svg>',
     rowAfter: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3h12v2H4V3zm0 5h12v6H4V8zm6 0h2v8h3l-4 4-4-4h3V8z"/></svg>',
@@ -69,7 +76,16 @@
     cancel: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.4 4 10 8.6 14.6 4 16 5.4 11.4 10 16 14.6 14.6 16 10 11.4 5.4 16 4 14.6 8.6 10 4 5.4 5.4 4z"/></svg>',
     insert: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M9 3h2v6h6v2h-6v6H9v-6H3V9h6V3z"/></svg>'
   };
-
+  var TABLE_COLOR_SWATCHES = [
+    '#000000', '#434343', '#666666', '#999999', '#B7B7B7', '#CCCCCC', '#D9D9D9', '#EFEFEF', '#F3F3F3', '#FFFFFF',
+    '#980000', '#FF0000', '#FF9900', '#FFFF00', '#00FF00', '#00FFFF', '#4A86E8', '#0000FF', '#9900FF', '#FF00FF',
+    '#E6B8AF', '#F4CCCC', '#FCE5CD', '#FFF2CC', '#D9EAD3', '#D0E0E3', '#C9DAF8', '#CFE2F3', '#D9D2E9', '#EAD1DC',
+    '#DD7E6B', '#EA9999', '#F9CB9C', '#FFE599', '#B6D7A8', '#A2C4C9', '#A4C2F4', '#9FC5E8', '#B4A7D6', '#D5A6BD',
+    '#CC4125', '#E06666', '#F6B26B', '#FFD966', '#93C47D', '#76A5AF', '#6D9EEB', '#6FA8DC', '#8E7CC3', '#C27BA0',
+    '#A61C00', '#CC0000', '#E69138', '#F1C232', '#6AA84F', '#45818E', '#3C78D8', '#3D85C6', '#674EA7', '#A64D79',
+    '#85200C', '#990000', '#B45F06', '#BF9000', '#38761D', '#134F5C', '#1155CC', '#0B5394', '#351C75', '#741B47',
+    '#5B0F00', '#660000', '#783F04', '#7F6000', '#274E13', '#0C343D', '#1C4587', '#073763', '#20124D', '#4C1130'
+  ];
   function getSceditorRoot() {
     if (window.sceditor) return window.sceditor;
     if (window.jQuery && window.jQuery.sceditor) return window.jQuery.sceditor;
@@ -155,8 +171,106 @@
     return fallback;
   }
 
+  function clampColorChannel(value) {
+    value = parseInt(value, 10);
+    if (isNaN(value)) value = 0;
+    if (value < 0) value = 0;
+    if (value > 255) value = 255;
+    return value;
+  }
+
+  function clampColorAlpha(value) {
+    value = parseFloat(value);
+    if (isNaN(value)) value = 1;
+    if (value < 0) value = 0;
+    if (value > 1) value = 1;
+    return value;
+  }
+
+  function toColorHex(value) {
+    var hex = clampColorChannel(value).toString(16).toUpperCase();
+    return hex.length < 2 ? '0' + hex : hex;
+  }
+
+  function alphaToColorHex(value) {
+    var hex = Math.round(clampColorAlpha(value) * 255).toString(16).toUpperCase();
+    return hex.length < 2 ? '0' + hex : hex;
+  }
+
   function normalizeColor(value) {
-    return trim(value);
+    var m;
+    var s;
+    var r;
+    var g;
+    var b;
+    var a;
+    var hex;
+
+    value = trim(value);
+    if (!value) return '';
+
+    m = value.match(/^#([0-9a-f]{3})$/i);
+    if (m) {
+      s = m[1].toUpperCase();
+      return '#' + s.charAt(0) + s.charAt(0) + s.charAt(1) + s.charAt(1) + s.charAt(2) + s.charAt(2);
+    }
+
+    m = value.match(/^#([0-9a-f]{4})$/i);
+    if (m) {
+      s = m[1].toUpperCase();
+      hex = '#' +
+        s.charAt(0) + s.charAt(0) +
+        s.charAt(1) + s.charAt(1) +
+        s.charAt(2) + s.charAt(2) +
+        s.charAt(3) + s.charAt(3);
+
+      if (hex.substr(7, 2) === 'FF') {
+        return hex.substr(0, 7);
+      }
+
+      return hex;
+    }
+
+    m = value.match(/^#([0-9a-f]{6})$/i);
+    if (m) {
+      return '#' + m[1].toUpperCase();
+    }
+
+    m = value.match(/^#([0-9a-f]{8})$/i);
+    if (m) {
+      hex = '#' + m[1].toUpperCase();
+
+      if (hex.substr(7, 2) === 'FF') {
+        return hex.substr(0, 7);
+      }
+
+      return hex;
+    }
+
+    m = value.match(/^rgb\(\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*\)$/i);
+    if (m) {
+      r = clampColorChannel(m[1]);
+      g = clampColorChannel(m[2]);
+      b = clampColorChannel(m[3]);
+      return '#' + toColorHex(r) + toColorHex(g) + toColorHex(b);
+    }
+
+    m = value.match(/^rgba\(\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,\s*([0-9]*\.?[0-9]+)\s*\)$/i);
+    if (m) {
+      r = clampColorChannel(m[1]);
+      g = clampColorChannel(m[2]);
+      b = clampColorChannel(m[3]);
+      a = clampColorAlpha(m[4]);
+
+      hex = '#' + toColorHex(r) + toColorHex(g) + toColorHex(b);
+      if (alphaToColorHex(a) === 'FF') {
+        return hex;
+      }
+
+      return hex + alphaToColorHex(a);
+    }
+
+    return '';
   }
 
   function isBorderEnabled(value) {
@@ -900,13 +1014,269 @@
     if (window.jscolor && typeof window.jscolor === 'function') return window.jscolor;
     return null;
   }
+  function isJscolorEventTarget(node) {
+  if (!node) return false;
+
+  if (node.nodeType !== 1) {
+    node = node.parentNode;
+  }
+
+  return !!(node && node.closest && node.closest('.jscolor-picker, .jscolor-wrap, #jscolor-palette'));
+}
+
+  function hasVisibleJscolorPopup() {
+    var nodes = document.querySelectorAll('.jscolor-picker, .jscolor-wrap, #jscolor-palette');
+
+    for (var i = 0; i < nodes.length; i += 1) {
+      var node = nodes[i];
+      if ((node.offsetWidth > 0 || node.offsetHeight > 0 || node.getClientRects().length > 0) &&
+          window.getComputedStyle(node).display !== 'none' &&
+          window.getComputedStyle(node).visibility !== 'hidden') {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  function isBuilderEventTarget(node) {
+    if (!node) return false;
+
+    if (node.nodeType !== 1) {
+      node = node.parentNode;
+    }
+
+    if (!node || !node.closest) return false;
+
+    if (builderState.root && builderState.root.contains(node)) {
+      return true;
+    }
+
+    if (builderState.dropdown && builderState.dropdown.contains(node)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function openBuilderState(root, dropdown, editor) {
+    builderState.isOpen = true;
+    builderState.root = root || null;
+    builderState.dropdown = dropdown || null;
+    builderState.editor = editor || null;
+    builderState.allowProgrammaticClose = false;
+
+    if (
+      editor &&
+      typeof editor.closeDropDown === 'function' &&
+      !builderState.originalCloseDropDown
+    ) {
+      builderState.originalCloseDropDown = editor.closeDropDown;
+
+      editor.closeDropDown = function () {
+        if (builderState.isOpen && !builderState.allowProgrammaticClose) {
+          return false;
+        }
+
+        return builderState.originalCloseDropDown.apply(editor, arguments);
+      };
+    }
+  }
+
+  function restoreBuilderCloseDropDown() {
+    if (builderState.editor && builderState.originalCloseDropDown) {
+      builderState.editor.closeDropDown = builderState.originalCloseDropDown;
+    }
+
+    builderState.originalCloseDropDown = null;
+    builderState.editor = null;
+    builderState.allowProgrammaticClose = false;
+  }
+
+  function closeBuilderState() {
+    restoreBuilderCloseDropDown();
+    builderState.isOpen = false;
+    builderState.root = null;
+    builderState.dropdown = null;
+  }
+
+  function requestBuilderClose() {
+    var editor = builderState.editor;
+    var closeFn = editor && typeof editor.closeDropDown === 'function'
+      ? editor.closeDropDown
+      : null;
+
+    if (!editor || !closeFn) {
+      closeBuilderState();
+      return;
+    }
+
+    builderState.allowProgrammaticClose = true;
+
+    try {
+      closeFn.call(editor, true);
+    } catch (e) {
+      closeBuilderState();
+      throw e;
+    }
+
+    closeBuilderState();
+  }
+
+  function bindJscolorPopupGuards() {
+    var nodes = document.querySelectorAll('.jscolor-picker, .jscolor-wrap, #jscolor-palette');
+
+    for (var i = 0; i < nodes.length; i += 1) {
+      var node = nodes[i];
+
+      if (node.__afTableJscolorPopupGuardBound) {
+        continue;
+      }
+
+      node.__afTableJscolorPopupGuardBound = true;
+      node.style.pointerEvents = 'auto';
+
+      if (!node.getAttribute('data-af-jscolor-popup')) {
+        node.setAttribute('data-af-jscolor-popup', '1');
+      }
+    }
+  }
+
+  function getTableColorDropdown(root) {
+    var node = root;
+
+    while (node && node.nodeType === 1) {
+      if (node.classList && node.classList.contains('sceditor-dropdown')) {
+        return node;
+      }
+      node = node.parentNode;
+    }
+
+    return null;
+  }
+
+  function ensureTableColorViewport(root) {
+    var dropdown = getTableColorDropdown(root);
+
+    if (dropdown) {
+      dropdown.style.overflow = 'visible';
+      dropdown.style.maxWidth = 'none';
+      if (dropdown.offsetWidth < 460) {
+        dropdown.style.width = '460px';
+      }
+    }
+
+    if (root && root.classList) {
+      if (root.classList.contains('af-ae-tables-dropdown')) {
+        root.style.minWidth = '430px';
+        root.style.maxWidth = '460px';
+      }
+
+      if (root.classList.contains('af-ae-table-toolbar')) {
+        root.style.width = '460px';
+        root.style.maxWidth = 'calc(100% - 12px)';
+      }
+    }
+  }
+
+  function createTableJscolorInstance(root, input, pickerBtn) {
+    var Ctor = getJscolorCtor();
+    var picker;
+    var initialValue;
+    var hadValue;
+
+    if (!root || !input || !pickerBtn || !Ctor) return null;
+    if (input.jscolor) return input.jscolor;
+
+    hadValue = !!normalizeColor(input.value);
+    initialValue = normalizeColor(input.value) || '#FFFFFF';
+
+    ensureTableColorViewport(root);
+
+    try {
+      picker = new Ctor(input, {
+        value: initialValue,
+        format: 'hexa',
+        alphaChannel: true,
+        hash: true,
+        valueElement: input,
+        previewElement: pickerBtn,
+        container: document.body,
+        showOnClick: false,
+        hideOnLeave: false,
+        closeButton: true,
+        position: 'top',
+        smartPosition: true,
+        palette: TABLE_COLOR_SWATCHES,
+        paletteCols: 10,
+        paletteHeight: 12,
+        paletteSpacing: 4,
+        width: 160,
+        height: 86,
+        zIndex: 100000,
+        onInput: function () {
+          var value = '';
+
+          if (typeof this.toHEXAString === 'function') {
+            try { value = this.toHEXAString(); } catch (e1) {}
+          }
+
+          if (!value && typeof this.toRGBAString === 'function') {
+            try { value = this.toRGBAString(); } catch (e2) {}
+          }
+
+          value = normalizeColor(value || input.value);
+          if (value) {
+            input.value = value;
+          }
+
+          syncColorControls(root);
+        },
+        onChange: function () {
+          var value = '';
+
+          if (typeof this.toHEXAString === 'function') {
+            try { value = this.toHEXAString(); } catch (e3) {}
+          }
+
+          if (!value && typeof this.toRGBAString === 'function') {
+            try { value = this.toRGBAString(); } catch (e4) {}
+          }
+
+          value = normalizeColor(value || input.value);
+          if (value) {
+            input.value = value;
+          }
+
+          syncColorControls(root);
+        }
+      });
+
+      input.jscolor = picker;
+
+      if (!hadValue) {
+        input.value = '';
+        pickerBtn.style.background = '#FFFFFF';
+      } else if (typeof picker.fromString === 'function') {
+        picker.fromString(initialValue);
+      }
+
+      if (picker && typeof picker.hide === 'function') {
+        try { picker.hide(); } catch (e5) {}
+      }
+
+      bindJscolorPopupGuards();
+      return picker;
+    } catch (e) {
+      return null;
+    }
+  }
 
   function ensureJscolorForInput(root, input) {
-    var Ctor = getJscolorCtor();
     var pickerBtn;
     var picker;
 
-    if (!root || !input || !Ctor) return;
+    if (!root || !input) return;
     if (input.__afTableJscolorBound) return;
 
     pickerBtn = root.querySelector('.af-ae-color__pick[data-af-color-for="' + input.name + '"]');
@@ -914,58 +1284,96 @@
 
     input.__afTableJscolorBound = true;
 
-    try {
-      picker = new Ctor(input, {
-        value: input.value || '#ffffff',
-        format: 'hex',
-        alphaChannel: false,
-        hash: true,
-        valueElement: input,
-        previewElement: pickerBtn,
-        showOnClick: false,
-        closeButton: false,
-        paletteCols: 10,
-        paletteHeight: 18,
-        paletteSpacing: 4,
-        zIndex: 100000
-      });
-      input.jscolor = picker;
-      if (input.value && typeof picker.fromString === 'function') {
-        picker.fromString(input.value);
-      }
-    } catch (e) {
-      input.__afTableJscolorBound = false;
-      return;
-    }
+    pickerBtn.addEventListener('pointerdown', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+
+    pickerBtn.addEventListener('mousedown', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    });
 
     pickerBtn.addEventListener('click', function (event) {
       event.preventDefault();
-      if (input.jscolor && typeof input.jscolor.show === 'function') {
-        input.jscolor.show();
+      event.stopPropagation();
+
+      ensureTableColorViewport(root);
+
+      picker = createTableJscolorInstance(root, input, pickerBtn);
+      if (picker && typeof picker.show === 'function') {
+        try { picker.show(); } catch (e1) {}
+        window.setTimeout(bindJscolorPopupGuards, 0);
       }
     });
-  }
 
+    input.addEventListener('input', function () {
+      var norm = normalizeColor(input.value);
+
+      if (norm) {
+        input.value = norm;
+      }
+
+      syncColorControls(root);
+    });
+
+    input.addEventListener('change', function () {
+      var norm = normalizeColor(input.value);
+
+      if (!norm) {
+        syncColorControls(root);
+        return;
+      }
+
+      input.value = norm;
+
+      if (input.jscolor && typeof input.jscolor.fromString === 'function') {
+        try { input.jscolor.fromString(norm); } catch (e2) {}
+      }
+
+      syncColorControls(root);
+    });
+  }
   function initTableJscolor(root) {
     var textInputs = root.querySelectorAll('.af-ae-color input[type="text"]');
     for (var i = 0; i < textInputs.length; i += 1) {
       ensureJscolorForInput(root, textInputs[i]);
     }
   }
+  function bindJscolorInteractionGuards(root) {
+    if (!root || root.__afTableJscolorGuardsBound) return;
+    root.__afTableJscolorGuardsBound = true;
 
+    function stopIfJscolor(event) {
+      var target = event.target;
+      if (!target || !target.closest) return;
+
+      if (target.closest('.jscolor-picker, .jscolor-wrap, #jscolor-palette, .af-ae-color, .af-ae-color__pick, .af-ae-color__value')) {
+        event.stopPropagation();
+      }
+    }
+
+    root.addEventListener('mousedown', stopIfJscolor);
+    root.addEventListener('click', stopIfJscolor);
+  }
   function syncColorControls(root) {
     var textInputs = root.querySelectorAll('.af-ae-color input[type="text"]');
+
     for (var i = 0; i < textInputs.length; i += 1) {
       var input = textInputs[i];
       var color = root.querySelector('[data-af-color-for="' + input.name + '"]');
       var value = normalizeColor(input.value);
 
-      if (color && /^#([a-f0-9]{3}|[a-f0-9]{6})$/i.test(value)) {
-        if (value.length === 4) {
-          color.style.background = '#' + value.charAt(1) + value.charAt(1) + value.charAt(2) + value.charAt(2) + value.charAt(3) + value.charAt(3);
-        } else {
-          color.style.background = value;
-        }
+      if (value && input.value !== value) {
+        input.value = value;
+      }
+
+      if (!color) continue;
+
+      if (value) {
+        color.style.background = value;
+      } else {
+        color.style.background = '#FFFFFF';
       }
     }
   }
@@ -980,21 +1388,28 @@
     });
 
     root.addEventListener('click', function (event) {
-      var name = event.target && event.target.getAttribute('data-af-clear-color');
+      var clearNode = event.target && event.target.closest ? event.target.closest('[data-af-clear-color]') : null;
+      var name = clearNode ? clearNode.getAttribute('data-af-clear-color') : '';
+
       if (!name) return;
 
       event.preventDefault();
+      event.stopPropagation();
 
       var textInput = root.querySelector('.af-ae-color input[type="text"][name="' + name + '"]');
       var colorInput = root.querySelector('[data-af-color-for="' + name + '"]');
 
       if (textInput) {
         textInput.value = '';
-        if (textInput.jscolor && typeof textInput.jscolor.fromString === 'function') {
-          textInput.jscolor.fromString('#ffffff');
+
+        if (textInput.jscolor && typeof textInput.jscolor.hide === 'function') {
+          try { textInput.jscolor.hide(); } catch (e) {}
         }
       }
-      if (colorInput) colorInput.style.background = '#ffffff';
+
+      if (colorInput) {
+        colorInput.style.background = '#FFFFFF';
+      }
     });
   }
 
@@ -1048,6 +1463,7 @@
     ].join('');
 
     attachColorUi(root);
+    bindJscolorInteractionGuards(root);
     initTableJscolor(root);
     syncColorControls(root);
 
@@ -1104,17 +1520,45 @@
   }
 
   function openBuilder(target, caller) {
+    var node;
+    var dropdown;
+    var drops;
+    var i;
+
     if (!target || typeof target.createDropDown !== 'function') {
       return false;
     }
 
-    var node = createBuilderNode(target, function () {
-      if (typeof target.closeDropDown === 'function') {
-        target.closeDropDown(true);
-      }
+    if (builderState.isOpen) {
+      requestBuilderClose();
+    }
+
+    node = createBuilderNode(target, function () {
+      requestBuilderClose();
     });
 
     target.createDropDown(caller || null, 'af-ae-tables-builder', node);
+
+    dropdown = node.parentNode;
+    if (!dropdown || !dropdown.classList || !dropdown.classList.contains('sceditor-dropdown')) {
+      drops = document.querySelectorAll('.sceditor-dropdown');
+      for (i = drops.length - 1; i >= 0; i -= 1) {
+        if (drops[i].contains(node)) {
+          dropdown = drops[i];
+          break;
+        }
+      }
+    }
+
+    if (dropdown) {
+      dropdown.style.overflow = 'visible';
+      dropdown.style.maxWidth = 'none';
+      if (dropdown.offsetWidth < 460) {
+        dropdown.style.width = '460px';
+      }
+    }
+
+    openBuilderState(node, dropdown || null, target);
     return true;
   }
 
@@ -1585,6 +2029,7 @@
     toolbar.innerHTML = toolbarTemplate();
 
     attachColorUi(toolbar);
+    bindJscolorInteractionGuards(toolbar);
     initTableJscolor(toolbar);
 
     toolbar.addEventListener('click', function (event) {
@@ -1634,12 +2079,16 @@
     var toolbar = ensureTableToolbar();
     var tableAttrs = readTableAttrsFromElement(table);
     var cellAttrs = cell ? readCellSourceAttrs(cell) : { width: '', bgcolor: '', textcolor: '' };
+    var isHeader = !!(cell && cell.tagName && cell.tagName.toLowerCase() === 'th');
+
+    var effectiveCellBg = cellAttrs.bgcolor || (isHeader ? tableAttrs.hbgcolor : tableAttrs.bgcolor) || '';
+    var effectiveCellText = cellAttrs.textcolor || (isHeader ? tableAttrs.htextcolor : tableAttrs.textcolor) || '';
 
     toolbar.querySelector('input[name="toolbar-width"]').value = tableAttrs.width || '';
     toolbar.querySelector('input[name="toolbar-colwidth"]').value = cellAttrs.width || tableAttrs.cellwidth || '';
     toolbar.querySelector('select[name="toolbar-align"]').value = tableAttrs.align || 'center';
-    toolbar.querySelector('input[name="toolbar-cell-bg"]').value = cellAttrs.bgcolor || '';
-    toolbar.querySelector('input[name="toolbar-cell-text"]').value = cellAttrs.textcolor || '';
+    toolbar.querySelector('input[name="toolbar-cell-bg"]').value = effectiveCellBg;
+    toolbar.querySelector('input[name="toolbar-cell-text"]').value = effectiveCellText;
     toolbar.querySelector('input[name="toolbar-head-bg"]').value = tableAttrs.hbgcolor || '';
     toolbar.querySelector('input[name="toolbar-head-text"]').value = tableAttrs.htextcolor || '';
     toolbar.querySelector('input[name="toolbar-borderwidth"]').value = tableAttrs.borderwidth || '1px';
@@ -1647,7 +2096,6 @@
 
     syncColorControls(toolbar);
   }
-
   function positionToolbar(container, frame, anchor) {
     var toolbar = ensureTableToolbar();
 
@@ -1839,15 +2287,18 @@
     });
 
     instance.bind('selectionchanged nodechanged valuechanged blur', function (event) {
-        if (event && event.type === 'blur') {
-        window.setTimeout(function () {
-            var toolbar = toolbarState.toolbar;
-            var active = document.activeElement;
-            if (toolbar && toolbar.contains(active)) return;
-            hideTableToolbar();
-        }, 0);
-        return;
-        }
+          if (event && event.type === 'blur') {
+            window.setTimeout(function () {
+                var toolbar = toolbarState.toolbar;
+                var active = document.activeElement;
+
+                if (toolbar && toolbar.contains(active)) return;
+                if (isJscolorEventTarget(active) || hasVisibleJscolorPopup()) return;
+
+                hideTableToolbar();
+            }, 0);
+            return;
+          }
 
         cleanupEditorBodyTableSpacers(instance);
         handleSelectionState(instance);
@@ -1897,6 +2348,8 @@
     var toolbar = toolbarState.toolbar;
     var frame = toolbarState.frame;
 
+    if (builderState.isOpen) return;
+    if (isJscolorEventTarget(event.target)) return;
     if (toolbar && toolbar.contains(event.target)) return;
     if (frame && event.target === frame) return;
 
