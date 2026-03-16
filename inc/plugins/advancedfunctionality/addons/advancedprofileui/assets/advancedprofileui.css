@@ -527,6 +527,25 @@
 }
 
 
+
+.af-apui-postbit-userdetails [data-af-balance-inline="1"] {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.af-apui-postbit-userdetails [data-af-balance-inline="1"] .af-cs-postbit-stats__grid--compact {
+  overflow: hidden;
+}
+
+.af-apui-postbit-userdetails [data-af-balance-inline="1"] .af-cs-postbit-stat {
+  flex: 0 1 auto;
+}
+
+.af-apui-postbit-userdetails [data-af-balance-inline="1"] .af-cs-postbit-stat__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .af-apui-postbit-apc-slot,
 .af-apui-postbit-plaque-slot {
   width: 100%;
@@ -544,6 +563,10 @@
 
 .af-apui-postbit-plaque-slot > * {
   width: 100%;
+}
+
+.af-apui-postbit-plaque-slot .af-cs-postbit-stats {
+  display: none;
 }
 
 .af-apui-postbit-plaque-slot a,

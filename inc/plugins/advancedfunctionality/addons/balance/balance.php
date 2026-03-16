@@ -261,6 +261,7 @@ function af_balance_templates_install_or_update(): void
 
     $map = [
         'postbit_balance' => ['af_balance_postbit', 'af_balance_postbit_plaque'],
+        'postbit_balance_compact' => ['af_balance_postbit_compact', 'af_balance_postbit_inline'],
     ];
 
     foreach ($map as $basename => $titles) {

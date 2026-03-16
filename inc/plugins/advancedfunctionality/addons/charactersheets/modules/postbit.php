@@ -8,6 +8,7 @@ function af_charactersheets_postbit_button(array &$post): void
     global $templates, $lang;
 
     $post['af_cs_plaque'] = '';
+    $post['af_balance_inline_stats'] = '';
     if (!af_charactersheets_is_enabled()) {
         return;
     }
@@ -33,6 +34,7 @@ function af_charactersheets_postbit_button(array &$post): void
     $sheet_slug = htmlspecialchars_uni($slug);
 
     $af_balance_stats = '';
+    $af_balance_inline_stats = '';
     if (function_exists('af_balance_get_postbit_data')) {
         $balance_data = af_balance_get_postbit_data($uid);
 
@@ -84,7 +86,21 @@ function af_charactersheets_postbit_button(array &$post): void
             $tpl_balance = $templates->get('af_balance_postbit_plaque');
         }
         eval("\$af_balance_stats = \"" . $tpl_balance . "\";");
+
+        $tpl_balance_inline = $templates->get('af_balance_postbit_compact');
+        if ($tpl_balance_inline === '') {
+            $tpl_balance_inline = $templates->get('af_balance_postbit_inline');
+        }
+        if ($tpl_balance_inline === '') {
+            $tpl_balance_inline = <<<'HTML'
+<div class="af-cs-postbit-stats af-cs-postbit-stats--compact" data-af-balance-inline="1" data-pid="{$post['pid']}" data-uid="{$post['uid']}"><div class="af-cs-postbit-stats__grid af-cs-postbit-stats__grid--compact"><div class="af-cs-postbit-stat af-cs-postbit-stat--credits" data-af-balance-credits="1"><div class="af-cs-postbit-stat__icon">{$postbit_label_credits_html}</div><div class="af-cs-postbit-stat__value" data-af-balance-credits-value="1">{$credits_display} {$currency_symbol}</div></div>{$ability_tokens_postbit_html}<div class="af-cs-postbit-stat af-cs-postbit-stat--level" data-af-balance-level="1"><div class="af-cs-postbit-stat__icon">{$postbit_label_level_html}</div><div class="af-cs-postbit-stat__value" data-af-balance-level-value="1">{$level}</div></div><div class="af-cs-postbit-stat af-cs-postbit-stat--posts" data-af-balance-posts="1"><div class="af-apc-slot" data-af-apc-slot="1" data-uid="{$post['uid']}">{$af_apc_postbit_html}</div></div></div></div>
+HTML;
+        }
+
+        eval("\$af_balance_inline_stats = \"" . $tpl_balance_inline . "\";");
     }
+
+    $post['af_balance_inline_stats'] = $af_balance_inline_stats;
 
     $tpl = $templates->get('af_charactersheets_postbit_plaque');
     eval("\$plaque_html = \"" . $tpl . "\";");
