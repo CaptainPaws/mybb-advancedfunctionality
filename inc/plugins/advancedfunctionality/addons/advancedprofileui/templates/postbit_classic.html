@@ -1,0 +1,78 @@
+<!-- TEMPLATE: postbit_classic -->
+<!-- AF_APUI postbit_classic START -->
+{$ignore_bit}
+{$deleted_bit}
+<div class="af-apui-postbit-wrapper" id="post_{$post['pid']}">
+    {$unapproved_shade}
+    <div class="af-apui-postbit {$post_visibility}">
+        <aside class="af-apui-postbit-author">
+            <div class="af-apui-postbit-author__bg"></div>
+            <div class="af-apui-postbit-author__inner">
+                <div class="af-apui-postbit-avatar-shell">
+                    <div class="af-apui-postbit-avatar-frame">
+                        {$post['useravatar']}
+                    </div>
+                </div>
+
+                <div class="af-apui-postbit-name-wrap">
+                    {$post['profilelink']}
+                </div>
+
+                <div class="af-apui-postbit-online">{$post['onlinestatus']}</div>
+                <div class="af-apui-postbit-rank">{$post['usertitle']}</div>
+                <div class="af-apui-postbit-groupimage">{$post['groupimage']}</div>
+                <div class="af-apui-postbit-stars">{$post['userstars']}</div>
+
+                <div class="af-apui-postbit-stats-table">
+                    <div class="af-apui-postbit-stats-table__title">Статистика</div>
+                    {$post['user_details']}
+                </div>
+
+                <div class="af-apui-postbit-apc-slot">{$post['advancedpostcounter']}</div>
+                <div class="af-apui-postbit-plaque-slot">{$post['af_cs_plaque']}</div>
+            </div>
+        </aside>
+
+        <section class="af-apui-postbit-content">
+            <header class="af-apui-postbit-content__head">
+                <div class="af-apui-postbit-content__meta">{$post['posturl']} {$post['icon']} {$post['postdate']}</div>
+                <div class="af-apui-postbit-content__controls">
+                    {$post['button_email']}
+                    {$post['button_pm']}
+                    {$post['button_www']}
+                    {$post['button_find']}
+                </div>
+            </header>
+
+            {$post['subject_extra']}
+
+            <div class="af-apui-postbit-message">{$post['message']}</div>
+            {$post['attachments']}
+            {$post['signature']}
+            {$post['editedmsg']}
+            {$post['iplogged']}
+            {$post['poststatus']}
+            {$post['input_editreason']}
+
+            <footer class="af-apui-postbit-actions">
+                {$post['button_rep']}
+                {$post['button_edit']}
+                {$post['button_qdelete']}
+                {$post['button_delete']}
+                {$post['button_undelete']}
+                {$post['button_quickrestore']}
+                {$post['button_quote']}
+                {$post['button_multiquote']}
+                {$post['button_report']}
+                {$post['button_warn']}
+                {$post['button_ip']}
+                {$post['button_reply_pm']}
+                {$post['button_forward_pm']}
+                {$post['button_delete_pm']}
+                {$post['button_edit_pm']}
+                {$post['button_history']}
+            </footer>
+        </section>
+    </div>
+</div>
+<!-- AF_APUI postbit_classic END -->

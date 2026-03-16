@@ -1,0 +1,122 @@
+<!-- TEMPLATE: member_profile -->
+<!-- AF_APUI member_profile START -->
+<!DOCTYPE html>
+<html{$htmloption}>
+<head>
+<title>{$lang->profile} - {$formattedname}</title>
+{$headerinclude}
+</head>
+<body>
+{$header}
+
+<div class="af-apui-profile-page">
+    <section class="af-apui-profile-hero">
+        <div class="af-apui-profile-hero__background"></div>
+        <div class="af-apui-profile-hero__banner"></div>
+        <div class="af-apui-profile-hero__inner">
+            <div class="af-apui-profile-avatar-shell">
+                <div class="af-apui-profile-avatar-frame">
+                    {$avatar}
+                </div>
+                <div class="af-apui-profile-avatar-state">{$online_status}</div>
+            </div>
+            <div class="af-apui-profile-identity">
+                <div class="af-apui-profile-name-wrap">{$formattedname}</div>
+                <div class="af-apui-profile-rank-wrap">{$usertitle}</div>
+                <div class="af-apui-profile-groupimage">{$groupimage}</div>
+                <div class="af-apui-profile-stars">{$userstars}</div>
+                <div class="af-apui-profile-meta">
+                    <span>{$memregdate}</span>
+                    <span>{$membday} {$membdayage}</span>
+                    <span>{$localtime}</span>
+                </div>
+                <div class="af-apui-profile-statebits">{$awaybit}{$bannedbit}</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="af-apui-profile-tabs" data-af-apui-tabs>
+        <div class="af-apui-profile-tabs__nav" role="tablist" aria-label="Профиль">
+            <button class="af-apui-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="af-apui-tab-info" data-tab="info">Информация</button>
+            <button class="af-apui-tab" type="button" role="tab" aria-selected="false" aria-controls="af-apui-tab-sheet" data-tab="sheet">Лист персонажа</button>
+            <button class="af-apui-tab" type="button" role="tab" aria-selected="false" aria-controls="af-apui-tab-application" data-tab="application">Анкета</button>
+            <button class="af-apui-tab" type="button" role="tab" aria-selected="false" aria-controls="af-apui-tab-inventory" data-tab="inventory">Инвентарь</button>
+            <button class="af-apui-tab" type="button" role="tab" aria-selected="false" aria-controls="af-apui-tab-timeline" data-tab="timeline">Хронология</button>
+            <button class="af-apui-tab" type="button" role="tab" aria-selected="false" aria-controls="af-apui-tab-activity" data-tab="activity">Активность</button>
+            <button class="af-apui-tab" type="button" role="tab" aria-selected="false" aria-controls="af-apui-tab-amc" data-tab="amc">Функции АМС</button>
+        </div>
+
+        <div class="af-apui-profile-tabs__content">
+            <article class="af-apui-panel is-active" id="af-apui-tab-info" role="tabpanel" data-panel="info">
+                <div class="af-apui-card">
+                    <h2>Основная информация</h2>
+                    <div class="af-apui-info-grid">
+                        <div class="af-apui-info-item">{$memregdate}</div>
+                        <div class="af-apui-info-item">{$lastvisit}</div>
+                        <div class="af-apui-info-item">{$totalposts}</div>
+                        <div class="af-apui-info-item">{$totalthreads}</div>
+                        <div class="af-apui-info-item">{$timeonline}</div>
+                        <div class="af-apui-info-item">{$referrals}</div>
+                        <div class="af-apui-info-item">{$reputation}</div>
+                        <div class="af-apui-info-item">{$warning_level}</div>
+                    </div>
+                    <div class="af-apui-links">{$findposts} {$findthreads}</div>
+                </div>
+                <div class="af-apui-card">
+                    <h2>Дополнительная информация</h2>
+                    <div class="af-apui-profilefields">{$profilefields}</div>
+                    <div class="af-apui-contact-details">{$contact_details}</div>
+                    <div class="af-apui-signature">{$signature}</div>
+                </div>
+            </article>
+
+            <article class="af-apui-panel" id="af-apui-tab-sheet" role="tabpanel" data-panel="sheet" hidden>
+                <div class="af-apui-card">
+                    {$af_apui_character_sheet_tab}
+                    <div class="af-apui-empty" data-empty-for="sheet">Лист персонажа пока не подключён.</div>
+                </div>
+            </article>
+
+            <article class="af-apui-panel" id="af-apui-tab-application" role="tabpanel" data-panel="application" hidden>
+                <div class="af-apui-card">
+                    {$af_apui_application_tab}
+                    <div class="af-apui-empty" data-empty-for="application">Анкета пока не подключена.</div>
+                </div>
+            </article>
+
+            <article class="af-apui-panel" id="af-apui-tab-inventory" role="tabpanel" data-panel="inventory" hidden>
+                <div class="af-apui-card">
+                    {$af_apui_inventory_tab}
+                    <div class="af-apui-empty" data-empty-for="inventory">Инвентарь пока не подключён.</div>
+                </div>
+            </article>
+
+            <article class="af-apui-panel" id="af-apui-tab-timeline" role="tabpanel" data-panel="timeline" hidden>
+                <div class="af-apui-card">
+                    {$af_apui_timeline_tab}
+                    <div class="af-apui-empty" data-empty-for="timeline">Хронология пока не подключена.</div>
+                </div>
+            </article>
+
+            <article class="af-apui-panel" id="af-apui-tab-activity" role="tabpanel" data-panel="activity" hidden>
+                <div class="af-apui-card">
+                    {$af_apui_activity_tab}
+                    <div class="af-apui-empty" data-empty-for="activity">Активность пока не подключена.</div>
+                </div>
+            </article>
+
+            <article class="af-apui-panel" id="af-apui-tab-amc" role="tabpanel" data-panel="amc" hidden>
+                <div class="af-apui-card">
+                    <h2>Функции модератора и администратора</h2>
+                    <div class="af-apui-amc-actions">{$modoptions}{$adminoptions}</div>
+                    <div class="af-apui-social-actions">{$buddy_options}{$ignore_options}{$report_options}</div>
+                </div>
+            </article>
+        </div>
+    </section>
+</div>
+
+{$footer}
+</body>
+</html>
+<!-- AF_APUI member_profile END -->
