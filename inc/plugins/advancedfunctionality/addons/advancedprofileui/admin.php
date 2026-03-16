@@ -4,10 +4,112 @@ if (!defined('IN_MYBB') || !defined('IN_ADMINCP')) {
     die('No direct access');
 }
 
+if (!defined('AF_APUI_ID')) {
+    define('AF_APUI_ID', 'advancedprofileui');
+}
+
 class AF_Admin_Advancedprofileui
 {
     public static function dispatch(): void
     {
-        echo '<div class="success">AdvancedProfileUI: каркас активен. Управление выполняется через включение/отключение аддона.</div>';
+        global $mybb, $db;
+
+        if (function_exists('af_apui_ensure_settings')) {
+            af_apui_ensure_settings();
+        }
+        if (function_exists('rebuild_settings')) {
+            rebuild_settings();
+        }
+
+        $redirectUrl = 'index.php?module=advancedfunctionality&af_view=' . AF_APUI_ID;
+
+        $fields = [
+            'af_' . AF_APUI_ID . '_member_profile_body_cover_url',
+            'af_' . AF_APUI_ID . '_member_profile_body_tile_url',
+            'af_' . AF_APUI_ID . '_member_profile_body_bg_mode',
+            'af_' . AF_APUI_ID . '_member_profile_body_overlay',
+            'af_' . AF_APUI_ID . '_profile_banner_url',
+            'af_' . AF_APUI_ID . '_profile_banner_overlay',
+            'af_' . AF_APUI_ID . '_postbit_author_bg_url',
+            'af_' . AF_APUI_ID . '_postbit_author_overlay',
+            'af_' . AF_APUI_ID . '_postbit_name_bg_url',
+            'af_' . AF_APUI_ID . '_postbit_name_overlay',
+            'af_' . AF_APUI_ID . '_postbit_plaque_bg_url',
+            'af_' . AF_APUI_ID . '_postbit_plaque_overlay',
+            'af_' . AF_APUI_ID . '_member_profile_css',
+            'af_' . AF_APUI_ID . '_postbit_css',
+        ];
+
+        if ($mybb->request_method === 'post' && $mybb->get_input('save_apui_settings') === '1') {
+            if (function_exists('verify_post_check')) {
+                verify_post_check($mybb->get_input('my_post_key'), true);
+            }
+
+            foreach ($fields as $fieldName) {
+                $value = trim((string)$mybb->get_input($fieldName));
+                $db->update_query(
+                    'settings',
+                    ['value' => $db->escape_string($value)],
+                    "name='" . $db->escape_string($fieldName) . "'"
+                );
+            }
+
+            if (function_exists('rebuild_settings')) {
+                rebuild_settings();
+            }
+
+            if (function_exists('flash_message')) {
+                flash_message('Настройки AdvancedProfileUI сохранены.', 'success');
+            }
+
+            if (function_exists('admin_redirect')) {
+                admin_redirect($redirectUrl);
+            }
+
+            echo '<div class="success">Настройки AdvancedProfileUI сохранены.</div>';
+        }
+
+        $values = [];
+        foreach ($fields as $fieldName) {
+            $values[$fieldName] = htmlspecialchars_uni((string)($mybb->settings[$fieldName] ?? ''));
+        }
+
+        $mode = (string)($mybb->settings['af_' . AF_APUI_ID . '_member_profile_body_bg_mode'] ?? 'cover');
+        if ($mode !== 'tile') {
+            $mode = 'cover';
+        }
+
+        echo '<form action="' . htmlspecialchars_uni($redirectUrl) . '" method="post">';
+        echo '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
+        echo '<input type="hidden" name="save_apui_settings" value="1">';
+
+        echo '<div class="page_messagetype">';
+        echo '<p>Здесь задаются дефолтные изображения, режимы и оверлеи для member_profile и postbit_classic.</p>';
+        echo '</div>';
+
+        echo '<table class="table table-bordered">';
+        echo '<tr><th colspan="2">member_profile</th></tr>';
+        echo '<tr><td style="width:260px;"><strong>Фон body (большое изображение)</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_member_profile_body_cover_url" value="' . $values['af_' . AF_APUI_ID . '_member_profile_body_cover_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Фон body (бесшовная плитка)</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_member_profile_body_tile_url" value="' . $values['af_' . AF_APUI_ID . '_member_profile_body_tile_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Режим фона body</strong></td><td><select name="af_' . AF_APUI_ID . '_member_profile_body_bg_mode"><option value="cover"' . ($mode === 'cover' ? ' selected' : '') . '>cover</option><option value="tile"' . ($mode === 'tile' ? ' selected' : '') . '>tile</option></select></td></tr>';
+        echo '<tr><td><strong>Оверлей фона body</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_member_profile_body_overlay" value="' . $values['af_' . AF_APUI_ID . '_member_profile_body_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>Баннер по умолчанию</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_profile_banner_url" value="' . $values['af_' . AF_APUI_ID . '_profile_banner_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Оверлей баннера</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_profile_banner_overlay" value="' . $values['af_' . AF_APUI_ID . '_profile_banner_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>Пользовательский CSS</strong></td><td><textarea name="af_' . AF_APUI_ID . '_member_profile_css" rows="8" style="width:100%;">' . $values['af_' . AF_APUI_ID . '_member_profile_css'] . '</textarea></td></tr>';
+
+        echo '<tr><th colspan="2">postbit_classic</th></tr>';
+        echo '<tr><td><strong>Фон профиля по умолчанию</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_author_bg_url" value="' . $values['af_' . AF_APUI_ID . '_postbit_author_bg_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Оверлей фона профиля</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_author_overlay" value="' . $values['af_' . AF_APUI_ID . '_postbit_author_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>Фон никнейма по умолчанию</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_name_bg_url" value="' . $values['af_' . AF_APUI_ID . '_postbit_name_bg_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Оверлей никнейма</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_name_overlay" value="' . $values['af_' . AF_APUI_ID . '_postbit_name_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>Фон кнопки листа персонажа</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_bg_url" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_bg_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Оверлей кнопки листа персонажа</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_overlay" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>Пользовательский CSS</strong></td><td><textarea name="af_' . AF_APUI_ID . '_postbit_css" rows="10" style="width:100%;">' . $values['af_' . AF_APUI_ID . '_postbit_css'] . '</textarea></td></tr>';
+        echo '</table>';
+
+        echo '<div style="margin-top:12px;">';
+        echo '<button type="submit" class="button button_yes"><span class="text">Сохранить настройки</span></button>';
+        echo '</div>';
+        echo '</form>';
     }
 }
