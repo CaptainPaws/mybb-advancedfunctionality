@@ -428,10 +428,11 @@
 .af-apui-postbit-userdetails {
   width: 100%;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 10px;
-  align-items: stretch;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: flex-start;
+  overflow-x: auto;
 }
 
 .af-apui-postbit-userdetails .af-apf-stat {
@@ -504,11 +505,13 @@
 .af-apui-postbit-userdetails .af-apui-stat-chip {
   box-sizing: border-box;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 6px;
   min-height: 28px;
   color: #c5c5c5;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .af-apui-postbit-userdetails .af-apui-stat-chip__icon {
@@ -527,8 +530,10 @@
 .af-apui-postbit-userdetails .af-apui-stat-chip__value {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   line-height: 1.2;
   font-size: 12px;
+  text-align: center;
 }
 
 .af-apui-postbit-userdetails .af-apui-stat-chip--posts .af-apc-slot,
@@ -536,6 +541,7 @@
 .af-apui-postbit-userdetails .af-apui-stat-chip--posts .af-apc-count {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   line-height: 1.2;
 }
 
@@ -549,6 +555,12 @@
   min-height: 30px;
   align-items: flex-start;
   text-align: left;
+}
+
+.af-apui-postbit-userdetails .af-apui-balance-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .af-apui-postbit-userdetails .af-apui-stat-extra .af-apf-stat-label {
