@@ -425,179 +425,74 @@
   opacity: .92;
 }
 
+.af-apui-postbit-profilefields {
+  width: 100%;
+  display: block;
+}
+
+.af-apui-postbit-profilefields .af-apf-postbit-field {
+  display: block;
+}
+
 .af-apui-postbit-userdetails {
   width: 100%;
   display: flex;
   flex-wrap: nowrap;
   gap: 10px;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-start;
   overflow-x: auto;
+  margin-top: 10px;
 }
 
-.af-apui-postbit-userdetails .af-apf-stat {
- box-sizing: border-box;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 6px;
-  text-align: center;
-  color: #c5c5c5;
-}
-
-.af-apui-postbit-userdetails .af-apui-stat-hidden,
-.af-apui-postbit-userdetails .af-apf-stat-registered,
-.af-apui-postbit-userdetails .af-apf-stat-warning,
-.af-apui-postbit-userdetails .af-apf-stat-warninglevel,
-.af-apui-postbit-userdetails .af-apf-stat-warning_level {
-  display: none !important;
-}
-
-.af-apui-postbit-userdetails .af-apui-stat-posts,
-.af-apui-postbit-userdetails .af-apui-stat-threads,
-.af-apui-postbit-userdetails .af-apui-stat-reputation {
-  flex: 0 0 auto;
-  min-height: 28px;
-  cursor: default;
-}
-
-.af-apui-postbit-userdetails .af-apui-stat-posts::before,
-.af-apui-postbit-userdetails .af-apui-stat-threads::before,
-.af-apui-postbit-userdetails .af-apui-stat-reputation::before {
-  font-family: "Font Awesome 6 Free", "Font Awesome 5 Free", "Font Awesome 7 Free";
-  font-weight: 900;
-  font-size: 15px;
-  line-height: 1;
-  opacity: .95;
-}
-
-.af-apui-postbit-userdetails .af-apui-stat-posts::before {
-  content: "\f4ad";
-}
-
-.af-apui-postbit-userdetails .af-apui-stat-threads::before {
-  content: "\f0c5";
-}
-
-.af-apui-postbit-userdetails .af-apui-stat-reputation::before {
-  content: "\f004";
-}
-
-.af-apui-postbit-userdetails .af-apui-stat-posts .af-apf-stat-label,
-.af-apui-postbit-userdetails .af-apui-stat-threads .af-apf-stat-label,
-.af-apui-postbit-userdetails .af-apui-stat-reputation .af-apf-stat-label,
-.af-apui-postbit-userdetails .af-apui-stat-posts .af-apf-stat-value,
-.af-apui-postbit-userdetails .af-apui-stat-threads .af-apf-stat-value,
-.af-apui-postbit-userdetails .af-apui-stat-reputation .af-apf-stat-value {
-  display: none !important;
-}
-
-.af-apui-postbit-userdetails .af-apui-stat-number {
-  display: block;
-  font-size: 12px;
-  line-height: 1.3;
-  font-weight: 400;
-}
-
-
-.af-apui-postbit-userdetails .af-apui-stat-chip {
+.af-apui-postbit-userdetails .af-apui-stat-item {
   box-sizing: border-box;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 6px;
-  min-height: 28px;
+  min-width: 36px;
   color: #c5c5c5;
-  white-space: normal;
+  text-align: center;
+  flex: 0 0 auto;
 }
 
-.af-apui-postbit-userdetails .af-apui-stat-chip__icon {
+.af-apui-postbit-userdetails .af-apui-stat-item__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
   opacity: .95;
+  min-height: 14px;
 }
 
-.af-apui-postbit-userdetails .af-apui-stat-chip__icon .fa-solid {
+.af-apui-postbit-userdetails .af-apui-stat-item__icon .fa-solid {
   font-size: 12px;
   line-height: 1;
 }
 
-.af-apui-postbit-userdetails .af-apui-stat-chip__value {
+.af-apui-postbit-userdetails .af-apui-stat-item__value {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 1.2;
   font-size: 12px;
   text-align: center;
+  white-space: nowrap;
 }
 
-.af-apui-postbit-userdetails .af-apui-stat-chip--posts .af-apc-slot,
-.af-apui-postbit-userdetails .af-apui-stat-chip--posts .af-apc,
-.af-apui-postbit-userdetails .af-apui-stat-chip--posts .af-apc-count {
+.af-apui-postbit-userdetails .af-apui-stat-item--posts .af-apc-slot,
+.af-apui-postbit-userdetails .af-apui-stat-item--posts .af-apc,
+.af-apui-postbit-userdetails .af-apui-stat-item--posts .af-apc-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 1.2;
 }
 
-.af-apui-postbit-userdetails .af-apui-stat-chip--posts .af-apc-label {
+.af-apui-postbit-userdetails .af-apui-stat-item--posts .af-apc-label {
   display: none !important;
-}
-
-.af-apui-postbit-userdetails .af-apui-stat-extra {
-  flex: 0 0 100%;
-  max-width: 100%;
-  min-height: 30px;
-  align-items: flex-start;
-  text-align: left;
-}
-
-.af-apui-postbit-userdetails .af-apui-balance-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.af-apui-postbit-userdetails .af-apui-stat-extra .af-apf-stat-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 11px;
-  line-height: 1.2;
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  color: rgba(216, 221, 243, .62);
-}
-
-.af-apui-postbit-userdetails .af-apui-stat-extra .af-apf-stat-value {
-  display: block;
-  line-height: 1.5;
-  word-wrap: break-word;
-  overflow-wrap: anywhere;
-}
-
-
-
-.af-apui-postbit-userdetails [data-af-balance-inline="1"] {
-  flex: 1 1 100%;
-  min-width: 0;
-}
-
-.af-apui-postbit-userdetails [data-af-balance-inline="1"] .af-cs-postbit-stats__grid--compact {
-  overflow: hidden;
-}
-
-.af-apui-postbit-userdetails [data-af-balance-inline="1"] .af-cs-postbit-stat {
-  flex: 0 1 auto;
-}
-
-.af-apui-postbit-userdetails [data-af-balance-inline="1"] .af-cs-postbit-stat__value {
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .af-apui-postbit-apc-slot,
@@ -696,15 +591,8 @@
     gap: 8px;
   }
 
-  .af-apui-postbit-userdetails .af-apui-stat-posts,
-  .af-apui-postbit-userdetails .af-apui-stat-threads,
-  .af-apui-postbit-userdetails .af-apui-stat-reputation {
-    flex: 0 0 calc((100% - 16px) / 3);
-    max-width: calc((100% - 16px) / 3);
-  }
-
-  .af-apui-postbit-userdetails .af-apf-stat {
-    padding: 8px;
+  .af-apui-postbit-userdetails .af-apui-stat-item {
+    min-width: 32px;
   }
 }
 
