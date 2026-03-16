@@ -74,9 +74,6 @@ function af_charactersheets_postbit_button(array &$post): void
             : htmlspecialchars_uni($label_ability_tokens);
 
         $ability_tokens_postbit_html = '';
-        if (!empty($balance_data['ability_tokens_show_postbit'])) {
-            $ability_tokens_postbit_html = '<div class="af-cs-postbit-stat af-cs-postbit-stat--ability" data-af-balance-ability="1" data-af-balance-ability-scaled="' . $ability_tokens_scaled . '"><div class="af-cs-postbit-stat__icon">' . $postbit_label_ability_tokens_html . '</div><div class="af-cs-postbit-stat__value" data-af-balance-ability-value="1">' . $ability_tokens_display . ' ' . $ability_tokens_symbol . '</div></div>';
-        }
 
         $isQuickReplyContext = (defined('THIS_SCRIPT') && strtolower((string)THIS_SCRIPT) === 'newreply.php') || defined('IN_XMLHTTP');
         $af_apc_postbit_html = $isQuickReplyContext ? '' : '<af_apc_uid_' . $uid . '>';
@@ -87,14 +84,15 @@ function af_charactersheets_postbit_button(array &$post): void
         }
         eval("\$af_balance_stats = \"" . $tpl_balance . "\";");
 
-        $tpl_balance_inline = $templates->get('af_balance_postbit_compact');
-        if ($tpl_balance_inline === '') {
-            $tpl_balance_inline = $templates->get('af_balance_postbit_inline');
-        }
-        if ($tpl_balance_inline === '') {
-            $tpl_balance_inline = <<<'HTML'
-<div class="af-cs-postbit-stats af-cs-postbit-stats--compact" data-af-balance-inline="1" data-pid="{$post['pid']}" data-uid="{$post['uid']}"><div class="af-cs-postbit-stats__grid af-cs-postbit-stats__grid--compact"><div class="af-cs-postbit-stat af-cs-postbit-stat--credits" data-af-balance-credits="1"><div class="af-cs-postbit-stat__icon">{$postbit_label_credits_html}</div><div class="af-cs-postbit-stat__value" data-af-balance-credits-value="1">{$credits_display} {$currency_symbol}</div></div>{$ability_tokens_postbit_html}<div class="af-cs-postbit-stat af-cs-postbit-stat--level" data-af-balance-level="1"><div class="af-cs-postbit-stat__icon">{$postbit_label_level_html}</div><div class="af-cs-postbit-stat__value" data-af-balance-level-value="1">{$level}</div></div><div class="af-cs-postbit-stat af-cs-postbit-stat--posts" data-af-balance-posts="1"><div class="af-apc-slot" data-af-apc-slot="1" data-uid="{$post['uid']}">{$af_apc_postbit_html}</div></div></div></div>
+        $tpl_balance_inline = <<<'HTML'
+<span class="af-apui-stat-chip af-apui-stat-chip--credits" data-af-balance-credits="1" data-pid="{$post['pid']}" data-uid="{$post['uid']}"><span class="af-apui-stat-chip__icon">{$postbit_label_credits_html}</span><span class="af-apui-stat-chip__value" data-af-balance-credits-value="1">{$credits_display} {$currency_symbol}</span></span>{$ability_tokens_postbit_html}<span class="af-apui-stat-chip af-apui-stat-chip--level" data-af-balance-level="1" data-pid="{$post['pid']}" data-uid="{$post['uid']}"><span class="af-apui-stat-chip__icon">{$postbit_label_level_html}</span><span class="af-apui-stat-chip__value" data-af-balance-level-value="1">{$level}</span></span><span class="af-apui-stat-chip af-apui-stat-chip--posts" data-af-balance-posts="1" data-pid="{$post['pid']}" data-uid="{$post['uid']}"><span class="af-apui-stat-chip__icon"><i class="fa-solid fa-pen" aria-hidden="true"></i></span><span class="af-apui-stat-chip__value"><span class="af-apc-slot" data-af-apc-slot="1" data-uid="{$post['uid']}">{$af_apc_postbit_html}</span></span></span>
 HTML;
+
+        if (!empty($balance_data['ability_tokens_show_postbit'])) {
+            $ability_tokens_postbit_html = '<span class="af-apui-stat-chip af-apui-stat-chip--tokens" data-af-balance-ability="1" data-af-balance-ability-scaled="' . $ability_tokens_scaled . '" data-pid="' . (int)$post['pid'] . '" data-uid="' . $uid . '"><span class="af-apui-stat-chip__icon">' . $postbit_label_ability_tokens_html . '</span><span class="af-apui-stat-chip__value" data-af-balance-ability-value="1">' . $ability_tokens_display . ' ' . $ability_tokens_symbol . '</span></span>';
+            $tpl_balance_inline = str_replace('{$ability_tokens_postbit_html}', $ability_tokens_postbit_html, $tpl_balance_inline);
+        } else {
+            $tpl_balance_inline = str_replace('{$ability_tokens_postbit_html}', '', $tpl_balance_inline);
         }
 
         eval("\$af_balance_inline_stats = \"" . $tpl_balance_inline . "\";");

@@ -457,9 +457,8 @@
 .af-apui-postbit-userdetails .af-apui-stat-posts,
 .af-apui-postbit-userdetails .af-apui-stat-threads,
 .af-apui-postbit-userdetails .af-apui-stat-reputation {
-  flex: 0 0 calc((85% - 0px) / 3);
-  max-width: calc((100% - 20px) / 3);
-  min-height: 64px;
+  flex: 0 0 auto;
+  min-height: 28px;
   cursor: default;
 }
 
@@ -499,6 +498,49 @@
   font-size: 12px;
   line-height: 1.3;
   font-weight: 400;
+}
+
+
+.af-apui-postbit-userdetails .af-apui-stat-chip {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  color: #c5c5c5;
+  white-space: nowrap;
+}
+
+.af-apui-postbit-userdetails .af-apui-stat-chip__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  opacity: .95;
+}
+
+.af-apui-postbit-userdetails .af-apui-stat-chip__icon .fa-solid {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.af-apui-postbit-userdetails .af-apui-stat-chip__value {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.2;
+  font-size: 12px;
+}
+
+.af-apui-postbit-userdetails .af-apui-stat-chip--posts .af-apc-slot,
+.af-apui-postbit-userdetails .af-apui-stat-chip--posts .af-apc,
+.af-apui-postbit-userdetails .af-apui-stat-chip--posts .af-apc-count {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.2;
+}
+
+.af-apui-postbit-userdetails .af-apui-stat-chip--posts .af-apc-label {
+  display: none !important;
 }
 
 .af-apui-postbit-userdetails .af-apui-stat-extra {
