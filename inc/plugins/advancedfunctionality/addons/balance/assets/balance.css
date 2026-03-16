@@ -19,6 +19,15 @@
 .af-cs-postbit-stat--posts .af-apc-label{font-size:10px;line-height:1.1}
 .af-cs-postbit-stat--posts .af-apc-count{font-size:12px;line-height:1.2}
 .af-cs-postbit-stats__bar{height:18px;grid-column:1 / -1}
+
+.af-cs-postbit-stats--compact{margin-top:0;font-size:10px;min-width:0}
+.af-cs-postbit-stats__grid--compact{display:flex;flex-wrap:nowrap;align-items:center;justify-content:flex-start;gap:4px;min-width:0}
+.af-cs-postbit-stats--compact .af-cs-postbit-stat{min-height:0;flex-direction:row;gap:3px;text-align:left;align-items:center;justify-content:flex-start;min-width:0;white-space:nowrap}
+.af-cs-postbit-stats--compact .af-cs-postbit-stat__icon{font-size:10px;line-height:1;opacity:.85;display:inline-flex;align-items:center}
+.af-cs-postbit-stats--compact .af-cs-postbit-stat__value{font-size:10px;line-height:1.1}
+.af-cs-postbit-stats--compact .af-cs-postbit-stat--posts .af-apc{flex-direction:row;align-items:center;gap:3px}
+.af-cs-postbit-stats--compact .af-cs-postbit-stat--posts .af-apc-label{display:none}
+.af-cs-postbit-stats--compact .af-cs-postbit-stat--posts .af-apc-count{font-size:10px;line-height:1.1}
 .af-expbar{position:relative;border-radius:999px;background:rgba(0,0,0,.12);overflow:hidden}
 .af-expbar__fill{position:absolute;left:0;top:0;bottom:0;z-index:1;background:linear-gradient(90deg,#5cc3ff,#7bffb8)}
 .af-expbar__text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);white-space:nowrap;pointer-events:none;z-index:2;color:#0f1114;font-weight:lighter;font-size:9px}
