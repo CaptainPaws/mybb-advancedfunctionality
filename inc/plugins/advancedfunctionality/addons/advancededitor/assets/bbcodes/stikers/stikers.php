@@ -422,6 +422,150 @@ function af_advancededitor_stikers_unique_path(string $dir, string $filename): a
     return [$final, $ext];
 }
 
+function af_advancededitor_stikers_sync_filesystem(string &$message = ''): int
+{
+    global $db;
+
+    $message = '';
+    $imported = 0;
+    $updated = 0;
+
+    af_advancededitor_stikers_ensure_base_dir();
+
+    $baseDir = rtrim(af_advancededitor_stikers_abs(), '/\\');
+
+    $cq = $db->simple_select(
+        AF_AE_STIKERS_CATEGORY_TABLE,
+        '*',
+        '1=1',
+        ['order_by' => 'id', 'order_dir' => 'ASC']
+    );
+
+    while ($cat = $db->fetch_array($cq)) {
+        $categoryId = (int)($cat['id'] ?? 0);
+        $slug = trim((string)($cat['slug'] ?? ''));
+
+        if ($categoryId <= 0 || $slug === '') {
+            continue;
+        }
+
+        $dir = trim((string)($cat['path'] ?? ''));
+        $fallbackDir = $baseDir . DIRECTORY_SEPARATOR . $slug;
+
+        if ($dir === '' || !is_dir($dir)) {
+            $dir = $fallbackDir;
+
+            if (is_dir($dir) && (string)($cat['path'] ?? '') !== $dir) {
+                $db->update_query(
+                    AF_AE_STIKERS_CATEGORY_TABLE,
+                    ['path' => $db->escape_string($dir)],
+                    'id=' . $categoryId
+                );
+            }
+        }
+
+        if (!is_dir($dir)) {
+            continue;
+        }
+
+        $files = @scandir($dir);
+        if (!is_array($files)) {
+            continue;
+        }
+
+        foreach ($files as $file) {
+            if ($file === '.' || $file === '..') {
+                continue;
+            }
+
+            $absPath = rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . $file;
+
+            if (!is_file($absPath)) {
+                continue;
+            }
+
+            if (!af_advancededitor_stikers_is_path_inside($absPath, af_advancededitor_stikers_abs())) {
+                continue;
+            }
+
+            $ext = strtolower((string)pathinfo($absPath, PATHINFO_EXTENSION));
+            if (!in_array($ext, af_advancededitor_stikers_allowed_exts(), true)) {
+                continue;
+            }
+
+            $fileName = basename($absPath);
+            if ($fileName === '' || $fileName === '.' || $fileName === '..') {
+                continue;
+            }
+
+            $url = af_advancededitor_stikers_url($slug . '/' . $fileName);
+            $title = (string)pathinfo($fileName, PATHINFO_FILENAME);
+            $stickerSlug = af_advancededitor_stikers_slugify($title);
+
+            $existing = $db->fetch_array(
+                $db->simple_select(
+                    AF_AE_STIKERS_TABLE,
+                    '*',
+                    "is_user_sticker=0 AND (path='" . $db->escape_string($absPath) . "' OR url='" . $db->escape_string($url) . "')",
+                    ['limit' => 1]
+                )
+            );
+
+            if (!empty($existing['id'])) {
+                $update = [];
+
+                if ((int)$existing['category_id'] !== $categoryId) {
+                    $update['category_id'] = $categoryId;
+                }
+
+                if ((string)$existing['path'] !== $absPath) {
+                    $update['path'] = $db->escape_string($absPath);
+                }
+
+                if ((string)$existing['url'] !== $url) {
+                    $update['url'] = $db->escape_string($url);
+                }
+
+                if ((string)$existing['ext'] !== $ext) {
+                    $update['ext'] = $db->escape_string($ext);
+                }
+
+                if (!empty($update)) {
+                    $db->update_query(
+                        AF_AE_STIKERS_TABLE,
+                        $update,
+                        'id=' . (int)$existing['id']
+                    );
+                    $updated++;
+                }
+
+                continue;
+            }
+
+            $db->insert_query(AF_AE_STIKERS_TABLE, [
+                'title' => $db->escape_string($title),
+                'slug' => $db->escape_string($stickerSlug),
+                'path' => $db->escape_string($absPath),
+                'url' => $db->escape_string($url),
+                'ext' => $db->escape_string($ext),
+                'is_user_sticker' => 0,
+                'uid' => 0,
+                'category_id' => $categoryId,
+                'sortorder' => 0,
+                'created_at' => (int)(@filemtime($absPath) ?: TIME_NOW),
+            ]);
+
+            $imported++;
+        }
+    }
+
+    if ($imported > 0 || $updated > 0) {
+        $message = 'Синхронизация завершена. Импортировано: ' . $imported . ', обновлено: ' . $updated . '.';
+    }
+
+    return $imported;
+}
+
 function af_advancededitor_stikers_get_client_config(): array
 {
     global $mybb;
@@ -890,6 +1034,53 @@ function af_advancededitor_stikers_update_category_title(int $id, string $title,
     );
 
     $message = 'Категория обновлена.';
+    return true;
+}
+
+function af_advancededitor_stikers_update_admin_sticker_title(int $id, string $title, string &$message = ''): bool
+{
+    global $db;
+
+    if ($id <= 0) {
+        $message = 'Некорректный ID стикера.';
+        return false;
+    }
+
+    $row = $db->fetch_array(
+        $db->simple_select(
+            AF_AE_STIKERS_TABLE,
+            '*',
+            'id=' . (int)$id . ' AND is_user_sticker=0',
+            ['limit' => 1]
+        )
+    );
+
+    if (empty($row['id'])) {
+        $message = 'Стикер не найден.';
+        return false;
+    }
+
+    $title = trim($title);
+    if ($title === '') {
+        $message = 'Введите title стикера.';
+        return false;
+    }
+
+    if (function_exists('mb_substr')) {
+        $title = mb_substr($title, 0, 255);
+    } else {
+        $title = substr($title, 0, 255);
+    }
+
+    $db->update_query(
+        AF_AE_STIKERS_TABLE,
+        [
+            'title' => $db->escape_string($title),
+        ],
+        'id=' . (int)$id
+    );
+
+    $message = 'Title стикера обновлён.';
     return true;
 }
 
