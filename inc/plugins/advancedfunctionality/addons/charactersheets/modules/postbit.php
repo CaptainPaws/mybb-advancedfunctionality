@@ -98,6 +98,11 @@ HTML;
         eval("\$af_balance_inline_stats = \"" . $tpl_balance_inline . "\";");
     }
 
+    if ($af_balance_inline_stats !== '') {
+        $inline_wrap = '<span class="af-apf-postbit-field af-apui-balance-inline">' . $af_balance_inline_stats . '</span>';
+        $post['user_details'] = (string)($post['user_details'] ?? '') . $inline_wrap;
+    }
+
     $post['af_balance_inline_stats'] = $af_balance_inline_stats;
 
     $tpl = $templates->get('af_charactersheets_postbit_plaque');
