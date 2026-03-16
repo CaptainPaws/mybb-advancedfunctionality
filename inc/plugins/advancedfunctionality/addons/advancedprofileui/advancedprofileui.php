@@ -269,10 +269,89 @@ function af_apui_register_hooks(): void
     }
 
     $plugins->add_hook('member_profile_end', 'af_apui_member_profile_end', 5);
+    $plugins->add_hook('postbit', 'af_apui_postbit_compose_userdetails', 5);
+    $plugins->add_hook('postbit_prev', 'af_apui_postbit_compose_userdetails', 5);
+    $plugins->add_hook('postbit_pm', 'af_apui_postbit_compose_userdetails', 5);
     $plugins->add_hook('pre_output_page', 'af_apui_pre_output_page', 10);
     $plugins->add_hook('global_start', 'af_apui_global_start', 10);
 }
 af_apui_register_hooks();
+
+
+
+function af_apui_postbit_extract_number(string $value): string
+{
+    $clean = trim(preg_replace('~\s+~u', ' ', strip_tags($value)));
+    if ($clean === '') {
+        return '0';
+    }
+
+    if (preg_match('~[+\-]?\d[\d\s.,]*~u', $clean, $m)) {
+        return trim((string)$m[0]);
+    }
+
+    return htmlspecialchars_uni($clean);
+}
+
+function af_apui_postbit_extract_profile_fields(string $userDetails): string
+{
+    if ($userDetails === '') {
+        return '';
+    }
+
+    if (!preg_match_all('~<span[^>]*class="[^"]*\baf-apf-postbit-field\b[^"]*"[^>]*>.*?</span>~is', $userDetails, $m)) {
+        return '';
+    }
+
+    return implode("
+", $m[0]);
+}
+
+function af_apui_postbit_compose_userdetails(array &$post): void
+{
+    $userDetails = (string)($post['user_details'] ?? '');
+    $profileFields = af_apui_postbit_extract_profile_fields($userDetails);
+
+    $postsValue = af_apui_postbit_extract_number((string)($post['postnum'] ?? '0'));
+    $threadsValue = af_apui_postbit_extract_number((string)($post['threadnum'] ?? '0'));
+    $reputationValue = af_apui_postbit_extract_number((string)($post['replink'] ?? ($post['reputation'] ?? '0')));
+
+    $uid = (int)($post['uid'] ?? 0);
+    $pid = (int)($post['pid'] ?? 0);
+
+    $creditsValue = '0.00';
+    $currencySymbol = '¢';
+    $tokensHtml = '';
+    $levelValue = '1';
+
+    if ($uid > 0 && function_exists('af_balance_get_postbit_data')) {
+        $balanceData = af_balance_get_postbit_data($uid);
+        $creditsValue = htmlspecialchars_uni((string)($balanceData['credits_display'] ?? '0.00'));
+        $currencySymbol = htmlspecialchars_uni((string)($balanceData['currency_symbol'] ?? '¢'));
+        $levelValue = (string)((int)($balanceData['level'] ?? 1));
+
+        if (!empty($balanceData['ability_tokens_show_postbit'])) {
+            $tokensValue = htmlspecialchars_uni((string)($balanceData['ability_tokens_display'] ?? '0.00'));
+            $tokensSymbol = htmlspecialchars_uni((string)($balanceData['ability_tokens_symbol'] ?? '♦'));
+            $tokensHtml = '<span class="af-apui-stat-item af-apui-stat-item--tokens" data-af-balance-ability="1" data-af-balance-ability-scaled="' . (int)($balanceData['ability_tokens_scaled'] ?? 0) . '" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-gem" aria-hidden="true"></i></span><span class="af-apui-stat-item__value" data-af-balance-ability-value="1">' . $tokensValue . ' ' . $tokensSymbol . '</span></span>';
+        }
+    }
+
+    $isQuickReplyContext = (defined('THIS_SCRIPT') && strtolower((string)THIS_SCRIPT) === 'newreply.php') || defined('IN_XMLHTTP');
+    $afApcPostbitHtml = $isQuickReplyContext ? '' : '<af_apc_uid_' . $uid . '>';
+
+    $post['af_apui_profile_fields_html'] = $profileFields;
+    $post['af_apui_author_statistics_html'] =
+        '<div class="author_statistics af-apui-postbit-userdetails">'
+        . '<span class="af-apui-stat-item af-apui-stat-item--messages"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-comments" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">' . htmlspecialchars_uni($postsValue) . '</span></span>'
+        . '<span class="af-apui-stat-item af-apui-stat-item--threads"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-copy" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">' . htmlspecialchars_uni($threadsValue) . '</span></span>'
+        . '<span class="af-apui-stat-item af-apui-stat-item--reputation"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-heart" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">' . htmlspecialchars_uni($reputationValue) . '</span></span>'
+        . '<span class="af-apui-stat-item af-apui-stat-item--posts" data-af-balance-posts="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-pen" aria-hidden="true"></i></span><span class="af-apui-stat-item__value"><span class="af-apc-slot" data-af-apc-slot="1" data-uid="' . $uid . '">' . $afApcPostbitHtml . '</span></span></span>'
+        . '<span class="af-apui-stat-item af-apui-stat-item--credits" data-af-balance-credits="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-coins" aria-hidden="true"></i></span><span class="af-apui-stat-item__value" data-af-balance-credits-value="1">' . $creditsValue . ' ' . $currencySymbol . '</span></span>'
+        . $tokensHtml
+        . '<span class="af-apui-stat-item af-apui-stat-item--level" data-af-balance-level="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-signal" aria-hidden="true"></i></span><span class="af-apui-stat-item__value" data-af-balance-level-value="1">' . htmlspecialchars_uni($levelValue) . '</span></span>'
+        . '</div>';
+}
 
 function af_apui_global_start(): void
 {
