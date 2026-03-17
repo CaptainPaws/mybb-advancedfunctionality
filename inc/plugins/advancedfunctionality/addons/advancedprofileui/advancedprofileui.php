@@ -174,7 +174,7 @@ function af_apui_ensure_settings(): void
         'postbit_classic: оверлей фона профиля',
         'CSS background-image слой для оверлея авторского блока postbit.',
         'text',
-        'linear-gradient(180deg, rgba(8, 12, 24, 0.06) 0%, rgba(24, 24, 24, 0.81) 42%, rgb(0, 0, 0) 100%)',
+        'linear-gradient(180deg, rgba(8, 12, 24, 0.06) 0%, rgba(9, 9, 9, 0.87) 42%, rgb(0, 0, 0) 100%)',
         21
     );
 
@@ -194,7 +194,7 @@ function af_apui_ensure_settings(): void
         'postbit_classic: оверлей никнейма',
         'CSS background-image слой для оверлея блока никнейма.',
         'text',
-        'linear-gradient(180deg, rgba(10, 14, 24, .18), rgba(10, 14, 24, .28))',
+        'linear-gradient(180deg, rgba(0, 0, 0, 0.24), rgba(69, 69, 69, 0.28))',
         23
     );
 
@@ -214,7 +214,7 @@ function af_apui_ensure_settings(): void
         'postbit_classic: оверлей кнопки листа персонажа',
         'CSS background-image слой для оверлея кнопки/плашки листа персонажа.',
         'text',
-        'linear-gradient(180deg, rgba(10, 14, 24, .10), rgba(10, 14, 24, .18))',
+        'linear-gradient(180deg, rgba(10, 14, 24, 0.17), rgba(0, 0, 0, 0.85))',
         25
     );
 
@@ -269,9 +269,13 @@ function af_apui_register_hooks(): void
     }
 
     $plugins->add_hook('member_profile_end', 'af_apui_member_profile_end', 5);
-    $plugins->add_hook('postbit', 'af_apui_postbit_compose_userdetails', 5);
-    $plugins->add_hook('postbit_prev', 'af_apui_postbit_compose_userdetails', 5);
-    $plugins->add_hook('postbit_pm', 'af_apui_postbit_compose_userdetails', 5);
+
+    // ВАЖНО: ставим поздний приоритет, чтобы другие плагины успели
+    // дописать user_details до того, как APUI начнет его разбирать.
+    $plugins->add_hook('postbit', 'af_apui_postbit_compose_userdetails', 100);
+    $plugins->add_hook('postbit_prev', 'af_apui_postbit_compose_userdetails', 100);
+    $plugins->add_hook('postbit_pm', 'af_apui_postbit_compose_userdetails', 100);
+
     $plugins->add_hook('pre_output_page', 'af_apui_pre_output_page', 10);
     $plugins->add_hook('global_start', 'af_apui_global_start', 10);
 }
@@ -293,24 +297,226 @@ function af_apui_postbit_extract_number(string $value): string
     return htmlspecialchars_uni($clean);
 }
 
+function af_apui_dom_outer_html($node): string
+{
+    if (!is_object($node)) {
+        return '';
+    }
+
+    $doc = $node->ownerDocument ?? null;
+    if (!is_object($doc) || !method_exists($doc, 'saveHTML')) {
+        return '';
+    }
+
+    return (string)$doc->saveHTML($node);
+}
+
 function af_apui_postbit_extract_profile_fields(string $userDetails): string
 {
+    $userDetails = trim($userDetails);
     if ($userDetails === '') {
         return '';
     }
 
-    if (!preg_match_all('~<span[^>]*class="[^"]*\baf-apf-postbit-field\b[^"]*"[^>]*>.*?</span>~is', $userDetails, $m)) {
+    // Сначала нормальная попытка через DOM, чтобы не ломаться на вложенных span/div
+    if (class_exists('DOMDocument') && class_exists('DOMXPath')) {
+        $prevUseErrors = libxml_use_internal_errors(true);
+
+        $dom = new DOMDocument('1.0', 'UTF-8');
+        $html = '<?xml encoding="utf-8" ?><div id="af-apui-root">' . $userDetails . '</div>';
+
+        $loaded = $dom->loadHTML($html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        if ($loaded) {
+            $xpath = new DOMXPath($dom);
+            $nodes = $xpath->query('//*[@class and contains(concat(" ", normalize-space(@class), " "), " af-apf-postbit-field ")]');
+
+            if ($nodes !== false && $nodes->length > 0) {
+                $out = [];
+                foreach ($nodes as $node) {
+                    $chunk = trim(af_apui_dom_outer_html($node));
+                    if ($chunk !== '') {
+                        $out[] = $chunk;
+                    }
+                }
+
+                libxml_clear_errors();
+                libxml_use_internal_errors($prevUseErrors);
+
+                return implode("\n", $out);
+            }
+        }
+
+        libxml_clear_errors();
+        libxml_use_internal_errors($prevUseErrors);
+    }
+
+    // Фолбэк: если DOM не сработал, пробуем более широкий regex
+    if (preg_match_all('~<([a-z0-9:_-]+)\b[^>]*class=(["\'])[^"\']*\baf-apf-postbit-field\b[^"\']*\2[^>]*>.*?</\1>~is', $userDetails, $m)) {
+        return implode("\n", $m[0]);
+    }
+
+    return '';
+}
+function af_apui_postbit_strip_profile_field_names(string $html): string
+{
+    $html = trim($html);
+    if ($html === '') {
         return '';
     }
 
-    return implode("
-", $m[0]);
+    // Удаляем название поля и двоеточие после него:
+    // <span class="af-apf-name">ЛЗ</span>:
+    $html = preg_replace(
+        '~<span[^>]*class=(["\'])[^"\']*\baf-apf-name\b[^"\']*\1[^>]*>.*?</span>\s*(?:&nbsp;|&#160;|\s)*:\s*~isu',
+        '',
+        $html
+    ) ?? $html;
+
+    // Фолбэк: если двоеточия нет, но span с названием есть — убираем просто его
+    $html = preg_replace(
+        '~<span[^>]*class=(["\'])[^"\']*\baf-apf-name\b[^"\']*\1[^>]*>.*?</span>\s*~isu',
+        '',
+        $html
+    ) ?? $html;
+
+    return trim($html);
+}
+
+function af_apui_format_duration_ru(int $seconds): string
+{
+    $seconds = max(0, $seconds);
+
+    if ($seconds < 60) {
+        return 'только что';
+    }
+
+    $minutes = (int) floor($seconds / 60);
+    if ($minutes < 60) {
+        return $minutes . ' ' . af_apui_ru_plural($minutes, 'минуту', 'минуты', 'минут');
+    }
+
+    $hours = (int) floor($minutes / 60);
+    if ($hours < 24) {
+        return $hours . ' ' . af_apui_ru_plural($hours, 'час', 'часа', 'часов');
+    }
+
+    $days = (int) floor($hours / 24);
+    return $days . ' ' . af_apui_ru_plural($days, 'день', 'дня', 'дней');
+}
+
+function af_apui_ru_plural(int $num, string $one, string $few, string $many): string
+{
+    $n = abs($num) % 100;
+    $n1 = $n % 10;
+
+    if ($n > 10 && $n < 20) {
+        return $many;
+    }
+
+    if ($n1 > 1 && $n1 < 5) {
+        return $few;
+    }
+
+    if ($n1 === 1) {
+        return $one;
+    }
+
+    return $many;
+}
+
+function af_apui_build_postbit_presence_html(array $post): string
+{
+    global $db, $mybb;
+
+    $uid = (int)($post['uid'] ?? 0);
+    if ($uid <= 0) {
+        $title = htmlspecialchars_uni('Оффлайн');
+        return '<span class="af-apui-presence-dot af-apui-presence-dot--offline" title="' . $title . '" data-af-title="' . $title . '" aria-label="' . $title . '"></span>';
+    }
+
+    static $presenceCache = [];
+
+    if (isset($presenceCache[$uid])) {
+        return $presenceCache[$uid];
+    }
+
+    $lastActive = 0;
+
+    if ($db->table_exists('sessions')) {
+        $query = $db->simple_select(
+            'sessions',
+            'MAX(time) AS last_time',
+            "uid='" . $uid . "'"
+        );
+        $lastActive = (int)$db->fetch_field($query, 'last_time');
+    }
+
+    if ($lastActive <= 0 && !empty($post['lastactive'])) {
+        $lastActive = (int)$post['lastactive'];
+    }
+
+    $cutoffSeconds = 15 * 60;
+
+    if (!empty($mybb->settings['wolcutoff'])) {
+        $tmp = (int)$mybb->settings['wolcutoff'];
+        if ($tmp > 0) {
+            $cutoffSeconds = $tmp;
+        }
+    } elseif (!empty($mybb->settings['wolcutoffmins'])) {
+        $tmp = (int)$mybb->settings['wolcutoffmins'];
+        if ($tmp > 0) {
+            $cutoffSeconds = $tmp * 60;
+        }
+    }
+
+    $isOnline = $lastActive > 0 && $lastActive >= (TIME_NOW - $cutoffSeconds);
+
+    if ($isOnline) {
+        $delta = max(0, TIME_NOW - $lastActive);
+        $title = 'Онлайн';
+        if ($delta < 60) {
+            $title .= ' · активен только что';
+        } else {
+            $title .= ' · активен ' . af_apui_format_duration_ru($delta) . ' назад';
+        }
+
+        $title = htmlspecialchars_uni($title);
+
+        $presenceCache[$uid] =
+            '<span class="af-apui-presence-dot af-apui-presence-dot--online"'
+            . ' title="' . $title . '"'
+            . ' data-af-title="' . $title . '"'
+            . ' aria-label="' . $title . '"></span>';
+
+        return $presenceCache[$uid];
+    }
+
+    $title = 'Оффлайн';
+    if ($lastActive > 0) {
+        $title .= ' · был активен ' . af_apui_format_duration_ru(max(0, TIME_NOW - $lastActive)) . ' назад';
+    }
+
+    $title = htmlspecialchars_uni($title);
+
+    $presenceCache[$uid] =
+        '<span class="af-apui-presence-dot af-apui-presence-dot--offline"'
+        . ' title="' . $title . '"'
+        . ' data-af-title="' . $title . '"'
+        . ' aria-label="' . $title . '"></span>';
+
+    return $presenceCache[$uid];
 }
 
 function af_apui_postbit_compose_userdetails(array &$post): void
 {
     $userDetails = (string)($post['user_details'] ?? '');
     $profileFields = af_apui_postbit_extract_profile_fields($userDetails);
+
+    if ($profileFields === '' && strpos($userDetails, 'af-apf-postbit-field') !== false) {
+        $profileFields = $userDetails;
+    }
+
+    $profileFields = af_apui_postbit_strip_profile_field_names($profileFields);
 
     $postsValue = af_apui_postbit_extract_number((string)($post['postnum'] ?? '0'));
     $threadsValue = af_apui_postbit_extract_number((string)($post['threadnum'] ?? '0'));
@@ -324,6 +530,14 @@ function af_apui_postbit_compose_userdetails(array &$post): void
     $tokensHtml = '';
     $levelValue = '1';
 
+    $tooltipMessages = htmlspecialchars_uni('Сообщений');
+    $tooltipThreads = htmlspecialchars_uni('Тем');
+    $tooltipReputation = htmlspecialchars_uni('Репутация');
+    $tooltipPosts = htmlspecialchars_uni('Постов');
+    $tooltipCredits = htmlspecialchars_uni('Кредитов');
+    $tooltipTokens = htmlspecialchars_uni('Абилити токенов');
+    $tooltipLevel = htmlspecialchars_uni('Уровень');
+
     if ($uid > 0 && function_exists('af_balance_get_postbit_data')) {
         $balanceData = af_balance_get_postbit_data($uid);
         $creditsValue = htmlspecialchars_uni((string)($balanceData['credits_display'] ?? '0.00'));
@@ -333,23 +547,35 @@ function af_apui_postbit_compose_userdetails(array &$post): void
         if (!empty($balanceData['ability_tokens_show_postbit'])) {
             $tokensValue = htmlspecialchars_uni((string)($balanceData['ability_tokens_display'] ?? '0.00'));
             $tokensSymbol = htmlspecialchars_uni((string)($balanceData['ability_tokens_symbol'] ?? '♦'));
-            $tokensHtml = '<span class="af-apui-stat-item af-apui-stat-item--tokens" data-af-balance-ability="1" data-af-balance-ability-scaled="' . (int)($balanceData['ability_tokens_scaled'] ?? 0) . '" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-gem" aria-hidden="true"></i></span><span class="af-apui-stat-item__value" data-af-balance-ability-value="1">' . $tokensValue . ' ' . $tokensSymbol . '</span></span>';
+
+            $tokensHtml =
+                '<span class="af-apui-stat-item af-apui-stat-item--tokens"'
+                . ' title="' . $tooltipTokens . '"'
+                . ' data-af-title="' . $tooltipTokens . '"'
+                . ' data-af-balance-ability="1"'
+                . ' data-af-balance-ability-scaled="' . (int)($balanceData['ability_tokens_scaled'] ?? 0) . '"'
+                . ' data-pid="' . $pid . '"'
+                . ' data-uid="' . $uid . '">'
+                    . '<span class="af-apui-stat-item__icon"><i class="fa-solid fa-gem" aria-hidden="true"></i></span>'
+                    . '<span class="af-apui-stat-item__value" data-af-balance-ability-value="1">' . $tokensValue . ' ' . $tokensSymbol . '</span>'
+                . '</span>';
         }
     }
 
     $isQuickReplyContext = (defined('THIS_SCRIPT') && strtolower((string)THIS_SCRIPT) === 'newreply.php') || defined('IN_XMLHTTP');
     $afApcPostbitHtml = $isQuickReplyContext ? '' : '<af_apc_uid_' . $uid . '>';
 
+    $post['af_apui_presence_html'] = af_apui_build_postbit_presence_html($post);
     $post['af_apui_profile_fields_html'] = $profileFields;
     $post['af_apui_author_statistics_html'] =
         '<div class="author_statistics af-apui-postbit-userdetails">'
-        . '<span class="af-apui-stat-item af-apui-stat-item--messages"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-comments" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">' . htmlspecialchars_uni($postsValue) . '</span></span>'
-        . '<span class="af-apui-stat-item af-apui-stat-item--threads"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-copy" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">' . htmlspecialchars_uni($threadsValue) . '</span></span>'
-        . '<span class="af-apui-stat-item af-apui-stat-item--reputation"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-heart" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">' . htmlspecialchars_uni($reputationValue) . '</span></span>'
-        . '<span class="af-apui-stat-item af-apui-stat-item--posts" data-af-balance-posts="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-pen" aria-hidden="true"></i></span><span class="af-apui-stat-item__value"><span class="af-apc-slot" data-af-apc-slot="1" data-uid="' . $uid . '">' . $afApcPostbitHtml . '</span></span></span>'
-        . '<span class="af-apui-stat-item af-apui-stat-item--credits" data-af-balance-credits="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-coins" aria-hidden="true"></i></span><span class="af-apui-stat-item__value" data-af-balance-credits-value="1">' . $creditsValue . ' ' . $currencySymbol . '</span></span>'
+        . '<span class="af-apui-stat-item af-apui-stat-item--messages" title="' . $tooltipMessages . '" data-af-title="' . $tooltipMessages . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-comments" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">' . htmlspecialchars_uni($postsValue) . '</span></span>'
+        . '<span class="af-apui-stat-item af-apui-stat-item--threads" title="' . $tooltipThreads . '" data-af-title="' . $tooltipThreads . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-copy" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">' . htmlspecialchars_uni($threadsValue) . '</span></span>'
+        . '<span class="af-apui-stat-item af-apui-stat-item--reputation" title="' . $tooltipReputation . '" data-af-title="' . $tooltipReputation . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-heart" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">' . htmlspecialchars_uni($reputationValue) . '</span></span>'
+        . '<span class="af-apui-stat-item af-apui-stat-item--posts" title="' . $tooltipPosts . '" data-af-title="' . $tooltipPosts . '" data-af-balance-posts="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-pen" aria-hidden="true"></i></span><span class="af-apui-stat-item__value"><span class="af-apc-slot" data-af-apc-slot="1" data-uid="' . $uid . '">' . $afApcPostbitHtml . '</span></span></span>'
+        . '<span class="af-apui-stat-item af-apui-stat-item--credits" title="' . $tooltipCredits . '" data-af-title="' . $tooltipCredits . '" data-af-balance-credits="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-coins" aria-hidden="true"></i></span><span class="af-apui-stat-item__value" data-af-balance-credits-value="1">' . $creditsValue . ' ' . $currencySymbol . '</span></span>'
         . $tokensHtml
-        . '<span class="af-apui-stat-item af-apui-stat-item--level" data-af-balance-level="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-signal" aria-hidden="true"></i></span><span class="af-apui-stat-item__value" data-af-balance-level-value="1">' . htmlspecialchars_uni($levelValue) . '</span></span>'
+        . '<span class="af-apui-stat-item af-apui-stat-item--level" title="' . $tooltipLevel . '" data-af-title="' . $tooltipLevel . '" data-af-balance-level="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-signal" aria-hidden="true"></i></span><span class="af-apui-stat-item__value" data-af-balance-level-value="1">' . htmlspecialchars_uni($levelValue) . '</span></span>'
         . '</div>';
 }
 
