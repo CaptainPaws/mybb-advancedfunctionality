@@ -524,6 +524,7 @@ function af_apui_postbit_compose_userdetails(array &$post): void
 
     $uid = (int)($post['uid'] ?? 0);
     $pid = (int)($post['pid'] ?? 0);
+    $post['af_aa_user_class'] = $uid > 0 ? 'af-aa-user-' . $uid : '';
 
     $creditsValue = '0.00';
     $currencySymbol = '¢';
