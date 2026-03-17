@@ -279,8 +279,96 @@
     activate(initial, false);
   }
 
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  function resetStickyPostbitState(author) {
+    if (!author) {
+      return;
+    }
+
+    author.style.removeProperty('transform');
+    author.style.removeProperty('will-change');
+  }
+
+  function initStickyPostbits() {
+    if (window.__afApuiStickyPostbitsInit) {
+      return;
+    }
+    window.__afApuiStickyPostbitsInit = true;
+
+    var stickyTop = 12;
+    var rafId = 0;
+
+    function updateOne(row) {
+      var author = row.querySelector('.af-apui-postbit-author');
+
+      if (!author) {
+        return;
+      }
+
+      resetStickyPostbitState(author);
+
+      if (window.innerWidth <= 900) {
+        return;
+      }
+
+      var rowHeight = row.offsetHeight;
+      var authorHeight = author.offsetHeight;
+
+      if (!rowHeight || !authorHeight) {
+        return;
+      }
+
+      if (rowHeight <= authorHeight + stickyTop + 12) {
+        return;
+      }
+
+      var rowTop = window.pageYOffset + row.getBoundingClientRect().top;
+      var maxTranslate = Math.max(0, rowHeight - authorHeight);
+      var wantedTranslate = window.pageYOffset + stickyTop - rowTop;
+      var translateY = clamp(wantedTranslate, 0, maxTranslate);
+
+      author.style.willChange = 'transform';
+      author.style.transform = 'translate3d(0, ' + translateY + 'px, 0)';
+    }
+
+    function updateAll() {
+      rafId = 0;
+
+      var rows = document.querySelectorAll('.af-apui-postbit');
+      if (!rows.length) {
+        return;
+      }
+
+      Array.prototype.forEach.call(rows, updateOne);
+    }
+
+    function scheduleUpdate() {
+      if (rafId) {
+        return;
+      }
+
+      rafId = window.requestAnimationFrame(updateAll);
+    }
+
+    window.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('resize', scheduleUpdate);
+    window.addEventListener('load', scheduleUpdate);
+    window.addEventListener('orientationchange', scheduleUpdate);
+
+    document.addEventListener('click', scheduleUpdate);
+
+    setTimeout(scheduleUpdate, 0);
+    setTimeout(scheduleUpdate, 100);
+    setTimeout(scheduleUpdate, 300);
+    setTimeout(scheduleUpdate, 700);
+  }
+
   function boot() {
     normalizePostbitUserDetails();
+    initStickyPostbits();
 
     var roots = document.querySelectorAll('[data-af-apui-tabs]');
     if (!roots.length) {
