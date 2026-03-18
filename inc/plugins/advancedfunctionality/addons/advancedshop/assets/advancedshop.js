@@ -311,14 +311,22 @@
     var qty = (slotNode.querySelector('.af-inventory-qty') || {}).textContent || '1';
     var equipSlot = slotNode.getAttribute('data-equip-slot') || '';
     var canEquip = slotNode.getAttribute('data-is-equippable') === '1';
+    var sourceType = slotNode.getAttribute('data-source-type') || 'kb';
+    var isVisualItem = sourceType === 'appearance' || slotNode.getAttribute('data-is-visual-item') === '1';
+    var activeApplied = slotNode.getAttribute('data-appearance-active') === '1';
     var pop = document.querySelector('[data-af-item-popover]');
     if(!pop){ return; }
+    var actions = '';
+    if(isVisualItem){
+      actions += '<button type="button" class="af-shop-btn" data-af-appearance-apply-btn data-inv-id="' + escapeHtml(String(invId)) + '">Применить</button>';
+      actions += '<button type="button" class="af-shop-btn" data-af-appearance-unapply-btn data-target-key="profile_banner"' + (activeApplied ? '' : ' disabled') + '>Снять</button>';
+    } else {
+      actions += '<button type="button" class="af-shop-btn" data-af-equip-btn data-can-equip="' + (canEquip ? '1' : '0') + '" data-inv-id="' + escapeHtml(String(invId)) + '" data-slot-code="' + escapeHtml(equipSlot) + '">Надеть</button>';
+    }
+    actions += '<button type="button" class="af-shop-btn" data-af-sell-btn>Продать</button>';
     pop.innerHTML = '<div class="af-item-popover__title">' + escapeHtml(title) + '</div>'
       + '<div class="af-item-popover__meta">Редкость: ' + escapeHtml(rarity) + ' · Кол-во: ' + escapeHtml(qty) + '</div>'
-      + '<div class="af-item-popover__actions">'
-      + '<button type="button" class="af-shop-btn" data-af-equip-btn data-can-equip="' + (canEquip ? '1' : '0') + '" data-inv-id="' + escapeHtml(String(invId)) + '" data-slot-code="' + escapeHtml(equipSlot) + '">Надеть</button>'
-      + '<button type="button" class="af-shop-btn" data-af-sell-btn>Продать</button>'
-      + '</div>';
+      + '<div class="af-item-popover__actions">' + actions + '</div>';
     var rect = slotNode.getBoundingClientRect();
     pop.style.left = (window.scrollX + rect.left) + 'px';
     pop.style.top = (window.scrollY + rect.bottom + 8) + 'px';
@@ -429,6 +437,40 @@
           afShopToast('Предмет экипирован', 'success');
         } else if(r && r.error !== 'busy'){
           afShopToast(r.error || 'Не удалось надеть предмет', 'error');
+        }
+      });
+      return;
+    }
+
+    var applyAppearanceBtn = e.target.closest('[data-af-appearance-apply-btn][data-inv-id]');
+    if(applyAppearanceBtn){
+      e.preventDefault();
+      var invIdApply = parseInt(applyAppearanceBtn.getAttribute('data-inv-id') || '0', 10);
+      if(invIdApply <= 0){ return; }
+      var ctxApply = inventoryContext(applyAppearanceBtn);
+      withLoading(applyAppearanceBtn, post('misc.php?action=inventory_appearance_apply', {uid:ctxApply.uid || '0', inv_id:invIdApply})).then(function(r){
+        if(r && r.ok){
+          hideItemPopover();
+          safeMountInventory(ctxApply.root || document);
+          afShopToast('Пресет применён', 'success');
+        } else if(r && r.error !== 'busy'){
+          afShopToast(r.error || 'Не удалось применить пресет', 'error');
+        }
+      });
+      return;
+    }
+
+    var unapplyAppearanceBtn = e.target.closest('[data-af-appearance-unapply-btn]');
+    if(unapplyAppearanceBtn){
+      e.preventDefault();
+      var ctxUn = inventoryContext(unapplyAppearanceBtn);
+      withLoading(unapplyAppearanceBtn, post('misc.php?action=inventory_appearance_unapply', {uid:ctxUn.uid || '0', target_key: unapplyAppearanceBtn.getAttribute('data-target-key') || 'profile_banner'})).then(function(r){
+        if(r && r.ok){
+          hideItemPopover();
+          safeMountInventory(ctxUn.root || document);
+          afShopToast('Пресет снят', 'success');
+        } else if(r && r.error !== 'busy'){
+          afShopToast(r.error || 'Не удалось снять пресет', 'error');
         }
       });
       return;
@@ -596,7 +638,11 @@
     if(pick){
       e.preventDefault();
       var picker = document.getElementById('af-kb-picker');
-      if(picker){ picker.hidden = !picker.hidden; }
+      var ap = document.getElementById('af-appearance-picker');
+      var sourceTypeNode = document.getElementById('af-slot-source-type');
+      var st = sourceTypeNode ? (sourceTypeNode.value || 'kb') : 'kb';
+      if(picker){ picker.hidden = st !== 'kb' ? true : !picker.hidden; }
+      if(ap){ ap.hidden = st !== 'appearance' ? true : !ap.hidden; }
       return;
     }
 
@@ -610,6 +656,8 @@
       var status3 = document.getElementById('af-manage-slot-status');
       post('misc.php?action=shop_manage_slot_create&shop=' + encodeURIComponent(shop6), {
         cat_id: catId,
+        source_type: 'kb',
+        source_ref_id: kbItem.getAttribute('data-kb-id'),
         kb_id: kbItem.getAttribute('data-kb-id'),
         kb_type: kbItem.getAttribute('data-kb-type') || 'item',
         kb_key: kbItem.getAttribute('data-kb-key') || '',
@@ -626,6 +674,31 @@
       return;
     }
 
+    var apItem = e.target.closest('.af-appearance-pick-item');
+    if(apItem){
+      e.preventDefault();
+      var rootAp = document.querySelector('.af-manage-slots[data-shop]');
+      if(!rootAp){ return; }
+      var shopAp = rootAp.getAttribute('data-shop') || 'game';
+      var catAp = rootAp.getAttribute('data-cat-id') || '0';
+      var statusAp = document.getElementById('af-manage-slot-status');
+      post('misc.php?action=shop_manage_slot_create&shop=' + encodeURIComponent(shopAp), {
+        cat_id: catAp,
+        source_type: 'appearance',
+        source_ref_id: apItem.getAttribute('data-preset-id'),
+        price: 0,
+        currency: 'credits',
+        stock: -1,
+        limit_per_user: 0,
+        enabled: 1,
+        sortorder: 0
+      }).then(function(r){
+        if(r.ok){ setStatus(statusAp, 'Appearance slot created', true); loadSlots(shopAp, catAp); }
+        else { setStatus(statusAp, r.error || 'Failed to create appearance slot', false); }
+      });
+      return;
+    }
+
     var saveSlot = e.target.closest('.af-slot-save');
     if(saveSlot){
       e.preventDefault();
@@ -636,6 +709,8 @@
       var status4 = document.getElementById('af-manage-slot-status');
       post('misc.php?action=shop_manage_slot_update&shop=' + encodeURIComponent(shop7), {
         slot_id: card.getAttribute('data-slot-id'),
+        source_type: card.getAttribute('data-source-type') || 'kb',
+        source_ref_id: card.getAttribute('data-source-ref-id') || '0',
         price: (card.querySelector('.af-slot-price') || {}).value || 0,
         currency: (card.querySelector('.af-slot-currency') || {}).value || 'credits',
         stock: (card.querySelector('.af-slot-stock') || {}).value || -1,
@@ -754,6 +829,45 @@
       node.addEventListener('change', runKbSearch);
     });
     runKbSearch();
+
+    var sourceNode = document.getElementById('af-slot-source-type');
+    var apPicker = document.getElementById('af-appearance-picker');
+    var kbPicker = document.getElementById('af-kb-picker');
+    var apQ = document.getElementById('af-appearance-picker-q');
+
+    function renderAppearanceResults(r){
+      var node = document.getElementById('af-appearance-picker-results');
+      if(!node){ return; }
+      if(!r.ok){ node.textContent = r.error || 'Search failed'; return; }
+      var items = r.items || [];
+      if(!items.length){ node.innerHTML = '<div class="af-kb-item">Nothing found.</div>'; return; }
+      node.innerHTML = items.map(function(item){
+        var prev = item.preview_image ? ('<img src="'+escapeHtml(item.preview_image)+'" alt="" style="width:32px;height:32px;object-fit:cover;"> ') : '';
+        return '<div class="af-kb-item">'
+          + prev
+          + '<span>#'+escapeHtml(String(item.preset_id))+' '+escapeHtml(item.title || '')+' ['+escapeHtml(item.target_key || '')+'] '+(item.enabled ? '' : '[DISABLED]')+'</span>'
+          + ' <button class="af-appearance-pick-item" data-preset-id="'+escapeHtml(String(item.preset_id))+'" type="button">Добавить</button></div>';
+      }).join('');
+    }
+
+    function runAppearanceSearch(){
+      var q = apQ ? (apQ.value || '') : '';
+      var query = 'misc.php?action=shop_appearance_search&shop=' + encodeURIComponent(shopCode) + '&q=' + encodeURIComponent(q);
+      getJSON(query).then(renderAppearanceResults);
+    }
+
+    if(apQ){
+      apQ.addEventListener('input', function(){ clearTimeout(searchTimer); searchTimer = setTimeout(runAppearanceSearch, 150); });
+    }
+    if(sourceNode){
+      sourceNode.addEventListener('change', function(){
+        var st = sourceNode.value || 'kb';
+        if(kbPicker){ kbPicker.hidden = st !== 'kb'; }
+        if(apPicker){ apPicker.hidden = st !== 'appearance'; }
+        if(st === 'appearance'){ runAppearanceSearch(); }
+      });
+    }
+    runAppearanceSearch();
   }
 
   function loadSlots(shop, catId){
@@ -771,8 +885,13 @@
         var debugInfo = 'debug: rarity_raw = ' + escapeHtml(row.debug_rarity_raw || '')
           + ', rarity_final = ' + escapeHtml(row.debug_rarity_final || rarity)
           + ', data_json_present: ' + escapeHtml(row.debug_data_json_present || 'no');
-        return '<div class="af-slot-card '+escapeHtml(rarityClass)+'" data-slot-id="'+row.slot_id+'">'
-          + '<div><strong>#'+row.slot_id+'</strong> KB#'+row.kb_id+' ('+escapeHtml(row.kb_type || 'item')+') '+icon+'</div>'
+        var sourceType = row.source_type || 'kb';
+        var sourceRefId = row.source_ref_id || 0;
+        var sourceLabel = sourceType === 'appearance'
+          ? ('Appearance#' + sourceRefId + ' [' + (row.appearance_target || 'profile_banner') + ']')
+          : ('KB#' + row.kb_id + ' (' + escapeHtml(row.kb_type || 'item') + ')');
+        return '<div class="af-slot-card '+escapeHtml(rarityClass)+'" data-slot-id="'+row.slot_id+'" data-source-type="'+escapeHtml(sourceType)+'" data-source-ref-id="'+escapeHtml(String(sourceRefId))+'">'
+          + '<div><strong>#'+row.slot_id+'</strong> '+sourceLabel+' '+icon+'</div>'
           + '<div>'+escapeHtml(row.title || '')+'</div>'
           + '<div><strong>Rarity:</strong> <span class="'+escapeHtml(rarityClass)+'">'+escapeHtml(rarityLabel)+'</span></div>'
           + '<div><small>'+debugInfo+'</small></div>'
@@ -801,8 +920,11 @@
     var icon = item && item.icon_url ? item.icon_url : '';
     var qty = item && item.qty ? String(item.qty) : '1';
     var tooltip = item && item.tooltip_text ? item.tooltip_text : '';
+    var sourceType = item && item.source_type ? String(item.source_type) : 'kb';
+    var isVisual = item && item.is_visual_item ? '1' : '0';
+    var isActiveAppearance = item && item.appearance_is_active ? '1' : '0';
     var iconHtml = icon ? ('<img src="' + escapeHtml(icon) + '" alt="' + escapeHtml(title) + '">') : '<span class="af-equip-slot__placeholder">?</span>';
-    return '<div class="af-inventory-slot af-inv-slot rarity-' + escapeHtml(rarity) + '" draggable="true" data-inv-id="' + escapeHtml(invId) + '" data-kb-id="' + escapeHtml(kbId) + '" data-rarity="' + escapeHtml(rarity) + '" data-kind="' + escapeHtml(kind) + '" data-equip-slot="' + escapeHtml(equipSlot) + '" data-is-equippable="' + escapeHtml(canEquip) + '" data-title="' + escapeHtml(title) + '" data-tooltip="' + escapeHtml(tooltip) + '">' + iconHtml + '<span class="af-inventory-qty">' + escapeHtml(qty) + '</span></div>';
+    return '<div class="af-inventory-slot af-inv-slot rarity-' + escapeHtml(rarity) + '" draggable="true" data-inv-id="' + escapeHtml(invId) + '" data-kb-id="' + escapeHtml(kbId) + '" data-rarity="' + escapeHtml(rarity) + '" data-kind="' + escapeHtml(kind) + '" data-source-type="' + escapeHtml(sourceType) + '" data-is-visual-item="' + escapeHtml(isVisual) + '" data-appearance-active="' + escapeHtml(isActiveAppearance) + '" data-equip-slot="' + escapeHtml(equipSlot) + '" data-is-equippable="' + escapeHtml(canEquip) + '" data-title="' + escapeHtml(title) + '" data-tooltip="' + escapeHtml(tooltip) + '">' + iconHtml + '<span class="af-inventory-qty">' + escapeHtml(qty) + '</span></div>';
   }
 
   function renderInventoryGrid(root, inventoryItems){
