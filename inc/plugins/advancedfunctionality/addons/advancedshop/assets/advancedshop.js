@@ -637,39 +637,20 @@
     var pick = e.target.closest('#af-add-slot-btn');
     if(pick){
       e.preventDefault();
-      var picker = document.getElementById('af-kb-picker');
-      var ap = document.getElementById('af-appearance-picker');
-      var sourceTypeNode = document.getElementById('af-slot-source-type');
-      var st = sourceTypeNode ? (sourceTypeNode.value || 'kb') : 'kb';
-      if(picker){ picker.hidden = st !== 'kb' ? true : !picker.hidden; }
-      if(ap){ ap.hidden = st !== 'appearance' ? true : !ap.hidden; }
+      var panel = document.getElementById('af-slot-create-panel');
+      if(panel){ panel.hidden = !panel.hidden; }
       return;
     }
 
     var kbItem = e.target.closest('.af-kb-pick-item');
     if(kbItem){
       e.preventDefault();
-      var root = document.querySelector('.af-manage-slots[data-shop]');
-      if(!root){ return; }
-      var shop6 = root.getAttribute('data-shop') || 'game';
-      var catId = root.getAttribute('data-cat-id') || '0';
-      var status3 = document.getElementById('af-manage-slot-status');
-      post('misc.php?action=shop_manage_slot_create&shop=' + encodeURIComponent(shop6), {
-        cat_id: catId,
-        source_type: 'kb',
-        source_ref_id: kbItem.getAttribute('data-kb-id'),
-        kb_id: kbItem.getAttribute('data-kb-id'),
+      var prefix = kbItem.getAttribute('data-editor-prefix') || 'create';
+      setKbSelection(prefix, {
+        kb_id: kbItem.getAttribute('data-kb-id') || '0',
         kb_type: kbItem.getAttribute('data-kb-type') || 'item',
         kb_key: kbItem.getAttribute('data-kb-key') || '',
-        price: 0,
-        currency: 'credits',
-        stock: -1,
-        limit_per_user: 0,
-        enabled: 1,
-        sortorder: 0
-      }).then(function(r){
-        if(r.ok){ setStatus(status3, 'Slot created', true); loadSlots(shop6, catId); }
-        else { setStatus(status3, r.error || 'Failed to create slot', false); }
+        title: kbItem.getAttribute('data-kb-title') || ''
       });
       return;
     }
@@ -677,24 +658,35 @@
     var apItem = e.target.closest('.af-appearance-pick-item');
     if(apItem){
       e.preventDefault();
-      var rootAp = document.querySelector('.af-manage-slots[data-shop]');
-      if(!rootAp){ return; }
-      var shopAp = rootAp.getAttribute('data-shop') || 'game';
-      var catAp = rootAp.getAttribute('data-cat-id') || '0';
-      var statusAp = document.getElementById('af-manage-slot-status');
-      post('misc.php?action=shop_manage_slot_create&shop=' + encodeURIComponent(shopAp), {
-        cat_id: catAp,
-        source_type: 'appearance',
-        source_ref_id: apItem.getAttribute('data-preset-id'),
-        price: 0,
-        currency: 'credits',
-        stock: -1,
-        limit_per_user: 0,
-        enabled: 1,
-        sortorder: 0
-      }).then(function(r){
-        if(r.ok){ setStatus(statusAp, 'Appearance slot created', true); loadSlots(shopAp, catAp); }
-        else { setStatus(statusAp, r.error || 'Failed to create appearance slot', false); }
+      var prefixAp = apItem.getAttribute('data-editor-prefix') || 'create';
+      setAppearanceSelection(prefixAp, {
+        preset_id: apItem.getAttribute('data-preset-id') || '0',
+        slug: apItem.getAttribute('data-preset-slug') || '',
+        title: apItem.getAttribute('data-preset-title') || '',
+        target_key: apItem.getAttribute('data-target-key') || '',
+        preview_image: apItem.getAttribute('data-preview-image') || '',
+        enabled: apItem.getAttribute('data-enabled') || '0'
+      });
+      return;
+    }
+
+    var createSubmit = e.target.closest('#af-slot-create-submit');
+    if(createSubmit){
+      e.preventDefault();
+      var rootCreate = document.querySelector('.af-manage-slots[data-shop]');
+      if(!rootCreate){ return; }
+      var shopCreate = rootCreate.getAttribute('data-shop') || 'game';
+      var catCreate = rootCreate.getAttribute('data-cat-id') || '0';
+      var statusCreate = document.getElementById('af-manage-slot-status');
+      var payloadCreate = buildSlotPayload('create');
+      payloadCreate.cat_id = catCreate;
+      post('misc.php?action=shop_manage_slot_create&shop=' + encodeURIComponent(shopCreate), payloadCreate).then(function(r){
+        if(r.ok){
+          setStatus(statusCreate, 'Slot created', true);
+          loadSlots(shopCreate, catCreate);
+        } else {
+          setStatus(statusCreate, r.error || 'Failed to create slot', false);
+        }
       });
       return;
     }
@@ -707,17 +699,16 @@
       if(!card || !root2){ return; }
       var shop7 = root2.getAttribute('data-shop') || 'game';
       var status4 = document.getElementById('af-manage-slot-status');
-      post('misc.php?action=shop_manage_slot_update&shop=' + encodeURIComponent(shop7), {
-        slot_id: card.getAttribute('data-slot-id'),
-        source_type: card.getAttribute('data-source-type') || 'kb',
-        source_ref_id: card.getAttribute('data-source-ref-id') || '0',
-        price: (card.querySelector('.af-slot-price') || {}).value || 0,
-        currency: (card.querySelector('.af-slot-currency') || {}).value || 'credits',
-        stock: (card.querySelector('.af-slot-stock') || {}).value || -1,
-        limit_per_user: (card.querySelector('.af-slot-limit') || {}).value || 0,
-        enabled: (card.querySelector('.af-slot-enabled') || {}).checked ? 1 : 0,
-        sortorder: (card.querySelector('.af-slot-sortorder') || {}).value || 0
-      }).then(function(r){ setStatus(status4, r.ok ? 'Slot saved' : (r.error || 'Save failed'), !!r.ok); });
+      var payloadUpdate = buildSlotPayload('slot-' + card.getAttribute('data-slot-id'));
+      payloadUpdate.slot_id = card.getAttribute('data-slot-id');
+      post('misc.php?action=shop_manage_slot_update&shop=' + encodeURIComponent(shop7), payloadUpdate).then(function(r){
+        if(r.ok){
+          setStatus(status4, 'Slot saved', true);
+          loadSlots(shop7, root2.getAttribute('data-cat-id') || '0');
+        } else {
+          setStatus(status4, r.error || 'Save failed', false);
+        }
+      });
       return;
     }
 
@@ -775,22 +766,85 @@
   safeMountInventory(document);
   runHealthCheck();
 
+  function sourcePrefix(id){ return 'af-' + id; }
+  function byId(id){ return document.getElementById(id); }
+  function asBool(value){ return String(value || '') === '1'; }
+
+  function setSourceMode(prefix, sourceType){
+    var normalized = sourceType === 'appearance' ? 'appearance' : 'kb';
+    var sourceNode = byId(sourcePrefix(prefix + '-source-type'));
+    if(sourceNode){ sourceNode.value = normalized; }
+    var kbWrap = byId(sourcePrefix(prefix + '-kb-fields'));
+    var apWrap = byId(sourcePrefix(prefix + '-appearance-fields'));
+    if(kbWrap){ kbWrap.hidden = normalized !== 'kb'; }
+    if(apWrap){ apWrap.hidden = normalized !== 'appearance'; }
+  }
+
+  function setKbSelection(prefix, item){
+    var idNode = byId(sourcePrefix(prefix + '-kb-id'));
+    var typeNode = byId(sourcePrefix(prefix + '-kb-type'));
+    var keyNode = byId(sourcePrefix(prefix + '-kb-key'));
+    var sourceRefNode = byId(sourcePrefix(prefix + '-source-ref-id'));
+    var kbId = item && item.kb_id ? item.kb_id : '0';
+    if(idNode){ idNode.value = kbId; }
+    if(typeNode){ typeNode.value = item && item.kb_type ? item.kb_type : 'item'; }
+    if(keyNode){ keyNode.value = item && item.kb_key ? item.kb_key : ''; }
+    if(sourceRefNode){ sourceRefNode.value = kbId; }
+  }
+
+  function renderAppearanceSummary(prefix, item){
+    var node = byId(sourcePrefix(prefix + '-appearance-summary'));
+    if(!node){ return; }
+    if(!item || (!item.preset_id && !item.slug)){
+      node.innerHTML = 'Preset not selected.';
+      return;
+    }
+    var preview = item.preview_image ? ('<img src="' + escapeHtml(item.preview_image) + '" alt="" style="width:48px;height:48px;object-fit:cover;vertical-align:middle;margin-right:8px;">') : '';
+    var enabledLabel = asBool(item.enabled) ? 'enabled' : 'disabled';
+    node.innerHTML = preview + '<strong>' + escapeHtml(item.title || item.slug || ('#' + String(item.preset_id || '0'))) + '</strong>'
+      + ' <small>slug: ' + escapeHtml(item.slug || '') + ' / target: ' + escapeHtml(item.target_key || '') + ' / ' + enabledLabel + '</small>';
+  }
+
+  function setAppearanceSelection(prefix, item){
+    var idNode = byId(sourcePrefix(prefix + '-preset-id'));
+    var slugNode = byId(sourcePrefix(prefix + '-preset-slug'));
+    var sourceRefNode = byId(sourcePrefix(prefix + '-source-ref-id'));
+    var presetId = item && item.preset_id ? item.preset_id : '0';
+    if(idNode){ idNode.value = presetId; }
+    if(slugNode && item && item.slug){ slugNode.value = item.slug; }
+    if(sourceRefNode){ sourceRefNode.value = presetId; }
+    renderAppearanceSummary(prefix, item || {});
+  }
+
+  function buildSlotPayload(prefix){
+    var sourceTypeNode = byId(sourcePrefix(prefix + '-source-type'));
+    var sourceType = sourceTypeNode ? (sourceTypeNode.value || 'kb') : 'kb';
+    return {
+      source_type: sourceType,
+      source_ref_id: sourceType === 'appearance' ? ((byId(sourcePrefix(prefix + '-preset-id')) || {}).value || (byId(sourcePrefix(prefix + '-source-ref-id')) || {}).value || '0') : ((byId(sourcePrefix(prefix + '-kb-id')) || {}).value || (byId(sourcePrefix(prefix + '-source-ref-id')) || {}).value || '0'),
+      preset_id: (byId(sourcePrefix(prefix + '-preset-id')) || {}).value || '0',
+      preset_slug: (byId(sourcePrefix(prefix + '-preset-slug')) || {}).value || '',
+      kb_id: (byId(sourcePrefix(prefix + '-kb-id')) || {}).value || '0',
+      kb_type: (byId(sourcePrefix(prefix + '-kb-type')) || {}).value || 'item',
+      kb_key: (byId(sourcePrefix(prefix + '-kb-key')) || {}).value || '',
+      price: (byId(sourcePrefix(prefix + '-price')) || {}).value || 0,
+      currency: (byId(sourcePrefix(prefix + '-currency')) || {}).value || 'credits',
+      stock: (byId(sourcePrefix(prefix + '-stock')) || {}).value || -1,
+      limit_per_user: (byId(sourcePrefix(prefix + '-limit')) || {}).value || 0,
+      enabled: (byId(sourcePrefix(prefix + '-enabled')) || {}).checked ? 1 : 0,
+      sortorder: (byId(sourcePrefix(prefix + '-sortorder')) || {}).value || 0
+    };
+  }
+
   var slotsRoot = document.querySelector('.af-manage-slots[data-shop]');
   if(slotsRoot){
     var shopCode = slotsRoot.getAttribute('data-shop') || 'game';
     var catId = slotsRoot.getAttribute('data-cat-id') || '0';
-    loadSlots(shopCode, catId);
-
-    var kbQ = document.getElementById('af-kb-picker-q');
-    var kbType = document.getElementById('af-kb-picker-type');
-    var kbRarity = document.getElementById('af-kb-picker-rarity');
-    var kbItemType = document.getElementById('af-kb-picker-item-type');
-    var kbSpellLevel = document.getElementById('af-kb-picker-spell-level');
-    var kbSpellSchool = document.getElementById('af-kb-picker-spell-school');
+    var createPanel = byId('af-slot-create-panel');
     var searchTimer = null;
 
-    function renderKbResults(r){
-      var resNode = document.getElementById('af-kb-picker-results');
+    function renderKbResults(r, prefix){
+      var resNode = byId(sourcePrefix(prefix + '-kb-results')) || byId('af-kb-picker-results');
       if(!resNode){ return; }
       if(!r.ok){ resNode.textContent = r.error || 'Search failed'; return; }
       var items = r.items || [];
@@ -800,43 +854,32 @@
       }
       resNode.innerHTML = items.map(function(item){
         var desc = item.short ? ('<small>' + escapeHtml(item.short) + '</small>') : '';
-        var price = (item.price_major && item.price_minor > 0) ? ('<small>' + escapeHtml(item.price_major) + ' ' + escapeHtml(item.currency || 'credits') + '</small>') : '';
         return '<div class="af-kb-item">'
           + '<span>#'+item.kb_id+' '+escapeHtml(item.title || '')+' ['+escapeHtml(item.kb_type || 'item')+'] ['+escapeHtml(item.rarity || 'common')+']</span>'
-          + desc + price
-          + ' <button class="af-kb-pick-item" data-kb-id="'+item.kb_id+'" data-kb-type="'+escapeHtml(item.kb_type || 'item')+'" data-kb-key="'+escapeHtml(item.kb_key || '')+'" type="button">Добавить</button></div>';
+          + desc
+          + ' <button class="af-kb-pick-item" data-editor-prefix="'+escapeHtml(prefix)+'" data-kb-id="'+item.kb_id+'" data-kb-type="'+escapeHtml(item.kb_type || 'item')+'" data-kb-key="'+escapeHtml(item.kb_key || '')+'" data-kb-title="'+escapeHtml(item.title || '')+'" type="button">Выбрать</button></div>';
       }).join('');
     }
 
-    function runKbSearch(){
-      var q = kbQ ? (kbQ.value || '') : '';
+    function runKbSearch(prefix){
+      var qNode = byId(sourcePrefix(prefix + '-kb-q')) || byId('af-kb-picker-q');
+      var typeNode = byId(sourcePrefix(prefix + '-kb-type-filter')) || byId('af-kb-picker-type');
+      var rarityNode = byId(sourcePrefix(prefix + '-kb-rarity')) || byId('af-kb-picker-rarity');
+      var itemTypeNode = byId(sourcePrefix(prefix + '-kb-item-type')) || byId('af-kb-picker-item-type');
+      var spellLevelNode = byId(sourcePrefix(prefix + '-kb-spell-level')) || byId('af-kb-picker-spell-level');
+      var spellSchoolNode = byId(sourcePrefix(prefix + '-kb-spell-school')) || byId('af-kb-picker-spell-school');
       var query = 'misc.php?action=shop_kb_search&shop=' + encodeURIComponent(shopCode)
-        + '&q=' + encodeURIComponent(q)
-        + '&kb_type=' + encodeURIComponent(kbType ? (kbType.value || 'all') : 'all')
-        + '&rarity=' + encodeURIComponent(kbRarity ? (kbRarity.value || '') : '')
-        + '&item_type=' + encodeURIComponent(kbItemType ? (kbItemType.value || '') : '')
-        + '&spell_level=' + encodeURIComponent(kbSpellLevel ? (kbSpellLevel.value || '') : '')
-        + '&spell_school=' + encodeURIComponent(kbSpellSchool ? (kbSpellSchool.value || '') : '');
-      getJSON(query).then(renderKbResults);
+        + '&q=' + encodeURIComponent(qNode ? (qNode.value || '') : '')
+        + '&kb_type=' + encodeURIComponent(typeNode ? (typeNode.value || 'all') : 'all')
+        + '&rarity=' + encodeURIComponent(rarityNode ? (rarityNode.value || '') : '')
+        + '&item_type=' + encodeURIComponent(itemTypeNode ? (itemTypeNode.value || '') : '')
+        + '&spell_level=' + encodeURIComponent(spellLevelNode ? (spellLevelNode.value || '') : '')
+        + '&spell_school=' + encodeURIComponent(spellSchoolNode ? (spellSchoolNode.value || '') : '');
+      getJSON(query).then(function(r){ renderKbResults(r, prefix); });
     }
 
-    [kbQ, kbType, kbRarity, kbItemType, kbSpellLevel, kbSpellSchool].forEach(function(node){
-      if(!node){ return; }
-      node.addEventListener('input', function(){
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(runKbSearch, 150);
-      });
-      node.addEventListener('change', runKbSearch);
-    });
-    runKbSearch();
-
-    var sourceNode = document.getElementById('af-slot-source-type');
-    var apPicker = document.getElementById('af-appearance-picker');
-    var kbPicker = document.getElementById('af-kb-picker');
-    var apQ = document.getElementById('af-appearance-picker-q');
-
-    function renderAppearanceResults(r){
-      var node = document.getElementById('af-appearance-picker-results');
+    function renderAppearanceResults(r, prefix){
+      var node = byId(sourcePrefix(prefix + '-appearance-results')) || byId('af-appearance-picker-results');
       if(!node){ return; }
       if(!r.ok){ node.textContent = r.error || 'Search failed'; return; }
       var items = r.items || [];
@@ -845,29 +888,94 @@
         var prev = item.preview_image ? ('<img src="'+escapeHtml(item.preview_image)+'" alt="" style="width:32px;height:32px;object-fit:cover;"> ') : '';
         return '<div class="af-kb-item">'
           + prev
-          + '<span>#'+escapeHtml(String(item.preset_id))+' '+escapeHtml(item.title || '')+' ['+escapeHtml(item.target_key || '')+'] '+(item.enabled ? '' : '[DISABLED]')+'</span>'
-          + ' <button class="af-appearance-pick-item" data-preset-id="'+escapeHtml(String(item.preset_id))+'" type="button">Добавить</button></div>';
+          + '<span>#'+escapeHtml(String(item.preset_id))+' '+escapeHtml(item.title || '')+' <code>'+escapeHtml(item.slug || '')+'</code> ['+escapeHtml(item.target_key || '')+'] '+(item.enabled ? '' : '[DISABLED]')+'</span>'
+          + ' <button class="af-appearance-pick-item" data-editor-prefix="'+escapeHtml(prefix)+'" data-preset-id="'+escapeHtml(String(item.preset_id))+'" data-preset-slug="'+escapeHtml(item.slug || '')+'" data-preset-title="'+escapeHtml(item.title || '')+'" data-target-key="'+escapeHtml(item.target_key || '')+'" data-preview-image="'+escapeHtml(item.preview_image || '')+'" data-enabled="'+escapeHtml(String(item.enabled ? 1 : 0))+'" type="button">Выбрать</button></div>';
       }).join('');
     }
 
-    function runAppearanceSearch(){
-      var q = apQ ? (apQ.value || '') : '';
-      var query = 'misc.php?action=shop_appearance_search&shop=' + encodeURIComponent(shopCode) + '&q=' + encodeURIComponent(q);
-      getJSON(query).then(renderAppearanceResults);
+    function runAppearanceSearch(prefix){
+      var qNode = byId(sourcePrefix(prefix + '-appearance-q')) || byId('af-appearance-picker-q');
+      var query = 'misc.php?action=shop_appearance_search&shop=' + encodeURIComponent(shopCode) + '&q=' + encodeURIComponent(qNode ? (qNode.value || '') : '');
+      getJSON(query).then(function(r){ renderAppearanceResults(r, prefix); });
     }
 
-    if(apQ){
-      apQ.addEventListener('input', function(){ clearTimeout(searchTimer); searchTimer = setTimeout(runAppearanceSearch, 150); });
-    }
-    if(sourceNode){
-      sourceNode.addEventListener('change', function(){
-        var st = sourceNode.value || 'kb';
-        if(kbPicker){ kbPicker.hidden = st !== 'kb'; }
-        if(apPicker){ apPicker.hidden = st !== 'appearance'; }
-        if(st === 'appearance'){ runAppearanceSearch(); }
+    function bindEditor(prefix){
+      var sourceNode = byId(sourcePrefix(prefix + '-source-type'));
+      if(sourceNode){
+        sourceNode.addEventListener('change', function(){
+          var st = sourceNode.value || 'kb';
+          setSourceMode(prefix, st);
+          if(st === 'appearance'){ runAppearanceSearch(prefix); }
+          else { runKbSearch(prefix); }
+        });
+      }
+      var apQ = byId(sourcePrefix(prefix + '-appearance-q'));
+      if(apQ){
+        apQ.addEventListener('input', function(){ clearTimeout(searchTimer); searchTimer = setTimeout(function(){ runAppearanceSearch(prefix); }, 150); });
+      }
+      ['kb-q','kb-type-filter','kb-rarity','kb-item-type','kb-spell-level','kb-spell-school'].forEach(function(suffix){
+        var node = byId(sourcePrefix(prefix + '-' + suffix));
+        if(!node){ return; }
+        node.addEventListener('input', function(){ clearTimeout(searchTimer); searchTimer = setTimeout(function(){ runKbSearch(prefix); }, 150); });
+        node.addEventListener('change', function(){ runKbSearch(prefix); });
       });
+      setSourceMode(prefix, sourceNode ? (sourceNode.value || 'kb') : 'kb');
     }
-    runAppearanceSearch();
+
+    bindEditor('create');
+    setKbSelection('create', {kb_id:'0',kb_type:'item',kb_key:''});
+    setAppearanceSelection('create', {});
+    runKbSearch('create');
+    runAppearanceSearch('create');
+    loadSlots(shopCode, catId);
+  }
+
+  function slotEditorHtml(prefix, row){
+    var sourceType = row.source_type || 'kb';
+    var appearanceSummary = row.source_type === 'appearance'
+      ? ((row.appearance_preview_image ? '<img src="'+escapeHtml(row.appearance_preview_image)+'" alt="" style="width:48px;height:48px;object-fit:cover;vertical-align:middle;margin-right:8px;">' : '')
+        + '<strong>' + escapeHtml(row.appearance_preset_title || row.title || '') + '</strong>'
+        + ' <small>slug: ' + escapeHtml(row.appearance_preset_slug || '') + ' / target: ' + escapeHtml(row.appearance_target || '') + ' / ' + (row.appearance_enabled ? 'enabled' : 'disabled') + '</small>')
+      : 'Preset not selected.';
+    return '<div class="af-slot-card '+escapeHtml(row.rarity_class || 'af-rarity-common')+'" data-slot-id="'+row.slot_id+'">'
+      + '<div><strong>#'+row.slot_id+'</strong> — '+escapeHtml(row.title || '')+'</div>'
+      + '<div><label>Source <select id="'+sourcePrefix(prefix+'-source-type')+'"><option value="kb"'+(sourceType === 'kb' ? ' selected' : '')+'>KB</option><option value="appearance"'+(sourceType === 'appearance' ? ' selected' : '')+'>Appearance</option></select><input type="hidden" id="'+sourcePrefix(prefix+'-source-ref-id')+'" value="'+escapeHtml(String(row.source_ref_id || row.kb_id || 0))+'"></label></div>'
+      + '<div><small>' + (sourceType === 'appearance'
+          ? ('Appearance preset #' + escapeHtml(String(row.source_ref_id || 0)) + ' / slug ' + escapeHtml(row.appearance_preset_slug || '') + ' / target ' + escapeHtml(row.appearance_target || ''))
+          : ('KB #' + escapeHtml(String(row.kb_id || 0)) + ' / ' + escapeHtml(row.kb_type || 'item') + ' / ' + escapeHtml(row.kb_key || '')))
+      + '</small></div>'
+      + '<div class="af-kb-picker-filters">'
+      + '<label>Price <input type="number" id="'+sourcePrefix(prefix+'-price')+'" value="'+escapeHtml(row.price_major || '0.00')+'" min="0" step="0.01"></label>'
+      + '<label>Currency <input type="text" id="'+sourcePrefix(prefix+'-currency')+'" value="'+escapeHtml(row.currency || 'credits')+'"></label>'
+      + '<label>Stock <input type="number" id="'+sourcePrefix(prefix+'-stock')+'" value="'+escapeHtml(String(row.stock == null ? -1 : row.stock))+'"></label>'
+      + '<label>Limit/user <input type="number" id="'+sourcePrefix(prefix+'-limit')+'" value="'+escapeHtml(String(row.limit_per_user || 0))+'" min="0"></label>'
+      + '<label>Sort <input type="number" id="'+sourcePrefix(prefix+'-sortorder')+'" value="'+escapeHtml(String(row.sortorder || 0))+'"></label>'
+      + '<label><input type="checkbox" id="'+sourcePrefix(prefix+'-enabled')+'" '+(row.enabled ? 'checked' : '')+'> Enabled</label>'
+      + '</div>'
+      + '<div id="'+sourcePrefix(prefix+'-kb-fields')+'"'+(sourceType === 'kb' ? '' : ' hidden')+'>'
+      + '<div class="af-kb-picker-filters">'
+      + '<label>KB ID <input type="number" id="'+sourcePrefix(prefix+'-kb-id')+'" value="'+escapeHtml(String(row.kb_id || 0))+'"></label>'
+      + '<label>KB type <input type="text" id="'+sourcePrefix(prefix+'-kb-type')+'" value="'+escapeHtml(row.kb_type || 'item')+'"></label>'
+      + '<label>KB key <input type="text" id="'+sourcePrefix(prefix+'-kb-key')+'" value="'+escapeHtml(row.kb_key || '')+'"></label>'
+      + '</div>'
+      + '<div class="af-kb-picker-filters">'
+      + '<label>Type <select id="'+sourcePrefix(prefix+'-kb-type-filter')+'"><option value="all">All</option><option value="item">Item</option><option value="spell">Spell / Ritual</option></select></label>'
+      + '<label>Search <input type="text" id="'+sourcePrefix(prefix+'-kb-q')+'" placeholder="Search by title or key/slug"></label>'
+      + '<label>Rarity <input type="text" id="'+sourcePrefix(prefix+'-kb-rarity')+'" placeholder="rare, uncommon..."></label>'
+      + '<label>Item type <input type="text" id="'+sourcePrefix(prefix+'-kb-item-type')+'" placeholder="weapon, armor..."></label>'
+      + '<label>Spell level <input type="text" id="'+sourcePrefix(prefix+'-kb-spell-level')+'" placeholder="1,2,3..."></label>'
+      + '<label>Spell school <input type="text" id="'+sourcePrefix(prefix+'-kb-spell-school')+'" placeholder="evocation..."></label>'
+      + '</div><div id="'+sourcePrefix(prefix+'-kb-results')+'"></div></div>'
+      + '<div id="'+sourcePrefix(prefix+'-appearance-fields')+'"'+(sourceType === 'appearance' ? '' : ' hidden')+'>'
+      + '<div class="af-kb-picker-filters">'
+      + '<label>Preset ID <input type="number" id="'+sourcePrefix(prefix+'-preset-id')+'" value="'+escapeHtml(String(row.appearance_preset_id || row.source_ref_id || 0))+'"></label>'
+      + '<label>Preset slug <input type="text" id="'+sourcePrefix(prefix+'-preset-slug')+'" value="'+escapeHtml(row.appearance_preset_slug || '')+'" placeholder="preset-slug"></label>'
+      + '</div>'
+      + '<div id="'+sourcePrefix(prefix+'-appearance-summary')+'" class="af-slot-source-summary">'+appearanceSummary+'</div>'
+      + '<div class="af-kb-picker-filters"><label>Search <input type="text" id="'+sourcePrefix(prefix+'-appearance-q')+'" placeholder="Search by title, description or slug"></label></div>'
+      + '<div id="'+sourcePrefix(prefix+'-appearance-results')+'"></div></div>'
+      + '<div><button type="button" class="af-shop-btn af-slot-save">Save</button> <button type="button" class="af-shop-btn af-slot-delete">Delete</button></div>'
+      + '</div>';
   }
 
   function loadSlots(shop, catId){
@@ -877,33 +985,29 @@
       if(!r.ok){ body.innerHTML = '<div>'+escapeHtml(r.error || 'Failed to load slots')+'</div>'; return; }
       var rows = r.rows || [];
       if(!rows.length){ body.innerHTML = '<div>No slots yet</div>'; return; }
-      body.innerHTML = rows.map(function(row){
-        var icon = row.icon_url ? '<img src="'+escapeHtml(row.icon_url)+'" alt="" style="width:32px;height:32px;">' : '';
-        var rarity = row.rarity || 'common';
-        var rarityClass = row.rarity_class || ('af-rarity-' + rarity);
-        var rarityLabel = row.rarity_label || rarity;
-        var debugInfo = 'debug: rarity_raw = ' + escapeHtml(row.debug_rarity_raw || '')
-          + ', rarity_final = ' + escapeHtml(row.debug_rarity_final || rarity)
-          + ', data_json_present: ' + escapeHtml(row.debug_data_json_present || 'no');
-        var sourceType = row.source_type || 'kb';
-        var sourceRefId = row.source_ref_id || 0;
-        var sourceLabel = sourceType === 'appearance'
-          ? ('Appearance#' + sourceRefId + ' [' + (row.appearance_target || 'profile_banner') + ']')
-          : ('KB#' + row.kb_id + ' (' + escapeHtml(row.kb_type || 'item') + ')');
-        return '<div class="af-slot-card '+escapeHtml(rarityClass)+'" data-slot-id="'+row.slot_id+'" data-source-type="'+escapeHtml(sourceType)+'" data-source-ref-id="'+escapeHtml(String(sourceRefId))+'">'
-          + '<div><strong>#'+row.slot_id+'</strong> '+sourceLabel+' '+icon+'</div>'
-          + '<div>'+escapeHtml(row.title || '')+'</div>'
-          + '<div><strong>Rarity:</strong> <span class="'+escapeHtml(rarityClass)+'">'+escapeHtml(rarityLabel)+'</span></div>'
-          + '<div><small>'+debugInfo+'</small></div>'
-          + '<label>Price <input type="number" class="af-slot-price" value="'+escapeHtml(row.price_major || '0.00')+'" min="0" step="0.01"></label>'
-          + '<label>Currency <input type="text" class="af-slot-currency" value="'+escapeHtml(row.currency || 'credits')+'"></label>'
-          + '<label>Stock <input type="number" class="af-slot-stock" value="'+(row.stock==null?-1:row.stock)+'"></label>'
-          + '<label>Limit/user <input type="number" class="af-slot-limit" value="'+(row.limit_per_user||0)+'" min="0"></label>'
-          + '<label>Sort <input type="number" class="af-slot-sortorder" value="'+(row.sortorder||0)+'"></label>'
-          + '<label><input type="checkbox" class="af-slot-enabled" '+(row.enabled ? 'checked' : '')+'> Enabled</label>'
-          + '<div><button type="button" class="af-shop-btn af-slot-save">Save</button> <button type="button" class="af-shop-btn af-slot-delete">Delete</button></div>'
-          + '</div>';
-      }).join('');
+      body.innerHTML = rows.map(function(row){ return slotEditorHtml('slot-' + row.slot_id, row); }).join('');
+      rows.forEach(function(row){
+        var prefix = 'slot-' + row.slot_id;
+        var sourceNode = byId(sourcePrefix(prefix + '-source-type'));
+        if(sourceNode){
+          sourceNode.addEventListener('change', function(){
+            var current = sourceNode.value || 'kb';
+            setSourceMode(prefix, current);
+            if(current === 'appearance'){ runAppearanceSearch(prefix); }
+            else { runKbSearch(prefix); }
+          });
+        }
+        ['kb-q','kb-type-filter','kb-rarity','kb-item-type','kb-spell-level','kb-spell-school'].forEach(function(suffix){
+          var node = byId(sourcePrefix(prefix + '-' + suffix));
+          if(!node){ return; }
+          node.addEventListener('input', function(){ runKbSearch(prefix); });
+          node.addEventListener('change', function(){ runKbSearch(prefix); });
+        });
+        var apNode = byId(sourcePrefix(prefix + '-appearance-q'));
+        if(apNode){ apNode.addEventListener('input', function(){ runAppearanceSearch(prefix); }); }
+        if((row.source_type || 'kb') === 'appearance'){ runAppearanceSearch(prefix); }
+        else { runKbSearch(prefix); }
+      });
     });
   }
 

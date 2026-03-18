@@ -8,58 +8,107 @@
 
   <div class="af-manage-slots-toolbar">
     <a class="button" href="{$manage_url}">← Back to manage</a>
-    <a class="button" href="{$manage_url}">← Back to categories</a>
-    <button type="button" class="af-shop-btn" id="af-add-slot-btn">Add Slot</button>
+    <button type="button" class="af-shop-btn" id="af-add-slot-btn">Показать форму слота</button>
     <span id="af-manage-slot-status" aria-live="polite"></span>
   </div>
 
-  <div id="af-manage-slots-body" class="af-manage-slots-grid"></div>
-
-  <div id="af-kb-picker" hidden>
-    <h3>Добавить из KB</h3>
+  <div id="af-slot-create-panel" class="af-slot-editor" hidden>
+    <h3>Добавить слот</h3>
+    <input type="hidden" id="af-create-source-ref-id" value="0">
     <div class="af-kb-picker-filters">
-      <label>Type
-        <select id="af-kb-picker-type">
-          <option value="all">All</option>
-          <option value="item">Item</option>
-          <option value="spell">Spell / Ritual</option>
+      <label>Источник
+        <select id="af-create-source-type">
+          <option value="kb">KB</option>
+          <option value="appearance">Appearance</option>
         </select>
       </label>
-      <label>Search
-        <input type="text" id="af-kb-picker-q" placeholder="Search by title or key/slug">
+      <label>Price
+        <input type="number" id="af-create-price" value="0" min="0" step="0.01">
       </label>
-      <label>Rarity
-        <input type="text" id="af-kb-picker-rarity" placeholder="rare, uncommon...">
+      <label>Currency
+        <input type="text" id="af-create-currency" value="credits">
       </label>
-      <label>Item type
-        <input type="text" id="af-kb-picker-item-type" placeholder="weapon, armor...">
+      <label>Stock
+        <input type="number" id="af-create-stock" value="-1">
       </label>
-      <label>Spell level
-        <input type="text" id="af-kb-picker-spell-level" placeholder="1,2,3...">
+      <label>Limit / user
+        <input type="number" id="af-create-limit" value="0" min="0">
       </label>
-      <label>Spell school
-        <input type="text" id="af-kb-picker-spell-school" placeholder="evocation...">
+      <label>Enabled
+        <input type="checkbox" id="af-create-enabled" checked>
       </label>
-    </div>
-    <div id="af-kb-picker-results"></div>
-  </div>
-  <div class="af-kb-picker-filters" style="margin-top:10px;">
-    <label>Источник
-      <select id="af-slot-source-type">
-        <option value="kb">KB</option>
-        <option value="appearance">Appearance (profile_banner)</option>
-      </select>
-    </label>
-  </div>
-
-  <div id="af-appearance-picker" hidden>
-    <h3>Добавить пресет Appearance</h3>
-    <div class="af-kb-picker-filters">
-      <label>Search
-        <input type="text" id="af-appearance-picker-q" placeholder="Search by title/description">
+      <label>Sortorder
+        <input type="number" id="af-create-sortorder" value="0">
       </label>
     </div>
-    <div id="af-appearance-picker-results"></div>
+
+    <div id="af-create-kb-fields">
+      <h4>Выбор KB</h4>
+      <div class="af-kb-picker-filters">
+        <label>Selected KB ID
+          <input type="number" id="af-create-kb-id" value="0" min="0">
+        </label>
+        <label>KB type
+          <input type="text" id="af-create-kb-type" value="item">
+        </label>
+        <label>KB key
+          <input type="text" id="af-create-kb-key" value="">
+        </label>
+      </div>
+      <div id="af-kb-picker">
+        <h4>KB picker</h4>
+        <div class="af-kb-picker-filters">
+          <label>Type
+            <select id="af-kb-picker-type">
+              <option value="all">All</option>
+              <option value="item">Item</option>
+              <option value="spell">Spell / Ritual</option>
+            </select>
+          </label>
+          <label>Search
+            <input type="text" id="af-kb-picker-q" placeholder="Search by title or key/slug">
+          </label>
+          <label>Rarity
+            <input type="text" id="af-kb-picker-rarity" placeholder="rare, uncommon...">
+          </label>
+          <label>Item type
+            <input type="text" id="af-kb-picker-item-type" placeholder="weapon, armor...">
+          </label>
+          <label>Spell level
+            <input type="text" id="af-kb-picker-spell-level" placeholder="1,2,3...">
+          </label>
+          <label>Spell school
+            <input type="text" id="af-kb-picker-spell-school" placeholder="evocation...">
+          </label>
+        </div>
+        <div id="af-kb-picker-results"></div>
+      </div>
+    </div>
+
+    <div id="af-create-appearance-fields" hidden>
+      <h4>Выбор appearance preset</h4>
+      <div class="af-kb-picker-filters">
+        <label>Selected preset ID
+          <input type="number" id="af-create-preset-id" value="0" min="0">
+        </label>
+        <label>Fallback preset slug
+          <input type="text" id="af-create-preset-slug" value="" placeholder="preset-slug">
+        </label>
+      </div>
+      <div id="af-create-appearance-summary" class="af-slot-source-summary">Preset not selected.</div>
+      <div id="af-appearance-picker">
+        <h4>Appearance picker</h4>
+        <div class="af-kb-picker-filters">
+          <label>Search
+            <input type="text" id="af-appearance-picker-q" placeholder="Search by title, description or slug">
+          </label>
+        </div>
+        <div id="af-appearance-picker-results"></div>
+      </div>
+    </div>
+
+    <p><button type="button" class="af-shop-btn" id="af-slot-create-submit">Создать слот</button></p>
   </div>
 
+  <div id="af-manage-slots-body" class="af-manage-slots-grid"></div>
 </div>
