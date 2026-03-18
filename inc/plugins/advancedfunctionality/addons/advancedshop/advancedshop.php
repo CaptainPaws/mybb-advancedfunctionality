@@ -87,9 +87,93 @@ function af_advancedshop_appearance_presets_table(): string
     return '';
 }
 
+function af_advancedshop_appearance_supported_targets(): array
+{
+    static $targets = null;
+
+    if (is_array($targets)) {
+        return $targets;
+    }
+
+    $targets = [
+        'apui_theme_pack' => ['group' => 'theme_pack', 'label' => 'Общие пак-темы'],
+        'apui_profile_pack' => ['group' => 'profile_pack', 'label' => 'Профили'],
+        'apui_postbit_pack' => ['group' => 'postbit_pack', 'label' => 'Постбиты'],
+        'apui_fragment_pack' => ['group' => 'fragment_pack', 'label' => 'Разное'],
+        'apui_fragment_pack:profile_body' => ['group' => 'fragment_pack', 'label' => 'Разное · Профиль: фон body'],
+        'apui_fragment_pack:profile_banner' => ['group' => 'fragment_pack', 'label' => 'Разное · Профиль: баннер'],
+        'apui_fragment_pack:profile_avatar_frame' => ['group' => 'fragment_pack', 'label' => 'Разное · Профиль: рамка аватара'],
+        'apui_fragment_pack:postbit_author' => ['group' => 'fragment_pack', 'label' => 'Разное · Постбит: фон автора'],
+        'apui_fragment_pack:postbit_name' => ['group' => 'fragment_pack', 'label' => 'Разное · Постбит: блок никнейма'],
+        'apui_fragment_pack:postbit_plaque' => ['group' => 'fragment_pack', 'label' => 'Разное · Постбит: плашка'],
+        'apui_fragment_pack:postbit_avatar_frame' => ['group' => 'fragment_pack', 'label' => 'Разное · Постбит: рамка аватара'],
+    ];
+
+    return $targets;
+}
+
+function af_advancedshop_appearance_supported_target_keys(): array
+{
+    return array_keys(af_advancedshop_appearance_supported_targets());
+}
+
+function af_advancedshop_appearance_group_for_target(string $targetKey): string
+{
+    $targetKey = mb_strtolower(trim($targetKey));
+    $targets = af_advancedshop_appearance_supported_targets();
+
+    if (isset($targets[$targetKey]['group'])) {
+        return (string)$targets[$targetKey]['group'];
+    }
+
+    if (strpos($targetKey, 'apui_fragment_pack:') === 0) {
+        return 'fragment_pack';
+    }
+
+    return 'unsupported';
+}
+
+function af_advancedshop_appearance_target_label(string $targetKey): string
+{
+    $targetKey = mb_strtolower(trim($targetKey));
+    $targets = af_advancedshop_appearance_supported_targets();
+
+    if (isset($targets[$targetKey]['label'])) {
+        return (string)$targets[$targetKey]['label'];
+    }
+
+    return $targetKey === '' ? 'Unknown target' : $targetKey;
+}
+
+function af_advancedshop_appearance_supported_group_labels(): array
+{
+    return [
+        'all' => 'Все группы',
+        'theme_pack' => 'Общие пак-темы',
+        'profile_pack' => 'Профили',
+        'postbit_pack' => 'Постбиты',
+        'fragment_pack' => 'Разное',
+    ];
+}
+
+function af_advancedshop_appearance_validate_target(string $targetKey): string
+{
+    $targetKey = mb_strtolower(trim($targetKey));
+    if ($targetKey === '') {
+        throw new RuntimeException('Appearance preset has empty target_key.');
+    }
+
+    if (!in_array($targetKey, af_advancedshop_appearance_supported_target_keys(), true)) {
+        $supported = implode(', ', af_advancedshop_appearance_supported_target_keys());
+        throw new RuntimeException('Appearance target not supported: ' . $targetKey . '. Supported targets: ' . $supported . '.');
+    }
+
+    return $targetKey;
+}
+
 function af_advancedshop_appearance_active_target(): string
 {
-    return 'profile_banner';
+    return 'apui_fragment_pack:profile_banner';
 }
 
 function af_advancedshop_appearance_fetch_preset(int $presetId): array
@@ -157,10 +241,10 @@ function af_advancedshop_appearance_resolve_preset(int $sourceRefId = 0, int $pr
         throw new RuntimeException('Appearance preset not found. Проверьте preset ID или slug.');
     }
 
-    $targetKey = mb_strtolower(trim((string)($resolved['target_key'] ?? '')));
-    if ($targetKey !== af_advancedshop_appearance_active_target()) {
-        throw new RuntimeException('Only profile_banner target is supported in MVP.');
-    }
+    $targetKey = af_advancedshop_appearance_validate_target((string)($resolved['target_key'] ?? ''));
+    $resolved['target_key'] = $targetKey;
+    $resolved['appearance_group'] = af_advancedshop_appearance_group_for_target($targetKey);
+    $resolved['target_label'] = af_advancedshop_appearance_target_label($targetKey);
 
     if ((int)($resolved['enabled'] ?? 0) !== 1) {
         throw new RuntimeException('Appearance preset is disabled and cannot be sold.');
@@ -891,6 +975,11 @@ function af_advancedshop_redirect_legacy_manage_action(string $action): void
         return;
     }
 
+    $mode = trim((string)$mybb->get_input('do'));
+    if ($mode !== '') {
+        return;
+    }
+
     $legacyActions = [
         'shop_manage',
         'shop_manage_categories',
@@ -1353,7 +1442,9 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
             $slot_title_raw = trim((string)($preset['title'] ?? ''));
             $slot_short_raw = trim((string)($preset['description'] ?? ''));
             $slot_icon_raw = trim((string)($preset['preview_image'] ?? ''));
-            if (mb_strtolower((string)($preset['target_key'] ?? '')) !== af_advancedshop_appearance_active_target()) {
+            try {
+                $preset['target_key'] = af_advancedshop_appearance_validate_target((string)($preset['target_key'] ?? ''));
+            } catch (RuntimeException $e) {
                 continue;
             }
             if ((int)($preset['enabled'] ?? 0) !== 1) {
@@ -2102,9 +2193,7 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
         if (!$preset || (int)($preset['enabled'] ?? 0) !== 1) {
             throw new RuntimeException('Appearance preset недоступен.');
         }
-        if (mb_strtolower((string)($preset['target_key'] ?? '')) !== af_advancedshop_appearance_active_target()) {
-            throw new RuntimeException('Для MVP поддерживается только target profile_banner.');
-        }
+        $preset['target_key'] = af_advancedshop_appearance_validate_target((string)($preset['target_key'] ?? ''));
 
         $settingsRaw = (string)($preset['settings_json'] ?? '');
         $metaPayload = [
@@ -2119,7 +2208,7 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
 
         $payload = [
             'slot' => 'customization',
-            'subtype' => 'profile_banner',
+            'subtype' => str_replace(':', '__', (string)$preset['target_key']),
             'kb_type' => 'appearance',
             'kb_key' => 'appearance:' . (int)$preset['id'],
             'qty' => max(1, (int)($item['qty'] ?? 1)),
@@ -2666,6 +2755,8 @@ function af_advancedshop_manage_slots(): void
                 $meta['ui']['icon_url'] = (string)($appearancePreset['preview_image'] ?? ($meta['ui']['icon_url'] ?? ''));
             }
 
+            $appearanceTargetKey = (string)($appearancePreset['target_key'] ?? '');
+
             $rows[] = [
                 'slot_id' => (int)$r['slot_id'],
                 'source_type' => $sourceType,
@@ -2673,7 +2764,10 @@ function af_advancedshop_manage_slots(): void
                 'kb_id' => (int)$r['kb_id'],
                 'kb_type' => (string)($r['slot_kb_type'] ?? ($r['kb_type'] ?? 'item')),
                 'kb_key' => (string)($r['slot_kb_key'] ?? ($r['kb_key'] ?? '')),
-                'appearance_target' => (string)($appearancePreset['target_key'] ?? ''),
+                'appearance_target' => $appearanceTargetKey,
+                'appearance_target_label' => af_advancedshop_appearance_target_label($appearanceTargetKey),
+                'appearance_group' => af_advancedshop_appearance_group_for_target($appearanceTargetKey),
+                'appearance_group_label' => (string)(af_advancedshop_appearance_supported_group_labels()[af_advancedshop_appearance_group_for_target($appearanceTargetKey)] ?? af_advancedshop_appearance_group_for_target($appearanceTargetKey)),
                 'appearance_preset_id' => (int)($appearancePreset['id'] ?? 0),
                 'appearance_preset_slug' => (string)($appearancePreset['slug'] ?? ''),
                 'appearance_preset_title' => (string)($appearancePreset['title'] ?? ''),
@@ -2863,28 +2957,60 @@ function af_advancedshop_appearance_search(): void
     }
 
     $q = trim((string)$mybb->get_input('q'));
-    $where = ["target_key='" . $db->escape_string(af_advancedshop_appearance_active_target()) . "'"];
+    $group = mb_strtolower(trim((string)$mybb->get_input('group')));
+    if ($group === '') {
+        $group = 'all';
+    }
+
+    $targetSql = [];
+    foreach (af_advancedshop_appearance_supported_target_keys() as $targetKey) {
+        $targetSql[] = "'" . $db->escape_string($targetKey) . "'";
+    }
+
+    $where = ['target_key IN (' . implode(', ', $targetSql) . ')'];
     if ($q !== '') {
         $like = $db->escape_string_like($q);
         $where[] = "(title LIKE '%" . $like . "%' OR description LIKE '%" . $like . "%' OR slug LIKE '%" . $like . "%')";
+    }
+    if ($group !== '' && $group !== 'all') {
+        $groupTargets = [];
+        foreach (af_advancedshop_appearance_supported_target_keys() as $targetKey) {
+            if (af_advancedshop_appearance_group_for_target($targetKey) === $group) {
+                $groupTargets[] = "'" . $db->escape_string($targetKey) . "'";
+            }
+        }
+        if (!$groupTargets) {
+            af_advancedshop_json_ok(['items' => [], 'group' => $group, 'group_label' => (string)(af_advancedshop_appearance_supported_group_labels()[$group] ?? $group), 'table' => $table]);
+        }
+        $where[] = 'target_key IN (' . implode(', ', $groupTargets) . ')';
     }
     $whereSql = implode(' AND ', $where);
 
     $items = [];
     $query = $db->query("SELECT id, slug, title, description, preview_image, target_key, enabled FROM " . $table . " WHERE " . $whereSql . " ORDER BY enabled DESC, sortorder ASC, id DESC LIMIT 100");
     while ($row = $db->fetch_array($query)) {
+        $targetKey = mb_strtolower(trim((string)$row['target_key']));
         $items[] = [
             'preset_id' => (int)$row['id'],
             'slug' => (string)$row['slug'],
             'title' => (string)$row['title'],
             'description' => (string)$row['description'],
             'preview_image' => (string)$row['preview_image'],
-            'target_key' => (string)$row['target_key'],
+            'target_key' => $targetKey,
+            'target_label' => af_advancedshop_appearance_target_label($targetKey),
+            'group' => af_advancedshop_appearance_group_for_target($targetKey),
+            'group_label' => (string)(af_advancedshop_appearance_supported_group_labels()[af_advancedshop_appearance_group_for_target($targetKey)] ?? af_advancedshop_appearance_group_for_target($targetKey)),
             'enabled' => (int)$row['enabled'],
         ];
     }
 
-    af_advancedshop_json_ok(['items' => $items, 'table' => $table]);
+    af_advancedshop_json_ok([
+        'items' => $items,
+        'table' => $table,
+        'group' => $group,
+        'group_label' => (string)(af_advancedshop_appearance_supported_group_labels()[$group] ?? 'Все группы'),
+        'groups' => af_advancedshop_appearance_supported_group_labels(),
+    ]);
 }
 
 function af_advancedshop_kb_search(): void
@@ -3330,9 +3456,17 @@ function af_advancedshop_inventory_state_payload(int $uid, bool $includeDebug = 
         $metaLabels[$slotCode] = (string)($meta['label'] ?? $slotCode);
     }
 
-    $activeAppearance = af_advancedshop_inventory_active_appearance($uid, af_advancedshop_appearance_active_target());
-    $activeItemId = (int)($activeAppearance['item_id'] ?? 0);
+    $activeAppearanceMap = [];
+    foreach (af_advancedshop_appearance_supported_target_keys() as $appearanceTargetKey) {
+        $currentActive = af_advancedshop_inventory_active_appearance($uid, $appearanceTargetKey);
+        if ($currentActive) {
+            $activeAppearanceMap[$appearanceTargetKey] = $currentActive;
+        }
+    }
+    $activeAppearance = $activeAppearanceMap[af_advancedshop_appearance_active_target()] ?? [];
     foreach ($items as &$itemRow) {
+        $itemTargetKey = (string)($itemRow['appearance_target'] ?? '');
+        $activeItemId = (int)($activeAppearanceMap[$itemTargetKey]['item_id'] ?? 0);
         $itemRow['appearance_is_active'] = $activeItemId > 0 && (int)($itemRow['inv_id'] ?? 0) === $activeItemId;
     }
     unset($itemRow);
@@ -3344,6 +3478,7 @@ function af_advancedshop_inventory_state_payload(int $uid, bool $includeDebug = 
         'inventory' => $items,
         'equipment' => $equipment,
         'active_appearance' => $activeAppearance,
+        'active_appearance_map' => $activeAppearanceMap,
         'derived' => af_advancedshop_inventory_derived_effects($equipment),
         'meta' => [
             'labels' => $metaLabels,
@@ -3634,9 +3769,10 @@ function af_advancedshop_inventory_appearance_apply(): void
         af_advancedshop_json_err('Preset unavailable', 422);
     }
 
-    $targetKey = mb_strtolower(trim((string)($preset['target_key'] ?? '')));
-    if ($targetKey !== af_advancedshop_appearance_active_target()) {
-        af_advancedshop_json_err('Only profile_banner supported', 422);
+    try {
+        $targetKey = af_advancedshop_appearance_validate_target((string)($preset['target_key'] ?? ''));
+    } catch (RuntimeException $e) {
+        af_advancedshop_json_err($e->getMessage(), 422);
     }
 
     $exists = $db->fetch_array($db->query("SELECT id FROM " . TABLE_PREFIX . "af_aa_active WHERE entity_type='user' AND entity_id=" . $targetUid . " AND target_key='" . $db->escape_string($targetKey) . "' LIMIT 1"));
@@ -4443,6 +4579,12 @@ function af_advancedshop_render_shop_manage_page(): void
         eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
         output_page($page);
         exit;
+    }
+
+    $action = trim((string)$mybb->get_input('action'));
+    if ($action !== '' && in_array($action, ['shop_manage_slots', 'shop_appearance_search', 'shop_kb_search'], true)) {
+        af_advancedshop_dispatch($action);
+        return;
     }
 
     $view = trim((string)$mybb->get_input('view'));

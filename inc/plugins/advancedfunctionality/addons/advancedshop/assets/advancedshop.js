@@ -319,7 +319,7 @@
     var actions = '';
     if(isVisualItem){
       actions += '<button type="button" class="af-shop-btn" data-af-appearance-apply-btn data-inv-id="' + escapeHtml(String(invId)) + '">Применить</button>';
-      actions += '<button type="button" class="af-shop-btn" data-af-appearance-unapply-btn data-target-key="profile_banner"' + (activeApplied ? '' : ' disabled') + '>Снять</button>';
+      actions += '<button type="button" class="af-shop-btn" data-af-appearance-unapply-btn data-target-key="' + escapeHtml(slotNode.getAttribute('data-appearance-target') || '') + '"' + (activeApplied ? '' : ' disabled') + '>Снять</button>';
     } else {
       actions += '<button type="button" class="af-shop-btn" data-af-equip-btn data-can-equip="' + (canEquip ? '1' : '0') + '" data-inv-id="' + escapeHtml(String(invId)) + '" data-slot-code="' + escapeHtml(equipSlot) + '">Надеть</button>';
     }
@@ -464,7 +464,7 @@
     if(unapplyAppearanceBtn){
       e.preventDefault();
       var ctxUn = inventoryContext(unapplyAppearanceBtn);
-      withLoading(unapplyAppearanceBtn, post('misc.php?action=inventory_appearance_unapply', {uid:ctxUn.uid || '0', target_key: unapplyAppearanceBtn.getAttribute('data-target-key') || 'profile_banner'})).then(function(r){
+      withLoading(unapplyAppearanceBtn, post('misc.php?action=inventory_appearance_unapply', {uid:ctxUn.uid || '0', target_key: unapplyAppearanceBtn.getAttribute('data-target-key') || ''})).then(function(r){
         if(r && r.ok){
           hideItemPopover();
           safeMountInventory(ctxUn.root || document);
@@ -665,7 +665,11 @@
         title: apItem.getAttribute('data-preset-title') || '',
         target_key: apItem.getAttribute('data-target-key') || '',
         preview_image: apItem.getAttribute('data-preview-image') || '',
-        enabled: apItem.getAttribute('data-enabled') || '0'
+        enabled: apItem.getAttribute('data-enabled') || '0',
+        target_label: apItem.getAttribute('data-target-label') || '',
+        group: apItem.getAttribute('data-group') || '',
+        group_label: apItem.getAttribute('data-group-label') || '',
+        description: apItem.getAttribute('data-description') || ''
       });
       return;
     }
@@ -792,6 +796,17 @@
     if(sourceRefNode){ sourceRefNode.value = kbId; }
   }
 
+  function appearanceSearchEndpoint(){
+    return window.location.pathname && /shop_manage\.php$/i.test(window.location.pathname) ? 'shop_manage.php' : 'misc.php';
+  }
+
+  function appearanceSearchEmptyMessage(groupLabel, query){
+    var parts = [];
+    if(groupLabel){ parts.push('группа: ' + groupLabel); }
+    if(query){ parts.push('поиск: ' + query); }
+    return 'Nothing found. ' + (parts.length ? ('Фильтрация — ' + parts.join(', ') + '.') : '');
+  }
+
   function renderAppearanceSummary(prefix, item){
     var node = byId(sourcePrefix(prefix + '-appearance-summary'));
     if(!node){ return; }
@@ -802,7 +817,9 @@
     var preview = item.preview_image ? ('<img src="' + escapeHtml(item.preview_image) + '" alt="" style="width:48px;height:48px;object-fit:cover;vertical-align:middle;margin-right:8px;">') : '';
     var enabledLabel = asBool(item.enabled) ? 'enabled' : 'disabled';
     node.innerHTML = preview + '<strong>' + escapeHtml(item.title || item.slug || ('#' + String(item.preset_id || '0'))) + '</strong>'
-      + ' <small>slug: ' + escapeHtml(item.slug || '') + ' / target: ' + escapeHtml(item.target_key || '') + ' / ' + enabledLabel + '</small>';
+      + '<div><small>ID: ' + escapeHtml(String(item.preset_id || '0')) + ' / slug: ' + escapeHtml(item.slug || '') + '</small></div>'
+      + '<div><small>group: ' + escapeHtml(item.group_label || item.group || '') + ' / target: ' + escapeHtml(item.target_label || item.target_key || '') + ' / ' + enabledLabel + '</small></div>'
+      + (item.description ? ('<div><small>' + escapeHtml(item.description) + '</small></div>') : '');
   }
 
   function setAppearanceSelection(prefix, item){
@@ -883,19 +900,23 @@
       if(!node){ return; }
       if(!r.ok){ node.textContent = r.error || 'Search failed'; return; }
       var items = r.items || [];
-      if(!items.length){ node.innerHTML = '<div class="af-kb-item">Nothing found.</div>'; return; }
+      if(!items.length){ node.innerHTML = '<div class="af-kb-item">' + escapeHtml(appearanceSearchEmptyMessage(r.group_label || '', ((byId(sourcePrefix(prefix + '-appearance-q')) || byId('af-appearance-picker-q') || {}).value || ''))) + '</div>'; return; }
       node.innerHTML = items.map(function(item){
         var prev = item.preview_image ? ('<img src="'+escapeHtml(item.preview_image)+'" alt="" style="width:32px;height:32px;object-fit:cover;"> ') : '';
         return '<div class="af-kb-item">'
           + prev
-          + '<span>#'+escapeHtml(String(item.preset_id))+' '+escapeHtml(item.title || '')+' <code>'+escapeHtml(item.slug || '')+'</code> ['+escapeHtml(item.target_key || '')+'] '+(item.enabled ? '' : '[DISABLED]')+'</span>'
-          + ' <button class="af-appearance-pick-item" data-editor-prefix="'+escapeHtml(prefix)+'" data-preset-id="'+escapeHtml(String(item.preset_id))+'" data-preset-slug="'+escapeHtml(item.slug || '')+'" data-preset-title="'+escapeHtml(item.title || '')+'" data-target-key="'+escapeHtml(item.target_key || '')+'" data-preview-image="'+escapeHtml(item.preview_image || '')+'" data-enabled="'+escapeHtml(String(item.enabled ? 1 : 0))+'" type="button">Выбрать</button></div>';
+          + '<div><strong>#'+escapeHtml(String(item.preset_id))+' '+escapeHtml(item.title || '')+'</strong> <code>'+escapeHtml(item.slug || '')+'</code></div>'
+          + '<div><small>' + escapeHtml(item.group_label || item.group || '') + ' / ' + escapeHtml(item.target_label || item.target_key || '') + ' / ' + (item.enabled ? 'enabled' : 'disabled') + '</small></div>'
+          + (item.description ? ('<div><small>' + escapeHtml(item.description) + '</small></div>') : '')
+          + ' <button class="af-appearance-pick-item" data-editor-prefix="'+escapeHtml(prefix)+'" data-preset-id="'+escapeHtml(String(item.preset_id))+'" data-preset-slug="'+escapeHtml(item.slug || '')+'" data-preset-title="'+escapeHtml(item.title || '')+'" data-target-key="'+escapeHtml(item.target_key || '')+'" data-target-label="'+escapeHtml(item.target_label || '')+'" data-group="'+escapeHtml(item.group || '')+'" data-group-label="'+escapeHtml(item.group_label || '')+'" data-description="'+escapeHtml(item.description || '')+'" data-preview-image="'+escapeHtml(item.preview_image || '')+'" data-enabled="'+escapeHtml(String(item.enabled ? 1 : 0))+'" type="button">Выбрать</button></div>';
       }).join('');
     }
 
     function runAppearanceSearch(prefix){
       var qNode = byId(sourcePrefix(prefix + '-appearance-q')) || byId('af-appearance-picker-q');
-      var query = 'misc.php?action=shop_appearance_search&shop=' + encodeURIComponent(shopCode) + '&q=' + encodeURIComponent(qNode ? (qNode.value || '') : '');
+      var groupNode = byId(sourcePrefix(prefix + '-appearance-group')) || byId('af-appearance-picker-group');
+      var endpoint = appearanceSearchEndpoint();
+      var query = endpoint + '?action=shop_appearance_search&shop=' + encodeURIComponent(shopCode) + '&q=' + encodeURIComponent(qNode ? (qNode.value || '') : '') + '&group=' + encodeURIComponent(groupNode ? (groupNode.value || 'all') : 'all');
       getJSON(query).then(function(r){ renderAppearanceResults(r, prefix); });
     }
 
@@ -913,6 +934,8 @@
       if(apQ){
         apQ.addEventListener('input', function(){ clearTimeout(searchTimer); searchTimer = setTimeout(function(){ runAppearanceSearch(prefix); }, 150); });
       }
+      var apGroup = byId(sourcePrefix(prefix + '-appearance-group'));
+      if(apGroup){ apGroup.addEventListener('change', function(){ runAppearanceSearch(prefix); }); }
       ['kb-q','kb-type-filter','kb-rarity','kb-item-type','kb-spell-level','kb-spell-school'].forEach(function(suffix){
         var node = byId(sourcePrefix(prefix + '-' + suffix));
         if(!node){ return; }
@@ -935,13 +958,13 @@
     var appearanceSummary = row.source_type === 'appearance'
       ? ((row.appearance_preview_image ? '<img src="'+escapeHtml(row.appearance_preview_image)+'" alt="" style="width:48px;height:48px;object-fit:cover;vertical-align:middle;margin-right:8px;">' : '')
         + '<strong>' + escapeHtml(row.appearance_preset_title || row.title || '') + '</strong>'
-        + ' <small>slug: ' + escapeHtml(row.appearance_preset_slug || '') + ' / target: ' + escapeHtml(row.appearance_target || '') + ' / ' + (row.appearance_enabled ? 'enabled' : 'disabled') + '</small>')
+        + ' <small>slug: ' + escapeHtml(row.appearance_preset_slug || '') + ' / group: ' + escapeHtml(row.appearance_group_label || row.appearance_group || '') + ' / target: ' + escapeHtml(row.appearance_target_label || row.appearance_target || '') + ' / ' + (row.appearance_enabled ? 'enabled' : 'disabled') + '</small>')
       : 'Preset not selected.';
     return '<div class="af-slot-card '+escapeHtml(row.rarity_class || 'af-rarity-common')+'" data-slot-id="'+row.slot_id+'">'
       + '<div><strong>#'+row.slot_id+'</strong> — '+escapeHtml(row.title || '')+'</div>'
       + '<div><label>Source <select id="'+sourcePrefix(prefix+'-source-type')+'"><option value="kb"'+(sourceType === 'kb' ? ' selected' : '')+'>KB</option><option value="appearance"'+(sourceType === 'appearance' ? ' selected' : '')+'>Appearance</option></select><input type="hidden" id="'+sourcePrefix(prefix+'-source-ref-id')+'" value="'+escapeHtml(String(row.source_ref_id || row.kb_id || 0))+'"></label></div>'
       + '<div><small>' + (sourceType === 'appearance'
-          ? ('Appearance preset #' + escapeHtml(String(row.source_ref_id || 0)) + ' / slug ' + escapeHtml(row.appearance_preset_slug || '') + ' / target ' + escapeHtml(row.appearance_target || ''))
+          ? ('Appearance preset #' + escapeHtml(String(row.source_ref_id || 0)) + ' / slug ' + escapeHtml(row.appearance_preset_slug || '') + ' / group ' + escapeHtml(row.appearance_group_label || row.appearance_group || '') + ' / target ' + escapeHtml(row.appearance_target_label || row.appearance_target || ''))
           : ('KB #' + escapeHtml(String(row.kb_id || 0)) + ' / ' + escapeHtml(row.kb_type || 'item') + ' / ' + escapeHtml(row.kb_key || '')))
       + '</small></div>'
       + '<div class="af-kb-picker-filters">'
@@ -972,14 +995,14 @@
       + '<label>Preset slug <input type="text" id="'+sourcePrefix(prefix+'-preset-slug')+'" value="'+escapeHtml(row.appearance_preset_slug || '')+'" placeholder="preset-slug"></label>'
       + '</div>'
       + '<div id="'+sourcePrefix(prefix+'-appearance-summary')+'" class="af-slot-source-summary">'+appearanceSummary+'</div>'
-      + '<div class="af-kb-picker-filters"><label>Search <input type="text" id="'+sourcePrefix(prefix+'-appearance-q')+'" placeholder="Search by title, description or slug"></label></div>'
+      + '<div class="af-kb-picker-filters"><label>Group <select id="'+sourcePrefix(prefix+'-appearance-group')+'"><option value="all">Все группы</option><option value="theme_pack">Общие пак-темы</option><option value="profile_pack">Профили</option><option value="postbit_pack">Постбиты</option><option value="fragment_pack">Разное</option></select></label><label>Search <input type="text" id="'+sourcePrefix(prefix+'-appearance-q')+'" placeholder="Search by title, description or slug"></label></div>'
       + '<div id="'+sourcePrefix(prefix+'-appearance-results')+'"></div></div>'
       + '<div><button type="button" class="af-shop-btn af-slot-save">Save</button> <button type="button" class="af-shop-btn af-slot-delete">Delete</button></div>'
       + '</div>';
   }
 
   function loadSlots(shop, catId){
-    getJSON('misc.php?action=shop_manage_slots&shop=' + encodeURIComponent(shop) + '&cat=' + encodeURIComponent(catId) + '&do=list').then(function(r){
+    getJSON('shop_manage.php?shop=' + encodeURIComponent(shop) + '&cat_id=' + encodeURIComponent(catId) + '&view=slots&do=list').then(function(r){
       var body = document.getElementById('af-manage-slots-body');
       if(!body){ return; }
       if(!r.ok){ body.innerHTML = '<div>'+escapeHtml(r.error || 'Failed to load slots')+'</div>'; return; }
@@ -1005,6 +1028,8 @@
         });
         var apNode = byId(sourcePrefix(prefix + '-appearance-q'));
         if(apNode){ apNode.addEventListener('input', function(){ runAppearanceSearch(prefix); }); }
+        var apGroupNode = byId(sourcePrefix(prefix + '-appearance-group'));
+        if(apGroupNode){ apGroupNode.addEventListener('change', function(){ runAppearanceSearch(prefix); }); }
         if((row.source_type || 'kb') === 'appearance'){ runAppearanceSearch(prefix); }
         else { runKbSearch(prefix); }
       });
@@ -1028,7 +1053,7 @@
     var isVisual = item && item.is_visual_item ? '1' : '0';
     var isActiveAppearance = item && item.appearance_is_active ? '1' : '0';
     var iconHtml = icon ? ('<img src="' + escapeHtml(icon) + '" alt="' + escapeHtml(title) + '">') : '<span class="af-equip-slot__placeholder">?</span>';
-    return '<div class="af-inventory-slot af-inv-slot rarity-' + escapeHtml(rarity) + '" draggable="true" data-inv-id="' + escapeHtml(invId) + '" data-kb-id="' + escapeHtml(kbId) + '" data-rarity="' + escapeHtml(rarity) + '" data-kind="' + escapeHtml(kind) + '" data-source-type="' + escapeHtml(sourceType) + '" data-is-visual-item="' + escapeHtml(isVisual) + '" data-appearance-active="' + escapeHtml(isActiveAppearance) + '" data-equip-slot="' + escapeHtml(equipSlot) + '" data-is-equippable="' + escapeHtml(canEquip) + '" data-title="' + escapeHtml(title) + '" data-tooltip="' + escapeHtml(tooltip) + '">' + iconHtml + '<span class="af-inventory-qty">' + escapeHtml(qty) + '</span></div>';
+    return '<div class="af-inventory-slot af-inv-slot rarity-' + escapeHtml(rarity) + '" draggable="true" data-inv-id="' + escapeHtml(invId) + '" data-kb-id="' + escapeHtml(kbId) + '" data-rarity="' + escapeHtml(rarity) + '" data-kind="' + escapeHtml(kind) + '" data-source-type="' + escapeHtml(sourceType) + '" data-is-visual-item="' + escapeHtml(isVisual) + '" data-appearance-target="' + escapeHtml(item && item.appearance_target ? item.appearance_target : '') + '" data-appearance-active="' + escapeHtml(isActiveAppearance) + '" data-equip-slot="' + escapeHtml(equipSlot) + '" data-is-equippable="' + escapeHtml(canEquip) + '" data-title="' + escapeHtml(title) + '" data-tooltip="' + escapeHtml(tooltip) + '">' + iconHtml + '<span class="af-inventory-qty">' + escapeHtml(qty) + '</span></div>';
   }
 
   function renderInventoryGrid(root, inventoryItems){
