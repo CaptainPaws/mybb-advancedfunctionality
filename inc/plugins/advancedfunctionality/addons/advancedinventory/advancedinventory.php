@@ -1139,6 +1139,72 @@ function af_advinv_kb_extract_icon(?string $metaJson): string
     return trim((string)($meta['ui']['icon_url'] ?? $meta['icon_url'] ?? ''));
 }
 
+function af_advinv_decode_meta_json($value): array
+{
+    if (is_array($value)) {
+        return $value;
+    }
+    if (!is_string($value) || trim($value) === '') {
+        return [];
+    }
+    $decoded = @json_decode($value, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function af_advinv_resolve_appearance_item(array $item): array
+{
+    if (function_exists('af_advancedshop_inventory_resolve_appearance_item')) {
+        return (array)af_advancedshop_inventory_resolve_appearance_item($item, [], af_advinv_decode_meta_json((string)($item['kb_meta'] ?? '')));
+    }
+
+    $meta = af_advinv_decode_meta_json((string)($item['meta_json'] ?? ''));
+    $appearance = is_array($meta['appearance'] ?? null) ? (array)$meta['appearance'] : [];
+    $kbKey = trim((string)($item['kb_key'] ?? ''));
+    $isAppearance = trim((string)($item['source_type'] ?? '')) === 'appearance'
+        || strpos($kbKey, 'appearance:') === 0
+        || !empty($appearance)
+        || !empty($appearance['preset_id'])
+        || !empty($appearance['target_key']);
+
+    $presetId = 0;
+    if (strpos($kbKey, 'appearance:') === 0) {
+        $presetId = (int)substr($kbKey, strlen('appearance:'));
+    }
+    if ($presetId <= 0) {
+        $presetId = (int)($appearance['preset_id'] ?? 0);
+    }
+
+    return [
+        'source_type' => $isAppearance ? 'appearance' : trim((string)($item['source_type'] ?? 'kb')),
+        'is_visual_item' => $isAppearance,
+        'kb_key' => $kbKey,
+        'preset_id' => $presetId,
+        'target_key' => trim((string)($appearance['target_key'] ?? '')),
+        'appearance_meta' => $appearance,
+    ];
+}
+
+function af_advinv_active_appearance_map(int $uid): array
+{
+    global $db;
+
+    $map = [];
+    if ($uid <= 0 || !$db->table_exists('af_aa_active')) {
+        return $map;
+    }
+
+    $q = $db->simple_select('af_aa_active', '*', "entity_type='user' AND entity_id='" . (int)$uid . "' AND is_enabled='1'");
+    while ($row = $db->fetch_array($q)) {
+        $targetKey = trim((string)($row['target_key'] ?? ''));
+        if ($targetKey === '') {
+            continue;
+        }
+        $map[$targetKey] = $row;
+    }
+
+    return $map;
+}
+
 function af_advinv_enrich_items_from_kb(array $items): array
 {
     global $db;
@@ -1209,6 +1275,48 @@ function af_advinv_enrich_items_from_kb(array $items): array
         }
         if (trim((string)($item['icon'] ?? '')) === '' && $fromKb['icon'] !== '') {
             $item['icon'] = $fromKb['icon'];
+        }
+    }
+    unset($item);
+
+    $appearanceActiveMap = [];
+    foreach ($items as &$item) {
+        $meta = af_advinv_decode_meta_json((string)($item['meta_json'] ?? ''));
+        $item['meta'] = $meta;
+        $appearanceInfo = af_advinv_resolve_appearance_item($item);
+        $appearanceMeta = (array)($appearanceInfo['appearance_meta'] ?? []);
+        $targetKey = trim((string)($appearanceInfo['target_key'] ?? ($appearanceMeta['target_key'] ?? '')));
+        $presetId = (int)($appearanceInfo['preset_id'] ?? ($appearanceMeta['preset_id'] ?? 0));
+        $kbKey = trim((string)($appearanceInfo['kb_key'] ?? ($item['kb_key'] ?? '')));
+        $sourceType = trim((string)($appearanceInfo['source_type'] ?? ''));
+        $isVisual = !empty($appearanceInfo['is_visual_item']);
+
+        if ($isVisual && isset($appearanceMeta['preview_image']) && trim((string)$appearanceMeta['preview_image']) !== '') {
+            $item['icon'] = trim((string)$appearanceMeta['preview_image']);
+        }
+        if ($isVisual && trim((string)($appearanceMeta['title'] ?? '')) !== '') {
+            $item['title'] = trim((string)$appearanceMeta['title']);
+        }
+
+        $item['is_visual_item'] = $isVisual ? 1 : 0;
+        $item['source_type'] = $isVisual ? 'appearance' : ($sourceType !== '' ? $sourceType : 'kb');
+        $item['appearance_target'] = $targetKey;
+        $item['appearance_preset_id'] = $presetId;
+        $item['appearance_is_active'] = 0;
+        $item['appearance_preview_image'] = trim((string)($appearanceMeta['preview_image'] ?? ($item['icon'] ?? '')));
+        $item['preview_image'] = $item['appearance_preview_image'];
+        $item['appearance_title'] = trim((string)($appearanceMeta['title'] ?? ($item['title'] ?? '')));
+        $item['appearance_slug'] = trim((string)($appearanceMeta['slug'] ?? ''));
+        $item['appearance_meta'] = $appearanceMeta;
+        $item['kb_key'] = $kbKey;
+
+        if ($isVisual) {
+            $uid = (int)($item['uid'] ?? 0);
+            if (!isset($appearanceActiveMap[$uid])) {
+                $appearanceActiveMap[$uid] = af_advinv_active_appearance_map($uid);
+            }
+            $activeTarget = (array)($appearanceActiveMap[$uid][$targetKey] ?? []);
+            $item['appearance_is_active'] = ((int)($activeTarget['item_id'] ?? 0) === (int)($item['id'] ?? 0)) ? 1 : 0;
         }
     }
     unset($item);
@@ -1815,6 +1923,7 @@ function af_advinv_render_tab_cards(array $items, bool $canManage, bool $allowEq
         $icon = trim((string)$item['icon']);
         $iconHtml = $icon !== '' ? '<img src="' . htmlspecialchars_uni($icon) . '" alt="" loading="lazy">' : '';
         $actions = '';
+        $isVisualItem = !empty($item['is_visual_item']);
         if ($allowEquipActions) {
             $slotCandidates = af_inv_candidate_slots_for_item($item);
             $isEquipped = af_inv_find_equipped_slot_by_item($equipped, (int)$item['id']);
@@ -1823,6 +1932,35 @@ function af_advinv_render_tab_cards(array $items, bool $canManage, bool $allowEq
             } elseif ($slotCandidates) {
                 $actions .= '<button class="af-inv-action" data-action="equip" data-item-id="' . (int)$item['id'] . '" data-equip-slot="' . htmlspecialchars_uni((string)$slotCandidates[0]) . '">Надеть</button>';
             }
+        }
+        if ($isVisualItem) {
+            $appearanceTarget = trim((string)($item['appearance_target'] ?? ''));
+            $presetId = (int)($item['appearance_preset_id'] ?? 0);
+            $presetSlug = trim((string)($item['appearance_slug'] ?? ''));
+            $statusLabel = !empty($item['appearance_is_active']) ? 'Активен' : 'Не активен';
+            $statusClass = !empty($item['appearance_is_active']) ? 'is-active' : 'is-inactive';
+            $metaBits = [];
+            if ($presetId > 0) {
+                $metaBits[] = 'preset #' . $presetId;
+            }
+            if ($presetSlug !== '') {
+                $metaBits[] = 'slug: ' . $presetSlug;
+            }
+            if ($appearanceTarget !== '') {
+                $metaBits[] = 'target: ' . $appearanceTarget;
+            }
+
+            $actions .= '<button class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . (int)$item['id'] . '"' . (!empty($item['appearance_is_active']) ? ' disabled' : '') . '>Активировать</button>';
+            $actions .= '<button class="af-inv-action" data-af-appearance-unapply-btn data-target-key="' . htmlspecialchars_uni($appearanceTarget) . '"' . (empty($item['appearance_is_active']) ? ' disabled' : '') . '>Снять</button>';
+
+            $rows .= '<div class="af-inv-card af-inv-card--appearance" data-item-id="' . (int)$item['id'] . '" data-is-visual-item="1" data-appearance-target="' . htmlspecialchars_uni($appearanceTarget) . '" data-appearance-active="' . (!empty($item['appearance_is_active']) ? '1' : '0') . '">'
+                . $iconHtml
+                . '<div class="af-inv-card-title">' . htmlspecialchars_uni((string)($item['appearance_title'] ?: $title)) . '</div>'
+                . '<div class="af-inv-card-meta">' . htmlspecialchars_uni(implode(' / ', $metaBits)) . '</div>'
+                . '<div class="af-inv-card-status ' . $statusClass . '">' . $statusLabel . '</div>'
+                . '<div class="af-inv-card-actions">' . $actions . '</div>'
+                . '</div>';
+            continue;
         }
         if ($canManage) {
             $actions .= '<button class="af-inv-action" data-action="delete" data-item-id="' . (int)$item['id'] . '">Удалить</button>';
