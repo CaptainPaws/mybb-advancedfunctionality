@@ -238,10 +238,22 @@
         my_post_key: getPostKey(page)
       };
 
-      if (action === 'update') {
-        var card = actionBtn.closest('[data-preview-item]');
-        var qtyInput = card ? card.querySelector('.af-inv-qty') : null;
-        payload.qty = qtyInput ? (qtyInput.value || '1') : '1';
+      var card = actionBtn.closest('[data-preview-item]');
+      var qtyInput = card ? card.querySelector('.af-inv-qty') : null;
+      var qtyValue = qtyInput ? parseInt(qtyInput.value || '1', 10) : 1;
+      var qtyMax = qtyInput ? parseInt(qtyInput.getAttribute('data-max-qty') || qtyInput.getAttribute('max') || '0', 10) : 0;
+      if (!qtyValue || qtyValue < 1) {
+        qtyValue = 1;
+      }
+      if (qtyMax > 0 && qtyValue > qtyMax) {
+        qtyValue = qtyMax;
+      }
+      if (qtyInput) {
+        qtyInput.value = String(qtyValue);
+      }
+
+      if (action === 'update' || action === 'sell') {
+        payload.qty = String(qtyValue);
       }
 
       if (action === 'equip' || action === 'unequip') {
@@ -252,7 +264,7 @@
         .then(function (res) {
           if (action === 'sell') {
             updateWallet(page, res.wallet || null);
-            showMessage(page, (res.message || 'Предмет продан.') + ' +' + (res.sold_major || '0') + ' ' + (res.currency_symbol || ''), false);
+            showMessage(page, 'Продано: ' + (res.sold_qty || payload.qty || '1') + ' шт. Баланс пополнен на ' + (res.sold_major || '0') + ' ' + (res.currency_symbol || '') + '.', false);
           } else if (action === 'delete') {
             showMessage(page, 'Предмет удалён.', false);
           } else if (action === 'update') {

@@ -1145,7 +1145,7 @@ function af_advinv_item_shop_price_minor(array $item): int
     return max(0, (int)($row['price'] ?? 0));
 }
 
-function af_advinv_item_sale_profile(array $item): array
+function af_advinv_item_sale_profile(array $item, ?int $qtyOverride = null): array
 {
     global $mybb;
 
@@ -1158,9 +1158,10 @@ function af_advinv_item_sale_profile(array $item): array
     }
 
     $unitPriceMinor = af_advinv_item_shop_price_minor($item);
-    $qty = max(1, (int)($item['qty'] ?? 1));
+    $itemQty = max(1, (int)($item['qty'] ?? 1));
+    $saleQty = $qtyOverride === null ? $itemQty : max(1, min($itemQty, (int)$qtyOverride));
     $sellUnitMinor = (int)floor($unitPriceMinor * 0.8);
-    $sellTotalMinor = $sellUnitMinor * $qty;
+    $sellTotalMinor = $sellUnitMinor * $saleQty;
 
     $format = function ($minor) {
         return function_exists('af_advancedshop_money_format')
@@ -1171,9 +1172,12 @@ function af_advinv_item_sale_profile(array $item): array
     return [
         'currency' => $currency,
         'currency_symbol' => function_exists('af_advancedshop_currency_symbol') ? af_advancedshop_currency_symbol($currency) : $currency,
-        'qty' => $qty,
+        'item_qty' => $itemQty,
+        'qty' => $saleQty,
         'price_each_minor' => $unitPriceMinor,
         'price_each_major' => $format($unitPriceMinor),
+        'price_total_minor' => $unitPriceMinor * $saleQty,
+        'price_total_major' => $format($unitPriceMinor * $saleQty),
         'sell_each_minor' => $sellUnitMinor,
         'sell_each_major' => $format($sellUnitMinor),
         'sell_total_minor' => $sellTotalMinor,
@@ -1200,7 +1204,17 @@ function af_advancedinventory_api_sell(): void
         af_advancedinventory_json(['ok' => false, 'error' => 'item_not_found'], 404);
     }
 
-    $sale = af_advinv_item_sale_profile($item);
+    $itemQty = max(1, (int)($item['qty'] ?? 1));
+    $sellQtyRaw = isset($mybb->input['qty']) ? trim((string)$mybb->input['qty']) : '';
+    $sellQty = $sellQtyRaw === '' ? 1 : (int)$mybb->get_input('qty');
+    if ($sellQty < 1) {
+        af_advancedinventory_json(['ok' => false, 'error' => 'invalid_qty'], 422);
+    }
+    if ($sellQty > $itemQty) {
+        af_advancedinventory_json(['ok' => false, 'error' => 'qty_exceeds_item'], 422);
+    }
+
+    $sale = af_advinv_item_sale_profile($item, $sellQty);
     if (empty($sale['can_sell'])) {
         af_advancedinventory_json(['ok' => false, 'error' => 'sell_price_unavailable'], 422);
     }
@@ -1210,7 +1224,19 @@ function af_advancedinventory_api_sell(): void
         af_advancedinventory_json(['ok' => false, 'error' => 'sell_price_invalid'], 422);
     }
 
+    $equipped = af_inv_get_equipped($ownerUid);
+    $equippedSlot = af_inv_find_equipped_slot_by_item($equipped, $itemId);
+    if ($equippedSlot !== '' && $sellQty < $itemQty) {
+        $slotCandidates = af_inv_candidate_slots_for_item($item);
+        $isConsumableSlot = strpos($equippedSlot, 'consumable_') === 0;
+        $isConsumableItem = in_array('consumable_1', $slotCandidates, true) || in_array('consumable_2', $slotCandidates, true);
+        if (!$isConsumableSlot || !$isConsumableItem) {
+            af_advancedinventory_json(['ok' => false, 'error' => 'equipped_partial_sale_forbidden'], 422);
+        }
+    }
+
     $appearanceInfo = af_advinv_resolve_appearance_item($item);
+    $itemQtyLeft = max(0, $itemQty - $sellQty);
 
     $db->write_query('START TRANSACTION');
     try {
@@ -1218,15 +1244,19 @@ function af_advancedinventory_api_sell(): void
             $db->delete_query('af_aa_active', "entity_type='user' AND entity_id=" . $ownerUid . " AND item_id=" . $itemId);
         }
 
-        $db->delete_query('af_advinv_equipped', 'uid=' . $ownerUid . ' AND item_id=' . $itemId);
-        $db->delete_query(AF_ADVINV_TABLE_ITEMS, 'id=' . $itemId . ' AND uid=' . $ownerUid);
+        if ($itemQtyLeft > 0) {
+            $db->update_query(AF_ADVINV_TABLE_ITEMS, ['qty' => $itemQtyLeft, 'updated_at' => TIME_NOW], 'id=' . $itemId . ' AND uid=' . $ownerUid);
+        } else {
+            $db->delete_query('af_advinv_equipped', 'uid=' . $ownerUid . ' AND item_id=' . $itemId);
+            $db->delete_query(AF_ADVINV_TABLE_ITEMS, 'id=' . $itemId . ' AND uid=' . $ownerUid);
+        }
 
         if (function_exists('af_shop_add_balance')) {
             af_shop_add_balance($ownerUid, (string)$sale['currency'], $sellMinor, 'inventory_sell', [
                 'item_id' => $itemId,
                 'kb_key' => (string)($item['kb_key'] ?? ''),
                 'title' => (string)($item['appearance_title'] ?? ($item['title'] ?? '')),
-                'qty' => (int)($item['qty'] ?? 1),
+                'qty' => $sellQty,
                 'source' => 'advancedinventory',
             ]);
         }
@@ -1240,8 +1270,10 @@ function af_advancedinventory_api_sell(): void
     $wallet = af_advinv_wallet_payload($ownerUid);
     af_advancedinventory_json([
         'ok' => true,
+        'sold_qty' => $sellQty,
         'sold_minor' => $sellMinor,
         'sold_major' => (string)($sale['sell_total_major'] ?? '0'),
+        'item_qty_left' => $itemQtyLeft,
         'currency' => (string)$sale['currency'],
         'currency_symbol' => (string)$sale['currency_symbol'],
         'wallet' => $wallet,
@@ -2444,8 +2476,11 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
         $metaRows[] = ['Слот', (string)($slotLabels[$defaultSlot] ?? $defaultSlot)];
     }
     if (!empty($sale['price_each_minor'])) {
-        $metaRows[] = ['Цена магазина', (string)$sale['price_each_major'] . ' ' . (string)$sale['currency_symbol']];
-        $metaRows[] = ['Продажа (80%)', (string)$sale['sell_total_major'] . ' ' . (string)$sale['currency_symbol']];
+        $metaRows[] = ['Цена магазина / шт.', (string)$sale['price_each_major'] . ' ' . (string)$sale['currency_symbol']];
+        $metaRows[] = ['Продажа / шт. (80%)', (string)$sale['sell_each_major'] . ' ' . (string)$sale['currency_symbol']];
+        if ($qty > 1) {
+            $metaRows[] = ['Продажа за весь стак', (string)$sale['sell_total_major'] . ' ' . (string)$sale['currency_symbol']];
+        }
     }
 
     $statusHtml = '';
@@ -2474,8 +2509,12 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
         $actions .= '<button type="button" class="af-inv-action" data-action="sell" data-item-id="' . $itemId . '"' . (empty($sale['can_sell']) ? ' disabled="disabled"' : '') . '>Продать</button>';
     }
 
+    if ($canManage || $canEditOwner) {
+        $qtyInputValue = $canManage ? $qty : 1;
+        $actions .= '<label class="af-inv-qty-wrap">Qty <input type="number" min="1" max="' . $qty . '" class="af-inv-qty" value="' . $qtyInputValue . '" data-max-qty="' . $qty . '"></label>';
+    }
+
     if ($canManage) {
-        $actions .= '<label class="af-inv-qty-wrap">Qty <input type="number" min="1" class="af-inv-qty" value="' . $qty . '"></label>';
         $actions .= '<button type="button" class="af-inv-action" data-action="update" data-item-id="' . $itemId . '">Сохранить</button>';
         $actions .= '<button type="button" class="af-inv-action" data-action="delete" data-item-id="' . $itemId . '">Удалить</button>';
     }
