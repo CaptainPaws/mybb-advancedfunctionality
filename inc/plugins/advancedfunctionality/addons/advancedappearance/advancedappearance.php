@@ -159,13 +159,17 @@ function af_aa_ensure_schema(): void
 
 function af_aa_register_hooks(): void
 {
-    global $plugins;
-
-    $plugins->add_hook('postbit', 'af_aa_collect_uid_from_postbit', 20);
-    $plugins->add_hook('postbit_prev', 'af_aa_collect_uid_from_postbit', 20);
-    $plugins->add_hook('postbit_pm', 'af_aa_collect_uid_from_postbit', 20);
-    $plugins->add_hook('member_profile_end', 'af_aa_collect_uid_from_member_profile', 20);
-    $plugins->add_hook('pre_output_page', 'af_aa_pre_output_page', 20);
+    // В текущей версии AdvancedAppearance preview должен работать
+    // только на /apstudio.php и /fittingroom.php.
+    //
+    // Эти страницы рендерятся напрямую через:
+    // - af_aa_render_apstudio_page()
+    // - af_aa_render_fittingroom_page()
+    //
+    // И сами подключают CSS/JS через $headerinclude.
+    //
+    // Поэтому никаких глобальных фронтовых хуков для postbit/member profile
+    // и никакого runtime-inject в обычные страницы форума здесь быть не должно.
 }
 af_aa_register_hooks();
 
@@ -229,60 +233,14 @@ function af_aa_collect_uid_from_member_profile(): void
 
 function af_aa_pre_output_page(string &$page): void
 {
-    if (defined('IN_ADMINCP') || $page === '') {
-        return;
-    }
-
-    $thisScript = defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '';
-
-    // Эти две страницы сами full-page и сами получают theme assets через {$headerinclude}.
-    // Здесь их трогать нельзя.
-    if (
-        $thisScript === 'apstudio.php'
-        || $thisScript === 'fittingroom.php'
-        || $thisScript === AF_AA_ALIAS_APSTUDIO
-        || $thisScript === AF_AA_ALIAS_FITTINGROOM
-    ) {
-        return;
-    }
-
-    $page = af_aa_strip_asset_includes($page);
-
-    if (!af_aa_is_enabled()) {
-        return;
-    }
-
-    $uids = [];
-    if (isset($GLOBALS['af_aa_uids_on_page']) && is_array($GLOBALS['af_aa_uids_on_page'])) {
-        $uids = array_values(array_unique(array_map('intval', $GLOBALS['af_aa_uids_on_page'])));
-    }
-
-    if (empty($uids)) {
-        return;
-    }
-
-    $cssBlock = af_aa_render_page_css($uids);
-    if ($cssBlock === '') {
-        return;
-    }
-
-    $bburl = rtrim((string)($GLOBALS['mybb']->settings['bburl'] ?? ''), '/');
-    $base = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AA_ID . '/assets';
-
-    $cssUrl = af_aa_add_ver($base . '/advancedappearance.css', AF_AA_ASSETS_DIR . 'advancedappearance.css');
-    $jsUrl = af_aa_add_ver($base . '/advancedappearance.js', AF_AA_ASSETS_DIR . 'advancedappearance.js');
-
-    $injection = "\n" . AF_AA_ASSET_MARK . "\n";
-    $injection .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($cssUrl) . '">' . "\n";
-    $injection .= $cssBlock;
-    $injection .= '<script src="' . htmlspecialchars_uni($jsUrl) . '" defer></script>' . "\n";
-
-    if (stripos($page, '</head>') !== false) {
-        $page = preg_replace('~</head>~i', $injection . '</head>', $page, 1) ?? $page;
-        return;
-    }
-
-    $page .= $injection;
+    // Намеренно ничего не делаем.
+    //
+    // Preview-оформление AdvancedAppearance должно существовать
+    // только внутри /apstudio.php и /fittingroom.php,
+    // где assets подключаются явно через af_aa_page_asset_tags().
+    //
+    // На обычных страницах форума, в темах, профилях, ЛС и т.д.
+    // этот аддон не должен внедрять CSS/JS и не должен перекрывать APUI.
 }
 
 function af_aa_strip_asset_includes(string $page): string
