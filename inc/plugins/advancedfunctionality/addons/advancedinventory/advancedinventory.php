@@ -314,7 +314,7 @@ function af_advancedinventory_misc_router(): void
 {
     global $mybb;
     $action = (string)$mybb->get_input('action');
-    if (!in_array($action, ['inventory', 'inventories', 'tab', 'entity', 'api_list', 'api_move', 'api_equip', 'api_unequip', 'api_update', 'api_delete'], true)) {
+    if (!in_array($action, ['inventory', 'inventories', 'tab', 'entity', 'api_list', 'api_move', 'api_equip', 'api_unequip', 'api_update', 'api_delete', 'api_sell'], true)) {
         return;
     }
     if (!af_advancedinventory_alias_available()) {
@@ -354,6 +354,7 @@ function af_advancedinventory_dispatch(string $action): void
         case 'api_unequip': af_advancedinventory_api_unequip(); return;
         case 'api_update': af_advancedinventory_api_update(); return;
         case 'api_delete': af_advancedinventory_api_delete(); return;
+        case 'api_sell': af_advancedinventory_api_sell(); return;
         case 'api_move': af_advancedinventory_json(['ok' => false, 'error' => 'not_implemented'], 501); return;
     }
     error_no_permission();
@@ -361,25 +362,30 @@ function af_advancedinventory_dispatch(string $action): void
 
 function af_advancedinventory_render_inventory(): void
 {
-    global $mybb, $headerinclude, $header, $footer, $templates, $lang, $db;
+    global $mybb, $headerinclude, $templates, $lang, $db;
     if ((int)($mybb->settings['af_advancedinventory_enabled'] ?? 1) !== 1) {
         error((string)($lang->af_advancedinventory_error_disabled ?? 'Inventory is disabled'));
     }
 
     $viewerUid = (int)($mybb->user['uid'] ?? 0);
     $ownerUid = (int)$mybb->get_input('uid');
-    if ($ownerUid <= 0) { $ownerUid = $viewerUid; }
+    if ($ownerUid <= 0) {
+        $ownerUid = $viewerUid;
+    }
     if (!af_inv_user_can_view($viewerUid, $ownerUid)) {
         error_no_permission();
     }
 
     $user = $db->fetch_array($db->simple_select('users', 'uid,username,avatar', 'uid=' . $ownerUid, ['limit' => 1]));
-    if (!$user) { error_no_permission(); }
+    if (!$user) {
+        error_no_permission();
+    }
 
     $tabs = af_advancedinventory_tabs();
     if (!$tabs) {
         error('Inventory entities are not configured.');
     }
+
     $defaultTab = (string)($mybb->settings['af_advancedinventory_default_tab'] ?? '');
     if (!isset($tabs[$defaultTab])) {
         $defaultTab = (string)array_key_first($tabs);
@@ -399,7 +405,14 @@ function af_advancedinventory_render_inventory(): void
         $tabLinks .= '<button type="button" class="af-inv-tab ' . $active . '" data-entity="' . htmlspecialchars_uni($code) . '">' . htmlspecialchars_uni($title) . '</button>';
     }
 
-    $firstUrl = af_advancedinventory_url('entity', ['uid' => $ownerUid, 'entity' => $defaultTab, 'sub' => 'all', 'ajax' => 1], true);
+    $firstPanelUrl = af_advancedinventory_url('entity', ['uid' => $ownerUid, 'entity' => $defaultTab, 'sub' => 'all', 'ajax' => 1], false);
+    $entityUrlBase = af_advancedinventory_url('entity', ['uid' => $ownerUid], false);
+    $firstPanelHtml = af_advinv_render_entity_tab($defaultTab, $ownerUid, 'all', 1, true);
+    $wallet = af_advinv_wallet_payload($ownerUid);
+    $walletBalance = htmlspecialchars_uni((string)($wallet['balance_major'] ?? '0'));
+    $walletCurrencySymbol = htmlspecialchars_uni((string)($wallet['currency_symbol'] ?? '₡'));
+    $walletCurrencyCode = htmlspecialchars_uni((string)($wallet['currency'] ?? 'credits'));
+
     eval('$af_inv_content = "' . $templates->get('advancedinventory_inventory_inner') . '";');
     eval('$page = "' . $templates->get('advancedinventory_inventory_page') . '";');
     output_page($page);
@@ -842,10 +855,14 @@ function af_advancedinventory_log_schema_columns(): void
 
 function af_advancedinventory_render_tab(): void
 {
-    global $mybb;
+    global $mybb, $headerinclude, $templates;
+
     $viewerUid = (int)($mybb->user['uid'] ?? 0);
     $ownerUid = (int)$mybb->get_input('uid');
-    if ($ownerUid <= 0) { $ownerUid = $viewerUid; }
+    if ($ownerUid <= 0) {
+        $ownerUid = $viewerUid;
+    }
+
     if (!af_inv_user_can_view($viewerUid, $ownerUid)) {
         error_no_permission();
     }
@@ -863,15 +880,29 @@ function af_advancedinventory_render_tab(): void
     }
 
     $sub = trim((string)$mybb->get_input('sub'));
-    $page = max(1, (int)$mybb->get_input('page'));
-    $ajax = (int)$mybb->get_input('ajax') === 1;
+    $pageNum = max(1, (int)$mybb->get_input('page'));
+    $fragment = (int)$mybb->get_input('ajax') === 1 || (int)$mybb->get_input('fragment') === 1;
 
-    $html = af_advinv_render_entity_tab($tab, $ownerUid, $sub, $page, $ajax);
-    if ($ajax || defined('XMLHTTP_REQUEST')) {
-        echo $html;
+    $af_inv_frame_content = af_advinv_render_entity_tab($tab, $ownerUid, $sub, $pageNum, true);
+    if ($fragment) {
+        echo $af_inv_frame_content;
         exit;
     }
-    output_page($html);
+
+    $assetBase = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedinventory/assets/';
+    $cssFile = AF_ADVINV_ASSET_DIR . 'advancedinventory.css';
+    $vCss = @is_file($cssFile) ? (string)@filemtime($cssFile) : '1';
+    $headerinclude .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($assetBase . 'advancedinventory.css?v=' . rawurlencode($vCss)) . '">';
+
+    $af_inv_frame_title = htmlspecialchars_uni((string)($tabs[$tab] ?? $tab));
+    $tpl = $templates->get('advancedinventory_entity_frame', 1, 0);
+    if (trim($tpl) === '') {
+        $page = '<!DOCTYPE html><html><head><title>' . $af_inv_frame_title . '</title>' . $headerinclude . '</head><body class="af-inv-iframe-body">' . $af_inv_frame_content . '</body></html>';
+    } else {
+        eval('$page = "' . $tpl . '";');
+    }
+
+    output_page($page);
     exit;
 }
 
@@ -934,10 +965,20 @@ function af_advancedinventory_render_inventories(): void
 function af_advancedinventory_require_post(): void
 {
     global $mybb;
-    if (strtoupper((string)$_SERVER['REQUEST_METHOD']) !== 'POST') {
+
+    $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+    if ($method !== 'POST') {
         af_advancedinventory_json(['ok' => false, 'error' => 'method_not_allowed'], 405);
     }
-    verify_post_check($mybb->get_input('post_key'), true);
+
+    $postKey = trim((string)$mybb->get_input('my_post_key'));
+    if ($postKey === '') {
+        $postKey = trim((string)$mybb->get_input('post_key'));
+    }
+
+    if ($postKey === '' || !verify_post_check($postKey, true)) {
+        af_advancedinventory_json(['ok' => false, 'error' => 'invalid_post_key'], 403);
+    }
 }
 
 function af_advancedinventory_api_equip(): void
@@ -1009,6 +1050,203 @@ function af_advancedinventory_api_delete(): void
     $db->delete_query(AF_ADVINV_TABLE_ITEMS, 'id=' . $itemId . ' AND uid=' . $uid);
     $db->delete_query('af_advinv_equipped', 'uid=' . $uid . ' AND item_id=' . $itemId);
     af_advancedinventory_json(['ok' => true]);
+}
+
+
+function af_advinv_require_shop_runtime(): void
+{
+    if (function_exists('af_shop_get_balance') && function_exists('af_shop_add_balance') && function_exists('af_advancedshop_currency_symbol')) {
+        return;
+    }
+
+    $shopBootstrap = AF_ADDONS . 'advancedshop/advancedshop.php';
+    if (is_file($shopBootstrap)) {
+        require_once $shopBootstrap;
+    }
+}
+
+function af_advinv_wallet_payload(int $uid): array
+{
+    global $mybb;
+
+    af_advinv_require_shop_runtime();
+
+    $currency = trim((string)($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits'));
+    if ($currency === '') {
+        $currency = 'credits';
+    }
+
+    $balanceMinor = function_exists('af_shop_get_balance') ? (int)af_shop_get_balance($uid, $currency) : 0;
+    $balanceMajor = function_exists('af_advancedshop_money_format')
+        ? af_advancedshop_money_format($balanceMinor)
+        : number_format($balanceMinor / 100, 2, '.', '');
+    $currencySymbol = function_exists('af_advancedshop_currency_symbol')
+        ? af_advancedshop_currency_symbol($currency)
+        : $currency;
+
+    return [
+        'uid' => $uid,
+        'currency' => $currency,
+        'currency_symbol' => $currencySymbol,
+        'balance_minor' => $balanceMinor,
+        'balance_major' => $balanceMajor,
+    ];
+}
+
+function af_advinv_item_shop_price_minor(array $item): int
+{
+    global $db;
+
+    $meta = af_advinv_decode_meta_json((string)($item['meta_json'] ?? ''));
+    $priceMinor = max(0, (int)($meta['shop']['price_each'] ?? 0));
+    if ($priceMinor > 0) {
+        return $priceMinor;
+    }
+
+    af_advinv_require_shop_runtime();
+
+    if (!$db->table_exists('af_shop_slots')) {
+        return 0;
+    }
+
+    $kbType = trim((string)($item['kb_type'] ?? ''));
+    $kbKey = trim((string)($item['kb_key'] ?? ''));
+    $itemId = (int)($item['id'] ?? 0);
+
+    $appearanceInfo = af_advinv_resolve_appearance_item($item);
+    $sourceType = trim((string)($appearanceInfo['source_type'] ?? ($item['source_type'] ?? 'kb')));
+    if ($sourceType === 'appearance' || !empty($appearanceInfo['is_visual_item'])) {
+        $presetId = (int)($appearanceInfo['preset_id'] ?? 0);
+        if ($presetId <= 0 && strpos($kbKey, 'appearance:') === 0) {
+            $presetId = (int)substr($kbKey, strlen('appearance:'));
+        }
+        if ($presetId > 0) {
+            $query = $db->query("SELECT price FROM " . TABLE_PREFIX . "af_shop_slots WHERE source_type='appearance' AND source_ref_id=" . $presetId . " AND enabled=1 ORDER BY price ASC, slot_id ASC LIMIT 1");
+            $row = $db->fetch_array($query);
+            return max(0, (int)($row['price'] ?? 0));
+        }
+        return 0;
+    }
+
+    $where = [];
+    $kbId = (int)($item['kb_id'] ?? 0);
+    if ($kbId > 0) {
+        $where[] = 'kb_id=' . $kbId;
+    }
+    if ($kbType !== '' && $kbKey !== '') {
+        $where[] = "(kb_type='" . $db->escape_string($kbType) . "' AND kb_key='" . $db->escape_string($kbKey) . "')";
+    }
+    if (!$where) {
+        return 0;
+    }
+
+    $query = $db->query("SELECT price FROM " . TABLE_PREFIX . "af_shop_slots WHERE enabled=1 AND (" . implode(' OR ', $where) . ") ORDER BY price ASC, slot_id ASC LIMIT 1");
+    $row = $db->fetch_array($query);
+    return max(0, (int)($row['price'] ?? 0));
+}
+
+function af_advinv_item_sale_profile(array $item): array
+{
+    global $mybb;
+
+    af_advinv_require_shop_runtime();
+
+    $meta = af_advinv_decode_meta_json((string)($item['meta_json'] ?? ''));
+    $currency = trim((string)($meta['shop']['currency'] ?? ($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits')));
+    if ($currency === '') {
+        $currency = 'credits';
+    }
+
+    $unitPriceMinor = af_advinv_item_shop_price_minor($item);
+    $qty = max(1, (int)($item['qty'] ?? 1));
+    $sellUnitMinor = (int)floor($unitPriceMinor * 0.8);
+    $sellTotalMinor = $sellUnitMinor * $qty;
+
+    $format = function ($minor) {
+        return function_exists('af_advancedshop_money_format')
+            ? af_advancedshop_money_format((int)$minor)
+            : number_format(((int)$minor) / 100, 2, '.', '');
+    };
+
+    return [
+        'currency' => $currency,
+        'currency_symbol' => function_exists('af_advancedshop_currency_symbol') ? af_advancedshop_currency_symbol($currency) : $currency,
+        'qty' => $qty,
+        'price_each_minor' => $unitPriceMinor,
+        'price_each_major' => $format($unitPriceMinor),
+        'sell_each_minor' => $sellUnitMinor,
+        'sell_each_major' => $format($sellUnitMinor),
+        'sell_total_minor' => $sellTotalMinor,
+        'sell_total_major' => $format($sellTotalMinor),
+        'can_sell' => $sellUnitMinor > 0,
+    ];
+}
+
+function af_advancedinventory_api_sell(): void
+{
+    global $mybb, $db;
+
+    af_advancedinventory_require_post();
+
+    $ownerUid = (int)$mybb->get_input('uid');
+    $viewerUid = (int)($mybb->user['uid'] ?? 0);
+    if (!af_inv_can_manage_owner($viewerUid, $ownerUid)) {
+        af_advancedinventory_json(['ok' => false, 'error' => 'forbidden'], 403);
+    }
+
+    $itemId = (int)$mybb->get_input('item_id');
+    $item = af_inv_get_item_for_owner($ownerUid, $itemId);
+    if (!$item) {
+        af_advancedinventory_json(['ok' => false, 'error' => 'item_not_found'], 404);
+    }
+
+    $sale = af_advinv_item_sale_profile($item);
+    if (empty($sale['can_sell'])) {
+        af_advancedinventory_json(['ok' => false, 'error' => 'sell_price_unavailable'], 422);
+    }
+
+    $sellMinor = max(0, (int)($sale['sell_total_minor'] ?? 0));
+    if ($sellMinor <= 0) {
+        af_advancedinventory_json(['ok' => false, 'error' => 'sell_price_invalid'], 422);
+    }
+
+    $appearanceInfo = af_advinv_resolve_appearance_item($item);
+
+    $db->write_query('START TRANSACTION');
+    try {
+        if (!empty($appearanceInfo['is_visual_item']) && $db->table_exists('af_aa_active')) {
+            $db->delete_query('af_aa_active', "entity_type='user' AND entity_id=" . $ownerUid . " AND item_id=" . $itemId);
+        }
+
+        $db->delete_query('af_advinv_equipped', 'uid=' . $ownerUid . ' AND item_id=' . $itemId);
+        $db->delete_query(AF_ADVINV_TABLE_ITEMS, 'id=' . $itemId . ' AND uid=' . $ownerUid);
+
+        if (function_exists('af_shop_add_balance')) {
+            af_shop_add_balance($ownerUid, (string)$sale['currency'], $sellMinor, 'inventory_sell', [
+                'item_id' => $itemId,
+                'kb_key' => (string)($item['kb_key'] ?? ''),
+                'title' => (string)($item['appearance_title'] ?? ($item['title'] ?? '')),
+                'qty' => (int)($item['qty'] ?? 1),
+                'source' => 'advancedinventory',
+            ]);
+        }
+
+        $db->write_query('COMMIT');
+    } catch (Throwable $e) {
+        $db->write_query('ROLLBACK');
+        af_advancedinventory_json(['ok' => false, 'error' => $e->getMessage()], 500);
+    }
+
+    $wallet = af_advinv_wallet_payload($ownerUid);
+    af_advancedinventory_json([
+        'ok' => true,
+        'sold_minor' => $sellMinor,
+        'sold_major' => (string)($sale['sell_total_major'] ?? '0'),
+        'currency' => (string)$sale['currency'],
+        'currency_symbol' => (string)$sale['currency_symbol'],
+        'wallet' => $wallet,
+        'message' => 'Предмет продан, баланс пополнен.',
+    ]);
 }
 
 function af_advancedinventory_api_list(): void
@@ -1736,6 +1974,161 @@ function af_inv_get_equipped(int $uid): array
     return $out;
 }
 
+function af_inv_get_item_for_owner(int $ownerUid, int $itemId): array
+{
+    global $db;
+
+    $ownerUid = (int)$ownerUid;
+    $itemId = (int)$itemId;
+    if ($ownerUid <= 0 || $itemId <= 0) {
+        return [];
+    }
+
+    $row = (array)$db->fetch_array(
+        $db->simple_select(
+            AF_ADVINV_TABLE_ITEMS,
+            '*',
+            'id=' . $itemId . ' AND uid=' . $ownerUid,
+            ['limit' => 1]
+        )
+    );
+
+    if (!$row) {
+        return [];
+    }
+
+    $items = af_advinv_enrich_items_from_kb([$row]);
+    return (array)($items[0] ?? $row);
+}
+
+function af_inv_find_equipped_slot_by_item(array $equipped, int $itemId): string
+{
+    $itemId = (int)$itemId;
+    if ($itemId <= 0) {
+        return '';
+    }
+
+    foreach ($equipped as $slotCode => $row) {
+        if ((int)($row['item_id'] ?? 0) === $itemId) {
+            return (string)$slotCode;
+        }
+    }
+
+    return '';
+}
+
+function af_inv_candidate_slots_for_item(array $item): array
+{
+    $entity = af_advancedinventory_normalize_entity((string)($item['entity'] ?? ''));
+    if ($entity !== 'equipment') {
+        return [];
+    }
+
+    $knownSlots = af_inv_equipment_slots();
+    $meta = af_advinv_decode_meta_json((string)($item['meta_json'] ?? ''));
+    $result = [];
+
+    $pushSlot = static function (string $rawSlot) use (&$result, $knownSlots): void {
+        $slot = mb_strtolower(trim($rawSlot));
+        if ($slot === '') {
+            return;
+        }
+
+        $aliases = [
+            'mainhand'      => 'weapon_mainhand',
+            'main_hand'     => 'weapon_mainhand',
+            'weapon'        => 'weapon_mainhand',
+            'offhand'       => 'weapon_offhand',
+            'off_hand'      => 'weapon_offhand',
+            'ammo'          => 'ammo',
+            'body'          => 'body',
+            'head'          => 'head',
+            'hands'         => 'hands',
+            'legs'          => 'legs',
+            'feet'          => 'feet',
+            'artifact'      => 'artifact',
+            'consumable'    => 'consumable_1',
+            'consumable_1'  => 'consumable_1',
+            'consumable_2'  => 'consumable_2',
+        ];
+
+        $slot = $aliases[$slot] ?? $slot;
+        if (!isset($knownSlots[$slot])) {
+            return;
+        }
+
+        $result[$slot] = $slot;
+    };
+
+    $paths = [
+        'rules.item.equip.slot',
+        'rules.item.equip.slots',
+        'rules.item.slot',
+        'equip.slot',
+        'equip.slots',
+        'slot',
+    ];
+
+    foreach ($paths as $path) {
+        $cursor = $meta;
+        $ok = true;
+        foreach (explode('.', $path) as $segment) {
+            if (!is_array($cursor) || !array_key_exists($segment, $cursor)) {
+                $ok = false;
+                break;
+            }
+            $cursor = $cursor[$segment];
+        }
+
+        if (!$ok) {
+            continue;
+        }
+
+        if (is_array($cursor)) {
+            foreach ($cursor as $slotValue) {
+                $pushSlot((string)$slotValue);
+            }
+        } else {
+            $pushSlot((string)$cursor);
+        }
+    }
+
+    if ($result) {
+        return array_values($result);
+    }
+
+    $subtype = mb_strtolower(trim((string)($item['subtype'] ?? '')));
+    if ($subtype === '') {
+        $subtype = af_advinv_classify_equipment_from_kb_meta($meta);
+    }
+
+    switch ($subtype) {
+        case 'weapon':
+            $pushSlot('weapon_mainhand');
+            $pushSlot('weapon_offhand');
+            break;
+
+        case 'armor':
+            $pushSlot('body');
+            break;
+
+        case 'ammo':
+            $pushSlot('ammo');
+            break;
+
+        case 'consumable':
+            $pushSlot('consumable_1');
+            $pushSlot('consumable_2');
+            break;
+
+        case 'augmentations':
+            $pushSlot('artifact');
+            break;
+    }
+
+    return array_values($result);
+}
+
 function af_advancedinventory_normalize_entity(string $entity): string
 {
     $entity = trim($entity);
@@ -1874,18 +2267,242 @@ function af_advinv_render_entity_tab(string $entity, int $ownerUid, string $sub,
 
 function af_advinv_render_entity_generic(string $entity, int $ownerUid, string $sub, int $page, bool $ajax): string
 {
-    $filters = ['entity' => $entity, 'subtype' => $sub, 'page' => max(1, $page)];
+    global $mybb;
+
+    $filters = [
+        'entity' => $entity,
+        'subtype' => $sub,
+        'page' => max(1, $page),
+    ];
+
     $data = af_inv_get_items($ownerUid, array_merge($filters, ['enrich' => true]));
+    $items = (array)($data['items'] ?? []);
     $canManage = af_advancedinventory_user_can_manage();
+    $canEditOwner = af_inv_can_manage_owner((int)($mybb->user['uid'] ?? 0), $ownerUid);
+    $equipped = $entity === 'equipment' ? af_inv_get_equipped($ownerUid) : [];
+    $wallet = af_advinv_wallet_payload($ownerUid);
 
-    $rows = af_advinv_render_tab_cards($data['items'], $canManage, false, []);
-    $filterButtons = af_advinv_render_subfilter_links($entity, $ownerUid, $sub, af_advancedinventory_subfilters($entity));
-    $html = '<div class="af-inv-subfilters">' . $filterButtons . '</div>';
-    $html .= '<div class="af-inv-grid-wrap"><div class="af-inv-grid">' . $rows . '</div></div>';
+    $filterButtons = af_advinv_render_subfilter_links(
+        $entity,
+        $ownerUid,
+        $sub,
+        af_advancedinventory_subfilters($entity)
+    );
 
+    $selectedItemId = !empty($items) ? (int)($items[0]['id'] ?? 0) : 0;
+    $hiddenPostKey = htmlspecialchars_uni((string)$mybb->post_code);
     $apiBase = af_advancedinventory_url('', [], false);
-    $html .= '<div class="af-inv-api" data-api-base="' . htmlspecialchars_uni($apiBase) . '" data-owner="' . $ownerUid . '"></div>';
+
+    $html = '';
+    $html .= '<div class="af-inv-entity-page" data-entity="' . htmlspecialchars_uni($entity) . '">';
+    $html .= '<input type="hidden" name="my_post_key" value="' . $hiddenPostKey . '">';
+    $html .= '<div class="af-inv-subfilters">' . $filterButtons . '</div>';
+    $html .= '<div class="af-inv-api"'
+        . ' data-api-base="' . htmlspecialchars_uni($apiBase) . '"'
+        . ' data-owner="' . (int)$ownerUid . '"'
+        . ' data-can-edit="' . ($canEditOwner ? '1' : '0') . '"'
+        . ' data-wallet-balance="' . htmlspecialchars_uni((string)($wallet['balance_major'] ?? '0')) . '"'
+        . ' data-wallet-symbol="' . htmlspecialchars_uni((string)($wallet['currency_symbol'] ?? '₡')) . '"></div>';
+    $html .= af_advinv_render_workspace($entity, $items, $selectedItemId, $canManage, $canEditOwner, $equipped);
+    $html .= '</div>';
+
     return $html;
+}
+
+function af_advinv_render_workspace(string $entity, array $items, int $selectedItemId, bool $canManage, bool $canEditOwner, array $equipped): string
+{
+    $html = '<div class="af-inv-workspace" data-entity="' . htmlspecialchars_uni($entity) . '">';
+    $html .= '<div class="af-inv-slots-pane">';
+    $html .= af_advinv_render_slot_grid($items, $selectedItemId, $equipped);
+    $html .= '</div>';
+    $html .= '<div class="af-inv-preview-pane">';
+    $html .= af_advinv_render_preview_stack($items, $selectedItemId, $canManage, $canEditOwner, $equipped);
+    $html .= '</div>';
+    $html .= '</div>';
+    return $html;
+}
+
+function af_advinv_render_slot_grid(array $items, int $selectedItemId, array $equipped): string
+{
+    if (!$items) {
+        return '<div class="af-inv-empty">В этом разделе пока пусто.</div>';
+    }
+
+    $equippedByItem = [];
+    foreach ($equipped as $slotCode => $row) {
+        $itemId = (int)($row['item_id'] ?? 0);
+        if ($itemId > 0) {
+            $equippedByItem[$itemId] = (string)$slotCode;
+        }
+    }
+
+    $html = '<div class="af-inv-slot-grid">';
+    foreach ($items as $item) {
+        $itemId = (int)($item['id'] ?? 0);
+        $title = trim((string)($item['appearance_title'] ?? ($item['title'] ?? 'Предмет')));
+        $icon = trim((string)($item['appearance_preview_image'] ?? ($item['icon'] ?? '')));
+        $qty = max(1, (int)($item['qty'] ?? 1));
+        $isVisual = !empty($item['is_visual_item']);
+        $isActive = !empty($item['appearance_is_active']);
+        $equippedSlot = (string)($equippedByItem[$itemId] ?? '');
+        $isSelected = $selectedItemId > 0 && $selectedItemId === $itemId;
+
+        $classes = ['af-inv-slot'];
+        if ($isSelected) { $classes[] = 'is-selected'; }
+        if ($isVisual) { $classes[] = 'is-appearance'; }
+        if ($isActive) { $classes[] = 'is-active'; }
+        if ($equippedSlot !== '') { $classes[] = 'is-equipped'; }
+
+        $iconHtml = $icon !== ''
+            ? '<img src="' . htmlspecialchars_uni($icon) . '" alt="' . htmlspecialchars_uni($title) . '" loading="lazy">'
+            : '<span class="af-inv-slot__placeholder">?</span>';
+
+        $badgeHtml = $qty > 1 ? '<span class="af-inv-slot__badge">' . $qty . '</span>' : '';
+        $stateMark = '';
+        if ($equippedSlot !== '') {
+            $stateMark = '<span class="af-inv-slot__state">E</span>';
+        } elseif ($isActive) {
+            $stateMark = '<span class="af-inv-slot__state">A</span>';
+        }
+
+        $html .= '<button type="button" class="' . htmlspecialchars_uni(implode(' ', $classes)) . '"'
+            . ' data-item-select="' . $itemId . '"'
+            . ' data-item-id="' . $itemId . '"'
+            . ' aria-label="' . htmlspecialchars_uni($title) . '">'
+            . '<span class="af-inv-slot__icon">' . $iconHtml . '</span>'
+            . $badgeHtml
+            . $stateMark
+            . '</button>';
+    }
+    $html .= '</div>';
+
+    return $html;
+}
+
+function af_advinv_render_preview_stack(array $items, int $selectedItemId, bool $canManage, bool $canEditOwner, array $equipped): string
+{
+    if (!$items) {
+        return '<div class="af-inv-preview-card is-active"><div class="af-inv-empty">Выбери раздел с предметами или купи что-нибудь в магазине.</div></div>';
+    }
+
+    $html = '';
+    foreach ($items as $index => $item) {
+        $itemId = (int)($item['id'] ?? 0);
+        $active = ($selectedItemId > 0 ? $selectedItemId === $itemId : $index === 0);
+        $html .= af_advinv_render_preview_card($item, $active, $canManage, $canEditOwner, $equipped);
+    }
+
+    return $html;
+}
+
+function af_advinv_render_preview_card(array $item, bool $active, bool $canManage, bool $canEditOwner, array $equipped): string
+{
+    $itemId = (int)($item['id'] ?? 0);
+    $title = trim((string)($item['appearance_title'] ?? ($item['title'] ?? 'Предмет')));
+    if ($title === '') {
+        $title = trim((string)($item['kb_key'] ?? 'Предмет'));
+    }
+
+    $icon = trim((string)($item['appearance_preview_image'] ?? ($item['icon'] ?? '')));
+    $qty = max(1, (int)($item['qty'] ?? 1));
+    $subtype = trim((string)($item['subtype'] ?? ''));
+    $kbKey = trim((string)($item['kb_key'] ?? ''));
+    $isVisual = !empty($item['is_visual_item']);
+    $appearanceTarget = trim((string)($item['appearance_target'] ?? ''));
+    $appearanceSlug = trim((string)($item['appearance_slug'] ?? ''));
+    $appearancePresetId = (int)($item['appearance_preset_id'] ?? 0);
+    $isActiveAppearance = !empty($item['appearance_is_active']);
+    $sale = af_advinv_item_sale_profile($item);
+
+    $slotCandidates = af_inv_candidate_slots_for_item($item);
+    $equippedSlot = af_inv_find_equipped_slot_by_item($equipped, $itemId);
+    $slotLabels = af_inv_equipment_slots();
+
+    $classes = ['af-inv-preview-card'];
+    if ($active) { $classes[] = 'is-active'; }
+
+    $metaRows = [];
+    if ($subtype !== '') {
+        $metaRows[] = ['Тип', $subtype];
+    }
+    if ($kbKey !== '') {
+        $metaRows[] = ['Ключ', $kbKey];
+    }
+    if ($isVisual && $appearancePresetId > 0) {
+        $metaRows[] = ['Preset', '#' . $appearancePresetId];
+    }
+    if ($isVisual && $appearanceSlug !== '') {
+        $metaRows[] = ['Slug', $appearanceSlug];
+    }
+    if ($isVisual && $appearanceTarget !== '') {
+        $metaRows[] = ['Target', $appearanceTarget];
+    }
+    if ($equippedSlot !== '') {
+        $metaRows[] = ['Надето', (string)($slotLabels[$equippedSlot] ?? $equippedSlot)];
+    } elseif ($slotCandidates) {
+        $defaultSlot = (string)$slotCandidates[0];
+        $metaRows[] = ['Слот', (string)($slotLabels[$defaultSlot] ?? $defaultSlot)];
+    }
+    if (!empty($sale['price_each_minor'])) {
+        $metaRows[] = ['Цена магазина', (string)$sale['price_each_major'] . ' ' . (string)$sale['currency_symbol']];
+        $metaRows[] = ['Продажа (80%)', (string)$sale['sell_total_major'] . ' ' . (string)$sale['currency_symbol']];
+    }
+
+    $statusHtml = '';
+    if ($isVisual) {
+        $statusHtml = '<div class="af-inv-preview-status ' . ($isActiveAppearance ? 'is-active' : 'is-inactive') . '">' . ($isActiveAppearance ? 'Пресет активен' : 'Пресет не активен') . '</div>';
+    } elseif ($equippedSlot !== '') {
+        $statusHtml = '<div class="af-inv-preview-status is-active">Предмет надет</div>';
+    } elseif ($slotCandidates) {
+        $statusHtml = '<div class="af-inv-preview-status is-inactive">Предмет готов к экипировке</div>';
+    }
+
+    $actions = '';
+    if ($canEditOwner) {
+        if ($isVisual) {
+            $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActiveAppearance ? ' disabled="disabled"' : '') . '>Активировать</button>';
+            $actions .= '<button type="button" class="af-inv-action" data-af-appearance-unapply-btn data-target-key="' . htmlspecialchars_uni($appearanceTarget) . '"' . (!$isActiveAppearance ? ' disabled="disabled"' : '') . '>Снять</button>';
+        } else {
+            if ($equippedSlot !== '') {
+                $actions .= '<button type="button" class="af-inv-action" data-action="unequip" data-item-id="' . $itemId . '" data-equip-slot="' . htmlspecialchars_uni($equippedSlot) . '">Снять</button>';
+            } elseif ($slotCandidates) {
+                $defaultSlot = (string)$slotCandidates[0];
+                $actions .= '<button type="button" class="af-inv-action" data-action="equip" data-item-id="' . $itemId . '" data-equip-slot="' . htmlspecialchars_uni($defaultSlot) . '">Надеть</button>';
+            }
+        }
+
+        $actions .= '<button type="button" class="af-inv-action" data-action="sell" data-item-id="' . $itemId . '"' . (empty($sale['can_sell']) ? ' disabled="disabled"' : '') . '>Продать</button>';
+    }
+
+    if ($canManage) {
+        $actions .= '<label class="af-inv-qty-wrap">Qty <input type="number" min="1" class="af-inv-qty" value="' . $qty . '"></label>';
+        $actions .= '<button type="button" class="af-inv-action" data-action="update" data-item-id="' . $itemId . '">Сохранить</button>';
+        $actions .= '<button type="button" class="af-inv-action" data-action="delete" data-item-id="' . $itemId . '">Удалить</button>';
+    }
+
+    $iconHtml = $icon !== ''
+        ? '<img src="' . htmlspecialchars_uni($icon) . '" alt="' . htmlspecialchars_uni($title) . '" loading="lazy">'
+        : '<div class="af-inv-card__placeholder">?</div>';
+
+    $metaHtml = '';
+    if ($metaRows) {
+        $metaHtml .= '<dl class="af-inv-preview-meta">';
+        foreach ($metaRows as $row) {
+            $metaHtml .= '<dt>' . htmlspecialchars_uni((string)$row[0]) . '</dt><dd>' . htmlspecialchars_uni((string)$row[1]) . '</dd>';
+        }
+        $metaHtml .= '</dl>';
+    }
+
+    return '<section class="' . htmlspecialchars_uni(implode(' ', $classes)) . '" data-preview-item="' . $itemId . '"' . ($active ? '' : ' hidden="hidden"') . '>'
+        . '<div class="af-inv-preview-media">' . $iconHtml . '</div>'
+        . '<div class="af-inv-preview-body">'
+        . '<h3 class="af-inv-preview-title">' . htmlspecialchars_uni($title) . '</h3>'
+        . '<div class="af-inv-preview-qty">Количество: x' . $qty . '</div>'
+        . $statusHtml
+        . $metaHtml
+        . '<div class="af-inv-card-actions af-inv-preview-actions">' . $actions . '</div>'
+        . '</div>'
+        . '</section>';
 }
 
 function af_advancedinventory_decode_assoc(string $json): array
@@ -1916,61 +2533,115 @@ function af_advancedinventory_subfilters(string $tab): array
 function af_advinv_render_tab_cards(array $items, bool $canManage, bool $allowEquipActions, array $equipped = []): string
 {
     $rows = '';
+    $slotLabels = af_inv_equipment_slots();
+
     foreach ($items as $item) {
-        $qty = (int)$item['qty'];
-        $title = (string)$item['title'];
-        $subtype = (string)$item['subtype'];
-        $icon = trim((string)$item['icon']);
-        $iconHtml = $icon !== '' ? '<img src="' . htmlspecialchars_uni($icon) . '" alt="" loading="lazy">' : '';
-        $actions = '';
-        $isVisualItem = !empty($item['is_visual_item']);
-        if ($allowEquipActions) {
-            $slotCandidates = af_inv_candidate_slots_for_item($item);
-            $isEquipped = af_inv_find_equipped_slot_by_item($equipped, (int)$item['id']);
-            if ($isEquipped !== '') {
-                $actions .= '<button class="af-inv-action" data-action="unequip" data-item-id="' . (int)$item['id'] . '">Снять</button>';
-            } elseif ($slotCandidates) {
-                $actions .= '<button class="af-inv-action" data-action="equip" data-item-id="' . (int)$item['id'] . '" data-equip-slot="' . htmlspecialchars_uni((string)$slotCandidates[0]) . '">Надеть</button>';
-            }
+        $itemId = (int)($item['id'] ?? 0);
+        $qty = max(1, (int)($item['qty'] ?? 1));
+        $title = trim((string)($item['appearance_title'] ?? ($item['title'] ?? '')));
+        if ($title === '') {
+            $title = trim((string)($item['kb_key'] ?? 'Предмет'));
         }
+
+        $subtype = trim((string)($item['subtype'] ?? ''));
+        $kbKey = trim((string)($item['kb_key'] ?? ''));
+        $icon = trim((string)($item['appearance_preview_image'] ?? ($item['icon'] ?? '')));
+        $iconHtml = $icon !== ''
+            ? '<img src="' . htmlspecialchars_uni($icon) . '" alt="' . htmlspecialchars_uni($title) . '" loading="lazy">'
+            : '<div class="af-inv-card__placeholder">?</div>';
+
+        $isVisualItem = !empty($item['is_visual_item']);
+        $cardClasses = ['af-inv-card'];
+        $actions = '';
+        $statusHtml = '';
+
         if ($isVisualItem) {
+            $cardClasses[] = 'af-inv-card--appearance';
+
             $appearanceTarget = trim((string)($item['appearance_target'] ?? ''));
             $presetId = (int)($item['appearance_preset_id'] ?? 0);
             $presetSlug = trim((string)($item['appearance_slug'] ?? ''));
-            $statusLabel = !empty($item['appearance_is_active']) ? 'Активен' : 'Не активен';
-            $statusClass = !empty($item['appearance_is_active']) ? 'is-active' : 'is-inactive';
-            $metaBits = [];
+            $isActive = !empty($item['appearance_is_active']);
+
+            $metaParts = [];
             if ($presetId > 0) {
-                $metaBits[] = 'preset #' . $presetId;
+                $metaParts[] = 'preset #' . $presetId;
             }
             if ($presetSlug !== '') {
-                $metaBits[] = 'slug: ' . $presetSlug;
+                $metaParts[] = 'slug: ' . $presetSlug;
             }
             if ($appearanceTarget !== '') {
-                $metaBits[] = 'target: ' . $appearanceTarget;
+                $metaParts[] = 'target: ' . $appearanceTarget;
             }
 
-            $actions .= '<button class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . (int)$item['id'] . '"' . (!empty($item['appearance_is_active']) ? ' disabled' : '') . '>Активировать</button>';
-            $actions .= '<button class="af-inv-action" data-af-appearance-unapply-btn data-target-key="' . htmlspecialchars_uni($appearanceTarget) . '"' . (empty($item['appearance_is_active']) ? ' disabled' : '') . '>Снять</button>';
-
-            $rows .= '<div class="af-inv-card af-inv-card--appearance" data-item-id="' . (int)$item['id'] . '" data-is-visual-item="1" data-appearance-target="' . htmlspecialchars_uni($appearanceTarget) . '" data-appearance-active="' . (!empty($item['appearance_is_active']) ? '1' : '0') . '">'
-                . $iconHtml
-                . '<div class="af-inv-card-title">' . htmlspecialchars_uni((string)($item['appearance_title'] ?: $title)) . '</div>'
-                . '<div class="af-inv-card-meta">' . htmlspecialchars_uni(implode(' / ', $metaBits)) . '</div>'
-                . '<div class="af-inv-card-status ' . $statusClass . '">' . $statusLabel . '</div>'
-                . '<div class="af-inv-card-actions">' . $actions . '</div>'
+            $statusHtml = '<div class="af-inv-card-status ' . ($isActive ? 'is-active' : 'is-inactive') . '">'
+                . ($isActive ? 'Активен' : 'Не активен')
                 . '</div>';
+
+            $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActive ? ' disabled="disabled"' : '') . '>Активировать</button>';
+            $actions .= '<button type="button" class="af-inv-action" data-af-appearance-unapply-btn data-target-key="' . htmlspecialchars_uni($appearanceTarget) . '"' . (!$isActive ? ' disabled="disabled"' : '') . '>Снять</button>';
+
+            if ($canManage) {
+                $actions .= '<button type="button" class="af-inv-action" data-action="delete" data-item-id="' . $itemId . '">Удалить</button>';
+            }
+
+            $rows .= '<article class="' . htmlspecialchars_uni(implode(' ', $cardClasses)) . '" data-item-id="' . $itemId . '" data-is-visual-item="1" data-appearance-target="' . htmlspecialchars_uni($appearanceTarget) . '" data-appearance-active="' . ($isActive ? '1' : '0') . '">'
+                . '<div class="af-inv-card__media">' . $iconHtml . '</div>'
+                . '<div class="af-inv-card-title">' . htmlspecialchars_uni($title) . '</div>'
+                . '<div class="af-inv-card-meta">' . htmlspecialchars_uni(implode(' / ', $metaParts)) . '</div>'
+                . '<div class="af-inv-card-qty">x' . $qty . '</div>'
+                . $statusHtml
+                . '<div class="af-inv-card-actions">' . $actions . '</div>'
+                . '</article>';
+
             continue;
         }
-        if ($canManage) {
-            $actions .= '<button class="af-inv-action" data-action="delete" data-item-id="' . (int)$item['id'] . '">Удалить</button>';
-            $actions .= '<label>Qty <input type="number" min="1" class="af-inv-qty" value="' . $qty . '"></label><button class="af-inv-action" data-action="update" data-item-id="' . (int)$item['id'] . '">Сохранить</button>';
+
+        if ($allowEquipActions) {
+            $slotCandidates = af_inv_candidate_slots_for_item($item);
+            $equippedSlot = af_inv_find_equipped_slot_by_item($equipped, $itemId);
+
+            if ($equippedSlot !== '') {
+                $cardClasses[] = 'is-equipped';
+                $slotLabel = (string)($slotLabels[$equippedSlot] ?? $equippedSlot);
+                $statusHtml = '<div class="af-inv-card-status is-active">Надето: ' . htmlspecialchars_uni($slotLabel) . '</div>';
+                $actions .= '<button type="button" class="af-inv-action" data-action="unequip" data-item-id="' . $itemId . '" data-equip-slot="' . htmlspecialchars_uni($equippedSlot) . '">Снять</button>';
+            } elseif ($slotCandidates) {
+                $defaultSlot = (string)$slotCandidates[0];
+                $slotLabel = (string)($slotLabels[$defaultSlot] ?? $defaultSlot);
+                $statusHtml = '<div class="af-inv-card-status is-inactive">Слот: ' . htmlspecialchars_uni($slotLabel) . '</div>';
+                $actions .= '<button type="button" class="af-inv-action" data-action="equip" data-item-id="' . $itemId . '" data-equip-slot="' . htmlspecialchars_uni($defaultSlot) . '">Надеть</button>';
+            }
         }
-        $rows .= '<div class="af-inv-card">' . $iconHtml . '<div class="af-inv-card-title">' . htmlspecialchars_uni($title) . '</div><div class="af-inv-card-meta">' . htmlspecialchars_uni($subtype) . '</div><div class="af-inv-card-qty">x' . $qty . '</div><div class="af-inv-card-actions">' . $actions . '</div></div>';
+
+        if ($canManage) {
+            $actions .= '<button type="button" class="af-inv-action" data-action="delete" data-item-id="' . $itemId . '">Удалить</button>';
+            $actions .= '<label class="af-inv-qty-wrap">Qty <input type="number" min="1" class="af-inv-qty" value="' . $qty . '"></label>';
+            $actions .= '<button type="button" class="af-inv-action" data-action="update" data-item-id="' . $itemId . '">Сохранить</button>';
+        }
+
+        $metaParts = [];
+        if ($subtype !== '') {
+            $metaParts[] = $subtype;
+        }
+        if ($kbKey !== '') {
+            $metaParts[] = $kbKey;
+        }
+
+        $rows .= '<article class="' . htmlspecialchars_uni(implode(' ', $cardClasses)) . '" data-item-id="' . $itemId . '">'
+            . '<div class="af-inv-card__media">' . $iconHtml . '</div>'
+            . '<div class="af-inv-card-title">' . htmlspecialchars_uni($title) . '</div>'
+            . '<div class="af-inv-card-meta">' . htmlspecialchars_uni(implode(' / ', $metaParts)) . '</div>'
+            . '<div class="af-inv-card-qty">x' . $qty . '</div>'
+            . $statusHtml
+            . '<div class="af-inv-card-actions">' . $actions . '</div>'
+            . '</article>';
     }
+
     if ($rows === '') {
-        $rows = '<div class="af-inv-empty">Inventory is empty.</div>';
+        $rows = '<div class="af-inv-empty">В этом разделе пока пусто.</div>';
     }
+
     return $rows;
 }
 
