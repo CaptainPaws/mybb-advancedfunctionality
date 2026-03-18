@@ -45,6 +45,7 @@ function af_advancedinventory_install(): void
     af_advancedinventory_ensure_setting('af_advancedinventory_manage_groups', 'Manage groups', 'CSV group IDs that may open inventories.php and manage inventories', 'text', '3,4,6', 5, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_debug_enabled', 'Enable debug logging', 'Write Advanced Inventory debug events to file', 'yesno', '0', 6, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_debug_max_kb', 'Debug log max size (KB)', 'Rotate debug log when size exceeds this limit. Set 0 to disable rotation.', 'numeric', '512', 7, $gid);
+    af_advancedinventory_ensure_setting('af_advancedinventory_support_slots_json', 'Support slots JSON', 'JSON list of support slot configs: slot_code, title_ru/title_en, sortorder.', 'textarea', '[{"slot_code":"support_1","title_ru":"Быстрый слот 1","title_en":"Support slot 1","sortorder":10},{"slot_code":"support_2","title_ru":"Быстрый слот 2","title_en":"Support slot 2","sortorder":20},{"slot_code":"support_3","title_ru":"Быстрый слот 3","title_en":"Support slot 3","sortorder":30}]', 8, $gid);
 
     af_advancedinventory_ensure_inventory_storage();
     af_advancedinventory_upgrade_schema();
@@ -82,6 +83,7 @@ function af_advancedinventory_activate(): void
     );
     af_advancedinventory_ensure_setting('af_advancedinventory_debug_enabled', 'Enable debug logging', 'Write Advanced Inventory debug events to file', 'yesno', '0', 6, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_debug_max_kb', 'Debug log max size (KB)', 'Rotate debug log when size exceeds this limit. Set 0 to disable rotation.', 'numeric', '512', 7, $gid);
+    af_advancedinventory_ensure_setting('af_advancedinventory_support_slots_json', 'Support slots JSON', 'JSON list of support slot configs: slot_code, title_ru/title_en, sortorder.', 'textarea', '[{"slot_code":"support_1","title_ru":"Быстрый слот 1","title_en":"Support slot 1","sortorder":10},{"slot_code":"support_2","title_ru":"Быстрый слот 2","title_en":"Support slot 2","sortorder":20},{"slot_code":"support_3","title_ru":"Быстрый слот 3","title_en":"Support slot 3","sortorder":30}]', 8, $gid);
 
     af_advancedinventory_upgrade_schema();
     af_advancedinventory_templates_install_or_update();
@@ -109,6 +111,7 @@ function af_advancedinventory_write_schema_markdown(): void
     $requiredTables = [
         $prefix . 'af_advinv_items',
         $prefix . 'af_advinv_equipped',
+        $prefix . 'af_advinv_support_slots',
         $prefix . 'af_advinv_entities',
         $prefix . 'af_advinv_entity_filters',
         $prefix . 'af_advinv_shop_map',
@@ -216,6 +219,7 @@ function af_advancedinventory_uninstall(): void
         $db->delete_query('settinggroups', 'gid=' . $gid);
     }
     $db->delete_query('templates', "title LIKE 'advancedinventory_%'");
+    if ($db->table_exists('af_advinv_support_slots')) { $db->drop_table('af_advinv_support_slots'); }
     if ($db->table_exists(AF_ADVINV_TABLE_SHOP_MAP)) {
         $db->drop_table(AF_ADVINV_TABLE_SHOP_MAP);
     }
@@ -314,7 +318,7 @@ function af_advancedinventory_misc_router(): void
 {
     global $mybb;
     $action = (string)$mybb->get_input('action');
-    if (!in_array($action, ['inventory', 'inventories', 'tab', 'entity', 'api_list', 'api_move', 'api_equip', 'api_unequip', 'api_update', 'api_delete', 'api_sell'], true)) {
+    if (!in_array($action, ['inventory', 'inventories', 'tab', 'entity', 'api_list', 'api_move', 'api_equip', 'api_unequip', 'api_update', 'api_delete', 'api_sell', 'api_bind_support_slot', 'api_unbind_support_slot', 'api_support_slots_state'], true)) {
         return;
     }
     if (!af_advancedinventory_alias_available()) {
@@ -355,6 +359,9 @@ function af_advancedinventory_dispatch(string $action): void
         case 'api_update': af_advancedinventory_api_update(); return;
         case 'api_delete': af_advancedinventory_api_delete(); return;
         case 'api_sell': af_advancedinventory_api_sell(); return;
+        case 'api_bind_support_slot': af_advancedinventory_api_bind_support_slot(); return;
+        case 'api_unbind_support_slot': af_advancedinventory_api_unbind_support_slot(); return;
+        case 'api_support_slots_state': af_advancedinventory_api_support_slots_state(); return;
         case 'api_move': af_advancedinventory_json(['ok' => false, 'error' => 'not_implemented'], 501); return;
     }
     error_no_permission();
@@ -526,6 +533,20 @@ function af_advancedinventory_upgrade_schema(): void
 
         af_advinv_debug_log('schema_upgrade_done', ['added_cols' => $addedCols, 'added_keys' => $addedKeys]);
         af_advancedinventory_log_schema_columns();
+    }
+
+    if (!$db->table_exists('af_advinv_support_slots')) {
+        $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_advinv_support_slots (
+            uid INT UNSIGNED NOT NULL,
+            slot_code VARCHAR(64) NOT NULL,
+            item_id BIGINT UNSIGNED NOT NULL,
+            sortorder INT NOT NULL DEFAULT 0,
+            created_at BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            updated_at BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            PRIMARY KEY (uid, slot_code),
+            KEY uid_item (uid, item_id),
+            KEY uid_sortorder (uid, sortorder)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     }
 
     af_advinv_entities_upgrade_schema();
@@ -1020,6 +1041,87 @@ function af_advancedinventory_api_unequip(): void
     af_advancedinventory_json(['ok' => true]);
 }
 
+function af_advancedinventory_api_support_slots_state(): void
+{
+    global $mybb;
+    $viewerUid = (int)($mybb->user['uid'] ?? 0);
+    $ownerUid = (int)$mybb->get_input('uid');
+    if ($ownerUid <= 0) { $ownerUid = $viewerUid; }
+    if (!af_inv_user_can_view($viewerUid, $ownerUid)) { af_advancedinventory_json(['ok' => false, 'error' => 'forbidden'], 403); }
+
+    $slotConfigs = af_inv_support_slots();
+    $bindings = af_inv_support_bindings($ownerUid);
+    $itemsById = [];
+    foreach (af_inv_get_items($ownerUid, ['entity' => 'equipment', 'page' => 1, 'per_page' => 500])['items'] ?? [] as $item) {
+        $itemsById[(int)($item['id'] ?? 0)] = $item;
+    }
+
+    $slots = [];
+    foreach ($slotConfigs as $slotCode => $config) {
+        $binding = (array)($bindings[$slotCode] ?? []);
+        $item = [];
+        if ($binding) {
+            $item = (array)($itemsById[(int)($binding['item_id'] ?? 0)] ?? af_inv_get_item_for_owner($ownerUid, (int)($binding['item_id'] ?? 0)));
+        }
+        if ($item && !af_inv_is_consumable_item($item)) {
+            $item = [];
+        }
+        $slots[] = [
+            'slot_code' => $slotCode,
+            'title' => (string)($config['title'] ?? $slotCode),
+            'legacy_slot' => (string)($config['legacy_slot'] ?? ''),
+            'sortorder' => (int)($config['sortorder'] ?? 0),
+            'item_id' => (int)($binding['item_id'] ?? 0),
+            'item_title' => (string)($item['title'] ?? $item['appearance_title'] ?? ''),
+            'qty_bound' => (int)($item['qty'] ?? 0),
+            'is_empty' => empty($binding),
+        ];
+    }
+
+    af_advancedinventory_json(['ok' => true, 'slots' => $slots]);
+}
+
+function af_advancedinventory_api_bind_support_slot(): void
+{
+    global $mybb, $db;
+    af_advancedinventory_require_post();
+    $ownerUid = (int)$mybb->get_input('uid');
+    $viewerUid = (int)($mybb->user['uid'] ?? 0);
+    if (!af_inv_can_manage_owner($viewerUid, $ownerUid)) { af_advancedinventory_json(['ok' => false, 'error' => 'forbidden'], 403); }
+    $item = af_inv_get_item_for_owner($ownerUid, (int)$mybb->get_input('item_id'));
+    if (!$item) { af_advancedinventory_json(['ok' => false, 'error' => 'item_not_found'], 404); }
+    if (!af_inv_is_consumable_item($item)) { af_advancedinventory_json(['ok' => false, 'error' => 'item_not_consumable'], 422); }
+    $slotCode = af_inv_map_legacy_support_slot((string)$mybb->get_input('slot_code'));
+    $slotConfigs = af_inv_support_slots();
+    if ($slotCode === '' || !isset($slotConfigs[$slotCode])) { af_advancedinventory_json(['ok' => false, 'error' => 'slot_invalid'], 422); }
+    $db->delete_query('af_advinv_support_slots', 'uid=' . $ownerUid . ' AND item_id=' . (int)$item['id']);
+    $exists = (int)$db->fetch_field($db->simple_select('af_advinv_support_slots', 'COUNT(*) c', "uid={$ownerUid} AND slot_code='" . $db->escape_string($slotCode) . "'"), 'c');
+    $row = ['item_id' => (int)$item['id'], 'sortorder' => (int)($slotConfigs[$slotCode]['sortorder'] ?? 0), 'updated_at' => TIME_NOW];
+    if ($exists > 0) {
+        $db->update_query('af_advinv_support_slots', $row, "uid={$ownerUid} AND slot_code='" . $db->escape_string($slotCode) . "'");
+    } else {
+        $row['uid'] = $ownerUid; $row['slot_code'] = $db->escape_string($slotCode); $row['created_at'] = TIME_NOW;
+        $db->insert_query('af_advinv_support_slots', $row);
+    }
+    af_advancedinventory_json(['ok' => true, 'slot_code' => $slotCode]);
+}
+
+function af_advancedinventory_api_unbind_support_slot(): void
+{
+    global $mybb, $db;
+    af_advancedinventory_require_post();
+    $ownerUid = (int)$mybb->get_input('uid');
+    $viewerUid = (int)($mybb->user['uid'] ?? 0);
+    if (!af_inv_can_manage_owner($viewerUid, $ownerUid)) { af_advancedinventory_json(['ok' => false, 'error' => 'forbidden'], 403); }
+    $slotCode = af_inv_map_legacy_support_slot((string)$mybb->get_input('slot_code'));
+    if ($slotCode !== '') {
+        $db->delete_query('af_advinv_support_slots', 'uid=' . $ownerUid . " AND slot_code='" . $db->escape_string($slotCode) . "'");
+    } else {
+        $db->delete_query('af_advinv_support_slots', 'uid=' . $ownerUid . ' AND item_id=' . (int)$mybb->get_input('item_id'));
+    }
+    af_advancedinventory_json(['ok' => true]);
+}
+
 function af_advancedinventory_api_update(): void
 {
     global $mybb, $db;
@@ -1228,8 +1330,8 @@ function af_advancedinventory_api_sell(): void
     $equippedSlot = af_inv_find_equipped_slot_by_item($equipped, $itemId);
     if ($equippedSlot !== '' && $sellQty < $itemQty) {
         $slotCandidates = af_inv_candidate_slots_for_item($item);
-        $isConsumableSlot = strpos($equippedSlot, 'consumable_') === 0;
-        $isConsumableItem = in_array('consumable_1', $slotCandidates, true) || in_array('consumable_2', $slotCandidates, true);
+        $isConsumableSlot = strpos($equippedSlot, 'support_') === 0 || strpos($equippedSlot, 'consumable_') === 0;
+        $isConsumableItem = af_inv_is_consumable_item($item);
         if (!$isConsumableSlot || !$isConsumableItem) {
             af_advancedinventory_json(['ok' => false, 'error' => 'equipped_partial_sale_forbidden'], 422);
         }
@@ -1989,9 +2091,114 @@ function af_inv_can_manage_owner(int $viewerUid, int $ownerUid): bool
     return af_advancedinventory_user_can_manage();
 }
 
+function af_inv_legacy_support_slot_map(): array
+{
+    return [
+        'consumable_1' => 'support_1',
+        'consumable_2' => 'support_2',
+    ];
+}
+
+function af_inv_support_slots(): array
+{
+    global $mybb;
+
+    $raw = (string)($mybb->settings['af_advancedinventory_support_slots_json'] ?? '');
+    $decoded = af_advancedinventory_decode_assoc($raw);
+    if (!is_array($decoded) || array_values($decoded) !== $decoded) {
+        $decoded = [];
+    }
+
+    $slots = [];
+    foreach ($decoded as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $slotCode = trim((string)($row['slot_code'] ?? $row['code'] ?? ''));
+        if ($slotCode === '') {
+            continue;
+        }
+        $titleRu = trim((string)($row['title_ru'] ?? $row['title'] ?? ''));
+        $titleEn = trim((string)($row['title_en'] ?? $row['title'] ?? ''));
+        $title = $titleRu !== '' ? $titleRu : ($titleEn !== '' ? $titleEn : $slotCode);
+        $slots[$slotCode] = [
+            'slot_code' => $slotCode,
+            'title' => $title,
+            'title_ru' => $titleRu,
+            'title_en' => $titleEn,
+            'sortorder' => (int)($row['sortorder'] ?? $row['sort_order'] ?? 0),
+        ];
+    }
+
+    foreach (af_inv_legacy_support_slot_map() as $legacyCode => $slotCode) {
+        if (!isset($slots[$slotCode])) {
+            $slots[$slotCode] = [
+                'slot_code' => $slotCode,
+                'title' => 'Быстрый слот ' . preg_replace('~^support_~', '', $slotCode),
+                'title_ru' => 'Быстрый слот ' . preg_replace('~^support_~', '', $slotCode),
+                'title_en' => 'Support slot ' . preg_replace('~^support_~', '', $slotCode),
+                'sortorder' => (int)preg_replace('~\D+~', '', $slotCode) * 10,
+            ];
+        }
+        $slots[$slotCode]['legacy_slot'] = $legacyCode;
+    }
+
+    uasort($slots, static function (array $a, array $b): int {
+        $sort = ((int)($a['sortorder'] ?? 0)) <=> ((int)($b['sortorder'] ?? 0));
+        return $sort !== 0 ? $sort : strcmp((string)$a['slot_code'], (string)$b['slot_code']);
+    });
+
+    return $slots;
+}
+
+function af_inv_support_slot_labels(): array
+{
+    $labels = [];
+    foreach (af_inv_support_slots() as $slotCode => $slot) {
+        $labels[$slotCode] = (string)($slot['title'] ?? $slotCode);
+    }
+    return $labels;
+}
+
+function af_inv_support_bindings(int $uid): array
+{
+    global $db;
+    $out = [];
+    if ($uid <= 0 || !$db->table_exists('af_advinv_support_slots')) {
+        return $out;
+    }
+    $q = $db->simple_select('af_advinv_support_slots', '*', 'uid=' . (int)$uid, ['order_by' => 'sortorder ASC, slot_code ASC']);
+    while ($row = $db->fetch_array($q)) {
+        $out[(string)$row['slot_code']] = $row;
+    }
+    return $out;
+}
+
+function af_inv_find_support_slot_by_item(array $bindings, int $itemId): string
+{
+    foreach ($bindings as $slotCode => $row) {
+        if ((int)($row['item_id'] ?? 0) === $itemId) {
+            return (string)$slotCode;
+        }
+    }
+    return '';
+}
+
+function af_inv_is_consumable_item(array $item): bool
+{
+    return trim((string)($item['subtype'] ?? '')) === 'consumable';
+}
+
+function af_inv_map_legacy_support_slot(string $slot): string
+{
+    $slot = trim($slot);
+    $map = af_inv_legacy_support_slot_map();
+    return $map[$slot] ?? $slot;
+}
+
 function af_inv_equipment_slots(): array
 {
-    return ['head' => 'Head', 'body' => 'Body', 'hands' => 'Hands', 'legs' => 'Legs', 'feet' => 'Feet', 'weapon_mainhand' => 'Main hand', 'weapon_offhand' => 'Off hand', 'consumable_1' => 'Consumable 1', 'consumable_2' => 'Consumable 2', 'ammo' => 'Ammo', 'artifact' => 'Artifact'];
+    return ['head' => 'Head', 'body' => 'Body', 'hands' => 'Hands', 'legs' => 'Legs', 'feet' => 'Feet', 'weapon_mainhand' => 'Main hand', 'weapon_offhand' => 'Off hand', 'ammo' => 'Ammo', 'artifact' => 'Artifact'] + af_inv_support_slot_labels();
 }
 
 function af_inv_get_equipped(int $uid): array
@@ -2079,9 +2286,9 @@ function af_inv_candidate_slots_for_item(array $item): array
             'legs'          => 'legs',
             'feet'          => 'feet',
             'artifact'      => 'artifact',
-            'consumable'    => 'consumable_1',
-            'consumable_1'  => 'consumable_1',
-            'consumable_2'  => 'consumable_2',
+            'consumable'    => 'support_1',
+            'consumable_1'  => 'support_1',
+            'consumable_2'  => 'support_2',
         ];
 
         $slot = $aliases[$slot] ?? $slot;
@@ -2149,8 +2356,9 @@ function af_inv_candidate_slots_for_item(array $item): array
             break;
 
         case 'consumable':
-            $pushSlot('consumable_1');
-            $pushSlot('consumable_2');
+            foreach (array_keys(af_inv_support_slots()) as $supportSlotCode) {
+                $pushSlot($supportSlotCode);
+            }
             break;
 
         case 'augmentations':
@@ -2487,9 +2695,9 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
     if ($isVisual) {
         $statusHtml = '<div class="af-inv-preview-status ' . ($isActiveAppearance ? 'is-active' : 'is-inactive') . '">' . ($isActiveAppearance ? 'Пресет активен' : 'Пресет не активен') . '</div>';
     } elseif ($equippedSlot !== '') {
-        $statusHtml = '<div class="af-inv-preview-status is-active">Предмет надет</div>';
+        $statusHtml = '<div class="af-inv-preview-status is-active">' . (af_inv_is_consumable_item($item) ? 'Назначен в быстрый слот' : 'Предмет надет') . '</div>';
     } elseif ($slotCandidates) {
-        $statusHtml = '<div class="af-inv-preview-status is-inactive">Предмет готов к экипировке</div>';
+        $statusHtml = '<div class="af-inv-preview-status is-inactive">' . (af_inv_is_consumable_item($item) ? 'Предмет готов к быстрому слоту' : 'Предмет готов к экипировке') . '</div>';
     }
 
     $actions = '';
@@ -2499,10 +2707,18 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
             $actions .= '<button type="button" class="af-inv-action" data-af-appearance-unapply-btn data-target-key="' . htmlspecialchars_uni($appearanceTarget) . '"' . (!$isActiveAppearance ? ' disabled="disabled"' : '') . '>Снять</button>';
         } else {
             if ($equippedSlot !== '') {
-                $actions .= '<button type="button" class="af-inv-action" data-action="unequip" data-item-id="' . $itemId . '" data-equip-slot="' . htmlspecialchars_uni($equippedSlot) . '">Снять</button>';
+                if (af_inv_is_consumable_item($item)) {
+                    $actions .= '<button type="button" class="af-inv-action" data-action="unbind_support_slot" data-item-id="' . $itemId . '" data-slot-code="' . htmlspecialchars_uni($equippedSlot) . '">Убрать из быстрого слота</button>';
+                } else {
+                    $actions .= '<button type="button" class="af-inv-action" data-action="unequip" data-item-id="' . $itemId . '" data-equip-slot="' . htmlspecialchars_uni($equippedSlot) . '">Снять</button>';
+                }
             } elseif ($slotCandidates) {
                 $defaultSlot = (string)$slotCandidates[0];
-                $actions .= '<button type="button" class="af-inv-action" data-action="equip" data-item-id="' . $itemId . '" data-equip-slot="' . htmlspecialchars_uni($defaultSlot) . '">Надеть</button>';
+                if (af_inv_is_consumable_item($item)) {
+                    $actions .= '<button type="button" class="af-inv-action" data-action="bind_support_slot" data-item-id="' . $itemId . '" data-slot-code="' . htmlspecialchars_uni($defaultSlot) . '">В быстрый слот</button>';
+                } else {
+                    $actions .= '<button type="button" class="af-inv-action" data-action="equip" data-item-id="' . $itemId . '" data-equip-slot="' . htmlspecialchars_uni($defaultSlot) . '">Надеть</button>';
+                }
             }
         }
 
@@ -2643,13 +2859,17 @@ function af_advinv_render_tab_cards(array $items, bool $canManage, bool $allowEq
             if ($equippedSlot !== '') {
                 $cardClasses[] = 'is-equipped';
                 $slotLabel = (string)($slotLabels[$equippedSlot] ?? $equippedSlot);
-                $statusHtml = '<div class="af-inv-card-status is-active">Надето: ' . htmlspecialchars_uni($slotLabel) . '</div>';
-                $actions .= '<button type="button" class="af-inv-action" data-action="unequip" data-item-id="' . $itemId . '" data-equip-slot="' . htmlspecialchars_uni($equippedSlot) . '">Снять</button>';
+                $statusHtml = '<div class="af-inv-card-status is-active">' . (af_inv_is_consumable_item($item) ? 'Быстрый слот: ' : 'Надето: ') . htmlspecialchars_uni($slotLabel) . '</div>';
+                $actions .= af_inv_is_consumable_item($item)
+                    ? '<button type="button" class="af-inv-action" data-action="unbind_support_slot" data-item-id="' . $itemId . '" data-slot-code="' . htmlspecialchars_uni($equippedSlot) . '">Убрать из быстрого слота</button>'
+                    : '<button type="button" class="af-inv-action" data-action="unequip" data-item-id="' . $itemId . '" data-equip-slot="' . htmlspecialchars_uni($equippedSlot) . '">Снять</button>';
             } elseif ($slotCandidates) {
                 $defaultSlot = (string)$slotCandidates[0];
                 $slotLabel = (string)($slotLabels[$defaultSlot] ?? $defaultSlot);
-                $statusHtml = '<div class="af-inv-card-status is-inactive">Слот: ' . htmlspecialchars_uni($slotLabel) . '</div>';
-                $actions .= '<button type="button" class="af-inv-action" data-action="equip" data-item-id="' . $itemId . '" data-equip-slot="' . htmlspecialchars_uni($defaultSlot) . '">Надеть</button>';
+                $statusHtml = '<div class="af-inv-card-status is-inactive">' . (af_inv_is_consumable_item($item) ? 'Быстрый слот: ' : 'Слот: ') . htmlspecialchars_uni($slotLabel) . '</div>';
+                $actions .= af_inv_is_consumable_item($item)
+                    ? '<button type="button" class="af-inv-action" data-action="bind_support_slot" data-item-id="' . $itemId . '" data-slot-code="' . htmlspecialchars_uni($defaultSlot) . '">В быстрый слот</button>'
+                    : '<button type="button" class="af-inv-action" data-action="equip" data-item-id="' . $itemId . '" data-equip-slot="' . htmlspecialchars_uni($defaultSlot) . '">Надеть</button>';
             }
         }
 

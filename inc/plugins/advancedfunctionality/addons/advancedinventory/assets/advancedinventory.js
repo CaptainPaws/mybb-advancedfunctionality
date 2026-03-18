@@ -225,13 +225,17 @@
       }
 
       var action = actionBtn.getAttribute('data-action') || '';
-      if (['update', 'delete', 'equip', 'unequip', 'sell'].indexOf(action) === -1) {
+      if (['update', 'delete', 'equip', 'unequip', 'sell', 'bind_support_slot', 'unbind_support_slot'].indexOf(action) === -1) {
         return;
       }
 
       e.preventDefault();
 
       var ctx = inventoryContext(page);
+      if (action === 'bind_support_slot') {
+        openSupportSlotPicker(page, actionBtn, ctx);
+        return;
+      }
       var payload = {
         uid: ctx.uid,
         item_id: actionBtn.getAttribute('data-item-id') || '0',
@@ -259,6 +263,9 @@
       if (action === 'equip' || action === 'unequip') {
         payload.equip_slot = actionBtn.getAttribute('data-equip-slot') || '';
       }
+      if (action === 'unbind_support_slot') {
+        payload.slot_code = actionBtn.getAttribute('data-slot-code') || '';
+      }
 
       withLoading(actionBtn, postForm(apiActionUrl(ctx.apiBase, 'api_' + action), payload))
         .then(function (res) {
@@ -273,6 +280,8 @@
             showMessage(page, 'Предмет надет.', false);
           } else if (action === 'unequip') {
             showMessage(page, 'Предмет снят.', false);
+          } else if (action === 'unbind_support_slot') {
+            showMessage(page, 'Предмет убран из быстрого слота.', false);
           }
           page.__afInvReloadCurrent();
         })
@@ -284,7 +293,97 @@
     activateSlot(panel, '');
   }
 
+
+  function supportSlotModal(page) {
+    if (page.__afInvSupportModal) {
+      return page.__afInvSupportModal;
+    }
+
+    var overlay = document.createElement('div');
+    overlay.className = 'af-inv-support-modal';
+    overlay.setAttribute('hidden', 'hidden');
+    overlay.innerHTML = ''
+      + '<div class="af-inv-support-modal__backdrop" data-support-close="1"></div>'
+      + '<div class="af-inv-support-modal__dialog" role="dialog" aria-modal="true" aria-label="Выбор быстрого слота">'
+      + '<div class="af-inv-support-modal__header"><strong>Выберите быстрый слот</strong><button type="button" class="af-inv-action" data-support-close="1">Закрыть</button></div>'
+      + '<div class="af-inv-support-modal__body"></div>'
+      + '</div>';
+    page.appendChild(overlay);
+    overlay.addEventListener('click', function (e) {
+      if (e.target && e.target.getAttribute('data-support-close') === '1') {
+        overlay.setAttribute('hidden', 'hidden');
+      }
+      var bindBtn = e.target.closest('[data-support-bind-slot]');
+      if (!bindBtn) return;
+      var pending = overlay.__pendingBind || null;
+      if (!pending) return;
+      var payload = {
+        uid: pending.uid,
+        item_id: pending.itemId,
+        slot_code: bindBtn.getAttribute('data-support-bind-slot') || '',
+        my_post_key: pending.postKey
+      };
+      withLoading(bindBtn, postForm(apiActionUrl(pending.apiBase, 'api_bind_support_slot'), payload))
+        .then(function () {
+          overlay.setAttribute('hidden', 'hidden');
+          showMessage(page, 'Предмет добавлен в быстрый слот.', false);
+          if (typeof page.__afInvReloadCurrent === 'function') {
+            page.__afInvReloadCurrent();
+          }
+        })
+        .catch(function (err) {
+          showMessage(page, err.message || 'Не удалось назначить быстрый слот.', true);
+        });
+    });
+    page.__afInvSupportModal = overlay;
+    return overlay;
+  }
+
+  function openSupportSlotPicker(page, actionBtn, ctx) {
+    var modal = supportSlotModal(page);
+    var body = modal.querySelector('.af-inv-support-modal__body');
+    body.innerHTML = '<div class="af-inv-muted">Загрузка слотов…</div>';
+    modal.__pendingBind = {
+      uid: ctx.uid,
+      itemId: actionBtn.getAttribute('data-item-id') || '0',
+      postKey: getPostKey(page),
+      apiBase: ctx.apiBase
+    };
+    modal.removeAttribute('hidden');
+
+    fetch(apiActionUrl(ctx.apiBase, 'api_support_slots_state') + '&uid=' + encodeURIComponent(ctx.uid), { credentials: 'same-origin' })
+      .then(function (res) { return res.json(); })
+      .then(function (res) {
+        if (!res || res.ok === false) {
+          throw new Error((res && res.error) || 'Не удалось загрузить слоты.');
+        }
+        var preferred = actionBtn.getAttribute('data-slot-code') || '';
+        var html = '';
+        (res.slots || []).forEach(function (slot) {
+          var isCurrent = String(slot.item_id || '0') === String(modal.__pendingBind.itemId || '');
+          var isPreferred = preferred && preferred === String(slot.slot_code || '');
+          html += '<button type="button" class="af-inv-action" data-support-bind-slot="' + escapeHtml(String(slot.slot_code || '')) + '">'
+            + escapeHtml(String(slot.title || slot.slot_code || 'Слот'))
+            + (slot.legacy_slot ? ' <small>(' + escapeHtml(String(slot.legacy_slot)) + ')</small>' : '')
+            + (isCurrent ? ' — уже выбран' : '')
+            + (slot.item_title ? ' — ' + escapeHtml(String(slot.item_title)) + ' x' + escapeHtml(String(slot.qty_bound || 0)) : ' — пусто')
+            + (isPreferred ? ' — рекомендуется' : '')
+            + '</button>';
+        });
+        body.innerHTML = html || '<div class="af-inv-muted">Нет доступных support slots.</div>';
+      })
+      .catch(function (err) {
+        body.innerHTML = '<div class="af-inv-muted">' + escapeHtml(err.message || 'Ошибка загрузки.') + '</div>';
+      });
+  }
+
   onReady(function () {
+    if (!document.getElementById('af-inv-support-modal-style')) {
+      var style = document.createElement('style');
+      style.id = 'af-inv-support-modal-style';
+      style.textContent = '.af-inv-support-modal{position:fixed;inset:0;z-index:9999}.af-inv-support-modal[hidden]{display:none}.af-inv-support-modal__backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45)}.af-inv-support-modal__dialog{position:relative;max-width:560px;margin:8vh auto;background:#111827;color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px}.af-inv-support-modal__header{display:flex;justify-content:space-between;align-items:center;gap:12px}.af-inv-support-modal__body{display:flex;flex-direction:column;gap:8px}.af-inv-muted{opacity:.8}';
+      document.head.appendChild(style);
+    }
     var page = document.querySelector('.af-inv-page');
     if (!page) {
       return;
