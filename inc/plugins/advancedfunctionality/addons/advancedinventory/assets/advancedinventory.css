@@ -6,12 +6,20 @@
 .af-inv-subfilter{display:inline-block;padding:6px 10px;border:1px solid #ccc;text-decoration:none}
 .af-inv-subfilter.is-active{background:#f0f4ff;border-color:#6d7bb8}
 .af-inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
-.af-inv-card{border:1px solid #ddd;padding:10px}
+.af-inv-card{border:1px solid #ddd;padding:10px;border-radius:10px;background:#fff}
 .af-inv-card img{max-width:100%;height:80px;object-fit:contain;display:block;margin:0 auto 8px}
 .af-inv-grid-wrap{display:grid;grid-template-columns:2fr 1fr;gap:16px;align-items:start}
 .af-inv-card-actions{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
 .af-inv-card-actions button{padding:4px 8px}
 .af-inv-card-actions input{width:70px}
+.af-inv-card-status{margin-top:8px;font-weight:700}
+.af-inv-card-status.is-active{color:#188038}
+.af-inv-card-status.is-inactive{color:#8a5a00}
+.af-inv-card--appearance{border-color:#8aa7ff;background:#f8faff}
+.af-inv-flash{margin:0 0 12px;padding:8px 10px;border-radius:8px;border:1px solid #bcd2ff;background:#eef4ff}
+.af-inv-flash.is-error{border-color:#e8b4b4;background:#fff0f0;color:#8a1f1f}
+.af-inv-flash.is-success{border-color:#b8dfc0;background:#effcf2;color:#196127}
+.af-inv-action[data-loading="1"]{opacity:.7;pointer-events:none}
 .af-inv-slots{border:1px solid #ddd;padding:10px;background:#fafafa}
 .af-inv-slot{border-bottom:1px solid #e2e2e2;padding:8px 0}
 .af-inv-slot:last-child{border-bottom:none}
