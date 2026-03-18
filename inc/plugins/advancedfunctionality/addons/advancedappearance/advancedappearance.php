@@ -306,6 +306,35 @@ function af_aa_get_active_assignment(string $entityType, int $entityId, string $
 
     $query = $db->simple_select(AF_AA_ASSIGNMENTS_TABLE_NAME, '*', $where, ['limit' => 1]);
     $row = $db->fetch_array($query);
+
+    if (!is_array($row) && $entityType === 'user' && $targetKey === (AF_AA_TARGET_APUI_FRAGMENT_PACK . ':profile_banner') && $db->table_exists('af_aa_active')) {
+        $active = $db->fetch_array($db->simple_select('af_aa_active', '*', "entity_type='user' AND entity_id='" . $entityId . "' AND target_key='profile_banner' AND is_enabled='1'", ['limit' => 1]));
+        if (is_array($active)) {
+            $inv = $db->fetch_array($db->simple_select('af_inventory_items', 'kb_key,meta_json', "inv_id='" . (int)$active['item_id'] . "' AND uid='" . $entityId . "'", ['limit' => 1]));
+            $kbKey = trim((string)($inv['kb_key'] ?? ''));
+            $presetId = 0;
+            if (strpos($kbKey, 'appearance:') === 0) {
+                $presetId = (int)substr($kbKey, strlen('appearance:'));
+            }
+            if ($presetId <= 0) {
+                $meta = @json_decode((string)($inv['meta_json'] ?? '{}'), true);
+                if (is_array($meta)) {
+                    $presetId = (int)($meta['appearance']['preset_id'] ?? 0);
+                }
+            }
+            if ($presetId > 0) {
+                $row = [
+                    'id' => 0,
+                    'entity_type' => 'user',
+                    'entity_id' => $entityId,
+                    'target_key' => $targetKey,
+                    'preset_id' => $presetId,
+                    'is_enabled' => 1,
+                ];
+            }
+        }
+    }
+
     if (!is_array($row)) {
         $GLOBALS['af_aa_assignment_cache_runtime'][$cacheKey] = [];
         return [];
