@@ -511,6 +511,28 @@ function af_advancedshop_url(string $action = 'shop', array $params = [], bool $
     return $url;
 }
 
+function af_advancedshop_manage_url(string $shopCode = '', string $view = '', int $catId = 0, bool $html = false): string
+{
+    $params = [];
+    if ($shopCode !== '') {
+        $params['shop'] = $shopCode;
+    }
+    if ($view !== '') {
+        $params['view'] = $view;
+    }
+    if ($catId > 0) {
+        $params['cat_id'] = $catId;
+    }
+
+    $url = 'shop_manage.php';
+    if ($params) {
+        $query = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+        $url .= '?' . ($html ? str_replace('&', '&amp;', $query) : $query);
+    }
+
+    return $url;
+}
+
 function af_advancedshop_shops_table(): string
 {
     global $db;
@@ -846,6 +868,10 @@ function af_advancedshop_redirect_legacy_manage_action(string $action): void
 {
     global $db, $mybb;
 
+    if (strtolower((string)($mybb->request_method ?? 'get')) !== 'get') {
+        return;
+    }
+
     $legacyActions = [
         'shop_manage',
         'shop_manage_categories',
@@ -881,19 +907,12 @@ function af_advancedshop_redirect_legacy_manage_action(string $action): void
     }
 
     if ($shopCode === '') {
-        header('Location: shop_manage.php');
+        header('Location: ' . af_advancedshop_manage_url());
         exit;
     }
 
-    $target = 'shop_manage.php?shop=' . rawurlencode($shopCode);
-    if ($action === 'shop_manage_slots' || $action === 'shop_manage_slot_create' || $action === 'shop_manage_slot_update' || $action === 'shop_manage_slot_delete') {
-        $target .= '&view=slots';
-        if ($catId > 0) {
-            $target .= '&cat_id=' . $catId;
-        }
-    } else {
-        $target .= '&view=categories';
-    }
+    $isSlotsAction = $action === 'shop_manage_slots' || $action === 'shop_manage_slot_create' || $action === 'shop_manage_slot_update' || $action === 'shop_manage_slot_delete';
+    $target = af_advancedshop_manage_url($shopCode, $isSlotsAction ? 'slots' : 'categories', $isSlotsAction ? $catId : 0);
 
     header('Location: ' . $target);
     exit;
@@ -1367,7 +1386,7 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
     $cart_url = af_advancedshop_url('shop_cart', ['shop' => (string)$shop['code']], true);
     $shop_manage_button = '';
     if (af_advancedshop_user_can_manage()) {
-        $manage_url = htmlspecialchars_uni(af_advancedshop_url('shop_manage', ['shop' => (string)$shop['code']], true));
+        $manage_url = htmlspecialchars_uni(af_advancedshop_manage_url((string)$shop['code']));
         $shop_manage_button = '<a class="af-shop-manage-link" href="' . $manage_url . '" title="Manage" aria-label="Manage">⚙</a>';
     }
     $inventory_link = '';
@@ -1415,7 +1434,7 @@ function af_advancedshop_render_hub(): void
         $shop_open_url = af_advancedshop_url('shop_category', ['shop' => $code], true);
         $shop_manage_button = '';
         if (af_advancedshop_user_can_manage()) {
-            $manage_url = htmlspecialchars_uni(af_advancedshop_url('shop_manage', ['shop' => $code], true));
+            $manage_url = htmlspecialchars_uni(af_advancedshop_manage_url($code));
             $shop_manage_button = '<a class="af-shop-manage-link" href="' . $manage_url . '" title="Manage" aria-label="Manage">⚙</a>';
         }
         $shop_open_text = htmlspecialchars_uni($lang->af_advancedshop_hub_open ?? 'Открыть');
@@ -2331,7 +2350,7 @@ function af_advancedshop_render_manage(): void
     if (!af_advancedshop_can_manage()) { error_no_permission(); }
     $shop = af_advancedshop_current_shop();
     $shop_code = htmlspecialchars_uni((string)$shop['code']);
-    add_breadcrumb($lang->af_advancedshop_manage_title ?? 'Manage Shop', af_advancedshop_url('shop_manage', ['shop' => (string)$shop['code']]));
+    add_breadcrumb($lang->af_advancedshop_manage_title ?? 'Manage Shop', af_advancedshop_manage_url((string)$shop['code']));
 
     $flat = [];
     $q = $db->simple_select('af_shop_categories', '*', 'shop_id=' . (int)$shop['shop_id'], ['order_by' => 'parent_id ASC, sortorder ASC, title ASC, cat_id ASC']);
@@ -2358,7 +2377,7 @@ function af_advancedshop_render_manage(): void
         $cat_enabled = (int)$cat['enabled'];
         $cat_enabled_checked = $cat_enabled ? 'checked="checked"' : '';
         $cat_sortorder = (int)$cat['sortorder'];
-        $slots_url = af_advancedshop_url('shop_manage_slots', ['shop' => (string)$shop['code'], 'cat' => $cat_id], true);
+        $slots_url = af_advancedshop_manage_url((string)$shop['code'], 'slots', $cat_id, true);
         $cat_depth = $depth;
         $blockedParents = $descendantsMap[$cat_id] ?? [];
         $blockedParents[$cat_id] = true;
@@ -2532,11 +2551,11 @@ function af_advancedshop_manage_slots(): void
         $category_id = $catId;
         $category_title_raw = (string)$category['title'];
         $category_title = htmlspecialchars_uni($category_title_raw);
-        add_breadcrumb($lang->af_advancedshop_manage_title ?? 'Manage Shop', af_advancedshop_url('shop_manage', ['shop' => (string)$shop['code']]));
-        add_breadcrumb($lang->af_advancedshop_manage_categories ?? 'Categories', af_advancedshop_url('shop_manage', ['shop' => (string)$shop['code']]));
-        add_breadcrumb($lang->af_advancedshop_manage_slots ?? 'Slots', af_advancedshop_url('shop_manage_slots', ['shop' => (string)$shop['code'], 'cat' => $catId]));
-        add_breadcrumb($category_title_raw, af_advancedshop_url('shop_manage_slots', ['shop' => (string)$shop['code'], 'cat' => $catId]));
-        $manage_url = htmlspecialchars_uni(af_advancedshop_url('shop_manage', ['shop' => (string)$shop['code']]));
+        add_breadcrumb($lang->af_advancedshop_manage_title ?? 'Manage Shop', af_advancedshop_manage_url((string)$shop['code']));
+        add_breadcrumb($lang->af_advancedshop_manage_categories ?? 'Categories', af_advancedshop_manage_url((string)$shop['code'], 'categories'));
+        add_breadcrumb($lang->af_advancedshop_manage_slots ?? 'Slots', af_advancedshop_manage_url((string)$shop['code'], 'slots', $catId));
+        add_breadcrumb($category_title_raw, af_advancedshop_manage_url((string)$shop['code'], 'slots', $catId));
+        $manage_url = htmlspecialchars_uni(af_advancedshop_manage_url((string)$shop['code']));
         $assets = af_advancedshop_assets_html();
         eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_manage_slots') . '";');
         eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
@@ -4318,7 +4337,7 @@ function af_advancedshop_render_shop_manage_page(): void
             $shops[] = $row;
         }
 
-        add_breadcrumb('Shop Manager', 'shop_manage.php');
+        add_breadcrumb('Shop Manager', af_advancedshop_manage_url());
         $rows = '';
         foreach ($shops as $shop) {
             $title = trim((string)($shop['title_ru'] ?? ''));
@@ -4328,7 +4347,7 @@ function af_advancedshop_render_shop_manage_page(): void
             if ($title === '') {
                 $title = (string)($shop['title'] ?? (string)$shop['code']);
             }
-            $rows .= '<tr><td><code>' . htmlspecialchars_uni((string)$shop['code']) . '</code></td><td>' . htmlspecialchars_uni($title) . '</td><td><a href="shop_manage.php?shop=' . rawurlencode((string)$shop['code']) . '">Manage</a></td></tr>';
+            $rows .= '<tr><td><code>' . htmlspecialchars_uni((string)$shop['code']) . '</code></td><td>' . htmlspecialchars_uni($title) . '</td><td><a href="' . htmlspecialchars_uni(af_advancedshop_manage_url((string)$shop['code'])) . '">Manage</a></td></tr>';
         }
         if ($rows === '') {
             $rows = '<tr><td colspan="3">No enabled shops found.</td></tr>';
