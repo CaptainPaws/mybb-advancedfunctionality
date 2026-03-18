@@ -3081,6 +3081,7 @@ function af_advancedshop_kb_search(): void
         $meta = @json_decode((string)($row['kb_meta'] ?? '{}'), true);
         $title = af_advancedshop_pick_lang((string)($row['kb_title_ru'] ?? ''), (string)($row['kb_title_en'] ?? ''));
         if ($title === '') { $title = (string)($row['kb_title'] ?? ''); }
+        if ($title === '') { $title = (string)($row['title'] ?? ''); }
         $short = af_advancedshop_pick_lang((string)($row['kb_short_ru'] ?? ''), (string)($row['kb_short_en'] ?? ''));
         if ($short === '') { $short = (string)($row['kb_short'] ?? ''); }
         $itemType = mb_strtolower(trim((string)($meta['rules']['item']['item_kind'] ?? $meta['rules']['item']['type'] ?? '')));
@@ -3238,6 +3239,7 @@ function af_advancedshop_render_inventory(): void
         $inv_source_type = htmlspecialchars_uni((string)($row['source_type'] ?? 'kb'));
         $inv_is_visual_item = !empty($row['is_visual_item']) ? '1' : '0';
         $inv_appearance_active = !empty($row['appearance_is_active']) ? '1' : '0';
+        $inv_appearance_target = htmlspecialchars_uni((string)($row['appearance_target'] ?? ''));
         $tooltip_body = (string)($row['tooltip_html'] ?? '');
         $inv_tooltip = htmlspecialchars_uni((string)($row['tooltip_text'] ?? ''));
 
@@ -3375,9 +3377,10 @@ function af_advancedshop_inventory_fetch_rows(int $targetUid, array &$debug = []
         ORDER BY i.updated_at DESC, i.inv_id DESC");
     while ($row = $db->fetch_array($q)) {
         $profile = af_advancedshop_kb_item_profile($row);
-        $meta = @json_decode((string)($row['kb_meta'] ?? '{}'), true);
+        $meta = af_advancedshop_decode_json_assoc((string)($row['kb_meta'] ?? '{}'));
         $title = af_advancedshop_pick_lang((string)($row['kb_title_ru'] ?? ''), (string)($row['kb_title_en'] ?? ''));
         if ($title === '') { $title = (string)($row['kb_title'] ?? ''); }
+        if ($title === '') { $title = (string)($row['title'] ?? ''); }
 
         $tooltipSource = af_advancedshop_pick_lang((string)($row['kb_tech_ru'] ?? ''), (string)($row['kb_tech_en'] ?? ''));
         if ($tooltipSource === '') { $tooltipSource = (string)($row['kb_tech'] ?? ''); }
@@ -3390,9 +3393,10 @@ function af_advancedshop_inventory_fetch_rows(int $targetUid, array &$debug = []
         $itemKind = strtolower(trim((string)($profile['item_kind'] ?? '')));
         if ($itemKind === '') { $itemKind = 'misc'; }
 
-        $kbKeyValue = (string)($profile['kb_key'] ?? '');
-        $isAppearance = strpos($kbKeyValue, 'appearance:') === 0;
-        $appearanceMeta = is_array($meta['appearance'] ?? null) ? (array)$meta['appearance'] : [];
+        $appearanceInfo = af_advancedshop_inventory_resolve_appearance_item($row, $profile, $meta);
+        $kbKeyValue = (string)($appearanceInfo['kb_key'] ?? '');
+        $isAppearance = !empty($appearanceInfo['is_visual_item']);
+        $appearanceMeta = (array)($appearanceInfo['appearance_meta'] ?? []);
 
         $rows[] = [
             'inv_id' => (int)($row['inv_id'] ?? 0),
@@ -3400,10 +3404,10 @@ function af_advancedshop_inventory_fetch_rows(int $targetUid, array &$debug = []
             'qty' => (int)($row['qty'] ?? 0),
             'rarity' => af_advancedshop_normalize_rarity((string)($row['rarity'] ?? 'common')),
             'title' => $title,
-            'icon_url' => (string)($meta['ui']['icon_url'] ?? ($appearanceMeta['preview_image'] ?? '')),
+            'icon_url' => (string)($meta['ui']['icon_url'] ?? ($appearanceMeta['preview_image'] ?? (string)($row['icon'] ?? ''))),
             'item_kind' => $itemKind,
             'kb_key' => $kbKeyValue,
-            'source_type' => $isAppearance ? 'appearance' : 'kb',
+            'source_type' => (string)($appearanceInfo['source_type'] ?? ($isAppearance ? 'appearance' : 'kb')),
             'is_visual_item' => $isAppearance,
             'appearance_target' => (string)($appearanceMeta['target_key'] ?? ''),
             'appearance_preset_id' => (int)($appearanceMeta['preset_id'] ?? 0),
@@ -3755,11 +3759,11 @@ function af_advancedshop_inventory_appearance_apply(): void
         af_advancedshop_json_err('Item not found', 404);
     }
 
-    $kbKey = trim((string)($item['kb_key'] ?? ''));
-    if (strpos($kbKey, 'appearance:') !== 0) {
+    $appearanceInfo = af_advancedshop_inventory_resolve_appearance_item($item);
+    if (empty($appearanceInfo['is_visual_item'])) {
         af_advancedshop_json_err('Item is not appearance', 422);
     }
-    $presetId = (int)substr($kbKey, strlen('appearance:'));
+    $presetId = (int)($appearanceInfo['preset_id'] ?? 0);
     if ($presetId <= 0) {
         af_advancedshop_json_err('Invalid appearance item', 422);
     }
@@ -3770,7 +3774,7 @@ function af_advancedshop_inventory_appearance_apply(): void
     }
 
     try {
-        $targetKey = af_advancedshop_appearance_validate_target((string)($preset['target_key'] ?? ''));
+        $targetKey = af_advancedshop_appearance_validate_target((string)($appearanceInfo['target_key'] ?? ($preset['target_key'] ?? '')));
     } catch (RuntimeException $e) {
         af_advancedshop_json_err($e->getMessage(), 422);
     }
@@ -3807,6 +3811,11 @@ function af_advancedshop_inventory_appearance_unapply(): void
     $targetKey = trim((string)$mybb->get_input('target_key'));
     if ($targetKey === '') {
         $targetKey = af_advancedshop_appearance_active_target();
+    }
+    try {
+        $targetKey = af_advancedshop_appearance_validate_target($targetKey);
+    } catch (RuntimeException $e) {
+        af_advancedshop_json_err($e->getMessage(), 422);
     }
 
     $db->delete_query('af_aa_active', "entity_type='user' AND entity_id=" . $targetUid . " AND target_key='" . $db->escape_string($targetKey) . "'");
@@ -4055,6 +4064,48 @@ function af_advancedshop_parse_bbcode(string $text): string
         'filter_badwords' => 1,
         'nl2br' => 1,
     ]);
+}
+
+function af_advancedshop_decode_json_assoc(string $json): array
+{
+    $decoded = @json_decode($json, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function af_advancedshop_inventory_resolve_appearance_item(array $row, array $profile = [], array $kbMeta = []): array
+{
+    $kbKey = trim((string)($row['kb_key'] ?? $profile['kb_key'] ?? $row['key'] ?? ''));
+    $itemMeta = af_advancedshop_decode_json_assoc((string)($row['meta_json'] ?? ''));
+    $kbMeta = $kbMeta ?: af_advancedshop_decode_json_assoc((string)($row['kb_meta'] ?? ''));
+
+    $itemAppearanceMeta = is_array($itemMeta['appearance'] ?? null) ? (array)$itemMeta['appearance'] : [];
+    $kbAppearanceMeta = is_array($kbMeta['appearance'] ?? null) ? (array)$kbMeta['appearance'] : [];
+    $appearanceMeta = $itemAppearanceMeta ?: $kbAppearanceMeta;
+
+    $sourceTypeRaw = trim((string)($row['source_type'] ?? ($itemMeta['source_type'] ?? $kbMeta['source_type'] ?? '')));
+    $sourceType = af_advancedshop_normalize_source_type($sourceTypeRaw === '' ? 'kb' : $sourceTypeRaw);
+    $isAppearance = $sourceType === 'appearance'
+        || strpos($kbKey, 'appearance:') === 0
+        || !empty($appearanceMeta);
+
+    $presetId = 0;
+    if (strpos($kbKey, 'appearance:') === 0) {
+        $presetId = (int)substr($kbKey, strlen('appearance:'));
+    }
+    if ($presetId <= 0) {
+        $presetId = (int)($appearanceMeta['preset_id'] ?? 0);
+    }
+
+    return [
+        'source_type' => $isAppearance ? 'appearance' : $sourceType,
+        'is_visual_item' => $isAppearance,
+        'kb_key' => $kbKey,
+        'preset_id' => $presetId,
+        'target_key' => trim((string)($appearanceMeta['target_key'] ?? '')),
+        'appearance_meta' => $appearanceMeta,
+        'item_meta' => $itemMeta,
+        'kb_meta' => $kbMeta,
+    ];
 }
 
 function af_advancedshop_pick_lang(string $ru, string $en): string

@@ -318,14 +318,14 @@
     if(!pop){ return; }
     var actions = '';
     if(isVisualItem){
-      actions += '<button type="button" class="af-shop-btn" data-af-appearance-apply-btn data-inv-id="' + escapeHtml(String(invId)) + '">Применить</button>';
+      actions += '<button type="button" class="af-shop-btn" data-af-appearance-apply-btn data-inv-id="' + escapeHtml(String(invId)) + '">' + (activeApplied ? 'Активен' : 'Активировать') + '</button>';
       actions += '<button type="button" class="af-shop-btn" data-af-appearance-unapply-btn data-target-key="' + escapeHtml(slotNode.getAttribute('data-appearance-target') || '') + '"' + (activeApplied ? '' : ' disabled') + '>Снять</button>';
     } else {
       actions += '<button type="button" class="af-shop-btn" data-af-equip-btn data-can-equip="' + (canEquip ? '1' : '0') + '" data-inv-id="' + escapeHtml(String(invId)) + '" data-slot-code="' + escapeHtml(equipSlot) + '">Надеть</button>';
+      actions += '<button type="button" class="af-shop-btn" data-af-sell-btn>Продать</button>';
     }
-    actions += '<button type="button" class="af-shop-btn" data-af-sell-btn>Продать</button>';
     pop.innerHTML = '<div class="af-item-popover__title">' + escapeHtml(title) + '</div>'
-      + '<div class="af-item-popover__meta">Редкость: ' + escapeHtml(rarity) + ' · Кол-во: ' + escapeHtml(qty) + '</div>'
+      + '<div class="af-item-popover__meta">' + (isVisualItem ? 'Визуальный пресет' : ('Редкость: ' + escapeHtml(rarity))) + ' · Кол-во: ' + escapeHtml(qty) + '</div>'
       + '<div class="af-item-popover__actions">' + actions + '</div>';
     var rect = slotNode.getBoundingClientRect();
     pop.style.left = (window.scrollX + rect.left) + 'px';
@@ -452,6 +452,7 @@
         if(r && r.ok){
           hideItemPopover();
           safeMountInventory(ctxApply.root || document);
+          loadEquipped(ctxApply.root || document);
           afShopToast('Пресет применён', 'success');
         } else if(r && r.error !== 'busy'){
           afShopToast(r.error || 'Не удалось применить пресет', 'error');
@@ -468,6 +469,7 @@
         if(r && r.ok){
           hideItemPopover();
           safeMountInventory(ctxUn.root || document);
+          loadEquipped(ctxUn.root || document);
           afShopToast('Пресет снят', 'success');
         } else if(r && r.error !== 'busy'){
           afShopToast(r.error || 'Не удалось снять пресет', 'error');
