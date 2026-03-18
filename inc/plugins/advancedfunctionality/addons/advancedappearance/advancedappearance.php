@@ -29,6 +29,17 @@ define('AF_AA_ALIAS_FITTINGROOM_MARK', 'AF_AA_FITTINGROOM_PAGE_ALIAS');
 define('AF_AA_TPL_APSTUDIO', 'advancedappearance_apstudio');
 define('AF_AA_TPL_FITTINGROOM', 'advancedappearance_fittingroom');
 
+function af_aa_is_preview_script(?string $script = null): bool
+{
+    if ($script === null) {
+        $script = defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '';
+    }
+
+    $script = trim(strtolower((string)$script));
+
+    return $script === strtolower(AF_AA_ALIAS_APSTUDIO)
+        || $script === strtolower(AF_AA_ALIAS_FITTINGROOM);
+}
 
 function af_advancedappearance_install(): void
 {
@@ -159,17 +170,12 @@ function af_aa_ensure_schema(): void
 
 function af_aa_register_hooks(): void
 {
-    // В текущей версии AdvancedAppearance preview должен работать
-    // только на /apstudio.php и /fittingroom.php.
-    //
-    // Эти страницы рендерятся напрямую через:
-    // - af_aa_render_apstudio_page()
-    // - af_aa_render_fittingroom_page()
-    //
-    // И сами подключают CSS/JS через $headerinclude.
-    //
-    // Поэтому никаких глобальных фронтовых хуков для postbit/member profile
-    // и никакого runtime-inject в обычные страницы форума здесь быть не должно.
+    global $plugins;
+
+    // Нам нужен только один защитный hook:
+    // на обычных страницах он вырезает любые AA-assets,
+    // если они случайно попали в вывод.
+    $plugins->add_hook('pre_output_page', 'af_aa_pre_output_page', 1);
 }
 af_aa_register_hooks();
 
@@ -233,14 +239,19 @@ function af_aa_collect_uid_from_member_profile(): void
 
 function af_aa_pre_output_page(string &$page): void
 {
-    // Намеренно ничего не делаем.
-    //
-    // Preview-оформление AdvancedAppearance должно существовать
-    // только внутри /apstudio.php и /fittingroom.php,
-    // где assets подключаются явно через af_aa_page_asset_tags().
-    //
-    // На обычных страницах форума, в темах, профилях, ЛС и т.д.
-    // этот аддон не должен внедрять CSS/JS и не должен перекрывать APUI.
+    if (defined('IN_ADMINCP') || $page === '') {
+        return;
+    }
+
+    // На preview-страницах ничего не трогаем:
+    // там assets подключаются осознанно и локально.
+    if (af_aa_is_preview_script()) {
+        return;
+    }
+
+    // На всех остальных фронтовых страницах гарантированно вычищаем
+    // любые следы AdvancedAppearance preview/runtime assets.
+    $page = af_aa_strip_asset_includes($page);
 }
 
 function af_aa_strip_asset_includes(string $page): string
@@ -250,6 +261,7 @@ function af_aa_strip_asset_includes(string $page): string
         '~<link\b[^>]*href=(["\'])[^"\']*advancedappearance\.css(?:\?[^"\']*)?\1[^>]*>\s*~i',
         '~<script\b[^>]*src=(["\'])[^"\']*advancedappearance\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~is',
         '~<style\b[^>]*id=(["\'])af-aa-runtime-css\1[^>]*>.*?</style>\s*~is',
+        '~<style\b[^>]*data-aa-preview-custom-css[^>]*>.*?</style>\s*~is',
     ];
 
     foreach ($patterns as $pattern) {
@@ -1455,6 +1467,10 @@ function af_aa_toggle_front_preset(int $presetId, int $enabled): void
 function af_aa_page_asset_tags(): string
 {
     global $mybb;
+
+    if (!af_aa_is_preview_script()) {
+        return '';
+    }
 
     $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
     $base = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AA_ID . '/assets';
