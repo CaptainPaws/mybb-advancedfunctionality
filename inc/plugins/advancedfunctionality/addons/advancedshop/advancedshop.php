@@ -115,6 +115,121 @@ function af_advancedshop_appearance_fetch_preset(int $presetId): array
     return $row;
 }
 
+function af_advancedshop_appearance_fetch_preset_by_slug(string $slug): array
+{
+    global $db;
+
+    $slug = trim($slug);
+    if ($slug === '') {
+        return [];
+    }
+
+    $table = af_advancedshop_appearance_presets_table();
+    if ($table === '') {
+        return [];
+    }
+
+    $query = $db->query(
+        "SELECT * FROM " . $table . " WHERE slug='" . $db->escape_string($slug) . "' ORDER BY enabled DESC, sortorder ASC, id ASC LIMIT 1"
+    );
+    $row = (array)$db->fetch_array($query);
+    if (!$row) {
+        return [];
+    }
+
+    return $row;
+}
+
+function af_advancedshop_appearance_resolve_preset(int $sourceRefId = 0, int $presetId = 0, string $presetSlug = ''): array
+{
+    $resolved = [];
+    if ($sourceRefId > 0) {
+        $resolved = af_advancedshop_appearance_fetch_preset($sourceRefId);
+    }
+    if (!$resolved && $presetId > 0) {
+        $resolved = af_advancedshop_appearance_fetch_preset($presetId);
+    }
+    if (!$resolved && trim($presetSlug) !== '') {
+        $resolved = af_advancedshop_appearance_fetch_preset_by_slug($presetSlug);
+    }
+
+    if (!$resolved) {
+        throw new RuntimeException('Appearance preset not found. Проверьте preset ID или slug.');
+    }
+
+    $targetKey = mb_strtolower(trim((string)($resolved['target_key'] ?? '')));
+    if ($targetKey !== af_advancedshop_appearance_active_target()) {
+        throw new RuntimeException('Only profile_banner target is supported in MVP.');
+    }
+
+    if ((int)($resolved['enabled'] ?? 0) !== 1) {
+        throw new RuntimeException('Appearance preset is disabled and cannot be sold.');
+    }
+
+    return $resolved;
+}
+
+function af_advancedshop_slot_payload_from_source(string $sourceType, array $input, array $fallbackSlot = []): array
+{
+    global $db;
+
+    $sourceType = af_advancedshop_normalize_source_type($sourceType);
+    if ($sourceType === 'appearance') {
+        $preset = af_advancedshop_appearance_resolve_preset(
+            (int)($input['source_ref_id'] ?? 0),
+            (int)($input['preset_id'] ?? 0),
+            (string)($input['preset_slug'] ?? '')
+        );
+
+        $presetId = (int)$preset['id'];
+        return [
+            'source_type' => 'appearance',
+            'source_ref_id' => $presetId,
+            'kb_id' => 0,
+            'kb_type' => 'appearance',
+            'kb_key' => 'appearance:' . $presetId,
+            'appearance_preset' => $preset,
+        ];
+    }
+
+    $kbId = (int)($input['kb_id'] ?? ($fallbackSlot['kb_id'] ?? 0));
+    if ($kbId <= 0) {
+        $sourceRefId = (int)($input['source_ref_id'] ?? 0);
+        if ($sourceRefId > 0) {
+            $kbId = $sourceRefId;
+        }
+    }
+    if ($kbId <= 0) {
+        throw new RuntimeException('kb_id required for KB source');
+    }
+
+    $kbCols = af_advancedshop_kb_cols();
+    $kbIdCol = $kbCols['id'] ?? 'id';
+    $kbSelect = [$kbIdCol . ' AS kb_id'];
+    if (!empty($kbCols['type'])) { $kbSelect[] = ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS kb_type'; }
+    if (!empty($kbCols['key'])) { $kbSelect[] = ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS kb_key'; }
+    if (!empty($kbCols['meta_json'])) { $kbSelect[] = $kbCols['meta_json'] . ' AS kb_meta'; }
+    $kbRow = $db->fetch_array($db->query("SELECT " . implode(', ', $kbSelect) . " FROM " . af_advancedshop_kb_table() . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
+    if (!$kbRow) {
+        throw new RuntimeException('KB entry not found');
+    }
+
+    $kbType = af_advancedshop_normalize_kb_type((string)($kbRow['kb_type'] ?? ($input['kb_type'] ?? ($fallbackSlot['kb_type'] ?? 'item'))));
+    if ($kbType === '') {
+        $kbType = 'item';
+    }
+    $kbKey = trim((string)($kbRow['kb_key'] ?? ($input['kb_key'] ?? ($fallbackSlot['kb_key'] ?? ''))));
+
+    return [
+        'source_type' => 'kb',
+        'source_ref_id' => $kbId,
+        'kb_id' => $kbId,
+        'kb_type' => $kbType,
+        'kb_key' => $kbKey,
+        'appearance_preset' => [],
+    ];
+}
+
 function af_advancedshop_kb_cols(): array
 {
     return [
@@ -2469,6 +2584,11 @@ function af_advancedshop_manage_slots(): void
                 'kb_type' => (string)($r['slot_kb_type'] ?? ($r['kb_type'] ?? 'item')),
                 'kb_key' => (string)($r['slot_kb_key'] ?? ($r['kb_key'] ?? '')),
                 'appearance_target' => (string)($appearancePreset['target_key'] ?? ''),
+                'appearance_preset_id' => (int)($appearancePreset['id'] ?? 0),
+                'appearance_preset_slug' => (string)($appearancePreset['slug'] ?? ''),
+                'appearance_preset_title' => (string)($appearancePreset['title'] ?? ''),
+                'appearance_preview_image' => (string)($appearancePreset['preview_image'] ?? ''),
+                'appearance_enabled' => (int)($appearancePreset['enabled'] ?? 0),
                 'title' => $title,
                 'icon_url' => (string)($meta['ui']['icon_url'] ?? ''),
                 'rarity' => (string)$profile['rarity'],
@@ -2492,6 +2612,7 @@ function af_advancedshop_manage_slots(): void
 
     af_advancedshop_json_err('unsupported', 400);
 }
+
 function af_advancedshop_manage_slot_create(): void
 {
     global $mybb, $db;
@@ -2499,57 +2620,25 @@ function af_advancedshop_manage_slot_create(): void
     $shop = af_advancedshop_current_shop();
 
     $catId = (int)$mybb->get_input('cat_id');
-    $sourceType = af_advancedshop_normalize_source_type((string)$mybb->get_input('source_type'));
-    $sourceRefId = (int)$mybb->get_input('source_ref_id');
-    $kbId = (int)$mybb->get_input('kb_id');
-    $kbType = af_advancedshop_normalize_kb_type((string)$mybb->get_input('kb_type'));
-    $kbKey = trim((string)$mybb->get_input('kb_key'));
-    if ($kbType === '') { $kbType = 'item'; }
-
     if ($catId <= 0) { af_advancedshop_json_err('cat_id required', 422); }
     $cat = $db->fetch_array($db->simple_select('af_shop_categories', 'cat_id', 'cat_id=' . $catId . ' AND shop_id=' . (int)$shop['shop_id'], ['limit' => 1]));
     if (!$cat) { af_advancedshop_json_err('Category not found', 404); }
 
-    if ($sourceType === 'appearance') {
-        if ($sourceRefId <= 0) {
-            $sourceRefId = (int)$mybb->get_input('preset_id');
-        }
-        $preset = af_advancedshop_appearance_fetch_preset($sourceRefId);
-        if (!$preset) {
-            af_advancedshop_json_err('Appearance preset not found', 404);
-        }
-        if (mb_strtolower((string)($preset['target_key'] ?? '')) !== af_advancedshop_appearance_active_target()) {
-            af_advancedshop_json_err('Only profile_banner target is supported in MVP', 422);
-        }
-        $kbId = 0;
-        $kbType = 'appearance';
-        $kbKey = 'appearance:' . (int)$sourceRefId;
-    } else {
-        if ($kbId <= 0) { af_advancedshop_json_err('kb_id required for KB source', 422); }
-
-        $kbCols = af_advancedshop_kb_cols();
-        $kbIdCol = $kbCols['id'] ?? 'id';
-        $kbSelect = [$kbIdCol . ' AS kb_id'];
-        if (!empty($kbCols['type'])) { $kbSelect[] = ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . ' AS kb_type'; }
-        if (!empty($kbCols['key'])) { $kbSelect[] = ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . ' AS kb_key'; }
-        if (!empty($kbCols['meta_json'])) { $kbSelect[] = $kbCols['meta_json'] . ' AS kb_meta'; }
-        $kbRow = $db->fetch_array($db->query("SELECT " . implode(', ', $kbSelect) . " FROM " . af_advancedshop_kb_table() . " WHERE " . $kbIdCol . "=" . $kbId . " LIMIT 1"));
-        if (!$kbRow) {
-            af_advancedshop_json_err('KB entry not found', 404);
-        }
-
-        $kbTypeResolved = af_advancedshop_normalize_kb_type((string)($kbRow['kb_type'] ?? $kbType));
-        if ($kbTypeResolved !== '') {
-            $kbType = $kbTypeResolved;
-        }
-        $kbKeyResolved = trim((string)($kbRow['kb_key'] ?? ''));
-        if ($kbKeyResolved !== '') {
-            $kbKey = $kbKeyResolved;
-        }
-        $sourceRefId = $kbId;
+    $sourceType = af_advancedshop_normalize_source_type((string)$mybb->get_input('source_type'));
+    try {
+        $sourcePayload = af_advancedshop_slot_payload_from_source($sourceType, [
+            'source_ref_id' => (int)$mybb->get_input('source_ref_id'),
+            'preset_id' => (int)$mybb->get_input('preset_id'),
+            'preset_slug' => trim((string)$mybb->get_input('preset_slug')),
+            'kb_id' => (int)$mybb->get_input('kb_id'),
+            'kb_type' => (string)$mybb->get_input('kb_type'),
+            'kb_key' => trim((string)$mybb->get_input('kb_key')),
+        ]);
+    } catch (RuntimeException $e) {
+        af_advancedshop_json_err($e->getMessage(), 422);
     }
 
-    $duplicateWhere = 'shop_id=' . (int)$shop['shop_id'] . ' AND cat_id=' . $catId . " AND source_type='" . $db->escape_string($sourceType) . "' AND source_ref_id=" . (int)$sourceRefId;
+    $duplicateWhere = 'shop_id=' . (int)$shop['shop_id'] . ' AND cat_id=' . $catId . " AND source_type='" . $db->escape_string($sourcePayload['source_type']) . "' AND source_ref_id=" . (int)$sourcePayload['source_ref_id'];
     $duplicate = $db->fetch_array($db->simple_select('af_shop_slots', 'slot_id', $duplicateWhere, ['limit' => 1]));
     if ($duplicate) { af_advancedshop_json_err('Slot with this source already exists in category', 409); }
 
@@ -2562,11 +2651,11 @@ function af_advancedshop_manage_slot_create(): void
     $slotId = (int)$db->insert_query('af_shop_slots', [
         'shop_id' => (int)$shop['shop_id'],
         'cat_id' => $catId,
-        'source_type' => $db->escape_string($sourceType),
-        'source_ref_id' => $sourceRefId,
-        'kb_type' => $db->escape_string($kbType),
-        'kb_id' => $kbId,
-        'kb_key' => $db->escape_string($kbKey),
+        'source_type' => $db->escape_string($sourcePayload['source_type']),
+        'source_ref_id' => (int)$sourcePayload['source_ref_id'],
+        'kb_type' => $db->escape_string((string)$sourcePayload['kb_type']),
+        'kb_id' => (int)$sourcePayload['kb_id'],
+        'kb_key' => $db->escape_string((string)$sourcePayload['kb_key']),
         'price' => $priceMinor,
         'currency' => $db->escape_string($currency),
         'stock' => (int)$mybb->get_input('stock', MyBB::INPUT_INT),
@@ -2579,11 +2668,11 @@ function af_advancedshop_manage_slot_create(): void
     af_advancedshop_json_ok(['slot' => [
         'slot_id' => $slotId,
         'cat_id' => $catId,
-        'source_type' => $sourceType,
-        'source_ref_id' => $sourceRefId,
-        'kb_id' => $kbId,
-        'kb_type' => $kbType,
-        'kb_key' => $kbKey,
+        'source_type' => (string)$sourcePayload['source_type'],
+        'source_ref_id' => (int)$sourcePayload['source_ref_id'],
+        'kb_id' => (int)$sourcePayload['kb_id'],
+        'kb_type' => (string)$sourcePayload['kb_type'],
+        'kb_key' => (string)$sourcePayload['kb_key'],
         'price' => $priceMinor,
         'price_major' => af_advancedshop_money_format($priceMinor),
         'currency' => $currency,
@@ -2591,6 +2680,7 @@ function af_advancedshop_manage_slot_create(): void
         'limit_per_user' => max(0, (int)$mybb->get_input('limit_per_user', MyBB::INPUT_INT)),
         'enabled' => (int)$mybb->get_input('enabled') ? 1 : 0,
         'sortorder' => (int)$mybb->get_input('sortorder', MyBB::INPUT_INT),
+        'appearance_preset' => $sourcePayload['appearance_preset'] ?? [],
     ]]);
 }
 
@@ -2607,13 +2697,30 @@ function af_advancedshop_manage_slot_update(): void
 
     $priceMinor = af_advancedshop_money_to_minor((string)$mybb->get_input('price'));
     $sourceType = af_advancedshop_normalize_source_type((string)$mybb->get_input('source_type'));
-    $sourceRefId = (int)$mybb->get_input('source_ref_id');
-    if ($sourceType === 'appearance' && $sourceRefId <= 0) { $sourceRefId = (int)$slot['source_ref_id']; }
-    if ($sourceType === 'kb' && $sourceRefId <= 0) { $sourceRefId = (int)$slot['kb_id']; }
+
+    try {
+        $sourcePayload = af_advancedshop_slot_payload_from_source($sourceType, [
+            'source_ref_id' => (int)$mybb->get_input('source_ref_id'),
+            'preset_id' => (int)$mybb->get_input('preset_id'),
+            'preset_slug' => trim((string)$mybb->get_input('preset_slug')),
+            'kb_id' => (int)$mybb->get_input('kb_id'),
+            'kb_type' => (string)$mybb->get_input('kb_type'),
+            'kb_key' => trim((string)$mybb->get_input('kb_key')),
+        ], $slot);
+    } catch (RuntimeException $e) {
+        af_advancedshop_json_err($e->getMessage(), 422);
+    }
+
+    $duplicateWhere = 'shop_id=' . (int)$shop['shop_id'] . ' AND cat_id=' . (int)$slot['cat_id'] . " AND source_type='" . $db->escape_string($sourcePayload['source_type']) . "' AND source_ref_id=" . (int)$sourcePayload['source_ref_id'] . ' AND slot_id<>' . $slotId;
+    $duplicate = $db->fetch_array($db->simple_select('af_shop_slots', 'slot_id', $duplicateWhere, ['limit' => 1]));
+    if ($duplicate) { af_advancedshop_json_err('Slot with this source already exists in category', 409); }
 
     $update = [
-        'source_type' => $db->escape_string($sourceType),
-        'source_ref_id' => $sourceRefId,
+        'source_type' => $db->escape_string($sourcePayload['source_type']),
+        'source_ref_id' => (int)$sourcePayload['source_ref_id'],
+        'kb_type' => $db->escape_string((string)$sourcePayload['kb_type']),
+        'kb_id' => (int)$sourcePayload['kb_id'],
+        'kb_key' => $db->escape_string((string)$sourcePayload['kb_key']),
         'price' => $priceMinor,
         'currency' => $db->escape_string((string)($mybb->get_input('currency') ?: $slot['currency'])),
         'stock' => (int)$mybb->get_input('stock', MyBB::INPUT_INT),
@@ -2626,11 +2733,11 @@ function af_advancedshop_manage_slot_update(): void
     af_advancedshop_json_ok(['slot' => [
         'slot_id' => $slotId,
         'cat_id' => (int)$slot['cat_id'],
-        'source_type' => $sourceType,
-        'source_ref_id' => $sourceRefId,
-        'kb_id' => (int)$slot['kb_id'],
-        'kb_type' => (string)($slot['kb_type'] ?? 'item'),
-        'kb_key' => (string)($slot['kb_key'] ?? ''),
+        'source_type' => (string)$sourcePayload['source_type'],
+        'source_ref_id' => (int)$sourcePayload['source_ref_id'],
+        'kb_id' => (int)$sourcePayload['kb_id'],
+        'kb_type' => (string)$sourcePayload['kb_type'],
+        'kb_key' => (string)$sourcePayload['kb_key'],
         'price' => (int)$update['price'],
         'price_major' => af_advancedshop_money_format((int)$update['price']),
         'currency' => (string)($mybb->get_input('currency') ?: $slot['currency']),
@@ -2638,6 +2745,7 @@ function af_advancedshop_manage_slot_update(): void
         'limit_per_user' => (int)$update['limit_per_user'],
         'enabled' => (int)$update['enabled'],
         'sortorder' => (int)$update['sortorder'],
+        'appearance_preset' => $sourcePayload['appearance_preset'] ?? [],
     ]]);
 }
 
@@ -2660,7 +2768,7 @@ function af_advancedshop_appearance_search(): void
 
     $table = af_advancedshop_appearance_presets_table();
     if ($table === '') {
-        af_advancedshop_json_ok(['items' => []]);
+        af_advancedshop_json_err('AdvancedAppearance presets table not found. Expected af_aa_presets.', 500);
     }
 
     $q = trim((string)$mybb->get_input('q'));
@@ -2672,10 +2780,11 @@ function af_advancedshop_appearance_search(): void
     $whereSql = implode(' AND ', $where);
 
     $items = [];
-    $query = $db->query("SELECT id, title, description, preview_image, target_key, enabled FROM " . $table . " WHERE " . $whereSql . " ORDER BY enabled DESC, sortorder ASC, id DESC LIMIT 100");
+    $query = $db->query("SELECT id, slug, title, description, preview_image, target_key, enabled FROM " . $table . " WHERE " . $whereSql . " ORDER BY enabled DESC, sortorder ASC, id DESC LIMIT 100");
     while ($row = $db->fetch_array($query)) {
         $items[] = [
             'preset_id' => (int)$row['id'],
+            'slug' => (string)$row['slug'],
             'title' => (string)$row['title'],
             'description' => (string)$row['description'],
             'preview_image' => (string)$row['preview_image'],
@@ -2684,7 +2793,7 @@ function af_advancedshop_appearance_search(): void
         ];
     }
 
-    af_advancedshop_json_ok(['items' => $items]);
+    af_advancedshop_json_ok(['items' => $items, 'table' => $table]);
 }
 
 function af_advancedshop_kb_search(): void
@@ -4195,22 +4304,13 @@ function af_advancedshop_debug_log(string $event, array $context = []): void
 
 function af_advancedshop_render_shop_manage_page(): void
 {
-    global $db, $mybb, $lang, $headerinclude, $header, $footer;
+    global $mybb, $db;
 
     if (!af_advancedshop_can_manage()) {
         error_no_permission();
     }
 
-    $view = (string)$mybb->get_input('view');
-    if ($view === '') {
-        $view = 'categories';
-    }
     $shopCode = trim((string)$mybb->get_input('shop'));
-
-    if (strtolower($mybb->request_method) === 'post') {
-        verify_post_check($mybb->post_code);
-    }
-
     if ($shopCode === '') {
         $shops = [];
         $q = $db->simple_select(af_advancedshop_shops_table(), '*', 'enabled=1', ['order_by' => 'sortorder ASC, shop_id ASC']);
@@ -4239,187 +4339,13 @@ function af_advancedshop_render_shop_manage_page(): void
         exit;
     }
 
-    $shop = $db->fetch_array($db->simple_select(af_advancedshop_shops_table(), '*', "code='" . $db->escape_string($shopCode) . "' AND enabled=1", ['limit' => 1]));
-    if (!$shop) {
-        $af_advancedshop_content = '<div class="af-shop af-shop-manage"><h2>Shop Manager</h2><div class="af-status-error">Shop not found or disabled. <a href="shop.php">Open shop hub</a>.</div></div>';
-        eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
-        output_page($page);
-        exit;
-    }
-
-    $message = '';
-    $do = trim((string)$mybb->get_input('do'));
-    if (strtolower($mybb->request_method) === 'post' && $do !== '') {
-        if ($view === 'slots') {
-            $catId = (int)$mybb->get_input('cat_id');
-            if ($do === 'add') {
-                $kbType = af_advancedshop_normalize_kb_type((string)$mybb->get_input('kb_type')) ?: 'item';
-                $kbKey = trim((string)$mybb->get_input('kb_key'));
-                $kbId = (int)$mybb->get_input('kb_id');
-                if ($kbKey === '' && $kbId <= 0) {
-                    $message = 'kb_key or kb_id is required.';
-                } else {
-                    $kbCols = af_advancedshop_kb_cols();
-                    $where = [];
-                    if ($kbId > 0) { $where[] = ($kbCols['id'] ?? 'id') . '=' . $kbId; }
-                    if ($kbKey !== '' && !empty($kbCols['key'])) { $where[] = ($kbCols['key'] === 'key' ? '`key`' : $kbCols['key']) . "='" . $db->escape_string($kbKey) . "'"; }
-                    if (!empty($kbCols['type'])) { $where[] = ($kbCols['type'] === 'type' ? '`type`' : $kbCols['type']) . "='" . $db->escape_string($kbType) . "'"; }
-                    $kbSql = af_advancedshop_kb_table();
-                    $kbOk = $kbSql !== '' && $where ? $db->fetch_array($db->query('SELECT * FROM ' . $kbSql . ' WHERE ' . implode(' AND ', $where) . ' LIMIT 1')) : false;
-                    if (!$kbOk) {
-                        $message = 'KB entry not found.';
-                    } else {
-                        $db->insert_query('af_shop_slots', [
-                            'shop_id' => (int)$shop['shop_id'],
-                            'cat_id' => $catId,
-                            'kb_type' => $db->escape_string($kbType),
-                            'kb_id' => $kbId > 0 ? $kbId : (int)($kbOk['id'] ?? 0),
-                            'kb_key' => $db->escape_string($kbKey !== '' ? $kbKey : (string)($kbOk['key'] ?? '')),
-                            'price' => af_shop_price_to_storage((string)$mybb->get_input('price')),
-                            'currency' => $db->escape_string((string)$mybb->get_input('currency')),
-                            'stock' => (int)$mybb->get_input('stock'),
-                            'limit_per_user' => (int)$mybb->get_input('limit_per_user'),
-                            'enabled' => (int)$mybb->get_input('enabled') === 1 ? 1 : 0,
-                            'sortorder' => (int)$mybb->get_input('sortorder'),
-                            'meta_json' => $db->escape_string(trim((string)$mybb->get_input('meta_json'))),
-                        ]);
-                    }
-                }
-            } elseif ($do === 'edit') {
-                $slotId = (int)$mybb->get_input('slot_id');
-                $db->update_query('af_shop_slots', [
-                    'kb_type' => $db->escape_string(af_advancedshop_normalize_kb_type((string)$mybb->get_input('kb_type')) ?: 'item'),
-                    'kb_id' => (int)$mybb->get_input('kb_id'),
-                    'kb_key' => $db->escape_string(trim((string)$mybb->get_input('kb_key'))),
-                    'price' => af_shop_price_to_storage((string)$mybb->get_input('price')),
-                    'currency' => $db->escape_string((string)$mybb->get_input('currency')),
-                    'stock' => (int)$mybb->get_input('stock'),
-                    'limit_per_user' => (int)$mybb->get_input('limit_per_user'),
-                    'enabled' => (int)$mybb->get_input('enabled') === 1 ? 1 : 0,
-                    'sortorder' => (int)$mybb->get_input('sortorder'),
-                    'meta_json' => $db->escape_string(trim((string)$mybb->get_input('meta_json'))),
-                ], 'slot_id=' . $slotId . ' AND shop_id=' . (int)$shop['shop_id']);
-            } elseif ($do === 'delete') {
-                $db->delete_query('af_shop_slots', 'slot_id=' . (int)$mybb->get_input('slot_id') . ' AND shop_id=' . (int)$shop['shop_id']);
-            } elseif ($do === 'toggle') {
-                $slotId = (int)$mybb->get_input('slot_id');
-                $slot = $db->fetch_array($db->simple_select('af_shop_slots', 'enabled', 'slot_id=' . $slotId . ' AND shop_id=' . (int)$shop['shop_id'], ['limit' => 1]));
-                if ($slot) {
-                    $db->update_query('af_shop_slots', ['enabled' => (int)$slot['enabled'] === 1 ? 0 : 1], 'slot_id=' . $slotId . ' AND shop_id=' . (int)$shop['shop_id']);
-                }
-            } elseif ($do === 'move_up' || $do === 'move_down') {
-                $slotId = (int)$mybb->get_input('slot_id');
-                $delta = $do === 'move_up' ? -1 : 1;
-                $db->write_query('UPDATE ' . TABLE_PREFIX . 'af_shop_slots SET sortorder=sortorder+' . $delta . ' WHERE slot_id=' . $slotId . ' AND shop_id=' . (int)$shop['shop_id']);
-            }
-        } else {
-            if ($do === 'add') {
-                $db->insert_query('af_shop_categories', [
-                    'shop_id' => (int)$shop['shop_id'],
-                    'title' => $db->escape_string(trim((string)$mybb->get_input('title'))),
-                    'description' => $db->escape_string(trim((string)$mybb->get_input('description'))),
-                    'enabled' => (int)$mybb->get_input('enabled') === 1 ? 1 : 0,
-                    'sortorder' => (int)$mybb->get_input('sortorder'),
-                    'parent_id' => (int)$mybb->get_input('parent_id'),
-                ]);
-            } elseif ($do === 'edit') {
-                $catId = (int)$mybb->get_input('cat_id');
-                $db->update_query('af_shop_categories', [
-                    'title' => $db->escape_string(trim((string)$mybb->get_input('title'))),
-                    'description' => $db->escape_string(trim((string)$mybb->get_input('description'))),
-                    'enabled' => (int)$mybb->get_input('enabled') === 1 ? 1 : 0,
-                    'sortorder' => (int)$mybb->get_input('sortorder'),
-                    'parent_id' => (int)$mybb->get_input('parent_id'),
-                ], 'cat_id=' . $catId . ' AND shop_id=' . (int)$shop['shop_id']);
-            } elseif ($do === 'delete') {
-                $catId = (int)$mybb->get_input('cat_id');
-                $db->delete_query('af_shop_slots', 'cat_id=' . $catId . ' AND shop_id=' . (int)$shop['shop_id']);
-                $db->delete_query('af_shop_categories', 'cat_id=' . $catId . ' AND shop_id=' . (int)$shop['shop_id']);
-            } elseif ($do === 'toggle') {
-                $catId = (int)$mybb->get_input('cat_id');
-                $cat = $db->fetch_array($db->simple_select('af_shop_categories', 'enabled', 'cat_id=' . $catId . ' AND shop_id=' . (int)$shop['shop_id'], ['limit' => 1]));
-                if ($cat) {
-                    $db->update_query('af_shop_categories', ['enabled' => (int)$cat['enabled'] === 1 ? 0 : 1], 'cat_id=' . $catId . ' AND shop_id=' . (int)$shop['shop_id']);
-                }
-            } elseif ($do === 'move_up' || $do === 'move_down') {
-                $catId = (int)$mybb->get_input('cat_id');
-                $delta = $do === 'move_up' ? -1 : 1;
-                $db->write_query('UPDATE ' . TABLE_PREFIX . 'af_shop_categories SET sortorder=sortorder+' . $delta . ' WHERE cat_id=' . $catId . ' AND shop_id=' . (int)$shop['shop_id']);
-            }
-        }
-    }
-
-    $shopTitle = trim((string)($shop['title_ru'] ?? ''));
-    if ($shopTitle === '') { $shopTitle = trim((string)($shop['title_en'] ?? '')); }
-    if ($shopTitle === '') { $shopTitle = (string)($shop['title'] ?? $shopCode); }
-
-    add_breadcrumb('Shop Manager', 'shop_manage.php');
-    add_breadcrumb($shopTitle, 'shop_manage.php?shop=' . rawurlencode($shopCode));
-
-    $openShopUrl = 'shop.php?action=shop_category&amp;shop=' . rawurlencode($shopCode);
-    $notice = $message !== '' ? '<div class="af-status-error">' . htmlspecialchars_uni($message) . '</div>' : '';
-    $content = '<div class="af-shop af-shop-manage"><div style="margin-bottom:10px;"><a class="button" href="shop_manage.php">Shop Manager Hub</a> <a class="button" href="' . $openShopUrl . '">Открыть магазин</a></div>' . $notice;
-
+    $view = trim((string)$mybb->get_input('view'));
     if ($view === 'slots') {
-        $catId = (int)$mybb->get_input('cat_id');
-        $cat = $db->fetch_array($db->simple_select('af_shop_categories', '*', 'cat_id=' . $catId . ' AND shop_id=' . (int)$shop['shop_id'], ['limit' => 1]));
-        if (!$cat) {
-            $content .= '<div class="af-status-error">Category not found.</div>';
-        } else {
-            add_breadcrumb((string)$cat['title'], 'shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . $catId);
-            $content .= '<h2>Slots: ' . htmlspecialchars_uni((string)$cat['title']) . '</h2>';
-            $q = $db->simple_select('af_shop_slots', '*', 'shop_id=' . (int)$shop['shop_id'] . ' AND cat_id=' . $catId, ['order_by' => 'sortorder ASC, slot_id ASC']);
-            $rows = '';
-            while ($r = $db->fetch_array($q)) {
-                $slotEnabled = (int)$r['enabled'] === 1;
-                $toggleLabel = $slotEnabled ? 'Disable' : 'Enable';
-                $rows .= '<tr><td>' . (int)$r['slot_id'] . '</td><td>' . htmlspecialchars_uni((string)$r['kb_type']) . '</td><td>' . (int)$r['kb_id'] . '</td><td>' . htmlspecialchars_uni((string)$r['kb_key']) . '</td><td>' . (int)$r['price'] . '</td><td>' . htmlspecialchars_uni((string)$r['currency']) . '</td><td>' . (int)$r['stock'] . '</td><td>' . (int)$r['limit_per_user'] . '</td><td>' . (int)$r['enabled'] . '</td><td>' . (int)$r['sortorder'] . '</td><td>'
-                    . '<a class="button" href="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . $catId . '&amp;edit_slot_id=' . (int)$r['slot_id'] . '">Редактировать</a> '
-                    . '<form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . $catId . '" style="display:inline"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="toggle"><input type="hidden" name="slot_id" value="' . (int)$r['slot_id'] . '"><button type="submit" title="Включить/выключить">' . $toggleLabel . '</button></form> '
-                    . '<form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . $catId . '" style="display:inline"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="move_up"><input type="hidden" name="slot_id" value="' . (int)$r['slot_id'] . '"><button type="submit">↑</button></form> '
-                    . '<form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . $catId . '" style="display:inline"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="move_down"><input type="hidden" name="slot_id" value="' . (int)$r['slot_id'] . '"><button type="submit">↓</button></form> '
-                    . '<form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . $catId . '" style="display:inline"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="delete"><input type="hidden" name="slot_id" value="' . (int)$r['slot_id'] . '"><button type="submit">Delete</button></form></td></tr>';
-            }
-            if ($rows === '') { $rows = '<tr><td colspan="11">No slots yet.</td></tr>'; }
-            $content .= '<table class="tborder" cellpadding="6" cellspacing="1" width="100%"><tr><th>slot_id</th><th>kb_type</th><th>kb_id</th><th>kb_key</th><th>price</th><th>currency</th><th>stock</th><th>limit_per_user</th><th>enabled</th><th>sortorder</th><th>actions</th></tr>' . $rows . '</table>';
-            $editSlotId = (int)$mybb->get_input('edit_slot_id');
-            if ($editSlotId > 0) {
-                $editSlot = $db->fetch_array($db->simple_select('af_shop_slots', '*', 'slot_id=' . $editSlotId . ' AND shop_id=' . (int)$shop['shop_id'] . ' AND cat_id=' . $catId, ['limit' => 1]));
-                if ($editSlot) {
-                    $content .= '<h3>Редактировать слот #' . (int)$editSlot['slot_id'] . '</h3><form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . $catId . '"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="edit"><input type="hidden" name="slot_id" value="' . (int)$editSlot['slot_id'] . '"><p>kb_type <input name="kb_type" value="' . htmlspecialchars_uni((string)$editSlot['kb_type']) . '"> kb_key <input name="kb_key" value="' . htmlspecialchars_uni((string)$editSlot['kb_key']) . '" required> kb_id <input type="number" name="kb_id" value="' . (int)$editSlot['kb_id'] . '"></p><p>price <input type="number" name="price" step="0.01" min="0" value="' . htmlspecialchars_uni(af_shop_price_to_display((int)$editSlot['price'])) . '"> currency <input name="currency" value="' . htmlspecialchars_uni((string)$editSlot['currency']) . '"> stock <input type="number" name="stock" value="' . (int)$editSlot['stock'] . '"> limit_per_user <input type="number" name="limit_per_user" value="' . (int)$editSlot['limit_per_user'] . '"></p><p>sortorder <input type="number" name="sortorder" value="' . (int)$editSlot['sortorder'] . '"> enabled <select name="enabled"><option value="1"' . ((int)$editSlot['enabled'] === 1 ? ' selected' : '') . '>1</option><option value="0"' . ((int)$editSlot['enabled'] === 0 ? ' selected' : '') . '>0</option></select></p><p>meta_json<br><textarea name="meta_json" rows="4" cols="100">' . htmlspecialchars_uni((string)$editSlot['meta_json']) . '</textarea></p><p><button type="submit">Сохранить слот</button> <a class="button" href="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . $catId . '">Отмена</a></p></form>';
-                }
-            }
-            $content .= '<h3>Add slot</h3><form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . $catId . '"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="add"><input type="hidden" name="cat_id" value="' . $catId . '"><p>kb_type <input name="kb_type" value="item"> kb_key <input name="kb_key" required> kb_id <input type="number" name="kb_id" value="0"></p><p>price <input type="number" step="0.01" min="0" name="price" value="0"> currency <input name="currency" value="credits"> stock <input type="number" name="stock" value="-1"> limit_per_user <input type="number" name="limit_per_user" value="0"></p><p>sortorder <input type="number" name="sortorder" value="0"> enabled <select name="enabled"><option value="1">1</option><option value="0">0</option></select></p><p>meta_json<br><textarea name="meta_json" rows="4" cols="100"></textarea></p><p><button type="submit">Add slot</button></p></form>';
-        }
-    } else {
-        $content .= '<h2>Categories: ' . htmlspecialchars_uni($shopTitle) . '</h2>';
-        $q = $db->simple_select('af_shop_categories', '*', 'shop_id=' . (int)$shop['shop_id'], ['order_by' => 'sortorder ASC, cat_id ASC']);
-        $rows = '';
-        while ($r = $db->fetch_array($q)) {
-            $catEnabled = (int)$r['enabled'] === 1;
-            $toggleLabel = $catEnabled ? 'Disable' : 'Enable';
-            $rows .= '<tr><td>' . (int)$r['cat_id'] . '</td><td>' . htmlspecialchars_uni((string)$r['title']) . '</td><td>' . (int)$r['enabled'] . '</td><td>' . (int)$r['sortorder'] . '</td><td><a href="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;view=slots&amp;cat_id=' . (int)$r['cat_id'] . '">Открыть слоты</a></td><td>'
-                . '<a class="button" href="shop_manage.php?shop=' . rawurlencode($shopCode) . '&amp;edit_cat_id=' . (int)$r['cat_id'] . '">Редактировать</a> '
-                . '<form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '" style="display:inline"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="toggle"><input type="hidden" name="cat_id" value="' . (int)$r['cat_id'] . '"><button type="submit" title="Включить/выключить">' . $toggleLabel . '</button></form> '
-                . '<form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '" style="display:inline"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="move_up"><input type="hidden" name="cat_id" value="' . (int)$r['cat_id'] . '"><button type="submit">↑</button></form> '
-                . '<form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '" style="display:inline"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="move_down"><input type="hidden" name="cat_id" value="' . (int)$r['cat_id'] . '"><button type="submit">↓</button></form> '
-                . '<form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '" style="display:inline"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="delete"><input type="hidden" name="cat_id" value="' . (int)$r['cat_id'] . '"><button type="submit">Delete</button></form></td></tr>';
-        }
-        if ($rows === '') { $rows = '<tr><td colspan="6">No categories yet.</td></tr>'; }
-        $content .= '<table class="tborder" cellpadding="6" cellspacing="1" width="100%"><tr><th>cat_id</th><th>title</th><th>enabled</th><th>sortorder</th><th>slots</th><th>actions</th></tr>' . $rows . '</table>';
-        $editCatId = (int)$mybb->get_input('edit_cat_id');
-        if ($editCatId > 0) {
-            $editCat = $db->fetch_array($db->simple_select('af_shop_categories', '*', 'cat_id=' . $editCatId . ' AND shop_id=' . (int)$shop['shop_id'], ['limit' => 1]));
-            if ($editCat) {
-                $content .= '<h3>Редактировать категорию #' . (int)$editCat['cat_id'] . '</h3><form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="edit"><input type="hidden" name="cat_id" value="' . (int)$editCat['cat_id'] . '"><p>title <input name="title" value="' . htmlspecialchars_uni((string)$editCat['title']) . '" required> parent_id <input type="number" name="parent_id" value="' . (int)$editCat['parent_id'] . '"></p><p>description<br><textarea name="description" rows="3" cols="80">' . htmlspecialchars_uni((string)$editCat['description']) . '</textarea></p><p>sortorder <input type="number" name="sortorder" value="' . (int)$editCat['sortorder'] . '"> enabled <select name="enabled"><option value="1"' . ((int)$editCat['enabled'] === 1 ? ' selected' : '') . '>1</option><option value="0"' . ((int)$editCat['enabled'] === 0 ? ' selected' : '') . '>0</option></select></p><p><button type="submit">Сохранить категорию</button> <a class="button" href="shop_manage.php?shop=' . rawurlencode($shopCode) . '">Отмена</a></p></form>';
-            }
-        }
-        $content .= '<h3>Add category</h3><form method="post" action="shop_manage.php?shop=' . rawurlencode($shopCode) . '"><input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '"><input type="hidden" name="do" value="add"><p>title <input name="title" required> parent_id <input type="number" name="parent_id" value="0"></p><p>description<br><textarea name="description" rows="3" cols="80"></textarea></p><p>sortorder <input type="number" name="sortorder" value="0"> enabled <select name="enabled"><option value="1">1</option><option value="0">0</option></select></p><p><button type="submit">Add category</button></p></form>';
+        $_GET['cat'] = $_GET['cat'] ?? $_GET['cat_id'] ?? null;
+        $_REQUEST['cat'] = $_REQUEST['cat'] ?? $_REQUEST['cat_id'] ?? null;
+        af_advancedshop_manage_slots();
+        return;
     }
 
-    $content .= '</div>';
-    $af_advancedshop_content = $content;
-    eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
-    output_page($page);
-    exit;
+    af_advancedshop_render_manage();
 }
