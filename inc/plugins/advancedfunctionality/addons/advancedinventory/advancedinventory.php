@@ -2369,6 +2369,145 @@ function af_inv_candidate_slots_for_item(array $item): array
     return array_values($result);
 }
 
+function af_advinv_export_charactersheet_equipment_state(int $uid): array
+{
+    $items = [];
+    $equipped = [];
+    $groups = [
+        'armor' => ['title' => 'Броня', 'slots' => []],
+        'weapon' => ['title' => 'Оружие', 'slots' => []],
+        'ammo' => ['title' => 'Боеприпасы', 'slots' => []],
+        'support' => ['title' => 'Поддержка', 'slots' => []],
+    ];
+
+    if ($uid <= 0) {
+        return ['items' => [], 'equipped' => [], 'groups' => $groups];
+    }
+
+    $allowedSubtypes = ['weapon', 'armor', 'ammo', 'consumable'];
+    $allItems = (array)(af_inv_get_items($uid, ['entity' => 'equipment', 'page' => 1, 'per_page' => 500, 'enrich' => true])['items'] ?? []);
+    $equippedRows = af_inv_get_equipped($uid);
+    $supportBindings = af_inv_support_bindings($uid);
+    $slotLabels = af_inv_equipment_slots();
+
+    foreach ($allItems as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+
+        $subtype = trim((string)($item['subtype'] ?? ''));
+        if ($subtype === '') {
+            $subtype = af_advinv_classify_equipment_from_kb_meta(af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')));
+        }
+        if (!in_array($subtype, $allowedSubtypes, true)) {
+            continue;
+        }
+
+        $itemId = (int)($item['id'] ?? 0);
+        $equippedSlot = af_inv_find_equipped_slot_by_item($equippedRows, $itemId);
+        if ($equippedSlot === '' && $subtype === 'consumable') {
+            $equippedSlot = af_inv_find_support_slot_by_item($supportBindings, $itemId);
+        }
+
+        $candidateSlots = af_inv_candidate_slots_for_item($item);
+        $items[] = [
+            'id' => $itemId,
+            'subtype' => $subtype,
+            'title' => (string)($item['appearance_title'] ?? $item['title'] ?? $item['kb_key'] ?? 'Предмет'),
+            'description' => (string)($item['description'] ?? ''),
+            'short_description' => (string)($item['short_description'] ?? ''),
+            'qty' => max(1, (int)($item['qty'] ?? 1)),
+            'icon' => (string)($item['appearance_preview_image'] ?? $item['icon'] ?? ''),
+            'kb_type' => (string)($item['kb_type'] ?? 'item'),
+            'kb_key' => (string)($item['kb_key'] ?? ''),
+            'candidate_slots' => array_values($candidateSlots),
+            'equipped_slot' => $equippedSlot,
+            'equipped_slot_label' => (string)($slotLabels[$equippedSlot] ?? $equippedSlot),
+            'meta_json' => (string)($item['meta_json'] ?? ''),
+        ];
+    }
+
+    foreach ($equippedRows as $slotCode => $row) {
+        $item = af_inv_get_item_for_owner($uid, (int)($row['item_id'] ?? 0));
+        if (!$item) {
+            continue;
+        }
+        $subtype = trim((string)($item['subtype'] ?? ''));
+        if ($subtype === '') {
+            $subtype = af_advinv_classify_equipment_from_kb_meta(af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')));
+        }
+        if (!in_array($subtype, ['weapon', 'armor', 'ammo'], true)) {
+            continue;
+        }
+
+        $groupKey = $subtype;
+        $equipped[$slotCode] = [
+            'slot' => (string)$slotCode,
+            'slot_label' => (string)($slotLabels[$slotCode] ?? $slotCode),
+            'group' => $groupKey,
+            'title' => (string)($item['appearance_title'] ?? $item['title'] ?? $item['kb_key'] ?? 'Предмет'),
+            'icon' => (string)($item['appearance_preview_image'] ?? $item['icon'] ?? ''),
+            'item_id' => (int)($item['id'] ?? 0),
+            'kb_type' => (string)($item['kb_type'] ?? 'item'),
+            'kb_key' => (string)($item['kb_key'] ?? ''),
+            'subtype' => $subtype,
+        ];
+    }
+
+    foreach ($supportBindings as $slotCode => $binding) {
+        $item = af_inv_get_item_for_owner($uid, (int)($binding['item_id'] ?? 0));
+        if (!$item || !af_inv_is_consumable_item($item)) {
+            continue;
+        }
+        $equipped[$slotCode] = [
+            'slot' => (string)$slotCode,
+            'slot_label' => (string)($slotLabels[$slotCode] ?? $slotCode),
+            'group' => 'support',
+            'title' => (string)($item['appearance_title'] ?? $item['title'] ?? $item['kb_key'] ?? 'Предмет'),
+            'icon' => (string)($item['appearance_preview_image'] ?? $item['icon'] ?? ''),
+            'item_id' => (int)($item['id'] ?? 0),
+            'kb_type' => (string)($item['kb_type'] ?? 'item'),
+            'kb_key' => (string)($item['kb_key'] ?? ''),
+            'subtype' => 'consumable',
+        ];
+    }
+
+    foreach ($equipped as $slotCode => $slotItem) {
+        $groupKey = (string)($slotItem['group'] ?? 'support');
+        if (!isset($groups[$groupKey])) {
+            $groups[$groupKey] = ['title' => ucfirst($groupKey), 'slots' => []];
+        }
+        $groups[$groupKey]['slots'][$slotCode] = $slotItem;
+    }
+
+    return ['items' => $items, 'equipped' => $equipped, 'groups' => $groups];
+}
+
+function af_advinv_export_charactersheet_augmentations_inventory(int $uid): array
+{
+    if ($uid <= 0) {
+        return [];
+    }
+
+    $out = [];
+    $allItems = (array)(af_inv_get_items($uid, ['entity' => 'equipment', 'page' => 1, 'per_page' => 500, 'enrich' => true])['items'] ?? []);
+    foreach ($allItems as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        $subtype = trim((string)($item['subtype'] ?? ''));
+        if ($subtype === '') {
+            $subtype = af_advinv_classify_equipment_from_kb_meta(af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')));
+        }
+        if ($subtype !== 'augmentations') {
+            continue;
+        }
+        $out[] = $item;
+    }
+
+    return $out;
+}
+
 function af_advancedinventory_normalize_entity(string $entity): string
 {
     $entity = trim($entity);

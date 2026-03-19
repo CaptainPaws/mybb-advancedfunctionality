@@ -657,6 +657,28 @@
         updatePool();
         initAttributesUI();
         initInventoryUI(sheet);
+        initEquipmentPreviewUI();
+      }
+
+      function initEquipmentPreviewUI() {
+        var equipmentBlock = sheet.querySelector('[data-afcs-block="equipment"]');
+        if (!equipmentBlock) return;
+        var cards = equipmentBlock.querySelectorAll('[data-afcs-equipment-card]');
+        var slots = equipmentBlock.querySelectorAll('[data-afcs-equipment-preview-item-id]');
+        if (!cards.length) return;
+
+        function activate(itemId) {
+          cards.forEach(function (card) {
+            card.classList.toggle('is-active', String(card.getAttribute('data-afcs-equipment-item-id') || '') === String(itemId || ''));
+          });
+          slots.forEach(function (slot) {
+            var active = String(slot.getAttribute('data-afcs-equipment-preview-item-id') || '') === String(itemId || '');
+            slot.classList.toggle('is-active', active);
+          });
+        }
+
+        var activeCard = equipmentBlock.querySelector('[data-afcs-equipment-card].is-active') || cards[0];
+        if (activeCard) activate(activeCard.getAttribute('data-afcs-equipment-item-id') || '');
       }
       function setActiveInventoryTab(root, key) {
         if (!root || !key) return;
@@ -1212,19 +1234,17 @@
         var equipEquip = event.target.closest('[data-afcs-equipment-equip]');
         if (equipEquip) {
           event.preventDefault();
-          var eqType = equipEquip.getAttribute('data-afcs-equipment-type');
-          var eqKey = equipEquip.getAttribute('data-afcs-equipment-key');
+          var eqItemId = equipEquip.getAttribute('data-afcs-equipment-item-id');
           var eqSelectWrap = equipEquip.closest('.af-cs-augment-card') || equipEquip.parentElement;
           var eqSlotSelect = eqSelectWrap ? eqSelectWrap.querySelector('[data-afcs-equipment-slot-select]') : null;
           if (eqSlotSelect && !eqSlotSelect.value && eqSlotSelect.options && eqSlotSelect.options.length === 2) {
             eqSlotSelect.value = eqSlotSelect.options[1].value;
           }
           var eqSlot = eqSlotSelect ? eqSlotSelect.value : '';
-          if (eqType && eqKey && eqSlot) {
+          if (eqItemId && eqSlot) {
             afCsAjax('equip_equipment', {
               slot: eqSlot,
-              type: eqType,
-              key: eqKey
+              item_id: eqItemId
             }).then(function (payload) {
               if (isErrorPayload(payload)) {
                 showInlineError(responseError(payload, 'Ошибка сохранения'));
@@ -1232,6 +1252,22 @@
               }
               clearInlineError();
               applyViewUpdate(payload);
+            });
+          }
+          return;
+        }
+
+        var equipmentPreview = event.target.closest('[data-afcs-equipment-preview-trigger]');
+        if (equipmentPreview) {
+          event.preventDefault();
+          var previewItemId = equipmentPreview.getAttribute('data-afcs-equipment-preview-trigger') || '';
+          var equipmentBlock = sheet.querySelector('[data-afcs-block="equipment"]');
+          if (equipmentBlock && previewItemId) {
+            equipmentBlock.querySelectorAll('[data-afcs-equipment-card]').forEach(function (card) {
+              card.classList.toggle('is-active', (card.getAttribute('data-afcs-equipment-item-id') || '') === previewItemId);
+            });
+            equipmentBlock.querySelectorAll('[data-afcs-equipment-preview-item-id]').forEach(function (slot) {
+              slot.classList.toggle('is-active', (slot.getAttribute('data-afcs-equipment-preview-item-id') || '') === previewItemId);
             });
           }
           return;
@@ -1273,6 +1309,7 @@
       updatePool();
       initAttributesUI();
       initInventoryUI(sheet);
+      initEquipmentPreviewUI();
     })();
   });
 })();
