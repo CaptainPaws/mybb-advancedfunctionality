@@ -459,6 +459,14 @@
   border: 1px solid rgba(255,255,255,.12);
   background: rgba(255,255,255,.06);
   color: #f5f7ff;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+.af-inv-flash.is-hiding {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .af-inv-flash.is-error {
