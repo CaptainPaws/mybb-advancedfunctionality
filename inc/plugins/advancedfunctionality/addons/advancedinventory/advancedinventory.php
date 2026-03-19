@@ -2842,7 +2842,7 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
     $actions = '';
     if ($canEditOwner) {
         if ($isVisual) {
-            $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActiveAppearance ? ' disabled="disabled"' : '') . '>Активировать</button>';
+            $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActiveAppearance ? ' disabled="disabled"' : '') . '>Применить</button>';
             $actions .= '<button type="button" class="af-inv-action" data-af-appearance-unapply-btn data-target-key="' . htmlspecialchars_uni($appearanceTarget) . '"' . (!$isActiveAppearance ? ' disabled="disabled"' : '') . '>Снять</button>';
         } else {
             if ($equippedSlot !== '') {
@@ -2972,8 +2972,10 @@ function af_advinv_render_tab_cards(array $items, bool $canManage, bool $allowEq
                 . ($isActive ? 'Активен' : 'Не активен')
                 . '</div>';
 
-            $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActive ? ' disabled="disabled"' : '') . '>Активировать</button>';
+            $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActive ? ' disabled="disabled"' : '') . '>Применить</button>';
             $actions .= '<button type="button" class="af-inv-action" data-af-appearance-unapply-btn data-target-key="' . htmlspecialchars_uni($appearanceTarget) . '"' . (!$isActive ? ' disabled="disabled"' : '') . '>Снять</button>';
+            $sale = af_advinv_item_sale_profile($item, 1);
+            $actions .= '<button type="button" class="af-inv-action" data-action="sell" data-item-id="' . $itemId . '"' . (empty($sale['can_sell']) ? ' disabled="disabled"' : '') . '>Продать</button>';
 
             if ($canManage) {
                 $actions .= '<button type="button" class="af-inv-action" data-action="delete" data-item-id="' . $itemId . '">Удалить</button>';
