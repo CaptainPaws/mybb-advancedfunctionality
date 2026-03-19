@@ -108,7 +108,6 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $sheet_skills_html = af_charactersheets_build_skills_html($sheet_view, $can_manage_skills, $can_view_ledger, $can_staff_reset, $skills_locked);
     $sheet_knowledge_html = af_charactersheets_build_knowledge_html($sheet_view, $can_edit_sheet, $can_view_ledger);
     $sheet_abilities_html = af_charactersheets_build_abilities_html($build, $can_edit_sheet);
-    $sheet_inventory_html = af_charactersheets_build_inventory_html($uid);
     $sheet_augments_html = af_charactersheets_build_augments_html($build, $can_edit_sheet, $sheet_view, $uid);
     $sheet_equipment_html = af_charactersheets_build_equipment_html($build, $can_edit_sheet, $uid);
     $sheet_mechanics_html = af_charactersheets_build_mechanics_html($sheet_view);

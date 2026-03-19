@@ -750,7 +750,6 @@ function af_charactersheets_handle_api_impl(): void
     $knowledge_html = af_charactersheets_build_knowledge_html($view, $can_edit, $can_view_ledger);
     $abilities_html = af_charactersheets_build_abilities_html($build, $can_edit);
     $inventory_uid = (int)($sheet['uid'] ?? 0);
-    $inventory_html = af_charactersheets_build_inventory_html($inventory_uid);
     $augmentations_html = af_charactersheets_build_augments_html($build, $can_edit, $view, $inventory_uid);
     $equipment_html = af_charactersheets_build_equipment_html($build, $can_edit, $inventory_uid);
     $mechanics_html = af_charactersheets_build_mechanics_html($view);
@@ -771,7 +770,6 @@ function af_charactersheets_handle_api_impl(): void
         'html_skills' => $skills_html,
         'knowledge_html' => $knowledge_html,
         'abilities_html' => $abilities_html,
-        'inventory_html' => $inventory_html,
         'augmentations_html' => $augmentations_html,
         'equipment_html' => $equipment_html,
         'mechanics_html' => $mechanics_html,
