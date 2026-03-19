@@ -257,10 +257,10 @@
           inv_id: appearanceApplyBtn.getAttribute('data-item-id') || '0',
           my_post_key: getPostKey(page)
         })).then(function () {
-          showMessage(page, 'Пресет активирован.', false, { autohide: true });
+          showMessage(page, 'Пресет применён.', false, { autohide: true });
           page.__afInvReloadCurrent();
         }).catch(function (err) {
-          showMessage(page, err.message || 'Не удалось активировать пресет.', true, { autohide: true });
+          showMessage(page, err.message || 'Не удалось применить пресет.', true, { autohide: true });
         });
         return;
       }
