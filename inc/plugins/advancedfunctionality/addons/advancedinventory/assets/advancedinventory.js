@@ -67,16 +67,79 @@
     return base + '&action=' + encodeURIComponent(action);
   }
 
-  function showMessage(page, text, isError) {
+  function clearMessage(page) {
+    if (!page) {
+      return;
+    }
+
+    var state = page.__afInvFlashState || null;
+    if (state && state.timerId) {
+      window.clearTimeout(state.timerId);
+      state.timerId = 0;
+    }
+
+    page.querySelectorAll('.af-inv-flash').forEach(function (node) {
+      node.remove();
+    });
+
+    page.__afInvFlashState = {
+      timerId: 0,
+      box: null
+    };
+  }
+
+  function showMessage(page, text, isError, options) {
+    if (!page) {
+      return;
+    }
+
+    var opts = options || {};
+    var state = page.__afInvFlashState || { timerId: 0, box: null };
+    if (state.timerId) {
+      window.clearTimeout(state.timerId);
+      state.timerId = 0;
+    }
+
     var host = page.querySelector('.af-inv-tab-content') || page;
-    var box = page.querySelector('.af-inv-flash');
+    var box = host ? host.parentNode.querySelector(':scope > .af-inv-flash') : null;
     if (!box) {
+      page.querySelectorAll('.af-inv-flash').forEach(function (node) {
+        node.remove();
+      });
       box = document.createElement('div');
       box.className = 'af-inv-flash';
-      host.parentNode.insertBefore(box, host);
+      if (host && host.parentNode) {
+        host.parentNode.insertBefore(box, host);
+      } else {
+        page.insertBefore(box, page.firstChild || null);
+      }
     }
+
     box.className = 'af-inv-flash ' + (isError ? 'is-error' : 'is-success');
     box.textContent = text;
+    box.removeAttribute('hidden');
+    box.classList.remove('is-hiding');
+
+    state.box = box;
+    if (opts.autohide) {
+      state.timerId = window.setTimeout(function () {
+        if (!state.box || !state.box.parentNode) {
+          return;
+        }
+        state.box.classList.add('is-hiding');
+        window.setTimeout(function () {
+          if (state.box && state.box.parentNode) {
+            state.box.remove();
+          }
+          if (page.__afInvFlashState === state) {
+            page.__afInvFlashState = { timerId: 0, box: null };
+          }
+        }, 220);
+        state.timerId = 0;
+      }, typeof opts.delay === 'number' ? opts.delay : 3000);
+    }
+
+    page.__afInvFlashState = state;
   }
 
   function withLoading(btn, promise) {
@@ -194,10 +257,10 @@
           inv_id: appearanceApplyBtn.getAttribute('data-item-id') || '0',
           my_post_key: getPostKey(page)
         })).then(function () {
-          showMessage(page, 'Пресет активирован.', false);
+          showMessage(page, 'Пресет активирован.', false, { autohide: true });
           page.__afInvReloadCurrent();
         }).catch(function (err) {
-          showMessage(page, err.message || 'Не удалось активировать пресет.', true);
+          showMessage(page, err.message || 'Не удалось активировать пресет.', true, { autohide: true });
         });
         return;
       }
@@ -211,10 +274,10 @@
           target_key: appearanceUnapplyBtn.getAttribute('data-target-key') || '',
           my_post_key: getPostKey(page)
         })).then(function () {
-          showMessage(page, 'Пресет снят.', false);
+          showMessage(page, 'Пресет снят.', false, { autohide: true });
           page.__afInvReloadCurrent();
         }).catch(function (err) {
-          showMessage(page, err.message || 'Не удалось снять пресет.', true);
+          showMessage(page, err.message || 'Не удалось снять пресет.', true, { autohide: true });
         });
         return;
       }
@@ -271,22 +334,22 @@
         .then(function (res) {
           if (action === 'sell') {
             updateWallet(page, res.wallet || null);
-            showMessage(page, 'Продано: ' + (res.sold_qty || payload.qty || '1') + ' шт. Баланс пополнен на ' + (res.sold_major || '0') + ' ' + (res.currency_symbol || '') + '.', false);
+            showMessage(page, 'Продано: ' + (res.sold_qty || payload.qty || '1') + ' шт. Баланс пополнен на ' + (res.sold_major || '0') + ' ' + (res.currency_symbol || '') + '.', false, { autohide: true });
           } else if (action === 'delete') {
-            showMessage(page, 'Предмет удалён.', false);
+            showMessage(page, 'Предмет удалён.', false, { autohide: true });
           } else if (action === 'update') {
-            showMessage(page, 'Изменения сохранены.', false);
+            showMessage(page, 'Изменения сохранены.', false, { autohide: true });
           } else if (action === 'equip') {
-            showMessage(page, 'Предмет надет.', false);
+            showMessage(page, 'Предмет надет.', false, { autohide: true });
           } else if (action === 'unequip') {
-            showMessage(page, 'Предмет снят.', false);
+            showMessage(page, 'Предмет снят.', false, { autohide: true });
           } else if (action === 'unbind_support_slot') {
-            showMessage(page, 'Предмет убран из быстрого слота.', false);
+            showMessage(page, 'Предмет убран из быстрого слота.', false, { autohide: true });
           }
           page.__afInvReloadCurrent();
         })
         .catch(function (err) {
-          showMessage(page, err.message || 'Не удалось выполнить действие.', true);
+          showMessage(page, err.message || 'Не удалось выполнить действие.', true, { autohide: true });
         });
     });
 
@@ -326,13 +389,13 @@
       withLoading(bindBtn, postForm(apiActionUrl(pending.apiBase, 'api_bind_support_slot'), payload))
         .then(function () {
           overlay.setAttribute('hidden', 'hidden');
-          showMessage(page, 'Предмет добавлен в быстрый слот.', false);
+          showMessage(page, 'Предмет добавлен в быстрый слот.', false, { autohide: true });
           if (typeof page.__afInvReloadCurrent === 'function') {
             page.__afInvReloadCurrent();
           }
         })
         .catch(function (err) {
-          showMessage(page, err.message || 'Не удалось назначить быстрый слот.', true);
+          showMessage(page, err.message || 'Не удалось назначить быстрый слот.', true, { autohide: true });
         });
     });
     page.__afInvSupportModal = overlay;
@@ -435,7 +498,7 @@
       return loadPanelHtml(url, finalKey, !!force).then(function (html) {
         mountPanelHtml(html, finalKey, url);
       }).catch(function (err) {
-        showMessage(page, err.message || 'Не удалось загрузить раздел инвентаря.', true);
+        showMessage(page, err.message || 'Не удалось загрузить раздел инвентаря.', true, { autohide: true });
       });
     };
 
@@ -459,6 +522,7 @@
     page.querySelectorAll('.af-inv-tab').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
         e.preventDefault();
+        clearMessage(page);
         var entity = btn.getAttribute('data-entity') || btn.getAttribute('data-tab') || 'equipment';
         page.querySelectorAll('.af-inv-tab').forEach(function (el) {
           el.classList.remove('is-active');
