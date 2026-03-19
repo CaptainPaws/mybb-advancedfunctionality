@@ -409,7 +409,7 @@ function af_charactersheets_collect_bonus_items(array $kb_sources): array
     return $items;
 }
 
-function af_charactersheets_collect_build_bonus_items(array $build): array
+function af_charactersheets_collect_build_bonus_items(array $build, int $uid = 0): array
 {
     $items = [];
 
@@ -454,13 +454,12 @@ function af_charactersheets_collect_build_bonus_items(array $build): array
         }
     }
 
-    $equipment = (array)($build['equipment'] ?? []);
-    foreach ((array)($equipment['slots'] ?? []) as $slotItem) {
-        if (!is_array($slotItem)) {
-            continue;
-        }
-        $type = (string)($slotItem['type'] ?? '');
-        $key = (string)($slotItem['key'] ?? '');
+    $equipmentState = $uid > 0 && function_exists('af_advinv_export_charactersheet_equipment_state')
+        ? af_advinv_export_charactersheet_equipment_state($uid)
+        : [];
+    foreach ((array)($equipmentState['equipped'] ?? []) as $slotItem) {
+        $type = (string)($slotItem['kb_type'] ?? '');
+        $key = (string)($slotItem['kb_key'] ?? '');
         if ($type === '' || $key === '') {
             continue;
         }
@@ -684,7 +683,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     ];
 
     $bonus_items = af_charactersheets_collect_bonus_items($kb_sources);
-    $bonus_items = array_merge($bonus_items, af_charactersheets_collect_build_bonus_items($build));
+    $bonus_items = array_merge($bonus_items, af_charactersheets_collect_build_bonus_items($build, (int)$uid));
     foreach ($bonus_items as $item) {
         $type = (string)($item['type'] ?? '');
         $target = $item['target'] ?? null;

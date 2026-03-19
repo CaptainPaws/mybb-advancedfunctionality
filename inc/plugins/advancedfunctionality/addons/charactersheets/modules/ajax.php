@@ -644,50 +644,77 @@ function af_charactersheets_handle_api_impl(): void
         if (!$can_edit) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
         }
-        $slot = (string)$mybb->get_input('slot');
-        $slots_allowed = array_keys(af_charactersheets_get_equipment_slots());
-        if ($slot === '' || !in_array($slot, $slots_allowed, true)) {
-            af_charactersheets_json_response(['success' => false, 'error' => 'Invalid slot']);
-        }
 
-        $equipment = (array)($build['equipment'] ?? []);
-        $slots = (array)($equipment['slots'] ?? []);
+        $owner_uid = (int)($sheet['uid'] ?? 0);
+        if ($owner_uid <= 0) {
+            af_charactersheets_json_response(['success' => false, 'error' => 'Owner not found']);
+        }
 
         if ($do === 'equip_equipment') {
-            $type = (string)$mybb->get_input('type');
-            $key = (string)$mybb->get_input('key');
-            if ($type === '' || $key === '') {
-                af_charactersheets_json_response(['success' => false, 'error' => 'Invalid equipment']);
+            $item_id = (int)$mybb->get_input('item_id');
+            $slot = (string)$mybb->get_input('slot');
+            $item = function_exists('af_inv_get_item_for_owner') ? af_inv_get_item_for_owner($owner_uid, $item_id) : [];
+            if (empty($item)) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Equipment not found']);
             }
-            $entry = af_charactersheets_kb_get_entry($type, $key);
-            if (empty($entry)) {
-                af_charactersheets_json_response(['success' => false, 'error' => 'Unknown equipment']);
-            }
-            $owned = (array)($equipment['owned'] ?? []);
-            $owned_match = false;
-            foreach ($owned as $item) {
-                if (!is_array($item)) {
-                    continue;
-                }
-                if ((string)($item['type'] ?? '') === $type && (string)($item['key'] ?? '') === $key) {
-                    $owned_match = true;
-                    break;
-                }
-            }
-            if (!$owned_match) {
-                af_charactersheets_json_response(['success' => false, 'error' => 'Equipment not owned']);
-            }
-            $slots[$slot] = [
-                'type' => $type,
-                'key' => $key,
-            ];
-        } else {
-            $slots[$slot] = null;
-        }
 
-        $equipment['slots'] = $slots;
-        $build['equipment'] = $equipment;
-        af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
+            $subtype = trim((string)($item['subtype'] ?? ''));
+            if ($subtype === '') {
+                $subtype = af_advinv_classify_equipment_from_kb_meta(af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')));
+            }
+            if (!in_array($subtype, ['weapon', 'armor', 'ammo', 'consumable'], true)) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Item is not valid equipment']);
+            }
+
+            $candidate_slots = function_exists('af_inv_candidate_slots_for_item') ? af_inv_candidate_slots_for_item($item) : [];
+            if ($slot === '' && !empty($candidate_slots)) {
+                $slot = (string)$candidate_slots[0];
+            }
+            if ($slot === '' || !in_array($slot, $candidate_slots, true)) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Invalid slot']);
+            }
+
+            if ($subtype === 'consumable') {
+                global $db;
+                $slotCode = af_inv_map_legacy_support_slot($slot);
+                $slotConfigs = af_inv_support_slots();
+                if (!isset($slotConfigs[$slotCode])) {
+                    af_charactersheets_json_response(['success' => false, 'error' => 'Invalid support slot']);
+                }
+                $db->delete_query('af_advinv_support_slots', 'uid=' . $owner_uid . ' AND item_id=' . (int)$item['id']);
+                $exists = (int)$db->fetch_field($db->simple_select('af_advinv_support_slots', 'COUNT(*) c', "uid={$owner_uid} AND slot_code='" . $db->escape_string($slotCode) . "'"), 'c');
+                $row = ['item_id' => (int)$item['id'], 'sortorder' => (int)($slotConfigs[$slotCode]['sortorder'] ?? 0), 'updated_at' => TIME_NOW];
+                if ($exists > 0) {
+                    $db->update_query('af_advinv_support_slots', $row, "uid={$owner_uid} AND slot_code='" . $db->escape_string($slotCode) . "'");
+                } else {
+                    $row['uid'] = $owner_uid;
+                    $row['slot_code'] = $db->escape_string($slotCode);
+                    $row['created_at'] = TIME_NOW;
+                    $db->insert_query('af_advinv_support_slots', $row);
+                }
+            } else {
+                global $db;
+                $db->delete_query('af_advinv_equipped', 'uid=' . $owner_uid . ' AND item_id=' . (int)$item['id']);
+                $exists = (int)$db->fetch_field($db->simple_select('af_advinv_equipped', 'COUNT(*) c', "uid={$owner_uid} AND equip_slot='" . $db->escape_string($slot) . "'"), 'c');
+                if ($exists > 0) {
+                    $db->update_query('af_advinv_equipped', ['item_id' => (int)$item['id'], 'updated_at' => TIME_NOW], "uid={$owner_uid} AND equip_slot='" . $db->escape_string($slot) . "'");
+                } else {
+                    $db->insert_query('af_advinv_equipped', ['uid' => $owner_uid, 'equip_slot' => $db->escape_string($slot), 'item_id' => (int)$item['id'], 'updated_at' => TIME_NOW]);
+                }
+            }
+        } else {
+            $slot = (string)$mybb->get_input('slot');
+            if ($slot === '') {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Invalid slot']);
+            }
+            global $db;
+            $slotCode = af_inv_map_legacy_support_slot($slot);
+            if (array_key_exists($slotCode, af_inv_support_slots())) {
+                $db->delete_query('af_advinv_support_slots', 'uid=' . $owner_uid . " AND slot_code='" . $db->escape_string($slotCode) . "'");
+            } else {
+                $db->delete_query('af_advinv_equipped', 'uid=' . $owner_uid . " AND equip_slot='" . $db->escape_string($slot) . "'");
+            }
+        }
     } elseif ($do === 'reset_attributes') {
         if (!$can_staff_reset) {
             af_charactersheets_json_error('no_permission', 'Permission denied', [], 403);
@@ -724,8 +751,8 @@ function af_charactersheets_handle_api_impl(): void
     $abilities_html = af_charactersheets_build_abilities_html($build, $can_edit);
     $inventory_uid = (int)($sheet['uid'] ?? 0);
     $inventory_html = af_charactersheets_build_inventory_html($inventory_uid);
-    $augmentations_html = af_charactersheets_build_augments_html($build, $can_edit, $view);
-    $equipment_html = af_charactersheets_build_equipment_html($build, $can_edit);
+    $augmentations_html = af_charactersheets_build_augments_html($build, $can_edit, $view, $inventory_uid);
+    $equipment_html = af_charactersheets_build_equipment_html($build, $can_edit, $inventory_uid);
     $mechanics_html = af_charactersheets_build_mechanics_html($view);
 
     $response_payload = [

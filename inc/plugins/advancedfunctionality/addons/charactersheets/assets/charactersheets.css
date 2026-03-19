@@ -1893,3 +1893,43 @@
 .af-cs-inline-error{margin:8px 0;padding:8px 10px;border:1px solid #b84a4a;background:rgba(184,74,74,.15);color:#ffd4d4;border-radius:8px;font-size:13px}
 
 .af-cs-toast{position:sticky;top:10px;z-index:5;margin:8px 0;padding:8px 10px;border:1px solid #3f7d4f;background:rgba(56,125,79,.2);color:#d8ffe2;border-radius:8px;font-size:13px}
+
+.af-cs-equipment-slots-group {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.af-cs-panel-title--small {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.75;
+}
+
+.af-cs-equipment-card-hit {
+  all: unset;
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  border-radius: 12px;
+}
+
+.af-cs-augment-card[data-afcs-equipment-card] {
+  position: relative;
+}
+
+.af-cs-augment-card[data-afcs-equipment-card].is-active,
+.af-cs-slot[data-afcs-equipment-preview-item-id].is-active {
+  border-color: rgba(92, 195, 255, 0.85);
+  box-shadow: 0 0 0 1px rgba(92, 195, 255, 0.35), 0 0 20px rgba(92, 195, 255, 0.12);
+}
+
+.af-cs-equipment-preview {
+  display: grid;
+  gap: 14px;
+}
+
+.af-cs-slot--empty {
+  opacity: 0.7;
+}
