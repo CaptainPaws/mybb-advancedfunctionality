@@ -629,10 +629,6 @@
           var abilitiesBlock = sheet.querySelector('[data-afcs-block="abilities"]');
           if (abilitiesBlock) abilitiesBlock.innerHTML = payload.abilities_html;
         }
-        if (payload.inventory_html) {
-          var inventoryBlock = sheet.querySelector('[data-afcs-block="inventory"]');
-          if (inventoryBlock) inventoryBlock.innerHTML = payload.inventory_html;
-        }
         if (payload.augmentations_html) {
           var augmentsBlock = sheet.querySelector('[data-afcs-block="augmentations"]');
           if (augmentsBlock) augmentsBlock.innerHTML = payload.augmentations_html;
@@ -656,7 +652,6 @@
 
         updatePool();
         initAttributesUI();
-        initInventoryUI(sheet);
         initEquipmentPreviewUI();
       }
 
@@ -680,43 +675,6 @@
         var activeCard = equipmentBlock.querySelector('[data-afcs-equipment-card].is-active') || cards[0];
         if (activeCard) activate(activeCard.getAttribute('data-afcs-equipment-item-id') || '');
       }
-      function setActiveInventoryTab(root, key) {
-        if (!root || !key) return;
-        var tabs = root.querySelectorAll('[data-afcs-inventory-tab]');
-        var panels = root.querySelectorAll('[data-afcs-inventory-panel]');
-        tabs.forEach(function (tab) {
-          tab.classList.toggle('is-active', tab.getAttribute('data-afcs-inventory-tab') === key);
-        });
-        panels.forEach(function (panel) {
-          panel.classList.toggle('is-active', panel.getAttribute('data-afcs-inventory-panel') === key);
-        });
-      }
-
-      function updateInventoryInfo(panel, card) {
-        if (!panel || !card) return;
-        var info = panel.querySelector('[data-afcs-inventory-info]');
-        if (!info) return;
-
-        var title = card.getAttribute('data-afcs-item-title') || '';
-        var desc = card.getAttribute('data-afcs-item-desc') || '';
-        var qty = card.getAttribute('data-afcs-item-qty') || '0';
-        var effects = card.getAttribute('data-afcs-item-effects') || '';
-        var action = card.getAttribute('data-afcs-item-action') || '';
-
-        var html = '<div class="af-cs-inventory-title">' + title + '</div>';
-        if (desc) html += '<div class="af-cs-inventory-desc">' + desc + '</div>';
-        html += '<div class="af-cs-inventory-row"><span>Количество</span><strong>' + qty + '</strong></div>';
-        if (effects) html += '<div class="af-cs-inventory-bonus">' + effects + '</div>';
-        if (action) html += '<div class="af-cs-ability-actions">' + action + '</div>';
-
-        info.innerHTML = html;
-
-        var cards = panel.querySelectorAll('[data-afcs-item-card]');
-        cards.forEach(function (item) {
-          item.classList.toggle('is-active', item === card);
-        });
-      }
-
       function closeAttributeConfirmModal() {
         var modal = sheet.querySelector('[data-afcs-attr-confirm-modal]');
         if (!modal) return;
@@ -794,81 +752,6 @@
         });
       }
 
-      function ensureInventoryEmbed(root, forceReload) {
-        if (!root) return;
-        var embedRoot = root.querySelector('[data-afcs-inventory-embed-root]');
-        if (!embedRoot) return;
-
-        var embedUrl = embedRoot.getAttribute('data-afcs-inventory-embed-url') || '';
-        var content = embedRoot.querySelector('[data-afcs-inventory-embed-content]');
-        if (!content) return;
-
-        var fullscreenLink = embedRoot.querySelector('.af-cs-inventory-embed__fullscreen');
-        if (fullscreenLink) {
-          fullscreenLink.hidden = !embedUrl;
-        }
-
-        if (!embedUrl) {
-          content.innerHTML = '<div class="af-cs-muted">Инвентарь недоступен.</div>';
-          return;
-        }
-
-        var alreadyLoaded = embedRoot.getAttribute('data-afcs-inventory-embed-loaded') === '1';
-        var inProgress = embedRoot.getAttribute('data-afcs-inventory-embed-loading') === '1';
-        if ((alreadyLoaded && !forceReload) || inProgress) return;
-
-        embedRoot.setAttribute('data-afcs-inventory-embed-loading', '1');
-        content.innerHTML = '<div class="af-cs-muted">Загрузка инвентаря...</div>';
-
-        fetch(embedUrl, {
-          method: 'GET',
-          credentials: 'same-origin',
-          headers: {
-            'X-Requested-With': 'XMLHttpRequest'
-          }
-        }).then(function (resp) {
-          if (!resp.ok) throw new Error('HTTP ' + resp.status);
-          return resp.text();
-        }).then(function (html) {
-          content.innerHTML = html || '<div class="af-cs-muted">Инвентарь пуст.</div>';
-          if (window.AFSHOP && typeof window.AFSHOP.mountInventory === 'function') {
-            var inventoryRoot = content.querySelector('.af-inventory');
-            window.AFSHOP.mountInventory(inventoryRoot || content);
-          }
-          embedRoot.setAttribute('data-afcs-inventory-embed-loaded', '1');
-        }).catch(function () {
-          var fallbackHtml = ''
-            + '<div class="af-cs-inventory-embed__fallback">'
-            + '<div class="af-cs-muted">Не удалось загрузить инвентарь как HTML. Показан fallback.</div>'
-            + '<iframe class="af-cs-inventory-embed__iframe" src="' + escapeHtml(embedUrl) + '" loading="lazy" referrerpolicy="same-origin"></iframe>'
-            + '</div>';
-          content.innerHTML = fallbackHtml;
-          embedRoot.setAttribute('data-afcs-inventory-embed-loaded', '1');
-        }).then(function () {
-          embedRoot.setAttribute('data-afcs-inventory-embed-loading', '0');
-        });
-      }
-
-      function initInventoryUI(root) {
-        if (!root) return;
-        var inventory = root.querySelector('[data-afcs-block="inventory"]') || root;
-        if (!inventory) return;
-        var activeTab = inventory.querySelector('.af-cs-tab-btn.is-active');
-        if (!activeTab) {
-          activeTab = inventory.querySelector('[data-afcs-inventory-tab]');
-          if (activeTab) activeTab.classList.add('is-active');
-        }
-        if (activeTab) {
-          setActiveInventoryTab(inventory, activeTab.getAttribute('data-afcs-inventory-tab'));
-        }
-
-        var tabPanel = sheet.querySelector('[data-afcs-tab-content="inventory"]');
-        if (tabPanel && tabPanel.classList.contains('is-active')) {
-          ensureInventoryEmbed(tabPanel);
-        }
-      }
-
-
       sheet.addEventListener('change', function (event) {
         var rankSelect = event.target.closest('[data-afcs-skill-rank]');
         if (!rankSelect) return;
@@ -888,28 +771,6 @@
       });
 
       sheet.addEventListener('click', function (event) {
-        var topInventoryTab = event.target.closest('[data-afcs-tab="inventory"]');
-        if (topInventoryTab) {
-          var panel = sheet.querySelector('[data-afcs-tab-content="inventory"]');
-          ensureInventoryEmbed(panel || sheet);
-        }
-
-        var inventoryTab = event.target.closest('[data-afcs-inventory-tab]');
-        if (inventoryTab) {
-          event.preventDefault();
-          var tabKey = inventoryTab.getAttribute('data-afcs-inventory-tab');
-          setActiveInventoryTab(sheet, tabKey);
-          return;
-        }
-
-        var inventoryCard = event.target.closest('[data-afcs-item-card]');
-        if (inventoryCard) {
-          event.preventDefault();
-          var panel = inventoryCard.closest('[data-afcs-inventory-panel]');
-          updateInventoryInfo(panel, inventoryCard);
-          return;
-        }
-
         // +/− атрибутов (как у навыков)
         var attrChange = event.target.closest('[data-afcs-attr-change]');
         if (attrChange) {
