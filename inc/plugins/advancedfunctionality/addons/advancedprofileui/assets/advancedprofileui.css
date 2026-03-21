@@ -1204,6 +1204,7 @@ af-apf-postbit-field {
   box-shadow: 0 6px 16px rgba(0,0,0,.16);
   box-sizing: border-box;
   margin-left: -10px;
+  color: #d2d2d3;
 }
 
 .af-apui-postbit-rail .af-apui-postbit-action__icon,
@@ -1548,5 +1549,514 @@ af-apf-postbit-field {
 @media (max-width: 380px) {
   .af-apui-postbit-rail .af-apui-postbit-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* =========================================================
+   APUI MODAL / APPLICATION FRAGMENT
+   - прокрутка модалки
+   - нормальное вмещение контента анкеты
+   - база под будущие пресеты
+   ========================================================= */
+
+:root {
+  --af-apui-modal-dialog-width: min(1280px, calc(100vw - 32px));
+  --af-apui-modal-dialog-height: min(92vh, 980px);
+  --af-apui-modal-body-bg: rgba(10, 14, 24, .94);
+  --af-apui-modal-body-border: rgba(255,255,255,.10);
+  --af-apui-modal-fragment-bg: rgba(14, 18, 28, .72);
+  --af-apui-modal-fragment-border: rgba(255,255,255,.10);
+  --af-apui-modal-fragment-radius: 14px;
+  --af-apui-modal-fragment-padding: 18px;
+  --af-apui-modal-text: #d8ddf3;
+  --af-apui-modal-muted: rgba(216, 221, 243, .72);
+}
+
+/* Общая геометрия модалки */
+.af-cs-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: none;
+}
+
+.af-cs-modal.is-open {
+  display: block;
+}
+
+.af-cs-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 7, 14, .72);
+  backdrop-filter: blur(6px);
+}
+
+.af-cs-modal__dialog {
+  position: relative;
+  z-index: 1;
+  width: var(--af-apui-modal-dialog-width);
+  height: var(--af-apui-modal-dialog-height);
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  margin: 16px auto;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid var(--af-apui-modal-body-border);
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(10, 14, 24, .98);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .45);
+}
+
+.af-cs-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0)),
+    rgba(15, 20, 32, .96);
+}
+
+.af-cs-modal__title {
+  min-width: 0;
+  color: #eef2ff;
+  font-size: 18px;
+  line-height: 1.3;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.af-cs-modal__close {
+  flex: 0 0 auto;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 10px;
+  background: rgba(255,255,255,.04);
+  color: #eef2ff;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, transform .15s ease;
+}
+
+.af-cs-modal__close:hover,
+.af-cs-modal__close:focus-visible {
+  background: rgba(34, 46, 78, .86);
+  border-color: rgba(147, 166, 255, .42);
+  transform: translateY(-1px);
+}
+
+/* ВАЖНО: скролл модалки */
+.af-cs-modal__body {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--af-apui-modal-body-bg);
+  color: var(--af-apui-modal-text);
+  box-sizing: border-box;
+}
+
+/* iframe режим */
+.af-cs-modal__frame {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
+/* HTML режим для анкеты */
+.af-cs-modal__content {
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.af-apui-modal-loading,
+.af-apui-modal-error {
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 12px;
+  padding: 16px;
+  background: rgba(255,255,255,.03);
+  color: var(--af-apui-modal-text);
+}
+
+.af-apui-modal-error a {
+  color: #c7d7ff;
+}
+
+/* Контейнер анкеты — ЭТО И БУДЕТ ТОЧКА ДЛЯ ПРЕСЕТОВ */
+.af-apui-application-fragment {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  padding: var(--af-apui-modal-fragment-padding);
+  border: 1px solid var(--af-apui-modal-fragment-border);
+  border-radius: var(--af-apui-modal-fragment-radius);
+  background: var(--af-apui-modal-fragment-bg);
+  color: var(--af-apui-modal-text);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Всё внутри анкеты не должно вылезать за диагональ/ширину */
+.af-apui-application-fragment,
+.af-apui-application-fragment * {
+  box-sizing: border-box;
+}
+
+.af-apui-application-fragment > *:first-child {
+  margin-top: 0 !important;
+}
+
+.af-apui-application-fragment > *:last-child {
+  margin-bottom: 0 !important;
+}
+
+.af-apui-application-fragment * {
+  max-width: 100%;
+}
+
+.af-apui-application-fragment p,
+.af-apui-application-fragment div,
+.af-apui-application-fragment li,
+.af-apui-application-fragment blockquote,
+.af-apui-application-fragment td,
+.af-apui-application-fragment th {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Заголовки и текстовые блоки — чтобы визуально не слипались */
+.af-apui-application-fragment h1,
+.af-apui-application-fragment h2,
+.af-apui-application-fragment h3,
+.af-apui-application-fragment h4,
+.af-apui-application-fragment h5,
+.af-apui-application-fragment h6 {
+  margin: 0 0 12px;
+  line-height: 1.25;
+  color: #eef2ff;
+}
+
+.af-apui-application-fragment p {
+  margin: 0 0 12px;
+  line-height: 1.65;
+}
+
+.af-apui-application-fragment ul,
+.af-apui-application-fragment ol {
+  margin: 0 0 14px;
+  padding-left: 20px;
+}
+
+.af-apui-application-fragment li + li {
+  margin-top: 6px;
+}
+
+.af-apui-application-fragment blockquote {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border-left: 3px solid rgba(147, 166, 255, .38);
+  border-radius: 10px;
+  background: rgba(255,255,255,.04);
+}
+
+.af-apui-application-fragment hr {
+  border: 0;
+  border-top: 1px solid rgba(255,255,255,.10);
+  margin: 16px 0;
+}
+
+/* Картинки, видео, iframe и прочее медиа */
+.af-apui-application-fragment img,
+.af-apui-application-fragment video,
+.af-apui-application-fragment canvas,
+.af-apui-application-fragment svg,
+.af-apui-application-fragment iframe {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.af-apui-application-fragment figure {
+  margin: 0 0 14px;
+  max-width: 100%;
+}
+
+.af-apui-application-fragment pre,
+.af-apui-application-fragment code {
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.af-apui-application-fragment pre {
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(6, 10, 18, .76);
+  border: 1px solid rgba(255,255,255,.08);
+}
+
+/* Таблицы и старые mybb-блоки — чтобы не схлопывались */
+.af-apui-application-fragment table {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+.af-apui-application-fragment table:not(:last-child) {
+  margin-bottom: 14px;
+}
+
+.af-apui-application-fragment td,
+.af-apui-application-fragment th {
+  vertical-align: top;
+}
+
+.af-apui-application-fragment .tborder,
+.af-apui-application-fragment .thead,
+.af-apui-application-fragment .trow1,
+.af-apui-application-fragment .trow2,
+.af-apui-application-fragment .post,
+.af-apui-application-fragment .post_body,
+.af-apui-application-fragment .post_content,
+.af-apui-application-fragment .postbit_message,
+.af-apui-application-fragment .scaleimages,
+.af-apui-application-fragment .af-apui-postbit-message,
+.af-apui-application-fragment .af-apui-postbit-content {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Если в анкете есть старые таблицы полей, не даём им сливаться */
+.af-apui-application-fragment .tborder table,
+.af-apui-application-fragment .post table,
+.af-apui-application-fragment .post_body table,
+.af-apui-application-fragment .post_content table {
+  width: 100%;
+}
+
+.af-apui-application-fragment .thead,
+.af-apui-application-fragment th {
+  color: #eef2ff;
+}
+
+.af-apui-application-fragment .trow1,
+.af-apui-application-fragment .trow2,
+.af-apui-application-fragment td,
+.af-apui-application-fragment th {
+  padding: 10px 12px;
+}
+
+/* Частый кейс: инфоблоки/карточки */
+.af-apui-application-fragment .af-apui-card,
+.af-apui-application-fragment .card,
+.af-apui-application-fragment .panel,
+.af-apui-application-fragment .section,
+.af-apui-application-fragment .fieldset {
+  margin: 0 0 14px;
+  max-width: 100%;
+}
+
+/* Если внутри анкеты есть постбит/тема со своими отступами — гасим лишнее */
+.af-apui-application-fragment .post.classic,
+.af-apui-application-fragment .af-apui-postbit {
+  margin: 0 !important;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Мобильная адаптация модалки */
+@media (max-width: 900px) {
+  :root {
+    --af-apui-modal-dialog-width: calc(100vw - 20px);
+    --af-apui-modal-dialog-height: calc(100vh - 20px);
+    --af-apui-modal-fragment-padding: 14px;
+  }
+
+  .af-cs-modal__dialog {
+    margin: 10px auto;
+    max-width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+    border-radius: 14px;
+  }
+
+  .af-cs-modal__title {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 560px) {
+  :root {
+    --af-apui-modal-fragment-padding: 12px;
+  }
+
+  .af-cs-modal__header {
+    min-height: 50px;
+    padding: 10px 12px;
+  }
+
+  .af-apui-application-fragment table,
+  .af-apui-application-fragment tbody,
+  .af-apui-application-fragment tr,
+  .af-apui-application-fragment td,
+  .af-apui-application-fragment th {
+    display: block;
+    width: 100%;
+  }
+
+  .af-apui-application-fragment td,
+  .af-apui-application-fragment th {
+    padding: 8px 10px;
+  }
+}
+
+/* =========================================================
+   APUI MODAL THEMES / PRESET HOOKS
+   - единый контракт для application / inventory / sheet / achievements
+   - фон модалки задается переменными, а не жесткими селекторами
+   ========================================================= */
+
+:root {
+  /* application */
+  --af-apui-modal-application-bg-image: var(--af-apui-profile-banner-image, none);
+  --af-apui-modal-application-bg-overlay:
+    linear-gradient(180deg, rgba(6, 10, 18, .20) 0%, rgba(6, 10, 18, .58) 55%, rgba(6, 10, 18, .88) 100%);
+  --af-apui-modal-application-bg-position: center center;
+  --af-apui-modal-application-bg-size: cover;
+  --af-apui-modal-application-panel-bg: rgba(6, 12, 26, .58);
+  --af-apui-modal-application-panel-border: rgba(255,255,255,.10);
+
+  /* inventory */
+  --af-apui-modal-inventory-bg-image: var(--af-apui-postbit-author-bg-image, none);
+  --af-apui-modal-inventory-bg-overlay:
+    linear-gradient(180deg, rgba(6, 10, 18, .26) 0%, rgba(6, 10, 18, .72) 100%);
+  --af-apui-modal-inventory-bg-position: center center;
+  --af-apui-modal-inventory-bg-size: cover;
+
+  /* sheet */
+  --af-apui-modal-sheet-bg-image: var(--af-apui-profile-banner-image, none);
+  --af-apui-modal-sheet-bg-overlay:
+    linear-gradient(180deg, rgba(6, 10, 18, .24) 0%, rgba(6, 10, 18, .78) 100%);
+  --af-apui-modal-sheet-bg-position: center center;
+  --af-apui-modal-sheet-bg-size: cover;
+
+  /* achievements */
+  --af-apui-modal-achievements-bg-image: var(--af-apui-postbit-plaque-bg-image, none);
+  --af-apui-modal-achievements-bg-overlay:
+    linear-gradient(180deg, rgba(6, 10, 18, .24) 0%, rgba(6, 10, 18, .78) 100%);
+  --af-apui-modal-achievements-bg-position: center center;
+  --af-apui-modal-achievements-bg-size: cover;
+}
+
+/* Базовый body модалки */
+.af-cs-modal__body {
+  padding: 16px;
+  background-repeat: no-repeat, no-repeat;
+  background-position: center center, center center;
+  background-size: cover, cover;
+}
+
+/* ТИПЫ МОДАЛОК */
+.af-cs-modal[data-af-modal-kind="application"] .af-cs-modal__body,
+.af-cs-modal[data-af-apui-modal-kind="application"] .af-cs-modal__body {
+  background-image:
+    var(--af-apui-modal-application-bg-overlay),
+    var(--af-apui-modal-application-bg-image);
+  background-position:
+    center center,
+    var(--af-apui-modal-application-bg-position);
+  background-size:
+    cover,
+    var(--af-apui-modal-application-bg-size);
+}
+
+.af-cs-modal[data-af-modal-kind="inventory"] .af-cs-modal__body,
+.af-cs-modal[data-af-apui-modal-kind="inventory"] .af-cs-modal__body {
+  background-image:
+    var(--af-apui-modal-inventory-bg-overlay),
+    var(--af-apui-modal-inventory-bg-image);
+  background-position:
+    center center,
+    var(--af-apui-modal-inventory-bg-position);
+  background-size:
+    cover,
+    var(--af-apui-modal-inventory-bg-size);
+}
+
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-modal__body,
+.af-cs-modal[data-af-apui-modal-kind="sheet"] .af-cs-modal__body {
+  background-image:
+    var(--af-apui-modal-sheet-bg-overlay),
+    var(--af-apui-modal-sheet-bg-image);
+  background-position:
+    center center,
+    var(--af-apui-modal-sheet-bg-position);
+  background-size:
+    cover,
+    var(--af-apui-modal-sheet-bg-size);
+}
+
+.af-cs-modal[data-af-modal-kind="achievements"] .af-cs-modal__body,
+.af-cs-modal[data-af-apui-modal-kind="achievements"] .af-cs-modal__body {
+  background-image:
+    var(--af-apui-modal-achievements-bg-overlay),
+    var(--af-apui-modal-achievements-bg-image);
+  background-position:
+    center center,
+    var(--af-apui-modal-achievements-bg-position);
+  background-size:
+    cover,
+    var(--af-apui-modal-achievements-bg-size);
+}
+
+/* Панель Анкеты поверх фоновой сцены */
+.af-cs-modal[data-af-modal-kind="application"] .af-apui-application-fragment,
+.af-cs-modal[data-af-apui-modal-kind="application"] .af-apui-application-fragment {
+  background: var(--af-apui-modal-application-panel-bg);
+  border-color: var(--af-apui-modal-application-panel-border);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Если внутри анкеты нужен почти "голый" контент с фоном самой модалки */
+.af-cs-modal[data-af-modal-kind="application"] .af-apui-application-fragment > .post,
+.af-cs-modal[data-af-modal-kind="application"] .af-apui-application-fragment > .post.classic,
+.af-cs-modal[data-af-modal-kind="application"] .af-apui-application-fragment > .post_body,
+.af-cs-modal[data-af-apui-modal-kind="application"] .af-apui-application-fragment > .post,
+.af-cs-modal[data-af-apui-modal-kind="application"] .af-apui-application-fragment > .post.classic,
+.af-cs-modal[data-af-apui-modal-kind="application"] .af-apui-application-fragment > .post_body {
+  background: transparent !important;
+}
+
+/* Фон не должен "обрезаться" пустым внутренним отступом */
+.af-cs-modal__content {
+  min-height: 100%;
+}
+
+/* Мобильный режим */
+@media (max-width: 900px) {
+  .af-cs-modal__body {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .af-cs-modal__body {
+    padding: 10px;
   }
 }
