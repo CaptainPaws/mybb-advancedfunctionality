@@ -313,7 +313,7 @@
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   gap: 0;
-  align-items: start;
+  align-items: stretch;
 }
 
 .post.classic,
@@ -333,6 +333,9 @@
   margin: 0 !important;
   padding: 12px !important;
   min-width: 0;
+  min-height: 100%;
+  align-self: stretch;
+  box-sizing: border-box;
 }
 
 .af-apui-postbit-author {
@@ -580,8 +583,11 @@
 
 .af-apui-postbit-content {
   min-width: 0;
+  min-height: 100%;
   display: grid;
   gap: 10px;
+  align-content: start;
+  box-sizing: border-box;
 }
 
 .af-apui-postbit-message {
