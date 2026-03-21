@@ -153,6 +153,11 @@
 .af-inv-preview-pane {
   min-width: 0;
 }
+.af-inv-slots-pane {
+  overflow: auto;
+  max-height: 680px;
+  padding: 10px;
+}
 
 .af-inv-slot-grid {
   display: grid;
@@ -1087,5 +1092,126 @@
 
   .af-inv-preview-meta {
     grid-template-columns: 1fr;
+  }
+}
+
+/* =========================================================
+   INVENTORY ROOT SURFACE FIX
+   - фон статичный и не прокручивается
+   - прокручивается только контент
+   - работает и на inventory.php, и внутри iframe-модалки
+   ========================================================= */
+
+body.af-apui-surface-body[data-af-apui-surface="inventory"] {
+  margin: 0;
+  background: #0b0f18 !important;
+  background-image: none !important;
+}
+
+.af-apui-surface-page[data-af-apui-surface="inventory"] {
+  position: relative;
+  isolation: isolate;
+  display: block;
+  min-height: calc(100vh - 36px);
+  box-sizing: border-box;
+  background: transparent !important;
+  background-image: none !important;
+}
+
+@supports (height: 100dvh) {
+  .af-apui-surface-page[data-af-apui-surface="inventory"] {
+    min-height: calc(100dvh - 36px);
+  }
+}
+
+/* Статичный фон на viewport */
+.af-apui-surface-page[data-af-apui-surface="inventory"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    var(--af-apui-modal-inventory-bg-overlay),
+    var(--af-apui-modal-inventory-bg-image);
+  background-repeat: no-repeat, no-repeat;
+  background-position:
+    center center,
+    var(--af-apui-modal-inventory-bg-position, center center);
+  background-size:
+    cover,
+    var(--af-apui-modal-inventory-bg-size, cover);
+}
+
+/* Весь контент выше фиксированного фона */
+.af-apui-surface-page[data-af-apui-surface="inventory"] > * {
+  position: relative;
+  z-index: 1;
+}
+
+.af-inv-page[data-af-apui-surface="inventory"] {
+  position: relative;
+  z-index: 1;
+  display: block;
+  min-height: 100%;
+  box-sizing: border-box;
+  background: transparent;
+}
+
+.af-inv-shell {
+  display: grid;
+  gap: 16px;
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: 18px;
+  border: 1px solid var(--af-apui-modal-inventory-panel-border, rgba(255,255,255,.12));
+  border-radius: 24px;
+  background: var(--af-apui-modal-inventory-panel-bg, rgba(21, 25, 34, .92));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  overflow: hidden;
+}
+
+.af-inv-page[data-af-apui-surface="inventory"] .af-inv-tabs {
+  margin: 0;
+}
+
+.af-inv-page[data-af-apui-surface="inventory"] .af-inv-tab-content {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.af-inv-page[data-af-apui-surface="inventory"] .af-inv-panel,
+.af-inv-page[data-af-apui-surface="inventory"] #af-inv-panel {
+  min-height: 640px;
+  box-sizing: border-box;
+}
+
+.af-inv-page[data-af-apui-surface="inventory"] .af-inv-wallet__code {
+  opacity: .72;
+}
+
+.af-inv-page[data-af-apui-surface="inventory"] .af-inv-shell > :last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 640px) {
+  .af-inv-shell {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .af-apui-surface-page[data-af-apui-surface="inventory"] {
+    min-height: calc(100vh - 20px);
+  }
+
+  @supports (height: 100dvh) {
+    .af-apui-surface-page[data-af-apui-surface="inventory"] {
+      min-height: calc(100dvh - 20px);
+    }
   }
 }
