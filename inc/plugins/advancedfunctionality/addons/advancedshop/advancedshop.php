@@ -1583,7 +1583,8 @@ function af_advancedshop_assets_html(): string
 
     [$cssUrl, $jsUrl] = af_advancedshop_asset_urls();
     $endpointScript = af_advancedshop_alias_available() ? 'shop.php' : 'misc.php';
-    return '<link rel="stylesheet" href="' . htmlspecialchars_uni($cssUrl) . '">'
+    return '<!-- af_advancedshop_assets -->'
+        . '<link rel="stylesheet" href="' . htmlspecialchars_uni($cssUrl) . '">'
         . '<script>window.AFSHOP=window.AFSHOP||{};window.AFSHOP.endpointScript=' . json_encode($endpointScript) . ';</script>'
         . '<script defer src="' . htmlspecialchars_uni($jsUrl) . '"></script>';
 }
@@ -1696,6 +1697,11 @@ function af_advancedshop_pre_output(string &$page = ''): void
         return;
     }
 
+    if (!af_advancedshop_should_load_assets_for_page((string)$page)) {
+        af_advancedshop_strip_assets_from_html($page);
+        return;
+    }
+
     $action = (string)($mybb->input['action'] ?? '');
     $thisScript = defined('THIS_SCRIPT') ? THIS_SCRIPT : '';
     $isShopScript = $thisScript === 'shop.php';
@@ -1717,6 +1723,26 @@ function af_advancedshop_pre_output(string &$page = ''): void
     }
 }
 
+function af_advancedshop_should_load_assets_for_page(string $page): bool
+{
+    $page = strtolower($page);
+    if ($page === '') {
+        return false;
+    }
+
+    if (strpos($page, '<!-- af_advancedshop_assets -->') !== false) {
+        return true;
+    }
+
+    return strpos($page, 'class="af-shop') !== false
+        || strpos($page, "class='af-shop") !== false
+        || strpos($page, 'class="af-inventory') !== false
+        || strpos($page, "class='af-inventory") !== false
+        || strpos($page, 'data-af-inventory-tabs') !== false
+        || strpos($page, 'data-af-equip') !== false
+        || strpos($page, 'data-af-shop-modal') !== false;
+}
+
 function af_advancedshop_strip_assets_from_html(string &$page): void
 {
     if ($page === '') {
@@ -1731,6 +1757,12 @@ function af_advancedshop_strip_assets_from_html(string &$page): void
     );
     $page = (string)preg_replace(
         '~<link\b[^>]*\bhref=("|\')' . $basePattern . '\.css(?:\?[^"\']*)?\1[^>]*>\s*~i',
+        '',
+        $page
+    );
+    $page = str_replace('<!-- af_advancedshop_assets -->', '', $page);
+    $page = (string)preg_replace(
+        '~<script>\s*window\.AFSHOP=window\.AFSHOP\|\|\{\};window\.AFSHOP\.endpointScript=.*?</script>\s*~i',
         '',
         $page
     );

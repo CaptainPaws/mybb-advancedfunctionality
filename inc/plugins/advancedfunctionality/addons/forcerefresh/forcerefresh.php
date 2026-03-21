@@ -42,10 +42,12 @@ function af_forcerefresh_pre_output(string &$page = ''): void
         return;
     }
 
-    // showthread.php + editpost.php
-    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
-    $script = strtolower(basename(str_replace('\\', '/', $script)));
-    if ($script !== 'showthread.php' && $script !== 'editpost.php') {
+    $script = af_forcerefresh_current_script_name();
+    if (!in_array($script, ['showthread.php', 'newreply.php', 'newthread.php', 'editpost.php'], true)) {
+        return;
+    }
+
+    if (!af_forcerefresh_should_load_assets($script, (string)$page)) {
         return;
     }
 
@@ -83,6 +85,48 @@ function af_forcerefresh_pre_output(string &$page = ''): void
             1
         );
     }
+}
+
+function af_forcerefresh_current_script_name(): string
+{
+    if (function_exists('af_current_script_name')) {
+        $script = (string)af_current_script_name();
+        if ($script !== '') {
+            return strtolower($script);
+        }
+    }
+
+    if (defined('THIS_SCRIPT')) {
+        return strtolower((string)basename(str_replace('\\', '/', (string)THIS_SCRIPT)));
+    }
+
+    return strtolower((string)basename(str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''))));
+}
+
+function af_forcerefresh_should_load_assets(string $script, string $page): bool
+{
+    $page = strtolower($page);
+    if ($page === '') {
+        return false;
+    }
+
+    if ($script === 'showthread.php') {
+        return strpos($page, 'quickreply') !== false
+            || strpos($page, 'do_newreply') !== false
+            || strpos($page, 'id="quick_reply_form"') !== false
+            || strpos($page, "id='quick_reply_form'") !== false
+            || strpos($page, 'name="message"') !== false;
+    }
+
+    if (in_array($script, ['newreply.php', 'newthread.php', 'editpost.php'], true)) {
+        return strpos($page, 'name="message"') !== false
+            || strpos($page, "name='message'") !== false
+            || strpos($page, 'id="message"') !== false
+            || strpos($page, "id='message'") !== false
+            || strpos($page, 'sceditor-container') !== false;
+    }
+
+    return false;
 }
 
 function af_forcerefresh_try_load_lang(): void

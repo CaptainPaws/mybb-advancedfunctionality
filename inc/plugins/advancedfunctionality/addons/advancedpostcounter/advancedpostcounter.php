@@ -186,10 +186,7 @@ function af_apc_assets_disabled_for_current_page(): bool
 {
     global $mybb;
 
-    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
-    if ($script !== '') {
-        $script = strtolower(basename(str_replace('\\', '/', $script)));
-    }
+    $script = af_apc_current_script_name();
     if ($script === '') {
         return false;
     }
@@ -219,6 +216,59 @@ function af_apc_assets_disabled_for_current_page(): bool
     }
 
     return false;
+}
+
+function af_apc_current_script_name(): string
+{
+    if (function_exists('af_current_script_name')) {
+        $script = (string)af_current_script_name();
+        if ($script !== '') {
+            return strtolower($script);
+        }
+    }
+
+    if (defined('THIS_SCRIPT')) {
+        $script = strtolower((string)basename(str_replace('\\', '/', (string)THIS_SCRIPT)));
+        if ($script !== '') {
+            return $script;
+        }
+    }
+
+    foreach (['SCRIPT_NAME', 'PHP_SELF'] as $key) {
+        $raw = (string)($_SERVER[$key] ?? '');
+        if ($raw === '') {
+            continue;
+        }
+
+        $script = strtolower((string)basename(str_replace('\\', '/', $raw)));
+        if ($script !== '') {
+            return $script;
+        }
+    }
+
+    return '';
+}
+
+function af_apc_should_load_assets_for_page(string $page): bool
+{
+    if (af_apc_assets_disabled_for_current_page()) {
+        return false;
+    }
+
+    $page = (string)$page;
+    if ($page === '') {
+        return false;
+    }
+
+    $script = af_apc_current_script_name();
+    if (in_array($script, ['postsactivity.php', 'postsbyuser.php'], true)) {
+        return true;
+    }
+
+    return strpos($page, 'class="af-apc-tabs"') !== false
+        || strpos($page, "class='af-apc-tabs'") !== false
+        || strpos($page, 'data-apc-tab') !== false
+        || strpos($page, 'data-apc-panel') !== false;
 }
 
 function af_apc_build_asset_url(string $file): string
@@ -1495,7 +1545,7 @@ function af_advancedpostcounter_pre_output(&$page): void
     }
 
     // -------------------- 1) Подключаем ассеты с filemtime-версией --------------------
-    $assetsDisabled = af_apc_assets_disabled_for_current_page();
+    $shouldLoadAssets = af_apc_should_load_assets_for_page((string)$page);
 
     if (strpos((string)$page, 'advancedpostcounter.') !== false) {
         // Удаляем предыдущие инжекты APC (включая старые ?v), чтобы в финале оставить только каноничную версию.
@@ -1503,7 +1553,7 @@ function af_advancedpostcounter_pre_output(&$page): void
         $page = (string)preg_replace('~<script\b[^>]*src=["\"][^"\"]*advancedpostcounter\.js(?:\?[^"\"]*)?["\"][^>]*>\s*</script>\s*~iu', '', (string)$page);
     }
 
-    if (!$assetsDisabled) {
+    if ($shouldLoadAssets) {
         $css = af_apc_build_asset_url('advancedpostcounter.css');
         $js  = af_apc_build_asset_url('advancedpostcounter.js');
 
@@ -2879,4 +2929,3 @@ function af_apc_install_postsactivity_alias(bool $force = false): void
 
     @file_put_contents($dst, $srcCode);
 }
-
