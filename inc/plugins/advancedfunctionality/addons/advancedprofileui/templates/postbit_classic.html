@@ -3,7 +3,7 @@
 {$ignore_bit}{$deleted_bit}
 <a name="pid{$post['pid']}" id="pid{$post['pid']}"></a>
 
-<div class="post classic {$unapproved_shade}" style="{$post_visibility}" id="post_{$post['pid']}">
+<div class="post classic {$unapproved_shade} {$post['af_aa_user_class']}" style="{$post_visibility}" id="post_{$post['pid']}">
     <div class="af-apui-postbit {$post['af_aa_user_class']}">
         <div class="post_author scaleimages af-apui-postbit-author {$post['af_aa_user_class']}">
             <div class="af-apui-postbit-author__inner">
@@ -22,83 +22,15 @@
                 <div class="af-apui-postbit-groupimage">{$post['groupimage']}</div>
                 <div class="af-apui-postbit-stars">{$post['userstars']}</div>
 
-                <div class="af-apui-postbit-profilefields">
-                    {$post['af_apui_profile_fields_html']}
-                </div>
                 {$post['af_apui_author_statistics_html']}
-
-                <div class="af-apui-postbit-plaque-slot">
-                    {$post['af_cs_plaque']}
-                </div>
-            </div>
-        </div>
-
-        <div class="post_content af-apui-postbit-content">
-            <div class="post_head">
-                {$post['posturl']}
-                {$post['icon']}
-                <span class="post_date">{$post['postdate']} <span class="post_edit" id="edited_by_{$post['pid']}">{$post['editedmsg']}</span></span>
-                {$post['subject_extra']}
-            </div>
-
-            <div class="post_body scaleimages af-apui-postbit-message" id="pid_{$post['pid']}">
-                {$post['message']}
-            </div>
-
-            {$post['attachments']}
-            {$post['signature']}
-
-            <div class="post_meta" id="post_meta_{$post['pid']}">
-                {$post['iplogged']}
-                <div class="float_right">
-                    {$post['poststatus']}
-                </div>
-            </div>
-
-            {$post['input_editreason']}
-        </div>
-    </div>
-
-    <div class="post_controls">
-        <div class="postbit_buttons author_buttons float_left">
-            {$post['button_email']}{$post['button_pm']}{$post['button_www']}{$post['button_find']}{$post['button_rep']}
-        </div>
-        <div class="postbit_buttons post_management_buttons float_right">
-            {$post['button_edit']}{$post['button_quickdelete']}{$post['button_quickrestore']}{$post['button_quote']}{$post['button_multiquote']}{$post['button_report']}{$post['button_warn']}{$post['button_purgespammer']}{$post['button_reply_pm']}{$post['button_replyall_pm']}{$post['button_forward_pm']}{$post['button_delete_pm']}
-        </div>
-    </div>
-</div>
-<!-- AF_APUI postbit_classic END --><!-- TEMPLATE: postbit_classic -->
-<!-- AF_APUI postbit_classic START -->
-{$ignore_bit}{$deleted_bit}
-<a name="pid{$post['pid']}" id="pid{$post['pid']}"></a>
-
-<div class="post classic {$unapproved_shade} {$post['af_aa_user_class']}" style="{$post_visibility}" id="post_{$post['pid']}">
-    <div class="af-apui-postbit {$post['af_aa_user_class']}">
-        <div class="post_author scaleimages af-apui-postbit-author {$post['af_aa_user_class']}">
-            <div class="af-apui-postbit-author__inner">
-                <div class="af-apui-postbit-name-wrap">
-                    <strong><span class="largetext">{$post['profilelink']}</span></strong>
-                </div>
-
-                <div class="af-apui-postbit-avatar-shell">
-                    <div class="af-apui-postbit-avatar-frame">
-                        {$post['useravatar']}
-                    </div>
-                </div>
-
-                <div class="af-apui-postbit-online">{$post['onlinestatus']}</div>
-                <div class="af-apui-postbit-rank">{$post['usertitle']}</div>
-                <div class="af-apui-postbit-groupimage">{$post['groupimage']}</div>
-                <div class="af-apui-postbit-stars">{$post['userstars']}</div>
+                {$post['af_apui_actionbar_html']}
 
                 <div class="af-apui-postbit-profilefields">
                     {$post['af_apui_profile_fields_html']}
                 </div>
-                {$post['af_apui_author_statistics_html']}
 
                 <div class="af-apui-postbit-plaque-slot">
-                    {$post['af_cs_plaque']}
+                    {$post['af_apui_plaque_html']}
                 </div>
             </div>
         </div>

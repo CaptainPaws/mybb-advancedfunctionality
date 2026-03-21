@@ -279,6 +279,109 @@
     activate(initial, false);
   }
 
+
+  function ensureSharedModal() {
+    var modal = document.querySelector('[data-afcs-modal]') || document.querySelector('[data-af-apui-modal]');
+    if (modal) {
+      var frame = modal.querySelector('[data-afcs-frame]') || modal.querySelector('[data-af-apui-modal-frame]');
+      var title = modal.querySelector('[data-af-apui-modal-title]');
+      if (frame) {
+        modal.setAttribute('data-af-apui-modal', '1');
+        return { modal: modal, frame: frame, title: title };
+      }
+    }
+
+    var wrap = document.createElement('div');
+    wrap.className = 'af-cs-modal';
+    wrap.setAttribute('data-afcs-modal', '1');
+    wrap.setAttribute('data-af-apui-modal', '1');
+    wrap.innerHTML =
+      '<div class="af-cs-modal__backdrop" data-afcs-close="1" data-af-apui-modal-close="1"></div>' +
+      '<div class="af-cs-modal__dialog" role="dialog" aria-modal="true">' +
+        '<div class="af-cs-modal__header">' +
+          '<div class="af-cs-modal__title" data-af-apui-modal-title="1">Просмотр</div>' +
+          '<button type="button" class="af-cs-modal__close" data-afcs-close="1" data-af-apui-modal-close="1" aria-label="Закрыть">×</button>' +
+        '</div>' +
+        '<div class="af-cs-modal__body">' +
+          '<iframe class="af-cs-modal__frame" data-afcs-frame="1" data-af-apui-modal-frame="1" src="" loading="lazy"></iframe>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(wrap);
+    return { modal: wrap, frame: wrap.querySelector('[data-af-apui-modal-frame]'), title: wrap.querySelector('[data-af-apui-modal-title]') };
+  }
+
+  function normalizeModalUrl(url) {
+    var raw = String(url || '').trim();
+    if (!raw) {
+      return '';
+    }
+
+    if (/action=af_charactersheet_api|action=cs_.*_ajax/i.test(raw)) {
+      return '';
+    }
+
+    if (raw.indexOf('embed=1') === -1 && raw.indexOf('ajax=1') === -1) {
+      raw += (raw.indexOf('?') === -1 ? '?' : '&') + 'ajax=1';
+    }
+
+    return raw;
+  }
+
+  function openUniversalModal(url, title) {
+    var loadUrl = normalizeModalUrl(url);
+    if (!loadUrl) {
+      return;
+    }
+
+    var modalParts = ensureSharedModal();
+    modalParts.frame.setAttribute('src', loadUrl);
+    if (modalParts.title) {
+      modalParts.title.textContent = title || 'Просмотр';
+    }
+    modalParts.modal.classList.add('is-open');
+  }
+
+  function initPostbitModalActions() {
+    if (window.__afApuiPostbitModalInit) {
+      return;
+    }
+    window.__afApuiPostbitModalInit = true;
+
+    document.addEventListener('click', function (event) {
+      if (event.target.closest('[data-af-apui-modal-close]')) {
+        var modal = document.querySelector('[data-af-apui-modal]');
+        if (!modal) { return; }
+        var frame = modal.querySelector('[data-af-apui-modal-frame], [data-afcs-frame]');
+        modal.classList.remove('is-open');
+        if (frame) { frame.removeAttribute('src'); }
+        return;
+      }
+
+      var opener = event.target.closest('[data-af-apui-modal-url]');
+      if (!opener) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === 'function') { event.stopImmediatePropagation(); }
+      openUniversalModal(opener.getAttribute('data-af-apui-modal-url'), opener.getAttribute('data-af-apui-modal-title'));
+    }, true);
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      var modal = document.querySelector('[data-af-apui-modal]');
+      if (!modal) {
+        return;
+      }
+      var frame = modal.querySelector('[data-af-apui-modal-frame], [data-afcs-frame]');
+      modal.classList.remove('is-open');
+      if (frame) { frame.removeAttribute('src'); }
+    });
+  }
+
   function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
   }
@@ -368,6 +471,7 @@
 
   function boot() {
     normalizePostbitUserDetails();
+    initPostbitModalActions();
     initStickyPostbits();
 
     var roots = document.querySelectorAll('[data-af-apui-tabs]');
