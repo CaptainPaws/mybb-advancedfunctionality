@@ -1,16 +1,21 @@
 <div class="af-inv-page af-aa-context af-aa-context--inventory" data-af-apui-surface="inventory" data-af-modal-kind="inventory" data-owner="{$ownerUid}" data-default-tab="{$defaultTab}" data-entity-base="{$entityUrlBase}" data-first-url="{$firstPanelUrl}">
-    <input type="hidden" name="my_post_key" value="{$mybb->post_code}">
-    <div class="af-inv-head">
-        <h1>Инвентарь: {$user['username']}</h1>
-        <div class="af-inv-wallet" data-af-wallet>
-            <span>Баланс кошелька:</span>
-            <strong data-af-wallet-balance>{$walletBalance}</strong>
-            <span data-af-wallet-symbol>{$walletCurrencySymbol}</span>
-            <span class="af-inv-wallet__code">{$walletCurrencyCode}</span>
+    <div class="af-inv-shell">
+        <input type="hidden" name="my_post_key" value="{$mybb->post_code}">
+
+        <div class="af-inv-head">
+            <h1>Инвентарь: {$user['username']}</h1>
+            <div class="af-inv-wallet" data-af-wallet>
+                <span>Баланс кошелька:</span>
+                <strong data-af-wallet-balance>{$walletBalance}</strong>
+                <span data-af-wallet-symbol>{$walletCurrencySymbol}</span>
+                <span class="af-inv-wallet__code">{$walletCurrencyCode}</span>
+            </div>
         </div>
-    </div>
-    <div class="af-inv-tabs">{$tabLinks}</div>
-    <div class="af-inv-tab-content">
-        <div class="af-inv-panel" id="af-inv-panel">{$firstPanelHtml}</div>
+
+        <div class="af-inv-tabs">{$tabLinks}</div>
+
+        <div class="af-inv-tab-content">
+            <div class="af-inv-panel" id="af-inv-panel">{$firstPanelHtml}</div>
+        </div>
     </div>
 </div>
