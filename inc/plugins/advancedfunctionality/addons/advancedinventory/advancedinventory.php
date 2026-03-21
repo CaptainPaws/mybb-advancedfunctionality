@@ -1586,115 +1586,158 @@ function af_advinv_active_appearance_map(int $uid): array
 function af_advinv_enrich_items_from_kb(array $items): array
 {
     global $db;
-    if (!$items || !$db->table_exists('af_kb_entries')) {
+
+    if (!$items) {
         return $items;
     }
 
-    $keys = [];
-    foreach ($items as $item) {
-        $title = trim((string)($item['title'] ?? ''));
-        $icon = trim((string)($item['icon'] ?? ''));
-        $kbKey = trim((string)($item['kb_key'] ?? ''));
-        if ($kbKey === '' || ($title !== '' && $icon !== '')) {
-            continue;
-        }
-        $kbType = trim((string)($item['kb_type'] ?? ''));
-        $keys[$kbType . '||' . $kbKey] = ['kb_type' => $kbType, 'kb_key' => $kbKey];
-    }
-    if (!$keys) {
-        return $items;
-    }
-
-    $kbCols = af_advinv_kb_cols();
-    $keyExpr = $kbCols['key'] ?? '`key`';
-    $typeExpr = $kbCols['type'] ?? '`type`';
-    $titleRuExpr = $kbCols['title_ru'] ?: "''";
-    $titleEnExpr = $kbCols['title_en'] ?: "''";
-    $titleExpr = $kbCols['title'] ?: "''";
-    $metaExpr = $kbCols['meta_json'] ?: "''";
-    $whereOr = [];
-    foreach ($keys as $pair) {
-        $whereOr[] = '(' . $typeExpr . "='" . $db->escape_string($pair['kb_type']) . "' AND " . $keyExpr . "='" . $db->escape_string($pair['kb_key']) . "')";
-    }
-    if (!$whereOr) {
-        return $items;
-    }
-
-    $q = $db->query("SELECT " . $typeExpr . " AS kb_type, " . $keyExpr . " AS kb_key, " . $titleRuExpr . " AS title_ru, " . $titleEnExpr . " AS title_en, " . $titleExpr . " AS title_plain, " . $metaExpr . " AS meta_json FROM " . af_advinv_kb_table_sql() . " WHERE " . implode(' OR ', $whereOr));
     $kbMap = [];
-    while ($row = $db->fetch_array($q)) {
-        $t = trim((string)($row['title_ru'] ?? ''));
-        if ($t === '') { $t = trim((string)($row['title_en'] ?? '')); }
-        if ($t === '') { $t = trim((string)($row['title_plain'] ?? '')); }
-        $kbType = trim((string)($row['kb_type'] ?? ''));
-        $kbKey = trim((string)($row['kb_key'] ?? ''));
-        $kbMap[$kbType . '||' . $kbKey] = [
-            'title' => $t,
-            'icon' => af_advinv_kb_extract_icon((string)($row['meta_json'] ?? '')),
-        ];
-    }
 
-    foreach ($items as &$item) {
-        $kbType = trim((string)($item['kb_type'] ?? ''));
-        $kbKey = trim((string)($item['kb_key'] ?? ''));
-        if ($kbKey === '') {
-            continue;
-        }
-        $mapKey = $kbType . '||' . $kbKey;
-        $fromKb = $kbMap[$mapKey] ?? null;
-        if (!$fromKb) {
-            if (trim((string)($item['title'] ?? '')) === '') {
-                $item['title'] = $kbKey;
+    $kbTableSql = trim((string)af_advinv_kb_table_sql());
+    $kbTablePlain = $kbTableSql;
+    if ($kbTablePlain !== '' && defined('TABLE_PREFIX') && TABLE_PREFIX !== '' && strpos($kbTablePlain, TABLE_PREFIX) === 0) {
+        $kbTablePlain = substr($kbTablePlain, strlen(TABLE_PREFIX));
+    }
+    $kbTableExists = ($kbTablePlain !== '' && $db->table_exists($kbTablePlain));
+
+    if ($kbTableExists) {
+        $keys = [];
+        foreach ($items as $item) {
+            $title = trim((string)($item['title'] ?? ''));
+            $icon = trim((string)($item['icon'] ?? ''));
+            $kbKey = trim((string)($item['kb_key'] ?? ''));
+            if ($kbKey === '' || ($title !== '' && $icon !== '')) {
+                continue;
             }
-            continue;
+
+            $kbType = trim((string)($item['kb_type'] ?? ''));
+            $keys[$kbType . '||' . $kbKey] = [
+                'kb_type' => $kbType,
+                'kb_key'  => $kbKey,
+            ];
         }
-        if (trim((string)($item['title'] ?? '')) === '') {
-            $item['title'] = $fromKb['title'] !== '' ? $fromKb['title'] : $kbKey;
-        }
-        if (trim((string)($item['icon'] ?? '')) === '' && $fromKb['icon'] !== '') {
-            $item['icon'] = $fromKb['icon'];
+
+        if ($keys) {
+            $kbCols = af_advinv_kb_cols();
+            $keyExpr = $kbCols['key'] ?? '`key`';
+            $typeExpr = $kbCols['type'] ?? '`type`';
+            $titleRuExpr = $kbCols['title_ru'] ?: "''";
+            $titleEnExpr = $kbCols['title_en'] ?: "''";
+            $titleExpr = $kbCols['title'] ?: "''";
+            $metaExpr = $kbCols['meta_json'] ?: "''";
+
+            $whereOr = [];
+            foreach ($keys as $pair) {
+                $whereOr[] = '('
+                    . $typeExpr . "='" . $db->escape_string($pair['kb_type']) . "' AND "
+                    . $keyExpr . "='" . $db->escape_string($pair['kb_key']) . "'"
+                    . ')';
+            }
+
+            if ($whereOr) {
+                $q = $db->query(
+                    "SELECT "
+                    . $typeExpr . " AS kb_type, "
+                    . $keyExpr . " AS kb_key, "
+                    . $titleRuExpr . " AS title_ru, "
+                    . $titleEnExpr . " AS title_en, "
+                    . $titleExpr . " AS title_plain, "
+                    . $metaExpr . " AS meta_json
+                    FROM " . $kbTableSql . "
+                    WHERE " . implode(' OR ', $whereOr)
+                );
+
+                while ($row = $db->fetch_array($q)) {
+                    $t = trim((string)($row['title_ru'] ?? ''));
+                    if ($t === '') {
+                        $t = trim((string)($row['title_en'] ?? ''));
+                    }
+                    if ($t === '') {
+                        $t = trim((string)($row['title_plain'] ?? ''));
+                    }
+
+                    $kbType = trim((string)($row['kb_type'] ?? ''));
+                    $kbKey = trim((string)($row['kb_key'] ?? ''));
+
+                    $kbMap[$kbType . '||' . $kbKey] = [
+                        'title' => $t,
+                        'icon'  => af_advinv_kb_extract_icon((string)($row['meta_json'] ?? '')),
+                    ];
+                }
+            }
         }
     }
-    unset($item);
 
     $appearanceActiveMap = [];
+
     foreach ($items as &$item) {
+        $kbType = trim((string)($item['kb_type'] ?? ''));
+        $kbKey = trim((string)($item['kb_key'] ?? ''));
+        $mapKey = $kbType . '||' . $kbKey;
+        $fromKb = $kbMap[$mapKey] ?? null;
+
+        if ($fromKb) {
+            if (trim((string)($item['title'] ?? '')) === '') {
+                $item['title'] = $fromKb['title'] !== '' ? $fromKb['title'] : $kbKey;
+            }
+            if (trim((string)($item['icon'] ?? '')) === '' && $fromKb['icon'] !== '') {
+                $item['icon'] = $fromKb['icon'];
+            }
+        } elseif ($kbKey !== '' && trim((string)($item['title'] ?? '')) === '') {
+            $item['title'] = $kbKey;
+        }
+
         $meta = af_advinv_decode_meta_json((string)($item['meta_json'] ?? ''));
         $item['meta'] = $meta;
-        $appearanceInfo = af_advinv_resolve_appearance_item($item);
-        $appearanceMeta = (array)($appearanceInfo['appearance_meta'] ?? []);
-        $targetKey = trim((string)($appearanceInfo['target_key'] ?? ($appearanceMeta['target_key'] ?? '')));
-        $presetId = (int)($appearanceInfo['preset_id'] ?? ($appearanceMeta['preset_id'] ?? 0));
-        $kbKey = trim((string)($appearanceInfo['kb_key'] ?? ($item['kb_key'] ?? '')));
-        $sourceType = trim((string)($appearanceInfo['source_type'] ?? ''));
-        $isVisual = !empty($appearanceInfo['is_visual_item']);
 
-        if ($isVisual && isset($appearanceMeta['preview_image']) && trim((string)$appearanceMeta['preview_image']) !== '') {
-            $item['icon'] = trim((string)$appearanceMeta['preview_image']);
-        }
-        if ($isVisual && trim((string)($appearanceMeta['title'] ?? '')) !== '') {
-            $item['title'] = trim((string)$appearanceMeta['title']);
-        }
+        $appearanceInfo = af_advinv_resolve_appearance_item($item);
+        $appearanceMeta = is_array($appearanceInfo['appearance_meta'] ?? null)
+            ? (array)$appearanceInfo['appearance_meta']
+            : [];
+
+        $resolvedKbKey = trim((string)($appearanceInfo['kb_key'] ?? $kbKey));
+        $sourceType = trim((string)($appearanceInfo['source_type'] ?? ($item['source_type'] ?? '')));
+        $targetKey = trim((string)($item['appearance_target'] ?? ($appearanceInfo['target_key'] ?? ($appearanceMeta['target_key'] ?? ''))));
+        $presetId = (int)($item['appearance_preset_id'] ?? ($appearanceInfo['preset_id'] ?? ($appearanceMeta['preset_id'] ?? 0)));
+
+        $isVisual = !empty($item['is_visual_item'])
+            || !empty($appearanceInfo['is_visual_item'])
+            || $sourceType === 'appearance'
+            || strpos($resolvedKbKey, 'appearance:') === 0
+            || !empty($appearanceMeta);
+
+        $previewImage = trim((string)($appearanceMeta['preview_image'] ?? ($item['appearance_preview_image'] ?? ($item['icon'] ?? ''))));
+        $appearanceTitle = trim((string)($appearanceMeta['title'] ?? ($item['appearance_title'] ?? ($item['title'] ?? ''))));
+        $appearanceSlug = trim((string)($appearanceMeta['slug'] ?? ($item['appearance_slug'] ?? '')));
 
         $item['is_visual_item'] = $isVisual ? 1 : 0;
         $item['source_type'] = $isVisual ? 'appearance' : ($sourceType !== '' ? $sourceType : 'kb');
         $item['appearance_target'] = $targetKey;
         $item['appearance_preset_id'] = $presetId;
-        $item['appearance_is_active'] = 0;
-        $item['appearance_preview_image'] = trim((string)($appearanceMeta['preview_image'] ?? ($item['icon'] ?? '')));
-        $item['preview_image'] = $item['appearance_preview_image'];
-        $item['appearance_title'] = trim((string)($appearanceMeta['title'] ?? ($item['title'] ?? '')));
-        $item['appearance_slug'] = trim((string)($appearanceMeta['slug'] ?? ''));
+        $item['appearance_preview_image'] = $previewImage;
+        $item['preview_image'] = $previewImage;
+        $item['appearance_title'] = $appearanceTitle;
+        $item['appearance_slug'] = $appearanceSlug;
         $item['appearance_meta'] = $appearanceMeta;
-        $item['kb_key'] = $kbKey;
+        $item['appearance_is_active'] = 0;
+        $item['kb_key'] = $resolvedKbKey !== '' ? $resolvedKbKey : $kbKey;
+
+        if ($previewImage !== '') {
+            $item['icon'] = $previewImage;
+        }
+        if ($appearanceTitle !== '') {
+            $item['title'] = $appearanceTitle;
+        }
 
         if ($isVisual) {
             $uid = (int)($item['uid'] ?? 0);
-            if (!isset($appearanceActiveMap[$uid])) {
-                $appearanceActiveMap[$uid] = af_advinv_active_appearance_map($uid);
+            if ($uid > 0) {
+                if (!isset($appearanceActiveMap[$uid])) {
+                    $appearanceActiveMap[$uid] = af_advinv_active_appearance_map($uid);
+                }
+                $activeTarget = (array)($appearanceActiveMap[$uid][$targetKey] ?? []);
+                $item['appearance_is_active'] = ((int)($activeTarget['item_id'] ?? 0) === (int)($item['id'] ?? 0)) ? 1 : 0;
             }
-            $activeTarget = (array)($appearanceActiveMap[$uid][$targetKey] ?? []);
-            $item['appearance_is_active'] = ((int)($activeTarget['item_id'] ?? 0) === (int)($item['id'] ?? 0)) ? 1 : 0;
         }
     }
     unset($item);
@@ -2721,22 +2764,61 @@ function af_advinv_render_slot_grid(array $items, int $selectedItemId, array $eq
         }
     }
 
+    $activeMapByUid = [];
     $html = '<div class="af-inv-slot-grid">';
+
     foreach ($items as $item) {
         $itemId = (int)($item['id'] ?? 0);
-        $title = trim((string)($item['appearance_title'] ?? ($item['title'] ?? 'Предмет')));
-        $icon = trim((string)($item['appearance_preview_image'] ?? ($item['icon'] ?? '')));
-        $qty = max(1, (int)($item['qty'] ?? 1));
-        $isVisual = !empty($item['is_visual_item']);
+        $kbKey = trim((string)($item['kb_key'] ?? ''));
+
+        $appearanceInfo = af_advinv_resolve_appearance_item($item);
+        $appearanceMeta = is_array($appearanceInfo['appearance_meta'] ?? null)
+            ? (array)$appearanceInfo['appearance_meta']
+            : [];
+
+        $isVisual = !empty($item['is_visual_item'])
+            || !empty($appearanceInfo['is_visual_item'])
+            || trim((string)($appearanceInfo['source_type'] ?? '')) === 'appearance'
+            || strpos($kbKey, 'appearance:') === 0
+            || !empty($appearanceMeta);
+
+        $appearanceTarget = trim((string)($item['appearance_target'] ?? ($appearanceInfo['target_key'] ?? ($appearanceMeta['target_key'] ?? ''))));
+
         $isActive = !empty($item['appearance_is_active']);
+        if ($isVisual && !$isActive && $appearanceTarget !== '') {
+            $uid = (int)($item['uid'] ?? 0);
+            if ($uid > 0) {
+                if (!isset($activeMapByUid[$uid])) {
+                    $activeMapByUid[$uid] = af_advinv_active_appearance_map($uid);
+                }
+                $activeTarget = (array)($activeMapByUid[$uid][$appearanceTarget] ?? []);
+                $isActive = ((int)($activeTarget['item_id'] ?? 0) === $itemId);
+            }
+        }
+
+        $title = trim((string)($item['appearance_title'] ?? ($appearanceMeta['title'] ?? ($item['title'] ?? 'Предмет'))));
+        if ($title === '') {
+            $title = $kbKey !== '' ? $kbKey : 'Предмет';
+        }
+
+        $icon = trim((string)($item['appearance_preview_image'] ?? ($appearanceMeta['preview_image'] ?? ($item['icon'] ?? ''))));
+        $qty = max(1, (int)($item['qty'] ?? 1));
         $equippedSlot = (string)($equippedByItem[$itemId] ?? '');
         $isSelected = $selectedItemId > 0 && $selectedItemId === $itemId;
 
         $classes = ['af-inv-slot'];
-        if ($isSelected) { $classes[] = 'is-selected'; }
-        if ($isVisual) { $classes[] = 'is-appearance'; }
-        if ($isActive) { $classes[] = 'is-active'; }
-        if ($equippedSlot !== '') { $classes[] = 'is-equipped'; }
+        if ($isSelected) {
+            $classes[] = 'is-selected';
+        }
+        if ($isVisual) {
+            $classes[] = 'is-appearance';
+        }
+        if ($isActive) {
+            $classes[] = 'is-active';
+        }
+        if ($equippedSlot !== '') {
+            $classes[] = 'is-equipped';
+        }
 
         $iconHtml = $icon !== ''
             ? '<img src="' . htmlspecialchars_uni($icon) . '" alt="' . htmlspecialchars_uni($title) . '" loading="lazy">'
@@ -2759,8 +2841,8 @@ function af_advinv_render_slot_grid(array $items, int $selectedItemId, array $eq
             . $stateMark
             . '</button>';
     }
-    $html .= '</div>';
 
+    $html .= '</div>';
     return $html;
 }
 
@@ -2783,20 +2865,42 @@ function af_advinv_render_preview_stack(array $items, int $selectedItemId, bool 
 function af_advinv_render_preview_card(array $item, bool $active, bool $canManage, bool $canEditOwner, array $equipped): string
 {
     $itemId = (int)($item['id'] ?? 0);
-    $title = trim((string)($item['appearance_title'] ?? ($item['title'] ?? 'Предмет')));
+    $kbKey = trim((string)($item['kb_key'] ?? ''));
+
+    $appearanceInfo = af_advinv_resolve_appearance_item($item);
+    $appearanceMeta = is_array($appearanceInfo['appearance_meta'] ?? null)
+        ? (array)$appearanceInfo['appearance_meta']
+        : [];
+
+    $isVisual = !empty($item['is_visual_item'])
+        || !empty($appearanceInfo['is_visual_item'])
+        || trim((string)($appearanceInfo['source_type'] ?? '')) === 'appearance'
+        || strpos($kbKey, 'appearance:') === 0
+        || !empty($appearanceMeta);
+
+    $appearanceTarget = trim((string)($item['appearance_target'] ?? ($appearanceInfo['target_key'] ?? ($appearanceMeta['target_key'] ?? ''))));
+    $appearanceSlug = trim((string)($item['appearance_slug'] ?? ($appearanceMeta['slug'] ?? '')));
+    $appearancePresetId = (int)($item['appearance_preset_id'] ?? ($appearanceInfo['preset_id'] ?? ($appearanceMeta['preset_id'] ?? 0)));
+
+    $title = trim((string)($item['appearance_title'] ?? ($appearanceMeta['title'] ?? ($item['title'] ?? 'Предмет'))));
     if ($title === '') {
-        $title = trim((string)($item['kb_key'] ?? 'Предмет'));
+        $title = $kbKey !== '' ? $kbKey : 'Предмет';
     }
 
-    $icon = trim((string)($item['appearance_preview_image'] ?? ($item['icon'] ?? '')));
+    $icon = trim((string)($item['appearance_preview_image'] ?? ($appearanceMeta['preview_image'] ?? ($item['icon'] ?? ''))));
     $qty = max(1, (int)($item['qty'] ?? 1));
     $subtype = trim((string)($item['subtype'] ?? ''));
-    $kbKey = trim((string)($item['kb_key'] ?? ''));
-    $isVisual = !empty($item['is_visual_item']);
-    $appearanceTarget = trim((string)($item['appearance_target'] ?? ''));
-    $appearanceSlug = trim((string)($item['appearance_slug'] ?? ''));
-    $appearancePresetId = (int)($item['appearance_preset_id'] ?? 0);
+
     $isActiveAppearance = !empty($item['appearance_is_active']);
+    if ($isVisual && !$isActiveAppearance && $appearanceTarget !== '') {
+        $uid = (int)($item['uid'] ?? 0);
+        if ($uid > 0) {
+            $activeMap = af_advinv_active_appearance_map($uid);
+            $activeTarget = (array)($activeMap[$appearanceTarget] ?? []);
+            $isActiveAppearance = ((int)($activeTarget['item_id'] ?? 0) === $itemId);
+        }
+    }
+
     $sale = af_advinv_item_sale_profile($item);
 
     $slotCandidates = af_inv_candidate_slots_for_item($item);
@@ -2804,7 +2908,9 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
     $slotLabels = af_inv_equipment_slots();
 
     $classes = ['af-inv-preview-card'];
-    if ($active) { $classes[] = 'is-active'; }
+    if ($active) {
+        $classes[] = 'is-active';
+    }
 
     $metaRows = [];
     if ($subtype !== '') {
@@ -2838,7 +2944,9 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
 
     $statusHtml = '';
     if ($isVisual) {
-        $statusHtml = '<div class="af-inv-preview-status ' . ($isActiveAppearance ? 'is-active' : 'is-inactive') . '">' . ($isActiveAppearance ? 'Пресет активен' : 'Пресет не активен') . '</div>';
+        $statusHtml = '<div class="af-inv-preview-status ' . ($isActiveAppearance ? 'is-active' : 'is-inactive') . '">'
+            . ($isActiveAppearance ? 'Пресет активен' : 'Пресет не активен')
+            . '</div>';
     } elseif ($equippedSlot !== '') {
         $statusHtml = '<div class="af-inv-preview-status is-active">' . (af_inv_is_consumable_item($item) ? 'Назначен в быстрый слот' : 'Предмет надет') . '</div>';
     } elseif ($slotCandidates) {
