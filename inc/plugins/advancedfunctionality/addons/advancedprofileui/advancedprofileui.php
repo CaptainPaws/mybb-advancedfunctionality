@@ -201,8 +201,8 @@ function af_apui_ensure_settings(): void
     af_ensure_setting(
         'af_' . AF_APUI_ID,
         'af_' . AF_APUI_ID . '_postbit_plaque_bg_url',
-        'postbit_classic: фон кнопки листа персонажа',
-        'URL фоновой картинки для кнопки/плашки листа персонажа.',
+        'postbit_classic: фон нижней плашки',
+        'URL фоновой картинки для нижней плашки postbit.',
         'text',
         'https://warprift.ru/uploads/af_gallery/1/2026/03/844fae67d94b689f6e827278722ec152.webp',
         24
@@ -211,8 +211,8 @@ function af_apui_ensure_settings(): void
     af_ensure_setting(
         'af_' . AF_APUI_ID,
         'af_' . AF_APUI_ID . '_postbit_plaque_overlay',
-        'postbit_classic: оверлей кнопки листа персонажа',
-        'CSS background-image слой для оверлея кнопки/плашки листа персонажа.',
+        'postbit_classic: оверлей нижней плашки',
+        'CSS background-image слой для оверлея нижней плашки postbit.',
         'text',
         'linear-gradient(180deg, rgba(10, 14, 24, 0.17), rgba(0, 0, 0, 0.85))',
         25
@@ -507,6 +507,93 @@ function af_apui_build_postbit_presence_html(array $post): string
     return $presenceCache[$uid];
 }
 
+function af_apui_build_postbit_action_button(array $config): string
+{
+    $label = htmlspecialchars_uni((string)($config['label'] ?? ''));
+    $url = htmlspecialchars_uni((string)($config['url'] ?? ''));
+    if ($label === '' || $url === '') {
+        return '';
+    }
+
+    $classes = trim('af-apui-postbit-action ' . (string)($config['modifier'] ?? '') . ' ' . (string)($config['compat_class'] ?? ''));
+    $title = htmlspecialchars_uni((string)($config['title'] ?? $label));
+    $icon = (string)($config['icon'] ?? 'fa-solid fa-up-right-from-square');
+    $extraAttrs = (string)($config['extra_attrs'] ?? '');
+
+    return '<a class="' . $classes . '" href="' . $url . '"'
+        . ' data-af-apui-modal-url="' . $url . '"'
+        . ' data-af-apui-modal-title="' . $title . '"'
+        . ' aria-label="' . $title . '"'
+        . ' title="' . $title . '"'
+        . $extraAttrs
+        . '>'
+        . '<span class="af-apui-postbit-action__icon" aria-hidden="true"><i class="' . htmlspecialchars_uni($icon) . '"></i></span>'
+        . '<span class="af-apui-postbit-action__label">' . $label . '</span>'
+        . '</a>';
+}
+
+function af_apui_build_postbit_actionbar_html(array $post): string
+{
+    global $lang;
+
+    $uid = (int)($post['uid'] ?? 0);
+    if ($uid <= 0) {
+        return '';
+    }
+
+    $buttons = [];
+
+    if (function_exists('af_cs_get_postbit_sheet_payload')) {
+        $sheet = af_cs_get_postbit_sheet_payload($uid);
+        if (!empty($sheet['enabled']) && !empty($sheet['sheet_url'])) {
+            $buttons[] = af_apui_build_postbit_action_button([
+                'label' => (string)($sheet['button_label'] ?? 'Лист персонажа'),
+                'title' => (string)($sheet['button_label'] ?? 'Лист персонажа'),
+                'url' => (string)$sheet['sheet_url'],
+                'icon' => 'fa-solid fa-id-card',
+                'modifier' => 'af-apui-postbit-action--sheet',
+                'compat_class' => 'af-cs-plaque__btn',
+                'extra_attrs' => ' data-afcs-open="1" data-afcs-sheet="' . htmlspecialchars_uni((string)$sheet['sheet_url']) . '" data-slug="' . htmlspecialchars_uni((string)($sheet['sheet_slug'] ?? '')) . '"',
+            ]);
+        }
+    }
+
+    $buttons[] = af_apui_build_postbit_action_button([
+        'label' => 'Инвентарь',
+        'title' => 'Инвентарь',
+        'url' => 'inventory.php?uid=' . $uid,
+        'icon' => 'fa-solid fa-box-archive',
+        'modifier' => 'af-apui-postbit-action--inventory',
+    ]);
+
+    $buttons[] = af_apui_build_postbit_action_button([
+        'label' => 'Ачивки',
+        'title' => 'Ачивки',
+        'url' => 'achivments.php?uid=' . $uid,
+        'icon' => 'fa-solid fa-trophy',
+        'modifier' => 'af-apui-postbit-action--achievements',
+    ]);
+
+    $buttons = array_values(array_filter($buttons));
+    if (!$buttons) {
+        return '';
+    }
+
+    return '<div class="af-apui-postbit-actions" aria-label="Postbit actions">' . implode('', $buttons) . '</div>';
+}
+
+function af_apui_build_postbit_plaque_html(array $post): string
+{
+    $uid = (int)($post['uid'] ?? 0);
+    if ($uid <= 0) {
+        return '';
+    }
+
+    return '<div class="af-apui-postbit-plaque" data-af-apui-plaque="1">'
+        . '<span class="af-apui-postbit-plaque__label">profile plaque</span>'
+        . '</div>';
+}
+
 function af_apui_postbit_compose_userdetails(array &$post): void
 {
     $userDetails = (string)($post['user_details'] ?? '');
@@ -568,6 +655,8 @@ function af_apui_postbit_compose_userdetails(array &$post): void
 
     $post['af_apui_presence_html'] = af_apui_build_postbit_presence_html($post);
     $post['af_apui_profile_fields_html'] = $profileFields;
+    $post['af_apui_actionbar_html'] = af_apui_build_postbit_actionbar_html($post);
+    $post['af_apui_plaque_html'] = af_apui_build_postbit_plaque_html($post);
     $post['af_apui_author_statistics_html'] =
         '<div class="author_statistics af-apui-postbit-userdetails">'
         . '<span class="af-apui-stat-item af-apui-stat-item--messages" title="' . $tooltipMessages . '" data-af-title="' . $tooltipMessages . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-comments" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">' . htmlspecialchars_uni($postsValue) . '</span></span>'

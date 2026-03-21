@@ -102,8 +102,8 @@ class AF_Admin_Advancedprofileui
         echo '<tr><td><strong>Оверлей фона профиля</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_author_overlay" value="' . $values['af_' . AF_APUI_ID . '_postbit_author_overlay'] . '"></td></tr>';
         echo '<tr><td><strong>Фон никнейма по умолчанию</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_name_bg_url" value="' . $values['af_' . AF_APUI_ID . '_postbit_name_bg_url'] . '"></td></tr>';
         echo '<tr><td><strong>Оверлей никнейма</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_name_overlay" value="' . $values['af_' . AF_APUI_ID . '_postbit_name_overlay'] . '"></td></tr>';
-        echo '<tr><td><strong>Фон кнопки листа персонажа</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_bg_url" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_bg_url'] . '"></td></tr>';
-        echo '<tr><td><strong>Оверлей кнопки листа персонажа</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_overlay" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>Фон нижней плашки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_bg_url" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_bg_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Оверлей нижней плашки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_overlay" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_overlay'] . '"></td></tr>';
         echo '<tr><td><strong>Пользовательский CSS</strong></td><td><textarea name="af_' . AF_APUI_ID . '_postbit_css" rows="10" style="width:100%;">' . $values['af_' . AF_APUI_ID . '_postbit_css'] . '</textarea></td></tr>';
         echo '</table>';
 

@@ -69,9 +69,6 @@ function af_charactersheets_init(): void
     $plugins->add_hook('showthread_start', 'af_charactersheets_showthread_start');
     $plugins->add_hook('pre_output_page', 'af_charactersheets_pre_output');
     $plugins->add_hook('misc_start', 'af_charactersheets_misc_start');
-    $plugins->add_hook('postbit', 'af_charactersheets_postbit_button');
-    $plugins->add_hook('postbit_prev', 'af_charactersheets_postbit_button');
-    $plugins->add_hook('postbit_pm', 'af_charactersheets_postbit_button');
 }
 
 function af_charactersheets_showthread_start(): void

@@ -148,7 +148,7 @@ class AF_Admin_Advancedappearance
             'profile_avatar_frame' => 'Профиль: рамка аватара',
             'postbit_author' => 'Постбит: фон карточки автора',
             'postbit_name' => 'Постбит: блок никнейма',
-            'postbit_plaque' => 'Постбит: плашка / кнопка листа',
+            'postbit_plaque' => 'Постбит: нижняя плашка',
             'postbit_avatar_frame' => 'Постбит: рамка аватара',
         ];
     }
@@ -541,7 +541,7 @@ class AF_Admin_Advancedappearance
     }
 
     {{selector}} .af-apui-postbit-name-wrap,
-    {{selector}} .af-apui-postbit-plaque-slot a {
+    {{selector}} .af-apui-postbit-plaque {
     text-shadow: 0 0 16px rgba(199, 184, 255, .24);
     }
     CSS
@@ -595,7 +595,7 @@ class AF_Admin_Advancedappearance
     backdrop-filter: blur(14px);
     }
 
-    {{selector}} .af-apui-postbit-plaque-slot a {
+    {{selector}} .af-apui-postbit-plaque {
     border-radius: 0 0 16px 16px;
     }
     CSS
@@ -709,12 +709,12 @@ class AF_Admin_Advancedappearance
     text-shadow: 0 0 14px rgba(224, 214, 255, .22);
     }
 
-    {{selector}} .af-apui-postbit-plaque-slot a {
+    {{selector}} .af-apui-postbit-plaque {
     box-shadow: 0 10px 20px rgba(0,0,0,.25);
     transition: transform .18s ease, box-shadow .18s ease;
     }
 
-    {{selector}} .af-apui-postbit-plaque-slot a:hover {
+    {{selector}} .af-apui-postbit-plaque:hover {
     transform: translateY(-1px);
     box-shadow: 0 14px 26px rgba(0,0,0,.32);
     }
@@ -777,13 +777,13 @@ class AF_Admin_Advancedappearance
                 'description' => 'Пример, если пользователь хочет изменить только кнопку/плашку.',
                 'code' => <<<'CSS'
     /* Fragment: плашка листа персонажа */
-    {{selector}} .af-apui-postbit-plaque-slot a {
+    {{selector}} .af-apui-postbit-plaque {
     border-color: rgba(255,255,255,.16);
     text-shadow: 0 0 12px rgba(255,255,255,.18);
     box-shadow: 0 10px 20px rgba(0,0,0,.24);
     }
 
-    {{selector}} .af-apui-postbit-plaque-slot a:hover {
+    {{selector}} .af-apui-postbit-plaque:hover {
     transform: translateY(-1px);
     }
     CSS
@@ -854,12 +854,12 @@ class AF_Admin_Advancedappearance
             case 'postbit_plaque':
                 return <<<'CSS'
     /* Fragment: постбит — плашка / кнопка листа */
-    {{selector}} .af-apui-postbit-plaque-slot a {
+    {{selector}} .af-apui-postbit-plaque {
     box-shadow: 0 10px 20px rgba(0,0,0,.24);
     transition: transform .18s ease, box-shadow .18s ease;
     }
 
-    {{selector}} .af-apui-postbit-plaque-slot a:hover {
+    {{selector}} .af-apui-postbit-plaque:hover {
     transform: translateY(-1px);
     }
     CSS;

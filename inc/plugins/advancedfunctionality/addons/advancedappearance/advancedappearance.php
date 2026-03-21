@@ -193,7 +193,7 @@ function af_aa_get_supported_fragment_keys(): array
         'profile_avatar_frame' => 'Профиль: рамка аватара',
         'postbit_author' => 'Постбит: фон карточки автора',
         'postbit_name' => 'Постбит: блок никнейма',
-        'postbit_plaque' => 'Постбит: плашка / кнопка листа',
+        'postbit_plaque' => 'Постбит: нижняя плашка',
         'postbit_avatar_frame' => 'Постбит: рамка аватара',
     ];
 }

@@ -3,44 +3,41 @@ if (!defined('IN_MYBB')) {
     die('No direct access');
 }
 
-function af_charactersheets_postbit_button(array &$post): void
+function af_cs_get_postbit_sheet_payload(int $uid): array
 {
-    global $templates, $lang;
+    global $lang;
 
-    $post['af_cs_plaque'] = '';
-    if (!af_charactersheets_is_enabled()) {
-        return;
-    }
+    $payload = [
+        'enabled' => false,
+        'sheet_url' => '',
+        'sheet_slug' => '',
+        'button_label' => '',
+    ];
 
-    $uid = (int)($post['uid'] ?? 0);
-    if ($uid <= 0) {
-        return;
+    if (!af_charactersheets_is_enabled() || $uid <= 0) {
+        return $payload;
     }
 
     $slug = af_charactersheets_get_sheet_slug_by_uid($uid);
     if ($slug === '') {
-        return;
+        return $payload;
     }
 
     if (!isset($lang->af_charactersheets_name)) {
         af_charactersheets_lang();
     }
 
-    $sheet_url = af_charactersheets_url(['slug' => $slug]);
-    $button_label = $lang->af_charactersheets_sheet_button ?? 'Лист персонажа';
-    $sheet_url = htmlspecialchars_uni($sheet_url);
-    $button_label = htmlspecialchars_uni($button_label);
-    $sheet_slug = htmlspecialchars_uni($slug);
-
-    $tpl = $templates->get('af_charactersheets_postbit_plaque');
-    eval("\$plaque_html = \"" . $tpl . "\";");
-
-    $post['af_cs_plaque'] = $plaque_html;
+    $payload['enabled'] = true;
+    $payload['sheet_url'] = af_charactersheets_url(['slug' => $slug]);
+    $payload['sheet_slug'] = $slug;
+    $payload['button_label'] = (string)($lang->af_charactersheets_sheet_button ?? 'Лист персонажа');
 
     if (!af_cs_assets_disabled_for_current_page()) {
         $GLOBALS['af_charactersheets_needs_assets'] = true;
         $GLOBALS['af_charactersheets_needs_modal'] = true;
     }
+
+    return $payload;
 }
 
 function af_charactersheets_get_sheet_slug_by_uid(int $uid): string

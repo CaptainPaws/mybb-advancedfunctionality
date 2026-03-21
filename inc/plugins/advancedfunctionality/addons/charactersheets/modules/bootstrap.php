@@ -24,7 +24,6 @@ function af_charactersheets_install_impl(): void
     af_charactersheets_ensure_schema();
     af_charactersheets_ensure_settings();
     af_charactersheets_templates_install_or_update();
-    af_charactersheets_ensure_postbit_placeholder();
     af_charactersheets_alias_install_or_update();
 
     if (function_exists('rebuild_settings')) {
@@ -36,7 +35,6 @@ function af_charactersheets_activate_impl(): bool
 {
     af_charactersheets_templates_install_or_update();
     af_charactersheets_ensure_schema();
-    af_charactersheets_ensure_postbit_placeholder();
     af_charactersheets_alias_install_or_update();
     return true;
 }
@@ -86,14 +84,7 @@ function af_charactersheets_uninstall_impl(): void
     )");
     $db->delete_query('settinggroups', "name='af_charactersheets'");
     $db->delete_query('templates', "title LIKE 'charactersheets_%'");
-    $db->delete_query('templates', "title IN ('charactersheet_fullpage','charactersheet_inner','charactersheet_modal','af_cs_modal_fullpage','af_cs_page_modal','af_charactersheets_postbit_plaque','postbit_plaque','charactersheet_rct_cards','charactersheet_stats_bars','charactersheet_attributes','charactersheet_progress','charactersheet_skills','charactersheet_feats','charactersheet_abilities','charactersheet_inventory','charactersheet_augmentations','charactersheet_equipment','charactersheet_knowledge','charactersheets_catalog','charactersheets_catalog_card')");
-
-    if (file_exists(MYBB_ROOT . 'inc/adminfunctions_templates.php')) {
-        require_once MYBB_ROOT . 'inc/adminfunctions_templates.php';
-    }
-    if (function_exists('find_replace_templatesets')) {
-        find_replace_templatesets('postbit_classic', "#\\{\\$post\\['af_cs_plaque'\\]\\}#i", '');
-    }
+    $db->delete_query('templates', "title IN ('charactersheet_fullpage','charactersheet_inner','charactersheet_modal','af_cs_modal_fullpage','af_cs_page_modal','postbit_plaque','charactersheet_rct_cards','charactersheet_stats_bars','charactersheet_attributes','charactersheet_progress','charactersheet_skills','charactersheet_feats','charactersheet_abilities','charactersheet_inventory','charactersheet_augmentations','charactersheet_equipment','charactersheet_knowledge','charactersheets_catalog','charactersheets_catalog_card')");
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -1741,56 +1732,6 @@ function af_charactersheets_inject_modal(string $page): string
     }
 
     return $page . $inject;
-}
-
-function af_charactersheets_ensure_postbit_placeholder(): void
-{
-    global $db;
-
-    $needle = '{$post[\'af_cs_plaque\']}';
-    $anchors = [
-        '{$post[\'user_details\']}',
-        '{$post[\'usercontact\']}',
-        '{$post[\'userstars\']}',
-    ];
-    $q = $db->simple_select('templates', 'tid,template', "title='postbit_classic'");
-
-    while ($row = $db->fetch_array($q)) {
-        $tid = (int)$row['tid'];
-        $tpl = (string)$row['template'];
-
-        if ($tid <= 0 || $tpl === '') {
-            continue;
-        }
-
-        if (strpos($tpl, $needle) !== false) {
-            continue;
-        }
-        $new = '';
-        foreach ($anchors as $anchor) {
-            if (strpos($tpl, $anchor) !== false) {
-                $new = str_replace($anchor, $anchor . "\n" . $needle, $tpl);
-                break;
-            }
-        }
-        if ($new === '') {
-            if (stripos($tpl, '</td>') !== false) {
-                $new = preg_replace('~</td>~i', $needle . "\n</td>", $tpl, 1);
-            } elseif (stripos($tpl, '</div>') !== false) {
-                $new = preg_replace('~</div>~i', $needle . "\n</div>", $tpl, 1);
-            } else {
-                $new = $tpl . "\n" . $needle;
-            }
-        }
-
-        if (is_string($new) && $new !== '' && $new !== $tpl) {
-            $db->update_query('templates', ['template' => $db->escape_string($new)], 'tid=' . $tid);
-        }
-    }
-
-    if (function_exists('cache_templatesets')) {
-        cache_templatesets();
-    }
 }
 
 function af_charactersheets_templates_install_or_update(): void
