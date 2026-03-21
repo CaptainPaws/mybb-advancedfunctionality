@@ -281,33 +281,37 @@
 
 
   function ensureSharedModal() {
-    var modal = document.querySelector('[data-afcs-modal]') || document.querySelector('[data-af-apui-modal]');
+    var modal = document.querySelector('[data-af-apui-modal]');
     if (modal) {
-      var frame = modal.querySelector('[data-afcs-frame]') || modal.querySelector('[data-af-apui-modal-frame]');
-      var title = modal.querySelector('[data-af-apui-modal-title]');
-      if (frame) {
-        modal.setAttribute('data-af-apui-modal', '1');
-        return { modal: modal, frame: frame, title: title };
-      }
+      return {
+        modal: modal,
+        frame: modal.querySelector('[data-af-apui-modal-frame]'),
+        title: modal.querySelector('[data-af-apui-modal-title]')
+      };
     }
 
     var wrap = document.createElement('div');
     wrap.className = 'af-cs-modal';
-    wrap.setAttribute('data-afcs-modal', '1');
     wrap.setAttribute('data-af-apui-modal', '1');
     wrap.innerHTML =
-      '<div class="af-cs-modal__backdrop" data-afcs-close="1" data-af-apui-modal-close="1"></div>' +
+      '<div class="af-cs-modal__backdrop" data-af-apui-modal-close="1"></div>' +
       '<div class="af-cs-modal__dialog" role="dialog" aria-modal="true">' +
         '<div class="af-cs-modal__header">' +
-          '<div class="af-cs-modal__title" data-af-apui-modal-title="1">Просмотр</div>' +
-          '<button type="button" class="af-cs-modal__close" data-afcs-close="1" data-af-apui-modal-close="1" aria-label="Закрыть">×</button>' +
+          '<div class="af-cs-modal__title" data-af-apui-modal-title="1"></div>' +
+          '<button type="button" class="af-cs-modal__close" data-af-apui-modal-close="1" aria-label="Закрыть">×</button>' +
         '</div>' +
         '<div class="af-cs-modal__body">' +
-          '<iframe class="af-cs-modal__frame" data-afcs-frame="1" data-af-apui-modal-frame="1" src="" loading="lazy"></iframe>' +
+          '<iframe class="af-cs-modal__frame" data-af-apui-modal-frame="1" src="" loading="lazy"></iframe>' +
         '</div>' +
       '</div>';
+
     document.body.appendChild(wrap);
-    return { modal: wrap, frame: wrap.querySelector('[data-af-apui-modal-frame]'), title: wrap.querySelector('[data-af-apui-modal-title]') };
+
+    return {
+      modal: wrap,
+      frame: wrap.querySelector('[data-af-apui-modal-frame]'),
+      title: wrap.querySelector('[data-af-apui-modal-title]')
+    };
   }
 
   function normalizeModalUrl(url) {
@@ -320,11 +324,27 @@
       return '';
     }
 
+    var hash = '';
+    var hashIndex = raw.indexOf('#');
+
+    if (hashIndex !== -1) {
+      hash = raw.substring(hashIndex);
+      raw = raw.substring(0, hashIndex);
+    }
+
+    var basePath = raw.split('?')[0].toLowerCase();
+
+    // Для темы анкеты не добавляем ajax=1,
+    // чтобы в iframe открывалась нормальная страница темы
+    if (/(^|\/)showthread\.php$/i.test(basePath)) {
+      return raw + hash;
+    }
+
     if (raw.indexOf('embed=1') === -1 && raw.indexOf('ajax=1') === -1) {
       raw += (raw.indexOf('?') === -1 ? '?' : '&') + 'ajax=1';
     }
 
-    return raw;
+    return raw + hash;
   }
 
   function openUniversalModal(url, title) {
@@ -334,12 +354,127 @@
     }
 
     var modalParts = ensureSharedModal();
-    modalParts.frame.setAttribute('src', loadUrl);
-    if (modalParts.title) {
-      modalParts.title.textContent = title || 'Просмотр';
+
+    if (modalParts.frame) {
+      modalParts.frame.setAttribute('src', loadUrl);
     }
+
+    if (modalParts.title) {
+      var safeTitle = String(title || '').trim();
+      modalParts.title.textContent = safeTitle;
+      modalParts.title.style.display = safeTitle ? '' : 'none';
+    }
+
     modalParts.modal.classList.add('is-open');
   }
+
+  function initPostbitStatInteractions() {
+    if (window.__afApuiPostbitStatInteractionsInit) {
+      return;
+    }
+    window.__afApuiPostbitStatInteractionsInit = true;
+
+    function getAllStats() {
+      return document.querySelectorAll('.af-apui-postbit-userdetails .af-apui-stat-item');
+    }
+
+    function closeAllStats(exceptNode) {
+      Array.prototype.forEach.call(getAllStats(), function (item) {
+        if (exceptNode && item === exceptNode) {
+          return;
+        }
+
+        item.classList.remove('is-open');
+        item.setAttribute('aria-expanded', 'false');
+      });
+    }
+
+    function prepareStatsAccessibility() {
+      Array.prototype.forEach.call(getAllStats(), function (item) {
+        if (!item.hasAttribute('tabindex')) {
+          item.setAttribute('tabindex', '0');
+        }
+
+        if (!item.hasAttribute('role')) {
+          item.setAttribute('role', 'button');
+        }
+
+        if (!item.hasAttribute('aria-expanded')) {
+          item.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
+
+    prepareStatsAccessibility();
+
+    document.addEventListener('click', function (event) {
+      var interactiveInsideValue = event.target.closest(
+        '.af-apui-stat-item__value a, .af-apui-stat-item__value button, .af-apui-stat-item__value input, .af-apui-stat-item__value select, .af-apui-stat-item__value textarea, .af-apui-stat-item__value label'
+      );
+
+      if (interactiveInsideValue) {
+        return;
+      }
+
+      var stat = event.target.closest('.af-apui-postbit-userdetails .af-apui-stat-item');
+
+      if (!stat) {
+        closeAllStats(null);
+        return;
+      }
+
+      var opened = stat.classList.contains('is-open');
+      closeAllStats(stat);
+
+      if (opened) {
+        stat.classList.remove('is-open');
+        stat.setAttribute('aria-expanded', 'false');
+        return;
+      }
+
+      stat.classList.add('is-open');
+      stat.setAttribute('aria-expanded', 'true');
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        closeAllStats(null);
+        return;
+      }
+
+      var stat = event.target.closest('.af-apui-postbit-userdetails .af-apui-stat-item');
+      if (!stat) {
+        return;
+      }
+
+      if (event.key !== 'Enter' && event.key !== ' ') {
+        return;
+      }
+
+      event.preventDefault();
+
+      var opened = stat.classList.contains('is-open');
+      closeAllStats(stat);
+
+      if (opened) {
+        stat.classList.remove('is-open');
+        stat.setAttribute('aria-expanded', 'false');
+        return;
+      }
+
+      stat.classList.add('is-open');
+      stat.setAttribute('aria-expanded', 'true');
+    });
+
+    var observer = new MutationObserver(function () {
+      prepareStatsAccessibility();
+    });
+
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true
+    });
+  }  
 
   function initPostbitModalActions() {
     if (window.__afApuiPostbitModalInit) {
@@ -351,9 +486,21 @@
       if (event.target.closest('[data-af-apui-modal-close]')) {
         var modal = document.querySelector('[data-af-apui-modal]');
         if (!modal) { return; }
-        var frame = modal.querySelector('[data-af-apui-modal-frame], [data-afcs-frame]');
+
+        var frame = modal.querySelector('[data-af-apui-modal-frame]');
+        var title = modal.querySelector('[data-af-apui-modal-title]');
+
         modal.classList.remove('is-open');
-        if (frame) { frame.removeAttribute('src'); }
+
+        if (frame) {
+          frame.removeAttribute('src');
+        }
+
+        if (title) {
+          title.textContent = '';
+          title.style.display = 'none';
+        }
+
         return;
       }
 
@@ -372,13 +519,25 @@
       if (event.key !== 'Escape') {
         return;
       }
+
       var modal = document.querySelector('[data-af-apui-modal]');
       if (!modal) {
         return;
       }
-      var frame = modal.querySelector('[data-af-apui-modal-frame], [data-afcs-frame]');
+
+      var frame = modal.querySelector('[data-af-apui-modal-frame]');
+      var title = modal.querySelector('[data-af-apui-modal-title]');
+
       modal.classList.remove('is-open');
-      if (frame) { frame.removeAttribute('src'); }
+
+      if (frame) {
+        frame.removeAttribute('src');
+      }
+
+      if (title) {
+        title.textContent = '';
+        title.style.display = 'none';
+      }
     });
   }
 
@@ -413,7 +572,7 @@
 
       resetStickyPostbitState(author);
 
-      if (window.innerWidth <= 900) {
+      if (window.innerWidth <= 1024) {
         return;
       }
 
@@ -472,6 +631,7 @@
   function boot() {
     normalizePostbitUserDetails();
     initPostbitModalActions();
+    initPostbitStatInteractions();
     initStickyPostbits();
 
     var roots = document.querySelectorAll('[data-af-apui-tabs]');
