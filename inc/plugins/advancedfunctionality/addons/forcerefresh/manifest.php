@@ -23,6 +23,10 @@ return [
             'af_forcerefresh_enabled_desc' => 'Если включено — после успешной AJAX-отправки через быстрый ответ в теме страница будет перезагружена.',
             'af_forcerefresh_delay_ms' => 'Задержка перед перезагрузкой (мс)',
             'af_forcerefresh_delay_ms_desc' => 'Например 200–600 мс. 0 = сразу.',
+            'af_forcerefresh_debug' => 'Режим отладки',
+            'af_forcerefresh_debug_desc' => 'Включает диагностические сообщения в консоли для сценария force refresh.',
+            'af_forcerefresh_assets_blacklist' => 'Blacklist отключения ассетов',
+            'af_forcerefresh_assets_blacklist_desc' => 'По одной строке: script.php или script.php?action=name. На совпавших страницах ассеты Force Refresh не подключаются.',
         ],
         'en' => [
             'af_forcerefresh_name' => 'Force Refresh (Quick Reply)',
@@ -35,6 +39,10 @@ return [
             'af_forcerefresh_enabled_desc' => 'If enabled — reload after successful AJAX quick reply.',
             'af_forcerefresh_delay_ms' => 'Reload delay (ms)',
             'af_forcerefresh_delay_ms_desc' => 'Example 200–600 ms. 0 = immediate.',
+            'af_forcerefresh_debug' => 'Debug mode',
+            'af_forcerefresh_debug_desc' => 'Enable console diagnostics for the force refresh flow.',
+            'af_forcerefresh_assets_blacklist' => 'Assets blacklist',
+            'af_forcerefresh_assets_blacklist_desc' => 'One condition per line: script.php or script.php?action=name. Force Refresh assets are disabled on matching pages.',
         ],
     ],
 ];

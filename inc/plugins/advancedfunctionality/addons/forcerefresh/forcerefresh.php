@@ -8,6 +8,7 @@ if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { /* AF core required */ }
 
 define('AF_FORCEREFRESH_ID', 'forcerefresh');
+define('AF_FORCEREFRESH_DEFAULT_BLACKLIST', "index.php");
 
 function af_forcerefresh_install(): void
 {
@@ -22,7 +23,7 @@ function af_forcerefresh_uninstall(): void
     global $db;
 
     // не трогаем БД аддона? тут только settings
-    $db->delete_query('settings', "name IN ('af_forcerefresh_enabled','af_forcerefresh_delay_ms','af_forcerefresh_debug')");
+    $db->delete_query('settings', "name IN ('af_forcerefresh_enabled','af_forcerefresh_delay_ms','af_forcerefresh_debug','af_forcerefresh_assets_blacklist')");
     $db->delete_query('settinggroups', "name='af_forcerefresh'");
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -42,7 +43,13 @@ function af_forcerefresh_pre_output(string &$page = ''): void
         return;
     }
 
+    af_forcerefresh_strip_assets($page);
+
     $script = af_forcerefresh_current_script_name();
+    if ($script === '' || af_forcerefresh_assets_disabled_for_current_page()) {
+        return;
+    }
+
     if (!in_array($script, ['showthread.php', 'newreply.php', 'newthread.php', 'editpost.php'], true)) {
         return;
     }
@@ -87,6 +94,117 @@ function af_forcerefresh_pre_output(string &$page = ''): void
     }
 }
 
+function af_forcerefresh_parse_disable_conditions(string $raw): array
+{
+    $out = [];
+    $lines = preg_split('~\R~', $raw);
+    if (!is_array($lines)) {
+        return $out;
+    }
+
+    foreach ($lines as $line) {
+        $line = trim((string)$line);
+        if ($line === '') {
+            continue;
+        }
+
+        $script = $line;
+        $action = null;
+        $query = '';
+        $qPos = strpos($line, '?');
+        if ($qPos !== false) {
+            $script = substr($line, 0, $qPos);
+            $query = substr($line, $qPos + 1);
+        }
+
+        $script = af_forcerefresh_normalize_script_name($script);
+        if ($script === '') {
+            continue;
+        }
+
+        if ($query !== '') {
+            parse_str($query, $params);
+            if (!empty($params['action'])) {
+                $action = strtolower(trim((string)$params['action']));
+            }
+        }
+
+        $out[] = ['script' => $script, 'action' => $action];
+    }
+
+    return $out;
+}
+
+function af_forcerefresh_normalize_script_name(string $raw): string
+{
+    $raw = trim(str_replace('\\', '/', $raw));
+    if ($raw === '') {
+        return '';
+    }
+
+    $path = parse_url($raw, PHP_URL_PATH);
+    if (!is_string($path) || $path === '') {
+        $path = $raw;
+    }
+
+    $script = strtolower((string)basename($path));
+    if ($script === '' || $script === '.' || $script === '/') {
+        return '';
+    }
+
+    if (strpos($script, '.php') === false) {
+        $script .= '.php';
+    }
+
+    return $script;
+}
+
+function af_forcerefresh_assets_disabled_for_current_page(): bool
+{
+    global $mybb;
+
+    $script = af_forcerefresh_current_script_name();
+    if ($script === '') {
+        return false;
+    }
+
+    $action = strtolower(trim((string)($mybb->input['action'] ?? '')));
+    $lines = [AF_FORCEREFRESH_DEFAULT_BLACKLIST];
+    $custom = trim((string)($mybb->settings['af_forcerefresh_assets_blacklist'] ?? ''));
+    if ($custom !== '') {
+        $lines[] = $custom;
+    }
+
+    foreach (af_forcerefresh_parse_disable_conditions(implode("\n", $lines)) as $cond) {
+        if (($cond['script'] ?? '') !== $script) {
+            continue;
+        }
+
+        $condAction = strtolower(trim((string)($cond['action'] ?? '')));
+        if ($condAction === '' || $condAction === $action) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function af_forcerefresh_strip_assets(string &$page): void
+{
+    if ($page === '') {
+        return;
+    }
+
+    $patterns = [
+        '~<script>\s*window\.afForceRefreshCfg=.*?</script>\s*~is',
+        '~<script\b[^>]*src=["\'][^"\']*forcerefresh\.js(?:\?[^"\']*)?["\'][^>]*>\s*</script>\s*~iu',
+    ];
+
+    foreach ($patterns as $pattern) {
+        $page = (string)preg_replace($pattern, '', $page);
+    }
+}
+
 function af_forcerefresh_current_script_name(): string
 {
     if (function_exists('af_current_script_name')) {
@@ -97,10 +215,17 @@ function af_forcerefresh_current_script_name(): string
     }
 
     if (defined('THIS_SCRIPT')) {
-        return strtolower((string)basename(str_replace('\\', '/', (string)THIS_SCRIPT)));
+        return af_forcerefresh_normalize_script_name((string)THIS_SCRIPT);
     }
 
-    return strtolower((string)basename(str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''))));
+    foreach (['SCRIPT_NAME', 'PHP_SELF', 'REQUEST_URI'] as $key) {
+        $script = af_forcerefresh_normalize_script_name((string)($_SERVER[$key] ?? ''));
+        if ($script !== '') {
+            return $script;
+        }
+    }
+
+    return '';
 }
 
 function af_forcerefresh_should_load_assets(string $script, string $page): bool
@@ -171,6 +296,8 @@ function af_forcerefresh_ensure_settings(): void
     $delayDesc    = 'Example 200–600 ms. 0 = immediate.';
     $debugTitle   = 'Debug mode';
     $debugDesc    = 'Enable console diagnostics for pending/landed force refresh flow.';
+    $blacklistTitle = 'Assets blacklist';
+    $blacklistDesc = 'One condition per line: script.php or script.php?action=name. Force Refresh assets are blocked on matching pages.';
 
     // если язык всё-таки загрузился — используем его
     if (isset($lang) && is_object($lang)) {
@@ -185,6 +312,9 @@ function af_forcerefresh_ensure_settings(): void
 
         if (!empty($lang->af_forcerefresh_debug)) $debugTitle = (string)$lang->af_forcerefresh_debug;
         if (!empty($lang->af_forcerefresh_debug_desc)) $debugDesc = (string)$lang->af_forcerefresh_debug_desc;
+
+        if (!empty($lang->af_forcerefresh_assets_blacklist)) $blacklistTitle = (string)$lang->af_forcerefresh_assets_blacklist;
+        if (!empty($lang->af_forcerefresh_assets_blacklist_desc)) $blacklistDesc = (string)$lang->af_forcerefresh_assets_blacklist_desc;
     }
 
     $gid = (int)$db->fetch_field($db->simple_select('settinggroups', 'gid', "name='af_forcerefresh'", ['limit'=>1]), 'gid');
@@ -228,6 +358,14 @@ function af_forcerefresh_ensure_settings(): void
             'optionscode' => 'yesno',
             'value' => '0',
             'disporder' => 3,
+        ],
+        [
+            'name' => 'af_forcerefresh_assets_blacklist',
+            'title' => $blacklistTitle,
+            'description' => $blacklistDesc,
+            'optionscode' => 'textarea',
+            'value' => AF_FORCEREFRESH_DEFAULT_BLACKLIST,
+            'disporder' => 4,
         ],
     ];
 

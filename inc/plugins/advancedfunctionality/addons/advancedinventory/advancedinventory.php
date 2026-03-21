@@ -244,6 +244,88 @@ function af_advancedinventory_is_installed(): bool
     return $db->table_exists(AF_ADVINV_TABLE_ITEMS);
 }
 
+function af_advancedinventory_normalize_script_name(string $raw): string
+{
+    $raw = trim(str_replace('\\', '/', $raw));
+    if ($raw === '') {
+        return '';
+    }
+
+    $path = parse_url($raw, PHP_URL_PATH);
+    if (!is_string($path) || $path === '') {
+        $path = $raw;
+    }
+
+    $script = strtolower((string)basename($path));
+    if ($script === '' || $script === '.' || $script === '/') {
+        return '';
+    }
+
+    if (strpos($script, '.php') === false) {
+        $script .= '.php';
+    }
+
+    return $script;
+}
+
+function af_advancedinventory_current_script_name(): string
+{
+    if (defined('THIS_SCRIPT')) {
+        $script = af_advancedinventory_normalize_script_name((string)THIS_SCRIPT);
+        if ($script !== '') {
+            return $script;
+        }
+    }
+
+    foreach (['SCRIPT_NAME', 'PHP_SELF', 'REQUEST_URI'] as $key) {
+        $script = af_advancedinventory_normalize_script_name((string)($_SERVER[$key] ?? ''));
+        if ($script !== '') {
+            return $script;
+        }
+    }
+
+    return '';
+}
+
+function af_advancedinventory_is_inventory_ui_context(string $action = ''): bool
+{
+    global $mybb;
+
+    $script = af_advancedinventory_current_script_name();
+    if ($script === 'inventory.php' || $script === 'inventories.php') {
+        return true;
+    }
+
+    if ($script !== 'misc.php') {
+        return false;
+    }
+
+    $currentAction = $action !== '' ? $action : (string)$mybb->get_input('action');
+    return in_array($currentAction, ['inventory', 'inventories', 'tab', 'entity'], true);
+}
+
+function af_advancedinventory_append_runtime_assets(string &$headerinclude, bool $withScript = true): void
+{
+    global $mybb;
+
+    if (!af_advancedinventory_is_inventory_ui_context()) {
+        return;
+    }
+
+    $assetBase = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedinventory/assets/';
+    $cssFile = AF_ADVINV_ASSET_DIR . 'advancedinventory.css';
+    $vCss = @is_file($cssFile) ? (string)@filemtime($cssFile) : '1';
+    $headerinclude .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($assetBase . 'advancedinventory.css?v=' . rawurlencode($vCss)) . '">';
+
+    if (!$withScript) {
+        return;
+    }
+
+    $jsFile = AF_ADVINV_ASSET_DIR . 'advancedinventory.js';
+    $vJs = @is_file($jsFile) ? (string)@filemtime($jsFile) : '1';
+    $headerinclude .= '<script src="' . htmlspecialchars_uni($assetBase . 'advancedinventory.js?v=' . rawurlencode($vJs)) . '" defer></script>';
+}
+
 function af_advancedinventory_alias_target_path(): string
 {
     return MYBB_ROOT . 'inventory.php';
@@ -398,13 +480,7 @@ function af_advancedinventory_render_inventory(): void
         $defaultTab = (string)array_key_first($tabs);
     }
 
-    $assetBase = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedinventory/assets/';
-    $cssFile = AF_ADVINV_ASSET_DIR . 'advancedinventory.css';
-    $jsFile = AF_ADVINV_ASSET_DIR . 'advancedinventory.js';
-    $vCss = @is_file($cssFile) ? (string)@filemtime($cssFile) : '1';
-    $vJs = @is_file($jsFile) ? (string)@filemtime($jsFile) : '1';
-    $headerinclude .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($assetBase . 'advancedinventory.css?v=' . rawurlencode($vCss)) . '">';
-    $headerinclude .= '<script src="' . htmlspecialchars_uni($assetBase . 'advancedinventory.js?v=' . rawurlencode($vJs)) . '" defer></script>';
+    af_advancedinventory_append_runtime_assets($headerinclude, true);
 
     $tabLinks = '';
     foreach ($tabs as $code => $title) {
@@ -910,10 +986,7 @@ function af_advancedinventory_render_tab(): void
         exit;
     }
 
-    $assetBase = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedinventory/assets/';
-    $cssFile = AF_ADVINV_ASSET_DIR . 'advancedinventory.css';
-    $vCss = @is_file($cssFile) ? (string)@filemtime($cssFile) : '1';
-    $headerinclude .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($assetBase . 'advancedinventory.css?v=' . rawurlencode($vCss)) . '">';
+    af_advancedinventory_append_runtime_assets($headerinclude, false);
 
     $af_inv_frame_title = htmlspecialchars_uni((string)($tabs[$tab] ?? $tab));
     $tpl = $templates->get('advancedinventory_entity_frame', 1, 0);
@@ -969,7 +1042,7 @@ function af_advancedinventory_render_inventories(): void
         $url = 'inventories.php?page=' . $i . '&username=' . rawurlencode($username) . '&entity=' . rawurlencode($entity) . '&state=' . rawurlencode($state);
         $pager .= '<a class="af-page' . ($i === $page ? ' is-active' : '') . '" href="' . htmlspecialchars_uni($url) . '">' . $i . '</a> ';
     }
-    $headerinclude .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(rtrim((string)$mybb->settings['bburl'], '/') . '/inc/plugins/advancedfunctionality/addons/advancedinventory/assets/advancedinventory.css') . '">';
+    af_advancedinventory_append_runtime_assets($headerinclude, false);
     $entityOptions = '<option value="">Все entity</option>';
     foreach (af_advancedinventory_tabs(false) as $entitySlug => $entityTitle) {
         $selected = $entity === $entitySlug ? ' selected' : '';

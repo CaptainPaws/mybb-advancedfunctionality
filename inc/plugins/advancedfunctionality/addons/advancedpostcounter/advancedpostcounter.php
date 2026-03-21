@@ -218,6 +218,30 @@ function af_apc_assets_disabled_for_current_page(): bool
     return false;
 }
 
+function af_apc_normalize_script_name(string $raw): string
+{
+    $raw = trim(str_replace('\\', '/', $raw));
+    if ($raw === '') {
+        return '';
+    }
+
+    $path = parse_url($raw, PHP_URL_PATH);
+    if (!is_string($path) || $path === '') {
+        $path = $raw;
+    }
+
+    $script = strtolower((string)basename($path));
+    if ($script === '' || $script === '.' || $script === '/') {
+        return '';
+    }
+
+    if (strpos($script, '.php') === false) {
+        $script .= '.php';
+    }
+
+    return $script;
+}
+
 function af_apc_current_script_name(): string
 {
     if (function_exists('af_current_script_name')) {
@@ -228,19 +252,19 @@ function af_apc_current_script_name(): string
     }
 
     if (defined('THIS_SCRIPT')) {
-        $script = strtolower((string)basename(str_replace('\\', '/', (string)THIS_SCRIPT)));
+        $script = af_apc_normalize_script_name((string)THIS_SCRIPT);
         if ($script !== '') {
             return $script;
         }
     }
 
-    foreach (['SCRIPT_NAME', 'PHP_SELF'] as $key) {
+    foreach (['SCRIPT_NAME', 'PHP_SELF', 'REQUEST_URI'] as $key) {
         $raw = (string)($_SERVER[$key] ?? '');
         if ($raw === '') {
             continue;
         }
 
-        $script = strtolower((string)basename(str_replace('\\', '/', $raw)));
+        $script = af_apc_normalize_script_name($raw);
         if ($script !== '') {
             return $script;
         }
@@ -1539,13 +1563,19 @@ function af_advancedpostcounter_pre_output(&$page): void
         return;
     }
 
+    $assetsDisabled = af_apc_assets_disabled_for_current_page();
+    if ($assetsDisabled && strpos((string)$page, 'advancedpostcounter.') !== false) {
+        $page = (string)preg_replace('~<link\b[^>]*href=["\'][^"\']*advancedpostcounter\.css(?:\?[^"\']*)?["\'][^>]*>\s*~iu', '', (string)$page);
+        $page = (string)preg_replace('~<script\b[^>]*src=["\'][^"\']*advancedpostcounter\.js(?:\?[^"\']*)?["\'][^>]*>\s*</script>\s*~iu', '', (string)$page);
+    }
+
     // Cупер-дешёвый early return: если APC-маркеров нет, дальше ничего не делаем.
     if (strpos((string)$page, '<af_apc_') === false) {
         return;
     }
 
     // -------------------- 1) Подключаем ассеты с filemtime-версией --------------------
-    $shouldLoadAssets = af_apc_should_load_assets_for_page((string)$page);
+    $shouldLoadAssets = !$assetsDisabled && af_apc_should_load_assets_for_page((string)$page);
 
     if (strpos((string)$page, 'advancedpostcounter.') !== false) {
         // Удаляем предыдущие инжекты APC (включая старые ?v), чтобы в финале оставить только каноничную версию.
