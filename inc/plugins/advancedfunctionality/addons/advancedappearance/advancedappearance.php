@@ -535,6 +535,10 @@ function af_aa_get_apui_defaults(): array
         'inventory_bg_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('inventory_bg_overlay', 'none'), 'none'),
         'inventory_panel_bg' => af_aa_sanitize_overlay(af_aa_get_apui_setting('inventory_panel_bg', 'rgba(21,25,34,.92)'), 'rgba(21,25,34,.92)'),
         'inventory_panel_border' => af_aa_sanitize_overlay(af_aa_get_apui_setting('inventory_panel_border', 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
+        'achievements_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('achievements_bg_url', ''), ''),
+        'achievements_bg_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('achievements_bg_overlay', 'none'), 'none'),
+        'achievements_panel_bg' => af_aa_sanitize_overlay(af_aa_get_apui_setting('achievements_panel_bg', 'rgba(13,17,28,.74)'), 'rgba(13,17,28,.74)'),
+        'achievements_panel_border' => af_aa_sanitize_overlay(af_aa_get_apui_setting('achievements_panel_border', 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
         'custom_css' => '',
         'fragment_key' => 'profile_banner',
     ];
@@ -643,6 +647,7 @@ function af_aa_build_user_css_payload(int $uid): array
         'sheet_bg_url','sheet_bg_overlay','sheet_panel_bg','sheet_panel_border',
         'application_bg_url','application_bg_overlay','application_panel_bg','application_panel_border',
         'inventory_bg_url','inventory_bg_overlay','inventory_panel_bg','inventory_panel_border',
+        'achievements_bg_url','achievements_bg_overlay','achievements_panel_bg','achievements_panel_border',
     ];
 
     $profileSettings = af_aa_merge_keys([], $defaults, $profileKeys);
@@ -769,6 +774,10 @@ function af_aa_build_user_css_payload(int $uid): array
             '--af-apui-modal-inventory-bg-overlay' => af_aa_css_raw_value((string)($modalSettings['inventory_bg_overlay'] ?? 'none'), 'none'),
             '--af-apui-modal-inventory-panel-bg' => af_aa_css_raw_value((string)($modalSettings['inventory_panel_bg'] ?? 'rgba(21,25,34,.92)'), 'rgba(21,25,34,.92)'),
             '--af-apui-modal-inventory-panel-border' => af_aa_css_raw_value((string)($modalSettings['inventory_panel_border'] ?? 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
+            '--af-apui-modal-achievements-bg-image' => af_aa_css_url_value((string)($modalSettings['achievements_bg_url'] ?? '')),
+            '--af-apui-modal-achievements-bg-overlay' => af_aa_css_raw_value((string)($modalSettings['achievements_bg_overlay'] ?? 'none'), 'none'),
+            '--af-apui-modal-achievements-panel-bg' => af_aa_css_raw_value((string)($modalSettings['achievements_panel_bg'] ?? 'rgba(13,17,28,.74)'), 'rgba(13,17,28,.74)'),
+            '--af-apui-modal-achievements-panel-border' => af_aa_css_raw_value((string)($modalSettings['achievements_panel_border'] ?? 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
         ],
         'body' => [
             'overlay' => af_aa_css_raw_value((string)($profileSettings['member_profile_body_overlay'] ?? 'none'), 'none'),
@@ -1002,6 +1011,10 @@ function af_aa_decode_and_sanitize_preset_settings(string $json, array $defaults
     $out['inventory_bg_overlay'] = af_aa_sanitize_overlay((string)($decoded['inventory_bg_overlay'] ?? ''), (string)($defaults['inventory_bg_overlay'] ?? 'none'));
     $out['inventory_panel_bg'] = af_aa_sanitize_overlay((string)($decoded['inventory_panel_bg'] ?? ''), (string)($defaults['inventory_panel_bg'] ?? 'rgba(21,25,34,.92)'));
     $out['inventory_panel_border'] = af_aa_sanitize_overlay((string)($decoded['inventory_panel_border'] ?? ''), (string)($defaults['inventory_panel_border'] ?? 'rgba(255,255,255,.12)'));
+    $out['achievements_bg_url'] = af_aa_sanitize_image_url((string)($decoded['achievements_bg_url'] ?? ''), (string)($defaults['achievements_bg_url'] ?? ''));
+    $out['achievements_bg_overlay'] = af_aa_sanitize_overlay((string)($decoded['achievements_bg_overlay'] ?? ''), (string)($defaults['achievements_bg_overlay'] ?? 'none'));
+    $out['achievements_panel_bg'] = af_aa_sanitize_overlay((string)($decoded['achievements_panel_bg'] ?? ''), (string)($defaults['achievements_panel_bg'] ?? 'rgba(13,17,28,.74)'));
+    $out['achievements_panel_border'] = af_aa_sanitize_overlay((string)($decoded['achievements_panel_border'] ?? ''), (string)($defaults['achievements_panel_border'] ?? 'rgba(255,255,255,.12)'));
 
     $out['custom_css'] = af_aa_sanitize_custom_css((string)($decoded['custom_css'] ?? ''));
     $out['fragment_key'] = af_aa_sanitize_fragment_key(
@@ -1961,6 +1974,40 @@ function af_aa_build_fragment_fields_html(array $settings): string
     return $html;
 }
 
+function af_aa_build_surface_fields_html(array $settings): string
+{
+    $surfaceMap = [
+        'sheet' => 'Лист персонажа',
+        'application' => 'Анкета',
+        'inventory' => 'Инвентарь',
+        'achievements' => 'Ачивки',
+    ];
+
+    $html = '';
+
+    foreach ($surfaceMap as $surfaceKey => $surfaceLabel) {
+        $html .= '<section class="af-aa-panel af-aa-form-section">';
+        $html .= '<h3 class="af-aa-panel__title">' . htmlspecialchars_uni($surfaceLabel) . '</h3>';
+        $html .= '<div class="af-aa-form-grid">';
+        $html .= af_aa_front_input('Background URL', 'settings[' . $surfaceKey . '_bg_url]', (string)($settings[$surfaceKey . '_bg_url'] ?? ''), [
+            'data-aa-setting' => $surfaceKey . '_bg_url',
+        ]);
+        $html .= af_aa_front_input('Background overlay', 'settings[' . $surfaceKey . '_bg_overlay]', (string)($settings[$surfaceKey . '_bg_overlay'] ?? ''), [
+            'data-aa-setting' => $surfaceKey . '_bg_overlay',
+        ]);
+        $html .= af_aa_front_input('Panel background', 'settings[' . $surfaceKey . '_panel_bg]', (string)($settings[$surfaceKey . '_panel_bg'] ?? ''), [
+            'data-aa-setting' => $surfaceKey . '_panel_bg',
+        ]);
+        $html .= af_aa_front_input('Panel border', 'settings[' . $surfaceKey . '_panel_border]', (string)($settings[$surfaceKey . '_panel_border'] ?? ''), [
+            'data-aa-setting' => $surfaceKey . '_panel_border',
+        ]);
+        $html .= '</div>';
+        $html .= '</section>';
+    }
+
+    return $html;
+}
+
 function af_aa_build_studio_form_html(string $do, array $preset, array $settings): string
 {
     global $mybb;
@@ -2020,6 +2067,7 @@ function af_aa_build_studio_form_html(string $do, array $preset, array $settings
         default:
             $html .= af_aa_build_profile_fields_html($settings, false);
             $html .= af_aa_build_postbit_fields_html($settings, false);
+            $html .= af_aa_build_surface_fields_html($settings);
             $html .= '<section class="af-aa-panel af-aa-form-section">';
             $html .= '<h3 class="af-aa-panel__title">Пользовательский CSS</h3>';
             $html .= '<div class="af-aa-form-grid">';

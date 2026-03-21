@@ -53,6 +53,11 @@ class AF_Admin_Advancedprofileui
             'af_' . AF_APUI_ID . '_inventory_panel_bg',
             'af_' . AF_APUI_ID . '_inventory_panel_border',
             'af_' . AF_APUI_ID . '_inventory_css',
+            'af_' . AF_APUI_ID . '_achievements_bg_url',
+            'af_' . AF_APUI_ID . '_achievements_bg_overlay',
+            'af_' . AF_APUI_ID . '_achievements_panel_bg',
+            'af_' . AF_APUI_ID . '_achievements_panel_border',
+            'af_' . AF_APUI_ID . '_achievements_css',
         ];
 
         if ($mybb->request_method === 'post' && $mybb->get_input('save_apui_settings') === '1') {
@@ -99,7 +104,7 @@ class AF_Admin_Advancedprofileui
         echo '<input type="hidden" name="save_apui_settings" value="1">';
 
         echo '<div class="page_messagetype">';
-        echo '<p>Здесь задаются базовые стили APUI для member_profile, postbit_classic, character sheet, application и inventory. AdvancedAppearance может частично перекрывать эти значения пресетом.</p>';
+        echo '<p>Здесь задаются базовые стили APUI для member_profile, postbit_classic, sheet, application, inventory и achievements. AdvancedAppearance может частично перекрывать эти значения пресетом без сброса уже сохранённых setting values.</p>';
         echo '</div>';
 
         echo '<table class="table table-bordered">';
@@ -140,6 +145,12 @@ class AF_Admin_Advancedprofileui
         echo '<tr><td><strong>Panel/card background</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_inventory_panel_bg" value="' . $values['af_' . AF_APUI_ID . '_inventory_panel_bg'] . '"></td></tr>';
         echo '<tr><td><strong>Panel/card border</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_inventory_panel_border" value="' . $values['af_' . AF_APUI_ID . '_inventory_panel_border'] . '"></td></tr>';
         echo '<tr><td><strong>Custom CSS</strong></td><td><textarea name="af_' . AF_APUI_ID . '_inventory_css" rows="8" style="width:100%;">' . $values['af_' . AF_APUI_ID . '_inventory_css'] . '</textarea></td></tr>';
+        echo '<tr><th colspan="2">achievements</th></tr>';
+        echo '<tr><td><strong>Background image URL</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_achievements_bg_url" value="' . $values['af_' . AF_APUI_ID . '_achievements_bg_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Background overlay</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_achievements_bg_overlay" value="' . $values['af_' . AF_APUI_ID . '_achievements_bg_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>Panel/card background</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_achievements_panel_bg" value="' . $values['af_' . AF_APUI_ID . '_achievements_panel_bg'] . '"></td></tr>';
+        echo '<tr><td><strong>Panel/card border</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_achievements_panel_border" value="' . $values['af_' . AF_APUI_ID . '_achievements_panel_border'] . '"></td></tr>';
+        echo '<tr><td><strong>Custom CSS</strong></td><td><textarea name="af_' . AF_APUI_ID . '_achievements_css" rows="8" style="width:100%;">' . $values['af_' . AF_APUI_ID . '_achievements_css'] . '</textarea></td></tr>';
         echo '</table>';
 
         echo '<div style="margin-top:12px;">';

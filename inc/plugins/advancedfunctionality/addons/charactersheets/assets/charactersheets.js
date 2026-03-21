@@ -58,6 +58,8 @@
 
     var wrap = document.createElement('div');
     wrap.setAttribute('data-afcs-modal', '1');
+    wrap.setAttribute('data-af-modal-kind', 'sheet');
+    wrap.setAttribute('data-af-apui-modal-kind', 'sheet');
     wrap.className = 'af-cs-modal';
 
     wrap.innerHTML =

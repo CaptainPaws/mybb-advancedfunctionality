@@ -106,6 +106,11 @@ function af_apui_ensure_settings(): void
         ['inventory_panel_bg', 'inventory: panel/card background', 'Базовый фон панелей инвентаря.', 'text', 'rgba(21, 25, 34, .92)', 52],
         ['inventory_panel_border', 'inventory: panel/card border', 'Базовая рамка панелей инвентаря.', 'text', 'rgba(255,255,255,.12)', 53],
         ['inventory_css', 'inventory: custom css', 'Дополнительный CSS для инвентаря.', 'textarea', '', 54],
+        ['achievements_bg_url', 'achievements: background image url', 'Базовый фон ачивок.', 'text', '', 60],
+        ['achievements_bg_overlay', 'achievements: background overlay', 'CSS overlay для ачивок.', 'text', 'linear-gradient(180deg, rgba(6, 10, 18, .24) 0%, rgba(6, 10, 18, .78) 100%)', 61],
+        ['achievements_panel_bg', 'achievements: panel/card background', 'Базовый фон панелей ачивок.', 'text', 'rgba(13, 17, 28, .74)', 62],
+        ['achievements_panel_border', 'achievements: panel/card border', 'Базовая рамка панелей ачивок.', 'text', 'rgba(255,255,255,.12)', 63],
+        ['achievements_css', 'achievements: custom css', 'Дополнительный CSS для ачивок.', 'textarea', '', 64],
     ];
 
     foreach ($definitions as $definition) {
@@ -1254,12 +1259,17 @@ function af_apui_build_runtime_style_tag(): string
     $inventoryOverlay = af_apui_css_raw_value(af_apui_get_setting_value('inventory_bg_overlay', 'linear-gradient(180deg, rgba(6, 10, 18, .26) 0%, rgba(6, 10, 18, .72) 100%)'));
     $inventoryPanelBg = af_apui_css_raw_value(af_apui_get_setting_value('inventory_panel_bg', 'rgba(21, 25, 34, .92)'));
     $inventoryPanelBorder = af_apui_css_raw_value(af_apui_get_setting_value('inventory_panel_border', 'rgba(255,255,255,.12)'));
+    $achievementsBg = af_apui_css_url_value(af_apui_get_setting_value('achievements_bg_url', ''));
+    $achievementsOverlay = af_apui_css_raw_value(af_apui_get_setting_value('achievements_bg_overlay', 'linear-gradient(180deg, rgba(6, 10, 18, .24) 0%, rgba(6, 10, 18, .78) 100%)'));
+    $achievementsPanelBg = af_apui_css_raw_value(af_apui_get_setting_value('achievements_panel_bg', 'rgba(13, 17, 28, .74)'));
+    $achievementsPanelBorder = af_apui_css_raw_value(af_apui_get_setting_value('achievements_panel_border', 'rgba(255,255,255,.12)'));
 
     $memberCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('member_profile_css', ''));
     $postbitCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('postbit_css', ''));
     $sheetCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('sheet_css', ''));
     $applicationCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('application_css', ''));
     $inventoryCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('inventory_css', ''));
+    $achievementsCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('achievements_css', ''));
 
     $css = ":root{";
     $css .= "--af-apui-profile-banner-image:" . $profileBanner . ";";
@@ -1282,6 +1292,10 @@ function af_apui_build_runtime_style_tag(): string
     $css .= "--af-apui-modal-inventory-bg-overlay:" . $inventoryOverlay . ";";
     $css .= "--af-apui-modal-inventory-panel-bg:" . $inventoryPanelBg . ";";
     $css .= "--af-apui-modal-inventory-panel-border:" . $inventoryPanelBorder . ";";
+    $css .= "--af-apui-modal-achievements-bg-image:" . $achievementsBg . ";";
+    $css .= "--af-apui-modal-achievements-bg-overlay:" . $achievementsOverlay . ";";
+    $css .= "--af-apui-modal-achievements-panel-bg:" . $achievementsPanelBg . ";";
+    $css .= "--af-apui-modal-achievements-panel-border:" . $achievementsPanelBorder . ";";
     $css .= "}\n";
 
     $css .= "body.af-apui-member-profile-page{";
@@ -1313,6 +1327,10 @@ function af_apui_build_runtime_style_tag(): string
 
     if ($inventoryCss !== '') {
         $css .= "\n/* inventory custom css */\n" . $inventoryCss . "\n";
+    }
+
+    if ($achievementsCss !== '') {
+        $css .= "\n/* achievements custom css */\n" . $achievementsCss . "\n";
     }
 
     return '<style id="af-apui-runtime-css">' . $css . '</style>' . "\n";
