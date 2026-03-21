@@ -172,9 +172,15 @@ function af_aa_register_hooks(): void
 {
     global $plugins;
 
-    // Нам нужен только один защитный hook:
-    // на обычных страницах он вырезает любые AA-assets,
-    // если они случайно попали в вывод.
+    // Сбор uid на страницах с постбитами
+    $plugins->add_hook('postbit', 'af_aa_collect_uid_from_postbit', 50);
+    $plugins->add_hook('postbit_prev', 'af_aa_collect_uid_from_postbit', 50);
+    $plugins->add_hook('postbit_pm', 'af_aa_collect_uid_from_postbit', 50);
+
+    // Сбор uid на странице профиля
+    $plugins->add_hook('member_profile_end', 'af_aa_collect_uid_from_member_profile', 50);
+
+    // Финальный инжект runtime CSS в готовую страницу
     $plugins->add_hook('pre_output_page', 'af_aa_pre_output_page', 1);
 }
 af_aa_register_hooks();
@@ -243,15 +249,48 @@ function af_aa_pre_output_page(string &$page): void
         return;
     }
 
-    // На preview-страницах ничего не трогаем:
-    // там assets подключаются осознанно и локально.
+    // На preview-страницах ничего не трогаем.
     if (af_aa_is_preview_script()) {
         return;
     }
 
-    // На всех остальных фронтовых страницах гарантированно вычищаем
-    // любые следы AdvancedAppearance preview/runtime assets.
+    // Сначала всегда вычищаем preview-assets, если они случайно попали в обычную страницу.
     $page = af_aa_strip_asset_includes($page);
+
+    if (!af_aa_is_enabled()) {
+        return;
+    }
+
+    $uids = [];
+
+    if (!empty($GLOBALS['af_aa_uids_on_page']) && is_array($GLOBALS['af_aa_uids_on_page'])) {
+        foreach ($GLOBALS['af_aa_uids_on_page'] as $uid) {
+            $uid = (int)$uid;
+            if ($uid > 0) {
+                $uids[$uid] = $uid;
+            }
+        }
+    }
+
+    // На случай, если страница профиля не попала в collector по какой-то причине
+    if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'member.php') {
+        global $memprofile;
+        $profileUid = (int)($memprofile['uid'] ?? 0);
+        if ($profileUid > 0) {
+            $uids[$profileUid] = $profileUid;
+        }
+    }
+
+    if (!$uids) {
+        return;
+    }
+
+    $runtimeCss = af_aa_render_page_css(array_values($uids));
+    if ($runtimeCss === '') {
+        return;
+    }
+
+    $page = af_aa_inject_runtime_css($page, $runtimeCss);
 }
 
 function af_aa_strip_asset_includes(string $page): string
@@ -269,6 +308,27 @@ function af_aa_strip_asset_includes(string $page): string
     }
 
     return $page;
+}
+
+function af_aa_inject_runtime_css(string $page, string $css): string
+{
+    $css = trim($css);
+    if ($css === '') {
+        return $page;
+    }
+
+    // если вдруг старый runtime-css уже есть в HTML — убираем, чтобы не плодить дубли
+    $page = (string)preg_replace(
+        '~<style\b[^>]*id=(["\'])af-aa-runtime-css\1[^>]*>.*?</style>\s*~is',
+        '',
+        $page
+    );
+
+    if (stripos($page, '</head>') !== false) {
+        return str_ireplace('</head>', $css . "\n</head>", $page);
+    }
+
+    return $css . "\n" . $page;
 }
 
 function af_aa_add_ver(string $url, string $absFile): string
@@ -302,6 +362,7 @@ function af_aa_get_active_assignment(string $entityType, int $entityId, string $
         return $GLOBALS['af_aa_assignment_cache_runtime'][$cacheKey];
     }
 
+    // 1. Сначала штатный источник: assignments
     $where = "entity_type='" . $db->escape_string($entityType) . "'"
         . " AND entity_id='" . $entityId . "'"
         . " AND target_key='" . $db->escape_string($targetKey) . "'"
@@ -310,21 +371,80 @@ function af_aa_get_active_assignment(string $entityType, int $entityId, string $
     $query = $db->simple_select(AF_AA_ASSIGNMENTS_TABLE_NAME, '*', $where, ['limit' => 1]);
     $row = $db->fetch_array($query);
 
-    if (!is_array($row) && $entityType === 'user' && $targetKey === (AF_AA_TARGET_APUI_FRAGMENT_PACK . ':profile_banner') && $db->table_exists('af_aa_active')) {
-        $active = $db->fetch_array($db->simple_select('af_aa_active', '*', "entity_type='user' AND entity_id='" . $entityId . "' AND target_key='profile_banner' AND is_enabled='1'", ['limit' => 1]));
+    // 2. Fallback на active-слоты из магазина/инвентаря
+    if (!is_array($row) && $entityType === 'user' && $db->table_exists('af_aa_active')) {
+        $active = $db->fetch_array(
+            $db->simple_select(
+                'af_aa_active',
+                '*',
+                "entity_type='user' AND entity_id='" . $entityId . "' AND target_key='" . $db->escape_string($targetKey) . "' AND is_enabled='1'",
+                ['limit' => 1]
+            )
+        );
+
         if (is_array($active)) {
-            $inv = $db->fetch_array($db->simple_select('af_inventory_items', 'kb_key,meta_json', "inv_id='" . (int)$active['item_id'] . "' AND uid='" . $entityId . "'", ['limit' => 1]));
-            $kbKey = trim((string)($inv['kb_key'] ?? ''));
-            $presetId = 0;
-            if (strpos($kbKey, 'appearance:') === 0) {
-                $presetId = (int)substr($kbKey, strlen('appearance:'));
-            }
-            if ($presetId <= 0) {
-                $meta = @json_decode((string)($inv['meta_json'] ?? '{}'), true);
-                if (is_array($meta)) {
-                    $presetId = (int)($meta['appearance']['preset_id'] ?? 0);
+            $itemId = (int)($active['item_id'] ?? 0);
+            $item = [];
+
+            if (($itemId > 0) && (!function_exists('af_inv_get_item_for_owner') || !function_exists('af_advinv_resolve_appearance_item'))) {
+                $invBootstrap = AF_ADDONS . 'advancedinventory/advancedinventory.php';
+                if (is_file($invBootstrap)) {
+                    require_once $invBootstrap;
                 }
             }
+
+            // Новый канон: current inventory
+            if ($itemId > 0 && function_exists('af_inv_get_item_for_owner')) {
+                $item = (array)af_inv_get_item_for_owner($entityId, $itemId);
+            }
+
+            // Fallback напрямую в текущую таблицу
+            if (!$item && $itemId > 0 && $db->table_exists('af_advinv_items')) {
+                $item = (array)$db->fetch_array(
+                    $db->simple_select(
+                        'af_advinv_items',
+                        '*',
+                        "id='" . $itemId . "' AND uid='" . $entityId . "'",
+                        ['limit' => 1]
+                    )
+                );
+            }
+
+            // Legacy fallback
+            if (!$item && $itemId > 0 && $db->table_exists('af_inventory_items')) {
+                $item = (array)$db->fetch_array(
+                    $db->simple_select(
+                        'af_inventory_items',
+                        '*',
+                        "inv_id='" . $itemId . "' AND uid='" . $entityId . "'",
+                        ['limit' => 1]
+                    )
+                );
+            }
+
+            $presetId = 0;
+
+            if ($item) {
+                if (function_exists('af_advinv_resolve_appearance_item')) {
+                    $appearanceInfo = (array)af_advinv_resolve_appearance_item($item);
+                    $presetId = (int)($appearanceInfo['preset_id'] ?? 0);
+                }
+
+                if ($presetId <= 0) {
+                    $kbKey = trim((string)($item['kb_key'] ?? ''));
+                    if (strpos($kbKey, 'appearance:') === 0) {
+                        $presetId = (int)substr($kbKey, strlen('appearance:'));
+                    }
+                }
+
+                if ($presetId <= 0) {
+                    $meta = @json_decode((string)($item['meta_json'] ?? '{}'), true);
+                    if (is_array($meta)) {
+                        $presetId = (int)($meta['appearance']['preset_id'] ?? 0);
+                    }
+                }
+            }
+
             if ($presetId > 0) {
                 $row = [
                     'id' => 0,
@@ -333,6 +453,8 @@ function af_aa_get_active_assignment(string $entityType, int $entityId, string $
                     'target_key' => $targetKey,
                     'preset_id' => $presetId,
                     'is_enabled' => 1,
+                    'created_at' => (int)($active['applied_at'] ?? 0),
+                    'updated_at' => (int)($active['applied_at'] ?? 0),
                 ];
             }
         }
