@@ -1152,7 +1152,7 @@ af-apf-postbit-field {
 /* Rail теперь накладывается поверх слева и НЕ участвует в центрировании контента */
 .af-apui-postbit-rail {
   position: absolute;
-  top: 50%;
+  top: 48%;
   left: var(--af-apui-rail-left);
   transform: translateY(-50%);
   z-index: 6;
