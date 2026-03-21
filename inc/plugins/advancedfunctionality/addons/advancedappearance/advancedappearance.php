@@ -523,6 +523,18 @@ function af_aa_get_apui_defaults(): array
         'postbit_name_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_name_overlay', 'none'), 'none'),
         'postbit_plaque_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('postbit_plaque_bg_url', ''), ''),
         'postbit_plaque_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_plaque_overlay', 'none'), 'none'),
+        'sheet_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('sheet_bg_url', ''), ''),
+        'sheet_bg_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('sheet_bg_overlay', 'none'), 'none'),
+        'sheet_panel_bg' => af_aa_sanitize_overlay(af_aa_get_apui_setting('sheet_panel_bg', 'rgba(0,0,0,.12)'), 'rgba(0,0,0,.12)'),
+        'sheet_panel_border' => af_aa_sanitize_overlay(af_aa_get_apui_setting('sheet_panel_border', 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
+        'application_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('application_bg_url', ''), ''),
+        'application_bg_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('application_bg_overlay', 'none'), 'none'),
+        'application_panel_bg' => af_aa_sanitize_overlay(af_aa_get_apui_setting('application_panel_bg', 'rgba(6,12,26,.58)'), 'rgba(6,12,26,.58)'),
+        'application_panel_border' => af_aa_sanitize_overlay(af_aa_get_apui_setting('application_panel_border', 'rgba(255,255,255,.10)'), 'rgba(255,255,255,.10)'),
+        'inventory_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('inventory_bg_url', ''), ''),
+        'inventory_bg_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('inventory_bg_overlay', 'none'), 'none'),
+        'inventory_panel_bg' => af_aa_sanitize_overlay(af_aa_get_apui_setting('inventory_panel_bg', 'rgba(21,25,34,.92)'), 'rgba(21,25,34,.92)'),
+        'inventory_panel_border' => af_aa_sanitize_overlay(af_aa_get_apui_setting('inventory_panel_border', 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
         'custom_css' => '',
         'fragment_key' => 'profile_banner',
     ];
@@ -627,8 +639,15 @@ function af_aa_build_user_css_payload(int $uid): array
         'postbit_plaque_overlay',
     ];
 
+    $modalKeys = [
+        'sheet_bg_url','sheet_bg_overlay','sheet_panel_bg','sheet_panel_border',
+        'application_bg_url','application_bg_overlay','application_panel_bg','application_panel_border',
+        'inventory_bg_url','inventory_bg_overlay','inventory_panel_bg','inventory_panel_border',
+    ];
+
     $profileSettings = af_aa_merge_keys([], $defaults, $profileKeys);
     $postbitSettings = af_aa_merge_keys([], $defaults, $postbitKeys);
+    $modalSettings = af_aa_merge_keys([], $defaults, $modalKeys);
     $customCssBlocks = [];
 
     $themePack = af_aa_get_user_preset_settings_for_target($uid, AF_AA_TARGET_APUI_THEME_PACK, $defaults);
@@ -636,6 +655,7 @@ function af_aa_build_user_css_payload(int $uid): array
         $themeSettings = (array)$themePack['settings'];
         $profileSettings = af_aa_merge_keys($profileSettings, $themeSettings, $profileKeys);
         $postbitSettings = af_aa_merge_keys($postbitSettings, $themeSettings, $postbitKeys);
+        $modalSettings = af_aa_merge_keys($modalSettings, $themeSettings, $modalKeys);
 
         if (!empty($themeSettings['custom_css'])) {
             $customCssBlocks[] = (string)$themeSettings['custom_css'];
@@ -646,6 +666,7 @@ function af_aa_build_user_css_payload(int $uid): array
     if (!empty($profilePack)) {
         $profilePackSettings = (array)$profilePack['settings'];
         $profileSettings = af_aa_merge_keys($profileSettings, $profilePackSettings, $profileKeys);
+        $modalSettings = af_aa_merge_keys($modalSettings, $profilePackSettings, $modalKeys);
 
         if (!empty($profilePackSettings['custom_css'])) {
             $customCssBlocks[] = (string)$profilePackSettings['custom_css'];
@@ -656,6 +677,7 @@ function af_aa_build_user_css_payload(int $uid): array
     if (!empty($postbitPack)) {
         $postbitPackSettings = (array)$postbitPack['settings'];
         $postbitSettings = af_aa_merge_keys($postbitSettings, $postbitPackSettings, $postbitKeys);
+        $modalSettings = af_aa_merge_keys($modalSettings, $postbitPackSettings, $modalKeys);
 
         if (!empty($postbitPackSettings['custom_css'])) {
             $customCssBlocks[] = (string)$postbitPackSettings['custom_css'];
@@ -735,6 +757,18 @@ function af_aa_build_user_css_payload(int $uid): array
             '--af-apui-postbit-name-overlay' => af_aa_css_raw_value((string)($postbitSettings['postbit_name_overlay'] ?? 'none'), 'none'),
             '--af-apui-postbit-plaque-bg-image' => af_aa_css_url_value((string)($postbitSettings['postbit_plaque_bg_url'] ?? '')),
             '--af-apui-postbit-plaque-overlay' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_overlay'] ?? 'none'), 'none'),
+            '--af-apui-modal-sheet-bg-image' => af_aa_css_url_value((string)($modalSettings['sheet_bg_url'] ?? '')),
+            '--af-apui-modal-sheet-bg-overlay' => af_aa_css_raw_value((string)($modalSettings['sheet_bg_overlay'] ?? 'none'), 'none'),
+            '--af-apui-modal-sheet-panel-bg' => af_aa_css_raw_value((string)($modalSettings['sheet_panel_bg'] ?? 'rgba(0,0,0,.12)'), 'rgba(0,0,0,.12)'),
+            '--af-apui-modal-sheet-panel-border' => af_aa_css_raw_value((string)($modalSettings['sheet_panel_border'] ?? 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
+            '--af-apui-modal-application-bg-image' => af_aa_css_url_value((string)($modalSettings['application_bg_url'] ?? '')),
+            '--af-apui-modal-application-bg-overlay' => af_aa_css_raw_value((string)($modalSettings['application_bg_overlay'] ?? 'none'), 'none'),
+            '--af-apui-modal-application-panel-bg' => af_aa_css_raw_value((string)($modalSettings['application_panel_bg'] ?? 'rgba(6,12,26,.58)'), 'rgba(6,12,26,.58)'),
+            '--af-apui-modal-application-panel-border' => af_aa_css_raw_value((string)($modalSettings['application_panel_border'] ?? 'rgba(255,255,255,.10)'), 'rgba(255,255,255,.10)'),
+            '--af-apui-modal-inventory-bg-image' => af_aa_css_url_value((string)($modalSettings['inventory_bg_url'] ?? '')),
+            '--af-apui-modal-inventory-bg-overlay' => af_aa_css_raw_value((string)($modalSettings['inventory_bg_overlay'] ?? 'none'), 'none'),
+            '--af-apui-modal-inventory-panel-bg' => af_aa_css_raw_value((string)($modalSettings['inventory_panel_bg'] ?? 'rgba(21,25,34,.92)'), 'rgba(21,25,34,.92)'),
+            '--af-apui-modal-inventory-panel-border' => af_aa_css_raw_value((string)($modalSettings['inventory_panel_border'] ?? 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
         ],
         'body' => [
             'overlay' => af_aa_css_raw_value((string)($profileSettings['member_profile_body_overlay'] ?? 'none'), 'none'),
@@ -955,6 +989,19 @@ function af_aa_decode_and_sanitize_preset_settings(string $json, array $defaults
         (string)($decoded['postbit_plaque_overlay'] ?? ''),
         (string)($defaults['postbit_plaque_overlay'] ?? 'none')
     );
+
+    $out['sheet_bg_url'] = af_aa_sanitize_image_url((string)($decoded['sheet_bg_url'] ?? ''), (string)($defaults['sheet_bg_url'] ?? ''));
+    $out['sheet_bg_overlay'] = af_aa_sanitize_overlay((string)($decoded['sheet_bg_overlay'] ?? ''), (string)($defaults['sheet_bg_overlay'] ?? 'none'));
+    $out['sheet_panel_bg'] = af_aa_sanitize_overlay((string)($decoded['sheet_panel_bg'] ?? ''), (string)($defaults['sheet_panel_bg'] ?? 'rgba(0,0,0,.12)'));
+    $out['sheet_panel_border'] = af_aa_sanitize_overlay((string)($decoded['sheet_panel_border'] ?? ''), (string)($defaults['sheet_panel_border'] ?? 'rgba(255,255,255,.12)'));
+    $out['application_bg_url'] = af_aa_sanitize_image_url((string)($decoded['application_bg_url'] ?? ''), (string)($defaults['application_bg_url'] ?? ''));
+    $out['application_bg_overlay'] = af_aa_sanitize_overlay((string)($decoded['application_bg_overlay'] ?? ''), (string)($defaults['application_bg_overlay'] ?? 'none'));
+    $out['application_panel_bg'] = af_aa_sanitize_overlay((string)($decoded['application_panel_bg'] ?? ''), (string)($defaults['application_panel_bg'] ?? 'rgba(6,12,26,.58)'));
+    $out['application_panel_border'] = af_aa_sanitize_overlay((string)($decoded['application_panel_border'] ?? ''), (string)($defaults['application_panel_border'] ?? 'rgba(255,255,255,.10)'));
+    $out['inventory_bg_url'] = af_aa_sanitize_image_url((string)($decoded['inventory_bg_url'] ?? ''), (string)($defaults['inventory_bg_url'] ?? ''));
+    $out['inventory_bg_overlay'] = af_aa_sanitize_overlay((string)($decoded['inventory_bg_overlay'] ?? ''), (string)($defaults['inventory_bg_overlay'] ?? 'none'));
+    $out['inventory_panel_bg'] = af_aa_sanitize_overlay((string)($decoded['inventory_panel_bg'] ?? ''), (string)($defaults['inventory_panel_bg'] ?? 'rgba(21,25,34,.92)'));
+    $out['inventory_panel_border'] = af_aa_sanitize_overlay((string)($decoded['inventory_panel_border'] ?? ''), (string)($defaults['inventory_panel_border'] ?? 'rgba(255,255,255,.12)'));
 
     $out['custom_css'] = af_aa_sanitize_custom_css((string)($decoded['custom_css'] ?? ''));
     $out['fragment_key'] = af_aa_sanitize_fragment_key(
