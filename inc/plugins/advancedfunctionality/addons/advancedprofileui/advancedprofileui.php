@@ -566,7 +566,9 @@ function af_apui_build_postbit_action_button(array $config): string
 
     $titleRaw = trim((string)($config['title'] ?? $labelRaw));
     $icon = (string)($config['icon'] ?? 'fa-solid fa-up-right-from-square');
-    $extraAttrs = (string)($config['extra_attrs'] ?? '');
+    $extraAttrs = trim((string)($config['extra_attrs'] ?? ''));
+    $useApuiModal = array_key_exists('use_apui_modal', $config) ? (bool)$config['use_apui_modal'] : true;
+    $modalKind = trim((string)($config['modal_kind'] ?? 'iframe'));
 
     $label = htmlspecialchars_uni($labelRaw);
     $title = htmlspecialchars_uni($titleRaw);
@@ -581,12 +583,42 @@ function af_apui_build_postbit_action_button(array $config): string
         . (string)($config['compat_class'] ?? '')
     );
 
-    return '<a class="' . $classes . '" href="' . $url . '"'
-        . ' data-af-apui-modal-url="' . $modalUrl . '"'
-        . ' data-af-apui-modal-title="' . $title . '"'
+    $attrs = '';
+
+    if ($useApuiModal && $modalUrlRaw !== '') {
+        $attrs .= ' data-af-apui-modal-url="' . $modalUrl . '"';
+        $attrs .= ' data-af-apui-modal-title="' . $title . '"';
+
+        if ($modalKind !== '') {
+            $attrs .= ' data-af-apui-modal-kind="' . htmlspecialchars_uni($modalKind) . '"';
+        }
+    }
+
+    if (!empty($config['data_attrs']) && is_array($config['data_attrs'])) {
+        foreach ($config['data_attrs'] as $attrName => $attrValue) {
+            $attrName = trim((string)$attrName);
+
+            if (
+                $attrName === ''
+                || !preg_match('~^[a-zA-Z_:][a-zA-Z0-9:._-]*$~', $attrName)
+                || $attrValue === null
+                || $attrValue === false
+            ) {
+                continue;
+            }
+
+            $attrs .= ' ' . $attrName . '="' . htmlspecialchars_uni((string)$attrValue) . '"';
+        }
+    }
+
+    if ($extraAttrs !== '') {
+        $attrs .= ' ' . $extraAttrs;
+    }
+
+    return '<a class="' . htmlspecialchars_uni($classes) . '" href="' . $url . '"'
+        . $attrs
         . ' aria-label="' . $title . '"'
         . ' title="' . $title . '"'
-        . $extraAttrs
         . '>'
         . '<span class="af-apui-postbit-action__icon" aria-hidden="true"><i class="' . htmlspecialchars_uni($icon) . '"></i></span>'
         . '<span class="af-apui-postbit-action__label">' . $label . '</span>'
@@ -616,6 +648,103 @@ function af_apui_resolve_application_url(array $post, array $sheetPayload = []):
     return '';
 }
 
+function af_apui_is_ajax_like_url(string $url): bool
+{
+    $url = af_apui_decode_action_url($url);
+    if ($url === '') {
+        return false;
+    }
+
+    return (bool)preg_match(
+        '~(?:^|[?&])(ajax=1|action=(?:af_charactersheet_api|cs_[^&]*_ajax))(?:[&]|$)~i',
+        $url
+    );
+}
+
+function af_apui_resolve_application_fetch_url(array $sheetPayload): string
+{
+    $application = (array)($sheetPayload['application'] ?? []);
+
+    $topicUrl = af_apui_decode_action_url((string)($application['topic_url'] ?? ($sheetPayload['application_topic_url'] ?? $sheetPayload['application_url'] ?? '')));
+    $postUrl = af_apui_decode_action_url((string)($application['post_url'] ?? ($sheetPayload['application_post_url'] ?? '')));
+    $embedUrl = af_apui_decode_action_url((string)($application['embed_url'] ?? ($sheetPayload['application_embed_url'] ?? '')));
+    $tid = (int)($application['tid'] ?? ($sheetPayload['application_tid'] ?? 0));
+    $pid = (int)($application['pid'] ?? ($sheetPayload['application_pid'] ?? 0));
+
+    // 1) Для fetch нам нужна НОРМАЛЬНАЯ страница темы/поста, а не ajax/api endpoint.
+    if ($topicUrl !== '' && !af_apui_is_ajax_like_url($topicUrl)) {
+        return $topicUrl;
+    }
+
+    if ($tid > 0) {
+        $built = af_apui_build_application_thread_url($tid, $pid);
+        if ($built !== '' && !af_apui_is_ajax_like_url($built)) {
+            return $built;
+        }
+    }
+
+    if ($postUrl !== '' && !af_apui_is_ajax_like_url($postUrl)) {
+        return $postUrl;
+    }
+
+    // 2) embed_url используем только как запасной вариант и только если он не ajax-like.
+    if ($embedUrl !== '' && !af_apui_is_ajax_like_url($embedUrl)) {
+        return $embedUrl;
+    }
+
+    // 3) Последний фолбэк — хоть что-то, если больше ничего нет.
+    if ($topicUrl !== '') {
+        return $topicUrl;
+    }
+
+    if ($tid > 0) {
+        return af_apui_build_application_thread_url($tid, $pid);
+    }
+
+    if ($postUrl !== '') {
+        return $postUrl;
+    }
+
+    return $embedUrl;
+}
+
+function af_apui_resolve_application_pid(array $sheetPayload): int
+{
+    $application = (array)($sheetPayload['application'] ?? []);
+
+    $pid = (int)($application['pid'] ?? ($sheetPayload['application_pid'] ?? 0));
+    if ($pid > 0) {
+        return $pid;
+    }
+
+    $candidates = [
+        (string)($application['topic_url'] ?? ''),
+        (string)($sheetPayload['application_topic_url'] ?? ''),
+        (string)($application['post_url'] ?? ''),
+        (string)($sheetPayload['application_post_url'] ?? ''),
+        (string)($application['embed_url'] ?? ''),
+        (string)($sheetPayload['application_embed_url'] ?? ''),
+    ];
+
+    foreach ($candidates as $candidate) {
+        $candidate = af_apui_decode_action_url($candidate);
+        if ($candidate === '') {
+            continue;
+        }
+
+        $pid = af_apui_extract_query_int_from_url($candidate, 'pid');
+        if ($pid > 0) {
+            return $pid;
+        }
+
+        if (preg_match('~#pid(\d+)~i', $candidate, $m)) {
+            return (int)$m[1];
+        }
+    }
+
+    return 0;
+}
+
 function af_apui_build_postbit_actionbar_html(array $post, array $sheetPayload = []): string
 {
     $uid = (int)($post['uid'] ?? 0);
@@ -626,16 +755,33 @@ function af_apui_build_postbit_actionbar_html(array $post, array $sheetPayload =
     $buttons = [];
 
     $applicationUrl = af_apui_resolve_application_url($post, $sheetPayload);
-    $application = (array)($sheetPayload['application'] ?? []);
-    $applicationModalUrl = af_apui_decode_action_url((string)($application['embed_url'] ?? ($sheetPayload['application_embed_url'] ?? '')));
-    if ($applicationUrl !== '' && $applicationModalUrl !== '') {
+    $applicationFetchUrl = af_apui_resolve_application_fetch_url($sheetPayload);
+    $applicationPid = af_apui_resolve_application_pid($sheetPayload);
+
+    if ($applicationUrl !== '') {
+        $fragmentSelector = '';
+        if ($applicationPid > 0) {
+            $fragmentSelector =
+                '#post_' . $applicationPid
+                . ', [data-pid="' . $applicationPid . '"]'
+                . ', #pid' . $applicationPid
+                . ', a[name="pid' . $applicationPid . '"]';
+        }
+
         $buttons[] = af_apui_build_postbit_action_button([
             'label' => 'Анкета',
             'title' => 'Анкета',
             'url' => $applicationUrl,
-            'modal_url' => $applicationModalUrl,
+            'modal_url' => $applicationFetchUrl !== '' ? $applicationFetchUrl : $applicationUrl,
+            'modal_kind' => 'application',
             'icon' => 'fa-regular fa-id-card',
             'modifier' => 'af-apui-postbit-action--application',
+            'data_attrs' => [
+                'data-af-apui-fetch-url' => $applicationFetchUrl !== '' ? $applicationFetchUrl : $applicationUrl,
+                'data-af-apui-source-url' => $applicationUrl,
+                'data-af-apui-application-pid' => $applicationPid > 0 ? (string)$applicationPid : null,
+                'data-af-apui-fragment-selector' => $fragmentSelector !== '' ? $fragmentSelector : null,
+            ],
         ]);
     }
 
@@ -653,7 +799,7 @@ function af_apui_build_postbit_actionbar_html(array $post, array $sheetPayload =
 
     if ($sheetUrl !== '') {
         $sheetExtraAttrs =
-            ' data-afcs-open="1"'
+            'data-afcs-open="1"'
             . ' data-afcs-sheet="' . htmlspecialchars_uni($sheetUrl) . '"'
             . ' data-slug="' . htmlspecialchars_uni((string)($sheetPayload['sheet_slug'] ?? '')) . '"';
 
@@ -665,6 +811,7 @@ function af_apui_build_postbit_actionbar_html(array $post, array $sheetPayload =
             'modifier' => 'af-apui-postbit-action--sheet',
             'compat_class' => 'af-cs-plaque__btn',
             'extra_attrs' => $sheetExtraAttrs,
+            'use_apui_modal' => false,
         ]);
     }
 
@@ -672,6 +819,7 @@ function af_apui_build_postbit_actionbar_html(array $post, array $sheetPayload =
         'label' => 'Инвентарь',
         'title' => 'Инвентарь',
         'url' => 'inventory.php?uid=' . $uid,
+        'modal_kind' => 'inventory',
         'icon' => 'fa-solid fa-box-archive',
         'modifier' => 'af-apui-postbit-action--inventory',
     ]);
@@ -680,6 +828,7 @@ function af_apui_build_postbit_actionbar_html(array $post, array $sheetPayload =
         'label' => 'Ачивки',
         'title' => 'Ачивки',
         'url' => 'achivments.php?uid=' . $uid,
+        'modal_kind' => 'achievements',
         'icon' => 'fa-solid fa-trophy',
         'modifier' => 'af-apui-postbit-action--achievements',
     ]);
