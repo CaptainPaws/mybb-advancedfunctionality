@@ -571,6 +571,8 @@ function af_apui_build_postbit_action_button(array $config): string
     $label = htmlspecialchars_uni($labelRaw);
     $title = htmlspecialchars_uni($titleRaw);
     $url = htmlspecialchars_uni($urlRaw);
+    $modalUrlRaw = af_apui_decode_action_url((string)($config['modal_url'] ?? $urlRaw));
+    $modalUrl = htmlspecialchars_uni($modalUrlRaw);
 
     $classes = trim(
         'af-apui-postbit-action '
@@ -580,7 +582,7 @@ function af_apui_build_postbit_action_button(array $config): string
     );
 
     return '<a class="' . $classes . '" href="' . $url . '"'
-        . ' data-af-apui-modal-url="' . $url . '"'
+        . ' data-af-apui-modal-url="' . $modalUrl . '"'
         . ' data-af-apui-modal-title="' . $title . '"'
         . ' aria-label="' . $title . '"'
         . ' title="' . $title . '"'
@@ -593,102 +595,24 @@ function af_apui_build_postbit_action_button(array $config): string
 
 function af_apui_resolve_application_url(array $post, array $sheetPayload = []): string
 {
-    $sources = [
-        $sheetPayload,
-        $post,
-    ];
+    $application = (array)($sheetPayload['application'] ?? []);
+    $canonicalUrl = af_apui_decode_action_url((string)($application['topic_url'] ?? ($sheetPayload['application_topic_url'] ?? $sheetPayload['application_url'] ?? '')));
+    $postUrl = af_apui_decode_action_url((string)($application['post_url'] ?? ($sheetPayload['application_post_url'] ?? '')));
+    $tid = (int)($application['tid'] ?? ($sheetPayload['application_tid'] ?? 0));
+    $pid = (int)($application['pid'] ?? ($sheetPayload['application_pid'] ?? 0));
 
-    $urlKeys = [
-        'application_url',
-        'application_link',
-        'application_href',
-        'application_thread_url',
-        'application_post_url',
-        'app_url',
-        'af_apui_application_url',
-        'af_application_url',
-        'af_cs_application_url',
-    ];
-
-    foreach ($sources as $source) {
-        foreach ($urlKeys as $key) {
-            $candidate = af_apui_decode_action_url((string)($source[$key] ?? ''));
-            if ($candidate === '') {
-                continue;
-            }
-
-            $parts = parse_url($candidate);
-            $path = strtolower((string)($parts['path'] ?? ''));
-
-            $query = [];
-            if (!empty($parts['query'])) {
-                parse_str((string)$parts['query'], $query);
-            }
-
-            $tid = isset($query['tid']) ? (int)$query['tid'] : 0;
-            $pid = isset($query['pid']) ? (int)$query['pid'] : 0;
-            $action = strtolower((string)($query['action'] ?? ''));
-
-            // Уже готовая ссылка на тему/пост анкеты
-            if ($path !== '' && preg_match('~(?:^|/)showthread\.php$~i', $path)) {
-                return af_apui_build_application_thread_url($tid, $pid);
-            }
-
-            // Ссылка вида charactersheets.php?action=application&tid=33
-            // конвертируем в реальную тему анкеты
-            if ($path !== '' && preg_match('~(?:^|/)charactersheets\.php$~i', $path) && $action === 'application' && $tid > 0) {
-                return af_apui_build_application_thread_url($tid, $pid);
-            }
-        }
+    if ($canonicalUrl !== '') {
+        return $canonicalUrl;
     }
 
-    $tidKeys = [
-        'application_tid',
-        'application_thread_id',
-        'application_topic_id',
-        'thread_tid',
-        'tid',
-        'af_application_tid',
-        'af_cs_application_tid',
-    ];
-
-    $pidKeys = [
-        'application_pid',
-        'application_post_id',
-        'application_first_pid',
-        'pid',
-        'af_application_pid',
-        'af_cs_application_pid',
-    ];
-
-    $resolvedTid = 0;
-    $resolvedPid = 0;
-
-    foreach ($sources as $source) {
-        foreach ($tidKeys as $key) {
-            $value = (int)($source[$key] ?? 0);
-            if ($value > 0) {
-                $resolvedTid = $value;
-                break 2;
-            }
-        }
+    if ($tid > 0) {
+        return af_apui_build_application_thread_url($tid, $pid);
     }
 
-    foreach ($sources as $source) {
-        foreach ($pidKeys as $key) {
-            $value = (int)($source[$key] ?? 0);
-            if ($value > 0) {
-                $resolvedPid = $value;
-                break 2;
-            }
-        }
+    if ($postUrl !== '') {
+        return $postUrl;
     }
 
-    if ($resolvedTid > 0) {
-        return af_apui_build_application_thread_url($resolvedTid, $resolvedPid);
-    }
-
-    // БОЛЬШЕ НЕ открываем профиль как ложный fallback.
     return '';
 }
 
@@ -702,11 +626,14 @@ function af_apui_build_postbit_actionbar_html(array $post, array $sheetPayload =
     $buttons = [];
 
     $applicationUrl = af_apui_resolve_application_url($post, $sheetPayload);
-    if ($applicationUrl !== '') {
+    $application = (array)($sheetPayload['application'] ?? []);
+    $applicationModalUrl = af_apui_decode_action_url((string)($application['embed_url'] ?? ($sheetPayload['application_embed_url'] ?? '')));
+    if ($applicationUrl !== '' && $applicationModalUrl !== '') {
         $buttons[] = af_apui_build_postbit_action_button([
             'label' => 'Анкета',
             'title' => 'Анкета',
             'url' => $applicationUrl,
+            'modal_url' => $applicationModalUrl,
             'icon' => 'fa-regular fa-id-card',
             'modifier' => 'af-apui-postbit-action--application',
         ]);

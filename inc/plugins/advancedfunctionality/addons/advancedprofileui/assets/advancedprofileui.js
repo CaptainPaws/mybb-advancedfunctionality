@@ -334,8 +334,6 @@
 
     var basePath = raw.split('?')[0].toLowerCase();
 
-    // Для темы анкеты не добавляем ajax=1,
-    // чтобы в iframe открывалась нормальная страница темы
     if (/(^|\/)showthread\.php$/i.test(basePath)) {
       return raw + hash;
     }
