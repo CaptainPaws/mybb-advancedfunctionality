@@ -1,6 +1,11 @@
 .af-inv-page {
   display: grid;
   gap: 16px;
+  min-height: 100%;
+}
+
+.af-apui-surface-page[data-af-apui-surface="inventory"] {
+  box-sizing: border-box;
 }
 
 .af-inv-head {
@@ -9,6 +14,10 @@
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 18px;
+  padding: 18px;
+  background: #151922;
 }
 
 .af-inv-head h1 {
@@ -79,6 +88,10 @@
 .af-inv-tab-content {
   display: block;
   position: relative;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 18px;
+  padding: 18px;
+  background: #151922;
 }
 
 #af-inv-panel {
@@ -89,6 +102,13 @@
   background: #151922;
   color: #eef2ff;
   padding: 18px;
+}
+
+.af-inv-tab-content > #af-inv-panel:first-child {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 #af-inv-panel.is-loading {
