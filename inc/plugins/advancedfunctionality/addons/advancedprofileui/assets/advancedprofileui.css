@@ -400,16 +400,23 @@
   justify-items: center;
 }
 
+.af-apui-postbit-avatar-shell, .af-apui-postbit-rank, .af-apui-postbit-profilefields {margin-left: -25px;}
+
 .af-apui-postbit-avatar-frame {
-  display: inline-block;
-  padding: 6px;
-  border: 2px solid rgba(255,255,255,.2);
-  border-radius: 10px;
-  background: rgba(0,0,0,.22);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 4px 1px 8px;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 6px;
+  background: rgba(19, 19, 19, 0.47);
+  backdrop-filter: blur(6px);
+  box-sizing: border-box;
 }
 
 .af-apui-postbit-avatar-frame img {
   display: block;
+  border: 1px solid rgba(255,255,255,.2);
   max-width: 100%;
   height: auto;
 }
@@ -479,8 +486,9 @@
 }
 
 .af-apui-postbit-userdetails .af-apui-stat-item__icon .fa-solid {
-  font-size: 11px;
+  font-size: 9px;
   line-height: 1;
+  cursor: pointer;
 }
 
 .af-apui-postbit-userdetails .af-apui-stat-item__value {
@@ -955,21 +963,12 @@
   }
 }
 
-.af-apf-postbit-field {text-align: justify;
+af-apf-postbit-field {
+  text-align: justify;
   font-size: 11px;
   font-variant: small-caps;
   text-transform: lowercase;
-  color: #bbb;}
-
-.af-apui-postbit-profilefields {
-  width: 100%;
-  display: block;
-  background: rgba(19, 19, 19, 0.54);
-  border-top: 1px solid rgba(255, 255, 255, .10);
-  border-radius: 0px;
-  padding: 15px;
-  backdrop-filter: blur(6px);
-  margin-bottom: -16px;
+  color: #bbb;
 }
 
 .af-apui-postbit-userdetails {
@@ -1023,4 +1022,531 @@
 
 .af-apui-postbit-author {
   position: relative;
+}
+
+/* =========================================================
+   APUI RESPONSIVE / RAIL OVERRIDE V5
+   - rail больше не сдвигает основной контент
+   - аватар, ранг и поля реально центрируются
+   - ник и плашка во всю ширину
+   ========================================================= */
+
+:root {
+  --af-apui-rail-tile-size: 24px;
+  --af-apui-rail-gap: 6px;
+  --af-apui-rail-left: 8px;
+  --af-apui-rail-top: 64px;
+  --af-apui-rail-bubble-bg: rgba(12, 16, 28, .94);
+  --af-apui-rail-bubble-border: rgba(255,255,255,.14);
+}
+
+/* Сбрасываем старые ручные сдвиги */
+.af-apui-postbit-avatar-shell,
+.af-apui-postbit-rank,
+.af-apui-postbit-groupimage,
+.af-apui-postbit-stars,
+.af-apui-postbit-profilefields,
+.af-apui-postbit-rail {
+  margin-left: 0 !important;
+}
+
+/* Базовая компоновка карточки автора */
+.af-apui-postbit-author__inner {
+  --af-apui-author-inner-pad: 14px;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 100%;
+  padding: var(--af-apui-author-inner-pad);
+  box-sizing: border-box;
+  text-align: center;
+}
+
+/* Ник — во всю ширину */
+.af-apui-postbit-name-wrap {
+  width: calc(100% + (var(--af-apui-author-inner-pad) * 2));
+  margin:
+    calc(var(--af-apui-author-inner-pad) * -1)
+    calc(var(--af-apui-author-inner-pad) * -1)
+    12px
+    calc(var(--af-apui-author-inner-pad) * -1);
+  box-sizing: border-box;
+  border-radius: 12px 12px 0 0;
+}
+
+/* Аватар реально по центру */
+.af-apui-postbit-avatar-shell {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: auto auto 0 auto !important;
+}
+
+
+
+.af-apui-postbit-avatar-frame img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+/* Ранг и прочее строго по центру */
+.af-apui-postbit-rank,
+.af-apui-postbit-groupimage,
+.af-apui-postbit-stars {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  margin: 0 auto !important;
+}
+
+.af-apui-postbit-rank {
+  opacity: .92;
+}
+
+/* Поля профиля по центру */
+.af-apui-postbit-profilefields {
+  width: min(88%, 260px);
+  display: block;
+  background: rgba(19, 19, 19, 0.47);
+  border: 1px solid rgba(255, 255, 255, .10);
+  border-radius: 8px;
+  padding: 15px;
+  backdrop-filter: blur(6px);
+  box-sizing: border-box;
+  margin-top: -20px;
+  text-align: justify;
+  font-size: 11px;
+  font-variant: small-caps;
+  text-transform: lowercase;
+  color: #bbbbbc;
+}
+
+.af-apui-postbit-profilefields .af-apf-postbit-field {
+  display: block;
+}
+
+/* Плашка во всю ширину */
+.af-apui-postbit-plaque-slot {
+  width: calc(100% + (var(--af-apui-author-inner-pad) * 2));
+  margin:
+    12px
+    calc(var(--af-apui-author-inner-pad) * -1)
+    calc(var(--af-apui-author-inner-pad) * -1)
+    calc(var(--af-apui-author-inner-pad) * -1);
+  box-sizing: border-box;
+}
+
+.af-apui-postbit-plaque {
+  margin: 0;
+  border-radius: 0 0 12px 12px;
+}
+
+/* Rail теперь накладывается поверх слева и НЕ участвует в центрировании контента */
+.af-apui-postbit-rail {
+  position: absolute;
+  top: 50%;
+  left: var(--af-apui-rail-left);
+  transform: translateY(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: auto;
+  min-height: 0;
+  padding: 0;
+  box-sizing: border-box;
+  border-radius: 0;
+  backdrop-filter: none;
+  background: none;
+}
+
+.af-apui-postbit-rail .af-apui-postbit-userdetails,
+.af-apui-postbit-rail .af-apui-postbit-actions {
+  width: 100%;
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--af-apui-rail-gap);
+  margin: 0 !important;
+  padding: 0 !important;
+  background: none !important;
+  border: 0 !important;
+  backdrop-filter: none !important;
+  overflow: visible !important;
+}
+
+.af-apui-postbit-rail .af-apui-stat-item,
+.af-apui-postbit-rail .af-apui-postbit-action {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--af-apui-rail-tile-size);
+  min-width: var(--af-apui-rail-tile-size);
+  height: var(--af-apui-rail-tile-size);
+  min-height: var(--af-apui-rail-tile-size);
+  padding: 0;
+  gap: 0;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 6px;
+  background: rgba(19, 19, 19, 0.47);
+  box-shadow: 0 6px 16px rgba(0,0,0,.16);
+  box-sizing: border-box;
+  margin-left: -10px;
+}
+
+.af-apui-postbit-rail .af-apui-postbit-action__icon,
+.af-apui-postbit-rail .af-apui-stat-item__icon {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.af-apui-postbit-rail .af-apui-postbit-action__icon i,
+.af-apui-postbit-rail .af-apui-stat-item__icon i {
+  font-size: 9px;
+  line-height: 1;
+}
+
+.af-apui-postbit-rail .af-apui-stat-item__value {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  max-width: 180px;
+  padding: 6px 10px;
+  border: 1px solid var(--af-apui-rail-bubble-border);
+  border-radius: 999px;
+  background: var(--af-apui-rail-bubble-bg);
+  box-shadow: 0 8px 18px rgba(0,0,0,.22);
+  color: #eef2ff;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 7;
+}
+
+.af-apui-postbit-rail .af-apui-stat-item:hover .af-apui-stat-item__value,
+.af-apui-postbit-rail .af-apui-stat-item:focus-within .af-apui-stat-item__value,
+.af-apui-postbit-rail .af-apui-stat-item.is-open .af-apui-stat-item__value {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-50%) translateX(0);
+  pointer-events: auto;
+}
+
+/* ---------- DESKTOP ---------- */
+@media (min-width: 1025px) {
+  .af-apui-postbit-author__inner {
+    min-height: 100%;
+  }
+}
+
+/* ---------- TABLETS ---------- */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .af-apui-postbit {
+    grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) !important;
+    gap: 10px;
+  }
+
+  .post.classic .post_content.af-apui-postbit-content {
+    padding: 10px !important;
+  }
+
+  .af-apui-postbit-author__inner {
+    --af-apui-author-inner-pad: 12px;
+  }
+
+  .af-apui-postbit-avatar-frame img {
+    max-width: 170px;
+    height: auto;
+  }
+
+  .af-apui-postbit-rail .af-apui-stat-item,
+  .af-apui-postbit-rail .af-apui-postbit-action {
+    width: 26px;
+    min-width: 26px;
+    height: 26px;
+    min-height: 26px;
+  }
+
+  .af-apui-postbit-rail .af-apui-postbit-action__icon i,
+  .af-apui-postbit-rail .af-apui-stat-item__icon i {
+    font-size: 10px;
+  }
+
+  .af-apui-postbit-rail .af-apui-stat-item__value {
+    font-size: 10px;
+  }
+}
+
+/* ---------- SMARTPHONES: PROFILE ---------- */
+@media (max-width: 767px) {
+  .af-apui-profile-page {
+    margin: 10px;
+    gap: 12px;
+  }
+
+  .af-apui-profile-hero {
+    min-height: 0;
+  }
+
+  .af-apui-profile-hero__banner {
+    height: 140px;
+  }
+
+  .af-apui-profile-avatar-shell {
+    position: relative;
+    left: auto;
+    bottom: auto;
+    width: 132px;
+    max-width: 100%;
+    margin: 104px auto 0 auto;
+    justify-items: center;
+  }
+
+  .af-apui-profile-avatar-frame {
+    padding: 6px;
+  }
+
+  .af-apui-profile-hero__inner {
+    min-height: 0;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .af-apui-profile-identity {
+    width: 100%;
+    text-align: center;
+  }
+
+  .af-apui-profile-name-wrap {
+    font-size: 24px;
+    margin-bottom: 4px;
+  }
+
+  .af-apui-profile-rank-wrap {
+    margin-bottom: 10px;
+  }
+
+  .af-apui-profile-grouping,
+  .af-apui-profile-presence,
+  .af-apui-profile-statebits {
+    justify-content: center;
+  }
+
+  .af-apui-profile-meta,
+  .af-apui-info-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .af-apui-profile-tabs__nav {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .af-apui-tab {
+    width: 100%;
+  }
+
+  .af-apui-profile-tabs__content {
+    padding: 10px;
+  }
+}
+
+/* ---------- SMARTPHONES: POSTBIT ---------- */
+@media (max-width: 767px) {
+  .af-apui-postbit {
+    grid-template-columns: 1fr !important;
+    gap: 10px;
+  }
+
+  .post.classic .post_author.af-apui-postbit-author {
+    width: 100% !important;
+  }
+
+  .post.classic .post_content.af-apui-postbit-content {
+    padding: 10px !important;
+    min-height: 0;
+  }
+
+  .af-apui-postbit-author__inner {
+    --af-apui-author-inner-pad: 12px;
+    align-items: center;
+    text-align: center;
+  }
+
+  .af-apui-postbit-name-wrap {
+    text-align: center;
+    border-radius: 12px 12px 0 0;
+  }
+
+  .af-apui-postbit-name-wrap a {
+    font-size: 16px;
+    line-height: 1.25;
+  }
+
+  .af-apui-postbit-avatar-shell {
+    width: 100%;
+    justify-content: center;
+    align-items: center;
+    margin: 0 auto !important;
+  }
+
+  .af-apui-postbit-avatar-frame {
+    padding: 4px;
+  }
+
+  .af-apui-postbit-avatar-frame img {
+    width: 84px;
+    max-width: 84px;
+    height: auto;
+  }
+
+  .af-apui-postbit-online {
+    top: 10px;
+    right: 10px;
+  }
+
+  .af-apui-postbit-rank,
+  .af-apui-postbit-groupimage,
+  .af-apui-postbit-stars {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .af-apui-postbit-rail {
+    position: static;
+    top: auto;
+    left: auto;
+    transform: none;
+    width: 100%;
+    min-height: 0;
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .af-apui-postbit-rail .af-apui-postbit-userdetails {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+
+  .af-apui-postbit-rail .af-apui-postbit-actions {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+
+  .af-apui-postbit-rail .af-apui-stat-item,
+  .af-apui-postbit-rail .af-apui-postbit-action {
+    width: 100%;
+    min-width: 0;
+    min-height: 36px;
+    height: 36px;
+  }
+
+  .af-apui-postbit-rail .af-apui-stat-item__value {
+    position: static;
+    transform: none;
+    display: block;
+    max-height: 0;
+    opacity: 0;
+    visibility: hidden;
+    overflow: hidden;
+    padding: 0;
+    margin: 0;
+    background: none;
+    border: 0;
+    box-shadow: none;
+    pointer-events: none;
+    font-size: 10px;
+    line-height: 1.15;
+    white-space: nowrap;
+    transition: max-height .18s ease, opacity .18s ease;
+  }
+
+  .af-apui-postbit-rail .af-apui-stat-item.is-open .af-apui-stat-item__value,
+  .af-apui-postbit-rail .af-apui-stat-item:focus-within .af-apui-stat-item__value {
+    max-height: 32px;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    margin-top: 4px;
+  }
+
+  .af-apui-postbit-profilefields {
+    width: 100%;
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .af-apui-postbit-plaque {
+    min-height: 40px;
+    border-radius: 0 0 12px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .af-apui-profile-hero__banner {
+    height: 120px;
+  }
+
+  .af-apui-profile-avatar-shell {
+    width: 116px;
+    margin-top: 92px;
+  }
+
+  .af-apui-profile-name-wrap {
+    font-size: 21px;
+  }
+
+  .af-apui-postbit-avatar-frame img {
+    width: 72px;
+    max-width: 72px;
+  }
+
+  .af-apui-postbit-rail .af-apui-postbit-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .af-apui-postbit-name-wrap a {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 380px) {
+  .af-apui-postbit-rail .af-apui-postbit-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
