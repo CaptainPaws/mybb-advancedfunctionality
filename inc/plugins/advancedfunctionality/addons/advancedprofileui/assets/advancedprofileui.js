@@ -598,7 +598,7 @@
       return '';
     }
 
-    return '<div class="af-apui-application-fragment">' + html + '</div>';
+    return '<div class="af-apui-application-fragment af-aa-context af-aa-context--application" data-af-apui-surface="application">' + html + '</div>';
   }
 
   function openApplicationModal(opener) {

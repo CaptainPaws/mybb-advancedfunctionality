@@ -33,7 +33,12 @@ function af_advancedprofileui_install(): void
 function af_advancedprofileui_activate(): void
 {
     af_apui_ensure_schema();
+    af_apui_ensure_settings();
     af_apui_apply_overrides();
+
+    if (function_exists('rebuild_settings')) {
+        rebuild_settings();
+    }
 }
 
 function af_advancedprofileui_deactivate(): void
@@ -68,165 +73,116 @@ function af_apui_is_enabled(): bool
 
 function af_apui_ensure_settings(): void
 {
-    if (!function_exists('af_ensure_settinggroup') || !function_exists('af_ensure_setting')) {
+    af_apui_ensure_setting_group();
+
+    $definitions = [
+        ['enabled', 'Включить AdvancedProfileUI', 'Включает подмену шаблонов member_profile и postbit_classic и подключение ассетов.', 'yesno', '1', 1],
+        ['member_profile_body_cover_url', 'member_profile: фон body (большое изображение)', 'URL большого фонового изображения для body на странице профиля.', 'text', '', 2],
+        ['member_profile_body_tile_url', 'member_profile: фон body (бесшовная плитка)', 'URL маленького бесшовного изображения для tiled-фона body.', 'text', '', 3],
+        ['member_profile_body_bg_mode', 'member_profile: режим фона body', 'cover или tile.', 'text', 'cover', 4],
+        ['member_profile_body_overlay', 'member_profile: оверлей фона body', 'CSS background-image слой для оверлея body.', 'text', 'none', 5],
+        ['profile_banner_url', 'member_profile: баннер по умолчанию', 'URL картинки баннера для member_profile.', 'text', '', 6],
+        ['profile_banner_overlay', 'member_profile: оверлей баннера', 'CSS background-image слой для оверлея баннера.', 'text', 'linear-gradient(180deg, rgba(8, 12, 24, 0.06) 0%, rgba(8, 12, 24, 0.30) 42%, rgba(8, 12, 24, 0.82) 100%)', 7],
+        ['member_profile_css', 'member_profile: пользовательский CSS', 'Дополнительный CSS для member_profile.', 'textarea', '', 8],
+        ['postbit_author_bg_url', 'postbit_classic: фон профиля по умолчанию', 'URL фоновой картинки авторского блока postbit.', 'text', '', 20],
+        ['postbit_author_overlay', 'postbit_classic: оверлей фона профиля', 'CSS background-image слой для оверлея авторского блока postbit.', 'text', 'linear-gradient(180deg, rgba(8, 12, 24, 0.06) 0%, rgba(9, 9, 9, 0.87) 42%, rgb(0, 0, 0) 100%)', 21],
+        ['postbit_name_bg_url', 'postbit_classic: фон никнейма по умолчанию', 'URL фоновой картинки для блока никнейма.', 'text', '', 22],
+        ['postbit_name_overlay', 'postbit_classic: оверлей никнейма', 'CSS background-image слой для оверлея блока никнейма.', 'text', 'linear-gradient(180deg, rgba(0, 0, 0, 0.24), rgba(69, 69, 69, 0.28))', 23],
+        ['postbit_plaque_bg_url', 'postbit_classic: фон нижней плашки', 'URL фоновой картинки для нижней плашки postbit.', 'text', '', 24],
+        ['postbit_plaque_overlay', 'postbit_classic: оверлей нижней плашки', 'CSS background-image слой для оверлея нижней плашки postbit.', 'text', 'linear-gradient(180deg, rgba(10, 14, 24, 0.17), rgba(0, 0, 0, 0.85))', 25],
+        ['postbit_css', 'postbit_classic: пользовательский CSS', 'Дополнительный CSS для postbit_classic.', 'textarea', '', 26],
+        ['sheet_bg_url', 'character sheet: background image url', 'Базовый фон листа персонажа.', 'text', '', 30],
+        ['sheet_bg_overlay', 'character sheet: background overlay', 'CSS overlay для листа персонажа.', 'text', 'linear-gradient(180deg, rgba(6, 10, 18, .24) 0%, rgba(6, 10, 18, .78) 100%)', 31],
+        ['sheet_panel_bg', 'character sheet: panel/card background', 'Базовый фон панелей листа персонажа.', 'text', 'rgba(0, 0, 0, 0.12)', 32],
+        ['sheet_panel_border', 'character sheet: panel/card border', 'Базовая рамка панелей листа персонажа.', 'text', 'rgba(255,255,255,.12)', 33],
+        ['sheet_css', 'character sheet: custom css', 'Дополнительный CSS для листа персонажа.', 'textarea', '', 34],
+        ['application_bg_url', 'application: background image url', 'Базовый фон анкеты.', 'text', '', 40],
+        ['application_bg_overlay', 'application: background overlay', 'CSS overlay для анкеты.', 'text', 'linear-gradient(180deg, rgba(6, 10, 18, .20) 0%, rgba(6, 10, 18, .58) 55%, rgba(6, 10, 18, .88) 100%)', 41],
+        ['application_panel_bg', 'application: panel/card background', 'Базовый фон панели анкеты.', 'text', 'rgba(6, 12, 26, .58)', 42],
+        ['application_panel_border', 'application: panel/card border', 'Базовая рамка панели анкеты.', 'text', 'rgba(255,255,255,.10)', 43],
+        ['application_css', 'application: custom css', 'Дополнительный CSS для анкеты.', 'textarea', '', 44],
+        ['inventory_bg_url', 'inventory: background image url', 'Базовый фон инвентаря.', 'text', '', 50],
+        ['inventory_bg_overlay', 'inventory: background overlay', 'CSS overlay для инвентаря.', 'text', 'linear-gradient(180deg, rgba(6, 10, 18, .26) 0%, rgba(6, 10, 18, .72) 100%)', 51],
+        ['inventory_panel_bg', 'inventory: panel/card background', 'Базовый фон панелей инвентаря.', 'text', 'rgba(21, 25, 34, .92)', 52],
+        ['inventory_panel_border', 'inventory: panel/card border', 'Базовая рамка панелей инвентаря.', 'text', 'rgba(255,255,255,.12)', 53],
+        ['inventory_css', 'inventory: custom css', 'Дополнительный CSS для инвентаря.', 'textarea', '', 54],
+    ];
+
+    foreach ($definitions as $definition) {
+        af_apui_ensure_setting_preserve_value(
+            'af_' . AF_APUI_ID . '_' . $definition[0],
+            $definition[1],
+            $definition[2],
+            $definition[3],
+            $definition[4],
+            (int)$definition[5]
+        );
+    }
+}
+
+function af_apui_ensure_setting_group(): int
+{
+    global $db;
+
+    $name = 'af_' . AF_APUI_ID;
+    $gid = (int)$db->fetch_field($db->simple_select('settinggroups', 'gid', "name='" . $db->escape_string($name) . "'", ['limit' => 1]), 'gid');
+    if ($gid > 0) {
+        $db->update_query('settinggroups', [
+            'title' => $db->escape_string('AdvancedProfileUI'),
+            'description' => $db->escape_string('Каркас кастомного UI профиля, postbit и модальных поверхностей с безопасной подменой шаблонов.'),
+        ], "gid='" . $gid . "'");
+        return $gid;
+    }
+
+    $max = (int)$db->fetch_field($db->simple_select('settinggroups', 'MAX(disporder) AS m'), 'm');
+    $db->insert_query('settinggroups', [
+        'name' => $db->escape_string($name),
+        'title' => $db->escape_string('AdvancedProfileUI'),
+        'description' => $db->escape_string('Каркас кастомного UI профиля, postbit и модальных поверхностей с безопасной подменой шаблонов.'),
+        'disporder' => $max + 1,
+        'isdefault' => 0,
+    ]);
+
+    return (int)$db->insert_id();
+}
+
+function af_apui_ensure_setting_preserve_value(string $name, string $title, string $desc, string $type, string $defaultValue, int $disporder): void
+{
+    global $db;
+
+    $gid = af_apui_ensure_setting_group();
+    $escapedName = $db->escape_string($name);
+    $query = $db->simple_select('settings', 'sid', "name='" . $escapedName . "'", ['order_by' => 'sid', 'order_dir' => 'ASC']);
+    $sids = [];
+    while ($row = $db->fetch_array($query)) {
+        $sids[] = (int)$row['sid'];
+    }
+
+    if (empty($sids)) {
+        $db->insert_query('settings', [
+            'name' => $escapedName,
+            'title' => $db->escape_string($title),
+            'description' => $db->escape_string($desc),
+            'optionscode' => $db->escape_string($type),
+            'value' => $db->escape_string($defaultValue),
+            'disporder' => $disporder,
+            'gid' => $gid,
+        ]);
         return;
     }
 
-    af_ensure_settinggroup(
-        'af_' . AF_APUI_ID,
-        'AdvancedProfileUI',
-        'Каркас кастомного UI профиля и postbit_classic с безопасной подменой шаблонов.'
-    );
+    $keepSid = array_shift($sids);
+    if (!empty($sids)) {
+        $db->delete_query('settings', 'sid IN (' . implode(',', array_map('intval', $sids)) . ')');
+    }
 
-    af_ensure_setting(
-        'af_' . AF_APUI_ID,
-        'af_' . AF_APUI_ID . '_enabled',
-        'Включить AdvancedProfileUI',
-        'Включает подмену шаблонов member_profile и postbit_classic и подключение ассетов.',
-        'yesno',
-        '1',
-        1
-    );
-
-    af_ensure_setting(
-        'af_' . AF_APUI_ID,
-        'af_' . AF_APUI_ID . '_member_profile_body_cover_url',
-        'member_profile: фон body (большое изображение)',
-        'URL большого фонового изображения для body на странице профиля.',
-        'text',
-        'https://warprift.ru/uploads/af_gallery/1/2026/03/06994bcde9e4d4c7919130bb88049916.webp',
-        2
-    );
-
-    af_ensure_setting(
-        'af_' . AF_APUI_ID,
-        'af_' . AF_APUI_ID . '_member_profile_body_tile_url',
-        'member_profile: фон body (бесшовная плитка)',
-        'URL маленького бесшовного изображения для tiled-фона body.',
-        'text',
-        '',
-        3
-    );
-
-    af_ensure_setting(
-        'af_' . AF_APUI_ID,
-        'af_' . AF_APUI_ID . '_member_profile_body_bg_mode',
-        'member_profile: режим фона body',
-        'cover или tile.',
-        'text',
-        'cover',
-        4
-    );
-
-    af_ensure_setting(
-        'af_' . AF_APUI_ID,
-        'af_' . AF_APUI_ID . '_member_profile_body_overlay',
-        'member_profile: оверлей фона body',
-        'CSS background-image слой для оверлея body.',
-        'text',
-        'none',
-        5
-    );
-
-    af_ensure_setting(
-        'af_' . AF_APUI_ID,
-        'af_' . AF_APUI_ID . '_profile_banner_url',
-        'member_profile: баннер по умолчанию',
-        'URL картинки баннера для member_profile.',
-        'text',
-        'https://warprift.ru/uploads/af_gallery/1/2026/03/f861bca4f289f989560bd8a641d261fc.webp',
-        6
-    );
-
-    af_ensure_setting(
-        'af_' . AF_APUI_ID,
-        'af_' . AF_APUI_ID . '_profile_banner_overlay',
-        'member_profile: оверлей баннера',
-        'CSS background-image слой для оверлея баннера.',
-        'text',
-        'linear-gradient(180deg, rgba(8, 12, 24, 0.06) 0%, rgba(8, 12, 24, 0.30) 42%, rgba(8, 12, 24, 0.82) 100%)',
-        7
-    );
-
-    af_ensure_setting(
-        'af_' . AF_APUI_ID,
-        'af_' . AF_APUI_ID . '_member_profile_css',
-        'member_profile: пользовательский CSS',
-        'Дополнительный CSS для member_profile.',
-        'textarea',
-        '',
-        8
-    );
-
-    af_ensure_setting(
-        'af_' . AF_APUI_ID,
-        'af_' . AF_APUI_ID . '_postbit_author_bg_url',
-        'postbit_classic: фон профиля по умолчанию',
-        'URL фоновой картинки авторского блока postbit.',
-        'text',
-        'https://warprift.ru/uploads/af_gallery/1/2026/03/e7a9f325d3838aad3e94e3e498f81edd.webp',
-        20
-    );
-
-    af_ensure_setting(
-        'af_' . AF_APUI_ID,
-        'af_' . AF_APUI_ID . '_postbit_author_overlay',
-        'postbit_classic: оверлей фона профиля',
-        'CSS background-image слой для оверлея авторского блока postbit.',
-        'text',
-        'linear-gradient(180deg, rgba(8, 12, 24, 0.06) 0%, rgba(9, 9, 9, 0.87) 42%, rgb(0, 0, 0) 100%)',
-        21
-    );
-
-    af_ensure_setting(
-        'af_' . AF_APUI_ID,
-        'af_' . AF_APUI_ID . '_postbit_name_bg_url',
-        'postbit_classic: фон никнейма по умолчанию',
-        'URL фоновой картинки для блока никнейма.',
-        'text',
-        'https://warprift.ru/uploads/af_gallery/1/2026/03/acb421937b268acaa4a999feac5aedc9.webp',
-        22
-    );
-
-    af_ensure_setting(
-        'af_' . AF_APUI_ID,
-        'af_' . AF_APUI_ID . '_postbit_name_overlay',
-        'postbit_classic: оверлей никнейма',
-        'CSS background-image слой для оверлея блока никнейма.',
-        'text',
-        'linear-gradient(180deg, rgba(0, 0, 0, 0.24), rgba(69, 69, 69, 0.28))',
-        23
-    );
-
-    af_ensure_setting(
-        'af_' . AF_APUI_ID,
-        'af_' . AF_APUI_ID . '_postbit_plaque_bg_url',
-        'postbit_classic: фон нижней плашки',
-        'URL фоновой картинки для нижней плашки postbit.',
-        'text',
-        'https://warprift.ru/uploads/af_gallery/1/2026/03/844fae67d94b689f6e827278722ec152.webp',
-        24
-    );
-
-    af_ensure_setting(
-        'af_' . AF_APUI_ID,
-        'af_' . AF_APUI_ID . '_postbit_plaque_overlay',
-        'postbit_classic: оверлей нижней плашки',
-        'CSS background-image слой для оверлея нижней плашки postbit.',
-        'text',
-        'linear-gradient(180deg, rgba(10, 14, 24, 0.17), rgba(0, 0, 0, 0.85))',
-        25
-    );
-
-    af_ensure_setting(
-        'af_' . AF_APUI_ID,
-        'af_' . AF_APUI_ID . '_postbit_css',
-        'postbit_classic: пользовательский CSS',
-        'Дополнительный CSS для postbit_classic.',
-        'textarea',
-        '',
-        26
-    );
+    $db->update_query('settings', [
+        'title' => $db->escape_string($title),
+        'description' => $db->escape_string($desc),
+        'optionscode' => $db->escape_string($type),
+        'disporder' => $disporder,
+        'gid' => $gid,
+    ], "sid='" . (int)$keepSid . "'");
 }
 
 function af_apui_ensure_schema(): void
@@ -1235,7 +1191,7 @@ function af_apui_sanitize_custom_css(string $css): string
 
 function af_apui_build_runtime_style_tag(): string
 {
-    $profileBanner = af_apui_css_url_value(af_apui_get_setting_value('profile_banner_url', 'https://warprift.ru/uploads/af_gallery/1/2026/03/f861bca4f289f989560bd8a641d261fc.webp'));
+    $profileBanner = af_apui_css_url_value(af_apui_get_setting_value('profile_banner_url', ''));
     $profileBannerOverlay = af_apui_css_raw_value(
         af_apui_get_setting_value(
             'profile_banner_overlay',
@@ -1248,7 +1204,7 @@ function af_apui_build_runtime_style_tag(): string
         $bodyMode = 'cover';
     }
 
-    $bodyCoverImage = af_apui_css_url_value(af_apui_get_setting_value('member_profile_body_cover_url', 'https://warprift.ru/uploads/af_gallery/1/2026/03/06994bcde9e4d4c7919130bb88049916.webp'));
+    $bodyCoverImage = af_apui_css_url_value(af_apui_get_setting_value('member_profile_body_cover_url', ''));
     $bodyTileImage = af_apui_css_url_value(af_apui_get_setting_value('member_profile_body_tile_url', ''));
     $bodyOverlay = af_apui_css_raw_value(af_apui_get_setting_value('member_profile_body_overlay', 'none'));
 
@@ -1266,28 +1222,44 @@ function af_apui_build_runtime_style_tag(): string
     $bodySize = $bodyMode === 'tile' ? 'auto' : 'cover';
 
     $postbitAuthorBg = af_apui_css_url_value(
-        af_apui_get_setting_value('postbit_author_bg_url', 'https://warprift.ru/uploads/af_gallery/1/2026/03/e7a9f325d3838aad3e94e3e498f81edd.webp')
+        af_apui_get_setting_value('postbit_author_bg_url', '')
     );
     $postbitAuthorOverlay = af_apui_css_raw_value(
         af_apui_get_setting_value('postbit_author_overlay', 'linear-gradient(180deg, rgba(8, 12, 24, 0.06) 0%, rgba(24, 24, 24, 0.81) 42%, rgb(0, 0, 0) 100%)')
     );
 
     $postbitNameBg = af_apui_css_url_value(
-        af_apui_get_setting_value('postbit_name_bg_url', 'https://warprift.ru/uploads/af_gallery/1/2026/03/acb421937b268acaa4a999feac5aedc9.webp')
+        af_apui_get_setting_value('postbit_name_bg_url', '')
     );
     $postbitNameOverlay = af_apui_css_raw_value(
         af_apui_get_setting_value('postbit_name_overlay', 'linear-gradient(180deg, rgba(10, 14, 24, .18), rgba(10, 14, 24, .28))')
     );
 
     $postbitPlaqueBg = af_apui_css_url_value(
-        af_apui_get_setting_value('postbit_plaque_bg_url', 'https://warprift.ru/uploads/af_gallery/1/2026/03/844fae67d94b689f6e827278722ec152.webp')
+        af_apui_get_setting_value('postbit_plaque_bg_url', '')
     );
     $postbitPlaqueOverlay = af_apui_css_raw_value(
         af_apui_get_setting_value('postbit_plaque_overlay', 'linear-gradient(180deg, rgba(10, 14, 24, .10), rgba(10, 14, 24, .18))')
     );
 
+    $sheetBg = af_apui_css_url_value(af_apui_get_setting_value('sheet_bg_url', ''));
+    $sheetOverlay = af_apui_css_raw_value(af_apui_get_setting_value('sheet_bg_overlay', 'linear-gradient(180deg, rgba(6, 10, 18, .24) 0%, rgba(6, 10, 18, .78) 100%)'));
+    $sheetPanelBg = af_apui_css_raw_value(af_apui_get_setting_value('sheet_panel_bg', 'rgba(0, 0, 0, 0.12)'));
+    $sheetPanelBorder = af_apui_css_raw_value(af_apui_get_setting_value('sheet_panel_border', 'rgba(255,255,255,.12)'));
+    $applicationBg = af_apui_css_url_value(af_apui_get_setting_value('application_bg_url', ''));
+    $applicationOverlay = af_apui_css_raw_value(af_apui_get_setting_value('application_bg_overlay', 'linear-gradient(180deg, rgba(6, 10, 18, .20) 0%, rgba(6, 10, 18, .58) 55%, rgba(6, 10, 18, .88) 100%)'));
+    $applicationPanelBg = af_apui_css_raw_value(af_apui_get_setting_value('application_panel_bg', 'rgba(6, 12, 26, .58)'));
+    $applicationPanelBorder = af_apui_css_raw_value(af_apui_get_setting_value('application_panel_border', 'rgba(255,255,255,.10)'));
+    $inventoryBg = af_apui_css_url_value(af_apui_get_setting_value('inventory_bg_url', ''));
+    $inventoryOverlay = af_apui_css_raw_value(af_apui_get_setting_value('inventory_bg_overlay', 'linear-gradient(180deg, rgba(6, 10, 18, .26) 0%, rgba(6, 10, 18, .72) 100%)'));
+    $inventoryPanelBg = af_apui_css_raw_value(af_apui_get_setting_value('inventory_panel_bg', 'rgba(21, 25, 34, .92)'));
+    $inventoryPanelBorder = af_apui_css_raw_value(af_apui_get_setting_value('inventory_panel_border', 'rgba(255,255,255,.12)'));
+
     $memberCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('member_profile_css', ''));
     $postbitCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('postbit_css', ''));
+    $sheetCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('sheet_css', ''));
+    $applicationCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('application_css', ''));
+    $inventoryCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('inventory_css', ''));
 
     $css = ":root{";
     $css .= "--af-apui-profile-banner-image:" . $profileBanner . ";";
@@ -1298,6 +1270,18 @@ function af_apui_build_runtime_style_tag(): string
     $css .= "--af-apui-postbit-name-overlay:" . $postbitNameOverlay . ";";
     $css .= "--af-apui-postbit-plaque-bg-image:" . $postbitPlaqueBg . ";";
     $css .= "--af-apui-postbit-plaque-overlay:" . $postbitPlaqueOverlay . ";";
+    $css .= "--af-apui-modal-sheet-bg-image:" . $sheetBg . ";";
+    $css .= "--af-apui-modal-sheet-bg-overlay:" . $sheetOverlay . ";";
+    $css .= "--af-apui-modal-sheet-panel-bg:" . $sheetPanelBg . ";";
+    $css .= "--af-apui-modal-sheet-panel-border:" . $sheetPanelBorder . ";";
+    $css .= "--af-apui-modal-application-bg-image:" . $applicationBg . ";";
+    $css .= "--af-apui-modal-application-bg-overlay:" . $applicationOverlay . ";";
+    $css .= "--af-apui-modal-application-panel-bg:" . $applicationPanelBg . ";";
+    $css .= "--af-apui-modal-application-panel-border:" . $applicationPanelBorder . ";";
+    $css .= "--af-apui-modal-inventory-bg-image:" . $inventoryBg . ";";
+    $css .= "--af-apui-modal-inventory-bg-overlay:" . $inventoryOverlay . ";";
+    $css .= "--af-apui-modal-inventory-panel-bg:" . $inventoryPanelBg . ";";
+    $css .= "--af-apui-modal-inventory-panel-border:" . $inventoryPanelBorder . ";";
     $css .= "}\n";
 
     $css .= "body.af-apui-member-profile-page{";
@@ -1317,6 +1301,18 @@ function af_apui_build_runtime_style_tag(): string
 
     if ($postbitCss !== '') {
         $css .= "\n/* postbit_classic custom css */\n" . $postbitCss . "\n";
+    }
+
+    if ($sheetCss !== '') {
+        $css .= "\n/* character sheet custom css */\n" . $sheetCss . "\n";
+    }
+
+    if ($applicationCss !== '') {
+        $css .= "\n/* application custom css */\n" . $applicationCss . "\n";
+    }
+
+    if ($inventoryCss !== '') {
+        $css .= "\n/* inventory custom css */\n" . $inventoryCss . "\n";
     }
 
     return '<style id="af-apui-runtime-css">' . $css . '</style>' . "\n";

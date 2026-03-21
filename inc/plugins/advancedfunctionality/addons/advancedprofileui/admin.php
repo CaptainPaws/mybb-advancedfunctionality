@@ -30,14 +30,29 @@ class AF_Admin_Advancedprofileui
             'af_' . AF_APUI_ID . '_member_profile_body_overlay',
             'af_' . AF_APUI_ID . '_profile_banner_url',
             'af_' . AF_APUI_ID . '_profile_banner_overlay',
+            'af_' . AF_APUI_ID . '_member_profile_css',
             'af_' . AF_APUI_ID . '_postbit_author_bg_url',
             'af_' . AF_APUI_ID . '_postbit_author_overlay',
             'af_' . AF_APUI_ID . '_postbit_name_bg_url',
             'af_' . AF_APUI_ID . '_postbit_name_overlay',
             'af_' . AF_APUI_ID . '_postbit_plaque_bg_url',
             'af_' . AF_APUI_ID . '_postbit_plaque_overlay',
-            'af_' . AF_APUI_ID . '_member_profile_css',
             'af_' . AF_APUI_ID . '_postbit_css',
+            'af_' . AF_APUI_ID . '_sheet_bg_url',
+            'af_' . AF_APUI_ID . '_sheet_bg_overlay',
+            'af_' . AF_APUI_ID . '_sheet_panel_bg',
+            'af_' . AF_APUI_ID . '_sheet_panel_border',
+            'af_' . AF_APUI_ID . '_sheet_css',
+            'af_' . AF_APUI_ID . '_application_bg_url',
+            'af_' . AF_APUI_ID . '_application_bg_overlay',
+            'af_' . AF_APUI_ID . '_application_panel_bg',
+            'af_' . AF_APUI_ID . '_application_panel_border',
+            'af_' . AF_APUI_ID . '_application_css',
+            'af_' . AF_APUI_ID . '_inventory_bg_url',
+            'af_' . AF_APUI_ID . '_inventory_bg_overlay',
+            'af_' . AF_APUI_ID . '_inventory_panel_bg',
+            'af_' . AF_APUI_ID . '_inventory_panel_border',
+            'af_' . AF_APUI_ID . '_inventory_css',
         ];
 
         if ($mybb->request_method === 'post' && $mybb->get_input('save_apui_settings') === '1') {
@@ -84,7 +99,7 @@ class AF_Admin_Advancedprofileui
         echo '<input type="hidden" name="save_apui_settings" value="1">';
 
         echo '<div class="page_messagetype">';
-        echo '<p>Здесь задаются дефолтные изображения, режимы и оверлеи для member_profile и postbit_classic.</p>';
+        echo '<p>Здесь задаются базовые стили APUI для member_profile, postbit_classic, character sheet, application и inventory. AdvancedAppearance может частично перекрывать эти значения пресетом.</p>';
         echo '</div>';
 
         echo '<table class="table table-bordered">';
@@ -105,6 +120,26 @@ class AF_Admin_Advancedprofileui
         echo '<tr><td><strong>Фон нижней плашки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_bg_url" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_bg_url'] . '"></td></tr>';
         echo '<tr><td><strong>Оверлей нижней плашки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_overlay" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_overlay'] . '"></td></tr>';
         echo '<tr><td><strong>Пользовательский CSS</strong></td><td><textarea name="af_' . AF_APUI_ID . '_postbit_css" rows="10" style="width:100%;">' . $values['af_' . AF_APUI_ID . '_postbit_css'] . '</textarea></td></tr>';
+        echo '<tr><th colspan="2">character sheet</th></tr>';
+        echo '<tr><td><strong>Background image URL</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_sheet_bg_url" value="' . $values['af_' . AF_APUI_ID . '_sheet_bg_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Background overlay</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_sheet_bg_overlay" value="' . $values['af_' . AF_APUI_ID . '_sheet_bg_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>Panel/card background</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_sheet_panel_bg" value="' . $values['af_' . AF_APUI_ID . '_sheet_panel_bg'] . '"></td></tr>';
+        echo '<tr><td><strong>Panel/card border</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_sheet_panel_border" value="' . $values['af_' . AF_APUI_ID . '_sheet_panel_border'] . '"></td></tr>';
+        echo '<tr><td><strong>Custom CSS</strong></td><td><textarea name="af_' . AF_APUI_ID . '_sheet_css" rows="8" style="width:100%;">' . $values['af_' . AF_APUI_ID . '_sheet_css'] . '</textarea></td></tr>';
+
+        echo '<tr><th colspan="2">application</th></tr>';
+        echo '<tr><td><strong>Background image URL</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_application_bg_url" value="' . $values['af_' . AF_APUI_ID . '_application_bg_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Background overlay</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_application_bg_overlay" value="' . $values['af_' . AF_APUI_ID . '_application_bg_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>Panel/card background</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_application_panel_bg" value="' . $values['af_' . AF_APUI_ID . '_application_panel_bg'] . '"></td></tr>';
+        echo '<tr><td><strong>Panel/card border</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_application_panel_border" value="' . $values['af_' . AF_APUI_ID . '_application_panel_border'] . '"></td></tr>';
+        echo '<tr><td><strong>Custom CSS</strong></td><td><textarea name="af_' . AF_APUI_ID . '_application_css" rows="8" style="width:100%;">' . $values['af_' . AF_APUI_ID . '_application_css'] . '</textarea></td></tr>';
+
+        echo '<tr><th colspan="2">inventory</th></tr>';
+        echo '<tr><td><strong>Background image URL</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_inventory_bg_url" value="' . $values['af_' . AF_APUI_ID . '_inventory_bg_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Background overlay</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_inventory_bg_overlay" value="' . $values['af_' . AF_APUI_ID . '_inventory_bg_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>Panel/card background</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_inventory_panel_bg" value="' . $values['af_' . AF_APUI_ID . '_inventory_panel_bg'] . '"></td></tr>';
+        echo '<tr><td><strong>Panel/card border</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_inventory_panel_border" value="' . $values['af_' . AF_APUI_ID . '_inventory_panel_border'] . '"></td></tr>';
+        echo '<tr><td><strong>Custom CSS</strong></td><td><textarea name="af_' . AF_APUI_ID . '_inventory_css" rows="8" style="width:100%;">' . $values['af_' . AF_APUI_ID . '_inventory_css'] . '</textarea></td></tr>';
         echo '</table>';
 
         echo '<div style="margin-top:12px;">';

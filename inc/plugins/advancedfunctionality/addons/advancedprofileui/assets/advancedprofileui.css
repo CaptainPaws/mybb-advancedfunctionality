@@ -1947,6 +1947,8 @@ af-apf-postbit-field {
     linear-gradient(180deg, rgba(6, 10, 18, .26) 0%, rgba(6, 10, 18, .72) 100%);
   --af-apui-modal-inventory-bg-position: center center;
   --af-apui-modal-inventory-bg-size: cover;
+  --af-apui-modal-inventory-panel-bg: rgba(21, 25, 34, .92);
+  --af-apui-modal-inventory-panel-border: rgba(255,255,255,.12);
 
   /* sheet */
   --af-apui-modal-sheet-bg-image: var(--af-apui-profile-banner-image, none);
@@ -1954,6 +1956,8 @@ af-apf-postbit-field {
     linear-gradient(180deg, rgba(6, 10, 18, .24) 0%, rgba(6, 10, 18, .78) 100%);
   --af-apui-modal-sheet-bg-position: center center;
   --af-apui-modal-sheet-bg-size: cover;
+  --af-apui-modal-sheet-panel-bg: rgba(0, 0, 0, .12);
+  --af-apui-modal-sheet-panel-border: rgba(255,255,255,.12);
 
   /* achievements */
   --af-apui-modal-achievements-bg-image: var(--af-apui-postbit-plaque-bg-image, none);
@@ -2059,4 +2063,43 @@ af-apf-postbit-field {
   .af-cs-modal__body {
     padding: 10px;
   }
+}
+
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-page,
+.af-cs-page[data-af-apui-surface="sheet"] {
+  background: transparent;
+}
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-portrait,
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-level,
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-info-table,
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-section,
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-bonus-card,
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-mech-card,
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-save-card,
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-slot,
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-augment-card,
+.af-cs-modal[data-af-modal-kind="sheet"] .af-cs-equipment-preview,
+.af-cs-page[data-af-apui-surface="sheet"] .af-cs-portrait,
+.af-cs-page[data-af-apui-surface="sheet"] .af-cs-level,
+.af-cs-page[data-af-apui-surface="sheet"] .af-cs-info-table,
+.af-cs-page[data-af-apui-surface="sheet"] .af-cs-section,
+.af-cs-page[data-af-apui-surface="sheet"] .af-cs-bonus-card,
+.af-cs-page[data-af-apui-surface="sheet"] .af-cs-mech-card,
+.af-cs-page[data-af-apui-surface="sheet"] .af-cs-save-card,
+.af-cs-page[data-af-apui-surface="sheet"] .af-cs-slot,
+.af-cs-page[data-af-apui-surface="sheet"] .af-cs-augment-card,
+.af-cs-page[data-af-apui-surface="sheet"] .af-cs-equipment-preview {
+  background: var(--af-apui-modal-sheet-panel-bg);
+  border-color: var(--af-apui-modal-sheet-panel-border);
+}
+.af-cs-modal[data-af-modal-kind="inventory"] #af-inv-panel,
+.af-cs-modal[data-af-modal-kind="inventory"] .af-inv-frame,
+.af-cs-modal[data-af-modal-kind="inventory"] .af-inv-slot,
+.af-cs-modal[data-af-modal-kind="inventory"] .af-inv-wallet,
+.af-cs-page[data-af-apui-surface="inventory"] #af-inv-panel,
+.af-cs-page[data-af-apui-surface="inventory"] .af-inv-frame,
+.af-cs-page[data-af-apui-surface="inventory"] .af-inv-slot,
+.af-cs-page[data-af-apui-surface="inventory"] .af-inv-wallet {
+  background: var(--af-apui-modal-inventory-panel-bg);
+  border-color: var(--af-apui-modal-inventory-panel-border);
 }
