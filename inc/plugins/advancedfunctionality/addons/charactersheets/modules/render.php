@@ -3,9 +3,9 @@ if (!defined('IN_MYBB')) {
     die('No direct access');
 }
 
-function af_charactersheets_render_sheet_page(string $slug): void
+function af_charactersheets_build_sheet_inner_html(string $slug): string
 {
-    global $db, $lang, $templates, $header, $headerinclude, $footer, $mybb;
+    global $db, $templates, $headerinclude, $mybb;
 
     if (function_exists('af_front_ensure_header_bits')) {
         af_front_ensure_header_bits();
@@ -13,8 +13,7 @@ function af_charactersheets_render_sheet_page(string $slug): void
 
     $accept_row = af_charactersheets_get_accept_row_by_slug($slug);
     if (empty($accept_row)) {
-        error_no_permission();
-        exit;
+        return '';
     }
 
     $tid = (int)($accept_row['tid'] ?? 0);
@@ -29,7 +28,9 @@ function af_charactersheets_render_sheet_page(string $slug): void
             'tid=' . $tid,
             ['limit' => 1]
         ));
-        if (!is_array($thread)) $thread = [];
+        if (!is_array($thread)) {
+            $thread = [];
+        }
     }
 
     // Если в threads uid есть — ок, если нет/0 — используем accept_row uid
@@ -44,7 +45,9 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $user = [];
     if ($uid > 0) {
         $user = $db->fetch_array($db->simple_select('users', 'uid,username', 'uid=' . $uid, ['limit' => 1]));
-        if (!is_array($user)) $user = [];
+        if (!is_array($user)) {
+            $user = [];
+        }
     }
 
     $profile_url = function_exists('get_profile_link') ? get_profile_link($uid) : ('member.php?action=profile&uid=' . $uid);
@@ -67,8 +70,10 @@ function af_charactersheets_render_sheet_page(string $slug): void
 
     $sheet = af_charactersheets_get_sheet_by_slug($slug);
     if (empty($sheet)) {
-        // ВАЖНО: автосоздаём с корректным uid
         $sheet = af_charactersheets_autocreate_sheet($tid, $thread);
+    }
+    if (empty($sheet)) {
+        return '';
     }
 
     $sheet_view = af_charactersheets_compute_sheet_view($sheet);
@@ -125,22 +130,27 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $sheet_post_key = htmlspecialchars_uni($mybb->post_code);
     $bonus_items_json = htmlspecialchars_uni(af_charactersheets_json_encode((array)($sheet_view['bonus_items'] ?? [])));
 
-    $page_title = 'Лист персонажа';
-    if (!empty($user['username'])) {
-        $page_title .= ' — ' . $user['username'];
-    } elseif (!empty($character_name_en)) {
-        $page_title .= ' — ' . $character_name_en;
-    }
-
     $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n";
     af_charactersheets_ensure_assets_in_headerinclude();
     if (function_exists('af_assets_inject_headerinclude')) {
         af_assets_inject_headerinclude([]);
     }
 
-
     $tplInner = $templates->get('charactersheet_inner');
     eval("\$sheet_inner = \"" . $tplInner . "\";");
+
+    return af_charactersheets_canonicalize_assets_html($sheet_inner);
+}
+
+function af_charactersheets_render_sheet_page(string $slug): void
+{
+    global $templates, $mybb;
+
+    $sheet_inner = af_charactersheets_build_sheet_inner_html($slug);
+    if ($sheet_inner === '') {
+        error_no_permission();
+        exit;
+    }
 
     $ajax = (string)$mybb->get_input('ajax');
     if ($ajax === '1') {
@@ -152,12 +162,9 @@ function af_charactersheets_render_sheet_page(string $slug): void
         eval("\$page = \"" . $tplFull . "\";");
     }
 
-    // Вырезаем дубли ассетов (в т.ч. если кто-то другой добавил ?v=...)
     $page = af_charactersheets_canonicalize_assets_html($page);
-
     output_page($page);
     exit;
-
 }
 
 /* -------------------- HELPERS -------------------- */

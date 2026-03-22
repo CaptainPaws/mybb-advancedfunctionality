@@ -1208,22 +1208,6 @@ function af_apui_build_member_profile_surface_actions(array $actions): string
     return '<div class="af-apui-tab-actions">' . implode('', $items) . '</div>';
 }
 
-function af_apui_build_member_profile_embed(string $url, string $title, string $surface = ''): string
-{
-    $url = af_apui_decode_action_url($url);
-    if ($url === '') {
-        return '';
-    }
-
-    $attrs = $surface !== ''
-        ? ' data-af-apui-surface="' . htmlspecialchars_uni($surface) . '"'
-        : '';
-
-    return '<div class="af-apui-tab-embed"' . $attrs . '>'
-        . '<iframe class="af-apui-tab-embed__frame" src="' . htmlspecialchars_uni($url) . '" loading="lazy" title="' . htmlspecialchars_uni($title) . '"></iframe>'
-        . '</div>';
-}
-
 function af_apui_build_member_profile_tab_shell(string $title, string $description, string $contentHtml, array $actions = [], string $asideHtml = ''): string
 {
     $html = '<div class="af-apui-tab-stack">';
@@ -1254,39 +1238,31 @@ function af_apui_build_member_profile_tab_shell(string $title, string $descripti
 function af_apui_build_member_profile_sheet_tab(int $uid, array $sheetPayload): string
 {
     $sheetUrl = af_apui_decode_action_url((string)($sheetPayload['sheet_url'] ?? ''));
-    $sheetLabel = trim((string)($sheetPayload['button_label'] ?? 'Лист персонажа'));
 
     if ($sheetUrl === '') {
         return af_apui_build_member_profile_placeholder_tab(
             'Лист персонажа',
             'Лист персонажа для этого профиля пока не подключён.',
-            'Когда у пользователя появится связанный CharacterSheet, вкладка автоматически покажет встроенный блок и кнопки действий.'
+            ''
         );
     }
 
-    $extraAttrs = 'data-afcs-open="1" data-afcs-sheet="' . htmlspecialchars_uni($sheetUrl) . '" data-slug="' . htmlspecialchars_uni((string)($sheetPayload['sheet_slug'] ?? '')) . '"';
+    $sheetSlug = trim((string)($sheetPayload['sheet_slug'] ?? ''));
+    $content = '';
+    if ($sheetSlug !== '' && function_exists('af_charactersheets_build_sheet_inner_html')) {
+        $content = af_charactersheets_build_sheet_inner_html($sheetSlug);
+    }
 
-    $content = af_apui_build_member_profile_embed($sheetUrl, $sheetLabel, 'sheet');
-    if ($content === '') {
-        $content = '<div class="af-apui-empty">Не удалось подготовить встраивание листа персонажа.</div>';
+    if (trim($content) === '') {
+        $content = '<div class="af-apui-empty">Лист персонажа пока недоступен для встроенного отображения.</div>';
+    } else {
+        $content = '<div class="af-apui-sheet-fragment">' . $content . '</div>';
     }
 
     return af_apui_build_member_profile_tab_shell(
         'Лист персонажа',
-        'Отдельная вкладка APUI для связанного CharacterSheet без хардкода ссылок в шаблоне.',
-        $content,
-        [
-            [
-                'label' => $sheetLabel,
-                'title' => $sheetLabel,
-                'url' => $sheetUrl,
-                'icon' => 'fa-solid fa-id-card',
-                'modifier' => 'af-apui-postbit-action--sheet',
-                'compat_class' => 'af-cs-plaque__btn',
-                'extra_attrs' => $extraAttrs,
-                'use_apui_modal' => false,
-            ],
-        ]
+        '',
+        $content
     );
 }
 
@@ -1294,14 +1270,13 @@ function af_apui_build_member_profile_application_tab(int $uid, array $sheetPayl
 {
     $application = (array)($sheetPayload['application'] ?? []);
     $applicationUrl = af_apui_resolve_application_url(['uid' => $uid], $sheetPayload);
-    $applicationFetchUrl = af_apui_resolve_application_fetch_url($sheetPayload);
     $tid = (int)($application['tid'] ?? ($sheetPayload['application_tid'] ?? 0));
 
     if ($applicationUrl === '' || $tid <= 0) {
         return af_apui_build_member_profile_placeholder_tab(
             'Анкета',
             'Для этого профиля пока не найдена привязанная анкета.',
-            'Как только CharacterSheets или ATF вернут связанный тред, вкладка начнёт показывать содержимое анкеты в едином блоке APUI.'
+            ''
         );
     }
 
@@ -1322,23 +1297,8 @@ function af_apui_build_member_profile_application_tab(int $uid, array $sheetPayl
 
     return af_apui_build_member_profile_tab_shell(
         'Анкета',
-        'Вкладка использует канонические данные CharacterSheets и ATF, а не хардкодные URL в шаблоне.',
-        $content,
-        [
-            [
-                'label' => 'Открыть анкету',
-                'title' => 'Открыть анкету',
-                'url' => $applicationUrl,
-                'modal_url' => $applicationFetchUrl !== '' ? $applicationFetchUrl : $applicationUrl,
-                'modal_kind' => 'application',
-                'icon' => 'fa-regular fa-id-card',
-                'modifier' => 'af-apui-postbit-action--application',
-                'data_attrs' => [
-                    'data-af-apui-fetch-url' => $applicationFetchUrl !== '' ? $applicationFetchUrl : $applicationUrl,
-                    'data-af-apui-source-url' => $applicationUrl,
-                ],
-            ],
-        ]
+        '',
+        $content
     );
 }
 
@@ -1348,33 +1308,24 @@ function af_apui_build_member_profile_inventory_tab(int $uid): string
         return af_apui_build_member_profile_placeholder_tab(
             'Инвентарь',
             'Инвентарь пока недоступен.',
-            'Не удалось определить пользователя для загрузки инвентаря.'
+            ''
         );
     }
 
-    $inventoryUrl = function_exists('af_advancedinventory_url')
-        ? af_advancedinventory_url('inventory', ['uid' => $uid], false)
-        : ('inventory.php?uid=' . $uid);
+    $content = function_exists('af_advancedinventory_build_inventory_fragment')
+        ? af_advancedinventory_build_inventory_fragment($uid)
+        : '';
 
-    $content = af_apui_build_member_profile_embed($inventoryUrl, 'Инвентарь', 'inventory');
-    if ($content === '') {
-        $content = '<div class="af-apui-empty">Не удалось подготовить встраивание инвентаря.</div>';
+    if (trim($content) === '') {
+        $content = '<div class="af-apui-empty">Инвентарь пока недоступен для встроенного отображения.</div>';
+    } else {
+        $content = '<div class="af-apui-inventory-fragment">' . $content . '</div>';
     }
 
     return af_apui_build_member_profile_tab_shell(
         'Инвентарь',
-        'Отдельная вкладка APUI для текущего инвентаря персонажа с сохранением существующей логики AdvancedInventory.',
-        $content,
-        [
-            [
-                'label' => 'Открыть инвентарь',
-                'title' => 'Открыть инвентарь',
-                'url' => $inventoryUrl,
-                'modal_kind' => 'inventory',
-                'icon' => 'fa-solid fa-box-archive',
-                'modifier' => 'af-apui-postbit-action--inventory',
-            ],
-        ]
+        '',
+        $content
     );
 }
 
