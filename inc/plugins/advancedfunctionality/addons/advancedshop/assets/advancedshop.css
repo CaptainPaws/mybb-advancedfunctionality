@@ -5,6 +5,7 @@
 .af-shop-card{background:#151515;border:1px solid #2c2c2c;border-radius:10px;padding:10px}
 .af-shop-card__icon img{width:64px;height:64px;object-fit:cover}
 .af-shop-btn{padding:7px 10px;border:0;border-radius:8px;cursor:pointer}
+.af-shop-inline-form{display:inline-flex;margin:0}
 .af-cart-item{display:grid;grid-template-columns:56px 1fr auto;gap:12px;align-items:center;padding:8px;border:1px solid #2c2c2c;border-radius:8px;margin-bottom:8px}
 .af-cart-item img{width:56px;height:56px}
 .af-inventory-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:8px}
