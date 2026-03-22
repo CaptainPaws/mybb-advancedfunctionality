@@ -1,2573 +1,1180 @@
-<?php
+(function () {
+  'use strict';
 
-if (!defined('IN_MYBB')) {
-    die('No direct access');
-}
-if (!defined('AF_ADDONS')) {
-    die('AdvancedFunctionality core required');
-}
+  var APUI_CLASS_RE = /(^|\s)af-apui-/;
+  var TAB_ROOT_SELECTOR = '[data-af-apui-tabs]';
+  var POSTBIT_SELECTOR = '.af-apui-postbit';
+  var POSTBIT_AUTHOR_SELECTOR = '.af-apui-postbit-author';
+  var POSTBIT_USERDETAILS_SELECTOR = '.af-apui-postbit-userdetails';
+  var STAT_ITEM_SELECTOR = '.af-apui-postbit-userdetails .af-apui-stat-item';
+  var APUI_MODAL_OPENER_SELECTOR = [
+    '.af-apui-profile-page [data-af-apui-modal-url]',
+    '.af-apui-profile [data-af-apui-modal-url]',
+    '.af-apui-member-profile [data-af-apui-modal-url]',
+    '.af-apui-postbit [data-af-apui-modal-url]',
+    TAB_ROOT_SELECTOR + ' [data-af-apui-modal-url]',
+    '[data-af-apui-modal-owner="1"][data-af-apui-modal-url]',
+    '[data-af-apui-owned-modal="1"][data-af-apui-modal-url]',
+    '[data-af-apui-owned="1"][data-af-apui-modal-url]'
+  ].join(', ');
 
-define('AF_AA_ID', 'advancedappearance');
-define('AF_AA_BASE', AF_ADDONS . AF_AA_ID . '/');
-define('AF_AA_ASSETS_DIR', AF_AA_BASE . 'assets/');
-define('AF_AA_PRESETS_TABLE_NAME', 'af_aa_presets');
-define('AF_AA_ASSIGNMENTS_TABLE_NAME', 'af_aa_assignments');
-define('AF_AA_PRESETS_TABLE', TABLE_PREFIX . AF_AA_PRESETS_TABLE_NAME);
-define('AF_AA_ASSIGNMENTS_TABLE', TABLE_PREFIX . AF_AA_ASSIGNMENTS_TABLE_NAME);
-define('AF_AA_ASSET_MARK', '<!--af_aa_assets-->');
+  var modalState = {
+    token: 0
+  };
 
-define('AF_AA_TARGET_APUI_THEME_PACK', 'apui_theme_pack');
-define('AF_AA_TARGET_APUI_PROFILE_PACK', 'apui_profile_pack');
-define('AF_AA_TARGET_APUI_POSTBIT_PACK', 'apui_postbit_pack');
-define('AF_AA_TARGET_APUI_FRAGMENT_PACK', 'apui_fragment_pack');
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
 
-define('AF_AA_ALIAS_APSTUDIO', 'apstudio.php');
-define('AF_AA_ALIAS_FITTINGROOM', 'fittingroom.php');
-define('AF_AA_ALIAS_APSTUDIO_MARK', 'AF_AA_APSTUDIO_PAGE_ALIAS');
-define('AF_AA_ALIAS_FITTINGROOM_MARK', 'AF_AA_FITTINGROOM_PAGE_ALIAS');
+  function textOf(node) {
+    return String(node && node.textContent ? node.textContent : '').replace(/\s+/g, ' ').trim();
+  }
 
-define('AF_AA_TPL_APSTUDIO', 'advancedappearance_apstudio');
-define('AF_AA_TPL_FITTINGROOM', 'advancedappearance_fittingroom');
+  function toArray(list) {
+    return Array.prototype.slice.call(list || []);
+  }
 
-function af_aa_is_preview_script(?string $script = null): bool
-{
-    if ($script === null) {
-        $script = defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '';
+  function hasMeaningfulContent(node) {
+    if (!node) {
+      return false;
     }
 
-    $script = trim(strtolower((string)$script));
+    var clone = node.cloneNode(true);
 
-    return $script === strtolower(AF_AA_ALIAS_APSTUDIO)
-        || $script === strtolower(AF_AA_ALIAS_FITTINGROOM);
-}
-
-function af_advancedappearance_install(): void
-{
-    af_aa_ensure_schema();
-    af_aa_ensure_settings();
-    af_aa_ensure_front_templates();
-    af_aa_install_page_aliases();
-
-    if (function_exists('rebuild_settings')) {
-        rebuild_settings();
-    }
-}
-
-function af_advancedappearance_activate(): void
-{
-    af_aa_ensure_schema();
-    af_aa_ensure_settings();
-    af_aa_ensure_front_templates();
-    af_aa_install_page_aliases();
-
-    if (function_exists('rebuild_settings')) {
-        rebuild_settings();
-    }
-}
-
-function af_advancedappearance_deactivate(): void
-{
-    af_aa_remove_page_aliases();
-}
-
-function af_advancedappearance_uninstall(): void
-{
-    global $db;
-
-    af_aa_remove_page_aliases();
-    af_aa_remove_front_templates();
-
-    if ($db->table_exists(AF_AA_PRESETS_TABLE_NAME)) {
-        $db->drop_table(AF_AA_PRESETS_TABLE_NAME);
-    }
-
-    if ($db->table_exists(AF_AA_ASSIGNMENTS_TABLE_NAME)) {
-        $db->drop_table(AF_AA_ASSIGNMENTS_TABLE_NAME);
-    }
-
-    $db->delete_query('settings', "name LIKE 'af_" . AF_AA_ID . "_%'");
-    $db->delete_query('settinggroups', "name='af_" . AF_AA_ID . "'");
-
-    if (function_exists('rebuild_settings')) {
-        rebuild_settings();
-    }
-}
-
-function af_aa_is_enabled(): bool
-{
-    global $mybb;
-
-    return !empty($mybb->settings['af_' . AF_AA_ID . '_enabled']);
-}
-
-function af_aa_ensure_settings(): void
-{
-    if (!function_exists('af_ensure_settinggroup') || !function_exists('af_ensure_setting')) {
-        return;
-    }
-
-    af_ensure_settinggroup(
-        'af_' . AF_AA_ID,
-        'AdvancedAppearance',
-        'Каталог визуальных пресетов для APUI и их назначения пользователям.'
-    );
-
-    af_ensure_setting(
-        'af_' . AF_AA_ID,
-        'af_' . AF_AA_ID . '_enabled',
-        'Включить AdvancedAppearance',
-        'Включает применение пресетов к APUI через runtime CSS.',
-        'yesno',
-        '1',
-        1
-    );
-}
-
-function af_aa_ensure_schema(): void
-{
-    global $db;
-
-    $charset = method_exists($db, 'build_create_table_collation')
-        ? $db->build_create_table_collation()
-        : 'ENGINE=InnoDB';
-
-    $db->write_query(
-        "CREATE TABLE IF NOT EXISTS " . AF_AA_PRESETS_TABLE . " (
-            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-            slug VARCHAR(120) NOT NULL,
-            title VARCHAR(191) NOT NULL,
-            description TEXT NOT NULL,
-            preview_image VARCHAR(512) NOT NULL DEFAULT '',
-            target_key VARCHAR(100) NOT NULL,
-            settings_json MEDIUMTEXT NOT NULL,
-            enabled TINYINT(1) NOT NULL DEFAULT 1,
-            sortorder INT NOT NULL DEFAULT 0,
-            created_at BIGINT UNSIGNED NOT NULL DEFAULT 0,
-            updated_at BIGINT UNSIGNED NOT NULL DEFAULT 0,
-            PRIMARY KEY (id),
-            UNIQUE KEY uniq_slug_target (slug, target_key),
-            KEY idx_target_enabled_sort (target_key, enabled, sortorder)
-        ) " . $charset
-    );
-
-    $db->write_query(
-        "CREATE TABLE IF NOT EXISTS " . AF_AA_ASSIGNMENTS_TABLE . " (
-            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-            entity_type VARCHAR(50) NOT NULL,
-            entity_id INT UNSIGNED NOT NULL,
-            target_key VARCHAR(100) NOT NULL,
-            preset_id INT UNSIGNED NOT NULL,
-            is_enabled TINYINT(1) NOT NULL DEFAULT 1,
-            created_at BIGINT UNSIGNED NOT NULL DEFAULT 0,
-            updated_at BIGINT UNSIGNED NOT NULL DEFAULT 0,
-            PRIMARY KEY (id),
-            UNIQUE KEY uniq_entity_target (entity_type, entity_id, target_key),
-            KEY idx_target_entity (target_key, entity_type, entity_id),
-            KEY idx_preset (preset_id)
-        ) " . $charset
-    );
-}
-
-function af_aa_register_hooks(): void
-{
-    global $plugins;
-
-    // Сбор uid на страницах с постбитами
-    $plugins->add_hook('postbit', 'af_aa_collect_uid_from_postbit', 50);
-    $plugins->add_hook('postbit_prev', 'af_aa_collect_uid_from_postbit', 50);
-    $plugins->add_hook('postbit_pm', 'af_aa_collect_uid_from_postbit', 50);
-
-    // Сбор uid на странице профиля
-    $plugins->add_hook('member_profile_end', 'af_aa_collect_uid_from_member_profile', 50);
-
-    // Финальный инжект runtime CSS в готовую страницу
-    $plugins->add_hook('pre_output_page', 'af_aa_pre_output_page', 1);
-}
-af_aa_register_hooks();
-
-function af_aa_get_supported_fragment_keys(): array
-{
-    return [
-        'profile_body' => 'Профиль: фон body',
-        'profile_banner' => 'Профиль: баннер',
-        'profile_avatar_frame' => 'Профиль: рамка аватара',
-        'postbit_author' => 'Постбит: фон карточки автора',
-        'postbit_name' => 'Постбит: блок никнейма',
-        'postbit_plaque' => 'Постбит: нижняя плашка',
-        'postbit_avatar_frame' => 'Постбит: рамка аватара',
-    ];
-}
-
-function af_aa_get_all_assignment_target_keys(): array
-{
-    $targets = [
-        AF_AA_TARGET_APUI_THEME_PACK,
-        AF_AA_TARGET_APUI_PROFILE_PACK,
-        AF_AA_TARGET_APUI_POSTBIT_PACK,
-    ];
-
-    foreach (array_keys(af_aa_get_supported_fragment_keys()) as $fragmentKey) {
-        $targets[] = AF_AA_TARGET_APUI_FRAGMENT_PACK . ':' . $fragmentKey;
-    }
-
-    return $targets;
-}
-
-function af_aa_collect_uid_from_postbit(array &$post): void
-{
-    $uid = (int)($post['uid'] ?? 0);
-    if ($uid <= 0) {
-        return;
-    }
-
-    if (!isset($GLOBALS['af_aa_uids_on_page']) || !is_array($GLOBALS['af_aa_uids_on_page'])) {
-        $GLOBALS['af_aa_uids_on_page'] = [];
-    }
-
-    $GLOBALS['af_aa_uids_on_page'][$uid] = $uid;
-}
-
-function af_aa_collect_uid_from_member_profile(): void
-{
-    global $memprofile;
-
-    $uid = (int)($memprofile['uid'] ?? 0);
-    if ($uid <= 0) {
-        return;
-    }
-
-    if (!isset($GLOBALS['af_aa_uids_on_page']) || !is_array($GLOBALS['af_aa_uids_on_page'])) {
-        $GLOBALS['af_aa_uids_on_page'] = [];
-    }
-
-    $GLOBALS['af_aa_uids_on_page'][$uid] = $uid;
-}
-
-function af_aa_pre_output_page(string &$page): void
-{
-    if (defined('IN_ADMINCP') || $page === '') {
-        return;
-    }
-
-    // На preview-страницах ничего не трогаем.
-    if (af_aa_is_preview_script()) {
-        return;
-    }
-
-    // Сначала всегда вычищаем preview-assets, если они случайно попали в обычную страницу.
-    $page = af_aa_strip_asset_includes($page);
-
-    if (!af_aa_is_enabled()) {
-        return;
-    }
-
-    $uids = [];
-
-    if (!empty($GLOBALS['af_aa_uids_on_page']) && is_array($GLOBALS['af_aa_uids_on_page'])) {
-        foreach ($GLOBALS['af_aa_uids_on_page'] as $uid) {
-            $uid = (int)$uid;
-            if ($uid > 0) {
-                $uids[$uid] = $uid;
-            }
+    Array.prototype.forEach.call(
+      clone.querySelectorAll('script, style, .af-apui-empty'),
+      function (el) {
+        if (el && el.parentNode) {
+          el.parentNode.removeChild(el);
         }
-    }
-
-    // На случай, если страница профиля не попала в collector по какой-то причине
-    if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'member.php') {
-        global $memprofile;
-        $profileUid = (int)($memprofile['uid'] ?? 0);
-        if ($profileUid > 0) {
-            $uids[$profileUid] = $profileUid;
-        }
-    }
-
-    if (!$uids) {
-        return;
-    }
-
-    $runtimeCss = af_aa_render_page_css(array_values($uids));
-    if ($runtimeCss === '') {
-        return;
-    }
-
-    $page = af_aa_inject_runtime_css($page, $runtimeCss);
-}
-
-function af_aa_strip_asset_includes(string $page): string
-{
-    $patterns = [
-        '~<!--\s*af_aa_assets\s*-->\s*~i',
-        '~<link\b[^>]*href=(["\'])[^"\']*advancedappearance\.css(?:\?[^"\']*)?\1[^>]*>\s*~i',
-        '~<script\b[^>]*src=(["\'])[^"\']*advancedappearance\.js(?:\?[^"\']*)?\1[^>]*>\s*</script>\s*~is',
-        '~<style\b[^>]*id=(["\'])af-aa-runtime-css\1[^>]*>.*?</style>\s*~is',
-        '~<style\b[^>]*data-aa-preview-custom-css[^>]*>.*?</style>\s*~is',
-    ];
-
-    foreach ($patterns as $pattern) {
-        $page = preg_replace($pattern, '', $page) ?? $page;
-    }
-
-    return $page;
-}
-
-function af_aa_inject_runtime_css(string $page, string $css): string
-{
-    $css = trim($css);
-    if ($css === '') {
-        return $page;
-    }
-
-    // если вдруг старый runtime-css уже есть в HTML — убираем, чтобы не плодить дубли
-    $page = (string)preg_replace(
-        '~<style\b[^>]*id=(["\'])af-aa-runtime-css\1[^>]*>.*?</style>\s*~is',
-        '',
-        $page
+      }
     );
 
-    if (stripos($page, '</head>') !== false) {
-        return str_ireplace('</head>', $css . "\n</head>", $page);
+    var html = clone.innerHTML
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<br\s*\/?>/gi, '')
+      .replace(/&nbsp;/gi, '')
+      .replace(/\s+/g, '');
+
+    return html.length > 0;
+  }
+
+  function detectStatType(stat) {
+    var labelEl = stat.querySelector('.af-apf-stat-label');
+    var source = textOf(labelEl || stat).toLowerCase();
+
+    if (!source) {
+      return 'extra';
     }
 
-    return $css . "\n" . $page;
-}
-
-function af_aa_add_ver(string $url, string $absFile): string
-{
-    $ver = is_file($absFile) ? (int)@filemtime($absFile) : 0;
-    if ($ver <= 0) {
-        return $url;
+    if (source.indexOf('зарегистр') !== -1 || source.indexOf('registered') !== -1) {
+      return 'hidden';
     }
 
-    return $url . (strpos($url, '?') === false ? '?' : '&') . 'v=' . $ver;
-}
-
-function af_aa_get_active_assignment(string $entityType, int $entityId, string $targetKey): array
-{
-    global $db;
-
-    $entityType = trim(strtolower($entityType));
-    $targetKey = trim((string)$targetKey);
-    $entityId = (int)$entityId;
-
-    if ($entityId <= 0 || $entityType === '' || $targetKey === '') {
-        return [];
+    if (source.indexOf('предупрежд') !== -1 || source.indexOf('warning') !== -1) {
+      return 'hidden';
     }
 
-    if (!isset($GLOBALS['af_aa_assignment_cache_runtime']) || !is_array($GLOBALS['af_aa_assignment_cache_runtime'])) {
-        $GLOBALS['af_aa_assignment_cache_runtime'] = [];
+    if (source.indexOf('сообщен') !== -1 || source.indexOf('posts') !== -1) {
+      return 'posts';
     }
 
-    $cacheKey = $entityType . ':' . $entityId . ':' . $targetKey;
-    if (array_key_exists($cacheKey, $GLOBALS['af_aa_assignment_cache_runtime'])) {
-        return $GLOBALS['af_aa_assignment_cache_runtime'][$cacheKey];
+    if (source.indexOf('тем') !== -1 || source.indexOf('threads') !== -1) {
+      return 'threads';
     }
 
-    // 1. Сначала штатный источник: assignments
-    $where = "entity_type='" . $db->escape_string($entityType) . "'"
-        . " AND entity_id='" . $entityId . "'"
-        . " AND target_key='" . $db->escape_string($targetKey) . "'"
-        . " AND is_enabled='1'";
+    if (source.indexOf('репутац') !== -1 || source.indexOf('reputation') !== -1) {
+      return 'reputation';
+    }
 
-    $query = $db->simple_select(AF_AA_ASSIGNMENTS_TABLE_NAME, '*', $where, ['limit' => 1]);
-    $row = $db->fetch_array($query);
+    return 'extra';
+  }
 
-    // 2. Fallback на active-слоты из магазина/инвентаря
-    if (!is_array($row) && $entityType === 'user' && $db->table_exists('af_aa_active')) {
-        $active = $db->fetch_array(
-            $db->simple_select(
-                'af_aa_active',
-                '*',
-                "entity_type='user' AND entity_id='" . $entityId . "' AND target_key='" . $db->escape_string($targetKey) . "' AND is_enabled='1'",
-                ['limit' => 1]
-            )
+  function extractStatValue(stat) {
+    var valueEl = stat.querySelector('.af-apf-stat-value');
+    var raw = textOf(valueEl || stat);
+    var match = raw.match(/[+\-]?\d[\d\s.,%]*/);
+    return match ? match[0].trim() : raw;
+  }
+
+  function normalizePostbitUserDetails() {
+    var wraps = document.querySelectorAll(POSTBIT_USERDETAILS_SELECTOR);
+    if (!wraps.length) {
+      return;
+    }
+
+    Array.prototype.forEach.call(wraps, function (wrap) {
+      var stats = wrap.querySelectorAll('.af-apf-stat');
+      if (!stats.length) {
+        return;
+      }
+
+      Array.prototype.forEach.call(stats, function (stat) {
+        stat.classList.remove(
+          'af-apui-stat-posts',
+          'af-apui-stat-threads',
+          'af-apui-stat-reputation',
+          'af-apui-stat-extra',
+          'af-apui-stat-hidden'
         );
 
-        if (is_array($active)) {
-            $itemId = (int)($active['item_id'] ?? 0);
-            $item = [];
+        stat.hidden = false;
+        stat.style.display = '';
 
-            if (($itemId > 0) && (!function_exists('af_inv_get_item_for_owner') || !function_exists('af_advinv_resolve_appearance_item'))) {
-                $invBootstrap = AF_ADDONS . 'advancedinventory/advancedinventory.php';
-                if (is_file($invBootstrap)) {
-                    require_once $invBootstrap;
-                }
-            }
+        var type = detectStatType(stat);
 
-            // Новый канон: current inventory
-            if ($itemId > 0 && function_exists('af_inv_get_item_for_owner')) {
-                $item = (array)af_inv_get_item_for_owner($entityId, $itemId);
-            }
-
-            // Fallback напрямую в текущую таблицу
-            if (!$item && $itemId > 0 && $db->table_exists('af_advinv_items')) {
-                $item = (array)$db->fetch_array(
-                    $db->simple_select(
-                        'af_advinv_items',
-                        '*',
-                        "id='" . $itemId . "' AND uid='" . $entityId . "'",
-                        ['limit' => 1]
-                    )
-                );
-            }
-
-            // Legacy fallback
-            if (!$item && $itemId > 0 && $db->table_exists('af_inventory_items')) {
-                $item = (array)$db->fetch_array(
-                    $db->simple_select(
-                        'af_inventory_items',
-                        '*',
-                        "inv_id='" . $itemId . "' AND uid='" . $entityId . "'",
-                        ['limit' => 1]
-                    )
-                );
-            }
-
-            $presetId = 0;
-
-            if ($item) {
-                if (function_exists('af_advinv_resolve_appearance_item')) {
-                    $appearanceInfo = (array)af_advinv_resolve_appearance_item($item);
-                    $presetId = (int)($appearanceInfo['preset_id'] ?? 0);
-                }
-
-                if ($presetId <= 0) {
-                    $kbKey = trim((string)($item['kb_key'] ?? ''));
-                    if (strpos($kbKey, 'appearance:') === 0) {
-                        $presetId = (int)substr($kbKey, strlen('appearance:'));
-                    }
-                }
-
-                if ($presetId <= 0) {
-                    $meta = @json_decode((string)($item['meta_json'] ?? '{}'), true);
-                    if (is_array($meta)) {
-                        $presetId = (int)($meta['appearance']['preset_id'] ?? 0);
-                    }
-                }
-            }
-
-            if ($presetId > 0) {
-                $row = [
-                    'id' => 0,
-                    'entity_type' => 'user',
-                    'entity_id' => $entityId,
-                    'target_key' => $targetKey,
-                    'preset_id' => $presetId,
-                    'is_enabled' => 1,
-                    'created_at' => (int)($active['applied_at'] ?? 0),
-                    'updated_at' => (int)($active['applied_at'] ?? 0),
-                ];
-            }
-        }
-    }
-
-    if (!is_array($row)) {
-        $GLOBALS['af_aa_assignment_cache_runtime'][$cacheKey] = [];
-        return [];
-    }
-
-    $row['id'] = (int)($row['id'] ?? 0);
-    $row['entity_id'] = (int)($row['entity_id'] ?? 0);
-    $row['preset_id'] = (int)($row['preset_id'] ?? 0);
-    $row['is_enabled'] = (int)($row['is_enabled'] ?? 0);
-
-    $GLOBALS['af_aa_assignment_cache_runtime'][$cacheKey] = $row;
-    return $row;
-}
-
-function af_aa_get_preset_by_id(int $presetId): array
-{
-    global $db;
-
-    $presetId = (int)$presetId;
-    if ($presetId <= 0) {
-        return [];
-    }
-
-    if (!isset($GLOBALS['af_aa_preset_cache_runtime']) || !is_array($GLOBALS['af_aa_preset_cache_runtime'])) {
-        $GLOBALS['af_aa_preset_cache_runtime'] = [];
-    }
-
-    if (array_key_exists($presetId, $GLOBALS['af_aa_preset_cache_runtime'])) {
-        return $GLOBALS['af_aa_preset_cache_runtime'][$presetId];
-    }
-
-    $query = $db->simple_select(AF_AA_PRESETS_TABLE_NAME, '*', "id='" . $presetId . "' AND enabled='1'", ['limit' => 1]);
-    $row = $db->fetch_array($query);
-    if (!is_array($row)) {
-        $GLOBALS['af_aa_preset_cache_runtime'][$presetId] = [];
-        return [];
-    }
-
-    $row['id'] = (int)($row['id'] ?? 0);
-    $row['enabled'] = (int)($row['enabled'] ?? 0);
-    $row['sortorder'] = (int)($row['sortorder'] ?? 0);
-
-    $GLOBALS['af_aa_preset_cache_runtime'][$presetId] = $row;
-    return $row;
-}
-
-function af_aa_get_apui_defaults(): array
-{
-    $mode = af_aa_sanitize_bg_mode(af_aa_get_apui_setting('member_profile_body_bg_mode', 'cover'), 'cover');
-
-    return [
-        'member_profile_body_cover_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('member_profile_body_cover_url', ''), ''),
-        'member_profile_body_tile_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('member_profile_body_tile_url', ''), ''),
-        'member_profile_body_bg_mode' => $mode,
-        'member_profile_body_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('member_profile_body_overlay', 'none'), 'none'),
-        'profile_banner_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('profile_banner_url', ''), ''),
-        'profile_banner_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('profile_banner_overlay', 'none'), 'none'),
-        'postbit_author_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('postbit_author_bg_url', ''), ''),
-        'postbit_author_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_author_overlay', 'none'), 'none'),
-        'postbit_name_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('postbit_name_bg_url', ''), ''),
-        'postbit_name_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_name_overlay', 'none'), 'none'),
-        'postbit_plaque_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('postbit_plaque_bg_url', ''), ''),
-        'postbit_plaque_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_plaque_overlay', 'none'), 'none'),
-        'sheet_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('sheet_bg_url', ''), ''),
-        'sheet_bg_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('sheet_bg_overlay', 'none'), 'none'),
-        'sheet_panel_bg' => af_aa_sanitize_overlay(af_aa_get_apui_setting('sheet_panel_bg', 'rgba(0,0,0,.12)'), 'rgba(0,0,0,.12)'),
-        'sheet_panel_border' => af_aa_sanitize_overlay(af_aa_get_apui_setting('sheet_panel_border', 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
-        'application_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('application_bg_url', ''), ''),
-        'application_bg_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('application_bg_overlay', 'none'), 'none'),
-        'application_panel_bg' => af_aa_sanitize_overlay(af_aa_get_apui_setting('application_panel_bg', 'rgba(6,12,26,.58)'), 'rgba(6,12,26,.58)'),
-        'application_panel_border' => af_aa_sanitize_overlay(af_aa_get_apui_setting('application_panel_border', 'rgba(255,255,255,.10)'), 'rgba(255,255,255,.10)'),
-        'inventory_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('inventory_bg_url', ''), ''),
-        'inventory_bg_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('inventory_bg_overlay', 'none'), 'none'),
-        'inventory_panel_bg' => af_aa_sanitize_overlay(af_aa_get_apui_setting('inventory_panel_bg', 'rgba(21,25,34,.92)'), 'rgba(21,25,34,.92)'),
-        'inventory_panel_border' => af_aa_sanitize_overlay(af_aa_get_apui_setting('inventory_panel_border', 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
-        'achievements_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('achievements_bg_url', ''), ''),
-        'achievements_bg_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('achievements_bg_overlay', 'none'), 'none'),
-        'achievements_panel_bg' => af_aa_sanitize_overlay(af_aa_get_apui_setting('achievements_panel_bg', 'rgba(13,17,28,.74)'), 'rgba(13,17,28,.74)'),
-        'achievements_panel_border' => af_aa_sanitize_overlay(af_aa_get_apui_setting('achievements_panel_border', 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
-        'custom_css' => '',
-        'fragment_key' => 'profile_banner',
-    ];
-}
-
-function af_aa_get_user_preset_settings_for_target(int $uid, string $assignmentTargetKey, array $defaults): array
-{
-    $uid = (int)$uid;
-    if ($uid <= 0 || $assignmentTargetKey === '') {
-        return [];
-    }
-
-    $assignment = af_aa_get_active_assignment('user', $uid, $assignmentTargetKey);
-    if (empty($assignment)) {
-        return [];
-    }
-
-    $preset = af_aa_get_preset_by_id((int)($assignment['preset_id'] ?? 0));
-    if (empty($preset)) {
-        return [];
-    }
-
-    $targetKey = (string)($preset['target_key'] ?? '');
-    $settings = af_aa_decode_and_sanitize_preset_settings((string)($preset['settings_json'] ?? ''), $defaults, $targetKey);
-
-    return [
-        'preset' => $preset,
-        'settings' => $settings,
-    ];
-}
-
-function af_aa_merge_keys(array $base, array $override, array $keys): array
-{
-    foreach ($keys as $key) {
-        if (array_key_exists($key, $override)) {
-            $base[$key] = $override[$key];
-        }
-    }
-
-    return $base;
-}
-
-function af_aa_build_user_css_payload(int $uid): array
-{
-    $uid = (int)$uid;
-    if ($uid <= 0) {
-        return [];
-    }
-
-    if (!isset($GLOBALS['af_aa_payload_cache_runtime']) || !is_array($GLOBALS['af_aa_payload_cache_runtime'])) {
-        $GLOBALS['af_aa_payload_cache_runtime'] = [];
-    }
-
-    if (array_key_exists($uid, $GLOBALS['af_aa_payload_cache_runtime'])) {
-        return $GLOBALS['af_aa_payload_cache_runtime'][$uid];
-    }
-
-    $defaults = af_aa_get_apui_defaults();
-
-    $profileKeys = [
-        'member_profile_body_cover_url',
-        'member_profile_body_tile_url',
-        'member_profile_body_bg_mode',
-        'member_profile_body_overlay',
-        'profile_banner_url',
-        'profile_banner_overlay',
-    ];
-
-    $bodyKeys = [
-        'member_profile_body_cover_url',
-        'member_profile_body_tile_url',
-        'member_profile_body_bg_mode',
-        'member_profile_body_overlay',
-    ];
-
-    $bannerKeys = [
-        'profile_banner_url',
-        'profile_banner_overlay',
-    ];
-
-    $postbitKeys = [
-        'postbit_author_bg_url',
-        'postbit_author_overlay',
-        'postbit_name_bg_url',
-        'postbit_name_overlay',
-        'postbit_plaque_bg_url',
-        'postbit_plaque_overlay',
-    ];
-
-    $authorKeys = [
-        'postbit_author_bg_url',
-        'postbit_author_overlay',
-    ];
-
-    $nameKeys = [
-        'postbit_name_bg_url',
-        'postbit_name_overlay',
-    ];
-
-    $plaqueKeys = [
-        'postbit_plaque_bg_url',
-        'postbit_plaque_overlay',
-    ];
-
-    $modalKeys = [
-        'sheet_bg_url','sheet_bg_overlay','sheet_panel_bg','sheet_panel_border',
-        'application_bg_url','application_bg_overlay','application_panel_bg','application_panel_border',
-        'inventory_bg_url','inventory_bg_overlay','inventory_panel_bg','inventory_panel_border',
-        'achievements_bg_url','achievements_bg_overlay','achievements_panel_bg','achievements_panel_border',
-    ];
-
-    $profileSettings = af_aa_merge_keys([], $defaults, $profileKeys);
-    $postbitSettings = af_aa_merge_keys([], $defaults, $postbitKeys);
-    $modalSettings = af_aa_merge_keys([], $defaults, $modalKeys);
-    $customCssBlocks = [];
-
-    $themePack = af_aa_get_user_preset_settings_for_target($uid, AF_AA_TARGET_APUI_THEME_PACK, $defaults);
-    if (!empty($themePack)) {
-        $themeSettings = (array)$themePack['settings'];
-        $profileSettings = af_aa_merge_keys($profileSettings, $themeSettings, $profileKeys);
-        $postbitSettings = af_aa_merge_keys($postbitSettings, $themeSettings, $postbitKeys);
-        $modalSettings = af_aa_merge_keys($modalSettings, $themeSettings, $modalKeys);
-
-        if (!empty($themeSettings['custom_css'])) {
-            $customCssBlocks[] = (string)$themeSettings['custom_css'];
-        }
-    }
-
-    $profilePack = af_aa_get_user_preset_settings_for_target($uid, AF_AA_TARGET_APUI_PROFILE_PACK, $defaults);
-    if (!empty($profilePack)) {
-        $profilePackSettings = (array)$profilePack['settings'];
-        $profileSettings = af_aa_merge_keys($profileSettings, $profilePackSettings, $profileKeys);
-        $modalSettings = af_aa_merge_keys($modalSettings, $profilePackSettings, $modalKeys);
-
-        if (!empty($profilePackSettings['custom_css'])) {
-            $customCssBlocks[] = (string)$profilePackSettings['custom_css'];
-        }
-    }
-
-    $postbitPack = af_aa_get_user_preset_settings_for_target($uid, AF_AA_TARGET_APUI_POSTBIT_PACK, $defaults);
-    if (!empty($postbitPack)) {
-        $postbitPackSettings = (array)$postbitPack['settings'];
-        $postbitSettings = af_aa_merge_keys($postbitSettings, $postbitPackSettings, $postbitKeys);
-        $modalSettings = af_aa_merge_keys($modalSettings, $postbitPackSettings, $modalKeys);
-
-        if (!empty($postbitPackSettings['custom_css'])) {
-            $customCssBlocks[] = (string)$postbitPackSettings['custom_css'];
-        }
-    }
-
-    foreach (array_keys(af_aa_get_supported_fragment_keys()) as $fragmentKey) {
-        $fragmentTarget = AF_AA_TARGET_APUI_FRAGMENT_PACK . ':' . $fragmentKey;
-        $fragmentPack = af_aa_get_user_preset_settings_for_target($uid, $fragmentTarget, $defaults);
-
-        if (empty($fragmentPack)) {
-            continue;
+        if (type === 'hidden') {
+          stat.classList.add('af-apui-stat-hidden');
+          stat.hidden = true;
+          stat.style.display = 'none';
+          return;
         }
 
-        $fragmentSettings = (array)$fragmentPack['settings'];
+        if (type === 'posts' || type === 'threads' || type === 'reputation') {
+          var number = extractStatValue(stat);
+          var title = 'Сообщений';
 
-        switch ($fragmentKey) {
-            case 'profile_body':
-                $profileSettings = af_aa_merge_keys($profileSettings, $fragmentSettings, $bodyKeys);
-                break;
+          if (type === 'threads') {
+            title = 'Тем';
+          } else if (type === 'reputation') {
+            title = 'Репутация';
+          }
 
-            case 'profile_banner':
-                $profileSettings = af_aa_merge_keys($profileSettings, $fragmentSettings, $bannerKeys);
-                break;
-
-            case 'postbit_author':
-                $postbitSettings = af_aa_merge_keys($postbitSettings, $fragmentSettings, $authorKeys);
-                break;
-
-            case 'postbit_name':
-                $postbitSettings = af_aa_merge_keys($postbitSettings, $fragmentSettings, $nameKeys);
-                break;
-
-            case 'postbit_plaque':
-                $postbitSettings = af_aa_merge_keys($postbitSettings, $fragmentSettings, $plaqueKeys);
-                break;
-
-            case 'profile_avatar_frame':
-            case 'postbit_avatar_frame':
-            default:
-                break;
+          stat.classList.add('af-apui-stat-' + type);
+          stat.setAttribute('title', title);
+          stat.innerHTML = '<span class="af-apui-stat-number">' + escapeHtml(number || '0') + '</span>';
+          return;
         }
 
-        if (!empty($fragmentSettings['custom_css'])) {
-            $customCssBlocks[] = (string)$fragmentSettings['custom_css'];
-        }
+        stat.classList.add('af-apui-stat-extra');
+      });
+    });
+  }
+
+  function cleanupExtraPanel(root) {
+    if (!root) {
+      return;
     }
 
-    $mode = af_aa_sanitize_bg_mode((string)($profileSettings['member_profile_body_bg_mode'] ?? 'cover'), 'cover');
-
-    $selectedBodyImage = $mode === 'tile'
-        ? af_aa_css_url_value((string)($profileSettings['member_profile_body_tile_url'] ?? ''))
-        : af_aa_css_url_value((string)($profileSettings['member_profile_body_cover_url'] ?? ''));
-
-    if ($selectedBodyImage === 'none') {
-        $selectedBodyImage = $mode === 'tile'
-            ? af_aa_css_url_value((string)($profileSettings['member_profile_body_cover_url'] ?? ''))
-            : af_aa_css_url_value((string)($profileSettings['member_profile_body_tile_url'] ?? ''));
-
-        if ($selectedBodyImage !== 'none') {
-            $mode = $mode === 'tile' ? 'cover' : 'tile';
-        }
+    var panel = root.querySelector('.af-apui-panel--extra');
+    if (!panel) {
+      return;
     }
 
-    $selector = '.af-aa-user-' . $uid;
+    var adminCard = panel.querySelector('.af-apui-extra-admin-card');
+    if (adminCard) {
+      var adminBody = adminCard.querySelector('.af-apui-extra-admin-body');
+      var adminHasContent = hasMeaningfulContent(adminBody);
 
-    $payload = [
-        'uid' => $uid,
-        'selector' => $selector,
-        'body_selector' => 'body.af-apui-member-profile-page.af-aa-user-' . $uid,
-        'vars' => [
-            '--af-apui-profile-banner-image' => af_aa_css_url_value((string)($profileSettings['profile_banner_url'] ?? '')),
-            '--af-apui-profile-banner-overlay' => af_aa_css_raw_value((string)($profileSettings['profile_banner_overlay'] ?? 'none'), 'none'),
-            '--af-apui-postbit-author-bg-image' => af_aa_css_url_value((string)($postbitSettings['postbit_author_bg_url'] ?? '')),
-            '--af-apui-postbit-author-overlay' => af_aa_css_raw_value((string)($postbitSettings['postbit_author_overlay'] ?? 'none'), 'none'),
-            '--af-apui-postbit-name-bg-image' => af_aa_css_url_value((string)($postbitSettings['postbit_name_bg_url'] ?? '')),
-            '--af-apui-postbit-name-overlay' => af_aa_css_raw_value((string)($postbitSettings['postbit_name_overlay'] ?? 'none'), 'none'),
-            '--af-apui-postbit-plaque-bg-image' => af_aa_css_url_value((string)($postbitSettings['postbit_plaque_bg_url'] ?? '')),
-            '--af-apui-postbit-plaque-overlay' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_overlay'] ?? 'none'), 'none'),
-            '--af-apui-modal-sheet-bg-image' => af_aa_css_url_value((string)($modalSettings['sheet_bg_url'] ?? '')),
-            '--af-apui-modal-sheet-bg-overlay' => af_aa_css_raw_value((string)($modalSettings['sheet_bg_overlay'] ?? 'none'), 'none'),
-            '--af-apui-modal-sheet-panel-bg' => af_aa_css_raw_value((string)($modalSettings['sheet_panel_bg'] ?? 'rgba(0,0,0,.12)'), 'rgba(0,0,0,.12)'),
-            '--af-apui-modal-sheet-panel-border' => af_aa_css_raw_value((string)($modalSettings['sheet_panel_border'] ?? 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
-            '--af-apui-modal-application-bg-image' => af_aa_css_url_value((string)($modalSettings['application_bg_url'] ?? '')),
-            '--af-apui-modal-application-bg-overlay' => af_aa_css_raw_value((string)($modalSettings['application_bg_overlay'] ?? 'none'), 'none'),
-            '--af-apui-modal-application-panel-bg' => af_aa_css_raw_value((string)($modalSettings['application_panel_bg'] ?? 'rgba(6,12,26,.58)'), 'rgba(6,12,26,.58)'),
-            '--af-apui-modal-application-panel-border' => af_aa_css_raw_value((string)($modalSettings['application_panel_border'] ?? 'rgba(255,255,255,.10)'), 'rgba(255,255,255,.10)'),
-            '--af-apui-modal-inventory-bg-image' => af_aa_css_url_value((string)($modalSettings['inventory_bg_url'] ?? '')),
-            '--af-apui-modal-inventory-bg-overlay' => af_aa_css_raw_value((string)($modalSettings['inventory_bg_overlay'] ?? 'none'), 'none'),
-            '--af-apui-modal-inventory-panel-bg' => af_aa_css_raw_value((string)($modalSettings['inventory_panel_bg'] ?? 'rgba(21,25,34,.92)'), 'rgba(21,25,34,.92)'),
-            '--af-apui-modal-inventory-panel-border' => af_aa_css_raw_value((string)($modalSettings['inventory_panel_border'] ?? 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
-            '--af-apui-modal-achievements-bg-image' => af_aa_css_url_value((string)($modalSettings['achievements_bg_url'] ?? '')),
-            '--af-apui-modal-achievements-bg-overlay' => af_aa_css_raw_value((string)($modalSettings['achievements_bg_overlay'] ?? 'none'), 'none'),
-            '--af-apui-modal-achievements-panel-bg' => af_aa_css_raw_value((string)($modalSettings['achievements_panel_bg'] ?? 'rgba(13,17,28,.74)'), 'rgba(13,17,28,.74)'),
-            '--af-apui-modal-achievements-panel-border' => af_aa_css_raw_value((string)($modalSettings['achievements_panel_border'] ?? 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
-        ],
-        'body' => [
-            'overlay' => af_aa_css_raw_value((string)($profileSettings['member_profile_body_overlay'] ?? 'none'), 'none'),
-            'image' => $selectedBodyImage,
-            'repeat' => $mode === 'tile' ? 'repeat' : 'no-repeat',
-            'position' => $mode === 'tile' ? 'left top' : 'center center',
-            'attachment' => $mode === 'tile' ? 'scroll' : 'fixed',
-            'size' => $mode === 'tile' ? 'auto' : 'cover',
-        ],
-        'custom_css_blocks' => $customCssBlocks,
-    ];
-
-    $GLOBALS['af_aa_payload_cache_runtime'][$uid] = $payload;
-    return $payload;
-}
-
-function af_aa_render_page_css(array $uidsOnPage): string
-{
-    $uids = [];
-    foreach ($uidsOnPage as $uid) {
-        $uid = (int)$uid;
-        if ($uid > 0) {
-            $uids[$uid] = $uid;
-        }
+      adminCard.hidden = !adminHasContent;
+      adminCard.style.display = adminHasContent ? '' : 'none';
     }
 
-    if (empty($uids)) {
-        return '';
+    var actions = panel.querySelectorAll('.af-apui-extra-action');
+    var visibleActions = 0;
+
+    Array.prototype.forEach.call(actions, function (action) {
+      var body = action.querySelector('.af-apui-extra-action__body');
+      var hasContent = hasMeaningfulContent(body);
+
+      action.hidden = !hasContent;
+      action.style.display = hasContent ? '' : 'none';
+
+      if (hasContent) {
+        visibleActions++;
+      }
+    });
+
+    var actionsCard = panel.querySelector('.af-apui-extra-actions-card');
+    if (actionsCard) {
+      var showActionsCard = visibleActions > 0;
+      actionsCard.hidden = !showActionsCard;
+      actionsCard.style.display = showActionsCard ? '' : 'none';
+    }
+  }
+
+  function toggleEmptyState(panel) {
+    var empty = panel.querySelector('.af-apui-empty');
+    if (!empty) {
+      return;
     }
 
-    af_aa_prime_runtime_cache(array_values($uids));
-
-    $css = '';
-
-    foreach ($uids as $uid) {
-        $payload = af_aa_build_user_css_payload($uid);
-        if (empty($payload)) {
-            continue;
-        }
-
-        $css .= $payload['selector'] . '{';
-        foreach ($payload['vars'] as $varName => $varValue) {
-            $css .= $varName . ':' . $varValue . ';';
-        }
-        $css .= "}\n";
-
-        $css .= $payload['body_selector'] . '{';
-        $css .= 'background-image:' . $payload['body']['overlay'] . ',' . $payload['body']['image'] . ';';
-        $css .= 'background-repeat:no-repeat,' . $payload['body']['repeat'] . ';';
-        $css .= 'background-position:center center,' . $payload['body']['position'] . ';';
-        $css .= 'background-attachment:scroll,' . $payload['body']['attachment'] . ';';
-        $css .= 'background-size:cover,' . $payload['body']['size'] . ';';
-        $css .= "}\n";
-
-        if (!empty($payload['custom_css_blocks']) && is_array($payload['custom_css_blocks'])) {
-            foreach ($payload['custom_css_blocks'] as $cssBlock) {
-                $css .= af_aa_render_scoped_custom_css((string)$cssBlock, $payload);
-            }
-        }
+    var clone = panel.cloneNode(true);
+    var cloneEmpty = clone.querySelector('.af-apui-empty');
+    if (cloneEmpty && cloneEmpty.parentNode) {
+      cloneEmpty.parentNode.removeChild(cloneEmpty);
     }
 
-    if ($css === '') {
-        return '';
+    Array.prototype.forEach.call(
+      clone.querySelectorAll('[hidden], [style*="display: none"]'),
+      function (el) {
+        if (el && el.parentNode) {
+          el.parentNode.removeChild(el);
+        }
+      }
+    );
+
+    var hasContent = clone.innerHTML.replace(/\s+/g, '').length > 0;
+    empty.style.display = hasContent ? 'none' : '';
+  }
+
+  function initTabs(root) {
+    if (!root || root.__afApuiTabsInit) {
+      return;
+    }
+    root.__afApuiTabsInit = true;
+
+    var tabs = toArray(root.querySelectorAll('[data-tab]'));
+    var panels = toArray(root.querySelectorAll('[data-panel]'));
+
+    if (!tabs.length || !panels.length) {
+      return;
     }
 
-    return '<style id="af-aa-runtime-css">' . $css . '</style>' . "\n";
-}
+    function activate(name, updateHash) {
+      tabs.forEach(function (tab) {
+        var active = tab.getAttribute('data-tab') === name;
+        tab.classList.toggle('is-active', active);
+        tab.setAttribute('aria-selected', active ? 'true' : 'false');
+        tab.setAttribute('tabindex', active ? '0' : '-1');
+      });
 
-function af_aa_prime_runtime_cache(array $uids): void
-{
-    global $db;
+      panels.forEach(function (panel) {
+        var active = panel.getAttribute('data-panel') === name;
+        panel.classList.toggle('is-active', active);
+        panel.hidden = !active;
+        panel.style.display = active ? '' : 'none';
 
-    $uids = array_values(array_filter(array_map('intval', $uids), static function ($uid) {
-        return $uid > 0;
-    }));
+        if (active) {
+          toggleEmptyState(panel);
+        }
+      });
 
-    if (empty($uids)) {
+      if (updateHash && window.history && typeof window.history.replaceState === 'function') {
+        window.history.replaceState(null, '', '#af-tab-' + name);
+      }
+    }
+
+    root.addEventListener('click', function (event) {
+      var tab = event.target && event.target.closest ? event.target.closest('[data-tab]') : null;
+      if (!tab || !root.contains(tab)) {
         return;
-    }
+      }
 
-    if (!isset($GLOBALS['af_aa_assignment_cache_runtime']) || !is_array($GLOBALS['af_aa_assignment_cache_runtime'])) {
-        $GLOBALS['af_aa_assignment_cache_runtime'] = [];
-    }
+      event.preventDefault();
+      activate(tab.getAttribute('data-tab'), true);
+    });
 
-    if (!isset($GLOBALS['af_aa_preset_cache_runtime']) || !is_array($GLOBALS['af_aa_preset_cache_runtime'])) {
-        $GLOBALS['af_aa_preset_cache_runtime'] = [];
-    }
-
-    $in = implode(',', $uids);
-
-    $targetList = array_map(static function ($target) use ($db) {
-        return "'" . $db->escape_string($target) . "'";
-    }, af_aa_get_all_assignment_target_keys());
-
-    $assignmentsByPreset = [];
-
-    $queryAssignments = $db->write_query(
-        "SELECT * FROM " . AF_AA_ASSIGNMENTS_TABLE
-        . " WHERE entity_type='user'"
-        . " AND is_enabled='1'"
-        . " AND entity_id IN (" . $in . ")"
-        . " AND target_key IN (" . implode(',', $targetList) . ")"
-    );
-
-    while ($row = $db->fetch_array($queryAssignments)) {
-        $uid = (int)($row['entity_id'] ?? 0);
-        $targetKey = (string)($row['target_key'] ?? '');
-
-        if ($uid <= 0 || $targetKey === '') {
-            continue;
-        }
-
-        $row['id'] = (int)($row['id'] ?? 0);
-        $row['entity_id'] = (int)($row['entity_id'] ?? 0);
-        $row['preset_id'] = (int)($row['preset_id'] ?? 0);
-        $row['is_enabled'] = (int)($row['is_enabled'] ?? 0);
-
-        $cacheKey = 'user:' . $uid . ':' . $targetKey;
-        $GLOBALS['af_aa_assignment_cache_runtime'][$cacheKey] = $row;
-
-        $presetId = (int)($row['preset_id'] ?? 0);
-        if ($presetId > 0) {
-            $assignmentsByPreset[$presetId] = $presetId;
-        }
-    }
-
-    if (empty($assignmentsByPreset)) {
+    root.addEventListener('keydown', function (event) {
+      var current = event.target && event.target.closest ? event.target.closest('[data-tab]') : null;
+      if (!current || !root.contains(current)) {
         return;
+      }
+
+      var index = tabs.indexOf(current);
+      if (index === -1) {
+        return;
+      }
+
+      var nextIndex = index;
+
+      if (event.key === 'ArrowRight') {
+        nextIndex = (index + 1) % tabs.length;
+      } else if (event.key === 'ArrowLeft') {
+        nextIndex = (index - 1 + tabs.length) % tabs.length;
+      } else {
+        return;
+      }
+
+      event.preventDefault();
+      tabs[nextIndex].focus();
+      activate(tabs[nextIndex].getAttribute('data-tab'), true);
+    });
+
+    var fromHash = (window.location.hash || '').replace('#af-tab-', '');
+    var initial = tabs.some(function (tab) {
+      return tab.getAttribute('data-tab') === fromHash;
+    }) ? fromHash : 'info';
+
+    activate(initial, false);
+  }
+
+  function ensureSharedModal() {
+    var modal = document.querySelector('[data-af-apui-modal]');
+    if (modal) {
+      return {
+        modal: modal,
+        frame: modal.querySelector('[data-af-apui-modal-frame]'),
+        title: modal.querySelector('[data-af-apui-modal-title]'),
+        content: modal.querySelector('[data-af-apui-modal-content]')
+      };
     }
 
-    $presetIn = implode(',', array_values($assignmentsByPreset));
+    var wrap = document.createElement('div');
+    wrap.className = 'af-cs-modal';
+    wrap.setAttribute('data-af-apui-modal', '1');
+    wrap.setAttribute('aria-hidden', 'true');
+    wrap.innerHTML =
+      '<div class="af-cs-modal__backdrop" data-af-apui-modal-close="1"></div>' +
+      '<div class="af-cs-modal__dialog" role="dialog" aria-modal="true">' +
+        '<div class="af-cs-modal__header">' +
+          '<div class="af-cs-modal__title" data-af-apui-modal-title="1"></div>' +
+          '<button type="button" class="af-cs-modal__close" data-af-apui-modal-close="1" aria-label="Закрыть">×</button>' +
+        '</div>' +
+        '<div class="af-cs-modal__body">' +
+          '<div class="af-cs-modal__content" data-af-apui-modal-content="1" style="display:none;"></div>' +
+          '<iframe class="af-cs-modal__frame" data-af-apui-modal-frame="1" src="about:blank" loading="lazy"></iframe>' +
+        '</div>' +
+      '</div>';
 
-    $queryPresets = $db->write_query(
-        "SELECT * FROM " . AF_AA_PRESETS_TABLE
-        . " WHERE id IN (" . $presetIn . ")"
-        . " AND enabled='1'"
-    );
+    document.body.appendChild(wrap);
 
-    while ($row = $db->fetch_array($queryPresets)) {
-        $pid = (int)($row['id'] ?? 0);
-        if ($pid <= 0) {
-            continue;
+    return {
+      modal: wrap,
+      frame: wrap.querySelector('[data-af-apui-modal-frame]'),
+      title: wrap.querySelector('[data-af-apui-modal-title]'),
+      content: wrap.querySelector('[data-af-apui-modal-content]')
+    };
+  }
+
+  function normalizeModalUrl(url) {
+    var raw = String(url || '').trim();
+    if (!raw) {
+      return '';
+    }
+
+    if (/action=af_charactersheet_api|action=cs_.*_ajax/i.test(raw)) {
+      return '';
+    }
+
+    var hash = '';
+    var hashIndex = raw.indexOf('#');
+
+    if (hashIndex !== -1) {
+      hash = raw.substring(hashIndex);
+      raw = raw.substring(0, hashIndex);
+    }
+
+    var basePath = raw.split('?')[0].toLowerCase();
+
+    if (/(^|\/)showthread\.php$/i.test(basePath)) {
+      return raw + hash;
+    }
+
+    if (raw.indexOf('embed=1') === -1 && raw.indexOf('ajax=1') === -1) {
+      raw += (raw.indexOf('?') === -1 ? '?' : '&') + 'ajax=1';
+    }
+
+    return raw + hash;
+  }
+
+  function normalizeFetchUrl(url) {
+    var raw = String(url || '').trim();
+    if (!raw) {
+      return '';
+    }
+
+    var hashIndex = raw.indexOf('#');
+    if (hashIndex !== -1) {
+      raw = raw.substring(0, hashIndex);
+    }
+
+    return raw;
+  }
+
+  function setUniversalModalKind(modalParts, kind) {
+    modalParts = modalParts || ensureSharedModal();
+
+    var modal = modalParts && modalParts.modal ? modalParts.modal : null;
+    if (!modal) {
+      return;
+    }
+
+    var knownKinds = ['application', 'inventory', 'sheet', 'achievements', 'iframe'];
+    var i;
+
+    modal.removeAttribute('data-af-apui-modal-kind');
+    modal.removeAttribute('data-af-modal-kind');
+
+    for (i = 0; i < knownKinds.length; i++) {
+      modal.classList.remove('af-cs-modal--' + knownKinds[i]);
+    }
+
+    kind = String(kind || '').trim().toLowerCase();
+    if (!kind) {
+      return;
+    }
+
+    modal.setAttribute('data-af-apui-modal-kind', kind);
+    modal.setAttribute('data-af-modal-kind', kind);
+    modal.classList.add('af-cs-modal--' + kind);
+  }
+
+  function isAjaxLikeUrl(url) {
+    var raw = normalizeFetchUrl(url);
+    if (!raw) {
+      return false;
+    }
+
+    return /(?:^|[?&])(ajax=1|action=(?:af_charactersheet_api|cs_[^&]*_ajax))(?:&|$)/i.test(raw);
+  }
+
+  function clearUniversalModalState(modalParts) {
+    modalParts = modalParts || ensureSharedModal();
+
+    if (modalState.controller && typeof modalState.controller.abort === 'function') {
+      modalState.controller.abort();
+    }
+    modalState.controller = null;
+
+    setUniversalModalKind(modalParts, '');
+
+    if (modalParts.frame) {
+      modalParts.frame.onload = null;
+      modalParts.frame.style.visibility = 'hidden';
+      modalParts.frame.style.display = 'none';
+      setFrameSrc(modalParts.frame, 'about:blank');
+    }
+
+    if (modalParts.content) {
+      modalParts.content.innerHTML = '';
+      modalParts.content.style.display = 'none';
+    }
+  }
+
+  function absolutizeFragmentLinks(root, baseUrl) {
+    if (!root || !root.querySelectorAll || !baseUrl) {
+      return;
+    }
+
+    Array.prototype.forEach.call(root.querySelectorAll('[href], [src], [poster]'), function (el) {
+      ['href', 'src', 'poster'].forEach(function (attr) {
+        var value = el.getAttribute(attr);
+        if (!value || /^(?:[a-z]+:|#|\/\/|data:|mailto:|tel:|javascript:)/i.test(value)) {
+          return;
         }
 
-        $row['id'] = $pid;
-        $row['enabled'] = (int)($row['enabled'] ?? 0);
-        $row['sortorder'] = (int)($row['sortorder'] ?? 0);
+        try {
+          el.setAttribute(attr, new URL(value, baseUrl).toString());
+        } catch (error) {
+          return;
+        }
+      });
 
-        $GLOBALS['af_aa_preset_cache_runtime'][$pid] = $row;
+      if (el.tagName === 'IMG') {
+        el.setAttribute('loading', 'lazy');
+        el.setAttribute('decoding', 'async');
+      }
+    });
+  }
+
+  function extractApplicationFragment(htmlText, baseUrl, pid, selector) {
+    var parser = new window.DOMParser();
+    var doc = parser.parseFromString(String(htmlText || ''), 'text/html');
+    var node = null;
+
+    function querySafe(root, sel) {
+      if (!root || !sel) {
+        return null;
+      }
+
+      try {
+        return root.querySelector(sel);
+      } catch (error) {
+        return null;
+      }
     }
-}
 
-function af_aa_decode_and_sanitize_preset_settings(string $json, array $defaults, string $targetKey = ''): array
-{
-    $decoded = json_decode($json, true);
-    if (!is_array($decoded)) {
-        $decoded = [];
+    function firstExisting(root, selectors) {
+      var i;
+      var found = null;
+
+      for (i = 0; i < selectors.length; i++) {
+        found = querySafe(root, selectors[i]);
+        if (found) {
+          return found;
+        }
+      }
+
+      return null;
     }
 
-    $out = $defaults;
+    function resolveContentNode(root) {
+      if (!root) {
+        return null;
+      }
 
-    $out['member_profile_body_cover_url'] = af_aa_sanitize_image_url(
-        (string)($decoded['member_profile_body_cover_url'] ?? ''),
-        (string)($defaults['member_profile_body_cover_url'] ?? '')
+      if (root.matches && root.matches(
+        '.af-apui-postbit-message, .af-apui-postbit-content, .af-apui-message, .post_body, .post_content, .post_message, .postbit_message, .scaleimages'
+      )) {
+        return root;
+      }
+
+      return firstExisting(root, [
+        '.af-apui-postbit-message',
+        '.af-apui-postbit-content',
+        '.af-apui-message',
+        '.post_body',
+        '.post_content',
+        '.post_message',
+        '.postbit_message',
+        '.scaleimages'
+      ]) || root;
+    }
+
+    if (selector) {
+      node = querySafe(doc, selector);
+    }
+
+    if (!node && pid > 0) {
+      node = firstExisting(doc, [
+        '#post_' + pid,
+        '[data-pid="' + pid + '"]',
+        '#pid' + pid,
+        'a[name="pid' + pid + '"]'
+      ]);
+
+      if (node && node.matches && node.matches('a[name], [id^="pid"]') && node.closest) {
+        node = node.closest(
+          '.af-apui-postbit, .post, .postbit, article, [id^="post_"], table, .tborder'
+        ) || node;
+      }
+    }
+
+    if (!node) {
+      node = firstExisting(doc, [
+        '.af-apui-postbit',
+        '.post',
+        '.postbit',
+        'article[id^="post_"]',
+        '[id^="post_"]',
+        '.af-apui-postbit-message',
+        '.af-apui-postbit-content',
+        '.af-apui-message',
+        '.post_body',
+        '.post_content',
+        '.post_message',
+        '.postbit_message',
+        '.scaleimages',
+        '#content',
+        'body'
+      ]);
+    }
+
+    if (!node) {
+      return '';
+    }
+
+    node = resolveContentNode(node);
+
+    if (!node) {
+      return '';
+    }
+
+    var clone = node.cloneNode(true);
+
+    Array.prototype.forEach.call(
+      clone.querySelectorAll('script, style, link[rel="stylesheet"], noscript, iframe'),
+      function (el) {
+        if (el && el.parentNode) {
+          el.parentNode.removeChild(el);
+        }
+      }
     );
 
-    $out['member_profile_body_tile_url'] = af_aa_sanitize_image_url(
-        (string)($decoded['member_profile_body_tile_url'] ?? ''),
-        (string)($defaults['member_profile_body_tile_url'] ?? '')
+    absolutizeFragmentLinks(clone, baseUrl);
+
+    var html = clone.innerHTML ? clone.innerHTML : '';
+    if (!html && clone.outerHTML) {
+      html = clone.outerHTML;
+    }
+
+    if (!html) {
+      return '';
+    }
+
+    return '<div class="af-apui-application-fragment af-aa-context af-aa-context--application" data-af-apui-surface="application">' + html + '</div>';
+  }
+
+  function openApplicationModal(opener) {
+    var rawFetchUrl = normalizeFetchUrl(
+      opener.getAttribute('data-af-apui-fetch-url')
+      || opener.getAttribute('data-af-apui-modal-url')
+      || opener.getAttribute('href')
     );
 
-    $out['member_profile_body_bg_mode'] = af_aa_sanitize_bg_mode(
-        (string)($decoded['member_profile_body_bg_mode'] ?? ''),
-        (string)($defaults['member_profile_body_bg_mode'] ?? 'cover')
+    var fallbackUrl = normalizeFetchUrl(
+      opener.getAttribute('href')
+      || opener.getAttribute('data-af-apui-source-url')
+      || rawFetchUrl
     );
 
-    $out['member_profile_body_overlay'] = af_aa_sanitize_overlay(
-        (string)($decoded['member_profile_body_overlay'] ?? ''),
-        (string)($defaults['member_profile_body_overlay'] ?? 'none')
-    );
+    var fetchUrl = rawFetchUrl;
 
-    $out['profile_banner_url'] = af_aa_sanitize_image_url(
-        (string)($decoded['profile_banner_url'] ?? ''),
-        (string)($defaults['profile_banner_url'] ?? '')
-    );
-
-    $out['profile_banner_overlay'] = af_aa_sanitize_overlay(
-        (string)($decoded['profile_banner_overlay'] ?? ''),
-        (string)($defaults['profile_banner_overlay'] ?? 'none')
-    );
-
-    $out['postbit_author_bg_url'] = af_aa_sanitize_image_url(
-        (string)($decoded['postbit_author_bg_url'] ?? ''),
-        (string)($defaults['postbit_author_bg_url'] ?? '')
-    );
-
-    $out['postbit_author_overlay'] = af_aa_sanitize_overlay(
-        (string)($decoded['postbit_author_overlay'] ?? ''),
-        (string)($defaults['postbit_author_overlay'] ?? 'none')
-    );
-
-    $out['postbit_name_bg_url'] = af_aa_sanitize_image_url(
-        (string)($decoded['postbit_name_bg_url'] ?? ''),
-        (string)($defaults['postbit_name_bg_url'] ?? '')
-    );
-
-    $out['postbit_name_overlay'] = af_aa_sanitize_overlay(
-        (string)($decoded['postbit_name_overlay'] ?? ''),
-        (string)($defaults['postbit_name_overlay'] ?? 'none')
-    );
-
-    $out['postbit_plaque_bg_url'] = af_aa_sanitize_image_url(
-        (string)($decoded['postbit_plaque_bg_url'] ?? ''),
-        (string)($defaults['postbit_plaque_bg_url'] ?? '')
-    );
-
-    $out['postbit_plaque_overlay'] = af_aa_sanitize_overlay(
-        (string)($decoded['postbit_plaque_overlay'] ?? ''),
-        (string)($defaults['postbit_plaque_overlay'] ?? 'none')
-    );
-
-    $out['sheet_bg_url'] = af_aa_sanitize_image_url((string)($decoded['sheet_bg_url'] ?? ''), (string)($defaults['sheet_bg_url'] ?? ''));
-    $out['sheet_bg_overlay'] = af_aa_sanitize_overlay((string)($decoded['sheet_bg_overlay'] ?? ''), (string)($defaults['sheet_bg_overlay'] ?? 'none'));
-    $out['sheet_panel_bg'] = af_aa_sanitize_overlay((string)($decoded['sheet_panel_bg'] ?? ''), (string)($defaults['sheet_panel_bg'] ?? 'rgba(0,0,0,.12)'));
-    $out['sheet_panel_border'] = af_aa_sanitize_overlay((string)($decoded['sheet_panel_border'] ?? ''), (string)($defaults['sheet_panel_border'] ?? 'rgba(255,255,255,.12)'));
-    $out['application_bg_url'] = af_aa_sanitize_image_url((string)($decoded['application_bg_url'] ?? ''), (string)($defaults['application_bg_url'] ?? ''));
-    $out['application_bg_overlay'] = af_aa_sanitize_overlay((string)($decoded['application_bg_overlay'] ?? ''), (string)($defaults['application_bg_overlay'] ?? 'none'));
-    $out['application_panel_bg'] = af_aa_sanitize_overlay((string)($decoded['application_panel_bg'] ?? ''), (string)($defaults['application_panel_bg'] ?? 'rgba(6,12,26,.58)'));
-    $out['application_panel_border'] = af_aa_sanitize_overlay((string)($decoded['application_panel_border'] ?? ''), (string)($defaults['application_panel_border'] ?? 'rgba(255,255,255,.10)'));
-    $out['inventory_bg_url'] = af_aa_sanitize_image_url((string)($decoded['inventory_bg_url'] ?? ''), (string)($defaults['inventory_bg_url'] ?? ''));
-    $out['inventory_bg_overlay'] = af_aa_sanitize_overlay((string)($decoded['inventory_bg_overlay'] ?? ''), (string)($defaults['inventory_bg_overlay'] ?? 'none'));
-    $out['inventory_panel_bg'] = af_aa_sanitize_overlay((string)($decoded['inventory_panel_bg'] ?? ''), (string)($defaults['inventory_panel_bg'] ?? 'rgba(21,25,34,.92)'));
-    $out['inventory_panel_border'] = af_aa_sanitize_overlay((string)($decoded['inventory_panel_border'] ?? ''), (string)($defaults['inventory_panel_border'] ?? 'rgba(255,255,255,.12)'));
-    $out['achievements_bg_url'] = af_aa_sanitize_image_url((string)($decoded['achievements_bg_url'] ?? ''), (string)($defaults['achievements_bg_url'] ?? ''));
-    $out['achievements_bg_overlay'] = af_aa_sanitize_overlay((string)($decoded['achievements_bg_overlay'] ?? ''), (string)($defaults['achievements_bg_overlay'] ?? 'none'));
-    $out['achievements_panel_bg'] = af_aa_sanitize_overlay((string)($decoded['achievements_panel_bg'] ?? ''), (string)($defaults['achievements_panel_bg'] ?? 'rgba(13,17,28,.74)'));
-    $out['achievements_panel_border'] = af_aa_sanitize_overlay((string)($decoded['achievements_panel_border'] ?? ''), (string)($defaults['achievements_panel_border'] ?? 'rgba(255,255,255,.12)'));
-
-    $out['custom_css'] = af_aa_sanitize_custom_css((string)($decoded['custom_css'] ?? ''));
-    $out['fragment_key'] = af_aa_sanitize_fragment_key(
-        (string)($decoded['fragment_key'] ?? ''),
-        (string)($defaults['fragment_key'] ?? 'profile_banner')
-    );
-
-    return $out;
-}
-
-function af_aa_sanitize_image_url(string $url, string $fallback = ''): string
-{
-    $url = trim($url);
-    if ($url === '') {
-        return $fallback;
+    if ((!fetchUrl || isAjaxLikeUrl(fetchUrl)) && fallbackUrl) {
+      fetchUrl = fallbackUrl;
     }
 
-    if (preg_match('~[\r\n<>]~', $url)) {
-        return $fallback;
+    var selector = normalizeFetchUrl(opener.getAttribute('data-af-apui-fragment-selector'));
+    var pid = parseInt(opener.getAttribute('data-af-apui-application-pid'), 10) || 0;
+    var title = String(
+      opener.getAttribute('data-af-apui-modal-title')
+      || opener.getAttribute('title')
+      || ''
+    ).trim();
+
+    if (!fetchUrl) {
+      return;
     }
 
-    if (stripos($url, 'javascript:') !== false) {
-        return $fallback;
+    var modalParts = ensureSharedModal();
+    var token = ++modalState.token;
+
+    modalParts.modal.classList.add('is-open');
+    modalParts.modal.setAttribute('aria-hidden', 'false');
+    setUniversalModalKind(modalParts, 'application');
+
+    if (modalParts.title) {
+      modalParts.title.textContent = title;
+      modalParts.title.style.display = title ? '' : 'none';
     }
 
-    $parts = @parse_url($url);
-    if (!is_array($parts)) {
-        return $fallback;
+    clearUniversalModalState(modalParts);
+    setUniversalModalKind(modalParts, 'application');
+
+    if (!modalParts.content) {
+      return;
     }
 
-    $scheme = strtolower((string)($parts['scheme'] ?? ''));
-    if ($scheme !== 'http' && $scheme !== 'https') {
-        return $fallback;
+    modalParts.content.style.display = 'block';
+    modalParts.content.innerHTML = '<div class="af-apui-modal-loading">Загрузка…</div>';
+
+    modalState.controller = typeof window.AbortController === 'function'
+      ? new window.AbortController()
+      : null;
+
+    var fetchOptions = {
+      credentials: 'same-origin'
+    };
+
+    if (modalState.controller) {
+      fetchOptions.signal = modalState.controller.signal;
     }
 
-    return $url;
-}
-
-function af_aa_sanitize_bg_mode(string $mode, string $fallback = 'cover'): string
-{
-    $mode = strtolower(trim($mode));
-    if ($mode !== 'cover' && $mode !== 'tile') {
-        return $fallback;
-    }
-
-    return $mode;
-}
-
-function af_aa_sanitize_overlay(string $value, string $fallback = 'none'): string
-{
-    $value = trim($value);
-    if ($value === '') {
-        return $fallback;
-    }
-
-    if (strpos($value, ';') !== false) {
-        return $fallback;
-    }
-
-    if (preg_match('~[\r\n]~', $value)) {
-        return $fallback;
-    }
-
-    if (stripos($value, '<style') !== false || stripos($value, '</style') !== false) {
-        return $fallback;
-    }
-
-    if (stripos($value, 'javascript:') !== false || strpos($value, '<') !== false || strpos($value, '>') !== false) {
-        return $fallback;
-    }
-
-    return $value;
-}
-
-function af_aa_sanitize_fragment_key(string $fragmentKey, string $fallback = 'profile_banner'): string
-{
-    $fragmentKey = trim($fragmentKey);
-    $allowed = af_aa_get_supported_fragment_keys();
-
-    if (!isset($allowed[$fragmentKey])) {
-        return $fallback;
-    }
-
-    return $fragmentKey;
-}
-
-function af_aa_sanitize_custom_css(string $css): string
-{
-    $css = trim($css);
-    if ($css === '') {
-        return '';
-    }
-
-    $css = str_replace(['</style', '<style'], ['<\/style', ''], $css);
-
-    return trim($css);
-}
-
-function af_aa_css_url_value(string $url): string
-{
-    $url = trim($url);
-    if ($url === '') {
-        return 'none';
-    }
-
-    $safe = str_replace(['\\', '"', "\r", "\n"], ['\\\\', '\\"', '', ''], $url);
-
-    return 'url("' . $safe . '")';
-}
-
-function af_aa_css_raw_value(string $value, string $default = 'none'): string
-{
-    $value = trim($value);
-    if ($value === '') {
-        return $default;
-    }
-
-    $value = str_replace(["\r", "\n", ';'], [' ', ' ', ''], $value);
-    $value = str_replace(['</style', '<style'], ['<\\/style', ''], $value);
-
-    return trim($value);
-}
-
-function af_aa_prefix_simple_css(string $css, string $scopeSelector): string
-{
-    if ($css === '' || $scopeSelector === '') {
-        return '';
-    }
-
-    if (strpos($css, '@') !== false) {
-        return $css;
-    }
-
-    $result = preg_replace_callback(
-        '~(^|})\s*([^{@}][^{]*)\{~m',
-        static function ($m) use ($scopeSelector) {
-            $lead = $m[1];
-            $selectorList = trim($m[2]);
-
-            if ($selectorList === '') {
-                return $m[0];
-            }
-
-            $parts = array_map('trim', explode(',', $selectorList));
-            foreach ($parts as &$part) {
-                if ($part === '') {
-                    continue;
-                }
-
-                if (strpos($part, $scopeSelector) === 0) {
-                    continue;
-                }
-
-                $part = $scopeSelector . ' ' . $part;
-            }
-            unset($part);
-
-            return $lead . ' ' . implode(', ', $parts) . ' {';
-        },
-        $css
-    );
-
-    return is_string($result) ? $result : $css;
-}
-
-function af_aa_render_scoped_custom_css(string $css, array $payload): string
-{
-    $css = af_aa_sanitize_custom_css($css);
-    if ($css === '') {
-        return '';
-    }
-
-    $selector = (string)($payload['selector'] ?? '');
-    $bodySelector = (string)($payload['body_selector'] ?? '');
-
-    if ($selector === '') {
-        return '';
-    }
-
-    $containsPlaceholder = strpos($css, '{{selector}}') !== false || strpos($css, '{{body_selector}}') !== false;
-
-    $css = str_replace(
-        ['{{selector}}', '{{body_selector}}'],
-        [$selector, $bodySelector],
-        $css
-    );
-
-    if (!$containsPlaceholder) {
-        $css = af_aa_prefix_simple_css($css, $selector);
-    }
-
-    return $css . "\n";
-}
-
-function af_aa_get_apui_setting(string $suffix, string $default = ''): string
-{
-    global $mybb;
-
-    $key = 'af_advancedprofileui_' . $suffix;
-    if (!isset($mybb->settings[$key])) {
-        return $default;
-    }
-
-    return trim((string)$mybb->settings[$key]);
-}
-
-function af_aa_root_path(): string
-{
-    if (defined('MYBB_ROOT')) {
-        return MYBB_ROOT;
-    }
-
-    return dirname(dirname(dirname(dirname(dirname(dirname(__FILE__)))))) . '/';
-}
-
-function af_aa_template_map(): array
-{
-    return [
-        AF_AA_TPL_APSTUDIO => 'advancedappearance_apstudio.html',
-        AF_AA_TPL_FITTINGROOM => 'advancedappearance_fittingroom.html',
-    ];
-}
-
-function af_aa_get_template_source(string $templateName): string
-{
-    global $templates;
-
-    $template = '';
-
-    if (isset($templates) && is_object($templates) && method_exists($templates, 'get')) {
-        $template = (string)$templates->get($templateName);
-    }
-
-    if ($template !== '') {
-        return $template;
-    }
-
-    $map = af_aa_template_map();
-    if (!isset($map[$templateName])) {
-        return '<div class="error">Template missing: ' . htmlspecialchars_uni($templateName) . '</div>';
-    }
-
-    $file = AF_AA_BASE . 'templates/' . $map[$templateName];
-    if (!is_file($file)) {
-        return '<div class="error">Template file missing: ' . htmlspecialchars_uni($map[$templateName]) . '</div>';
-    }
-
-    return (string)file_get_contents($file);
-}
-
-function af_aa_ensure_front_templates(): void
-{
-    global $db;
-
-    $map = af_aa_template_map();
-
-    foreach ($map as $templateName => $fileName) {
-        $file = AF_AA_BASE . 'templates/' . $fileName;
-        if (!is_file($file)) {
-            continue;
+    window.fetch(fetchUrl, fetchOptions)
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error('HTTP ' + response.status);
         }
 
-        $content = (string)file_get_contents($file);
-
-        $query = $db->simple_select('templates', 'tid', "title='" . $db->escape_string($templateName) . "'", ['limit' => 1]);
-        $existingTid = (int)$db->fetch_field($query, 'tid');
-
-        $payload = [
-            'title' => $db->escape_string($templateName),
-            'template' => $db->escape_string($content),
-            'sid' => -2,
-            'version' => $db->escape_string('1839'),
-            'dateline' => TIME_NOW,
-        ];
-
-        if ($existingTid > 0) {
-            $db->update_query('templates', $payload, "tid='" . $existingTid . "'");
-            continue;
+        return response.text();
+      })
+      .then(function (htmlText) {
+        if (token !== modalState.token) {
+          return;
         }
 
-        $db->insert_query('templates', $payload);
+        var fragmentHtml = extractApplicationFragment(htmlText, fetchUrl, pid, selector);
+        if (!fragmentHtml) {
+          throw new Error('fragment_not_found');
+        }
+
+        modalParts.content.innerHTML = fragmentHtml;
+      })
+      .catch(function (error) {
+        if (token !== modalState.token) {
+          return;
+        }
+
+        if (error && error.name === 'AbortError') {
+          return;
+        }
+
+        modalParts.content.innerHTML =
+          '<div class="af-apui-modal-error">' +
+            '<p>Не удалось загрузить анкету в модалку.</p>' +
+            (fallbackUrl
+              ? '<p><a href="' + escapeHtml(fallbackUrl) + '">Открыть тему целиком</a></p>'
+              : '') +
+          '</div>';
+      });
+  }
+
+  function setFrameSrc(frame, value) {
+    if (!frame) {
+      return;
     }
-}
 
-function af_aa_remove_front_templates(): void
-{
-    global $db;
+    frame.setAttribute('src', value || 'about:blank');
+  }
 
-    foreach (array_keys(af_aa_template_map()) as $templateName) {
-        $db->delete_query('templates', "title='" . $db->escape_string($templateName) . "'");
+  function closeUniversalModal() {
+    var modalParts = ensureSharedModal();
+    modalState.token++;
+
+    modalParts.modal.classList.remove('is-open');
+    modalParts.modal.setAttribute('aria-hidden', 'true');
+
+    if (modalParts.title) {
+      modalParts.title.textContent = '';
+      modalParts.title.style.display = 'none';
     }
-}
 
-function af_aa_install_page_aliases(): void
-{
-    af_aa_sync_alias_file(AF_AA_ALIAS_APSTUDIO, AF_AA_ASSETS_DIR . 'apstudio.php', AF_AA_ALIAS_APSTUDIO_MARK);
-    af_aa_sync_alias_file(AF_AA_ALIAS_FITTINGROOM, AF_AA_ASSETS_DIR . 'fittingroom.php', AF_AA_ALIAS_FITTINGROOM_MARK);
-}
+    clearUniversalModalState(modalParts);
+  }
 
-function af_aa_remove_page_aliases(): void
-{
-    af_aa_delete_owned_alias(AF_AA_ALIAS_APSTUDIO, AF_AA_ALIAS_APSTUDIO_MARK);
-    af_aa_delete_owned_alias(AF_AA_ALIAS_FITTINGROOM, AF_AA_ALIAS_FITTINGROOM_MARK);
-}
+  function defer(fn) {
+    if (typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(fn);
+      return;
+    }
 
-function af_aa_sync_alias_file(string $rootFileName, string $sourceFile, string $signature): void
-{
-    $rootFile = af_aa_root_path() . $rootFileName;
+    window.setTimeout(fn, 0);
+  }
 
-    if (!is_file($sourceFile)) {
+  function openUniversalModal(url, title, kind) {
+    var loadUrl = normalizeModalUrl(url);
+    if (!loadUrl) {
+      return;
+    }
+
+    var modalParts = ensureSharedModal();
+    var token = ++modalState.token;
+    var modalKind = String(kind || 'iframe').trim().toLowerCase();
+
+    modalParts.modal.classList.add('is-open');
+    modalParts.modal.setAttribute('aria-hidden', 'false');
+
+    if (modalParts.title) {
+      var safeTitle = String(title || '').trim();
+      modalParts.title.textContent = safeTitle;
+      modalParts.title.style.display = safeTitle ? '' : 'none';
+    }
+
+    clearUniversalModalState(modalParts);
+    setUniversalModalKind(modalParts, modalKind);
+
+    if (!modalParts.frame) {
+      return;
+    }
+
+    modalParts.frame.style.display = 'block';
+    modalParts.frame.style.visibility = 'hidden';
+    modalParts.frame.onload = function () {
+      if (token !== modalState.token) {
         return;
-    }
+      }
 
-    if (!is_file($rootFile) || af_aa_alias_is_owned($rootFile, $signature)) {
-        @copy($sourceFile, $rootFile);
-    }
-}
-
-function af_aa_delete_owned_alias(string $rootFileName, string $signature): void
-{
-    $rootFile = af_aa_root_path() . $rootFileName;
-
-    if (!is_file($rootFile)) {
+      if (modalParts.frame.getAttribute('src') === 'about:blank') {
         return;
-    }
+      }
 
-    if (!af_aa_alias_is_owned($rootFile, $signature)) {
+      modalParts.frame.style.visibility = '';
+    };
+
+    setFrameSrc(modalParts.frame, 'about:blank');
+
+    defer(function () {
+      if (token !== modalState.token) {
         return;
-    }
+      }
 
-    @unlink($rootFile);
-}
+      setFrameSrc(modalParts.frame, loadUrl);
+    });
+  }
 
-function af_aa_alias_is_owned(string $filePath, string $signature): bool
-{
-    if (!is_file($filePath)) {
-        return false;
-    }
+  function isApuiOwnedNode(node) {
+    while (node && node !== document && node !== document.documentElement) {
+      if (node.nodeType !== 1) {
+        node = node.parentNode;
+        continue;
+      }
 
-    $content = @file_get_contents($filePath);
-    if (!is_string($content)) {
-        return false;
-    }
-
-    return strpos($content, $signature) !== false;
-}
-
-function af_aa_is_admin_user(int $uid = 0): bool
-{
-    global $db, $mybb;
-
-    $uid = $uid > 0 ? $uid : (int)($mybb->user['uid'] ?? 0);
-    if ($uid <= 0) {
-        return false;
-    }
-
-    if (function_exists('is_super_admin') && is_super_admin($uid)) {
+      if (node.matches && (
+        node.matches(TAB_ROOT_SELECTOR) ||
+        node.matches(POSTBIT_SELECTOR) ||
+        node.matches('.af-apui-profile-page') ||
+        node.matches('.af-apui-profile') ||
+        node.matches('.af-apui-member-profile') ||
+        node.matches('[data-af-apui-modal-owner="1"], [data-af-apui-owned-modal="1"], [data-af-apui-owned="1"]')
+      )) {
         return true;
-    }
+      }
 
-    $usergroup = (int)($mybb->user['usergroup'] ?? 0);
-    if ($uid === (int)($mybb->user['uid'] ?? 0) && $usergroup === 4) {
+      if (node.className && APUI_CLASS_RE.test(String(node.className))) {
         return true;
-    }
+      }
 
-    $additional = array_filter(array_map('intval', explode(',', (string)($mybb->user['additionalgroups'] ?? ''))));
-    if ($uid === (int)($mybb->user['uid'] ?? 0) && in_array(4, $additional, true)) {
-        return true;
-    }
-
-    if ($db->table_exists('adminoptions')) {
-        $query = $db->simple_select('adminoptions', 'uid', "uid='" . $uid . "'", ['limit' => 1]);
-        $found = (int)$db->fetch_field($query, 'uid');
-        if ($found > 0) {
-            return true;
-        }
+      node = node.parentNode;
     }
 
     return false;
-}
+  }
 
-function af_aa_get_front_defaults(): array
-{
-    $defaults = af_aa_get_apui_defaults();
-
-    if (!isset($defaults['custom_css'])) {
-        $defaults['custom_css'] = '';
+  function isApuiModalOpener(node) {
+    if (!node || !node.matches || !node.matches('[data-af-apui-modal-url]')) {
+      return false;
     }
 
-    if (!isset($defaults['fragment_key'])) {
-        $defaults['fragment_key'] = 'profile_banner';
+    if (node.hasAttribute('data-af-apui-modal-owner') || node.hasAttribute('data-af-apui-owned-modal') || node.hasAttribute('data-af-apui-owned')) {
+      return true;
     }
 
-    return $defaults;
-}
+    return isApuiOwnedNode(node);
+  }
 
-function af_aa_resolve_preset_do(string $do = ''): string
-{
-    $do = trim(strtolower($do));
-
-    $allowed = [
-        'themepack',
-        'profilepack',
-        'postbitpack',
-        'fragmentpack',
-    ];
-
-    if (!in_array($do, $allowed, true)) {
-        return 'themepack';
+  function initPostbitStatInteractions() {
+    if (window.__afApuiPostbitStatInteractionsInit) {
+      return;
     }
 
-    return $do;
-}
-
-function af_aa_target_key_for_do(string $do): string
-{
-    switch (af_aa_resolve_preset_do($do)) {
-        case 'profilepack':
-            return AF_AA_TARGET_APUI_PROFILE_PACK;
-
-        case 'postbitpack':
-            return AF_AA_TARGET_APUI_POSTBIT_PACK;
-
-        case 'fragmentpack':
-            return AF_AA_TARGET_APUI_FRAGMENT_PACK;
-
-        case 'themepack':
-        default:
-            return AF_AA_TARGET_APUI_THEME_PACK;
-    }
-}
-
-function af_aa_do_for_target(string $targetKey): string
-{
-    $targetKey = trim((string)$targetKey);
-
-    switch ($targetKey) {
-        case AF_AA_TARGET_APUI_PROFILE_PACK:
-            return 'profilepack';
-
-        case AF_AA_TARGET_APUI_POSTBIT_PACK:
-            return 'postbitpack';
-
-        case AF_AA_TARGET_APUI_FRAGMENT_PACK:
-            return 'fragmentpack';
-
-        case AF_AA_TARGET_APUI_THEME_PACK:
-        default:
-            return 'themepack';
-    }
-}
-
-function af_aa_get_front_tabs(): array
-{
-    return [
-        'themepack' => 'Общие пак-темы',
-        'profilepack' => 'Страница профиля',
-        'postbitpack' => 'Постбит в теме',
-        'fragmentpack' => 'Разное',
-    ];
-}
-
-function af_aa_human_target_label(string $targetKey, array $settings = []): string
-{
-    if ($targetKey === AF_AA_TARGET_APUI_THEME_PACK) {
-        return 'Общий пак темы';
+    var initialStats = document.querySelectorAll(STAT_ITEM_SELECTOR);
+    if (!initialStats.length) {
+      return;
     }
 
-    if ($targetKey === AF_AA_TARGET_APUI_PROFILE_PACK) {
-        return 'Пак профиля';
-    }
+    window.__afApuiPostbitStatInteractionsInit = true;
 
-    if ($targetKey === AF_AA_TARGET_APUI_POSTBIT_PACK) {
-        return 'Пак постбита';
-    }
-
-    if ($targetKey === AF_AA_TARGET_APUI_FRAGMENT_PACK) {
-        $fragmentKey = (string)($settings['fragment_key'] ?? '');
-        $labelMap = af_aa_get_supported_fragment_keys();
-        $fragmentLabel = $labelMap[$fragmentKey] ?? $fragmentKey;
-
-        return 'Дробный пак: ' . $fragmentLabel;
-    }
-
-    if (strpos($targetKey, AF_AA_TARGET_APUI_FRAGMENT_PACK . ':') === 0) {
-        $fragmentKey = substr($targetKey, strlen(AF_AA_TARGET_APUI_FRAGMENT_PACK . ':'));
-        $labelMap = af_aa_get_supported_fragment_keys();
-        $fragmentLabel = $labelMap[$fragmentKey] ?? $fragmentKey;
-
-        return 'Назначение: ' . $fragmentLabel;
-    }
-
-    return $targetKey;
-}
-
-function af_aa_front_settings_from_row(array $row): array
-{
-    $defaults = af_aa_get_front_defaults();
-    $json = (string)($row['settings_json'] ?? '');
-    $targetKey = (string)($row['target_key'] ?? '');
-
-    return af_aa_decode_and_sanitize_preset_settings($json, $defaults, $targetKey);
-}
-
-function af_aa_get_preset_row(int $presetId): array
-{
-    global $db;
-
-    $presetId = (int)$presetId;
-    if ($presetId <= 0) {
-        return [];
-    }
-
-    $query = $db->simple_select(AF_AA_PRESETS_TABLE_NAME, '*', "id='" . $presetId . "'", ['limit' => 1]);
-    $row = $db->fetch_array($query);
-
-    return is_array($row) ? $row : [];
-}
-
-function af_aa_fetch_presets_for_do(string $do, bool $enabledOnly = false): array
-{
-    global $db;
-
-    $targetKey = af_aa_target_key_for_do($do);
-    $where = "target_key='" . $db->escape_string($targetKey) . "'";
-
-    if ($enabledOnly) {
-        $where .= " AND enabled='1'";
-    }
-
-    $rows = [];
-    $query = $db->simple_select(
-        AF_AA_PRESETS_TABLE_NAME,
-        '*',
-        $where,
-        ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']
-    );
-
-    while ($row = $db->fetch_array($query)) {
-        if (is_array($row)) {
-            $rows[] = $row;
-        }
-    }
-
-    return $rows;
-}
-
-function af_aa_save_front_preset(string $do): int
-{
-    global $db, $mybb;
-
-    $do = af_aa_resolve_preset_do($do);
-    $id = (int)$mybb->get_input('id');
-
-    $slugRaw = trim((string)$mybb->get_input('slug'));
-    $slug = preg_replace('~[^a-z0-9_\-]+~i', '-', strtolower($slugRaw)) ?? '';
-    $slug = trim($slug, '-');
-
-    if ($slug === '') {
-        $slug = 'preset-' . TIME_NOW;
-    }
-
-    $targetKey = af_aa_target_key_for_do($do);
-
-    $settingsInput = $mybb->get_input('settings', MyBB::INPUT_ARRAY);
-    if (!is_array($settingsInput)) {
-        $settingsInput = [];
-    }
-
-    $settings = af_aa_decode_and_sanitize_preset_settings(
-        json_encode($settingsInput, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        af_aa_get_front_defaults(),
-        $targetKey
-    );
-
-    $previewImage = af_aa_sanitize_image_url((string)$mybb->get_input('preview_image'), '');
-
-    $payload = [
-        'slug' => $db->escape_string($slug),
-        'title' => $db->escape_string(trim((string)$mybb->get_input('title'))),
-        'description' => $db->escape_string(trim((string)$mybb->get_input('description'))),
-        'preview_image' => $db->escape_string($previewImage),
-        'target_key' => $db->escape_string($targetKey),
-        'settings_json' => $db->escape_string(json_encode($settings, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
-        'sortorder' => (int)$mybb->get_input('sortorder'),
-        'updated_at' => TIME_NOW,
-    ];
-
-    if ($id > 0) {
-        $db->update_query(AF_AA_PRESETS_TABLE_NAME, $payload, "id='" . $id . "'");
-        return $id;
-    }
-
-    $payload['enabled'] = 1;
-    $payload['created_at'] = TIME_NOW;
-
-    $newId = (int)$db->insert_query(AF_AA_PRESETS_TABLE_NAME, $payload);
-    return $newId;
-}
-
-function af_aa_delete_front_preset(int $presetId): void
-{
-    global $db;
-
-    $presetId = (int)$presetId;
-    if ($presetId <= 0) {
+    function ensureStatAccessibility(item) {
+      if (!item) {
         return;
+      }
+
+      if (!item.hasAttribute('tabindex')) {
+        item.setAttribute('tabindex', '0');
+      }
+
+      if (!item.hasAttribute('role')) {
+        item.setAttribute('role', 'button');
+      }
+
+      if (!item.hasAttribute('aria-expanded')) {
+        item.setAttribute('aria-expanded', 'false');
+      }
     }
 
-    $db->delete_query(AF_AA_PRESETS_TABLE_NAME, "id='" . $presetId . "'");
-}
+    function prepareStatsAccessibility(root) {
+      var base = root && root.querySelectorAll ? root : document;
+      Array.prototype.forEach.call(base.querySelectorAll(STAT_ITEM_SELECTOR), ensureStatAccessibility);
+    }
 
-function af_aa_toggle_front_preset(int $presetId, int $enabled): void
-{
-    global $db;
+    function closeAllStats(exceptNode) {
+      Array.prototype.forEach.call(document.querySelectorAll(STAT_ITEM_SELECTOR + '.is-open'), function (item) {
+        if (exceptNode && item === exceptNode) {
+          return;
+        }
 
-    $presetId = (int)$presetId;
-    if ($presetId <= 0) {
+        item.classList.remove('is-open');
+        item.setAttribute('aria-expanded', 'false');
+      });
+    }
+
+    prepareStatsAccessibility(document);
+
+    document.addEventListener('click', function (event) {
+      var target = event.target;
+      var interactiveInsideValue = target && target.closest ? target.closest(
+        '.af-apui-stat-item__value a, .af-apui-stat-item__value button, .af-apui-stat-item__value input, .af-apui-stat-item__value select, .af-apui-stat-item__value textarea, .af-apui-stat-item__value label'
+      ) : null;
+
+      if (interactiveInsideValue) {
         return;
+      }
+
+      var stat = target && target.closest ? target.closest(STAT_ITEM_SELECTOR) : null;
+
+      if (!stat) {
+        closeAllStats(null);
+        return;
+      }
+
+      ensureStatAccessibility(stat);
+
+      var opened = stat.classList.contains('is-open');
+      closeAllStats(stat);
+
+      if (opened) {
+        stat.classList.remove('is-open');
+        stat.setAttribute('aria-expanded', 'false');
+        return;
+      }
+
+      stat.classList.add('is-open');
+      stat.setAttribute('aria-expanded', 'true');
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        closeAllStats(null);
+        return;
+      }
+
+      var target = event.target;
+      var stat = target && target.closest ? target.closest(STAT_ITEM_SELECTOR) : null;
+      if (!stat) {
+        return;
+      }
+
+      ensureStatAccessibility(stat);
+
+      if (event.key !== 'Enter' && event.key !== ' ') {
+        return;
+      }
+
+      event.preventDefault();
+
+      var opened = stat.classList.contains('is-open');
+      closeAllStats(stat);
+
+      if (opened) {
+        stat.classList.remove('is-open');
+        stat.setAttribute('aria-expanded', 'false');
+        return;
+      }
+
+      stat.classList.add('is-open');
+      stat.setAttribute('aria-expanded', 'true');
+    });
+
+    document.addEventListener('focusin', function (event) {
+      var target = event.target;
+      var stat = target && target.closest ? target.closest(STAT_ITEM_SELECTOR) : null;
+      if (stat) {
+        ensureStatAccessibility(stat);
+      }
+    });
+  }
+
+  function initPostbitModalActions() {
+    if (window.__afApuiPostbitModalInit) {
+      return;
     }
 
-    $db->update_query(
-        AF_AA_PRESETS_TABLE_NAME,
-        [
-            'enabled' => $enabled ? 1 : 0,
-            'updated_at' => TIME_NOW,
-        ],
-        "id='" . $presetId . "'"
-    );
-}
+    var hasApuiOpener = document.querySelector(APUI_MODAL_OPENER_SELECTOR);
 
-function af_aa_page_asset_tags(): string
-{
-    global $mybb;
-
-    if (!af_aa_is_preview_script()) {
-        return '';
+    if (!hasApuiOpener) {
+      return;
     }
 
-    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
-    $base = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AA_ID . '/assets';
+    window.__afApuiPostbitModalInit = true;
 
-    $cssUrl = af_aa_add_ver($base . '/advancedappearance.css', AF_AA_ASSETS_DIR . 'advancedappearance.css');
-    $jsUrl = af_aa_add_ver($base . '/advancedappearance.js', AF_AA_ASSETS_DIR . 'advancedappearance.js');
+    document.addEventListener('click', function (event) {
+      var target = event.target;
 
-    $out = '';
-    $out .= "\n" . '<link rel="stylesheet" href="' . htmlspecialchars_uni($cssUrl) . '">' . "\n";
-    $out .= '<script src="' . htmlspecialchars_uni($jsUrl) . '" defer></script>' . "\n";
+      if (target && target.closest && target.closest('[data-af-apui-modal-close]')) {
+        closeUniversalModal();
+        return;
+      }
 
-    return $out;
-}
+      var opener = target && target.closest ? target.closest('[data-af-apui-modal-url]') : null;
+      if (!isApuiModalOpener(opener)) {
+        return;
+      }
 
-function af_aa_ensure_header_bits(): void
-{
-    global $templates, $headerinclude, $header, $footer;
+      if (opener.hasAttribute('data-afcs-open') || opener.hasAttribute('data-afcs-sheet')) {
+        return;
+      }
 
-    if ($headerinclude === '' && isset($templates)) {
-        eval('$headerinclude = "' . $templates->get('headerinclude') . '";');
+      event.preventDefault();
+
+      var modalKind = String(opener.getAttribute('data-af-apui-modal-kind') || 'iframe').toLowerCase();
+
+      if (modalKind === 'application') {
+        openApplicationModal(opener);
+        return;
+      }
+
+      openUniversalModal(
+        opener.getAttribute('data-af-apui-modal-url'),
+        opener.getAttribute('data-af-apui-modal-title'),
+        modalKind
+      );
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        var modal = document.querySelector('[data-af-apui-modal].is-open');
+        if (modal) {
+          closeUniversalModal();
+        }
+      }
+    });
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  function initStickyPostbits() {
+    if (window.__afApuiStickyPostbitsInit) {
+      return;
     }
 
-    if ($header === '' && isset($templates)) {
-        eval('$header = "' . $templates->get('header') . '";');
+    var rows = toArray(document.querySelectorAll(POSTBIT_SELECTOR));
+    if (!rows.length) {
+      return;
     }
 
-    if ($footer === '' && isset($templates)) {
-        eval('$footer = "' . $templates->get('footer') . '";');
-    }
-}
+    var items = [];
+    var stickyTop = 12;
+    var rafId = 0;
+    var refreshTimer = 0;
 
-function af_aa_escape_attr_json(array $payload): string
-{
-    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if (!is_string($json) || $json === '') {
-        $json = '{}';
-    }
+    function setAuthorTranslate(item, translateY) {
+      if (translateY === item.lastTranslate) {
+        return;
+      }
 
-    return htmlspecialchars_uni($json);
-}
+      item.lastTranslate = translateY;
 
-function af_aa_render_tabs_html(string $baseFile, string $currentDo): string
-{
-    $tabs = af_aa_get_front_tabs();
-    $currentDo = af_aa_resolve_preset_do($currentDo);
+      if (!translateY) {
+        item.author.style.removeProperty('transform');
+        item.author.style.removeProperty('will-change');
+        return;
+      }
 
-    $html = '<div class="af-aa-tabs" role="tablist">';
-
-    foreach ($tabs as $do => $label) {
-        $isActive = $do === $currentDo;
-        $class = 'af-aa-tab' . ($isActive ? ' is-active' : '');
-        $url = $baseFile . '?do=' . rawurlencode($do);
-
-        $html .= '<a class="' . $class . '" href="' . htmlspecialchars_uni($url) . '">' . htmlspecialchars_uni($label) . '</a>';
+      item.author.style.willChange = 'transform';
+      item.author.style.transform = 'translate3d(0, ' + translateY + 'px, 0)';
     }
 
-    $html .= '</div>';
-
-    return $html;
-}
-
-function af_aa_front_field(string $label, string $inputHtml, string $hint = ''): string
-{
-    $html = '<label class="af-aa-field">';
-    $html .= '<span class="af-aa-field__label">' . htmlspecialchars_uni($label) . '</span>';
-    $html .= $inputHtml;
-
-    if ($hint !== '') {
-        $html .= '<span class="af-aa-field__hint">' . htmlspecialchars_uni($hint) . '</span>';
-    }
-
-    $html .= '</label>';
-
-    return $html;
-}
-
-function af_aa_front_input(string $label, string $name, string $value, array $attrs = [], string $hint = ''): string
-{
-    $type = (string)($attrs['type'] ?? 'text');
-    unset($attrs['type']);
-
-    $attrHtml = '';
-    foreach ($attrs as $attrName => $attrValue) {
-        if (is_bool($attrValue)) {
-            if ($attrValue) {
-                $attrHtml .= ' ' . htmlspecialchars_uni((string)$attrName);
-            }
-            continue;
+    function collectRows() {
+      items = toArray(document.querySelectorAll(POSTBIT_SELECTOR)).map(function (row) {
+        var author = row.querySelector(POSTBIT_AUTHOR_SELECTOR);
+        if (!author) {
+          return null;
         }
 
-        $attrHtml .= ' ' . htmlspecialchars_uni((string)$attrName) . '="' . htmlspecialchars_uni((string)$attrValue) . '"';
+        return {
+          row: row,
+          author: author,
+          lastTranslate: null
+        };
+      }).filter(function (item) {
+        return !!item;
+      });
     }
 
-    $input = '<input class="af-aa-input" type="' . htmlspecialchars_uni($type) . '"'
-        . ' name="' . htmlspecialchars_uni($name) . '"'
-        . ' value="' . htmlspecialchars_uni($value) . '"'
-        . $attrHtml
-        . '>';
+    function updateOne(item) {
+      if (!item || !item.row || !item.author) {
+        return;
+      }
 
-    return af_aa_front_field($label, $input, $hint);
-}
+      if (window.innerWidth <= 1024) {
+        setAuthorTranslate(item, 0);
+        return;
+      }
 
-function af_aa_front_textarea(string $label, string $name, string $value, array $attrs = [], string $hint = ''): string
-{
-    $rows = (int)($attrs['rows'] ?? 4);
-    unset($attrs['rows']);
+      var rowHeight = item.row.offsetHeight;
+      var authorHeight = item.author.offsetHeight;
 
-    $attrHtml = '';
-    foreach ($attrs as $attrName => $attrValue) {
-        if (is_bool($attrValue)) {
-            if ($attrValue) {
-                $attrHtml .= ' ' . htmlspecialchars_uni((string)$attrName);
-            }
-            continue;
-        }
+      if (!rowHeight || !authorHeight) {
+        setAuthorTranslate(item, 0);
+        return;
+      }
 
-        $attrHtml .= ' ' . htmlspecialchars_uni((string)$attrName) . '="' . htmlspecialchars_uni((string)$attrValue) . '"';
+      if (rowHeight <= authorHeight + stickyTop + 12) {
+        setAuthorTranslate(item, 0);
+        return;
+      }
+
+      var scrollTop = window.pageYOffset || document.documentElement.scrollTop || 0;
+      var rowRect = item.row.getBoundingClientRect();
+      var rowTop = scrollTop + rowRect.top;
+      var maxTranslate = Math.max(0, rowHeight - authorHeight);
+      var wantedTranslate = scrollTop + stickyTop - rowTop;
+      var translateY = clamp(wantedTranslate, 0, maxTranslate);
+
+      setAuthorTranslate(item, translateY);
     }
 
-    $input = '<textarea class="af-aa-input af-aa-input--textarea"'
-        . ' name="' . htmlspecialchars_uni($name) . '"'
-        . ' rows="' . $rows . '"'
-        . $attrHtml
-        . '>' . htmlspecialchars_uni($value) . '</textarea>';
+    function updateAll() {
+      rafId = 0;
 
-    return af_aa_front_field($label, $input, $hint);
-}
+      if (!items.length) {
+        return;
+      }
 
-function af_aa_front_select(string $label, string $name, string $selectedValue, array $options, array $attrs = [], string $hint = ''): string
-{
-    $attrHtml = '';
-    foreach ($attrs as $attrName => $attrValue) {
-        if (is_bool($attrValue)) {
-            if ($attrValue) {
-                $attrHtml .= ' ' . htmlspecialchars_uni((string)$attrName);
-            }
-            continue;
-        }
-
-        $attrHtml .= ' ' . htmlspecialchars_uni((string)$attrName) . '="' . htmlspecialchars_uni((string)$attrValue) . '"';
+      items.forEach(updateOne);
     }
 
-    $input = '<select class="af-aa-input af-aa-input--select" name="' . htmlspecialchars_uni($name) . '"' . $attrHtml . '>';
-    foreach ($options as $value => $labelText) {
-        $input .= '<option value="' . htmlspecialchars_uni((string)$value) . '"'
-            . ((string)$value === $selectedValue ? ' selected' : '')
-            . '>' . htmlspecialchars_uni((string)$labelText) . '</option>';
-    }
-    $input .= '</select>';
+    function scheduleUpdate() {
+      if (rafId) {
+        return;
+      }
 
-    return af_aa_front_field($label, $input, $hint);
-}
+      if (typeof window.requestAnimationFrame === 'function') {
+        rafId = window.requestAnimationFrame(updateAll);
+        return;
+      }
 
-function af_aa_build_profile_fields_html(array $settings, bool $includeCustomCss = false): string
-{
-    $html = '<section class="af-aa-panel af-aa-form-section">';
-    $html .= '<h3 class="af-aa-panel__title">Профиль</h3>';
-    $html .= '<div class="af-aa-form-grid">';
-
-    $html .= af_aa_front_input('Cover URL', 'settings[member_profile_body_cover_url]', (string)$settings['member_profile_body_cover_url'], [
-        'data-aa-setting' => 'member_profile_body_cover_url',
-    ]);
-
-    $html .= af_aa_front_input('Tile URL', 'settings[member_profile_body_tile_url]', (string)$settings['member_profile_body_tile_url'], [
-        'data-aa-setting' => 'member_profile_body_tile_url',
-    ]);
-
-    $html .= af_aa_front_select('Body mode', 'settings[member_profile_body_bg_mode]', (string)$settings['member_profile_body_bg_mode'], [
-        'cover' => 'cover',
-        'tile' => 'tile',
-    ], [
-        'data-aa-setting' => 'member_profile_body_bg_mode',
-    ]);
-
-    $html .= af_aa_front_input('Body overlay', 'settings[member_profile_body_overlay]', (string)$settings['member_profile_body_overlay'], [
-        'data-aa-setting' => 'member_profile_body_overlay',
-    ], 'Например: linear-gradient(180deg, rgba(0,0,0,.10), rgba(0,0,0,.65))');
-
-    $html .= af_aa_front_input('Banner URL', 'settings[profile_banner_url]', (string)$settings['profile_banner_url'], [
-        'data-aa-setting' => 'profile_banner_url',
-    ]);
-
-    $html .= af_aa_front_input('Banner overlay', 'settings[profile_banner_overlay]', (string)$settings['profile_banner_overlay'], [
-        'data-aa-setting' => 'profile_banner_overlay',
-    ]);
-
-    if ($includeCustomCss) {
-        $html .= af_aa_front_textarea('Custom CSS', 'settings[custom_css]', (string)$settings['custom_css'], [
-            'rows' => 10,
-            'data-aa-setting' => 'custom_css',
-        ], 'Поддерживаются плейсхолдеры {{selector}} и {{body_selector}}.');
+      rafId = window.setTimeout(updateAll, 16);
     }
 
-    $html .= '</div>';
-    $html .= '</section>';
+    function scheduleRefresh() {
+      if (refreshTimer) {
+        window.clearTimeout(refreshTimer);
+      }
 
-    return $html;
-}
-
-function af_aa_build_postbit_fields_html(array $settings, bool $includeCustomCss = false): string
-{
-    $html = '<section class="af-aa-panel af-aa-form-section">';
-    $html .= '<h3 class="af-aa-panel__title">Постбит</h3>';
-    $html .= '<div class="af-aa-form-grid">';
-
-    $html .= af_aa_front_input('Author background URL', 'settings[postbit_author_bg_url]', (string)$settings['postbit_author_bg_url'], [
-        'data-aa-setting' => 'postbit_author_bg_url',
-    ]);
-
-    $html .= af_aa_front_input('Author overlay', 'settings[postbit_author_overlay]', (string)$settings['postbit_author_overlay'], [
-        'data-aa-setting' => 'postbit_author_overlay',
-    ]);
-
-    $html .= af_aa_front_input('Name background URL', 'settings[postbit_name_bg_url]', (string)$settings['postbit_name_bg_url'], [
-        'data-aa-setting' => 'postbit_name_bg_url',
-    ]);
-
-    $html .= af_aa_front_input('Name overlay', 'settings[postbit_name_overlay]', (string)$settings['postbit_name_overlay'], [
-        'data-aa-setting' => 'postbit_name_overlay',
-    ]);
-
-    $html .= af_aa_front_input('Plaque background URL', 'settings[postbit_plaque_bg_url]', (string)$settings['postbit_plaque_bg_url'], [
-        'data-aa-setting' => 'postbit_plaque_bg_url',
-    ]);
-
-    $html .= af_aa_front_input('Plaque overlay', 'settings[postbit_plaque_overlay]', (string)$settings['postbit_plaque_overlay'], [
-        'data-aa-setting' => 'postbit_plaque_overlay',
-    ]);
-
-    if ($includeCustomCss) {
-        $html .= af_aa_front_textarea('Custom CSS', 'settings[custom_css]', (string)$settings['custom_css'], [
-            'rows' => 10,
-            'data-aa-setting' => 'custom_css',
-        ], 'Этот CSS должен менять только макет постбита.');
+      refreshTimer = window.setTimeout(function () {
+        refreshTimer = 0;
+        collectRows();
+        scheduleUpdate();
+      }, 80);
     }
 
-    $html .= '</div>';
-    $html .= '</section>';
-
-    return $html;
-}
-
-function af_aa_build_fragment_fields_html(array $settings): string
-{
-    $fragmentOptions = af_aa_get_supported_fragment_keys();
-    $fragmentKey = (string)($settings['fragment_key'] ?? 'profile_banner');
-
-    if (!isset($fragmentOptions[$fragmentKey])) {
-        $fragmentKey = 'profile_banner';
+    collectRows();
+    if (!items.length) {
+      return;
     }
 
-    $html = '<section class="af-aa-panel af-aa-form-section">';
-    $html .= '<h3 class="af-aa-panel__title">Разное / дробный пак</h3>';
-    $html .= '<div class="af-aa-form-grid">';
+    window.__afApuiStickyPostbitsInit = true;
 
-    $html .= af_aa_front_select('Участок', 'settings[fragment_key]', $fragmentKey, $fragmentOptions, [
-        'data-aa-setting' => 'fragment_key',
-    ], 'Для preview меняется только выбранный участок + custom CSS.');
+    window.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('resize', scheduleRefresh);
+    window.addEventListener('load', scheduleRefresh);
+    window.addEventListener('orientationchange', scheduleRefresh);
 
-    $html .= af_aa_front_input('Cover URL', 'settings[member_profile_body_cover_url]', (string)$settings['member_profile_body_cover_url'], [
-        'data-aa-setting' => 'member_profile_body_cover_url',
-    ]);
+    scheduleUpdate();
+    window.setTimeout(scheduleRefresh, 180);
+  }
 
-    $html .= af_aa_front_input('Tile URL', 'settings[member_profile_body_tile_url]', (string)$settings['member_profile_body_tile_url'], [
-        'data-aa-setting' => 'member_profile_body_tile_url',
-    ]);
+  function boot() {
+    var hasTabs = !!document.querySelector(TAB_ROOT_SELECTOR);
+    var hasPostbitUserDetails = !!document.querySelector(POSTBIT_USERDETAILS_SELECTOR);
+    var hasPostbits = !!document.querySelector(POSTBIT_SELECTOR);
+    var hasApuiModalOpeners = !!document.querySelector(APUI_MODAL_OPENER_SELECTOR);
 
-    $html .= af_aa_front_select('Body mode', 'settings[member_profile_body_bg_mode]', (string)$settings['member_profile_body_bg_mode'], [
-        'cover' => 'cover',
-        'tile' => 'tile',
-    ], [
-        'data-aa-setting' => 'member_profile_body_bg_mode',
-    ]);
-
-    $html .= af_aa_front_input('Body overlay', 'settings[member_profile_body_overlay]', (string)$settings['member_profile_body_overlay'], [
-        'data-aa-setting' => 'member_profile_body_overlay',
-    ]);
-
-    $html .= af_aa_front_input('Banner URL', 'settings[profile_banner_url]', (string)$settings['profile_banner_url'], [
-        'data-aa-setting' => 'profile_banner_url',
-    ]);
-
-    $html .= af_aa_front_input('Banner overlay', 'settings[profile_banner_overlay]', (string)$settings['profile_banner_overlay'], [
-        'data-aa-setting' => 'profile_banner_overlay',
-    ]);
-
-    $html .= af_aa_front_input('Author background URL', 'settings[postbit_author_bg_url]', (string)$settings['postbit_author_bg_url'], [
-        'data-aa-setting' => 'postbit_author_bg_url',
-    ]);
-
-    $html .= af_aa_front_input('Author overlay', 'settings[postbit_author_overlay]', (string)$settings['postbit_author_overlay'], [
-        'data-aa-setting' => 'postbit_author_overlay',
-    ]);
-
-    $html .= af_aa_front_input('Name background URL', 'settings[postbit_name_bg_url]', (string)$settings['postbit_name_bg_url'], [
-        'data-aa-setting' => 'postbit_name_bg_url',
-    ]);
-
-    $html .= af_aa_front_input('Name overlay', 'settings[postbit_name_overlay]', (string)$settings['postbit_name_overlay'], [
-        'data-aa-setting' => 'postbit_name_overlay',
-    ]);
-
-    $html .= af_aa_front_input('Plaque background URL', 'settings[postbit_plaque_bg_url]', (string)$settings['postbit_plaque_bg_url'], [
-        'data-aa-setting' => 'postbit_plaque_bg_url',
-    ]);
-
-    $html .= af_aa_front_input('Plaque overlay', 'settings[postbit_plaque_overlay]', (string)$settings['postbit_plaque_overlay'], [
-        'data-aa-setting' => 'postbit_plaque_overlay',
-    ]);
-
-    $html .= af_aa_front_textarea('Custom CSS', 'settings[custom_css]', (string)$settings['custom_css'], [
-        'rows' => 10,
-        'data-aa-setting' => 'custom_css',
-    ], 'Для точечной кастомизации. Можно использовать CSS из ACP-примеров.');
-
-    $html .= '</div>';
-    $html .= '</section>';
-
-    return $html;
-}
-
-function af_aa_build_surface_fields_html(array $settings): string
-{
-    $surfaceMap = [
-        'sheet' => 'Лист персонажа',
-        'application' => 'Анкета',
-        'inventory' => 'Инвентарь',
-        'achievements' => 'Ачивки',
-    ];
-
-    $html = '';
-
-    foreach ($surfaceMap as $surfaceKey => $surfaceLabel) {
-        $html .= '<section class="af-aa-panel af-aa-form-section">';
-        $html .= '<h3 class="af-aa-panel__title">' . htmlspecialchars_uni($surfaceLabel) . '</h3>';
-        $html .= '<div class="af-aa-form-grid">';
-        $html .= af_aa_front_input('Background URL', 'settings[' . $surfaceKey . '_bg_url]', (string)($settings[$surfaceKey . '_bg_url'] ?? ''), [
-            'data-aa-setting' => $surfaceKey . '_bg_url',
-        ]);
-        $html .= af_aa_front_input('Background overlay', 'settings[' . $surfaceKey . '_bg_overlay]', (string)($settings[$surfaceKey . '_bg_overlay'] ?? ''), [
-            'data-aa-setting' => $surfaceKey . '_bg_overlay',
-        ]);
-        $html .= af_aa_front_input('Panel background', 'settings[' . $surfaceKey . '_panel_bg]', (string)($settings[$surfaceKey . '_panel_bg'] ?? ''), [
-            'data-aa-setting' => $surfaceKey . '_panel_bg',
-        ]);
-        $html .= af_aa_front_input('Panel border', 'settings[' . $surfaceKey . '_panel_border]', (string)($settings[$surfaceKey . '_panel_border'] ?? ''), [
-            'data-aa-setting' => $surfaceKey . '_panel_border',
-        ]);
-        $html .= '</div>';
-        $html .= '</section>';
+    if (hasPostbitUserDetails) {
+      normalizePostbitUserDetails();
+      initPostbitStatInteractions();
     }
 
-    return $html;
-}
-
-function af_aa_build_studio_form_html(string $do, array $preset, array $settings): string
-{
-    global $mybb;
-
-    $do = af_aa_resolve_preset_do($do);
-    $id = (int)($preset['id'] ?? 0);
-    $targetKey = af_aa_target_key_for_do($do);
-
-    $titleMap = [
-        'themepack' => 'Конструктор: общий пак темы',
-        'profilepack' => 'Конструктор: пак профиля',
-        'postbitpack' => 'Конструктор: пак постбита',
-        'fragmentpack' => 'Конструктор: дробный пак',
-    ];
-
-    $html = '<form class="af-aa-panel af-aa-form" method="post" action="apstudio.php?do=' . rawurlencode($do) . '" data-aa-form>';
-    $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
-    $html .= '<input type="hidden" name="action" value="save">';
-    $html .= '<input type="hidden" name="id" value="' . $id . '">';
-
-    $html .= '<div class="af-aa-panel__head">';
-    $html .= '<div>';
-    $html .= '<h2 class="af-aa-panel__title">' . htmlspecialchars_uni($titleMap[$do] ?? 'Конструктор') . '</h2>';
-    $html .= '<p class="af-aa-panel__desc">Фронтовое создание и редактирование пресетов без ACP.</p>';
-    $html .= '</div>';
-    if ($id > 0) {
-        $html .= '<span class="af-aa-chip">Редактирование #' . $id . '</span>';
-    }
-    $html .= '</div>';
-
-    $html .= '<section class="af-aa-panel af-aa-form-section">';
-    $html .= '<h3 class="af-aa-panel__title">Общие данные</h3>';
-    $html .= '<div class="af-aa-form-grid">';
-    $html .= af_aa_front_input('Slug', 'slug', (string)($preset['slug'] ?? ''));
-    $html .= af_aa_front_input('Название', 'title', (string)($preset['title'] ?? ''));
-    $html .= af_aa_front_textarea('Описание', 'description', (string)($preset['description'] ?? ''), ['rows' => 4]);
-    $html .= af_aa_front_input('Preview image', 'preview_image', (string)($preset['preview_image'] ?? ''), [], 'Это картинка карточки пресета в каталоге.');
-    $html .= af_aa_front_input('Target key', 'target_key', $targetKey, ['readonly' => true]);
-    $html .= af_aa_front_input('Sort order', 'sortorder', (string)($preset['sortorder'] ?? '0'), ['type' => 'number']);
-    $html .= '</div>';
-    $html .= '</section>';
-
-    switch ($do) {
-        case 'profilepack':
-            $html .= af_aa_build_profile_fields_html($settings, true);
-            break;
-
-        case 'postbitpack':
-            $html .= af_aa_build_postbit_fields_html($settings, true);
-            break;
-
-        case 'fragmentpack':
-            $html .= af_aa_build_fragment_fields_html($settings);
-            break;
-
-        case 'themepack':
-        default:
-            $html .= af_aa_build_profile_fields_html($settings, false);
-            $html .= af_aa_build_postbit_fields_html($settings, false);
-            $html .= af_aa_build_surface_fields_html($settings);
-            $html .= '<section class="af-aa-panel af-aa-form-section">';
-            $html .= '<h3 class="af-aa-panel__title">Пользовательский CSS</h3>';
-            $html .= '<div class="af-aa-form-grid">';
-            $html .= af_aa_front_textarea('Custom CSS', 'settings[custom_css]', (string)$settings['custom_css'], [
-                'rows' => 12,
-                'data-aa-setting' => 'custom_css',
-            ], 'Поддерживаются {{selector}} и {{body_selector}}.');
-            $html .= '</div>';
-            $html .= '</section>';
-            break;
+    if (hasApuiModalOpeners) {
+      initPostbitModalActions();
     }
 
-    $html .= '<div class="af-aa-actions">';
-    $html .= '<button class="button" type="submit">Сохранить пресет</button>';
-    $html .= '<button class="button" type="button" data-aa-preview-from-form>Открыть превью</button>';
-    $html .= '<a class="button" href="apstudio.php?do=' . rawurlencode($do) . '">Создать новый</a>';
-    $html .= '</div>';
-    $html .= '</form>';
-
-    return $html;
-}
-
-function af_aa_build_preset_card_html(array $row, string $do, bool $studioMode = false): string
-{
-    global $mybb;
-
-    $settings = af_aa_front_settings_from_row($row);
-    $targetLabel = af_aa_human_target_label((string)$row['target_key'], $settings);
-    $enabled = (int)($row['enabled'] ?? 0) === 1;
-    $id = (int)($row['id'] ?? 0);
-    $title = (string)($row['title'] ?? '');
-    $description = trim((string)($row['description'] ?? ''));
-    $previewImage = trim((string)($row['preview_image'] ?? ''));
-    $settingsJson = af_aa_escape_attr_json($settings);
-
-    $imageHtml = '<div class="af-aa-card__image af-aa-card__image--empty">Нет preview</div>';
-    if ($previewImage !== '') {
-        $imageHtml = '<div class="af-aa-card__image" style="background-image:url(\'' . htmlspecialchars_uni($previewImage) . '\');"></div>';
+    if (hasPostbits) {
+      initStickyPostbits();
     }
 
-    $html = '<article class="af-aa-card"'
-        . ' data-aa-card'
-        . ' data-aa-settings="' . $settingsJson . '"'
-        . ' data-aa-title="' . htmlspecialchars_uni($title) . '"'
-        . ' data-aa-description="' . htmlspecialchars_uni($description !== '' ? $description : $targetLabel) . '">';
-
-    $html .= $imageHtml;
-    $html .= '<div class="af-aa-card__body">';
-    $html .= '<div class="af-aa-card__meta">';
-    $html .= '<span class="af-aa-chip">' . htmlspecialchars_uni($targetLabel) . '</span>';
-    if ($studioMode) {
-        $html .= '<span class="af-aa-chip ' . ($enabled ? 'is-success' : 'is-muted') . '">' . ($enabled ? 'Вкл' : 'Выкл') . '</span>';
-        $html .= '<span class="af-aa-chip">sort: ' . (int)($row['sortorder'] ?? 0) . '</span>';
-    }
-    $html .= '</div>';
-
-    $html .= '<h3 class="af-aa-card__title">' . htmlspecialchars_uni($title !== '' ? $title : ('Preset #' . $id)) . '</h3>';
-    $html .= '<p class="af-aa-card__desc">' . htmlspecialchars_uni($description !== '' ? $description : 'Без описания') . '</p>';
-
-    $html .= '<div class="af-aa-card__actions">';
-    $html .= '<button class="button button_small" type="button" data-aa-preview-from-card>Показать в превью</button>';
-
-    if ($studioMode) {
-        $html .= '<a class="button button_small" href="apstudio.php?do=' . rawurlencode($do) . '&edit=' . $id . '">Редактировать</a>';
-
-        $html .= '<form method="post" action="apstudio.php?do=' . rawurlencode($do) . '" class="af-aa-inline-form">';
-        $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
-        $html .= '<input type="hidden" name="action" value="toggle">';
-        $html .= '<input type="hidden" name="id" value="' . $id . '">';
-        $html .= '<input type="hidden" name="enabled" value="' . ($enabled ? '0' : '1') . '">';
-        $html .= '<button class="button button_small" type="submit">' . ($enabled ? 'Выключить' : 'Включить') . '</button>';
-        $html .= '</form>';
-
-        $html .= '<form method="post" action="apstudio.php?do=' . rawurlencode($do) . '" class="af-aa-inline-form" onsubmit="return confirm(\'Удалить пресет?\');">';
-        $html .= '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">';
-        $html .= '<input type="hidden" name="action" value="delete">';
-        $html .= '<input type="hidden" name="id" value="' . $id . '">';
-        $html .= '<button class="button button_small" type="submit">Удалить</button>';
-        $html .= '</form>';
+    if (!hasTabs) {
+      return;
     }
 
-    $html .= '</div>';
-    $html .= '</div>';
-    $html .= '</article>';
-
-    return $html;
-}
-
-function af_aa_build_cards_grid_html(array $rows, string $do, bool $studioMode = false): string
-{
-    if (empty($rows)) {
-        return '<div class="af-aa-panel"><div class="af-aa-empty">Пока тут нет пресетов в этой вкладке.</div></div>';
-    }
-
-    $html = '<div class="af-aa-card-grid">';
-    foreach ($rows as $row) {
-        $html .= af_aa_build_preset_card_html($row, $do, $studioMode);
-    }
-    $html .= '</div>';
-
-    return $html;
-}
-
-function af_aa_pick_initial_preset(array $rows, int $preferredId = 0): array
-{
-    if ($preferredId > 0) {
-        foreach ($rows as $row) {
-            if ((int)($row['id'] ?? 0) === $preferredId) {
-                return $row;
-            }
-        }
-    }
-
-    if (!empty($rows)) {
-        return $rows[0];
-    }
-
-    return [];
-}
-
-function af_aa_render_template_output(string $templateName, array $vars): string
-{
-    // Подтягиваем в scope шаблона нужные глобалы MyBB,
-    // чтобы {$headerinclude}, {$header}, {$footer}, {$htmloption} и т.д. реально работали.
-    $globalsToImport = [
-        'mybb',
-        'lang',
-        'theme',
-        'templates',
-        'headerinclude',
-        'header',
-        'footer',
-        'htmloption',
-        'charset',
-        'stylesheets',
-        'plugins'
-    ];
-
-    foreach ($globalsToImport as $globalName) {
-        if (array_key_exists($globalName, $GLOBALS)) {
-            ${$globalName} = $GLOBALS[$globalName];
-        }
-    }
-
-    extract($vars, EXTR_SKIP);
-
-    $template = af_aa_get_template_source($templateName);
-    $out = '';
-    eval('$out = "' . $template . '";');
-
-    return (string)$out;
-}
-
-function af_aa_preview_abs_url(string $url): string
-{
-    global $mybb;
-
-    $url = trim($url);
-    if ($url === '') {
-        return '';
-    }
-
-    if (preg_match('~^https?://~i', $url)) {
-        return $url;
-    }
-
-    if (strpos($url, '//') === 0) {
-        return '';
-    }
-
-    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
-
-    return $bburl . '/' . ltrim($url, '/');
-}
-
-function af_aa_preview_initials(string $username): string
-{
-    $username = trim((string)(preg_replace('~\s+~u', ' ', $username) ?? $username));
-    if ($username === '') {
-        return 'U';
-    }
-
-    $parts = preg_split('~[\s\-_]+~u', $username) ?: [$username];
-    $letters = [];
-
-    foreach ($parts as $part) {
-        $part = trim((string)$part);
-        if ($part === '') {
-            continue;
-        }
-
-        if (function_exists('mb_substr') && function_exists('mb_strtoupper')) {
-            $letters[] = mb_strtoupper(mb_substr($part, 0, 1, 'UTF-8'), 'UTF-8');
-        } else {
-            $letters[] = strtoupper(substr($part, 0, 1));
-        }
-
-        if (count($letters) >= 2) {
-            break;
-        }
-    }
-
-    if (empty($letters)) {
-        return 'U';
-    }
-
-    return implode('', $letters);
-}
-
-function af_aa_preview_render_avatar(string $avatarUrl, string $username, bool $small = false): string
-{
-    if ($avatarUrl !== '') {
-        return '<img src="' . htmlspecialchars_uni($avatarUrl) . '"'
-            . ' alt="' . htmlspecialchars_uni($username) . '"'
-            . ' class="af-aa-preview-avatar-image' . ($small ? ' af-aa-preview-avatar-image--small' : '') . '"'
-            . ' style="display:block;width:100%;height:100%;object-fit:cover;">';
-    }
-
-    $class = 'af-aa-mock-avatar' . ($small ? ' af-aa-mock-avatar--small' : '');
-    return '<div class="' . $class . '">' . htmlspecialchars_uni(af_aa_preview_initials($username)) . '</div>';
-}
-
-function af_aa_preview_get_group_title(int $gid): string
-{
-    global $db;
-
-    if ($gid <= 0) {
-        return '';
-    }
-
-    if (!isset($GLOBALS['af_aa_preview_group_title_cache']) || !is_array($GLOBALS['af_aa_preview_group_title_cache'])) {
-        $GLOBALS['af_aa_preview_group_title_cache'] = [];
-    }
-
-    if (isset($GLOBALS['af_aa_preview_group_title_cache'][$gid])) {
-        return (string)$GLOBALS['af_aa_preview_group_title_cache'][$gid];
-    }
-
-    $query = $db->simple_select('usergroups', 'title', "gid='" . (int)$gid . "'", ['limit' => 1]);
-    $title = trim((string)$db->fetch_field($query, 'title'));
-
-    $GLOBALS['af_aa_preview_group_title_cache'][$gid] = $title;
-
-    return $title;
-}
-
-function af_aa_preview_format_birthday(string $birthday): string
-{
-    $birthday = trim($birthday);
-    if ($birthday === '') {
-        return '—';
-    }
-
-    $parts = array_map('intval', explode('-', $birthday));
-    $day = (int)($parts[0] ?? 0);
-    $month = (int)($parts[1] ?? 0);
-    $year = (int)($parts[2] ?? 0);
-
-    if ($day <= 0 || $month <= 0 || $year <= 0) {
-        return '—';
-    }
-
-    try {
-        $birthdayDate = new DateTimeImmutable(sprintf('%04d-%02d-%02d', $year, $month, $day));
-        $today = new DateTimeImmutable('today');
-        $age = $birthdayDate->diff($today)->y;
-
-        return sprintf('%02d.%02d.%04d • %d', $day, $month, $year, $age);
-    } catch (Throwable $e) {
-        return '—';
-    }
-}
-
-function af_aa_build_preview_user_context(int $uid = 0): array
-{
-    global $mybb, $db;
-
-    $uid = $uid > 0 ? $uid : (int)($mybb->user['uid'] ?? 0);
-
-    $user = [];
-    if ($uid > 0) {
-        $query = $db->simple_select(
-            'users',
-            'uid,username,usergroup,displaygroup,avatar,regdate,birthday,lastactive,invisible',
-            "uid='" . $uid . "'",
-            ['limit' => 1]
-        );
-        $row = $db->fetch_array($query);
-        if (is_array($row)) {
-            $user = $row;
-        }
-    }
-
-    if (empty($user)) {
-        $user = [
-            'uid' => 0,
-            'username' => trim((string)($mybb->user['username'] ?? '')) ?: 'Гость',
-            'usergroup' => (int)($mybb->user['usergroup'] ?? 1),
-            'displaygroup' => (int)($mybb->user['displaygroup'] ?? 0),
-            'avatar' => trim((string)($mybb->user['avatar'] ?? '')),
-            'regdate' => (int)($mybb->user['regdate'] ?? 0),
-            'birthday' => trim((string)($mybb->user['birthday'] ?? '')),
-            'lastactive' => (int)($mybb->user['lastactive'] ?? 0),
-            'invisible' => (int)($mybb->user['invisible'] ?? 0),
-        ];
-    }
-
-    $uid = (int)($user['uid'] ?? 0);
-    $username = trim((string)($user['username'] ?? ''));
-    if ($username === '') {
-        $username = 'Гость';
-    }
-
-    $groupId = (int)($user['displaygroup'] ?? 0);
-    if ($groupId <= 0) {
-        $groupId = (int)($user['usergroup'] ?? 0);
-    }
-
-    $groupTitle = af_aa_preview_get_group_title($groupId);
-    if ($groupTitle === '') {
-        $groupTitle = $uid > 0 ? 'Пользователь' : 'Гость';
-    }
-
-    $avatarUrl = af_aa_preview_abs_url((string)($user['avatar'] ?? ''));
-
-    $registrationValue = (int)($user['regdate'] ?? 0) > 0
-        ? my_date((string)($mybb->settings['dateformat'] ?? 'd.m.Y'), (int)$user['regdate'])
-        : '—';
-
-    $birthdayValue = af_aa_preview_format_birthday((string)($user['birthday'] ?? ''));
-    $localTimeValue = my_date((string)($mybb->settings['timeformat'] ?? 'H:i'), TIME_NOW);
-
-    $isOnline = $uid > 0
-        && (int)($user['invisible'] ?? 0) !== 1
-        && (int)($user['lastactive'] ?? 0) >= (TIME_NOW - 900);
-
-    $presenceLabel = $isOnline ? 'online' : 'offline';
-    $presenceDotClass = $isOnline ? 'af-apui-presence-dot--online' : 'af-apui-presence-dot--offline';
-
-    $profileUrl = $uid > 0
-        ? 'member.php?action=profile&uid=' . $uid
-        : 'javascript:void(0)';
-
-    $profileFieldsHtml =
-        htmlspecialchars_uni('UID: ' . ($uid > 0 ? $uid : '—'))
-        . '<br>'
-        . htmlspecialchars_uni('Группа: ' . $groupTitle)
-        . '<br>'
-        . htmlspecialchars_uni('Статус: ' . $presenceLabel);
-
-    $detailsHtml =
-        htmlspecialchars_uni('Регистрация: ' . $registrationValue)
-        . '<br>'
-        . htmlspecialchars_uni('Локальное время: ' . $localTimeValue);
-
-    return [
-        'af_aa_preview_uid' => $uid,
-        'af_aa_preview_uid_class' => htmlspecialchars_uni($uid > 0 ? 'af-aa-user-' . $uid : 'af-aa-user-guest'),
-        'af_aa_preview_username' => htmlspecialchars_uni($username),
-        'af_aa_preview_profile_url' => htmlspecialchars_uni($profileUrl),
-        'af_aa_preview_group_title' => htmlspecialchars_uni($groupTitle),
-        'af_aa_preview_registration_value' => htmlspecialchars_uni($registrationValue),
-        'af_aa_preview_birthday_value' => htmlspecialchars_uni($birthdayValue),
-        'af_aa_preview_local_time_value' => htmlspecialchars_uni($localTimeValue),
-        'af_aa_preview_presence_label' => htmlspecialchars_uni($presenceLabel),
-        'af_aa_preview_presence_dot_class' => htmlspecialchars_uni($presenceDotClass),
-        'af_aa_preview_state_chip' => htmlspecialchars_uni($uid > 0 ? ('uid ' . $uid) : 'guest'),
-        'af_aa_preview_avatar_large_html' => af_aa_preview_render_avatar($avatarUrl, $username, false),
-        'af_aa_preview_avatar_small_html' => af_aa_preview_render_avatar($avatarUrl, $username, true),
-        'af_aa_preview_profilefields_html' => $profileFieldsHtml,
-        'af_aa_preview_details_html' => $detailsHtml,
-    ];
-}
-
-function af_aa_render_apstudio_page(): void
-{
-    global $mybb, $headerinclude;
-
-    if (!af_aa_is_enabled() || !af_aa_is_admin_user()) {
-        error_no_permission();
-    }
-
-    af_aa_ensure_schema();
-    af_aa_ensure_front_templates();
-
-    $do = af_aa_resolve_preset_do((string)$mybb->get_input('do'));
-    $baseUrl = 'apstudio.php?do=' . rawurlencode($do);
-
-    if ($mybb->request_method === 'post') {
-        verify_post_check($mybb->get_input('my_post_key'), true);
-
-        $action = trim((string)$mybb->get_input('action'));
-
-        if ($action === 'save') {
-            $savedId = af_aa_save_front_preset($do);
-            redirect($baseUrl . '&edit=' . $savedId, 'Пресет сохранён.');
-        }
-
-        if ($action === 'toggle') {
-            af_aa_toggle_front_preset((int)$mybb->get_input('id'), (int)$mybb->get_input('enabled'));
-            redirect($baseUrl, 'Статус пресета обновлён.');
-        }
-
-        if ($action === 'delete') {
-            af_aa_delete_front_preset((int)$mybb->get_input('id'));
-            redirect($baseUrl, 'Пресет удалён.');
-        }
-    }
-
-    $editId = (int)$mybb->get_input('edit');
-    $editPreset = [];
-    if ($editId > 0) {
-        $editPreset = af_aa_get_preset_row($editId);
-        if (!empty($editPreset)) {
-            $rowDo = af_aa_do_for_target((string)($editPreset['target_key'] ?? ''));
-            if ($rowDo !== $do) {
-                redirect('apstudio.php?do=' . rawurlencode($rowDo) . '&edit=' . $editId, 'Открыт нужный раздел для редактирования пресета.');
-            }
-        }
-    }
-
-    $settings = af_aa_front_settings_from_row($editPreset);
-    $rows = af_aa_fetch_presets_for_do($do, false);
-    $previewUser = af_aa_build_preview_user_context((int)($mybb->user['uid'] ?? 0));
-
-    $initialPreviewTitle = !empty($editPreset)
-        ? (string)($editPreset['title'] ?? 'Новый пресет')
-        : 'Новый пресет';
-
-    $initialPreviewDescription = !empty($editPreset)
-        ? (string)($editPreset['description'] ?? af_aa_human_target_label(af_aa_target_key_for_do($do), $settings))
-        : af_aa_human_target_label(af_aa_target_key_for_do($do), $settings);
-
-    add_breadcrumb('Конструктор пресетов', AF_AA_ALIAS_APSTUDIO);
-
-    af_aa_ensure_header_bits();
-    $headerinclude .= af_aa_page_asset_tags();
-
-    $templateVars = [
-        'af_aa_tabs_html' => af_aa_render_tabs_html('apstudio.php', $do),
-        'af_aa_form_html' => af_aa_build_studio_form_html($do, $editPreset, $settings),
-        'af_aa_cards_html' => af_aa_build_cards_grid_html($rows, $do, true),
-        'af_aa_preview_seed_json' => af_aa_escape_attr_json($settings),
-        'af_aa_preview_title' => htmlspecialchars_uni($initialPreviewTitle),
-        'af_aa_preview_description' => htmlspecialchars_uni($initialPreviewDescription),
-    ];
-
-    $page = af_aa_render_template_output(
-        AF_AA_TPL_APSTUDIO,
-        array_merge($templateVars, $previewUser)
-    );
-
-    output_page($page);
-    exit;
-}
-
-function af_aa_render_fittingroom_page(): void
-{
-    global $mybb, $headerinclude;
-
-    if (!af_aa_is_enabled()) {
-        error_no_permission();
-    }
-
-    af_aa_ensure_schema();
-    af_aa_ensure_front_templates();
-
-    $do = af_aa_resolve_preset_do((string)$mybb->get_input('do'));
-    $rows = af_aa_fetch_presets_for_do($do, true);
-    $preferredId = (int)$mybb->get_input('preview');
-    $initialPreset = af_aa_pick_initial_preset($rows, $preferredId);
-    $initialSettings = !empty($initialPreset) ? af_aa_front_settings_from_row($initialPreset) : af_aa_get_front_defaults();
-    $previewUser = af_aa_build_preview_user_context((int)($mybb->user['uid'] ?? 0));
-
-    $initialTitle = !empty($initialPreset)
-        ? (string)($initialPreset['title'] ?? 'Примерка')
-        : 'Примерочная';
-
-    $initialDescription = !empty($initialPreset)
-        ? (string)($initialPreset['description'] ?? af_aa_human_target_label((string)$initialPreset['target_key'], $initialSettings))
-        : 'Здесь можно посмотреть готовые пресеты и примерить их на своём профиле и своём постбите.';
-
-    add_breadcrumb('Примерочная', AF_AA_ALIAS_FITTINGROOM);
-
-    af_aa_ensure_header_bits();
-    $headerinclude .= af_aa_page_asset_tags();
-
-    $templateVars = [
-        'af_aa_tabs_html' => af_aa_render_tabs_html('fittingroom.php', $do),
-        'af_aa_cards_html' => af_aa_build_cards_grid_html($rows, $do, false),
-        'af_aa_preview_seed_json' => af_aa_escape_attr_json($initialSettings),
-        'af_aa_preview_title' => htmlspecialchars_uni($initialTitle),
-        'af_aa_preview_description' => htmlspecialchars_uni($initialDescription),
-    ];
-
-    $page = af_aa_render_template_output(
-        AF_AA_TPL_FITTINGROOM,
-        array_merge($templateVars, $previewUser)
-    );
-
-    output_page($page);
-    exit;
-}
+    Array.prototype.forEach.call(document.querySelectorAll(TAB_ROOT_SELECTOR), function (root) {
+      cleanupExtraPanel(root);
+      initTabs(root);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+})();
