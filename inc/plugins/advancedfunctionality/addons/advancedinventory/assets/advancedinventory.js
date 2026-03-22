@@ -272,6 +272,28 @@
     }
     panel.dataset.afInvBound = '1';
 
+    panel.addEventListener('submit', function (e) {
+      var appearanceUnapplyForm = e.target.closest('[data-af-appearance-unapply-form]');
+      if (!appearanceUnapplyForm || !panel.contains(appearanceUnapplyForm)) {
+        return;
+      }
+
+      e.preventDefault();
+
+      var appearanceUnapplyBtn = appearanceUnapplyForm.querySelector('[data-af-appearance-unapply-btn]');
+      var ctxUn = inventoryContext(page);
+      withLoading(appearanceUnapplyBtn || appearanceUnapplyForm, postForm('misc.php?action=inventory_appearance_unapply', {
+        uid: ctxUn.uid,
+        target_key: (appearanceUnapplyForm.querySelector('input[name=\"target_key\"]') || {}).value || '',
+        my_post_key: getPostKey(page)
+      })).then(function () {
+        showMessage(page, 'Пресет снят.', false, { autohide: true });
+        page.__afInvReloadCurrent();
+      }).catch(function (err) {
+        showMessage(page, err.message || 'Не удалось снять пресет.', true, { autohide: true });
+      });
+    });
+
     panel.addEventListener('click', function (e) {
       var slot = e.target.closest('[data-item-select]');
       if (slot && panel.contains(slot)) {
@@ -301,23 +323,6 @@
           page.__afInvReloadCurrent();
         }).catch(function (err) {
           showMessage(page, err.message || 'Не удалось применить пресет.', true, { autohide: true });
-        });
-        return;
-      }
-
-      var appearanceUnapplyBtn = e.target.closest('[data-af-appearance-unapply-btn]');
-      if (appearanceUnapplyBtn && panel.contains(appearanceUnapplyBtn)) {
-        e.preventDefault();
-        var ctxUn = inventoryContext(page);
-        withLoading(appearanceUnapplyBtn, postForm('misc.php?action=inventory_appearance_unapply', {
-          uid: ctxUn.uid,
-          target_key: appearanceUnapplyBtn.getAttribute('data-target-key') || '',
-          my_post_key: getPostKey(page)
-        })).then(function () {
-          showMessage(page, 'Пресет снят.', false, { autohide: true });
-          page.__afInvReloadCurrent();
-        }).catch(function (err) {
-          showMessage(page, err.message || 'Не удалось снять пресет.', true, { autohide: true });
         });
         return;
       }
