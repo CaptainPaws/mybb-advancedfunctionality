@@ -10,6 +10,7 @@
   }
 
   function postForm(url, data) {
+    url = normalizeActionUrl(url);
     var body = new URLSearchParams();
     Object.keys(data || {}).forEach(function (key) {
       body.append(key, data[key] == null ? '' : String(data[key]));
@@ -40,6 +41,45 @@
         return parsed;
       });
     });
+  }
+
+  function endpointScript() {
+    var path = (window.location && window.location.pathname)
+      ? String(window.location.pathname).toLowerCase()
+      : '';
+    return /\/shop\.php$/.test(path) ? 'shop.php' : 'misc.php';
+  }
+
+  function buildActionUrl(action, query) {
+    var endpoint = endpointScript();
+    if (endpoint === 'shop.php') {
+      var params = [];
+      if (action) {
+        params.push('action=' + encodeURIComponent(action));
+      }
+      if (query) {
+        params.push(query);
+      }
+      return 'shop.php' + (params.length ? ('?' + params.join('&')) : '');
+    }
+
+    return 'misc.php?action=' + encodeURIComponent(action || 'shop') + (query ? ('&' + query) : '');
+  }
+
+  function normalizeActionUrl(url) {
+    if (typeof url !== 'string') {
+      return url;
+    }
+    if (url.indexOf('misc.php?action=') !== 0) {
+      return url;
+    }
+
+    var raw = url.slice('misc.php?action='.length);
+    var ampIndex = raw.indexOf('&');
+    var action = ampIndex === -1 ? raw : raw.slice(0, ampIndex);
+    var query = ampIndex === -1 ? '' : raw.slice(ampIndex + 1);
+
+    return buildActionUrl(decodeURIComponent(action || 'shop'), query);
   }
 
   function getPostKey(root) {
