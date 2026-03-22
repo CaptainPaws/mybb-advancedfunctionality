@@ -3850,6 +3850,10 @@ function af_advancedshop_inventory_appearance_apply(): void
         af_advancedshop_json_err($e->getMessage(), 422);
     }
 
+    if ($targetKey === 'apui_thread_pack') {
+        af_advancedshop_json_err('Thread presets are selected on newthread.php / editpost.php, not via inventory activation.', 422);
+    }
+
     $exists = $db->fetch_array($db->query("SELECT id FROM " . TABLE_PREFIX . "af_aa_active WHERE entity_type='user' AND entity_id=" . $targetUid . " AND target_key='" . $db->escape_string($targetKey) . "' LIMIT 1"));
     if ($exists) {
         $db->update_query('af_aa_active', [

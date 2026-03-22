@@ -735,20 +735,39 @@ function af_aa_inject_thread_preset_field(string $page): string
         return $page;
     }
 
-    $pattern = '~(<td\s+class=(?:["\'])trow2(?:["\'])\s*>\s*\{\$prefixselect\}\s*<input\b[^>]*\bname=(?:["\'])subject(?:["\'])[^>]*>\s*</td>\s*</tr>)~is';
-    $updated = preg_replace($pattern, '$1' . "\n" . $html, $page, 1, $count);
-    if ($count > 0 && is_string($updated)) {
+    $formPattern = '~<form\b[^>]*>(?P<body>.*?)</form>~is';
+    $updated = preg_replace_callback($formPattern, static function (array $matches) use ($html) {
+        $formHtml = (string)($matches[0] ?? '');
+        $bodyHtml = (string)($matches['body'] ?? '');
+        if ($bodyHtml === '') {
+            return $formHtml;
+        }
+
+        $hasSubject = (bool)preg_match('~<input\b[^>]*\bname=(?:["\'])subject(?:["\'])[^>]*>~is', $bodyHtml);
+        $hasMessage = (bool)preg_match('~<textarea\b[^>]*\bname=(?:["\'])message(?:["\'])[^>]*>~is', $bodyHtml);
+        if (!$hasSubject || !$hasMessage) {
+            return $formHtml;
+        }
+
+        $subjectRowPattern = '~(<tr\b[^>]*>.*?<input\b[^>]*\bname=(?:["\'])subject(?:["\'])[^>]*>.*?</tr>)~is';
+        $subjectInjected = preg_replace($subjectRowPattern, '$1' . "\n" . $html, $formHtml, 1, $subjectCount);
+        if ($subjectCount > 0 && is_string($subjectInjected)) {
+            return $subjectInjected;
+        }
+
+        $messageRowPattern = '~(<tr\b[^>]*>.*?<textarea\b[^>]*\bname=(?:["\'])message(?:["\'])[^>]*>.*?</tr>)~is';
+        $messageInjected = preg_replace($messageRowPattern, $html . "\n" . '$1', $formHtml, 1, $messageCount);
+        if ($messageCount > 0 && is_string($messageInjected)) {
+            return $messageInjected;
+        }
+
+        return $formHtml;
+    }, $page, 1, $count);
+    if ($count > 0 && is_string($updated) && $updated !== $page) {
         return $updated;
     }
 
-    foreach (['</tbody>', '</table>', '</form>'] as $anchor) {
-        $pos = stripos($page, $anchor);
-        if ($pos !== false) {
-            return substr($page, 0, $pos) . $html . "\n" . substr($page, $pos);
-        }
-    }
-
-    return $page . "\n" . $html;
+    return $page;
 }
 
 function af_aa_newthread_start(): void
@@ -1454,16 +1473,6 @@ function af_aa_build_user_css_payload(int $uid): array
 
         if (!empty($postbitPackSettings['custom_css'])) {
             $customCssBlocks[] = (string)$postbitPackSettings['custom_css'];
-        }
-    }
-
-    $threadPack = af_aa_get_user_preset_settings_for_target($uid, AF_AA_TARGET_APUI_THREAD_PACK, $defaults);
-    if (!empty($threadPack)) {
-        $threadPackSettings = (array)$threadPack['settings'];
-        $threadSettings = af_aa_merge_keys($threadSettings, $threadPackSettings, $threadKeys);
-
-        if (!empty($threadPackSettings['custom_css'])) {
-            $customCssBlocks[] = (string)$threadPackSettings['custom_css'];
         }
     }
 
