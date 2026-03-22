@@ -198,6 +198,7 @@ function af_aa_get_supported_fragment_keys(): array
         'postbit_author' => 'Постбит: фон карточки автора',
         'postbit_name' => 'Постбит: блок никнейма',
         'postbit_plaque' => 'Постбит: нижняя плашка',
+        'postbit_plaque_icon' => 'Постбит: иконка нижней плашки',
         'postbit_avatar_frame' => 'Постбит: рамка аватара',
     ];
 }
@@ -530,6 +531,13 @@ function af_aa_get_apui_defaults(): array
         'postbit_name_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_name_overlay', 'none'), 'none'),
         'postbit_plaque_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('postbit_plaque_bg_url', ''), ''),
         'postbit_plaque_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_plaque_overlay', 'none'), 'none'),
+        'postbit_plaque_icon_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('postbit_plaque_icon_url', ''), ''),
+        'postbit_plaque_icon_glyph' => af_aa_sanitize_icon_glyph(af_aa_get_apui_setting('postbit_plaque_icon_glyph', '★'), '★'),
+        'postbit_plaque_icon_bg' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_plaque_icon_bg', 'linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08))'), 'linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08))'),
+        'postbit_plaque_icon_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_plaque_icon_overlay', 'none'), 'none'),
+        'postbit_plaque_icon_border' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_plaque_icon_border', 'rgba(255,255,255,.18)'), 'rgba(255,255,255,.18)'),
+        'postbit_plaque_icon_color' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_plaque_icon_color', '#f6f1cf'), '#f6f1cf'),
+        'postbit_plaque_icon_size' => af_aa_sanitize_css_size(af_aa_get_apui_setting('postbit_plaque_icon_size', '26px'), '26px'),
         'sheet_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('sheet_bg_url', ''), ''),
         'sheet_bg_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('sheet_bg_overlay', 'none'), 'none'),
         'sheet_panel_bg' => af_aa_sanitize_overlay(af_aa_get_apui_setting('sheet_panel_bg', 'rgba(0,0,0,.12)'), 'rgba(0,0,0,.12)'),
@@ -633,6 +641,13 @@ function af_aa_build_user_css_payload(int $uid): array
         'postbit_name_overlay',
         'postbit_plaque_bg_url',
         'postbit_plaque_overlay',
+        'postbit_plaque_icon_url',
+        'postbit_plaque_icon_glyph',
+        'postbit_plaque_icon_bg',
+        'postbit_plaque_icon_overlay',
+        'postbit_plaque_icon_border',
+        'postbit_plaque_icon_color',
+        'postbit_plaque_icon_size',
     ];
 
     $authorKeys = [
@@ -648,6 +663,13 @@ function af_aa_build_user_css_payload(int $uid): array
     $plaqueKeys = [
         'postbit_plaque_bg_url',
         'postbit_plaque_overlay',
+        'postbit_plaque_icon_url',
+        'postbit_plaque_icon_glyph',
+        'postbit_plaque_icon_bg',
+        'postbit_plaque_icon_overlay',
+        'postbit_plaque_icon_border',
+        'postbit_plaque_icon_color',
+        'postbit_plaque_icon_size',
     ];
 
     $modalKeys = [
@@ -798,6 +820,11 @@ function af_aa_build_user_css_payload(int $uid): array
             '--af-apui-postbit-name-overlay' => af_aa_css_raw_value((string)($postbitSettings['postbit_name_overlay'] ?? 'none'), 'none'),
             '--af-apui-postbit-plaque-bg-image' => af_aa_css_url_value((string)($postbitSettings['postbit_plaque_bg_url'] ?? '')),
             '--af-apui-postbit-plaque-overlay' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_overlay'] ?? 'none'), 'none'),
+            '--af-apui-postbit-plaque-icon-bg' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_icon_bg'] ?? 'linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08))'), 'linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08))'),
+            '--af-apui-postbit-plaque-icon-overlay' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_icon_overlay'] ?? 'none'), 'none'),
+            '--af-apui-postbit-plaque-icon-border' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_icon_border'] ?? 'rgba(255,255,255,.18)'), 'rgba(255,255,255,.18)'),
+            '--af-apui-postbit-plaque-icon-color' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_icon_color'] ?? '#f6f1cf'), '#f6f1cf'),
+            '--af-apui-postbit-plaque-icon-size' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_icon_size'] ?? '26px'), '26px'),
             '--af-apui-modal-sheet-bg-image' => af_aa_css_url_value((string)($modalSettings['sheet_bg_url'] ?? '')),
             '--af-apui-modal-sheet-bg-overlay' => af_aa_css_raw_value((string)($modalSettings['sheet_bg_overlay'] ?? 'none'), 'none'),
             '--af-apui-modal-sheet-panel-bg' => af_aa_css_raw_value((string)($modalSettings['sheet_panel_bg'] ?? 'rgba(0,0,0,.12)'), 'rgba(0,0,0,.12)'),
@@ -1035,6 +1062,34 @@ function af_aa_decode_and_sanitize_preset_settings(string $json, array $defaults
         (string)($decoded['postbit_plaque_overlay'] ?? ''),
         (string)($defaults['postbit_plaque_overlay'] ?? 'none')
     );
+    $out['postbit_plaque_icon_url'] = af_aa_sanitize_image_url(
+        (string)($decoded['postbit_plaque_icon_url'] ?? ''),
+        (string)($defaults['postbit_plaque_icon_url'] ?? '')
+    );
+    $out['postbit_plaque_icon_glyph'] = af_aa_sanitize_icon_glyph(
+        (string)($decoded['postbit_plaque_icon_glyph'] ?? ''),
+        (string)($defaults['postbit_plaque_icon_glyph'] ?? '★')
+    );
+    $out['postbit_plaque_icon_bg'] = af_aa_sanitize_overlay(
+        (string)($decoded['postbit_plaque_icon_bg'] ?? ''),
+        (string)($defaults['postbit_plaque_icon_bg'] ?? 'linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08))')
+    );
+    $out['postbit_plaque_icon_overlay'] = af_aa_sanitize_overlay(
+        (string)($decoded['postbit_plaque_icon_overlay'] ?? ''),
+        (string)($defaults['postbit_plaque_icon_overlay'] ?? 'none')
+    );
+    $out['postbit_plaque_icon_border'] = af_aa_sanitize_overlay(
+        (string)($decoded['postbit_plaque_icon_border'] ?? ''),
+        (string)($defaults['postbit_plaque_icon_border'] ?? 'rgba(255,255,255,.18)')
+    );
+    $out['postbit_plaque_icon_color'] = af_aa_sanitize_overlay(
+        (string)($decoded['postbit_plaque_icon_color'] ?? ''),
+        (string)($defaults['postbit_plaque_icon_color'] ?? '#f6f1cf')
+    );
+    $out['postbit_plaque_icon_size'] = af_aa_sanitize_css_size(
+        (string)($decoded['postbit_plaque_icon_size'] ?? ''),
+        (string)($defaults['postbit_plaque_icon_size'] ?? '26px')
+    );
 
     $out['sheet_bg_url'] = af_aa_sanitize_image_url((string)($decoded['sheet_bg_url'] ?? ''), (string)($defaults['sheet_bg_url'] ?? ''));
     $out['sheet_bg_overlay'] = af_aa_sanitize_overlay((string)($decoded['sheet_bg_overlay'] ?? ''), (string)($defaults['sheet_bg_overlay'] ?? 'none'));
@@ -1088,6 +1143,31 @@ function af_aa_sanitize_image_url(string $url, string $fallback = ''): string
     }
 
     return $url;
+}
+
+function af_aa_sanitize_icon_glyph(string $value, string $fallback = '★'): string
+{
+    $value = trim($value);
+    $value = preg_replace('~[\x00-\x1F\x7F]+~u', '', $value) ?? '';
+    if ($value === '') {
+        return $fallback;
+    }
+
+    return function_exists('my_substr') ? my_substr($value, 0, 3) : mb_substr($value, 0, 3);
+}
+
+function af_aa_sanitize_css_size(string $value, string $fallback = '26px'): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return $fallback;
+    }
+
+    if (!preg_match('~^(?:\d+(?:\.\d+)?)(?:px|rem|em|%)$~i', $value)) {
+        return $fallback;
+    }
+
+    return $value;
 }
 
 function af_aa_sanitize_bg_mode(string $mode, string $fallback = 'cover'): string
@@ -1966,6 +2046,27 @@ function af_aa_build_postbit_fields_html(array $settings, bool $includeCustomCss
     $html .= af_aa_front_input('Plaque overlay', 'settings[postbit_plaque_overlay]', (string)$settings['postbit_plaque_overlay'], [
         'data-aa-setting' => 'postbit_plaque_overlay',
     ]);
+    $html .= af_aa_front_input('Plaque icon URL', 'settings[postbit_plaque_icon_url]', (string)$settings['postbit_plaque_icon_url'], [
+        'data-aa-setting' => 'postbit_plaque_icon_url',
+    ]);
+    $html .= af_aa_front_input('Plaque icon glyph', 'settings[postbit_plaque_icon_glyph]', (string)$settings['postbit_plaque_icon_glyph'], [
+        'data-aa-setting' => 'postbit_plaque_icon_glyph',
+    ]);
+    $html .= af_aa_front_input('Plaque icon background', 'settings[postbit_plaque_icon_bg]', (string)$settings['postbit_plaque_icon_bg'], [
+        'data-aa-setting' => 'postbit_plaque_icon_bg',
+    ]);
+    $html .= af_aa_front_input('Plaque icon overlay', 'settings[postbit_plaque_icon_overlay]', (string)$settings['postbit_plaque_icon_overlay'], [
+        'data-aa-setting' => 'postbit_plaque_icon_overlay',
+    ]);
+    $html .= af_aa_front_input('Plaque icon border', 'settings[postbit_plaque_icon_border]', (string)$settings['postbit_plaque_icon_border'], [
+        'data-aa-setting' => 'postbit_plaque_icon_border',
+    ]);
+    $html .= af_aa_front_input('Plaque icon color', 'settings[postbit_plaque_icon_color]', (string)$settings['postbit_plaque_icon_color'], [
+        'data-aa-setting' => 'postbit_plaque_icon_color',
+    ]);
+    $html .= af_aa_front_input('Plaque icon size', 'settings[postbit_plaque_icon_size]', (string)$settings['postbit_plaque_icon_size'], [
+        'data-aa-setting' => 'postbit_plaque_icon_size',
+    ]);
 
     if ($includeCustomCss) {
         $html .= af_aa_front_textarea('Custom CSS', 'settings[custom_css]', (string)$settings['custom_css'], [
@@ -2046,6 +2147,27 @@ function af_aa_build_fragment_fields_html(array $settings): string
 
     $html .= af_aa_front_input('Plaque overlay', 'settings[postbit_plaque_overlay]', (string)$settings['postbit_plaque_overlay'], [
         'data-aa-setting' => 'postbit_plaque_overlay',
+    ]);
+    $html .= af_aa_front_input('Plaque icon URL', 'settings[postbit_plaque_icon_url]', (string)$settings['postbit_plaque_icon_url'], [
+        'data-aa-setting' => 'postbit_plaque_icon_url',
+    ]);
+    $html .= af_aa_front_input('Plaque icon glyph', 'settings[postbit_plaque_icon_glyph]', (string)$settings['postbit_plaque_icon_glyph'], [
+        'data-aa-setting' => 'postbit_plaque_icon_glyph',
+    ]);
+    $html .= af_aa_front_input('Plaque icon background', 'settings[postbit_plaque_icon_bg]', (string)$settings['postbit_plaque_icon_bg'], [
+        'data-aa-setting' => 'postbit_plaque_icon_bg',
+    ]);
+    $html .= af_aa_front_input('Plaque icon overlay', 'settings[postbit_plaque_icon_overlay]', (string)$settings['postbit_plaque_icon_overlay'], [
+        'data-aa-setting' => 'postbit_plaque_icon_overlay',
+    ]);
+    $html .= af_aa_front_input('Plaque icon border', 'settings[postbit_plaque_icon_border]', (string)$settings['postbit_plaque_icon_border'], [
+        'data-aa-setting' => 'postbit_plaque_icon_border',
+    ]);
+    $html .= af_aa_front_input('Plaque icon color', 'settings[postbit_plaque_icon_color]', (string)$settings['postbit_plaque_icon_color'], [
+        'data-aa-setting' => 'postbit_plaque_icon_color',
+    ]);
+    $html .= af_aa_front_input('Plaque icon size', 'settings[postbit_plaque_icon_size]', (string)$settings['postbit_plaque_icon_size'], [
+        'data-aa-setting' => 'postbit_plaque_icon_size',
     ]);
 
     $html .= af_aa_front_textarea('Custom CSS', 'settings[custom_css]', (string)$settings['custom_css'], [

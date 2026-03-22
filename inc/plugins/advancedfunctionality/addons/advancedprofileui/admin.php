@@ -37,6 +37,13 @@ class AF_Admin_Advancedprofileui
             'af_' . AF_APUI_ID . '_postbit_name_overlay',
             'af_' . AF_APUI_ID . '_postbit_plaque_bg_url',
             'af_' . AF_APUI_ID . '_postbit_plaque_overlay',
+            'af_' . AF_APUI_ID . '_postbit_plaque_icon_url',
+            'af_' . AF_APUI_ID . '_postbit_plaque_icon_glyph',
+            'af_' . AF_APUI_ID . '_postbit_plaque_icon_bg',
+            'af_' . AF_APUI_ID . '_postbit_plaque_icon_overlay',
+            'af_' . AF_APUI_ID . '_postbit_plaque_icon_border',
+            'af_' . AF_APUI_ID . '_postbit_plaque_icon_color',
+            'af_' . AF_APUI_ID . '_postbit_plaque_icon_size',
             'af_' . AF_APUI_ID . '_postbit_css',
             'af_' . AF_APUI_ID . '_sheet_bg_url',
             'af_' . AF_APUI_ID . '_sheet_bg_overlay',
@@ -124,6 +131,13 @@ class AF_Admin_Advancedprofileui
         echo '<tr><td><strong>Оверлей никнейма</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_name_overlay" value="' . $values['af_' . AF_APUI_ID . '_postbit_name_overlay'] . '"></td></tr>';
         echo '<tr><td><strong>Фон нижней плашки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_bg_url" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_bg_url'] . '"></td></tr>';
         echo '<tr><td><strong>Оверлей нижней плашки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_overlay" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>URL иконки плашки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_icon_url" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_icon_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Fallback-символ иконки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_icon_glyph" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_icon_glyph'] . '"></td></tr>';
+        echo '<tr><td><strong>Фон контейнера иконки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_icon_bg" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_icon_bg'] . '"></td></tr>';
+        echo '<tr><td><strong>Overlay контейнера иконки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_icon_overlay" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_icon_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>Рамка контейнера иконки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_icon_border" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_icon_border'] . '"></td></tr>';
+        echo '<tr><td><strong>Цвет fallback-иконки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_icon_color" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_icon_color'] . '"></td></tr>';
+        echo '<tr><td><strong>Размер иконки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_icon_size" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_icon_size'] . '"></td></tr>';
         echo '<tr><td><strong>Пользовательский CSS</strong></td><td><textarea name="af_' . AF_APUI_ID . '_postbit_css" rows="10" style="width:100%;">' . $values['af_' . AF_APUI_ID . '_postbit_css'] . '</textarea></td></tr>';
         echo '<tr><th colspan="2">character sheet</th></tr>';
         echo '<tr><td><strong>Background image URL</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_sheet_bg_url" value="' . $values['af_' . AF_APUI_ID . '_sheet_bg_url'] . '"></td></tr>';

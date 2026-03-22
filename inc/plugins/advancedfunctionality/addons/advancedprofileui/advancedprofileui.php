@@ -90,7 +90,14 @@ function af_apui_ensure_settings(): void
         ['postbit_name_overlay', 'postbit_classic: оверлей никнейма', 'CSS background-image слой для оверлея блока никнейма.', 'text', 'linear-gradient(180deg, rgba(0, 0, 0, 0.24), rgba(69, 69, 69, 0.28))', 23],
         ['postbit_plaque_bg_url', 'postbit_classic: фон нижней плашки', 'URL фоновой картинки для нижней плашки postbit.', 'text', '', 24],
         ['postbit_plaque_overlay', 'postbit_classic: оверлей нижней плашки', 'CSS background-image слой для оверлея нижней плашки postbit.', 'text', 'linear-gradient(180deg, rgba(10, 14, 24, 0.17), rgba(0, 0, 0, 0.85))', 25],
-        ['postbit_css', 'postbit_classic: пользовательский CSS', 'Дополнительный CSS для postbit_classic.', 'textarea', '', 26],
+        ['postbit_plaque_icon_url', 'postbit_classic: URL иконки нижней плашки', 'URL изображения для иконки внутри нижней плашки postbit.', 'text', '', 26],
+        ['postbit_plaque_icon_glyph', 'postbit_classic: fallback-символ иконки нижней плашки', 'Текстовый fallback-символ для иконки внутри нижней плашки postbit.', 'text', '★', 27],
+        ['postbit_plaque_icon_bg', 'postbit_classic: фон контейнера иконки плашки', 'Фон контейнера иконки внутри нижней плашки postbit.', 'text', 'linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08))', 28],
+        ['postbit_plaque_icon_overlay', 'postbit_classic: overlay контейнера иконки плашки', 'CSS background-image слой для overlay контейнера иконки внутри нижней плашки postbit.', 'text', 'none', 29],
+        ['postbit_plaque_icon_border', 'postbit_classic: border контейнера иконки плашки', 'Цвет рамки контейнера иконки внутри нижней плашки postbit.', 'text', 'rgba(255,255,255,.18)', 30],
+        ['postbit_plaque_icon_color', 'postbit_classic: цвет иконки нижней плашки', 'Цвет текстовой fallback-иконки внутри нижней плашки postbit.', 'text', '#f6f1cf', 31],
+        ['postbit_plaque_icon_size', 'postbit_classic: размер иконки нижней плашки', 'CSS размер контейнера и внутренней иконки внутри нижней плашки postbit.', 'text', '26px', 32],
+        ['postbit_css', 'postbit_classic: пользовательский CSS', 'Дополнительный CSS для postbit_classic.', 'textarea', '', 33],
         ['sheet_bg_url', 'character sheet: background image url', 'Базовый фон листа персонажа.', 'text', '', 30],
         ['sheet_bg_overlay', 'character sheet: background overlay', 'CSS overlay для листа персонажа.', 'text', 'linear-gradient(180deg, rgba(6, 10, 18, .24) 0%, rgba(6, 10, 18, .78) 100%)', 31],
         ['sheet_panel_bg', 'character sheet: panel/card background', 'Базовый фон панелей листа персонажа.', 'text', 'rgba(0, 0, 0, 0.12)', 32],
@@ -802,6 +809,65 @@ function af_apui_build_postbit_actionbar_html(array $post, array $sheetPayload =
     return '<div class="af-apui-postbit-actions" aria-label="Postbit actions">' . implode('', $buttons) . '</div>';
 }
 
+function af_apui_get_postbit_plaque_icon_settings(int $uid): array
+{
+    static $cache = [];
+
+    if (isset($cache[$uid])) {
+        return $cache[$uid];
+    }
+
+    $settings = [
+        'postbit_plaque_icon_url' => trim((string)af_apui_get_setting_value('postbit_plaque_icon_url', '')),
+        'postbit_plaque_icon_glyph' => trim((string)af_apui_get_setting_value('postbit_plaque_icon_glyph', '★')),
+    ];
+
+    if ($settings['postbit_plaque_icon_glyph'] === '') {
+        $settings['postbit_plaque_icon_glyph'] = '★';
+    }
+
+    if (
+        $uid > 0
+        && function_exists('af_aa_get_apui_defaults')
+        && function_exists('af_aa_get_user_preset_settings_for_target')
+        && function_exists('af_aa_merge_keys')
+        && defined('AF_AA_TARGET_APUI_THEME_PACK')
+        && defined('AF_AA_TARGET_APUI_POSTBIT_PACK')
+        && defined('AF_AA_TARGET_APUI_FRAGMENT_PACK')
+    ) {
+        $defaults = af_aa_get_apui_defaults();
+        $iconKeys = ['postbit_plaque_icon_url', 'postbit_plaque_icon_glyph'];
+        $resolved = af_aa_merge_keys([], $defaults, $iconKeys);
+
+        $themePack = af_aa_get_user_preset_settings_for_target($uid, AF_AA_TARGET_APUI_THEME_PACK, $defaults);
+        if (!empty($themePack)) {
+            $resolved = af_aa_merge_keys($resolved, (array)$themePack['settings'], $iconKeys);
+        }
+
+        $postbitPack = af_aa_get_user_preset_settings_for_target($uid, AF_AA_TARGET_APUI_POSTBIT_PACK, $defaults);
+        if (!empty($postbitPack)) {
+            $resolved = af_aa_merge_keys($resolved, (array)$postbitPack['settings'], $iconKeys);
+        }
+
+        foreach (['postbit_plaque', 'postbit_plaque_icon'] as $fragmentKey) {
+            $fragmentPack = af_aa_get_user_preset_settings_for_target($uid, AF_AA_TARGET_APUI_FRAGMENT_PACK . ':' . $fragmentKey, $defaults);
+            if (!empty($fragmentPack)) {
+                $resolved = af_aa_merge_keys($resolved, (array)$fragmentPack['settings'], $iconKeys);
+            }
+        }
+
+        $settings['postbit_plaque_icon_url'] = trim((string)($resolved['postbit_plaque_icon_url'] ?? ''));
+        $settings['postbit_plaque_icon_glyph'] = trim((string)($resolved['postbit_plaque_icon_glyph'] ?? '★'));
+        if ($settings['postbit_plaque_icon_glyph'] === '') {
+            $settings['postbit_plaque_icon_glyph'] = '★';
+        }
+    }
+
+    $cache[$uid] = $settings;
+
+    return $cache[$uid];
+}
+
 function af_apui_build_postbit_plaque_html(array $post): string
 {
     $uid = (int)($post['uid'] ?? 0);
@@ -809,7 +875,17 @@ function af_apui_build_postbit_plaque_html(array $post): string
         return '';
     }
 
+    $iconSettings = af_apui_get_postbit_plaque_icon_settings($uid);
+    $iconHtml = '';
+
+    if ($iconSettings['postbit_plaque_icon_url'] !== '') {
+        $iconHtml = '<img class="af-apui-postbit-plaque__icon-image" src="' . htmlspecialchars_uni($iconSettings['postbit_plaque_icon_url']) . '" alt="" loading="lazy" decoding="async">';
+    } else {
+        $iconHtml = '<span class="af-apui-postbit-plaque__icon-glyph" aria-hidden="true">' . htmlspecialchars_uni($iconSettings['postbit_plaque_icon_glyph']) . '</span>';
+    }
+
     return '<div class="af-apui-postbit-plaque" data-af-apui-plaque="1">'
+        . '<span class="af-apui-postbit-plaque__icon" data-af-apui-plaque-icon="1">' . $iconHtml . '</span>'
         . '<span class="af-apui-postbit-plaque__label">profile plaque</span>'
         . '</div>';
 }
@@ -1511,6 +1587,21 @@ function af_apui_build_runtime_style_tag(): string
     $postbitPlaqueOverlay = af_apui_css_raw_value(
         af_apui_get_setting_value('postbit_plaque_overlay', 'linear-gradient(180deg, rgba(10, 14, 24, .10), rgba(10, 14, 24, .18))')
     );
+    $postbitPlaqueIconBg = af_apui_css_raw_value(
+        af_apui_get_setting_value('postbit_plaque_icon_bg', 'linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08))')
+    );
+    $postbitPlaqueIconOverlay = af_apui_css_raw_value(
+        af_apui_get_setting_value('postbit_plaque_icon_overlay', 'none')
+    );
+    $postbitPlaqueIconBorder = af_apui_css_raw_value(
+        af_apui_get_setting_value('postbit_plaque_icon_border', 'rgba(255,255,255,.18)')
+    );
+    $postbitPlaqueIconColor = af_apui_css_raw_value(
+        af_apui_get_setting_value('postbit_plaque_icon_color', '#f6f1cf')
+    );
+    $postbitPlaqueIconSize = af_apui_css_raw_value(
+        af_apui_get_setting_value('postbit_plaque_icon_size', '26px')
+    );
 
     $sheetBg = af_apui_css_url_value(af_apui_get_setting_value('sheet_bg_url', ''));
     $sheetOverlay = af_apui_css_raw_value(af_apui_get_setting_value('sheet_bg_overlay', 'linear-gradient(180deg, rgba(6, 10, 18, .24) 0%, rgba(6, 10, 18, .78) 100%)'));
@@ -1545,6 +1636,11 @@ function af_apui_build_runtime_style_tag(): string
     $css .= "--af-apui-postbit-name-overlay:" . $postbitNameOverlay . ";";
     $css .= "--af-apui-postbit-plaque-bg-image:" . $postbitPlaqueBg . ";";
     $css .= "--af-apui-postbit-plaque-overlay:" . $postbitPlaqueOverlay . ";";
+    $css .= "--af-apui-postbit-plaque-icon-bg:" . $postbitPlaqueIconBg . ";";
+    $css .= "--af-apui-postbit-plaque-icon-overlay:" . $postbitPlaqueIconOverlay . ";";
+    $css .= "--af-apui-postbit-plaque-icon-border:" . $postbitPlaqueIconBorder . ";";
+    $css .= "--af-apui-postbit-plaque-icon-color:" . $postbitPlaqueIconColor . ";";
+    $css .= "--af-apui-postbit-plaque-icon-size:" . $postbitPlaqueIconSize . ";";
     $css .= "--af-apui-modal-sheet-bg-image:" . $sheetBg . ";";
     $css .= "--af-apui-modal-sheet-bg-overlay:" . $sheetOverlay . ";";
     $css .= "--af-apui-modal-sheet-panel-bg:" . $sheetPanelBg . ";";
