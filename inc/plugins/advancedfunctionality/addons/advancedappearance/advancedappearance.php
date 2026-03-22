@@ -735,35 +735,50 @@ function af_aa_inject_thread_preset_field(string $page): string
         return $page;
     }
 
-    $formPattern = '~<form\b[^>]*>(?P<body>.*?)</form>~is';
-    $updated = preg_replace_callback($formPattern, static function (array $matches) use ($html) {
+    $formPattern = '~<form\b[^>]*>.*?</form>~is';
+    $injected = false;
+
+    $updated = preg_replace_callback($formPattern, static function (array $matches) use ($html, &$injected) {
         $formHtml = (string)($matches[0] ?? '');
-        $bodyHtml = (string)($matches['body'] ?? '');
-        if ($bodyHtml === '') {
+
+        if ($injected || $formHtml === '') {
             return $formHtml;
         }
 
-        $hasSubject = (bool)preg_match('~<input\b[^>]*\bname=(?:["\'])subject(?:["\'])[^>]*>~is', $bodyHtml);
-        $hasMessage = (bool)preg_match('~<textarea\b[^>]*\bname=(?:["\'])message(?:["\'])[^>]*>~is', $bodyHtml);
+        $hasSubject = (bool)preg_match(
+            '~<input\b[^>]*\bname=(["\'])subject\1[^>]*>~is',
+            $formHtml
+        );
+
+        $hasMessage = (bool)preg_match(
+            '~<textarea\b[^>]*\bname=(["\'])message\1[^>]*>.*?</textarea>~is',
+            $formHtml
+        );
+
         if (!$hasSubject || !$hasMessage) {
             return $formHtml;
         }
 
-        $subjectRowPattern = '~(<tr\b[^>]*>.*?<input\b[^>]*\bname=(?:["\'])subject(?:["\'])[^>]*>.*?</tr>)~is';
+        $subjectRowPattern = '~(<tr\b[^>]*>.*?<input\b[^>]*\bname=(["\'])subject\2[^>]*>.*?</tr>)~is';
         $subjectInjected = preg_replace($subjectRowPattern, '$1' . "\n" . $html, $formHtml, 1, $subjectCount);
-        if ($subjectCount > 0 && is_string($subjectInjected)) {
+
+        if ($subjectCount > 0 && is_string($subjectInjected) && $subjectInjected !== $formHtml) {
+            $injected = true;
             return $subjectInjected;
         }
 
-        $messageRowPattern = '~(<tr\b[^>]*>.*?<textarea\b[^>]*\bname=(?:["\'])message(?:["\'])[^>]*>.*?</tr>)~is';
+        $messageRowPattern = '~(<tr\b[^>]*>.*?<textarea\b[^>]*\bname=(["\'])message\2[^>]*>.*?</textarea>.*?</tr>)~is';
         $messageInjected = preg_replace($messageRowPattern, $html . "\n" . '$1', $formHtml, 1, $messageCount);
-        if ($messageCount > 0 && is_string($messageInjected)) {
+
+        if ($messageCount > 0 && is_string($messageInjected) && $messageInjected !== $formHtml) {
+            $injected = true;
             return $messageInjected;
         }
 
         return $formHtml;
-    }, $page, 1, $count);
-    if ($count > 0 && is_string($updated) && $updated !== $page) {
+    }, $page);
+
+    if ($injected && is_string($updated) && $updated !== '') {
         return $updated;
     }
 
