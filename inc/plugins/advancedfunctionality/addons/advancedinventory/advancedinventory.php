@@ -46,6 +46,7 @@ function af_advancedinventory_install(): void
     af_advancedinventory_ensure_setting('af_advancedinventory_debug_enabled', 'Enable debug logging', 'Write Advanced Inventory debug events to file', 'yesno', '0', 6, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_debug_max_kb', 'Debug log max size (KB)', 'Rotate debug log when size exceeds this limit. Set 0 to disable rotation.', 'numeric', '512', 7, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_support_slots_json', 'Support slots JSON', 'JSON list of support slot configs: slot_code, title_ru/title_en, sortorder.', 'textarea', '[{"slot_code":"support_1","title_ru":"Быстрый слот 1","title_en":"Support slot 1","sortorder":10},{"slot_code":"support_2","title_ru":"Быстрый слот 2","title_en":"Support slot 2","sortorder":20},{"slot_code":"support_3","title_ru":"Быстрый слот 3","title_en":"Support slot 3","sortorder":30}]', 8, $gid);
+    af_advancedinventory_ensure_setting('af_advancedinventory_assets_blacklist', 'Assets blacklist', 'Disable Advanced Inventory JS/CSS on these scripts. One page per line, for example: index.php\nforumdisplay.php\nusercp.php', 'textarea', 'index.php', 9, $gid);
 
     af_advancedinventory_ensure_inventory_storage();
     af_advancedinventory_upgrade_schema();
@@ -84,6 +85,7 @@ function af_advancedinventory_activate(): void
     af_advancedinventory_ensure_setting('af_advancedinventory_debug_enabled', 'Enable debug logging', 'Write Advanced Inventory debug events to file', 'yesno', '0', 6, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_debug_max_kb', 'Debug log max size (KB)', 'Rotate debug log when size exceeds this limit. Set 0 to disable rotation.', 'numeric', '512', 7, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_support_slots_json', 'Support slots JSON', 'JSON list of support slot configs: slot_code, title_ru/title_en, sortorder.', 'textarea', '[{"slot_code":"support_1","title_ru":"Быстрый слот 1","title_en":"Support slot 1","sortorder":10},{"slot_code":"support_2","title_ru":"Быстрый слот 2","title_en":"Support slot 2","sortorder":20},{"slot_code":"support_3","title_ru":"Быстрый слот 3","title_en":"Support slot 3","sortorder":30}]', 8, $gid);
+    af_advancedinventory_ensure_setting('af_advancedinventory_assets_blacklist', 'Assets blacklist', 'Disable Advanced Inventory JS/CSS on these scripts. One page per line, for example: index.php\nforumdisplay.php\nusercp.php', 'textarea', 'index.php', 9, $gid);
 
     af_advancedinventory_upgrade_schema();
     af_advancedinventory_templates_install_or_update();
@@ -277,7 +279,7 @@ function af_advancedinventory_current_script_name(): string
         }
     }
 
-    foreach (['SCRIPT_NAME', 'PHP_SELF', 'REQUEST_URI'] as $key) {
+    foreach (['SCRIPT_NAME', 'PHP_SELF'] as $key) {
         $script = af_advancedinventory_normalize_script_name((string)($_SERVER[$key] ?? ''));
         if ($script !== '') {
             return $script;
@@ -304,11 +306,56 @@ function af_advancedinventory_is_inventory_ui_context(string $action = ''): bool
     return in_array($currentAction, ['inventory', 'inventories', 'tab', 'entity'], true);
 }
 
+function af_advancedinventory_assets_blacklist(): array
+{
+    global $mybb;
+
+    static $blacklist = null;
+    if (is_array($blacklist)) {
+        return $blacklist;
+    }
+
+    $blacklist = [];
+    $raw = str_replace(["\r\n", "\r"], "\n", (string)($mybb->settings['af_advancedinventory_assets_blacklist'] ?? ''));
+    foreach (explode("\n", $raw) as $line) {
+        $script = af_advancedinventory_normalize_script_name($line);
+        if ($script !== '') {
+            $blacklist[$script] = $script;
+        }
+    }
+
+    return $blacklist;
+}
+
+function af_advancedinventory_assets_are_blacklisted(?string $script = null): bool
+{
+    $script = $script === null ? af_advancedinventory_current_script_name() : af_advancedinventory_normalize_script_name($script);
+    if ($script === '') {
+        return false;
+    }
+
+    $blacklist = af_advancedinventory_assets_blacklist();
+    return isset($blacklist[$script]);
+}
+
+function af_advancedinventory_should_inject_assets(bool $embedded = false, string $action = ''): bool
+{
+    if (af_advancedinventory_assets_are_blacklisted()) {
+        return false;
+    }
+
+    if ($embedded) {
+        return true;
+    }
+
+    return af_advancedinventory_is_inventory_ui_context($action);
+}
+
 function af_advancedinventory_append_runtime_assets(string &$headerinclude, bool $withScript = true): void
 {
     global $mybb;
 
-    if (!af_advancedinventory_is_inventory_ui_context()) {
+    if (!af_advancedinventory_should_inject_assets(false)) {
         return;
     }
 
@@ -326,9 +373,13 @@ function af_advancedinventory_append_runtime_assets(string &$headerinclude, bool
     $headerinclude .= '<script src="' . htmlspecialchars_uni($assetBase . 'advancedinventory.js?v=' . rawurlencode($vJs)) . '" defer></script>';
 }
 
-function af_advancedinventory_append_assets_unconditional(string &$headerinclude, bool $withScript = true): void
+function af_advancedinventory_append_embedded_assets(string &$headerinclude, bool $withScript = true): void
 {
     global $mybb;
+
+    if (!af_advancedinventory_should_inject_assets(true)) {
+        return;
+    }
 
     $assetBase = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedinventory/assets/';
     $cssFile = AF_ADVINV_ASSET_DIR . 'advancedinventory.css';
@@ -537,7 +588,7 @@ function af_advancedinventory_build_inventory_fragment(int $ownerUid): string
         $defaultTab = (string)array_key_first($tabs);
     }
 
-    af_advancedinventory_append_assets_unconditional($headerinclude, true);
+    af_advancedinventory_append_embedded_assets($headerinclude, true);
 
     $tabLinks = '';
     foreach ($tabs as $code => $title) {
