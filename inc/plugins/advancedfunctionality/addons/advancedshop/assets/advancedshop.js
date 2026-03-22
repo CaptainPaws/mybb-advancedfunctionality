@@ -99,6 +99,17 @@
     return String(v == null ? '' : v).replace(/[&<>"']/g, function(ch){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch]; });
   }
 
+  function renderAppearanceUnapplyControl(uid, appearanceTarget, activeApplied){
+    var actionUrl = normalizeActionUrl('misc.php?action=inventory_appearance_unapply');
+    var disabledAttr = activeApplied ? '' : ' disabled';
+    return '<form method="post" action="' + escapeHtml(actionUrl) + '" class="af-shop-inline-form" data-af-appearance-unapply-form>'
+      + '<input type="hidden" name="uid" value="' + escapeHtml(String(uid || '0')) + '">'
+      + '<input type="hidden" name="target_key" value="' + escapeHtml(appearanceTarget || '') + '">'
+      + '<input type="hidden" name="my_post_key" value="' + escapeHtml(key()) + '">'
+      + '<button type="submit" class="af-shop-btn" data-af-appearance-unapply-btn data-target-key="' + escapeHtml(appearanceTarget) + '"' + disabledAttr + '>Снять</button>'
+      + '</form>';
+  }
+
   function setStatus(node, text, ok){ if(!node){ return; } node.textContent = text; node.className = ok ? 'af-status-ok' : 'af-status-error'; }
 
   function afShopModalRoot(){
@@ -304,6 +315,7 @@
 
   function handleInventorySlotClick(slotNode){
     if(!slotNode){ return; }
+    var ctx = inventoryContext(slotNode);
     var invId = parseInt(slotNode.getAttribute('data-inv-id') || '0', 10);
     if(invId <= 0){ return; }
     var title = slotNode.getAttribute('data-title') || 'Предмет';
@@ -323,7 +335,7 @@
         actions += '<div class="af-item-popover__hint">Пресет темы выбирается только при создании темы или редактировании первого поста.</div>';
       } else {
         actions += '<button type="button" class="af-shop-btn" data-af-appearance-apply-btn data-inv-id="' + escapeHtml(String(invId)) + '">' + (activeApplied ? 'Активен' : 'Активировать') + '</button>';
-        actions += '<button type="button" class="af-shop-btn" data-af-appearance-unapply-btn data-target-key="' + escapeHtml(appearanceTarget) + '"' + (activeApplied ? '' : ' disabled') + '>Снять</button>';
+        actions += renderAppearanceUnapplyControl(ctx.uid || '0', appearanceTarget, activeApplied);
       }
     } else {
       actions += '<button type="button" class="af-shop-btn" data-af-equip-btn data-can-equip="' + (canEquip ? '1' : '0') + '" data-inv-id="' + escapeHtml(String(invId)) + '" data-slot-code="' + escapeHtml(equipSlot) + '">Надеть</button>';

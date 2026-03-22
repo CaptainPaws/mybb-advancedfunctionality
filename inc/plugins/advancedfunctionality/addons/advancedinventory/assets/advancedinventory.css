@@ -447,6 +447,11 @@
   margin-top: auto;
 }
 
+.af-inv-inline-form {
+  display: inline-flex;
+  margin: 0;
+}
+
 .af-inv-card-actions .af-inv-action {
   flex: 0 0 auto;
 }

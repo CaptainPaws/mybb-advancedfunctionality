@@ -3044,7 +3044,10 @@ function af_advinv_render_preview_stack(array $items, int $selectedItemId, bool 
 
 function af_advinv_render_preview_card(array $item, bool $active, bool $canManage, bool $canEditOwner, array $equipped): string
 {
+    global $mybb;
+
     $itemId = (int)($item['id'] ?? 0);
+    $itemOwnerUid = (int)($item['uid'] ?? 0);
     $kbKey = trim((string)($item['kb_key'] ?? ''));
 
     $appearanceInfo = af_advinv_resolve_appearance_item($item);
@@ -3144,7 +3147,12 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
                 $actions .= '<div class="af-inv-card-status is-inactive">Пресет темы выбирается только в форме создания темы или при редактировании первого поста.</div>';
             } else {
                 $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActiveAppearance ? ' disabled="disabled"' : '') . '>Активировать</button>';
-                $actions .= '<button type="button" class="af-inv-action" data-af-appearance-unapply-btn data-target-key="' . htmlspecialchars_uni($appearanceTarget) . '"' . (!$isActiveAppearance ? ' disabled="disabled"' : '') . '>Снять</button>';
+                $actions .= '<form method="post" action="shop.php?action=inventory_appearance_unapply" class="af-inv-inline-form" data-af-appearance-unapply-form>'
+                    . '<input type="hidden" name="uid" value="' . $itemOwnerUid . '">'
+                    . '<input type="hidden" name="target_key" value="' . htmlspecialchars_uni($appearanceTarget) . '">'
+                    . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">'
+                    . '<button type="submit" class="af-inv-action" data-af-appearance-unapply-btn data-target-key="' . htmlspecialchars_uni($appearanceTarget) . '"' . (!$isActiveAppearance ? ' disabled="disabled"' : '') . '>Снять</button>'
+                    . '</form>';
             }
         } else {
             if ($equippedSlot !== '') {
@@ -3228,11 +3236,14 @@ function af_advancedinventory_subfilters(string $tab): array
 
 function af_advinv_render_tab_cards(array $items, bool $canManage, bool $allowEquipActions, array $equipped = []): string
 {
+    global $mybb;
+
     $rows = '';
     $slotLabels = af_inv_equipment_slots();
 
     foreach ($items as $item) {
         $itemId = (int)($item['id'] ?? 0);
+        $itemOwnerUid = (int)($item['uid'] ?? 0);
         $qty = max(1, (int)($item['qty'] ?? 1));
         $title = trim((string)($item['appearance_title'] ?? ($item['title'] ?? '')));
         if ($title === '') {
@@ -3278,7 +3289,12 @@ function af_advinv_render_tab_cards(array $items, bool $canManage, bool $allowEq
                 $statusHtml = '<div class="af-inv-card-status is-inactive">Пресет темы выбирается в newthread.php / editpost.php.</div>';
             } else {
                 $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActive ? ' disabled="disabled"' : '') . '>Активировать</button>';
-                $actions .= '<button type="button" class="af-inv-action" data-af-appearance-unapply-btn data-target-key="' . htmlspecialchars_uni($appearanceTarget) . '"' . (!$isActive ? ' disabled="disabled"' : '') . '>Снять</button>';
+                $actions .= '<form method="post" action="shop.php?action=inventory_appearance_unapply" class="af-inv-inline-form" data-af-appearance-unapply-form>'
+                    . '<input type="hidden" name="uid" value="' . $itemOwnerUid . '">'
+                    . '<input type="hidden" name="target_key" value="' . htmlspecialchars_uni($appearanceTarget) . '">'
+                    . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">'
+                    . '<button type="submit" class="af-inv-action" data-af-appearance-unapply-btn data-target-key="' . htmlspecialchars_uni($appearanceTarget) . '"' . (!$isActive ? ' disabled="disabled"' : '') . '>Снять</button>'
+                    . '</form>';
             }
             $sale = af_advinv_item_sale_profile($item, 1);
             $actions .= '<button type="button" class="af-inv-action" data-action="sell" data-item-id="' . $itemId . '"' . (empty($sale['can_sell']) ? ' disabled="disabled"' : '') . '>Продать</button>';
