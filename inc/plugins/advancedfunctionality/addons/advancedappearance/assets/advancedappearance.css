@@ -316,6 +316,11 @@
 
   --af-aa-preview-postbit-plaque-image: none;
   --af-aa-preview-postbit-plaque-overlay: linear-gradient(180deg, rgba(55, 66, 122, .30), rgba(31, 38, 76, .48));
+  --af-aa-preview-postbit-plaque-icon-bg: linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08));
+  --af-aa-preview-postbit-plaque-icon-overlay: none;
+  --af-aa-preview-postbit-plaque-icon-border: rgba(255,255,255,.18);
+  --af-aa-preview-postbit-plaque-icon-color: #f6f1cf;
+  --af-aa-preview-postbit-plaque-icon-size: 26px;
 
   padding: 16px;
   display: grid;
@@ -547,6 +552,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   min-height: 42px;
   padding: 0 14px;
   border-radius: 12px;
@@ -557,6 +563,34 @@
   background-repeat: no-repeat, no-repeat;
   background-position: center center, center center;
   background-size: cover, cover;
+}
+
+.af-apui-postbit-plaque__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--af-aa-preview-postbit-plaque-icon-size) + 12px);
+  height: calc(var(--af-aa-preview-postbit-plaque-icon-size) + 12px);
+  border-radius: 999px;
+  border: 1px solid var(--af-aa-preview-postbit-plaque-icon-border);
+  background-image: var(--af-aa-preview-postbit-plaque-icon-overlay), var(--af-aa-preview-postbit-plaque-icon-bg);
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 6px 14px rgba(0,0,0,.18);
+  overflow: hidden;
+}
+
+.af-apui-postbit-plaque__icon-glyph {
+  color: var(--af-aa-preview-postbit-plaque-icon-color);
+  font-size: var(--af-aa-preview-postbit-plaque-icon-size);
+  line-height: 1;
+}
+
+.af-apui-postbit-plaque__icon-image {
+  width: var(--af-aa-preview-postbit-plaque-icon-size);
+  height: var(--af-aa-preview-postbit-plaque-icon-size);
+  object-fit: contain;
 }
 
 .af-aa-page .button {

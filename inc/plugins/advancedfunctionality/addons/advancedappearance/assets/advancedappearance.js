@@ -134,6 +134,27 @@
     }
   }
 
+  function updatePlaqueIcon(root, settings) {
+    if (!root) return;
+
+    var iconNode = root.querySelector('.af-apui-postbit-plaque__icon');
+    if (!iconNode) return;
+
+    var iconUrl = trim(settings.postbit_plaque_icon_url || '');
+    var glyph = trim(settings.postbit_plaque_icon_glyph || '★') || '★';
+
+    if (iconUrl) {
+      iconNode.innerHTML = '<img class="af-apui-postbit-plaque__icon-image" src="' + iconUrl.replace(/"/g, '&quot;') + '" alt="">';
+      return;
+    }
+
+    iconNode.innerHTML = '<span class="af-apui-postbit-plaque__icon-glyph" aria-hidden="true"></span>';
+    var glyphNode = iconNode.querySelector('.af-apui-postbit-plaque__icon-glyph');
+    if (glyphNode) {
+      glyphNode.textContent = glyph;
+    }
+  }
+
   function applySettings(root, settings, meta) {
     if (!root || !settings) return;
 
@@ -166,6 +187,12 @@
 
     setVar(root, '--af-aa-preview-postbit-plaque-image', toCssUrl(settings.postbit_plaque_bg_url || ''));
     setVar(root, '--af-aa-preview-postbit-plaque-overlay', trim(settings.postbit_plaque_overlay || 'linear-gradient(180deg, rgba(55,66,122,.30), rgba(31,38,76,.48))'));
+    setVar(root, '--af-aa-preview-postbit-plaque-icon-bg', trim(settings.postbit_plaque_icon_bg || 'linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08))'));
+    setVar(root, '--af-aa-preview-postbit-plaque-icon-overlay', trim(settings.postbit_plaque_icon_overlay || 'none'));
+    setVar(root, '--af-aa-preview-postbit-plaque-icon-border', trim(settings.postbit_plaque_icon_border || 'rgba(255,255,255,.18)'));
+    setVar(root, '--af-aa-preview-postbit-plaque-icon-color', trim(settings.postbit_plaque_icon_color || '#f6f1cf'));
+    setVar(root, '--af-aa-preview-postbit-plaque-icon-size', trim(settings.postbit_plaque_icon_size || '26px'));
+    updatePlaqueIcon(root, settings);
 
     renderCustomCss(root, settings.custom_css || '');
     updatePreviewMeta(root, meta || {});

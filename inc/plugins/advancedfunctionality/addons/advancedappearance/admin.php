@@ -185,6 +185,7 @@ class AF_Admin_Advancedappearance
             'postbit_author' => 'Постбит: фон карточки автора',
             'postbit_name' => 'Постбит: блок никнейма',
             'postbit_plaque' => 'Постбит: нижняя плашка',
+            'postbit_plaque_icon' => 'Постбит: иконка нижней плашки',
             'postbit_avatar_frame' => 'Постбит: рамка аватара',
         ];
     }
@@ -204,6 +205,13 @@ class AF_Admin_Advancedappearance
             'postbit_name_overlay' => 'none',
             'postbit_plaque_bg_url' => '',
             'postbit_plaque_overlay' => 'none',
+            'postbit_plaque_icon_url' => '',
+            'postbit_plaque_icon_glyph' => '★',
+            'postbit_plaque_icon_bg' => 'linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08))',
+            'postbit_plaque_icon_overlay' => 'none',
+            'postbit_plaque_icon_border' => 'rgba(255,255,255,.18)',
+            'postbit_plaque_icon_color' => '#f6f1cf',
+            'postbit_plaque_icon_size' => '26px',
             'custom_css' => '',
             'fragment_key' => 'profile_banner',
         ];
@@ -998,6 +1006,19 @@ border-color: rgba(255,255,255,.10);
     }
     CSS;
 
+            case 'postbit_plaque_icon':
+                return <<<'CSS'
+    /* Fragment: постбит — иконка плашки */
+    {{selector}} .af-apui-postbit-plaque__icon {
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.24), 0 8px 18px rgba(0,0,0,.24);
+    }
+
+    {{selector}} .af-apui-postbit-plaque__icon-glyph,
+    {{selector}} .af-apui-postbit-plaque__icon-image {
+    transform: scale(1.04);
+    }
+    CSS;
+
             case 'postbit_avatar_frame':
                 return <<<'CSS'
     /* Fragment: постбит — рамка аватара */
@@ -1122,6 +1143,13 @@ border-color: rgba(255,255,255,.10);
         self::inputRow('postbit_name_overlay', 'settings[postbit_name_overlay]', $settings['postbit_name_overlay']);
         self::inputRow('postbit_plaque_bg_url', 'settings[postbit_plaque_bg_url]', $settings['postbit_plaque_bg_url']);
         self::inputRow('postbit_plaque_overlay', 'settings[postbit_plaque_overlay]', $settings['postbit_plaque_overlay']);
+        self::inputRow('postbit_plaque_icon_url', 'settings[postbit_plaque_icon_url]', $settings['postbit_plaque_icon_url']);
+        self::inputRow('postbit_plaque_icon_glyph', 'settings[postbit_plaque_icon_glyph]', $settings['postbit_plaque_icon_glyph']);
+        self::inputRow('postbit_plaque_icon_bg', 'settings[postbit_plaque_icon_bg]', $settings['postbit_plaque_icon_bg']);
+        self::inputRow('postbit_plaque_icon_overlay', 'settings[postbit_plaque_icon_overlay]', $settings['postbit_plaque_icon_overlay']);
+        self::inputRow('postbit_plaque_icon_border', 'settings[postbit_plaque_icon_border]', $settings['postbit_plaque_icon_border']);
+        self::inputRow('postbit_plaque_icon_color', 'settings[postbit_plaque_icon_color]', $settings['postbit_plaque_icon_color']);
+        self::inputRow('postbit_plaque_icon_size', 'settings[postbit_plaque_icon_size]', $settings['postbit_plaque_icon_size']);
 
         echo '<tr><th colspan="2">Пользовательский CSS</th></tr>';
         self::textareaRow(
@@ -1157,6 +1185,13 @@ border-color: rgba(255,255,255,.10);
         self::inputRow('postbit_name_overlay', 'settings[postbit_name_overlay]', $settings['postbit_name_overlay']);
         self::inputRow('postbit_plaque_bg_url', 'settings[postbit_plaque_bg_url]', $settings['postbit_plaque_bg_url']);
         self::inputRow('postbit_plaque_overlay', 'settings[postbit_plaque_overlay]', $settings['postbit_plaque_overlay']);
+        self::inputRow('postbit_plaque_icon_url', 'settings[postbit_plaque_icon_url]', $settings['postbit_plaque_icon_url']);
+        self::inputRow('postbit_plaque_icon_glyph', 'settings[postbit_plaque_icon_glyph]', $settings['postbit_plaque_icon_glyph']);
+        self::inputRow('postbit_plaque_icon_bg', 'settings[postbit_plaque_icon_bg]', $settings['postbit_plaque_icon_bg']);
+        self::inputRow('postbit_plaque_icon_overlay', 'settings[postbit_plaque_icon_overlay]', $settings['postbit_plaque_icon_overlay']);
+        self::inputRow('postbit_plaque_icon_border', 'settings[postbit_plaque_icon_border]', $settings['postbit_plaque_icon_border']);
+        self::inputRow('postbit_plaque_icon_color', 'settings[postbit_plaque_icon_color]', $settings['postbit_plaque_icon_color']);
+        self::inputRow('postbit_plaque_icon_size', 'settings[postbit_plaque_icon_size]', $settings['postbit_plaque_icon_size']);
     }
 
     private static function savePreset(string $do): void
