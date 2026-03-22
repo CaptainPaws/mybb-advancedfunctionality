@@ -98,8 +98,12 @@
     }
 
     var mf = ensureModal();
-    if (loadUrl.indexOf('embed=1') === -1 && loadUrl.indexOf('ajax=1') === -1) {
-      loadUrl += (loadUrl.indexOf('?') === -1 ? '?' : '&') + 'ajax=1';
+
+    loadUrl = loadUrl.replace(/([?&])ajax=1(?:&|$)/i, '$1');
+    loadUrl = loadUrl.replace(/[?&]$/, '');
+
+    if (!/(?:[?&])embed=1(?:[&#]|$)/i.test(loadUrl)) {
+      loadUrl += (loadUrl.indexOf('?') === -1 ? '?' : '&') + 'embed=1';
     }
 
     mf.frame.setAttribute('src', loadUrl);
