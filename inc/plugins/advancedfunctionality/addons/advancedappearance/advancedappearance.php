@@ -214,23 +214,199 @@ function af_aa_get_supported_fragment_keys(): array
     ];
 }
 
-function af_aa_get_all_assignment_target_keys(): array
+function af_aa_normalize_target_key(string $targetKey): string
 {
-    $targets = [
-        AF_AA_TARGET_APUI_THEME_PACK,
-        AF_AA_TARGET_APUI_PROFILE_PACK,
-        AF_AA_TARGET_APUI_POSTBIT_PACK,
-        AF_AA_TARGET_APUI_THREAD_PACK,
-        AF_AA_TARGET_APUI_APPLICATION_PACK,
-        AF_AA_TARGET_APUI_SHEET_PACK,
-        AF_AA_TARGET_APUI_INVENTORY_PACK,
-        AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK,
-    ];
-    foreach (array_keys(af_aa_get_supported_fragment_keys()) as $fragmentKey) {
-        $targets[] = AF_AA_TARGET_APUI_FRAGMENT_PACK . ':' . $fragmentKey;
+    return mb_strtolower(trim($targetKey));
+}
+
+function af_aa_get_supported_targets_registry(): array
+{
+    static $registry = null;
+
+    if (is_array($registry)) {
+        return $registry;
     }
 
-    return $targets;
+    $registry = [
+        AF_AA_TARGET_APUI_THEME_PACK => [
+            'do' => 'themepack',
+            'group' => 'theme_pack',
+            'label' => 'Общие пак-темы',
+            'human_label' => 'Общий пак темы',
+            'preset_target' => true,
+            'assignable' => true,
+            'purchasable' => true,
+            'useable' => true,
+        ],
+        AF_AA_TARGET_APUI_PROFILE_PACK => [
+            'do' => 'profilepack',
+            'group' => 'profile_pack',
+            'label' => 'Профили',
+            'human_label' => 'Пак профиля',
+            'preset_target' => true,
+            'assignable' => true,
+            'purchasable' => true,
+            'useable' => true,
+        ],
+        AF_AA_TARGET_APUI_POSTBIT_PACK => [
+            'do' => 'postbitpack',
+            'group' => 'postbit_pack',
+            'label' => 'Постбиты',
+            'human_label' => 'Пак постбита',
+            'preset_target' => true,
+            'assignable' => true,
+            'purchasable' => true,
+            'useable' => true,
+        ],
+        AF_AA_TARGET_APUI_THREAD_PACK => [
+            'do' => 'threadpack',
+            'group' => 'thread_pack',
+            'label' => 'Страница темы',
+            'human_label' => 'Пак страницы темы',
+            'preset_target' => true,
+            'assignable' => true,
+            'purchasable' => true,
+            'useable' => true,
+        ],
+        AF_AA_TARGET_APUI_APPLICATION_PACK => [
+            'do' => 'applicationpack',
+            'group' => 'application_pack',
+            'label' => 'Анкеты',
+            'human_label' => 'Пак анкеты',
+            'preset_target' => true,
+            'assignable' => true,
+            'purchasable' => true,
+            'useable' => true,
+        ],
+        AF_AA_TARGET_APUI_SHEET_PACK => [
+            'do' => 'sheetpack',
+            'group' => 'sheet_pack',
+            'label' => 'Листы персонажа',
+            'human_label' => 'Пак листа персонажа',
+            'preset_target' => true,
+            'assignable' => true,
+            'purchasable' => true,
+            'useable' => true,
+        ],
+        AF_AA_TARGET_APUI_INVENTORY_PACK => [
+            'do' => 'inventorypack',
+            'group' => 'inventory_pack',
+            'label' => 'Инвентарь',
+            'human_label' => 'Пак инвентаря',
+            'preset_target' => true,
+            'assignable' => true,
+            'purchasable' => true,
+            'useable' => true,
+        ],
+        AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK => [
+            'do' => 'achievementspack',
+            'group' => 'achievements_pack',
+            'label' => 'Ачивки',
+            'human_label' => 'Пак ачивок',
+            'preset_target' => true,
+            'assignable' => true,
+            'purchasable' => true,
+            'useable' => true,
+        ],
+        AF_AA_TARGET_APUI_FRAGMENT_PACK => [
+            'do' => 'fragmentpack',
+            'group' => 'fragment_pack',
+            'label' => 'Разное',
+            'human_label' => 'Дробный пак',
+            'preset_target' => true,
+            'assignable' => false,
+            'purchasable' => true,
+            'useable' => true,
+        ],
+    ];
+
+    foreach (af_aa_get_supported_fragment_keys() as $fragmentKey => $fragmentLabel) {
+        $registry[AF_AA_TARGET_APUI_FRAGMENT_PACK . ':' . $fragmentKey] = [
+            'do' => 'fragmentpack',
+            'group' => 'fragment_pack',
+            'label' => 'Разное · ' . $fragmentLabel,
+            'human_label' => 'Назначение: ' . $fragmentLabel,
+            'fragment_key' => $fragmentKey,
+            'preset_target' => false,
+            'assignable' => true,
+            'purchasable' => true,
+            'useable' => true,
+        ];
+    }
+
+    return $registry;
+}
+
+function af_aa_get_supported_target_keys(array $filters = []): array
+{
+    $keys = [];
+
+    foreach (af_aa_get_supported_targets_registry() as $targetKey => $meta) {
+        $include = true;
+
+        foreach ($filters as $filterKey => $expected) {
+            if (($meta[$filterKey] ?? null) !== $expected) {
+                $include = false;
+                break;
+            }
+        }
+
+        if ($include) {
+            $keys[] = $targetKey;
+        }
+    }
+
+    return $keys;
+}
+
+function af_aa_is_supported_target(string $targetKey, array $filters = []): bool
+{
+    $targetKey = af_aa_normalize_target_key($targetKey);
+    if ($targetKey === '') {
+        return false;
+    }
+
+    $meta = af_aa_get_target_meta($targetKey);
+    if (!$meta) {
+        return false;
+    }
+
+    foreach ($filters as $filterKey => $expected) {
+        if (($meta[$filterKey] ?? null) !== $expected) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function af_aa_get_target_meta(string $targetKey): array
+{
+    $targetKey = af_aa_normalize_target_key($targetKey);
+    $registry = af_aa_get_supported_targets_registry();
+
+    return isset($registry[$targetKey]) ? $registry[$targetKey] : [];
+}
+
+function af_aa_get_target_group_labels(): array
+{
+    return [
+        'all' => 'Все группы',
+        'theme_pack' => 'Общие пак-темы',
+        'profile_pack' => 'Профили',
+        'postbit_pack' => 'Постбиты',
+        'thread_pack' => 'Страница темы',
+        'application_pack' => 'Анкеты',
+        'sheet_pack' => 'Листы персонажа',
+        'inventory_pack' => 'Инвентарь',
+        'achievements_pack' => 'Ачивки',
+        'fragment_pack' => 'Разное',
+    ];
+}
+
+function af_aa_get_all_assignment_target_keys(): array
+{
+    return af_aa_get_supported_target_keys(['assignable' => true]);
 }
 
 function af_aa_collect_uid_from_postbit(array &$post): void
@@ -2226,17 +2402,7 @@ function af_aa_resolve_preset_do(string $do = ''): string
 {
     $do = trim(strtolower($do));
 
-    $allowed = [
-        'themepack',
-        'profilepack',
-        'postbitpack',
-        'threadpack',
-        'applicationpack',
-        'sheetpack',
-        'inventorypack',
-        'achievementspack',
-        'fragmentpack',
-    ];
+    $allowed = array_unique(array_column(af_aa_get_supported_targets_registry(), 'do'));
 
     if (!in_array($do, $allowed, true)) {
         return 'themepack';
@@ -2247,119 +2413,46 @@ function af_aa_resolve_preset_do(string $do = ''): string
 
 function af_aa_target_key_for_do(string $do): string
 {
-    switch (af_aa_resolve_preset_do($do)) {
-        case 'profilepack':
-            return AF_AA_TARGET_APUI_PROFILE_PACK;
+    $do = af_aa_resolve_preset_do($do);
 
-        case 'postbitpack':
-            return AF_AA_TARGET_APUI_POSTBIT_PACK;
-        case 'threadpack':
-            return AF_AA_TARGET_APUI_THREAD_PACK;
-
-        case 'applicationpack':
-            return AF_AA_TARGET_APUI_APPLICATION_PACK;
-
-        case 'sheetpack':
-            return AF_AA_TARGET_APUI_SHEET_PACK;
-
-        case 'inventorypack':
-            return AF_AA_TARGET_APUI_INVENTORY_PACK;
-
-        case 'achievementspack':
-            return AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK;
-
-        case 'fragmentpack':
-            return AF_AA_TARGET_APUI_FRAGMENT_PACK;
-
-        case 'themepack':
-        default:
-            return AF_AA_TARGET_APUI_THEME_PACK;
+    foreach (af_aa_get_supported_targets_registry() as $targetKey => $meta) {
+        if (!empty($meta['preset_target']) && (string)($meta['do'] ?? '') === $do) {
+            return $targetKey;
+        }
     }
+
+    return AF_AA_TARGET_APUI_THEME_PACK;
 }
 
 function af_aa_do_for_target(string $targetKey): string
 {
-    $targetKey = trim((string)$targetKey);
+    $meta = af_aa_get_target_meta($targetKey);
 
-    switch ($targetKey) {
-        case AF_AA_TARGET_APUI_PROFILE_PACK:
-            return 'profilepack';
-
-        case AF_AA_TARGET_APUI_POSTBIT_PACK:
-            return 'postbitpack';
-        case AF_AA_TARGET_APUI_THREAD_PACK:
-            return 'threadpack';
-
-        case AF_AA_TARGET_APUI_APPLICATION_PACK:
-            return 'applicationpack';
-
-        case AF_AA_TARGET_APUI_SHEET_PACK:
-            return 'sheetpack';
-
-        case AF_AA_TARGET_APUI_INVENTORY_PACK:
-            return 'inventorypack';
-
-        case AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK:
-            return 'achievementspack';
-
-        case AF_AA_TARGET_APUI_FRAGMENT_PACK:
-            return 'fragmentpack';
-
-        case AF_AA_TARGET_APUI_THEME_PACK:
-        default:
-            return 'themepack';
-    }
+    return (string)($meta['do'] ?? 'themepack');
 }
 
 function af_aa_get_front_tabs(): array
 {
-    return [
-        'themepack' => 'Общие пак-темы',
-        'profilepack' => 'Страница профиля',
-        'postbitpack' => 'Постбит в теме',
-        'threadpack' => 'Страница темы',
-        'applicationpack' => 'Анкеты',
-        'sheetpack' => 'Листы персонажа',
-        'inventorypack' => 'Инвентарь',
-        'achievementspack' => 'Ачивки',
-        'fragmentpack' => 'Разное',
-    ];
+    $tabs = [];
+
+    foreach (af_aa_get_supported_targets_registry() as $meta) {
+        if (empty($meta['preset_target'])) {
+            continue;
+        }
+
+        $do = (string)($meta['do'] ?? '');
+        $label = (string)($meta['label'] ?? '');
+
+        if ($do !== '' && $label !== '' && !isset($tabs[$do])) {
+            $tabs[$do] = $label;
+        }
+    }
+
+    return $tabs;
 }
 
 function af_aa_human_target_label(string $targetKey, array $settings = []): string
 {
-    if ($targetKey === AF_AA_TARGET_APUI_THEME_PACK) {
-        return 'Общий пак темы';
-    }
-
-    if ($targetKey === AF_AA_TARGET_APUI_PROFILE_PACK) {
-        return 'Пак профиля';
-    }
-
-    if ($targetKey === AF_AA_TARGET_APUI_POSTBIT_PACK) {
-        return 'Пак постбита';
-    }
-
-    if ($targetKey === AF_AA_TARGET_APUI_THREAD_PACK) {
-        return 'Пак страницы темы';
-    }
-
-    if ($targetKey === AF_AA_TARGET_APUI_APPLICATION_PACK) {
-        return 'Пак анкеты';
-    }
-
-    if ($targetKey === AF_AA_TARGET_APUI_SHEET_PACK) {
-        return 'Пак листа персонажа';
-    }
-
-    if ($targetKey === AF_AA_TARGET_APUI_INVENTORY_PACK) {
-        return 'Пак инвентаря';
-    }
-
-    if ($targetKey === AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK) {
-        return 'Пак ачивок';
-    }
-
     if ($targetKey === AF_AA_TARGET_APUI_FRAGMENT_PACK) {
         $fragmentKey = (string)($settings['fragment_key'] ?? '');
         $labelMap = af_aa_get_supported_fragment_keys();
@@ -2368,12 +2461,9 @@ function af_aa_human_target_label(string $targetKey, array $settings = []): stri
         return 'Дробный пак: ' . $fragmentLabel;
     }
 
-    if (strpos($targetKey, AF_AA_TARGET_APUI_FRAGMENT_PACK . ':') === 0) {
-        $fragmentKey = substr($targetKey, strlen(AF_AA_TARGET_APUI_FRAGMENT_PACK . ':'));
-        $labelMap = af_aa_get_supported_fragment_keys();
-        $fragmentLabel = $labelMap[$fragmentKey] ?? $fragmentKey;
-
-        return 'Назначение: ' . $fragmentLabel;
+    $meta = af_aa_get_target_meta($targetKey);
+    if (!empty($meta['human_label'])) {
+        return (string)$meta['human_label'];
     }
 
     return $targetKey;

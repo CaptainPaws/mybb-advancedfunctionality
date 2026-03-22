@@ -95,10 +95,32 @@ function af_advancedshop_appearance_supported_targets(): array
         return $targets;
     }
 
+    if (function_exists('af_aa_get_supported_targets_registry')) {
+        $targets = [];
+
+        foreach (af_aa_get_supported_targets_registry() as $targetKey => $meta) {
+            if (empty($meta['purchasable'])) {
+                continue;
+            }
+
+            $targets[$targetKey] = [
+                'group' => (string)($meta['group'] ?? 'unsupported'),
+                'label' => (string)($meta['label'] ?? $targetKey),
+            ];
+        }
+
+        return $targets;
+    }
+
     $targets = [
         'apui_theme_pack' => ['group' => 'theme_pack', 'label' => 'Общие пак-темы'],
         'apui_profile_pack' => ['group' => 'profile_pack', 'label' => 'Профили'],
         'apui_postbit_pack' => ['group' => 'postbit_pack', 'label' => 'Постбиты'],
+        'apui_thread_pack' => ['group' => 'thread_pack', 'label' => 'Страница темы'],
+        'apui_application_pack' => ['group' => 'application_pack', 'label' => 'Анкеты'],
+        'apui_sheet_pack' => ['group' => 'sheet_pack', 'label' => 'Листы персонажа'],
+        'apui_inventory_pack' => ['group' => 'inventory_pack', 'label' => 'Инвентарь'],
+        'apui_achievements_pack' => ['group' => 'achievements_pack', 'label' => 'Ачивки'],
         'apui_fragment_pack' => ['group' => 'fragment_pack', 'label' => 'Разное'],
         'apui_fragment_pack:profile_body' => ['group' => 'fragment_pack', 'label' => 'Разное · Профиль: фон body'],
         'apui_fragment_pack:profile_banner' => ['group' => 'fragment_pack', 'label' => 'Разное · Профиль: баннер'],
@@ -106,7 +128,10 @@ function af_advancedshop_appearance_supported_targets(): array
         'apui_fragment_pack:postbit_author' => ['group' => 'fragment_pack', 'label' => 'Разное · Постбит: фон автора'],
         'apui_fragment_pack:postbit_name' => ['group' => 'fragment_pack', 'label' => 'Разное · Постбит: блок никнейма'],
         'apui_fragment_pack:postbit_plaque' => ['group' => 'fragment_pack', 'label' => 'Разное · Постбит: плашка'],
+        'apui_fragment_pack:postbit_plaque_icon' => ['group' => 'fragment_pack', 'label' => 'Разное · Постбит: иконка плашки'],
         'apui_fragment_pack:postbit_avatar_frame' => ['group' => 'fragment_pack', 'label' => 'Разное · Постбит: рамка аватара'],
+        'apui_fragment_pack:thread_body' => ['group' => 'fragment_pack', 'label' => 'Разное · Тема: фон страницы'],
+        'apui_fragment_pack:thread_banner' => ['group' => 'fragment_pack', 'label' => 'Разное · Тема: баннер темы'],
     ];
 
     return $targets;
@@ -119,23 +144,18 @@ function af_advancedshop_appearance_supported_target_keys(): array
 
 function af_advancedshop_appearance_group_for_target(string $targetKey): string
 {
-    $targetKey = mb_strtolower(trim($targetKey));
+    $targetKey = function_exists('af_aa_normalize_target_key')
+        ? af_aa_normalize_target_key($targetKey)
+        : mb_strtolower(trim($targetKey));
     $targets = af_advancedshop_appearance_supported_targets();
-
-    if (isset($targets[$targetKey]['group'])) {
-        return (string)$targets[$targetKey]['group'];
-    }
-
-    if (strpos($targetKey, 'apui_fragment_pack:') === 0) {
-        return 'fragment_pack';
-    }
-
-    return 'unsupported';
+    return (string)($targets[$targetKey]['group'] ?? 'unsupported');
 }
 
 function af_advancedshop_appearance_target_label(string $targetKey): string
 {
-    $targetKey = mb_strtolower(trim($targetKey));
+    $targetKey = function_exists('af_aa_normalize_target_key')
+        ? af_aa_normalize_target_key($targetKey)
+        : mb_strtolower(trim($targetKey));
     $targets = af_advancedshop_appearance_supported_targets();
 
     if (isset($targets[$targetKey]['label'])) {
@@ -147,23 +167,42 @@ function af_advancedshop_appearance_target_label(string $targetKey): string
 
 function af_advancedshop_appearance_supported_group_labels(): array
 {
+    if (function_exists('af_aa_get_target_group_labels')) {
+        return af_aa_get_target_group_labels();
+    }
+
     return [
         'all' => 'Все группы',
         'theme_pack' => 'Общие пак-темы',
         'profile_pack' => 'Профили',
         'postbit_pack' => 'Постбиты',
+        'thread_pack' => 'Страница темы',
+        'application_pack' => 'Анкеты',
+        'sheet_pack' => 'Листы персонажа',
+        'inventory_pack' => 'Инвентарь',
+        'achievements_pack' => 'Ачивки',
         'fragment_pack' => 'Разное',
     ];
 }
 
 function af_advancedshop_appearance_validate_target(string $targetKey): string
 {
-    $targetKey = mb_strtolower(trim($targetKey));
+    $targetKey = function_exists('af_aa_normalize_target_key')
+        ? af_aa_normalize_target_key($targetKey)
+        : mb_strtolower(trim($targetKey));
     if ($targetKey === '') {
         throw new RuntimeException('Appearance preset has empty target_key.');
     }
 
-    if (!in_array($targetKey, af_advancedshop_appearance_supported_target_keys(), true)) {
+    if (
+        function_exists('af_aa_is_supported_target')
+        && !af_aa_is_supported_target($targetKey, ['purchasable' => true])
+    ) {
+        $supported = implode(', ', af_aa_get_supported_target_keys(['purchasable' => true]));
+        throw new RuntimeException('Appearance target not supported: ' . $targetKey . '. Supported targets: ' . $supported . '.');
+    }
+
+    if (!function_exists('af_aa_is_supported_target') && !in_array($targetKey, af_advancedshop_appearance_supported_target_keys(), true)) {
         $supported = implode(', ', af_advancedshop_appearance_supported_target_keys());
         throw new RuntimeException('Appearance target not supported: ' . $targetKey . '. Supported targets: ' . $supported . '.');
     }

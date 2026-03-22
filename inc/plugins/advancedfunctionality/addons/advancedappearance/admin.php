@@ -110,17 +110,19 @@ class AF_Admin_Advancedappearance
             $do = (string)$mybb->get_input('do');
         }
 
-        $allowed = [
-            'themepack',
-            'profilepack',
-            'postbitpack',
-            'threadpack',
-            'applicationpack',
-            'sheetpack',
-            'inventorypack',
-            'achievementspack',
-            'fragmentpack',
-        ];
+        $allowed = function_exists('af_aa_get_supported_targets_registry')
+            ? array_unique(array_column(af_aa_get_supported_targets_registry(), 'do'))
+            : [
+                'themepack',
+                'profilepack',
+                'postbitpack',
+                'threadpack',
+                'applicationpack',
+                'sheetpack',
+                'inventorypack',
+                'achievementspack',
+                'fragmentpack',
+            ];
 
         if (!in_array($do, $allowed, true)) {
             return 'themepack';
@@ -131,54 +133,29 @@ class AF_Admin_Advancedappearance
 
     private static function targetKeyForDo(string $do): string
     {
-        switch (self::resolvePresetDo($do)) {
-            case 'profilepack':
-                return AF_AA_TARGET_APUI_PROFILE_PACK;
-            case 'postbitpack':
-                return AF_AA_TARGET_APUI_POSTBIT_PACK;
-            case 'threadpack':
-                return AF_AA_TARGET_APUI_THREAD_PACK;
-            case 'applicationpack':
-                return AF_AA_TARGET_APUI_APPLICATION_PACK;
-            case 'sheetpack':
-                return AF_AA_TARGET_APUI_SHEET_PACK;
-            case 'inventorypack':
-                return AF_AA_TARGET_APUI_INVENTORY_PACK;
-            case 'achievementspack':
-                return AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK;
-            case 'fragmentpack':
-                return AF_AA_TARGET_APUI_FRAGMENT_PACK;
-            case 'themepack':
-            default:
-                return AF_AA_TARGET_APUI_THEME_PACK;
+        $do = self::resolvePresetDo($do);
+
+        if (function_exists('af_aa_get_supported_targets_registry')) {
+            foreach (af_aa_get_supported_targets_registry() as $targetKey => $meta) {
+                if (!empty($meta['preset_target']) && (string)($meta['do'] ?? '') === $do) {
+                    return $targetKey;
+                }
+            }
         }
+
+        return AF_AA_TARGET_APUI_THEME_PACK;
     }
 
     private static function doForTarget(string $targetKey): string
     {
-        $targetKey = trim((string)$targetKey);
-
-        switch ($targetKey) {
-            case AF_AA_TARGET_APUI_PROFILE_PACK:
-                return 'profilepack';
-            case AF_AA_TARGET_APUI_POSTBIT_PACK:
-                return 'postbitpack';
-            case AF_AA_TARGET_APUI_THREAD_PACK:
-                return 'threadpack';
-            case AF_AA_TARGET_APUI_APPLICATION_PACK:
-                return 'applicationpack';
-            case AF_AA_TARGET_APUI_SHEET_PACK:
-                return 'sheetpack';
-            case AF_AA_TARGET_APUI_INVENTORY_PACK:
-                return 'inventorypack';
-            case AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK:
-                return 'achievementspack';
-            case AF_AA_TARGET_APUI_FRAGMENT_PACK:
-                return 'fragmentpack';
-            case AF_AA_TARGET_APUI_THEME_PACK:
-            default:
-                return 'themepack';
+        if (function_exists('af_aa_get_target_meta')) {
+            $meta = af_aa_get_target_meta($targetKey);
+            if (!empty($meta['do'])) {
+                return (string)$meta['do'];
+            }
         }
+
+        return 'themepack';
     }
 
     private static function fragmentOptions(): array
@@ -253,38 +230,6 @@ class AF_Admin_Advancedappearance
 
     private static function humanTargetLabel(string $targetKey, array $settings = []): string
     {
-        if ($targetKey === AF_AA_TARGET_APUI_THEME_PACK) {
-            return 'Общий пак темы';
-        }
-
-        if ($targetKey === AF_AA_TARGET_APUI_PROFILE_PACK) {
-            return 'Пак профиля';
-        }
-
-        if ($targetKey === AF_AA_TARGET_APUI_POSTBIT_PACK) {
-            return 'Пак постбита';
-        }
-
-        if ($targetKey === AF_AA_TARGET_APUI_THREAD_PACK) {
-            return 'Пак страницы темы';
-        }
-
-        if ($targetKey === AF_AA_TARGET_APUI_APPLICATION_PACK) {
-            return 'Пак анкеты';
-        }
-
-        if ($targetKey === AF_AA_TARGET_APUI_SHEET_PACK) {
-            return 'Пак листа персонажа';
-        }
-
-        if ($targetKey === AF_AA_TARGET_APUI_INVENTORY_PACK) {
-            return 'Пак инвентаря';
-        }
-
-        if ($targetKey === AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK) {
-            return 'Пак ачивок';
-        }
-
         if ($targetKey === AF_AA_TARGET_APUI_FRAGMENT_PACK) {
             $fragmentKey = (string)($settings['fragment_key'] ?? '');
             $labelMap = self::fragmentOptions();
@@ -301,6 +246,13 @@ class AF_Admin_Advancedappearance
             return 'Назначение: ' . $fragmentLabel;
         }
 
+        if (function_exists('af_aa_get_target_meta')) {
+            $meta = af_aa_get_target_meta($targetKey);
+            if (!empty($meta['human_label'])) {
+                return (string)$meta['human_label'];
+            }
+        }
+
         return $targetKey;
     }
 
@@ -312,17 +264,19 @@ class AF_Admin_Advancedappearance
         echo '</div>';
 
         if ($section === 'presets') {
-            $tabs = [
-                'themepack' => 'Общие пак-темы',
-                'profilepack' => 'Страница профиля',
-                'postbitpack' => 'Постбит в теме',
-                'threadpack' => 'Страница темы',
-                'applicationpack' => 'Анкеты',
-                'sheetpack' => 'Листы персонажа',
-                'inventorypack' => 'Инвентарь',
-                'achievementspack' => 'Ачивки',
-                'fragmentpack' => 'Разное',
-            ];
+            $tabs = function_exists('af_aa_get_front_tabs')
+                ? af_aa_get_front_tabs()
+                : [
+                    'themepack' => 'Общие пак-темы',
+                    'profilepack' => 'Страница профиля',
+                    'postbitpack' => 'Постбит в теме',
+                    'threadpack' => 'Страница темы',
+                    'applicationpack' => 'Анкеты',
+                    'sheetpack' => 'Листы персонажа',
+                    'inventorypack' => 'Инвентарь',
+                    'achievementspack' => 'Ачивки',
+                    'fragmentpack' => 'Разное',
+                ];
 
             echo '<div style="margin:0 0 14px; display:flex; flex-wrap:wrap; gap:8px;">';
             foreach ($tabs as $tabKey => $title) {
