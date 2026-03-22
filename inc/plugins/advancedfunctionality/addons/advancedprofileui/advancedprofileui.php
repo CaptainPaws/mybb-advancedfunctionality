@@ -15,6 +15,7 @@ define('AF_APUI_BACKUP_TABLE_NAME', 'af_apui_template_backups');
 define('AF_APUI_BACKUP_TABLE', TABLE_PREFIX . AF_APUI_BACKUP_TABLE_NAME);
 define('AF_APUI_MARKER_PROFILE_START', '<!-- AF_APUI member_profile START -->');
 define('AF_APUI_MARKER_POSTBIT_START', '<!-- AF_APUI postbit_classic START -->');
+define('AF_APUI_MARKER_THREAD_START', '<!-- AF_APUI showthread START -->');
 define('AF_APUI_ASSET_MARK', '<!--af_apui_assets-->');
 
 function af_advancedprofileui_install(): void
@@ -104,6 +105,13 @@ function af_apui_ensure_settings(): void
         ['postbit_plaque_icon_color', 'postbit_classic: цвет fallback-иконки нижней плашки', 'Цвет fallback-иконки внутри нижней плашки postbit.', 'text', '#f6f1cf', 37],
         ['postbit_plaque_icon_size', 'postbit_classic: размер медиа-блока нижней плашки', 'CSS размер медиа-блока и fallback-иконки внутри нижней плашки postbit.', 'text', '26px', 38],
         ['postbit_css', 'postbit_classic: пользовательский CSS', 'Дополнительный CSS для postbit_classic.', 'textarea', '', 39],
+        ['thread_body_cover_url', 'showthread: фон body (большое изображение)', 'URL большого фонового изображения для страницы темы.', 'text', '', 70],
+        ['thread_body_tile_url', 'showthread: фон body (бесшовная плитка)', 'URL маленького бесшовного изображения для tiled-фона страницы темы.', 'text', '', 71],
+        ['thread_body_bg_mode', 'showthread: режим фона body', 'cover или tile.', 'text', 'cover', 72],
+        ['thread_body_overlay', 'showthread: оверлей фона body', 'CSS background-image слой для оверлея body страницы темы.', 'text', 'none', 73],
+        ['thread_banner_url', 'showthread: баннер темы по умолчанию', 'URL картинки hero-баннера страницы темы.', 'text', '', 74],
+        ['thread_banner_overlay', 'showthread: оверлей баннера темы', 'CSS background-image слой для оверлея баннера showthread.', 'text', 'linear-gradient(180deg, rgba(8, 12, 24, 0.08) 0%, rgba(8, 12, 24, 0.36) 42%, rgba(8, 12, 24, 0.88) 100%)', 75],
+        ['thread_css', 'showthread: пользовательский CSS', 'Дополнительный CSS для страницы темы.', 'textarea', '', 76],
         ['sheet_bg_url', 'character sheet: background image url', 'Базовый фон листа персонажа.', 'text', '', 30],
         ['sheet_bg_overlay', 'character sheet: background overlay', 'CSS overlay для листа персонажа.', 'text', 'linear-gradient(180deg, rgba(6, 10, 18, .24) 0%, rgba(6, 10, 18, .78) 100%)', 31],
         ['sheet_panel_bg', 'character sheet: panel/card background', 'Базовый фон панелей листа персонажа.', 'text', 'rgba(0, 0, 0, 0.12)', 32],
@@ -1432,6 +1440,7 @@ function af_apui_pre_output_page(string &$page): void
         $needles = [
             AF_APUI_MARKER_POSTBIT_START,
             AF_APUI_MARKER_PROFILE_START,
+            AF_APUI_MARKER_THREAD_START,
             'af-apui-profile-page',
             'af-apui-postbit',
             'af-apui-tab',
@@ -1646,6 +1655,26 @@ function af_apui_build_runtime_style_tag(): string
     $achievementsOverlay = af_apui_css_raw_value(af_apui_get_setting_value('achievements_bg_overlay', 'linear-gradient(180deg, rgba(6, 10, 18, .24) 0%, rgba(6, 10, 18, .78) 100%)'));
     $achievementsPanelBg = af_apui_css_raw_value(af_apui_get_setting_value('achievements_panel_bg', 'rgba(13, 17, 28, .74)'));
     $achievementsPanelBorder = af_apui_css_raw_value(af_apui_get_setting_value('achievements_panel_border', 'rgba(255,255,255,.12)'));
+    $threadBodyMode = strtolower(af_apui_get_setting_value('thread_body_bg_mode', 'cover'));
+    if ($threadBodyMode !== 'tile') {
+        $threadBodyMode = 'cover';
+    }
+    $threadBodyCoverImage = af_apui_css_url_value(af_apui_get_setting_value('thread_body_cover_url', ''));
+    $threadBodyTileImage = af_apui_css_url_value(af_apui_get_setting_value('thread_body_tile_url', ''));
+    $threadBodyOverlay = af_apui_css_raw_value(af_apui_get_setting_value('thread_body_overlay', 'none'));
+    $threadBanner = af_apui_css_url_value(af_apui_get_setting_value('thread_banner_url', ''));
+    $threadBannerOverlay = af_apui_css_raw_value(af_apui_get_setting_value('thread_banner_overlay', 'linear-gradient(180deg, rgba(8, 12, 24, 0.08) 0%, rgba(8, 12, 24, 0.36) 42%, rgba(8, 12, 24, 0.88) 100%)'));
+    $selectedThreadBodyImage = $threadBodyMode === 'tile' ? $threadBodyTileImage : $threadBodyCoverImage;
+    if ($selectedThreadBodyImage === 'none') {
+        $selectedThreadBodyImage = $threadBodyMode === 'tile' ? $threadBodyCoverImage : $threadBodyTileImage;
+        if ($selectedThreadBodyImage !== 'none') {
+            $threadBodyMode = $threadBodyMode === 'tile' ? 'cover' : 'tile';
+        }
+    }
+    $threadBodyRepeat = $threadBodyMode === 'tile' ? 'repeat' : 'no-repeat';
+    $threadBodyPosition = $threadBodyMode === 'tile' ? 'left top' : 'center center';
+    $threadBodyAttachment = $threadBodyMode === 'tile' ? 'scroll' : 'fixed';
+    $threadBodySize = $threadBodyMode === 'tile' ? 'auto' : 'cover';
 
     $memberCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('member_profile_css', ''));
     $postbitCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('postbit_css', ''));
@@ -1653,6 +1682,7 @@ function af_apui_build_runtime_style_tag(): string
     $applicationCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('application_css', ''));
     $inventoryCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('inventory_css', ''));
     $achievementsCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('achievements_css', ''));
+    $threadCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('thread_css', ''));
 
     $css = ":root{";
     $css .= "--af-apui-profile-banner-image:" . $profileBanner . ";";
@@ -1685,6 +1715,8 @@ function af_apui_build_runtime_style_tag(): string
     $css .= "--af-apui-modal-achievements-bg-overlay:" . $achievementsOverlay . ";";
     $css .= "--af-apui-modal-achievements-panel-bg:" . $achievementsPanelBg . ";";
     $css .= "--af-apui-modal-achievements-panel-border:" . $achievementsPanelBorder . ";";
+    $css .= "--af-apui-thread-banner-image:" . $threadBanner . ";";
+    $css .= "--af-apui-thread-banner-overlay:" . $threadBannerOverlay . ";";
     $css .= "}\n";
 
     $css .= "body.af-apui-member-profile-page{";
@@ -1696,8 +1728,19 @@ function af_apui_build_runtime_style_tag(): string
     $css .= "background-size:" . $bodySize . ";";
     $css .= "}\n";
 
+    $css .= "body.af-apui-thread-page{";
+    $css .= "--af-apui-thread-body-overlay:" . $threadBodyOverlay . ";";
+    $css .= "background-image:" . $selectedThreadBodyImage . ";";
+    $css .= "background-repeat:" . $threadBodyRepeat . ";";
+    $css .= "background-position:" . $threadBodyPosition . ";";
+    $css .= "background-attachment:" . $threadBodyAttachment . ";";
+    $css .= "background-size:" . $threadBodySize . ";";
+    $css .= "}\n";
+
     $css .= ".af-apui-profile-hero__banner{background-image:var(--af-apui-profile-banner-image, none);}\n";
     $css .= ".af-apui-profile-hero__banner::after{background:var(--af-apui-profile-banner-overlay, linear-gradient(180deg, rgba(8, 12, 24, 0.06) 0%, rgba(8, 12, 24, 0.30) 42%, rgba(8, 12, 24, 0.82) 100%));}\n";
+    $css .= ".af-apui-thread-hero__banner{background-image:var(--af-apui-thread-banner-image, none);}\n";
+    $css .= ".af-apui-thread-hero__banner::after{background:var(--af-apui-thread-banner-overlay, linear-gradient(180deg, rgba(8, 12, 24, 0.08) 0%, rgba(8, 12, 24, 0.36) 42%, rgba(8, 12, 24, 0.88) 100%));}\n";
 
     if ($memberCss !== '') {
         $css .= "\n/* member_profile custom css */\n" . $memberCss . "\n";
@@ -1723,6 +1766,10 @@ function af_apui_build_runtime_style_tag(): string
         $css .= "\n/* achievements custom css */\n" . $achievementsCss . "\n";
     }
 
+    if ($threadCss !== '') {
+        $css .= "\n/* showthread custom css */\n" . $threadCss . "\n";
+    }
+
     return '<style id="af-apui-runtime-css">' . $css . '</style>' . "\n";
 }
 
@@ -1733,7 +1780,7 @@ function af_apui_apply_overrides(): void
     af_apui_ensure_schema();
 
     $customTemplates = af_apui_load_custom_templates();
-    $targetTitles = ['member_profile', 'postbit_classic'];
+    $targetTitles = ['member_profile', 'postbit_classic', 'showthread'];
 
     foreach ($targetTitles as $title) {
         if (!isset($customTemplates[$title])) {
@@ -1837,10 +1884,13 @@ function af_apui_load_custom_templates(): array
 
     $filePostbit = AF_APUI_TEMPLATES_DIR . 'postbit_classic.html';
     $rawPostbit = is_file($filePostbit) ? (string)file_get_contents($filePostbit) : '';
+    $fileShowthread = AF_APUI_TEMPLATES_DIR . 'showthread.html';
+    $rawShowthread = is_file($fileShowthread) ? (string)file_get_contents($fileShowthread) : '';
 
     $templates = [];
     $templates = array_merge($templates, af_parse_templates_bundle($rawProfile));
     $templates = array_merge($templates, af_parse_templates_bundle($rawPostbit));
+    $templates = array_merge($templates, af_parse_templates_bundle($rawShowthread));
 
     return $templates;
 }

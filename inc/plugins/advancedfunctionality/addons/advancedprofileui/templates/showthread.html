@@ -1,0 +1,36 @@
+<!-- TEMPLATE: showthread -->
+<!-- AF_APUI showthread START -->
+<html>
+<head>
+<title>{$thread['subject']}</title>
+{$headerinclude}
+</head>
+<body class="af-apui-thread-page af-aa-user-{$thread['uid']}">
+{$header}
+{$pollbox}
+{$printthread}
+{$moderation_notice}
+{$ratethread}
+<div class="af-apui-thread-page-shell af-aa-user-{$thread['uid']}">
+    <section class="af-apui-thread-hero af-aa-user-{$thread['uid']}">
+        <div class="af-apui-thread-hero__background"></div>
+        <div class="af-apui-thread-hero__banner"></div>
+        <div class="af-apui-thread-hero__inner">
+            <div class="af-apui-thread-meta">{$newreply}{$newthread}{$threadnoteslink}{$subscriptionmethod}{$search_thread}</div>
+            <h1 class="af-apui-thread-title"><span>{$thread['displayprefix']}{$thread['subject']}</span></h1>
+            <div class="af-apui-thread-meta af-apui-thread-meta--secondary">{$multipage}</div>
+        </div>
+    </section>
+    <div class="af-apui-thread-content">
+        <div class="af-apui-thread-atf">{$af_atf_showthread_block}</div>
+        {$classic_header}
+        {$posts}
+        {$classic_footer}
+        {$quickreply}
+        {$moderationoptions}
+    </div>
+</div>
+{$footer}
+</body>
+</html>
+<!-- AF_APUI showthread END -->

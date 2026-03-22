@@ -23,6 +23,123 @@ body.af-apui-member-profile-page > * {
   z-index: 1;
 }
 
+body.af-apui-thread-page {
+  position: relative;
+  isolation: isolate;
+  --af-apui-thread-body-overlay: none;
+}
+
+body.af-apui-thread-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: var(--af-apui-thread-body-overlay, none);
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body.af-apui-thread-page > * {
+  position: relative;
+  z-index: 1;
+}
+
+.af-apui-thread-page-shell {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 16px auto;
+  display: grid;
+  gap: 16px;
+}
+
+.af-apui-thread-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #2a2d38;
+  border-radius: 12px;
+  background: #171a23;
+  min-height: 220px;
+}
+
+.af-apui-thread-hero__background,
+.af-apui-thread-hero__banner {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.af-apui-thread-hero__background {
+  background: linear-gradient(135deg, #222736, #161926);
+  opacity: .96;
+}
+
+.af-apui-thread-hero__banner {
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.af-apui-thread-hero__banner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.af-apui-thread-hero__inner {
+  position: relative;
+  z-index: 1;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 24px;
+}
+
+.af-apui-thread-title {
+  margin: 0;
+  font-size: clamp(26px, 4vw, 40px);
+  line-height: 1.1;
+  color: #fff;
+}
+
+.af-apui-thread-title span {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.af-apui-thread-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  color: rgba(255,255,255,.82);
+}
+
+.af-apui-thread-meta a,
+.af-apui-thread-title a {
+  color: inherit;
+}
+
+.af-apui-thread-content {
+  display: grid;
+  gap: 16px;
+}
+
+.af-apui-thread-atf:empty {
+  display: none;
+}
+
+.af-apui-thread-atf > * {
+  margin-bottom: 0;
+}
+
 .af-apui-profile-page {
   position: relative;
   z-index: 1;
@@ -1676,6 +1793,15 @@ af-apf-postbit-field {
 
   .af-apui-postbit-name-wrap a {
     font-size: 15px;
+  }
+
+  .af-apui-thread-page-shell {
+    margin: 10px;
+  }
+
+  .af-apui-thread-hero__inner {
+    min-height: 180px;
+    padding: 18px;
   }
 }
 
