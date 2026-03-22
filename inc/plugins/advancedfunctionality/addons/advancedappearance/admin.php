@@ -20,6 +20,22 @@ if (!defined('AF_AA_TARGET_APUI_POSTBIT_PACK')) {
     define('AF_AA_TARGET_APUI_POSTBIT_PACK', 'apui_postbit_pack');
 }
 
+if (!defined('AF_AA_TARGET_APUI_APPLICATION_PACK')) {
+    define('AF_AA_TARGET_APUI_APPLICATION_PACK', 'apui_application_pack');
+}
+
+if (!defined('AF_AA_TARGET_APUI_SHEET_PACK')) {
+    define('AF_AA_TARGET_APUI_SHEET_PACK', 'apui_sheet_pack');
+}
+
+if (!defined('AF_AA_TARGET_APUI_INVENTORY_PACK')) {
+    define('AF_AA_TARGET_APUI_INVENTORY_PACK', 'apui_inventory_pack');
+}
+
+if (!defined('AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK')) {
+    define('AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK', 'apui_achievements_pack');
+}
+
 if (!defined('AF_AA_TARGET_APUI_FRAGMENT_PACK')) {
     define('AF_AA_TARGET_APUI_FRAGMENT_PACK', 'apui_fragment_pack');
 }
@@ -94,6 +110,10 @@ class AF_Admin_Advancedappearance
             'themepack',
             'profilepack',
             'postbitpack',
+            'applicationpack',
+            'sheetpack',
+            'inventorypack',
+            'achievementspack',
             'fragmentpack',
         ];
 
@@ -111,6 +131,14 @@ class AF_Admin_Advancedappearance
                 return AF_AA_TARGET_APUI_PROFILE_PACK;
             case 'postbitpack':
                 return AF_AA_TARGET_APUI_POSTBIT_PACK;
+            case 'applicationpack':
+                return AF_AA_TARGET_APUI_APPLICATION_PACK;
+            case 'sheetpack':
+                return AF_AA_TARGET_APUI_SHEET_PACK;
+            case 'inventorypack':
+                return AF_AA_TARGET_APUI_INVENTORY_PACK;
+            case 'achievementspack':
+                return AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK;
             case 'fragmentpack':
                 return AF_AA_TARGET_APUI_FRAGMENT_PACK;
             case 'themepack':
@@ -128,6 +156,14 @@ class AF_Admin_Advancedappearance
                 return 'profilepack';
             case AF_AA_TARGET_APUI_POSTBIT_PACK:
                 return 'postbitpack';
+            case AF_AA_TARGET_APUI_APPLICATION_PACK:
+                return 'applicationpack';
+            case AF_AA_TARGET_APUI_SHEET_PACK:
+                return 'sheetpack';
+            case AF_AA_TARGET_APUI_INVENTORY_PACK:
+                return 'inventorypack';
+            case AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK:
+                return 'achievementspack';
             case AF_AA_TARGET_APUI_FRAGMENT_PACK:
                 return 'fragmentpack';
             case AF_AA_TARGET_APUI_THEME_PACK:
@@ -193,15 +229,31 @@ class AF_Admin_Advancedappearance
     private static function humanTargetLabel(string $targetKey, array $settings = []): string
     {
         if ($targetKey === AF_AA_TARGET_APUI_THEME_PACK) {
-            return 'Общий theme pack';
+            return 'Общий пак темы';
         }
 
         if ($targetKey === AF_AA_TARGET_APUI_PROFILE_PACK) {
-            return 'Profile pack';
+            return 'Пак профиля';
         }
 
         if ($targetKey === AF_AA_TARGET_APUI_POSTBIT_PACK) {
-            return 'Postbit pack';
+            return 'Пак постбита';
+        }
+
+        if ($targetKey === AF_AA_TARGET_APUI_APPLICATION_PACK) {
+            return 'Пак анкеты';
+        }
+
+        if ($targetKey === AF_AA_TARGET_APUI_SHEET_PACK) {
+            return 'Пак листа персонажа';
+        }
+
+        if ($targetKey === AF_AA_TARGET_APUI_INVENTORY_PACK) {
+            return 'Пак инвентаря';
+        }
+
+        if ($targetKey === AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK) {
+            return 'Пак ачивок';
         }
 
         if ($targetKey === AF_AA_TARGET_APUI_FRAGMENT_PACK) {
@@ -209,7 +261,7 @@ class AF_Admin_Advancedappearance
             $labelMap = self::fragmentOptions();
             $fragmentLabel = $labelMap[$fragmentKey] ?? $fragmentKey;
 
-            return 'Fragment pack: ' . $fragmentLabel;
+            return 'Дробный пак: ' . $fragmentLabel;
         }
 
         if (strpos($targetKey, AF_AA_TARGET_APUI_FRAGMENT_PACK . ':') === 0) {
@@ -217,7 +269,7 @@ class AF_Admin_Advancedappearance
             $labelMap = self::fragmentOptions();
             $fragmentLabel = $labelMap[$fragmentKey] ?? $fragmentKey;
 
-            return 'Fragment assignment: ' . $fragmentLabel;
+            return 'Назначение: ' . $fragmentLabel;
         }
 
         return $targetKey;
@@ -232,10 +284,14 @@ class AF_Admin_Advancedappearance
 
         if ($section === 'presets') {
             $tabs = [
-                'themepack' => 'Общий пак темы',
-                'profilepack' => 'Пак профиля',
-                'postbitpack' => 'Пак постбита',
-                'fragmentpack' => 'Дробный пак',
+                'themepack' => 'Общие пак-темы',
+                'profilepack' => 'Страница профиля',
+                'postbitpack' => 'Постбит в теме',
+                'applicationpack' => 'Анкеты',
+                'sheetpack' => 'Листы персонажа',
+                'inventorypack' => 'Инвентарь',
+                'achievementspack' => 'Ачивки',
+                'fragmentpack' => 'Разное',
             ];
 
             echo '<div style="margin:0 0 14px; display:flex; flex-wrap:wrap; gap:8px;">';
@@ -256,6 +312,22 @@ class AF_Admin_Advancedappearance
 
                 case 'postbitpack':
                     echo '<p>Раздельные пресеты только для оформления постбита. Здесь доступны настройки авторского блока, никнейма, плашки и пользовательский CSS.</p>';
+                    break;
+
+                case 'applicationpack':
+                    echo '<p>Пресеты только для UI анкеты. Сохраняются и применяются как отдельная категория surface-паков.</p>';
+                    break;
+
+                case 'sheetpack':
+                    echo '<p>Пресеты только для листа персонажа. Меняют фон, оверлей, панели и custom CSS поверхности sheet.</p>';
+                    break;
+
+                case 'inventorypack':
+                    echo '<p>Пресеты только для инвентаря. Меняют фон, оверлей, панели и custom CSS поверхности inventory.</p>';
+                    break;
+
+                case 'achievementspack':
+                    echo '<p>Пресеты только для ачивок. Меняют фон, оверлей, панели и custom CSS поверхности achievements.</p>';
                     break;
 
                 case 'fragmentpack':
@@ -395,6 +467,10 @@ class AF_Admin_Advancedappearance
             'themepack' => 'Создать общий пак темы',
             'profilepack' => 'Создать пак профиля',
             'postbitpack' => 'Создать пак постбита',
+            'applicationpack' => 'Создать пак анкеты',
+            'sheetpack' => 'Создать пак листа персонажа',
+            'inventorypack' => 'Создать пак инвентаря',
+            'achievementspack' => 'Создать пак ачивок',
             'fragmentpack' => 'Создать дробный пак',
         ];
 
@@ -425,6 +501,14 @@ class AF_Admin_Advancedappearance
             self::renderProfilePackFields($settings);
         } elseif ($do === 'postbitpack') {
             self::renderPostbitPackFields($settings);
+        } elseif ($do === 'applicationpack') {
+            self::renderSurfacePackFields($settings, 'application', 'Оформление анкеты');
+        } elseif ($do === 'sheetpack') {
+            self::renderSurfacePackFields($settings, 'sheet', 'Оформление листа персонажа');
+        } elseif ($do === 'inventorypack') {
+            self::renderSurfacePackFields($settings, 'inventory', 'Оформление инвентаря');
+        } elseif ($do === 'achievementspack') {
+            self::renderSurfacePackFields($settings, 'achievements', 'Оформление ачивок');
         } else {
             self::renderFragmentPackFields($settings);
         }
@@ -503,6 +587,18 @@ class AF_Admin_Advancedappearance
 
             case 'postbitpack':
                 return self::getPostbitPackCssExamples();
+
+            case 'applicationpack':
+                return self::getSurfacePackCssExamples('application', 'Анкета');
+
+            case 'sheetpack':
+                return self::getSurfacePackCssExamples('sheet', 'Лист персонажа');
+
+            case 'inventorypack':
+                return self::getSurfacePackCssExamples('inventory', 'Инвентарь');
+
+            case 'achievementspack':
+                return self::getSurfacePackCssExamples('achievements', 'Ачивки');
 
             case 'fragmentpack':
                 return self::getFragmentPackCssExamples($settings);
@@ -740,6 +836,44 @@ class AF_Admin_Advancedappearance
         ];
     }
 
+
+    private static function getSurfacePackCssExamples(string $surfaceKey, string $surfaceLabel): array
+    {
+        $selector = '{{selector}} [data-af-apui-surface="' . $surfaceKey . '"]';
+
+        return [
+            [
+                'title' => $surfaceLabel . ': атмосферный фон и рамки',
+                'description' => 'Стартовый шаблон для отдельной UI-поверхности с акцентом на фон и панели.',
+                'code' => "/* {$surfaceLabel}: фон и панели */
+{$selector} {
+background-blend-mode: normal;
+}
+
+{$selector},
+{$selector} .af-apui-surface-page,
+{$selector} .af-inv-panel,
+{$selector} .af-cs-section {
+border-color: rgba(163, 134, 255, .20);
+box-shadow: 0 12px 28px rgba(0,0,0,.24);
+}"
+            ],
+            [
+                'title' => $surfaceLabel . ': стеклянные карточки',
+                'description' => 'Подходит для модалок и полноэкранных страниц с матовым стеклом.',
+                'code' => "/* {$surfaceLabel}: glass ui */
+{$selector} .af-apui-surface-page > *,
+{$selector} .af-inv-panel,
+{$selector} .af-cs-section,
+{$selector} .af-achievements-card {
+background: rgba(15, 18, 28, .56);
+backdrop-filter: blur(12px);
+border-color: rgba(255,255,255,.10);
+}"
+            ],
+        ];
+    }
+
     private static function getFragmentPackCssExamples(array $settings): array
     {
         $fragmentKey = (string)($settings['fragment_key'] ?? 'profile_banner');
@@ -927,6 +1061,24 @@ class AF_Admin_Advancedappearance
             (string)($settings['custom_css'] ?? ''),
             12,
             'Подсказка: используй {{selector}}. Этот CSS должен менять только постбит.'
+        );
+    }
+
+    private static function renderSurfacePackFields(array $settings, string $surfaceKey, string $heading): void
+    {
+        echo '<tr><th colspan="2">' . htmlspecialchars_uni($heading) . '</th></tr>';
+        self::inputRow('Background URL', 'settings[' . $surfaceKey . '_bg_url]', (string)($settings[$surfaceKey . '_bg_url'] ?? ''));
+        self::inputRow('Background overlay', 'settings[' . $surfaceKey . '_bg_overlay]', (string)($settings[$surfaceKey . '_bg_overlay'] ?? ''));
+        self::inputRow('Panel background', 'settings[' . $surfaceKey . '_panel_bg]', (string)($settings[$surfaceKey . '_panel_bg'] ?? ''));
+        self::inputRow('Panel border', 'settings[' . $surfaceKey . '_panel_border]', (string)($settings[$surfaceKey . '_panel_border'] ?? ''));
+
+        echo '<tr><th colspan="2">Пользовательский CSS</th></tr>';
+        self::textareaRow(
+            'Custom CSS',
+            'settings[custom_css]',
+            (string)($settings['custom_css'] ?? ''),
+            12,
+            'Подсказка: используй {{selector}}. Этот CSS должен менять только выбранную UI-поверхность.'
         );
     }
 
