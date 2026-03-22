@@ -1971,15 +1971,18 @@ af-apf-postbit-field {
 
 /* Базовый body модалки */
 .af-cs-modal__body {
-  padding: 16px;
-  background-repeat: no-repeat, no-repeat;
-  background-position: center center, center center;
-  background-size: cover, cover;
+  padding: 0;
+  background: var(--af-apui-modal-body-bg);
+  background-image: none;
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
 }
 
 /* ТИПЫ МОДАЛОК */
 .af-cs-modal[data-af-modal-kind="application"] .af-cs-modal__body,
 .af-cs-modal[data-af-apui-modal-kind="application"] .af-cs-modal__body {
+  padding: 16px;
   background-image:
     var(--af-apui-modal-application-bg-overlay),
     var(--af-apui-modal-application-bg-image);
@@ -1989,19 +1992,15 @@ af-apf-postbit-field {
   background-size:
     cover,
     var(--af-apui-modal-application-bg-size);
+  background-repeat: no-repeat, no-repeat;
 }
 
 .af-cs-modal[data-af-modal-kind="inventory"] .af-cs-modal__body,
 .af-cs-modal[data-af-apui-modal-kind="inventory"] .af-cs-modal__body {
-  background-image:
-    var(--af-apui-modal-inventory-bg-overlay),
-    var(--af-apui-modal-inventory-bg-image);
-  background-position:
-    center center,
-    var(--af-apui-modal-inventory-bg-position);
-  background-size:
-    cover,
-    var(--af-apui-modal-inventory-bg-size);
+  padding: 0;
+  overflow: hidden;
+  background: var(--af-apui-modal-body-bg);
+  background-image: none;
 }
 
 .af-cs-modal[data-af-modal-kind="sheet"] .af-cs-modal__body,
@@ -2056,13 +2055,15 @@ af-apf-postbit-field {
 
 /* Мобильный режим */
 @media (max-width: 900px) {
-  .af-cs-modal__body {
+  .af-cs-modal[data-af-modal-kind="application"] .af-cs-modal__body,
+  .af-cs-modal[data-af-apui-modal-kind="application"] .af-cs-modal__body {
     padding: 12px;
   }
 }
 
 @media (max-width: 560px) {
-  .af-cs-modal__body {
+  .af-cs-modal[data-af-modal-kind="application"] .af-cs-modal__body,
+  .af-cs-modal[data-af-apui-modal-kind="application"] .af-cs-modal__body {
     padding: 10px;
   }
 }
@@ -2080,9 +2081,19 @@ body.af-apui-surface-body {
   background: #0b0f18;
 }
 
-body.af-apui-surface-body[data-af-apui-surface="sheet"],
-.af-apui-surface-page[data-af-apui-surface="sheet"] {
+body.af-apui-surface-body[data-af-apui-surface="sheet"] {
   background-image: var(--af-apui-modal-sheet-bg-overlay), var(--af-apui-modal-sheet-bg-image);
+  background-repeat: no-repeat, no-repeat;
+  background-position: center center, center center;
+  background-size: cover, cover;
+  background-attachment: fixed, fixed;
+}
+
+.af-apui-surface-page[data-af-apui-surface="sheet"] {
+  position: relative;
+  z-index: 1;
+  background: transparent !important;
+  background-image: none !important;
 }
 
 body.af-apui-surface-body[data-af-apui-surface="inventory"],
