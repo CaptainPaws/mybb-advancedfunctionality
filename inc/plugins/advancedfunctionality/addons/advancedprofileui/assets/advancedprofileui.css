@@ -18,7 +18,14 @@ body.af-apui-member-profile-page::before {
   z-index: 0;
 }
 
-body.af-apui-member-profile-page > * {
+/*
+  Важно:
+  НЕ ставим position: relative на body > *,
+  иначе ломаются любые tooltip/modal roots,
+  которые сторонний JS вставляет прямым ребёнком body.
+*/
+body.af-apui-member-profile-page #container,
+body.af-apui-member-profile-page .af-apui-profile-page {
   position: relative;
   z-index: 1;
 }
@@ -41,18 +48,15 @@ body.af-apui-thread-page::before {
   z-index: 0;
 }
 
-body.af-apui-thread-page > * {
+body.af-apui-thread-page #container,
+body.af-apui-thread-page .pun.af-apui-thread-pun {
   position: relative;
   z-index: 1;
 }
 
-.af-apui-thread-page-shell {
-  position: relative;
-  z-index: 1;
+.pun.af-apui-thread-pun {
   max-width: 1200px;
   margin: 16px auto;
-  display: grid;
-  gap: 16px;
 }
 
 .af-apui-thread-hero {
@@ -62,6 +66,7 @@ body.af-apui-thread-page > * {
   border-radius: 12px;
   background: #171a23;
   min-height: 220px;
+  margin-bottom: 14px;
 }
 
 .af-apui-thread-hero__background,
@@ -100,6 +105,19 @@ body.af-apui-thread-page > * {
   padding: 24px;
 }
 
+.af-apui-thread-hero__title-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.af-apui-thread-hero__toggle {
+  flex: 0 0 auto;
+  color: rgba(255,255,255,.86);
+}
+
 .af-apui-thread-title {
   margin: 0;
   font-size: clamp(26px, 4vw, 40px);
@@ -114,26 +132,188 @@ body.af-apui-thread-page > * {
   align-items: center;
 }
 
-.af-apui-thread-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  color: rgba(255,255,255,.82);
-}
-
-.af-apui-thread-meta a,
-.af-apui-thread-title a {
-  color: inherit;
-}
-
-.af-apui-thread-content {
-  display: grid;
-  gap: 16px;
-}
-
 .af-apui-thread-atf:empty {
   display: none;
+}
+
+.af-apui-thread-atf > * {
+  margin-bottom: 0;
+}
+
+.af-apui-thread-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 14px;
+  clear: both;
+}
+
+.af-apui-thread-toolbar__left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.af-apui-thread-toolbar__right {
+  flex: 0 0 auto;
+}
+
+.af-apui-thread-toolbar .inline_rating,
+.af-apui-thread-toolbar .new_reply_button,
+.af-apui-thread-toolbar .pagination {
+  float: none !important;
+  margin: 0 !important;
+}
+
+.af-apui-thread-table {
+  width: 100%;
+  margin: 0;
+  clear: both;
+}
+
+.af-apui-thread-table #posts_container {
+  vertical-align: top;
+}
+
+.af-apui-thread-bottom-tools {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.af-apui-thread-bottom-tools form,
+.af-apui-thread-bottom-tools fieldset,
+.af-apui-thread-bottom-tools .search_thread {
+  margin: 0;
+}
+
+.af-apui-thread-breadcrumbs {
+  clear: both;
+  padding: 8px 10px;
+  border: 1px solid rgba(108, 122, 177, 0.18);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(28, 34, 49, 0.92) 0%, rgba(16, 20, 31, 0.92) 100%);
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255,255,255,0.03);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.af-apui-thread-breadcrumbs--top {
+  margin: 0 0 10px;
+}
+
+.af-apui-thread-breadcrumbs--bottom {
+  margin: 10px 0 0;
+}
+
+.af-apui-thread-breadcrumbs__inner {
+  min-width: 0;
+}
+
+.af-apui-thread-breadcrumbs .navigation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1.2;
+  color: rgba(216, 221, 243, 0.78);
+}
+
+.af-apui-thread-breadcrumbs .navigation a,
+.af-apui-thread-breadcrumbs .navigation .active {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border-radius: 999px;
+  box-sizing: border-box;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.af-apui-thread-breadcrumbs .navigation a {
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+  color: #dbe3ff;
+  transition:
+    color .15s ease,
+    border-color .15s ease,
+    background .15s ease,
+    transform .15s ease;
+}
+
+.af-apui-thread-breadcrumbs .navigation a:hover,
+.af-apui-thread-breadcrumbs .navigation a:focus {
+  color: #ffffff;
+  text-decoration: none;
+  border-color: rgba(147, 166, 255, .28);
+  background: rgba(58, 74, 122, .18);
+  transform: translateY(-1px);
+}
+
+.af-apui-thread-breadcrumbs .navigation .active {
+  border: 1px solid rgba(147, 166, 255, .22);
+  background:
+    linear-gradient(180deg, rgba(90, 111, 176, .22) 0%, rgba(54, 68, 112, .16) 100%);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.af-apui-thread-breadcrumbs .navigation .af-apui-breadcrumb-sep {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  color: rgba(176, 188, 231, 0.64);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.af-apui-thread-breadcrumbs .navigation .af-apui-breadcrumb-sep--active {
+  color: rgba(222, 229, 255, 0.92);
+}
+
+.af-apui-thread-breadcrumbs .navigation img,
+.af-apui-thread-breadcrumbs .navigation br {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  .af-apui-thread-breadcrumbs {
+    padding: 7px 8px;
+    border-radius: 10px;
+  }
+
+  .af-apui-thread-breadcrumbs--top {
+    margin-bottom: 8px;
+  }
+
+  .af-apui-thread-breadcrumbs--bottom {
+    margin-top: 8px;
+  }
+
+  .af-apui-thread-breadcrumbs .navigation {
+    gap: 5px;
+    font-size: 10px;
+  }
+
+  .af-apui-thread-breadcrumbs .navigation a,
+  .af-apui-thread-breadcrumbs .navigation .active {
+    min-height: 22px;
+    padding: 2px 8px;
+  }
 }
 
 .af-apui-thread-atf > * {
@@ -910,7 +1090,7 @@ body.af-apui-thread-page > * {
 }
 
 /* =========================
-   Доп. информация и контакты -> плитки
+   Доп. информация и контакты плитки
    ========================= */
 
 .af-apui-legacy-stack {
@@ -1000,13 +1180,12 @@ body.af-apui-thread-page > * {
   opacity: .92;
 }
 
-/* первое поле профиля — шире */
 .af-apui-legacy-block--profilefields tbody > tr:nth-child(2) {
   grid-column: span 2;
 }
 
 /* =========================
-   Дополнительно -> единый блок плитками
+   Дополнительно единый блок плитками
    ========================= */
 
 .af-apui-panel--extra {
@@ -1270,10 +1449,7 @@ af-apf-postbit-field {
 }
 
 /* =========================================================
-   APUI RESPONSIVE / RAIL OVERRIDE V5
-   - rail больше не сдвигает основной контент
-   - аватар, ранг и поля реально центрируются
-   - ник и плашка во всю ширину
+   APUI RESPONSIVE / RAIL OVERRIDE
    ========================================================= */
 
 :root {
@@ -1285,7 +1461,6 @@ af-apf-postbit-field {
   --af-apui-rail-bubble-border: rgba(255,255,255,.14);
 }
 
-/* Сбрасываем старые ручные сдвиги */
 .af-apui-postbit-avatar-shell,
 .af-apui-postbit-rank,
 .af-apui-postbit-groupimage,
@@ -1295,7 +1470,6 @@ af-apf-postbit-field {
   margin-left: 0 !important;
 }
 
-/* Базовая компоновка карточки автора */
 .af-apui-postbit-author__inner {
   --af-apui-author-inner-pad: 14px;
   position: relative;
@@ -1310,7 +1484,6 @@ af-apf-postbit-field {
   text-align: center;
 }
 
-/* Ник — во всю ширину */
 .af-apui-postbit-name-wrap {
   width: calc(100% + (var(--af-apui-author-inner-pad) * 2));
   margin:
@@ -1322,7 +1495,6 @@ af-apf-postbit-field {
   border-radius: 12px 12px 0 0;
 }
 
-/* Аватар реально по центру */
 .af-apui-postbit-avatar-shell {
   width: 100%;
   display: flex;
@@ -1331,8 +1503,6 @@ af-apf-postbit-field {
   margin: auto auto 0 auto !important;
 }
 
-
-
 .af-apui-postbit-avatar-frame img {
   display: block;
   max-width: 100%;
@@ -1340,7 +1510,6 @@ af-apf-postbit-field {
   margin: 0 auto;
 }
 
-/* Ранг и прочее строго по центру */
 .af-apui-postbit-rank,
 .af-apui-postbit-groupimage,
 .af-apui-postbit-stars {
@@ -1356,7 +1525,6 @@ af-apf-postbit-field {
   opacity: .92;
 }
 
-/* Поля профиля по центру */
 .af-apui-postbit-profilefields {
   width: min(88%, 260px);
   display: block;
@@ -1378,7 +1546,6 @@ af-apf-postbit-field {
   display: block;
 }
 
-/* Плашка во всю ширину */
 .af-apui-postbit-plaque-slot {
   width: calc(100% + (var(--af-apui-author-inner-pad) * 2));
   margin:
@@ -1394,7 +1561,6 @@ af-apf-postbit-field {
   border-radius: 0 0 12px 12px;
 }
 
-/* Rail теперь накладывается поверх слева и НЕ участвует в центрировании контента */
 .af-apui-postbit-rail {
   position: absolute;
   top: 48%;
@@ -1503,14 +1669,12 @@ af-apf-postbit-field {
   pointer-events: auto;
 }
 
-/* ---------- DESKTOP ---------- */
 @media (min-width: 1025px) {
   .af-apui-postbit-author__inner {
     min-height: 100%;
   }
 }
 
-/* ---------- TABLETS ---------- */
 @media (min-width: 768px) and (max-width: 1024px) {
   .af-apui-postbit {
     grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) !important;
@@ -1548,7 +1712,6 @@ af-apf-postbit-field {
   }
 }
 
-/* ---------- SMARTPHONES: PROFILE ---------- */
 @media (max-width: 767px) {
   body.af-apui-member-profile-page::before {
     height: min(36vh, 280px);
@@ -1632,7 +1795,6 @@ af-apf-postbit-field {
   }
 }
 
-/* ---------- SMARTPHONES: POSTBIT ---------- */
 @media (max-width: 767px) {
   .af-apui-postbit {
     grid-template-columns: 1fr !important;
@@ -1795,7 +1957,7 @@ af-apf-postbit-field {
     font-size: 15px;
   }
 
-  .af-apui-thread-page-shell {
+  .pun.af-apui-thread-pun {
     margin: 10px;
   }
 
@@ -1813,9 +1975,6 @@ af-apf-postbit-field {
 
 /* =========================================================
    APUI MODAL / APPLICATION FRAGMENT
-   - прокрутка модалки
-   - нормальное вмещение контента анкеты
-   - база под будущие пресеты
    ========================================================= */
 
 :root {
@@ -1831,7 +1990,6 @@ af-apf-postbit-field {
   --af-apui-modal-muted: rgba(216, 221, 243, .72);
 }
 
-/* Общая геометрия модалки */
 .af-cs-modal {
   position: fixed;
   inset: 0;
@@ -1909,7 +2067,6 @@ af-apf-postbit-field {
   transform: translateY(-1px);
 }
 
-/* ВАЖНО: скролл модалки */
 .af-cs-modal__body {
   position: relative;
   min-width: 0;
@@ -1921,7 +2078,6 @@ af-apf-postbit-field {
   box-sizing: border-box;
 }
 
-/* iframe режим */
 .af-cs-modal__frame {
   display: block;
   width: 100%;
@@ -1932,7 +2088,6 @@ af-apf-postbit-field {
   background: transparent;
 }
 
-/* HTML режим для анкеты */
 .af-cs-modal__content {
   min-width: 0;
   min-height: 0;
@@ -1953,7 +2108,6 @@ af-apf-postbit-field {
   color: #c7d7ff;
 }
 
-/* Контейнер анкеты — ЭТО И БУДЕТ ТОЧКА ДЛЯ ПРЕСЕТОВ */
 .af-apui-application-fragment {
   position: relative;
   min-width: 0;
@@ -1968,7 +2122,6 @@ af-apf-postbit-field {
   overflow: hidden;
 }
 
-/* Всё внутри анкеты не должно вылезать за диагональ/ширину */
 .af-apui-application-fragment,
 .af-apui-application-fragment * {
   box-sizing: border-box;
@@ -1996,7 +2149,6 @@ af-apf-postbit-field {
   word-break: break-word;
 }
 
-/* Заголовки и текстовые блоки — чтобы визуально не слипались */
 .af-apui-application-fragment h1,
 .af-apui-application-fragment h2,
 .af-apui-application-fragment h3,
@@ -2037,7 +2189,7 @@ af-apf-postbit-field {
   margin: 16px 0;
 }
 
-/* Картинки, видео, iframe и прочее медиа */
+
 .af-apui-application-fragment img,
 .af-apui-application-fragment video,
 .af-apui-application-fragment canvas,
@@ -2068,7 +2220,6 @@ af-apf-postbit-field {
   border: 1px solid rgba(255,255,255,.08);
 }
 
-/* Таблицы и старые mybb-блоки — чтобы не схлопывались */
 .af-apui-application-fragment table {
   width: 100%;
   max-width: 100%;
@@ -2101,7 +2252,6 @@ af-apf-postbit-field {
   min-width: 0;
 }
 
-/* Если в анкете есть старые таблицы полей, не даём им сливаться */
 .af-apui-application-fragment .tborder table,
 .af-apui-application-fragment .post table,
 .af-apui-application-fragment .post_body table,
@@ -2121,7 +2271,6 @@ af-apf-postbit-field {
   padding: 10px 12px;
 }
 
-/* Частый кейс: инфоблоки/карточки */
 .af-apui-application-fragment .af-apui-card,
 .af-apui-application-fragment .card,
 .af-apui-application-fragment .panel,
@@ -2131,7 +2280,6 @@ af-apf-postbit-field {
   max-width: 100%;
 }
 
-/* Если внутри анкеты есть постбит/тема со своими отступами — гасим лишнее */
 .af-apui-application-fragment .post.classic,
 .af-apui-application-fragment .af-apui-postbit {
   margin: 0 !important;
@@ -2170,7 +2318,6 @@ af-apf-postbit-field {
   padding-top: 0;
 }
 
-/* Мобильная адаптация модалки */
 @media (max-width: 900px) {
   :root {
     --af-apui-modal-dialog-width: calc(100vw - 20px);
@@ -2217,8 +2364,6 @@ af-apf-postbit-field {
 
 /* =========================================================
    APUI MODAL THEMES / PRESET HOOKS
-   - единый контракт для application / inventory / sheet / achievements
-   - фон модалки задается переменными, а не жесткими селекторами
    ========================================================= */
 
 :root {
@@ -2450,4 +2595,41 @@ body.af-apui-surface-body[data-af-apui-surface="achievements"],
   background: var(--af-apui-modal-achievements-panel-bg);
   border: 1px solid var(--af-apui-modal-achievements-panel-border);
   border-radius: 18px;
+}
+
+.post_controls .postbit_buttons > a.af-apf-postbit-profile {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 30px !important;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 !important;
+  margin-right: 4px !important;
+}
+
+.post_controls .postbit_buttons > a.af-apf-postbit-profile .af-apf-ico-profile {
+  display: none !important;
+  background: none !important;
+  background-image: none !important;
+}
+
+.post_controls .postbit_buttons > a.af-apf-postbit-profile .af-apf-title {
+  display: none !important;
+}
+
+.post_controls .postbit_buttons > a.af-apf-postbit-profile::before {
+  content: "\f007";
+  font-family: "Font Awesome 6 Free", "Font Awesome 5 Free";
+  font-weight: 900;
+  font-style: normal;
+  font-variant: normal;
+  text-rendering: auto;
+  -webkit-font-smoothing: antialiased;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  line-height: 1;
 }
