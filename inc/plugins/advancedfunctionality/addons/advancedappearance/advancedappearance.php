@@ -19,6 +19,10 @@ define('AF_AA_ASSET_MARK', '<!--af_aa_assets-->');
 define('AF_AA_TARGET_APUI_THEME_PACK', 'apui_theme_pack');
 define('AF_AA_TARGET_APUI_PROFILE_PACK', 'apui_profile_pack');
 define('AF_AA_TARGET_APUI_POSTBIT_PACK', 'apui_postbit_pack');
+define('AF_AA_TARGET_APUI_APPLICATION_PACK', 'apui_application_pack');
+define('AF_AA_TARGET_APUI_SHEET_PACK', 'apui_sheet_pack');
+define('AF_AA_TARGET_APUI_INVENTORY_PACK', 'apui_inventory_pack');
+define('AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK', 'apui_achievements_pack');
 define('AF_AA_TARGET_APUI_FRAGMENT_PACK', 'apui_fragment_pack');
 
 define('AF_AA_ALIAS_APSTUDIO', 'apstudio.php');
@@ -204,8 +208,11 @@ function af_aa_get_all_assignment_target_keys(): array
         AF_AA_TARGET_APUI_THEME_PACK,
         AF_AA_TARGET_APUI_PROFILE_PACK,
         AF_AA_TARGET_APUI_POSTBIT_PACK,
+        AF_AA_TARGET_APUI_APPLICATION_PACK,
+        AF_AA_TARGET_APUI_SHEET_PACK,
+        AF_AA_TARGET_APUI_INVENTORY_PACK,
+        AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK,
     ];
-
     foreach (array_keys(af_aa_get_supported_fragment_keys()) as $fragmentKey) {
         $targets[] = AF_AA_TARGET_APUI_FRAGMENT_PACK . ':' . $fragmentKey;
     }
@@ -655,6 +662,21 @@ function af_aa_build_user_css_payload(int $uid): array
     $modalSettings = af_aa_merge_keys([], $defaults, $modalKeys);
     $customCssBlocks = [];
 
+    $surfaceKeyMap = [
+        AF_AA_TARGET_APUI_APPLICATION_PACK => [
+            'keys' => ['application_bg_url', 'application_bg_overlay', 'application_panel_bg', 'application_panel_border'],
+        ],
+        AF_AA_TARGET_APUI_SHEET_PACK => [
+            'keys' => ['sheet_bg_url', 'sheet_bg_overlay', 'sheet_panel_bg', 'sheet_panel_border'],
+        ],
+        AF_AA_TARGET_APUI_INVENTORY_PACK => [
+            'keys' => ['inventory_bg_url', 'inventory_bg_overlay', 'inventory_panel_bg', 'inventory_panel_border'],
+        ],
+        AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK => [
+            'keys' => ['achievements_bg_url', 'achievements_bg_overlay', 'achievements_panel_bg', 'achievements_panel_border'],
+        ],
+    ];
+
     $themePack = af_aa_get_user_preset_settings_for_target($uid, AF_AA_TARGET_APUI_THEME_PACK, $defaults);
     if (!empty($themePack)) {
         $themeSettings = (array)$themePack['settings'];
@@ -686,6 +708,20 @@ function af_aa_build_user_css_payload(int $uid): array
 
         if (!empty($postbitPackSettings['custom_css'])) {
             $customCssBlocks[] = (string)$postbitPackSettings['custom_css'];
+        }
+    }
+
+    foreach ($surfaceKeyMap as $surfaceTargetKey => $surfaceMeta) {
+        $surfacePack = af_aa_get_user_preset_settings_for_target($uid, $surfaceTargetKey, $defaults);
+        if (empty($surfacePack)) {
+            continue;
+        }
+
+        $surfaceSettings = (array)$surfacePack['settings'];
+        $modalSettings = af_aa_merge_keys($modalSettings, $surfaceSettings, (array)$surfaceMeta['keys']);
+
+        if (!empty($surfaceSettings['custom_css'])) {
+            $customCssBlocks[] = (string)$surfaceSettings['custom_css'];
         }
     }
 
@@ -1419,6 +1455,10 @@ function af_aa_resolve_preset_do(string $do = ''): string
         'themepack',
         'profilepack',
         'postbitpack',
+        'applicationpack',
+        'sheetpack',
+        'inventorypack',
+        'achievementspack',
         'fragmentpack',
     ];
 
@@ -1437,6 +1477,18 @@ function af_aa_target_key_for_do(string $do): string
 
         case 'postbitpack':
             return AF_AA_TARGET_APUI_POSTBIT_PACK;
+
+        case 'applicationpack':
+            return AF_AA_TARGET_APUI_APPLICATION_PACK;
+
+        case 'sheetpack':
+            return AF_AA_TARGET_APUI_SHEET_PACK;
+
+        case 'inventorypack':
+            return AF_AA_TARGET_APUI_INVENTORY_PACK;
+
+        case 'achievementspack':
+            return AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK;
 
         case 'fragmentpack':
             return AF_AA_TARGET_APUI_FRAGMENT_PACK;
@@ -1458,6 +1510,18 @@ function af_aa_do_for_target(string $targetKey): string
         case AF_AA_TARGET_APUI_POSTBIT_PACK:
             return 'postbitpack';
 
+        case AF_AA_TARGET_APUI_APPLICATION_PACK:
+            return 'applicationpack';
+
+        case AF_AA_TARGET_APUI_SHEET_PACK:
+            return 'sheetpack';
+
+        case AF_AA_TARGET_APUI_INVENTORY_PACK:
+            return 'inventorypack';
+
+        case AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK:
+            return 'achievementspack';
+
         case AF_AA_TARGET_APUI_FRAGMENT_PACK:
             return 'fragmentpack';
 
@@ -1473,6 +1537,10 @@ function af_aa_get_front_tabs(): array
         'themepack' => 'Общие пак-темы',
         'profilepack' => 'Страница профиля',
         'postbitpack' => 'Постбит в теме',
+        'applicationpack' => 'Анкеты',
+        'sheetpack' => 'Листы персонажа',
+        'inventorypack' => 'Инвентарь',
+        'achievementspack' => 'Ачивки',
         'fragmentpack' => 'Разное',
     ];
 }
@@ -1489,6 +1557,22 @@ function af_aa_human_target_label(string $targetKey, array $settings = []): stri
 
     if ($targetKey === AF_AA_TARGET_APUI_POSTBIT_PACK) {
         return 'Пак постбита';
+    }
+
+    if ($targetKey === AF_AA_TARGET_APUI_APPLICATION_PACK) {
+        return 'Пак анкеты';
+    }
+
+    if ($targetKey === AF_AA_TARGET_APUI_SHEET_PACK) {
+        return 'Пак листа персонажа';
+    }
+
+    if ($targetKey === AF_AA_TARGET_APUI_INVENTORY_PACK) {
+        return 'Пак инвентаря';
+    }
+
+    if ($targetKey === AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK) {
+        return 'Пак ачивок';
     }
 
     if ($targetKey === AF_AA_TARGET_APUI_FRAGMENT_PACK) {
@@ -1974,7 +2058,7 @@ function af_aa_build_fragment_fields_html(array $settings): string
     return $html;
 }
 
-function af_aa_build_surface_fields_html(array $settings): string
+function af_aa_build_surface_fields_html(array $settingsOrSurfaceMap, array $settings = [], bool $includeCustomCss = false): string
 {
     $surfaceMap = [
         'sheet' => 'Лист персонажа',
@@ -1982,6 +2066,20 @@ function af_aa_build_surface_fields_html(array $settings): string
         'inventory' => 'Инвентарь',
         'achievements' => 'Ачивки',
     ];
+
+    $looksLikeSurfaceMap = true;
+    foreach ($settingsOrSurfaceMap as $surfaceKey => $surfaceLabel) {
+        if (!in_array((string)$surfaceKey, ['sheet', 'application', 'inventory', 'achievements'], true) || !is_string($surfaceLabel)) {
+            $looksLikeSurfaceMap = false;
+            break;
+        }
+    }
+
+    if ($looksLikeSurfaceMap && !empty($settingsOrSurfaceMap)) {
+        $surfaceMap = $settingsOrSurfaceMap;
+    } else {
+        $settings = $settingsOrSurfaceMap;
+    }
 
     $html = '';
 
@@ -2001,6 +2099,12 @@ function af_aa_build_surface_fields_html(array $settings): string
         $html .= af_aa_front_input('Panel border', 'settings[' . $surfaceKey . '_panel_border]', (string)($settings[$surfaceKey . '_panel_border'] ?? ''), [
             'data-aa-setting' => $surfaceKey . '_panel_border',
         ]);
+        if ($includeCustomCss) {
+            $html .= af_aa_front_textarea('Custom CSS', 'settings[custom_css]', (string)($settings['custom_css'] ?? ''), [
+                'rows' => 10,
+                'data-aa-setting' => 'custom_css',
+            ], 'Этот CSS должен менять только выбранную поверхность.');
+        }
         $html .= '</div>';
         $html .= '</section>';
     }
@@ -2020,6 +2124,10 @@ function af_aa_build_studio_form_html(string $do, array $preset, array $settings
         'themepack' => 'Конструктор: общий пак темы',
         'profilepack' => 'Конструктор: пак профиля',
         'postbitpack' => 'Конструктор: пак постбита',
+        'applicationpack' => 'Конструктор: пак анкеты',
+        'sheetpack' => 'Конструктор: пак листа персонажа',
+        'inventorypack' => 'Конструктор: пак инвентаря',
+        'achievementspack' => 'Конструктор: пак ачивок',
         'fragmentpack' => 'Конструктор: дробный пак',
     ];
 
@@ -2057,6 +2165,22 @@ function af_aa_build_studio_form_html(string $do, array $preset, array $settings
 
         case 'postbitpack':
             $html .= af_aa_build_postbit_fields_html($settings, true);
+            break;
+
+        case 'applicationpack':
+            $html .= af_aa_build_surface_fields_html(['application' => 'Анкета'], $settings, true);
+            break;
+
+        case 'sheetpack':
+            $html .= af_aa_build_surface_fields_html(['sheet' => 'Лист персонажа'], $settings, true);
+            break;
+
+        case 'inventorypack':
+            $html .= af_aa_build_surface_fields_html(['inventory' => 'Инвентарь'], $settings, true);
+            break;
+
+        case 'achievementspack':
+            $html .= af_aa_build_surface_fields_html(['achievements' => 'Ачивки'], $settings, true);
             break;
 
         case 'fragmentpack':
