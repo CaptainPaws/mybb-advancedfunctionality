@@ -20,6 +20,10 @@ if (!defined('AF_AA_TARGET_APUI_POSTBIT_PACK')) {
     define('AF_AA_TARGET_APUI_POSTBIT_PACK', 'apui_postbit_pack');
 }
 
+if (!defined('AF_AA_TARGET_APUI_THREAD_PACK')) {
+    define('AF_AA_TARGET_APUI_THREAD_PACK', 'apui_thread_pack');
+}
+
 if (!defined('AF_AA_TARGET_APUI_APPLICATION_PACK')) {
     define('AF_AA_TARGET_APUI_APPLICATION_PACK', 'apui_application_pack');
 }
@@ -110,6 +114,7 @@ class AF_Admin_Advancedappearance
             'themepack',
             'profilepack',
             'postbitpack',
+            'threadpack',
             'applicationpack',
             'sheetpack',
             'inventorypack',
@@ -131,6 +136,8 @@ class AF_Admin_Advancedappearance
                 return AF_AA_TARGET_APUI_PROFILE_PACK;
             case 'postbitpack':
                 return AF_AA_TARGET_APUI_POSTBIT_PACK;
+            case 'threadpack':
+                return AF_AA_TARGET_APUI_THREAD_PACK;
             case 'applicationpack':
                 return AF_AA_TARGET_APUI_APPLICATION_PACK;
             case 'sheetpack':
@@ -156,6 +163,8 @@ class AF_Admin_Advancedappearance
                 return 'profilepack';
             case AF_AA_TARGET_APUI_POSTBIT_PACK:
                 return 'postbitpack';
+            case AF_AA_TARGET_APUI_THREAD_PACK:
+                return 'threadpack';
             case AF_AA_TARGET_APUI_APPLICATION_PACK:
                 return 'applicationpack';
             case AF_AA_TARGET_APUI_SHEET_PACK:
@@ -187,6 +196,8 @@ class AF_Admin_Advancedappearance
             'postbit_plaque' => 'Постбит: нижняя плашка',
             'postbit_plaque_icon' => 'Постбит: иконка нижней плашки',
             'postbit_avatar_frame' => 'Постбит: рамка аватара',
+            'thread_body' => 'Тема: фон страницы',
+            'thread_banner' => 'Тема: баннер темы',
         ];
     }
 
@@ -199,6 +210,12 @@ class AF_Admin_Advancedappearance
             'member_profile_body_overlay' => 'none',
             'profile_banner_url' => '',
             'profile_banner_overlay' => 'none',
+            'thread_body_cover_url' => '',
+            'thread_body_tile_url' => '',
+            'thread_body_bg_mode' => 'cover',
+            'thread_body_overlay' => 'none',
+            'thread_banner_url' => '',
+            'thread_banner_overlay' => 'none',
             'postbit_author_bg_url' => '',
             'postbit_author_overlay' => 'none',
             'postbit_name_bg_url' => '',
@@ -248,6 +265,10 @@ class AF_Admin_Advancedappearance
             return 'Пак постбита';
         }
 
+        if ($targetKey === AF_AA_TARGET_APUI_THREAD_PACK) {
+            return 'Пак страницы темы';
+        }
+
         if ($targetKey === AF_AA_TARGET_APUI_APPLICATION_PACK) {
             return 'Пак анкеты';
         }
@@ -295,6 +316,7 @@ class AF_Admin_Advancedappearance
                 'themepack' => 'Общие пак-темы',
                 'profilepack' => 'Страница профиля',
                 'postbitpack' => 'Постбит в теме',
+                'threadpack' => 'Страница темы',
                 'applicationpack' => 'Анкеты',
                 'sheetpack' => 'Листы персонажа',
                 'inventorypack' => 'Инвентарь',
@@ -320,6 +342,10 @@ class AF_Admin_Advancedappearance
 
                 case 'postbitpack':
                     echo '<p>Раздельные пресеты только для оформления постбита. Здесь доступны настройки авторского блока, никнейма, плашки и пользовательский CSS.</p>';
+                    break;
+
+                case 'threadpack':
+                    echo '<p>Раздельные пресеты только для оформления страницы темы showthread. Здесь доступны фон body, overlay, hero banner и пользовательский CSS.</p>';
                     break;
 
                 case 'applicationpack':
@@ -475,6 +501,7 @@ class AF_Admin_Advancedappearance
             'themepack' => 'Создать общий пак темы',
             'profilepack' => 'Создать пак профиля',
             'postbitpack' => 'Создать пак постбита',
+            'threadpack' => 'Создать пак страницы темы',
             'applicationpack' => 'Создать пак анкеты',
             'sheetpack' => 'Создать пак листа персонажа',
             'inventorypack' => 'Создать пак инвентаря',
@@ -509,6 +536,8 @@ class AF_Admin_Advancedappearance
             self::renderProfilePackFields($settings);
         } elseif ($do === 'postbitpack') {
             self::renderPostbitPackFields($settings);
+        } elseif ($do === 'threadpack') {
+            self::renderThreadPackFields($settings);
         } elseif ($do === 'applicationpack') {
             self::renderSurfacePackFields($settings, 'application', 'Оформление анкеты');
         } elseif ($do === 'sheetpack') {
@@ -1042,6 +1071,9 @@ border-color: rgba(255,255,255,.10);
         echo '<tr><th colspan="2">Профиль</th></tr>';
         self::renderProfilePackFieldsInner($settings);
 
+        echo '<tr><th colspan="2">Страница темы</th></tr>';
+        self::renderThreadPackFieldsInner($settings);
+
         echo '<tr><th colspan="2">Постбит</th></tr>';
         self::renderPostbitPackFieldsInner($settings);
 
@@ -1067,6 +1099,21 @@ border-color: rgba(255,255,255,.10);
             (string)($settings['custom_css'] ?? ''),
             12,
             'Подсказка: используй {{selector}} и {{body_selector}}. Этот CSS должен менять только профильный UI.'
+        );
+    }
+
+    private static function renderThreadPackFields(array $settings): void
+    {
+        echo '<tr><th colspan="2">Оформление страницы темы</th></tr>';
+        self::renderThreadPackFieldsInner($settings);
+
+        echo '<tr><th colspan="2">Пользовательский CSS</th></tr>';
+        self::textareaRow(
+            'Custom CSS',
+            'settings[custom_css]',
+            (string)($settings['custom_css'] ?? ''),
+            12,
+            'Подсказка: используй {{selector}} и {{body_selector}}. Этот CSS должен менять только showthread.'
         );
     }
 
@@ -1137,6 +1184,16 @@ border-color: rgba(255,255,255,.10);
         self::inputRow('member_profile_body_overlay', 'settings[member_profile_body_overlay]', $settings['member_profile_body_overlay']);
         self::inputRow('profile_banner_url', 'settings[profile_banner_url]', $settings['profile_banner_url']);
         self::inputRow('profile_banner_overlay', 'settings[profile_banner_overlay]', $settings['profile_banner_overlay']);
+        self::inputRow('thread_body_cover_url', 'settings[thread_body_cover_url]', $settings['thread_body_cover_url']);
+        self::inputRow('thread_body_tile_url', 'settings[thread_body_tile_url]', $settings['thread_body_tile_url']);
+        echo '<tr><td><strong>thread_body_bg_mode</strong></td><td>';
+        echo '<select name="settings[thread_body_bg_mode]">';
+        echo '<option value="cover"' . ((string)$settings['thread_body_bg_mode'] === 'cover' ? ' selected' : '') . '>cover</option>';
+        echo '<option value="tile"' . ((string)$settings['thread_body_bg_mode'] === 'tile' ? ' selected' : '') . '>tile</option>';
+        echo '</select></td></tr>';
+        self::inputRow('thread_body_overlay', 'settings[thread_body_overlay]', $settings['thread_body_overlay']);
+        self::inputRow('thread_banner_url', 'settings[thread_banner_url]', $settings['thread_banner_url']);
+        self::inputRow('thread_banner_overlay', 'settings[thread_banner_overlay]', $settings['thread_banner_overlay']);
         self::inputRow('postbit_author_bg_url', 'settings[postbit_author_bg_url]', $settings['postbit_author_bg_url']);
         self::inputRow('postbit_author_overlay', 'settings[postbit_author_overlay]', $settings['postbit_author_overlay']);
         self::inputRow('postbit_name_bg_url', 'settings[postbit_name_bg_url]', $settings['postbit_name_bg_url']);
@@ -1175,6 +1232,22 @@ border-color: rgba(255,255,255,.10);
         self::inputRow('member_profile_body_overlay', 'settings[member_profile_body_overlay]', $settings['member_profile_body_overlay']);
         self::inputRow('profile_banner_url', 'settings[profile_banner_url]', $settings['profile_banner_url']);
         self::inputRow('profile_banner_overlay', 'settings[profile_banner_overlay]', $settings['profile_banner_overlay']);
+    }
+
+    private static function renderThreadPackFieldsInner(array $settings): void
+    {
+        self::inputRow('thread_body_cover_url', 'settings[thread_body_cover_url]', $settings['thread_body_cover_url']);
+        self::inputRow('thread_body_tile_url', 'settings[thread_body_tile_url]', $settings['thread_body_tile_url']);
+
+        echo '<tr><td><strong>thread_body_bg_mode</strong></td><td>';
+        echo '<select name="settings[thread_body_bg_mode]">';
+        echo '<option value="cover"' . ((string)$settings['thread_body_bg_mode'] === 'cover' ? ' selected' : '') . '>cover</option>';
+        echo '<option value="tile"' . ((string)$settings['thread_body_bg_mode'] === 'tile' ? ' selected' : '') . '>tile</option>';
+        echo '</select></td></tr>';
+
+        self::inputRow('thread_body_overlay', 'settings[thread_body_overlay]', $settings['thread_body_overlay']);
+        self::inputRow('thread_banner_url', 'settings[thread_banner_url]', $settings['thread_banner_url']);
+        self::inputRow('thread_banner_overlay', 'settings[thread_banner_overlay]', $settings['thread_banner_overlay']);
     }
 
     private static function renderPostbitPackFieldsInner(array $settings): void

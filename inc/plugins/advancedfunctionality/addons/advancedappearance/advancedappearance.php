@@ -19,6 +19,7 @@ define('AF_AA_ASSET_MARK', '<!--af_aa_assets-->');
 define('AF_AA_TARGET_APUI_THEME_PACK', 'apui_theme_pack');
 define('AF_AA_TARGET_APUI_PROFILE_PACK', 'apui_profile_pack');
 define('AF_AA_TARGET_APUI_POSTBIT_PACK', 'apui_postbit_pack');
+define('AF_AA_TARGET_APUI_THREAD_PACK', 'apui_thread_pack');
 define('AF_AA_TARGET_APUI_APPLICATION_PACK', 'apui_application_pack');
 define('AF_AA_TARGET_APUI_SHEET_PACK', 'apui_sheet_pack');
 define('AF_AA_TARGET_APUI_INVENTORY_PACK', 'apui_inventory_pack');
@@ -200,6 +201,8 @@ function af_aa_get_supported_fragment_keys(): array
         'postbit_plaque' => 'Постбит: нижняя плашка',
         'postbit_plaque_icon' => 'Постбит: иконка нижней плашки',
         'postbit_avatar_frame' => 'Постбит: рамка аватара',
+        'thread_body' => 'Тема: фон страницы',
+        'thread_banner' => 'Тема: баннер темы',
     ];
 }
 
@@ -209,6 +212,7 @@ function af_aa_get_all_assignment_target_keys(): array
         AF_AA_TARGET_APUI_THEME_PACK,
         AF_AA_TARGET_APUI_PROFILE_PACK,
         AF_AA_TARGET_APUI_POSTBIT_PACK,
+        AF_AA_TARGET_APUI_THREAD_PACK,
         AF_AA_TARGET_APUI_APPLICATION_PACK,
         AF_AA_TARGET_APUI_SHEET_PACK,
         AF_AA_TARGET_APUI_INVENTORY_PACK,
@@ -525,6 +529,12 @@ function af_aa_get_apui_defaults(): array
         'member_profile_body_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('member_profile_body_overlay', 'none'), 'none'),
         'profile_banner_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('profile_banner_url', ''), ''),
         'profile_banner_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('profile_banner_overlay', 'none'), 'none'),
+        'thread_body_cover_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('thread_body_cover_url', ''), ''),
+        'thread_body_tile_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('thread_body_tile_url', ''), ''),
+        'thread_body_bg_mode' => af_aa_sanitize_bg_mode(af_aa_get_apui_setting('thread_body_bg_mode', 'cover'), 'cover'),
+        'thread_body_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('thread_body_overlay', 'none'), 'none'),
+        'thread_banner_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('thread_banner_url', ''), ''),
+        'thread_banner_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('thread_banner_overlay', 'none'), 'none'),
         'postbit_author_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('postbit_author_bg_url', ''), ''),
         'postbit_author_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_author_overlay', 'none'), 'none'),
         'postbit_name_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('postbit_name_bg_url', ''), ''),
@@ -621,6 +631,27 @@ function af_aa_build_user_css_payload(int $uid): array
 
     $defaults = af_aa_get_apui_defaults();
 
+    $threadKeys = [
+        'thread_body_cover_url',
+        'thread_body_tile_url',
+        'thread_body_bg_mode',
+        'thread_body_overlay',
+        'thread_banner_url',
+        'thread_banner_overlay',
+    ];
+
+    $threadBodyKeys = [
+        'thread_body_cover_url',
+        'thread_body_tile_url',
+        'thread_body_bg_mode',
+        'thread_body_overlay',
+    ];
+
+    $threadBannerKeys = [
+        'thread_banner_url',
+        'thread_banner_overlay',
+    ];
+
     $profileKeys = [
         'member_profile_body_cover_url',
         'member_profile_body_tile_url',
@@ -705,10 +736,14 @@ function af_aa_build_user_css_payload(int $uid): array
 
     $profileSettings = af_aa_merge_keys([], $defaults, $profileKeys);
     $postbitSettings = af_aa_merge_keys([], $defaults, $postbitKeys);
+    $threadSettings = af_aa_merge_keys([], $defaults, $threadKeys);
     $modalSettings = af_aa_merge_keys([], $defaults, $modalKeys);
     $customCssBlocks = [];
 
     $surfaceKeyMap = [
+        AF_AA_TARGET_APUI_THREAD_PACK => [
+            'keys' => $threadKeys,
+        ],
         AF_AA_TARGET_APUI_APPLICATION_PACK => [
             'keys' => ['application_bg_url', 'application_bg_overlay', 'application_panel_bg', 'application_panel_border'],
         ],
@@ -728,6 +763,7 @@ function af_aa_build_user_css_payload(int $uid): array
         $themeSettings = (array)$themePack['settings'];
         $profileSettings = af_aa_merge_keys($profileSettings, $themeSettings, $profileKeys);
         $postbitSettings = af_aa_merge_keys($postbitSettings, $themeSettings, $postbitKeys);
+        $threadSettings = af_aa_merge_keys($threadSettings, $themeSettings, $threadKeys);
         $modalSettings = af_aa_merge_keys($modalSettings, $themeSettings, $modalKeys);
 
         if (!empty($themeSettings['custom_css'])) {
@@ -757,6 +793,16 @@ function af_aa_build_user_css_payload(int $uid): array
         }
     }
 
+    $threadPack = af_aa_get_user_preset_settings_for_target($uid, AF_AA_TARGET_APUI_THREAD_PACK, $defaults);
+    if (!empty($threadPack)) {
+        $threadPackSettings = (array)$threadPack['settings'];
+        $threadSettings = af_aa_merge_keys($threadSettings, $threadPackSettings, $threadKeys);
+
+        if (!empty($threadPackSettings['custom_css'])) {
+            $customCssBlocks[] = (string)$threadPackSettings['custom_css'];
+        }
+    }
+
     foreach ($surfaceKeyMap as $surfaceTargetKey => $surfaceMeta) {
         $surfacePack = af_aa_get_user_preset_settings_for_target($uid, $surfaceTargetKey, $defaults);
         if (empty($surfacePack)) {
@@ -782,6 +828,14 @@ function af_aa_build_user_css_payload(int $uid): array
         $fragmentSettings = (array)$fragmentPack['settings'];
 
         switch ($fragmentKey) {
+            case 'thread_body':
+                $threadSettings = af_aa_merge_keys($threadSettings, $fragmentSettings, $threadBodyKeys);
+                break;
+
+            case 'thread_banner':
+                $threadSettings = af_aa_merge_keys($threadSettings, $fragmentSettings, $threadBannerKeys);
+                break;
+
             case 'profile_body':
                 $profileSettings = af_aa_merge_keys($profileSettings, $fragmentSettings, $bodyKeys);
                 break;
@@ -829,6 +883,21 @@ function af_aa_build_user_css_payload(int $uid): array
         }
     }
 
+    $threadMode = af_aa_sanitize_bg_mode((string)($threadSettings['thread_body_bg_mode'] ?? 'cover'), 'cover');
+    $selectedThreadBodyImage = $threadMode === 'tile'
+        ? af_aa_css_url_value((string)($threadSettings['thread_body_tile_url'] ?? ''))
+        : af_aa_css_url_value((string)($threadSettings['thread_body_cover_url'] ?? ''));
+
+    if ($selectedThreadBodyImage === 'none') {
+        $selectedThreadBodyImage = $threadMode === 'tile'
+            ? af_aa_css_url_value((string)($threadSettings['thread_body_cover_url'] ?? ''))
+            : af_aa_css_url_value((string)($threadSettings['thread_body_tile_url'] ?? ''));
+
+        if ($selectedThreadBodyImage !== 'none') {
+            $threadMode = $threadMode === 'tile' ? 'cover' : 'tile';
+        }
+    }
+
     $selector = '.af-aa-user-' . $uid;
 
     $payload = [
@@ -838,6 +907,8 @@ function af_aa_build_user_css_payload(int $uid): array
         'vars' => [
             '--af-apui-profile-banner-image' => af_aa_css_url_value((string)($profileSettings['profile_banner_url'] ?? '')),
             '--af-apui-profile-banner-overlay' => af_aa_css_raw_value((string)($profileSettings['profile_banner_overlay'] ?? 'none'), 'none'),
+            '--af-apui-thread-banner-image' => af_aa_css_url_value((string)($threadSettings['thread_banner_url'] ?? '')),
+            '--af-apui-thread-banner-overlay' => af_aa_css_raw_value((string)($threadSettings['thread_banner_overlay'] ?? 'none'), 'none'),
             '--af-apui-postbit-author-bg-image' => af_aa_css_url_value((string)($postbitSettings['postbit_author_bg_url'] ?? '')),
             '--af-apui-postbit-author-overlay' => af_aa_css_raw_value((string)($postbitSettings['postbit_author_overlay'] ?? 'none'), 'none'),
             '--af-apui-postbit-name-bg-image' => af_aa_css_url_value((string)($postbitSettings['postbit_name_bg_url'] ?? '')),
@@ -874,6 +945,14 @@ function af_aa_build_user_css_payload(int $uid): array
             'position' => $mode === 'tile' ? 'left top' : 'center center',
             'attachment' => $mode === 'tile' ? 'scroll' : 'fixed',
             'size' => $mode === 'tile' ? 'auto' : 'cover',
+        ],
+        'thread_body' => [
+            'overlay' => af_aa_css_raw_value((string)($threadSettings['thread_body_overlay'] ?? 'none'), 'none'),
+            'image' => $selectedThreadBodyImage,
+            'repeat' => $threadMode === 'tile' ? 'repeat' : 'no-repeat',
+            'position' => $threadMode === 'tile' ? 'left top' : 'center center',
+            'attachment' => $threadMode === 'tile' ? 'scroll' : 'fixed',
+            'size' => $threadMode === 'tile' ? 'auto' : 'cover',
         ],
         'custom_css_blocks' => $customCssBlocks,
     ];
@@ -919,6 +998,15 @@ function af_aa_render_page_css(array $uidsOnPage): string
         $css .= 'background-position:' . $payload['body']['position'] . ';';
         $css .= 'background-attachment:' . $payload['body']['attachment'] . ';';
         $css .= 'background-size:' . $payload['body']['size'] . ';';
+        $css .= "}\n";
+
+        $css .= 'body.af-apui-thread-page.af-aa-user-' . $uid . '{';
+        $css .= '--af-apui-thread-body-overlay:' . $payload['thread_body']['overlay'] . ';';
+        $css .= 'background-image:' . $payload['thread_body']['image'] . ';';
+        $css .= 'background-repeat:' . $payload['thread_body']['repeat'] . ';';
+        $css .= 'background-position:' . $payload['thread_body']['position'] . ';';
+        $css .= 'background-attachment:' . $payload['thread_body']['attachment'] . ';';
+        $css .= 'background-size:' . $payload['thread_body']['size'] . ';';
         $css .= "}\n";
 
         if (!empty($payload['custom_css_blocks']) && is_array($payload['custom_css_blocks'])) {
@@ -1046,6 +1134,36 @@ function af_aa_decode_and_sanitize_preset_settings(string $json, array $defaults
     $out['member_profile_body_overlay'] = af_aa_sanitize_overlay(
         (string)($decoded['member_profile_body_overlay'] ?? ''),
         (string)($defaults['member_profile_body_overlay'] ?? 'none')
+    );
+
+    $out['thread_body_cover_url'] = af_aa_sanitize_image_url(
+        (string)($decoded['thread_body_cover_url'] ?? ''),
+        (string)($defaults['thread_body_cover_url'] ?? '')
+    );
+
+    $out['thread_body_tile_url'] = af_aa_sanitize_image_url(
+        (string)($decoded['thread_body_tile_url'] ?? ''),
+        (string)($defaults['thread_body_tile_url'] ?? '')
+    );
+
+    $out['thread_body_bg_mode'] = af_aa_sanitize_bg_mode(
+        (string)($decoded['thread_body_bg_mode'] ?? ''),
+        (string)($defaults['thread_body_bg_mode'] ?? 'cover')
+    );
+
+    $out['thread_body_overlay'] = af_aa_sanitize_overlay(
+        (string)($decoded['thread_body_overlay'] ?? ''),
+        (string)($defaults['thread_body_overlay'] ?? 'none')
+    );
+
+    $out['thread_banner_url'] = af_aa_sanitize_image_url(
+        (string)($decoded['thread_banner_url'] ?? ''),
+        (string)($defaults['thread_banner_url'] ?? '')
+    );
+
+    $out['thread_banner_overlay'] = af_aa_sanitize_overlay(
+        (string)($decoded['thread_banner_overlay'] ?? ''),
+        (string)($defaults['thread_banner_overlay'] ?? 'none')
     );
 
     $out['profile_banner_url'] = af_aa_sanitize_image_url(
@@ -1575,6 +1693,7 @@ function af_aa_resolve_preset_do(string $do = ''): string
         'themepack',
         'profilepack',
         'postbitpack',
+        'threadpack',
         'applicationpack',
         'sheetpack',
         'inventorypack',
@@ -1597,6 +1716,8 @@ function af_aa_target_key_for_do(string $do): string
 
         case 'postbitpack':
             return AF_AA_TARGET_APUI_POSTBIT_PACK;
+        case 'threadpack':
+            return AF_AA_TARGET_APUI_THREAD_PACK;
 
         case 'applicationpack':
             return AF_AA_TARGET_APUI_APPLICATION_PACK;
@@ -1629,6 +1750,8 @@ function af_aa_do_for_target(string $targetKey): string
 
         case AF_AA_TARGET_APUI_POSTBIT_PACK:
             return 'postbitpack';
+        case AF_AA_TARGET_APUI_THREAD_PACK:
+            return 'threadpack';
 
         case AF_AA_TARGET_APUI_APPLICATION_PACK:
             return 'applicationpack';
@@ -1657,6 +1780,7 @@ function af_aa_get_front_tabs(): array
         'themepack' => 'Общие пак-темы',
         'profilepack' => 'Страница профиля',
         'postbitpack' => 'Постбит в теме',
+        'threadpack' => 'Страница темы',
         'applicationpack' => 'Анкеты',
         'sheetpack' => 'Листы персонажа',
         'inventorypack' => 'Инвентарь',
@@ -1677,6 +1801,10 @@ function af_aa_human_target_label(string $targetKey, array $settings = []): stri
 
     if ($targetKey === AF_AA_TARGET_APUI_POSTBIT_PACK) {
         return 'Пак постбита';
+    }
+
+    if ($targetKey === AF_AA_TARGET_APUI_THREAD_PACK) {
+        return 'Пак страницы темы';
     }
 
     if ($targetKey === AF_AA_TARGET_APUI_APPLICATION_PACK) {
@@ -2056,6 +2184,47 @@ function af_aa_build_profile_fields_html(array $settings, bool $includeCustomCss
     return $html;
 }
 
+function af_aa_build_thread_fields_html(array $settings, bool $includeCustomCss = false): string
+{
+    $html = '<section class="af-aa-panel af-aa-form-section">';
+    $html .= '<h3 class="af-aa-panel__title">Страница темы</h3>';
+    $html .= '<div class="af-aa-form-grid">';
+
+    $html .= af_aa_front_input('Cover URL', 'settings[thread_body_cover_url]', (string)$settings['thread_body_cover_url'], [
+        'data-aa-setting' => 'thread_body_cover_url',
+    ]);
+    $html .= af_aa_front_input('Tile URL', 'settings[thread_body_tile_url]', (string)$settings['thread_body_tile_url'], [
+        'data-aa-setting' => 'thread_body_tile_url',
+    ]);
+    $html .= af_aa_front_select('Body mode', 'settings[thread_body_bg_mode]', (string)$settings['thread_body_bg_mode'], [
+        'cover' => 'cover',
+        'tile' => 'tile',
+    ], [
+        'data-aa-setting' => 'thread_body_bg_mode',
+    ]);
+    $html .= af_aa_front_input('Body overlay', 'settings[thread_body_overlay]', (string)$settings['thread_body_overlay'], [
+        'data-aa-setting' => 'thread_body_overlay',
+    ]);
+    $html .= af_aa_front_input('Banner URL', 'settings[thread_banner_url]', (string)$settings['thread_banner_url'], [
+        'data-aa-setting' => 'thread_banner_url',
+    ]);
+    $html .= af_aa_front_input('Banner overlay', 'settings[thread_banner_overlay]', (string)$settings['thread_banner_overlay'], [
+        'data-aa-setting' => 'thread_banner_overlay',
+    ]);
+
+    if ($includeCustomCss) {
+        $html .= af_aa_front_textarea('Custom CSS', 'settings[custom_css]', (string)$settings['custom_css'], [
+            'rows' => 10,
+            'data-aa-setting' => 'custom_css',
+        ], 'Поддерживаются плейсхолдеры {{selector}} и {{body_selector}}.');
+    }
+
+    $html .= '</div>';
+    $html .= '</section>';
+
+    return $html;
+}
+
 function af_aa_build_postbit_fields_html(array $settings, bool $includeCustomCss = false): string
 {
     $html = '<section class="af-aa-panel af-aa-form-section">';
@@ -2187,6 +2356,27 @@ function af_aa_build_fragment_fields_html(array $settings): string
     $html .= af_aa_front_input('Banner overlay', 'settings[profile_banner_overlay]', (string)$settings['profile_banner_overlay'], [
         'data-aa-setting' => 'profile_banner_overlay',
     ]);
+    $html .= af_aa_front_input('Thread cover URL', 'settings[thread_body_cover_url]', (string)$settings['thread_body_cover_url'], [
+        'data-aa-setting' => 'thread_body_cover_url',
+    ]);
+    $html .= af_aa_front_input('Thread tile URL', 'settings[thread_body_tile_url]', (string)$settings['thread_body_tile_url'], [
+        'data-aa-setting' => 'thread_body_tile_url',
+    ]);
+    $html .= af_aa_front_select('Thread body mode', 'settings[thread_body_bg_mode]', (string)$settings['thread_body_bg_mode'], [
+        'cover' => 'cover',
+        'tile' => 'tile',
+    ], [
+        'data-aa-setting' => 'thread_body_bg_mode',
+    ]);
+    $html .= af_aa_front_input('Thread body overlay', 'settings[thread_body_overlay]', (string)$settings['thread_body_overlay'], [
+        'data-aa-setting' => 'thread_body_overlay',
+    ]);
+    $html .= af_aa_front_input('Thread banner URL', 'settings[thread_banner_url]', (string)$settings['thread_banner_url'], [
+        'data-aa-setting' => 'thread_banner_url',
+    ]);
+    $html .= af_aa_front_input('Thread banner overlay', 'settings[thread_banner_overlay]', (string)$settings['thread_banner_overlay'], [
+        'data-aa-setting' => 'thread_banner_overlay',
+    ]);
 
     $html .= af_aa_front_input('Author background URL', 'settings[postbit_author_bg_url]', (string)$settings['postbit_author_bg_url'], [
         'data-aa-setting' => 'postbit_author_bg_url',
@@ -2275,11 +2465,12 @@ function af_aa_build_surface_fields_html(array $settingsOrSurfaceMap, array $set
         'application' => 'Анкета',
         'inventory' => 'Инвентарь',
         'achievements' => 'Ачивки',
+        'thread' => 'Страница темы',
     ];
 
     $looksLikeSurfaceMap = true;
     foreach ($settingsOrSurfaceMap as $surfaceKey => $surfaceLabel) {
-        if (!in_array((string)$surfaceKey, ['sheet', 'application', 'inventory', 'achievements'], true) || !is_string($surfaceLabel)) {
+        if (!in_array((string)$surfaceKey, ['sheet', 'application', 'inventory', 'achievements', 'thread'], true) || !is_string($surfaceLabel)) {
             $looksLikeSurfaceMap = false;
             break;
         }
@@ -2334,6 +2525,7 @@ function af_aa_build_studio_form_html(string $do, array $preset, array $settings
         'themepack' => 'Конструктор: общий пак темы',
         'profilepack' => 'Конструктор: пак профиля',
         'postbitpack' => 'Конструктор: пак постбита',
+        'threadpack' => 'Конструктор: пак страницы темы',
         'applicationpack' => 'Конструктор: пак анкеты',
         'sheetpack' => 'Конструктор: пак листа персонажа',
         'inventorypack' => 'Конструктор: пак инвентаря',
@@ -2377,6 +2569,10 @@ function af_aa_build_studio_form_html(string $do, array $preset, array $settings
             $html .= af_aa_build_postbit_fields_html($settings, true);
             break;
 
+        case 'threadpack':
+            $html .= af_aa_build_thread_fields_html($settings, true);
+            break;
+
         case 'applicationpack':
             $html .= af_aa_build_surface_fields_html(['application' => 'Анкета'], $settings, true);
             break;
@@ -2400,6 +2596,7 @@ function af_aa_build_studio_form_html(string $do, array $preset, array $settings
         case 'themepack':
         default:
             $html .= af_aa_build_profile_fields_html($settings, false);
+            $html .= af_aa_build_thread_fields_html($settings, false);
             $html .= af_aa_build_postbit_fields_html($settings, false);
             $html .= af_aa_build_surface_fields_html($settings);
             $html .= '<section class="af-aa-panel af-aa-form-section">';
