@@ -146,17 +146,28 @@ function af_charactersheets_render_sheet_page(string $slug): void
 {
     global $templates, $mybb;
 
+    if (function_exists('af_front_ensure_header_bits')) {
+        af_front_ensure_header_bits();
+    }
+
     $sheet_inner = af_charactersheets_build_sheet_inner_html($slug);
     if ($sheet_inner === '') {
         error_no_permission();
         exit;
     }
 
-    $ajax = (string)$mybb->get_input('ajax');
-    if ($ajax === '1') {
-        $af_cs_content = $sheet_inner;
-        $tplModal = $templates->get('af_cs_page_modal');
-        eval("\$page = \"" . $tplModal . "\";");
+    $isEmbed = (string)$mybb->get_input('embed') === '1';
+    $isAjax = (string)$mybb->get_input('ajax') === '1';
+
+    // ajax/fragments only for partial in-page rendering (profile tabs, inline loads).
+    // iframe modal route from postbit must always use a full embed page with the
+    // normal MyBB headerinclude/header/footer contract so forum/theme/plugin assets load.
+    if ($isAjax && !$isEmbed) {
+        $page = $sheet_inner;
+    } elseif ($isEmbed) {
+        $tplModalFullpage = $templates->get('af_cs_modal_fullpage');
+        $content = $sheet_inner;
+        eval("\$page = \"" . $tplModalFullpage . "\";");
     } else {
         $tplFull = $templates->get('charactersheet_fullpage');
         eval("\$page = \"" . $tplFull . "\";");
