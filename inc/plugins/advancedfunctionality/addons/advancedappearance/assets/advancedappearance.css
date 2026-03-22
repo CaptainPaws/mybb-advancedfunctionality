@@ -551,10 +551,11 @@
 .af-apui-postbit-plaque {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 42px;
-  padding: 0 14px;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 58px;
+  width: 100%;
+  padding: 10px 14px;
   border-radius: 12px;
   text-decoration: none;
   color: #fff;
@@ -565,7 +566,7 @@
   background-size: cover, cover;
 }
 
-.af-apui-postbit-plaque__icon {
+.af-apui-postbit-plaque__media {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -573,7 +574,7 @@
   height: calc(var(--af-aa-preview-postbit-plaque-icon-size) + 12px);
   border-radius: 999px;
   border: 1px solid var(--af-aa-preview-postbit-plaque-icon-border);
-  background-image: var(--af-aa-preview-postbit-plaque-icon-overlay), var(--af-aa-preview-postbit-plaque-icon-bg);
+  background-image: var(--af-aa-preview-postbit-plaque-media-overlay, var(--af-aa-preview-postbit-plaque-icon-overlay)), var(--af-aa-preview-postbit-plaque-icon-bg);
   background-position: center center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -581,16 +582,38 @@
   overflow: hidden;
 }
 
-.af-apui-postbit-plaque__icon-glyph {
+.af-apui-postbit-plaque__media-glyph,
+.af-apui-postbit-plaque__media-icon {
   color: var(--af-aa-preview-postbit-plaque-icon-color);
   font-size: var(--af-aa-preview-postbit-plaque-icon-size);
   line-height: 1;
 }
 
-.af-apui-postbit-plaque__icon-image {
+.af-apui-postbit-plaque__media-image {
   width: var(--af-aa-preview-postbit-plaque-icon-size);
   height: var(--af-aa-preview-postbit-plaque-icon-size);
-  object-fit: contain;
+  object-fit: cover;
+  border-radius: 999px;
+}
+
+.af-apui-postbit-plaque__content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.af-apui-postbit-plaque__title {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.af-apui-postbit-plaque__subtitle {
+  font-size: 11px;
+  line-height: 1.25;
+  color: rgba(233, 237, 255, .78);
 }
 
 .af-aa-page .button {

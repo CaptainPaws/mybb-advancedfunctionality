@@ -37,6 +37,12 @@ class AF_Admin_Advancedprofileui
             'af_' . AF_APUI_ID . '_postbit_name_overlay',
             'af_' . AF_APUI_ID . '_postbit_plaque_bg_url',
             'af_' . AF_APUI_ID . '_postbit_plaque_overlay',
+            'af_' . AF_APUI_ID . '_postbit_plaque_media_image_url',
+            'af_' . AF_APUI_ID . '_postbit_plaque_media_icon_class',
+            'af_' . AF_APUI_ID . '_postbit_plaque_media_overlay',
+            'af_' . AF_APUI_ID . '_postbit_plaque_media_css',
+            'af_' . AF_APUI_ID . '_postbit_plaque_title_default',
+            'af_' . AF_APUI_ID . '_postbit_plaque_subtitle_default',
             'af_' . AF_APUI_ID . '_postbit_plaque_icon_url',
             'af_' . AF_APUI_ID . '_postbit_plaque_icon_glyph',
             'af_' . AF_APUI_ID . '_postbit_plaque_icon_bg',
@@ -131,6 +137,12 @@ class AF_Admin_Advancedprofileui
         echo '<tr><td><strong>Оверлей никнейма</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_name_overlay" value="' . $values['af_' . AF_APUI_ID . '_postbit_name_overlay'] . '"></td></tr>';
         echo '<tr><td><strong>Фон нижней плашки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_bg_url" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_bg_url'] . '"></td></tr>';
         echo '<tr><td><strong>Оверлей нижней плашки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_overlay" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>URL картинки медиа-блока</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_media_image_url" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_media_image_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Fallback icon class медиа-блока</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_media_icon_class" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_media_icon_class'] . '"></td></tr>';
+        echo '<tr><td><strong>Overlay медиа-блока</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_media_overlay" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_media_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>Дополнительный CSS медиа-блока</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_media_css" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_media_css'] . '"></td></tr>';
+        echo '<tr><td><strong>Заголовок плашки по умолчанию</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_title_default" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_title_default'] . '"></td></tr>';
+        echo '<tr><td><strong>Подзаголовок плашки по умолчанию</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_subtitle_default" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_subtitle_default'] . '"></td></tr>';
         echo '<tr><td><strong>URL иконки плашки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_icon_url" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_icon_url'] . '"></td></tr>';
         echo '<tr><td><strong>Fallback-символ иконки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_icon_glyph" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_icon_glyph'] . '"></td></tr>';
         echo '<tr><td><strong>Фон контейнера иконки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_icon_bg" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_icon_bg'] . '"></td></tr>';
