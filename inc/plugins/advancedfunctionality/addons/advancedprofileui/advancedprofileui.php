@@ -986,6 +986,247 @@ function af_apui_member_profile_prepare_layout_vars(): void
         $extraPairs,
         'Дополнительная информация не заполнена.'
     );
+
+    $uid = (int)($memprofile['uid'] ?? 0);
+    $sheetPayload = af_apui_get_charactersheet_postbit_payload($uid);
+
+    $GLOBALS['af_apui_character_sheet_tab'] = af_apui_build_member_profile_sheet_tab($uid, $sheetPayload);
+    $GLOBALS['af_apui_application_tab'] = af_apui_build_member_profile_application_tab($uid, $sheetPayload);
+    $GLOBALS['af_apui_inventory_tab'] = af_apui_build_member_profile_inventory_tab($uid);
+    $GLOBALS['af_apui_timeline_tab'] = af_apui_build_member_profile_placeholder_tab(
+        'Хронология',
+        'Здесь появится временная линия персонажа: ключевые эпизоды, квесты и сюжетные вехи.',
+        'Слой подготовлен в AdvancedProfileUI и ждёт подключения реального источника данных.'
+    );
+    $GLOBALS['af_apui_activity_tab'] = af_apui_build_member_profile_placeholder_tab(
+        'Активность',
+        'Здесь появятся последние действия персонажа на форуме и в игровых модулях.',
+        'Можно будет подключить посты, ответы, покупки, изменения листа и другие события без перестройки шаблона.'
+    );
+}
+
+function af_apui_build_member_profile_placeholder_tab(string $title, string $lead, string $note = ''): string
+{
+    $html = '<div class="af-apui-tab-stack">';
+    $html .= '<section class="af-apui-card af-apui-tab-card">';
+    $html .= '<div class="af-apui-tab-card__head">';
+    $html .= '<h2>' . htmlspecialchars_uni($title) . '</h2>';
+    $html .= '<p>' . htmlspecialchars_uni($lead) . '</p>';
+    $html .= '</div>';
+    if ($note !== '') {
+        $html .= '<div class="af-apui-empty af-apui-empty--soft">' . htmlspecialchars_uni($note) . '</div>';
+    }
+    $html .= '</section>';
+    $html .= '</div>';
+
+    return $html;
+}
+
+function af_apui_build_member_profile_surface_actions(array $actions): string
+{
+    $items = [];
+
+    foreach ($actions as $action) {
+        if (!is_array($action)) {
+            continue;
+        }
+
+        $url = af_apui_decode_action_url((string)($action['url'] ?? ''));
+        $label = trim((string)($action['label'] ?? ''));
+        if ($url === '' || $label === '') {
+            continue;
+        }
+
+        $items[] = af_apui_build_postbit_action_button([
+            'label' => $label,
+            'title' => (string)($action['title'] ?? $label),
+            'url' => $url,
+            'modal_url' => (string)($action['modal_url'] ?? $url),
+            'modal_kind' => (string)($action['modal_kind'] ?? 'iframe'),
+            'icon' => (string)($action['icon'] ?? 'fa-solid fa-up-right-from-square'),
+            'modifier' => 'af-apui-postbit-action--profile-tab ' . (string)($action['modifier'] ?? ''),
+            'compat_class' => (string)($action['compat_class'] ?? ''),
+            'extra_attrs' => (string)($action['extra_attrs'] ?? ''),
+            'use_apui_modal' => array_key_exists('use_apui_modal', $action) ? (bool)$action['use_apui_modal'] : true,
+            'data_attrs' => !empty($action['data_attrs']) && is_array($action['data_attrs']) ? $action['data_attrs'] : [],
+        ]);
+    }
+
+    if (!$items) {
+        return '';
+    }
+
+    return '<div class="af-apui-tab-actions">' . implode('', $items) . '</div>';
+}
+
+function af_apui_build_member_profile_embed(string $url, string $title, string $surface = ''): string
+{
+    $url = af_apui_decode_action_url($url);
+    if ($url === '') {
+        return '';
+    }
+
+    $attrs = $surface !== ''
+        ? ' data-af-apui-surface="' . htmlspecialchars_uni($surface) . '"'
+        : '';
+
+    return '<div class="af-apui-tab-embed"' . $attrs . '>'
+        . '<iframe class="af-apui-tab-embed__frame" src="' . htmlspecialchars_uni($url) . '" loading="lazy" title="' . htmlspecialchars_uni($title) . '"></iframe>'
+        . '</div>';
+}
+
+function af_apui_build_member_profile_tab_shell(string $title, string $description, string $contentHtml, array $actions = [], string $asideHtml = ''): string
+{
+    $html = '<div class="af-apui-tab-stack">';
+    $html .= '<section class="af-apui-card af-apui-tab-card">';
+    $html .= '<div class="af-apui-tab-card__head">';
+    $html .= '<h2>' . htmlspecialchars_uni($title) . '</h2>';
+    if ($description !== '') {
+        $html .= '<p>' . htmlspecialchars_uni($description) . '</p>';
+    }
+    $html .= '</div>';
+
+    $actionsHtml = af_apui_build_member_profile_surface_actions($actions);
+    if ($actionsHtml !== '') {
+        $html .= $actionsHtml;
+    }
+
+    if ($asideHtml !== '') {
+        $html .= '<div class="af-apui-tab-card__aside">' . $asideHtml . '</div>';
+    }
+
+    $html .= '<div class="af-apui-tab-card__body">' . $contentHtml . '</div>';
+    $html .= '</section>';
+    $html .= '</div>';
+
+    return $html;
+}
+
+function af_apui_build_member_profile_sheet_tab(int $uid, array $sheetPayload): string
+{
+    $sheetUrl = af_apui_decode_action_url((string)($sheetPayload['sheet_url'] ?? ''));
+    $sheetLabel = trim((string)($sheetPayload['button_label'] ?? 'Лист персонажа'));
+
+    if ($sheetUrl === '') {
+        return af_apui_build_member_profile_placeholder_tab(
+            'Лист персонажа',
+            'Лист персонажа для этого профиля пока не подключён.',
+            'Когда у пользователя появится связанный CharacterSheet, вкладка автоматически покажет встроенный блок и кнопки действий.'
+        );
+    }
+
+    $extraAttrs = 'data-afcs-open="1" data-afcs-sheet="' . htmlspecialchars_uni($sheetUrl) . '" data-slug="' . htmlspecialchars_uni((string)($sheetPayload['sheet_slug'] ?? '')) . '"';
+
+    $content = af_apui_build_member_profile_embed($sheetUrl, $sheetLabel, 'sheet');
+    if ($content === '') {
+        $content = '<div class="af-apui-empty">Не удалось подготовить встраивание листа персонажа.</div>';
+    }
+
+    return af_apui_build_member_profile_tab_shell(
+        'Лист персонажа',
+        'Отдельная вкладка APUI для связанного CharacterSheet без хардкода ссылок в шаблоне.',
+        $content,
+        [
+            [
+                'label' => $sheetLabel,
+                'title' => $sheetLabel,
+                'url' => $sheetUrl,
+                'icon' => 'fa-solid fa-id-card',
+                'modifier' => 'af-apui-postbit-action--sheet',
+                'compat_class' => 'af-cs-plaque__btn',
+                'extra_attrs' => $extraAttrs,
+                'use_apui_modal' => false,
+            ],
+        ]
+    );
+}
+
+function af_apui_build_member_profile_application_tab(int $uid, array $sheetPayload): string
+{
+    $application = (array)($sheetPayload['application'] ?? []);
+    $applicationUrl = af_apui_resolve_application_url(['uid' => $uid], $sheetPayload);
+    $applicationFetchUrl = af_apui_resolve_application_fetch_url($sheetPayload);
+    $tid = (int)($application['tid'] ?? ($sheetPayload['application_tid'] ?? 0));
+
+    if ($applicationUrl === '' || $tid <= 0) {
+        return af_apui_build_member_profile_placeholder_tab(
+            'Анкета',
+            'Для этого профиля пока не найдена привязанная анкета.',
+            'Как только CharacterSheets или ATF вернут связанный тред, вкладка начнёт показывать содержимое анкеты в едином блоке APUI.'
+        );
+    }
+
+    $content = '';
+    if (function_exists('af_atf_build_display_block_for_tid_fid') && function_exists('get_thread')) {
+        $thread = get_thread($tid);
+        $fid = (int)($thread['fid'] ?? 0);
+        if ($fid > 0) {
+            $content = (string)af_atf_build_display_block_for_tid_fid($tid, $fid);
+        }
+    }
+
+    if (trim($content) === '') {
+        $content = '<div class="af-apui-empty">Содержимое анкеты пока недоступно для встроенного вывода. Используйте кнопку открытия темы.</div>';
+    } else {
+        $content = '<div class="af-apui-application-fragment">' . $content . '</div>';
+    }
+
+    return af_apui_build_member_profile_tab_shell(
+        'Анкета',
+        'Вкладка использует канонические данные CharacterSheets и ATF, а не хардкодные URL в шаблоне.',
+        $content,
+        [
+            [
+                'label' => 'Открыть анкету',
+                'title' => 'Открыть анкету',
+                'url' => $applicationUrl,
+                'modal_url' => $applicationFetchUrl !== '' ? $applicationFetchUrl : $applicationUrl,
+                'modal_kind' => 'application',
+                'icon' => 'fa-regular fa-id-card',
+                'modifier' => 'af-apui-postbit-action--application',
+                'data_attrs' => [
+                    'data-af-apui-fetch-url' => $applicationFetchUrl !== '' ? $applicationFetchUrl : $applicationUrl,
+                    'data-af-apui-source-url' => $applicationUrl,
+                ],
+            ],
+        ]
+    );
+}
+
+function af_apui_build_member_profile_inventory_tab(int $uid): string
+{
+    if ($uid <= 0) {
+        return af_apui_build_member_profile_placeholder_tab(
+            'Инвентарь',
+            'Инвентарь пока недоступен.',
+            'Не удалось определить пользователя для загрузки инвентаря.'
+        );
+    }
+
+    $inventoryUrl = function_exists('af_advancedinventory_url')
+        ? af_advancedinventory_url('inventory', ['uid' => $uid], false)
+        : ('inventory.php?uid=' . $uid);
+
+    $content = af_apui_build_member_profile_embed($inventoryUrl, 'Инвентарь', 'inventory');
+    if ($content === '') {
+        $content = '<div class="af-apui-empty">Не удалось подготовить встраивание инвентаря.</div>';
+    }
+
+    return af_apui_build_member_profile_tab_shell(
+        'Инвентарь',
+        'Отдельная вкладка APUI для текущего инвентаря персонажа с сохранением существующей логики AdvancedInventory.',
+        $content,
+        [
+            [
+                'label' => 'Открыть инвентарь',
+                'title' => 'Открыть инвентарь',
+                'url' => $inventoryUrl,
+                'modal_kind' => 'inventory',
+                'icon' => 'fa-solid fa-box-archive',
+                'modifier' => 'af-apui-postbit-action--inventory',
+            ],
+        ]
+    );
 }
 
 function af_apui_extract_pairs_from_html(string $html): array

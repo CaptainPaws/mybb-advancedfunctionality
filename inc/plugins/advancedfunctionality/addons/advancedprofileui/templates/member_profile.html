@@ -58,7 +58,7 @@
 
     <section class="af-apui-profile-tabs" data-af-apui-tabs>
         <div class="af-apui-profile-tabs__nav" role="tablist" aria-label="Профиль">
-            <button class="af-apui-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="af-apui-tab-info" data-tab="info">Информация</button>
+            <button class="af-apui-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="af-apui-tab-info" data-tab="info">Основная информация</button>
             <button class="af-apui-tab" type="button" role="tab" aria-selected="false" aria-controls="af-apui-tab-sheet" data-tab="sheet">Лист персонажа</button>
             <button class="af-apui-tab" type="button" role="tab" aria-selected="false" aria-controls="af-apui-tab-application" data-tab="application">Анкета</button>
             <button class="af-apui-tab" type="button" role="tab" aria-selected="false" aria-controls="af-apui-tab-inventory" data-tab="inventory">Инвентарь</button>
@@ -96,38 +96,23 @@
             </article>
 
             <article class="af-apui-panel" id="af-apui-tab-sheet" role="tabpanel" data-panel="sheet" hidden>
-                <div class="af-apui-card">
-                    {$af_apui_character_sheet_tab}
-                    <div class="af-apui-empty" data-empty-for="sheet">Лист персонажа пока не подключён.</div>
-                </div>
+                {$af_apui_character_sheet_tab}
             </article>
 
             <article class="af-apui-panel" id="af-apui-tab-application" role="tabpanel" data-panel="application" hidden>
-                <div class="af-apui-card">
-                    {$af_apui_application_tab}
-                    <div class="af-apui-empty" data-empty-for="application">Анкета пока не подключена.</div>
-                </div>
+                {$af_apui_application_tab}
             </article>
 
             <article class="af-apui-panel" id="af-apui-tab-inventory" role="tabpanel" data-panel="inventory" hidden>
-                <div class="af-apui-card">
-                    {$af_apui_inventory_tab}
-                    <div class="af-apui-empty" data-empty-for="inventory">Инвентарь пока не подключён.</div>
-                </div>
+                {$af_apui_inventory_tab}
             </article>
 
             <article class="af-apui-panel" id="af-apui-tab-timeline" role="tabpanel" data-panel="timeline" hidden>
-                <div class="af-apui-card">
-                    {$af_apui_timeline_tab}
-                    <div class="af-apui-empty" data-empty-for="timeline">Хронология пока не подключена.</div>
-                </div>
+                {$af_apui_timeline_tab}
             </article>
 
             <article class="af-apui-panel" id="af-apui-tab-activity" role="tabpanel" data-panel="activity" hidden>
-                <div class="af-apui-card">
-                    {$af_apui_activity_tab}
-                    <div class="af-apui-empty" data-empty-for="activity">Активность пока не подключена.</div>
-                </div>
+                {$af_apui_activity_tab}
             </article>
 
             <article class="af-apui-panel af-apui-panel--extra" id="af-apui-tab-extra" role="tabpanel" data-panel="extra" hidden>
