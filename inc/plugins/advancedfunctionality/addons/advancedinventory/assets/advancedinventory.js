@@ -10,17 +10,19 @@
   }
 
   function postForm(url, data) {
-    url = normalizeActionUrl(url);
     var body = new URLSearchParams();
+
     Object.keys(data || {}).forEach(function (key) {
       body.append(key, data[key] == null ? '' : String(data[key]));
     });
 
-    return fetch(url, {
+    return fetch(String(url), {
       method: 'POST',
       credentials: 'same-origin',
+      cache: 'no-store',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest'
       },
       body: body.toString()
     }).then(function (res) {
@@ -29,18 +31,25 @@
         try {
           parsed = JSON.parse(text);
         } catch (e) {}
+
         if (!res.ok) {
           var err = parsed && (parsed.error || parsed.message)
             ? (parsed.error || parsed.message)
             : ('HTTP ' + res.status);
           throw new Error(err);
         }
+
         if (!parsed) {
           throw new Error('Invalid JSON response');
         }
+
         return parsed;
       });
     });
+  }
+
+  function appearanceActionUrl(action) {
+    return 'shop.php?action=' + encodeURIComponent(action);
   }
 
   function endpointScript() {
@@ -282,7 +291,7 @@
 
       var appearanceUnapplyBtn = appearanceUnapplyForm.querySelector('[data-af-appearance-unapply-btn]');
       var ctxUn = inventoryContext(page);
-      withLoading(appearanceUnapplyBtn || appearanceUnapplyForm, postForm('misc.php?action=inventory_appearance_unapply', {
+      withLoading(appearanceUnapplyBtn || appearanceUnapplyForm, postForm(appearanceActionUrl('inventory_appearance_unapply'), {
         uid: ctxUn.uid,
         target_key: (appearanceUnapplyForm.querySelector('input[name=\"target_key\"]') || {}).value || '',
         my_post_key: getPostKey(page)
@@ -313,7 +322,7 @@
       if (appearanceApplyBtn && panel.contains(appearanceApplyBtn)) {
         e.preventDefault();
         var ctxApply = inventoryContext(page);
-        withLoading(appearanceApplyBtn, postForm('misc.php?action=inventory_appearance_apply', {
+        withLoading(appearanceApplyBtn, postForm(appearanceActionUrl('inventory_appearance_apply'), {
           uid: ctxApply.uid,
           item_id: appearanceApplyBtn.getAttribute('data-item-id') || '0',
           inv_id: appearanceApplyBtn.getAttribute('data-item-id') || '0',
