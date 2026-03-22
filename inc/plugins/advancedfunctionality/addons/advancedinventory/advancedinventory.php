@@ -326,6 +326,24 @@ function af_advancedinventory_append_runtime_assets(string &$headerinclude, bool
     $headerinclude .= '<script src="' . htmlspecialchars_uni($assetBase . 'advancedinventory.js?v=' . rawurlencode($vJs)) . '" defer></script>';
 }
 
+function af_advancedinventory_append_assets_unconditional(string &$headerinclude, bool $withScript = true): void
+{
+    global $mybb;
+
+    $assetBase = rtrim((string)($mybb->settings['bburl'] ?? ''), '/') . '/inc/plugins/advancedfunctionality/addons/advancedinventory/assets/';
+    $cssFile = AF_ADVINV_ASSET_DIR . 'advancedinventory.css';
+    $vCss = @is_file($cssFile) ? (string)@filemtime($cssFile) : '1';
+    $headerinclude .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($assetBase . 'advancedinventory.css?v=' . rawurlencode($vCss)) . '">';
+
+    if (!$withScript) {
+        return;
+    }
+
+    $jsFile = AF_ADVINV_ASSET_DIR . 'advancedinventory.js';
+    $vJs = @is_file($jsFile) ? (string)@filemtime($jsFile) : '1';
+    $headerinclude .= '<script src="' . htmlspecialchars_uni($assetBase . 'advancedinventory.js?v=' . rawurlencode($vJs)) . '" defer></script>';
+}
+
 function af_advancedinventory_alias_target_path(): string
 {
     return MYBB_ROOT . 'inventory.php';
@@ -482,6 +500,45 @@ function af_advancedinventory_render_inventory(): void
 
     af_advancedinventory_append_runtime_assets($headerinclude, true);
 
+    $af_inv_content = af_advancedinventory_build_inventory_fragment($ownerUid);
+    eval('$page = "' . $templates->get('advancedinventory_inventory_page') . '";');
+    output_page($page);
+    exit;
+}
+
+function af_advancedinventory_build_inventory_fragment(int $ownerUid): string
+{
+    global $mybb, $headerinclude, $templates, $lang, $db;
+
+    if ((int)($mybb->settings['af_advancedinventory_enabled'] ?? 1) !== 1) {
+        return '';
+    }
+
+    $viewerUid = (int)($mybb->user['uid'] ?? 0);
+    if ($ownerUid <= 0) {
+        $ownerUid = $viewerUid;
+    }
+    if ($ownerUid <= 0 || !af_inv_user_can_view($viewerUid, $ownerUid)) {
+        return '';
+    }
+
+    $user = $db->fetch_array($db->simple_select('users', 'uid,username,avatar', 'uid=' . $ownerUid, ['limit' => 1]));
+    if (!$user) {
+        return '';
+    }
+
+    $tabs = af_advancedinventory_tabs();
+    if (!$tabs) {
+        return '';
+    }
+
+    $defaultTab = (string)($mybb->settings['af_advancedinventory_default_tab'] ?? '');
+    if (!isset($tabs[$defaultTab])) {
+        $defaultTab = (string)array_key_first($tabs);
+    }
+
+    af_advancedinventory_append_assets_unconditional($headerinclude, true);
+
     $tabLinks = '';
     foreach ($tabs as $code => $title) {
         $active = $code === $defaultTab ? 'is-active' : '';
@@ -496,10 +553,9 @@ function af_advancedinventory_render_inventory(): void
     $walletCurrencySymbol = htmlspecialchars_uni((string)($wallet['currency_symbol'] ?? '₡'));
     $walletCurrencyCode = htmlspecialchars_uni((string)($wallet['currency'] ?? 'credits'));
 
-    eval('$af_inv_content = "' . $templates->get('advancedinventory_inventory_inner') . '";');
-    eval('$page = "' . $templates->get('advancedinventory_inventory_page') . '";');
-    output_page($page);
-    exit;
+    eval('$inventory_inner = "' . $templates->get('advancedinventory_inventory_inner') . '";');
+
+    return $inventory_inner;
 }
 
 function af_advancedinventory_ensure_inventory_storage(): void

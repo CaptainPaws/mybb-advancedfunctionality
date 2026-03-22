@@ -351,36 +351,14 @@ body.af-apui-member-profile-page > * {
   line-height: 1.6;
 }
 
-.af-apui-tab-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.af-apui-postbit-action--profile-tab {
-  min-width: 0;
-}
-
 .af-apui-tab-card__body,
 .af-apui-tab-card__aside {
   min-width: 0;
 }
 
-.af-apui-tab-embed {
-  position: relative;
-  min-height: 720px;
-  border: 1px solid #30364a;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #111522;
-}
-
-.af-apui-tab-embed__frame {
-  display: block;
-  width: 100%;
-  min-height: 720px;
-  border: 0;
-  background: transparent;
+.af-apui-sheet-fragment,
+.af-apui-inventory-fragment {
+  min-width: 0;
 }
 
 .af-apui-empty--soft {
@@ -2033,6 +2011,37 @@ af-apf-postbit-field {
   margin: 0 !important;
   width: 100%;
   max-width: 100%;
+}
+
+.af-apui-sheet-fragment .af-cs-page,
+.af-apui-inventory-fragment .af-inv-page {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.af-apui-sheet-fragment .af-cs-page {
+  min-height: 0;
+}
+
+.af-apui-inventory-fragment .af-inv-shell,
+.af-apui-inventory-fragment .af-inv-head,
+.af-apui-inventory-fragment .af-inv-tab-content,
+.af-apui-inventory-fragment .af-inv-panel,
+.af-apui-inventory-fragment #af-inv-panel {
+  background: transparent;
+  box-shadow: none;
+}
+
+.af-apui-inventory-fragment .af-inv-shell {
+  padding: 0;
+  border: 0;
+}
+
+.af-apui-inventory-fragment .af-inv-head {
+  padding-top: 0;
 }
 
 /* Мобильная адаптация модалки */
