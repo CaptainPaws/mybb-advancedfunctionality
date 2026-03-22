@@ -24,6 +24,8 @@ class AF_Admin_Advancedprofileui
         $redirectUrl = 'index.php?module=advancedfunctionality&af_view=' . AF_APUI_ID;
 
         $fields = [
+            'af_' . AF_APUI_ID . '_enabled',
+
             'af_' . AF_APUI_ID . '_member_profile_body_cover_url',
             'af_' . AF_APUI_ID . '_member_profile_body_tile_url',
             'af_' . AF_APUI_ID . '_member_profile_body_bg_mode',
@@ -31,6 +33,7 @@ class AF_Admin_Advancedprofileui
             'af_' . AF_APUI_ID . '_profile_banner_url',
             'af_' . AF_APUI_ID . '_profile_banner_overlay',
             'af_' . AF_APUI_ID . '_member_profile_css',
+
             'af_' . AF_APUI_ID . '_postbit_author_bg_url',
             'af_' . AF_APUI_ID . '_postbit_author_overlay',
             'af_' . AF_APUI_ID . '_postbit_name_bg_url',
@@ -51,26 +54,44 @@ class AF_Admin_Advancedprofileui
             'af_' . AF_APUI_ID . '_postbit_plaque_icon_color',
             'af_' . AF_APUI_ID . '_postbit_plaque_icon_size',
             'af_' . AF_APUI_ID . '_postbit_css',
+
+            'af_' . AF_APUI_ID . '_thread_body_cover_url',
+            'af_' . AF_APUI_ID . '_thread_body_tile_url',
+            'af_' . AF_APUI_ID . '_thread_body_bg_mode',
+            'af_' . AF_APUI_ID . '_thread_body_overlay',
+            'af_' . AF_APUI_ID . '_thread_banner_url',
+            'af_' . AF_APUI_ID . '_thread_banner_overlay',
+            'af_' . AF_APUI_ID . '_thread_css',
+
             'af_' . AF_APUI_ID . '_sheet_bg_url',
             'af_' . AF_APUI_ID . '_sheet_bg_overlay',
             'af_' . AF_APUI_ID . '_sheet_panel_bg',
             'af_' . AF_APUI_ID . '_sheet_panel_border',
             'af_' . AF_APUI_ID . '_sheet_css',
+
             'af_' . AF_APUI_ID . '_application_bg_url',
             'af_' . AF_APUI_ID . '_application_bg_overlay',
             'af_' . AF_APUI_ID . '_application_panel_bg',
             'af_' . AF_APUI_ID . '_application_panel_border',
             'af_' . AF_APUI_ID . '_application_css',
+
             'af_' . AF_APUI_ID . '_inventory_bg_url',
             'af_' . AF_APUI_ID . '_inventory_bg_overlay',
             'af_' . AF_APUI_ID . '_inventory_panel_bg',
             'af_' . AF_APUI_ID . '_inventory_panel_border',
             'af_' . AF_APUI_ID . '_inventory_css',
+
             'af_' . AF_APUI_ID . '_achievements_bg_url',
             'af_' . AF_APUI_ID . '_achievements_bg_overlay',
             'af_' . AF_APUI_ID . '_achievements_panel_bg',
             'af_' . AF_APUI_ID . '_achievements_panel_border',
             'af_' . AF_APUI_ID . '_achievements_css',
+        ];
+
+        $enumFields = [
+            'af_' . AF_APUI_ID . '_enabled' => ['0', '1'],
+            'af_' . AF_APUI_ID . '_member_profile_body_bg_mode' => ['cover', 'tile'],
+            'af_' . AF_APUI_ID . '_thread_body_bg_mode' => ['cover', 'tile'],
         ];
 
         if ($mybb->request_method === 'post' && $mybb->get_input('save_apui_settings') === '1') {
@@ -80,6 +101,11 @@ class AF_Admin_Advancedprofileui
 
             foreach ($fields as $fieldName) {
                 $value = trim((string)$mybb->get_input($fieldName));
+
+                if (isset($enumFields[$fieldName]) && !in_array($value, $enumFields[$fieldName], true)) {
+                    $value = $enumFields[$fieldName][0];
+                }
+
                 $db->update_query(
                     'settings',
                     ['value' => $db->escape_string($value)],
@@ -107,9 +133,19 @@ class AF_Admin_Advancedprofileui
             $values[$fieldName] = htmlspecialchars_uni((string)($mybb->settings[$fieldName] ?? ''));
         }
 
+        $enabled = (string)($mybb->settings['af_' . AF_APUI_ID . '_enabled'] ?? '1');
+        if ($enabled !== '0') {
+            $enabled = '1';
+        }
+
         $mode = (string)($mybb->settings['af_' . AF_APUI_ID . '_member_profile_body_bg_mode'] ?? 'cover');
         if ($mode !== 'tile') {
             $mode = 'cover';
+        }
+
+        $threadMode = (string)($mybb->settings['af_' . AF_APUI_ID . '_thread_body_bg_mode'] ?? 'cover');
+        if ($threadMode !== 'tile') {
+            $threadMode = 'cover';
         }
 
         echo '<form action="' . htmlspecialchars_uni($redirectUrl) . '" method="post">';
@@ -117,10 +153,14 @@ class AF_Admin_Advancedprofileui
         echo '<input type="hidden" name="save_apui_settings" value="1">';
 
         echo '<div class="page_messagetype">';
-        echo '<p>Здесь задаются базовые стили APUI для member_profile, postbit_classic, sheet, application, inventory и achievements. AdvancedAppearance может частично перекрывать эти значения пресетом без сброса уже сохранённых setting values.</p>';
+        echo '<p>Здесь задаются базовые стили APUI для member_profile, postbit_classic, showthread, sheet, application, inventory и achievements. AdvancedAppearance может частично перекрывать эти значения пресетом без сброса уже сохранённых setting values.</p>';
         echo '</div>';
 
         echo '<table class="table table-bordered">';
+
+        echo '<tr><th colspan="2">Общие</th></tr>';
+        echo '<tr><td style="width:260px;"><strong>Включить AdvancedProfileUI</strong></td><td><select name="af_' . AF_APUI_ID . '_enabled"><option value="1"' . ($enabled === '1' ? ' selected' : '') . '>Да</option><option value="0"' . ($enabled === '0' ? ' selected' : '') . '>Нет</option></select></td></tr>';
+
         echo '<tr><th colspan="2">member_profile</th></tr>';
         echo '<tr><td style="width:260px;"><strong>Фон body (большое изображение)</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_member_profile_body_cover_url" value="' . $values['af_' . AF_APUI_ID . '_member_profile_body_cover_url'] . '"></td></tr>';
         echo '<tr><td><strong>Фон body (бесшовная плитка)</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_member_profile_body_tile_url" value="' . $values['af_' . AF_APUI_ID . '_member_profile_body_tile_url'] . '"></td></tr>';
@@ -151,6 +191,16 @@ class AF_Admin_Advancedprofileui
         echo '<tr><td><strong>Цвет fallback-иконки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_icon_color" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_icon_color'] . '"></td></tr>';
         echo '<tr><td><strong>Размер иконки</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_postbit_plaque_icon_size" value="' . $values['af_' . AF_APUI_ID . '_postbit_plaque_icon_size'] . '"></td></tr>';
         echo '<tr><td><strong>Пользовательский CSS</strong></td><td><textarea name="af_' . AF_APUI_ID . '_postbit_css" rows="10" style="width:100%;">' . $values['af_' . AF_APUI_ID . '_postbit_css'] . '</textarea></td></tr>';
+
+        echo '<tr><th colspan="2">showthread</th></tr>';
+        echo '<tr><td><strong>Фон body (большое изображение)</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_thread_body_cover_url" value="' . $values['af_' . AF_APUI_ID . '_thread_body_cover_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Фон body (бесшовная плитка)</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_thread_body_tile_url" value="' . $values['af_' . AF_APUI_ID . '_thread_body_tile_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Режим фона body</strong></td><td><select name="af_' . AF_APUI_ID . '_thread_body_bg_mode"><option value="cover"' . ($threadMode === 'cover' ? ' selected' : '') . '>cover</option><option value="tile"' . ($threadMode === 'tile' ? ' selected' : '') . '>tile</option></select></td></tr>';
+        echo '<tr><td><strong>Оверлей фона body</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_thread_body_overlay" value="' . $values['af_' . AF_APUI_ID . '_thread_body_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>Баннер темы по умолчанию</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_thread_banner_url" value="' . $values['af_' . AF_APUI_ID . '_thread_banner_url'] . '"></td></tr>';
+        echo '<tr><td><strong>Оверлей баннера темы</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_thread_banner_overlay" value="' . $values['af_' . AF_APUI_ID . '_thread_banner_overlay'] . '"></td></tr>';
+        echo '<tr><td><strong>Пользовательский CSS</strong></td><td><textarea name="af_' . AF_APUI_ID . '_thread_css" rows="8" style="width:100%;">' . $values['af_' . AF_APUI_ID . '_thread_css'] . '</textarea></td></tr>';
+
         echo '<tr><th colspan="2">character sheet</th></tr>';
         echo '<tr><td><strong>Background image URL</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_sheet_bg_url" value="' . $values['af_' . AF_APUI_ID . '_sheet_bg_url'] . '"></td></tr>';
         echo '<tr><td><strong>Background overlay</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_sheet_bg_overlay" value="' . $values['af_' . AF_APUI_ID . '_sheet_bg_overlay'] . '"></td></tr>';
@@ -171,12 +221,14 @@ class AF_Admin_Advancedprofileui
         echo '<tr><td><strong>Panel/card background</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_inventory_panel_bg" value="' . $values['af_' . AF_APUI_ID . '_inventory_panel_bg'] . '"></td></tr>';
         echo '<tr><td><strong>Panel/card border</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_inventory_panel_border" value="' . $values['af_' . AF_APUI_ID . '_inventory_panel_border'] . '"></td></tr>';
         echo '<tr><td><strong>Custom CSS</strong></td><td><textarea name="af_' . AF_APUI_ID . '_inventory_css" rows="8" style="width:100%;">' . $values['af_' . AF_APUI_ID . '_inventory_css'] . '</textarea></td></tr>';
+
         echo '<tr><th colspan="2">achievements</th></tr>';
         echo '<tr><td><strong>Background image URL</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_achievements_bg_url" value="' . $values['af_' . AF_APUI_ID . '_achievements_bg_url'] . '"></td></tr>';
         echo '<tr><td><strong>Background overlay</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_achievements_bg_overlay" value="' . $values['af_' . AF_APUI_ID . '_achievements_bg_overlay'] . '"></td></tr>';
         echo '<tr><td><strong>Panel/card background</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_achievements_panel_bg" value="' . $values['af_' . AF_APUI_ID . '_achievements_panel_bg'] . '"></td></tr>';
         echo '<tr><td><strong>Panel/card border</strong></td><td><input type="text" class="text_input" style="width:100%;" name="af_' . AF_APUI_ID . '_achievements_panel_border" value="' . $values['af_' . AF_APUI_ID . '_achievements_panel_border'] . '"></td></tr>';
         echo '<tr><td><strong>Custom CSS</strong></td><td><textarea name="af_' . AF_APUI_ID . '_achievements_css" rows="8" style="width:100%;">' . $values['af_' . AF_APUI_ID . '_achievements_css'] . '</textarea></td></tr>';
+
         echo '</table>';
 
         echo '<div style="margin-top:12px;">';
