@@ -3147,7 +3147,7 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
                 $actions .= '<div class="af-inv-card-status is-inactive">Пресет темы выбирается только в форме создания темы или при редактировании первого поста.</div>';
             } else {
                 $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActiveAppearance ? ' disabled="disabled"' : '') . '>Активировать</button>';
-                $actions .= '<form method="post" action="misc.php?action=inventory_appearance_unapply" class="af-inv-inline-form" data-af-appearance-unapply-form>'
+                $actions .= '<form method="post" action="shop.php?action=inventory_appearance_unapply" class="af-inv-inline-form" data-af-appearance-unapply-form>'
                     . '<input type="hidden" name="uid" value="' . $itemOwnerUid . '">'
                     . '<input type="hidden" name="target_key" value="' . htmlspecialchars_uni($appearanceTarget) . '">'
                     . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">'
@@ -3289,7 +3289,7 @@ function af_advinv_render_tab_cards(array $items, bool $canManage, bool $allowEq
                 $statusHtml = '<div class="af-inv-card-status is-inactive">Пресет темы выбирается в newthread.php / editpost.php.</div>';
             } else {
                 $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActive ? ' disabled="disabled"' : '') . '>Активировать</button>';
-                $actions .= '<form method="post" action="misc.php?action=inventory_appearance_unapply" class="af-inv-inline-form" data-af-appearance-unapply-form>'
+                $actions .= '<form method="post" action="shop.php?action=inventory_appearance_unapply" class="af-inv-inline-form" data-af-appearance-unapply-form>'
                     . '<input type="hidden" name="uid" value="' . $itemOwnerUid . '">'
                     . '<input type="hidden" name="target_key" value="' . htmlspecialchars_uni($appearanceTarget) . '">'
                     . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">'

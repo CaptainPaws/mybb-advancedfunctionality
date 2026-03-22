@@ -1175,6 +1175,12 @@ function af_advancedshop_misc_router(): void
         return;
     }
 
+    $directDispatchActions = ['inventory_appearance_apply', 'inventory_appearance_unapply'];
+    if (in_array($action, $directDispatchActions, true) && strtolower((string)($mybb->request_method ?? 'get')) === 'post') {
+        af_advancedshop_dispatch($action);
+        return;
+    }
+
     if (!af_advancedshop_alias_available()) {
         af_advancedshop_dispatch($action);
         return;
@@ -3825,7 +3831,31 @@ function af_advancedshop_inventory_appearance_apply(): void
         af_advancedshop_json_err('inv_id required', 422);
     }
 
-    $item = $db->fetch_array($db->simple_select('af_inventory_items', '*', 'inv_id=' . $invId . ' AND uid=' . $targetUid, ['limit' => 1]));
+    $item = [];
+
+    if (!function_exists('af_inv_get_item_for_owner')) {
+        $invBootstrap = AF_ADDONS . 'advancedinventory/advancedinventory.php';
+        if (is_file($invBootstrap)) {
+            require_once $invBootstrap;
+        }
+    }
+
+    if (function_exists('af_inv_get_item_for_owner')) {
+        $item = (array)af_inv_get_item_for_owner($targetUid, $invId);
+    }
+
+    if (!$item && $db->table_exists('af_advinv_items')) {
+        $item = (array)$db->fetch_array(
+            $db->simple_select('af_advinv_items', '*', 'id=' . $invId . ' AND uid=' . $targetUid, ['limit' => 1])
+        );
+    }
+
+    if (!$item && $db->table_exists('af_inventory_items')) {
+        $item = (array)$db->fetch_array(
+            $db->simple_select('af_inventory_items', '*', 'inv_id=' . $invId . ' AND uid=' . $targetUid, ['limit' => 1])
+        );
+    }
+
     if (!$item) {
         af_advancedshop_json_err('Item not found', 404);
     }
@@ -3874,7 +3904,7 @@ function af_advancedshop_inventory_appearance_apply(): void
 
     af_advancedshop_json_ok([
         'active_appearance' => af_advancedshop_inventory_active_appearance($targetUid, $targetKey),
-        'state' => af_advancedshop_inventory_state_payload($targetUid),
+        'state' => af_advancedshop_inventory_visual_state_payload($targetUid),
     ]);
 }
 
@@ -3898,8 +3928,35 @@ function af_advancedshop_inventory_appearance_unapply(): void
     af_advancedshop_json_ok([
         'target_key' => $targetKey,
         'active_appearance' => af_advancedshop_inventory_active_appearance($targetUid, $targetKey),
-        'state' => af_advancedshop_inventory_state_payload($targetUid),
+        'state' => af_advancedshop_inventory_visual_state_payload($targetUid),
     ]);
+}
+
+function af_advancedshop_inventory_visual_state_payload(int $uid): array
+{
+    global $db;
+
+    if ($db->table_exists('af_inventory_items') && $db->table_exists('af_inventory_equipped')) {
+        return af_advancedshop_inventory_state_payload($uid);
+    }
+
+    return [
+        'uid' => $uid,
+        'can_edit' => af_advancedshop_can_edit_inventory($uid),
+        'items' => [],
+        'inventory' => [],
+        'equipment' => [],
+        'active_appearance' => [],
+        'active_appearance_map' => [],
+        'derived' => [
+            'ac_bonus' => 0,
+            'damage_bonus' => 0,
+            'damage_type' => '',
+        ],
+        'meta' => [
+            'labels' => [],
+        ],
+    ];
 }
 
 function af_advancedshop_inventory_equipped_get(): void
