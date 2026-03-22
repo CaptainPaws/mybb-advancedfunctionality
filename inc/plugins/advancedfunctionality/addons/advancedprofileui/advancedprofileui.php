@@ -1445,7 +1445,6 @@ function af_apui_pre_output_page(string &$page): void
             'af-apui-postbit',
             'af-apui-tab',
 
-            // APUI surface contract
             'af-apui-surface-body',
             'af-apui-surface-page',
             'data-af-apui-surface="sheet"',
@@ -1457,7 +1456,6 @@ function af_apui_pre_output_page(string &$page): void
             'data-af-apui-surface="achievements"',
             "data-af-apui-surface='achievements'",
 
-            // known surface roots
             'af-cs-page',
             'af-inv-page',
             'af-apui-application-fragment',
@@ -1472,6 +1470,9 @@ function af_apui_pre_output_page(string &$page): void
     }
 
     $page = af_apui_strip_asset_includes($page);
+
+    // Переносим штатные хлебные крошки внутрь APUI-контейнера темы.
+    $page = af_apui_relocate_thread_breadcrumbs($page);
 
     if (!$needAssets) {
         return;
@@ -1510,6 +1511,137 @@ function af_apui_strip_asset_includes(string $page): string
 
     return $page;
 }
+
+
+function af_apui_is_thread_page_markup(string $page): bool
+{
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+
+    if ($script === 'showthread.php') {
+        return true;
+    }
+
+    return strpos($page, AF_APUI_MARKER_THREAD_START) !== false
+        || strpos($page, 'af-apui-thread-page') !== false
+        || strpos($page, 'AF_APUI_THREAD_BREADCRUMBS_TOP') !== false
+        || strpos($page, 'AF_APUI_THREAD_BREADCRUMBS_BOTTOM') !== false;
+}
+
+function af_apui_normalize_thread_breadcrumbs_html(string $html): string
+{
+    $html = trim($html);
+    if ($html === '') {
+        return '';
+    }
+
+    // Убираем template-комменты MyBB
+    $html = preg_replace('~<!--.*?-->~s', '', $html) ?? $html;
+
+    // Убираем \r\n шум
+    $html = str_replace(["\r"], '', $html);
+    $html = preg_replace("~\n+~", '', $html) ?? $html;
+
+    // Старый активный разделитель вида <br><img ... nav_bit.png>
+    $html = preg_replace(
+        '~<br\s*/?>\s*<img\b[^>]*>~i',
+        '<span class="af-apui-breadcrumb-sep af-apui-breadcrumb-sep--active" aria-hidden="true">›</span>',
+        $html
+    ) ?? $html;
+
+    // Обычный текстовый разделитель "›" между элементами
+    $html = preg_replace(
+        '~(?<=>)\s*›\s*(?=<)~u',
+        '<span class="af-apui-breadcrumb-sep" aria-hidden="true">›</span>',
+        $html
+    ) ?? $html;
+
+    // На всякий случай выпиливаем оставшиеся br/img
+    $html = preg_replace('~<br\s*/?>~i', '', $html) ?? $html;
+    $html = preg_replace('~<img\b[^>]*>~i', '', $html) ?? $html;
+
+    // Чистим лишние пробелы между тегами
+    $html = preg_replace('~>\s+<~', '><', $html) ?? $html;
+
+    return trim($html);
+}
+
+function af_apui_relocate_thread_breadcrumbs(string $page): string
+{
+    if ($page === '' || !af_apui_is_thread_page_markup($page)) {
+        return $page;
+    }
+
+    $hasTopSlot = strpos($page, '<!--AF_APUI_THREAD_BREADCRUMBS_TOP-->') !== false;
+    $hasBottomSlot = strpos($page, '<!--AF_APUI_THREAD_BREADCRUMBS_BOTTOM-->') !== false;
+
+    if (!$hasTopSlot && !$hasBottomSlot) {
+        return $page;
+    }
+
+    $punPos = strpos($page, '<div class="pun af-apui-thread-pun">');
+    if ($punPos === false) {
+        $punPos = strpos($page, 'af-apui-thread-pun');
+    }
+
+    if ($punPos === false) {
+        return $page;
+    }
+
+    // Ищем хлебные крошки только в верхней части страницы, до APUI-контейнера темы.
+    $beforePun = substr($page, 0, (int)$punPos);
+
+    if (
+        !preg_match_all(
+            '~<div\b[^>]*class=(["\'])[^"\']*\bnavigation\b[^"\']*\1[^>]*>.*?</div>~is',
+            $beforePun,
+            $matches,
+            PREG_OFFSET_CAPTURE
+        )
+    ) {
+        // Если не нашли — просто уберём пустые контейнеры, чтобы не было пустых полос
+        $page = str_replace(
+            ['<!--AF_APUI_THREAD_BREADCRUMBS_TOP-->', '<!--AF_APUI_THREAD_BREADCRUMBS_BOTTOM-->'],
+            '',
+            $page
+        );
+
+        $page = preg_replace(
+            '~<nav\b[^>]*class=(["\'])[^"\']*\baf-apui-thread-breadcrumbs\b[^"\']*\1[^>]*>\s*<div\b[^>]*class=(["\'])[^"\']*\baf-apui-thread-breadcrumbs__inner\b[^"\']*\2[^>]*>\s*</div>\s*</nav>~is',
+            '',
+            $page
+        ) ?? $page;
+
+        return $page;
+    }
+
+    // Берём последнюю navigation до .pun — это и есть форумные хлебные крошки.
+    $lastMatch = end($matches[0]);
+    if (!is_array($lastMatch) || !isset($lastMatch[0], $lastMatch[1])) {
+        return $page;
+    }
+
+    $rawNavigationHtml = (string)$lastMatch[0];
+    $navigationOffset = (int)$lastMatch[1];
+
+    $normalizedNavigationHtml = af_apui_normalize_thread_breadcrumbs_html($rawNavigationHtml);
+
+    // Удаляем верхние штатные хлебные крошки из header-части страницы.
+    $page = substr_replace($page, '', $navigationOffset, strlen($rawNavigationHtml));
+
+    // Вставляем одинаковые хлебные крошки и сверху, и снизу.
+    $page = str_replace('<!--AF_APUI_THREAD_BREADCRUMBS_TOP-->', $normalizedNavigationHtml, $page);
+    $page = str_replace('<!--AF_APUI_THREAD_BREADCRUMBS_BOTTOM-->', $normalizedNavigationHtml, $page);
+
+    // Если вдруг вставить было нечего — выпиливаем пустые контейнеры.
+    $page = preg_replace(
+        '~<nav\b[^>]*class=(["\'])[^"\']*\baf-apui-thread-breadcrumbs\b[^"\']*\1[^>]*>\s*<div\b[^>]*class=(["\'])[^"\']*\baf-apui-thread-breadcrumbs__inner\b[^"\']*\2[^>]*>\s*</div>\s*</nav>~is',
+        '',
+        $page
+    ) ?? $page;
+
+    return $page;
+}
+
 function af_apui_add_ver(string $url, string $absFile): string
 {
     $ver = is_file($absFile) ? (int)@filemtime($absFile) : 0;
@@ -1587,14 +1719,24 @@ function af_apui_build_runtime_style_tag(): string
     $bodyTileImage = af_apui_css_url_value(af_apui_get_setting_value('member_profile_body_tile_url', ''));
     $bodyOverlay = af_apui_css_raw_value(af_apui_get_setting_value('member_profile_body_overlay', 'none'));
 
-    $selectedBodyImage = $bodyMode === 'tile' ? $bodyTileImage : $bodyCoverImage;
-    if ($selectedBodyImage === 'none') {
-        $selectedBodyImage = $bodyMode === 'tile' ? $bodyCoverImage : $bodyTileImage;
-        if ($selectedBodyImage !== 'none') {
-            $bodyMode = $bodyMode === 'tile' ? 'cover' : 'tile';
+    $selectedBodyImage = 'none';
+    if ($bodyMode === 'tile') {
+        if ($bodyTileImage !== 'none') {
+            $selectedBodyImage = $bodyTileImage;
+        } elseif ($bodyCoverImage !== 'none') {
+            $selectedBodyImage = $bodyCoverImage;
+            $bodyMode = 'cover';
+        }
+    } else {
+        if ($bodyCoverImage !== 'none') {
+            $selectedBodyImage = $bodyCoverImage;
+        } elseif ($bodyTileImage !== 'none') {
+            $selectedBodyImage = $bodyTileImage;
+            $bodyMode = 'tile';
         }
     }
 
+    $hasMemberProfileBodyImage = ($selectedBodyImage !== 'none');
     $bodyRepeat = $bodyMode === 'tile' ? 'repeat' : 'no-repeat';
     $bodyPosition = $bodyMode === 'tile' ? 'left top' : 'center center';
     $bodyAttachment = $bodyMode === 'tile' ? 'scroll' : 'fixed';
@@ -1643,34 +1785,56 @@ function af_apui_build_runtime_style_tag(): string
     $sheetOverlay = af_apui_css_raw_value(af_apui_get_setting_value('sheet_bg_overlay', 'linear-gradient(180deg, rgba(6, 10, 18, .24) 0%, rgba(6, 10, 18, .78) 100%)'));
     $sheetPanelBg = af_apui_css_raw_value(af_apui_get_setting_value('sheet_panel_bg', 'rgba(0, 0, 0, 0.12)'));
     $sheetPanelBorder = af_apui_css_raw_value(af_apui_get_setting_value('sheet_panel_border', 'rgba(255,255,255,.12)'));
+
     $applicationBg = af_apui_css_url_value(af_apui_get_setting_value('application_bg_url', ''));
     $applicationOverlay = af_apui_css_raw_value(af_apui_get_setting_value('application_bg_overlay', 'linear-gradient(180deg, rgba(6, 10, 18, .20) 0%, rgba(6, 10, 18, .58) 55%, rgba(6, 10, 18, .88) 100%)'));
     $applicationPanelBg = af_apui_css_raw_value(af_apui_get_setting_value('application_panel_bg', 'rgba(6, 12, 26, .58)'));
     $applicationPanelBorder = af_apui_css_raw_value(af_apui_get_setting_value('application_panel_border', 'rgba(255,255,255,.10)'));
+
     $inventoryBg = af_apui_css_url_value(af_apui_get_setting_value('inventory_bg_url', ''));
     $inventoryOverlay = af_apui_css_raw_value(af_apui_get_setting_value('inventory_bg_overlay', 'linear-gradient(180deg, rgba(6, 10, 18, .26) 0%, rgba(6, 10, 18, .72) 100%)'));
     $inventoryPanelBg = af_apui_css_raw_value(af_apui_get_setting_value('inventory_panel_bg', 'rgba(21, 25, 34, .92)'));
     $inventoryPanelBorder = af_apui_css_raw_value(af_apui_get_setting_value('inventory_panel_border', 'rgba(255,255,255,.12)'));
+
     $achievementsBg = af_apui_css_url_value(af_apui_get_setting_value('achievements_bg_url', ''));
     $achievementsOverlay = af_apui_css_raw_value(af_apui_get_setting_value('achievements_bg_overlay', 'linear-gradient(180deg, rgba(6, 10, 18, .24) 0%, rgba(6, 10, 18, .78) 100%)'));
     $achievementsPanelBg = af_apui_css_raw_value(af_apui_get_setting_value('achievements_panel_bg', 'rgba(13, 17, 28, .74)'));
     $achievementsPanelBorder = af_apui_css_raw_value(af_apui_get_setting_value('achievements_panel_border', 'rgba(255,255,255,.12)'));
+
     $threadBodyMode = strtolower(af_apui_get_setting_value('thread_body_bg_mode', 'cover'));
     if ($threadBodyMode !== 'tile') {
         $threadBodyMode = 'cover';
     }
+
     $threadBodyCoverImage = af_apui_css_url_value(af_apui_get_setting_value('thread_body_cover_url', ''));
     $threadBodyTileImage = af_apui_css_url_value(af_apui_get_setting_value('thread_body_tile_url', ''));
     $threadBodyOverlay = af_apui_css_raw_value(af_apui_get_setting_value('thread_body_overlay', 'none'));
     $threadBanner = af_apui_css_url_value(af_apui_get_setting_value('thread_banner_url', ''));
-    $threadBannerOverlay = af_apui_css_raw_value(af_apui_get_setting_value('thread_banner_overlay', 'linear-gradient(180deg, rgba(8, 12, 24, 0.08) 0%, rgba(8, 12, 24, 0.36) 42%, rgba(8, 12, 24, 0.88) 100%)'));
-    $selectedThreadBodyImage = $threadBodyMode === 'tile' ? $threadBodyTileImage : $threadBodyCoverImage;
-    if ($selectedThreadBodyImage === 'none') {
-        $selectedThreadBodyImage = $threadBodyMode === 'tile' ? $threadBodyCoverImage : $threadBodyTileImage;
-        if ($selectedThreadBodyImage !== 'none') {
-            $threadBodyMode = $threadBodyMode === 'tile' ? 'cover' : 'tile';
+    $threadBannerOverlay = af_apui_css_raw_value(
+        af_apui_get_setting_value(
+            'thread_banner_overlay',
+            'linear-gradient(180deg, rgba(8, 12, 24, 0.08) 0%, rgba(8, 12, 24, 0.36) 42%, rgba(8, 12, 24, 0.88) 100%)'
+        )
+    );
+
+    $selectedThreadBodyImage = 'none';
+    if ($threadBodyMode === 'tile') {
+        if ($threadBodyTileImage !== 'none') {
+            $selectedThreadBodyImage = $threadBodyTileImage;
+        } elseif ($threadBodyCoverImage !== 'none') {
+            $selectedThreadBodyImage = $threadBodyCoverImage;
+            $threadBodyMode = 'cover';
+        }
+    } else {
+        if ($threadBodyCoverImage !== 'none') {
+            $selectedThreadBodyImage = $threadBodyCoverImage;
+        } elseif ($threadBodyTileImage !== 'none') {
+            $selectedThreadBodyImage = $threadBodyTileImage;
+            $threadBodyMode = 'tile';
         }
     }
+
+    $hasThreadBodyImage = ($selectedThreadBodyImage !== 'none');
     $threadBodyRepeat = $threadBodyMode === 'tile' ? 'repeat' : 'no-repeat';
     $threadBodyPosition = $threadBodyMode === 'tile' ? 'left top' : 'center center';
     $threadBodyAttachment = $threadBodyMode === 'tile' ? 'scroll' : 'fixed';
@@ -1685,13 +1849,24 @@ function af_apui_build_runtime_style_tag(): string
     $threadCss = af_apui_sanitize_custom_css(af_apui_get_setting_value('thread_css', ''));
 
     $css = ":root{";
-    $css .= "--af-apui-profile-banner-image:" . $profileBanner . ";";
+    if ($profileBanner !== 'none') {
+        $css .= "--af-apui-profile-banner-image:" . $profileBanner . ";";
+    }
     $css .= "--af-apui-profile-banner-overlay:" . $profileBannerOverlay . ";";
-    $css .= "--af-apui-postbit-author-bg-image:" . $postbitAuthorBg . ";";
+
+    if ($postbitAuthorBg !== 'none') {
+        $css .= "--af-apui-postbit-author-bg-image:" . $postbitAuthorBg . ";";
+    }
     $css .= "--af-apui-postbit-author-overlay:" . $postbitAuthorOverlay . ";";
-    $css .= "--af-apui-postbit-name-bg-image:" . $postbitNameBg . ";";
+
+    if ($postbitNameBg !== 'none') {
+        $css .= "--af-apui-postbit-name-bg-image:" . $postbitNameBg . ";";
+    }
     $css .= "--af-apui-postbit-name-overlay:" . $postbitNameOverlay . ";";
-    $css .= "--af-apui-postbit-plaque-bg-image:" . $postbitPlaqueBg . ";";
+
+    if ($postbitPlaqueBg !== 'none') {
+        $css .= "--af-apui-postbit-plaque-bg-image:" . $postbitPlaqueBg . ";";
+    }
     $css .= "--af-apui-postbit-plaque-overlay:" . $postbitPlaqueOverlay . ";";
     $css .= "--af-apui-postbit-plaque-media-overlay:" . $postbitPlaqueMediaOverlay . ";";
     $css .= "--af-apui-postbit-plaque-icon-bg:" . $postbitPlaqueIconBg . ";";
@@ -1699,47 +1874,79 @@ function af_apui_build_runtime_style_tag(): string
     $css .= "--af-apui-postbit-plaque-icon-border:" . $postbitPlaqueIconBorder . ";";
     $css .= "--af-apui-postbit-plaque-icon-color:" . $postbitPlaqueIconColor . ";";
     $css .= "--af-apui-postbit-plaque-icon-size:" . $postbitPlaqueIconSize . ";";
-    $css .= "--af-apui-modal-sheet-bg-image:" . $sheetBg . ";";
+
+    if ($sheetBg !== 'none') {
+        $css .= "--af-apui-modal-sheet-bg-image:" . $sheetBg . ";";
+    }
     $css .= "--af-apui-modal-sheet-bg-overlay:" . $sheetOverlay . ";";
     $css .= "--af-apui-modal-sheet-panel-bg:" . $sheetPanelBg . ";";
     $css .= "--af-apui-modal-sheet-panel-border:" . $sheetPanelBorder . ";";
-    $css .= "--af-apui-modal-application-bg-image:" . $applicationBg . ";";
+
+    if ($applicationBg !== 'none') {
+        $css .= "--af-apui-modal-application-bg-image:" . $applicationBg . ";";
+    }
     $css .= "--af-apui-modal-application-bg-overlay:" . $applicationOverlay . ";";
     $css .= "--af-apui-modal-application-panel-bg:" . $applicationPanelBg . ";";
     $css .= "--af-apui-modal-application-panel-border:" . $applicationPanelBorder . ";";
-    $css .= "--af-apui-modal-inventory-bg-image:" . $inventoryBg . ";";
+
+    if ($inventoryBg !== 'none') {
+        $css .= "--af-apui-modal-inventory-bg-image:" . $inventoryBg . ";";
+    }
     $css .= "--af-apui-modal-inventory-bg-overlay:" . $inventoryOverlay . ";";
     $css .= "--af-apui-modal-inventory-panel-bg:" . $inventoryPanelBg . ";";
     $css .= "--af-apui-modal-inventory-panel-border:" . $inventoryPanelBorder . ";";
-    $css .= "--af-apui-modal-achievements-bg-image:" . $achievementsBg . ";";
+
+    if ($achievementsBg !== 'none') {
+        $css .= "--af-apui-modal-achievements-bg-image:" . $achievementsBg . ";";
+    }
     $css .= "--af-apui-modal-achievements-bg-overlay:" . $achievementsOverlay . ";";
     $css .= "--af-apui-modal-achievements-panel-bg:" . $achievementsPanelBg . ";";
     $css .= "--af-apui-modal-achievements-panel-border:" . $achievementsPanelBorder . ";";
-    $css .= "--af-apui-thread-banner-image:" . $threadBanner . ";";
+
+    if ($threadBanner !== 'none') {
+        $css .= "--af-apui-thread-banner-image:" . $threadBanner . ";";
+    }
     $css .= "--af-apui-thread-banner-overlay:" . $threadBannerOverlay . ";";
     $css .= "}\n";
 
-    $css .= "body.af-apui-member-profile-page{";
-    $css .= "--af-apui-member-profile-body-overlay:" . $bodyOverlay . ";";
-    $css .= "background-image:" . $selectedBodyImage . ";";
-    $css .= "background-repeat:" . $bodyRepeat . ";";
-    $css .= "background-position:" . $bodyPosition . ";";
-    $css .= "background-attachment:" . $bodyAttachment . ";";
-    $css .= "background-size:" . $bodySize . ";";
-    $css .= "}\n";
+    $memberBodyDeclarations = [];
+    if ($bodyOverlay !== 'none') {
+        $memberBodyDeclarations[] = "--af-apui-member-profile-body-overlay:" . $bodyOverlay . ";";
+    }
+    if ($hasMemberProfileBodyImage) {
+        $memberBodyDeclarations[] = "background-image:" . $selectedBodyImage . ";";
+        $memberBodyDeclarations[] = "background-repeat:" . $bodyRepeat . ";";
+        $memberBodyDeclarations[] = "background-position:" . $bodyPosition . ";";
+        $memberBodyDeclarations[] = "background-attachment:" . $bodyAttachment . ";";
+        $memberBodyDeclarations[] = "background-size:" . $bodySize . ";";
+    }
+    if (!empty($memberBodyDeclarations)) {
+        $css .= "body.af-apui-member-profile-page{" . implode('', $memberBodyDeclarations) . "}\n";
+    }
 
-    $css .= "body.af-apui-thread-page{";
-    $css .= "--af-apui-thread-body-overlay:" . $threadBodyOverlay . ";";
-    $css .= "background-image:" . $selectedThreadBodyImage . ";";
-    $css .= "background-repeat:" . $threadBodyRepeat . ";";
-    $css .= "background-position:" . $threadBodyPosition . ";";
-    $css .= "background-attachment:" . $threadBodyAttachment . ";";
-    $css .= "background-size:" . $threadBodySize . ";";
-    $css .= "}\n";
+    $threadBodyDeclarations = [];
+    if ($threadBodyOverlay !== 'none') {
+        $threadBodyDeclarations[] = "--af-apui-thread-body-overlay:" . $threadBodyOverlay . ";";
+    }
+    if ($hasThreadBodyImage) {
+        $threadBodyDeclarations[] = "background-image:" . $selectedThreadBodyImage . ";";
+        $threadBodyDeclarations[] = "background-repeat:" . $threadBodyRepeat . ";";
+        $threadBodyDeclarations[] = "background-position:" . $threadBodyPosition . ";";
+        $threadBodyDeclarations[] = "background-attachment:" . $threadBodyAttachment . ";";
+        $threadBodyDeclarations[] = "background-size:" . $threadBodySize . ";";
+    }
+    if (!empty($threadBodyDeclarations)) {
+        $css .= "body.af-apui-thread-page{" . implode('', $threadBodyDeclarations) . "}\n";
+    }
 
-    $css .= ".af-apui-profile-hero__banner{background-image:var(--af-apui-profile-banner-image, none);}\n";
+    if ($profileBanner !== 'none') {
+        $css .= ".af-apui-profile-hero__banner{background-image:var(--af-apui-profile-banner-image);}\n";
+    }
     $css .= ".af-apui-profile-hero__banner::after{background:var(--af-apui-profile-banner-overlay, linear-gradient(180deg, rgba(8, 12, 24, 0.06) 0%, rgba(8, 12, 24, 0.30) 42%, rgba(8, 12, 24, 0.82) 100%));}\n";
-    $css .= ".af-apui-thread-hero__banner{background-image:var(--af-apui-thread-banner-image, none);}\n";
+
+    if ($threadBanner !== 'none') {
+        $css .= ".af-apui-thread-hero__banner{background-image:var(--af-apui-thread-banner-image);}\n";
+    }
     $css .= ".af-apui-thread-hero__banner::after{background:var(--af-apui-thread-banner-overlay, linear-gradient(180deg, rgba(8, 12, 24, 0.08) 0%, rgba(8, 12, 24, 0.36) 42%, rgba(8, 12, 24, 0.88) 100%));}\n";
 
     if ($memberCss !== '') {
