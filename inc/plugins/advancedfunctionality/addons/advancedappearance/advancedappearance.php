@@ -985,29 +985,78 @@ function af_aa_render_page_css(array $uidsOnPage): string
             continue;
         }
 
-        $css .= $payload['selector'] . '{';
-        foreach ($payload['vars'] as $varName => $varValue) {
+        $selector = (string)($payload['selector'] ?? '');
+        $bodySelector = (string)($payload['body_selector'] ?? '');
+        $threadBodySelector = 'body.af-apui-thread-page.af-aa-user-' . $uid;
+
+        if ($selector === '') {
+            continue;
+        }
+
+        $vars = isset($payload['vars']) && is_array($payload['vars'])
+            ? $payload['vars']
+            : [];
+
+        $css .= $selector . '{';
+        foreach ($vars as $varName => $varValue) {
+            $varName = trim((string)$varName);
+            $varValue = trim((string)$varValue);
+
+            if ($varName === '' || $varValue === '') {
+                continue;
+            }
+
             $css .= $varName . ':' . $varValue . ';';
         }
         $css .= "}\n";
 
-        $css .= $payload['body_selector'] . '{';
-        $css .= '--af-apui-member-profile-body-overlay:' . $payload['body']['overlay'] . ';';
-        $css .= 'background-image:' . $payload['body']['image'] . ';';
-        $css .= 'background-repeat:' . $payload['body']['repeat'] . ';';
-        $css .= 'background-position:' . $payload['body']['position'] . ';';
-        $css .= 'background-attachment:' . $payload['body']['attachment'] . ';';
-        $css .= 'background-size:' . $payload['body']['size'] . ';';
-        $css .= "}\n";
+        $body = isset($payload['body']) && is_array($payload['body'])
+            ? $payload['body']
+            : [];
 
-        $css .= 'body.af-apui-thread-page.af-aa-user-' . $uid . '{';
-        $css .= '--af-apui-thread-body-overlay:' . $payload['thread_body']['overlay'] . ';';
-        $css .= 'background-image:' . $payload['thread_body']['image'] . ';';
-        $css .= 'background-repeat:' . $payload['thread_body']['repeat'] . ';';
-        $css .= 'background-position:' . $payload['thread_body']['position'] . ';';
-        $css .= 'background-attachment:' . $payload['thread_body']['attachment'] . ';';
-        $css .= 'background-size:' . $payload['thread_body']['size'] . ';';
-        $css .= "}\n";
+        $memberBodyDeclarations = [];
+
+        $memberOverlay = trim((string)($body['overlay'] ?? 'none'));
+        if ($memberOverlay !== '' && strtolower($memberOverlay) !== 'none') {
+            $memberBodyDeclarations[] = '--af-apui-member-profile-body-overlay:' . $memberOverlay . ';';
+        }
+
+        $memberImage = trim((string)($body['image'] ?? 'none'));
+        if ($memberImage !== '' && strtolower($memberImage) !== 'none') {
+            $memberBodyDeclarations[] = 'background-image:' . $memberImage . ';';
+            $memberBodyDeclarations[] = 'background-repeat:' . trim((string)($body['repeat'] ?? 'no-repeat')) . ';';
+            $memberBodyDeclarations[] = 'background-position:' . trim((string)($body['position'] ?? 'center center')) . ';';
+            $memberBodyDeclarations[] = 'background-attachment:' . trim((string)($body['attachment'] ?? 'fixed')) . ';';
+            $memberBodyDeclarations[] = 'background-size:' . trim((string)($body['size'] ?? 'cover')) . ';';
+        }
+
+        if ($bodySelector !== '' && !empty($memberBodyDeclarations)) {
+            $css .= $bodySelector . '{' . implode('', $memberBodyDeclarations) . "}\n";
+        }
+
+        $threadBody = isset($payload['thread_body']) && is_array($payload['thread_body'])
+            ? $payload['thread_body']
+            : [];
+
+        $threadBodyDeclarations = [];
+
+        $threadOverlay = trim((string)($threadBody['overlay'] ?? 'none'));
+        if ($threadOverlay !== '' && strtolower($threadOverlay) !== 'none') {
+            $threadBodyDeclarations[] = '--af-apui-thread-body-overlay:' . $threadOverlay . ';';
+        }
+
+        $threadImage = trim((string)($threadBody['image'] ?? 'none'));
+        if ($threadImage !== '' && strtolower($threadImage) !== 'none') {
+            $threadBodyDeclarations[] = 'background-image:' . $threadImage . ';';
+            $threadBodyDeclarations[] = 'background-repeat:' . trim((string)($threadBody['repeat'] ?? 'no-repeat')) . ';';
+            $threadBodyDeclarations[] = 'background-position:' . trim((string)($threadBody['position'] ?? 'center center')) . ';';
+            $threadBodyDeclarations[] = 'background-attachment:' . trim((string)($threadBody['attachment'] ?? 'fixed')) . ';';
+            $threadBodyDeclarations[] = 'background-size:' . trim((string)($threadBody['size'] ?? 'cover')) . ';';
+        }
+
+        if (!empty($threadBodyDeclarations)) {
+            $css .= $threadBodySelector . '{' . implode('', $threadBodyDeclarations) . "}\n";
+        }
 
         if (!empty($payload['custom_css_blocks']) && is_array($payload['custom_css_blocks'])) {
             foreach ($payload['custom_css_blocks'] as $cssBlock) {
