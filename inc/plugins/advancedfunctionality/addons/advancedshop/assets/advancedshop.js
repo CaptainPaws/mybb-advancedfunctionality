@@ -318,8 +318,13 @@
     if(!pop){ return; }
     var actions = '';
     if(isVisualItem){
-      actions += '<button type="button" class="af-shop-btn" data-af-appearance-apply-btn data-inv-id="' + escapeHtml(String(invId)) + '">' + (activeApplied ? 'Активен' : 'Активировать') + '</button>';
-      actions += '<button type="button" class="af-shop-btn" data-af-appearance-unapply-btn data-target-key="' + escapeHtml(slotNode.getAttribute('data-appearance-target') || '') + '"' + (activeApplied ? '' : ' disabled') + '>Снять</button>';
+      var appearanceTarget = slotNode.getAttribute('data-appearance-target') || '';
+      if(appearanceTarget === 'apui_thread_pack'){
+        actions += '<div class="af-item-popover__hint">Пресет темы выбирается только при создании темы или редактировании первого поста.</div>';
+      } else {
+        actions += '<button type="button" class="af-shop-btn" data-af-appearance-apply-btn data-inv-id="' + escapeHtml(String(invId)) + '">' + (activeApplied ? 'Активен' : 'Активировать') + '</button>';
+        actions += '<button type="button" class="af-shop-btn" data-af-appearance-unapply-btn data-target-key="' + escapeHtml(appearanceTarget) + '"' + (activeApplied ? '' : ' disabled') + '>Снять</button>';
+      }
     } else {
       actions += '<button type="button" class="af-shop-btn" data-af-equip-btn data-can-equip="' + (canEquip ? '1' : '0') + '" data-inv-id="' + escapeHtml(String(invId)) + '" data-slot-code="' + escapeHtml(equipSlot) + '">Надеть</button>';
       actions += '<button type="button" class="af-shop-btn" data-af-sell-btn>Продать</button>';

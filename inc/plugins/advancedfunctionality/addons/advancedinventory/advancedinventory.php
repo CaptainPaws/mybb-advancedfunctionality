@@ -3061,6 +3061,7 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
     $appearanceTarget = trim((string)($item['appearance_target'] ?? ($appearanceInfo['target_key'] ?? ($appearanceMeta['target_key'] ?? ''))));
     $appearanceSlug = trim((string)($item['appearance_slug'] ?? ($appearanceMeta['slug'] ?? '')));
     $appearancePresetId = (int)($item['appearance_preset_id'] ?? ($appearanceInfo['preset_id'] ?? ($appearanceMeta['preset_id'] ?? 0)));
+    $isThreadAppearance = ($appearanceTarget === 'apui_thread_pack');
 
     $title = trim((string)($item['appearance_title'] ?? ($appearanceMeta['title'] ?? ($item['title'] ?? 'Предмет'))));
     if ($title === '') {
@@ -3102,6 +3103,9 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
     if ($isVisual && $appearancePresetId > 0) {
         $metaRows[] = ['Preset', '#' . $appearancePresetId];
     }
+    if ($isThreadAppearance) {
+        $metaRows[] = ['Применение', 'Выбор доступен только при создании темы или редактировании первого поста'];
+    }
     if ($isVisual && $appearanceSlug !== '') {
         $metaRows[] = ['Slug', $appearanceSlug];
     }
@@ -3136,8 +3140,12 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
     $actions = '';
     if ($canEditOwner) {
         if ($isVisual) {
-            $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActiveAppearance ? ' disabled="disabled"' : '') . '>Активировать</button>';
-            $actions .= '<button type="button" class="af-inv-action" data-af-appearance-unapply-btn data-target-key="' . htmlspecialchars_uni($appearanceTarget) . '"' . (!$isActiveAppearance ? ' disabled="disabled"' : '') . '>Снять</button>';
+            if ($isThreadAppearance) {
+                $actions .= '<div class="af-inv-card-status is-inactive">Пресет темы выбирается только в форме создания темы или при редактировании первого поста.</div>';
+            } else {
+                $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActiveAppearance ? ' disabled="disabled"' : '') . '>Активировать</button>';
+                $actions .= '<button type="button" class="af-inv-action" data-af-appearance-unapply-btn data-target-key="' . htmlspecialchars_uni($appearanceTarget) . '"' . (!$isActiveAppearance ? ' disabled="disabled"' : '') . '>Снять</button>';
+            }
         } else {
             if ($equippedSlot !== '') {
                 if (af_inv_is_consumable_item($item)) {
@@ -3266,8 +3274,12 @@ function af_advinv_render_tab_cards(array $items, bool $canManage, bool $allowEq
                 . ($isActive ? 'Активен' : 'Не активен')
                 . '</div>';
 
-            $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActive ? ' disabled="disabled"' : '') . '>Активировать</button>';
-            $actions .= '<button type="button" class="af-inv-action" data-af-appearance-unapply-btn data-target-key="' . htmlspecialchars_uni($appearanceTarget) . '"' . (!$isActive ? ' disabled="disabled"' : '') . '>Снять</button>';
+            if ($appearanceTarget === 'apui_thread_pack') {
+                $statusHtml = '<div class="af-inv-card-status is-inactive">Пресет темы выбирается в newthread.php / editpost.php.</div>';
+            } else {
+                $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActive ? ' disabled="disabled"' : '') . '>Активировать</button>';
+                $actions .= '<button type="button" class="af-inv-action" data-af-appearance-unapply-btn data-target-key="' . htmlspecialchars_uni($appearanceTarget) . '"' . (!$isActive ? ' disabled="disabled"' : '') . '>Снять</button>';
+            }
             $sale = af_advinv_item_sale_profile($item, 1);
             $actions .= '<button type="button" class="af-inv-action" data-action="sell" data-item-id="' . $itemId . '"' . (empty($sale['can_sell']) ? ' disabled="disabled"' : '') . '>Продать</button>';
 
