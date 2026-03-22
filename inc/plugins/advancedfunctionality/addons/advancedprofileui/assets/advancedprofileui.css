@@ -305,6 +305,63 @@
   margin-top: 18px;
 }
 
+.af-apui-tab-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.af-apui-tab-card {
+  display: grid;
+  gap: 14px;
+}
+
+.af-apui-tab-card__head {
+  display: grid;
+  gap: 6px;
+}
+
+.af-apui-tab-card__head p {
+  margin: 0;
+  color: rgba(216, 221, 243, .78);
+  line-height: 1.6;
+}
+
+.af-apui-tab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.af-apui-postbit-action--profile-tab {
+  min-width: 0;
+}
+
+.af-apui-tab-card__body,
+.af-apui-tab-card__aside {
+  min-width: 0;
+}
+
+.af-apui-tab-embed {
+  position: relative;
+  min-height: 720px;
+  border: 1px solid #30364a;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #111522;
+}
+
+.af-apui-tab-embed__frame {
+  display: block;
+  width: 100%;
+  min-height: 720px;
+  border: 0;
+  background: transparent;
+}
+
+.af-apui-empty--soft {
+  margin-top: 0;
+}
+
 .af-apui-postbit-wrapper {
   margin-bottom: 14px;
 }
