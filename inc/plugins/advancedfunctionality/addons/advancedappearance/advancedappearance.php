@@ -861,11 +861,12 @@ function af_aa_render_page_css(array $uidsOnPage): string
         $css .= "}\n";
 
         $css .= $payload['body_selector'] . '{';
-        $css .= 'background-image:' . $payload['body']['overlay'] . ',' . $payload['body']['image'] . ';';
-        $css .= 'background-repeat:no-repeat,' . $payload['body']['repeat'] . ';';
-        $css .= 'background-position:center center,' . $payload['body']['position'] . ';';
-        $css .= 'background-attachment:scroll,' . $payload['body']['attachment'] . ';';
-        $css .= 'background-size:cover,' . $payload['body']['size'] . ';';
+        $css .= '--af-apui-member-profile-body-overlay:' . $payload['body']['overlay'] . ';';
+        $css .= 'background-image:' . $payload['body']['image'] . ';';
+        $css .= 'background-repeat:' . $payload['body']['repeat'] . ';';
+        $css .= 'background-position:' . $payload['body']['position'] . ';';
+        $css .= 'background-attachment:' . $payload['body']['attachment'] . ';';
+        $css .= 'background-size:' . $payload['body']['size'] . ';';
         $css .= "}\n";
 
         if (!empty($payload['custom_css_blocks']) && is_array($payload['custom_css_blocks'])) {

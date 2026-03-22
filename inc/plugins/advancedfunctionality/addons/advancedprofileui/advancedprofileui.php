@@ -1564,11 +1564,12 @@ function af_apui_build_runtime_style_tag(): string
     $css .= "}\n";
 
     $css .= "body.af-apui-member-profile-page{";
-    $css .= "background-image:" . $bodyOverlay . "," . $selectedBodyImage . ";";
-    $css .= "background-repeat:no-repeat," . $bodyRepeat . ";";
-    $css .= "background-position:center center," . $bodyPosition . ";";
-    $css .= "background-attachment:scroll," . $bodyAttachment . ";";
-    $css .= "background-size:cover," . $bodySize . ";";
+    $css .= "--af-apui-member-profile-body-overlay:" . $bodyOverlay . ";";
+    $css .= "background-image:" . $selectedBodyImage . ";";
+    $css .= "background-repeat:" . $bodyRepeat . ";";
+    $css .= "background-position:" . $bodyPosition . ";";
+    $css .= "background-attachment:" . $bodyAttachment . ";";
+    $css .= "background-size:" . $bodySize . ";";
     $css .= "}\n";
 
     $css .= ".af-apui-profile-hero__banner{background-image:var(--af-apui-profile-banner-image, none);}\n";

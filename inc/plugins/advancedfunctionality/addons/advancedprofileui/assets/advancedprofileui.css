@@ -1,3 +1,28 @@
+body.af-apui-member-profile-page {
+  position: relative;
+  isolation: isolate;
+  --af-apui-member-profile-body-overlay: none;
+}
+
+body.af-apui-member-profile-page::before {
+  content: "";
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  height: min(44vh, 420px);
+  background-image: var(--af-apui-member-profile-body-overlay, none);
+  background-repeat: no-repeat;
+  background-position: center bottom;
+  background-size: 100% 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body.af-apui-member-profile-page > * {
+  position: relative;
+  z-index: 1;
+}
+
 .af-apui-profile-page {
   position: relative;
   z-index: 1;
@@ -1362,6 +1387,11 @@ af-apf-postbit-field {
 
 /* ---------- SMARTPHONES: PROFILE ---------- */
 @media (max-width: 767px) {
+  body.af-apui-member-profile-page::before {
+    height: min(36vh, 280px);
+    background-size: cover;
+  }
+
   .af-apui-profile-page {
     margin: 10px;
     gap: 12px;
