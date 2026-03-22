@@ -185,6 +185,14 @@ function af_aa_register_hooks(): void
     // Сбор uid на странице профиля
     $plugins->add_hook('member_profile_end', 'af_aa_collect_uid_from_member_profile', 50);
 
+    // Выбор пресета темы в формах создания/редактирования темы.
+    $plugins->add_hook('newthread_start', 'af_aa_newthread_start', 50);
+    $plugins->add_hook('editpost_start', 'af_aa_editpost_start', 50);
+    $plugins->add_hook('newthread_do_newthread_start', 'af_aa_newthread_do_start', 50);
+    $plugins->add_hook('editpost_do_editpost_start', 'af_aa_editpost_do_start', 50);
+    $plugins->add_hook('newthread_do_newthread_end', 'af_aa_newthread_do_end', 50);
+    $plugins->add_hook('editpost_do_editpost_end', 'af_aa_editpost_do_end', 50);
+
     // Финальный инжект runtime CSS в готовую страницу
     $plugins->add_hook('pre_output_page', 'af_aa_pre_output_page', 1);
 }
@@ -255,6 +263,478 @@ function af_aa_collect_uid_from_member_profile(): void
     $GLOBALS['af_aa_uids_on_page'][$uid] = $uid;
 }
 
+function af_aa_thread_selector_field_name(): string
+{
+    return 'af_aa_thread_preset_id';
+}
+
+function af_aa_reset_thread_form_state(): void
+{
+    $GLOBALS['af_aa_thread_preset_html'] = '';
+    $GLOBALS['af_aa_thread_preset_selected'] = 0;
+    $GLOBALS['af_aa_thread_preset_options'] = [];
+}
+
+function af_aa_get_post_thread_context_by_pid(int $pid): array
+{
+    global $db;
+
+    $pid = (int)$pid;
+    if ($pid <= 0) {
+        return [];
+    }
+
+    $query = $db->query(
+        "SELECT p.pid, p.tid, p.uid AS post_uid, t.fid, t.uid AS thread_uid, t.firstpost"
+        . " FROM " . TABLE_PREFIX . "posts p"
+        . " LEFT JOIN " . TABLE_PREFIX . "threads t ON (t.tid=p.tid)"
+        . " WHERE p.pid='" . $pid . "'"
+        . " LIMIT 1"
+    );
+    $row = $db->fetch_array($query);
+    if (!is_array($row) || empty($row)) {
+        return [];
+    }
+
+    $row['pid'] = (int)($row['pid'] ?? 0);
+    $row['tid'] = (int)($row['tid'] ?? 0);
+    $row['fid'] = (int)($row['fid'] ?? 0);
+    $row['post_uid'] = (int)($row['post_uid'] ?? 0);
+    $row['thread_uid'] = (int)($row['thread_uid'] ?? 0);
+    $row['firstpost'] = (int)($row['firstpost'] ?? 0);
+    $row['is_first'] = ($row['pid'] > 0 && $row['firstpost'] > 0 && $row['pid'] === $row['firstpost']);
+
+    return $row;
+}
+
+function af_aa_get_thread_row(int $tid): array
+{
+    global $db;
+
+    $tid = (int)$tid;
+    if ($tid <= 0) {
+        return [];
+    }
+
+    $row = $db->fetch_array($db->simple_select('threads', '*', "tid='" . $tid . "'", ['limit' => 1]));
+    if (!is_array($row) || empty($row)) {
+        return [];
+    }
+
+    $row['tid'] = (int)($row['tid'] ?? 0);
+    $row['uid'] = (int)($row['uid'] ?? 0);
+    $row['fid'] = (int)($row['fid'] ?? 0);
+    $row['firstpost'] = (int)($row['firstpost'] ?? 0);
+
+    return $row;
+}
+
+function af_aa_is_thread_author(int $uid, array $thread): bool
+{
+    return $uid > 0 && $uid === (int)($thread['uid'] ?? 0);
+}
+
+function af_aa_get_inventory_owned_thread_presets(int $uid): array
+{
+    $uid = (int)$uid;
+    if ($uid <= 0) {
+        return [];
+    }
+
+    if (!function_exists('af_inv_get_items') || !function_exists('af_advinv_resolve_appearance_item')) {
+        $invBootstrap = AF_ADDONS . 'advancedinventory/advancedinventory.php';
+        if (is_file($invBootstrap)) {
+            require_once $invBootstrap;
+        }
+    }
+
+    if (!function_exists('af_inv_get_items') || !function_exists('af_advinv_resolve_appearance_item')) {
+        return [];
+    }
+
+    $itemsPayload = af_inv_get_items($uid, [
+        'page' => 1,
+        'perPage' => 500,
+        'enrich' => true,
+    ]);
+
+    $presets = [];
+    foreach ((array)($itemsPayload['items'] ?? []) as $item) {
+        $appearanceInfo = (array)af_advinv_resolve_appearance_item((array)$item);
+        $appearanceMeta = is_array($appearanceInfo['appearance_meta'] ?? null)
+            ? (array)$appearanceInfo['appearance_meta']
+            : [];
+
+        $targetKey = trim((string)($item['appearance_target'] ?? ($appearanceInfo['target_key'] ?? ($appearanceMeta['target_key'] ?? ''))));
+        if ($targetKey !== AF_AA_TARGET_APUI_THREAD_PACK) {
+            continue;
+        }
+
+        $presetId = (int)($item['appearance_preset_id'] ?? ($appearanceInfo['preset_id'] ?? ($appearanceMeta['preset_id'] ?? 0)));
+        if ($presetId <= 0) {
+            continue;
+        }
+
+        $preset = af_aa_get_preset_by_id($presetId);
+        if (empty($preset) || (string)($preset['target_key'] ?? '') !== AF_AA_TARGET_APUI_THREAD_PACK) {
+            continue;
+        }
+
+        $presets[$presetId] = $preset;
+    }
+
+    uasort($presets, static function (array $a, array $b): int {
+        $sort = ((int)($a['sortorder'] ?? 0)) <=> ((int)($b['sortorder'] ?? 0));
+        if ($sort !== 0) {
+            return $sort;
+        }
+
+        return strcmp((string)($a['title'] ?? ''), (string)($b['title'] ?? ''));
+    });
+
+    return $presets;
+}
+
+function af_aa_user_owns_thread_preset(int $uid, int $presetId): bool
+{
+    $uid = (int)$uid;
+    $presetId = (int)$presetId;
+
+    if ($uid <= 0 || $presetId <= 0) {
+        return false;
+    }
+
+    $presets = af_aa_get_inventory_owned_thread_presets($uid);
+    return isset($presets[$presetId]);
+}
+
+function af_aa_get_valid_thread_preset(int $tid): array
+{
+    $tid = (int)$tid;
+    if ($tid <= 0) {
+        return [];
+    }
+
+    $assignment = af_aa_get_active_assignment('thread', $tid, AF_AA_TARGET_APUI_THREAD_PACK);
+    if (empty($assignment)) {
+        return [];
+    }
+
+    $thread = af_aa_get_thread_row($tid);
+    if (empty($thread)) {
+        return [];
+    }
+
+    $presetId = (int)($assignment['preset_id'] ?? 0);
+    if ($presetId <= 0 || !af_aa_user_owns_thread_preset((int)($thread['uid'] ?? 0), $presetId)) {
+        return [];
+    }
+
+    $preset = af_aa_get_preset_by_id($presetId);
+    if (empty($preset) || (string)($preset['target_key'] ?? '') !== AF_AA_TARGET_APUI_THREAD_PACK) {
+        return [];
+    }
+
+    return [
+        'assignment' => $assignment,
+        'preset' => $preset,
+        'thread' => $thread,
+    ];
+}
+
+function af_aa_get_thread_preset_settings(int $tid, array $defaults): array
+{
+    $resolved = af_aa_get_valid_thread_preset($tid);
+    if (empty($resolved['preset'])) {
+        return [];
+    }
+
+    return [
+        'preset' => $resolved['preset'],
+        'settings' => af_aa_decode_and_sanitize_preset_settings((string)($resolved['preset']['settings_json'] ?? ''), $defaults, AF_AA_TARGET_APUI_THREAD_PACK),
+        'assignment' => (array)($resolved['assignment'] ?? []),
+        'thread' => (array)($resolved['thread'] ?? []),
+    ];
+}
+
+function af_aa_upsert_thread_assignment(int $tid, int $uid, int $presetId): void
+{
+    global $db;
+
+    $tid = (int)$tid;
+    $uid = (int)$uid;
+    $presetId = (int)$presetId;
+
+    if ($tid <= 0 || $uid <= 0) {
+        return;
+    }
+
+    if ($presetId <= 0) {
+        $db->delete_query(AF_AA_ASSIGNMENTS_TABLE_NAME, "entity_type='thread' AND entity_id='" . $tid . "' AND target_key='" . $db->escape_string(AF_AA_TARGET_APUI_THREAD_PACK) . "'");
+        unset($GLOBALS['af_aa_assignment_cache_runtime']['thread:' . $tid . ':' . AF_AA_TARGET_APUI_THREAD_PACK]);
+        return;
+    }
+
+    $existing = af_aa_get_active_assignment('thread', $tid, AF_AA_TARGET_APUI_THREAD_PACK);
+    $data = [
+        'entity_type' => 'thread',
+        'entity_id' => $tid,
+        'target_key' => AF_AA_TARGET_APUI_THREAD_PACK,
+        'preset_id' => $presetId,
+        'is_enabled' => 1,
+        'updated_at' => TIME_NOW,
+    ];
+
+    if (!empty($existing['id'])) {
+        $db->update_query(AF_AA_ASSIGNMENTS_TABLE_NAME, $data, "id='" . (int)$existing['id'] . "'");
+    } else {
+        $data['created_at'] = TIME_NOW;
+        $db->insert_query(AF_AA_ASSIGNMENTS_TABLE_NAME, $data);
+    }
+
+    unset($GLOBALS['af_aa_assignment_cache_runtime']['thread:' . $tid . ':' . AF_AA_TARGET_APUI_THREAD_PACK]);
+}
+
+function af_aa_resolve_posted_thread_preset_id(array $thread, int $actorUid, ?int $fallbackPresetId = null): int
+{
+    global $mybb;
+
+    $fallback = $fallbackPresetId === null ? (int)($mybb->input[af_aa_thread_selector_field_name()] ?? 0) : (int)$fallbackPresetId;
+    $selectedPresetId = isset($mybb->input[af_aa_thread_selector_field_name()])
+        ? (int)$mybb->get_input(af_aa_thread_selector_field_name(), MyBB::INPUT_INT)
+        : $fallback;
+
+    if ($selectedPresetId <= 0) {
+        return 0;
+    }
+
+    if (!af_aa_is_thread_author($actorUid, $thread)) {
+        return 0;
+    }
+
+    $preset = af_aa_get_preset_by_id($selectedPresetId);
+    if (empty($preset) || (string)($preset['target_key'] ?? '') !== AF_AA_TARGET_APUI_THREAD_PACK) {
+        return 0;
+    }
+
+    return af_aa_user_owns_thread_preset($actorUid, $selectedPresetId) ? $selectedPresetId : 0;
+}
+
+function af_aa_build_thread_preset_select_html(int $uid, int $selectedPresetId): string
+{
+    $options = ['<option value="0">По умолчанию</option>'];
+    $presets = af_aa_get_inventory_owned_thread_presets($uid);
+
+    foreach ($presets as $presetId => $preset) {
+        $selected = ((int)$selectedPresetId === (int)$presetId) ? ' selected="selected"' : '';
+        $options[] = '<option value="' . (int)$presetId . '"' . $selected . '>' . htmlspecialchars_uni((string)($preset['title'] ?? ('Preset #' . $presetId))) . '</option>';
+    }
+
+    return '<tr class="af-aa-thread-preset-row">'
+        . '<td class="trow2"><strong>Пресет темы</strong><br /><span class="smalltext">Выбери оформление этой темы. Доступны только купленные пресеты темы.</span></td>'
+        . '<td class="trow2"><select name="' . htmlspecialchars_uni(af_aa_thread_selector_field_name()) . '" class="select">' . implode('', $options) . '</select></td>'
+        . '</tr>';
+}
+
+function af_aa_prepare_thread_preset_form(int $uid, int $selectedPresetId, bool $allowed): void
+{
+    af_aa_reset_thread_form_state();
+
+    if ($uid <= 0 || !$allowed) {
+        return;
+    }
+
+    $GLOBALS['af_aa_thread_preset_selected'] = max(0, (int)$selectedPresetId);
+    $GLOBALS['af_aa_thread_preset_html'] = af_aa_build_thread_preset_select_html($uid, (int)$selectedPresetId);
+}
+
+function af_aa_inject_thread_preset_field(string $page): string
+{
+    $html = trim((string)($GLOBALS['af_aa_thread_preset_html'] ?? ''));
+    if ($html === '') {
+        return $page;
+    }
+
+    if (strpos($page, 'af-aa-thread-preset-row') !== false) {
+        return $page;
+    }
+
+    $pattern = '~(<td\s+class=(?:["\'])trow2(?:["\'])\s*>\s*\{\$prefixselect\}\s*<input\b[^>]*\bname=(?:["\'])subject(?:["\'])[^>]*>\s*</td>\s*</tr>)~is';
+    $updated = preg_replace($pattern, '$1' . "\n" . $html, $page, 1, $count);
+    if ($count > 0 && is_string($updated)) {
+        return $updated;
+    }
+
+    foreach (['</tbody>', '</table>', '</form>'] as $anchor) {
+        $pos = stripos($page, $anchor);
+        if ($pos !== false) {
+            return substr($page, 0, $pos) . $html . "\n" . substr($page, $pos);
+        }
+    }
+
+    return $page . "\n" . $html;
+}
+
+function af_aa_newthread_start(): void
+{
+    global $mybb;
+
+    af_aa_reset_thread_form_state();
+
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    if ($uid <= 0) {
+        return;
+    }
+
+    $selectedPresetId = isset($mybb->input[af_aa_thread_selector_field_name()])
+        ? (int)$mybb->get_input(af_aa_thread_selector_field_name(), MyBB::INPUT_INT)
+        : 0;
+
+    $selectedPresetId = af_aa_resolve_posted_thread_preset_id(['uid' => $uid], $uid, $selectedPresetId);
+    af_aa_prepare_thread_preset_form($uid, $selectedPresetId, true);
+}
+
+function af_aa_editpost_start(): void
+{
+    global $mybb, $pid;
+
+    af_aa_reset_thread_form_state();
+
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    $pid = isset($pid) ? (int)$pid : (int)$mybb->get_input('pid', MyBB::INPUT_INT);
+    if ($uid <= 0 || $pid <= 0) {
+        return;
+    }
+
+    $context = af_aa_get_post_thread_context_by_pid($pid);
+    if (empty($context['is_first']) || !af_aa_is_thread_author($uid, ['uid' => (int)($context['thread_uid'] ?? 0)])) {
+        return;
+    }
+
+    $currentAssignment = af_aa_get_valid_thread_preset((int)($context['tid'] ?? 0));
+    $currentPresetId = (int)($currentAssignment['preset']['id'] ?? 0);
+    $selectedPresetId = isset($mybb->input[af_aa_thread_selector_field_name()])
+        ? af_aa_resolve_posted_thread_preset_id(['uid' => (int)($context['thread_uid'] ?? 0)], $uid, (int)$mybb->get_input(af_aa_thread_selector_field_name(), MyBB::INPUT_INT))
+        : $currentPresetId;
+
+    af_aa_prepare_thread_preset_form($uid, $selectedPresetId, true);
+}
+
+function af_aa_newthread_do_start(): void
+{
+    af_aa_newthread_start();
+}
+
+function af_aa_editpost_do_start(): void
+{
+    af_aa_editpost_start();
+}
+
+function af_aa_newthread_do_end(): void
+{
+    global $mybb, $tid;
+
+    $tid = (int)($tid ?? 0);
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    if ($tid <= 0 || $uid <= 0) {
+        return;
+    }
+
+    $thread = af_aa_get_thread_row($tid);
+    if (empty($thread) || !af_aa_is_thread_author($uid, $thread)) {
+        return;
+    }
+
+    $presetId = af_aa_resolve_posted_thread_preset_id($thread, $uid);
+    af_aa_upsert_thread_assignment($tid, $uid, $presetId);
+}
+
+function af_aa_editpost_do_end(): void
+{
+    global $mybb, $pid, $post, $thread, $tid;
+
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    $pid = isset($pid) ? (int)$pid : (int)$mybb->get_input('pid', MyBB::INPUT_INT);
+    if ($uid <= 0 || $pid <= 0) {
+        return;
+    }
+
+    $context = af_aa_get_post_thread_context_by_pid($pid);
+    if (empty($context['is_first'])) {
+        return;
+    }
+
+    $threadRow = is_array($thread ?? null) && !empty($thread) ? $thread : af_aa_get_thread_row((int)($context['tid'] ?? ($tid ?? 0)));
+    if (empty($threadRow) || !af_aa_is_thread_author($uid, $threadRow)) {
+        return;
+    }
+
+    $presetId = af_aa_resolve_posted_thread_preset_id($threadRow, $uid);
+    af_aa_upsert_thread_assignment((int)($threadRow['tid'] ?? 0), $uid, $presetId);
+}
+
+function af_aa_render_thread_runtime_css(int $tid): string
+{
+    $defaults = af_aa_get_apui_defaults();
+    $threadPreset = af_aa_get_thread_preset_settings($tid, $defaults);
+    if (empty($threadPreset['settings'])) {
+        return '';
+    }
+
+    $settings = (array)$threadPreset['settings'];
+    $threadMode = af_aa_sanitize_bg_mode((string)($settings['thread_body_bg_mode'] ?? 'cover'), 'cover');
+    $selectedThreadBodyImage = $threadMode === 'tile'
+        ? af_aa_css_url_value((string)($settings['thread_body_tile_url'] ?? ''))
+        : af_aa_css_url_value((string)($settings['thread_body_cover_url'] ?? ''));
+
+    if ($selectedThreadBodyImage === 'none') {
+        $selectedThreadBodyImage = $threadMode === 'tile'
+            ? af_aa_css_url_value((string)($settings['thread_body_cover_url'] ?? ''))
+            : af_aa_css_url_value((string)($settings['thread_body_tile_url'] ?? ''));
+
+        if ($selectedThreadBodyImage !== 'none') {
+            $threadMode = $threadMode === 'tile' ? 'cover' : 'tile';
+        }
+    }
+
+    $css = '';
+    $threadBodyDeclarations = [];
+    $threadOverlay = trim((string)($settings['thread_body_overlay'] ?? 'none'));
+    if ($threadOverlay !== '' && strtolower($threadOverlay) !== 'none') {
+        $threadBodyDeclarations[] = '--af-apui-thread-body-overlay:' . af_aa_css_raw_value($threadOverlay, 'none') . ';';
+    }
+    if ($selectedThreadBodyImage !== 'none') {
+        $threadBodyDeclarations[] = 'background-image:' . $selectedThreadBodyImage . ';';
+        $threadBodyDeclarations[] = 'background-repeat:' . ($threadMode === 'tile' ? 'repeat' : 'no-repeat') . ';';
+        $threadBodyDeclarations[] = 'background-position:' . ($threadMode === 'tile' ? 'left top' : 'center center') . ';';
+        $threadBodyDeclarations[] = 'background-attachment:' . ($threadMode === 'tile' ? 'scroll' : 'fixed') . ';';
+        $threadBodyDeclarations[] = 'background-size:' . ($threadMode === 'tile' ? 'auto' : 'cover') . ';';
+    }
+    if ($threadBodyDeclarations) {
+        $css .= 'body.af-apui-thread-page{' . implode('', $threadBodyDeclarations) . "}\n";
+    }
+
+    $threadBanner = af_aa_css_url_value((string)($settings['thread_banner_url'] ?? ''));
+    $threadBannerOverlay = af_aa_css_raw_value((string)($settings['thread_banner_overlay'] ?? 'none'), 'none');
+    if ($threadBanner !== 'none') {
+        $css .= '.af-apui-thread-hero__banner{background-image:' . $threadBanner . ";}\n";
+    }
+    if ($threadBannerOverlay !== 'none') {
+        $css .= '.af-apui-thread-hero__banner::after{background:' . $threadBannerOverlay . ";}\n";
+    }
+
+    $customCss = trim((string)($settings['custom_css'] ?? ''));
+    if ($customCss !== '') {
+        $payload = [
+            'selector' => 'body.af-apui-thread-page',
+            'body_selector' => 'body.af-apui-thread-page',
+        ];
+        $css .= af_aa_render_scoped_custom_css($customCss, $payload);
+    }
+
+    return $css !== '' ? '<style id="af-aa-thread-runtime-css">' . $css . '</style>' . "\n" : '';
+}
+
 function af_aa_pre_output_page(string &$page): void
 {
     if (defined('IN_ADMINCP') || $page === '') {
@@ -293,16 +773,24 @@ function af_aa_pre_output_page(string &$page): void
         }
     }
 
-    if (!$uids) {
-        return;
+    $runtimeCss = $uids ? af_aa_render_page_css(array_values($uids)) : '';
+
+    if (defined('THIS_SCRIPT') && (string)THIS_SCRIPT === 'showthread.php') {
+        global $thread, $tid, $mybb;
+
+        $threadId = (int)($thread['tid'] ?? ($tid ?? $mybb->get_input('tid', MyBB::INPUT_INT)));
+        if ($threadId > 0) {
+            $runtimeCss .= af_aa_render_thread_runtime_css($threadId);
+        }
     }
 
-    $runtimeCss = af_aa_render_page_css(array_values($uids));
-    if ($runtimeCss === '') {
-        return;
+    if ($runtimeCss !== '') {
+        $page = af_aa_inject_runtime_css($page, $runtimeCss);
     }
 
-    $page = af_aa_inject_runtime_css($page, $runtimeCss);
+    if (defined('THIS_SCRIPT') && ((string)THIS_SCRIPT === 'newthread.php' || (string)THIS_SCRIPT === 'editpost.php')) {
+        $page = af_aa_inject_thread_preset_field($page);
+    }
 }
 
 function af_aa_strip_asset_includes(string $page): string
