@@ -137,19 +137,25 @@
   function updatePlaqueIcon(root, settings) {
     if (!root) return;
 
-    var iconNode = root.querySelector('.af-apui-postbit-plaque__icon');
+    var iconNode = root.querySelector('.af-apui-postbit-plaque__media');
     if (!iconNode) return;
 
-    var iconUrl = trim(settings.postbit_plaque_icon_url || '');
+    var imageUrl = trim(settings.postbit_plaque_media_image_url || settings.postbit_plaque_icon_url || '');
+    var iconClass = trim(settings.postbit_plaque_media_icon_class || '');
     var glyph = trim(settings.postbit_plaque_icon_glyph || '★') || '★';
 
-    if (iconUrl) {
-      iconNode.innerHTML = '<img class="af-apui-postbit-plaque__icon-image" src="' + iconUrl.replace(/"/g, '&quot;') + '" alt="">';
+    if (imageUrl) {
+      iconNode.innerHTML = '<img class="af-apui-postbit-plaque__media-image" src="' + imageUrl.replace(/"/g, '&quot;') + '" alt="">';
       return;
     }
 
-    iconNode.innerHTML = '<span class="af-apui-postbit-plaque__icon-glyph" aria-hidden="true"></span>';
-    var glyphNode = iconNode.querySelector('.af-apui-postbit-plaque__icon-glyph');
+    if (iconClass) {
+      iconNode.innerHTML = '<i class="af-apui-postbit-plaque__media-icon ' + iconClass.replace(/"/g, '&quot;') + '" aria-hidden="true"></i>';
+      return;
+    }
+
+    iconNode.innerHTML = '<span class="af-apui-postbit-plaque__media-glyph" aria-hidden="true"></span>';
+    var glyphNode = iconNode.querySelector('.af-apui-postbit-plaque__media-glyph');
     if (glyphNode) {
       glyphNode.textContent = glyph;
     }
@@ -187,11 +193,16 @@
 
     setVar(root, '--af-aa-preview-postbit-plaque-image', toCssUrl(settings.postbit_plaque_bg_url || ''));
     setVar(root, '--af-aa-preview-postbit-plaque-overlay', trim(settings.postbit_plaque_overlay || 'linear-gradient(180deg, rgba(55,66,122,.30), rgba(31,38,76,.48))'));
+    setVar(root, '--af-aa-preview-postbit-plaque-media-overlay', trim(settings.postbit_plaque_media_overlay || settings.postbit_plaque_icon_overlay || 'none'));
     setVar(root, '--af-aa-preview-postbit-plaque-icon-bg', trim(settings.postbit_plaque_icon_bg || 'linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08))'));
     setVar(root, '--af-aa-preview-postbit-plaque-icon-overlay', trim(settings.postbit_plaque_icon_overlay || 'none'));
     setVar(root, '--af-aa-preview-postbit-plaque-icon-border', trim(settings.postbit_plaque_icon_border || 'rgba(255,255,255,.18)'));
     setVar(root, '--af-aa-preview-postbit-plaque-icon-color', trim(settings.postbit_plaque_icon_color || '#f6f1cf'));
     setVar(root, '--af-aa-preview-postbit-plaque-icon-size', trim(settings.postbit_plaque_icon_size || '26px'));
+    var titleNode = root.querySelector('.af-apui-postbit-plaque__title');
+    var subtitleNode = root.querySelector('.af-apui-postbit-plaque__subtitle');
+    if (titleNode) titleNode.textContent = trim(settings.postbit_plaque_title || settings.postbit_plaque_title_default || 'Postbit plaque') || 'Postbit plaque';
+    if (subtitleNode) subtitleNode.textContent = trim(settings.postbit_plaque_subtitle || settings.postbit_plaque_subtitle_default || 'Decorative media slot') || 'Decorative media slot';
     updatePlaqueIcon(root, settings);
 
     renderCustomCss(root, settings.custom_css || '');

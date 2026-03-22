@@ -531,6 +531,14 @@ function af_aa_get_apui_defaults(): array
         'postbit_name_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_name_overlay', 'none'), 'none'),
         'postbit_plaque_bg_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('postbit_plaque_bg_url', ''), ''),
         'postbit_plaque_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_plaque_overlay', 'none'), 'none'),
+        'postbit_plaque_media_image_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('postbit_plaque_media_image_url', ''), ''),
+        'postbit_plaque_media_icon_class' => trim((string)af_aa_get_apui_setting('postbit_plaque_media_icon_class', '')),
+        'postbit_plaque_media_overlay' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_plaque_media_overlay', 'none'), 'none'),
+        'postbit_plaque_media_css' => trim((string)af_aa_get_apui_setting('postbit_plaque_media_css', '')),
+        'postbit_plaque_title_default' => trim((string)af_aa_get_apui_setting('postbit_plaque_title_default', 'Profile plaque')),
+        'postbit_plaque_subtitle_default' => trim((string)af_aa_get_apui_setting('postbit_plaque_subtitle_default', 'Decorative media slot')),
+        'postbit_plaque_title' => '',
+        'postbit_plaque_subtitle' => '',
         'postbit_plaque_icon_url' => af_aa_sanitize_image_url(af_aa_get_apui_setting('postbit_plaque_icon_url', ''), ''),
         'postbit_plaque_icon_glyph' => af_aa_sanitize_icon_glyph(af_aa_get_apui_setting('postbit_plaque_icon_glyph', '★'), '★'),
         'postbit_plaque_icon_bg' => af_aa_sanitize_overlay(af_aa_get_apui_setting('postbit_plaque_icon_bg', 'linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08))'), 'linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08))'),
@@ -641,6 +649,14 @@ function af_aa_build_user_css_payload(int $uid): array
         'postbit_name_overlay',
         'postbit_plaque_bg_url',
         'postbit_plaque_overlay',
+        'postbit_plaque_media_image_url',
+        'postbit_plaque_media_icon_class',
+        'postbit_plaque_media_overlay',
+        'postbit_plaque_media_css',
+        'postbit_plaque_title',
+        'postbit_plaque_subtitle',
+        'postbit_plaque_title_default',
+        'postbit_plaque_subtitle_default',
         'postbit_plaque_icon_url',
         'postbit_plaque_icon_glyph',
         'postbit_plaque_icon_bg',
@@ -663,6 +679,14 @@ function af_aa_build_user_css_payload(int $uid): array
     $plaqueKeys = [
         'postbit_plaque_bg_url',
         'postbit_plaque_overlay',
+        'postbit_plaque_media_image_url',
+        'postbit_plaque_media_icon_class',
+        'postbit_plaque_media_overlay',
+        'postbit_plaque_media_css',
+        'postbit_plaque_title',
+        'postbit_plaque_subtitle',
+        'postbit_plaque_title_default',
+        'postbit_plaque_subtitle_default',
         'postbit_plaque_icon_url',
         'postbit_plaque_icon_glyph',
         'postbit_plaque_icon_bg',
@@ -820,6 +844,7 @@ function af_aa_build_user_css_payload(int $uid): array
             '--af-apui-postbit-name-overlay' => af_aa_css_raw_value((string)($postbitSettings['postbit_name_overlay'] ?? 'none'), 'none'),
             '--af-apui-postbit-plaque-bg-image' => af_aa_css_url_value((string)($postbitSettings['postbit_plaque_bg_url'] ?? '')),
             '--af-apui-postbit-plaque-overlay' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_overlay'] ?? 'none'), 'none'),
+            '--af-apui-postbit-plaque-media-overlay' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_media_overlay'] ?? 'none'), 'none'),
             '--af-apui-postbit-plaque-icon-bg' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_icon_bg'] ?? 'linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08))'), 'linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08))'),
             '--af-apui-postbit-plaque-icon-overlay' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_icon_overlay'] ?? 'none'), 'none'),
             '--af-apui-postbit-plaque-icon-border' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_icon_border'] ?? 'rgba(255,255,255,.18)'), 'rgba(255,255,255,.18)'),
@@ -1062,6 +1087,20 @@ function af_aa_decode_and_sanitize_preset_settings(string $json, array $defaults
         (string)($decoded['postbit_plaque_overlay'] ?? ''),
         (string)($defaults['postbit_plaque_overlay'] ?? 'none')
     );
+    $out['postbit_plaque_media_image_url'] = af_aa_sanitize_image_url(
+        (string)($decoded['postbit_plaque_media_image_url'] ?? ''),
+        (string)($defaults['postbit_plaque_media_image_url'] ?? '')
+    );
+    $out['postbit_plaque_media_icon_class'] = trim((string)($decoded['postbit_plaque_media_icon_class'] ?? ($defaults['postbit_plaque_media_icon_class'] ?? '')));
+    $out['postbit_plaque_media_overlay'] = af_aa_sanitize_overlay(
+        (string)($decoded['postbit_plaque_media_overlay'] ?? ''),
+        (string)($defaults['postbit_plaque_media_overlay'] ?? 'none')
+    );
+    $out['postbit_plaque_media_css'] = trim((string)($decoded['postbit_plaque_media_css'] ?? ($defaults['postbit_plaque_media_css'] ?? '')));
+    $out['postbit_plaque_title'] = trim((string)($decoded['postbit_plaque_title'] ?? ($defaults['postbit_plaque_title'] ?? '')));
+    $out['postbit_plaque_subtitle'] = trim((string)($decoded['postbit_plaque_subtitle'] ?? ($defaults['postbit_plaque_subtitle'] ?? '')));
+    $out['postbit_plaque_title_default'] = trim((string)($decoded['postbit_plaque_title_default'] ?? ($defaults['postbit_plaque_title_default'] ?? 'Profile plaque')));
+    $out['postbit_plaque_subtitle_default'] = trim((string)($decoded['postbit_plaque_subtitle_default'] ?? ($defaults['postbit_plaque_subtitle_default'] ?? 'Decorative media slot')));
     $out['postbit_plaque_icon_url'] = af_aa_sanitize_image_url(
         (string)($decoded['postbit_plaque_icon_url'] ?? ''),
         (string)($defaults['postbit_plaque_icon_url'] ?? '')
@@ -2046,7 +2085,31 @@ function af_aa_build_postbit_fields_html(array $settings, bool $includeCustomCss
     $html .= af_aa_front_input('Plaque overlay', 'settings[postbit_plaque_overlay]', (string)$settings['postbit_plaque_overlay'], [
         'data-aa-setting' => 'postbit_plaque_overlay',
     ]);
-    $html .= af_aa_front_input('Plaque icon URL', 'settings[postbit_plaque_icon_url]', (string)$settings['postbit_plaque_icon_url'], [
+    $html .= af_aa_front_input('Plaque media image URL', 'settings[postbit_plaque_media_image_url]', (string)$settings['postbit_plaque_media_image_url'], [
+        'data-aa-setting' => 'postbit_plaque_media_image_url',
+    ]);
+    $html .= af_aa_front_input('Plaque media icon class', 'settings[postbit_plaque_media_icon_class]', (string)$settings['postbit_plaque_media_icon_class'], [
+        'data-aa-setting' => 'postbit_plaque_media_icon_class',
+    ]);
+    $html .= af_aa_front_input('Plaque media overlay', 'settings[postbit_plaque_media_overlay]', (string)$settings['postbit_plaque_media_overlay'], [
+        'data-aa-setting' => 'postbit_plaque_media_overlay',
+    ]);
+    $html .= af_aa_front_input('Plaque media CSS', 'settings[postbit_plaque_media_css]', (string)$settings['postbit_plaque_media_css'], [
+        'data-aa-setting' => 'postbit_plaque_media_css',
+    ]);
+    $html .= af_aa_front_input('Plaque title', 'settings[postbit_plaque_title]', (string)$settings['postbit_plaque_title'], [
+        'data-aa-setting' => 'postbit_plaque_title',
+    ]);
+    $html .= af_aa_front_input('Plaque subtitle', 'settings[postbit_plaque_subtitle]', (string)$settings['postbit_plaque_subtitle'], [
+        'data-aa-setting' => 'postbit_plaque_subtitle',
+    ]);
+    $html .= af_aa_front_input('Plaque default title', 'settings[postbit_plaque_title_default]', (string)$settings['postbit_plaque_title_default'], [
+        'data-aa-setting' => 'postbit_plaque_title_default',
+    ]);
+    $html .= af_aa_front_input('Plaque default subtitle', 'settings[postbit_plaque_subtitle_default]', (string)$settings['postbit_plaque_subtitle_default'], [
+        'data-aa-setting' => 'postbit_plaque_subtitle_default',
+    ]);
+    $html .= af_aa_front_input('Plaque icon URL (legacy fallback)', 'settings[postbit_plaque_icon_url]', (string)$settings['postbit_plaque_icon_url'], [
         'data-aa-setting' => 'postbit_plaque_icon_url',
     ]);
     $html .= af_aa_front_input('Plaque icon glyph', 'settings[postbit_plaque_icon_glyph]', (string)$settings['postbit_plaque_icon_glyph'], [
@@ -2148,7 +2211,31 @@ function af_aa_build_fragment_fields_html(array $settings): string
     $html .= af_aa_front_input('Plaque overlay', 'settings[postbit_plaque_overlay]', (string)$settings['postbit_plaque_overlay'], [
         'data-aa-setting' => 'postbit_plaque_overlay',
     ]);
-    $html .= af_aa_front_input('Plaque icon URL', 'settings[postbit_plaque_icon_url]', (string)$settings['postbit_plaque_icon_url'], [
+    $html .= af_aa_front_input('Plaque media image URL', 'settings[postbit_plaque_media_image_url]', (string)$settings['postbit_plaque_media_image_url'], [
+        'data-aa-setting' => 'postbit_plaque_media_image_url',
+    ]);
+    $html .= af_aa_front_input('Plaque media icon class', 'settings[postbit_plaque_media_icon_class]', (string)$settings['postbit_plaque_media_icon_class'], [
+        'data-aa-setting' => 'postbit_plaque_media_icon_class',
+    ]);
+    $html .= af_aa_front_input('Plaque media overlay', 'settings[postbit_plaque_media_overlay]', (string)$settings['postbit_plaque_media_overlay'], [
+        'data-aa-setting' => 'postbit_plaque_media_overlay',
+    ]);
+    $html .= af_aa_front_input('Plaque media CSS', 'settings[postbit_plaque_media_css]', (string)$settings['postbit_plaque_media_css'], [
+        'data-aa-setting' => 'postbit_plaque_media_css',
+    ]);
+    $html .= af_aa_front_input('Plaque title', 'settings[postbit_plaque_title]', (string)$settings['postbit_plaque_title'], [
+        'data-aa-setting' => 'postbit_plaque_title',
+    ]);
+    $html .= af_aa_front_input('Plaque subtitle', 'settings[postbit_plaque_subtitle]', (string)$settings['postbit_plaque_subtitle'], [
+        'data-aa-setting' => 'postbit_plaque_subtitle',
+    ]);
+    $html .= af_aa_front_input('Plaque default title', 'settings[postbit_plaque_title_default]', (string)$settings['postbit_plaque_title_default'], [
+        'data-aa-setting' => 'postbit_plaque_title_default',
+    ]);
+    $html .= af_aa_front_input('Plaque default subtitle', 'settings[postbit_plaque_subtitle_default]', (string)$settings['postbit_plaque_subtitle_default'], [
+        'data-aa-setting' => 'postbit_plaque_subtitle_default',
+    ]);
+    $html .= af_aa_front_input('Plaque icon URL (legacy fallback)', 'settings[postbit_plaque_icon_url]', (string)$settings['postbit_plaque_icon_url'], [
         'data-aa-setting' => 'postbit_plaque_icon_url',
     ]);
     $html .= af_aa_front_input('Plaque icon glyph', 'settings[postbit_plaque_icon_glyph]', (string)$settings['postbit_plaque_icon_glyph'], [

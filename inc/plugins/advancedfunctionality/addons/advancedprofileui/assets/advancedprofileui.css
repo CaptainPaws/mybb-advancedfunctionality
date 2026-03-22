@@ -702,7 +702,17 @@ body.af-apui-member-profile-page > * {
   letter-spacing: .08em;
 }
 
-.af-apui-postbit-plaque__icon {
+.af-apui-postbit-plaque {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 14px;
+}
+
+.af-apui-postbit-plaque__media {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -712,7 +722,7 @@ body.af-apui-member-profile-page > * {
   height: calc(var(--af-apui-postbit-plaque-icon-size, 26px) + 12px);
   border: 1px solid var(--af-apui-postbit-plaque-icon-border, rgba(255,255,255,.18));
   border-radius: 999px;
-  background-image: var(--af-apui-postbit-plaque-icon-overlay, none), var(--af-apui-postbit-plaque-icon-bg, linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08)));
+  background-image: var(--af-apui-postbit-plaque-media-overlay, var(--af-apui-postbit-plaque-icon-overlay, none)), var(--af-apui-postbit-plaque-icon-bg, linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08)));
   background-position: center center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -720,30 +730,49 @@ body.af-apui-member-profile-page > * {
   overflow: hidden;
 }
 
-.af-apui-postbit-plaque__icon-image,
-.af-apui-postbit-plaque__icon-glyph {
+.af-apui-postbit-plaque__media-image,
+.af-apui-postbit-plaque__media-icon,
+.af-apui-postbit-plaque__media-glyph {
   position: relative;
   z-index: 1;
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.af-apui-postbit-plaque__icon-image {
+.af-apui-postbit-plaque__media-image {
   width: var(--af-apui-postbit-plaque-icon-size, 26px);
   height: var(--af-apui-postbit-plaque-icon-size, 26px);
-  object-fit: contain;
+  object-fit: cover;
+  border-radius: 999px;
 }
 
-.af-apui-postbit-plaque__icon-glyph {
+.af-apui-postbit-plaque__media-icon,
+.af-apui-postbit-plaque__media-glyph {
   color: var(--af-apui-postbit-plaque-icon-color, #f6f1cf);
   font-size: var(--af-apui-postbit-plaque-icon-size, 26px);
   line-height: 1;
   text-shadow: 0 0 10px rgba(0,0,0,.2);
 }
 
-.af-apui-postbit-plaque__label {
+.af-apui-postbit-plaque__content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.af-apui-postbit-plaque__title {
   font-size: 14px;
   line-height: 1.2;
-  opacity: .9;
+  font-weight: 700;
+  color: #fff;
+}
+
+.af-apui-postbit-plaque__subtitle {
+  font-size: 11px;
+  line-height: 1.25;
+  color: rgba(233,237,255,.78);
 }
 
 .af-apui-postbit-content {
