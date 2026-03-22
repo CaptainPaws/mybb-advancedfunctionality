@@ -1071,6 +1071,7 @@ function af_apui_render_info_grid(array $pairs, string $emptyMessage = ''): stri
 
     return $out;
 }
+
 function af_apui_pre_output_page(string &$page): void
 {
     if (defined('IN_ADMINCP') || !af_apui_is_enabled() || $page === '') {
@@ -1087,14 +1088,36 @@ function af_apui_pre_output_page(string &$page): void
     }
 
     if (!$needAssets) {
-        if (
-            strpos($page, AF_APUI_MARKER_POSTBIT_START) !== false
-            || strpos($page, AF_APUI_MARKER_PROFILE_START) !== false
-            || strpos($page, 'af-apui-profile-page') !== false
-            || strpos($page, 'af-apui-postbit') !== false
-            || strpos($page, 'af-apui-tab') !== false
-        ) {
-            $needAssets = true;
+        $needles = [
+            AF_APUI_MARKER_POSTBIT_START,
+            AF_APUI_MARKER_PROFILE_START,
+            'af-apui-profile-page',
+            'af-apui-postbit',
+            'af-apui-tab',
+
+            // APUI surface contract
+            'af-apui-surface-body',
+            'af-apui-surface-page',
+            'data-af-apui-surface="sheet"',
+            "data-af-apui-surface='sheet'",
+            'data-af-apui-surface="application"',
+            "data-af-apui-surface='application'",
+            'data-af-apui-surface="inventory"',
+            "data-af-apui-surface='inventory'",
+            'data-af-apui-surface="achievements"',
+            "data-af-apui-surface='achievements'",
+
+            // known surface roots
+            'af-cs-page',
+            'af-inv-page',
+            'af-apui-application-fragment',
+        ];
+
+        foreach ($needles as $needle) {
+            if ($needle !== '' && strpos($page, $needle) !== false) {
+                $needAssets = true;
+                break;
+            }
         }
     }
 
@@ -1121,6 +1144,7 @@ function af_apui_pre_output_page(string &$page): void
         $page .= $injection;
     }
 }
+
 function af_apui_strip_asset_includes(string $page): string
 {
     $patterns = [
