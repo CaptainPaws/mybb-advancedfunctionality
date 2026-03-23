@@ -19,8 +19,41 @@ af_advancedinventory_init();
 function af_advancedinventory_init(): void
 {
     global $plugins;
+    af_advinv_run_customization_subtype_migration();
     $plugins->add_hook('global_start', 'af_advancedinventory_register_routes', 10);
     $plugins->add_hook('misc_start', 'af_advancedinventory_misc_router', 10);
+}
+
+
+function af_advinv_run_customization_subtype_migration(): void
+{
+    global $db;
+
+    static $done = false;
+    if ($done || !is_object($db)) {
+        return;
+    }
+    $done = true;
+
+    if (!$db->table_exists(AF_ADVINV_TABLE_ITEMS)) {
+        return;
+    }
+
+    $cacheTitle = 'af_advinv_customization_subtypes_v2';
+    $cacheValue = (string)$db->fetch_field($db->simple_select('datacache', 'cache', "title='" . $db->escape_string($cacheTitle) . "'", ['limit' => 1]), 'cache');
+    if ($cacheValue === '1') {
+        return;
+    }
+
+    af_advinv_entity_filters_upgrade_schema();
+    af_advinv_normalize_customization_items_in_db();
+
+    $exists = (int)$db->fetch_field($db->simple_select('datacache', 'COUNT(*) AS c', "title='" . $db->escape_string($cacheTitle) . "'", ['limit' => 1]), 'c');
+    if ($exists > 0) {
+        $db->update_query('datacache', ['cache' => '1'], "title='" . $db->escape_string($cacheTitle) . "'");
+    } else {
+        $db->insert_query('datacache', ['title' => $cacheTitle, 'cache' => '1']);
+    }
 }
 
 function af_advancedinventory_register_routes(): void
@@ -50,6 +83,7 @@ function af_advancedinventory_install(): void
 
     af_advancedinventory_ensure_inventory_storage();
     af_advancedinventory_upgrade_schema();
+    af_advinv_normalize_customization_items_in_db();
 
     if (!$db->table_exists('af_advinv_equipped')) {
         $db->write_query("CREATE TABLE " . TABLE_PREFIX . "af_advinv_equipped (
@@ -88,6 +122,7 @@ function af_advancedinventory_activate(): void
     af_advancedinventory_ensure_setting('af_advancedinventory_assets_blacklist', 'Assets blacklist', 'Disable Advanced Inventory JS/CSS on these scripts. One page per line, for example: index.php\nforumdisplay.php\nusercp.php', 'textarea', 'index.php', 9, $gid);
 
     af_advancedinventory_upgrade_schema();
+    af_advinv_normalize_customization_items_in_db();
     af_advancedinventory_templates_install_or_update();
     af_advancedinventory_ensure_inventory_storage();
     af_advancedinventory_migrate_from_shop();
@@ -739,6 +774,130 @@ function af_advancedinventory_upgrade_schema(): void
     af_advinv_shop_map_upgrade_schema();
 }
 
+
+function af_advinv_customization_filter_definitions(): array
+{
+    return [
+        ['code' => 'packs', 'title_ru' => 'Паки', 'title_en' => 'Packs', 'sortorder' => 10],
+        ['code' => 'profile', 'title_ru' => 'Профиль', 'title_en' => 'Profile', 'sortorder' => 20],
+        ['code' => 'postbit', 'title_ru' => 'Постбит', 'title_en' => 'Postbit', 'sortorder' => 30],
+        ['code' => 'thread', 'title_ru' => 'Тема', 'title_en' => 'Thread', 'sortorder' => 40],
+        ['code' => 'sheet', 'title_ru' => 'Лист персонажа', 'title_en' => 'Character sheet', 'sortorder' => 50],
+        ['code' => 'achievements', 'title_ru' => 'Ачивки', 'title_en' => 'Achievements', 'sortorder' => 60],
+        ['code' => 'application', 'title_ru' => 'Анкеты', 'title_en' => 'Application', 'sortorder' => 70],
+        ['code' => 'inventory', 'title_ru' => 'Инвентарь', 'title_en' => 'Inventory', 'sortorder' => 80],
+        ['code' => 'other', 'title_ru' => 'Разное', 'title_en' => 'Other', 'sortorder' => 90],
+    ];
+}
+
+function af_advinv_customization_legacy_subtype_map(): array
+{
+    return [
+        'tread' => 'thread',
+        'achivments' => 'achievements',
+        'inventore' => 'inventory',
+    ];
+}
+
+function af_advinv_normalize_customization_subtype(string $subtype): string
+{
+    $subtype = mb_strtolower(trim($subtype));
+    if ($subtype === '') {
+        return '';
+    }
+
+    $legacyMap = af_advinv_customization_legacy_subtype_map();
+    if (isset($legacyMap[$subtype])) {
+        return $legacyMap[$subtype];
+    }
+
+    $allowed = [];
+    foreach (af_advinv_customization_filter_definitions() as $definition) {
+        $allowed[(string)$definition['code']] = true;
+    }
+    if (isset($allowed[$subtype])) {
+        return $subtype;
+    }
+
+    $rawSubtype = str_replace('__', ':', $subtype);
+    if ($rawSubtype === 'apui_theme_pack') {
+        return 'packs';
+    }
+
+    $directMap = [
+        'apui_profile_pack' => 'profile',
+        'apui_postbit_pack' => 'postbit',
+        'apui_thread_pack' => 'thread',
+        'apui_sheet_pack' => 'sheet',
+        'apui_application_pack' => 'application',
+        'apui_inventory_pack' => 'inventory',
+        'apui_achievements_pack' => 'achievements',
+    ];
+    if (isset($directMap[$rawSubtype])) {
+        return $directMap[$rawSubtype];
+    }
+
+    if (strpos($rawSubtype, 'apui_fragment_pack:') === 0) {
+        $fragmentKey = substr($rawSubtype, strlen('apui_fragment_pack:'));
+        if (strpos($fragmentKey, 'profile_') === 0) {
+            return 'profile';
+        }
+        if (strpos($fragmentKey, 'postbit_') === 0) {
+            return 'postbit';
+        }
+        if (strpos($fragmentKey, 'thread_') === 0) {
+            return 'thread';
+        }
+        return 'other';
+    }
+
+    return 'other';
+}
+
+function af_advinv_normalize_subtype_for_entity(string $entity, string $subtype): string
+{
+    if ($entity === 'customization') {
+        return af_advinv_normalize_customization_subtype($subtype);
+    }
+
+    return trim($subtype);
+}
+
+function af_advinv_normalize_customization_items_in_db(): void
+{
+    global $db;
+
+    if (!$db->table_exists(AF_ADVINV_TABLE_ITEMS)) {
+        return;
+    }
+
+    $q = $db->simple_select(AF_ADVINV_TABLE_ITEMS, 'id, subtype, meta_json', "entity='customization'");
+    while ($row = $db->fetch_array($q)) {
+        $itemId = (int)($row['id'] ?? 0);
+        if ($itemId <= 0) {
+            continue;
+        }
+
+        $meta = af_advinv_decode_meta_json((string)($row['meta_json'] ?? ''));
+        $targetKey = '';
+        if (is_array($meta['appearance'] ?? null)) {
+            $targetKey = (string)($meta['appearance']['target_key'] ?? '');
+        }
+        $rawSubtype = $targetKey !== '' ? $targetKey : (string)($row['subtype'] ?? '');
+        $normalizedSubtype = af_advinv_normalize_customization_subtype($rawSubtype);
+        if ($normalizedSubtype === '') {
+            $normalizedSubtype = 'other';
+        }
+
+        if ($normalizedSubtype !== (string)($row['subtype'] ?? '')) {
+            $db->update_query(AF_ADVINV_TABLE_ITEMS, [
+                'subtype' => $db->escape_string(substr($normalizedSubtype, 0, 32)),
+                'updated_at' => TIME_NOW,
+            ], 'id=' . $itemId);
+        }
+    }
+}
+
 function af_advinv_default_entities(): array
 {
     return [
@@ -751,7 +910,7 @@ function af_advinv_default_entities(): array
 
 function af_advinv_default_entity_filters(): array
 {
-    return [
+    $filters = [
         ['entity' => 'equipment', 'code' => 'weapon', 'title_ru' => 'Оружие', 'title_en' => 'Weapon', 'sortorder' => 10, 'match_json' => '{"kind":["weapon"],"type":["weapon"],"tags":["weapon"]}'],
         ['entity' => 'equipment', 'code' => 'armor', 'title_ru' => 'Броня', 'title_en' => 'Armor', 'sortorder' => 20, 'match_json' => '{"kind":["armor"],"type":["armor"],"tags":["armor"]}'],
         ['entity' => 'equipment', 'code' => 'ammo', 'title_ru' => 'Боеприпасы', 'title_en' => 'Ammo', 'sortorder' => 30, 'match_json' => '{"kind":["ammo"],"type":["ammo"],"tags":["ammo"]}'],
@@ -762,10 +921,20 @@ function af_advinv_default_entity_filters(): array
         ['entity' => 'resources', 'code' => 'stones', 'title_ru' => 'Камни', 'title_en' => 'Stones', 'sortorder' => 30, 'match_json' => '{"tags":["stone","stones"],"kind":["stone"],"type":["stone"]}'],
         ['entity' => 'pets', 'code' => 'eggs', 'title_ru' => 'Яйца', 'title_en' => 'Eggs', 'sortorder' => 10, 'match_json' => '{"tags":["egg","eggs"],"kind":["egg"],"type":["egg"]}'],
         ['entity' => 'pets', 'code' => 'pets', 'title_ru' => 'Питомцы', 'title_en' => 'Pets', 'sortorder' => 20, 'match_json' => '{"tags":["pet","pets"],"kind":["pet"],"type":["pet"]}'],
-        ['entity' => 'customization', 'code' => 'profile', 'title_ru' => 'Профиль', 'title_en' => 'Profile', 'sortorder' => 10, 'match_json' => '{"tags":["profile"],"kind":["profile"],"type":["profile"]}'],
-        ['entity' => 'customization', 'code' => 'postbit', 'title_ru' => 'Постбит', 'title_en' => 'Postbit', 'sortorder' => 20, 'match_json' => '{"tags":["postbit"],"kind":["postbit"],"type":["postbit"]}'],
-        ['entity' => 'customization', 'code' => 'sheet', 'title_ru' => 'Лист персонажа', 'title_en' => 'Character sheet', 'sortorder' => 30, 'match_json' => '{"tags":["sheet"],"kind":["sheet"],"type":["sheet"]}'],
     ];
+
+    foreach (af_advinv_customization_filter_definitions() as $definition) {
+        $filters[] = [
+            'entity' => 'customization',
+            'code' => (string)$definition['code'],
+            'title_ru' => (string)$definition['title_ru'],
+            'title_en' => (string)$definition['title_en'],
+            'sortorder' => (int)$definition['sortorder'],
+            'match_json' => '',
+        ];
+    }
+
+    return $filters;
 }
 
 function af_advinv_entities_upgrade_schema(): void
@@ -906,22 +1075,58 @@ function af_advinv_entity_filters_upgrade_schema(): void
     }
 
     foreach (af_advinv_default_entity_filters() as $row) {
-        $entity = $db->escape_string((string)$row['entity']);
-        $code = $db->escape_string((string)$row['code']);
-        $exists = (int)$db->fetch_field($db->simple_select(AF_ADVINV_TABLE_ENTITY_FILTERS, 'COUNT(*) AS c', "entity='{$entity}' AND code='{$code}'", ['limit' => 1]), 'c');
-        if ($exists > 0) {
-            continue;
-        }
-        $db->insert_query(AF_ADVINV_TABLE_ENTITY_FILTERS, [
-            'entity' => $entity,
-            'code' => $code,
+        $entityRaw = (string)$row['entity'];
+        $codeRaw = (string)$row['code'];
+        $entity = $db->escape_string($entityRaw);
+        $code = $db->escape_string($codeRaw);
+        $payload = [
             'title_ru' => $db->escape_string((string)$row['title_ru']),
             'title_en' => $db->escape_string((string)$row['title_en']),
             'sortorder' => (int)$row['sortorder'],
             'enabled' => 1,
             'match_json' => $db->escape_string((string)$row['match_json']),
             'updated_at' => TIME_NOW,
-        ]);
+        ];
+        $exists = (int)$db->fetch_field($db->simple_select(AF_ADVINV_TABLE_ENTITY_FILTERS, 'COUNT(*) AS c', "entity='{$entity}' AND code='{$code}'", ['limit' => 1]), 'c');
+        if ($exists > 0) {
+            $db->update_query(AF_ADVINV_TABLE_ENTITY_FILTERS, $payload, "entity='{$entity}' AND code='{$code}'");
+            continue;
+        }
+        $db->insert_query(AF_ADVINV_TABLE_ENTITY_FILTERS, array_merge([
+            'entity' => $entity,
+            'code' => $code,
+        ], $payload));
+    }
+
+    af_advinv_normalize_legacy_customization_filter_codes();
+}
+
+function af_advinv_normalize_legacy_customization_filter_codes(): void
+{
+    global $db;
+
+    if (!$db->table_exists(AF_ADVINV_TABLE_ENTITY_FILTERS)) {
+        return;
+    }
+
+    foreach (af_advinv_customization_legacy_subtype_map() as $legacyCode => $canonicalCode) {
+        $legacyCodeSql = $db->escape_string($legacyCode);
+        $canonicalCodeSql = $db->escape_string($canonicalCode);
+        $legacyCount = (int)$db->fetch_field($db->simple_select(AF_ADVINV_TABLE_ENTITY_FILTERS, 'COUNT(*) AS c', "entity='customization' AND code='" . $legacyCodeSql . "'", ['limit' => 1]), 'c');
+        if ($legacyCount <= 0) {
+            continue;
+        }
+
+        $canonicalCount = (int)$db->fetch_field($db->simple_select(AF_ADVINV_TABLE_ENTITY_FILTERS, 'COUNT(*) AS c', "entity='customization' AND code='" . $canonicalCodeSql . "'", ['limit' => 1]), 'c');
+        if ($canonicalCount > 0) {
+            $db->delete_query(AF_ADVINV_TABLE_ENTITY_FILTERS, "entity='customization' AND code='" . $legacyCodeSql . "'");
+            continue;
+        }
+
+        $db->update_query(AF_ADVINV_TABLE_ENTITY_FILTERS, [
+            'code' => $canonicalCodeSql,
+            'updated_at' => TIME_NOW,
+        ], "entity='customization' AND code='" . $legacyCodeSql . "'");
     }
 }
 
@@ -2213,6 +2418,7 @@ function af_inv_add_item(int $uid, array $item): int
     $entity = af_advancedinventory_normalize_entity((string)($item['entity'] ?? ($item['slot'] ?? 'equipment')));
     $slot = substr(trim((string)($item['slot'] ?? $entity)), 0, 32);
     $subtype = substr(trim((string)($item['subtype'] ?? '')), 0, 32);
+    $subtype = substr(af_advinv_normalize_subtype_for_entity($entity, $subtype), 0, 32);
     $kbType = substr(trim((string)($item['kb_type'] ?? '')), 0, 32);
     $kbKey = substr(trim((string)($item['kb_key'] ?? '')), 0, 64);
     $title = substr(trim((string)($item['title'] ?? '')), 0, 255);
@@ -2367,7 +2573,8 @@ function af_inv_get_items(int $uid, array $filters = []): array
         $where[] = "entity='" . $db->escape_string(af_advancedinventory_normalize_entity($entityFilter)) . "'";
     }
     if (($filters['subtype'] ?? '') !== '' && (string)$filters['subtype'] !== 'all') {
-        $where[] = "subtype='" . $db->escape_string((string)$filters['subtype']) . "'";
+        $normalizedSubtype = af_advinv_normalize_subtype_for_entity($entityFilter, (string)$filters['subtype']);
+        $where[] = "subtype='" . $db->escape_string($normalizedSubtype) . "'";
     }
     if (($filters['search'] ?? '') !== '') {
         $like = $db->escape_string_like((string)$filters['search']);
@@ -2976,6 +3183,7 @@ function af_advinv_get_entity_filters(string $entity): array
     }
 
     $filters = [];
+    $seenCodes = [];
     if ($db->table_exists(AF_ADVINV_TABLE_ENTITY_FILTERS)) {
         $q = $db->simple_select(
             AF_ADVINV_TABLE_ENTITY_FILTERS,
@@ -2985,9 +3193,11 @@ function af_advinv_get_entity_filters(string $entity): array
         );
         while ($row = $db->fetch_array($q)) {
             $code = trim((string)($row['code'] ?? ''));
-            if ($code === '' || $code === 'all') {
+            $code = $entity === 'customization' ? af_advinv_normalize_customization_subtype($code) : $code;
+            if ($code === '' || $code === 'all' || isset($seenCodes[$code])) {
                 continue;
             }
+            $seenCodes[$code] = true;
             $titleRu = trim((string)($row['title_ru'] ?? ''));
             $titleEn = trim((string)($row['title_en'] ?? ''));
             $filters[] = [
@@ -3012,6 +3222,7 @@ function af_advinv_render_entity_tab(string $entity, int $ownerUid, string $sub,
 
 function af_advinv_render_entity_generic(string $entity, int $ownerUid, string $sub, int $page, bool $ajax): string
 {
+    $sub = af_advinv_normalize_subtype_for_entity($entity, $sub);
     global $mybb;
 
     $filters = [
