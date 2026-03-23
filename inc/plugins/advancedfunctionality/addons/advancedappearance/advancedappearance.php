@@ -1856,7 +1856,19 @@ function af_aa_render_page_css(array $uidsOnPage): string
 
             if (!empty($payload['theme_custom_css_blocks']) && is_array($payload['theme_custom_css_blocks'])) {
                 foreach ($payload['theme_custom_css_blocks'] as $cssBlock) {
-                    $css .= af_aa_render_multi_scope_custom_css((string)$cssBlock, $selectors, $selectors[0]);
+                    $cssBlock = (string)$cssBlock;
+
+                    if (
+                        $cssBlock === ''
+                        || (
+                            strpos($cssBlock, '{{selector}}') === false
+                            && strpos($cssBlock, '{{body_selector}}') === false
+                        )
+                    ) {
+                        continue;
+                    }
+
+                    $css .= af_aa_render_multi_scope_custom_css($cssBlock, $selectors, $selectors[0]);
                 }
             }
 
@@ -2443,17 +2455,14 @@ function af_aa_get_surface_scope_selectors(int $uid, string $surface, string $pr
     $registry = af_aa_get_surface_registry();
     $meta = $registry[$surface] ?? [];
 
+    $surfaceAttr = '[data-af-apui-surface="' . $surface . '"][data-af-apui-owner-uid="' . $uid . '"]';
+    $scopedClass = '.af-aa-surface-user-' . $uid;
+
     $selectors = [
-        'body.af-aa-surface-user-' . $uid,
-        'body.af-aa-surface-user-' . $uid . '[data-af-apui-surface="' . $surface . '"]',
-        'body.af-aa-surface-user-' . $uid . '[data-af-apui-owner-uid="' . $uid . '"]',
-        'body.af-aa-surface-user-' . $uid . '[data-af-apui-surface="' . $surface . '"][data-af-apui-owner-uid="' . $uid . '"]',
-
-        '.af-aa-surface-user-' . $uid . '[data-af-apui-surface="' . $surface . '"]',
-        '.af-aa-surface-user-' . $uid . '[data-af-apui-owner-uid="' . $uid . '"]',
-
-        '[data-af-apui-surface="' . $surface . '"][data-af-apui-owner-uid="' . $uid . '"]',
-        '[data-af-apui-surface="' . $surface . '"][data-uid="' . $uid . '"]',
+        $scopedClass . $surfaceAttr,
+        $surfaceAttr . $scopedClass,
+        '.af-apui-surface-page' . $scopedClass . $surfaceAttr,
+        '.af-apui-surface-page' . $surfaceAttr . $scopedClass,
     ];
 
     foreach ((array)($meta['fragment_selectors'] ?? []) as $fragmentSelector) {
@@ -2462,24 +2471,24 @@ function af_aa_get_surface_scope_selectors(int $uid, string $surface, string $pr
             continue;
         }
 
-        $selectors[] = 'body.af-aa-surface-user-' . $uid . ' ' . $fragmentSelector;
-        $selectors[] = 'body.af-aa-surface-user-' . $uid . ' ' . $fragmentSelector . '[data-af-apui-owner-uid="' . $uid . '"]';
-        $selectors[] = 'body.af-aa-surface-user-' . $uid . ' ' . $fragmentSelector . '[data-uid="' . $uid . '"]';
-
-        $selectors[] = $fragmentSelector . '.af-aa-surface-user-' . $uid;
-        $selectors[] = $fragmentSelector . '[data-af-apui-owner-uid="' . $uid . '"]';
-        $selectors[] = $fragmentSelector . '[data-uid="' . $uid . '"]';
+        $selectors[] = $fragmentSelector . $scopedClass . $surfaceAttr;
+        $selectors[] = $fragmentSelector . $surfaceAttr . $scopedClass;
+        $selectors[] = $scopedClass . $surfaceAttr . ' ' . $fragmentSelector;
+        $selectors[] = $surfaceAttr . $scopedClass . ' ' . $fragmentSelector;
     }
 
     if ($profileSelector !== '') {
-        $selectors[] = $profileSelector . ' [data-af-apui-surface="' . $surface . '"]';
-        $selectors[] = $profileSelector . ' [data-af-apui-surface="' . $surface . '"][data-af-apui-owner-uid="' . $uid . '"]';
+        $selectors[] = $profileSelector . ' ' . $surfaceAttr;
+        $selectors[] = $profileSelector . ' ' . $surfaceAttr . $scopedClass;
 
         foreach ((array)($meta['fragment_selectors'] ?? []) as $fragmentSelector) {
             $fragmentSelector = trim((string)$fragmentSelector);
-            if ($fragmentSelector !== '') {
-                $selectors[] = $profileSelector . ' ' . $fragmentSelector;
+            if ($fragmentSelector === '') {
+                continue;
             }
+
+            $selectors[] = $profileSelector . ' ' . $fragmentSelector . $surfaceAttr;
+            $selectors[] = $profileSelector . ' ' . $fragmentSelector . $surfaceAttr . $scopedClass;
         }
     }
 
@@ -2541,22 +2550,6 @@ function af_aa_detect_surface_context(string $page): array
         }
     }
 
-    if ($surface === '' && preg_match('~data-af-apui-surface=(["\'])(sheet|application|inventory|achievements)\1~i', $page, $m)) {
-        $surface = strtolower((string)$m[2]);
-    }
-
-    if ($surface === '') {
-        foreach (af_aa_get_surface_registry() as $surfaceKey => $meta) {
-            foreach ((array)($meta['context_markers'] ?? []) as $marker) {
-                $marker = (string)$marker;
-                if ($marker !== '' && strpos($page, $marker) !== false) {
-                    $surface = (string)$surfaceKey;
-                    break 2;
-                }
-            }
-        }
-    }
-
     if ($surface === '') {
         if ($script === 'charactersheets.php') {
             $surface = 'sheet';
@@ -2567,11 +2560,52 @@ function af_aa_detect_surface_context(string $page): array
         }
     }
 
-    if (isset($mybb) && is_object($mybb) && method_exists($mybb, 'get_input')) {
-        $uid = (int)$mybb->get_input('uid', MyBB::INPUT_INT);
+    if ($surface === '' && preg_match(
+        '~<([a-z0-9:_-]+)\b[^>]*data-af-apui-surface=(["\'])(sheet|application|inventory|achievements)\2[^>]*data-af-apui-owner-uid=(["\']?)(\d+)\4[^>]*>~isu',
+        $page,
+        $m
+    )) {
+        $surface = strtolower((string)$m[3]);
+        $uid = (int)$m[5];
+    }
 
+    if ($surface === '' && preg_match(
+        '~<([a-z0-9:_-]+)\b[^>]*data-af-apui-owner-uid=(["\']?)(\d+)\2[^>]*data-af-apui-surface=(["\'])(sheet|application|inventory|achievements)\4[^>]*>~isu',
+        $page,
+        $m
+    )) {
+        $surface = strtolower((string)$m[5]);
+        $uid = (int)$m[3];
+    }
+
+    if ($surface === '') {
+        foreach (af_aa_get_surface_registry() as $surfaceKey => $meta) {
+            foreach ((array)($meta['root_classes'] ?? []) as $rootClass) {
+                $rootClass = trim((string)$rootClass);
+                if ($rootClass === '') {
+                    continue;
+                }
+
+                if (preg_match(
+                    '~<([a-z0-9:_-]+)\b[^>]*class=(["\'])[^"\']*\b' . preg_quote($rootClass, '~') . '\b[^"\']*\2[^>]*data-af-apui-owner-uid=(["\']?)(\d+)\3[^>]*>~isu',
+                    $page,
+                    $m
+                )) {
+                    $surface = (string)$surfaceKey;
+                    $uid = (int)$m[4];
+                    break 2;
+                }
+            }
+        }
+    }
+
+    if (isset($mybb) && is_object($mybb) && method_exists($mybb, 'get_input')) {
         if ($uid <= 0) {
             $uid = (int)$mybb->get_input('af_apui_owner_uid', MyBB::INPUT_INT);
+        }
+
+        if ($uid <= 0 && in_array($script, ['inventory.php', 'achivments.php', 'achievements.php'], true)) {
+            $uid = (int)$mybb->get_input('uid', MyBB::INPUT_INT);
         }
     }
 
@@ -2595,16 +2629,40 @@ function af_aa_detect_surface_context(string $page): array
         }
     }
 
-    if ($uid <= 0 && !empty($memprofile['uid'])) {
+    if ($uid <= 0 && $surface !== '') {
+        if (preg_match(
+            '~data-af-apui-surface=(["\'])' . preg_quote($surface, '~') . '\1[^>]*data-af-apui-owner-uid=(["\']?)(\d+)\2~isu',
+            $page,
+            $m
+        )) {
+            $uid = (int)$m[3];
+        } elseif (preg_match(
+            '~data-af-apui-owner-uid=(["\']?)(\d+)\1[^>]*data-af-apui-surface=(["\'])' . preg_quote($surface, '~') . '\3~isu',
+            $page,
+            $m
+        )) {
+            $uid = (int)$m[2];
+        }
+    }
+
+    if ($uid <= 0 && $surface !== '') {
+        if (preg_match(
+            '~data-af-apui-surface=(["\'])' . preg_quote($surface, '~') . '\1[^>]*data-uid=(["\']?)(\d+)\2~isu',
+            $page,
+            $m
+        )) {
+            $uid = (int)$m[3];
+        } elseif (preg_match(
+            '~data-uid=(["\']?)(\d+)\1[^>]*data-af-apui-surface=(["\'])' . preg_quote($surface, '~') . '\3~isu',
+            $page,
+            $m
+        )) {
+            $uid = (int)$m[2];
+        }
+    }
+
+    if ($uid <= 0 && !empty($memprofile['uid']) && $script === 'member.php') {
         $uid = (int)$memprofile['uid'];
-    }
-
-    if ($uid <= 0 && preg_match('~\bdata-af-apui-owner-uid=(["\']?)(\d+)\1~i', $page, $m)) {
-        $uid = (int)$m[2];
-    }
-
-    if ($uid <= 0 && preg_match('~\bdata-uid=(["\']?)(\d+)\1~i', $page, $m)) {
-        $uid = (int)$m[2];
     }
 
     return [
@@ -2625,6 +2683,7 @@ function af_aa_inject_surface_scope_classes(string $page, int $uid, string $surf
     $surfaceClass = 'af-aa-surface-user-' . $uid;
     $registry = af_aa_get_surface_registry();
     $meta = $registry[$surface] ?? [];
+    $updatedAny = false;
 
     $addClassToTag = static function (string $tagHtml, string $className): string {
         if ($tagHtml === '' || $className === '') {
@@ -2660,13 +2719,20 @@ function af_aa_inject_surface_scope_classes(string $page, int $uid, string $surf
         return is_string($replaced) && $replaced !== '' ? $replaced : $tagHtml;
     };
 
-    $ensureAttrOnTag = static function (string $tagHtml, string $attrName, string $attrValue): string {
-        if ($tagHtml === '' || $attrName === '' || $attrValue === '') {
+    $upsertAttrOnTag = static function (string $tagHtml, string $attrName, string $attrValue): string {
+        if ($tagHtml === '' || $attrName === '') {
             return $tagHtml;
         }
 
         if (preg_match('~\b' . preg_quote($attrName, '~') . '=(["\']).*?\1~is', $tagHtml)) {
-            return $tagHtml;
+            $replaced = preg_replace(
+                '~\b' . preg_quote($attrName, '~') . '=(["\']).*?\1~is',
+                $attrName . '="' . htmlspecialchars_uni($attrValue) . '"',
+                $tagHtml,
+                1
+            );
+
+            return is_string($replaced) && $replaced !== '' ? $replaced : $tagHtml;
         }
 
         $replaced = preg_replace(
@@ -2679,33 +2745,27 @@ function af_aa_inject_surface_scope_classes(string $page, int $uid, string $surf
         return is_string($replaced) && $replaced !== '' ? $replaced : $tagHtml;
     };
 
-    $applySurfaceAttrsToTag = static function (string $tagHtml) use ($addClassToTag, $ensureAttrOnTag, $surfaceClass, $surface, $uid): string {
+    $applySurfaceAttrsToTag = static function (string $tagHtml) use ($addClassToTag, $upsertAttrOnTag, $surfaceClass, $surface, $uid): string {
         $tagHtml = $addClassToTag($tagHtml, $surfaceClass);
-        $tagHtml = $ensureAttrOnTag($tagHtml, 'data-af-apui-surface', $surface);
-        $tagHtml = $ensureAttrOnTag($tagHtml, 'data-af-apui-owner-uid', (string)$uid);
-        $tagHtml = $ensureAttrOnTag($tagHtml, 'data-uid', (string)$uid);
+        $tagHtml = $upsertAttrOnTag($tagHtml, 'data-af-apui-surface', $surface);
+        $tagHtml = $upsertAttrOnTag($tagHtml, 'data-af-apui-owner-uid', (string)$uid);
 
         return $tagHtml;
     };
 
-    $page = preg_replace_callback(
-        '~<body\b[^>]*>~is',
-        static function (array $m) use ($applySurfaceAttrsToTag): string {
+    $surfacePattern = '~<([a-z0-9:_-]+)\b[^>]*data-af-apui-surface=(["\'])' . preg_quote($surface, '~') . '\2[^>]*>~isu';
+    $updated = preg_replace_callback(
+        $surfacePattern,
+        static function (array $m) use ($applySurfaceAttrsToTag, &$updatedAny): string {
+            $updatedAny = true;
             return $applySurfaceAttrsToTag((string)$m[0]);
         },
-        $page,
-        1
-    ) ?? $page;
+        $page
+    );
 
-    $pattern = '~<([a-z0-9:_-]+)\b[^>]*data-af-apui-surface=(["\'])' . preg_quote($surface, '~') . '\2[^>]*>~isu';
-    $page = preg_replace_callback(
-        $pattern,
-        static function (array $m) use ($applySurfaceAttrsToTag): string {
-            return $applySurfaceAttrsToTag((string)$m[0]);
-        },
-        $page,
-        1
-    ) ?? $page;
+    if (is_string($updated) && $updated !== '') {
+        $page = $updated;
+    }
 
     foreach ((array)($meta['root_classes'] ?? []) as $rootClass) {
         $rootClass = trim((string)$rootClass);
@@ -2717,15 +2777,44 @@ function af_aa_inject_surface_scope_classes(string $page, int $uid, string $surf
 
         $updated = preg_replace_callback(
             $rootPattern,
-            static function (array $m) use ($applySurfaceAttrsToTag): string {
+            static function (array $m) use ($applySurfaceAttrsToTag, &$updatedAny): string {
+                $updatedAny = true;
                 return $applySurfaceAttrsToTag((string)$m[0]);
             },
-            $page,
-            1
+            $page
         );
 
         if (is_string($updated) && $updated !== '') {
             $page = $updated;
+        }
+    }
+
+    if (!$updatedAny) {
+        $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+        $standaloneSurfaceScripts = [
+            'charactersheets.php' => 'sheet',
+            'inventory.php' => 'inventory',
+            'achivments.php' => 'achievements',
+            'achievements.php' => 'achievements',
+        ];
+
+        $explicitSurface = '';
+        if (isset($GLOBALS['mybb']) && is_object($GLOBALS['mybb']) && method_exists($GLOBALS['mybb'], 'get_input')) {
+            $explicitSurface = trim(strtolower((string)$GLOBALS['mybb']->get_input('af_apui_surface')));
+        }
+
+        if (
+            (!empty($standaloneSurfaceScripts[$script]) && $standaloneSurfaceScripts[$script] === $surface)
+            || $explicitSurface === $surface
+        ) {
+            $page = preg_replace_callback(
+                '~<body\b[^>]*>~is',
+                static function (array $m) use ($applySurfaceAttrsToTag): string {
+                    return $applySurfaceAttrsToTag((string)$m[0]);
+                },
+                $page,
+                1
+            ) ?? $page;
         }
     }
 
