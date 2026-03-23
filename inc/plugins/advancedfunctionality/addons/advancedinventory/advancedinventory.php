@@ -856,11 +856,58 @@ function af_advinv_normalize_customization_subtype(string $subtype): string
 
 function af_advinv_normalize_subtype_for_entity(string $entity, string $subtype): string
 {
+    $subtype = trim($subtype);
+    if ($subtype === '' || $subtype === 'all') {
+        return $subtype;
+    }
+
     if ($entity === 'customization') {
         return af_advinv_normalize_customization_subtype($subtype);
     }
 
-    return trim($subtype);
+    return $subtype;
+}
+
+function af_advinv_virtual_all_filter_definition(): array
+{
+    return [
+        'code' => 'all',
+        'title' => 'Все',
+        'title_ru' => 'Все',
+        'title_en' => 'All',
+        'sortorder' => 0,
+        'virtual' => true,
+        'match' => [],
+    ];
+}
+
+function af_advinv_get_ui_subfilters(string $entity): array
+{
+    $entity = af_advancedinventory_normalize_entity($entity);
+    $filters = [af_advinv_virtual_all_filter_definition()];
+
+    foreach (af_advinv_get_entity_filters($entity) as $row) {
+        $filters[] = $row;
+    }
+
+    return $filters;
+}
+
+function af_advinv_resolve_active_subfilter(string $entity, string $subtype): string
+{
+    $entity = af_advancedinventory_normalize_entity($entity);
+    $normalized = af_advinv_normalize_subtype_for_entity($entity, $subtype);
+    if ($normalized === '' || $normalized === 'all') {
+        return 'all';
+    }
+
+    foreach (af_advinv_get_ui_subfilters($entity) as $filter) {
+        if ((string)($filter['code'] ?? '') === $normalized) {
+            return $normalized;
+        }
+    }
+
+    return 'all';
 }
 
 function af_advinv_normalize_customization_items_in_db(): void
@@ -1290,7 +1337,7 @@ function af_advancedinventory_render_tab(): void
         error_no_permission();
     }
 
-    $sub = trim((string)$mybb->get_input('sub'));
+    $sub = af_advinv_resolve_active_subfilter($tab, (string)$mybb->get_input('sub'));
     $pageNum = max(1, (int)$mybb->get_input('page'));
     $fragment = (int)$mybb->get_input('ajax') === 1 || (int)$mybb->get_input('fragment') === 1;
 
@@ -2576,9 +2623,9 @@ function af_inv_get_items(int $uid, array $filters = []): array
     if ($entityFilter !== '') {
         $where[] = "entity='" . $db->escape_string(af_advancedinventory_normalize_entity($entityFilter)) . "'";
     }
-    if (($filters['subtype'] ?? '') !== '' && (string)$filters['subtype'] !== 'all') {
-        $normalizedSubtype = af_advinv_normalize_subtype_for_entity($entityFilter, (string)$filters['subtype']);
-        $where[] = "subtype='" . $db->escape_string($normalizedSubtype) . "'";
+    $activeSubtype = af_advinv_resolve_active_subfilter($entityFilter, (string)($filters['subtype'] ?? 'all'));
+    if ($activeSubtype !== 'all') {
+        $where[] = "subtype='" . $db->escape_string($activeSubtype) . "'";
     }
     if (($filters['search'] ?? '') !== '') {
         $like = $db->escape_string_like((string)$filters['search']);
@@ -3226,7 +3273,7 @@ function af_advinv_render_entity_tab(string $entity, int $ownerUid, string $sub,
 
 function af_advinv_render_entity_generic(string $entity, int $ownerUid, string $sub, int $page, bool $ajax): string
 {
-    $sub = af_advinv_normalize_subtype_for_entity($entity, $sub);
+    $sub = af_advinv_resolve_active_subfilter($entity, $sub);
     global $mybb;
 
     $filters = [
@@ -3578,9 +3625,8 @@ function af_advancedinventory_tabs(bool $enabledOnly = true): array
 
 function af_advancedinventory_subfilters(string $tab): array
 {
-    $tab = af_advancedinventory_normalize_entity($tab);
-    $filters = ['all' => 'Все'];
-    foreach (af_advinv_get_entity_filters($tab) as $row) {
+    $filters = [];
+    foreach (af_advinv_get_ui_subfilters($tab) as $row) {
         $filters[(string)$row['code']] = (string)$row['title'];
     }
     return $filters;
