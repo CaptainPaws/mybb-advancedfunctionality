@@ -1428,6 +1428,21 @@ function af_advancedinventory_api_unequip(): void
     af_advancedinventory_json(['ok' => true]);
 }
 
+
+function af_advinv_clear_legacy_active_appearance(int $uid, string $targetKey): void
+{
+    global $db;
+
+    $uid = (int)$uid;
+    $targetKey = af_advancedinventory_normalize_appearance_target($targetKey);
+
+    if ($uid <= 0 || $targetKey === '' || !$db->table_exists('af_aa_active')) {
+        return;
+    }
+
+    $db->delete_query('af_aa_active', "entity_type='user' AND entity_id='" . $uid . "' AND target_key='" . $db->escape_string($targetKey) . "'");
+}
+
 function af_advancedinventory_api_appearance_apply(): void
 {
     global $mybb;
@@ -1469,6 +1484,7 @@ function af_advancedinventory_api_appearance_apply(): void
     if (function_exists('af_aa_upsert_user_assignment')) {
         af_aa_upsert_user_assignment($ownerUid, $targetKey, $presetId);
     }
+    af_advinv_clear_legacy_active_appearance($ownerUid, $targetKey);
 
     $activeState = af_advinv_active_appearance_map($ownerUid);
     af_advancedinventory_json([
@@ -1501,6 +1517,7 @@ function af_advancedinventory_api_appearance_unapply(): void
     if (function_exists('af_aa_delete_user_assignment')) {
         af_aa_delete_user_assignment($ownerUid, $targetKey);
     }
+    af_advinv_clear_legacy_active_appearance($ownerUid, $targetKey);
 
     $activeState = af_advinv_active_appearance_map($ownerUid);
     af_advancedinventory_json([
@@ -2065,19 +2082,6 @@ function af_advinv_active_appearance_map(int $uid): array
             }
             $map[$targetKey] = $row;
         }
-    }
-
-    if ($map || !$db->table_exists('af_aa_active')) {
-        return $map;
-    }
-
-    $q = $db->simple_select('af_aa_active', '*', "entity_type='user' AND entity_id='" . (int)$uid . "' AND is_enabled='1'");
-    while ($row = $db->fetch_array($q)) {
-        $targetKey = trim((string)($row['target_key'] ?? ''));
-        if ($targetKey === '') {
-            continue;
-        }
-        $map[$targetKey] = $row;
     }
 
     return $map;

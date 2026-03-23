@@ -649,6 +649,10 @@ function af_aa_reset_runtime_assignment_cache(string $entityType, int $entityId,
     }
 
     unset($GLOBALS['af_aa_assignment_cache_runtime'][$entityType . ':' . $entityId . ':' . $targetKey]);
+
+    if ($entityType === 'user' && isset($GLOBALS['af_aa_payload_cache_runtime']) && is_array($GLOBALS['af_aa_payload_cache_runtime'])) {
+        unset($GLOBALS['af_aa_payload_cache_runtime'][$entityId]);
+    }
 }
 
 function af_aa_upsert_user_assignment(int $uid, string $targetKey, int $presetId): void
@@ -1146,95 +1150,6 @@ function af_aa_get_active_assignment(string $entityType, int $entityId, string $
     $query = $db->simple_select(AF_AA_ASSIGNMENTS_TABLE_NAME, '*', $where, ['limit' => 1]);
     $row = $db->fetch_array($query);
 
-    // 2. Fallback на active-слоты из магазина/инвентаря
-    if (!is_array($row) && $entityType === 'user' && $db->table_exists('af_aa_active')) {
-        $active = $db->fetch_array(
-            $db->simple_select(
-                'af_aa_active',
-                '*',
-                "entity_type='user' AND entity_id='" . $entityId . "' AND target_key='" . $db->escape_string($targetKey) . "' AND is_enabled='1'",
-                ['limit' => 1]
-            )
-        );
-
-        if (is_array($active)) {
-            $itemId = (int)($active['item_id'] ?? 0);
-            $item = [];
-
-            if (($itemId > 0) && (!function_exists('af_inv_get_item_for_owner') || !function_exists('af_advinv_resolve_appearance_item'))) {
-                $invBootstrap = AF_ADDONS . 'advancedinventory/advancedinventory.php';
-                if (is_file($invBootstrap)) {
-                    require_once $invBootstrap;
-                }
-            }
-
-            // Новый канон: current inventory
-            if ($itemId > 0 && function_exists('af_inv_get_item_for_owner')) {
-                $item = (array)af_inv_get_item_for_owner($entityId, $itemId);
-            }
-
-            // Fallback напрямую в текущую таблицу
-            if (!$item && $itemId > 0 && $db->table_exists('af_advinv_items')) {
-                $item = (array)$db->fetch_array(
-                    $db->simple_select(
-                        'af_advinv_items',
-                        '*',
-                        "id='" . $itemId . "' AND uid='" . $entityId . "'",
-                        ['limit' => 1]
-                    )
-                );
-            }
-
-            // Legacy fallback
-            if (!$item && $itemId > 0 && $db->table_exists('af_inventory_items')) {
-                $item = (array)$db->fetch_array(
-                    $db->simple_select(
-                        'af_inventory_items',
-                        '*',
-                        "inv_id='" . $itemId . "' AND uid='" . $entityId . "'",
-                        ['limit' => 1]
-                    )
-                );
-            }
-
-            $presetId = 0;
-
-            if ($item) {
-                if (function_exists('af_advinv_resolve_appearance_item')) {
-                    $appearanceInfo = (array)af_advinv_resolve_appearance_item($item);
-                    $presetId = (int)($appearanceInfo['preset_id'] ?? 0);
-                }
-
-                if ($presetId <= 0) {
-                    $kbKey = trim((string)($item['kb_key'] ?? ''));
-                    if (strpos($kbKey, 'appearance:') === 0) {
-                        $presetId = (int)substr($kbKey, strlen('appearance:'));
-                    }
-                }
-
-                if ($presetId <= 0) {
-                    $meta = @json_decode((string)($item['meta_json'] ?? '{}'), true);
-                    if (is_array($meta)) {
-                        $presetId = (int)($meta['appearance']['preset_id'] ?? 0);
-                    }
-                }
-            }
-
-            if ($presetId > 0) {
-                $row = [
-                    'id' => 0,
-                    'entity_type' => 'user',
-                    'entity_id' => $entityId,
-                    'target_key' => $targetKey,
-                    'preset_id' => $presetId,
-                    'is_enabled' => 1,
-                    'created_at' => (int)($active['applied_at'] ?? 0),
-                    'updated_at' => (int)($active['applied_at'] ?? 0),
-                ];
-            }
-        }
-    }
-
     if (!is_array($row)) {
         $GLOBALS['af_aa_assignment_cache_runtime'][$cacheKey] = [];
         return [];
@@ -1652,7 +1567,7 @@ function af_aa_build_user_css_payload(int $uid): array
     $payload = [
         'uid' => $uid,
         'selector' => $selector,
-        'body_selector' => 'body.af-apui-member-profile-page.af-aa-user-' . $uid,
+        'body_selector' => 'body.af-apui-member-profile-page.af-aa-user-' . $uid . ', body.af-apui-thread-page.af-aa-user-' . $uid . ', .af-aa-user-' . $uid,
         'vars' => [
             '--af-apui-profile-banner-image' => af_aa_css_url_value((string)($profileSettings['profile_banner_url'] ?? '')),
             '--af-apui-profile-banner-overlay' => af_aa_css_raw_value((string)($profileSettings['profile_banner_overlay'] ?? 'none'), 'none'),
