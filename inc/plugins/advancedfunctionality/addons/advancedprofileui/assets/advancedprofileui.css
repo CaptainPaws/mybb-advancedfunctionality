@@ -2524,6 +2524,15 @@ body.af-apui-surface-body[data-af-apui-surface="sheet"] {
   background-attachment: fixed, fixed;
 }
 
+body.af-apui-surface-body[data-af-apui-surface="application"],
+.af-apui-surface-page[data-af-apui-surface="application"],
+.af-apui-application-fragment[data-af-apui-surface="application"] {
+  background-image: var(--af-apui-modal-application-bg-overlay), var(--af-apui-modal-application-bg-image);
+  background-repeat: no-repeat, no-repeat;
+  background-position: center center, center center;
+  background-size: cover, cover;
+}
+
 .af-apui-surface-page[data-af-apui-surface="sheet"] {
   position: relative;
   z-index: 1;
@@ -2589,9 +2598,20 @@ body.af-apui-surface-body[data-af-apui-surface="achievements"],
   border-color: var(--af-apui-modal-inventory-panel-border);
 }
 
+.af-cs-modal[data-af-modal-kind="application"] .af-apui-application-fragment[data-af-apui-surface="application"],
+.af-cs-modal[data-af-apui-modal-kind="application"] .af-apui-application-fragment[data-af-apui-surface="application"],
+.af-apui-surface-page[data-af-apui-surface="application"] .af-apui-application-fragment[data-af-apui-surface="application"],
+.af-apui-application-fragment[data-af-apui-surface="application"] {
+  background: var(--af-apui-modal-application-panel-bg);
+  border: 1px solid var(--af-apui-modal-application-panel-border);
+  border-radius: 18px;
+}
+
 .af-cs-modal[data-af-modal-kind="achievements"] .af-cs-modal__content > :first-child,
 .af-cs-modal[data-af-apui-modal-kind="achievements"] .af-cs-modal__content > :first-child,
-.af-apui-surface-page[data-af-apui-surface="achievements"] > :first-child {
+body.af-apui-surface-body[data-af-apui-surface="achievements"] > :first-child,
+.af-apui-surface-page[data-af-apui-surface="achievements"] > :first-child,
+.af-apui-achievements-fragment[data-af-apui-surface="achievements"] {
   background: var(--af-apui-modal-achievements-panel-bg);
   border: 1px solid var(--af-apui-modal-achievements-panel-border);
   border-radius: 18px;

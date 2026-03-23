@@ -113,7 +113,6 @@ class AF_Admin_Advancedappearance
         $allowed = function_exists('af_aa_get_supported_targets_registry')
             ? array_unique(array_column(af_aa_get_supported_targets_registry(), 'do'))
             : [
-                'themepack',
                 'profilepack',
                 'postbitpack',
                 'threadpack',
@@ -124,8 +123,8 @@ class AF_Admin_Advancedappearance
                 'fragmentpack',
             ];
 
-        if (!in_array($do, $allowed, true)) {
-            return 'themepack';
+        if (!in_array($do, $allowed, true) || $do === 'themepack') {
+            return 'profilepack';
         }
 
         return $do;
@@ -143,7 +142,7 @@ class AF_Admin_Advancedappearance
             }
         }
 
-        return AF_AA_TARGET_APUI_THEME_PACK;
+        return AF_AA_TARGET_APUI_PROFILE_PACK;
     }
 
     private static function doForTarget(string $targetKey): string
@@ -155,7 +154,7 @@ class AF_Admin_Advancedappearance
             }
         }
 
-        return 'themepack';
+        return 'profilepack';
     }
 
     private static function fragmentOptions(): array
@@ -256,7 +255,7 @@ class AF_Admin_Advancedappearance
         return $targetKey;
     }
 
-    private static function renderNav(string $section, string $do = 'themepack'): void
+    private static function renderNav(string $section, string $do = 'profilepack'): void
     {
         echo '<div style="margin-bottom:14px;">';
         echo '<a class="button" style="margin-right:8px;" href="' . htmlspecialchars_uni(self::baseUrl('presets', self::resolvePresetDo($do))) . '">Каталог пресетов</a>';
@@ -267,7 +266,6 @@ class AF_Admin_Advancedappearance
             $tabs = function_exists('af_aa_get_front_tabs')
                 ? af_aa_get_front_tabs()
                 : [
-                    'themepack' => 'Общие пак-темы',
                     'profilepack' => 'Страница профиля',
                     'postbitpack' => 'Постбит в теме',
                     'threadpack' => 'Страница темы',

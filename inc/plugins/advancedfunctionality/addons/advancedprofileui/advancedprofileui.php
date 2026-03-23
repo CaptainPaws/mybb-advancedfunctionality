@@ -1383,7 +1383,7 @@ function af_apui_build_member_profile_application_tab(int $uid, array $sheetPayl
     if (trim($content) === '') {
         $content = '<div class="af-apui-empty">Содержимое анкеты пока недоступно для встроенного вывода. Используйте кнопку открытия темы.</div>';
     } else {
-        $content = '<div class="af-apui-application-fragment">' . $content . '</div>';
+        $content = '<div class="af-apui-application-fragment af-aa-context af-aa-context--application" data-af-apui-surface="application" data-af-apui-owner-uid="' . $uid . '">' . $content . '</div>';
     }
 
     return af_apui_build_member_profile_tab_shell(

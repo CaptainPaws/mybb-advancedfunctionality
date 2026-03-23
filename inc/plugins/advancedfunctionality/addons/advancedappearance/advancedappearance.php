@@ -232,11 +232,12 @@ function af_aa_get_supported_targets_registry(): array
             'do' => 'themepack',
             'group' => 'theme_pack',
             'label' => 'Общие пак-темы',
-            'human_label' => 'Общий пак темы',
-            'preset_target' => true,
-            'assignable' => true,
-            'purchasable' => true,
-            'useable' => true,
+            'human_label' => 'Общий пак темы (legacy)',
+            'preset_target' => false,
+            'assignable' => false,
+            'purchasable' => false,
+            'useable' => false,
+            'legacy_only' => true,
         ],
         AF_AA_TARGET_APUI_PROFILE_PACK => [
             'do' => 'profilepack',
@@ -1514,26 +1515,6 @@ function af_aa_build_user_css_payload(int $uid): array
     $themeCustomCssBlocks = [];
     $profileCustomCssBlocks = [];
     $postbitCustomCssBlocks = [];
-
-    $themePack = af_aa_get_user_preset_settings_for_target($uid, AF_AA_TARGET_APUI_THEME_PACK, $defaults);
-    if (!empty($themePack)) {
-        $themeSettings = (array)$themePack['settings'];
-
-        $profileSettings = af_aa_merge_keys($profileSettings, $themeSettings, $profileKeys);
-        $postbitSettings = af_aa_merge_keys($postbitSettings, $themeSettings, $postbitKeys);
-
-        foreach ($surfaceRegistry as $surfaceKey => $surfaceMeta) {
-            $surfaceSettings[$surfaceKey] = af_aa_merge_keys(
-                $surfaceSettings[$surfaceKey],
-                $themeSettings,
-                (array)$surfaceMeta['keys']
-            );
-        }
-
-        if (!empty($themeSettings['custom_css'])) {
-            $themeCustomCssBlocks[] = (string)$themeSettings['custom_css'];
-        }
-    }
 
     $profilePack = af_aa_get_user_preset_settings_for_target($uid, AF_AA_TARGET_APUI_PROFILE_PACK, $defaults);
     if (!empty($profilePack)) {
@@ -3029,8 +3010,8 @@ function af_aa_resolve_preset_do(string $do = ''): string
 
     $allowed = array_unique(array_column(af_aa_get_supported_targets_registry(), 'do'));
 
-    if (!in_array($do, $allowed, true)) {
-        return 'themepack';
+    if (!in_array($do, $allowed, true) || $do === 'themepack') {
+        return 'profilepack';
     }
 
     return $do;
@@ -3046,14 +3027,16 @@ function af_aa_target_key_for_do(string $do): string
         }
     }
 
-    return AF_AA_TARGET_APUI_THEME_PACK;
+    return AF_AA_TARGET_APUI_PROFILE_PACK;
 }
 
 function af_aa_do_for_target(string $targetKey): string
 {
     $meta = af_aa_get_target_meta($targetKey);
 
-    return (string)($meta['do'] ?? 'themepack');
+    $resolved = (string)($meta['do'] ?? '');
+
+    return $resolved !== '' ? $resolved : 'profilepack';
 }
 
 function af_aa_get_front_tabs(): array
