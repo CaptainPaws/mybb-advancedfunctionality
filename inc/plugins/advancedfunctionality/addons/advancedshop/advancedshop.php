@@ -1263,6 +1263,47 @@ function af_advancedshop_can_buy(): bool
     return (int)($mybb->user['uid'] ?? 0) > 0;
 }
 
+function af_advancedshop_current_shop(bool $strictByCode = false): array
+{
+    global $mybb, $db;
+
+    $shopsTable = af_advancedshop_shops_table();
+    $code = trim((string)$mybb->get_input('shop'));
+    $shop = false;
+
+    if ($code !== '') {
+        $where = "code='" . $db->escape_string($code) . "'";
+        if ($strictByCode) {
+            $where .= ' AND enabled=1';
+        }
+
+        $shop = $db->fetch_array(
+            $db->simple_select($shopsTable, '*', $where, ['limit' => 1])
+        );
+
+        if ($strictByCode && !$shop) {
+            return [];
+        }
+    }
+
+    if (!$shop) {
+        $shop = $db->fetch_array(
+            $db->simple_select(
+                $shopsTable,
+                '*',
+                'enabled=1',
+                ['order_by' => 'sortorder ASC, shop_id ASC', 'limit' => 1]
+            )
+        );
+    }
+
+    if (!$shop) {
+        error('Shop not found');
+    }
+
+    return $shop;
+}
+
 function af_advancedshop_render_shop(bool $strictByCode = false): void
 {
     global $db, $mybb, $lang, $headerinclude, $header, $footer;
