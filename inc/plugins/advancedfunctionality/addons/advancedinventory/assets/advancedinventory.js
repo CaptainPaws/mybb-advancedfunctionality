@@ -49,7 +49,13 @@
   }
 
   function appearanceActionUrl(action) {
-    return 'shop.php?action=' + encodeURIComponent(action);
+    if (action === 'inventory_appearance_apply') {
+      return buildActionUrl('api_appearance_apply');
+    }
+    if (action === 'inventory_appearance_unapply') {
+      return buildActionUrl('api_appearance_unapply');
+    }
+    return buildActionUrl(action);
   }
 
   function endpointScript() {

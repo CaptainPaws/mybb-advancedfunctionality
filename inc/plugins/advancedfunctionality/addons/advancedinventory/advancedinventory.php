@@ -469,7 +469,7 @@ function af_advancedinventory_misc_router(): void
 {
     global $mybb;
     $action = (string)$mybb->get_input('action');
-    if (!in_array($action, ['inventory', 'inventories', 'tab', 'entity', 'api_list', 'api_move', 'api_equip', 'api_unequip', 'api_update', 'api_delete', 'api_sell', 'api_bind_support_slot', 'api_unbind_support_slot', 'api_support_slots_state'], true)) {
+    if (!in_array($action, ['inventory', 'inventories', 'tab', 'entity', 'api_list', 'api_move', 'api_equip', 'api_unequip', 'api_appearance_apply', 'api_appearance_unapply', 'api_update', 'api_delete', 'api_sell', 'api_bind_support_slot', 'api_unbind_support_slot', 'api_support_slots_state'], true)) {
         return;
     }
     if (!af_advancedinventory_alias_available()) {
@@ -507,6 +507,8 @@ function af_advancedinventory_dispatch(string $action): void
         case 'api_list': af_advancedinventory_api_list(); return;
         case 'api_equip': af_advancedinventory_api_equip(); return;
         case 'api_unequip': af_advancedinventory_api_unequip(); return;
+        case 'api_appearance_apply': af_advancedinventory_api_appearance_apply(); return;
+        case 'api_appearance_unapply': af_advancedinventory_api_appearance_unapply(); return;
         case 'api_update': af_advancedinventory_api_update(); return;
         case 'api_delete': af_advancedinventory_api_delete(); return;
         case 'api_sell': af_advancedinventory_api_sell(); return;
@@ -1221,6 +1223,79 @@ function af_advancedinventory_api_unequip(): void
     af_advancedinventory_json(['ok' => true]);
 }
 
+function af_advancedinventory_api_appearance_apply(): void
+{
+    global $mybb, $db;
+
+    af_advancedinventory_require_post();
+
+    $ownerUid = (int)$mybb->get_input('uid');
+    $viewerUid = (int)($mybb->user['uid'] ?? 0);
+    if (!af_inv_can_manage_owner($viewerUid, $ownerUid)) {
+        af_advancedinventory_json(['ok' => false, 'error' => 'forbidden'], 403);
+    }
+
+    $itemId = (int)$mybb->get_input('item_id');
+    if ($itemId <= 0) {
+        $itemId = (int)$mybb->get_input('inv_id');
+    }
+    $item = af_inv_get_item_for_owner($ownerUid, $itemId);
+    if (!$item) {
+        af_advancedinventory_json(['ok' => false, 'error' => 'item_not_found'], 404);
+    }
+
+    $appearanceInfo = af_advinv_resolve_appearance_item($item);
+    if (empty($appearanceInfo['is_visual_item'])) {
+        af_advancedinventory_json(['ok' => false, 'error' => 'item_not_appearance'], 422);
+    }
+
+    $targetKey = af_advancedinventory_normalize_appearance_target((string)($appearanceInfo['target_key'] ?? ''));
+    if ($targetKey === '') {
+        af_advancedinventory_json(['ok' => false, 'error' => 'appearance_target_missing'], 422);
+    }
+    if ($targetKey === 'apui_thread_pack') {
+        af_advancedinventory_json(['ok' => false, 'error' => 'thread_pack_requires_thread_form'], 422);
+    }
+
+    $row = [
+        'item_id' => (int)$item['id'],
+        'is_enabled' => 1,
+        'applied_at' => TIME_NOW,
+    ];
+    $exists = $db->fetch_array($db->simple_select('af_aa_active', 'id', "entity_type='user' AND entity_id=" . $ownerUid . " AND target_key='" . $db->escape_string($targetKey) . "'", ['limit' => 1]));
+    if ($exists) {
+        $db->update_query('af_aa_active', $row, 'id=' . (int)$exists['id']);
+    } else {
+        $row['entity_type'] = 'user';
+        $row['entity_id'] = $ownerUid;
+        $row['target_key'] = $db->escape_string($targetKey);
+        $db->insert_query('af_aa_active', $row);
+    }
+
+    af_advancedinventory_json(['ok' => true, 'target_key' => $targetKey, 'item_id' => (int)$item['id']]);
+}
+
+function af_advancedinventory_api_appearance_unapply(): void
+{
+    global $mybb, $db;
+
+    af_advancedinventory_require_post();
+
+    $ownerUid = (int)$mybb->get_input('uid');
+    $viewerUid = (int)($mybb->user['uid'] ?? 0);
+    if (!af_inv_can_manage_owner($viewerUid, $ownerUid)) {
+        af_advancedinventory_json(['ok' => false, 'error' => 'forbidden'], 403);
+    }
+
+    $targetKey = af_advancedinventory_normalize_appearance_target((string)$mybb->get_input('target_key'));
+    if ($targetKey === '') {
+        af_advancedinventory_json(['ok' => false, 'error' => 'appearance_target_missing'], 422);
+    }
+
+    $db->delete_query('af_aa_active', "entity_type='user' AND entity_id=" . $ownerUid . " AND target_key='" . $db->escape_string($targetKey) . "'");
+    af_advancedinventory_json(['ok' => true, 'target_key' => $targetKey]);
+}
+
 function af_advancedinventory_api_support_slots_state(): void
 {
     global $mybb;
@@ -1705,16 +1780,6 @@ function af_advinv_decode_meta_json($value): array
 
 function af_advinv_resolve_appearance_item(array $item): array
 {
-    if (function_exists('af_advancedshop_inventory_resolve_appearance_item')) {
-        $kbMetaRaw = (string)($item['kb_meta'] ?? '');
-        $kbMeta = af_advinv_decode_meta_json($kbMetaRaw);
-        if (!$kbMeta) {
-            $kbMeta = af_advinv_decode_meta_json((string)($item['meta_json'] ?? ''));
-        }
-
-        return (array)af_advancedshop_inventory_resolve_appearance_item($item, [], $kbMeta);
-    }
-
     $meta = af_advinv_decode_meta_json((string)($item['meta_json'] ?? ''));
     $appearance = is_array($meta['appearance'] ?? null) ? (array)$meta['appearance'] : [];
     $kbKey = trim((string)($item['kb_key'] ?? ''));
@@ -1740,6 +1805,23 @@ function af_advinv_resolve_appearance_item(array $item): array
         'target_key' => trim((string)($appearance['target_key'] ?? '')),
         'appearance_meta' => $appearance,
     ];
+}
+
+function af_advancedinventory_normalize_appearance_target(string $targetKey): string
+{
+    $targetKey = function_exists('af_aa_normalize_target_key')
+        ? af_aa_normalize_target_key($targetKey)
+        : mb_strtolower(trim($targetKey));
+
+    if ($targetKey === '') {
+        return '';
+    }
+
+    if (function_exists('af_aa_is_supported_target') && !af_aa_is_supported_target($targetKey, ['purchasable' => true])) {
+        return '';
+    }
+
+    return $targetKey;
 }
 
 function af_advinv_active_appearance_map(int $uid): array
@@ -3147,7 +3229,7 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
                 $actions .= '<div class="af-inv-card-status is-inactive">Пресет темы выбирается только в форме создания темы или при редактировании первого поста.</div>';
             } else {
                 $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActiveAppearance ? ' disabled="disabled"' : '') . '>Активировать</button>';
-                $actions .= '<form method="post" action="shop.php?action=inventory_appearance_unapply" class="af-inv-inline-form" data-af-appearance-unapply-form>'
+                $actions .= '<form method="post" action="' . htmlspecialchars_uni(af_advancedinventory_url('api_appearance_unapply')) . '" class="af-inv-inline-form" data-af-appearance-unapply-form>'
                     . '<input type="hidden" name="uid" value="' . $itemOwnerUid . '">'
                     . '<input type="hidden" name="target_key" value="' . htmlspecialchars_uni($appearanceTarget) . '">'
                     . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">'
@@ -3289,7 +3371,7 @@ function af_advinv_render_tab_cards(array $items, bool $canManage, bool $allowEq
                 $statusHtml = '<div class="af-inv-card-status is-inactive">Пресет темы выбирается в newthread.php / editpost.php.</div>';
             } else {
                 $actions .= '<button type="button" class="af-inv-action" data-af-appearance-apply-btn data-item-id="' . $itemId . '"' . ($isActive ? ' disabled="disabled"' : '') . '>Активировать</button>';
-                $actions .= '<form method="post" action="shop.php?action=inventory_appearance_unapply" class="af-inv-inline-form" data-af-appearance-unapply-form>'
+                $actions .= '<form method="post" action="' . htmlspecialchars_uni(af_advancedinventory_url('api_appearance_unapply')) . '" class="af-inv-inline-form" data-af-appearance-unapply-form>'
                     . '<input type="hidden" name="uid" value="' . $itemOwnerUid . '">'
                     . '<input type="hidden" name="target_key" value="' . htmlspecialchars_uni($appearanceTarget) . '">'
                     . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '">'
