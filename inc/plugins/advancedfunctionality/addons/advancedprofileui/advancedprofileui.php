@@ -495,6 +495,58 @@ function af_apui_decode_action_url(string $url): string
     return $url;
 }
 
+function af_apui_append_query_arg(string $url, string $key, $value): string
+{
+    $url = af_apui_decode_action_url($url);
+    $key = trim($key);
+
+    if ($url === '' || $key === '' || $value === null || $value === '') {
+        return $url;
+    }
+
+    $fragment = '';
+    $hashPos = strpos($url, '#');
+    if ($hashPos !== false) {
+        $fragment = substr($url, $hashPos);
+        $url = substr($url, 0, $hashPos);
+    }
+
+    $base = $url;
+    $queryString = '';
+
+    $questionPos = strpos($url, '?');
+    if ($questionPos !== false) {
+        $base = substr($url, 0, $questionPos);
+        $queryString = substr($url, $questionPos + 1);
+    }
+
+    $query = [];
+    if ($queryString !== '') {
+        parse_str($queryString, $query);
+    }
+
+    $query[$key] = (string)$value;
+    $newQuery = http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+
+    return $base . ($newQuery !== '' ? '?' . $newQuery : '') . $fragment;
+}
+
+function af_apui_build_surface_url(string $url, int $uid, string $surface): string
+{
+    $url = af_apui_decode_action_url($url);
+    $surface = trim(strtolower($surface));
+
+    if ($url === '' || $uid <= 0 || $surface === '') {
+        return $url;
+    }
+
+    $url = af_apui_append_query_arg($url, 'uid', $uid);
+    $url = af_apui_append_query_arg($url, 'af_apui_owner_uid', $uid);
+    $url = af_apui_append_query_arg($url, 'af_apui_surface', $surface);
+
+    return $url;
+}
+
 function af_apui_get_charactersheet_postbit_payload(int $uid): array
 {
     if ($uid <= 0 || !function_exists('af_cs_get_postbit_sheet_payload')) {
@@ -750,19 +802,28 @@ function af_apui_build_postbit_actionbar_html(array $post, array $sheetPayload =
                 . ', a[name="pid' . $applicationPid . '"]';
         }
 
+        $applicationSourceUrl = af_apui_build_surface_url($applicationUrl, $uid, 'application');
+        $applicationModalUrl = af_apui_build_surface_url(
+            $applicationFetchUrl !== '' ? $applicationFetchUrl : $applicationUrl,
+            $uid,
+            'application'
+        );
+
         $buttons[] = af_apui_build_postbit_action_button([
             'label' => 'Анкета',
             'title' => 'Анкета',
-            'url' => $applicationUrl,
-            'modal_url' => $applicationFetchUrl !== '' ? $applicationFetchUrl : $applicationUrl,
+            'url' => $applicationSourceUrl,
+            'modal_url' => $applicationModalUrl,
             'modal_kind' => 'application',
             'icon' => 'fa-regular fa-id-card',
             'modifier' => 'af-apui-postbit-action--application',
             'data_attrs' => [
-                'data-af-apui-fetch-url' => $applicationFetchUrl !== '' ? $applicationFetchUrl : $applicationUrl,
-                'data-af-apui-source-url' => $applicationUrl,
+                'data-af-apui-fetch-url' => $applicationModalUrl,
+                'data-af-apui-source-url' => $applicationSourceUrl,
                 'data-af-apui-application-pid' => $applicationPid > 0 ? (string)$applicationPid : null,
                 'data-af-apui-fragment-selector' => $fragmentSelector !== '' ? $fragmentSelector : null,
+                'data-af-apui-owner-uid' => (string)$uid,
+                'data-af-apui-surface' => 'application',
             ],
         ]);
     }
@@ -780,39 +841,61 @@ function af_apui_build_postbit_actionbar_html(array $post, array $sheetPayload =
     }
 
     if ($sheetUrl !== '') {
+        $sheetSurfaceUrl = af_apui_build_surface_url($sheetUrl, $uid, 'sheet');
+
         $sheetExtraAttrs =
             'data-afcs-open="1"'
-            . ' data-afcs-sheet="' . htmlspecialchars_uni($sheetUrl) . '"'
-            . ' data-slug="' . htmlspecialchars_uni((string)($sheetPayload['sheet_slug'] ?? '')) . '"';
+            . ' data-afcs-sheet="' . htmlspecialchars_uni($sheetSurfaceUrl) . '"'
+            . ' data-slug="' . htmlspecialchars_uni((string)($sheetPayload['sheet_slug'] ?? '')) . '"'
+            . ' data-af-apui-owner-uid="' . $uid . '"'
+            . ' data-af-apui-surface="sheet"';
 
         $buttons[] = af_apui_build_postbit_action_button([
             'label' => $sheetLabel,
             'title' => $sheetLabel,
-            'url' => $sheetUrl,
+            'url' => $sheetSurfaceUrl,
             'icon' => 'fa-solid fa-id-card',
             'modifier' => 'af-apui-postbit-action--sheet',
             'compat_class' => 'af-cs-plaque__btn',
             'extra_attrs' => $sheetExtraAttrs,
             'use_apui_modal' => false,
+            'data_attrs' => [
+                'data-af-apui-owner-uid' => (string)$uid,
+                'data-af-apui-surface' => 'sheet',
+            ],
         ]);
     }
+
+    $inventoryUrl = af_apui_build_surface_url('inventory.php?uid=' . $uid, $uid, 'inventory');
 
     $buttons[] = af_apui_build_postbit_action_button([
         'label' => 'Инвентарь',
         'title' => 'Инвентарь',
-        'url' => 'inventory.php?uid=' . $uid,
+        'url' => $inventoryUrl,
+        'modal_url' => $inventoryUrl,
         'modal_kind' => 'inventory',
         'icon' => 'fa-solid fa-box-archive',
         'modifier' => 'af-apui-postbit-action--inventory',
+        'data_attrs' => [
+            'data-af-apui-owner-uid' => (string)$uid,
+            'data-af-apui-surface' => 'inventory',
+        ],
     ]);
+
+    $achievementsUrl = af_apui_build_surface_url('achivments.php?uid=' . $uid, $uid, 'achievements');
 
     $buttons[] = af_apui_build_postbit_action_button([
         'label' => 'Ачивки',
         'title' => 'Ачивки',
-        'url' => 'achivments.php?uid=' . $uid,
+        'url' => $achievementsUrl,
+        'modal_url' => $achievementsUrl,
         'modal_kind' => 'achievements',
         'icon' => 'fa-solid fa-trophy',
         'modifier' => 'af-apui-postbit-action--achievements',
+        'data_attrs' => [
+            'data-af-apui-owner-uid' => (string)$uid,
+            'data-af-apui-surface' => 'achievements',
+        ],
     ]);
 
     $buttons = array_values(array_filter($buttons));
@@ -988,7 +1071,7 @@ function af_apui_postbit_compose_userdetails(array &$post): void
 
     $uid = (int)($post['uid'] ?? 0);
     $pid = (int)($post['pid'] ?? 0);
-    $post['af_aa_user_class'] = $uid > 0 ? 'af-aa-user-' . $uid : '';
+    $post['af_aa_user_class'] = $uid > 0 ? 'af-aa-postbit-user-' . $uid : '';
 
     $creditsValue = '0.00';
     $currencySymbol = '¢';
