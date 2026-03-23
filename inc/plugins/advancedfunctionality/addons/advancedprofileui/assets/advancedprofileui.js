@@ -598,7 +598,9 @@
       return '';
     }
 
-    return '<div class="af-apui-application-fragment af-aa-context af-aa-context--application" data-af-apui-surface="application">' + html + '</div>';
+    var ownerUid = parseInt(clone.getAttribute('data-af-apui-owner-uid') || clone.getAttribute('data-owner') || '0', 10) || 0;
+
+    return '<div class="af-apui-application-fragment af-aa-context af-aa-context--application" data-af-apui-surface="application"' + (ownerUid > 0 ? ' data-af-apui-owner-uid="' + ownerUid + '"' : '') + '>' + html + '</div>';
   }
 
   function openApplicationModal(opener) {
