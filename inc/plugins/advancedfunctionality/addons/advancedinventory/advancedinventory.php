@@ -1506,6 +1506,7 @@ function af_advancedinventory_api_appearance_apply(): void
     if ($itemId <= 0) {
         $itemId = (int)$mybb->get_input('inv_id');
     }
+
     $item = af_inv_get_item_for_owner($ownerUid, $itemId);
     if (!$item) {
         af_advancedinventory_json(['ok' => false, 'error' => 'item_not_found'], 404);
@@ -1518,19 +1519,24 @@ function af_advancedinventory_api_appearance_apply(): void
 
     $targetKey = af_advancedinventory_normalize_appearance_target((string)($appearanceInfo['target_key'] ?? ''));
     $presetId = (int)($appearanceInfo['preset_id'] ?? 0);
+
     if ($targetKey === '') {
         af_advancedinventory_json(['ok' => false, 'error' => 'appearance_target_missing'], 422);
     }
+
     if ($presetId <= 0) {
         af_advancedinventory_json(['ok' => false, 'error' => 'appearance_preset_missing'], 422);
     }
-    if ($targetKey === 'apui_thread_pack') {
-        af_advancedinventory_json(['ok' => false, 'error' => 'thread presets are handled only by newthread/editpost.'], 422);
+
+    // Жёсткая защита: через inventory разрешаем только user-scoped назначения.
+    if (!function_exists('af_aa_is_user_assignable_target') || !af_aa_is_user_assignable_target($targetKey)) {
+        af_advancedinventory_json(['ok' => false, 'error' => 'appearance_target_not_user_assignable'], 422);
     }
 
     if (function_exists('af_aa_upsert_user_assignment')) {
         af_aa_upsert_user_assignment($ownerUid, $targetKey, $presetId);
     }
+
     af_advinv_clear_legacy_active_appearance($ownerUid, $targetKey);
 
     $activeState = af_advinv_active_appearance_map($ownerUid);
@@ -2120,15 +2126,27 @@ function af_advinv_active_appearance_map(int $uid): array
         return $map;
     }
 
-    if ($db->table_exists(AF_AA_ASSIGNMENTS_TABLE_NAME)) {
-        $q = $db->simple_select(AF_AA_ASSIGNMENTS_TABLE_NAME, '*', "entity_type='user' AND entity_id='" . (int)$uid . "' AND is_enabled='1'");
-        while ($row = $db->fetch_array($q)) {
-            $targetKey = trim((string)($row['target_key'] ?? ''));
-            if ($targetKey === '') {
-                continue;
-            }
-            $map[$targetKey] = $row;
+    if (!$db->table_exists(AF_AA_ASSIGNMENTS_TABLE_NAME)) {
+        return $map;
+    }
+
+    $q = $db->simple_select(
+        AF_AA_ASSIGNMENTS_TABLE_NAME,
+        '*',
+        "entity_type='user' AND entity_id='" . (int)$uid . "' AND is_enabled='1'"
+    );
+
+    while ($row = $db->fetch_array($q)) {
+        $targetKey = af_aa_normalize_target_key((string)($row['target_key'] ?? ''));
+        if ($targetKey === '') {
+            continue;
         }
+
+        if (function_exists('af_aa_is_user_assignable_target') && !af_aa_is_user_assignable_target($targetKey)) {
+            continue;
+        }
+
+        $map[$targetKey] = $row;
     }
 
     return $map;
