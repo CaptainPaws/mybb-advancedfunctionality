@@ -2151,6 +2151,41 @@ function af_advancedshop_apply_shop_map_target(array $target, array $item, bool 
     return $target;
 }
 
+
+function af_advancedshop_customization_inventory_subtype(string $targetKey): string
+{
+    $targetKey = af_advancedshop_appearance_validate_target($targetKey);
+
+    if (function_exists('af_advinv_normalize_customization_subtype')) {
+        return af_advinv_normalize_customization_subtype($targetKey);
+    }
+
+    $targetKey = str_replace('__', ':', mb_strtolower(trim($targetKey)));
+    $directMap = [
+        'apui_theme_pack' => 'packs',
+        'apui_profile_pack' => 'profile',
+        'apui_postbit_pack' => 'postbit',
+        'apui_thread_pack' => 'thread',
+        'apui_sheet_pack' => 'sheet',
+        'apui_application_pack' => 'application',
+        'apui_inventory_pack' => 'inventory',
+        'apui_achievements_pack' => 'achievements',
+    ];
+    if (isset($directMap[$targetKey])) {
+        return $directMap[$targetKey];
+    }
+    if (strpos($targetKey, 'apui_fragment_pack:profile_') === 0) {
+        return 'profile';
+    }
+    if (strpos($targetKey, 'apui_fragment_pack:postbit_') === 0) {
+        return 'postbit';
+    }
+    if (strpos($targetKey, 'apui_fragment_pack:thread_') === 0) {
+        return 'thread';
+    }
+    return strpos($targetKey, 'apui_fragment_pack:') === 0 ? 'other' : 'other';
+}
+
 function af_advancedshop_grant_inventory_item(int $uid, array $item): void
 {
     global $db;
@@ -2181,7 +2216,7 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
 
         $payload = [
             'slot' => 'customization',
-            'subtype' => str_replace(':', '__', (string)$preset['target_key']),
+            'subtype' => af_advancedshop_customization_inventory_subtype((string)$preset['target_key']),
             'kb_type' => 'appearance',
             'kb_key' => 'appearance:' . (int)$preset['id'],
             'qty' => max(1, (int)($item['qty'] ?? 1)),
