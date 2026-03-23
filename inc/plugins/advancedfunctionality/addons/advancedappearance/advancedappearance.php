@@ -1050,18 +1050,81 @@ function af_aa_render_thread_runtime_css(int $tid): string
     return $css !== '' ? '<style id="af-aa-thread-runtime-css">' . $css . '</style>' . "\n" : '';
 }
 
+function af_aa_inject_profile_scope_classes(string $page, int $uid): string
+{
+    $uid = (int)$uid;
+    if ($uid <= 0 || $page === '') {
+        return $page;
+    }
+
+    $profileClass = 'af-aa-profile-user-' . $uid;
+
+    $addClassToTag = static function (string $tagHtml, string $className): string {
+        $className = trim($className);
+        if ($tagHtml === '' || $className === '') {
+            return $tagHtml;
+        }
+
+        if (preg_match('~\bclass=(["\'])(.*?)\1~is', $tagHtml, $m, PREG_OFFSET_CAPTURE)) {
+            $fullMatch = (string)$m[0][0];
+            $fullOffset = (int)$m[0][1];
+            $classValue = (string)$m[2][0];
+
+            $classes = preg_split('~\s+~u', trim($classValue)) ?: [];
+            $classes = array_values(array_filter($classes, static function ($value) {
+                return $value !== '';
+            }));
+
+            if (!in_array($className, $classes, true)) {
+                $classes[] = $className;
+            }
+
+            $replacement = 'class="' . htmlspecialchars_uni(implode(' ', $classes)) . '"';
+
+            return substr_replace($tagHtml, $replacement, $fullOffset, strlen($fullMatch));
+        }
+
+        $replaced = preg_replace(
+            '~^<([a-z0-9:_-]+)\b([^>]*)>$~isu',
+            '<$1$2 class="' . htmlspecialchars_uni($className) . '">',
+            $tagHtml,
+            1
+        );
+
+        return is_string($replaced) && $replaced !== '' ? $replaced : $tagHtml;
+    };
+
+    $page = preg_replace_callback(
+        '~<body\b[^>]*>~is',
+        static function (array $m) use ($addClassToTag, $profileClass): string {
+            return $addClassToTag((string)$m[0], $profileClass);
+        },
+        $page,
+        1
+    ) ?? $page;
+
+    $page = preg_replace_callback(
+        '~<div\b[^>]*class=(["\'])[^"\']*\baf-apui-profile-page\b[^"\']*\1[^>]*>~is',
+        static function (array $m) use ($addClassToTag, $profileClass): string {
+            return $addClassToTag((string)$m[0], $profileClass);
+        },
+        $page,
+        1
+    ) ?? $page;
+
+    return $page;
+}
+
 function af_aa_pre_output_page(string &$page): void
 {
     if (defined('IN_ADMINCP') || $page === '') {
         return;
     }
 
-    // На preview-страницах ничего не трогаем.
     if (af_aa_is_preview_script()) {
         return;
     }
 
-    // Сначала всегда вычищаем preview-assets, если они случайно попали в обычную страницу.
     $page = af_aa_strip_asset_includes($page);
 
     if (!af_aa_is_enabled()) {
@@ -1079,13 +1142,23 @@ function af_aa_pre_output_page(string &$page): void
         }
     }
 
-    // На случай, если страница профиля не попала в collector по какой-то причине
-    if (defined('THIS_SCRIPT') && THIS_SCRIPT === 'member.php') {
+    if (defined('THIS_SCRIPT') && (string)THIS_SCRIPT === 'member.php') {
         global $memprofile;
+
         $profileUid = (int)($memprofile['uid'] ?? 0);
         if ($profileUid > 0) {
             $uids[$profileUid] = $profileUid;
+            $page = af_aa_inject_profile_scope_classes($page, $profileUid);
         }
+    }
+
+    $surfaceContext = af_aa_detect_surface_context($page);
+    $surfaceUid = (int)($surfaceContext['uid'] ?? 0);
+    $surfaceName = trim((string)($surfaceContext['surface'] ?? ''));
+
+    if ($surfaceUid > 0 && $surfaceName !== '') {
+        $uids[$surfaceUid] = $surfaceUid;
+        $page = af_aa_inject_surface_scope_classes($page, $surfaceUid, $surfaceName);
     }
 
     $runtimeCss = $uids ? af_aa_render_page_css(array_values($uids)) : '';
@@ -1350,6 +1423,7 @@ function af_aa_build_user_css_payload(int $uid): array
     }
 
     $defaults = af_aa_get_apui_defaults();
+    $surfaceRegistry = af_aa_get_surface_registry();
 
     $profileKeys = [
         'member_profile_body_cover_url',
@@ -1426,43 +1500,38 @@ function af_aa_build_user_css_payload(int $uid): array
         'postbit_plaque_icon_size',
     ];
 
-    $modalKeys = [
-        'sheet_bg_url','sheet_bg_overlay','sheet_panel_bg','sheet_panel_border',
-        'application_bg_url','application_bg_overlay','application_panel_bg','application_panel_border',
-        'inventory_bg_url','inventory_bg_overlay','inventory_panel_bg','inventory_panel_border',
-        'achievements_bg_url','achievements_bg_overlay','achievements_panel_bg','achievements_panel_border',
-    ];
-
     $profileSettings = af_aa_merge_keys([], $defaults, $profileKeys);
     $postbitSettings = af_aa_merge_keys([], $defaults, $postbitKeys);
-    $modalSettings = af_aa_merge_keys([], $defaults, $modalKeys);
-    $customCssBlocks = [];
 
-    $surfaceKeyMap = [
-        AF_AA_TARGET_APUI_APPLICATION_PACK => [
-            'keys' => ['application_bg_url', 'application_bg_overlay', 'application_panel_bg', 'application_panel_border'],
-        ],
-        AF_AA_TARGET_APUI_SHEET_PACK => [
-            'keys' => ['sheet_bg_url', 'sheet_bg_overlay', 'sheet_panel_bg', 'sheet_panel_border'],
-        ],
-        AF_AA_TARGET_APUI_INVENTORY_PACK => [
-            'keys' => ['inventory_bg_url', 'inventory_bg_overlay', 'inventory_panel_bg', 'inventory_panel_border'],
-        ],
-        AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK => [
-            'keys' => ['achievements_bg_url', 'achievements_bg_overlay', 'achievements_panel_bg', 'achievements_panel_border'],
-        ],
-    ];
+    $surfaceSettings = [];
+    $surfaceCustomCssBlocks = [];
 
-    // Общий user-scoped pack: только профиль + постбит + модалки.
+    foreach ($surfaceRegistry as $surfaceKey => $surfaceMeta) {
+        $surfaceSettings[$surfaceKey] = af_aa_merge_keys([], $defaults, (array)$surfaceMeta['keys']);
+        $surfaceCustomCssBlocks[$surfaceKey] = [];
+    }
+
+    $themeCustomCssBlocks = [];
+    $profileCustomCssBlocks = [];
+    $postbitCustomCssBlocks = [];
+
     $themePack = af_aa_get_user_preset_settings_for_target($uid, AF_AA_TARGET_APUI_THEME_PACK, $defaults);
     if (!empty($themePack)) {
         $themeSettings = (array)$themePack['settings'];
+
         $profileSettings = af_aa_merge_keys($profileSettings, $themeSettings, $profileKeys);
         $postbitSettings = af_aa_merge_keys($postbitSettings, $themeSettings, $postbitKeys);
-        $modalSettings = af_aa_merge_keys($modalSettings, $themeSettings, $modalKeys);
+
+        foreach ($surfaceRegistry as $surfaceKey => $surfaceMeta) {
+            $surfaceSettings[$surfaceKey] = af_aa_merge_keys(
+                $surfaceSettings[$surfaceKey],
+                $themeSettings,
+                (array)$surfaceMeta['keys']
+            );
+        }
 
         if (!empty($themeSettings['custom_css'])) {
-            $customCssBlocks[] = (string)$themeSettings['custom_css'];
+            $themeCustomCssBlocks[] = (string)$themeSettings['custom_css'];
         }
     }
 
@@ -1470,10 +1539,9 @@ function af_aa_build_user_css_payload(int $uid): array
     if (!empty($profilePack)) {
         $profilePackSettings = (array)$profilePack['settings'];
         $profileSettings = af_aa_merge_keys($profileSettings, $profilePackSettings, $profileKeys);
-        $modalSettings = af_aa_merge_keys($modalSettings, $profilePackSettings, $modalKeys);
 
         if (!empty($profilePackSettings['custom_css'])) {
-            $customCssBlocks[] = (string)$profilePackSettings['custom_css'];
+            $profileCustomCssBlocks[] = (string)$profilePackSettings['custom_css'];
         }
     }
 
@@ -1481,33 +1549,36 @@ function af_aa_build_user_css_payload(int $uid): array
     if (!empty($postbitPack)) {
         $postbitPackSettings = (array)$postbitPack['settings'];
         $postbitSettings = af_aa_merge_keys($postbitSettings, $postbitPackSettings, $postbitKeys);
-        $modalSettings = af_aa_merge_keys($modalSettings, $postbitPackSettings, $modalKeys);
 
         if (!empty($postbitPackSettings['custom_css'])) {
-            $customCssBlocks[] = (string)$postbitPackSettings['custom_css'];
+            $postbitCustomCssBlocks[] = (string)$postbitPackSettings['custom_css'];
         }
     }
 
-    foreach ($surfaceKeyMap as $surfaceTargetKey => $surfaceMeta) {
-        $surfacePack = af_aa_get_user_preset_settings_for_target($uid, $surfaceTargetKey, $defaults);
+    foreach ($surfaceRegistry as $surfaceKey => $surfaceMeta) {
+        $targetKey = (string)($surfaceMeta['target_key'] ?? '');
+        if ($targetKey === '') {
+            continue;
+        }
+
+        $surfacePack = af_aa_get_user_preset_settings_for_target($uid, $targetKey, $defaults);
         if (empty($surfacePack)) {
             continue;
         }
 
-        $surfaceSettings = (array)$surfacePack['settings'];
-        $modalSettings = af_aa_merge_keys($modalSettings, $surfaceSettings, (array)$surfaceMeta['keys']);
+        $surfacePackSettings = (array)$surfacePack['settings'];
+        $surfaceSettings[$surfaceKey] = af_aa_merge_keys(
+            $surfaceSettings[$surfaceKey],
+            $surfacePackSettings,
+            (array)$surfaceMeta['keys']
+        );
 
-        if (!empty($surfaceSettings['custom_css'])) {
-            $customCssBlocks[] = (string)$surfaceSettings['custom_css'];
+        if (!empty($surfacePackSettings['custom_css'])) {
+            $surfaceCustomCssBlocks[$surfaceKey][] = (string)$surfacePackSettings['custom_css'];
         }
     }
 
-    // user-scoped fragments: только профиль/постбит.
     foreach (array_keys(af_aa_get_supported_fragment_keys()) as $fragmentKey) {
-        if (in_array($fragmentKey, ['thread_body', 'thread_banner'], true)) {
-            continue;
-        }
-
         $fragmentTarget = AF_AA_TARGET_APUI_FRAGMENT_PACK . ':' . $fragmentKey;
         $fragmentPack = af_aa_get_user_preset_settings_for_target($uid, $fragmentTarget, $defaults);
 
@@ -1520,32 +1591,45 @@ function af_aa_build_user_css_payload(int $uid): array
         switch ($fragmentKey) {
             case 'profile_body':
                 $profileSettings = af_aa_merge_keys($profileSettings, $fragmentSettings, $bodyKeys);
+                if (!empty($fragmentSettings['custom_css'])) {
+                    $profileCustomCssBlocks[] = (string)$fragmentSettings['custom_css'];
+                }
                 break;
 
             case 'profile_banner':
+            case 'profile_avatar_frame':
                 $profileSettings = af_aa_merge_keys($profileSettings, $fragmentSettings, $bannerKeys);
+                if (!empty($fragmentSettings['custom_css'])) {
+                    $profileCustomCssBlocks[] = (string)$fragmentSettings['custom_css'];
+                }
                 break;
 
             case 'postbit_author':
                 $postbitSettings = af_aa_merge_keys($postbitSettings, $fragmentSettings, $authorKeys);
+                if (!empty($fragmentSettings['custom_css'])) {
+                    $postbitCustomCssBlocks[] = (string)$fragmentSettings['custom_css'];
+                }
                 break;
 
             case 'postbit_name':
                 $postbitSettings = af_aa_merge_keys($postbitSettings, $fragmentSettings, $nameKeys);
+                if (!empty($fragmentSettings['custom_css'])) {
+                    $postbitCustomCssBlocks[] = (string)$fragmentSettings['custom_css'];
+                }
                 break;
 
             case 'postbit_plaque':
-                $postbitSettings = af_aa_merge_keys($postbitSettings, $fragmentSettings, $plaqueKeys);
-                break;
-
-            case 'profile_avatar_frame':
+            case 'postbit_plaque_icon':
             case 'postbit_avatar_frame':
-            default:
+                $postbitSettings = af_aa_merge_keys($postbitSettings, $fragmentSettings, $plaqueKeys);
+                if (!empty($fragmentSettings['custom_css'])) {
+                    $postbitCustomCssBlocks[] = (string)$fragmentSettings['custom_css'];
+                }
                 break;
-        }
 
-        if (!empty($fragmentSettings['custom_css'])) {
-            $customCssBlocks[] = (string)$fragmentSettings['custom_css'];
+            case 'thread_body':
+            case 'thread_banner':
+                break;
         }
     }
 
@@ -1565,16 +1649,16 @@ function af_aa_build_user_css_payload(int $uid): array
         }
     }
 
-    $selector = '.af-aa-user-' . $uid;
-
     $payload = [
         'uid' => $uid,
-        'selector' => $selector,
-        // ВАЖНО: только body страницы профиля, без thread body и без голого .af-aa-user-UID.
-        'body_selector' => 'body.af-apui-member-profile-page.af-aa-user-' . $uid,
+        'profile_selector' => '.af-aa-profile-user-' . $uid,
+        'profile_body_selector' => 'body.af-apui-member-profile-page.af-aa-profile-user-' . $uid,
+        'postbit_selector' => '.af-aa-postbit-user-' . $uid,
+
         'vars' => [
             '--af-apui-profile-banner-image' => af_aa_css_url_value((string)($profileSettings['profile_banner_url'] ?? '')),
             '--af-apui-profile-banner-overlay' => af_aa_css_raw_value((string)($profileSettings['profile_banner_overlay'] ?? 'none'), 'none'),
+
             '--af-apui-postbit-author-bg-image' => af_aa_css_url_value((string)($postbitSettings['postbit_author_bg_url'] ?? '')),
             '--af-apui-postbit-author-overlay' => af_aa_css_raw_value((string)($postbitSettings['postbit_author_overlay'] ?? 'none'), 'none'),
             '--af-apui-postbit-name-bg-image' => af_aa_css_url_value((string)($postbitSettings['postbit_name_bg_url'] ?? '')),
@@ -1587,23 +1671,8 @@ function af_aa_build_user_css_payload(int $uid): array
             '--af-apui-postbit-plaque-icon-border' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_icon_border'] ?? 'rgba(255,255,255,.18)'), 'rgba(255,255,255,.18)'),
             '--af-apui-postbit-plaque-icon-color' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_icon_color'] ?? '#f6f1cf'), '#f6f1cf'),
             '--af-apui-postbit-plaque-icon-size' => af_aa_css_raw_value((string)($postbitSettings['postbit_plaque_icon_size'] ?? '26px'), '26px'),
-            '--af-apui-modal-sheet-bg-image' => af_aa_css_url_value((string)($modalSettings['sheet_bg_url'] ?? '')),
-            '--af-apui-modal-sheet-bg-overlay' => af_aa_css_raw_value((string)($modalSettings['sheet_bg_overlay'] ?? 'none'), 'none'),
-            '--af-apui-modal-sheet-panel-bg' => af_aa_css_raw_value((string)($modalSettings['sheet_panel_bg'] ?? 'rgba(0,0,0,.12)'), 'rgba(0,0,0,.12)'),
-            '--af-apui-modal-sheet-panel-border' => af_aa_css_raw_value((string)($modalSettings['sheet_panel_border'] ?? 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
-            '--af-apui-modal-application-bg-image' => af_aa_css_url_value((string)($modalSettings['application_bg_url'] ?? '')),
-            '--af-apui-modal-application-bg-overlay' => af_aa_css_raw_value((string)($modalSettings['application_bg_overlay'] ?? 'none'), 'none'),
-            '--af-apui-modal-application-panel-bg' => af_aa_css_raw_value((string)($modalSettings['application_panel_bg'] ?? 'rgba(6,12,26,.58)'), 'rgba(6,12,26,.58)'),
-            '--af-apui-modal-application-panel-border' => af_aa_css_raw_value((string)($modalSettings['application_panel_border'] ?? 'rgba(255,255,255,.10)'), 'rgba(255,255,255,.10)'),
-            '--af-apui-modal-inventory-bg-image' => af_aa_css_url_value((string)($modalSettings['inventory_bg_url'] ?? '')),
-            '--af-apui-modal-inventory-bg-overlay' => af_aa_css_raw_value((string)($modalSettings['inventory_bg_overlay'] ?? 'none'), 'none'),
-            '--af-apui-modal-inventory-panel-bg' => af_aa_css_raw_value((string)($modalSettings['inventory_panel_bg'] ?? 'rgba(21,25,34,.92)'), 'rgba(21,25,34,.92)'),
-            '--af-apui-modal-inventory-panel-border' => af_aa_css_raw_value((string)($modalSettings['inventory_panel_border'] ?? 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
-            '--af-apui-modal-achievements-bg-image' => af_aa_css_url_value((string)($modalSettings['achievements_bg_url'] ?? '')),
-            '--af-apui-modal-achievements-bg-overlay' => af_aa_css_raw_value((string)($modalSettings['achievements_bg_overlay'] ?? 'none'), 'none'),
-            '--af-apui-modal-achievements-panel-bg' => af_aa_css_raw_value((string)($modalSettings['achievements_panel_bg'] ?? 'rgba(13,17,28,.74)'), 'rgba(13,17,28,.74)'),
-            '--af-apui-modal-achievements-panel-border' => af_aa_css_raw_value((string)($modalSettings['achievements_panel_border'] ?? 'rgba(255,255,255,.12)'), 'rgba(255,255,255,.12)'),
         ],
+
         'body' => [
             'overlay' => af_aa_css_raw_value((string)($profileSettings['member_profile_body_overlay'] ?? 'none'), 'none'),
             'image' => $selectedBodyImage,
@@ -1612,7 +1681,12 @@ function af_aa_build_user_css_payload(int $uid): array
             'attachment' => $mode === 'tile' ? 'scroll' : 'fixed',
             'size' => $mode === 'tile' ? 'auto' : 'cover',
         ],
-        'custom_css_blocks' => $customCssBlocks,
+
+        'surface_settings' => $surfaceSettings,
+        'theme_custom_css_blocks' => $themeCustomCssBlocks,
+        'profile_custom_css_blocks' => $profileCustomCssBlocks,
+        'postbit_custom_css_blocks' => $postbitCustomCssBlocks,
+        'surface_custom_css_blocks' => $surfaceCustomCssBlocks,
     ];
 
     $GLOBALS['af_aa_payload_cache_runtime'][$uid] = $payload;
@@ -1636,6 +1710,7 @@ function af_aa_render_page_css(array $uidsOnPage): string
     af_aa_prime_runtime_cache(array_values($uids));
 
     $css = '';
+    $surfaceRegistry = af_aa_get_surface_registry();
 
     foreach ($uids as $uid) {
         $payload = af_aa_build_user_css_payload($uid);
@@ -1643,29 +1718,29 @@ function af_aa_render_page_css(array $uidsOnPage): string
             continue;
         }
 
-        $selector = (string)($payload['selector'] ?? '');
-        $bodySelector = (string)($payload['body_selector'] ?? '');
+        $profileSelector = trim((string)($payload['profile_selector'] ?? ''));
+        $profileBodySelector = trim((string)($payload['profile_body_selector'] ?? ''));
+        $postbitSelector = trim((string)($payload['postbit_selector'] ?? ''));
 
-        if ($selector === '') {
-            continue;
-        }
+        $varTargets = array_values(array_filter([$profileSelector, $postbitSelector]));
+        if ($varTargets) {
+            $vars = isset($payload['vars']) && is_array($payload['vars'])
+                ? $payload['vars']
+                : [];
 
-        $vars = isset($payload['vars']) && is_array($payload['vars'])
-            ? $payload['vars']
-            : [];
+            $css .= implode(', ', $varTargets) . '{';
+            foreach ($vars as $varName => $varValue) {
+                $varName = trim((string)$varName);
+                $varValue = trim((string)$varValue);
 
-        $css .= $selector . '{';
-        foreach ($vars as $varName => $varValue) {
-            $varName = trim((string)$varName);
-            $varValue = trim((string)$varValue);
+                if ($varName === '' || $varValue === '') {
+                    continue;
+                }
 
-            if ($varName === '' || $varValue === '') {
-                continue;
+                $css .= $varName . ':' . $varValue . ';';
             }
-
-            $css .= $varName . ':' . $varValue . ';';
+            $css .= "}\n";
         }
-        $css .= "}\n";
 
         $body = isset($payload['body']) && is_array($payload['body'])
             ? $payload['body']
@@ -1687,13 +1762,108 @@ function af_aa_render_page_css(array $uidsOnPage): string
             $memberBodyDeclarations[] = 'background-size:' . trim((string)($body['size'] ?? 'cover')) . ';';
         }
 
-        if ($bodySelector !== '' && !empty($memberBodyDeclarations)) {
-            $css .= $bodySelector . '{' . implode('', $memberBodyDeclarations) . "}\n";
+        if ($profileBodySelector !== '' && !empty($memberBodyDeclarations)) {
+            $css .= $profileBodySelector . '{' . implode('', $memberBodyDeclarations) . "}\n";
         }
 
-        if (!empty($payload['custom_css_blocks']) && is_array($payload['custom_css_blocks'])) {
-            foreach ($payload['custom_css_blocks'] as $cssBlock) {
-                $css .= af_aa_render_scoped_custom_css((string)$cssBlock, $payload);
+        if (!empty($payload['theme_custom_css_blocks']) && is_array($payload['theme_custom_css_blocks'])) {
+            foreach ($payload['theme_custom_css_blocks'] as $cssBlock) {
+                $cssBlock = (string)$cssBlock;
+                if ($cssBlock === '') {
+                    continue;
+                }
+
+                if ($profileSelector !== '') {
+                    $css .= af_aa_render_scoped_custom_css($cssBlock, [
+                        'selector' => $profileSelector,
+                        'body_selector' => $profileBodySelector,
+                    ]);
+                }
+
+                if ($postbitSelector !== '') {
+                    $css .= af_aa_render_scoped_custom_css($cssBlock, [
+                        'selector' => $postbitSelector,
+                        'body_selector' => $postbitSelector,
+                    ]);
+                }
+            }
+        }
+
+        if (!empty($payload['profile_custom_css_blocks']) && is_array($payload['profile_custom_css_blocks']) && $profileSelector !== '') {
+            foreach ($payload['profile_custom_css_blocks'] as $cssBlock) {
+                $css .= af_aa_render_scoped_custom_css((string)$cssBlock, [
+                    'selector' => $profileSelector,
+                    'body_selector' => $profileBodySelector,
+                ]);
+            }
+        }
+
+        if (!empty($payload['postbit_custom_css_blocks']) && is_array($payload['postbit_custom_css_blocks']) && $postbitSelector !== '') {
+            foreach ($payload['postbit_custom_css_blocks'] as $cssBlock) {
+                $css .= af_aa_render_scoped_custom_css((string)$cssBlock, [
+                    'selector' => $postbitSelector,
+                    'body_selector' => $postbitSelector,
+                ]);
+            }
+        }
+
+        $surfaceSettings = isset($payload['surface_settings']) && is_array($payload['surface_settings'])
+            ? $payload['surface_settings']
+            : [];
+
+        $surfaceCustomCssBlocks = isset($payload['surface_custom_css_blocks']) && is_array($payload['surface_custom_css_blocks'])
+            ? $payload['surface_custom_css_blocks']
+            : [];
+
+        foreach ($surfaceRegistry as $surfaceKey => $surfaceMeta) {
+            $selectors = af_aa_get_surface_scope_selectors($uid, $surfaceKey, $profileSelector);
+            if (empty($selectors)) {
+                continue;
+            }
+
+            $settings = isset($surfaceSettings[$surfaceKey]) && is_array($surfaceSettings[$surfaceKey])
+                ? $surfaceSettings[$surfaceKey]
+                : [];
+
+            $declarations = '';
+            foreach ((array)($surfaceMeta['var_map'] ?? []) as $varName => $rule) {
+                $ruleType = (string)($rule['type'] ?? 'raw');
+                $key = (string)($rule['key'] ?? '');
+                $default = (string)($rule['default'] ?? 'none');
+
+                if ($key === '') {
+                    continue;
+                }
+
+                $value = (string)($settings[$key] ?? '');
+
+                if ($ruleType === 'url') {
+                    $rendered = af_aa_css_url_value($value);
+                } else {
+                    $rendered = af_aa_css_raw_value($value, $default);
+                }
+
+                if ($rendered === '') {
+                    continue;
+                }
+
+                $declarations .= $varName . ':' . $rendered . ';';
+            }
+
+            if ($declarations !== '') {
+                $css .= implode(', ', $selectors) . '{' . $declarations . "}\n";
+            }
+
+            if (!empty($payload['theme_custom_css_blocks']) && is_array($payload['theme_custom_css_blocks'])) {
+                foreach ($payload['theme_custom_css_blocks'] as $cssBlock) {
+                    $css .= af_aa_render_multi_scope_custom_css((string)$cssBlock, $selectors, $selectors[0]);
+                }
+            }
+
+            if (!empty($surfaceCustomCssBlocks[$surfaceKey]) && is_array($surfaceCustomCssBlocks[$surfaceKey])) {
+                foreach ($surfaceCustomCssBlocks[$surfaceKey] as $cssBlock) {
+                    $css .= af_aa_render_multi_scope_custom_css((string)$cssBlock, $selectors, $selectors[0]);
+                }
             }
         }
     }
@@ -2163,6 +2333,403 @@ function af_aa_render_scoped_custom_css(string $css, array $payload): string
     }
 
     return $css . "\n";
+}
+
+function af_aa_get_surface_registry(): array
+{
+    return [
+        'sheet' => [
+            'target_key' => AF_AA_TARGET_APUI_SHEET_PACK,
+            'keys' => ['sheet_bg_url', 'sheet_bg_overlay', 'sheet_panel_bg', 'sheet_panel_border'],
+            'fragment_selectors' => [
+                '.af-apui-sheet-fragment',
+                '.af-cs-page',
+            ],
+            'root_classes' => [
+                'af-apui-sheet-fragment',
+                'af-cs-page',
+            ],
+            'context_markers' => [
+                'data-af-apui-surface="sheet"',
+                "data-af-apui-surface='sheet'",
+                'af-apui-sheet-fragment',
+                'af-cs-page',
+            ],
+            'var_map' => [
+                '--af-apui-modal-sheet-bg-image' => ['type' => 'url', 'key' => 'sheet_bg_url'],
+                '--af-apui-modal-sheet-bg-overlay' => ['type' => 'raw', 'key' => 'sheet_bg_overlay', 'default' => 'none'],
+                '--af-apui-modal-sheet-panel-bg' => ['type' => 'raw', 'key' => 'sheet_panel_bg', 'default' => 'rgba(0,0,0,.12)'],
+                '--af-apui-modal-sheet-panel-border' => ['type' => 'raw', 'key' => 'sheet_panel_border', 'default' => 'rgba(255,255,255,.12)'],
+            ],
+        ],
+        'application' => [
+            'target_key' => AF_AA_TARGET_APUI_APPLICATION_PACK,
+            'keys' => ['application_bg_url', 'application_bg_overlay', 'application_panel_bg', 'application_panel_border'],
+            'fragment_selectors' => [
+                '.af-apui-application-fragment',
+            ],
+            'root_classes' => [
+                'af-apui-application-fragment',
+            ],
+            'context_markers' => [
+                'data-af-apui-surface="application"',
+                "data-af-apui-surface='application'",
+                'af-apui-application-fragment',
+            ],
+            'var_map' => [
+                '--af-apui-modal-application-bg-image' => ['type' => 'url', 'key' => 'application_bg_url'],
+                '--af-apui-modal-application-bg-overlay' => ['type' => 'raw', 'key' => 'application_bg_overlay', 'default' => 'none'],
+                '--af-apui-modal-application-panel-bg' => ['type' => 'raw', 'key' => 'application_panel_bg', 'default' => 'rgba(6,12,26,.58)'],
+                '--af-apui-modal-application-panel-border' => ['type' => 'raw', 'key' => 'application_panel_border', 'default' => 'rgba(255,255,255,.10)'],
+            ],
+        ],
+        'inventory' => [
+            'target_key' => AF_AA_TARGET_APUI_INVENTORY_PACK,
+            'keys' => ['inventory_bg_url', 'inventory_bg_overlay', 'inventory_panel_bg', 'inventory_panel_border'],
+            'fragment_selectors' => [
+                '.af-apui-inventory-fragment',
+                '.af-inv-page',
+            ],
+            'root_classes' => [
+                'af-apui-inventory-fragment',
+                'af-inv-page',
+            ],
+            'context_markers' => [
+                'data-af-apui-surface="inventory"',
+                "data-af-apui-surface='inventory'",
+                'af-apui-inventory-fragment',
+                'af-inv-page',
+            ],
+            'var_map' => [
+                '--af-apui-modal-inventory-bg-image' => ['type' => 'url', 'key' => 'inventory_bg_url'],
+                '--af-apui-modal-inventory-bg-overlay' => ['type' => 'raw', 'key' => 'inventory_bg_overlay', 'default' => 'none'],
+                '--af-apui-modal-inventory-panel-bg' => ['type' => 'raw', 'key' => 'inventory_panel_bg', 'default' => 'rgba(21,25,34,.92)'],
+                '--af-apui-modal-inventory-panel-border' => ['type' => 'raw', 'key' => 'inventory_panel_border', 'default' => 'rgba(255,255,255,.12)'],
+            ],
+        ],
+        'achievements' => [
+            'target_key' => AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK,
+            'keys' => ['achievements_bg_url', 'achievements_bg_overlay', 'achievements_panel_bg', 'achievements_panel_border'],
+            'fragment_selectors' => [
+                '.af-apui-achievements-fragment',
+            ],
+            'root_classes' => [
+                'af-apui-achievements-fragment',
+            ],
+            'context_markers' => [
+                'data-af-apui-surface="achievements"',
+                "data-af-apui-surface='achievements'",
+                'af-apui-achievements-fragment',
+            ],
+            'var_map' => [
+                '--af-apui-modal-achievements-bg-image' => ['type' => 'url', 'key' => 'achievements_bg_url'],
+                '--af-apui-modal-achievements-bg-overlay' => ['type' => 'raw', 'key' => 'achievements_bg_overlay', 'default' => 'none'],
+                '--af-apui-modal-achievements-panel-bg' => ['type' => 'raw', 'key' => 'achievements_panel_bg', 'default' => 'rgba(13,17,28,.74)'],
+                '--af-apui-modal-achievements-panel-border' => ['type' => 'raw', 'key' => 'achievements_panel_border', 'default' => 'rgba(255,255,255,.12)'],
+            ],
+        ],
+    ];
+}
+
+function af_aa_get_surface_scope_selectors(int $uid, string $surface, string $profileSelector = ''): array
+{
+    $uid = (int)$uid;
+    $surface = trim(strtolower($surface));
+
+    if ($uid <= 0 || $surface === '') {
+        return [];
+    }
+
+    $registry = af_aa_get_surface_registry();
+    $meta = $registry[$surface] ?? [];
+
+    $selectors = [
+        'body.af-aa-surface-user-' . $uid,
+        'body.af-aa-surface-user-' . $uid . '[data-af-apui-surface="' . $surface . '"]',
+        'body.af-aa-surface-user-' . $uid . '[data-af-apui-owner-uid="' . $uid . '"]',
+        'body.af-aa-surface-user-' . $uid . '[data-af-apui-surface="' . $surface . '"][data-af-apui-owner-uid="' . $uid . '"]',
+
+        '.af-aa-surface-user-' . $uid . '[data-af-apui-surface="' . $surface . '"]',
+        '.af-aa-surface-user-' . $uid . '[data-af-apui-owner-uid="' . $uid . '"]',
+
+        '[data-af-apui-surface="' . $surface . '"][data-af-apui-owner-uid="' . $uid . '"]',
+        '[data-af-apui-surface="' . $surface . '"][data-uid="' . $uid . '"]',
+    ];
+
+    foreach ((array)($meta['fragment_selectors'] ?? []) as $fragmentSelector) {
+        $fragmentSelector = trim((string)$fragmentSelector);
+        if ($fragmentSelector === '') {
+            continue;
+        }
+
+        $selectors[] = 'body.af-aa-surface-user-' . $uid . ' ' . $fragmentSelector;
+        $selectors[] = 'body.af-aa-surface-user-' . $uid . ' ' . $fragmentSelector . '[data-af-apui-owner-uid="' . $uid . '"]';
+        $selectors[] = 'body.af-aa-surface-user-' . $uid . ' ' . $fragmentSelector . '[data-uid="' . $uid . '"]';
+
+        $selectors[] = $fragmentSelector . '.af-aa-surface-user-' . $uid;
+        $selectors[] = $fragmentSelector . '[data-af-apui-owner-uid="' . $uid . '"]';
+        $selectors[] = $fragmentSelector . '[data-uid="' . $uid . '"]';
+    }
+
+    if ($profileSelector !== '') {
+        $selectors[] = $profileSelector . ' [data-af-apui-surface="' . $surface . '"]';
+        $selectors[] = $profileSelector . ' [data-af-apui-surface="' . $surface . '"][data-af-apui-owner-uid="' . $uid . '"]';
+
+        foreach ((array)($meta['fragment_selectors'] ?? []) as $fragmentSelector) {
+            $fragmentSelector = trim((string)$fragmentSelector);
+            if ($fragmentSelector !== '') {
+                $selectors[] = $profileSelector . ' ' . $fragmentSelector;
+            }
+        }
+    }
+
+    $selectors = array_values(array_unique(array_filter(array_map('trim', $selectors))));
+
+    return $selectors;
+}
+
+function af_aa_render_multi_scope_custom_css(string $css, array $selectors, string $bodySelector = ''): string
+{
+    $css = af_aa_sanitize_custom_css($css);
+    if ($css === '') {
+        return '';
+    }
+
+    $selectors = array_values(array_unique(array_filter(array_map('trim', $selectors))));
+    if (empty($selectors)) {
+        return '';
+    }
+
+    $primarySelector = $selectors[0];
+    $combinedSelector = implode(', ', $selectors);
+    $bodySelector = trim($bodySelector) !== '' ? trim($bodySelector) : $primarySelector;
+
+    $hasPlaceholder = strpos($css, '{{selector}}') !== false || strpos($css, '{{body_selector}}') !== false;
+
+    if ($hasPlaceholder) {
+        return af_aa_render_scoped_custom_css($css, [
+            'selector' => $combinedSelector,
+            'body_selector' => $bodySelector,
+        ]);
+    }
+
+    $out = '';
+    foreach ($selectors as $selector) {
+        $out .= af_aa_render_scoped_custom_css($css, [
+            'selector' => $selector,
+            'body_selector' => $bodySelector,
+        ]);
+    }
+
+    return $out;
+}
+
+function af_aa_detect_surface_context(string $page): array
+{
+    global $mybb, $memprofile;
+
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    $surface = '';
+    $uid = 0;
+
+    $allowedSurfaces = ['sheet', 'application', 'inventory', 'achievements'];
+
+    if (isset($mybb) && is_object($mybb) && method_exists($mybb, 'get_input')) {
+        $requestedSurface = trim(strtolower((string)$mybb->get_input('af_apui_surface')));
+        if (in_array($requestedSurface, $allowedSurfaces, true)) {
+            $surface = $requestedSurface;
+        }
+    }
+
+    if ($surface === '' && preg_match('~data-af-apui-surface=(["\'])(sheet|application|inventory|achievements)\1~i', $page, $m)) {
+        $surface = strtolower((string)$m[2]);
+    }
+
+    if ($surface === '') {
+        foreach (af_aa_get_surface_registry() as $surfaceKey => $meta) {
+            foreach ((array)($meta['context_markers'] ?? []) as $marker) {
+                $marker = (string)$marker;
+                if ($marker !== '' && strpos($page, $marker) !== false) {
+                    $surface = (string)$surfaceKey;
+                    break 2;
+                }
+            }
+        }
+    }
+
+    if ($surface === '') {
+        if ($script === 'charactersheets.php') {
+            $surface = 'sheet';
+        } elseif ($script === 'inventory.php') {
+            $surface = 'inventory';
+        } elseif ($script === 'achivments.php' || $script === 'achievements.php') {
+            $surface = 'achievements';
+        }
+    }
+
+    if (isset($mybb) && is_object($mybb) && method_exists($mybb, 'get_input')) {
+        $uid = (int)$mybb->get_input('uid', MyBB::INPUT_INT);
+
+        if ($uid <= 0) {
+            $uid = (int)$mybb->get_input('af_apui_owner_uid', MyBB::INPUT_INT);
+        }
+    }
+
+    if ($uid <= 0 && $surface === 'application' && $script === 'showthread.php') {
+        $pid = 0;
+        $tid = 0;
+
+        if (isset($mybb) && is_object($mybb) && method_exists($mybb, 'get_input')) {
+            $pid = (int)$mybb->get_input('pid', MyBB::INPUT_INT);
+            $tid = (int)$mybb->get_input('tid', MyBB::INPUT_INT);
+        }
+
+        if ($pid > 0 && function_exists('af_aa_get_post_thread_context_by_pid')) {
+            $context = af_aa_get_post_thread_context_by_pid($pid);
+            $uid = (int)($context['thread_uid'] ?? ($context['post_uid'] ?? 0));
+        }
+
+        if ($uid <= 0 && $tid > 0 && function_exists('af_aa_get_thread_row')) {
+            $thread = af_aa_get_thread_row($tid);
+            $uid = (int)($thread['uid'] ?? 0);
+        }
+    }
+
+    if ($uid <= 0 && !empty($memprofile['uid'])) {
+        $uid = (int)$memprofile['uid'];
+    }
+
+    if ($uid <= 0 && preg_match('~\bdata-af-apui-owner-uid=(["\']?)(\d+)\1~i', $page, $m)) {
+        $uid = (int)$m[2];
+    }
+
+    if ($uid <= 0 && preg_match('~\bdata-uid=(["\']?)(\d+)\1~i', $page, $m)) {
+        $uid = (int)$m[2];
+    }
+
+    return [
+        'surface' => $surface,
+        'uid' => $uid,
+    ];
+}
+
+function af_aa_inject_surface_scope_classes(string $page, int $uid, string $surface): string
+{
+    $uid = (int)$uid;
+    $surface = trim(strtolower($surface));
+
+    if ($uid <= 0 || $surface === '' || $page === '') {
+        return $page;
+    }
+
+    $surfaceClass = 'af-aa-surface-user-' . $uid;
+    $registry = af_aa_get_surface_registry();
+    $meta = $registry[$surface] ?? [];
+
+    $addClassToTag = static function (string $tagHtml, string $className): string {
+        if ($tagHtml === '' || $className === '') {
+            return $tagHtml;
+        }
+
+        if (preg_match('~\bclass=(["\'])(.*?)\1~is', $tagHtml, $m, PREG_OFFSET_CAPTURE)) {
+            $fullMatch = (string)$m[0][0];
+            $fullOffset = (int)$m[0][1];
+            $classValue = (string)$m[2][0];
+
+            $classes = preg_split('~\s+~u', trim($classValue)) ?: [];
+            $classes = array_values(array_filter($classes, static function ($value) {
+                return $value !== '';
+            }));
+
+            if (!in_array($className, $classes, true)) {
+                $classes[] = $className;
+            }
+
+            $replacement = 'class="' . htmlspecialchars_uni(implode(' ', $classes)) . '"';
+
+            return substr_replace($tagHtml, $replacement, $fullOffset, strlen($fullMatch));
+        }
+
+        $replaced = preg_replace(
+            '~^<([a-z0-9:_-]+)\b([^>]*)>$~isu',
+            '<$1$2 class="' . htmlspecialchars_uni($className) . '">',
+            $tagHtml,
+            1
+        );
+
+        return is_string($replaced) && $replaced !== '' ? $replaced : $tagHtml;
+    };
+
+    $ensureAttrOnTag = static function (string $tagHtml, string $attrName, string $attrValue): string {
+        if ($tagHtml === '' || $attrName === '' || $attrValue === '') {
+            return $tagHtml;
+        }
+
+        if (preg_match('~\b' . preg_quote($attrName, '~') . '=(["\']).*?\1~is', $tagHtml)) {
+            return $tagHtml;
+        }
+
+        $replaced = preg_replace(
+            '~^<([a-z0-9:_-]+)\b([^>]*)>$~isu',
+            '<$1$2 ' . $attrName . '="' . htmlspecialchars_uni($attrValue) . '">',
+            $tagHtml,
+            1
+        );
+
+        return is_string($replaced) && $replaced !== '' ? $replaced : $tagHtml;
+    };
+
+    $applySurfaceAttrsToTag = static function (string $tagHtml) use ($addClassToTag, $ensureAttrOnTag, $surfaceClass, $surface, $uid): string {
+        $tagHtml = $addClassToTag($tagHtml, $surfaceClass);
+        $tagHtml = $ensureAttrOnTag($tagHtml, 'data-af-apui-surface', $surface);
+        $tagHtml = $ensureAttrOnTag($tagHtml, 'data-af-apui-owner-uid', (string)$uid);
+        $tagHtml = $ensureAttrOnTag($tagHtml, 'data-uid', (string)$uid);
+
+        return $tagHtml;
+    };
+
+    $page = preg_replace_callback(
+        '~<body\b[^>]*>~is',
+        static function (array $m) use ($applySurfaceAttrsToTag): string {
+            return $applySurfaceAttrsToTag((string)$m[0]);
+        },
+        $page,
+        1
+    ) ?? $page;
+
+    $pattern = '~<([a-z0-9:_-]+)\b[^>]*data-af-apui-surface=(["\'])' . preg_quote($surface, '~') . '\2[^>]*>~isu';
+    $page = preg_replace_callback(
+        $pattern,
+        static function (array $m) use ($applySurfaceAttrsToTag): string {
+            return $applySurfaceAttrsToTag((string)$m[0]);
+        },
+        $page,
+        1
+    ) ?? $page;
+
+    foreach ((array)($meta['root_classes'] ?? []) as $rootClass) {
+        $rootClass = trim((string)$rootClass);
+        if ($rootClass === '') {
+            continue;
+        }
+
+        $rootPattern = '~<([a-z0-9:_-]+)\b[^>]*class=(["\'])[^"\']*\b' . preg_quote($rootClass, '~') . '\b[^"\']*\2[^>]*>~isu';
+
+        $updated = preg_replace_callback(
+            $rootPattern,
+            static function (array $m) use ($applySurfaceAttrsToTag): string {
+                return $applySurfaceAttrsToTag((string)$m[0]);
+            },
+            $page,
+            1
+        );
+
+        if (is_string($updated) && $updated !== '') {
+            $page = $updated;
+        }
+    }
+
+    return $page;
 }
 
 function af_aa_get_apui_setting(string $suffix, string $default = ''): string
