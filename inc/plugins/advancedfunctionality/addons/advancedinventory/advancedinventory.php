@@ -1225,7 +1225,7 @@ function af_advancedinventory_api_unequip(): void
 
 function af_advancedinventory_api_appearance_apply(): void
 {
-    global $mybb, $db;
+    global $mybb;
 
     af_advancedinventory_require_post();
 
@@ -1250,34 +1250,35 @@ function af_advancedinventory_api_appearance_apply(): void
     }
 
     $targetKey = af_advancedinventory_normalize_appearance_target((string)($appearanceInfo['target_key'] ?? ''));
+    $presetId = (int)($appearanceInfo['preset_id'] ?? 0);
     if ($targetKey === '') {
         af_advancedinventory_json(['ok' => false, 'error' => 'appearance_target_missing'], 422);
     }
+    if ($presetId <= 0) {
+        af_advancedinventory_json(['ok' => false, 'error' => 'appearance_preset_missing'], 422);
+    }
     if ($targetKey === 'apui_thread_pack') {
-        af_advancedinventory_json(['ok' => false, 'error' => 'thread_pack_requires_thread_form'], 422);
+        af_advancedinventory_json(['ok' => false, 'error' => 'thread presets are handled only by newthread/editpost.'], 422);
     }
 
-    $row = [
+    if (function_exists('af_aa_upsert_user_assignment')) {
+        af_aa_upsert_user_assignment($ownerUid, $targetKey, $presetId);
+    }
+
+    $activeState = af_advinv_active_appearance_map($ownerUid);
+    af_advancedinventory_json([
+        'ok' => true,
+        'target_key' => $targetKey,
         'item_id' => (int)$item['id'],
-        'is_enabled' => 1,
-        'applied_at' => TIME_NOW,
-    ];
-    $exists = $db->fetch_array($db->simple_select('af_aa_active', 'id', "entity_type='user' AND entity_id=" . $ownerUid . " AND target_key='" . $db->escape_string($targetKey) . "'", ['limit' => 1]));
-    if ($exists) {
-        $db->update_query('af_aa_active', $row, 'id=' . (int)$exists['id']);
-    } else {
-        $row['entity_type'] = 'user';
-        $row['entity_id'] = $ownerUid;
-        $row['target_key'] = $db->escape_string($targetKey);
-        $db->insert_query('af_aa_active', $row);
-    }
-
-    af_advancedinventory_json(['ok' => true, 'target_key' => $targetKey, 'item_id' => (int)$item['id']]);
+        'preset_id' => $presetId,
+        'active_customization' => (array)($activeState[$targetKey] ?? []),
+        'item' => af_advinv_build_appearance_response_item($item, $activeState),
+    ]);
 }
 
 function af_advancedinventory_api_appearance_unapply(): void
 {
-    global $mybb, $db;
+    global $mybb;
 
     af_advancedinventory_require_post();
 
@@ -1292,8 +1293,16 @@ function af_advancedinventory_api_appearance_unapply(): void
         af_advancedinventory_json(['ok' => false, 'error' => 'appearance_target_missing'], 422);
     }
 
-    $db->delete_query('af_aa_active', "entity_type='user' AND entity_id=" . $ownerUid . " AND target_key='" . $db->escape_string($targetKey) . "'");
-    af_advancedinventory_json(['ok' => true, 'target_key' => $targetKey]);
+    if (function_exists('af_aa_delete_user_assignment')) {
+        af_aa_delete_user_assignment($ownerUid, $targetKey);
+    }
+
+    $activeState = af_advinv_active_appearance_map($ownerUid);
+    af_advancedinventory_json([
+        'ok' => true,
+        'target_key' => $targetKey,
+        'active_customization' => (array)($activeState[$targetKey] ?? []),
+    ]);
 }
 
 function af_advancedinventory_api_support_slots_state(): void
@@ -1597,8 +1606,17 @@ function af_advancedinventory_api_sell(): void
 
     $db->write_query('START TRANSACTION');
     try {
-        if (!empty($appearanceInfo['is_visual_item']) && $db->table_exists('af_aa_active')) {
-            $db->delete_query('af_aa_active', "entity_type='user' AND entity_id=" . $ownerUid . " AND item_id=" . $itemId);
+        if (!empty($appearanceInfo['is_visual_item'])) {
+            $targetKey = af_advancedinventory_normalize_appearance_target((string)($appearanceInfo['target_key'] ?? ''));
+            $presetId = (int)($appearanceInfo['preset_id'] ?? 0);
+            $activeAppearanceMap = af_advinv_active_appearance_map($ownerUid);
+            $activeTarget = $targetKey !== '' ? (array)($activeAppearanceMap[$targetKey] ?? []) : [];
+            $matchesActive = ($targetKey !== '' && (((int)($activeTarget['preset_id'] ?? 0) > 0 && (int)($activeTarget['preset_id'] ?? 0) === $presetId) || ((int)($activeTarget['item_id'] ?? 0) === $itemId)));
+            if ($matchesActive && function_exists('af_aa_delete_user_assignment')) {
+                af_aa_delete_user_assignment($ownerUid, $targetKey);
+            } elseif ($matchesActive && $db->table_exists('af_aa_active')) {
+                $db->delete_query('af_aa_active', "entity_type='user' AND entity_id=" . $ownerUid . " AND item_id=" . $itemId);
+            }
         }
 
         if ($itemQtyLeft > 0) {
@@ -1829,7 +1847,22 @@ function af_advinv_active_appearance_map(int $uid): array
     global $db;
 
     $map = [];
-    if ($uid <= 0 || !$db->table_exists('af_aa_active')) {
+    if ($uid <= 0) {
+        return $map;
+    }
+
+    if ($db->table_exists(AF_AA_ASSIGNMENTS_TABLE_NAME)) {
+        $q = $db->simple_select(AF_AA_ASSIGNMENTS_TABLE_NAME, '*', "entity_type='user' AND entity_id='" . (int)$uid . "' AND is_enabled='1'");
+        while ($row = $db->fetch_array($q)) {
+            $targetKey = trim((string)($row['target_key'] ?? ''));
+            if ($targetKey === '') {
+                continue;
+            }
+            $map[$targetKey] = $row;
+        }
+    }
+
+    if ($map || !$db->table_exists('af_aa_active')) {
         return $map;
     }
 
@@ -1843,6 +1876,28 @@ function af_advinv_active_appearance_map(int $uid): array
     }
 
     return $map;
+}
+
+function af_advinv_build_appearance_response_item(array $item, array $activeState = []): array
+{
+    $appearanceInfo = af_advinv_resolve_appearance_item($item);
+    $targetKey = trim((string)($appearanceInfo['target_key'] ?? ''));
+    $presetId = (int)($appearanceInfo['preset_id'] ?? 0);
+    $activeTarget = $targetKey !== '' ? (array)($activeState[$targetKey] ?? []) : [];
+    $isActive = false;
+
+    if ($presetId > 0 && (int)($activeTarget['preset_id'] ?? 0) === $presetId) {
+        $isActive = true;
+    } elseif ((int)($activeTarget['item_id'] ?? 0) === (int)($item['id'] ?? 0)) {
+        $isActive = true;
+    }
+
+    return [
+        'id' => (int)($item['id'] ?? 0),
+        'target_key' => $targetKey,
+        'preset_id' => $presetId,
+        'is_active' => $isActive ? 1 : 0,
+    ];
 }
 
 function af_advinv_enrich_items_from_kb(array $items): array
@@ -1998,7 +2053,7 @@ function af_advinv_enrich_items_from_kb(array $items): array
                     $appearanceActiveMap[$uid] = af_advinv_active_appearance_map($uid);
                 }
                 $activeTarget = (array)($appearanceActiveMap[$uid][$targetKey] ?? []);
-                $item['appearance_is_active'] = ((int)($activeTarget['item_id'] ?? 0) === (int)($item['id'] ?? 0)) ? 1 : 0;
+                $item['appearance_is_active'] = (((int)($activeTarget['preset_id'] ?? 0) > 0 && (int)($activeTarget['preset_id'] ?? 0) === (int)($item['appearance_preset_id'] ?? 0)) || ((int)($activeTarget['item_id'] ?? 0) === (int)($item['id'] ?? 0))) ? 1 : 0;
             }
         }
     }
@@ -3163,7 +3218,7 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
         if ($uid > 0) {
             $activeMap = af_advinv_active_appearance_map($uid);
             $activeTarget = (array)($activeMap[$appearanceTarget] ?? []);
-            $isActiveAppearance = ((int)($activeTarget['item_id'] ?? 0) === $itemId);
+            $isActiveAppearance = (((int)($activeTarget['preset_id'] ?? 0) > 0 && (int)($activeTarget['preset_id'] ?? 0) === $appearancePresetId) || ((int)($activeTarget['item_id'] ?? 0) === $itemId));
         }
     }
 
