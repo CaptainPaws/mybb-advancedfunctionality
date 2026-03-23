@@ -172,7 +172,140 @@
     document.body.classList.add('af-shop-modal-open');
   }
 
+  function afShopModalRoot(){
+    return document.querySelector('[data-af-shop-modal]');
+  }
+
+  function hideInventoryModal(){
+    var modal = afShopModalRoot();
+    if(!modal){ return; }
+    modal.hidden = true;
+    document.body.classList.remove('af-shop-modal-open');
+  }
+
+  var CHECKOUT_SUCCESS_STORAGE_KEY = 'af_shop_checkout_success';
+
+  function checkoutSuccessStorage(){
+    try {
+      if(window.sessionStorage){ return window.sessionStorage; }
+    } catch(err) {}
+    try {
+      if(window.localStorage){ return window.localStorage; }
+    } catch(err2) {}
+    return null;
+  }
+
+  function checkoutSuccessStateKey(shopCode){
+    return CHECKOUT_SUCCESS_STORAGE_KEY + ':' + String(shopCode || 'game');
+  }
+
+  function currentShopCode(){
+    var root = document.querySelector('[data-shop]');
+    return root ? (root.getAttribute('data-shop') || 'game') : 'game';
+  }
+
+  function persistCheckoutSuccess(res){
+    var storage = checkoutSuccessStorage();
+    var payload = normalizeCheckoutSuccessPayload(res);
+    if(!storage || !payload){ return; }
+    try {
+      storage.setItem(checkoutSuccessStateKey(payload.shop_code), JSON.stringify(payload));
+    } catch(err) {
+      afShopWarn('Failed to persist checkout success payload', err);
+    }
+  }
+
+  function readCheckoutSuccess(shopCode){
+    var storage = checkoutSuccessStorage();
+    if(!storage){ return null; }
+    var keyName = checkoutSuccessStateKey(shopCode || currentShopCode());
+    try {
+      var raw = storage.getItem(keyName);
+      if(!raw){ return null; }
+      return normalizeCheckoutSuccessPayload(parseJSON(raw));
+    } catch(err) {
+      afShopWarn('Failed to read checkout success payload', err);
+      return null;
+    }
+  }
+
+  function clearCheckoutSuccess(shopCode){
+    var storage = checkoutSuccessStorage();
+    if(!storage){ return; }
+    try {
+      storage.removeItem(checkoutSuccessStateKey(shopCode || currentShopCode()));
+    } catch(err) {
+      afShopWarn('Failed to clear checkout success payload', err);
+    }
+  }
+
+  function normalizeCheckoutSuccessPayload(res){
+    if(!res || typeof res !== 'object'){ return null; }
+    var checkout = res.checkout || {};
+    var links = res.links || {};
+    var items = Array.isArray(res.items) ? res.items : [];
+    var normalizedItems = items.map(function(item){
+      var qty = Math.max(1, parseInt(item && item.qty, 10) || 1);
+      var title = item && item.title ? String(item.title) : ('Товар #' + String(item && item.slot_id ? item.slot_id : ''));
+      return {
+        title: title,
+        qty: qty
+      };
+    }).filter(function(item){ return item.title !== 'Товар #'; });
+    if(!normalizedItems.length){ return null; }
+    return {
+      shop_code: String(res.shop_code || checkout.shop_code || currentShopCode()),
+      spent_minor: parseInt(res.spent_minor != null ? res.spent_minor : checkout.spent_minor, 10) || 0,
+      spent_major: String(res.spent_major != null ? res.spent_major : (checkout.spent_major || checkout.total_major || '0.00')),
+      currency_symbol: String(res.currency_symbol || checkout.currency_symbol || ''),
+      shop_url: String(links.shop || ''),
+      inventory_url: String(links.inventory || ''),
+      items: normalizedItems
+    };
+  }
+
+  function showCheckoutSuccessModal(payload){
+    if(!payload){ return; }
+    var spentText = escapeHtml(payload.spent_major || '0.00') + (payload.currency_symbol ? (' ' + escapeHtml(payload.currency_symbol)) : '');
+    var itemsHtml = payload.items.map(function(item){
+      return '<li><strong>' + escapeHtml(item.title) + '</strong>' + (item.qty > 1 ? (' <span>×' + escapeHtml(String(item.qty)) + '</span>') : '') + '</li>';
+    }).join('');
+    var actions = '';
+    if(payload.shop_url){
+      actions += '<a class="af-shop-btn" href="' + escapeHtml(payload.shop_url) + '">Вернуться в магазин</a>';
+    }
+    if(payload.inventory_url){
+      actions += '<a class="af-shop-btn" href="' + escapeHtml(payload.inventory_url) + '">Открыть инвентарь</a>';
+    }
+    showInventoryModal(
+      '<div class="af-shop-modal__title" id="af-shop-modal-title">Покупка успешно завершена</div>'
+      + '<p>Купленные товары:</p>'
+      + '<ul>' + itemsHtml + '</ul>'
+      + '<p>Списано: <strong>' + spentText + '</strong></p>'
+      + '<div class="af-shop-modal__actions">' + actions + '</div>'
+    );
+  }
+
+  function hideCheckoutSuccessModal(){
+    clearCheckoutSuccess();
+    hideInventoryModal();
+  }
+
+  window.afShopHideCheckoutSuccessModal = hideCheckoutSuccessModal;
+
+  function restoreCheckoutSuccessModal(){
+    var payload = readCheckoutSuccess();
+    if(!payload){ return; }
+    clearCheckoutSuccess(payload.shop_code);
+    showCheckoutSuccessModal(payload);
+  }
+
   document.addEventListener('click', function(e){
+    if(e.target.closest('[data-af-shop-modal-close]')){
+      e.preventDefault();
+      hideCheckoutSuccessModal();
+      return;
+    }
 
     var catToggle = e.target.closest('.af-cat-toggle[data-cat]');
     if(catToggle){
