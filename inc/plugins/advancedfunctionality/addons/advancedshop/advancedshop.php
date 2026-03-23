@@ -1921,7 +1921,15 @@ function af_advancedshop_checkout(): void
 
     $balanceAfter = max(0, (int)$balance - (int)$total);
     af_advancedshop_json_ok([
+        'shop_code' => (string)$shop['code'],
+        'items' => af_advancedshop_checkout_success_items($items),
+        'spent_minor' => (int)$total,
+        'spent_major' => af_advancedshop_money_format((int)$total),
+        'currency_symbol' => af_advancedshop_currency_symbol($currency),
         'checkout' => [
+            'shop_code' => (string)$shop['code'],
+            'spent_minor' => (int)$total,
+            'spent_major' => af_advancedshop_money_format((int)$total),
             'total_minor' => (int)$total,
             'total_major' => af_advancedshop_money_format((int)$total),
             'currency' => $currency,
@@ -2089,32 +2097,74 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
     global $db;
     $items = [];
     $total = 0;
+    $kbCols = af_advancedshop_kb_cols();
+    $kbIdCol = $kbCols['id'] ?? 'id';
+    $titleRuCol = $kbCols['title_ru'] ?? null;
+    $titleEnCol = $kbCols['title_en'] ?? null;
+    $titleCol = $kbCols['title'] ?? null;
     $q = $db->query("SELECT ci.qty, s.slot_id, s.shop_id, sh.code AS shop_code, s.cat_id, s.source_type, s.source_ref_id, s.kb_id, s.kb_type, s.kb_key, s.meta_json, s.price, s.currency
+        , " . ($titleRuCol ? ('e.' . $titleRuCol) : "''") . " AS kb_title_ru
+        , " . ($titleEnCol ? ('e.' . $titleEnCol) : "''") . " AS kb_title_en
+        , " . ($titleCol ? ('e.' . $titleCol) : "''") . " AS kb_title
         FROM " . TABLE_PREFIX . "af_shop_cart_items ci
         INNER JOIN " . TABLE_PREFIX . "af_shop_slots s ON(s.slot_id=ci.slot_id)
         INNER JOIN " . TABLE_PREFIX . af_advancedshop_shops_table() . " sh ON(sh.shop_id=s.shop_id)
+        LEFT JOIN " . af_advancedshop_kb_table() . " e ON(e." . $kbIdCol . "=s.kb_id)
         WHERE ci.cart_id={$cartId} AND s.enabled=1");
     while ($row = $db->fetch_array($q)) {
         $qty = max(1, (int)$row['qty']);
         $price = max(0, (int)$row['price']);
+        $sourceType = af_advancedshop_source_type_from_slot($row);
+        $sourceRefId = af_advancedshop_source_ref_id_from_slot($row);
+        $title = '';
+        if ($sourceType === 'appearance') {
+            $preset = af_advancedshop_appearance_fetch_preset($sourceRefId);
+            $title = trim((string)($preset['title'] ?? ''));
+            if ($title === '') {
+                $title = 'Preset #' . $sourceRefId;
+            }
+        } else {
+            $title = af_advancedshop_pick_lang((string)($row['kb_title_ru'] ?? ''), (string)($row['kb_title_en'] ?? ''));
+            if ($title === '') {
+                $title = trim((string)($row['kb_title'] ?? ''));
+            }
+            if ($title === '') {
+                $title = 'Item #' . (int)$row['slot_id'];
+            }
+        }
         $items[] = [
             'slot_id' => (int)$row['slot_id'],
             'shop_id' => (int)$row['shop_id'],
             'shop_code' => (string)($row['shop_code'] ?? ''),
             'cat_id' => (int)$row['cat_id'],
-            'source_type' => af_advancedshop_source_type_from_slot($row),
-            'source_ref_id' => af_advancedshop_source_ref_id_from_slot($row),
+            'source_type' => $sourceType,
+            'source_ref_id' => $sourceRefId,
             'kb_id' => (int)$row['kb_id'],
             'kb_type' => (string)($row['kb_type'] ?? 'item'),
             'kb_key' => (string)($row['kb_key'] ?? ''),
             'slot_meta_json' => (string)($row['meta_json'] ?? ''),
             'qty' => $qty,
+            'title' => $title,
             'price_each' => $price,
             'currency' => (string)$row['currency'],
         ];
         $total += $qty * $price;
     }
     return [$items, $total];
+}
+
+function af_advancedshop_checkout_success_items(array $items): array
+{
+    $result = [];
+    foreach ($items as $item) {
+        $result[] = [
+            'slot_id' => (int)($item['slot_id'] ?? 0),
+            'qty' => max(1, (int)($item['qty'] ?? 1)),
+            'title' => trim((string)($item['title'] ?? '')),
+        ];
+    }
+
+    return $result;
 }
 
 function af_advancedshop_apply_shop_map_target(array $target, array $item, bool $hasKb): array
