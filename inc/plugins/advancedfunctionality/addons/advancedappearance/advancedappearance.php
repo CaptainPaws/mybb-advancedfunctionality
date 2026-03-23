@@ -404,9 +404,45 @@ function af_aa_get_target_group_labels(): array
     ];
 }
 
+function af_aa_is_user_assignable_target(string $targetKey): bool
+{
+    $targetKey = af_aa_normalize_target_key($targetKey);
+    if ($targetKey === '') {
+        return false;
+    }
+
+    if (!af_aa_is_supported_target($targetKey, ['assignable' => true])) {
+        return false;
+    }
+
+    // Пак темы страницы темы никогда не должен жить в user-scoped assignment.
+    if ($targetKey === AF_AA_TARGET_APUI_THREAD_PACK) {
+        return false;
+    }
+
+    // И дробные thread-кусочки тоже не должны активироваться пользователем через inventory.
+    $fragmentPrefix = AF_AA_TARGET_APUI_FRAGMENT_PACK . ':';
+    if (strpos($targetKey, $fragmentPrefix) === 0) {
+        $fragmentKey = substr($targetKey, strlen($fragmentPrefix));
+        if (in_array($fragmentKey, ['thread_body', 'thread_banner'], true)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 function af_aa_get_all_assignment_target_keys(): array
 {
-    return af_aa_get_supported_target_keys(['assignable' => true]);
+    $keys = [];
+
+    foreach (af_aa_get_supported_target_keys(['assignable' => true]) as $targetKey) {
+        if (af_aa_is_user_assignable_target($targetKey)) {
+            $keys[] = $targetKey;
+        }
+    }
+
+    return $keys;
 }
 
 function af_aa_collect_uid_from_postbit(array &$post): void
@@ -1258,7 +1294,13 @@ function af_aa_get_apui_defaults(): array
 function af_aa_get_user_preset_settings_for_target(int $uid, string $assignmentTargetKey, array $defaults): array
 {
     $uid = (int)$uid;
+    $assignmentTargetKey = af_aa_normalize_target_key($assignmentTargetKey);
+
     if ($uid <= 0 || $assignmentTargetKey === '') {
+        return [];
+    }
+
+    if (!af_aa_is_user_assignable_target($assignmentTargetKey)) {
         return [];
     }
 
@@ -1308,27 +1350,6 @@ function af_aa_build_user_css_payload(int $uid): array
     }
 
     $defaults = af_aa_get_apui_defaults();
-
-    $threadKeys = [
-        'thread_body_cover_url',
-        'thread_body_tile_url',
-        'thread_body_bg_mode',
-        'thread_body_overlay',
-        'thread_banner_url',
-        'thread_banner_overlay',
-    ];
-
-    $threadBodyKeys = [
-        'thread_body_cover_url',
-        'thread_body_tile_url',
-        'thread_body_bg_mode',
-        'thread_body_overlay',
-    ];
-
-    $threadBannerKeys = [
-        'thread_banner_url',
-        'thread_banner_overlay',
-    ];
 
     $profileKeys = [
         'member_profile_body_cover_url',
@@ -1414,7 +1435,6 @@ function af_aa_build_user_css_payload(int $uid): array
 
     $profileSettings = af_aa_merge_keys([], $defaults, $profileKeys);
     $postbitSettings = af_aa_merge_keys([], $defaults, $postbitKeys);
-    $threadSettings = af_aa_merge_keys([], $defaults, $threadKeys);
     $modalSettings = af_aa_merge_keys([], $defaults, $modalKeys);
     $customCssBlocks = [];
 
@@ -1433,6 +1453,7 @@ function af_aa_build_user_css_payload(int $uid): array
         ],
     ];
 
+    // Общий user-scoped pack: только профиль + постбит + модалки.
     $themePack = af_aa_get_user_preset_settings_for_target($uid, AF_AA_TARGET_APUI_THEME_PACK, $defaults);
     if (!empty($themePack)) {
         $themeSettings = (array)$themePack['settings'];
@@ -1481,7 +1502,12 @@ function af_aa_build_user_css_payload(int $uid): array
         }
     }
 
+    // user-scoped fragments: только профиль/постбит.
     foreach (array_keys(af_aa_get_supported_fragment_keys()) as $fragmentKey) {
+        if (in_array($fragmentKey, ['thread_body', 'thread_banner'], true)) {
+            continue;
+        }
+
         $fragmentTarget = AF_AA_TARGET_APUI_FRAGMENT_PACK . ':' . $fragmentKey;
         $fragmentPack = af_aa_get_user_preset_settings_for_target($uid, $fragmentTarget, $defaults);
 
@@ -1492,14 +1518,6 @@ function af_aa_build_user_css_payload(int $uid): array
         $fragmentSettings = (array)$fragmentPack['settings'];
 
         switch ($fragmentKey) {
-            case 'thread_body':
-                $threadSettings = af_aa_merge_keys($threadSettings, $fragmentSettings, $threadBodyKeys);
-                break;
-
-            case 'thread_banner':
-                $threadSettings = af_aa_merge_keys($threadSettings, $fragmentSettings, $threadBannerKeys);
-                break;
-
             case 'profile_body':
                 $profileSettings = af_aa_merge_keys($profileSettings, $fragmentSettings, $bodyKeys);
                 break;
@@ -1547,32 +1565,16 @@ function af_aa_build_user_css_payload(int $uid): array
         }
     }
 
-    $threadMode = af_aa_sanitize_bg_mode((string)($threadSettings['thread_body_bg_mode'] ?? 'cover'), 'cover');
-    $selectedThreadBodyImage = $threadMode === 'tile'
-        ? af_aa_css_url_value((string)($threadSettings['thread_body_tile_url'] ?? ''))
-        : af_aa_css_url_value((string)($threadSettings['thread_body_cover_url'] ?? ''));
-
-    if ($selectedThreadBodyImage === 'none') {
-        $selectedThreadBodyImage = $threadMode === 'tile'
-            ? af_aa_css_url_value((string)($threadSettings['thread_body_cover_url'] ?? ''))
-            : af_aa_css_url_value((string)($threadSettings['thread_body_tile_url'] ?? ''));
-
-        if ($selectedThreadBodyImage !== 'none') {
-            $threadMode = $threadMode === 'tile' ? 'cover' : 'tile';
-        }
-    }
-
     $selector = '.af-aa-user-' . $uid;
 
     $payload = [
         'uid' => $uid,
         'selector' => $selector,
-        'body_selector' => 'body.af-apui-member-profile-page.af-aa-user-' . $uid . ', body.af-apui-thread-page.af-aa-user-' . $uid . ', .af-aa-user-' . $uid,
+        // ВАЖНО: только body страницы профиля, без thread body и без голого .af-aa-user-UID.
+        'body_selector' => 'body.af-apui-member-profile-page.af-aa-user-' . $uid,
         'vars' => [
             '--af-apui-profile-banner-image' => af_aa_css_url_value((string)($profileSettings['profile_banner_url'] ?? '')),
             '--af-apui-profile-banner-overlay' => af_aa_css_raw_value((string)($profileSettings['profile_banner_overlay'] ?? 'none'), 'none'),
-            '--af-apui-thread-banner-image' => af_aa_css_url_value((string)($threadSettings['thread_banner_url'] ?? '')),
-            '--af-apui-thread-banner-overlay' => af_aa_css_raw_value((string)($threadSettings['thread_banner_overlay'] ?? 'none'), 'none'),
             '--af-apui-postbit-author-bg-image' => af_aa_css_url_value((string)($postbitSettings['postbit_author_bg_url'] ?? '')),
             '--af-apui-postbit-author-overlay' => af_aa_css_raw_value((string)($postbitSettings['postbit_author_overlay'] ?? 'none'), 'none'),
             '--af-apui-postbit-name-bg-image' => af_aa_css_url_value((string)($postbitSettings['postbit_name_bg_url'] ?? '')),
@@ -1610,14 +1612,6 @@ function af_aa_build_user_css_payload(int $uid): array
             'attachment' => $mode === 'tile' ? 'scroll' : 'fixed',
             'size' => $mode === 'tile' ? 'auto' : 'cover',
         ],
-        'thread_body' => [
-            'overlay' => af_aa_css_raw_value((string)($threadSettings['thread_body_overlay'] ?? 'none'), 'none'),
-            'image' => $selectedThreadBodyImage,
-            'repeat' => $threadMode === 'tile' ? 'repeat' : 'no-repeat',
-            'position' => $threadMode === 'tile' ? 'left top' : 'center center',
-            'attachment' => $threadMode === 'tile' ? 'scroll' : 'fixed',
-            'size' => $threadMode === 'tile' ? 'auto' : 'cover',
-        ],
         'custom_css_blocks' => $customCssBlocks,
     ];
 
@@ -1651,7 +1645,6 @@ function af_aa_render_page_css(array $uidsOnPage): string
 
         $selector = (string)($payload['selector'] ?? '');
         $bodySelector = (string)($payload['body_selector'] ?? '');
-        $threadBodySelector = 'body.af-apui-thread-page.af-aa-user-' . $uid;
 
         if ($selector === '') {
             continue;
@@ -1696,30 +1689,6 @@ function af_aa_render_page_css(array $uidsOnPage): string
 
         if ($bodySelector !== '' && !empty($memberBodyDeclarations)) {
             $css .= $bodySelector . '{' . implode('', $memberBodyDeclarations) . "}\n";
-        }
-
-        $threadBody = isset($payload['thread_body']) && is_array($payload['thread_body'])
-            ? $payload['thread_body']
-            : [];
-
-        $threadBodyDeclarations = [];
-
-        $threadOverlay = trim((string)($threadBody['overlay'] ?? 'none'));
-        if ($threadOverlay !== '' && strtolower($threadOverlay) !== 'none') {
-            $threadBodyDeclarations[] = '--af-apui-thread-body-overlay:' . $threadOverlay . ';';
-        }
-
-        $threadImage = trim((string)($threadBody['image'] ?? 'none'));
-        if ($threadImage !== '' && strtolower($threadImage) !== 'none') {
-            $threadBodyDeclarations[] = 'background-image:' . $threadImage . ';';
-            $threadBodyDeclarations[] = 'background-repeat:' . trim((string)($threadBody['repeat'] ?? 'no-repeat')) . ';';
-            $threadBodyDeclarations[] = 'background-position:' . trim((string)($threadBody['position'] ?? 'center center')) . ';';
-            $threadBodyDeclarations[] = 'background-attachment:' . trim((string)($threadBody['attachment'] ?? 'fixed')) . ';';
-            $threadBodyDeclarations[] = 'background-size:' . trim((string)($threadBody['size'] ?? 'cover')) . ';';
-        }
-
-        if (!empty($threadBodyDeclarations)) {
-            $css .= $threadBodySelector . '{' . implode('', $threadBodyDeclarations) . "}\n";
         }
 
         if (!empty($payload['custom_css_blocks']) && is_array($payload['custom_css_blocks'])) {
