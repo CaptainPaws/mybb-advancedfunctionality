@@ -121,3 +121,44 @@ body.af-shop-modal-open{overflow:hidden}
 .af-shop-hub-card{position:relative;display:flex;flex-direction:column;gap:10px;align-items:flex-start;background:#151515;border:1px solid #2c2c2c;border-radius:10px;padding:12px}
 .af-shop-hub-card__manage{position:absolute;top:10px;right:10px}
 .af-shop-hub-card__title{margin:0;padding-right:34px}
+
+.af-manage-slots-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(320px,.95fr);gap:18px;align-items:start}
+.af-slot-section{background:#15181f;border:1px solid #2f3442;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.af-slot-section__head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.af-slot-section__head h2{margin:0 0 6px}
+.af-slot-section__head p{margin:0;opacity:.82}
+.af-manage-slots-list{display:flex;flex-direction:column;gap:12px}
+.af-slot-card{background:#11151d;border:1px solid #31384a;border-radius:12px;padding:14px}
+.af-slot-existing{display:grid;grid-template-columns:88px minmax(0,1fr);gap:14px;align-items:start}
+.af-slot-existing__preview{width:88px;height:88px;object-fit:cover;border-radius:12px;border:1px solid #343b4d;background:#1a2030}
+.af-slot-existing__preview--empty,.af-search-result-card__preview--empty{display:flex;align-items:center;justify-content:center;color:#9ea9bc;font-size:12px;text-align:center;padding:8px}
+.af-slot-existing__header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.af-slot-existing__header h3{margin:0 0 8px}
+.af-slot-existing__meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0 0}
+.af-slot-existing__meta div{padding:8px 10px;background:#171c27;border:1px solid #2b3242;border-radius:10px}
+.af-slot-existing__meta dt{font-size:11px;text-transform:uppercase;letter-spacing:.04em;opacity:.72;margin-bottom:4px}
+.af-slot-existing__meta dd{margin:0;font-weight:600}
+.af-slot-inline-editor{margin-top:14px;padding-top:14px;border-top:1px solid #2b3242;display:flex;flex-direction:column;gap:12px}
+.af-slot-inline-editor__actions{display:flex;gap:8px;flex-wrap:wrap}
+.af-slot-step{display:grid;grid-template-columns:56px minmax(0,1fr);gap:12px;align-items:start}
+.af-slot-step__label{display:flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:999px;background:#21283a;border:1px solid #394158;font-weight:700}
+.af-slot-step__body h3,.af-slot-step__body h4{margin:0 0 10px}
+.af-slot-source-panel,.af-slot-search-box,.af-slot-selected-card,.af-slot-source-summary{background:#171c27;border:1px solid #2b3242;border-radius:12px;padding:12px}
+.af-slot-search-head h4{margin:0 0 6px}
+.af-slot-search-head p{margin:0 0 10px;opacity:.8}
+.af-slot-search-results{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.af-slot-search-results__head{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:13px;opacity:.85}
+.af-search-result-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 12px;border:1px solid #31384a;border-radius:12px;background:#11151d}
+.af-search-result-card--appearance{grid-template-columns:52px minmax(0,1fr) auto}
+.af-search-result-card__preview{width:52px;height:52px;object-fit:cover;border-radius:10px;border:1px solid #343b4d;background:#1a2030}
+.af-search-result-card__main{min-width:0}
+.af-slot-badges{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.af-slot-badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#232a3a;border:1px solid #394158;font-size:11px}
+.af-slot-source-summary img,.af-slot-selected-card img{flex:0 0 auto}
+.af-slot-selected-card{display:flex;gap:12px;align-items:flex-start}
+.af-slot-selected-card__type{font-size:11px;text-transform:uppercase;letter-spacing:.05em;opacity:.72;margin-bottom:8px;width:100%}
+.af-slot-selected-card__preview{width:64px;height:64px;object-fit:cover;border-radius:12px;border:1px solid #343b4d;background:#1a2030}
+.af-slot-selected-card__body{min-width:0}
+.af-slot-empty-state{padding:16px;border:1px dashed #414a60;border-radius:12px;background:#151a24;opacity:.86}
+@media (max-width:1100px){.af-manage-slots-layout{grid-template-columns:1fr}.af-slot-section--create{order:-1}}
+@media (max-width:720px){.af-slot-existing{grid-template-columns:1fr}.af-slot-step{grid-template-columns:1fr}.af-slot-step__label{width:40px;height:40px}.af-search-result-card,.af-search-result-card--appearance{grid-template-columns:1fr}.af-search-result-card__preview{width:64px;height:64px}}
