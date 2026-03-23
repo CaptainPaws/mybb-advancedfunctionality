@@ -1407,8 +1407,13 @@ function af_charactersheets_build_inventory_html(int $uid): string
     $inventory_embed_url = '';
     $inventory_full_url = '';
     if ($uid > 0) {
-        $inventory_embed_url = 'misc.php?action=inventory&uid=' . $uid . '&embed=1';
-        $inventory_full_url = 'misc.php?action=inventory&uid=' . $uid;
+        if (function_exists('af_advancedinventory_url')) {
+            $inventory_embed_url = af_advancedinventory_url('inventory', ['uid' => $uid, 'embed' => 1], false);
+            $inventory_full_url = af_advancedinventory_url('inventory', ['uid' => $uid], false);
+        } else {
+            $inventory_embed_url = 'inventory.php?uid=' . $uid . '&embed=1';
+            $inventory_full_url = 'inventory.php?uid=' . $uid;
+        }
     }
 
     $inventory_embed_url_attr = htmlspecialchars_uni($inventory_embed_url);
