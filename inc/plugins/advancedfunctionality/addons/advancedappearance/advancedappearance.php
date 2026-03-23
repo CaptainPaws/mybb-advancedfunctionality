@@ -1439,9 +1439,6 @@ function af_aa_build_user_css_payload(int $uid): array
     $customCssBlocks = [];
 
     $surfaceKeyMap = [
-        AF_AA_TARGET_APUI_THREAD_PACK => [
-            'keys' => $threadKeys,
-        ],
         AF_AA_TARGET_APUI_APPLICATION_PACK => [
             'keys' => ['application_bg_url', 'application_bg_overlay', 'application_panel_bg', 'application_panel_border'],
         ],
@@ -1461,7 +1458,6 @@ function af_aa_build_user_css_payload(int $uid): array
         $themeSettings = (array)$themePack['settings'];
         $profileSettings = af_aa_merge_keys($profileSettings, $themeSettings, $profileKeys);
         $postbitSettings = af_aa_merge_keys($postbitSettings, $themeSettings, $postbitKeys);
-        $threadSettings = af_aa_merge_keys($threadSettings, $themeSettings, $threadKeys);
         $modalSettings = af_aa_merge_keys($modalSettings, $themeSettings, $modalKeys);
 
         if (!empty($themeSettings['custom_css'])) {
@@ -3116,12 +3112,13 @@ function af_aa_build_surface_fields_html(array $settingsOrSurfaceMap, array $set
         'application' => 'Анкета',
         'inventory' => 'Инвентарь',
         'achievements' => 'Ачивки',
-        'thread' => 'Страница темы',
     ];
+
+    $allowedSurfaceKeys = ['sheet', 'application', 'inventory', 'achievements', 'thread'];
 
     $looksLikeSurfaceMap = true;
     foreach ($settingsOrSurfaceMap as $surfaceKey => $surfaceLabel) {
-        if (!in_array((string)$surfaceKey, ['sheet', 'application', 'inventory', 'achievements', 'thread'], true) || !is_string($surfaceLabel)) {
+        if (!in_array((string)$surfaceKey, $allowedSurfaceKeys, true) || !is_string($surfaceLabel)) {
             $looksLikeSurfaceMap = false;
             break;
         }
@@ -3247,9 +3244,13 @@ function af_aa_build_studio_form_html(string $do, array $preset, array $settings
         case 'themepack':
         default:
             $html .= af_aa_build_profile_fields_html($settings, false);
-            $html .= af_aa_build_thread_fields_html($settings, false);
             $html .= af_aa_build_postbit_fields_html($settings, false);
-            $html .= af_aa_build_surface_fields_html($settings);
+            $html .= af_aa_build_surface_fields_html([
+                'application' => 'Анкета',
+                'sheet' => 'Лист персонажа',
+                'inventory' => 'Инвентарь',
+                'achievements' => 'Ачивки',
+            ], $settings);
             $html .= '<section class="af-aa-panel af-aa-form-section">';
             $html .= '<h3 class="af-aa-panel__title">Пользовательский CSS</h3>';
             $html .= '<div class="af-aa-form-grid">';
