@@ -633,6 +633,71 @@ function af_aa_get_thread_preset_settings(int $tid, array $defaults): array
     ];
 }
 
+
+function af_aa_reset_runtime_assignment_cache(string $entityType, int $entityId, string $targetKey): void
+{
+    $entityType = trim(strtolower($entityType));
+    $targetKey = af_aa_normalize_target_key($targetKey);
+    $entityId = (int)$entityId;
+
+    if ($entityType === '' || $entityId <= 0 || $targetKey === '') {
+        return;
+    }
+
+    if (!isset($GLOBALS['af_aa_assignment_cache_runtime']) || !is_array($GLOBALS['af_aa_assignment_cache_runtime'])) {
+        $GLOBALS['af_aa_assignment_cache_runtime'] = [];
+    }
+
+    unset($GLOBALS['af_aa_assignment_cache_runtime'][$entityType . ':' . $entityId . ':' . $targetKey]);
+}
+
+function af_aa_upsert_user_assignment(int $uid, string $targetKey, int $presetId): void
+{
+    global $db;
+
+    $uid = (int)$uid;
+    $presetId = (int)$presetId;
+    $targetKey = af_aa_normalize_target_key($targetKey);
+
+    if ($uid <= 0 || $presetId <= 0 || $targetKey === '') {
+        return;
+    }
+
+    $existing = af_aa_get_active_assignment('user', $uid, $targetKey);
+    $data = [
+        'entity_type' => 'user',
+        'entity_id' => $uid,
+        'target_key' => $targetKey,
+        'preset_id' => $presetId,
+        'is_enabled' => 1,
+        'updated_at' => TIME_NOW,
+    ];
+
+    if (!empty($existing['id'])) {
+        $db->update_query(AF_AA_ASSIGNMENTS_TABLE_NAME, $data, "id='" . (int)$existing['id'] . "'");
+    } else {
+        $data['created_at'] = TIME_NOW;
+        $db->insert_query(AF_AA_ASSIGNMENTS_TABLE_NAME, $data);
+    }
+
+    af_aa_reset_runtime_assignment_cache('user', $uid, $targetKey);
+}
+
+function af_aa_delete_user_assignment(int $uid, string $targetKey): void
+{
+    global $db;
+
+    $uid = (int)$uid;
+    $targetKey = af_aa_normalize_target_key($targetKey);
+
+    if ($uid <= 0 || $targetKey === '') {
+        return;
+    }
+
+    $db->delete_query(AF_AA_ASSIGNMENTS_TABLE_NAME, "entity_type='user' AND entity_id='" . $uid . "' AND target_key='" . $db->escape_string($targetKey) . "'");
+    af_aa_reset_runtime_assignment_cache('user', $uid, $targetKey);
+}
+
 function af_aa_upsert_thread_assignment(int $tid, int $uid, int $presetId): void
 {
     global $db;

@@ -48,16 +48,6 @@
     });
   }
 
-  function appearanceActionUrl(action) {
-    if (action === 'inventory_appearance_apply') {
-      return buildActionUrl('api_appearance_apply');
-    }
-    if (action === 'inventory_appearance_unapply') {
-      return buildActionUrl('api_appearance_unapply');
-    }
-    return buildActionUrl(action);
-  }
-
   function endpointScript() {
     var path = (window.location && window.location.pathname)
       ? String(window.location.pathname).toLowerCase()
@@ -297,7 +287,7 @@
 
       var appearanceUnapplyBtn = appearanceUnapplyForm.querySelector('[data-af-appearance-unapply-btn]');
       var ctxUn = inventoryContext(page);
-      withLoading(appearanceUnapplyBtn || appearanceUnapplyForm, postForm(appearanceActionUrl('inventory_appearance_unapply'), {
+      withLoading(appearanceUnapplyBtn || appearanceUnapplyForm, postForm(apiActionUrl(ctxUn.apiBase, 'api_appearance_unapply'), {
         uid: ctxUn.uid,
         target_key: (appearanceUnapplyForm.querySelector('input[name=\"target_key\"]') || {}).value || '',
         my_post_key: getPostKey(page)
@@ -328,7 +318,7 @@
       if (appearanceApplyBtn && panel.contains(appearanceApplyBtn)) {
         e.preventDefault();
         var ctxApply = inventoryContext(page);
-        withLoading(appearanceApplyBtn, postForm(appearanceActionUrl('inventory_appearance_apply'), {
+        withLoading(appearanceApplyBtn, postForm(apiActionUrl(ctxApply.apiBase, 'api_appearance_apply'), {
           uid: ctxApply.uid,
           item_id: appearanceApplyBtn.getAttribute('data-item-id') || '0',
           inv_id: appearanceApplyBtn.getAttribute('data-item-id') || '0',
