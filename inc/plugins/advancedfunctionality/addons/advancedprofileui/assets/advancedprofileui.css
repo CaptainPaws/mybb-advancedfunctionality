@@ -1982,7 +1982,8 @@ af-apf-postbit-field {
    ========================================================= */
 
 :root {
-  --af-apui-modal-dialog-width: min(1280px, calc(100vw - 32px));
+  --af-apui-modal-viewport-gap: clamp(10px, 2.2vw, 22px);
+  --af-apui-modal-dialog-width: min(1280px, calc(100vw - (var(--af-apui-modal-viewport-gap) * 2)));
   --af-apui-modal-dialog-height: min(92vh, 980px);
   --af-apui-modal-body-bg: rgba(10, 14, 24, .94);
   --af-apui-modal-body-border: rgba(255,255,255,.10);
@@ -1999,10 +2000,17 @@ af-apf-postbit-field {
   inset: 0;
   z-index: 99999;
   display: none;
+  box-sizing: border-box;
+  padding: max(var(--af-apui-modal-viewport-gap), env(safe-area-inset-top))
+    max(var(--af-apui-modal-viewport-gap), env(safe-area-inset-right))
+    max(var(--af-apui-modal-viewport-gap), env(safe-area-inset-bottom))
+    max(var(--af-apui-modal-viewport-gap), env(safe-area-inset-left));
+  overflow: auto;
 }
 
 .af-cs-modal.is-open {
-  display: block;
+  display: grid;
+  place-items: center;
 }
 
 .af-cs-modal__backdrop {
@@ -2017,9 +2025,9 @@ af-apf-postbit-field {
   z-index: 1;
   width: var(--af-apui-modal-dialog-width);
   height: var(--af-apui-modal-dialog-height);
-  max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 32px);
-  margin: 16px auto;
+  max-width: min(1280px, calc(100vw - (var(--af-apui-modal-viewport-gap) * 2)));
+  max-height: calc(100vh - (var(--af-apui-modal-viewport-gap) * 2));
+  margin: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   border: 1px solid var(--af-apui-modal-body-border);
@@ -2324,17 +2332,16 @@ af-apf-postbit-field {
 
 @media (max-width: 900px) {
   :root {
-    --af-apui-modal-dialog-width: calc(100vw - 20px);
-    --af-apui-modal-dialog-height: calc(100vh - 20px);
+    --af-apui-modal-viewport-gap: 10px;
+    --af-apui-modal-dialog-width: calc(100vw - (var(--af-apui-modal-viewport-gap) * 2));
+    --af-apui-modal-dialog-height: calc(100vh - (var(--af-apui-modal-viewport-gap) * 2));
     --af-apui-modal-fragment-padding: 14px;
   }
 
   .af-cs-modal__dialog {
-    margin: 10px auto;
-    max-width: calc(100vw - 20px);
-    max-height: calc(100vh - 20px);
+    max-width: calc(100vw - (var(--af-apui-modal-viewport-gap) * 2));
+    max-height: calc(100vh - (var(--af-apui-modal-viewport-gap) * 2));
     border-radius: 14px;
-    top: 5%;
   }
 
   .af-cs-modal__title {
