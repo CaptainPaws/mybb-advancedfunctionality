@@ -75,8 +75,10 @@ function af_charactersheets_compute_level(float $exp): array
         $computed = af_balance_compute_level($exp);
         if (is_array($computed)) {
             $percent = (int)($computed['progress_percent'] ?? $computed['percent'] ?? 0);
-            $expCurrent = (float)($computed['exp_current'] ?? 0);
-            $expNeed = (float)($computed['exp_need'] ?? 0);
+            $expCurrent = (float)($computed['exp_current'] ?? $computed['exp_in_level'] ?? 0);
+            $expNeed = (float)($computed['exp_need'] ?? $computed['next_req'] ?? 0);
+            $prevReqTotal = (float)($computed['prev_req_total'] ?? 0);
+            $nextReqTotal = (float)($computed['next_req_total'] ?? ($prevReqTotal + $expNeed));
 
             return [
                 'level' => (int)($computed['level'] ?? 1),
@@ -84,8 +86,8 @@ function af_charactersheets_compute_level(float $exp): array
                 'percent' => $percent,
                 'progress_percent' => $percent,
                 'next_req' => $expNeed,
-                'prev_req_total' => 0,
-                'next_req_total' => $expNeed,
+                'prev_req_total' => $prevReqTotal,
+                'next_req_total' => $nextReqTotal,
                 'exp_in_level' => $expCurrent,
                 'exp_current' => $expCurrent,
                 'exp_need' => $expNeed,

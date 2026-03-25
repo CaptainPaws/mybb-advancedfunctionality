@@ -324,9 +324,9 @@ function af_balance_get_postbit_data(int $uid): array
     $bal = af_balance_get($uid);
     $expScaled = (int)($bal['exp'] ?? 0);
 
-    $levelData = af_balance_compute_level($expScaled / AF_BALANCE_EXP_SCALE);
-    $expCurrent = (int)($levelData['exp_current'] ?? 0);
-    $expNeed = (int)($levelData['exp_need'] ?? 0);
+    $levelData = af_balance_compute_level_from_scaled($expScaled);
+    $expCurrent = (float)($levelData['exp_current'] ?? 0.0);
+    $expNeed = (float)($levelData['exp_need'] ?? 0.0);
 
     return [
         'credits_display' => af_balance_format_credits((int)($bal['credits'] ?? 0)),
@@ -341,8 +341,8 @@ function af_balance_get_postbit_data(int $uid): array
         'percent' => max(0, min(100, (int)($levelData['progress_percent'] ?? 0))),
         'exp_current' => $expCurrent,
         'exp_need' => $expNeed,
-        'exp_display' => number_format((float)$expCurrent, 0, '.', ' '),
-        'exp_need_display' => number_format((float)$expNeed, 0, '.', ' '),
+        'exp_display' => af_balance_format_level_exp_value($expCurrent),
+        'exp_need_display' => af_balance_format_level_exp_value($expNeed),
     ];
 }
 
@@ -407,53 +407,74 @@ function af_balance_level_settings(): array
     ];
 }
 
-function af_balance_compute_level(float $exp): array
+function af_balance_format_level_exp_value(float $value): string
+{
+    $normalized = max(0.0, $value);
+    $formatted = number_format($normalized, 2, '.', ' ');
+    $formatted = rtrim(rtrim($formatted, '0'), '.');
+
+    return $formatted === '' ? '0' : $formatted;
+}
+
+function af_balance_compute_level_from_scaled(int $expScaled): array
 {
     $settings = af_balance_level_settings();
     $cap = (int)$settings['cap'];
-    $base = (int)$settings['base'];
-    $step = (int)$settings['step'];
+    $baseScaled = (int)max(0, $settings['base']) * AF_BALANCE_EXP_SCALE;
+    $stepScaled = (int)max(0, $settings['step']) * AF_BALANCE_EXP_SCALE;
 
-    $expCurrent = (int)floor(max(0, $exp));
+    $expTotalScaled = max(0, (int)$expScaled);
     $level = 1;
+    $nextReqScaled = $baseScaled;
+    $prevReqTotalScaled = 0;
 
-    $reqForLevel = static function (int $targetLevel) use ($base, $step): int {
-        if ($targetLevel <= 1) {
-            return 0;
-        }
-
-        $need = $base + (($targetLevel - 2) * $step);
-
-        return (int)max(0, $need);
-    };
-
-    while ($level < $cap && $expCurrent >= $reqForLevel($level + 1)) {
+    while (
+        $nextReqScaled > 0
+        && $expTotalScaled >= ($prevReqTotalScaled + $nextReqScaled)
+        && $level < $cap
+    ) {
+        $prevReqTotalScaled += $nextReqScaled;
         $level++;
+        $nextReqScaled = $baseScaled + (($level - 1) * $stepScaled);
     }
 
-    $nextLevel = min($level + 1, $cap);
-    $needForNext = $reqForLevel($nextLevel);
+    if ($level >= $cap) {
+        $nextReqScaled = 0;
+    }
 
-    $progressPercent = 100;
-    if ($needForNext > 0) {
-        $progressPercent = (int)floor(($expCurrent / $needForNext) * 100);
-        if ($progressPercent < 0) {
-            $progressPercent = 0;
-        } elseif ($progressPercent > 100) {
-            $progressPercent = 100;
-        }
+    $expInLevelScaled = max(0, $expTotalScaled - $prevReqTotalScaled);
+    $needForNextScaled = max(0, $nextReqScaled);
+
+    $progressPercent = $needForNextScaled > 0
+        ? (int)floor(($expInLevelScaled / $needForNextScaled) * 100)
+        : 100;
+    if ($progressPercent < 0) {
+        $progressPercent = 0;
+    } elseif ($progressPercent > 100) {
+        $progressPercent = 100;
     }
 
     return [
         'level' => $level,
         'cap' => $cap,
-        'exp_current' => $expCurrent,
-        'exp_need' => $needForNext,
+        'exp_current' => $expInLevelScaled / AF_BALANCE_EXP_SCALE,
+        'exp_need' => $needForNextScaled / AF_BALANCE_EXP_SCALE,
         'progress_percent' => $progressPercent,
         // compatibility aliases
         'percent' => $progressPercent,
-        'exp_in_level' => $expCurrent,
+        'exp_in_level' => $expInLevelScaled / AF_BALANCE_EXP_SCALE,
+        'exp_total' => $expTotalScaled / AF_BALANCE_EXP_SCALE,
+        'prev_req_total' => $prevReqTotalScaled / AF_BALANCE_EXP_SCALE,
+        'next_req' => $needForNextScaled / AF_BALANCE_EXP_SCALE,
+        'next_req_total' => ($prevReqTotalScaled + $needForNextScaled) / AF_BALANCE_EXP_SCALE,
     ];
+}
+
+function af_balance_compute_level(float $exp): array
+{
+    $expScaled = (int)round(max(0.0, $exp) * AF_BALANCE_EXP_SCALE);
+
+    return af_balance_compute_level_from_scaled($expScaled);
 }
 
 function af_balance_ensure_settings(): void
@@ -1070,8 +1091,8 @@ function af_balance_xmlhttp(): void
             'exp_scaled' => (int)($bal['exp'] ?? 0),
             'credits_scaled' => (int)($bal['credits'] ?? 0),
             'ability_tokens_scaled' => (int)($bal['ability_tokens'] ?? 0),
-            'exp_current' => (int)($data['exp_current'] ?? 0),
-            'exp_need' => (int)($data['exp_need'] ?? 0),
+            'exp_current' => (float)($data['exp_current'] ?? 0.0),
+            'exp_need' => (float)($data['exp_need'] ?? 0.0),
             'exp_display' => (string)($data['exp_display'] ?? '0'),
             'exp_need_display' => (string)($data['exp_need_display'] ?? '0'),
             'credits_display' => (string)($data['credits_display'] ?? '0.00'),
@@ -1619,8 +1640,8 @@ function af_balance_handle_manage_adjust(): void
                 'success' => true,
                 'uid' => $uid,
                 'kind' => $kind,
-                'exp_current' => (int)($data['exp_current'] ?? 0),
-                'exp_need' => (int)($data['exp_need'] ?? 0),
+                'exp_current' => (float)($data['exp_current'] ?? 0.0),
+                'exp_need' => (float)($data['exp_need'] ?? 0.0),
                 'exp_display' => (string)($data['exp_display'] ?? '0'),
                 'exp_need_display' => (string)($data['exp_need_display'] ?? '0'),
                 'credits_display' => (string)($data['credits_display'] ?? '0.00'),
