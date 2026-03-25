@@ -653,6 +653,16 @@ body.af-apui-thread-page .pun.af-apui-thread-pun {
   min-width: 0;
 }
 
+.af-apui-application-embed {
+  min-width: 0;
+}
+
+body.af-apui-member-profile-page #af-apui-tab-application .af-apui-tab-card__body {
+  max-height: min(70vh, 980px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
 .af-apui-sheet-fragment,
 .af-apui-inventory-fragment {
   min-width: 0;
