@@ -2635,25 +2635,26 @@ function af_advancedpostcounter_wrap_with_forum_shell(string $page_inner, string
 }
 
 /**
- * Строит ссылку на конкретный пост с корректной пагинацией (через pid).
- * Если pid недоступен — откатывается на ссылку темы.
+ * Строит каноничную ссылку на конкретный пост:
+ * showthread.php?tid=<tid>&pid=<pid>#pid<pid>
  */
 function af_apc_build_post_url(int $pid, int $tid = 0): string
 {
-    global $mybb;
+    global $db, $mybb;
 
     $pid = (int)$pid;
     $tid = (int)$tid;
 
-    if ($pid > 0) {
-        // Важно: используем get_post_link($pid) без tid, чтобы задействовать POST_URL
-        // и не терять переход к нужной странице темы в инсталляциях с кастомными URL.
-        if (function_exists('get_post_link')) {
-            return (string)get_post_link($pid);
-        }
+    if ($pid > 0 && $tid <= 0 && isset($db) && is_object($db)) {
+        $q = $db->simple_select('posts', 'tid', 'pid=' . $pid, ['limit' => 1]);
+        $tid = (int)($db->fetch_field($q, 'tid') ?? 0);
+    }
 
+    if ($pid > 0 && $tid > 0) {
         $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
-        return ($bburl !== '' ? $bburl . '/' : '') . 'showthread.php?pid=' . $pid . '#pid' . $pid;
+        $base = ($bburl !== '' ? $bburl . '/' : '');
+
+        return $base . 'showthread.php?tid=' . $tid . '&pid=' . $pid . '#pid' . $pid;
     }
 
     if ($tid > 0) {
