@@ -50,8 +50,6 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
         }
     }
 
-    $profile_url = function_exists('get_profile_link') ? get_profile_link($uid) : ('member.php?action=profile&uid=' . $uid);
-    $profile_url = html_entity_decode($profile_url, ENT_QUOTES, 'UTF-8');
     $thread_url = function_exists('get_thread_link') ? get_thread_link($tid) : ('showthread.php?tid=' . $tid);
 
     $atf_fields = af_charactersheets_get_atf_fields($tid);
@@ -97,13 +95,8 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     $can_delete_sheet = af_charactersheets_user_can_delete_sheet($sheet, $mybb->user ?? []);
     $delete_redirect = $thread_url !== '' ? $thread_url : af_charactersheets_url(['action' => 'list']);
     $sheet_header_actions_html = af_charactersheets_build_header_actions_html(
-        $profile_url,
-        $thread_url,
-        $uid,
-        $tid,
         $can_delete_sheet,
-        $delete_redirect,
-        $can_award_exp
+        $delete_redirect
     );
     $sheet_info_table_html = af_charactersheets_build_info_table_html($atf_index, $sheet_view);
     $sheet_attributes_html = af_charactersheets_build_attributes_html($sheet_view, $can_edit_attributes, $can_view_ledger, $can_staff_reset, $attributes_locked);
@@ -951,35 +944,19 @@ function af_charactersheets_render_kb_chip(string $type, string $key, string $fa
 }
 
 function af_charactersheets_build_header_actions_html(
-    string $profile_url,
-    string $thread_url,
-    int $uid,
-    int $tid,
     bool $can_delete,
-    string $delete_redirect,
-    bool $can_award
+    string $delete_redirect
 ): string
 {
+    $public_actions_html = af_charactersheets_build_public_header_actions_html();
+    $moderator_actions_html = af_charactersheets_build_moderator_header_actions_html($can_delete, $delete_redirect);
+
     $items = [];
-
-    if ($profile_url !== '' && $uid > 0) {
-        $modalProfileUrl = af_charactersheets_url(['action' => 'profile', 'uid' => $uid]);
-        $items[] = '<a class="af-cs-btn af-cs-btn--compact" href="' . htmlspecialchars_uni($modalProfileUrl)
-            . '" data-afcs-open="1" data-afcs-sheet="' . htmlspecialchars_uni($modalProfileUrl)
-            . '" title="Профиль" aria-label="Профиль"><i class="fa-regular fa-user"></i></a>';
+    if ($public_actions_html !== '') {
+        $items[] = $public_actions_html;
     }
-
-    if ($thread_url !== '' && $tid > 0) {
-        $modalAppUrl = af_charactersheets_url(['action' => 'application', 'tid' => $tid]);
-        $items[] = '<a class="af-cs-btn af-cs-btn--compact" href="' . htmlspecialchars_uni($modalAppUrl)
-            . '" data-afcs-open="1" data-afcs-sheet="' . htmlspecialchars_uni($modalAppUrl)
-            . '" title="Анкета" aria-label="Анкета"><i class="fa-regular fa-id-card"></i></a>';
-    }
-
-    if ($can_delete) {
-        $items[] = '<button type="button" class="af-cs-btn af-cs-btn--compact af-cs-btn--danger" data-afcs-delete-sheet'
-            . ' data-afcs-delete-redirect="' . htmlspecialchars_uni($delete_redirect) . '" title="Удалить"'
-            . ' aria-label="Удалить"><i class="fa-solid fa-xmark"></i></button>';
+    if ($moderator_actions_html !== '') {
+        $items[] = $moderator_actions_html;
     }
 
     if (empty($items)) {
@@ -987,6 +964,22 @@ function af_charactersheets_build_header_actions_html(
     }
 
     return implode('', $items);
+}
+
+function af_charactersheets_build_public_header_actions_html(): string
+{
+    return '';
+}
+
+function af_charactersheets_build_moderator_header_actions_html(bool $can_delete, string $delete_redirect): string
+{
+    if (!$can_delete) {
+        return '';
+    }
+
+    return '<button type="button" class="af-cs-btn af-cs-btn--compact af-cs-btn--danger" data-afcs-delete-sheet'
+        . ' data-afcs-delete-redirect="' . htmlspecialchars_uni($delete_redirect) . '" title="Удалить"'
+        . ' aria-label="Удалить"><i class="fa-solid fa-xmark"></i></button>';
 }
 
 function af_charactersheets_build_kb_cards_html(array $fields): string
