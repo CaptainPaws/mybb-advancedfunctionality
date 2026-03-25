@@ -2480,9 +2480,7 @@ function af_advancedpostcounter_postsactivity_page(): void
                 $tid = (int)($last[$uid]['tid'] ?? 0);
                 $sub = $esc((string)($last[$uid]['subject'] ?? ''));
 
-                $url = function_exists('get_post_link')
-                    ? get_post_link($pid, $tid)
-                    : (rtrim((string)$mybb->settings['bburl'], '/') . '/showthread.php?pid=' . $pid . '#pid' . $pid);
+                $url = af_apc_build_post_url($pid, $tid);
 
                 $dt = (int)($last[$uid]['dateline'] ?? 0);
                 $when = '';
@@ -2586,6 +2584,40 @@ function af_advancedpostcounter_wrap_with_forum_shell(string $page_inner, string
     }
 
     return (string)$header . (string)$page_inner . (string)$footer;
+}
+
+/**
+ * Строит ссылку на конкретный пост с корректной пагинацией (через pid).
+ * Если pid недоступен — откатывается на ссылку темы.
+ */
+function af_apc_build_post_url(int $pid, int $tid = 0): string
+{
+    global $mybb;
+
+    $pid = (int)$pid;
+    $tid = (int)$tid;
+
+    if ($pid > 0) {
+        // Важно: используем get_post_link($pid) без tid, чтобы задействовать POST_URL
+        // и не терять переход к нужной странице темы в инсталляциях с кастомными URL.
+        if (function_exists('get_post_link')) {
+            return (string)get_post_link($pid);
+        }
+
+        $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+        return ($bburl !== '' ? $bburl . '/' : '') . 'showthread.php?pid=' . $pid . '#pid' . $pid;
+    }
+
+    if ($tid > 0) {
+        if (function_exists('get_thread_link')) {
+            return (string)get_thread_link($tid);
+        }
+
+        $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+        return ($bburl !== '' ? $bburl . '/' : '') . 'showthread.php?tid=' . $tid;
+    }
+
+    return 'showthread.php';
 }
 
 /**
@@ -2738,9 +2770,7 @@ function af_advancedpostcounter_postsbyuser_page(): void
                     'filter_badwords' => 1,
                 ]);
 
-                $postUrl = function_exists('get_post_link')
-                    ? get_post_link($pid, $tid)
-                    : ('showthread.php?pid=' . $pid . '#pid' . $pid);
+                $postUrl = af_apc_build_post_url($pid, $tid);
 
                 $row_thread_link = '<a href="' . $esc($postUrl) . '">' . $esc($subject) . '</a>';
                 $row_post_link = '<a class="smalltext" href="' . $esc($postUrl) . '">' . $esc($goToPostLabel) . '</a>';
