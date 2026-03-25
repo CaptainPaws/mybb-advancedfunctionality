@@ -637,9 +637,17 @@ function af_advancedinventory_build_inventory_fragment(int $ownerUid): string
     $entityUrlBase = af_advancedinventory_url('entity', ['uid' => $ownerUid], false);
     $firstPanelHtml = af_advinv_render_entity_tab($defaultTab, $ownerUid, 'all', 1, true);
     $wallet = af_advinv_wallet_payload($ownerUid);
-    $walletBalance = htmlspecialchars_uni((string)($wallet['balance_major'] ?? '0'));
-    $walletCurrencySymbol = htmlspecialchars_uni((string)($wallet['currency_symbol'] ?? '₡'));
-    $walletCurrencyCode = htmlspecialchars_uni((string)($wallet['currency'] ?? 'credits'));
+    $walletBalances = (array)($wallet['balances'] ?? []);
+
+    $walletCredits = (array)($walletBalances['credits'] ?? []);
+    $walletCreditsLabel = htmlspecialchars_uni((string)($walletCredits['label'] ?? 'Credits'));
+    $walletCreditsMajor = htmlspecialchars_uni((string)($walletCredits['balance_major'] ?? '0'));
+    $walletCreditsSymbol = htmlspecialchars_uni((string)($walletCredits['currency_symbol'] ?? '₡'));
+
+    $walletAbility = (array)($walletBalances['ability_tokens'] ?? []);
+    $walletAbilityLabel = htmlspecialchars_uni((string)($walletAbility['label'] ?? 'Ability Tokens'));
+    $walletAbilityMajor = htmlspecialchars_uni((string)($walletAbility['balance_major'] ?? '0'));
+    $walletAbilitySymbol = htmlspecialchars_uni((string)($walletAbility['currency_symbol'] ?? '♦'));
 
     eval('$inventory_inner = "' . $templates->get('advancedinventory_inventory_inner') . '";');
 
@@ -1716,21 +1724,54 @@ function af_advinv_wallet_payload(int $uid): array
     if ($currency === '') {
         $currency = 'credits';
     }
+    if (function_exists('af_advancedshop_normalize_currency_slug')) {
+        $currency = af_advancedshop_normalize_currency_slug($currency);
+    }
 
-    $balanceMinor = function_exists('af_shop_get_balance') ? (int)af_shop_get_balance($uid, $currency) : 0;
-    $balanceMajor = function_exists('af_advancedshop_money_format')
-        ? af_advancedshop_money_format($balanceMinor)
-        : number_format($balanceMinor / 100, 2, '.', '');
-    $currencySymbol = function_exists('af_advancedshop_currency_symbol')
-        ? af_advancedshop_currency_symbol($currency)
-        : $currency;
+    $currencies = ['credits', 'ability_tokens'];
+    if (function_exists('af_advancedshop_supported_currencies')) {
+        $currencies = array_keys((array)af_advancedshop_supported_currencies());
+    }
+    if (!in_array('credits', $currencies, true)) {
+        array_unshift($currencies, 'credits');
+    }
+    if (!in_array('ability_tokens', $currencies, true)) {
+        $currencies[] = 'ability_tokens';
+    }
+
+    $balances = [];
+    foreach ($currencies as $currencySlug) {
+        $slug = function_exists('af_advancedshop_normalize_currency_slug')
+            ? af_advancedshop_normalize_currency_slug((string)$currencySlug)
+            : trim((string)$currencySlug);
+        if ($slug === '') {
+            continue;
+        }
+        $balanceMinor = function_exists('af_shop_get_balance') ? (int)af_shop_get_balance($uid, $slug) : 0;
+        $balanceMajor = function_exists('af_advancedshop_money_format')
+            ? af_advancedshop_money_format($balanceMinor)
+            : number_format($balanceMinor / 100, 2, '.', '');
+        $balances[$slug] = [
+            'currency' => $slug,
+            'label' => function_exists('af_advancedshop_currency_label') ? af_advancedshop_currency_label($slug) : ucfirst(str_replace('_', ' ', $slug)),
+            'currency_symbol' => function_exists('af_advancedshop_currency_symbol') ? af_advancedshop_currency_symbol($slug) : $slug,
+            'balance_minor' => $balanceMinor,
+            'balance_major' => $balanceMajor,
+        ];
+    }
+
+    $primary = (array)($balances[$currency] ?? []);
+    if (!$primary && $balances) {
+        $primary = (array)reset($balances);
+    }
 
     return [
         'uid' => $uid,
-        'currency' => $currency,
-        'currency_symbol' => $currencySymbol,
-        'balance_minor' => $balanceMinor,
-        'balance_major' => $balanceMajor,
+        'currency' => (string)($primary['currency'] ?? $currency),
+        'currency_symbol' => (string)($primary['currency_symbol'] ?? $currency),
+        'balance_minor' => (int)($primary['balance_minor'] ?? 0),
+        'balance_major' => (string)($primary['balance_major'] ?? '0'),
+        'balances' => $balances,
     ];
 }
 

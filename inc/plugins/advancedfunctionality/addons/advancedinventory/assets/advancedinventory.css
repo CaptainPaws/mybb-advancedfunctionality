@@ -42,6 +42,20 @@
   color: #fff;
 }
 
+.af-inv-wallet__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.af-inv-wallet__label {
+  opacity: .9;
+}
+
+.af-inv-wallet__sep {
+  opacity: .6;
+}
+
 .af-inv-tabs {
   display: flex;
   flex-wrap: wrap;
