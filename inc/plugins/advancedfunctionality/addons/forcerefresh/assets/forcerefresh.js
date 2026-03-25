@@ -200,21 +200,69 @@
   function responseLooksSuccessful(xhr) {
     try {
       if (!xhr) return false;
-      if (xhr.status && xhr.status !== 200) return false;
-      var t = String(xhr.responseText || '');
-
-      if (/error|permission|no\s+permission|csrf|my_post_key/i.test(t) && !/post_/i.test(t)) {
-        return false;
-      }
-
-      if (/post_\d+/i.test(t) || /pid\d+/i.test(t) || /<\/textarea>/i.test(t) || /<!-- start: postbit/i.test(t)) {
-        return true;
-      }
-
-      return true;
+      if (xhr.readyState && xhr.readyState !== 4) return false;
+      if (xhr.status !== 200) return false;
+      return responseTextLooksSuccessful(String(xhr.responseText || ''));
     } catch (e) {
-      return true;
+      return false;
     }
+  }
+
+  function responseTextLooksSuccessful(text) {
+    var t = String(text || '');
+    if (!t) return false;
+
+    if (/error|no\s+permission|csrf|my_post_key|invalid_post|thread_closed|flood_check/i.test(t) && !/post_\d+/i.test(t)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function findQuickReplyTextarea() {
+    var form =
+      document.querySelector('form#quick_reply_form') ||
+      document.querySelector('form[action*="newreply.php"][id*="quick"]') ||
+      document.querySelector('form[action*="xmlhttp.php"][id*="quick"]');
+    if (!form) return null;
+    return form.querySelector('textarea[name="message"], textarea#message');
+  }
+
+  function clearQuickReplyEditor() {
+    var ta = findQuickReplyTextarea();
+    if (!ta) return;
+
+    try { ta.value = ''; } catch (e0) {}
+
+    var inst = null;
+    try {
+      if (window.jQuery && window.jQuery.fn && typeof window.jQuery.fn.sceditor === 'function') {
+        inst = window.jQuery(ta).sceditor('instance');
+      }
+    } catch (e1) {
+      inst = null;
+    }
+
+    if (inst) {
+      try { if (typeof inst.val === 'function') inst.val(''); } catch (e2) {}
+      try {
+        if (typeof inst.getBody === 'function') {
+          var body = inst.getBody();
+          if (body && typeof body.innerHTML === 'string') body.innerHTML = '';
+        }
+      } catch (e3) {}
+      try {
+        var sourceTa = (inst.getContentAreaContainer && inst.getContentAreaContainer().querySelector)
+          ? inst.getContentAreaContainer().querySelector('textarea.sceditor-source')
+          : null;
+        if (!sourceTa && inst.textarea) sourceTa = inst.textarea;
+        if (sourceTa) sourceTa.value = '';
+      } catch (e4) {}
+      try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e5) {}
+    }
+
+    try { ta.dispatchEvent(new Event('input', { bubbles: true })); } catch (e6) {}
+    try { ta.dispatchEvent(new Event('change', { bubbles: true })); } catch (e7) {}
   }
 
   function reloadSoon() {
@@ -242,6 +290,7 @@
       try {
         if (!looksLikeQuickReplyRequest(settings)) return;
         if (!responseLooksSuccessful(xhr)) return;
+        clearQuickReplyEditor();
         reloadSoon();
       } catch (e) {}
     });
@@ -265,7 +314,21 @@
       return _fetch.apply(this, args).then(function (resp) {
         try {
           if (!resp || !resp.ok) return resp;
-          reloadSoon();
+          var copy = null;
+          try { copy = resp.clone(); } catch (eClone) { copy = null; }
+
+          if (!copy || typeof copy.text !== 'function') {
+            return resp;
+          }
+
+          return copy.text().then(function (txt) {
+            if (!responseTextLooksSuccessful(txt)) return resp;
+            clearQuickReplyEditor();
+            reloadSoon();
+            return resp;
+          }).catch(function () {
+            return resp;
+          });
         } catch (e) {}
         return resp;
       });
