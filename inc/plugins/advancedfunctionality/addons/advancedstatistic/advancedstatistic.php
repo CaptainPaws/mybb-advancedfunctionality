@@ -448,35 +448,11 @@ function af_advancedstatistic_get_newest_member_html(array $stats): string
     return '<a href="member.php?action=profile&uid=' . $uid . '">' . $formatted . '</a>';
 }
 
-/**
- * Интеграция с AdvancedPostCounter:
- * - если есть известная функция/кэш/настройка — возьмём её
- * - иначе вернём null (и карточка "написано постов" не покажется)
- */
-/**
- * Интеграция с AdvancedPostCounter:
- * - если есть известная функция/кэш/настройка — возьмём её
- * - иначе посчитаем напрямую SQL (и закешируем на 10 минут)
- */
 function af_advancedstatistic_get_apc_posts_total(): ?int
 {
     global $mybb, $cache;
 
-    // 0) Кэш MyBB (чтобы не считать каждый раз)
-    // Будем хранить в cache('advancedpostcounter'): ['total_posts'=>int, 'total_posts_ts'=>int]
-    $ttl = 600; // 10 минут
-    if (isset($cache) && is_object($cache) && method_exists($cache, 'read')) {
-        $c = $cache->read('advancedpostcounter');
-        if (is_array($c) && isset($c['total_posts'], $c['total_posts_ts'])) {
-            $ts = (int)$c['total_posts_ts'];
-            $val = $c['total_posts'];
-            if (is_numeric($val) && $ts > 0 && (TIME_NOW - $ts) < $ttl) {
-                return (int)$val;
-            }
-        }
-    }
-
-    // 1) Если у APC есть явная функция — поддержим.
+    // 1) Каноничный источник: backend helper из APC.
     if (function_exists('af_advancedpostcounter_get_total_posts')) {
         $v = @af_advancedpostcounter_get_total_posts();
         if (is_numeric($v)) return (int)$v;
@@ -486,7 +462,7 @@ function af_advancedstatistic_get_apc_posts_total(): ?int
         if (is_numeric($v)) return (int)$v;
     }
 
-    // 2) Если APC пишет в settings — попробуем несколько вариантов имён.
+    // 2) Legacy fallback: если APC пишет в settings — попробуем несколько вариантов имён.
     $candidates = [
         'af_apc_total_posts',
         'af_advancedpostcounter_total_posts',
@@ -498,11 +474,11 @@ function af_advancedstatistic_get_apc_posts_total(): ?int
         }
     }
 
-    // 3) Если APC пишет в cache — попробуем.
+    // 3) Legacy fallback: если APC пишет в cache — попробуем.
     if (isset($cache) && is_object($cache) && method_exists($cache, 'read')) {
         $c = $cache->read('advancedpostcounter');
         if (is_array($c)) {
-            foreach (['total_posts', 'posts_total', 'count'] as $kk) {
+            foreach (['total_posts', 'posts_total', 'count', 'total'] as $kk) {
                 if (isset($c[$kk]) && is_numeric($c[$kk])) {
                     return (int)$c[$kk];
                 }
@@ -510,21 +486,16 @@ function af_advancedstatistic_get_apc_posts_total(): ?int
         }
     }
 
-    // 4) Фоллбек: посчитать напрямую из БД (и положить в кэш)
-    $computed = null;
+    // 4) Фоллбек: считаем по правилам APC без сохранения своего кэша,
+    // чтобы избежать устаревших значений.
     if (function_exists('af_advancedstatistic_query_apc_total_posts')) {
         $computed = af_advancedstatistic_query_apc_total_posts();
+        if (is_numeric($computed)) {
+            return (int)$computed;
+        }
     }
 
-    if ($computed !== null && isset($cache) && is_object($cache) && method_exists($cache, 'update')) {
-        $c = $cache->read('advancedpostcounter');
-        if (!is_array($c)) $c = [];
-        $c['total_posts'] = (int)$computed;
-        $c['total_posts_ts'] = TIME_NOW;
-        $cache->update('advancedpostcounter', $c);
-    }
-
-    return $computed;
+    return null;
 }
 
 /**

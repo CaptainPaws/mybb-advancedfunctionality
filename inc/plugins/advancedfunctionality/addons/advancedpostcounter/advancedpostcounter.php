@@ -932,6 +932,54 @@ function af_advancedpostcounter_fetch_monthly_totals(int $limit = 0): array
 }
 
 /**
+ * Каноничный "ВСЕГО" для APC:
+ * используется теми же правилами фильтрации, что и постовая активность.
+ */
+function af_advancedpostcounter_get_total_posts(): int
+{
+    static $cachedTotal = null;
+    if ($cachedTotal !== null) {
+        return $cachedTotal;
+    }
+
+    global $db;
+
+    $fids = af_advancedpostcounter_get_tracked_forums();
+    if (empty($fids)) {
+        $cachedTotal = 0;
+        return $cachedTotal;
+    }
+
+    $fidList = implode(',', array_map('intval', $fids));
+    if ($fidList === '') {
+        $cachedTotal = 0;
+        return $cachedTotal;
+    }
+
+    $prefix = TABLE_PREFIX;
+    $firstCond = af_advancedpostcounter_count_firstpost_enabled() ? '1=1' : 'p.pid != t.firstpost';
+
+    $q = $db->query("
+        SELECT COUNT(*) AS c
+        FROM {$prefix}posts p
+        INNER JOIN {$prefix}threads t ON (t.tid = p.tid)
+        WHERE p.visible = 1
+          AND t.visible = 1
+          AND p.uid > 0
+          AND p.fid IN ({$fidList})
+          AND {$firstCond}
+    ");
+
+    $cachedTotal = (int)($db->fetch_field($q, 'c') ?? 0);
+    return $cachedTotal;
+}
+
+function af_apc_get_total_posts(): int
+{
+    return af_advancedpostcounter_get_total_posts();
+}
+
+/**
  * Превращает "YYYY-MM" в "Месяц YYYY" (рус).
  * Если в $lang есть month_1..month_12 — используем их, иначе fallback на массив.
  */
