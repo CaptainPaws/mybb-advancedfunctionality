@@ -2422,7 +2422,10 @@ af-apf-postbit-field {
 /* ТИПЫ МОДАЛОК */
 .af-cs-modal[data-af-modal-kind="application"] .af-cs-modal__body,
 .af-cs-modal[data-af-apui-modal-kind="application"] .af-cs-modal__body {
+  display: flex;
+  min-height: 0;
   padding: 16px;
+  overflow: hidden;
   background-image:
     var(--af-apui-modal-application-bg-overlay),
     var(--af-apui-modal-application-bg-image);
@@ -2433,6 +2436,14 @@ af-apf-postbit-field {
     cover,
     var(--af-apui-modal-application-bg-size);
   background-repeat: no-repeat, no-repeat;
+}
+
+.af-cs-modal[data-af-modal-kind="application"] .af-cs-modal__content,
+.af-cs-modal[data-af-apui-modal-kind="application"] .af-cs-modal__content {
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .af-cs-modal[data-af-modal-kind="inventory"] .af-cs-modal__body,
