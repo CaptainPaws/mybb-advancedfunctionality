@@ -242,6 +242,30 @@
         applyScopedNode(node, uid, surface);
       }
     });
+
+    if (surface === 'application') {
+      normalizeApplicationModalFragments(modal);
+    }
+  }
+
+  function normalizeApplicationModalFragments(modal) {
+    if (!modal || modal.nodeType !== 1) return;
+
+    var fragments = modal.querySelectorAll('.af-apui-application-fragment');
+    if (!fragments || !fragments.length) return;
+
+    fragments.forEach(function (fragment) {
+      if (!fragment || !fragment.style) return;
+
+      var current = safeLower(fragment.style.position);
+      if (current !== 'absolute') return;
+
+      fragment.style.removeProperty('position');
+
+      if (!trim(fragment.getAttribute('style'))) {
+        fragment.removeAttribute('style');
+      }
+    });
   }
 
   function installObserver(modal, uid, surface) {

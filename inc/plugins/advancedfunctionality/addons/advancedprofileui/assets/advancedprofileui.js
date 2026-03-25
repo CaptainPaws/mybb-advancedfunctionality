@@ -687,6 +687,7 @@
         }
 
         modalParts.content.innerHTML = fragmentHtml;
+        normalizeApplicationModalFragmentLayout(modalParts);
       })
       .catch(function (error) {
         if (token !== modalState.token) {
@@ -705,6 +706,43 @@
               : '') +
           '</div>';
       });
+  }
+
+  function normalizeApplicationModalFragmentLayout(modalParts) {
+    if (!modalParts || !modalParts.modal || !modalParts.content) {
+      return;
+    }
+
+    var kind = String(
+      modalParts.modal.getAttribute('data-af-modal-kind')
+      || modalParts.modal.getAttribute('data-af-apui-modal-kind')
+      || ''
+    ).trim().toLowerCase();
+
+    if (kind !== 'application') {
+      return;
+    }
+
+    var fragments = modalParts.content.querySelectorAll('.af-apui-application-fragment');
+    if (!fragments.length) {
+      return;
+    }
+
+    Array.prototype.forEach.call(fragments, function (fragment) {
+      if (!fragment || !fragment.style) {
+        return;
+      }
+
+      if (String(fragment.style.position || '').trim().toLowerCase() !== 'absolute') {
+        return;
+      }
+
+      fragment.style.removeProperty('position');
+
+      if (!String(fragment.getAttribute('style') || '').trim()) {
+        fragment.removeAttribute('style');
+      }
+    });
   }
 
   function setFrameSrc(frame, value) {
