@@ -4685,7 +4685,7 @@ function af_aa_build_preview_postbit_markup(array $ctx): string
 {
     return '<div class="af-aa-preview-postbit-wrap ' . ($ctx['af_aa_preview_uid_class'] ?? '') . '">'
         . '<div class="af-apui-postbit af-aa-preview-postbit">'
-        . '<aside class="af-aa-preview-postbit__author"><div class="af-apui-postbit-author__inner">'
+        . '<aside class="af-aa-preview-postbit__author af-apui-postbit-author"><div class="af-apui-postbit-author__inner">'
         . '<div class="af-apui-postbit-name-wrap"><a href="' . ($ctx['af_aa_preview_profile_url'] ?? 'javascript:void(0)') . '">' . ($ctx['af_aa_preview_username'] ?? 'User') . '</a></div>'
         . '<div class="af-apui-postbit-avatar-shell"><div class="af-apui-postbit-avatar-frame">' . ($ctx['af_aa_preview_avatar_small_html'] ?? '') . '</div></div>'
         . '<div class="af-apui-postbit-online"><span class="' . ($ctx['af_aa_preview_presence_dot_class'] ?? 'af-apui-presence-dot--offline') . '"></span></div>'
