@@ -797,17 +797,17 @@ function af_apui_build_postbit_actionbar_html(array $post, array $sheetPayload =
         if ($applicationPid > 0) {
             $fragmentSelector =
                 '#post_' . $applicationPid
-                . ', [data-pid="' . $applicationPid . '"]'
-                . ', #pid' . $applicationPid
-                . ', a[name="pid' . $applicationPid . '"]';
+                . ', [data-pid="' . $applicationPid . '"]';
         }
 
         $applicationSourceUrl = af_apui_build_surface_url($applicationUrl, $uid, 'application');
+
         $applicationModalUrl = af_apui_build_surface_url(
             $applicationFetchUrl !== '' ? $applicationFetchUrl : $applicationUrl,
             $uid,
             'application'
         );
+        $applicationModalUrl = af_apui_append_query_arg($applicationModalUrl, 'ajax', 1);
 
         $buttons[] = af_apui_build_postbit_action_button([
             'label' => 'Анкета',
@@ -833,11 +833,11 @@ function af_apui_build_postbit_actionbar_html(array $post, array $sheetPayload =
     $sheetExtraAttrs = '';
 
     if (!empty($sheetPayload['sheet_url'])) {
-        $sheetUrl = af_apui_decode_action_url((string)$sheetPayload['sheet_url']);
+        $sheetUrl = af_apui_decode_action_url((string)($sheetPayload['sheet_url'] ?? ''));
     }
 
     if (!empty($sheetPayload['button_label'])) {
-        $sheetLabel = (string)$sheetPayload['button_label'];
+        $sheetLabel = (string)($sheetPayload['button_label'] ?? 'Лист персонажа');
     }
 
     if ($sheetUrl !== '') {
@@ -1383,7 +1383,7 @@ function af_apui_build_member_profile_application_tab(int $uid, array $sheetPayl
     if (trim($content) === '') {
         $content = '<div class="af-apui-empty">Содержимое анкеты пока недоступно для встроенного вывода. Используйте кнопку открытия темы.</div>';
     } else {
-        $content = '<div class="af-apui-application-fragment af-aa-context af-aa-context--application" data-af-apui-surface="application" data-af-apui-owner-uid="' . $uid . '">' . $content . '</div>';
+        $content = '<div class="af-apui-application-embed">' . $content . '</div>';
     }
 
     return af_apui_build_member_profile_tab_shell(
@@ -1504,9 +1504,80 @@ function af_apui_render_info_grid(array $pairs, string $emptyMessage = ''): stri
     return $out;
 }
 
+function af_apui_is_application_surface_ajax_request(): bool
+{
+    global $mybb;
+
+    if (!defined('THIS_SCRIPT') || strtolower((string)THIS_SCRIPT) !== 'showthread.php') {
+        return false;
+    }
+
+    $surface = strtolower(trim((string)$mybb->get_input('af_apui_surface')));
+    if ($surface !== 'application') {
+        return false;
+    }
+
+    $ajaxRaw = strtolower(trim((string)$mybb->get_input('ajax')));
+    return $mybb->get_input('ajax', MyBB::INPUT_INT) === 1
+        || $ajaxRaw === '1'
+        || $ajaxRaw === 'true';
+}
+
+function af_apui_build_application_surface_fragment_html(): string
+{
+    global $mybb, $thread;
+
+    $tid = (int)($thread['tid'] ?? $mybb->get_input('tid', MyBB::INPUT_INT));
+    if ($tid <= 0 && function_exists('get_thread')) {
+        $tid = (int)$mybb->get_input('tid', MyBB::INPUT_INT);
+        if ($tid > 0) {
+            $thread = get_thread($tid);
+        }
+    }
+
+    $threadRow = is_array($thread ?? null) ? (array)$thread : [];
+    $tid = (int)($threadRow['tid'] ?? $tid);
+    $fid = (int)($threadRow['fid'] ?? 0);
+    $uid = (int)$mybb->get_input('af_apui_owner_uid', MyBB::INPUT_INT);
+
+    if ($uid <= 0) {
+        $uid = (int)($threadRow['uid'] ?? 0);
+    }
+
+    if ($tid <= 0 || $fid <= 0 || !function_exists('af_atf_build_display_block_for_tid_fid')) {
+        return '<div class="af-apui-application-fragment af-aa-context af-aa-context--application"'
+            . ' data-af-apui-surface="application"'
+            . ($uid > 0 ? ' data-af-apui-owner-uid="' . $uid . '" data-uid="' . $uid . '"' : '')
+            . '><div class="af-apui-empty">Содержимое анкеты недоступно.</div></div>';
+    }
+
+    $content = (string)af_atf_build_display_block_for_tid_fid($tid, $fid);
+    if (trim($content) === '') {
+        $content = '<div class="af-apui-empty">Содержимое анкеты недоступно.</div>';
+    }
+
+    $classes = 'af-apui-application-fragment af-aa-context af-aa-context--application';
+    if ($uid > 0) {
+        $classes .= ' af-aa-surface-user-' . $uid;
+    }
+
+    return '<div class="' . htmlspecialchars_uni($classes) . '"'
+        . ' data-af-apui-surface="application"'
+        . ($uid > 0 ? ' data-af-apui-owner-uid="' . $uid . '" data-uid="' . $uid . '"' : '')
+        . ' data-af-apui-application-fragment="1"'
+        . '>'
+        . $content
+        . '</div>';
+}
+
 function af_apui_pre_output_page(string &$page): void
 {
     if (defined('IN_ADMINCP') || !af_apui_is_enabled() || $page === '') {
+        return;
+    }
+
+    if (af_apui_is_application_surface_ajax_request()) {
+        $page = af_apui_build_application_surface_fragment_html();
         return;
     }
 
@@ -1554,7 +1625,6 @@ function af_apui_pre_output_page(string &$page): void
 
     $page = af_apui_strip_asset_includes($page);
 
-    // Переносим штатные хлебные крошки внутрь APUI-контейнера темы.
     $page = af_apui_relocate_thread_breadcrumbs($page);
 
     if (!$needAssets) {
