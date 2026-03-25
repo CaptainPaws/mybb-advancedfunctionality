@@ -6,9 +6,17 @@
             <h1>Инвентарь: {$user['username']}</h1>
             <div class="af-inv-wallet" data-af-wallet>
                 <span>Баланс кошелька:</span>
-                <strong data-af-wallet-balance>{$walletBalance}</strong>
-                <span data-af-wallet-symbol>{$walletCurrencySymbol}</span>
-                <span class="af-inv-wallet__code">{$walletCurrencyCode}</span>
+                <span class="af-inv-wallet__item" data-af-wallet-item="credits">
+                    <span class="af-inv-wallet__label">{$walletCreditsLabel}:</span>
+                    <strong data-af-wallet-balance="credits">{$walletCreditsMajor}</strong>
+                    <span data-af-wallet-symbol="credits">{$walletCreditsSymbol}</span>
+                </span>
+                <span class="af-inv-wallet__sep">·</span>
+                <span class="af-inv-wallet__item" data-af-wallet-item="ability_tokens">
+                    <span class="af-inv-wallet__label">{$walletAbilityLabel}:</span>
+                    <strong data-af-wallet-balance="ability_tokens">{$walletAbilityMajor}</strong>
+                    <span data-af-wallet-symbol="ability_tokens">{$walletAbilitySymbol}</span>
+                </span>
             </div>
         </div>
 

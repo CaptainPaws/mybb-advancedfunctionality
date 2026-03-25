@@ -235,13 +235,30 @@
     if (!page || !wallet) {
       return;
     }
-    var balanceNode = page.querySelector('[data-af-wallet-balance]');
-    var symbolNode = page.querySelector('[data-af-wallet-symbol]');
-    if (balanceNode && wallet.balance_major != null) {
-      balanceNode.textContent = wallet.balance_major;
+
+    var balances = wallet.balances || null;
+    if (balances && typeof balances === 'object') {
+      Object.keys(balances).forEach(function (slug) {
+        var payload = balances[slug] || {};
+        var balanceNode = page.querySelector('[data-af-wallet-balance="' + slug + '"]');
+        var symbolNode = page.querySelector('[data-af-wallet-symbol="' + slug + '"]');
+        if (balanceNode && payload.balance_major != null) {
+          balanceNode.textContent = payload.balance_major;
+        }
+        if (symbolNode && payload.currency_symbol != null) {
+          symbolNode.textContent = payload.currency_symbol;
+        }
+      });
+      return;
     }
-    if (symbolNode && wallet.currency_symbol != null) {
-      symbolNode.textContent = wallet.currency_symbol;
+
+    var legacyBalanceNode = page.querySelector('[data-af-wallet-balance]');
+    var legacySymbolNode = page.querySelector('[data-af-wallet-symbol]');
+    if (legacyBalanceNode && wallet.balance_major != null) {
+      legacyBalanceNode.textContent = wallet.balance_major;
+    }
+    if (legacySymbolNode && wallet.currency_symbol != null) {
+      legacySymbolNode.textContent = wallet.currency_symbol;
     }
   }
 
