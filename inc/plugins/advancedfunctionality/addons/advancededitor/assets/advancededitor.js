@@ -1698,6 +1698,33 @@
     try { return $ta.sceditor('instance'); } catch (e) { return null; }
   }
 
+  function destroyTextareaInstance(ta, reason) {
+    if (!ta || !hasJq()) return;
+
+    var $ta = window.jQuery(ta);
+    var inst = safeGetInstance($ta);
+    if (!inst) {
+      ta.__afAeInited = false;
+      return;
+    }
+
+    try {
+      if (inst.__afAeOwned && typeof inst.destroy === 'function') {
+        inst.destroy();
+      } else {
+        try { $ta.sceditor('destroy'); } catch (e1) {}
+      }
+      log('[AE] editor destroyed', {
+        textareaName: ta.name || '',
+        reason: reason || 'unknown'
+      });
+    } catch (e2) {
+      log('[AE] destroy error', e2);
+    } finally {
+      ta.__afAeInited = false;
+    }
+  }
+
   function updateOriginal(inst) {
     if (!inst) return;
     try { inst.updateOriginal(); } catch (e) {}
@@ -2143,9 +2170,6 @@
   }
 
   function scanAndInit(root) {
-    if (window.__afAeScanDone) return;
-    window.__afAeScanDone = true;
-
     root = root || document;
     if (!root.querySelectorAll) return;
 
@@ -2153,6 +2177,90 @@
     for (var i = 0; i < list.length; i++) {
       initOneTextarea(list[i]);
     }
+  }
+
+  function scanAndDestroyRemoved(root, reason) {
+    if (!root || !root.querySelectorAll) return;
+
+    if (root.nodeType === 1 && root.tagName === 'TEXTAREA') {
+      destroyTextareaInstance(root, reason);
+      return;
+    }
+
+    var list = root.querySelectorAll('textarea');
+    for (var i = 0; i < list.length; i++) {
+      destroyTextareaInstance(list[i], reason);
+    }
+  }
+
+  function scheduleScan(root, attempts, delay) {
+    attempts = Number(attempts || 1);
+    if (!isFinite(attempts) || attempts < 1) attempts = 1;
+    delay = Number(delay || 80);
+    if (!isFinite(delay) || delay < 0) delay = 80;
+
+    function tick(left) {
+      scanAndInit(root || document);
+      if (left <= 1) return;
+      setTimeout(function () { tick(left - 1); }, delay);
+    }
+
+    tick(attempts);
+  }
+
+  function bindDynamicTextareaObserver() {
+    if (window.__afAeDynamicObserverBound) return;
+    window.__afAeDynamicObserverBound = true;
+
+    if (!window.MutationObserver || !document.body) return;
+
+    var observer = new MutationObserver(function (records) {
+      for (var i = 0; i < records.length; i++) {
+        var rec = records[i];
+        if (!rec) continue;
+
+        if (rec.addedNodes && rec.addedNodes.length) {
+          for (var j = 0; j < rec.addedNodes.length; j++) {
+            var added = rec.addedNodes[j];
+            if (!added || added.nodeType !== 1) continue;
+
+            if (added.tagName === 'TEXTAREA' || (added.querySelector && added.querySelector('textarea'))) {
+              scheduleScan(added, 6, 90);
+            }
+          }
+        }
+
+        if (rec.removedNodes && rec.removedNodes.length) {
+          for (var k = 0; k < rec.removedNodes.length; k++) {
+            var removed = rec.removedNodes[k];
+            if (!removed || removed.nodeType !== 1) continue;
+            scanAndDestroyRemoved(removed, 'dom_removed');
+          }
+        }
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
+
+  function bindQuickEditLateInitHints() {
+    if (window.__afAeQuickEditHintsBound) return;
+    window.__afAeQuickEditHintsBound = true;
+
+    document.addEventListener('click', function (event) {
+      var target = event && event.target ? event.target : null;
+      if (!target || !target.closest) return;
+
+      var quickEditTrigger = target.closest(
+        'a[id^="quick_edit_"], a[onclick*="quick_edit"], a[href*="action=edit_post"], a[href*="action=editpost"]'
+      );
+      if (!quickEditTrigger) return;
+
+      scheduleScan(document, 6, 110);
+    }, true);
   }
 
   function boot() {
@@ -2163,6 +2271,8 @@
       if (hasSceditor()) {
         initGlobalEditorEnvironment();
         scanAndInit(document);
+        bindDynamicTextareaObserver();
+        bindQuickEditLateInitHints();
         bindEditpostFormGuards(document);
         return;
       }
