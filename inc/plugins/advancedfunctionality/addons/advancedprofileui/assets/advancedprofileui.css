@@ -2565,8 +2565,7 @@ body.af-apui-surface-body[data-af-apui-surface="sheet"] {
 }
 
 body.af-apui-surface-body[data-af-apui-surface="application"],
-.af-apui-surface-page[data-af-apui-surface="application"],
-.af-apui-application-fragment[data-af-apui-surface="application"] {
+.af-apui-surface-page[data-af-apui-surface="application"] {
   background-image: var(--af-apui-modal-application-bg-overlay), var(--af-apui-modal-application-bg-image);
   background-repeat: no-repeat, no-repeat;
   background-position: center center, center center;
@@ -2643,6 +2642,7 @@ body.af-apui-surface-body[data-af-apui-surface="achievements"],
 .af-apui-surface-page[data-af-apui-surface="application"] .af-apui-application-fragment[data-af-apui-surface="application"],
 .af-apui-application-fragment[data-af-apui-surface="application"] {
   background: var(--af-apui-modal-application-panel-bg);
+  background-image: none !important;
   border: 1px solid var(--af-apui-modal-application-panel-border);
   border-radius: 18px;
 }
