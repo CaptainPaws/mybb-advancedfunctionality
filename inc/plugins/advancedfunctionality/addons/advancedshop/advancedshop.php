@@ -405,6 +405,34 @@ function af_advancedshop_source_ref_id_from_slot(array $slot): int
     return (int)($slot['kb_id'] ?? 0);
 }
 
+function af_advancedshop_supported_currencies(): array
+{
+    return [
+        'credits' => [
+            'slug' => 'credits',
+            'label' => 'Credits',
+        ],
+        'ability_tokens' => [
+            'slug' => 'ability_tokens',
+            'label' => 'Ability Tokens',
+        ],
+    ];
+}
+
+function af_advancedshop_normalize_currency_slug(string $slug): string
+{
+    $slug = mb_strtolower(trim($slug));
+    $supported = af_advancedshop_supported_currencies();
+    return isset($supported[$slug]) ? $slug : 'credits';
+}
+
+function af_advancedshop_currency_label(string $slug): string
+{
+    $slug = af_advancedshop_normalize_currency_slug($slug);
+    $supported = af_advancedshop_supported_currencies();
+    return (string)($supported[$slug]['label'] ?? ucfirst(str_replace('_', ' ', $slug)));
+}
+
 function af_advancedshop_init(): void
 {
     global $plugins;
@@ -435,9 +463,13 @@ function af_advancedshop_ensure_slots_schema(): void
     if (!$db->field_exists('source_ref_id', 'af_shop_slots')) {
         $db->write_query("ALTER TABLE " . TABLE_PREFIX . "af_shop_slots ADD COLUMN source_ref_id INT UNSIGNED NOT NULL DEFAULT 0 AFTER source_type");
     }
+    if (!$db->field_exists('currency', 'af_shop_slots')) {
+        $db->write_query("ALTER TABLE " . TABLE_PREFIX . "af_shop_slots ADD COLUMN currency VARCHAR(32) NOT NULL DEFAULT 'credits' AFTER price");
+    }
 
     $db->write_query("UPDATE " . TABLE_PREFIX . "af_shop_slots SET source_type='kb' WHERE source_type='' OR source_type IS NULL");
     $db->write_query("UPDATE " . TABLE_PREFIX . "af_shop_slots SET source_ref_id=kb_id WHERE source_ref_id=0 AND kb_id>0");
+    $db->write_query("UPDATE " . TABLE_PREFIX . "af_shop_slots SET currency='credits' WHERE currency='' OR currency IS NULL OR currency NOT IN ('credits','ability_tokens')");
 
     $kbCols = af_advancedshop_kb_cols();
     $kbIdCol = $kbCols['id'] ?? '';
@@ -1432,10 +1464,15 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
         eval('$slotsHtml .= "' . af_advancedshop_tpl('advancedshop_product_card') . '";');
     }
 
-    $balance = (int)af_shop_get_balance((int)($mybb->user['uid'] ?? 0), (string)($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits'));
-    $currencySlug = (string)($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits');
-    $currency_symbol = htmlspecialchars_uni(af_advancedshop_currency_symbol($currencySlug));
-    $balance = af_advancedshop_money_format($balance);
+    $balance_badges = [];
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    foreach (af_advancedshop_supported_currencies() as $currencyMeta) {
+        $currencySlug = (string)$currencyMeta['slug'];
+        $balanceMinor = (int)af_shop_get_balance($uid, $currencySlug);
+        $balance_badges[] = '<span class="af-shop-balance">' . htmlspecialchars_uni(af_advancedshop_currency_label($currencySlug)) . ': <strong>'
+            . htmlspecialchars_uni(af_advancedshop_money_format($balanceMinor)) . '</strong> '
+            . htmlspecialchars_uni(af_advancedshop_currency_symbol($currencySlug)) . '</span>';
+    }
     $shop_code = htmlspecialchars_uni((string)$shop['code']);
     $shop_title = htmlspecialchars_uni($lang->af_advancedshop_shop_title ?? 'Shop');
     $cart_url = af_advancedshop_url('shop_cart', ['shop' => (string)$shop['code']], true);
@@ -1448,7 +1485,7 @@ function af_advancedshop_render_shop(bool $strictByCode = false): void
     if ((int)($mybb->user['uid'] ?? 0) > 0) {
         $inventory_link = '<a class="af-shop-btn" href="' . htmlspecialchars_uni(af_advancedshop_inventory_url((int)$mybb->user['uid'])) . '">Инвентарь</a>';
     }
-    $balance_badge = '<span class="af-shop-balance">' . htmlspecialchars_uni($lang->af_advancedshop_balance ?? 'Balance') . ': <strong>' . $balance . '</strong> ' . $currency_symbol . '</span>';
+    $balance_badge = implode(' ', $balance_badges);
     $assets = af_advancedshop_assets_html();
     eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_shop') . '";');
     eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
@@ -1717,18 +1754,44 @@ function af_advancedshop_render_cart(): void
     add_breadcrumb($lang->af_advancedshop_hub_title ?? 'Выбор магазина', af_advancedshop_url('shop'));
     add_breadcrumb($lang->af_advancedshop_cart_title ?? 'Cart', af_advancedshop_url('shop_cart', ['shop' => (string)$shop['code']]));
     $cart = af_advancedshop_get_or_create_cart((int)$shop['shop_id'], (int)$mybb->user['uid']);
-    [$itemsHtml, $total] = af_advancedshop_build_cart_items($cart);
-    $balance = (int)af_shop_get_balance((int)$mybb->user['uid'], (string)($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits'));
-    $can_checkout = $balance >= $total ? '' : 'disabled="disabled"';
-    $msg = $balance >= $total ? '' : '<div class="af-shop-error">' . htmlspecialchars_uni($lang->af_advancedshop_error_not_enough_money ?? 'Not enough money') . '</div>';
+    [$itemsHtml, $totalByCurrency] = af_advancedshop_build_cart_items($cart);
+    $insufficientLines = [];
+    $balancesSummary = [];
+    $totalsSummary = [];
+    foreach ($totalByCurrency as $currencySlug => $currencyTotal) {
+        $currencySlug = af_advancedshop_normalize_currency_slug((string)$currencySlug);
+        $balanceCurrency = (int)af_shop_get_balance((int)$mybb->user['uid'], $currencySlug);
+        if ($balanceCurrency < (int)$currencyTotal) {
+            $insufficientLines[] = htmlspecialchars_uni(af_advancedshop_currency_label($currencySlug));
+        }
+        $balancesSummary[] = af_advancedshop_currency_label($currencySlug) . ': '
+            . af_advancedshop_money_format($balanceCurrency) . ' '
+            . af_advancedshop_currency_symbol($currencySlug);
+        $totalsSummary[] = af_advancedshop_currency_label($currencySlug) . ': '
+            . af_advancedshop_money_format((int)$currencyTotal) . ' '
+            . af_advancedshop_currency_symbol($currencySlug);
+    }
+    if (!$balancesSummary) {
+        foreach (af_advancedshop_supported_currencies() as $currencyMeta) {
+            $currencySlug = (string)$currencyMeta['slug'];
+            $balanceCurrency = (int)af_shop_get_balance((int)$mybb->user['uid'], $currencySlug);
+            $balancesSummary[] = af_advancedshop_currency_label($currencySlug) . ': '
+                . af_advancedshop_money_format($balanceCurrency) . ' '
+                . af_advancedshop_currency_symbol($currencySlug);
+        }
+        $totalsSummary[] = '0';
+    }
+    $can_checkout = $insufficientLines ? 'disabled="disabled"' : '';
+    $msg = $insufficientLines
+        ? '<div class="af-shop-error">' . htmlspecialchars_uni(($lang->af_advancedshop_error_not_enough_money ?? 'Not enough money') . ': ' . implode(', ', $insufficientLines)) . '</div>'
+        : '';
     $assets = af_advancedshop_assets_html();
     $shop_code = htmlspecialchars_uni((string)$shop['code']);
     $shop_url = af_advancedshop_url('shop_category', ['shop' => (string)$shop['code']], true);
     $inventory_url = htmlspecialchars_uni(af_advancedshop_inventory_url((int)$mybb->user['uid']));
-    $currencySlug = (string)($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits');
-    $currency_symbol = htmlspecialchars_uni(af_advancedshop_currency_symbol($currencySlug));
-    $balance = af_advancedshop_money_format($balance);
-    $total = af_advancedshop_money_format($total);
+    $currency_symbol = '';
+    $balance = htmlspecialchars_uni(implode(' · ', $balancesSummary));
+    $total = htmlspecialchars_uni(implode(' · ', $totalsSummary));
     eval('$af_advancedshop_content = "' . af_advancedshop_tpl('advancedshop_cart') . '";');
     eval('$page = "' . af_advancedshop_tpl('advancedshop_fullpage') . '";');
     output_page($page);
@@ -1748,7 +1811,7 @@ function af_advancedshop_build_cart_items(array $cart): array
 {
     global $db;
     $itemsHtml = '';
-    $total = 0;
+    $totalsByCurrency = [];
     $kbCols = af_advancedshop_kb_cols();
     $kbIdCol = $kbCols['id'] ?? 'id';
     $titleRuCol = $kbCols['title_ru'] ?? null;
@@ -1780,8 +1843,9 @@ function af_advancedshop_build_cart_items(array $cart): array
         $slot_id = (int)$row['slot_id'];
         $qty = max(1, (int)$row['qty']);
         $price = (int)$row['price'];
+        $currencySlug = af_advancedshop_normalize_currency_slug((string)($row['currency'] ?? 'credits'));
         $sum = $qty * $price;
-        $total += $sum;
+        $totalsByCurrency[$currencySlug] = (int)($totalsByCurrency[$currencySlug] ?? 0) + $sum;
         $sourceType = af_advancedshop_source_type_from_slot($row);
         $sourceRefId = af_advancedshop_source_ref_id_from_slot($row);
         $item_title_raw = '';
@@ -1803,10 +1867,10 @@ function af_advancedshop_build_cart_items(array $cart): array
         $item_title = htmlspecialchars_uni($item_title_raw);
         $price = af_advancedshop_money_format($price);
         $sum = af_advancedshop_money_format($sum);
-        $currency_symbol = htmlspecialchars_uni(af_advancedshop_currency_symbol((string)($row['currency'] ?? 'credits')));
+        $currency_symbol = htmlspecialchars_uni(af_advancedshop_currency_symbol($currencySlug));
         eval('$itemsHtml .= "' . af_advancedshop_tpl('advancedshop_cart_item') . '";');
     }
-    return [$itemsHtml, $total];
+    return [$itemsHtml, $totalsByCurrency];
 }
 
 function af_advancedshop_add_to_cart(): void
@@ -1857,14 +1921,20 @@ function af_advancedshop_checkout(): void
     }
     af_advancedshop_write_inventory_schema_snapshot();
     $shop = af_advancedshop_current_shop();
-    $currency = (string)($mybb->settings['af_advancedshop_currency_slug'] ?? 'credits');
     $cart = af_advancedshop_get_or_create_cart((int)$shop['shop_id'], $uid);
-    [$items, $total] = af_advancedshop_checkout_collect_items((int)$cart['cart_id']);
-    if (!$items || $total <= 0) { af_advancedshop_json_err('empty', 400); }
+    [$items, $totalsByCurrency] = af_advancedshop_checkout_collect_items((int)$cart['cart_id']);
+    if (!$items || !$totalsByCurrency) { af_advancedshop_json_err('empty', 400); }
 
-    $balance = af_shop_get_balance($uid, $currency);
-    if ($balance < $total) {
-        af_advancedshop_json_err($lang->af_advancedshop_error_not_enough_money ?? 'Not enough money', 400);
+    $insufficient = [];
+    foreach ($totalsByCurrency as $currencySlug => $totalCurrency) {
+        $currencySlug = af_advancedshop_normalize_currency_slug((string)$currencySlug);
+        $balanceCurrency = af_shop_get_balance($uid, $currencySlug);
+        if ($balanceCurrency < (int)$totalCurrency) {
+            $insufficient[] = af_advancedshop_currency_label($currencySlug);
+        }
+    }
+    if ($insufficient) {
+        af_advancedshop_json_err(($lang->af_advancedshop_error_not_enough_money ?? 'Not enough money') . ': ' . implode(', ', $insufficient), 400);
     }
 
     $db->write_query('START TRANSACTION');
@@ -1872,8 +1942,8 @@ function af_advancedshop_checkout(): void
         $orderPayload = [
             'shop_id' => (int)$shop['shop_id'],
             'uid' => $uid,
-            'total' => $total,
-            'currency' => $db->escape_string($currency),
+            'total' => (int)array_sum($totalsByCurrency),
+            'currency' => $db->escape_string(count($totalsByCurrency) === 1 ? (string)array_key_first($totalsByCurrency) : 'mixed'),
             'created_at' => TIME_NOW,
             'status' => 'paid',
             'items_json' => $db->escape_string(json_encode($items, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
@@ -1888,7 +1958,10 @@ function af_advancedshop_checkout(): void
         ]);
         $orderId = (int)$db->insert_query('af_shop_orders', $orderPayload);
 
-        af_shop_sub_balance($uid, $currency, $total, 'shop_purchase', ['order_id' => $orderId, 'shop' => $shop['code']]);
+        foreach ($totalsByCurrency as $currencySlug => $totalCurrency) {
+            $currencySlug = af_advancedshop_normalize_currency_slug((string)$currencySlug);
+            af_shop_sub_balance($uid, $currencySlug, (int)$totalCurrency, 'shop_purchase', ['order_id' => $orderId, 'shop' => $shop['code']]);
+        }
 
         foreach ($items as $item) {
             af_advancedshop_inv_debug('checkout_grant_start', ['uid' => $uid, 'item' => $item]);
@@ -1919,24 +1992,27 @@ function af_advancedshop_checkout(): void
         af_advancedshop_json_err('Покупка не завершена: ' . $e->getMessage(), 500);
     }
 
-    $balanceAfter = max(0, (int)$balance - (int)$total);
+    $primaryCurrency = count($totalsByCurrency) === 1 ? (string)array_key_first($totalsByCurrency) : 'credits';
+    $primarySpent = (int)($totalsByCurrency[$primaryCurrency] ?? 0);
+    $balanceAfter = af_shop_get_balance($uid, $primaryCurrency);
     af_advancedshop_json_ok([
         'shop_code' => (string)$shop['code'],
         'items' => af_advancedshop_checkout_success_items($items),
-        'spent_minor' => (int)$total,
-        'spent_major' => af_advancedshop_money_format((int)$total),
-        'currency_symbol' => af_advancedshop_currency_symbol($currency),
+        'spent_minor' => $primarySpent,
+        'spent_major' => af_advancedshop_money_format($primarySpent),
+        'currency_symbol' => af_advancedshop_currency_symbol($primaryCurrency),
         'checkout' => [
             'shop_code' => (string)$shop['code'],
-            'spent_minor' => (int)$total,
-            'spent_major' => af_advancedshop_money_format((int)$total),
-            'total_minor' => (int)$total,
-            'total_major' => af_advancedshop_money_format((int)$total),
-            'currency' => $currency,
-            'currency_symbol' => af_advancedshop_currency_symbol($currency),
+            'spent_minor' => $primarySpent,
+            'spent_major' => af_advancedshop_money_format($primarySpent),
+            'total_minor' => $primarySpent,
+            'total_major' => af_advancedshop_money_format($primarySpent),
+            'currency' => $primaryCurrency,
+            'currency_symbol' => af_advancedshop_currency_symbol($primaryCurrency),
             'order_id' => (int)$orderId,
             'balance_minor' => $balanceAfter,
             'balance_major' => af_advancedshop_money_format($balanceAfter),
+            'totals' => $totalsByCurrency,
         ],
         'links' => [
             'shop' => af_advancedshop_url('shop_category', ['shop' => (string)$shop['code']]),
@@ -2096,7 +2172,7 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
 {
     global $db;
     $items = [];
-    $total = 0;
+    $totalsByCurrency = [];
     $kbCols = af_advancedshop_kb_cols();
     $kbIdCol = $kbCols['id'] ?? 'id';
     $titleRuCol = $kbCols['title_ru'] ?? null;
@@ -2146,11 +2222,12 @@ function af_advancedshop_checkout_collect_items(int $cartId): array
             'qty' => $qty,
             'title' => $title,
             'price_each' => $price,
-            'currency' => (string)$row['currency'],
+            'currency' => af_advancedshop_normalize_currency_slug((string)$row['currency']),
         ];
-        $total += $qty * $price;
+        $currencySlug = af_advancedshop_normalize_currency_slug((string)$row['currency']);
+        $totalsByCurrency[$currencySlug] = (int)($totalsByCurrency[$currencySlug] ?? 0) + ($qty * $price);
     }
-    return [$items, $total];
+    return [$items, $totalsByCurrency];
 }
 
 function af_advancedshop_checkout_success_items(array $items): array
@@ -2842,7 +2919,7 @@ function af_advancedshop_manage_slots(): void
                 'price' => (int)$r['price'],
                 'price_major' => af_advancedshop_money_format((int)$r['price']),
                 'cat_id' => (int)$r['cat_id'],
-                'currency' => (string)$r['currency'],
+                'currency' => af_advancedshop_normalize_currency_slug((string)$r['currency']),
                 'stock' => (int)$r['stock'],
                 'limit_per_user' => (int)$r['limit_per_user'],
                 'sortorder' => (int)$r['sortorder'],
@@ -2886,10 +2963,7 @@ function af_advancedshop_manage_slot_create(): void
     if ($duplicate) { af_advancedshop_json_err('Slot with this source already exists in category', 409); }
 
     $priceMinor = af_advancedshop_money_to_minor((string)$mybb->get_input('price'));
-    $currency = (string)$mybb->get_input('currency');
-    if ($currency === '') {
-        $currency = (string)$mybb->settings['af_advancedshop_currency_slug'];
-    }
+    $currency = af_advancedshop_normalize_currency_slug((string)$mybb->get_input('currency'));
 
     $slotId = (int)$db->insert_query('af_shop_slots', [
         'shop_id' => (int)$shop['shop_id'],
@@ -2965,7 +3039,7 @@ function af_advancedshop_manage_slot_update(): void
         'kb_id' => (int)$sourcePayload['kb_id'],
         'kb_key' => $db->escape_string((string)$sourcePayload['kb_key']),
         'price' => $priceMinor,
-        'currency' => $db->escape_string((string)($mybb->get_input('currency') ?: $slot['currency'])),
+        'currency' => $db->escape_string(af_advancedshop_normalize_currency_slug((string)($mybb->get_input('currency') ?: $slot['currency']))),
         'stock' => (int)$mybb->get_input('stock', MyBB::INPUT_INT),
         'limit_per_user' => max(0, (int)$mybb->get_input('limit_per_user', MyBB::INPUT_INT)),
         'enabled' => (int)$mybb->get_input('enabled') ? 1 : 0,
@@ -2983,7 +3057,7 @@ function af_advancedshop_manage_slot_update(): void
         'kb_key' => (string)$sourcePayload['kb_key'],
         'price' => (int)$update['price'],
         'price_major' => af_advancedshop_money_format((int)$update['price']),
-        'currency' => (string)($mybb->get_input('currency') ?: $slot['currency']),
+        'currency' => af_advancedshop_normalize_currency_slug((string)($mybb->get_input('currency') ?: $slot['currency'])),
         'stock' => (int)$update['stock'],
         'limit_per_user' => (int)$update['limit_per_user'],
         'enabled' => (int)$update['enabled'],
@@ -3335,9 +3409,14 @@ function af_advancedshop_money_to_minor(string $amount): int
 
 function af_advancedshop_currency_symbol(string $slug): string
 {
-    $slug = trim($slug);
+    global $mybb;
+
+    $slug = af_advancedshop_normalize_currency_slug($slug);
     if ($slug === 'credits') {
-        return '¢';
+        return (string)($mybb->settings['af_balance_currency_symbol'] ?? '¢');
+    }
+    if ($slug === 'ability_tokens') {
+        return (string)($mybb->settings['af_balance_ability_tokens_symbol'] ?? '♦');
     }
     return $slug;
 }
@@ -3712,20 +3791,32 @@ function af_advancedshop_kb_entry_url(int $kbId, string $type = '', string $entr
 
 function af_shop_get_balance(int $uid, string $currency_slug): int
 {
-    $currency_slug = $currency_slug === '' ? 'credits' : $currency_slug;
-    if ($currency_slug === 'credits' && function_exists('af_balance_get')) {
+    $currency_slug = af_advancedshop_normalize_currency_slug($currency_slug);
+    if (function_exists('af_balance_get')) {
         $bal = af_balance_get($uid);
-        return (int)($bal['credits'] ?? 0);
+        if ($currency_slug === 'credits') {
+            return (int)($bal['credits'] ?? 0);
+        }
+        if ($currency_slug === 'ability_tokens') {
+            return (int)($bal['ability_tokens'] ?? 0);
+        }
     }
     return 0;
 }
 
 function af_shop_add_balance(int $uid, string $currency_slug, int $amount, string $reason, array $meta = []): void
 {
+    $currency_slug = af_advancedshop_normalize_currency_slug($currency_slug);
     if ($currency_slug === 'credits' && function_exists('af_balance_add_credits')) {
         $meta['reason'] = $reason;
         $meta['source'] = 'advancedshop';
         af_balance_add_credits($uid, $amount / 100, $meta);
+        return;
+    }
+    if ($currency_slug === 'ability_tokens' && function_exists('af_balance_add_ability_tokens')) {
+        $meta['reason'] = $reason;
+        $meta['source'] = 'advancedshop';
+        af_balance_add_ability_tokens($uid, $amount / 100, $meta);
     }
 }
 

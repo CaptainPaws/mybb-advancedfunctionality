@@ -979,6 +979,8 @@
   }
 
   function buildSlotPayload(prefix) {
+    var rawCurrency = ((byId(sourcePrefix(prefix + '-currency')) || {}).value || 'credits').toLowerCase().trim();
+    var normalizedCurrency = rawCurrency === 'ability_tokens' ? 'ability_tokens' : 'credits';
     var sourceTypeNode = byId(sourcePrefix(prefix + '-source-type'));
     var sourceType = sourceTypeNode ? (sourceTypeNode.value || 'kb') : 'kb';
     return {
@@ -992,7 +994,7 @@
       kb_type: (byId(sourcePrefix(prefix + '-kb-type')) || {}).value || 'item',
       kb_key: (byId(sourcePrefix(prefix + '-kb-key')) || {}).value || '',
       price: (byId(sourcePrefix(prefix + '-price')) || {}).value || 0,
-      currency: (byId(sourcePrefix(prefix + '-currency')) || {}).value || 'credits',
+      currency: normalizedCurrency,
       stock: (byId(sourcePrefix(prefix + '-stock')) || {}).value || -1,
       limit_per_user: (byId(sourcePrefix(prefix + '-limit')) || {}).value || 0,
       enabled: (byId(sourcePrefix(prefix + '-enabled')) || {}).checked ? 1 : 0,
@@ -1168,6 +1170,10 @@
       var kbType = sourceType === 'kb' ? (row.kb_type || 'item') : 'item';
       var kbKey = sourceType === 'kb' ? (row.kb_key || '') : '';
 
+      var currency = (row.currency || 'credits') === 'ability_tokens' ? 'ability_tokens' : 'credits';
+      var currencyOptions = '<option value="credits"' + (currency === 'credits' ? ' selected' : '') + '>Credits</option>'
+        + '<option value="ability_tokens"' + (currency === 'ability_tokens' ? ' selected' : '') + '>Ability Tokens</option>';
+
       return '<article class="af-slot-card ' + escapeHtml(row.rarity_class || 'af-rarity-common') + '" data-slot-id="' + escapeHtml(String(row.slot_id || 0)) + '">'
         + '<div class="af-slot-existing">'
         + '<div class="af-slot-existing__media">' + icon + '</div>'
@@ -1179,7 +1185,7 @@
         + '<div><dt>source ref</dt><dd>#' + escapeHtml(sourceRefId) + '</dd></div>'
         + '<div><dt>target/group</dt><dd>' + escapeHtml(sourceType === 'appearance' ? ((row.appearance_group_label || row.appearance_group || '—') + ' / ' + (row.appearance_target_label || row.appearance_target || '—')) : '—') + '</dd></div>'
         + '<div><dt>price</dt><dd>' + escapeHtml(row.price_major || '0.00') + '</dd></div>'
-        + '<div><dt>currency</dt><dd>' + escapeHtml(row.currency || 'credits') + '</dd></div>'
+        + '<div><dt>currency</dt><dd>' + escapeHtml(currency) + '</dd></div>'
         + '<div><dt>stock</dt><dd>' + escapeHtml(String(row.stock == null ? -1 : row.stock)) + '</dd></div>'
         + '<div><dt>enabled</dt><dd>' + (row.enabled ? 'yes' : 'no') + '</dd></div>'
         + '<div><dt>sortorder</dt><dd>' + escapeHtml(String(row.sortorder || 0)) + '</dd></div>'
@@ -1202,7 +1208,7 @@
         + '<h4>Коммерческие настройки слота</h4>'
         + '<div class="af-kb-picker-filters">'
         + '<label>Price <input type="number" id="' + sourcePrefix(prefix + '-price') + '" value="' + escapeHtml(row.price_major || '0.00') + '" min="0" step="0.01"></label>'
-        + '<label>Currency <input type="text" id="' + sourcePrefix(prefix + '-currency') + '" value="' + escapeHtml(row.currency || 'credits') + '"></label>'
+        + '<label>Currency <select id="' + sourcePrefix(prefix + '-currency') + '">' + currencyOptions + '</select></label>'
         + '<label>Stock <input type="number" id="' + sourcePrefix(prefix + '-stock') + '" value="' + escapeHtml(String(row.stock == null ? -1 : row.stock)) + '"></label>'
         + '<label>Limit/user <input type="number" id="' + sourcePrefix(prefix + '-limit') + '" value="' + escapeHtml(String(row.limit_per_user || 0)) + '" min="0"></label>'
         + '<label>Sort <input type="number" id="' + sourcePrefix(prefix + '-sortorder') + '" value="' + escapeHtml(String(row.sortorder || 0)) + '"></label>'
