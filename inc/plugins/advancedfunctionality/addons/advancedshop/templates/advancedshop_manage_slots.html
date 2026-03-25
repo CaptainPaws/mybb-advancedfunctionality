@@ -160,7 +160,10 @@
                 <input type="number" id="af-create-price" value="0" min="0" step="0.01">
               </label>
               <label>Currency
-                <input type="text" id="af-create-currency" value="credits">
+                <select id="af-create-currency">
+                  <option value="credits" selected>Credits</option>
+                  <option value="ability_tokens">Ability Tokens</option>
+                </select>
               </label>
               <label>Stock
                 <input type="number" id="af-create-stock" value="-1">
