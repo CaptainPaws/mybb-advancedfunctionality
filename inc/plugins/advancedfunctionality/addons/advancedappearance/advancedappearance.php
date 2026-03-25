@@ -1306,35 +1306,37 @@ function af_aa_render_application_surface_fallback_css(array $selectors): string
         $panelSelectors[] = $root . ' .post_content';
     }
 
-    $layerSelectors = array_values(array_unique(array_filter(array_map('trim', $layerSelectors))));
-    $panelSelectors = array_values(array_unique(array_filter(array_map('trim', $panelSelectors))));
-
-    $rootCombined = implode(', ', $roots);
-    $layerCombined = implode(', ', $layerSelectors);
-    $panelCombined = implode(', ', $panelSelectors);
+    $rootCombined = af_aa_join_scoped_selectors($roots);
+    $beforeCombined = af_aa_join_scoped_selectors($roots, '::before');
+    $layerCombined = af_aa_join_scoped_selectors($layerSelectors);
+    $panelCombined = af_aa_join_scoped_selectors($panelSelectors);
 
     $css = '';
 
-    $css .= $rootCombined . '{';
-    $css .= 'position:relative;';
-    $css .= 'isolation:isolate;';
-    $css .= 'overflow:hidden;';
-    $css .= 'background-color:var(--af-apui-modal-application-panel-bg, rgba(6,12,26,.58)) !important;';
-    $css .= 'background-image:var(--af-apui-modal-application-bg-image, none) !important;';
-    $css .= 'background-position:center center !important;';
-    $css .= 'background-repeat:no-repeat !important;';
-    $css .= 'background-size:cover !important;';
-    $css .= 'border:1px solid var(--af-apui-modal-application-panel-border, rgba(255,255,255,.10)) !important;';
-    $css .= "}\n";
+    if ($rootCombined !== '') {
+        $css .= $rootCombined . '{';
+        $css .= 'position:relative;';
+        $css .= 'isolation:isolate;';
+        $css .= 'overflow:hidden;';
+        $css .= 'background-color:var(--af-apui-modal-application-panel-bg, rgba(6,12,26,.58)) !important;';
+        $css .= 'background-image:var(--af-apui-modal-application-bg-image, none) !important;';
+        $css .= 'background-position:center center !important;';
+        $css .= 'background-repeat:no-repeat !important;';
+        $css .= 'background-size:cover !important;';
+        $css .= 'border:1px solid var(--af-apui-modal-application-panel-border, rgba(255,255,255,.10)) !important;';
+        $css .= "}\n";
+    }
 
-    $css .= $rootCombined . '::before{';
-    $css .= 'content:"";';
-    $css .= 'position:absolute;';
-    $css .= 'inset:0;';
-    $css .= 'background:var(--af-apui-modal-application-bg-overlay, none) !important;';
-    $css .= 'pointer-events:none;';
-    $css .= 'z-index:0;';
-    $css .= "}\n";
+    if ($beforeCombined !== '') {
+        $css .= $beforeCombined . '{';
+        $css .= 'content:"";';
+        $css .= 'position:absolute;';
+        $css .= 'inset:0;';
+        $css .= 'background:var(--af-apui-modal-application-bg-overlay, none) !important;';
+        $css .= 'pointer-events:none;';
+        $css .= 'z-index:0;';
+        $css .= "}\n";
+    }
 
     if ($layerCombined !== '') {
         $css .= $layerCombined . '{position:relative;z-index:1;}' . "\n";
@@ -2160,7 +2162,9 @@ function af_aa_render_page_css(array $uidsOnPage): string
                 : $selectors;
 
             if ($surfaceKey === 'application' && !empty($selectors)) {
-                $rootSelectors = implode(', ', $selectors);
+                $rootSelectors = af_aa_join_scoped_selectors($selectors);
+                $rootBeforeSelectors = af_aa_join_scoped_selectors($selectors, '::before');
+                $rootChildrenSelectors = af_aa_join_scoped_selectors($selectors, ' > *');
 
                 $panelSelectors = [];
                 foreach ($selectors as $selector) {
@@ -2170,32 +2174,38 @@ function af_aa_render_page_css(array $uidsOnPage): string
                     $panelSelectors[] = $selector . ' .post_body';
                     $panelSelectors[] = $selector . ' .post_content';
                 }
-                $panelSelectors = array_values(array_unique(array_filter(array_map('trim', $panelSelectors))));
+                $panelCombined = af_aa_join_scoped_selectors($panelSelectors);
 
-                $css .= $rootSelectors . '{'
-                    . 'position:relative;'
-                    . 'isolation:isolate;'
-                    . 'background-color:var(--af-apui-modal-application-panel-bg, rgba(6,12,26,.58));'
-                    . 'background-image:var(--af-apui-modal-application-bg-image, none);'
-                    . 'background-position:center center;'
-                    . 'background-repeat:no-repeat;'
-                    . 'background-size:cover;'
-                    . 'border:1px solid var(--af-apui-modal-application-panel-border, rgba(255,255,255,.10));'
-                    . "}\n";
+                if ($rootSelectors !== '') {
+                    $css .= $rootSelectors . '{'
+                        . 'position:relative;'
+                        . 'isolation:isolate;'
+                        . 'background-color:var(--af-apui-modal-application-panel-bg, rgba(6,12,26,.58));'
+                        . 'background-image:var(--af-apui-modal-application-bg-image, none);'
+                        . 'background-position:center center;'
+                        . 'background-repeat:no-repeat;'
+                        . 'background-size:cover;'
+                        . 'border:1px solid var(--af-apui-modal-application-panel-border, rgba(255,255,255,.10));'
+                        . "}\n";
+                }
 
-                $css .= $rootSelectors . '::before{'
-                    . 'content:"";'
-                    . 'position:absolute;'
-                    . 'inset:0;'
-                    . 'background:var(--af-apui-modal-application-bg-overlay, none);'
-                    . 'pointer-events:none;'
-                    . 'z-index:0;'
-                    . "}\n";
+                if ($rootBeforeSelectors !== '') {
+                    $css .= $rootBeforeSelectors . '{'
+                        . 'content:"";'
+                        . 'position:absolute;'
+                        . 'inset:0;'
+                        . 'background:var(--af-apui-modal-application-bg-overlay, none);'
+                        . 'pointer-events:none;'
+                        . 'z-index:0;'
+                        . "}\n";
+                }
 
-                $css .= $rootSelectors . ' > *{position:relative;z-index:1;}' . "\n";
+                if ($rootChildrenSelectors !== '') {
+                    $css .= $rootChildrenSelectors . '{position:relative;z-index:1;}' . "\n";
+                }
 
-                if (!empty($panelSelectors)) {
-                    $css .= implode(', ', $panelSelectors) . '{'
+                if ($panelCombined !== '') {
+                    $css .= $panelCombined . '{'
                         . 'background:var(--af-apui-modal-application-panel-bg, rgba(6,12,26,.58));'
                         . 'border-color:var(--af-apui-modal-application-panel-border, rgba(255,255,255,.10));'
                         . "}\n";
@@ -2971,6 +2981,23 @@ function af_aa_render_multi_scope_custom_css(string $css, array $selectors, stri
     }
 
     return $out;
+}
+
+function af_aa_join_scoped_selectors(array $selectors, string $suffix = ''): string
+{
+    $selectors = array_values(array_unique(array_filter(array_map('trim', $selectors))));
+    if (empty($selectors)) {
+        return '';
+    }
+
+    if ($suffix !== '') {
+        foreach ($selectors as &$selector) {
+            $selector .= $suffix;
+        }
+        unset($selector);
+    }
+
+    return implode(', ', $selectors);
 }
 
 function af_aa_detect_surface_context(string $page): array
