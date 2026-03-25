@@ -455,7 +455,7 @@ function af_apf_apply_template_patches(bool $enable): void
     // Кнопка "Профиль" (вставляем один раз, с маркером для безопасного отката)
     $profileBtnHtml =
         '<!-- af_apf_profile_btn -->'
-        . '<a href="member.php?action=profile&amp;uid={$post[\'uid\']}" title="Профиль" class="postbit_profile af-apf-postbit-profile">'
+        . '<a href="member.php?action=profile&amp;uid={$post[\'uid\']}" class="postbit_profile af-apf-postbit-profile" data-af-title="Профиль" title="Профиль">'
         . '<span class="af-apf-ico-profile" aria-hidden="true"></span>'
         . '<span class="af-apf-title">Профиль</span>'
         . '</a>'
