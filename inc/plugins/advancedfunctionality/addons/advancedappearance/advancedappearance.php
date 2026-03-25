@@ -4663,6 +4663,87 @@ function af_aa_build_preview_user_context(int $uid = 0): array
     ];
 }
 
+function af_aa_preview_kind_for_do(string $do): string
+{
+    $do = af_aa_resolve_preset_do($do);
+
+    $map = [
+        'profilepack' => 'profile',
+        'postbitpack' => 'postbit',
+        'threadpack' => 'thread',
+        'applicationpack' => 'application',
+        'sheetpack' => 'sheet',
+        'inventorypack' => 'inventory',
+        'achievementspack' => 'achievements',
+        'fragmentpack' => 'misc',
+    ];
+
+    return $map[$do] ?? 'profile';
+}
+
+function af_aa_build_preview_postbit_markup(array $ctx): string
+{
+    return '<div class="af-aa-preview-postbit-wrap ' . ($ctx['af_aa_preview_uid_class'] ?? '') . '">'
+        . '<div class="af-apui-postbit af-aa-preview-postbit">'
+        . '<aside class="af-aa-preview-postbit__author"><div class="af-apui-postbit-author__inner">'
+        . '<div class="af-apui-postbit-name-wrap"><a href="' . ($ctx['af_aa_preview_profile_url'] ?? 'javascript:void(0)') . '">' . ($ctx['af_aa_preview_username'] ?? 'User') . '</a></div>'
+        . '<div class="af-apui-postbit-avatar-shell"><div class="af-apui-postbit-avatar-frame">' . ($ctx['af_aa_preview_avatar_small_html'] ?? '') . '</div></div>'
+        . '<div class="af-apui-postbit-online"><span class="' . ($ctx['af_aa_preview_presence_dot_class'] ?? 'af-apui-presence-dot--offline') . '"></span></div>'
+        . '<div class="af-apui-postbit-profilefields"><div class="af-aa-card-title">Поля профиля</div><div class="af-aa-card-copy">' . ($ctx['af_aa_preview_profilefields_html'] ?? '') . '</div></div>'
+        . '<div class="af-apui-postbit-userdetails"><div class="af-aa-card-title">Детали</div><div class="af-aa-card-copy">' . ($ctx['af_aa_preview_details_html'] ?? '') . '</div></div>'
+        . '<div class="af-apui-postbit-plaque-slot"><div class="af-apui-postbit-plaque"><span class="af-apui-postbit-plaque__media"><span class="af-apui-postbit-plaque__media-glyph" aria-hidden="true">★</span></span><span class="af-apui-postbit-plaque__content"><span class="af-apui-postbit-plaque__title">Postbit plaque</span><span class="af-apui-postbit-plaque__subtitle">Decorative media slot</span></span></div></div>'
+        . '</div></aside>'
+        . '<div class="af-aa-preview-postbit__content"><div class="af-apui-postbit-content"><div class="af-aa-card-title">Mock postbit content</div><div class="af-aa-card-copy">Здесь проверяется полный wrapper .af-apui-postbit: рамки, фон, оверлеи, иконки и соседний контент.</div></div></div>'
+        . '</div></div>';
+}
+
+function af_aa_build_preview_modal_markup(string $surface, array $ctx): string
+{
+    $titles = [
+        'application' => 'Анкета персонажа',
+        'sheet' => 'Лист персонажа',
+        'inventory' => 'Инвентарь',
+        'achievements' => 'Ачивки',
+    ];
+
+    $title = $titles[$surface] ?? 'Модальное окно';
+    $user = $ctx['af_aa_preview_username'] ?? 'User';
+
+    return '<div class="af-aa-preview-modal af-aa-preview-modal--' . $surface . '">'
+        . '<div class="af-aa-preview-modal__backdrop"></div>'
+        . '<div class="af-aa-preview-modal__window" data-af-apui-surface="' . $surface . '">'
+        . '<header class="af-aa-preview-modal__head"><strong>' . $title . '</strong><span class="af-aa-chip is-muted">preview</span></header>'
+        . '<div class="af-aa-preview-modal__body">'
+        . '<div class="af-aa-preview-modal__panel"><div class="af-aa-card-title">' . $user . '</div><div class="af-aa-card-copy">Тестовая болванка модального контента для target: ' . $surface . '.</div></div>'
+        . '<div class="af-aa-preview-modal__panel"><div class="af-aa-card-title">Контент</div><div class="af-aa-card-copy">Статичный контент без iframe/loader, чтобы стабильно примерять фон, overlay, panel background и border.</div></div>'
+        . '</div></div></div>';
+}
+
+function af_aa_build_preview_markup(string $kind, array $ctx): string
+{
+    if ($kind === 'postbit' || $kind === 'misc') {
+        return af_aa_build_preview_postbit_markup($ctx);
+    }
+
+    if ($kind === 'thread') {
+        return '<div class="af-aa-preview-thread-page ' . ($ctx['af_aa_preview_uid_class'] ?? '') . '">'
+            . '<section class="af-aa-preview-thread-hero"><div class="af-aa-preview-thread-hero__banner"></div><div class="af-aa-preview-thread-hero__inner"><h3>Showthread preview</h3><p>Статичная болванка страницы темы.</p></div></section>'
+            . '<section class="af-aa-preview-thread-post">' . af_aa_build_preview_postbit_markup($ctx) . '</section>'
+            . '</div>';
+    }
+
+    if (in_array($kind, ['application', 'sheet', 'inventory', 'achievements'], true)) {
+        return af_aa_build_preview_modal_markup($kind, $ctx);
+    }
+
+    return '<div class="af-apui-profile-page af-aa-preview-profile-page ' . ($ctx['af_aa_preview_uid_class'] ?? '') . '">'
+        . '<section class="af-apui-profile-hero"><div class="af-apui-profile-hero__background"></div><div class="af-apui-profile-hero__banner"></div>'
+        . '<div class="af-apui-profile-avatar-shell"><div class="af-apui-profile-avatar-frame">' . ($ctx['af_aa_preview_avatar_large_html'] ?? '') . '</div></div>'
+        . '<div class="af-apui-profile-hero__inner"><div class="af-apui-profile-identity"><div class="af-apui-profile-name-wrap">' . ($ctx['af_aa_preview_username'] ?? 'User') . '</div><div class="af-apui-profile-rank-wrap">' . ($ctx['af_aa_preview_group_title'] ?? 'Group') . ' • Ваш профиль</div></div></div>'
+        . '</section><section class="af-apui-profile-tabs"><div class="af-apui-profile-tabs__content"><article class="af-apui-panel is-active"><div class="af-apui-card"><h2>Основная информация</h2><div class="af-aa-card-copy">Превью member.php target без примесей других блоков.</div></div></article></div></section>'
+        . '</div>';
+}
+
 function af_aa_render_apstudio_page(): void
 {
     global $mybb, $headerinclude;
@@ -4732,6 +4813,8 @@ function af_aa_render_apstudio_page(): void
         'af_aa_form_html' => af_aa_build_studio_form_html($do, $editPreset, $settings),
         'af_aa_cards_html' => af_aa_build_cards_grid_html($rows, $do, true),
         'af_aa_preview_seed_json' => af_aa_escape_attr_json($settings),
+        'af_aa_preview_kind' => htmlspecialchars_uni(af_aa_preview_kind_for_do($do)),
+        'af_aa_preview_markup' => af_aa_build_preview_markup(af_aa_preview_kind_for_do($do), $previewUser),
         'af_aa_preview_title' => htmlspecialchars_uni($initialPreviewTitle),
         'af_aa_preview_description' => htmlspecialchars_uni($initialPreviewDescription),
     ];
@@ -4780,6 +4863,8 @@ function af_aa_render_fittingroom_page(): void
         'af_aa_tabs_html' => af_aa_render_tabs_html('fittingroom.php', $do),
         'af_aa_cards_html' => af_aa_build_cards_grid_html($rows, $do, false),
         'af_aa_preview_seed_json' => af_aa_escape_attr_json($initialSettings),
+        'af_aa_preview_kind' => htmlspecialchars_uni(af_aa_preview_kind_for_do($do)),
+        'af_aa_preview_markup' => af_aa_build_preview_markup(af_aa_preview_kind_for_do($do), $previewUser),
         'af_aa_preview_title' => htmlspecialchars_uni($initialTitle),
         'af_aa_preview_description' => htmlspecialchars_uni($initialDescription),
     ];

@@ -109,7 +109,7 @@
     var containsPlaceholder = css.indexOf('{{selector}}') !== -1 || css.indexOf('{{body_selector}}') !== -1;
 
     css = css.replace(/\{\{selector\}\}/g, '.af-aa-preview-root');
-    css = css.replace(/\{\{body_selector\}\}/g, '.af-aa-preview-root .af-aa-preview-profile-page');
+    css = css.replace(/\{\{body_selector\}\}/g, '.af-aa-preview-root .af-aa-preview-profile-page, .af-aa-preview-root .af-aa-preview-thread-page');
 
     if (!containsPlaceholder) {
       css = prefixSimpleCss(css, '.af-aa-preview-root');
@@ -184,6 +184,10 @@
 
     setVar(root, '--af-aa-preview-banner-image', toCssUrl(settings.profile_banner_url || ''));
     setVar(root, '--af-aa-preview-banner-overlay', trim(settings.profile_banner_overlay || 'linear-gradient(180deg, rgba(7,10,16,.06), rgba(7,10,16,.78))'));
+    setVar(root, '--af-aa-preview-thread-body-image', toCssUrl(settings.thread_body_cover_url || settings.thread_body_tile_url || ''));
+    setVar(root, '--af-aa-preview-thread-body-overlay', trim(settings.thread_body_overlay || 'linear-gradient(180deg, rgba(8,12,20,.25), rgba(6,8,14,.82))'));
+    setVar(root, '--af-aa-preview-thread-banner-image', toCssUrl(settings.thread_banner_url || ''));
+    setVar(root, '--af-aa-preview-thread-banner-overlay', trim(settings.thread_banner_overlay || 'linear-gradient(180deg, rgba(7,10,16,.08), rgba(7,10,16,.76))'));
 
     setVar(root, '--af-aa-preview-postbit-author-image', toCssUrl(settings.postbit_author_bg_url || ''));
     setVar(root, '--af-aa-preview-postbit-author-overlay', trim(settings.postbit_author_overlay || 'linear-gradient(180deg, rgba(7,10,16,.08), rgba(7,10,16,.72))'));
@@ -205,7 +209,20 @@
     if (subtitleNode) subtitleNode.textContent = trim(settings.postbit_plaque_subtitle || settings.postbit_plaque_subtitle_default || 'Decorative media slot') || 'Decorative media slot';
     updatePlaqueIcon(root, settings);
 
-    renderCustomCss(root, settings.custom_css || '');
+    var previewKind = trim(root.getAttribute('data-aa-preview-kind') || 'profile');
+    var customCssKey = {
+      application: 'application_css',
+      sheet: 'sheet_css',
+      inventory: 'inventory_css',
+      achievements: 'achievements_css'
+    };
+
+    setVar(root, '--af-aa-preview-modal-bg-image', toCssUrl(settings[previewKind + '_bg_url'] || ''));
+    setVar(root, '--af-aa-preview-modal-bg-overlay', trim(settings[previewKind + '_bg_overlay'] || 'none'));
+    setVar(root, '--af-aa-preview-modal-panel-bg', trim(settings[previewKind + '_panel_bg'] || 'rgba(12,17,28,.88)'));
+    setVar(root, '--af-aa-preview-modal-panel-border', trim(settings[previewKind + '_panel_border'] || 'rgba(255,255,255,.12)'));
+
+    renderCustomCss(root, settings[customCssKey[previewKind] || 'custom_css'] || settings.custom_css || '');
     updatePreviewMeta(root, meta || {});
   }
 
