@@ -1829,7 +1829,6 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
             . ' data-afcs-equipment-popover-icon="' . htmlspecialchars_uni($icon) . '"'
             . ($is_weapon_slot ? ' data-afcs-equipment-popover-can-set-active="1"' : '')
             . ($is_active_weapon ? ' data-afcs-equipment-popover-is-active-weapon="1"' : '')
-            . ($can_edit && $item_id > 0 ? ' draggable="true" data-afcs-equipment-draggable="equipped" data-afcs-equipment-item-id="' . $item_id . '"' : '')
             . '>'
             . '<span class="af-cs-slot__icon">' . $icon_html . '</span>'
             . '<span class="af-cs-slot__label">' . htmlspecialchars_uni($slot_label) . '</span>'
@@ -1863,7 +1862,7 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
         }
         $classes = 'af-cs-augment-card af-cs-equipment-item-card' . ($index === 0 ? ' is-active' : '');
         $default_slot = (string)($candidate_slots[0] ?? '');
-        $preview_cards[] = '<div class="' . $classes . '" data-afcs-equipment-card="1" data-afcs-equipment-item-id="' . $itemId . '" data-afcs-equipment-filter-kind="' . htmlspecialchars_uni($subtype) . '" data-afcs-equipment-default-slot="' . htmlspecialchars_uni($default_slot) . '" data-afcs-equipment-candidate-slots="' . htmlspecialchars_uni(implode(',', array_map('strval', $candidate_slots))) . '"' . ($can_edit ? ' draggable="true" data-afcs-equipment-draggable="inventory"' : '') . '>'
+        $preview_cards[] = '<div class="' . $classes . '" data-afcs-equipment-card="1" data-afcs-equipment-item-id="' . $itemId . '" data-afcs-equipment-filter-kind="' . htmlspecialchars_uni($subtype) . '" data-afcs-equipment-default-slot="' . htmlspecialchars_uni($default_slot) . '" data-afcs-equipment-candidate-slots="' . htmlspecialchars_uni(implode(',', array_map('strval', $candidate_slots))) . '">'
             . '<div class="af-cs-augment-card__icon">' . af_charactersheets_render_kb_icon($entry, $title) . '</div>'
             . '<div class="af-cs-augment-card__body">'
             . '<div class="af-cs-augment-card__title">' . htmlspecialchars_uni($title) . '</div>'
@@ -1926,7 +1925,6 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
             . '<button type="button" class="af-cs-tab-btn" data-afcs-equipment-filter="consumable">Расходники</button>'
             . '<button type="button" class="af-cs-tab-btn" data-afcs-equipment-filter="gear">Снаряжение / аксессуары</button>'
         . '</div>'
-        . '<div class="af-cs-equipment-unequip-zone" data-afcs-equipment-unequip-zone="1">Перетащите сюда, чтобы снять</div>'
         . '<div class="af-cs-augmentations-list af-cs-equipment-cards-grid">' . implode('', $preview_cards) . '</div>'
         . '</div>'
         . '<div class="af-cs-augmentations-column">'
