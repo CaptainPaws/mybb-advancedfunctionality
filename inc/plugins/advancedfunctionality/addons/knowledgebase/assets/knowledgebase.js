@@ -709,11 +709,33 @@
         var itemKindOptionsRaw = readJson(root.getAttribute('data-item-kinds') || '[]', []);
         var itemKindOptions = (Array.isArray(itemKindOptionsRaw) && itemKindOptionsRaw.length ? itemKindOptionsRaw : [
             { value: 'weapon' }, { value: 'armor' }, { value: 'gear' }, { value: 'consumable' },
-            { value: 'ammo' }, { value: 'augmentation' }, { value: 'cyberware' }, { value: 'artifact' }, { value: 'unique' }
+            { value: 'ammo' }, { value: 'augmentation' }, { value: 'artifact' }, { value: 'unique' }
         ]).map(function (opt) {
             if (opt && typeof opt === 'object') return String(opt.value || '');
             return String(opt || '');
         });
+        var canonicalItemKinds = ['weapon', 'armor', 'gear', 'consumable', 'ammo', 'augmentation', 'artifact', 'unique'];
+        var itemKindAliases = {
+            cyberware: 'augmentation',
+            implant: 'augmentation',
+            weapon_offhand: 'weapon',
+            helmet: 'armor'
+        };
+
+        function normalizeItemKind(kind) {
+            var rawKind = String(kind || '').trim().toLowerCase();
+            if (!rawKind) return 'gear';
+            rawKind = itemKindAliases[rawKind] || rawKind;
+            if (canonicalItemKinds.indexOf(rawKind) === -1) return 'gear';
+            return rawKind;
+        }
+
+        itemKindOptions = itemKindOptions.map(function (kind) {
+            return normalizeItemKind(kind);
+        }).filter(function (kind, idx, arr) {
+            return arr.indexOf(kind) === idx;
+        });
+
         var slotByKind = {
             armor: ['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt'],
             weapon: ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_ranged', 'weapon_melee'],
@@ -1414,7 +1436,7 @@
             if (!state.item.item_type && state.item.item_kind) {
                 state.item.item_type = state.item.item_kind;
             }
-            if (!state.item.item_kind) state.item.item_kind = 'gear';
+            state.item.item_kind = normalizeItemKind(state.item.item_kind);
 
             if (!state.item.equip || typeof state.item.equip !== 'object') state.item.equip = {};
             if (!state.item.equip.slot && state.item.slot) state.item.equip.slot = state.item.slot;
@@ -1768,11 +1790,12 @@
                 if (rarityAllowed.indexOf(rarity) === -1) {
                     errors.push('item.rarity: unsupported value');
                 }
-                var kind = String((state.item && state.item.item_kind) || 'gear').toLowerCase();
-                var augmentationMode = (kind === 'augmentation' || kind === 'cyberware') || String((state.item && state.item.augmentation && state.item.augmentation.slot) || '').trim() !== '' || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '';
+                var kind = normalizeItemKind((state.item && state.item.item_kind) || 'gear');
+                state.item.item_kind = kind;
+                var augmentationMode = (kind === 'augmentation') || String((state.item && state.item.augmentation && state.item.augmentation.slot) || '').trim() !== '' || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '';
                 var equipSlot = String((state.item && state.item.equip && state.item.equip.slot) || '').trim().toLowerCase();
                 var allowed = slotByKind[kind] || [''];
-                if (kind === 'augmentation' || kind === 'cyberware') {
+                if (kind === 'augmentation') {
                     if (equipSlot) errors.push('item.equip.slot: not used for augmentation');
                     if (!String((state.item.augmentation && state.item.augmentation.slot) || (state.item.cyberware && state.item.cyberware.slot) || '').trim()) {
                         errors.push('item.augmentation.slot: required for augmentation');
@@ -1901,7 +1924,7 @@
                 if (!Array.isArray(onEquip.grants)) onEquip.grants = [];
 
                 var itemOut = deepClone(it);
-                itemOut.item_kind = String(it.item_kind || 'gear');
+                itemOut.item_kind = normalizeItemKind(it.item_kind || 'gear');
                 itemOut.rarity = String(it.rarity || 'common');
                 itemOut.equip = {
                     slot: String((it.equip && it.equip.slot) || it.slot || ''),
@@ -1921,7 +1944,7 @@
                 itemOut.gear.subtype = String(itemOut.gear.subtype || '');
                 var augmentationRaw = (it.augmentation && typeof it.augmentation === 'object') ? it.augmentation : ((it.cyberware && typeof it.cyberware === 'object') ? it.cyberware : {});
                 itemOut.augmentation = deepClone(augmentationRaw || {});
-                itemOut.augmentation.subtype = String(itemOut.augmentation.subtype || (itemOut.item_kind === 'cyberware' ? 'cybernetic' : ''));
+                itemOut.augmentation.subtype = String(itemOut.augmentation.subtype || (itemOut.item_kind === 'augmentation' ? 'cybernetic' : ''));
                 itemOut.augmentation.slot = String(itemOut.augmentation.slot || '');
                 itemOut.augmentation.grade = String(itemOut.augmentation.grade || '');
                 itemOut.augmentation.humanity_cost_percent = Math.max(0, Math.min(100, numberOrZero(itemOut.augmentation.humanity_cost_percent != null ? itemOut.augmentation.humanity_cost_percent : 0)));
@@ -1931,7 +1954,6 @@
                 itemOut.augmentation.requirements = (itemOut.augmentation.requirements && typeof itemOut.augmentation.requirements === 'object') ? itemOut.augmentation.requirements : {};
                 itemOut.augmentation.conflicts = (itemOut.augmentation.conflicts && typeof itemOut.augmentation.conflicts === 'object') ? itemOut.augmentation.conflicts : {};
                 itemOut.cyberware = deepClone(itemOut.augmentation);
-                if (itemOut.item_kind === 'cyberware') itemOut.item_kind = 'augmentation';
                 itemOut.price = numberOrZero(it.price != null ? it.price : 0);
                 itemOut.currency = String(it.currency || 'credits');
                 itemOut.weight = numberOrZero(it.weight != null ? it.weight : 0);
@@ -2350,8 +2372,9 @@
             }
 
             if (uiProfile === 'item') {
-                var kind = String((state.item && state.item.item_kind) || 'gear').toLowerCase();
-                var augmentationMode = (kind === 'augmentation' || kind === 'cyberware') || String((state.item && state.item.augmentation && state.item.augmentation.slot) || '').trim() !== '' || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '';
+                var kind = normalizeItemKind((state.item && state.item.item_kind) || 'gear');
+                state.item.item_kind = kind;
+                var augmentationMode = (kind === 'augmentation') || String((state.item && state.item.augmentation && state.item.augmentation.slot) || '').trim() !== '' || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '';
                 var defI = [
                     { name: 'item_kind', label: 'Тип предмета', type: 'select', options: itemKindOptions },
                     { name: 'rarity', label: 'Редкость', type: 'select', options: ['common', 'uncommon', 'rare', 'unique', 'illegal', 'restricted', 'legendary', 'mythic'] },
