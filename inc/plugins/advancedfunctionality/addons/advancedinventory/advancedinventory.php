@@ -9,6 +9,7 @@ define('AF_ADVINV_ASSET_DIR', AF_ADVINV_BASE . 'assets/');
 define('AF_ADVINV_DEBUG_LOG', AF_CACHE . 'advancedinventory_debug.log');
 define('AF_ADVINV_ALIAS_MARKER', "define('AF_ADVANCEDINVENTORY_PAGE_ALIAS', 1);");
 define('AF_ADVINV_INVENTORIES_ALIAS_MARKER', "define('AF_ADVANCEDINVENTORIES_PAGE_ALIAS', 1);");
+define('AF_ADVINV_ABILITIES_ALIAS_MARKER', "define('AF_ADVANCEDABILITIES_PAGE_ALIAS', 1);");
 define('AF_ADVINV_TABLE_ITEMS', 'af_advinv_items');
 define('AF_ADVINV_TABLE_SHOP_MAP', 'af_advinv_shop_map');
 define('AF_ADVINV_TABLE_ENTITIES', 'af_advinv_entities');
@@ -329,7 +330,7 @@ function af_advancedinventory_is_inventory_ui_context(string $action = ''): bool
     global $mybb;
 
     $script = af_advancedinventory_current_script_name();
-    if ($script === 'inventory.php' || $script === 'inventories.php') {
+    if ($script === 'inventory.php' || $script === 'inventories.php' || $script === 'abilities.php') {
         return true;
     }
 
@@ -338,7 +339,7 @@ function af_advancedinventory_is_inventory_ui_context(string $action = ''): bool
     }
 
     $currentAction = $action !== '' ? $action : (string)$mybb->get_input('action');
-    return in_array($currentAction, ['inventory', 'inventories', 'tab', 'entity'], true);
+    return in_array($currentAction, ['inventory', 'abilities', 'inventories', 'tab', 'entity'], true);
 }
 
 function af_advancedinventory_assets_blacklist(): array
@@ -448,6 +449,11 @@ function af_advancedinventory_alias_definitions(): array
             'asset' => AF_ADVINV_ASSET_DIR . 'inventories.php',
             'marker' => AF_ADVINV_INVENTORIES_ALIAS_MARKER,
         ],
+        [
+            'target' => MYBB_ROOT . 'abilities.php',
+            'asset' => AF_ADVINV_ASSET_DIR . 'abilities.php',
+            'marker' => AF_ADVINV_ABILITIES_ALIAS_MARKER,
+        ],
     ];
 }
 
@@ -504,7 +510,7 @@ function af_advancedinventory_misc_router(): void
 {
     global $mybb;
     $action = (string)$mybb->get_input('action');
-    if (!in_array($action, ['inventory', 'inventories', 'tab', 'entity', 'api_list', 'api_move', 'api_equip', 'api_unequip', 'api_appearance_apply', 'api_appearance_unapply', 'api_update', 'api_delete', 'api_sell', 'api_bind_support_slot', 'api_unbind_support_slot', 'api_support_slots_state'], true)) {
+    if (!in_array($action, ['inventory', 'abilities', 'inventories', 'tab', 'entity', 'api_list', 'api_move', 'api_equip', 'api_unequip', 'api_appearance_apply', 'api_appearance_unapply', 'api_update', 'api_delete', 'api_sell', 'api_bind_support_slot', 'api_unbind_support_slot', 'api_support_slots_state'], true)) {
         return;
     }
     if (!af_advancedinventory_alias_available()) {
@@ -532,10 +538,16 @@ function af_advancedinventory_render_inventories_page(): void
     af_advancedinventory_dispatch('inventories');
 }
 
+function af_advancedinventory_render_abilities_page(): void
+{
+    af_advancedinventory_dispatch('abilities');
+}
+
 function af_advancedinventory_dispatch(string $action): void
 {
     switch ($action) {
         case 'inventory': af_advancedinventory_render_inventory(); return;
+        case 'abilities': af_advancedinventory_render_abilities(); return;
         case 'inventories': af_advancedinventory_render_inventories(); return;
         case 'tab':
         case 'entity': af_advancedinventory_render_tab(); return;
@@ -553,6 +565,41 @@ function af_advancedinventory_dispatch(string $action): void
         case 'api_move': af_advancedinventory_json(['ok' => false, 'error' => 'not_implemented'], 501); return;
     }
     error_no_permission();
+}
+
+function af_advancedinventory_render_abilities(): void
+{
+    global $mybb, $headerinclude, $templates, $lang, $db;
+
+    if ((int)($mybb->settings['af_advancedinventory_enabled'] ?? 1) !== 1) {
+        error((string)($lang->af_advancedinventory_error_disabled ?? 'Inventory is disabled'));
+    }
+
+    $viewerUid = (int)($mybb->user['uid'] ?? 0);
+    $ownerUid = (int)$mybb->get_input('uid');
+    if ($ownerUid <= 0) {
+        $ownerUid = $viewerUid;
+    }
+    if (!af_inv_user_can_view($viewerUid, $ownerUid)) {
+        error_no_permission();
+    }
+
+    $user = $db->fetch_array($db->simple_select('users', 'uid,username,avatar', 'uid=' . $ownerUid, ['limit' => 1]));
+    if (!$user) {
+        error_no_permission();
+    }
+
+    $tabs = af_advancedinventory_tabs();
+    if (!isset($tabs['abilities'])) {
+        error('Abilities entity is not configured.');
+    }
+
+    af_advancedinventory_append_runtime_assets($headerinclude, true);
+
+    $af_abilities_content = af_advancedinventory_build_abilities_fragment($ownerUid);
+    eval('$page = "' . $templates->get('advancedinventory_abilities_page') . '";');
+    output_page($page);
+    exit;
 }
 
 function af_advancedinventory_render_inventory(): void
@@ -652,6 +699,37 @@ function af_advancedinventory_build_inventory_fragment(int $ownerUid): string
     eval('$inventory_inner = "' . $templates->get('advancedinventory_inventory_inner') . '";');
 
     return $inventory_inner;
+}
+
+function af_advancedinventory_build_abilities_fragment(int $ownerUid): string
+{
+    global $mybb, $headerinclude, $templates, $db;
+
+    if ((int)($mybb->settings['af_advancedinventory_enabled'] ?? 1) !== 1) {
+        return '';
+    }
+
+    $viewerUid = (int)($mybb->user['uid'] ?? 0);
+    if ($ownerUid <= 0) {
+        $ownerUid = $viewerUid;
+    }
+    if ($ownerUid <= 0 || !af_inv_user_can_view($viewerUid, $ownerUid)) {
+        return '';
+    }
+
+    $user = $db->fetch_array($db->simple_select('users', 'uid,username,avatar', 'uid=' . $ownerUid, ['limit' => 1]));
+    if (!$user) {
+        return '';
+    }
+
+    af_advancedinventory_append_embedded_assets($headerinclude, true);
+
+    $firstPanelUrl = af_advancedinventory_url('entity', ['uid' => $ownerUid, 'entity' => 'abilities', 'sub' => 'all', 'ajax' => 1], false);
+    $entityUrlBase = af_advancedinventory_url('entity', ['uid' => $ownerUid], false);
+    $firstPanelHtml = af_advinv_render_entity_tab('abilities', $ownerUid, 'all', 1, true);
+
+    eval('$abilities_inner = "' . $templates->get('advancedinventory_abilities_inner') . '";');
+    return $abilities_inner;
 }
 
 function af_advancedinventory_ensure_inventory_storage(): void
@@ -960,6 +1038,7 @@ function af_advinv_default_entities(): array
         ['entity' => 'resources', 'title_ru' => 'Ресурсы', 'title_en' => 'Resources', 'enabled' => 1, 'sortorder' => 20, 'renderer' => 'generic', 'settings_json' => '{}'],
         ['entity' => 'pets', 'title_ru' => 'Питомцы', 'title_en' => 'Pets', 'enabled' => 1, 'sortorder' => 30, 'renderer' => 'generic', 'settings_json' => '{}'],
         ['entity' => 'customization', 'title_ru' => 'Кастомизация профиля', 'title_en' => 'Customization', 'enabled' => 1, 'sortorder' => 40, 'renderer' => 'generic', 'settings_json' => '{}'],
+        ['entity' => 'abilities', 'title_ru' => 'Способности', 'title_en' => 'Abilities', 'enabled' => 1, 'sortorder' => 50, 'renderer' => 'abilities', 'settings_json' => '{}'],
     ];
 }
 
@@ -976,6 +1055,8 @@ function af_advinv_default_entity_filters(): array
         ['entity' => 'resources', 'code' => 'stones', 'title_ru' => 'Камни', 'title_en' => 'Stones', 'sortorder' => 30, 'match_json' => '{"tags":["stone","stones"],"kind":["stone"],"type":["stone"]}'],
         ['entity' => 'pets', 'code' => 'eggs', 'title_ru' => 'Яйца', 'title_en' => 'Eggs', 'sortorder' => 10, 'match_json' => '{"tags":["egg","eggs"],"kind":["egg"],"type":["egg"]}'],
         ['entity' => 'pets', 'code' => 'pets', 'title_ru' => 'Питомцы', 'title_en' => 'Pets', 'sortorder' => 20, 'match_json' => '{"tags":["pet","pets"],"kind":["pet"],"type":["pet"]}'],
+        ['entity' => 'abilities', 'code' => 'spell', 'title_ru' => 'Заклинания', 'title_en' => 'Spells', 'sortorder' => 10, 'match_json' => '{"type":["spell"],"tags":["spell"]}'],
+        ['entity' => 'abilities', 'code' => 'ritual', 'title_ru' => 'Ритуалы', 'title_en' => 'Rituals', 'sortorder' => 20, 'match_json' => '{"type":["ritual"],"tags":["ritual"]}'],
     ];
 
     foreach (af_advinv_customization_filter_definitions() as $definition) {
@@ -1347,9 +1428,10 @@ function af_advancedinventory_render_tab(): void
 
     $sub = af_advinv_resolve_active_subfilter($tab, (string)$mybb->get_input('sub'));
     $pageNum = max(1, (int)$mybb->get_input('page'));
+    $search = trim((string)$mybb->get_input('search'));
     $fragment = (int)$mybb->get_input('ajax') === 1 || (int)$mybb->get_input('fragment') === 1;
 
-    $af_inv_frame_content = af_advinv_render_entity_tab($tab, $ownerUid, $sub, $pageNum, true);
+    $af_inv_frame_content = af_advinv_render_entity_tab($tab, $ownerUid, $sub, $pageNum, true, $search);
     if ($fragment) {
         echo $af_inv_frame_content;
         exit;
@@ -2238,7 +2320,8 @@ function af_advinv_enrich_items_from_kb(array $items): array
             $title = trim((string)($item['title'] ?? ''));
             $icon = trim((string)($item['icon'] ?? ''));
             $kbKey = trim((string)($item['kb_key'] ?? ''));
-            if ($kbKey === '' || ($title !== '' && $icon !== '')) {
+            $isAbility = af_advinv_is_spell_kb_type((string)($item['kb_type'] ?? ''));
+            if ($kbKey === '' || (!$isAbility && $title !== '' && $icon !== '')) {
                 continue;
             }
 
@@ -2294,6 +2377,7 @@ function af_advinv_enrich_items_from_kb(array $items): array
                     $kbMap[$kbType . '||' . $kbKey] = [
                         'title' => $t,
                         'icon'  => af_advinv_kb_extract_icon((string)($row['meta_json'] ?? '')),
+                        'meta' => af_advinv_decode_meta_json((string)($row['meta_json'] ?? '')),
                     ];
                 }
             }
@@ -2314,6 +2398,9 @@ function af_advinv_enrich_items_from_kb(array $items): array
             }
             if (trim((string)($item['icon'] ?? '')) === '' && $fromKb['icon'] !== '') {
                 $item['icon'] = $fromKb['icon'];
+            }
+            if (!empty($fromKb['meta']) && is_array($fromKb['meta'])) {
+                $item = array_merge($item, af_advinv_extract_ability_fields($fromKb['meta']));
             }
         } elseif ($kbKey !== '' && trim((string)($item['title'] ?? '')) === '') {
             $item['title'] = $kbKey;
@@ -2375,6 +2462,101 @@ function af_advinv_enrich_items_from_kb(array $items): array
     unset($item);
 
     return $items;
+}
+
+function af_advinv_is_spell_kb_type(string $kbType): bool
+{
+    $kbType = mb_strtolower(trim($kbType));
+    return in_array($kbType, ['spell', 'ritual'], true);
+}
+
+function af_advinv_extract_ability_fields(array $meta): array
+{
+    $short = trim((string)($meta['short'] ?? $meta['description_short'] ?? $meta['summary'] ?? ''));
+    $description = trim((string)($meta['description'] ?? $meta['full_description'] ?? ''));
+    $effects = [];
+    $requirements = [];
+    $cost = trim((string)($meta['cost'] ?? $meta['rules']['spell']['cost'] ?? $meta['rules']['ritual']['cost'] ?? ''));
+    $price = trim((string)($meta['price'] ?? $meta['shop']['price'] ?? ''));
+
+    foreach ((array)($meta['effects'] ?? $meta['rules']['effects'] ?? []) as $effect) {
+        if (is_array($effect)) {
+            $line = trim((string)($effect['text'] ?? $effect['label'] ?? ''));
+            if ($line !== '') {
+                $effects[] = $line;
+            }
+        } else {
+            $line = trim((string)$effect);
+            if ($line !== '') {
+                $effects[] = $line;
+            }
+        }
+    }
+    foreach ((array)($meta['requirements'] ?? $meta['rules']['requirements'] ?? []) as $req) {
+        if (is_array($req)) {
+            $line = trim((string)($req['text'] ?? $req['label'] ?? ''));
+            if ($line !== '') {
+                $requirements[] = $line;
+            }
+        } else {
+            $line = trim((string)$req);
+            if ($line !== '') {
+                $requirements[] = $line;
+            }
+        }
+    }
+
+    return [
+        'ability_short' => $short,
+        'ability_description' => $description,
+        'ability_summary' => $short !== '' ? $short : $description,
+        'ability_effects' => array_values(array_unique($effects)),
+        'ability_requirements' => array_values(array_unique($requirements)),
+        'ability_cost' => $cost,
+        'ability_price' => $price,
+    ];
+}
+
+function af_advinv_export_charactersheet_abilities_state(int $uid): array
+{
+    $uid = (int)$uid;
+    if ($uid <= 0) {
+        return [];
+    }
+
+    $items = (array)(af_inv_get_items($uid, [
+        'entity' => 'abilities',
+        'page' => 1,
+        'per_page' => 500,
+        'enrich' => true,
+    ])['items'] ?? []);
+
+    $out = [];
+    foreach ($items as $item) {
+        $kbType = trim((string)($item['kb_type'] ?? ''));
+        if (!af_advinv_is_spell_kb_type($kbType)) {
+            continue;
+        }
+        $out[] = [
+            'id' => (int)($item['id'] ?? 0),
+            'uid' => (int)($item['uid'] ?? $uid),
+            'title' => (string)($item['title'] ?? ''),
+            'icon' => (string)($item['icon'] ?? ''),
+            'qty' => max(1, (int)($item['qty'] ?? 1)),
+            'subtype' => (string)($item['subtype'] ?? ''),
+            'kb_type' => $kbType,
+            'kb_key' => (string)($item['kb_key'] ?? ''),
+            'short' => (string)($item['ability_short'] ?? ''),
+            'description' => (string)($item['ability_description'] ?? ''),
+            'effects' => array_values((array)($item['ability_effects'] ?? [])),
+            'requirements' => array_values((array)($item['ability_requirements'] ?? [])),
+            'cost' => (string)($item['ability_cost'] ?? ''),
+            'price' => (string)($item['ability_price'] ?? ''),
+            'meta' => (array)($item['meta'] ?? []),
+        ];
+    }
+
+    return $out;
 }
 
 function af_advinv_classify_equipment_from_kb_meta(array $kbMeta): string
@@ -2539,6 +2721,10 @@ function af_inv_add_item(int $uid, array $item): int
     $meta = is_array($meta) ? $meta : [];
 
     $equipmentKinds = ['weapon', 'armor', 'ammo', 'augmentations', 'consumable'];
+    if (af_advinv_is_spell_kb_type($kbType)) {
+        $entity = 'abilities';
+        $slot = 'abilities';
+    }
     if ($slot === '') {
         $slot = $entity;
     }
@@ -3325,12 +3511,12 @@ function af_advinv_get_entity_filters(string $entity): array
     return $filters;
 }
 
-function af_advinv_render_entity_tab(string $entity, int $ownerUid, string $sub, int $page, bool $ajax): string
+function af_advinv_render_entity_tab(string $entity, int $ownerUid, string $sub, int $page, bool $ajax, string $search = ''): string
 {
-    return af_advinv_render_entity_generic($entity, $ownerUid, $sub, $page, $ajax);
+    return af_advinv_render_entity_generic($entity, $ownerUid, $sub, $page, $ajax, $search);
 }
 
-function af_advinv_render_entity_generic(string $entity, int $ownerUid, string $sub, int $page, bool $ajax): string
+function af_advinv_render_entity_generic(string $entity, int $ownerUid, string $sub, int $page, bool $ajax, string $search = ''): string
 {
     $sub = af_advinv_resolve_active_subfilter($entity, $sub);
     global $mybb;
@@ -3339,6 +3525,7 @@ function af_advinv_render_entity_generic(string $entity, int $ownerUid, string $
         'entity' => $entity,
         'subtype' => $sub,
         'page' => max(1, $page),
+        'search' => $search,
     ];
 
     $data = af_inv_get_items($ownerUid, array_merge($filters, ['enrich' => true]));
@@ -3369,14 +3556,18 @@ function af_advinv_render_entity_generic(string $entity, int $ownerUid, string $
         . ' data-can-edit="' . ($canEditOwner ? '1' : '0') . '"'
         . ' data-wallet-balance="' . htmlspecialchars_uni((string)($wallet['balance_major'] ?? '0')) . '"'
         . ' data-wallet-symbol="' . htmlspecialchars_uni((string)($wallet['currency_symbol'] ?? '₡')) . '"></div>';
-    $html .= af_advinv_render_workspace($entity, $items, $selectedItemId, $canManage, $canEditOwner, $equipped);
+    $html .= af_advinv_render_workspace($entity, $items, $selectedItemId, $canManage, $canEditOwner, $equipped, $data, $ownerUid, $sub, $search);
     $html .= '</div>';
 
     return $html;
 }
 
-function af_advinv_render_workspace(string $entity, array $items, int $selectedItemId, bool $canManage, bool $canEditOwner, array $equipped): string
+function af_advinv_render_workspace(string $entity, array $items, int $selectedItemId, bool $canManage, bool $canEditOwner, array $equipped, array $data = [], int $ownerUid = 0, string $sub = 'all', string $search = ''): string
 {
+    if ($entity === 'abilities') {
+        return af_advinv_render_abilities_workspace($entity, $items, $data, $ownerUid, $sub, $search);
+    }
+
     $html = '<div class="af-inv-workspace" data-entity="' . htmlspecialchars_uni($entity) . '">';
     $html .= '<div class="af-inv-slots-pane">';
     $html .= af_advinv_render_slot_grid($items, $selectedItemId, $equipped);
@@ -3385,6 +3576,32 @@ function af_advinv_render_workspace(string $entity, array $items, int $selectedI
     $html .= af_advinv_render_preview_stack($items, $selectedItemId, $canManage, $canEditOwner, $equipped);
     $html .= '</div>';
     $html .= '</div>';
+    return $html;
+}
+
+function af_advinv_render_abilities_workspace(string $entity, array $items, array $data, int $ownerUid, string $sub, string $search): string
+{
+    $page = max(1, (int)($data['page'] ?? 1));
+    $perPage = max(1, (int)($data['perPage'] ?? 24));
+    $total = max(0, (int)($data['total'] ?? 0));
+    $pages = max(1, (int)ceil($total / $perPage));
+    if ($page > $pages) {
+        $page = $pages;
+    }
+
+    $html = '<div class="af-inv-abilities" data-entity="' . htmlspecialchars_uni($entity) . '">';
+    $html .= '<form class="af-inv-abilities__search" method="get" action="' . htmlspecialchars_uni(af_advancedinventory_url('entity', [], false)) . '" data-af-inv-search-form="1">';
+    $html .= '<input type="hidden" name="action" value="entity">';
+    $html .= '<input type="hidden" name="uid" value="' . (int)$ownerUid . '">';
+    $html .= '<input type="hidden" name="entity" value="' . htmlspecialchars_uni($entity) . '">';
+    $html .= '<input type="hidden" name="sub" value="' . htmlspecialchars_uni($sub) . '">';
+    $html .= '<input type="text" name="search" value="' . htmlspecialchars_uni($search) . '" placeholder="Поиск способности…">';
+    $html .= '<button type="submit" class="af-inv-action">Найти</button>';
+    $html .= '</form>';
+    $html .= af_advinv_render_abilities_cards($items);
+    $html .= af_advinv_render_abilities_pagination($ownerUid, $entity, $sub, $search, $page, $pages, $total);
+    $html .= '</div>';
+
     return $html;
 }
 
@@ -3834,6 +4051,89 @@ function af_advinv_render_subfilter_links(string $tab, int $ownerUid, string $su
         $filterButtons .= '<a class="af-inv-subfilter ' . $isActive . '" href="' . $url . '">' . htmlspecialchars_uni($title) . '</a>';
     }
     return $filterButtons;
+}
+
+function af_advinv_render_abilities_cards(array $items): string
+{
+    if (!$items) {
+        return '<div class="af-inv-empty">Способностей пока нет.</div>';
+    }
+
+    $rows = '<div class="af-inv-abilities-grid">';
+    foreach ($items as $item) {
+        $title = trim((string)($item['title'] ?? ''));
+        if ($title === '') {
+            $title = trim((string)($item['kb_key'] ?? 'Способность'));
+        }
+        $icon = trim((string)($item['icon'] ?? ''));
+        $summary = trim((string)($item['ability_summary'] ?? ($item['ability_short'] ?? $item['ability_description'] ?? '')));
+        $effects = (array)($item['ability_effects'] ?? []);
+        $requirements = (array)($item['ability_requirements'] ?? []);
+        $cost = trim((string)($item['ability_cost'] ?? ''));
+        $price = trim((string)($item['ability_price'] ?? ''));
+        $subtype = trim((string)($item['subtype'] ?? ''));
+        $qty = max(1, (int)($item['qty'] ?? 1));
+
+        $rows .= '<article class="af-inv-ability-card">';
+        $rows .= '<div class="af-inv-ability-card__head">';
+        $rows .= $icon !== ''
+            ? '<img class="af-inv-ability-card__icon" src="' . htmlspecialchars_uni($icon) . '" alt="' . htmlspecialchars_uni($title) . '" loading="lazy">'
+            : '<span class="af-inv-ability-card__icon is-empty">✦</span>';
+        $rows .= '<div class="af-inv-ability-card__title-wrap"><h3>' . htmlspecialchars_uni($title) . '</h3>'
+            . ($subtype !== '' ? '<div class="af-inv-ability-card__subtype">' . htmlspecialchars_uni($subtype) . '</div>' : '')
+            . '</div>';
+        if ($qty > 1) {
+            $rows .= '<span class="af-inv-ability-card__qty">x' . $qty . '</span>';
+        }
+        $rows .= '</div>';
+        if ($summary !== '') {
+            $rows .= '<p class="af-inv-ability-card__summary">' . htmlspecialchars_uni($summary) . '</p>';
+        }
+        if ($effects) {
+            $rows .= '<ul class="af-inv-ability-card__list">';
+            foreach ($effects as $line) {
+                $line = trim((string)$line);
+                if ($line !== '') {
+                    $rows .= '<li>' . htmlspecialchars_uni($line) . '</li>';
+                }
+            }
+            $rows .= '</ul>';
+        }
+        $meta = [];
+        if ($cost !== '') { $meta[] = 'Стоимость: ' . $cost; }
+        if ($price !== '') { $meta[] = 'Цена: ' . $price; }
+        if ($requirements) {
+            $meta[] = 'Требования: ' . implode(', ', array_map(static function ($v) { return trim((string)$v); }, $requirements));
+        }
+        if ($meta) {
+            $rows .= '<div class="af-inv-ability-card__meta">' . htmlspecialchars_uni(implode(' · ', $meta)) . '</div>';
+        }
+        $rows .= '</article>';
+    }
+    $rows .= '</div>';
+    return $rows;
+}
+
+function af_advinv_render_abilities_pagination(int $uid, string $entity, string $sub, string $search, int $page, int $pages, int $total): string
+{
+    if ($pages <= 1) {
+        return '<div class="af-inv-abilities__pager-note">Найдено: ' . (int)$total . '</div>';
+    }
+    $html = '<div class="af-inv-abilities__pager">';
+    for ($i = 1; $i <= $pages; $i++) {
+        $active = $i === $page ? ' is-active' : '';
+        $url = af_advancedinventory_url('entity', [
+            'uid' => $uid,
+            'entity' => $entity,
+            'sub' => $sub,
+            'search' => $search,
+            'page' => $i,
+            'ajax' => 1,
+        ], true);
+        $html .= '<a class="af-inv-subfilter' . $active . '" href="' . $url . '">' . $i . '</a>';
+    }
+    $html .= '</div>';
+    return $html;
 }
 
 function af_advancedinventory_json(array $data, int $status = 200): void
