@@ -664,8 +664,13 @@
       function initEquipmentPreviewUI() {
         var equipmentBlock = sheet.querySelector('[data-afcs-block="equipment"]');
         if (!equipmentBlock) return;
+        var root = equipmentBlock.querySelector('[data-afcs-equipment-root]');
+        if (!root) return;
         var cards = equipmentBlock.querySelectorAll('[data-afcs-equipment-card]');
-        var slots = equipmentBlock.querySelectorAll('[data-afcs-equipment-preview-item-id]');
+        var slots = equipmentBlock.querySelectorAll('[data-afcs-equipment-slot-dot]');
+        var popover = equipmentBlock.querySelector('[data-afcs-equipment-popover]');
+        var filters = equipmentBlock.querySelectorAll('[data-afcs-equipment-filter]');
+        var activeFilter = 'all';
         if (!cards.length) return;
 
         function activate(itemId) {
@@ -677,9 +682,150 @@
             slot.classList.toggle('is-active', active);
           });
         }
+        function applyFilter() {
+          cards.forEach(function (card) {
+            var kind = String(card.getAttribute('data-afcs-equipment-filter-kind') || '');
+            var show = activeFilter === 'all'
+              || kind === activeFilter
+              || (activeFilter === 'gear' && (kind === 'gear' || kind === 'accessory'));
+            card.hidden = !show;
+          });
+        }
+        function popoverPayload(node) {
+          if (!node) return null;
+          var meta = node.querySelector('[data-afcs-equipment-card-meta]') || node;
+          var title = meta.getAttribute('data-afcs-equipment-popover-title') || '';
+          if (!title) return null;
+          return {
+            kind: meta.getAttribute('data-afcs-equipment-popover-kind') || '',
+            title: title,
+            desc: meta.getAttribute('data-afcs-equipment-popover-desc') || '',
+            slot: meta.getAttribute('data-afcs-equipment-popover-slot') || '',
+            stats: meta.getAttribute('data-afcs-equipment-popover-stats') || '',
+            icon: meta.getAttribute('data-afcs-equipment-popover-icon') || '',
+            defaultSlot: meta.getAttribute('data-afcs-equipment-default-slot') || '',
+            itemId: meta.getAttribute('data-afcs-equipment-item-id') || (node.getAttribute('data-afcs-equipment-item-id') || ''),
+            slotCode: meta.getAttribute('data-afcs-equipment-slot') || ''
+          };
+        }
+        function showPopover(anchor, payload) {
+          if (!popover || !payload) return;
+          var iconHtml = payload.icon ? '<img src="' + payload.icon + '" alt="">' : '<span class="af-cs-slot-icon af-cs-slot-icon--empty"></span>';
+          var actionBtn = '';
+          if (payload.kind === 'equipped' && payload.slotCode) {
+            actionBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-unequip="1" data-afcs-equipment-slot="' + payload.slotCode + '">Снять</button>';
+          } else if (payload.itemId) {
+            actionBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-equip="1" data-afcs-equipment-item-id="' + payload.itemId + '" data-afcs-equipment-slot-default="' + payload.defaultSlot + '">Надеть</button>';
+          }
+          popover.innerHTML = ''
+            + '<div class="af-cs-equip-popover__head"><span class="af-cs-slot-icon">' + iconHtml + '</span><strong>' + payload.title + '</strong></div>'
+            + (payload.desc ? '<div class="af-cs-equip-popover__line">' + payload.desc + '</div>' : '')
+            + (payload.stats ? '<div class="af-cs-equip-popover__line"><em>' + payload.stats + '</em></div>' : '')
+            + (payload.slot ? '<div class="af-cs-equip-popover__line">Слот: ' + payload.slot + '</div>' : '')
+            + (actionBtn ? '<div class="af-cs-equip-popover__actions">' + actionBtn + '</div>' : '');
+          popover.hidden = false;
+          var rect = anchor.getBoundingClientRect();
+          popover.style.top = (rect.top + window.scrollY + rect.height + 6) + 'px';
+          popover.style.left = (rect.left + window.scrollX) + 'px';
+        }
+        function hidePopover() {
+          if (!popover) return;
+          popover.hidden = true;
+        }
+        function bindDnD() {
+          var unequipZone = equipmentBlock.querySelector('[data-afcs-equipment-unequip-zone]');
+          var dragPayload = null;
+          equipmentBlock.querySelectorAll('[data-afcs-equipment-draggable]').forEach(function (node) {
+            node.addEventListener('dragstart', function (event) {
+              dragPayload = {
+                itemId: node.getAttribute('data-afcs-equipment-item-id') || '',
+                slot: node.getAttribute('data-afcs-equipment-slot') || '',
+                origin: node.getAttribute('data-afcs-equipment-draggable') || ''
+              };
+              try { event.dataTransfer.setData('text/plain', JSON.stringify(dragPayload)); } catch (e) {}
+              event.dataTransfer.effectAllowed = 'move';
+            });
+          });
+          equipmentBlock.querySelectorAll('[data-afcs-equipment-slot-dot]').forEach(function (slotNode) {
+            slotNode.addEventListener('dragover', function (event) {
+              event.preventDefault();
+              slotNode.classList.add('is-drop-target');
+            });
+            slotNode.addEventListener('dragleave', function () {
+              slotNode.classList.remove('is-drop-target');
+            });
+            slotNode.addEventListener('drop', function (event) {
+              event.preventDefault();
+              slotNode.classList.remove('is-drop-target');
+              var itemId = dragPayload && dragPayload.itemId ? dragPayload.itemId : '';
+              var slotCode = slotNode.getAttribute('data-afcs-equipment-slot') || '';
+              if (!itemId || !slotCode) return;
+              afCsAjax('equip_equipment', { slot: slotCode, item_id: itemId }).then(function (payload) {
+                if (isErrorPayload(payload)) {
+                  showInlineError(responseError(payload, 'Ошибка экипировки'));
+                  return;
+                }
+                clearInlineError();
+                applyViewUpdate(payload);
+              });
+            });
+          });
+          if (unequipZone) {
+            unequipZone.addEventListener('dragover', function (event) {
+              event.preventDefault();
+              unequipZone.classList.add('is-drop-target');
+            });
+            unequipZone.addEventListener('dragleave', function () {
+              unequipZone.classList.remove('is-drop-target');
+            });
+            unequipZone.addEventListener('drop', function (event) {
+              event.preventDefault();
+              unequipZone.classList.remove('is-drop-target');
+              var slotCode = dragPayload && dragPayload.slot ? dragPayload.slot : '';
+              if (!slotCode) return;
+              afCsAjax('unequip_equipment', { slot: slotCode }).then(function (payload) {
+                if (isErrorPayload(payload)) {
+                  showInlineError(responseError(payload, 'Ошибка снятия'));
+                  return;
+                }
+                clearInlineError();
+                applyViewUpdate(payload);
+              });
+            });
+          }
+        }
 
         var activeCard = equipmentBlock.querySelector('[data-afcs-equipment-card].is-active') || cards[0];
         if (activeCard) activate(activeCard.getAttribute('data-afcs-equipment-item-id') || '');
+        applyFilter();
+        bindDnD();
+
+        filters.forEach(function (filterBtn) {
+          filterBtn.addEventListener('click', function () {
+            activeFilter = filterBtn.getAttribute('data-afcs-equipment-filter') || 'all';
+            filters.forEach(function (node) { node.classList.toggle('is-active', node === filterBtn); });
+            applyFilter();
+          });
+        });
+        cards.forEach(function (card) {
+          card.addEventListener('mouseenter', function () { showPopover(card, popoverPayload(card)); });
+          card.addEventListener('mouseleave', hidePopover);
+          card.addEventListener('click', function () { showPopover(card, popoverPayload(card)); });
+        });
+        slots.forEach(function (slot) {
+          slot.addEventListener('mouseenter', function () { showPopover(slot, popoverPayload(slot)); });
+          slot.addEventListener('mouseleave', hidePopover);
+          slot.addEventListener('click', function () { showPopover(slot, popoverPayload(slot)); });
+        });
+        if (!root.__afEquipDocBound) {
+          root.__afEquipDocBound = true;
+          document.addEventListener('click', function (event) {
+            if (!popover || popover.hidden) return;
+            if (!event.target.closest('[data-afcs-equipment-slot-dot]') && !event.target.closest('[data-afcs-equipment-card]') && !event.target.closest('[data-afcs-equipment-popover]')) {
+              hidePopover();
+            }
+          }, { passive: true });
+        }
       }
       function closeAttributeConfirmModal() {
         var modal = sheet.querySelector('[data-afcs-attr-confirm-modal]');
@@ -1108,6 +1254,9 @@
             eqSlotSelect.value = eqSlotSelect.options[1].value;
           }
           var eqSlot = eqSlotSelect ? eqSlotSelect.value : '';
+          if (!eqSlot) {
+            eqSlot = equipEquip.getAttribute('data-afcs-equipment-slot-default') || (eqSelectWrap ? (eqSelectWrap.getAttribute('data-afcs-equipment-default-slot') || '') : '');
+          }
           if (eqItemId && eqSlot) {
             afCsAjax('equip_equipment', {
               slot: eqSlot,
