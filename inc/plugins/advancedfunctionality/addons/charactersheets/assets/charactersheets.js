@@ -688,7 +688,7 @@
             var kind = String(card.getAttribute('data-afcs-equipment-filter-kind') || '');
             var show = activeFilter === 'all'
               || kind === activeFilter
-              || (activeFilter === 'gear' && (kind === 'gear' || kind === 'accessory'));
+              || (activeFilter === 'gear' && (kind === 'gear' || kind === 'accessory' || kind === 'artifact'));
             card.hidden = !show;
           });
         }
@@ -726,8 +726,14 @@
             + (actionBtn ? '<div class="af-cs-equip-popover__actions">' + actionBtn + '</div>' : '');
           popover.hidden = false;
           var rect = anchor.getBoundingClientRect();
-          popover.style.top = (rect.top + window.scrollY + rect.height + 6) + 'px';
-          popover.style.left = (rect.left + window.scrollX) + 'px';
+          var maxLeft = Math.max(8, window.innerWidth - popover.offsetWidth - 8);
+          var left = Math.min(maxLeft, Math.max(8, rect.left));
+          var top = rect.bottom + 8;
+          if (top + popover.offsetHeight > window.innerHeight - 8) {
+            top = Math.max(8, rect.top - popover.offsetHeight - 8);
+          }
+          popover.style.left = left + 'px';
+          popover.style.top = top + 'px';
         }
         function hidePopover() {
           if (!popover) return;
@@ -838,24 +844,29 @@
           });
         });
         cards.forEach(function (card) {
-          card.addEventListener('mouseenter', function () { showPopover(card, popoverPayload(card)); });
-          card.addEventListener('mouseleave', hidePopover);
           card.addEventListener('click', function (event) {
             if (event.target.closest('button,select,option,input,textarea,a,label')) return;
             activate(card.getAttribute('data-afcs-equipment-item-id') || '');
-            showPopover(card, popoverPayload(card));
           });
         });
         slots.forEach(function (slot) {
-          slot.addEventListener('mouseenter', function () { showPopover(slot, popoverPayload(slot)); });
+          slot.addEventListener('mouseenter', function () {
+            var itemId = Number(slot.getAttribute('data-afcs-equipment-preview-item-id') || 0);
+            if (itemId <= 0) return;
+            showPopover(slot, popoverPayload(slot));
+          });
           slot.addEventListener('mouseleave', hidePopover);
-          slot.addEventListener('click', function () { showPopover(slot, popoverPayload(slot)); });
+          slot.addEventListener('click', function () {
+            var itemId = Number(slot.getAttribute('data-afcs-equipment-preview-item-id') || 0);
+            if (itemId <= 0) return;
+            showPopover(slot, popoverPayload(slot));
+          });
         });
         if (!root.__afEquipDocBound) {
           root.__afEquipDocBound = true;
           document.addEventListener('click', function (event) {
             if (!popover || popover.hidden) return;
-            if (!event.target.closest('[data-afcs-equipment-slot-dot]') && !event.target.closest('[data-afcs-equipment-card]') && !event.target.closest('[data-afcs-equipment-popover]')) {
+            if (!event.target.closest('[data-afcs-equipment-slot-dot]') && !event.target.closest('[data-afcs-equipment-popover]')) {
               hidePopover();
             }
           }, { passive: true });

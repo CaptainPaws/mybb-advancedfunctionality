@@ -248,8 +248,11 @@ function af_charactersheets_normalize_bonus_items(string $source, string $key): 
     }
     $items = array_merge($items, af_charactersheets_rules_to_bonus_items($data, $source, $attributes));
     $items = array_merge($items, af_charactersheets_rules_to_bonus_items($raw_rules, $source, $attributes));
+    $items = array_merge($items, af_charactersheets_extract_item_bonus_items($data, $source));
+    $items = array_merge($items, af_charactersheets_extract_item_bonus_items($raw_rules, $source));
     if (!empty($data['rules']) && is_array($data['rules'])) {
         $items = array_merge($items, af_charactersheets_rules_to_bonus_items($data['rules'], $source, $attributes));
+        $items = array_merge($items, af_charactersheets_extract_item_bonus_items((array)$data['rules'], $source));
     }
     $augmentation_rules = [];
     if (!empty($raw_rules['augmentation']) && is_array($raw_rules['augmentation'])) {
@@ -327,6 +330,41 @@ function af_charactersheets_normalize_bonus_items(string $source, string $key): 
     }
 
     return $normalized;
+}
+
+function af_charactersheets_extract_item_bonus_items(array $rules, string $source): array
+{
+    $item = is_array($rules['item'] ?? null) ? (array)$rules['item'] : [];
+    if (!$item) {
+        return [];
+    }
+
+    $out = [];
+    $damageBonus = (float)($item['weapon']['damage_bonus'] ?? $item['ammo']['damage_bonus'] ?? 0);
+    if ($damageBonus !== 0.0) {
+        $out[] = ['source' => $source, 'type' => 'weapon_bonus', 'target' => 'damage', 'value' => $damageBonus, 'requires_choice' => false];
+    }
+
+    $armorBonus = (float)($item['equip']['armor']['ac_bonus'] ?? 0);
+    if ($armorBonus !== 0.0) {
+        $out[] = ['source' => $source, 'type' => 'armor_bonus', 'target' => 'armor', 'value' => $armorBonus, 'requires_choice' => false];
+    }
+
+    foreach ((array)($item['on_equip']['effects'] ?? []) as $effect) {
+        if (!is_array($effect)) {
+            continue;
+        }
+        $op = trim((string)($effect['op'] ?? ''));
+        $value = (float)($effect['value'] ?? 0);
+        if ($op === 'add_damage' && $value !== 0.0) {
+            $out[] = ['source' => $source, 'type' => 'weapon_bonus', 'target' => 'damage', 'value' => $value, 'requires_choice' => false];
+        }
+        if (($op === 'add_armor' || $op === 'add_ac') && $value !== 0.0) {
+            $out[] = ['source' => $source, 'type' => 'armor_bonus', 'target' => 'armor', 'value' => $value, 'requires_choice' => false];
+        }
+    }
+
+    return $out;
 }
 
 function af_charactersheets_rules_to_bonus_items(array $rules, string $source, array $attributes): array
