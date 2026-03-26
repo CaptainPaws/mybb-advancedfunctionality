@@ -3406,41 +3406,13 @@ function af_kb_build_sceditor_assets_and_init(string $bburl, string $pageHtml): 
         $contentCssUrl = $bburl.'/jscripts/sceditor/themes/content.css';
     }
 
-    // Инициализация: включаем на текстовых полях KB, исключаем JSON-поля
-    // Делается максимально “широко”, чтобы работало независимо от точных id в шаблонах.
-    $contentCssJs = $contentCssUrl !== '' ? json_encode($contentCssUrl) : '""';
-
-    $init = '<script>(function(){'
-        . 'function afKbInitSceditor(){'
-        . 'if(!window.jQuery || !jQuery.fn || !jQuery.fn.sceditor) return;'
-        . 'var $ = jQuery;'
-        . 'var contentCss = '.$contentCssJs.';'
-        . '$("textarea").each(function(){'
-        . '  var el=this;'
-        . '  if(!el || el.disabled) return;'
-        . '  var name = (el.name||"").toLowerCase();'
-        . '  if(!name) return;'
-        . '  if(name.indexOf("meta_json")!==-1) return;'
-        . '  if(name.indexOf("data_json")!==-1) return;'
-        . '  // Только поля контента KB (включая blocks[][content_ru/en], short/body/tech и т.п.)'
-        . '  var ok = (name.indexOf("short_")!==-1) || (name.indexOf("body_")!==-1) || (name.indexOf("tech_")!==-1) || (name.indexOf("[content_")!==-1);'
-        . '  if(!ok) return;'
-        . '  try{'
-        . '    if($(el).data("afKbSceditorReady")) return;'
-        . '    $(el).data("afKbSceditorReady",1);'
-        . '    $(el).sceditor({'
-        . '      plugins:"bbcode",'
-        . '      style: (contentCss && typeof contentCss==="string") ? contentCss : undefined,'
-        . '      emoticonsEnabled:false,'
-        . '      width:"100%",'
-        . '      height:240,'
-        . '      toolbar:"bold,italic,underline|left,center,right,justify|bulletlist,orderedlist|link,unlink|image|quote,code|source"'
-        . '    });'
-        . '  }catch(e){}'
-        . '});'
-        . '}'
-        . 'if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",afKbInitSceditor);}else{afKbInitSceditor();}'
-        . '})();</script>';
+    // Инициализацию SCEditor выполняет knowledgebase.js.
+    // Здесь пробрасываем style в глобальные опции, чтобы редактор применял content.css.
+    if ($contentCssUrl !== '') {
+        $init = '<script>(function(){window.sceditor_options=window.sceditor_options||{};window.sceditor_options.style='
+            . json_encode($contentCssUrl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            . ';})();</script>';
+    }
 
     return ['assets' => $assets, 'init' => $init];
 }
