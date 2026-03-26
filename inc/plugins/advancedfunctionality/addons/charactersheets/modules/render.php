@@ -672,20 +672,108 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
 
 function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bool $can_view_pool): string
 {
+    global $mybb;
+
     $knowledge_entries = af_charactersheets_get_kb_entries_by_type('knowledge');
     $language_entries = af_charactersheets_get_kb_entries_by_type('language');
 
-    $knowledge_selected = (array)($view['knowledge']['selected'] ?? []);
-    $knowledge_bonus = (array)($view['knowledge']['bonus'] ?? []);
-    $knowledge_remaining = (int)($view['knowledge']['remaining'] ?? 0);
-    $knowledge_total = (int)($view['knowledge']['total_choices'] ?? 0);
+    $knowledge_selected = array_values(array_unique(array_filter((array)($view['knowledge']['selected'] ?? []))));
+    $knowledge_bonus = array_values(array_unique(array_filter((array)($view['knowledge']['bonus'] ?? []))));
+    $knowledge_remaining = max(0, (int)($view['knowledge']['remaining'] ?? 0));
+    $knowledge_total = max(0, (int)($view['knowledge']['total_choices'] ?? 0));
     $knowledge_selected_count = count($knowledge_selected);
+    $knowledge_bonus_count = count($knowledge_bonus);
 
-    $language_selected = (array)($view['languages']['selected'] ?? []);
-    $language_bonus = (array)($view['languages']['bonus'] ?? []);
-    $language_remaining = (int)($view['languages']['remaining'] ?? 0);
-    $language_total = (int)($view['languages']['total_choices'] ?? 0);
+    $language_selected = array_values(array_unique(array_filter((array)($view['languages']['selected'] ?? []))));
+    $language_bonus = array_values(array_unique(array_filter((array)($view['languages']['bonus'] ?? []))));
+    $language_remaining = max(0, (int)($view['languages']['remaining'] ?? 0));
+    $language_total = max(0, (int)($view['languages']['total_choices'] ?? 0));
     $language_selected_count = count($language_selected);
+    $language_bonus_count = count($language_bonus);
+
+    $source_labels = [
+        'race' => 'Раса',
+        'class' => 'Класс',
+        'theme' => 'Тема',
+        'other' => 'Прочее',
+    ];
+
+    $sum_grant_slots = static function (array $grants, string $resource): int {
+        $sum = 0;
+        foreach ($grants as $grant) {
+            if (!is_array($grant)) {
+                continue;
+            }
+            $type = strtolower(trim((string)($grant['type'] ?? $grant['op'] ?? '')));
+            if ($type !== 'resource' && $type !== 'resource_slot' && $type !== 'slot') {
+                continue;
+            }
+            $name = strtolower(trim((string)($grant['resource'] ?? $grant['name'] ?? $grant['target'] ?? '')));
+            if ($name !== strtolower($resource)) {
+                continue;
+            }
+            $sum += (int)($grant['amount'] ?? $grant['value'] ?? 0);
+        }
+        return $sum;
+    };
+
+    $source_rules = [
+        'race' => cs_kb_rules_normalize((array)($view['ctx']['sources']['race']['rules'] ?? [])),
+        'class' => cs_kb_rules_normalize((array)($view['ctx']['sources']['class']['rules'] ?? [])),
+        'theme' => cs_kb_rules_normalize((array)($view['ctx']['sources']['theme']['rules'] ?? [])),
+    ];
+
+    $knowledge_source_breakdown = [];
+    $language_source_breakdown = [];
+    foreach ($source_rules as $source_key => $rules) {
+        $knowledge_source_breakdown[$source_key] = (int)($rules['fixed']['knowledge_slots'] ?? 0)
+            + (int)($rules['fixed_bonuses']['knowledge_slots'] ?? 0)
+            + $sum_grant_slots((array)($rules['grants'] ?? []), 'knowledge_slots');
+        $language_source_breakdown[$source_key] = (int)($rules['fixed']['language_slots'] ?? 0)
+            + (int)($rules['fixed_bonuses']['language_slots'] ?? 0)
+            + $sum_grant_slots((array)($rules['grants'] ?? []), 'language_slots');
+    }
+
+    $int_value = (float)($view['final']['int'] ?? 0);
+    $knowledge_base_choices = (int)($mybb->settings['af_charactersheets_knowledge_base_choices'] ?? 0);
+    $knowledge_per_int = (float)($mybb->settings['af_charactersheets_knowledge_per_int'] ?? 0);
+    $knowledge_from_int = (int)floor($int_value * $knowledge_per_int);
+
+    $knowledge_sources = [
+        'Базовые слоты' => $knowledge_base_choices,
+        'INT модификатор' => $knowledge_from_int,
+        $source_labels['race'] => (int)$knowledge_source_breakdown['race'],
+        $source_labels['class'] => (int)$knowledge_source_breakdown['class'],
+        $source_labels['theme'] => (int)$knowledge_source_breakdown['theme'],
+    ];
+    $knowledge_known_sum = array_sum($knowledge_sources);
+    if ($knowledge_total > $knowledge_known_sum) {
+        $knowledge_sources[$source_labels['other']] = $knowledge_total - $knowledge_known_sum;
+    }
+
+    $language_sources = [
+        $source_labels['race'] => (int)$language_source_breakdown['race'],
+        $source_labels['class'] => (int)$language_source_breakdown['class'],
+        $source_labels['theme'] => (int)$language_source_breakdown['theme'],
+    ];
+    $language_known_sum = array_sum($language_sources);
+    if ($language_total > $language_known_sum) {
+        $language_sources[$source_labels['other']] = $language_total - $language_known_sum;
+    }
+
+    $render_source_chips = static function (array $sources): string {
+        $chips = [];
+        foreach ($sources as $label => $value) {
+            if ((int)$value === 0) {
+                continue;
+            }
+            $chips[] = '<span class="af-cs-knowledge-source-chip"><em>' . htmlspecialchars_uni((string)$label) . '</em><strong>+' . htmlspecialchars_uni((string)(int)$value) . '</strong></span>';
+        }
+        if (!$chips) {
+            return '<span class="af-cs-muted">Нет бонусных источников.</span>';
+        }
+        return implode('', $chips);
+    };
 
     $knowledge_options = '<option value="">— выбрать знание —</option>';
     foreach ($knowledge_entries as $entry) {
@@ -707,76 +795,70 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
         $language_options .= '<option value="' . htmlspecialchars_uni($key) . '">' . htmlspecialchars_uni($title !== '' ? $title : $key) . '</option>';
     }
 
-    $knowledge_items = [];
-    foreach ($knowledge_bonus as $key) {
-        $entry = af_charactersheets_kb_get_entry('knowledge', $key);
+    $render_item = static function (string $kind, string $key, bool $is_bonus, bool $can_edit): string {
+        $entry = af_charactersheets_kb_get_entry($kind, $key);
         $label = af_charactersheets_kb_pick_text($entry, 'title');
         $desc = af_charactersheets_kb_pick_text($entry, 'short');
         if ($desc === '') {
             $desc = af_charactersheets_kb_pick_text($entry, 'description');
         }
-        $knowledge_items[] = '<div class="af-cs-knowledge-chip">'
-            . '<span class="af-cs-knowledge-title">' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
-            . ($desc !== '' ? '<small class="af-cs-knowledge-desc">' . htmlspecialchars_uni($desc) . '</small>' : '')
-            . '<em class="af-cs-knowledge-badge">Бонус</em>'
-            . '</div>';
-    }
+
+        $status = $is_bonus
+            ? '<em class="af-cs-knowledge-tag af-cs-knowledge-tag--bonus">Авто</em>'
+            : '<em class="af-cs-knowledge-tag af-cs-knowledge-tag--manual">Выбор</em>';
+
+        $remove = '';
+        if (!$is_bonus && $can_edit) {
+            $remove = '<button type="button" class="af-cs-knowledge-remove" data-afcs-knowledge-remove="1" data-afcs-knowledge-type="' . htmlspecialchars_uni($kind) . '" data-afcs-knowledge-key="' . htmlspecialchars_uni($key) . '" title="Убрать">×</button>';
+        }
+
+        return '<article class="af-cs-knowledge-card' . ($is_bonus ? ' is-bonus' : '') . '">'
+            . '<div class="af-cs-knowledge-card__head">'
+            . '<strong class="af-cs-knowledge-title">' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</strong>'
+            . $status
+            . $remove
+            . '</div>'
+            . ($desc !== '' ? '<div class="af-cs-knowledge-desc">' . htmlspecialchars_uni($desc) . '</div>' : '')
+            . '</article>';
+    };
+
+    $knowledge_selected_items = [];
     foreach ($knowledge_selected as $key) {
-        $entry = af_charactersheets_kb_get_entry('knowledge', $key);
-        $label = af_charactersheets_kb_pick_text($entry, 'title');
-        $desc = af_charactersheets_kb_pick_text($entry, 'short');
-        if ($desc === '') {
-            $desc = af_charactersheets_kb_pick_text($entry, 'description');
-        }
-        $remove = $can_edit
-            ? '<button type="button" data-afcs-knowledge-remove="1" data-afcs-knowledge-type="knowledge" data-afcs-knowledge-key="' . htmlspecialchars_uni($key) . '">×</button>'
-            : '';
-        $knowledge_items[] = '<div class="af-cs-knowledge-chip">'
-            . '<span class="af-cs-knowledge-title">' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
-            . ($desc !== '' ? '<small class="af-cs-knowledge-desc">' . htmlspecialchars_uni($desc) . '</small>' : '')
-            . $remove
-            . '</div>';
+        $knowledge_selected_items[] = $render_item('knowledge', (string)$key, false, $can_edit);
     }
-    if (!$knowledge_items) {
-        $knowledge_items[] = '<div class="af-cs-muted">Пока нет знаний.</div>';
+    if (!$knowledge_selected_items) {
+        $knowledge_selected_items[] = '<div class="af-cs-muted">Пока нет выбранных знаний.</div>';
     }
 
-    $language_items = [];
-    foreach ($language_bonus as $key) {
-        $entry = af_charactersheets_kb_get_entry('language', $key);
-        $label = af_charactersheets_kb_pick_text($entry, 'title');
-        $desc = af_charactersheets_kb_pick_text($entry, 'short');
-        if ($desc === '') {
-            $desc = af_charactersheets_kb_pick_text($entry, 'description');
-        }
-        $language_items[] = '<div class="af-cs-knowledge-chip">'
-            . '<span class="af-cs-knowledge-title">' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
-            . ($desc !== '' ? '<small class="af-cs-knowledge-desc">' . htmlspecialchars_uni($desc) . '</small>' : '')
-            . '<em class="af-cs-knowledge-badge">Бонус</em>'
-            . '</div>';
+    $knowledge_bonus_items = [];
+    foreach ($knowledge_bonus as $key) {
+        $knowledge_bonus_items[] = $render_item('knowledge', (string)$key, true, false);
     }
+    if (!$knowledge_bonus_items) {
+        $knowledge_bonus_items[] = '<div class="af-cs-muted">Нет автоматических знаний.</div>';
+    }
+
+    $language_selected_items = [];
     foreach ($language_selected as $key) {
-        $entry = af_charactersheets_kb_get_entry('language', $key);
-        $label = af_charactersheets_kb_pick_text($entry, 'title');
-        $desc = af_charactersheets_kb_pick_text($entry, 'short');
-        if ($desc === '') {
-            $desc = af_charactersheets_kb_pick_text($entry, 'description');
-        }
-        $remove = $can_edit
-            ? '<button type="button" data-afcs-knowledge-remove="1" data-afcs-knowledge-type="language" data-afcs-knowledge-key="' . htmlspecialchars_uni($key) . '">×</button>'
-            : '';
-        $language_items[] = '<div class="af-cs-knowledge-chip">'
-            . '<span class="af-cs-knowledge-title">' . htmlspecialchars_uni($label !== '' ? $label : $key) . '</span>'
-            . ($desc !== '' ? '<small class="af-cs-knowledge-desc">' . htmlspecialchars_uni($desc) . '</small>' : '')
-            . $remove
-            . '</div>';
+        $language_selected_items[] = $render_item('language', (string)$key, false, $can_edit);
     }
-    if (!$language_items) {
-        $language_items[] = '<div class="af-cs-muted">Пока нет языков.</div>';
+    if (!$language_selected_items) {
+        $language_selected_items[] = '<div class="af-cs-muted">Пока нет выбранных языков.</div>';
     }
 
-    $knowledge_items_html = implode('', $knowledge_items);
-    $language_items_html = implode('', $language_items);
+    $language_bonus_items = [];
+    foreach ($language_bonus as $key) {
+        $language_bonus_items[] = $render_item('language', (string)$key, true, false);
+    }
+    if (!$language_bonus_items) {
+        $language_bonus_items[] = '<div class="af-cs-muted">Нет автоматических языков.</div>';
+    }
+
+    $knowledge_selected_items_html = implode('', $knowledge_selected_items);
+    $knowledge_bonus_items_html = implode('', $knowledge_bonus_items);
+    $language_selected_items_html = implode('', $language_selected_items);
+    $language_bonus_items_html = implode('', $language_bonus_items);
+
     $knowledge_form = '';
     $language_form = '';
     if ($can_edit) {
@@ -790,23 +872,34 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
             . '</div>';
     }
 
-    $knowledge_pool_html = '';
+    $knowledge_overview_html = '';
     if ($can_view_pool) {
-        $knowledge_pool_html = '<div class="af-cs-knowledge-pool">'
-            . '<div>Доступно знаний: <strong>' . htmlspecialchars_uni((string)$knowledge_total) . '</strong></div>'
-            . '<div>Выбрано: <strong>' . htmlspecialchars_uni((string)$knowledge_selected_count) . '</strong></div>'
-            . '<div>Осталось: <strong>' . htmlspecialchars_uni((string)$knowledge_remaining) . '</strong></div>'
+        $knowledge_overview_html = '<div class="af-cs-knowledge-overview-grid">'
+            . '<section class="af-cs-knowledge-overview-card">'
+            . '<h4>Слоты знаний</h4>'
+            . '<div class="af-cs-knowledge-counters">'
+            . '<div><span>Всего</span><strong>' . htmlspecialchars_uni((string)$knowledge_total) . '</strong></div>'
+            . '<div><span>Занято вручную</span><strong>' . htmlspecialchars_uni((string)$knowledge_selected_count) . '</strong></div>'
+            . '<div><span>Свободно</span><strong>' . htmlspecialchars_uni((string)$knowledge_remaining) . '</strong></div>'
+            . '<div><span>Авто/бонус</span><strong>' . htmlspecialchars_uni((string)$knowledge_bonus_count) . '</strong></div>'
+            . '</div>'
+            . '<div class="af-cs-knowledge-sources">' . $render_source_chips($knowledge_sources) . '</div>'
+            . '</section>'
+            . '<section class="af-cs-knowledge-overview-card">'
+            . '<h4>Слоты языков</h4>'
+            . '<div class="af-cs-knowledge-counters">'
+            . '<div><span>Всего</span><strong>' . htmlspecialchars_uni((string)$language_total) . '</strong></div>'
+            . '<div><span>Занято вручную</span><strong>' . htmlspecialchars_uni((string)$language_selected_count) . '</strong></div>'
+            . '<div><span>Свободно</span><strong>' . htmlspecialchars_uni((string)$language_remaining) . '</strong></div>'
+            . '<div><span>Авто/бонус</span><strong>' . htmlspecialchars_uni((string)$language_bonus_count) . '</strong></div>'
+            . '</div>'
+            . '<div class="af-cs-knowledge-sources">' . $render_source_chips($language_sources) . '</div>'
+            . '</section>'
             . '</div>';
     }
 
+    $knowledge_pool_html = '';
     $language_pool_html = '';
-    if ($can_view_pool) {
-        $language_pool_html = '<div class="af-cs-knowledge-pool">'
-            . '<div>Доступно языков: <strong>' . htmlspecialchars_uni((string)$language_total) . '</strong></div>'
-            . '<div>Выбрано: <strong>' . htmlspecialchars_uni((string)$language_selected_count) . '</strong></div>'
-            . '<div>Осталось: <strong>' . htmlspecialchars_uni((string)$language_remaining) . '</strong></div>'
-            . '</div>';
-    }
 
     global $templates;
     $tpl = $templates->get('charactersheet_knowledge');

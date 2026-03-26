@@ -1,23 +1,61 @@
 <div class="af-cs-knowledge">
-  <div class="af-cs-knowledge-section">
-    <div class="af-cs-knowledge-head">
-      <h3>Языки</h3>
-      {$language_pool_html}
-    </div>
-    {$language_form}
-    <div class="af-cs-knowledge-list">
-      {$language_items_html}
-    </div>
+  <div class="af-cs-knowledge-overview">
+    {$knowledge_overview_html}
   </div>
 
-  <div class="af-cs-knowledge-section">
-    <div class="af-cs-knowledge-head">
-      <h3>Знания</h3>
-      {$knowledge_pool_html}
+  <div class="af-cs-knowledge-sections">
+    <div class="af-cs-knowledge-section">
+      <div class="af-cs-knowledge-head">
+        <h3>Знания</h3>
+        {$knowledge_form}
+      </div>
+      <div class="af-cs-knowledge-groups">
+        <section class="af-cs-knowledge-group">
+          <div class="af-cs-knowledge-group__head">
+            <strong>Выбрано вручную</strong>
+            <span>{$knowledge_selected_count}</span>
+          </div>
+          <div class="af-cs-knowledge-list">
+            {$knowledge_selected_items_html}
+          </div>
+        </section>
+        <section class="af-cs-knowledge-group">
+          <div class="af-cs-knowledge-group__head">
+            <strong>Автоматически / бонусом</strong>
+            <span>{$knowledge_bonus_count}</span>
+          </div>
+          <div class="af-cs-knowledge-list">
+            {$knowledge_bonus_items_html}
+          </div>
+        </section>
+      </div>
     </div>
-    {$knowledge_form}
-    <div class="af-cs-knowledge-list">
-      {$knowledge_items_html}
+
+    <div class="af-cs-knowledge-section">
+      <div class="af-cs-knowledge-head">
+        <h3>Языки</h3>
+        {$language_form}
+      </div>
+      <div class="af-cs-knowledge-groups">
+        <section class="af-cs-knowledge-group">
+          <div class="af-cs-knowledge-group__head">
+            <strong>Выбрано вручную</strong>
+            <span>{$language_selected_count}</span>
+          </div>
+          <div class="af-cs-knowledge-list">
+            {$language_selected_items_html}
+          </div>
+        </section>
+        <section class="af-cs-knowledge-group">
+          <div class="af-cs-knowledge-group__head">
+            <strong>Автоматически / бонусом</strong>
+            <span>{$language_bonus_count}</span>
+          </div>
+          <div class="af-cs-knowledge-list">
+            {$language_bonus_items_html}
+          </div>
+        </section>
+      </div>
     </div>
   </div>
 </div>
