@@ -82,6 +82,7 @@ function af_charactersheets_handle_api_impl(): void
         'move_augmentation',
         'equip_equipment',
         'unequip_equipment',
+        'set_active_weapon',
         'reset_attributes',
         'reset_skills',
     ], true)) {
@@ -700,7 +701,7 @@ function af_charactersheets_handle_api_impl(): void
         $augmentations['slots'] = $slots;
         $build['augmentations'] = $augmentations;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
-    } elseif ($do === 'equip_equipment' || $do === 'unequip_equipment') {
+    } elseif ($do === 'equip_equipment' || $do === 'unequip_equipment' || $do === 'set_active_weapon') {
         if (!$can_edit) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
         }
@@ -710,7 +711,23 @@ function af_charactersheets_handle_api_impl(): void
             af_charactersheets_json_response(['success' => false, 'error' => 'Owner not found']);
         }
 
-        if ($do === 'equip_equipment') {
+        if ($do === 'set_active_weapon') {
+            $slot = (string)$mybb->get_input('slot');
+            $allowedWeaponSlots = ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_melee', 'weapon_ranged'];
+            if ($slot === '' || !in_array($slot, $allowedWeaponSlots, true)) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Invalid weapon slot']);
+            }
+            $state = function_exists('af_advinv_export_charactersheet_equipment_state')
+                ? af_advinv_export_charactersheet_equipment_state($owner_uid)
+                : [];
+            if (empty((array)($state['equipped'][$slot] ?? []))) {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Weapon is not equipped in this slot']);
+            }
+            $buildEquipment = (array)($build['equipment'] ?? []);
+            $buildEquipment['active_weapon_slot'] = $slot;
+            $build['equipment'] = $buildEquipment;
+            af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
+        } elseif ($do === 'equip_equipment') {
             $item_id = (int)$mybb->get_input('item_id');
             $slot = (string)$mybb->get_input('slot');
             $item = function_exists('af_inv_get_item_for_owner') ? af_inv_get_item_for_owner($owner_uid, $item_id) : [];
@@ -722,7 +739,7 @@ function af_charactersheets_handle_api_impl(): void
             if ($subtype === '') {
                 $subtype = af_advinv_classify_equipment_from_kb_meta(af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')));
             }
-            if (!in_array($subtype, ['weapon', 'armor', 'ammo', 'consumable'], true)) {
+            if (!in_array($subtype, ['weapon', 'armor', 'ammo', 'consumable', 'gear', 'artifact'], true)) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Item is not valid equipment']);
             }
 
@@ -762,6 +779,13 @@ function af_charactersheets_handle_api_impl(): void
                     $db->insert_query('af_advinv_equipped', ['uid' => $owner_uid, 'equip_slot' => $db->escape_string($slot), 'item_id' => (int)$item['id'], 'updated_at' => TIME_NOW]);
                 }
             }
+            $allowedWeaponSlots = ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_melee', 'weapon_ranged'];
+            if (in_array($slot, $allowedWeaponSlots, true) && !empty((array)($build['equipment'] ?? [])) && empty((string)((array)($build['equipment'] ?? [])['active_weapon_slot'] ?? ''))) {
+                $buildEquipment = (array)($build['equipment'] ?? []);
+                $buildEquipment['active_weapon_slot'] = $slot;
+                $build['equipment'] = $buildEquipment;
+                af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
+            }
         } else {
             $slot = (string)$mybb->get_input('slot');
             if ($slot === '') {
@@ -773,6 +797,12 @@ function af_charactersheets_handle_api_impl(): void
                 $db->delete_query('af_advinv_support_slots', 'uid=' . $owner_uid . " AND slot_code='" . $db->escape_string($slotCode) . "'");
             } else {
                 $db->delete_query('af_advinv_equipped', 'uid=' . $owner_uid . " AND equip_slot='" . $db->escape_string($slot) . "'");
+            }
+            $buildEquipment = (array)($build['equipment'] ?? []);
+            if ((string)($buildEquipment['active_weapon_slot'] ?? '') === $slot) {
+                $buildEquipment['active_weapon_slot'] = '';
+                $build['equipment'] = $buildEquipment;
+                af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
             }
         }
     } elseif ($do === 'reset_attributes') {

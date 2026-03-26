@@ -706,7 +706,9 @@
             icon: meta.getAttribute('data-afcs-equipment-popover-icon') || '',
             defaultSlot: meta.getAttribute('data-afcs-equipment-default-slot') || '',
             itemId: meta.getAttribute('data-afcs-equipment-item-id') || (node.getAttribute('data-afcs-equipment-item-id') || ''),
-            slotCode: meta.getAttribute('data-afcs-equipment-slot') || ''
+            slotCode: meta.getAttribute('data-afcs-equipment-slot') || '',
+            canSetActiveWeapon: meta.getAttribute('data-afcs-equipment-popover-can-set-active') === '1',
+            isActiveWeapon: meta.getAttribute('data-afcs-equipment-popover-is-active-weapon') === '1'
           };
         }
         function showPopover(anchor, payload) {
@@ -715,6 +717,13 @@
           var actionBtn = '';
           if (payload.kind === 'equipped' && payload.slotCode) {
             actionBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-unequip="1" data-afcs-equipment-slot="' + payload.slotCode + '">Снять</button>';
+            if (payload.canSetActiveWeapon) {
+              if (payload.isActiveWeapon) {
+                actionBtn += '<span class="af-cs-equip-popover__active-mark">Активное оружие</span>';
+              } else {
+                actionBtn += '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-set-active-weapon="1" data-afcs-equipment-slot="' + payload.slotCode + '">Сделать активным</button>';
+              }
+            }
           } else if (payload.itemId) {
             actionBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-equip="1" data-afcs-equipment-item-id="' + payload.itemId + '" data-afcs-equipment-slot-default="' + payload.defaultSlot + '">Надеть</button>';
           }
@@ -850,12 +859,6 @@
           });
         });
         slots.forEach(function (slot) {
-          slot.addEventListener('mouseenter', function () {
-            var itemId = Number(slot.getAttribute('data-afcs-equipment-preview-item-id') || 0);
-            if (itemId <= 0) return;
-            showPopover(slot, popoverPayload(slot));
-          });
-          slot.addEventListener('mouseleave', hidePopover);
           slot.addEventListener('click', function () {
             var itemId = Number(slot.getAttribute('data-afcs-equipment-preview-item-id') || 0);
             if (itemId <= 0) return;
@@ -1498,6 +1501,23 @@
           var eqSlotKey = equipUnequip.getAttribute('data-afcs-equipment-slot');
           if (eqSlotKey) {
             afCsAjax('unequip_equipment', { slot: eqSlotKey }).then(function (payload) {
+              if (isErrorPayload(payload)) {
+                showInlineError(responseError(payload, 'Ошибка сохранения'));
+                return;
+              }
+              clearInlineError();
+              applyViewUpdate(payload);
+            });
+          }
+          return;
+        }
+
+        var equipSetActiveWeapon = event.target.closest('[data-afcs-equipment-set-active-weapon]');
+        if (equipSetActiveWeapon) {
+          event.preventDefault();
+          var activeSlotKey = equipSetActiveWeapon.getAttribute('data-afcs-equipment-slot');
+          if (activeSlotKey) {
+            afCsAjax('set_active_weapon', { slot: activeSlotKey }).then(function (payload) {
               if (isErrorPayload(payload)) {
                 showInlineError(responseError(payload, 'Ошибка сохранения'));
                 return;
