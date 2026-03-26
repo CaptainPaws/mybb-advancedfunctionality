@@ -241,6 +241,7 @@
     var data = payload || {};
     var checkout = data.checkout || {};
     var links = data.links || {};
+    var successTarget = String(data.success_target || checkout.success_target || '');
     var items = [];
 
     if (Array.isArray(data.items)) {
@@ -252,6 +253,7 @@
     return {
       checkout: checkout,
       links: links,
+      success_target: successTarget,
       items: items
     };
   }
@@ -414,6 +416,7 @@
     var checkout = data.checkout || {};
     var links = data.links || {};
     var items = Array.isArray(data.items) ? data.items : [];
+    var isAbilitiesSuccess = String(data.success_target || '').toLowerCase() === 'abilities';
 
     var currencySymbol = checkout.currency_symbol ? (' ' + escapeHtml(checkout.currency_symbol)) : '';
     var totalMajor = checkout.total_major ? escapeHtml(checkout.total_major) : '0.00';
@@ -449,13 +452,20 @@
     if (links.shop) {
       actions += '<button type="button" class="af-shop-btn af-shop-btn--primary" data-af-shop-nav="' + escapeHtml(normalizeActionUrl(String(links.shop))) + '">В магазин</button>';
     }
-    if (links.inventory) {
+    if (isAbilitiesSuccess && links.abilities) {
+      actions += '<button type="button" class="af-shop-btn af-shop-btn--secondary" data-af-shop-nav="' + escapeHtml(String(links.abilities)) + '">В способности</button>';
+    } else if (links.inventory) {
       actions += '<button type="button" class="af-shop-btn af-shop-btn--secondary" data-af-shop-nav="' + escapeHtml(String(links.inventory)) + '">В инвентарь</button>';
     }
+
+    var successText = isAbilitiesSuccess
+      ? 'Способность добавлена в способности.'
+      : 'Предмет добавлен в инвентарь.';
 
     return ''
       + '<div class="af-shop-success">'
       +   '<h3 class="af-shop-modal__title">Покупка завершена</h3>'
+      +   '<p class="af-shop-success__note">' + successText + '</p>'
 
       +   '<div class="af-shop-success__section">'
       +     '<div class="af-shop-success__label">Куплено:</div>'

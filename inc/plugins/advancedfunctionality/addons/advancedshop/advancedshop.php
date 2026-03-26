@@ -1203,6 +1203,17 @@ function af_advancedshop_inventory_url(int $uid, bool $html = false, array $extr
     return 'inventory.php' . ($query !== '' ? ('?' . ($html ? str_replace('&', '&amp;', $query) : $query)) : '');
 }
 
+function af_advancedshop_abilities_url(int $uid, bool $html = false, array $extra = []): string
+{
+    $params = array_merge(['uid' => $uid], $extra);
+    if (function_exists('af_advancedinventory_url')) {
+        return af_advancedinventory_url('abilities', $params, $html);
+    }
+
+    $query = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+    return 'abilities.php' . ($query !== '' ? ('?' . ($html ? str_replace('&', '&amp;', $query) : $query)) : '');
+}
+
 function af_advancedshop_ensure_setting_group(string $title, string $desc): int
 {
     global $db;
@@ -1995,9 +2006,22 @@ function af_advancedshop_checkout(): void
     $primaryCurrency = count($totalsByCurrency) === 1 ? (string)array_key_first($totalsByCurrency) : 'credits';
     $primarySpent = (int)($totalsByCurrency[$primaryCurrency] ?? 0);
     $balanceAfter = af_shop_get_balance($uid, $primaryCurrency);
+    $successItems = af_advancedshop_checkout_success_items($items);
+    $hasAbilityItems = false;
+    $hasRegularItems = false;
+    foreach ($successItems as $successItem) {
+        if (!empty($successItem['is_ability'])) {
+            $hasAbilityItems = true;
+        } else {
+            $hasRegularItems = true;
+        }
+    }
+    $successTarget = ($hasAbilityItems && !$hasRegularItems) ? 'abilities' : 'inventory';
+
     af_advancedshop_json_ok([
         'shop_code' => (string)$shop['code'],
-        'items' => af_advancedshop_checkout_success_items($items),
+        'items' => $successItems,
+        'success_target' => $successTarget,
         'spent_minor' => $primarySpent,
         'spent_major' => af_advancedshop_money_format($primarySpent),
         'currency_symbol' => af_advancedshop_currency_symbol($primaryCurrency),
@@ -2017,6 +2041,7 @@ function af_advancedshop_checkout(): void
         'links' => [
             'shop' => af_advancedshop_url('shop_category', ['shop' => (string)$shop['code']]),
             'inventory' => af_advancedshop_inventory_url($uid),
+            'abilities' => af_advancedshop_abilities_url($uid),
         ],
     ]);
 }
@@ -2244,14 +2269,38 @@ function af_advancedshop_checkout_success_items(array $items): array
 {
     $result = [];
     foreach ($items as $item) {
+        $isAbility = af_advancedshop_checkout_item_is_ability($item);
         $result[] = [
             'slot_id' => (int)($item['slot_id'] ?? 0),
             'qty' => max(1, (int)($item['qty'] ?? 1)),
             'title' => trim((string)($item['title'] ?? '')),
+            'is_ability' => $isAbility,
         ];
     }
 
     return $result;
+}
+
+function af_advancedshop_checkout_item_is_ability(array $item): bool
+{
+    $kbType = af_advancedshop_normalize_kb_type((string)($item['kb_type'] ?? ''));
+    if ($kbType === 'spell') {
+        return true;
+    }
+
+    $shopCode = trim((string)($item['shop_code'] ?? ''));
+    $catId = (int)($item['cat_id'] ?? 0);
+    if ($shopCode !== '' && $catId > 0 && function_exists('af_advinv_shop_map_resolve')) {
+        $map = (array)af_advinv_shop_map_resolve($shopCode, $catId);
+        $mappedEntity = trim((string)($map['entity'] ?? ''));
+        if ($mappedEntity === 'abilities') {
+            return true;
+        }
+    }
+
+    $meta = af_advancedshop_json_decode_assoc((string)($item['slot_meta_json'] ?? ''));
+    $target = af_advancedshop_detect_inventory_target_from_kb_meta($meta);
+    return trim((string)($target['slot'] ?? '')) === 'abilities';
 }
 
 function af_advancedshop_apply_shop_map_target(array $target, array $item, bool $hasKb): array
