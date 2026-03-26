@@ -144,10 +144,26 @@ function af_kb_default_item_kind_definitions(): array
         ['kind_key' => 'consumable', 'title_ru' => 'Расходник', 'title_en' => 'Consumable', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"consumable_1","stackable":true}}}]}', 'sortorder' => 40],
         ['kind_key' => 'ammo', 'title_ru' => 'Боеприпас', 'title_en' => 'Ammo', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"ammo"}}}]}', 'sortorder' => 50],
         ['kind_key' => 'augmentation', 'title_ru' => 'Аугментация', 'title_en' => 'Augmentation', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[]}', 'sortorder' => 60],
-        ['kind_key' => 'cyberware', 'title_ru' => 'Киберимплант (legacy)', 'title_en' => 'Cyberware (legacy)', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[]}', 'sortorder' => 61],
         ['kind_key' => 'artifact', 'title_ru' => 'Артефакт', 'title_en' => 'Artifact', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"artifact"}}}]}', 'sortorder' => 70],
         ['kind_key' => 'unique', 'title_ru' => 'Уникальный', 'title_en' => 'Unique', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"unique"}}}]}', 'sortorder' => 80],
     ];
+}
+
+function af_kb_normalize_item_kind(string $kind): string
+{
+    $kind = strtolower(trim($kind));
+    if ($kind === '') {
+        return '';
+    }
+
+    $aliases = [
+        'cyberware' => 'augmentation',
+        'implant' => 'augmentation',
+        'weapon_offhand' => 'weapon',
+        'helmet' => 'armor',
+    ];
+
+    return $aliases[$kind] ?? $kind;
 }
 
 /* -------------------- LANG -------------------- */
@@ -1051,6 +1067,28 @@ function af_kb_seed_defaults(): void
     }
 
     if ($db->table_exists('af_kb_item_kinds')) {
+        $canonicalKinds = [];
+        foreach (af_kb_default_item_kind_definitions() as $row) {
+            $canonicalKinds[(string)$row['kind_key']] = true;
+        }
+        $deprecatedKinds = ['cyberware', 'implant', 'weapon_offhand', 'helmet'];
+
+        foreach ($deprecatedKinds as $deprecatedKind) {
+            $normalizedKind = af_kb_normalize_item_kind($deprecatedKind);
+            if ($normalizedKind === $deprecatedKind || empty($canonicalKinds[$normalizedKind])) {
+                continue;
+            }
+            $db->update_query('af_kb_item_kinds', [
+                'is_active' => 0,
+                'updated_at' => TIME_NOW,
+            ], "kind_key='".$db->escape_string($deprecatedKind)."'");
+            if ($db->table_exists('af_kb_entries')) {
+                $db->update_query('af_kb_entries', [
+                    'item_kind' => $db->escape_string($normalizedKind),
+                ], "item_kind='".$db->escape_string($deprecatedKind)."'");
+            }
+        }
+
         foreach (af_kb_default_item_kind_definitions() as $row) {
             $existing = $db->fetch_array($db->simple_select('af_kb_item_kinds', '*', "kind_key='".$db->escape_string($row['kind_key'])."'", ['limit' => 1]));
             if (!$existing) {
@@ -5573,10 +5611,10 @@ function af_kb_handle_edit(): void
         }
         $entryDataJsonNormalized = af_kb_normalize_json(json_encode($entryRulesRaw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}');
 
-        $itemKind = trim((string)($metaPayload['item_kind'] ?? $mybb->get_input('item_kind')));
+        $itemKind = af_kb_normalize_item_kind((string)($metaPayload['item_kind'] ?? $mybb->get_input('item_kind')));
         if ($type === 'item') {
             if ($itemKind === '') {
-                $itemKind = 'misc';
+                $itemKind = 'gear';
             }
             $metaPayload['item_kind'] = $itemKind;
 
