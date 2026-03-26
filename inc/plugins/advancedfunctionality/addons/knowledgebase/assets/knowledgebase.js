@@ -868,6 +868,7 @@
                     input.appendChild(option);
                 });
                 input.value = value != null ? String(value) : String((def.options && def.options[0]) || '');
+                obj[def.name] = input.value;
             } else if (def.type === 'checkbox') {
                 input = document.createElement('input');
                 input.type = 'checkbox';
@@ -2384,10 +2385,29 @@
             if (uiProfile === 'item') {
                 var kind = normalizeItemKind((state.item && state.item.item_kind) || 'gear');
                 state.item.item_kind = kind;
+                var ensureSlotInOptions = function (slotValue, options) {
+                    var slot = String(slotValue || '').trim();
+                    if (!slot) return String((options && options[0]) || '');
+                    return (options || []).indexOf(slot) === -1 ? String((options && options[0]) || '') : slot;
+                };
                 if (kind === 'unique') {
                     if (!state.item.unique_role && state.item.unique_base_kind) state.item.unique_role = state.item.unique_base_kind;
                     if (!state.item.unique_role) state.item.unique_role = 'gear';
                     state.item.unique_base_kind = state.item.unique_role;
+                }
+                if (kind === 'armor') {
+                    state.item.equip.slot = ensureSlotInOptions((state.item.equip && state.item.equip.slot) || '', slotByKind.armor);
+                } else if (kind === 'weapon') {
+                    state.item.equip.slot = ensureSlotInOptions((state.item.equip && state.item.equip.slot) || '', slotByKind.weapon);
+                } else if (kind === 'augmentation') {
+                    state.item.equip.slot = '';
+                } else if (kind === 'unique') {
+                    var normalizedUniqueKind = uniqueRoleToKind[String(state.item.unique_role || '').trim().toLowerCase()] || 'gear';
+                    if (normalizedUniqueKind === 'armor' || normalizedUniqueKind === 'weapon') {
+                        state.item.equip.slot = ensureSlotInOptions((state.item.equip && state.item.equip.slot) || '', slotByKind[normalizedUniqueKind] || []);
+                    } else if (normalizedUniqueKind === 'augmentation') {
+                        state.item.equip.slot = '';
+                    }
                 }
                 var augmentationMode = (kind === 'augmentation') || String((state.item && state.item.augmentation && state.item.augmentation.slot) || '').trim() !== '' || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '';
                 var defI = [

@@ -2771,6 +2771,7 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
 
     if ($type === 'item') {
         $rulesData = af_kb_normalize_item_rules_payload($rulesData);
+        $rulesData = af_kb_validate_item_slot_requirements($rulesData, $errors);
     }
 
     // effects: по твоему ТЗ это реально “общая штука” для spell/perk и иногда item/condition
@@ -2826,6 +2827,61 @@ function af_kb_normalize_item_rules_payload(array $payload): array
     }
 
     return $payload;
+}
+
+function af_kb_validate_item_slot_requirements(array $rulesData, array &$errors): array
+{
+    $item = is_array($rulesData['item'] ?? null) ? (array)$rulesData['item'] : [];
+    $kind = af_kb_normalize_item_kind((string)($item['item_kind'] ?? ''));
+    if ($kind === '') {
+        $kind = 'gear';
+    }
+
+    $uniqueRole = af_kb_normalize_item_kind((string)($item['unique_role'] ?? $item['unique_base_kind'] ?? ''));
+    $effectiveKind = $kind;
+    if ($kind === 'unique' && $uniqueRole !== '') {
+        $effectiveKind = $uniqueRole;
+    }
+
+    $equip = is_array($item['equip'] ?? null) ? (array)$item['equip'] : [];
+    $equipSlot = strtolower(trim((string)($equip['slot'] ?? '')));
+
+    $augmentation = is_array($item['augmentation'] ?? null) ? (array)$item['augmentation'] : [];
+    $cyberware = is_array($item['cyberware'] ?? null) ? (array)$item['cyberware'] : [];
+    $augmentationSlot = trim((string)($augmentation['slot'] ?? ''));
+    if ($augmentationSlot === '') {
+        $augmentationSlot = trim((string)($cyberware['slot'] ?? ''));
+    }
+
+    if ($kind === 'augmentation' || $effectiveKind === 'augmentation') {
+        if ($equipSlot !== '') {
+            $errors[] = 'item.equip.slot: not used for augmentation';
+        }
+        if ($augmentationSlot === '') {
+            $errors[] = 'item.augmentation.slot: required for augmentation';
+        }
+    } elseif (in_array($effectiveKind, ['armor', 'weapon'], true) && $equipSlot === '') {
+        $errors[] = 'item.equip.slot: required for armor/weapon';
+    }
+
+    $item['item_kind'] = $kind;
+    if (!isset($item['equip']) || !is_array($item['equip'])) {
+        $item['equip'] = [];
+    }
+    $item['equip']['slot'] = $equipSlot;
+
+    if (!isset($item['augmentation']) || !is_array($item['augmentation'])) {
+        $item['augmentation'] = [];
+    }
+    if (!isset($item['cyberware']) || !is_array($item['cyberware'])) {
+        $item['cyberware'] = [];
+    }
+    $item['augmentation']['slot'] = $augmentationSlot;
+    $item['cyberware']['slot'] = $augmentationSlot;
+
+    $rulesData['item'] = $item;
+
+    return $rulesData;
 }
 
 function af_kb_normalize_item_entries_bulk(): array
@@ -5638,6 +5694,9 @@ function af_kb_handle_edit(): void
             }
             foreach ((array)($schema['fields'] ?? []) as $field) {
                 if (empty($field['required']) || empty($field['path'])) {
+                    continue;
+                }
+                if ((string)$field['path'] === 'item.equip.slot') {
                     continue;
                 }
                 $parts = explode('.', (string)$field['path']);
