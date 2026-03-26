@@ -143,7 +143,8 @@ function af_kb_default_item_kind_definitions(): array
         ['kind_key' => 'gear', 'title_ru' => 'Снаряжение', 'title_en' => 'Gear', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[]}', 'sortorder' => 30],
         ['kind_key' => 'consumable', 'title_ru' => 'Расходник', 'title_en' => 'Consumable', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"consumable_1","stackable":true}}}]}', 'sortorder' => 40],
         ['kind_key' => 'ammo', 'title_ru' => 'Боеприпас', 'title_en' => 'Ammo', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"ammo"}}}]}', 'sortorder' => 50],
-        ['kind_key' => 'cyberware', 'title_ru' => 'Киберимплант', 'title_en' => 'Cyberware', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[]}', 'sortorder' => 60],
+        ['kind_key' => 'augmentation', 'title_ru' => 'Аугментация', 'title_en' => 'Augmentation', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[]}', 'sortorder' => 60],
+        ['kind_key' => 'cyberware', 'title_ru' => 'Киберимплант (legacy)', 'title_en' => 'Cyberware (legacy)', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[]}', 'sortorder' => 61],
         ['kind_key' => 'artifact', 'title_ru' => 'Артефакт', 'title_en' => 'Artifact', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"artifact"}}}]}', 'sortorder' => 70],
         ['kind_key' => 'unique', 'title_ru' => 'Уникальный', 'title_en' => 'Unique', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"unique"}}}]}', 'sortorder' => 80],
     ];
@@ -1326,7 +1327,7 @@ function af_kb_get_type_profile_definition(string $typeKey): array
         'knowledge' => ['ui_profile' => 'knowledge', 'rules_enabled' => true, 'defaults' => $base + ['knowledge_group' => 'lore', 'skill' => ['rank_mode' => 'ranked', 'max_rank' => 10, 'rank_bonus' => 1, 'base_formula' => 'attribute', 'can_buy_rank' => true]]],
         'language' => ['ui_profile' => 'language', 'rules_enabled' => true, 'defaults' => $base + ['script' => '', 'rarity' => 'common', 'family' => '', 'requires' => []]],
         'spell' => ['ui_profile' => 'spell', 'rules_enabled' => true, 'defaults' => $base + ['spell' => ['rank' => 1, 'tradition' => 'arcane', 'casting_time' => '1_action', 'range' => '', 'duration' => '', 'area' => '', 'requires_check' => false, 'check_stat' => 'int', 'dc' => 0], 'effects' => []]],
-        'item' => ['ui_profile' => 'item', 'rules_enabled' => true, 'defaults' => $base + ['schema' => 'af_kb.item.v2', 'item_kind' => 'gear', 'rarity' => 'common', 'price' => 0, 'weight' => 0, 'equip' => ['slot' => '', 'armor' => ['ac_bonus' => 0, 'armor_type' => 'light']], 'cyberware' => ['slot' => '', 'grade' => '', 'humanity_cost_percent' => 0, 'modifiers' => [], 'effects' => [], 'grants' => [], 'requirements' => [], 'conflicts' => []], 'on_equip' => [], 'on_use' => [], 'requirements' => []]],
+        'item' => ['ui_profile' => 'item', 'rules_enabled' => true, 'defaults' => $base + ['schema' => 'af_kb.item.v2', 'item_kind' => 'gear', 'rarity' => 'common', 'price' => 0, 'weight' => 0, 'equip' => ['slot' => '', 'armor' => ['ac_bonus' => 0, 'armor_type' => 'light']], 'augmentation' => ['subtype' => 'cybernetic', 'slot' => '', 'grade' => '', 'humanity_cost_percent' => 0, 'modifiers' => [], 'effects' => [], 'grants' => [], 'requirements' => [], 'conflicts' => []], 'cyberware' => ['slot' => '', 'grade' => '', 'humanity_cost_percent' => 0, 'modifiers' => [], 'effects' => [], 'grants' => [], 'requirements' => [], 'conflicts' => []], 'on_equip' => [], 'on_use' => [], 'requirements' => []]],
         'condition' => ['ui_profile' => 'condition', 'rules_enabled' => true, 'defaults' => $base + ['condition' => ['severity' => 1, 'duration_default' => '', 'stacking' => 'none', 'effects' => []]]],
         'perk' => ['ui_profile' => 'perk', 'rules_enabled' => true, 'defaults' => $base + ['tier' => 1, 'level_req' => 1, 'prereq' => [], 'effects' => []]],
         'faction' => ['ui_profile' => 'faction', 'rules_enabled' => false, 'defaults' => ['meta' => []]],
@@ -2635,6 +2636,10 @@ function af_kb_item_get_humanity_cost(array $entry): float
 {
     $rules = kb_parse_rules($entry);
     $item = (array)($rules['item'] ?? []);
+    $augmentation = (array)($item['augmentation'] ?? []);
+    if (isset($augmentation['humanity_cost_percent'])) {
+        return max(0.0, min(100.0, (float)$augmentation['humanity_cost_percent']));
+    }
     $cyberware = (array)($item['cyberware'] ?? []);
     if (isset($cyberware['humanity_cost_percent'])) {
         return max(0.0, min(100.0, (float)$cyberware['humanity_cost_percent']));
@@ -2744,7 +2749,7 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
 
 function af_kb_item_root_fields(): array
 {
-    return ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'equip', 'weapon', 'ammo', 'gear', 'cyberware', 'tags', 'on_use', 'on_equip', 'requirements'];
+    return ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'equip', 'weapon', 'ammo', 'gear', 'augmentation', 'cyberware', 'tags', 'on_use', 'on_equip', 'requirements'];
 }
 
 function af_kb_normalize_item_rules_payload(array $payload): array
@@ -3938,7 +3943,8 @@ function af_kb_render_entry_ui(array $entry, array $typeRow, bool $isRu): string
         $short = af_kb_pick_text($entry, 'short');
         $rules = kb_parse_rules($entry);
         $item = (array)($rules['item'] ?? []);
-        $cyberware = (array)($item['cyberware'] ?? []);
+        $augmentation = (array)($item['augmentation'] ?? []);
+        $cyberware = $augmentation ?: (array)($item['cyberware'] ?? []);
 
         $parts = [];
         if ($short !== '') {

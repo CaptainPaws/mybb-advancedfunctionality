@@ -2406,6 +2406,7 @@ function cs_kb_rules_normalize($dataJson): array
         'immunities' => is_array($rules['immunities'] ?? null) ? array_values($rules['immunities']) : [],
         'weaknesses' => is_array($rules['weaknesses'] ?? null) ? (array)$rules['weaknesses'] : [],
         'spell' => is_array($rules['spell'] ?? null) ? (array)$rules['spell'] : [],
+        'augmentation' => is_array($rules['augmentation'] ?? null) ? (array)$rules['augmentation'] : [],
         'cyberware' => is_array($rules['cyberware'] ?? null) ? (array)$rules['cyberware'] : [],
     ];
 }

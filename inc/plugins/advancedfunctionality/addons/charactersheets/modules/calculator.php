@@ -251,17 +251,23 @@ function af_charactersheets_normalize_bonus_items(string $source, string $key): 
     if (!empty($data['rules']) && is_array($data['rules'])) {
         $items = array_merge($items, af_charactersheets_rules_to_bonus_items($data['rules'], $source, $attributes));
     }
+    $augmentation_rules = [];
+    if (!empty($raw_rules['augmentation']) && is_array($raw_rules['augmentation'])) {
+        $augmentation_rules[] = (array)$raw_rules['augmentation'];
+    }
     if (!empty($raw_rules['cyberware']) && is_array($raw_rules['cyberware'])) {
-        $cyberware = (array)$raw_rules['cyberware'];
+        $augmentation_rules[] = (array)$raw_rules['cyberware'];
+    }
+    foreach ($augmentation_rules as $augmentation) {
         foreach (['modifiers', 'effects', 'grants'] as $bucket) {
-            if (!is_array($cyberware[$bucket] ?? null)) {
+            if (!is_array($augmentation[$bucket] ?? null)) {
                 continue;
             }
             $items = array_merge($items, af_charactersheets_rules_to_bonus_items([
                 'schema' => 'af_kb.rules.v1',
-                'grants' => $bucket === 'grants' ? $cyberware[$bucket] : [],
-                'modifiers' => $bucket === 'modifiers' ? $cyberware[$bucket] : [],
-                'effects' => $bucket === 'effects' ? $cyberware[$bucket] : [],
+                'grants' => $bucket === 'grants' ? $augmentation[$bucket] : [],
+                'modifiers' => $bucket === 'modifiers' ? $augmentation[$bucket] : [],
+                'effects' => $bucket === 'effects' ? $augmentation[$bucket] : [],
             ], $source, $attributes));
         }
     }
@@ -606,9 +612,11 @@ function af_charactersheets_extract_humanity_cost_from_data(array $data): float
         $cost += (float)$data['humanity_cost'];
     }
     $item = (array)($data['item'] ?? []);
-    $cyberware = (array)($item['cyberware'] ?? []);
-    if (isset($cyberware['humanity_cost_percent'])) {
-        $cost += (float)$cyberware['humanity_cost_percent'];
+    $augmentation = (array)($item['augmentation'] ?? []);
+    if (isset($augmentation['humanity_cost_percent'])) {
+        $cost += (float)$augmentation['humanity_cost_percent'];
+    } elseif (isset($item['cyberware']) && is_array($item['cyberware']) && isset($item['cyberware']['humanity_cost_percent'])) {
+        $cost += (float)$item['cyberware']['humanity_cost_percent'];
     }
     foreach (['bonuses', 'modifiers'] as $listKey) {
         if (empty($data[$listKey]) || !is_array($data[$listKey])) {

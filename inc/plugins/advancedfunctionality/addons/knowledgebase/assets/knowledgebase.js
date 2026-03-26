@@ -709,7 +709,7 @@
         var itemKindOptionsRaw = readJson(root.getAttribute('data-item-kinds') || '[]', []);
         var itemKindOptions = (Array.isArray(itemKindOptionsRaw) && itemKindOptionsRaw.length ? itemKindOptionsRaw : [
             { value: 'weapon' }, { value: 'armor' }, { value: 'gear' }, { value: 'consumable' },
-            { value: 'ammo' }, { value: 'cyberware' }, { value: 'artifact' }, { value: 'unique' }
+            { value: 'ammo' }, { value: 'augmentation' }, { value: 'cyberware' }, { value: 'artifact' }, { value: 'unique' }
         ]).map(function (opt) {
             if (opt && typeof opt === 'object') return String(opt.value || '');
             return String(opt || '');
@@ -1094,6 +1094,7 @@
                     weapon: { damage_bonus: 0, damage_type: 'kinetic', rate_of_fire: 0, range: '', ammo_type_key: '' },
                     ammo: { ammo_type: '', damage_type: 'kinetic', damage_bonus: 0 },
                     gear: { subtype: '' },
+                    augmentation: { subtype: 'cybernetic', slot: '', grade: '', humanity_cost_percent: 0, modifiers: [], effects: [], grants: [], requirements: {}, conflicts: {} },
                     cyberware: { slot: '', grade: '', humanity_cost_percent: 0, modifiers: [], effects: [], grants: [], requirements: {}, conflicts: {} },
                     price: 0,
                     currency: 'credits',
@@ -1174,7 +1175,7 @@
                 return payload;
             }
 
-            var rootFields = ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'equip', 'weapon', 'ammo', 'gear', 'cyberware', 'tags', 'on_use', 'on_equip', 'requirements'];
+            var rootFields = ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'equip', 'weapon', 'ammo', 'gear', 'augmentation', 'cyberware', 'tags', 'on_use', 'on_equip', 'requirements'];
             var hasItem = payload.item && typeof payload.item === 'object' && !Array.isArray(payload.item);
 
             if (!hasItem) {
@@ -1429,6 +1430,19 @@
             if (state.item.ammo.damage_bonus == null) state.item.ammo.damage_bonus = 0;
             if (!state.item.gear || typeof state.item.gear !== 'object') state.item.gear = {};
             if (!state.item.gear.subtype) state.item.gear.subtype = '';
+            if (!state.item.augmentation || typeof state.item.augmentation !== 'object') state.item.augmentation = {};
+            if ((!state.item.augmentation.slot || !state.item.augmentation.grade) && state.item.cyberware && typeof state.item.cyberware === 'object') {
+                state.item.augmentation = deepMerge(state.item.cyberware, state.item.augmentation);
+            }
+            if (!state.item.augmentation.subtype) state.item.augmentation.subtype = 'cybernetic';
+            if (!state.item.augmentation.slot) state.item.augmentation.slot = '';
+            if (!state.item.augmentation.grade) state.item.augmentation.grade = '';
+            if (state.item.augmentation.humanity_cost_percent == null) state.item.augmentation.humanity_cost_percent = 0;
+            if (!Array.isArray(state.item.augmentation.modifiers)) state.item.augmentation.modifiers = [];
+            if (!Array.isArray(state.item.augmentation.effects)) state.item.augmentation.effects = [];
+            if (!Array.isArray(state.item.augmentation.grants)) state.item.augmentation.grants = [];
+            if (!state.item.augmentation.requirements || typeof state.item.augmentation.requirements !== 'object') state.item.augmentation.requirements = {};
+            if (!state.item.augmentation.conflicts || typeof state.item.augmentation.conflicts !== 'object') state.item.augmentation.conflicts = {};
             if (!state.item.cyberware || typeof state.item.cyberware !== 'object') state.item.cyberware = {};
             if (!state.item.cyberware.slot) state.item.cyberware.slot = '';
             if (!state.item.cyberware.grade) state.item.cyberware.grade = '';
@@ -1755,13 +1769,13 @@
                     errors.push('item.rarity: unsupported value');
                 }
                 var kind = String((state.item && state.item.item_kind) || 'gear').toLowerCase();
-                var cyberwareMode = (kind === 'cyberware') || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '';
+                var augmentationMode = (kind === 'augmentation' || kind === 'cyberware') || String((state.item && state.item.augmentation && state.item.augmentation.slot) || '').trim() !== '' || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '';
                 var equipSlot = String((state.item && state.item.equip && state.item.equip.slot) || '').trim().toLowerCase();
                 var allowed = slotByKind[kind] || [''];
-                if (kind === 'cyberware') {
-                    if (equipSlot) errors.push('item.equip.slot: not used for cyberware');
-                    if (!String((state.item.cyberware && state.item.cyberware.slot) || '').trim()) {
-                        errors.push('item.cyberware.slot: required for cyberware');
+                if (kind === 'augmentation' || kind === 'cyberware') {
+                    if (equipSlot) errors.push('item.equip.slot: not used for augmentation');
+                    if (!String((state.item.augmentation && state.item.augmentation.slot) || (state.item.cyberware && state.item.cyberware.slot) || '').trim()) {
+                        errors.push('item.augmentation.slot: required for augmentation');
                     }
                 } else if (equipSlot && allowed.indexOf(equipSlot) === -1) {
                     errors.push('item.equip.slot: incompatible with item_kind=' + kind);
@@ -1769,10 +1783,10 @@
                 if ((kind === 'armor' || kind === 'weapon') && !equipSlot) {
                     errors.push('item.equip.slot: required for armor/weapon');
                 }
-                if (kind === 'cyberware' || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '') {
-                    var humanityCost = numberOrZero((state.item.cyberware && state.item.cyberware.humanity_cost_percent) || 0);
+                if (augmentationMode) {
+                    var humanityCost = numberOrZero(((state.item.augmentation && state.item.augmentation.humanity_cost_percent) != null ? state.item.augmentation.humanity_cost_percent : ((state.item.cyberware && state.item.cyberware.humanity_cost_percent) || 0)));
                     if (humanityCost < 0 || humanityCost > 100) {
-                        errors.push('item.cyberware.humanity_cost_percent: range 0..100');
+                        errors.push('item.augmentation.humanity_cost_percent: range 0..100');
                     }
                 }
             }
@@ -1905,15 +1919,19 @@
                 itemOut.ammo.damage_bonus = numberOrZero(itemOut.ammo.damage_bonus != null ? itemOut.ammo.damage_bonus : 0);
                 itemOut.gear = (it.gear && typeof it.gear === 'object') ? it.gear : {};
                 itemOut.gear.subtype = String(itemOut.gear.subtype || '');
-                itemOut.cyberware = (it.cyberware && typeof it.cyberware === 'object') ? it.cyberware : {};
-                itemOut.cyberware.slot = String(itemOut.cyberware.slot || '');
-                itemOut.cyberware.grade = String(itemOut.cyberware.grade || '');
-                itemOut.cyberware.humanity_cost_percent = Math.max(0, Math.min(100, numberOrZero(itemOut.cyberware.humanity_cost_percent != null ? itemOut.cyberware.humanity_cost_percent : 0)));
-                itemOut.cyberware.modifiers = Array.isArray(itemOut.cyberware.modifiers) ? itemOut.cyberware.modifiers.filter(function (row) { return row && row.type; }) : [];
-                itemOut.cyberware.effects = Array.isArray(itemOut.cyberware.effects) ? itemOut.cyberware.effects.filter(function (row) { return row && row.event && row.effect_type; }) : [];
-                itemOut.cyberware.grants = Array.isArray(itemOut.cyberware.grants) ? itemOut.cyberware.grants.filter(function (row) { return row && row.grant_type; }) : [];
-                itemOut.cyberware.requirements = (itemOut.cyberware.requirements && typeof itemOut.cyberware.requirements === 'object') ? itemOut.cyberware.requirements : {};
-                itemOut.cyberware.conflicts = (itemOut.cyberware.conflicts && typeof itemOut.cyberware.conflicts === 'object') ? itemOut.cyberware.conflicts : {};
+                var augmentationRaw = (it.augmentation && typeof it.augmentation === 'object') ? it.augmentation : ((it.cyberware && typeof it.cyberware === 'object') ? it.cyberware : {});
+                itemOut.augmentation = deepClone(augmentationRaw || {});
+                itemOut.augmentation.subtype = String(itemOut.augmentation.subtype || (itemOut.item_kind === 'cyberware' ? 'cybernetic' : ''));
+                itemOut.augmentation.slot = String(itemOut.augmentation.slot || '');
+                itemOut.augmentation.grade = String(itemOut.augmentation.grade || '');
+                itemOut.augmentation.humanity_cost_percent = Math.max(0, Math.min(100, numberOrZero(itemOut.augmentation.humanity_cost_percent != null ? itemOut.augmentation.humanity_cost_percent : 0)));
+                itemOut.augmentation.modifiers = Array.isArray(itemOut.augmentation.modifiers) ? itemOut.augmentation.modifiers.filter(function (row) { return row && row.type; }) : [];
+                itemOut.augmentation.effects = Array.isArray(itemOut.augmentation.effects) ? itemOut.augmentation.effects.filter(function (row) { return row && row.event && row.effect_type; }) : [];
+                itemOut.augmentation.grants = Array.isArray(itemOut.augmentation.grants) ? itemOut.augmentation.grants.filter(function (row) { return row && row.grant_type; }) : [];
+                itemOut.augmentation.requirements = (itemOut.augmentation.requirements && typeof itemOut.augmentation.requirements === 'object') ? itemOut.augmentation.requirements : {};
+                itemOut.augmentation.conflicts = (itemOut.augmentation.conflicts && typeof itemOut.augmentation.conflicts === 'object') ? itemOut.augmentation.conflicts : {};
+                itemOut.cyberware = deepClone(itemOut.augmentation);
+                if (itemOut.item_kind === 'cyberware') itemOut.item_kind = 'augmentation';
                 itemOut.price = numberOrZero(it.price != null ? it.price : 0);
                 itemOut.currency = String(it.currency || 'credits');
                 itemOut.weight = numberOrZero(it.weight != null ? it.weight : 0);
@@ -2333,7 +2351,7 @@
 
             if (uiProfile === 'item') {
                 var kind = String((state.item && state.item.item_kind) || 'gear').toLowerCase();
-                var cyberwareMode = (kind === 'cyberware') || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '';
+                var augmentationMode = (kind === 'augmentation' || kind === 'cyberware') || String((state.item && state.item.augmentation && state.item.augmentation.slot) || '').trim() !== '' || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '';
                 var defI = [
                     { name: 'item_kind', label: 'Тип предмета', type: 'select', options: itemKindOptions },
                     { name: 'rarity', label: 'Редкость', type: 'select', options: ['common', 'uncommon', 'rare', 'unique', 'illegal', 'restricted', 'legendary', 'mythic'] },
@@ -2374,16 +2392,17 @@
                 } else if (kind === 'gear') {
                     equipGrid.appendChild(createInput({ name: 'subtype', label: 'Gear subtype', type: 'select', options: ['', 'cyberdeck', 'scanner', 'drone', 'medkit', 'toolkit', 'jammer', 'cloak', 'hacking_module'] }, state.item.gear, syncRawDebounced));
                     equipGrid.appendChild(createInput({ name: 'slot', label: 'Слот экипировки', type: 'select', options: slotByKind.gear }, state.item.equip, syncRawDebounced));
-                } else if (cyberwareMode) {
-                    equipGrid.appendChild(createInput({ name: 'slot', label: 'Cyberware slot', type: 'select', options: ['', 'nervous_system', 'circulatory_system', 'immune_system', 'integumentary_system', 'operating_system', 'skeleton', 'arms', 'hands', 'legs', 'eyes', 'frontal_cortex', 'cyberaudio'] }, state.item.cyberware, syncRawDebounced));
-                    equipGrid.appendChild(createInput({ name: 'grade', label: 'Cyberware grade', type: 'text' }, state.item.cyberware, syncRawDebounced));
-                    equipGrid.appendChild(createInput({ name: 'humanity_cost_percent', label: 'Humanity cost / Влияние на человечность (%)', type: 'number', hint: 'При надевании уменьшает человечность на X%' }, state.item.cyberware, syncRawDebounced));
+                } else if (augmentationMode) {
+                    equipGrid.appendChild(createInput({ name: 'subtype', label: 'Augmentation subtype', type: 'select', options: ['', 'cybernetic', 'biomechanical', 'symbiotic'] }, state.item.augmentation, syncRawDebounced));
+                    equipGrid.appendChild(createInput({ name: 'slot', label: 'Augmentation slot', type: 'select', options: ['', 'nervous_system', 'circulatory_system', 'immune_system', 'integumentary_system', 'operating_system', 'skeleton', 'arms', 'hands', 'legs', 'eyes', 'frontal_cortex', 'cyberaudio'] }, state.item.augmentation, syncRawDebounced));
+                    equipGrid.appendChild(createInput({ name: 'grade', label: 'Augmentation grade', type: 'text' }, state.item.augmentation, syncRawDebounced));
+                    equipGrid.appendChild(createInput({ name: 'humanity_cost_percent', label: 'Humanity cost / Влияние на человечность (%)', type: 'number', hint: 'При надевании уменьшает человечность на X%' }, state.item.augmentation, syncRawDebounced));
                 } else if (kind === 'artifact' || kind === 'unique') {
                     equipGrid.appendChild(createInput({ name: 'slot', label: 'Слот экипировки', type: 'select', options: slotByKind[kind] }, state.item.equip, syncRawDebounced));
                 }
                 fields.profileFields.appendChild(equipGrid);
                 var currentSlot = String((state.item.equip && state.item.equip.slot) || '');
-                if (!cyberwareMode && currentSlot && (slotByKind[kind] || ['']).indexOf(currentSlot) === -1) {
+                if (!augmentationMode && currentSlot && (slotByKind[kind] || ['']).indexOf(currentSlot) === -1) {
                     fields.profileFields.insertAdjacentHTML('beforeend', '<div class="af-kb-help">⚠ Несовместимый slot для item_kind: ' + esc(currentSlot) + '</div>');
                 }
 
@@ -2463,10 +2482,10 @@
 
                 fields.profileLists.appendChild(equipBox);
 
-                if (cyberwareMode) {
+                if (augmentationMode) {
                     var cyberBox = document.createElement('div');
                     cyberBox.className = 'af-kb-rule-card';
-                    cyberBox.innerHTML = '<div class="af-kb-rule-card__title"><strong>Cyberware → Effects</strong></div>';
+                    cyberBox.innerHTML = '<div class="af-kb-rule-card__title"><strong>Augmentation → Effects</strong></div>';
 
                     var modifierFieldsCyber = [
                         { name: 'type', label: 'Type', type: 'select', options: ['attribute_bonus_str','attribute_bonus_dex','attribute_bonus_con','attribute_bonus_int','attribute_bonus_wis','attribute_bonus_cha','hp_max','hp_regen_flat','hp_regen_percent','stamina_max','stamina_regen','energy_max','energy_regen','armor_flat','armor_percent','evasion','mitigation_chance','mitigation_strength','speed_flat','speed_percent','jump_height','dash_cost_reduction','carry_capacity','loot_radius','interaction_range','perception','detection_range','enemy_visibility_reduction','crit_chance','crit_damage','accuracy','ads_speed','recoil_reduction','spread_reduction','reload_speed','damage_percent','damage_melee_percent','damage_ranged_percent','headshot_damage_percent','stealth_damage_percent','damage_fire_percent','damage_electric_percent','damage_chemical_percent','resist_fire','resist_electric','resist_chemical','resist_poison','resist_bleed','dot_damage_percent','dot_resist_percent','attack_speed','block_efficiency','parry_window','ram_max','ram_recovery_rate','quickhack_damage_percent','quickhack_upload_speed','quickhack_crit_chance','quickhack_crit_damage','cyberware_cooldown_reduction','ability_cooldown_reduction','scan_speed','ice_resistance','trace_time_increase'] },
@@ -2490,22 +2509,22 @@
                     var modsWrap = document.createElement('div');
                     modsWrap.className = 'af-kb-rule-card';
                     cyberBox.appendChild(modsWrap);
-                    renderObjectList(modsWrap, state.item.cyberware.modifiers, 'Modifiers', modifierFieldsCyber, syncRawDebounced, { type: '', value: 0, unit: '', scope: 'while_equipped' });
+                    renderObjectList(modsWrap, state.item.augmentation.modifiers, 'Modifiers', modifierFieldsCyber, syncRawDebounced, { type: '', value: 0, unit: '', scope: 'while_equipped' });
 
                     var fxWrap = document.createElement('div');
                     fxWrap.className = 'af-kb-rule-card';
                     cyberBox.appendChild(fxWrap);
-                    renderObjectList(fxWrap, state.item.cyberware.effects, 'Effects', effectsFieldsCyber, syncRawDebounced, { event: 'on_kill', effect_type: 'reduce_cooldown', chance: 0, cooldown_sec: 0, params: {} });
+                    renderObjectList(fxWrap, state.item.augmentation.effects, 'Effects', effectsFieldsCyber, syncRawDebounced, { event: 'on_kill', effect_type: 'reduce_cooldown', chance: 0, cooldown_sec: 0, params: {} });
 
                     var grantsWrap = document.createElement('div');
                     grantsWrap.className = 'af-kb-rule-card';
                     cyberBox.appendChild(grantsWrap);
-                    renderObjectList(grantsWrap, state.item.cyberware.grants, 'Grants', grantsFieldsCyber, syncRawDebounced, { grant_type: 'perk', target: '', value: 0 });
+                    renderObjectList(grantsWrap, state.item.augmentation.grants, 'Grants', grantsFieldsCyber, syncRawDebounced, { grant_type: 'perk', target: '', value: 0 });
 
                     var reqConflictRow = document.createElement('div');
                     reqConflictRow.className = 'af-kb-row';
-                    reqConflictRow.appendChild(createInput({ name: 'requirements', label: 'Requirements & limits', type: 'json' }, state.item.cyberware, syncRawDebounced));
-                    reqConflictRow.appendChild(createInput({ name: 'conflicts', label: 'Conflicts', type: 'json' }, state.item.cyberware, syncRawDebounced));
+                    reqConflictRow.appendChild(createInput({ name: 'requirements', label: 'Requirements & limits', type: 'json' }, state.item.augmentation, syncRawDebounced));
+                    reqConflictRow.appendChild(createInput({ name: 'conflicts', label: 'Conflicts', type: 'json' }, state.item.augmentation, syncRawDebounced));
                     cyberBox.appendChild(reqConflictRow);
 
                     fields.profileLists.appendChild(cyberBox);
