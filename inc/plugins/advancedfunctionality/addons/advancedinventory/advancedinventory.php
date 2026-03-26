@@ -3117,23 +3117,24 @@ function af_inv_map_legacy_support_slot(string $slot): string
 function af_inv_equipment_slots(): array
 {
     return [
-        'head' => 'Head',
-        'body' => 'Body',
-        'hands' => 'Hands',
-        'legs' => 'Legs',
-        'feet' => 'Feet',
-        'back' => 'Back',
-        'belt' => 'Belt',
-        'weapon_mainhand' => 'Main hand',
-        'weapon_offhand' => 'Off hand',
-        'weapon_twohand' => 'Two-hand',
-        'weapon_melee' => 'Melee',
-        'weapon_ranged' => 'Ranged',
-        'ammo' => 'Ammo',
-        'ammo_pouch' => 'Ammo pouch',
-        'gear' => 'Gear',
-        'accessory' => 'Accessory',
-        'artifact' => 'Artifact',
+        'head' => 'Голова',
+        'body' => 'Тело',
+        'hands' => 'Руки',
+        'legs' => 'Ноги',
+        'feet' => 'Ступни',
+        'back' => 'Спина',
+        'belt' => 'Пояс',
+        'weapon_mainhand' => 'Основная рука',
+        'weapon_offhand' => 'Вторая рука',
+        'weapon_twohand' => 'Двуручное',
+        'weapon_melee' => 'Ближний бой',
+        'weapon_ranged' => 'Дальний бой',
+        'ammo' => 'Боеприпасы',
+        'ammo_pouch' => 'Подсумок',
+        'gear' => 'Снаряжение',
+        'accessory_1' => 'Аксессуар 1',
+        'accessory_2' => 'Аксессуар 2',
+        'artifact' => 'Артефакт',
     ] + af_inv_support_slot_labels();
 }
 
@@ -3210,6 +3211,16 @@ function af_inv_candidate_slots_for_item(array $item): array
             return;
         }
 
+        if ($slot === 'accessory') {
+            if (isset($knownSlots['accessory_1'])) {
+                $result['accessory_1'] = 'accessory_1';
+            }
+            if (isset($knownSlots['accessory_2'])) {
+                $result['accessory_2'] = 'accessory_2';
+            }
+            return;
+        }
+
         $aliases = [
             'mainhand'      => 'weapon_mainhand',
             'main_hand'     => 'weapon_mainhand',
@@ -3223,6 +3234,8 @@ function af_inv_candidate_slots_for_item(array $item): array
             'legs'          => 'legs',
             'feet'          => 'feet',
             'artifact'      => 'artifact',
+            'accessory_1'   => 'accessory_1',
+            'accessory_2'   => 'accessory_2',
             'consumable'    => 'support_1',
             'consumable_1'  => 'support_1',
             'consumable_2'  => 'support_2',
@@ -3282,6 +3295,7 @@ function af_inv_candidate_slots_for_item(array $item): array
                     'armor' => ['body', 'head', 'hands', 'legs', 'feet', 'back', 'belt'],
                     'artifact' => ['artifact'],
                     'gear' => ['gear', 'accessory'],
+                    'accessory' => ['accessory_1', 'accessory_2'],
                     'ammo' => ['ammo'],
                     'consumable' => ['support_1', 'support_2', 'support_3'],
                 ];
@@ -3311,6 +3325,12 @@ function af_inv_candidate_slots_for_item(array $item): array
             $pushSlot('body');
             break;
 
+        case 'gear':
+            $pushSlot('gear');
+            $pushSlot('accessory_1');
+            $pushSlot('accessory_2');
+            break;
+
         case 'ammo':
             $pushSlot('ammo');
             break;
@@ -3334,10 +3354,9 @@ function af_advinv_export_charactersheet_equipment_state(int $uid): array
     $items = [];
     $equipped = [];
     $groups = [
-        'armor' => ['title' => 'Броня', 'slots' => []],
+        'armor' => ['title' => 'Броня и экипировка', 'slots' => []],
         'weapon' => ['title' => 'Оружие', 'slots' => []],
-        'ammo' => ['title' => 'Боеприпасы', 'slots' => []],
-        'support' => ['title' => 'Поддержка', 'slots' => []],
+        'support' => ['title' => 'Быстрые слоты', 'slots' => []],
     ];
 
     if ($uid <= 0) {
@@ -3434,11 +3453,17 @@ function af_advinv_export_charactersheet_equipment_state(int $uid): array
         ];
     }
 
+    $armorSlots = ['head', 'body', 'back', 'hands', 'legs', 'feet', 'belt', 'artifact', 'accessory_1', 'accessory_2', 'gear'];
+    $weaponSlots = ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_melee', 'weapon_ranged', 'ammo', 'ammo_pouch'];
     foreach ($equipped as $slotCode => $slotItem) {
-        $groupKey = (string)($slotItem['group'] ?? 'support');
-        if (!isset($groups[$groupKey])) {
-            $groups[$groupKey] = ['title' => ucfirst($groupKey), 'slots' => []];
+        $slotCode = (string)$slotCode;
+        $groupKey = 'support';
+        if (in_array($slotCode, $armorSlots, true)) {
+            $groupKey = 'armor';
+        } elseif (in_array($slotCode, $weaponSlots, true)) {
+            $groupKey = 'weapon';
         }
+        $slotItem['group'] = $groupKey;
         $groups[$groupKey]['slots'][$slotCode] = $slotItem;
     }
 

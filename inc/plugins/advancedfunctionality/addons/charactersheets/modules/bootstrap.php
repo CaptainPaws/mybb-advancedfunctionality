@@ -3636,6 +3636,7 @@ function af_charactersheets_default_build(): array
         'equipment' => [
             'slots' => $equipment_slots,
             'owned' => [],
+            'active_weapon_slot' => '',
         ],
     ];
 }
@@ -3743,6 +3744,7 @@ function af_charactersheets_normalize_build(array $build): array
     $equipment_slots = array_merge($equipment_defaults, (array)($build['equipment']['slots'] ?? []));
     $build['equipment']['slots'] = $equipment_slots;
     $build['equipment']['owned'] = array_values(array_filter((array)($build['equipment']['owned'] ?? []), 'is_array'));
+    $build['equipment']['active_weapon_slot'] = (string)($build['equipment']['active_weapon_slot'] ?? '');
 
     return $build;
 }

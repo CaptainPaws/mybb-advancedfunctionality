@@ -456,6 +456,8 @@ function af_charactersheets_collect_bonus_items(array $kb_sources): array
 function af_charactersheets_collect_build_bonus_items(array $build, int $uid = 0): array
 {
     $items = [];
+    $activeWeaponSlot = (string)((array)($build['equipment'] ?? [])['active_weapon_slot'] ?? '');
+    $weaponSlots = ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_melee', 'weapon_ranged'];
 
     $abilities = (array)($build['abilities'] ?? []);
     foreach ((array)($abilities['owned'] ?? []) as $ability) {
@@ -495,13 +497,29 @@ function af_charactersheets_collect_build_bonus_items(array $build, int $uid = 0
     $equipmentState = $uid > 0 && function_exists('af_advinv_export_charactersheet_equipment_state')
         ? af_advinv_export_charactersheet_equipment_state($uid)
         : [];
+    if ($activeWeaponSlot === '' && is_array($equipmentState['equipped'] ?? null)) {
+        foreach ($weaponSlots as $weaponSlotCode) {
+            if (!empty((array)($equipmentState['equipped'][$weaponSlotCode] ?? []))) {
+                $activeWeaponSlot = $weaponSlotCode;
+                break;
+            }
+        }
+    }
     foreach ((array)($equipmentState['equipped'] ?? []) as $slotItem) {
         $type = (string)($slotItem['kb_type'] ?? '');
         $key = (string)($slotItem['kb_key'] ?? '');
         if ($type === '' || $key === '') {
             continue;
         }
-        $items = array_merge($items, af_charactersheets_normalize_bonus_items($type, $key));
+        $normalized = af_charactersheets_normalize_bonus_items($type, $key);
+        $slotCode = (string)($slotItem['slot'] ?? '');
+        $isWeapon = in_array($slotCode, $weaponSlots, true) || (string)($slotItem['subtype'] ?? '') === 'weapon';
+        if ($isWeapon && $activeWeaponSlot !== '' && $slotCode !== $activeWeaponSlot) {
+            $normalized = array_values(array_filter($normalized, static function (array $bonusRow): bool {
+                return (string)($bonusRow['type'] ?? '') !== 'weapon_bonus';
+            }));
+        }
+        $items = array_merge($items, $normalized);
     }
 
     return $items;

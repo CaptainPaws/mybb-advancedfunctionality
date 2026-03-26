@@ -1780,10 +1780,12 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
         : ['items' => [], 'groups' => [], 'equipped' => []];
 
     $slot_labels = af_inv_equipment_slots();
+    $active_weapon_slot = (string)((array)($build['equipment'] ?? [])['active_weapon_slot'] ?? '');
+    $weapon_slots = ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_melee', 'weapon_ranged'];
     $slot_order = [
-        'head', 'body', 'back', 'hands', 'legs', 'feet', 'belt',
+        'head', 'body', 'back', 'hands', 'legs', 'feet', 'belt', 'artifact', 'accessory_1', 'accessory_2',
         'weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_melee', 'weapon_ranged',
-        'ammo', 'ammo_pouch', 'artifact', 'gear', 'accessory',
+        'ammo', 'ammo_pouch', 'gear',
         'support_1', 'support_2', 'support_3',
     ];
 
@@ -1797,7 +1799,7 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
     $all_slots = array_values(array_unique(array_merge($slot_order, array_keys($all_slots))));
 
     $equipped_map = (array)($state['equipped'] ?? []);
-    $preview_slots = [];
+    $preview_slots_map = [];
     foreach ($all_slots as $slot_code) {
         $slot_code = (string)$slot_code;
         $slot_item = (array)($equipped_map[$slot_code] ?? []);
@@ -1812,7 +1814,9 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
             ? af_charactersheets_kb_get_entry((string)($slot_item['kb_type'] ?? ''), (string)($slot_item['kb_key'] ?? ''))
             : [];
         $bonus_html = $entry ? af_charactersheets_kb_get_block_html($entry, 'bonuses') : '';
-        $preview_slots[] = '<button type="button" class="af-cs-slot af-cs-slot--equipment' . ($item_id > 0 ? ' is-filled' : '') . '"'
+        $is_weapon_slot = in_array($slot_code, $weapon_slots, true);
+        $is_active_weapon = $is_weapon_slot && $item_id > 0 && $slot_code === $active_weapon_slot;
+        $slot_markup = '<button type="button" class="af-cs-slot af-cs-slot--equipment' . ($item_id > 0 ? ' is-filled' : '') . '"'
             . ' data-afcs-equipment-slot-dot="1"'
             . ' data-afcs-equipment-slot="' . htmlspecialchars_uni($slot_code) . '"'
             . ' data-afcs-equipment-preview-item-id="' . $item_id . '"'
@@ -1823,12 +1827,15 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
             . ' data-afcs-equipment-popover-slot="' . htmlspecialchars_uni($slot_label) . '"'
             . ' data-afcs-equipment-popover-stats="' . htmlspecialchars_uni(strip_tags($bonus_html)) . '"'
             . ' data-afcs-equipment-popover-icon="' . htmlspecialchars_uni($icon) . '"'
+            . ($is_weapon_slot ? ' data-afcs-equipment-popover-can-set-active="1"' : '')
+            . ($is_active_weapon ? ' data-afcs-equipment-popover-is-active-weapon="1"' : '')
             . ($can_edit && $item_id > 0 ? ' draggable="true" data-afcs-equipment-draggable="equipped" data-afcs-equipment-item-id="' . $item_id . '"' : '')
             . '>'
             . '<span class="af-cs-slot__icon">' . $icon_html . '</span>'
             . '<span class="af-cs-slot__label">' . htmlspecialchars_uni($slot_label) . '</span>'
             . '<span class="af-cs-slot__item">' . htmlspecialchars_uni($item_id > 0 ? $item_title : 'Пусто') . '</span>'
             . '</button>';
+        $preview_slots_map[$slot_code] = $slot_markup;
     }
 
     $preview_cards = [];
@@ -1881,16 +1888,43 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
         $preview_cards[] = '<div class="af-cs-muted">Подходящая экипировка не найдена.</div>';
     }
 
+    $group_slots = [
+        'armor' => ['head', 'body', 'back', 'hands', 'legs', 'feet', 'belt', 'artifact', 'accessory_1', 'accessory_2'],
+        'weapon' => ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_melee', 'weapon_ranged', 'ammo', 'ammo_pouch'],
+        'support' => ['support_1', 'support_2', 'support_3'],
+    ];
+    $group_titles = [
+        'armor' => 'Броня и экипировка',
+        'weapon' => 'Оружие',
+        'support' => 'Быстрые слоты',
+    ];
+    $slots_grouped_html = [];
+    foreach ($group_slots as $group_key => $group_slot_codes) {
+        $group_cards = [];
+        foreach ($group_slot_codes as $slot_code) {
+            if (isset($preview_slots_map[$slot_code])) {
+                $group_cards[] = $preview_slots_map[$slot_code];
+            }
+        }
+        if (!$group_cards) {
+            continue;
+        }
+        $slots_grouped_html[] = '<section class="af-cs-equipment-slots-group" data-afcs-equipment-group="' . htmlspecialchars_uni($group_key) . '">'
+            . '<h4 class="af-cs-panel-title af-cs-panel-title--small">' . htmlspecialchars_uni((string)($group_titles[$group_key] ?? $group_key)) . '</h4>'
+            . '<div class="af-cs-equipment-slot-grid">' . implode('', $group_cards) . '</div>'
+            . '</section>';
+    }
+
     $equipment_html = '<div class="af-cs-augmentations-ui af-cs-equipment-ui" data-afcs-equipment-root="1">'
         . '<div class="af-cs-augmentations-column">'
         . '<div class="af-cs-panel-title">Инвентарь экипировки</div>'
         . '<div class="af-cs-equipment-filters">'
-            . '<button type="button" class="af-cs-tab-btn is-active" data-afcs-equipment-filter="all">All</button>'
-            . '<button type="button" class="af-cs-tab-btn" data-afcs-equipment-filter="armor">Armor</button>'
-            . '<button type="button" class="af-cs-tab-btn" data-afcs-equipment-filter="weapon">Weapon</button>'
-            . '<button type="button" class="af-cs-tab-btn" data-afcs-equipment-filter="ammo">Ammo</button>'
-            . '<button type="button" class="af-cs-tab-btn" data-afcs-equipment-filter="consumable">Consumables</button>'
-            . '<button type="button" class="af-cs-tab-btn" data-afcs-equipment-filter="gear">Gear/Accessory</button>'
+            . '<button type="button" class="af-cs-tab-btn is-active" data-afcs-equipment-filter="all">Все</button>'
+            . '<button type="button" class="af-cs-tab-btn" data-afcs-equipment-filter="armor">Броня</button>'
+            . '<button type="button" class="af-cs-tab-btn" data-afcs-equipment-filter="weapon">Оружие</button>'
+            . '<button type="button" class="af-cs-tab-btn" data-afcs-equipment-filter="ammo">Боеприпасы</button>'
+            . '<button type="button" class="af-cs-tab-btn" data-afcs-equipment-filter="consumable">Расходники</button>'
+            . '<button type="button" class="af-cs-tab-btn" data-afcs-equipment-filter="gear">Снаряжение / аксессуары</button>'
         . '</div>'
         . '<div class="af-cs-equipment-unequip-zone" data-afcs-equipment-unequip-zone="1">Перетащите сюда, чтобы снять</div>'
         . '<div class="af-cs-augmentations-list af-cs-equipment-cards-grid">' . implode('', $preview_cards) . '</div>'
@@ -1898,7 +1932,7 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
         . '<div class="af-cs-augmentations-column">'
         . '<div class="af-cs-panel-title">Слоты экипировки</div>'
         . '<div class="af-cs-equipment-preview" data-afcs-equipment-preview-root="1">'
-            . '<div class="af-cs-equipment-slot-grid">' . implode('', $preview_slots) . '</div>'
+            . implode('', $slots_grouped_html)
         . '</div>'
         . '</div>'
         . '<div class="af-cs-equip-popover" data-afcs-equipment-popover="1" hidden></div>'
