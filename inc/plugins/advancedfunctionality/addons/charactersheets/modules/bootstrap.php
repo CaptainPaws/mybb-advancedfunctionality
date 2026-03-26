@@ -3450,38 +3450,97 @@ function af_charactersheets_get_kb_entries_by_type(string $type): array
 
 function af_charactersheets_get_augmentation_slots(): array
 {
-    global $mybb;
-
-    $raw = (string)($mybb->settings['af_charactersheets_aug_slots_json'] ?? '');
-    $slots = af_charactersheets_json_decode($raw);
-    if (!is_array($slots)) {
-        $slots = [];
-    }
+    global $mybb, $db;
 
     $normalized = [];
-    foreach ($slots as $slot) {
-        if (!is_array($slot)) {
-            continue;
-        }
-        $key = trim((string)($slot['slot_key'] ?? $slot['key'] ?? ''));
-        if ($key === '') {
-            continue;
-        }
-        $title_ru = (string)($slot['title_ru'] ?? $slot['title'] ?? '');
-        $title_en = (string)($slot['title_en'] ?? $slot['title'] ?? '');
-        $title = af_charactersheets_is_ru() ? $title_ru : $title_en;
-        if ($title === '') {
-            $title = $title_ru !== '' ? $title_ru : ($title_en !== '' ? $title_en : $key);
-        }
-        $normalized[$key] = [
-            'slot_key' => $key,
-            'title' => $title,
-            'title_ru' => $title_ru,
-            'title_en' => $title_en,
-            'icon' => (string)($slot['icon'] ?? ''),
-            'sortorder' => (int)($slot['sortorder'] ?? $slot['sort_order'] ?? 0),
-            'max_equipped' => max(1, (int)($slot['max_equipped'] ?? 1)),
+
+    if ($db->table_exists('af_kb_types')) {
+        $candidate_types = [
+            'augmentation_slot',
+            'augmentation_slots',
+            'augment_slot',
+            'augment_slots',
+            'cyberware_slot',
+            'cyberware_slots',
+            'augmentation slot',
+            'augmentation slots',
         ];
+        $q = $db->simple_select('af_kb_types', 'type,type_key', "(LOWER(type) LIKE '%augment%' AND LOWER(type) LIKE '%slot%') OR (LOWER(type_key) LIKE '%augment%' AND LOWER(type_key) LIKE '%slot%')");
+        while ($row = $db->fetch_array($q)) {
+            $type = trim((string)($row['type'] ?? ''));
+            $type_key = trim((string)($row['type_key'] ?? ''));
+            if ($type !== '') {
+                $candidate_types[] = $type;
+            }
+            if ($type_key !== '') {
+                $candidate_types[] = $type_key;
+            }
+        }
+
+        foreach (array_values(array_unique($candidate_types)) as $candidate_type) {
+            $entries = af_charactersheets_kb_get_resolved_by_type((string)$candidate_type);
+            foreach ($entries as $entry) {
+                $entry_row = (array)($entry['entry'] ?? []);
+                $meta = (array)($entry['meta'] ?? []);
+                $data = (array)($entry['data'] ?? []);
+                $key = trim((string)($meta['slot_key'] ?? $data['slot_key'] ?? $entry['key'] ?? ''));
+                if ($key === '') {
+                    continue;
+                }
+                $title_ru = (string)($entry_row['title_ru'] ?? $meta['title_ru'] ?? $data['title_ru'] ?? '');
+                $title_en = (string)($entry_row['title_en'] ?? $meta['title_en'] ?? $data['title_en'] ?? '');
+                if ($title_ru === '' && $title_en === '') {
+                    $title_common = (string)($entry['title'] ?? $meta['title'] ?? $data['title'] ?? '');
+                    $title_ru = $title_common;
+                    $title_en = $title_common;
+                }
+                $title = af_charactersheets_is_ru() ? $title_ru : $title_en;
+                if ($title === '') {
+                    $title = $title_ru !== '' ? $title_ru : ($title_en !== '' ? $title_en : $key);
+                }
+                $normalized[$key] = [
+                    'slot_key' => $key,
+                    'title' => $title,
+                    'title_ru' => $title_ru,
+                    'title_en' => $title_en,
+                    'icon' => (string)($meta['icon'] ?? $meta['icon_class'] ?? $entry_row['icon_class'] ?? ''),
+                    'sortorder' => (int)($meta['sortorder'] ?? $meta['sort_order'] ?? $entry_row['sortorder'] ?? 0),
+                    'max_equipped' => max(1, (int)($meta['max_equipped'] ?? $data['max_equipped'] ?? 1)),
+                ];
+            }
+        }
+    }
+
+    if (!$normalized) {
+        $raw = (string)($mybb->settings['af_charactersheets_aug_slots_json'] ?? '');
+        $slots = af_charactersheets_json_decode($raw);
+        if (!is_array($slots)) {
+            $slots = [];
+        }
+        foreach ($slots as $slot) {
+            if (!is_array($slot)) {
+                continue;
+            }
+            $key = trim((string)($slot['slot_key'] ?? $slot['key'] ?? ''));
+            if ($key === '') {
+                continue;
+            }
+            $title_ru = (string)($slot['title_ru'] ?? $slot['title'] ?? '');
+            $title_en = (string)($slot['title_en'] ?? $slot['title'] ?? '');
+            $title = af_charactersheets_is_ru() ? $title_ru : $title_en;
+            if ($title === '') {
+                $title = $title_ru !== '' ? $title_ru : ($title_en !== '' ? $title_en : $key);
+            }
+            $normalized[$key] = [
+                'slot_key' => $key,
+                'title' => $title,
+                'title_ru' => $title_ru,
+                'title_en' => $title_en,
+                'icon' => (string)($slot['icon'] ?? ''),
+                'sortorder' => (int)($slot['sortorder'] ?? $slot['sort_order'] ?? 0),
+                'max_equipped' => max(1, (int)($slot['max_equipped'] ?? 1)),
+            ];
+        }
     }
 
     uasort($normalized, function (array $a, array $b): int {

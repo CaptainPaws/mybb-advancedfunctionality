@@ -2256,17 +2256,24 @@
   background: linear-gradient(180deg, rgba(10, 20, 32, 0.85), rgba(5, 10, 16, 0.85));
 }
 
-.af-cs-augment-silhouette {
-  min-height: 620px;
+.af-cs-augmentation-slot-grid {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
 
-.af-cs-augment-dot {
-  width: 110px;
+.af-cs-slot--augmentation {
+  cursor: pointer;
+  min-height: 110px;
 }
 
-.af-cs-augment-dot__item {
-  font-size: 10px;
-  opacity: 0.92;
+.af-cs-slot--augmentation .af-cs-slot-note {
+  margin-top: 2px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.af-cs-slot-count {
+  font-size: 11px;
+  opacity: 0.7;
 }
 
 .af-cs-augment-card--available {

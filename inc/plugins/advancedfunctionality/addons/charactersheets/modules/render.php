@@ -1555,30 +1555,11 @@ function af_charactersheets_build_augments_html(array $build, bool $can_edit, ar
     $owned = (array)($augmentations['owned'] ?? []);
 
     $slot_configs = af_charactersheets_get_augmentation_slots();
-    $slot_positions = [
-        'head' => ['top' => '12%', 'left' => '50%'],
-        'eyes' => ['top' => '18%', 'left' => '66%'],
-        'ears' => ['top' => '20%', 'left' => '34%'],
-        'face' => ['top' => '24%', 'left' => '50%'],
-        'neck' => ['top' => '30%', 'left' => '50%'],
-        'torso' => ['top' => '42%', 'left' => '50%'],
-        'spine' => ['top' => '44%', 'left' => '66%'],
-        'arms' => ['top' => '44%', 'left' => '22%'],
-        'hands' => ['top' => '58%', 'left' => '16%'],
-        'legs' => ['top' => '66%', 'left' => '50%'],
-        'feet' => ['top' => '84%', 'left' => '50%'],
-        'skin' => ['top' => '52%', 'left' => '78%'],
-        'nervous' => ['top' => '34%', 'left' => '78%'],
-        'internal' => ['top' => '56%', 'left' => '66%'],
-    ];
-
-    $slot_rows = [];
+    $slot_cards = [];
     foreach ($slot_configs as $slot => $config) {
         $slot_title = (string)($config['title'] ?? $slot);
         $current = $slots[$slot] ?? null;
         $slot_items = af_charactersheets_normalize_slot_items($current);
-        $slot_top = (string)($slot_positions[$slot]['top'] ?? $config['top'] ?? '50%');
-        $slot_left = (string)($slot_positions[$slot]['left'] ?? $config['left'] ?? '50%');
         $equipped_count = count($slot_items);
         $is_empty = $equipped_count <= 0;
 
@@ -1613,7 +1594,7 @@ function af_charactersheets_build_augments_html(array $build, bool $can_edit, ar
         }
         $slot_items_label = $line_items ? implode(' • ', $line_items) : '';
         $slot_stats = $first_entry ? trim(preg_replace('/\s+/', ' ', strip_tags(af_charactersheets_kb_get_block_html($first_entry, 'bonuses')))) : '';
-        $slot_dot_classes = 'af-cs-equip-dot af-cs-augment-dot' . ($is_empty ? ' af-cs-slot--empty' : '');
+        $slot_dot_classes = 'af-cs-slot af-cs-slot--augmentation af-cs-augmentation-slot-card' . ($is_empty ? ' af-cs-slot--empty' : '');
         if ($can_edit) {
             $slot_dot_classes .= ' af-cs-augment-draggable-slot';
         }
@@ -1627,14 +1608,16 @@ function af_charactersheets_build_augments_html(array $build, bool $can_edit, ar
             . ' data-afcs-augmentation-popover-humanity="' . htmlspecialchars_uni($first_humanity > 0 ? ('−' . (string)$first_humanity) : '') . '"'
             . ' data-afcs-augmentation-popover-items="' . htmlspecialchars_uni($slot_items_label) . '"'
             . ' data-afcs-augmentation-popover-key="' . htmlspecialchars_uni($first_key) . '"'
-            . ($can_edit && !$is_empty ? ' draggable="true" data-afcs-augmentation-draggable="slot"' : '')
-            . ' style="top:' . htmlspecialchars_uni($slot_top) . ';left:' . htmlspecialchars_uni($slot_left) . ';"';
+            . ($can_edit && !$is_empty ? ' draggable="true" data-afcs-augmentation-draggable="slot"' : '');
 
-        $slot_rows[] = '<div class="' . $slot_dot_classes . '"' . $dot_attrs . '>'
-            . '<div class="af-cs-equip-dot__icon"><span class="af-cs-slot-icon">' . (!$is_empty ? af_charactersheets_render_kb_icon($first_entry, $first_title) : af_charactersheets_render_slot_icon($config)) . '</span></div>'
-            . '<div class="af-cs-equip-dot__label">' . htmlspecialchars_uni($slot_title) . '</div>'
-            . (!$is_empty ? '<div class="af-cs-equip-dot__label af-cs-augment-dot__item">' . htmlspecialchars_uni($equipped_count > 1 ? ($first_title . ' +' . ($equipped_count - 1)) : $first_title) . '</div>' : '')
-            . '</div>';
+        $slot_cards[] = '<button type="button" class="' . $slot_dot_classes . '"' . $dot_attrs . '>'
+            . '<div class="af-cs-slot-header">'
+            . '<span class="af-cs-slot-icon">' . (!$is_empty ? af_charactersheets_render_kb_icon($first_entry, $first_title) : af_charactersheets_render_slot_icon($config)) . '</span>'
+            . '<span class="af-cs-slot-label">' . htmlspecialchars_uni($slot_title) . '</span>'
+            . '</div>'
+            . '<div class="af-cs-slot-title">' . htmlspecialchars_uni($is_empty ? 'Слот пуст' : $first_title) . ($equipped_count > 1 ? ' <span class="af-cs-slot-count">+' . ($equipped_count - 1) . '</span>' : '') . '</div>'
+            . (!$is_empty && $first_desc !== '' ? '<div class="af-cs-slot-note">' . htmlspecialchars_uni($first_desc) . '</div>' : '')
+            . '</button>';
     }
 
     $inventory_items = $uid > 0 && function_exists('af_advinv_export_charactersheet_augmentations_inventory')
@@ -1772,14 +1755,11 @@ function af_charactersheets_build_augments_html(array $build, bool $can_edit, ar
 
     $augmentations_html = '<div class="af-cs-augmentations-ui af-cs-augmentations-rpg" data-afcs-augmentation-root="1">'
         . '<div class="af-cs-augmentations-column">'
-        . '<div class="af-cs-panel-title">Имплант-матрица</div>'
+        . '<div class="af-cs-panel-title">Слоты аугментаций</div>'
         . $humanity_html
         . '<div class="af-cs-equipment-unequip-zone af-cs-augment-unequip-zone" data-afcs-augmentation-unequip-zone="1">Перетащите установленную аугментацию сюда, чтобы снять.</div>'
-        . '<div class="af-cs-equip-silhouette af-cs-augment-silhouette">'
-        . '<div class="af-cs-equip-silhouette__body"></div>'
-        . implode('', $slot_rows)
+        . '<div class="af-cs-slot-grid af-cs-augmentation-slot-grid">' . implode('', $slot_cards) . '</div>'
         . '<div class="af-cs-augment-popover" data-afcs-augmentation-popover hidden></div>'
-        . '</div>'
         . '</div>'
         . '<div class="af-cs-augmentations-column">'
         . '<div class="af-cs-panel-title">Доступные аугментации</div>'

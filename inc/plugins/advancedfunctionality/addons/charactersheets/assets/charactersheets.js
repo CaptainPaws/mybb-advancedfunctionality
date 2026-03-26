@@ -922,8 +922,18 @@
 
           var rect = anchor.getBoundingClientRect();
           popover.hidden = false;
-          popover.style.top = (rect.top + window.scrollY + rect.height + 8) + 'px';
-          popover.style.left = (rect.left + window.scrollX) + 'px';
+          var top = rect.top + window.scrollY + rect.height + 8;
+          var left = rect.left + window.scrollX;
+          var maxLeft = window.scrollX + Math.max(8, window.innerWidth - popover.offsetWidth - 8);
+          if (left > maxLeft) left = maxLeft;
+          if (left < window.scrollX + 8) left = window.scrollX + 8;
+          var maxTop = window.scrollY + Math.max(8, window.innerHeight - popover.offsetHeight - 8);
+          if (top > maxTop) {
+            top = rect.top + window.scrollY - popover.offsetHeight - 8;
+          }
+          if (top < window.scrollY + 8) top = window.scrollY + 8;
+          popover.style.top = top + 'px';
+          popover.style.left = left + 'px';
         }
 
         function hidePopover() {
