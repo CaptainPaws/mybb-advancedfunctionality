@@ -1897,6 +1897,17 @@
 
 .af-cs-toast{position:sticky;top:10px;z-index:5;margin:8px 0;padding:8px 10px;border:1px solid #3f7d4f;background:rgba(56,125,79,.2);color:#d8ffe2;border-radius:8px;font-size:13px}
 
+.af-cs-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  overflow: hidden;
+}
+
 .af-cs-equipment-slots-group {
   display: grid;
   gap: 10px;
@@ -1931,8 +1942,122 @@
 .af-cs-equipment-preview {
   display: grid;
   gap: 14px;
+  position: relative;
+  overflow: visible;
 }
 
 .af-cs-slot--empty {
   opacity: 0.7;
+}
+
+.af-cs-equipment-ui,
+.af-cs-equipment-ui .af-cs-augmentations-column {
+  overflow: visible;
+}
+
+.af-cs-equipment-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.af-cs-equipment-cards-grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.af-cs-equipment-item-card {
+  min-height: 148px;
+}
+
+.af-cs-equipment-unequip-zone {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 119, 119, 0.45);
+  background: rgba(67, 14, 14, 0.35);
+  font-size: 12px;
+  opacity: .9;
+}
+
+.af-cs-equipment-unequip-zone.is-drop-target {
+  border-color: rgba(255, 119, 119, 0.85);
+  box-shadow: 0 0 0 1px rgba(255, 119, 119, 0.35);
+}
+
+.af-cs-equip-silhouette {
+  position: relative;
+  height: 560px;
+  border-radius: 14px;
+  border: 1px solid rgba(92, 195, 255, 0.2);
+  background: radial-gradient(circle at center, rgba(27, 57, 78, 0.45), rgba(5, 10, 16, 0.9) 65%);
+}
+
+.af-cs-equip-silhouette__body {
+  position: absolute;
+  inset: 12% 34% 14% 34%;
+  border-radius: 140px 140px 90px 90px;
+  border: 1px dashed rgba(148, 183, 214, 0.4);
+  background: linear-gradient(180deg, rgba(148, 183, 214, 0.14), rgba(148, 183, 214, 0.03));
+}
+
+.af-cs-equip-dot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 82px;
+  border-radius: 10px;
+  border: 1px solid rgba(92, 195, 255, 0.3);
+  background: rgba(3, 10, 17, 0.86);
+  color: inherit;
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  z-index: 2;
+  cursor: pointer;
+}
+
+.af-cs-equip-dot.is-drop-target {
+  border-color: rgba(92, 195, 255, 0.95);
+  box-shadow: 0 0 0 1px rgba(92, 195, 255, 0.5), 0 0 18px rgba(92, 195, 255, 0.25);
+}
+
+.af-cs-equip-dot__icon .af-cs-slot-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.af-cs-equip-dot__label {
+  font-size: 10px;
+  line-height: 1.1;
+  text-align: center;
+  opacity: .85;
+}
+
+.af-cs-equip-popover {
+  position: absolute;
+  z-index: 10030;
+  width: min(320px, calc(100vw - 24px));
+  border-radius: 12px;
+  border: 1px solid rgba(92, 195, 255, 0.4);
+  background: rgba(9, 17, 26, 0.98);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  padding: 10px;
+}
+
+.af-cs-equip-popover__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.af-cs-equip-popover__line {
+  font-size: 12px;
+  opacity: 0.9;
+  margin-top: 4px;
+}
+
+.af-cs-equip-popover__actions {
+  margin-top: 8px;
 }
