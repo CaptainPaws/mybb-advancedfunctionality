@@ -744,7 +744,7 @@
           if (!popover || !payload) return;
           var iconHtml = payload.icon ? '<img src="' + payload.icon + '" alt="">' : '<span class="af-cs-slot-icon af-cs-slot-icon--empty"></span>';
           var actionBtn = '';
-          if (payload.kind === 'equipped' && payload.slotCode) {
+          if (payload.kind === 'equipped' && payload.slotCode && payload.title !== 'Пусто') {
             actionBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-unequip="1" data-afcs-equipment-slot="' + payload.slotCode + '">Снять</button>';
             if (payload.canSetActiveWeapon) {
               if (payload.isActiveWeapon) {
@@ -777,97 +777,6 @@
           if (!popover) return;
           popover.hidden = true;
         }
-        function bindDnD() {
-          var unequipZone = equipmentBlock.querySelector('[data-afcs-equipment-unequip-zone]');
-          var dragPayload = null;
-          function readDragPayload(event) {
-            if (dragPayload) return dragPayload;
-            try {
-              var raw = event.dataTransfer ? event.dataTransfer.getData('text/plain') : '';
-              if (!raw) return null;
-              var parsed = JSON.parse(raw);
-              return parsed && typeof parsed === 'object' ? parsed : null;
-            } catch (e) {
-              return null;
-            }
-          }
-          equipmentBlock.querySelectorAll('[data-afcs-equipment-draggable]').forEach(function (node) {
-            node.addEventListener('dragstart', function (event) {
-              dragPayload = {
-                itemId: node.getAttribute('data-afcs-equipment-item-id') || '',
-                slot: node.getAttribute('data-afcs-equipment-slot') || '',
-                origin: node.getAttribute('data-afcs-equipment-draggable') || ''
-              };
-              try { event.dataTransfer.setData('text/plain', JSON.stringify(dragPayload)); } catch (e) {}
-              event.dataTransfer.effectAllowed = 'move';
-            });
-            node.addEventListener('dragend', function () {
-              dragPayload = null;
-              equipmentBlock.querySelectorAll('[data-afcs-equipment-slot-dot]').forEach(function (slotNode) {
-                slotNode.classList.remove('is-drop-target');
-              });
-              if (unequipZone) unequipZone.classList.remove('is-drop-target');
-            });
-          });
-          equipmentBlock.querySelectorAll('[data-afcs-equipment-slot-dot]').forEach(function (slotNode) {
-            slotNode.addEventListener('dragover', function (event) {
-              var activePayload = readDragPayload(event);
-              if (!activePayload || !activePayload.itemId) return;
-              var slotCode = slotNode.getAttribute('data-afcs-equipment-slot') || '';
-              if (!slotCode) return;
-              if (activePayload.origin === 'inventory') {
-                var card = equipmentBlock.querySelector('[data-afcs-equipment-card][data-afcs-equipment-item-id="' + activePayload.itemId + '"]');
-                var allowed = (card && card.getAttribute('data-afcs-equipment-candidate-slots') || '').split(',').filter(Boolean);
-                if (allowed.length && allowed.indexOf(slotCode) === -1) return;
-              }
-              event.preventDefault();
-              slotNode.classList.add('is-drop-target');
-            });
-            slotNode.addEventListener('dragleave', function () {
-              slotNode.classList.remove('is-drop-target');
-            });
-            slotNode.addEventListener('drop', function (event) {
-              event.preventDefault();
-              slotNode.classList.remove('is-drop-target');
-              var activePayload = readDragPayload(event);
-              var itemId = activePayload && activePayload.itemId ? activePayload.itemId : '';
-              var slotCode = slotNode.getAttribute('data-afcs-equipment-slot') || '';
-              if (!itemId || !slotCode) return;
-              afCsAjax('equip_equipment', { slot: slotCode, item_id: itemId }).then(function (payload) {
-                if (isErrorPayload(payload)) {
-                  showInlineError(responseError(payload, 'Ошибка экипировки'));
-                  return;
-                }
-                clearInlineError();
-                applyViewUpdate(payload);
-              });
-            });
-          });
-          if (unequipZone) {
-            unequipZone.addEventListener('dragover', function (event) {
-              event.preventDefault();
-              unequipZone.classList.add('is-drop-target');
-            });
-            unequipZone.addEventListener('dragleave', function () {
-              unequipZone.classList.remove('is-drop-target');
-            });
-            unequipZone.addEventListener('drop', function (event) {
-              event.preventDefault();
-              unequipZone.classList.remove('is-drop-target');
-              var activePayload = readDragPayload(event);
-              var slotCode = activePayload && activePayload.slot ? activePayload.slot : '';
-              if (!slotCode) return;
-              afCsAjax('unequip_equipment', { slot: slotCode }).then(function (payload) {
-                if (isErrorPayload(payload)) {
-                  showInlineError(responseError(payload, 'Ошибка снятия'));
-                  return;
-                }
-                clearInlineError();
-                applyViewUpdate(payload);
-              });
-            });
-          }
-        }
 
         var activeCard = equipmentBlock.querySelector('[data-afcs-equipment-card].is-active') || cards[0];
         if (activeCard) activate(activeCard.getAttribute('data-afcs-equipment-item-id') || '');
@@ -876,7 +785,6 @@
           node.classList.toggle('is-active', code === activeFilter);
         });
         applyFilter();
-        bindDnD();
 
         filters.forEach(function (filterBtn) {
           filterBtn.addEventListener('click', function () {
@@ -894,9 +802,10 @@
         });
         slots.forEach(function (slot) {
           slot.addEventListener('click', function () {
-            var itemId = Number(slot.getAttribute('data-afcs-equipment-preview-item-id') || 0);
-            if (itemId <= 0) return;
-            showPopover(slot, popoverPayload(slot));
+            var payload = popoverPayload(slot);
+            if (!payload) return;
+            if (payload.kind === 'equipped' && payload.title === 'Пусто') return;
+            showPopover(slot, payload);
           });
         });
         if (!root.__afEquipDocBound) {
