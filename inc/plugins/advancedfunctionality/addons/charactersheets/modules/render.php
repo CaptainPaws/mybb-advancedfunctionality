@@ -1802,26 +1802,26 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
     $slot_labels = af_inv_equipment_slots();
     $slot_configs = [
         'head' => ['top' => '10%', 'left' => '50%'],
-        'body' => ['top' => '26%', 'left' => '50%'],
-        'hands' => ['top' => '30%', 'left' => '18%'],
-        'legs' => ['top' => '48%', 'left' => '50%'],
-        'feet' => ['top' => '74%', 'left' => '50%'],
-        'back' => ['top' => '24%', 'left' => '80%'],
-        'belt' => ['top' => '40%', 'left' => '50%'],
-        'weapon_mainhand' => ['top' => '34%', 'left' => '8%'],
-        'weapon_offhand' => ['top' => '34%', 'left' => '92%'],
-        'weapon_twohand' => ['top' => '36%', 'left' => '8%'],
-        'weapon_ranged' => ['top' => '20%', 'left' => '10%'],
-        'weapon_melee' => ['top' => '54%', 'left' => '8%'],
-        'ammo' => ['top' => '54%', 'left' => '92%'],
-        'ammo_pouch' => ['top' => '62%', 'left' => '74%'],
-        'gear' => ['top' => '62%', 'left' => '26%'],
-        'artifact' => ['top' => '16%', 'left' => '74%'],
-        'unique' => ['top' => '16%', 'left' => '26%'],
-        'accessory' => ['top' => '10%', 'left' => '74%'],
-        'support_1' => ['top' => '88%', 'left' => '32%'],
-        'support_2' => ['top' => '88%', 'left' => '50%'],
-        'support_3' => ['top' => '88%', 'left' => '68%'],
+        'accessory' => ['top' => '14%', 'left' => '68%'],
+        'unique' => ['top' => '14%', 'left' => '32%'],
+        'back' => ['top' => '26%', 'left' => '72%'],
+        'body' => ['top' => '27%', 'left' => '50%'],
+        'hands' => ['top' => '34%', 'left' => '28%'],
+        'weapon_offhand' => ['top' => '34%', 'left' => '80%'],
+        'weapon_mainhand' => ['top' => '42%', 'left' => '20%'],
+        'weapon_twohand' => ['top' => '46%', 'left' => '80%'],
+        'belt' => ['top' => '46%', 'left' => '50%'],
+        'weapon_melee' => ['top' => '54%', 'left' => '20%'],
+        'legs' => ['top' => '62%', 'left' => '50%'],
+        'weapon_ranged' => ['top' => '62%', 'left' => '80%'],
+        'gear' => ['top' => '70%', 'left' => '28%'],
+        'ammo' => ['top' => '70%', 'left' => '72%'],
+        'feet' => ['top' => '80%', 'left' => '50%'],
+        'ammo_pouch' => ['top' => '80%', 'left' => '72%'],
+        'artifact' => ['top' => '88%', 'left' => '28%'],
+        'support_1' => ['top' => '92%', 'left' => '42%'],
+        'support_2' => ['top' => '92%', 'left' => '50%'],
+        'support_3' => ['top' => '92%', 'left' => '58%'],
     ];
 
     $all_slots = [];
@@ -1853,7 +1853,8 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
             ? af_charactersheets_kb_get_entry((string)($slot_item['kb_type'] ?? ''), (string)($slot_item['kb_key'] ?? ''))
             : [];
         $bonus_html = $entry ? af_charactersheets_kb_get_block_html($entry, 'bonuses') : '';
-        $preview_slots[] = '<button type="button" class="af-cs-equip-dot' . ($item_id > 0 ? ' is-filled' : '') . '"'
+        $slot_modifier = preg_replace('/[^a-z0-9\-_]+/i', '-', strtolower($slot_code));
+        $preview_slots[] = '<button type="button" class="af-cs-equip-dot af-cs-equip-dot--' . htmlspecialchars_uni($slot_modifier) . ($item_id > 0 ? ' is-filled' : '') . '"'
             . ' style="top:' . htmlspecialchars_uni((string)($coords['top'] ?? '50%')) . ';left:' . htmlspecialchars_uni((string)($coords['left'] ?? '50%')) . ';"'
             . ' data-afcs-equipment-slot-dot="1"'
             . ' data-afcs-equipment-slot="' . htmlspecialchars_uni($slot_code) . '"'
@@ -1897,8 +1898,7 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
         }
         $classes = 'af-cs-augment-card af-cs-equipment-item-card' . ($index === 0 ? ' is-active' : '');
         $default_slot = (string)($candidate_slots[0] ?? '');
-        $preview_cards[] = '<div class="' . $classes . '" data-afcs-equipment-card="1" data-afcs-equipment-item-id="' . $itemId . '" data-afcs-equipment-filter-kind="' . htmlspecialchars_uni($subtype) . '" data-afcs-equipment-default-slot="' . htmlspecialchars_uni($default_slot) . '"' . ($can_edit ? ' draggable="true" data-afcs-equipment-draggable="inventory"' : '') . '>'
-            . '<button type="button" class="af-cs-equipment-card-hit" data-afcs-equipment-preview-trigger="' . $itemId . '"></button>'
+        $preview_cards[] = '<div class="' . $classes . '" data-afcs-equipment-card="1" data-afcs-equipment-item-id="' . $itemId . '" data-afcs-equipment-filter-kind="' . htmlspecialchars_uni($subtype) . '" data-afcs-equipment-default-slot="' . htmlspecialchars_uni($default_slot) . '" data-afcs-equipment-candidate-slots="' . htmlspecialchars_uni(implode(',', array_map('strval', $candidate_slots))) . '"' . ($can_edit ? ' draggable="true" data-afcs-equipment-draggable="inventory"' : '') . '>'
             . '<div class="af-cs-augment-card__icon">' . af_charactersheets_render_kb_icon($entry, $title) . '</div>'
             . '<div class="af-cs-augment-card__body">'
             . '<div class="af-cs-augment-card__title">' . htmlspecialchars_uni($title) . '</div>'
@@ -1941,7 +1941,9 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
         . '<div class="af-cs-panel-title">Силуэт и слоты</div>'
         . '<div class="af-cs-equipment-preview" data-afcs-equipment-preview-root="1">'
             . '<div class="af-cs-equip-silhouette">'
-                . '<div class="af-cs-equip-silhouette__body"></div>'
+                . '<svg class="af-cs-equip-silhouette__svg" viewBox="0 0 220 500" aria-hidden="true" focusable="false">'
+                    . '<path class="af-cs-equip-silhouette__shape" d="M110 28c24 0 42 18 42 42s-18 42-42 42-42-18-42-42 18-42 42-42Zm-61 105c0-13 11-24 24-24h74c13 0 24 11 24 24v80c0 11-8 20-19 23l19 86c3 15-6 29-21 33-14 3-28-6-32-21l-8-37-8 37c-4 15-18 24-32 21-15-4-24-18-21-33l19-86c-11-3-19-12-19-23v-80Zm-2 119c12 0 21 9 21 21v67c0 12-9 21-21 21s-21-9-21-21v-67c0-12 9-21 21-21Zm126 0c12 0 21 9 21 21v67c0 12-9 21-21 21s-21-9-21-21v-67c0-12 9-21 21-21Z"></path>'
+                . '</svg>'
                 . implode('', $preview_slots)
             . '</div>'
         . '</div>'

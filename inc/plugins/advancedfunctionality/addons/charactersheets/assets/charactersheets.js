@@ -736,6 +736,17 @@
         function bindDnD() {
           var unequipZone = equipmentBlock.querySelector('[data-afcs-equipment-unequip-zone]');
           var dragPayload = null;
+          function readDragPayload(event) {
+            if (dragPayload) return dragPayload;
+            try {
+              var raw = event.dataTransfer ? event.dataTransfer.getData('text/plain') : '';
+              if (!raw) return null;
+              var parsed = JSON.parse(raw);
+              return parsed && typeof parsed === 'object' ? parsed : null;
+            } catch (e) {
+              return null;
+            }
+          }
           equipmentBlock.querySelectorAll('[data-afcs-equipment-draggable]').forEach(function (node) {
             node.addEventListener('dragstart', function (event) {
               dragPayload = {
@@ -746,9 +757,25 @@
               try { event.dataTransfer.setData('text/plain', JSON.stringify(dragPayload)); } catch (e) {}
               event.dataTransfer.effectAllowed = 'move';
             });
+            node.addEventListener('dragend', function () {
+              dragPayload = null;
+              equipmentBlock.querySelectorAll('[data-afcs-equipment-slot-dot]').forEach(function (slotNode) {
+                slotNode.classList.remove('is-drop-target');
+              });
+              if (unequipZone) unequipZone.classList.remove('is-drop-target');
+            });
           });
           equipmentBlock.querySelectorAll('[data-afcs-equipment-slot-dot]').forEach(function (slotNode) {
             slotNode.addEventListener('dragover', function (event) {
+              var activePayload = readDragPayload(event);
+              if (!activePayload || !activePayload.itemId) return;
+              var slotCode = slotNode.getAttribute('data-afcs-equipment-slot') || '';
+              if (!slotCode) return;
+              if (activePayload.origin === 'inventory') {
+                var card = equipmentBlock.querySelector('[data-afcs-equipment-card][data-afcs-equipment-item-id="' + activePayload.itemId + '"]');
+                var allowed = (card && card.getAttribute('data-afcs-equipment-candidate-slots') || '').split(',').filter(Boolean);
+                if (allowed.length && allowed.indexOf(slotCode) === -1) return;
+              }
               event.preventDefault();
               slotNode.classList.add('is-drop-target');
             });
@@ -758,7 +785,8 @@
             slotNode.addEventListener('drop', function (event) {
               event.preventDefault();
               slotNode.classList.remove('is-drop-target');
-              var itemId = dragPayload && dragPayload.itemId ? dragPayload.itemId : '';
+              var activePayload = readDragPayload(event);
+              var itemId = activePayload && activePayload.itemId ? activePayload.itemId : '';
               var slotCode = slotNode.getAttribute('data-afcs-equipment-slot') || '';
               if (!itemId || !slotCode) return;
               afCsAjax('equip_equipment', { slot: slotCode, item_id: itemId }).then(function (payload) {
@@ -782,7 +810,8 @@
             unequipZone.addEventListener('drop', function (event) {
               event.preventDefault();
               unequipZone.classList.remove('is-drop-target');
-              var slotCode = dragPayload && dragPayload.slot ? dragPayload.slot : '';
+              var activePayload = readDragPayload(event);
+              var slotCode = activePayload && activePayload.slot ? activePayload.slot : '';
               if (!slotCode) return;
               afCsAjax('unequip_equipment', { slot: slotCode }).then(function (payload) {
                 if (isErrorPayload(payload)) {
@@ -811,7 +840,11 @@
         cards.forEach(function (card) {
           card.addEventListener('mouseenter', function () { showPopover(card, popoverPayload(card)); });
           card.addEventListener('mouseleave', hidePopover);
-          card.addEventListener('click', function () { showPopover(card, popoverPayload(card)); });
+          card.addEventListener('click', function (event) {
+            if (event.target.closest('button,select,option,input,textarea,a,label')) return;
+            activate(card.getAttribute('data-afcs-equipment-item-id') || '');
+            showPopover(card, popoverPayload(card));
+          });
         });
         slots.forEach(function (slot) {
           slot.addEventListener('mouseenter', function () { showPopover(slot, popoverPayload(slot)); });
@@ -1422,10 +1455,10 @@
           return;
         }
 
-        var equipmentPreview = event.target.closest('[data-afcs-equipment-preview-trigger]');
+        var equipmentPreview = event.target.closest('[data-afcs-equipment-preview-trigger], [data-afcs-equipment-card]');
         if (equipmentPreview) {
           event.preventDefault();
-          var previewItemId = equipmentPreview.getAttribute('data-afcs-equipment-preview-trigger') || '';
+          var previewItemId = equipmentPreview.getAttribute('data-afcs-equipment-preview-trigger') || equipmentPreview.getAttribute('data-afcs-equipment-item-id') || '';
           var equipmentBlock = sheet.querySelector('[data-afcs-block="equipment"]');
           if (equipmentBlock && previewItemId) {
             equipmentBlock.querySelectorAll('[data-afcs-equipment-card]').forEach(function (card) {
