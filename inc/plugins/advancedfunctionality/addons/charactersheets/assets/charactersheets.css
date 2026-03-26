@@ -2081,7 +2081,7 @@
   display: grid;
   gap: 14px;
   position: relative;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .af-cs-slot--empty {
@@ -2090,7 +2090,7 @@
 
 .af-cs-equipment-ui,
 .af-cs-equipment-ui .af-cs-augmentations-column {
-  overflow: visible;
+  overflow: hidden;
 }
 
 .af-cs-equipment-filters {
@@ -2129,20 +2129,29 @@
   border-radius: 14px;
   border: 1px solid rgba(92, 195, 255, 0.2);
   background: radial-gradient(circle at center, rgba(27, 57, 78, 0.45), rgba(5, 10, 16, 0.9) 65%);
+  overflow: hidden;
 }
 
-.af-cs-equip-silhouette__body {
+.af-cs-equip-silhouette__svg {
   position: absolute;
-  inset: 12% 34% 14% 34%;
-  border-radius: 140px 140px 90px 90px;
-  border: 1px dashed rgba(148, 183, 214, 0.4);
-  background: linear-gradient(180deg, rgba(148, 183, 214, 0.14), rgba(148, 183, 214, 0.03));
+  inset: 8% 22% 8% 22%;
+  width: 56%;
+  height: 84%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.af-cs-equip-silhouette__shape {
+  fill: rgba(146, 182, 209, 0.13);
+  stroke: rgba(174, 210, 235, 0.38);
+  stroke-width: 4;
 }
 
 .af-cs-equip-dot {
   position: absolute;
   transform: translate(-50%, -50%);
-  width: 82px;
+  width: 88px;
+  min-height: 74px;
   border-radius: 10px;
   border: 1px solid rgba(92, 195, 255, 0.3);
   background: rgba(3, 10, 17, 0.86);
@@ -2166,11 +2175,15 @@
 }
 
 .af-cs-equip-dot__label {
-  font-size: 10px;
+  font-size: 9px;
   line-height: 1.1;
   text-align: center;
   opacity: .85;
 }
+
+.af-cs-equip-dot--support_1 .af-cs-equip-dot__label::before { content: 'Q1 '; }
+.af-cs-equip-dot--support_2 .af-cs-equip-dot__label::before { content: 'Q2 '; }
+.af-cs-equip-dot--support_3 .af-cs-equip-dot__label::before { content: 'Q3 '; }
 
 .af-cs-equip-popover {
   position: absolute;
@@ -2181,6 +2194,16 @@
   background: rgba(9, 17, 26, 0.98);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
   padding: 10px;
+}
+
+@media (max-width: 980px) {
+  .af-cs-augmentations-ui {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .af-cs-equipment-ui .af-cs-augmentations-column {
+    overflow: visible;
+  }
 }
 
 .af-cs-equip-popover__head {
