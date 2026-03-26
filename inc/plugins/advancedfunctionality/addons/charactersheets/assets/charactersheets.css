@@ -1188,45 +1188,152 @@
   gap: 20px;
 }
 
+.af-cs-knowledge-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.af-cs-knowledge-overview-card,
 .af-cs-knowledge-section {
   padding: 14px;
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(180deg, rgba(11, 19, 30, 0.9), rgba(7, 12, 20, 0.82));
+  border: 1px solid rgba(120, 168, 255, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 
-.af-cs-knowledge-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
+.af-cs-knowledge-overview-card h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
 }
 
-.af-cs-knowledge-form {
-  display: flex;
+.af-cs-knowledge-counters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 10px;
 }
 
-.af-cs-knowledge-list {
+.af-cs-knowledge-counters div {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.af-cs-knowledge-counters span {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.af-cs-knowledge-counters strong {
+  font-size: 16px;
+}
+
+.af-cs-knowledge-sources {
+  margin-top: 10px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.af-cs-knowledge-chip {
+.af-cs-knowledge-source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(124, 214, 255, 0.32);
+  background: rgba(124, 214, 255, 0.12);
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.af-cs-knowledge-source-chip em {
+  font-style: normal;
+  opacity: 0.8;
+}
+
+.af-cs-knowledge-sections {
   display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-areas:
-    "title action"
-    "desc action";
+  gap: 16px;
+}
+
+.af-cs-knowledge-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.af-cs-knowledge-head h3 {
+  margin: 6px 0 0;
+}
+
+.af-cs-knowledge-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+.af-cs-knowledge-form select {
+  min-width: 190px;
+}
+
+.af-cs-knowledge-groups {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.af-cs-knowledge-group {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px;
+}
+
+.af-cs-knowledge-group__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.af-cs-knowledge-group__head span {
+  font-size: 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 2px 8px;
+}
+
+.af-cs-knowledge-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.af-cs-knowledge-card {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  grid-template-areas: "title status action" "desc desc desc";
   gap: 4px 8px;
   padding: 8px 10px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.16);
   font-size: 12px;
-  min-width: 180px;
+}
+
+.af-cs-knowledge-card.is-bonus {
+  border-color: rgba(124, 214, 255, 0.35);
+  background: rgba(124, 214, 255, 0.1);
+}
+
+.af-cs-knowledge-card__head {
+  display: contents;
 }
 
 .af-cs-knowledge-title {
@@ -1240,19 +1347,50 @@
   opacity: 0.75;
 }
 
-.af-cs-knowledge-badge {
-  grid-area: action;
+.af-cs-knowledge-tag {
+  grid-area: status;
   font-style: normal;
   font-size: 10px;
-  opacity: 0.7;
+  border-radius: 999px;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  opacity: 0.9;
 }
 
-.af-cs-knowledge-chip button {
+.af-cs-knowledge-tag--bonus {
+  border-color: rgba(124, 214, 255, 0.45);
+  background: rgba(124, 214, 255, 0.2);
+}
+
+.af-cs-knowledge-tag--manual {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.af-cs-knowledge-remove {
   grid-area: action;
-  background: none;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
   color: #fff;
   cursor: pointer;
+  width: 24px;
+  height: 24px;
+  line-height: 1;
+}
+
+@media (max-width: 640px) {
+  .af-cs-knowledge-head {
+    flex-direction: column;
+  }
+
+  .af-cs-knowledge-form {
+    width: 100%;
+  }
+
+  .af-cs-knowledge-form select {
+    flex: 1;
+    min-width: 0;
+  }
 }
 
 /* ===== Inventory / Augments ===== */
