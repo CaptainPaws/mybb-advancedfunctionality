@@ -658,6 +658,7 @@
 
         updatePool();
         initAttributesUI();
+        initAugmentationUI();
         initEquipmentPreviewUI();
       }
 
@@ -822,6 +823,154 @@
           document.addEventListener('click', function (event) {
             if (!popover || popover.hidden) return;
             if (!event.target.closest('[data-afcs-equipment-slot-dot]') && !event.target.closest('[data-afcs-equipment-card]') && !event.target.closest('[data-afcs-equipment-popover]')) {
+              hidePopover();
+            }
+          }, { passive: true });
+        }
+      }
+
+      function initAugmentationUI() {
+        var augBlock = sheet.querySelector('[data-afcs-block="augmentations"]');
+        if (!augBlock) return;
+        var root = augBlock.querySelector('[data-afcs-augmentation-root]');
+        if (!root) return;
+        var cards = augBlock.querySelectorAll('[data-afcs-augmentation-card]');
+        var slots = augBlock.querySelectorAll('[data-afcs-augmentation-slot-dot]');
+        var popover = augBlock.querySelector('[data-afcs-augmentation-popover]');
+        var unequipZone = augBlock.querySelector('[data-afcs-augmentation-unequip-zone]');
+        if (!cards.length && !slots.length) return;
+
+        function payloadFromNode(node) {
+          if (!node) return null;
+          var title = node.getAttribute('data-afcs-augmentation-popover-title') || '';
+          if (!title) return null;
+          return {
+            title: title,
+            desc: node.getAttribute('data-afcs-augmentation-popover-desc') || '',
+            slot: node.getAttribute('data-afcs-augmentation-popover-slot') || '',
+            stats: node.getAttribute('data-afcs-augmentation-popover-stats') || '',
+            humanity: node.getAttribute('data-afcs-augmentation-popover-humanity') || '',
+            items: node.getAttribute('data-afcs-augmentation-popover-items') || '',
+            type: node.getAttribute('data-afcs-augmentation-type') || '',
+            key: node.getAttribute('data-afcs-augmentation-key') || node.getAttribute('data-afcs-augmentation-popover-key') || '',
+            slotCode: node.getAttribute('data-afcs-augmentation-slot') || '',
+            defaultSlot: node.getAttribute('data-afcs-augmentation-slot-default') || ''
+          };
+        }
+
+        function showPopover(anchor, payload) {
+          if (!popover || !payload) return;
+          var actionBtn = '';
+          if (payload.type && payload.key) {
+            actionBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-augmentation-equip="1" data-afcs-augmentation-type="' + payload.type + '" data-afcs-augmentation-key="' + payload.key + '" data-afcs-augmentation-slot-default="' + payload.defaultSlot + '">Надеть</button>';
+          } else if (payload.slotCode && payload.key) {
+            actionBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-augmentation-unequip="1" data-afcs-augmentation-slot="' + payload.slotCode + '" data-afcs-augmentation-key="' + payload.key + '">Снять</button>';
+          }
+
+          popover.innerHTML = ''
+            + '<div class="af-cs-equip-popover__head"><strong>' + payload.title + '</strong></div>'
+            + (payload.desc ? '<div class="af-cs-equip-popover__line">' + payload.desc + '</div>' : '')
+            + (payload.slot ? '<div class="af-cs-equip-popover__line">Слот: ' + payload.slot + '</div>' : '')
+            + (payload.humanity ? '<div class="af-cs-equip-popover__line">Человечность: ' + payload.humanity + '</div>' : '')
+            + (payload.stats ? '<div class="af-cs-equip-popover__line"><em>' + payload.stats + '</em></div>' : '')
+            + (payload.items ? '<div class="af-cs-equip-popover__line">' + payload.items + '</div>' : '')
+            + (actionBtn ? '<div class="af-cs-equip-popover__actions">' + actionBtn + '</div>' : '');
+
+          var rect = anchor.getBoundingClientRect();
+          popover.hidden = false;
+          popover.style.top = (rect.top + window.scrollY + rect.height + 8) + 'px';
+          popover.style.left = (rect.left + window.scrollX) + 'px';
+        }
+
+        function hidePopover() {
+          if (!popover) return;
+          popover.hidden = true;
+        }
+
+        var dragPayload = null;
+        augBlock.querySelectorAll('[data-afcs-augmentation-draggable]').forEach(function (node) {
+          node.addEventListener('dragstart', function (event) {
+            dragPayload = {
+              origin: node.getAttribute('data-afcs-augmentation-draggable') || '',
+              type: node.getAttribute('data-afcs-augmentation-type') || '',
+              key: node.getAttribute('data-afcs-augmentation-key') || node.getAttribute('data-afcs-augmentation-popover-key') || '',
+              slot: node.getAttribute('data-afcs-augmentation-slot') || ''
+            };
+            try { event.dataTransfer.setData('text/plain', JSON.stringify(dragPayload)); } catch (e) {}
+            event.dataTransfer.effectAllowed = 'move';
+          });
+        });
+
+        slots.forEach(function (slotNode) {
+          slotNode.addEventListener('dragover', function (event) {
+            event.preventDefault();
+            slotNode.classList.add('is-drop-target');
+          });
+          slotNode.addEventListener('dragleave', function () {
+            slotNode.classList.remove('is-drop-target');
+          });
+          slotNode.addEventListener('drop', function (event) {
+            event.preventDefault();
+            slotNode.classList.remove('is-drop-target');
+            var slotCode = slotNode.getAttribute('data-afcs-augmentation-slot') || '';
+            if (!slotCode || !dragPayload || !dragPayload.key) return;
+            var req;
+            if (dragPayload.origin === 'slot' && dragPayload.slot) {
+              req = afCsAjax('move_augmentation', { from_slot: dragPayload.slot, slot: slotCode, key: dragPayload.key });
+            } else if (dragPayload.origin === 'available' && dragPayload.type) {
+              req = afCsAjax('equip_augmentation', { slot: slotCode, type: dragPayload.type, key: dragPayload.key });
+            }
+            if (!req) return;
+            req.then(function (payload) {
+              if (isErrorPayload(payload)) {
+                showInlineError(responseError(payload, 'Ошибка перемещения аугментации'));
+                return;
+              }
+              clearInlineError();
+              applyViewUpdate(payload);
+            });
+          });
+        });
+
+        if (unequipZone) {
+          unequipZone.addEventListener('dragover', function (event) {
+            event.preventDefault();
+            unequipZone.classList.add('is-drop-target');
+          });
+          unequipZone.addEventListener('dragleave', function () {
+            unequipZone.classList.remove('is-drop-target');
+          });
+          unequipZone.addEventListener('drop', function (event) {
+            event.preventDefault();
+            unequipZone.classList.remove('is-drop-target');
+            if (!dragPayload || dragPayload.origin !== 'slot' || !dragPayload.slot) return;
+            afCsAjax('unequip_augmentation', { slot: dragPayload.slot, key: dragPayload.key || '' }).then(function (payload) {
+              if (isErrorPayload(payload)) {
+                showInlineError(responseError(payload, 'Ошибка снятия аугментации'));
+                return;
+              }
+              clearInlineError();
+              applyViewUpdate(payload);
+            });
+          });
+        }
+
+        cards.forEach(function (card) {
+          card.addEventListener('mouseenter', function () { showPopover(card, payloadFromNode(card)); });
+          card.addEventListener('mouseleave', hidePopover);
+          card.addEventListener('click', function () { showPopover(card, payloadFromNode(card)); });
+        });
+        slots.forEach(function (slot) {
+          slot.addEventListener('mouseenter', function () { showPopover(slot, payloadFromNode(slot)); });
+          slot.addEventListener('mouseleave', hidePopover);
+          slot.addEventListener('click', function () { showPopover(slot, payloadFromNode(slot)); });
+        });
+
+        if (!root.__afAugDocBound) {
+          root.__afAugDocBound = true;
+          document.addEventListener('click', function (event) {
+            if (!popover || popover.hidden) return;
+            if (!event.target.closest('[data-afcs-augmentation-slot-dot]') && !event.target.closest('[data-afcs-augmentation-card]') && !event.target.closest('[data-afcs-augmentation-popover]')) {
               hidePopover();
             }
           }, { passive: true });
@@ -1325,6 +1474,7 @@
       updatePool();
       initAttributesUI();
       initInventoryUI(sheet);
+      initAugmentationUI();
       initEquipmentPreviewUI();
     })();
   });

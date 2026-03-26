@@ -439,19 +439,13 @@ function af_charactersheets_collect_build_bonus_items(array $build, int $uid = 0
         $items = array_merge($items, af_charactersheets_normalize_bonus_items($type, $key));
     }
 
-    $augmentations = (array)($build['augmentations'] ?? []);
-    foreach ((array)($augmentations['slots'] ?? []) as $slotItem) {
-        foreach (af_charactersheets_normalize_slot_items($slotItem) as $slot_entry) {
-            if (!is_array($slot_entry)) {
-                continue;
-            }
-            $type = (string)($slot_entry['type'] ?? $slot_entry['kb_type'] ?? '');
-            $key = (string)($slot_entry['key'] ?? $slot_entry['kb_key'] ?? '');
-            if ($type === '' || $key === '') {
-                continue;
-            }
-            $items = array_merge($items, af_charactersheets_normalize_bonus_items($type, $key));
+    foreach (af_charactersheets_collect_equipped_augmentations($build) as $augmentation_item) {
+        $type = (string)($augmentation_item['type'] ?? '');
+        $key = (string)($augmentation_item['key'] ?? '');
+        if ($type === '' || $key === '') {
+            continue;
         }
+        $items = array_merge($items, af_charactersheets_normalize_bonus_items($type, $key));
     }
 
     $equipmentState = $uid > 0 && function_exists('af_advinv_export_charactersheet_equipment_state')
@@ -467,6 +461,34 @@ function af_charactersheets_collect_build_bonus_items(array $build, int $uid = 0
     }
 
     return $items;
+}
+
+function af_charactersheets_collect_equipped_augmentations(array $build): array
+{
+    $resolved = [];
+    $augmentations = (array)($build['augmentations'] ?? []);
+    foreach ((array)($augmentations['slots'] ?? []) as $slotItem) {
+        foreach (af_charactersheets_normalize_slot_items($slotItem) as $slot_entry) {
+            if (!is_array($slot_entry)) {
+                continue;
+            }
+            $type = (string)($slot_entry['type'] ?? $slot_entry['kb_type'] ?? '');
+            $key = (string)($slot_entry['key'] ?? $slot_entry['kb_key'] ?? '');
+            if ($type === '' || $key === '') {
+                continue;
+            }
+            $entry = af_charactersheets_kb_get_entry($type, $key);
+            if (empty($entry)) {
+                continue;
+            }
+            $resolved[] = [
+                'type' => $type,
+                'key' => $key,
+                'entry' => $entry,
+            ];
+        }
+    }
+    return $resolved;
 }
 
 function af_charactersheets_sum_resource_slots_from_grants(array $grants, string $resource_key): int
@@ -1273,26 +1295,14 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $race_speed = (int)($source_rules_map['race']['speed'] ?? 0) + (int)$bonus_speed;
     $damage_bonus_total = $weapon_bonus + (int)floor((float)($final['str'] ?? 0));
 
-    $augmentation_slots = (array)($build['augmentations']['slots'] ?? []);
     $humanity_from_augments = 0.0;
-    foreach ($augmentation_slots as $slotItem) {
-        foreach (af_charactersheets_normalize_slot_items($slotItem) as $slot_entry) {
-            if (!is_array($slot_entry)) {
-                continue;
-            }
-            $aug_type = (string)($slot_entry['type'] ?? $slot_entry['kb_type'] ?? '');
-            $aug_key = (string)($slot_entry['key'] ?? $slot_entry['kb_key'] ?? '');
-            if ($aug_type === '' || $aug_key === '') {
-                continue;
-            }
-            $entry = af_charactersheets_kb_get_entry($aug_type, $aug_key);
-            $humanity_from_augments += af_charactersheets_extract_humanity_cost_from_entry($entry);
-        }
+    foreach (af_charactersheets_collect_equipped_augmentations($build) as $augmentation_item) {
+        $humanity_from_augments += af_charactersheets_extract_humanity_cost_from_entry((array)($augmentation_item['entry'] ?? []));
     }
     $humanity_penalty = max(0.0, $humanity_from_augments);
 
     $hp_total = (int)floor($hp_base_total + $hp_fixed_total + $hp_con);
-    $humanity_total = (int)floor($humanity_base - $humanity_penalty);
+    $humanity_total = $humanity_base - $humanity_penalty;
 
     $character_computed_state = [
         'base_stats' => array_fill_keys(array_keys($attributes_base), (float)$auto_stat_bonus),

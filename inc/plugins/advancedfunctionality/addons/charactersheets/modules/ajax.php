@@ -79,6 +79,7 @@ function af_charactersheets_handle_api_impl(): void
         'inventory_toggle_item',
         'equip_augmentation',
         'unequip_augmentation',
+        'move_augmentation',
         'equip_equipment',
         'unequip_equipment',
         'reset_attributes',
@@ -522,12 +523,12 @@ function af_charactersheets_handle_api_impl(): void
         $inventory['items'] = array_values($items);
         $build['inventory'] = $inventory;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
-    } elseif ($do === 'equip_augmentation' || $do === 'unequip_augmentation') {
+    } elseif ($do === 'equip_augmentation' || $do === 'unequip_augmentation' || $do === 'move_augmentation') {
         if (!$can_edit) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
         }
-        $slot = (string)$mybb->get_input('slot');
         $slot_configs = af_charactersheets_get_augmentation_slots();
+        $slot = (string)$mybb->get_input('slot');
         if ($slot === '' || !array_key_exists($slot, $slot_configs)) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Invalid slot']);
         }
@@ -536,7 +537,66 @@ function af_charactersheets_handle_api_impl(): void
         $augmentations = (array)($build['augmentations'] ?? []);
         $slots = (array)($augmentations['slots'] ?? []);
 
-        if ($do === 'equip_augmentation') {
+        if ($do === 'move_augmentation') {
+            $from_slot = (string)$mybb->get_input('from_slot');
+            $item_key = (string)$mybb->get_input('key');
+            if ($from_slot === '' || !array_key_exists($from_slot, $slot_configs) || $item_key === '') {
+                af_charactersheets_json_response(['success' => false, 'error' => 'Invalid move payload']);
+            }
+            if ($from_slot !== $slot) {
+                $source_items = af_charactersheets_normalize_slot_items($slots[$from_slot] ?? []);
+                $move_item = null;
+                $source_after = [];
+                foreach ($source_items as $source_item) {
+                    if (!is_array($source_item)) {
+                        continue;
+                    }
+                    $source_key = (string)($source_item['key'] ?? $source_item['kb_key'] ?? '');
+                    if ($move_item === null && $source_key === $item_key) {
+                        $move_item = $source_item;
+                        continue;
+                    }
+                    $source_after[] = $source_item;
+                }
+                if (!is_array($move_item)) {
+                    af_charactersheets_json_response(['success' => false, 'error' => 'Augmentation not found in source slot']);
+                }
+
+                $move_type = (string)($move_item['type'] ?? $move_item['kb_type'] ?? '');
+                $entry = af_charactersheets_kb_get_entry($move_type, $item_key);
+                if (empty($entry)) {
+                    af_charactersheets_json_response(['success' => false, 'error' => 'Unknown augmentation']);
+                }
+                $allowed_slots = af_charactersheets_pick_augmentation_slots($entry);
+                if ($allowed_slots && !in_array($slot, $allowed_slots, true)) {
+                    af_charactersheets_json_response(['success' => false, 'error' => 'Slot not allowed for this augmentation']);
+                }
+
+                $target_max = (int)($slot_configs[$slot]['max_equipped'] ?? 1);
+                if ($target_max <= 1) {
+                    if (!empty($slots[$slot])) {
+                        af_charactersheets_json_response(['success' => false, 'error' => 'Slot is occupied']);
+                    }
+                    $slots[$slot] = [
+                        'type' => $move_type,
+                        'key' => $item_key,
+                    ];
+                } else {
+                    $target_items = af_charactersheets_normalize_slot_items($slots[$slot] ?? []);
+                    if (count($target_items) >= $target_max) {
+                        af_charactersheets_json_response(['success' => false, 'error' => 'Slot is full']);
+                    }
+                    $target_items[] = [
+                        'type' => $move_type,
+                        'key' => $item_key,
+                    ];
+                    $slots[$slot] = $target_items;
+                }
+
+                $source_max = (int)($slot_configs[$from_slot]['max_equipped'] ?? 1);
+                $slots[$from_slot] = $source_max <= 1 ? null : array_values($source_after);
+            }
+        } elseif ($do === 'equip_augmentation') {
             $type = (string)$mybb->get_input('type');
             $key = (string)$mybb->get_input('key');
             if ($type === '' || $key === '') {
