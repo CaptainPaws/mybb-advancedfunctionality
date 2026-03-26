@@ -671,7 +671,25 @@
         var slots = equipmentBlock.querySelectorAll('[data-afcs-equipment-slot-dot]');
         var popover = equipmentBlock.querySelector('[data-afcs-equipment-popover]');
         var filters = equipmentBlock.querySelectorAll('[data-afcs-equipment-filter]');
-        var activeFilter = 'all';
+        function normalizeEquipmentFilter(value) {
+          var raw = String(value || '').toLowerCase().trim();
+          if (!raw || raw === 'all') return 'all';
+
+          var aliasMap = {
+            armors: 'armor',
+            armour: 'armor',
+            weapons: 'weapon',
+            accessory: 'gear',
+            accessories: 'gear',
+            artifacts: 'artifact',
+            equipments: 'gear',
+            equipment: 'gear'
+          };
+
+          return aliasMap[raw] || raw;
+        }
+
+        var activeFilter = normalizeEquipmentFilter(root.getAttribute('data-afcs-equipment-active-filter') || 'all');
         if (!cards.length) return;
 
         function activate(itemId) {
@@ -685,12 +703,23 @@
         }
         function applyFilter() {
           cards.forEach(function (card) {
-            var kind = String(card.getAttribute('data-afcs-equipment-filter-kind') || '');
+            var kind = normalizeEquipmentFilter(card.getAttribute('data-afcs-equipment-filter-kind') || '');
             var show = activeFilter === 'all'
               || kind === activeFilter
-              || (activeFilter === 'gear' && (kind === 'gear' || kind === 'accessory' || kind === 'artifact'));
-            card.hidden = !show;
+              || (activeFilter === 'gear' && (kind === 'gear' || kind === 'artifact'));
+            card.style.display = show ? '' : 'none';
           });
+
+          var activeCard = equipmentBlock.querySelector('[data-afcs-equipment-card].is-active');
+          if (activeCard && activeCard.style.display === 'none') {
+            var firstVisibleCard = null;
+            cards.forEach(function (card) {
+              if (!firstVisibleCard && card.style.display !== 'none') firstVisibleCard = card;
+            });
+            if (firstVisibleCard) {
+              activate(firstVisibleCard.getAttribute('data-afcs-equipment-item-id') || '');
+            }
+          }
         }
         function popoverPayload(node) {
           if (!node) return null;
@@ -842,12 +871,17 @@
 
         var activeCard = equipmentBlock.querySelector('[data-afcs-equipment-card].is-active') || cards[0];
         if (activeCard) activate(activeCard.getAttribute('data-afcs-equipment-item-id') || '');
+        filters.forEach(function (node) {
+          var code = normalizeEquipmentFilter(node.getAttribute('data-afcs-equipment-filter') || 'all');
+          node.classList.toggle('is-active', code === activeFilter);
+        });
         applyFilter();
         bindDnD();
 
         filters.forEach(function (filterBtn) {
           filterBtn.addEventListener('click', function () {
-            activeFilter = filterBtn.getAttribute('data-afcs-equipment-filter') || 'all';
+            activeFilter = normalizeEquipmentFilter(filterBtn.getAttribute('data-afcs-equipment-filter') || 'all');
+            root.setAttribute('data-afcs-equipment-active-filter', activeFilter);
             filters.forEach(function (node) { node.classList.toggle('is-active', node === filterBtn); });
             applyFilter();
           });
