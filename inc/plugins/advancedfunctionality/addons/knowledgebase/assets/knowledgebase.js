@@ -1,4 +1,22 @@
 (function () {
+    function isAllowedKbEditorField(field) {
+        if (!field || field.tagName !== 'TEXTAREA') {
+            return false;
+        }
+        var name = String(field.getAttribute('name') || '').trim().toLowerCase();
+        if (!name) {
+            return false;
+        }
+        if (
+            name === 'short_ru' || name === 'short_en' ||
+            name === 'body_ru' || name === 'body_en' ||
+            name === 'tech_ru' || name === 'tech_en'
+        ) {
+            return true;
+        }
+        return /^blocks\[\d+]\[content_(ru|en)]$/.test(name);
+    }
+
     function afKbEndpoint(name, fallback) {
         var map = (window && window.afKbEndpoints) ? window.afKbEndpoints : null;
         return (map && map[name]) ? map[name] : fallback;
@@ -35,7 +53,7 @@
             return;
         }
         var container = root || document;
-        var fields = container.querySelectorAll('textarea.af-kb-editor');
+        var fields = container.querySelectorAll('textarea');
         if (!fields.length) {
             return;
         }
@@ -55,6 +73,9 @@
             }
         }
         fields.forEach(function (field) {
+            if (!isAllowedKbEditorField(field)) {
+                return;
+            }
             if (getEditorInstance(field)) {
                 field.dataset.afKbEditor = '1';
                 return;
