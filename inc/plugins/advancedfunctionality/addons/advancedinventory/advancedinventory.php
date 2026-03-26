@@ -2478,6 +2478,11 @@ function af_advinv_extract_ability_fields(array $meta): array
     $requirements = [];
     $cost = trim((string)($meta['cost'] ?? $meta['rules']['spell']['cost'] ?? $meta['rules']['ritual']['cost'] ?? ''));
     $price = trim((string)($meta['price'] ?? $meta['shop']['price'] ?? ''));
+    $cooldown = trim((string)($meta['cooldown'] ?? $meta['rules']['spell']['cooldown'] ?? $meta['rules']['ritual']['cooldown'] ?? ''));
+    $resource = trim((string)($meta['resource'] ?? $meta['rules']['spell']['resource'] ?? $meta['rules']['ritual']['resource'] ?? ''));
+    $rank = trim((string)($meta['rank'] ?? $meta['tier'] ?? $meta['rules']['spell']['rank'] ?? $meta['rules']['ritual']['rank'] ?? ''));
+    $school = trim((string)($meta['school'] ?? $meta['rules']['spell']['school'] ?? $meta['rules']['ritual']['school'] ?? ''));
+    $tradition = trim((string)($meta['tradition'] ?? $meta['rules']['spell']['tradition'] ?? $meta['rules']['ritual']['tradition'] ?? ''));
 
     foreach ((array)($meta['effects'] ?? $meta['rules']['effects'] ?? []) as $effect) {
         if (is_array($effect)) {
@@ -2514,7 +2519,33 @@ function af_advinv_extract_ability_fields(array $meta): array
         'ability_requirements' => array_values(array_unique($requirements)),
         'ability_cost' => $cost,
         'ability_price' => $price,
+        'ability_cooldown' => $cooldown,
+        'ability_resource' => $resource,
+        'ability_rank' => $rank,
+        'ability_school' => $school,
+        'ability_tradition' => $tradition,
     ];
+}
+
+function af_advinv_get_user_ability_items(int $uid, int $perPage = 500): array
+{
+    $uid = (int)$uid;
+    if ($uid <= 0) {
+        return [];
+    }
+
+    return (array)(af_inv_get_items($uid, [
+        'entity' => 'abilities',
+        'subtype' => 'all',
+        'page' => 1,
+        'per_page' => max(1, $perPage),
+        'enrich' => true,
+    ])['items'] ?? []);
+}
+
+function af_advinv_render_abilities_cards_for_uid(int $uid, int $perPage = 500): string
+{
+    return af_advinv_render_abilities_cards(af_advinv_get_user_ability_items($uid, $perPage));
 }
 
 function af_advinv_export_charactersheet_abilities_state(int $uid): array
@@ -4067,10 +4098,16 @@ function af_advinv_render_abilities_cards(array $items): string
         }
         $icon = trim((string)($item['icon'] ?? ''));
         $summary = trim((string)($item['ability_summary'] ?? ($item['ability_short'] ?? $item['ability_description'] ?? '')));
+        $description = trim((string)($item['ability_description'] ?? ''));
         $effects = (array)($item['ability_effects'] ?? []);
         $requirements = (array)($item['ability_requirements'] ?? []);
         $cost = trim((string)($item['ability_cost'] ?? ''));
         $price = trim((string)($item['ability_price'] ?? ''));
+        $cooldown = trim((string)($item['ability_cooldown'] ?? ''));
+        $resource = trim((string)($item['ability_resource'] ?? ''));
+        $rank = trim((string)($item['ability_rank'] ?? ''));
+        $school = trim((string)($item['ability_school'] ?? ''));
+        $tradition = trim((string)($item['ability_tradition'] ?? ''));
         $subtype = trim((string)($item['subtype'] ?? ''));
         $qty = max(1, (int)($item['qty'] ?? 1));
 
@@ -4089,6 +4126,11 @@ function af_advinv_render_abilities_cards(array $items): string
         if ($summary !== '') {
             $rows .= '<p class="af-inv-ability-card__summary">' . htmlspecialchars_uni($summary) . '</p>';
         }
+        if ($description !== '' && $description !== $summary) {
+            $rows .= '<details class="af-inv-ability-card__details"><summary>Подробнее</summary><div>'
+                . nl2br(htmlspecialchars_uni($description))
+                . '</div></details>';
+        }
         if ($effects) {
             $rows .= '<ul class="af-inv-ability-card__list">';
             foreach ($effects as $line) {
@@ -4100,8 +4142,13 @@ function af_advinv_render_abilities_cards(array $items): string
             $rows .= '</ul>';
         }
         $meta = [];
+        if ($rank !== '') { $meta[] = 'Ранг: ' . $rank; }
+        if ($school !== '') { $meta[] = 'Школа: ' . $school; }
+        if ($tradition !== '') { $meta[] = 'Традиция: ' . $tradition; }
         if ($cost !== '') { $meta[] = 'Стоимость: ' . $cost; }
         if ($price !== '') { $meta[] = 'Цена: ' . $price; }
+        if ($resource !== '') { $meta[] = 'Ресурс: ' . $resource; }
+        if ($cooldown !== '') { $meta[] = 'Cooldown: ' . $cooldown; }
         if ($requirements) {
             $meta[] = 'Требования: ' . implode(', ', array_map(static function ($v) { return trim((string)$v); }, $requirements));
         }

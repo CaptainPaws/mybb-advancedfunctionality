@@ -105,7 +105,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     $can_manage_skills = $can_manage_sheet && (!$skills_locked || $is_staff);
     $sheet_skills_html = af_charactersheets_build_skills_html($sheet_view, $can_manage_skills, $can_view_ledger, $can_staff_reset, $skills_locked);
     $sheet_knowledge_html = af_charactersheets_build_knowledge_html($sheet_view, $can_edit_sheet, $can_view_ledger);
-    $sheet_abilities_html = af_charactersheets_build_abilities_html($build, $can_edit_sheet);
+    $sheet_abilities_html = af_charactersheets_build_abilities_html((int)($sheet['uid'] ?? 0));
     $sheet_augments_html = af_charactersheets_build_augments_html($build, $can_edit_sheet, $sheet_view, $uid);
     $sheet_equipment_html = af_charactersheets_build_equipment_html($build, $can_edit_sheet, $uid);
     $sheet_mechanics_html = af_charactersheets_build_mechanics_html($sheet_view);
@@ -947,53 +947,11 @@ function af_charactersheets_render_slot_icon(array $slot_config): string
     return '<span class="af-cs-slot-icon"><i class="' . htmlspecialchars_uni($icon) . '"></i></span>';
 }
 
-function af_charactersheets_build_abilities_html(array $build, bool $can_edit): string
+function af_charactersheets_build_abilities_html(int $ownerUid): string
 {
-    $abilities = (array)($build['abilities'] ?? []);
-    $owned = (array)($abilities['owned'] ?? []);
-
-    $cards = [];
-    foreach ($owned as $ability) {
-        if (!is_array($ability)) {
-            continue;
-        }
-        $type = (string)($ability['type'] ?? '');
-        $key = (string)($ability['key'] ?? '');
-        if ($type === '' || $key === '') {
-            continue;
-        }
-        $entry = af_charactersheets_kb_get_entry($type, $key);
-        $title = af_charactersheets_kb_pick_text($entry, 'title');
-        $desc = af_charactersheets_kb_pick_text($entry, 'short');
-        if ($desc === '') {
-            $desc = af_charactersheets_kb_pick_text($entry, 'description');
-        }
-        $bonus_html = af_charactersheets_kb_get_block_html($entry, 'bonuses');
-        $equipped = !empty($ability['equipped']);
-        $equip_label = $equipped ? 'Снять' : 'Надеть';
-        $equip_action = $can_edit
-            ? '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-ability-toggle="1"'
-                . ' data-afcs-ability-type="' . htmlspecialchars_uni($type) . '"'
-                . ' data-afcs-ability-key="' . htmlspecialchars_uni($key) . '"'
-                . ' data-afcs-ability-equipped="' . ($equipped ? '0' : '1') . '">' . $equip_label . '</button>'
-            : '';
-
-        $cards[] = '<div class="af-cs-ability-card' . ($equipped ? ' is-equipped' : '') . '">'
-            . '<div class="af-cs-ability-icon">' . af_charactersheets_render_kb_icon($entry, $title) . '</div>'
-            . '<div class="af-cs-ability-body">'
-            . '<div class="af-cs-ability-title">' . htmlspecialchars_uni($title !== '' ? $title : $key) . '</div>'
-            . ($desc !== '' ? '<div class="af-cs-ability-desc">' . htmlspecialchars_uni($desc) . '</div>' : '')
-            . ($bonus_html !== '' ? '<div class="af-cs-ability-bonus">' . $bonus_html . '</div>' : '')
-            . ($equip_action !== '' ? '<div class="af-cs-ability-actions">' . $equip_action . '</div>' : '')
-            . '</div>'
-            . '</div>';
-    }
-
-    if (!$cards) {
-        $cards[] = '<div class="af-cs-muted">Способности пока не куплены.</div>';
-    }
-
-    $abilities_html = implode('', $cards);
+    $abilities_html = function_exists('af_advinv_render_abilities_cards_for_uid')
+        ? af_advinv_render_abilities_cards_for_uid($ownerUid)
+        : '<div class="af-cs-muted">Способности пока не куплены.</div>';
 
     global $templates;
     $tpl = $templates->get('charactersheet_abilities');
