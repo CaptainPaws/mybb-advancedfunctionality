@@ -281,7 +281,9 @@
       var parsed = new URL(url, window.location.origin);
       var entity = parsed.searchParams.get('entity') || parsed.searchParams.get('tab') || 'equipment';
       var sub = parsed.searchParams.get('sub') || 'all';
-      return entity + ':' + sub;
+      var page = parsed.searchParams.get('page') || '1';
+      var search = parsed.searchParams.get('search') || '';
+      return entity + ':' + sub + ':' + page + ':' + search;
     } catch (e) {
       return '';
     }
@@ -295,6 +297,18 @@
     panel.dataset.afInvBound = '1';
 
     panel.addEventListener('submit', function (e) {
+      var searchForm = e.target.closest('[data-af-inv-search-form]');
+      if (searchForm && panel.contains(searchForm)) {
+        e.preventDefault();
+        var params = new URLSearchParams(new FormData(searchForm));
+        params.set('ajax', '1');
+        var actionUrl = searchForm.getAttribute('action') || 'inventory.php';
+        var join = actionUrl.indexOf('?') === -1 ? '?' : '&';
+        var url = actionUrl + join + params.toString();
+        page.__afInvLoadUrl(url, normalizeKeyFromUrl(url), true);
+        return;
+      }
+
       var appearanceUnapplyForm = e.target.closest('[data-af-appearance-unapply-form]');
       if (!appearanceUnapplyForm || !panel.contains(appearanceUnapplyForm)) {
         return;

@@ -2132,6 +2132,16 @@ function af_advancedshop_detect_inventory_target_from_kb_meta(array $meta): arra
         $kindSource = 'fallback';
     }
 
+    $spellType = mb_strtolower(trim((string)($meta['rules']['spell']['type'] ?? $meta['rules']['ritual']['type'] ?? '')));
+    if (in_array($spellType, ['spell', 'ritual'], true)) {
+        return [
+            'slot' => 'abilities',
+            'subtype' => $spellType,
+            'kind_detected' => $spellType,
+            'kind_source' => 'rules.spell.type',
+        ];
+    }
+
     $slot = 'resources';
     $subtype = '';
     if (in_array($kind, $supportedKinds, true)) {
@@ -2504,6 +2514,14 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
     if ($hasKbData && (trim((string)$payload['kb_type']) === '' || trim((string)$payload['kb_key']) === '')) {
         af_advancedshop_inv_debug('checkout_grant_blocked', ['uid' => $uid, 'reason' => 'kb_identity_missing', 'item' => $item, 'kb' => $kb]);
         throw new RuntimeException('Не удалось выдать предмет: отсутствуют kb_type/kb_key.');
+    }
+
+    $kbTypeNorm = mb_strtolower(trim((string)$payload['kb_type']));
+    if (in_array($kbTypeNorm, ['spell', 'ritual'], true)) {
+        $payload['slot'] = 'abilities';
+        if (trim((string)$payload['subtype']) === '') {
+            $payload['subtype'] = $kbTypeNorm;
+        }
     }
 
     af_advancedshop_inv_debug('grant_payload_ready', [

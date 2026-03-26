@@ -1234,3 +1234,20 @@ body.af-apui-surface-body[data-af-apui-surface="inventory"] {
     }
   }
 }
+
+.af-inv-abilities{display:flex;flex-direction:column;gap:12px}
+.af-inv-abilities__search{display:flex;gap:8px}
+.af-inv-abilities__search input[type="text"]{min-width:240px}
+.af-inv-abilities-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.af-inv-ability-card{border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:12px;background:rgba(17,24,39,.65)}
+.af-inv-ability-card__head{display:flex;align-items:center;gap:10px}
+.af-inv-ability-card__icon{width:36px;height:36px;object-fit:cover;border-radius:8px}
+.af-inv-ability-card__icon.is-empty{display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08)}
+.af-inv-ability-card__title-wrap h3{margin:0;font-size:14px}
+.af-inv-ability-card__subtype{font-size:11px;opacity:.8}
+.af-inv-ability-card__summary{font-size:12px;opacity:.92}
+.af-inv-ability-card__list{margin:8px 0 0;padding-left:18px}
+.af-inv-ability-card__meta{font-size:11px;opacity:.82;margin-top:8px}
+.af-inv-ability-card__qty{margin-left:auto;font-weight:700}
+.af-inv-abilities__pager{display:flex;gap:6px;flex-wrap:wrap}
+.af-inv-abilities__pager-note{font-size:12px;opacity:.8}
