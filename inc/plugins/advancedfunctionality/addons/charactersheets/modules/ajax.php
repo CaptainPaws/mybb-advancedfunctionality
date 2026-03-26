@@ -808,7 +808,7 @@ function af_charactersheets_handle_api_impl(): void
     $can_manage_skills = $can_manage && (!$skills_locked || $is_staff);
     $skills_html = af_charactersheets_build_skills_html($view, $can_manage_skills, $can_view_ledger, $can_staff_reset, $skills_locked);
     $knowledge_html = af_charactersheets_build_knowledge_html($view, $can_edit, $can_view_ledger);
-    $abilities_html = af_charactersheets_build_abilities_html($build, $can_edit);
+    $abilities_html = af_charactersheets_build_abilities_html((int)($sheet['uid'] ?? 0));
     $inventory_uid = (int)($sheet['uid'] ?? 0);
     $augmentations_html = af_charactersheets_build_augments_html($build, $can_edit, $view, $inventory_uid);
     $equipment_html = af_charactersheets_build_equipment_html($build, $can_edit, $inventory_uid);
