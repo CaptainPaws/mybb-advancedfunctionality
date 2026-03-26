@@ -3,10 +3,12 @@
         if (!field || field.tagName !== 'TEXTAREA') {
             return false;
         }
+
         var name = String(field.getAttribute('name') || '').trim().toLowerCase();
         if (!name) {
             return false;
         }
+
         if (
             name === 'short_ru' || name === 'short_en' ||
             name === 'body_ru' || name === 'body_en' ||
@@ -14,6 +16,7 @@
         ) {
             return true;
         }
+
         return /^blocks\[\d+]\[content_(ru|en)]$/.test(name);
     }
 
@@ -26,6 +29,7 @@
         if (!field) {
             return null;
         }
+
         if (window.jQuery && window.jQuery.fn && typeof window.jQuery.fn.sceditor === 'function') {
             try {
                 return window.jQuery(field).sceditor('instance');
@@ -33,61 +37,192 @@
                 return null;
             }
         }
+
         return null;
+    }
+
+    function destroyEditorInstance(field) {
+        if (!field) {
+            return false;
+        }
+
+        var instance = getEditorInstance(field);
+        if (!instance) {
+            return false;
+        }
+
+        try {
+            if (typeof instance.destroy === 'function') {
+                instance.destroy();
+            }
+        } catch (err) {
+            return false;
+        }
+
+        field.removeAttribute('data-af-kb-editor');
+        field.removeAttribute('data-af-kb-editor-allowed');
+        field.removeAttribute('data-af-kb-editor-init');
+        field.removeAttribute('data-af-kb-editor-policy');
+        field.dataset.afKbEditor = '';
+        return true;
     }
 
     function setFieldValue(field, value) {
         if (!field) {
             return;
         }
+
         var instance = getEditorInstance(field);
         if (instance) {
             instance.val(value);
             return;
         }
+
         field.value = value;
+    }
+
+    function markEditorPolicy(root) {
+        var container = root || document;
+        var fields = container.querySelectorAll('textarea');
+
+        Array.prototype.forEach.call(fields, function (field) {
+            var allowed = isAllowedKbEditorField(field);
+
+            if (allowed) {
+                field.setAttribute('data-af-kb-editor-allowed', '1');
+                field.setAttribute('data-af-kb-editor-policy', 'allow');
+                field.classList.remove('af-kb-editor-deny');
+                field.classList.add('af-kb-editor-allow');
+            } else {
+                field.setAttribute('data-af-kb-editor-policy', 'deny');
+                field.classList.remove('af-kb-editor-allow');
+                field.classList.add('af-kb-editor-deny');
+            }
+        });
+    }
+
+    function cleanupDeniedEditors(root) {
+        var container = root || document;
+        var fields = container.querySelectorAll('textarea');
+
+        Array.prototype.forEach.call(fields, function (field) {
+            if (isAllowedKbEditorField(field)) {
+                return;
+            }
+
+            destroyEditorInstance(field);
+        });
     }
 
     function initEditors(root) {
         if (!window.jQuery || !window.jQuery.fn || typeof window.jQuery.fn.sceditor !== 'function') {
             return;
         }
+
         var container = root || document;
+        markEditorPolicy(container);
+        cleanupDeniedEditors(container);
+
         var fields = container.querySelectorAll('textarea');
         if (!fields.length) {
             return;
         }
+
         var baseOptions = window.sceditor_options && typeof window.sceditor_options === 'object'
             ? window.sceditor_options
             : {};
+
         if (!baseOptions.plugins) {
             baseOptions.plugins = 'bbcode';
         }
+
         if (!baseOptions.toolbar) {
             baseOptions.toolbar = 'bold,italic,underline,strike|left,center,right,justify|bulletlist,orderedlist|link,unlink|image|quote,code';
         }
+
         if (!baseOptions.style) {
-            var defaultStyle = window.sceditor && window.sceditor.defaultOptions ? window.sceditor.defaultOptions.style : '';
+            var defaultStyle = window.sceditor && window.sceditor.defaultOptions
+                ? window.sceditor.defaultOptions.style
+                : '';
             if (defaultStyle) {
                 baseOptions.style = defaultStyle;
             }
         }
-        fields.forEach(function (field) {
+
+        Array.prototype.forEach.call(fields, function (field) {
             if (!isAllowedKbEditorField(field)) {
                 return;
             }
+
             if (getEditorInstance(field)) {
                 field.dataset.afKbEditor = '1';
+                field.setAttribute('data-af-kb-editor-init', '1');
                 return;
             }
-            if (field.dataset.afKbEditor === '1') {
+
+            if (field.dataset.afKbEditor === '1' || field.getAttribute('data-af-kb-editor-init') === '1') {
                 return;
             }
+
             field.dataset.afKbEditor = '1';
+            field.setAttribute('data-af-kb-editor-init', '1');
+
             var options = Object.assign({}, baseOptions, { startInSourceMode: true });
             window.jQuery(field).sceditor(options);
         });
     }
+
+    function refreshEditorPolicy(root) {
+        var container = root || document;
+        markEditorPolicy(container);
+        cleanupDeniedEditors(container);
+        initEditors(container);
+    }
+
+    function scheduleRefresh(root) {
+        var container = root || document;
+
+        if (container.__afKbEditorRefreshScheduled) {
+            return;
+        }
+
+        container.__afKbEditorRefreshScheduled = true;
+
+        window.setTimeout(function () {
+            container.__afKbEditorRefreshScheduled = false;
+            refreshEditorPolicy(container);
+        }, 0);
+    }
+
+    function observeEditorLeaks(root) {
+        var container = root || document.body;
+        if (!container || !window.MutationObserver || container.__afKbEditorObserverAttached) {
+            return;
+        }
+
+        var observer = new MutationObserver(function () {
+            scheduleRefresh(container);
+        });
+
+        observer.observe(container, {
+            childList: true,
+            subtree: true
+        });
+
+        container.__afKbEditorObserverAttached = true;
+    }
+
+    window.__afKbEditorGuard = {
+        isAllowedKbEditorField: isAllowedKbEditorField,
+        getEditorInstance: getEditorInstance,
+        destroyEditorInstance: destroyEditorInstance,
+        markEditorPolicy: markEditorPolicy,
+        cleanupDeniedEditors: cleanupDeniedEditors,
+        initEditors: initEditors,
+        refreshEditorPolicy: refreshEditorPolicy,
+        observeEditorLeaks: observeEditorLeaks,
+        scheduleRefresh: scheduleRefresh
+    };
 
     function initRepeater(containerId, addButtonId, templateId, indexAttr) {
         var container = document.getElementById(containerId);
@@ -112,6 +247,7 @@
             var html = template.innerHTML.replace(/__INDEX__/g, String(index));
             var wrapper = document.createElement('div');
             wrapper.innerHTML = html;
+
             var lastElement = null;
             while (wrapper.firstChild) {
                 var node = wrapper.firstChild;
@@ -121,10 +257,13 @@
                     lastElement = node;
                 }
             }
+
             bumpIndex();
+
             if (lastElement) {
-                initEditors(lastElement);
+                refreshEditorPolicy(lastElement);
             }
+
             return lastElement;
         }
 
@@ -137,10 +276,12 @@
             if (!(target instanceof HTMLElement)) {
                 return;
             }
+
             if (target.classList.contains('af-kb-remove')) {
                 var item = target.closest('.af-kb-block-item, .af-kb-rel-item-edit');
                 if (item && container.contains(item)) {
                     item.remove();
+                    scheduleRefresh(container);
                 }
             }
         });
@@ -163,6 +304,7 @@
         if (!blockElement) {
             return;
         }
+
         var fields = {
             block_key: data.block_key || '',
             title_ru: data.title_ru || '',
@@ -174,12 +316,15 @@
             icon_class: data.icon_class || '',
             sortorder: data.sortorder != null ? String(data.sortorder) : ''
         };
+
         Object.keys(fields).forEach(function (key) {
             var input = blockElement.querySelector('[name$="[' + key + ']"]');
             if (input) {
                 setFieldValue(input, fields[key]);
             }
         });
+
+        refreshEditorPolicy(blockElement);
     }
 
     function initCopyButtons() {
@@ -191,14 +336,17 @@
             if (!target.classList.contains('af-kb-copy-json')) {
                 return;
             }
+
             var payload = target.getAttribute('data-json') || '';
             if (payload === '') {
                 return;
             }
+
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(payload);
                 return;
             }
+
             var temp = document.createElement('textarea');
             temp.value = payload;
             temp.style.position = 'fixed';
@@ -223,15 +371,18 @@
             if (!target.classList.contains('af-kb-tech-template')) {
                 return;
             }
+
             var fieldName = target.getAttribute('data-target');
             var template = target.getAttribute('data-template') || '';
             if (!fieldName || template === '') {
                 return;
             }
+
             var field = document.querySelector('textarea[name="' + fieldName + '"]');
             if (!field) {
                 return;
             }
+
             var currentValue = '';
             var instance = getEditorInstance(field);
             if (instance) {
@@ -239,10 +390,12 @@
             } else {
                 currentValue = field.value;
             }
+
             if (currentValue.trim() === '') {
                 setFieldValue(field, template);
                 return;
             }
+
             setFieldValue(field, template + '\n' + currentValue);
         });
     }
@@ -327,22 +480,22 @@
                 meta_json: JSON.stringify({
                     tags: ['skill'],
                     skill: {
-                    category: 'general',
-                    key_stat: 'dex',
-                    rank_max: 4,
-                    armor_check_penalty: false,
-                    trained_only: false,
-                    notes: ''
+                        category: 'general',
+                        key_stat: 'dex',
+                        rank_max: 4,
+                        armor_check_penalty: false,
+                        trained_only: false,
+                        notes: ''
                     }
                 }, null, 2),
                 blocks: [
                     {
-                    block_key: 'rules',
-                    title_ru: 'Правила',
-                    title_en: 'Rules',
-                    content_en: 'This skill is used for balance, tumbling, and escape maneuvers.',
-                    data_json: '{}',
-                    sortorder: 0
+                        block_key: 'rules',
+                        title_ru: 'Правила',
+                        title_en: 'Rules',
+                        content_en: 'This skill is used for balance, tumbling, and escape maneuvers.',
+                        data_json: '{}',
+                        sortorder: 0
                     }
                 ]
             }
@@ -353,6 +506,7 @@
             if (!key || !templates[key]) {
                 return;
             }
+
             var preset = templates[key];
             setValue('textarea[name="short_en"]', preset.short_en);
             setValue('textarea[name="body_en"]', preset.body_en);
@@ -362,6 +516,8 @@
                 var blockElement = blockRepeater.addItem();
                 setBlockValues(blockElement, block);
             });
+
+            refreshEditorPolicy(document);
         });
     }
 
@@ -369,7 +525,8 @@
         var blockRepeater = initRepeater('af-kb-blocks', 'af-kb-add-block', 'af-kb-block-template', 'data-index');
         initRepeater('af-kb-relations', 'af-kb-add-relation', 'af-kb-relation-template', 'data-index');
         applyTemplate(blockRepeater);
-        initEditors(document);
+        refreshEditorPolicy(document);
+        observeEditorLeaks(document.body);
         initCopyButtons();
         initTechTemplateButtons();
     });
@@ -652,12 +809,18 @@
             if (def.type === 'textarea') {
                 input = document.createElement('textarea');
                 input.value = value || '';
+                input.classList.add('af-kb-plain-textarea');
+                input.setAttribute('data-af-kb-editor-policy', 'deny');
             } else if (def.type === 'lines') {
                 input = document.createElement('textarea');
                 input.value = Array.isArray(value) ? value.join('\n') : (value || '');
+                input.classList.add('af-kb-plain-textarea');
+                input.setAttribute('data-af-kb-editor-policy', 'deny');
             } else if (def.type === 'json') {
                 input = document.createElement('textarea');
                 input.value = JSON.stringify(value || {}, null, 2);
+                input.classList.add('af-kb-plain-textarea');
+                input.setAttribute('data-af-kb-editor-policy', 'deny');
             } else if (def.type === 'number') {
                 input = document.createElement('input');
                 input.type = 'number';
@@ -754,6 +917,7 @@
             if (def.hint) {
                 wrap.insertAdjacentHTML('beforeend', '<div class="af-kb-help">' + esc(def.hint) + '</div>');
             }
+
             return wrap;
         }
 
@@ -1160,6 +1324,10 @@
         ));
 
         root.innerHTML = html.join('');
+        if (window.__afKbEditorGuard) {
+            window.__afKbEditorGuard.refreshEditorPolicy(root);
+            window.__afKbEditorGuard.observeEditorLeaks(root);
+        }
 
         // ---------- State (разный по профилям) ----------
         var state = deepClone(merged);
@@ -2668,6 +2836,9 @@
         if (form) {
             form.addEventListener('submit', function () {
                 syncRawNow();
+                if (window.__afKbEditorGuard) {
+                    window.__afKbEditorGuard.refreshEditorPolicy(root);
+                }
             });
         }
 
