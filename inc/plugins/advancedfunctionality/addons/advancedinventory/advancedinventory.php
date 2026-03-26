@@ -2592,18 +2592,36 @@ function af_advinv_export_charactersheet_abilities_state(int $uid): array
 
 function af_advinv_classify_equipment_from_kb_meta(array $kbMeta): string
 {
+    $resolveUniqueSubtype = static function (array $itemNode): string {
+        $role = mb_strtolower(trim((string)($itemNode['unique_role'] ?? $itemNode['unique_base_kind'] ?? '')));
+        if ($role === '') {
+            return '';
+        }
+        if (in_array($role, ['augmentation', 'cyberware', 'augmentations'], true)) {
+            return 'augmentations';
+        }
+        if (in_array($role, ['weapon', 'armor', 'ammo', 'consumable', 'gear', 'artifact'], true)) {
+            return $role;
+        }
+        return '';
+    };
+
     $normalizeKind = static function (string $raw): string {
         $kind = mb_strtolower(trim($raw));
         if ($kind === 'augmentation' || $kind === 'cyberware') {
             return 'augmentations';
         }
-        if (in_array($kind, ['weapon', 'armor', 'ammo', 'consumable', 'augmentations'], true)) {
+        if (in_array($kind, ['weapon', 'armor', 'ammo', 'consumable', 'augmentations', 'gear', 'artifact'], true)) {
             return $kind;
         }
         return '';
     };
 
     $rulesItem = is_array($kbMeta['rules']['item'] ?? null) ? (array)$kbMeta['rules']['item'] : [];
+    $kindFromUniqueRole = $resolveUniqueSubtype($rulesItem);
+    if ($kindFromUniqueRole !== '') {
+        return $kindFromUniqueRole;
+    }
 
     $kindFromRules = $normalizeKind((string)($rulesItem['item_kind'] ?? ''));
     if ($kindFromRules !== '') {
@@ -3098,7 +3116,25 @@ function af_inv_map_legacy_support_slot(string $slot): string
 
 function af_inv_equipment_slots(): array
 {
-    return ['head' => 'Head', 'body' => 'Body', 'hands' => 'Hands', 'legs' => 'Legs', 'feet' => 'Feet', 'weapon_mainhand' => 'Main hand', 'weapon_offhand' => 'Off hand', 'ammo' => 'Ammo', 'artifact' => 'Artifact'] + af_inv_support_slot_labels();
+    return [
+        'head' => 'Head',
+        'body' => 'Body',
+        'hands' => 'Hands',
+        'legs' => 'Legs',
+        'feet' => 'Feet',
+        'back' => 'Back',
+        'belt' => 'Belt',
+        'weapon_mainhand' => 'Main hand',
+        'weapon_offhand' => 'Off hand',
+        'weapon_twohand' => 'Two-hand',
+        'weapon_melee' => 'Melee',
+        'weapon_ranged' => 'Ranged',
+        'ammo' => 'Ammo',
+        'ammo_pouch' => 'Ammo pouch',
+        'gear' => 'Gear',
+        'accessory' => 'Accessory',
+        'artifact' => 'Artifact',
+    ] + af_inv_support_slot_labels();
 }
 
 function af_inv_get_equipped(int $uid): array
@@ -3165,6 +3201,7 @@ function af_inv_candidate_slots_for_item(array $item): array
 
     $knownSlots = af_inv_equipment_slots();
     $meta = af_advinv_decode_meta_json((string)($item['meta_json'] ?? ''));
+    $rulesItem = is_array($meta['rules']['item'] ?? null) ? (array)$meta['rules']['item'] : [];
     $result = [];
 
     $pushSlot = static function (string $rawSlot) use (&$result, $knownSlots): void {
@@ -3232,6 +3269,29 @@ function af_inv_candidate_slots_for_item(array $item): array
         }
     }
 
+    if (!$result && mb_strtolower(trim((string)($rulesItem['item_kind'] ?? ''))) === 'unique') {
+        $uniqueRole = mb_strtolower(trim((string)($rulesItem['unique_role'] ?? $rulesItem['unique_base_kind'] ?? '')));
+        if ($uniqueRole !== '') {
+            $pushSlot((string)($rulesItem['equip']['slot'] ?? ''));
+            foreach ((array)($rulesItem['equip']['slots'] ?? []) as $slotValue) {
+                $pushSlot((string)$slotValue);
+            }
+            if (!$result) {
+                $roleFallback = [
+                    'weapon' => ['weapon_mainhand', 'weapon_offhand'],
+                    'armor' => ['body', 'head', 'hands', 'legs', 'feet', 'back', 'belt'],
+                    'artifact' => ['artifact'],
+                    'gear' => ['gear', 'accessory'],
+                    'ammo' => ['ammo'],
+                    'consumable' => ['support_1', 'support_2', 'support_3'],
+                ];
+                foreach ((array)($roleFallback[$uniqueRole] ?? []) as $slotValue) {
+                    $pushSlot((string)$slotValue);
+                }
+            }
+        }
+    }
+
     if ($result) {
         return array_values($result);
     }
@@ -3284,7 +3344,7 @@ function af_advinv_export_charactersheet_equipment_state(int $uid): array
         return ['items' => [], 'equipped' => [], 'groups' => $groups];
     }
 
-    $allowedSubtypes = ['weapon', 'armor', 'ammo', 'consumable'];
+    $allowedSubtypes = ['weapon', 'armor', 'ammo', 'consumable', 'gear', 'artifact'];
     $allItems = (array)(af_inv_get_items($uid, ['entity' => 'equipment', 'page' => 1, 'per_page' => 500, 'enrich' => true])['items'] ?? []);
     $equippedRows = af_inv_get_equipped($uid);
     $supportBindings = af_inv_support_bindings($uid);
@@ -3336,16 +3396,17 @@ function af_advinv_export_charactersheet_equipment_state(int $uid): array
         if ($subtype === '') {
             $subtype = af_advinv_classify_equipment_from_kb_meta(af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')));
         }
-        if (!in_array($subtype, ['weapon', 'armor', 'ammo'], true)) {
+        if (!in_array($subtype, ['weapon', 'armor', 'ammo', 'gear', 'artifact'], true)) {
             continue;
         }
 
-        $groupKey = $subtype;
+        $groupKey = in_array($subtype, ['gear', 'artifact'], true) ? 'support' : $subtype;
         $equipped[$slotCode] = [
             'slot' => (string)$slotCode,
             'slot_label' => (string)($slotLabels[$slotCode] ?? $slotCode),
             'group' => $groupKey,
             'title' => (string)($item['appearance_title'] ?? $item['title'] ?? $item['kb_key'] ?? 'Предмет'),
+            'description' => (string)($item['short_description'] ?? $item['description'] ?? ''),
             'icon' => (string)($item['appearance_preview_image'] ?? $item['icon'] ?? ''),
             'item_id' => (int)($item['id'] ?? 0),
             'kb_type' => (string)($item['kb_type'] ?? 'item'),
@@ -3364,6 +3425,7 @@ function af_advinv_export_charactersheet_equipment_state(int $uid): array
             'slot_label' => (string)($slotLabels[$slotCode] ?? $slotCode),
             'group' => 'support',
             'title' => (string)($item['appearance_title'] ?? $item['title'] ?? $item['kb_key'] ?? 'Предмет'),
+            'description' => (string)($item['short_description'] ?? $item['description'] ?? ''),
             'icon' => (string)($item['appearance_preview_image'] ?? $item['icon'] ?? ''),
             'item_id' => (int)($item['id'] ?? 0),
             'kb_type' => (string)($item['kb_type'] ?? 'item'),

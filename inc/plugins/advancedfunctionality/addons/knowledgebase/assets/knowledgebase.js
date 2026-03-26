@@ -739,12 +739,13 @@
         var slotByKind = {
             armor: ['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt'],
             weapon: ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_ranged', 'weapon_melee'],
-            consumable: ['', 'consumable_1', 'consumable_2'],
+            consumable: ['', 'support_1', 'support_2', 'support_3'],
             ammo: ['ammo', 'ammo_pouch'],
             gear: ['', 'gear', 'accessory'],
             artifact: ['', 'artifact', 'accessory'],
-            unique: ['', 'unique', 'accessory']
+            unique: ['', 'weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_ranged', 'weapon_melee', 'head', 'body', 'hands', 'legs', 'feet', 'back', 'belt', 'support_1', 'support_2', 'support_3', 'ammo', 'ammo_pouch', 'gear', 'artifact', 'accessory']
         };
+        var uniqueRoleToKind = { weapon: 'weapon', armor: 'armor', augmentation: 'augmentation', artifact: 'artifact', gear: 'gear', consumable: 'consumable', ammo: 'ammo' };
 
         // ВАЖНО: мы больше НЕ делаем один и тот же UI на все типы.
         // Профиль UI: либо задаётся схемой (ui_profile), либо определяется по type.
@@ -1440,6 +1441,9 @@
 
             if (!state.item.equip || typeof state.item.equip !== 'object') state.item.equip = {};
             if (!state.item.equip.slot && state.item.slot) state.item.equip.slot = state.item.slot;
+            if (String(state.item.equip.slot || '').indexOf('consumable_') === 0) {
+                state.item.equip.slot = String(state.item.equip.slot).replace('consumable_', 'support_');
+            }
             if (!state.item.equip.armor || typeof state.item.equip.armor !== 'object') state.item.equip.armor = {};
             if (state.item.equip.armor.ac_bonus == null) state.item.equip.armor.ac_bonus = 0;
             if (!state.item.equip.armor.armor_type) state.item.equip.armor.armor_type = 'light';
@@ -1792,18 +1796,22 @@
                 }
                 var kind = normalizeItemKind((state.item && state.item.item_kind) || 'gear');
                 state.item.item_kind = kind;
+                var uniqueRole = String((state.item && (state.item.unique_role || state.item.unique_base_kind)) || '').trim().toLowerCase();
                 var augmentationMode = (kind === 'augmentation') || String((state.item && state.item.augmentation && state.item.augmentation.slot) || '').trim() !== '' || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '';
                 var equipSlot = String((state.item && state.item.equip && state.item.equip.slot) || '').trim().toLowerCase();
-                var allowed = slotByKind[kind] || [''];
+                var effectiveKind = kind === 'unique' ? (uniqueRoleToKind[uniqueRole] || '') : kind;
+                var allowed = slotByKind[effectiveKind || kind] || [''];
                 if (kind === 'augmentation') {
                     if (equipSlot) errors.push('item.equip.slot: not used for augmentation');
                     if (!String((state.item.augmentation && state.item.augmentation.slot) || (state.item.cyberware && state.item.cyberware.slot) || '').trim()) {
                         errors.push('item.augmentation.slot: required for augmentation');
                     }
+                } else if (kind === 'unique' && !effectiveKind) {
+                    errors.push('item.unique_role: required for unique');
                 } else if (equipSlot && allowed.indexOf(equipSlot) === -1) {
-                    errors.push('item.equip.slot: incompatible with item_kind=' + kind);
+                    errors.push('item.equip.slot: incompatible with item_kind=' + (effectiveKind || kind));
                 }
-                if ((kind === 'armor' || kind === 'weapon') && !equipSlot) {
+                if ((kind === 'armor' || kind === 'weapon' || effectiveKind === 'armor' || effectiveKind === 'weapon') && !equipSlot) {
                     errors.push('item.equip.slot: required for armor/weapon');
                 }
                 if (augmentationMode) {
@@ -1925,9 +1933,11 @@
 
                 var itemOut = deepClone(it);
                 itemOut.item_kind = normalizeItemKind(it.item_kind || 'gear');
+                itemOut.unique_role = String(it.unique_role || it.unique_base_kind || '');
+                itemOut.unique_base_kind = itemOut.unique_role;
                 itemOut.rarity = String(it.rarity || 'common');
                 itemOut.equip = {
-                    slot: String((it.equip && it.equip.slot) || it.slot || ''),
+                    slot: String((it.equip && it.equip.slot) || it.slot || '').replace(/^consumable_/, 'support_'),
                     armor: {
                         ac_bonus: numberOrZero((it.equip && it.equip.armor && it.equip.armor.ac_bonus) != null ? it.equip.armor.ac_bonus : 0),
                         armor_type: String((it.equip && it.equip.armor && it.equip.armor.armor_type) || 'light')
@@ -2374,6 +2384,11 @@
             if (uiProfile === 'item') {
                 var kind = normalizeItemKind((state.item && state.item.item_kind) || 'gear');
                 state.item.item_kind = kind;
+                if (kind === 'unique') {
+                    if (!state.item.unique_role && state.item.unique_base_kind) state.item.unique_role = state.item.unique_base_kind;
+                    if (!state.item.unique_role) state.item.unique_role = 'gear';
+                    state.item.unique_base_kind = state.item.unique_role;
+                }
                 var augmentationMode = (kind === 'augmentation') || String((state.item && state.item.augmentation && state.item.augmentation.slot) || '').trim() !== '' || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '';
                 var defI = [
                     { name: 'item_kind', label: 'Тип предмета', type: 'select', options: itemKindOptions },
@@ -2420,12 +2435,23 @@
                     equipGrid.appendChild(createInput({ name: 'slot', label: 'Augmentation slot', type: 'select', options: ['', 'nervous_system', 'circulatory_system', 'immune_system', 'integumentary_system', 'operating_system', 'skeleton', 'arms', 'hands', 'legs', 'eyes', 'frontal_cortex', 'cyberaudio'] }, state.item.augmentation, syncRawDebounced));
                     equipGrid.appendChild(createInput({ name: 'grade', label: 'Augmentation grade', type: 'text' }, state.item.augmentation, syncRawDebounced));
                     equipGrid.appendChild(createInput({ name: 'humanity_cost_percent', label: 'Humanity cost / Влияние на человечность (%)', type: 'number', hint: 'При надевании уменьшает человечность на X%' }, state.item.augmentation, syncRawDebounced));
-                } else if (kind === 'artifact' || kind === 'unique') {
+                } else if (kind === 'artifact') {
                     equipGrid.appendChild(createInput({ name: 'slot', label: 'Слот экипировки', type: 'select', options: slotByKind[kind] }, state.item.equip, syncRawDebounced));
+                } else if (kind === 'unique') {
+                    equipGrid.appendChild(createInput({ name: 'unique_role', label: 'Базовый тип уникального', type: 'select', options: ['', 'weapon', 'armor', 'augmentation', 'artifact', 'gear', 'consumable', 'ammo'] }, state.item, function () {
+                        state.item.unique_base_kind = state.item.unique_role || '';
+                        renderProfile();
+                        syncRawDebounced();
+                    }));
+                    var uniqueKind = uniqueRoleToKind[String(state.item.unique_role || '').trim().toLowerCase()] || 'gear';
+                    if (uniqueKind !== 'augmentation') {
+                        equipGrid.appendChild(createInput({ name: 'slot', label: 'Слот экипировки', type: 'select', options: slotByKind[uniqueKind] || slotByKind.gear }, state.item.equip, syncRawDebounced));
+                    }
                 }
                 fields.profileFields.appendChild(equipGrid);
                 var currentSlot = String((state.item.equip && state.item.equip.slot) || '');
-                if (!augmentationMode && currentSlot && (slotByKind[kind] || ['']).indexOf(currentSlot) === -1) {
+                var slotKind = kind === 'unique' ? (uniqueRoleToKind[String(state.item.unique_role || '').trim().toLowerCase()] || kind) : kind;
+                if (!augmentationMode && currentSlot && (slotByKind[slotKind] || ['']).indexOf(currentSlot) === -1) {
                     fields.profileFields.insertAdjacentHTML('beforeend', '<div class="af-kb-help">⚠ Несовместимый slot для item_kind: ' + esc(currentSlot) + '</div>');
                 }
 

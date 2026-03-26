@@ -2081,7 +2081,7 @@
   display: grid;
   gap: 14px;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .af-cs-slot--empty {
@@ -2186,7 +2186,7 @@
 .af-cs-equip-dot--support_3 .af-cs-equip-dot__label::before { content: 'Q3 '; }
 
 .af-cs-equip-popover {
-  position: absolute;
+  position: fixed;
   z-index: 10030;
   width: min(320px, calc(100vw - 24px));
   border-radius: 12px;
@@ -2194,6 +2194,35 @@
   background: rgba(9, 17, 26, 0.98);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
   padding: 10px;
+}
+
+.af-cs-equipment-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.af-cs-slot--equipment {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 4px 10px;
+  align-items: center;
+  text-align: left;
+  width: 100%;
+  min-height: 72px;
+}
+
+.af-cs-slot--equipment .af-cs-slot__icon {
+  grid-row: 1 / span 2;
+}
+
+.af-cs-slot--equipment .af-cs-slot__label {
+  font-size: 11px;
+  opacity: .8;
+}
+
+.af-cs-slot--equipment .af-cs-slot__item {
+  font-size: 13px;
 }
 
 @media (max-width: 980px) {

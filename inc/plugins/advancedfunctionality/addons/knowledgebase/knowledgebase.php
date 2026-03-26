@@ -112,7 +112,8 @@ function af_kb_default_type_definitions(): array
                 ['path' => 'item.item_kind', 'type' => 'select', 'label_ru' => 'Подтип предмета', 'label_en' => 'Item kind', 'required' => true, 'options_dynamic' => ['source' => 'kb_item_kinds'], 'default' => 'gear'],
                 ['path' => 'item.rarity', 'type' => 'select', 'required' => true, 'options' => [['value'=>'common'],['value'=>'uncommon'],['value'=>'rare'],['value'=>'unique'],['value'=>'illegal'],['value'=>'restricted'],['value'=>'legendary'],['value'=>'mythic']], 'default' => 'common'],
                 ['path' => 'item.price', 'type' => 'number', 'default' => 0],
-                ['path' => 'item.equip.slot', 'type' => 'select', 'required' => true, 'options' => [['value'=>''],['value'=>'head'],['value'=>'body'],['value'=>'hands'],['value'=>'legs'],['value'=>'feet'],['value'=>'back'],['value'=>'belt'],['value'=>'weapon_mainhand'],['value'=>'weapon_offhand'],['value'=>'weapon_twohand'],['value'=>'weapon_ranged'],['value'=>'weapon_melee'],['value'=>'consumable_1'],['value'=>'consumable_2'],['value'=>'ammo'],['value'=>'ammo_pouch'],['value'=>'gear'],['value'=>'artifact'],['value'=>'unique'],['value'=>'accessory']]],
+                ['path' => 'item.unique_role', 'type' => 'select', 'options' => [['value'=>''],['value'=>'weapon'],['value'=>'armor'],['value'=>'augmentation'],['value'=>'artifact'],['value'=>'gear'],['value'=>'consumable'],['value'=>'ammo']]],
+                ['path' => 'item.equip.slot', 'type' => 'select', 'required' => true, 'options' => [['value'=>''],['value'=>'head'],['value'=>'body'],['value'=>'hands'],['value'=>'legs'],['value'=>'feet'],['value'=>'back'],['value'=>'belt'],['value'=>'weapon_mainhand'],['value'=>'weapon_offhand'],['value'=>'weapon_twohand'],['value'=>'weapon_ranged'],['value'=>'weapon_melee'],['value'=>'support_1'],['value'=>'support_2'],['value'=>'support_3'],['value'=>'ammo'],['value'=>'ammo_pouch'],['value'=>'gear'],['value'=>'artifact'],['value'=>'accessory']]],
                 ['path' => 'item.equip.armor.ac_bonus', 'type' => 'number', 'default' => 0],
                 ['path' => 'item.equip.armor.armor_type', 'type' => 'select', 'options' => [['value'=>'light'],['value'=>'medium'],['value'=>'heavy']], 'default' => 'light'],
                 ['path' => 'item.on_use.effects', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'op','type'=>'select','required'=>true,'options'=>[['value'=>'add_stat'],['value'=>'add_hp'],['value'=>'add_ep'],['value'=>'kb_grant'],['value'=>'set_flag']]],['path'=>'stat','type'=>'select','options'=>[['value'=>'str'],['value'=>'dex'],['value'=>'con'],['value'=>'int'],['value'=>'wis'],['value'=>'cha']]],['path'=>'value','type'=>'number'],['path'=>'kb_type','type'=>'string'],['path'=>'kb_key','type'=>'string'],['path'=>'flag','type'=>'string']]], 'default' => []],
@@ -141,11 +142,11 @@ function af_kb_default_item_kind_definitions(): array
         ['kind_key' => 'weapon', 'title_ru' => 'Оружие', 'title_en' => 'Weapon', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"weapon_mainhand","unique":true,"two_handed":false,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true}]}', 'sortorder' => 10],
         ['kind_key' => 'armor', 'title_ru' => 'Броня', 'title_en' => 'Armor', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"body","unique":true,"stackable":false}}},{"op":"set_required","path":"equip.slot","required":true}]}', 'sortorder' => 20],
         ['kind_key' => 'gear', 'title_ru' => 'Снаряжение', 'title_en' => 'Gear', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[]}', 'sortorder' => 30],
-        ['kind_key' => 'consumable', 'title_ru' => 'Расходник', 'title_en' => 'Consumable', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"consumable_1","stackable":true}}}]}', 'sortorder' => 40],
+        ['kind_key' => 'consumable', 'title_ru' => 'Расходник', 'title_en' => 'Consumable', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"support_1","stackable":true}}}]}', 'sortorder' => 40],
         ['kind_key' => 'ammo', 'title_ru' => 'Боеприпас', 'title_en' => 'Ammo', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"ammo"}}}]}', 'sortorder' => 50],
         ['kind_key' => 'augmentation', 'title_ru' => 'Аугментация', 'title_en' => 'Augmentation', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[]}', 'sortorder' => 60],
         ['kind_key' => 'artifact', 'title_ru' => 'Артефакт', 'title_en' => 'Artifact', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"artifact"}}}]}', 'sortorder' => 70],
-        ['kind_key' => 'unique', 'title_ru' => 'Уникальный', 'title_en' => 'Unique', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"equip":{"slot":"unique"}}}]}', 'sortorder' => 80],
+        ['kind_key' => 'unique', 'title_ru' => 'Уникальный', 'title_en' => 'Unique', 'ui_schema_json' => '{"schema":"af_kb.ui.overlay.v1","version":1,"patch":[{"op":"set_defaults","defaults":{"unique_role":"gear","equip":{"slot":"gear"}}}]}', 'sortorder' => 80],
     ];
 }
 
@@ -1132,13 +1133,26 @@ function af_kb_default_equip_slots_dictionary(): array
 {
     return [
         'none' => ['ru' => 'Нет', 'en' => 'None'],
-        'weapon_main' => ['ru' => 'Основное оружие', 'en' => 'Main Hand'],
-        'weapon_off' => ['ru' => 'Второе оружие', 'en' => 'Off Hand'],
-        'armor_body' => ['ru' => 'Броня', 'en' => 'Body Armor'],
-        'armor_head' => ['ru' => 'Шлем', 'en' => 'Headgear'],
-        'augment' => ['ru' => 'Аугментация', 'en' => 'Augmentation'],
-        'gadget' => ['ru' => 'Гаджет', 'en' => 'Gadget'],
+        'weapon_mainhand' => ['ru' => 'Основное оружие', 'en' => 'Main Hand'],
+        'weapon_offhand' => ['ru' => 'Второе оружие', 'en' => 'Off Hand'],
+        'weapon_twohand' => ['ru' => 'Двуручное оружие', 'en' => 'Two-hand Weapon'],
+        'weapon_melee' => ['ru' => 'Оружие ближнего боя', 'en' => 'Melee Weapon'],
+        'weapon_ranged' => ['ru' => 'Дальнобойное оружие', 'en' => 'Ranged Weapon'],
+        'body' => ['ru' => 'Броня', 'en' => 'Body Armor'],
+        'head' => ['ru' => 'Шлем', 'en' => 'Headgear'],
+        'hands' => ['ru' => 'Руки', 'en' => 'Hands'],
+        'legs' => ['ru' => 'Ноги', 'en' => 'Legs'],
+        'feet' => ['ru' => 'Обувь', 'en' => 'Feet'],
+        'back' => ['ru' => 'Спина', 'en' => 'Back'],
+        'belt' => ['ru' => 'Пояс', 'en' => 'Belt'],
+        'ammo' => ['ru' => 'Боеприпасы', 'en' => 'Ammo'],
+        'ammo_pouch' => ['ru' => 'Подсумок', 'en' => 'Ammo pouch'],
+        'artifact' => ['ru' => 'Артефакт', 'en' => 'Artifact'],
+        'gear' => ['ru' => 'Снаряжение', 'en' => 'Gear'],
         'accessory' => ['ru' => 'Аксессуар', 'en' => 'Accessory'],
+        'support_1' => ['ru' => 'Быстрый слот 1', 'en' => 'Quick slot 1'],
+        'support_2' => ['ru' => 'Быстрый слот 2', 'en' => 'Quick slot 2'],
+        'support_3' => ['ru' => 'Быстрый слот 3', 'en' => 'Quick slot 3'],
     ];
 }
 
@@ -5627,14 +5641,23 @@ function af_kb_handle_edit(): void
                     continue;
                 }
                 $parts = explode('.', (string)$field['path']);
-                $cursor = $metaPayload;
-                $present = true;
-                foreach ($parts as $part) {
-                    if (!is_array($cursor) || !array_key_exists($part, $cursor)) {
-                        $present = false;
+                $present = false;
+                $cursor = null;
+                foreach ([$metaPayload, (array)($metaPayload['rules'] ?? [])] as $candidateRoot) {
+                    $cursorCandidate = $candidateRoot;
+                    $candidatePresent = true;
+                    foreach ($parts as $part) {
+                        if (!is_array($cursorCandidate) || !array_key_exists($part, $cursorCandidate)) {
+                            $candidatePresent = false;
+                            break;
+                        }
+                        $cursorCandidate = $cursorCandidate[$part];
+                    }
+                    if ($candidatePresent) {
+                        $present = true;
+                        $cursor = $cursorCandidate;
                         break;
                     }
-                    $cursor = $cursor[$part];
                 }
                 if (!$present || $cursor === '' || $cursor === null || (is_array($cursor) && $cursor === [])) {
                     $errors[] = 'Required meta field missing: '.$field['path'];
