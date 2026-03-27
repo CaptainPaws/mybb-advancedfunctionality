@@ -1334,7 +1334,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     }
     $armor_from_equipped = (int)($legacy_equipment['armor_bonus'] ?? 0) + (int)$bonus_armor;
     $shield_bonus = (int)($legacy_equipment['shield_bonus'] ?? 0) + (int)$bonus_shield;
-    $weapon_bonus = (int)($legacy_equipment['weapon_bonus'] ?? 0) + (int)$bonus_weapon;
+    $weapon_bonus = (int)$bonus_weapon;
     $armor_rules_bonus = (int)($resolved_rules['fixed']['armor'] ?? 0) + (int)($resolved_rules['fixed_bonuses']['armor'] ?? 0) + (int)$bonus_ac;
     $armor_equip_bonus_total = $armor_from_equipped + $armor_rules_bonus + $shield_bonus;
     $ac_total = $dex_final + $con_final + $armor_equip_bonus_total;
