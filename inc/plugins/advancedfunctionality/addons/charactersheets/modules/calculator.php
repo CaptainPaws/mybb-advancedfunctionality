@@ -768,6 +768,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $build = af_charactersheets_json_decode((string)($sheet['build_json'] ?? ''));
     $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
     $build = af_charactersheets_normalize_build($build);
+    $sheet_uid = (int)($sheet['uid'] ?? 0);
 
     $balance = function_exists('af_balance_get') ? af_balance_get((int)($sheet['uid'] ?? 0)) : ['exp' => null, 'credits' => 0, 'ability_tokens' => 0];
     if (isset($balance['exp']) && $balance['exp'] !== null) {
@@ -807,8 +808,8 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     ];
 
     $bonus_items = af_charactersheets_collect_bonus_items($kb_sources);
-    $bonus_items = array_merge($bonus_items, af_charactersheets_collect_build_bonus_items($build, (int)$uid));
-    $equipment_meta_bonuses = af_charactersheets_collect_equipment_meta_bonus_items($build, (int)$uid);
+    $bonus_items = array_merge($bonus_items, af_charactersheets_collect_build_bonus_items($build, $sheet_uid));
+    $equipment_meta_bonuses = af_charactersheets_collect_equipment_meta_bonus_items($build, $sheet_uid);
     $bonus_items = array_merge($bonus_items, (array)($equipment_meta_bonuses['bonus_items'] ?? []));
     foreach ($bonus_items as $item) {
         $type = (string)($item['type'] ?? '');
