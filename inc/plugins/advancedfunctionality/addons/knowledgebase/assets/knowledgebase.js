@@ -194,13 +194,71 @@
         }, 0);
     }
 
+    function hasKbEditorSurface(root) {
+        var container = root || document;
+        if (!container || typeof container.querySelector !== 'function') {
+            return false;
+        }
+
+        if (container.querySelector('#af-kb-rules-ui, #af-kb-meta-ui, #af-kb-blocks, #af-kb-relations, .af-kb-form')) {
+            return true;
+        }
+
+        return !!container.querySelector(
+            'textarea[name="short_ru"], ' +
+            'textarea[name="short_en"], ' +
+            'textarea[name="body_ru"], ' +
+            'textarea[name="body_en"], ' +
+            'textarea[name="tech_ru"], ' +
+            'textarea[name="tech_en"]'
+        );
+    }
+
+    function mutationNeedsRefresh(mutations) {
+        for (var i = 0; i < mutations.length; i += 1) {
+            var mutation = mutations[i];
+            var groups = [mutation.addedNodes, mutation.removedNodes];
+
+            for (var g = 0; g < groups.length; g += 1) {
+                var nodes = groups[g];
+                if (!nodes || !nodes.length) {
+                    continue;
+                }
+
+                for (var n = 0; n < nodes.length; n += 1) {
+                    var node = nodes[n];
+                    if (!node || node.nodeType !== 1) {
+                        continue;
+                    }
+
+                    if (
+                        (typeof node.matches === 'function' && node.matches('textarea, .af-kb-block-item, .af-kb-rel-item-edit')) ||
+                        (typeof node.querySelector === 'function' && node.querySelector('textarea, .af-kb-block-item, .af-kb-rel-item-edit'))
+                    ) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
     function observeEditorLeaks(root) {
         var container = root || document.body;
         if (!container || !window.MutationObserver || container.__afKbEditorObserverAttached) {
             return;
         }
 
-        var observer = new MutationObserver(function () {
+        if (!hasKbEditorSurface(container)) {
+            return;
+        }
+
+        var observer = new MutationObserver(function (mutations) {
+            if (!mutationNeedsRefresh(mutations)) {
+                return;
+            }
+
             scheduleRefresh(container);
         });
 
@@ -525,8 +583,19 @@
         var blockRepeater = initRepeater('af-kb-blocks', 'af-kb-add-block', 'af-kb-block-template', 'data-index');
         initRepeater('af-kb-relations', 'af-kb-add-relation', 'af-kb-relation-template', 'data-index');
         applyTemplate(blockRepeater);
-        refreshEditorPolicy(document);
-        observeEditorLeaks(document.body);
+
+        var editorRoot =
+            document.querySelector('.af-kb-form') ||
+            document.getElementById('af-kb-rules-ui') ||
+            document.getElementById('af-kb-meta-ui') ||
+            document.getElementById('af-kb-blocks') ||
+            null;
+
+        if (editorRoot) {
+            refreshEditorPolicy(editorRoot);
+            observeEditorLeaks(editorRoot);
+        }
+
         initCopyButtons();
         initTechTemplateButtons();
     });
@@ -851,12 +920,14 @@
                 input.value = value != null ? String(value) : '0';
             } else if (def.type === 'select') {
                 input = document.createElement('select');
+
                 if (def.allowEmpty) {
                     var emptyOption = document.createElement('option');
                     emptyOption.value = '';
                     emptyOption.textContent = def.emptyLabel || '—';
                     input.appendChild(emptyOption);
                 }
+
                 (def.options || []).forEach(function (opt) {
                     var option = document.createElement('option');
                     if (opt && typeof opt === 'object') {
@@ -868,6 +939,7 @@
                     }
                     input.appendChild(option);
                 });
+
                 input.value = value != null ? String(value) : String((def.options && def.options[0]) || '');
                 obj[def.name] = input.value;
             } else if (def.type === 'checkbox') {
@@ -884,6 +956,7 @@
                 input = document.createElement('input');
                 input.type = 'text';
                 input.value = value || '';
+
                 var datalistId = 'kb-list-' + Math.random().toString(16).slice(2);
                 var list = document.createElement('datalist');
                 list.id = datalistId;
@@ -899,7 +972,12 @@
 
                 input.addEventListener('input', debounce(function () {
                     var typeName = getTypeName();
-                    fetch(afKbEndpoint('json_list', 'misc.php?action=kb_json_list') + '&type=' + encodeURIComponent(typeName || '') + '&q=' + encodeURIComponent(input.value || ''), { credentials: 'same-origin' })
+                    fetch(
+                        afKbEndpoint('json_list', 'misc.php?action=kb_json_list')
+                        + '&type=' + encodeURIComponent(typeName || '')
+                        + '&q=' + encodeURIComponent(input.value || ''),
+                        { credentials: 'same-origin' }
+                    )
                         .then(function (res) { return res.json(); })
                         .then(function (payload) {
                             list.innerHTML = '';
@@ -912,7 +990,8 @@
                                 opt.label = (item.title || item.key) + ' (' + item.key + ')';
                                 list.appendChild(opt);
                             });
-                        }).catch(function () {});
+                        })
+                        .catch(function () {});
                 }, 250));
             } else {
                 input = document.createElement('input');
@@ -922,7 +1001,7 @@
 
             input.dataset.field = def.name;
 
-            input.addEventListener('input', function () {
+            function commitValue() {
                 if (def.type === 'lines') {
                     obj[def.name] = splitLines(input.value);
                 } else if (def.type === 'json') {
@@ -934,8 +1013,21 @@
                 } else {
                     obj[def.name] = input.value;
                 }
-                onChange();
-            });
+
+                if (typeof onChange === 'function') {
+                    onChange();
+                }
+            }
+
+            if (def.type === 'select' || def.type === 'checkbox') {
+                input.addEventListener('change', commitValue);
+            } else {
+                input.addEventListener('input', commitValue);
+
+                if (def.type === 'number' || def.type === 'kb_key') {
+                    input.addEventListener('change', commitValue);
+                }
+            }
 
             wrap.appendChild(input);
 
@@ -1790,81 +1882,166 @@
             return null;
         }
 
+        function syncAugmentationDomFallbacks() {
+            if (uiProfile !== 'item' || !fields.profileFields || !state.item || typeof state.item !== 'object') {
+                return;
+            }
+
+            if (!state.item.augmentation || typeof state.item.augmentation !== 'object') {
+                state.item.augmentation = {};
+            }
+
+            if (!state.item.cyberware || typeof state.item.cyberware !== 'object') {
+                state.item.cyberware = {};
+            }
+
+            var kind = normalizeItemKind((state.item.item_kind || 'gear'));
+            var augmentationMode = kind === 'augmentation'
+                || String((state.item.augmentation && state.item.augmentation.slot) || '').trim() !== ''
+                || String((state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '';
+
+            if (!augmentationMode) {
+                return;
+            }
+
+            var slotNode = fields.profileFields.querySelector('select[data-field="slot"], input[data-field="slot"]');
+            var subtypeNode = fields.profileFields.querySelector('select[data-field="subtype"], input[data-field="subtype"]');
+            var gradeNode = fields.profileFields.querySelector('select[data-field="grade"], input[data-field="grade"]');
+            var humanityNode = fields.profileFields.querySelector('input[data-field="humanity_cost_percent"]');
+
+            if (slotNode) {
+                state.item.augmentation.slot = String(slotNode.value || '').trim();
+            }
+            if (subtypeNode) {
+                state.item.augmentation.subtype = String(subtypeNode.value || '').trim();
+            }
+            if (gradeNode) {
+                state.item.augmentation.grade = String(gradeNode.value || '').trim();
+            }
+            if (humanityNode) {
+                state.item.augmentation.humanity_cost_percent = numberOrZero(humanityNode.value);
+            }
+
+            state.item.cyberware = deepMerge(state.item.cyberware || {}, state.item.augmentation || {});
+        }
+
         function validate() {
             var errors = [];
+            var validationState = toPayload();
 
-            if (!state.schema) errors.push('schema: required');
+            if (!validationState || typeof validationState !== 'object') {
+                validationState = {};
+            }
+
+            if (!validationState.schema) {
+                errors.push('schema: required');
+            }
+
             if (uiProfile === 'knowledge') {
-                if (!String(state.knowledge_group || '').trim()) {
+                if (!String(validationState.knowledge_group || '').trim()) {
                     errors.push('knowledge_group: required');
                 }
             }
 
             if (uiProfile === 'item') {
+                var item = (validationState.item && typeof validationState.item === 'object')
+                    ? validationState.item
+                    : {};
+
                 var rarityAllowed = ['common', 'uncommon', 'rare', 'unique', 'illegal', 'restricted', 'legendary', 'mythic'];
-                var rarity = String((state.item && state.item.rarity) || 'common').trim().toLowerCase();
+                var rarity = String(item.rarity || 'common').trim().toLowerCase();
                 if (rarityAllowed.indexOf(rarity) === -1) {
                     errors.push('item.rarity: unsupported value');
                 }
-                var kind = normalizeItemKind((state.item && state.item.item_kind) || 'gear');
-                state.item.item_kind = kind;
-                var uniqueRole = String((state.item && (state.item.unique_role || state.item.unique_base_kind)) || '').trim().toLowerCase();
-                var augmentationMode = (kind === 'augmentation') || String((state.item && state.item.augmentation && state.item.augmentation.slot) || '').trim() !== '' || String((state.item && state.item.cyberware && state.item.cyberware.slot) || '').trim() !== '';
-                var equipSlot = String((state.item && state.item.equip && state.item.equip.slot) || '').trim().toLowerCase();
+
+                var kind = normalizeItemKind(item.item_kind || 'gear');
+                item.item_kind = kind;
+
+                var uniqueRole = String(item.unique_role || item.unique_base_kind || '').trim().toLowerCase();
                 var effectiveKind = kind === 'unique' ? (uniqueRoleToKind[uniqueRole] || '') : kind;
+
+                var equip = (item.equip && typeof item.equip === 'object') ? item.equip : {};
+                var equipSlot = String(equip.slot || '').trim().toLowerCase();
+
+                var augmentation = (item.augmentation && typeof item.augmentation === 'object') ? item.augmentation : {};
+                var cyberware = (item.cyberware && typeof item.cyberware === 'object') ? item.cyberware : {};
+
+                var augmentationSlot = String(augmentation.slot || cyberware.slot || '').trim().toLowerCase();
+                if (!augmentationSlot && equipSlot && augmentationSlotOptions.indexOf(equipSlot) !== -1) {
+                    augmentationSlot = equipSlot;
+                }
+
                 var allowed = slotByKind[effectiveKind || kind] || [''];
+
                 if (kind === 'augmentation') {
-                    if (!String((state.item.augmentation && state.item.augmentation.slot) || '').trim() && isAugmentationSlot(equipSlot)) {
-                        state.item.augmentation.slot = equipSlot;
-                        if (state.item.cyberware && typeof state.item.cyberware === 'object') state.item.cyberware.slot = equipSlot;
-                        state.item.equip.slot = '';
-                        equipSlot = '';
-                    }
-                    if (!String((state.item.augmentation && state.item.augmentation.slot) || (state.item.cyberware && state.item.cyberware.slot) || '').trim()) {
-                        errors.push('item.augmentation.slot: required for augmentation');
+                    if (augmentationSlot && augmentationSlotOptions.indexOf(augmentationSlot) === -1) {
+                        errors.push('item.augmentation.slot: incompatible with augmentation');
                     }
                 } else if (kind === 'unique' && !effectiveKind) {
                     errors.push('item.unique_role: required for unique');
-                } else if (equipSlot && allowed.indexOf(equipSlot) === -1) {
-                    errors.push('item.equip.slot: incompatible with item_kind=' + (effectiveKind || kind));
+                } else {
+                    if (equipSlot && allowed.indexOf(equipSlot) === -1) {
+                        errors.push('item.equip.slot: incompatible with item_kind=' + (effectiveKind || kind));
+                    }
+
+                    if (
+                        (kind === 'armor' || kind === 'weapon' || effectiveKind === 'armor' || effectiveKind === 'weapon')
+                        && !equipSlot
+                    ) {
+                        errors.push('item.equip.slot: required for armor/weapon');
+                    }
                 }
-                if ((kind === 'armor' || kind === 'weapon' || effectiveKind === 'armor' || effectiveKind === 'weapon') && !equipSlot) {
-                    errors.push('item.equip.slot: required for armor/weapon');
-                }
-                if (augmentationMode) {
-                    var humanityCost = numberOrZero(((state.item.augmentation && state.item.augmentation.humanity_cost_percent) != null ? state.item.augmentation.humanity_cost_percent : ((state.item.cyberware && state.item.cyberware.humanity_cost_percent) || 0)));
+
+                if (kind === 'augmentation') {
+                    var humanityCost = numberOrZero(
+                        augmentation.humanity_cost_percent != null
+                            ? augmentation.humanity_cost_percent
+                            : (cyberware.humanity_cost_percent || 0)
+                    );
+
                     if (humanityCost < 0 || humanityCost > 100) {
                         errors.push('item.augmentation.humanity_cost_percent: range 0..100');
                     }
                 }
             }
 
-            // Heritage validation
             if (uiProfile === 'heritage') {
                 function validateSlugList(values, prefix) {
                     (values || []).forEach(function (v) {
-                        if (!slugPattern.test(v)) errors.push(prefix + ': invalid key ' + v);
+                        if (!slugPattern.test(v)) {
+                            errors.push(prefix + ': invalid key ' + v);
+                        }
                     });
                 }
 
-                state.choices.forEach(function (item, i) {
+                validationState.choices = Array.isArray(validationState.choices) ? validationState.choices : [];
+                validationState.traits = Array.isArray(validationState.traits) ? validationState.traits : [];
+
+                validationState.choices.forEach(function (item, i) {
                     if (!item.type) {
                         errors.push('choices[' + i + ']: missing type');
                         return;
                     }
+
                     var def = getDef(choiceDefs, item.type);
-                    if (!def) return;
+                    if (!def) {
+                        return;
+                    }
+
                     def.fields.forEach(function (f) {
                         if (f.required && (item[f.name] == null || item[f.name] === '')) {
                             errors.push('choices[' + i + '].' + f.name + ': required');
                         }
                     });
+
                     validateSlugList(item.options, 'choices[' + i + '].options');
                     validateSlugList(item.exclude, 'choices[' + i + '].exclude');
                 });
 
-                state.traits.forEach(function (t, i) {
-                    if (!t.key) errors.push('traits[' + i + '].key: required');
+                validationState.traits.forEach(function (t, i) {
+                    if (!t.key) {
+                        errors.push('traits[' + i + '].key: required');
+                    }
                 });
             }
 
@@ -2034,6 +2211,9 @@
         }
 
         function toPayload() {
+            if (uiProfile === 'item') {
+                syncAugmentationDomFallbacks();
+            }            
             var payload = deepClone(state);
 
             // Heritage back-compat (как у тебя было)
