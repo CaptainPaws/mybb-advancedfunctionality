@@ -2470,19 +2470,59 @@ function af_advinv_is_spell_kb_type(string $kbType): bool
     return in_array($kbType, ['spell', 'ritual'], true);
 }
 
+function af_advinv_format_structured_value($value, int $depth = 0): string
+{
+    if ($value === null) {
+        return '';
+    }
+    if (is_bool($value)) {
+        return $value ? 'Да' : 'Нет';
+    }
+    if (is_scalar($value)) {
+        return trim((string)$value);
+    }
+    if (is_object($value)) {
+        $value = (array)$value;
+    }
+    if (!is_array($value)) {
+        return '';
+    }
+    if ($depth >= 3) {
+        $json = @json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        return is_string($json) ? $json : '';
+    }
+
+    $isAssoc = array_keys($value) !== range(0, count($value) - 1);
+    $parts = [];
+    foreach ($value as $k => $v) {
+        $formatted = af_advinv_format_structured_value($v, $depth + 1);
+        if ($formatted === '') {
+            continue;
+        }
+        if ($isAssoc) {
+            $key = trim((string)$k);
+            $parts[] = $key !== '' ? ($key . ': ' . $formatted) : $formatted;
+        } else {
+            $parts[] = $formatted;
+        }
+    }
+
+    return implode($isAssoc ? '; ' : ', ', $parts);
+}
+
 function af_advinv_extract_ability_fields(array $meta): array
 {
     $short = trim((string)($meta['short'] ?? $meta['description_short'] ?? $meta['summary'] ?? ''));
     $description = trim((string)($meta['description'] ?? $meta['full_description'] ?? ''));
     $effects = [];
     $requirements = [];
-    $cost = trim((string)($meta['cost'] ?? $meta['rules']['spell']['cost'] ?? $meta['rules']['ritual']['cost'] ?? ''));
-    $price = trim((string)($meta['price'] ?? $meta['shop']['price'] ?? ''));
-    $cooldown = trim((string)($meta['cooldown'] ?? $meta['rules']['spell']['cooldown'] ?? $meta['rules']['ritual']['cooldown'] ?? ''));
-    $resource = trim((string)($meta['resource'] ?? $meta['rules']['spell']['resource'] ?? $meta['rules']['ritual']['resource'] ?? ''));
-    $rank = trim((string)($meta['rank'] ?? $meta['tier'] ?? $meta['rules']['spell']['rank'] ?? $meta['rules']['ritual']['rank'] ?? ''));
-    $school = trim((string)($meta['school'] ?? $meta['rules']['spell']['school'] ?? $meta['rules']['ritual']['school'] ?? ''));
-    $tradition = trim((string)($meta['tradition'] ?? $meta['rules']['spell']['tradition'] ?? $meta['rules']['ritual']['tradition'] ?? ''));
+    $cost = af_advinv_format_structured_value($meta['cost'] ?? $meta['rules']['spell']['cost'] ?? $meta['rules']['ritual']['cost'] ?? '');
+    $price = af_advinv_format_structured_value($meta['price'] ?? $meta['shop']['price'] ?? '');
+    $cooldown = af_advinv_format_structured_value($meta['cooldown'] ?? $meta['rules']['spell']['cooldown'] ?? $meta['rules']['ritual']['cooldown'] ?? '');
+    $resource = af_advinv_format_structured_value($meta['resource'] ?? $meta['rules']['spell']['resource'] ?? $meta['rules']['ritual']['resource'] ?? '');
+    $rank = af_advinv_format_structured_value($meta['rank'] ?? $meta['tier'] ?? $meta['rules']['spell']['rank'] ?? $meta['rules']['ritual']['rank'] ?? '');
+    $school = af_advinv_format_structured_value($meta['school'] ?? $meta['rules']['spell']['school'] ?? $meta['rules']['ritual']['school'] ?? '');
+    $tradition = af_advinv_format_structured_value($meta['tradition'] ?? $meta['rules']['spell']['tradition'] ?? $meta['rules']['ritual']['tradition'] ?? '');
 
     foreach ((array)($meta['effects'] ?? $meta['rules']['effects'] ?? []) as $effect) {
         if (is_array($effect)) {
@@ -2581,7 +2621,7 @@ function af_advinv_export_charactersheet_abilities_state(int $uid): array
             'description' => (string)($item['ability_description'] ?? ''),
             'effects' => array_values((array)($item['ability_effects'] ?? [])),
             'requirements' => array_values((array)($item['ability_requirements'] ?? [])),
-            'cost' => (string)($item['ability_cost'] ?? ''),
+            'cost' => af_advinv_format_structured_value($item['ability_cost'] ?? ''),
             'price' => (string)($item['ability_price'] ?? ''),
             'meta' => (array)($item['meta'] ?? []),
         ];
@@ -3730,6 +3770,8 @@ function af_advinv_render_abilities_workspace(string $entity, array $items, arra
         $page = $pages;
     }
 
+    $selectedItemId = !empty($items) ? (int)($items[0]['id'] ?? 0) : 0;
+
     $html = '<div class="af-inv-abilities" data-entity="' . htmlspecialchars_uni($entity) . '">';
     $html .= '<form class="af-inv-abilities__search" method="get" action="' . htmlspecialchars_uni(af_advancedinventory_url('entity', [], false)) . '" data-af-inv-search-form="1">';
     $html .= '<input type="hidden" name="action" value="entity">';
@@ -3739,7 +3781,14 @@ function af_advinv_render_abilities_workspace(string $entity, array $items, arra
     $html .= '<input type="text" name="search" value="' . htmlspecialchars_uni($search) . '" placeholder="Поиск способности…">';
     $html .= '<button type="submit" class="af-inv-action">Найти</button>';
     $html .= '</form>';
-    $html .= af_advinv_render_abilities_cards($items);
+    $html .= '<div class="af-inv-workspace af-inv-workspace--abilities" data-entity="abilities">';
+    $html .= '<div class="af-inv-slots-pane af-inv-abilities-list-pane">';
+    $html .= af_advinv_render_abilities_list($items, $selectedItemId);
+    $html .= '</div>';
+    $html .= '<div class="af-inv-preview-pane af-inv-abilities-preview-pane">';
+    $html .= af_advinv_render_abilities_preview_stack($items, $selectedItemId);
+    $html .= '</div>';
+    $html .= '</div>';
     $html .= af_advinv_render_abilities_pagination($ownerUid, $entity, $sub, $search, $page, $pages, $total);
     $html .= '</div>';
 
@@ -4194,81 +4243,158 @@ function af_advinv_render_subfilter_links(string $tab, int $ownerUid, string $su
     return $filterButtons;
 }
 
-function af_advinv_render_abilities_cards(array $items): string
+function af_advinv_render_abilities_list(array $items, int $selectedItemId): string
 {
     if (!$items) {
         return '<div class="af-inv-empty">Способностей пока нет.</div>';
     }
 
-    $rows = '<div class="af-inv-abilities-grid">';
+    $rows = '<div class="af-inv-abilities-list">';
     foreach ($items as $item) {
+        $itemId = (int)($item['id'] ?? 0);
+        $isSelected = $selectedItemId > 0 && $selectedItemId === $itemId;
         $title = trim((string)($item['title'] ?? ''));
         if ($title === '') {
             $title = trim((string)($item['kb_key'] ?? 'Способность'));
         }
-        $icon = trim((string)($item['icon'] ?? ''));
+        $icon = trim((string)($item['appearance_preview_image'] ?? ($item['icon'] ?? '')));
         $summary = trim((string)($item['ability_summary'] ?? ($item['ability_short'] ?? $item['ability_description'] ?? '')));
-        $description = trim((string)($item['ability_description'] ?? ''));
-        $effects = (array)($item['ability_effects'] ?? []);
-        $requirements = (array)($item['ability_requirements'] ?? []);
-        $cost = trim((string)($item['ability_cost'] ?? ''));
-        $price = trim((string)($item['ability_price'] ?? ''));
-        $cooldown = trim((string)($item['ability_cooldown'] ?? ''));
-        $resource = trim((string)($item['ability_resource'] ?? ''));
-        $rank = trim((string)($item['ability_rank'] ?? ''));
-        $school = trim((string)($item['ability_school'] ?? ''));
-        $tradition = trim((string)($item['ability_tradition'] ?? ''));
         $subtype = trim((string)($item['subtype'] ?? ''));
         $qty = max(1, (int)($item['qty'] ?? 1));
 
-        $rows .= '<article class="af-inv-ability-card">';
-        $rows .= '<div class="af-inv-ability-card__head">';
+        $rows .= '<button type="button" class="af-inv-ability-list-item' . ($isSelected ? ' is-selected' : '') . '" data-item-select="' . $itemId . '" data-item-id="' . $itemId . '" aria-pressed="' . ($isSelected ? 'true' : 'false') . '">';
+        $rows .= '<div class="af-inv-ability-list-item__head">';
         $rows .= $icon !== ''
-            ? '<img class="af-inv-ability-card__icon" src="' . htmlspecialchars_uni($icon) . '" alt="' . htmlspecialchars_uni($title) . '" loading="lazy">'
-            : '<span class="af-inv-ability-card__icon is-empty">✦</span>';
-        $rows .= '<div class="af-inv-ability-card__title-wrap"><h3>' . htmlspecialchars_uni($title) . '</h3>'
-            . ($subtype !== '' ? '<div class="af-inv-ability-card__subtype">' . htmlspecialchars_uni($subtype) . '</div>' : '')
+            ? '<img class="af-inv-ability-list-item__icon" src="' . htmlspecialchars_uni($icon) . '" alt="' . htmlspecialchars_uni($title) . '" loading="lazy">'
+            : '<span class="af-inv-ability-list-item__icon is-empty">✦</span>';
+        $rows .= '<div class="af-inv-ability-list-item__title-wrap"><strong>' . htmlspecialchars_uni($title) . '</strong>'
+            . ($subtype !== '' ? '<div class="af-inv-ability-list-item__subtype">' . htmlspecialchars_uni($subtype) . '</div>' : '')
             . '</div>';
         if ($qty > 1) {
-            $rows .= '<span class="af-inv-ability-card__qty">x' . $qty . '</span>';
+            $rows .= '<span class="af-inv-ability-list-item__qty">x' . $qty . '</span>';
         }
         $rows .= '</div>';
         if ($summary !== '') {
-            $rows .= '<p class="af-inv-ability-card__summary">' . htmlspecialchars_uni($summary) . '</p>';
+            $rows .= '<div class="af-inv-ability-list-item__summary">' . htmlspecialchars_uni($summary) . '</div>';
         }
-        if ($description !== '' && $description !== $summary) {
-            $rows .= '<details class="af-inv-ability-card__details"><summary>Подробнее</summary><div>'
-                . nl2br(htmlspecialchars_uni($description))
-                . '</div></details>';
-        }
-        if ($effects) {
-            $rows .= '<ul class="af-inv-ability-card__list">';
-            foreach ($effects as $line) {
-                $line = trim((string)$line);
-                if ($line !== '') {
-                    $rows .= '<li>' . htmlspecialchars_uni($line) . '</li>';
-                }
-            }
-            $rows .= '</ul>';
-        }
-        $meta = [];
-        if ($rank !== '') { $meta[] = 'Ранг: ' . $rank; }
-        if ($school !== '') { $meta[] = 'Школа: ' . $school; }
-        if ($tradition !== '') { $meta[] = 'Традиция: ' . $tradition; }
-        if ($cost !== '') { $meta[] = 'Стоимость: ' . $cost; }
-        if ($price !== '') { $meta[] = 'Цена: ' . $price; }
-        if ($resource !== '') { $meta[] = 'Ресурс: ' . $resource; }
-        if ($cooldown !== '') { $meta[] = 'Cooldown: ' . $cooldown; }
-        if ($requirements) {
-            $meta[] = 'Требования: ' . implode(', ', array_map(static function ($v) { return trim((string)$v); }, $requirements));
-        }
-        if ($meta) {
-            $rows .= '<div class="af-inv-ability-card__meta">' . htmlspecialchars_uni(implode(' · ', $meta)) . '</div>';
-        }
-        $rows .= '</article>';
+        $rows .= '</button>';
     }
     $rows .= '</div>';
     return $rows;
+}
+
+function af_advinv_render_abilities_cards(array $items): string
+{
+    $selectedItemId = !empty($items) ? (int)($items[0]['id'] ?? 0) : 0;
+    return af_advinv_render_abilities_list($items, $selectedItemId);
+}
+
+function af_advinv_render_abilities_preview_stack(array $items, int $selectedItemId): string
+{
+    if (!$items) {
+        return '<div class="af-inv-preview-card is-active"><div class="af-inv-empty">Выберите способность слева.</div></div>';
+    }
+
+    $html = '';
+    foreach ($items as $index => $item) {
+        $itemId = (int)($item['id'] ?? 0);
+        $active = ($selectedItemId > 0 ? $selectedItemId === $itemId : $index === 0);
+        $title = trim((string)($item['title'] ?? ''));
+        if ($title === '') {
+            $title = trim((string)($item['kb_key'] ?? 'Способность'));
+        }
+
+        $icon = trim((string)($item['appearance_preview_image'] ?? ($item['icon'] ?? '')));
+        $summary = trim((string)($item['ability_summary'] ?? ($item['ability_short'] ?? '')));
+        $description = trim((string)($item['ability_description'] ?? ''));
+        $subtype = trim((string)($item['subtype'] ?? ''));
+        $cost = af_advinv_format_structured_value($item['ability_cost'] ?? '');
+        $price = af_advinv_format_structured_value($item['ability_price'] ?? '');
+        $cooldown = af_advinv_format_structured_value($item['ability_cooldown'] ?? '');
+        $resource = af_advinv_format_structured_value($item['ability_resource'] ?? '');
+        $rank = af_advinv_format_structured_value($item['ability_rank'] ?? '');
+        $school = af_advinv_format_structured_value($item['ability_school'] ?? '');
+        $tradition = af_advinv_format_structured_value($item['ability_tradition'] ?? '');
+
+        $effects = array_values(array_filter(array_map(static function ($line) {
+            return trim((string)$line);
+        }, (array)($item['ability_effects'] ?? [])), static function ($line) {
+            return $line !== '';
+        }));
+        $requirements = array_values(array_filter(array_map(static function ($line) {
+            return trim((string)$line);
+        }, (array)($item['ability_requirements'] ?? [])), static function ($line) {
+            return $line !== '';
+        }));
+
+        $iconHtml = $icon !== ''
+            ? '<img src="' . htmlspecialchars_uni($icon) . '" alt="' . htmlspecialchars_uni($title) . '" loading="lazy">'
+            : '<div class="af-inv-card__placeholder">✦</div>';
+
+        $metaRows = [];
+        if ($subtype !== '') { $metaRows[] = ['Тип', $subtype]; }
+        if ($cost !== '') { $metaRows[] = ['Стоимость', $cost]; }
+        if ($resource !== '') { $metaRows[] = ['Ресурс', $resource]; }
+        if ($cooldown !== '') { $metaRows[] = ['Перезарядка', $cooldown]; }
+        if ($price !== '') { $metaRows[] = ['Цена', $price]; }
+        if ($rank !== '') { $metaRows[] = ['Ранг', $rank]; }
+        if ($school !== '') { $metaRows[] = ['Школа', $school]; }
+        if ($tradition !== '') { $metaRows[] = ['Традиция', $tradition]; }
+
+        $metaHtml = '';
+        if ($metaRows) {
+            $metaHtml .= '<dl class="af-inv-preview-meta">';
+            foreach ($metaRows as $row) {
+                $metaHtml .= '<dt>' . htmlspecialchars_uni((string)$row[0]) . '</dt><dd>' . htmlspecialchars_uni((string)$row[1]) . '</dd>';
+            }
+            $metaHtml .= '</dl>';
+        }
+
+        $effectsHtml = '';
+        if ($effects) {
+            $effectsHtml .= '<div class="af-inv-ability-preview__section"><h4>Эффекты</h4><ul>';
+            foreach ($effects as $line) {
+                $effectsHtml .= '<li>' . htmlspecialchars_uni($line) . '</li>';
+            }
+            $effectsHtml .= '</ul></div>';
+        }
+
+        $requirementsHtml = '';
+        if ($requirements) {
+            $requirementsHtml .= '<div class="af-inv-ability-preview__section"><h4>Ограничения и требования</h4><ul>';
+            foreach ($requirements as $line) {
+                $requirementsHtml .= '<li>' . htmlspecialchars_uni($line) . '</li>';
+            }
+            $requirementsHtml .= '</ul></div>';
+        }
+
+        $descriptionHtml = '';
+        if ($summary !== '') {
+            $descriptionHtml .= '<p class="af-inv-ability-preview__summary">' . htmlspecialchars_uni($summary) . '</p>';
+        }
+        if ($description !== '' && $description !== $summary) {
+            $descriptionHtml .= '<div class="af-inv-ability-preview__description">' . nl2br(htmlspecialchars_uni($description)) . '</div>';
+        }
+
+        $actionsHtml = '<div class="af-inv-card-actions af-inv-preview-actions af-inv-ability-preview__actions" data-ability-actions="1">'
+            . '<button type="button" class="af-inv-action" disabled="disabled">Бросок (скоро)</button>'
+            . '<button type="button" class="af-inv-action" disabled="disabled">Расширенное действие (скоро)</button>'
+            . '</div>';
+
+        $html .= '<section class="af-inv-preview-card af-inv-ability-preview' . ($active ? ' is-active' : '') . '" data-preview-item="' . $itemId . '"' . ($active ? '' : ' hidden="hidden"') . '>'
+            . '<div class="af-inv-preview-media">' . $iconHtml . '</div>'
+            . '<div class="af-inv-preview-body">'
+            . '<h3 class="af-inv-preview-title">' . htmlspecialchars_uni($title) . '</h3>'
+            . $descriptionHtml
+            . $metaHtml
+            . $requirementsHtml
+            . $effectsHtml
+            . $actionsHtml
+            . '</div>'
+            . '</section>';
+    }
+
+    return $html;
 }
 
 function af_advinv_render_abilities_pagination(int $uid, string $entity, string $sub, string $search, int $page, int $pages, int $total): string
