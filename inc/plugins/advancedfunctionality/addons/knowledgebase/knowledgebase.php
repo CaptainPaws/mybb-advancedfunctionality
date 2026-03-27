@@ -113,7 +113,7 @@ function af_kb_default_type_definitions(): array
                 ['path' => 'item.rarity', 'type' => 'select', 'required' => true, 'options' => [['value'=>'common'],['value'=>'uncommon'],['value'=>'rare'],['value'=>'unique'],['value'=>'illegal'],['value'=>'restricted'],['value'=>'legendary'],['value'=>'mythic']], 'default' => 'common'],
                 ['path' => 'item.price', 'type' => 'number', 'default' => 0],
                 ['path' => 'item.unique_role', 'type' => 'select', 'options' => [['value'=>''],['value'=>'weapon'],['value'=>'armor'],['value'=>'augmentation'],['value'=>'artifact'],['value'=>'gear'],['value'=>'consumable'],['value'=>'ammo']]],
-                ['path' => 'item.equip.slot', 'type' => 'select', 'required' => true, 'options' => [['value'=>''],['value'=>'head'],['value'=>'body'],['value'=>'hands'],['value'=>'legs'],['value'=>'feet'],['value'=>'back'],['value'=>'belt'],['value'=>'weapon_mainhand'],['value'=>'weapon_offhand'],['value'=>'weapon_twohand'],['value'=>'weapon_ranged'],['value'=>'weapon_melee'],['value'=>'support_1'],['value'=>'support_2'],['value'=>'support_3'],['value'=>'ammo'],['value'=>'ammo_pouch'],['value'=>'gear'],['value'=>'artifact'],['value'=>'accessory']]],
+                ['path' => 'item.equip.slot', 'type' => 'select', 'required' => true, 'options' => [['value'=>''],['value'=>'head'],['value'=>'body'],['value'=>'hands'],['value'=>'legs'],['value'=>'feet'],['value'=>'back'],['value'=>'belt'],['value'=>'weapon_mainhand'],['value'=>'weapon_offhand'],['value'=>'weapon_twohand'],['value'=>'weapon_ranged'],['value'=>'weapon_melee'],['value'=>'support_1'],['value'=>'support_2'],['value'=>'support_3'],['value'=>'support_4'],['value'=>'ammo'],['value'=>'ammo_pouch'],['value'=>'gear'],['value'=>'artifact'],['value'=>'accessory']]],
                 ['path' => 'item.equip.armor.ac_bonus', 'type' => 'number', 'default' => 0],
                 ['path' => 'item.equip.armor.armor_type', 'type' => 'select', 'options' => [['value'=>'light'],['value'=>'medium'],['value'=>'heavy']], 'default' => 'light'],
                 ['path' => 'item.on_use.effects', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'op','type'=>'select','required'=>true,'options'=>[['value'=>'add_stat'],['value'=>'add_hp'],['value'=>'add_ep'],['value'=>'kb_grant'],['value'=>'set_flag']]],['path'=>'stat','type'=>'select','options'=>[['value'=>'str'],['value'=>'dex'],['value'=>'con'],['value'=>'int'],['value'=>'wis'],['value'=>'cha']]],['path'=>'value','type'=>'number'],['path'=>'kb_type','type'=>'string'],['path'=>'kb_key','type'=>'string'],['path'=>'flag','type'=>'string']]], 'default' => []],
@@ -1153,6 +1153,7 @@ function af_kb_default_equip_slots_dictionary(): array
         'support_1' => ['ru' => 'Быстрый слот 1', 'en' => 'Quick slot 1'],
         'support_2' => ['ru' => 'Быстрый слот 2', 'en' => 'Quick slot 2'],
         'support_3' => ['ru' => 'Быстрый слот 3', 'en' => 'Quick slot 3'],
+        'support_4' => ['ru' => 'Быстрый слот 4', 'en' => 'Quick slot 4'],
     ];
 }
 
@@ -2852,10 +2853,15 @@ function af_kb_validate_item_slot_requirements(array $rulesData, array &$errors)
     if ($augmentationSlot === '') {
         $augmentationSlot = trim((string)($cyberware['slot'] ?? ''));
     }
+    $augmentationSlotsAllowed = [
+        'nervous_system', 'circulatory_system', 'immune_system', 'integumentary_system',
+        'operating_system', 'skeleton', 'arms', 'hands', 'legs', 'eyes', 'frontal_cortex', 'cyberaudio',
+    ];
 
     if ($kind === 'augmentation' || $effectiveKind === 'augmentation') {
-        if ($equipSlot !== '') {
-            $errors[] = 'item.equip.slot: not used for augmentation';
+        if ($augmentationSlot === '' && $equipSlot !== '' && in_array($equipSlot, $augmentationSlotsAllowed, true)) {
+            $augmentationSlot = $equipSlot;
+            $equipSlot = '';
         }
         if ($augmentationSlot === '') {
             $errors[] = 'item.augmentation.slot: required for augmentation';
