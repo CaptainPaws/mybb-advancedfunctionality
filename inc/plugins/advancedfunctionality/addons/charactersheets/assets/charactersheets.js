@@ -1432,7 +1432,7 @@
         }
 
         var equipmentPreview = event.target.closest('[data-afcs-equipment-preview-trigger], [data-afcs-equipment-card]');
-        if (equipmentPreview) {
+        if (equipmentPreview && !event.target.closest('button,select,option,input,textarea,a,label')) {
           event.preventDefault();
           var previewItemId = equipmentPreview.getAttribute('data-afcs-equipment-preview-trigger') || equipmentPreview.getAttribute('data-afcs-equipment-item-id') || '';
           var equipmentBlock = sheet.querySelector('[data-afcs-block="equipment"]');
