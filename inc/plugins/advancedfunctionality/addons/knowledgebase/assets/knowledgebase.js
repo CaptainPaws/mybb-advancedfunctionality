@@ -736,14 +736,15 @@
             return arr.indexOf(kind) === idx;
         });
 
+        var augmentationSlotOptions = ['', 'nervous_system', 'circulatory_system', 'immune_system', 'integumentary_system', 'operating_system', 'skeleton', 'arms', 'hands', 'legs', 'eyes', 'frontal_cortex', 'cyberaudio'];
         var slotByKind = {
             armor: ['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt'],
             weapon: ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_ranged', 'weapon_melee'],
-            consumable: ['', 'support_1', 'support_2', 'support_3'],
+            consumable: ['', 'support_1', 'support_2', 'support_3', 'support_4'],
             ammo: ['ammo', 'ammo_pouch'],
             gear: ['', 'gear', 'accessory'],
             artifact: ['', 'artifact', 'accessory'],
-            unique: ['', 'weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_ranged', 'weapon_melee', 'head', 'body', 'hands', 'legs', 'feet', 'back', 'belt', 'support_1', 'support_2', 'support_3', 'ammo', 'ammo_pouch', 'gear', 'artifact', 'accessory']
+            unique: ['', 'weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_ranged', 'weapon_melee', 'head', 'body', 'hands', 'legs', 'feet', 'back', 'belt', 'support_1', 'support_2', 'support_3', 'support_4', 'ammo', 'ammo_pouch', 'gear', 'artifact', 'accessory']
         };
         var uniqueRoleToKind = { weapon: 'weapon', armor: 'armor', augmentation: 'augmentation', artifact: 'artifact', gear: 'gear', consumable: 'consumable', ammo: 'ammo' };
 
@@ -1217,6 +1218,9 @@
             rootFields.forEach(function (k) { delete payload[k]; });
             return payload;
         }
+        function isAugmentationSlot(slot) {
+            return augmentationSlotOptions.indexOf(String(slot || '').trim()) !== -1;
+        }
 
         var parsedRaw = readJson(getFieldValue(raw) || '{}', {});
         var schemaDefaults = (typeSchema.defaults && typeof typeSchema.defaults === 'object') ? deepClone(typeSchema.defaults) : {};
@@ -1445,6 +1449,9 @@
             if (String(state.item.equip.slot || '').indexOf('consumable_') === 0) {
                 state.item.equip.slot = String(state.item.equip.slot).replace('consumable_', 'support_');
             }
+            var normalizedKind = normalizeItemKind(state.item.item_kind || 'gear');
+            var normalizedUniqueRole = String((state.item.unique_role || state.item.unique_base_kind) || '').trim().toLowerCase();
+            var normalizedEffectiveKind = normalizedKind === 'unique' ? (uniqueRoleToKind[normalizedUniqueRole] || '') : normalizedKind;
             if (!state.item.equip.armor || typeof state.item.equip.armor !== 'object') state.item.equip.armor = {};
             if (state.item.equip.armor.ac_bonus == null) state.item.equip.armor.ac_bonus = 0;
             if (!state.item.equip.armor.armor_type) state.item.equip.armor.armor_type = 'light';
@@ -1463,6 +1470,10 @@
             }
             if (!state.item.augmentation.subtype) state.item.augmentation.subtype = 'cybernetic';
             if (!state.item.augmentation.slot) state.item.augmentation.slot = '';
+            if (!state.item.augmentation.slot && isAugmentationSlot(state.item.equip.slot) && (normalizedKind === 'augmentation' || normalizedEffectiveKind === 'augmentation')) {
+                state.item.augmentation.slot = String(state.item.equip.slot || '').trim();
+                state.item.equip.slot = '';
+            }
             if (!state.item.augmentation.grade) state.item.augmentation.grade = '';
             if (state.item.augmentation.humanity_cost_percent == null) state.item.augmentation.humanity_cost_percent = 0;
             if (!Array.isArray(state.item.augmentation.modifiers)) state.item.augmentation.modifiers = [];
@@ -1803,7 +1814,12 @@
                 var effectiveKind = kind === 'unique' ? (uniqueRoleToKind[uniqueRole] || '') : kind;
                 var allowed = slotByKind[effectiveKind || kind] || [''];
                 if (kind === 'augmentation') {
-                    if (equipSlot) errors.push('item.equip.slot: not used for augmentation');
+                    if (!String((state.item.augmentation && state.item.augmentation.slot) || '').trim() && isAugmentationSlot(equipSlot)) {
+                        state.item.augmentation.slot = equipSlot;
+                        if (state.item.cyberware && typeof state.item.cyberware === 'object') state.item.cyberware.slot = equipSlot;
+                        state.item.equip.slot = '';
+                        equipSlot = '';
+                    }
                     if (!String((state.item.augmentation && state.item.augmentation.slot) || (state.item.cyberware && state.item.cyberware.slot) || '').trim()) {
                         errors.push('item.augmentation.slot: required for augmentation');
                     }
@@ -1957,6 +1973,12 @@
                 itemOut.augmentation = deepClone(augmentationRaw || {});
                 itemOut.augmentation.subtype = String(itemOut.augmentation.subtype || (itemOut.item_kind === 'augmentation' ? 'cybernetic' : ''));
                 itemOut.augmentation.slot = String(itemOut.augmentation.slot || '');
+                var itemOutUniqueRole = String(itemOut.unique_role || '').trim().toLowerCase();
+                var itemOutEffectiveKind = itemOut.item_kind === 'unique' ? (uniqueRoleToKind[itemOutUniqueRole] || '') : itemOut.item_kind;
+                if (!itemOut.augmentation.slot && isAugmentationSlot(itemOut.equip.slot) && (itemOut.item_kind === 'augmentation' || itemOutEffectiveKind === 'augmentation')) {
+                    itemOut.augmentation.slot = String(itemOut.equip.slot || '').trim();
+                    itemOut.equip.slot = '';
+                }
                 itemOut.augmentation.grade = String(itemOut.augmentation.grade || '');
                 itemOut.augmentation.humanity_cost_percent = Math.max(0, Math.min(100, numberOrZero(itemOut.augmentation.humanity_cost_percent != null ? itemOut.augmentation.humanity_cost_percent : 0)));
                 itemOut.augmentation.modifiers = Array.isArray(itemOut.augmentation.modifiers) ? itemOut.augmentation.modifiers.filter(function (row) { return row && row.type; }) : [];
@@ -2452,7 +2474,7 @@
                     equipGrid.appendChild(createInput({ name: 'slot', label: 'Слот экипировки', type: 'select', options: slotByKind.gear }, state.item.equip, syncRawDebounced));
                 } else if (augmentationMode) {
                     equipGrid.appendChild(createInput({ name: 'subtype', label: 'Augmentation subtype', type: 'select', options: ['', 'cybernetic', 'biomechanical', 'symbiotic'] }, state.item.augmentation, syncRawDebounced));
-                    equipGrid.appendChild(createInput({ name: 'slot', label: 'Augmentation slot', type: 'select', options: ['', 'nervous_system', 'circulatory_system', 'immune_system', 'integumentary_system', 'operating_system', 'skeleton', 'arms', 'hands', 'legs', 'eyes', 'frontal_cortex', 'cyberaudio'] }, state.item.augmentation, syncRawDebounced));
+                    equipGrid.appendChild(createInput({ name: 'slot', label: 'Augmentation slot', type: 'select', options: augmentationSlotOptions }, state.item.augmentation, syncRawDebounced));
                     equipGrid.appendChild(createInput({ name: 'grade', label: 'Augmentation grade', type: 'text' }, state.item.augmentation, syncRawDebounced));
                     equipGrid.appendChild(createInput({ name: 'humanity_cost_percent', label: 'Humanity cost / Влияние на человечность (%)', type: 'number', hint: 'При надевании уменьшает человечность на X%' }, state.item.augmentation, syncRawDebounced));
                 } else if (kind === 'artifact') {
