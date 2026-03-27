@@ -58,9 +58,10 @@ function af_kb_default_type_definitions(): array
     $defs = [];
     foreach ($typeMap as $key => $titles) {
         $schema = $base;
-        $schema['title_ru'] = $titles[0] . ': параметры (af_kb.rules.v1)';
-        $schema['title_en'] = $titles[1] . ': rules (af_kb.rules.v1)';
-        $schema['root_defaults'] = ['schema' => AF_KB_RULES_SCHEMA];
+        $rulesSchema = $key === 'item' ? 'af_kb.item.v2' : AF_KB_RULES_SCHEMA;
+        $schema['title_ru'] = $titles[0] . ': параметры (' . $rulesSchema . ')';
+        $schema['title_en'] = $titles[1] . ': rules (' . $rulesSchema . ')';
+        $schema['root_defaults'] = ['schema' => $rulesSchema];
 
         if (in_array($key, ['race', 'class', 'theme', 'skill', 'knowledge', 'perk', 'condition', 'spell'], true)) {
             $schema['root_defaults']['fixed_bonuses'] = ['stats' => ['str' => 0, 'dex' => 0, 'con' => 0, 'int' => 0, 'wis' => 0, 'cha' => 0], 'hp' => 0, 'ep' => 0];
@@ -92,7 +93,7 @@ function af_kb_default_type_definitions(): array
 
         if ($key === 'item') {
             $schema['root_defaults'] = [
-                'schema' => AF_KB_RULES_SCHEMA,
+                'schema' => 'af_kb.item.v2',
                 'item' => [
                     'item_kind' => 'gear',
                     'rarity' => 'common',
@@ -108,7 +109,7 @@ function af_kb_default_type_definitions(): array
                 ],
             ];
             $schema['fields'] = [
-                ['path' => 'schema', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => AF_KB_RULES_SCHEMA],
+                ['path' => 'schema', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => 'af_kb.item.v2'],
                 ['path' => 'item.item_kind', 'type' => 'select', 'label_ru' => 'Подтип предмета', 'label_en' => 'Item kind', 'required' => true, 'options_dynamic' => ['source' => 'kb_item_kinds'], 'default' => 'gear'],
                 ['path' => 'item.rarity', 'type' => 'select', 'required' => true, 'options' => [['value'=>'common'],['value'=>'uncommon'],['value'=>'rare'],['value'=>'unique'],['value'=>'illegal'],['value'=>'restricted'],['value'=>'legendary'],['value'=>'mythic']], 'default' => 'common'],
                 ['path' => 'item.price', 'type' => 'number', 'default' => 0],
@@ -126,7 +127,7 @@ function af_kb_default_type_definitions(): array
             'title_en' => $titles[1],
             'desc_ru' => '',
             'desc_en' => '',
-            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'rules_schema' => $rulesSchema,
             'ui_schema_json' => json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'is_active' => $key === 'spell' ? 0 : 1,
             'sortorder' => count($defs),
@@ -670,6 +671,8 @@ function af_knowledgebase_activate(): bool
     }
 
     af_kb_templates_install_or_update();
+    af_kb_ensure_schema();
+    af_kb_seed_defaults();
     af_kb_ensure_alias_file();
     return true;
 }
@@ -1012,7 +1015,6 @@ function af_kb_migrate_data_json(): void
     }
 }
 
-
 function af_kb_seed_defaults(): void
 {
     global $db;
@@ -1025,16 +1027,30 @@ function af_kb_seed_defaults(): void
 
     foreach ($requiredTypes as $idx => $typeKey) {
         $existing = $db->fetch_array($db->simple_select('af_kb_types', '*', "(type='".$db->escape_string($typeKey)."' OR type_key='".$db->escape_string($typeKey)."')", ['limit' => 1]));
+
         $defaultRow = $defaultsByType[$typeKey] ?? [
             'type_key' => $typeKey,
             'title_ru' => ucfirst($typeKey),
             'title_en' => ucfirst($typeKey),
-            'rules_schema' => AF_KB_RULES_SCHEMA,
-            'ui_schema_json' => '{}',
+            'rules_schema' => $typeKey === 'item' ? 'af_kb.item.v2' : AF_KB_RULES_SCHEMA,
+            'ui_schema_json' => json_encode(af_kb_default_ui_schema_for_type($typeKey), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'is_active' => 1,
             'sortorder' => $idx,
         ];
-        $defaultRow['ui_schema_json'] = json_encode(af_kb_default_ui_schema_for_type($typeKey), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        $defaultUiSchemaJson = trim((string)($defaultRow['ui_schema_json'] ?? ''));
+        if ($defaultUiSchemaJson === '' || $defaultUiSchemaJson === '{}' || $defaultUiSchemaJson === '[]') {
+            $defaultUiSchemaJson = json_encode(
+                af_kb_default_ui_schema_for_type($typeKey),
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            );
+        }
+        $defaultRow['ui_schema_json'] = $defaultUiSchemaJson;
+
+        $defaultRulesSchema = trim((string)($defaultRow['rules_schema'] ?? ''));
+        if ($defaultRulesSchema === '') {
+            $defaultRulesSchema = $typeKey === 'item' ? 'af_kb.item.v2' : AF_KB_RULES_SCHEMA;
+        }
 
         if (!$existing) {
             $db->insert_query('af_kb_types', [
@@ -1048,7 +1064,7 @@ function af_kb_seed_defaults(): void
                 'description_en' => '',
                 'desc_ru' => '',
                 'desc_en' => '',
-                'rules_schema' => $db->escape_string($defaultRow['rules_schema']),
+                'rules_schema' => $db->escape_string($defaultRulesSchema),
                 'ui_schema_json' => $db->escape_string($defaultRow['ui_schema_json']),
                 'active' => (int)$defaultRow['is_active'],
                 'is_active' => (int)$defaultRow['is_active'],
@@ -1058,12 +1074,30 @@ function af_kb_seed_defaults(): void
             continue;
         }
 
-        $uiSchema = trim((string)($existing['ui_schema_json'] ?? ''));
-        if ($uiSchema === '' || $uiSchema === '{}' || $uiSchema === '[]') {
-            $db->update_query('af_kb_types', [
-                'ui_schema_json' => $db->escape_string((string)$defaultRow['ui_schema_json']),
-                'updated_at' => TIME_NOW,
-            ], 'id='.(int)$existing['id']);
+        $update = [];
+
+        if ((string)($existing['type_key'] ?? '') === '') {
+            $update['type_key'] = $db->escape_string($defaultRow['type_key']);
+        }
+
+        $existingRulesSchema = trim((string)($existing['rules_schema'] ?? ''));
+        if ($existingRulesSchema === '' || $existingRulesSchema !== $defaultRulesSchema) {
+            $update['rules_schema'] = $db->escape_string($defaultRulesSchema);
+        }
+
+        $existingUiSchema = trim((string)($existing['ui_schema_json'] ?? ''));
+        if (
+            $existingUiSchema === ''
+            || $existingUiSchema === '{}'
+            || $existingUiSchema === '[]'
+            || $typeKey === 'item'
+        ) {
+            $update['ui_schema_json'] = $db->escape_string($defaultRow['ui_schema_json']);
+        }
+
+        if (!empty($update)) {
+            $update['updated_at'] = TIME_NOW;
+            $db->update_query('af_kb_types', $update, 'id='.(int)$existing['id']);
         }
     }
 
@@ -1362,35 +1396,228 @@ function af_kb_default_type_rules_config(string $typeKey): array
 function af_kb_get_type_profile_definition(string $typeKey): array
 {
     $fixedStats = ['str' => 0, 'dex' => 0, 'con' => 0, 'int' => 0, 'wis' => 0, 'cha' => 0];
+
     $base = [
         'schema' => AF_KB_RULES_SCHEMA,
         'type_profile' => $typeKey,
         'version' => '1.0',
-        'fixed' => ['stats' => $fixedStats, 'hp' => 0, 'speed' => 0, 'ep' => 0, 'armor' => 0, 'initiative' => 0, 'carry' => 0],
+        'fixed' => [
+            'stats' => $fixedStats,
+            'hp' => 0,
+            'speed' => 0,
+            'ep' => 0,
+            'armor' => 0,
+            'initiative' => 0,
+            'carry' => 0,
+        ],
         'grants' => [],
         'choices' => [],
         'traits' => [],
     ];
 
     $profiles = [
-        'race' => ['ui_profile' => 'race', 'rules_enabled' => true, 'defaults' => $base + ['size' => 'medium', 'creature_type' => 'humanoid', 'speed' => 30, 'hp_base' => 10, 'languages' => ['common']]],
-        'class' => ['ui_profile' => 'class', 'rules_enabled' => true, 'defaults' => $base + ['hp_per_level' => 6, 'key_ability' => 'str', 'proficiencies' => new stdClass(), 'progression' => []]],
-        'theme' => ['ui_profile' => 'theme', 'rules_enabled' => true, 'defaults' => $base],
-        'skill' => ['ui_profile' => 'skill', 'rules_enabled' => true, 'defaults' => $base + ['skill' => ['trained_only' => false, 'untrained_allowed' => true, 'armor_check_penalty_applies' => false, 'rank_mode' => 'ranked', 'max_rank' => 10, 'rank_bonus' => 1, 'base_formula' => 'attribute', 'can_buy_rank' => true]]],
-        'knowledge' => ['ui_profile' => 'knowledge', 'rules_enabled' => true, 'defaults' => $base + ['knowledge_group' => 'lore', 'skill' => ['rank_mode' => 'ranked', 'max_rank' => 10, 'rank_bonus' => 1, 'base_formula' => 'attribute', 'can_buy_rank' => true]]],
-        'language' => ['ui_profile' => 'language', 'rules_enabled' => true, 'defaults' => $base + ['script' => '', 'rarity' => 'common', 'family' => '', 'requires' => []]],
-        'spell' => ['ui_profile' => 'spell', 'rules_enabled' => true, 'defaults' => $base + ['spell' => ['rank' => 1, 'tradition' => 'arcane', 'casting_time' => '1_action', 'range' => '', 'duration' => '', 'area' => '', 'requires_check' => false, 'check_stat' => 'int', 'dc' => 0], 'effects' => []]],
-        'item' => ['ui_profile' => 'item', 'rules_enabled' => true, 'defaults' => $base + ['schema' => 'af_kb.item.v2', 'item_kind' => 'gear', 'rarity' => 'common', 'price' => 0, 'weight' => 0, 'equip' => ['slot' => '', 'armor' => ['ac_bonus' => 0, 'armor_type' => 'light']], 'augmentation' => ['subtype' => 'cybernetic', 'slot' => '', 'grade' => '', 'humanity_cost_percent' => 0, 'modifiers' => [], 'effects' => [], 'grants' => [], 'requirements' => [], 'conflicts' => []], 'cyberware' => ['slot' => '', 'grade' => '', 'humanity_cost_percent' => 0, 'modifiers' => [], 'effects' => [], 'grants' => [], 'requirements' => [], 'conflicts' => []], 'on_equip' => [], 'on_use' => [], 'requirements' => []]],
-        'condition' => ['ui_profile' => 'condition', 'rules_enabled' => true, 'defaults' => $base + ['condition' => ['severity' => 1, 'duration_default' => '', 'stacking' => 'none', 'effects' => []]]],
-        'perk' => ['ui_profile' => 'perk', 'rules_enabled' => true, 'defaults' => $base + ['tier' => 1, 'level_req' => 1, 'prereq' => [], 'effects' => []]],
-        'faction' => ['ui_profile' => 'faction', 'rules_enabled' => false, 'defaults' => ['meta' => []]],
-        'lore' => ['ui_profile' => 'lore', 'rules_enabled' => false, 'defaults' => ['meta' => []]],
+        'race' => [
+            'ui_profile' => 'race',
+            'rules_enabled' => true,
+            'defaults' => array_replace_recursive($base, [
+                'size' => 'medium',
+                'creature_type' => 'humanoid',
+                'speed' => 30,
+                'hp_base' => 10,
+                'languages' => ['common'],
+            ]),
+        ],
+        'class' => [
+            'ui_profile' => 'class',
+            'rules_enabled' => true,
+            'defaults' => array_replace_recursive($base, [
+                'hp_per_level' => 6,
+                'key_ability' => 'str',
+                'proficiencies' => new stdClass(),
+                'progression' => [],
+            ]),
+        ],
+        'theme' => [
+            'ui_profile' => 'theme',
+            'rules_enabled' => true,
+            'defaults' => $base,
+        ],
+        'skill' => [
+            'ui_profile' => 'skill',
+            'rules_enabled' => true,
+            'defaults' => array_replace_recursive($base, [
+                'skill' => [
+                    'trained_only' => false,
+                    'untrained_allowed' => true,
+                    'armor_check_penalty_applies' => false,
+                    'rank_mode' => 'ranked',
+                    'max_rank' => 10,
+                    'rank_bonus' => 1,
+                    'base_formula' => 'attribute',
+                    'can_buy_rank' => true,
+                ],
+            ]),
+        ],
+        'knowledge' => [
+            'ui_profile' => 'knowledge',
+            'rules_enabled' => true,
+            'defaults' => array_replace_recursive($base, [
+                'knowledge_group' => 'lore',
+                'skill' => [
+                    'rank_mode' => 'ranked',
+                    'max_rank' => 10,
+                    'rank_bonus' => 1,
+                    'base_formula' => 'attribute',
+                    'can_buy_rank' => true,
+                ],
+            ]),
+        ],
+        'language' => [
+            'ui_profile' => 'language',
+            'rules_enabled' => true,
+            'defaults' => array_replace_recursive($base, [
+                'script' => '',
+                'rarity' => 'common',
+                'family' => '',
+                'requires' => [],
+            ]),
+        ],
+        'spell' => [
+            'ui_profile' => 'spell',
+            'rules_enabled' => true,
+            'defaults' => array_replace_recursive($base, [
+                'spell' => [
+                    'rank' => 1,
+                    'tradition' => 'arcane',
+                    'casting_time' => '1_action',
+                    'range' => '',
+                    'duration' => '',
+                    'area' => '',
+                    'requires_check' => false,
+                    'check_stat' => 'int',
+                    'dc' => 0,
+                ],
+                'effects' => [],
+            ]),
+        ],
+
+        // ВАЖНО: item БЕЗ fixed/grants/choices/traits и сразу в af_kb.item.v2
+        'item' => [
+            'ui_profile' => 'item',
+            'rules_enabled' => true,
+            'defaults' => [
+                'schema' => 'af_kb.item.v2',
+                'type_profile' => 'item',
+                'version' => '1.0',
+                'item' => [
+                    'item_kind' => 'gear',
+                    'rarity' => 'common',
+                    'price' => 0,
+                    'currency' => 'credits',
+                    'weight' => 0,
+                    'stack_max' => 1,
+                    'equip' => [
+                        'slot' => '',
+                        'armor' => [
+                            'ac_bonus' => 0,
+                            'armor_type' => 'light',
+                        ],
+                    ],
+                    'weapon' => [
+                        'damage_bonus' => 0,
+                        'damage_type' => 'kinetic',
+                        'rate_of_fire' => 0,
+                        'range' => '',
+                        'ammo_type_key' => '',
+                    ],
+                    'ammo' => [
+                        'ammo_type' => '',
+                        'damage_type' => 'kinetic',
+                        'damage_bonus' => 0,
+                    ],
+                    'gear' => [
+                        'subtype' => '',
+                    ],
+                    'augmentation' => [
+                        'subtype' => 'cybernetic',
+                        'slot' => '',
+                        'grade' => '',
+                        'humanity_cost_percent' => 0,
+                        'modifiers' => [],
+                        'effects' => [],
+                        'grants' => [],
+                        'requirements' => [],
+                        'conflicts' => [],
+                    ],
+                    'cyberware' => [
+                        'slot' => '',
+                        'grade' => '',
+                        'humanity_cost_percent' => 0,
+                        'modifiers' => [],
+                        'effects' => [],
+                        'grants' => [],
+                        'requirements' => [],
+                        'conflicts' => [],
+                        'subtype' => 'cybernetic',
+                    ],
+                    'tags' => [],
+                    'on_use' => [],
+                    'on_equip' => [],
+                    'requirements' => [],
+                    'unique_role' => '',
+                    'unique_base_kind' => '',
+                ],
+            ],
+        ],
+
+        'condition' => [
+            'ui_profile' => 'condition',
+            'rules_enabled' => true,
+            'defaults' => array_replace_recursive($base, [
+                'condition' => [
+                    'severity' => 1,
+                    'duration_default' => '',
+                    'stacking' => 'none',
+                    'effects' => [],
+                ],
+            ]),
+        ],
+        'perk' => [
+            'ui_profile' => 'perk',
+            'rules_enabled' => true,
+            'defaults' => array_replace_recursive($base, [
+                'tier' => 1,
+                'level_req' => 1,
+                'prereq' => [],
+                'effects' => [],
+            ]),
+        ],
+        'faction' => [
+            'ui_profile' => 'faction',
+            'rules_enabled' => false,
+            'defaults' => ['meta' => []],
+        ],
+        'lore' => [
+            'ui_profile' => 'lore',
+            'rules_enabled' => false,
+            'defaults' => ['meta' => []],
+        ],
     ];
 
-    $profile = (array)($profiles[$typeKey] ?? ['ui_profile' => $typeKey, 'rules_enabled' => true, 'defaults' => $base]);
+    $profile = (array)($profiles[$typeKey] ?? [
+        'ui_profile' => $typeKey,
+        'rules_enabled' => true,
+        'defaults' => $base,
+    ]);
+
     $profile['allowed_choices'] = ['kb_pick', 'stat_bonus', 'language_pick', 'proficiency_pick', 'equipment_pick', 'spell_pick'];
     $profile['allowed_grants'] = ['resource', 'skill', 'item', 'sense', 'resistance', 'speed'];
-    $profile['validators'] = ['schema' => AF_KB_RULES_SCHEMA];
+
+    $expectedSchema = (string)($profile['defaults']['schema'] ?? AF_KB_RULES_SCHEMA);
+    $profile['validators'] = array_replace_recursive(
+        ['schema' => $expectedSchema],
+        (array)($profile['validators'] ?? [])
+    );
 
     return $profile;
 }
@@ -1400,8 +1627,28 @@ function af_kb_get_type_schema(string $typeKey): array
     global $db;
 
     $safeType = $db->escape_string($typeKey);
-    $row = $db->fetch_array($db->simple_select('af_kb_types', 'ui_schema_json,rules_schema', "(type='".$safeType."' OR type_key='".$safeType."')", ['limit' => 1]));
+    $row = $db->fetch_array(
+        $db->simple_select(
+            'af_kb_types',
+            'ui_schema_json,rules_schema',
+            "(type='".$safeType."' OR type_key='".$safeType."')",
+            ['limit' => 1]
+        )
+    );
+
     $schema = $row ? af_kb_decode_json((string)($row['ui_schema_json'] ?? '{}')) : [];
+
+    // Для item жёстко берём каноничную editor-schema,
+    // даже если в БД раньше остался старый ui_schema_json.
+    if ($typeKey === 'item') {
+        foreach (af_kb_default_type_definitions() as $def) {
+            if ((string)($def['type_key'] ?? '') === 'item') {
+                $schema = af_kb_decode_json((string)($def['ui_schema_json'] ?? '{}'));
+                break;
+            }
+        }
+    }
+
     if (empty($schema)) {
         $schema = af_kb_default_ui_schema_for_type($typeKey);
     }
@@ -1410,25 +1657,62 @@ function af_kb_get_type_schema(string $typeKey): array
     if (!array_key_exists('rules_schema', $rulesConfig)) {
         $rulesConfig['rules_schema'] = '';
     }
+
     $dbRulesSchema = trim((string)($row['rules_schema'] ?? ''));
-    if ($dbRulesSchema !== '' && !isset($schema['rules_schema'])) {
+    if ($typeKey !== 'item' && $dbRulesSchema !== '' && !isset($schema['rules_schema'])) {
         $rulesConfig['rules_schema'] = $dbRulesSchema;
     }
 
     $profileSchema = af_kb_get_type_profile_definition($typeKey);
 
-    $schema['rules_enabled'] = isset($schema['rules_enabled']) ? !empty($schema['rules_enabled']) : !empty($profileSchema['rules_enabled']);
-    $schema['rules_schema'] = (string)($schema['rules_schema'] ?? $rulesConfig['rules_schema'] ?? '');
+    $schema['rules_enabled'] = isset($schema['rules_enabled'])
+        ? !empty($schema['rules_enabled'])
+        : !empty($profileSchema['rules_enabled']);
+
+    $schema['rules_schema'] = (string)(
+        $typeKey === 'item'
+            ? 'af_kb.item.v2'
+            : ($schema['rules_schema'] ?? $rulesConfig['rules_schema'] ?? '')
+    );
+
     $schema['rules_required_keys'] = isset($schema['rules_required_keys']) && is_array($schema['rules_required_keys'])
         ? array_values($schema['rules_required_keys'])
         : array_values((array)($rulesConfig['rules_required_keys'] ?? []));
-    $schema['ui_rules_editor'] = isset($schema['ui_rules_editor']) ? !empty($schema['ui_rules_editor']) : !empty($rulesConfig['ui_rules_editor']);
+
+    $schema['ui_rules_editor'] = isset($schema['ui_rules_editor'])
+        ? !empty($schema['ui_rules_editor'])
+        : !empty($rulesConfig['ui_rules_editor']);
+
     $schema['type_profile'] = (string)($schema['type_profile'] ?? $typeKey);
     $schema['ui_profile'] = (string)($schema['ui_profile'] ?? ($profileSchema['ui_profile'] ?? $typeKey));
-    $schema['defaults'] = array_replace_recursive((array)($profileSchema['defaults'] ?? []), (array)($schema['defaults'] ?? []));
+    $schema['defaults'] = array_replace_recursive(
+        (array)($profileSchema['defaults'] ?? []),
+        (array)($schema['defaults'] ?? [])
+    );
     $schema['allowed_choices'] = array_values((array)($schema['allowed_choices'] ?? $profileSchema['allowed_choices'] ?? []));
     $schema['allowed_grants'] = array_values((array)($schema['allowed_grants'] ?? $profileSchema['allowed_grants'] ?? []));
-    $schema['validators'] = array_replace_recursive((array)($profileSchema['validators'] ?? []), (array)($schema['validators'] ?? []));
+    $schema['validators'] = array_replace_recursive(
+        (array)($profileSchema['validators'] ?? []),
+        (array)($schema['validators'] ?? [])
+    );
+
+    if ($typeKey === 'item') {
+        $schema['root_defaults'] = af_kb_normalize_item_rules_payload((array)($schema['root_defaults'] ?? []));
+        $schema['root_defaults']['schema'] = 'af_kb.item.v2';
+        $schema['root_defaults']['type_profile'] = 'item';
+        if (!isset($schema['root_defaults']['version']) || trim((string)$schema['root_defaults']['version']) === '') {
+            $schema['root_defaults']['version'] = '1.0';
+        }
+
+        if (isset($schema['fields']) && is_array($schema['fields'])) {
+            foreach ($schema['fields'] as &$field) {
+                if (($field['path'] ?? '') === 'schema') {
+                    $field['default'] = 'af_kb.item.v2';
+                }
+            }
+            unset($field);
+        }
+    }
 
     return $schema;
 }
@@ -2715,6 +2999,23 @@ function af_kb_normalize_rules_json(string $raw): string
         return '{}';
     }
 
+    $schema = trim((string)($decoded['schema'] ?? ''));
+    $typeProfile = trim((string)($decoded['type_profile'] ?? ''));
+    $isItem = (
+        $schema === 'af_kb.item.v2'
+        || $typeProfile === 'item'
+        || (isset($decoded['item']) && is_array($decoded['item']))
+    );
+
+    if ($isItem) {
+        $decoded = af_kb_normalize_item_rules_payload($decoded);
+        if (!isset($decoded['item']) || !is_array($decoded['item'])) {
+            $decoded['item'] = [];
+        }
+
+        return (string)json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
     foreach (['choices', 'traits', 'grants'] as $arrayKey) {
         if (!isset($decoded[$arrayKey]) || !is_array($decoded[$arrayKey])) {
             $decoded[$arrayKey] = [];
@@ -2734,15 +3035,20 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
         $rulesData = [];
     }
 
-    // Если rules выключены — просто нормализуем и выходим
     if (!$rulesEnabled) {
         return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
     }
 
-    $expectedSchema = trim((string)($typeSchema['rules_schema'] ?? AF_KB_RULES_SCHEMA));
-    $defaults       = (array)($typeSchema['defaults'] ?? []);
+    $isItem = ($type === 'item');
 
-    if ($type === 'item') {
+    $expectedSchema = trim((string)($typeSchema['rules_schema'] ?? ($isItem ? 'af_kb.item.v2' : AF_KB_RULES_SCHEMA)));
+    if ($expectedSchema === '') {
+        $expectedSchema = $isItem ? 'af_kb.item.v2' : AF_KB_RULES_SCHEMA;
+    }
+
+    $defaults = (array)($typeSchema['defaults'] ?? []);
+
+    if ($isItem) {
         $rulesData = af_kb_normalize_item_rules_payload($rulesData);
         $defaults = af_kb_normalize_item_rules_payload($defaults);
     }
@@ -2752,17 +3058,17 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
         $rulesData = array_replace_recursive($defaults, $rulesData);
     }
 
-    // schema/type_profile/version — приводим к канону
-    $rulesData['schema']       = $expectedSchema !== '' ? $expectedSchema : AF_KB_RULES_SCHEMA;
+    $rulesData['schema'] = $expectedSchema;
     $rulesData['type_profile'] = $type;
     if (!isset($rulesData['version']) || (string)$rulesData['version'] === '') {
         $rulesData['version'] = '1.0';
     }
 
-    // Гарантируем массивы, чтобы UI/рендер не ломались
-    foreach (['traits', 'grants', 'choices'] as $k) {
-        if (!isset($rulesData[$k]) || !is_array($rulesData[$k])) {
-            $rulesData[$k] = [];
+    if (!$isItem) {
+        foreach (['traits', 'grants', 'choices'] as $k) {
+            if (!isset($rulesData[$k]) || !is_array($rulesData[$k])) {
+                $rulesData[$k] = [];
+            }
         }
     }
 
@@ -2770,20 +3076,20 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
         $rulesData['skill'] = af_kb_normalize_skill_payload((array)($rulesData['skill'] ?? []));
     }
 
-    if ($type === 'item') {
+    if ($isItem) {
         $rulesData = af_kb_normalize_item_rules_payload($rulesData);
+        if (!isset($rulesData['item']) || !is_array($rulesData['item'])) {
+            $rulesData['item'] = [];
+        }
         $rulesData = af_kb_validate_item_slot_requirements($rulesData, $errors);
     }
 
-    // effects: по твоему ТЗ это реально “общая штука” для spell/perk и иногда item/condition
-    // Если defaults содержат effects или тип требует effects — держим массив.
     $requiredKeys = (array)($typeSchema['rules_required_keys'] ?? []);
     $needsEffects = in_array('effects', $requiredKeys, true) || array_key_exists('effects', $defaults);
     if ($needsEffects && (!isset($rulesData['effects']) || !is_array($rulesData['effects']))) {
         $rulesData['effects'] = [];
     }
 
-    // Проверка required keys — ПОСЛЕ подстановки defaults
     foreach ($requiredKeys as $requiredKey) {
         $rk = (string)$requiredKey;
         if (!$shouldMergeDefaults && in_array($rk, ['fixed', 'grants', 'choices', 'progression'], true)) {
@@ -2794,9 +3100,10 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
         }
     }
 
-    // нормализация traits/grants (как у тебя было)
-    $rulesData['traits'] = af_kb_normalize_traits_json($rulesData['traits'], $errors);
-    $rulesData['grants'] = af_kb_normalize_grants_json($rulesData['grants'], $errors);
+    if (!$isItem) {
+        $rulesData['traits'] = af_kb_normalize_traits_json($rulesData['traits'], $errors);
+        $rulesData['grants'] = af_kb_normalize_grants_json($rulesData['grants'], $errors);
+    }
 
     return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
 }
@@ -2810,6 +3117,8 @@ function af_kb_normalize_item_rules_payload(array $payload): array
 {
     $rootFields = af_kb_item_root_fields();
     $hasItem = isset($payload['item']) && is_array($payload['item']);
+
+    $legacyRootSlot = trim((string)($payload['slot'] ?? ''));
 
     if (!$hasItem) {
         $item = [];
@@ -2827,16 +3136,138 @@ function af_kb_normalize_item_rules_payload(array $payload): array
         unset($payload[$field]);
     }
 
+    if (!isset($payload['item']) || !is_array($payload['item'])) {
+        $payload['item'] = [];
+    }
+
+    if (!isset($payload['item']['equip']) || !is_array($payload['item']['equip'])) {
+        $payload['item']['equip'] = [];
+    }
+
+    $legacyItemSlot = trim((string)($payload['item']['slot'] ?? ''));
+    if ($legacyRootSlot !== '' && trim((string)($payload['item']['equip']['slot'] ?? '')) === '') {
+        $payload['item']['equip']['slot'] = $legacyRootSlot;
+    }
+    if ($legacyItemSlot !== '' && trim((string)($payload['item']['equip']['slot'] ?? '')) === '') {
+        $payload['item']['equip']['slot'] = $legacyItemSlot;
+    }
+
+    unset($payload['item']['slot']);
+
     return $payload;
+}
+
+function af_kb_prepare_item_payload_for_save(array $metaPayload, string $fallbackItemKind = ''): array
+{
+    $rules = $metaPayload['rules'] ?? [];
+    if (!is_array($rules)) {
+        $rules = [];
+    }
+
+    $rules = af_kb_normalize_item_rules_payload($rules);
+
+    if (!isset($rules['item']) || !is_array($rules['item'])) {
+        $rules['item'] = [];
+    }
+
+    $item = $rules['item'];
+
+    $rulesItemKind = af_kb_normalize_item_kind((string)($item['item_kind'] ?? ''));
+    $metaItemKind = af_kb_normalize_item_kind((string)($metaPayload['item_kind'] ?? ''));
+    $fallbackItemKind = af_kb_normalize_item_kind($fallbackItemKind);
+
+    $itemKind = $rulesItemKind !== ''
+        ? $rulesItemKind
+        : ($metaItemKind !== ''
+            ? $metaItemKind
+            : ($fallbackItemKind !== '' ? $fallbackItemKind : 'gear'));
+
+    $item['item_kind'] = $itemKind;
+
+    if (!isset($item['equip']) || !is_array($item['equip'])) {
+        $item['equip'] = [];
+    }
+    if (!isset($item['augmentation']) || !is_array($item['augmentation'])) {
+        $item['augmentation'] = [];
+    }
+    if (!isset($item['cyberware']) || !is_array($item['cyberware'])) {
+        $item['cyberware'] = [];
+    }
+
+    $equipSlot = strtolower(trim((string)($item['equip']['slot'] ?? '')));
+    if (strpos($equipSlot, 'consumable_') === 0) {
+        $equipSlot = str_replace('consumable_', 'support_', $equipSlot);
+    }
+
+    $augmentationSlotsAllowed = [
+        'nervous_system',
+        'circulatory_system',
+        'immune_system',
+        'integumentary_system',
+        'operating_system',
+        'skeleton',
+        'arms',
+        'hands',
+        'legs',
+        'eyes',
+        'frontal_cortex',
+        'cyberaudio',
+    ];
+
+    $augmentationSlot = trim((string)($item['augmentation']['slot'] ?? ''));
+    $cyberwareSlot = trim((string)($item['cyberware']['slot'] ?? ''));
+
+    if ($augmentationSlot === '' && $cyberwareSlot !== '') {
+        $augmentationSlot = $cyberwareSlot;
+    }
+    if ($cyberwareSlot === '' && $augmentationSlot !== '') {
+        $cyberwareSlot = $augmentationSlot;
+    }
+
+    $effectiveKind = $itemKind;
+    if ($itemKind === 'unique') {
+        $uniqueRole = af_kb_normalize_item_kind((string)($item['unique_role'] ?? $item['unique_base_kind'] ?? ''));
+        if ($uniqueRole !== '') {
+            $effectiveKind = $uniqueRole;
+        }
+    }
+
+    if (
+        $effectiveKind === 'augmentation'
+        && $augmentationSlot === ''
+        && $equipSlot !== ''
+        && in_array($equipSlot, $augmentationSlotsAllowed, true)
+    ) {
+        $augmentationSlot = $equipSlot;
+        $cyberwareSlot = $equipSlot;
+        $equipSlot = '';
+    }
+
+    $item['equip']['slot'] = $equipSlot;
+    $item['augmentation']['slot'] = $augmentationSlot;
+    $item['cyberware']['slot'] = $cyberwareSlot;
+
+    $rules['item'] = $item;
+    $metaPayload['item_kind'] = $itemKind;
+    $metaPayload['rules'] = $rules;
+
+    return [
+        'meta' => $metaPayload,
+        'rules' => $rules,
+        'item_kind' => $itemKind,
+    ];
 }
 
 function af_kb_validate_item_slot_requirements(array $rulesData, array &$errors): array
 {
+    $rulesData = af_kb_normalize_item_rules_payload($rulesData);
+
     $item = is_array($rulesData['item'] ?? null) ? (array)$rulesData['item'] : [];
     $kind = af_kb_normalize_item_kind((string)($item['item_kind'] ?? ''));
     if ($kind === '') {
         $kind = 'gear';
     }
+    $item['item_kind'] = $kind;
 
     $uniqueRole = af_kb_normalize_item_kind((string)($item['unique_role'] ?? $item['unique_base_kind'] ?? ''));
     $effectiveKind = $kind;
@@ -2844,46 +3275,88 @@ function af_kb_validate_item_slot_requirements(array $rulesData, array &$errors)
         $effectiveKind = $uniqueRole;
     }
 
-    $equip = is_array($item['equip'] ?? null) ? (array)$item['equip'] : [];
-    $equipSlot = strtolower(trim((string)($equip['slot'] ?? '')));
-
-    $augmentation = is_array($item['augmentation'] ?? null) ? (array)$item['augmentation'] : [];
-    $cyberware = is_array($item['cyberware'] ?? null) ? (array)$item['cyberware'] : [];
-    $augmentationSlot = trim((string)($augmentation['slot'] ?? ''));
-    if ($augmentationSlot === '') {
-        $augmentationSlot = trim((string)($cyberware['slot'] ?? ''));
-    }
-    $augmentationSlotsAllowed = [
-        'nervous_system', 'circulatory_system', 'immune_system', 'integumentary_system',
-        'operating_system', 'skeleton', 'arms', 'hands', 'legs', 'eyes', 'frontal_cortex', 'cyberaudio',
-    ];
-
-    if ($kind === 'augmentation' || $effectiveKind === 'augmentation') {
-        if ($augmentationSlot === '' && $equipSlot !== '' && in_array($equipSlot, $augmentationSlotsAllowed, true)) {
-            $augmentationSlot = $equipSlot;
-            $equipSlot = '';
-        }
-        if ($augmentationSlot === '') {
-            $errors[] = 'item.augmentation.slot: required for augmentation';
-        }
-    } elseif (in_array($effectiveKind, ['armor', 'weapon'], true) && $equipSlot === '') {
-        $errors[] = 'item.equip.slot: required for armor/weapon';
-    }
-
-    $item['item_kind'] = $kind;
     if (!isset($item['equip']) || !is_array($item['equip'])) {
         $item['equip'] = [];
     }
-    $item['equip']['slot'] = $equipSlot;
-
     if (!isset($item['augmentation']) || !is_array($item['augmentation'])) {
         $item['augmentation'] = [];
     }
     if (!isset($item['cyberware']) || !is_array($item['cyberware'])) {
         $item['cyberware'] = [];
     }
+
+    $equipSlot = strtolower(trim((string)($item['equip']['slot'] ?? '')));
+    if (strpos($equipSlot, 'consumable_') === 0) {
+        $equipSlot = str_replace('consumable_', 'support_', $equipSlot);
+    }
+
+    $augmentationSlotsAllowed = [
+        'nervous_system',
+        'circulatory_system',
+        'immune_system',
+        'integumentary_system',
+        'operating_system',
+        'skeleton',
+        'arms',
+        'hands',
+        'legs',
+        'eyes',
+        'frontal_cortex',
+        'cyberaudio',
+    ];
+
+    $slotByKind = [
+        'armor' => ['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt'],
+        'weapon' => ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_ranged', 'weapon_melee'],
+        'consumable' => ['', 'support_1', 'support_2', 'support_3', 'support_4'],
+        'ammo' => ['ammo', 'ammo_pouch'],
+        'gear' => ['', 'gear', 'accessory'],
+        'artifact' => ['', 'artifact', 'accessory'],
+        'unique' => ['', 'weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_ranged', 'weapon_melee', 'head', 'body', 'hands', 'legs', 'feet', 'back', 'belt', 'support_1', 'support_2', 'support_3', 'support_4', 'ammo', 'ammo_pouch', 'gear', 'artifact', 'accessory'],
+    ];
+
+    $augmentationSlot = strtolower(trim((string)($item['augmentation']['slot'] ?? '')));
+    $cyberwareSlot = strtolower(trim((string)($item['cyberware']['slot'] ?? '')));
+
+    if ($augmentationSlot === '' && $cyberwareSlot !== '') {
+        $augmentationSlot = $cyberwareSlot;
+    }
+    if ($cyberwareSlot === '' && $augmentationSlot !== '') {
+        $cyberwareSlot = $augmentationSlot;
+    }
+
+    if (
+        $effectiveKind === 'augmentation'
+        && $augmentationSlot === ''
+        && $equipSlot !== ''
+        && in_array($equipSlot, $augmentationSlotsAllowed, true)
+    ) {
+        $augmentationSlot = $equipSlot;
+        $cyberwareSlot = $equipSlot;
+    }
+
+    if ($effectiveKind === 'augmentation') {
+        if ($augmentationSlot !== '' && !in_array($augmentationSlot, $augmentationSlotsAllowed, true)) {
+            $errors[] = 'item.augmentation.slot: incompatible with augmentation';
+        }
+
+        // Для аугментаций используем только dedicated-slot, а не equip.slot
+        $equipSlot = '';
+    } elseif ($kind === 'unique' && $uniqueRole === '') {
+        $errors[] = 'item.unique_role: required for unique';
+    } else {
+        $allowed = $slotByKind[$effectiveKind] ?? [''];
+        if ($equipSlot !== '' && !in_array($equipSlot, $allowed, true)) {
+            $errors[] = 'item.equip.slot: incompatible with item_kind=' . $effectiveKind;
+        }
+        if (in_array($effectiveKind, ['armor', 'weapon'], true) && $equipSlot === '') {
+            $errors[] = 'item.equip.slot: required for armor/weapon';
+        }
+    }
+
+    $item['equip']['slot'] = $equipSlot;
     $item['augmentation']['slot'] = $augmentationSlot;
-    $item['cyberware']['slot'] = $augmentationSlot;
+    $item['cyberware']['slot'] = $cyberwareSlot;
 
     $rulesData['item'] = $item;
 
@@ -4053,71 +4526,14 @@ function af_kb_render_entry_ui(array $entry, array $typeRow, bool $isRu): string
 
 
     if ($typeKey === 'item') {
-        $body  = af_kb_pick_text($entry, 'body');
-        $short = af_kb_pick_text($entry, 'short');
-        $rules = kb_parse_rules($entry);
-        $item = (array)($rules['item'] ?? []);
-        $augmentation = (array)($item['augmentation'] ?? []);
-        $cyberware = $augmentation ?: (array)($item['cyberware'] ?? []);
-
-        $parts = [];
-        if ($short !== '') {
-            $parts[] = '<div class="kb-card">' . af_kb_parse_message($short) . '</div>';
-        }
-        if ($body !== '') {
-            $parts[] = '<div class="kb-card">' . af_kb_parse_message($body) . '</div>';
+        $body = af_kb_pick_text($entry, 'body');
+        if ($body === '') {
+            return '';
         }
 
-        $slot = trim((string)($cyberware['slot'] ?? ''));
-        $grade = trim((string)($cyberware['grade'] ?? ''));
-        $humanityCost = af_kb_item_get_humanity_cost($entry);
-        $mods = (array)($cyberware['modifiers'] ?? []);
-        $effects = (array)($cyberware['effects'] ?? []);
-        $grants = (array)($cyberware['grants'] ?? []);
-
-        $metaLines = [];
-        if ($slot !== '') { $metaLines[] = '<li><strong>Slot:</strong> ' . htmlspecialchars_uni($slot) . '</li>'; }
-        if ($grade !== '') { $metaLines[] = '<li><strong>Grade:</strong> ' . htmlspecialchars_uni($grade) . '</li>'; }
-        if ($humanityCost > 0) { $metaLines[] = '<li><strong>Humanity cost:</strong> −' . htmlspecialchars_uni((string)$humanityCost) . '% человечности</li>'; }
-        if ($metaLines) {
-            $parts[] = '<div class="kb-card"><ul>' . implode('', $metaLines) . '</ul></div>';
-        }
-
-        if ($mods) {
-            $lines = [];
-            foreach ($mods as $mod) {
-                if (!is_array($mod)) { continue; }
-                $type = (string)($mod['type'] ?? 'modifier');
-                $value = (string)($mod['value'] ?? '0');
-                $unit = (string)($mod['unit'] ?? '');
-                $lines[] = '<li>' . htmlspecialchars_uni($type . ': ' . $value . $unit) . '</li>';
-            }
-            if ($lines) { $parts[] = '<div class="kb-card"><strong>Modifiers</strong><ul>' . implode('', $lines) . '</ul></div>'; }
-        }
-
-        if ($effects) {
-            $lines = [];
-            foreach ($effects as $effect) {
-                if (!is_array($effect)) { continue; }
-                $event = (string)($effect['event'] ?? '');
-                $effectType = (string)($effect['effect_type'] ?? '');
-                $lines[] = '<li>' . htmlspecialchars_uni($event . ' → ' . $effectType) . '</li>';
-            }
-            if ($lines) { $parts[] = '<div class="kb-card"><strong>Effects</strong><ul>' . implode('', $lines) . '</ul></div>'; }
-        }
-
-        if ($grants) {
-            $lines = [];
-            foreach ($grants as $grant) {
-                if (!is_array($grant)) { continue; }
-                $gType = (string)($grant['grant_type'] ?? '');
-                $target = (string)($grant['target'] ?? '');
-                $lines[] = '<li>' . htmlspecialchars_uni($gType . ($target !== '' ? ': ' . $target : '')) . '</li>';
-            }
-            if ($lines) { $parts[] = '<div class="kb-card"><strong>Grants</strong><ul>' . implode('', $lines) . '</ul></div>'; }
-        }
-
-        return trim(implode('', $parts));
+        // Для предметов на странице записи выводим только основное описание
+        // без технических карточек Slot / Humanity / Modifiers / Effects / Grants
+        return trim(af_kb_parse_message($body));
     }
 
     // ----- обычная логика для остальных типов -----
@@ -5641,6 +6057,10 @@ function af_kb_handle_edit(): void
         }
 
         $metaJson = trim((string)$mybb->get_input('meta_json'));
+        $kbRulesJsonRaw = trim((string)$mybb->get_input('kb_rules_json'));
+        $hasPostedRulesJson = ($kbRulesJsonRaw !== '');
+        $postedRulesPayload = [];
+
         $entryIconClass = af_kb_sanitize_icon_class((string)$mybb->get_input('icon_class'));
         $entryIconUrl = af_kb_sanitize_url((string)$mybb->get_input('icon_url'));
         $entryBannerUrl = af_kb_sanitize_url((string)$mybb->get_input('banner_url'));
@@ -5649,6 +6069,13 @@ function af_kb_handle_edit(): void
         if (!af_kb_validate_json($metaJson)) {
             $errors[] = $lang->af_kb_invalid_json ?? 'Invalid JSON.';
         }
+        if ($hasPostedRulesJson) {
+            if (!af_kb_validate_json($kbRulesJsonRaw)) {
+                $errors[] = 'Invalid rules JSON.';
+            } else {
+                $postedRulesPayload = af_kb_decode_json($kbRulesJsonRaw);
+            }
+        }        
 
         $metaPayload = af_kb_decode_json($metaJson);
         $metaBeforeRaw = '';
@@ -5664,15 +6091,20 @@ function af_kb_handle_edit(): void
         if (!is_array($metaPayload)) {
             $metaPayload = [];
         }
+
         $metaPayload = array_replace_recursive($metaBefore, $metaPayload);
         if (empty($metaPayload['schema']) || (string)$metaPayload['schema'] === 'af_kb.meta.v1') {
             $metaPayload['schema'] = 'af_kb.meta.v2';
         }
         $metaPayload = af_kb_cleanup_meta_payload($metaPayload);
 
-        $entryRulesRaw = $metaPayload['rules'] ?? null;
-        if (!is_array($entryRulesRaw)) {
-            $entryRulesRaw = [];
+        $entryRulesRaw = [];
+
+        if ($hasPostedRulesJson) {
+            $entryRulesRaw = is_array($postedRulesPayload) ? $postedRulesPayload : [];
+            $metaPayload['rules'] = $entryRulesRaw;
+        } elseif (is_array($metaPayload['rules'] ?? null)) {
+            $entryRulesRaw = (array)$metaPayload['rules'];
         }
 
         if (af_kb_is_admin() && (int)$mybb->get_input('kb_debug_rules', MyBB::INPUT_INT) === 1) {
@@ -5685,9 +6117,20 @@ function af_kb_handle_edit(): void
                 'grants' => $rawGrantsBeforeNormalize,
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         }
-        $entryDataJsonNormalized = af_kb_normalize_json(json_encode($entryRulesRaw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}');
 
         $itemKind = af_kb_normalize_item_kind((string)($metaPayload['item_kind'] ?? $mybb->get_input('item_kind')));
+        if ($type === 'item') {
+            $preparedItem = af_kb_prepare_item_payload_for_save($metaPayload, $itemKind);
+            $metaPayload = (array)($preparedItem['meta'] ?? $metaPayload);
+            $entryRulesRaw = (array)($preparedItem['rules'] ?? []);
+            $metaPayload['rules'] = $entryRulesRaw;
+            $itemKind = (string)($preparedItem['item_kind'] ?? $itemKind);
+        }
+
+        $entryDataJsonNormalized = af_kb_normalize_json(
+            json_encode($entryRulesRaw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}'
+        );
+
         if ($type === 'item') {
             if ($itemKind === '') {
                 $itemKind = 'gear';
@@ -5698,19 +6141,24 @@ function af_kb_handle_edit(): void
             if ($itemKind !== '') {
                 $schema = af_kb_apply_overlay_to_schema($schema, af_kb_get_item_kind_overlay($itemKind));
             }
+
             foreach ((array)($schema['fields'] ?? []) as $field) {
                 if (empty($field['required']) || empty($field['path'])) {
                     continue;
                 }
+
                 if ((string)$field['path'] === 'item.equip.slot') {
                     continue;
                 }
+
                 $parts = explode('.', (string)$field['path']);
                 $present = false;
                 $cursor = null;
+
                 foreach ([$metaPayload, (array)($metaPayload['rules'] ?? [])] as $candidateRoot) {
                     $cursorCandidate = $candidateRoot;
                     $candidatePresent = true;
+
                     foreach ($parts as $part) {
                         if (!is_array($cursorCandidate) || !array_key_exists($part, $cursorCandidate)) {
                             $candidatePresent = false;
@@ -5718,14 +6166,16 @@ function af_kb_handle_edit(): void
                         }
                         $cursorCandidate = $cursorCandidate[$part];
                     }
+
                     if ($candidatePresent) {
                         $present = true;
                         $cursor = $cursorCandidate;
                         break;
                     }
                 }
+
                 if (!$present || $cursor === '' || $cursor === null || (is_array($cursor) && $cursor === [])) {
-                    $errors[] = 'Required meta field missing: '.$field['path'];
+                    $errors[] = 'Required meta field missing: ' . $field['path'];
                 }
             }
         }
