@@ -301,9 +301,9 @@
 
       if (!normalizedTitle || !normalizedIcon) { return; }
 
-      var key = normalizedTitle + '|' + normalizedIcon;
-      if (seen[key]) { return; }
-      seen[key] = true;
+      var keyName = normalizedTitle + '|' + normalizedIcon;
+      if (seen[keyName]) { return; }
+      seen[keyName] = true;
 
       items.push({
         title: String(title || '').trim(),
@@ -466,23 +466,18 @@
       + '<div class="af-shop-success">'
       +   '<h3 class="af-shop-modal__title">Покупка завершена</h3>'
       +   '<p class="af-shop-success__note">' + successText + '</p>'
-
       +   '<div class="af-shop-success__section">'
       +     '<div class="af-shop-success__label">Куплено:</div>'
       +     '<div class="af-shop-success__items">'
       +       itemsHtml
       +     '</div>'
       +   '</div>'
-
       +   '<div class="af-shop-success__divider"></div>'
-
       +   '<div class="af-shop-success__totals">'
       +     '<div class="af-shop-success__row"><span>Списано:</span><strong>' + totalMajor + currencySymbol + '</strong></div>'
       +     '<div class="af-shop-success__row"><span>Баланс:</span><strong>' + balanceMajor + currencySymbol + '</strong></div>'
       +   '</div>'
-
       +   '<div class="af-shop-success__divider"></div>'
-
       +   '<div class="af-shop-modal__actions af-shop-success__actions">'
       +     actions
       +   '</div>'
@@ -551,11 +546,24 @@
       button.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
       button.textContent = isOpen ? openText : closedText;
     }
-  }  
+  }
 
   var AF_EQUIP_META = {
-    head:{label:'Голова'}, body:{label:'Тело'}, hands:{label:'Руки'}, legs:{label:'Ноги'}, feet:{label:'Ступни'}, back:{label:'Спина'}, belt:{label:'Пояс'},
-    mainhand:{label:'Основная рука'}, offhand:{label:'Вторая рука'}, twohand:{label:'Двуручное'}, ranged:{label:'Дистанционное'}, melee:{label:'Ближний бой'}, accessory:{label:'Аксессуар'}, unique:{label:'Уникалка'}, artifact:{label:'Артефакт'}
+    head:{label:'Голова'},
+    body:{label:'Тело'},
+    hands:{label:'Руки'},
+    legs:{label:'Ноги'},
+    feet:{label:'Ступни'},
+    back:{label:'Спина'},
+    belt:{label:'Пояс'},
+    mainhand:{label:'Основная рука'},
+    offhand:{label:'Вторая рука'},
+    twohand:{label:'Двуручное'},
+    ranged:{label:'Дистанционное'},
+    melee:{label:'Ближний бой'},
+    accessory:{label:'Аксессуар'},
+    unique:{label:'Уникалка'},
+    artifact:{label:'Артефакт'}
   };
 
   function updateEquipmentSlot(node, data) {
@@ -566,6 +574,7 @@
     var rarity = (entry && entry.rarity) ? entry.rarity : 'common';
     var title = (entry && entry.title) ? entry.title : 'Пусто';
     var iconUrl = (entry && entry.icon_url) ? entry.icon_url : '';
+
     node.className = 'af-eq-slot af-equip-slot rarity-' + rarity + (entry ? '' : ' is-empty');
     node.setAttribute('data-inv-id', entry && entry.inv_id ? String(entry.inv_id) : '0');
     node.setAttribute('data-kb-id', entry && entry.kb_id ? String(entry.kb_id) : '0');
@@ -573,9 +582,12 @@
     node.setAttribute('data-item-icon', iconUrl);
     node.setAttribute('data-item-rarity', rarity);
     node.setAttribute('data-slot-label', meta.label || slotCode);
+
     var iconNode = node.querySelector('.af-equip-slot__item-icon');
     if (iconNode) {
-      iconNode.innerHTML = iconUrl ? ('<img src="' + escapeHtml(iconUrl) + '" alt="' + escapeHtml(title) + '">') : '<span class="af-equip-slot__placeholder">Пусто</span>';
+      iconNode.innerHTML = iconUrl
+        ? ('<img src="' + escapeHtml(iconUrl) + '" alt="' + escapeHtml(title) + '">')
+        : '<span class="af-equip-slot__placeholder">Пусто</span>';
     }
   }
 
@@ -584,15 +596,19 @@
     if (catToggle) {
       e.preventDefault();
       e.stopPropagation();
+
       var wrap = catToggle.closest('.af-shop-wrap[data-shop]');
       var shop = wrap ? (wrap.getAttribute('data-shop') || 'game') : 'game';
       var collapsed = catToggle.getAttribute('aria-expanded') === 'true';
       applyCatState(catToggle, collapsed);
+
       try {
         localStorage.setItem(treeStorageKey(shop, catToggle.getAttribute('data-cat')), collapsed ? 'collapsed' : 'expanded');
       } catch (err) {}
+
       return;
     }
+
     var popupNav = e.target.closest('[data-af-shop-nav]');
     if (popupNav) {
       e.preventDefault();
@@ -605,12 +621,15 @@
       }
       return;
     }
+
     var add = e.target.closest('.af-add-cart');
     if (add) {
       e.preventDefault();
       e.stopPropagation();
+
       var wrap1 = add.closest('[data-shop]');
       var shop1 = wrap1 ? wrap1.getAttribute('data-shop') : 'game';
+
       withLoading(add, post(buildActionUrl('shop_add_to_cart', 'shop=' + encodeURIComponent(shop1)), {
         slot: add.getAttribute('data-slot'),
         qty: 1
@@ -628,8 +647,10 @@
     if (buy) {
       e.preventDefault();
       e.stopPropagation();
+
       var wrap2 = buy.closest('[data-shop]');
       var shop2 = wrap2 ? wrap2.getAttribute('data-shop') : 'game';
+
       withLoading(buy, post(buildActionUrl('shop_add_to_cart', 'shop=' + encodeURIComponent(shop2)), {
         slot: buy.getAttribute('data-slot'),
         qty: 1
@@ -647,7 +668,9 @@
     if (checkout) {
       e.preventDefault();
       e.stopPropagation();
+
       var shop3 = (checkout.closest('[data-shop]') || document.body).getAttribute('data-shop') || 'game';
+
       withLoading(checkout, post(buildActionUrl('shop_checkout', 'shop=' + encodeURIComponent(shop3)), {})).then(function(res) {
         if (res.ok) {
           persistCheckoutSuccess(res);
@@ -663,11 +686,15 @@
     if (qtyBtn) {
       e.preventDefault();
       e.stopPropagation();
+
       var item = qtyBtn.closest('.af-cart-item');
       var id = item.getAttribute('data-item-id');
       var curr = parseInt(((item.querySelector('.af-cart-item__qty span') || {}).textContent || '1'), 10);
       var next = curr + parseInt(qtyBtn.getAttribute('data-delta'), 10);
-      post(buildActionUrl('shop_update_cart', ''), { item_id: id, qty: next }).then(function() { window.location.reload(); });
+
+      post(buildActionUrl('shop_update_cart', ''), { item_id: id, qty: next }).then(function() {
+        window.location.reload();
+      });
       return;
     }
 
@@ -675,19 +702,28 @@
     if (remove) {
       e.preventDefault();
       e.stopPropagation();
+
       var item2 = remove.closest('.af-cart-item');
-      post(buildActionUrl('shop_update_cart', ''), { item_id: item2.getAttribute('data-item-id'), qty: 0 }).then(function() { window.location.reload(); });
+      post(buildActionUrl('shop_update_cart', ''), {
+        item_id: item2.getAttribute('data-item-id'),
+        qty: 0
+      }).then(function() {
+        window.location.reload();
+      });
       return;
     }
 
     var catSave = e.target.closest('.af-cat-save');
     if (catSave) {
       e.preventDefault();
+
       var row = catSave.closest('tr[data-cat-id]');
       var wrap3 = document.querySelector('.af-manage[data-shop]');
       if (!row || !wrap3) { return; }
+
       var shop4 = wrap3.getAttribute('data-shop') || 'game';
       var status1 = document.getElementById('af-manage-category-status');
+
       post(buildActionUrl('shop_manage_category_update', 'shop=' + encodeURIComponent(shop4)), {
         cat_id: row.getAttribute('data-cat-id'),
         title: (row.querySelector('.af-cat-title-input') || {}).value || '',
@@ -709,11 +745,14 @@
     var catDelete = e.target.closest('.af-cat-delete');
     if (catDelete) {
       e.preventDefault();
+
       var row2 = catDelete.closest('tr[data-cat-id]');
       var wrap4 = document.querySelector('.af-manage[data-shop]');
       if (!row2 || !wrap4 || !window.confirm('Delete category?')) { return; }
+
       var shop5 = wrap4.getAttribute('data-shop') || 'game';
       var status2 = document.getElementById('af-manage-category-status');
+
       post(buildActionUrl('shop_manage_category_delete', 'shop=' + encodeURIComponent(shop5)), {
         cat_id: row2.getAttribute('data-cat-id')
       }).then(function(r) {
@@ -730,6 +769,7 @@
     var pick = e.target.closest('#af-add-slot-btn');
     if (pick) {
       e.preventDefault();
+
       var panel = document.getElementById('af-slot-create-panel');
       if (panel) {
         setDisclosureState(
@@ -745,6 +785,7 @@
     var editToggle = e.target.closest('.af-slot-edit-toggle');
     if (editToggle) {
       e.preventDefault();
+
       var targetId = editToggle.getAttribute('aria-controls') || '';
       var editor = targetId ? byId(targetId) : null;
       if (editor) {
@@ -761,6 +802,7 @@
     var kbItem = e.target.closest('.af-kb-pick-item');
     if (kbItem) {
       e.preventDefault();
+
       var prefixKb = kbItem.getAttribute('data-editor-prefix') || 'create';
       setKbSelection(prefixKb, {
         kb_id: kbItem.getAttribute('data-kb-id') || '0',
@@ -776,6 +818,7 @@
     var apItem = e.target.closest('.af-appearance-pick-item');
     if (apItem) {
       e.preventDefault();
+
       var prefixAp = apItem.getAttribute('data-editor-prefix') || 'create';
       setAppearanceSelection(prefixAp, {
         preset_id: apItem.getAttribute('data-preset-id') || '0',
@@ -795,13 +838,16 @@
     var createSubmit = e.target.closest('#af-slot-create-submit');
     if (createSubmit) {
       e.preventDefault();
+
       var rootCreate = document.querySelector('.af-manage-slots[data-shop]');
       if (!rootCreate) { return; }
+
       var shopCreate = rootCreate.getAttribute('data-shop') || 'game';
       var catCreate = rootCreate.getAttribute('data-cat-id') || '0';
       var statusCreate = document.getElementById('af-manage-slot-status');
       var payloadCreate = buildSlotPayload('create');
       payloadCreate.cat_id = catCreate;
+
       post(buildActionUrl('shop_manage_slot_create', 'shop=' + encodeURIComponent(shopCreate)), payloadCreate).then(function(r) {
         if (r.ok) {
           setStatus(statusCreate, 'Slot created', true);
@@ -816,13 +862,16 @@
     var saveSlot = e.target.closest('.af-slot-save');
     if (saveSlot) {
       e.preventDefault();
+
       var card = saveSlot.closest('.af-slot-card');
       var root5 = document.querySelector('.af-manage-slots[data-shop]');
       if (!card || !root5) { return; }
+
       var shop6 = root5.getAttribute('data-shop') || 'game';
       var status4 = document.getElementById('af-manage-slot-status');
       var payloadUpdate = buildSlotPayload('slot-' + card.getAttribute('data-slot-id'));
       payloadUpdate.slot_id = card.getAttribute('data-slot-id');
+
       post(buildActionUrl('shop_manage_slot_update', 'shop=' + encodeURIComponent(shop6)), payloadUpdate).then(function(r) {
         if (r.ok) {
           setStatus(status4, 'Slot saved', true);
@@ -837,11 +886,14 @@
     var delSlot = e.target.closest('.af-slot-delete');
     if (delSlot) {
       e.preventDefault();
+
       var card2 = delSlot.closest('.af-slot-card');
       var root6 = document.querySelector('.af-manage-slots[data-shop]');
       if (!card2 || !root6 || !window.confirm('Delete slot?')) { return; }
+
       var shop7 = root6.getAttribute('data-shop') || 'game';
       var status5 = document.getElementById('af-manage-slot-status');
+
       post(buildActionUrl('shop_manage_slot_delete', 'shop=' + encodeURIComponent(shop7)), {
         slot_id: card2.getAttribute('data-slot-id')
       }).then(function(r) {
@@ -859,12 +911,15 @@
   var categoryForm = document.getElementById('af-manage-category-form');
   if (categoryForm) {
     var statusNode = document.getElementById('af-manage-category-status');
+
     categoryForm.addEventListener('submit', function(e) {
       e.preventDefault();
+
       var fd = new FormData(categoryForm);
       var shop = categoryForm.getAttribute('data-shop') || 'game';
       var payload = Object.fromEntries(fd.entries());
       payload.my_post_key = key();
+
       post(buildActionUrl('shop_manage_category_create', 'shop=' + encodeURIComponent(shop)), payload).then(function(r) {
         if (r.ok) {
           setStatus(statusNode, 'Category created', true);
@@ -881,6 +936,7 @@
     rebuild.addEventListener('click', function() {
       var wrap = document.querySelector('.af-manage[data-shop]');
       if (!wrap) { return; }
+
       var shop = wrap.getAttribute('data-shop') || 'game';
       post(buildActionUrl('shop_manage_sortorder_rebuild', 'shop=' + encodeURIComponent(shop)), {}).then(function(r) {
         var status = document.getElementById('af-manage-category-status');
@@ -906,14 +962,26 @@
   }
   runHealthCheck();
 
-  function sourcePrefix(id) { return 'af-' + id; }
-  function byId(id) { return document.getElementById(id); }
-  function asBool(value) { return String(value || '') === '1'; }
+  function sourcePrefix(id) {
+    return 'af-' + id;
+  }
+
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  function asBool(value) {
+    return String(value || '') === '1';
+  }
+
   function normalizeKbType(value) {
-    var normalized = String(value || '').toLowerCase().trim();
+    var normalized = String(value == null ? '' : value).toLowerCase().trim();
+
     if (normalized === 'ritual') { return 'spell'; }
-    if (normalized === '' || normalized === 'item') { return 'item'; }
+    if (normalized === 'spell') { return 'spell'; }
     if (normalized === 'all') { return 'all'; }
+    if (normalized === '' || normalized === 'item') { return 'item'; }
+
     return normalized;
   }
 
@@ -921,86 +989,227 @@
     return byId(sourcePrefix(prefix + '-kb-type-filter')) || byId('af-kb-picker-type');
   }
 
+  function kbFilterStateKey(prefix) {
+    var pageKey = '';
+    try {
+      pageKey = String(window.location.pathname || '') + '?' + String(window.location.search || '').replace(/^\?/, '');
+    } catch (err) {
+      pageKey = 'shop_manage';
+    }
+    return 'afshop:kb-filters:' + pageKey + ':' + String(prefix || 'create');
+  }
+
+  function collectKbFilterState(prefix) {
+    var qNode = byId(sourcePrefix(prefix + '-kb-q')) || byId('af-kb-picker-q');
+    var typeNode = kbFilterNode(prefix);
+    var rarityNode = byId(sourcePrefix(prefix + '-kb-rarity')) || byId('af-kb-picker-rarity');
+    var itemTypeNode = byId(sourcePrefix(prefix + '-kb-item-type')) || byId('af-kb-picker-item-type');
+    var spellLevelNode = byId(sourcePrefix(prefix + '-kb-spell-level')) || byId('af-kb-picker-spell-level');
+    var spellSchoolNode = byId(sourcePrefix(prefix + '-kb-spell-school')) || byId('af-kb-picker-spell-school');
+
+    return {
+      q: qNode ? String(qNode.value || '') : '',
+      kb_type: normalizeKbType(typeNode ? typeNode.value : 'item'),
+      rarity: rarityNode ? String(rarityNode.value || '') : '',
+      item_type: itemTypeNode ? String(itemTypeNode.value || '') : '',
+      spell_level: spellLevelNode ? String(spellLevelNode.value || '') : '',
+      spell_school: spellSchoolNode ? String(spellSchoolNode.value || '') : ''
+    };
+  }
+
+  function persistKbFilterState(prefix) {
+    try {
+      sessionStorage.setItem(kbFilterStateKey(prefix), JSON.stringify(collectKbFilterState(prefix)));
+    } catch (err) {}
+  }
+
+  function restoreKbFilterState(prefix) {
+    var raw = '';
+    try {
+      raw = sessionStorage.getItem(kbFilterStateKey(prefix)) || '';
+    } catch (err) {
+      raw = '';
+    }
+
+    if (!raw) {
+      return false;
+    }
+
+    var state = null;
+    try {
+      state = JSON.parse(raw);
+    } catch (err) {
+      state = null;
+    }
+
+    if (!state || typeof state !== 'object') {
+      return false;
+    }
+
+    var qNode = byId(sourcePrefix(prefix + '-kb-q')) || byId('af-kb-picker-q');
+    var typeNode = kbFilterNode(prefix);
+    var rarityNode = byId(sourcePrefix(prefix + '-kb-rarity')) || byId('af-kb-picker-rarity');
+    var itemTypeNode = byId(sourcePrefix(prefix + '-kb-item-type')) || byId('af-kb-picker-item-type');
+    var spellLevelNode = byId(sourcePrefix(prefix + '-kb-spell-level')) || byId('af-kb-picker-spell-level');
+    var spellSchoolNode = byId(sourcePrefix(prefix + '-kb-spell-school')) || byId('af-kb-picker-spell-school');
+
+    if (qNode && Object.prototype.hasOwnProperty.call(state, 'q')) {
+      qNode.value = String(state.q || '');
+    }
+    if (typeNode && Object.prototype.hasOwnProperty.call(state, 'kb_type')) {
+      typeNode.value = normalizeKbType(state.kb_type || 'item');
+    }
+    if (rarityNode && Object.prototype.hasOwnProperty.call(state, 'rarity')) {
+      rarityNode.value = String(state.rarity || '');
+    }
+    if (itemTypeNode && Object.prototype.hasOwnProperty.call(state, 'item_type')) {
+      itemTypeNode.value = String(state.item_type || '');
+    }
+    if (spellLevelNode && Object.prototype.hasOwnProperty.call(state, 'spell_level')) {
+      spellLevelNode.value = String(state.spell_level || '');
+    }
+    if (spellSchoolNode && Object.prototype.hasOwnProperty.call(state, 'spell_school')) {
+      spellSchoolNode.value = String(state.spell_school || '');
+    }
+
+    return true;
+  }
+
   function syncKbTypeControls(prefix, rawType, keepCurrentFilter) {
     var typeNode = byId(sourcePrefix(prefix + '-kb-type'));
     var filterNode = kbFilterNode(prefix);
     var normalized = normalizeKbType(rawType);
-    if (normalized !== 'all' && typeNode) {
+
+    if (typeNode && normalized !== 'all') {
       typeNode.value = normalized;
     }
+
     if (filterNode && !keepCurrentFilter) {
-      if (normalized === 'spell' || normalized === 'item') {
-        filterNode.value = normalized;
-      } else if (normalized === 'all') {
-        filterNode.value = 'all';
-      }
+      filterNode.value = normalized;
     }
+
+    persistKbFilterState(prefix);
     return normalized;
   }
 
   function setSourceMode(prefix, sourceType) {
     var normalized = sourceType === 'appearance' ? 'appearance' : 'kb';
     var sourceNode = byId(sourcePrefix(prefix + '-source-type'));
-    if (sourceNode) { sourceNode.value = normalized; }
+    if (sourceNode) {
+      sourceNode.value = normalized;
+    }
+
     var kbWrap = byId(sourcePrefix(prefix + '-kb-fields'));
     var apWrap = byId(sourcePrefix(prefix + '-appearance-fields'));
-    if (kbWrap) { kbWrap.hidden = normalized !== 'kb'; }
-    if (apWrap) { apWrap.hidden = normalized !== 'appearance'; }
+
+    if (kbWrap) {
+      kbWrap.hidden = normalized !== 'kb';
+    }
+    if (apWrap) {
+      apWrap.hidden = normalized !== 'appearance';
+    }
   }
 
   function renderSelectedSource(prefix, sourceType, html) {
     var node = byId(sourcePrefix(prefix + '-selected-summary'));
     if (!node) { return; }
+
     if (!html) {
       node.innerHTML = 'Источник ещё не выбран.';
       return;
     }
-    node.innerHTML = '<div class="af-slot-selected-card__type">' + escapeHtml(sourceType === 'appearance' ? 'Appearance source' : 'KB source') + '</div>' + html;
+
+    node.innerHTML =
+      '<div class="af-slot-selected-card__type">'
+      + escapeHtml(sourceType === 'appearance' ? 'Appearance source' : 'KB source')
+      + '</div>'
+      + html;
   }
 
-  function setKbSelection(prefix, item) {
+  function setKbSelection(prefix, item, options) {
+    options = options || {};
+
     var idNode = byId(sourcePrefix(prefix + '-kb-id'));
     var typeNode = byId(sourcePrefix(prefix + '-kb-type'));
     var keyNode = byId(sourcePrefix(prefix + '-kb-key'));
     var sourceRefNode = byId(sourcePrefix(prefix + '-source-ref-id'));
+    var filterNode = kbFilterNode(prefix);
+
     var kbId = item && item.kb_id ? String(item.kb_id) : '0';
+    var incomingType = normalizeKbType(
+      item && item.kb_type
+        ? item.kb_type
+        : (filterNode ? filterNode.value : (typeNode ? typeNode.value : 'item'))
+    );
+
     if (idNode) { idNode.value = kbId; }
-    if (typeNode) { typeNode.value = item && item.kb_type ? item.kb_type : 'item'; }
+    if (typeNode) { typeNode.value = incomingType; }
     if (keyNode) { keyNode.value = item && item.kb_key ? item.kb_key : ''; }
     if (sourceRefNode) { sourceRefNode.value = kbId; }
-    syncKbTypeControls(prefix, item && item.kb_type ? item.kb_type : 'item', false);
+
+    if (kbId !== '0') {
+      syncKbTypeControls(prefix, incomingType, false);
+    } else if (options.syncEmptyToFilter === true) {
+      syncKbTypeControls(prefix, incomingType, false);
+    } else {
+      if (typeNode && filterNode) {
+        typeNode.value = normalizeKbType(filterNode.value || incomingType || 'item');
+      }
+      persistKbFilterState(prefix);
+    }
 
     var summaryNode = byId(sourcePrefix(prefix + '-kb-summary'));
     var title = item && item.title ? item.title : '';
     var shortText = item && item.short ? item.short : '';
     var rarity = item && item.rarity ? item.rarity : '';
+
     var summaryHtml = kbId !== '0'
       ? '<strong>' + escapeHtml(title || ('KB #' + kbId)) + '</strong>'
-        + '<div class="af-slot-badges"><span class="af-slot-badge">KB</span><span class="af-slot-badge">ID ' + escapeHtml(kbId) + '</span><span class="af-slot-badge">' + escapeHtml(item && item.kb_type ? item.kb_type : 'item') + '</span>' + (rarity ? '<span class="af-slot-badge">' + escapeHtml(rarity) + '</span>' : '') + '</div>'
+        + '<div class="af-slot-badges"><span class="af-slot-badge">KB</span><span class="af-slot-badge">ID ' + escapeHtml(kbId) + '</span><span class="af-slot-badge">' + escapeHtml(incomingType) + '</span>' + (rarity ? '<span class="af-slot-badge">' + escapeHtml(rarity) + '</span>' : '') + '</div>'
         + '<div><small>key: ' + escapeHtml(item && item.kb_key ? item.kb_key : '') + '</small></div>'
         + (shortText ? ('<div><small>' + escapeHtml(shortText) + '</small></div>') : '')
       : 'KB-источник ещё не выбран.';
 
-    if (summaryNode) { summaryNode.innerHTML = summaryHtml; }
+    if (summaryNode) {
+      summaryNode.innerHTML = summaryHtml;
+    }
+
     renderSelectedSource(prefix, 'kb', kbId !== '0' ? summaryHtml : '');
   }
 
   function renderAppearanceSummary(prefix, item) {
     var node = byId(sourcePrefix(prefix + '-appearance-summary'));
     if (!node) { return ''; }
+
     if (!item || (!item.preset_id && !item.slug)) {
       node.innerHTML = 'Appearance preset ещё не выбран.';
       renderSelectedSource(prefix, 'appearance', '');
       return '';
     }
 
-    var preview = item.preview_image ? ('<img src="' + escapeHtml(item.preview_image) + '" alt="" class="af-slot-selected-card__preview">') : '';
+    var preview = item.preview_image
+      ? ('<img src="' + escapeHtml(item.preview_image) + '" alt="" class="af-slot-selected-card__preview">')
+      : '';
+
     var enabledLabel = asBool(item.enabled) ? 'enabled' : 'disabled';
-    var html = preview + '<div class="af-slot-selected-card__body"><strong>' + escapeHtml(item.title || item.slug || ('#' + String(item.preset_id || '0'))) + '</strong>'
-      + '<div class="af-slot-badges"><span class="af-slot-badge">Appearance</span><span class="af-slot-badge">ID ' + escapeHtml(String(item.preset_id || '0')) + '</span><span class="af-slot-badge">' + escapeHtml(item.group_label || item.group || 'group?') + '</span><span class="af-slot-badge">' + escapeHtml(item.target_label || item.target_key || 'target?') + '</span><span class="af-slot-badge">' + escapeHtml(enabledLabel) + '</span></div>'
+
+    var html = preview
+      + '<div class="af-slot-selected-card__body"><strong>'
+      + escapeHtml(item.title || item.slug || ('#' + String(item.preset_id || '0')))
+      + '</strong>'
+      + '<div class="af-slot-badges"><span class="af-slot-badge">Appearance</span><span class="af-slot-badge">ID '
+      + escapeHtml(String(item.preset_id || '0'))
+      + '</span><span class="af-slot-badge">'
+      + escapeHtml(item.group_label || item.group || 'group?')
+      + '</span><span class="af-slot-badge">'
+      + escapeHtml(item.target_label || item.target_key || 'target?')
+      + '</span><span class="af-slot-badge">'
+      + escapeHtml(enabledLabel)
+      + '</span></div>'
       + '<div><small>slug: ' + escapeHtml(item.slug || '') + '</small></div>'
       + (item.description ? ('<div><small>' + escapeHtml(item.description) + '</small></div>') : '')
       + '</div>';
+
     node.innerHTML = html;
     renderSelectedSource(prefix, 'appearance', html);
     return html;
@@ -1011,9 +1220,11 @@
     var slugNode = byId(sourcePrefix(prefix + '-preset-slug'));
     var sourceRefNode = byId(sourcePrefix(prefix + '-source-ref-id'));
     var presetId = item && item.preset_id ? String(item.preset_id) : '0';
+
     if (idNode) { idNode.value = presetId; }
     if (slugNode) { slugNode.value = item && item.slug ? item.slug : ''; }
     if (sourceRefNode) { sourceRefNode.value = presetId; }
+
     renderAppearanceSummary(prefix, item || {});
   }
 
@@ -1022,6 +1233,7 @@
     var normalizedCurrency = rawCurrency === 'ability_tokens' ? 'ability_tokens' : 'credits';
     var sourceTypeNode = byId(sourcePrefix(prefix + '-source-type'));
     var sourceType = sourceTypeNode ? (sourceTypeNode.value || 'kb') : 'kb';
+
     return {
       source_type: sourceType,
       source_ref_id: sourceType === 'appearance'
@@ -1047,71 +1259,155 @@
     var catId = slotsRoot.getAttribute('data-cat-id') || '0';
     var searchTimer = null;
     var loadSlots = function(){};
+    var kbSearchSeq = 0;
 
     function renderKbResults(r, prefix) {
       var resNode = byId(sourcePrefix(prefix + '-kb-results')) || byId('af-kb-picker-results');
       if (!resNode) { return; }
+
       if (!r.ok) {
         resNode.textContent = r.error || 'Search failed';
         return;
       }
+
       var items = Array.isArray(r.items) ? r.items : [];
       if (!items.length) {
         resNode.innerHTML = '<div class="af-slot-empty-state">По KB ничего не найдено. Измените тип, ключ или редкость.</div>';
         return;
       }
+
       resNode.innerHTML = items.map(function(item) {
-        var desc = item.short ? ('<small>' + escapeHtml(item.short) + '</small>') : '<small>Без краткого описания.</small>';
+        var desc = item.short
+          ? ('<small>' + escapeHtml(item.short) + '</small>')
+          : '<small>Без краткого описания.</small>';
+
         return '<div class="af-search-result-card af-search-result-card--kb">'
-          + '<div class="af-search-result-card__main"><strong>#' + escapeHtml(String(item.kb_id || 0)) + ' ' + escapeHtml(item.title || '') + '</strong>'
-          + '<div class="af-slot-badges"><span class="af-slot-badge">KB</span><span class="af-slot-badge">' + escapeHtml(item.kb_type || 'item') + '</span><span class="af-slot-badge">' + escapeHtml(item.rarity || 'common') + '</span></div>'
+          + '<div class="af-search-result-card__main"><strong>#'
+          + escapeHtml(String(item.kb_id || 0))
+          + ' '
+          + escapeHtml(item.title || '')
+          + '</strong>'
+          + '<div class="af-slot-badges"><span class="af-slot-badge">KB</span><span class="af-slot-badge">'
+          + escapeHtml(item.kb_type || 'item')
+          + '</span><span class="af-slot-badge">'
+          + escapeHtml(item.rarity || 'common')
+          + '</span></div>'
           + '<div><small>key: ' + escapeHtml(item.kb_key || '') + '</small></div>'
-          + desc + '</div>'
-          + '<button class="af-kb-pick-item" data-editor-prefix="' + escapeHtml(prefix) + '" data-kb-id="' + escapeHtml(String(item.kb_id || 0)) + '" data-kb-type="' + escapeHtml(item.kb_type || 'item') + '" data-kb-key="' + escapeHtml(item.kb_key || '') + '" data-kb-title="' + escapeHtml(item.title || '') + '" data-kb-short="' + escapeHtml(item.short || '') + '" data-kb-rarity="' + escapeHtml(item.rarity || '') + '" type="button">Выбрать KB</button></div>';
+          + desc
+          + '</div>'
+          + '<button class="af-kb-pick-item" data-editor-prefix="'
+          + escapeHtml(prefix)
+          + '" data-kb-id="'
+          + escapeHtml(String(item.kb_id || 0))
+          + '" data-kb-type="'
+          + escapeHtml(item.kb_type || 'item')
+          + '" data-kb-key="'
+          + escapeHtml(item.kb_key || '')
+          + '" data-kb-title="'
+          + escapeHtml(item.title || '')
+          + '" data-kb-short="'
+          + escapeHtml(item.short || '')
+          + '" data-kb-rarity="'
+          + escapeHtml(item.rarity || '')
+          + '" type="button">Выбрать KB</button></div>';
       }).join('');
     }
 
     function ensureKbSelectionMatchesFilter(prefix) {
       var idNode = byId(sourcePrefix(prefix + '-kb-id'));
-      if (!idNode) { return; }
-      var selectedId = parseInt(idNode.value || '0', 10);
-      if (!selectedId) { return; }
-
       var typeNode = byId(sourcePrefix(prefix + '-kb-type'));
-      var selectedType = normalizeKbType(typeNode ? typeNode.value : 'item');
       var filterNode = kbFilterNode(prefix);
-      var filterType = normalizeKbType(filterNode ? filterNode.value : 'all');
-      if (filterType === 'all') { return; }
+
+      if (!filterNode) {
+        return;
+      }
+
+      var filterType = normalizeKbType(filterNode.value || 'item');
+
+      if (filterType === 'all') {
+        persistKbFilterState(prefix);
+        return;
+      }
+
+      if (!typeNode) {
+        persistKbFilterState(prefix);
+        return;
+      }
+
+      var selectedId = idNode ? parseInt(idNode.value || '0', 10) : 0;
+      var selectedType = normalizeKbType(typeNode.value || 'item');
+
+      if (!selectedId) {
+        typeNode.value = filterType;
+        persistKbFilterState(prefix);
+        return;
+      }
 
       if (selectedType !== filterType) {
-        setKbSelection(prefix, { kb_id: '0', kb_type: filterType, kb_key: '' });
+        setKbSelection(prefix, {
+          kb_id: '0',
+          kb_type: filterType,
+          kb_key: ''
+        }, {
+          syncEmptyToFilter: true
+        });
+        return;
       }
+
+      persistKbFilterState(prefix);
     }
 
     function runKbSearch(prefix, options) {
       options = options || {};
+
       var qNode = byId(sourcePrefix(prefix + '-kb-q')) || byId('af-kb-picker-q');
-      var typeNode = byId(sourcePrefix(prefix + '-kb-type-filter')) || byId('af-kb-picker-type');
+      var typeNode = kbFilterNode(prefix);
       var rarityNode = byId(sourcePrefix(prefix + '-kb-rarity')) || byId('af-kb-picker-rarity');
       var itemTypeNode = byId(sourcePrefix(prefix + '-kb-item-type')) || byId('af-kb-picker-item-type');
       var spellLevelNode = byId(sourcePrefix(prefix + '-kb-spell-level')) || byId('af-kb-picker-spell-level');
       var spellSchoolNode = byId(sourcePrefix(prefix + '-kb-spell-school')) || byId('af-kb-picker-spell-school');
 
-      var url = buildActionUrl('shop_kb_search',
+      if (!typeNode) {
+        return;
+      }
+
+      typeNode.value = normalizeKbType(typeNode.value || 'item');
+      ensureKbSelectionMatchesFilter(prefix);
+      persistKbFilterState(prefix);
+
+      var requestId = ++kbSearchSeq;
+
+      var url = buildActionUrl(
+        'shop_kb_search',
         'shop=' + encodeURIComponent(shopCode)
-        + '&q=' + encodeURIComponent(qNode ? (qNode.value || '') : '')
-        + '&kb_type=' + encodeURIComponent(typeNode ? (typeNode.value || 'all') : 'all')
-        + '&rarity=' + encodeURIComponent(rarityNode ? (rarityNode.value || '') : '')
-        + '&item_type=' + encodeURIComponent(itemTypeNode ? (itemTypeNode.value || '') : '')
-        + '&spell_level=' + encodeURIComponent(spellLevelNode ? (spellLevelNode.value || '') : '')
-        + '&spell_school=' + encodeURIComponent(spellSchoolNode ? (spellSchoolNode.value || '') : '')
+          + '&q=' + encodeURIComponent(qNode ? (qNode.value || '') : '')
+          + '&kb_type=' + encodeURIComponent(typeNode.value || 'item')
+          + '&rarity=' + encodeURIComponent(rarityNode ? (rarityNode.value || '') : '')
+          + '&item_type=' + encodeURIComponent(itemTypeNode ? (itemTypeNode.value || '') : '')
+          + '&spell_level=' + encodeURIComponent(spellLevelNode ? (spellLevelNode.value || '') : '')
+          + '&spell_school=' + encodeURIComponent(spellSchoolNode ? (spellSchoolNode.value || '') : '')
       );
 
       afShopDebug('runKbSearch', prefix, url);
+
       getJSON(url).then(function(r) {
+        if (requestId !== kbSearchSeq) {
+          return;
+        }
+
         renderKbResults(r, prefix);
+
         if (options.enforceSelection !== false) {
           ensureKbSelectionMatchesFilter(prefix);
+        }
+      }).catch(function(err) {
+        if (requestId !== kbSearchSeq) {
+          return;
+        }
+
+        var resNode = byId(sourcePrefix(prefix + '-kb-results')) || byId('af-kb-picker-results');
+        if (resNode) {
+          resNode.innerHTML = '<div class="af-slot-empty-state">' + escapeHtml((err && err.message) ? err.message : 'Search failed') + '</div>';
         }
       });
     }
@@ -1126,6 +1422,7 @@
     function renderAppearanceResults(r, prefix) {
       var node = byId(sourcePrefix(prefix + '-appearance-results')) || byId('af-appearance-picker-results');
       if (!node) { return; }
+
       if (!r.ok) {
         node.textContent = r.error || 'Search failed';
         return;
@@ -1145,10 +1442,45 @@
 
         return '<div class="af-search-result-card af-search-result-card--appearance">'
           + prev
-          + '<div class="af-search-result-card__main"><strong>#' + escapeHtml(String(item.preset_id || 0)) + ' ' + escapeHtml(item.title || '') + '</strong><div><code>' + escapeHtml(item.slug || '') + '</code></div>'
-          + '<div class="af-slot-badges"><span class="af-slot-badge">Appearance</span><span class="af-slot-badge">' + escapeHtml(item.group_label || item.group || '') + '</span><span class="af-slot-badge">' + escapeHtml(item.target_label || item.target_key || '') + '</span><span class="af-slot-badge">' + escapeHtml(item.enabled ? 'enabled' : 'disabled') + '</span></div>'
-          + (item.description ? ('<div><small>' + escapeHtml(item.description) + '</small></div>') : '<div><small>Без описания.</small></div>') + '</div>'
-          + '<button class="af-appearance-pick-item" data-editor-prefix="' + escapeHtml(prefix) + '" data-preset-id="' + escapeHtml(String(item.preset_id || 0)) + '" data-preset-slug="' + escapeHtml(item.slug || '') + '" data-preset-title="' + escapeHtml(item.title || '') + '" data-target-key="' + escapeHtml(item.target_key || '') + '" data-target-label="' + escapeHtml(item.target_label || '') + '" data-group="' + escapeHtml(item.group || '') + '" data-group-label="' + escapeHtml(item.group_label || '') + '" data-description="' + escapeHtml(item.description || '') + '" data-preview-image="' + escapeHtml(item.preview_image || '') + '" data-enabled="' + escapeHtml(String(item.enabled ? 1 : 0)) + '" type="button">Выбрать appearance</button></div>';
+          + '<div class="af-search-result-card__main"><strong>#'
+          + escapeHtml(String(item.preset_id || 0))
+          + ' '
+          + escapeHtml(item.title || '')
+          + '</strong><div><code>'
+          + escapeHtml(item.slug || '')
+          + '</code></div>'
+          + '<div class="af-slot-badges"><span class="af-slot-badge">Appearance</span><span class="af-slot-badge">'
+          + escapeHtml(item.group_label || item.group || '')
+          + '</span><span class="af-slot-badge">'
+          + escapeHtml(item.target_label || item.target_key || '')
+          + '</span><span class="af-slot-badge">'
+          + escapeHtml(item.enabled ? 'enabled' : 'disabled')
+          + '</span></div>'
+          + (item.description ? ('<div><small>' + escapeHtml(item.description) + '</small></div>') : '<div><small>Без описания.</small></div>')
+          + '</div>'
+          + '<button class="af-appearance-pick-item" data-editor-prefix="'
+          + escapeHtml(prefix)
+          + '" data-preset-id="'
+          + escapeHtml(String(item.preset_id || 0))
+          + '" data-preset-slug="'
+          + escapeHtml(item.slug || '')
+          + '" data-preset-title="'
+          + escapeHtml(item.title || '')
+          + '" data-target-key="'
+          + escapeHtml(item.target_key || '')
+          + '" data-target-label="'
+          + escapeHtml(item.target_label || '')
+          + '" data-group="'
+          + escapeHtml(item.group || '')
+          + '" data-group-label="'
+          + escapeHtml(item.group_label || '')
+          + '" data-description="'
+          + escapeHtml(item.description || '')
+          + '" data-preview-image="'
+          + escapeHtml(item.preview_image || '')
+          + '" data-enabled="'
+          + escapeHtml(String(item.enabled ? 1 : 0))
+          + '" type="button">Выбрать appearance</button></div>';
       }).join('');
     }
 
@@ -1156,14 +1488,17 @@
       var qNode = byId(sourcePrefix(prefix + '-appearance-q')) || byId('af-appearance-picker-q');
       var groupNode = byId(sourcePrefix(prefix + '-appearance-group')) || byId('af-appearance-picker-group');
 
-      var url = buildActionUrl('shop_appearance_search',
+      var url = buildActionUrl(
+        'shop_appearance_search',
         'shop=' + encodeURIComponent(shopCode)
         + '&q=' + encodeURIComponent(qNode ? (qNode.value || '') : '')
         + '&group=' + encodeURIComponent(groupNode ? (groupNode.value || 'all') : 'all')
       );
 
       afShopDebug('runAppearanceSearch', prefix, url);
-      getJSON(url).then(function(r) { renderAppearanceResults(r, prefix); });
+      getJSON(url).then(function(r) {
+        renderAppearanceResults(r, prefix);
+      });
     }
 
     function bindEditor(prefix, row) {
@@ -1171,57 +1506,135 @@
         return;
       }
 
+      restoreKbFilterState(prefix);
+
       var sourceNode = byId(sourcePrefix(prefix + '-source-type'));
+      var apQ = byId(sourcePrefix(prefix + '-appearance-q')) || byId('af-appearance-picker-q');
+      var apGroup = byId(sourcePrefix(prefix + '-appearance-group')) || byId('af-appearance-picker-group');
+
+      var kbQNode = byId(sourcePrefix(prefix + '-kb-q')) || byId('af-kb-picker-q');
+      var kbTypeFilterNode = kbFilterNode(prefix);
+      var kbRarityNode = byId(sourcePrefix(prefix + '-kb-rarity')) || byId('af-kb-picker-rarity');
+      var kbItemTypeNode = byId(sourcePrefix(prefix + '-kb-item-type')) || byId('af-kb-picker-item-type');
+      var kbSpellLevelNode = byId(sourcePrefix(prefix + '-kb-spell-level')) || byId('af-kb-picker-spell-level');
+      var kbSpellSchoolNode = byId(sourcePrefix(prefix + '-kb-spell-school')) || byId('af-kb-picker-spell-school');
+      var kbTypeNode = byId(sourcePrefix(prefix + '-kb-type'));
+
+      function scheduleKbSearch(delay) {
+        persistKbFilterState(prefix);
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(function() {
+          ensureKbSelectionMatchesFilter(prefix);
+          runKbSearch(prefix, { enforceSelection: true });
+        }, typeof delay === 'number' ? delay : 150);
+      }
+
+      function runKbSearchNow() {
+        persistKbFilterState(prefix);
+        clearTimeout(searchTimer);
+        ensureKbSelectionMatchesFilter(prefix);
+        runKbSearch(prefix, { enforceSelection: true });
+      }
+
       if (sourceNode) {
         sourceNode.addEventListener('change', function() {
           var st = sourceNode.value || 'kb';
           setSourceMode(prefix, st);
           renderSelectedSource(prefix, st, '');
+
           if (st === 'appearance') {
             runAppearanceSearch(prefix);
           } else {
-            runKbSearch(prefix);
+            runKbSearchNow();
           }
         });
       }
 
-      var apQ = byId(sourcePrefix(prefix + '-appearance-q'));
       if (apQ) {
         apQ.addEventListener('input', function() {
           clearTimeout(searchTimer);
-          searchTimer = setTimeout(function() { runAppearanceSearch(prefix); }, 150);
+          searchTimer = setTimeout(function() {
+            runAppearanceSearch(prefix);
+          }, 150);
+        });
+        apQ.addEventListener('change', function() {
+          runAppearanceSearch(prefix);
         });
       }
 
-      var apGroup = byId(sourcePrefix(prefix + '-appearance-group')) || byId('af-appearance-picker-group');
       if (apGroup) {
-        apGroup.addEventListener('change', function() { runAppearanceSearch(prefix); });
+        apGroup.addEventListener('change', function() {
+          runAppearanceSearch(prefix);
+        });
       }
 
-      ['kb-q','kb-type-filter','kb-rarity','kb-item-type','kb-spell-level','kb-spell-school'].forEach(function(suffix) {
-        var node = byId(sourcePrefix(prefix + '-' + suffix)) || byId('af-' + suffix.replace(/^kb-/, 'kb-picker-'));
-        if (!node) { return; }
-        node.addEventListener('input', function() {
-          clearTimeout(searchTimer);
-          searchTimer = setTimeout(function() { runKbSearch(prefix); }, 150);
+      if (kbQNode) {
+        kbQNode.addEventListener('input', function() {
+          scheduleKbSearch(150);
         });
-        node.addEventListener('change', function() { runKbSearch(prefix); });
-      });
+        kbQNode.addEventListener('change', function() {
+          runKbSearchNow();
+        });
+      }
 
-      var kbTypeNode = byId(sourcePrefix(prefix + '-kb-type'));
+      if (kbTypeFilterNode) {
+        kbTypeFilterNode.addEventListener('change', function() {
+          runKbSearchNow();
+        });
+        kbTypeFilterNode.addEventListener('input', function() {
+          runKbSearchNow();
+        });
+      }
+
+      if (kbRarityNode) {
+        kbRarityNode.addEventListener('change', function() {
+          runKbSearchNow();
+        });
+        kbRarityNode.addEventListener('input', function() {
+          scheduleKbSearch(120);
+        });
+      }
+
+      if (kbItemTypeNode) {
+        kbItemTypeNode.addEventListener('change', function() {
+          runKbSearchNow();
+        });
+        kbItemTypeNode.addEventListener('input', function() {
+          scheduleKbSearch(120);
+        });
+      }
+
+      if (kbSpellLevelNode) {
+        kbSpellLevelNode.addEventListener('change', function() {
+          runKbSearchNow();
+        });
+        kbSpellLevelNode.addEventListener('input', function() {
+          scheduleKbSearch(120);
+        });
+      }
+
+      if (kbSpellSchoolNode) {
+        kbSpellSchoolNode.addEventListener('change', function() {
+          runKbSearchNow();
+        });
+        kbSpellSchoolNode.addEventListener('input', function() {
+          scheduleKbSearch(120);
+        });
+      }
+
       if (kbTypeNode) {
         var kbTypeRefresh = function() {
           var typeNormalized = syncKbTypeControls(prefix, kbTypeNode.value, false);
+          kbTypeNode.value = typeNormalized;
           ensureKbSelectionMatchesFilter(prefix);
           runKbSearch(prefix, { enforceSelection: true });
-          if (typeNormalized !== 'all') {
-            kbTypeNode.value = typeNormalized;
-          }
         };
+
         kbTypeNode.addEventListener('input', function() {
           clearTimeout(searchTimer);
-          searchTimer = setTimeout(kbTypeRefresh, 150);
+          searchTimer = setTimeout(kbTypeRefresh, 120);
         });
+
         kbTypeNode.addEventListener('change', kbTypeRefresh);
       }
 
@@ -1230,9 +1643,22 @@
 
     function sourceSummaryLine(row) {
       if ((row.source_type || 'kb') === 'appearance') {
-        return '<div class="af-slot-badges"><span class="af-slot-badge">appearance</span><span class="af-slot-badge">ref #' + escapeHtml(String(row.source_ref_id || 0)) + '</span><span class="af-slot-badge">' + escapeHtml(row.appearance_group_label || row.appearance_group || 'group?') + '</span><span class="af-slot-badge">' + escapeHtml(row.appearance_target_label || row.appearance_target || 'target?') + '</span></div>';
+        return '<div class="af-slot-badges"><span class="af-slot-badge">appearance</span><span class="af-slot-badge">ref #'
+          + escapeHtml(String(row.source_ref_id || 0))
+          + '</span><span class="af-slot-badge">'
+          + escapeHtml(row.appearance_group_label || row.appearance_group || 'group?')
+          + '</span><span class="af-slot-badge">'
+          + escapeHtml(row.appearance_target_label || row.appearance_target || 'target?')
+          + '</span></div>';
       }
-      return '<div class="af-slot-badges"><span class="af-slot-badge">kb</span><span class="af-slot-badge">ref #' + escapeHtml(String(row.source_ref_id || row.kb_id || 0)) + '</span><span class="af-slot-badge">' + escapeHtml(row.kb_type || 'item') + '</span><span class="af-slot-badge">' + escapeHtml(row.kb_key || 'no-key') + '</span></div>';
+
+      return '<div class="af-slot-badges"><span class="af-slot-badge">kb</span><span class="af-slot-badge">ref #'
+        + escapeHtml(String(row.source_ref_id || row.kb_id || 0))
+        + '</span><span class="af-slot-badge">'
+        + escapeHtml(row.kb_type || 'item')
+        + '</span><span class="af-slot-badge">'
+        + escapeHtml(row.kb_key || 'no-key')
+        + '</span></div>';
     }
 
     function slotEditorHtml(prefix, row) {
@@ -1253,11 +1679,23 @@
       var currencyOptions = '<option value="credits"' + (currency === 'credits' ? ' selected' : '') + '>Credits</option>'
         + '<option value="ability_tokens"' + (currency === 'ability_tokens' ? ' selected' : '') + '>Ability Tokens</option>';
 
-      return '<article class="af-slot-card ' + escapeHtml(row.rarity_class || 'af-rarity-common') + '" data-slot-id="' + escapeHtml(String(row.slot_id || 0)) + '">'
+      return '<article class="af-slot-card '
+        + escapeHtml(row.rarity_class || 'af-rarity-common')
+        + '" data-slot-id="'
+        + escapeHtml(String(row.slot_id || 0))
+        + '">'
         + '<div class="af-slot-existing">'
         + '<div class="af-slot-existing__media">' + icon + '</div>'
         + '<div class="af-slot-existing__main">'
-        + '<div class="af-slot-existing__header"><div><h3>#' + escapeHtml(String(row.slot_id || 0)) + ' — ' + escapeHtml(row.title || '') + '</h3>' + sourceSummaryLine(row) + '</div><button type="button" class="af-shop-btn af-slot-edit-toggle" aria-expanded="false" aria-controls="' + editorId + '">Редактировать</button></div>'
+        + '<div class="af-slot-existing__header"><div><h3>#'
+        + escapeHtml(String(row.slot_id || 0))
+        + ' — '
+        + escapeHtml(row.title || '')
+        + '</h3>'
+        + sourceSummaryLine(row)
+        + '</div><button type="button" class="af-shop-btn af-slot-edit-toggle" aria-expanded="false" aria-controls="'
+        + editorId
+        + '">Редактировать</button></div>'
         + '<dl class="af-slot-existing__meta">'
         + '<div><dt>title</dt><dd>' + escapeHtml(row.title || '') + '</dd></div>'
         + '<div><dt>source type</dt><dd>' + escapeHtml(sourceType) + '</dd></div>'
@@ -1352,16 +1790,32 @@
   function runHealthCheck() {
     var root = document.getElementById('af-shop-health');
     if (!root) { return; }
+
     var jsNode = root.querySelector('[data-health-js]');
     var keyNode = root.querySelector('[data-health-postkey]');
     var apiNode = root.querySelector('[data-health-api]');
-    if (jsNode) { jsNode.textContent = 'JS loaded: ' + (window.AFSHOP && window.AFSHOP.loaded ? 'yes' : 'no'); }
+
+    if (jsNode) {
+      jsNode.textContent = 'JS loaded: ' + (window.AFSHOP && window.AFSHOP.loaded ? 'yes' : 'no');
+    }
+
     var hasPostKey = !!key();
-    if (keyNode) { keyNode.textContent = 'postKey present: ' + (hasPostKey ? 'yes' : 'no'); }
+    if (keyNode) {
+      keyNode.textContent = 'postKey present: ' + (hasPostKey ? 'yes' : 'no');
+    }
+
     fetch(buildActionUrl('shop_health', ''), { credentials:'same-origin' })
       .then(function(r){ return r.text(); })
       .then(parseJSON)
-      .then(function(res) { if (apiNode) { apiNode.textContent = 'API ping: ' + (res && res.ok ? 'ok' : 'no'); } })
-      .catch(function() { if (apiNode) { apiNode.textContent = 'API ping: no'; } });
+      .then(function(res) {
+        if (apiNode) {
+          apiNode.textContent = 'API ping: ' + (res && res.ok ? 'ok' : 'no');
+        }
+      })
+      .catch(function() {
+        if (apiNode) {
+          apiNode.textContent = 'API ping: no';
+        }
+      });
   }
 })();
