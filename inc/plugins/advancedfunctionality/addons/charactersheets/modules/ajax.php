@@ -59,6 +59,7 @@ function af_charactersheets_handle_api_impl(): void
     $can_award = af_charactersheets_user_can_award_exp($mybb->user ?? [], $fid_for_mod);
     $can_staff_reset = af_charactersheets_user_can_staff_reset($mybb->user ?? [], $fid_for_mod);
     $is_staff = af_cs_is_staff($mybb->user ?? [], $fid_for_mod);
+    $can_manage_knowledge_selection = af_charactersheets_user_can_manage_knowledge_selection($sheet, $mybb->user ?? [], $fid_for_mod);
 
     if (in_array($do, [
         'save_attributes',
@@ -371,6 +372,9 @@ function af_charactersheets_handle_api_impl(): void
                 $selected[] = $key;
             }
         } else {
+            if (!$can_manage_knowledge_selection) {
+                af_charactersheets_json_error('knowledge_locked', 'Knowledge and language choices are locked', [], 403);
+            }
             $selected = array_values(array_filter($selected, static function ($item) use ($key) {
                 return $item !== $key;
             }));
@@ -844,7 +848,7 @@ function af_charactersheets_handle_api_impl(): void
     $skills_locked = !empty($build['locked_skills']);
     $can_manage_skills = $can_manage && (!$skills_locked || $is_staff);
     $skills_html = af_charactersheets_build_skills_html($view, $can_manage_skills, $can_view_ledger, $can_staff_reset, $skills_locked);
-    $knowledge_html = af_charactersheets_build_knowledge_html($view, $can_edit, $can_view_ledger);
+    $knowledge_html = af_charactersheets_build_knowledge_html($view, $can_edit, $can_view_ledger, $can_manage_knowledge_selection);
     $abilities_html = af_charactersheets_build_abilities_html((int)($sheet['uid'] ?? 0));
     $inventory_uid = (int)($sheet['uid'] ?? 0);
     $augmentations_html = af_charactersheets_build_augments_html($build, $can_edit, $view, $inventory_uid);

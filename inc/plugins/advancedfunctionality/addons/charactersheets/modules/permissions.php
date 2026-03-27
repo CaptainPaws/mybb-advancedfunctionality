@@ -145,6 +145,15 @@ function af_cs_is_staff(array $user, int $fid = 0): bool
     return af_charactersheets_user_can_staff_reset($user, $fid);
 }
 
+function af_charactersheets_user_can_manage_knowledge_selection(array $sheet, array $user, int $fid = 0): bool
+{
+    if (empty($sheet)) {
+        return false;
+    }
+
+    return af_cs_is_staff($user, $fid);
+}
+
 function af_charactersheets_user_can_accept(array $user, int $fid): bool
 {
     global $mybb;
