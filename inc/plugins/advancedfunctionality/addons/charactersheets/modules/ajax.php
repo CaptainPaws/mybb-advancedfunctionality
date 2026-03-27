@@ -744,6 +744,13 @@ function af_charactersheets_handle_api_impl(): void
             }
 
             $candidate_slots = function_exists('af_inv_candidate_slots_for_item') ? af_inv_candidate_slots_for_item($item) : [];
+
+            if ($subtype === 'consumable') {
+                $candidate_slots = ['support_1', 'support_2', 'support_3', 'support_4'];
+            }
+
+            $candidate_slots = array_values(array_unique(array_filter(array_map('strval', $candidate_slots))));
+
             if ($slot === '' && !empty($candidate_slots)) {
                 $slot = (string)$candidate_slots[0];
             }
