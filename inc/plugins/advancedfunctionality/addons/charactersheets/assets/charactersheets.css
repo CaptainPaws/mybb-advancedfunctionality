@@ -2108,21 +2108,6 @@
   min-height: 148px;
 }
 
-.af-cs-equipment-unequip-zone {
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px dashed rgba(255, 119, 119, 0.45);
-  background: rgba(67, 14, 14, 0.35);
-  font-size: 12px;
-  opacity: .9;
-}
-
-.af-cs-equipment-unequip-zone.is-drop-target {
-  border-color: rgba(255, 119, 119, 0.85);
-  box-shadow: 0 0 0 1px rgba(255, 119, 119, 0.35);
-}
-
 .af-cs-equip-silhouette {
   position: relative;
   height: 560px;
@@ -2331,10 +2316,6 @@
   opacity: 0.7;
 }
 
-.af-cs-augment-card--available {
-  cursor: grab;
-}
-
 .af-cs-augment-popover {
   position: fixed;
   z-index: 10060;
@@ -2344,12 +2325,4 @@
   background: rgba(6, 14, 24, 0.97);
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.45);
   padding: 10px;
-}
-
-.af-cs-augment-draggable-slot {
-  cursor: grab;
-}
-
-.af-cs-augment-unequip-zone {
-  margin-bottom: 14px;
 }
