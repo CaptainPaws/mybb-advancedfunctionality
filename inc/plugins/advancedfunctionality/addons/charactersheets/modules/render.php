@@ -1856,7 +1856,9 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
         $candidate_slots = (array)($item['candidate_slots'] ?? []);
         $subtype = trim((string)($item['subtype'] ?? ''));
         if ($subtype === '' && function_exists('af_advinv_classify_equipment_from_kb_meta')) {
-            $subtype = af_advinv_classify_equipment_from_kb_meta(af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')));
+            $subtype = af_advinv_classify_equipment_from_kb_meta(
+                af_advinv_decode_meta_json((string)($item['meta_json'] ?? ''))
+            );
         }
         if ($subtype === 'artifact') {
             $subtype = 'gear';
@@ -1864,6 +1866,12 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
         if (!in_array($subtype, ['armor', 'weapon', 'ammo', 'consumable', 'gear'], true)) {
             $subtype = 'gear';
         }
+
+        if ($subtype === 'consumable') {
+            $candidate_slots = ['support_1', 'support_2', 'support_3', 'support_4'];
+        }
+
+        $candidate_slots = array_values(array_unique(array_filter(array_map('strval', $candidate_slots))));
         $slot_select = '';
         if ($can_edit && $candidate_slots) {
             $options = '<option value="">— слот —</option>';
