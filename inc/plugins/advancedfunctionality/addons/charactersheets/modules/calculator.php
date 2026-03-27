@@ -456,8 +456,6 @@ function af_charactersheets_collect_bonus_items(array $kb_sources): array
 function af_charactersheets_collect_build_bonus_items(array $build, int $uid = 0): array
 {
     $items = [];
-    $activeWeaponSlot = (string)((array)($build['equipment'] ?? [])['active_weapon_slot'] ?? '');
-    $weaponSlots = ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_melee', 'weapon_ranged'];
 
     $abilities = (array)($build['abilities'] ?? []);
     foreach ((array)($abilities['owned'] ?? []) as $ability) {
@@ -494,35 +492,75 @@ function af_charactersheets_collect_build_bonus_items(array $build, int $uid = 0
         $items = array_merge($items, af_charactersheets_normalize_bonus_items($type, $key));
     }
 
-    $equipmentState = $uid > 0 && function_exists('af_advinv_export_charactersheet_equipment_state')
-        ? af_advinv_export_charactersheet_equipment_state($uid)
-        : [];
-    if ($activeWeaponSlot === '' && is_array($equipmentState['equipped'] ?? null)) {
+    return $items;
+}
+
+function af_charactersheets_collect_equipment_meta_bonus_items(array $build, int $uid = 0): array
+{
+    if ($uid <= 0 || !function_exists('af_advinv_export_charactersheet_equipment_state')) {
+        return ['active_weapon_slot' => '', 'bonus_items' => []];
+    }
+
+    $equipmentState = af_advinv_export_charactersheet_equipment_state($uid);
+    $equippedMap = (array)($equipmentState['equipped'] ?? []);
+    $weaponSlots = ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_melee', 'weapon_ranged'];
+    $activeWeaponSlot = (string)((array)($build['equipment'] ?? [])['active_weapon_slot'] ?? '');
+
+    if ($activeWeaponSlot === '' || empty((array)($equippedMap[$activeWeaponSlot] ?? []))) {
         foreach ($weaponSlots as $weaponSlotCode) {
-            if (!empty((array)($equipmentState['equipped'][$weaponSlotCode] ?? []))) {
+            if (!empty((array)($equippedMap[$weaponSlotCode] ?? []))) {
                 $activeWeaponSlot = $weaponSlotCode;
                 break;
             }
         }
     }
-    foreach ((array)($equipmentState['equipped'] ?? []) as $slotItem) {
-        $type = (string)($slotItem['kb_type'] ?? '');
-        $key = (string)($slotItem['kb_key'] ?? '');
-        if ($type === '' || $key === '') {
+
+    $bonusItems = [];
+    foreach ($equippedMap as $slotCode => $slotItem) {
+        if (!is_array($slotItem)) {
             continue;
         }
-        $normalized = af_charactersheets_normalize_bonus_items($type, $key);
-        $slotCode = (string)($slotItem['slot'] ?? '');
-        $isWeapon = in_array($slotCode, $weaponSlots, true) || (string)($slotItem['subtype'] ?? '') === 'weapon';
-        if ($isWeapon && $activeWeaponSlot !== '' && $slotCode !== $activeWeaponSlot) {
-            $normalized = array_values(array_filter($normalized, static function (array $bonusRow): bool {
-                return (string)($bonusRow['type'] ?? '') !== 'weapon_bonus';
-            }));
+        $kbType = (string)($slotItem['kb_type'] ?? '');
+        $kbKey = (string)($slotItem['kb_key'] ?? '');
+        if ($kbType === '' || $kbKey === '') {
+            continue;
         }
-        $items = array_merge($items, $normalized);
+        $entry = af_charactersheets_kb_get_entry($kbType, $kbKey);
+        if (empty($entry)) {
+            continue;
+        }
+
+        $metaReader = af_cs_kb_meta_reader((array)$entry);
+        $rules = (array)($metaReader['rules'] ?? []);
+        $rulesItem = is_array($rules['item'] ?? null) ? (array)$rules['item'] : [];
+        if (!$rulesItem) {
+            continue;
+        }
+
+        $itemKind = mb_strtolower(trim((string)($rulesItem['item_kind'] ?? ($slotItem['subtype'] ?? ''))));
+        $source = 'equipment:' . (string)$slotCode;
+
+        if ($itemKind === 'armor') {
+            $acBonus = (float)($rulesItem['equip']['armor']['ac_bonus'] ?? 0);
+            if ($acBonus !== 0.0) {
+                $bonusItems[] = ['source' => $source, 'type' => 'armor_bonus', 'target' => 'armor', 'value' => $acBonus, 'requires_choice' => false];
+            }
+        } elseif ($itemKind === 'weapon') {
+            if ((string)$slotCode === $activeWeaponSlot) {
+                $damageBonus = (float)($rulesItem['weapon']['damage_bonus'] ?? 0);
+                if ($damageBonus !== 0.0) {
+                    $bonusItems[] = ['source' => $source, 'type' => 'weapon_bonus', 'target' => 'damage', 'value' => $damageBonus, 'requires_choice' => false];
+                }
+            }
+        } else {
+            $bonusItems = array_merge($bonusItems, af_charactersheets_extract_item_bonus_items(['item' => $rulesItem], $source));
+        }
     }
 
-    return $items;
+    return [
+        'active_weapon_slot' => $activeWeaponSlot,
+        'bonus_items' => $bonusItems,
+    ];
 }
 
 function af_charactersheets_collect_equipped_augmentations(array $build): array
@@ -770,6 +808,8 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
 
     $bonus_items = af_charactersheets_collect_bonus_items($kb_sources);
     $bonus_items = array_merge($bonus_items, af_charactersheets_collect_build_bonus_items($build, (int)$uid));
+    $equipment_meta_bonuses = af_charactersheets_collect_equipment_meta_bonus_items($build, (int)$uid);
+    $bonus_items = array_merge($bonus_items, (array)($equipment_meta_bonuses['bonus_items'] ?? []));
     foreach ($bonus_items as $item) {
         $type = (string)($item['type'] ?? '');
         $target = $item['target'] ?? null;

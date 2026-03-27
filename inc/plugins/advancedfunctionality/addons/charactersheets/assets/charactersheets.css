@@ -2184,6 +2184,7 @@
 .af-cs-equip-dot--support_1 .af-cs-equip-dot__label::before { content: 'Q1 '; }
 .af-cs-equip-dot--support_2 .af-cs-equip-dot__label::before { content: 'Q2 '; }
 .af-cs-equip-dot--support_3 .af-cs-equip-dot__label::before { content: 'Q3 '; }
+.af-cs-equip-dot--support_4 .af-cs-equip-dot__label::before { content: 'Q4 '; }
 
 .af-cs-equip-popover {
   position: fixed;
@@ -2244,6 +2245,11 @@
 .af-cs-slot--equipment.is-active-weapon {
   border-color: rgba(255, 210, 92, 0.9);
   box-shadow: 0 0 0 1px rgba(255, 210, 92, 0.45), 0 0 24px rgba(255, 210, 92, 0.2);
+}
+
+.af-cs-equipment-item-card.is-equipped {
+  border-color: rgba(92, 195, 255, 0.8);
+  box-shadow: 0 0 0 1px rgba(92, 195, 255, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 .af-cs-slot--equipment .af-cs-slot__state-badge {

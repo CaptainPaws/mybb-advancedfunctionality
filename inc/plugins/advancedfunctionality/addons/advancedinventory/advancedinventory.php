@@ -79,7 +79,7 @@ function af_advancedinventory_install(): void
     af_advancedinventory_ensure_setting('af_advancedinventory_manage_groups', 'Manage groups', 'CSV group IDs that may open inventories.php and manage inventories', 'text', '3,4,6', 5, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_debug_enabled', 'Enable debug logging', 'Write Advanced Inventory debug events to file', 'yesno', '0', 6, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_debug_max_kb', 'Debug log max size (KB)', 'Rotate debug log when size exceeds this limit. Set 0 to disable rotation.', 'numeric', '512', 7, $gid);
-    af_advancedinventory_ensure_setting('af_advancedinventory_support_slots_json', 'Support slots JSON', 'JSON list of support slot configs: slot_code, title_ru/title_en, sortorder.', 'textarea', '[{"slot_code":"support_1","title_ru":"Быстрый слот 1","title_en":"Support slot 1","sortorder":10},{"slot_code":"support_2","title_ru":"Быстрый слот 2","title_en":"Support slot 2","sortorder":20},{"slot_code":"support_3","title_ru":"Быстрый слот 3","title_en":"Support slot 3","sortorder":30}]', 8, $gid);
+    af_advancedinventory_ensure_setting('af_advancedinventory_support_slots_json', 'Support slots JSON', 'JSON list of support slot configs: slot_code, title_ru/title_en, sortorder.', 'textarea', '[{"slot_code":"support_1","title_ru":"Быстрый слот 1","title_en":"Support slot 1","sortorder":10},{"slot_code":"support_2","title_ru":"Быстрый слот 2","title_en":"Support slot 2","sortorder":20},{"slot_code":"support_3","title_ru":"Быстрый слот 3","title_en":"Support slot 3","sortorder":30},{"slot_code":"support_4","title_ru":"Быстрый слот 4","title_en":"Support slot 4","sortorder":40}]', 8, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_assets_blacklist', 'Assets blacklist', 'Disable Advanced Inventory JS/CSS on these scripts. One page per line, for example: index.php\nforumdisplay.php\nusercp.php', 'textarea', 'index.php', 9, $gid);
 
     af_advancedinventory_ensure_inventory_storage();
@@ -119,7 +119,7 @@ function af_advancedinventory_activate(): void
     );
     af_advancedinventory_ensure_setting('af_advancedinventory_debug_enabled', 'Enable debug logging', 'Write Advanced Inventory debug events to file', 'yesno', '0', 6, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_debug_max_kb', 'Debug log max size (KB)', 'Rotate debug log when size exceeds this limit. Set 0 to disable rotation.', 'numeric', '512', 7, $gid);
-    af_advancedinventory_ensure_setting('af_advancedinventory_support_slots_json', 'Support slots JSON', 'JSON list of support slot configs: slot_code, title_ru/title_en, sortorder.', 'textarea', '[{"slot_code":"support_1","title_ru":"Быстрый слот 1","title_en":"Support slot 1","sortorder":10},{"slot_code":"support_2","title_ru":"Быстрый слот 2","title_en":"Support slot 2","sortorder":20},{"slot_code":"support_3","title_ru":"Быстрый слот 3","title_en":"Support slot 3","sortorder":30}]', 8, $gid);
+    af_advancedinventory_ensure_setting('af_advancedinventory_support_slots_json', 'Support slots JSON', 'JSON list of support slot configs: slot_code, title_ru/title_en, sortorder.', 'textarea', '[{"slot_code":"support_1","title_ru":"Быстрый слот 1","title_en":"Support slot 1","sortorder":10},{"slot_code":"support_2","title_ru":"Быстрый слот 2","title_en":"Support slot 2","sortorder":20},{"slot_code":"support_3","title_ru":"Быстрый слот 3","title_en":"Support slot 3","sortorder":30},{"slot_code":"support_4","title_ru":"Быстрый слот 4","title_en":"Support slot 4","sortorder":40}]', 8, $gid);
     af_advancedinventory_ensure_setting('af_advancedinventory_assets_blacklist', 'Assets blacklist', 'Disable Advanced Inventory JS/CSS on these scripts. One page per line, for example: index.php\nforumdisplay.php\nusercp.php', 'textarea', 'index.php', 9, $gid);
 
     af_advancedinventory_upgrade_schema();
@@ -3017,6 +3017,16 @@ function af_inv_legacy_support_slot_map(): array
     ];
 }
 
+function af_inv_default_support_slots(): array
+{
+    return [
+        'support_1' => ['title_ru' => 'Быстрый слот 1', 'title_en' => 'Support slot 1', 'sortorder' => 10],
+        'support_2' => ['title_ru' => 'Быстрый слот 2', 'title_en' => 'Support slot 2', 'sortorder' => 20],
+        'support_3' => ['title_ru' => 'Быстрый слот 3', 'title_en' => 'Support slot 3', 'sortorder' => 30],
+        'support_4' => ['title_ru' => 'Быстрый слот 4', 'title_en' => 'Support slot 4', 'sortorder' => 40],
+    ];
+}
+
 function af_inv_support_slots(): array
 {
     global $mybb;
@@ -3046,6 +3056,20 @@ function af_inv_support_slots(): array
             'title_en' => $titleEn,
             'sortorder' => (int)($row['sortorder'] ?? $row['sort_order'] ?? 0),
         ];
+    }
+
+    foreach (af_inv_default_support_slots() as $slotCode => $config) {
+        if (!isset($slots[$slotCode])) {
+            $titleRu = (string)($config['title_ru'] ?? $slotCode);
+            $titleEn = (string)($config['title_en'] ?? $slotCode);
+            $slots[$slotCode] = [
+                'slot_code' => $slotCode,
+                'title' => $titleRu !== '' ? $titleRu : $titleEn,
+                'title_ru' => $titleRu,
+                'title_en' => $titleEn,
+                'sortorder' => (int)($config['sortorder'] ?? 0),
+            ];
+        }
     }
 
     foreach (af_inv_legacy_support_slot_map() as $legacyCode => $slotCode) {
@@ -3130,7 +3154,6 @@ function af_inv_equipment_slots(): array
         'weapon_melee' => 'Ближний бой',
         'weapon_ranged' => 'Дальний бой',
         'ammo' => 'Боеприпасы',
-        'ammo_pouch' => 'Подсумок',
         'gear' => 'Снаряжение',
         'accessory_1' => 'Аксессуар 1',
         'accessory_2' => 'Аксессуар 2',
@@ -3297,7 +3320,7 @@ function af_inv_candidate_slots_for_item(array $item): array
                     'gear' => ['gear', 'accessory'],
                     'accessory' => ['accessory_1', 'accessory_2'],
                     'ammo' => ['ammo'],
-                    'consumable' => ['support_1', 'support_2', 'support_3'],
+                    'consumable' => ['support_1', 'support_2', 'support_3', 'support_4'],
                 ];
                 foreach ((array)($roleFallback[$uniqueRole] ?? []) as $slotValue) {
                     $pushSlot((string)$slotValue);
@@ -3454,7 +3477,7 @@ function af_advinv_export_charactersheet_equipment_state(int $uid): array
     }
 
     $armorSlots = ['head', 'body', 'back', 'hands', 'legs', 'feet', 'belt', 'artifact', 'accessory_1', 'accessory_2', 'gear'];
-    $weaponSlots = ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_melee', 'weapon_ranged', 'ammo', 'ammo_pouch'];
+    $weaponSlots = ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_melee', 'weapon_ranged', 'ammo'];
     foreach ($equipped as $slotCode => $slotItem) {
         $slotCode = (string)$slotCode;
         $groupKey = 'support';
