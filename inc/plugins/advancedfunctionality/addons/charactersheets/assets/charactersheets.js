@@ -601,6 +601,14 @@
       }
 
       function applyViewUpdate(payload) {
+        var previousEquipmentFilter = 'all';
+        var previousEquipmentRoot = sheet.querySelector('[data-afcs-equipment-root]');
+        if (previousEquipmentRoot) {
+          previousEquipmentFilter = String(previousEquipmentRoot.getAttribute('data-afcs-equipment-active-filter') || 'all');
+        } else if (sheet.getAttribute('data-afcs-equipment-active-filter')) {
+          previousEquipmentFilter = String(sheet.getAttribute('data-afcs-equipment-active-filter') || 'all');
+        }
+
         var skillCatalogWasOpen = false;
         var currentCatalogPanel = sheet.querySelector('[data-afcs-skill-catalog-panel]');
         if (currentCatalogPanel && !currentCatalogPanel.hidden) {
@@ -641,7 +649,13 @@
         }
         if (payload.equipment_html) {
           var equipmentBlock = sheet.querySelector('[data-afcs-block="equipment"]');
-          if (equipmentBlock) equipmentBlock.innerHTML = payload.equipment_html;
+          if (equipmentBlock) {
+            equipmentBlock.innerHTML = payload.equipment_html;
+            var nextEquipmentRoot = equipmentBlock.querySelector('[data-afcs-equipment-root]');
+            if (nextEquipmentRoot) {
+              nextEquipmentRoot.setAttribute('data-afcs-equipment-active-filter', previousEquipmentFilter);
+            }
+          }
         }
         if (payload.mechanics_html) {
           var mechanicsBlock = sheet.querySelector('[data-afcs-block="mechanics"]');
@@ -673,24 +687,14 @@
         var filters = equipmentBlock.querySelectorAll('[data-afcs-equipment-filter]');
         function normalizeEquipmentFilter(value) {
           var raw = String(value || '').toLowerCase().trim();
-          if (!raw || raw === 'all') return 'all';
-
-          var aliasMap = {
-            armors: 'armor',
-            armour: 'armor',
-            weapons: 'weapon',
-            accessory: 'gear',
-            accessories: 'gear',
-            artifacts: 'artifact',
-            equipments: 'gear',
-            equipment: 'gear'
-          };
-
-          return aliasMap[raw] || raw;
+          var allowedCodes = ['all', 'armor', 'weapon', 'ammo', 'consumable', 'gear'];
+          return allowedCodes.indexOf(raw) !== -1 ? raw : 'all';
         }
 
-        var activeFilter = normalizeEquipmentFilter(root.getAttribute('data-afcs-equipment-active-filter') || 'all');
-        if (!cards.length) return;
+        var savedFilter = sheet.getAttribute('data-afcs-equipment-active-filter') || root.getAttribute('data-afcs-equipment-active-filter') || 'all';
+        var activeFilter = normalizeEquipmentFilter(savedFilter);
+        root.setAttribute('data-afcs-equipment-active-filter', activeFilter);
+        sheet.setAttribute('data-afcs-equipment-active-filter', activeFilter);
 
         function activate(itemId) {
           cards.forEach(function (card) {
@@ -702,11 +706,10 @@
           });
         }
         function applyFilter() {
+          if (!cards.length) return;
           cards.forEach(function (card) {
             var kind = normalizeEquipmentFilter(card.getAttribute('data-afcs-equipment-filter-kind') || '');
-            var show = activeFilter === 'all'
-              || kind === activeFilter
-              || (activeFilter === 'gear' && (kind === 'gear' || kind === 'artifact'));
+            var show = activeFilter === 'all' || kind === activeFilter;
             card.style.display = show ? '' : 'none';
           });
 
@@ -790,6 +793,7 @@
           filterBtn.addEventListener('click', function () {
             activeFilter = normalizeEquipmentFilter(filterBtn.getAttribute('data-afcs-equipment-filter') || 'all');
             root.setAttribute('data-afcs-equipment-active-filter', activeFilter);
+            sheet.setAttribute('data-afcs-equipment-active-filter', activeFilter);
             filters.forEach(function (node) { node.classList.toggle('is-active', node === filterBtn); });
             applyFilter();
           });
@@ -808,8 +812,8 @@
             showPopover(slot, payload);
           });
         });
-        if (!root.__afEquipDocBound) {
-          root.__afEquipDocBound = true;
+        if (!sheet.__afEquipDocBound) {
+          sheet.__afEquipDocBound = true;
           document.addEventListener('click', function (event) {
             if (!popover || popover.hidden) return;
             if (!event.target.closest('[data-afcs-equipment-slot-dot]') && !event.target.closest('[data-afcs-equipment-popover]')) {
@@ -1490,7 +1494,7 @@
 
       updatePool();
       initAttributesUI();
-      initInventoryUI(sheet);
+      if (typeof initInventoryUI === 'function') initInventoryUI(sheet);
       initAugmentationUI();
       initEquipmentPreviewUI();
     })();

@@ -1816,7 +1816,7 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
         $bonus_html = $entry ? af_charactersheets_kb_get_block_html($entry, 'bonuses') : '';
         $is_weapon_slot = in_array($slot_code, $weapon_slots, true);
         $is_active_weapon = $is_weapon_slot && $item_id > 0 && $slot_code === $active_weapon_slot;
-        $slot_markup = '<button type="button" class="af-cs-slot af-cs-slot--equipment' . ($item_id > 0 ? ' is-filled' : '') . '"'
+        $slot_markup = '<button type="button" class="af-cs-slot af-cs-slot--equipment' . ($item_id > 0 ? ' is-filled' : '') . ($is_active_weapon ? ' is-active-weapon' : '') . '"'
             . ' data-afcs-equipment-slot-dot="1"'
             . ' data-afcs-equipment-slot="' . htmlspecialchars_uni($slot_code) . '"'
             . ' data-afcs-equipment-preview-item-id="' . $item_id . '"'
@@ -1833,6 +1833,7 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
             . '<span class="af-cs-slot__icon">' . $icon_html . '</span>'
             . '<span class="af-cs-slot__label">' . htmlspecialchars_uni($slot_label) . '</span>'
             . '<span class="af-cs-slot__item">' . htmlspecialchars_uni($item_id > 0 ? $item_title : 'Пусто') . '</span>'
+            . ($is_active_weapon ? '<span class="af-cs-slot__state-badge">Активное оружие</span>' : '')
             . '</button>';
         $preview_slots_map[$slot_code] = $slot_markup;
     }
@@ -1845,7 +1846,16 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
         $entry = af_charactersheets_kb_get_entry((string)($item['kb_type'] ?? ''), (string)($item['kb_key'] ?? ''));
         $bonus_html = $entry ? af_charactersheets_kb_get_block_html($entry, 'bonuses') : '';
         $candidate_slots = (array)($item['candidate_slots'] ?? []);
-        $subtype = (string)($item['subtype'] ?? 'gear');
+        $subtype = trim((string)($item['subtype'] ?? ''));
+        if ($subtype === '' && function_exists('af_advinv_classify_equipment_from_kb_meta')) {
+            $subtype = af_advinv_classify_equipment_from_kb_meta(af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')));
+        }
+        if ($subtype === 'artifact') {
+            $subtype = 'gear';
+        }
+        if (!in_array($subtype, ['armor', 'weapon', 'ammo', 'consumable', 'gear'], true)) {
+            $subtype = 'gear';
+        }
         $slot_select = '';
         if ($can_edit && $candidate_slots) {
             $options = '<option value="">— слот —</option>';
