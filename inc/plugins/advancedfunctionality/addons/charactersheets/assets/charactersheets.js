@@ -836,7 +836,6 @@
         var cards = augBlock.querySelectorAll('[data-afcs-augmentation-card]');
         var slots = augBlock.querySelectorAll('[data-afcs-augmentation-slot-dot]');
         var popover = augBlock.querySelector('[data-afcs-augmentation-popover]');
-        var unequipZone = augBlock.querySelector('[data-afcs-augmentation-unequip-zone]');
         if (!cards.length && !slots.length) return;
 
         function payloadFromNode(node) {
@@ -894,74 +893,6 @@
         function hidePopover() {
           if (!popover) return;
           popover.hidden = true;
-        }
-
-        var dragPayload = null;
-        augBlock.querySelectorAll('[data-afcs-augmentation-draggable]').forEach(function (node) {
-          node.addEventListener('dragstart', function (event) {
-            dragPayload = {
-              origin: node.getAttribute('data-afcs-augmentation-draggable') || '',
-              type: node.getAttribute('data-afcs-augmentation-type') || '',
-              key: node.getAttribute('data-afcs-augmentation-key') || node.getAttribute('data-afcs-augmentation-popover-key') || '',
-              slot: node.getAttribute('data-afcs-augmentation-slot') || ''
-            };
-            try { event.dataTransfer.setData('text/plain', JSON.stringify(dragPayload)); } catch (e) {}
-            event.dataTransfer.effectAllowed = 'move';
-          });
-        });
-
-        slots.forEach(function (slotNode) {
-          slotNode.addEventListener('dragover', function (event) {
-            event.preventDefault();
-            slotNode.classList.add('is-drop-target');
-          });
-          slotNode.addEventListener('dragleave', function () {
-            slotNode.classList.remove('is-drop-target');
-          });
-          slotNode.addEventListener('drop', function (event) {
-            event.preventDefault();
-            slotNode.classList.remove('is-drop-target');
-            var slotCode = slotNode.getAttribute('data-afcs-augmentation-slot') || '';
-            if (!slotCode || !dragPayload || !dragPayload.key) return;
-            var req;
-            if (dragPayload.origin === 'slot' && dragPayload.slot) {
-              req = afCsAjax('move_augmentation', { from_slot: dragPayload.slot, slot: slotCode, key: dragPayload.key });
-            } else if (dragPayload.origin === 'available' && dragPayload.type) {
-              req = afCsAjax('equip_augmentation', { slot: slotCode, type: dragPayload.type, key: dragPayload.key });
-            }
-            if (!req) return;
-            req.then(function (payload) {
-              if (isErrorPayload(payload)) {
-                showInlineError(responseError(payload, 'Ошибка перемещения аугментации'));
-                return;
-              }
-              clearInlineError();
-              applyViewUpdate(payload);
-            });
-          });
-        });
-
-        if (unequipZone) {
-          unequipZone.addEventListener('dragover', function (event) {
-            event.preventDefault();
-            unequipZone.classList.add('is-drop-target');
-          });
-          unequipZone.addEventListener('dragleave', function () {
-            unequipZone.classList.remove('is-drop-target');
-          });
-          unequipZone.addEventListener('drop', function (event) {
-            event.preventDefault();
-            unequipZone.classList.remove('is-drop-target');
-            if (!dragPayload || dragPayload.origin !== 'slot' || !dragPayload.slot) return;
-            afCsAjax('unequip_augmentation', { slot: dragPayload.slot, key: dragPayload.key || '' }).then(function (payload) {
-              if (isErrorPayload(payload)) {
-                showInlineError(responseError(payload, 'Ошибка снятия аугментации'));
-                return;
-              }
-              clearInlineError();
-              applyViewUpdate(payload);
-            });
-          });
         }
 
         cards.forEach(function (card) {

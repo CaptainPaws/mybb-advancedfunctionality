@@ -1595,9 +1595,6 @@ function af_charactersheets_build_augments_html(array $build, bool $can_edit, ar
         $slot_items_label = $line_items ? implode(' • ', $line_items) : '';
         $slot_stats = $first_entry ? trim(preg_replace('/\s+/', ' ', strip_tags(af_charactersheets_kb_get_block_html($first_entry, 'bonuses')))) : '';
         $slot_dot_classes = 'af-cs-slot af-cs-slot--augmentation af-cs-augmentation-slot-card' . ($is_empty ? ' af-cs-slot--empty' : '');
-        if ($can_edit) {
-            $slot_dot_classes .= ' af-cs-augment-draggable-slot';
-        }
 
         $dot_attrs = ' data-afcs-augmentation-slot-dot="1"'
             . ' data-afcs-augmentation-slot="' . htmlspecialchars_uni($slot) . '"'
@@ -1607,8 +1604,7 @@ function af_charactersheets_build_augments_html(array $build, bool $can_edit, ar
             . ' data-afcs-augmentation-popover-stats="' . htmlspecialchars_uni($slot_stats) . '"'
             . ' data-afcs-augmentation-popover-humanity="' . htmlspecialchars_uni($first_humanity > 0 ? ('−' . (string)$first_humanity) : '') . '"'
             . ' data-afcs-augmentation-popover-items="' . htmlspecialchars_uni($slot_items_label) . '"'
-            . ' data-afcs-augmentation-popover-key="' . htmlspecialchars_uni($first_key) . '"'
-            . ($can_edit && !$is_empty ? ' draggable="true" data-afcs-augmentation-draggable="slot"' : '');
+            . ' data-afcs-augmentation-popover-key="' . htmlspecialchars_uni($first_key) . '"';
 
         $slot_cards[] = '<button type="button" class="' . $slot_dot_classes . '"' . $dot_attrs . '>'
             . '<div class="af-cs-slot-header">'
@@ -1722,8 +1718,7 @@ function af_charactersheets_build_augments_html(array $build, bool $can_edit, ar
                 return (string)($slot_configs[$slotCode]['title'] ?? $slotCode);
             }, $slot_options))) . '"'
             . ' data-afcs-augmentation-popover-stats="' . htmlspecialchars_uni($bonus_text) . '"'
-            . ' data-afcs-augmentation-popover-humanity="' . htmlspecialchars_uni($humanity_cost > 0 ? ('−' . (string)$humanity_cost) : '') . '"'
-            . ($can_edit ? ' draggable="true" data-afcs-augmentation-draggable="available"' : '') . '>'
+            . ' data-afcs-augmentation-popover-humanity="' . htmlspecialchars_uni($humanity_cost > 0 ? ('−' . (string)$humanity_cost) : '') . '">'
             . '<div class="af-cs-augment-card__icon">' . af_charactersheets_render_kb_icon($entry, $title) . '</div>'
             . '<div class="af-cs-augment-card__body">'
             . '<div class="af-cs-augment-card__title">' . htmlspecialchars_uni($title !== '' ? $title : $key) . '</div>'
@@ -1757,7 +1752,6 @@ function af_charactersheets_build_augments_html(array $build, bool $can_edit, ar
         . '<div class="af-cs-augmentations-column">'
         . '<div class="af-cs-panel-title">Слоты аугментаций</div>'
         . $humanity_html
-        . '<div class="af-cs-equipment-unequip-zone af-cs-augment-unequip-zone" data-afcs-augmentation-unequip-zone="1">Перетащите установленную аугментацию сюда, чтобы снять.</div>'
         . '<div class="af-cs-slot-grid af-cs-augmentation-slot-grid">' . implode('', $slot_cards) . '</div>'
         . '<div class="af-cs-augment-popover" data-afcs-augmentation-popover hidden></div>'
         . '</div>'
