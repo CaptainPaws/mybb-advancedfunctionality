@@ -104,7 +104,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     $skills_locked = !empty($build['locked_skills']);
     $can_manage_skills = $can_manage_sheet && (!$skills_locked || $is_staff);
     $sheet_skills_html = af_charactersheets_build_skills_html($sheet_view, $can_manage_skills, $can_view_ledger, $can_staff_reset, $skills_locked);
-    $sheet_knowledge_html = af_charactersheets_build_knowledge_html($sheet_view, $can_edit_sheet, $can_view_ledger);
+    $sheet_knowledge_html = af_charactersheets_build_knowledge_html($sheet_view, $can_edit_sheet, $can_view_ledger, $is_staff);
     $sheet_abilities_html = af_charactersheets_build_abilities_html((int)($sheet['uid'] ?? 0));
     $sheet_augments_html = af_charactersheets_build_augments_html($build, $can_edit_sheet, $sheet_view, $uid);
     $sheet_equipment_html = af_charactersheets_build_equipment_html($build, $can_edit_sheet, $uid);
@@ -670,7 +670,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
     return $out;
 }
 
-function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bool $can_view_pool): string
+function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bool $can_view_pool, bool $can_manage_selected = false): string
 {
     global $mybb;
 
@@ -795,7 +795,7 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
         $language_options .= '<option value="' . htmlspecialchars_uni($key) . '">' . htmlspecialchars_uni($title !== '' ? $title : $key) . '</option>';
     }
 
-    $render_item = static function (string $kind, string $key, bool $is_bonus, bool $can_edit): string {
+    $render_item = static function (string $kind, string $key, bool $is_bonus, bool $can_edit, bool $can_manage_selected): string {
         $entry = af_charactersheets_kb_get_entry($kind, $key);
         $label = af_charactersheets_kb_pick_text($entry, 'title');
         $desc = af_charactersheets_kb_pick_text($entry, 'short');
@@ -805,10 +805,10 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
 
         $status = $is_bonus
             ? '<em class="af-cs-knowledge-tag af-cs-knowledge-tag--bonus">Авто</em>'
-            : '<em class="af-cs-knowledge-tag af-cs-knowledge-tag--manual">Выбор</em>';
+            : '<em class="af-cs-knowledge-tag af-cs-knowledge-tag--manual">' . ($can_manage_selected ? 'Выбор' : 'Выбор зафиксирован') . '</em>';
 
         $remove = '';
-        if (!$is_bonus && $can_edit) {
+        if (!$is_bonus && $can_edit && $can_manage_selected) {
             $remove = '<button type="button" class="af-cs-knowledge-remove" data-afcs-knowledge-remove="1" data-afcs-knowledge-type="' . htmlspecialchars_uni($kind) . '" data-afcs-knowledge-key="' . htmlspecialchars_uni($key) . '" title="Убрать">×</button>';
         }
 
@@ -824,7 +824,7 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
 
     $knowledge_selected_items = [];
     foreach ($knowledge_selected as $key) {
-        $knowledge_selected_items[] = $render_item('knowledge', (string)$key, false, $can_edit);
+        $knowledge_selected_items[] = $render_item('knowledge', (string)$key, false, $can_edit, $can_manage_selected);
     }
     if (!$knowledge_selected_items) {
         $knowledge_selected_items[] = '<div class="af-cs-muted">Пока нет выбранных знаний.</div>';
@@ -832,7 +832,7 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
 
     $knowledge_bonus_items = [];
     foreach ($knowledge_bonus as $key) {
-        $knowledge_bonus_items[] = $render_item('knowledge', (string)$key, true, false);
+        $knowledge_bonus_items[] = $render_item('knowledge', (string)$key, true, false, false);
     }
     if (!$knowledge_bonus_items) {
         $knowledge_bonus_items[] = '<div class="af-cs-muted">Нет автоматических знаний.</div>';
@@ -840,7 +840,7 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
 
     $language_selected_items = [];
     foreach ($language_selected as $key) {
-        $language_selected_items[] = $render_item('language', (string)$key, false, $can_edit);
+        $language_selected_items[] = $render_item('language', (string)$key, false, $can_edit, $can_manage_selected);
     }
     if (!$language_selected_items) {
         $language_selected_items[] = '<div class="af-cs-muted">Пока нет выбранных языков.</div>';
@@ -848,7 +848,7 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
 
     $language_bonus_items = [];
     foreach ($language_bonus as $key) {
-        $language_bonus_items[] = $render_item('language', (string)$key, true, false);
+        $language_bonus_items[] = $render_item('language', (string)$key, true, false, false);
     }
     if (!$language_bonus_items) {
         $language_bonus_items[] = '<div class="af-cs-muted">Нет автоматических языков.</div>';
@@ -866,10 +866,16 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
             . '<select data-afcs-knowledge-select="knowledge">' . $knowledge_options . '</select>'
             . '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-knowledge-add="1" data-afcs-knowledge-type="knowledge">Добавить</button>'
             . '</div>';
+        if (!$can_manage_selected && $knowledge_selected_count > 0) {
+            $knowledge_form .= '<div class="af-cs-muted">Выбранные знания зафиксированы и недоступны для удаления.</div>';
+        }
         $language_form = '<div class="af-cs-knowledge-form">'
             . '<select data-afcs-knowledge-select="language">' . $language_options . '</select>'
             . '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-knowledge-add="1" data-afcs-knowledge-type="language">Добавить</button>'
             . '</div>';
+        if (!$can_manage_selected && $language_selected_count > 0) {
+            $language_form .= '<div class="af-cs-muted">Выбранные языки зафиксированы и недоступны для удаления.</div>';
+        }
     }
 
     $knowledge_overview_html = '';
