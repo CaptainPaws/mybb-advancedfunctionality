@@ -737,6 +737,7 @@
             stats: meta.getAttribute('data-afcs-equipment-popover-stats') || '',
             icon: meta.getAttribute('data-afcs-equipment-popover-icon') || '',
             defaultSlot: meta.getAttribute('data-afcs-equipment-default-slot') || '',
+            equippedSlot: meta.getAttribute('data-afcs-equipment-popover-equipped-slot') || '',
             itemId: meta.getAttribute('data-afcs-equipment-item-id') || (node.getAttribute('data-afcs-equipment-item-id') || ''),
             slotCode: meta.getAttribute('data-afcs-equipment-slot') || '',
             canSetActiveWeapon: meta.getAttribute('data-afcs-equipment-popover-can-set-active') === '1',
@@ -757,7 +758,11 @@
               }
             }
           } else if (payload.itemId) {
-            actionBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-equip="1" data-afcs-equipment-item-id="' + payload.itemId + '" data-afcs-equipment-slot-default="' + payload.defaultSlot + '">Надеть</button>';
+            if (payload.equippedSlot) {
+              actionBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-unequip="1" data-afcs-equipment-slot="' + payload.equippedSlot + '">Снять</button>';
+            } else {
+              actionBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-equip="1" data-afcs-equipment-item-id="' + payload.itemId + '" data-afcs-equipment-slot-default="' + payload.defaultSlot + '">Надеть</button>';
+            }
           }
           popover.innerHTML = ''
             + '<div class="af-cs-equip-popover__head"><span class="af-cs-slot-icon">' + iconHtml + '</span><strong>' + payload.title + '</strong></div>'
