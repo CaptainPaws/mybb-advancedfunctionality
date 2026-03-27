@@ -909,6 +909,34 @@
   function sourcePrefix(id) { return 'af-' + id; }
   function byId(id) { return document.getElementById(id); }
   function asBool(value) { return String(value || '') === '1'; }
+  function normalizeKbType(value) {
+    var normalized = String(value || '').toLowerCase().trim();
+    if (normalized === 'ritual') { return 'spell'; }
+    if (normalized === '' || normalized === 'item') { return 'item'; }
+    if (normalized === 'all') { return 'all'; }
+    return normalized;
+  }
+
+  function kbFilterNode(prefix) {
+    return byId(sourcePrefix(prefix + '-kb-type-filter')) || byId('af-kb-picker-type');
+  }
+
+  function syncKbTypeControls(prefix, rawType, keepCurrentFilter) {
+    var typeNode = byId(sourcePrefix(prefix + '-kb-type'));
+    var filterNode = kbFilterNode(prefix);
+    var normalized = normalizeKbType(rawType);
+    if (normalized !== 'all' && typeNode) {
+      typeNode.value = normalized;
+    }
+    if (filterNode && !keepCurrentFilter) {
+      if (normalized === 'spell' || normalized === 'item') {
+        filterNode.value = normalized;
+      } else if (normalized === 'all') {
+        filterNode.value = 'all';
+      }
+    }
+    return normalized;
+  }
 
   function setSourceMode(prefix, sourceType) {
     var normalized = sourceType === 'appearance' ? 'appearance' : 'kb';
@@ -940,6 +968,7 @@
     if (typeNode) { typeNode.value = item && item.kb_type ? item.kb_type : 'item'; }
     if (keyNode) { keyNode.value = item && item.kb_key ? item.kb_key : ''; }
     if (sourceRefNode) { sourceRefNode.value = kbId; }
+    syncKbTypeControls(prefix, item && item.kb_type ? item.kb_type : 'item', false);
 
     var summaryNode = byId(sourcePrefix(prefix + '-kb-summary'));
     var title = item && item.title ? item.title : '';
@@ -1042,7 +1071,25 @@
       }).join('');
     }
 
-    function runKbSearch(prefix) {
+    function ensureKbSelectionMatchesFilter(prefix) {
+      var idNode = byId(sourcePrefix(prefix + '-kb-id'));
+      if (!idNode) { return; }
+      var selectedId = parseInt(idNode.value || '0', 10);
+      if (!selectedId) { return; }
+
+      var typeNode = byId(sourcePrefix(prefix + '-kb-type'));
+      var selectedType = normalizeKbType(typeNode ? typeNode.value : 'item');
+      var filterNode = kbFilterNode(prefix);
+      var filterType = normalizeKbType(filterNode ? filterNode.value : 'all');
+      if (filterType === 'all') { return; }
+
+      if (selectedType !== filterType) {
+        setKbSelection(prefix, { kb_id: '0', kb_type: filterType, kb_key: '' });
+      }
+    }
+
+    function runKbSearch(prefix, options) {
+      options = options || {};
       var qNode = byId(sourcePrefix(prefix + '-kb-q')) || byId('af-kb-picker-q');
       var typeNode = byId(sourcePrefix(prefix + '-kb-type-filter')) || byId('af-kb-picker-type');
       var rarityNode = byId(sourcePrefix(prefix + '-kb-rarity')) || byId('af-kb-picker-rarity');
@@ -1061,7 +1108,12 @@
       );
 
       afShopDebug('runKbSearch', prefix, url);
-      getJSON(url).then(function(r) { renderKbResults(r, prefix); });
+      getJSON(url).then(function(r) {
+        renderKbResults(r, prefix);
+        if (options.enforceSelection !== false) {
+          ensureKbSelectionMatchesFilter(prefix);
+        }
+      });
     }
 
     function appearanceSearchEmptyMessage(groupLabel, query) {
@@ -1155,6 +1207,23 @@
         });
         node.addEventListener('change', function() { runKbSearch(prefix); });
       });
+
+      var kbTypeNode = byId(sourcePrefix(prefix + '-kb-type'));
+      if (kbTypeNode) {
+        var kbTypeRefresh = function() {
+          var typeNormalized = syncKbTypeControls(prefix, kbTypeNode.value, false);
+          ensureKbSelectionMatchesFilter(prefix);
+          runKbSearch(prefix, { enforceSelection: true });
+          if (typeNormalized !== 'all') {
+            kbTypeNode.value = typeNormalized;
+          }
+        };
+        kbTypeNode.addEventListener('input', function() {
+          clearTimeout(searchTimer);
+          searchTimer = setTimeout(kbTypeRefresh, 150);
+        });
+        kbTypeNode.addEventListener('change', kbTypeRefresh);
+      }
 
       setSourceMode(prefix, sourceNode ? (sourceNode.value || 'kb') : 'kb');
     }
