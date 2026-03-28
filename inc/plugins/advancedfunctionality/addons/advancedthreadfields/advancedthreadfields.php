@@ -541,6 +541,11 @@ function af_atf_misc_start(): void
         af_atf_clean_output_buffers();
         af_atf_kb_get_endpoint(); // die внутри
     }
+
+    if ($action === 'af_atf_kb_race_variants') {
+        af_atf_clean_output_buffers();
+        af_atf_kb_race_variants_endpoint(); // die внутри
+    }
 }
 
 function af_atf_early_ajax_router(): void
@@ -571,6 +576,11 @@ function af_atf_early_ajax_router(): void
     if ($action === 'af_kb_get') {
         af_atf_clean_output_buffers();
         af_atf_kb_get_endpoint(); // внутри будет die
+    }
+
+    if ($action === 'af_atf_kb_race_variants') {
+        af_atf_clean_output_buffers();
+        af_atf_kb_race_variants_endpoint(); // внутри будет die
     }
 }
 
@@ -830,6 +840,62 @@ function af_atf_kb_get_endpoint(): void
             'short_html' => $shortHtml,
             'body_html' => $bodyHtml,
             'blocks' => $blocks,
+        ],
+    ]);
+}
+
+function af_atf_kb_race_variants_endpoint(): void
+{
+    global $mybb;
+
+    $raceKey = strtolower(trim((string)$mybb->get_input('race')));
+    if ($raceKey === '') {
+        $raceKey = strtolower(trim((string)$mybb->get_input('race_key')));
+    }
+
+    if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $raceKey)) {
+        af_atf_json_response(['ok' => 0, 'error' => 'invalid_race'], 400);
+        return;
+    }
+
+    $activeOnly = (int)$mybb->get_input('include_inactive', MyBB::INPUT_INT) !== 1;
+
+    if (function_exists('af_kb_get_race_variants')) {
+        $rows = af_kb_get_race_variants($raceKey, $activeOnly);
+    } else {
+        $rows = [];
+    }
+
+    $items = [];
+    foreach ($rows as $row) {
+        $entry = is_array($row['variant'] ?? null) ? $row['variant'] : [];
+        if (empty($entry)) {
+            continue;
+        }
+
+        $label = af_atf_kb_pick_text($entry, 'title');
+        $value = (string)($entry['key'] ?? '');
+        if ($value === '') {
+            continue;
+        }
+        if ($label === '') {
+            $label = $value;
+        }
+
+        $items[] = [
+            'value' => $value,
+            'label' => $label,
+            'sortorder' => (int)($row['sortorder'] ?? 0),
+        ];
+    }
+
+    af_atf_json_response([
+        'ok' => 1,
+        'race' => $raceKey,
+        'items' => $items,
+        'select_contract' => [
+            'value_key' => 'value',
+            'label_key' => 'label',
         ],
     ]);
 }

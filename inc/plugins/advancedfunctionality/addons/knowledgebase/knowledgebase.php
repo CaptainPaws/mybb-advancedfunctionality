@@ -5174,7 +5174,7 @@ function af_kb_misc_route(): void
     global $mybb;
 
     $action = $mybb->get_input('action');
-    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_debug_entry', 'kb_migrate_rules', 'kb_manage_categories', 'kb_manage_categories_save', 'kb_entry_categories_save', 'kb_debug_entry_cats'], true)) {
+    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_race_variants', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_debug_entry', 'kb_migrate_rules', 'kb_manage_categories', 'kb_manage_categories_save', 'kb_entry_categories_save', 'kb_debug_entry_cats'], true)) {
         return;
     }
 
@@ -5230,6 +5230,9 @@ function af_kb_dispatch(): void
     }
     if ($action === 'kb_children') {
         af_kb_handle_json_children();
+    }
+    if ($action === 'kb_race_variants') {
+        af_kb_handle_json_race_variants();
     }
 
     if ($action === 'kb_edit') {
@@ -7491,6 +7494,66 @@ function af_kb_handle_json_children(): void
     }
 
     af_kb_send_json(['items' => $items]);
+}
+
+function af_kb_format_select_option(array $entry): array
+{
+    $value = (string)($entry['key'] ?? '');
+    $label = af_kb_pick_text($entry, 'title');
+    if ($label === '') {
+        $label = $value;
+    }
+
+    return [
+        'value' => $value,
+        'label' => $label,
+    ];
+}
+
+function af_kb_handle_json_race_variants(): void
+{
+    global $mybb, $lang;
+
+    if (!af_kb_can_view()) {
+        af_kb_render_json_error($lang->af_kb_no_access ?? 'No access', 403);
+    }
+
+    $raceKey = trim((string)$mybb->get_input('race'));
+    if ($raceKey === '') {
+        $raceKey = trim((string)$mybb->get_input('race_key'));
+    }
+    if ($raceKey === '') {
+        af_kb_render_json_error('Missing race', 400);
+    }
+
+    if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $raceKey)) {
+        af_kb_render_json_error('Invalid race key', 400);
+    }
+
+    $activeOnly = (int)$mybb->get_input('include_inactive', MyBB::INPUT_INT) !== 1;
+    $links = af_kb_get_race_variants($raceKey, $activeOnly);
+
+    $items = [];
+    foreach ($links as $link) {
+        $entry = is_array($link['variant'] ?? null) ? $link['variant'] : [];
+        if (empty($entry)) {
+            continue;
+        }
+
+        $option = af_kb_format_select_option($entry);
+        $option['sortorder'] = (int)($link['sortorder'] ?? 0);
+        $items[] = $option;
+    }
+
+    af_kb_send_json([
+        'success' => true,
+        'race' => $raceKey,
+        'items' => $items,
+        'select_contract' => [
+            'value_key' => 'value',
+            'label_key' => 'label',
+        ],
+    ]);
 }
 
 function af_kb_get_entry(string $type, string $key): ?array
