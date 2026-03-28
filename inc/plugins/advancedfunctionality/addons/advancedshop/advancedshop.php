@@ -3771,6 +3771,23 @@ function af_advancedshop_kb_item_profile(array $kbRow): array
 
     $equip = is_array($item['equip'] ?? null) ? $item['equip'] : [];
     $equipArmor = is_array($equip['armor'] ?? null) ? $equip['armor'] : [];
+    $passiveBonuses = is_array($item['bonuses'] ?? null) ? (array)$item['bonuses'] : [];
+    $armorFromBonuses = 0;
+    $damageFromBonuses = 0;
+    foreach ($passiveBonuses as $bonus) {
+        if (!is_array($bonus)) {
+            continue;
+        }
+        $bonusType = trim((string)($bonus['type'] ?? ''));
+        $bonusTarget = trim((string)($bonus['target'] ?? $bonus['stat'] ?? ''));
+        $value = (int)($bonus['value'] ?? $bonus['amount'] ?? 0);
+        if ($bonusType === 'resource' && $bonusTarget === 'armor') {
+            $armorFromBonuses += $value;
+        }
+        if ($bonusType === 'resource' && $bonusTarget === 'damage') {
+            $damageFromBonuses += $value;
+        }
+    }
 
     return [
         'rarity' => af_advancedshop_normalize_rarity($rawRarity),
@@ -3778,8 +3795,8 @@ function af_advancedshop_kb_item_profile(array $kbRow): array
         'kb_key' => trim((string)($kbRow['kb_key'] ?? $kbRow['key'] ?? '')),
         'slot' => (string)($item['slot'] ?? ''),
         'equip_slot' => af_advancedshop_normalize_equip_slot_code((string)($equip['slot'] ?? ($item['slot'] ?? ''))),
-        'armor_ac_bonus' => max(0, (int)($equipArmor['ac_bonus'] ?? 0)),
-        'weapon_damage_bonus' => (int)($item['weapon']['damage_bonus'] ?? 0),
+        'armor_ac_bonus' => max(0, (int)($equipArmor['ac_bonus'] ?? 0) + $armorFromBonuses),
+        'weapon_damage_bonus' => (int)($item['weapon']['damage_bonus'] ?? 0) + $damageFromBonuses,
         'weapon_damage_type' => trim((string)($item['weapon']['damage_type'] ?? '')),
         'stack_max' => max(1, (int)($item['stack_max'] ?? 1)),
         'currency' => (string)($item['currency'] ?? 'credits'),
