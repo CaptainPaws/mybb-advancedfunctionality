@@ -22,6 +22,10 @@ define('AF_KB_KEY_PATTERN', '/^[a-z0-9_-]{2,64}$/');
 define('AF_KB_CAT_KEY_PATTERN', '/^[a-z0-9_-]{1,64}$/');
 define('AF_KB_PERPAGE', 20);
 
+define('AF_KB_REL_RACE_HAS_VARIANT', 'race_has_variant');
+define('AF_KB_TYPE_RACE', 'race');
+define('AF_KB_TYPE_RACE_VARIANT', 'race_variant');
+
 function af_kb_default_type_definitions(): array
 {
     $statsFields = [
@@ -43,6 +47,7 @@ function af_kb_default_type_definitions(): array
 
     $typeMap = [
         'race' => ['Расы', 'Races'],
+        'race_variant' => ['Разновидности рас', 'Race Variants'],
         'class' => ['Классы', 'Classes'],
         'theme' => ['Темы', 'Themes'],
         'skill' => ['Навыки', 'Skills'],
@@ -63,7 +68,7 @@ function af_kb_default_type_definitions(): array
         $schema['title_en'] = $titles[1] . ': rules (' . $rulesSchema . ')';
         $schema['root_defaults'] = ['schema' => $rulesSchema];
 
-        if (in_array($key, ['race', 'class', 'theme', 'skill', 'knowledge', 'perk', 'condition', 'spell'], true)) {
+        if (in_array($key, ['race', 'race_variant', 'class', 'theme', 'skill', 'knowledge', 'perk', 'condition', 'spell'], true)) {
             $schema['root_defaults']['fixed_bonuses'] = ['stats' => ['str' => 0, 'dex' => 0, 'con' => 0, 'int' => 0, 'wis' => 0, 'cha' => 0], 'hp' => 0, 'ep' => 0];
             $schema['fields'] = array_merge($schema['fields'], $statsFields, [
                 ['path' => 'fixed_bonuses.hp', 'type' => 'number', 'label_ru' => 'HP', 'label_en' => 'HP', 'required' => true, 'default' => 0],
@@ -1021,7 +1026,7 @@ function af_kb_seed_defaults(): void
 {
     global $db;
 
-    $requiredTypes = ['race', 'class', 'theme', 'skill', 'knowledge', 'language', 'item'];
+    $requiredTypes = ['race', 'race_variant', 'class', 'theme', 'skill', 'knowledge', 'language', 'item'];
     $defaultsByType = [];
     foreach (af_kb_default_type_definitions() as $row) {
         $defaultsByType[(string)$row['type_key']] = $row;
@@ -1324,6 +1329,12 @@ function af_kb_default_type_rules_config(string $typeKey): array
             'rules_required_keys' => ['fixed_bonuses', 'choices', 'traits'],
             'ui_rules_editor' => true,
         ],
+        'race_variant' => [
+            'rules_enabled' => true,
+            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'rules_required_keys' => ['fixed_bonuses', 'choices', 'traits'],
+            'ui_rules_editor' => true,
+        ],
         'class' => [
             'rules_enabled' => true,
             'rules_schema' => AF_KB_RULES_SCHEMA,
@@ -1427,6 +1438,13 @@ function af_kb_get_type_profile_definition(string $typeKey): array
                 'speed' => 30,
                 'hp_base' => 10,
                 'languages' => ['common'],
+            ]),
+        ],
+        'race_variant' => [
+            'ui_profile' => 'race_variant',
+            'rules_enabled' => true,
+            'defaults' => array_replace_recursive($base, [
+                'inherits_from_race' => true,
             ]),
         ],
         'class' => [
@@ -7423,6 +7441,87 @@ function af_kb_get_entry(string $type, string $key): ?array
     ];
 
     return $cache[$idx];
+}
+
+
+function af_kb_get_race_parent_for_variant(string $variantKey, bool $activeOnly = true): ?array
+{
+    global $db;
+
+    $variantKey = trim($variantKey);
+    if ($variantKey === '') {
+        return null;
+    }
+
+    $where = "to_type='" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "'"
+        . " AND to_key='" . $db->escape_string($variantKey) . "'"
+        . " AND from_type='" . $db->escape_string(AF_KB_TYPE_RACE) . "'"
+        . " AND rel_type='" . $db->escape_string(AF_KB_REL_RACE_HAS_VARIANT) . "'";
+
+    $relation = $db->fetch_array(
+        $db->simple_select('af_kb_relations', '*', $where, ['order_by' => 'sortorder, id', 'order_dir' => 'ASC', 'limit' => 1])
+    );
+
+    if (!$relation) {
+        return null;
+    }
+
+    $entryWhere = "type='" . $db->escape_string((string)$relation['from_type']) . "'"
+        . " AND `key`='" . $db->escape_string((string)$relation['from_key']) . "'";
+    if ($activeOnly) {
+        $entryWhere .= ' AND active=1';
+    }
+
+    $race = $db->fetch_array($db->simple_select('af_kb_entries', '*', $entryWhere, ['limit' => 1]));
+    if (!$race) {
+        return null;
+    }
+
+    return [
+        'relation_id' => (int)($relation['id'] ?? 0),
+        'rel_type' => (string)($relation['rel_type'] ?? ''),
+        'sortorder' => (int)($relation['sortorder'] ?? 0),
+        'race' => $race,
+    ];
+}
+
+function af_kb_get_race_variants(string $raceKey, bool $activeOnly = true): array
+{
+    global $db;
+
+    $raceKey = trim($raceKey);
+    if ($raceKey === '') {
+        return [];
+    }
+
+    $where = "from_type='" . $db->escape_string(AF_KB_TYPE_RACE) . "'"
+        . " AND from_key='" . $db->escape_string($raceKey) . "'"
+        . " AND to_type='" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "'"
+        . " AND rel_type='" . $db->escape_string(AF_KB_REL_RACE_HAS_VARIANT) . "'";
+
+    $rows = [];
+    $query = $db->simple_select('af_kb_relations', '*', $where, ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
+    while ($relation = $db->fetch_array($query)) {
+        $entryWhere = "type='" . $db->escape_string((string)$relation['to_type']) . "'"
+            . " AND `key`='" . $db->escape_string((string)$relation['to_key']) . "'";
+        if ($activeOnly) {
+            $entryWhere .= ' AND active=1';
+        }
+
+        $variant = $db->fetch_array($db->simple_select('af_kb_entries', '*', $entryWhere, ['limit' => 1]));
+        if (!$variant) {
+            continue;
+        }
+
+        $rows[] = [
+            'relation_id' => (int)($relation['id'] ?? 0),
+            'rel_type' => (string)($relation['rel_type'] ?? ''),
+            'sortorder' => (int)($relation['sortorder'] ?? 0),
+            'variant' => $variant,
+        ];
+    }
+
+    return $rows;
 }
 
 function af_kb_get_meta(string $type, string $key): array
