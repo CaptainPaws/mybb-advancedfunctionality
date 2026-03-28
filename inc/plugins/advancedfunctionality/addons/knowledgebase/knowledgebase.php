@@ -6364,6 +6364,28 @@ function af_kb_handle_edit(): void
             }
         }
 
+        $raceParentKey = '';
+        if ($type === AF_KB_TYPE_RACE_VARIANT) {
+            $raceParentKey = trim((string)$mybb->get_input('race_parent_key'));
+            if ($raceParentKey !== '' && !preg_match(AF_KB_KEY_PATTERN, $raceParentKey)) {
+                $errors[] = $lang->af_kb_invalid_key ?? 'Invalid key.';
+            }
+
+            if (!$errors && $raceParentKey !== '') {
+                $raceExists = $db->fetch_array(
+                    $db->simple_select(
+                        'af_kb_entries',
+                        'id',
+                        "type='" . $db->escape_string(AF_KB_TYPE_RACE) . "' AND `key`='" . $db->escape_string($raceParentKey) . "'",
+                        ['limit' => 1]
+                    )
+                );
+                if (!$raceExists) {
+                    $errors[] = 'Selected parent race does not exist.';
+                }
+            }
+        }
+
         $catIds = [];
         $primaryCatId = 0;
         if (af_kb_categories_enabled()) {
@@ -6536,6 +6558,28 @@ function af_kb_handle_edit(): void
                             'meta_json' => $db->escape_string($rel['meta_json']),
                             'sortorder' => (int)$rel['sortorder'],
                         ]);
+                    }
+
+                    if ($type === AF_KB_TYPE_RACE_VARIANT) {
+                        $db->delete_query(
+                            'af_kb_relations',
+                            "to_type='" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "'"
+                            . " AND to_key='" . $db->escape_string($key) . "'"
+                            . " AND from_type='" . $db->escape_string(AF_KB_TYPE_RACE) . "'"
+                            . " AND rel_type='" . $db->escape_string(AF_KB_REL_RACE_HAS_VARIANT) . "'"
+                        );
+
+                        if ($raceParentKey !== '') {
+                            $db->insert_query('af_kb_relations', [
+                                'from_type' => $db->escape_string(AF_KB_TYPE_RACE),
+                                'from_key'  => $db->escape_string($raceParentKey),
+                                'rel_type'  => $db->escape_string(AF_KB_REL_RACE_HAS_VARIANT),
+                                'to_type'   => $db->escape_string(AF_KB_TYPE_RACE_VARIANT),
+                                'to_key'    => $db->escape_string($key),
+                                'meta_json' => $db->escape_string('{}'),
+                                'sortorder' => 0,
+                            ]);
+                        }
                     }
 
                     if (af_kb_categories_enabled()) {
@@ -6769,6 +6813,42 @@ function af_kb_handle_edit(): void
             . '})();</script>'
             . '</section>';
     }
+
+    $raceParentEditor = '';
+    if ($type === AF_KB_TYPE_RACE_VARIANT) {
+        $selectedRaceParentKey = '';
+        if ($mybb->request_method === 'post') {
+            $selectedRaceParentKey = trim((string)$mybb->get_input('race_parent_key'));
+        } elseif (!empty($entry['key'])) {
+            $parentRelation = af_kb_get_race_parent_for_variant((string)$entry['key'], false);
+            if (is_array($parentRelation['race'] ?? null)) {
+                $selectedRaceParentKey = (string)($parentRelation['race']['key'] ?? '');
+            }
+        }
+
+        $raceOptions = '<option value="">— Без родительской расы —</option>';
+        $rq = $db->simple_select(
+            'af_kb_entries',
+            '`key`,title_ru,title_en',
+            "type='" . $db->escape_string(AF_KB_TYPE_RACE) . "'",
+            ['order_by' => 'sortorder, title_ru, title_en, `key`', 'order_dir' => 'ASC']
+        );
+        while ($raceRow = $db->fetch_array($rq)) {
+            $raceKey = (string)($raceRow['key'] ?? '');
+            $raceTitle = af_kb_pick_text($raceRow, 'title');
+            if ($raceTitle === '') {
+                $raceTitle = $raceKey;
+            }
+            $selectedAttr = ($raceKey !== '' && $raceKey === $selectedRaceParentKey) ? ' selected="selected"' : '';
+            $raceOptions .= '<option value="' . htmlspecialchars_uni($raceKey) . '"' . $selectedAttr . '>' . htmlspecialchars_uni($raceTitle) . ' (' . htmlspecialchars_uni($raceKey) . ')</option>';
+        }
+
+        $raceParentEditor = '<section><h3>Родительская раса</h3>'
+            . '<label>Parent race</label>'
+            . '<select name="race_parent_key">' . $raceOptions . '</select>'
+            . '<div class="af-kb-help">Для type=race_variant связь сохраняется в af_kb_relations как race → race_variant (rel_type=' . htmlspecialchars_uni(AF_KB_REL_RACE_HAS_VARIANT) . ').</div>'
+            . '</section>';
+    }
     $entryUi = af_kb_get_entry_ui($entry);
     $kb_icon_class = htmlspecialchars_uni($entryUi['icon_class'] ?? '');
     $kb_icon_url = htmlspecialchars_uni($entryUi['icon_url'] ?? '');
@@ -6781,6 +6861,7 @@ function af_kb_handle_edit(): void
     $kb_relations_rows = $relationsRows;
     $kb_blocks_index = $blockIndex;
     $kb_relations_index = $relIndex;
+    $kb_race_parent_editor = $raceParentEditor;
 
     $kb_delete_button = !empty($entry['id']) ? '<button type="submit" name="kb_delete" value="1" class="af-kb-btn af-kb-btn--delete af-kb-btn-delete">'.$lang->af_kb_delete.'</button>' : '';
     $kb_help_link = af_kb_can_edit()
