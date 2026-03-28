@@ -148,13 +148,14 @@ function af_kb_default_type_definitions(): array
             ];
         }
 
-        if ($key === 'race') {
+        if (in_array($key, ['race', 'race_variant'], true)) {
             $schema['root_defaults'] += [
                 'size' => 'medium',
                 'creature_type' => 'humanoid',
                 'speed' => 30,
                 'languages' => ['common'],
                 'hp_base' => 10,
+                'effects' => [],
             ];
 
             $schema['fields'][] = [
@@ -198,9 +199,7 @@ function af_kb_default_type_definitions(): array
         }
 
         if ($key === 'race_variant') {
-            $schema['root_defaults'] += [
-                'inherits_from_race' => true,
-            ];
+            $schema['root_defaults'] += ['inherits_from_race' => true];
         }
 
         if (in_array($key, ['class', 'theme'], true)) {
@@ -1334,8 +1333,7 @@ function af_kb_default_ui_schema_for_type(string $typeKey): array
         ];
     }
 
-    $schemas = [
-        'race' => '{"schema":"af_kb.ui.schema.v1","version":1,"sections":[
+    $raceSchemaJson = '{"schema":"af_kb.ui.schema.v1","version":1,"sections":[
             {"id":"race_overview","title":{"ru":"Кратко","en":"Overview"},"layout":"two_col","blocks":[
                 {"id":"short","source":"entry","path":"short"},
                 {"id":"creature_type","source":"rules","path":"creature_type"}
@@ -1362,8 +1360,15 @@ function af_kb_default_ui_schema_for_type(string $typeKey): array
             ]},
             {"id":"race_traits","title":{"ru":"Черты","en":"Traits"},"layout":"stack","blocks":[
                 {"id":"traits","source":"rules","path":"traits"}
+            ]},
+            {"id":"race_effects","title":{"ru":"Эффекты","en":"Effects"},"layout":"stack","blocks":[
+                {"id":"effects","source":"rules","path":"effects"}
             ]}
-        ]}',
+        ]}';
+
+    $schemas = [
+        'race' => $raceSchemaJson,
+        'race_variant' => $raceSchemaJson,
 
         'class' => '{"schema":"af_kb.ui.schema.v1","version":1,"sections":[
             {"id":"class_overview","title":{"ru":"Кратко","en":"Overview"},"layout":"two_col","blocks":[
@@ -1574,6 +1579,12 @@ function af_kb_get_type_profile_definition(string $typeKey): array
                 ],
                 'choices' => [],
                 'traits' => [],
+                'size' => 'medium',
+                'creature_type' => 'humanoid',
+                'speed' => 30,
+                'hp_base' => 10,
+                'languages' => ['common'],
+                'effects' => [],
                 'inherits_from_race' => true,
             ],
         ],
@@ -1788,11 +1799,11 @@ function af_kb_get_type_schema(string $typeKey): array
 
     $schema = $row ? af_kb_decode_json((string)($row['ui_schema_json'] ?? '{}')) : [];
 
-    // Для item жёстко берём каноничную editor-schema,
+    // Для item и race_variant жёстко берём каноничную editor-schema,
     // даже если в БД раньше остался старый ui_schema_json.
-    if ($typeKey === 'item') {
+    if (in_array($typeKey, ['item', AF_KB_TYPE_RACE_VARIANT], true)) {
         foreach (af_kb_default_type_definitions() as $def) {
-            if ((string)($def['type_key'] ?? '') === 'item') {
+            if ((string)($def['type_key'] ?? '') === $typeKey) {
                 $schema = af_kb_decode_json((string)($def['ui_schema_json'] ?? '{}'));
                 break;
             }

@@ -826,7 +826,7 @@
 
             // ВАЖНО: эти три типа ДОЛЖНЫ иметь один и тот же UI-профиль (как у расы),
             // независимо от того, что лежит в schema.ui_profile.
-            if (t === 'race' || t === 'class' || t === 'theme') {
+            if (t === 'race' || t === 'race_variant' || t === 'class' || t === 'theme') {
                 return 'heritage';
             }
 
@@ -852,11 +852,11 @@
 
         var uiProfile = resolveUiProfile(type, typeSchema);
         // принудительно нормализуем type_profile для race/class/theme
-        if (type === 'race' || type === 'class' || type === 'theme') {
+        if (type === 'race' || type === 'race_variant' || type === 'class' || type === 'theme') {
             uiProfile = 'heritage';
         }
-        // type_profile в JSON должен совпадать с entry type для race/class/theme
-        var expectedTypeProfile = (type === 'race' || type === 'class' || type === 'theme')
+        // type_profile в JSON должен совпадать с entry type для race/race_variant/class/theme
+        var expectedTypeProfile = (type === 'race' || type === 'race_variant' || type === 'class' || type === 'theme')
             ? type
             : uiProfile;
 
@@ -1388,7 +1388,7 @@
 
         // ---------- UI layout (разный по профилям) ----------
         // Heritage: race/class/theme (как ты и хотела: одинаковый “расовый” UI только там)
-        var isRaceHead = (type === 'race');
+        var isRaceHead = (type === 'race' || type === 'race_variant');
 
         // Сборка HTML-контейнеров
         var html = [];
