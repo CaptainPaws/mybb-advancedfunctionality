@@ -5980,6 +5980,11 @@ function af_kb_handle_view(): void
         if (af_kb_can_edit()) {
             $actions[] = '<a class="af-kb-btn af-kb-btn--create af-kb-btn-create" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_create ?? 'Create').'</a>';
         }
+        if ($type === AF_KB_TYPE_RACE) {
+            $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_RACE_VARIANT) . '">Разновидности рас</a>';
+        } elseif ($type === AF_KB_TYPE_RACE_VARIANT) {
+            $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb&type=' . htmlspecialchars_uni(AF_KB_TYPE_RACE) . '">К расам</a>';
+        }
         if (af_kb_cat_can_manage() && af_kb_categories_enabled()) {
             $actions[] = '<a class="af-kb-btn" href="misc.php?action=kb_manage_categories&type=' . htmlspecialchars_uni($type) . '">Manage categories</a>';
         }
