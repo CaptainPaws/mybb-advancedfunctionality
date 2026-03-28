@@ -504,6 +504,7 @@ function af_charactersheets_collect_bonus_items(array $kb_sources): array
     $items = [];
     $sources = [
         'race' => (string)($kb_sources['race'] ?? ''),
+        'race_variant' => (string)($kb_sources['race_variant'] ?? ''),
         'class' => (string)($kb_sources['class'] ?? ''),
         'theme' => (string)($kb_sources['theme'] ?? ''),
     ];
@@ -882,6 +883,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
 
     $sources = [
         'race' => (string)($kb_sources['race'] ?? ''),
+        'race_variant' => (string)($kb_sources['race_variant'] ?? ''),
         'class' => (string)($kb_sources['class'] ?? ''),
         'theme' => (string)($kb_sources['theme'] ?? ''),
     ];
@@ -978,7 +980,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         }
 
         if ($type === 'hp_bonus') {
-            if (in_array($source, ['race', 'class'], true)) {
+            if (in_array($source, ['race', 'race_variant', 'class'], true)) {
                 continue;
             }
             $bonus_hp += (float)$value;
@@ -1018,13 +1020,13 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
 
     $kb_context = cs_resolve_character_kb_context((int)($sheet['id'] ?? 0));
     $source_rules_map = [];
-    foreach (['race', 'class', 'theme'] as $src) {
+    foreach (['race', 'race_variant', 'class', 'theme'] as $src) {
         $source_rules_map[$src] = cs_kb_rules_normalize((array)($kb_context['sources'][$src]['rules'] ?? []));
     }
 
     $rules_aggregate = (array)($kb_context['aggregate'] ?? af_cs_aggregate_rules(array_values((array)($kb_context['sources'] ?? []))));
     $rules_engine_state = af_cs_rules_engine_init_state();
-    foreach (['race', 'class', 'theme'] as $src) {
+    foreach (['race', 'race_variant', 'class', 'theme'] as $src) {
         $source_rules = (array)($source_rules_map[$src] ?? []);
         $rules_engine_state = apply_kb_rules_to_character_state($rules_engine_state, $source_rules, $src);
     }
@@ -1064,7 +1066,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         ];
     }
 
-    foreach (['race', 'class', 'theme'] as $sourceKey) {
+    foreach (['race', 'race_variant', 'class', 'theme'] as $sourceKey) {
         $resolved = (array)($kb_context[$sourceKey] ?? []);
         foreach (af_charactersheets_extract_knowledge_grants($resolved, 'knowledge') as $key) {
             $bonus_knowledges[] = $key;
@@ -1079,7 +1081,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $bonus[$statKey] += (float)($rules_aggregate['fixed_bonuses']['stats'][$statKey] ?? 0);
     }
 
-    foreach (['race', 'class', 'theme'] as $src) {
+    foreach (['race', 'race_variant', 'class', 'theme'] as $src) {
         $source_choices = (array)($source_rules_map[$src]['choices'] ?? []);
         foreach ($source_choices as $choice) {
             if (!is_array($choice) || (string)($choice['type'] ?? '') !== 'stat_bonus') {
@@ -1194,7 +1196,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     }
 
     $kb_debug = [];
-    foreach (['race', 'class', 'theme'] as $src) {
+    foreach (['race', 'race_variant', 'class', 'theme'] as $src) {
         $source_debug = (array)($kb_context['sources'][$src] ?? []);
         $rules = (array)($source_rules_map[$src] ?? []);
         $kb_debug[$src] = [
@@ -1211,7 +1213,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
     $skills_rows = af_charactersheets_get_sheet_skills((int)($sheet['id'] ?? 0));
     $grant_skill_ranks = [];
     $grant_skill_rank_maxes = [];
-    foreach (['race', 'class', 'theme'] as $source) {
+    foreach (['race', 'race_variant', 'class', 'theme'] as $source) {
         $resolved = (array)($kb_context[$source] ?? []);
         foreach (af_charactersheets_extract_skill_grants($resolved, $source) as $grant) {
             $skill_key = (string)($grant['skill_key'] ?? '');
@@ -1245,7 +1247,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
         $source = (string)($row['source'] ?? 'manual');
         $existing = (array)($skills_map[$skill_key] ?? []);
         if (!empty($existing)) {
-            $fixedSources = ['race', 'class', 'theme', 'race_choice', 'class_choice', 'theme_choice'];
+            $fixedSources = ['race', 'race_variant', 'class', 'theme', 'race_choice', 'race_variant_choice', 'class_choice', 'theme_choice'];
             $existingSource = (string)($existing['source'] ?? 'manual');
             if (in_array($existingSource, $fixedSources, true)) {
                 if (in_array($source, $fixedSources, true)
