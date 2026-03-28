@@ -64,12 +64,18 @@ function af_kb_default_type_definitions(): array
     foreach ($typeMap as $key => $titles) {
         $schema = $base;
         $rulesSchema = $key === 'item' ? 'af_kb.item.v2' : AF_KB_RULES_SCHEMA;
+
         $schema['title_ru'] = $titles[0] . ': параметры (' . $rulesSchema . ')';
         $schema['title_en'] = $titles[1] . ': rules (' . $rulesSchema . ')';
         $schema['root_defaults'] = ['schema' => $rulesSchema];
 
         if (in_array($key, ['race', 'race_variant', 'class', 'theme', 'skill', 'knowledge', 'perk', 'condition', 'spell'], true)) {
-            $schema['root_defaults']['fixed_bonuses'] = ['stats' => ['str' => 0, 'dex' => 0, 'con' => 0, 'int' => 0, 'wis' => 0, 'cha' => 0], 'hp' => 0, 'ep' => 0];
+            $schema['root_defaults']['fixed_bonuses'] = [
+                'stats' => ['str' => 0, 'dex' => 0, 'con' => 0, 'int' => 0, 'wis' => 0, 'cha' => 0],
+                'hp' => 0,
+                'ep' => 0,
+            ];
+
             $schema['fields'] = array_merge($schema['fields'], $statsFields, [
                 ['path' => 'fixed_bonuses.hp', 'type' => 'number', 'label_ru' => 'HP', 'label_en' => 'HP', 'required' => true, 'default' => 0],
                 ['path' => 'fixed_bonuses.ep', 'type' => 'number', 'label_ru' => 'EP', 'label_en' => 'EP', 'required' => true, 'default' => 0],
@@ -80,17 +86,122 @@ function af_kb_default_type_definitions(): array
             ]);
         }
 
+        if (in_array($key, ['race', 'race_variant'], true)) {
+            $schema['root_defaults'] += [
+                'choices' => [],
+                'traits' => [],
+            ];
+
+            $schema['fields'][] = [
+                'path' => 'choices',
+                'type' => 'array',
+                'item' => [
+                    'type' => 'object',
+                    'fields' => [
+                        ['path' => 'id', 'type' => 'string', 'required' => true],
+                        [
+                            'path' => 'type',
+                            'type' => 'select',
+                            'required' => true,
+                            'options' => [
+                                ['value' => 'language_pick'],
+                                ['value' => 'stat_bonus'],
+                                ['value' => 'kb_pick'],
+                            ],
+                        ],
+                        ['path' => 'pick', 'type' => 'number', 'required' => true, 'default' => 1],
+                        ['path' => 'kb_type', 'type' => 'string'],
+                        ['path' => 'options', 'type' => 'array', 'item' => ['type' => 'string']],
+                    ],
+                ],
+                'default' => [],
+            ];
+
+            $schema['fields'][] = [
+                'path' => 'traits',
+                'type' => 'array',
+                'item' => [
+                    'type' => 'object',
+                    'fields' => [
+                        ['path' => 'id', 'type' => 'string', 'required' => true],
+                        ['path' => 'title', 'type' => 'i18n', 'required' => true],
+                        ['path' => 'desc', 'type' => 'i18n', 'required' => true],
+                        [
+                            'path' => 'effects',
+                            'type' => 'array',
+                            'item' => [
+                                'type' => 'object',
+                                'fields' => [
+                                    [
+                                        'path' => 'op',
+                                        'type' => 'select',
+                                        'options' => [['value' => 'choice_ref']],
+                                        'required' => true,
+                                    ],
+                                    ['path' => 'choice_id', 'type' => 'string', 'required' => true],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'default' => [],
+            ];
+        }
+
         if ($key === 'race') {
-            $schema['root_defaults'] += ['size' => 'medium', 'creature_type' => 'humanoid', 'speed' => 30, 'languages' => ['common'], 'hp_base' => 10, 'choices' => [], 'traits' => []];
-            $schema['fields'][] = ['path' => 'size', 'type' => 'select', 'label_ru' => 'Размер', 'label_en' => 'Size', 'required' => true, 'options' => [['value'=>'tiny'],['value'=>'small'],['value'=>'medium'],['value'=>'large'],['value'=>'huge']], 'default' => 'medium'];
-            $schema['fields'][] = ['path' => 'creature_type', 'type' => 'select', 'label_ru' => 'Тип существа', 'label_en' => 'Creature type', 'required' => true, 'options' => [['value'=>'humanoid'],['value'=>'android'],['value'=>'construct'],['value'=>'mutant'],['value'=>'outsider'],['value'=>'beast'],['value'=>'undead'],['value'=>'other']], 'default' => 'humanoid'];
+            $schema['root_defaults'] += [
+                'size' => 'medium',
+                'creature_type' => 'humanoid',
+                'speed' => 30,
+                'languages' => ['common'],
+                'hp_base' => 10,
+            ];
+
+            $schema['fields'][] = [
+                'path' => 'size',
+                'type' => 'select',
+                'label_ru' => 'Размер',
+                'label_en' => 'Size',
+                'required' => true,
+                'options' => [
+                    ['value' => 'tiny'],
+                    ['value' => 'small'],
+                    ['value' => 'medium'],
+                    ['value' => 'large'],
+                    ['value' => 'huge'],
+                ],
+                'default' => 'medium',
+            ];
+
+            $schema['fields'][] = [
+                'path' => 'creature_type',
+                'type' => 'select',
+                'label_ru' => 'Тип существа',
+                'label_en' => 'Creature type',
+                'required' => true,
+                'options' => [
+                    ['value' => 'humanoid'],
+                    ['value' => 'android'],
+                    ['value' => 'construct'],
+                    ['value' => 'mutant'],
+                    ['value' => 'outsider'],
+                    ['value' => 'beast'],
+                    ['value' => 'undead'],
+                    ['value' => 'other'],
+                ],
+                'default' => 'humanoid',
+            ];
+
             $schema['fields'][] = ['path' => 'speed', 'type' => 'number', 'required' => true, 'default' => 30];
             $schema['fields'][] = ['path' => 'languages', 'type' => 'array', 'required' => true, 'item' => ['type' => 'string'], 'default' => ['common']];
             $schema['fields'][] = ['path' => 'hp_base', 'type' => 'number', 'required' => true, 'default' => 10];
-            $schema['fields'][] = ['path' => 'choices', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'id','type'=>'string','required'=>true], ['path'=>'type','type'=>'select','required'=>true,'options'=>[['value'=>'language_pick'],['value'=>'stat_bonus'],['value'=>'kb_pick']]], ['path'=>'pick','type'=>'number','required'=>true,'default'=>1], ['path'=>'kb_type','type'=>'string'], ['path'=>'options','type'=>'array','item'=>['type'=>'string']]]], 'default' => []];
-            $schema['fields'][] = ['path' => 'traits', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'id','type'=>'string','required'=>true], ['path'=>'title','type'=>'i18n','required'=>true], ['path'=>'desc','type'=>'i18n','required'=>true], ['path'=>'effects','type'=>'array','item'=>['type'=>'object','fields'=>[['path'=>'op','type'=>'select','options'=>[['value'=>'choice_ref']],'required'=>true],['path'=>'choice_id','type'=>'string','required'=>true]]]]]], 'default' => []];
         }
 
+        if ($key === 'race_variant') {
+            $schema['root_defaults'] += [
+                'inherits_from_race' => true,
+            ];
+        }
 
         if (in_array($key, ['class', 'theme'], true)) {
             $schema['fields'][] = ['path' => 'hp_base', 'type' => 'number', 'label_ru' => 'Базовое HP', 'label_en' => 'Base HP', 'required' => false, 'default' => null];
@@ -107,21 +218,20 @@ function af_kb_default_type_definitions(): array
                     'weight' => 0,
                     'stack_max' => 1,
                     'equip' => ['slot' => '', 'armor' => ['ac_bonus' => 0, 'armor_type' => 'light']],
-                    'bonuses' => [],
                     'tags' => [],
                     'on_use' => ['cooldown' => 0, 'cost' => (object)[], 'effects' => []],
                     'on_equip' => ['effects' => [], 'grants' => []],
                     'requirements' => ['level' => 0, 'tags_any' => [], 'tags_all' => []],
                 ],
             ];
+
             $schema['fields'] = [
                 ['path' => 'schema', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => 'af_kb.item.v2'],
                 ['path' => 'item.item_kind', 'type' => 'select', 'label_ru' => 'Подтип предмета', 'label_en' => 'Item kind', 'required' => true, 'options_dynamic' => ['source' => 'kb_item_kinds'], 'default' => 'gear'],
                 ['path' => 'item.rarity', 'type' => 'select', 'required' => true, 'options' => [['value'=>'common'],['value'=>'uncommon'],['value'=>'rare'],['value'=>'unique'],['value'=>'illegal'],['value'=>'restricted'],['value'=>'legendary'],['value'=>'mythic']], 'default' => 'common'],
                 ['path' => 'item.price', 'type' => 'number', 'default' => 0],
                 ['path' => 'item.unique_role', 'type' => 'select', 'options' => [['value'=>''],['value'=>'weapon'],['value'=>'armor'],['value'=>'augmentation'],['value'=>'artifact'],['value'=>'gear'],['value'=>'consumable'],['value'=>'ammo']]],
-                ['path' => 'item.equip.slot', 'type' => 'select', 'required' => true, 'options' => [['value'=>''],['value'=>'head'],['value'=>'body'],['value'=>'hands'],['value'=>'legs'],['value'=>'feet'],['value'=>'back'],['value'=>'belt'],['value'=>'weapon_mainhand'],['value'=>'weapon_offhand'],['value'=>'weapon_twohand'],['value'=>'weapon_ranged'],['value'=>'weapon_melee'],['value'=>'support_1'],['value'=>'support_2'],['value'=>'support_3'],['value'=>'support_4'],['value'=>'ammo'],['value'=>'ammo_pouch'],['value'=>'gear'],['value'=>'artifact'],['value'=>'accessory']]],
-                ['path' => 'item.bonuses', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'type','type'=>'string','required'=>true],['path'=>'target','type'=>'string'],['path'=>'mode','type'=>'string'],['path'=>'value','type'=>'number','required'=>true],['path'=>'unit','type'=>'string'],['path'=>'conditions','type'=>'string'],['path'=>'notes','type'=>'string']]], 'default' => []],
+                ['path' => 'item.equip.slot', 'type' => 'select', 'required' => true, 'options' => [['value'=>''],['value'=>'head'],['value'=>'body'],['value'=>'hands'],['value'=>'legs'],['value'=>'feet'],['value'=>'back'],['value'=>'belt'],['value'=>'weapon_mainhand'],['value'=>'weapon_offhand'],['value'=>'weapon_twohand'],['value'=>'weapon_ranged'],['value'=>'weapon_melee'],['value'=>'support_1'],['value'=>'support_2'],['value'=>'support_3'],['value'=>'ammo'],['value'=>'ammo_pouch'],['value'=>'gear'],['value'=>'artifact'],['value'=>'accessory']]],
                 ['path' => 'item.equip.armor.ac_bonus', 'type' => 'number', 'default' => 0],
                 ['path' => 'item.equip.armor.armor_type', 'type' => 'select', 'options' => [['value'=>'light'],['value'=>'medium'],['value'=>'heavy']], 'default' => 'light'],
                 ['path' => 'item.on_use.effects', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'op','type'=>'select','required'=>true,'options'=>[['value'=>'add_stat'],['value'=>'add_hp'],['value'=>'add_ep'],['value'=>'kb_grant'],['value'=>'set_flag']]],['path'=>'stat','type'=>'select','options'=>[['value'=>'str'],['value'=>'dex'],['value'=>'con'],['value'=>'int'],['value'=>'wis'],['value'=>'cha']]],['path'=>'value','type'=>'number'],['path'=>'kb_type','type'=>'string'],['path'=>'kb_key','type'=>'string'],['path'=>'flag','type'=>'string']]], 'default' => []],
@@ -1432,20 +1542,40 @@ function af_kb_get_type_profile_definition(string $typeKey): array
         'race' => [
             'ui_profile' => 'race',
             'rules_enabled' => true,
-            'defaults' => array_replace_recursive($base, [
+            'defaults' => [
+                'schema' => AF_KB_RULES_SCHEMA,
+                'type_profile' => 'race',
+                'version' => '1.0',
+                'fixed_bonuses' => [
+                    'stats' => $fixedStats,
+                    'hp' => 0,
+                    'ep' => 0,
+                ],
+                'choices' => [],
+                'traits' => [],
                 'size' => 'medium',
                 'creature_type' => 'humanoid',
                 'speed' => 30,
                 'hp_base' => 10,
                 'languages' => ['common'],
-            ]),
+            ],
         ],
         'race_variant' => [
             'ui_profile' => 'race_variant',
             'rules_enabled' => true,
-            'defaults' => array_replace_recursive($base, [
+            'defaults' => [
+                'schema' => AF_KB_RULES_SCHEMA,
+                'type_profile' => 'race_variant',
+                'version' => '1.0',
+                'fixed_bonuses' => [
+                    'stats' => $fixedStats,
+                    'hp' => 0,
+                    'ep' => 0,
+                ],
+                'choices' => [],
+                'traits' => [],
                 'inherits_from_race' => true,
-            ]),
+            ],
         ],
         'class' => [
             'ui_profile' => 'class',
@@ -1521,7 +1651,6 @@ function af_kb_get_type_profile_definition(string $typeKey): array
             ]),
         ],
 
-        // ВАЖНО: item БЕЗ fixed/grants/choices/traits и сразу в af_kb.item.v2
         'item' => [
             'ui_profile' => 'item',
             'rules_enabled' => true,
@@ -5601,7 +5730,7 @@ function af_kb_handle_view(): void
             add_breadcrumb($lang->af_kb_catalog_title ?? 'Knowledge Base', 'misc.php?action=kb');
         }
 
-        $typesWhere = 'active=1';
+        $typesWhere = "active=1 AND type<>'" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "'";
         if ($query !== '') {
             $safeQuery = $db->escape_string($query);
             $typesWhere .= " AND (title_ru LIKE '%{$safeQuery}%' OR title_en LIKE '%{$safeQuery}%')";
@@ -5772,13 +5901,12 @@ function af_kb_handle_view(): void
             $typeDesc = af_kb_pick_text($typeRow, 'description');
         }
 
-        // ✅ FIX: баннер категории (af_kb_types.banner_url) для страницы /misc.php?action=kb&type=...
         $kb_banner = '';
         $kb_type_banner = '';
         $typeBannerUrl = $typeRow ? af_kb_sanitize_url((string)($typeRow['banner_url'] ?? '')) : '';
         if ($typeBannerUrl !== '') {
             $kb_banner = '<img class="af-kb-banner" src="' . htmlspecialchars_uni($typeBannerUrl) . '" alt="" loading="lazy" />';
-            $kb_type_banner = $kb_banner; // на случай если в шаблоне ты вывела именно {$kb_type_banner}
+            $kb_type_banner = $kb_banner;
         }
 
         $typeIconUrl = $typeRow ? ($typeRow['icon_url'] ?? '') : '';
@@ -7431,7 +7559,10 @@ function af_kb_handle_json_types(): void
         af_kb_render_json_error($lang->af_kb_no_access ?? 'No access', 403);
     }
 
-    $where = af_kb_can_edit() ? '1=1' : 'active=1';
+    $where = af_kb_can_edit()
+        ? "type<>'" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "'"
+        : "active=1 AND type<>'" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "'";
+
     $items = [];
     $q = $db->simple_select('af_kb_types', '*', $where, ['order_by' => 'sortorder, type', 'order_dir' => 'ASC']);
     while ($row = $db->fetch_array($q)) {
