@@ -1557,7 +1557,7 @@
             if (!state.item.gear || typeof state.item.gear !== 'object') state.item.gear = {};
             if (!state.item.gear.subtype) state.item.gear.subtype = '';
             if (!state.item.augmentation || typeof state.item.augmentation !== 'object') state.item.augmentation = {};
-            if ((!state.item.augmentation.slot || !state.item.augmentation.grade) && state.item.cyberware && typeof state.item.cyberware === 'object') {
+            if (!state.item.augmentation.slot && state.item.cyberware && typeof state.item.cyberware === 'object') {
                 state.item.augmentation = deepMerge(state.item.cyberware, state.item.augmentation);
             }
             if (!state.item.augmentation.subtype) state.item.augmentation.subtype = 'cybernetic';
@@ -1906,7 +1906,6 @@
 
             var slotNode = fields.profileFields.querySelector('select[data-field="slot"], input[data-field="slot"]');
             var subtypeNode = fields.profileFields.querySelector('select[data-field="subtype"], input[data-field="subtype"]');
-            var gradeNode = fields.profileFields.querySelector('select[data-field="grade"], input[data-field="grade"]');
             var humanityNode = fields.profileFields.querySelector('input[data-field="humanity_cost_percent"]');
 
             if (slotNode) {
@@ -1914,9 +1913,6 @@
             }
             if (subtypeNode) {
                 state.item.augmentation.subtype = String(subtypeNode.value || '').trim();
-            }
-            if (gradeNode) {
-                state.item.augmentation.grade = String(gradeNode.value || '').trim();
             }
             if (humanityNode) {
                 state.item.augmentation.humanity_cost_percent = numberOrZero(humanityNode.value);
@@ -2156,7 +2152,11 @@
                     itemOut.augmentation.slot = String(itemOut.equip.slot || '').trim();
                     itemOut.equip.slot = '';
                 }
-                itemOut.augmentation.grade = String(itemOut.augmentation.grade || '');
+                var legacyGrade = String(itemOut.augmentation.grade || '');
+                if (!legacyGrade && it.cyberware && typeof it.cyberware === 'object') {
+                    legacyGrade = String(it.cyberware.grade || '');
+                }
+                itemOut.augmentation.grade = legacyGrade;
                 itemOut.augmentation.humanity_cost_percent = Math.max(0, Math.min(100, numberOrZero(itemOut.augmentation.humanity_cost_percent != null ? itemOut.augmentation.humanity_cost_percent : 0)));
                 itemOut.augmentation.modifiers = Array.isArray(itemOut.augmentation.modifiers) ? itemOut.augmentation.modifiers.filter(function (row) { return row && row.type; }) : [];
                 itemOut.augmentation.effects = Array.isArray(itemOut.augmentation.effects) ? itemOut.augmentation.effects.filter(function (row) { return row && row.event && row.effect_type; }) : [];
@@ -2655,8 +2655,8 @@
                 } else if (augmentationMode) {
                     equipGrid.appendChild(createInput({ name: 'subtype', label: 'Augmentation subtype', type: 'select', options: ['', 'cybernetic', 'biomechanical', 'symbiotic'] }, state.item.augmentation, syncRawDebounced));
                     equipGrid.appendChild(createInput({ name: 'slot', label: 'Augmentation slot', type: 'select', options: augmentationSlotOptions }, state.item.augmentation, syncRawDebounced));
-                    equipGrid.appendChild(createInput({ name: 'grade', label: 'Augmentation grade', type: 'text' }, state.item.augmentation, syncRawDebounced));
                     equipGrid.appendChild(createInput({ name: 'humanity_cost_percent', label: 'Humanity cost / Влияние на человечность (%)', type: 'number', hint: 'При надевании уменьшает человечность на X%' }, state.item.augmentation, syncRawDebounced));
+                    equipGrid.insertAdjacentHTML('beforeend', '<div class="af-kb-help">Поле <strong>Augmentation grade</strong> скрыто: в текущей логике оно не участвует в расчётах и сохраняется только для legacy-совместимости.</div>');
                 } else if (kind === 'artifact') {
                     equipGrid.appendChild(createInput({ name: 'slot', label: 'Слот экипировки', type: 'select', options: slotByKind[kind] }, state.item.equip, syncRawDebounced));
                 } else if (kind === 'unique') {
