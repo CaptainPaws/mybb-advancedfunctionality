@@ -102,6 +102,7 @@ function af_kb_default_type_definitions(): array
                     'weight' => 0,
                     'stack_max' => 1,
                     'equip' => ['slot' => '', 'armor' => ['ac_bonus' => 0, 'armor_type' => 'light']],
+                    'bonuses' => [],
                     'tags' => [],
                     'on_use' => ['cooldown' => 0, 'cost' => (object)[], 'effects' => []],
                     'on_equip' => ['effects' => [], 'grants' => []],
@@ -115,6 +116,7 @@ function af_kb_default_type_definitions(): array
                 ['path' => 'item.price', 'type' => 'number', 'default' => 0],
                 ['path' => 'item.unique_role', 'type' => 'select', 'options' => [['value'=>''],['value'=>'weapon'],['value'=>'armor'],['value'=>'augmentation'],['value'=>'artifact'],['value'=>'gear'],['value'=>'consumable'],['value'=>'ammo']]],
                 ['path' => 'item.equip.slot', 'type' => 'select', 'required' => true, 'options' => [['value'=>''],['value'=>'head'],['value'=>'body'],['value'=>'hands'],['value'=>'legs'],['value'=>'feet'],['value'=>'back'],['value'=>'belt'],['value'=>'weapon_mainhand'],['value'=>'weapon_offhand'],['value'=>'weapon_twohand'],['value'=>'weapon_ranged'],['value'=>'weapon_melee'],['value'=>'support_1'],['value'=>'support_2'],['value'=>'support_3'],['value'=>'support_4'],['value'=>'ammo'],['value'=>'ammo_pouch'],['value'=>'gear'],['value'=>'artifact'],['value'=>'accessory']]],
+                ['path' => 'item.bonuses', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'type','type'=>'string','required'=>true],['path'=>'target','type'=>'string'],['path'=>'mode','type'=>'string'],['path'=>'value','type'=>'number','required'=>true],['path'=>'unit','type'=>'string'],['path'=>'conditions','type'=>'string'],['path'=>'notes','type'=>'string']]], 'default' => []],
                 ['path' => 'item.equip.armor.ac_bonus', 'type' => 'number', 'default' => 0],
                 ['path' => 'item.equip.armor.armor_type', 'type' => 'select', 'options' => [['value'=>'light'],['value'=>'medium'],['value'=>'heavy']], 'default' => 'light'],
                 ['path' => 'item.on_use.effects', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'op','type'=>'select','required'=>true,'options'=>[['value'=>'add_stat'],['value'=>'add_hp'],['value'=>'add_ep'],['value'=>'kb_grant'],['value'=>'set_flag']]],['path'=>'stat','type'=>'select','options'=>[['value'=>'str'],['value'=>'dex'],['value'=>'con'],['value'=>'int'],['value'=>'wis'],['value'=>'cha']]],['path'=>'value','type'=>'number'],['path'=>'kb_type','type'=>'string'],['path'=>'kb_key','type'=>'string'],['path'=>'flag','type'=>'string']]], 'default' => []],
@@ -1538,6 +1540,7 @@ function af_kb_get_type_profile_definition(string $typeKey): array
                     'gear' => [
                         'subtype' => '',
                     ],
+                    'bonuses' => [],
                     'augmentation' => [
                         'subtype' => 'cybernetic',
                         'slot' => '',
@@ -3110,7 +3113,69 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
 
 function af_kb_item_root_fields(): array
 {
-    return ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'equip', 'weapon', 'ammo', 'gear', 'augmentation', 'cyberware', 'tags', 'on_use', 'on_equip', 'requirements'];
+    return ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'equip', 'weapon', 'ammo', 'gear', 'bonuses', 'passive_bonuses', 'augmentation', 'cyberware', 'tags', 'on_use', 'on_equip', 'requirements'];
+}
+
+function af_kb_item_bonus_allowed_types(): array
+{
+    return [
+        'hp',
+        'hp_max',
+        'armor',
+        'damage',
+        'initiative',
+        'speed',
+        'carry',
+        'ep',
+        'attribute_points',
+        'skill_points',
+        'knowledge_slots',
+        'language_slots',
+        'str', 'dex', 'con', 'int', 'wis', 'cha',
+    ];
+}
+
+function af_kb_normalize_item_bonus_rows($rows): array
+{
+    if (!is_array($rows)) {
+        return [];
+    }
+
+    $allowedTypes = array_flip(af_kb_item_bonus_allowed_types());
+    $normalized = [];
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+
+        $type = trim((string)($row['type'] ?? $row['target'] ?? $row['stat'] ?? ''));
+        if ($type === '') {
+            continue;
+        }
+        if (isset($allowedTypes[$type])) {
+            $target = $type;
+            $type = 'resource';
+        } else {
+            $target = trim((string)($row['target'] ?? $row['stat'] ?? $row['attribute'] ?? $row['key'] ?? ''));
+        }
+
+        $value = isset($row['value']) ? (float)$row['value'] : (isset($row['amount']) ? (float)$row['amount'] : 0.0);
+        if ($value == 0.0 && empty($row['notes']) && empty($row['conditions'])) {
+            continue;
+        }
+
+        $normalized[] = [
+            'type' => $type,
+            'target' => $target,
+            'mode' => trim((string)($row['mode'] ?? 'add')) ?: 'add',
+            'value' => $value,
+            'unit' => trim((string)($row['unit'] ?? '')),
+            'conditions' => trim((string)($row['conditions'] ?? $row['condition'] ?? '')),
+            'notes' => trim((string)($row['notes'] ?? '')),
+        ];
+    }
+
+    return array_values($normalized);
 }
 
 function af_kb_normalize_item_rules_payload(array $payload): array
@@ -3153,6 +3218,17 @@ function af_kb_normalize_item_rules_payload(array $payload): array
     }
 
     unset($payload['item']['slot']);
+
+    $item = (array)$payload['item'];
+    $bonusSource = [];
+    if (isset($item['bonuses']) && is_array($item['bonuses'])) {
+        $bonusSource = $item['bonuses'];
+    } elseif (isset($item['passive_bonuses']) && is_array($item['passive_bonuses'])) {
+        $bonusSource = $item['passive_bonuses'];
+    }
+
+    $payload['item']['bonuses'] = af_kb_normalize_item_bonus_rows($bonusSource);
+    unset($payload['item']['passive_bonuses']);
 
     return $payload;
 }

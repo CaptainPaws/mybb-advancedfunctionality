@@ -806,6 +806,8 @@
         });
 
         var augmentationSlotOptions = ['', 'nervous_system', 'circulatory_system', 'immune_system', 'integumentary_system', 'operating_system', 'skeleton', 'arms', 'hands', 'legs', 'eyes', 'frontal_cortex', 'cyberaudio'];
+        var itemBonusTargetOptions = ['', 'hp', 'hp_max', 'armor', 'damage', 'initiative', 'speed', 'carry', 'ep', 'attribute_points', 'skill_points', 'knowledge_slots', 'language_slots', 'str', 'dex', 'con', 'int', 'wis', 'cha'];
+        var itemBonusTypeOptions = ['resource', 'stat', 'attribute', 'skill', 'custom'];
         var slotByKind = {
             armor: ['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt'],
             weapon: ['weapon_mainhand', 'weapon_offhand', 'weapon_twohand', 'weapon_ranged', 'weapon_melee'],
@@ -1208,6 +1210,7 @@
                     item_kind: 'gear',
                     rarity: 'common',
                     equip: { slot: '', armor: { ac_bonus: 0, armor_type: 'light' } },
+                    bonuses: [],
                     weapon: { damage_bonus: 0, damage_type: 'kinetic', rate_of_fire: 0, range: '', ammo_type_key: '' },
                     ammo: { ammo_type: '', damage_type: 'kinetic', damage_bonus: 0 },
                     gear: { subtype: '' },
@@ -1292,7 +1295,7 @@
                 return payload;
             }
 
-            var rootFields = ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'equip', 'weapon', 'ammo', 'gear', 'augmentation', 'cyberware', 'tags', 'on_use', 'on_equip', 'requirements'];
+            var rootFields = ['item_kind', 'rarity', 'price', 'currency', 'weight', 'stack_max', 'slot', 'equip', 'weapon', 'ammo', 'gear', 'bonuses', 'passive_bonuses', 'augmentation', 'cyberware', 'tags', 'on_use', 'on_equip', 'requirements'];
             var hasItem = payload.item && typeof payload.item === 'object' && !Array.isArray(payload.item);
 
             if (!hasItem) {
@@ -1309,6 +1312,30 @@
 
             rootFields.forEach(function (k) { delete payload[k]; });
             return payload;
+        }
+        function normalizeItemBonusRows(rows) {
+            if (!Array.isArray(rows)) return [];
+            return rows.map(function (row) {
+                if (!row || typeof row !== 'object') return null;
+                var rawType = String((row.type != null ? row.type : (row.target != null ? row.target : (row.stat != null ? row.stat : ''))) || '').trim();
+                var normalizedTarget = String((row.target != null ? row.target : (row.stat != null ? row.stat : (row.attribute != null ? row.attribute : (row.key != null ? row.key : '')))) || '').trim();
+                var type = rawType;
+                if (itemBonusTargetOptions.indexOf(rawType) !== -1) {
+                    normalizedTarget = rawType;
+                    type = 'resource';
+                }
+                if (!type && normalizedTarget) type = 'resource';
+                if (!type) return null;
+                return {
+                    type: type,
+                    target: normalizedTarget,
+                    mode: String(row.mode || 'add').trim() || 'add',
+                    value: numberOrZero(row.value != null ? row.value : (row.amount != null ? row.amount : 0)),
+                    unit: String(row.unit || ''),
+                    conditions: String(row.conditions || row.condition || ''),
+                    notes: String(row.notes || '')
+                };
+            }).filter(function (row) { return !!row; });
         }
         function isAugmentationSlot(slot) {
             return augmentationSlotOptions.indexOf(String(slot || '').trim()) !== -1;
@@ -1556,6 +1583,11 @@
             if (state.item.ammo.damage_bonus == null) state.item.ammo.damage_bonus = 0;
             if (!state.item.gear || typeof state.item.gear !== 'object') state.item.gear = {};
             if (!state.item.gear.subtype) state.item.gear.subtype = '';
+            if (!Array.isArray(state.item.bonuses)) {
+                state.item.bonuses = Array.isArray(state.item.passive_bonuses) ? state.item.passive_bonuses : [];
+            }
+            state.item.bonuses = normalizeItemBonusRows(state.item.bonuses);
+            delete state.item.passive_bonuses;
             if (!state.item.augmentation || typeof state.item.augmentation !== 'object') state.item.augmentation = {};
             if (!state.item.augmentation.slot && state.item.cyberware && typeof state.item.cyberware === 'object') {
                 state.item.augmentation = deepMerge(state.item.cyberware, state.item.augmentation);
@@ -2142,6 +2174,7 @@
                 itemOut.ammo.damage_bonus = numberOrZero(itemOut.ammo.damage_bonus != null ? itemOut.ammo.damage_bonus : 0);
                 itemOut.gear = (it.gear && typeof it.gear === 'object') ? it.gear : {};
                 itemOut.gear.subtype = String(itemOut.gear.subtype || '');
+                itemOut.bonuses = normalizeItemBonusRows(Array.isArray(it.bonuses) ? it.bonuses : (Array.isArray(it.passive_bonuses) ? it.passive_bonuses : []));
                 var augmentationRaw = (it.augmentation && typeof it.augmentation === 'object') ? it.augmentation : ((it.cyberware && typeof it.cyberware === 'object') ? it.cyberware : {});
                 itemOut.augmentation = deepClone(augmentationRaw || {});
                 itemOut.augmentation.subtype = String(itemOut.augmentation.subtype || (itemOut.item_kind === 'augmentation' ? 'cybernetic' : ''));
@@ -2675,6 +2708,28 @@
                 var slotKind = kind === 'unique' ? (uniqueRoleToKind[String(state.item.unique_role || '').trim().toLowerCase()] || kind) : kind;
                 if (!augmentationMode && currentSlot && (slotByKind[slotKind] || ['']).indexOf(currentSlot) === -1) {
                     fields.profileFields.insertAdjacentHTML('beforeend', '<div class="af-kb-help">⚠ Несовместимый slot для item_kind: ' + esc(currentSlot) + '</div>');
+                }
+
+                var passiveBonusKinds = { armor: true, artifact: true, unique: true, augmentation: true };
+                var uniqueBaseKind = uniqueRoleToKind[String(state.item.unique_role || '').trim().toLowerCase()] || '';
+                var shouldShowBonuses = !!passiveBonusKinds[kind] || (kind === 'unique' && !!passiveBonusKinds[uniqueBaseKind]) || kind === 'weapon' || kind === 'gear' || kind === 'consumable' || kind === 'ammo';
+                if (shouldShowBonuses) {
+                    var passiveBonusCard = document.createElement('div');
+                    passiveBonusCard.className = 'af-kb-rule-card';
+                    fields.profileLists.appendChild(passiveBonusCard);
+                    var bonusFields = [
+                        { name: 'type', label: 'Type', type: 'select', options: itemBonusTypeOptions },
+                        { name: 'target', label: 'Target', type: 'select', options: itemBonusTargetOptions },
+                        { name: 'mode', label: 'Mode', type: 'select', options: ['add', 'set', 'mul', 'max'] },
+                        { name: 'value', label: 'Value', type: 'number' },
+                        { name: 'unit', label: 'Unit', type: 'select', options: ['', 'flat', '%', 'points'] },
+                        { name: 'conditions', label: 'Conditions', type: 'text' },
+                        { name: 'notes', label: 'Notes', type: 'text' }
+                    ];
+                    renderObjectList(passiveBonusCard, state.item.bonuses, 'Passive bonuses', bonusFields, function () {
+                        state.item.bonuses = normalizeItemBonusRows(state.item.bonuses);
+                        syncRawDebounced();
+                    }, { type: 'resource', target: 'armor', mode: 'add', value: 0, unit: 'flat', conditions: '', notes: '' });
                 }
 
                 // on_use

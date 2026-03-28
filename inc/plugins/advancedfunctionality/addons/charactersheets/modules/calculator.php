@@ -340,6 +340,11 @@ function af_charactersheets_extract_item_bonus_items(array $rules, string $sourc
     }
 
     $out = [];
+    $normalizedBonuses = af_charactersheets_normalize_item_passive_bonus_items((array)($item['bonuses'] ?? []), $source);
+    if ($normalizedBonuses) {
+        return $normalizedBonuses;
+    }
+
     $damageBonus = (float)($item['weapon']['damage_bonus'] ?? $item['ammo']['damage_bonus'] ?? 0);
     if ($damageBonus !== 0.0) {
         $out[] = ['source' => $source, 'type' => 'weapon_bonus', 'target' => 'damage', 'value' => $damageBonus, 'requires_choice' => false];
@@ -362,6 +367,64 @@ function af_charactersheets_extract_item_bonus_items(array $rules, string $sourc
         if (($op === 'add_armor' || $op === 'add_ac') && $value !== 0.0) {
             $out[] = ['source' => $source, 'type' => 'armor_bonus', 'target' => 'armor', 'value' => $value, 'requires_choice' => false];
         }
+    }
+
+    return $out;
+}
+
+function af_charactersheets_normalize_item_passive_bonus_items(array $bonuses, string $source): array
+{
+    if (!$bonuses) {
+        return [];
+    }
+
+    $attributes = af_charactersheets_default_attributes();
+    $resourceTypeMap = [
+        'hp' => 'hp_bonus',
+        'hp_max' => 'hp_bonus',
+        'armor' => 'armor_bonus',
+        'damage' => 'weapon_bonus',
+        'speed' => 'speed_bonus',
+        'initiative' => 'initiative_bonus',
+        'carry' => 'carry_bonus',
+        'ep' => 'ep_bonus',
+        'attribute_points' => 'attribute_points',
+        'skill_points' => 'skill_points',
+        'knowledge_slots' => 'knowledge_choice',
+        'language_slots' => 'language_choice',
+    ];
+
+    $out = [];
+    foreach ($bonuses as $bonus) {
+        if (!is_array($bonus)) {
+            continue;
+        }
+        $type = trim((string)($bonus['type'] ?? ''));
+        $target = trim((string)($bonus['target'] ?? $bonus['stat'] ?? $bonus['attribute'] ?? $bonus['key'] ?? ''));
+        if ($target === '' && isset($bonus['type']) && isset($resourceTypeMap[(string)$bonus['type']])) {
+            $target = (string)$bonus['type'];
+            $type = 'resource';
+        }
+        $value = (float)($bonus['value'] ?? $bonus['amount'] ?? 0);
+        if ($value == 0.0) {
+            continue;
+        }
+
+        if (($type === 'resource' || $type === '' || $type === 'stat' || $type === 'attribute') && isset($resourceTypeMap[$target])) {
+            $out[] = ['source' => $source, 'type' => $resourceTypeMap[$target], 'target' => $target, 'value' => $value, 'requires_choice' => false];
+            continue;
+        }
+
+        if (($type === 'resource' || $type === '' || $type === 'stat' || $type === 'attribute') && array_key_exists($target, $attributes)) {
+            $out[] = ['source' => $source, 'type' => 'attribute_bonus', 'target' => $target, 'value' => $value, 'requires_choice' => false];
+            continue;
+        }
+
+        $normalizedType = $type !== '' ? $type : ($target !== '' ? $target . '_bonus' : '');
+        if ($normalizedType === '') {
+            continue;
+        }
+        $out[] = ['source' => $source, 'type' => $normalizedType, 'target' => $target !== '' ? $target : null, 'value' => $value, 'requires_choice' => false];
     }
 
     return $out;
@@ -669,6 +732,14 @@ function af_charactersheets_extract_hp_from_data(array $data): float
         }
     }
 
+    $itemBonuses = af_charactersheets_normalize_item_passive_bonus_items((array)(((array)($data['item'] ?? []))['bonuses'] ?? []), 'item');
+    foreach ($itemBonuses as $itemBonus) {
+        if ((string)($itemBonus['type'] ?? '') !== 'hp_bonus') {
+            continue;
+        }
+        $hp += (float)($itemBonus['value'] ?? 0);
+    }
+
     return $hp;
 }
 
@@ -726,6 +797,14 @@ function af_charactersheets_extract_humanity_cost_from_data(array $data): float
             }
             $cost += (float)($item['value'] ?? $item['amount'] ?? 0);
         }
+    }
+
+    $itemBonuses = af_charactersheets_normalize_item_passive_bonus_items((array)(((array)($data['item'] ?? []))['bonuses'] ?? []), 'item');
+    foreach ($itemBonuses as $itemBonus) {
+        if ((string)($itemBonus['type'] ?? '') !== 'humanity_cost') {
+            continue;
+        }
+        $cost += (float)($itemBonus['value'] ?? 0);
     }
 
     return $cost;
