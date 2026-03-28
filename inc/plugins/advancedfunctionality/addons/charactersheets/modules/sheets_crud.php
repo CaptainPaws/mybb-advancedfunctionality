@@ -386,7 +386,16 @@ function af_charactersheets_sync_fixed_skills(int $sheet_id): void
     $build = af_charactersheets_normalize_build(af_charactersheets_json_decode((string)($sheet['build_json'] ?? '')));
     $context = cs_resolve_character_kb_context($sheet_id);
     $grants = [];
-    $source_priority = ['race_choice' => 0, 'class_choice' => 1, 'theme_choice' => 2, 'race' => 3, 'class' => 4, 'theme' => 5];
+    $source_priority = [
+        'race_choice' => 0,
+        'race_variant_choice' => 1,
+        'class_choice' => 2,
+        'theme_choice' => 3,
+        'race' => 4,
+        'race_variant' => 5,
+        'class' => 6,
+        'theme' => 7,
+    ];
 
     $push_grant = static function (string $skill_key, int $skill_rank, string $source) use (&$grants, $source_priority): void {
         if ($skill_key === '' || $skill_rank <= 0 || $source === '') {
@@ -412,7 +421,7 @@ function af_charactersheets_sync_fixed_skills(int $sheet_id): void
         }
     };
 
-    foreach (['race', 'class', 'theme'] as $source) {
+    foreach (['race', 'race_variant', 'class', 'theme'] as $source) {
         $resolved = (array)($context[$source] ?? []);
         foreach (af_charactersheets_extract_skill_grants($resolved, $source) as $grant) {
             $push_grant(
@@ -434,7 +443,7 @@ function af_charactersheets_sync_fixed_skills(int $sheet_id): void
         }
     }
 
-    $fixed_sources = ['race', 'class', 'theme', 'race_choice', 'class_choice', 'theme_choice'];
+    $fixed_sources = ['race', 'race_variant', 'class', 'theme', 'race_choice', 'race_variant_choice', 'class_choice', 'theme_choice'];
 
     $rows = af_charactersheets_get_sheet_skills($sheet_id);
     $rows_by_key = [];

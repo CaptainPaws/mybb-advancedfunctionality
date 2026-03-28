@@ -2056,6 +2056,10 @@ function af_charactersheets_kb_mapping(): array
             'type' => 'race',
             'label' => 'Раса',
         ],
+        'character_race_variant' => [
+            'type' => 'race_variant',
+            'label' => 'Вариант расы',
+        ],
         'character_class' => [
             'type' => 'class',
             'label' => 'Класс',
@@ -2655,7 +2659,7 @@ function af_charactersheets_collect_skill_pick_choices(array $context, array $bu
     }
 
     $result = [];
-    foreach (['race', 'class', 'theme'] as $source) {
+    foreach (['race', 'race_variant', 'class', 'theme'] as $source) {
         $rules = cs_kb_rules_normalize((array)($context['sources'][$source]['rules'] ?? []));
         foreach ((array)($rules['choices'] ?? []) as $idx => $choice) {
             if (!is_array($choice) || (string)($choice['type'] ?? '') !== 'skill_pick_choice') {
@@ -3112,7 +3116,7 @@ function af_cs_build_rules_sources(array $sheet): array
     $kb_sources = cs_get_sheet_kb_sources($sheet);
     $result = [];
 
-    foreach (['race', 'class', 'theme'] as $type) {
+    foreach (['race', 'race_variant', 'class', 'theme'] as $type) {
         $key = trim((string)($kb_sources[$type] ?? ''));
         if ($key === '') {
             $result[$type] = [
@@ -3126,6 +3130,12 @@ function af_cs_build_rules_sources(array $sheet): array
         }
 
         $candidate_types = [$type];
+        if ($type === 'race_variant') {
+            $candidate_types[] = 'racevariant';
+            $candidate_types[] = 'race';
+        } elseif ($type === 'race') {
+            $candidate_types[] = 'race_variant';
+        }
         if ($type === 'theme') {
             $candidate_types[] = 'themes';
         } elseif ($type === 'themes') {
@@ -3279,7 +3289,7 @@ function cs_get_attribute_points_from_rules($rules): int
 function af_charactersheets_extract_skill_points_from_sources(array $context): int
 {
     $total = 0;
-    foreach (['race', 'class', 'theme'] as $source) {
+    foreach (['race', 'race_variant', 'class', 'theme'] as $source) {
         $resolved = (array)($context[$source] ?? []);
         $data = (array)($resolved['data'] ?? []);
         $total += cs_get_skill_points_from_rules($data);
@@ -3290,7 +3300,7 @@ function af_charactersheets_extract_skill_points_from_sources(array $context): i
 function af_charactersheets_extract_attribute_points_from_sources(array $context): int
 {
     $total = 0;
-    foreach (['race', 'class', 'theme'] as $source) {
+    foreach (['race', 'race_variant', 'class', 'theme'] as $source) {
         $resolved = (array)($context[$source] ?? []);
         $data = (array)($resolved['data'] ?? []);
         $total += cs_get_attribute_points_from_rules($data);
@@ -3308,6 +3318,7 @@ function cs_get_sheet_kb_sources(array $sheet): array
 
     return [
         'race' => af_charactersheets_pick_field_value($index, ['character_race', 'race'], false),
+        'race_variant' => af_charactersheets_pick_field_value($index, ['character_race_variant', 'race_variant', 'racevariant'], false),
         'class' => af_charactersheets_pick_field_value($index, ['character_class', 'class'], false),
         'theme' => af_charactersheets_pick_field_value($index, ['character_themes', 'character_theme', 'theme'], false),
     ];
@@ -3380,6 +3391,10 @@ function cs_resolve_character_kb_context(int $sheet_id): array
     );
 
     $race = af_charactersheets_kb_resolve_entry('race', (string)($kb_sources['race'] ?? ''));
+    $race_variant = af_charactersheets_kb_resolve_entry('race_variant', (string)($kb_sources['race_variant'] ?? ''));
+    if (empty($race_variant['entry']) && (string)($kb_sources['race_variant'] ?? '') !== '') {
+        $race_variant = af_charactersheets_kb_resolve_entry('racevariant', (string)($kb_sources['race_variant'] ?? ''));
+    }
     $class = af_charactersheets_kb_resolve_entry('class', (string)($kb_sources['class'] ?? ''));
     $theme = af_charactersheets_kb_resolve_entry('theme', (string)($kb_sources['theme'] ?? ''));
 
@@ -3415,6 +3430,7 @@ function cs_resolve_character_kb_context(int $sheet_id): array
 
     return [
         'race' => $race,
+        'race_variant' => $race_variant,
         'class' => $class,
         'theme' => $theme,
         'sources' => $rule_sources,

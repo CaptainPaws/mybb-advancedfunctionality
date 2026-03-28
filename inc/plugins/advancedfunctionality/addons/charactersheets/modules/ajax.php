@@ -184,8 +184,8 @@ function af_charactersheets_handle_api_impl(): void
         $choice_values = array_values(array_filter(array_map('trim', explode(',', $choice_value)), static function ($value) {
             return $value !== '';
         }));
-        $allowed_attr_choices = ['race_attr_bonus_choice', 'class_attr_bonus_choice', 'theme_attr_bonus_choice'];
-        $is_stat_bonus_choice = (bool)preg_match('/^(race|class|theme)_stat_bonus_choice(?:_.+)?$/', $choice_key);
+        $allowed_attr_choices = ['race_attr_bonus_choice', 'race_variant_attr_bonus_choice', 'class_attr_bonus_choice', 'theme_attr_bonus_choice'];
+        $is_stat_bonus_choice = (bool)preg_match('/^(race|race_variant|class|theme)_stat_bonus_choice(?:_.+)?$/', $choice_key);
         if (!empty($build['attributes_locked']) && !$is_staff && (in_array($choice_key, $allowed_attr_choices, true) || $is_stat_bonus_choice)) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Attributes are locked']);
         }
@@ -212,7 +212,7 @@ function af_charactersheets_handle_api_impl(): void
             if ($choice_value === '' || !in_array($choice_value, $allowed, true)) {
                 af_charactersheets_json_response(['success' => false, 'error' => 'Invalid skill']);
             }
-        } elseif (preg_match('/^(race|class|theme)_skill_pick_choice_/', $choice_key)) {
+        } elseif (preg_match('/^(race|race_variant|class|theme)_skill_pick_choice_/', $choice_key)) {
             $context = cs_resolve_character_kb_context($sheet_id);
             $choice_config = [];
             foreach (af_charactersheets_collect_skill_pick_choices($context, $build) as $item) {

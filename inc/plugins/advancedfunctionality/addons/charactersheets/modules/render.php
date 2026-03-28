@@ -394,7 +394,16 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
     $skills = (array)($view['skills'] ?? []);
     $active_grouped = [];
     $catalog_grouped = [];
-    $fixed_sources = ['race' => 'раса', 'class' => 'класс', 'theme' => 'тема', 'race_choice' => 'выбор расы', 'class_choice' => 'выбор класса', 'theme_choice' => 'выбор темы'];
+    $fixed_sources = [
+        'race' => 'раса',
+        'race_variant' => 'вариант расы',
+        'class' => 'класс',
+        'theme' => 'тема',
+        'race_choice' => 'выбор расы',
+        'race_variant_choice' => 'выбор варианта расы',
+        'class_choice' => 'выбор класса',
+        'theme_choice' => 'выбор темы',
+    ];
     $rank_names = [];
     $rank_config = af_charactersheets_skill_rank_config();
     foreach ($rank_config as $rank => $row) {
@@ -604,6 +613,7 @@ function af_charactersheets_build_skills_html(array $view, bool $can_manage, boo
     $skill_pick_choice_items = [];
     $skill_choice_source_labels = [
         'race' => 'раса',
+        'race_variant' => 'вариант расы',
         'class' => 'класс',
         'theme' => 'тема',
     ];
@@ -693,6 +703,7 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
 
     $source_labels = [
         'race' => 'Раса',
+        'race_variant' => 'Вариант расы',
         'class' => 'Класс',
         'theme' => 'Тема',
         'other' => 'Прочее',
@@ -719,6 +730,7 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
 
     $source_rules = [
         'race' => cs_kb_rules_normalize((array)($view['ctx']['sources']['race']['rules'] ?? [])),
+        'race_variant' => cs_kb_rules_normalize((array)($view['ctx']['sources']['race_variant']['rules'] ?? [])),
         'class' => cs_kb_rules_normalize((array)($view['ctx']['sources']['class']['rules'] ?? [])),
         'theme' => cs_kb_rules_normalize((array)($view['ctx']['sources']['theme']['rules'] ?? [])),
     ];
@@ -743,6 +755,7 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
         'Базовые слоты' => $knowledge_base_choices,
         'INT модификатор' => $knowledge_from_int,
         $source_labels['race'] => (int)$knowledge_source_breakdown['race'],
+        $source_labels['race_variant'] => (int)$knowledge_source_breakdown['race_variant'],
         $source_labels['class'] => (int)$knowledge_source_breakdown['class'],
         $source_labels['theme'] => (int)$knowledge_source_breakdown['theme'],
     ];
@@ -753,6 +766,7 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
 
     $language_sources = [
         $source_labels['race'] => (int)$language_source_breakdown['race'],
+        $source_labels['race_variant'] => (int)$language_source_breakdown['race_variant'],
         $source_labels['class'] => (int)$language_source_breakdown['class'],
         $source_labels['theme'] => (int)$language_source_breakdown['theme'],
     ];
@@ -986,6 +1000,9 @@ function af_charactersheets_render_kb_chip(string $type, string $key, string $fa
     }
 
     $entry = af_charactersheets_kb_get_entry($type, $key);
+    if (empty($entry) && $type === 'race_variant') {
+        $entry = af_charactersheets_kb_get_entry('racevariant', $key);
+    }
     $label = af_charactersheets_kb_pick_text($entry, 'title');
     if ($label === '') {
         $label = $fallbackLabel;
@@ -1188,9 +1205,11 @@ function af_charactersheets_build_info_table_html(array $index, array $sheet_vie
     $age = af_charactersheets_pick_field_value($index, ['character_age', 'age']);
     $gender = af_charactersheets_pick_field_value($index, ['character_gen', 'character_gender', 'gender']);
     $race_key = af_charactersheets_pick_field_value($index, ['character_race', 'race'], false);
+    $race_variant_key = af_charactersheets_pick_field_value($index, ['character_race_variant', 'race_variant', 'racevariant'], false);
     $class_key = af_charactersheets_pick_field_value($index, ['character_class', 'class'], false);
     $theme_key = af_charactersheets_pick_field_value($index, ['character_themes', 'character_theme', 'theme'], false);
     $race_label = af_charactersheets_pick_field_value($index, ['character_race', 'race'], true);
+    $race_variant_label = af_charactersheets_pick_field_value($index, ['character_race_variant', 'race_variant', 'racevariant'], true);
     $class_label = af_charactersheets_pick_field_value($index, ['character_class', 'class'], true);
     $theme_label = af_charactersheets_pick_field_value($index, ['character_themes', 'character_theme', 'theme'], true);
 
@@ -1200,12 +1219,15 @@ function af_charactersheets_build_info_table_html(array $index, array $sheet_vie
 
     $chip_html = '';
     $chip_html .= af_charactersheets_render_kb_chip('race', $race_key, $race_label);
+    $chip_html .= af_charactersheets_render_kb_chip('race_variant', $race_variant_key, $race_variant_label);
     $chip_html .= af_charactersheets_render_kb_chip('class', $class_key, $class_label);
     $chip_html .= af_charactersheets_render_kb_chip('themes', $theme_key, $theme_label);
     if ($chip_html === '') {
         $chip_html = '<span class="af-cs-muted">—</span>';
     }
     $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Чипы</div><div class="af-cs-info-value">' . $chip_html . '</div></div>';
+    $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Раса</div><div class="af-cs-info-value">' . htmlspecialchars_uni($race_label !== '' ? $race_label : '—') . '</div></div>';
+    $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Вариант расы</div><div class="af-cs-info-value">' . htmlspecialchars_uni($race_variant_label !== '' ? $race_variant_label : '—') . '</div></div>';
     $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Эффекты</div><div class="af-cs-info-value">' . af_charactersheets_build_effects_chip_html($sheet_view) . '</div></div>';
     $wallet_raw = (int)($sheet_view['credits'] ?? 0);
     $wallet = function_exists('af_balance_format_credits') ? af_balance_format_credits($wallet_raw) : number_format($wallet_raw / 100, 2, '.', ' ');
@@ -1338,7 +1360,7 @@ function af_charactersheets_build_mechanics_html(array $view): string
 
     $debug = (array)($view['debug'] ?? []);
     $debug_lines = [];
-    foreach (['race', 'class', 'theme'] as $src) {
+    foreach (['race', 'race_variant', 'class', 'theme'] as $src) {
         $entry = (array)($debug[$src] ?? []);
         $key = (string)($entry['key'] ?? '-');
         $schema = (string)($entry['schema'] ?? '');
