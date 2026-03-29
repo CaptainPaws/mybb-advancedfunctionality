@@ -479,10 +479,14 @@ class AF_Admin
         $addonId = trim($addon);
         $confirmForce = $mybb->get_input('confirm_force', MyBB::INPUT_INT) === 1;
         $themeTid = $mybb->get_input('theme_tid', MyBB::INPUT_INT);
+        $themeScope = strtolower(trim((string)$mybb->get_input('theme_scope')));
+        if (!in_array($themeScope, ['current', 'all'], true)) {
+            $themeScope = 'all';
+        }
 
         if ($action === 'theme_stylesheets_force_resync' && !$confirmForce) {
             flash_message($lang->af_theme_stylesheets_force_confirm, 'error');
-            admin_redirect(self::themeStylesheetsUrl($addonId !== '' ? $addonId : null, $themeTid > 0 ? $themeTid : null));
+            admin_redirect(self::themeStylesheetsUrl($addonId !== '' ? $addonId : null, $themeTid > 0 ? $themeTid : null, $themeScope));
         }
 
         $op = 'status';
@@ -503,7 +507,7 @@ class AF_Admin
         $result = af_theme_stylesheets_execute_action($op, $addonId !== '' ? $addonId : null, $confirmForce);
         $message = af_theme_stylesheets_action_message($op, $result, $lang);
         flash_message($message, 'success');
-        admin_redirect(self::themeStylesheetsUrl($addonId !== '' ? $addonId : null, $themeTid > 0 ? $themeTid : null));
+        admin_redirect(self::themeStylesheetsUrl($addonId !== '' ? $addonId : null, $themeTid > 0 ? $themeTid : null, $themeScope));
     }
 
     private static function renderThemeStylesheetsPage(): void
@@ -513,7 +517,7 @@ class AF_Admin
         $addonFilter = trim((string)$mybb->get_input('addon'));
         $themeFilter = strtolower(trim((string)$mybb->get_input('theme_scope')));
         if (!in_array($themeFilter, ['current', 'all'], true)) {
-            $themeFilter = 'current';
+            $themeFilter = 'all';
         }
 
         $currentThemeTid = self::currentThemeTid();
@@ -575,7 +579,7 @@ class AF_Admin
 
                 $actions = [];
                 $actions[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_stylesheet, 'edit_stylesheet');
-                $actions[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_properties, 'edit_stylesheet_properties');
+                $actions[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_properties, 'stylesheet_properties');
                 $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_sync_addon', $lang->af_theme_stylesheets_sync_addon, $addonId, true, false, $themeFilter, $themeTid);
                 $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_force_resync', $lang->af_theme_stylesheets_force_resync, $addonId, true, true, $themeFilter, $themeTid);
                 $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_rebuild_missing', $lang->af_theme_stylesheets_rebuild_missing, $addonId, true, false, $themeFilter, $themeTid);
@@ -626,29 +630,38 @@ class AF_Admin
 
         echo '<label style="margin-right:8px;">'.htmlspecialchars_uni($lang->af_theme_stylesheets_filter_theme_scope).': ';
         echo '<select name="theme_scope">';
-        echo '<option value="current"'.($themeScope === 'current' ? ' selected="selected"' : '').'>'.htmlspecialchars_uni($lang->af_theme_stylesheets_filter_current_theme).'</option>';
         echo '<option value="all"'.($themeScope === 'all' ? ' selected="selected"' : '').'>'.htmlspecialchars_uni($lang->af_theme_stylesheets_filter_all_themes).'</option>';
+        echo '<option value="current"'.($themeScope === 'current' ? ' selected="selected"' : '').'>'.htmlspecialchars_uni($lang->af_theme_stylesheets_filter_current_theme).'</option>';
         echo '</select></label>';
 
         echo '<input type="submit" class="submit_button" value="'.htmlspecialchars_uni($lang->af_theme_stylesheets_apply_filter).'">';
-        echo '&nbsp;<a href="index.php?module='.AF_PLUGIN_ID.'&amp;af_view=theme_stylesheets">'.htmlspecialchars_uni($lang->af_theme_stylesheets_clear_filter).'</a>';
+        echo '&nbsp;<a href="index.php?module='.AF_PLUGIN_ID.'&amp;af_view=theme_stylesheets&amp;theme_scope=all">'.htmlspecialchars_uni($lang->af_theme_stylesheets_clear_filter).'</a>';
         echo '</form>';
     }
 
     private static function buildThemeStylesheetEditLink(array $row, string $label, string $action): string
     {
-        $sid = (int)($row['stylesheet_sid'] ?? 0);
         $themeTid = (int)($row['theme_tid'] ?? 0);
+        $file = trim((string)($row['stylesheet_name'] ?? ''));
 
-        if ($sid <= 0 || $themeTid <= 0) {
+        if ($themeTid <= 1 || $file === '') {
             return '<span style="color:#777;">'.htmlspecialchars_uni($label).'</span>';
         }
 
-        $url = 'index.php?module=style-themes&amp;action='.$action.'&amp;sid='.$sid.'&amp;tid='.$themeTid;
+        $resolvedAction = 'edit_stylesheet';
+        if ($action === 'stylesheet_properties') {
+            $resolvedAction = 'stylesheet_properties';
+        }
+
+        $url = 'index.php?module=style-themes&amp;action='.$resolvedAction.'&amp;file='.rawurlencode($file).'&amp;tid='.$themeTid;
+        if ($resolvedAction === 'edit_stylesheet') {
+            $url .= '&amp;mode=advanced';
+        }
+
         return '<a href="'.$url.'">'.htmlspecialchars_uni($label).'</a>';
     }
 
-    private static function renderThemeStylesheetActionForm(string $action, string $label, string $addon = '', bool $inline = false, bool $confirm = false, string $themeScope = 'current', ?int $themeTid = null): string
+    private static function renderThemeStylesheetActionForm(string $action, string $label, string $addon = '', bool $inline = false, bool $confirm = false, string $themeScope = 'all', ?int $themeTid = null): string
     {
         global $mybb;
 
@@ -687,7 +700,7 @@ class AF_Admin
         return max(1, $tid);
     }
 
-    private static function themeStylesheetsUrl(?string $addon = null, ?int $themeTid = null): string
+    private static function themeStylesheetsUrl(?string $addon = null, ?int $themeTid = null, string $themeScope = 'all'): string
     {
         $url = 'index.php?module='.AF_PLUGIN_ID.'&af_view=theme_stylesheets';
         if ($addon !== null && $addon !== '') {
@@ -696,6 +709,10 @@ class AF_Admin
         if ($themeTid !== null && $themeTid > 0) {
             $url .= '&theme_tid='.(int)$themeTid;
         }
+        if (!in_array($themeScope, ['all', 'current'], true)) {
+            $themeScope = 'all';
+        }
+        $url .= '&theme_scope='.$themeScope;
         return $url;
     }
 
@@ -831,21 +848,22 @@ if (!defined('IN_MYBB')) die('No direct access');
  */
 function advancedfunctionality_meta()
 {
-    global \$page, \$mybb;
+    global \$page, \$mybb, \$lang;
 
     // Подтягиваем основной файл плагина, чтобы были доступны af_* хелперы
     require_once MYBB_ROOT.'inc/plugins/advancedfunctionality.php';
+    \$lang->load('advancedfunctionality');
 
     // Базовые подпункты
     \$sub_menu   = [];
     \$sub_menu[] = [
         'id'    => 'index',
-        'title' => 'Обзор аддонов',
+        'title' => (string)(\$lang->af_admin_menu_overview ?? 'Обзор аддонов'),
         'link'  => 'index.php?module=advancedfunctionality',
     ];
     \$sub_menu[] = [
         'id'    => 'view_theme_stylesheets',
-        'title' => 'Theme Stylesheets',
+        'title' => (string)(\$lang->af_theme_stylesheets_title ?? 'Theme Stylesheets'),
         'link'  => 'index.php?module=advancedfunctionality&af_view=theme_stylesheets',
     ];
 
@@ -882,7 +900,7 @@ function advancedfunctionality_meta()
     }
 
     // Регистрируем пункт верхнего уровня + подпункты
-    \$page->add_menu_item('Расширенный функционал', 'advancedfunctionality', 'index.php?module=advancedfunctionality', 60, \$sub_menu);
+    \$page->add_menu_item((string)(\$lang->af_admin_title ?? 'Advanced functionality'), 'advancedfunctionality', 'index.php?module=advancedfunctionality', 60, \$sub_menu);
     return true;
 }
 
@@ -892,7 +910,7 @@ function advancedfunctionality_meta()
  */
 function advancedfunctionality_action_handler(\$action)
 {
-    global \$page, \$mybb;
+    global \$page, \$mybb, \$lang;
     \$page->active_module = 'advancedfunctionality';
 
     \$view = \$mybb->get_input('af_view');
@@ -911,7 +929,7 @@ function advancedfunctionality_action_handler(\$action)
 function advancedfunctionality_admin_permissions()
 {
     return [
-        'name'        => 'Расширенный функционал',
+        'name'        => 'Advanced functionality',
         'permissions' => ['index' => 'Доступ'],
         'disporder'   => 60
     ];
@@ -1148,52 +1166,53 @@ function af_ensure_core_languages(bool $force = false): void
             'af_addon_enabled' => 'Аддон включён.',
             'af_addon_disabled'=> 'Аддон отключён.',
             'af_author'        => 'Автор',
-            'af_theme_stylesheets_title' => 'AF Theme Stylesheets',
-            'af_theme_stylesheets_help' => 'Сервисная страница регистрации и обслуживания AF-managed theme stylesheets.',
+            'af_admin_menu_overview' => 'Обзор аддонов',
+            'af_theme_stylesheets_title' => 'Стили тем AF',
+            'af_theme_stylesheets_help' => 'Сервисная страница регистрации и обслуживания стилей тем, управляемых AF.',
             'af_theme_stylesheets_help_actions' => 'Редактирование CSS и свойств выполняется в штатном редакторе stylesheet’ов ACP MyBB (кнопки Edit stylesheet / Edit properties). Sync/Rebuild/Force resync — только сервисные действия.',
-            'af_theme_stylesheets_col_theme_id' => 'Theme ID',
-            'af_theme_stylesheets_col_theme_title' => 'Theme title',
-            'af_theme_stylesheets_col_addon' => 'Addon ID',
-            'af_theme_stylesheets_col_logical' => 'Logical ID',
-            'af_theme_stylesheets_col_name' => 'MyBB stylesheet',
-            'af_theme_stylesheets_col_seed' => 'Seed file',
-            'af_theme_stylesheets_col_mode' => 'Mode',
-            'af_theme_stylesheets_col_status' => 'Status',
-            'af_theme_stylesheets_col_attached' => 'Attached to',
-            'af_theme_stylesheets_col_sync' => 'Last sync',
-            'af_theme_stylesheets_col_actions' => 'Actions',
+            'af_theme_stylesheets_col_theme_id' => 'ID темы',
+            'af_theme_stylesheets_col_theme_title' => 'Название темы',
+            'af_theme_stylesheets_col_addon' => 'ID аддона',
+            'af_theme_stylesheets_col_logical' => 'Логический ID',
+            'af_theme_stylesheets_col_name' => 'Stylesheet MyBB',
+            'af_theme_stylesheets_col_seed' => 'Seed-файл',
+            'af_theme_stylesheets_col_mode' => 'Режим',
+            'af_theme_stylesheets_col_status' => 'Статус',
+            'af_theme_stylesheets_col_attached' => 'Подключён к',
+            'af_theme_stylesheets_col_sync' => 'Последняя синхронизация',
+            'af_theme_stylesheets_col_actions' => 'Действия',
             'af_theme_stylesheets_empty' => 'Зарегистрированные theme stylesheets не найдены.',
-            'af_theme_stylesheets_edit_stylesheet' => 'Edit stylesheet',
-            'af_theme_stylesheets_edit_properties' => 'Edit properties',
-            'af_theme_stylesheets_sync_all' => 'Sync all',
-            'af_theme_stylesheets_sync_addon' => 'Sync addon',
-            'af_theme_stylesheets_rebuild_missing' => 'Rebuild missing',
-            'af_theme_stylesheets_force_resync' => 'Force resync',
-            'af_theme_stylesheets_hash_status' => 'Show diff/hash status',
-            'af_theme_stylesheets_restore_safe' => 'Restore from seed (safe)',
-            'af_theme_stylesheets_filter_addon' => 'Addon filter',
-            'af_theme_stylesheets_filter_all_addons' => 'All addons',
-            'af_theme_stylesheets_filter_theme_scope' => 'Themes',
-            'af_theme_stylesheets_filter_current_theme' => 'Current theme',
-            'af_theme_stylesheets_filter_all_themes' => 'All themes',
-            'af_theme_stylesheets_apply_filter' => 'Apply filter',
-            'af_theme_stylesheets_clear_filter' => 'clear',
+            'af_theme_stylesheets_edit_stylesheet' => 'Редактировать stylesheet',
+            'af_theme_stylesheets_edit_properties' => 'Редактировать свойства',
+            'af_theme_stylesheets_sync_all' => 'Синхронизировать всё',
+            'af_theme_stylesheets_sync_addon' => 'Синхронизировать аддон',
+            'af_theme_stylesheets_rebuild_missing' => 'Восстановить отсутствующие',
+            'af_theme_stylesheets_force_resync' => 'Принудительная пересинхронизация',
+            'af_theme_stylesheets_hash_status' => 'Показать статус diff/hash',
+            'af_theme_stylesheets_restore_safe' => 'Восстановить из seed (safe)',
+            'af_theme_stylesheets_filter_addon' => 'Фильтр по аддону',
+            'af_theme_stylesheets_filter_all_addons' => 'Все аддоны',
+            'af_theme_stylesheets_filter_theme_scope' => 'Темы',
+            'af_theme_stylesheets_filter_current_theme' => 'Текущая тема',
+            'af_theme_stylesheets_filter_all_themes' => 'Все темы',
+            'af_theme_stylesheets_apply_filter' => 'Применить фильтр',
+            'af_theme_stylesheets_clear_filter' => 'Сбросить',
             'af_theme_stylesheets_force_confirm' => 'Force resync требует явного подтверждения (confirm_force=1).',
-            'af_theme_stylesheets_diag_found' => 'found in theme',
-            'af_theme_stylesheets_diag_seed' => 'seed checksum',
-            'af_theme_stylesheets_diag_duplicate' => 'duplicate risk',
-            'af_theme_stylesheets_diag_attached' => 'attached pages',
-            'af_theme_stylesheets_status_ok' => 'ok',
-            'af_theme_stylesheets_status_missing' => 'missing',
-            'af_theme_stylesheets_status_manual_override' => 'edited in ACP (local override)',
-            'af_theme_stylesheets_status_outdated' => 'outdated',
-            'af_theme_stylesheets_status_duplicate_risk' => 'duplicate risk',
-            'af_theme_stylesheets_msg_sync_all' => 'Sync all completed.',
-            'af_theme_stylesheets_msg_sync_addon' => 'Sync addon completed.',
-            'af_theme_stylesheets_msg_rebuild_missing' => 'Rebuild missing completed.',
-            'af_theme_stylesheets_msg_force_resync' => 'Force resync completed.',
-            'af_theme_stylesheets_msg_restore_safe' => 'Safe restore completed.',
-            'af_theme_stylesheets_msg_hash_status' => 'Status refreshed.',
+            'af_theme_stylesheets_diag_found' => 'найдено в теме',
+            'af_theme_stylesheets_diag_seed' => 'контрольная сумма seed',
+            'af_theme_stylesheets_diag_duplicate' => 'риск дубликата',
+            'af_theme_stylesheets_diag_attached' => 'подключённые страницы',
+            'af_theme_stylesheets_status_ok' => 'ок',
+            'af_theme_stylesheets_status_missing' => 'отсутствует',
+            'af_theme_stylesheets_status_manual_override' => 'изменён в ACP (локальный override)',
+            'af_theme_stylesheets_status_outdated' => 'устарел',
+            'af_theme_stylesheets_status_duplicate_risk' => 'риск дубликата',
+            'af_theme_stylesheets_msg_sync_all' => 'Синхронизация всех завершена.',
+            'af_theme_stylesheets_msg_sync_addon' => 'Синхронизация аддона завершена.',
+            'af_theme_stylesheets_msg_rebuild_missing' => 'Восстановление отсутствующих завершено.',
+            'af_theme_stylesheets_msg_force_resync' => 'Принудительная пересинхронизация завершена.',
+            'af_theme_stylesheets_msg_restore_safe' => 'Безопасное восстановление завершено.',
+            'af_theme_stylesheets_msg_hash_status' => 'Статус обновлён.',
         ],
         $force
     );
@@ -1226,6 +1245,7 @@ function af_ensure_core_languages(bool $force = false): void
             'af_addon_enabled' => 'Addon enabled.',
             'af_addon_disabled'=> 'Addon disabled.',
             'af_author'        => 'Author',
+            'af_admin_menu_overview' => 'Addons overview',
             'af_theme_stylesheets_title' => 'AF Theme Stylesheets',
             'af_theme_stylesheets_help' => 'Service page for registering and maintaining AF-managed theme stylesheets.',
             'af_theme_stylesheets_help_actions' => 'CSS and stylesheet properties are edited in native MyBB ACP stylesheet editor (Edit stylesheet / Edit properties). Sync/Rebuild/Force resync are service operations only.',
