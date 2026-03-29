@@ -321,7 +321,7 @@ class AF_Admin
 {
     public static function dispatch()
     {
-        global $mybb, $page, $lang, $db;
+        global $mybb, $page, $lang;
 
         af_ensure_scaffold(false);
         af_ensure_core_languages(false);
@@ -340,7 +340,12 @@ class AF_Admin
             admin_redirect('index.php?module='.AF_PLUGIN_ID.'&_='.TIME_NOW);
         }
 
-        if ($action && $addon) {
+        if (strpos((string)$action, 'theme_stylesheets_') === 0) {
+            verify_post_check($mybb->get_input('my_post_key'));
+            self::handleThemeStylesheetsAction($action, $addon);
+        }
+
+        if ($action && $addon && strpos((string)$action, 'theme_stylesheets_') !== 0) {
             verify_post_check($mybb->get_input('my_post_key'));
 
             if ($action === 'enable') {
@@ -366,7 +371,9 @@ class AF_Admin
 
         $page->output_header($lang->af_admin_title);
 
-        if ($view) {
+        if ($view === 'theme_stylesheets') {
+            self::renderThemeStylesheetsPage();
+        } elseif ($view) {
             $sections = self::collectAdminSections();
             foreach ($sections as $sec) {
                 if ($sec['slug'] === $view) {
@@ -381,7 +388,6 @@ class AF_Admin
                 $klass = $ctrl['class'];
 
                 if (class_exists($klass) && method_exists($klass, 'dispatch')) {
-                    // контроллер НЕ должен вызывать output_header/output_footer
                     call_user_func([$klass, 'dispatch']);
                 } else {
                     echo '<div class="error">Контроллер найден, но класс/метод не обнаружен.</div>';
@@ -460,22 +466,246 @@ class AF_Admin
             }
 
             $table->output($lang->af_admin_title);
-
-            echo '<br />';
-            echo '<form method="post" action="index.php?module='.AF_PLUGIN_ID.'" style="margin:0;">'
-                . '<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'">'
-                . '<input type="hidden" name="af_action" value="sync_theme_stylesheets">'
-                . '<input type="submit" class="submit_button" value="Force resync AF theme stylesheets">'
-                . '</form>';
         }
 
         $page->output_footer();
         exit;
     }
 
+    private static function handleThemeStylesheetsAction(string $action, string $addon): void
+    {
+        global $mybb, $lang;
+
+        $addonId = trim($addon);
+        $confirmForce = $mybb->get_input('confirm_force', MyBB::INPUT_INT) === 1;
+        $themeTid = $mybb->get_input('theme_tid', MyBB::INPUT_INT);
+
+        if ($action === 'theme_stylesheets_force_resync' && !$confirmForce) {
+            flash_message($lang->af_theme_stylesheets_force_confirm, 'error');
+            admin_redirect(self::themeStylesheetsUrl($addonId !== '' ? $addonId : null, $themeTid > 0 ? $themeTid : null));
+        }
+
+        $op = 'status';
+        if ($action === 'theme_stylesheets_sync_all') {
+            $op = 'sync_all';
+        } elseif ($action === 'theme_stylesheets_sync_addon') {
+            $op = 'sync_addon';
+        } elseif ($action === 'theme_stylesheets_rebuild_missing') {
+            $op = 'rebuild_missing';
+        } elseif ($action === 'theme_stylesheets_force_resync') {
+            $op = 'force_resync';
+        } elseif ($action === 'theme_stylesheets_restore_safe') {
+            $op = 'restore_safe';
+        } elseif ($action === 'theme_stylesheets_hash_status') {
+            $op = 'hash_status';
+        }
+
+        $result = af_theme_stylesheets_execute_action($op, $addonId !== '' ? $addonId : null, $confirmForce);
+        $message = af_theme_stylesheets_action_message($op, $result, $lang);
+        flash_message($message, 'success');
+        admin_redirect(self::themeStylesheetsUrl($addonId !== '' ? $addonId : null, $themeTid > 0 ? $themeTid : null));
+    }
+
+    private static function renderThemeStylesheetsPage(): void
+    {
+        global $mybb, $lang;
+
+        $addonFilter = trim((string)$mybb->get_input('addon'));
+        $themeFilter = strtolower(trim((string)$mybb->get_input('theme_scope')));
+        if (!in_array($themeFilter, ['current', 'all'], true)) {
+            $themeFilter = 'current';
+        }
+
+        $currentThemeTid = self::currentThemeTid();
+        $rows = af_collect_theme_stylesheet_diagnostics($addonFilter !== '' ? $addonFilter : null);
+
+        if ($themeFilter === 'current') {
+            $rows = array_values(array_filter($rows, static function (array $row) use ($currentThemeTid): bool {
+                return (int)($row['theme_tid'] ?? 0) === $currentThemeTid;
+            }));
+        }
+
+        echo '<h2>'.htmlspecialchars_uni($lang->af_theme_stylesheets_title).'</h2>';
+        echo '<p class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_help).'</p>';
+        echo '<p class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_help_actions).'</p>';
+
+        self::renderThemeStylesheetFilters($addonFilter, $themeFilter);
+
+        echo '<div style="margin:8px 0 14px 0;">';
+        echo self::renderThemeStylesheetActionForm('theme_stylesheets_sync_all', $lang->af_theme_stylesheets_sync_all, '', false, false, $themeFilter);
+        echo '&nbsp;';
+        echo self::renderThemeStylesheetActionForm('theme_stylesheets_rebuild_missing', $lang->af_theme_stylesheets_rebuild_missing, '', false, false, $themeFilter);
+        echo '&nbsp;';
+        echo self::renderThemeStylesheetActionForm('theme_stylesheets_force_resync', $lang->af_theme_stylesheets_force_resync, '', false, true, $themeFilter);
+        echo '&nbsp;';
+        echo self::renderThemeStylesheetActionForm('theme_stylesheets_hash_status', $lang->af_theme_stylesheets_hash_status, '', false, false, $themeFilter);
+        echo '</div>';
+
+        $table = new Table;
+        $table->construct_header($lang->af_theme_stylesheets_col_theme_id, ['width' => '5%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_theme_title, ['width' => '11%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_addon, ['width' => '8%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_logical, ['width' => '8%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_name, ['width' => '10%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_seed, ['width' => '14%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_mode, ['width' => '6%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_status, ['width' => '8%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_attached, ['width' => '10%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_sync, ['width' => '8%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_actions, ['width' => '12%']);
+
+        if (!$rows) {
+            $table->construct_cell($lang->af_theme_stylesheets_empty, ['colspan' => 11, 'class' => 'align_center']);
+            $table->construct_row();
+        } else {
+            foreach ($rows as $row) {
+                $addonId = (string)$row['addon_id'];
+                $themeTid = (int)($row['theme_tid'] ?? 0);
+                $statusRaw = (string)$row['status'];
+                $statusLabelKey = 'af_theme_stylesheets_status_'.$statusRaw;
+                $statusLabel = isset($lang->{$statusLabelKey}) ? $lang->{$statusLabelKey} : $statusRaw;
+                $statusColor = '#2f6f2f';
+                if ($statusRaw === 'missing' || $statusRaw === 'outdated') $statusColor = '#a66900';
+                if ($statusRaw === 'manual_override' || $statusRaw === 'duplicate_risk') $statusColor = '#a00';
+
+                $lastSync = !empty($row['last_synced_at']) ? my_date('relative', (int)$row['last_synced_at']) : '—';
+                $mode = htmlspecialchars_uni((string)$row['mode']);
+                $attached = htmlspecialchars_uni((string)$row['attached_to']);
+                $seedFile = htmlspecialchars_uni((string)$row['seed_file']);
+
+                $actions = [];
+                $actions[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_stylesheet, 'edit_stylesheet');
+                $actions[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_properties, 'edit_stylesheet_properties');
+                $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_sync_addon', $lang->af_theme_stylesheets_sync_addon, $addonId, true, false, $themeFilter, $themeTid);
+                $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_force_resync', $lang->af_theme_stylesheets_force_resync, $addonId, true, true, $themeFilter, $themeTid);
+                $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_rebuild_missing', $lang->af_theme_stylesheets_rebuild_missing, $addonId, true, false, $themeFilter, $themeTid);
+
+                $table->construct_cell((string)$themeTid, ['class' => 'align_center']);
+                $table->construct_cell(htmlspecialchars_uni((string)($row['theme_title'] ?? ('Theme #'.$themeTid))));
+                $table->construct_cell(htmlspecialchars_uni($addonId));
+                $table->construct_cell(htmlspecialchars_uni((string)$row['logical_id']));
+                $table->construct_cell(htmlspecialchars_uni((string)$row['stylesheet_name']));
+                $table->construct_cell($seedFile);
+                $table->construct_cell($mode, ['class' => 'align_center']);
+                $table->construct_cell('<span style="color:'.$statusColor.';font-weight:600;">'.htmlspecialchars_uni($statusLabel).'</span>');
+                $table->construct_cell($attached);
+                $table->construct_cell(htmlspecialchars_uni($lastSync), ['class' => 'align_center']);
+                $table->construct_cell(implode('<br />', $actions));
+                $table->construct_row();
+            }
+        }
+
+        $table->output($lang->af_theme_stylesheets_title);
+    }
+
+    private static function renderThemeStylesheetFilters(string $addonFilter, string $themeScope): void
+    {
+        global $lang;
+
+        $addons = [];
+        foreach (self::discoverAddons() as $meta) {
+            $id = (string)($meta['id'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+            $addons[$id] = (string)($meta['name'] ?? $id);
+        }
+        ksort($addons, SORT_STRING);
+
+        echo '<form method="get" action="index.php" style="margin:10px 0 12px 0;">';
+        echo '<input type="hidden" name="module" value="'.AF_PLUGIN_ID.'">';
+        echo '<input type="hidden" name="af_view" value="theme_stylesheets">';
+        echo '<label style="margin-right:8px;">'.htmlspecialchars_uni($lang->af_theme_stylesheets_filter_addon).': ';
+        echo '<select name="addon">';
+        echo '<option value="">'.htmlspecialchars_uni($lang->af_theme_stylesheets_filter_all_addons).'</option>';
+        foreach ($addons as $id => $title) {
+            $selected = ($addonFilter === $id) ? ' selected="selected"' : '';
+            echo '<option value="'.htmlspecialchars_uni($id).'"'.$selected.'>'.htmlspecialchars_uni($title).' ('.htmlspecialchars_uni($id).')</option>';
+        }
+        echo '</select></label>';
+
+        echo '<label style="margin-right:8px;">'.htmlspecialchars_uni($lang->af_theme_stylesheets_filter_theme_scope).': ';
+        echo '<select name="theme_scope">';
+        echo '<option value="current"'.($themeScope === 'current' ? ' selected="selected"' : '').'>'.htmlspecialchars_uni($lang->af_theme_stylesheets_filter_current_theme).'</option>';
+        echo '<option value="all"'.($themeScope === 'all' ? ' selected="selected"' : '').'>'.htmlspecialchars_uni($lang->af_theme_stylesheets_filter_all_themes).'</option>';
+        echo '</select></label>';
+
+        echo '<input type="submit" class="submit_button" value="'.htmlspecialchars_uni($lang->af_theme_stylesheets_apply_filter).'">';
+        echo '&nbsp;<a href="index.php?module='.AF_PLUGIN_ID.'&amp;af_view=theme_stylesheets">'.htmlspecialchars_uni($lang->af_theme_stylesheets_clear_filter).'</a>';
+        echo '</form>';
+    }
+
+    private static function buildThemeStylesheetEditLink(array $row, string $label, string $action): string
+    {
+        $sid = (int)($row['stylesheet_sid'] ?? 0);
+        $themeTid = (int)($row['theme_tid'] ?? 0);
+
+        if ($sid <= 0 || $themeTid <= 0) {
+            return '<span style="color:#777;">'.htmlspecialchars_uni($label).'</span>';
+        }
+
+        $url = 'index.php?module=style-themes&amp;action='.$action.'&amp;sid='.$sid.'&amp;tid='.$themeTid;
+        return '<a href="'.$url.'">'.htmlspecialchars_uni($label).'</a>';
+    }
+
+    private static function renderThemeStylesheetActionForm(string $action, string $label, string $addon = '', bool $inline = false, bool $confirm = false, string $themeScope = 'current', ?int $themeTid = null): string
+    {
+        global $mybb;
+
+        $html = '<form method="post" action="index.php?module='.AF_PLUGIN_ID.'" style="margin:0;'.($inline ? 'display:inline-block;' : '').'">';
+        $html .= '<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'">';
+        $html .= '<input type="hidden" name="af_view" value="theme_stylesheets">';
+        $html .= '<input type="hidden" name="theme_scope" value="'.htmlspecialchars_uni($themeScope).'">';
+        $html .= '<input type="hidden" name="af_action" value="'.htmlspecialchars_uni($action).'">';
+        if ($addon !== '') {
+            $html .= '<input type="hidden" name="addon" value="'.htmlspecialchars_uni($addon).'">';
+        }
+        if ($themeTid !== null && $themeTid > 0) {
+            $html .= '<input type="hidden" name="theme_tid" value="'.(int)$themeTid.'">';
+        }
+        if ($confirm) {
+            $html .= '<input type="hidden" name="confirm_force" value="1">';
+        }
+        $html .= '<input type="submit" class="submit_button" value="'.htmlspecialchars_uni($label).'">';
+        $html .= '</form>';
+
+        return $html;
+    }
+
+    private static function currentThemeTid(): int
+    {
+        $theme = $GLOBALS['theme'] ?? null;
+        if (is_array($theme ?? null)) {
+            $tid = (int)($theme['tid'] ?? 0);
+            if ($tid > 0) {
+                return $tid;
+            }
+        }
+
+        global $mybb;
+        $tid = (int)($mybb->settings['theme'] ?? 0);
+        return max(1, $tid);
+    }
+
+    private static function themeStylesheetsUrl(?string $addon = null, ?int $themeTid = null): string
+    {
+        $url = 'index.php?module='.AF_PLUGIN_ID.'&af_view=theme_stylesheets';
+        if ($addon !== null && $addon !== '') {
+            $url .= '&addon='.rawurlencode($addon);
+        }
+        if ($themeTid !== null && $themeTid > 0) {
+            $url .= '&theme_tid='.(int)$themeTid;
+        }
+        return $url;
+    }
+
     public static function collectAdminSections(): array
     {
-        $out = [];
+        $out = [[
+            'id' => 'core',
+            'slug' => 'theme_stylesheets',
+            'title' => 'Theme Stylesheets',
+        ]];
         foreach (self::discoverAddons() as $meta) {
             if (!self::isAddonEnabled($meta['id'])) continue;
             if (empty($meta['admin']['slug'])) continue;
@@ -577,6 +807,7 @@ class AF_Admin
 }
 
 AF_Admin::dispatch();
+
 PHP;
 
         @file_put_contents($router, $code);
@@ -605,12 +836,17 @@ function advancedfunctionality_meta()
     // Подтягиваем основной файл плагина, чтобы были доступны af_* хелперы
     require_once MYBB_ROOT.'inc/plugins/advancedfunctionality.php';
 
-    // Базовый подпункт — обзор
+    // Базовые подпункты
     \$sub_menu   = [];
     \$sub_menu[] = [
         'id'    => 'index',
         'title' => 'Обзор аддонов',
         'link'  => 'index.php?module=advancedfunctionality',
+    ];
+    \$sub_menu[] = [
+        'id'    => 'view_theme_stylesheets',
+        'title' => 'Theme Stylesheets',
+        'link'  => 'index.php?module=advancedfunctionality&af_view=theme_stylesheets',
     ];
 
     // Динамические подпункты из включённых аддонов с admin-страницами
@@ -913,7 +1149,10 @@ function af_ensure_core_languages(bool $force = false): void
             'af_addon_disabled'=> 'Аддон отключён.',
             'af_author'        => 'Автор',
             'af_theme_stylesheets_title' => 'AF Theme Stylesheets',
-            'af_theme_stylesheets_help' => 'Управление синком/восстановлением theme stylesheets аддонов AF.',
+            'af_theme_stylesheets_help' => 'Сервисная страница регистрации и обслуживания AF-managed theme stylesheets.',
+            'af_theme_stylesheets_help_actions' => 'Редактирование CSS и свойств выполняется в штатном редакторе stylesheet’ов ACP MyBB (кнопки Edit stylesheet / Edit properties). Sync/Rebuild/Force resync — только сервисные действия.',
+            'af_theme_stylesheets_col_theme_id' => 'Theme ID',
+            'af_theme_stylesheets_col_theme_title' => 'Theme title',
             'af_theme_stylesheets_col_addon' => 'Addon ID',
             'af_theme_stylesheets_col_logical' => 'Logical ID',
             'af_theme_stylesheets_col_name' => 'MyBB stylesheet',
@@ -922,16 +1161,22 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_col_status' => 'Status',
             'af_theme_stylesheets_col_attached' => 'Attached to',
             'af_theme_stylesheets_col_sync' => 'Last sync',
-            'af_theme_stylesheets_col_diag' => 'Diagnostics / actions',
+            'af_theme_stylesheets_col_actions' => 'Actions',
             'af_theme_stylesheets_empty' => 'Зарегистрированные theme stylesheets не найдены.',
+            'af_theme_stylesheets_edit_stylesheet' => 'Edit stylesheet',
+            'af_theme_stylesheets_edit_properties' => 'Edit properties',
             'af_theme_stylesheets_sync_all' => 'Sync all',
             'af_theme_stylesheets_sync_addon' => 'Sync addon',
             'af_theme_stylesheets_rebuild_missing' => 'Rebuild missing',
             'af_theme_stylesheets_force_resync' => 'Force resync',
             'af_theme_stylesheets_hash_status' => 'Show diff/hash status',
             'af_theme_stylesheets_restore_safe' => 'Restore from seed (safe)',
-            'af_theme_stylesheets_scope_addon' => 'Filter addon',
             'af_theme_stylesheets_filter_addon' => 'Addon filter',
+            'af_theme_stylesheets_filter_all_addons' => 'All addons',
+            'af_theme_stylesheets_filter_theme_scope' => 'Themes',
+            'af_theme_stylesheets_filter_current_theme' => 'Current theme',
+            'af_theme_stylesheets_filter_all_themes' => 'All themes',
+            'af_theme_stylesheets_apply_filter' => 'Apply filter',
             'af_theme_stylesheets_clear_filter' => 'clear',
             'af_theme_stylesheets_force_confirm' => 'Force resync требует явного подтверждения (confirm_force=1).',
             'af_theme_stylesheets_diag_found' => 'found in theme',
@@ -940,7 +1185,7 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_diag_attached' => 'attached pages',
             'af_theme_stylesheets_status_ok' => 'ok',
             'af_theme_stylesheets_status_missing' => 'missing',
-            'af_theme_stylesheets_status_manual_override' => 'manual override',
+            'af_theme_stylesheets_status_manual_override' => 'edited in ACP (local override)',
             'af_theme_stylesheets_status_outdated' => 'outdated',
             'af_theme_stylesheets_status_duplicate_risk' => 'duplicate risk',
             'af_theme_stylesheets_msg_sync_all' => 'Sync all completed.',
@@ -982,7 +1227,10 @@ function af_ensure_core_languages(bool $force = false): void
             'af_addon_disabled'=> 'Addon disabled.',
             'af_author'        => 'Author',
             'af_theme_stylesheets_title' => 'AF Theme Stylesheets',
-            'af_theme_stylesheets_help' => 'Manage AF addon theme stylesheet sync, status and safe restore.',
+            'af_theme_stylesheets_help' => 'Service page for registering and maintaining AF-managed theme stylesheets.',
+            'af_theme_stylesheets_help_actions' => 'CSS and stylesheet properties are edited in native MyBB ACP stylesheet editor (Edit stylesheet / Edit properties). Sync/Rebuild/Force resync are service operations only.',
+            'af_theme_stylesheets_col_theme_id' => 'Theme ID',
+            'af_theme_stylesheets_col_theme_title' => 'Theme title',
             'af_theme_stylesheets_col_addon' => 'Addon ID',
             'af_theme_stylesheets_col_logical' => 'Logical ID',
             'af_theme_stylesheets_col_name' => 'MyBB stylesheet',
@@ -991,16 +1239,22 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_col_status' => 'Status',
             'af_theme_stylesheets_col_attached' => 'Attached to',
             'af_theme_stylesheets_col_sync' => 'Last sync',
-            'af_theme_stylesheets_col_diag' => 'Diagnostics / actions',
+            'af_theme_stylesheets_col_actions' => 'Actions',
             'af_theme_stylesheets_empty' => 'No registered theme stylesheets found.',
+            'af_theme_stylesheets_edit_stylesheet' => 'Edit stylesheet',
+            'af_theme_stylesheets_edit_properties' => 'Edit properties',
             'af_theme_stylesheets_sync_all' => 'Sync all',
             'af_theme_stylesheets_sync_addon' => 'Sync addon',
             'af_theme_stylesheets_rebuild_missing' => 'Rebuild missing',
             'af_theme_stylesheets_force_resync' => 'Force resync',
             'af_theme_stylesheets_hash_status' => 'Show diff/hash status',
             'af_theme_stylesheets_restore_safe' => 'Restore from seed (safe)',
-            'af_theme_stylesheets_scope_addon' => 'Filter addon',
             'af_theme_stylesheets_filter_addon' => 'Addon filter',
+            'af_theme_stylesheets_filter_all_addons' => 'All addons',
+            'af_theme_stylesheets_filter_theme_scope' => 'Themes',
+            'af_theme_stylesheets_filter_current_theme' => 'Current theme',
+            'af_theme_stylesheets_filter_all_themes' => 'All themes',
+            'af_theme_stylesheets_apply_filter' => 'Apply filter',
             'af_theme_stylesheets_clear_filter' => 'clear',
             'af_theme_stylesheets_force_confirm' => 'Force resync requires explicit confirmation (confirm_force=1).',
             'af_theme_stylesheets_diag_found' => 'found in theme',
@@ -1009,7 +1263,7 @@ function af_ensure_core_languages(bool $force = false): void
             'af_theme_stylesheets_diag_attached' => 'attached pages',
             'af_theme_stylesheets_status_ok' => 'ok',
             'af_theme_stylesheets_status_missing' => 'missing',
-            'af_theme_stylesheets_status_manual_override' => 'manual override',
+            'af_theme_stylesheets_status_manual_override' => 'edited in ACP (local override)',
             'af_theme_stylesheets_status_outdated' => 'outdated',
             'af_theme_stylesheets_status_duplicate_risk' => 'duplicate risk',
             'af_theme_stylesheets_msg_sync_all' => 'Sync all completed.',
@@ -1332,7 +1586,6 @@ function af_apply_preoutput_filters(string $page): string
 
     // 0) Рантайм-синк шаблонов (очень лёгкий, с сигнатурой)
     af_maybe_sync_templates_runtime();
-    af_maybe_sync_theme_stylesheets_runtime();
 
     // 1) Прогоняем pre_output аддонов
     $addons = af_discover_addons();
@@ -1825,6 +2078,14 @@ function af_collect_theme_stylesheet_diagnostics(?string $onlyAddonId = null): a
     $themeTids = af_get_theme_tids();
     $rows = [];
 
+    $themeTitles = [];
+    if (!empty($themeTids)) {
+        $themeQuery = $db->simple_select('themes', 'tid,name');
+        while ($themeRow = $db->fetch_array($themeQuery)) {
+            $themeTitles[(int)($themeRow['tid'] ?? 0)] = (string)($themeRow['name'] ?? '');
+        }
+    }
+
     foreach ($entries as $entry) {
         $addonId = (string)$entry['addon_id'];
         if ($onlyAddonId !== null && $onlyAddonId !== '' && $onlyAddonId !== $addonId) {
@@ -1896,8 +2157,10 @@ function af_collect_theme_stylesheet_diagnostics(?string $onlyAddonId = null): a
 
             $rows[] = [
                 'theme_tid' => (int)$themeTid,
+                'theme_title' => (string)($themeTitles[(int)$themeTid] ?? ('Theme #'.(int)$themeTid)),
                 'addon_id' => $addonId,
                 'logical_id' => (string)$entry['logical_id'],
+                'stylesheet_sid' => (int)($row['sid'] ?? 0),
                 'stylesheet_name' => (string)$entry['stylesheet_name'],
                 'seed_file' => (string)($seed['path'] ?? ''),
                 'mode' => $mode,
