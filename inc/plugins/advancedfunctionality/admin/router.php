@@ -166,10 +166,14 @@ class AF_Admin
         $addonId = trim($addon);
         $confirmForce = $mybb->get_input('confirm_force', MyBB::INPUT_INT) === 1;
         $themeTid = $mybb->get_input('theme_tid', MyBB::INPUT_INT);
+        $themeScope = strtolower(trim((string)$mybb->get_input('theme_scope')));
+        if (!in_array($themeScope, ['current', 'all'], true)) {
+            $themeScope = 'all';
+        }
 
         if ($action === 'theme_stylesheets_force_resync' && !$confirmForce) {
             flash_message($lang->af_theme_stylesheets_force_confirm, 'error');
-            admin_redirect(self::themeStylesheetsUrl($addonId !== '' ? $addonId : null, $themeTid > 0 ? $themeTid : null));
+            admin_redirect(self::themeStylesheetsUrl($addonId !== '' ? $addonId : null, $themeTid > 0 ? $themeTid : null, $themeScope));
         }
 
         $op = 'status';
@@ -190,7 +194,7 @@ class AF_Admin
         $result = af_theme_stylesheets_execute_action($op, $addonId !== '' ? $addonId : null, $confirmForce);
         $message = af_theme_stylesheets_action_message($op, $result, $lang);
         flash_message($message, 'success');
-        admin_redirect(self::themeStylesheetsUrl($addonId !== '' ? $addonId : null, $themeTid > 0 ? $themeTid : null));
+        admin_redirect(self::themeStylesheetsUrl($addonId !== '' ? $addonId : null, $themeTid > 0 ? $themeTid : null, $themeScope));
     }
 
     private static function renderThemeStylesheetsPage(): void
@@ -200,7 +204,7 @@ class AF_Admin
         $addonFilter = trim((string)$mybb->get_input('addon'));
         $themeFilter = strtolower(trim((string)$mybb->get_input('theme_scope')));
         if (!in_array($themeFilter, ['current', 'all'], true)) {
-            $themeFilter = 'current';
+            $themeFilter = 'all';
         }
 
         $currentThemeTid = self::currentThemeTid();
@@ -262,7 +266,7 @@ class AF_Admin
 
                 $actions = [];
                 $actions[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_stylesheet, 'edit_stylesheet');
-                $actions[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_properties, 'edit_stylesheet_properties');
+                $actions[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_properties, 'stylesheet_properties');
                 $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_sync_addon', $lang->af_theme_stylesheets_sync_addon, $addonId, true, false, $themeFilter, $themeTid);
                 $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_force_resync', $lang->af_theme_stylesheets_force_resync, $addonId, true, true, $themeFilter, $themeTid);
                 $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_rebuild_missing', $lang->af_theme_stylesheets_rebuild_missing, $addonId, true, false, $themeFilter, $themeTid);
@@ -313,29 +317,38 @@ class AF_Admin
 
         echo '<label style="margin-right:8px;">'.htmlspecialchars_uni($lang->af_theme_stylesheets_filter_theme_scope).': ';
         echo '<select name="theme_scope">';
-        echo '<option value="current"'.($themeScope === 'current' ? ' selected="selected"' : '').'>'.htmlspecialchars_uni($lang->af_theme_stylesheets_filter_current_theme).'</option>';
         echo '<option value="all"'.($themeScope === 'all' ? ' selected="selected"' : '').'>'.htmlspecialchars_uni($lang->af_theme_stylesheets_filter_all_themes).'</option>';
+        echo '<option value="current"'.($themeScope === 'current' ? ' selected="selected"' : '').'>'.htmlspecialchars_uni($lang->af_theme_stylesheets_filter_current_theme).'</option>';
         echo '</select></label>';
 
         echo '<input type="submit" class="submit_button" value="'.htmlspecialchars_uni($lang->af_theme_stylesheets_apply_filter).'">';
-        echo '&nbsp;<a href="index.php?module='.AF_PLUGIN_ID.'&amp;af_view=theme_stylesheets">'.htmlspecialchars_uni($lang->af_theme_stylesheets_clear_filter).'</a>';
+        echo '&nbsp;<a href="index.php?module='.AF_PLUGIN_ID.'&amp;af_view=theme_stylesheets&amp;theme_scope=all">'.htmlspecialchars_uni($lang->af_theme_stylesheets_clear_filter).'</a>';
         echo '</form>';
     }
 
     private static function buildThemeStylesheetEditLink(array $row, string $label, string $action): string
     {
-        $sid = (int)($row['stylesheet_sid'] ?? 0);
         $themeTid = (int)($row['theme_tid'] ?? 0);
+        $file = trim((string)($row['stylesheet_name'] ?? ''));
 
-        if ($sid <= 0 || $themeTid <= 0) {
+        if ($themeTid <= 1 || $file === '') {
             return '<span style="color:#777;">'.htmlspecialchars_uni($label).'</span>';
         }
 
-        $url = 'index.php?module=style-themes&amp;action='.$action.'&amp;sid='.$sid.'&amp;tid='.$themeTid;
+        $resolvedAction = 'edit_stylesheet';
+        if ($action === 'stylesheet_properties') {
+            $resolvedAction = 'stylesheet_properties';
+        }
+
+        $url = 'index.php?module=style-themes&amp;action='.$resolvedAction.'&amp;file='.rawurlencode($file).'&amp;tid='.$themeTid;
+        if ($resolvedAction === 'edit_stylesheet') {
+            $url .= '&amp;mode=advanced';
+        }
+
         return '<a href="'.$url.'">'.htmlspecialchars_uni($label).'</a>';
     }
 
-    private static function renderThemeStylesheetActionForm(string $action, string $label, string $addon = '', bool $inline = false, bool $confirm = false, string $themeScope = 'current', ?int $themeTid = null): string
+    private static function renderThemeStylesheetActionForm(string $action, string $label, string $addon = '', bool $inline = false, bool $confirm = false, string $themeScope = 'all', ?int $themeTid = null): string
     {
         global $mybb;
 
@@ -374,7 +387,7 @@ class AF_Admin
         return max(1, $tid);
     }
 
-    private static function themeStylesheetsUrl(?string $addon = null, ?int $themeTid = null): string
+    private static function themeStylesheetsUrl(?string $addon = null, ?int $themeTid = null, string $themeScope = 'all'): string
     {
         $url = 'index.php?module='.AF_PLUGIN_ID.'&af_view=theme_stylesheets';
         if ($addon !== null && $addon !== '') {
@@ -383,6 +396,10 @@ class AF_Admin
         if ($themeTid !== null && $themeTid > 0) {
             $url .= '&theme_tid='.(int)$themeTid;
         }
+        if (!in_array($themeScope, ['all', 'current'], true)) {
+            $themeScope = 'all';
+        }
+        $url .= '&theme_scope='.$themeScope;
         return $url;
     }
 
