@@ -17,6 +17,7 @@ define('AF_APUI_MARKER_PROFILE_START', '<!-- AF_APUI member_profile START -->');
 define('AF_APUI_MARKER_POSTBIT_START', '<!-- AF_APUI postbit_classic START -->');
 define('AF_APUI_MARKER_THREAD_START', '<!-- AF_APUI showthread START -->');
 define('AF_APUI_ASSET_MARK', '<!--af_apui_assets-->');
+define('AF_APUI_THEME_STYLESHEET_LOGICAL_ID', 'advancedprofileui_main');
 
 function af_advancedprofileui_install(): void
 {
@@ -25,6 +26,9 @@ function af_advancedprofileui_install(): void
     af_apui_ensure_schema();
     af_apui_ensure_settings();
     af_apui_apply_overrides();
+    if (function_exists('af_sync_theme_stylesheets')) {
+        af_sync_theme_stylesheets(false, AF_APUI_ID);
+    }
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -36,6 +40,9 @@ function af_advancedprofileui_activate(): void
     af_apui_ensure_schema();
     af_apui_ensure_settings();
     af_apui_apply_overrides();
+    if (function_exists('af_sync_theme_stylesheets')) {
+        af_sync_theme_stylesheets(false, AF_APUI_ID);
+    }
 
     if (function_exists('rebuild_settings')) {
         rebuild_settings();
@@ -78,6 +85,7 @@ function af_apui_ensure_settings(): void
 
     $definitions = [
         ['enabled', 'Включить AdvancedProfileUI', 'Включает подмену шаблонов member_profile и postbit_classic и подключение ассетов.', 'yesno', '1', 1],
+        ['css_delivery_mode', 'Режим доставки CSS (file/theme/auto)', "file — CSS из файла аддона; theme — CSS из theme stylesheet; auto — theme stylesheet с fallback на file.", "select\nfile=File (legacy)\ntheme=Theme stylesheet\nauto=Auto (theme -> file fallback)", 'auto', 9],
         ['member_profile_body_cover_url', 'member_profile: фон body (большое изображение)', 'URL большого фонового изображения для body на странице профиля.', 'text', '', 2],
         ['member_profile_body_tile_url', 'member_profile: фон body (бесшовная плитка)', 'URL маленького бесшовного изображения для tiled-фона body.', 'text', '', 3],
         ['member_profile_body_bg_mode', 'member_profile: режим фона body', 'cover или tile.', 'text', 'cover', 4],
@@ -262,6 +270,129 @@ function af_apui_register_hooks(): void
     $plugins->add_hook('global_start', 'af_apui_global_start', 10);
 }
 af_apui_register_hooks();
+
+function af_apui_get_css_delivery_mode(): string
+{
+    global $mybb;
+
+    $mode = strtolower(trim((string)($mybb->settings['af_' . AF_APUI_ID . '_css_delivery_mode'] ?? 'auto')));
+    if (!in_array($mode, ['file', 'theme', 'auto'], true)) {
+        $mode = 'auto';
+    }
+
+    return $mode;
+}
+
+function af_apui_current_theme_tid(): int
+{
+    $theme = $GLOBALS['theme'] ?? null;
+    if (is_array($theme ?? null)) {
+        $tid = (int)($theme['tid'] ?? 0);
+        if ($tid > 0) {
+            return $tid;
+        }
+    }
+
+    global $mybb;
+    $tid = (int)($mybb->settings['theme'] ?? 0);
+    return max(1, $tid);
+}
+
+function af_apui_is_stylesheet_attached_to_request(string $attachedTo): bool
+{
+    global $mybb;
+
+    $attachedTo = trim($attachedTo);
+    if ($attachedTo === '') {
+        return false;
+    }
+
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    $action = strtolower(trim((string)($mybb->input['action'] ?? '')));
+    $tokens = preg_split('~\|~', $attachedTo) ?: [];
+
+    foreach ($tokens as $tokenRaw) {
+        $token = trim((string)$tokenRaw);
+        if ($token === '') {
+            continue;
+        }
+        if (strtolower($token) === 'global') {
+            return true;
+        }
+
+        $parts = explode('?', $token, 2);
+        $file = strtolower(trim((string)$parts[0]));
+        $file = basename($file);
+        if ($file === '') {
+            continue;
+        }
+        if (strpos($file, '.php') === false) {
+            $file .= '.php';
+        }
+
+        if ($script !== '' && $file !== $script) {
+            continue;
+        }
+
+        if (!isset($parts[1]) || trim((string)$parts[1]) === '') {
+            return true;
+        }
+
+        parse_str((string)$parts[1], $query);
+        $neededAction = strtolower(trim((string)($query['action'] ?? '')));
+        if ($neededAction === '' || $neededAction === $action) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function af_apui_theme_stylesheet_is_available(): bool
+{
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+
+    global $db;
+
+    if (!defined('AF_THEME_STYLESHEETS_TABLE') || !$db->table_exists(AF_THEME_STYLESHEETS_TABLE)) {
+        $cached = false;
+        return false;
+    }
+
+    $themeTid = af_apui_current_theme_tid();
+    $addonEsc = $db->escape_string(AF_APUI_ID);
+    $logicalEsc = $db->escape_string(AF_APUI_THEME_STYLESHEET_LOGICAL_ID);
+
+    $stateQ = $db->simple_select(
+        AF_THEME_STYLESHEETS_TABLE,
+        'stylesheet_sid',
+        "theme_tid='" . (int)$themeTid . "' AND addon_id='" . $addonEsc . "' AND logical_id='" . $logicalEsc . "'",
+        ['limit' => 1]
+    );
+    $sid = (int)$db->fetch_field($stateQ, 'stylesheet_sid');
+    if ($sid <= 0) {
+        $cached = false;
+        return false;
+    }
+
+    $rowQ = $db->simple_select(
+        'themestylesheets',
+        'sid,attachedto',
+        "sid='" . (int)$sid . "' AND tid='" . (int)$themeTid . "'",
+        ['limit' => 1]
+    );
+    $row = $db->fetch_array($rowQ);
+    if (!is_array($row) || (int)($row['sid'] ?? 0) <= 0) {
+        $cached = false;
+        return false;
+    }
+
+    $cached = af_apui_is_stylesheet_attached_to_request((string)($row['attachedto'] ?? ''));
+    return $cached;
+}
 
 
 
@@ -1633,12 +1764,31 @@ function af_apui_pre_output_page(string &$page): void
 
     $bburl = rtrim((string)($GLOBALS['mybb']->settings['bburl'] ?? ''), '/');
     $base = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_APUI_ID . '/assets';
-
-    $cssUrl = af_apui_add_ver($base . '/advancedprofileui.css', AF_APUI_ASSETS_DIR . 'advancedprofileui.css');
     $jsUrl = af_apui_add_ver($base . '/advancedprofileui.js', AF_APUI_ASSETS_DIR . 'advancedprofileui.js');
 
+    $cssMode = af_apui_get_css_delivery_mode();
+    $useFileCss = true;
+    $themeCssAvailable = false;
+
+    if ($cssMode !== 'file') {
+        if (function_exists('af_sync_theme_stylesheets')) {
+            af_sync_theme_stylesheets(false, AF_APUI_ID);
+        }
+        $themeCssAvailable = af_apui_theme_stylesheet_is_available();
+        $useFileCss = !$themeCssAvailable;
+    }
+
+    if ($cssMode === 'theme') {
+        // В theme-режиме стараемся не дублировать CSS из файла.
+        // Если stylesheet недоступен, сохраняем рабочий фронт через fallback.
+        $useFileCss = !$themeCssAvailable;
+    }
+
     $injection = "\n" . AF_APUI_ASSET_MARK . "\n";
-    $injection .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($cssUrl) . '">' . "\n";
+    if ($useFileCss) {
+        $cssUrl = af_apui_add_ver($base . '/advancedprofileui.css', AF_APUI_ASSETS_DIR . 'advancedprofileui.css');
+        $injection .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($cssUrl) . '">' . "\n";
+    }
     $injection .= af_apui_build_runtime_style_tag();
     $injection .= '<script src="' . htmlspecialchars_uni($jsUrl) . '" defer></script>' . "\n";
 
