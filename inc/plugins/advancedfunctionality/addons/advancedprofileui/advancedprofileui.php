@@ -1768,20 +1768,10 @@ function af_apui_pre_output_page(string &$page): void
 
     $cssMode = af_apui_get_css_delivery_mode();
     $useFileCss = true;
-    $themeCssAvailable = false;
-
-    if ($cssMode !== 'file') {
-        if (function_exists('af_sync_theme_stylesheets')) {
-            af_sync_theme_stylesheets(false, AF_APUI_ID);
-        }
-        $themeCssAvailable = af_apui_theme_stylesheet_is_available();
-        $useFileCss = !$themeCssAvailable;
-    }
-
+    // На фронте сохраняем безопасный файловый CSS как основной источник.
+    // Theme stylesheet остаётся сервисным ACP-механизмом, без runtime-зависимости.
     if ($cssMode === 'theme') {
-        // В theme-режиме стараемся не дублировать CSS из файла.
-        // Если stylesheet недоступен, сохраняем рабочий фронт через fallback.
-        $useFileCss = !$themeCssAvailable;
+        $useFileCss = true;
     }
 
     $injection = "\n" . AF_APUI_ASSET_MARK . "\n";
