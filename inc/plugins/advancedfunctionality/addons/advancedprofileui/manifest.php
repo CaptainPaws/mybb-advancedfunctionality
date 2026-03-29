@@ -13,4 +13,17 @@ return [
         'controller' => 'admin.php',
         'icon'       => 'user',
     ],
+    'theme_stylesheets' => [
+        [
+            'id' => 'advancedprofileui_main',
+            'file' => 'assets/advancedprofileui.css',
+            'stylesheet_name' => 'af_advancedprofileui.css',
+            'attach' => [
+                ['file' => 'global'],
+                ['file' => 'member.php'],
+                ['file' => 'showthread.php'],
+            ],
+            'enabled_setting' => 'af_advancedprofileui_enabled',
+        ],
+    ],
 ];

@@ -20,6 +20,13 @@ class AF_Admin
         $addon  = $mybb->get_input('addon');
         $view   = $mybb->get_input('af_view');
 
+        if ($action === 'sync_theme_stylesheets') {
+            verify_post_check($mybb->get_input('my_post_key'));
+            af_sync_theme_stylesheets(true);
+            flash_message('AF theme stylesheets resynced from seed files.', 'success');
+            admin_redirect('index.php?module='.AF_PLUGIN_ID.'&_='.TIME_NOW);
+        }
+
         if ($action && $addon) {
             verify_post_check($mybb->get_input('my_post_key'));
 
@@ -140,6 +147,13 @@ class AF_Admin
             }
 
             $table->output($lang->af_admin_title);
+
+            echo '<br />';
+            echo '<form method="post" action="index.php?module='.AF_PLUGIN_ID.'" style="margin:0;">'
+                . '<input type="hidden" name="my_post_key" value="'.htmlspecialchars_uni($mybb->post_code).'">'
+                . '<input type="hidden" name="af_action" value="sync_theme_stylesheets">'
+                . '<input type="submit" class="submit_button" value="Force resync AF theme stylesheets">'
+                . '</form>';
         }
 
         $page->output_footer();
@@ -193,12 +207,14 @@ class AF_Admin
         }
         self::ensureEnabledSetting($id, 1);
         af_rebuild_and_reload_settings();
+        af_sync_theme_stylesheets(false, $id);
     }
 
     public static function disableAddon(string $id): void
     {
         self::ensureEnabledSetting($id, 0);
         af_rebuild_and_reload_settings();
+        af_sync_theme_stylesheets(false, $id);
     }
 
     public static function addonBootstrap(string $id): ?string
