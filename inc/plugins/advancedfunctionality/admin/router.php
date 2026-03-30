@@ -344,7 +344,7 @@ class AF_Admin
     private static function buildThemeStylesheetEditLink(array $row, string $label, string $action): string
     {
         $themeTid = (int)($row['theme_tid'] ?? 0);
-        $file = trim((string)($row['stylesheet_name'] ?? ''));
+        $file = trim((string)($row['db_stylesheet_name'] ?? ($row['stylesheet_name'] ?? '')));
 
         if ($themeTid <= 0 || $file === '') {
             return '<span style="color:#777;">'.htmlspecialchars_uni($label).'</span>';
@@ -402,7 +402,13 @@ class AF_Admin
 
         global $mybb;
         $tid = (int)($mybb->settings['theme'] ?? 0);
-        return max(1, $tid);
+        if ($tid > 1) {
+            return $tid;
+        }
+        global $db;
+        $q = $db->simple_select('themes', 'tid', "tid > 1", ['order_by' => 'tid', 'order_dir' => 'asc', 'limit' => 1]);
+        $fallback = (int)$db->fetch_field($q, 'tid');
+        return $fallback > 1 ? $fallback : 1;
     }
 
     private static function themeStylesheetsUrl(?string $addon = null, ?int $themeTid = null, string $themeScope = 'all'): string
