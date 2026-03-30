@@ -228,26 +228,17 @@ class AF_Admin
         echo '<h2>'.htmlspecialchars_uni($lang->af_theme_stylesheets_title).'</h2>';
         echo '<p class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_help).'</p>';
         echo '<p class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_help_actions).'</p>';
-        echo '<div class="notice" style="margin:10px 0 12px 0;padding:10px 12px;">';
-        echo '<strong>'.htmlspecialchars_uni($lang->af_theme_stylesheets_quick_help_title).'</strong>';
-        echo '<ul style="margin:8px 0 0 18px;">';
-        echo '<li><strong>'.htmlspecialchars_uni($lang->af_theme_stylesheets_edit_in_acp).':</strong> '.htmlspecialchars_uni($lang->af_theme_stylesheets_help_edit_in_acp).'</li>';
-        echo '<li><strong>'.htmlspecialchars_uni($lang->af_theme_stylesheets_edit_stylesheet).':</strong> '.htmlspecialchars_uni($lang->af_theme_stylesheets_help_edit_stylesheet).'</li>';
-        echo '<li><strong>'.htmlspecialchars_uni($lang->af_theme_stylesheets_edit_properties).':</strong> '.htmlspecialchars_uni($lang->af_theme_stylesheets_help_edit_properties).'</li>';
-        echo '<li><strong>'.htmlspecialchars_uni($lang->af_theme_stylesheets_set_file_mode).' / '.htmlspecialchars_uni($lang->af_theme_stylesheets_set_theme_mode).':</strong> '.htmlspecialchars_uni($lang->af_theme_stylesheets_help_modes).'</li>';
-        echo '<li><strong>'.htmlspecialchars_uni($lang->af_theme_stylesheets_sync_addon).':</strong> '.htmlspecialchars_uni($lang->af_theme_stylesheets_help_sync_addon).'</li>';
-        echo '<li><strong>'.htmlspecialchars_uni($lang->af_theme_stylesheets_force_resync).':</strong> '.htmlspecialchars_uni($lang->af_theme_stylesheets_help_force_resync).'</li>';
-        echo '<li><strong>'.htmlspecialchars_uni($lang->af_theme_stylesheets_rebuild_missing).':</strong> '.htmlspecialchars_uni($lang->af_theme_stylesheets_help_rebuild_missing).'</li>';
-        echo '</ul>';
-        echo '</div>';
 
         self::renderThemeStylesheetFilters($addonFilter, $themeFilter);
 
-        echo '<div style="margin:8px 0 14px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
-        echo self::renderThemeStylesheetActionForm('theme_stylesheets_sync_all', $lang->af_theme_stylesheets_sync_all, '', true, false, $themeFilter, null, '', false);
-        echo self::renderThemeStylesheetActionForm('theme_stylesheets_rebuild_missing', $lang->af_theme_stylesheets_rebuild_missing, '', true, false, $themeFilter, null, '', false);
-        echo self::renderThemeStylesheetActionForm('theme_stylesheets_force_resync', $lang->af_theme_stylesheets_force_resync, '', true, true, $themeFilter, null, '', false);
-        echo self::renderThemeStylesheetActionForm('theme_stylesheets_hash_status', $lang->af_theme_stylesheets_hash_status, '', true, false, $themeFilter, null, '', false);
+        echo '<div style="margin:8px 0 14px 0;">';
+        echo self::renderThemeStylesheetActionForm('theme_stylesheets_sync_all', $lang->af_theme_stylesheets_sync_all, '', false, false, $themeFilter);
+        echo '&nbsp;';
+        echo self::renderThemeStylesheetActionForm('theme_stylesheets_rebuild_missing', $lang->af_theme_stylesheets_rebuild_missing, '', false, false, $themeFilter);
+        echo '&nbsp;';
+        echo self::renderThemeStylesheetActionForm('theme_stylesheets_force_resync', $lang->af_theme_stylesheets_force_resync, '', false, true, $themeFilter);
+        echo '&nbsp;';
+        echo self::renderThemeStylesheetActionForm('theme_stylesheets_hash_status', $lang->af_theme_stylesheets_hash_status, '', false, false, $themeFilter);
         echo '</div>';
 
         $table = new Table;
@@ -293,17 +284,17 @@ class AF_Admin
                 $logicalView = self::shortCell($logicalRaw, 26);
                 $nameView = self::shortCell($nameRaw, 28);
 
-                $actionsPrimary = [];
-                $actionsPrimary[] = self::buildThemeStylesheetAcpLink($row, $lang->af_theme_stylesheets_edit_in_acp);
-                $actionsPrimary[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_stylesheet, 'edit_stylesheet', false);
-                $actionsPrimary[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_properties, 'stylesheet_properties', false);
-
-                $actionsSecondary = [];
-                $actionsSecondary[] = self::renderThemeStylesheetActionForm('theme_stylesheets_set_file_mode', $lang->af_theme_stylesheets_set_file_mode, $addonId, true, false, $themeFilter, $themeTid, (string)$row['logical_id'], true);
-                $actionsSecondary[] = self::renderThemeStylesheetActionForm('theme_stylesheets_set_theme_mode', $lang->af_theme_stylesheets_set_theme_mode, $addonId, true, false, $themeFilter, $themeTid, (string)$row['logical_id'], true);
-                $actionsSecondary[] = self::renderThemeStylesheetActionForm('theme_stylesheets_sync_addon', $lang->af_theme_stylesheets_sync_addon, $addonId, true, false, $themeFilter, $themeTid, '', true);
-                $actionsSecondary[] = self::renderThemeStylesheetActionForm('theme_stylesheets_force_resync', $lang->af_theme_stylesheets_force_resync, $addonId, true, true, $themeFilter, $themeTid, '', true);
-                $actionsSecondary[] = self::renderThemeStylesheetActionForm('theme_stylesheets_rebuild_missing', $lang->af_theme_stylesheets_rebuild_missing, $addonId, true, false, $themeFilter, $themeTid, '', true);
+                $actions = [];
+                if (empty($row['is_integrated'])) {
+                    $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_integrate', $lang->af_theme_stylesheets_integrate, $addonId, true, false, $themeFilter, $themeTid, (string)$row['logical_id']);
+                }
+                $actions[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_stylesheet, 'edit_stylesheet');
+                $actions[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_properties, 'stylesheet_properties');
+                $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_set_file_mode', $lang->af_theme_stylesheets_set_file_mode, $addonId, true, false, $themeFilter, $themeTid, (string)$row['logical_id']);
+                $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_set_theme_mode', $lang->af_theme_stylesheets_set_theme_mode, $addonId, true, false, $themeFilter, $themeTid, (string)$row['logical_id']);
+                $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_sync_addon', $lang->af_theme_stylesheets_sync_addon, $addonId, true, false, $themeFilter, $themeTid);
+                $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_force_resync', $lang->af_theme_stylesheets_force_resync, $addonId, true, true, $themeFilter, $themeTid);
+                $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_rebuild_missing', $lang->af_theme_stylesheets_rebuild_missing, $addonId, true, false, $themeFilter, $themeTid);
 
                 $table->construct_cell((string)$themeTid, ['class' => 'align_center']);
                 $table->construct_cell(self::shortCell((string)($row['theme_title'] ?? ('Theme #'.$themeTid)), 24));
@@ -323,9 +314,11 @@ class AF_Admin
                 $table->construct_cell($statusHtml);
                 $table->construct_cell($attached);
                 $table->construct_cell(htmlspecialchars_uni($lastSync), ['class' => 'align_center']);
-                $primary = '<div style="display:flex;flex-wrap:wrap;gap:6px;">'.implode('', $actionsPrimary).'</div>';
-                $secondary = '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">'.implode('', $actionsSecondary).'</div>';
-                $table->construct_cell($primary.$secondary);
+                $primary = implode('&nbsp;', array_slice($actions, 0, 3));
+                $secondary = implode(' ', array_map(static function (string $actionHtml): string {
+                    return '<span class="smalltext">'.$actionHtml.'</span>';
+                }, array_slice($actions, 3)));
+                $table->construct_cell($primary.($secondary !== '' ? '<div style="margin-top:5px;">'.$secondary.'</div>' : ''));
                 $table->construct_row();
             }
         }
@@ -370,17 +363,7 @@ class AF_Admin
         echo '</form>';
     }
 
-    private static function buildThemeStylesheetAcpLink(array $row, string $label): string
-    {
-        $themeTid = (int)($row['theme_tid'] ?? 0);
-        if ($themeTid <= 0) {
-            return '<span style="color:#777;">'.htmlspecialchars_uni($label).'</span>';
-        }
-        $url = 'index.php?module=style-themes&amp;action=edit_stylesheets&amp;tid='.$themeTid;
-        return '<a class="button" style="padding:3px 8px;" title="'.htmlspecialchars_uni($label).'" href="'.$url.'">'.htmlspecialchars_uni($label).'</a>';
-    }
-
-    private static function buildThemeStylesheetEditLink(array $row, string $label, string $action, bool $small = false): string
+    private static function buildThemeStylesheetEditLink(array $row, string $label, string $action): string
     {
         $themeTid = (int)($row['theme_tid'] ?? 0);
         $file = trim((string)($row['db_stylesheet_name'] ?? ($row['stylesheet_name'] ?? '')));
@@ -399,11 +382,10 @@ class AF_Admin
             $url .= '&amp;mode=advanced';
         }
 
-        $padding = $small ? 'padding:2px 5px;font-size:11px;' : 'padding:3px 8px;';
-        return '<a class="button" style="'.$padding.'" title="'.htmlspecialchars_uni($label).'" href="'.$url.'">'.htmlspecialchars_uni($label).'</a>';
+        return '<a class="button" style="padding:2px 6px;" href="'.$url.'">'.htmlspecialchars_uni($label).'</a>';
     }
 
-    private static function renderThemeStylesheetActionForm(string $action, string $label, string $addon = '', bool $inline = false, bool $confirm = false, string $themeScope = 'all', ?int $themeTid = null, string $logicalId = '', bool $small = false): string
+    private static function renderThemeStylesheetActionForm(string $action, string $label, string $addon = '', bool $inline = false, bool $confirm = false, string $themeScope = 'all', ?int $themeTid = null, string $logicalId = ''): string
     {
         global $mybb;
 
@@ -424,12 +406,11 @@ class AF_Admin
         if ($confirm) {
             $html .= '<input type="hidden" name="confirm_force" value="1">';
         }
-        $buttonClass = $inline ? 'button' : 'submit_button';
-        $buttonStyle = '';
+        $buttonClass = 'submit_button';
         if ($inline) {
-            $buttonStyle = $small ? 'padding:2px 5px;font-size:11px;' : 'padding:3px 8px;';
+            $buttonClass = 'button';
         }
-        $html .= '<input type="submit" class="'.$buttonClass.'"'.($buttonStyle !== '' ? ' style="'.$buttonStyle.'"' : '').' title="'.htmlspecialchars_uni($label).'" value="'.htmlspecialchars_uni($label).'">';
+        $html .= '<input type="submit" class="'.$buttonClass.'" value="'.htmlspecialchars_uni($label).'">';
         $html .= '</form>';
 
         return $html;
