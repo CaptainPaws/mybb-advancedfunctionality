@@ -242,17 +242,17 @@ class AF_Admin
         echo '</div>';
 
         $table = new Table;
-        $table->construct_header($lang->af_theme_stylesheets_col_theme_id, ['width' => '5%']);
-        $table->construct_header($lang->af_theme_stylesheets_col_theme_title, ['width' => '11%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_theme_id, ['width' => '4%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_theme_title, ['width' => '10%']);
         $table->construct_header($lang->af_theme_stylesheets_col_addon, ['width' => '8%']);
-        $table->construct_header($lang->af_theme_stylesheets_col_logical, ['width' => '8%']);
-        $table->construct_header($lang->af_theme_stylesheets_col_name, ['width' => '10%']);
-        $table->construct_header($lang->af_theme_stylesheets_col_seed, ['width' => '14%']);
-        $table->construct_header($lang->af_theme_stylesheets_col_mode, ['width' => '6%']);
-        $table->construct_header($lang->af_theme_stylesheets_col_status, ['width' => '8%']);
-        $table->construct_header($lang->af_theme_stylesheets_col_attached, ['width' => '10%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_logical, ['width' => '9%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_name, ['width' => '8%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_seed, ['width' => '12%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_mode, ['width' => '5%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_status, ['width' => '11%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_attached, ['width' => '9%']);
         $table->construct_header($lang->af_theme_stylesheets_col_sync, ['width' => '8%']);
-        $table->construct_header($lang->af_theme_stylesheets_col_actions, ['width' => '12%']);
+        $table->construct_header($lang->af_theme_stylesheets_col_actions, ['width' => '16%']);
 
         if (!$rows) {
             $table->construct_cell($lang->af_theme_stylesheets_empty, ['colspan' => 11, 'class' => 'align_center']);
@@ -271,8 +271,18 @@ class AF_Admin
 
                 $lastSync = !empty($row['last_synced_at']) ? my_date('relative', (int)$row['last_synced_at']) : '—';
                 $mode = htmlspecialchars_uni((string)$row['mode']);
-                $attached = htmlspecialchars_uni((string)$row['attached_to']);
-                $seedFile = htmlspecialchars_uni((string)$row['seed_file']);
+                $attachedRaw = (string)$row['attached_to'];
+                $seedRaw = str_replace('\\', '/', (string)$row['seed_file']);
+                $logicalRaw = (string)$row['logical_id'];
+                $nameRaw = (string)$row['db_stylesheet_name'];
+                $statusHint = '';
+                if ($statusRaw === 'manual_override') {
+                    $statusHint = isset($lang->af_theme_stylesheets_status_manual_override_help) ? (string)$lang->af_theme_stylesheets_status_manual_override_help : '';
+                }
+                $attached = self::shortCell($attachedRaw, 36);
+                $seedFile = self::shortCell($seedRaw, 38);
+                $logicalView = self::shortCell($logicalRaw, 26);
+                $nameView = self::shortCell($nameRaw, 28);
 
                 $actions = [];
                 if (empty($row['is_integrated'])) {
@@ -287,16 +297,28 @@ class AF_Admin
                 $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_rebuild_missing', $lang->af_theme_stylesheets_rebuild_missing, $addonId, true, false, $themeFilter, $themeTid);
 
                 $table->construct_cell((string)$themeTid, ['class' => 'align_center']);
-                $table->construct_cell(htmlspecialchars_uni((string)($row['theme_title'] ?? ('Theme #'.$themeTid))));
+                $table->construct_cell(self::shortCell((string)($row['theme_title'] ?? ('Theme #'.$themeTid)), 24));
                 $table->construct_cell(htmlspecialchars_uni($addonId));
-                $table->construct_cell(htmlspecialchars_uni((string)$row['logical_id']));
-                $table->construct_cell(htmlspecialchars_uni((string)$row['stylesheet_name']));
+                $table->construct_cell($logicalView);
+                $table->construct_cell($nameView);
                 $table->construct_cell($seedFile);
                 $table->construct_cell($mode, ['class' => 'align_center']);
-                $table->construct_cell('<span style="color:'.$statusColor.';font-weight:600;">'.htmlspecialchars_uni($statusLabel).'</span>');
+                $statusHtml = '<span style="color:'.$statusColor.';font-weight:600;"';
+                if ($statusHint !== '') {
+                    $statusHtml .= ' title="'.htmlspecialchars_uni($statusHint).'"';
+                }
+                $statusHtml .= '>'.htmlspecialchars_uni($statusLabel).'</span>';
+                if ($statusHint !== '') {
+                    $statusHtml .= '<br><span class="smalltext">'.htmlspecialchars_uni($statusHint).'</span>';
+                }
+                $table->construct_cell($statusHtml);
                 $table->construct_cell($attached);
                 $table->construct_cell(htmlspecialchars_uni($lastSync), ['class' => 'align_center']);
-                $table->construct_cell(implode('<br />', $actions));
+                $primary = implode('&nbsp;', array_slice($actions, 0, 3));
+                $secondary = implode(' ', array_map(static function (string $actionHtml): string {
+                    return '<span class="smalltext">'.$actionHtml.'</span>';
+                }, array_slice($actions, 3)));
+                $table->construct_cell($primary.($secondary !== '' ? '<div style="margin-top:5px;">'.$secondary.'</div>' : ''));
                 $table->construct_row();
             }
         }
@@ -360,7 +382,7 @@ class AF_Admin
             $url .= '&amp;mode=advanced';
         }
 
-        return '<a href="'.$url.'">'.htmlspecialchars_uni($label).'</a>';
+        return '<a class="button" style="padding:2px 6px;" href="'.$url.'">'.htmlspecialchars_uni($label).'</a>';
     }
 
     private static function renderThemeStylesheetActionForm(string $action, string $label, string $addon = '', bool $inline = false, bool $confirm = false, string $themeScope = 'all', ?int $themeTid = null, string $logicalId = ''): string
@@ -384,10 +406,29 @@ class AF_Admin
         if ($confirm) {
             $html .= '<input type="hidden" name="confirm_force" value="1">';
         }
-        $html .= '<input type="submit" class="submit_button" value="'.htmlspecialchars_uni($label).'">';
+        $buttonClass = 'submit_button';
+        if ($inline) {
+            $buttonClass = 'button';
+        }
+        $html .= '<input type="submit" class="'.$buttonClass.'" value="'.htmlspecialchars_uni($label).'">';
         $html .= '</form>';
 
         return $html;
+    }
+
+    private static function shortCell(string $value, int $limit = 32): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '—';
+        }
+        if (function_exists('my_substr') && my_strlen($value) > $limit) {
+            return '<span title="'.htmlspecialchars_uni($value).'">'.htmlspecialchars_uni(my_substr($value, 0, $limit)).'…</span>';
+        }
+        if (strlen($value) > $limit) {
+            return '<span title="'.htmlspecialchars_uni($value).'">'.htmlspecialchars_uni(substr($value, 0, $limit)).'…</span>';
+        }
+        return '<span title="'.htmlspecialchars_uni($value).'">'.htmlspecialchars_uni($value).'</span>';
     }
 
     private static function currentThemeTid(): int
