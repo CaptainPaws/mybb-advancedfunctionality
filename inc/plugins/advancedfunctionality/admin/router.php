@@ -164,6 +164,7 @@ class AF_Admin
         global $mybb, $lang;
 
         $addonId = trim($addon);
+        $logicalId = trim((string)$mybb->get_input('logical_id'));
         $confirmForce = $mybb->get_input('confirm_force', MyBB::INPUT_INT) === 1;
         $themeTid = $mybb->get_input('theme_tid', MyBB::INPUT_INT);
         $themeScope = strtolower(trim((string)$mybb->get_input('theme_scope')));
@@ -179,6 +180,14 @@ class AF_Admin
         $op = 'status';
         if ($action === 'theme_stylesheets_sync_all') {
             $op = 'sync_all';
+        } elseif ($action === 'theme_stylesheets_integrate') {
+            $op = 'integrate';
+        } elseif ($action === 'theme_stylesheets_set_file_mode') {
+            $op = 'set_file_mode';
+        } elseif ($action === 'theme_stylesheets_set_theme_mode') {
+            $op = 'set_theme_mode';
+        } elseif ($action === 'theme_stylesheets_set_auto_mode') {
+            $op = 'set_auto_mode';
         } elseif ($action === 'theme_stylesheets_sync_addon') {
             $op = 'sync_addon';
         } elseif ($action === 'theme_stylesheets_rebuild_missing') {
@@ -191,7 +200,7 @@ class AF_Admin
             $op = 'hash_status';
         }
 
-        $result = af_theme_stylesheets_execute_action($op, $addonId !== '' ? $addonId : null, $confirmForce);
+        $result = af_theme_stylesheets_execute_action($op, $addonId !== '' ? $addonId : null, $confirmForce, $themeTid > 0 ? $themeTid : null, $logicalId !== '' ? $logicalId : null);
         $message = af_theme_stylesheets_action_message($op, $result, $lang);
         flash_message($message, 'success');
         admin_redirect(self::themeStylesheetsUrl($addonId !== '' ? $addonId : null, $themeTid > 0 ? $themeTid : null, $themeScope));
@@ -257,6 +266,7 @@ class AF_Admin
                 $statusLabel = isset($lang->{$statusLabelKey}) ? $lang->{$statusLabelKey} : $statusRaw;
                 $statusColor = '#2f6f2f';
                 if ($statusRaw === 'missing' || $statusRaw === 'outdated') $statusColor = '#a66900';
+                if ($statusRaw === 'not_integrated') $statusColor = '#555';
                 if ($statusRaw === 'manual_override' || $statusRaw === 'duplicate_risk') $statusColor = '#a00';
 
                 $lastSync = !empty($row['last_synced_at']) ? my_date('relative', (int)$row['last_synced_at']) : '—';
@@ -265,8 +275,13 @@ class AF_Admin
                 $seedFile = htmlspecialchars_uni((string)$row['seed_file']);
 
                 $actions = [];
+                if (empty($row['is_integrated'])) {
+                    $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_integrate', $lang->af_theme_stylesheets_integrate, $addonId, true, false, $themeFilter, $themeTid, (string)$row['logical_id']);
+                }
                 $actions[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_stylesheet, 'edit_stylesheet');
                 $actions[] = self::buildThemeStylesheetEditLink($row, $lang->af_theme_stylesheets_edit_properties, 'stylesheet_properties');
+                $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_set_file_mode', $lang->af_theme_stylesheets_set_file_mode, $addonId, true, false, $themeFilter, $themeTid, (string)$row['logical_id']);
+                $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_set_theme_mode', $lang->af_theme_stylesheets_set_theme_mode, $addonId, true, false, $themeFilter, $themeTid, (string)$row['logical_id']);
                 $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_sync_addon', $lang->af_theme_stylesheets_sync_addon, $addonId, true, false, $themeFilter, $themeTid);
                 $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_force_resync', $lang->af_theme_stylesheets_force_resync, $addonId, true, true, $themeFilter, $themeTid);
                 $actions[] = self::renderThemeStylesheetActionForm('theme_stylesheets_rebuild_missing', $lang->af_theme_stylesheets_rebuild_missing, $addonId, true, false, $themeFilter, $themeTid);
@@ -331,7 +346,7 @@ class AF_Admin
         $themeTid = (int)($row['theme_tid'] ?? 0);
         $file = trim((string)($row['stylesheet_name'] ?? ''));
 
-        if ($themeTid <= 1 || $file === '') {
+        if ($themeTid <= 0 || $file === '') {
             return '<span style="color:#777;">'.htmlspecialchars_uni($label).'</span>';
         }
 
@@ -348,7 +363,7 @@ class AF_Admin
         return '<a href="'.$url.'">'.htmlspecialchars_uni($label).'</a>';
     }
 
-    private static function renderThemeStylesheetActionForm(string $action, string $label, string $addon = '', bool $inline = false, bool $confirm = false, string $themeScope = 'all', ?int $themeTid = null): string
+    private static function renderThemeStylesheetActionForm(string $action, string $label, string $addon = '', bool $inline = false, bool $confirm = false, string $themeScope = 'all', ?int $themeTid = null, string $logicalId = ''): string
     {
         global $mybb;
 
@@ -362,6 +377,9 @@ class AF_Admin
         }
         if ($themeTid !== null && $themeTid > 0) {
             $html .= '<input type="hidden" name="theme_tid" value="'.(int)$themeTid.'">';
+        }
+        if ($logicalId !== '') {
+            $html .= '<input type="hidden" name="logical_id" value="'.htmlspecialchars_uni($logicalId).'">';
         }
         if ($confirm) {
             $html .= '<input type="hidden" name="confirm_force" value="1">';
