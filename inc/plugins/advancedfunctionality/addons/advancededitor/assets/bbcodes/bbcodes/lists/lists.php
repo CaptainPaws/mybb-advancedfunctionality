@@ -1,21 +1,12 @@
 <?php
 /**
- * AE Pack: lists — MyCode installer/uninstaller
- * Auto-called by AdvancedEditor pack installer:
- * - af_ae_lists_install_mycode()
- * - af_ae_lists_uninstall_mycode()
- *
- * IMPORTANT (MyBB 1.8.x):
- * Table `mycode` primary key column is `cid` (NOT `mid`).
+ * AE Pack: lists — canonical list parsing/rendering for AE + MyBB output.
  */
 
 if (!defined('IN_MYBB')) {
     die('No direct access');
 }
 
-/**
- * Safe rebuild of MyCode cache (MyBB 1.8.x).
- */
 if (!function_exists('af_ae_lists_rebuild_mycode_cache_safe')) {
     function af_ae_lists_rebuild_mycode_cache_safe(): void
     {
@@ -32,9 +23,6 @@ if (!function_exists('af_ae_lists_rebuild_mycode_cache_safe')) {
     }
 }
 
-/**
- * Upsert a MyCode by title (MyBB 1.8: table `mycode`, primary `cid`).
- */
 if (!function_exists('af_ae_lists_mycode_upsert')) {
     function af_ae_lists_mycode_upsert(string $title, string $regex, string $replacement, int $parseorder, int $active = 1): void
     {
@@ -50,8 +38,6 @@ if (!function_exists('af_ae_lists_mycode_upsert')) {
         }
 
         $titleEsc = $db->escape_string($title);
-
-        // MyBB 1.8.x: `cid`
         $q = $db->simple_select('mycode', 'cid', "title='{$titleEsc}'", ['limit' => 1]);
         $cid = (int)$db->fetch_field($q, 'cid');
 
@@ -72,9 +58,6 @@ if (!function_exists('af_ae_lists_mycode_upsert')) {
     }
 }
 
-/**
- * Delete MyCode rows by titles.
- */
 if (!function_exists('af_ae_lists_mycode_delete_titles')) {
     function af_ae_lists_mycode_delete_titles(array $titles): void
     {
@@ -94,18 +77,61 @@ if (!function_exists('af_ae_lists_mycode_delete_titles')) {
     }
 }
 
-/**
- * Install MyCodes for lists.
- *
- * Концепция:
- * - [li]...[/li] => <li>...</li>
- * - [ul]...[/ul] => <ul style="list-style-type:disc">...</ul>
- * - [ul=square]...[/ul] => <ul style="list-style-type:square">...</ul>
- * - [ul=upper-alpha]...[/ul] => <ol style="list-style-type:upper-alpha">...</ol>
- * - [ol]/[ol=...]...[/ol] поддерживаются как каноничные ordered-теги
- *
- * Да, это “ul параметризованный” превращаем в ol — потому что так у тебя задуманы кнопки/разметка.
- */
+if (!function_exists('af_ae_lists_html_type_attr')) {
+    function af_ae_lists_html_type_attr(string $tag, string $style): string
+    {
+        $tag = strtolower(trim($tag));
+        $style = strtolower(trim($style));
+
+        if ($tag === 'ul') {
+            return in_array($style, ['disc', 'circle', 'square'], true) ? $style : '';
+        }
+
+        if ($tag === 'ol') {
+            return match ($style) {
+                'decimal' => '1',
+                'upper-alpha' => 'A',
+                'lower-alpha' => 'a',
+                'upper-roman' => 'I',
+                'lower-roman' => 'i',
+                default => '',
+            };
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('af_ae_lists_render_html')) {
+    function af_ae_lists_render_html(string $tag, string $style, string $content): string
+    {
+        $tag = strtolower(trim($tag)) === 'ol' ? 'ol' : 'ul';
+        $style = strtolower(trim($style));
+
+        if ($tag === 'ul' && !in_array($style, ['disc', 'circle', 'square'], true)) {
+            $style = 'disc';
+        }
+
+        if ($tag === 'ol' && !in_array($style, ['decimal', 'upper-alpha', 'lower-alpha', 'upper-roman', 'lower-roman'], true)) {
+            $style = 'decimal';
+        }
+
+        $padding = $tag === 'ol' ? '1.6em' : '1.4em';
+        $typeAttr = af_ae_lists_html_type_attr($tag, $style);
+        $class = 'af-ae-list af-ae-list--' . preg_replace('~[^a-z0-9_-]+~i', '-', $style);
+
+        return '<' . $tag .
+            ' class="' . htmlspecialchars($class, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"' .
+            ' data-af-list-type="' . $tag . '"' .
+            ' data-af-list-style="' . htmlspecialchars($style, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"' .
+            ' data-list="' . htmlspecialchars($style, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"' .
+            ($typeAttr !== '' ? ' type="' . htmlspecialchars($typeAttr, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"' : '') .
+            ' style="list-style-type:' . htmlspecialchars($style, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '; padding-left:' . $padding . ';">' .
+            $content .
+            '</' . $tag . '>';
+    }
+}
+
 if (!function_exists('af_ae_lists_install_mycode')) {
     function af_ae_lists_install_mycode(): void
     {
@@ -126,63 +152,15 @@ if (!function_exists('af_ae_lists_install_mycode')) {
         af_ae_lists_mycode_upsert(
             'AF AE: UL (disc)',
             '\\[ul\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ul class="af-ae-list af-ae-list--disc" data-af-list-style="disc" type="disc" style="list-style-type:disc; padding-left:1.4em;">$1</ul>',
+            af_ae_lists_render_html('ul', 'disc', '$1'),
             20,
             1
         );
 
         af_ae_lists_mycode_upsert(
-            'AF AE: UL (square)',
-            '\\[ul=square\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ul class="af-ae-list af-ae-list--square" data-af-list-style="square" type="square" style="list-style-type:square; padding-left:1.4em;">$1</ul>',
-            20,
-            1
-        );
-
-        af_ae_lists_mycode_upsert(
-            'AF AE: UL (circle)',
-            '\\[ul=circle\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ul class="af-ae-list af-ae-list--circle" data-af-list-style="circle" type="circle" style="list-style-type:circle; padding-left:1.4em;">$1</ul>',
-            20,
-            1
-        );
-
-        af_ae_lists_mycode_upsert(
-            'AF AE: UL (decimal)',
-            '\\[ul=i\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ol class="af-ae-list af-ae-list--decimal" data-af-list-style="decimal" type="1" style="list-style-type:decimal; padding-left:1.6em;">$1</ol>',
-            20,
-            1
-        );
-
-        af_ae_lists_mycode_upsert(
-            'AF AE: UL (upper-roman)',
-            '\\[ul=upper-roman\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ol class="af-ae-list af-ae-list--upper-roman" data-af-list-style="upper-roman" type="I" style="list-style-type:upper-roman; padding-left:1.6em;">$1</ol>',
-            20,
-            1
-        );
-
-        af_ae_lists_mycode_upsert(
-            'AF AE: UL (upper-alpha)',
-            '\\[ul=upper-alpha\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ol class="af-ae-list af-ae-list--upper-alpha" data-af-list-style="upper-alpha" type="A" style="list-style-type:upper-alpha; padding-left:1.6em;">$1</ol>',
-            20,
-            1
-        );
-
-        af_ae_lists_mycode_upsert(
-            'AF AE: UL (lower-roman)',
-            '\\[ul=lower-roman\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ol class="af-ae-list af-ae-list--lower-roman" data-af-list-style="lower-roman" type="i" style="list-style-type:lower-roman; padding-left:1.6em;">$1</ol>',
-            20,
-            1
-        );
-
-        af_ae_lists_mycode_upsert(
-            'AF AE: UL (lower-alpha)',
-            '\\[ul=lower-alpha\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ol class="af-ae-list af-ae-list--lower-alpha" data-af-list-style="lower-alpha" type="a" style="list-style-type:lower-alpha; padding-left:1.6em;">$1</ol>',
+            'AF AE: UL (typed)',
+            '\\[ul=(circle|square)\\]([\\s\\S]*?)\\[\\/ul\\]',
+            af_ae_lists_render_html('ul', '$1', '$2'),
             20,
             1
         );
@@ -190,7 +168,7 @@ if (!function_exists('af_ae_lists_install_mycode')) {
         af_ae_lists_mycode_upsert(
             'AF AE: OL (decimal default)',
             '\\[ol\\]([\\s\\S]*?)\\[\\/ol\\]',
-            '<ol class="af-ae-list af-ae-list--decimal" data-af-list-style="decimal" type="1" style="list-style-type:decimal; padding-left:1.6em;">$1</ol>',
+            af_ae_lists_render_html('ol', 'decimal', '$1'),
             20,
             1
         );
@@ -198,15 +176,24 @@ if (!function_exists('af_ae_lists_install_mycode')) {
         af_ae_lists_mycode_upsert(
             'AF AE: OL (typed)',
             '\\[ol=(decimal|upper-alpha|upper-roman|lower-alpha|lower-roman)\\]([\\s\\S]*?)\\[\\/ol\\]',
-            '<ol class="af-ae-list af-ae-list--$1" data-af-list-style="$1" style="list-style-type:$1; padding-left:1.6em;">$2</ol>',
+            af_ae_lists_render_html('ol', '$1', '$2'),
             20,
             1
         );
 
+        // Legacy compat: [ol=i] / old packs with ordered styles under [ul=...]
         af_ae_lists_mycode_upsert(
             'AF AE: OL (i->decimal)',
             '\\[ol=i\\]([\\s\\S]*?)\\[\\/ol\\]',
-            '<ol class="af-ae-list af-ae-list--decimal" data-af-list-style="decimal" type="1" style="list-style-type:decimal; padding-left:1.6em;">$1</ol>',
+            af_ae_lists_render_html('ol', 'decimal', '$1'),
+            19,
+            1
+        );
+
+        af_ae_lists_mycode_upsert(
+            'AF AE: UL legacy ordered',
+            '\\[ul=(i|decimal|upper-alpha|upper-roman|lower-alpha|lower-roman)\\]([\\s\\S]*?)\\[\\/ul\\]',
+            af_ae_lists_render_html('ol', '$1', '$2'),
             19,
             1
         );
@@ -225,7 +212,6 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
             static function (array $match) use (&$protected): string {
                 $key = '%%AF_AE_LISTS_BBCODE_' . count($protected) . '%%';
                 $protected[$key] = $match[0];
-
                 return $key;
             },
             $message
@@ -241,7 +227,7 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
 
     function af_ae_lists_bridge_prefix_tags(string $message): string
     {
-        if ($message === '' || stripos($message, '[ul') === false && stripos($message, '[ol') === false && stripos($message, '[li') === false) {
+        if ($message === '' || (stripos($message, '[ul') === false && stripos($message, '[ol') === false && stripos($message, '[li') === false)) {
             return $message;
         }
 
@@ -261,88 +247,41 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
 
     function af_ae_lists_bridge_normalize_list_attr(string $tagName, string $rawAttr): array
     {
+        $tagName = strtolower(trim($tagName));
         $attr = strtolower(trim($rawAttr));
+
         if ($attr === 'i') {
             $attr = 'decimal';
         }
 
         if ($tagName === 'af_ol') {
-            $allowed = ['decimal', 'upper-alpha', 'upper-roman', 'lower-alpha', 'lower-roman'];
-            if (!in_array($attr, $allowed, true)) {
+            if (!in_array($attr, ['decimal', 'upper-alpha', 'upper-roman', 'lower-alpha', 'lower-roman'], true)) {
                 $attr = 'decimal';
             }
 
-            return [
-                'tag' => 'ol',
-                'style' => $attr,
-                'padding' => '1.6em',
-            ];
+            return ['tag' => 'ol', 'style' => $attr];
         }
 
+        // af_ul canonical and legacy compatibility
         if ($attr === '' || $attr === 'disc') {
-            return [
-                'tag' => 'ul',
-                'style' => 'disc',
-                'padding' => '1.4em',
-            ];
+            return ['tag' => 'ul', 'style' => 'disc'];
         }
 
         if (in_array($attr, ['circle', 'square'], true)) {
-            return [
-                'tag' => 'ul',
-                'style' => $attr,
-                'padding' => '1.4em',
-            ];
+            return ['tag' => 'ul', 'style' => $attr];
         }
 
-        $ordered = ['decimal', 'upper-alpha', 'upper-roman', 'lower-alpha', 'lower-roman'];
-        if (in_array($attr, $ordered, true)) {
-            return [
-                'tag' => 'ol',
-                'style' => $attr,
-                'padding' => '1.6em',
-            ];
+        if (in_array($attr, ['decimal', 'upper-alpha', 'upper-roman', 'lower-alpha', 'lower-roman'], true)) {
+            return ['tag' => 'ol', 'style' => $attr];
         }
 
-        return [
-            'tag' => 'ul',
-            'style' => 'disc',
-            'padding' => '1.4em',
-        ];
-    }
-
-    function af_ae_lists_html_type_attr(string $tag, string $style): string
-    {
-        $tag = strtolower(trim($tag));
-        $style = strtolower(trim($style));
-
-        if ($tag === 'ul') {
-            if (in_array($style, ['disc', 'circle', 'square'], true)) {
-                return $style;
-            }
-
-            return '';
-        }
-
-        if ($tag === 'ol') {
-            return match ($style) {
-                'decimal' => '1',
-                'upper-alpha' => 'A',
-                'lower-alpha' => 'a',
-                'upper-roman' => 'I',
-                'lower-roman' => 'i',
-                default => '',
-            };
-        }
-
-        return '';
+        return ['tag' => 'ul', 'style' => 'disc'];
     }
 
     function af_ae_lists_bridge_is_spacer_html(string $html): bool
     {
         $probe = str_ireplace(['<br>', '<br/>', '<br />', '&nbsp;'], '', $html);
         $probe = preg_replace('~\s+~u', '', (string)$probe);
-
         return trim(strip_tags((string)$probe)) === '';
     }
 
@@ -351,11 +290,9 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
         $html = preg_replace('~(<(?:ul|ol)\b[^>]*>)(?:\s|&nbsp;|<br\s*/?>)+~i', '$1', $html);
         $html = preg_replace('~(?:\s|&nbsp;|<br\s*/?>)+(</(?:ul|ol)>)~i', '$1', $html);
         $html = preg_replace('~</li>(?:\s|&nbsp;|<br\s*/?>)+(?=<li\b)~i', '</li>', $html);
-        $html = preg_replace('~(?:<br\s*/?>\s*)+(?=<(?:ul|ol)\b)~i', '', $html);
-        $html = preg_replace('~(</(?:ul|ol)>)(?:\s*<br\s*/?>)+~i', '$1', $html);
 
         return is_string($html) ? $html : '';
-    }    
+    }
 
     function af_ae_lists_bridge_render_node(array $node, array $context = []): string
     {
@@ -363,46 +300,35 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
 
         if ($type === 'root') {
             $html = '';
-
             foreach ($node['children'] ?? [] as $child) {
-                if (!is_array($child)) {
-                    continue;
+                if (is_array($child)) {
+                    $html .= af_ae_lists_bridge_render_node($child, $context);
                 }
-
-                $html .= af_ae_lists_bridge_render_node($child, $context);
             }
-
             return af_ae_lists_bridge_cleanup_rendered_html($html);
         }
 
         if ($type === 'text') {
             $value = (string)($node['value'] ?? '');
-
             if (!empty($context['inside_list']) && af_ae_lists_bridge_is_spacer_html($value)) {
                 return '';
             }
-
             return $value;
         }
 
         if ($type === 'af_li') {
             $children = '';
-
             foreach ($node['children'] ?? [] as $child) {
-                if (!is_array($child)) {
-                    continue;
+                if (is_array($child)) {
+                    $children .= af_ae_lists_bridge_render_node($child, $context);
                 }
-
-                $children .= af_ae_lists_bridge_render_node($child, $context);
             }
 
             $children = af_ae_lists_bridge_cleanup_rendered_html($children);
-
             $attrs = ' class="af-ae-list__item" style="list-style-type:inherit;"';
 
             if (!empty($context['list_style'])) {
-                $style = htmlspecialchars((string)$context['list_style'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-                $attrs .= ' data-af-list-style="' . $style . '"';
+                $attrs .= ' data-af-list-style="' . htmlspecialchars((string)$context['list_style'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"';
             }
 
             return '<li' . $attrs . '>' . $children . '</li>';
@@ -410,35 +336,16 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
 
         if ($type === 'af_ul' || $type === 'af_ol') {
             $normalized = af_ae_lists_bridge_normalize_list_attr($type, (string)($node['attr'] ?? ''));
-            $tag = $normalized['tag'];
-            $style = htmlspecialchars($normalized['style'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $padding = htmlspecialchars($normalized['padding'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $class = 'af-ae-list af-ae-list--' . preg_replace('~[^a-z0-9_-]+~i', '-', strtolower($normalized['style']));
-            $typeAttr = af_ae_lists_html_type_attr($tag, $normalized['style']);
-
             $children = '';
-            $childContext = [
-                'inside_list' => true,
-                'list_style'  => $normalized['style'],
-            ];
+            $childContext = ['inside_list' => true, 'list_style' => $normalized['style']];
 
             foreach ($node['children'] ?? [] as $child) {
-                if (!is_array($child)) {
-                    continue;
+                if (is_array($child)) {
+                    $children .= af_ae_lists_bridge_render_node($child, $childContext);
                 }
-
-                $children .= af_ae_lists_bridge_render_node($child, $childContext);
             }
 
-            $children = af_ae_lists_bridge_cleanup_rendered_html($children);
-
-            return '<' . $tag .
-                ' class="' . htmlspecialchars($class, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"' .
-                ' data-af-list-style="' . $style . '"' .
-                ($typeAttr !== '' ? ' type="' . htmlspecialchars($typeAttr, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"' : '') .
-                ' style="list-style-type:' . $style . '; padding-left:' . $padding . ';">' .
-                $children .
-                '</' . $tag . '>';
+            return af_ae_lists_render_html($normalized['tag'], $normalized['style'], af_ae_lists_bridge_cleanup_rendered_html($children));
         }
 
         $children = '';
@@ -453,18 +360,11 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
 
     function af_ae_lists_bridge_parse_html(string $message): string
     {
-        if (
-            $message === '' ||
-            (
-                stripos($message, '[af_ul') === false &&
-                stripos($message, '[af_ol') === false &&
-                stripos($message, '[af_li') === false
-            )
-        ) {
+        if ($message === '' || (stripos($message, '[af_ul') === false && stripos($message, '[af_ol') === false && stripos($message, '[af_li') === false)) {
             return $message;
         }
 
-        $pattern = '~\[(\/?)(af_ul|af_ol|af_li)(?:=([^\]]*))?\]~i';
+        $pattern = '~\[(/?)(af_ul|af_ol|af_li)(?:=([^\]]*))?\]~i';
         if (!preg_match_all($pattern, $message, $matches, PREG_OFFSET_CAPTURE)) {
             return $message;
         }
@@ -481,10 +381,7 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
             if ($tokenOffset > $lastOffset) {
                 $text = substr($message, $lastOffset, $tokenOffset - $lastOffset);
                 if ($text !== '') {
-                    $stack[count($stack) - 1]['children'][] = [
-                        'type'  => 'text',
-                        'value' => $text,
-                    ];
+                    $stack[count($stack) - 1]['children'][] = ['type' => 'text', 'value' => $text];
                 }
             }
 
@@ -493,12 +390,7 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
             $attr = isset($matches[3][$i][0]) ? (string)$matches[3][$i][0] : '';
 
             if (!$isClosing) {
-                $node = [
-                    'type'     => $tagName,
-                    'attr'     => $attr,
-                    'children' => [],
-                ];
-
+                $node = ['type' => $tagName, 'attr' => $attr, 'children' => []];
                 $stack[count($stack) - 1]['children'][] = $node;
                 $newIndex = count($stack[count($stack) - 1]['children']) - 1;
                 $stack[] = &$stack[count($stack) - 1]['children'][$newIndex];
@@ -516,10 +408,7 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
                         array_pop($stack);
                     }
                 } else {
-                    $stack[count($stack) - 1]['children'][] = [
-                        'type'  => 'text',
-                        'value' => $fullToken,
-                    ];
+                    $stack[count($stack) - 1]['children'][] = ['type' => 'text', 'value' => $fullToken];
                 }
             }
 
@@ -529,10 +418,7 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
         if ($lastOffset < strlen($message)) {
             $tail = substr($message, $lastOffset);
             if ($tail !== '') {
-                $stack[count($stack) - 1]['children'][] = [
-                    'type'  => 'text',
-                    'value' => $tail,
-                ];
+                $stack[count($stack) - 1]['children'][] = ['type' => 'text', 'value' => $tail];
             }
         }
 
@@ -578,15 +464,19 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
     }
 }
 
-
-/**
- * Uninstall MyCodes for lists (and cleanup legacy titles if they were previously created).
- */
 if (!function_exists('af_ae_lists_uninstall_mycode')) {
     function af_ae_lists_uninstall_mycode(): void
     {
         $titles = [
-            // текущие
+            'AF AE: LI',
+            'AF AE: UL (disc)',
+            'AF AE: UL (typed)',
+            'AF AE: UL legacy ordered',
+            'AF AE: OL (decimal default)',
+            'AF AE: OL (typed)',
+            'AF AE: OL (i->decimal)',
+
+            // old titles
             'AF AE Lists: LI',
             'AF AE Lists: UL (disc)',
             'AF AE Lists: UL (square)',
@@ -599,28 +489,6 @@ if (!function_exists('af_ae_lists_uninstall_mycode')) {
             'AF AE Lists: OL (decimal default)',
             'AF AE Lists: OL (typed)',
             'AF AE Lists: OL (i->decimal)',
-
-            // легаси/мусор от прошлых попыток (на всякий случай)
-            'AF AE: LI',
-            'AF AE: UL (disc)',
-            'AF AE: UL (square)',
-            'AF AE: UL (circle)',
-            'AF AE: UL (decimal)',
-            'AF AE: UL (upper-roman)',
-            'AF AE: UL (upper-alpha)',
-            'AF AE: UL (lower-roman)',
-            'AF AE: UL (lower-alpha)',
-            'AF AE: OL (decimal default)',
-            'AF AE: OL (typed)',
-            'AF AE: OL (i->decimal)',
-
-            'AF AE: li',
-            'AF AE: af_ul_disc',
-            'AF AE: af_ul_square',
-            'AF AE: af_ol_decimal',
-            'AF AE: af_ol_upper_roman',
-            'AF AE: af_ol_upper_alpha',
-            'AF AE: af_ol_lower_alpha',
         ];
 
         af_ae_lists_mycode_delete_titles($titles);
