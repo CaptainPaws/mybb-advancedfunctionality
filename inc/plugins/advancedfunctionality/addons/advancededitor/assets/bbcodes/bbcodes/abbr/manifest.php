@@ -19,10 +19,10 @@ return [
 
     'assets' => [
         'css' => [
-            'bbcodes/bbcodes/abbr/abbr.css',
+            'bbcodes/abbr/abbr.css',
         ],
         'js' => [
-            'bbcodes/bbcodes/abbr/abbr.js',
+            'bbcodes/abbr/abbr.js',
         ],
     ],
 
