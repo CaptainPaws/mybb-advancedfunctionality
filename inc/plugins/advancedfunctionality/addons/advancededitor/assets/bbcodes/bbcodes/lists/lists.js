@@ -170,6 +170,138 @@
     }
   }
 
+  function getSourceTextareaFromInstance(inst) {
+    try {
+      if (inst && inst.sourceEditor && inst.sourceEditor.nodeType === 1) {
+        return inst.sourceEditor;
+      }
+    } catch (e0) {}
+
+    try {
+      var cont = inst && typeof inst.getContainer === 'function' ? inst.getContainer() : null;
+      if (!cont && inst && inst.container && inst.container.nodeType === 1) cont = inst.container;
+      if (cont && cont.querySelector) {
+        var ta = cont.querySelector('textarea.sceditor-textarea');
+        if (ta) return ta;
+        ta = cont.querySelector('textarea');
+        if (ta) return ta;
+      }
+    } catch (e1) {}
+
+    return null;
+  }
+
+  function insertIntoSourceInstance(inst, chunk, ctx) {
+    var ta = getSourceTextareaFromInstance(inst);
+    if (ta) {
+      return insertIntoTextarea(chunk, { textarea: ta });
+    }
+
+    try {
+      if (inst && typeof inst.insertText === 'function') {
+        inst.insertText(chunk, '');
+        return true;
+      }
+    } catch (e0) {}
+
+    try {
+      if (inst && typeof inst.insert === 'function') {
+        inst.insert(chunk, '');
+        return true;
+      }
+    } catch (e1) {}
+
+    return insertIntoTextarea(chunk, ctx || {});
+  }
+
+  function stripListBoundaryBreaks(html) {
+    html = String(html == null ? '' : html);
+
+    html = html.replace(/^(?:\s|&nbsp;|<br\s*\/?>)+/gi, '');
+    html = html.replace(/(?:\s|&nbsp;|<br\s*\/?>)+$/gi, '');
+    html = html.replace(/(?:<br\s*\/?>\s*)+(?=<li\b)/gi, '');
+    html = html.replace(/<\/li>(?:\s|&nbsp;|<br\s*\/?>)+(?=<li\b)/gi, '</li>');
+
+    return html;
+  }
+
+  function isListSpacerNode(node) {
+    if (!node) return false;
+
+    if (node.nodeType === 3) {
+      return String(node.nodeValue || '').replace(/\u00a0/g, ' ').trim() === '';
+    }
+
+    if (node.nodeType !== 1) return false;
+
+    var tag = String(node.nodeName || '').toLowerCase();
+    if (tag === 'br') return true;
+
+    if (tag === 'p' || tag === 'div') {
+      var html = String(node.innerHTML || '')
+        .replace(/&nbsp;/gi, '')
+        .replace(/\s+/g, '')
+        .toLowerCase();
+
+      return html === '' || html === '<br>' || html === '<br/>' || html === '<br />';
+    }
+
+    return false;
+  }
+
+  function cleanupListBoundaryBreaks(inst) {
+    try {
+      if (!inst || typeof inst.getBody !== 'function') return;
+
+      var body = inst.getBody();
+      if (!body) return;
+
+      var lists = body.querySelectorAll('ul, ol');
+      for (var i = 0; i < lists.length; i++) {
+        var list = lists[i];
+
+        while (list.firstChild && isListSpacerNode(list.firstChild)) {
+          list.removeChild(list.firstChild);
+        }
+
+        while (list.lastChild && isListSpacerNode(list.lastChild)) {
+          list.removeChild(list.lastChild);
+        }
+
+        var child = list.firstChild;
+        while (child) {
+          var next = child.nextSibling;
+          if (isListSpacerNode(child)) {
+            list.removeChild(child);
+          }
+          child = next;
+        }
+
+        while (list.previousSibling && isListSpacerNode(list.previousSibling)) {
+          list.parentNode.removeChild(list.previousSibling);
+        }
+
+        while (list.nextSibling && isListSpacerNode(list.nextSibling)) {
+          list.parentNode.removeChild(list.nextSibling);
+        }
+      }
+    } catch (e) {}
+  }
+
+  function buildHtmlListTag(tag, style, padding, content) {
+    style = String(style || '').trim().toLowerCase();
+    padding = String(padding || '').trim();
+    content = stripListBoundaryBreaks(content);
+
+    return '<' + tag +
+      ' class="af-ae-list af-ae-list--' + style + '"' +
+      ' data-list="' + style + '"' +
+      ' data-af-list-style="' + style + '"' +
+      ' style="list-style-type:' + style + '; padding-left:' + padding + ';">' +
+        content +
+      '</' + tag + '>';
+  }  
+
   // ===============================
   // Canonical BBCode chunk (твой канон)
   // ===============================
@@ -255,23 +387,31 @@
   function buildHtmlListChunk(attr) {
     attr = normAttr(attr);
 
-    // без атрибута — буллеты
     if (!attr) {
-      return '<ul style="list-style-type:disc; padding-left:1.4em;">' +
-        '<li><br></li>' +
-      '</ul>';
+      return buildHtmlListTag(
+        'ul',
+        'disc',
+        '1.4em',
+        '<li style="list-style-type:disc;"><br></li>'
+      );
     }
 
     if (attr === 'square' || attr === 'circle') {
-      return '<ul style="list-style-type:' + attr + '; padding-left:1.4em;">' +
-        '<li><br></li>' +
-      '</ul>';
+      return buildHtmlListTag(
+        'ul',
+        attr,
+        '1.4em',
+        '<li style="list-style-type:' + attr + ';"><br></li>'
+      );
     }
 
     var lst = olStyleForAttr(attr);
-    return '<ol style="list-style-type:' + lst + '; padding-left:1.6em;">' +
-      '<li><br></li>' +
-    '</ol>';
+    return buildHtmlListTag(
+      'ol',
+      lst,
+      '1.6em',
+      '<li style="list-style-type:' + lst + ';"><br></li>'
+    );
   }
 
   // ===============================
@@ -326,7 +466,7 @@
   }
 
   // ===============================
-  // BBCode plugin patch (ГЛАВНОЕ)
+  // BBCode plugin patch
   // ===============================
   function afAeEnsureMybbListsBbcode(inst) {
     if (!hasSceditor()) return;
@@ -355,7 +495,10 @@
       (function retry() {
         t++;
         var b2 = getBb();
-        if (b2) { try { afAeEnsureMybbListsBbcode(inst); } catch (e2) {} return; }
+        if (b2) {
+          try { afAeEnsureMybbListsBbcode(inst); } catch (e2) {}
+          return;
+        }
         if (t < 25) return setTimeout(retry, 120);
       })();
       return;
@@ -364,7 +507,6 @@
     if (bb.__afAeMybbListsPatched) return;
     bb.__afAeMybbListsPatched = true;
 
-    // [li]..[/li] <-> <li>..</li>
     try {
       bb.set('li', {
         isInline: false,
@@ -390,10 +532,8 @@
       }
     } catch (eDelete) {}
 
-    // [ul] <-> <ul>
     try {
       bb.set('ul', {
-
         isBlock: true,
 
         html: function (_token, attrs, content) {
@@ -412,11 +552,10 @@
           };
 
           var conf = map[type] || map.disc;
-          return '<' + conf[0] + ' style="list-style-type:' + conf[1] + '; padding-left:' + conf[2] + ';">' + (content || '') + '</' + conf[0] + '>';
+          return buildHtmlListTag(conf[0], conf[1], conf[2], content || '');
         },
 
         format: function (el, content) {
-
           var norm = normalizeListAttr(extractListStyle(el, 'disc'), 'disc');
 
           if (norm.type === 'ol') {
@@ -424,7 +563,6 @@
           }
 
           if (norm.attr) return '[ul=' + norm.attr + ']' + (content || '') + '[/ul]';
-
           return '[ul]' + (content || '') + '[/ul]';
         },
 
@@ -432,12 +570,12 @@
           ul: {
             format: function (el, content) {
               var norm = normalizeListAttr(extractListStyle(el, 'disc'), 'disc');
+
               if (norm.type === 'ol') {
                 return '[ol=' + norm.attr + ']' + (content || '') + '[/ol]';
               }
 
               if (norm.attr) return '[ul=' + norm.attr + ']' + (content || '') + '[/ul]';
-
               return '[ul]' + (content || '') + '[/ul]';
             }
           }
@@ -460,14 +598,16 @@
             'upper-alpha': 'upper-alpha',
             'lower-alpha': 'lower-alpha'
           };
-          type = map[type] || 'decimal';
 
-          return '<ol style="list-style-type:' + type + '; padding-left:1.6em;">' + (content || '') + '</ol>';
+          type = map[type] || 'decimal';
+          return buildHtmlListTag('ol', type, '1.6em', content || '');
         },
 
         format: function (el, content) {
           var norm = normalizeListAttr(extractListStyle(el, 'decimal'), 'decimal');
-          if (norm.type !== 'ol') return '[ul' + (norm.attr ? '=' + norm.attr : '') + ']' + (content || '') + '[/ul]';
+          if (norm.type !== 'ol') {
+            return '[ul' + (norm.attr ? '=' + norm.attr : '') + ']' + (content || '') + '[/ul]';
+          }
           return '[ol=' + norm.attr + ']' + (content || '') + '[/ol]';
         },
 
@@ -475,7 +615,9 @@
           ol: {
             format: function (el, content) {
               var norm = normalizeListAttr(extractListStyle(el, 'decimal'), 'decimal');
-              if (norm.type !== 'ol') return '[ul' + (norm.attr ? '=' + norm.attr : '') + ']' + (content || '') + '[/ul]';
+              if (norm.type !== 'ol') {
+                return '[ul' + (norm.attr ? '=' + norm.attr : '') + ']' + (content || '') + '[/ul]';
+              }
               return '[ol=' + norm.attr + ']' + (content || '') + '[/ol]';
             }
           }
@@ -483,13 +625,11 @@
       });
     } catch (eOL2) {}
 
-    // ВАЖНО: “bulletlist/orderedlist” иногда сериализуются как [bulletlist]
-    // Мы забиваем это и заставляем всё уходить через ul.
     try {
       bb.set('bulletlist', {
         isInline: false,
         html: function (_t, _a, c) {
-          return '<ul style="list-style-type:disc; padding-left:1.4em;">' + (c || '') + '</ul>';
+          return buildHtmlListTag('ul', 'disc', '1.4em', c || '');
         },
         format: function (_el, c) {
           return '[ul]' + (c || '') + '[/ul]';
@@ -501,7 +641,7 @@
       bb.set('orderedlist', {
         isInline: false,
         html: function (_t, _a, c) {
-          return '<ol style="list-style-type:decimal; padding-left:1.6em;">' + (c || '') + '</ol>';
+          return buildHtmlListTag('ol', 'decimal', '1.6em', c || '');
         },
         format: function (_el, c) {
           return '[ol=decimal]' + (c || '') + '[/ol]';
@@ -509,7 +649,6 @@
       });
     } catch (eOL) {}
   }
-
   function bindListEnterBehavior(inst) {
     if (!inst || inst.__afAeListEnterBound) return;
     inst.__afAeListEnterBound = true;
@@ -670,19 +809,19 @@
 
   function insertCanonicalList(editorOrCtx, attr, meta) {
     meta = meta || {};
+
     var inst = getSceditorInstanceFromCtx(editorOrCtx, meta.caller);
     var sourceFlag = isSourceMode(inst);
     var hasBody = hasUsableIframeBody(inst);
-    var mode = hasBody ? 'wysiwyg' : 'source';
+    var mode = sourceFlag ? 'source' : (hasBody ? 'wysiwyg' : 'source');
 
-    // без SCEditor
     if (!inst) {
       var textareaInserted = insertIntoTextarea(buildCanonicalChunk(attr), editorOrCtx);
       debugLog('[AE-LISTS] insert', {
         handler: meta.handler || 'unknown',
         cmd: meta.cmd || '',
         mode: 'textarea',
-        isSourceMode: sourceFlag,
+        isSourceMode: false,
         hasIframeBody: false,
         insertedVia: textareaInserted ? 'textarea-insert' : 'none',
         instance: describeInstance(inst)
@@ -690,45 +829,36 @@
       return textareaInserted;
     }
 
-    // патчим bbcode и css
     try { afAeEnsureMybbListsBbcode(inst); } catch (e0) {}
     try { ensureListCss(inst); } catch (e1) {}
     try { bindToSourceListNormalization(inst); } catch (e2) {}
     try { bindListEnterBehavior(inst); } catch (e3) {}
 
-    // SOURCE mode: вставляем BBCode
-    if (mode !== 'wysiwyg') {
+    if (mode === 'source') {
       var chunk = buildCanonicalChunk(attr);
-      var insertedSourceVia = 'none';
-      try {
-        if (typeof inst.insertText === 'function') {
-          inst.insertText(chunk, '');
-          insertedSourceVia = 'insertText';
-        } else if (typeof inst.insert === 'function') {
-          inst.insert(chunk, '');
-          insertedSourceVia = 'insert';
-        }
-      } catch (e2) {}
+      var insertedSourceOk = insertIntoSourceInstance(inst, chunk, editorOrCtx);
+
       debugLog('[AE-LISTS] insert', {
         handler: meta.handler || 'unknown',
         cmd: meta.cmd || '',
-        mode: mode,
+        mode: 'source',
         isSourceMode: sourceFlag,
         hasIframeBody: hasBody,
         requestedAttr: attr,
         format: getEditorFormat(inst) || '(unknown)',
-        insertedVia: insertedSourceVia,
+        insertedVia: insertedSourceOk ? 'source-insert' : 'none',
         bbcodeChunk: chunk,
         instance: describeInstance(inst)
       });
-      try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e3) {}
-      return true;
+
+      try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e4) {}
+      return insertedSourceOk;
     }
 
-    // true html-mode: вставляем HTML в iframe.
     var html = buildHtmlListChunk(attr);
     var insertedVia = '';
     var insertedOk = false;
+
     try {
       if (typeof inst.wysiwygEditorInsertHtml === 'function') {
         inst.wysiwygEditorInsertHtml(html);
@@ -742,7 +872,7 @@
         insertedOk = insertHtmlViaDom(inst, html);
         insertedVia = insertedOk ? 'domRangeInsert' : 'no-html-api';
       }
-    } catch (e4) {}
+    } catch (e5) {}
 
     if (!insertedOk && hasBody) {
       for (var retry = 1; retry <= 3 && !insertedOk; retry++) {
@@ -754,35 +884,26 @@
       }
     }
 
-    try {
-      var bodyHtml = '';
-      if (typeof inst.getBody === 'function') {
-        var b = inst.getBody();
-        if (b && typeof b.innerHTML === 'string') {
-          bodyHtml = b.innerHTML;
-          if (bodyHtml.length > 240) bodyHtml = bodyHtml.slice(0, 240) + '…';
-        }
-      }
-      debugLog('[AE-LISTS] insert', {
-        mode: isSourceMode(inst) ? 'source' : 'wysiwyg',
-        handler: meta.handler || 'unknown',
-        cmd: meta.cmd || '',
-        isSourceMode: sourceFlag,
-        hasIframeBody: hasBody,
-        requestedAttr: attr,
-        insertedVia: insertedVia,
-        bodyPreview: bodyHtml,
-        instance: describeInstance(inst)
-      });
-    } catch (eDbg) {}
+    try { cleanupListBoundaryBreaks(inst); } catch (e6) {}
+    try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e7) {}
+    try { if (typeof inst.focus === 'function') inst.focus(); } catch (e8) {}
 
-    try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e5) {}
-    try { if (typeof inst.focus === 'function') inst.focus(); } catch (e6) {}
+    debugLog('[AE-LISTS] insert', {
+      mode: 'wysiwyg',
+      handler: meta.handler || 'unknown',
+      cmd: meta.cmd || '',
+      isSourceMode: sourceFlag,
+      hasIframeBody: hasBody,
+      requestedAttr: attr,
+      insertedVia: insertedVia,
+      instance: describeInstance(inst)
+    });
+
     return insertedOk;
   }
 
   // ===============================
-  // cmd detection (для dropdown и обычных кнопок)
+  // cmd detection
   // ===============================
   function detectCmd(def, caller) {
     try {
