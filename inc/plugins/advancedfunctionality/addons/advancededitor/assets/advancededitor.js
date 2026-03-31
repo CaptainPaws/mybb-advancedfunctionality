@@ -878,7 +878,7 @@
     try { if (typeof editor.closeDropDown === 'function') editor.closeDropDown(true); } catch (e1) {}
 
     var wrap = null;
-    try { wrap = buildDropdownContent(editor, menu, availableMap); } catch (e2) { wrap = null; }
+    try { wrap = buildDropdownContent(editor, menu, availableMap, el); } catch (e2) { wrap = null; }
     if (!wrap) return false;
 
     // ВАЖНО: ровно как ты показала:
@@ -901,7 +901,7 @@
     return false;
   }
 
-  function buildDropdownContent(editor, menu, availableMap) {
+  function buildDropdownContent(editor, menu, availableMap, dropdownCaller) {
     var wrap = document.createElement('div');
     wrap.className = 'af-ae-dd';
 
@@ -1035,7 +1035,7 @@
 
       try { if (editor && typeof editor.focus === 'function') editor.focus(); } catch (e0) {}
 
-      var caller = findToolbarCallerForCmd(editor, cmd) || callerEl || null;
+      var caller = findToolbarCallerForCmd(editor, cmd) || dropdownCaller || callerEl || null;
 
       // 1) НОРМАЛЬНЫЙ штатный запуск SCEditor: ВАЖНО — БЕЗ .call(editor,...)
       try {
@@ -1093,9 +1093,12 @@
       btn.addEventListener('click', function (ev) {
         try { ev.preventDefault(); } catch (e0) {}
 
-        execCmd(cmd, btn);
-
+        // Закрываем текущее меню ДО dispatch команды:
+        // если команда открывает собственный dropdown/dialog,
+        // он не должен быть сразу же закрыт этим же обработчиком.
         try { if (editor && typeof editor.closeDropDown === 'function') editor.closeDropDown(true); } catch (e1) {}
+
+        execCmd(cmd, btn);
       });
 
       wrap.appendChild(btn);
