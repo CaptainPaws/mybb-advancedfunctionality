@@ -20,10 +20,10 @@ return [
 
     'assets' => [
         'css' => [
-            'bbcodes/bbcodes/accordion/accordion.css',
+            'bbcodes/accordion/accordion.css',
         ],
         'js' => [
-            'bbcodes/bbcodes/accordion/accordion.js',
+            'bbcodes/accordion/accordion.js',
         ],
     ],
 
