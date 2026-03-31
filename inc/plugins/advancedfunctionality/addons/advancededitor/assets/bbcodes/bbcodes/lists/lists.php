@@ -118,7 +118,7 @@ if (!function_exists('af_ae_lists_install_mycode')) {
         af_ae_lists_mycode_upsert(
             'AF AE: LI',
             '\\[li\\]([\\s\\S]*?)\\[\\/li\\]',
-            '<li>$1</li>',
+            '<li class="af-ae-list__item" style="list-style-type:inherit;">$1</li>',
             40,
             1
         );
@@ -126,7 +126,7 @@ if (!function_exists('af_ae_lists_install_mycode')) {
         af_ae_lists_mycode_upsert(
             'AF AE: UL (disc)',
             '\\[ul\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ul class="af-ae-list af-ae-list--disc" data-af-list-style="disc" style="list-style-type:disc; padding-left:1.4em;">$1</ul>',
+            '<ul class="af-ae-list af-ae-list--disc" data-af-list-style="disc" type="disc" style="list-style-type:disc; padding-left:1.4em;">$1</ul>',
             20,
             1
         );
@@ -134,7 +134,7 @@ if (!function_exists('af_ae_lists_install_mycode')) {
         af_ae_lists_mycode_upsert(
             'AF AE: UL (square)',
             '\\[ul=square\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ul class="af-ae-list af-ae-list--square" data-af-list-style="square" style="list-style-type:square; padding-left:1.4em;">$1</ul>',
+            '<ul class="af-ae-list af-ae-list--square" data-af-list-style="square" type="square" style="list-style-type:square; padding-left:1.4em;">$1</ul>',
             20,
             1
         );
@@ -142,7 +142,7 @@ if (!function_exists('af_ae_lists_install_mycode')) {
         af_ae_lists_mycode_upsert(
             'AF AE: UL (circle)',
             '\\[ul=circle\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ul class="af-ae-list af-ae-list--circle" data-af-list-style="circle" style="list-style-type:circle; padding-left:1.4em;">$1</ul>',
+            '<ul class="af-ae-list af-ae-list--circle" data-af-list-style="circle" type="circle" style="list-style-type:circle; padding-left:1.4em;">$1</ul>',
             20,
             1
         );
@@ -150,7 +150,7 @@ if (!function_exists('af_ae_lists_install_mycode')) {
         af_ae_lists_mycode_upsert(
             'AF AE: UL (decimal)',
             '\\[ul=i\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ol class="af-ae-list af-ae-list--decimal" data-af-list-style="decimal" style="list-style-type:decimal; padding-left:1.6em;">$1</ol>',
+            '<ol class="af-ae-list af-ae-list--decimal" data-af-list-style="decimal" type="1" style="list-style-type:decimal; padding-left:1.6em;">$1</ol>',
             20,
             1
         );
@@ -158,7 +158,7 @@ if (!function_exists('af_ae_lists_install_mycode')) {
         af_ae_lists_mycode_upsert(
             'AF AE: UL (upper-roman)',
             '\\[ul=upper-roman\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ol class="af-ae-list af-ae-list--upper-roman" data-af-list-style="upper-roman" style="list-style-type:upper-roman; padding-left:1.6em;">$1</ol>',
+            '<ol class="af-ae-list af-ae-list--upper-roman" data-af-list-style="upper-roman" type="I" style="list-style-type:upper-roman; padding-left:1.6em;">$1</ol>',
             20,
             1
         );
@@ -166,7 +166,7 @@ if (!function_exists('af_ae_lists_install_mycode')) {
         af_ae_lists_mycode_upsert(
             'AF AE: UL (upper-alpha)',
             '\\[ul=upper-alpha\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ol class="af-ae-list af-ae-list--upper-alpha" data-af-list-style="upper-alpha" style="list-style-type:upper-alpha; padding-left:1.6em;">$1</ol>',
+            '<ol class="af-ae-list af-ae-list--upper-alpha" data-af-list-style="upper-alpha" type="A" style="list-style-type:upper-alpha; padding-left:1.6em;">$1</ol>',
             20,
             1
         );
@@ -174,7 +174,7 @@ if (!function_exists('af_ae_lists_install_mycode')) {
         af_ae_lists_mycode_upsert(
             'AF AE: UL (lower-roman)',
             '\\[ul=lower-roman\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ol class="af-ae-list af-ae-list--lower-roman" data-af-list-style="lower-roman" style="list-style-type:lower-roman; padding-left:1.6em;">$1</ol>',
+            '<ol class="af-ae-list af-ae-list--lower-roman" data-af-list-style="lower-roman" type="i" style="list-style-type:lower-roman; padding-left:1.6em;">$1</ol>',
             20,
             1
         );
@@ -182,7 +182,7 @@ if (!function_exists('af_ae_lists_install_mycode')) {
         af_ae_lists_mycode_upsert(
             'AF AE: UL (lower-alpha)',
             '\\[ul=lower-alpha\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ol class="af-ae-list af-ae-list--lower-alpha" data-af-list-style="lower-alpha" style="list-style-type:lower-alpha; padding-left:1.6em;">$1</ol>',
+            '<ol class="af-ae-list af-ae-list--lower-alpha" data-af-list-style="lower-alpha" type="a" style="list-style-type:lower-alpha; padding-left:1.6em;">$1</ol>',
             20,
             1
         );
@@ -190,7 +190,7 @@ if (!function_exists('af_ae_lists_install_mycode')) {
         af_ae_lists_mycode_upsert(
             'AF AE: OL (decimal default)',
             '\\[ol\\]([\\s\\S]*?)\\[\\/ol\\]',
-            '<ol class="af-ae-list af-ae-list--decimal" data-af-list-style="decimal" style="list-style-type:decimal; padding-left:1.6em;">$1</ol>',
+            '<ol class="af-ae-list af-ae-list--decimal" data-af-list-style="decimal" type="1" style="list-style-type:decimal; padding-left:1.6em;">$1</ol>',
             20,
             1
         );
@@ -206,7 +206,7 @@ if (!function_exists('af_ae_lists_install_mycode')) {
         af_ae_lists_mycode_upsert(
             'AF AE: OL (i->decimal)',
             '\\[ol=i\\]([\\s\\S]*?)\\[\\/ol\\]',
-            '<ol class="af-ae-list af-ae-list--decimal" data-af-list-style="decimal" style="list-style-type:decimal; padding-left:1.6em;">$1</ol>',
+            '<ol class="af-ae-list af-ae-list--decimal" data-af-list-style="decimal" type="1" style="list-style-type:decimal; padding-left:1.6em;">$1</ol>',
             19,
             1
         );
@@ -311,6 +311,33 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
         ];
     }
 
+    function af_ae_lists_html_type_attr(string $tag, string $style): string
+    {
+        $tag = strtolower(trim($tag));
+        $style = strtolower(trim($style));
+
+        if ($tag === 'ul') {
+            if (in_array($style, ['disc', 'circle', 'square'], true)) {
+                return $style;
+            }
+
+            return '';
+        }
+
+        if ($tag === 'ol') {
+            return match ($style) {
+                'decimal' => '1',
+                'upper-alpha' => 'A',
+                'lower-alpha' => 'a',
+                'upper-roman' => 'I',
+                'lower-roman' => 'i',
+                default => '',
+            };
+        }
+
+        return '';
+    }
+
     function af_ae_lists_bridge_is_spacer_html(string $html): bool
     {
         $probe = str_ireplace(['<br>', '<br/>', '<br />', '&nbsp;'], '', $html);
@@ -371,12 +398,11 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
 
             $children = af_ae_lists_bridge_cleanup_rendered_html($children);
 
-            $attrs = ' class="af-ae-list__item"';
+            $attrs = ' class="af-ae-list__item" style="list-style-type:inherit;"';
 
             if (!empty($context['list_style'])) {
                 $style = htmlspecialchars((string)$context['list_style'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
                 $attrs .= ' data-af-list-style="' . $style . '"';
-                $attrs .= ' style="list-style-type:' . $style . ';"';
             }
 
             return '<li' . $attrs . '>' . $children . '</li>';
@@ -388,6 +414,7 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
             $style = htmlspecialchars($normalized['style'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $padding = htmlspecialchars($normalized['padding'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $class = 'af-ae-list af-ae-list--' . preg_replace('~[^a-z0-9_-]+~i', '-', strtolower($normalized['style']));
+            $typeAttr = af_ae_lists_html_type_attr($tag, $normalized['style']);
 
             $children = '';
             $childContext = [
@@ -408,6 +435,7 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
             return '<' . $tag .
                 ' class="' . htmlspecialchars($class, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"' .
                 ' data-af-list-style="' . $style . '"' .
+                ($typeAttr !== '' ? ' type="' . htmlspecialchars($typeAttr, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"' : '') .
                 ' style="list-style-type:' . $style . '; padding-left:' . $padding . ';">' .
                 $children .
                 '</' . $tag . '>';
