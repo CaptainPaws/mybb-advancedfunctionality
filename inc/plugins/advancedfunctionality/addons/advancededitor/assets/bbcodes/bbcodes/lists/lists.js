@@ -284,6 +284,9 @@
         while (list.nextSibling && isListSpacerNode(list.nextSibling)) {
           list.parentNode.removeChild(list.nextSibling);
         }
+
+        var tag = String(list.tagName || '').toLowerCase();
+        normalizeListElement(list, tag === 'ol' ? 'decimal' : 'disc');
       }
     } catch (e) {}
   }
@@ -302,6 +305,150 @@
       '</' + tag + '>';
   }  
 
+  function buildCanonicalListBbcode(tag, style, content) {
+    tag = String(tag || '').toLowerCase();
+    style = String(style || '').trim().toLowerCase();
+    content = String(content == null ? '' : content);
+
+    var norm = normalizeListAttr(style, tag === 'ol' ? 'decimal' : 'disc');
+
+    if (norm.type === 'ol') {
+      if (!norm.attr || norm.attr === 'decimal') {
+        return '[ol]' + content + '[/ol]';
+      }
+      return '[ol=' + norm.attr + ']' + content + '[/ol]';
+    }
+
+    if (!norm.attr) {
+      return '[ul]' + content + '[/ul]';
+    }
+
+    return '[ul=' + norm.attr + ']' + content + '[/ul]';
+  }
+
+  function convertNodeForCustomListSerialization(node, doc) {
+    if (!node) return null;
+
+    if (node.nodeType === 3) {
+      return doc.createTextNode(node.nodeValue || '');
+    }
+
+    if (node.nodeType !== 1) {
+      return null;
+    }
+
+    var tag = String(node.tagName || '').toLowerCase();
+
+    if (tag === 'ul' || tag === 'ol') {
+      var fallback = tag === 'ol' ? 'decimal' : 'disc';
+      var style = extractListStyle(node, fallback);
+      var normalized = normalizeListAttr(style, fallback);
+
+      var outTag = normalized.type === 'ol' ? 'afol' : 'aful';
+      var out = doc.createElement(outTag);
+      out.setAttribute('data-af-list-style', normalized.attr || (normalized.type === 'ol' ? 'decimal' : 'disc'));
+      out.setAttribute('data-af-list-tag', normalized.type);
+
+      for (var i = 0; i < node.childNodes.length; i++) {
+        var childConverted = convertNodeForCustomListSerialization(node.childNodes[i], doc);
+        if (childConverted) out.appendChild(childConverted);
+      }
+
+      return out;
+    }
+
+    if (tag === 'li') {
+      var li = doc.createElement('afli');
+      for (var j = 0; j < node.childNodes.length; j++) {
+        var liChild = convertNodeForCustomListSerialization(node.childNodes[j], doc);
+        if (liChild) li.appendChild(liChild);
+      }
+      return li;
+    }
+
+    var clone = node.cloneNode(false);
+    for (var k = 0; k < node.childNodes.length; k++) {
+      var nested = convertNodeForCustomListSerialization(node.childNodes[k], doc);
+      if (nested) clone.appendChild(nested);
+    }
+    return clone;
+  }
+
+  function rewriteListHtmlForCustomSerialization(html) {
+    html = String(html == null ? '' : html);
+    if (!html) return html;
+
+    var wrap = document.createElement('div');
+    wrap.innerHTML = html;
+
+    var out = document.createElement('div');
+    while (wrap.firstChild) {
+      var converted = convertNodeForCustomListSerialization(wrap.firstChild, document);
+      wrap.removeChild(wrap.firstChild);
+      if (converted) out.appendChild(converted);
+    }
+
+    return out.innerHTML;
+  }
+
+  function afAeRegisterCustomListHtmlSerializers(bb) {
+    if (!bb || bb.__afAeCustomListHtmlSerializersInstalled) return;
+    bb.__afAeCustomListHtmlSerializersInstalled = true;
+
+    try {
+      bb.set('afli', {
+        isInline: false,
+        tags: {
+          afli: {
+            format: function (_el, content) {
+              content = String(content == null ? '' : content);
+              return '[li]' + content + '[/li]';
+            }
+          }
+        },
+        format: function (_el, content) {
+          content = String(content == null ? '' : content);
+          return '[li]' + content + '[/li]';
+        }
+      });
+    } catch (e0) {}
+
+    try {
+      bb.set('aful', {
+        isBlock: true,
+        tags: {
+          aful: {
+            format: function (el, content) {
+              var style = extractListStyle(el, 'disc');
+              return buildCanonicalListBbcode('ul', style, content || '');
+            }
+          }
+        },
+        format: function (el, content) {
+          var style = extractListStyle(el, 'disc');
+          return buildCanonicalListBbcode('ul', style, content || '');
+        }
+      });
+    } catch (e1) {}
+
+    try {
+      bb.set('afol', {
+        isBlock: true,
+        tags: {
+          afol: {
+            format: function (el, content) {
+              var style = extractListStyle(el, 'decimal');
+              return buildCanonicalListBbcode('ol', style, content || '');
+            }
+          }
+        },
+        format: function (el, content) {
+          var style = extractListStyle(el, 'decimal');
+          return buildCanonicalListBbcode('ol', style, content || '');
+        }
+      });
+    } catch (e2) {}
+  }
   // ===============================
   // Canonical BBCode chunk (твой канон)
   // ===============================
@@ -339,28 +486,130 @@
   }
 
   function extractListStyle(el, fallback) {
+    function parseInlineListStyle(styleText) {
+      styleText = String(styleText || '');
+      var m = styleText.match(/(?:^|;)\s*list-style-type\s*:\s*([^;]+)/i);
+      return m && m[1] ? String(m[1]).trim().toLowerCase() : '';
+    }
+
+    function styleFromTypeAttr(tag, typeAttr) {
+      tag = String(tag || '').toLowerCase();
+      typeAttr = String(typeAttr || '').trim();
+
+      if (!typeAttr) return '';
+
+      if (tag === 'ul') {
+        var ulType = typeAttr.toLowerCase();
+        if (ulType === 'disc' || ulType === 'circle' || ulType === 'square') {
+          return ulType;
+        }
+        return '';
+      }
+
+      if (tag === 'ol') {
+        if (typeAttr === '1') return 'decimal';
+        if (typeAttr === 'A') return 'upper-alpha';
+        if (typeAttr === 'a') return 'lower-alpha';
+        if (typeAttr === 'I') return 'upper-roman';
+        if (typeAttr === 'i') return 'lower-roman';
+
+        var olType = typeAttr.toLowerCase();
+        if (
+          olType === 'decimal' ||
+          olType === 'upper-alpha' ||
+          olType === 'lower-alpha' ||
+          olType === 'upper-roman' ||
+          olType === 'lower-roman'
+        ) {
+          return olType;
+        }
+      }
+
+      return '';
+    }
+
+    function styleFromClasses(node) {
+      if (!node || !node.className) return '';
+      var m = String(node.className).match(/\baf-ae-list--([a-z-]+)\b/i);
+      return m && m[1] ? String(m[1]).toLowerCase() : '';
+    }
+
+    function firstDirectLi(list) {
+      if (!list || !list.children) return null;
+      for (var i = 0; i < list.children.length; i++) {
+        var child = list.children[i];
+        if (child && child.nodeType === 1 && String(child.tagName).toLowerCase() === 'li') {
+          return child;
+        }
+      }
+      return null;
+    }
+
+    var tag = '';
+    try { tag = el && el.tagName ? String(el.tagName).toLowerCase() : ''; } catch (eTag) {}
+
     var style = '';
 
     try {
       if (el && typeof el.getAttribute === 'function') {
-        var dataList = el.getAttribute('data-list');
-        if (dataList) style = String(dataList);
+        style = String(el.getAttribute('data-list') || '').trim().toLowerCase();
+        if (style) return style;
+
+        style = String(el.getAttribute('data-af-list-style') || '').trim().toLowerCase();
+        if (style) return style;
+
+        style = styleFromTypeAttr(tag, el.getAttribute('type'));
+        if (style) return style;
+
+        style = parseInlineListStyle(el.getAttribute('style'));
+        if (style) return style;
       }
     } catch (e0) {}
 
-    if (!style) {
-      try { style = String((el && el.style && el.style.listStyleType) ? el.style.listStyleType : ''); } catch (e1) { style = ''; }
-    }
+    style = styleFromClasses(el);
+    if (style) return style;
 
-    if (!style && el && el.ownerDocument && el.ownerDocument.defaultView && el.ownerDocument.defaultView.getComputedStyle) {
+    try {
+      style = String((el && el.style && el.style.listStyleType) ? el.style.listStyleType : '').trim().toLowerCase();
+      if (style) return style;
+    } catch (e1) {}
+
+    var li = firstDirectLi(el);
+    if (li) {
       try {
-        var cs = el.ownerDocument.defaultView.getComputedStyle(el);
-        style = cs && cs.listStyleType ? String(cs.listStyleType) : '';
-      } catch (e2) { style = ''; }
+        style = String(li.getAttribute('data-af-list-style') || '').trim().toLowerCase();
+        if (style) return style;
+
+        style = parseInlineListStyle(li.getAttribute('style'));
+        if (style) return style;
+      } catch (e2) {}
+
+      style = styleFromClasses(li);
+      if (style) return style;
+
+      try {
+        style = String((li.style && li.style.listStyleType) ? li.style.listStyleType : '').trim().toLowerCase();
+        if (style) return style;
+      } catch (e3) {}
+
+      try {
+        if (li.ownerDocument && li.ownerDocument.defaultView && li.ownerDocument.defaultView.getComputedStyle) {
+          var liCs = li.ownerDocument.defaultView.getComputedStyle(li);
+          style = liCs && liCs.listStyleType ? String(liCs.listStyleType).trim().toLowerCase() : '';
+          if (style && style !== 'inherit') return style;
+        }
+      } catch (e4) {}
     }
 
-    style = String(style || '').trim().toLowerCase();
-    return style || String(fallback || '').toLowerCase();
+    try {
+      if (el && el.ownerDocument && el.ownerDocument.defaultView && el.ownerDocument.defaultView.getComputedStyle) {
+        var cs = el.ownerDocument.defaultView.getComputedStyle(el);
+        style = cs && cs.listStyleType ? String(cs.listStyleType).trim().toLowerCase() : '';
+        if (style && style !== 'inherit') return style;
+      }
+    } catch (e5) {}
+
+    return String(fallback || '').trim().toLowerCase();
   }
 
   function isOrderedAttr(attr) {
@@ -384,6 +633,135 @@
     return { type: 'ul', attr: '' };
   }
 
+  function htmlListTypeAttr(tag, style) {
+    tag = String(tag || '').toLowerCase();
+    style = String(style || '').toLowerCase().trim();
+
+    if (tag === 'ul') {
+      if (style === 'disc' || style === 'circle' || style === 'square') {
+        return style;
+      }
+      return '';
+    }
+
+    if (tag === 'ol') {
+      if (style === 'decimal') return '1';
+      if (style === 'upper-alpha') return 'A';
+      if (style === 'lower-alpha') return 'a';
+      if (style === 'upper-roman') return 'I';
+      if (style === 'lower-roman') return 'i';
+    }
+
+    return '';
+  }
+
+  function setListClassStyle(el, style) {
+    if (!el || !el.classList) return;
+
+    var toRemove = [];
+    for (var i = 0; i < el.classList.length; i++) {
+      var cls = el.classList[i];
+      if (/^af-ae-list--/i.test(cls)) {
+        toRemove.push(cls);
+      }
+    }
+
+    for (var j = 0; j < toRemove.length; j++) {
+      el.classList.remove(toRemove[j]);
+    }
+
+    el.classList.add('af-ae-list');
+    el.classList.add('af-ae-list--' + style);
+  }
+
+  function getDirectLiChildren(list) {
+    var out = [];
+    if (!list || !list.children) return out;
+
+    for (var i = 0; i < list.children.length; i++) {
+      var child = list.children[i];
+      if (child && child.nodeType === 1 && String(child.tagName).toLowerCase() === 'li') {
+        out.push(child);
+      }
+    }
+
+    return out;
+  }
+
+  function normalizeListElement(el, fallback) {
+    if (!el || el.nodeType !== 1) return '';
+
+    var tag = String(el.tagName || '').toLowerCase();
+    if (tag !== 'ul' && tag !== 'ol') return '';
+
+    var wanted = extractListStyle(el, fallback || (tag === 'ol' ? 'decimal' : 'disc'));
+
+    if (tag === 'ul' && !isUnorderedAttr(wanted)) {
+      wanted = 'disc';
+    }
+
+    if (tag === 'ol' && !isOrderedAttr(wanted)) {
+      wanted = 'decimal';
+    }
+
+    el.setAttribute('data-list', wanted);
+    el.setAttribute('data-af-list-style', wanted);
+    setListClassStyle(el, wanted);
+
+    var typeAttr = htmlListTypeAttr(tag, wanted);
+    if (typeAttr) {
+      el.setAttribute('type', typeAttr);
+    } else {
+      el.removeAttribute('type');
+    }
+
+    el.style.listStyleType = wanted;
+    el.style.paddingLeft = tag === 'ol' ? '1.6em' : '1.4em';
+
+    var liChildren = getDirectLiChildren(el);
+    for (var i = 0; i < liChildren.length; i++) {
+      var li = liChildren[i];
+      li.classList.add('af-ae-list__item');
+      li.setAttribute('data-af-list-style', wanted);
+      li.style.listStyleType = wanted;
+    }
+
+    return wanted;
+  }
+
+  function normalizeEditorLists(inst) {
+    try {
+      if (!inst || typeof inst.getBody !== 'function') return;
+      var body = inst.getBody();
+      if (!body) return;
+
+      var lists = body.querySelectorAll('ul, ol');
+      for (var i = 0; i < lists.length; i++) {
+        var list = lists[i];
+        var tag = String(list.tagName || '').toLowerCase();
+        normalizeListElement(list, tag === 'ol' ? 'decimal' : 'disc');
+      }
+    } catch (e) {}
+  }
+
+  function buildHtmlListTag(tag, style, padding, content) {
+    tag = String(tag || '').toLowerCase();
+    style = String(style || '').toLowerCase().trim();
+    padding = String(padding || '').trim();
+    content = String(content == null ? '' : content);
+
+    var typeAttr = htmlListTypeAttr(tag, style);
+
+    return '<' + tag +
+      ' class="af-ae-list af-ae-list--' + style + '"' +
+      ' data-list="' + style + '"' +
+      ' data-af-list-style="' + style + '"' +
+      (typeAttr ? ' type="' + typeAttr + '"' : '') +
+      ' style="list-style-type:' + style + '; padding-left:' + padding + ';">' +
+        content +
+      '</' + tag + '>';
+  }
+
   function buildHtmlListChunk(attr) {
     attr = normAttr(attr);
 
@@ -392,7 +770,7 @@
         'ul',
         'disc',
         '1.4em',
-        '<li style="list-style-type:disc;"><br></li>'
+        '<li class="af-ae-list__item" data-af-list-style="disc" style="list-style-type:inherit;"><br></li>'
       );
     }
 
@@ -401,21 +779,22 @@
         'ul',
         attr,
         '1.4em',
-        '<li style="list-style-type:' + attr + ';"><br></li>'
+        '<li class="af-ae-list__item" data-af-list-style="' + attr + '" style="list-style-type:inherit;"><br></li>'
       );
     }
 
     var lst = olStyleForAttr(attr);
+
     return buildHtmlListTag(
       'ol',
       lst,
       '1.6em',
-      '<li style="list-style-type:' + lst + ';"><br></li>'
+      '<li class="af-ae-list__item" data-af-list-style="' + lst + '" style="list-style-type:inherit;"><br></li>'
     );
   }
 
   // ===============================
-  // WYSIWYG CSS (чтобы SCEditor не “съедал” типы)
+  // WYSIWYG CSS
   // ===============================
   function ensureListCss(inst) {
     try {
@@ -431,9 +810,17 @@
       if (doc.getElementById('af-ae-lists-css')) return;
 
       var css =
-        'ol{padding-left:1.6em !important;}' +
-        'ul{padding-left:1.4em !important;}' +
-        'li{display:list-item !important;}';
+        'ol.af-ae-list{padding-left:1.6em !important;}' +
+        'ul.af-ae-list{padding-left:1.4em !important;}' +
+        '.af-ae-list > li,.af-ae-list__item{display:list-item !important;}' +
+        '.af-ae-list--disc > li,.af-ae-list__item[data-af-list-style="disc"]{list-style-type:disc !important;}' +
+        '.af-ae-list--circle > li,.af-ae-list__item[data-af-list-style="circle"]{list-style-type:circle !important;}' +
+        '.af-ae-list--square > li,.af-ae-list__item[data-af-list-style="square"]{list-style-type:square !important;}' +
+        '.af-ae-list--decimal > li,.af-ae-list__item[data-af-list-style="decimal"]{list-style-type:decimal !important;}' +
+        '.af-ae-list--upper-roman > li,.af-ae-list__item[data-af-list-style="upper-roman"]{list-style-type:upper-roman !important;}' +
+        '.af-ae-list--lower-roman > li,.af-ae-list__item[data-af-list-style="lower-roman"]{list-style-type:lower-roman !important;}' +
+        '.af-ae-list--upper-alpha > li,.af-ae-list__item[data-af-list-style="upper-alpha"]{list-style-type:upper-alpha !important;}' +
+        '.af-ae-list--lower-alpha > li,.af-ae-list__item[data-af-list-style="lower-alpha"]{list-style-type:lower-alpha !important;}';
 
       var st = doc.createElement('style');
       st.id = 'af-ae-lists-css';
@@ -449,18 +836,11 @@
 
     try {
       if (typeof inst.bind !== 'function') return;
+
       inst.bind('toSource', function (html) {
+        try { normalizeEditorLists(inst); } catch (e0) {}
         html = String(html == null ? '' : html);
-
-        html = html.replace(/<ul[^>]*style="[^"]*list-style-type:([^;"]+)[^"]*"[^>]*>/gi, function (_m, type) {
-          return '<ul data-list="' + String(type || '').trim().toLowerCase() + '">';
-        });
-
-        html = html.replace(/<ol[^>]*style="[^"]*list-style-type:([^;"]+)[^"]*"[^>]*>/gi, function (_m, type) {
-          return '<ol data-list="' + String(type || '').trim().toLowerCase() + '">';
-        });
-
-        return html;
+        return rewriteListHtmlForCustomSerialization(html);
       });
     } catch (e) {}
   }
@@ -506,6 +886,7 @@
 
     if (bb.__afAeMybbListsPatched) return;
     bb.__afAeMybbListsPatched = true;
+    afAeRegisterCustomListHtmlSerializers(bb);
 
     try {
       bb.set('li', {
@@ -718,7 +1099,13 @@
         return false;
       }
 
+      var currentStyle = extractListStyle(list, String(list.nodeName).toLowerCase() === 'ol' ? 'decimal' : 'disc');
+      normalizeListElement(list, currentStyle);
+
       var newLi = doc.createElement('li');
+      newLi.className = 'af-ae-list__item';
+      newLi.setAttribute('data-af-list-style', currentStyle);
+      newLi.setAttribute('style', 'list-style-type:' + currentStyle + ';');
       newLi.appendChild(doc.createElement('br'));
       if (li.nextSibling) list.insertBefore(newLi, li.nextSibling);
       else list.appendChild(newLi);
@@ -885,6 +1272,7 @@
     }
 
     try { cleanupListBoundaryBreaks(inst); } catch (e6) {}
+    try { normalizeEditorLists(inst); } catch (e6b) {}
     try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e7) {}
     try { if (typeof inst.focus === 'function') inst.focus(); } catch (e8) {}
 
@@ -1062,6 +1450,7 @@
         try { ensureListCss(inst); } catch (e2) {}
         try { bindToSourceListNormalization(inst); } catch (e3) {}
         try { bindListEnterBehavior(inst); } catch (e4) {}
+        try { normalizeEditorLists(inst); } catch (e5) {}
       }
     } catch (e3) {}
 
