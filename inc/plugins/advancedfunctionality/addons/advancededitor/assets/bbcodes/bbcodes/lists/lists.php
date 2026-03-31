@@ -115,7 +115,6 @@ if (!function_exists('af_ae_lists_install_mycode')) {
             return;
         }
 
-        // [li]...[/li]
         af_ae_lists_mycode_upsert(
             'AF AE: LI',
             '\\[li\\]([\\s\\S]*?)\\[\\/li\\]',
@@ -124,101 +123,90 @@ if (!function_exists('af_ae_lists_install_mycode')) {
             1
         );
 
-        // [ul]...[/ul] => disc list
         af_ae_lists_mycode_upsert(
             'AF AE: UL (disc)',
             '\\[ul\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ul style="list-style-type:disc; padding-left: 1.4em;">$1</ul>',
+            '<ul class="af-ae-list af-ae-list--disc" data-af-list-style="disc" style="list-style-type:disc; padding-left:1.4em;">$1</ul>',
             20,
             1
         );
 
-        // [ul=square]...[/ul]
         af_ae_lists_mycode_upsert(
             'AF AE: UL (square)',
             '\\[ul=square\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ul style="list-style-type:square; padding-left: 1.4em;">$1</ul>',
+            '<ul class="af-ae-list af-ae-list--square" data-af-list-style="square" style="list-style-type:square; padding-left:1.4em;">$1</ul>',
             20,
             1
         );
 
-        // [ul=circle]...[/ul]
         af_ae_lists_mycode_upsert(
             'AF AE: UL (circle)',
             '\\[ul=circle\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ul style="list-style-type:circle; padding-left: 1.4em;">$1</ul>',
+            '<ul class="af-ae-list af-ae-list--circle" data-af-list-style="circle" style="list-style-type:circle; padding-left:1.4em;">$1</ul>',
             20,
             1
         );
 
-        // [ul=i]...[/ul] => decimal
         af_ae_lists_mycode_upsert(
             'AF AE: UL (decimal)',
             '\\[ul=i\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ol style="list-style-type:decimal; padding-left: 1.6em;">$1</ol>',
+            '<ol class="af-ae-list af-ae-list--decimal" data-af-list-style="decimal" style="list-style-type:decimal; padding-left:1.6em;">$1</ol>',
             20,
             1
         );
 
-        // [ul=upper-roman]...[/ul]
         af_ae_lists_mycode_upsert(
             'AF AE: UL (upper-roman)',
             '\\[ul=upper-roman\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ol style="list-style-type:upper-roman; padding-left: 1.6em;">$1</ol>',
+            '<ol class="af-ae-list af-ae-list--upper-roman" data-af-list-style="upper-roman" style="list-style-type:upper-roman; padding-left:1.6em;">$1</ol>',
             20,
             1
         );
 
-        // [ul=upper-alpha]...[/ul]
         af_ae_lists_mycode_upsert(
             'AF AE: UL (upper-alpha)',
             '\\[ul=upper-alpha\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ol style="list-style-type:upper-alpha; padding-left: 1.6em;">$1</ol>',
+            '<ol class="af-ae-list af-ae-list--upper-alpha" data-af-list-style="upper-alpha" style="list-style-type:upper-alpha; padding-left:1.6em;">$1</ol>',
             20,
             1
         );
 
-        // [ul=lower-roman]...[/ul]
         af_ae_lists_mycode_upsert(
             'AF AE: UL (lower-roman)',
             '\\[ul=lower-roman\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ol style="list-style-type:lower-roman; padding-left: 1.6em;">$1</ol>',
+            '<ol class="af-ae-list af-ae-list--lower-roman" data-af-list-style="lower-roman" style="list-style-type:lower-roman; padding-left:1.6em;">$1</ol>',
             20,
             1
         );
 
-        // [ul=lower-alpha]...[/ul]
         af_ae_lists_mycode_upsert(
             'AF AE: UL (lower-alpha)',
             '\\[ul=lower-alpha\\]([\\s\\S]*?)\\[\\/ul\\]',
-            '<ol style="list-style-type:lower-alpha; padding-left: 1.6em;">$1</ol>',
+            '<ol class="af-ae-list af-ae-list--lower-alpha" data-af-list-style="lower-alpha" style="list-style-type:lower-alpha; padding-left:1.6em;">$1</ol>',
             20,
             1
         );
 
-        // [ol]...[/ol] => decimal
         af_ae_lists_mycode_upsert(
             'AF AE: OL (decimal default)',
             '\\[ol\\]([\\s\\S]*?)\\[\\/ol\\]',
-            '<ol style="list-style-type:decimal; padding-left: 1.6em;">$1</ol>',
+            '<ol class="af-ae-list af-ae-list--decimal" data-af-list-style="decimal" style="list-style-type:decimal; padding-left:1.6em;">$1</ol>',
             20,
             1
         );
 
-        // [ol=decimal|upper-alpha|upper-roman|lower-alpha|lower-roman|i]...[/ol]
         af_ae_lists_mycode_upsert(
             'AF AE: OL (typed)',
-            '\\[ol=(decimal|upper-alpha|upper-roman|lower-alpha|lower-roman|i)\\]([\\s\\S]*?)\\[\\/ol\\]',
-            '<ol style="list-style-type:$1; padding-left: 1.6em;">$2</ol>',
+            '\\[ol=(decimal|upper-alpha|upper-roman|lower-alpha|lower-roman)\\]([\\s\\S]*?)\\[\\/ol\\]',
+            '<ol class="af-ae-list af-ae-list--$1" data-af-list-style="$1" style="list-style-type:$1; padding-left:1.6em;">$2</ol>',
             20,
             1
         );
 
-        // Backward compatibility: [ol=i] should render as decimal
         af_ae_lists_mycode_upsert(
             'AF AE: OL (i->decimal)',
             '\\[ol=i\\]([\\s\\S]*?)\\[\\/ol\\]',
-            '<ol style="list-style-type:decimal; padding-left: 1.6em;">$1</ol>',
+            '<ol class="af-ae-list af-ae-list--decimal" data-af-list-style="decimal" style="list-style-type:decimal; padding-left:1.6em;">$1</ol>',
             19,
             1
         );
@@ -323,23 +311,75 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
         ];
     }
 
-    function af_ae_lists_bridge_render_node(array $node): string
+    function af_ae_lists_bridge_is_spacer_html(string $html): bool
+    {
+        $probe = str_ireplace(['<br>', '<br/>', '<br />', '&nbsp;'], '', $html);
+        $probe = preg_replace('~\s+~u', '', (string)$probe);
+
+        return trim(strip_tags((string)$probe)) === '';
+    }
+
+    function af_ae_lists_bridge_cleanup_rendered_html(string $html): string
+    {
+        $html = preg_replace('~(<(?:ul|ol)\b[^>]*>)(?:\s|&nbsp;|<br\s*/?>)+~i', '$1', $html);
+        $html = preg_replace('~(?:\s|&nbsp;|<br\s*/?>)+(</(?:ul|ol)>)~i', '$1', $html);
+        $html = preg_replace('~</li>(?:\s|&nbsp;|<br\s*/?>)+(?=<li\b)~i', '</li>', $html);
+        $html = preg_replace('~(?:<br\s*/?>\s*)+(?=<(?:ul|ol)\b)~i', '', $html);
+        $html = preg_replace('~(</(?:ul|ol)>)(?:\s*<br\s*/?>)+~i', '$1', $html);
+
+        return is_string($html) ? $html : '';
+    }    
+
+    function af_ae_lists_bridge_render_node(array $node, array $context = []): string
     {
         $type = $node['type'] ?? 'text';
 
-        if ($type === 'text') {
-            return (string)($node['value'] ?? '');
+        if ($type === 'root') {
+            $html = '';
+
+            foreach ($node['children'] ?? [] as $child) {
+                if (!is_array($child)) {
+                    continue;
+                }
+
+                $html .= af_ae_lists_bridge_render_node($child, $context);
+            }
+
+            return af_ae_lists_bridge_cleanup_rendered_html($html);
         }
 
-        $children = '';
-        foreach ($node['children'] ?? [] as $child) {
-            if (is_array($child)) {
-                $children .= af_ae_lists_bridge_render_node($child);
+        if ($type === 'text') {
+            $value = (string)($node['value'] ?? '');
+
+            if (!empty($context['inside_list']) && af_ae_lists_bridge_is_spacer_html($value)) {
+                return '';
             }
+
+            return $value;
         }
 
         if ($type === 'af_li') {
-            return '<li>' . $children . '</li>';
+            $children = '';
+
+            foreach ($node['children'] ?? [] as $child) {
+                if (!is_array($child)) {
+                    continue;
+                }
+
+                $children .= af_ae_lists_bridge_render_node($child, $context);
+            }
+
+            $children = af_ae_lists_bridge_cleanup_rendered_html($children);
+
+            $attrs = ' class="af-ae-list__item"';
+
+            if (!empty($context['list_style'])) {
+                $style = htmlspecialchars((string)$context['list_style'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                $attrs .= ' data-af-list-style="' . $style . '"';
+                $attrs .= ' style="list-style-type:' . $style . ';"';
+            }
+
+            return '<li' . $attrs . '>' . $children . '</li>';
         }
 
         if ($type === 'af_ul' || $type === 'af_ol') {
@@ -347,8 +387,37 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
             $tag = $normalized['tag'];
             $style = htmlspecialchars($normalized['style'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $padding = htmlspecialchars($normalized['padding'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $class = 'af-ae-list af-ae-list--' . preg_replace('~[^a-z0-9_-]+~i', '-', strtolower($normalized['style']));
 
-            return '<' . $tag . ' style="list-style-type:' . $style . '; padding-left:' . $padding . ';">' . $children . '</' . $tag . '>';
+            $children = '';
+            $childContext = [
+                'inside_list' => true,
+                'list_style'  => $normalized['style'],
+            ];
+
+            foreach ($node['children'] ?? [] as $child) {
+                if (!is_array($child)) {
+                    continue;
+                }
+
+                $children .= af_ae_lists_bridge_render_node($child, $childContext);
+            }
+
+            $children = af_ae_lists_bridge_cleanup_rendered_html($children);
+
+            return '<' . $tag .
+                ' class="' . htmlspecialchars($class, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"' .
+                ' data-af-list-style="' . $style . '"' .
+                ' style="list-style-type:' . $style . '; padding-left:' . $padding . ';">' .
+                $children .
+                '</' . $tag . '>';
+        }
+
+        $children = '';
+        foreach ($node['children'] ?? [] as $child) {
+            if (is_array($child)) {
+                $children .= af_ae_lists_bridge_render_node($child, $context);
+            }
         }
 
         return $children;
@@ -356,7 +425,14 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
 
     function af_ae_lists_bridge_parse_html(string $message): string
     {
-        if ($message === '' || (stripos($message, '[af_ul') === false && stripos($message, '[af_ol') === false && stripos($message, '[af_li') === false)) {
+        if (
+            $message === '' ||
+            (
+                stripos($message, '[af_ul') === false &&
+                stripos($message, '[af_ol') === false &&
+                stripos($message, '[af_li') === false
+            )
+        ) {
             return $message;
         }
 
@@ -378,7 +454,7 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
                 $text = substr($message, $lastOffset, $tokenOffset - $lastOffset);
                 if ($text !== '') {
                     $stack[count($stack) - 1]['children'][] = [
-                        'type' => 'text',
+                        'type'  => 'text',
                         'value' => $text,
                     ];
                 }
@@ -390,8 +466,8 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
 
             if (!$isClosing) {
                 $node = [
-                    'type' => $tagName,
-                    'attr' => $attr,
+                    'type'     => $tagName,
+                    'attr'     => $attr,
                     'children' => [],
                 ];
 
@@ -413,7 +489,7 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
                     }
                 } else {
                     $stack[count($stack) - 1]['children'][] = [
-                        'type' => 'text',
+                        'type'  => 'text',
                         'value' => $fullToken,
                     ];
                 }
@@ -426,7 +502,7 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
             $tail = substr($message, $lastOffset);
             if ($tail !== '') {
                 $stack[count($stack) - 1]['children'][] = [
-                    'type' => 'text',
+                    'type'  => 'text',
                     'value' => $tail,
                 ];
             }
