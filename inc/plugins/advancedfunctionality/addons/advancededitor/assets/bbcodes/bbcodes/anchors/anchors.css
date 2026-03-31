@@ -1,0 +1,26 @@
+.af-bb-anchor-target {
+  display: block;
+  position: relative;
+  width: 0;
+  height: 0;
+}
+
+.af-bb-anchor-link {
+  cursor: pointer;
+}
+
+.af-ae-anchor-placeholder {
+  display: inline-block;
+  padding: 2px 6px;
+  border: 1px dashed #7c8aa0;
+  border-radius: 4px;
+  color: #2f3b4f;
+  background: #eef3ff;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.af-ae-anchorlink-placeholder {
+  text-decoration: underline;
+}
