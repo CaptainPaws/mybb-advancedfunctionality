@@ -8,12 +8,20 @@
     window.afAeBuiltinHandlers = Object.create(null);
   }
 
+  var POSITIONS = ['top', 'bottom', 'left', 'right'];
+
   function asText(x) {
     return String(x == null ? '' : x);
   }
 
-  function insertTemplate(inst) {
-    var template = '[tabs position="top"]\n'
+  function sanitizePosition(position) {
+    position = asText(position).toLowerCase().trim();
+    return POSITIONS.indexOf(position) !== -1 ? position : 'top';
+  }
+
+  function buildTemplate(position) {
+    position = sanitizePosition(position);
+    return '[tabs position="' + position + '"]\n'
       + '[tab title="Вкладка 1"]\n'
       + 'Контент вкладки 1\n'
       + '[/tab]\n'
@@ -21,6 +29,10 @@
       + 'Контент вкладки 2\n'
       + '[/tab]\n'
       + '[/tabs]';
+  }
+
+  function insertTemplate(inst, position) {
+    var template = buildTemplate(position);
 
     try {
       if (inst && typeof inst.insertText === 'function') {
@@ -61,8 +73,106 @@
     }
   }
 
-  window.af_ae_tabs_exec = function (inst) {
-    insertTemplate(inst);
+  function removeMenu(menu) {
+    if (!menu || !menu.parentNode) return;
+    menu.parentNode.removeChild(menu);
+  }
+
+  function openPositionMenu(caller, onPick) {
+    if (!caller || typeof caller.getBoundingClientRect !== 'function') return false;
+
+    var menu = document.createElement('div');
+    menu.className = 'af-ae-tabs-position-menu';
+    menu.setAttribute('role', 'menu');
+    menu.style.position = 'fixed';
+    menu.style.zIndex = '100000';
+    menu.style.minWidth = '160px';
+    menu.style.padding = '6px';
+    menu.style.borderRadius = '8px';
+    menu.style.border = '1px solid #3c4656';
+    menu.style.background = '#1d2430';
+    menu.style.boxShadow = '0 10px 30px rgba(0,0,0,.3)';
+
+    var rect = caller.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.round(rect.left)) + 'px';
+    menu.style.top = Math.max(8, Math.round(rect.bottom + 6)) + 'px';
+
+    function pick(pos) {
+      removeMenu(menu);
+      if (typeof onPick === 'function') onPick(pos);
+    }
+
+    POSITIONS.forEach(function (position) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'af-ae-tabs-position-menu__item';
+      btn.setAttribute('role', 'menuitem');
+      btn.setAttribute('data-pos', position);
+      btn.style.display = 'block';
+      btn.style.width = '100%';
+      btn.style.textAlign = 'left';
+      btn.style.margin = '0';
+      btn.style.padding = '8px 10px';
+      btn.style.border = '0';
+      btn.style.borderRadius = '6px';
+      btn.style.background = 'transparent';
+      btn.style.color = '#e9edf4';
+      btn.style.cursor = 'pointer';
+      btn.textContent = 'Tabs ' + position;
+
+      btn.addEventListener('mouseenter', function () {
+        btn.style.background = '#2e3f58';
+      }, false);
+      btn.addEventListener('mouseleave', function () {
+        btn.style.background = 'transparent';
+      }, false);
+      btn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        pick(position);
+      }, false);
+
+      menu.appendChild(btn);
+    });
+
+    document.body.appendChild(menu);
+
+    function onDocClick(ev) {
+      if (!menu.contains(ev.target) && ev.target !== caller) {
+        cleanup();
+      }
+    }
+
+    function onEsc(ev) {
+      if (ev.key === 'Escape') {
+        cleanup();
+      }
+    }
+
+    function cleanup() {
+      document.removeEventListener('mousedown', onDocClick, true);
+      document.removeEventListener('keydown', onEsc, true);
+      removeMenu(menu);
+    }
+
+    document.addEventListener('mousedown', onDocClick, true);
+    document.addEventListener('keydown', onEsc, true);
+
+    return true;
+  }
+
+  function askPosition(caller, callback) {
+    if (openPositionMenu(caller, callback)) return;
+
+    var raw = window.prompt('Положение tabs: top, bottom, left или right', 'top');
+    if (raw == null) return;
+
+    callback(sanitizePosition(raw));
+  }
+
+  window.af_ae_tabs_exec = function (inst, caller) {
+    askPosition(caller || null, function (position) {
+      insertTemplate(inst, position);
+    });
   };
 
   window.afAeBuiltinHandlers.tabs = window.af_ae_tabs_exec;
