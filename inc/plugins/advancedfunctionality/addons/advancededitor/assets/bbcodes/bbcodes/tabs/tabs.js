@@ -1,4 +1,4 @@
-(function () {
+(function (window, document) {
   'use strict';
 
   if (window.__afAeTabsPackLoaded) return;
@@ -8,7 +8,9 @@
     window.afAeBuiltinHandlers = Object.create(null);
   }
 
+  var CMD = 'af_tabs';
   var POSITIONS = ['top', 'bottom', 'left', 'right'];
+  var DROPDOWN_ID = 'sceditor-sceditor-af_tabs-picker';
 
   function asText(x) {
     return String(x == null ? '' : x);
@@ -17,6 +19,25 @@
   function sanitizePosition(position) {
     position = asText(position).toLowerCase().trim();
     return POSITIONS.indexOf(position) !== -1 ? position : 'top';
+  }
+
+  function resolveEditor(ctx) {
+    if (ctx && typeof ctx.insertText === 'function') return ctx;
+    if (ctx && ctx.sceditor && typeof ctx.sceditor.insertText === 'function') return ctx.sceditor;
+    if (ctx && ctx.inst && typeof ctx.inst.insertText === 'function') return ctx.inst;
+    if (ctx && ctx.instance && typeof ctx.instance.insertText === 'function') return ctx.instance;
+    return null;
+  }
+
+  function resolveCaller(primary, secondary) {
+    var candidate = secondary || primary;
+
+    if (candidate && candidate.nodeType === 1) return candidate;
+    if (candidate && candidate.jquery && candidate[0] && candidate[0].nodeType === 1) return candidate[0];
+    if (candidate && candidate.currentTarget && candidate.currentTarget.nodeType === 1) return candidate.currentTarget;
+    if (candidate && candidate.target && candidate.target.nodeType === 1) return candidate.target;
+
+    return null;
   }
 
   function buildTemplate(position) {
@@ -73,109 +94,69 @@
     }
   }
 
-  function removeMenu(menu) {
-    if (!menu || !menu.parentNode) return;
-    menu.parentNode.removeChild(menu);
+  function makeDirectionDropdown(editor) {
+    var wrap = document.createElement('div');
+    wrap.className = 'af-ae-tabs-picker';
+    wrap.innerHTML = ''
+      + '<div class="af-ae-tabs-picker__title">Положение табов</div>'
+      + '<div class="af-ae-tabs-picker__grid">'
+      + '  <button type="button" class="button af-ae-tabs-picker__btn" data-pos="top">top</button>'
+      + '  <button type="button" class="button af-ae-tabs-picker__btn" data-pos="bottom">bottom</button>'
+      + '  <button type="button" class="button af-ae-tabs-picker__btn" data-pos="left">left</button>'
+      + '  <button type="button" class="button af-ae-tabs-picker__btn" data-pos="right">right</button>'
+      + '</div>';
+
+    wrap.addEventListener('click', function (event) {
+      var target = event.target;
+      if (!target || !target.closest) return;
+
+      var btn = target.closest('[data-pos]');
+      if (!btn) return;
+
+      event.preventDefault();
+      insertTemplate(editor, sanitizePosition(btn.getAttribute('data-pos')));
+
+      try {
+        if (editor && typeof editor.closeDropDown === 'function') {
+          editor.closeDropDown(true);
+        }
+      } catch (e0) {}
+    }, false);
+
+    return wrap;
   }
 
-  function openPositionMenu(caller, onPick) {
-    if (!caller || typeof caller.getBoundingClientRect !== 'function') return false;
+  function openDirectionDropdown(editor, caller) {
+    if (!editor || typeof editor.createDropDown !== 'function') return false;
 
-    var menu = document.createElement('div');
-    menu.className = 'af-ae-tabs-position-menu';
-    menu.setAttribute('role', 'menu');
-    menu.style.position = 'fixed';
-    menu.style.zIndex = '100000';
-    menu.style.minWidth = '160px';
-    menu.style.padding = '6px';
-    menu.style.borderRadius = '8px';
-    menu.style.border = '1px solid #3c4656';
-    menu.style.background = '#1d2430';
-    menu.style.boxShadow = '0 10px 30px rgba(0,0,0,.3)';
+    var anchor = resolveCaller(caller, null);
+    if (!anchor || typeof anchor.getBoundingClientRect !== 'function') return false;
 
-    var rect = caller.getBoundingClientRect();
-    menu.style.left = Math.max(8, Math.round(rect.left)) + 'px';
-    menu.style.top = Math.max(8, Math.round(rect.bottom + 6)) + 'px';
-
-    function pick(pos) {
-      removeMenu(menu);
-      if (typeof onPick === 'function') onPick(pos);
-    }
-
-    POSITIONS.forEach(function (position) {
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'af-ae-tabs-position-menu__item';
-      btn.setAttribute('role', 'menuitem');
-      btn.setAttribute('data-pos', position);
-      btn.style.display = 'block';
-      btn.style.width = '100%';
-      btn.style.textAlign = 'left';
-      btn.style.margin = '0';
-      btn.style.padding = '8px 10px';
-      btn.style.border = '0';
-      btn.style.borderRadius = '6px';
-      btn.style.background = 'transparent';
-      btn.style.color = '#e9edf4';
-      btn.style.cursor = 'pointer';
-      btn.textContent = 'Tabs ' + position;
-
-      btn.addEventListener('mouseenter', function () {
-        btn.style.background = '#2e3f58';
-      }, false);
-      btn.addEventListener('mouseleave', function () {
-        btn.style.background = 'transparent';
-      }, false);
-      btn.addEventListener('click', function (ev) {
-        ev.preventDefault();
-        pick(position);
-      }, false);
-
-      menu.appendChild(btn);
-    });
-
-    document.body.appendChild(menu);
-
-    function onDocClick(ev) {
-      if (!menu.contains(ev.target) && ev.target !== caller) {
-        cleanup();
+    try {
+      if (anchor.closest) {
+        var button = anchor.closest('a.sceditor-button');
+        if (button) anchor = button;
       }
-    }
+    } catch (e0) {}
 
-    function onEsc(ev) {
-      if (ev.key === 'Escape') {
-        cleanup();
-      }
-    }
-
-    function cleanup() {
-      document.removeEventListener('mousedown', onDocClick, true);
-      document.removeEventListener('keydown', onEsc, true);
-      removeMenu(menu);
-    }
-
-    document.addEventListener('mousedown', onDocClick, true);
-    document.addEventListener('keydown', onEsc, true);
-
+    try { editor.closeDropDown(true); } catch (e1) {}
+    editor.createDropDown(anchor, DROPDOWN_ID, makeDirectionDropdown(editor));
     return true;
   }
 
-  function askPosition(caller, callback) {
-    if (openPositionMenu(caller, callback)) return;
+  window.af_ae_tabs_exec = function (ctx, maybeDefOrCaller, maybeCaller) {
+    var editor = resolveEditor(ctx) || ctx;
+    var caller = resolveCaller(maybeDefOrCaller, maybeCaller);
 
-    var raw = window.prompt('Положение tabs: top, bottom, left или right', 'top');
-    if (raw == null) return;
+    if (openDirectionDropdown(editor, caller)) {
+      return;
+    }
 
-    callback(sanitizePosition(raw));
-  }
-
-  window.af_ae_tabs_exec = function (inst, caller) {
-    askPosition(caller || null, function (position) {
-      insertTemplate(inst, position);
-    });
+    insertTemplate(editor, 'top');
   };
 
   window.afAeBuiltinHandlers.tabs = window.af_ae_tabs_exec;
+  window.afAeBuiltinHandlers[CMD] = window.af_ae_tabs_exec;
 
   function activateTabs(root, idx) {
     if (!root) return;
@@ -259,20 +240,27 @@
     if (isNaN(current)) current = 0;
 
     var next = current;
-
+    if (key === 'ArrowLeft' || key === 'ArrowUp') next = current - 1;
+    if (key === 'ArrowRight' || key === 'ArrowDown') next = current + 1;
     if (key === 'Home') next = 0;
-    else if (key === 'End') next = tabs.length - 1;
-    else if (key === 'ArrowLeft' || key === 'ArrowUp') next = (current - 1 + tabs.length) % tabs.length;
-    else if (key === 'ArrowRight' || key === 'ArrowDown') next = (current + 1) % tabs.length;
+    if (key === 'End') next = tabs.length - 1;
+
+    if (next < 0) next = tabs.length - 1;
+    if (next >= tabs.length) next = 0;
 
     ev.preventDefault();
     activateTabs(root, next);
-    try { tabs[next].focus(); } catch (e) {}
+
+    try {
+      tabs[next].focus();
+    } catch (e0) {}
   }, false);
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initAll, false);
+    document.addEventListener('DOMContentLoaded', initAll);
   } else {
     initAll();
   }
-})();
+
+  window.addEventListener('load', initAll);
+})(window, document);
