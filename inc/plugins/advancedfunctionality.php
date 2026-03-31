@@ -538,13 +538,36 @@ class AF_Admin
 
         echo '<style>
             .af-ts-top-actions{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 14px 0;align-items:center;}
-            .af-ts-help{margin:0 0 12px 0;padding:10px 12px;border:1px solid #d6e2f1;background:#f7fbff;border-radius:4px;}
+            .af-ts-help{margin:0 0 12px 0;padding:11px 13px;border:1px solid #74556a;background:#efe4ea;border-radius:4px;color:#2a1421;}
+            .af-ts-help strong{color:#2a1421;}
             .af-ts-help ul{margin:6px 0 0 18px;}
             .af-ts-help li{margin:2px 0;}
-            .af-ts-row-actions{display:flex;flex-direction:column;gap:6px;}
+            .af-ts-row-actions{display:flex;flex-direction:column;gap:7px;}
             .af-ts-row-primary,.af-ts-row-secondary{display:flex;flex-wrap:wrap;gap:6px;}
-            .af-ts-btn-primary{font-weight:700;padding:4px 10px;}
-            .af-ts-btn-secondary{font-size:11px;padding:2px 7px;}
+            .af-ts-row-primary{margin-bottom:1px;}
+            .af-ts-btn-primary,.af-ts-btn-primary:link,.af-ts-btn-primary:visited{
+                display:inline-block;
+                font-weight:700;
+                padding:6px 16px;
+                background:rgb(78, 36, 59);
+                border-radius:4px;
+                color:#fff;
+                text-decoration:none;
+                border:1px solid rgba(255,255,255,.08);
+                line-height:1.2;
+                cursor:pointer;
+            }
+            .af-ts-btn-primary:hover,.af-ts-btn-primary:focus{color:#fff;text-decoration:none;background:rgb(96, 44, 72);}
+            .af-ts-btn-secondary,.af-ts-btn-secondary:link,.af-ts-btn-secondary:visited{
+                display:inline-block;
+                font-size:11px;
+                font-weight:600;
+                padding:3px 9px;
+                border-radius:3px;
+                line-height:1.2;
+                text-decoration:none;
+                cursor:pointer;
+            }
         </style>';
         echo '<h2>'.htmlspecialchars_uni($lang->af_theme_stylesheets_title).'</h2>';
         echo '<p class="smalltext">'.htmlspecialchars_uni($lang->af_theme_stylesheets_help).'</p>';
