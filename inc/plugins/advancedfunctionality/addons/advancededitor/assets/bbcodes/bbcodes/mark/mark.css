@@ -1,0 +1,51 @@
+/* Toolbar icon */
+a.sceditor-button-af_mark div {
+  background: none !important;
+  text-indent: 0 !important;
+  overflow: visible !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+a.sceditor-button-af_mark div:before {
+  content: "M";
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* Rendered content */
+.af-ae-mark-render,
+.af-ae-mark {
+  background: #fff2a8;
+  color: #202020;
+  border-radius: 2px;
+  padding: 0 .12em;
+}
+
+.af-ae-mark-pop {
+  position: absolute;
+  z-index: 99999;
+  display: none;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(95, 110, 130, 0.45);
+  background: rgba(16, 20, 28, 0.96);
+  box-shadow: 0 10px 26px rgba(0,0,0,0.25);
+}
+
+.af-ae-mark-pop.is-open {
+  display: inline-flex;
+}
+
+.af-ae-mark-pop input[type="color"] {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
