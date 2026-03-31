@@ -432,7 +432,7 @@
     if (!node) return false;
 
     if (node.nodeType === 3) {
-      return trim(String(node.nodeValue || '').replace(/\u00a0/g, '')) !== '';
+      return trim(String(node.nodeValue || '').replace(/\u00a0/g, '').replace(/\u200b/g, '')) !== '';
     }
 
     if (node.nodeType !== 1) {
@@ -566,6 +566,69 @@
       .replace(/\n{3,}/g, '\n\n')
       .replace(/^\s+/, '')
       .replace(/\s+$/, '');
+  }
+
+  function parseOuterColorBbcode(content) {
+    var trimmed = String(content == null ? '' : content).replace(/^\s+|\s+$/g, '');
+    var m = trimmed.match(/^\[color=([^\]\n]+)\]([\s\S]*)\[\/color\]$/i);
+
+    if (!m) return null;
+
+    return {
+      color: trim(m[1]),
+      inner: m[2]
+    };
+  }
+
+  function canonicalColorValue(value) {
+    var normalized = normalizeColor(value);
+    if (!normalized) {
+      return trim(value).toLowerCase();
+    }
+    return normalized.toLowerCase();
+  }
+
+  function stripRedundantOuterColorWrappers(content, inheritedColors) {
+    var disallowed = Object.create(null);
+    var i;
+    var key;
+    var current;
+    var outer;
+    var innerOuter;
+    var outerColor;
+    var innerColor;
+
+    inheritedColors = Array.isArray(inheritedColors) ? inheritedColors : [];
+
+    for (i = 0; i < inheritedColors.length; i += 1) {
+      key = canonicalColorValue(inheritedColors[i]);
+      if (key) disallowed[key] = 1;
+    }
+
+    current = String(content == null ? '' : content).replace(/^\s+|\s+$/g, '');
+
+    while (current) {
+      outer = parseOuterColorBbcode(current);
+      if (!outer) break;
+
+      outerColor = canonicalColorValue(outer.color);
+      if (!outerColor) break;
+
+      if (disallowed[outerColor]) {
+        current = String(outer.inner == null ? '' : outer.inner).replace(/^\s+|\s+$/g, '');
+        continue;
+      }
+
+      innerOuter = parseOuterColorBbcode(outer.inner);
+      if (!innerOuter) break;
+
+      innerColor = canonicalColorValue(innerOuter.color);
+      if (!innerColor || innerColor !== outerColor) break;
+
+      current = '[color=' + outer.color + ']' + innerOuter.inner + '[/color]';
+    }
+
+    return current;
   }
 
   function decorateTableContent(content, tableAttrs) {
@@ -745,6 +808,17 @@
     var bgcolor = trim(element.getAttribute('data-af-source-bgcolor'));
     var textcolor = trim(element.getAttribute('data-af-source-textcolor'));
     var normalizedContent = normalizeCellHtmlForBbcode(content);
+    var table = getClosestTable(element);
+    var tableAttrs = table ? readTableAttrsFromElement(table) : null;
+    var inheritedTextColors = [];
+
+    if (textcolor) {
+      inheritedTextColors.push(textcolor);
+    } else if (tableAttrs) {
+      inheritedTextColors.push(tagName === 'th' ? tableAttrs.htextcolor : tableAttrs.textcolor);
+    }
+
+    normalizedContent = stripRedundantOuterColorWrappers(normalizedContent, inheritedTextColors);
 
     if (width) attrs.width = normalizeSize(width, '', true);
     if (align) attrs.align = normalizeOptionalAlign(align);
