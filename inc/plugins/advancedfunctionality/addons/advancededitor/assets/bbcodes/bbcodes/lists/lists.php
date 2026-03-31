@@ -108,6 +108,10 @@ if (!function_exists('af_ae_lists_render_html')) {
         $tag = strtolower(trim($tag)) === 'ol' ? 'ol' : 'ul';
         $style = strtolower(trim($style));
 
+        if ($style === 'i') {
+            $style = 'decimal';
+        }
+
         if ($tag === 'ul' && !in_array($style, ['disc', 'circle', 'square'], true)) {
             $style = 'disc';
         }
@@ -181,7 +185,6 @@ if (!function_exists('af_ae_lists_install_mycode')) {
             1
         );
 
-        // Legacy compat: [ol=i] / old packs with ordered styles under [ul=...]
         af_ae_lists_mycode_upsert(
             'AF AE: OL (i->decimal)',
             '\\[ol=i\\]([\\s\\S]*?)\\[\\/ol\\]',
@@ -262,7 +265,6 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
             return ['tag' => 'ol', 'style' => $attr];
         }
 
-        // af_ul canonical and legacy compatibility
         if ($attr === '' || $attr === 'disc') {
             return ['tag' => 'ul', 'style' => 'disc'];
         }
@@ -325,10 +327,13 @@ if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
             }
 
             $children = af_ae_lists_bridge_cleanup_rendered_html($children);
-            $attrs = ' class="af-ae-list__item" style="list-style-type:inherit;"';
+
+            $liStyle = !empty($context['list_style']) ? (string)$context['list_style'] : 'inherit';
+            $attrs = ' class="af-ae-list__item" style="list-style-type:' . htmlspecialchars($liStyle, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . ';"';
 
             if (!empty($context['list_style'])) {
                 $attrs .= ' data-af-list-style="' . htmlspecialchars((string)$context['list_style'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"';
+                $attrs .= ' data-list="' . htmlspecialchars((string)$context['list_style'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"';
             }
 
             return '<li' . $attrs . '>' . $children . '</li>';
@@ -476,7 +481,6 @@ if (!function_exists('af_ae_lists_uninstall_mycode')) {
             'AF AE: OL (typed)',
             'AF AE: OL (i->decimal)',
 
-            // old titles
             'AF AE Lists: LI',
             'AF AE Lists: UL (disc)',
             'AF AE Lists: UL (square)',
