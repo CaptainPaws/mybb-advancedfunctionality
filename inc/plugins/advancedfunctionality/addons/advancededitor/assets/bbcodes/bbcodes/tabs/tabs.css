@@ -86,3 +86,24 @@
 .af-ae-tabs--right .af-ae-tabs__body {
   order: 1;
 }
+
+.af-ae-tabs-picker {
+  min-width: 240px;
+  padding: 10px;
+}
+
+.af-ae-tabs-picker__title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.af-ae-tabs-picker__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.af-ae-tabs-picker__btn {
+  width: 100%;
+  text-transform: lowercase;
+}
