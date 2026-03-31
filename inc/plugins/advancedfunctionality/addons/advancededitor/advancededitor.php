@@ -1348,6 +1348,7 @@ size
 color
 url
 email
+align
 ul
 li",
         78
