@@ -42,3 +42,18 @@ a.sceditor-button-af_ol_upper_alpha div:after,
 a.sceditor-button-af_ol_lower_alpha div:after{
   content: "" !important;
 }
+
+/* Frontend/rendered lists */
+.af-ae-list > li,
+.af-ae-list__item {
+  display: list-item !important;
+}
+
+.af-ae-list--disc > li { list-style-type: disc !important; }
+.af-ae-list--circle > li { list-style-type: circle !important; }
+.af-ae-list--square > li { list-style-type: square !important; }
+.af-ae-list--decimal > li { list-style-type: decimal !important; }
+.af-ae-list--upper-roman > li { list-style-type: upper-roman !important; }
+.af-ae-list--lower-roman > li { list-style-type: lower-roman !important; }
+.af-ae-list--upper-alpha > li { list-style-type: upper-alpha !important; }
+.af-ae-list--lower-alpha > li { list-style-type: lower-alpha !important; }
