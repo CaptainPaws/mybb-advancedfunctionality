@@ -52,6 +52,27 @@
     return null;
   }
 
+  function resolveEditor(ctx) {
+    if (!ctx) return null;
+    if (typeof ctx.createDropDown === 'function') return ctx;
+    if (ctx.editor && typeof ctx.editor.createDropDown === 'function') return ctx.editor;
+
+    try {
+      if (window.jQuery && ctx.textarea) {
+        var inst = window.jQuery(ctx.textarea).sceditor('instance');
+        if (inst) return inst;
+      }
+    } catch (e0) {}
+
+    return null;
+  }
+
+  function resolveCaller(ctx, maybeCaller) {
+    if (maybeCaller && maybeCaller.nodeType === 1) return maybeCaller;
+    if (ctx && ctx.caller && ctx.caller.nodeType === 1) return ctx.caller;
+    return null;
+  }
+
   function isSourceMode(editor) {
     try {
       if (editor && typeof editor.sourceMode === 'function') return !!editor.sourceMode();
@@ -210,6 +231,7 @@
   }
 
   function execute(editor, def, caller) {
+    editor = resolveEditor(editor) || editor;
     ensureBbcodeDef();
 
     if (editor && typeof editor.createDropDown === 'function') {
@@ -233,16 +255,18 @@
   function registerCommand() {
     try {
       if (!window.jQuery || !jQuery.sceditor || !jQuery.sceditor.command) return;
-      jQuery.sceditor.command.set(CMD, {
+      var impl = {
         tooltip: 'Поясняющий текст',
         exec: function (caller) { execute(this, null, caller); },
         txtExec: function (caller) { execute(this, null, caller); }
-      });
+      };
+      jQuery.sceditor.command.set(CMD, impl);
+      jQuery.sceditor.command.set('abbr', impl);
     } catch (e0) {}
   }
 
   window.af_ae_abbr_exec = function (editor, def, caller) {
-    execute(editor, def, caller);
+    execute(resolveEditor(editor) || editor, def, resolveCaller(editor, caller));
   };
 
   window.afAeBuiltinHandlers.abbr = execute;

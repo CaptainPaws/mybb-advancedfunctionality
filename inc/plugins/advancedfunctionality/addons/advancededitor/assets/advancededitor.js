@@ -728,15 +728,30 @@
       if (getCommand(cmd)) return;
 
       // если есть pack-handler — оставляем как есть (он сам решит что вставлять)
-      function tryHandler(ed) {
+      function tryHandler(ed, caller) {
         if (!handler) return false;
         try {
           var fn = window['af_ae_' + handler + '_exec'];
           if (typeof fn === 'function') {
-            fn(ed, b);
+            fn(ed, b, caller || null);
             return true;
           }
         } catch (e0) {}
+
+        try {
+          if (window.afAeBuiltinHandlers && typeof window.afAeBuiltinHandlers[handler] === 'function') {
+            window.afAeBuiltinHandlers[handler](ed, caller || null);
+            return true;
+          }
+        } catch (e1) {}
+
+        try {
+          if (window.afAeBuiltinHandlers && typeof window.afAeBuiltinHandlers[cmd] === 'function') {
+            window.afAeBuiltinHandlers[cmd](ed, caller || null);
+            return true;
+          }
+        } catch (e2) {}
+
         return false;
       }
 
@@ -791,11 +806,11 @@
       setCommand(cmd, {
         tooltip: tooltip,
 
-        exec: function () {
+        exec: function (caller) {
           var ed = this;
           try {
             // handler имеет приоритет
-            if (tryHandler(ed)) return;
+            if (tryHandler(ed, caller || null)) return;
 
             if (afAeIsSourceMode(ed)) {
               insertInSource(ed);
@@ -806,10 +821,10 @@
           } catch (e0) {}
         },
 
-        txtExec: function () {
+        txtExec: function (caller) {
           var ed = this;
           try {
-            if (tryHandler(ed)) return;
+            if (tryHandler(ed, caller || null)) return;
             insertInSource(ed);
           } catch (e1) {}
         }
