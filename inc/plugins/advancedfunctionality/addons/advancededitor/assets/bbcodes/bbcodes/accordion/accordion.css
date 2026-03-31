@@ -1,0 +1,81 @@
+.af-accordion {
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  margin: 12px 0;
+}
+
+.af-accordion-item + .af-accordion-item {
+  border-top: 1px solid #e5e9ef;
+}
+
+.af-accordion-heading {
+  margin: 0;
+}
+
+.af-accordion-toggle {
+  width: 100%;
+  border: 0;
+  background: #f6f8fa;
+  color: #1f2328;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.af-accordion-toggle:hover,
+.af-accordion-toggle:focus {
+  background: #eef2f6;
+}
+
+.af-accordion-toggle-icon {
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform .18s ease;
+  flex: 0 0 auto;
+}
+
+.af-accordion-item.is-open .af-accordion-toggle-icon,
+.af-accordion-toggle[aria-expanded="true"] .af-accordion-toggle-icon {
+  transform: rotate(225deg);
+}
+
+.af-accordion-panel {
+  background: #fff;
+}
+
+.af-accordion-panel-inner {
+  padding: 12px 14px;
+}
+
+.af-accordion-dir-up .af-accordion-item.is-open .af-accordion-toggle-icon,
+.af-accordion-dir-up .af-accordion-toggle[aria-expanded="true"] .af-accordion-toggle-icon {
+  transform: rotate(45deg);
+}
+
+.af-accordion-dir-left .af-accordion-toggle-icon {
+  transform: rotate(135deg);
+}
+
+.af-accordion-dir-left .af-accordion-item.is-open .af-accordion-toggle-icon,
+.af-accordion-dir-left .af-accordion-toggle[aria-expanded="true"] .af-accordion-toggle-icon {
+  transform: rotate(315deg);
+}
+
+.af-accordion-dir-right .af-accordion-toggle-icon {
+  transform: rotate(-45deg);
+}
+
+.af-accordion-dir-right .af-accordion-item.is-open .af-accordion-toggle-icon,
+.af-accordion-dir-right .af-accordion-toggle[aria-expanded="true"] .af-accordion-toggle-icon {
+  transform: rotate(135deg);
+}
