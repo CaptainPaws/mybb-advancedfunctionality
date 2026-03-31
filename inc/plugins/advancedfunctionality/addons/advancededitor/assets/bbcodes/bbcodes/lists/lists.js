@@ -28,13 +28,20 @@
     return String(x == null ? '' : x);
   }
 
-  function normalizeStyle(raw, fallback) {
+  function knownListStyle(raw) {
     var s = asText(raw).trim().toLowerCase();
     if (s === 'i') s = 'decimal';
-    if (!s) s = asText(fallback).trim().toLowerCase();
-    if (!s) s = 'disc';
-    if (UL_STYLES[s] || OL_STYLES[s]) return s;
-    return fallback || 'disc';
+    return (UL_STYLES[s] || OL_STYLES[s]) ? s : '';
+  }
+
+  function normalizeStyle(raw, fallback) {
+    var s = knownListStyle(raw);
+    if (s) return s;
+
+    s = knownListStyle(fallback);
+    if (s) return s;
+
+    return 'disc';
   }
 
   function styleToType(style) {
@@ -43,17 +50,20 @@
   }
 
   function canonicalListOpen(type, style) {
+    type = asText(type).toLowerCase() === 'ol' ? 'ol' : 'ul';
     style = normalizeStyle(style, type === 'ol' ? 'decimal' : 'disc');
+
     if (type === 'ol') {
       if (style === 'decimal') return '[ol]';
       return '[ol=' + style + ']';
     }
+
     if (style === 'disc') return '[ul]';
     return '[ul=' + style + ']';
   }
 
   function canonicalListClose(type) {
-    return type === 'ol' ? '[/ol]' : '[/ul]';
+    return asText(type).toLowerCase() === 'ol' ? '[/ol]' : '[/ul]';
   }
 
   function buildCanonicalChunk(style) {
@@ -66,6 +76,9 @@
   }
 
   function listTypeAttr(type, style) {
+    type = asText(type).toLowerCase();
+    style = normalizeStyle(style, type === 'ol' ? 'decimal' : 'disc');
+
     if (type === 'ul') {
       if (style === 'disc' || style === 'circle' || style === 'square') return style;
       return '';
@@ -85,8 +98,11 @@
 
     var toDelete = [];
     for (var i = 0; i < el.classList.length; i++) {
-      if (/^af-ae-list--/i.test(el.classList[i])) toDelete.push(el.classList[i]);
+      if (/^af-ae-list--/i.test(el.classList[i])) {
+        toDelete.push(el.classList[i]);
+      }
     }
+
     for (var j = 0; j < toDelete.length; j++) {
       el.classList.remove(toDelete[j]);
     }
@@ -121,17 +137,56 @@
 
   function parseInlineStyle(styleText) {
     var m = asText(styleText).match(/(?:^|;)\s*list-style-type\s*:\s*([^;]+)/i);
-    return m && m[1] ? normalizeStyle(m[1], '') : '';
+    return m && m[1] ? knownListStyle(m[1]) : '';
+  }
+
+  function nodeClassStyle(node) {
+    if (!node || !node.className) return '';
+    var m = String(node.className).match(/\baf-ae-list--([a-z-]+)\b/i);
+    return m && m[1] ? knownListStyle(m[1]) : '';
+  }
+
+  function nodeComputedStyle(node) {
+    try {
+      if (!node || !node.ownerDocument || !node.ownerDocument.defaultView || !node.ownerDocument.defaultView.getComputedStyle) {
+        return '';
+      }
+
+      var cs = node.ownerDocument.defaultView.getComputedStyle(node);
+      return cs && cs.listStyleType ? knownListStyle(cs.listStyleType) : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function directLiChildren(node) {
+    var out = [];
+    if (!node || !node.children) return out;
+
+    for (var i = 0; i < node.children.length; i++) {
+      var child = node.children[i];
+      if (child && child.nodeType === 1 && String(child.tagName).toLowerCase() === 'li') {
+        out.push(child);
+      }
+    }
+
+    return out;
   }
 
   function detectListStyle(el, fallback) {
-    if (!el || el.nodeType !== 1) return normalizeStyle(fallback, 'disc');
+    if (!el || el.nodeType !== 1) {
+      return normalizeStyle(fallback, 'disc');
+    }
 
-    var style = normalizeStyle(el.getAttribute('data-af-list-style'), '');
-    if (style && (UL_STYLES[style] || OL_STYLES[style])) return style;
+    var tag = String(el.tagName).toLowerCase();
+    var listFallback = tag === 'ol' ? 'decimal' : 'disc';
+    var style = '';
 
-    style = normalizeStyle(el.getAttribute('data-list'), '');
-    if (style && (UL_STYLES[style] || OL_STYLES[style])) return style;
+    style = knownListStyle(el.getAttribute('data-af-list-style'));
+    if (style) return style;
+
+    style = knownListStyle(el.getAttribute('data-list'));
+    if (style) return style;
 
     style = readListTypeFromLegacy(el.tagName, el.getAttribute('type'));
     if (style) return style;
@@ -139,15 +194,35 @@
     style = parseInlineStyle(el.getAttribute('style'));
     if (style) return style;
 
-    if (el.className) {
-      var m = String(el.className).match(/\baf-ae-list--([a-z-]+)\b/i);
-      if (m && m[1]) {
-        style = normalizeStyle(m[1], '');
-        if (style) return style;
-      }
+    style = nodeClassStyle(el);
+    if (style) return style;
+
+    var liChildren = directLiChildren(el);
+    for (var i = 0; i < liChildren.length; i++) {
+      var li = liChildren[i];
+
+      style = knownListStyle(li.getAttribute('data-af-list-style'));
+      if (style) return style;
+
+      style = knownListStyle(li.getAttribute('data-list'));
+      if (style) return style;
+
+      style = parseInlineStyle(li.getAttribute('style'));
+      if (style) return style;
+
+      style = nodeClassStyle(li);
+      if (style) return style;
     }
 
-    return normalizeStyle(fallback, String(el.tagName).toLowerCase() === 'ol' ? 'decimal' : 'disc');
+    for (var j = 0; j < liChildren.length; j++) {
+      style = nodeComputedStyle(liChildren[j]);
+      if (style) return style;
+    }
+
+    style = nodeComputedStyle(el);
+    if (style) return style;
+
+    return normalizeStyle(fallback, listFallback);
   }
 
   function applyListMeta(el, style, forcedType) {
@@ -170,14 +245,12 @@
     el.style.listStyleType = style;
     el.style.paddingLeft = type === 'ol' ? '1.6em' : '1.4em';
 
-    if (!el.children) return;
-
-    for (var i = 0; i < el.children.length; i++) {
-      var child = el.children[i];
-      if (!child || child.nodeType !== 1 || String(child.tagName).toLowerCase() !== 'li') continue;
-
+    var liChildren = directLiChildren(el);
+    for (var i = 0; i < liChildren.length; i++) {
+      var child = liChildren[i];
       child.classList.add('af-ae-list__item');
       child.setAttribute('data-af-list-style', style);
+      child.setAttribute('data-list', style);
       child.style.listStyleType = style;
     }
   }
@@ -186,15 +259,16 @@
     if (!root || !root.querySelectorAll) return;
 
     var lists = root.querySelectorAll('ul, ol');
-    for (var i = 0; i < lists.length; i++) {
+
+    for (var i = lists.length - 1; i >= 0; i--) {
       var list = lists[i];
-      var fallback = String(list.tagName).toLowerCase() === 'ol' ? 'decimal' : 'disc';
+      var tag = String(list.tagName).toLowerCase();
+      var fallback = tag === 'ol' ? 'decimal' : 'disc';
       var style = detectListStyle(list, fallback);
       var type = styleToType(style);
-      var tag = String(list.tagName).toLowerCase();
 
       if (tag !== type) {
-        style = normalizeStyle(style, tag === 'ol' ? 'decimal' : 'disc');
+        style = normalizeStyle(style, fallback);
         type = tag;
       }
 
@@ -221,7 +295,12 @@
   function buildHtmlListChunk(style) {
     var type = styleToType(style);
     var normalized = normalizeStyle(style, type === 'ol' ? 'decimal' : 'disc');
-    return buildHtmlList(type, normalized, '<li class="af-ae-list__item" data-af-list-style="' + normalized + '" style="list-style-type:' + normalized + ';"><br></li>');
+
+    return buildHtmlList(
+      type,
+      normalized,
+      '<li class="af-ae-list__item" data-af-list-style="' + normalized + '" data-list="' + normalized + '" style="list-style-type:' + normalized + ';"><br></li>'
+    );
   }
 
   function findEditorInstanceFromCtx(ctx, caller) {
@@ -264,6 +343,7 @@
   function isSourceMode(inst) {
     try {
       if (inst && typeof inst.sourceMode === 'function') return !!inst.sourceMode();
+      if (inst && typeof inst.isSourceMode === 'function') return !!inst.isSourceMode();
     } catch (e) {}
     return false;
   }
@@ -299,254 +379,6 @@
     return true;
   }
 
-  function insertList(instOrCtx, style, meta) {
-    meta = meta || {};
-
-    var inst = findEditorInstanceFromCtx(instOrCtx, meta.caller);
-    var chunk = buildCanonicalChunk(style);
-
-    if (!inst) {
-      var plain = document.querySelector('textarea#message, textarea[name="message"]');
-      if (!plain) return false;
-      return insertIntoTextarea(plain, chunk);
-    }
-
-    try { ensureListCss(inst); } catch (e0) {}
-    try { ensureBbcodeBridge(inst); } catch (e1) {}
-    try { bindToSource(inst); } catch (e2) {}
-
-    if (isSourceMode(inst)) {
-      var srcTa = getSourceTextarea(inst);
-      if (srcTa) {
-        insertIntoTextarea(srcTa, chunk);
-      } else if (typeof inst.insertText === 'function') {
-        inst.insertText(chunk, '');
-      }
-      try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e3) {}
-      return true;
-    }
-
-    var html = buildHtmlListChunk(style);
-
-    try {
-      if (typeof inst.wysiwygEditorInsertHtml === 'function') {
-        inst.wysiwygEditorInsertHtml(html);
-      } else if (typeof inst.insertHTML === 'function') {
-        inst.insertHTML(html);
-      } else {
-        inst.insert(html, '');
-      }
-
-      if (typeof inst.getBody === 'function') normalizeListsUnder(inst.getBody());
-      if (typeof inst.updateOriginal === 'function') inst.updateOriginal();
-      return true;
-    } catch (e4) {
-      return false;
-    }
-  }
-
-  function rewriteHtmlForSourceFromInstance(inst) {
-    if (!inst || typeof inst.getBody !== 'function') return '';
-    var body = inst.getBody();
-    if (!body) return '';
-
-    var cloneWrap = document.createElement('div');
-    cloneWrap.innerHTML = body.innerHTML;
-    normalizeListsUnder(cloneWrap);
-
-    return rewriteHtmlForSource(cloneWrap.innerHTML);
-  }
-
-  function rewriteHtmlForSource(html) {
-    html = asText(html);
-    if (!html) return '';
-
-    var wrap = document.createElement('div');
-    wrap.innerHTML = html;
-
-    function convert(node, doc) {
-      if (!node) return null;
-      if (node.nodeType === 3) return doc.createTextNode(node.nodeValue || '');
-      if (node.nodeType !== 1) return null;
-
-      var tag = String(node.tagName).toLowerCase();
-      if (tag === 'ul' || tag === 'ol') {
-        var fallback = tag === 'ol' ? 'decimal' : 'disc';
-        var style = detectListStyle(node, fallback);
-        var type = styleToType(style);
-
-        if (tag !== type) {
-          style = normalizeStyle(style, fallback);
-          type = tag;
-        }
-
-        var out = doc.createElement(type === 'ol' ? 'afol' : 'aful');
-        out.setAttribute('data-af-list-style', style);
-
-        for (var i = 0; i < node.childNodes.length; i++) {
-          var converted = convert(node.childNodes[i], doc);
-          if (converted) out.appendChild(converted);
-        }
-        return out;
-      }
-
-      if (tag === 'li') {
-        var li = doc.createElement('afli');
-        for (var j = 0; j < node.childNodes.length; j++) {
-          var nested = convert(node.childNodes[j], doc);
-          if (nested) li.appendChild(nested);
-        }
-        return li;
-      }
-
-      var cloned = node.cloneNode(false);
-      for (var k = 0; k < node.childNodes.length; k++) {
-        var child = convert(node.childNodes[k], doc);
-        if (child) cloned.appendChild(child);
-      }
-      return cloned;
-    }
-
-    var out = document.createElement('div');
-    while (wrap.firstChild) {
-      var n = convert(wrap.firstChild, document);
-      wrap.removeChild(wrap.firstChild);
-      if (n) out.appendChild(n);
-    }
-
-    return out.innerHTML;
-  }
-
-  function registerBridgeTags(bb) {
-    if (!bb || bb.__afAeListsBridgeTagsInstalled) return;
-    bb.__afAeListsBridgeTagsInstalled = true;
-
-    bb.set('afli', {
-      isInline: false,
-      format: function (_el, content) { return '[li]' + asText(content) + '[/li]'; },
-      tags: {
-        afli: {
-          format: function (_el, content) { return '[li]' + asText(content) + '[/li]'; }
-        }
-      }
-    });
-
-    bb.set('aful', {
-      isBlock: true,
-      format: function (el, content) {
-        var style = normalizeStyle(el && el.getAttribute ? el.getAttribute('data-af-list-style') : '', 'disc');
-        return canonicalListOpen('ul', style) + asText(content) + canonicalListClose('ul');
-      },
-      tags: {
-        aful: {
-          format: function (el, content) {
-            var style = normalizeStyle(el && el.getAttribute ? el.getAttribute('data-af-list-style') : '', 'disc');
-            return canonicalListOpen('ul', style) + asText(content) + canonicalListClose('ul');
-          }
-        }
-      }
-    });
-
-    bb.set('afol', {
-      isBlock: true,
-      format: function (el, content) {
-        var style = normalizeStyle(el && el.getAttribute ? el.getAttribute('data-af-list-style') : '', 'decimal');
-        return canonicalListOpen('ol', style) + asText(content) + canonicalListClose('ol');
-      },
-      tags: {
-        afol: {
-          format: function (el, content) {
-            var style = normalizeStyle(el && el.getAttribute ? el.getAttribute('data-af-list-style') : '', 'decimal');
-            return canonicalListOpen('ol', style) + asText(content) + canonicalListClose('ol');
-          }
-        }
-      }
-    });
-  }
-
-  function ensureBbcodeBridge(inst) {
-    if (!hasSceditor() || !window.jQuery) return;
-
-    function getBb() {
-      try {
-        var bb = jQuery.sceditor.plugins && jQuery.sceditor.plugins.bbcode ? jQuery.sceditor.plugins.bbcode.bbcode : null;
-        if (bb && typeof bb.set === 'function') return bb;
-      } catch (e0) {}
-
-      try {
-        var p = inst && typeof inst.getPlugin === 'function' ? inst.getPlugin('bbcode') : null;
-        if (p && p.bbcode && typeof p.bbcode.set === 'function') return p.bbcode;
-      } catch (e1) {}
-
-      return null;
-    }
-
-    var bb = getBb();
-    if (!bb) return;
-    if (bb.__afAeListsPatched) return;
-    bb.__afAeListsPatched = true;
-
-    registerBridgeTags(bb);
-
-    bb.set('li', {
-      isInline: false,
-      html: '<li>{0}</li>',
-      format: '[li]{0}[/li]'
-    });
-
-    bb.set('ul', {
-      isBlock: true,
-      html: function (_token, attrs, content) {
-        var style = normalizeStyle(attrs && attrs.defaultattr != null ? attrs.defaultattr : '', 'disc');
-        if (OL_STYLES[style]) {
-          return buildHtmlList('ol', style, asText(content || ''));
-        }
-        return buildHtmlList('ul', style, asText(content || ''));
-      },
-      format: function (el, content) {
-        var style = detectListStyle(el, 'disc');
-        var type = styleToType(style);
-        if (type === 'ol') return canonicalListOpen('ol', style) + asText(content) + canonicalListClose('ol');
-        return canonicalListOpen('ul', style) + asText(content) + canonicalListClose('ul');
-      }
-    });
-
-    bb.set('ol', {
-      isBlock: true,
-      html: function (_token, attrs, content) {
-        var style = normalizeStyle(attrs && attrs.defaultattr != null ? attrs.defaultattr : '', 'decimal');
-        return buildHtmlList('ol', style, asText(content || ''));
-      },
-      format: function (el, content) {
-        var style = detectListStyle(el, 'decimal');
-        return canonicalListOpen('ol', style) + asText(content) + canonicalListClose('ol');
-      }
-    });
-
-    bb.set('bulletlist', {
-      isInline: false,
-      html: function (_t, _a, c) { return buildHtmlList('ul', 'disc', asText(c || '')); },
-      format: function (_el, c) { return '[ul]' + asText(c) + '[/ul]'; }
-    });
-
-    bb.set('orderedlist', {
-      isInline: false,
-      html: function (_t, _a, c) { return buildHtmlList('ol', 'decimal', asText(c || '')); },
-      format: function (_el, c) { return '[ol]' + asText(c) + '[/ol]'; }
-    });
-  }
-
-  function bindToSource(inst) {
-    if (!inst || inst.__afAeListsToSourceBound || typeof inst.bind !== 'function') return;
-    inst.__afAeListsToSourceBound = true;
-
-    inst.bind('toSource', function (html) {
-      var preferred = rewriteHtmlForSourceFromInstance(inst);
-      if (preferred) return preferred;
-      return rewriteHtmlForSource(html);
-    });
-  }
-
   function ensureListCss(inst) {
     if (!inst || typeof inst.getBody !== 'function') return;
 
@@ -575,6 +407,132 @@
     (doc.head || doc.documentElement).appendChild(st);
   }
 
+  function applyBbcodeListDefinitions(api) {
+    if (!api || typeof api.set !== 'function') return false;
+    if (api.__afAeListsDefsApplied) return true;
+    api.__afAeListsDefsApplied = true;
+
+    api.set('li', {
+      tags: { li: null },
+      isInline: false,
+      html: '<li>{0}</li>',
+      format: function (_el, content) {
+        return '[li]' + asText(content) + '[/li]';
+      }
+    });
+
+    api.set('ul', {
+      tags: { ul: null },
+      isBlock: true,
+      allowedChildren: ['li', 'ul', 'ol'],
+      html: function (_token, attrs, content) {
+        var style = normalizeStyle(attrs && attrs.defaultattr != null ? attrs.defaultattr : '', 'disc');
+        var type = styleToType(style);
+
+        if (type === 'ol') {
+          return buildHtmlList('ol', style, asText(content || ''));
+        }
+
+        return buildHtmlList('ul', style, asText(content || ''));
+      },
+      format: function (el, content) {
+        var style = detectListStyle(el, 'disc');
+        var type = styleToType(style);
+        return canonicalListOpen(type, style) + asText(content) + canonicalListClose(type);
+      }
+    });
+
+    api.set('ol', {
+      tags: { ol: null },
+      isBlock: true,
+      allowedChildren: ['li', 'ul', 'ol'],
+      html: function (_token, attrs, content) {
+        var style = normalizeStyle(attrs && attrs.defaultattr != null ? attrs.defaultattr : '', 'decimal');
+        return buildHtmlList('ol', style, asText(content || ''));
+      },
+      format: function (el, content) {
+        var style = detectListStyle(el, 'decimal');
+        var type = styleToType(style);
+
+        if (type === 'ul') {
+          return canonicalListOpen('ul', style) + asText(content) + canonicalListClose('ul');
+        }
+
+        return canonicalListOpen('ol', style) + asText(content) + canonicalListClose('ol');
+      }
+    });
+
+    return true;
+  }
+
+  function ensureBbcodeBridge(inst) {
+    if (!hasSceditor() || !window.jQuery) return;
+
+    var $ = window.jQuery;
+
+    try {
+      if ($.sceditor && $.sceditor.formats && $.sceditor.formats.bbcode) {
+        applyBbcodeListDefinitions($.sceditor.formats.bbcode);
+      }
+    } catch (e0) {}
+
+    try {
+      var p = inst && typeof inst.getPlugin === 'function' ? inst.getPlugin('bbcode') : null;
+      if (p && p.bbcode && typeof p.bbcode.set === 'function') {
+        applyBbcodeListDefinitions(p.bbcode);
+      }
+    } catch (e1) {}
+  }
+
+  function insertList(instOrCtx, style, meta) {
+    meta = meta || {};
+
+    var inst = findEditorInstanceFromCtx(instOrCtx, meta.caller);
+    var chunk = buildCanonicalChunk(style);
+
+    if (!inst) {
+      var plain = document.querySelector('textarea#message, textarea[name="message"]');
+      if (!plain) return false;
+      return insertIntoTextarea(plain, chunk);
+    }
+
+    try { ensureListCss(inst); } catch (e0) {}
+    try { ensureBbcodeBridge(inst); } catch (e1) {}
+
+    if (isSourceMode(inst)) {
+      var srcTa = getSourceTextarea(inst);
+      if (srcTa) {
+        insertIntoTextarea(srcTa, chunk);
+      } else if (typeof inst.insertText === 'function') {
+        inst.insertText(chunk, '');
+      }
+      try {
+        if (typeof inst.updateOriginal === 'function') inst.updateOriginal();
+      } catch (e2) {}
+      return true;
+    }
+
+    var html = buildHtmlListChunk(style);
+
+    try {
+      if (typeof inst.wysiwygEditorInsertHtml === 'function') {
+        inst.wysiwygEditorInsertHtml(html);
+      } else if (typeof inst.insertHTML === 'function') {
+        inst.insertHTML(html);
+      } else if (typeof inst.insert === 'function') {
+        inst.insert(html, '');
+      } else {
+        return false;
+      }
+
+      if (typeof inst.getBody === 'function') normalizeListsUnder(inst.getBody());
+      if (typeof inst.updateOriginal === 'function') inst.updateOriginal();
+      return true;
+    } catch (e3) {
+      return false;
+    }
+  }
+
   function detectCmd(def, caller) {
     var fromDef = asText(def && def.cmd ? def.cmd : '').trim();
     if (fromDef) return fromDef;
@@ -585,7 +543,9 @@
     if (!a) a = caller;
 
     for (var i = 0; i < LIST_BTNS.length; i++) {
-      if (a.classList && a.classList.contains('sceditor-button-' + LIST_BTNS[i].cmd)) return LIST_BTNS[i].cmd;
+      if (a.classList && a.classList.contains('sceditor-button-' + LIST_BTNS[i].cmd)) {
+        return LIST_BTNS[i].cmd;
+      }
     }
 
     if (a.className) {
@@ -641,6 +601,7 @@
         $.sceditor.commands[name] = def;
         return true;
       } catch (e1) {}
+
       return false;
     }
 
@@ -651,7 +612,6 @@
           exec: function () {
             ensureBbcodeBridge(this);
             ensureListCss(this);
-            bindToSource(this);
             insertList(this, btn.style, { cmd: btn.cmd, handler: 'sceditor' });
           },
           txtExec: function () {
@@ -666,7 +626,6 @@
       exec: function () {
         ensureBbcodeBridge(this);
         ensureListCss(this);
-        bindToSource(this);
         insertList(this, 'disc', { cmd: 'bulletlist', handler: 'sceditor' });
       },
       txtExec: function () {
@@ -679,7 +638,6 @@
       exec: function () {
         ensureBbcodeBridge(this);
         ensureListCss(this);
-        bindToSource(this);
         insertList(this, 'decimal', { cmd: 'orderedlist', handler: 'sceditor' });
       },
       txtExec: function () {
@@ -695,15 +653,23 @@
 
     var $ = window.jQuery;
     var tas = document.querySelectorAll('textarea');
+
     for (var i = 0; i < tas.length; i++) {
       var inst = null;
-      try { inst = $(tas[i]).sceditor('instance'); } catch (e0) { inst = null; }
+      try {
+        inst = $(tas[i]).sceditor('instance');
+      } catch (e0) {
+        inst = null;
+      }
       if (!inst) continue;
 
       try { ensureBbcodeBridge(inst); } catch (e1) {}
       try { ensureListCss(inst); } catch (e2) {}
-      try { bindToSource(inst); } catch (e3) {}
-      try { if (typeof inst.getBody === 'function') normalizeListsUnder(inst.getBody()); } catch (e4) {}
+      try {
+        if (typeof inst.getBody === 'function') {
+          normalizeListsUnder(inst.getBody());
+        }
+      } catch (e3) {}
     }
 
     return true;
@@ -721,12 +687,17 @@
 
   registerHandlers();
   for (var r = 1; r <= 10; r++) setTimeout(registerHandlers, r * 200);
-  waitAnd(registerSceditorCommands, 120);
+
+  waitAnd(function () {
+    var ok1 = registerSceditorCommands();
+    patchInstances();
+    return ok1;
+  }, 120);
 
   var patchTry = 0;
   (function patchTick() {
     patchTry++;
     patchInstances();
-    if (patchTry < 60) setTimeout(patchTick, 150);
+    if (patchTry < 40) setTimeout(patchTick, 150);
   })();
 })();
