@@ -5,8 +5,11 @@
   window.__afAeAccordionPackLoaded = true;
 
   if (!window.afAeBuiltinHandlers) window.afAeBuiltinHandlers = Object.create(null);
+  if (!window.afAqrBuiltinHandlers) window.afAqrBuiltinHandlers = Object.create(null);
 
+  var ID = 'accordion';
   var CMD = 'af_accordion';
+  var DROPDOWN_ID = 'sceditor-sceditor-af_accordion-picker';
 
   function asText(value) {
     return String(value == null ? '' : value);
@@ -23,14 +26,14 @@
   function buildTemplate(direction) {
     direction = normalizeDirection(direction);
 
-    return '[accordion direction="' + direction + '"]\n' +
-      '[accitem title="Заголовок 1"]\n' +
-      'Контент 1\n' +
-      '[/accitem]\n' +
-      '[accitem title="Заголовок 2"]\n' +
-      'Контент 2\n' +
-      '[/accitem]\n' +
-      '[/accordion]';
+    return '[accordion direction="' + direction + '"]\n'
+      + '[accitem title="Заголовок 1"]\n'
+      + 'Контент 1\n'
+      + '[/accitem]\n'
+      + '[accitem title="Заголовок 2"]\n'
+      + 'Контент 2\n'
+      + '[/accitem]\n'
+      + '[/accordion]';
   }
 
   function resolveCaller(caller) {
@@ -41,14 +44,47 @@
     return null;
   }
 
-  function chooseDirection() {
-    var input = 'down';
+  function getEditorFromCtx(ctx) {
+    if (!ctx) return null;
+    if (ctx.editor && typeof ctx.editor.createDropDown === 'function') return ctx.editor;
+    if (typeof ctx.createDropDown === 'function') return ctx;
+    return null;
+  }
+
+  function findCallerForEditor(editor) {
+    var cont;
+    var selectors = [
+      'a.sceditor-button-' + CMD,
+      'a.sceditor-button-' + ID,
+      'a.sceditor-button-af_menu_dropdown1',
+      '.sceditor-button.active'
+    ];
+
+    if (!editor) return null;
 
     try {
-      input = window.prompt('Направление аккордеона: up, down, left, right', 'down') || 'down';
-    } catch (e) {}
+      cont = (typeof editor.getContainer === 'function') ? editor.getContainer() : null;
+    } catch (e0) {
+      cont = null;
+    }
 
-    return normalizeDirection(input);
+    if (cont && cont.querySelector) {
+      for (var i = 0; i < selectors.length; i++) {
+        var found = cont.querySelector(selectors[i]);
+        if (found) return found;
+      }
+      try {
+        var fromTb = cont.querySelector('.sceditor-toolbar a.sceditor-button');
+        if (fromTb) return fromTb;
+      } catch (e1) {}
+    }
+
+    for (var j = 0; j < selectors.length; j++) {
+      var any = document.querySelector(selectors[j]);
+      if (any) return any;
+    }
+
+    return null;
   }
 
   function getTextareaFromEditor(editor) {
@@ -109,16 +145,78 @@
     return insertIntoTextarea(getTextareaFromEditor(editor), template);
   }
 
+  function getDialogRoot() {
+    return document.getElementById('af-accordion-direction-dialog');
+  }
+
+  function closeDirectionDialog() {
+    var root = getDialogRoot();
+    if (!root) return;
+    root.classList.remove('is-open');
+    root.setAttribute('aria-hidden', 'true');
+  }
+
+  function ensureDirectionDialog(onPick) {
+    var root = getDialogRoot();
+    if (root) return root;
+
+    root = document.createElement('div');
+    root.id = 'af-accordion-direction-dialog';
+    root.className = 'af-accordion-modal';
+    root.setAttribute('aria-hidden', 'true');
+    root.innerHTML = ''
+      + '<div class="af-accordion-modal__overlay" data-af-acc-close="1"></div>'
+      + '<div class="af-accordion-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="af-accordion-modal-title">'
+      + '  <button type="button" class="af-accordion-modal__close" data-af-acc-close="1" aria-label="Close">×</button>'
+      + '  <div class="af-accordion-modal__title" id="af-accordion-modal-title">Направление аккордеона</div>'
+      + '  <div class="af-accordion-dd-grid">'
+      + '    <button type="button" class="button af-accordion-dd-btn" data-direction="down">down</button>'
+      + '    <button type="button" class="button af-accordion-dd-btn" data-direction="up">up</button>'
+      + '    <button type="button" class="button af-accordion-dd-btn" data-direction="left">left</button>'
+      + '    <button type="button" class="button af-accordion-dd-btn" data-direction="right">right</button>'
+      + '  </div>'
+      + '</div>';
+
+    root.addEventListener('click', function (event) {
+      var target = event.target;
+      if (!target || !target.closest) return;
+
+      if (target.closest('[data-af-acc-close="1"]')) {
+        closeDirectionDialog();
+        return;
+      }
+
+      var btn = target.closest('[data-direction]');
+      if (!btn) return;
+
+      event.preventDefault();
+      closeDirectionDialog();
+      onPick(normalizeDirection(btn.getAttribute('data-direction')));
+    }, false);
+
+    document.body.appendChild(root);
+    return root;
+  }
+
+  function openDirectionDialog(onPick) {
+    var root = ensureDirectionDialog(onPick);
+    if (!root) return false;
+
+    root.classList.add('is-open');
+    root.setAttribute('aria-hidden', 'false');
+    return true;
+  }
+
   function makeDirectionDropdown(editor) {
     var wrap = document.createElement('div');
     wrap.className = 'af-accordion-dd';
     wrap.innerHTML = ''
       + '<div class="af-accordion-dd-title">Направление аккордеона</div>'
       + '<div class="af-accordion-dd-grid">'
+      + '  <button type="button" class="button af-accordion-dd-btn" data-direction="down">down</button>'
+      + '  <button type="button" class="button af-accordion-dd-btn" data-direction="up">up</button>'
       + '  <button type="button" class="button af-accordion-dd-btn" data-direction="left">left</button>'
       + '  <button type="button" class="button af-accordion-dd-btn" data-direction="right">right</button>'
-      + '  <button type="button" class="button af-accordion-dd-btn" data-direction="up">up</button>'
-      + '  <button type="button" class="button af-accordion-dd-btn" data-direction="down">down</button>'
       + '</div>';
 
     wrap.addEventListener('click', function (event) {
@@ -139,30 +237,70 @@
   function openDirectionDropdown(editor, caller) {
     if (!editor || typeof editor.createDropDown !== 'function') return false;
 
-    var anchor = resolveCaller(caller);
+    var anchor = resolveCaller(caller) || findCallerForEditor(editor);
     if (!anchor) return false;
 
-    try { editor.closeDropDown(true); } catch (e0) {}
-    editor.createDropDown(anchor, 'sceditor-sceditor-af_accordion-picker', makeDirectionDropdown(editor));
+    try { if (typeof editor.closeDropDown === 'function') editor.closeDropDown(true); } catch (e0) {}
+    editor.createDropDown(anchor, DROPDOWN_ID, makeDirectionDropdown(editor));
     return true;
   }
 
+  function setPanelState(toggle, panel, isOpen, direction) {
+    var item;
+    if (!toggle || !panel) return;
+
+    toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    panel.hidden = false;
+
+    if (isOpen) {
+      panel.classList.add('is-open');
+      panel.classList.remove('is-closing');
+    } else {
+      panel.classList.remove('is-open');
+      panel.classList.add('is-closing');
+    }
+
+    item = toggle.closest('.af-accordion-item');
+    if (item) {
+      if (isOpen) item.classList.add('is-open');
+      else item.classList.remove('is-open');
+    }
+
+    if (direction === 'left' || direction === 'right') {
+      panel.style.maxHeight = 'none';
+      panel.style.maxWidth = isOpen ? (panel.scrollWidth + 20) + 'px' : '0px';
+    } else {
+      panel.style.maxWidth = 'none';
+      panel.style.maxHeight = isOpen ? (panel.scrollHeight + 20) + 'px' : '0px';
+    }
+
+    if (!isOpen) {
+      window.setTimeout(function () {
+        if (toggle.getAttribute('aria-expanded') !== 'true') {
+          panel.hidden = true;
+        }
+      }, 230);
+    }
+  }
+
   function togglePanel(toggle) {
+    var expanded;
+    var panelId;
+    var panel;
+    var root;
+    var direction;
+
     if (!toggle || toggle.nodeType !== 1) return;
 
-    var expanded = toggle.getAttribute('aria-expanded') === 'true';
-    var panelId = toggle.getAttribute('aria-controls') || '';
-    var panel = panelId ? document.getElementById(panelId) : null;
+    expanded = toggle.getAttribute('aria-expanded') === 'true';
+    panelId = toggle.getAttribute('aria-controls') || '';
+    panel = panelId ? document.getElementById(panelId) : null;
     if (!panel) return;
 
-    toggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-    panel.hidden = expanded;
+    root = toggle.closest('[data-af-accordion="1"]');
+    direction = normalizeDirection(root ? root.getAttribute('data-direction') : 'down');
 
-    var item = toggle.closest('.af-accordion-item');
-    if (item) {
-      if (expanded) item.classList.remove('is-open');
-      else item.classList.add('is-open');
-    }
+    setPanelState(toggle, panel, !expanded, direction);
   }
 
   function bindAccordion(root) {
@@ -190,16 +328,49 @@
     }
   }
 
-  window.af_ae_accordion_exec = function (editor, _def, caller) {
-    if (openDirectionDropdown(editor, caller)) {
-      return;
-    }
+  function execute(editor, caller) {
+    if (openDirectionDropdown(editor, caller)) return;
 
-    var direction = chooseDirection();
-    insertTemplate(editor, buildTemplate(direction));
+    openDirectionDialog(function (direction) {
+      insertTemplate(editor, buildTemplate(direction));
+    });
+  }
+
+  function aqrOpen(ctx, ev) {
+    var editor = getEditorFromCtx(ctx) || getEditorFromCtx({ editor: window.sceditor && window.sceditor.instance && window.sceditor.instance(document.getElementById('message')) });
+    var caller =
+      (ctx && (ctx.buttonEl || ctx.btn || ctx.caller)) ||
+      (ev && (ev.currentTarget || ev.target)) ||
+      null;
+
+    if (!editor) return;
+    execute(editor, caller);
+  }
+
+  var aqrHandler = {
+    id: ID,
+    title: 'Аккордеон',
+    onClick: aqrOpen,
+    click: aqrOpen,
+    action: aqrOpen,
+    run: aqrOpen,
+    init: function () {}
   };
 
-  window.afAeBuiltinHandlers[CMD] = window.af_ae_accordion_exec;
+  function registerHandlers() {
+    window.af_ae_accordion_exec = function (editor, _def, caller) {
+      execute(editor, caller);
+    };
+
+    window.afAeBuiltinHandlers[ID] = execute;
+    window.afAeBuiltinHandlers[CMD] = execute;
+
+    window.afAqrBuiltinHandlers[ID] = aqrHandler;
+    window.afAqrBuiltinHandlers[CMD] = aqrHandler;
+  }
+
+  registerHandlers();
+  for (var t = 1; t <= 10; t++) window.setTimeout(registerHandlers, t * 200);
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initAccordions);
