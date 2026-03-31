@@ -33,6 +33,14 @@
       '[/accordion]';
   }
 
+  function resolveCaller(caller) {
+    if (caller && caller.nodeType === 1) return caller;
+    if (caller && caller.jquery && caller[0] && caller[0].nodeType === 1) return caller[0];
+    if (caller && caller.currentTarget && caller.currentTarget.nodeType === 1) return caller.currentTarget;
+    if (caller && caller.target && caller.target.nodeType === 1) return caller.target;
+    return null;
+  }
+
   function chooseDirection() {
     var input = 'down';
 
@@ -80,14 +88,63 @@
   }
 
   function insertTemplate(editor, template) {
-    if (editor && typeof editor.insertText === 'function') {
-      editor.insertText(template, '');
-      try { if (typeof editor.updateOriginal === 'function') editor.updateOriginal(); } catch (e0) {}
-      try { if (typeof editor.focus === 'function') editor.focus(); } catch (e1) {}
-      return true;
-    }
+    try {
+      if (editor && typeof editor.insertText === 'function') {
+        editor.insertText(template, '');
+        try { if (typeof editor.updateOriginal === 'function') editor.updateOriginal(); } catch (e0) {}
+        try { if (typeof editor.focus === 'function') editor.focus(); } catch (e1) {}
+        return true;
+      }
+    } catch (e2) {}
+
+    try {
+      if (editor && typeof editor.insert === 'function') {
+        editor.insert(template, '');
+        try { if (typeof editor.updateOriginal === 'function') editor.updateOriginal(); } catch (e3) {}
+        try { if (typeof editor.focus === 'function') editor.focus(); } catch (e4) {}
+        return true;
+      }
+    } catch (e5) {}
 
     return insertIntoTextarea(getTextareaFromEditor(editor), template);
+  }
+
+  function makeDirectionDropdown(editor) {
+    var wrap = document.createElement('div');
+    wrap.className = 'af-accordion-dd';
+    wrap.innerHTML = ''
+      + '<div class="af-accordion-dd-title">Направление аккордеона</div>'
+      + '<div class="af-accordion-dd-grid">'
+      + '  <button type="button" class="button af-accordion-dd-btn" data-direction="left">left</button>'
+      + '  <button type="button" class="button af-accordion-dd-btn" data-direction="right">right</button>'
+      + '  <button type="button" class="button af-accordion-dd-btn" data-direction="up">up</button>'
+      + '  <button type="button" class="button af-accordion-dd-btn" data-direction="down">down</button>'
+      + '</div>';
+
+    wrap.addEventListener('click', function (event) {
+      var target = event.target;
+      if (!target || !target.closest) return;
+      var btn = target.closest('[data-direction]');
+      if (!btn) return;
+
+      event.preventDefault();
+      var direction = normalizeDirection(btn.getAttribute('data-direction'));
+      insertTemplate(editor, buildTemplate(direction));
+      try { if (editor && typeof editor.closeDropDown === 'function') editor.closeDropDown(true); } catch (e0) {}
+    }, false);
+
+    return wrap;
+  }
+
+  function openDirectionDropdown(editor, caller) {
+    if (!editor || typeof editor.createDropDown !== 'function') return false;
+
+    var anchor = resolveCaller(caller);
+    if (!anchor) return false;
+
+    try { editor.closeDropDown(true); } catch (e0) {}
+    editor.createDropDown(anchor, 'sceditor-sceditor-af_accordion-picker', makeDirectionDropdown(editor));
+    return true;
   }
 
   function togglePanel(toggle) {
@@ -133,10 +190,13 @@
     }
   }
 
-  window.af_ae_accordion_exec = function (editor) {
+  window.af_ae_accordion_exec = function (editor, _def, caller) {
+    if (openDirectionDropdown(editor, caller)) {
+      return;
+    }
+
     var direction = chooseDirection();
-    var template = buildTemplate(direction);
-    insertTemplate(editor, template);
+    insertTemplate(editor, buildTemplate(direction));
   };
 
   window.afAeBuiltinHandlers[CMD] = window.af_ae_accordion_exec;

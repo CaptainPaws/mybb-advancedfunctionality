@@ -79,3 +79,24 @@
 .af-accordion-dir-right .af-accordion-toggle[aria-expanded="true"] .af-accordion-toggle-icon {
   transform: rotate(135deg);
 }
+
+.af-accordion-dd {
+  min-width: 220px;
+  padding: 10px;
+}
+
+.af-accordion-dd-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.af-accordion-dd-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.af-accordion-dd-btn {
+  width: 100%;
+  text-transform: lowercase;
+}
