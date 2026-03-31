@@ -15,14 +15,14 @@ function hasSceditor(){
 }
 
 function getBb(inst){
-  try {
-    var bb = jQuery.sceditor.plugins.bbcode.bbcode;
-    if (bb && typeof bb.set === 'function') return bb;
-  } catch(e){}
   try{
     var p = inst && typeof inst.getPlugin === 'function' ? inst.getPlugin('bbcode') : null;
     if (p && p.bbcode && typeof p.bbcode.set === 'function') return p.bbcode;
   }catch(e){}
+  try {
+    var bb = jQuery.sceditor.plugins.bbcode.bbcode;
+    if (bb && typeof bb.set === 'function') return bb;
+  } catch(e){}
   return null;
 }
 
@@ -69,6 +69,7 @@ function whitelist(){
       b:1,i:1,u:1,s:1,
       font:1,size:1,color:1,
       url:1,email:1,
+      align:1,
       ul:1,ol:1,li:1
     };
   }
@@ -393,6 +394,7 @@ function register(inst){
 
   Object.keys(tags).forEach(function(tag){
     if(isStructuralTableTag(tag)) return;
+    if(tag === 'align') return;
 
     var def=tags[tag];
 

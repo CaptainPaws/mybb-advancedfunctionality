@@ -875,102 +875,126 @@
   function afAeEnsureMybbAlignBbcode(inst) {
     if (!hasSceditor()) return;
 
-    function getBb() {
+    function getGlobalBb() {
       try {
         var bb = jQuery.sceditor.plugins && jQuery.sceditor.plugins.bbcode
           ? jQuery.sceditor.plugins.bbcode.bbcode
           : null;
         if (bb && typeof bb.set === 'function') return bb;
       } catch (e0) {}
-
-      try {
-        if (inst && typeof inst.getPlugin === 'function') {
-          var p = inst.getPlugin('bbcode');
-          if (p && p.bbcode && typeof p.bbcode.set === 'function') return p.bbcode;
-        }
-      } catch (e1) {}
-
       return null;
     }
 
-    var bb = getBb();
-    if (!bb) return;
-
-    if (bb.__afAeMybbAlignPatched) return;
-    bb.__afAeMybbAlignPatched = true;
-
-    // =========================
-    // ALIGN: MyBB style [align=...]
-    // =========================
-
-    function normalizeAlign(value) {
-      value = String(value || '').toLowerCase().trim();
-      if (value === 'start') return 'left';
-      if (value === 'end') return 'right';
-      if (value === 'left' || value === 'center' || value === 'right' || value === 'justify') return value;
-      return '';
-    }
-
-    function formatAlignTag(value, content) {
-      var align = normalizeAlign(value);
-      if (!align) return content;
-      return '[align=' + align + ']' + content + '[/align]';
-    }
-
-    try {
-      bb.set('align', {
-        isInline: false,
-        html: function (token, attrs, content) {
-          var a = normalizeAlign(attrs && attrs.defaultattr);
-          if (!a) a = 'left';
-          return '<div class="af-bb-align" data-af-align="' + a + '" style="text-align:' + a + '">' + content + '</div>';
-        },
-        format: function (el, content) {
-          var fromData = '';
-          var fromStyle = '';
-
-          try { fromData = el && el.getAttribute ? el.getAttribute('data-af-align') : ''; } catch (e0) { fromData = ''; }
-          try { fromStyle = el && el.style ? el.style.textAlign : ''; } catch (e1) { fromStyle = ''; }
-
-          return formatAlignTag(fromData || fromStyle, content);
-        }
-      });
-    } catch (eA0) {}
-
-    function patchLegacyAlign(tag, val) {
+    function getInstBb(editorInst) {
       try {
-        bb.set(tag, {
-          isInline: false,
-          html: '<div style="text-align:' + val + '">{0}</div>',
-          format: '[align=' + val + ']{0}[/align]'
-        });
-      } catch (e) {}
+        if (editorInst && typeof editorInst.getPlugin === 'function') {
+          var p = editorInst.getPlugin('bbcode');
+          if (p && p.bbcode && typeof p.bbcode.set === 'function') return p.bbcode;
+        }
+      } catch (e1) {}
+      return null;
     }
 
-    patchLegacyAlign('left', 'left');
-    patchLegacyAlign('center', 'center');
-    patchLegacyAlign('right', 'right');
-    patchLegacyAlign('justify', 'justify');
+    function collectTargets(editorInst) {
+      var out = [];
+      var seen = [];
 
-    try {
-      bb.set('div', {
-        styles: { 'text-align': 'align' },
-        format: function (el, content) {
-          try {
-            var a = '';
-            try { a = (el && el.style && el.style.textAlign) ? String(el.style.textAlign) : ''; } catch (e0) { a = ''; }
-            return formatAlignTag(a, content);
-          } catch (e1) {
-            return '[align=left]' + content + '[/align]';
-          }
-        },
-        html: function (token, attrs, content) {
-          var a = normalizeAlign(attrs && attrs.defaultattr);
-          if (!a) a = 'left';
-          return '<div class="af-bb-align" data-af-align="' + a + '" style="text-align:' + a + '">' + content + '</div>';
+      function add(bb) {
+        if (!bb || typeof bb.set !== 'function') return;
+        for (var i = 0; i < seen.length; i++) {
+          if (seen[i] === bb) return;
         }
-      });
-    } catch (eD) {}
+        seen.push(bb);
+        out.push(bb);
+      }
+
+      add(getInstBb(editorInst));
+      add(getGlobalBb());
+      return out;
+    }
+
+    function patchBb(bb) {
+      if (!bb || bb.__afAeMybbAlignPatched) return;
+      bb.__afAeMybbAlignPatched = true;
+
+      // =========================
+      // ALIGN: MyBB style [align=...]
+      // =========================
+
+      function normalizeAlign(value) {
+        value = String(value || '').toLowerCase().trim();
+        if (value === 'start') return 'left';
+        if (value === 'end') return 'right';
+        if (value === 'left' || value === 'center' || value === 'right' || value === 'justify') return value;
+        return '';
+      }
+
+      function formatAlignTag(value, content) {
+        var align = normalizeAlign(value);
+        if (!align) return content;
+        return '[align=' + align + ']' + content + '[/align]';
+      }
+
+      try {
+        bb.set('align', {
+          isInline: false,
+          html: function (token, attrs, content) {
+            var a = normalizeAlign(attrs && attrs.defaultattr);
+            if (!a) a = 'left';
+            return '<div class="af-bb-align" data-af-align="' + a + '" style="text-align:' + a + '">' + content + '</div>';
+          },
+          format: function (el, content) {
+            var fromData = '';
+            var fromStyle = '';
+
+            try { fromData = el && el.getAttribute ? el.getAttribute('data-af-align') : ''; } catch (e0) { fromData = ''; }
+            try { fromStyle = el && el.style ? el.style.textAlign : ''; } catch (e1) { fromStyle = ''; }
+
+            return formatAlignTag(fromData || fromStyle, content);
+          }
+        });
+      } catch (eA0) {}
+
+      function patchLegacyAlign(tag, val) {
+        try {
+          bb.set(tag, {
+            isInline: false,
+            html: '<div style="text-align:' + val + '">{0}</div>',
+            format: '[align=' + val + ']{0}[/align]'
+          });
+        } catch (e) {}
+      }
+
+      patchLegacyAlign('left', 'left');
+      patchLegacyAlign('center', 'center');
+      patchLegacyAlign('right', 'right');
+      patchLegacyAlign('justify', 'justify');
+
+      try {
+        bb.set('div', {
+          styles: { 'text-align': 'align' },
+          format: function (el, content) {
+            try {
+              var a = '';
+              try { a = (el && el.style && el.style.textAlign) ? String(el.style.textAlign) : ''; } catch (e0) { a = ''; }
+              return formatAlignTag(a, content);
+            } catch (e1) {
+              return '[align=left]' + content + '[/align]';
+            }
+          },
+          html: function (token, attrs, content) {
+            var a = normalizeAlign(attrs && attrs.defaultattr);
+            if (!a) a = 'left';
+            return '<div class="af-bb-align" data-af-align="' + a + '" style="text-align:' + a + '">' + content + '</div>';
+          }
+        });
+      } catch (eD) {}
+    }
+
+    var targets = collectTargets(inst);
+    for (var i = 0; i < targets.length; i++) {
+      patchBb(targets[i]);
+    }
   }
 
   function afAePatchAlignCommandsForSourceMode() {
@@ -2091,6 +2115,7 @@
       try { afAeApplyWysiwygCodeQuoteCss(existing); } catch (e2) {}
       try { afAeApplyWysiwygLocalFontsCss(existing); } catch (e2b) {}
       try { bindRememberModeHooks(existing); } catch (e2c) {}
+      try { afAeEnsureMybbAlignBbcode(existing); } catch (eA1) {}
       try { if (window.afAeWysiwygBbcodes && typeof window.afAeWysiwygBbcodes.applyInstance === 'function') window.afAeWysiwygBbcodes.applyInstance(existing); } catch (eW1) {}
 
       try {
@@ -2135,6 +2160,7 @@
 
         try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e5) {}
         try { afAeApplyWysiwygLocalFontsCss(inst); } catch (e5b) {}
+        try { afAeEnsureMybbAlignBbcode(inst); } catch (eA2) {}
         try { if (window.afAeWysiwygBbcodes && typeof window.afAeWysiwygBbcodes.applyInstance === 'function') window.afAeWysiwygBbcodes.applyInstance(inst); } catch (eW2) {}
 
         try {
