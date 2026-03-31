@@ -70,6 +70,7 @@ function whitelist(){
       font:1,size:1,color:1,
       url:1,email:1,
       align:1,
+      mark:1,
       ul:1,ol:1,li:1
     };
   }
@@ -375,6 +376,18 @@ function isStructuralTableTag(tag){
     tag==='af_table' || tag==='af_tr' || tag==='af_td' || tag==='af_th';
 }
 
+function hasCustomWysiwygRenderer(tag){
+  tag = String(tag||'').toLowerCase().trim();
+  if (!tag) return false;
+
+  try {
+    var map = window.afAeWysiwygCustomTags;
+    if (map && typeof map === 'object' && map[tag]) return true;
+  } catch (e) {}
+
+  return false;
+}
+
 /* ------------------------------------------------ */
 /* REGISTER */
 
@@ -395,6 +408,7 @@ function register(inst){
   Object.keys(tags).forEach(function(tag){
     if(isStructuralTableTag(tag)) return;
     if(tag === 'align') return;
+    if(hasCustomWysiwygRenderer(tag)) return;
 
     var def=tags[tag];
 

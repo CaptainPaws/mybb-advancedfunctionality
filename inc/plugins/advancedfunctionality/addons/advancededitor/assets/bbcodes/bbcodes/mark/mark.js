@@ -11,6 +11,8 @@
   var state = { instance: null, node: null, pop: null };
 
   if (!window.afAeBuiltinHandlers) window.afAeBuiltinHandlers = Object.create(null);
+  if (!window.afAeWysiwygCustomTags) window.afAeWysiwygCustomTags = Object.create(null);
+  window.afAeWysiwygCustomTags.mark = true;
 
   function asText(x) { return String(x == null ? '' : x); }
 
@@ -186,6 +188,32 @@
     pop.classList.add('is-open');
   }
 
+  function resolveEditorFrame(instance) {
+    try {
+      if (!instance) return null;
+
+      if (typeof instance.getContentAreaContainer === 'function') {
+        var container = instance.getContentAreaContainer();
+        if (container) {
+          if (container.tagName === 'IFRAME') return container;
+          if (container.querySelector) {
+            var nested = container.querySelector('iframe');
+            if (nested) return nested;
+          }
+        }
+      }
+
+      if (typeof instance.getBody === 'function') {
+        var body = instance.getBody();
+        if (body && body.ownerDocument && body.ownerDocument.defaultView && body.ownerDocument.defaultView.frameElement) {
+          return body.ownerDocument.defaultView.frameElement;
+        }
+      }
+    } catch (e) {}
+
+    return null;
+  }
+
   function bindInstance(instance) {
     if (!instance || instance.__afAeMarkBound) return;
     instance.__afAeMarkBound = true;
@@ -194,7 +222,7 @@
 
     try {
       var body = instance.getBody && instance.getBody();
-      var frame = instance.getContentAreaContainer && instance.getContentAreaContainer().querySelector('iframe');
+      var frame = resolveEditorFrame(instance);
       if (!body || !frame) return;
 
       body.addEventListener('click', function (event) {
