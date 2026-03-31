@@ -7,12 +7,12 @@ return [
 
     'buttons' => [
         [
-            'cmd'     => 'af_mark',
-            'name'    => 'mark',
-            'title'   => 'Маркер',
-            'handler' => 'mark',
-            'opentag' => '[mark]',
-            'closetag'=> '[/mark]',
+            'cmd'      => 'af_mark',
+            'name'     => 'mark',
+            'title'    => 'Маркер',
+            'handler'  => 'mark',
+            'opentag'  => '[mark]',
+            'closetag' => '[/mark]',
         ],
     ],
 
