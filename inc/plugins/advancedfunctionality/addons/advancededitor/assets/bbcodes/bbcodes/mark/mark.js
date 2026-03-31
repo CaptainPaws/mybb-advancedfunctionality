@@ -4,49 +4,296 @@
   if (window.__afAeMarkPackLoaded) return;
   window.__afAeMarkPackLoaded = true;
 
-  var CMD = 'af_mark';
-  var DEFAULT_BG = '#FFF2A8';
-  var DEFAULT_TEXT = '#202020';
-  var POP_ID = 'af-ae-mark-pop';
-  var state = { instance: null, node: null, pop: null };
-
   if (!window.afAeBuiltinHandlers) window.afAeBuiltinHandlers = Object.create(null);
   if (!window.afAeWysiwygCustomTags) window.afAeWysiwygCustomTags = Object.create(null);
+
+  var CMD = 'af_mark';
+  var INSTANCE_SCAN_DELAY = 1200;
+  var DEFAULT_BG = '#FFF2A8';
+  var DEFAULT_TEXT = '#202020';
+
   window.afAeWysiwygCustomTags.mark = true;
 
-  function asText(x) { return String(x == null ? '' : x); }
-
-  function normalizeColor(v, fallback) {
-    v = asText(v).trim();
-    if (!v) return fallback || '';
-    var m = v.match(/^#([0-9a-f]{3})$/i);
-    if (m) {
-      var s = m[1].toUpperCase();
-      return '#' + s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
-    }
-    m = v.match(/^#([0-9a-f]{6})$/i);
-    if (m) return '#' + m[1].toUpperCase();
-    m = v.match(/^rgb\(\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*\)$/i);
-    if (m) {
-      var r = Math.max(0, Math.min(255, parseInt(m[1], 10) || 0)).toString(16).toUpperCase().padStart(2, '0');
-      var g = Math.max(0, Math.min(255, parseInt(m[2], 10) || 0)).toString(16).toUpperCase().padStart(2, '0');
-      var b = Math.max(0, Math.min(255, parseInt(m[3], 10) || 0)).toString(16).toUpperCase().padStart(2, '0');
-      return '#' + r + g + b;
-    }
-    return fallback || '';
+  function getSceditorRoot() {
+    if (window.sceditor) return window.sceditor;
+    if (window.jQuery && window.jQuery.sceditor) return window.jQuery.sceditor;
+    return null;
   }
 
-  function applyMarkStyles(el, bg, text) {
-    if (!el || el.nodeType !== 1) return;
+  function asText(x) {
+    return String(x == null ? '' : x);
+  }
+
+  function trim(x) {
+    return asText(x).trim();
+  }
+
+  function normHex(x) {
+    var hex;
+
+    x = trim(x);
+    if (!x) return '';
+
+    if (!/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(x)) {
+      return '';
+    }
+
+    hex = x.slice(1).toUpperCase();
+
+    if (hex.length === 3) {
+      hex = hex.split('').map(function (ch) {
+        return ch + ch;
+      }).join('');
+    }
+
+    return '#' + hex;
+  }
+
+  function normalizeColor(v, fallback) {
+    return normHex(v) || fallback || '';
+  }
+
+  function escHtml(x) {
+    return asText(x)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function getEditorInstanceFromTextarea(textarea) {
+    if (!textarea || !window.jQuery || !jQuery.fn || typeof jQuery.fn.sceditor !== 'function') {
+      return null;
+    }
+
+    try {
+      return jQuery(textarea).sceditor('instance');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function getEditorBody(instance) {
+    try {
+      if (instance && typeof instance.getBody === 'function') {
+        return instance.getBody();
+      }
+    } catch (e) {}
+
+    return null;
+  }
+
+  function isSourceMode(instance) {
+    try {
+      if (instance && typeof instance.inSourceMode === 'function') {
+        return !!instance.inSourceMode();
+      }
+      if (instance && typeof instance.sourceMode === 'function') {
+        return !!instance.sourceMode();
+      }
+    } catch (e) {}
+
+    return false;
+  }
+
+  function getSelectionAnchorNode(instance) {
+    try {
+      if (instance && typeof instance.currentNode === 'function') {
+        var current = instance.currentNode();
+        if (current) return current;
+      }
+    } catch (e0) {}
+
+    try {
+      if (instance && instance.getRangeHelper && typeof instance.getRangeHelper === 'function') {
+        var helper = instance.getRangeHelper();
+        if (helper && typeof helper.selectedRange === 'function') {
+          var range = helper.selectedRange();
+          if (range) {
+            return range.commonAncestorContainer || range.startContainer || null;
+          }
+        }
+      }
+    } catch (e1) {}
+
+    return null;
+  }
+
+  function toElement(node) {
+    if (!node) return null;
+    if (node.nodeType === 1) return node;
+    if (node.nodeType === 3) return node.parentNode || null;
+    return null;
+  }
+
+  function closestMarkNode(node, stopNode) {
+    node = toElement(node);
+
+    while (node) {
+      if (
+        node.nodeType === 1 &&
+        node.getAttribute &&
+        node.getAttribute('data-af-bb') === 'mark'
+      ) {
+        if (!stopNode || stopNode.contains(node)) {
+          return node;
+        }
+        return null;
+      }
+
+      if (node === stopNode) break;
+      node = node.parentNode;
+    }
+
+    return null;
+  }
+
+  function readColorsFromNode(node) {
+    var bg = '';
+    var text = '';
+
+    if (!node || node.nodeType !== 1) {
+      return {
+        bg: DEFAULT_BG,
+        text: DEFAULT_TEXT
+      };
+    }
+
+    bg = normalizeColor(node.getAttribute('data-bgcolor') || '', '');
+    text = normalizeColor(node.getAttribute('data-textcolor') || '', '');
+
+    if ((!bg || !text) && node.getAttribute('data-af-bb-attrs')) {
+      try {
+        var attrs = JSON.parse(String(node.getAttribute('data-af-bb-attrs') || '{}')) || {};
+        if (!bg) bg = normalizeColor(attrs.bgcolor || '', '');
+        if (!text) text = normalizeColor(attrs.textcolor || '', '');
+      } catch (e) {}
+    }
+
+    if (!bg && node.style) {
+      bg = normalizeColor(node.style.backgroundColor || '', '');
+    }
+
+    if (!text && node.style) {
+      text = normalizeColor(node.style.color || '', '');
+    }
+
+    return {
+      bg: bg || DEFAULT_BG,
+      text: text || DEFAULT_TEXT
+    };
+  }
+
+  function applyMarkStyles(node, bg, text) {
+    if (!node || node.nodeType !== 1) return;
+
     bg = normalizeColor(bg, DEFAULT_BG);
     text = normalizeColor(text, DEFAULT_TEXT);
 
-    el.classList.add('af-ae-mark');
-    el.setAttribute('data-af-bb', 'mark');
-    el.setAttribute('data-bgcolor', bg);
-    el.setAttribute('data-textcolor', text);
-    el.style.backgroundColor = bg;
-    el.style.color = text;
+    node.classList.add('af-ae-mark');
+    node.classList.add('af-ae-bb-mark');
+
+    node.setAttribute('data-af-bb', 'mark');
+    node.setAttribute('data-bgcolor', bg);
+    node.setAttribute('data-textcolor', text);
+
+    node.style.backgroundColor = bg;
+    node.style.color = text;
+  }
+
+  function normalizeRenderedMarkNode(node) {
+    if (!node || node.nodeType !== 1) return null;
+
+    var colors = readColorsFromNode(node);
+    applyMarkStyles(node, colors.bg, colors.text);
+
+    return node;
+  }
+
+  function normalizeAllRenderedMarks(root) {
+    if (!root || !root.querySelectorAll) return;
+
+    var nodes = root.querySelectorAll(
+      '[data-af-bb="mark"], .af-ae-mark, .af-ae-bb-mark, .af-ae-mark-render'
+    );
+
+    for (var i = 0; i < nodes.length; i += 1) {
+      normalizeRenderedMarkNode(nodes[i]);
+    }
+  }
+
+  function normalizeFormatContent(content) {
+    return asText(content).replace(/\u200B/g, '').trim();
+  }
+
+  function stripOuterBbcodeTag(content, tagName, predicate) {
+    var text = trim(content);
+    var re = new RegExp(
+      '^\\[' + tagName + '(?:=([^\\]]+)|\\s+([^\\]]+))?\\]([\\s\\S]*)\\[\\/' + tagName + '\\]$',
+      'i'
+    );
+    var match = text.match(re);
+    var attrRaw;
+    var inner;
+
+    if (!match) {
+      return {
+        changed: false,
+        content: content
+      };
+    }
+
+    attrRaw = trim(match[1] || match[2] || '');
+    inner = trim(match[3] || '');
+
+    if (typeof predicate === 'function' && !predicate(attrRaw, inner)) {
+      return {
+        changed: false,
+        content: content
+      };
+    }
+
+    return {
+      changed: true,
+      content: inner
+    };
+  }
+
+  function parseMarkAttrString(attrRaw) {
+    var attrs = {};
+    var m;
+
+    if (!attrRaw) return attrs;
+
+    var re = /([a-z_][a-z0-9_-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s\]]+))/ig;
+    while ((m = re.exec(attrRaw))) {
+      attrs[String(m[1]).toLowerCase()] = String(m[2] || m[3] || m[4] || '');
+    }
+
+    return attrs;
+  }
+
+  function normalizeMarkSerializedContent(content, opts) {
+    var result = trim(normalizeFormatContent(content));
+    var prev = null;
+    var guard = 0;
+    var textColor = normHex((opts && opts.text) || '') || DEFAULT_TEXT;
+
+    while (result !== prev && guard < 12) {
+      prev = result;
+      guard += 1;
+
+      result = stripOuterBbcodeTag(result, 'color', function (attrRaw) {
+        var attr = normHex(trim(attrRaw).replace(/^["']|["']$/g, ''));
+        return !!attr && attr === textColor;
+      }).content;
+
+      result = stripOuterBbcodeTag(result, 'mark', function () {
+        return true;
+      }).content;
+    }
+
+    return trim(result);
   }
 
   function buildOpenTag(bg, text) {
@@ -60,226 +307,332 @@
     return '[mark bgcolor="' + bg + '" textcolor="' + text + '"]';
   }
 
-  function getCurrentMarkNode(instance) {
-    try {
-      var range = instance && instance.getRangeHelper && instance.getRangeHelper().selectedRange();
-      var node = range ? (range.commonAncestorContainer || range.startContainer) : null;
-      while (node) {
-        if (node.nodeType === 1 && node.getAttribute('data-af-bb') === 'mark') return node;
-        node = node.parentNode;
-      }
-    } catch (e) {}
-    return null;
-  }
-
   function touchEditor(instance) {
     try {
-      if (instance && typeof instance.triggerValueChanged === 'function') instance.triggerValueChanged();
-      if (instance && typeof instance.updateOriginal === 'function') instance.updateOriginal();
-    } catch (e) {}
+      if (instance && typeof instance.triggerValueChanged === 'function') {
+        instance.triggerValueChanged();
+      }
+    } catch (e0) {}
+
+    try {
+      if (instance && typeof instance.updateOriginal === 'function') {
+        instance.updateOriginal();
+      }
+    } catch (e1) {}
+  }
+
+  function rerenderInstance(instance) {
+    if (!instance || isSourceMode(instance)) return;
+
+    try {
+      if (typeof instance.val === 'function') {
+        var current = instance.val();
+        if (typeof current === 'string' && current.indexOf('[mark') !== -1) {
+          instance.val(current);
+        }
+      }
+    } catch (e0) {}
+
+    try {
+      if (typeof instance.focus === 'function') {
+        instance.focus();
+      }
+    } catch (e1) {}
+
+    touchEditor(instance);
+
+    var body = getEditorBody(instance);
+    if (body) {
+      normalizeAllRenderedMarks(body);
+    }
+  }
+
+  function buildMarkDef() {
+    return {
+      isInline: true,
+      allowsEmpty: true,
+      tags: {
+        span: {
+          'data-af-bb': 'mark'
+        }
+      },
+
+      html: function (token, attrs, content) {
+        attrs = attrs || {};
+
+        var bg = normalizeColor(attrs.bgcolor, DEFAULT_BG);
+        var text = normalizeColor(attrs.textcolor, DEFAULT_TEXT);
+
+        return '' +
+          '<span' +
+          ' class="af-ae-mark af-ae-bb-mark"' +
+          ' data-af-bb="mark"' +
+          ' data-bgcolor="' + escHtml(bg) + '"' +
+          ' data-textcolor="' + escHtml(text) + '"' +
+          ' style="background-color:' + escHtml(bg) + ';color:' + escHtml(text) + ';">' +
+          asText(content || '') +
+          '</span>';
+      },
+
+      format: function (el, content) {
+        var colors = readColorsFromNode(el);
+        var inner = normalizeMarkSerializedContent(content, {
+          bg: colors.bg,
+          text: colors.text
+        });
+
+        if (!trim(inner)) {
+          return '';
+        }
+
+        if (colors.bg === DEFAULT_BG && colors.text === DEFAULT_TEXT) {
+          return '[mark]' + inner + '[/mark]';
+        }
+
+        return '[mark bgcolor="' + colors.bg + '" textcolor="' + colors.text + '"]' + inner + '[/mark]';
+      }
+    };
+  }
+
+  function getFormatTargets(instance) {
+    var out = [];
+    var seen = [];
+
+    function pushUnique(target) {
+      if (!target || typeof target.set !== 'function') return;
+      if (seen.indexOf(target) !== -1) return;
+      seen.push(target);
+      out.push(target);
+    }
+
+    try {
+      var sc = getSceditorRoot();
+      if (sc && sc.formats && sc.formats.bbcode && typeof sc.formats.bbcode.set === 'function') {
+        pushUnique(sc.formats.bbcode);
+      }
+    } catch (e0) {}
+
+    try {
+      if (window.jQuery && jQuery.sceditor && jQuery.sceditor.formats && jQuery.sceditor.formats.bbcode && typeof jQuery.sceditor.formats.bbcode.set === 'function') {
+        pushUnique(jQuery.sceditor.formats.bbcode);
+      }
+    } catch (e1) {}
+
+    try {
+      if (instance && typeof instance.getPlugin === 'function') {
+        var plugin = instance.getPlugin('bbcode');
+        if (plugin && plugin.bbcode && typeof plugin.bbcode.set === 'function') {
+          pushUnique(plugin.bbcode);
+        }
+      }
+    } catch (e2) {}
+
+    try {
+      var sc2 = getSceditorRoot();
+      if (sc2 && sc2.plugins && sc2.plugins.bbcode && sc2.plugins.bbcode.bbcode && typeof sc2.plugins.bbcode.bbcode.set === 'function') {
+        pushUnique(sc2.plugins.bbcode.bbcode);
+      }
+    } catch (e3) {}
+
+    try {
+      if (window.jQuery && jQuery.sceditor && jQuery.sceditor.plugins && jQuery.sceditor.plugins.bbcode && jQuery.sceditor.plugins.bbcode.bbcode && typeof jQuery.sceditor.plugins.bbcode.bbcode.set === 'function') {
+        pushUnique(jQuery.sceditor.plugins.bbcode.bbcode);
+      }
+    } catch (e4) {}
+
+    return out;
+  }
+
+  function ensureBbcodeDef(instance) {
+    var targets = getFormatTargets(instance);
+    if (!targets.length) return false;
+
+    var def = buildMarkDef();
+
+    for (var i = 0; i < targets.length; i += 1) {
+      try {
+        targets[i].set('mark', def);
+      } catch (e) {}
+    }
+
+    return true;
+  }
+
+  function getCurrentMarkNode(instance) {
+    var body = getEditorBody(instance);
+    var anchor = getSelectionAnchorNode(instance);
+
+    if (!body || !anchor) return null;
+
+    return closestMarkNode(anchor, body);
   }
 
   function insertOrApply(instance, bg, text) {
     bg = normalizeColor(bg, DEFAULT_BG);
     text = normalizeColor(text, DEFAULT_TEXT);
 
-    var existing = getCurrentMarkNode(instance);
-    if (existing) {
-      applyMarkStyles(existing, bg, text);
-      touchEditor(instance);
-      return;
+    if (!instance) return false;
+
+    if (getCurrentMarkNode(instance)) {
+      return true;
     }
 
+    ensureBbcodeDef(instance);
+
     var open = buildOpenTag(bg, text);
+
     try {
-      if (instance && typeof instance.insert === 'function') {
+      if (typeof instance.insert === 'function') {
         instance.insert(open, '[/mark]');
-        return;
+
+        window.setTimeout(function () {
+          ensureBbcodeDef(instance);
+          rerenderInstance(instance);
+        }, 0);
+
+        return true;
       }
     } catch (e0) {}
 
     try {
-      if (instance && typeof instance.insertText === 'function') {
-        instance.insertText(open + '[/mark]', '');
+      if (typeof instance.insertText === 'function') {
+        instance.insertText(open, '[/mark]');
+        return true;
       }
     } catch (e1) {}
+
+    return false;
   }
 
-  function ensureBbcodeDef() {
-    if (!(window.jQuery && jQuery.sceditor && jQuery.sceditor.plugins && jQuery.sceditor.plugins.bbcode)) return;
+  function patchSceditorMarkCommand() {
+    if (!window.jQuery) return false;
+    var $ = window.jQuery;
+    if (!$.sceditor || !$.sceditor.command) return false;
 
-    var bb = null;
-    try { bb = jQuery.sceditor.plugins.bbcode.bbcode; } catch (e) { bb = null; }
-    if (!bb || typeof bb.set !== 'function') return;
-
-    bb.set('mark', {
-      isInline: true,
-      html: function (token, attrs, content) {
-        attrs = attrs || {};
-        var bg = normalizeColor(attrs.bgcolor, DEFAULT_BG);
-        var text = normalizeColor(attrs.textcolor, DEFAULT_TEXT);
-        return '<span class="af-ae-mark" data-af-bb="mark" data-bgcolor="' + bg + '" data-textcolor="' + text + '" style="background-color:' + bg + ';color:' + text + ';">' + (content || '') + '</span>';
+    $.sceditor.command.set(CMD, {
+      exec: function () {
+        insertOrApply(this, DEFAULT_BG, DEFAULT_TEXT);
       },
-      format: function (el, content) {
-        var bg = normalizeColor(el && el.getAttribute ? el.getAttribute('data-bgcolor') : '', DEFAULT_BG);
-        var text = normalizeColor(el && el.getAttribute ? el.getAttribute('data-textcolor') : '', DEFAULT_TEXT);
-
-        if ((!bg || bg === DEFAULT_BG) && (!text || text === DEFAULT_TEXT)) {
-          return '[mark]' + (content || '') + '[/mark]';
-        }
-
-        return '[mark bgcolor="' + bg + '" textcolor="' + text + '"]' + (content || '') + '[/mark]';
-      }
-    });
-  }
-
-  function ensurePopup() {
-    if (state.pop && state.pop.nodeType === 1) return state.pop;
-
-    var pop = document.createElement('div');
-    pop.id = POP_ID;
-    pop.className = 'af-ae-mark-pop';
-    pop.innerHTML =
-      '<label title="Цвет фона"><input type="color" data-role="bg" value="#fff2a8"></label>' +
-      '<label title="Цвет текста"><input type="color" data-role="text" value="#202020"></label>';
-
-    pop.addEventListener('input', function (event) {
-      if (!state.node) return;
-      var t = event.target;
-      if (!t || t.nodeType !== 1) return;
-      var bgInput = pop.querySelector('input[data-role="bg"]');
-      var textInput = pop.querySelector('input[data-role="text"]');
-      applyMarkStyles(state.node, bgInput.value, textInput.value);
-      touchEditor(state.instance);
+      txtExec: function () {
+        insertOrApply(this, DEFAULT_BG, DEFAULT_TEXT);
+      },
+      tooltip: 'Маркер'
     });
 
-    document.body.appendChild(pop);
-    state.pop = pop;
-    return pop;
+    $.sceditor.command.set('mark', {
+      exec: function () {
+        insertOrApply(this, DEFAULT_BG, DEFAULT_TEXT);
+      },
+      txtExec: function () {
+        insertOrApply(this, DEFAULT_BG, DEFAULT_TEXT);
+      },
+      tooltip: 'Маркер'
+    });
+
+    return true;
   }
 
-  function hidePopup() {
-    var pop = ensurePopup();
-    pop.classList.remove('is-open');
-    state.instance = null;
-    state.node = null;
-  }
+  function enhanceEditorInstance(instance) {
+    if (!instance || instance.__afAeMarkEnhanced) return;
 
-  function showPopup(instance, node, frameRect) {
-    var pop = ensurePopup();
-    var bgInput = pop.querySelector('input[data-role="bg"]');
-    var textInput = pop.querySelector('input[data-role="text"]');
+    var body = getEditorBody(instance);
+    if (!body) return;
 
-    var bg = normalizeColor(node.getAttribute('data-bgcolor') || node.style.backgroundColor, DEFAULT_BG);
-    var text = normalizeColor(node.getAttribute('data-textcolor') || node.style.color, DEFAULT_TEXT);
+    instance.__afAeMarkEnhanced = true;
 
-    bgInput.value = bg;
-    textInput.value = text;
+    ensureBbcodeDef(instance);
+    normalizeAllRenderedMarks(body);
 
-    state.instance = instance;
-    state.node = node;
+    window.setTimeout(function () {
+      ensureBbcodeDef(instance);
+      rerenderInstance(instance);
+    }, 0);
 
-    var r = node.getBoundingClientRect();
-    var top = frameRect.top + r.top - 42;
-    var left = frameRect.left + r.left;
+    window.setTimeout(function () {
+      ensureBbcodeDef(instance);
+      rerenderInstance(instance);
+    }, 80);
 
-    pop.style.top = Math.max(8, top) + 'px';
-    pop.style.left = Math.max(8, left) + 'px';
-    pop.classList.add('is-open');
-  }
+    body.addEventListener('click', function () {
+      normalizeAllRenderedMarks(body);
+    });
 
-  function resolveEditorFrame(instance) {
-    try {
-      if (!instance) return null;
+    body.addEventListener('mouseup', function () {
+      normalizeAllRenderedMarks(body);
+    });
 
-      if (typeof instance.getContentAreaContainer === 'function') {
-        var container = instance.getContentAreaContainer();
-        if (container) {
-          if (container.tagName === 'IFRAME') return container;
-          if (container.querySelector) {
-            var nested = container.querySelector('iframe');
-            if (nested) return nested;
-          }
-        }
-      }
+    body.addEventListener('keyup', function () {
+      normalizeAllRenderedMarks(body);
+    });
 
-      if (typeof instance.getBody === 'function') {
-        var body = instance.getBody();
-        if (body && body.ownerDocument && body.ownerDocument.defaultView && body.ownerDocument.defaultView.frameElement) {
-          return body.ownerDocument.defaultView.frameElement;
-        }
-      }
-    } catch (e) {}
-
-    return null;
-  }
-
-  function bindInstance(instance) {
-    if (!instance || instance.__afAeMarkBound) return;
-    instance.__afAeMarkBound = true;
-
-    ensureBbcodeDef();
-
-    try {
-      var body = instance.getBody && instance.getBody();
-      var frame = resolveEditorFrame(instance);
-      if (!body || !frame) return;
-
-      body.addEventListener('click', function (event) {
-        var node = event.target;
-        while (node && node.nodeType === 1 && node !== body) {
-          if (node.getAttribute('data-af-bb') === 'mark') {
-            showPopup(instance, node, frame.getBoundingClientRect());
-            return;
-          }
-          node = node.parentNode;
-        }
-        hidePopup();
+    if (typeof instance.bind === 'function') {
+      instance.bind('selectionchanged nodechanged valuechanged blur', function () {
+        if (isSourceMode(instance)) return;
+        normalizeAllRenderedMarks(body);
       });
-    } catch (e) {}
+    }
   }
 
-  function scanInstances() {
-    if (!window.jQuery || !jQuery.fn || typeof jQuery.fn.sceditor !== 'function') return;
-    var arr = document.querySelectorAll('textarea');
-    for (var i = 0; i < arr.length; i += 1) {
+  function enhanceAllEditors() {
+    var sc = getSceditorRoot();
+    if (!sc || typeof sc.instance !== 'function') return;
+
+    var textareas = document.querySelectorAll('textarea');
+    for (var i = 0; i < textareas.length; i += 1) {
       try {
-        var inst = jQuery(arr[i]).sceditor('instance');
-        if (inst) bindInstance(inst);
+        var editor = sc.instance(textareas[i]);
+        if (editor) {
+          enhanceEditorInstance(editor);
+        }
       } catch (e) {}
     }
   }
 
+  function waitAnd(fn, maxTries) {
+    var tries = 0;
+
+    (function tick() {
+      tries += 1;
+      if (fn()) return;
+      if (tries > (maxTries || 150)) return;
+      setTimeout(tick, 100);
+    })();
+  }
+
   window.af_ae_mark_exec = function (editor) {
-    ensureBbcodeDef();
+    ensureBbcodeDef(editor);
     if (!editor) return;
 
-    try {
-      if (typeof editor.sourceMode === 'function' && editor.sourceMode()) {
-        editor.insertText('[mark][/mark]', '');
-        return;
-      }
-    } catch (e0) {}
+    if (isSourceMode(editor)) {
+      try {
+        if (typeof editor.insertText === 'function') {
+          editor.insertText('[mark]', '[/mark]');
+          return;
+        }
+      } catch (e0) {}
+    }
 
     insertOrApply(editor, DEFAULT_BG, DEFAULT_TEXT);
   };
 
-  document.addEventListener('click', function (event) {
-    var pop = state.pop;
-    if (!pop || !pop.classList.contains('is-open')) return;
-    if (pop.contains(event.target)) return;
-    hidePopup();
-  }, true);
+  window.afAeBuiltinHandlers.mark = function (editor) {
+    window.af_ae_mark_exec(editor);
+  };
 
-  if (window.jQuery && jQuery.sceditor && jQuery.sceditor.command) {
-    jQuery.sceditor.command.set(CMD, {
-      tooltip: 'Маркер',
-      exec: function () { window.af_ae_mark_exec(this); },
-      txtExec: function () { window.af_ae_mark_exec(this); }
-    });
-  }
+  window.afAeBuiltinHandlers[CMD] = function (editor) {
+    window.af_ae_mark_exec(editor);
+  };
 
-  ensureBbcodeDef();
-  setInterval(scanInstances, 1200);
-  scanInstances();
+  waitAnd(function () {
+    return ensureBbcodeDef(null);
+  }, 150);
+
+  waitAnd(patchSceditorMarkCommand, 150);
+
+  waitAnd(function () {
+    enhanceAllEditors();
+    return false;
+  }, 20);
+
+  window.setInterval(enhanceAllEditors, INSTANCE_SCAN_DELAY);
 })(window, document);
