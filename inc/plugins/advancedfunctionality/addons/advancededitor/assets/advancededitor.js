@@ -560,61 +560,6 @@
     root.setAttribute('aria-hidden', 'true');
   }
 
-  function afAeForceAlignEverywhere(inst) {
-    if (!hasSceditor()) return;
-
-    function insertAlignTag(ed, alignVal) {
-      if (!ed) return;
-
-      try {
-        if (typeof ed.insertText === 'function') {
-          ed.insertText('[align=' + alignVal + ']', '[/align]');
-          return;
-        }
-      } catch (e0) {}
-
-      try {
-        if (typeof ed.insert === 'function') {
-          ed.insert('[align=' + alignVal + ']', '[/align]');
-          return;
-        }
-      } catch (e1) {}
-
-      try {
-        if (typeof ed.val === 'function') {
-          var cur = ed.val();
-          ed.val(String(cur || '') + '[align=' + alignVal + '][/align]');
-        }
-      } catch (e2) {}
-    }
-
-    // ---------- HARD OVERRIDE COMMANDS (кнопки) ----------
-    // Вставляем только [align=...] — и в source, и в WYSIWYG.
-    function hardCmd(cmd, alignVal) {
-      try {
-        var def = {
-          tooltip: cmd,
-
-          exec: function () {
-            insertAlignTag(this, alignVal);
-          },
-
-          txtExec: function () {
-            insertAlignTag(this, alignVal);
-          }
-        };
-
-        def.__afAeHardAlign = true;
-        setCommand(cmd, def);
-      } catch (e) {}
-    }
-
-    hardCmd('left', 'left');
-    hardCmd('center', 'center');
-    hardCmd('right', 'right');
-    hardCmd('justify', 'justify');
-  }
-
   function afAeEnsureMycodePassthroughBbcode(inst) {
     if (!hasSceditor()) return;
 
@@ -870,136 +815,6 @@
         }
       });
     });
-  }
-
-  function afAeEnsureMybbAlignBbcode(inst) {
-    if (!hasSceditor()) return;
-
-    function getGlobalBb() {
-      try {
-        var bb = jQuery.sceditor.plugins && jQuery.sceditor.plugins.bbcode
-          ? jQuery.sceditor.plugins.bbcode.bbcode
-          : null;
-        if (bb && typeof bb.set === 'function') return bb;
-      } catch (e0) {}
-      return null;
-    }
-
-    function getInstBb(editorInst) {
-      try {
-        if (editorInst && typeof editorInst.getPlugin === 'function') {
-          var p = editorInst.getPlugin('bbcode');
-          if (p && p.bbcode && typeof p.bbcode.set === 'function') return p.bbcode;
-        }
-      } catch (e1) {}
-      return null;
-    }
-
-    function collectTargets(editorInst) {
-      var out = [];
-      var seen = [];
-
-      function add(bb) {
-        if (!bb || typeof bb.set !== 'function') return;
-        for (var i = 0; i < seen.length; i++) {
-          if (seen[i] === bb) return;
-        }
-        seen.push(bb);
-        out.push(bb);
-      }
-
-      add(getInstBb(editorInst));
-      add(getGlobalBb());
-      return out;
-    }
-
-    function patchBb(bb) {
-      if (!bb || bb.__afAeMybbAlignPatched) return;
-      bb.__afAeMybbAlignPatched = true;
-
-      // =========================
-      // ALIGN: MyBB style [align=...]
-      // =========================
-
-      function normalizeAlign(value) {
-        value = String(value || '').toLowerCase().trim();
-        if (value === 'start') return 'left';
-        if (value === 'end') return 'right';
-        if (value === 'left' || value === 'center' || value === 'right' || value === 'justify') return value;
-        return '';
-      }
-
-      function formatAlignTag(value, content) {
-        var align = normalizeAlign(value);
-        if (!align) return content;
-        return '[align=' + align + ']' + content + '[/align]';
-      }
-
-      try {
-        bb.set('align', {
-          isInline: false,
-          html: function (token, attrs, content) {
-            var a = normalizeAlign(attrs && attrs.defaultattr);
-            if (!a) a = 'left';
-            return '<div class="af-bb-align" data-af-align="' + a + '" style="text-align:' + a + '">' + content + '</div>';
-          },
-          format: function (el, content) {
-            var fromData = '';
-            var fromStyle = '';
-
-            try { fromData = el && el.getAttribute ? el.getAttribute('data-af-align') : ''; } catch (e0) { fromData = ''; }
-            try { fromStyle = el && el.style ? el.style.textAlign : ''; } catch (e1) { fromStyle = ''; }
-
-            return formatAlignTag(fromData || fromStyle, content);
-          }
-        });
-      } catch (eA0) {}
-
-      function patchLegacyAlign(tag, val) {
-        try {
-          bb.set(tag, {
-            isInline: false,
-            html: '<div style="text-align:' + val + '">{0}</div>',
-            format: '[align=' + val + ']{0}[/align]'
-          });
-        } catch (e) {}
-      }
-
-      patchLegacyAlign('left', 'left');
-      patchLegacyAlign('center', 'center');
-      patchLegacyAlign('right', 'right');
-      patchLegacyAlign('justify', 'justify');
-
-      try {
-        bb.set('div', {
-          styles: { 'text-align': 'align' },
-          format: function (el, content) {
-            try {
-              var a = '';
-              try { a = (el && el.style && el.style.textAlign) ? String(el.style.textAlign) : ''; } catch (e0) { a = ''; }
-              return formatAlignTag(a, content);
-            } catch (e1) {
-              return '[align=left]' + content + '[/align]';
-            }
-          },
-          html: function (token, attrs, content) {
-            var a = normalizeAlign(attrs && attrs.defaultattr);
-            if (!a) a = 'left';
-            return '<div class="af-bb-align" data-af-align="' + a + '" style="text-align:' + a + '">' + content + '</div>';
-          }
-        });
-      } catch (eD) {}
-    }
-
-    var targets = collectTargets(inst);
-    for (var i = 0; i < targets.length; i++) {
-      patchBb(targets[i]);
-    }
-  }
-
-  function afAePatchAlignCommandsForSourceMode() {
-    // теперь это просто “вызов жёсткого режима”
-    try { afAeForceAlignEverywhere(null); } catch (e) {}
   }
 
   function svgStarMarkup() {
@@ -1754,43 +1569,22 @@
     try { inst.updateOriginal(); } catch (e) {}
   }
 
-  function normalizeLegacyAlignBbcode(s) {
-    s = String(s == null ? '' : s);
-
-    // парные
-    s = s.replace(/\[left\]([\s\S]*?)\[\/left\]/gi, '[align=left]$1[/align]');
-    s = s.replace(/\[center\]([\s\S]*?)\[\/center\]/gi, '[align=center]$1[/align]');
-    s = s.replace(/\[right\]([\s\S]*?)\[\/right\]/gi, '[align=right]$1[/align]');
-    s = s.replace(/\[justify\]([\s\S]*?)\[\/justify\]/gi, '[align=justify]$1[/align]');
-
-    // одиночные/кривые
-    s = s.replace(/\[(\/?)left\]/gi, '[$1align=left]').replace(/\[\/align=left\]/gi, '[/align]');
-    s = s.replace(/\[(\/?)center\]/gi, '[$1align=center]').replace(/\[\/align=center\]/gi, '[/align]');
-    s = s.replace(/\[(\/?)right\]/gi, '[$1align=right]').replace(/\[\/align=right\]/gi, '[/align]');
-    s = s.replace(/\[(\/?)justify\]/gi, '[$1align=justify]').replace(/\[\/align=justify\]/gi, '[/align]');
-
-    return s;
-  }
-
-  function afAeNormalizeAlignInInstance(inst) {
-    if (!inst || inst.__afAeAlignNormalizing) return;
-    inst.__afAeAlignNormalizing = true;
-
-    try {
-      if (typeof inst.val === 'function') {
-        var v = inst.val();
-        var nv = normalizeLegacyAlignBbcode(v);
-        if (nv !== v) {
-          // важно: задаём обратно — чтобы изменения были В РЕДАКТОРЕ, а не только в textarea перед submit
-          inst.val(nv);
-        }
-      }
-      try { if (typeof inst.updateOriginal === 'function') inst.updateOriginal(); } catch (e0) {}
-    } catch (e1) {
-      // no-op
-    } finally {
-      inst.__afAeAlignNormalizing = false;
+  function applyBbcodeNormalizers(value) {
+    var out = String(value == null ? '' : value);
+    var list = window.afAeBbcodeNormalizers;
+    if (!Array.isArray(list) || !list.length) {
+      return out;
     }
+
+    for (var i = 0; i < list.length; i++) {
+      var fn = list[i];
+      if (typeof fn !== 'function') continue;
+      try {
+        out = String(fn(out));
+      } catch (e) {}
+    }
+
+    return out;
   }
 
   function getEditorText(inst, ta) {
@@ -1848,15 +1642,14 @@
           if (inst && typeof inst.val === 'function') {
             var v = getEditorText(inst, ta);
             if (typeof v === 'string') {
-              v = normalizeLegacyAlignBbcode(v);
+              v = applyBbcodeNormalizers(v);
               ta.value = v;
             }
           } else {
-            // если inst.val нет — хотя бы textarea прогоняем
-            ta.value = normalizeLegacyAlignBbcode(ta.value);
+            ta.value = applyBbcodeNormalizers(ta.value);
           }
         } catch (e1) {
-          try { ta.value = normalizeLegacyAlignBbcode(ta.value); } catch (e2) {}
+          try { ta.value = applyBbcodeNormalizers(ta.value); } catch (e2) {}
         }
       } catch (e3) {}
 
@@ -2078,8 +1871,6 @@
     try { ensureToggleCommandDefinition(); } catch (eT) {}
     try { afAeBindFormatHelpEsc(); } catch (eFE) {}
     try { ensureMybbTagAliases(); } catch (eTA) {}
-    try { afAeEnsureMybbAlignBbcode(null); } catch (eA) {}
-    try { afAePatchAlignCommandsForSourceMode(); } catch (eA2) {}
     try { afAeEnsureMycodePassthroughBbcode(null); } catch (eM) {}
     try { if (window.afAeWysiwygBbcodes && typeof window.afAeWysiwygBbcodes.init === 'function') window.afAeWysiwygBbcodes.init(null); } catch (eWB) {}
   }
@@ -2115,7 +1906,6 @@
       try { afAeApplyWysiwygCodeQuoteCss(existing); } catch (e2) {}
       try { afAeApplyWysiwygLocalFontsCss(existing); } catch (e2b) {}
       try { bindRememberModeHooks(existing); } catch (e2c) {}
-      try { afAeEnsureMybbAlignBbcode(existing); } catch (eA1) {}
       try { if (window.afAeWysiwygBbcodes && typeof window.afAeWysiwygBbcodes.applyInstance === 'function') window.afAeWysiwygBbcodes.applyInstance(existing); } catch (eW1) {}
 
       try {
@@ -2160,7 +1950,6 @@
 
         try { afAeApplyWysiwygCodeQuoteCss(inst); } catch (e5) {}
         try { afAeApplyWysiwygLocalFontsCss(inst); } catch (e5b) {}
-        try { afAeEnsureMybbAlignBbcode(inst); } catch (eA2) {}
         try { if (window.afAeWysiwygBbcodes && typeof window.afAeWysiwygBbcodes.applyInstance === 'function') window.afAeWysiwygBbcodes.applyInstance(inst); } catch (eW2) {}
 
         try {
