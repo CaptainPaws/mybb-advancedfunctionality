@@ -491,55 +491,176 @@
     return !isNodeMeaningful(node);
     }
 
+    function isManagedTableNode(node) {
+      return !!(
+        node &&
+        node.nodeType === 1 &&
+        node.matches &&
+        node.matches('table[data-af-bb-table="1"], table.af-bb-table')
+      );
+    }
+
+    function unwrapSingleTableWrapper(node) {
+      if (!node || node.nodeType !== 1 || !node.parentNode) {
+        return false;
+      }
+
+      var tag = node.tagName.toLowerCase();
+      if (tag !== 'div' && tag !== 'p') {
+        return false;
+      }
+
+      var table = null;
+      var child = node.firstChild;
+
+      while (child) {
+        var next = child.nextSibling;
+
+        if (isEditorSpacerNode(child)) {
+          child = next;
+          continue;
+        }
+
+        if (!table && isManagedTableNode(child)) {
+          table = child;
+          child = next;
+          continue;
+        }
+
+        return false;
+      }
+
+      if (!table) {
+        return false;
+      }
+
+      node.parentNode.insertBefore(table, node);
+      node.parentNode.removeChild(node);
+      return true;
+    }
+
+    function normalizeTableDomAround(table) {
+      if (!table || !table.parentNode) {
+        return false;
+      }
+
+      var changed = false;
+
+      if (!table.getAttribute('data-af-bb-table')) {
+        table.setAttribute('data-af-bb-table', '1');
+        changed = true;
+      }
+
+      while (table.parentNode && unwrapSingleTableWrapper(table.parentNode)) {
+        changed = true;
+      }
+
+      if (removeSpacerSiblingsAroundTable(table)) {
+        changed = true;
+      }
+
+      return changed;
+    }
+
+    function cleanupTableHtmlForSource(html) {
+      html = String(html == null ? '' : html);
+
+      if (!html) {
+        return html;
+      }
+
+      var wrap = document.createElement('div');
+      wrap.innerHTML = html;
+
+      var tables = wrap.querySelectorAll('table[data-af-bb-table="1"], table.af-bb-table');
+      for (var i = 0; i < tables.length; i += 1) {
+        normalizeTableDomAround(tables[i]);
+      }
+
+      html = wrap.innerHTML;
+
+      html = html.replace(/<(p|div)>(?:\s|&nbsp;|<br\s*\/?>)*?(<table\b[\s\S]*?<\/table>)(?:\s|&nbsp;|<br\s*\/?>)*?<\/\1>/gi, '$2');
+      html = html.replace(/(?:<br\s*\/?>|\s|&nbsp;)+(?=<table\b)/gi, '');
+      html = html.replace(/(<\/table>)(?:<br\s*\/?>|\s|&nbsp;)+/gi, '$1');
+
+      return html;
+    }
+
+    function bindTableToSourceCleanup(instance) {
+      if (!instance || instance.__afTablesToSourceBound) {
+        return;
+      }
+
+      if (typeof instance.bind !== 'function') {
+        return;
+      }
+
+      instance.__afTablesToSourceBound = true;
+
+      instance.bind('toSource', function (html) {
+        try {
+          cleanupEditorBodyTableSpacers(instance);
+        } catch (e0) {}
+
+        try {
+          return cleanupTableHtmlForSource(html);
+        } catch (e1) {}
+
+        return html;
+      });
+    }
+
     function removeSpacerSiblingsAroundTable(table) {
-    if (!table || !table.parentNode) return false;
+      if (!table || !table.parentNode) return false;
 
-    var changed = false;
-    var prev = table.previousSibling;
-    var next;
-    var removable;
+      var changed = false;
+      var prev = table.previousSibling;
+      var next;
+      var removable;
 
-    while (prev && isEditorSpacerNode(prev)) {
+      while (prev && isEditorSpacerNode(prev)) {
         removable = prev;
         prev = prev.previousSibling;
         if (removable.parentNode) {
-        removable.parentNode.removeChild(removable);
-        changed = true;
+          removable.parentNode.removeChild(removable);
+          changed = true;
         }
-    }
+      }
 
-    next = table.nextSibling;
+      next = table.nextSibling;
 
-    while (next && isEditorSpacerNode(next)) {
+      while (next && isEditorSpacerNode(next)) {
         removable = next;
         next = next.nextSibling;
         if (removable.parentNode) {
-        removable.parentNode.removeChild(removable);
-        changed = true;
+          removable.parentNode.removeChild(removable);
+          changed = true;
         }
-    }
+      }
 
-    return changed;
+      return changed;
     }
 
     function cleanupEditorBodyTableSpacers(instance) {
-    if (!instance || typeof instance.getBody !== 'function') return false;
+      if (!instance || typeof instance.getBody !== 'function') return false;
 
-    var body = instance.getBody();
-    if (!body) return false;
+      var body = instance.getBody();
+      if (!body) return false;
 
-    var tables = body.querySelectorAll('table[data-af-bb-table="1"]');
-    if (!tables.length) return false;
+      var changed = false;
+      var tables = body.querySelectorAll('table[data-af-bb-table="1"], table.af-bb-table');
 
-    var changed = false;
+      if (!tables.length) {
+        return false;
+      }
 
-    for (var i = 0; i < tables.length; i += 1) {
-        if (removeSpacerSiblingsAroundTable(tables[i])) {
-        changed = true;
+      for (var i = 0; i < tables.length; i += 1) {
+        if (normalizeTableDomAround(tables[i])) {
+          changed = true;
         }
-    }
+      }
 
-    return changed;
+      return changed;
     }
 
   function normalizeCellHtmlForBbcode(content) {
@@ -561,11 +682,19 @@
   }
 
   function normalizeBlockBbcodeContent(content) {
-    return String(content == null ? '' : content)
+    content = String(content == null ? '' : content)
       .replace(/\r\n?/g, '\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .replace(/^\s+/, '')
-      .replace(/\s+$/, '');
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n[ \t]+/g, '\n')
+      .replace(/^(?:\s*\n)+/, '')
+      .replace(/(?:\n\s*)+$/, '');
+
+    content = content.replace(/(?:\n\s*){2,}(?=\[tr\])/g, '\n');
+    content = content.replace(/\[\/tr\](?:\n\s*)+(?=\[tr\])/g, '[/tr]\n');
+    content = content.replace(/(?:\n\s*){3,}/g, '\n\n');
+
+    return content;
   }
 
   function parseOuterColorBbcode(content) {
@@ -842,8 +971,8 @@
       isInline: false,
       allowedChildren: ['tr'],
       allowsEmpty: true,
-      breakBefore: true,
-      breakAfter: true,
+      breakBefore: false,
+      breakAfter: false,
       skipLastLineBreak: true,
       format: function (element, content) {
         return formatTableElement(element, content);
@@ -858,8 +987,8 @@
       isInline: false,
       allowedChildren: ['td', 'th'],
       allowsEmpty: true,
-      breakBefore: true,
-      breakAfter: true,
+      breakBefore: false,
+      breakAfter: false,
       skipLastLineBreak: true,
       format: function (element, content) {
         return formatRowElement(element, content);
@@ -2338,7 +2467,7 @@
     showTableToolbar(instance, table, cell);
   }
 
-    function enhanceEditorInstance(instance) {
+  function enhanceEditorInstance(instance) {
     if (!instance || instance.__afTablesEnhanced) return;
 
     var body = typeof instance.getBody === 'function' ? instance.getBody() : null;
@@ -2347,37 +2476,52 @@
     instance.__afTablesEnhanced = true;
 
     cleanupEditorBodyTableSpacers(instance);
+    bindTableToSourceCleanup(instance);
+
+    window.setTimeout(function () {
+      cleanupEditorBodyTableSpacers(instance);
+    }, 0);
+
+    window.setTimeout(function () {
+      cleanupEditorBodyTableSpacers(instance);
+    }, 80);
+
+    window.setTimeout(function () {
+      cleanupEditorBodyTableSpacers(instance);
+    }, 200);
 
     body.addEventListener('click', function (event) {
-        handleBodyClick(instance, event);
+      handleBodyClick(instance, event);
     });
 
     body.addEventListener('mouseup', function () {
-        handleSelectionState(instance);
+      cleanupEditorBodyTableSpacers(instance);
+      handleSelectionState(instance);
     });
 
     body.addEventListener('keyup', function () {
-        handleSelectionState(instance);
+      cleanupEditorBodyTableSpacers(instance);
+      handleSelectionState(instance);
     });
 
     instance.bind('selectionchanged nodechanged valuechanged blur', function (event) {
-          if (event && event.type === 'blur') {
-            window.setTimeout(function () {
-                var toolbar = toolbarState.toolbar;
-                var active = document.activeElement;
+      if (event && event.type === 'blur') {
+        window.setTimeout(function () {
+          var toolbar = toolbarState.toolbar;
+          var active = document.activeElement;
 
-                if (toolbar && toolbar.contains(active)) return;
-                if (isJscolorEventTarget(active) || hasVisibleJscolorPopup()) return;
+          if (toolbar && toolbar.contains(active)) return;
+          if (isJscolorEventTarget(active) || hasVisibleJscolorPopup()) return;
 
-                hideTableToolbar();
-            }, 0);
-            return;
-          }
+          hideTableToolbar();
+        }, 0);
+        return;
+      }
 
-        cleanupEditorBodyTableSpacers(instance);
-        handleSelectionState(instance);
+      cleanupEditorBodyTableSpacers(instance);
+      handleSelectionState(instance);
     });
-    }
+  }
 
   function enhanceAllEditors() {
     var textareas = document.querySelectorAll('textarea');
