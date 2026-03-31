@@ -227,6 +227,253 @@ if (!function_exists('af_ae_lists_install_mycode')) {
     }
 }
 
+if (!function_exists('af_ae_lists_bridge_protect_bbcodes')) {
+    function af_ae_lists_bridge_protect_bbcodes(string $message, array &$protected): string
+    {
+        $protected = [];
+
+        $result = preg_replace_callback(
+            '~\[(code|php)\b[^\]]*\].*?\[/\1\]~is',
+            static function (array $match) use (&$protected): string {
+                $key = '%%AF_AE_LISTS_BBCODE_' . count($protected) . '%%';
+                $protected[$key] = $match[0];
+
+                return $key;
+            },
+            $message
+        );
+
+        return is_string($result) ? $result : $message;
+    }
+
+    function af_ae_lists_bridge_restore_bbcodes(string $message, array $protected): string
+    {
+        return $protected ? strtr($message, $protected) : $message;
+    }
+
+    function af_ae_lists_bridge_prefix_tags(string $message): string
+    {
+        if ($message === '' || stripos($message, '[ul') === false && stripos($message, '[ol') === false && stripos($message, '[li') === false) {
+            return $message;
+        }
+
+        $protected = [];
+        $message = af_ae_lists_bridge_protect_bbcodes($message, $protected);
+
+        $message = preg_replace('~\[(/?)ul\b([^\]]*)\]~i', '[$1af_ul$2]', $message);
+        $message = preg_replace('~\[(/?)ol\b([^\]]*)\]~i', '[$1af_ol$2]', $message);
+        $message = preg_replace('~\[(/?)li\b([^\]]*)\]~i', '[$1af_li$2]', $message);
+
+        if (!is_string($message)) {
+            return '';
+        }
+
+        return af_ae_lists_bridge_restore_bbcodes($message, $protected);
+    }
+
+    function af_ae_lists_bridge_normalize_list_attr(string $tagName, string $rawAttr): array
+    {
+        $attr = strtolower(trim($rawAttr));
+        if ($attr === 'i') {
+            $attr = 'decimal';
+        }
+
+        if ($tagName === 'af_ol') {
+            $allowed = ['decimal', 'upper-alpha', 'upper-roman', 'lower-alpha', 'lower-roman'];
+            if (!in_array($attr, $allowed, true)) {
+                $attr = 'decimal';
+            }
+
+            return [
+                'tag' => 'ol',
+                'style' => $attr,
+                'padding' => '1.6em',
+            ];
+        }
+
+        if ($attr === '' || $attr === 'disc') {
+            return [
+                'tag' => 'ul',
+                'style' => 'disc',
+                'padding' => '1.4em',
+            ];
+        }
+
+        if (in_array($attr, ['circle', 'square'], true)) {
+            return [
+                'tag' => 'ul',
+                'style' => $attr,
+                'padding' => '1.4em',
+            ];
+        }
+
+        $ordered = ['decimal', 'upper-alpha', 'upper-roman', 'lower-alpha', 'lower-roman'];
+        if (in_array($attr, $ordered, true)) {
+            return [
+                'tag' => 'ol',
+                'style' => $attr,
+                'padding' => '1.6em',
+            ];
+        }
+
+        return [
+            'tag' => 'ul',
+            'style' => 'disc',
+            'padding' => '1.4em',
+        ];
+    }
+
+    function af_ae_lists_bridge_render_node(array $node): string
+    {
+        $type = $node['type'] ?? 'text';
+
+        if ($type === 'text') {
+            return (string)($node['value'] ?? '');
+        }
+
+        $children = '';
+        foreach ($node['children'] ?? [] as $child) {
+            if (is_array($child)) {
+                $children .= af_ae_lists_bridge_render_node($child);
+            }
+        }
+
+        if ($type === 'af_li') {
+            return '<li>' . $children . '</li>';
+        }
+
+        if ($type === 'af_ul' || $type === 'af_ol') {
+            $normalized = af_ae_lists_bridge_normalize_list_attr($type, (string)($node['attr'] ?? ''));
+            $tag = $normalized['tag'];
+            $style = htmlspecialchars($normalized['style'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $padding = htmlspecialchars($normalized['padding'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+            return '<' . $tag . ' style="list-style-type:' . $style . '; padding-left:' . $padding . ';">' . $children . '</' . $tag . '>';
+        }
+
+        return $children;
+    }
+
+    function af_ae_lists_bridge_parse_html(string $message): string
+    {
+        if ($message === '' || (stripos($message, '[af_ul') === false && stripos($message, '[af_ol') === false && stripos($message, '[af_li') === false)) {
+            return $message;
+        }
+
+        $pattern = '~\[(\/?)(af_ul|af_ol|af_li)(?:=([^\]]*))?\]~i';
+        if (!preg_match_all($pattern, $message, $matches, PREG_OFFSET_CAPTURE)) {
+            return $message;
+        }
+
+        $root = ['type' => 'root', 'children' => []];
+        $stack = [&$root];
+        $lastOffset = 0;
+        $tokenCount = count($matches[0]);
+
+        for ($i = 0; $i < $tokenCount; $i++) {
+            $fullToken = $matches[0][$i][0];
+            $tokenOffset = (int)$matches[0][$i][1];
+
+            if ($tokenOffset > $lastOffset) {
+                $text = substr($message, $lastOffset, $tokenOffset - $lastOffset);
+                if ($text !== '') {
+                    $stack[count($stack) - 1]['children'][] = [
+                        'type' => 'text',
+                        'value' => $text,
+                    ];
+                }
+            }
+
+            $isClosing = trim(strtolower((string)$matches[1][$i][0])) === '/';
+            $tagName = strtolower((string)$matches[2][$i][0]);
+            $attr = isset($matches[3][$i][0]) ? (string)$matches[3][$i][0] : '';
+
+            if (!$isClosing) {
+                $node = [
+                    'type' => $tagName,
+                    'attr' => $attr,
+                    'children' => [],
+                ];
+
+                $stack[count($stack) - 1]['children'][] = $node;
+                $newIndex = count($stack[count($stack) - 1]['children']) - 1;
+                $stack[] = &$stack[count($stack) - 1]['children'][$newIndex];
+            } else {
+                $found = -1;
+                for ($j = count($stack) - 1; $j > 0; $j--) {
+                    if (($stack[$j]['type'] ?? '') === $tagName) {
+                        $found = $j;
+                        break;
+                    }
+                }
+
+                if ($found !== -1) {
+                    while (count($stack) - 1 >= $found) {
+                        array_pop($stack);
+                    }
+                } else {
+                    $stack[count($stack) - 1]['children'][] = [
+                        'type' => 'text',
+                        'value' => $fullToken,
+                    ];
+                }
+            }
+
+            $lastOffset = $tokenOffset + strlen($fullToken);
+        }
+
+        if ($lastOffset < strlen($message)) {
+            $tail = substr($message, $lastOffset);
+            if ($tail !== '') {
+                $stack[count($stack) - 1]['children'][] = [
+                    'type' => 'text',
+                    'value' => $tail,
+                ];
+            }
+        }
+
+        return af_ae_lists_bridge_render_node($root);
+    }
+
+    function af_ae_bbcode_lists_parse_start(&$message): void
+    {
+        if (!is_string($message) || $message === '') {
+            return;
+        }
+
+        $message = af_ae_lists_bridge_prefix_tags($message);
+    }
+
+    function af_ae_bbcode_lists_parse_end(&$message): void
+    {
+        if (!is_string($message) || $message === '') {
+            return;
+        }
+
+        $message = af_ae_lists_bridge_parse_html($message);
+    }
+
+    function af_ae_bbcode_lists_parse(&$message): void
+    {
+        af_ae_bbcode_lists_parse_end($message);
+    }
+
+    function af_aqr_bbcode_lists_parse_start(&$message): void
+    {
+        af_ae_bbcode_lists_parse_start($message);
+    }
+
+    function af_aqr_bbcode_lists_parse_end(&$message): void
+    {
+        af_ae_bbcode_lists_parse_end($message);
+    }
+
+    function af_aqr_bbcode_lists_parse(&$message): void
+    {
+        af_ae_bbcode_lists_parse($message);
+    }
+}
+
 
 /**
  * Uninstall MyCodes for lists (and cleanup legacy titles if they were previously created).
