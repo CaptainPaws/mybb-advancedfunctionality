@@ -36,6 +36,14 @@ function escHtml(s){
     .replace(/>/g,'&gt;');
 }
 
+function escBbAttr(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;')
+    .replace(/"/g,'&quot;')
+    .replace(/\]/g,'&#93;')
+    .trim();
+}
+
 /* ------------------------------------------------ */
 /* PARTIAL MODE */
 
@@ -370,6 +378,29 @@ function createPassthroughDef(tag,hasClose){
 
 }
 
+function createAbbrDef(){
+  return {
+    isInline:true,
+
+    html:function(token,attrs,content){
+      var a=collectAttrs(attrs);
+      var tip=String(a.defaultattr == null ? '' : a.defaultattr);
+
+      return '<span class="af-ae-abbr" data-af-bb="abbr" data-af-abbr-title="'+escHtml(tip)+'" title="'+escHtml(tip)+'">'+(content||'')+'</span>';
+    },
+
+    format:function(el,content){
+      var tip='';
+      try{ tip=String(el.getAttribute('data-af-abbr-title')||''); }catch(e0){}
+      if(!tip){
+        try{ tip=String(el.getAttribute('title')||''); }catch(e1){}
+      }
+
+      return '[abbr="'+escBbAttr(tip)+'"]'+(content||'')+'[/abbr]';
+    }
+  };
+}
+
 function isStructuralTableTag(tag){
   tag = String(tag||'').toLowerCase().trim();
   return tag==='table' || tag==='tr' || tag==='td' || tag==='th' ||
@@ -416,7 +447,9 @@ function register(inst){
 
       if(partial){
 
-        if(isWhitelist(tag)){
+        if(tag === 'abbr'){
+          bb.set(tag,createAbbrDef());
+        }else if(isWhitelist(tag)){
           bb.set(tag,createUniversalDef(tag,def.hasClose));
         }else{
           bb.set(tag,createPassthroughDef(tag,def.hasClose));
@@ -424,11 +457,15 @@ function register(inst){
 
       }else{
 
-        bb.set(tag,
-          isExcluded(tag)
-          ? createPassthroughDef(tag,def.hasClose)
-          : createUniversalDef(tag,def.hasClose)
-        );
+        if(tag === 'abbr'){
+          bb.set(tag,createAbbrDef());
+        }else{
+          bb.set(tag,
+            isExcluded(tag)
+            ? createPassthroughDef(tag,def.hasClose)
+            : createUniversalDef(tag,def.hasClose)
+          );
+        }
 
       }
 
@@ -479,7 +516,8 @@ function injectCss(inst){
 
     style.appendChild(doc.createTextNode(
       '.af-ae-bb-node[data-af-bb]{display:block}'+
-      '.af-ae-bb-node.af-ae-bb-font,.af-ae-bb-node.af-ae-bb-size,.af-ae-bb-node.af-ae-bb-color{display:inline}'
+      '.af-ae-bb-node.af-ae-bb-font,.af-ae-bb-node.af-ae-bb-size,.af-ae-bb-node.af-ae-bb-color{display:inline}'+
+      '.af-ae-abbr{cursor:help;text-decoration:underline dotted;text-underline-offset:2px;background:rgba(75,116,255,.08);border-radius:3px;padding:0 2px}'
     ));
 
     (doc.head||doc.documentElement).appendChild(style);
