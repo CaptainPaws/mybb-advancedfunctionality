@@ -1,0 +1,54 @@
+.af-bb-abbr,
+.af-ae-abbr {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+.af-ae-abbr {
+  background: rgba(75, 116, 255, 0.08);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.af-ae-abbr-dd {
+  min-width: 280px;
+  max-width: 360px;
+  padding: 10px;
+}
+
+.af-ae-abbr-dd__title {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.af-ae-abbr-dd__field {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.af-ae-abbr-dd__field span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.af-ae-abbr-dd__field input,
+.af-ae-abbr-dd__field textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.af-ae-abbr-dd__selected {
+  margin-bottom: 8px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.af-ae-abbr-dd__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
