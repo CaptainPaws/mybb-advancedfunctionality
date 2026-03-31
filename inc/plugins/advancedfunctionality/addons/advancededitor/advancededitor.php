@@ -1312,7 +1312,9 @@ gallery.php",
         "hide
 lockcontent
 float
-grid",
+grid
+tabs
+tab",
         75
     );
 
