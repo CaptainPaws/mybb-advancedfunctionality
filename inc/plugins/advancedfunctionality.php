@@ -1781,10 +1781,68 @@ function af_apply_preoutput_filters(string $page): string
     // 3) Страховка: если внезапно нет НИ ОДНОГО rel="stylesheet" — вклеим $stylesheets
     $page = af_inject_core_stylesheets_if_missing($page);
 
-    // 4) Last-resort дедуп <script src> по clean path (предохранитель против ручных инжекторов)
+    // 4) Last-resort дедуп/нормализация CSS (предохранитель против ручных инжекторов)
+    $page = af_hard_normalize_stylesheet_link_tags($page);
+
+    // 5) Last-resort дедуп <script src> по clean path (предохранитель против ручных инжекторов)
     $page = af_hard_dedup_script_src_tags($page);
 
     return $page;
+}
+
+function af_hard_normalize_stylesheet_link_tags(string $page): string
+{
+    if ($page === '' || stripos($page, '<link') === false) {
+        return $page;
+    }
+
+    $seenExact = [];
+    $seenThemeLayer = [];
+
+    return (string)preg_replace_callback(
+        '~<link\b[^>]*\brel\s*=\s*("|\')stylesheet\1[^>]*\bhref\s*=\s*("|\')(.*?)\2[^>]*>\s*~is',
+        static function (array $m) use (&$seenExact, &$seenThemeLayer): string {
+            $href = html_entity_decode((string)($m[3] ?? ''), ENT_QUOTES, 'UTF-8');
+            $cleanPath = af_asset_clean_path($href);
+            if ($cleanPath === '') {
+                return $m[0];
+            }
+
+            $exactKey = strtolower($cleanPath);
+            if (isset($seenExact[$exactKey])) {
+                return '';
+            }
+
+            if (preg_match('~^/inc/plugins/'.preg_quote(AF_PLUGIN_ID, '~').'/addons/([^/]+)/(.+?\.css)$~i', $cleanPath, $mm)) {
+                $addonId = strtolower((string)($mm[1] ?? ''));
+                $fileRel = strtolower((string)($mm[2] ?? ''));
+                $decision = af_theme_stylesheet_delivery_decision($addonId, $fileRel);
+                if (
+                    (string)($decision['mode'] ?? 'auto') === 'theme'
+                    && !empty($decision['state_found'])
+                    && !empty($decision['is_integrated'])
+                ) {
+                    return '';
+                }
+            }
+
+            if (preg_match('~^/cache/themes/theme\d+/([^/?#]+)$~i', $cleanPath, $tm)) {
+                $file = strtolower((string)($tm[1] ?? ''));
+                $layer = preg_replace('~(?:\.min)?\.css$~i', '', $file) ?? $file;
+                $layer = (string)$layer;
+                if ($layer !== '') {
+                    if (isset($seenThemeLayer[$layer])) {
+                        return '';
+                    }
+                    $seenThemeLayer[$layer] = true;
+                }
+            }
+
+            $seenExact[$exactKey] = true;
+            return $m[0];
+        },
+        $page
+    );
 }
 
 /**
@@ -4065,7 +4123,19 @@ function af_current_theme_tid(): int
 
 function af_theme_stylesheet_frontend_href_for_candidate(string $addonId, string $fileRel): string
 {
-    global $db;
+    $decision = af_theme_stylesheet_delivery_decision($addonId, $fileRel);
+    return (string)($decision['theme_href'] ?? '');
+}
+
+function af_theme_stylesheet_delivery_decision(string $addonId, string $fileRel): array
+{
+    global $db, $mybb;
+
+    $addonId = trim($addonId);
+    $fileRel = ltrim(str_replace('\\', '/', trim($fileRel)), '/');
+    if ($addonId === '' || $fileRel === '') {
+        return ['mode' => 'auto', 'state_found' => false, 'is_integrated' => false, 'include_file' => true, 'theme_href' => ''];
+    }
 
     $base = af_theme_stylesheet_base_from_rel($fileRel);
     $logicalId = $addonId.'__'.$base;
@@ -4081,7 +4151,7 @@ function af_theme_stylesheet_frontend_href_for_candidate(string $addonId, string
     );
     $state = $db->fetch_array($q) ?: [];
     if (!$state) {
-        return '';
+        return ['mode' => 'auto', 'state_found' => false, 'is_integrated' => false, 'include_file' => true, 'theme_href' => ''];
     }
 
     $deliveryMode = strtolower((string)($state['delivery_mode'] ?? 'auto'));
@@ -4089,38 +4159,42 @@ function af_theme_stylesheet_frontend_href_for_candidate(string $addonId, string
         $deliveryMode = 'auto';
     }
     if ($deliveryMode === 'file') {
-        return '';
+        return ['mode' => $deliveryMode, 'state_found' => true, 'is_integrated' => false, 'include_file' => true, 'theme_href' => ''];
     }
 
     $sid = (int)($state['stylesheet_sid'] ?? 0);
     $isIntegrated = (int)($state['is_integrated'] ?? 0) === 1;
     if (!$isIntegrated || $sid <= 0) {
-        return '';
+        $includeFile = ($deliveryMode !== 'theme');
+        return ['mode' => $deliveryMode, 'state_found' => true, 'is_integrated' => false, 'include_file' => $includeFile, 'theme_href' => ''];
     }
 
     $sidQ = $db->simple_select('themestylesheets', 'sid,name', "sid='{$sid}' AND tid='".(int)$themeTid."'", ['limit' => 1]);
     $sidRow = $db->fetch_array($sidQ) ?: [];
     if (!$sidRow) {
-        return '';
+        $includeFile = ($deliveryMode !== 'theme');
+        return ['mode' => $deliveryMode, 'state_found' => true, 'is_integrated' => false, 'include_file' => $includeFile, 'theme_href' => ''];
     }
 
     $name = trim((string)($sidRow['name'] ?? ''));
     if ($name === '') {
-        return '';
+        $includeFile = ($deliveryMode !== 'theme');
+        return ['mode' => $deliveryMode, 'state_found' => true, 'is_integrated' => false, 'include_file' => $includeFile, 'theme_href' => ''];
     }
 
-    global $mybb;
     $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
-
     $cacheDirFs = MYBB_ROOT.'cache/themes/theme'.(int)$themeTid.'/';
     $nameMin = preg_replace('~\.css$~i', '.min.css', $name) ?? $name;
     $nameMin = trim((string)$nameMin);
 
+    $themeHref = '';
     if ($nameMin !== '' && is_file($cacheDirFs.$nameMin)) {
-        return $bburl.'/cache/themes/theme'.(int)$themeTid.'/'.rawurlencode($nameMin).'?t='.(int)($state['updated_at'] ?? TIME_NOW);
+        $themeHref = $bburl.'/cache/themes/theme'.(int)$themeTid.'/'.rawurlencode($nameMin).'?t='.(int)($state['updated_at'] ?? TIME_NOW);
+    } else {
+        $themeHref = $bburl.'/cache/themes/theme'.(int)$themeTid.'/'.rawurlencode($name).'?t='.(int)($state['updated_at'] ?? TIME_NOW);
     }
 
-    return $bburl.'/cache/themes/theme'.(int)$themeTid.'/'.rawurlencode($name).'?t='.(int)($state['updated_at'] ?? TIME_NOW);
+    return ['mode' => $deliveryMode, 'state_found' => true, 'is_integrated' => true, 'include_file' => false, 'theme_href' => $themeHref];
 }
 
 /**
@@ -4155,10 +4229,11 @@ function af_collect_enabled_addon_assets(): array
                         if ($relAsset === '') continue;
                         $cleanPath = '/inc/plugins/'.AF_PLUGIN_ID.'/addons/'.$id.'/'.ltrim(str_replace('\\', '/', $relAsset), '/');
                         if ($type === 'css') {
-                            $themeHref = af_theme_stylesheet_frontend_href_for_candidate($id, ltrim(str_replace('\\', '/', $relAsset), '/'));
+                            $decision = af_theme_stylesheet_delivery_decision($id, ltrim(str_replace('\\', '/', $relAsset), '/'));
+                            $themeHref = (string)($decision['theme_href'] ?? '');
                             if ($themeHref !== '') {
                                 af_add_css_once($cleanPath, ['scope' => $scope, 'raw_url' => $themeHref]);
-                            } else {
+                            } elseif (!empty($decision['include_file'])) {
                                 af_add_css_once($cleanPath, ['scope' => $scope, 'version' => $version]);
                             }
                         }
@@ -4186,10 +4261,11 @@ function af_collect_enabled_addon_assets(): array
 
             $cleanPath = '/inc/plugins/'.AF_PLUGIN_ID.'/addons/'.$id.'/assets/'.$f;
             if ($ext === 'css') {
-                $themeHref = af_theme_stylesheet_frontend_href_for_candidate($id, 'assets/'.$f);
+                $decision = af_theme_stylesheet_delivery_decision($id, 'assets/'.$f);
+                $themeHref = (string)($decision['theme_href'] ?? '');
                 if ($themeHref !== '') {
                     af_add_css_once($cleanPath, ['scope' => 'both', 'raw_url' => $themeHref]);
-                } else {
+                } elseif (!empty($decision['include_file'])) {
                     af_add_css_once($cleanPath, ['scope' => 'both', 'version' => (string)($meta['version'] ?? '')]);
                 }
             }
