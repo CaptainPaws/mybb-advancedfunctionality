@@ -394,6 +394,25 @@ function af_apui_theme_stylesheet_is_available(): bool
     return $cached;
 }
 
+function af_apui_css_include_tag(string $baseUrl): string
+{
+    $fileRel = 'assets/advancedprofileui.css';
+    $decision = function_exists('af_theme_stylesheet_delivery_decision')
+        ? af_theme_stylesheet_delivery_decision(AF_APUI_ID, $fileRel)
+        : ['include_file' => true, 'use_theme_stylesheet' => false, 'theme_href' => ''];
+
+    if (!empty($decision['use_theme_stylesheet']) && !empty($decision['theme_href'])) {
+        return '<link rel="stylesheet" href="' . htmlspecialchars_uni((string)$decision['theme_href']) . '">' . "\n";
+    }
+
+    if (empty($decision['include_file'])) {
+        return '';
+    }
+
+    $cssUrl = af_apui_add_ver($baseUrl . '/advancedprofileui.css', AF_APUI_ASSETS_DIR . 'advancedprofileui.css');
+    return '<link rel="stylesheet" href="' . htmlspecialchars_uni($cssUrl) . '">' . "\n";
+}
+
 
 
 function af_apui_postbit_extract_number(string $value): string
@@ -1767,13 +1786,13 @@ function af_apui_pre_output_page(string &$page): void
     $jsUrl = af_apui_add_ver($base . '/advancedprofileui.js', AF_APUI_ASSETS_DIR . 'advancedprofileui.js');
 
     $cssMode = af_apui_get_css_delivery_mode();
-    $themeStylesheetAvailable = af_apui_theme_stylesheet_is_available();
-    $useFileCss = ($cssMode === 'file') || ($cssMode === 'auto' && !$themeStylesheetAvailable);
 
     $injection = "\n" . AF_APUI_ASSET_MARK . "\n";
-    if ($useFileCss) {
+    if ($cssMode === 'file') {
         $cssUrl = af_apui_add_ver($base . '/advancedprofileui.css', AF_APUI_ASSETS_DIR . 'advancedprofileui.css');
         $injection .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($cssUrl) . '">' . "\n";
+    } else {
+        $injection .= af_apui_css_include_tag($base);
     }
     $injection .= af_apui_build_runtime_style_tag();
     $injection .= '<script src="' . htmlspecialchars_uni($jsUrl) . '" defer></script>' . "\n";

@@ -377,6 +377,17 @@ function af_ajsb_build_link_tags(array $files = [], bool $template = true): stri
     $out = [];
     foreach ($files as $fname) {
         $href = $base . $fname;
+        $fileRel = 'assets/' . ltrim((string)$fname, '/');
+
+        if (!$template && function_exists('af_theme_stylesheet_delivery_decision')) {
+            $decision = af_theme_stylesheet_delivery_decision(AF_AJSB_ID, $fileRel);
+            if (!empty($decision['use_theme_stylesheet']) && !empty($decision['theme_href'])) {
+                $href = (string)$decision['theme_href'];
+            } elseif (empty($decision['include_file'])) {
+                continue;
+            }
+        }
+
         $out[] = '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars($href, ENT_QUOTES) . '" />';
     }
 

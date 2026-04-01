@@ -2088,6 +2088,38 @@ function af_kb_strip_assets_from_html(string &$html): void
         $html = (string)preg_replace($pattern, '', $html);
     }
 }
+
+function af_kb_build_css_include_tag(string $fileRel): string
+{
+    global $mybb;
+
+    $fileRel = ltrim(str_replace('\\', '/', trim($fileRel)), '/');
+    if ($fileRel === '') {
+        return '';
+    }
+
+    $decision = function_exists('af_theme_stylesheet_delivery_decision')
+        ? af_theme_stylesheet_delivery_decision(AF_KB_ID, $fileRel)
+        : ['include_file' => true, 'use_theme_stylesheet' => false, 'theme_href' => ''];
+
+    if (!empty($decision['use_theme_stylesheet']) && !empty($decision['theme_href'])) {
+        return '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni((string)$decision['theme_href']) . '" />';
+    }
+
+    if (empty($decision['include_file'])) {
+        return '';
+    }
+
+    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+    if ($bburl === '') {
+        return '';
+    }
+
+    $assetFile = basename($fileRel);
+    $href = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_KB_ID . '/' . $fileRel
+        . '?v=' . af_kb_asset_version($assetFile);
+    return '<link rel="stylesheet" type="text/css" href="' . htmlspecialchars_uni($href) . '" />';
+}
 /**
  * Гарантированно добавляет CSS/JS KB в $headerinclude (один раз).
  * Важно: единая версия — filemtime.
@@ -2110,7 +2142,7 @@ function af_kb_ensure_header_bits(): void
         $assetBase = '';
     }
 
-    $css = $assetBase . '/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase.css?v=' . af_kb_asset_version('knowledgebase.css');
+    $cssTag = af_kb_build_css_include_tag('assets/knowledgebase.css');
     $js  = $assetBase . '/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase.js?v=' . af_kb_asset_version('knowledgebase.js');
 
     // marker чтобы не плодить дубли даже если $done сорвут
@@ -2119,7 +2151,9 @@ function af_kb_ensure_header_bits(): void
     }
 
     $headerinclude .= "\n<!-- af_kb_assets -->\n";
-    $headerinclude .= '<link rel="stylesheet" href="' . htmlspecialchars_uni($css) . '" />' . "\n";
+    if ($cssTag !== '') {
+        $headerinclude .= $cssTag . "\n";
+    }
     $headerinclude .= '<script type="text/javascript" src="' . htmlspecialchars_uni($js) . '"></script>' . "\n";
 }
 
@@ -4278,7 +4312,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
 
             if ($is_kb_page) {
                 // KB base css/js
-                $cssTag .= '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase.css?v='.af_kb_asset_version('knowledgebase.css').'" />';
+                $cssTag .= af_kb_build_css_include_tag('assets/knowledgebase.css');
                 $jsTag  .= '<script src="'.$assetsBase.'/knowledgebase.js?v='.af_kb_asset_version('knowledgebase.js').'"></script>';
 
                 // ✅ ВАЖНО: фон для body — инжектим в конец <head>, с !important
@@ -4316,7 +4350,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                 'json_list' => af_kb_url(['action' => 'kb_json_list']),
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';</script>';
 
-            $kbUiCss  = '<link rel="stylesheet" type="text/css" href="'.$assetsBase.'/knowledgebase_kbui.css?v='.af_kb_asset_version('knowledgebase_kbui.css').'" />';
+            $kbUiCss  = af_kb_build_css_include_tag('assets/knowledgebase_kbui.css');
             $chipsJs  = '<script src="'.$assetsBase.'/knowledgebase_chips.js?v='.af_kb_asset_version('knowledgebase_chips.js').'"></script>';
             $insertJs = '<script src="'.$assetsBase.'/knowledgebase_insert.js?v='.af_kb_asset_version('knowledgebase_insert.js').'"></script>';
 

@@ -756,6 +756,38 @@ gallery.php";
     return false;
 }
 
+function af_advancededitor_build_css_tag_for_asset(string $assetUrl, string $bburl, int $version): string
+{
+    $assetUrl = trim($assetUrl);
+    if ($assetUrl === '') {
+        return '';
+    }
+
+    $addonPrefix = rtrim($bburl, '/') . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/';
+    if (stripos($assetUrl, $addonPrefix) !== 0) {
+        return '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetUrl, $version)) . '" />' . "\n";
+    }
+
+    $fileRel = ltrim(substr($assetUrl, strlen($addonPrefix)), '/');
+    if ($fileRel === '') {
+        return '';
+    }
+
+    $decision = function_exists('af_theme_stylesheet_delivery_decision')
+        ? af_theme_stylesheet_delivery_decision(AF_AE_ID, $fileRel)
+        : ['include_file' => true, 'use_theme_stylesheet' => false, 'theme_href' => ''];
+
+    if (!empty($decision['use_theme_stylesheet']) && !empty($decision['theme_href'])) {
+        return '<link rel="stylesheet" href="' . htmlspecialchars_uni((string)$decision['theme_href']) . '" />' . "\n";
+    }
+
+    if (empty($decision['include_file'])) {
+        return '';
+    }
+
+    return '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetUrl, $version)) . '" />' . "\n";
+}
+
 function af_advancededitor_pre_output(string &$page = ''): void
 {
     global $mybb;
@@ -840,7 +872,7 @@ function af_advancededitor_pre_output(string &$page = ''): void
      */
 
     // базовый CSS аддона (общие правила/переменные/иконки тулбара и т.п.)
-    $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetsBase . 'advancededitor.css', $buildVer)) . '" />' . "\n";
+    $injectHead .= af_advancededitor_build_css_tag_for_asset($assetsBase . 'advancededitor.css', $bburl, $buildVer);
 
 
 
@@ -849,7 +881,7 @@ function af_advancededitor_pre_output(string &$page = ''): void
         foreach ($packs['css'] as $u) {
             $u = (string)$u;
             if ($u === '') continue;
-            $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_add_ver($u, $buildVer)) . '" />' . "\n";
+            $injectHead .= af_advancededitor_build_css_tag_for_asset($u, $bburl, $buildVer);
         }
     }
 
