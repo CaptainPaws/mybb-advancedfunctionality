@@ -4111,7 +4111,16 @@ function af_theme_stylesheet_frontend_href_for_candidate(string $addonId, string
 
     global $mybb;
     $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
-    return $bburl.'/css.php?stylesheet='.rawurlencode($name).'&tid='.(int)$themeTid.'&v='.(int)($state['updated_at'] ?? TIME_NOW);
+
+    $cacheDirFs = MYBB_ROOT.'cache/themes/theme'.(int)$themeTid.'/';
+    $nameMin = preg_replace('~\.css$~i', '.min.css', $name) ?? $name;
+    $nameMin = trim((string)$nameMin);
+
+    if ($nameMin !== '' && is_file($cacheDirFs.$nameMin)) {
+        return $bburl.'/cache/themes/theme'.(int)$themeTid.'/'.rawurlencode($nameMin).'?t='.(int)($state['updated_at'] ?? TIME_NOW);
+    }
+
+    return $bburl.'/cache/themes/theme'.(int)$themeTid.'/'.rawurlencode($name).'?t='.(int)($state['updated_at'] ?? TIME_NOW);
 }
 
 /**
