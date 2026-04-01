@@ -1767,12 +1767,8 @@ function af_apui_pre_output_page(string &$page): void
     $jsUrl = af_apui_add_ver($base . '/advancedprofileui.js', AF_APUI_ASSETS_DIR . 'advancedprofileui.js');
 
     $cssMode = af_apui_get_css_delivery_mode();
-    $useFileCss = true;
-    // На фронте сохраняем безопасный файловый CSS как основной источник.
-    // Theme stylesheet остаётся сервисным ACP-механизмом, без runtime-зависимости.
-    if ($cssMode === 'theme') {
-        $useFileCss = true;
-    }
+    $themeStylesheetAvailable = af_apui_theme_stylesheet_is_available();
+    $useFileCss = ($cssMode === 'file') || ($cssMode === 'auto' && !$themeStylesheetAvailable);
 
     $injection = "\n" . AF_APUI_ASSET_MARK . "\n";
     if ($useFileCss) {
