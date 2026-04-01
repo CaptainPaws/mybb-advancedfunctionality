@@ -514,7 +514,17 @@ function af_ae_bbcode_htmlbb_pre_output(&$page): void
         return;
     }
 
-    $cssUrl = af_ae_htmlbb_asset_url('htmlbb.css');
+    $cssUrl = '';
+    if (function_exists('af_theme_stylesheet_delivery_decision')) {
+        $decision = af_theme_stylesheet_delivery_decision('advancededitor', 'assets/bbcodes/bbcodes/htmlbb/htmlbb.css');
+        if (!empty($decision['use_theme_stylesheet']) && !empty($decision['theme_href'])) {
+            $cssUrl = (string)$decision['theme_href'];
+        } elseif (!empty($decision['include_file'])) {
+            $cssUrl = af_ae_htmlbb_asset_url('htmlbb.css');
+        }
+    } else {
+        $cssUrl = af_ae_htmlbb_asset_url('htmlbb.css');
+    }
     $jsUrl  = af_ae_htmlbb_asset_url('htmlbb.js');
 
     $inject = "\n";

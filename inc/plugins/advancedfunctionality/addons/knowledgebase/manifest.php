@@ -12,6 +12,28 @@ return [
         'title'      => 'Knowledge Base',
         'controller' => 'admin.php',
     ],
+    'theme_stylesheets' => [
+        [
+            'id' => 'knowledgebase_main',
+            'file' => 'assets/knowledgebase.css',
+            'stylesheet_name' => 'af_knowledgebase.css',
+            'attach' => [
+                ['file' => 'global'],
+                ['file' => 'kb.php'],
+            ],
+            'enabled_setting' => 'af_knowledgebase_enabled',
+        ],
+        [
+            'id' => 'knowledgebase_kbui',
+            'file' => 'assets/knowledgebase_kbui.css',
+            'stylesheet_name' => 'af_knowledgebase_kbui.css',
+            'attach' => [
+                ['file' => 'global'],
+                ['file' => 'kb.php'],
+            ],
+            'enabled_setting' => 'af_knowledgebase_enabled',
+        ],
+    ],
     'lang' => [
         'russian' => [
             'front' => [
