@@ -1744,8 +1744,11 @@ function af_apply_preoutput_filters(string $page): string
         return $page;
     }
 
-    // 0) Рантайм-синк шаблонов (очень лёгкий, с сигнатурой)
+    // 0) Рантайм-синк шаблонов
     af_maybe_sync_templates_runtime();
+
+    // 0.1) Рантайм-синк theme stylesheets
+    af_maybe_sync_theme_stylesheets_runtime();
 
     // 1) Прогоняем pre_output аддонов
     $addons = af_discover_addons();
@@ -1756,12 +1759,11 @@ function af_apply_preoutput_filters(string $page): string
             continue;
         }
 
-        // На всякий случай гарантируем bootstrap
         if (!empty($meta['bootstrap']) && is_file($meta['bootstrap'])) {
             require_once $meta['bootstrap'];
         }
 
-        $fn = 'af_'.$id.'_pre_output';
+        $fn = 'af_' . $id . '_pre_output';
         if (!function_exists($fn)) {
             continue;
         }
@@ -1769,11 +1771,14 @@ function af_apply_preoutput_filters(string $page): string
         $before = $page;
         $res = $fn($page);
 
-        // поддерживаем оба стиля: by-ref и “вернул строку”
         if (is_string($res) && $res !== '' && $res !== $before) {
             $page = $res;
         }
     }
+
+    // 1.1) Если какие-то аддоны уже успели насрать file-CSS в очередь вручную —
+    // вычищаем очередь по theme-mode до финальной инъекции.
+    af_prune_queued_css_by_theme_mode();
 
     // 2) Вклеиваем ассеты (CSS/JS) всех включённых аддонов
     $page = af_inject_enabled_addon_assets($page);
@@ -1781,10 +1786,10 @@ function af_apply_preoutput_filters(string $page): string
     // 3) Страховка: если внезапно нет НИ ОДНОГО rel="stylesheet" — вклеим $stylesheets
     $page = af_inject_core_stylesheets_if_missing($page);
 
-    // 4) Last-resort дедуп/нормализация CSS (предохранитель против ручных инжекторов)
+    // 4) Last-resort дедуп/нормализация CSS
     $page = af_hard_normalize_stylesheet_link_tags($page);
 
-    // 5) Last-resort дедуп <script src> по clean path (предохранитель против ручных инжекторов)
+    // 5) Last-resort дедуп <script src>
     $page = af_hard_dedup_script_src_tags($page);
 
     return $page;
@@ -1800,36 +1805,52 @@ function af_hard_normalize_stylesheet_link_tags(string $page): string
     $seenThemeLayer = [];
 
     return (string)preg_replace_callback(
-        '~<link\b[^>]*\brel\s*=\s*("|\')stylesheet\1[^>]*\bhref\s*=\s*("|\')(.*?)\2[^>]*>\s*~is',
+        '~<link\b[^>]*>~is',
         static function (array $m) use (&$seenExact, &$seenThemeLayer): string {
-            $href = html_entity_decode((string)($m[3] ?? ''), ENT_QUOTES, 'UTF-8');
+            $tag = (string)($m[0] ?? '');
+            if ($tag === '') {
+                return $tag;
+            }
+
+            if (!preg_match('~\brel\s*=\s*(["\']?)([^"\'>\s]+)\1~i', $tag, $relMatch)) {
+                return $tag;
+            }
+
+            $rel = strtolower(trim((string)($relMatch[2] ?? '')));
+            if ($rel !== 'stylesheet') {
+                return $tag;
+            }
+
+            if (!preg_match('~\bhref\s*=\s*(["\'])(.*?)\1~i', $tag, $hrefMatch)) {
+                return $tag;
+            }
+
+            $href = html_entity_decode((string)($hrefMatch[2] ?? ''), ENT_QUOTES, 'UTF-8');
             $cleanPath = af_asset_clean_path($href);
             if ($cleanPath === '') {
-                return $m[0];
+                return $tag;
             }
 
             $exactKey = strtolower($cleanPath);
+
+            // ЖЁСТКИЙ САНИТАЙЗЕР:
+            // любой AF addon css-file режем, если theme-mode не разрешает file delivery.
+            $cssCtx = af_resolve_af_addon_css_delivery_context($cleanPath);
+            if (!empty($cssCtx['is_af_addon_css']) && empty($cssCtx['allow_file'])) {
+                return '';
+            }
+
+            // Exact dedup
             if (isset($seenExact[$exactKey])) {
                 return '';
             }
 
-            if (preg_match('~^/inc/plugins/'.preg_quote(AF_PLUGIN_ID, '~').'/addons/([^/]+)/(.+?\.css)$~i', $cleanPath, $mm)) {
-                $addonId = strtolower((string)($mm[1] ?? ''));
-                $fileRel = strtolower((string)($mm[2] ?? ''));
-                $decision = af_theme_stylesheet_delivery_decision($addonId, $fileRel);
-                if (
-                    (string)($decision['mode'] ?? 'auto') === 'theme'
-                    && !empty($decision['state_found'])
-                    && !empty($decision['is_integrated'])
-                ) {
-                    return '';
-                }
-            }
-
+            // theme cache dedup: af_x.css / af_x.min.css считаем одним слоем
             if (preg_match('~^/cache/themes/theme\d+/([^/?#]+)$~i', $cleanPath, $tm)) {
                 $file = strtolower((string)($tm[1] ?? ''));
-                $layer = preg_replace('~(?:\.min)?\.css$~i', '', $file) ?? $file;
+                $layer = preg_replace('~(?:\.min)?\.css$~i', '', $file);
                 $layer = (string)$layer;
+
                 if ($layer !== '') {
                     if (isset($seenThemeLayer[$layer])) {
                         return '';
@@ -1839,10 +1860,86 @@ function af_hard_normalize_stylesheet_link_tags(string $page): string
             }
 
             $seenExact[$exactKey] = true;
-            return $m[0];
+            return $tag;
         },
         $page
     );
+}
+
+function af_theme_stylesheet_expected_names_for_file(string $addonId, string $fileRel, array $candidate = [], array $states = []): array
+{
+    $names = [];
+
+    foreach ($states as $state) {
+        $n = trim((string)($state['stylesheet_name'] ?? ''));
+        if ($n !== '') {
+            $names[] = $n;
+        }
+    }
+
+    $logicalId = $addonId . '__' . af_theme_stylesheet_base_from_rel($fileRel);
+    $sourceRel = $fileRel;
+
+    if ($candidate) {
+        $n = trim((string)($candidate['stylesheet_name'] ?? ''));
+        if ($n !== '') {
+            $names[] = $n;
+        }
+
+        if (!empty($candidate['logical_id'])) {
+            $logicalId = (string)$candidate['logical_id'];
+        }
+        if (!empty($candidate['source_file_rel'])) {
+            $sourceRel = (string)$candidate['source_file_rel'];
+        }
+    }
+
+    $names[] = af_theme_stylesheet_build_name($addonId, $logicalId, $sourceRel, (string)($candidate['stylesheet_name'] ?? ''));
+    $names[] = af_theme_stylesheet_expected_legacy_name($addonId, $sourceRel);
+
+    $out = [];
+    foreach ($names as $name) {
+        $name = trim((string)$name);
+        if ($name === '') {
+            continue;
+        }
+        $out[strtolower($name)] = $name;
+    }
+
+    return array_values($out);
+}
+
+function af_page_contains_theme_stylesheet_name(string $page, array $names, array $themeTids): bool
+{
+    $pageLower = strtolower($page);
+
+    foreach ($themeTids as $themeTid) {
+        $themeTid = (int)$themeTid;
+        if ($themeTid <= 0) {
+            continue;
+        }
+
+        foreach ($names as $name) {
+            $name = strtolower(trim((string)$name));
+            if ($name === '') {
+                continue;
+            }
+
+            $variants = [$name];
+            if (substr($name, -4) === '.css') {
+                $variants[] = preg_replace('~\.css$~i', '.min.css', $name);
+            }
+
+            foreach (array_unique($variants) as $variant) {
+                $needle = '/cache/themes/theme' . $themeTid . '/' . strtolower((string)$variant);
+                if (strpos($pageLower, $needle) !== false) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -2406,11 +2503,21 @@ function af_register_theme_stylesheet(int $themeTid, array $meta, array $entry, 
     global $db;
 
     $themeTid = max(1, $themeTid);
-    $entry['stylesheet_name'] = af_theme_stylesheet_build_name((string)$entry['addon_id'], (string)$entry['logical_id'], (string)($entry['file'] ?? ''), (string)$entry['stylesheet_name']);
-    $nameEsc = $db->escape_string((string)$entry['stylesheet_name']);
-    $addonEsc = $db->escape_string((string)$entry['addon_id']);
+    $entry['stylesheet_name'] = af_theme_stylesheet_build_name(
+        (string)$entry['addon_id'],
+        (string)$entry['logical_id'],
+        (string)($entry['file'] ?? ''),
+        (string)$entry['stylesheet_name']
+    );
+
+    $nameEsc    = $db->escape_string((string)$entry['stylesheet_name']);
+    $addonEsc   = $db->escape_string((string)$entry['addon_id']);
     $logicalEsc = $db->escape_string((string)$entry['logical_id']);
-    $attach = af_build_theme_stylesheet_attach_string((array)$entry['attach']);
+
+    $attachRaw   = af_build_theme_stylesheet_attach_string((array)$entry['attach']);
+    $attachEsc   = $db->escape_string($attachRaw);
+    $seedCssRaw  = (string)($seed['source'] ?? '');
+    $seedCssEsc  = $db->escape_string($seedCssRaw);
 
     $stateQ = $db->simple_select(
         AF_THEME_STYLESHEETS_TABLE,
@@ -2421,20 +2528,32 @@ function af_register_theme_stylesheet(int $themeTid, array $meta, array $entry, 
     $state = $db->fetch_array($stateQ) ?: [];
 
     $expectedName = (string)$entry['stylesheet_name'];
-    $legacyName = af_theme_stylesheet_expected_legacy_name((string)$entry['addon_id'], (string)($entry['file'] ?? ''));
-    $sid = (int)($state['stylesheet_sid'] ?? 0);
-    $row = null;
+    $legacyName   = af_theme_stylesheet_expected_legacy_name((string)$entry['addon_id'], (string)($entry['file'] ?? ''));
+    $sid          = (int)($state['stylesheet_sid'] ?? 0);
+    $row          = null;
+
     if ($sid > 0) {
-        $rowQ = $db->simple_select('themestylesheets', 'sid,name,stylesheet,attachedto', "sid='{$sid}' AND tid='{$themeTid}'", ['limit' => 1]);
+        $rowQ = $db->simple_select(
+            'themestylesheets',
+            'sid,name,stylesheet,attachedto',
+            "sid='{$sid}' AND tid='{$themeTid}'",
+            ['limit' => 1]
+        );
         $row = $db->fetch_array($rowQ) ?: null;
     }
+
     if (!$row) {
         foreach (array_values(array_unique([$expectedName, (string)($state['stylesheet_name'] ?? ''), $legacyName])) as $candidateName) {
             if ($candidateName === '') {
                 continue;
             }
             $candidateEsc = $db->escape_string($candidateName);
-            $rowQ = $db->simple_select('themestylesheets', 'sid,name,stylesheet,attachedto', "tid='{$themeTid}' AND name='{$candidateEsc}'", ['order_by' => 'sid', 'order_dir' => 'asc', 'limit' => 1]);
+            $rowQ = $db->simple_select(
+                'themestylesheets',
+                'sid,name,stylesheet,attachedto',
+                "tid='{$themeTid}' AND name='{$candidateEsc}'",
+                ['order_by' => 'sid', 'order_dir' => 'asc', 'limit' => 1]
+            );
             $row = $db->fetch_array($rowQ) ?: null;
             if ($row) {
                 $sid = (int)($row['sid'] ?? 0);
@@ -2443,38 +2562,44 @@ function af_register_theme_stylesheet(int $themeTid, array $meta, array $entry, 
         }
     }
 
-    $seedChecksum = (string)$seed['checksum'];
-    $manualOverride = ((int)($state['manual_override'] ?? 0) === 1);
-    $mustWriteSeed = false;
+    $seedChecksum      = (string)$seed['checksum'];
+    $manualOverride    = ((int)($state['manual_override'] ?? 0) === 1);
+    $mustWriteSeed     = false;
+    $cssForCacheWrite  = $seedCssRaw;
 
     if (!$row) {
         $sid = (int)$db->insert_query('themestylesheets', [
-            'name'         => (string)$entry['stylesheet_name'],
+            'name'         => $nameEsc,
             'tid'          => $themeTid,
-            'attachedto'   => $attach,
-            'stylesheet'   => (string)$seed['source'],
+            'attachedto'   => $attachEsc,
+            'stylesheet'   => $seedCssEsc,
             'cachefile'    => '',
             'lastmodified' => TIME_NOW,
         ]);
-        $mustWriteSeed = true;
+
+        $mustWriteSeed  = true;
         $manualOverride = false;
-        $row = ['sid' => $sid, 'name' => (string)$entry['stylesheet_name']];
+        $row = [
+            'sid'        => $sid,
+            'name'       => (string)$entry['stylesheet_name'],
+            'stylesheet' => $seedCssRaw,
+        ];
     } else {
-        $currentCss = (string)($row['stylesheet'] ?? '');
-        $currentChecksum = sha1($currentCss);
-        $lastSyncedChecksum = (string)($state['last_synced_checksum'] ?? '');
+        $currentCss          = (string)($row['stylesheet'] ?? '');
+        $currentChecksum     = sha1($currentCss);
+        $lastSyncedChecksum  = (string)($state['last_synced_checksum'] ?? '');
 
         if ($force) {
-            $mustWriteSeed = true;
+            $mustWriteSeed  = true;
             $manualOverride = false;
         } elseif ($lastSyncedChecksum === '') {
-            $mustWriteSeed = ($currentChecksum === $seedChecksum);
+            $mustWriteSeed  = ($currentChecksum === $seedChecksum);
             $manualOverride = !$mustWriteSeed;
         } elseif ($currentChecksum !== $lastSyncedChecksum) {
-            $mustWriteSeed = false;
+            $mustWriteSeed  = false;
             $manualOverride = true;
         } elseif ($seedChecksum !== $lastSyncedChecksum) {
-            $mustWriteSeed = true;
+            $mustWriteSeed  = true;
             $manualOverride = false;
         }
 
@@ -2482,16 +2607,25 @@ function af_register_theme_stylesheet(int $themeTid, array $meta, array $entry, 
         if ($resolvedName === '' || strlen($resolvedName) > 30 || $resolvedName !== $expectedName) {
             $resolvedName = $expectedName;
         }
+
         $update = [
-            'name'         => $resolvedName,
-            'attachedto'   => $attach,
+            'name'         => $db->escape_string($resolvedName),
+            'attachedto'   => $attachEsc,
             'lastmodified' => TIME_NOW,
         ];
+
         if ($mustWriteSeed) {
-            $update['stylesheet'] = (string)$seed['source'];
+            $update['stylesheet'] = $seedCssEsc;
+            $cssForCacheWrite = $seedCssRaw;
+        } else {
+            $cssForCacheWrite = $currentCss;
         }
+
         $db->update_query('themestylesheets', $update, "sid='{$sid}'");
         $row['name'] = $resolvedName;
+        if ($mustWriteSeed) {
+            $row['stylesheet'] = $seedCssRaw;
+        }
     }
 
     if (!function_exists('cache_stylesheet') || !function_exists('update_theme_stylesheet_list')) {
@@ -2500,21 +2634,34 @@ function af_register_theme_stylesheet(int $themeTid, array $meta, array $entry, 
             require_once $adminInc;
         }
     }
+
     if (function_exists('cache_stylesheet')) {
-        $cached = cache_stylesheet($themeTid, (string)$row['name'], $mustWriteSeed ? (string)$seed['source'] : (string)($row['stylesheet'] ?? ''));
-        $db->update_query('themestylesheets', ['cachefile' => $cached !== false ? (string)$row['name'] : ''], "sid='{$sid}'");
+        $cached = cache_stylesheet($themeTid, (string)$row['name'], $cssForCacheWrite);
+        $db->update_query(
+            'themestylesheets',
+            ['cachefile' => $cached !== false ? (string)$row['name'] : ''],
+            "sid='{$sid}'"
+        );
     }
+
     if (function_exists('update_theme_stylesheet_list')) {
         update_theme_stylesheet_list($themeTid);
     }
 
-    af_mark_theme_stylesheet_managed($themeTid, $sid, $entry, $seed, $manualOverride, (string)($row['name'] ?? $entry['stylesheet_name']));
+    af_mark_theme_stylesheet_managed(
+        $themeTid,
+        $sid,
+        $entry,
+        $seed,
+        $manualOverride,
+        (string)($row['name'] ?? $entry['stylesheet_name'])
+    );
 
     return [
-        'sid' => $sid,
+        'sid'               => $sid,
         'updated_from_seed' => $mustWriteSeed,
-        'manual_override' => $manualOverride,
-        'name' => (string)($row['name'] ?? $entry['stylesheet_name']),
+        'manual_override'   => $manualOverride,
+        'name'              => (string)($row['name'] ?? $entry['stylesheet_name']),
     ];
 }
 
@@ -3977,6 +4124,95 @@ function af_asset_is_admin_only(string $cleanPath): bool
     return false;
 }
 
+function af_resolve_af_addon_css_from_clean_path(string $cleanPath): array
+{
+    $cleanPath = af_asset_clean_path($cleanPath);
+    if ($cleanPath === '') {
+        return [];
+    }
+
+    if (preg_match(
+        '~^/inc/plugins/' . preg_quote(AF_PLUGIN_ID, '~') . '/addons/([^/]+)/(.+?\.css)$~i',
+        $cleanPath,
+        $m
+    )) {
+        return [
+            'addon_id'   => strtolower((string)$m[1]),
+            'file_rel'   => ltrim((string)$m[2], '/'),
+            'clean_path' => $cleanPath,
+        ];
+    }
+
+    return [];
+}
+
+function af_resolve_af_addon_css_delivery_context(string $cleanPath): array
+{
+    $resolved = af_resolve_af_addon_css_from_clean_path($cleanPath);
+    if (!$resolved) {
+        return [
+            'is_af_addon_css' => false,
+            'allow_file'      => true,
+            'decision'        => [],
+        ];
+    }
+
+    $decision = af_theme_stylesheet_delivery_decision(
+        (string)$resolved['addon_id'],
+        (string)$resolved['file_rel']
+    );
+
+    return [
+        'is_af_addon_css' => true,
+        'addon_id'        => (string)$resolved['addon_id'],
+        'file_rel'        => (string)$resolved['file_rel'],
+        'clean_path'      => (string)$resolved['clean_path'],
+        'decision'        => $decision,
+        'allow_file'      => !empty($decision['include_file']),
+    ];
+}
+
+function af_css_file_asset_allowed_by_theme_mode(string $cleanPath): bool
+{
+    $ctx = af_assets_init_context();
+
+    // В админке не режем фронтовые file-css через этот механизм
+    if (!empty($ctx['is_admincp'])) {
+        return true;
+    }
+
+    $info = af_resolve_af_addon_css_delivery_context($cleanPath);
+    if (empty($info['is_af_addon_css'])) {
+        return true;
+    }
+
+    return !empty($info['allow_file']);
+}
+
+function af_prune_queued_css_by_theme_mode(): void
+{
+    if (
+        empty($GLOBALS['af_assets_queue']['css']) ||
+        !is_array($GLOBALS['af_assets_queue']['css'])
+    ) {
+        return;
+    }
+
+    foreach ($GLOBALS['af_assets_queue']['css'] as $assetKey => $href) {
+        $cleanPath = af_asset_clean_path((string)$href);
+        if ($cleanPath === '') {
+            $cleanPath = af_asset_clean_path((string)$assetKey);
+        }
+        if ($cleanPath === '') {
+            continue;
+        }
+
+        if (!af_css_file_asset_allowed_by_theme_mode($cleanPath)) {
+            unset($GLOBALS['af_assets_queue']['css'][$assetKey]);
+        }
+    }
+}
+
 function af_add_js_once(string $urlOrPath, array $meta = []): void
 {
     af_add_asset_once('js', $urlOrPath, $meta);
@@ -3991,12 +4227,14 @@ function af_add_asset_once(string $type, string $urlOrPath, array $meta = []): v
 {
     $rawUrl = trim((string)($meta['raw_url'] ?? ''));
     $cleanPath = af_asset_clean_path($urlOrPath);
-    if ($rawUrl === '' && $cleanPath === '' || ($type !== 'js' && $type !== 'css')) {
+
+    if ((($rawUrl === '') && ($cleanPath === '')) || ($type !== 'js' && $type !== 'css')) {
         return;
     }
 
     $ctx = af_assets_init_context();
     $scope = strtolower((string)($meta['scope'] ?? 'both'));
+
     if ($scope === 'admin' && empty($ctx['is_admincp'])) {
         return;
     }
@@ -4008,10 +4246,25 @@ function af_add_asset_once(string $type, string $urlOrPath, array $meta = []): v
         return;
     }
 
+    // ЖЁСТКИЙ ЦЕНТРАЛЬНЫЙ GATE:
+    // если это CSS-файл AF-аддона и для него режим theme/auto запрещает file delivery,
+    // не даём вообще положить его в очередь.
+    if ($type === 'css') {
+        $candidatePath = $cleanPath;
+        if ($candidatePath === '' && $rawUrl !== '') {
+            $candidatePath = af_asset_clean_path($rawUrl);
+        }
+
+        if ($candidatePath !== '' && !af_css_file_asset_allowed_by_theme_mode($candidatePath)) {
+            return;
+        }
+    }
+
     if (!isset($GLOBALS['af_assets_loaded']) || !is_array($GLOBALS['af_assets_loaded'])) {
         $GLOBALS['af_assets_loaded'] = ['js' => [], 'css' => []];
     }
-    $assetKey = $rawUrl !== '' ? 'raw:'.$rawUrl : $cleanPath;
+
+    $assetKey = $rawUrl !== '' ? 'raw:' . $rawUrl : $cleanPath;
     if (!empty($GLOBALS['af_assets_loaded'][$type][$assetKey])) {
         return;
     }
@@ -4025,6 +4278,7 @@ function af_add_asset_once(string $type, string $urlOrPath, array $meta = []): v
     if ($url === '') {
         return;
     }
+
     $GLOBALS['af_assets_queue'][$type][$assetKey] = $url;
 }
 
@@ -4121,6 +4375,269 @@ function af_current_theme_tid(): int
     return $fallback > 1 ? $fallback : 1;
 }
 
+function af_get_theme_inheritance_tids(?int $startTid = null): array
+{
+    global $db;
+
+    $startTid = ($startTid !== null && $startTid > 0) ? (int)$startTid : af_current_theme_tid();
+    if ($startTid <= 0) {
+        $startTid = 1;
+    }
+
+    $out = [];
+    $seen = [];
+    $tid = $startTid;
+    $guard = 0;
+
+    while ($tid > 0 && empty($seen[$tid]) && $guard < 20) {
+        $seen[$tid] = true;
+        $out[] = $tid;
+
+        $q = $db->simple_select('themes', 'pid', "tid='".(int)$tid."'", ['limit' => 1]);
+        $pid = (int)$db->fetch_field($q, 'pid');
+
+        if ($pid <= 0 || $pid === $tid) {
+            break;
+        }
+
+        $tid = $pid;
+        $guard++;
+    }
+
+    return $out ?: [$startTid];
+}
+
+function af_find_theme_stylesheet_registry_states_for_file(string $addonId, string $fileRel, array $themeTids = []): array
+{
+    global $db;
+
+    $addonId = trim($addonId);
+    $fileRel = ltrim(str_replace('\\', '/', trim($fileRel)), '/');
+
+    if ($addonId === '' || $fileRel === '') {
+        return [];
+    }
+
+    $themeTids = array_values(array_unique(array_filter(array_map('intval', $themeTids))));
+    if (!$themeTids) {
+        $themeTids = af_get_theme_inheritance_tids();
+    }
+
+    $addonEsc = $db->escape_string($addonId);
+    $themeIn = implode(',', $themeTids);
+    $themeOrder = array_flip($themeTids);
+
+    $targetBase = af_theme_stylesheet_base_from_rel($fileRel);
+    $targetLogicalId = $addonId . '__' . $targetBase;
+    $targetBasename = strtolower((string)basename($fileRel));
+
+    $q = $db->simple_select(
+        AF_THEME_STYLESHEETS_TABLE,
+        '*',
+        "theme_tid IN ({$themeIn}) AND addon_id='{$addonEsc}'"
+    );
+
+    $matches = [];
+
+    while ($row = $db->fetch_array($q)) {
+        $rowThemeTid = (int)($row['theme_tid'] ?? 0);
+        $rowSource = ltrim(str_replace('\\', '/', (string)($row['source_file'] ?? '')), '/');
+        $rowLogical = (string)($row['logical_id'] ?? '');
+
+        $score = -1;
+
+        if ($rowSource !== '' && strtolower($rowSource) === strtolower($fileRel)) {
+            $score = 1000;
+        } elseif ($rowLogical !== '' && $rowLogical === $targetLogicalId) {
+            $score = 900;
+        } elseif ($rowSource !== '' && strtolower((string)basename($rowSource)) === $targetBasename) {
+            $score = 700;
+        } elseif ($rowSource !== '' && af_theme_stylesheet_base_from_rel($rowSource) === $targetBase) {
+            $score = 500;
+        }
+
+        if ($score < 0) {
+            continue;
+        }
+
+        $depth = $themeOrder[$rowThemeTid] ?? 99;
+
+        $mode = strtolower((string)($row['delivery_mode'] ?? 'auto'));
+        if (!in_array($mode, ['file', 'theme', 'auto'], true)) {
+            $mode = 'auto';
+        }
+
+        // Чем ближе тема в цепочке наследования — тем приоритетнее
+        $score -= ($depth * 25);
+
+        // Небольшой приоритет для theme/auto над file
+        if ($mode === 'theme') {
+            $score += 30;
+        } elseif ($mode === 'auto') {
+            $score += 15;
+        }
+
+        if ((int)($row['is_integrated'] ?? 0) === 1) {
+            $score += 10;
+        }
+        if ((int)($row['stylesheet_sid'] ?? 0) > 0) {
+            $score += 5;
+        }
+
+        $matches[] = [
+            'row' => $row,
+            'score' => $score,
+            'depth' => $depth,
+        ];
+    }
+
+    usort($matches, static function (array $a, array $b): int {
+        if ($a['score'] === $b['score']) {
+            return $a['depth'] <=> $b['depth'];
+        }
+        return $b['score'] <=> $a['score'];
+    });
+
+    return array_map(static function (array $item): array {
+        return (array)$item['row'];
+    }, $matches);
+}
+
+function af_find_theme_stylesheet_registry_state_for_file(string $addonId, string $fileRel, int $themeTid): array
+{
+    $states = af_find_theme_stylesheet_registry_states_for_file($addonId, $fileRel, af_get_theme_inheritance_tids($themeTid));
+    return $states ? (array)$states[0] : [];
+}
+
+function af_find_css_candidate_for_file(string $addonId, string $fileRel): array
+{
+    static $exactMap = null;
+    static $basenameMap = null;
+    static $baseMap = null;
+
+    $addonId = strtolower(trim($addonId));
+    $fileRel = ltrim(str_replace('\\', '/', trim($fileRel)), '/');
+
+    if ($addonId === '' || $fileRel === '') {
+        return [];
+    }
+
+    if ($exactMap === null || $basenameMap === null || $baseMap === null) {
+        $exactMap = [];
+        $basenameMap = [];
+        $baseMap = [];
+
+        $candidates = af_discover_addon_css_candidates();
+        foreach ($candidates as $candidate) {
+            $cid = strtolower(trim((string)($candidate['addon_id'] ?? '')));
+            $rel = ltrim(str_replace('\\', '/', trim((string)($candidate['source_file_rel'] ?? ''))), '/');
+
+            if ($cid === '' || $rel === '') {
+                continue;
+            }
+
+            $priority = ((string)($candidate['discovered_from'] ?? '') === 'manifest_theme_stylesheets') ? 2 : 1;
+
+            $exactKey = $cid . '|' . strtolower($rel);
+            $nameKey  = $cid . '|' . strtolower((string)basename($rel));
+            $baseKey  = $cid . '|' . strtolower(af_theme_stylesheet_base_from_rel($rel));
+
+            if (!isset($exactMap[$exactKey]) || (($exactMap[$exactKey]['__priority'] ?? 0) < $priority)) {
+                $candidate['__priority'] = $priority;
+                $exactMap[$exactKey] = $candidate;
+            }
+
+            if (!isset($basenameMap[$nameKey]) || (($basenameMap[$nameKey]['__priority'] ?? 0) < $priority)) {
+                $candidate['__priority'] = $priority;
+                $basenameMap[$nameKey] = $candidate;
+            }
+
+            if (!isset($baseMap[$baseKey]) || (($baseMap[$baseKey]['__priority'] ?? 0) < $priority)) {
+                $candidate['__priority'] = $priority;
+                $baseMap[$baseKey] = $candidate;
+            }
+        }
+    }
+
+    $exactKey = $addonId . '|' . strtolower($fileRel);
+    if (isset($exactMap[$exactKey])) {
+        return $exactMap[$exactKey];
+    }
+
+    $nameKey = $addonId . '|' . strtolower((string)basename($fileRel));
+    if (isset($basenameMap[$nameKey])) {
+        return $basenameMap[$nameKey];
+    }
+
+    $baseKey = $addonId . '|' . strtolower(af_theme_stylesheet_base_from_rel($fileRel));
+    if (isset($baseMap[$baseKey])) {
+        return $baseMap[$baseKey];
+    }
+
+    return [];
+}
+
+function af_theme_stylesheet_resolve_theme_href_from_state(array $state, int $themeTid = 0): string
+{
+    global $db, $mybb;
+
+    if ($themeTid <= 0) {
+        $themeTid = (int)($state['theme_tid'] ?? 0);
+    }
+
+    if ($themeTid <= 0 || !$state) {
+        return '';
+    }
+
+    $sid = (int)($state['stylesheet_sid'] ?? 0);
+    $themeRow = [];
+
+    if ($sid > 0) {
+        $sidQ = $db->simple_select(
+            'themestylesheets',
+            'sid,name',
+            "sid='{$sid}' AND tid='{$themeTid}'",
+            ['limit' => 1]
+        );
+        $themeRow = $db->fetch_array($sidQ) ?: [];
+    }
+
+    if (!$themeRow) {
+        $name = trim((string)($state['stylesheet_name'] ?? ''));
+        if ($name !== '') {
+            $nameEsc = $db->escape_string($name);
+            $nameQ = $db->simple_select(
+                'themestylesheets',
+                'sid,name',
+                "tid='{$themeTid}' AND name='{$nameEsc}'",
+                ['order_by' => 'sid', 'order_dir' => 'asc', 'limit' => 1]
+            );
+            $themeRow = $db->fetch_array($nameQ) ?: [];
+        }
+    }
+
+    $name = trim((string)($themeRow['name'] ?? ''));
+    if ($name === '') {
+        return '';
+    }
+
+    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
+    $cacheDirFs = MYBB_ROOT . 'cache/themes/theme' . $themeTid . '/';
+
+    $nameMin = preg_replace('~\.css$~i', '.min.css', $name) ?? $name;
+    $nameMin = trim((string)$nameMin);
+
+    if ($nameMin !== '' && is_file($cacheDirFs . $nameMin)) {
+        return $bburl . '/cache/themes/theme' . $themeTid . '/' . rawurlencode($nameMin);
+    }
+
+    if (is_file($cacheDirFs . $name)) {
+        return $bburl . '/cache/themes/theme' . $themeTid . '/' . rawurlencode($name);
+    }
+
+    return '';
+}
+
 function af_theme_stylesheet_frontend_href_for_candidate(string $addonId, string $fileRel): string
 {
     $decision = af_theme_stylesheet_delivery_decision($addonId, $fileRel);
@@ -4129,72 +4646,182 @@ function af_theme_stylesheet_frontend_href_for_candidate(string $addonId, string
 
 function af_theme_stylesheet_delivery_decision(string $addonId, string $fileRel): array
 {
-    global $db, $mybb;
+    global $db;
 
     $addonId = trim($addonId);
     $fileRel = ltrim(str_replace('\\', '/', trim($fileRel)), '/');
+
     if ($addonId === '' || $fileRel === '') {
-        return ['mode' => 'auto', 'state_found' => false, 'is_integrated' => false, 'include_file' => true, 'theme_href' => ''];
+        return [
+            'mode' => 'auto',
+            'state_found' => false,
+            'is_integrated' => false,
+            'include_file' => true,
+            'use_theme_stylesheet' => false,
+            'theme_href' => ''
+        ];
     }
 
-    $base = af_theme_stylesheet_base_from_rel($fileRel);
-    $logicalId = $addonId.'__'.$base;
-    $themeTid = af_current_theme_tid();
-    $addonEsc = $db->escape_string($addonId);
-    $logicalEsc = $db->escape_string($logicalId);
+    $currentThemeTid = af_current_theme_tid();
+    $themeTids       = af_get_theme_inheritance_tids($currentThemeTid);
+    $candidate       = af_find_css_candidate_for_file($addonId, $fileRel);
+    $states          = af_find_theme_stylesheet_registry_states_for_file($addonId, $fileRel, $themeTids);
 
-    $q = $db->simple_select(
-        AF_THEME_STYLESHEETS_TABLE,
-        '*',
-        "theme_tid='".(int)$themeTid."' AND addon_id='{$addonEsc}' AND logical_id='{$logicalEsc}'",
-        ['limit' => 1]
-    );
-    $state = $db->fetch_array($q) ?: [];
-    if (!$state) {
-        return ['mode' => 'auto', 'state_found' => false, 'is_integrated' => false, 'include_file' => true, 'theme_href' => ''];
+    if ($states) {
+        foreach ($states as $state) {
+            $mode = strtolower(trim((string)($state['delivery_mode'] ?? 'auto')));
+            if (!in_array($mode, ['file', 'theme', 'auto'], true)) {
+                $mode = 'auto';
+            }
+
+            $stateThemeTid = (int)($state['theme_tid'] ?? 0);
+            $themeHref = af_theme_stylesheet_resolve_theme_href_from_state($state, $stateThemeTid);
+
+            if ($mode === 'theme') {
+                return [
+                    'mode' => 'theme',
+                    'state_found' => true,
+                    'is_integrated' => ($themeHref !== ''),
+                    'include_file' => false,
+                    'use_theme_stylesheet' => ($themeHref !== ''),
+                    'theme_href' => $themeHref,
+                ];
+            }
+
+            if ($mode === 'file') {
+                return [
+                    'mode' => 'file',
+                    'state_found' => true,
+                    'is_integrated' => false,
+                    'include_file' => true,
+                    'use_theme_stylesheet' => false,
+                    'theme_href' => '',
+                ];
+            }
+
+            if ($mode === 'auto' && $themeHref !== '') {
+                return [
+                    'mode' => 'auto',
+                    'state_found' => true,
+                    'is_integrated' => true,
+                    'include_file' => false,
+                    'use_theme_stylesheet' => true,
+                    'theme_href' => $themeHref,
+                ];
+            }
+        }
+
+        return [
+            'mode' => 'auto',
+            'state_found' => true,
+            'is_integrated' => false,
+            'include_file' => true,
+            'use_theme_stylesheet' => false,
+            'theme_href' => '',
+        ];
     }
 
-    $deliveryMode = strtolower((string)($state['delivery_mode'] ?? 'auto'));
-    if (!in_array($deliveryMode, ['file', 'theme', 'auto'], true)) {
-        $deliveryMode = 'auto';
-    }
-    if ($deliveryMode === 'file') {
-        return ['mode' => $deliveryMode, 'state_found' => true, 'is_integrated' => false, 'include_file' => true, 'theme_href' => ''];
+    if ($candidate) {
+        $mode = strtolower(trim((string)($candidate['delivery_hint'] ?? 'auto')));
+        if (!in_array($mode, ['file', 'theme', 'auto'], true)) {
+            $mode = 'auto';
+        }
+
+        $names = [];
+        $names[] = (string)($candidate['stylesheet_name'] ?? '');
+        $names[] = af_theme_stylesheet_build_name(
+            (string)$candidate['addon_id'],
+            (string)$candidate['logical_id'],
+            (string)$candidate['source_file_rel'],
+            (string)($candidate['stylesheet_name'] ?? '')
+        );
+        $names[] = af_theme_stylesheet_expected_legacy_name(
+            (string)$candidate['addon_id'],
+            (string)$candidate['source_file_rel']
+        );
+
+        $names = array_values(array_unique(array_filter(array_map('trim', $names), static function ($v) {
+            return $v !== '';
+        })));
+
+        foreach ($themeTids as $themeTid) {
+            foreach ($names as $name) {
+                $nameEsc = $db->escape_string($name);
+                $rowQ = $db->simple_select(
+                    'themestylesheets',
+                    'sid,name',
+                    "tid='{$themeTid}' AND name='{$nameEsc}'",
+                    ['order_by' => 'sid', 'order_dir' => 'asc', 'limit' => 1]
+                );
+                $row = $db->fetch_array($rowQ) ?: [];
+
+                if (!$row) {
+                    continue;
+                }
+
+                $pseudoState = [
+                    'theme_tid' => $themeTid,
+                    'stylesheet_sid' => (int)($row['sid'] ?? 0),
+                    'stylesheet_name' => (string)($row['name'] ?? $name),
+                ];
+
+                $themeHref = af_theme_stylesheet_resolve_theme_href_from_state($pseudoState, $themeTid);
+
+                if ($mode === 'theme') {
+                    return [
+                        'mode' => 'theme',
+                        'state_found' => true,
+                        'is_integrated' => ($themeHref !== ''),
+                        'include_file' => false,
+                        'use_theme_stylesheet' => ($themeHref !== ''),
+                        'theme_href' => $themeHref,
+                    ];
+                }
+
+                if ($mode === 'auto' && $themeHref !== '') {
+                    return [
+                        'mode' => 'auto',
+                        'state_found' => true,
+                        'is_integrated' => true,
+                        'include_file' => false,
+                        'use_theme_stylesheet' => true,
+                        'theme_href' => $themeHref,
+                    ];
+                }
+            }
+        }
+
+        if ($mode === 'theme') {
+            return [
+                'mode' => 'theme',
+                'state_found' => false,
+                'is_integrated' => false,
+                'include_file' => false,
+                'use_theme_stylesheet' => false,
+                'theme_href' => '',
+            ];
+        }
+
+        if ($mode === 'file') {
+            return [
+                'mode' => 'file',
+                'state_found' => false,
+                'is_integrated' => false,
+                'include_file' => true,
+                'use_theme_stylesheet' => false,
+                'theme_href' => '',
+            ];
+        }
     }
 
-    $sid = (int)($state['stylesheet_sid'] ?? 0);
-    $isIntegrated = (int)($state['is_integrated'] ?? 0) === 1;
-    if (!$isIntegrated || $sid <= 0) {
-        $includeFile = ($deliveryMode !== 'theme');
-        return ['mode' => $deliveryMode, 'state_found' => true, 'is_integrated' => false, 'include_file' => $includeFile, 'theme_href' => ''];
-    }
-
-    $sidQ = $db->simple_select('themestylesheets', 'sid,name', "sid='{$sid}' AND tid='".(int)$themeTid."'", ['limit' => 1]);
-    $sidRow = $db->fetch_array($sidQ) ?: [];
-    if (!$sidRow) {
-        $includeFile = ($deliveryMode !== 'theme');
-        return ['mode' => $deliveryMode, 'state_found' => true, 'is_integrated' => false, 'include_file' => $includeFile, 'theme_href' => ''];
-    }
-
-    $name = trim((string)($sidRow['name'] ?? ''));
-    if ($name === '') {
-        $includeFile = ($deliveryMode !== 'theme');
-        return ['mode' => $deliveryMode, 'state_found' => true, 'is_integrated' => false, 'include_file' => $includeFile, 'theme_href' => ''];
-    }
-
-    $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
-    $cacheDirFs = MYBB_ROOT.'cache/themes/theme'.(int)$themeTid.'/';
-    $nameMin = preg_replace('~\.css$~i', '.min.css', $name) ?? $name;
-    $nameMin = trim((string)$nameMin);
-
-    $themeHref = '';
-    if ($nameMin !== '' && is_file($cacheDirFs.$nameMin)) {
-        $themeHref = $bburl.'/cache/themes/theme'.(int)$themeTid.'/'.rawurlencode($nameMin).'?t='.(int)($state['updated_at'] ?? TIME_NOW);
-    } else {
-        $themeHref = $bburl.'/cache/themes/theme'.(int)$themeTid.'/'.rawurlencode($name).'?t='.(int)($state['updated_at'] ?? TIME_NOW);
-    }
-
-    return ['mode' => $deliveryMode, 'state_found' => true, 'is_integrated' => true, 'include_file' => false, 'theme_href' => $themeHref];
+    return [
+        'mode' => 'auto',
+        'state_found' => false,
+        'is_integrated' => false,
+        'include_file' => true,
+        'use_theme_stylesheet' => false,
+        'theme_href' => '',
+    ];
 }
 
 /**
@@ -4207,76 +4834,103 @@ function af_collect_enabled_addon_assets(): array
         $GLOBALS['af_assets_queue'] = ['css' => [], 'js' => []];
     }
 
-    $css = [];
-    $js  = [];
-
     $addons = af_discover_addons();
+
     foreach ($addons as $meta) {
         $id = $meta['id'] ?? '';
-        if ($id === '' || !af_is_addon_enabled($id)) continue;
-        if (af_is_blacklisted($id)) continue;
+        if ($id === '' || !af_is_addon_enabled($id)) {
+            continue;
+        }
+        if (af_is_blacklisted($id)) {
+            continue;
+        }
 
         $manifestAssets = $meta['assets'] ?? null;
         if (is_array($manifestAssets)) {
             $version = (string)($meta['version'] ?? '');
+
             foreach (['front' => 'front', 'admin' => 'admin', 'both' => 'both'] as $section => $scope) {
                 if (empty($manifestAssets[$section]) || !is_array($manifestAssets[$section])) {
                     continue;
                 }
+
                 foreach (['css', 'js'] as $type) {
                     foreach ((array)($manifestAssets[$section][$type] ?? []) as $relAsset) {
                         $relAsset = trim((string)$relAsset);
-                        if ($relAsset === '') continue;
-                        $cleanPath = '/inc/plugins/'.AF_PLUGIN_ID.'/addons/'.$id.'/'.ltrim(str_replace('\\', '/', $relAsset), '/');
+                        if ($relAsset === '') {
+                            continue;
+                        }
+
+                        $cleanPath = '/inc/plugins/' . AF_PLUGIN_ID . '/addons/' . $id . '/' . ltrim(str_replace('\\', '/', $relAsset), '/');
+
                         if ($type === 'css') {
                             $decision = af_theme_stylesheet_delivery_decision($id, ltrim(str_replace('\\', '/', $relAsset), '/'));
-                            $themeHref = (string)($decision['theme_href'] ?? '');
-                            if ($themeHref !== '') {
-                                af_add_css_once($cleanPath, ['scope' => $scope, 'raw_url' => $themeHref]);
-                            } elseif (!empty($decision['include_file'])) {
+
+                            // ВАЖНО:
+                            // theme stylesheet в режиме theme/auto НЕ докидываем вручную.
+                            // Его подключает сам MyBB через $stylesheets.
+                            if (!empty($decision['include_file'])) {
                                 af_add_css_once($cleanPath, ['scope' => $scope, 'version' => $version]);
                             }
                         }
-                        if ($type === 'js') af_add_js_once($cleanPath, ['scope' => $scope, 'version' => $version]);
+
+                        if ($type === 'js') {
+                            af_add_js_once($cleanPath, ['scope' => $scope, 'version' => $version]);
+                        }
                     }
                 }
             }
+
             continue;
         }
 
-        $assetsDir = rtrim((string)($meta['path'] ?? ''), '/\\').'/assets/';
-        if (!is_dir($assetsDir)) continue;
+        $assetsDir = rtrim((string)($meta['path'] ?? ''), '/\\') . '/assets/';
+        if (!is_dir($assetsDir)) {
+            continue;
+        }
 
         $files = @scandir($assetsDir);
-        if (!$files) continue;
+        if (!$files) {
+            continue;
+        }
 
         sort($files, SORT_STRING);
 
         foreach ($files as $f) {
-            if ($f === '.' || $f === '..') continue;
-            if (!is_file($assetsDir.$f)) continue;
+            if ($f === '.' || $f === '..') {
+                continue;
+            }
+            if (!is_file($assetsDir . $f)) {
+                continue;
+            }
 
-            $ext = strtolower(pathinfo($f, PATHINFO_EXTENSION));
-            if ($ext !== 'css' && $ext !== 'js') continue;
+            $ext = strtolower((string)pathinfo($f, PATHINFO_EXTENSION));
+            if ($ext !== 'css' && $ext !== 'js') {
+                continue;
+            }
 
-            $cleanPath = '/inc/plugins/'.AF_PLUGIN_ID.'/addons/'.$id.'/assets/'.$f;
+            $cleanPath = '/inc/plugins/' . AF_PLUGIN_ID . '/addons/' . $id . '/assets/' . $f;
+
             if ($ext === 'css') {
-                $decision = af_theme_stylesheet_delivery_decision($id, 'assets/'.$f);
-                $themeHref = (string)($decision['theme_href'] ?? '');
-                if ($themeHref !== '') {
-                    af_add_css_once($cleanPath, ['scope' => 'both', 'raw_url' => $themeHref]);
-                } elseif (!empty($decision['include_file'])) {
+                $decision = af_theme_stylesheet_delivery_decision($id, 'assets/' . $f);
+
+                // ВАЖНО:
+                // theme stylesheet в режиме theme/auto НЕ докидываем вручную.
+                if (!empty($decision['include_file'])) {
                     af_add_css_once($cleanPath, ['scope' => 'both', 'version' => (string)($meta['version'] ?? '')]);
                 }
             }
-            if ($ext === 'js')  af_add_js_once($cleanPath, ['scope' => 'both', 'version' => (string)($meta['version'] ?? '')]);
+
+            if ($ext === 'js') {
+                af_add_js_once($cleanPath, ['scope' => 'both', 'version' => (string)($meta['version'] ?? '')]);
+            }
         }
     }
 
-    $css = array_values($GLOBALS['af_assets_queue']['css'] ?? []);
-    $js  = array_values($GLOBALS['af_assets_queue']['js'] ?? []);
-
-    return ['css'=>$css, 'js'=>$js];
+    return [
+        'css' => array_values($GLOBALS['af_assets_queue']['css'] ?? []),
+        'js'  => array_values($GLOBALS['af_assets_queue']['js'] ?? []),
+    ];
 }
 
 /**
