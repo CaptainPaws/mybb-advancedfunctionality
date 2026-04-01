@@ -38,8 +38,8 @@ if (!function_exists('af_ae_bbcode_accordion_parse_end')) {
 
     function af_ae_accordion_render(string $rawAttrs, string $inner): string
     {
-        $attrs = af_ae_accordion_parse_attrs($rawAttrs);
-        $direction = af_ae_accordion_normalize_direction((string)($attrs['direction'] ?? ''));
+        // Поддерживаем старые посты с direction, но всегда рендерим каноничный down-вариант.
+        af_ae_accordion_parse_attrs($rawAttrs);
 
         $items = af_ae_accordion_extract_items($inner);
         if (!$items) {
@@ -49,9 +49,9 @@ if (!function_exists('af_ae_bbcode_accordion_parse_end')) {
             ];
         }
 
-        $id = 'af-acc-' . substr(md5($inner . '|' . $direction . '|' . microtime(true)), 0, 10);
+        $id = 'af-acc-' . substr(md5($inner . '|' . microtime(true)), 0, 10);
 
-        $html = '<div class="af-accordion af-accordion-dir-' . htmlspecialchars_uni($direction) . '" data-af-accordion="1" data-direction="' . htmlspecialchars_uni($direction) . '">';
+        $html = '<div class="af-accordion af-accordion-dir-down" data-af-accordion="1" data-direction="down">';
 
         foreach ($items as $idx => $item) {
             $title = af_ae_accordion_clean_title((string)($item['title'] ?? ''));
@@ -117,16 +117,6 @@ if (!function_exists('af_ae_bbcode_accordion_parse_end')) {
         }
 
         return $attrs;
-    }
-
-    function af_ae_accordion_normalize_direction(string $value): string
-    {
-        $value = strtolower(trim($value));
-
-        return match ($value) {
-            'up', 'down', 'left', 'right' => $value,
-            default => 'down',
-        };
     }
 
     function af_ae_accordion_clean_title(string $title): string

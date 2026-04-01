@@ -369,6 +369,12 @@
 
         ui.previewBody.innerHTML = html;
         ui.previewBox.hidden = false;
+
+        try {
+          document.dispatchEvent(new CustomEvent('af:preview-updated', {
+            detail: { root: ui.previewBody }
+          }));
+        } catch (e) {}
       })
       .catch(function () {
         ui.previewBody.innerHTML = '<div class="af-ccp-muted">Ошибка превью (fetch).</div>';

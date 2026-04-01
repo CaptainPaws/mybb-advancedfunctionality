@@ -53,8 +53,8 @@
   background: #fff;
   overflow: hidden;
   max-height: 0;
-  max-width: 100%;
-  transition: max-height .22s ease, max-width .22s ease, opacity .22s ease;
+  width: 100%;
+  transition: max-height .22s ease, opacity .22s ease;
   opacity: 0;
 }
 
@@ -64,119 +64,4 @@
 
 .af-accordion-panel-inner {
   padding: 12px 14px;
-}
-
-.af-accordion-dir-down .af-accordion-panel,
-.af-accordion-dir-up .af-accordion-panel {
-  width: 100%;
-}
-
-.af-accordion-dir-down .af-accordion-panel {
-  transform-origin: top;
-}
-
-.af-accordion-dir-up .af-accordion-panel {
-  transform-origin: bottom;
-}
-
-.af-accordion-dir-left .af-accordion-panel,
-.af-accordion-dir-right .af-accordion-panel {
-  max-height: none;
-}
-
-.af-accordion-dir-left .af-accordion-panel {
-  transform-origin: right center;
-}
-
-.af-accordion-dir-right .af-accordion-panel {
-  transform-origin: left center;
-}
-
-.af-accordion-dir-up .af-accordion-item.is-open .af-accordion-toggle-icon,
-.af-accordion-dir-up .af-accordion-toggle[aria-expanded="true"] .af-accordion-toggle-icon {
-  transform: rotate(45deg);
-}
-
-.af-accordion-dir-left .af-accordion-toggle-icon {
-  transform: rotate(135deg);
-}
-
-.af-accordion-dir-left .af-accordion-item.is-open .af-accordion-toggle-icon,
-.af-accordion-dir-left .af-accordion-toggle[aria-expanded="true"] .af-accordion-toggle-icon {
-  transform: rotate(315deg);
-}
-
-.af-accordion-dir-right .af-accordion-toggle-icon {
-  transform: rotate(-45deg);
-}
-
-.af-accordion-dir-right .af-accordion-item.is-open .af-accordion-toggle-icon,
-.af-accordion-dir-right .af-accordion-toggle[aria-expanded="true"] .af-accordion-toggle-icon {
-  transform: rotate(135deg);
-}
-
-.af-accordion-dd {
-  min-width: 220px;
-  padding: 10px;
-}
-
-.af-accordion-dd-title {
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.af-accordion-dd-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.af-accordion-dd-btn {
-  width: 100%;
-  text-transform: lowercase;
-}
-
-.af-accordion-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: none;
-}
-
-.af-accordion-modal.is-open {
-  display: block;
-}
-
-.af-accordion-modal__overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, .45);
-}
-
-.af-accordion-modal__dialog {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  background: #fff;
-  border: 1px solid #d0d7de;
-  border-radius: 8px;
-  width: min(360px, calc(100vw - 24px));
-  padding: 14px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, .24);
-}
-
-.af-accordion-modal__title {
-  font-weight: 700;
-  margin: 0 0 10px;
-}
-
-.af-accordion-modal__close {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  border: 0;
-  background: transparent;
-  font-size: 20px;
-  cursor: pointer;
 }
