@@ -13,7 +13,7 @@ return [
             'hint'     => 'Вставить [accordion] с двумя [accitem]',
             'icon'     => 'img/starmenu.svg',
             'handler'  => 'accordion',
-            'opentag'  => '[accordion direction="down"]',
+            'opentag'  => '[accordion]',
             'closetag' => '[/accordion]',
         ],
     ],
