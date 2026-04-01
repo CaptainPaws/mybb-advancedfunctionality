@@ -66,6 +66,53 @@ function af_advancededitor_url(string $rel): string
     return $bburl . '/' . $rel;
 }
 
+function af_advancededitor_addon_file_rel_from_web_rel(string $rel): string
+{
+    $rel = ltrim(trim($rel), '/');
+    if ($rel === '') {
+        return '';
+    }
+
+    $baseRel = ltrim(af_advancededitor_base_rel(), '/');
+    if (stripos($rel, $baseRel) === 0) {
+        $rel = substr($rel, strlen($baseRel));
+    }
+
+    return ltrim($rel, '/');
+}
+
+function af_advancededitor_addon_file_url(string $fileRel): string
+{
+    $fileRel = ltrim(trim($fileRel), '/');
+    if ($fileRel === '') {
+        return '';
+    }
+
+    return af_advancededitor_url(af_advancededitor_base_rel() . $fileRel);
+}
+
+function af_advancededitor_resolve_css_delivery_url(string $fileRel): string
+{
+    $fileRel = af_advancededitor_addon_file_rel_from_web_rel($fileRel);
+    if ($fileRel === '') {
+        return '';
+    }
+
+    $decision = function_exists('af_theme_stylesheet_delivery_decision')
+        ? af_theme_stylesheet_delivery_decision(AF_AE_ID, $fileRel)
+        : ['include_file' => true, 'use_theme_stylesheet' => false, 'theme_href' => ''];
+
+    if (!empty($decision['use_theme_stylesheet']) && !empty($decision['theme_href'])) {
+        return (string)$decision['theme_href'];
+    }
+
+    if (empty($decision['include_file'])) {
+        return '';
+    }
+
+    return af_advancededitor_addon_file_url($fileRel);
+}
+
 function af_advancededitor_realpath_safe(string $path): string
 {
     $rp = @realpath($path);
@@ -126,16 +173,44 @@ function af_advancededitor_collect_bbcode_packs(): array
 
     $addJs = function(string $rel) use (&$out, &$seen) {
         $rel = ltrim($rel, '/');
-        if (isset($seen['js'][$rel])) return;
-        $seen['js'][$rel] = true;
-        $out['js'][] = af_advancededitor_url($rel);
+        if ($rel === '') return;
+
+        if (preg_match('~^(https?:)?//~i', $rel)) {
+            if (isset($seen['js'][$rel])) return;
+            $seen['js'][$rel] = true;
+            $out['js'][] = $rel;
+            return;
+        }
+
+        $fileRel = af_advancededitor_addon_file_rel_from_web_rel($rel);
+        if ($fileRel === '') return;
+
+        if (isset($seen['js'][$fileRel])) return;
+        $seen['js'][$fileRel] = true;
+        $out['js'][] = af_advancededitor_addon_file_url($fileRel);
     };
 
     $addCss = function(string $rel) use (&$out, &$seen) {
         $rel = ltrim($rel, '/');
-        if (isset($seen['css'][$rel])) return;
-        $seen['css'][$rel] = true;
-        $out['css'][] = af_advancededitor_url($rel);
+        if ($rel === '') return;
+
+        if (preg_match('~^(https?:)?//~i', $rel)) {
+            if (isset($seen['css'][$rel])) return;
+            $seen['css'][$rel] = true;
+            $out['css'][] = $rel;
+            return;
+        }
+
+        $fileRel = af_advancededitor_addon_file_rel_from_web_rel($rel);
+        if ($fileRel === '') return;
+
+        if (isset($seen['css'][$fileRel])) return;
+        $seen['css'][$fileRel] = true;
+
+        $resolved = af_advancededitor_resolve_css_delivery_url($fileRel);
+        if ($resolved !== '') {
+            $out['css'][] = $resolved;
+        }
     };
 
     $addBtn = function(array $b) use (&$out, &$seen) {
@@ -735,6 +810,30 @@ function af_advancededitor_resolve_sceditor_theme_css_url(string $bburl): string
     return $bburl . '/jscripts/sceditor/themes/default.min.css';
 }
 
+function af_advancededitor_build_sceditor_content_css(string $baseCssUrl, array $packCssUrls): string
+{
+    $urls = [];
+
+    $baseCssUrl = trim($baseCssUrl);
+    if ($baseCssUrl !== '') {
+        $urls[] = $baseCssUrl;
+    }
+
+    foreach ($packCssUrls as $url) {
+        $url = trim((string)$url);
+        if ($url === '') {
+            continue;
+        }
+        $urls[] = $url;
+    }
+
+    if (empty($urls)) {
+        return '';
+    }
+
+    return implode(',', array_values(array_unique($urls)));
+}
+
 function af_advancededitor_assets_disabled_for_current_page(): bool
 {
     if (function_exists('af_is_blacklisted')) {
@@ -768,24 +867,21 @@ function af_advancededitor_build_css_tag_for_asset(string $assetUrl, string $bbu
         return '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetUrl, $version)) . '" />' . "\n";
     }
 
-    $fileRel = ltrim(substr($assetUrl, strlen($addonPrefix)), '/');
+    $fileRel = af_advancededitor_addon_file_rel_from_web_rel(substr($assetUrl, strlen($addonPrefix)));
     if ($fileRel === '') {
         return '';
     }
 
-    $decision = function_exists('af_theme_stylesheet_delivery_decision')
-        ? af_theme_stylesheet_delivery_decision(AF_AE_ID, $fileRel)
-        : ['include_file' => true, 'use_theme_stylesheet' => false, 'theme_href' => ''];
-
-    if (!empty($decision['use_theme_stylesheet']) && !empty($decision['theme_href'])) {
-        return '<link rel="stylesheet" href="' . htmlspecialchars_uni((string)$decision['theme_href']) . '" />' . "\n";
-    }
-
-    if (empty($decision['include_file'])) {
+    $resolved = af_advancededitor_resolve_css_delivery_url($fileRel);
+    if ($resolved === '') {
         return '';
     }
 
-    return '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_add_ver($assetUrl, $version)) . '" />' . "\n";
+    $href = ($resolved === af_advancededitor_addon_file_url($fileRel))
+        ? af_advancededitor_add_ver($resolved, $version)
+        : $resolved;
+
+    return '<link rel="stylesheet" href="' . htmlspecialchars_uni($href) . '" />' . "\n";
 }
 
 function af_advancededitor_pre_output(string &$page = ''): void
@@ -931,7 +1027,11 @@ function af_advancededitor_pre_output(string &$page = ''): void
         $injectHead .= '<link rel="stylesheet" href="' . htmlspecialchars_uni(af_advancededitor_add_ver($sceditorThemeCss, $buildVer)) . '" />' . "\n";
 
         // SCEditor: content css (для iframe WYSIWYG)
-        $sceditorContentCss = af_advancededitor_resolve_sceditor_content_css_url($bburl);
+        $sceditorContentCssBase = af_advancededitor_resolve_sceditor_content_css_url($bburl);
+        $sceditorContentCss = af_advancededitor_build_sceditor_content_css(
+            $sceditorContentCssBase,
+            (!empty($packs['css']) && is_array($packs['css'])) ? $packs['css'] : []
+        );
 
         // SCEditor core + bbcode plugin
         $core = af_advancededitor_url_if_file_exists($bburl, 'jscripts/sceditor/jquery.sceditor.min.js');
@@ -2403,8 +2503,6 @@ function af_advancededitor_get_custom_button_defs(string $bburl): array
  */
 function af_advancededitor_discover_bbcode_packs(string $bburl): array
 {
-    $bburl = rtrim($bburl, '/');
-
     // Поддерживаем оба legacy-расположения паков:
     // - assets/bbcodes/<pack>
     // - assets/bbcodes/bbcodes/<pack>
@@ -2412,7 +2510,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
         MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/bbcodes/',
         MYBB_ROOT . 'inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/bbcodes/bbcodes/',
     ];
-    $assetsBaseUrl = $bburl . '/inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/';
+    $addonBaseFs = af_advancededitor_realpath_safe(MYBB_ROOT . af_advancededitor_base_rel());
 
     $out = [
         // агрегаты для фронта/ACP
@@ -2458,21 +2556,62 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
             }
         }
 
-        // assets from manifest: paths are RELATIVE TO assets/
+        // assets from manifest
         $packCss = [];
         $packJs  = [];
         if (!empty($m['assets']['css']) && is_array($m['assets']['css'])) {
             foreach ($m['assets']['css'] as $rel) {
                 $rel = trim((string)$rel);
                 if ($rel === '') continue;
-                $packCss[] = $assetsBaseUrl . ltrim($rel, '/');
+                $candidatesAbs = [
+                    MYBB_ROOT . af_advancededitor_base_rel() . 'assets/' . ltrim($rel, '/'),
+                    $packDir . ltrim($rel, '/'),
+                    $packDir . basename($rel),
+                ];
+
+                $fileRel = '';
+                foreach ($candidatesAbs as $abs) {
+                    $abs = af_advancededitor_realpath_safe($abs);
+                    if (!is_file($abs)) continue;
+                    if (!af_advancededitor_is_path_inside($abs, $addonBaseFs)) continue;
+                    $fileRel = ltrim(str_replace($addonBaseFs, '', $abs), '/\\');
+                    if ($fileRel !== '') break;
+                }
+
+                if ($fileRel === '') {
+                    $fileRel = af_advancededitor_addon_file_rel_from_web_rel('assets/' . ltrim($rel, '/'));
+                }
+
+                $resolvedCss = af_advancededitor_resolve_css_delivery_url($fileRel);
+                if ($resolvedCss !== '') {
+                    $packCss[] = $resolvedCss;
+                }
             }
         }
         if (!empty($m['assets']['js']) && is_array($m['assets']['js'])) {
             foreach ($m['assets']['js'] as $rel) {
                 $rel = trim((string)$rel);
                 if ($rel === '') continue;
-                $packJs[] = $assetsBaseUrl . ltrim($rel, '/');
+                $candidatesAbs = [
+                    MYBB_ROOT . af_advancededitor_base_rel() . 'assets/' . ltrim($rel, '/'),
+                    $packDir . ltrim($rel, '/'),
+                    $packDir . basename($rel),
+                ];
+
+                $fileRel = '';
+                foreach ($candidatesAbs as $abs) {
+                    $abs = af_advancededitor_realpath_safe($abs);
+                    if (!is_file($abs)) continue;
+                    if (!af_advancededitor_is_path_inside($abs, $addonBaseFs)) continue;
+                    $fileRel = ltrim(str_replace($addonBaseFs, '', $abs), '/\\');
+                    if ($fileRel !== '') break;
+                }
+
+                if ($fileRel === '') {
+                    $fileRel = af_advancededitor_addon_file_rel_from_web_rel('assets/' . ltrim($rel, '/'));
+                }
+
+                $packJs[] = af_advancededitor_addon_file_url($fileRel);
             }
         }
 
@@ -2504,8 +2643,7 @@ function af_advancededitor_discover_bbcode_packs(string $bburl): array
 
                 $icon = trim((string)($b['icon'] ?? ''));
                 if ($icon !== '') {
-                    // icon in your packs is RELATIVE TO assets/
-                    $icon = $assetsBaseUrl . ltrim($icon, '/');
+                    $icon = af_advancededitor_addon_file_url('assets/' . ltrim($icon, '/'));
                 }
 
                 $btn = [
