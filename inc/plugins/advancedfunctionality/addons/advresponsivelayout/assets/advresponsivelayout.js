@@ -10,44 +10,88 @@
     drawerId: 'af-rwd-right-menu',
     triggerId: 'af-rwd-right-trigger',
     mainNavHostId: 'af-rwd-main-nav-host',
-    mainNavPlaceholderClass: 'af-rwd-main-nav-placeholder',
-    extraMenuPlaceholderClass: 'af-rwd-extra-menu-placeholder'
+    mainNavBarClass: 'af-rwd-main-nav-bar',
+    mainNavShellClass: 'af-rwd-main-nav-shell',
+    placeholderClass: 'af-rwd-main-nav-placeholder',
+    extraPlaceholderClass: 'af-rwd-extra-menu-placeholder'
   };
 
   function cssVarInt(name, fallback) {
-    var value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    var parsed = parseInt(value, 10);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    var raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    var num = parseInt(raw, 10);
+    return Number.isFinite(num) && num > 0 ? num : fallback;
   }
 
-  function isMobileHeaderViewport() {
-    var bp = cssVarInt('--af-rwd-mobile-header-breakpoint', 900);
-    return window.matchMedia('(max-width: ' + bp + 'px)').matches;
+  function isMobileViewport() {
+    return window.matchMedia('(max-width: 767.98px)').matches;
   }
 
-  function wrapWideTables(root) {
-    if (!body.classList.contains('af-rwd-table-wrap-on')) return;
-    var scope = root || document;
-    var tables = scope.querySelectorAll('table');
+  function isTabletViewport() {
+    return window.matchMedia('(min-width: 768px) and (max-width: 1024px)').matches;
+  }
 
-    tables.forEach(function (table) {
-      if (table.closest('.af-rwd-table-wrap')) return;
-      if (table.closest('.sceditor-container, .sceditor-group, .CodeMirror')) return;
-      if (table.matches('.af-rwd-no-wrap, [data-af-rwd-no-wrap]')) return;
-      var parent = table.parentElement;
-      if (!parent) return;
+  function updateViewportClasses() {
+    body.classList.toggle('af-rwd-viewport-mobile', isMobileViewport());
+    body.classList.toggle('af-rwd-viewport-tablet', isTabletViewport());
+  }
 
-      var wrapper = document.createElement('div');
-      wrapper.className = 'af-rwd-table-wrap';
-      parent.insertBefore(wrapper, table);
-      wrapper.appendChild(table);
+  function normalizeLabel(text) {
+    return (text || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function buildHeaderMap(table) {
+    var headers = [];
+    table.querySelectorAll('thead th, tr.thead th').forEach(function (th) {
+      headers.push(normalizeLabel(th.textContent));
+    });
+    return headers;
+  }
+
+  function markTableAsCards(table, force) {
+    var enableCards = isMobileViewport() || !!force;
+    table.classList.toggle('af-rwd-mobile-cards', enableCards);
+    table.classList.toggle('af-rwd-tablet-compact', isTabletViewport());
+    if (!enableCards) return;
+
+    var headers = buildHeaderMap(table);
+    table.querySelectorAll('tbody tr, tr.inline_row, tr[id^="thread_"], tr[id^="forum_"], tr[id^="pm_"]').forEach(function (row) {
+      if (row.querySelector('th')) return;
+      row.querySelectorAll('td').forEach(function (cell, index) {
+        if (cell.dataset.afRwdLabel) return;
+        var label = headers[index] || cell.getAttribute('data-label') || '';
+        if (label) cell.dataset.afRwdLabel = normalizeLabel(label);
+      });
     });
   }
 
-  function syncModalClass() {
-    if (!body.classList.contains('af-rwd-modal-fixes-on')) return;
-    var modalNode = document.querySelector('.modal, .af-modal, .af-cs-modal, .af-apui-modal, [data-af-apui-surface]');
-    body.classList.toggle('af-rwd-modal-surface', !!modalNode);
+  function adaptCoreTables() {
+    var selectors = [
+      'body.af-rwd-userlist table',
+      'body.af-rwd-postsactivity table',
+      'body.af-rwd-private table.pm_table',
+      'body.af-rwd-search table',
+      'body.af-rwd-forumdisplay table#threads',
+      'body.af-rwd-index table#forums'
+    ];
+
+    document.querySelectorAll(selectors.join(',')).forEach(function (table) {
+      markTableAsCards(table);
+    });
+  }
+
+  function wrapNarrowTables() {
+    document.querySelectorAll('body.af-rwd-enabled table').forEach(function (table) {
+      if (table.closest('.af-rwd-table-wrap')) return;
+      if (table.classList.contains('af-rwd-mobile-cards')) return;
+      if (!isTabletViewport()) return;
+
+      var parent = table.parentElement;
+      if (!parent) return;
+      var wrap = document.createElement('div');
+      wrap.className = 'af-rwd-table-wrap';
+      parent.insertBefore(wrap, table);
+      wrap.appendChild(table);
+    });
   }
 
   function ensureMainNavHost() {
@@ -57,44 +101,112 @@
     host = document.createElement('div');
     host.id = state.mainNavHostId;
     host.className = 'af-rwd-main-nav-host';
+    host.hidden = true;
     host.setAttribute('role', 'navigation');
     host.setAttribute('aria-label', 'Main forum navigation');
-    host.hidden = true;
     body.appendChild(host);
     return host;
   }
 
-  function moveMainMenuForMobile() {
+  function ensureMainNavBar(host) {
+    var bar = host.querySelector('.' + state.mainNavBarClass);
+    if (bar) return bar;
+
+    bar = document.createElement('div');
+    bar.className = state.mainNavBarClass;
+
+    var left = document.createElement('button');
+    left.type = 'button';
+    left.className = 'af-rwd-main-nav-scroll af-rwd-main-nav-scroll--left';
+    left.setAttribute('aria-label', 'Scroll menu left');
+    left.textContent = '‹';
+
+    var shell = document.createElement('div');
+    shell.className = state.mainNavShellClass;
+
+    var actions = document.createElement('div');
+    actions.className = 'af-rwd-main-nav-actions';
+
+    var right = document.createElement('button');
+    right.type = 'button';
+    right.className = 'af-rwd-main-nav-scroll af-rwd-main-nav-scroll--right';
+    right.setAttribute('aria-label', 'Scroll menu right');
+    right.textContent = '›';
+
+    bar.appendChild(left);
+    bar.appendChild(shell);
+    bar.appendChild(actions);
+    bar.appendChild(right);
+    host.appendChild(bar);
+
+    function scrollByDelta(delta) {
+      shell.scrollBy({ left: delta, behavior: 'smooth' });
+    }
+
+    left.addEventListener('click', function () { scrollByDelta(-160); });
+    right.addEventListener('click', function () { scrollByDelta(160); });
+    shell.addEventListener('scroll', function () { updateNavArrowState(shell, left, right); }, { passive: true });
+
+    return bar;
+  }
+
+  function updateNavArrowState(shell, left, right) {
+    var max = Math.max(0, shell.scrollWidth - shell.clientWidth);
+    left.disabled = shell.scrollLeft <= 4;
+    right.disabled = shell.scrollLeft >= (max - 4);
+  }
+
+  function mountMainMenu() {
     if (!body.classList.contains('af-rwd-main-nav-sticky')) return;
+
     var menu = document.querySelector('#header ul.menu.top_links, #header .menu.top_links');
     if (!menu) return;
 
     var host = ensureMainNavHost();
+    var bar = ensureMainNavBar(host);
+    var shell = bar.querySelector('.' + state.mainNavShellClass);
 
-    if (isMobileHeaderViewport()) {
-      if (!menu.classList.contains('af-rwd-main-nav-live')) {
-        var ph = document.createElement('span');
-        ph.className = state.mainNavPlaceholderClass;
-        ph.hidden = true;
-        menu.parentNode.insertBefore(ph, menu);
-      }
-      menu.classList.add('af-rwd-main-nav-live');
-      host.hidden = false;
-      host.appendChild(menu);
-      body.classList.add('af-rwd-main-nav-mounted');
+    if (!isMobileViewport()) {
+      restoreMainMenu(menu, host);
       return;
     }
 
-    if (!menu.classList.contains('af-rwd-main-nav-live')) return;
+    if (!menu.classList.contains('af-rwd-main-nav-live')) {
+      var ph = document.createElement('span');
+      ph.className = state.placeholderClass;
+      ph.hidden = true;
+      menu.parentNode.insertBefore(ph, menu);
+    }
 
-    var placeholder = document.querySelector('.' + state.mainNavPlaceholderClass);
+    menu.classList.add('af-rwd-main-nav-live');
+    shell.appendChild(menu);
+    host.hidden = false;
+    body.classList.add('af-rwd-main-nav-mounted');
+
+    var hostH = host.getBoundingClientRect().height || 56;
+    document.documentElement.style.setProperty('--af-rwd-main-nav-offset', Math.ceil(hostH) + 'px');
+
+    var left = bar.querySelector('.af-rwd-main-nav-scroll--left');
+    var right = bar.querySelector('.af-rwd-main-nav-scroll--right');
+    updateNavArrowState(shell, left, right);
+  }
+
+  function restoreMainMenu(menu, host) {
+    if (!menu || !menu.classList.contains('af-rwd-main-nav-live')) {
+      if (host) host.hidden = true;
+      body.classList.remove('af-rwd-main-nav-mounted');
+      return;
+    }
+
+    var placeholder = document.querySelector('.' + state.placeholderClass);
     if (placeholder && placeholder.parentNode) {
       placeholder.parentNode.insertBefore(menu, placeholder);
       placeholder.remove();
     }
+
     menu.classList.remove('af-rwd-main-nav-live');
     body.classList.remove('af-rwd-main-nav-mounted');
-    host.hidden = true;
+    if (host) host.hidden = true;
   }
 
   function getExtraNavNode() {
@@ -104,26 +216,30 @@
     return lower;
   }
 
-  function ensureRightMenuShell() {
+  function ensureRightMenu(host) {
+    var bar = host.querySelector('.' + state.mainNavBarClass);
+    if (!bar) return null;
+
+    var actions = bar.querySelector('.af-rwd-main-nav-actions');
     var trigger = document.getElementById(state.triggerId);
     if (!trigger) {
       trigger = document.createElement('button');
       trigger.type = 'button';
       trigger.id = state.triggerId;
       trigger.className = 'af-rwd-right-trigger';
-      trigger.setAttribute('aria-expanded', 'false');
       trigger.setAttribute('aria-label', 'Open extra menu');
       trigger.setAttribute('aria-controls', state.drawerId);
+      trigger.setAttribute('aria-expanded', 'false');
       trigger.innerHTML = '<span class="af-rwd-right-trigger__icon" aria-hidden="true"></span>';
-      document.body.appendChild(trigger);
     }
+    if (actions && !actions.contains(trigger)) actions.appendChild(trigger);
 
     var overlay = document.querySelector('.af-rwd-extra-overlay');
     if (!overlay) {
       overlay = document.createElement('div');
       overlay.className = 'af-rwd-extra-overlay';
       overlay.hidden = true;
-      document.body.appendChild(overlay);
+      body.appendChild(overlay);
     }
 
     var drawer = document.getElementById(state.drawerId);
@@ -134,180 +250,130 @@
       drawer.hidden = true;
       drawer.setAttribute('aria-hidden', 'true');
       drawer.setAttribute('aria-label', 'Extra navigation menu');
-      document.body.appendChild(drawer);
+      body.appendChild(drawer);
     }
 
     return { trigger: trigger, overlay: overlay, drawer: drawer };
   }
 
-  function moveExtraMenuForMobile(drawer) {
+  function moveExtraMenu(shell) {
     var lower = getExtraNavNode();
     if (!lower) return;
 
-    if (isMobileHeaderViewport()) {
-      if (!lower.classList.contains('af-rwd-extra-menu-live')) {
-        var ph = document.createElement('span');
-        ph.className = state.extraMenuPlaceholderClass;
-        ph.hidden = true;
-        lower.parentNode.insertBefore(ph, lower);
-      }
-      lower.classList.add('af-rwd-extra-menu-live');
-      drawer.appendChild(lower);
-      body.classList.add('af-rwd-has-extra-menu');
+    if (!isMobileViewport()) {
+      restoreExtraMenu();
       return;
     }
 
-    restoreExtraMenu();
+    if (!lower.classList.contains('af-rwd-extra-menu-live')) {
+      var ph = document.createElement('span');
+      ph.className = state.extraPlaceholderClass;
+      ph.hidden = true;
+      lower.parentNode.insertBefore(ph, lower);
+    }
+
+    lower.classList.add('af-rwd-extra-menu-live');
+    shell.drawer.appendChild(lower);
   }
 
   function restoreExtraMenu() {
     var lower = document.querySelector('#' + state.drawerId + ' .lower.af-rwd-extra-menu-live');
     if (!lower) return;
-
-    var placeholder = document.querySelector('.' + state.extraMenuPlaceholderClass);
+    var placeholder = document.querySelector('.' + state.extraPlaceholderClass);
     if (placeholder && placeholder.parentNode) {
       placeholder.parentNode.insertBefore(lower, placeholder);
       placeholder.remove();
     }
-
     lower.classList.remove('af-rwd-extra-menu-live');
-    body.classList.remove('af-rwd-has-extra-menu');
   }
 
-  function setRightMenuState(isOpen, shell) {
-    state.drawerOpen = !!isOpen;
-
+  function setRightMenuState(open, shell) {
+    state.drawerOpen = !!open;
     body.classList.toggle('af-rwd-right-menu-open', state.drawerOpen);
-    body.classList.toggle('af-rwd-right-menu-closed', !state.drawerOpen);
-
     shell.trigger.setAttribute('aria-expanded', state.drawerOpen ? 'true' : 'false');
     shell.drawer.setAttribute('aria-hidden', state.drawerOpen ? 'false' : 'true');
-
     shell.overlay.hidden = !state.drawerOpen;
     shell.drawer.hidden = !state.drawerOpen;
   }
 
-  function closeRightMenu(shell) {
-    setRightMenuState(false, shell);
-  }
+  function setupMenus() {
+    var host = ensureMainNavHost();
+    mountMainMenu();
 
-  function setupRightBurgerMenu() {
     if (!body.classList.contains('af-rwd-right-burger')) return;
 
-    var shell = ensureRightMenuShell();
-    moveExtraMenuForMobile(shell.drawer);
+    var shell = ensureRightMenu(host);
+    if (!shell) return;
+    moveExtraMenu(shell);
 
     shell.trigger.addEventListener('click', function () {
-      if (!isMobileHeaderViewport()) return;
-      moveExtraMenuForMobile(shell.drawer);
+      if (!isMobileViewport()) return;
       setRightMenuState(!state.drawerOpen, shell);
     });
 
-    shell.overlay.addEventListener('click', function () {
-      closeRightMenu(shell);
-    });
+    shell.overlay.addEventListener('click', function () { setRightMenuState(false, shell); });
 
     document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape') closeRightMenu(shell);
+      if (event.key === 'Escape') setRightMenuState(false, shell);
     });
 
     document.addEventListener('click', function (event) {
       if (!state.drawerOpen) return;
-      if (!shell.drawer.contains(event.target) && !shell.trigger.contains(event.target)) {
-        closeRightMenu(shell);
-      }
+      if (shell.trigger.contains(event.target) || shell.drawer.contains(event.target)) return;
+      setRightMenuState(false, shell);
     });
 
     window.addEventListener('resize', function () {
-      if (!isMobileHeaderViewport()) {
-        closeRightMenu(shell);
-      }
-      moveMainMenuForMobile();
-      moveExtraMenuForMobile(shell.drawer);
+      updateViewportClasses();
+      mountMainMenu();
+      moveExtraMenu(shell);
+      if (!isMobileViewport()) setRightMenuState(false, shell);
+      adaptCoreTables();
+      wrapNarrowTables();
     }, { passive: true });
   }
 
-  function applyMobileTableLabels(tableSelector) {
-    document.querySelectorAll(tableSelector).forEach(function (table) {
-      var headers = [];
-      table.querySelectorAll('thead th, tr.thead th').forEach(function (th) {
-        headers.push((th.textContent || '').trim());
-      });
+  function stabilizeAvatars() {
+    if (!isMobileViewport()) return;
 
-      table.querySelectorAll('tbody tr, tr.inline_row, tr[id^="thread_"], tr[id^="forum_"]').forEach(function (row) {
-        if (row.querySelector('th')) return;
-        row.classList.add('af-rwd-mobile-row');
+    document.querySelectorAll('.post .author_avatar img, .af-apui-postbit-avatar-shell img').forEach(function (img) {
+      img.style.width = '86px';
+      img.style.height = '86px';
+      img.style.objectFit = 'cover';
+    });
 
-        row.querySelectorAll('td').forEach(function (cell, index) {
-          if (cell.dataset.afRwdLabel) return;
-          var label = headers[index] || cell.getAttribute('data-label') || '';
-          if (label) cell.dataset.afRwdLabel = label;
-        });
-      });
+    document.querySelectorAll('#panel .avatar img, #panel .user-avatar img').forEach(function (img) {
+      img.style.width = '34px';
+      img.style.height = '34px';
+      img.style.objectFit = 'cover';
     });
   }
 
-  function adaptIndex() {
-    if (!body.classList.contains('af-rwd-index') || !body.classList.contains('af-rwd-forumdisplay-fixes-on')) return;
-    applyMobileTableLabels('table#forums, table.forum_table, table.tborder[id*="forum"]');
-  }
-
-  function adaptForumdisplay() {
-    if (!body.classList.contains('af-rwd-forumdisplay') || !body.classList.contains('af-rwd-forumdisplay-fixes-on')) return;
-    applyMobileTableLabels('table#threads, table.threadlist, table.tborder[id*="thread"]');
-  }
-
-  function adaptShowthread() {
-    if (!body.classList.contains('af-rwd-showthread') || !body.classList.contains('af-rwd-postbit-fixes-on')) return;
-    document.querySelectorAll('.post.classic, .af-apui-postbit').forEach(function (postbit) {
-      postbit.classList.add('af-rwd-postbit-mobile-ready');
-    });
-  }
-
-  function adaptProfile() {
-    if (!body.classList.contains('af-rwd-profile-fixes-on') || !body.classList.contains('af-rwd-member')) return;
-    document.querySelectorAll('.af-apui-profile-tabs__nav').forEach(function (tabs) {
-      tabs.classList.add('af-rwd-tabs-scroll');
-    });
-  }
-
-  function adaptUtilityPages() {
-    applyMobileTableLabels('body.af-rwd-postsactivity table, body.af-rwd-userlist table, body.af-rwd-search table, body.af-rwd-private table, body.af-rwd-usercp table');
-  }
-
-  function initPageAdapters() {
-    adaptIndex();
-    adaptForumdisplay();
-    adaptShowthread();
-    adaptProfile();
-    adaptUtilityPages();
+  function syncModalClass() {
+    var hasModal = !!document.querySelector('.modal, .af-modal, .af-cs-modal, .af-apui-modal, .af-shop-modal__dialog');
+    body.classList.toggle('af-rwd-modal-surface', hasModal);
   }
 
   function initOnce() {
     if (state.initialized) return;
     state.initialized = true;
 
-    wrapWideTables(document);
+    updateViewportClasses();
+    setupMenus();
+    adaptCoreTables();
+    wrapNarrowTables();
+    stabilizeAvatars();
     syncModalClass();
-    moveMainMenuForMobile();
-    setupRightBurgerMenu();
-    initPageAdapters();
 
     var observer = new MutationObserver(function (mutations) {
-      var shouldRefresh = false;
-
-      for (var i = 0; i < mutations.length; i++) {
-        if (mutations[i].addedNodes && mutations[i].addedNodes.length) {
-          shouldRefresh = true;
-          break;
-        }
-      }
-
-      if (!shouldRefresh) return;
-      wrapWideTables(document);
+      var changed = mutations.some(function (m) { return m.addedNodes && m.addedNodes.length; });
+      if (!changed) return;
+      updateViewportClasses();
+      mountMainMenu();
+      adaptCoreTables();
+      wrapNarrowTables();
+      stabilizeAvatars();
       syncModalClass();
-      moveMainMenuForMobile();
-      initPageAdapters();
     });
 
     observer.observe(document.documentElement, { childList: true, subtree: true });
