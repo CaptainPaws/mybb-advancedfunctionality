@@ -9,9 +9,9 @@ html { -webkit-text-size-adjust: 100%; }
   --af-rwd-breakpoint-desktop: 1200px;
   --af-rwd-mobile-header-breakpoint: 900px;
   --af-rwd-overlay-z: 9997;
-  --af-rwd-right-menu-z: 9998;
-  --af-rwd-right-trigger-z: 9999;
-  --af-rwd-main-nav-z: 9988;
+  --af-rwd-right-menu-z: 10000;
+  --af-rwd-right-trigger-z: 10001;
+  --af-rwd-main-nav-z: 9999;
   --af-rwd-shadow: 0 8px 20px rgba(0, 0, 0, .18);
   --af-rwd-radius: 12px;
 }
@@ -21,15 +21,42 @@ body.af-rwd-enabled {
   overflow-x: hidden;
 }
 
-body.af-rwd-enabled :is(img, video, svg, canvas) {
+body.af-rwd-enabled :is(img, video, svg, canvas, iframe) {
   max-width: 100%;
   height: auto;
 }
 
-body.af-rwd-enabled :is(input, button, textarea, select) { font: inherit; }
+body.af-rwd-enabled :is(input, button, textarea, select) { font: inherit; max-width: 100%; }
 body.af-rwd-enabled :is(pre, code, kbd, samp) { overflow-wrap: anywhere; }
 body.af-rwd-enabled :is(.container, .wrapper, .content, #content, #container) { min-width: 0; }
 body.af-rwd-enabled .navigation { overflow-wrap: anywhere; }
+
+.af-rwd-main-nav-host {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--af-rwd-main-nav-z);
+  background: rgba(10, 15, 25, .96);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(255,255,255,.14);
+  box-shadow: var(--af-rwd-shadow);
+  padding: 8px var(--af-rwd-page-pad-mobile);
+}
+
+.af-rwd-main-nav-host :is(ul.menu.top_links, .menu.top_links) {
+  margin: 0;
+  display: flex;
+  gap: 10px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  list-style: none;
+  padding: 0;
+}
+
+.af-rwd-main-nav-host :is(ul.menu.top_links > li, .menu.top_links > li) {
+  flex: 0 0 auto;
+}
 
 .af-rwd-right-trigger {
   display: none;
@@ -41,6 +68,7 @@ body.af-rwd-enabled .navigation { overflow-wrap: anywhere; }
   border: 1px solid rgba(255, 255, 255, .2);
   background: rgba(10, 15, 25, .86);
   cursor: pointer;
+  color: #fff;
 }
 
 .af-rwd-right-trigger__icon,
@@ -63,23 +91,18 @@ body.af-rwd-enabled .navigation { overflow-wrap: anywhere; }
   position: fixed;
   top: 0;
   right: 0;
-  height: 100vh;
+  bottom: 0;
   width: min(86vw, 390px);
   transform: translateX(102%);
   transition: transform .24s ease;
   z-index: var(--af-rwd-right-menu-z);
   overflow: auto;
-  padding: 14px;
+  padding: 56px 12px 12px;
   border-left: 1px solid rgba(255, 255, 255, .14);
-  background: rgba(11, 17, 28, .96);
+  background: rgba(11, 17, 28, .98);
 }
 
-.af-rwd-right-menu__title {
-  margin: 0 0 10px;
-  font-size: 13px;
-  text-transform: uppercase;
-  opacity: .82;
-}
+.af-rwd-right-menu .lower { display: block !important; }
 
 .af-rwd-extra-overlay {
   position: fixed;
@@ -130,22 +153,19 @@ body.af-rwd-modal-surface.af-rwd-modal-fixes-on :is(.modal, .af-modal, .af-cs-mo
     line-height: 1.45;
   }
 
-  body.af-rwd-enabled.af-rwd-main-nav-sticky :is(#header ul.menu.top_links, #header .menu.top_links) {
-    position: sticky;
-    top: 0;
-    z-index: var(--af-rwd-main-nav-z);
-    backdrop-filter: blur(5px);
+  body.af-rwd-enabled.af-rwd-main-nav-mounted {
+    padding-top: 62px;
   }
 
   body.af-rwd-enabled.af-rwd-right-burger .af-rwd-right-trigger {
     display: inline-flex;
     position: fixed;
-    top: 8px;
-    right: 8px;
+    top: 10px;
+    right: 10px;
     z-index: var(--af-rwd-right-trigger-z);
   }
 
-  body.af-rwd-enabled.af-rwd-right-burger #panel .lower {
+  body.af-rwd-enabled.af-rwd-right-burger #panel .lower:not(.af-rwd-extra-menu-live) {
     display: none;
   }
 
@@ -153,47 +173,23 @@ body.af-rwd-modal-surface.af-rwd-modal-fixes-on :is(.modal, .af-modal, .af-cs-mo
     font-size: .95rem;
   }
 
-  /* index.php */
-  body.af-rwd-index.af-rwd-forumdisplay-fixes-on table#forums {
+  body.af-rwd-enabled :is(#content, #container, .wrapper, .content, .af-apui-profile-page, .af-cs-page, .af-kb-page, .af-shop-layout) {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    min-width: 0;
+  }
+
+  body.af-rwd-enabled :is(table#forums, table#threads, table.userlist, table.search_results, table.pm_table) {
     border-collapse: separate;
     border-spacing: 0 10px;
   }
 
-  body.af-rwd-index.af-rwd-forumdisplay-fixes-on table#forums tbody,
-  body.af-rwd-index.af-rwd-forumdisplay-fixes-on table#forums tr.inline_row {
-    display: block;
-    width: 100%;
-  }
-
-  body.af-rwd-index.af-rwd-forumdisplay-fixes-on table#forums tr.inline_row {
-    background: rgba(255,255,255,.04);
-    border-radius: var(--af-rwd-radius);
-    box-shadow: var(--af-rwd-shadow);
-    padding: 12px;
-    margin-bottom: 10px;
-  }
-
-  body.af-rwd-index.af-rwd-forumdisplay-fixes-on table#forums tr.inline_row td {
-    display: block;
-    width: 100% !important;
-    border: 0;
-    padding: 6px 0;
-  }
-
-  body.af-rwd-index.af-rwd-forumdisplay-fixes-on :is(td.forumdisplay_regular, td.forumdisplay_sticky) {
-    font-size: .98rem;
-  }
-
-  body.af-rwd-index.af-rwd-forumdisplay-fixes-on :is(.subforums, .forum_stats, .forum_lastpost) {
-    font-size: .9rem;
-    opacity: .95;
-  }
-
-  /* forumdisplay.php */
-  body.af-rwd-forumdisplay.af-rwd-forumdisplay-fixes-on table#threads tr.inline_row {
+  body.af-rwd-enabled :is(table#forums tr.inline_row, table#threads tr.inline_row, table tr.af-rwd-mobile-row) {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 8px;
+    gap: 6px;
     background: rgba(255,255,255,.04);
     border-radius: var(--af-rwd-radius);
     box-shadow: var(--af-rwd-shadow);
@@ -201,14 +197,15 @@ body.af-rwd-modal-surface.af-rwd-modal-fixes-on :is(.modal, .af-modal, .af-cs-mo
     padding: 12px;
   }
 
-  body.af-rwd-forumdisplay.af-rwd-forumdisplay-fixes-on table#threads tr.inline_row td {
+  body.af-rwd-enabled :is(table#forums tr.inline_row td, table#threads tr.inline_row td, table tr.af-rwd-mobile-row td) {
     width: 100% !important;
     border: 0;
     padding: 2px 0;
     display: block;
+    min-width: 0;
   }
 
-  body.af-rwd-forumdisplay.af-rwd-forumdisplay-fixes-on table#threads tr.inline_row td[data-af-rwd-label]::before {
+  body.af-rwd-enabled :is(table#threads tr.inline_row td[data-af-rwd-label], table tr.af-rwd-mobile-row td[data-af-rwd-label])::before {
     content: attr(data-af-rwd-label);
     display: block;
     font-size: .74rem;
@@ -217,63 +214,69 @@ body.af-rwd-modal-surface.af-rwd-modal-fixes-on :is(.modal, .af-modal, .af-cs-mo
     margin-bottom: 2px;
   }
 
-  /* showthread.php */
   body.af-rwd-showthread.af-rwd-postbit-fixes-on {
     font-size: 16px;
   }
 
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on .post.classic .af-apui-postbit,
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on .post.classic.af-rwd-postbit-mobile-ready {
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post.classic.af-rwd-postbit-mobile-ready, .af-apui-postbit.af-rwd-postbit-mobile-ready) {
     display: grid;
     grid-template-columns: 1fr;
     gap: 10px;
+    padding: 10px;
   }
 
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post_author, .af-apui-postbit-author, .post_content, .af-apui-postbit-content) {
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post_author, .af-apui-postbit-author) {
+    display: grid !important;
+    grid-template-columns: 1fr auto;
+    align-items: start;
+    gap: 10px;
     width: 100% !important;
-    min-width: 0;
     float: none !important;
   }
 
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post_body, .af-apui-postbit-message) {
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post_controls, .author_buttons, .af-apui-post-controls) {
+    grid-column: 1;
+    order: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.author_avatar, .post_author .author_avatar, .af-apui-author-avatar) {
+    grid-column: 2;
+    order: 2;
+    justify-self: end;
+  }
+
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.author_statistics, .author_fields, .post_author .smalltext, .af-apui-author-meta) {
+    grid-column: 1 / -1;
+    order: 3;
+    width: 100%;
+  }
+
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post_content, .af-apui-postbit-content, .post_body, .af-apui-postbit-message) {
+    width: 100% !important;
+    min-width: 0;
+    float: none !important;
     font-size: 1rem;
     line-height: 1.6;
     overflow-wrap: anywhere;
   }
 
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on .post_controls {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on .postbit_buttons {
-    float: none !important;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on .af-apui-thread-toolbar {
+  body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-page,
+  body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-hero,
+  body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-info-grid,
+  body.af-rwd-usercp.af-rwd-profile-fixes-on :is(#usercp_menu, #usercp_content, .usercp_nav, .usercp_body),
+  body.af-rwd-private :is(#pm_menu, #pm_content, .pm_nav, .pm_body) {
     display: grid;
     grid-template-columns: 1fr;
+    width: 100% !important;
+    float: none !important;
     gap: 10px;
   }
 
-  /* member profile */
-  body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-page {
-    display: grid;
-    gap: 12px;
-  }
-
-  body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-hero {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-tabs__nav,
-  body.af-rwd-member.af-rwd-profile-fixes-on .af-rwd-tabs-scroll {
+  body.af-rwd-enabled :is(.af-apui-profile-tabs__nav, .af-cs-tabs__nav, .af-kb-tabs, .af-shop-tabs) {
     display: flex;
     flex-wrap: nowrap;
     overflow-x: auto;
@@ -281,34 +284,22 @@ body.af-rwd-modal-surface.af-rwd-modal-fixes-on :is(.modal, .af-modal, .af-cs-mo
     padding-bottom: 4px;
   }
 
-  body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-tabs__content {
-    min-width: 0;
-  }
-
-  body.af-rwd-member.af-rwd-profile-fixes-on :is(.af-apui-legacy-stack, .af-apui-extra-actions-grid, .af-apui-info-grid) {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  body.af-rwd-usercp.af-rwd-profile-fixes-on :is(#usercp_menu, #usercp_content, .usercp_nav, .usercp_body) {
+  body.af-rwd-postsactivity :is(table, .tborder),
+  body.af-rwd-userlist :is(table, .tborder),
+  body.af-rwd-search :is(table, .tborder),
+  body.af-rwd-gallery :is(table, .tborder),
+  body.af-rwd-kb :is(table, .tborder),
+  body.af-rwd-shop :is(table, .tborder),
+  body.af-rwd-charactersheets :is(table, .tborder),
+  body.af-rwd-forumdisplay :is(table, .tborder) {
     width: 100% !important;
-    float: none !important;
+    min-width: 0 !important;
   }
 
-  /* plugin patches (only safe scoped containers) */
-  body.af-rwd-plugin-patches-on.af-rwd-inventory .af-inv-page :is(.af-inv-head, .af-inv-wallet, .af-inv-workspace) {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  body.af-rwd-plugin-patches-on.af-rwd-shop :is(.af-shop-layout, .af-manage-slots-layout) {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  body.af-rwd-plugin-patches-on.af-rwd-kb :is(.af-kb-page, .af-kb-tabs, .af-kb-header) {
+  body.af-rwd-plugin-patches-on.af-rwd-gallery :is(.af-gallery-grid, .gallery_grid, .gallery-images, .gallery_list),
+  body.af-rwd-plugin-patches-on.af-rwd-shop :is(.af-shop-layout, .af-shop-grid, .af-manage-slots-layout, .shop_grid),
+  body.af-rwd-plugin-patches-on.af-rwd-kb :is(.af-kb-page, .af-kb-grid, .kb-grid),
+  body.af-rwd-plugin-patches-on.af-rwd-charactersheets :is(.af-cs-page, .af-cs-grid, .charactersheets-grid) {
     display: grid;
     grid-template-columns: 1fr;
     gap: 10px;
@@ -318,16 +309,23 @@ body.af-rwd-modal-surface.af-rwd-modal-fixes-on :is(.modal, .af-modal, .af-cs-mo
     grid-template-columns: 1fr;
   }
 
-  body.af-rwd-plugin-patches-on.af-rwd-charactersheets .af-cs-page .af-cs-tabs__nav {
-    overflow-x: auto;
-    flex-wrap: nowrap;
+  body.af-rwd-plugin-patches-on.af-rwd-inventory .af-inv-page :is(.af-inv-head, .af-inv-wallet, .af-inv-workspace) {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  body.af-rwd-misc.af-rwd-misc-docs :is(.helpdoc, .rules, .af-rules, .af-help, .content, .trow1, .trow2) {
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 }
 
 @media (min-width: 901px) {
   body.af-rwd-enabled .af-rwd-right-trigger,
   body.af-rwd-enabled .af-rwd-right-menu,
-  body.af-rwd-enabled .af-rwd-extra-overlay {
+  body.af-rwd-enabled .af-rwd-extra-overlay,
+  body.af-rwd-enabled .af-rwd-main-nav-host {
     display: none !important;
   }
 }
