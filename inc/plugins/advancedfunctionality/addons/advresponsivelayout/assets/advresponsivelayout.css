@@ -1,0 +1,194 @@
+/* AdvancedFunctionality: Adaptive Responsive Layout
+ * Layout/fix-only layer. It does not override theme/APUI skin variables.
+ */
+
+:root {
+    --af-rwd-page-max: min(100%, 1400px);
+    --af-rwd-layout-gap: var(--af-layout-gap, 16px);
+    --af-rwd-page-pad-mobile: 12px;
+    --af-rwd-page-pad-desktop: 20px;
+    --af-rwd-breakpoint-phone: 576px;
+    --af-rwd-breakpoint-tablet: 768px;
+    --af-rwd-breakpoint-desktop: 1200px;
+    --af-rwd-modal-pad: 14px;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+*, *::before, *::after { box-sizing: border-box; }
+body.af-rwd-enabled {
+    min-width: 320px;
+    overflow-x: hidden;
+}
+
+body.af-rwd-enabled img,
+body.af-rwd-enabled video,
+body.af-rwd-enabled iframe,
+body.af-rwd-enabled svg,
+body.af-rwd-enabled canvas {
+    max-width: 100%;
+    height: auto;
+}
+
+body.af-rwd-enabled input,
+body.af-rwd-enabled button,
+body.af-rwd-enabled textarea,
+body.af-rwd-enabled select { font: inherit; }
+
+body.af-rwd-enabled :is(pre, code, kbd, samp) {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+body.af-rwd-enabled :is(.container, .wrapper, .content, .af-apui-profile-page, .af-apui-postbit, .af-inv-layout, .af-shop-layout, .af-cs-page, .af-kb-page) {
+    min-width: 0;
+}
+
+body.af-rwd-enabled table {
+    width: 100%;
+    max-width: 100%;
+    border-collapse: collapse;
+}
+
+body.af-rwd-enabled .af-rwd-table-wrap {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+}
+
+body.af-rwd-enabled .af-rwd-page-container {
+    width: 100%;
+    max-width: var(--af-rwd-page-max);
+    margin-inline: auto;
+    padding-inline: var(--af-rwd-page-pad-desktop);
+}
+
+body.af-rwd-enabled .af-rwd-stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--af-rwd-layout-gap);
+}
+
+body.af-rwd-enabled .af-rwd-stack > * { min-width: 0; }
+
+body.af-rwd-enabled .af-rwd-grid-two {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+    gap: var(--af-rwd-layout-gap);
+}
+
+body.af-rwd-enabled .pagination,
+body.af-rwd-enabled .breadcrumb,
+body.af-rwd-enabled .tcat,
+body.af-rwd-enabled .menu,
+body.af-rwd-enabled .top_links {
+    overflow-wrap: anywhere;
+}
+
+body.af-rwd-showthread.af-rwd-postbit-fixes-on .af-apui-postbit {
+    display: grid;
+    grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+    gap: var(--af-rwd-layout-gap);
+}
+
+body.af-rwd-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-author,
+body.af-rwd-showthread.af-rwd-postbit-fixes-on .post_author {
+    min-width: 0;
+}
+
+body.af-rwd-showthread.af-rwd-postbit-fixes-on .post_body,
+body.af-rwd-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-content {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-page,
+body.af-rwd-member.af-rwd-profile-fixes-on .profile,
+body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-tabs__content {
+    min-width: 0;
+}
+
+body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-hero,
+body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-identity {
+    overflow-wrap: anywhere;
+}
+
+body.af-rwd-plugin-patches-on .af-inv-layout,
+body.af-rwd-plugin-patches-on .af-shop-layout,
+body.af-rwd-plugin-patches-on .af-kb-layout,
+body.af-rwd-plugin-patches-on .af-cs-page,
+body.af-rwd-plugin-patches-on .af-cs-layout {
+    min-width: 0;
+    max-width: 100%;
+}
+
+body.af-rwd-plugin-patches-on .af-inv-tabs,
+body.af-rwd-plugin-patches-on .af-shop-tabs,
+body.af-rwd-plugin-patches-on .af-kb-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+body.af-rwd-modal-surface.af-rwd-modal-fixes-on :is(.modal, .af-modal, .af-aa-preview-modal__window, .af-cs-modal, .af-apui-modal) {
+    max-width: min(100vw - 16px, 980px);
+    width: min(100vw - 16px, 980px);
+    max-height: calc(100vh - 16px);
+    overflow: auto;
+    padding: var(--af-rwd-modal-pad);
+}
+
+body.af-rwd-enabled iframe.af-cs-iframe,
+body.af-rwd-enabled iframe.af-inv-iframe {
+    width: 100%;
+    max-width: 100%;
+}
+
+@media (max-width: 1200px) {
+    body.af-rwd-enabled .af-rwd-grid-two {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    body.af-rwd-enabled .af-rwd-page-container {
+        padding-inline: var(--af-rwd-page-pad-mobile);
+    }
+
+    body.af-rwd-enabled .menu,
+    body.af-rwd-enabled .top_links,
+    body.af-rwd-enabled .breadcrumb {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    body.af-rwd-showthread.af-rwd-postbit-fixes-on .af-apui-postbit {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-author, .post_author) {
+        order: 1;
+    }
+
+    body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-content, .post_body) {
+        order: 2;
+    }
+}
+
+@media (max-width: 576px) {
+    body.af-rwd-enabled .navigation,
+    body.af-rwd-enabled #panel,
+    body.af-rwd-enabled #header ul.menu {
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+    }
+
+    body.af-rwd-modal-surface.af-rwd-modal-fixes-on :is(.modal, .af-modal, .af-cs-modal, .af-apui-modal) {
+        max-width: calc(100vw - 8px);
+        width: calc(100vw - 8px);
+        max-height: calc(100vh - 8px);
+        padding: 10px;
+    }
+}
