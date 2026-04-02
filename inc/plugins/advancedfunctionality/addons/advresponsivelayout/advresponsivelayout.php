@@ -41,12 +41,12 @@ function af_advresponsivelayout_install(): void
     af_advresponsivelayout_ensure_setting('af_advresponsivelayout_enable_compact_profile_mobile', 'Enable compact profile/usercp mobile layout', 'Apply mobile layout for profile hero, tabs, side panels and usercp blocks.', 'yesno', '1', 10, $gid);
     af_advresponsivelayout_ensure_setting('af_advresponsivelayout_enable_plugin_patches', 'Enable plugin-aware mobile patches', 'Responsive layout patches for AF plugins (Inventory/Shop/KB/CharacterSheets).', 'yesno', '1', 11, $gid);
 
-    af_advresponsivelayout_ensure_setting('af_advresponsivelayout_mobile_header_breakpoint', 'Mobile header breakpoint (px)', 'Breakpoint where mobile header + right burger behavior becomes active.', 'numeric', '900', 12, $gid);
-    af_advresponsivelayout_ensure_setting('af_advresponsivelayout_breakpoint_phone', 'Phone breakpoint (px)', 'Phone breakpoint used by responsive layout system.', 'numeric', '576', 13, $gid);
-    af_advresponsivelayout_ensure_setting('af_advresponsivelayout_breakpoint_tablet', 'Tablet breakpoint (px)', 'Tablet breakpoint used by responsive layout system.', 'numeric', '820', 14, $gid);
+    af_advresponsivelayout_ensure_setting('af_advresponsivelayout_mobile_header_breakpoint', 'Mobile header breakpoint (px)', 'Breakpoint where mobile header + right burger behavior becomes active.', 'numeric', '768', 12, $gid);
+    af_advresponsivelayout_ensure_setting('af_advresponsivelayout_breakpoint_phone', 'Phone breakpoint (px)', 'Phone breakpoint used by responsive layout system.', 'numeric', '768', 13, $gid);
+    af_advresponsivelayout_ensure_setting('af_advresponsivelayout_breakpoint_tablet', 'Tablet breakpoint (px)', 'Tablet breakpoint used by responsive layout system.', 'numeric', '1024', 14, $gid);
     af_advresponsivelayout_ensure_setting('af_advresponsivelayout_breakpoint_desktop', 'Desktop breakpoint (px)', 'Desktop breakpoint used by responsive layout system.', 'numeric', '1200', 15, $gid);
 
-    af_advresponsivelayout_ensure_setting('af_advresponsivelayout_page_pad_mobile', 'Mobile page padding', 'Responsive page padding for narrow screens (CSS value).', 'text', '12px', 16, $gid);
+    af_advresponsivelayout_ensure_setting('af_advresponsivelayout_page_pad_mobile', 'Mobile page padding', 'Responsive page padding for narrow screens (CSS value).', 'text', '8px', 16, $gid);
     af_advresponsivelayout_ensure_setting('af_advresponsivelayout_page_pad_desktop', 'Desktop page padding', 'Responsive page padding for desktop screens (CSS value).', 'text', '20px', 17, $gid);
 
     if (function_exists('rebuild_settings')) {
@@ -419,25 +419,28 @@ function af_advresponsivelayout_runtime_style_tag(): string
 {
     global $mybb;
 
-    $phone = max(320, (int)($mybb->settings['af_advresponsivelayout_breakpoint_phone'] ?? 576));
-    $tablet = max($phone, (int)($mybb->settings['af_advresponsivelayout_breakpoint_tablet'] ?? 820));
+    $phone = max(360, (int)($mybb->settings['af_advresponsivelayout_breakpoint_phone'] ?? 768));
+    $tablet = max($phone + 1, (int)($mybb->settings['af_advresponsivelayout_breakpoint_tablet'] ?? 1024));
     $desktop = max($tablet, (int)($mybb->settings['af_advresponsivelayout_breakpoint_desktop'] ?? 1200));
-    $headerBp = max($phone, (int)($mybb->settings['af_advresponsivelayout_mobile_header_breakpoint'] ?? 900));
+    $headerBp = max(360, (int)($mybb->settings['af_advresponsivelayout_mobile_header_breakpoint'] ?? 768));
 
-    $padMobile = trim((string)($mybb->settings['af_advresponsivelayout_page_pad_mobile'] ?? '12px'));
+    $padMobile = trim((string)($mybb->settings['af_advresponsivelayout_page_pad_mobile'] ?? '8px'));
     $padDesktop = trim((string)($mybb->settings['af_advresponsivelayout_page_pad_desktop'] ?? '20px'));
 
     if (!preg_match('~^[0-9.]+(?:px|rem|em|vw|%)$~i', $padMobile)) {
-        $padMobile = '12px';
+        $padMobile = '8px';
     }
     if (!preg_match('~^[0-9.]+(?:px|rem|em|vw|%)$~i', $padDesktop)) {
         $padDesktop = '20px';
     }
 
+    $mobileMax = max(359, $phone - 1);
+
     return '<style id="af-rwd-runtime-vars">:root{'
         . '--af-rwd-breakpoint-phone:' . (int)$phone . 'px;'
         . '--af-rwd-breakpoint-tablet:' . (int)$tablet . 'px;'
         . '--af-rwd-breakpoint-desktop:' . (int)$desktop . 'px;'
+        . '--af-rwd-mobile-max:' . (int)$mobileMax . 'px;'
         . '--af-rwd-mobile-header-breakpoint:' . (int)$headerBp . 'px;'
         . '--af-rwd-page-pad-mobile:' . htmlspecialchars_uni($padMobile) . ';'
         . '--af-rwd-page-pad-desktop:' . htmlspecialchars_uni($padDesktop) . ';'

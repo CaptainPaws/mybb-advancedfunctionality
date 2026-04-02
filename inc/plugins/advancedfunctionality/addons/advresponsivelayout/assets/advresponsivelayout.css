@@ -2,330 +2,285 @@ html { -webkit-text-size-adjust: 100%; }
 *, *::before, *::after { box-sizing: border-box; }
 
 :root {
-  --af-rwd-page-pad-mobile: 12px;
+  --af-rwd-page-pad-mobile: 8px;
   --af-rwd-page-pad-desktop: 20px;
-  --af-rwd-breakpoint-phone: 576px;
-  --af-rwd-breakpoint-tablet: 820px;
+  --af-rwd-breakpoint-phone: 768px;
+  --af-rwd-breakpoint-tablet: 1024px;
   --af-rwd-breakpoint-desktop: 1200px;
-  --af-rwd-mobile-header-breakpoint: 900px;
-  --af-rwd-overlay-z: 9997;
-  --af-rwd-right-menu-z: 10000;
-  --af-rwd-right-trigger-z: 10001;
-  --af-rwd-main-nav-z: 9999;
+  --af-rwd-mobile-max: 767px;
+  --af-rwd-mobile-header-breakpoint: 768px;
+  --af-rwd-main-nav-z: 9997;
+  --af-rwd-overlay-z: 9998;
+  --af-rwd-right-menu-z: 9999;
+  --af-rwd-nav-bg: rgba(11, 16, 27, .96);
   --af-rwd-shadow: 0 8px 20px rgba(0, 0, 0, .18);
   --af-rwd-radius: 12px;
 }
 
-body.af-rwd-enabled {
-  min-width: 320px;
-  overflow-x: hidden;
-}
+body.af-rwd-enabled .af-rwd-main-nav-host,
+body.af-rwd-enabled .af-rwd-right-menu,
+body.af-rwd-enabled .af-rwd-extra-overlay { display: none; }
 
-body.af-rwd-enabled :is(img, video, svg, canvas, iframe) {
-  max-width: 100%;
-  height: auto;
-}
-
-body.af-rwd-enabled :is(input, button, textarea, select) { font: inherit; max-width: 100%; }
-body.af-rwd-enabled :is(pre, code, kbd, samp) { overflow-wrap: anywhere; }
-body.af-rwd-enabled :is(.container, .wrapper, .content, #content, #container) { min-width: 0; }
-body.af-rwd-enabled .navigation { overflow-wrap: anywhere; }
-
-.af-rwd-main-nav-host {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: var(--af-rwd-main-nav-z);
-  background: rgba(10, 15, 25, .96);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(255,255,255,.14);
-  box-shadow: var(--af-rwd-shadow);
-  padding: 8px var(--af-rwd-page-pad-mobile);
-}
-
-.af-rwd-main-nav-host :is(ul.menu.top_links, .menu.top_links) {
-  margin: 0;
-  display: flex;
-  gap: 10px;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  list-style: none;
-  padding: 0;
-}
-
-.af-rwd-main-nav-host :is(ul.menu.top_links > li, .menu.top_links > li) {
-  flex: 0 0 auto;
-}
-
-.af-rwd-right-trigger {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, .2);
-  background: rgba(10, 15, 25, .86);
-  cursor: pointer;
-  color: #fff;
-}
-
-.af-rwd-right-trigger__icon,
-.af-rwd-right-trigger__icon::before,
-.af-rwd-right-trigger__icon::after {
-  width: 16px;
-  height: 2px;
-  border-radius: 999px;
-  background: currentColor;
-  display: block;
-  content: "";
-  transition: transform .2s ease, opacity .2s ease;
-}
-
-.af-rwd-right-trigger__icon { position: relative; }
-.af-rwd-right-trigger__icon::before { position: absolute; inset: -5px 0 auto; }
-.af-rwd-right-trigger__icon::after { position: absolute; inset: auto 0 -5px; }
-
-.af-rwd-right-menu {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(86vw, 390px);
-  transform: translateX(102%);
-  transition: transform .24s ease;
-  z-index: var(--af-rwd-right-menu-z);
-  overflow: auto;
-  padding: 56px 12px 12px;
-  border-left: 1px solid rgba(255, 255, 255, .14);
-  background: rgba(11, 17, 28, .98);
-}
-
-.af-rwd-right-menu .lower { display: block !important; }
-
-.af-rwd-extra-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--af-rwd-overlay-z);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity .2s ease;
-  background: rgba(2, 8, 17, .54);
-}
-
-body.af-rwd-enabled.af-rwd-right-menu-open {
-  overflow: hidden;
-  touch-action: none;
-}
-
-body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-extra-overlay {
-  opacity: 1;
-  visibility: visible;
-}
-
-body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-right-menu {
-  transform: translateX(0);
-}
-
-body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-right-trigger__icon { background: transparent; }
-body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-right-trigger__icon::before { transform: translateY(5px) rotate(45deg); }
-body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-right-trigger__icon::after { transform: translateY(-5px) rotate(-45deg); }
-
-body.af-rwd-enabled .af-rwd-table-wrap {
-  overflow-x: auto;
-  overflow-y: hidden;
-  max-width: 100%;
-  -webkit-overflow-scrolling: touch;
-}
-
-body.af-rwd-modal-surface.af-rwd-modal-fixes-on :is(.modal, .af-modal, .af-cs-modal, .af-apui-modal, .af-aa-preview-modal__window) {
-  width: min(100vw - 14px, 980px);
-  max-width: min(100vw - 14px, 980px);
-  max-height: calc(100vh - 14px);
-  overflow: auto;
-}
-
-@media (max-width: 900px) {
+@media (max-width: 767.98px) {
   body.af-rwd-enabled {
-    padding-inline: var(--af-rwd-page-pad-mobile);
+    min-width: 320px;
     font-size: 15px;
     line-height: 1.45;
+    overflow-x: clip;
   }
 
-  body.af-rwd-enabled.af-rwd-main-nav-mounted {
-    padding-top: 62px;
-  }
+  body.af-rwd-enabled.af-rwd-main-nav-mounted { padding-top: var(--af-rwd-main-nav-offset, 56px); }
 
-  body.af-rwd-enabled.af-rwd-right-burger .af-rwd-right-trigger {
-    display: inline-flex;
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    z-index: var(--af-rwd-right-trigger-z);
-  }
-
-  body.af-rwd-enabled.af-rwd-right-burger #panel .lower:not(.af-rwd-extra-menu-live) {
-    display: none;
-  }
-
-  body.af-rwd-enabled :is(.tborder, .thead, .tfoot) {
-    font-size: .95rem;
-  }
-
-  body.af-rwd-enabled :is(#content, #container, .wrapper, .content, .af-apui-profile-page, .af-cs-page, .af-kb-page, .af-shop-layout) {
-    padding-left: 0 !important;
-    padding-right: 0 !important;
+  body.af-rwd-enabled #container,
+  body.af-rwd-enabled #content,
+  body.af-rwd-enabled .wrapper,
+  body.af-rwd-enabled .content,
+  body.af-rwd-enabled .pun,
+  body.af-rwd-enabled .af-apui-profile-page,
+  body.af-rwd-enabled .af-kb-page,
+  body.af-rwd-enabled .af-cs-page,
+  body.af-rwd-enabled .af-shop,
+  body.af-rwd-enabled .af-advancedgallery {
+    width: 100% !important;
+    max-width: 100% !important;
     margin-left: 0 !important;
     margin-right: 0 !important;
-    min-width: 0;
+    padding-left: var(--af-rwd-page-pad-mobile) !important;
+    padding-right: var(--af-rwd-page-pad-mobile) !important;
+    min-width: 0 !important;
   }
 
-  body.af-rwd-enabled :is(table#forums, table#threads, table.userlist, table.search_results, table.pm_table) {
-    border-collapse: separate;
-    border-spacing: 0 10px;
+  body.af-rwd-enabled :is(img, video, svg, canvas, iframe) { max-width: 100%; height: auto; }
+  body.af-rwd-enabled :is(input, select, textarea, button) { max-width: 100%; }
+
+  .af-rwd-main-nav-host {
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: var(--af-rwd-main-nav-z);
+    display: block;
+    background: var(--af-rwd-nav-bg);
+    border-bottom: 1px solid rgba(255,255,255,.14);
+    box-shadow: var(--af-rwd-shadow);
+    padding: 8px var(--af-rwd-page-pad-mobile);
   }
 
-  body.af-rwd-enabled :is(table#forums tr.inline_row, table#threads tr.inline_row, table tr.af-rwd-mobile-row) {
+  .af-rwd-main-nav-bar {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: 28px minmax(0, 1fr) auto 28px;
     gap: 6px;
+    align-items: center;
+  }
+
+  .af-rwd-main-nav-scroll {
+    border: 1px solid rgba(255,255,255,.28);
+    background: rgba(255,255,255,.06);
+    color: #fff;
+    border-radius: 8px;
+    width: 28px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  .af-rwd-main-nav-scroll[disabled] { opacity: .35; }
+
+  .af-rwd-main-nav-shell {
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .af-rwd-main-nav-shell :is(ul.menu.top_links, .menu.top_links) {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .af-rwd-main-nav-shell :is(ul.menu.top_links > li, .menu.top_links > li) { flex: 0 0 auto; }
+
+  .af-rwd-right-trigger {
+    width: 34px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.2);
+    background: rgba(255,255,255,.08);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .af-rwd-right-trigger__icon,
+  .af-rwd-right-trigger__icon::before,
+  .af-rwd-right-trigger__icon::after {
+    width: 15px;
+    height: 2px;
+    border-radius: 999px;
+    display: block;
+    content: "";
+    background: currentColor;
+    transition: transform .2s ease, opacity .2s ease;
+  }
+  .af-rwd-right-trigger__icon { position: relative; }
+  .af-rwd-right-trigger__icon::before { position: absolute; inset: -5px 0 auto; }
+  .af-rwd-right-trigger__icon::after { position: absolute; inset: auto 0 -5px; }
+
+  .af-rwd-extra-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: var(--af-rwd-overlay-z);
+    opacity: 0;
+    visibility: hidden;
+    background: rgba(3, 8, 16, .55);
+    transition: opacity .2s ease;
+  }
+
+  .af-rwd-right-menu {
+    position: fixed;
+    top: var(--af-rwd-main-nav-offset, 56px);
+    right: 0;
+    bottom: 0;
+    width: min(88vw, 360px);
+    background: rgba(11, 16, 27, .98);
+    border-left: 1px solid rgba(255,255,255,.18);
+    box-shadow: var(--af-rwd-shadow);
+    padding: 10px;
+    overflow-y: auto;
+    transform: translateX(102%);
+    transition: transform .22s ease;
+    z-index: var(--af-rwd-right-menu-z);
+  }
+
+  .af-rwd-right-menu .lower { display: block !important; }
+
+  body.af-rwd-enabled.af-rwd-right-menu-open {
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-extra-overlay { opacity: 1; visibility: visible; }
+  body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-right-menu { transform: translateX(0); }
+  body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-right-trigger__icon { background: transparent; }
+  body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-right-trigger__icon::before { transform: translateY(5px) rotate(45deg); }
+  body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-right-trigger__icon::after { transform: translateY(-5px) rotate(-45deg); }
+
+  body.af-rwd-enabled .af-rwd-table-wrap { overflow: visible; max-width: 100%; }
+  body.af-rwd-enabled table.af-rwd-mobile-cards,
+  body.af-rwd-enabled table.af-rwd-mobile-cards :is(thead, tbody, tr, th, td) { display: block; width: 100%; }
+  body.af-rwd-enabled table.af-rwd-mobile-cards thead { display: none; }
+  body.af-rwd-enabled table.af-rwd-mobile-cards tr {
     background: rgba(255,255,255,.04);
     border-radius: var(--af-rwd-radius);
     box-shadow: var(--af-rwd-shadow);
     margin-bottom: 10px;
-    padding: 12px;
+    padding: 10px;
   }
-
-  body.af-rwd-enabled :is(table#forums tr.inline_row td, table#threads tr.inline_row td, table tr.af-rwd-mobile-row td) {
-    width: 100% !important;
+  body.af-rwd-enabled table.af-rwd-mobile-cards td {
     border: 0;
     padding: 2px 0;
-    display: block;
     min-width: 0;
+    overflow-wrap: anywhere;
   }
-
-  body.af-rwd-enabled :is(table#threads tr.inline_row td[data-af-rwd-label], table tr.af-rwd-mobile-row td[data-af-rwd-label])::before {
+  body.af-rwd-enabled table.af-rwd-mobile-cards td[data-af-rwd-label]::before {
     content: attr(data-af-rwd-label);
     display: block;
-    font-size: .74rem;
+    font-size: .72rem;
+    letter-spacing: .02em;
     text-transform: uppercase;
-    opacity: .65;
+    opacity: .7;
     margin-bottom: 2px;
   }
 
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on {
-    font-size: 16px;
-  }
+  body.af-rwd-userlist :is(table.userlist, #userlist, .userlist_table),
+  body.af-rwd-postsactivity :is(table, .postsactivity-table),
+  body.af-rwd-private :is(table.pm_table, #pmdata, table),
+  body.af-rwd-search :is(table.tborder, table),
+  body.af-rwd-usercp :is(#usercp_menu, #usercp_content),
+  body.af-rwd-gallery :is(.ag-grid, .af-gallery-grid),
+  body.af-rwd-kb :is(.af-kb-layout, .af-kb-entries),
+  body.af-rwd-shop :is(.af-shop-grid, .af-shop-hub__grid),
+  body.af-rwd-charactersheets :is(.af-cs-catalog-grid, .af-cs-grid) { min-width: 0 !important; width: 100% !important; }
 
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post.classic.af-rwd-postbit-mobile-ready, .af-apui-postbit.af-rwd-postbit-mobile-ready) {
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post.classic, .af-apui-postbit) {
     display: grid;
     grid-template-columns: 1fr;
     gap: 10px;
     padding: 10px;
   }
-
   body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post_author, .af-apui-postbit-author) {
     display: grid !important;
     grid-template-columns: 1fr auto;
+    gap: 8px;
     align-items: start;
-    gap: 10px;
     width: 100% !important;
     float: none !important;
   }
-
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post_controls, .author_buttons, .af-apui-post-controls) {
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.postbit_buttons.author_buttons, .post_controls, .af-apui-post-controls) {
     grid-column: 1;
-    order: 1;
     display: flex;
     flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 8px;
+    gap: 6px;
+    justify-content: flex-start;
   }
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.author_avatar, .af-apui-postbit-avatar-shell, .af-apui-author-avatar) { grid-column: 2; justify-self: end; }
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.author_statistics, .author_fields, .af-apui-postbit-profilefields, .af-apui-author-meta) { grid-column: 1 / -1; width: 100%; }
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post_content, .post_body, .af-apui-postbit-content, .af-apui-postbit-message) { width: 100% !important; font-size: 1rem; line-height: 1.55; }
 
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.author_avatar, .post_author .author_avatar, .af-apui-author-avatar) {
-    grid-column: 2;
-    order: 2;
-    justify-self: end;
-  }
+  body.af-rwd-enabled :is(.avatar img, .post_avatar img, .author_avatar img) { max-width: 96px; max-height: 96px; }
+  body.af-rwd-enabled #panel .user-avatar img,
+  body.af-rwd-enabled .panel .avatar img,
+  body.af-rwd-enabled .welcome .avatar img { max-width: 34px; max-height: 34px; border-radius: 999px; }
 
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.author_statistics, .author_fields, .post_author .smalltext, .af-apui-author-meta) {
-    grid-column: 1 / -1;
-    order: 3;
-    width: 100%;
-  }
-
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post_content, .af-apui-postbit-content, .post_body, .af-apui-postbit-message) {
-    width: 100% !important;
-    min-width: 0;
-    float: none !important;
-    font-size: 1rem;
-    line-height: 1.6;
-    overflow-wrap: anywhere;
-  }
-
-  body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-page,
-  body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-hero,
-  body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-info-grid,
-  body.af-rwd-usercp.af-rwd-profile-fixes-on :is(#usercp_menu, #usercp_content, .usercp_nav, .usercp_body),
-  body.af-rwd-private :is(#pm_menu, #pm_content, .pm_nav, .pm_body) {
-    display: grid;
-    grid-template-columns: 1fr;
-    width: 100% !important;
-    float: none !important;
-    gap: 10px;
-  }
-
-  body.af-rwd-enabled :is(.af-apui-profile-tabs__nav, .af-cs-tabs__nav, .af-kb-tabs, .af-shop-tabs) {
-    display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    gap: 8px;
-    padding-bottom: 4px;
-  }
-
-  body.af-rwd-postsactivity :is(table, .tborder),
-  body.af-rwd-userlist :is(table, .tborder),
-  body.af-rwd-search :is(table, .tborder),
-  body.af-rwd-gallery :is(table, .tborder),
-  body.af-rwd-kb :is(table, .tborder),
-  body.af-rwd-shop :is(table, .tborder),
-  body.af-rwd-charactersheets :is(table, .tborder),
-  body.af-rwd-forumdisplay :is(table, .tborder) {
-    width: 100% !important;
-    min-width: 0 !important;
-  }
-
-  body.af-rwd-plugin-patches-on.af-rwd-gallery :is(.af-gallery-grid, .gallery_grid, .gallery-images, .gallery_list),
-  body.af-rwd-plugin-patches-on.af-rwd-shop :is(.af-shop-layout, .af-shop-grid, .af-manage-slots-layout, .shop_grid),
-  body.af-rwd-plugin-patches-on.af-rwd-kb :is(.af-kb-page, .af-kb-grid, .kb-grid),
-  body.af-rwd-plugin-patches-on.af-rwd-charactersheets :is(.af-cs-page, .af-cs-grid, .charactersheets-grid) {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  body.af-rwd-plugin-patches-on.af-rwd-charactersheets .af-cs-page .af-cs-hero {
-    grid-template-columns: 1fr;
-  }
-
-  body.af-rwd-plugin-patches-on.af-rwd-inventory .af-inv-page :is(.af-inv-head, .af-inv-wallet, .af-inv-workspace) {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  body.af-rwd-misc.af-rwd-misc-docs :is(.helpdoc, .rules, .af-rules, .af-help, .content, .trow1, .trow2) {
-    max-width: 100%;
-    overflow-wrap: anywhere;
+  body.af-rwd-enabled.af-rwd-modal-fixes-on :is(.modal, .af-modal, .af-cs-modal, .af-apui-modal, .af-aa-preview-modal__window, .af-shop-modal__dialog) {
+    max-width: calc(100vw - 12px) !important;
+    width: calc(100vw - 12px) !important;
+    max-height: calc(100vh - 12px);
+    overflow: auto;
   }
 }
 
-@media (min-width: 901px) {
-  body.af-rwd-enabled .af-rwd-right-trigger,
+@media (min-width: 768px) and (max-width: 1024px) {
+  body.af-rwd-enabled {
+    overflow-x: clip;
+    font-size: 15px;
+  }
+
+  body.af-rwd-enabled #container,
+  body.af-rwd-enabled #content,
+  body.af-rwd-enabled .wrapper,
+  body.af-rwd-enabled .content,
+  body.af-rwd-enabled .pun {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  body.af-rwd-enabled :is(#usercp_menu, #pm_menu) { width: 28% !important; min-width: 180px; }
+  body.af-rwd-enabled :is(#usercp_content, #pm_content) { width: 72% !important; min-width: 0; }
+
+  body.af-rwd-enabled table.af-rwd-tablet-compact td,
+  body.af-rwd-enabled table.af-rwd-tablet-compact th { padding: 8px 6px; }
+
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post_author, .af-apui-postbit-author) {
+    width: 230px !important;
+    min-width: 200px;
+    float: left !important;
+  }
+}
+
+@media (min-width: 1025px) {
+  body.af-rwd-enabled .af-rwd-main-nav-host,
   body.af-rwd-enabled .af-rwd-right-menu,
   body.af-rwd-enabled .af-rwd-extra-overlay,
-  body.af-rwd-enabled .af-rwd-main-nav-host {
-    display: none !important;
-  }
+  body.af-rwd-enabled .af-rwd-right-trigger,
+  body.af-rwd-enabled .af-rwd-main-nav-scroll { display: none !important; }
 }
