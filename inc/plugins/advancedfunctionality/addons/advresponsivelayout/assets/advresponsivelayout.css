@@ -1,194 +1,348 @@
-/* AdvancedFunctionality: Adaptive Responsive Layout
- * Layout/fix-only layer. It does not override theme/APUI skin variables.
+/* AdvancedFunctionality / advresponsivelayout
+ * Full mobile responsive layout system.
+ * Layout-only changes: flow, spacing, grids, ordering, wrappers, drawer behavior.
  */
 
-:root {
-    --af-rwd-page-max: min(100%, 1400px);
-    --af-rwd-layout-gap: var(--af-layout-gap, 16px);
-    --af-rwd-page-pad-mobile: 12px;
-    --af-rwd-page-pad-desktop: 20px;
-    --af-rwd-breakpoint-phone: 576px;
-    --af-rwd-breakpoint-tablet: 768px;
-    --af-rwd-breakpoint-desktop: 1200px;
-    --af-rwd-modal-pad: 14px;
-}
-
+/* 1) reset / foundation */
 html { -webkit-text-size-adjust: 100%; }
 *, *::before, *::after { box-sizing: border-box; }
+
+/* 2) root variables */
+:root {
+  --af-rwd-page-max: min(100%, 1440px);
+  --af-rwd-layout-gap: clamp(10px, 1.6vw, 18px);
+  --af-rwd-radius: 12px;
+  --af-rwd-shadow: 0 10px 26px rgba(0, 0, 0, .22);
+  --af-rwd-page-pad-mobile: 12px;
+  --af-rwd-page-pad-desktop: 20px;
+  --af-rwd-breakpoint-phone: 576px;
+  --af-rwd-breakpoint-tablet: 820px;
+  --af-rwd-breakpoint-desktop: 1200px;
+  --af-rwd-mobile-header-breakpoint: 900px;
+  --af-rwd-overlay-z: 9997;
+  --af-rwd-right-menu-z: 9998;
+  --af-rwd-right-trigger-z: 9999;
+  --af-rwd-main-nav-z: 9988;
+}
+
+/* 3) body/page classes */
 body.af-rwd-enabled {
-    min-width: 320px;
-    overflow-x: hidden;
+  min-width: 320px;
+  overflow-x: hidden;
 }
 
-body.af-rwd-enabled img,
-body.af-rwd-enabled video,
-body.af-rwd-enabled iframe,
-body.af-rwd-enabled svg,
-body.af-rwd-enabled canvas {
-    max-width: 100%;
-    height: auto;
+body.af-rwd-enabled :is(img, video, iframe, svg, canvas) {
+  max-width: 100%;
+  height: auto;
 }
 
-body.af-rwd-enabled input,
-body.af-rwd-enabled button,
-body.af-rwd-enabled textarea,
-body.af-rwd-enabled select { font: inherit; }
+body.af-rwd-enabled :is(input, button, textarea, select) { font: inherit; }
+body.af-rwd-enabled :is(pre, code, kbd, samp) { overflow-wrap: anywhere; }
+body.af-rwd-enabled :is(.container, .wrapper, .content, #content, #container) { min-width: 0; }
+body.af-rwd-enabled table { max-width: 100%; }
+body.af-rwd-enabled .navigation { overflow-wrap: anywhere; }
 
-body.af-rwd-enabled :is(pre, code, kbd, samp) {
+/* 4) mobile header */
+.af-rwd-right-trigger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, .2);
+  background: rgba(10, 15, 25, .86);
+  color: inherit;
+  cursor: pointer;
+}
+
+.af-rwd-right-trigger__icon,
+.af-rwd-right-trigger__icon::before,
+.af-rwd-right-trigger__icon::after {
+  width: 16px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  display: block;
+  content: "";
+  transition: transform .2s ease, opacity .2s ease;
+}
+
+.af-rwd-right-trigger__icon { position: relative; }
+.af-rwd-right-trigger__icon::before { position: absolute; inset: -5px 0 auto; }
+.af-rwd-right-trigger__icon::after { position: absolute; inset: auto 0 -5px; }
+
+/* 5) sticky main nav */
+@media (max-width: 900px) {
+  body.af-rwd-enabled.af-rwd-main-nav-sticky :is(#header ul.menu, #header .menu.top_links, .menu.top_links):first-of-type {
+    position: sticky;
+    top: 0;
+    z-index: var(--af-rwd-main-nav-z);
+    backdrop-filter: blur(5px);
+  }
+}
+
+/* 6) right burger / extra nav drawer */
+.af-rwd-right-menu {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: min(86vw, 390px);
+  transform: translateX(102%);
+  transition: transform .24s ease;
+  z-index: var(--af-rwd-right-menu-z);
+  overflow: auto;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  border-left: 1px solid rgba(255, 255, 255, .14);
+  background: rgba(11, 17, 28, .96);
+}
+
+.af-rwd-right-menu__title {
+  margin: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  opacity: .82;
+}
+
+.af-rwd-right-menu .af-rwd-right-menu__block {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.af-rwd-extra-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--af-rwd-overlay-z);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .2s ease;
+  background: rgba(2, 8, 17, .54);
+}
+
+/* 7) overlays / body lock / nav states */
+body.af-rwd-enabled.af-rwd-right-menu-open {
+  overflow: hidden;
+  touch-action: none;
+}
+
+body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-extra-overlay {
+  opacity: 1;
+  visibility: visible;
+}
+
+body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-right-menu {
+  transform: translateX(0);
+}
+
+body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-right-trigger__icon { background: transparent; }
+body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-right-trigger__icon::before { transform: translateY(5px) rotate(45deg); }
+body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-right-trigger__icon::after { transform: translateY(-5px) rotate(-45deg); }
+
+/* 8) breadcrumbs / utility nav */
+body.af-rwd-enabled :is(.breadcrumb, .pagination, .thread_legend, .forum_legend, .menu, .top_links) {
+  overflow-wrap: anywhere;
+}
+
+/* 9) index responsive layouts */
+@media (max-width: 820px) {
+  body.af-rwd-index.af-rwd-forumdisplay-fixes-on :is(table#forums, .forumdisplay_table, .forum_table) {
+    display: block;
+    border: 0;
+  }
+
+  body.af-rwd-index.af-rwd-forumdisplay-fixes-on :is(table#forums tr, .forumdisplay_table tr, .forum_table tr) {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 10px;
+    margin: 0 0 10px;
+    border-radius: var(--af-rwd-radius);
+    box-shadow: var(--af-rwd-shadow);
+  }
+
+  body.af-rwd-index.af-rwd-forumdisplay-fixes-on :is(td.forumdisplay_regular, td.forumdisplay_sticky, td.forumdisplay_thread, td) {
+    width: 100% !important;
+    display: block;
+    min-width: 0;
+  }
+}
+
+/* 10) forumdisplay responsive layouts */
+@media (max-width: 900px) {
+  body.af-rwd-forumdisplay.af-rwd-forumdisplay-fixes-on :is(.threadlist, #threads, .tborder) {
+    display: block;
+  }
+
+  body.af-rwd-forumdisplay.af-rwd-forumdisplay-fixes-on :is(#threads tr.inline_row, #threads tr) {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin: 0 0 10px;
+    padding: 10px;
+    border-radius: var(--af-rwd-radius);
+  }
+
+  body.af-rwd-forumdisplay.af-rwd-forumdisplay-fixes-on :is(#threads td, .thread_status) {
+    display: block;
+    width: 100% !important;
+  }
+}
+
+/* 11) showthread/postbit responsive layouts */
+body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit, .post.classic) {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on .af-apui-postbit {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-author, .post_author) {
+    order: 1;
+    min-width: 0;
+  }
+
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-content, .post_body) {
+    order: 2;
+    min-width: 0;
+  }
+
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.author_information, .post_author div, .author_avatar, .post_controls, .post_meta) {
     overflow-wrap: anywhere;
     word-break: break-word;
+  }
+
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post_controls, .post_control) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
 }
 
-body.af-rwd-enabled :is(.container, .wrapper, .content, .af-apui-profile-page, .af-apui-postbit, .af-inv-layout, .af-shop-layout, .af-cs-page, .af-kb-page) {
-    min-width: 0;
-}
+/* 12) member/profile responsive layouts */
+@media (max-width: 900px) {
+  body.af-rwd-member.af-rwd-profile-fixes-on :is(.af-apui-profile-hero, .profile_header, .profile) {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
 
-body.af-rwd-enabled table {
-    width: 100%;
-    max-width: 100%;
-    border-collapse: collapse;
-}
-
-body.af-rwd-enabled .af-rwd-table-wrap {
+  body.af-rwd-member.af-rwd-profile-fixes-on :is(.af-apui-profile-tabs, .profile-tabs, .profile_tabs) {
+    display: flex;
+    flex-wrap: nowrap;
     overflow-x: auto;
-    overflow-y: hidden;
-    max-width: 100%;
-    -webkit-overflow-scrolling: touch;
-}
-
-body.af-rwd-enabled .af-rwd-page-container {
-    width: 100%;
-    max-width: var(--af-rwd-page-max);
-    margin-inline: auto;
-    padding-inline: var(--af-rwd-page-pad-desktop);
-}
-
-body.af-rwd-enabled .af-rwd-stack {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--af-rwd-layout-gap);
-}
-
-body.af-rwd-enabled .af-rwd-stack > * { min-width: 0; }
-
-body.af-rwd-enabled .af-rwd-grid-two {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
-    gap: var(--af-rwd-layout-gap);
-}
-
-body.af-rwd-enabled .pagination,
-body.af-rwd-enabled .breadcrumb,
-body.af-rwd-enabled .tcat,
-body.af-rwd-enabled .menu,
-body.af-rwd-enabled .top_links {
-    overflow-wrap: anywhere;
-}
-
-body.af-rwd-showthread.af-rwd-postbit-fixes-on .af-apui-postbit {
-    display: grid;
-    grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
-    gap: var(--af-rwd-layout-gap);
-}
-
-body.af-rwd-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-author,
-body.af-rwd-showthread.af-rwd-postbit-fixes-on .post_author {
-    min-width: 0;
-}
-
-body.af-rwd-showthread.af-rwd-postbit-fixes-on .post_body,
-body.af-rwd-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-content {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
-body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-page,
-body.af-rwd-member.af-rwd-profile-fixes-on .profile,
-body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-tabs__content {
-    min-width: 0;
-}
-
-body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-hero,
-body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-identity {
-    overflow-wrap: anywhere;
-}
-
-body.af-rwd-plugin-patches-on .af-inv-layout,
-body.af-rwd-plugin-patches-on .af-shop-layout,
-body.af-rwd-plugin-patches-on .af-kb-layout,
-body.af-rwd-plugin-patches-on .af-cs-page,
-body.af-rwd-plugin-patches-on .af-cs-layout {
-    min-width: 0;
-    max-width: 100%;
-}
-
-body.af-rwd-plugin-patches-on .af-inv-tabs,
-body.af-rwd-plugin-patches-on .af-shop-tabs,
-body.af-rwd-plugin-patches-on .af-kb-tabs {
-    display: flex;
-    flex-wrap: wrap;
     gap: 8px;
+    padding-bottom: 2px;
+  }
+
+  body.af-rwd-member.af-rwd-profile-fixes-on :is(.af-apui-profile-sidebar, .profile_left, .profile_right) {
+    width: 100% !important;
+    min-width: 0;
+  }
 }
 
-body.af-rwd-modal-surface.af-rwd-modal-fixes-on :is(.modal, .af-modal, .af-aa-preview-modal__window, .af-cs-modal, .af-apui-modal) {
-    max-width: min(100vw - 16px, 980px);
-    width: min(100vw - 16px, 980px);
-    max-height: calc(100vh - 16px);
-    overflow: auto;
-    padding: var(--af-rwd-modal-pad);
+/* 13) usercp responsive layouts */
+@media (max-width: 900px) {
+  body.af-rwd-usercp.af-rwd-profile-fixes-on :is(#usercp_menu, .usercp_nav, .usercp_navlist) {
+    width: 100% !important;
+    float: none !important;
+  }
+
+  body.af-rwd-usercp.af-rwd-profile-fixes-on :is(#usercp_content, .usercp_body, .usercp_main) {
+    width: 100% !important;
+    float: none !important;
+  }
 }
 
-body.af-rwd-enabled iframe.af-cs-iframe,
-body.af-rwd-enabled iframe.af-inv-iframe {
-    width: 100%;
-    max-width: 100%;
+/* 14) modal / surface / iframe responsive layouts */
+body.af-rwd-modal-surface.af-rwd-modal-fixes-on :is(.modal, .af-modal, .af-cs-modal, .af-apui-modal, .af-aa-preview-modal__window) {
+  width: min(100vw - 14px, 980px);
+  max-width: min(100vw - 14px, 980px);
+  max-height: calc(100vh - 14px);
+  overflow: auto;
 }
 
-@media (max-width: 1200px) {
-    body.af-rwd-enabled .af-rwd-grid-two {
-        grid-template-columns: minmax(0, 1fr);
-    }
+body.af-rwd-enabled :is(iframe.af-cs-iframe, iframe.af-inv-iframe) {
+  width: 100%;
+  max-width: 100%;
 }
 
-@media (max-width: 768px) {
-    body.af-rwd-enabled .af-rwd-page-container {
-        padding-inline: var(--af-rwd-page-pad-mobile);
-    }
+/* 15) plugin patches */
+@media (max-width: 900px) {
+  body.af-rwd-plugin-patches-on.af-rwd-inventory :is(.af-inv-head, .af-inv-wallet, .af-inv-workspace) {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
 
-    body.af-rwd-enabled .menu,
-    body.af-rwd-enabled .top_links,
-    body.af-rwd-enabled .breadcrumb {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-    }
+  body.af-rwd-plugin-patches-on.af-rwd-shop :is(.af-shop-layout, .af-manage-slots-layout) {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
 
-    body.af-rwd-showthread.af-rwd-postbit-fixes-on .af-apui-postbit {
-        grid-template-columns: minmax(0, 1fr);
-    }
+  body.af-rwd-plugin-patches-on.af-rwd-shop :is(.af-shop-grid, .af-shop-hub__grid) {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
 
-    body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-author, .post_author) {
-        order: 1;
-    }
+  body.af-rwd-plugin-patches-on.af-rwd-kb :is(.af-kb-page, .af-kb-tabs, .af-kb-header) {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
 
-    body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-content, .post_body) {
-        order: 2;
-    }
+  body.af-rwd-plugin-patches-on.af-rwd-charactersheets :is(.af-cs-hero, .af-cs-summary__title-row, .af-cs-button-row) {
+    grid-template-columns: 1fr;
+    display: grid;
+    gap: 10px;
+  }
+
+  body.af-rwd-plugin-patches-on.af-rwd-charactersheets .af-cs-portrait {
+    min-height: 220px;
+  }
 }
 
-@media (max-width: 576px) {
-    body.af-rwd-enabled .navigation,
-    body.af-rwd-enabled #panel,
-    body.af-rwd-enabled #header ul.menu {
-        overflow-x: auto;
-        overflow-y: hidden;
-        white-space: nowrap;
-    }
+/* 16) utility helpers */
+body.af-rwd-enabled .af-rwd-table-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
 
-    body.af-rwd-modal-surface.af-rwd-modal-fixes-on :is(.modal, .af-modal, .af-cs-modal, .af-apui-modal) {
-        max-width: calc(100vw - 8px);
-        width: calc(100vw - 8px);
-        max-height: calc(100vh - 8px);
-        padding: 10px;
-    }
+body.af-rwd-enabled .af-rwd-hide-mobile { display: none !important; }
+
+/* 17) breakpoint blocks */
+@media (max-width: 900px) {
+  body.af-rwd-enabled {
+    padding-inline: var(--af-rwd-page-pad-mobile);
+  }
+
+  body.af-rwd-enabled.af-rwd-right-burger .af-rwd-right-trigger {
+    display: inline-flex;
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    z-index: var(--af-rwd-right-trigger-z);
+  }
+
+  body.af-rwd-enabled.af-rwd-right-burger :is(.menu.top_links, ul.menu.panel_links, ul.menu.user_links, #panel .upper, #panel .lower) {
+    display: none;
+  }
+}
+
+@media (min-width: 901px) {
+  body.af-rwd-enabled .af-rwd-right-trigger,
+  body.af-rwd-enabled .af-rwd-right-menu,
+  body.af-rwd-enabled .af-rwd-extra-overlay {
+    display: none !important;
+  }
 }
