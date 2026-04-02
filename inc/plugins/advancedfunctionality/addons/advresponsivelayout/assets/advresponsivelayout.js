@@ -42,28 +42,20 @@
     body.classList.toggle('af-rwd-modal-surface', !!modalNode);
   }
 
-  function getExtraNavNodes() {
-    var selectors = [
-      'ul.menu.top_links',
-      'ul.menu.panel_links',
-      'ul.menu.user_links',
-      '#panel .upper',
-      '#panel .lower',
-      '#panel'
-    ];
-
+    function getExtraNavNodes() {
     var result = [];
-    selectors.forEach(function (selector) {
-      document.querySelectorAll(selector).forEach(function (node) {
+    [
+        '#panel .lower'
+    ].forEach(function (selector) {
+        document.querySelectorAll(selector).forEach(function (node) {
         if (!node) return;
         if (node.closest('#' + state.drawerId)) return;
         if (result.indexOf(node) !== -1) return;
         result.push(node);
-      });
+        });
     });
-
     return result;
-  }
+    }
 
   function ensureRightMenuShell() {
     var trigger = document.getElementById(state.triggerId);
