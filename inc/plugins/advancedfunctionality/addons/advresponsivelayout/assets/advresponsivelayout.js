@@ -8,13 +8,20 @@
     initialized: false,
     drawerOpen: false,
     drawerId: 'af-rwd-right-menu',
-    triggerId: 'af-rwd-right-trigger'
+    triggerId: 'af-rwd-right-trigger',
+    mainNavHostId: 'af-rwd-main-nav-host',
+    mainNavPlaceholderClass: 'af-rwd-main-nav-placeholder',
+    extraMenuPlaceholderClass: 'af-rwd-extra-menu-placeholder'
   };
 
+  function cssVarInt(name, fallback) {
+    var value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    var parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  }
+
   function isMobileHeaderViewport() {
-    var value = getComputedStyle(document.documentElement).getPropertyValue('--af-rwd-mobile-header-breakpoint').trim();
-    var bp = parseInt(value, 10);
-    if (!Number.isFinite(bp) || bp <= 0) bp = 900;
+    var bp = cssVarInt('--af-rwd-mobile-header-breakpoint', 900);
     return window.matchMedia('(max-width: ' + bp + 'px)').matches;
   }
 
@@ -26,6 +33,7 @@
     tables.forEach(function (table) {
       if (table.closest('.af-rwd-table-wrap')) return;
       if (table.closest('.sceditor-container, .sceditor-group, .CodeMirror')) return;
+      if (table.matches('.af-rwd-no-wrap, [data-af-rwd-no-wrap]')) return;
       var parent = table.parentElement;
       if (!parent) return;
 
@@ -42,13 +50,58 @@
     body.classList.toggle('af-rwd-modal-surface', !!modalNode);
   }
 
-  function getExtraNavNodes() {
-    var lower = document.querySelector('#panel .lower');
-    if (!lower || lower.closest('#' + state.drawerId)) {
-      return [];
+  function ensureMainNavHost() {
+    var host = document.getElementById(state.mainNavHostId);
+    if (host) return host;
+
+    host = document.createElement('div');
+    host.id = state.mainNavHostId;
+    host.className = 'af-rwd-main-nav-host';
+    host.setAttribute('role', 'navigation');
+    host.setAttribute('aria-label', 'Main forum navigation');
+    host.hidden = true;
+    body.appendChild(host);
+    return host;
+  }
+
+  function moveMainMenuForMobile() {
+    if (!body.classList.contains('af-rwd-main-nav-sticky')) return;
+    var menu = document.querySelector('#header ul.menu.top_links, #header .menu.top_links');
+    if (!menu) return;
+
+    var host = ensureMainNavHost();
+
+    if (isMobileHeaderViewport()) {
+      if (!menu.classList.contains('af-rwd-main-nav-live')) {
+        var ph = document.createElement('span');
+        ph.className = state.mainNavPlaceholderClass;
+        ph.hidden = true;
+        menu.parentNode.insertBefore(ph, menu);
+      }
+      menu.classList.add('af-rwd-main-nav-live');
+      host.hidden = false;
+      host.appendChild(menu);
+      body.classList.add('af-rwd-main-nav-mounted');
+      return;
     }
 
-    return [lower];
+    if (!menu.classList.contains('af-rwd-main-nav-live')) return;
+
+    var placeholder = document.querySelector('.' + state.mainNavPlaceholderClass);
+    if (placeholder && placeholder.parentNode) {
+      placeholder.parentNode.insertBefore(menu, placeholder);
+      placeholder.remove();
+    }
+    menu.classList.remove('af-rwd-main-nav-live');
+    body.classList.remove('af-rwd-main-nav-mounted');
+    host.hidden = true;
+  }
+
+  function getExtraNavNode() {
+    var lower = document.querySelector('#panel .lower');
+    if (!lower) return null;
+    if (lower.closest('#' + state.drawerId)) return null;
+    return lower;
   }
 
   function ensureRightMenuShell() {
@@ -87,26 +140,38 @@
     return { trigger: trigger, overlay: overlay, drawer: drawer };
   }
 
-  function cloneToDrawer(drawer) {
-    drawer.innerHTML = '';
+  function moveExtraMenuForMobile(drawer) {
+    var lower = getExtraNavNode();
+    if (!lower) return;
 
-    var nodes = getExtraNavNodes();
-    if (!nodes.length) return;
+    if (isMobileHeaderViewport()) {
+      if (!lower.classList.contains('af-rwd-extra-menu-live')) {
+        var ph = document.createElement('span');
+        ph.className = state.extraMenuPlaceholderClass;
+        ph.hidden = true;
+        lower.parentNode.insertBefore(ph, lower);
+      }
+      lower.classList.add('af-rwd-extra-menu-live');
+      drawer.appendChild(lower);
+      body.classList.add('af-rwd-has-extra-menu');
+      return;
+    }
 
-    nodes.forEach(function (node) {
-      var wrap = document.createElement('section');
-      wrap.className = 'af-rwd-right-menu__block';
+    restoreExtraMenu();
+  }
 
-      var title = document.createElement('h2');
-      title.className = 'af-rwd-right-menu__title';
-      title.textContent = 'User menu';
-      wrap.appendChild(title);
+  function restoreExtraMenu() {
+    var lower = document.querySelector('#' + state.drawerId + ' .lower.af-rwd-extra-menu-live');
+    if (!lower) return;
 
-      var clone = node.cloneNode(true);
-      clone.removeAttribute('id');
-      wrap.appendChild(clone);
-      drawer.appendChild(wrap);
-    });
+    var placeholder = document.querySelector('.' + state.extraMenuPlaceholderClass);
+    if (placeholder && placeholder.parentNode) {
+      placeholder.parentNode.insertBefore(lower, placeholder);
+      placeholder.remove();
+    }
+
+    lower.classList.remove('af-rwd-extra-menu-live');
+    body.classList.remove('af-rwd-has-extra-menu');
   }
 
   function setRightMenuState(isOpen, shell) {
@@ -129,15 +194,12 @@
   function setupRightBurgerMenu() {
     if (!body.classList.contains('af-rwd-right-burger')) return;
 
-    var nodes = getExtraNavNodes();
-    if (!nodes.length) return;
-
     var shell = ensureRightMenuShell();
-    cloneToDrawer(shell.drawer);
+    moveExtraMenuForMobile(shell.drawer);
 
     shell.trigger.addEventListener('click', function () {
       if (!isMobileHeaderViewport()) return;
-      if (!state.drawerOpen) cloneToDrawer(shell.drawer);
+      moveExtraMenuForMobile(shell.drawer);
       setRightMenuState(!state.drawerOpen, shell);
     });
 
@@ -160,6 +222,8 @@
       if (!isMobileHeaderViewport()) {
         closeRightMenu(shell);
       }
+      moveMainMenuForMobile();
+      moveExtraMenuForMobile(shell.drawer);
     }, { passive: true });
   }
 
@@ -170,7 +234,7 @@
         headers.push((th.textContent || '').trim());
       });
 
-      table.querySelectorAll('tbody tr, tr.inline_row, tr[id^="thread_"]').forEach(function (row) {
+      table.querySelectorAll('tbody tr, tr.inline_row, tr[id^="thread_"], tr[id^="forum_"]').forEach(function (row) {
         if (row.querySelector('th')) return;
         row.classList.add('af-rwd-mobile-row');
 
@@ -207,11 +271,16 @@
     });
   }
 
+  function adaptUtilityPages() {
+    applyMobileTableLabels('body.af-rwd-postsactivity table, body.af-rwd-userlist table, body.af-rwd-search table, body.af-rwd-private table, body.af-rwd-usercp table');
+  }
+
   function initPageAdapters() {
     adaptIndex();
     adaptForumdisplay();
     adaptShowthread();
     adaptProfile();
+    adaptUtilityPages();
   }
 
   function initOnce() {
@@ -220,6 +289,7 @@
 
     wrapWideTables(document);
     syncModalClass();
+    moveMainMenuForMobile();
     setupRightBurgerMenu();
     initPageAdapters();
 
@@ -236,6 +306,7 @@
       if (!shouldRefresh) return;
       wrapWideTables(document);
       syncModalClass();
+      moveMainMenuForMobile();
       initPageAdapters();
     });
 

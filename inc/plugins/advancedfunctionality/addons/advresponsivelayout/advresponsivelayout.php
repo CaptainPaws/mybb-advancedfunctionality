@@ -284,6 +284,12 @@ function af_advresponsivelayout_detect_page_aliases(string $script, string $acti
         'showthread.php' => 'af-rwd-showthread',
         'member.php' => 'af-rwd-member',
         'usercp.php' => 'af-rwd-usercp',
+        'private.php' => 'af-rwd-private',
+        'postsactivity.php' => 'af-rwd-postsactivity',
+        'userlist.php' => 'af-rwd-userlist',
+        'search.php' => 'af-rwd-search',
+        'gallery.php' => 'af-rwd-gallery',
+        'misc.php' => 'af-rwd-misc',
         'shop.php' => 'af-rwd-shop',
         'inventory.php' => 'af-rwd-inventory',
         'inventories.php' => 'af-rwd-inventory',
@@ -308,6 +314,12 @@ function af_advresponsivelayout_detect_page_aliases(string $script, string $acti
         }
         if ($action === 'af_charactersheet' || strpos($action, 'charactersheet') !== false) {
             $classes[] = 'af-rwd-charactersheets';
+        }
+        if (in_array($action, ['help', 'advancedrules'], true)) {
+            $classes[] = 'af-rwd-misc-docs';
+        }
+        if (strpos($action, 'gallery') === 0) {
+            $classes[] = 'af-rwd-gallery';
         }
     }
 
