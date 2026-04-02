@@ -13,7 +13,8 @@
     mainNavBarClass: 'af-rwd-main-nav-bar',
     mainNavShellClass: 'af-rwd-main-nav-shell',
     placeholderClass: 'af-rwd-main-nav-placeholder',
-    extraPlaceholderClass: 'af-rwd-extra-menu-placeholder'
+    extraPlaceholderClass: 'af-rwd-extra-menu-placeholder',
+    listenersBound: false
   };
 
   function cssVarInt(name, fallback) {
@@ -70,6 +71,11 @@
       'body.af-rwd-postsactivity table',
       'body.af-rwd-private table.pm_table',
       'body.af-rwd-search table',
+      'body.af-rwd-usercp table',
+      'body.af-rwd-gallery table',
+      'body.af-rwd-kb table',
+      'body.af-rwd-shop table',
+      'body.af-rwd-charactersheets table',
       'body.af-rwd-forumdisplay table#threads',
       'body.af-rwd-index table#forums'
     ];
@@ -159,7 +165,9 @@
   function mountMainMenu() {
     if (!body.classList.contains('af-rwd-main-nav-sticky')) return;
 
-    var menu = document.querySelector('#header ul.menu.top_links, #header .menu.top_links');
+    var menu = document.querySelector(
+      '#header ul.menu.top_links, #header .menu.top_links, .top_links ul.menu, nav ul.menu.top_links, #panel ul.menu.top_links'
+    );
     if (!menu) return;
 
     var host = ensureMainNavHost();
@@ -210,7 +218,7 @@
   }
 
   function getExtraNavNode() {
-    var lower = document.querySelector('#panel .lower');
+    var lower = document.querySelector('#panel .lower, .panel .lower, #header .lower, .menu.panel_links, .top_links + .lower');
     if (!lower) return null;
     if (lower.closest('#' + state.drawerId)) return null;
     return lower;
@@ -306,22 +314,26 @@
     if (!shell) return;
     moveExtraMenu(shell);
 
-    shell.trigger.addEventListener('click', function () {
-      if (!isMobileViewport()) return;
-      setRightMenuState(!state.drawerOpen, shell);
-    });
+    if (!state.listenersBound) {
+      state.listenersBound = true;
 
-    shell.overlay.addEventListener('click', function () { setRightMenuState(false, shell); });
+      shell.trigger.addEventListener('click', function () {
+        if (!isMobileViewport()) return;
+        setRightMenuState(!state.drawerOpen, shell);
+      });
 
-    document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape') setRightMenuState(false, shell);
-    });
+      shell.overlay.addEventListener('click', function () { setRightMenuState(false, shell); });
 
-    document.addEventListener('click', function (event) {
-      if (!state.drawerOpen) return;
-      if (shell.trigger.contains(event.target) || shell.drawer.contains(event.target)) return;
-      setRightMenuState(false, shell);
-    });
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') setRightMenuState(false, shell);
+      });
+
+      document.addEventListener('click', function (event) {
+        if (!state.drawerOpen) return;
+        if (shell.trigger.contains(event.target) || shell.drawer.contains(event.target)) return;
+        setRightMenuState(false, shell);
+      });
+    }
 
     window.addEventListener('resize', function () {
       updateViewportClasses();
@@ -349,6 +361,23 @@
     });
   }
 
+  function fixPostbitFlow() {
+    if (!isMobileViewport()) return;
+    document.querySelectorAll('.post.classic, .af-apui-postbit').forEach(function (post) {
+      post.style.overflow = 'visible';
+    });
+    document.querySelectorAll('.post_author, .af-apui-postbit-author').forEach(function (author) {
+      author.style.minWidth = '0';
+    });
+  }
+
+  function tuneMobileEditor() {
+    if (!isMobileViewport()) return;
+    document.querySelectorAll('.sceditor-container, #quickreply_e, #quickreply').forEach(function (editor) {
+      editor.style.minWidth = '0';
+    });
+  }
+
   function syncModalClass() {
     var hasModal = !!document.querySelector('.modal, .af-modal, .af-cs-modal, .af-apui-modal, .af-shop-modal__dialog');
     body.classList.toggle('af-rwd-modal-surface', hasModal);
@@ -363,6 +392,8 @@
     adaptCoreTables();
     wrapNarrowTables();
     stabilizeAvatars();
+    fixPostbitFlow();
+    tuneMobileEditor();
     syncModalClass();
 
     var observer = new MutationObserver(function (mutations) {
@@ -373,6 +404,8 @@
       adaptCoreTables();
       wrapNarrowTables();
       stabilizeAvatars();
+      fixPostbitFlow();
+      tuneMobileEditor();
       syncModalClass();
     });
 
