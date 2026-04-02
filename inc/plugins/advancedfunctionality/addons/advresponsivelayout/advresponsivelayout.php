@@ -334,7 +334,7 @@ function af_advresponsivelayout_add_body_classes(string $page): string
     $script = af_advresponsivelayout_current_script_name();
     $action = af_advresponsivelayout_normalize_action((string)$mybb->get_input('action'));
 
-    $classes = ['af-rwd-enabled', 'af-rwd-extra-nav-closed'];
+    $classes = ['af-rwd-enabled', 'af-rwd-right-menu-closed'];
     if ($script !== '') {
         $classes[] = 'af-rwd-script-' . preg_replace('~[^a-z0-9_-]+~', '-', str_replace('.php', '', $script));
     }
@@ -448,7 +448,7 @@ function af_advresponsivelayout_append_runtime_assets(string $page): string
     $vJs = @is_file($jsFile) ? (string)@filemtime($jsFile) : '1';
 
     $viewportMeta = '';
-    if (!preg_match('~<meta[^>]+name=(["\'])viewport\1~i', $page)) {
+    if (!preg_match('~<meta\b[^>]*\bname\s*=\s*(?:["\']viewport["\']|viewport)\b[^>]*>~i', $page)) {
         $viewportMeta = '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">' . "\n";
     }
 
