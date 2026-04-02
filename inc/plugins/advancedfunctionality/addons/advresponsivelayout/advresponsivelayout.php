@@ -447,13 +447,19 @@ function af_advresponsivelayout_append_runtime_assets(string $page): string
     $vCss = @is_file($cssFile) ? (string)@filemtime($cssFile) : '1';
     $vJs = @is_file($jsFile) ? (string)@filemtime($jsFile) : '1';
 
+    $viewportMeta = '';
+    if (!preg_match('~<meta[^>]+name=(["\'])viewport\1~i', $page)) {
+        $viewportMeta = '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">' . "\n";
+    }
+
     $bits = "\n" . AF_ADVRWD_MARK . "\n"
+        . $viewportMeta
         . af_advresponsivelayout_runtime_style_tag() . "\n"
         . '<link rel="stylesheet" href="' . htmlspecialchars_uni($base . 'advresponsivelayout.css?v=' . rawurlencode($vCss)) . '">' . "\n"
         . '<script defer src="' . htmlspecialchars_uni($base . 'advresponsivelayout.js?v=' . rawurlencode($vJs)) . '"></script>' . "\n";
 
     if (stripos($page, '</head>') !== false) {
-        return (string)str_ireplace('</head>', $bits . '</head>', $page);
+        return (string)preg_replace('~</head>~i', $bits . '</head>', $page, 1);
     }
 
     return $bits . $page;
