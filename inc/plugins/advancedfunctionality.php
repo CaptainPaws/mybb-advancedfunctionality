@@ -4638,6 +4638,97 @@ function af_theme_stylesheet_resolve_theme_href_from_state(array $state, int $th
     return '';
 }
 
+function af_theme_stylesheet_is_attached_to_request(string $attachedTo): bool
+{
+    global $mybb;
+
+    $attachedTo = trim($attachedTo);
+    if ($attachedTo === '') {
+        return false;
+    }
+
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    $action = strtolower(trim((string)($mybb->input['action'] ?? '')));
+    $tokens = preg_split('~\|~', $attachedTo) ?: [];
+
+    foreach ($tokens as $tokenRaw) {
+        $token = trim((string)$tokenRaw);
+        if ($token === '') {
+            continue;
+        }
+
+        if (strtolower($token) === 'global') {
+            return true;
+        }
+
+        $parts = explode('?', $token, 2);
+        $file = strtolower(trim((string)$parts[0]));
+        $file = basename($file);
+        if ($file === '') {
+            continue;
+        }
+        if (strpos($file, '.php') === false) {
+            $file .= '.php';
+        }
+
+        if ($script !== '' && $file !== $script) {
+            continue;
+        }
+
+        if (!isset($parts[1]) || trim((string)$parts[1]) === '') {
+            return true;
+        }
+
+        parse_str((string)$parts[1], $query);
+        $neededAction = strtolower(trim((string)($query['action'] ?? '')));
+        if ($neededAction === '' || $neededAction === $action) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function af_theme_stylesheet_is_usable_on_current_request(array $state, int $themeTid): bool
+{
+    global $db;
+
+    $sid = (int)($state['stylesheet_sid'] ?? 0);
+    $name = trim((string)($state['stylesheet_name'] ?? ''));
+
+    if ($sid <= 0 && $name === '') {
+        return false;
+    }
+
+    $row = [];
+    if ($sid > 0) {
+        $q = $db->simple_select(
+            'themestylesheets',
+            'sid,attachedto',
+            "sid='" . (int)$sid . "' AND tid='" . (int)$themeTid . "'",
+            ['limit' => 1]
+        );
+        $row = $db->fetch_array($q) ?: [];
+    }
+
+    if (!$row && $name !== '') {
+        $nameEsc = $db->escape_string($name);
+        $q = $db->simple_select(
+            'themestylesheets',
+            'sid,attachedto',
+            "tid='" . (int)$themeTid . "' AND name='{$nameEsc}'",
+            ['order_by' => 'sid', 'order_dir' => 'asc', 'limit' => 1]
+        );
+        $row = $db->fetch_array($q) ?: [];
+    }
+
+    if (!$row) {
+        return false;
+    }
+
+    return af_theme_stylesheet_is_attached_to_request((string)($row['attachedto'] ?? ''));
+}
+
 function af_theme_stylesheet_frontend_href_for_candidate(string $addonId, string $fileRel): string
 {
     $decision = af_theme_stylesheet_delivery_decision($addonId, $fileRel);
@@ -4676,14 +4767,15 @@ function af_theme_stylesheet_delivery_decision(string $addonId, string $fileRel)
 
             $stateThemeTid = (int)($state['theme_tid'] ?? 0);
             $themeHref = af_theme_stylesheet_resolve_theme_href_from_state($state, $stateThemeTid);
+            $themeUsable = ($themeHref !== '') && af_theme_stylesheet_is_usable_on_current_request($state, $stateThemeTid);
 
             if ($mode === 'theme') {
                 return [
                     'mode' => 'theme',
                     'state_found' => true,
-                    'is_integrated' => ($themeHref !== ''),
-                    'include_file' => false,
-                    'use_theme_stylesheet' => ($themeHref !== ''),
+                    'is_integrated' => $themeUsable,
+                    'include_file' => !$themeUsable,
+                    'use_theme_stylesheet' => $themeUsable,
                     'theme_href' => $themeHref,
                 ];
             }
@@ -4699,7 +4791,7 @@ function af_theme_stylesheet_delivery_decision(string $addonId, string $fileRel)
                 ];
             }
 
-            if ($mode === 'auto' && $themeHref !== '') {
+            if ($mode === 'auto' && $themeUsable) {
                 return [
                     'mode' => 'auto',
                     'state_found' => true,
@@ -4766,19 +4858,20 @@ function af_theme_stylesheet_delivery_decision(string $addonId, string $fileRel)
                 ];
 
                 $themeHref = af_theme_stylesheet_resolve_theme_href_from_state($pseudoState, $themeTid);
+                $themeUsable = ($themeHref !== '') && af_theme_stylesheet_is_usable_on_current_request($pseudoState, $themeTid);
 
                 if ($mode === 'theme') {
                     return [
                         'mode' => 'theme',
                         'state_found' => true,
-                        'is_integrated' => ($themeHref !== ''),
-                        'include_file' => false,
-                        'use_theme_stylesheet' => ($themeHref !== ''),
+                        'is_integrated' => $themeUsable,
+                        'include_file' => !$themeUsable,
+                        'use_theme_stylesheet' => $themeUsable,
                         'theme_href' => $themeHref,
                     ];
                 }
 
-                if ($mode === 'auto' && $themeHref !== '') {
+                if ($mode === 'auto' && $themeUsable) {
                     return [
                         'mode' => 'auto',
                         'state_found' => true,
