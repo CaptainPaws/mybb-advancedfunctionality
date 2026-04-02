@@ -121,6 +121,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     $sheet_nicknames = htmlspecialchars_uni($character_nicknames !== '' ? $character_nicknames : '—');
     $sheet_id = (int)($sheet['id'] ?? 0);
     $sheet_post_key = htmlspecialchars_uni($mybb->post_code);
+    $sheet_owner_uid = (int)$uid;
     $bonus_items_json = htmlspecialchars_uni(af_charactersheets_json_encode((array)($sheet_view['bonus_items'] ?? [])));
 
     $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n";
@@ -151,11 +152,13 @@ function af_charactersheets_render_sheet_page(string $slug): void
 
     $isEmbed = (string)$mybb->get_input('embed') === '1';
     $isAjax = (string)$mybb->get_input('ajax') === '1';
+    $surface = strtolower(trim((string)$mybb->get_input('af_apui_surface')));
+    $isSheetSurfaceRequest = ($surface === 'sheet');
 
     // ajax/fragments only for partial in-page rendering (profile tabs, inline loads).
     // iframe modal route from postbit must always use a full embed page with the
     // normal MyBB headerinclude/header/footer contract so forum/theme/plugin assets load.
-    if ($isAjax && !$isEmbed) {
+    if ($isAjax && !$isEmbed && !$isSheetSurfaceRequest) {
         $page = $sheet_inner;
     } elseif ($isEmbed) {
         $tplModalFullpage = $templates->get('af_cs_modal_fullpage');
