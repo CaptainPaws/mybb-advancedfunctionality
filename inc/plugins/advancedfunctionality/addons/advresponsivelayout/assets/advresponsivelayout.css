@@ -1,18 +1,7 @@
-/* AdvancedFunctionality / advresponsivelayout
- * Full mobile responsive layout system.
- * Layout-only changes: flow, spacing, grids, ordering, wrappers, drawer behavior.
- */
-
-/* 1) reset / foundation */
 html { -webkit-text-size-adjust: 100%; }
 *, *::before, *::after { box-sizing: border-box; }
 
-/* 2) root variables */
 :root {
-  --af-rwd-page-max: min(100%, 1440px);
-  --af-rwd-layout-gap: clamp(10px, 1.6vw, 18px);
-  --af-rwd-radius: 12px;
-  --af-rwd-shadow: 0 10px 26px rgba(0, 0, 0, .22);
   --af-rwd-page-pad-mobile: 12px;
   --af-rwd-page-pad-desktop: 20px;
   --af-rwd-breakpoint-phone: 576px;
@@ -23,15 +12,16 @@ html { -webkit-text-size-adjust: 100%; }
   --af-rwd-right-menu-z: 9998;
   --af-rwd-right-trigger-z: 9999;
   --af-rwd-main-nav-z: 9988;
+  --af-rwd-shadow: 0 8px 20px rgba(0, 0, 0, .18);
+  --af-rwd-radius: 12px;
 }
 
-/* 3) body/page classes */
 body.af-rwd-enabled {
   min-width: 320px;
   overflow-x: hidden;
 }
 
-body.af-rwd-enabled :is(img, video, iframe, svg, canvas) {
+body.af-rwd-enabled :is(img, video, svg, canvas) {
   max-width: 100%;
   height: auto;
 }
@@ -39,10 +29,8 @@ body.af-rwd-enabled :is(img, video, iframe, svg, canvas) {
 body.af-rwd-enabled :is(input, button, textarea, select) { font: inherit; }
 body.af-rwd-enabled :is(pre, code, kbd, samp) { overflow-wrap: anywhere; }
 body.af-rwd-enabled :is(.container, .wrapper, .content, #content, #container) { min-width: 0; }
-body.af-rwd-enabled table { max-width: 100%; }
 body.af-rwd-enabled .navigation { overflow-wrap: anywhere; }
 
-/* 4) mobile header */
 .af-rwd-right-trigger {
   display: none;
   align-items: center;
@@ -52,7 +40,6 @@ body.af-rwd-enabled .navigation { overflow-wrap: anywhere; }
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, .2);
   background: rgba(10, 15, 25, .86);
-  color: inherit;
   cursor: pointer;
 }
 
@@ -72,17 +59,6 @@ body.af-rwd-enabled .navigation { overflow-wrap: anywhere; }
 .af-rwd-right-trigger__icon::before { position: absolute; inset: -5px 0 auto; }
 .af-rwd-right-trigger__icon::after { position: absolute; inset: auto 0 -5px; }
 
-/* 5) sticky main nav */
-@media (max-width: 900px) {
-  body.af-rwd-enabled.af-rwd-main-nav-sticky :is(#header ul.menu, #header .menu.top_links, .menu.top_links):first-of-type {
-    position: sticky;
-    top: 0;
-    z-index: var(--af-rwd-main-nav-z);
-    backdrop-filter: blur(5px);
-  }
-}
-
-/* 6) right burger / extra nav drawer */
 .af-rwd-right-menu {
   position: fixed;
   top: 0;
@@ -94,25 +70,15 @@ body.af-rwd-enabled .navigation { overflow-wrap: anywhere; }
   z-index: var(--af-rwd-right-menu-z);
   overflow: auto;
   padding: 14px;
-  display: grid;
-  gap: 10px;
   border-left: 1px solid rgba(255, 255, 255, .14);
   background: rgba(11, 17, 28, .96);
 }
 
 .af-rwd-right-menu__title {
-  margin: 0;
+  margin: 0 0 10px;
   font-size: 13px;
   text-transform: uppercase;
-  letter-spacing: .08em;
   opacity: .82;
-}
-
-.af-rwd-right-menu .af-rwd-right-menu__block {
-  min-width: 0;
-  border: 1px solid rgba(255, 255, 255, .1);
-  border-radius: 10px;
-  padding: 10px;
 }
 
 .af-rwd-extra-overlay {
@@ -125,7 +91,6 @@ body.af-rwd-enabled .navigation { overflow-wrap: anywhere; }
   background: rgba(2, 8, 17, .54);
 }
 
-/* 7) overlays / body lock / nav states */
 body.af-rwd-enabled.af-rwd-right-menu-open {
   overflow: hidden;
   touch-action: none;
@@ -144,173 +109,6 @@ body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-right-trigger__icon { backgro
 body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-right-trigger__icon::before { transform: translateY(5px) rotate(45deg); }
 body.af-rwd-enabled.af-rwd-right-menu-open .af-rwd-right-trigger__icon::after { transform: translateY(-5px) rotate(-45deg); }
 
-/* 8) breadcrumbs / utility nav */
-body.af-rwd-enabled :is(.breadcrumb, .pagination, .thread_legend, .forum_legend, .menu, .top_links) {
-  overflow-wrap: anywhere;
-}
-
-/* 9) index responsive layouts */
-@media (max-width: 820px) {
-  body.af-rwd-index.af-rwd-forumdisplay-fixes-on :is(table#forums, .forumdisplay_table, .forum_table) {
-    display: block;
-    border: 0;
-  }
-
-  body.af-rwd-index.af-rwd-forumdisplay-fixes-on :is(table#forums tr, .forumdisplay_table tr, .forum_table tr) {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-    padding: 10px;
-    margin: 0 0 10px;
-    border-radius: var(--af-rwd-radius);
-    box-shadow: var(--af-rwd-shadow);
-  }
-
-  body.af-rwd-index.af-rwd-forumdisplay-fixes-on :is(td.forumdisplay_regular, td.forumdisplay_sticky, td.forumdisplay_thread, td) {
-    width: 100% !important;
-    display: block;
-    min-width: 0;
-  }
-}
-
-/* 10) forumdisplay responsive layouts */
-@media (max-width: 900px) {
-  body.af-rwd-forumdisplay.af-rwd-forumdisplay-fixes-on :is(.threadlist, #threads, .tborder) {
-    display: block;
-  }
-
-  body.af-rwd-forumdisplay.af-rwd-forumdisplay-fixes-on :is(#threads tr.inline_row, #threads tr) {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-    margin: 0 0 10px;
-    padding: 10px;
-    border-radius: var(--af-rwd-radius);
-  }
-
-  body.af-rwd-forumdisplay.af-rwd-forumdisplay-fixes-on :is(#threads td, .thread_status) {
-    display: block;
-    width: 100% !important;
-  }
-}
-
-/* 11) showthread/postbit responsive layouts */
-body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit, .post.classic) {
-  min-width: 0;
-}
-
-@media (max-width: 900px) {
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on .af-apui-postbit {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-author, .post_author) {
-    order: 1;
-    min-width: 0;
-  }
-
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-content, .post_body) {
-    order: 2;
-    min-width: 0;
-  }
-
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.author_information, .post_author div, .author_avatar, .post_controls, .post_meta) {
-    overflow-wrap: anywhere;
-    word-break: break-word;
-  }
-
-  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post_controls, .post_control) {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-}
-
-/* 12) member/profile responsive layouts */
-@media (max-width: 900px) {
-  body.af-rwd-member.af-rwd-profile-fixes-on :is(.af-apui-profile-hero, .profile_header, .profile) {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  body.af-rwd-member.af-rwd-profile-fixes-on :is(.af-apui-profile-tabs, .profile-tabs, .profile_tabs) {
-    display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    gap: 8px;
-    padding-bottom: 2px;
-  }
-
-  body.af-rwd-member.af-rwd-profile-fixes-on :is(.af-apui-profile-sidebar, .profile_left, .profile_right) {
-    width: 100% !important;
-    min-width: 0;
-  }
-}
-
-/* 13) usercp responsive layouts */
-@media (max-width: 900px) {
-  body.af-rwd-usercp.af-rwd-profile-fixes-on :is(#usercp_menu, .usercp_nav, .usercp_navlist) {
-    width: 100% !important;
-    float: none !important;
-  }
-
-  body.af-rwd-usercp.af-rwd-profile-fixes-on :is(#usercp_content, .usercp_body, .usercp_main) {
-    width: 100% !important;
-    float: none !important;
-  }
-}
-
-/* 14) modal / surface / iframe responsive layouts */
-body.af-rwd-modal-surface.af-rwd-modal-fixes-on :is(.modal, .af-modal, .af-cs-modal, .af-apui-modal, .af-aa-preview-modal__window) {
-  width: min(100vw - 14px, 980px);
-  max-width: min(100vw - 14px, 980px);
-  max-height: calc(100vh - 14px);
-  overflow: auto;
-}
-
-body.af-rwd-enabled :is(iframe.af-cs-iframe, iframe.af-inv-iframe) {
-  width: 100%;
-  max-width: 100%;
-}
-
-/* 15) plugin patches */
-@media (max-width: 900px) {
-  body.af-rwd-plugin-patches-on.af-rwd-inventory :is(.af-inv-head, .af-inv-wallet, .af-inv-workspace) {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  body.af-rwd-plugin-patches-on.af-rwd-shop :is(.af-shop-layout, .af-manage-slots-layout) {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  body.af-rwd-plugin-patches-on.af-rwd-shop :is(.af-shop-grid, .af-shop-hub__grid) {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  }
-
-  body.af-rwd-plugin-patches-on.af-rwd-kb :is(.af-kb-page, .af-kb-tabs, .af-kb-header) {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  body.af-rwd-plugin-patches-on.af-rwd-charactersheets :is(.af-cs-hero, .af-cs-summary__title-row, .af-cs-button-row) {
-    grid-template-columns: 1fr;
-    display: grid;
-    gap: 10px;
-  }
-
-  body.af-rwd-plugin-patches-on.af-rwd-charactersheets .af-cs-portrait {
-    min-height: 220px;
-  }
-}
-
-/* 16) utility helpers */
 body.af-rwd-enabled .af-rwd-table-wrap {
   overflow-x: auto;
   overflow-y: hidden;
@@ -318,12 +116,25 @@ body.af-rwd-enabled .af-rwd-table-wrap {
   -webkit-overflow-scrolling: touch;
 }
 
-body.af-rwd-enabled .af-rwd-hide-mobile { display: none !important; }
+body.af-rwd-modal-surface.af-rwd-modal-fixes-on :is(.modal, .af-modal, .af-cs-modal, .af-apui-modal, .af-aa-preview-modal__window) {
+  width: min(100vw - 14px, 980px);
+  max-width: min(100vw - 14px, 980px);
+  max-height: calc(100vh - 14px);
+  overflow: auto;
+}
 
-/* 17) breakpoint blocks */
 @media (max-width: 900px) {
   body.af-rwd-enabled {
     padding-inline: var(--af-rwd-page-pad-mobile);
+    font-size: 15px;
+    line-height: 1.45;
+  }
+
+  body.af-rwd-enabled.af-rwd-main-nav-sticky :is(#header ul.menu.top_links, #header .menu.top_links) {
+    position: sticky;
+    top: 0;
+    z-index: var(--af-rwd-main-nav-z);
+    backdrop-filter: blur(5px);
   }
 
   body.af-rwd-enabled.af-rwd-right-burger .af-rwd-right-trigger {
@@ -334,8 +145,182 @@ body.af-rwd-enabled .af-rwd-hide-mobile { display: none !important; }
     z-index: var(--af-rwd-right-trigger-z);
   }
 
-  body.af-rwd-enabled.af-rwd-right-burger :is(.menu.top_links, ul.menu.panel_links, ul.menu.user_links, #panel .upper, #panel .lower) {
+  body.af-rwd-enabled.af-rwd-right-burger #panel .lower {
     display: none;
+  }
+
+  body.af-rwd-enabled :is(.tborder, .thead, .tfoot) {
+    font-size: .95rem;
+  }
+
+  /* index.php */
+  body.af-rwd-index.af-rwd-forumdisplay-fixes-on table#forums {
+    border-collapse: separate;
+    border-spacing: 0 10px;
+  }
+
+  body.af-rwd-index.af-rwd-forumdisplay-fixes-on table#forums tbody,
+  body.af-rwd-index.af-rwd-forumdisplay-fixes-on table#forums tr.inline_row {
+    display: block;
+    width: 100%;
+  }
+
+  body.af-rwd-index.af-rwd-forumdisplay-fixes-on table#forums tr.inline_row {
+    background: rgba(255,255,255,.04);
+    border-radius: var(--af-rwd-radius);
+    box-shadow: var(--af-rwd-shadow);
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+
+  body.af-rwd-index.af-rwd-forumdisplay-fixes-on table#forums tr.inline_row td {
+    display: block;
+    width: 100% !important;
+    border: 0;
+    padding: 6px 0;
+  }
+
+  body.af-rwd-index.af-rwd-forumdisplay-fixes-on :is(td.forumdisplay_regular, td.forumdisplay_sticky) {
+    font-size: .98rem;
+  }
+
+  body.af-rwd-index.af-rwd-forumdisplay-fixes-on :is(.subforums, .forum_stats, .forum_lastpost) {
+    font-size: .9rem;
+    opacity: .95;
+  }
+
+  /* forumdisplay.php */
+  body.af-rwd-forumdisplay.af-rwd-forumdisplay-fixes-on table#threads tr.inline_row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    background: rgba(255,255,255,.04);
+    border-radius: var(--af-rwd-radius);
+    box-shadow: var(--af-rwd-shadow);
+    margin-bottom: 10px;
+    padding: 12px;
+  }
+
+  body.af-rwd-forumdisplay.af-rwd-forumdisplay-fixes-on table#threads tr.inline_row td {
+    width: 100% !important;
+    border: 0;
+    padding: 2px 0;
+    display: block;
+  }
+
+  body.af-rwd-forumdisplay.af-rwd-forumdisplay-fixes-on table#threads tr.inline_row td[data-af-rwd-label]::before {
+    content: attr(data-af-rwd-label);
+    display: block;
+    font-size: .74rem;
+    text-transform: uppercase;
+    opacity: .65;
+    margin-bottom: 2px;
+  }
+
+  /* showthread.php */
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on {
+    font-size: 16px;
+  }
+
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on .post.classic .af-apui-postbit,
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on .post.classic.af-rwd-postbit-mobile-ready {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post_author, .af-apui-postbit-author, .post_content, .af-apui-postbit-content) {
+    width: 100% !important;
+    min-width: 0;
+    float: none !important;
+  }
+
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on :is(.post_body, .af-apui-postbit-message) {
+    font-size: 1rem;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on .post_controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on .postbit_buttons {
+    float: none !important;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  body.af-rwd-showthread.af-rwd-postbit-fixes-on .af-apui-thread-toolbar {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  /* member profile */
+  body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-page {
+    display: grid;
+    gap: 12px;
+  }
+
+  body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-hero {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-tabs__nav,
+  body.af-rwd-member.af-rwd-profile-fixes-on .af-rwd-tabs-scroll {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 4px;
+  }
+
+  body.af-rwd-member.af-rwd-profile-fixes-on .af-apui-profile-tabs__content {
+    min-width: 0;
+  }
+
+  body.af-rwd-member.af-rwd-profile-fixes-on :is(.af-apui-legacy-stack, .af-apui-extra-actions-grid, .af-apui-info-grid) {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  body.af-rwd-usercp.af-rwd-profile-fixes-on :is(#usercp_menu, #usercp_content, .usercp_nav, .usercp_body) {
+    width: 100% !important;
+    float: none !important;
+  }
+
+  /* plugin patches (only safe scoped containers) */
+  body.af-rwd-plugin-patches-on.af-rwd-inventory .af-inv-page :is(.af-inv-head, .af-inv-wallet, .af-inv-workspace) {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  body.af-rwd-plugin-patches-on.af-rwd-shop :is(.af-shop-layout, .af-manage-slots-layout) {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  body.af-rwd-plugin-patches-on.af-rwd-kb :is(.af-kb-page, .af-kb-tabs, .af-kb-header) {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  body.af-rwd-plugin-patches-on.af-rwd-charactersheets .af-cs-page .af-cs-hero {
+    grid-template-columns: 1fr;
+  }
+
+  body.af-rwd-plugin-patches-on.af-rwd-charactersheets .af-cs-page .af-cs-tabs__nav {
+    overflow-x: auto;
+    flex-wrap: nowrap;
   }
 }
 

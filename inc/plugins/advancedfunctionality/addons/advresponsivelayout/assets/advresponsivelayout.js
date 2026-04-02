@@ -42,20 +42,14 @@
     body.classList.toggle('af-rwd-modal-surface', !!modalNode);
   }
 
-    function getExtraNavNodes() {
-    var result = [];
-    [
-        '#panel .lower'
-    ].forEach(function (selector) {
-        document.querySelectorAll(selector).forEach(function (node) {
-        if (!node) return;
-        if (node.closest('#' + state.drawerId)) return;
-        if (result.indexOf(node) !== -1) return;
-        result.push(node);
-        });
-    });
-    return result;
+  function getExtraNavNodes() {
+    var lower = document.querySelector('#panel .lower');
+    if (!lower || lower.closest('#' + state.drawerId)) {
+      return [];
     }
+
+    return [lower];
+  }
 
   function ensureRightMenuShell() {
     var trigger = document.getElementById(state.triggerId);
@@ -99,13 +93,13 @@
     var nodes = getExtraNavNodes();
     if (!nodes.length) return;
 
-    nodes.forEach(function (node, index) {
+    nodes.forEach(function (node) {
       var wrap = document.createElement('section');
       wrap.className = 'af-rwd-right-menu__block';
 
       var title = document.createElement('h2');
       title.className = 'af-rwd-right-menu__title';
-      title.textContent = index === 0 ? 'Extra menu' : 'Navigation ' + (index + 1);
+      title.textContent = 'User menu';
       wrap.appendChild(title);
 
       var clone = node.cloneNode(true);
@@ -119,8 +113,7 @@
     state.drawerOpen = !!isOpen;
 
     body.classList.toggle('af-rwd-right-menu-open', state.drawerOpen);
-    body.classList.toggle('af-rwd-extra-nav-open', state.drawerOpen);
-    body.classList.toggle('af-rwd-extra-nav-closed', !state.drawerOpen);
+    body.classList.toggle('af-rwd-right-menu-closed', !state.drawerOpen);
 
     shell.trigger.setAttribute('aria-expanded', state.drawerOpen ? 'true' : 'false');
     shell.drawer.setAttribute('aria-hidden', state.drawerOpen ? 'false' : 'true');
@@ -135,6 +128,9 @@
 
   function setupRightBurgerMenu() {
     if (!body.classList.contains('af-rwd-right-burger')) return;
+
+    var nodes = getExtraNavNodes();
+    if (!nodes.length) return;
 
     var shell = ensureRightMenuShell();
     cloneToDrawer(shell.drawer);
@@ -167,6 +163,57 @@
     }, { passive: true });
   }
 
+  function applyMobileTableLabels(tableSelector) {
+    document.querySelectorAll(tableSelector).forEach(function (table) {
+      var headers = [];
+      table.querySelectorAll('thead th, tr.thead th').forEach(function (th) {
+        headers.push((th.textContent || '').trim());
+      });
+
+      table.querySelectorAll('tbody tr, tr.inline_row, tr[id^="thread_"]').forEach(function (row) {
+        if (row.querySelector('th')) return;
+        row.classList.add('af-rwd-mobile-row');
+
+        row.querySelectorAll('td').forEach(function (cell, index) {
+          if (cell.dataset.afRwdLabel) return;
+          var label = headers[index] || cell.getAttribute('data-label') || '';
+          if (label) cell.dataset.afRwdLabel = label;
+        });
+      });
+    });
+  }
+
+  function adaptIndex() {
+    if (!body.classList.contains('af-rwd-index') || !body.classList.contains('af-rwd-forumdisplay-fixes-on')) return;
+    applyMobileTableLabels('table#forums, table.forum_table, table.tborder[id*="forum"]');
+  }
+
+  function adaptForumdisplay() {
+    if (!body.classList.contains('af-rwd-forumdisplay') || !body.classList.contains('af-rwd-forumdisplay-fixes-on')) return;
+    applyMobileTableLabels('table#threads, table.threadlist, table.tborder[id*="thread"]');
+  }
+
+  function adaptShowthread() {
+    if (!body.classList.contains('af-rwd-showthread') || !body.classList.contains('af-rwd-postbit-fixes-on')) return;
+    document.querySelectorAll('.post.classic, .af-apui-postbit').forEach(function (postbit) {
+      postbit.classList.add('af-rwd-postbit-mobile-ready');
+    });
+  }
+
+  function adaptProfile() {
+    if (!body.classList.contains('af-rwd-profile-fixes-on') || !body.classList.contains('af-rwd-member')) return;
+    document.querySelectorAll('.af-apui-profile-tabs__nav').forEach(function (tabs) {
+      tabs.classList.add('af-rwd-tabs-scroll');
+    });
+  }
+
+  function initPageAdapters() {
+    adaptIndex();
+    adaptForumdisplay();
+    adaptShowthread();
+    adaptProfile();
+  }
+
   function initOnce() {
     if (state.initialized) return;
     state.initialized = true;
@@ -174,30 +221,22 @@
     wrapWideTables(document);
     syncModalClass();
     setupRightBurgerMenu();
+    initPageAdapters();
 
     var observer = new MutationObserver(function (mutations) {
-      var tableFound = false;
-      var modalFound = false;
+      var shouldRefresh = false;
 
       for (var i = 0; i < mutations.length; i++) {
-        var mutation = mutations[i];
-        if (!mutation.addedNodes || mutation.addedNodes.length === 0) continue;
-
-        for (var j = 0; j < mutation.addedNodes.length; j++) {
-          var node = mutation.addedNodes[j];
-          if (!node || node.nodeType !== 1) continue;
-
-          if (node.matches && node.matches('table')) tableFound = true;
-          if (node.matches && node.matches('.modal, .af-modal, .af-cs-modal, .af-apui-modal, [data-af-apui-surface]')) modalFound = true;
-
-          if (tableFound && modalFound) break;
+        if (mutations[i].addedNodes && mutations[i].addedNodes.length) {
+          shouldRefresh = true;
+          break;
         }
-
-        if (tableFound && modalFound) break;
       }
 
-      if (tableFound) wrapWideTables(document);
-      if (modalFound) syncModalClass();
+      if (!shouldRefresh) return;
+      wrapWideTables(document);
+      syncModalClass();
+      initPageAdapters();
     });
 
     observer.observe(document.documentElement, { childList: true, subtree: true });
