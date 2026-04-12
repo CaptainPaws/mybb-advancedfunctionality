@@ -132,7 +132,6 @@ body.af-rwd-enabled .af-rwd-main-nav-scroll {
     padding: 0 !important;
   }
 
-  /* временно убираем стрелки из лэйаута, чтобы они не ломали ширину */
   .af-rwd-main-nav-scroll {
     display: none !important;
   }
@@ -300,7 +299,6 @@ body.af-rwd-enabled .af-rwd-main-nav-scroll {
     transform: translateY(-5px) rotate(-45deg);
   }
 
-  /* если модалка / попап родился внутри drawer */
   .af-rwd-right-menu :is(.modal, .af-modal, .popup_menu, [role="dialog"], [class*="switcher"], [class*="account"]) {
     position: fixed !important;
     left: 50% !important;
@@ -517,7 +515,6 @@ body.af-rwd-enabled .af-rwd-main-nav-scroll {
     display: block !important;
   }
 
-  /* welcome avatar fixed */
   .af-hw-avatarlink {
     display: block !important;
     width: 65px !important;
@@ -566,11 +563,12 @@ body.af-rwd-enabled .af-rwd-main-nav-scroll {
 
   body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-author__inner {
     display: grid !important;
-    grid-template-columns: minmax(0, 1fr) 88px !important;
+    grid-template-columns: minmax(0, calc(100% - 80px)) 70px !important;
     grid-template-areas:
       "name name"
       "rank rank"
-      "extras avatar"
+      "rail avatar"
+      "extras extras"
       "fields fields"
       "plaque plaque";
     gap: 8px 10px !important;
@@ -599,23 +597,35 @@ body.af-rwd-enabled .af-rwd-main-nav-scroll {
 
   body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-avatar-shell {
     grid-area: avatar !important;
+    position: relative !important;
     justify-self: end !important;
     align-self: start !important;
-    width: 88px !important;
-    min-width: 88px !important;
-    max-width: 88px !important;
+    width: 70px !important;
+    height: 70px !important;
+    min-width: 70px !important;
+    min-height: 70px !important;
+    max-width: 70px !important;
+    max-height: 70px !important;
     margin: 0 !important;
-    position: relative !important;
+    padding: 3px !important;
+    box-sizing: border-box !important;
+    display: grid !important;
+    place-items: center !important;
+    aspect-ratio: 1 / 1 !important;
+    overflow: hidden !important;
+    z-index: 3 !important;
   }
 
   body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-avatar-shell img,
   body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .author_avatar img,
   body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-author-avatar img {
     display: block !important;
-    width: 88px !important;
-    height: 88px !important;
-    max-width: 88px !important;
-    max-height: 88px !important;
+    width: 64px !important;
+    height: 64px !important;
+    min-width: 64px !important;
+    min-height: 64px !important;
+    max-width: 64px !important;
+    max-height: 64px !important;
     object-fit: cover !important;
   }
 
@@ -623,7 +633,7 @@ body.af-rwd-enabled .af-rwd-main-nav-scroll {
     position: absolute !important;
     top: 4px !important;
     right: 4px !important;
-    z-index: 2 !important;
+    z-index: 4 !important;
   }
 
   body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-rwd-postbit-extras {
@@ -643,7 +653,266 @@ body.af-rwd-enabled .af-rwd-main-nav-scroll {
     max-width: 100% !important;
   }
 
-  /* компактнее блок статистики */
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-rwd-postbit-rail-host {
+    grid-area: rail !important;
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
+    float: none !important;
+    clear: none !important;
+    align-self: start !important;
+    justify-self: start !important;
+    width: 100% !important;
+    max-width: 280px !important;
+    min-width: 0 !important;
+    height: 60px !important;
+    min-height: 60px !important;
+    max-height: 60px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    z-index: auto !important;
+  }
+
+  /* 2 ряда по ширине */
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-rail, .af-rwd-postbit-rail-host .af-apui-postbit-rail) {
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
+    float: none !important;
+    clear: none !important;
+    display: grid !important;
+    grid-auto-flow: column !important;
+    grid-template-rows: repeat(2, 26px) !important;
+    grid-auto-columns: 26px !important;
+    column-gap: 8px !important;
+    row-gap: 8px !important;
+    justify-content: start !important;
+    align-content: start !important;
+    width: 100% !important;
+    max-width: 280px !important;
+    min-width: 0 !important;
+    height: 60px !important;
+    min-height: 60px !important;
+    max-height: 60px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    list-style: none !important;
+    overflow: visible !important;
+    z-index: auto !important;
+  }
+
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-rail, .af-rwd-postbit-rail-host .af-apui-postbit-rail),
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-rail, .af-rwd-postbit-rail-host .af-apui-postbit-rail) * {
+    box-sizing: border-box !important;
+  }
+
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-rail, .af-rwd-postbit-rail-host .af-apui-postbit-rail) > :not(a):not(button):not([role="button"]):not(li) {
+    display: contents !important;
+    width: auto !important;
+    height: auto !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-rail, .af-rwd-postbit-rail-host .af-apui-postbit-rail) > *,
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-rail, .af-rwd-postbit-rail-host .af-apui-postbit-rail) > li,
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-rail, .af-rwd-postbit-rail-host .af-apui-postbit-rail) > .af-apui-postbit-rail__item,
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(.af-apui-postbit-rail, .af-rwd-postbit-rail-host .af-apui-postbit-rail) > .af-apui-postbit-rail-item {
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
+    float: none !important;
+    display: block !important;
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    min-height: 26px !important;
+    max-width: 26px !important;
+    max-height: 26px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    list-style: none !important;
+    overflow: visible !important;
+  }
+
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .af-apui-postbit-rail,
+    .af-rwd-postbit-rail-host .af-apui-postbit-rail
+  ) :is(
+    a,
+    button,
+    [role="button"],
+    .af-apui-stat-item
+  ) {
+    position: relative !important;
+    inset: auto !important;
+    transform: none !important;
+    float: none !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    min-height: 26px !important;
+    max-width: 26px !important;
+    max-height: 26px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    aspect-ratio: 1 / 1 !important;
+    white-space: nowrap !important;
+    overflow: visible !important;
+  }
+
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .af-apui-postbit-rail,
+    .af-rwd-postbit-rail-host .af-apui-postbit-rail
+  ) .af-apui-stat-item {
+    z-index: 1 !important;
+  }
+
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .af-apui-postbit-rail,
+    .af-rwd-postbit-rail-host .af-apui-postbit-rail
+  ) .af-apui-stat-item.is-open,
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .af-apui-postbit-rail,
+    .af-rwd-postbit-rail-host .af-apui-postbit-rail
+  ) .af-apui-stat-item:focus-within {
+    z-index: 20 !important;
+  }
+
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .af-apui-postbit-rail,
+    .af-rwd-postbit-rail-host .af-apui-postbit-rail
+  ) .af-apui-stat-item__icon {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    min-height: 26px !important;
+    max-width: 26px !important;
+    max-height: 26px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* ВАЖНО: возвращаем штатный desktop bubble с числом */
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .af-apui-postbit-rail,
+    .af-rwd-postbit-rail-host .af-apui-postbit-rail
+  ) .af-apui-stat-item__value {
+    position: absolute !important;
+    left: calc(100% + 6px) !important;
+    top: 50% !important;
+    transform: translateY(-50%) translateX(-4px) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 40px !important;
+    max-width: 96px !important;
+    min-height: 20px !important;
+    padding: 2px 6px !important;
+    margin: 0 !important;
+    border: 1px solid rgba(255,255,255,.14) !important;
+    border-radius: 999px !important;
+    background: rgba(12, 16, 28, .94) !important;
+    box-shadow: 0 8px 18px rgba(0,0,0,.22) !important;
+    color: #eef2ff !important;
+    font-size: 11px !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    z-index: 21 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .af-apui-postbit-rail,
+    .af-rwd-postbit-rail-host .af-apui-postbit-rail
+  ) .af-apui-stat-item.is-open .af-apui-stat-item__value,
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .af-apui-postbit-rail,
+    .af-rwd-postbit-rail-host .af-apui-postbit-rail
+  ) .af-apui-stat-item:focus-within .af-apui-stat-item__value,
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .af-apui-postbit-rail,
+    .af-rwd-postbit-rail-host .af-apui-postbit-rail
+  ) .af-apui-stat-item[aria-expanded="true"] .af-apui-stat-item__value {
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: translateY(-50%) translateX(0) !important;
+  }
+
+  /* Убиваем текстовые title/data-af-title подсказки */
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .af-apui-postbit-rail,
+    .af-rwd-postbit-rail-host .af-apui-postbit-rail
+  ) .af-apui-stat-item::before,
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .af-apui-postbit-rail,
+    .af-rwd-postbit-rail-host .af-apui-postbit-rail
+  ) .af-apui-stat-item::after,
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .af-apui-postbit-rail,
+    .af-rwd-postbit-rail-host .af-apui-postbit-rail
+  ) .af-apui-stat-item[data-af-title]::before,
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .af-apui-postbit-rail,
+    .af-rwd-postbit-rail-host .af-apui-postbit-rail
+  ) .af-apui-stat-item[data-af-title]::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .af-apui-postbit-rail,
+    .af-rwd-postbit-rail-host .af-apui-postbit-rail
+  ) :is(
+    i,
+    svg,
+    img,
+    .fa,
+    .far,
+    .fas,
+    .fab
+  ) {
+    width: 14px !important;
+    height: 14px !important;
+    min-width: 14px !important;
+    min-height: 14px !important;
+    max-width: 14px !important;
+    max-height: 14px !important;
+    font-size: 14px !important;
+    line-height: 1 !important;
+  }
+
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .af-apui-postbit-rail,
+    .af-rwd-postbit-rail-host .af-apui-postbit-rail
+  ) :is(
+    .af-apui-postbit-rail__item--level,
+    .af-apui-postbit-rail-item--level,
+    [data-af-apui-rail-action="level"],
+    [data-af-apui-action="level"]
+  ) {
+    display: none !important;
+  }
+
+  /* TOOLTIP / USERDETAILS */
   body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(.author_statistics, .af-apui-postbit-userdetails) {
     position: relative !important;
     display: grid !important;
@@ -663,17 +932,76 @@ body.af-rwd-enabled .af-rwd-main-nav-scroll {
     max-width: 100% !important;
   }
 
-  /* всплывашки в userdetails не сваливаются вниз обычным блоком */
-  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(.author_statistics, .af-apui-postbit-userdetails) :is(.popup_menu, .author_popup, [class*="tooltip"], [class*="popup"], [role="tooltip"]) {
-    position: absolute !important;
-    top: calc(100% + 6px) !important;
-    left: 0 !important;
-    right: auto !important;
-    bottom: auto !important;
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(
+    .author_statistics,
+    .af-apui-postbit-userdetails
+  ) :is(
+    .af-apui-stat-item--level,
+    [data-af-apui-stat="level"],
+    [data-af-apui-key="level"]
+  ) {
+    display: none !important;
+  }
+
+  /* жёстко скрываем level в rail вместе с родительской плиткой */
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-rail .af-apui-stat-item.af-apui-stat-item--level,
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-rail [data-af-apui-stat="level"],
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-rail [data-af-apui-key="level"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-rail > li:has(.af-apui-stat-item.af-apui-stat-item--level),
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-rail > li:has([data-af-apui-stat="level"]),
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-rail > li:has([data-af-apui-key="level"]),
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-rail > .af-apui-postbit-rail__item:has(.af-apui-stat-item.af-apui-stat-item--level),
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-rail > .af-apui-postbit-rail__item:has([data-af-apui-stat="level"]),
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-rail > .af-apui-postbit-rail__item:has([data-af-apui-key="level"]),
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-rail > .af-apui-postbit-rail-item:has(.af-apui-stat-item.af-apui-stat-item--level),
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-rail > .af-apui-postbit-rail-item:has([data-af-apui-stat="level"]),
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-rail > .af-apui-postbit-rail-item:has([data-af-apui-key="level"]) {
+    display: none !important;
+  }  
+
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on :is(.author_statistics, .af-apui-postbit-userdetails) :is(
+    .popup_menu,
+    .author_popup,
+    .af-apui-stat-item__popup,
+    .af-apui-stat-item__tooltip,
+    .af-apui-stat-item__details,
+    .af-apui-stat-item__panel,
+    .af-apui-stat-item__popover,
+    .af-apui-stat-item__dropdown,
+    .af-apui-stat-item__content,
+    .af-apui-stat-item__body,
+    .af-apui-stat-item__expanded,
+    .af-apui-stat-item__box,
+    [class*="tooltip"],
+    [class*="popover"],
+    [class*="popup"],
+    [role="tooltip"]
+  ) {
     width: max-content !important;
     min-width: 90px !important;
     max-width: min(78vw, 220px) !important;
     z-index: 40 !important;
+  }
+
+  body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-rwd-mobile-userdetails-popup {
+    position: fixed !important;
+    inset: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    margin: 0 !important;
+    transform: none !important;
+    z-index: 10050 !important;
+    width: max-content !important;
+    min-width: 110px !important;
+    max-width: min(78vw, 220px) !important;
   }
 
   body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .af-apui-postbit-profilefields {
@@ -730,7 +1058,6 @@ body.af-rwd-enabled .af-rwd-main-nav-scroll {
     float: none !important;
   }
 
-  /* только меню из post_controls делаем обычным потоком */
   body.af-rwd-script-showthread.af-rwd-postbit-fixes-on .post_controls :is(.postbit_buttons_panel, .author_popup, .post_control_menu, .popup_menu, .af-apui-post-controls-panel, .af-apui-author-popup) {
     position: static !important;
     inset: auto !important;
@@ -910,3 +1237,4 @@ body.af-rwd-enabled .af-rwd-main-nav-scroll {
     display: none !important;
   }
 }
+
