@@ -11,7 +11,6 @@
     refs: null,
     extraOpen: false,
     extraSource: null,
-    extraPlaceholder: null,
     resizeTimer: null,
     activeTooltip: null,
     userdetailsTooltipTimer: null,
@@ -126,46 +125,6 @@
 
     refs.overlay.addEventListener('click', function () {
       setDrawerOpen(false);
-    });
-
-    refs.drawer.addEventListener('click', function (e) {
-      var trigger = e.target.closest('a, button, [role="button"]');
-      if (!trigger) return;
-
-      if (trigger.getAttribute('data-af-rwd-proxy-account-trigger') === '1') {
-        e.preventDefault();
-        e.stopPropagation();
-
-        proxyExistingAccountSwitcherTrigger();
-
-        setTimeout(function () {
-          setDrawerOpen(false);
-        }, 0);
-        return;
-      }
-
-      var text = textNorm(
-        trigger.textContent + ' ' +
-        (trigger.getAttribute('title') || '') + ' ' +
-        (trigger.getAttribute('aria-label') || '')
-      );
-      var href = textNorm(trigger.getAttribute('href') || '');
-      var cls = textNorm(trigger.className || '');
-
-      var looksLikeAccountUi =
-        text.indexOf('аккаунт') !== -1 ||
-        text.indexOf('account') !== -1 ||
-        text.indexOf('switch') !== -1 ||
-        href.indexOf('account') !== -1 ||
-        href.indexOf('switch') !== -1 ||
-        cls.indexOf('account') !== -1 ||
-        cls.indexOf('switch') !== -1;
-
-      if (looksLikeAccountUi) {
-        setTimeout(function () {
-          setDrawerOpen(false);
-        }, 0);
-      }
     });
 
     document.addEventListener('keydown', function (e) {
@@ -301,109 +260,6 @@
     return state.extraSource || $('#panel .lower') || $('.panel .lower') || $('#header .lower') || $('.lower');
   }
 
-  function setExtraSourceHidden(source, hidden) {
-    if (!source) return;
-
-    source.classList.add('af-rwd-extra-nav-source');
-
-    if (hidden) {
-      if (!source.hasAttribute('data-af-rwd-prev-display')) {
-        source.setAttribute('data-af-rwd-prev-display', source.style.display || '');
-      }
-
-      source.style.display = 'none';
-      source.setAttribute('aria-hidden', 'true');
-      return;
-    }
-
-    if (source.hasAttribute('data-af-rwd-prev-display')) {
-      var prevDisplay = source.getAttribute('data-af-rwd-prev-display');
-      if (prevDisplay) {
-        source.style.display = prevDisplay;
-      } else {
-        source.style.removeProperty('display');
-      }
-      source.removeAttribute('data-af-rwd-prev-display');
-    } else {
-      source.style.removeProperty('display');
-    }
-
-    source.removeAttribute('aria-hidden');
-  }
-
-  function buildExtraNavClone(source) {
-    if (!source) return null;
-
-    var clone = source.cloneNode(true);
-    clone.classList.add('af-rwd-extra-nav-clone');
-
-    [clone].concat($all('[id]', clone)).forEach(function (node) {
-      if (!node.id) return;
-      node.setAttribute('data-af-rwd-cloned-id', node.id);
-      node.removeAttribute('id');
-    });
-
-    [clone].concat($all('.af-aas-trigger', clone)).forEach(function (node) {
-      if (!node || !node.getAttribute) return;
-      node.setAttribute('data-af-rwd-proxy-account-trigger', '1');
-    });
-
-    return clone;
-  }
-
-  function findOriginalAccountSwitcherTrigger() {
-    var refs = ensureRefs();
-    var blockedContainers = [
-      refs.drawer,
-      refs.shell,
-      $('.af-rwd-extra-nav-clone', refs.drawer),
-      $('.af-rwd-main-nav-clone', refs.shell)
-    ].filter(Boolean);
-
-    function isBlocked(node) {
-      if (!node) return true;
-      for (var i = 0; i < blockedContainers.length; i++) {
-        if (blockedContainers[i].contains(node)) return true;
-      }
-      return node.getAttribute('data-af-rwd-proxy-account-trigger') === '1';
-    }
-
-    var byIdCandidates = $all('#af_aas_trigger');
-    for (var j = 0; j < byIdCandidates.length; j++) {
-      if (isBlocked(byIdCandidates[j])) continue;
-      return byIdCandidates[j];
-    }
-
-    var candidates = $all('.af-aas-trigger');
-    for (var k = 0; k < candidates.length; k++) {
-      if (isBlocked(candidates[k])) continue;
-      return candidates[k];
-    }
-
-    return null;
-  }
-
-  function proxyExistingAccountSwitcherTrigger() {
-    var original = findOriginalAccountSwitcherTrigger();
-    if (!original) return false;
-
-    try {
-      original.dispatchEvent(new MouseEvent('click', {
-        bubbles: true,
-        cancelable: true,
-        view: window
-      }));
-      return true;
-    } catch (err) {
-      if (typeof original.click === 'function') {
-        original.click();
-        return true;
-      }
-    }
-
-    return false;
-  }
-
   function mountExtraNav() {
     var refs = ensureRefs();
     body.classList.remove('af-rwd-extra-nav-mounted');
@@ -423,33 +279,23 @@
     }
 
     if (state.extraSource && state.extraSource !== source) {
-      setExtraSourceHidden(state.extraSource, false);
+      restoreNode(state.extraSource);
+      state.extraSource.classList.remove('af-rwd-extra-nav-source', 'af-rwd-extra-nav-live');
     }
 
     state.extraSource = source;
-    refs.drawer.innerHTML = '';
+    source.classList.add('af-rwd-extra-nav-source', 'af-rwd-extra-nav-live');
 
-    var clone = buildExtraNavClone(source);
-    if (!clone) {
-      setDrawerOpen(false);
-      return;
-    }
-
-    setExtraSourceHidden(source, true);
-    refs.drawer.appendChild(clone);
+    moveNode(source, refs.drawer);
 
     body.classList.add('af-rwd-extra-nav-mounted');
   }
 
   function restoreExtraNav() {
     if (state.extraSource) {
-      setExtraSourceHidden(state.extraSource, false);
+      restoreNode(state.extraSource);
+      state.extraSource.classList.remove('af-rwd-extra-nav-live');
     }
-
-    if (state.extraPlaceholder && state.extraPlaceholder.parentNode) {
-      state.extraPlaceholder.parentNode.removeChild(state.extraPlaceholder);
-    }
-    state.extraPlaceholder = null;
   }
 
   function moveNode(node, target, beforeNode, post) {
