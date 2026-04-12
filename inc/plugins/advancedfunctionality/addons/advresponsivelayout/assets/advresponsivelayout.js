@@ -353,17 +353,31 @@
 
   function findOriginalAccountSwitcherTrigger() {
     var refs = ensureRefs();
-    var byId = document.getElementById('af_aas_trigger');
+    var blockedContainers = [
+      refs.drawer,
+      refs.shell,
+      $('.af-rwd-extra-nav-clone', refs.drawer),
+      $('.af-rwd-main-nav-clone', refs.shell)
+    ].filter(Boolean);
 
-    if (byId && !refs.drawer.contains(byId)) {
-      return byId;
+    function isBlocked(node) {
+      if (!node) return true;
+      for (var i = 0; i < blockedContainers.length; i++) {
+        if (blockedContainers[i].contains(node)) return true;
+      }
+      return node.getAttribute('data-af-rwd-proxy-account-trigger') === '1';
+    }
+
+    var byIdCandidates = $all('#af_aas_trigger');
+    for (var j = 0; j < byIdCandidates.length; j++) {
+      if (isBlocked(byIdCandidates[j])) continue;
+      return byIdCandidates[j];
     }
 
     var candidates = $all('.af-aas-trigger');
-    for (var i = 0; i < candidates.length; i++) {
-      if (refs.drawer.contains(candidates[i])) continue;
-      if (candidates[i].getAttribute('data-af-rwd-proxy-account-trigger') === '1') continue;
-      return candidates[i];
+    for (var k = 0; k < candidates.length; k++) {
+      if (isBlocked(candidates[k])) continue;
+      return candidates[k];
     }
 
     return null;
