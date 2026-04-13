@@ -138,7 +138,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
 
 function af_charactersheets_render_sheet_page(string $slug): void
 {
-    global $templates, $mybb;
+    global $templates, $mybb, $headerinclude, $header, $footer, $htmloption, $theme;
 
     if (function_exists('af_front_ensure_header_bits')) {
         af_front_ensure_header_bits();
@@ -972,9 +972,23 @@ function af_charactersheets_render_slot_icon(array $slot_config): string
 
 function af_charactersheets_build_abilities_html(int $ownerUid): string
 {
-    $abilities_html = function_exists('af_advinv_render_abilities_cards_for_uid')
-        ? af_advinv_render_abilities_cards_for_uid($ownerUid)
-        : '<div class="af-cs-muted">Способности пока не куплены.</div>';
+    $abilities_html = '<div class="af-cs-abilities-empty">Способности пока не куплены.</div>';
+
+    if ($ownerUid > 0 && function_exists('af_advinv_export_charactersheet_abilities_state')) {
+        $state = af_advinv_export_charactersheet_abilities_state($ownerUid);
+        $items = (array)($state['items'] ?? []);
+        $selected_item_id = !empty($items) ? (int)($items[0]['id'] ?? 0) : 0;
+
+        if (!empty($items) && function_exists('af_advinv_render_abilities_list') && function_exists('af_advinv_render_abilities_preview_stack')) {
+            $list_html = af_advinv_render_abilities_list($items, $selected_item_id);
+            $preview_html = af_advinv_render_abilities_preview_stack($items, $selected_item_id);
+
+            $abilities_html = '<div class="af-cs-abilities-workspace" data-afcs-abilities-root="1">'
+                . '<div class="af-cs-abilities-list-pane">' . $list_html . '</div>'
+                . '<div class="af-cs-abilities-preview-pane">' . $preview_html . '</div>'
+                . '</div>';
+        }
+    }
 
     global $templates;
     $tpl = $templates->get('charactersheet_abilities');
@@ -1205,6 +1219,8 @@ function af_charactersheets_build_effects_chip_html(array $sheet_view): string
 
 function af_charactersheets_build_info_table_html(array $index, array $sheet_view = []): string
 {
+    global $mybb;
+
     $age = af_charactersheets_pick_field_value($index, ['character_age', 'age']);
     $gender = af_charactersheets_pick_field_value($index, ['character_gen', 'character_gender', 'gender']);
     $race_key = af_charactersheets_pick_field_value($index, ['character_race', 'race'], false);
@@ -1229,8 +1245,11 @@ function af_charactersheets_build_info_table_html(array $index, array $sheet_vie
         $chip_html = '<span class="af-cs-muted">—</span>';
     }
     $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Чипы</div><div class="af-cs-info-value">' . $chip_html . '</div></div>';
-    $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Раса</div><div class="af-cs-info-value">' . htmlspecialchars_uni($race_label !== '' ? $race_label : '—') . '</div></div>';
-    $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Вариант расы</div><div class="af-cs-info-value">' . htmlspecialchars_uni($race_variant_label !== '' ? $race_variant_label : '—') . '</div></div>';
+    $race_value = htmlspecialchars_uni($race_label !== '' ? $race_label : '—');
+    if ($race_variant_label !== '') {
+        $race_value .= '<div class="af-cs-info-subvalue">' . htmlspecialchars_uni($race_variant_label) . '</div>';
+    }
+    $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Раса</div><div class="af-cs-info-value">' . $race_value . '</div></div>';
     $items[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">Эффекты</div><div class="af-cs-info-value">' . af_charactersheets_build_effects_chip_html($sheet_view) . '</div></div>';
     $wallet_raw = (int)($sheet_view['credits'] ?? 0);
     $wallet = function_exists('af_balance_format_credits') ? af_balance_format_credits($wallet_raw) : number_format($wallet_raw / 100, 2, '.', ' ');
@@ -1252,7 +1271,54 @@ function af_charactersheets_build_bonus_html(array $index): string
 
     $mapping = af_charactersheets_kb_mapping();
     $columns = [];
+
+    $race_field = $index['character_race'] ?? [];
+    $race_key = (string)($race_field['value'] ?? '');
+    $race_entry = $race_key !== '' ? af_charactersheets_kb_get_entry('race', $race_key) : [];
+    $race_title = af_charactersheets_kb_pick_text($race_entry, 'title');
+    if ($race_title === '') {
+        $race_title = (string)($race_field['value_label'] ?? 'Раса');
+    }
+
+    $race_variant_field = $index['character_race_variant'] ?? [];
+    $race_variant_key = (string)($race_variant_field['value'] ?? '');
+    $race_variant_entry = $race_variant_key !== '' ? af_charactersheets_kb_get_entry('race_variant', $race_variant_key) : [];
+    if (empty($race_variant_entry) && $race_variant_key !== '') {
+        $race_variant_entry = af_charactersheets_kb_get_entry('racevariant', $race_variant_key);
+    }
+    $race_variant_title = af_charactersheets_kb_pick_text($race_variant_entry, 'title');
+    if ($race_variant_title === '') {
+        $race_variant_title = (string)($race_variant_field['value_label'] ?? '');
+    }
+
+    $race_text_html = af_cs_render_kb_bonuses_text('race', $race_key, af_charactersheets_is_ru());
+    if ($race_text_html === '') {
+        $race_text_html = '<div class="af-cs-muted">Нет данных</div>';
+    }
+
+    $race_variant_text_html = '';
+    if ($race_variant_key !== '') {
+        $race_variant_text_html = af_cs_render_kb_bonuses_text('race_variant', $race_variant_key, af_charactersheets_is_ru());
+        if ($race_variant_text_html === '') {
+            $race_variant_text_html = af_cs_render_kb_bonuses_text('racevariant', $race_variant_key, af_charactersheets_is_ru());
+        }
+    }
+
+    $race_package_sections = '<div class="af-cs-bonus-race-package__section"><div class="af-cs-bonus-race-package__subtitle">'
+        . htmlspecialchars_uni($race_title !== '' ? $race_title : 'Раса') . '</div><div class="af-cs-bonus-body">' . $race_text_html . '</div></div>';
+    if ($race_variant_title !== '' || $race_variant_text_html !== '') {
+        if ($race_variant_text_html === '') {
+            $race_variant_text_html = '<div class="af-cs-muted">Нет данных</div>';
+        }
+        $race_package_sections .= '<div class="af-cs-bonus-race-package__section"><div class="af-cs-bonus-race-package__subtitle">'
+            . htmlspecialchars_uni($race_variant_title !== '' ? $race_variant_title : 'Вариант расы') . '</div><div class="af-cs-bonus-body">' . $race_variant_text_html . '</div></div>';
+    }
+    $columns[] = '<div class="af-cs-bonus-card af-cs-bonus-card--race"><div class="af-cs-bonus-title">Раса</div>' . $race_package_sections . '</div>';
+
     foreach ($mapping as $fieldName => $data) {
+        if ($fieldName === 'character_race' || $fieldName === 'character_race_variant') {
+            continue;
+        }
         $field = $index[$fieldName] ?? [];
         $key = (string)($field['value'] ?? '');
 

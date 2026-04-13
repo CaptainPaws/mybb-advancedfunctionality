@@ -672,8 +672,46 @@
 
         updatePool();
         initAttributesUI();
+        initAbilitiesUI();
         initAugmentationUI();
         initEquipmentPreviewUI();
+      }
+
+      function initAbilitiesUI() {
+        var abilitiesBlock = sheet.querySelector('[data-afcs-block="abilities"]');
+        if (!abilitiesBlock) return;
+        var root = abilitiesBlock.querySelector('[data-afcs-abilities-root]');
+        if (!root) return;
+        var listItems = root.querySelectorAll('[data-item-select]');
+        var previews = root.querySelectorAll('[data-preview-item]');
+        if (!listItems.length || !previews.length) return;
+
+        function setActive(itemId) {
+          var normalizedId = String(itemId || '');
+          listItems.forEach(function (item) {
+            var isCurrent = String(item.getAttribute('data-item-id') || '') === normalizedId;
+            item.classList.toggle('is-selected', isCurrent);
+            item.setAttribute('aria-pressed', isCurrent ? 'true' : 'false');
+          });
+          previews.forEach(function (preview) {
+            var isCurrent = String(preview.getAttribute('data-preview-item') || '') === normalizedId;
+            preview.classList.toggle('is-active', isCurrent);
+            preview.hidden = !isCurrent;
+          });
+        }
+
+        var firstActive = root.querySelector('[data-item-select].is-selected') || listItems[0];
+        if (firstActive) {
+          setActive(firstActive.getAttribute('data-item-id') || '');
+        }
+
+        listItems.forEach(function (item) {
+          if (item.__afCsAbilitiesBound) return;
+          item.__afCsAbilitiesBound = true;
+          item.addEventListener('click', function () {
+            setActive(item.getAttribute('data-item-id') || '');
+          });
+        });
       }
 
       function initEquipmentPreviewUI() {
@@ -1430,6 +1468,7 @@
 
       updatePool();
       initAttributesUI();
+      initAbilitiesUI();
       if (typeof initInventoryUI === 'function') initInventoryUI(sheet);
       initAugmentationUI();
       initEquipmentPreviewUI();
