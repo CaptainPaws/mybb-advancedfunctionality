@@ -843,7 +843,7 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
         $knowledge_selected_items[] = $render_item('knowledge', (string)$key, false, $can_edit, $can_manage_selected);
     }
     if (!$knowledge_selected_items) {
-        $knowledge_selected_items[] = '<div class="af-cs-muted">Пока нет выбранных знаний.</div>';
+        $knowledge_selected_items[] = '<div class="af-cs-knowledge-empty"><strong>Пока пусто</strong><span>Выбранные вручную знания появятся здесь.</span></div>';
     }
 
     $knowledge_bonus_items = [];
@@ -851,7 +851,7 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
         $knowledge_bonus_items[] = $render_item('knowledge', (string)$key, true, false, false);
     }
     if (!$knowledge_bonus_items) {
-        $knowledge_bonus_items[] = '<div class="af-cs-muted">Нет автоматических знаний.</div>';
+        $knowledge_bonus_items[] = '<div class="af-cs-knowledge-empty"><strong>Нет автодобавлений</strong><span>Бонусные знания от расы, класса или темы пока отсутствуют.</span></div>';
     }
 
     $language_selected_items = [];
@@ -859,7 +859,7 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
         $language_selected_items[] = $render_item('language', (string)$key, false, $can_edit, $can_manage_selected);
     }
     if (!$language_selected_items) {
-        $language_selected_items[] = '<div class="af-cs-muted">Пока нет выбранных языков.</div>';
+        $language_selected_items[] = '<div class="af-cs-knowledge-empty"><strong>Пока пусто</strong><span>Выбранные вручную языки появятся здесь.</span></div>';
     }
 
     $language_bonus_items = [];
@@ -867,7 +867,7 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
         $language_bonus_items[] = $render_item('language', (string)$key, true, false, false);
     }
     if (!$language_bonus_items) {
-        $language_bonus_items[] = '<div class="af-cs-muted">Нет автоматических языков.</div>';
+        $language_bonus_items[] = '<div class="af-cs-knowledge-empty"><strong>Нет автодобавлений</strong><span>Бонусные языки от источников пока не выданы.</span></div>';
     }
 
     $knowledge_selected_items_html = implode('', $knowledge_selected_items);
@@ -879,15 +879,15 @@ function af_charactersheets_build_knowledge_html(array $view, bool $can_edit, bo
     $language_form = '';
     if ($can_edit) {
         $knowledge_form = '<div class="af-cs-knowledge-form">'
-            . '<select data-afcs-knowledge-select="knowledge">' . $knowledge_options . '</select>'
-            . '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-knowledge-add="1" data-afcs-knowledge-type="knowledge">Добавить</button>'
+            . '<select class="af-cs-knowledge-select" data-afcs-knowledge-select="knowledge" aria-label="Выбор знания">' . $knowledge_options . '</select>'
+            . '<button type="button" class="af-cs-btn af-cs-btn--ghost af-cs-knowledge-add-btn" data-afcs-knowledge-add="1" data-afcs-knowledge-type="knowledge">Добавить</button>'
             . '</div>';
         if (!$can_manage_selected && $knowledge_selected_count > 0) {
             $knowledge_form .= '<div class="af-cs-muted">Выбранные знания зафиксированы и недоступны для удаления.</div>';
         }
         $language_form = '<div class="af-cs-knowledge-form">'
-            . '<select data-afcs-knowledge-select="language">' . $language_options . '</select>'
-            . '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-knowledge-add="1" data-afcs-knowledge-type="language">Добавить</button>'
+            . '<select class="af-cs-knowledge-select" data-afcs-knowledge-select="language" aria-label="Выбор языка">' . $language_options . '</select>'
+            . '<button type="button" class="af-cs-btn af-cs-btn--ghost af-cs-knowledge-add-btn" data-afcs-knowledge-add="1" data-afcs-knowledge-type="language">Добавить</button>'
             . '</div>';
         if (!$can_manage_selected && $language_selected_count > 0) {
             $language_form .= '<div class="af-cs-muted">Выбранные языки зафиксированы и недоступны для удаления.</div>';

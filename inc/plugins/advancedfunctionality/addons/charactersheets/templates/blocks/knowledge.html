@@ -1,16 +1,21 @@
-<div class="af-cs-knowledge">
-  <div class="af-cs-knowledge-overview">
+<div class="af-cs-knowledge af-cs-knowledge--revamp">
+  <div class="af-cs-knowledge-overview af-cs-knowledge-panel">
     {$knowledge_overview_html}
   </div>
 
   <div class="af-cs-knowledge-sections">
-    <div class="af-cs-knowledge-section">
+    <div class="af-cs-knowledge-section af-cs-knowledge-panel">
       <div class="af-cs-knowledge-head">
-        <h3>Знания</h3>
-        {$knowledge_form}
+        <div class="af-cs-knowledge-titlewrap">
+          <h3>Знания</h3>
+          <div class="af-cs-muted af-cs-knowledge-subtitle">Ручной выбор и бонусные знания персонажа</div>
+        </div>
+        <div class="af-cs-knowledge-actions">
+          {$knowledge_form}
+        </div>
       </div>
       <div class="af-cs-knowledge-groups">
-        <section class="af-cs-knowledge-group">
+        <section class="af-cs-knowledge-group af-cs-knowledge-group--manual">
           <div class="af-cs-knowledge-group__head">
             <strong>Выбрано вручную</strong>
             <span>{$knowledge_selected_count}</span>
@@ -19,7 +24,7 @@
             {$knowledge_selected_items_html}
           </div>
         </section>
-        <section class="af-cs-knowledge-group">
+        <section class="af-cs-knowledge-group af-cs-knowledge-group--bonus">
           <div class="af-cs-knowledge-group__head">
             <strong>Автоматически / бонусом</strong>
             <span>{$knowledge_bonus_count}</span>
@@ -31,13 +36,18 @@
       </div>
     </div>
 
-    <div class="af-cs-knowledge-section">
+    <div class="af-cs-knowledge-section af-cs-knowledge-panel">
       <div class="af-cs-knowledge-head">
-        <h3>Языки</h3>
-        {$language_form}
+        <div class="af-cs-knowledge-titlewrap">
+          <h3>Языки</h3>
+          <div class="af-cs-muted af-cs-knowledge-subtitle">Языковые слоты, ручной выбор и авто-выдача</div>
+        </div>
+        <div class="af-cs-knowledge-actions">
+          {$language_form}
+        </div>
       </div>
       <div class="af-cs-knowledge-groups">
-        <section class="af-cs-knowledge-group">
+        <section class="af-cs-knowledge-group af-cs-knowledge-group--manual">
           <div class="af-cs-knowledge-group__head">
             <strong>Выбрано вручную</strong>
             <span>{$language_selected_count}</span>
@@ -46,7 +56,7 @@
             {$language_selected_items_html}
           </div>
         </section>
-        <section class="af-cs-knowledge-group">
+        <section class="af-cs-knowledge-group af-cs-knowledge-group--bonus">
           <div class="af-cs-knowledge-group__head">
             <strong>Автоматически / бонусом</strong>
             <span>{$language_bonus_count}</span>

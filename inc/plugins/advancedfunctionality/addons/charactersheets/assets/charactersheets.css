@@ -1185,27 +1185,37 @@
 /* ===== Knowledge ===== */
 .af-cs-knowledge {
   display: grid;
-  gap: 20px;
+  gap: 16px;
+}
+
+.af-cs-knowledge-panel {
+  border-radius: 14px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(10, 17, 27, 0.88), rgba(8, 13, 21, 0.8));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 
 .af-cs-knowledge-overview-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 12px;
 }
 
 .af-cs-knowledge-overview-card,
 .af-cs-knowledge-section {
-  padding: 14px;
+  padding: 12px;
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(11, 19, 30, 0.9), rgba(7, 12, 20, 0.82));
-  border: 1px solid rgba(120, 168, 255, 0.2);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(120, 168, 255, 0.22);
 }
 
 .af-cs-knowledge-overview-card h4 {
-  margin: 0 0 10px;
-  font-size: 14px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.9;
 }
 
 .af-cs-knowledge-counters {
@@ -1217,7 +1227,7 @@
 .af-cs-knowledge-counters div {
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.18);
   padding: 8px;
   display: grid;
   gap: 4px;
@@ -1257,7 +1267,7 @@
 
 .af-cs-knowledge-sections {
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
 .af-cs-knowledge-head {
@@ -1269,7 +1279,22 @@
 }
 
 .af-cs-knowledge-head h3 {
-  margin: 6px 0 0;
+  margin: 0;
+}
+
+.af-cs-knowledge-titlewrap {
+  display: grid;
+  gap: 4px;
+}
+
+.af-cs-knowledge-subtitle {
+  font-size: 12px;
+}
+
+.af-cs-knowledge-actions {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
 }
 
 .af-cs-knowledge-form {
@@ -1278,8 +1303,18 @@
   margin-bottom: 0;
 }
 
-.af-cs-knowledge-form select {
+.af-cs-knowledge-form select,
+.af-cs-knowledge-select {
   min-width: 190px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.28);
+  color: #fff;
+  padding: 0 10px;
+}
+
+.af-cs-knowledge-add-btn {
+  white-space: nowrap;
 }
 
 .af-cs-knowledge-groups {
@@ -1291,8 +1326,12 @@
 .af-cs-knowledge-group {
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(0, 0, 0, 0.14);
   padding: 10px;
+}
+
+.af-cs-knowledge-group--bonus {
+  border-color: rgba(124, 214, 255, 0.32);
 }
 
 .af-cs-knowledge-group__head {
@@ -1313,6 +1352,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 8px;
+  align-items: start;
 }
 
 .af-cs-knowledge-card {
@@ -1320,9 +1360,9 @@
   grid-template-columns: 1fr auto auto;
   grid-template-areas: "title status action" "desc desc desc";
   gap: 4px 8px;
-  padding: 8px 10px;
+  padding: 10px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.16);
   font-size: 12px;
 }
@@ -1344,7 +1384,8 @@
 .af-cs-knowledge-desc {
   grid-area: desc;
   font-size: 11px;
-  opacity: 0.75;
+  opacity: 0.82;
+  line-height: 1.35;
 }
 
 .af-cs-knowledge-tag {
@@ -1378,9 +1419,28 @@
   line-height: 1;
 }
 
+.af-cs-knowledge-empty {
+  border: 1px dashed rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.af-cs-knowledge-empty span {
+  opacity: 0.75;
+}
+
 @media (max-width: 640px) {
   .af-cs-knowledge-head {
     flex-direction: column;
+  }
+
+  .af-cs-knowledge-actions {
+    width: 100%;
+    justify-items: stretch;
   }
 
   .af-cs-knowledge-form {
