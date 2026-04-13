@@ -138,7 +138,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
 
 function af_charactersheets_render_sheet_page(string $slug): void
 {
-    global $templates, $mybb, $headerinclude, $header, $footer, $htmloption, $theme;
+    global $templates, $mybb, $headerinclude, $htmloption, $theme;
 
     if (function_exists('af_front_ensure_header_bits')) {
         af_front_ensure_header_bits();
@@ -156,14 +156,13 @@ function af_charactersheets_render_sheet_page(string $slug): void
     $isSheetSurfaceRequest = ($surface === 'sheet');
 
     // ajax/fragments only for partial in-page rendering (profile tabs, inline loads).
-    // iframe modal route from postbit must always use a full embed page with the
-    // normal MyBB headerinclude/header/footer contract so forum/theme/plugin assets load.
+    // iframe modal route from postbit must be content-only (no forum chrome),
+    // but still keep {$headerinclude} so theme/plugin assets are available.
     if ($isAjax && !$isEmbed && !$isSheetSurfaceRequest) {
         $page = $sheet_inner;
     } elseif ($isEmbed) {
-        $tplModalFullpage = $templates->get('af_cs_modal_fullpage');
-        $content = $sheet_inner;
-        eval("\$page = \"" . $tplModalFullpage . "\";");
+        $tplModal = $templates->get('charactersheet_modal');
+        eval("\$page = \"" . $tplModal . "\";");
     } else {
         $tplFull = $templates->get('charactersheet_fullpage');
         eval("\$page = \"" . $tplFull . "\";");
