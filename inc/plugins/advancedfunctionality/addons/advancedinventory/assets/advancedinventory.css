@@ -1240,8 +1240,8 @@ body.af-apui-surface-body[data-af-apui-surface="inventory"] {
 .af-inv-abilities__search input[type="text"]{min-width:240px;flex:1 1 260px}
 .af-inv-workspace--abilities{grid-template-columns:minmax(0,7fr) minmax(280px,3fr);gap:14px}
 .af-inv-abilities-list-pane{max-height:680px;overflow:auto;padding:10px}
-.af-inv-abilities-list{display:grid;gap:10px}
-.af-inv-ability-list-item{appearance:none;border:1px solid rgba(255,255,255,.15);background:rgba(17,24,39,.65);border-radius:14px;padding:12px;color:#eef2ff;text-align:left;cursor:pointer;display:grid;gap:8px;transition:border-color .15s ease,background .15s ease,transform .15s ease}
+.af-inv-abilities-list{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+.af-inv-ability-list-item{appearance:none;border:1px solid rgba(255,255,255,.15);background:rgba(17,24,39,.65);border-radius:14px;padding:12px;color:#eef2ff;text-align:left;cursor:pointer;display:grid;gap:8px;transition:border-color .15s ease,background .15s ease,transform .15s ease;align-content:start;min-height:160px}
 .af-inv-ability-list-item:hover{border-color:rgba(142,160,212,.65);background:rgba(45,52,70,.72);transform:translateY(-1px)}
 .af-inv-ability-list-item.is-selected{border-color:#8ea0d4;box-shadow:0 0 0 1px rgba(142,160,212,.25)}
 .af-inv-ability-list-item__head{display:flex;align-items:center;gap:10px}
@@ -1249,9 +1249,13 @@ body.af-apui-surface-body[data-af-apui-surface="inventory"] {
 .af-inv-ability-list-item__icon.is-empty{display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08)}
 .af-inv-ability-list-item__title-wrap strong{display:block;line-height:1.2}
 .af-inv-ability-list-item__subtype{font-size:11px;opacity:.8}
+.af-inv-ability-list-item__tags{display:flex;gap:6px;flex-wrap:wrap}
+.af-inv-ability-list-item__tags span{display:inline-flex;padding:3px 8px;border-radius:999px;background:rgba(142,160,212,.15);border:1px solid rgba(142,160,212,.25);font-size:11px;line-height:1}
 .af-inv-ability-list-item__summary{font-size:12px;opacity:.9}
 .af-inv-ability-list-item__qty{margin-left:auto;font-weight:700}
 .af-inv-abilities-preview-pane{min-height:420px}
+.af-inv-empty--abilities{display:grid;gap:8px}
+.af-inv-empty--abilities span{display:block;font-size:12px;opacity:.72}
 .af-inv-ability-preview__summary{margin:0;font-size:14px;color:#dfe6ff}
 .af-inv-ability-preview__description{font-size:13px;line-height:1.45;color:#e8edff}
 .af-inv-ability-preview__section{display:grid;gap:8px}
@@ -1260,4 +1264,4 @@ body.af-apui-surface-body[data-af-apui-surface="inventory"] {
 .af-inv-ability-preview__actions{display:flex;flex-wrap:wrap;gap:8px}
 .af-inv-abilities__pager{display:flex;gap:6px;flex-wrap:wrap}
 .af-inv-abilities__pager-note{font-size:12px;opacity:.8}
-@media (max-width: 980px){.af-inv-workspace--abilities{grid-template-columns:1fr}.af-inv-abilities-list-pane{max-height:none}}
+@media (max-width: 980px){.af-inv-workspace--abilities{grid-template-columns:1fr}.af-inv-abilities-list-pane{max-height:none}.af-inv-abilities-list{grid-template-columns:1fr}}
