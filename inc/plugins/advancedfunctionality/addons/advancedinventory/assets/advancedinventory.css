@@ -1238,7 +1238,7 @@ body.af-apui-surface-body[data-af-apui-surface="inventory"] {
 .af-inv-abilities{display:flex;flex-direction:column;gap:12px}
 .af-inv-abilities__search{display:flex;gap:8px;flex-wrap:wrap}
 .af-inv-abilities__search input[type="text"]{min-width:240px;flex:1 1 260px}
-.af-inv-workspace--abilities{grid-template-columns:minmax(0,7fr) minmax(280px,3fr);gap:14px}
+.af-inv-workspace--abilities{grid-template-columns:minmax(0,15fr) minmax(250px,3fr);gap:14px}
 .af-inv-abilities-list-pane{max-height:680px;overflow:auto;padding:10px}
 .af-inv-abilities-list{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
 .af-inv-ability-list-item{appearance:none;border:1px solid rgba(255,255,255,.15);background:rgba(17,24,39,.65);border-radius:14px;padding:12px;color:#eef2ff;text-align:left;cursor:pointer;display:grid;gap:8px;transition:border-color .15s ease,background .15s ease,transform .15s ease;align-content:start;min-height:160px}
