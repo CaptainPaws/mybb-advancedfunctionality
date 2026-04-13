@@ -1968,6 +1968,96 @@
   background: rgba(0, 0, 0, 0.18);
 }
 
+/* ===== Character Sheet visual unification (layout-safe) ===== */
+.af-apui-surface-body[data-af-apui-surface="sheet"] {
+  background:
+    radial-gradient(1200px 600px at 20% -10%, rgba(124, 214, 255, 0.16), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(177, 130, 255, 0.14), transparent 56%),
+    rgba(6, 9, 14, 0.92);
+}
+
+.af-cs-page,
+.af-cs-section,
+.af-cs-summary__info,
+.af-cs-level,
+.af-cs-info-table,
+.af-cs-knowledge-overview-card,
+.af-cs-knowledge-section,
+.af-cs-augmentations-column,
+.af-cs-inventory-section,
+.af-cs-inventory-equip {
+  backdrop-filter: blur(6px);
+}
+
+.af-cs-tabs__nav button,
+.af-cs-btn,
+.af-cs-tab-btn,
+.af-cs-choice-row select,
+.af-cs-knowledge-form select,
+.af-cs-augment-card__actions select,
+.af-cs-attr-input {
+  min-height: 34px;
+}
+
+.af-cs-info-subvalue {
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.78;
+}
+
+.af-cs-bonus-card--race {
+  grid-column: 1 / -1;
+}
+
+.af-cs-bonus-race-package__section + .af-cs-bonus-race-package__section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.14);
+}
+
+.af-cs-bonus-race-package__subtitle {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.af-cs-abilities-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(280px, 3fr);
+  gap: 14px;
+}
+
+.af-cs-abilities-list-pane,
+.af-cs-abilities-preview-pane {
+  border-radius: 12px;
+  border: 1px solid rgba(124, 161, 255, 0.26);
+  background: rgba(12, 19, 29, 0.62);
+  padding: 10px;
+}
+
+.af-cs-abilities-list-pane {
+  max-height: 720px;
+  overflow: auto;
+}
+
+.af-cs-abilities-preview-pane .af-inv-preview-card {
+  border-color: rgba(124, 161, 255, 0.35);
+}
+
+.af-cs-abilities-empty {
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.3);
+  padding: 22px;
+  text-align: center;
+  opacity: 0.82;
+}
+
+@media (max-width: 980px) {
+  .af-cs-abilities-workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
 .af-cs-skill-catalog-item__main {
   min-width: 0;
 }
