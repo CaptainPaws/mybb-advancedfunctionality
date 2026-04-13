@@ -975,8 +975,16 @@ function af_charactersheets_build_abilities_html(int $ownerUid): string
 
     if ($ownerUid > 0 && function_exists('af_advinv_export_charactersheet_abilities_state')) {
         $state = af_advinv_export_charactersheet_abilities_state($ownerUid);
-        $items = (array)($state['items'] ?? []);
-        $selected_item_id = !empty($items) ? (int)($items[0]['id'] ?? 0) : 0;
+        $items = [];
+        if (isset($state['items']) && is_array($state['items'])) {
+            $items = (array)$state['items'];
+        } elseif (is_array($state) && array_values($state) === $state) {
+            $items = $state;
+        }
+        $selected_item_id = (int)($state['selected_item_id'] ?? 0);
+        if ($selected_item_id <= 0) {
+            $selected_item_id = !empty($items) ? (int)($items[0]['id'] ?? 0) : 0;
+        }
 
         if (!empty($items) && function_exists('af_advinv_render_abilities_list') && function_exists('af_advinv_render_abilities_preview_stack')) {
             $list_html = af_advinv_render_abilities_list($items, $selected_item_id);

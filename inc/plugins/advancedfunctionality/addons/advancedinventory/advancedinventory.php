@@ -2592,42 +2592,16 @@ function af_advinv_export_charactersheet_abilities_state(int $uid): array
 {
     $uid = (int)$uid;
     if ($uid <= 0) {
-        return [];
+        return ['items' => [], 'selected_item_id' => 0];
     }
 
-    $items = (array)(af_inv_get_items($uid, [
-        'entity' => 'abilities',
-        'page' => 1,
-        'per_page' => 500,
-        'enrich' => true,
-    ])['items'] ?? []);
+    $items = af_advinv_get_user_ability_items($uid, 500);
+    $selectedItemId = !empty($items) ? (int)($items[0]['id'] ?? 0) : 0;
 
-    $out = [];
-    foreach ($items as $item) {
-        $kbType = trim((string)($item['kb_type'] ?? ''));
-        if (!af_advinv_is_spell_kb_type($kbType)) {
-            continue;
-        }
-        $out[] = [
-            'id' => (int)($item['id'] ?? 0),
-            'uid' => (int)($item['uid'] ?? $uid),
-            'title' => (string)($item['title'] ?? ''),
-            'icon' => (string)($item['icon'] ?? ''),
-            'qty' => max(1, (int)($item['qty'] ?? 1)),
-            'subtype' => (string)($item['subtype'] ?? ''),
-            'kb_type' => $kbType,
-            'kb_key' => (string)($item['kb_key'] ?? ''),
-            'short' => (string)($item['ability_short'] ?? ''),
-            'description' => (string)($item['ability_description'] ?? ''),
-            'effects' => array_values((array)($item['ability_effects'] ?? [])),
-            'requirements' => array_values((array)($item['ability_requirements'] ?? [])),
-            'cost' => af_advinv_format_structured_value($item['ability_cost'] ?? ''),
-            'price' => (string)($item['ability_price'] ?? ''),
-            'meta' => (array)($item['meta'] ?? []),
-        ];
-    }
-
-    return $out;
+    return [
+        'items' => $items,
+        'selected_item_id' => $selectedItemId,
+    ];
 }
 
 function af_advinv_classify_equipment_from_kb_meta(array $kbMeta): string
@@ -4246,7 +4220,7 @@ function af_advinv_render_subfilter_links(string $tab, int $ownerUid, string $su
 function af_advinv_render_abilities_list(array $items, int $selectedItemId): string
 {
     if (!$items) {
-        return '<div class="af-inv-empty">Способностей пока нет.</div>';
+        return '<div class="af-inv-empty af-inv-empty--abilities">Способностей пока нет.<span>Купите способность в магазине или измените фильтр поиска.</span></div>';
     }
 
     $rows = '<div class="af-inv-abilities-list">';
@@ -4261,6 +4235,12 @@ function af_advinv_render_abilities_list(array $items, int $selectedItemId): str
         $summary = trim((string)($item['ability_summary'] ?? ($item['ability_short'] ?? $item['ability_description'] ?? '')));
         $subtype = trim((string)($item['subtype'] ?? ''));
         $qty = max(1, (int)($item['qty'] ?? 1));
+        $rank = af_advinv_format_structured_value($item['ability_rank'] ?? '');
+        $tradition = af_advinv_format_structured_value($item['ability_tradition'] ?? '');
+        $school = af_advinv_format_structured_value($item['ability_school'] ?? '');
+        $tags = array_values(array_filter([$subtype, $rank !== '' ? ('Ранг ' . $rank) : '', $tradition, $school], static function ($v) {
+            return trim((string)$v) !== '';
+        }));
 
         $rows .= '<button type="button" class="af-inv-ability-list-item' . ($isSelected ? ' is-selected' : '') . '" data-item-select="' . $itemId . '" data-item-id="' . $itemId . '" aria-pressed="' . ($isSelected ? 'true' : 'false') . '">';
         $rows .= '<div class="af-inv-ability-list-item__head">';
@@ -4274,6 +4254,13 @@ function af_advinv_render_abilities_list(array $items, int $selectedItemId): str
             $rows .= '<span class="af-inv-ability-list-item__qty">x' . $qty . '</span>';
         }
         $rows .= '</div>';
+        if ($tags) {
+            $rows .= '<div class="af-inv-ability-list-item__tags">';
+            foreach ($tags as $tag) {
+                $rows .= '<span>' . htmlspecialchars_uni((string)$tag) . '</span>';
+            }
+            $rows .= '</div>';
+        }
         if ($summary !== '') {
             $rows .= '<div class="af-inv-ability-list-item__summary">' . htmlspecialchars_uni($summary) . '</div>';
         }
