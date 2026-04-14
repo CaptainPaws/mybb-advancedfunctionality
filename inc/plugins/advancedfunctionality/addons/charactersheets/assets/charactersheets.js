@@ -719,10 +719,13 @@
         if (!equipmentBlock) return;
         var root = equipmentBlock.querySelector('[data-afcs-equipment-root]');
         if (!root) return;
+        var mode = root.getAttribute('data-afcs-equipment-mode') || 'public';
+        var isEditMode = mode === 'edit';
         var cards = equipmentBlock.querySelectorAll('[data-afcs-equipment-card]');
         var slots = equipmentBlock.querySelectorAll('[data-afcs-equipment-slot-dot]');
         var popover = equipmentBlock.querySelector('[data-afcs-equipment-popover]');
         var filters = equipmentBlock.querySelectorAll('[data-afcs-equipment-filter]');
+        var infoPreview = equipmentBlock.querySelector('[data-afcs-equipment-info-preview]');
         function normalizeEquipmentFilter(value) {
           var raw = String(value || '').toLowerCase().trim();
           var allowedCodes = ['all', 'armor', 'weapon', 'ammo', 'consumable', 'gear'];
@@ -823,6 +826,28 @@
           if (!popover) return;
           popover.hidden = true;
         }
+        function escapeHtml(value) {
+          return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        }
+        function showInfoPreview(payload) {
+          if (!infoPreview || !payload) return;
+          var isEmpty = payload.title === 'Пусто';
+          var iconHtml = payload.icon
+            ? '<img src="' + escapeHtml(payload.icon) + '" alt="">'
+            : '<span class="af-cs-slot-icon af-cs-slot-icon--empty"></span>';
+          infoPreview.innerHTML = ''
+            + '<div class="af-cs-equip-preview__head"><span class="af-cs-slot-icon">' + iconHtml + '</span><strong class="af-cs-augment-preview__title">' + escapeHtml(payload.title || 'Пусто') + '</strong></div>'
+            + (payload.slot ? '<div class="af-cs-augment-preview__desc">Слот: ' + escapeHtml(payload.slot) + '</div>' : '')
+            + (isEmpty
+                ? '<div class="af-cs-augment-preview__desc">В этом слоте пока ничего не надето.</div>'
+                : ((payload.desc ? '<div class="af-cs-augment-preview__desc">' + escapeHtml(payload.desc) + '</div>' : '')
+                   + (payload.stats ? '<div class="af-cs-augment-preview__desc"><em>' + escapeHtml(payload.stats) + '</em></div>' : '')));
+        }
 
         var activeCard = equipmentBlock.querySelector('[data-afcs-equipment-card].is-active') || cards[0];
         if (activeCard) activate(activeCard.getAttribute('data-afcs-equipment-item-id') || '');
@@ -851,10 +876,27 @@
           slot.addEventListener('click', function () {
             var payload = popoverPayload(slot);
             if (!payload) return;
-            if (payload.kind === 'equipped' && payload.title === 'Пусто') return;
+            slots.forEach(function (item) { item.classList.remove('is-active'); });
+            slot.classList.add('is-active');
+            if (payload.itemId) {
+              activate(payload.itemId);
+            }
+            if (!isEditMode && infoPreview) {
+              showInfoPreview(payload);
+              hidePopover();
+              return;
+            }
+            if (payload.kind === 'equipped' && payload.title === 'Пусто') {
+              hidePopover();
+              return;
+            }
             showPopover(slot, payload);
           });
         });
+        if (!isEditMode && infoPreview && slots.length) {
+          slots[0].classList.add('is-active');
+          showInfoPreview(popoverPayload(slots[0]));
+        }
         if (!sheet.__afEquipDocBound) {
           sheet.__afEquipDocBound = true;
           document.addEventListener('click', function (event) {
