@@ -1731,78 +1731,78 @@ function af_charactersheets_build_augments_html(array $build, bool $can_edit, ar
             . '</button>';
     }
 
-    $inventory_items = $uid > 0 && function_exists('af_advinv_export_charactersheet_augmentations_inventory')
-        ? af_advinv_export_charactersheet_augmentations_inventory($uid)
-        : (array)((array)($build['inventory'] ?? [])['items'] ?? []);
-    $available_map = [];
-    foreach ($inventory_items as $item) {
-        if (!is_array($item)) {
-            continue;
-        }
-        $type = af_charactersheets_get_inventory_item_type($item);
-        $key = af_charactersheets_get_inventory_item_key($item);
-        if ($type === '' || $key === '') {
-            continue;
-        }
-        $entry = af_charactersheets_kb_get_entry($type, $key);
-        $category = af_charactersheets_pick_inventory_category($entry);
-        if ($category !== 'augmentations') {
-            continue;
-        }
-        $qty = (int)($item['qty'] ?? 0);
-        if ($qty <= 0) {
-            continue;
-        }
-        $stack_key = $type . ':' . $key;
-        $available_map[$stack_key] = [
-            'type' => $type,
-            'key' => $key,
-            'qty' => $qty,
-        ];
-    }
-
-    foreach ($owned as $item) {
-        if (!is_array($item)) {
-            continue;
-        }
-        $type = (string)($item['type'] ?? $item['kb_type'] ?? '');
-        $key = (string)($item['key'] ?? $item['kb_key'] ?? '');
-        if ($type === '' || $key === '') {
-            continue;
-        }
-        $stack_key = $type . ':' . $key;
-        if (!isset($available_map[$stack_key])) {
+    $available_cards = [];
+    if ($can_edit) {
+        $inventory_items = $uid > 0 && function_exists('af_advinv_export_charactersheet_augmentations_inventory')
+            ? af_advinv_export_charactersheet_augmentations_inventory($uid)
+            : (array)((array)($build['inventory'] ?? [])['items'] ?? []);
+        $available_map = [];
+        foreach ($inventory_items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $type = af_charactersheets_get_inventory_item_type($item);
+            $key = af_charactersheets_get_inventory_item_key($item);
+            if ($type === '' || $key === '') {
+                continue;
+            }
+            $entry = af_charactersheets_kb_get_entry($type, $key);
+            $category = af_charactersheets_pick_inventory_category($entry);
+            if ($category !== 'augmentations') {
+                continue;
+            }
+            $qty = (int)($item['qty'] ?? 0);
+            if ($qty <= 0) {
+                continue;
+            }
+            $stack_key = $type . ':' . $key;
             $available_map[$stack_key] = [
                 'type' => $type,
                 'key' => $key,
-                'qty' => 1,
+                'qty' => $qty,
             ];
         }
-    }
 
-    $available_cards = [];
-    foreach ($available_map as $item) {
-        $type = (string)($item['type'] ?? '');
-        $key = (string)($item['key'] ?? '');
-        if ($type === '' || $key === '') {
-            continue;
+        foreach ($owned as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $type = (string)($item['type'] ?? $item['kb_type'] ?? '');
+            $key = (string)($item['key'] ?? $item['kb_key'] ?? '');
+            if ($type === '' || $key === '') {
+                continue;
+            }
+            $stack_key = $type . ':' . $key;
+            if (!isset($available_map[$stack_key])) {
+                $available_map[$stack_key] = [
+                    'type' => $type,
+                    'key' => $key,
+                    'qty' => 1,
+                ];
+            }
         }
-        $entry = af_charactersheets_kb_get_entry($type, $key);
-        $title = af_charactersheets_kb_pick_text($entry, 'title');
-        $desc = af_charactersheets_kb_pick_text($entry, 'short');
-        if ($desc === '') {
-            $desc = af_charactersheets_kb_pick_text($entry, 'description');
-        }
-        $bonus_html = af_charactersheets_kb_get_block_html($entry, 'bonuses');
-        $bonus_text = trim(preg_replace('/\s+/', ' ', strip_tags($bonus_html)));
-        $allowed_slots = af_charactersheets_pick_augmentation_slots($entry);
-        $slot_options = $allowed_slots ?: array_keys($slot_configs);
-        $humanity_cost = af_charactersheets_extract_humanity_cost_from_entry($entry);
 
-        $slot_select = '';
-        $equip_btn = '';
-        $slot_default_attr = '';
-        if ($can_edit) {
+        foreach ($available_map as $item) {
+            $type = (string)($item['type'] ?? '');
+            $key = (string)($item['key'] ?? '');
+            if ($type === '' || $key === '') {
+                continue;
+            }
+            $entry = af_charactersheets_kb_get_entry($type, $key);
+            $title = af_charactersheets_kb_pick_text($entry, 'title');
+            $desc = af_charactersheets_kb_pick_text($entry, 'short');
+            if ($desc === '') {
+                $desc = af_charactersheets_kb_pick_text($entry, 'description');
+            }
+            $bonus_html = af_charactersheets_kb_get_block_html($entry, 'bonuses');
+            $bonus_text = trim(preg_replace('/\s+/', ' ', strip_tags($bonus_html)));
+            $allowed_slots = af_charactersheets_pick_augmentation_slots($entry);
+            $slot_options = $allowed_slots ?: array_keys($slot_configs);
+            $humanity_cost = af_charactersheets_extract_humanity_cost_from_entry($entry);
+
+            $slot_select = '';
+            $equip_btn = '';
+            $slot_default_attr = '';
             if (count($slot_options) > 1) {
                 $options = '<option value="">— слот —</option>';
                 foreach ($slot_configs as $slot => $slotConfig) {
@@ -1820,33 +1820,33 @@ function af_charactersheets_build_augments_html(array $build, bool $can_edit, ar
                 . ' data-afcs-augmentation-type="' . htmlspecialchars_uni($type) . '"'
                 . ' data-afcs-augmentation-key="' . htmlspecialchars_uni($key) . '"'
                 . $slot_default_attr . '>Надеть</button>';
+
+            $default_slot = count($slot_options) === 1 ? (string)$slot_options[0] : '';
+            $available_cards[] = '<div class="af-cs-augment-card af-cs-augment-card--available" data-afcs-augmentation-card="1"'
+                . ' data-afcs-augmentation-type="' . htmlspecialchars_uni($type) . '"'
+                . ' data-afcs-augmentation-key="' . htmlspecialchars_uni($key) . '"'
+                . ' data-afcs-augmentation-slot-default="' . htmlspecialchars_uni($default_slot) . '"'
+                . ' data-afcs-augmentation-popover-title="' . htmlspecialchars_uni($title !== '' ? $title : $key) . '"'
+                . ' data-afcs-augmentation-popover-desc="' . htmlspecialchars_uni($desc) . '"'
+                . ' data-afcs-augmentation-popover-slot="' . htmlspecialchars_uni(implode(', ', array_map(function ($slotCode) use ($slot_configs) {
+                    return (string)($slot_configs[$slotCode]['title'] ?? $slotCode);
+                }, $slot_options))) . '"'
+                . ' data-afcs-augmentation-popover-stats="' . htmlspecialchars_uni($bonus_text) . '"'
+                . ' data-afcs-augmentation-popover-humanity="' . htmlspecialchars_uni($humanity_cost > 0 ? ('−' . (string)$humanity_cost) : '') . '">'
+                . '<div class="af-cs-augment-card__icon">' . af_charactersheets_render_kb_icon($entry, $title) . '</div>'
+                . '<div class="af-cs-augment-card__body">'
+                . '<div class="af-cs-augment-card__title">' . htmlspecialchars_uni($title !== '' ? $title : $key) . '</div>'
+                . ($desc !== '' ? '<div class="af-cs-augment-card__desc">' . htmlspecialchars_uni($desc) . '</div>' : '')
+                . ($humanity_cost > 0 ? '<div class="af-cs-augment-card__humanity">Стоимость человечности: ' . htmlspecialchars_uni((string)$humanity_cost) . '</div>' : '')
+                . ($bonus_html !== '' ? '<div class="af-cs-augment-card__effects">' . $bonus_html . '</div>' : '')
+                . '<div class="af-cs-augment-card__actions">' . $slot_select . $equip_btn . '</div>'
+                . '</div>'
+                . '</div>';
         }
 
-        $default_slot = count($slot_options) === 1 ? (string)$slot_options[0] : '';
-        $available_cards[] = '<div class="af-cs-augment-card af-cs-augment-card--available" data-afcs-augmentation-card="1"'
-            . ' data-afcs-augmentation-type="' . htmlspecialchars_uni($type) . '"'
-            . ' data-afcs-augmentation-key="' . htmlspecialchars_uni($key) . '"'
-            . ' data-afcs-augmentation-slot-default="' . htmlspecialchars_uni($default_slot) . '"'
-            . ' data-afcs-augmentation-popover-title="' . htmlspecialchars_uni($title !== '' ? $title : $key) . '"'
-            . ' data-afcs-augmentation-popover-desc="' . htmlspecialchars_uni($desc) . '"'
-            . ' data-afcs-augmentation-popover-slot="' . htmlspecialchars_uni(implode(', ', array_map(function ($slotCode) use ($slot_configs) {
-                return (string)($slot_configs[$slotCode]['title'] ?? $slotCode);
-            }, $slot_options))) . '"'
-            . ' data-afcs-augmentation-popover-stats="' . htmlspecialchars_uni($bonus_text) . '"'
-            . ' data-afcs-augmentation-popover-humanity="' . htmlspecialchars_uni($humanity_cost > 0 ? ('−' . (string)$humanity_cost) : '') . '">'
-            . '<div class="af-cs-augment-card__icon">' . af_charactersheets_render_kb_icon($entry, $title) . '</div>'
-            . '<div class="af-cs-augment-card__body">'
-            . '<div class="af-cs-augment-card__title">' . htmlspecialchars_uni($title !== '' ? $title : $key) . '</div>'
-            . ($desc !== '' ? '<div class="af-cs-augment-card__desc">' . htmlspecialchars_uni($desc) . '</div>' : '')
-            . ($humanity_cost > 0 ? '<div class="af-cs-augment-card__humanity">Стоимость человечности: ' . htmlspecialchars_uni((string)$humanity_cost) . '</div>' : '')
-            . ($bonus_html !== '' ? '<div class="af-cs-augment-card__effects">' . $bonus_html . '</div>' : '')
-            . ($can_edit ? '<div class="af-cs-augment-card__actions">' . $slot_select . $equip_btn . '</div>' : '')
-            . '</div>'
-            . '</div>';
-    }
-
-    if (!$available_cards) {
-        $available_cards[] = '<div class="af-cs-muted">Аугментации не куплены.</div>';
+        if (!$available_cards) {
+            $available_cards[] = '<div class="af-cs-muted">Аугментации не куплены.</div>';
+        }
     }
 
     $humanity_total = (float)($view['mechanics']['humanity_total'] ?? 0);
@@ -1863,18 +1863,35 @@ function af_charactersheets_build_augments_html(array $build, bool $can_edit, ar
         . '<div class="af-cs-progress__bar"><span style="width:' . htmlspecialchars_uni(number_format((float)$humanity_percent, 2, '.', '')) . '%"></span></div>'
         . '</div>';
 
-    $augmentations_html = '<div class="af-cs-augmentations-ui af-cs-augmentations-rpg" data-afcs-augmentation-root="1">'
-        . '<div class="af-cs-augmentations-column">'
-        . '<div class="af-cs-panel-title">Слоты аугментаций</div>'
-        . $humanity_html
-        . '<div class="af-cs-slot-grid af-cs-augmentation-slot-grid">' . implode('', $slot_cards) . '</div>'
-        . '<div class="af-cs-augment-popover" data-afcs-augmentation-popover hidden></div>'
-        . '</div>'
-        . '<div class="af-cs-augmentations-column">'
-        . '<div class="af-cs-panel-title">Доступные аугментации</div>'
-        . '<div class="af-cs-augmentations-list">' . implode('', $available_cards) . '</div>'
-        . '</div>'
-        . '</div>';
+    if ($can_edit) {
+        $augmentations_html = '<div class="af-cs-augmentations-ui af-cs-augmentations-rpg" data-afcs-augmentation-root="1" data-afcs-augmentation-can-edit="1">'
+            . '<div class="af-cs-augmentations-column">'
+            . '<div class="af-cs-panel-title">Слоты аугментаций</div>'
+            . $humanity_html
+            . '<div class="af-cs-slot-grid af-cs-augmentation-slot-grid">' . implode('', $slot_cards) . '</div>'
+            . '<div class="af-cs-augment-popover" data-afcs-augmentation-popover hidden></div>'
+            . '</div>'
+            . '<div class="af-cs-augmentations-column">'
+            . '<div class="af-cs-panel-title">Доступные аугментации</div>'
+            . '<div class="af-cs-augmentations-list">' . implode('', $available_cards) . '</div>'
+            . '</div>'
+            . '</div>';
+    } else {
+        $augmentations_html = '<div class="af-cs-augmentations-ui af-cs-augmentations-rpg af-cs-augmentations-ui--public" data-afcs-augmentation-root="1" data-afcs-augmentation-can-edit="0">'
+            . '<div class="af-cs-augmentations-column">'
+            . '<div class="af-cs-panel-title">Слоты аугментаций</div>'
+            . $humanity_html
+            . '<div class="af-cs-slot-grid af-cs-augmentation-slot-grid">' . implode('', $slot_cards) . '</div>'
+            . '</div>'
+            . '<div class="af-cs-augmentations-column af-cs-augmentations-preview-column">'
+            . '<div class="af-cs-panel-title">Превью</div>'
+            . '<div class="af-cs-augment-preview" data-afcs-augmentation-preview>'
+            . '<div class="af-cs-augment-preview__title">Выберите слот</div>'
+            . '<div class="af-cs-augment-preview__desc">Наведите или нажмите на слот, чтобы увидеть данные аугментации.</div>'
+            . '</div>'
+            . '</div>'
+            . '</div>';
+    }
 
     global $templates;
     $tpl = $templates->get('charactersheet_augmentations');
