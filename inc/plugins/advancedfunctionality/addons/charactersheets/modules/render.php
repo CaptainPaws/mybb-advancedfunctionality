@@ -106,8 +106,10 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     $sheet_skills_html = af_charactersheets_build_skills_html($sheet_view, $can_manage_skills, $can_view_ledger, $can_staff_reset, $skills_locked);
     $sheet_knowledge_html = af_charactersheets_build_knowledge_html($sheet_view, $can_edit_sheet, $can_view_ledger, $is_staff);
     $sheet_abilities_html = af_charactersheets_build_abilities_html((int)($sheet['uid'] ?? 0));
-    $sheet_augments_html = af_charactersheets_build_augments_html($build, $can_edit_sheet, $sheet_view, $uid);
-    $sheet_equipment_html = af_charactersheets_build_equipment_html($build, $can_edit_sheet, $uid);
+    $can_edit_loadout = $can_edit_sheet || af_charactersheets_user_is_admin_or_moderator($mybb->user ?? [], $fid_for_mod);
+    $sheet_owner_uid_for_loadout = (int)($sheet['uid'] ?? 0);
+    $sheet_augments_html = af_charactersheets_build_augments_html($build, $can_edit_loadout, $sheet_view, $sheet_owner_uid_for_loadout);
+    $sheet_equipment_html = af_charactersheets_build_equipment_html($build, $can_edit_loadout, $sheet_owner_uid_for_loadout);
     $sheet_mechanics_html = af_charactersheets_build_mechanics_html($sheet_view);
     $sheet_mechanics_title = htmlspecialchars_uni(af_charactersheets_lang('af_charactersheets_mechanics_title', 'Механика'));
 

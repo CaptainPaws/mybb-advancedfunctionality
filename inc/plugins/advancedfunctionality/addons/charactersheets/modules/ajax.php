@@ -55,6 +55,7 @@ function af_charactersheets_handle_api_impl(): void
     }
 
     $can_edit = af_charactersheets_user_can_edit_sheet($sheet, $mybb->user ?? []);
+    $can_edit_loadout = $can_edit || af_charactersheets_user_is_admin_or_moderator($mybb->user ?? [], $fid_for_mod);
     $can_manage = af_cs_can_manage_sheet((int)($mybb->user['uid'] ?? 0), (int)($sheet['uid'] ?? 0));
     $can_award = af_charactersheets_user_can_award_exp($mybb->user ?? [], $fid_for_mod);
     $can_staff_reset = af_charactersheets_user_can_staff_reset($mybb->user ?? [], $fid_for_mod);
@@ -529,7 +530,7 @@ function af_charactersheets_handle_api_impl(): void
         $build['inventory'] = $inventory;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
     } elseif ($do === 'equip_augmentation' || $do === 'unequip_augmentation' || $do === 'move_augmentation') {
-        if (!$can_edit) {
+        if (!$can_edit_loadout) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
         }
         $slot_configs = af_charactersheets_get_augmentation_slots();
@@ -706,7 +707,7 @@ function af_charactersheets_handle_api_impl(): void
         $build['augmentations'] = $augmentations;
         af_charactersheets_update_sheet_json($sheet_id, $base, $build, $progress);
     } elseif ($do === 'equip_equipment' || $do === 'unequip_equipment' || $do === 'set_active_weapon') {
-        if (!$can_edit) {
+        if (!$can_edit_loadout) {
             af_charactersheets_json_response(['success' => false, 'error' => 'Permission denied']);
         }
 
@@ -851,8 +852,8 @@ function af_charactersheets_handle_api_impl(): void
     $knowledge_html = af_charactersheets_build_knowledge_html($view, $can_edit, $can_view_ledger, $can_manage_knowledge_selection);
     $abilities_html = af_charactersheets_build_abilities_html((int)($sheet['uid'] ?? 0));
     $inventory_uid = (int)($sheet['uid'] ?? 0);
-    $augmentations_html = af_charactersheets_build_augments_html($build, $can_edit, $view, $inventory_uid);
-    $equipment_html = af_charactersheets_build_equipment_html($build, $can_edit, $inventory_uid);
+    $augmentations_html = af_charactersheets_build_augments_html($build, $can_edit_loadout, $view, $inventory_uid);
+    $equipment_html = af_charactersheets_build_equipment_html($build, $can_edit_loadout, $inventory_uid);
     $mechanics_html = af_charactersheets_build_mechanics_html($view);
 
     $response_payload = [
