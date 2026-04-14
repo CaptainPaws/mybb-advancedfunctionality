@@ -1536,9 +1536,9 @@
 }
 
 .af-cs-augmentations-ui {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 1fr);
-  gap: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .af-cs-augmentations-list {
@@ -2480,10 +2480,7 @@
 }
 
 @media (max-width: 980px) {
-  .af-cs-augmentations-ui {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
+  .af-cs-augmentations-top-row,
   .af-cs-augmentations-main {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2564,14 +2561,23 @@
   padding: 10px;
 }
 
-.af-cs-augmentations-ui--public {
-  grid-template-columns: minmax(0, 4fr) minmax(240px, 1fr);
-}
-
+.af-cs-augmentations-top-row,
 .af-cs-augmentations-main {
   display: grid;
   grid-template-columns: minmax(0, 4fr) minmax(240px, 1fr);
   gap: 20px;
+}
+
+.af-cs-augmentations-slots-block {
+  min-width: 0;
+}
+
+.af-cs-augmentations-available-row {
+  width: 100%;
+}
+
+.af-cs-augmentations-available-block {
+  width: 100%;
 }
 
 .af-cs-panel-title--with-actions {
@@ -2582,7 +2588,9 @@
 }
 
 .af-cs-augmentations-edit-section {
-  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .af-cs-augmentations-column--full {
