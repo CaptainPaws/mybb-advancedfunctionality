@@ -1556,6 +1556,17 @@
   background: rgba(6, 12, 18, 0.75);
 }
 
+.af-cs-augment-card.is-active {
+  border-color: rgba(92, 195, 255, 0.85);
+  box-shadow: 0 0 0 1px rgba(92, 195, 255, 0.4), 0 10px 24px rgba(5, 16, 28, 0.45);
+}
+
+.af-cs-augment-card:focus-visible,
+.af-cs-slot--augmentation:focus-visible {
+  outline: 2px solid rgba(92, 195, 255, 0.85);
+  outline-offset: 2px;
+}
+
 .af-cs-augment-card__icon {
   width: 54px;
   height: 54px;

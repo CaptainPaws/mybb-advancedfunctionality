@@ -1318,6 +1318,31 @@
           }
         }
 
+        function setActiveSelection(node) {
+          if (!node) return;
+          var isCard = !!node.closest('[data-afcs-augmentation-card]');
+          cards.forEach(function (item) {
+            var active = item === node;
+            item.classList.toggle('is-active', active);
+            item.setAttribute('aria-pressed', active ? 'true' : 'false');
+          });
+          slots.forEach(function (item) {
+            var active = !isCard && item === node;
+            item.classList.toggle('is-active', active);
+            item.setAttribute('aria-pressed', active ? 'true' : 'false');
+          });
+        }
+
+        function selectAugmentationNode(node) {
+          if (!node) return;
+          setActiveSelection(node);
+          if (preview) {
+            showPreview(node);
+          } else {
+            showPopover(node, payloadFromNode(node));
+          }
+        }
+
         if (canEdit) {
           try {
             isEditMode = localStorage.getItem(editModeStorageKey) === '1';
@@ -1327,40 +1352,27 @@
         }
 
         cards.forEach(function (card) {
-          card.addEventListener('mouseenter', function () {
-            if (preview) showPreview(card);
-            else showPopover(card, payloadFromNode(card));
-          });
-          card.addEventListener('mouseleave', function () {
-            if (!preview) hidePopover();
-          });
+          card.setAttribute('tabindex', '0');
+          card.setAttribute('role', 'button');
+          card.setAttribute('aria-pressed', 'false');
           card.addEventListener('click', function () {
-            cards.forEach(function (item) { item.classList.remove('is-active'); });
-            card.classList.add('is-active');
-            if (preview) showPreview(card);
-            else showPopover(card, payloadFromNode(card));
+            selectAugmentationNode(card);
+          });
+          card.addEventListener('keydown', function (event) {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            selectAugmentationNode(card);
           });
         });
         slots.forEach(function (slot) {
-          slot.addEventListener('mouseenter', function () {
-            if (preview) showPreview(slot);
-            else showPopover(slot, payloadFromNode(slot));
-          });
-          slot.addEventListener('mouseleave', function () {
-            if (!preview) hidePopover();
-          });
+          slot.setAttribute('aria-pressed', slot.classList.contains('is-active') ? 'true' : 'false');
           slot.addEventListener('click', function () {
-            slots.forEach(function (item) { item.classList.remove('is-active'); });
-            slot.classList.add('is-active');
-            cards.forEach(function (item) { item.classList.remove('is-active'); });
-            if (preview) showPreview(slot);
-            else showPopover(slot, payloadFromNode(slot));
+            selectAugmentationNode(slot);
           });
         });
 
         if (preview && slots.length) {
-          slots[0].classList.add('is-active');
-          showPreview(slots[0]);
+          selectAugmentationNode(slots[0]);
         }
 
         if (canEdit && toggleBtn && !toggleBtn.__afAugToggleBound) {
