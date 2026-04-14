@@ -1942,6 +1942,7 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
             }
         }
     }
+
     $preview_slots_map = [];
     foreach ($all_slots as $slot_code) {
         $slot_code = (string)$slot_code;
@@ -1959,9 +1960,11 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
         $bonus_html = $entry ? af_charactersheets_kb_get_block_html($entry, 'bonuses') : '';
         $is_weapon_slot = in_array($slot_code, $weapon_slots, true);
         $is_active_weapon = $is_weapon_slot && $item_id > 0 && $slot_code === $active_weapon_slot;
+
         $slot_markup = '<button type="button" class="af-cs-slot af-cs-slot--equipment' . ($item_id > 0 ? ' is-filled' : '') . ($is_active_weapon ? ' is-active-weapon' : '') . '"'
             . ' data-afcs-equipment-slot-dot="1"'
             . ' data-afcs-equipment-slot="' . htmlspecialchars_uni($slot_code) . '"'
+            . ' data-afcs-equipment-slot-label="' . htmlspecialchars_uni($slot_label) . '"'
             . ' data-afcs-equipment-preview-item-id="' . $item_id . '"'
             . ($item_id > 0 ? ' data-afcs-equipment-preview-trigger="' . $item_id . '"' : '')
             . ' data-afcs-equipment-popover-kind="equipped"'
@@ -1978,10 +1981,11 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
             . '<span class="af-cs-slot__item">' . htmlspecialchars_uni($item_id > 0 ? $item_title : 'Пусто') . '</span>'
             . ($is_active_weapon ? '<span class="af-cs-slot__state-badge">Активное оружие</span>' : '')
             . '</button>';
+
         $preview_slots_map[$slot_code] = $slot_markup;
     }
 
-    $preview_cards = [];
+    $available_cards = [];
     if ($can_edit) {
         foreach ((array)($state['items'] ?? []) as $index => $item) {
             $itemId = (int)($item['id'] ?? 0);
@@ -2002,41 +2006,24 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
             if (!in_array($subtype, ['armor', 'weapon', 'ammo', 'consumable', 'gear'], true)) {
                 $subtype = 'gear';
             }
-
             if ($subtype === 'consumable') {
                 $candidate_slots = ['support_1', 'support_2', 'support_3', 'support_4'];
             }
-
             $candidate_slots = array_values(array_unique(array_filter(array_map('strval', $candidate_slots))));
-            $slot_select = '';
-            if ($candidate_slots) {
-                $options = '<option value="">— слот —</option>';
-                foreach ($candidate_slots as $slotCode) {
-                    $slotLabel = (string)(af_inv_equipment_slots()[$slotCode] ?? $slotCode);
-                    $selected = ((string)($item['equipped_slot'] ?? '') === (string)$slotCode) ? ' selected' : '';
-                    $options .= '<option value="' . htmlspecialchars_uni((string)$slotCode) . '"' . $selected . '>' . htmlspecialchars_uni($slotLabel) . '</option>';
-                }
-                $slot_select = '<select data-afcs-equipment-slot-select="1">' . $options . '</select>';
-            }
-            $equipBtn = '';
-            $is_equipped = ((string)($item['equipped_slot'] ?? '') !== '');
-            if ($itemId > 0 && $candidate_slots) {
-                if ($is_equipped) {
-                    $equipBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-unequip="1" data-afcs-equipment-slot="' . htmlspecialchars_uni((string)($item['equipped_slot'] ?? '')) . '">Снять</button>';
-                } else {
-                    $equipBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-equip="1" data-afcs-equipment-item-id="' . $itemId . '">Надеть</button>';
-                }
-            }
-            $classes = 'af-cs-augment-card af-cs-equipment-item-card' . ($index === 0 ? ' is-active' : '') . ($is_equipped ? ' is-equipped' : '');
             $default_slot = (string)($candidate_slots[0] ?? '');
-            $preview_cards[] = '<div class="' . $classes . '" data-afcs-equipment-card="1" data-afcs-equipment-item-id="' . $itemId . '" data-afcs-equipment-filter-kind="' . htmlspecialchars_uni($subtype) . '" data-afcs-equipment-default-slot="' . htmlspecialchars_uni($default_slot) . '" data-afcs-equipment-candidate-slots="' . htmlspecialchars_uni(implode(',', array_map('strval', $candidate_slots))) . '">'
+            $is_equipped = ((string)($item['equipped_slot'] ?? '') !== '');
+
+            $available_cards[] = '<div class="af-cs-augment-card af-cs-equipment-item-card' . ($index === 0 ? ' is-active' : '') . ($is_equipped ? ' is-equipped' : '') . '"'
+                . ' data-afcs-equipment-card="1"'
+                . ' data-afcs-equipment-item-id="' . $itemId . '"'
+                . ' data-afcs-equipment-filter-kind="' . htmlspecialchars_uni($subtype) . '"'
+                . ' data-afcs-equipment-default-slot="' . htmlspecialchars_uni($default_slot) . '"'
+                . ' data-afcs-equipment-candidate-slots="' . htmlspecialchars_uni(implode(',', $candidate_slots)) . '">'
                 . '<div class="af-cs-augment-card__icon">' . af_charactersheets_render_kb_icon($entry, $title) . '</div>'
                 . '<div class="af-cs-augment-card__body">'
                 . '<div class="af-cs-augment-card__title">' . htmlspecialchars_uni($title) . '</div>'
                 . ($desc !== '' ? '<div class="af-cs-augment-card__desc">' . htmlspecialchars_uni($desc) . '</div>' : '')
                 . '<div class="af-cs-inventory-row"><span>Количество</span><strong>' . max(1, (int)($item['qty'] ?? 1)) . '</strong></div>'
-                . ((string)($item['equipped_slot_label'] ?? '') !== '' ? '<div class="af-cs-augment-card__humanity"><span class="af-cs-slot__state-badge">Надето</span> ' . htmlspecialchars_uni((string)$item['equipped_slot_label']) . '</div>' : '')
-                . ($bonus_html !== '' ? '<div class="af-cs-augment-card__effects">' . $bonus_html . '</div>' : '')
                 . '<div class="af-cs-sr-only" data-afcs-equipment-card-meta="1"'
                     . ' data-afcs-equipment-popover-kind="inventory"'
                     . ' data-afcs-equipment-popover-title="' . htmlspecialchars_uni($title) . '"'
@@ -2047,13 +2034,12 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
                     . ' data-afcs-equipment-default-slot="' . htmlspecialchars_uni($default_slot) . '"'
                     . ($is_equipped ? ' data-afcs-equipment-popover-equipped-slot="' . htmlspecialchars_uni((string)($item['equipped_slot'] ?? '')) . '"' : '')
                     . '></div>'
-                . '<div class="af-cs-augment-card__actions">' . $slot_select . $equipBtn . '</div>'
                 . '</div>'
                 . '</div>';
         }
 
-        if (!$preview_cards) {
-            $preview_cards[] = '<div class="af-cs-muted">Подходящая экипировка не найдена.</div>';
+        if (!$available_cards) {
+            $available_cards[] = '<div class="af-cs-muted">Подходящая экипировка не найдена.</div>';
         }
     }
 
@@ -2071,6 +2057,7 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
         'accessories' => 'Аксессуары',
         'other' => 'Прочее',
     ];
+
     $slots_grouped_html = [];
     foreach ($group_slots as $group_key => $group_slot_codes) {
         $group_cards = [];
@@ -2088,17 +2075,30 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
             . '</section>';
     }
 
-    $equipment_mode = $can_edit ? 'edit' : 'public';
-    $public_preview_html = '<div class="af-cs-augment-preview af-cs-equipment-info-preview" data-afcs-equipment-info-preview="1">'
+    $gear_btn = $can_edit
+        ? '<button type="button" class="af-cs-attrs__gear af-cs-equipment__gear" data-afcs-equipment-edit-toggle="1" aria-label="Редактировать экипировку" title="Редактировать экипировку"><i class="fa-solid fa-gear" aria-hidden="true"></i></button>'
+        : '';
+
+    $info_preview_html = '<div class="af-cs-augment-preview af-cs-equipment-info-preview" data-afcs-equipment-info-preview="1">'
         . '<div class="af-cs-augment-preview__title">Выберите слот</div>'
         . '<div class="af-cs-augment-preview__desc">Наведите или нажмите на слот экипировки, чтобы увидеть детали.</div>'
         . '</div>';
 
-    $equipment_html = '<div class="af-cs-augmentations-ui af-cs-equipment-ui af-cs-equipment-ui--' . htmlspecialchars_uni($equipment_mode) . '" data-afcs-equipment-root="1" data-afcs-equipment-mode="' . htmlspecialchars_uni($equipment_mode) . '">'
+    $equipment_html = '<div class="af-cs-augmentations-ui af-cs-equipment-ui af-cs-equipment-ui--public" data-afcs-equipment-root="1" data-afcs-equipment-mode="public" data-afcs-equipment-can-edit="' . ($can_edit ? '1' : '0') . '">'
         . '<div class="af-cs-augmentations-top-row af-cs-equipment-top-row">'
-            . ($can_edit
-                ? ('<div class="af-cs-augmentations-column">'
-                    . '<div class="af-cs-panel-title">Инвентарь экипировки</div>'
+            . '<div class="af-cs-augmentations-column af-cs-equipment-slots-column">'
+                . '<div class="af-cs-panel-title af-cs-panel-title--with-actions"><span>Надетая экипировка</span>' . $gear_btn . '</div>'
+                . '<div class="af-cs-equipment-preview" data-afcs-equipment-preview-root="1">' . implode('', $slots_grouped_html) . '</div>'
+            . '</div>'
+            . '<div class="af-cs-augmentations-column af-cs-augmentations-preview-column">'
+                . '<div class="af-cs-panel-title">Превью</div>'
+                . $info_preview_html
+            . '</div>'
+        . '</div>'
+        . ($can_edit
+            ? ('<div class="af-cs-equipment-edit-section" data-afcs-equipment-edit-section="1" hidden>'
+                . '<div class="af-cs-augmentations-column af-cs-augmentations-column--full af-cs-equipment-available-block">'
+                    . '<div class="af-cs-panel-title">Доступные предметы</div>'
                     . '<div class="af-cs-equipment-filters">'
                         . '<button type="button" class="af-cs-tab-btn is-active" data-afcs-equipment-filter="all">Все</button>'
                         . '<button type="button" class="af-cs-tab-btn" data-afcs-equipment-filter="armor">Броня</button>'
@@ -2107,20 +2107,14 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
                         . '<button type="button" class="af-cs-tab-btn" data-afcs-equipment-filter="consumable">Расходники</button>'
                         . '<button type="button" class="af-cs-tab-btn" data-afcs-equipment-filter="gear">Снаряжение / аксессуары</button>'
                     . '</div>'
-                    . '<div class="af-cs-augmentations-list af-cs-equipment-cards-grid">' . implode('', $preview_cards) . '</div>'
-                    . '</div>')
-                : ('<div class="af-cs-augmentations-column af-cs-equipment-slots-column">'
-                    . '<div class="af-cs-panel-title">Надетая экипировка</div>'
-                    . '<div class="af-cs-equipment-preview" data-afcs-equipment-preview-root="1">' . implode('', $slots_grouped_html) . '</div>'
-                    . '</div>')
-            )
-            . '<div class="af-cs-augmentations-column af-cs-augmentations-preview-column">'
-                . '<div class="af-cs-panel-title">Превью</div>'
-                . ($can_edit
-                    ? ('<div class="af-cs-equipment-preview" data-afcs-equipment-preview-root="1">' . implode('', $slots_grouped_html) . '</div>')
-                    : $public_preview_html)
-            . '</div>'
-        . '</div>'
+                    . '<div class="af-cs-augmentations-list af-cs-equipment-cards-grid" data-afcs-equipment-cards-grid="1">' . implode('', $available_cards) . '</div>'
+                . '</div>'
+                . '<div class="af-cs-equipment-edit-actions">'
+                    . '<button type="button" class="af-cs-btn" data-afcs-equipment-edit-save="1">Сохранить</button>'
+                    . '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-edit-cancel="1">Отменить</button>'
+                . '</div>'
+            . '</div>')
+            : '')
         . '<div class="af-cs-equip-popover" data-afcs-equipment-popover="1" hidden></div>'
         . '</div>';
 
