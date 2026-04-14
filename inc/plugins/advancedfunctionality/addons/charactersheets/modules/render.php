@@ -1879,7 +1879,7 @@ function af_charactersheets_build_augments_html(array $build, bool $can_edit, ar
         . '<div class="af-cs-panel-title">Превью</div>'
         . '<div class="af-cs-augment-preview" data-afcs-augmentation-preview>'
         . '<div class="af-cs-augment-preview__title">Выберите слот</div>'
-        . '<div class="af-cs-augment-preview__desc">Наведите или нажмите на слот, чтобы увидеть данные аугментации.</div>'
+        . '<div class="af-cs-augment-preview__desc">Нажмите на слот или аугментацию, чтобы увидеть данные.</div>'
         . '</div>'
         . '</div>'
         . '</div>';
