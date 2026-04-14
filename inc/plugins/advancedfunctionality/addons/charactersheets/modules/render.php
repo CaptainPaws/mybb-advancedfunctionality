@@ -1661,7 +1661,42 @@ function af_charactersheets_pick_augmentation_slots(array $entry): array
         }
     }
 
-    $slots = array_values(array_unique(array_filter($slots)));
+    $data_root = af_charactersheets_json_decode((string)($entry['data_json'] ?? ''));
+    if (is_array($data_root)) {
+        $item = (array)($data_root['item'] ?? []);
+        $augmentation = (array)($item['augmentation'] ?? []);
+        $cyberware = (array)($item['cyberware'] ?? []);
+        foreach ([
+            (string)($augmentation['slot'] ?? ''),
+            (string)($cyberware['slot'] ?? ''),
+        ] as $slot) {
+            $slot = trim($slot);
+            if ($slot !== '') {
+                $slots[] = $slot;
+            }
+        }
+    }
+
+    $legacy_map = function_exists('af_charactersheets_legacy_augmentation_slot_map')
+        ? af_charactersheets_legacy_augmentation_slot_map()
+        : [];
+    $canonical_keys = function_exists('af_charactersheets_kb_canonical_augmentation_slot_keys')
+        ? array_fill_keys(af_charactersheets_kb_canonical_augmentation_slot_keys(), true)
+        : [];
+    $normalized_slots = [];
+    foreach ($slots as $slot) {
+        $slot = trim((string)$slot);
+        if ($slot === '') {
+            continue;
+        }
+        $slot = (string)($legacy_map[$slot] ?? $slot);
+        if ($canonical_keys && !isset($canonical_keys[$slot])) {
+            continue;
+        }
+        $normalized_slots[] = $slot;
+    }
+
+    $slots = array_values(array_unique($normalized_slots));
     return $slots;
 }
 

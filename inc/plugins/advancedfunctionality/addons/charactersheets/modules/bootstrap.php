@@ -269,7 +269,7 @@ function af_charactersheets_ensure_settings(): void
         $lang->af_charactersheets_aug_slots_json ?? 'Augmentation slots',
         $lang->af_charactersheets_aug_slots_json_desc ?? 'JSON list of augmentation slots (slot_key, titles, icon, sortorder, max_equipped).',
         'textarea',
-        '[{"slot_key":"head","title_ru":"Голова","title_en":"Head","icon":"fa-solid fa-helmet-safety","sortorder":10,"max_equipped":1},{"slot_key":"eyes","title_ru":"Глаза","title_en":"Eyes","icon":"fa-solid fa-eye","sortorder":20,"max_equipped":1},{"slot_key":"arms","title_ru":"Руки","title_en":"Arms","icon":"fa-solid fa-hand","sortorder":30,"max_equipped":1},{"slot_key":"body","title_ru":"Торс","title_en":"Body","icon":"fa-solid fa-heart","sortorder":40,"max_equipped":1},{"slot_key":"legs","title_ru":"Ноги","title_en":"Legs","icon":"fa-solid fa-person-walking","sortorder":50,"max_equipped":1},{"slot_key":"nervous","title_ru":"Нервная система","title_en":"Nervous system","icon":"fa-solid fa-brain","sortorder":60,"max_equipped":1},{"slot_key":"skin","title_ru":"Кожа","title_en":"Skin","icon":"fa-solid fa-hand-sparkles","sortorder":70,"max_equipped":1},{"slot_key":"implant","title_ru":"Имплант","title_en":"Implant","icon":"fa-solid fa-microchip","sortorder":80,"max_equipped":1}]',
+        '[{"slot_key":"nervous_system","title_ru":"Нервная система","title_en":"Nervous system","sortorder":10,"max_equipped":1},{"slot_key":"circulatory_system","title_ru":"Кровеносная система","title_en":"Circulatory system","sortorder":20,"max_equipped":1},{"slot_key":"immune_system","title_ru":"Иммунная система","title_en":"Immune system","sortorder":30,"max_equipped":1},{"slot_key":"integumentary_system","title_ru":"Покровная система","title_en":"Integumentary system","sortorder":40,"max_equipped":1},{"slot_key":"operating_system","title_ru":"Операционная система","title_en":"Operating system","sortorder":50,"max_equipped":1},{"slot_key":"skeleton","title_ru":"Скелет","title_en":"Skeleton","sortorder":60,"max_equipped":1},{"slot_key":"arms","title_ru":"Руки","title_en":"Arms","sortorder":70,"max_equipped":1},{"slot_key":"hands","title_ru":"Кисти","title_en":"Hands","sortorder":80,"max_equipped":1},{"slot_key":"legs","title_ru":"Ноги","title_en":"Legs","sortorder":90,"max_equipped":1},{"slot_key":"eyes","title_ru":"Глаза","title_en":"Eyes","sortorder":100,"max_equipped":1},{"slot_key":"frontal_cortex","title_ru":"Лобная кора","title_en":"Frontal cortex","sortorder":110,"max_equipped":1},{"slot_key":"cyberaudio","title_ru":"Кибераудио","title_en":"Cyberaudio","sortorder":120,"max_equipped":1}]',
         50
     );
     af_charactersheets_ensure_setting(
@@ -3464,11 +3464,85 @@ function af_charactersheets_get_kb_entries_by_type(string $type): array
     return $rows;
 }
 
+function af_charactersheets_kb_canonical_augmentation_slot_keys(): array
+{
+    if (function_exists('af_kb_item_augmentation_slots_allowed')) {
+        $keys = af_kb_item_augmentation_slots_allowed();
+        if (is_array($keys) && $keys) {
+            return array_values(array_unique(array_filter(array_map('strval', $keys))));
+        }
+    }
+
+    return [
+        'nervous_system',
+        'circulatory_system',
+        'immune_system',
+        'integumentary_system',
+        'operating_system',
+        'skeleton',
+        'arms',
+        'hands',
+        'legs',
+        'eyes',
+        'frontal_cortex',
+        'cyberaudio',
+    ];
+}
+
+function af_charactersheets_legacy_augmentation_slot_map(): array
+{
+    return [
+        'nervous' => 'nervous_system',
+        'skin' => 'integumentary_system',
+        'implant' => 'operating_system',
+        'head' => 'frontal_cortex',
+        'body' => 'skeleton',
+    ];
+}
+
+function af_charactersheets_augmentation_slot_titles(): array
+{
+    return [
+        'nervous_system' => ['title_ru' => 'Нервная система', 'title_en' => 'Nervous system'],
+        'circulatory_system' => ['title_ru' => 'Кровеносная система', 'title_en' => 'Circulatory system'],
+        'immune_system' => ['title_ru' => 'Иммунная система', 'title_en' => 'Immune system'],
+        'integumentary_system' => ['title_ru' => 'Покровная система', 'title_en' => 'Integumentary system'],
+        'operating_system' => ['title_ru' => 'Операционная система', 'title_en' => 'Operating system'],
+        'skeleton' => ['title_ru' => 'Скелет', 'title_en' => 'Skeleton'],
+        'arms' => ['title_ru' => 'Руки', 'title_en' => 'Arms'],
+        'hands' => ['title_ru' => 'Кисти', 'title_en' => 'Hands'],
+        'legs' => ['title_ru' => 'Ноги', 'title_en' => 'Legs'],
+        'eyes' => ['title_ru' => 'Глаза', 'title_en' => 'Eyes'],
+        'frontal_cortex' => ['title_ru' => 'Лобная кора', 'title_en' => 'Frontal cortex'],
+        'cyberaudio' => ['title_ru' => 'Кибераудио', 'title_en' => 'Cyberaudio'],
+    ];
+}
+
 function af_charactersheets_get_augmentation_slots(): array
 {
     global $mybb, $db;
 
+    $slot_titles = af_charactersheets_augmentation_slot_titles();
+    $canonical_keys = af_charactersheets_kb_canonical_augmentation_slot_keys();
+    $legacy_map = af_charactersheets_legacy_augmentation_slot_map();
+
     $normalized = [];
+    $sort = 10;
+    foreach ($canonical_keys as $key) {
+        $title_ru = (string)($slot_titles[$key]['title_ru'] ?? $key);
+        $title_en = (string)($slot_titles[$key]['title_en'] ?? $key);
+        $title = af_charactersheets_is_ru() ? $title_ru : $title_en;
+        $normalized[$key] = [
+            'slot_key' => $key,
+            'title' => $title,
+            'title_ru' => $title_ru,
+            'title_en' => $title_en,
+            'icon' => '',
+            'sortorder' => $sort,
+            'max_equipped' => 1,
+        ];
+        $sort += 10;
+    }
 
     if ($db->table_exists('af_kb_types')) {
         $candidate_types = [
@@ -3500,7 +3574,11 @@ function af_charactersheets_get_augmentation_slots(): array
                 $meta = (array)($entry['meta'] ?? []);
                 $data = (array)($entry['data'] ?? []);
                 $key = trim((string)($meta['slot_key'] ?? $data['slot_key'] ?? $entry['key'] ?? ''));
+                $key = (string)($legacy_map[$key] ?? $key);
                 if ($key === '') {
+                    continue;
+                }
+                if (!array_key_exists($key, $normalized)) {
                     continue;
                 }
                 $title_ru = (string)($entry_row['title_ru'] ?? $meta['title_ru'] ?? $data['title_ru'] ?? '');
@@ -3514,48 +3592,57 @@ function af_charactersheets_get_augmentation_slots(): array
                 if ($title === '') {
                     $title = $title_ru !== '' ? $title_ru : ($title_en !== '' ? $title_en : $key);
                 }
-                $normalized[$key] = [
-                    'slot_key' => $key,
-                    'title' => $title,
-                    'title_ru' => $title_ru,
-                    'title_en' => $title_en,
-                    'icon' => (string)($meta['icon'] ?? $meta['icon_class'] ?? $entry_row['icon_class'] ?? ''),
-                    'sortorder' => (int)($meta['sortorder'] ?? $meta['sort_order'] ?? $entry_row['sortorder'] ?? 0),
-                    'max_equipped' => max(1, (int)($meta['max_equipped'] ?? $data['max_equipped'] ?? 1)),
-                ];
+                if ($title_ru !== '') {
+                    $normalized[$key]['title_ru'] = $title_ru;
+                }
+                if ($title_en !== '') {
+                    $normalized[$key]['title_en'] = $title_en;
+                }
+                $normalized[$key]['title'] = $title;
+                $icon = (string)($meta['icon'] ?? $meta['icon_class'] ?? $entry_row['icon_class'] ?? '');
+                if ($icon !== '') {
+                    $normalized[$key]['icon'] = $icon;
+                }
+                $sortorder = (int)($meta['sortorder'] ?? $meta['sort_order'] ?? $entry_row['sortorder'] ?? 0);
+                if ($sortorder > 0) {
+                    $normalized[$key]['sortorder'] = $sortorder;
+                }
+                $normalized[$key]['max_equipped'] = max(1, (int)($meta['max_equipped'] ?? $data['max_equipped'] ?? 1));
             }
         }
     }
 
-    if (!$normalized) {
-        $raw = (string)($mybb->settings['af_charactersheets_aug_slots_json'] ?? '');
-        $slots = af_charactersheets_json_decode($raw);
-        if (!is_array($slots)) {
-            $slots = [];
-        }
+    $raw = (string)($mybb->settings['af_charactersheets_aug_slots_json'] ?? '');
+    $slots = af_charactersheets_json_decode($raw);
+    if (is_array($slots)) {
         foreach ($slots as $slot) {
             if (!is_array($slot)) {
                 continue;
             }
             $key = trim((string)($slot['slot_key'] ?? $slot['key'] ?? ''));
-            if ($key === '') {
+            $key = (string)($legacy_map[$key] ?? $key);
+            if ($key === '' || !array_key_exists($key, $normalized)) {
                 continue;
             }
             $title_ru = (string)($slot['title_ru'] ?? $slot['title'] ?? '');
             $title_en = (string)($slot['title_en'] ?? $slot['title'] ?? '');
-            $title = af_charactersheets_is_ru() ? $title_ru : $title_en;
-            if ($title === '') {
-                $title = $title_ru !== '' ? $title_ru : ($title_en !== '' ? $title_en : $key);
+            if ($title_ru !== '') {
+                $normalized[$key]['title_ru'] = $title_ru;
             }
-            $normalized[$key] = [
-                'slot_key' => $key,
-                'title' => $title,
-                'title_ru' => $title_ru,
-                'title_en' => $title_en,
-                'icon' => (string)($slot['icon'] ?? ''),
-                'sortorder' => (int)($slot['sortorder'] ?? $slot['sort_order'] ?? 0),
-                'max_equipped' => max(1, (int)($slot['max_equipped'] ?? 1)),
-            ];
+            if ($title_en !== '') {
+                $normalized[$key]['title_en'] = $title_en;
+            }
+            $title = af_charactersheets_is_ru() ? $normalized[$key]['title_ru'] : $normalized[$key]['title_en'];
+            $normalized[$key]['title'] = $title !== '' ? $title : $key;
+            $icon = (string)($slot['icon'] ?? '');
+            if ($icon !== '') {
+                $normalized[$key]['icon'] = $icon;
+            }
+            $sortorder = (int)($slot['sortorder'] ?? $slot['sort_order'] ?? 0);
+            if ($sortorder > 0) {
+                $normalized[$key]['sortorder'] = $sortorder;
+            }
+            $normalized[$key]['max_equipped'] = max(1, (int)($slot['max_equipped'] ?? 1));
         }
     }
 
@@ -3737,11 +3824,20 @@ function af_charactersheets_normalize_build(array $build): array
 
     $augmentation_defaults = $defaults['augmentations']['slots'];
     $augmentation_slots = $augmentation_defaults;
-    foreach ((array)($build['augmentations']['slots'] ?? []) as $slot_key => $slot_value) {
+    $legacy_slot_map = af_charactersheets_legacy_augmentation_slot_map();
+    foreach ((array)($build['augmentations']['slots'] ?? []) as $slot_key_raw => $slot_value) {
+        $slot_key = (string)$slot_key_raw;
         if (!array_key_exists($slot_key, $augmentation_defaults)) {
+            $slot_key = (string)($legacy_slot_map[$slot_key] ?? '');
+        }
+        if ($slot_key === '' || !array_key_exists($slot_key, $augmentation_defaults)) {
             continue;
         }
-        $augmentation_slots[$slot_key] = $slot_value;
+        $target_max = (int)((af_charactersheets_get_augmentation_slot_config($slot_key)['max_equipped'] ?? 1));
+        $existing = af_charactersheets_normalize_slot_items($augmentation_slots[$slot_key] ?? []);
+        $incoming = af_charactersheets_normalize_slot_items($slot_value);
+        $merged = array_merge($existing, $incoming);
+        $augmentation_slots[$slot_key] = $target_max <= 1 ? ($merged[0] ?? null) : array_slice($merged, 0, $target_max);
     }
     foreach ($augmentation_slots as $slot_key => $slot_value) {
         $config = af_charactersheets_get_augmentation_slot_config((string)$slot_key);

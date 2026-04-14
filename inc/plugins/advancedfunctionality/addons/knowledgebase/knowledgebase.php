@@ -3425,6 +3425,24 @@ function af_kb_normalize_item_rules_payload(array $payload): array
     return $payload;
 }
 
+function af_kb_item_augmentation_slots_allowed(): array
+{
+    return [
+        'nervous_system',
+        'circulatory_system',
+        'immune_system',
+        'integumentary_system',
+        'operating_system',
+        'skeleton',
+        'arms',
+        'hands',
+        'legs',
+        'eyes',
+        'frontal_cortex',
+        'cyberaudio',
+    ];
+}
+
 function af_kb_prepare_item_payload_for_save(array $metaPayload, string $fallbackItemKind = ''): array
 {
     $rules = $metaPayload['rules'] ?? [];
@@ -3467,20 +3485,7 @@ function af_kb_prepare_item_payload_for_save(array $metaPayload, string $fallbac
         $equipSlot = str_replace('consumable_', 'support_', $equipSlot);
     }
 
-    $augmentationSlotsAllowed = [
-        'nervous_system',
-        'circulatory_system',
-        'immune_system',
-        'integumentary_system',
-        'operating_system',
-        'skeleton',
-        'arms',
-        'hands',
-        'legs',
-        'eyes',
-        'frontal_cortex',
-        'cyberaudio',
-    ];
+    $augmentationSlotsAllowed = af_kb_item_augmentation_slots_allowed();
 
     $augmentationSlot = trim((string)($item['augmentation']['slot'] ?? ''));
     $cyberwareSlot = trim((string)($item['cyberware']['slot'] ?? ''));
@@ -3558,20 +3563,7 @@ function af_kb_validate_item_slot_requirements(array $rulesData, array &$errors)
         $equipSlot = str_replace('consumable_', 'support_', $equipSlot);
     }
 
-    $augmentationSlotsAllowed = [
-        'nervous_system',
-        'circulatory_system',
-        'immune_system',
-        'integumentary_system',
-        'operating_system',
-        'skeleton',
-        'arms',
-        'hands',
-        'legs',
-        'eyes',
-        'frontal_cortex',
-        'cyberaudio',
-    ];
+    $augmentationSlotsAllowed = af_kb_item_augmentation_slots_allowed();
 
     $slotByKind = [
         'armor' => ['head', 'body', 'hands', 'legs', 'feet', 'back', 'belt'],
