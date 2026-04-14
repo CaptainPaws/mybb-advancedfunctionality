@@ -1863,35 +1863,41 @@ function af_charactersheets_build_augments_html(array $build, bool $can_edit, ar
         . '<div class="af-cs-progress__bar"><span style="width:' . htmlspecialchars_uni(number_format((float)$humanity_percent, 2, '.', '')) . '%"></span></div>'
         . '</div>';
 
+    $augment_edit_gear = $can_edit
+        ? '<button type="button" class="af-cs-attrs__gear af-cs-augmentations__gear" data-afcs-augments-edit-toggle="1" aria-label="Редактировать аугментации" title="Редактировать аугментации"><i class="fa-solid fa-gear" aria-hidden="true"></i></button>'
+        : '';
+
+    $augmentations_html = '<div class="af-cs-augmentations-ui af-cs-augmentations-rpg' . ($can_edit ? ' af-cs-augmentations-ui--can-edit' : ' af-cs-augmentations-ui--public') . '" data-afcs-augmentation-root="1" data-afcs-augmentation-can-edit="' . ($can_edit ? '1' : '0') . '">'
+        . '<div class="af-cs-augmentations-main">'
+        . '<div class="af-cs-augmentations-column">'
+        . '<div class="af-cs-panel-title af-cs-panel-title--with-actions"><span>Слоты аугментаций</span>' . $augment_edit_gear . '</div>'
+        . $humanity_html
+        . '<div class="af-cs-slot-grid af-cs-augmentation-slot-grid">' . implode('', $slot_cards) . '</div>'
+        . '<div class="af-cs-augment-popover" data-afcs-augmentation-popover hidden></div>'
+        . '</div>'
+        . '<div class="af-cs-augmentations-column af-cs-augmentations-preview-column">'
+        . '<div class="af-cs-panel-title">Превью</div>'
+        . '<div class="af-cs-augment-preview" data-afcs-augmentation-preview>'
+        . '<div class="af-cs-augment-preview__title">Выберите слот</div>'
+        . '<div class="af-cs-augment-preview__desc">Наведите или нажмите на слот, чтобы увидеть данные аугментации.</div>'
+        . '</div>'
+        . '</div>'
+        . '</div>';
+
     if ($can_edit) {
-        $augmentations_html = '<div class="af-cs-augmentations-ui af-cs-augmentations-rpg" data-afcs-augmentation-root="1" data-afcs-augmentation-can-edit="1">'
-            . '<div class="af-cs-augmentations-column">'
-            . '<div class="af-cs-panel-title">Слоты аугментаций</div>'
-            . $humanity_html
-            . '<div class="af-cs-slot-grid af-cs-augmentation-slot-grid">' . implode('', $slot_cards) . '</div>'
-            . '<div class="af-cs-augment-popover" data-afcs-augmentation-popover hidden></div>'
-            . '</div>'
-            . '<div class="af-cs-augmentations-column">'
+        $augmentations_html .= '<div class="af-cs-augmentations-edit-section" data-afcs-augmentation-edit-section="1" hidden>'
+            . '<div class="af-cs-augmentations-column af-cs-augmentations-column--full">'
             . '<div class="af-cs-panel-title">Доступные аугментации</div>'
             . '<div class="af-cs-augmentations-list">' . implode('', $available_cards) . '</div>'
-            . '</div>'
-            . '</div>';
-    } else {
-        $augmentations_html = '<div class="af-cs-augmentations-ui af-cs-augmentations-rpg af-cs-augmentations-ui--public" data-afcs-augmentation-root="1" data-afcs-augmentation-can-edit="0">'
-            . '<div class="af-cs-augmentations-column">'
-            . '<div class="af-cs-panel-title">Слоты аугментаций</div>'
-            . $humanity_html
-            . '<div class="af-cs-slot-grid af-cs-augmentation-slot-grid">' . implode('', $slot_cards) . '</div>'
-            . '</div>'
-            . '<div class="af-cs-augmentations-column af-cs-augmentations-preview-column">'
-            . '<div class="af-cs-panel-title">Превью</div>'
-            . '<div class="af-cs-augment-preview" data-afcs-augmentation-preview>'
-            . '<div class="af-cs-augment-preview__title">Выберите слот</div>'
-            . '<div class="af-cs-augment-preview__desc">Наведите или нажмите на слот, чтобы увидеть данные аугментации.</div>'
+            . '<div class="af-cs-augmentations-edit-actions">'
+            . '<button type="button" class="af-cs-btn" data-afcs-augmentation-edit-save="1">Сохранить</button>'
+            . '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-augmentation-edit-cancel="1">Отменить</button>'
             . '</div>'
             . '</div>'
             . '</div>';
     }
+
+    $augmentations_html .= '</div>';
 
     global $templates;
     $tpl = $templates->get('charactersheet_augmentations');
