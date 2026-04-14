@@ -871,9 +871,11 @@
         if (!augBlock) return;
         var root = augBlock.querySelector('[data-afcs-augmentation-root]');
         if (!root) return;
+        var canEdit = root.getAttribute('data-afcs-augmentation-can-edit') === '1';
         var cards = augBlock.querySelectorAll('[data-afcs-augmentation-card]');
         var slots = augBlock.querySelectorAll('[data-afcs-augmentation-slot-dot]');
         var popover = augBlock.querySelector('[data-afcs-augmentation-popover]');
+        var preview = augBlock.querySelector('[data-afcs-augmentation-preview]');
         if (!cards.length && !slots.length) return;
 
         function payloadFromNode(node) {
@@ -894,16 +896,16 @@
           };
         }
 
-        function showPopover(anchor, payload) {
-          if (!popover || !payload) return;
+        function buildDetailsHtml(payload) {
+          if (!payload) return '';
           var actionBtn = '';
-          if (payload.type && payload.key) {
+          if (canEdit && payload.type && payload.key) {
             actionBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-augmentation-equip="1" data-afcs-augmentation-type="' + payload.type + '" data-afcs-augmentation-key="' + payload.key + '" data-afcs-augmentation-slot-default="' + payload.defaultSlot + '">Надеть</button>';
-          } else if (payload.slotCode && payload.key) {
+          } else if (canEdit && payload.slotCode && payload.key) {
             actionBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-augmentation-unequip="1" data-afcs-augmentation-slot="' + payload.slotCode + '" data-afcs-augmentation-key="' + payload.key + '">Снять</button>';
           }
 
-          popover.innerHTML = ''
+          return ''
             + '<div class="af-cs-equip-popover__head"><strong>' + payload.title + '</strong></div>'
             + (payload.desc ? '<div class="af-cs-equip-popover__line">' + payload.desc + '</div>' : '')
             + (payload.slot ? '<div class="af-cs-equip-popover__line">Слот: ' + payload.slot + '</div>' : '')
@@ -911,6 +913,11 @@
             + (payload.stats ? '<div class="af-cs-equip-popover__line"><em>' + payload.stats + '</em></div>' : '')
             + (payload.items ? '<div class="af-cs-equip-popover__line">' + payload.items + '</div>' : '')
             + (actionBtn ? '<div class="af-cs-equip-popover__actions">' + actionBtn + '</div>' : '');
+        }
+
+        function showPopover(anchor, payload) {
+          if (!popover || !payload) return;
+          popover.innerHTML = buildDetailsHtml(payload);
 
           var rect = anchor.getBoundingClientRect();
           popover.hidden = false;
@@ -928,21 +935,51 @@
           popover.style.left = left + 'px';
         }
 
+        function showPreview(node) {
+          if (!preview) return;
+          var payload = payloadFromNode(node);
+          if (!payload) return;
+          preview.innerHTML = buildDetailsHtml(payload);
+        }
+
         function hidePopover() {
           if (!popover) return;
           popover.hidden = true;
         }
 
         cards.forEach(function (card) {
-          card.addEventListener('mouseenter', function () { showPopover(card, payloadFromNode(card)); });
-          card.addEventListener('mouseleave', hidePopover);
-          card.addEventListener('click', function () { showPopover(card, payloadFromNode(card)); });
+          card.addEventListener('mouseenter', function () {
+            if (preview) showPreview(card);
+            else showPopover(card, payloadFromNode(card));
+          });
+          card.addEventListener('mouseleave', function () {
+            if (!preview) hidePopover();
+          });
+          card.addEventListener('click', function () {
+            if (preview) showPreview(card);
+            else showPopover(card, payloadFromNode(card));
+          });
         });
         slots.forEach(function (slot) {
-          slot.addEventListener('mouseenter', function () { showPopover(slot, payloadFromNode(slot)); });
-          slot.addEventListener('mouseleave', hidePopover);
-          slot.addEventListener('click', function () { showPopover(slot, payloadFromNode(slot)); });
+          slot.addEventListener('mouseenter', function () {
+            if (preview) showPreview(slot);
+            else showPopover(slot, payloadFromNode(slot));
+          });
+          slot.addEventListener('mouseleave', function () {
+            if (!preview) hidePopover();
+          });
+          slot.addEventListener('click', function () {
+            slots.forEach(function (item) { item.classList.remove('is-active'); });
+            slot.classList.add('is-active');
+            if (preview) showPreview(slot);
+            else showPopover(slot, payloadFromNode(slot));
+          });
         });
+
+        if (preview && slots.length) {
+          slots[0].classList.add('is-active');
+          showPreview(slots[0]);
+        }
 
         if (!root.__afAugDocBound) {
           root.__afAugDocBound = true;

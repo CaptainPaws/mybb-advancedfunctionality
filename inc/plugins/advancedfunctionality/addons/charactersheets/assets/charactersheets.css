@@ -2533,6 +2533,11 @@
   min-height: 110px;
 }
 
+.af-cs-slot--augmentation.is-active {
+  border-color: rgba(92, 195, 255, 0.85);
+  box-shadow: 0 0 0 1px rgba(92, 195, 255, 0.4), 0 10px 24px rgba(5, 16, 28, 0.45);
+}
+
 .af-cs-slot--augmentation .af-cs-slot-note {
   margin-top: 2px;
   font-size: 12px;
@@ -2553,4 +2558,32 @@
   background: rgba(6, 14, 24, 0.97);
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.45);
   padding: 10px;
+}
+
+.af-cs-augmentations-ui--public {
+  grid-template-columns: minmax(0, 4fr) minmax(240px, 1fr);
+}
+
+.af-cs-augmentations-preview-column {
+  position: sticky;
+  top: 12px;
+  align-self: start;
+}
+
+.af-cs-augment-preview {
+  min-height: 220px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(92, 195, 255, 0.35);
+  background: linear-gradient(180deg, rgba(8, 16, 28, 0.88), rgba(4, 10, 18, 0.92));
+}
+
+.af-cs-augment-preview__title {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.af-cs-augment-preview__desc {
+  font-size: 12px;
+  opacity: 0.8;
 }
