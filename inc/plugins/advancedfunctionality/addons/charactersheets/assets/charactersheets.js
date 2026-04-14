@@ -757,6 +757,30 @@
           return map;
         }
 
+        function enrichItemsFromSlots(map) {
+          equipmentBlock.querySelectorAll('[data-afcs-equipment-slot-dot]').forEach(function (slotNode) {
+            var slotCode = String(slotNode.getAttribute('data-afcs-equipment-slot') || '');
+            var itemId = String(slotNode.getAttribute('data-afcs-equipment-preview-item-id') || '');
+            if (!slotCode || !itemId || itemId === '0') return;
+
+            var existing = map[itemId] || {};
+            var candidateSlots = Array.isArray(existing.candidateSlots) ? existing.candidateSlots.slice() : [];
+            if (candidateSlots.indexOf(slotCode) === -1) candidateSlots.push(slotCode);
+
+            map[itemId] = {
+              id: itemId,
+              title: existing.title || slotNode.getAttribute('data-afcs-equipment-popover-title') || 'Предмет',
+              desc: existing.desc || slotNode.getAttribute('data-afcs-equipment-popover-desc') || '',
+              stats: existing.stats || slotNode.getAttribute('data-afcs-equipment-popover-stats') || '',
+              icon: existing.icon || slotNode.getAttribute('data-afcs-equipment-popover-icon') || '',
+              kind: existing.kind || (/^weapon_/.test(slotCode) ? 'weapon' : 'gear'),
+              defaultSlot: existing.defaultSlot || slotCode,
+              candidateSlots: candidateSlots
+            };
+          });
+          return map;
+        }
+
         function readInitialState(itemsMap) {
           var slots = {};
           equipmentBlock.querySelectorAll('[data-afcs-equipment-slot-dot]').forEach(function (slotNode) {
@@ -783,7 +807,7 @@
           return { slots: slots, activeWeaponSlot: activeWeaponSlot, items: itemsMap };
         }
 
-        var itemsMap = readItems();
+        var itemsMap = enrichItemsFromSlots(readItems());
         var initialState = readInitialState(itemsMap);
         var draftState = JSON.parse(JSON.stringify(initialState));
 
@@ -1372,7 +1396,13 @@
         });
 
         if (preview && slots.length) {
-          selectAugmentationNode(slots[0]);
+          var firstFilledSlot = null;
+          slots.forEach(function (slotNode) {
+            if (!firstFilledSlot && String(slotNode.getAttribute('data-afcs-augmentation-popover-key') || '') !== '') {
+              firstFilledSlot = slotNode;
+            }
+          });
+          selectAugmentationNode(firstFilledSlot || slots[0]);
         }
 
         if (canEdit && toggleBtn && !toggleBtn.__afAugToggleBound) {
