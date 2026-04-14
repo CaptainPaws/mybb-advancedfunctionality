@@ -2326,6 +2326,23 @@
   gap: 14px;
 }
 
+.af-cs-equipment-edit-section {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.af-cs-equipment-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.af-cs-equipment-ui:not(.is-editing) .af-cs-equipment-edit-section {
+  display: none;
+}
+
 .af-cs-equipment-ui--public .af-cs-augmentations-preview-column {
   position: sticky;
   top: 12px;
