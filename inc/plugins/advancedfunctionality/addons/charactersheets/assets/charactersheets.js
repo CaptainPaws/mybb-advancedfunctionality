@@ -876,7 +876,14 @@
         var slots = augBlock.querySelectorAll('[data-afcs-augmentation-slot-dot]');
         var popover = augBlock.querySelector('[data-afcs-augmentation-popover]');
         var preview = augBlock.querySelector('[data-afcs-augmentation-preview]');
+        var toggleBtn = augBlock.querySelector('[data-afcs-augments-edit-toggle]');
+        var editSection = augBlock.querySelector('[data-afcs-augmentation-edit-section]');
+        var saveBtn = augBlock.querySelector('[data-afcs-augmentation-edit-save]');
+        var cancelBtn = augBlock.querySelector('[data-afcs-augmentation-edit-cancel]');
         if (!cards.length && !slots.length) return;
+
+        var editModeStorageKey = 'afcs_augment_edit_' + String(sheetId || '');
+        var isEditMode = false;
 
         function payloadFromNode(node) {
           if (!node) return null;
@@ -899,9 +906,9 @@
         function buildDetailsHtml(payload) {
           if (!payload) return '';
           var actionBtn = '';
-          if (canEdit && payload.type && payload.key) {
+          if (canEdit && isEditMode && payload.type && payload.key) {
             actionBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-augmentation-equip="1" data-afcs-augmentation-type="' + payload.type + '" data-afcs-augmentation-key="' + payload.key + '" data-afcs-augmentation-slot-default="' + payload.defaultSlot + '">Надеть</button>';
-          } else if (canEdit && payload.slotCode && payload.key) {
+          } else if (canEdit && isEditMode && payload.slotCode && payload.key) {
             actionBtn = '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-augmentation-unequip="1" data-afcs-augmentation-slot="' + payload.slotCode + '" data-afcs-augmentation-key="' + payload.key + '">Снять</button>';
           }
 
@@ -947,6 +954,35 @@
           popover.hidden = true;
         }
 
+        function applyEditModeUI() {
+          root.classList.toggle('is-editing', !!isEditMode);
+          if (toggleBtn) {
+            toggleBtn.classList.toggle('is-active', !!isEditMode);
+            toggleBtn.setAttribute('aria-pressed', isEditMode ? 'true' : 'false');
+          }
+          if (editSection) {
+            editSection.hidden = !isEditMode;
+          }
+
+          var activeSlot = augBlock.querySelector('[data-afcs-augmentation-slot-dot].is-active');
+          var activeCard = augBlock.querySelector('[data-afcs-augmentation-card].is-active');
+          if (preview) {
+            if (activeCard) {
+              showPreview(activeCard);
+            } else if (activeSlot) {
+              showPreview(activeSlot);
+            }
+          }
+        }
+
+        if (canEdit) {
+          try {
+            isEditMode = localStorage.getItem(editModeStorageKey) === '1';
+          } catch (e) {
+            isEditMode = false;
+          }
+        }
+
         cards.forEach(function (card) {
           card.addEventListener('mouseenter', function () {
             if (preview) showPreview(card);
@@ -956,6 +992,8 @@
             if (!preview) hidePopover();
           });
           card.addEventListener('click', function () {
+            cards.forEach(function (item) { item.classList.remove('is-active'); });
+            card.classList.add('is-active');
             if (preview) showPreview(card);
             else showPopover(card, payloadFromNode(card));
           });
@@ -971,6 +1009,7 @@
           slot.addEventListener('click', function () {
             slots.forEach(function (item) { item.classList.remove('is-active'); });
             slot.classList.add('is-active');
+            cards.forEach(function (item) { item.classList.remove('is-active'); });
             if (preview) showPreview(slot);
             else showPopover(slot, payloadFromNode(slot));
           });
@@ -980,6 +1019,46 @@
           slots[0].classList.add('is-active');
           showPreview(slots[0]);
         }
+
+        if (canEdit && toggleBtn && !toggleBtn.__afAugToggleBound) {
+          toggleBtn.__afAugToggleBound = true;
+          toggleBtn.addEventListener('click', function (event) {
+            event.preventDefault();
+            isEditMode = !isEditMode;
+            try {
+              localStorage.setItem(editModeStorageKey, isEditMode ? '1' : '0');
+            } catch (e) {}
+            applyEditModeUI();
+          });
+        }
+
+        if (canEdit && saveBtn && !saveBtn.__afAugSaveBound) {
+          saveBtn.__afAugSaveBound = true;
+          saveBtn.addEventListener('click', function (event) {
+            event.preventDefault();
+            isEditMode = false;
+            try {
+              localStorage.setItem(editModeStorageKey, '0');
+            } catch (e) {}
+            applyEditModeUI();
+            showToast('Изменения сохранены');
+          });
+        }
+
+        if (canEdit && cancelBtn && !cancelBtn.__afAugCancelBound) {
+          cancelBtn.__afAugCancelBound = true;
+          cancelBtn.addEventListener('click', function (event) {
+            event.preventDefault();
+            isEditMode = false;
+            try {
+              localStorage.setItem(editModeStorageKey, '0');
+            } catch (e) {}
+            applyEditModeUI();
+            showToast('Редактирование отменено');
+          });
+        }
+
+        applyEditModeUI();
 
         if (!root.__afAugDocBound) {
           root.__afAugDocBound = true;

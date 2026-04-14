@@ -2484,6 +2484,10 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .af-cs-augmentations-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .af-cs-equipment-ui .af-cs-augmentations-column {
     overflow: visible;
   }
@@ -2562,6 +2566,38 @@
 
 .af-cs-augmentations-ui--public {
   grid-template-columns: minmax(0, 4fr) minmax(240px, 1fr);
+}
+
+.af-cs-augmentations-main {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(240px, 1fr);
+  gap: 20px;
+}
+
+.af-cs-panel-title--with-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.af-cs-augmentations-edit-section {
+  margin-top: 14px;
+}
+
+.af-cs-augmentations-column--full {
+  width: 100%;
+}
+
+.af-cs-augmentations-edit-actions {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.af-cs-augmentations-ui:not(.is-editing) .af-cs-augmentations-edit-section {
+  display: none;
 }
 
 .af-cs-augmentations-preview-column {
