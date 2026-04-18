@@ -1488,6 +1488,44 @@ function af_kb_l10n_label(string $dict, string $key, bool $isRu): string
     return (string)($isRu ? ($row['ru'] ?? $key) : ($row['en'] ?? $key));
 }
 
+
+function af_kb_default_relation_types_dictionary(): array
+{
+    return [
+        AF_KB_REL_RACE_HAS_VARIANT => ['ru' => 'Разновидности', 'en' => 'Variants'],
+    ];
+}
+
+function af_kb_relation_type_label(string $relType, bool $isRu): string
+{
+    $relType = trim($relType);
+    if ($relType == '') {
+        return '';
+    }
+
+    global $lang;
+
+    $langKey = 'af_kb_rel_type_' . preg_replace('/[^a-z0-9_]+/i', '_', strtolower($relType));
+    if (isset($lang->{$langKey}) && trim((string)$lang->{$langKey}) !== '') {
+        return (string)$lang->{$langKey};
+    }
+
+    $dict = af_kb_default_relation_types_dictionary();
+    $row = $dict[$relType] ?? null;
+    if (is_array($row)) {
+        $localized = $isRu ? (string)($row['ru'] ?? '') : (string)($row['en'] ?? '');
+        if ($localized !== '') {
+            return $localized;
+        }
+        $display = (string)($row['label'] ?? '');
+        if ($display !== '') {
+            return $display;
+        }
+    }
+
+    return $relType;
+}
+
 function af_kb_default_ui_schema_for_type(string $typeKey): array
 {
     // Для этих типов фронт должен быть "чистый": только body, без секций/карточек
@@ -6808,7 +6846,8 @@ function af_kb_handle_view(): void
             }
             eval("\$kb_rel_items .= \"" . af_kb_get_template('knowledgebase_rel_item') . "\";");
         }
-        $kb_relations .= '<div class="af-kb-rel-group"><h4>'.htmlspecialchars_uni($relType).'</h4><ul>'.$kb_rel_items.'</ul></div>';
+        $relTypeLabel = af_kb_relation_type_label((string)$relType, $isRu);
+        $kb_relations .= '<div class="af-kb-rel-group"><h4>'.htmlspecialchars_uni($relTypeLabel).'</h4><ul>'.$kb_rel_items.'</ul></div>';
     }
 
     $entryUi = af_kb_get_entry_ui($entry);
