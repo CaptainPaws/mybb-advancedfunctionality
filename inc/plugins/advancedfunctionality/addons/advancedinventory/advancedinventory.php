@@ -2516,15 +2516,23 @@ function af_advinv_extract_ability_fields(array $meta): array
     $description = trim((string)($meta['description'] ?? $meta['full_description'] ?? ''));
     $effects = [];
     $requirements = [];
-    $cost = af_advinv_format_structured_value($meta['cost'] ?? $meta['rules']['spell']['cost'] ?? $meta['rules']['ritual']['cost'] ?? '');
-    $price = af_advinv_format_structured_value($meta['price'] ?? $meta['shop']['price'] ?? '');
-    $cooldown = af_advinv_format_structured_value($meta['cooldown'] ?? $meta['rules']['spell']['cooldown'] ?? $meta['rules']['ritual']['cooldown'] ?? '');
-    $resource = af_advinv_format_structured_value($meta['resource'] ?? $meta['rules']['spell']['resource'] ?? $meta['rules']['ritual']['resource'] ?? '');
-    $rank = af_advinv_format_structured_value($meta['rank'] ?? $meta['tier'] ?? $meta['rules']['spell']['rank'] ?? $meta['rules']['ritual']['rank'] ?? '');
-    $school = af_advinv_format_structured_value($meta['school'] ?? $meta['rules']['spell']['school'] ?? $meta['rules']['ritual']['school'] ?? '');
-    $tradition = af_advinv_format_structured_value($meta['tradition'] ?? $meta['rules']['spell']['tradition'] ?? $meta['rules']['ritual']['tradition'] ?? '');
+    $normalizedAbility = [];
+    if (function_exists('af_kb_get_normalized_ability_profile')) {
+        $normalizedAbility = af_kb_get_normalized_ability_profile([
+            'type' => (string)($meta['kb_type'] ?? 'spell'),
+            'meta_json' => json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
+        ], 'inventory');
+    }
 
-    foreach ((array)($meta['effects'] ?? $meta['rules']['effects'] ?? []) as $effect) {
+    $cost = af_advinv_format_structured_value($meta['cost'] ?? ($normalizedAbility['cost'] ?? '') ?? $meta['rules']['spell']['cost'] ?? $meta['rules']['ritual']['cost'] ?? '');
+    $price = af_advinv_format_structured_value($meta['price'] ?? $meta['shop']['price'] ?? '');
+    $cooldown = af_advinv_format_structured_value($meta['cooldown'] ?? ($normalizedAbility['cooldown'] ?? '') ?? $meta['rules']['spell']['cooldown'] ?? $meta['rules']['ritual']['cooldown'] ?? '');
+    $resource = af_advinv_format_structured_value($meta['resource'] ?? ($normalizedAbility['resource'] ?? '') ?? $meta['rules']['spell']['resource'] ?? $meta['rules']['ritual']['resource'] ?? '');
+    $rank = af_advinv_format_structured_value($meta['rank'] ?? $meta['tier'] ?? ($normalizedAbility['rank'] ?? '') ?? $meta['rules']['spell']['rank'] ?? $meta['rules']['ritual']['rank'] ?? '');
+    $school = af_advinv_format_structured_value($meta['school'] ?? ($normalizedAbility['school'] ?? '') ?? $meta['rules']['spell']['school'] ?? $meta['rules']['ritual']['school'] ?? '');
+    $tradition = af_advinv_format_structured_value($meta['tradition'] ?? ($normalizedAbility['tradition'] ?? '') ?? $meta['rules']['spell']['tradition'] ?? $meta['rules']['ritual']['tradition'] ?? '');
+
+    foreach ((array)($meta['effects'] ?? ($normalizedAbility['effects'] ?? []) ?? $meta['rules']['effects'] ?? []) as $effect) {
         if (is_array($effect)) {
             $line = trim((string)($effect['text'] ?? $effect['label'] ?? ''));
             if ($line !== '') {
@@ -2537,7 +2545,7 @@ function af_advinv_extract_ability_fields(array $meta): array
             }
         }
     }
-    foreach ((array)($meta['requirements'] ?? $meta['rules']['requirements'] ?? []) as $req) {
+    foreach ((array)($meta['requirements'] ?? ($normalizedAbility['requirements'] ?? []) ?? $meta['rules']['requirements'] ?? []) as $req) {
         if (is_array($req)) {
             $line = trim((string)($req['text'] ?? $req['label'] ?? ''));
             if ($line !== '') {
@@ -2604,7 +2612,7 @@ function af_advinv_export_charactersheet_abilities_state(int $uid): array
     ];
 }
 
-function af_advinv_classify_equipment_from_kb_meta(array $kbMeta): string
+function af_advinv_classify_equipment_from_kb_meta(array $kbMeta, string $kbType = 'item'): string
 {
     $resolveUniqueSubtype = static function (array $itemNode): string {
         $role = mb_strtolower(trim((string)($itemNode['unique_role'] ?? $itemNode['unique_base_kind'] ?? '')));
@@ -2632,6 +2640,17 @@ function af_advinv_classify_equipment_from_kb_meta(array $kbMeta): string
     };
 
     $rulesItem = is_array($kbMeta['rules']['item'] ?? null) ? (array)$kbMeta['rules']['item'] : [];
+    if (function_exists('af_kb_get_normalized_item_profile')) {
+        $normalized = af_kb_get_normalized_item_profile([
+            'type' => $kbType,
+            'meta_json' => json_encode($kbMeta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
+            'item_kind' => (string)($kbMeta['item_kind'] ?? ''),
+        ], 'inventory');
+        $kindNormalized = $normalizeKind((string)($normalized['item_kind'] ?? ''));
+        if ($kindNormalized !== '') {
+            return $kindNormalized;
+        }
+    }
     $kindFromUniqueRole = $resolveUniqueSubtype($rulesItem);
     if ($kindFromUniqueRole !== '') {
         return $kindFromUniqueRole;
@@ -2798,7 +2817,7 @@ function af_inv_add_item(int $uid, array $item): int
 
     if ($entity === 'equipment') {
         if ($subtype === '' || $subtype === 'misc') {
-            $fromMeta = af_advinv_classify_equipment_from_kb_meta($meta);
+            $fromMeta = af_advinv_classify_equipment_from_kb_meta($meta, $kbType);
             if ($fromMeta !== '' && in_array($fromMeta, $equipmentKinds, true)) {
                 $subtype = $fromMeta;
             }
@@ -3349,7 +3368,7 @@ function af_inv_candidate_slots_for_item(array $item): array
 
     $subtype = mb_strtolower(trim((string)($item['subtype'] ?? '')));
     if ($subtype === '') {
-        $subtype = af_advinv_classify_equipment_from_kb_meta($meta);
+        $subtype = af_advinv_classify_equipment_from_kb_meta($meta, (string)($item['kb_type'] ?? 'item'));
     }
 
     switch ($subtype) {
@@ -3413,7 +3432,10 @@ function af_advinv_export_charactersheet_equipment_state(int $uid): array
 
         $subtype = trim((string)($item['subtype'] ?? ''));
         if ($subtype === '') {
-            $subtype = af_advinv_classify_equipment_from_kb_meta(af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')));
+            $subtype = af_advinv_classify_equipment_from_kb_meta(
+                af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')),
+                (string)($item['kb_type'] ?? 'item')
+            );
         }
         if (!in_array($subtype, $allowedSubtypes, true)) {
             continue;
@@ -3450,7 +3472,10 @@ function af_advinv_export_charactersheet_equipment_state(int $uid): array
         }
         $subtype = trim((string)($item['subtype'] ?? ''));
         if ($subtype === '') {
-            $subtype = af_advinv_classify_equipment_from_kb_meta(af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')));
+            $subtype = af_advinv_classify_equipment_from_kb_meta(
+                af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')),
+                (string)($item['kb_type'] ?? 'item')
+            );
         }
         if (!in_array($subtype, ['weapon', 'armor', 'ammo', 'gear', 'artifact'], true)) {
             continue;
@@ -3521,7 +3546,10 @@ function af_advinv_export_charactersheet_augmentations_inventory(int $uid): arra
         }
         $subtype = trim((string)($item['subtype'] ?? ''));
         if ($subtype === '') {
-            $subtype = af_advinv_classify_equipment_from_kb_meta(af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')));
+            $subtype = af_advinv_classify_equipment_from_kb_meta(
+                af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')),
+                (string)($item['kb_type'] ?? 'item')
+            );
         }
         if ($subtype !== 'augmentations') {
             continue;

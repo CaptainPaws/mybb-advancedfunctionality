@@ -4401,6 +4401,160 @@ function af_kb_extract_rules_from_meta_json(string $metaJson): ?array
     return $rules;
 }
 
+function af_kb_extract_rules_for_consumer($entry, string $consumer = 'generic'): array
+{
+    $consumer = strtolower(trim($consumer));
+    if ($consumer === '') {
+        $consumer = 'generic';
+    }
+
+    $result = [
+        'consumer' => $consumer,
+        'mechanic_key' => AF_KB_DEFAULT_MECHANIC_KEY,
+        'schema' => '',
+        'rules' => [],
+        'supported' => false,
+        'skip' => true,
+        'status' => 'empty',
+        'reason' => 'rules_not_found',
+    ];
+
+    if (!is_array($entry)) {
+        $result['status'] = 'invalid_entry';
+        $result['reason'] = 'entry_not_array';
+        return $result;
+    }
+
+    $type = trim((string)($entry['type'] ?? ''));
+    if ($type !== '' && function_exists('af_kb_get_type_mechanic_key')) {
+        $result['mechanic_key'] = af_kb_get_type_mechanic_key($type);
+    }
+
+    $rules = af_kb_extract_rules_from_meta_json((string)($entry['meta_json'] ?? ''));
+    if (!is_array($rules) || empty($rules)) {
+        $result['status'] = 'empty';
+        $result['reason'] = 'rules_not_found';
+        return $result;
+    }
+
+    $schema = trim((string)($rules['schema'] ?? ''));
+    if ($schema !== '') {
+        $result['schema'] = $schema;
+    }
+    if ($result['mechanic_key'] === AF_KB_DEFAULT_MECHANIC_KEY && $schema === AF_KB_ARPG_RULES_SCHEMA) {
+        $result['mechanic_key'] = 'arpg';
+    }
+
+    if ($result['mechanic_key'] === 'dnd') {
+        if ($schema !== '' && $schema !== AF_KB_RULES_SCHEMA) {
+            $result['status'] = 'unsupported_schema';
+            $result['reason'] = 'dnd_schema_mismatch';
+            return $result;
+        }
+
+        $result['rules'] = $rules;
+        $result['supported'] = true;
+        $result['skip'] = false;
+        $result['status'] = 'ok';
+        $result['reason'] = '';
+        return $result;
+    }
+
+    if ($result['mechanic_key'] === 'arpg') {
+        $result['rules'] = $rules;
+        $result['status'] = 'arpg_partial';
+        $result['reason'] = 'arpg_partial_support';
+        $result['supported'] = in_array($consumer, ['shop', 'inventory', 'generic'], true);
+        $result['skip'] = !$result['supported'];
+        return $result;
+    }
+
+    $result['status'] = 'unsupported_mechanic';
+    $result['reason'] = 'unknown_mechanic';
+    return $result;
+}
+
+function af_kb_get_normalized_item_profile($entry, string $consumer = 'generic'): array
+{
+    $extract = af_kb_extract_rules_for_consumer($entry, $consumer);
+    $rules = is_array($extract['rules'] ?? null) ? (array)$extract['rules'] : [];
+    $item = is_array($rules['item'] ?? null) ? (array)$rules['item'] : [];
+    $equip = is_array($item['equip'] ?? null) ? (array)$item['equip'] : [];
+    $weapon = is_array($item['weapon'] ?? null) ? (array)$item['weapon'] : [];
+    $armor = is_array($equip['armor'] ?? null) ? (array)$equip['armor'] : [];
+    $tags = $rules['tags'] ?? ($item['tags'] ?? []);
+    if (!is_array($tags)) {
+        $tags = [];
+    }
+
+    $fallbackKind = '';
+    if (is_array($entry)) {
+        $fallbackKind = trim((string)($entry['item_kind'] ?? $entry['kind'] ?? ''));
+    }
+
+    $profile = [
+        'consumer' => $consumer,
+        'mechanic_key' => (string)($extract['mechanic_key'] ?? AF_KB_DEFAULT_MECHANIC_KEY),
+        'supported' => (bool)($extract['supported'] ?? false),
+        'skip' => (bool)($extract['skip'] ?? true),
+        'status' => (string)($extract['status'] ?? 'empty'),
+        'reason' => (string)($extract['reason'] ?? 'rules_not_found'),
+        'item_kind' => trim((string)($item['item_kind'] ?? $item['kind'] ?? $fallbackKind)),
+        'slot' => trim((string)($item['slot'] ?? '')),
+        'equip_slot' => trim((string)($equip['slot'] ?? $item['slot'] ?? '')),
+        'rarity' => trim((string)($item['rarity'] ?? '')),
+        'stack_max' => max(1, (int)($item['stack_max'] ?? 1)),
+        'price' => max(0, (int)($item['price'] ?? 0)),
+        'currency' => trim((string)($item['currency'] ?? 'credits')),
+        'weapon_damage_bonus' => (int)($weapon['damage_bonus'] ?? 0),
+        'weapon_damage_type' => trim((string)($weapon['damage_type'] ?? '')),
+        'armor_ac_bonus' => max(0, (int)($armor['ac_bonus'] ?? 0)),
+        'tags' => $tags,
+        'raw_rules' => $rules,
+    ];
+
+    if ($profile['mechanic_key'] === 'arpg') {
+        $profile['supported'] = !empty($rules) || $profile['item_kind'] !== '';
+        $profile['skip'] = !$profile['supported'];
+        if ($profile['status'] === 'empty' && $profile['item_kind'] !== '') {
+            $profile['status'] = 'fallback_meta';
+            $profile['reason'] = 'item_kind_from_meta_only';
+            $profile['supported'] = true;
+            $profile['skip'] = false;
+        }
+    }
+
+    return $profile;
+}
+
+function af_kb_get_normalized_ability_profile($entry, string $consumer = 'generic'): array
+{
+    $extract = af_kb_extract_rules_for_consumer($entry, $consumer);
+    $rules = is_array($extract['rules'] ?? null) ? (array)$extract['rules'] : [];
+    $spell = is_array($rules['spell'] ?? null) ? (array)$rules['spell'] : [];
+    $ritual = is_array($rules['ritual'] ?? null) ? (array)$rules['ritual'] : [];
+    $base = !empty($spell) ? $spell : $ritual;
+
+    return [
+        'consumer' => $consumer,
+        'mechanic_key' => (string)($extract['mechanic_key'] ?? AF_KB_DEFAULT_MECHANIC_KEY),
+        'supported' => (bool)($extract['supported'] ?? false),
+        'skip' => (bool)($extract['skip'] ?? true),
+        'status' => (string)($extract['status'] ?? 'empty'),
+        'reason' => (string)($extract['reason'] ?? 'rules_not_found'),
+        'ability_type' => trim((string)($base['type'] ?? (empty($spell) ? 'ritual' : 'spell'))),
+        'cost' => $base['cost'] ?? '',
+        'cooldown' => $base['cooldown'] ?? '',
+        'resource' => $base['resource'] ?? '',
+        'rank' => $base['rank'] ?? '',
+        'school' => $base['school'] ?? '',
+        'tradition' => $base['tradition'] ?? '',
+        'effects' => is_array($rules['effects'] ?? null) ? (array)$rules['effects'] : [],
+        'requirements' => is_array($rules['requirements'] ?? null) ? (array)$rules['requirements'] : [],
+        'raw_rules' => $rules,
+    ];
+}
+
 function af_kb_get_rules_by_entry_id(int $entryId): ?array
 {
     global $db;
