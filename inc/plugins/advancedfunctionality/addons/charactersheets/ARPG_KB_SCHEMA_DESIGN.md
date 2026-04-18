@@ -20,7 +20,7 @@
 
 1. `ability` — **единый** тип с `subtype`, без обязательного разбиения на top-level `active/passive`.
 2. Служебные механические сущности (status/modifier/resource/formula/trigger/condition/stacking/cooldown/cost/charges) не являются публичными плитками по умолчанию.
-3. Бестиарийуже включен в подтип на уровне системы ARPG.
+3. Бестиарий уже включен в подтип на уровне системы ARPG.
 
 ### 1.2 Service/mechanics слой (скрытый от каталога по умолчанию)
 
