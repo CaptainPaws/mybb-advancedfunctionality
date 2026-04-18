@@ -6,7 +6,7 @@
 
 # ARPG_KB_SCHEMA_DESIGN.md
 
-````md
+md
 # ARPG KB Schema Design v2
 ## Canonical contract for Knowledge Base (ARPG branch)
 
@@ -155,7 +155,7 @@ Dnd path не переписывается и живёт параллельно.
     "blocks": []
   }
 }
-````
+```
 
 ### 2.2. Service entry envelope
 
