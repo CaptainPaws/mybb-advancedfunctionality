@@ -1,12 +1,3 @@
-Ниже — **полный новый `ARPG_KB_SCHEMA_DESIGN.md`**.
-Я переписал его под твой текущий канон: с `arpg_bestiary` как полноценным публичным типом, с одним service/mechanics слоем, с жёстким envelope-контрактом и с нормализованным downstream-слоем под CharacterSheets / Inventory / Shop. Основание для этого — текущий registry и envelope в `knowledgebase.php`, где уже зарегистрированы public ARPG-типы, service-типы и схемы `af_kb.arpg.meta.v1`, `af_kb.arpg.rules.v1`, `af_kb.arpg.mechanics.v1`, `af_kb.arpg.sheet-normalized.v1`. 
-Старый design-файл уже задавал правильное направление: public + service/mechanics split, `meta.rules` как контракт, `data_json.data` как machine-readable payload, `blocks/content` как UX-слой и `af_kb.arpg.sheet-normalized.v1` как downstream envelope. Но он был непоследователен по bestiary и недостаточно конкретен по payload-структурам.
-
----
-
-# ARPG_KB_SCHEMA_DESIGN.md
-
-md
 # ARPG KB Schema Design v2
 ## Canonical contract for Knowledge Base (ARPG branch)
 
