@@ -74,16 +74,7 @@ function af_kb_arpg_type_registry(): array
         'arpg_talent' => ['entity_kind' => 'talent', 'service' => false, 'title_ru' => 'ARPG: Таланты', 'title_en' => 'ARPG: Talents'],
         'arpg_item' => ['entity_kind' => 'item', 'service' => false, 'title_ru' => 'ARPG: Предметы', 'title_en' => 'ARPG: Items'],
         'arpg_lore' => ['entity_kind' => 'lore', 'service' => false, 'title_ru' => 'ARPG: Лор', 'title_en' => 'ARPG: Lore'],
-        'arpg_mechanic_profile' => ['entity_kind' => 'mechanic_profile', 'service' => true, 'title_ru' => 'ARPG: Профили механики', 'title_en' => 'ARPG: Mechanic Profiles'],
-        'arpg_resource_def' => ['entity_kind' => 'resource_def', 'service' => true, 'title_ru' => 'ARPG: Ресурсы (service)', 'title_en' => 'ARPG: Resources (service)'],
-        'arpg_status_def' => ['entity_kind' => 'status_def', 'service' => true, 'title_ru' => 'ARPG: Статусы (service)', 'title_en' => 'ARPG: Statuses (service)'],
-        'arpg_modifier_template' => ['entity_kind' => 'modifier_template', 'service' => true, 'title_ru' => 'ARPG: Шаблоны модификаторов', 'title_en' => 'ARPG: Modifier Templates'],
-        'arpg_formula_def' => ['entity_kind' => 'formula_def', 'service' => true, 'title_ru' => 'ARPG: Формулы (service)', 'title_en' => 'ARPG: Formulas (service)'],
-        'arpg_trigger_template' => ['entity_kind' => 'trigger_template', 'service' => true, 'title_ru' => 'ARPG: Шаблоны триггеров', 'title_en' => 'ARPG: Trigger Templates'],
-        'arpg_condition_template' => ['entity_kind' => 'condition_template', 'service' => true, 'title_ru' => 'ARPG: Шаблоны условий', 'title_en' => 'ARPG: Condition Templates'],
-        'arpg_scaling_table' => ['entity_kind' => 'scaling_table', 'service' => true, 'title_ru' => 'ARPG: Таблицы скейлинга', 'title_en' => 'ARPG: Scaling Tables'],
-        'arpg_combat_template' => ['entity_kind' => 'combat_template', 'service' => true, 'title_ru' => 'ARPG: Combat templates', 'title_en' => 'ARPG: Combat Templates'],
-        'arpg_snippet' => ['entity_kind' => 'snippet', 'service' => true, 'title_ru' => 'ARPG: Сниппеты', 'title_en' => 'ARPG: Snippets'],
+        'arpg_mechanics' => ['entity_kind' => 'service_mechanics', 'service' => true, 'title_ru' => 'ARPG: Сервисная механика', 'title_en' => 'ARPG: Service Mechanics'],
     ];
 }
 
@@ -96,44 +87,180 @@ function af_kb_arpg_envelope_defaults(string $typeKey): array
 {
     $typeDef = af_kb_arpg_type_definition($typeKey);
     $isService = !empty($typeDef['service']);
-    $entityKind = (string)($typeDef['entity_kind'] ?? $typeKey);
-    $entrySchema = $isService ? AF_KB_ARPG_MECHANICS_SCHEMA : AF_KB_ARPG_META_SCHEMA;
-
-    return [
-        'schema' => $entrySchema,
+    $typeProfile = (string)($typeDef['entity_kind'] ?? $typeKey);
+    $defaults = [
+        'schema' => AF_KB_ARPG_META_SCHEMA,
         'mechanic' => 'arpg',
-        'entity_kind' => $entityKind,
-        'subtype' => '',
-        'category' => $isService ? 'service.mechanics' : 'arpg',
         'tags' => [],
-        'visibility' => [
-            'catalog' => !$isService,
-            'search' => !$isService,
-            'internal' => $isService,
+        'ui' => [
+            'icon_class' => '',
+            'icon_url' => '',
+            'background_url' => '',
+            'background_tab_url' => '',
         ],
-        'meta' => [
-            'rules' => [
-                'schema' => AF_KB_ARPG_RULES_SCHEMA,
-                'version' => 1,
-                'profile_ref' => '',
-            ],
-            'source' => [
-                'canon' => false,
-                'origin' => 'oc',
-                'license' => 'project_internal',
-            ],
-            'ui' => [
-                'title' => '',
-                'summary' => '',
-                'icon' => '',
-                'color' => '',
-            ],
-        ],
-        'data_json' => [
-            'data' => [],
-            'blocks' => [],
+        'blocks' => [],
+        'rules' => [
+            'schema' => AF_KB_ARPG_RULES_SCHEMA,
+            'type_profile' => $typeProfile,
+            'version' => '1.0',
         ],
     ];
+
+    if ($isService) {
+        $defaults['rules']['type_profile'] = 'service_mechanics';
+        $defaults['rules']['service_kind'] = 'mechanic_profile';
+        $defaults['rules']['category'] = 'service.mechanics';
+        $defaults['rules']['visibility'] = ['catalog' => false, 'search' => false, 'internal' => true];
+        $defaults['rules']['stats_registry'] = [];
+        $defaults['rules']['damage_type_registry'] = [];
+        $defaults['rules']['targeting_registry'] = [];
+        $defaults['rules']['resource_ops_registry'] = [];
+        $defaults['rules']['modifier_modes_registry'] = [];
+        $defaults['rules']['talent_rank_registry'] = [];
+        $defaults['rules']['item_rarity_registry'] = [];
+        $defaults['rules']['bestiary_rank_registry'] = [];
+        $defaults['rules']['entries'] = [];
+    }
+
+    return $defaults;
+}
+
+function af_kb_default_type_profile_payload_arpg(string $typeKey): array
+{
+    $map = [
+        'arpg_origin' => [
+            'size' => 'medium',
+            'creature_type' => 'humanoid',
+            'base_hp' => 100,
+            'base_damage' => 10,
+            'base_defense' => 5,
+            'movement_speed' => 100,
+            'racial_bonuses_text' => '',
+            'racial_traits_text' => '',
+            'starting_notes' => '',
+        ],
+        'arpg_archetype' => [
+            'role' => 'striker',
+            'damage_bias' => 'high',
+            'defense_bias' => 'low',
+            'resource_affinity' => 'energy',
+            'base_damage_bonus' => 0,
+            'base_defense_bonus' => 0,
+            'slot_rules_text' => '',
+            'description_notes' => '',
+        ],
+        'arpg_faction' => [
+            'standing_model' => 'neutral',
+            'vendor_access_text' => '',
+            'story_flags_text' => '',
+            'description_text' => '',
+        ],
+        'arpg_lore' => [
+            'linked_entities_text' => '',
+            'timeline_text' => '',
+            'source_text' => '',
+        ],
+        'arpg_ability' => [
+            'type' => 'active',
+            'subtype' => '',
+            'slot' => 'skill_1',
+            'damage_type' => 'physical',
+            'targeting' => 'single_enemy',
+            'range' => 0,
+            'cast_time' => 0,
+            'cooldown' => 0,
+            'duration' => 0,
+            'max_charges' => 1,
+            'level_cap' => 20,
+            'resources' => [],
+            'effects' => [],
+            'modifiers' => [],
+            'triggers' => [],
+            'conditions' => [],
+            'stacking' => [],
+            'upgrade_requirements' => [],
+        ],
+        'arpg_talent' => [
+            'tree' => 'offense',
+            'tier' => 1,
+            'rank' => 'rare',
+            'slot_type' => 'passive',
+            'node_label' => '',
+            'rank_weight' => 1,
+            'socket_cost' => 1,
+            'effects' => [],
+            'passive_effects' => [],
+            'modifiers' => [],
+            'grants' => [],
+            'requirements' => [],
+            'mutual_exclusives' => [],
+        ],
+        'arpg_item' => [
+            'item_kind' => 'weapon',
+            'equip_slot' => 'weapon_one_hand',
+            'rarity' => 'common',
+            'subtype' => '',
+            'level_min' => 1,
+            'level_max' => 100,
+            'progression_stage' => 'base',
+            'level_cap' => 100,
+            'base_stats' => [],
+            'modifiers' => [],
+            'effects' => [],
+            'passive_effects' => [],
+            'triggers' => [],
+            'grants' => [],
+            'upgrade_steps' => [],
+            'weapon_class' => '',
+            'base_damage' => 0,
+            'damage_type' => 'physical',
+            'attack_speed' => 0,
+            'range' => 0,
+            'crit_bonus' => 0,
+            'armor_class' => '',
+            'base_defense' => 0,
+            'resist_profile_text' => '',
+            'accessory_role' => '',
+            'passive_focus_text' => '',
+            'artifact_set_text' => '',
+            'use_kind' => '',
+            'stack_max' => 1,
+            'use_cooldown' => 0,
+            'material_grade' => '',
+            'material_usage_text' => '',
+            'quest_usage_text' => '',
+        ],
+        'arpg_bestiary' => [
+            'family' => '',
+            'archetype' => '',
+            'faction' => '',
+            'rank' => 'normal',
+            'threat_tier' => 1,
+            'level' => 1,
+            'combat_stats' => ['hp' => 0, 'atk' => 0, 'def' => 0, 'armor' => 0, 'crit_rate' => 0, 'crit_dmg' => 0, 'status_hit' => 0, 'status_resist' => 0],
+            'resists' => [],
+            'weaknesses' => [],
+            'ability_keys' => [],
+            'loot' => [],
+        ],
+        'arpg_mechanics' => [
+            'type_profile' => 'service_mechanics',
+            'service_kind' => 'mechanic_profile',
+            'category' => 'service.mechanics',
+            'visibility' => ['catalog' => false, 'search' => false, 'internal' => true],
+            'stats_registry' => [],
+            'damage_type_registry' => [],
+            'targeting_registry' => [],
+            'resource_ops_registry' => [],
+            'modifier_modes_registry' => [],
+            'talent_rank_registry' => [],
+            'item_rarity_registry' => [],
+            'bestiary_rank_registry' => [],
+            'entries' => [],
+        ],
+    ];
+
+    return (array)($map[$typeKey] ?? []);
 }
 
 function af_kb_default_type_definitions(): array
@@ -440,28 +567,191 @@ function af_kb_default_arpg_type_definitions(): array
     foreach (af_kb_arpg_type_registry() as $typeKey => $typeDef) {
         $titles = [(string)($typeDef['title_ru'] ?? $typeKey), (string)($typeDef['title_en'] ?? $typeKey)];
         $isService = !empty($typeDef['service']);
-        $entityKind = (string)($typeDef['entity_kind'] ?? $typeKey);
-        $entrySchema = $isService ? AF_KB_ARPG_MECHANICS_SCHEMA : AF_KB_ARPG_META_SCHEMA;
+        $rootDefaults = af_kb_arpg_envelope_defaults($typeKey);
+        $requiredMap = [
+            'arpg_origin' => ['rules.size', 'rules.creature_type', 'rules.base_hp', 'rules.base_damage', 'rules.base_defense', 'rules.movement_speed', 'rules.racial_bonuses_text', 'rules.racial_traits_text', 'rules.starting_notes'],
+            'arpg_archetype' => ['rules.role', 'rules.damage_bias', 'rules.defense_bias', 'rules.resource_affinity', 'rules.base_damage_bonus', 'rules.base_defense_bonus', 'rules.slot_rules_text', 'rules.description_notes'],
+            'arpg_faction' => ['rules.standing_model', 'rules.vendor_access_text', 'rules.story_flags_text', 'rules.description_text'],
+            'arpg_lore' => ['rules.linked_entities_text', 'rules.timeline_text', 'rules.source_text'],
+            'arpg_ability' => ['rules.type', 'rules.subtype', 'rules.slot', 'rules.damage_type', 'rules.targeting', 'rules.range', 'rules.cast_time', 'rules.cooldown', 'rules.duration', 'rules.max_charges', 'rules.level_cap', 'rules.resources', 'rules.effects', 'rules.modifiers', 'rules.triggers', 'rules.conditions', 'rules.stacking', 'rules.upgrade_requirements'],
+            'arpg_talent' => ['rules.tree', 'rules.tier', 'rules.rank', 'rules.slot_type', 'rules.node_label', 'rules.rank_weight', 'rules.socket_cost', 'rules.effects', 'rules.passive_effects', 'rules.modifiers', 'rules.grants', 'rules.requirements', 'rules.mutual_exclusives'],
+            'arpg_item' => ['rules.item_kind', 'rules.equip_slot', 'rules.rarity', 'rules.subtype', 'rules.level_min', 'rules.level_max', 'rules.progression_stage', 'rules.level_cap', 'rules.base_stats', 'rules.modifiers', 'rules.effects', 'rules.passive_effects', 'rules.triggers', 'rules.grants', 'rules.upgrade_steps'],
+            'arpg_bestiary' => ['rules.family', 'rules.archetype', 'rules.faction', 'rules.rank', 'rules.threat_tier', 'rules.level', 'rules.combat_stats.hp', 'rules.combat_stats.atk', 'rules.combat_stats.def', 'rules.combat_stats.armor', 'rules.combat_stats.crit_rate', 'rules.combat_stats.crit_dmg', 'rules.combat_stats.status_hit', 'rules.combat_stats.status_resist', 'rules.resists', 'rules.weaknesses', 'rules.ability_keys', 'rules.loot'],
+            'arpg_mechanics' => ['rules.service_kind', 'rules.category', 'rules.visibility.catalog', 'rules.visibility.search', 'rules.visibility.internal', 'rules.entries'],
+        ];
+
+        $fieldsMap = [
+            'arpg_origin' => [
+                ['path' => 'rules.size', 'type' => 'string', 'required' => true, 'default' => 'medium'],
+                ['path' => 'rules.creature_type', 'type' => 'string', 'required' => true, 'default' => 'humanoid'],
+                ['path' => 'rules.base_hp', 'type' => 'number', 'required' => true, 'default' => 100],
+                ['path' => 'rules.base_damage', 'type' => 'number', 'required' => true, 'default' => 10],
+                ['path' => 'rules.base_defense', 'type' => 'number', 'required' => true, 'default' => 5],
+                ['path' => 'rules.movement_speed', 'type' => 'number', 'required' => true, 'default' => 100],
+                ['path' => 'rules.racial_bonuses_text', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.racial_traits_text', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.starting_notes', 'type' => 'string', 'required' => true, 'default' => ''],
+            ],
+            'arpg_archetype' => [
+                ['path' => 'rules.role', 'type' => 'string', 'required' => true, 'default' => 'striker'],
+                ['path' => 'rules.damage_bias', 'type' => 'string', 'required' => true, 'default' => 'high'],
+                ['path' => 'rules.defense_bias', 'type' => 'string', 'required' => true, 'default' => 'low'],
+                ['path' => 'rules.resource_affinity', 'type' => 'string', 'required' => true, 'default' => 'energy'],
+                ['path' => 'rules.base_damage_bonus', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.base_defense_bonus', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.slot_rules_text', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.description_notes', 'type' => 'string', 'required' => true, 'default' => ''],
+            ],
+            'arpg_faction' => [
+                ['path' => 'rules.standing_model', 'type' => 'string', 'required' => true, 'default' => 'neutral'],
+                ['path' => 'rules.vendor_access_text', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.story_flags_text', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.description_text', 'type' => 'string', 'required' => true, 'default' => ''],
+            ],
+            'arpg_lore' => [
+                ['path' => 'rules.linked_entities_text', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.timeline_text', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.source_text', 'type' => 'string', 'required' => true, 'default' => ''],
+            ],
+            'arpg_ability' => [
+                ['path' => 'rules.type', 'type' => 'string', 'required' => true, 'default' => 'active'],
+                ['path' => 'rules.subtype', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.slot', 'type' => 'string', 'required' => true, 'default' => 'skill_1'],
+                ['path' => 'rules.damage_type', 'type' => 'string', 'required' => true, 'default' => 'physical'],
+                ['path' => 'rules.targeting', 'type' => 'string', 'required' => true, 'default' => 'single_enemy'],
+                ['path' => 'rules.range', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.cast_time', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.cooldown', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.duration', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.max_charges', 'type' => 'number', 'required' => true, 'default' => 1],
+                ['path' => 'rules.level_cap', 'type' => 'number', 'required' => true, 'default' => 20],
+                ['path' => 'rules.resources', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.effects', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.modifiers', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.triggers', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.conditions', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.stacking', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.upgrade_requirements', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+            ],
+            'arpg_talent' => [
+                ['path' => 'rules.tree', 'type' => 'string', 'required' => true, 'default' => 'offense'],
+                ['path' => 'rules.tier', 'type' => 'number', 'required' => true, 'default' => 1],
+                ['path' => 'rules.rank', 'type' => 'string', 'required' => true, 'default' => 'rare'],
+                ['path' => 'rules.slot_type', 'type' => 'string', 'required' => true, 'default' => 'passive'],
+                ['path' => 'rules.node_label', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.rank_weight', 'type' => 'number', 'required' => true, 'default' => 1],
+                ['path' => 'rules.socket_cost', 'type' => 'number', 'required' => true, 'default' => 1],
+                ['path' => 'rules.effects', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.passive_effects', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.modifiers', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.grants', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.requirements', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.mutual_exclusives', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+            ],
+            'arpg_item' => [
+                ['path' => 'rules.item_kind', 'type' => 'string', 'required' => true, 'default' => 'weapon'],
+                ['path' => 'rules.equip_slot', 'type' => 'string', 'required' => true, 'default' => 'weapon_one_hand'],
+                ['path' => 'rules.rarity', 'type' => 'string', 'required' => true, 'default' => 'common'],
+                ['path' => 'rules.subtype', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.level_min', 'type' => 'number', 'required' => true, 'default' => 1],
+                ['path' => 'rules.level_max', 'type' => 'number', 'required' => true, 'default' => 100],
+                ['path' => 'rules.progression_stage', 'type' => 'string', 'required' => true, 'default' => 'base'],
+                ['path' => 'rules.level_cap', 'type' => 'number', 'required' => true, 'default' => 100],
+                ['path' => 'rules.base_stats', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.modifiers', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.effects', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.passive_effects', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.triggers', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.grants', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.upgrade_steps', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.weapon_class', 'type' => 'string', 'default' => ''],
+                ['path' => 'rules.base_damage', 'type' => 'number', 'default' => 0],
+                ['path' => 'rules.damage_type', 'type' => 'string', 'default' => 'physical'],
+                ['path' => 'rules.attack_speed', 'type' => 'number', 'default' => 0],
+                ['path' => 'rules.range', 'type' => 'number', 'default' => 0],
+                ['path' => 'rules.crit_bonus', 'type' => 'number', 'default' => 0],
+                ['path' => 'rules.armor_class', 'type' => 'string', 'default' => ''],
+                ['path' => 'rules.base_defense', 'type' => 'number', 'default' => 0],
+                ['path' => 'rules.resist_profile_text', 'type' => 'string', 'default' => ''],
+                ['path' => 'rules.accessory_role', 'type' => 'string', 'default' => ''],
+                ['path' => 'rules.passive_focus_text', 'type' => 'string', 'default' => ''],
+                ['path' => 'rules.artifact_set_text', 'type' => 'string', 'default' => ''],
+                ['path' => 'rules.use_kind', 'type' => 'string', 'default' => ''],
+                ['path' => 'rules.stack_max', 'type' => 'number', 'default' => 1],
+                ['path' => 'rules.use_cooldown', 'type' => 'number', 'default' => 0],
+                ['path' => 'rules.material_grade', 'type' => 'string', 'default' => ''],
+                ['path' => 'rules.material_usage_text', 'type' => 'string', 'default' => ''],
+                ['path' => 'rules.quest_usage_text', 'type' => 'string', 'default' => ''],
+            ],
+            'arpg_bestiary' => [
+                ['path' => 'rules.family', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.archetype', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.faction', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.rank', 'type' => 'string', 'required' => true, 'default' => 'normal'],
+                ['path' => 'rules.threat_tier', 'type' => 'number', 'required' => true, 'default' => 1],
+                ['path' => 'rules.level', 'type' => 'number', 'required' => true, 'default' => 1],
+                ['path' => 'rules.combat_stats.hp', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.combat_stats.atk', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.combat_stats.def', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.combat_stats.armor', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.combat_stats.crit_rate', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.combat_stats.crit_dmg', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.combat_stats.status_hit', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.combat_stats.status_resist', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.resists', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.weaknesses', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.ability_keys', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.loot', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+            ],
+            'arpg_mechanics' => [
+                ['path' => 'rules.service_kind', 'type' => 'select', 'required' => true, 'options' => array_map(static fn($kind) => ['value' => $kind], af_kb_arpg_service_entity_kinds())],
+                ['path' => 'rules.category', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => 'service.mechanics'],
+                ['path' => 'rules.visibility.catalog', 'type' => 'bool', 'required' => true, 'readonly' => true, 'default' => false],
+                ['path' => 'rules.visibility.search', 'type' => 'bool', 'required' => true, 'readonly' => true, 'default' => false],
+                ['path' => 'rules.visibility.internal', 'type' => 'bool', 'required' => true, 'readonly' => true, 'default' => true],
+                ['path' => 'rules.stats_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.damage_type_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.targeting_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.resource_ops_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.modifier_modes_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.talent_rank_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.item_rarity_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.bestiary_rank_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.entries', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+            ],
+        ];
 
         $schema = [
             'schema' => 'af_kb.ui.v1',
             'version' => 1,
-            'title_ru' => $titles[0] . ': параметры (' . $entrySchema . ')',
-            'title_en' => $titles[1] . ': rules (' . $entrySchema . ')',
+            'title_ru' => $titles[0] . ': параметры (' . AF_KB_ARPG_META_SCHEMA . ')',
+            'title_en' => $titles[1] . ': rules (' . AF_KB_ARPG_META_SCHEMA . ')',
             'ui_profile' => 'arpg',
             'rules_enabled' => true,
             'ui_rules_editor' => true,
-            'rules_schema' => $entrySchema,
-            'root_defaults' => af_kb_arpg_envelope_defaults($typeKey),
-            'fields' => [
-                ['path' => 'schema', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => $entrySchema],
+            'rules_schema' => AF_KB_ARPG_META_SCHEMA,
+            'rules_required_keys' => ['schema', 'mechanic', 'tags', 'ui', 'blocks', 'rules'],
+            'required_paths' => array_values($requiredMap[$typeKey] ?? []),
+            'root_defaults' => $rootDefaults,
+            'fields' => array_merge([
+                ['path' => 'schema', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => AF_KB_ARPG_META_SCHEMA],
                 ['path' => 'mechanic', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => 'arpg'],
-                ['path' => 'entity_kind', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => $entityKind],
-                ['path' => 'subtype', 'type' => 'string', 'default' => ''],
-                ['path' => 'category', 'type' => 'string', 'default' => $isService ? 'service.mechanics' : 'arpg'],
                 ['path' => 'tags', 'type' => 'array', 'item' => ['type' => 'string'], 'default' => []],
-            ],
+                ['path' => 'ui.icon_class', 'type' => 'string', 'default' => ''],
+                ['path' => 'ui.icon_url', 'type' => 'string', 'default' => ''],
+                ['path' => 'ui.background_url', 'type' => 'string', 'default' => ''],
+                ['path' => 'ui.background_tab_url', 'type' => 'string', 'default' => ''],
+                ['path' => 'blocks', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.schema', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => AF_KB_ARPG_RULES_SCHEMA],
+                ['path' => 'rules.type_profile', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => (string)($rootDefaults['rules']['type_profile'] ?? '')],
+                ['path' => 'rules.version', 'type' => 'string', 'required' => true, 'default' => '1.0'],
+            ], (array)($fieldsMap[$typeKey] ?? [])),
         ];
+
+        $schema['root_defaults']['rules'] = array_replace_recursive(
+            (array)($schema['root_defaults']['rules'] ?? []),
+            af_kb_default_type_profile_payload_arpg($typeKey)
+        );
 
         $defs[] = [
             'type_key' => $typeKey,
@@ -469,7 +759,7 @@ function af_kb_default_arpg_type_definitions(): array
             'title_en' => $titles[1],
             'desc_ru' => '',
             'desc_en' => '',
-            'rules_schema' => $entrySchema,
+            'rules_schema' => AF_KB_ARPG_META_SCHEMA,
             'ui_schema_json' => json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'mechanic_key' => 'arpg',
             'is_active' => $isService ? 0 : 1,
@@ -1639,25 +1929,74 @@ function af_kb_reorganize_arpg_entries_and_types(): void
     }
 
     $entryMap = [
-        'arpg_ability_active' => 'arpg_ability',
-        'arpg_ability_passive' => 'arpg_ability',
-        'arpg_modifier' => 'arpg_modifier_template',
-        'arpg_status' => 'arpg_status_def',
-        'arpg_resource' => 'arpg_resource_def',
-        'arpg_mechanics' => 'arpg_mechanic_profile',
+        'arpg_ability_active' => ['new_type' => 'arpg_ability', 'service_kind' => ''],
+        'arpg_ability_passive' => ['new_type' => 'arpg_ability', 'service_kind' => ''],
+        'arpg_modifier' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'modifier_template'],
+        'arpg_status' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'status_def'],
+        'arpg_resource' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'resource_def'],
+        'arpg_mechanic_profile' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'mechanic_profile'],
+        'arpg_resource_def' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'resource_def'],
+        'arpg_status_def' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'status_def'],
+        'arpg_modifier_template' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'modifier_template'],
+        'arpg_formula_def' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'formula_def'],
+        'arpg_trigger_template' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'trigger_template'],
+        'arpg_condition_template' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'condition_template'],
+        'arpg_scaling_table' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'scaling_table'],
+        'arpg_combat_template' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'combat_template'],
+        'arpg_snippet' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'snippet'],
     ];
 
     if ($db->table_exists('af_kb_entries')) {
-        foreach ($entryMap as $oldType => $newType) {
-            $db->update_query(
-                'af_kb_entries',
-                [
-                    'type' => $db->escape_string($newType),
+        foreach ($entryMap as $oldType => $mapping) {
+            $newType = (string)($mapping['new_type'] ?? '');
+            $serviceKind = (string)($mapping['service_kind'] ?? '');
+            $migratedIds = [];
+            if ($serviceKind !== '') {
+                $idQuery = $db->simple_select('af_kb_entries', 'id', "type='".$db->escape_string($oldType)."'");
+                while ($idRow = $db->fetch_array($idQuery)) {
+                    $migratedIds[] = (int)($idRow['id'] ?? 0);
+                }
+            }
+            $db->update_query('af_kb_entries', ['type' => $db->escape_string($newType), 'updated_at' => TIME_NOW], "type='".$db->escape_string($oldType)."'");
+
+            if ($serviceKind === '' || empty($migratedIds)) {
+                continue;
+            }
+
+            $query = $db->simple_select('af_kb_entries', 'id,data_json', 'id IN (' . implode(',', array_map('intval', $migratedIds)) . ')');
+            while ($row = $db->fetch_array($query)) {
+                $data = af_kb_decode_json((string)($row['data_json'] ?? '{}'));
+                if (!is_array($data)) {
+                    $data = [];
+                }
+                $legacyErrors = [];
+                $payload = af_kb_validate_rules_json_by_type_arpg($newType, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}', $legacyErrors);
+                $normalized = af_kb_decode_json($payload);
+                if (!is_array($normalized)) {
+                    $normalized = af_kb_arpg_envelope_defaults($newType);
+                }
+                $normalized['rules']['service_kind'] = $serviceKind;
+                $normalized['rules']['type_profile'] = 'service_mechanics';
+                $normalized['rules']['category'] = 'service.mechanics';
+                $normalized['rules']['visibility'] = ['catalog' => false, 'search' => false, 'internal' => true];
+                if (!isset($normalized['rules']['entries']) || !is_array($normalized['rules']['entries'])) {
+                    $normalized['rules']['entries'] = [];
+                }
+
+                $db->update_query('af_kb_entries', [
+                    'data_json' => $db->escape_string(json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}'),
                     'updated_at' => TIME_NOW,
-                ],
-                "type='".$db->escape_string($oldType)."'"
-            );
+                ], 'id='.(int)$row['id']);
+            }
         }
+    }
+
+    foreach (array_keys($entryMap) as $legacyTypeKey) {
+        $db->update_query('af_kb_types', [
+            'active' => 0,
+            'is_active' => 0,
+            'updated_at' => TIME_NOW,
+        ], "(type='".$db->escape_string($legacyTypeKey)."' OR type_key='".$db->escape_string($legacyTypeKey)."')");
     }
 
     foreach (af_kb_default_arpg_type_definitions() as $def) {
@@ -1994,8 +2333,8 @@ function af_kb_default_type_rules_config_arpg(string $typeKey): array
 
     return [
         'rules_enabled' => true,
-        'rules_schema' => $isService ? AF_KB_ARPG_MECHANICS_SCHEMA : AF_KB_ARPG_META_SCHEMA,
-        'rules_required_keys' => ['schema', 'mechanic', 'entity_kind', 'meta', 'data_json'],
+        'rules_schema' => AF_KB_ARPG_META_SCHEMA,
+        'rules_required_keys' => ['schema', 'mechanic', 'tags', 'ui', 'blocks', 'rules'],
         'ui_rules_editor' => true,
     ];
 }
@@ -2311,14 +2650,18 @@ function af_kb_get_type_profile_definition_dnd(string $typeKey): array
 function af_kb_get_type_profile_definition_arpg(string $typeKey): array
 {
     $typeDef = af_kb_arpg_type_definition($typeKey);
-    $entrySchema = !empty($typeDef['service']) ? AF_KB_ARPG_MECHANICS_SCHEMA : AF_KB_ARPG_META_SCHEMA;
     $base = af_kb_arpg_envelope_defaults($typeKey);
+    $base['rules'] = array_replace_recursive((array)($base['rules'] ?? []), af_kb_default_type_profile_payload_arpg($typeKey));
 
     return [
         'ui_profile' => 'arpg',
         'rules_enabled' => !empty($typeDef),
         'defaults' => $base,
-        'validators' => ['schema' => $entrySchema],
+        'validators' => [
+            'schema' => AF_KB_ARPG_META_SCHEMA,
+            'mechanic' => 'arpg',
+            'rules_schema' => AF_KB_ARPG_RULES_SCHEMA,
+        ],
     ];
 }
 
@@ -3795,7 +4138,8 @@ function af_kb_normalize_rules_json(string $raw): string
 
     if (is_array($decoded)) {
         $mechanic = trim((string)($decoded['mechanic'] ?? ''));
-        $hasArpgEnvelope = isset($decoded['entity_kind']) && isset($decoded['data_json']) && is_array($decoded['data_json'] ?? null);
+        $hasArpgEnvelope = (isset($decoded['rules']) && is_array($decoded['rules'] ?? null))
+            || (isset($decoded['entity_kind']) && isset($decoded['data_json']) && is_array($decoded['data_json'] ?? null));
         if ($mechanic === 'arpg' || $hasArpgEnvelope) {
             return (string)(json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}');
         }
@@ -3923,74 +4267,53 @@ function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalized
         return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
     }
 
-    // Backward compatibility: old ARPG payload with `type_profile`.
-    if (isset($rulesData['type_profile']) || isset($rulesData['mechanics']) || isset($rulesData['classification'])) {
+    // Backward compatibility: old ARPG envelope and old flat payloads.
+    if (isset($rulesData['data_json']) && is_array($rulesData['data_json'])) {
+        $legacyMeta = (array)($rulesData['meta'] ?? []);
+        $legacyRules = (array)($legacyMeta['rules'] ?? []);
+        $legacyUi = (array)($legacyMeta['ui'] ?? []);
+        $legacyData = (array)($rulesData['data_json']['data'] ?? []);
         $rulesData = [
             'schema' => AF_KB_ARPG_META_SCHEMA,
             'mechanic' => 'arpg',
-            'entity_kind' => (string)($typeDef['entity_kind'] ?? $type),
-            'subtype' => '',
-            'category' => 'arpg',
             'tags' => (array)($rulesData['tags'] ?? []),
-            'visibility' => ['catalog' => true, 'search' => true, 'internal' => false],
-            'meta' => [
-                'rules' => [
-                    'schema' => AF_KB_ARPG_RULES_SCHEMA,
-                    'version' => 1,
-                    'profile_ref' => '',
-                ],
-                'source' => ['canon' => false, 'origin' => 'oc', 'license' => 'project_internal'],
-                'ui' => [],
+            'ui' => [
+                'icon_class' => (string)($legacyUi['icon_class'] ?? $legacyUi['icon'] ?? ''),
+                'icon_url' => (string)($legacyUi['icon_url'] ?? ''),
+                'background_url' => (string)($legacyUi['background_url'] ?? ''),
+                'background_tab_url' => (string)($legacyUi['background_tab_url'] ?? ''),
             ],
-            'data_json' => [
-                'data' => $rulesData,
-                'blocks' => [],
-            ],
+            'blocks' => (array)($rulesData['data_json']['blocks'] ?? []),
+            'rules' => array_replace_recursive(
+                ['schema' => AF_KB_ARPG_RULES_SCHEMA, 'type_profile' => (string)($typeDef['entity_kind'] ?? ''), 'version' => (string)($legacyRules['version'] ?? '1.0')],
+                $legacyData
+            ),
+        ];
+    } elseif (isset($rulesData['type_profile']) || isset($rulesData['mechanics']) || isset($rulesData['classification'])) {
+        $rulesData = [
+            'schema' => AF_KB_ARPG_META_SCHEMA,
+            'mechanic' => 'arpg',
+            'tags' => (array)($rulesData['tags'] ?? []),
+            'ui' => ['icon_class' => '', 'icon_url' => '', 'background_url' => '', 'background_tab_url' => ''],
+            'blocks' => [],
+            'rules' => array_replace_recursive(
+                ['schema' => AF_KB_ARPG_RULES_SCHEMA, 'type_profile' => (string)($typeDef['entity_kind'] ?? ''), 'version' => '1.0'],
+                $rulesData
+            ),
         ];
     }
 
     $defaults = af_kb_arpg_envelope_defaults($type);
+    $defaults['rules'] = array_replace_recursive((array)($defaults['rules'] ?? []), af_kb_default_type_profile_payload_arpg($type));
     $rulesData = array_replace_recursive($defaults, $rulesData);
 
     $isService = !empty($typeDef['service']);
-    $rulesData['schema'] = $isService ? AF_KB_ARPG_MECHANICS_SCHEMA : AF_KB_ARPG_META_SCHEMA;
+    $rulesData['schema'] = AF_KB_ARPG_META_SCHEMA;
     $rulesData['mechanic'] = 'arpg';
-    $rulesData['entity_kind'] = (string)($typeDef['entity_kind'] ?? $type);
-
-    if (!isset($rulesData['tags']) || !is_array($rulesData['tags'])) {
-        $rulesData['tags'] = [];
-    }
-    if (!isset($rulesData['visibility']) || !is_array($rulesData['visibility'])) {
-        $rulesData['visibility'] = [];
-    }
-    $rulesData['visibility']['catalog'] = $isService ? false : !empty($rulesData['visibility']['catalog']);
-    $rulesData['visibility']['search'] = $isService ? false : !empty($rulesData['visibility']['search']);
-    $rulesData['visibility']['internal'] = $isService ? true : !empty($rulesData['visibility']['internal']);
-
-    if (!isset($rulesData['meta']) || !is_array($rulesData['meta'])) {
-        $rulesData['meta'] = [];
-    }
-    if (!isset($rulesData['meta']['rules']) || !is_array($rulesData['meta']['rules'])) {
-        $rulesData['meta']['rules'] = [];
-    }
-    $rulesData['meta']['rules']['schema'] = AF_KB_ARPG_RULES_SCHEMA;
-    if (!isset($rulesData['meta']['rules']['version']) || (int)$rulesData['meta']['rules']['version'] <= 0) {
-        $rulesData['meta']['rules']['version'] = 1;
-    }
-    foreach (['source', 'ui'] as $metaKey) {
-        if (!isset($rulesData['meta'][$metaKey]) || !is_array($rulesData['meta'][$metaKey])) {
-            $rulesData['meta'][$metaKey] = [];
-        }
-    }
-
-    if (!isset($rulesData['data_json']) || !is_array($rulesData['data_json'])) {
-        $rulesData['data_json'] = [];
-    }
-    if (!isset($rulesData['data_json']['data']) || !is_array($rulesData['data_json']['data'])) {
-        $rulesData['data_json']['data'] = [];
-    }
-    if (!isset($rulesData['data_json']['blocks']) || !is_array($rulesData['data_json']['blocks'])) {
-        $rulesData['data_json']['blocks'] = [];
+    $rulesData['rules']['schema'] = AF_KB_ARPG_RULES_SCHEMA;
+    $rulesData['rules']['type_profile'] = $isService ? 'service_mechanics' : (string)($typeDef['entity_kind'] ?? '');
+    if (trim((string)($rulesData['rules']['version'] ?? '')) === '') {
+        $rulesData['rules']['version'] = '1.0';
     }
 
     $validationErrors = [];
@@ -4056,10 +4379,9 @@ function af_kb_arpg_validate_ref_string(string $value): bool
 
 function af_kb_validate_arpg_envelope(string $type, array $payload, bool $isService, array &$errors): array
 {
-    $expectedSchema = $isService ? AF_KB_ARPG_MECHANICS_SCHEMA : AF_KB_ARPG_META_SCHEMA;
-    if ((string)($payload['schema'] ?? '') !== $expectedSchema) {
-        $errors[] = 'ARPG envelope: schema must be "' . $expectedSchema . '".';
-        $payload['schema'] = $expectedSchema;
+    if ((string)($payload['schema'] ?? '') !== AF_KB_ARPG_META_SCHEMA) {
+        $errors[] = 'ARPG envelope: schema must be "' . AF_KB_ARPG_META_SCHEMA . '".';
+        $payload['schema'] = AF_KB_ARPG_META_SCHEMA;
     }
 
     if ((string)($payload['mechanic'] ?? '') !== 'arpg') {
@@ -4067,73 +4389,33 @@ function af_kb_validate_arpg_envelope(string $type, array $payload, bool $isServ
         $payload['mechanic'] = 'arpg';
     }
 
-    $typeDef = af_kb_arpg_type_definition($type);
-    $expectedEntityKind = (string)($typeDef['entity_kind'] ?? '');
-    if ($expectedEntityKind !== '' && (string)($payload['entity_kind'] ?? '') !== $expectedEntityKind) {
-        $errors[] = 'ARPG envelope: entity_kind does not match type.';
-        $payload['entity_kind'] = $expectedEntityKind;
-    }
-
-    $entityKind = (string)($payload['entity_kind'] ?? '');
-    $allowedKinds = $isService ? af_kb_arpg_service_entity_kinds() : af_kb_arpg_public_entity_kinds();
-    if (!in_array($entityKind, $allowedKinds, true)) {
-        $errors[] = 'ARPG envelope: unsupported entity_kind "' . $entityKind . '".';
-    }
-
-    if (!isset($payload['subtype']) || !is_string($payload['subtype'])) {
-        $payload['subtype'] = '';
-    }
-    if (!isset($payload['category']) || trim((string)$payload['category']) === '') {
-        $errors[] = 'ARPG envelope: category is required.';
-    }
     if (!isset($payload['tags']) || !is_array($payload['tags'])) {
         $errors[] = 'ARPG envelope: tags must be an array.';
         $payload['tags'] = [];
     }
-    if (!isset($payload['visibility']) || !is_array($payload['visibility'])) {
-        $errors[] = 'ARPG envelope: visibility must be an object.';
-        $payload['visibility'] = [];
+    if (!isset($payload['ui']) || !is_array($payload['ui'])) {
+        $errors[] = 'ARPG envelope: ui must be an object.';
+        $payload['ui'] = [];
     }
-
-    foreach (['catalog', 'search', 'internal'] as $flag) {
-        $payload['visibility'][$flag] = !empty($payload['visibility'][$flag]);
+    foreach (['icon_class', 'icon_url', 'background_url', 'background_tab_url'] as $uiKey) {
+        if (!isset($payload['ui'][$uiKey]) || !is_string($payload['ui'][$uiKey])) {
+            $payload['ui'][$uiKey] = '';
+        }
     }
-    if ($isService && !$payload['visibility']['internal']) {
-        $errors[] = 'ARPG service entry must have visibility.internal=true.';
-        $payload['visibility']['internal'] = true;
+    if (!isset($payload['blocks']) || !is_array($payload['blocks'])) {
+        $errors[] = 'ARPG envelope: blocks must be an array.';
+        $payload['blocks'] = [];
     }
-
-    if (!isset($payload['meta']) || !is_array($payload['meta'])) {
-        $errors[] = 'ARPG envelope: meta must be an object.';
-        $payload['meta'] = [];
+    if (!isset($payload['rules']) || !is_array($payload['rules'])) {
+        $errors[] = 'ARPG envelope: rules must be an object.';
+        $payload['rules'] = [];
     }
-    if (!isset($payload['meta']['rules']) || !is_array($payload['meta']['rules'])) {
-        $errors[] = 'ARPG envelope: meta.rules must be an object.';
-        $payload['meta']['rules'] = [];
+    if ((string)($payload['rules']['schema'] ?? '') !== AF_KB_ARPG_RULES_SCHEMA) {
+        $errors[] = 'ARPG envelope: rules.schema must be "' . AF_KB_ARPG_RULES_SCHEMA . '".';
+        $payload['rules']['schema'] = AF_KB_ARPG_RULES_SCHEMA;
     }
-    if ((string)($payload['meta']['rules']['schema'] ?? '') !== AF_KB_ARPG_RULES_SCHEMA) {
-        $errors[] = 'ARPG envelope: meta.rules.schema must be "' . AF_KB_ARPG_RULES_SCHEMA . '".';
-        $payload['meta']['rules']['schema'] = AF_KB_ARPG_RULES_SCHEMA;
-    }
-
-    if (!isset($payload['meta']['source']) || !is_array($payload['meta']['source'])) {
-        $payload['meta']['source'] = [];
-    }
-    if (!isset($payload['meta']['ui']) || !is_array($payload['meta']['ui'])) {
-        $payload['meta']['ui'] = [];
-    }
-
-    if (!isset($payload['data_json']) || !is_array($payload['data_json'])) {
-        $errors[] = 'ARPG envelope: data_json must be an object.';
-        $payload['data_json'] = [];
-    }
-    if (!isset($payload['data_json']['data']) || !is_array($payload['data_json']['data'])) {
-        $errors[] = 'ARPG envelope: data_json.data must be an object.';
-        $payload['data_json']['data'] = [];
-    }
-    if (!isset($payload['data_json']['blocks']) || !is_array($payload['data_json']['blocks'])) {
-        $errors[] = 'ARPG envelope: data_json.blocks must be an array.';
-        $payload['data_json']['blocks'] = [];
+    if (!isset($payload['rules']['version']) || trim((string)$payload['rules']['version']) === '') {
+        $payload['rules']['version'] = '1.0';
     }
 
     return $payload;
@@ -4141,20 +4423,32 @@ function af_kb_validate_arpg_envelope(string $type, array $payload, bool $isServ
 
 function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, array &$errors): void
 {
+    $requiredMap = [
+        'origin' => ['rules.type_profile', 'rules.size', 'rules.creature_type', 'rules.base_hp', 'rules.base_damage', 'rules.base_defense', 'rules.movement_speed', 'rules.racial_bonuses_text', 'rules.racial_traits_text', 'rules.starting_notes'],
+        'archetype' => ['rules.type_profile', 'rules.role', 'rules.damage_bias', 'rules.defense_bias', 'rules.resource_affinity', 'rules.base_damage_bonus', 'rules.base_defense_bonus', 'rules.slot_rules_text', 'rules.description_notes'],
+        'faction' => ['rules.type_profile', 'rules.standing_model', 'rules.vendor_access_text', 'rules.story_flags_text', 'rules.description_text'],
+        'lore' => ['rules.type_profile', 'rules.linked_entities_text', 'rules.timeline_text', 'rules.source_text'],
+        'ability' => ['rules.type_profile', 'rules.type', 'rules.subtype', 'rules.slot', 'rules.damage_type', 'rules.targeting', 'rules.range', 'rules.cast_time', 'rules.cooldown', 'rules.duration', 'rules.max_charges', 'rules.level_cap', 'rules.resources', 'rules.effects', 'rules.modifiers', 'rules.triggers', 'rules.conditions', 'rules.stacking', 'rules.upgrade_requirements'],
+        'talent' => ['rules.type_profile', 'rules.tree', 'rules.tier', 'rules.rank', 'rules.slot_type', 'rules.node_label', 'rules.rank_weight', 'rules.socket_cost', 'rules.effects', 'rules.passive_effects', 'rules.modifiers', 'rules.grants', 'rules.requirements', 'rules.mutual_exclusives'],
+        'item' => ['rules.type_profile', 'rules.item_kind', 'rules.equip_slot', 'rules.rarity', 'rules.subtype', 'rules.level_min', 'rules.level_max', 'rules.progression_stage', 'rules.level_cap', 'rules.base_stats', 'rules.modifiers', 'rules.effects', 'rules.passive_effects', 'rules.triggers', 'rules.grants', 'rules.upgrade_steps'],
+        'bestiary' => ['rules.type_profile', 'rules.family', 'rules.archetype', 'rules.faction', 'rules.rank', 'rules.threat_tier', 'rules.level', 'rules.combat_stats.hp', 'rules.combat_stats.atk', 'rules.combat_stats.def', 'rules.combat_stats.armor', 'rules.combat_stats.crit_rate', 'rules.combat_stats.crit_dmg', 'rules.combat_stats.status_hit', 'rules.combat_stats.status_resist', 'rules.resists', 'rules.weaknesses', 'rules.ability_keys', 'rules.loot'],
+    ];
+
+    foreach ((array)($requiredMap[$entityKind] ?? []) as $requiredPath) {
+        af_kb_arpg_require_path($payload, (string)$requiredPath, 'ARPG ' . $entityKind . ' requires "' . $requiredPath . '".', $errors);
+    }
+
+    if ((string)($payload['rules']['type_profile'] ?? '') !== $entityKind) {
+        $errors[] = 'ARPG ' . $entityKind . ': rules.type_profile must be "' . $entityKind . '".';
+    }
+
     if ($entityKind === 'ability') {
-        af_kb_arpg_require_path($payload, 'subtype', 'ARPG ability requires subtype.', $errors);
-        af_kb_arpg_require_path($payload, 'data_json.data.ability', 'ARPG ability requires data_json.data.ability.', $errors);
-        foreach (['effects', 'costs', 'scaling', 'modifiers', 'conditions', 'triggers', 'stacking', 'status_refs', 'refs'] as $requiredArrKey) {
-            af_kb_arpg_require_path($payload, 'data_json.data.' . $requiredArrKey, 'ARPG ability requires "' . $requiredArrKey . '" section.', $errors);
-        }
-        foreach (['effects', 'costs', 'scaling', 'modifiers', 'conditions', 'triggers', 'stacking', 'status_refs', 'refs'] as $arrKey) {
-            $value = (array)($payload['data_json']['data'][$arrKey] ?? null);
-            if (!is_array($payload['data_json']['data'][$arrKey] ?? null)) {
-                $errors[] = 'ARPG ability: "' . $arrKey . '" must be an array.';
+        foreach (['resources', 'effects', 'modifiers', 'triggers', 'conditions', 'stacking', 'upgrade_requirements'] as $arrKey) {
+            if (!is_array($payload['rules'][$arrKey] ?? null)) {
+                $errors[] = 'ARPG ability: "rules.' . $arrKey . '" must be an array.';
             }
         }
-
-        foreach ((array)($payload['data_json']['data']['triggers'] ?? []) as $idx => $trigger) {
+        foreach ((array)($payload['rules']['triggers'] ?? []) as $idx => $trigger) {
             if (!is_array($trigger)) {
                 $errors[] = 'ARPG ability: trigger #' . ($idx + 1) . ' must be an object.';
                 continue;
@@ -4164,7 +4458,7 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
                 $errors[] = 'ARPG ability: trigger #' . ($idx + 1) . ' has invalid template_ref.';
             }
         }
-        foreach ((array)($payload['data_json']['data']['conditions'] ?? []) as $idx => $condition) {
+        foreach ((array)($payload['rules']['conditions'] ?? []) as $idx => $condition) {
             if (!is_array($condition)) {
                 $errors[] = 'ARPG ability: condition #' . ($idx + 1) . ' must be an object.';
                 continue;
@@ -4177,67 +4471,53 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
     }
 
     if ($entityKind === 'item') {
-        af_kb_arpg_require_path($payload, 'data_json.data.item', 'ARPG item requires data_json.data.item.', $errors);
-        af_kb_arpg_require_path($payload, 'data_json.data.item.item_kind', 'ARPG item requires item.item_kind.', $errors);
-        af_kb_arpg_require_path($payload, 'data_json.data.item.rarity', 'ARPG item requires item.rarity.', $errors);
-        foreach (['base_stats', 'substats', 'modifiers', 'effects', 'passive_refs', 'requirements', 'triggers', 'scaling', 'grants'] as $requiredArrKey) {
-            af_kb_arpg_require_path($payload, 'data_json.data.' . $requiredArrKey, 'ARPG item requires "' . $requiredArrKey . '" section.', $errors);
-        }
-        $item = (array)($payload['data_json']['data']['item'] ?? []);
-        $equipableKinds = ['weapon', 'armor', 'accessory', 'artifact', 'implant'];
-        if (in_array((string)($item['item_kind'] ?? ''), $equipableKinds, true) && trim((string)($item['equip_slot'] ?? '')) === '') {
-            $errors[] = 'ARPG item requires item.equip_slot for equipable item_kind.';
+        $equipableKinds = ['weapon', 'armor', 'accessory', 'artifact'];
+        if (in_array((string)($payload['rules']['item_kind'] ?? ''), $equipableKinds, true) && trim((string)($payload['rules']['equip_slot'] ?? '')) === '') {
+            $errors[] = 'ARPG item requires rules.equip_slot for equipable item_kind.';
         }
     }
 
     if ($entityKind === 'talent') {
-        af_kb_arpg_require_path($payload, 'data_json.data.talent', 'ARPG talent requires data_json.data.talent.', $errors);
-        af_kb_arpg_require_path($payload, 'data_json.data.talent.tree', 'ARPG talent requires talent.tree.', $errors);
-        af_kb_arpg_require_path($payload, 'data_json.data.talent.tier', 'ARPG talent requires talent.tier.', $errors);
-        af_kb_arpg_require_path($payload, 'data_json.data.talent.max_rank', 'ARPG talent requires talent.max_rank.', $errors);
-        af_kb_arpg_require_path($payload, 'data_json.data.rank_effects', 'ARPG talent requires rank_effects.', $errors);
-        foreach (['requirements', 'mutual_exclusives', 'grants', 'rank_modifiers', 'rank_effect_payloads', 'rank_unlocks'] as $requiredArrKey) {
-            af_kb_arpg_require_path($payload, 'data_json.data.' . $requiredArrKey, 'ARPG talent requires "' . $requiredArrKey . '" section.', $errors);
+        foreach (['effects', 'passive_effects', 'modifiers', 'grants', 'requirements', 'mutual_exclusives'] as $requiredArrKey) {
+            if (!is_array($payload['rules'][$requiredArrKey] ?? null)) {
+                $errors[] = 'ARPG talent requires "rules.' . $requiredArrKey . '" array.';
+            }
         }
     }
 
     if ($entityKind === 'bestiary') {
-        foreach (['combat_stats', 'abilities', 'loot'] as $requiredArrKey) {
-            af_kb_arpg_require_path($payload, 'data_json.data.' . $requiredArrKey, 'ARPG bestiary requires "' . $requiredArrKey . '" section.', $errors);
+        foreach (['resists', 'weaknesses', 'ability_keys', 'loot'] as $requiredArrKey) {
+            if (!is_array($payload['rules'][$requiredArrKey] ?? null)) {
+                $errors[] = 'ARPG bestiary requires "rules.' . $requiredArrKey . '" array.';
+            }
         }
     }
 }
 
 function af_kb_validate_arpg_service_entity(string $entityKind, array $payload, array &$errors): void
 {
-    if ($entityKind === 'mechanic_profile') {
-        $data = (array)($payload['data_json']['data'] ?? []);
-        foreach (['stats', 'resources', 'statuses', 'template_registry'] as $requiredKey) {
-            if (!array_key_exists($requiredKey, $data)) {
-                $errors[] = 'ARPG mechanic_profile requires "' . $requiredKey . '" in data_json.data.';
-            }
-        }
-
-        foreach ((array)($data['resources'] ?? []) as $idx => $row) {
-            $rowData = is_array($row) ? $row : [];
-            $ref = trim((string)($rowData['ref'] ?? ''));
-            if ($ref !== '' && !af_kb_arpg_validate_ref_string($ref)) {
-                $errors[] = 'ARPG mechanic_profile resources ref #' . ($idx + 1) . ' has invalid format.';
-            }
-        }
-        foreach ((array)($data['statuses'] ?? []) as $idx => $row) {
-            $rowData = is_array($row) ? $row : [];
-            $ref = trim((string)($rowData['ref'] ?? ''));
-            if ($ref !== '' && !af_kb_arpg_validate_ref_string($ref)) {
-                $errors[] = 'ARPG mechanic_profile statuses ref #' . ($idx + 1) . ' has invalid format.';
-            }
-        }
-        return;
+    if ((string)($payload['rules']['type_profile'] ?? '') !== 'service_mechanics') {
+        $errors[] = 'ARPG service entry requires rules.type_profile="service_mechanics".';
     }
-
-    $serviceKindsWithEntries = ['resource_def', 'status_def', 'modifier_template', 'formula_def', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
-    if (in_array($entityKind, $serviceKindsWithEntries, true)) {
-        af_kb_arpg_require_path($payload, 'data_json.data.entries', 'ARPG service entity "' . $entityKind . '" requires data_json.data.entries.', $errors);
+    if ((string)($payload['rules']['category'] ?? '') !== 'service.mechanics') {
+        $errors[] = 'ARPG service entry requires rules.category="service.mechanics".';
+    }
+    $visibility = (array)($payload['rules']['visibility'] ?? []);
+    if (!empty($visibility['catalog']) || !empty($visibility['search']) || empty($visibility['internal'])) {
+        $errors[] = 'ARPG service entry requires rules.visibility={catalog:false,search:false,internal:true}.';
+    }
+    if (!in_array($entityKind, af_kb_arpg_service_entity_kinds(), true)) {
+        $errors[] = 'ARPG service entry has unsupported rules.service_kind "' . $entityKind . '".';
+    }
+    if (!is_array($payload['rules']['entries'] ?? null)) {
+        $errors[] = 'ARPG service entry requires rules.entries[] array.';
+    }
+    if ($entityKind === 'mechanic_profile') {
+        foreach (['stats_registry', 'damage_type_registry', 'targeting_registry', 'resource_ops_registry', 'modifier_modes_registry', 'talent_rank_registry', 'item_rarity_registry', 'bestiary_rank_registry'] as $registryKey) {
+            if (!is_array($payload['rules'][$registryKey] ?? null)) {
+                $errors[] = 'ARPG mechanic_profile requires rules.' . $registryKey . ' array.';
+            }
+        }
     }
 }
 
@@ -4251,10 +4531,13 @@ function af_kb_validate_arpg_entry_by_type(string $type, array $payload, array &
     $isService = !empty($typeDef['service']);
     $payload = af_kb_validate_arpg_envelope($type, $payload, $isService, $errors);
 
-    $entityKind = (string)($payload['entity_kind'] ?? '');
     if ($isService) {
-        af_kb_validate_arpg_service_entity($entityKind, $payload, $errors);
+        $payload['rules']['type_profile'] = 'service_mechanics';
+        $serviceKind = (string)($payload['rules']['service_kind'] ?? '');
+        af_kb_validate_arpg_service_entity($serviceKind, $payload, $errors);
     } else {
+        $entityKind = (string)($typeDef['entity_kind'] ?? '');
+        $payload['rules']['type_profile'] = $entityKind;
         af_kb_validate_arpg_public_entity($entityKind, $payload, $errors);
     }
 
@@ -7970,14 +8253,14 @@ function af_kb_handle_edit(): void
             $metaPayload['ui']['icon_class'] = $entryIconClass;
             $metaPayload['ui']['icon_url'] = $entryIconUrl;
             $metaPayload['ui']['background_url'] = $entryBgUrl;
-            $metaPayload['background_tab_url'] = $entryBgTabUrl;
+            $metaPayload['ui']['background_tab_url'] = $entryBgTabUrl;
 
             $rulesObject = af_kb_decode_json($entryDataJsonNormalized);
             if (!is_array($rulesObject)) {
                 $errors[] = 'Rules JSON must be an object.';
             } elseif ($mechanicKey === 'arpg') {
-                if (empty($rulesObject['schema']) || empty($rulesObject['entity_kind']) || (($rulesObject['mechanic'] ?? '') !== 'arpg')) {
-                    $errors[] = 'ARPG JSON must contain schema, mechanic=arpg and entity_kind.';
+                if (empty($rulesObject['schema']) || (($rulesObject['mechanic'] ?? '') !== 'arpg') || !is_array($rulesObject['rules'] ?? null)) {
+                    $errors[] = 'ARPG JSON must contain schema, mechanic=arpg and rules object.';
                 }
             } elseif (empty($rulesObject['schema']) || empty($rulesObject['type_profile'])) {
                 $errors[] = 'Rules JSON must be an object with schema and type_profile.';
