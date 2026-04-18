@@ -100,7 +100,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     );
     $sheet_info_table_html = af_charactersheets_build_info_table_html($atf_index, $sheet_view);
     $sheet_attributes_html = af_charactersheets_build_attributes_html($sheet_view, $can_edit_attributes, $can_view_ledger, $can_staff_reset, $attributes_locked);
-    $sheet_bonus_html = af_charactersheets_build_bonus_html($atf_index);
+    $sheet_bonus_html = af_charactersheets_build_bonus_html($atf_index, $sheet_view);
     $skills_locked = !empty($build['locked_skills']);
     $can_manage_skills = $can_manage_sheet && (!$skills_locked || $is_staff);
     $sheet_skills_html = af_charactersheets_build_skills_html($sheet_view, $can_manage_skills, $can_view_ledger, $can_staff_reset, $skills_locked);
@@ -1269,7 +1269,7 @@ function af_charactersheets_build_info_table_html(array $index, array $sheet_vie
     return '<div class="af-cs-info-table">' . implode('', $items) . '</div>';
 }
 
-function af_charactersheets_build_bonus_html(array $index): string
+function af_charactersheets_build_bonus_html(array $index, array $sheet_view = []): string
 {
     global $mybb;
 
@@ -1292,37 +1292,75 @@ function af_charactersheets_build_bonus_html(array $index): string
         return $html;
     };
 
-    $race_field = $index['character_race'] ?? [];
-    $race_key = af_charactersheets_pick_field_value($index, ['character_race', 'race'], false);
-    $race_entry = $race_key !== '' ? af_charactersheets_kb_get_entry('race', $race_key) : [];
-    $race_title = af_charactersheets_kb_pick_text($race_entry, 'title');
-    if ($race_title === '') {
-        $race_title = af_charactersheets_pick_field_value($index, ['character_race', 'race'], true);
-    }
-    if ($race_title === '') {
-        $race_title = (string)($race_field['value_label'] ?? 'Раса');
-    }
+    $ctx_sources = (array)($sheet_view['ctx']['sources'] ?? []);
+    $resolve_source = static function (
+        string $type,
+        array $index,
+        array $ctx_sources,
+        array $fallback_keys,
+        string $default_title = ''
+    ) use ($bonus_from_entry): array {
+        $resolved = [
+            'key' => '',
+            'title' => $default_title,
+            'entry' => [],
+            'bonus_html' => '',
+        ];
 
-    $race_variant_field = $index['character_race_variant'] ?? [];
-    $race_variant_key = af_charactersheets_pick_field_value($index, ['character_race_variant', 'race_variant', 'racevariant'], false);
-    $race_variant_entry = $race_variant_key !== '' ? af_charactersheets_kb_get_entry('race_variant', $race_variant_key) : [];
-    if (empty($race_variant_entry) && $race_variant_key !== '') {
-        $race_variant_entry = af_charactersheets_kb_get_entry('racevariant', $race_variant_key);
-    }
-    $race_variant_title = af_charactersheets_kb_pick_text($race_variant_entry, 'title');
-    if ($race_variant_title === '') {
-        $race_variant_title = af_charactersheets_pick_field_value($index, ['character_race_variant', 'race_variant', 'racevariant'], true);
-    }
-    if ($race_variant_title === '') {
-        $race_variant_title = (string)($race_variant_field['value_label'] ?? '');
-    }
+        $field_name = 'character_' . $type;
+        $field = (array)($index[$field_name] ?? []);
+        $key = trim((string)af_charactersheets_pick_field_value($index, $fallback_keys, false));
+        if ($key === '') {
+            $key = trim((string)($ctx_sources[$type]['key'] ?? ''));
+        }
+        $resolved['key'] = $key;
 
-    $race_text_html = $bonus_from_entry($race_entry);
+        if ($key !== '') {
+            $entry_resolved = af_charactersheets_kb_resolve_entry($type, $key);
+            $entry = (array)($entry_resolved['entry'] ?? []);
+            if (empty($entry) && $type === 'race_variant') {
+                $entry_resolved = af_charactersheets_kb_resolve_entry('racevariant', $key);
+                $entry = (array)($entry_resolved['entry'] ?? []);
+            }
+            $resolved['entry'] = $entry;
+        }
+
+        $title = af_charactersheets_kb_pick_text((array)$resolved['entry'], 'title');
+        if ($title === '') {
+            $title = trim((string)af_charactersheets_pick_field_value($index, $fallback_keys, true));
+        }
+        if ($title === '') {
+            $title = trim((string)($field['value_label'] ?? ''));
+        }
+        if ($title === '') {
+            $title = $default_title;
+        }
+        $resolved['title'] = $title;
+
+        $bonus_html = '';
+        if ($key !== '') {
+            $bonus_html = trim((string)af_cs_render_kb_bonuses_text($type, $key, af_charactersheets_is_ru()));
+        }
+        if ($bonus_html === '') {
+            $bonus_html = $bonus_from_entry((array)$resolved['entry']);
+        }
+        $resolved['bonus_html'] = $bonus_html;
+
+        return $resolved;
+    };
+
+    $race_resolved = $resolve_source('race', $index, $ctx_sources, ['character_race', 'race'], 'Раса');
+    $race_variant_resolved = $resolve_source('race_variant', $index, $ctx_sources, ['character_race_variant', 'race_variant', 'racevariant'], '');
+
+    $race_title = $race_resolved['title'];
+    $race_variant_title = $race_variant_resolved['title'];
+
+    $race_text_html = (string)($race_resolved['bonus_html'] ?? '');
     if ($race_text_html === '') {
         $race_text_html = '<div class="af-cs-muted">Нет данных</div>';
     }
 
-    $race_variant_text_html = $bonus_from_entry($race_variant_entry);
+    $race_variant_text_html = (string)($race_variant_resolved['bonus_html'] ?? '');
 
     $race_card_title = 'Раса: ' . ($race_title !== '' ? $race_title : '—');
     if ($race_variant_title !== '') {
