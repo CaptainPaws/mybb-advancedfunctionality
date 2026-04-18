@@ -33,16 +33,50 @@ function af_kb_arpg_supported_types(): array
     return [
         'arpg_origin',
         'arpg_archetype',
-        'arpg_role',
-        'arpg_path',
+        'arpg_ability',
+        'arpg_item',
         'arpg_faction',
         'arpg_talent',
+        'arpg_lore',
+        'arpg_mechanics',
+        'arpg_role',
+        'arpg_path',
         'arpg_ability_active',
         'arpg_ability_passive',
-        'arpg_item',
         'arpg_modifier',
         'arpg_status',
         'arpg_resource',
+    ];
+}
+
+function af_kb_arpg_public_top_level_types(): array
+{
+    return [
+        'arpg_origin',
+        'arpg_archetype',
+        'arpg_faction',
+        'arpg_ability',
+        'arpg_talent',
+        'arpg_item',
+        'arpg_lore',
+    ];
+}
+
+function af_kb_arpg_internal_types(): array
+{
+    return [
+        'arpg_mechanics',
+        'arpg_modifier',
+        'arpg_status',
+        'arpg_resource',
+    ];
+}
+
+function af_kb_arpg_reference_types(): array
+{
+    return [
+        'arpg_role',
+        'arpg_path',
     ];
 }
 
@@ -279,23 +313,28 @@ function af_kb_default_type_definitions(): array
 
 function af_kb_default_arpg_type_definitions(): array
 {
-    $arpgTitles = [
-        'arpg_origin' => ['ARPG: Происхождения', 'ARPG: Origins'],
-        'arpg_archetype' => ['ARPG: Архетипы', 'ARPG: Archetypes'],
-        'arpg_role' => ['ARPG: Роли', 'ARPG: Roles'],
-        'arpg_path' => ['ARPG: Пути развития', 'ARPG: Progression Paths'],
-        'arpg_faction' => ['ARPG: Фракции', 'ARPG: Factions'],
-        'arpg_talent' => ['ARPG: Таланты', 'ARPG: Talents'],
-        'arpg_ability_active' => ['ARPG: Активные способности', 'ARPG: Active Abilities'],
-        'arpg_ability_passive' => ['ARPG: Пассивные способности', 'ARPG: Passive Abilities'],
-        'arpg_item' => ['ARPG: Предметы и экипировка', 'ARPG: Items and Equipment'],
-        'arpg_modifier' => ['ARPG: Модификаторы', 'ARPG: Modifiers'],
-        'arpg_status' => ['ARPG: Статусы', 'ARPG: Statuses'],
-        'arpg_resource' => ['ARPG: Ресурсы', 'ARPG: Resources'],
+    $arpgTypeMeta = [
+        'arpg_origin' => ['ARPG: Происхождения', 'ARPG: Origins', 1],
+        'arpg_archetype' => ['ARPG: Архетипы', 'ARPG: Archetypes', 1],
+        'arpg_faction' => ['ARPG: Фракции', 'ARPG: Factions', 1],
+        'arpg_ability' => ['ARPG: Способности', 'ARPG: Abilities', 1],
+        'arpg_talent' => ['ARPG: Таланты', 'ARPG: Talents', 1],
+        'arpg_item' => ['ARPG: Предметы и экипировка', 'ARPG: Items and Equipment', 1],
+        'arpg_lore' => ['ARPG: Лор', 'ARPG: Lore', 1],
+        'arpg_mechanics' => ['ARPG: Механический профиль', 'ARPG: Mechanics Profile', 0],
+        'arpg_role' => ['ARPG: Роли (reference)', 'ARPG: Roles (reference)', 0],
+        'arpg_path' => ['ARPG: Пути развития (reference)', 'ARPG: Progression Paths (reference)', 0],
+        'arpg_ability_active' => ['ARPG: Активные способности (legacy)', 'ARPG: Active Abilities (legacy)', 0],
+        'arpg_ability_passive' => ['ARPG: Пассивные способности (legacy)', 'ARPG: Passive Abilities (legacy)', 0],
+        'arpg_modifier' => ['ARPG: Модификаторы (service)', 'ARPG: Modifiers (service)', 0],
+        'arpg_status' => ['ARPG: Статусы (service)', 'ARPG: Statuses (service)', 0],
+        'arpg_resource' => ['ARPG: Ресурсы (service)', 'ARPG: Resources (service)', 0],
     ];
 
     $defs = [];
-    foreach ($arpgTitles as $typeKey => $titles) {
+    foreach ($arpgTypeMeta as $typeKey => $meta) {
+        $titles = [(string)$meta[0], (string)$meta[1]];
+        $isActive = (int)$meta[2];
         $schema = [
             'schema' => 'af_kb.ui.v1',
             'version' => 1,
@@ -325,7 +364,7 @@ function af_kb_default_arpg_type_definitions(): array
             'rules_schema' => AF_KB_ARPG_RULES_SCHEMA,
             'ui_schema_json' => json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'mechanic_key' => 'arpg',
-            'is_active' => 1,
+            'is_active' => $isActive,
             'sortorder' => 100 + count($defs),
         ];
     }
@@ -1442,29 +1481,90 @@ function af_kb_seed_arpg_types(): void
         }
 
         $existing = $db->fetch_array($db->simple_select('af_kb_types', '*', "(type='".$db->escape_string($typeKey)."' OR type_key='".$db->escape_string($typeKey)."')", ['limit' => 1]));
-        if ($existing) {
+        if (!$existing) {
+            $db->insert_query('af_kb_types', [
+                'type' => $db->escape_string($typeKey),
+                'type_key' => $db->escape_string($typeKey),
+                'mechanic_key' => $db->escape_string('arpg'),
+                'title_ru' => $db->escape_string((string)($defaultRow['title_ru'] ?? $typeKey)),
+                'title_en' => $db->escape_string((string)($defaultRow['title_en'] ?? $typeKey)),
+                'short_ru' => '',
+                'short_en' => '',
+                'description_ru' => '',
+                'description_en' => '',
+                'desc_ru' => '',
+                'desc_en' => '',
+                'rules_schema' => $db->escape_string(AF_KB_ARPG_RULES_SCHEMA),
+                'ui_schema_json' => $db->escape_string((string)($defaultRow['ui_schema_json'] ?? '{}')),
+                'active' => (int)($defaultRow['is_active'] ?? 1),
+                'is_active' => (int)($defaultRow['is_active'] ?? 1),
+                'sortorder' => 100 + $idx,
+                'updated_at' => TIME_NOW,
+            ]);
             continue;
         }
 
-        $db->insert_query('af_kb_types', [
-            'type' => $db->escape_string($typeKey),
-            'type_key' => $db->escape_string($typeKey),
+        $update = [
             'mechanic_key' => $db->escape_string('arpg'),
-            'title_ru' => $db->escape_string((string)($defaultRow['title_ru'] ?? $typeKey)),
-            'title_en' => $db->escape_string((string)($defaultRow['title_en'] ?? $typeKey)),
-            'short_ru' => '',
-            'short_en' => '',
-            'description_ru' => '',
-            'description_en' => '',
-            'desc_ru' => '',
-            'desc_en' => '',
             'rules_schema' => $db->escape_string(AF_KB_ARPG_RULES_SCHEMA),
-            'ui_schema_json' => $db->escape_string((string)($defaultRow['ui_schema_json'] ?? '{}')),
-            'active' => 1,
-            'is_active' => 1,
+            'active' => (int)($defaultRow['is_active'] ?? 1),
+            'is_active' => (int)($defaultRow['is_active'] ?? 1),
             'sortorder' => 100 + $idx,
             'updated_at' => TIME_NOW,
-        ]);
+        ];
+        $existingUiSchema = trim((string)($existing['ui_schema_json'] ?? ''));
+        if ($existingUiSchema === '' || $existingUiSchema === '{}' || $existingUiSchema === '[]') {
+            $update['ui_schema_json'] = $db->escape_string((string)($defaultRow['ui_schema_json'] ?? '{}'));
+        }
+        $db->update_query('af_kb_types', $update, 'id='.(int)$existing['id']);
+    }
+
+    af_kb_reorganize_arpg_entries_and_types();
+}
+
+function af_kb_reorganize_arpg_entries_and_types(): void
+{
+    global $db;
+
+    if (!$db->table_exists('af_kb_types')) {
+        return;
+    }
+
+    $entryMap = [
+        'arpg_ability_active' => 'arpg_ability',
+        'arpg_ability_passive' => 'arpg_ability',
+        'arpg_modifier' => 'arpg_mechanics',
+        'arpg_status' => 'arpg_mechanics',
+        'arpg_resource' => 'arpg_mechanics',
+    ];
+
+    if ($db->table_exists('af_kb_entries')) {
+        foreach ($entryMap as $oldType => $newType) {
+            $db->update_query(
+                'af_kb_entries',
+                [
+                    'type' => $db->escape_string($newType),
+                    'updated_at' => TIME_NOW,
+                ],
+                "type='".$db->escape_string($oldType)."'"
+            );
+        }
+    }
+
+    foreach (af_kb_default_arpg_type_definitions() as $def) {
+        $typeKey = (string)($def['type_key'] ?? '');
+        if ($typeKey === '') {
+            continue;
+        }
+        $row = $db->fetch_array($db->simple_select('af_kb_types', 'id', "(type='".$db->escape_string($typeKey)."' OR type_key='".$db->escape_string($typeKey)."')", ['limit' => 1]));
+        if (!$row) {
+            continue;
+        }
+        $db->update_query('af_kb_types', [
+            'active' => (int)($def['is_active'] ?? 0),
+            'is_active' => (int)($def['is_active'] ?? 0),
+            'updated_at' => TIME_NOW,
+        ], 'id='.(int)$row['id']);
     }
 }
 
@@ -1778,6 +1878,12 @@ function af_kb_default_type_rules_config_arpg(string $typeKey): array
             'ui_rules_editor' => true,
         ];
     }
+    $typeConfig['arpg_lore'] = [
+        'rules_enabled' => false,
+        'rules_schema' => AF_KB_ARPG_RULES_SCHEMA,
+        'rules_required_keys' => [],
+        'ui_rules_editor' => false,
+    ];
 
     return array_replace($defaults, (array)($typeConfig[$typeKey] ?? []));
 }
@@ -2073,8 +2179,26 @@ function af_kb_get_type_profile_definition_arpg(string $typeKey): array
         'abilities' => [
             'active' => [],
             'passive' => [],
+            'ultimate' => [],
+            'support' => [],
+            'technique' => [],
+            'aura' => [],
+            'toggle' => [],
         ],
         'items' => [],
+        'mechanics' => [
+            'stat_templates' => [],
+            'resources' => [],
+            'statuses' => [],
+            'modifiers' => [],
+            'scaling' => [],
+            'triggers' => [],
+            'conditions' => [],
+            'stacking_rules' => [],
+            'cost_templates' => [],
+            'cooldown_templates' => [],
+            'ui_schema' => [],
+        ],
         'modifiers' => [],
         'statuses' => [],
         'resources' => [],
@@ -3707,6 +3831,14 @@ function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalized
             $rulesData[$arrayKey] = [];
         }
     }
+    if (!isset($rulesData['mechanics']) || !is_array($rulesData['mechanics'])) {
+        $rulesData['mechanics'] = [];
+    }
+    foreach (['stat_templates', 'resources', 'statuses', 'modifiers', 'scaling', 'triggers', 'conditions', 'stacking_rules', 'cost_templates', 'cooldown_templates', 'ui_schema'] as $mechanicsKey) {
+        if (!isset($rulesData['mechanics'][$mechanicsKey]) || !is_array($rulesData['mechanics'][$mechanicsKey])) {
+            $rulesData['mechanics'][$mechanicsKey] = [];
+        }
+    }
 
     if (!isset($rulesData['classification']) || !is_array($rulesData['classification'])) {
         $rulesData['classification'] = [];
@@ -3720,11 +3852,24 @@ function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalized
     if (!isset($rulesData['abilities']) || !is_array($rulesData['abilities'])) {
         $rulesData['abilities'] = [];
     }
-    if (!isset($rulesData['abilities']['active']) || !is_array($rulesData['abilities']['active'])) {
-        $rulesData['abilities']['active'] = [];
+    foreach (['active', 'passive', 'ultimate', 'support', 'technique', 'aura', 'toggle'] as $abilitySubtype) {
+        if (!isset($rulesData['abilities'][$abilitySubtype]) || !is_array($rulesData['abilities'][$abilitySubtype])) {
+            $rulesData['abilities'][$abilitySubtype] = [];
+        }
     }
-    if (!isset($rulesData['abilities']['passive']) || !is_array($rulesData['abilities']['passive'])) {
-        $rulesData['abilities']['passive'] = [];
+
+    // backwards-compatible mirror for legacy top-level mechanics blocks
+    if (!empty($rulesData['modifiers']) && empty($rulesData['mechanics']['modifiers'])) {
+        $rulesData['mechanics']['modifiers'] = (array)$rulesData['modifiers'];
+    }
+    if (!empty($rulesData['statuses']) && empty($rulesData['mechanics']['statuses'])) {
+        $rulesData['mechanics']['statuses'] = (array)$rulesData['statuses'];
+    }
+    if (!empty($rulesData['resources']) && empty($rulesData['mechanics']['resources'])) {
+        $rulesData['mechanics']['resources'] = (array)$rulesData['resources'];
+    }
+    if (!empty($rulesData['scaling']) && empty($rulesData['mechanics']['scaling'])) {
+        $rulesData['mechanics']['scaling'] = (array)$rulesData['scaling'];
     }
 
     foreach ((array)($typeSchema['rules_required_keys'] ?? []) as $requiredKey) {

@@ -902,7 +902,7 @@
                 '<div class="af-kb-row"><div><label>Origin / race</label><input type="text" id="af-kb-arpg-origin" /></div><div><label>Archetype / role</label><input type="text" id="af-kb-arpg-archetype" /></div></div>',
                 '<div class="af-kb-row"><div><label>Path / faction</label><input type="text" id="af-kb-arpg-path" /></div><div><label>Resources / scaling (JSON)</label><textarea id="af-kb-arpg-resources" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
                 '<div class="af-kb-row"><div><label>Talents (JSON array)</label><textarea id="af-kb-arpg-talents" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Items/implants/artifacts (JSON array)</label><textarea id="af-kb-arpg-items" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
-                '<div class="af-kb-row"><div><label>Active abilities (JSON array)</label><textarea id="af-kb-arpg-active" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Passive abilities (JSON array)</label><textarea id="af-kb-arpg-passive" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
+                '<div class="af-kb-row"><div><label>Abilities by subtype (JSON object)</label><textarea id="af-kb-arpg-abilities" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Mechanics profile (JSON object)</label><textarea id="af-kb-arpg-mechanics" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
                 '<div class="af-kb-row"><div><label>Modifiers/statuses (JSON array)</label><textarea id="af-kb-arpg-mods" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Tags (comma separated)</label><input type="text" id="af-kb-arpg-tags" /></div></div>'
             ];
             root.innerHTML = block.join('');
@@ -916,8 +916,8 @@
                 resources: root.querySelector('#af-kb-arpg-resources'),
                 talents: root.querySelector('#af-kb-arpg-talents'),
                 items: root.querySelector('#af-kb-arpg-items'),
-                active: root.querySelector('#af-kb-arpg-active'),
-                passive: root.querySelector('#af-kb-arpg-passive'),
+                abilities: root.querySelector('#af-kb-arpg-abilities'),
+                mechanics: root.querySelector('#af-kb-arpg-mechanics'),
                 mods: root.querySelector('#af-kb-arpg-mods'),
                 tags: root.querySelector('#af-kb-arpg-tags')
             };
@@ -930,8 +930,8 @@
             fields.resources.value = JSON.stringify({ resources: payload.resources || [], scaling: payload.scaling || [] }, null, 2);
             fields.talents.value = JSON.stringify(payload.talents || [], null, 2);
             fields.items.value = JSON.stringify(payload.items || [], null, 2);
-            fields.active.value = JSON.stringify((payload.abilities && payload.abilities.active) || [], null, 2);
-            fields.passive.value = JSON.stringify((payload.abilities && payload.abilities.passive) || [], null, 2);
+            fields.abilities.value = JSON.stringify((payload.abilities && typeof payload.abilities === 'object') ? payload.abilities : { active: [], passive: [] }, null, 2);
+            fields.mechanics.value = JSON.stringify((payload.mechanics && typeof payload.mechanics === 'object') ? payload.mechanics : {}, null, 2);
             fields.mods.value = JSON.stringify({ modifiers: payload.modifiers || [], statuses: payload.statuses || [] }, null, 2);
             fields.tags.value = Array.isArray(payload.tags) ? payload.tags.join(', ') : '';
 
@@ -966,9 +966,8 @@
                 next.scaling = Array.isArray(resourcesPayload.scaling) ? resourcesPayload.scaling : [];
                 next.talents = parseJsonSafe(fields.talents.value, []);
                 next.items = parseJsonSafe(fields.items.value, []);
-                if (!next.abilities || typeof next.abilities !== 'object') next.abilities = {};
-                next.abilities.active = parseJsonSafe(fields.active.value, []);
-                next.abilities.passive = parseJsonSafe(fields.passive.value, []);
+                next.abilities = parseJsonSafe(fields.abilities.value, { active: [], passive: [], ultimate: [], support: [], technique: [], aura: [], toggle: [] });
+                next.mechanics = parseJsonSafe(fields.mechanics.value, {});
                 var modsPayload = parseJsonSafe(fields.mods.value, { modifiers: [], statuses: [] });
                 next.modifiers = Array.isArray(modsPayload.modifiers) ? modsPayload.modifiers : [];
                 next.statuses = Array.isArray(modsPayload.statuses) ? modsPayload.statuses : [];
