@@ -1242,6 +1242,97 @@
                     renderArrayEditor(entity, 'conditions', ['data_json', 'data', 'conditions'], [{ key: 'template_ref', label: 'template_ref' }, { key: 'kind', label: 'kind' }, { key: 'value', label: 'value' }]);
                     renderArrayEditor(entity, 'status_refs', ['data_json', 'data', 'status_refs'], [{ key: 'ref', label: 'status ref' }]);
                     renderArrayEditor(entity, 'template_refs', ['data_json', 'data', 'template_refs'], [{ key: 'ref', label: 'template ref' }]);
+                } else if (kind === 'bestiary') {
+                    var bestiary = ensureDataObject('bestiary');
+                    if (!bestiary.stats || typeof bestiary.stats !== 'object' || Array.isArray(bestiary.stats)) bestiary.stats = {};
+                    if (!bestiary.classification || typeof bestiary.classification !== 'object' || Array.isArray(bestiary.classification)) bestiary.classification = {};
+                    if (!Array.isArray(bestiary.notes)) bestiary.notes = [];
+                    if (!Array.isArray(data.resistances)) data.resistances = [];
+                    if (!Array.isArray(data.weaknesses)) data.weaknesses = [];
+                    if (!Array.isArray(data.statuses)) data.statuses = [];
+                    if (!Array.isArray(data.abilities)) data.abilities = [];
+                    if (!Array.isArray(data.loot)) data.loot = [];
+                    if (!Array.isArray(data.phases)) data.phases = [];
+                    if (!Array.isArray(data.content_blocks)) data.content_blocks = [];
+
+                    var bMain = createSection(entity, 'Bestiary core', 'Restored from pre-ARPG-refactor UI and adapted to mechanic-aware envelope.');
+                    bMain.insertAdjacentHTML('beforeend', '<div class="af-kb-row"><div><label>family</label><input id="af-arpg-best-family" type="text" /></div><div><label>category / archetype</label><input id="af-arpg-best-archetype" type="text" /></div><div><label>faction</label><input id="af-arpg-best-faction" type="text" /></div></div><div class="af-kb-row"><div><label>rank</label><select id="af-arpg-best-rank"></select></div><div><label>threat tier</label><input id="af-arpg-best-tier" type="number" /></div><div><label>level</label><input id="af-arpg-best-level" type="number" /></div></div><div class="af-kb-row"><div><label>description</label><textarea id="af-arpg-best-description" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>mechanics notes (line by line)</label><textarea id="af-arpg-best-notes" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>');
+                    var bf = entity.querySelector('#af-arpg-best-family');
+                    var ba = entity.querySelector('#af-arpg-best-archetype');
+                    var bfac = entity.querySelector('#af-arpg-best-faction');
+                    var br = entity.querySelector('#af-arpg-best-rank');
+                    var bt = entity.querySelector('#af-arpg-best-tier');
+                    var bl = entity.querySelector('#af-arpg-best-level');
+                    var bd = entity.querySelector('#af-arpg-best-description');
+                    var bn = entity.querySelector('#af-arpg-best-notes');
+                    ['normal', 'elite', 'boss', 'mythic'].forEach(function (v) { br.insertAdjacentHTML('beforeend', '<option value="' + esc(v) + '">' + esc(v) + '</option>'); });
+                    addSelectOptionIfMissing(br, bestiary.rank || '');
+                    bf.value = bestiary.family || '';
+                    ba.value = bestiary.classification.archetype || bestiary.archetype || '';
+                    bfac.value = bestiary.classification.faction || bestiary.faction || '';
+                    br.value = bestiary.rank || 'normal';
+                    bt.value = String(numberOrZero(bestiary.tier != null ? bestiary.tier : 1));
+                    bl.value = String(numberOrZero(bestiary.level || 0));
+                    bd.value = bestiary.description || '';
+                    bn.value = Array.isArray(bestiary.notes) ? bestiary.notes.join('\n') : '';
+                    [bf, ba, bfac, br, bt, bl, bd, bn].forEach(function (n) {
+                        n.addEventListener('input', function () {
+                            bestiary.family = bf.value.trim();
+                            bestiary.classification = ensureObject(bestiary, 'classification');
+                            bestiary.classification.archetype = ba.value.trim();
+                            bestiary.classification.faction = bfac.value.trim();
+                            bestiary.rank = br.value.trim() || 'normal';
+                            bestiary.tier = numberOrZero(bt.value);
+                            bestiary.level = numberOrZero(bl.value);
+                            bestiary.description = bd.value.trim();
+                            bestiary.notes = splitLines(bn.value);
+                            syncToRaw();
+                        });
+                    });
+
+                    var bStats = createSection(entity, 'Combat parameters', 'Core numeric stats of creature threat profile.');
+                    bStats.insertAdjacentHTML('beforeend', '<div class="af-kb-row"><div><label>hp</label><input id="af-arpg-best-hp" type="number" /></div><div><label>barrier</label><input id="af-arpg-best-barrier" type="number" /></div><div><label>armor</label><input id="af-arpg-best-armor" type="number" /></div></div><div class="af-kb-row"><div><label>damage</label><input id="af-arpg-best-damage" type="number" /></div><div><label>speed</label><input id="af-arpg-best-speed" type="number" step="0.1" /></div><div><label>accuracy</label><input id="af-arpg-best-accuracy" type="number" /></div></div><div class="af-kb-row"><div><label>evasion</label><input id="af-arpg-best-evasion" type="number" /></div><div><label>crit_chance</label><input id="af-arpg-best-crit-chance" type="number" /></div><div><label>crit_damage</label><input id="af-arpg-best-crit-damage" type="number" /></div></div>');
+                    var hp = entity.querySelector('#af-arpg-best-hp');
+                    var bar = entity.querySelector('#af-arpg-best-barrier');
+                    var arm = entity.querySelector('#af-arpg-best-armor');
+                    var dmgB = entity.querySelector('#af-arpg-best-damage');
+                    var spd = entity.querySelector('#af-arpg-best-speed');
+                    var acc = entity.querySelector('#af-arpg-best-accuracy');
+                    var eva = entity.querySelector('#af-arpg-best-evasion');
+                    var cc = entity.querySelector('#af-arpg-best-crit-chance');
+                    var cdmg = entity.querySelector('#af-arpg-best-crit-damage');
+                    hp.value = String(numberOrZero(bestiary.stats.hp != null ? bestiary.stats.hp : 100));
+                    bar.value = String(numberOrZero(bestiary.stats.barrier || 0));
+                    arm.value = String(numberOrZero(bestiary.stats.armor || 0));
+                    dmgB.value = String(numberOrZero(bestiary.stats.damage != null ? bestiary.stats.damage : 10));
+                    spd.value = String(numberOrZero(bestiary.stats.speed != null ? bestiary.stats.speed : 1));
+                    acc.value = String(numberOrZero(bestiary.stats.accuracy != null ? bestiary.stats.accuracy : 100));
+                    eva.value = String(numberOrZero(bestiary.stats.evasion || 0));
+                    cc.value = String(numberOrZero(bestiary.stats.crit_chance != null ? bestiary.stats.crit_chance : 5));
+                    cdmg.value = String(numberOrZero(bestiary.stats.crit_damage != null ? bestiary.stats.crit_damage : 150));
+                    [hp, bar, arm, dmgB, spd, acc, eva, cc, cdmg].forEach(function (n) {
+                        n.addEventListener('input', function () {
+                            bestiary.stats = ensureObject(bestiary, 'stats');
+                            bestiary.stats.hp = numberOrZero(hp.value);
+                            bestiary.stats.barrier = numberOrZero(bar.value);
+                            bestiary.stats.armor = numberOrZero(arm.value);
+                            bestiary.stats.damage = numberOrZero(dmgB.value);
+                            bestiary.stats.speed = numberOrZero(spd.value);
+                            bestiary.stats.accuracy = numberOrZero(acc.value);
+                            bestiary.stats.evasion = numberOrZero(eva.value);
+                            bestiary.stats.crit_chance = numberOrZero(cc.value);
+                            bestiary.stats.crit_damage = numberOrZero(cdmg.value);
+                            syncToRaw();
+                        });
+                    });
+
+                    renderArrayEditor(entity, 'resistances', ['data_json', 'data', 'resistances'], [{ key: 'type', label: 'type' }, { key: 'value', label: 'value', type: 'number' }, { key: 'cap', label: 'cap', type: 'number' }]);
+                    renderArrayEditor(entity, 'weaknesses', ['data_json', 'data', 'weaknesses'], [{ key: 'type', label: 'type' }, { key: 'value', label: 'value', type: 'number' }]);
+                    renderArrayEditor(entity, 'status interactions', ['data_json', 'data', 'statuses'], [{ key: 'status_ref', label: 'status_ref' }, { key: 'mode', label: 'mode(resist|immune|vulnerable)' }, { key: 'value', label: 'value', type: 'number' }]);
+                    renderArrayEditor(entity, 'abilities', ['data_json', 'data', 'abilities'], [{ key: 'ability_ref', label: 'ability_ref' }, { key: 'chance', label: 'chance', type: 'number' }, { key: 'trigger', label: 'trigger' }, { key: 'phase', label: 'phase' }]);
+                    renderArrayEditor(entity, 'drops / rewards', ['data_json', 'data', 'loot'], [{ key: 'item_ref', label: 'item_ref' }, { key: 'table_ref', label: 'table_ref' }, { key: 'chance', label: 'chance', type: 'number' }, { key: 'qty', label: 'qty', type: 'number' }]);
+                    renderArrayEditor(entity, 'boss phases', ['data_json', 'data', 'phases'], [{ key: 'name', label: 'name' }, { key: 'hp_threshold', label: 'hp_threshold', type: 'number' }, { key: 'script_ref', label: 'script_ref/snippet_ref' }]);
+                    renderArrayEditor(entity, 'description content blocks', ['data_json', 'data', 'content_blocks'], [{ key: 'kind', label: 'kind' }, { key: 'title', label: 'title' }, { key: 'text', label: 'text' }]);
                 } else if (kind === 'talent') {
                     var talent = ensureDataObject('talent');
                     var tMain = createSection(entity, 'Talent node', 'Tree placement, ranks and progression gates.');
