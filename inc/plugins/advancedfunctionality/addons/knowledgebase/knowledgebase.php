@@ -14,6 +14,7 @@ define('AF_KB_ASSETS', AF_KB_BASE . 'assets/');
 define('AF_KB_TPL_DIR', AF_KB_BASE . 'templates/');
 define('AF_KB_MARK', '<!--af_kb_assets-->');
 define('AF_KB_RULES_SCHEMA', 'af_kb.rules.v1');
+define('AF_KB_ARPG_RULES_SCHEMA', 'af_kb.arpg.rules.v1');
 define('AF_KB_TRAITS_SCHEMA', 'af_kb.traits.v1');
 define('AF_KB_GRANTS_SCHEMA', 'af_kb.grants.v1');
 define('AF_KB_ALIAS_MARKER', "define('AF_KB_PAGE_ALIAS', 1);");
@@ -26,6 +27,24 @@ define('AF_KB_REL_RACE_HAS_VARIANT', 'race_has_variant');
 define('AF_KB_TYPE_RACE', 'race');
 define('AF_KB_TYPE_RACE_VARIANT', 'race_variant');
 define('AF_KB_DEFAULT_MECHANIC_KEY', 'dnd');
+
+function af_kb_arpg_supported_types(): array
+{
+    return [
+        'arpg_origin',
+        'arpg_archetype',
+        'arpg_role',
+        'arpg_path',
+        'arpg_faction',
+        'arpg_talent',
+        'arpg_ability_active',
+        'arpg_ability_passive',
+        'arpg_item',
+        'arpg_modifier',
+        'arpg_status',
+        'arpg_resource',
+    ];
+}
 
 function af_kb_default_type_definitions(): array
 {
@@ -248,6 +267,66 @@ function af_kb_default_type_definitions(): array
             'ui_schema_json' => json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'is_active' => $key === 'spell' ? 0 : 1,
             'sortorder' => count($defs),
+        ];
+    }
+
+    foreach (af_kb_default_arpg_type_definitions() as $arpgDef) {
+        $defs[] = $arpgDef;
+    }
+
+    return $defs;
+}
+
+function af_kb_default_arpg_type_definitions(): array
+{
+    $arpgTitles = [
+        'arpg_origin' => ['ARPG: Происхождения', 'ARPG: Origins'],
+        'arpg_archetype' => ['ARPG: Архетипы', 'ARPG: Archetypes'],
+        'arpg_role' => ['ARPG: Роли', 'ARPG: Roles'],
+        'arpg_path' => ['ARPG: Пути развития', 'ARPG: Progression Paths'],
+        'arpg_faction' => ['ARPG: Фракции', 'ARPG: Factions'],
+        'arpg_talent' => ['ARPG: Таланты', 'ARPG: Talents'],
+        'arpg_ability_active' => ['ARPG: Активные способности', 'ARPG: Active Abilities'],
+        'arpg_ability_passive' => ['ARPG: Пассивные способности', 'ARPG: Passive Abilities'],
+        'arpg_item' => ['ARPG: Предметы и экипировка', 'ARPG: Items and Equipment'],
+        'arpg_modifier' => ['ARPG: Модификаторы', 'ARPG: Modifiers'],
+        'arpg_status' => ['ARPG: Статусы', 'ARPG: Statuses'],
+        'arpg_resource' => ['ARPG: Ресурсы', 'ARPG: Resources'],
+    ];
+
+    $defs = [];
+    foreach ($arpgTitles as $typeKey => $titles) {
+        $schema = [
+            'schema' => 'af_kb.ui.v1',
+            'version' => 1,
+            'title_ru' => $titles[0] . ': параметры (' . AF_KB_ARPG_RULES_SCHEMA . ')',
+            'title_en' => $titles[1] . ': rules (' . AF_KB_ARPG_RULES_SCHEMA . ')',
+            'ui_profile' => 'arpg',
+            'rules_enabled' => true,
+            'ui_rules_editor' => true,
+            'rules_schema' => AF_KB_ARPG_RULES_SCHEMA,
+            'root_defaults' => [
+                'schema' => AF_KB_ARPG_RULES_SCHEMA,
+                'type_profile' => $typeKey,
+                'version' => '1.0',
+            ],
+            'fields' => [
+                ['path' => 'schema', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => AF_KB_ARPG_RULES_SCHEMA],
+                ['path' => 'type_profile', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => $typeKey],
+            ],
+        ];
+
+        $defs[] = [
+            'type_key' => $typeKey,
+            'title_ru' => $titles[0],
+            'title_en' => $titles[1],
+            'desc_ru' => '',
+            'desc_en' => '',
+            'rules_schema' => AF_KB_ARPG_RULES_SCHEMA,
+            'ui_schema_json' => json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'mechanic_key' => 'arpg',
+            'is_active' => 1,
+            'sortorder' => 100 + count($defs),
         ];
     }
 
@@ -1217,7 +1296,7 @@ function af_kb_seed_defaults(): void
             $db->insert_query('af_kb_types', [
                 'type' => $db->escape_string($defaultRow['type_key']),
                 'type_key' => $db->escape_string($defaultRow['type_key']),
-                'mechanic_key' => $db->escape_string(AF_KB_DEFAULT_MECHANIC_KEY),
+                'mechanic_key' => $db->escape_string((string)($defaultRow['mechanic_key'] ?? AF_KB_DEFAULT_MECHANIC_KEY)),
                 'title_ru' => $db->escape_string($defaultRow['title_ru']),
                 'title_en' => $db->escape_string($defaultRow['title_en']),
                 'short_ru' => '',
@@ -1242,7 +1321,7 @@ function af_kb_seed_defaults(): void
             $update['type_key'] = $db->escape_string($defaultRow['type_key']);
         }
         if ((string)($existing['mechanic_key'] ?? '') === '') {
-            $update['mechanic_key'] = $db->escape_string(AF_KB_DEFAULT_MECHANIC_KEY);
+            $update['mechanic_key'] = $db->escape_string((string)($defaultRow['mechanic_key'] ?? AF_KB_DEFAULT_MECHANIC_KEY));
         }
 
         $existingRulesSchema = trim((string)($existing['rules_schema'] ?? ''));
@@ -1313,6 +1392,46 @@ function af_kb_seed_defaults(): void
                 ], 'id='.(int)$existing['id']);
             }
         }
+    }
+
+    af_kb_seed_arpg_types();
+}
+
+function af_kb_seed_arpg_types(): void
+{
+    global $db;
+
+    $definitions = af_kb_default_arpg_type_definitions();
+    foreach ($definitions as $idx => $defaultRow) {
+        $typeKey = (string)($defaultRow['type_key'] ?? '');
+        if ($typeKey === '') {
+            continue;
+        }
+
+        $existing = $db->fetch_array($db->simple_select('af_kb_types', '*', "(type='".$db->escape_string($typeKey)."' OR type_key='".$db->escape_string($typeKey)."')", ['limit' => 1]));
+        if ($existing) {
+            continue;
+        }
+
+        $db->insert_query('af_kb_types', [
+            'type' => $db->escape_string($typeKey),
+            'type_key' => $db->escape_string($typeKey),
+            'mechanic_key' => $db->escape_string('arpg'),
+            'title_ru' => $db->escape_string((string)($defaultRow['title_ru'] ?? $typeKey)),
+            'title_en' => $db->escape_string((string)($defaultRow['title_en'] ?? $typeKey)),
+            'short_ru' => '',
+            'short_en' => '',
+            'description_ru' => '',
+            'description_en' => '',
+            'desc_ru' => '',
+            'desc_en' => '',
+            'rules_schema' => $db->escape_string(AF_KB_ARPG_RULES_SCHEMA),
+            'ui_schema_json' => $db->escape_string((string)($defaultRow['ui_schema_json'] ?? '{}')),
+            'active' => 1,
+            'is_active' => 1,
+            'sortorder' => 100 + $idx,
+            'updated_at' => TIME_NOW,
+        ]);
     }
 }
 
@@ -1566,6 +1685,28 @@ function af_kb_default_type_rules_config_dnd(string $typeKey): array
             'ui_rules_editor' => false,
         ],
     ];
+
+    return array_replace($defaults, (array)($typeConfig[$typeKey] ?? []));
+}
+
+function af_kb_default_type_rules_config_arpg(string $typeKey): array
+{
+    $defaults = [
+        'rules_enabled' => false,
+        'rules_schema' => AF_KB_ARPG_RULES_SCHEMA,
+        'rules_required_keys' => [],
+        'ui_rules_editor' => false,
+    ];
+
+    $typeConfig = [];
+    foreach (af_kb_arpg_supported_types() as $arpgType) {
+        $typeConfig[$arpgType] = [
+            'rules_enabled' => true,
+            'rules_schema' => AF_KB_ARPG_RULES_SCHEMA,
+            'rules_required_keys' => ['schema', 'type_profile', 'version'],
+            'ui_rules_editor' => true,
+        ];
+    }
 
     return array_replace($defaults, (array)($typeConfig[$typeKey] ?? []));
 }
@@ -1843,6 +1984,41 @@ function af_kb_get_type_profile_definition_dnd(string $typeKey): array
     return $profile;
 }
 
+function af_kb_get_type_profile_definition_arpg(string $typeKey): array
+{
+    $base = [
+        'schema' => AF_KB_ARPG_RULES_SCHEMA,
+        'type_profile' => $typeKey,
+        'version' => '1.0',
+        'classification' => [
+            'origin' => '',
+            'race' => '',
+            'archetype' => '',
+            'role' => '',
+            'path' => '',
+            'faction' => '',
+        ],
+        'talents' => [],
+        'abilities' => [
+            'active' => [],
+            'passive' => [],
+        ],
+        'items' => [],
+        'modifiers' => [],
+        'statuses' => [],
+        'resources' => [],
+        'scaling' => [],
+        'tags' => [],
+    ];
+
+    return [
+        'ui_profile' => 'arpg',
+        'rules_enabled' => in_array($typeKey, af_kb_arpg_supported_types(), true),
+        'defaults' => $base,
+        'validators' => ['schema' => AF_KB_ARPG_RULES_SCHEMA],
+    ];
+}
+
 function af_kb_get_type_profile_definition(string $typeKey, ?string $mechanicKey = null): array
 {
     $mechanic = af_kb_get_mechanic_profile($mechanicKey ?? af_kb_get_type_mechanic_key($typeKey));
@@ -1945,6 +2121,54 @@ function af_kb_get_type_schema_dnd(string $typeKey): array
             unset($field);
         }
     }
+
+    return $schema;
+}
+
+function af_kb_get_type_schema_arpg(string $typeKey): array
+{
+    global $db;
+
+    $safeType = $db->escape_string($typeKey);
+    $row = $db->fetch_array(
+        $db->simple_select(
+            'af_kb_types',
+            'ui_schema_json,rules_schema',
+            "(type='".$safeType."' OR type_key='".$safeType."')",
+            ['limit' => 1]
+        )
+    );
+
+    $schema = $row ? af_kb_decode_json((string)($row['ui_schema_json'] ?? '{}')) : [];
+    if (empty($schema)) {
+        $schema = [
+            'schema' => 'af_kb.ui.v1',
+            'version' => 1,
+            'ui_profile' => 'arpg',
+            'fields' => [],
+        ];
+    }
+
+    $rulesConfig = af_kb_default_type_rules_config_arpg($typeKey);
+    $profileSchema = af_kb_get_type_profile_definition_arpg($typeKey);
+    $supported = in_array($typeKey, af_kb_arpg_supported_types(), true);
+
+    $schema['rules_enabled'] = !empty($rulesConfig['rules_enabled']) && $supported;
+    $schema['ui_rules_editor'] = isset($schema['ui_rules_editor'])
+        ? !empty($schema['ui_rules_editor'])
+        : !empty($rulesConfig['ui_rules_editor']);
+    $schema['rules_schema'] = AF_KB_ARPG_RULES_SCHEMA;
+    $schema['rules_required_keys'] = array_values((array)($rulesConfig['rules_required_keys'] ?? []));
+    $schema['type_profile'] = (string)($schema['type_profile'] ?? $typeKey);
+    $schema['ui_profile'] = 'arpg';
+    $schema['defaults'] = array_replace_recursive(
+        (array)($profileSchema['defaults'] ?? []),
+        (array)($schema['defaults'] ?? [])
+    );
+    $schema['validators'] = array_replace_recursive(
+        (array)($profileSchema['validators'] ?? []),
+        (array)($schema['validators'] ?? [])
+    );
 
     return $schema;
 }
@@ -3385,6 +3609,62 @@ function af_kb_validate_rules_json_by_type_dnd(string $type, string $normalizedJ
     return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
 }
 
+function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalizedJson, array &$errors): string
+{
+    $rulesData = af_kb_decode_json($normalizedJson);
+    if (!is_array($rulesData)) {
+        $rulesData = [];
+    }
+
+    $supported = in_array($type, af_kb_arpg_supported_types(), true);
+    if (!$supported) {
+        $errors[] = 'ARPG rules are not configured for type "' . $type . '".';
+        return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+    }
+
+    $typeSchema = af_kb_get_type_schema_arpg($type);
+    $defaults = (array)($typeSchema['defaults'] ?? []);
+    $rulesData = array_replace_recursive($defaults, $rulesData);
+    $rulesData['schema'] = AF_KB_ARPG_RULES_SCHEMA;
+    $rulesData['type_profile'] = $type;
+    if (!isset($rulesData['version']) || trim((string)$rulesData['version']) === '') {
+        $rulesData['version'] = '1.0';
+    }
+
+    foreach (['talents', 'items', 'modifiers', 'statuses', 'resources', 'scaling', 'tags'] as $arrayKey) {
+        if (!isset($rulesData[$arrayKey]) || !is_array($rulesData[$arrayKey])) {
+            $rulesData[$arrayKey] = [];
+        }
+    }
+
+    if (!isset($rulesData['classification']) || !is_array($rulesData['classification'])) {
+        $rulesData['classification'] = [];
+    }
+    foreach (['origin', 'race', 'archetype', 'role', 'path', 'faction'] as $classificationKey) {
+        if (!array_key_exists($classificationKey, $rulesData['classification'])) {
+            $rulesData['classification'][$classificationKey] = '';
+        }
+    }
+
+    if (!isset($rulesData['abilities']) || !is_array($rulesData['abilities'])) {
+        $rulesData['abilities'] = [];
+    }
+    if (!isset($rulesData['abilities']['active']) || !is_array($rulesData['abilities']['active'])) {
+        $rulesData['abilities']['active'] = [];
+    }
+    if (!isset($rulesData['abilities']['passive']) || !is_array($rulesData['abilities']['passive'])) {
+        $rulesData['abilities']['passive'] = [];
+    }
+
+    foreach ((array)($typeSchema['rules_required_keys'] ?? []) as $requiredKey) {
+        if (!array_key_exists((string)$requiredKey, $rulesData)) {
+            $errors[] = 'Required data field missing: ' . (string)$requiredKey;
+        }
+    }
+
+    return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+}
+
 function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson, array &$errors, ?string $mechanicKey = null): string
 {
     $mechanic = af_kb_get_mechanic_profile($mechanicKey ?? af_kb_get_type_mechanic_key($type));
@@ -4592,27 +4872,31 @@ function af_kb_get_mechanic_profile(string $mechanicKey): array
     $normalized = af_kb_normalize_mechanic_key($mechanicKey);
 
     if ($normalized === 'arpg') {
+        $typeProfileMap = [];
+        foreach (af_kb_arpg_supported_types() as $supportedType) {
+            $typeProfileMap[$supportedType] = $supportedType;
+        }
+
         return [
             'mechanic_key' => 'arpg',
-            'status' => 'stub',
-            'enabled' => false,
+            'status' => 'active',
+            'enabled' => true,
             'rules_schema_ids' => [
-                'default' => AF_KB_RULES_SCHEMA,
-                'item' => 'af_kb.item.v2',
+                'default' => AF_KB_ARPG_RULES_SCHEMA,
             ],
             'ui_profile_id' => 'arpg',
             'ui_config' => [
-                'routing_mode' => 'raw_only',
+                'routing_mode' => 'mechanic_aware_arpg',
             ],
             'providers' => [
-                'rules_config' => 'af_kb_default_type_rules_config_dnd',
-                'type_profile' => 'af_kb_get_type_profile_definition_dnd',
-                'schema' => 'af_kb_get_type_schema_dnd',
-                'validator' => 'af_kb_validate_rules_json_by_type_dnd',
+                'rules_config' => 'af_kb_default_type_rules_config_arpg',
+                'type_profile' => 'af_kb_get_type_profile_definition_arpg',
+                'schema' => 'af_kb_get_type_schema_arpg',
+                'validator' => 'af_kb_validate_rules_json_by_type_arpg',
             ],
-            'type_profile_map' => [],
+            'type_profile_map' => $typeProfileMap,
             'validator_hooks' => [
-                'rules_json_by_type' => 'af_kb_validate_rules_json_by_type_dnd',
+                'rules_json_by_type' => 'af_kb_validate_rules_json_by_type_arpg',
             ],
         ];
     }
@@ -7322,6 +7606,9 @@ function af_kb_handle_type_edit(): void
         $mechanicKey = $mechanicKeyInput !== ''
             ? af_kb_normalize_mechanic_key($mechanicKeyInput)
             : af_kb_get_default_mechanic_mode();
+        if ($mechanicKey === 'arpg' && !in_array($type, af_kb_arpg_supported_types(), true)) {
+            $errors[] = 'Mechanic "arpg" is allowed only for ARPG-ready types.';
+        }
 
         // NEW: короткое описание (только для табов)
         $shortRu = trim((string)$mybb->get_input('short_ru'));
