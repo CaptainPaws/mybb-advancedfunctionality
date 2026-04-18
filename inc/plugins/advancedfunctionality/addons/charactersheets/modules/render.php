@@ -3,6 +3,96 @@ if (!defined('IN_MYBB')) {
     die('No direct access');
 }
 
+function af_charactersheets_normalize_sheet_mode(string $mode): string
+{
+    $normalized = strtolower(trim($mode));
+    if ($normalized === '') {
+        return '';
+    }
+    if (in_array($normalized, ['arpg', 'action_rpg', 'action-rpg'], true)) {
+        return 'arpg';
+    }
+    if ($normalized === 'dnd') {
+        return 'dnd';
+    }
+    return '';
+}
+
+function af_charactersheets_resolve_sheet_mode(array $sheet, array $atf_index = []): string
+{
+    $base = af_charactersheets_json_decode((string)($sheet['base_json'] ?? ''));
+    $build = af_charactersheets_json_decode((string)($sheet['build_json'] ?? ''));
+
+    $modeCandidates = [
+        (string)($base['sheet_mode'] ?? ''),
+        (string)($base['mechanic'] ?? ''),
+        (string)($base['mechanic_key'] ?? ''),
+        (string)($build['sheet_mode'] ?? ''),
+        (string)($build['mechanic'] ?? ''),
+        af_charactersheets_pick_field_value($atf_index, ['sheet_mode', 'character_sheet_mode', 'mechanic', 'character_mechanic'], false),
+    ];
+
+    foreach ($modeCandidates as $candidate) {
+        $candidate = af_charactersheets_normalize_sheet_mode((string)$candidate);
+        if ($candidate === '') {
+            continue;
+        }
+        if ($candidate === 'arpg') {
+            return 'arpg';
+        }
+        if ($candidate === 'dnd') {
+            return 'dnd';
+        }
+    }
+
+    return 'dnd';
+}
+
+function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_view, array $atf_index): array
+{
+    $mechanics = (array)($sheet_view['mechanics'] ?? []);
+    $resources = (array)($sheet_view['resources'] ?? []);
+    $languages = (array)($sheet_view['languages'] ?? []);
+    $knowledge = (array)($sheet_view['knowledge'] ?? []);
+    $skills = (array)($sheet_view['skills'] ?? []);
+    $resistances = (array)($sheet_view['resistances'] ?? []);
+    $abilities = (array)($sheet_view['abilities'] ?? []);
+    $inventory = (array)($sheet_view['inventory'] ?? []);
+    $equipment = (array)($sheet_view['equipment'] ?? []);
+    $augments = (array)($sheet_view['augmentations'] ?? []);
+
+    return [
+        'mode' => 'arpg',
+        'sheet_id' => (int)($sheet['id'] ?? 0),
+        'uid' => (int)($sheet['uid'] ?? 0),
+        'level' => (int)($sheet_view['level'] ?? 1),
+        'exp_label' => (string)($sheet_view['level_exp_label'] ?? ''),
+        'combat' => [
+            'hp_total' => (int)($mechanics['hp_total'] ?? 0),
+            'ac_total' => (int)($mechanics['ac_total'] ?? 0),
+            'speed_total' => (int)($mechanics['speed_total'] ?? 0),
+            'damage_total' => (string)($mechanics['damage_total'] ?? '—'),
+            'humanity_total' => (float)($mechanics['humanity_total'] ?? 0),
+        ],
+        'resources' => $resources,
+        'resistances' => $resistances,
+        'skills' => $skills,
+        'abilities' => $abilities,
+        'knowledge' => [
+            'languages' => $languages,
+            'knowledges' => $knowledge,
+        ],
+        'inventory' => $inventory,
+        'equipment' => $equipment,
+        'augmentations' => $augments,
+        'atf' => [
+            'race' => af_charactersheets_pick_field_value($atf_index, ['character_race', 'race']),
+            'class' => af_charactersheets_pick_field_value($atf_index, ['character_class', 'class']),
+            'theme' => af_charactersheets_pick_field_value($atf_index, ['character_theme', 'character_themes', 'theme']),
+        ],
+    ];
+}
+
 function af_charactersheets_build_sheet_inner_html(string $slug): string
 {
     global $db, $templates, $headerinclude, $mybb;
@@ -74,6 +164,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
         return '';
     }
 
+    $sheet_mode = af_charactersheets_resolve_sheet_mode($sheet, $atf_index);
     $sheet_view = af_charactersheets_compute_sheet_view($sheet);
     $build = af_charactersheets_normalize_build(
         af_charactersheets_json_decode((string)($sheet['build_json'] ?? ''))
@@ -125,6 +216,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     $sheet_post_key = htmlspecialchars_uni($mybb->post_code);
     $sheet_owner_uid = (int)$uid;
     $bonus_items_json = htmlspecialchars_uni(af_charactersheets_json_encode((array)($sheet_view['bonus_items'] ?? [])));
+    $sheet_mode_attr = htmlspecialchars_uni($sheet_mode);
 
     $headerinclude .= "\n" . AF_CS_ASSET_MARK . "\n";
     af_charactersheets_ensure_assets_in_headerinclude();
@@ -132,7 +224,31 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
         af_assets_inject_headerinclude([]);
     }
 
-    $tplInner = $templates->get('charactersheet_inner');
+    if ($sheet_mode === 'arpg') {
+        $sheet_arpg_vm = af_charactersheets_build_arpg_view_model($sheet, $sheet_view, $atf_index);
+        $sheet_arpg_vm_json = htmlspecialchars_uni(af_charactersheets_json_encode($sheet_arpg_vm));
+        $sheet_arpg_combat = (array)($sheet_arpg_vm['combat'] ?? []);
+        $sheet_arpg_race = htmlspecialchars_uni((string)($sheet_arpg_vm['atf']['race'] ?? '—'));
+        $sheet_arpg_class = htmlspecialchars_uni((string)($sheet_arpg_vm['atf']['class'] ?? '—'));
+        $sheet_arpg_theme = htmlspecialchars_uni((string)($sheet_arpg_vm['atf']['theme'] ?? '—'));
+        $sheet_arpg_hp = htmlspecialchars_uni((string)($sheet_arpg_combat['hp_total'] ?? 0));
+        $sheet_arpg_ac = htmlspecialchars_uni((string)($sheet_arpg_combat['ac_total'] ?? 0));
+        $sheet_arpg_speed = htmlspecialchars_uni((string)($sheet_arpg_combat['speed_total'] ?? 0));
+        $sheet_arpg_damage = htmlspecialchars_uni((string)($sheet_arpg_combat['damage_total'] ?? '—'));
+        $sheet_arpg_humanity = htmlspecialchars_uni((string)($sheet_arpg_combat['humanity_total'] ?? 0));
+        $tplInner = $templates->get('charactersheet_inner_arpg');
+    } else {
+        $sheet_arpg_vm_json = '{}';
+        $sheet_arpg_race = '—';
+        $sheet_arpg_class = '—';
+        $sheet_arpg_theme = '—';
+        $sheet_arpg_hp = '0';
+        $sheet_arpg_ac = '0';
+        $sheet_arpg_speed = '0';
+        $sheet_arpg_damage = '—';
+        $sheet_arpg_humanity = '0';
+        $tplInner = $templates->get('charactersheet_inner');
+    }
     eval("\$sheet_inner = \"" . $tplInner . "\";");
 
     return af_charactersheets_canonicalize_assets_html($sheet_inner);

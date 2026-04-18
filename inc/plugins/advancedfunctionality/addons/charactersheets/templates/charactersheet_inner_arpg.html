@@ -1,0 +1,55 @@
+<div class="af-cs-page af-cs-page--arpg af-aa-context af-aa-context--sheet" data-af-apui-surface="sheet" data-af-modal-kind="sheet" data-af-apui-owner-uid="{$sheet_owner_uid}" data-uid="{$sheet_owner_uid}" data-afcs-sheet data-afcs-sheet-id="{$sheet_id}" data-afcs-sheet-mode="{$sheet_mode_attr}" data-afcs-post-key="{$sheet_post_key}" data-afcs-bonus-items="{$bonus_items_json}" data-afcs-arpg-vm="{$sheet_arpg_vm_json}">
+  <div class="af-cs-inline-error" data-afcs-error="1" hidden></div>
+  <div class="af-cs-toast" data-afcs-toast="1" hidden></div>
+
+  <header class="af-cs-arpg-hero">
+    <div class="af-cs-portrait af-cs-arpg-hero__portrait">
+      <img src="{$sheet_portrait_url}" alt="{$sheet_title}" loading="lazy" />
+    </div>
+    <div class="af-cs-arpg-hero__summary">
+      <div class="af-cs-summary__title-row">
+        <h1>{$sheet_title}</h1>
+        <div class="af-cs-header-actions">{$sheet_header_actions_html}</div>
+      </div>
+      <div class="af-cs-name-ru">
+        <span class="af-cs-name-ru__main">{$sheet_name_ru}</span>
+        <span class="af-cs-name-ru__nick">{$sheet_nicknames}</span>
+      </div>
+      <div class="af-cs-arpg-hero__meta">
+        <span><strong>Раса:</strong> {$sheet_arpg_race}</span>
+        <span><strong>Класс:</strong> {$sheet_arpg_class}</span>
+        <span><strong>Тема:</strong> {$sheet_arpg_theme}</span>
+      </div>
+      <div class="af-cs-arpg-hero__progress" data-afcs-block="progress">{$sheet_progress_html}</div>
+    </div>
+  </header>
+
+  <section class="af-cs-section af-cs-arpg-combat">
+    <h2>Боевой профиль</h2>
+    <div class="af-cs-arpg-combat-grid">
+      <article class="af-cs-arpg-card"><h3>HP</h3><strong>{$sheet_arpg_hp}</strong></article>
+      <article class="af-cs-arpg-card"><h3>AC</h3><strong>{$sheet_arpg_ac}</strong></article>
+      <article class="af-cs-arpg-card"><h3>Скорость</h3><strong>{$sheet_arpg_speed}</strong></article>
+      <article class="af-cs-arpg-card"><h3>Урон</h3><strong>{$sheet_arpg_damage}</strong></article>
+      <article class="af-cs-arpg-card"><h3>Humanity</h3><strong>{$sheet_arpg_humanity}</strong></article>
+    </div>
+  </section>
+
+  <section class="af-cs-section af-cs-arpg-layout">
+    <div class="af-cs-arpg-layout__main">
+      <h2>Способности и таланты</h2>
+      <div data-afcs-block="abilities">{$sheet_abilities_html}</div>
+      <h2>Сервисная механика</h2>
+      <div data-afcs-block="mechanics">{$sheet_mechanics_html}</div>
+      <div data-afcs-block="attributes">{$sheet_attributes_html}</div>
+    </div>
+    <aside class="af-cs-arpg-layout__side">
+      <h2>Оружие / экипировка</h2>
+      <div data-afcs-block="equipment">{$sheet_equipment_html}</div>
+      <h2>Аугментации</h2>
+      <div data-afcs-block="augmentations">{$sheet_augments_html}</div>
+      <h2>Знания</h2>
+      <div data-afcs-block="knowledge">{$sheet_knowledge_html}</div>
+    </aside>
+  </section>
+</div>
