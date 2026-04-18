@@ -896,9 +896,24 @@
             var payload = readJson(getFieldValue(raw) || '{}', {});
             if (!payload || typeof payload !== 'object') payload = {};
 
+            function shouldLogArpgDebug() {
+                try {
+                    return /(?:^|[?&])kb_debug_arpg=1(?:&|$)/.test(window.location.search || '');
+                } catch (e) {
+                    return false;
+                }
+            }
+            function logArpgDebug() {
+                if (!shouldLogArpgDebug() || !window.console || typeof window.console.log !== 'function') return;
+                var args = Array.prototype.slice.call(arguments);
+                args.unshift('[KB ARPG]');
+                window.console.log.apply(window.console, args);
+            }
+
             var serviceKinds = ['mechanic_profile', 'resource_def', 'status_def', 'modifier_template', 'formula_def', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
             var entityKind = String(payload.entity_kind || (typeSchema.root_defaults && typeSchema.root_defaults.entity_kind) || '').trim();
             var isService = serviceKinds.indexOf(entityKind) !== -1;
+            logArpgDebug('bindArpgMode', { type: type, entityKind: entityKind, isService: isService });
 
             function parseJsonSafe(text, fallback) { try { return JSON.parse(text); } catch (e) { return fallback; } }
             function ensureObject(parent, key) {
@@ -1021,12 +1036,14 @@
             function renderArrayEditor(container, title, path, columns, options) {
                 options = options || {};
                 columns = Array.isArray(columns) ? columns : [];
+                logArpgDebug('renderArrayEditor', { title: title, path: path });
                 var wrap = document.createElement('div');
                 wrap.className = 'af-kb-kvlist';
                 wrap.innerHTML = '<h4>' + esc(title) + '</h4>' + (options.help ? '<div class="af-kb-help">' + esc(options.help) + '</div>' : '');
                 var list = document.createElement('div');
                 var add = document.createElement('button');
                 add.type = 'button'; add.className = 'af-kb-add'; add.textContent = options.addLabel || 'Добавить';
+                add.setAttribute('data-af-arpg-add', '1');
                 wrap.appendChild(list); wrap.appendChild(add); container.appendChild(wrap);
 
                 function getArr() {
@@ -1037,6 +1054,7 @@
                 function redraw() {
                     list.innerHTML = '';
                     var arr = getArr();
+                    logArpgDebug('redraw', { title: title, length: arr.length, path: path });
                     if (!arr.length) {
                         list.innerHTML = '<div class="af-kb-help">Нет записей.</div>';
                         return;
@@ -1076,26 +1094,42 @@
                         card.appendChild(grid);
                         var del = document.createElement('button');
                         del.type = 'button'; del.className = 'af-kb-remove'; del.textContent = 'Удалить';
-                        del.addEventListener('click', function (event) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            arr.splice(idx, 1);
-                            redraw();
-                            syncToRaw();
-                        });
+                        del.setAttribute('data-af-arpg-remove-index', String(idx));
                         card.appendChild(del);
                         list.appendChild(card);
                     });
                 }
-                add.addEventListener('click', function (event) {
+                wrap.addEventListener('click', function (event) {
+                    var target = event.target;
+                    if (!(target instanceof HTMLElement)) return;
+
+                    var removeBtn = target.closest('button.af-kb-remove[data-af-arpg-remove-index]');
+                    if (removeBtn && wrap.contains(removeBtn)) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        var removeIdx = parseInt(removeBtn.getAttribute('data-af-arpg-remove-index') || '-1', 10);
+                        var removeArr = getArr();
+                        if (removeIdx >= 0 && removeIdx < removeArr.length) {
+                            removeArr.splice(removeIdx, 1);
+                            redraw();
+                            syncToRaw();
+                        }
+                        return;
+                    }
+
+                    var addBtn = target.closest('button.af-kb-add[data-af-arpg-add]');
+                    if (!addBtn || !wrap.contains(addBtn)) return;
                     event.preventDefault();
                     event.stopPropagation();
+                    logArpgDebug('add click', { title: title, path: path });
                     var row = {};
                     columns.forEach(function (col) {
                         if (col.type === 'number') row[col.key] = 0;
                         if (col.type === 'checkbox') row[col.key] = false;
                     });
-                    getArr().push(row);
+                    var targetArr = getArr();
+                    targetArr.push(row);
+                    logArpgDebug('push', { title: title, newLength: targetArr.length, path: path });
                     redraw();
                     syncToRaw();
                 });
