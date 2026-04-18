@@ -80,7 +80,8 @@ function af_charactersheets_uninstall_impl(): void
         'af_charactersheets_knowledge_base_choices',
         'af_charactersheets_knowledge_per_int',
         'af_charactersheets_aug_slots_json',
-        'af_cs_assets_blacklist'
+        'af_cs_assets_blacklist',
+        'af_charactersheets_render_path_mode'
     )");
     $db->delete_query('settinggroups', "name='af_charactersheets'");
     $db->delete_query('templates', "title LIKE 'charactersheets_%'");
@@ -181,6 +182,15 @@ function af_charactersheets_ensure_settings(): void
         'yesno',
         '1',
         8
+    );
+    af_charactersheets_ensure_setting(
+        $gid,
+        'af_charactersheets_render_path_mode',
+        $lang->af_charactersheets_render_path_mode ?? 'Sheet render path',
+        $lang->af_charactersheets_render_path_mode_desc ?? 'auto = detect by mechanic profile, dnd/arpg = force selected render path.',
+        "select\nauto=Auto\ndnd=DnD\narpg=ARPG",
+        'auto',
+        9
     );
     af_charactersheets_ensure_setting(
         $gid,
