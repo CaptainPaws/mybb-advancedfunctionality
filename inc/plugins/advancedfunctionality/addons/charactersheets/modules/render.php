@@ -2094,6 +2094,50 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
         }
     }
 
+    $normalizeFallbackDesc = static function (string $value): string {
+        $normalized = trim($value);
+        if ($normalized === '') {
+            return '';
+        }
+
+        $normalizedLower = mb_strtolower($normalized);
+        if (in_array($normalizedLower, ['нет данных', 'no data', 'n/a'], true)) {
+            return '';
+        }
+
+        return $normalized;
+    };
+
+    $resolveEquipmentDesc = static function (array $entry, array $item = []) use ($normalizeFallbackDesc): string {
+        $desc = trim((string)af_charactersheets_kb_pick_text($entry, 'short'));
+        if ($desc === '') {
+            $desc = trim((string)($entry['short'] ?? ''));
+        }
+        if ($desc === '') {
+            $desc = trim((string)af_charactersheets_kb_pick_text($entry, 'description'));
+        }
+        if ($desc === '') {
+            $body = trim((string)af_charactersheets_kb_pick_text($entry, 'body'));
+            if ($body === '') {
+                $body = trim((string)($entry['body'] ?? ''));
+            }
+            if ($body !== '') {
+                $desc = trim((string)mb_substr(strip_tags($body), 0, 140));
+            }
+        }
+
+        if ($desc !== '') {
+            return $desc;
+        }
+
+        $itemShort = $normalizeFallbackDesc((string)($item['short_description'] ?? ''));
+        if ($itemShort !== '') {
+            return $itemShort;
+        }
+
+        return $normalizeFallbackDesc((string)($item['description'] ?? ''));
+    };
+
     $preview_slots_map = [];
     foreach ($all_slots as $slot_code) {
         $slot_code = (string)$slot_code;
@@ -2109,6 +2153,7 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
             ? af_charactersheets_kb_get_entry((string)($slot_item['kb_type'] ?? ''), (string)($slot_item['kb_key'] ?? ''))
             : [];
         $bonus_html = $entry ? af_charactersheets_kb_get_block_html($entry, 'bonuses') : '';
+        $item_desc = $resolveEquipmentDesc($entry, $slot_item);
         $is_weapon_slot = in_array($slot_code, $weapon_slots, true);
         $is_active_weapon = $is_weapon_slot && $item_id > 0 && $slot_code === $active_weapon_slot;
 
@@ -2120,7 +2165,7 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
             . ($item_id > 0 ? ' data-afcs-equipment-preview-trigger="' . $item_id . '"' : '')
             . ' data-afcs-equipment-popover-kind="equipped"'
             . ' data-afcs-equipment-popover-title="' . htmlspecialchars_uni($item_title) . '"'
-            . ' data-afcs-equipment-popover-desc="' . htmlspecialchars_uni((string)($slot_item['description'] ?? '')) . '"'
+            . ' data-afcs-equipment-popover-desc="' . htmlspecialchars_uni($item_desc) . '"'
             . ' data-afcs-equipment-popover-slot="' . htmlspecialchars_uni($slot_label) . '"'
             . ' data-afcs-equipment-popover-stats="' . htmlspecialchars_uni(strip_tags($bonus_html)) . '"'
             . ' data-afcs-equipment-popover-icon="' . htmlspecialchars_uni($icon) . '"'
@@ -2141,8 +2186,8 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
         foreach ((array)($state['items'] ?? []) as $index => $item) {
             $itemId = (int)($item['id'] ?? 0);
             $title = (string)($item['title'] ?? 'Предмет');
-            $desc = trim((string)($item['short_description'] ?? $item['description'] ?? ''));
             $entry = af_charactersheets_kb_get_entry((string)($item['kb_type'] ?? ''), (string)($item['kb_key'] ?? ''));
+            $desc = $resolveEquipmentDesc($entry, $item);
             $bonus_html = $entry ? af_charactersheets_kb_get_block_html($entry, 'bonuses') : '';
             $candidate_slots = (array)($item['candidate_slots'] ?? []);
             $subtype = trim((string)($item['subtype'] ?? ''));
