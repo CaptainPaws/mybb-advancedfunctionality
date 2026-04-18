@@ -1061,8 +1061,8 @@
                 add.addEventListener('click', function () { arr.push(getSeed()); redraw(); syncToRaw(); });
                 redraw();
             }
-            function renderRuleFields(container, defs) {
-                var wrap = createSection(container, 'Rule fields');
+            function renderRuleFields(container, defs, title) {
+                var wrap = createSection(container, title || 'Rule fields');
                 var grid = document.createElement('div'); grid.className = 'af-kb-row';
                 defs.forEach(function (def) {
                     var cell = document.createElement('div');
@@ -1230,12 +1230,124 @@
                 renderSeededArrayEditor(rulesRoot, 'passive_effects', 'passive_effects', [{ key: 'kind', label: 'kind' }, { key: 'value', label: 'value', type: 'number' }], effectSeeds);
             }
             function renderBestiaryRules() {
-                renderRuleFields(rulesRoot, [{ key: 'family', label: 'family' }, { key: 'archetype', label: 'archetype' }, { key: 'faction', label: 'faction' }, { key: 'rank', label: 'rank' }, { key: 'threat_tier', label: 'threat_tier', type: 'number' }, { key: 'level', label: 'level', type: 'number' }]);
-                renderRuleFields(rulesRoot, [{ key: 'hp', label: 'hp', type: 'number' }, { key: 'atk', label: 'atk', type: 'number' }, { key: 'def', label: 'def', type: 'number' }, { key: 'armor', label: 'armor', type: 'number' }, { key: 'crit_rate', label: 'crit_rate', type: 'number' }, { key: 'crit_dmg', label: 'crit_dmg', type: 'number' }, { key: 'status_hit', label: 'status_hit', type: 'number' }, { key: 'status_resist', label: 'status_resist', type: 'number' }]);
-                renderSeededArrayEditor(rulesRoot, 'resists', 'resists', [{ key: 'kind', label: 'kind' }, { key: 'value', label: 'value', type: 'number' }], [{ key: 'default', label: 'default', seed: { kind: 'physical', value: 0 } }]);
-                renderSeededArrayEditor(rulesRoot, 'weaknesses', 'weaknesses', [{ key: 'kind', label: 'kind' }, { key: 'value', label: 'value', type: 'number' }], [{ key: 'default', label: 'default', seed: { kind: 'fire', value: 0 } }]);
-                renderSeededArrayEditor(rulesRoot, 'ability_keys', 'ability_keys', [{ key: 'ability_key', label: 'ability_key' }], [{ key: 'ability_key', label: 'ability_key', seed: { ability_key: '' } }]);
-                renderSeededArrayEditor(rulesRoot, 'loot', 'loot', [{ key: 'loot_key', label: 'loot_key' }, { key: 'qty_min', label: 'qty_min', type: 'number' }, { key: 'qty_max', label: 'qty_max', type: 'number' }, { key: 'chance', label: 'chance', type: 'number' }], [{ key: 'default', label: 'default', seed: { loot_key: '', qty_min: 1, qty_max: 1, chance: 0 } }]);
+                ensureObject(payload.rules, 'combat_stats');
+                renderRuleFields(rulesRoot, [
+                    { key: 'family', label: 'family' },
+                    { key: 'archetype', label: 'archetype' },
+                    { key: 'faction', label: 'faction' },
+                    { key: 'rank', label: 'rank', type: 'select', options: ['normal', 'elite', 'boss', 'resource'] },
+                    { key: 'threat_tier', label: 'threat_tier', type: 'number' },
+                    { key: 'level', label: 'level', type: 'number' }
+                ], 'Bestiary core');
+                renderRuleFields(rulesRoot, [
+                    { key: 'combat_stats.hp', label: 'hp', type: 'number' },
+                    { key: 'combat_stats.atk', label: 'atk', type: 'number' },
+                    { key: 'combat_stats.def', label: 'def', type: 'number' },
+                    { key: 'combat_stats.armor', label: 'armor', type: 'number' },
+                    { key: 'combat_stats.crit_rate', label: 'crit_rate', type: 'number' },
+                    { key: 'combat_stats.crit_dmg', label: 'crit_dmg', type: 'number' },
+                    { key: 'combat_stats.status_hit', label: 'status_hit', type: 'number' },
+                    { key: 'combat_stats.status_resist', label: 'status_resist', type: 'number' }
+                ], 'Combat stats');
+                renderSeededArrayEditor(
+                    rulesRoot,
+                    'Resists',
+                    'resists',
+                    [{ key: 'damage_type', label: 'damage_type' }, { key: 'value', label: 'value', type: 'number' }, { key: 'notes', label: 'notes' }],
+                    [{ key: 'default', label: 'default', seed: { damage_type: 'physical', value: 0, notes: '' } }]
+                );
+                renderSeededArrayEditor(
+                    rulesRoot,
+                    'Weaknesses',
+                    'weaknesses',
+                    [{ key: 'damage_type', label: 'damage_type' }, { key: 'value', label: 'value', type: 'number' }, { key: 'notes', label: 'notes' }],
+                    [{ key: 'default', label: 'default', seed: { damage_type: 'fire', value: 0, notes: '' } }]
+                );
+                renderSeededArrayEditor(
+                    rulesRoot,
+                    'Abilities',
+                    'ability_keys',
+                    [{ key: 'ability_key', label: 'ability_key' }, { key: 'notes', label: 'notes' }],
+                    [{ key: 'ability_key', label: 'ability_key', seed: { ability_key: '', notes: '' } }]
+                );
+                renderSeededArrayEditor(
+                    rulesRoot,
+                    'Loot / rewards',
+                    'loot',
+                    [
+                        { key: 'loot_key', label: 'loot_key' },
+                        { key: 'kind', label: 'kind', type: 'select', options: ['item', 'currency', 'material', 'reward', 'custom'] },
+                        { key: 'qty_min', label: 'qty_min', type: 'number' },
+                        { key: 'qty_max', label: 'qty_max', type: 'number' },
+                        { key: 'chance', label: 'chance', type: 'number' },
+                        { key: 'notes', label: 'notes' }
+                    ],
+                    [{ key: 'default', label: 'default', seed: { loot_key: '', kind: 'item', qty_min: 1, qty_max: 1, chance: 100, notes: '' } }]
+                );
+
+                var presetWrap = createSection(rulesRoot, 'Add presets');
+                var presetControls = document.createElement('div');
+                presetControls.className = 'af-kb-row';
+                var presetDefs = [
+                    {
+                        key: 'basic_mob',
+                        label: 'базовый моб',
+                        values: {
+                            rank: 'normal',
+                            threat_tier: 1,
+                            level: 1,
+                            combat_stats: { hp: 100, atk: 10, def: 8, armor: 5, crit_rate: 5, crit_dmg: 150, status_hit: 5, status_resist: 5 }
+                        }
+                    },
+                    {
+                        key: 'elite_mob',
+                        label: 'элитный моб',
+                        values: {
+                            rank: 'elite',
+                            threat_tier: 3,
+                            level: 10,
+                            combat_stats: { hp: 500, atk: 35, def: 22, armor: 16, crit_rate: 10, crit_dmg: 175, status_hit: 15, status_resist: 12 }
+                        }
+                    },
+                    {
+                        key: 'boss',
+                        label: 'босс',
+                        values: {
+                            rank: 'boss',
+                            threat_tier: 5,
+                            level: 20,
+                            combat_stats: { hp: 2500, atk: 90, def: 45, armor: 35, crit_rate: 15, crit_dmg: 200, status_hit: 25, status_resist: 22 }
+                        }
+                    },
+                    {
+                        key: 'resource_mob',
+                        label: 'ресурсный моб',
+                        values: {
+                            rank: 'resource',
+                            threat_tier: 1,
+                            level: 1,
+                            combat_stats: { hp: 70, atk: 5, def: 4, armor: 2, crit_rate: 2, crit_dmg: 125, status_hit: 3, status_resist: 4 },
+                            loot: [{ loot_key: 'resource.node', kind: 'material', qty_min: 1, qty_max: 3, chance: 100, notes: '' }]
+                        }
+                    }
+                ];
+                presetDefs.forEach(function (presetDef) {
+                    var btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'af-kb-add';
+                    btn.textContent = presetDef.label;
+                    btn.addEventListener('click', function () {
+                        var next = deepClone(presetDef.values || {});
+                        payload.rules.rank = String(next.rank || payload.rules.rank || 'normal');
+                        payload.rules.threat_tier = numberOrZero(next.threat_tier != null ? next.threat_tier : payload.rules.threat_tier);
+                        payload.rules.level = numberOrZero(next.level != null ? next.level : payload.rules.level);
+                        payload.rules.combat_stats = deepMerge(payload.rules.combat_stats || {}, next.combat_stats || {});
+                        if (Array.isArray(next.loot)) payload.rules.loot = deepClone(next.loot);
+                        syncToRaw();
+                    });
+                    presetControls.appendChild(btn);
+                });
+                presetWrap.appendChild(presetControls);
             }
             function renderServiceRules() {
                 payload.rules.type_profile = 'service_mechanics';
