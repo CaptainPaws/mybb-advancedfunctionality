@@ -336,6 +336,17 @@ function af_kb_get_setting(string $key, $default = null)
     return $mybb->settings[$key] ?? $default;
 }
 
+function af_kb_get_default_mechanic_mode(): string
+{
+    $raw = (string)af_kb_get_setting('af_kb_default_mechanic_mode', AF_KB_DEFAULT_MECHANIC_KEY);
+    $normalized = strtolower(trim($raw));
+    if ($normalized === 'arpg') {
+        return 'arpg';
+    }
+
+    return AF_KB_DEFAULT_MECHANIC_KEY;
+}
+
 function af_kb_ensure_group(string $name, string $title, string $desc): int
 {
     global $db;
@@ -435,6 +446,20 @@ function af_kb_ensure_categories_ui_position_setting(int $gid, string $title, st
         $optionsCode,
         'sidebar',
         10
+    );
+}
+
+function af_kb_ensure_default_mechanic_mode_setting(int $gid, string $title, string $desc): void
+{
+    $optionsCode = "select\ndnd=DnD-механика\narpg=ARPG-механика";
+    af_kb_ensure_setting(
+        $gid,
+        'af_kb_default_mechanic_mode',
+        $title,
+        $desc,
+        $optionsCode,
+        AF_KB_DEFAULT_MECHANIC_KEY,
+        11
     );
 }
 
@@ -714,6 +739,11 @@ SQL;
         $lang->af_kb_categories_ui_position ?? 'KB categories UI position',
         $lang->af_kb_categories_ui_position_desc ?? 'Sidebar or top block for categories tree.'
     );
+    af_kb_ensure_default_mechanic_mode_setting(
+        $gid,
+        $lang->af_kb_default_mechanic_mode ?? 'KB default mechanic mode',
+        $lang->af_kb_default_mechanic_mode_desc ?? 'Preferred/default KB mechanic mode for new types and upcoming UI.'
+    );
 
     af_kb_migrate_legacy_categories_ui_setting();
 
@@ -737,7 +767,7 @@ function af_knowledgebase_uninstall(): bool
     global $db;
     // DO NOT DROP KB TABLES OR DELETE ENTRIES ON UNINSTALL (Hanna requirement)
 
-    $db->delete_query('settings', "name IN ('af_knowledgebase_enabled','af_kb_public_catalog','af_kb_nav_link_enabled','af_kb_assets_blacklist','af_kb_editor_groups','af_kb_types_manage_groups','af_kb_atf_map','af_kb_manage_groups','af_kb_categories_enabled','af_kb_categories_require_primary','af_kb_categories_ui_position','af_kb_categories_ui')");
+    $db->delete_query('settings', "name IN ('af_knowledgebase_enabled','af_kb_public_catalog','af_kb_nav_link_enabled','af_kb_assets_blacklist','af_kb_editor_groups','af_kb_types_manage_groups','af_kb_atf_map','af_kb_manage_groups','af_kb_categories_enabled','af_kb_categories_require_primary','af_kb_categories_ui_position','af_kb_categories_ui','af_kb_default_mechanic_mode')");
     $db->delete_query('settinggroups', "name='af_knowledgebase'");
     $db->delete_query('templates', "title LIKE 'knowledgebase_%'");
 
@@ -769,6 +799,11 @@ function af_knowledgebase_activate(): bool
         $gid,
         $lang->af_kb_categories_ui_position ?? 'KB categories UI position',
         $lang->af_kb_categories_ui_position_desc ?? 'Sidebar or top block for categories tree.'
+    );
+    af_kb_ensure_default_mechanic_mode_setting(
+        $gid,
+        $lang->af_kb_default_mechanic_mode ?? 'KB default mechanic mode',
+        $lang->af_kb_default_mechanic_mode_desc ?? 'Preferred/default KB mechanic mode for new types and upcoming UI.'
     );
     af_kb_ensure_setting(
         $gid,
@@ -4501,7 +4536,11 @@ function af_kb_get_type_mechanic_key($typeDefOrKey): string
         $raw = (string)($typeDef['mechanic_key'] ?? '');
     }
 
-    return af_kb_normalize_mechanic_key($raw);
+    if (trim($raw) !== '') {
+        return af_kb_normalize_mechanic_key($raw);
+    }
+
+    return af_kb_get_default_mechanic_mode();
 }
 
 function af_kb_get_mechanic_profile(string $mechanicKey): array
@@ -7182,7 +7221,10 @@ function af_kb_handle_type_edit(): void
 
         $titleRu = trim((string)$mybb->get_input('title_ru'));
         $titleEn = trim((string)$mybb->get_input('title_en'));
-        $mechanicKey = af_kb_normalize_mechanic_key((string)$mybb->get_input('mechanic_key'));
+        $mechanicKeyInput = trim((string)$mybb->get_input('mechanic_key'));
+        $mechanicKey = $mechanicKeyInput !== ''
+            ? af_kb_normalize_mechanic_key($mechanicKeyInput)
+            : af_kb_get_default_mechanic_mode();
 
         // NEW: короткое описание (только для табов)
         $shortRu = trim((string)$mybb->get_input('short_ru'));
@@ -7253,7 +7295,7 @@ function af_kb_handle_type_edit(): void
 
     $typeRow = $typeRow ?: [
         'type'           => $type,
-        'mechanic_key'   => AF_KB_DEFAULT_MECHANIC_KEY,
+        'mechanic_key'   => af_kb_get_default_mechanic_mode(),
         'title_ru'       => '',
         'title_en'       => '',
         'short_ru'       => '',

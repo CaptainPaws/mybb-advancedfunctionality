@@ -263,6 +263,7 @@ class AF_Admin_KnowledgeBase
         $data = [
             'type' => $db->escape_string($key),
             'type_key' => $db->escape_string($key),
+            'mechanic_key' => $db->escape_string(af_kb_get_default_mechanic_mode()),
             'title_ru' => $db->escape_string((string)($_POST['title_ru'] ?? '')),
             'title_en' => $db->escape_string((string)($_POST['title_en'] ?? '')),
             'desc_ru' => $db->escape_string((string)($_POST['desc_ru'] ?? '')),
