@@ -3802,6 +3802,14 @@ function af_kb_normalize_rules_json(string $raw): string
         return '{}';
     }
 
+    if (is_array($decoded)) {
+        $mechanic = trim((string)($decoded['mechanic'] ?? ''));
+        $hasArpgEnvelope = isset($decoded['entity_kind']) && isset($decoded['data_json']) && is_array($decoded['data_json'] ?? null);
+        if ($mechanic === 'arpg' || $hasArpgEnvelope) {
+            return (string)(json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}');
+        }
+    }
+
     $schema = trim((string)($decoded['schema'] ?? ''));
     $typeProfile = trim((string)($decoded['type_profile'] ?? ''));
     $isItem = (
@@ -3994,7 +4002,259 @@ function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalized
         $rulesData['data_json']['blocks'] = [];
     }
 
+    $validationErrors = [];
+    $rulesData = af_kb_validate_arpg_entry_by_type($type, $rulesData, $validationErrors);
+    if (!empty($validationErrors)) {
+        $errors = array_merge($errors, $validationErrors);
+    }
+
     return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+}
+
+function af_kb_arpg_public_entity_kinds(): array
+{
+    return ['origin', 'archetype', 'faction', 'ability', 'talent', 'item', 'lore'];
+}
+
+function af_kb_arpg_service_entity_kinds(): array
+{
+    return ['mechanic_profile', 'resource_def', 'status_def', 'modifier_template', 'formula_def', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
+}
+
+function af_kb_arpg_get_payload_path(array $payload, string $path, bool &$exists = false)
+{
+    $parts = explode('.', trim($path));
+    $cursor = $payload;
+    foreach ($parts as $part) {
+        if (!is_array($cursor) || !array_key_exists($part, $cursor)) {
+            $exists = false;
+            return null;
+        }
+        $cursor = $cursor[$part];
+    }
+
+    $exists = true;
+    return $cursor;
+}
+
+function af_kb_arpg_require_path(array $payload, string $path, string $error, array &$errors): bool
+{
+    $exists = false;
+    $value = af_kb_arpg_get_payload_path($payload, $path, $exists);
+    if (!$exists) {
+        $errors[] = $error;
+        return false;
+    }
+
+    if ($value === '' || $value === null || (is_array($value) && empty($value))) {
+        $errors[] = $error;
+        return false;
+    }
+
+    return true;
+}
+
+function af_kb_arpg_validate_ref_string(string $value): bool
+{
+    $ref = trim($value);
+    if ($ref === '') {
+        return false;
+    }
+    return (bool)preg_match('/^[a-z0-9_]+:[a-z0-9_.\\-]+$/i', $ref);
+}
+
+function af_kb_validate_arpg_envelope(string $type, array $payload, bool $isService, array &$errors): array
+{
+    $expectedSchema = $isService ? AF_KB_ARPG_MECHANICS_SCHEMA : AF_KB_ARPG_META_SCHEMA;
+    if ((string)($payload['schema'] ?? '') !== $expectedSchema) {
+        $errors[] = 'ARPG envelope: schema must be "' . $expectedSchema . '".';
+        $payload['schema'] = $expectedSchema;
+    }
+
+    if ((string)($payload['mechanic'] ?? '') !== 'arpg') {
+        $errors[] = 'ARPG envelope: mechanic must be "arpg".';
+        $payload['mechanic'] = 'arpg';
+    }
+
+    $typeDef = af_kb_arpg_type_definition($type);
+    $expectedEntityKind = (string)($typeDef['entity_kind'] ?? '');
+    if ($expectedEntityKind !== '' && (string)($payload['entity_kind'] ?? '') !== $expectedEntityKind) {
+        $errors[] = 'ARPG envelope: entity_kind does not match type.';
+        $payload['entity_kind'] = $expectedEntityKind;
+    }
+
+    $entityKind = (string)($payload['entity_kind'] ?? '');
+    $allowedKinds = $isService ? af_kb_arpg_service_entity_kinds() : af_kb_arpg_public_entity_kinds();
+    if (!in_array($entityKind, $allowedKinds, true)) {
+        $errors[] = 'ARPG envelope: unsupported entity_kind "' . $entityKind . '".';
+    }
+
+    if (!isset($payload['subtype']) || !is_string($payload['subtype'])) {
+        $payload['subtype'] = '';
+    }
+    if (!isset($payload['category']) || trim((string)$payload['category']) === '') {
+        $errors[] = 'ARPG envelope: category is required.';
+    }
+    if (!isset($payload['tags']) || !is_array($payload['tags'])) {
+        $errors[] = 'ARPG envelope: tags must be an array.';
+        $payload['tags'] = [];
+    }
+    if (!isset($payload['visibility']) || !is_array($payload['visibility'])) {
+        $errors[] = 'ARPG envelope: visibility must be an object.';
+        $payload['visibility'] = [];
+    }
+
+    foreach (['catalog', 'search', 'internal'] as $flag) {
+        $payload['visibility'][$flag] = !empty($payload['visibility'][$flag]);
+    }
+    if ($isService && !$payload['visibility']['internal']) {
+        $errors[] = 'ARPG service entry must have visibility.internal=true.';
+        $payload['visibility']['internal'] = true;
+    }
+
+    if (!isset($payload['meta']) || !is_array($payload['meta'])) {
+        $errors[] = 'ARPG envelope: meta must be an object.';
+        $payload['meta'] = [];
+    }
+    if (!isset($payload['meta']['rules']) || !is_array($payload['meta']['rules'])) {
+        $errors[] = 'ARPG envelope: meta.rules must be an object.';
+        $payload['meta']['rules'] = [];
+    }
+    if ((string)($payload['meta']['rules']['schema'] ?? '') !== AF_KB_ARPG_RULES_SCHEMA) {
+        $errors[] = 'ARPG envelope: meta.rules.schema must be "' . AF_KB_ARPG_RULES_SCHEMA . '".';
+        $payload['meta']['rules']['schema'] = AF_KB_ARPG_RULES_SCHEMA;
+    }
+
+    if (!isset($payload['meta']['source']) || !is_array($payload['meta']['source'])) {
+        $payload['meta']['source'] = [];
+    }
+    if (!isset($payload['meta']['ui']) || !is_array($payload['meta']['ui'])) {
+        $payload['meta']['ui'] = [];
+    }
+
+    if (!isset($payload['data_json']) || !is_array($payload['data_json'])) {
+        $errors[] = 'ARPG envelope: data_json must be an object.';
+        $payload['data_json'] = [];
+    }
+    if (!isset($payload['data_json']['data']) || !is_array($payload['data_json']['data'])) {
+        $errors[] = 'ARPG envelope: data_json.data must be an object.';
+        $payload['data_json']['data'] = [];
+    }
+    if (!isset($payload['data_json']['blocks']) || !is_array($payload['data_json']['blocks'])) {
+        $errors[] = 'ARPG envelope: data_json.blocks must be an array.';
+        $payload['data_json']['blocks'] = [];
+    }
+
+    return $payload;
+}
+
+function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, array &$errors): void
+{
+    if ($entityKind === 'ability') {
+        af_kb_arpg_require_path($payload, 'subtype', 'ARPG ability requires subtype.', $errors);
+        af_kb_arpg_require_path($payload, 'data_json.data.ability', 'ARPG ability requires data_json.data.ability.', $errors);
+        foreach (['effects', 'requirements', 'costs', 'cooldown', 'charges', 'modifiers', 'resources', 'scaling', 'triggers', 'conditions', 'stacking'] as $optionalKey) {
+            if (!array_key_exists($optionalKey, (array)($payload['data_json']['data'] ?? []))) {
+                continue;
+            }
+            $value = $payload['data_json']['data'][$optionalKey];
+            if (in_array($optionalKey, ['cooldown', 'charges', 'stacking'], true)) {
+                if (!is_array($value)) {
+                    $errors[] = 'ARPG ability: "' . $optionalKey . '" must be an object.';
+                }
+                continue;
+            }
+            if (!is_array($value)) {
+                $errors[] = 'ARPG ability: "' . $optionalKey . '" must be an array.';
+            }
+        }
+
+        foreach ((array)($payload['data_json']['data']['triggers'] ?? []) as $idx => $trigger) {
+            if (!is_array($trigger)) {
+                $errors[] = 'ARPG ability: trigger #' . ($idx + 1) . ' must be an object.';
+                continue;
+            }
+            $templateRef = trim((string)($trigger['template_ref'] ?? ''));
+            if ($templateRef !== '' && !af_kb_arpg_validate_ref_string($templateRef)) {
+                $errors[] = 'ARPG ability: trigger #' . ($idx + 1) . ' has invalid template_ref.';
+            }
+        }
+        foreach ((array)($payload['data_json']['data']['conditions'] ?? []) as $idx => $condition) {
+            if (!is_array($condition)) {
+                $errors[] = 'ARPG ability: condition #' . ($idx + 1) . ' must be an object.';
+                continue;
+            }
+            $templateRef = trim((string)($condition['template_ref'] ?? ''));
+            if ($templateRef !== '' && !af_kb_arpg_validate_ref_string($templateRef)) {
+                $errors[] = 'ARPG ability: condition #' . ($idx + 1) . ' has invalid template_ref.';
+            }
+        }
+    }
+
+    if ($entityKind === 'item') {
+        af_kb_arpg_require_path($payload, 'data_json.data.item', 'ARPG item requires data_json.data.item.', $errors);
+        af_kb_arpg_require_path($payload, 'data_json.data.item.item_kind', 'ARPG item requires item.item_kind.', $errors);
+        af_kb_arpg_require_path($payload, 'data_json.data.item.rarity', 'ARPG item requires item.rarity.', $errors);
+        $item = (array)($payload['data_json']['data']['item'] ?? []);
+        $equipableKinds = ['weapon', 'armor', 'accessory', 'artifact', 'implant'];
+        if (in_array((string)($item['item_kind'] ?? ''), $equipableKinds, true) && trim((string)($item['equip_slot'] ?? '')) === '') {
+            $errors[] = 'ARPG item requires item.equip_slot for equipable item_kind.';
+        }
+    }
+
+    if ($entityKind === 'talent') {
+        af_kb_arpg_require_path($payload, 'data_json.data.talent.tree', 'ARPG talent requires talent.tree.', $errors);
+        af_kb_arpg_require_path($payload, 'data_json.data.talent.tier', 'ARPG talent requires talent.tier.', $errors);
+        af_kb_arpg_require_path($payload, 'data_json.data.talent.max_rank', 'ARPG talent requires talent.max_rank.', $errors);
+        af_kb_arpg_require_path($payload, 'data_json.data.rank_effects', 'ARPG talent requires rank_effects.', $errors);
+    }
+}
+
+function af_kb_validate_arpg_service_entity(string $entityKind, array $payload, array &$errors): void
+{
+    if ($entityKind === 'mechanic_profile') {
+        $data = (array)($payload['data_json']['data'] ?? []);
+        foreach (['stats', 'resources', 'statuses', 'template_registry'] as $requiredKey) {
+            if (!array_key_exists($requiredKey, $data)) {
+                $errors[] = 'ARPG mechanic_profile requires "' . $requiredKey . '" in data_json.data.';
+            }
+        }
+
+        foreach ((array)($data['resources'] ?? []) as $idx => $row) {
+            $rowData = is_array($row) ? $row : [];
+            $ref = trim((string)($rowData['ref'] ?? ''));
+            if ($ref !== '' && !af_kb_arpg_validate_ref_string($ref)) {
+                $errors[] = 'ARPG mechanic_profile resources ref #' . ($idx + 1) . ' has invalid format.';
+            }
+        }
+        foreach ((array)($data['statuses'] ?? []) as $idx => $row) {
+            $rowData = is_array($row) ? $row : [];
+            $ref = trim((string)($rowData['ref'] ?? ''));
+            if ($ref !== '' && !af_kb_arpg_validate_ref_string($ref)) {
+                $errors[] = 'ARPG mechanic_profile statuses ref #' . ($idx + 1) . ' has invalid format.';
+            }
+        }
+    }
+}
+
+function af_kb_validate_arpg_entry_by_type(string $type, array $payload, array &$errors): array
+{
+    $typeDef = af_kb_arpg_type_definition($type);
+    if (empty($typeDef)) {
+        return $payload;
+    }
+
+    $isService = !empty($typeDef['service']);
+    $payload = af_kb_validate_arpg_envelope($type, $payload, $isService, $errors);
+
+    $entityKind = (string)($payload['entity_kind'] ?? '');
+    if ($isService) {
+        af_kb_validate_arpg_service_entity($entityKind, $payload, $errors);
+    } else {
+        af_kb_validate_arpg_public_entity($entityKind, $payload, $errors);
+    }
+
+    return $payload;
 }
 
 function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson, array &$errors, ?string $mechanicKey = null): string
