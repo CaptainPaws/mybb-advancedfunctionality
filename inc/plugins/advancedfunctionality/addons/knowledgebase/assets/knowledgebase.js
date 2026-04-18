@@ -996,6 +996,16 @@
                 syncRulesToMeta(payload);
             }
 
+            function bindFieldSync(node, handler) {
+                if (!node || typeof handler !== 'function') return;
+                var tag = String(node.tagName || '').toUpperCase();
+                if (node.type === 'checkbox' || tag === 'SELECT') {
+                    node.addEventListener('change', handler);
+                    return;
+                }
+                node.addEventListener('input', handler);
+            }
+
             function renderArrayEditor(container, title, path, columns) {
                 var wrap = document.createElement('div');
                 wrap.className = 'af-kb-kvlist';
@@ -1057,7 +1067,7 @@
                                 input.type = col.type || 'text';
                                 input.value = row[col.key] != null ? String(row[col.key]) : '';
                             }
-                            input.addEventListener('input', function () {
+                            bindFieldSync(input, function () {
                                 if (col.type === 'number') {
                                     row[col.key] = numberOrZero(input.value);
                                 } else {
@@ -1216,7 +1226,7 @@
                     st.value = String(numberOrZero(((data.stacking || {}).max_stacks) || 0));
                     stRef.checked = !!((data.stacking || {}).refresh_on_apply);
                     [subtype, slot, dmg, trg, cd, ch, chr, st, stRef].forEach(function (node) {
-                        node.addEventListener(node.type === 'checkbox' ? 'change' : 'input', function () {
+                        bindFieldSync(node, function () {
                             payload.subtype = subtype.value;
                             ability.slot = slot.value.trim();
                             ability.damage_type = dmg.value.trim();
@@ -1276,7 +1286,7 @@
                     bd.value = bestiary.description || '';
                     bn.value = Array.isArray(bestiary.notes) ? bestiary.notes.join('\n') : '';
                     [bf, ba, bfac, br, bt, bl, bd, bn].forEach(function (n) {
-                        n.addEventListener('input', function () {
+                        bindFieldSync(n, function () {
                             bestiary.family = bf.value.trim();
                             bestiary.classification = ensureObject(bestiary, 'classification');
                             bestiary.classification.archetype = ba.value.trim();
@@ -1351,7 +1361,7 @@
                     nx.value = String(numberOrZero(((data.node_position || {}).x) || 0));
                     ny.value = String(numberOrZero(((data.node_position || {}).y) || 0));
                     ng.value = ((data.node_position || {}).group) || '';
-                    [tree, tier, mr, nx, ny, ng].forEach(function (n) { n.addEventListener('input', function () { data.node_position = ensureObject(data, 'node_position'); talent.tree = tree.value.trim(); talent.tier = numberOrZero(tier.value); talent.max_rank = numberOrZero(mr.value); data.node_position.x = numberOrZero(nx.value); data.node_position.y = numberOrZero(ny.value); data.node_position.group = ng.value.trim(); syncToRaw(); }); });
+                    [tree, tier, mr, nx, ny, ng].forEach(function (n) { bindFieldSync(n, function () { data.node_position = ensureObject(data, 'node_position'); talent.tree = tree.value.trim(); talent.tier = numberOrZero(tier.value); talent.max_rank = numberOrZero(mr.value); data.node_position.x = numberOrZero(nx.value); data.node_position.y = numberOrZero(ny.value); data.node_position.group = ng.value.trim(); syncToRaw(); }); });
                     renderArrayEditor(entity, 'rank_effects', ['data_json', 'data', 'rank_effects'], [{ key: 'rank', label: 'rank', type: 'number' }, { key: 'kind', label: 'kind' }, { key: 'value', label: 'value' }, { key: 'effect_ref', label: 'effect_ref' }]);
                     renderArrayEditor(entity, 'requirements', ['data_json', 'data', 'requirements'], [{ key: 'type', label: 'type' }, { key: 'key', label: 'key' }]);
                     renderArrayEditor(entity, 'mutual_exclusive_with', ['data_json', 'data', 'mutual_exclusive_with'], [{ key: 'ref', label: 'ref' }]);
@@ -1367,7 +1377,7 @@
                     addSelectOptionIfMissing(es, item.equip_slot || '');
                     addSelectOptionIfMissing(ir, item.rarity || '');
                     ik.value = item.item_kind || ''; es.value = item.equip_slot || ''; ir.value = item.rarity || ''; lmin.value = String(numberOrZero(((item.level_range||{}).min)||0)); lmax.value = String(numberOrZero(((item.level_range||{}).max)||0)); dur.value = String(numberOrZero(data.durability || 0));
-                    [ik, es, ir, lmin, lmax, dur].forEach(function (n) { n.addEventListener('input', function () { if (!item.level_range || typeof item.level_range !== 'object') item.level_range = {}; item.item_kind = ik.value.trim(); item.equip_slot = es.value.trim(); item.rarity = ir.value.trim(); item.level_range.min = numberOrZero(lmin.value); item.level_range.max = numberOrZero(lmax.value); data.durability = numberOrZero(dur.value); syncToRaw(); }); });
+                    [ik, es, ir, lmin, lmax, dur].forEach(function (n) { bindFieldSync(n, function () { if (!item.level_range || typeof item.level_range !== 'object') item.level_range = {}; item.item_kind = ik.value.trim(); item.equip_slot = es.value.trim(); item.rarity = ir.value.trim(); item.level_range.min = numberOrZero(lmin.value); item.level_range.max = numberOrZero(lmax.value); data.durability = numberOrZero(dur.value); syncToRaw(); }); });
                     renderArrayEditor(entity, 'requirements', ['data_json', 'data', 'requirements'], [{ key: 'type', label: 'type' }, { key: 'key', label: 'key' }]);
                     renderArrayEditor(entity, 'base_stats', ['data_json', 'data', 'base_stats'], [{ key: 'stat', label: 'stat' }, { key: 'flat', label: 'flat', type: 'number' }, { key: 'percent', label: 'percent', type: 'number' }]);
                     renderArrayEditor(entity, 'substats', ['data_json', 'data', 'substats'], [{ key: 'stat', label: 'stat' }, { key: 'flat', label: 'flat', type: 'number' }, { key: 'percent', label: 'percent', type: 'number' }]);
