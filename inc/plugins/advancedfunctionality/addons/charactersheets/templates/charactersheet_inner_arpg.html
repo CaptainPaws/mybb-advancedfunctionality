@@ -1,0 +1,44 @@
+<div class="af-cs-page af-cs-page--arpg af-aa-context af-aa-context--sheet" data-af-apui-surface="sheet" data-af-modal-kind="sheet" data-af-apui-owner-uid="{$sheet_owner_uid}" data-uid="{$sheet_owner_uid}" data-afcs-sheet data-afcs-sheet-id="{$sheet_id}" data-afcs-post-key="{$sheet_post_key}" data-afcs-bonus-items="{$bonus_items_json}" data-afcs-render-profile="{$sheet_render_profile_attr}">
+  <div class="af-cs-inline-error" data-afcs-error="1" hidden></div>
+  <div class="af-cs-toast" data-afcs-toast="1" hidden></div>
+
+  <div class="af-cs-arpg-hero">
+    <div class="af-cs-portrait af-cs-arpg-portrait">
+      <img src="{$sheet_portrait_url}" alt="{$sheet_title}" loading="lazy" />
+    </div>
+    <div class="af-cs-arpg-summary">
+      <div class="af-cs-summary__title-row">
+        <h1>{$sheet_title}</h1>
+        <div class="af-cs-header-actions">{$sheet_header_actions_html}</div>
+      </div>
+      <div class="af-cs-arpg-identity">{$arpg_header_identity_html}</div>
+      <div class="af-cs-arpg-progression">{$arpg_header_progress_html}</div>
+      <div class="af-cs-summary__info">{$sheet_info_table_html}</div>
+    </div>
+  </div>
+
+  <section class="af-cs-section">
+    <h2>Primary stats</h2>
+    {$arpg_primary_stats_html}
+  </section>
+
+  <section class="af-cs-section">
+    <h2>Weapon / core equipment</h2>
+    <div data-afcs-block="equipment">{$sheet_equipment_html}</div>
+  </section>
+
+  <section class="af-cs-section">
+    <h2>Abilities</h2>
+    <div data-afcs-block="abilities">{$sheet_abilities_html}</div>
+  </section>
+
+  <section class="af-cs-section">
+    <h2>Items / artifacts / equipment</h2>
+    <div data-afcs-block="augmentations">{$sheet_augments_html}</div>
+  </section>
+
+  <section class="af-cs-section">
+    <h2>ARPG mechanics expansion</h2>
+    {$arpg_future_blocks_html}
+  </section>
+</div>
