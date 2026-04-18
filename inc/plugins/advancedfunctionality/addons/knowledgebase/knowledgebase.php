@@ -33,6 +33,7 @@ function af_kb_arpg_supported_types(): array
     return [
         'arpg_origin',
         'arpg_archetype',
+        'arpg_bestiary',
         'arpg_ability',
         'arpg_item',
         'arpg_faction',
@@ -54,6 +55,7 @@ function af_kb_arpg_public_top_level_types(): array
     return [
         'arpg_origin',
         'arpg_archetype',
+        'arpg_bestiary',
         'arpg_faction',
         'arpg_ability',
         'arpg_talent',
@@ -104,6 +106,7 @@ function af_kb_default_type_definitions(): array
         'race_variant' => ['Разновидности рас', 'Race Variants'],
         'class' => ['Классы', 'Classes'],
         'theme' => ['Темы', 'Themes'],
+        'bestiary' => ['Бестиарий', 'Bestiary'],
         'skill' => ['Навыки', 'Skills'],
         'knowledge' => ['Знания', 'Knowledge'],
         'language' => ['Языки', 'Languages'],
@@ -260,6 +263,72 @@ function af_kb_default_type_definitions(): array
             $schema['fields'][] = ['path' => 'hp_base', 'type' => 'number', 'label_ru' => 'Базовое HP', 'label_en' => 'Base HP', 'required' => false, 'default' => null];
         }
 
+        if ($key === 'bestiary') {
+            $schema['root_defaults'] = [
+                'schema' => AF_KB_RULES_SCHEMA,
+                'type_profile' => 'bestiary',
+                'version' => '1.0',
+                'creature' => [
+                    'size' => 'medium',
+                    'kind' => 'humanoid',
+                    'alignment' => '',
+                    'challenge_rating' => '1',
+                    'xp' => 0,
+                    'proficiency_bonus' => 2,
+                    'armor_class' => 10,
+                    'hp' => ['average' => 10, 'dice' => '2d8+2'],
+                    'speed' => ['walk' => 30],
+                    'ability_scores' => ['str' => 10, 'dex' => 10, 'con' => 10, 'int' => 10, 'wis' => 10, 'cha' => 10],
+                    'saving_throws' => [],
+                    'skills' => [],
+                    'senses' => ['passive_perception' => 10],
+                    'languages' => [],
+                    'damage_vulnerabilities' => [],
+                    'damage_resistances' => [],
+                    'damage_immunities' => [],
+                    'condition_immunities' => [],
+                    'notes' => '',
+                ],
+                'traits' => [],
+                'actions' => [],
+                'reactions' => [],
+                'legendary_actions' => [],
+                'loot' => [],
+                'gm_notes' => '',
+            ];
+
+            $schema['fields'] = [
+                ['path' => 'schema', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => AF_KB_RULES_SCHEMA],
+                ['path' => 'type_profile', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => 'bestiary'],
+                ['path' => 'version', 'type' => 'string', 'required' => true, 'default' => '1.0'],
+                ['path' => 'creature.size', 'type' => 'select', 'required' => true, 'options' => [['value' => 'tiny'], ['value' => 'small'], ['value' => 'medium'], ['value' => 'large'], ['value' => 'huge'], ['value' => 'gargantuan']], 'default' => 'medium'],
+                ['path' => 'creature.kind', 'type' => 'string', 'required' => true, 'default' => 'humanoid'],
+                ['path' => 'creature.challenge_rating', 'type' => 'string', 'required' => true, 'default' => '1'],
+                ['path' => 'creature.xp', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'creature.proficiency_bonus', 'type' => 'number', 'required' => true, 'default' => 2],
+                ['path' => 'creature.armor_class', 'type' => 'number', 'required' => true, 'default' => 10],
+                ['path' => 'creature.hp.average', 'type' => 'number', 'required' => true, 'default' => 10],
+                ['path' => 'creature.hp.dice', 'type' => 'string', 'required' => true, 'default' => '2d8+2'],
+                ['path' => 'creature.speed.walk', 'type' => 'number', 'required' => true, 'default' => 30],
+                ['path' => 'creature.ability_scores.str', 'type' => 'number', 'required' => true, 'default' => 10],
+                ['path' => 'creature.ability_scores.dex', 'type' => 'number', 'required' => true, 'default' => 10],
+                ['path' => 'creature.ability_scores.con', 'type' => 'number', 'required' => true, 'default' => 10],
+                ['path' => 'creature.ability_scores.int', 'type' => 'number', 'required' => true, 'default' => 10],
+                ['path' => 'creature.ability_scores.wis', 'type' => 'number', 'required' => true, 'default' => 10],
+                ['path' => 'creature.ability_scores.cha', 'type' => 'number', 'required' => true, 'default' => 10],
+                ['path' => 'creature.damage_vulnerabilities', 'type' => 'array', 'item' => ['type' => 'string'], 'default' => []],
+                ['path' => 'creature.damage_resistances', 'type' => 'array', 'item' => ['type' => 'string'], 'default' => []],
+                ['path' => 'creature.damage_immunities', 'type' => 'array', 'item' => ['type' => 'string'], 'default' => []],
+                ['path' => 'creature.condition_immunities', 'type' => 'array', 'item' => ['type' => 'string'], 'default' => []],
+                ['path' => 'traits', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path' => 'name', 'type' => 'i18n', 'required' => true], ['path' => 'desc', 'type' => 'i18n', 'required' => true]]], 'default' => []],
+                ['path' => 'actions', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path' => 'name', 'type' => 'i18n', 'required' => true], ['path' => 'desc', 'type' => 'i18n', 'required' => true], ['path' => 'attack_bonus', 'type' => 'number'], ['path' => 'damage', 'type' => 'string']]], 'default' => []],
+                ['path' => 'reactions', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path' => 'name', 'type' => 'i18n', 'required' => true], ['path' => 'desc', 'type' => 'i18n', 'required' => true]]], 'default' => []],
+                ['path' => 'legendary_actions', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path' => 'name', 'type' => 'i18n', 'required' => true], ['path' => 'desc', 'type' => 'i18n', 'required' => true], ['path' => 'cost', 'type' => 'number', 'default' => 1]]], 'default' => []],
+                ['path' => 'loot', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path' => 'kind', 'type' => 'select', 'required' => true, 'options' => [['value' => 'item'], ['value' => 'resource'], ['value' => 'currency'], ['value' => 'table'], ['value' => 'note']]], ['path' => 'ref_type', 'type' => 'string'], ['path' => 'ref_key', 'type' => 'string'], ['path' => 'chance', 'type' => 'number'], ['path' => 'qty_min', 'type' => 'number'], ['path' => 'qty_max', 'type' => 'number'], ['path' => 'notes', 'type' => 'i18n']]], 'default' => []],
+                ['path' => 'gm_notes', 'type' => 'string', 'default' => ''],
+            ];
+        }
+
         if ($key === 'item') {
             $schema['root_defaults'] = [
                 'schema' => 'af_kb.item.v2',
@@ -317,6 +386,7 @@ function af_kb_default_arpg_type_definitions(): array
         'arpg_origin' => ['ARPG: Происхождения', 'ARPG: Origins', 1],
         'arpg_archetype' => ['ARPG: Архетипы', 'ARPG: Archetypes', 1],
         'arpg_faction' => ['ARPG: Фракции', 'ARPG: Factions', 1],
+        'arpg_bestiary' => ['ARPG: Бестиарий', 'ARPG: Bestiary', 1],
         'arpg_ability' => ['ARPG: Способности', 'ARPG: Abilities', 1],
         'arpg_talent' => ['ARPG: Таланты', 'ARPG: Talents', 1],
         'arpg_item' => ['ARPG: Предметы и экипировка', 'ARPG: Items and Equipment', 1],
@@ -354,6 +424,58 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'type_profile', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => $typeKey],
             ],
         ];
+
+        if ($typeKey === 'arpg_bestiary') {
+            $schema['root_defaults'] += [
+                'entity' => [
+                    'tier' => 1,
+                    'rank' => 'normal',
+                    'family' => '',
+                    'archetype' => '',
+                    'faction' => '',
+                    'tags' => [],
+                    'description' => '',
+                ],
+                'stats' => [
+                    'hp' => 100,
+                    'barrier' => 0,
+                    'armor' => 0,
+                    'speed' => 1.0,
+                    'damage' => 10,
+                    'crit_chance' => 5,
+                    'crit_damage' => 150,
+                    'accuracy' => 100,
+                    'evasion' => 0,
+                ],
+                'resistances' => [],
+                'weaknesses' => [],
+                'statuses' => [],
+                'phases' => [],
+                'abilities' => [],
+                'loot' => [],
+                'notes' => [],
+            ];
+
+            $schema['fields'] = array_merge($schema['fields'], [
+                ['path' => 'entity.description', 'type' => 'string', 'default' => ''],
+                ['path' => 'entity.tier', 'type' => 'number', 'required' => true, 'default' => 1],
+                ['path' => 'entity.rank', 'type' => 'select', 'required' => true, 'options' => [['value' => 'normal'], ['value' => 'elite'], ['value' => 'boss'], ['value' => 'mythic']], 'default' => 'normal'],
+                ['path' => 'stats.hp', 'type' => 'number', 'required' => true, 'default' => 100],
+                ['path' => 'stats.barrier', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'stats.armor', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'stats.speed', 'type' => 'number', 'required' => true, 'default' => 1.0],
+                ['path' => 'stats.damage', 'type' => 'number', 'required' => true, 'default' => 10],
+                ['path' => 'stats.crit_chance', 'type' => 'number', 'required' => true, 'default' => 5],
+                ['path' => 'stats.crit_damage', 'type' => 'number', 'required' => true, 'default' => 150],
+                ['path' => 'resistances', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path' => 'kind', 'type' => 'string', 'required' => true], ['path' => 'value', 'type' => 'number', 'required' => true], ['path' => 'unit', 'type' => 'select', 'options' => [['value' => 'percent'], ['value' => 'flat']], 'default' => 'percent']]], 'default' => []],
+                ['path' => 'weaknesses', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path' => 'kind', 'type' => 'string', 'required' => true], ['path' => 'value', 'type' => 'number'], ['path' => 'notes', 'type' => 'i18n']]], 'default' => []],
+                ['path' => 'statuses', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path' => 'status_key', 'type' => 'string', 'required' => true], ['path' => 'chance', 'type' => 'number'], ['path' => 'duration', 'type' => 'number']]], 'default' => []],
+                ['path' => 'phases', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path' => 'id', 'type' => 'string', 'required' => true], ['path' => 'trigger', 'type' => 'string'], ['path' => 'modifiers', 'type' => 'array', 'item' => ['type' => 'object']], ['path' => 'abilities', 'type' => 'array', 'item' => ['type' => 'string']]]], 'default' => []],
+                ['path' => 'abilities', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path' => 'ability_key', 'type' => 'string', 'required' => true], ['path' => 'cooldown', 'type' => 'number'], ['path' => 'weight', 'type' => 'number'], ['path' => 'notes', 'type' => 'i18n']]], 'default' => []],
+                ['path' => 'loot', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path' => 'kind', 'type' => 'select', 'required' => true, 'options' => [['value' => 'item'], ['value' => 'currency'], ['value' => 'resource'], ['value' => 'table']]], ['path' => 'ref_key', 'type' => 'string'], ['path' => 'chance', 'type' => 'number'], ['path' => 'qty_min', 'type' => 'number'], ['path' => 'qty_max', 'type' => 'number']]], 'default' => []],
+                ['path' => 'notes', 'type' => 'array', 'item' => ['type' => 'string'], 'default' => []],
+            ]);
+        }
 
         $defs[] = [
             'type_key' => $typeKey,
@@ -1331,7 +1453,7 @@ function af_kb_seed_defaults(): void
 {
     global $db;
 
-    $requiredTypes = ['race', 'race_variant', 'class', 'theme', 'skill', 'knowledge', 'language', 'item'];
+    $requiredTypes = ['race', 'race_variant', 'class', 'theme', 'bestiary', 'skill', 'knowledge', 'language', 'item'];
     $defaultsByType = [];
     foreach (af_kb_default_type_definitions() as $row) {
         $defaultsByType[(string)$row['type_key']] = $row;
@@ -1801,6 +1923,12 @@ function af_kb_default_type_rules_config_dnd(string $typeKey): array
             'rules_required_keys' => ['schema', 'type_profile', 'version', 'fixed', 'grants', 'choices'],
             'ui_rules_editor' => true,
         ],
+        'bestiary' => [
+            'rules_enabled' => true,
+            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'rules_required_keys' => ['schema', 'type_profile', 'version', 'creature'],
+            'ui_rules_editor' => true,
+        ],
         'skill' => [
             'rules_enabled' => true,
             'rules_schema' => AF_KB_RULES_SCHEMA,
@@ -1980,6 +2108,41 @@ function af_kb_get_type_profile_definition_dnd(string $typeKey): array
             'ui_profile' => 'theme',
             'rules_enabled' => true,
             'defaults' => $base,
+        ],
+        'bestiary' => [
+            'ui_profile' => 'bestiary',
+            'rules_enabled' => true,
+            'defaults' => [
+                'schema' => AF_KB_RULES_SCHEMA,
+                'type_profile' => 'bestiary',
+                'version' => '1.0',
+                'creature' => [
+                    'size' => 'medium',
+                    'kind' => 'humanoid',
+                    'challenge_rating' => '1',
+                    'xp' => 0,
+                    'proficiency_bonus' => 2,
+                    'armor_class' => 10,
+                    'hp' => ['average' => 10, 'dice' => '2d8+2'],
+                    'speed' => ['walk' => 30],
+                    'ability_scores' => ['str' => 10, 'dex' => 10, 'con' => 10, 'int' => 10, 'wis' => 10, 'cha' => 10],
+                    'saving_throws' => [],
+                    'skills' => [],
+                    'damage_vulnerabilities' => [],
+                    'damage_resistances' => [],
+                    'damage_immunities' => [],
+                    'condition_immunities' => [],
+                    'senses' => ['passive_perception' => 10],
+                    'languages' => [],
+                    'notes' => '',
+                ],
+                'traits' => [],
+                'actions' => [],
+                'reactions' => [],
+                'legendary_actions' => [],
+                'loot' => [],
+                'gm_notes' => '',
+            ],
         ],
         'skill' => [
             'ui_profile' => 'skill',
