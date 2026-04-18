@@ -891,234 +891,360 @@
             var payload = readJson(getFieldValue(raw) || '{}', {});
             if (!payload || typeof payload !== 'object') payload = {};
 
-            if (typeof payload.schema !== 'string' || !payload.schema) payload.schema = 'af_kb.arpg.rules.v1';
-            if (typeof payload.type_profile !== 'string' || !payload.type_profile) payload.type_profile = type || 'arpg';
-            if (typeof payload.version !== 'string' || !payload.version) payload.version = '1.0';
-            if (!payload.classification || typeof payload.classification !== 'object') payload.classification = {};
-            if (!payload.abilities || typeof payload.abilities !== 'object') payload.abilities = {};
-            if (type === 'arpg_bestiary') {
-                if (!payload.entity || typeof payload.entity !== 'object') payload.entity = {};
-                if (!payload.stats || typeof payload.stats !== 'object') payload.stats = {};
-                if (!Array.isArray(payload.resistances)) payload.resistances = [];
-                if (!Array.isArray(payload.weaknesses)) payload.weaknesses = [];
-                if (!Array.isArray(payload.statuses)) payload.statuses = [];
-                if (!Array.isArray(payload.abilities)) payload.abilities = [];
-                if (!Array.isArray(payload.loot)) payload.loot = [];
-                if (!Array.isArray(payload.phases)) payload.phases = [];
-                if (!Array.isArray(payload.notes)) payload.notes = [];
+            var serviceKinds = ['mechanic_profile', 'resource_def', 'status_def', 'modifier_template', 'formula_def', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
+            var entityKind = String(payload.entity_kind || (typeSchema.root_defaults && typeSchema.root_defaults.entity_kind) || '').trim();
+            var isService = serviceKinds.indexOf(entityKind) !== -1;
 
-                root.innerHTML = [
-                    '<div class="af-kb-help">ARPG bestiary profile: форма монстра/существа без обязательного raw JSON.</div>',
-                    '<div class="af-kb-row"><div><label>Schema</label><input type="text" id="af-kb-arpg-best-schema" readonly="readonly" /></div><div><label>Type profile</label><input type="text" id="af-kb-arpg-best-type-profile" readonly="readonly" /></div></div>',
-                    '<div class="af-kb-row"><div><label>Family</label><input type="text" id="af-kb-arpg-best-family" /></div><div><label>Rank</label><select id="af-kb-arpg-best-rank"><option value="normal">normal</option><option value="elite">elite</option><option value="boss">boss</option><option value="mythic">mythic</option></select></div><div><label>Tier</label><input type="number" id="af-kb-arpg-best-tier" /></div></div>',
-                    '<div class="af-kb-row"><div><label>Category/archetype</label><input type="text" id="af-kb-arpg-best-archetype" /></div><div><label>Faction</label><input type="text" id="af-kb-arpg-best-faction" /></div><div><label>Tags (comma)</label><input type="text" id="af-kb-arpg-best-tags" /></div></div>',
-                    '<div class="af-kb-row"><div><label>Description</label><textarea id="af-kb-arpg-best-description" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Behavior/mechanics notes</label><textarea id="af-kb-arpg-best-notes" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
-                    '<div class="af-kb-row"><div><label>HP</label><input type="number" id="af-kb-arpg-best-hp" /></div><div><label>Barrier</label><input type="number" id="af-kb-arpg-best-barrier" /></div><div><label>Armor</label><input type="number" id="af-kb-arpg-best-armor" /></div></div>',
-                    '<div class="af-kb-row"><div><label>Damage</label><input type="number" id="af-kb-arpg-best-damage" /></div><div><label>Speed</label><input type="number" step="0.1" id="af-kb-arpg-best-speed" /></div><div><label>Accuracy</label><input type="number" id="af-kb-arpg-best-accuracy" /></div></div>',
-                    '<div class="af-kb-row"><div><label>Evasion</label><input type="number" id="af-kb-arpg-best-evasion" /></div><div><label>Crit chance</label><input type="number" id="af-kb-arpg-best-crit-chance" /></div><div><label>Crit damage</label><input type="number" id="af-kb-arpg-best-crit-damage" /></div></div>',
-                    '<div class="af-kb-row"><div><label>Resistances (JSON array)</label><textarea id="af-kb-arpg-best-resistances" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Weaknesses (JSON array)</label><textarea id="af-kb-arpg-best-weaknesses" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
-                    '<div class="af-kb-row"><div><label>Status interactions (JSON array)</label><textarea id="af-kb-arpg-best-statuses" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Abilities (JSON array)</label><textarea id="af-kb-arpg-best-abilities" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
-                    '<div class="af-kb-row"><div><label>Drops / loot (JSON array)</label><textarea id="af-kb-arpg-best-loot" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Phases / boss mechanics (JSON array)</label><textarea id="af-kb-arpg-best-phases" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>'
-                ].join('');
-
-                var bfields = {
-                    schema: root.querySelector('#af-kb-arpg-best-schema'),
-                    typeProfile: root.querySelector('#af-kb-arpg-best-type-profile'),
-                    family: root.querySelector('#af-kb-arpg-best-family'),
-                    rank: root.querySelector('#af-kb-arpg-best-rank'),
-                    tier: root.querySelector('#af-kb-arpg-best-tier'),
-                    archetype: root.querySelector('#af-kb-arpg-best-archetype'),
-                    faction: root.querySelector('#af-kb-arpg-best-faction'),
-                    tags: root.querySelector('#af-kb-arpg-best-tags'),
-                    description: root.querySelector('#af-kb-arpg-best-description'),
-                    notes: root.querySelector('#af-kb-arpg-best-notes'),
-                    hp: root.querySelector('#af-kb-arpg-best-hp'),
-                    barrier: root.querySelector('#af-kb-arpg-best-barrier'),
-                    armor: root.querySelector('#af-kb-arpg-best-armor'),
-                    damage: root.querySelector('#af-kb-arpg-best-damage'),
-                    speed: root.querySelector('#af-kb-arpg-best-speed'),
-                    accuracy: root.querySelector('#af-kb-arpg-best-accuracy'),
-                    evasion: root.querySelector('#af-kb-arpg-best-evasion'),
-                    critChance: root.querySelector('#af-kb-arpg-best-crit-chance'),
-                    critDamage: root.querySelector('#af-kb-arpg-best-crit-damage'),
-                    resistances: root.querySelector('#af-kb-arpg-best-resistances'),
-                    weaknesses: root.querySelector('#af-kb-arpg-best-weaknesses'),
-                    statuses: root.querySelector('#af-kb-arpg-best-statuses'),
-                    abilities: root.querySelector('#af-kb-arpg-best-abilities'),
-                    loot: root.querySelector('#af-kb-arpg-best-loot'),
-                    phases: root.querySelector('#af-kb-arpg-best-phases')
-                };
-
-                bfields.schema.value = 'af_kb.arpg.rules.v1';
-                bfields.typeProfile.value = 'arpg_bestiary';
-                bfields.family.value = String(payload.entity.family || '');
-                bfields.rank.value = String(payload.entity.rank || 'normal');
-                bfields.tier.value = String(numberOrZero(payload.entity.tier != null ? payload.entity.tier : 1));
-                bfields.archetype.value = String(payload.entity.archetype || '');
-                bfields.faction.value = String(payload.entity.faction || '');
-                bfields.tags.value = Array.isArray(payload.entity.tags) ? payload.entity.tags.join(', ') : '';
-                bfields.description.value = String(payload.entity.description || '');
-                bfields.notes.value = Array.isArray(payload.notes) ? payload.notes.join('\n') : '';
-                bfields.hp.value = String(numberOrZero(payload.stats.hp != null ? payload.stats.hp : 100));
-                bfields.barrier.value = String(numberOrZero(payload.stats.barrier != null ? payload.stats.barrier : 0));
-                bfields.armor.value = String(numberOrZero(payload.stats.armor != null ? payload.stats.armor : 0));
-                bfields.damage.value = String(numberOrZero(payload.stats.damage != null ? payload.stats.damage : 10));
-                bfields.speed.value = String(numberOrZero(payload.stats.speed != null ? payload.stats.speed : 1));
-                bfields.accuracy.value = String(numberOrZero(payload.stats.accuracy != null ? payload.stats.accuracy : 100));
-                bfields.evasion.value = String(numberOrZero(payload.stats.evasion != null ? payload.stats.evasion : 0));
-                bfields.critChance.value = String(numberOrZero(payload.stats.crit_chance != null ? payload.stats.crit_chance : 5));
-                bfields.critDamage.value = String(numberOrZero(payload.stats.crit_damage != null ? payload.stats.crit_damage : 150));
-                bfields.resistances.value = JSON.stringify(payload.resistances || [], null, 2);
-                bfields.weaknesses.value = JSON.stringify(payload.weaknesses || [], null, 2);
-                bfields.statuses.value = JSON.stringify(payload.statuses || [], null, 2);
-                bfields.abilities.value = JSON.stringify(payload.abilities || [], null, 2);
-                bfields.loot.value = JSON.stringify(payload.loot || [], null, 2);
-                bfields.phases.value = JSON.stringify(payload.phases || [], null, 2);
-
-                function parseJsonSafe(text, fallback) {
-                    try {
-                        return JSON.parse(text);
-                    } catch (e) {
-                        return fallback;
-                    }
+            function ensureObject(parent, key) {
+                if (!parent[key] || typeof parent[key] !== 'object' || Array.isArray(parent[key])) parent[key] = {};
+                return parent[key];
+            }
+            function ensureArray(parent, key) {
+                if (!Array.isArray(parent[key])) parent[key] = [];
+                return parent[key];
+            }
+            function parseJsonSafe(text, fallback) {
+                try { return JSON.parse(text); } catch (e) { return fallback; }
+            }
+            function getPath(obj, path, fallback) {
+                var cur = obj;
+                for (var i = 0; i < path.length; i++) {
+                    if (!cur || typeof cur !== 'object' || !Object.prototype.hasOwnProperty.call(cur, path[i])) return fallback;
+                    cur = cur[path[i]];
                 }
-
-                function syncArpgBestiaryToRaw() {
-                    var next = readJson(getFieldValue(raw) || '{}', {});
-                    if (!next || typeof next !== 'object') next = {};
-                    next.schema = 'af_kb.arpg.rules.v1';
-                    next.type_profile = 'arpg_bestiary';
-                    next.version = String(next.version || '1.0');
-                    next.entity = {
-                        tier: numberOrZero(bfields.tier.value),
-                        rank: String(bfields.rank.value || 'normal'),
-                        family: String(bfields.family.value || '').trim(),
-                        archetype: String(bfields.archetype.value || '').trim(),
-                        faction: String(bfields.faction.value || '').trim(),
-                        tags: splitCsv(bfields.tags.value),
-                        description: String(bfields.description.value || '').trim()
-                    };
-                    next.stats = {
-                        hp: numberOrZero(bfields.hp.value),
-                        barrier: numberOrZero(bfields.barrier.value),
-                        armor: numberOrZero(bfields.armor.value),
-                        speed: numberOrZero(bfields.speed.value),
-                        damage: numberOrZero(bfields.damage.value),
-                        crit_chance: numberOrZero(bfields.critChance.value),
-                        crit_damage: numberOrZero(bfields.critDamage.value),
-                        accuracy: numberOrZero(bfields.accuracy.value),
-                        evasion: numberOrZero(bfields.evasion.value)
-                    };
-                    next.resistances = parseJsonSafe(bfields.resistances.value, []);
-                    next.weaknesses = parseJsonSafe(bfields.weaknesses.value, []);
-                    next.statuses = parseJsonSafe(bfields.statuses.value, []);
-                    next.abilities = parseJsonSafe(bfields.abilities.value, []);
-                    next.loot = parseJsonSafe(bfields.loot.value, []);
-                    next.phases = parseJsonSafe(bfields.phases.value, []);
-                    next.notes = splitLines(bfields.notes.value);
-
-                    raw.value = JSON.stringify(next, null, 2);
-                    syncRulesToMeta(next);
+                return cur;
+            }
+            function setPath(obj, path, value) {
+                var cur = obj;
+                for (var i = 0; i < path.length - 1; i++) {
+                    var key = path[i];
+                    if (!cur[key] || typeof cur[key] !== 'object' || Array.isArray(cur[key])) cur[key] = {};
+                    cur = cur[key];
                 }
-
-                Object.keys(bfields).forEach(function (key) {
-                    if (bfields[key]) {
-                        bfields[key].addEventListener('input', syncArpgBestiaryToRaw);
-                        bfields[key].addEventListener('change', syncArpgBestiaryToRaw);
-                    }
-                });
-                syncArpgBestiaryToRaw();
-                return;
+                cur[path[path.length - 1]] = value;
             }
 
-            var block = [
-                '<div class="af-kb-help">ARPG mechanics path: отдельная схема и отдельная валидация без приведения к DnD.</div>',
-                '<div class="af-kb-row"><div><label>Schema</label><input type="text" id="af-kb-arpg-schema" readonly="readonly" /></div><div><label>Type profile</label><input type="text" id="af-kb-arpg-type-profile" readonly="readonly" /></div></div>',
-                '<div class="af-kb-row"><div><label>Origin / race</label><input type="text" id="af-kb-arpg-origin" /></div><div><label>Archetype / role</label><input type="text" id="af-kb-arpg-archetype" /></div></div>',
-                '<div class="af-kb-row"><div><label>Path / faction</label><input type="text" id="af-kb-arpg-path" /></div><div><label>Resources / scaling (JSON)</label><textarea id="af-kb-arpg-resources" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
-                '<div class="af-kb-row"><div><label>Talents (JSON array)</label><textarea id="af-kb-arpg-talents" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Items/implants/artifacts (JSON array)</label><textarea id="af-kb-arpg-items" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
-                '<div class="af-kb-row"><div><label>Abilities by subtype (JSON object)</label><textarea id="af-kb-arpg-abilities" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Mechanics profile (JSON object)</label><textarea id="af-kb-arpg-mechanics" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
-                '<div class="af-kb-row"><div><label>Modifiers/statuses (JSON array)</label><textarea id="af-kb-arpg-mods" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Tags (comma separated)</label><input type="text" id="af-kb-arpg-tags" /></div></div>'
-            ];
-            root.innerHTML = block.join('');
+            payload.schema = isService ? 'af_kb.arpg.mechanics.v1' : 'af_kb.arpg.meta.v1';
+            payload.mechanic = 'arpg';
+            payload.entity_kind = entityKind || String(type || 'arpg').replace(/^arpg_/, '');
+            if (typeof payload.subtype !== 'string') payload.subtype = '';
+            if (typeof payload.category !== 'string' || !payload.category) payload.category = isService ? 'service.mechanics' : 'arpg';
+            if (!Array.isArray(payload.tags)) payload.tags = [];
+            if (!payload.visibility || typeof payload.visibility !== 'object') payload.visibility = {};
+            payload.visibility.catalog = isService ? false : !!payload.visibility.catalog;
+            payload.visibility.search = isService ? false : !!payload.visibility.search;
+            payload.visibility.internal = isService ? true : !!payload.visibility.internal;
+            if (!payload.meta || typeof payload.meta !== 'object') payload.meta = {};
+            payload.meta.rules = ensureObject(payload.meta, 'rules');
+            payload.meta.source = ensureObject(payload.meta, 'source');
+            payload.meta.ui = ensureObject(payload.meta, 'ui');
+            if (!payload.meta.rules.schema) payload.meta.rules.schema = 'af_kb.arpg.rules.v1';
+            if (!payload.meta.rules.version) payload.meta.rules.version = 1;
+            if (!payload.data_json || typeof payload.data_json !== 'object') payload.data_json = {};
+            payload.data_json.data = ensureObject(payload.data_json, 'data');
+            ensureArray(payload.data_json, 'blocks');
 
-            var fields = {
-                schema: root.querySelector('#af-kb-arpg-schema'),
-                typeProfile: root.querySelector('#af-kb-arpg-type-profile'),
-                origin: root.querySelector('#af-kb-arpg-origin'),
-                archetype: root.querySelector('#af-kb-arpg-archetype'),
-                path: root.querySelector('#af-kb-arpg-path'),
-                resources: root.querySelector('#af-kb-arpg-resources'),
-                talents: root.querySelector('#af-kb-arpg-talents'),
-                items: root.querySelector('#af-kb-arpg-items'),
-                abilities: root.querySelector('#af-kb-arpg-abilities'),
-                mechanics: root.querySelector('#af-kb-arpg-mechanics'),
-                mods: root.querySelector('#af-kb-arpg-mods'),
-                tags: root.querySelector('#af-kb-arpg-tags')
+            var data = payload.data_json.data;
+            root.innerHTML = [
+                '<div class="af-kb-help">ARPG editor path: envelope + mechanic-aware sections. DnD path remains unchanged.</div>',
+                '<details open="open" class="af-kb-collapsible"><summary>ARPG envelope</summary><div id="af-kb-arpg-envelope"></div></details>',
+                '<details open="open" class="af-kb-collapsible"><summary>Entity data (' + esc(payload.entity_kind || 'unknown') + ')</summary><div id="af-kb-arpg-entity"></div></details>',
+                '<details class="af-kb-collapsible"><summary>Debug JSON fragments (advanced)</summary><div id="af-kb-arpg-advanced"></div></details>'
+            ].join('');
+
+            var env = root.querySelector('#af-kb-arpg-envelope');
+            var entity = root.querySelector('#af-kb-arpg-entity');
+            var advanced = root.querySelector('#af-kb-arpg-advanced');
+
+            function syncToRaw() {
+                raw.value = JSON.stringify(payload, null, 2);
+                syncRulesToMeta(payload);
+            }
+
+            function renderArrayEditor(container, title, path, columns) {
+                var wrap = document.createElement('div');
+                wrap.className = 'af-kb-kvlist';
+                var head = document.createElement('h4');
+                head.textContent = title;
+                wrap.appendChild(head);
+                var list = document.createElement('div');
+                wrap.appendChild(list);
+                var add = document.createElement('button');
+                add.type = 'button';
+                add.className = 'af-kb-add';
+                add.textContent = 'Добавить';
+                wrap.appendChild(add);
+                container.appendChild(wrap);
+
+                function getArr() {
+                    var arr = getPath(payload, path, []);
+                    if (!Array.isArray(arr)) { arr = []; setPath(payload, path, arr); }
+                    return arr;
+                }
+                function redraw() {
+                    list.innerHTML = '';
+                    var arr = getArr();
+                    if (!arr.length) {
+                        list.innerHTML = '<div class="af-kb-help">Нет записей.</div>';
+                        return;
+                    }
+                    arr.forEach(function (row, idx) {
+                        if (!row || typeof row !== 'object' || Array.isArray(row)) {
+                            if (columns.length === 1 && row != null && typeof row !== 'object') {
+                                var seed = {};
+                                seed[columns[0].key] = row;
+                                row = arr[idx] = seed;
+                            } else {
+                                row = arr[idx] = {};
+                            }
+                        }
+                        var card = document.createElement('div');
+                        card.className = 'af-kb-block-item';
+                        var grid = document.createElement('div');
+                        grid.className = 'af-kb-row';
+                        columns.forEach(function (col) {
+                            var cell = document.createElement('div');
+                            var lbl = document.createElement('label');
+                            lbl.textContent = col.label;
+                            cell.appendChild(lbl);
+                            var input;
+                            if (col.type === 'select') {
+                                input = document.createElement('select');
+                                (col.options || []).forEach(function (opt) {
+                                    var o = document.createElement('option');
+                                    o.value = String(opt);
+                                    o.textContent = String(opt || '');
+                                    input.appendChild(o);
+                                });
+                                input.value = String(row[col.key] || '');
+                            } else {
+                                input = document.createElement('input');
+                                input.type = col.type || 'text';
+                                input.value = row[col.key] != null ? String(row[col.key]) : '';
+                            }
+                            input.addEventListener('input', function () {
+                                if (col.type === 'number') {
+                                    row[col.key] = numberOrZero(input.value);
+                                } else {
+                                    row[col.key] = input.value;
+                                }
+                                syncToRaw();
+                            });
+                            cell.appendChild(input);
+                            grid.appendChild(cell);
+                        });
+                        card.appendChild(grid);
+                        var jsonLabel = document.createElement('label');
+                        jsonLabel.textContent = 'extra JSON';
+                        card.appendChild(jsonLabel);
+                        var extra = document.createElement('textarea');
+                        extra.className = 'af-kb-plain-textarea';
+                        extra.setAttribute('data-af-kb-editor-policy', 'deny');
+                        var extraObj = {};
+                        Object.keys(row).forEach(function (k) {
+                            if (!columns.some(function (c) { return c.key === k; })) extraObj[k] = row[k];
+                        });
+                        extra.value = JSON.stringify(extraObj, null, 2);
+                        extra.addEventListener('input', function () {
+                            var parsed = parseJsonSafe(extra.value, null);
+                            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+                            var next = {};
+                            columns.forEach(function (c) { if (row[c.key] != null && row[c.key] !== '') next[c.key] = row[c.key]; });
+                            Object.keys(parsed).forEach(function (k) { next[k] = parsed[k]; });
+                            arr[idx] = next;
+                            syncToRaw();
+                        });
+                        card.appendChild(extra);
+                        var rm = document.createElement('button');
+                        rm.type = 'button';
+                        rm.className = 'af-kb-remove';
+                        rm.textContent = 'Удалить';
+                        rm.addEventListener('click', function () {
+                            arr.splice(idx, 1);
+                            redraw();
+                            syncToRaw();
+                        });
+                        card.appendChild(rm);
+                        list.appendChild(card);
+                    });
+                }
+                add.addEventListener('click', function () {
+                    getArr().push({});
+                    redraw();
+                    syncToRaw();
+                });
+                redraw();
+            }
+
+            env.innerHTML = [
+                '<div class="af-kb-row"><div><label>Schema</label><input type="text" id="af-arpg-schema" readonly="readonly" /></div><div><label>Mechanic</label><input type="text" id="af-arpg-mechanic" readonly="readonly" /></div><div><label>Entity kind</label><input type="text" id="af-arpg-kind" readonly="readonly" /></div></div>',
+                '<div class="af-kb-row"><div><label>Subtype</label><input type="text" id="af-arpg-subtype" /></div><div><label>Category</label><input type="text" id="af-arpg-category" /></div><div><label>Tags (csv)</label><input type="text" id="af-arpg-tags" /></div></div>',
+                '<div class="af-kb-row"><div><label><input type="checkbox" id="af-arpg-vis-catalog" /> visibility.catalog</label></div><div><label><input type="checkbox" id="af-arpg-vis-search" /> visibility.search</label></div><div><label><input type="checkbox" id="af-arpg-vis-internal" /> visibility.internal</label></div></div>',
+                '<div class="af-kb-row"><div><label>meta.rules.schema</label><input type="text" id="af-arpg-rules-schema" /></div><div><label>meta.rules.profile_ref</label><input type="text" id="af-arpg-profile-ref" placeholder="mechanic_profile:arpg_core_v1" /></div><div><label>meta.rules.version</label><input type="number" id="af-arpg-rules-version" /></div></div>',
+                '<div class="af-kb-row"><div><label>meta.rules.compat_flags (csv)</label><input type="text" id="af-arpg-compat" /></div><div><label>meta.source.origin</label><input type="text" id="af-arpg-source-origin" placeholder="canon|oc|hybrid" /></div><div><label>meta.source.source_ref</label><input type="text" id="af-arpg-source-ref" /></div></div>',
+                '<div class="af-kb-row"><div><label>meta.ui.icon</label><input type="text" id="af-arpg-ui-icon" /></div><div><label>meta.ui.color</label><input type="text" id="af-arpg-ui-color" /></div><div><label>meta.ui.title/label</label><input type="text" id="af-arpg-ui-title" /></div></div>',
+                '<div class="af-kb-row"><div><label>meta.ui.summary</label><textarea id="af-arpg-ui-summary" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>'
+            ].join('');
+
+            var envFields = {
+                schema: env.querySelector('#af-arpg-schema'), mechanic: env.querySelector('#af-arpg-mechanic'), kind: env.querySelector('#af-arpg-kind'),
+                subtype: env.querySelector('#af-arpg-subtype'), category: env.querySelector('#af-arpg-category'), tags: env.querySelector('#af-arpg-tags'),
+                visCatalog: env.querySelector('#af-arpg-vis-catalog'), visSearch: env.querySelector('#af-arpg-vis-search'), visInternal: env.querySelector('#af-arpg-vis-internal'),
+                rulesSchema: env.querySelector('#af-arpg-rules-schema'), profileRef: env.querySelector('#af-arpg-profile-ref'), rulesVersion: env.querySelector('#af-arpg-rules-version'), compat: env.querySelector('#af-arpg-compat'),
+                sourceOrigin: env.querySelector('#af-arpg-source-origin'), sourceRef: env.querySelector('#af-arpg-source-ref'),
+                uiIcon: env.querySelector('#af-arpg-ui-icon'), uiColor: env.querySelector('#af-arpg-ui-color'), uiTitle: env.querySelector('#af-arpg-ui-title'), uiSummary: env.querySelector('#af-arpg-ui-summary')
             };
 
-            fields.schema.value = 'af_kb.arpg.rules.v1';
-            fields.typeProfile.value = type || 'arpg';
-            fields.origin.value = String((payload.classification.origin || payload.classification.race || '') || '');
-            fields.archetype.value = String((payload.classification.archetype || payload.classification.role || '') || '');
-            fields.path.value = String(((payload.classification.path || '') + (payload.classification.faction ? ' | ' + payload.classification.faction : '')).trim());
-            fields.resources.value = JSON.stringify({ resources: payload.resources || [], scaling: payload.scaling || [] }, null, 2);
-            fields.talents.value = JSON.stringify(payload.talents || [], null, 2);
-            fields.items.value = JSON.stringify(payload.items || [], null, 2);
-            fields.abilities.value = JSON.stringify((payload.abilities && typeof payload.abilities === 'object') ? payload.abilities : { active: [], passive: [] }, null, 2);
-            fields.mechanics.value = JSON.stringify((payload.mechanics && typeof payload.mechanics === 'object') ? payload.mechanics : {}, null, 2);
-            fields.mods.value = JSON.stringify({ modifiers: payload.modifiers || [], statuses: payload.statuses || [] }, null, 2);
-            fields.tags.value = Array.isArray(payload.tags) ? payload.tags.join(', ') : '';
+            envFields.schema.value = payload.schema;
+            envFields.mechanic.value = payload.mechanic;
+            envFields.kind.value = payload.entity_kind;
+            envFields.subtype.value = payload.subtype || '';
+            envFields.category.value = payload.category || '';
+            envFields.tags.value = payload.tags.join(', ');
+            envFields.visCatalog.checked = !!payload.visibility.catalog;
+            envFields.visSearch.checked = !!payload.visibility.search;
+            envFields.visInternal.checked = !!payload.visibility.internal;
+            envFields.rulesSchema.value = payload.meta.rules.schema || 'af_kb.arpg.rules.v1';
+            envFields.profileRef.value = payload.meta.rules.profile_ref || '';
+            envFields.rulesVersion.value = String(numberOrZero(payload.meta.rules.version || 1));
+            envFields.compat.value = Array.isArray(payload.meta.rules.compat_flags) ? payload.meta.rules.compat_flags.join(', ') : '';
+            envFields.sourceOrigin.value = payload.meta.source.origin || '';
+            envFields.sourceRef.value = payload.meta.source.source_ref || payload.meta.source.ref || '';
+            envFields.uiIcon.value = payload.meta.ui.icon || '';
+            envFields.uiColor.value = payload.meta.ui.color || '';
+            envFields.uiTitle.value = payload.meta.ui.title || payload.meta.ui.label || '';
+            envFields.uiSummary.value = payload.meta.ui.summary || '';
 
-            function parseJsonSafe(text, fallback) {
-                try {
-                    var parsed = JSON.parse(text);
-                    return parsed;
-                } catch (e) {
-                    return fallback;
+            Object.keys(envFields).forEach(function (k) {
+                if (['schema', 'mechanic', 'kind'].indexOf(k) !== -1) return;
+                var node = envFields[k];
+                if (!node) return;
+                var evt = node.type === 'checkbox' ? 'change' : 'input';
+                node.addEventListener(evt, function () {
+                    payload.subtype = envFields.subtype.value.trim();
+                    payload.category = envFields.category.value.trim();
+                    payload.tags = splitCsv(envFields.tags.value);
+                    payload.visibility.catalog = isService ? false : !!envFields.visCatalog.checked;
+                    payload.visibility.search = isService ? false : !!envFields.visSearch.checked;
+                    payload.visibility.internal = isService ? true : !!envFields.visInternal.checked;
+                    payload.meta.rules.schema = envFields.rulesSchema.value.trim() || 'af_kb.arpg.rules.v1';
+                    payload.meta.rules.profile_ref = envFields.profileRef.value.trim();
+                    payload.meta.rules.version = numberOrZero(envFields.rulesVersion.value) || 1;
+                    payload.meta.rules.compat_flags = splitCsv(envFields.compat.value);
+                    payload.meta.source.origin = envFields.sourceOrigin.value.trim();
+                    payload.meta.source.source_ref = envFields.sourceRef.value.trim();
+                    payload.meta.ui.icon = envFields.uiIcon.value.trim();
+                    payload.meta.ui.color = envFields.uiColor.value.trim();
+                    payload.meta.ui.title = envFields.uiTitle.value.trim();
+                    payload.meta.ui.label = envFields.uiTitle.value.trim();
+                    payload.meta.ui.summary = envFields.uiSummary.value.trim();
+                    syncToRaw();
+                });
+            });
+
+            function renderPublicEntity() {
+                var kind = payload.entity_kind;
+                if (kind === 'ability') {
+                    if (!data.ability || typeof data.ability !== 'object') data.ability = {};
+                    entity.insertAdjacentHTML('beforeend', '<div class="af-kb-row"><div><label>slot</label><input id="af-arpg-ability-slot" type="text" /></div><div><label>damage_type</label><input id="af-arpg-ability-dmg" type="text" /></div><div><label>targeting</label><input id="af-arpg-ability-target" type="text" /></div></div>');
+                    var slot = entity.querySelector('#af-arpg-ability-slot');
+                    var dmg = entity.querySelector('#af-arpg-ability-dmg');
+                    var trg = entity.querySelector('#af-arpg-ability-target');
+                    slot.value = data.ability.slot || '';
+                    dmg.value = data.ability.damage_type || '';
+                    trg.value = data.ability.targeting || '';
+                    [slot, dmg, trg].forEach(function (node) {
+                        node.addEventListener('input', function () {
+                            data.ability.slot = slot.value.trim();
+                            data.ability.damage_type = dmg.value.trim();
+                            data.ability.targeting = trg.value.trim();
+                            syncToRaw();
+                        });
+                    });
+                    renderArrayEditor(entity, 'requirements', ['data_json', 'data', 'requirements'], [{ key: 'type', label: 'type' }, { key: 'key', label: 'key/ref' }]);
+                    renderArrayEditor(entity, 'costs', ['data_json', 'data', 'costs'], [{ key: 'resource', label: 'resource' }, { key: 'amount', label: 'amount', type: 'number' }]);
+                    renderArrayEditor(entity, 'effects', ['data_json', 'data', 'effects'], [{ key: 'kind', label: 'kind' }, { key: 'formula_ref', label: 'formula_ref' }, { key: 'status_ref', label: 'status_ref' }]);
+                    renderArrayEditor(entity, 'modifiers', ['data_json', 'data', 'modifiers'], [{ key: 'stat', label: 'stat' }, { key: 'mode', label: 'mode' }, { key: 'value', label: 'value', type: 'number' }]);
+                    renderArrayEditor(entity, 'resources', ['data_json', 'data', 'resources'], [{ key: 'resource', label: 'resource' }, { key: 'value', label: 'value', type: 'number' }]);
+                    renderArrayEditor(entity, 'scaling', ['data_json', 'data', 'scaling'], [{ key: 'table_ref', label: 'table_ref' }, { key: 'stat', label: 'stat' }, { key: 'ratio', label: 'ratio', type: 'number' }]);
+                    renderArrayEditor(entity, 'triggers', ['data_json', 'data', 'triggers'], [{ key: 'template_ref', label: 'template_ref' }, { key: 'event', label: 'event' }]);
+                    renderArrayEditor(entity, 'conditions', ['data_json', 'data', 'conditions'], [{ key: 'template_ref', label: 'template_ref' }, { key: 'kind', label: 'kind' }]);
+                } else if (kind === 'talent') {
+                    if (!data.talent || typeof data.talent !== 'object') data.talent = {};
+                    entity.insertAdjacentHTML('beforeend', '<div class="af-kb-row"><div><label>tree</label><input id="af-arpg-talent-tree" type="text" /></div><div><label>tier</label><input id="af-arpg-talent-tier" type="number" /></div><div><label>max_rank</label><input id="af-arpg-talent-rank" type="number" /></div></div><div class="af-kb-row"><div><label>node_position</label><input id="af-arpg-talent-node" type="text" /></div></div>');
+                    var tree = entity.querySelector('#af-arpg-talent-tree');
+                    var tier = entity.querySelector('#af-arpg-talent-tier');
+                    var mr = entity.querySelector('#af-arpg-talent-rank');
+                    var np = entity.querySelector('#af-arpg-talent-node');
+                    tree.value = data.talent.tree || '';
+                    tier.value = String(numberOrZero(data.talent.tier || 0));
+                    mr.value = String(numberOrZero(data.talent.max_rank || 1));
+                    np.value = data.node_position || '';
+                    [tree, tier, mr, np].forEach(function (n) { n.addEventListener('input', function () { data.talent.tree = tree.value.trim(); data.talent.tier = numberOrZero(tier.value); data.talent.max_rank = numberOrZero(mr.value); data.node_position = np.value.trim(); syncToRaw(); }); });
+                    renderArrayEditor(entity, 'rank_effects', ['data_json', 'data', 'rank_effects'], [{ key: 'rank', label: 'rank', type: 'number' }, { key: 'kind', label: 'kind' }]);
+                    renderArrayEditor(entity, 'requires', ['data_json', 'data', 'requires'], [{ key: 'type', label: 'type' }, { key: 'key', label: 'key' }]);
+                    renderArrayEditor(entity, 'mutual_exclusive_with', ['data_json', 'data', 'mutual_exclusive_with'], [{ key: 'ref', label: 'ref' }]);
+                } else if (kind === 'item') {
+                    if (!data.item || typeof data.item !== 'object') data.item = {};
+                    entity.insertAdjacentHTML('beforeend', '<div class="af-kb-row"><div><label>item_kind</label><input id="af-arpg-item-kind" type="text" /></div><div><label>equip_slot</label><input id="af-arpg-item-slot" type="text" /></div><div><label>rarity</label><input id="af-arpg-item-rarity" type="text" /></div></div><div class="af-kb-row"><div><label>level min</label><input id="af-arpg-item-lmin" type="number" /></div><div><label>level max</label><input id="af-arpg-item-lmax" type="number" /></div><div><label>durability</label><input id="af-arpg-item-dur" type="number" /></div></div>');
+                    var ik = entity.querySelector('#af-arpg-item-kind'), es = entity.querySelector('#af-arpg-item-slot'), ir = entity.querySelector('#af-arpg-item-rarity'), lmin = entity.querySelector('#af-arpg-item-lmin'), lmax = entity.querySelector('#af-arpg-item-lmax'), dur = entity.querySelector('#af-arpg-item-dur');
+                    ik.value = data.item.item_kind || ''; es.value = data.item.equip_slot || ''; ir.value = data.item.rarity || ''; lmin.value = String(numberOrZero(((data.item.level_range||{}).min)||0)); lmax.value = String(numberOrZero(((data.item.level_range||{}).max)||0)); dur.value = String(numberOrZero(data.durability || 0));
+                    [ik, es, ir, lmin, lmax, dur].forEach(function (n) { n.addEventListener('input', function () { if (!data.item.level_range || typeof data.item.level_range !== 'object') data.item.level_range = {}; data.item.item_kind = ik.value.trim(); data.item.equip_slot = es.value.trim(); data.item.rarity = ir.value.trim(); data.item.level_range.min = numberOrZero(lmin.value); data.item.level_range.max = numberOrZero(lmax.value); data.durability = numberOrZero(dur.value); syncToRaw(); }); });
+                    renderArrayEditor(entity, 'requirements', ['data_json', 'data', 'requirements'], [{ key: 'type', label: 'type' }, { key: 'key', label: 'key' }]);
+                    renderArrayEditor(entity, 'modifiers', ['data_json', 'data', 'modifiers'], [{ key: 'stat', label: 'stat' }, { key: 'mode', label: 'mode' }, { key: 'value', label: 'value', type: 'number' }]);
+                    renderArrayEditor(entity, 'effects', ['data_json', 'data', 'effects'], [{ key: 'kind', label: 'kind' }, { key: 'ability_ref', label: 'ability_ref' }]);
+                    renderArrayEditor(entity, 'grants', ['data_json', 'data', 'grants'], [{ key: 'kind', label: 'kind' }, { key: 'value', label: 'value/ref' }]);
+                    renderArrayEditor(entity, 'scaling', ['data_json', 'data', 'scaling'], [{ key: 'table_ref', label: 'table_ref' }, { key: 'stat', label: 'stat' }]);
+                    renderArrayEditor(entity, 'passive_ability_refs', ['data_json', 'data', 'passive_ability_refs'], [{ key: 'ref', label: 'ability ref' }]);
+                    renderArrayEditor(entity, 'upgrade_paths', ['data_json', 'data', 'upgrade_paths'], [{ key: 'to_ref', label: 'to_ref' }, { key: 'cost_ref', label: 'cost_ref' }]);
+                } else if (kind === 'origin' || kind === 'archetype' || kind === 'faction' || kind === 'lore') {
+                    var hints = {
+                        origin: ['starting_modifiers', 'starting_resources', 'requirements', 'grants', 'effects', 'lore_hooks'],
+                        archetype: ['role_tags', 'grants', 'stat_scaling_hooks', 'talent_branches', 'ability_slot_rules', 'resource_affinity', 'equipment_affinity'],
+                        faction: ['standing_rules', 'requirements', 'vendor_access', 'story_access', 'faction_modifiers'],
+                        lore: ['content_blocks', 'linked_entities', 'timeline', 'source']
+                    };
+                    entity.insertAdjacentHTML('beforeend', '<div class="af-kb-help">Ключевые поля для ' + esc(kind) + ': ' + esc(hints[kind].join(', ')) + '.</div>');
+                    hints[kind].forEach(function (k) {
+                        renderArrayEditor(entity, k, ['data_json', 'data', k], [{ key: 'kind', label: 'kind/type' }, { key: 'value', label: 'value/ref' }]);
+                    });
                 }
             }
 
-            function syncArpgToRaw() {
-                var next = readJson(getFieldValue(raw) || '{}', {});
-                if (!next || typeof next !== 'object') next = {};
-                next.schema = 'af_kb.arpg.rules.v1';
-                next.type_profile = type || 'arpg';
-                next.version = String(next.version || '1.0');
-
-                var pathBits = String(fields.path.value || '').split('|');
-                next.classification = {
-                    origin: String(fields.origin.value || '').trim(),
-                    race: String(fields.origin.value || '').trim(),
-                    archetype: String(fields.archetype.value || '').trim(),
-                    role: String(fields.archetype.value || '').trim(),
-                    path: String((pathBits[0] || '')).trim(),
-                    faction: String((pathBits[1] || '')).trim()
-                };
-
-                var resourcesPayload = parseJsonSafe(fields.resources.value, { resources: [], scaling: [] });
-                next.resources = Array.isArray(resourcesPayload.resources) ? resourcesPayload.resources : [];
-                next.scaling = Array.isArray(resourcesPayload.scaling) ? resourcesPayload.scaling : [];
-                next.talents = parseJsonSafe(fields.talents.value, []);
-                next.items = parseJsonSafe(fields.items.value, []);
-                next.abilities = parseJsonSafe(fields.abilities.value, { active: [], passive: [], ultimate: [], support: [], technique: [], aura: [], toggle: [] });
-                next.mechanics = parseJsonSafe(fields.mechanics.value, {});
-                var modsPayload = parseJsonSafe(fields.mods.value, { modifiers: [], statuses: [] });
-                next.modifiers = Array.isArray(modsPayload.modifiers) ? modsPayload.modifiers : [];
-                next.statuses = Array.isArray(modsPayload.statuses) ? modsPayload.statuses : [];
-                next.tags = splitCsv(fields.tags.value);
-
-                raw.value = JSON.stringify(next, null, 2);
-                syncRulesToMeta(next);
+            function renderServiceEntity() {
+                var kind = payload.entity_kind;
+                if (kind === 'mechanic_profile') {
+                    renderArrayEditor(entity, 'stats registry', ['data_json', 'data', 'stats'], [{ key: 'key', label: 'key' }, { key: 'label', label: 'label' }, { key: 'mode', label: 'mode' }]);
+                    renderArrayEditor(entity, 'resources refs', ['data_json', 'data', 'resources'], [{ key: 'ref', label: 'resource ref' }]);
+                    renderArrayEditor(entity, 'statuses refs', ['data_json', 'data', 'statuses'], [{ key: 'ref', label: 'status ref' }]);
+                    renderArrayEditor(entity, 'template registry', ['data_json', 'data', 'template_registry', 'modifier_templates'], [{ key: 'ref', label: 'modifier template ref' }]);
+                    renderArrayEditor(entity, 'trigger templates', ['data_json', 'data', 'template_registry', 'trigger_templates'], [{ key: 'ref', label: 'trigger template ref' }]);
+                    renderArrayEditor(entity, 'condition templates', ['data_json', 'data', 'template_registry', 'condition_templates'], [{ key: 'ref', label: 'condition template ref' }]);
+                } else if (kind === 'resource_def') {
+                    entity.insertAdjacentHTML('beforeend', '<div class="af-kb-row"><div><label>key</label><input id="af-arpg-res-key" type="text" /></div><div><label>label</label><input id="af-arpg-res-label" type="text" /></div><div><label>kind</label><input id="af-arpg-res-kind" type="text" /></div></div><div class="af-kb-row"><div><label>min</label><input id="af-arpg-res-min" type="number" /></div><div><label>max</label><input id="af-arpg-res-max" type="number" /></div><div><label>regen</label><input id="af-arpg-res-regen" type="number" /></div></div>');
+                    var rk = entity.querySelector('#af-arpg-res-key'), rl = entity.querySelector('#af-arpg-res-label'), rkind = entity.querySelector('#af-arpg-res-kind'), rmin = entity.querySelector('#af-arpg-res-min'), rmax = entity.querySelector('#af-arpg-res-max'), rreg = entity.querySelector('#af-arpg-res-regen');
+                    rk.value = data.key || ''; rl.value = data.label || ''; rkind.value = data.kind || ''; rmin.value = String(numberOrZero(data.min || 0)); rmax.value = String(numberOrZero(data.max || 0)); rreg.value = String(numberOrZero(data.regen || 0));
+                    [rk, rl, rkind, rmin, rmax, rreg].forEach(function (n) { n.addEventListener('input', function () { data.key = rk.value.trim(); data.label = rl.value.trim(); data.kind = rkind.value.trim(); data.min = numberOrZero(rmin.value); data.max = numberOrZero(rmax.value); data.regen = numberOrZero(rreg.value); syncToRaw(); }); });
+                } else if (kind === 'status_def' || kind === 'modifier_template' || kind === 'formula_def' || kind === 'trigger_template' || kind === 'condition_template' || kind === 'scaling_table' || kind === 'combat_template' || kind === 'snippet') {
+                    entity.insertAdjacentHTML('beforeend', '<div class="af-kb-help">Structured editor for service entity. Core fields + params.</div>');
+                    renderArrayEditor(entity, 'entries', ['data_json', 'data', 'entries'], [{ key: 'key', label: 'key' }, { key: 'kind', label: 'kind/event' }, { key: 'label', label: 'label' }, { key: 'ref', label: 'ref' }]);
+                }
             }
 
-            Object.keys(fields).forEach(function (key) {
-                if (fields[key]) {
-                    fields[key].addEventListener('input', syncArpgToRaw);
-                    fields[key].addEventListener('change', syncArpgToRaw);
+            if (isService) renderServiceEntity(); else renderPublicEntity();
+
+            advanced.innerHTML = '<label>data_json.blocks (JSON)</label><textarea id="af-arpg-blocks" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea>';
+            var blocksField = advanced.querySelector('#af-arpg-blocks');
+            blocksField.value = JSON.stringify(payload.data_json.blocks || [], null, 2);
+            blocksField.addEventListener('input', function () {
+                var parsed = parseJsonSafe(blocksField.value, payload.data_json.blocks || []);
+                if (Array.isArray(parsed)) {
+                    payload.data_json.blocks = parsed;
+                    syncToRaw();
                 }
             });
-            syncArpgToRaw();
+
+            syncToRaw();
         }
 
         if (mechanic === 'arpg') {
