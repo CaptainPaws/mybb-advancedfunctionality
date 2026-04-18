@@ -103,6 +103,8 @@ return [
                 'af_kb_nav_link_enabled_desc'         => 'Показывать ссылку базы знаний в верхнем меню.',
                 'af_kb_categories_ui_position'        => 'KB categories UI position',
                 'af_kb_categories_ui_position_desc'   => 'Sidebar or top block for categories tree.',
+                'af_kb_default_mechanic_mode'         => 'KB default mechanic mode',
+                'af_kb_default_mechanic_mode_desc'    => 'Предпочтительный/дефолтный mechanic mode для новых типов и будущего UI.',
             ],
         ],
         'english' => [
@@ -173,6 +175,8 @@ return [
                 'af_kb_nav_link_enabled_desc'         => 'Show Knowledge Base link in the top navigation.',
                 'af_kb_categories_ui_position'        => 'KB categories UI position',
                 'af_kb_categories_ui_position_desc'   => 'Sidebar or top block for categories tree.',
+                'af_kb_default_mechanic_mode'         => 'KB default mechanic mode',
+                'af_kb_default_mechanic_mode_desc'    => 'Preferred/default mechanic mode for new types and future UI.',
             ],
         ],
     ],
