@@ -1,15 +1,16 @@
 <section class="af-cs-arpg-panel af-cs-arpg-panel--identity">
-  <div class="af-cs-summary__title-row">
-    <h1><span class="af-cs-arpg-level-label">Ур. {$sheet_level_value}</span>{$sheet_title}</h1>
+  <div class="af-cs-arpg-identity-head">
+    <div class="af-cs-arpg-element">{$sheet_arpg_element}</div>
+    <h1>{$sheet_title}</h1>
+    <span class="af-cs-arpg-level-label">Ур. {$sheet_level_value}</span>
     <div class="af-cs-header-actions">{$sheet_header_actions_html}</div>
   </div>
-  <div class="af-cs-arpg-element">{$sheet_arpg_element}</div>
   <div class="af-cs-name-ru">
     <span class="af-cs-name-ru__main">{$sheet_name_ru}</span>
     <span class="af-cs-name-ru__nick">{$sheet_nicknames}</span>
   </div>
-  <div class="af-cs-arpg-hero__progress" data-afcs-block="progress">
-    {$sheet_progress_html}
+  <div class="af-cs-arpg-exp-wrap">
+    <div class="af-cs-arpg-exp-bar"><span style="width: {$sheet_level_percent}%"></span><strong>{$sheet_level_exp_label}</strong></div>
   </div>
   <div class="af-cs-arpg-wallet">
     <div class="af-cs-arpg-wallet-item"><span>Кредиты</span><strong>{$sheet_arpg_wallet_credits}</strong></div>

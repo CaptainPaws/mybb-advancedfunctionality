@@ -37,12 +37,7 @@
       </div>
       <div class="af-cs-tabs__content">
         <div class="af-cs-tab is-active" data-afcs-tab-content="arpg-main">
-          <section class="af-cs-arpg-panel">
-            <h2>Способности</h2>
-            <div class="af-cs-arpg-ability-grid">{$sheet_arpg_abilities_cards_html}</div>
-          </section>
-          {$sheet_arpg_weapon_block_html}
-          {$sheet_arpg_artifacts_block_html}
+          {$sheet_arpg_main_info_html}
         </div>
 
         <div class="af-cs-tab" data-afcs-tab-content="arpg-talents">
@@ -61,10 +56,7 @@
         </div>
 
         <div class="af-cs-tab" data-afcs-tab-content="arpg-equipment">
-          <section class="af-cs-arpg-panel">
-            <h2>Экипировка</h2>
-            <div data-afcs-block="equipment">{$sheet_equipment_html}</div>
-          </section>
+          <div data-afcs-block="equipment">{$sheet_equipment_html}</div>
         </div>
 
         <div class="af-cs-tab" data-afcs-tab-content="arpg-achievements">

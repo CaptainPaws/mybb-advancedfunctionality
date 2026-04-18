@@ -675,6 +675,7 @@
         initAbilitiesUI();
         initAugmentationUI();
         initEquipmentPreviewUI();
+        initArpgUI();
       }
 
       function initAbilitiesUI() {
@@ -1231,6 +1232,53 @@
             }
           } catch (err) {}
         }
+      }
+
+      function initArpgUI() {
+        var arpgEquipmentRoot = sheet.querySelector('[data-afcs-arpg-equipment-root]');
+        if (arpgEquipmentRoot && !arpgEquipmentRoot.__afArpgBound) {
+          arpgEquipmentRoot.__afArpgBound = true;
+          var canEdit = arpgEquipmentRoot.getAttribute('data-afcs-equipment-can-edit') === '1';
+          var managePanel = arpgEquipmentRoot.querySelector('[data-afcs-arpg-equip-manage]');
+          var toggle = arpgEquipmentRoot.querySelector('[data-afcs-arpg-edit-toggle]');
+          var setEditMode = function (isOn) {
+            arpgEquipmentRoot.classList.toggle('is-editing', !!isOn);
+            arpgEquipmentRoot.setAttribute('data-afcs-arpg-edit', isOn ? '1' : '0');
+            if (managePanel) managePanel.hidden = !isOn;
+          };
+          setEditMode(false);
+          if (toggle && canEdit) {
+            toggle.addEventListener('click', function () {
+              var next = arpgEquipmentRoot.getAttribute('data-afcs-arpg-edit') !== '1';
+              setEditMode(next);
+            });
+          }
+        }
+
+        sheet.querySelectorAll('[data-afcs-arpg-flip]').forEach(function (btn) {
+          if (btn.__afArpgFlipBound) return;
+          btn.__afArpgFlipBound = true;
+          btn.addEventListener('click', function (event) {
+            event.preventDefault();
+            var card = btn.closest('.af-cs-arpg-equip-card');
+            if (!card) return;
+            card.classList.toggle('is-flipped');
+          });
+        });
+
+        sheet.querySelectorAll('[data-afcs-arpg-talent-tree]').forEach(function (tree) {
+          if (tree.__afArpgTalentBound) return;
+          tree.__afArpgTalentBound = true;
+          var canEditTalents = tree.getAttribute('data-afcs-arpg-can-edit') === '1';
+          tree.querySelectorAll('[data-afcs-arpg-talent-node]').forEach(function (node) {
+            node.addEventListener('click', function () {
+              if (node.classList.contains('is-owned')) return;
+              if (!canEditTalents) return;
+              if (!window.confirm('Установить купленный талант в этот узел?')) return;
+              node.classList.add('is-owned');
+            });
+          });
+        });
       }
 
       function initAugmentationUI() {
@@ -1982,6 +2030,7 @@
       if (typeof initInventoryUI === 'function') initInventoryUI(sheet);
       initAugmentationUI();
       initEquipmentPreviewUI();
+      initArpgUI();
     })();
   });
 })();

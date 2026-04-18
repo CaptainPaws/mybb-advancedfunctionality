@@ -2713,8 +2713,8 @@
 
 .af-cs-arpg-top__right {
   display: grid;
-  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
-  gap: 12px;
+  grid-template-columns: 1fr;
+  gap: 10px;
 }
 
 .af-cs-arpg-panel h2 {
@@ -2723,12 +2723,11 @@
 
 .af-cs-arpg-level-label {
   display: inline-flex;
-  margin-right: 10px;
   padding: 2px 8px;
   border-radius: 999px;
   background: rgba(224, 190, 111, 0.25);
   font-size: 12px;
-  vertical-align: middle;
+  white-space: nowrap;
 }
 
 .af-cs-arpg-element {
@@ -2847,6 +2846,104 @@
   padding: 14px;
   background: rgba(0, 0, 0, 0.14);
 }
+
+.af-cs-arpg-identity-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.af-cs-arpg-identity-head h1 {
+  margin: 0;
+  font-size: 26px;
+}
+
+.af-cs-arpg-exp-wrap { margin-top: 10px; }
+
+.af-cs-arpg-exp-bar {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(17, 6, 6, 0.8);
+  min-height: 28px;
+}
+
+.af-cs-arpg-exp-bar > span {
+  display: block;
+  height: 100%;
+  min-height: 28px;
+  background: linear-gradient(90deg, rgba(242, 150, 82, 0.72), rgba(248, 221, 99, 0.68));
+}
+
+.af-cs-arpg-exp-bar > strong {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+}
+
+.af-cs-arpg-main-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.af-cs-arpg-main-item {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.af-cs-arpg-main-item span { font-size: 12px; opacity: .8; display: block; }
+.af-cs-arpg-main-item strong { font-size: 15px; }
+
+.af-cs-arpg-talent-tree {
+  position: relative;
+  min-height: 280px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.05), rgba(0,0,0,.24));
+}
+
+.af-cs-arpg-talent-edge {
+  position: absolute;
+  height: 2px;
+  border-top: 2px solid rgba(242, 177, 120, 0.55);
+  transform-origin: left center;
+  pointer-events: none;
+}
+
+.af-cs-arpg-talent-node {
+  position: absolute;
+  width: 92px;
+  height: 36px;
+  margin-left: -46px;
+  margin-top: -18px;
+  border: 1px solid rgba(255,255,255,0.3);
+  background: rgba(30, 10, 10, 0.86);
+  color: #fff;
+  border-radius: 8px;
+}
+
+.af-cs-arpg-talent-node.is-owned { border-color: #f1cb76; box-shadow: 0 0 0 1px rgba(241,203,118,.5) inset; }
+
+.af-cs-arpg-equip-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.af-cs-arpg-equip-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 10px; }
+
+.af-cs-arpg-equip-card { perspective: 900px; border:1px solid rgba(255,255,255,.14); border-radius:10px; background:rgba(0,0,0,.16); padding:10px; }
+.af-cs-arpg-equip-card__inner { position:relative; min-height:220px; transform-style:preserve-3d; transition:transform .35s ease; }
+.af-cs-arpg-equip-card.is-flipped .af-cs-arpg-equip-card__inner { transform: rotateY(180deg); }
+.af-cs-arpg-equip-card__face { position:absolute; inset:0; backface-visibility:hidden; display:grid; align-content:start; gap:8px; }
+.af-cs-arpg-equip-card__face--back { transform: rotateY(180deg); }
+.af-cs-arpg-equip-card__face img { width:100%; max-height:120px; object-fit:cover; border-radius:8px; }
+.af-cs-arpg-equip-card__desc { max-height:130px; overflow:auto; font-size:13px; opacity:.92; }
+.af-cs-arpg-equip-card__actions { display:none; margin-top:8px; gap:8px; align-items:center; flex-wrap:wrap; }
+.af-cs-arpg-equipment.is-editing .af-cs-arpg-equip-card__actions { display:flex; }
+.af-cs-arpg-equip-card h4 { margin:0; }
 
 @media (max-width: 980px) {
   .af-cs-arpg-top,
