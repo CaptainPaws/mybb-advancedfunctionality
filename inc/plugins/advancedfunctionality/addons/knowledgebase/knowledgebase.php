@@ -25,6 +25,7 @@ define('AF_KB_PERPAGE', 20);
 define('AF_KB_REL_RACE_HAS_VARIANT', 'race_has_variant');
 define('AF_KB_TYPE_RACE', 'race');
 define('AF_KB_TYPE_RACE_VARIANT', 'race_variant');
+define('AF_KB_DEFAULT_MECHANIC_KEY', 'dnd');
 
 function af_kb_default_type_definitions(): array
 {
@@ -449,6 +450,7 @@ function af_knowledgebase_install(): bool
 CREATE TABLE {TABLE_PREFIX}af_kb_types (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   type VARCHAR(64) NOT NULL UNIQUE,
+  mechanic_key VARCHAR(32) NOT NULL DEFAULT 'dnd',
   title_ru VARCHAR(255) NOT NULL DEFAULT '',
   title_en VARCHAR(255) NOT NULL DEFAULT '',
   short_ru TEXT NOT NULL,
@@ -933,6 +935,14 @@ function af_kb_ensure_schema(): void
             $db->add_column('af_kb_types', 'type_key', "VARCHAR(64) NOT NULL DEFAULT ''");
             $db->write_query("UPDATE ".TABLE_PREFIX."af_kb_types SET type_key=type WHERE type_key=''");
         }
+        if (!$db->field_exists('mechanic_key', 'af_kb_types')) {
+            $db->add_column('af_kb_types', 'mechanic_key', "VARCHAR(32) NOT NULL DEFAULT '" . AF_KB_DEFAULT_MECHANIC_KEY . "'");
+        }
+        $db->write_query(
+            "UPDATE " . TABLE_PREFIX . "af_kb_types"
+            . " SET mechanic_key='" . $db->escape_string(AF_KB_DEFAULT_MECHANIC_KEY) . "'"
+            . " WHERE mechanic_key IS NULL OR mechanic_key=''"
+        );
         if (!$db->field_exists('desc_ru', 'af_kb_types')) {
             $db->add_column('af_kb_types', 'desc_ru', "TEXT NULL");
         }
@@ -1172,6 +1182,7 @@ function af_kb_seed_defaults(): void
             $db->insert_query('af_kb_types', [
                 'type' => $db->escape_string($defaultRow['type_key']),
                 'type_key' => $db->escape_string($defaultRow['type_key']),
+                'mechanic_key' => $db->escape_string(AF_KB_DEFAULT_MECHANIC_KEY),
                 'title_ru' => $db->escape_string($defaultRow['title_ru']),
                 'title_en' => $db->escape_string($defaultRow['title_en']),
                 'short_ru' => '',
@@ -1194,6 +1205,9 @@ function af_kb_seed_defaults(): void
 
         if ((string)($existing['type_key'] ?? '') === '') {
             $update['type_key'] = $db->escape_string($defaultRow['type_key']);
+        }
+        if ((string)($existing['mechanic_key'] ?? '') === '') {
+            $update['mechanic_key'] = $db->escape_string(AF_KB_DEFAULT_MECHANIC_KEY);
         }
 
         $existingRulesSchema = trim((string)($existing['rules_schema'] ?? ''));
@@ -4461,6 +4475,54 @@ function af_kb_find_type_row(string $typeKey): ?array
     return $row ?: null;
 }
 
+function af_kb_normalize_mechanic_key(string $mechanicKey): string
+{
+    $normalized = strtolower(trim($mechanicKey));
+    return $normalized !== '' ? $normalized : AF_KB_DEFAULT_MECHANIC_KEY;
+}
+
+/**
+ * @param array|string $typeDefOrKey
+ */
+function af_kb_get_type_mechanic_key($typeDefOrKey): string
+{
+    $typeDef = null;
+    if (is_array($typeDefOrKey)) {
+        $typeDef = $typeDefOrKey;
+    } else {
+        $typeKey = trim((string)$typeDefOrKey);
+        if ($typeKey !== '') {
+            $typeDef = af_kb_find_type_row($typeKey);
+        }
+    }
+
+    $raw = '';
+    if (is_array($typeDef)) {
+        $raw = (string)($typeDef['mechanic_key'] ?? '');
+    }
+
+    return af_kb_normalize_mechanic_key($raw);
+}
+
+function af_kb_get_mechanic_profile(string $mechanicKey): array
+{
+    $normalized = af_kb_normalize_mechanic_key($mechanicKey);
+
+    if ($normalized === 'arpg') {
+        return [
+            'mechanic_key' => 'arpg',
+            'status' => 'stub',
+            'enabled' => false,
+        ];
+    }
+
+    return [
+        'mechanic_key' => AF_KB_DEFAULT_MECHANIC_KEY,
+        'status' => 'active',
+        'enabled' => true,
+    ];
+}
+
 function af_kb_find_item_kind_row(string $kindKey): ?array
 {
     global $db;
@@ -7120,6 +7182,7 @@ function af_kb_handle_type_edit(): void
 
         $titleRu = trim((string)$mybb->get_input('title_ru'));
         $titleEn = trim((string)$mybb->get_input('title_en'));
+        $mechanicKey = af_kb_normalize_mechanic_key((string)$mybb->get_input('mechanic_key'));
 
         // NEW: короткое описание (только для табов)
         $shortRu = trim((string)$mybb->get_input('short_ru'));
@@ -7154,6 +7217,7 @@ function af_kb_handle_type_edit(): void
         if (!$errors) {
             $data = [
                 'type'           => $db->escape_string($type),
+                'mechanic_key'   => $db->escape_string($mechanicKey),
                 'title_ru'       => $db->escape_string($titleRu),
                 'title_en'       => $db->escape_string($titleEn),
 
@@ -7189,6 +7253,7 @@ function af_kb_handle_type_edit(): void
 
     $typeRow = $typeRow ?: [
         'type'           => $type,
+        'mechanic_key'   => AF_KB_DEFAULT_MECHANIC_KEY,
         'title_ru'       => '',
         'title_en'       => '',
         'short_ru'       => '',
@@ -7215,6 +7280,7 @@ function af_kb_handle_type_edit(): void
 
     $kb_page_title = htmlspecialchars_uni($lang->af_kb_type_edit ?? 'Edit category');
     $kb_type_value = htmlspecialchars_uni($typeRow['type']);
+    $kb_type_mechanic_key = htmlspecialchars_uni(af_kb_get_type_mechanic_key($typeRow));
     $kb_type_title_ru = htmlspecialchars_uni($typeRow['title_ru']);
     $kb_type_title_en = htmlspecialchars_uni($typeRow['title_en']);
 
@@ -7610,6 +7676,7 @@ function af_kb_handle_json_types(): void
     while ($row = $db->fetch_array($q)) {
         $items[] = [
             'type' => $row['type'],
+            'mechanic_key' => af_kb_get_type_mechanic_key($row),
             'title' => af_kb_pick_text($row, 'title') ?: $row['type'],
             'icon_url' => $row['icon_url'],
             'icon_class' => $row['icon_class'],
