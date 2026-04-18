@@ -1928,30 +1928,15 @@ function af_kb_reorganize_arpg_entries_and_types(): void
         return;
     }
 
-    $entryMap = [
-        'arpg_ability_active' => ['new_type' => 'arpg_ability', 'service_kind' => ''],
-        'arpg_ability_passive' => ['new_type' => 'arpg_ability', 'service_kind' => ''],
-        'arpg_modifier' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'modifier_template'],
-        'arpg_status' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'status_def'],
-        'arpg_resource' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'resource_def'],
-        'arpg_mechanic_profile' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'mechanic_profile'],
-        'arpg_resource_def' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'resource_def'],
-        'arpg_status_def' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'status_def'],
-        'arpg_modifier_template' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'modifier_template'],
-        'arpg_formula_def' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'formula_def'],
-        'arpg_trigger_template' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'trigger_template'],
-        'arpg_condition_template' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'condition_template'],
-        'arpg_scaling_table' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'scaling_table'],
-        'arpg_combat_template' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'combat_template'],
-        'arpg_snippet' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'snippet'],
-    ];
+    $entryMap = af_kb_arpg_legacy_type_map();
 
     if ($db->table_exists('af_kb_entries')) {
         foreach ($entryMap as $oldType => $mapping) {
             $newType = (string)($mapping['new_type'] ?? '');
             $serviceKind = (string)($mapping['service_kind'] ?? '');
+            $forcedRuleType = (string)($mapping['forced_rule_type'] ?? '');
             $migratedIds = [];
-            if ($serviceKind !== '') {
+            if ($serviceKind !== '' || $forcedRuleType !== '') {
                 $idQuery = $db->simple_select('af_kb_entries', 'id', "type='".$db->escape_string($oldType)."'");
                 while ($idRow = $db->fetch_array($idQuery)) {
                     $migratedIds[] = (int)($idRow['id'] ?? 0);
@@ -1959,7 +1944,11 @@ function af_kb_reorganize_arpg_entries_and_types(): void
             }
             $db->update_query('af_kb_entries', ['type' => $db->escape_string($newType), 'updated_at' => TIME_NOW], "type='".$db->escape_string($oldType)."'");
 
-            if ($serviceKind === '' || empty($migratedIds)) {
+            if ($serviceKind === '' && $forcedRuleType === '') {
+                continue;
+            }
+
+            if (empty($migratedIds)) {
                 continue;
             }
 
@@ -1975,16 +1964,34 @@ function af_kb_reorganize_arpg_entries_and_types(): void
                 if (!is_array($normalized)) {
                     $normalized = af_kb_arpg_envelope_defaults($newType);
                 }
-                $normalized['rules']['service_kind'] = $serviceKind;
-                $normalized['rules']['type_profile'] = 'service_mechanics';
-                $normalized['rules']['category'] = 'service.mechanics';
-                $normalized['rules']['visibility'] = ['catalog' => false, 'search' => false, 'internal' => true];
-                if (!isset($normalized['rules']['entries']) || !is_array($normalized['rules']['entries'])) {
-                    $normalized['rules']['entries'] = [];
+                if ($serviceKind !== '') {
+                    $normalized['rules']['service_kind'] = $serviceKind;
+                    $normalized['rules']['type_profile'] = 'service_mechanics';
+                    $normalized['rules']['category'] = 'service.mechanics';
+                    $normalized['rules']['visibility'] = ['catalog' => false, 'search' => false, 'internal' => true];
+                    if (!isset($normalized['rules']['entries']) || !is_array($normalized['rules']['entries'])) {
+                        $normalized['rules']['entries'] = [];
+                    }
+                }
+                if ($forcedRuleType !== '' && $newType === 'arpg_ability') {
+                    $normalized['rules']['type'] = $forcedRuleType;
                 }
 
                 $db->update_query('af_kb_entries', [
                     'data_json' => $db->escape_string(json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}'),
+                    'updated_at' => TIME_NOW,
+                ], 'id='.(int)$row['id']);
+            }
+        }
+
+        $canonicalTypes = ['arpg_ability', 'arpg_talent', 'arpg_item', 'arpg_bestiary', 'arpg_mechanics'];
+        foreach ($canonicalTypes as $canonicalType) {
+            $query = $db->simple_select('af_kb_entries', 'id,data_json', "type='".$db->escape_string($canonicalType)."'");
+            while ($row = $db->fetch_array($query)) {
+                $legacyErrors = [];
+                $payload = af_kb_validate_rules_json_by_type_arpg($canonicalType, (string)($row['data_json'] ?? '{}'), $legacyErrors);
+                $db->update_query('af_kb_entries', [
+                    'data_json' => $db->escape_string($payload),
                     'updated_at' => TIME_NOW,
                 ], 'id='.(int)$row['id']);
             }
@@ -4267,41 +4274,7 @@ function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalized
         return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
     }
 
-    // Backward compatibility: old ARPG envelope and old flat payloads.
-    if (isset($rulesData['data_json']) && is_array($rulesData['data_json'])) {
-        $legacyMeta = (array)($rulesData['meta'] ?? []);
-        $legacyRules = (array)($legacyMeta['rules'] ?? []);
-        $legacyUi = (array)($legacyMeta['ui'] ?? []);
-        $legacyData = (array)($rulesData['data_json']['data'] ?? []);
-        $rulesData = [
-            'schema' => AF_KB_ARPG_META_SCHEMA,
-            'mechanic' => 'arpg',
-            'tags' => (array)($rulesData['tags'] ?? []),
-            'ui' => [
-                'icon_class' => (string)($legacyUi['icon_class'] ?? $legacyUi['icon'] ?? ''),
-                'icon_url' => (string)($legacyUi['icon_url'] ?? ''),
-                'background_url' => (string)($legacyUi['background_url'] ?? ''),
-                'background_tab_url' => (string)($legacyUi['background_tab_url'] ?? ''),
-            ],
-            'blocks' => (array)($rulesData['data_json']['blocks'] ?? []),
-            'rules' => array_replace_recursive(
-                ['schema' => AF_KB_ARPG_RULES_SCHEMA, 'type_profile' => (string)($typeDef['entity_kind'] ?? ''), 'version' => (string)($legacyRules['version'] ?? '1.0')],
-                $legacyData
-            ),
-        ];
-    } elseif (isset($rulesData['type_profile']) || isset($rulesData['mechanics']) || isset($rulesData['classification'])) {
-        $rulesData = [
-            'schema' => AF_KB_ARPG_META_SCHEMA,
-            'mechanic' => 'arpg',
-            'tags' => (array)($rulesData['tags'] ?? []),
-            'ui' => ['icon_class' => '', 'icon_url' => '', 'background_url' => '', 'background_tab_url' => ''],
-            'blocks' => [],
-            'rules' => array_replace_recursive(
-                ['schema' => AF_KB_ARPG_RULES_SCHEMA, 'type_profile' => (string)($typeDef['entity_kind'] ?? ''), 'version' => '1.0'],
-                $rulesData
-            ),
-        ];
-    }
+    $rulesData = af_kb_arpg_migrate_legacy_payload($type, $rulesData);
 
     $defaults = af_kb_arpg_envelope_defaults($type);
     $defaults['rules'] = array_replace_recursive((array)($defaults['rules'] ?? []), af_kb_default_type_profile_payload_arpg($type));
@@ -4323,6 +4296,232 @@ function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalized
     }
 
     return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+}
+
+function af_kb_arpg_legacy_type_map(): array
+{
+    return [
+        'arpg_ability_active' => ['new_type' => 'arpg_ability', 'service_kind' => '', 'forced_rule_type' => 'active'],
+        'arpg_ability_passive' => ['new_type' => 'arpg_ability', 'service_kind' => '', 'forced_rule_type' => 'passive'],
+        'arpg_modifier' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'modifier_template'],
+        'arpg_status' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'status_def'],
+        'arpg_resource' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'resource_def'],
+        'arpg_mechanic_profile' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'mechanic_profile'],
+        'arpg_resource_def' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'resource_def'],
+        'arpg_status_def' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'status_def'],
+        'arpg_modifier_template' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'modifier_template'],
+        'arpg_formula_def' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'formula_def'],
+        'arpg_trigger_template' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'trigger_template'],
+        'arpg_condition_template' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'condition_template'],
+        'arpg_scaling_table' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'scaling_table'],
+        'arpg_combat_template' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'combat_template'],
+        'arpg_snippet' => ['new_type' => 'arpg_mechanics', 'service_kind' => 'snippet'],
+    ];
+}
+
+function af_kb_arpg_migrate_legacy_payload(string $type, array $payload): array
+{
+    $typeDef = af_kb_arpg_type_definition($type);
+    $typeProfile = (string)($typeDef['entity_kind'] ?? '');
+    $isService = !empty($typeDef['service']);
+    $hasEnvelope = isset($payload['schema']) || isset($payload['rules']) || isset($payload['mechanic']);
+
+    if (!$hasEnvelope && isset($payload['meta']) && isset($payload['data_json'])) {
+        $legacyMeta = (array)($payload['meta'] ?? []);
+        $legacyMetaRules = (array)($legacyMeta['rules'] ?? []);
+        $legacyUi = (array)($legacyMeta['ui'] ?? []);
+        $legacyDataRoot = (array)($payload['data_json'] ?? []);
+        $legacyData = (array)($legacyDataRoot['data'] ?? $legacyDataRoot['rules'] ?? $legacyDataRoot);
+        $payload = [
+            'schema' => AF_KB_ARPG_META_SCHEMA,
+            'mechanic' => 'arpg',
+            'tags' => (array)($legacyMeta['tags'] ?? $payload['tags'] ?? []),
+            'ui' => [
+                'icon_class' => (string)($legacyUi['icon_class'] ?? $legacyUi['icon'] ?? ''),
+                'icon_url' => (string)($legacyUi['icon_url'] ?? ''),
+                'background_url' => (string)($legacyUi['background_url'] ?? ''),
+                'background_tab_url' => (string)($legacyUi['background_tab_url'] ?? ''),
+            ],
+            'blocks' => (array)($legacyDataRoot['blocks'] ?? $legacyMeta['blocks'] ?? []),
+            'rules' => array_replace_recursive(
+                ['schema' => AF_KB_ARPG_RULES_SCHEMA, 'type_profile' => $typeProfile, 'version' => (string)($legacyMetaRules['version'] ?? '1.0')],
+                $legacyData
+            ),
+        ];
+    } elseif (!$hasEnvelope || isset($payload['type_profile']) || isset($payload['mechanics']) || isset($payload['classification'])) {
+        $legacyUi = [];
+        if (isset($payload['ui']) && is_array($payload['ui'])) {
+            $legacyUi = (array)$payload['ui'];
+        } elseif (isset($payload['meta']['ui']) && is_array($payload['meta']['ui'])) {
+            $legacyUi = (array)$payload['meta']['ui'];
+        }
+
+        $legacyBlocks = [];
+        if (isset($payload['blocks']) && is_array($payload['blocks'])) {
+            $legacyBlocks = (array)$payload['blocks'];
+        } elseif (isset($payload['data_json']['blocks']) && is_array($payload['data_json']['blocks'])) {
+            $legacyBlocks = (array)$payload['data_json']['blocks'];
+        }
+
+        $legacyRules = (array)($payload['data'] ?? $payload['mechanics'] ?? $payload['classification'] ?? []);
+        $payload = [
+            'schema' => AF_KB_ARPG_META_SCHEMA,
+            'mechanic' => 'arpg',
+            'tags' => (array)($payload['tags'] ?? []),
+            'ui' => [
+                'icon_class' => (string)($legacyUi['icon_class'] ?? $legacyUi['icon'] ?? ''),
+                'icon_url' => (string)($legacyUi['icon_url'] ?? ''),
+                'background_url' => (string)($legacyUi['background_url'] ?? ''),
+                'background_tab_url' => (string)($legacyUi['background_tab_url'] ?? ''),
+            ],
+            'blocks' => $legacyBlocks,
+            'rules' => array_replace_recursive(
+                ['schema' => AF_KB_ARPG_RULES_SCHEMA, 'type_profile' => $typeProfile, 'version' => '1.0'],
+                $payload,
+                $legacyRules
+            ),
+        ];
+    }
+
+    if (!isset($payload['rules']) || !is_array($payload['rules'])) {
+        $payload['rules'] = [];
+    }
+    if (!isset($payload['blocks']) || !is_array($payload['blocks'])) {
+        $payload['blocks'] = [];
+    }
+    if (!isset($payload['ui']) || !is_array($payload['ui'])) {
+        $payload['ui'] = [];
+    }
+
+    $payload['blocks'] = array_values(array_filter((array)$payload['blocks'], static fn($block) => is_array($block)));
+    $payload['rules'] = af_kb_arpg_migrate_legacy_rules_contract($type, (array)$payload['rules']);
+    if (trim((string)($payload['rules']['schema'] ?? '')) === '') {
+        $payload['rules']['schema'] = AF_KB_ARPG_RULES_SCHEMA;
+    }
+    if ($isService) {
+        $payload['rules']['type_profile'] = 'service_mechanics';
+        if (trim((string)($payload['rules']['service_kind'] ?? '')) === '') {
+            $payload['rules']['service_kind'] = 'mechanic_profile';
+        }
+    } else {
+        $payload['rules']['type_profile'] = $typeProfile;
+    }
+
+    return $payload;
+}
+
+function af_kb_arpg_pick_first(array $source, array $keys, $fallback = null)
+{
+    foreach ($keys as $key) {
+        if (!array_key_exists($key, $source)) {
+            continue;
+        }
+        $value = $source[$key];
+        if ($value === null) {
+            continue;
+        }
+        if (is_string($value) && trim($value) === '') {
+            continue;
+        }
+        return $value;
+    }
+
+    return $fallback;
+}
+
+function af_kb_arpg_pick_array(array $source, array $keys): array
+{
+    foreach ($keys as $key) {
+        if (!array_key_exists($key, $source)) {
+            continue;
+        }
+        if (is_array($source[$key])) {
+            return array_values((array)$source[$key]);
+        }
+    }
+
+    return [];
+}
+
+function af_kb_arpg_migrate_legacy_rules_contract(string $type, array $rules): array
+{
+    if ($type === 'arpg_ability') {
+        $rules['type'] = (string)af_kb_arpg_pick_first($rules, ['type', 'ability_type', 'activation_type', 'cast_kind', 'kind'], '');
+        $rules['subtype'] = (string)af_kb_arpg_pick_first($rules, ['subtype', 'ability_subtype'], (string)($rules['subtype'] ?? ''));
+        $rules['slot'] = (string)af_kb_arpg_pick_first($rules, ['slot', 'ability_slot'], (string)($rules['slot'] ?? ''));
+        $rules['damage_type'] = (string)af_kb_arpg_pick_first($rules, ['damage_type', 'element', 'damage_kind'], (string)($rules['damage_type'] ?? ''));
+        $rules['targeting'] = (string)af_kb_arpg_pick_first($rules, ['targeting', 'target_type', 'target'], (string)($rules['targeting'] ?? ''));
+        foreach (['range', 'cast_time', 'cooldown', 'duration', 'max_charges', 'level_cap'] as $numericKey) {
+            $rules[$numericKey] = af_kb_arpg_pick_first($rules, [$numericKey, 'ability_' . $numericKey], $rules[$numericKey] ?? null);
+        }
+        $rules['resources'] = af_kb_arpg_pick_array($rules, ['resources', 'resource_costs', 'costs']);
+        $rules['effects'] = af_kb_arpg_pick_array($rules, ['effects', 'ability_effects']);
+        $rules['modifiers'] = af_kb_arpg_pick_array($rules, ['modifiers', 'buffs']);
+        $rules['triggers'] = af_kb_arpg_pick_array($rules, ['triggers', 'proc_triggers']);
+        $rules['conditions'] = af_kb_arpg_pick_array($rules, ['conditions', 'requirements']);
+        $rules['stacking'] = af_kb_arpg_pick_array($rules, ['stacking', 'stacks']);
+        $rules['upgrade_requirements'] = af_kb_arpg_pick_array($rules, ['upgrade_requirements', 'upgrades', 'progression']);
+    } elseif ($type === 'arpg_talent') {
+        $rules['tree'] = (string)af_kb_arpg_pick_first($rules, ['tree', 'talent_tree', 'branch'], (string)($rules['tree'] ?? ''));
+        $rules['tier'] = af_kb_arpg_pick_first($rules, ['tier', 'row'], $rules['tier'] ?? null);
+        $rules['rank'] = (string)af_kb_arpg_pick_first($rules, ['rank', 'rarity'], (string)($rules['rank'] ?? ''));
+        $rules['slot_type'] = (string)af_kb_arpg_pick_first($rules, ['slot_type', 'slot', 'talent_slot'], (string)($rules['slot_type'] ?? ''));
+        $rules['node_label'] = (string)af_kb_arpg_pick_first($rules, ['node_label', 'label', 'title'], (string)($rules['node_label'] ?? ''));
+        $rules['rank_weight'] = af_kb_arpg_pick_first($rules, ['rank_weight', 'weight'], $rules['rank_weight'] ?? null);
+        $rules['socket_cost'] = af_kb_arpg_pick_first($rules, ['socket_cost', 'cost', 'point_cost'], $rules['socket_cost'] ?? null);
+        $rules['effects'] = af_kb_arpg_pick_array($rules, ['effects']);
+        $rules['passive_effects'] = af_kb_arpg_pick_array($rules, ['passive_effects', 'passives']);
+        $rules['modifiers'] = af_kb_arpg_pick_array($rules, ['modifiers']);
+        $rules['grants'] = af_kb_arpg_pick_array($rules, ['grants', 'grant_refs']);
+        $rules['requirements'] = af_kb_arpg_pick_array($rules, ['requirements', 'prerequisites']);
+        $rules['mutual_exclusives'] = af_kb_arpg_pick_array($rules, ['mutual_exclusives', 'exclusive_with']);
+    } elseif ($type === 'arpg_item') {
+        $rules['item_kind'] = (string)af_kb_arpg_pick_first($rules, ['item_kind', 'kind', 'item_type'], (string)($rules['item_kind'] ?? ''));
+        $rules['equip_slot'] = (string)af_kb_arpg_pick_first($rules, ['equip_slot', 'slot', 'equipment_slot'], (string)($rules['equip_slot'] ?? ''));
+        $rules['rarity'] = (string)af_kb_arpg_pick_first($rules, ['rarity', 'rank'], (string)($rules['rarity'] ?? ''));
+        $rules['subtype'] = (string)af_kb_arpg_pick_first($rules, ['subtype', 'item_subtype'], (string)($rules['subtype'] ?? ''));
+        $rules['progression_stage'] = (string)af_kb_arpg_pick_first($rules, ['progression_stage', 'stage'], (string)($rules['progression_stage'] ?? ''));
+        foreach (['level_min', 'level_max', 'level_cap', 'base_damage', 'attack_speed', 'range', 'crit_bonus', 'base_defense', 'stack_max', 'use_cooldown'] as $numericKey) {
+            $rules[$numericKey] = af_kb_arpg_pick_first($rules, [$numericKey], $rules[$numericKey] ?? null);
+        }
+        $rules['base_stats'] = af_kb_arpg_pick_array($rules, ['base_stats', 'stats']);
+        $rules['modifiers'] = af_kb_arpg_pick_array($rules, ['modifiers']);
+        $rules['effects'] = af_kb_arpg_pick_array($rules, ['effects']);
+        $rules['passive_effects'] = af_kb_arpg_pick_array($rules, ['passive_effects', 'passives']);
+        $rules['triggers'] = af_kb_arpg_pick_array($rules, ['triggers']);
+        $rules['grants'] = af_kb_arpg_pick_array($rules, ['grants', 'grant_refs']);
+        $rules['upgrade_steps'] = af_kb_arpg_pick_array($rules, ['upgrade_steps', 'upgrades']);
+    } elseif ($type === 'arpg_bestiary') {
+        $rules['family'] = (string)af_kb_arpg_pick_first($rules, ['family', 'species_family', 'creature_family'], (string)($rules['family'] ?? ''));
+        $rules['archetype'] = (string)af_kb_arpg_pick_first($rules, ['archetype', 'creature_archetype'], (string)($rules['archetype'] ?? ''));
+        $rules['faction'] = (string)af_kb_arpg_pick_first($rules, ['faction', 'faction_key'], (string)($rules['faction'] ?? ''));
+        $rules['rank'] = (string)af_kb_arpg_pick_first($rules, ['rank', 'monster_rank'], (string)($rules['rank'] ?? ''));
+        $rules['threat_tier'] = af_kb_arpg_pick_first($rules, ['threat_tier', 'threat', 'danger_tier'], $rules['threat_tier'] ?? null);
+        $rules['level'] = af_kb_arpg_pick_first($rules, ['level', 'monster_level'], $rules['level'] ?? null);
+        $legacyCombat = (array)af_kb_arpg_pick_first($rules, ['combat_stats', 'stats', 'combat'], []);
+        $rules['combat_stats'] = [
+            'hp' => af_kb_arpg_pick_first($legacyCombat, ['hp', 'health'], $legacyCombat['hp'] ?? 0),
+            'atk' => af_kb_arpg_pick_first($legacyCombat, ['atk', 'attack'], $legacyCombat['atk'] ?? 0),
+            'def' => af_kb_arpg_pick_first($legacyCombat, ['def', 'defense'], $legacyCombat['def'] ?? 0),
+            'armor' => af_kb_arpg_pick_first($legacyCombat, ['armor'], $legacyCombat['armor'] ?? 0),
+            'crit_rate' => af_kb_arpg_pick_first($legacyCombat, ['crit_rate', 'crit'], $legacyCombat['crit_rate'] ?? 0),
+            'crit_dmg' => af_kb_arpg_pick_first($legacyCombat, ['crit_dmg', 'crit_damage'], $legacyCombat['crit_dmg'] ?? 0),
+            'status_hit' => af_kb_arpg_pick_first($legacyCombat, ['status_hit', 'status_accuracy'], $legacyCombat['status_hit'] ?? 0),
+            'status_resist' => af_kb_arpg_pick_first($legacyCombat, ['status_resist', 'status_resistance'], $legacyCombat['status_resist'] ?? 0),
+        ];
+        $rules['ability_keys'] = af_kb_arpg_pick_array($rules, ['ability_keys', 'abilities', 'ability_refs']);
+        $rules['loot'] = af_kb_arpg_pick_array($rules, ['loot', 'loot_table', 'drops']);
+    } elseif ($type === 'arpg_mechanics') {
+        $legacyKind = (string)af_kb_arpg_pick_first($rules, ['service_kind', 'entity_kind', 'kind', 'mechanic_kind'], '');
+        if ($legacyKind !== '') {
+            $rules['service_kind'] = $legacyKind;
+        }
+        if (!isset($rules['entries']) || !is_array($rules['entries'])) {
+            $rules['entries'] = af_kb_arpg_pick_array($rules, ['entries', 'templates', 'items']);
+        }
+    }
+
+    return $rules;
 }
 
 function af_kb_arpg_public_entity_kinds(): array
