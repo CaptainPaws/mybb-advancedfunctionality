@@ -2130,34 +2130,52 @@ function af_advancedshop_slot_lookup(int $slotId): array
 
 function af_advancedshop_detect_inventory_target_from_kb_meta(array $meta): array
 {
-    $rulesItem = is_array($meta['rules']['item'] ?? null) ? (array)$meta['rules']['item'] : [];
     $supportedKinds = ['weapon', 'armor', 'ammo', 'consumable'];
-
-    $kind = mb_strtolower(trim((string)($rulesItem['item_kind'] ?? '')));
-    $kindSource = 'rules.item.item_kind';
-
-    if ($kind === '') {
-        $kind = mb_strtolower(trim((string)($rulesItem['item_type'] ?? '')));
-        $kindSource = 'rules.item.item_type';
+    $kind = '';
+    $kindSource = 'fallback';
+    if (function_exists('af_kb_get_normalized_item_profile')) {
+        $itemProfile = af_kb_get_normalized_item_profile([
+            'type' => (string)($meta['kb_type'] ?? 'item'),
+            'meta_json' => json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
+            'item_kind' => (string)($meta['item_kind'] ?? ''),
+        ], 'shop');
+        $kind = mb_strtolower(trim((string)($itemProfile['item_kind'] ?? '')));
+        if ($kind !== '') {
+            $kindSource = 'normalized.item_kind';
+        }
     }
-
     if ($kind === '') {
-        $tags = is_array($rulesItem['tags'] ?? null) ? $rulesItem['tags'] : [];
-        foreach ($tags as $tag) {
-            $tagNorm = mb_strtolower(trim((string)$tag));
-            if (in_array($tagNorm, $supportedKinds, true)) {
-                $kind = $tagNorm;
-                $kindSource = 'rules.item.tags';
-                break;
+        $rulesItem = is_array($meta['rules']['item'] ?? null) ? (array)$meta['rules']['item'] : [];
+        $kind = mb_strtolower(trim((string)($rulesItem['item_kind'] ?? '')));
+        $kindSource = 'rules.item.item_kind';
+        if ($kind === '') {
+            $kind = mb_strtolower(trim((string)($rulesItem['item_type'] ?? '')));
+            $kindSource = $kind !== '' ? 'rules.item.item_type' : 'fallback';
+        }
+        if ($kind === '') {
+            $tags = is_array($rulesItem['tags'] ?? null) ? $rulesItem['tags'] : [];
+            foreach ($tags as $tag) {
+                $tagNorm = mb_strtolower(trim((string)$tag));
+                if (in_array($tagNorm, $supportedKinds, true)) {
+                    $kind = $tagNorm;
+                    $kindSource = 'rules.item.tags';
+                    break;
+                }
             }
         }
     }
 
-    if ($kind === '') {
-        $kindSource = 'fallback';
+    $spellType = '';
+    if (function_exists('af_kb_get_normalized_ability_profile')) {
+        $abilityProfile = af_kb_get_normalized_ability_profile([
+            'type' => (string)($meta['kb_type'] ?? 'spell'),
+            'meta_json' => json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
+        ], 'shop');
+        $spellType = mb_strtolower(trim((string)($abilityProfile['ability_type'] ?? '')));
     }
-
-    $spellType = mb_strtolower(trim((string)($meta['rules']['spell']['type'] ?? $meta['rules']['ritual']['type'] ?? '')));
+    if ($spellType === '') {
+        $spellType = mb_strtolower(trim((string)($meta['rules']['spell']['type'] ?? $meta['rules']['ritual']['type'] ?? '')));
+    }
     if (in_array($spellType, ['spell', 'ritual'], true)) {
         return [
             'slot' => 'abilities',
@@ -3698,9 +3716,17 @@ function af_advancedshop_health_ping(): void
     af_advancedshop_json_ok(['ping' => 'ok']);
 }
 
-function af_advancedshop_kb_rules_from_meta($metaRaw): array
+function af_advancedshop_kb_rules_from_meta($metaRaw, array $entry = []): array
 {
     if (!is_string($metaRaw) || trim($metaRaw) === '') {
+        return [];
+    }
+
+    if (function_exists('af_kb_extract_rules_for_consumer')) {
+        $extract = af_kb_extract_rules_for_consumer(array_merge($entry, ['meta_json' => $metaRaw]), 'shop');
+        if (!empty($extract['supported']) && is_array($extract['rules'] ?? null)) {
+            return (array)$extract['rules'];
+        }
         return [];
     }
 
@@ -3720,7 +3746,7 @@ function af_advancedshop_kb_rules_from_meta($metaRaw): array
 function af_advancedshop_kb_resolve_data_json(array $kbRow): array
 {
     $metaRaw = (string)($kbRow['kb_meta'] ?? $kbRow['meta_json'] ?? '');
-    $rules = af_advancedshop_kb_rules_from_meta($metaRaw);
+    $rules = af_advancedshop_kb_rules_from_meta($metaRaw, $kbRow);
     if (!$rules) {
         return [
             'kb_data' => '',
@@ -3758,7 +3784,37 @@ function af_advancedshop_kb_item_profile(array $kbRow): array
     ];
 
     $metaRaw = (string)($kbRow['kb_meta'] ?? $kbRow['meta_json'] ?? '');
-    $rules = af_advancedshop_kb_rules_from_meta($metaRaw);
+    if (function_exists('af_kb_get_normalized_item_profile')) {
+        $normalized = af_kb_get_normalized_item_profile(
+            [
+                'type' => (string)($kbRow['kb_type'] ?? $kbRow['type'] ?? 'item'),
+                'meta_json' => $metaRaw,
+                'item_kind' => (string)($kbRow['item_kind'] ?? ''),
+            ],
+            'shop'
+        );
+        if (!empty($normalized['supported'])) {
+            $rawRarity = (string)($normalized['rarity'] ?? '');
+            return [
+                'rarity' => af_advancedshop_normalize_rarity($rawRarity),
+                'item_kind' => (string)($normalized['item_kind'] ?? ''),
+                'kb_key' => trim((string)($kbRow['kb_key'] ?? $kbRow['key'] ?? '')),
+                'slot' => (string)($normalized['slot'] ?? ''),
+                'equip_slot' => af_advancedshop_normalize_equip_slot_code((string)($normalized['equip_slot'] ?? $normalized['slot'] ?? '')),
+                'armor_ac_bonus' => max(0, (int)($normalized['armor_ac_bonus'] ?? 0)),
+                'weapon_damage_bonus' => (int)($normalized['weapon_damage_bonus'] ?? 0),
+                'weapon_damage_type' => trim((string)($normalized['weapon_damage_type'] ?? '')),
+                'stack_max' => max(1, (int)($normalized['stack_max'] ?? 1)),
+                'currency' => (string)($normalized['currency'] ?? 'credits'),
+                'price' => max(0, (int)($normalized['price'] ?? 0)),
+                'tags' => is_array($normalized['tags'] ?? null) ? (array)$normalized['tags'] : [],
+                'rarity_raw' => $rawRarity,
+                'data_json_present' => 'yes',
+            ];
+        }
+    }
+
+    $rules = af_advancedshop_kb_rules_from_meta($metaRaw, $kbRow);
     if (!$rules) {
         return $default;
     }

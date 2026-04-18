@@ -2104,14 +2104,23 @@ function cs_kb_get_data_rules($entry): array
         return [];
     }
 
-    $metaRaw = (string)($entry['meta_json'] ?? '');
-    $rules = null;
-    if (function_exists('af_kb_extract_rules_from_meta_json')) {
-        $rules = af_kb_extract_rules_from_meta_json($metaRaw);
-    }
-    if (!is_array($rules)) {
-        $meta = af_charactersheets_json_decode($metaRaw);
-        $rules = is_array($meta['rules'] ?? null) ? (array)$meta['rules'] : [];
+    $rules = [];
+    if (function_exists('af_kb_extract_rules_for_consumer')) {
+        $extract = af_kb_extract_rules_for_consumer($entry, 'charactersheets');
+        if (!empty($extract['supported']) && is_array($extract['rules'] ?? null)) {
+            $rules = (array)$extract['rules'];
+        }
+    } else {
+        $metaRaw = (string)($entry['meta_json'] ?? '');
+        $raw = null;
+        if (function_exists('af_kb_extract_rules_from_meta_json')) {
+            $raw = af_kb_extract_rules_from_meta_json($metaRaw);
+        }
+        if (!is_array($raw)) {
+            $meta = af_charactersheets_json_decode($metaRaw);
+            $raw = is_array($meta['rules'] ?? null) ? (array)$meta['rules'] : [];
+        }
+        $rules = is_array($raw) ? $raw : [];
     }
 
     if ((string)($rules['schema'] ?? '') !== 'af_kb.rules.v1') {

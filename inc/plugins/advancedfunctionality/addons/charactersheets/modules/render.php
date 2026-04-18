@@ -2034,7 +2034,8 @@ function af_charactersheets_build_equipment_html(array $build, bool $can_edit, i
             $subtype = trim((string)($item['subtype'] ?? ''));
             if ($subtype === '' && function_exists('af_advinv_classify_equipment_from_kb_meta')) {
                 $subtype = af_advinv_classify_equipment_from_kb_meta(
-                    af_advinv_decode_meta_json((string)($item['meta_json'] ?? ''))
+                    af_advinv_decode_meta_json((string)($item['meta_json'] ?? '')),
+                    (string)($item['kb_type'] ?? 'item')
                 );
             }
             if ($subtype === 'artifact') {

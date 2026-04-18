@@ -11,7 +11,12 @@ function af_cs_kb_meta_reader(array $entry): array
     }
 
     $rules = [];
-    if (function_exists('af_kb_extract_rules_from_meta_json')) {
+    if (function_exists('af_kb_extract_rules_for_consumer')) {
+        $extract = af_kb_extract_rules_for_consumer($entry, 'charactersheets');
+        if (!empty($extract['supported']) && is_array($extract['rules'] ?? null)) {
+            $rules = (array)$extract['rules'];
+        }
+    } elseif (function_exists('af_kb_extract_rules_from_meta_json')) {
         $rules = (array)af_kb_extract_rules_from_meta_json((string)($entry['meta_json'] ?? ''));
     }
     if (empty($rules) && is_array($meta['rules'] ?? null)) {
