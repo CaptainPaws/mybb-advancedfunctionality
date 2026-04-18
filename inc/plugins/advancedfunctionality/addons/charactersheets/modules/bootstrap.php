@@ -2315,7 +2315,7 @@ function af_cs_render_kb_bonuses_text($type, $key, $isRu): string
 
         $block = $db->fetch_array($db->simple_select(
             'af_kb_blocks',
-            'content_ru, content_en',
+            'content_ru, content_en, data_json',
             $where,
             ['limit' => 1]
         ));
@@ -2324,6 +2324,21 @@ function af_cs_render_kb_bonuses_text($type, $key, $isRu): string
             $text = trim((string)($block[$localized_field] ?? ''));
             if ($text === '') {
                 $text = af_charactersheets_kb_pick_text($block, 'content');
+            }
+            if ($text === '' && function_exists('af_cs_kb_extract_block_content')) {
+                $decoded = [];
+                if (isset($block['data_json'])) {
+                    if (is_string($block['data_json']) && trim($block['data_json']) !== '') {
+                        $decoded = function_exists('af_kb_decode_json')
+                            ? af_kb_decode_json((string)$block['data_json'])
+                            : json_decode((string)$block['data_json'], true);
+                    } elseif (is_array($block['data_json'])) {
+                        $decoded = $block['data_json'];
+                    }
+                }
+                if (is_array($decoded) && !empty($decoded)) {
+                    $text = trim((string)af_cs_kb_extract_block_content($decoded, (bool)$isRu));
+                }
             }
         }
     }
@@ -4077,10 +4092,15 @@ function af_charactersheets_kb_get_block_html(array $entry, string $blockKey): s
     if ($content === '' && function_exists('af_cs_kb_extract_block_content')) {
         $content = trim((string)af_cs_kb_extract_block_content($block, $isRu));
     }
-    if ($content === '' && !empty($block['data_json']) && is_string($block['data_json'])) {
-        $decoded_data = function_exists('af_kb_decode_json')
-            ? af_kb_decode_json((string)$block['data_json'])
-            : json_decode((string)$block['data_json'], true);
+    if ($content === '' && !empty($block['data_json']) && (is_string($block['data_json']) || is_array($block['data_json']))) {
+        $decoded_data = [];
+        if (is_string($block['data_json'])) {
+            $decoded_data = function_exists('af_kb_decode_json')
+                ? af_kb_decode_json((string)$block['data_json'])
+                : json_decode((string)$block['data_json'], true);
+        } elseif (is_array($block['data_json'])) {
+            $decoded_data = $block['data_json'];
+        }
         if (is_array($decoded_data)) {
             if (function_exists('af_cs_kb_extract_block_content')) {
                 $content = trim((string)af_cs_kb_extract_block_content($decoded_data, $isRu));

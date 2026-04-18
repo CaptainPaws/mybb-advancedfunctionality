@@ -1302,6 +1302,7 @@ function af_charactersheets_build_bonus_html(array $index, array $sheet_view = [
     ) use ($bonus_from_entry): array {
         $resolved = [
             'key' => '',
+            'key_source' => '',
             'title' => $default_title,
             'entry' => [],
             'bonus_html' => '',
@@ -1310,8 +1311,14 @@ function af_charactersheets_build_bonus_html(array $index, array $sheet_view = [
         $field_name = 'character_' . $type;
         $field = (array)($index[$field_name] ?? []);
         $key = trim((string)af_charactersheets_pick_field_value($index, $fallback_keys, false));
+        if ($key !== '') {
+            $resolved['key_source'] = 'index';
+        }
         if ($key === '') {
             $key = trim((string)($ctx_sources[$type]['key'] ?? ''));
+            if ($key !== '') {
+                $resolved['key_source'] = 'ctx.sources';
+            }
         }
         $resolved['key'] = $key;
 
@@ -1369,9 +1376,19 @@ function af_charactersheets_build_bonus_html(array $index, array $sheet_view = [
 
     $race_package_sections = '<div class="af-cs-bonus-race-package__section"><div class="af-cs-bonus-race-package__subtitle">Бонусы расы</div><div class="af-cs-bonus-body">' . $race_text_html . '</div></div>';
     if ($race_variant_text_html !== '') {
-        $race_package_sections .= '<div class="af-cs-bonus-race-package__section"><div class="af-cs-bonus-race-package__subtitle">Бонусы подрасы</div><div class="af-cs-bonus-body">' . $race_variant_text_html . '</div></div>';
+        $race_package_sections .= '<div class="af-cs-bonus-race-package__section"><div class="af-cs-bonus-race-package__subtitle">Бонусы разновидности</div><div class="af-cs-bonus-body">' . $race_variant_text_html . '</div></div>';
     }
-    $columns[] = '<div class="af-cs-bonus-card af-cs-bonus-card--race"><div class="af-cs-bonus-title">' . htmlspecialchars_uni($race_card_title) . '</div>' . $race_package_sections . '</div>';
+    $race_debug_comment = '<!-- af-cs-race-debug '
+        . 'race_key=' . htmlspecialchars_uni((string)($race_resolved['key'] ?? ''))
+        . ' race_key_source=' . htmlspecialchars_uni((string)($race_resolved['key_source'] ?? ''))
+        . ' race_entry_id=' . (int)(((array)($race_resolved['entry'] ?? []))['id'] ?? 0)
+        . ' race_bonus_len=' . strlen(trim(strip_tags((string)$race_text_html)))
+        . ' race_variant_key=' . htmlspecialchars_uni((string)($race_variant_resolved['key'] ?? ''))
+        . ' race_variant_key_source=' . htmlspecialchars_uni((string)($race_variant_resolved['key_source'] ?? ''))
+        . ' race_variant_entry_id=' . (int)(((array)($race_variant_resolved['entry'] ?? []))['id'] ?? 0)
+        . ' race_variant_bonus_len=' . strlen(trim(strip_tags((string)$race_variant_text_html)))
+        . ' -->';
+    $columns[] = '<div class="af-cs-bonus-card af-cs-bonus-card--race"><div class="af-cs-bonus-title">' . htmlspecialchars_uni($race_card_title) . '</div>' . $race_package_sections . $race_debug_comment . '</div>';
 
     foreach ($mapping as $fieldName => $data) {
         if ($fieldName === 'character_race' || $fieldName === 'character_race_variant') {
