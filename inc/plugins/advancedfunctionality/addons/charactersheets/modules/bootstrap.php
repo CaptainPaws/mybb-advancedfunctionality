@@ -2176,6 +2176,11 @@ function af_cs_kb_get_meta_blocks($type, $key): array
     }
 
     $candidate_types = [$type];
+    if ($type === 'race_variant') {
+        $candidate_types[] = 'racevariant';
+    } elseif ($type === 'racevariant') {
+        $candidate_types[] = 'race_variant';
+    }
     if ($type === 'theme') {
         $candidate_types[] = 'themes';
     } elseif ($type === 'themes') {
@@ -2543,6 +2548,11 @@ function af_charactersheets_kb_resolve_entry(string $type_key, string $key): arr
     }
 
     $candidate_types = [$type_key];
+    if ($type_key === 'race_variant') {
+        $candidate_types[] = 'racevariant';
+    } elseif ($type_key === 'racevariant') {
+        $candidate_types[] = 'race_variant';
+    }
     if ($type_key === 'theme') {
         $candidate_types[] = 'themes';
     } elseif ($type_key === 'themes') {
