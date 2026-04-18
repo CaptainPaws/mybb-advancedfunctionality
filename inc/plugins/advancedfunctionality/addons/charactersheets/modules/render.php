@@ -1275,6 +1275,22 @@ function af_charactersheets_build_bonus_html(array $index): string
 
     $mapping = af_charactersheets_kb_mapping();
     $columns = [];
+    $bonus_from_entry = static function (array $entry): string {
+        if (empty($entry)) {
+            return '';
+        }
+
+        $html = trim((string)af_charactersheets_kb_get_block_html($entry, 'bonuses'));
+        if ($html === '') {
+            return '';
+        }
+
+        if (strpos($html, 'af-cs-muted') !== false) {
+            return '';
+        }
+
+        return $html;
+    };
 
     $race_field = $index['character_race'] ?? [];
     $race_key = af_charactersheets_pick_field_value($index, ['character_race', 'race'], false);
@@ -1301,18 +1317,12 @@ function af_charactersheets_build_bonus_html(array $index): string
         $race_variant_title = (string)($race_variant_field['value_label'] ?? '');
     }
 
-    $race_text_html = af_cs_render_kb_bonuses_text('race', $race_key, af_charactersheets_is_ru());
+    $race_text_html = $bonus_from_entry($race_entry);
     if ($race_text_html === '') {
         $race_text_html = '<div class="af-cs-muted">Нет данных</div>';
     }
 
-    $race_variant_text_html = '';
-    if ($race_variant_key !== '') {
-        $race_variant_text_html = af_cs_render_kb_bonuses_text('race_variant', $race_variant_key, af_charactersheets_is_ru());
-        if ($race_variant_text_html === '') {
-            $race_variant_text_html = af_cs_render_kb_bonuses_text('racevariant', $race_variant_key, af_charactersheets_is_ru());
-        }
-    }
+    $race_variant_text_html = $bonus_from_entry($race_variant_entry);
 
     $race_card_title = 'Раса: ' . ($race_title !== '' ? $race_title : '—');
     if ($race_variant_title !== '') {
@@ -1320,10 +1330,7 @@ function af_charactersheets_build_bonus_html(array $index): string
     }
 
     $race_package_sections = '<div class="af-cs-bonus-race-package__section"><div class="af-cs-bonus-race-package__subtitle">Бонусы расы</div><div class="af-cs-bonus-body">' . $race_text_html . '</div></div>';
-    if ($race_variant_title !== '' || $race_variant_text_html !== '') {
-        if ($race_variant_text_html === '') {
-            $race_variant_text_html = '<div class="af-cs-muted">Нет данных</div>';
-        }
+    if ($race_variant_text_html !== '') {
         $race_package_sections .= '<div class="af-cs-bonus-race-package__section"><div class="af-cs-bonus-race-package__subtitle">Бонусы подрасы</div><div class="af-cs-bonus-body">' . $race_variant_text_html . '</div></div>';
     }
     $columns[] = '<div class="af-cs-bonus-card af-cs-bonus-card--race"><div class="af-cs-bonus-title">' . htmlspecialchars_uni($race_card_title) . '</div>' . $race_package_sections . '</div>';
@@ -1345,7 +1352,7 @@ function af_charactersheets_build_bonus_html(array $index): string
             $title = (string)$data['label'];
         }
 
-        $text_html = af_cs_render_kb_bonuses_text((string)$data['type'], $key, af_charactersheets_is_ru());
+        $text_html = $bonus_from_entry($entry);
 
         if ((string)($data['type'] ?? '') === 'themes' && function_exists('af_cs_is_staff') && af_cs_is_staff((array)($mybb->user ?? []))) {
             $theme_entry_id = (int)($entry['id'] ?? 0);
