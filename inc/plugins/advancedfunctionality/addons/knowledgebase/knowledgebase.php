@@ -687,7 +687,7 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.family', 'type' => 'string', 'required' => true, 'default' => ''],
                 ['path' => 'rules.archetype', 'type' => 'string', 'required' => true, 'default' => ''],
                 ['path' => 'rules.faction', 'type' => 'string', 'required' => true, 'default' => ''],
-                ['path' => 'rules.rank', 'type' => 'string', 'required' => true, 'default' => 'normal'],
+                ['path' => 'rules.rank', 'type' => 'select', 'required' => true, 'options' => [['value' => 'normal'], ['value' => 'elite'], ['value' => 'boss'], ['value' => 'resource']], 'default' => 'normal'],
                 ['path' => 'rules.threat_tier', 'type' => 'number', 'required' => true, 'default' => 1],
                 ['path' => 'rules.level', 'type' => 'number', 'required' => true, 'default' => 1],
                 ['path' => 'rules.combat_stats.hp', 'type' => 'number', 'required' => true, 'default' => 0],
@@ -698,10 +698,10 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.combat_stats.crit_dmg', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.combat_stats.status_hit', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.combat_stats.status_resist', 'type' => 'number', 'required' => true, 'default' => 0],
-                ['path' => 'rules.resists', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
-                ['path' => 'rules.weaknesses', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
-                ['path' => 'rules.ability_keys', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
-                ['path' => 'rules.loot', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.resists', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [['path' => 'damage_type', 'type' => 'string', 'required' => true], ['path' => 'value', 'type' => 'number', 'required' => true], ['path' => 'notes', 'type' => 'string', 'default' => '']]], 'default' => []],
+                ['path' => 'rules.weaknesses', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [['path' => 'damage_type', 'type' => 'string', 'required' => true], ['path' => 'value', 'type' => 'number', 'required' => true], ['path' => 'notes', 'type' => 'string', 'default' => '']]], 'default' => []],
+                ['path' => 'rules.ability_keys', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [['path' => 'ability_key', 'type' => 'string', 'required' => true], ['path' => 'notes', 'type' => 'string', 'default' => '']]], 'default' => []],
+                ['path' => 'rules.loot', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [['path' => 'loot_key', 'type' => 'string', 'required' => true], ['path' => 'kind', 'type' => 'string', 'required' => true], ['path' => 'qty_min', 'type' => 'number', 'required' => true], ['path' => 'qty_max', 'type' => 'number', 'required' => true], ['path' => 'chance', 'type' => 'number', 'required' => true], ['path' => 'notes', 'type' => 'string', 'default' => '']]], 'default' => []],
             ],
             'arpg_mechanics' => [
                 ['path' => 'rules.service_kind', 'type' => 'select', 'required' => true, 'options' => array_map(static fn($kind) => ['value' => $kind], af_kb_arpg_service_entity_kinds())],
@@ -4489,6 +4489,73 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
         foreach (['resists', 'weaknesses', 'ability_keys', 'loot'] as $requiredArrKey) {
             if (!is_array($payload['rules'][$requiredArrKey] ?? null)) {
                 $errors[] = 'ARPG bestiary requires "rules.' . $requiredArrKey . '" array.';
+            }
+        }
+
+        foreach (['family', 'archetype', 'faction', 'rank'] as $requiredTextKey) {
+            if (trim((string)($payload['rules'][$requiredTextKey] ?? '')) === '') {
+                $errors[] = 'ARPG bestiary requires non-empty "rules.' . $requiredTextKey . '".';
+            }
+        }
+
+        foreach (['threat_tier', 'level'] as $requiredNumberKey) {
+            if (!is_numeric($payload['rules'][$requiredNumberKey] ?? null)) {
+                $errors[] = 'ARPG bestiary requires numeric "rules.' . $requiredNumberKey . '".';
+            }
+        }
+
+        $combatStats = (array)($payload['rules']['combat_stats'] ?? []);
+        foreach (['hp', 'atk', 'def', 'armor', 'crit_rate', 'crit_dmg', 'status_hit', 'status_resist'] as $statKey) {
+            if (!is_numeric($combatStats[$statKey] ?? null)) {
+                $errors[] = 'ARPG bestiary requires numeric "rules.combat_stats.' . $statKey . '".';
+            }
+        }
+
+        foreach (['resists', 'weaknesses'] as $rowSetKey) {
+            foreach ((array)($payload['rules'][$rowSetKey] ?? []) as $idx => $row) {
+                if (!is_array($row)) {
+                    $errors[] = 'ARPG bestiary "' . $rowSetKey . '" row #' . ($idx + 1) . ' must be an object.';
+                    continue;
+                }
+                if (trim((string)($row['damage_type'] ?? '')) === '') {
+                    $errors[] = 'ARPG bestiary "' . $rowSetKey . '" row #' . ($idx + 1) . ' requires damage_type.';
+                }
+                if (!is_numeric($row['value'] ?? null)) {
+                    $errors[] = 'ARPG bestiary "' . $rowSetKey . '" row #' . ($idx + 1) . ' requires numeric value.';
+                }
+            }
+        }
+
+        foreach ((array)($payload['rules']['ability_keys'] ?? []) as $idx => $row) {
+            if (!is_array($row)) {
+                $errors[] = 'ARPG bestiary "ability_keys" row #' . ($idx + 1) . ' must be an object.';
+                continue;
+            }
+            if (trim((string)($row['ability_key'] ?? '')) === '') {
+                $errors[] = 'ARPG bestiary "ability_keys" row #' . ($idx + 1) . ' requires ability_key.';
+            }
+        }
+
+        $allowedLootKinds = ['item', 'currency', 'material', 'reward', 'custom'];
+        foreach ((array)($payload['rules']['loot'] ?? []) as $idx => $row) {
+            if (!is_array($row)) {
+                $errors[] = 'ARPG bestiary "loot" row #' . ($idx + 1) . ' must be an object.';
+                continue;
+            }
+            if (trim((string)($row['loot_key'] ?? '')) === '') {
+                $errors[] = 'ARPG bestiary "loot" row #' . ($idx + 1) . ' requires loot_key.';
+            }
+            $kind = trim((string)($row['kind'] ?? ''));
+            if ($kind === '' || !in_array($kind, $allowedLootKinds, true)) {
+                $errors[] = 'ARPG bestiary "loot" row #' . ($idx + 1) . ' has invalid kind.';
+            }
+            foreach (['qty_min', 'qty_max', 'chance'] as $numKey) {
+                if (!is_numeric($row[$numKey] ?? null)) {
+                    $errors[] = 'ARPG bestiary "loot" row #' . ($idx + 1) . ' requires numeric ' . $numKey . '.';
+                }
+            }
+            if (is_numeric($row['qty_min'] ?? null) && is_numeric($row['qty_max'] ?? null) && (float)$row['qty_min'] > (float)$row['qty_max']) {
+                $errors[] = 'ARPG bestiary "loot" row #' . ($idx + 1) . ' requires qty_min <= qty_max.';
             }
         }
     }
