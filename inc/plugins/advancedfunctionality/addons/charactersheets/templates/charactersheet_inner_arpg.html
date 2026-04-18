@@ -14,70 +14,62 @@
   <div class="af-cs-inline-error" data-afcs-error="1" hidden></div>
   <div class="af-cs-toast" data-afcs-toast="1" hidden></div>
 
-  <header class="af-cs-arpg-hero">
-    <div class="af-cs-portrait af-cs-arpg-hero__portrait">
-      <img src="{$sheet_portrait_url}" alt="{$sheet_title}" loading="lazy" />
+  <header class="af-cs-arpg-top">
+    <div class="af-cs-arpg-top__art">
+      <div class="af-cs-portrait af-cs-arpg-hero__portrait">
+        <img src="{$sheet_portrait_url}" alt="{$sheet_title}" loading="lazy" />
+      </div>
     </div>
-
-    <div class="af-cs-arpg-hero__summary">
-      <div class="af-cs-summary__title-row">
-        <h1>{$sheet_title}</h1>
-        <div class="af-cs-header-actions">{$sheet_header_actions_html}</div>
-      </div>
-
-      <div class="af-cs-name-ru">
-        <span class="af-cs-name-ru__main">{$sheet_name_ru}</span>
-        <span class="af-cs-name-ru__nick">{$sheet_nicknames}</span>
-      </div>
-
-      <div class="af-cs-arpg-hero__meta">
-        <span><strong>Раса:</strong> {$sheet_arpg_race}</span>
-        <span><strong>Класс:</strong> {$sheet_arpg_class}</span>
-        <span><strong>Тема:</strong> {$sheet_arpg_theme}</span>
-      </div>
-      <div class="af-cs-muted">{$sheet_arpg_header_identity_html}</div>
-      <div class="af-cs-arpg-hero__meta">{$sheet_arpg_header_progress_html}</div>
-
-      <div class="af-cs-arpg-hero__progress" data-afcs-block="progress">
-        {$sheet_progress_html}
-      </div>
-
-      <div class="af-cs-summary__info">
-        {$sheet_info_table_html}
-      </div>
+    <div class="af-cs-arpg-top__right">
+      {$sheet_arpg_identity_block_html}
+      {$sheet_arpg_stats_block_html}
     </div>
   </header>
 
-  <section class="af-cs-section af-cs-arpg-combat">
-    <h2>Основные характеристики</h2>
-    <div class="af-cs-arpg-combat-grid">
-      <article class="af-cs-arpg-card"><h3>HP</h3><strong>{$sheet_arpg_hp}</strong></article>
-      <article class="af-cs-arpg-card"><h3>DEF</h3><strong>{$sheet_arpg_def}</strong></article>
-      <article class="af-cs-arpg-card"><h3>Скорость</h3><strong>{$sheet_arpg_speed}</strong></article>
-      <article class="af-cs-arpg-card"><h3>Урон</h3><strong>{$sheet_arpg_damage}</strong></article>
-      <article class="af-cs-arpg-card"><h3>Humanity</h3><strong>{$sheet_arpg_humanity}</strong></article>
-    </div>
-    <div class="af-cs-arpg-combat-grid">{$sheet_arpg_primary_stats_html}</div>
-  </section>
+  <section class="af-cs-section af-cs-arpg-tabs-wrap">
+    <div class="af-cs-tabs" data-afcs-tabs>
+      <div class="af-cs-tabs__nav">
+        <button class="is-active" type="button" data-afcs-tab="arpg-main">Основная информация</button>
+        <button type="button" data-afcs-tab="arpg-talents">Таланты</button>
+        <button type="button" data-afcs-tab="arpg-abilities">Способности</button>
+        <button type="button" data-afcs-tab="arpg-equipment">Экипировка</button>
+        <button type="button" data-afcs-tab="arpg-achievements">Достижения</button>
+      </div>
+      <div class="af-cs-tabs__content">
+        <div class="af-cs-tab is-active" data-afcs-tab-content="arpg-main">
+          <section class="af-cs-arpg-panel">
+            <h2>Способности</h2>
+            <div class="af-cs-arpg-ability-grid">{$sheet_arpg_abilities_cards_html}</div>
+          </section>
+          {$sheet_arpg_weapon_block_html}
+          {$sheet_arpg_artifacts_block_html}
+        </div>
 
-  <section class="af-cs-section af-cs-arpg-layout">
-    <div class="af-cs-arpg-layout__main">
-      <h2>Способности</h2>
-      <div class="af-cs-arpg-combat-grid" data-afcs-block="abilities">{$sheet_arpg_abilities_cards_html}</div>
+        <div class="af-cs-tab" data-afcs-tab-content="arpg-talents">
+          {$sheet_arpg_talents_block_html}
+        </div>
 
-      <h2>Предметы / артефакты</h2>
-      <div class="af-cs-arpg-combat-grid" data-afcs-block="inventory">{$sheet_arpg_inventory_cards_html}</div>
+        <div class="af-cs-tab" data-afcs-tab-content="arpg-abilities">
+          <section class="af-cs-arpg-panel">
+            <h2>Активные способности</h2>
+            <div class="af-cs-arpg-ability-grid">{$sheet_arpg_active_abilities_html}</div>
+          </section>
+          <section class="af-cs-arpg-panel">
+            <h2>Пассивные способности</h2>
+            <div class="af-cs-arpg-ability-grid">{$sheet_arpg_passive_abilities_html}</div>
+          </section>
+        </div>
 
-      <h2>Сервисные данные механики</h2>
-      <div data-afcs-block="mechanics">{$sheet_mechanics_html}</div>
-    </div>
+        <div class="af-cs-tab" data-afcs-tab-content="arpg-equipment">
+          <section class="af-cs-arpg-panel">
+            <h2>Экипировка</h2>
+            <div data-afcs-block="equipment">{$sheet_equipment_html}</div>
+          </section>
+        </div>
 
-    <aside class="af-cs-arpg-layout__side">
-      <h2>Оружие / экипировка</h2>
-      <div class="af-cs-arpg-combat-grid" data-afcs-block="equipment">{$sheet_arpg_equipment_cards_html}</div>
-
-      <h2>Дальнейшие ARPG-блоки</h2>
-      <div class="af-cs-muted">Таланты, ресурсы, статусные эффекты и service-derived блоки добавляются в этот path без смешивания с DnD layout.</div>
-    </aside>
+        <div class="af-cs-tab" data-afcs-tab-content="arpg-achievements">
+          {$sheet_arpg_achievements_block_html}
+        </div>
+      </div>
   </section>
 </div>
