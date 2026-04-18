@@ -853,7 +853,15 @@ function af_charactersheets_handle_api_impl(): void
     $abilities_html = af_charactersheets_build_abilities_html((int)($sheet['uid'] ?? 0));
     $inventory_uid = (int)($sheet['uid'] ?? 0);
     $augmentations_html = af_charactersheets_build_augments_html($build, $can_edit_loadout, $view, $inventory_uid);
-    $equipment_html = af_charactersheets_build_equipment_html($build, $can_edit_loadout, $inventory_uid);
+    $atf_index = [];
+    $tid = (int)($sheet['tid'] ?? 0);
+    if ($tid > 0) {
+        $atf_index = af_charactersheets_index_fields(af_charactersheets_get_atf_fields($tid));
+    }
+    $render_profile = af_charactersheets_resolve_render_path($sheet, $view, $atf_index);
+    $equipment_html = $render_profile === 'arpg'
+        ? af_charactersheets_build_arpg_equipment_html($build, $can_edit_loadout, $inventory_uid)
+        : af_charactersheets_build_equipment_html($build, $can_edit_loadout, $inventory_uid);
     $mechanics_html = af_charactersheets_build_mechanics_html($view);
 
     $response_payload = [

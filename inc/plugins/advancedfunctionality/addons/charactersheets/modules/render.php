@@ -684,6 +684,182 @@ function af_charactersheets_arpg_render_abilities_group_html(array $items, strin
     return $html;
 }
 
+function af_charactersheets_arpg_render_main_info_html(array $sheet_arpg_vm): string
+{
+    $atf = (array)($sheet_arpg_vm['atf'] ?? []);
+    $rows = [
+        ['Раса', (string)($atf['race'] ?? '—')],
+        ['Класс', (string)($atf['class'] ?? '—')],
+        ['Тема', (string)($atf['theme'] ?? '—')],
+        ['Путь', (string)($sheet_arpg_vm['header_identity_html'] ?? '—')],
+    ];
+
+    $html = '<section class="af-cs-arpg-panel"><h2>Основная информация</h2><div class="af-cs-arpg-main-grid">';
+    foreach ($rows as $row) {
+        $html .= '<article class="af-cs-arpg-main-item"><span>' . htmlspecialchars_uni($row[0]) . '</span><strong>' . htmlspecialchars_uni($row[1] !== '' ? $row[1] : '—') . '</strong></article>';
+    }
+    $html .= '</div></section>';
+
+    return $html;
+}
+
+function af_charactersheets_arpg_render_talent_tree_html(array $sheet_arpg_vm, bool $canEdit): string
+{
+    $wallet = (array)($sheet_arpg_vm['wallet'] ?? []);
+    $owned = (array)af_charactersheets_deep_get($sheet_arpg_vm, 'build.talents.owned', []);
+    $ownedMap = [];
+    foreach ($owned as $talentKey) {
+        $ownedMap[(string)$talentKey] = true;
+    }
+
+    $nodes = [
+        ['id' => 'core_1', 'title' => 'Core I', 'x' => 8, 'y' => 40],
+        ['id' => 'core_2', 'title' => 'Core II', 'x' => 28, 'y' => 24],
+        ['id' => 'core_3', 'title' => 'Core III', 'x' => 28, 'y' => 56],
+        ['id' => 'burst', 'title' => 'Burst', 'x' => 50, 'y' => 40],
+        ['id' => 'ward', 'title' => 'Ward', 'x' => 72, 'y' => 24],
+        ['id' => 'focus', 'title' => 'Focus', 'x' => 72, 'y' => 56],
+        ['id' => 'ascend', 'title' => 'Ascend', 'x' => 92, 'y' => 40],
+    ];
+    $edges = [
+        ['core_1', 'core_2'],
+        ['core_1', 'core_3'],
+        ['core_2', 'burst'],
+        ['core_3', 'burst'],
+        ['burst', 'ward'],
+        ['burst', 'focus'],
+        ['ward', 'ascend'],
+        ['focus', 'ascend'],
+    ];
+
+    $html = '<section class="af-cs-arpg-panel"><h2>Древо талантов</h2>'
+        . '<div class="af-cs-arpg-talent-hint">Доступно: <strong>' . htmlspecialchars_uni((string)($wallet['ability_tokens'] ?? '0')) . ' ' . htmlspecialchars_uni((string)($wallet['ability_symbol'] ?? '♦')) . '</strong></div>'
+        . '<div class="af-cs-arpg-talent-tree" data-afcs-arpg-talent-tree="1" data-afcs-arpg-can-edit="' . ($canEdit ? '1' : '0') . '">';
+
+    foreach ($edges as $edge) {
+        $from = null;
+        $to = null;
+        foreach ($nodes as $node) {
+            if ($node['id'] === $edge[0]) {
+                $from = $node;
+            } elseif ($node['id'] === $edge[1]) {
+                $to = $node;
+            }
+        }
+        if (!$from || !$to) {
+            continue;
+        }
+        $dx = (float)$to['x'] - (float)$from['x'];
+        $dy = (float)$to['y'] - (float)$from['y'];
+        $length = sqrt(($dx * $dx) + ($dy * $dy));
+        $angle = rad2deg(atan2($dy, $dx));
+        $html .= '<div class="af-cs-arpg-talent-edge" style="left:' . (float)$from['x'] . '%;top:' . (float)$from['y'] . '%;width:' . $length . '%;transform: rotate(' . $angle . 'deg);"></div>';
+    }
+
+    foreach ($nodes as $node) {
+        $id = (string)$node['id'];
+        $isOwned = isset($ownedMap[$id]);
+        $html .= '<button type="button" class="af-cs-arpg-talent-node' . ($isOwned ? ' is-owned' : '') . '"'
+            . ' style="left:' . (float)$node['x'] . '%;top:' . (float)$node['y'] . '%;"'
+            . ' data-afcs-arpg-talent-node="1"'
+            . ' data-afcs-arpg-talent-id="' . htmlspecialchars_uni($id) . '"'
+            . ' title="' . htmlspecialchars_uni((string)$node['title']) . '">'
+            . '<span>' . htmlspecialchars_uni((string)$node['title']) . '</span>'
+            . '</button>';
+    }
+
+    $html .= '</div><div class="af-cs-muted">Нажмите на пустой узел, чтобы назначить купленный талант.</div></section>';
+    return $html;
+}
+
+function af_charactersheets_build_arpg_equipment_html(array $build, bool $can_edit, int $uid = 0): string
+{
+    $state = $uid > 0 && function_exists('af_advinv_export_charactersheet_equipment_state')
+        ? af_advinv_export_charactersheet_equipment_state($uid)
+        : ['items' => [], 'equipped' => []];
+    $slot_labels = af_inv_equipment_slots();
+    $cards = [];
+    $equipped = [];
+    foreach ((array)($state['equipped'] ?? []) as $slotCode => $slotItem) {
+        if (!is_array($slotItem) || empty($slotItem['item_id'])) {
+            continue;
+        }
+        $equipped[(int)$slotItem['item_id']] = (string)$slotCode;
+    }
+
+    $renderCard = static function (array $item, string $equippedSlot = '') use ($slot_labels): string {
+        $itemId = (int)($item['id'] ?? $item['item_id'] ?? 0);
+        $title = htmlspecialchars_uni((string)($item['title'] ?? 'Предмет'));
+        $icon = htmlspecialchars_uni((string)($item['icon'] ?? ''));
+        $desc = htmlspecialchars_uni(trim((string)($item['description'] ?? $item['short_description'] ?? 'Без описания')));
+        $candidateSlots = array_values(array_unique(array_filter(array_map('strval', (array)($item['candidate_slots'] ?? [])))));
+        $defaultSlot = (string)($candidateSlots[0] ?? '');
+        $kind = trim((string)($item['subtype'] ?? 'gear'));
+        if ($kind === 'artifact') {
+            $kind = 'gear';
+        }
+        if (!in_array($kind, ['armor', 'weapon', 'ammo', 'consumable', 'gear'], true)) {
+            $kind = 'gear';
+        }
+        $slotOptions = '';
+        foreach ($candidateSlots as $slotCode) {
+            $slotOptions .= '<option value="' . htmlspecialchars_uni($slotCode) . '">' . htmlspecialchars_uni((string)($slot_labels[$slotCode] ?? $slotCode)) . '</option>';
+        }
+        return '<article class="af-cs-arpg-equip-card' . ($equippedSlot !== '' ? ' is-equipped' : '') . '" data-afcs-equipment-card="1" data-afcs-equipment-filter-kind="' . htmlspecialchars_uni($kind) . '" data-afcs-equipment-item-id="' . $itemId . '" data-afcs-equipment-candidate-slots="' . htmlspecialchars_uni(implode(',', $candidateSlots)) . '" data-afcs-equipment-default-slot="' . htmlspecialchars_uni($defaultSlot) . '">'
+            . '<div class="af-cs-arpg-equip-card__inner">'
+            . '<div class="af-cs-arpg-equip-card__face af-cs-arpg-equip-card__face--front">'
+            . ($icon !== '' ? '<img src="' . $icon . '" alt="' . $title . '" loading="lazy" />' : '<div class="af-cs-arpg-equip-card__empty"></div>')
+            . '<h4>' . $title . '</h4>'
+            . '<div class="af-cs-muted">' . htmlspecialchars_uni(mb_strtoupper($kind)) . ($equippedSlot !== '' ? ' • Надето' : '') . '</div>'
+            . '</div>'
+            . '<div class="af-cs-arpg-equip-card__face af-cs-arpg-equip-card__face--back">'
+            . '<h4>' . $title . '</h4>'
+            . '<div class="af-cs-arpg-equip-card__desc">' . $desc . '</div>'
+            . '</div>'
+            . '</div>'
+            . '<div class="af-cs-arpg-equip-card__actions" data-afcs-arpg-edit-only="1">'
+            . '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-arpg-flip="1">Перевернуть</button>'
+            . ($equippedSlot !== ''
+                ? '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-unequip="1" data-afcs-equipment-slot="' . htmlspecialchars_uni($equippedSlot) . '">Снять</button>'
+                : (($slotOptions !== '' ? '<select data-afcs-equipment-slot-select="1">' . $slotOptions . '</select>' : '')
+                    . '<button type="button" class="af-cs-btn af-cs-btn--ghost" data-afcs-equipment-equip="1" data-afcs-equipment-item-id="' . $itemId . '" data-afcs-equipment-slot-default="' . htmlspecialchars_uni($defaultSlot) . '">Надеть</button>'))
+            . '</div>'
+            . '</article>';
+    };
+
+    $activeWeaponHtml = '<div class="af-cs-muted">Оружие не экипировано</div>';
+    foreach ((array)($state['equipped'] ?? []) as $slotCode => $slotItem) {
+        if (!is_array($slotItem) || empty($slotItem['item_id']) || strpos((string)$slotCode, 'weapon_') !== 0) {
+            continue;
+        }
+        $activeWeaponHtml = $renderCard($slotItem, (string)$slotCode);
+        break;
+    }
+
+    $artifactsCards = '';
+    foreach ((array)($state['items'] ?? []) as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        $slot = (string)($equipped[(int)($item['id'] ?? 0)] ?? '');
+        $cards[] = $renderCard($item, $slot);
+        $subtype = (string)($item['subtype'] ?? '');
+        if ($subtype === 'artifact' && $slot !== '') {
+            $artifactsCards .= $renderCard($item, $slot);
+        }
+    }
+
+    $cardsHtml = $cards ? implode('', $cards) : '<div class="af-cs-muted">Нет предметов экипировки.</div>';
+    $artifactsHtml = $artifactsCards !== '' ? $artifactsCards : '<div class="af-cs-muted">Артефакты не надеты.</div>';
+
+    return '<div class="af-cs-arpg-equipment" data-afcs-arpg-equipment-root="1" data-afcs-equipment-can-edit="' . ($can_edit ? '1' : '0') . '">'
+        . '<section class="af-cs-arpg-panel"><div class="af-cs-arpg-equip-head"><h2>Активная экипировка</h2>'
+        . ($can_edit ? '<button type="button" class="af-cs-attrs__gear" data-afcs-arpg-edit-toggle="1" aria-label="Редактировать экипировку"><i class="fa-solid fa-gear" aria-hidden="true"></i></button>' : '')
+        . '</div><div class="af-cs-arpg-equip-grid">' . $activeWeaponHtml . $artifactsHtml . '</div></section>'
+        . '<section class="af-cs-arpg-panel af-cs-arpg-equip-manage" data-afcs-arpg-equip-manage="1" hidden><h2>Управление экипировкой</h2><div class="af-cs-arpg-equip-grid">' . $cardsHtml . '</div></section>'
+        . '</div>';
+}
+
 function af_charactersheets_detect_render_profile(array $sheet_view): string
 {
     $candidates = [
@@ -873,6 +1049,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     $sheet_arpg_passive_abilities_html = '<div class="af-cs-muted">Пассивные способности не назначены</div>';
     $sheet_arpg_talents_html = '<div class="af-cs-arpg-placeholder">Древо талантов и прокачка будут выведены здесь. Для улучшения используются Ability Tokens.</div>';
     $sheet_arpg_achievements_html = '<div class="af-cs-arpg-placeholder">Раздел достижений будет подключён позже.</div>';
+    $sheet_arpg_main_info_html = '<div class="af-cs-arpg-placeholder">Базовая информация персонажа будет выведена здесь.</div>';
     $sheet_arpg_identity_block_html = '';
     $sheet_arpg_stats_block_html = '';
     $sheet_arpg_weapon_block_html = '';
@@ -908,7 +1085,9 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
         $sheet_arpg_artifacts_html = af_charactersheets_arpg_render_artifacts_html((array)($sheet_arpg_vm['artifacts'] ?? []));
         $sheet_arpg_active_abilities_html = af_charactersheets_arpg_render_abilities_group_html((array)($sheet_arpg_vm['abilities_groups']['active'] ?? []), 'Активные способности не назначены');
         $sheet_arpg_passive_abilities_html = af_charactersheets_arpg_render_abilities_group_html((array)($sheet_arpg_vm['abilities_groups']['passive'] ?? []), 'Пассивные способности не назначены');
-        $sheet_arpg_talents_html = '<div class="af-cs-arpg-placeholder"><strong>Древо талантов:</strong> будет построено в этом блоке.<br><strong>Прокачка:</strong> использует кошелёк Ability Tokens (' . $sheet_arpg_wallet_tokens . ' ' . $sheet_arpg_wallet_symbol . ').</div>';
+        $sheet_arpg_talents_html = af_charactersheets_arpg_render_talent_tree_html($sheet_arpg_vm, $can_edit_loadout);
+        $sheet_arpg_main_info_html = af_charactersheets_arpg_render_main_info_html($sheet_arpg_vm);
+        $sheet_equipment_html = af_charactersheets_build_arpg_equipment_html($build, $can_edit_loadout, $sheet_owner_uid_for_loadout);
 
         eval("\$sheet_arpg_identity_block_html = \"" . $templates->get('charactersheet_arpg_identity') . "\";");
         eval("\$sheet_arpg_stats_block_html = \"" . $templates->get('charactersheet_arpg_stats_panel') . "\";");
