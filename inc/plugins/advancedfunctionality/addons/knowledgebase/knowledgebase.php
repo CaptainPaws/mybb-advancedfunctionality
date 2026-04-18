@@ -2430,17 +2430,7 @@ function af_kb_get_type_schema_dnd(string $typeKey): array
 
 function af_kb_get_type_schema_arpg(string $typeKey): array
 {
-    global $db;
-
-    $safeType = $db->escape_string($typeKey);
-    $row = $db->fetch_array(
-        $db->simple_select(
-            'af_kb_types',
-            'ui_schema_json,rules_schema',
-            "(type='".$safeType."' OR type_key='".$safeType."')",
-            ['limit' => 1]
-        )
-    );
+    $row = af_kb_find_type_row($typeKey);
 
     $schema = $row ? af_kb_decode_json((string)($row['ui_schema_json'] ?? '{}')) : [];
     if (empty($schema)) {
@@ -5598,8 +5588,31 @@ function af_kb_find_type_row(string $typeKey): ?array
     global $db;
 
     $safeType = $db->escape_string($typeKey);
-    $row = $db->fetch_array($db->simple_select('af_kb_types', '*', "(type='".$safeType."' OR type_key='".$safeType."')", ['limit' => 1]));
-    return $row ?: null;
+    $q = $db->simple_select('af_kb_types', '*', "(type='".$safeType."' OR type_key='".$safeType."')");
+    $best = null;
+    $bestScore = -1;
+    while ($row = $db->fetch_array($q)) {
+        $score = 0;
+        if ((string)($row['type_key'] ?? '') === $typeKey) {
+            $score += 100;
+        }
+        if ((string)($row['type'] ?? '') === $typeKey) {
+            $score += 50;
+        }
+        if ((int)($row['active'] ?? 0) === 1) {
+            $score += 10;
+        }
+        $score += 1;
+
+        $rowId = (int)($row['id'] ?? 0);
+        $bestId = (int)($best['id'] ?? 0);
+        if ($best === null || $score > $bestScore || ($score === $bestScore && $rowId > $bestId)) {
+            $best = $row;
+            $bestScore = $score;
+        }
+    }
+
+    return $best ?: null;
 }
 
 function af_kb_normalize_mechanic_key(string $mechanicKey): string
@@ -7095,6 +7108,7 @@ function af_kb_handle_view(): void
         $start = ($page - 1) * $perpage;
 
         $types = [];
+        $seenTypes = [];
         $q = $db->simple_select(
             'af_kb_types',
             '*',
@@ -7107,11 +7121,19 @@ function af_kb_handle_view(): void
             ]
         );
         while ($row = $db->fetch_array($q)) {
-            $rowType = (string)($row['type'] ?? '');
+            $rowType = (string)($row['type_key'] ?? '');
+            if ($rowType === '') {
+                $rowType = (string)($row['type'] ?? '');
+            }
+            if ($rowType === '' || isset($seenTypes[$rowType])) {
+                continue;
+            }
             $rowMechanic = af_kb_get_type_mechanic_key($row);
             if (!af_kb_can_edit() && af_kb_is_internal_service_type($rowType, $rowMechanic)) {
                 continue;
             }
+            $row['type'] = $rowType;
+            $seenTypes[$rowType] = true;
             $types[] = $row;
         }
 
@@ -8980,17 +9002,25 @@ function af_kb_handle_json_types(): void
         : "active=1 AND type<>'" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "'";
 
     $items = [];
+    $seenTypes = [];
     $q = $db->simple_select('af_kb_types', '*', $where, ['order_by' => 'sortorder, type', 'order_dir' => 'ASC']);
     while ($row = $db->fetch_array($q)) {
-        $rowType = (string)($row['type'] ?? '');
+        $rowType = (string)($row['type_key'] ?? '');
+        if ($rowType === '') {
+            $rowType = (string)($row['type'] ?? '');
+        }
+        if ($rowType === '' || isset($seenTypes[$rowType])) {
+            continue;
+        }
         $rowMechanic = af_kb_get_type_mechanic_key($row);
         if (!af_kb_can_edit() && af_kb_is_internal_service_type($rowType, $rowMechanic)) {
             continue;
         }
+        $seenTypes[$rowType] = true;
         $items[] = [
-            'type' => $row['type'],
+            'type' => $rowType,
             'mechanic_key' => af_kb_get_type_mechanic_key($row),
-            'title' => af_kb_pick_text($row, 'title') ?: $row['type'],
+            'title' => af_kb_pick_text($row, 'title') ?: $rowType,
             'icon_url' => $row['icon_url'],
             'icon_class' => $row['icon_class'],
             'background_tab_url' => $row['bg_tab_url'] ?? '',

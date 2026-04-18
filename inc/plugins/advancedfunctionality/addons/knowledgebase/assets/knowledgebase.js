@@ -775,6 +775,11 @@
 
         var type = (root.getAttribute('data-type') || '').trim(); // race/class/theme/lore/...
         var mechanic = String(root.getAttribute('data-mechanic') || 'dnd').trim().toLowerCase() || 'dnd';
+        // Forensic hardening: ARPG type keys must always route to ARPG UI even if stale/duplicate
+        // af_kb_types rows leaked wrong mechanic_key into the template dataset.
+        if (/^arpg_/i.test(type)) {
+            mechanic = 'arpg';
+        }
         var typeSchema = readJson(root.getAttribute('data-type-schema') || '{}', {});
         var itemKindOptionsRaw = readJson(root.getAttribute('data-item-kinds') || '[]', []);
         var itemKindOptions = (Array.isArray(itemKindOptionsRaw) && itemKindOptionsRaw.length ? itemKindOptionsRaw : [
@@ -1015,6 +1020,7 @@
 
             function renderArrayEditor(container, title, path, columns, options) {
                 options = options || {};
+                columns = Array.isArray(columns) ? columns : [];
                 var wrap = document.createElement('div');
                 wrap.className = 'af-kb-kvlist';
                 wrap.innerHTML = '<h4>' + esc(title) + '</h4>' + (options.help ? '<div class="af-kb-help">' + esc(options.help) + '</div>' : '');
@@ -1070,12 +1076,20 @@
                         card.appendChild(grid);
                         var del = document.createElement('button');
                         del.type = 'button'; del.className = 'af-kb-remove'; del.textContent = 'Удалить';
-                        del.addEventListener('click', function () { arr.splice(idx, 1); redraw(); syncToRaw(); });
+                        del.addEventListener('click', function (event) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            arr.splice(idx, 1);
+                            redraw();
+                            syncToRaw();
+                        });
                         card.appendChild(del);
                         list.appendChild(card);
                     });
                 }
-                add.addEventListener('click', function () {
+                add.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
                     var row = {};
                     columns.forEach(function (col) {
                         if (col.type === 'number') row[col.key] = 0;
