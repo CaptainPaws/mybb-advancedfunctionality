@@ -949,14 +949,21 @@
             }
             var arpgEnums = {
                 sourceOrigin: ['canon', 'oc', 'hybrid'],
-                abilitySubtype: ['', 'active', 'passive', 'ultimate', 'support', 'technique', 'aura', 'toggle', 'custom'],
-                abilitySlot: ['', 'basic', 'core', 'support', 'mobility', 'ultimate', 'passive', 'aura', 'utility'],
-                damageType: ['', 'physical', 'fire', 'cold', 'lightning', 'poison', 'bleed', 'arcane', 'void', 'holy', 'custom'],
-                targeting: ['', 'self', 'single_target', 'cone', 'line', 'aoe_ground', 'aoe_around_self', 'projectile', 'chain', 'global', 'custom'],
-                itemKind: ['', 'weapon', 'armor', 'accessory', 'artifact', 'implant', 'consumable', 'quest', 'material', 'custom'],
-                equipSlot: ['', 'main_hand', 'off_hand', 'two_hand', 'head', 'chest', 'legs', 'hands', 'feet', 'ring', 'amulet', 'belt', 'trinket', 'implant', 'custom'],
-                rarity: ['', 'common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic', 'set', 'unique', 'custom'],
-                talentTree: ['', 'combat', 'support', 'survival', 'specialization', 'custom']
+                abilitySubtype: ['', 'active', 'passive', 'ultimate', 'support', 'technique', 'aura', 'toggle', 'stance', 'counter', 'summon', 'combo', 'charged', 'hold', 'movement', 'reaction', 'follow_up', 'custom'],
+                abilitySlot: ['', 'basic', 'core', 'support', 'mobility', 'ultimate', 'passive', 'aura', 'utility', 'skill_1', 'skill_2', 'skill_3', 'weapon_skill', 'dash', 'jump', 'parry', 'counter', 'special', 'custom'],
+                damageType: ['', 'physical', 'strike', 'slash', 'pierce', 'fire', 'ice', 'frost', 'water', 'wind', 'earth', 'geo', 'lightning', 'electric', 'arcane', 'quantum', 'imaginary', 'poison', 'toxic', 'bleed', 'burn', 'holy', 'dark', 'void', 'true', 'custom'],
+                targeting: ['', 'self', 'single_target', 'single_ally', 'single_enemy', 'nearest_enemy', 'nearest_ally', 'cone', 'line', 'aoe_ground', 'aoe_around_self', 'aoe_around_target', 'projectile', 'chain', 'global', 'summon_point', 'field_zone', 'custom'],
+                itemKind: ['', 'weapon', 'armor', 'accessory', 'artifact', 'relic', 'echo', 'memory', 'implant', 'module', 'consumable', 'quest', 'material', 'set_piece', 'trinket', 'custom'],
+                equipSlot: ['', 'main_hand', 'off_hand', 'two_hand', 'head', 'chest', 'legs', 'hands', 'feet', 'ring', 'amulet', 'belt', 'trinket', 'implant', 'relic_1', 'relic_2', 'relic_3', 'relic_4', 'artifact_1', 'artifact_2', 'artifact_3', 'artifact_4', 'artifact_5', 'weapon_memory', 'pet', 'custom'],
+                rarity: ['', 'common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic', 'set', 'unique', 'exotic', 'ancient', 'ascended', 'custom'],
+                talentTree: ['', 'combat', 'support', 'survival', 'specialization', 'weapon', 'class', 'utility', 'ultimate', 'custom'],
+                modifierMode: ['', 'flat', 'percent', 'multiplier', 'override', 'convert', 'set_min', 'set_max'],
+                resourceKind: ['', 'hp', 'shield', 'energy', 'mana', 'rage', 'stamina', 'focus', 'ammo', 'heat', 'break_gauge', 'ultimate_charge', 'custom'],
+                triggerEvent: ['', 'on_hit', 'on_crit', 'on_kill', 'on_cast', 'on_use', 'on_equip', 'on_unequip', 'on_dodge', 'on_parry', 'on_block', 'on_take_damage', 'on_heal', 'on_shield_break', 'on_break', 'on_status_apply', 'on_status_expire', 'on_stack_gain', 'on_stack_consume', 'on_resource_full', 'on_resource_empty', 'on_enter_field', 'on_exit_field', 'on_interval', 'custom'],
+                conditionKind: ['', 'target_has_status', 'self_has_status', 'target_hp_below', 'self_hp_below', 'target_hp_above', 'self_hp_above', 'resource_above', 'resource_below', 'combo_step', 'weapon_type', 'damage_type', 'in_field', 'stack_count', 'on_crit_window', 'custom'],
+                stackingPolicy: ['', 'none', 'refresh', 'extend_duration', 'replace_oldest', 'replace_lowest', 'replace_highest', 'independent', 'custom'],
+                effectKind: ['', 'damage', 'heal', 'shield', 'status_apply', 'status_remove', 'buff', 'debuff', 'summon', 'aura', 'field', 'resource_gain', 'resource_spend', 'resource_drain', 'cleanse', 'displacement', 'control', 'grant_stack', 'consume_stack', 'grant_ability', 'proc', 'trigger_effect', 'custom'],
+                requirementType: ['', 'archetype', 'faction', 'origin', 'level', 'tag', 'resource_threshold', 'condition', 'talent', 'item', 'custom']
             };
 
             payload.schema = isService ? 'af_kb.arpg.mechanics.v1' : 'af_kb.arpg.meta.v1';
@@ -1121,6 +1128,58 @@
                 redraw();
             }
 
+            function enumCol(key, label, options) {
+                return { key: key, label: label, type: 'select', options: options || [''] };
+            }
+
+            function renderModifierEditor(container, title, path, includeRank) {
+                var columns = [];
+                if (includeRank) columns.push({ key: 'rank', label: 'rank', type: 'number' });
+                columns = columns.concat([
+                    enumCol('stat', 'stat', [''].concat((data.stats_registry && Array.isArray(data.stats_registry) ? data.stats_registry : []))),
+                    { key: 'target', label: 'target/scope' },
+                    enumCol('mode', 'mode', arpgEnums.modifierMode),
+                    { key: 'value', label: 'value', type: 'number' },
+                    enumCol('damage_type', 'damage_type', arpgEnums.damageType),
+                    { key: 'subtype', label: 'subtype' },
+                    { key: 'duration', label: 'duration', type: 'number' },
+                    { key: 'condition_ref', label: 'condition_ref' },
+                    { key: 'condition', label: 'inline condition' },
+                    { key: 'source_ref', label: 'source_ref' },
+                    { key: 'notes', label: 'notes' }
+                ]);
+                renderArrayEditor(container, title, path, columns);
+            }
+
+            function renderEffectEditor(container, title, path) {
+                renderArrayEditor(container, title, path, [
+                    enumCol('kind', 'kind', arpgEnums.effectKind),
+                    { key: 'formula', label: 'formula/value' },
+                    { key: 'value', label: 'value', type: 'number' },
+                    { key: 'ratio', label: 'ratio', type: 'number' },
+                    enumCol('damage_type', 'damage_type', arpgEnums.damageType),
+                    { key: 'status_ref', label: 'status_ref' },
+                    { key: 'ability_ref', label: 'ability_ref' },
+                    enumCol('resource', 'resource', arpgEnums.resourceKind),
+                    enumCol('event', 'trigger event', arpgEnums.triggerEvent),
+                    { key: 'condition_ref', label: 'condition_ref' },
+                    { key: 'duration', label: 'duration', type: 'number' },
+                    { key: 'chance', label: 'chance', type: 'number' },
+                    { key: 'target', label: 'target/scope' }
+                ]);
+            }
+
+            function renderRequirementEditor(container, title, path) {
+                renderArrayEditor(container, title, path, [
+                    enumCol('type', 'type', arpgEnums.requirementType),
+                    { key: 'key', label: 'key/ref' },
+                    { key: 'op', label: 'operator' },
+                    { key: 'value', label: 'value' },
+                    { key: 'resource', label: 'resource' },
+                    { key: 'condition_ref', label: 'condition_ref' }
+                ]);
+            }
+
             env.innerHTML = [
                 '<div class="af-kb-row"><div><label>Schema</label><input type="text" id="af-arpg-schema" readonly="readonly" /></div><div><label>Mechanic</label><input type="text" id="af-arpg-mechanic" readonly="readonly" /></div><div><label>Entity kind</label><input type="text" id="af-arpg-kind" readonly="readonly" /></div></div>',
                 '<div class="af-kb-row"><div><label>Subtype</label><select id="af-arpg-subtype"></select></div><div><label>Category</label><input type="text" id="af-arpg-category" /></div><div><label>Tags (csv)</label><input type="text" id="af-arpg-tags" /></div></div>',
@@ -1198,7 +1257,7 @@
                 if (kind === 'ability') {
                     var ability = ensureDataObject('ability');
                     var aMain = createSection(entity, 'Ability core', 'Active/passive setup, targeting and delivery.');
-                    aMain.insertAdjacentHTML('beforeend', '<div class="af-kb-row"><div><label>subtype</label><select id="af-arpg-ability-subtype"></select></div><div><label>slot</label><select id="af-arpg-ability-slot"></select></div><div><label>damage_type</label><select id="af-arpg-ability-dmg"></select></div></div><div class="af-kb-row"><div><label>targeting</label><select id="af-arpg-ability-target"></select></div><div><label>cooldown.seconds</label><input id="af-arpg-ability-cd" type="number" /></div><div><label>charges.max</label><input id="af-arpg-ability-charges" type="number" /></div></div><div class="af-kb-row"><div><label>charges.recharge_seconds</label><input id="af-arpg-ability-charge-regen" type="number" /></div><div><label>stacking.max_stacks</label><input id="af-arpg-ability-stacks" type="number" /></div><div><label>stacking.refresh_on_apply</label><input id="af-arpg-ability-stack-refresh" type="checkbox" /></div></div>');
+                    aMain.insertAdjacentHTML('beforeend', '<div class="af-kb-row"><div><label>subtype</label><select id="af-arpg-ability-subtype"></select></div><div><label>slot</label><select id="af-arpg-ability-slot"></select></div><div><label>damage_type</label><select id="af-arpg-ability-dmg"></select></div></div><div class="af-kb-row"><div><label>targeting</label><select id="af-arpg-ability-target"></select></div><div><label>cast_profile</label><input id="af-arpg-ability-cast-profile" type="text" /></div><div><label>delivery_kind</label><input id="af-arpg-ability-delivery" type="text" /></div></div><div class="af-kb-row"><div><label>cooldown.seconds</label><input id="af-arpg-ability-cd" type="number" /></div><div><label>charges.max</label><input id="af-arpg-ability-charges" type="number" /></div><div><label>charges.recharge_seconds</label><input id="af-arpg-ability-charge-regen" type="number" /></div></div><div class="af-kb-row"><div><label>stacking.max_stacks</label><input id="af-arpg-ability-stacks" type="number" /></div><div><label>stacking.refresh_on_apply</label><input id="af-arpg-ability-stack-refresh" type="checkbox" /></div><div><label>upkeep_per_sec</label><input id="af-arpg-ability-upkeep" type="number" /></div></div>');
                     var subtype = aMain.querySelector('#af-arpg-ability-subtype');
                     var slot = entity.querySelector('#af-arpg-ability-slot');
                     var dmg = entity.querySelector('#af-arpg-ability-dmg');
@@ -1208,6 +1267,9 @@
                     var chr = aMain.querySelector('#af-arpg-ability-charge-regen');
                     var st = aMain.querySelector('#af-arpg-ability-stacks');
                     var stRef = aMain.querySelector('#af-arpg-ability-stack-refresh');
+                    var cp = aMain.querySelector('#af-arpg-ability-cast-profile');
+                    var del = aMain.querySelector('#af-arpg-ability-delivery');
+                    var upkeep = aMain.querySelector('#af-arpg-ability-upkeep');
                     [arpgEnums.abilitySubtype, arpgEnums.abilitySlot, arpgEnums.damageType, arpgEnums.targeting].forEach(function (optSet, idx) {
                         var sel = [subtype, slot, dmg, trg][idx];
                         optSet.forEach(function (v) { sel.insertAdjacentHTML('beforeend', '<option value="' + esc(v) + '">' + esc(v || '—') + '</option>'); });
@@ -1225,7 +1287,10 @@
                     chr.value = String(numberOrZero(((data.charges || {}).recharge_seconds) || 0));
                     st.value = String(numberOrZero(((data.stacking || {}).max_stacks) || 0));
                     stRef.checked = !!((data.stacking || {}).refresh_on_apply);
-                    [subtype, slot, dmg, trg, cd, ch, chr, st, stRef].forEach(function (node) {
+                    cp.value = String(data.cast_profile || '');
+                    del.value = String(data.delivery_kind || '');
+                    upkeep.value = String(numberOrZero((data.upkeep || {}).per_second || 0));
+                    [subtype, slot, dmg, trg, cd, ch, chr, st, stRef, cp, del, upkeep].forEach(function (node) {
                         bindFieldSync(node, function () {
                             payload.subtype = subtype.value;
                             ability.slot = slot.value.trim();
@@ -1239,19 +1304,23 @@
                             data.charges.recharge_seconds = numberOrZero(chr.value);
                             data.stacking.max_stacks = numberOrZero(st.value);
                             data.stacking.refresh_on_apply = !!stRef.checked;
+                            data.cast_profile = cp.value.trim();
+                            data.delivery_kind = del.value.trim();
+                            data.upkeep = ensureObject(data, 'upkeep');
+                            data.upkeep.per_second = numberOrZero(upkeep.value);
                             syncToRaw();
                         });
                     });
-                    renderArrayEditor(entity, 'requirements', ['data_json', 'data', 'requirements'], [{ key: 'type', label: 'type' }, { key: 'key', label: 'key/ref' }]);
-                    renderArrayEditor(entity, 'costs', ['data_json', 'data', 'costs'], [{ key: 'resource', label: 'resource' }, { key: 'amount', label: 'amount', type: 'number' }]);
-                    renderArrayEditor(entity, 'effects', ['data_json', 'data', 'effects'], [{ key: 'kind', label: 'kind' }, { key: 'formula_ref', label: 'formula_ref' }, { key: 'status_ref', label: 'status_ref' }, { key: 'snippet_ref', label: 'snippet_ref' }]);
-                    renderArrayEditor(entity, 'modifiers', ['data_json', 'data', 'modifiers'], [{ key: 'stat', label: 'stat' }, { key: 'mode', label: 'mode' }, { key: 'value', label: 'value', type: 'number' }]);
-                    renderArrayEditor(entity, 'resources', ['data_json', 'data', 'resources'], [{ key: 'resource', label: 'resource' }, { key: 'value', label: 'value', type: 'number' }]);
-                    renderArrayEditor(entity, 'scaling', ['data_json', 'data', 'scaling'], [{ key: 'table_ref', label: 'table_ref' }, { key: 'stat', label: 'stat' }, { key: 'ratio', label: 'ratio', type: 'number' }, { key: 'formula_ref', label: 'formula_ref' }]);
-                    renderArrayEditor(entity, 'triggers', ['data_json', 'data', 'triggers'], [{ key: 'template_ref', label: 'template_ref' }, { key: 'event', label: 'event' }, { key: 'condition_ref', label: 'condition_ref' }]);
-                    renderArrayEditor(entity, 'conditions', ['data_json', 'data', 'conditions'], [{ key: 'template_ref', label: 'template_ref' }, { key: 'kind', label: 'kind' }, { key: 'value', label: 'value' }]);
-                    renderArrayEditor(entity, 'status_refs', ['data_json', 'data', 'status_refs'], [{ key: 'ref', label: 'status ref' }]);
-                    renderArrayEditor(entity, 'template_refs', ['data_json', 'data', 'template_refs'], [{ key: 'ref', label: 'template ref' }]);
+                    renderRequirementEditor(entity, 'Requirements', ['data_json', 'data', 'requirements']);
+                    renderArrayEditor(entity, 'Costs / upkeep', ['data_json', 'data', 'costs'], [enumCol('resource', 'resource', arpgEnums.resourceKind), { key: 'amount', label: 'amount', type: 'number' }, enumCol('mode', 'mode', ['', 'spend', 'upkeep', 'reserve']), { key: 'interval', label: 'interval', type: 'number' }]);
+                    renderArrayEditor(entity, 'Scaling', ['data_json', 'data', 'scaling'], [{ key: 'stat', label: 'scaling stat' }, { key: 'ratio', label: 'ratio', type: 'number' }, { key: 'formula_ref', label: 'formula_ref' }, { key: 'table_ref', label: 'level_curve/table_ref' }]);
+                    renderEffectEditor(entity, 'Effects', ['data_json', 'data', 'effects']);
+                    renderModifierEditor(entity, 'Embedded modifiers', ['data_json', 'data', 'modifiers']);
+                    renderArrayEditor(entity, 'Conditions', ['data_json', 'data', 'conditions'], [{ key: 'template_ref', label: 'template_ref' }, enumCol('kind', 'kind', arpgEnums.conditionKind), { key: 'value', label: 'value' }, { key: 'ref', label: 'ref target' }]);
+                    renderArrayEditor(entity, 'Triggers', ['data_json', 'data', 'triggers'], [{ key: 'template_ref', label: 'template_ref' }, enumCol('event', 'event', arpgEnums.triggerEvent), { key: 'condition_ref', label: 'condition_ref' }, { key: 'effect_ref', label: 'effect_ref' }]);
+                    renderArrayEditor(entity, 'Stacking', ['data_json', 'data', 'stacking_rules'], [enumCol('policy', 'policy', arpgEnums.stackingPolicy), { key: 'max_stacks', label: 'max_stacks', type: 'number' }, { key: 'refresh_behavior', label: 'refresh_behavior' }, { key: 'scope', label: 'scope' }]);
+                    renderArrayEditor(entity, 'Status refs', ['data_json', 'data', 'status_refs'], [{ key: 'ref', label: 'status ref' }]);
+                    renderArrayEditor(entity, 'Template refs', ['data_json', 'data', 'template_refs'], [{ key: 'ref', label: 'template ref' }]);
                 } else if (kind === 'bestiary') {
                     var bestiary = ensureDataObject('bestiary');
                     if (!bestiary.stats || typeof bestiary.stats !== 'object' || Array.isArray(bestiary.stats)) bestiary.stats = {};
@@ -1362,11 +1431,14 @@
                     ny.value = String(numberOrZero(((data.node_position || {}).y) || 0));
                     ng.value = ((data.node_position || {}).group) || '';
                     [tree, tier, mr, nx, ny, ng].forEach(function (n) { bindFieldSync(n, function () { data.node_position = ensureObject(data, 'node_position'); talent.tree = tree.value.trim(); talent.tier = numberOrZero(tier.value); talent.max_rank = numberOrZero(mr.value); data.node_position.x = numberOrZero(nx.value); data.node_position.y = numberOrZero(ny.value); data.node_position.group = ng.value.trim(); syncToRaw(); }); });
-                    renderArrayEditor(entity, 'rank_effects', ['data_json', 'data', 'rank_effects'], [{ key: 'rank', label: 'rank', type: 'number' }, { key: 'kind', label: 'kind' }, { key: 'value', label: 'value' }, { key: 'effect_ref', label: 'effect_ref' }]);
-                    renderArrayEditor(entity, 'requirements', ['data_json', 'data', 'requirements'], [{ key: 'type', label: 'type' }, { key: 'key', label: 'key' }]);
+                    renderRequirementEditor(entity, 'Requirements', ['data_json', 'data', 'requirements']);
                     renderArrayEditor(entity, 'mutual_exclusive_with', ['data_json', 'data', 'mutual_exclusive_with'], [{ key: 'ref', label: 'ref' }]);
-                    renderArrayEditor(entity, 'rank_grants', ['data_json', 'data', 'rank_grants'], [{ key: 'rank', label: 'rank', type: 'number' }, { key: 'kind', label: 'kind' }, { key: 'ref', label: 'ref' }]);
-                    renderArrayEditor(entity, 'rank_modifiers', ['data_json', 'data', 'rank_modifiers'], [{ key: 'rank', label: 'rank', type: 'number' }, { key: 'stat', label: 'stat' }, { key: 'mode', label: 'mode' }, { key: 'value', label: 'value', type: 'number' }]);
+                    renderArrayEditor(entity, 'grants', ['data_json', 'data', 'grants'], [{ key: 'kind', label: 'kind' }, { key: 'ref', label: 'ref' }, { key: 'value', label: 'value' }]);
+                    renderArrayEditor(entity, 'rank_effects', ['data_json', 'data', 'rank_effects'], [{ key: 'rank', label: 'rank', type: 'number' }, enumCol('kind', 'kind', ['modifier', 'effect', 'grant', 'unlock', 'ability_ref', 'trigger_change', 'resource_change', 'custom']), { key: 'description', label: 'description' }, { key: 'condition_ref', label: 'condition_ref' }]);
+                    renderArrayEditor(entity, 'rank_effect_grants', ['data_json', 'data', 'rank_effect_grants'], [{ key: 'rank', label: 'rank', type: 'number' }, { key: 'kind', label: 'kind' }, { key: 'ref', label: 'ref' }, { key: 'value', label: 'value' }]);
+                    renderModifierEditor(entity, 'rank_modifiers', ['data_json', 'data', 'rank_modifiers'], true);
+                    renderEffectEditor(entity, 'rank_effect_payloads', ['data_json', 'data', 'rank_effect_payloads']);
+                    renderArrayEditor(entity, 'rank_unlocks', ['data_json', 'data', 'rank_unlocks'], [{ key: 'rank', label: 'rank', type: 'number' }, { key: 'unlock_ref', label: 'unlock_ref' }, { key: 'ability_ref', label: 'ability_ref' }, { key: 'notes', label: 'notes' }]);
                 } else if (kind === 'item') {
                     var item = ensureDataObject('item');
                     var iMain = createSection(entity, 'Equipment profile', 'Core item identity, quality and level gating.');
@@ -1378,23 +1450,17 @@
                     addSelectOptionIfMissing(ir, item.rarity || '');
                     ik.value = item.item_kind || ''; es.value = item.equip_slot || ''; ir.value = item.rarity || ''; lmin.value = String(numberOrZero(((item.level_range||{}).min)||0)); lmax.value = String(numberOrZero(((item.level_range||{}).max)||0)); dur.value = String(numberOrZero(data.durability || 0));
                     [ik, es, ir, lmin, lmax, dur].forEach(function (n) { bindFieldSync(n, function () { if (!item.level_range || typeof item.level_range !== 'object') item.level_range = {}; item.item_kind = ik.value.trim(); item.equip_slot = es.value.trim(); item.rarity = ir.value.trim(); item.level_range.min = numberOrZero(lmin.value); item.level_range.max = numberOrZero(lmax.value); data.durability = numberOrZero(dur.value); syncToRaw(); }); });
-                    renderArrayEditor(entity, 'requirements', ['data_json', 'data', 'requirements'], [{ key: 'type', label: 'type' }, { key: 'key', label: 'key' }]);
-                    renderArrayEditor(entity, 'base_stats', ['data_json', 'data', 'base_stats'], [{ key: 'stat', label: 'stat' }, { key: 'flat', label: 'flat', type: 'number' }, { key: 'percent', label: 'percent', type: 'number' }]);
-                    renderArrayEditor(entity, 'substats', ['data_json', 'data', 'substats'], [{ key: 'stat', label: 'stat' }, { key: 'flat', label: 'flat', type: 'number' }, { key: 'percent', label: 'percent', type: 'number' }]);
-                    renderArrayEditor(entity, 'modifiers', ['data_json', 'data', 'modifiers'], [{ key: 'stat', label: 'stat' }, { key: 'mode', label: 'mode(flat|percent)' }, { key: 'value', label: 'value', type: 'number' }, { key: 'condition_ref', label: 'condition_ref' }]);
-                    renderArrayEditor(entity, 'effects', ['data_json', 'data', 'effects'], [{ key: 'kind', label: 'kind' }, { key: 'ability_ref', label: 'ability_ref' }, { key: 'status_ref', label: 'status_ref' }, { key: 'trigger', label: 'trigger' }]);
+                    renderArrayEditor(entity, 'tags / set_tags', ['data_json', 'data', 'set_tags'], [{ key: 'tag', label: 'set tag' }]);
+                    renderArrayEditor(entity, 'Base stats', ['data_json', 'data', 'base_stats'], [{ key: 'stat', label: 'stat' }, enumCol('mode', 'mode', arpgEnums.modifierMode), { key: 'value', label: 'value', type: 'number' }]);
+                    renderArrayEditor(entity, 'Substats', ['data_json', 'data', 'substats'], [{ key: 'stat', label: 'stat' }, enumCol('mode', 'mode', arpgEnums.modifierMode), { key: 'value', label: 'value', type: 'number' }]);
+                    renderModifierEditor(entity, 'Combat bonuses / modifiers', ['data_json', 'data', 'modifiers']);
+                    renderEffectEditor(entity, 'Effects', ['data_json', 'data', 'effects']);
+                    renderArrayEditor(entity, 'Passive refs', ['data_json', 'data', 'passive_refs'], [{ key: 'ability_ref', label: 'passive ability ref' }, { key: 'snippet_ref', label: 'snippet ref' }, { key: 'formula_ref', label: 'formula ref' }, { key: 'trigger_template_ref', label: 'trigger template ref' }, { key: 'condition_template_ref', label: 'condition template ref' }]);
+                    renderRequirementEditor(entity, 'Requirements', ['data_json', 'data', 'requirements']);
+                    renderArrayEditor(entity, 'Upgrade / scaling', ['data_json', 'data', 'scaling'], [{ key: 'table_ref', label: 'scaling table' }, { key: 'upgrade_path_ref', label: 'upgrade path ref' }, { key: 'refine_hook', label: 'refine/enhance hook' }, { key: 'formula_ref', label: 'formula_ref' }]);
                     renderArrayEditor(entity, 'grants', ['data_json', 'data', 'grants'], [{ key: 'kind', label: 'kind' }, { key: 'value', label: 'value/ref' }]);
-                    renderArrayEditor(entity, 'scaling', ['data_json', 'data', 'scaling'], [{ key: 'table_ref', label: 'table_ref' }, { key: 'stat', label: 'stat' }, { key: 'formula_ref', label: 'formula_ref' }]);
-                    renderArrayEditor(entity, 'passive_ability_refs', ['data_json', 'data', 'passive_ability_refs'], [{ key: 'ref', label: 'ability ref' }]);
-                    renderArrayEditor(entity, 'set_tags', ['data_json', 'data', 'set_tags'], [{ key: 'tag', label: 'set tag' }]);
-                    renderArrayEditor(entity, 'conditional_bonuses', ['data_json', 'data', 'conditional_bonuses'], [{ key: 'condition_ref', label: 'condition_ref' }, { key: 'stat', label: 'stat' }, { key: 'mode', label: 'mode' }, { key: 'value', label: 'value', type: 'number' }]);
-                    renderArrayEditor(entity, 'status_effects', ['data_json', 'data', 'status_effects'], [{ key: 'status_ref', label: 'status_ref' }, { key: 'chance', label: 'chance', type: 'number' }, { key: 'duration', label: 'duration', type: 'number' }]);
-                    renderArrayEditor(entity, 'resource_effects', ['data_json', 'data', 'resource_effects'], [{ key: 'resource', label: 'resource' }, { key: 'mode', label: 'mode' }, { key: 'value', label: 'value', type: 'number' }]);
-                    renderArrayEditor(entity, 'triggers', ['data_json', 'data', 'triggers'], [{ key: 'event', label: 'event(on_hit/on_equip/on_use/on_condition)' }, { key: 'template_ref', label: 'template_ref' }, { key: 'condition_ref', label: 'condition_ref' }]);
-                    renderArrayEditor(entity, 'upgrade_paths', ['data_json', 'data', 'upgrade_paths'], [{ key: 'to_ref', label: 'to_ref' }, { key: 'cost_ref', label: 'cost_ref' }]);
-                    renderArrayEditor(entity, 'formula_refs', ['data_json', 'data', 'formula_refs'], [{ key: 'ref', label: 'formula ref' }]);
-                    renderArrayEditor(entity, 'snippet_refs', ['data_json', 'data', 'snippet_refs'], [{ key: 'ref', label: 'snippet ref' }]);
-                    renderArrayEditor(entity, 'template_refs', ['data_json', 'data', 'template_refs'], [{ key: 'ref', label: 'template ref' }]);
+                    renderArrayEditor(entity, 'triggers', ['data_json', 'data', 'triggers'], [enumCol('event', 'event', arpgEnums.triggerEvent), { key: 'template_ref', label: 'template_ref' }, { key: 'condition_ref', label: 'condition_ref' }, { key: 'effect_ref', label: 'effect_ref' }]);
+                    renderArrayEditor(entity, 'upgrade_paths', ['data_json', 'data', 'upgrade_paths'], [{ key: 'to_ref', label: 'to_ref' }, { key: 'cost_ref', label: 'cost_ref' }, { key: 'materials_ref', label: 'materials_ref' }]);
                 } else if (kind === 'origin' || kind === 'archetype' || kind === 'faction' || kind === 'lore') {
                     var hints = {
                         origin: ['grants', 'modifiers', 'resources', 'conditions', 'restrictions', 'affinities', 'unlocks'],
@@ -1404,7 +1470,11 @@
                     };
                     entity.insertAdjacentHTML('beforeend', '<div class="af-kb-help">Ключевые поля для ' + esc(kind) + ': ' + esc(hints[kind].join(', ')) + '.</div>');
                     hints[kind].forEach(function (k) {
-                        renderArrayEditor(entity, k, ['data_json', 'data', k], [{ key: 'kind', label: 'kind/type' }, { key: 'value', label: 'value/ref' }]);
+                        if (k === 'modifiers') {
+                            renderModifierEditor(entity, k, ['data_json', 'data', k]);
+                        } else {
+                            renderArrayEditor(entity, k, ['data_json', 'data', k], [{ key: 'kind', label: 'kind/type' }, { key: 'value', label: 'value/ref' }]);
+                        }
                     });
                 }
             }
@@ -1412,9 +1482,12 @@
             function renderServiceEntity() {
                 var kind = payload.entity_kind;
                 if (kind === 'mechanic_profile') {
-                    renderArrayEditor(entity, 'stats registry', ['data_json', 'data', 'stats'], [{ key: 'key', label: 'key' }, { key: 'label', label: 'label' }, { key: 'mode', label: 'mode' }]);
-                    renderArrayEditor(entity, 'resources refs', ['data_json', 'data', 'resources'], [{ key: 'ref', label: 'resource ref' }]);
+                    renderArrayEditor(entity, 'stats registry', ['data_json', 'data', 'stats'], [{ key: 'key', label: 'key' }, { key: 'label', label: 'label' }, enumCol('mode', 'default mode', arpgEnums.modifierMode), enumCol('damage_type', 'damage type affinity', arpgEnums.damageType) ]);
+                    renderArrayEditor(entity, 'resources registry', ['data_json', 'data', 'resources'], [{ key: 'ref', label: 'resource ref' }, enumCol('kind', 'kind', arpgEnums.resourceKind) ]);
                     renderArrayEditor(entity, 'statuses refs', ['data_json', 'data', 'statuses'], [{ key: 'ref', label: 'status ref' }]);
+                    renderArrayEditor(entity, 'enum.trigger_events', ['data_json', 'data', 'enum_registry', 'trigger_events'], [{ key: 'key', label: 'event key' }]);
+                    renderArrayEditor(entity, 'enum.condition_kinds', ['data_json', 'data', 'enum_registry', 'condition_kinds'], [{ key: 'key', label: 'condition key' }]);
+                    renderArrayEditor(entity, 'enum.stacking_policies', ['data_json', 'data', 'enum_registry', 'stacking_policies'], [{ key: 'key', label: 'policy key' }]);
                     renderArrayEditor(entity, 'template registry', ['data_json', 'data', 'template_registry', 'modifier_templates'], [{ key: 'ref', label: 'modifier template ref' }]);
                     renderArrayEditor(entity, 'trigger templates', ['data_json', 'data', 'template_registry', 'trigger_templates'], [{ key: 'ref', label: 'trigger template ref' }]);
                     renderArrayEditor(entity, 'condition templates', ['data_json', 'data', 'template_registry', 'condition_templates'], [{ key: 'ref', label: 'condition template ref' }]);
