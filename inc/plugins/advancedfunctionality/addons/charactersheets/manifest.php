@@ -77,6 +77,8 @@ return [
 
                 'af_charactersheets_sheet_autocreate'        => 'Автосоздание листа персонажа',
                 'af_charactersheets_sheet_autocreate_desc'   => 'Если включено, после принятия срабатывает генератор листа персонажа (заглушка).',
+                'af_charactersheets_render_path_mode'         => 'Render path листа',
+                'af_charactersheets_render_path_mode_desc'    => 'auto — автоопределение профиля, dnd/arpg — принудительный выбор шаблона.',
                 'af_cs_assets_blacklist'                 => 'Blacklist ассетов CharacterSheets',
                 'af_cs_assets_blacklist_desc'            => "Одна строка = одно правило: script.php или script.php?action=... . На указанных страницах не подключаются charactersheets.css/js.",
                 'af_charactersheets_exp_per_char'            => 'EXP за символ',
@@ -179,6 +181,8 @@ return [
 
                 'af_charactersheets_sheet_autocreate'        => 'Auto-create character sheet',
                 'af_charactersheets_sheet_autocreate_desc'   => 'If enabled, triggers the character sheet generator (stub).',
+                'af_charactersheets_render_path_mode'         => 'Sheet render path',
+                'af_charactersheets_render_path_mode_desc'    => 'auto = detect by profile; dnd/arpg = force selected template path.',
                 'af_cs_assets_blacklist'                 => 'CharacterSheets assets blacklist',
                 'af_cs_assets_blacklist_desc'            => 'One rule per line: script.php or script.php?action=... . CharacterSheets CSS/JS will not be included on matched pages.',
                 'af_charactersheets_exp_per_char'            => 'EXP per character',
