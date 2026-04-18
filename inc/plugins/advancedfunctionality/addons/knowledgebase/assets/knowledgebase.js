@@ -949,24 +949,169 @@
             }
             var arpgEnums = {
                 sourceOrigin: ['canon', 'oc', 'hybrid'],
-                abilitySubtype: ['', 'active', 'passive', 'ultimate', 'support', 'technique', 'aura', 'toggle', 'stance', 'counter', 'summon', 'combo', 'charged', 'hold', 'movement', 'reaction', 'follow_up', 'resonance', 'burst', 'assist', 'custom'],
-                abilitySlot: ['', 'basic', 'core', 'support', 'mobility', 'ultimate', 'passive', 'aura', 'utility', 'skill_1', 'skill_2', 'skill_3', 'weapon_skill', 'dash', 'jump', 'parry', 'counter', 'special', 'assist', 'echo', 'custom'],
-                damageType: ['', 'physical', 'strike', 'slash', 'pierce', 'fire', 'ice', 'frost', 'water', 'wind', 'earth', 'geo', 'lightning', 'electric', 'arcane', 'quantum', 'imaginary', 'poison', 'toxic', 'bleed', 'burn', 'holy', 'dark', 'void', 'true', 'anemo', 'hydro', 'pyro', 'cryo', 'electro', 'dendro', 'custom'],
-                targeting: ['', 'self', 'single_target', 'single_ally', 'single_enemy', 'nearest_enemy', 'nearest_ally', 'cone', 'line', 'aoe_ground', 'aoe_around_self', 'aoe_around_target', 'projectile', 'chain', 'global', 'summon_point', 'field_zone', 'custom'],
-                itemKind: ['', 'weapon', 'armor', 'accessory', 'artifact', 'relic', 'echo', 'memory', 'implant', 'module', 'consumable', 'quest', 'material', 'set_piece', 'trinket', 'engine', 'disc', 'custom'],
-                equipSlot: ['', 'main_hand', 'off_hand', 'two_hand', 'head', 'chest', 'legs', 'hands', 'feet', 'ring', 'amulet', 'belt', 'trinket', 'implant', 'relic_1', 'relic_2', 'relic_3', 'relic_4', 'artifact_1', 'artifact_2', 'artifact_3', 'artifact_4', 'artifact_5', 'weapon_memory', 'pet', 'core', 'engine', 'disc_1', 'disc_2', 'disc_3', 'disc_4', 'disc_5', 'disc_6', 'custom'],
-                rarity: ['', 'common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic', 'set', 'unique', 'exotic', 'ancient', 'ascended', 'custom'],
-                talentTree: ['', 'combat', 'support', 'survival', 'specialization', 'weapon', 'class', 'utility', 'ultimate', 'core', 'chain', 'team', 'resonance', 'custom'],
+
+                abilitySubtype: [
+                    '', 'active', 'passive', 'ultimate', 'support', 'technique', 'aura', 'toggle',
+                    'stance', 'counter', 'summon', 'combo', 'charged', 'hold', 'movement',
+                    'reaction', 'follow_up', 'resonance', 'burst', 'assist', 'custom'
+                ],
+
+                abilitySlot: [
+                    '', 'basic', 'skill', 'skill_1', 'skill_2', 'skill_3', 'core', 'support',
+                    'mobility', 'ultimate', 'passive', 'aura', 'utility', 'weapon_skill',
+                    'dash', 'jump', 'parry', 'counter', 'special', 'assist', 'echo', 'custom'
+                ],
+
+                damageType: [
+                    '',
+                    'physical', 'strike', 'slash', 'pierce',
+                    'fire', 'ice', 'frost', 'water', 'wind', 'earth',
+                    'lightning', 'electric', 'arcane', 'holy', 'dark', 'void', 'true',
+                    'pyro', 'hydro', 'cryo', 'electro', 'anemo', 'geo', 'dendro',
+                    'imaginary', 'quantum', 'ether',
+                    'fusion', 'glacio', 'aero', 'spectro', 'havoc',
+                    'poison', 'toxic', 'bleed', 'burn',
+                    'custom'
+                ],
+
+                targeting: [
+                    '',
+                    'self', 'single_target', 'single_enemy', 'single_ally',
+                    'nearest_enemy', 'nearest_ally',
+                    'cone', 'line', 'projectile', 'chain',
+                    'aoe_ground', 'aoe_around_self', 'aoe_around_target',
+                    'field_zone', 'global', 'summon_point', 'custom'
+                ],
+
+                itemKind: [
+                    '',
+                    'weapon', 'armor', 'accessory', 'artifact', 'relic', 'echo', 'memory',
+                    'implant', 'module', 'consumable', 'quest', 'material', 'set_piece',
+                    'trinket', 'engine', 'disc', 'custom'
+                ],
+
+                equipSlot: [
+                    '',
+                    'main_hand', 'off_hand', 'two_hand',
+                    'head', 'chest', 'legs', 'hands', 'feet',
+                    'ring', 'amulet', 'belt', 'trinket',
+                    'implant', 'core', 'engine',
+                    'relic_1', 'relic_2', 'relic_3', 'relic_4',
+                    'artifact_1', 'artifact_2', 'artifact_3', 'artifact_4', 'artifact_5',
+                    'memory', 'echo',
+                    'disc_1', 'disc_2', 'disc_3', 'disc_4', 'disc_5', 'disc_6',
+                    'pet', 'custom'
+                ],
+
+                rarity: [
+                    '',
+                    'common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic',
+                    'set', 'unique', 'exotic', 'ancient', 'ascended', 'custom'
+                ],
+
+                talentTree: [
+                    '',
+                    'combat', 'support', 'survival', 'specialization',
+                    'weapon', 'class', 'utility', 'ultimate',
+                    'core', 'chain', 'team', 'resonance',
+                    'offense', 'defense', 'control', 'healing', 'resource',
+                    'custom'
+                ],
+
                 modifierMode: ['', 'flat', 'percent', 'multiplier', 'override', 'convert', 'set_min', 'set_max', 'formula_ref'],
+
                 valueMode: ['', 'flat', 'percent', 'multiplier', 'ratio', 'formula_ref', 'table_ref'],
+
                 resourceChangeMode: ['', 'spend', 'gain', 'refund', 'drain', 'regen', 'reserve', 'consume_stack', 'restore'],
-                resourceKind: ['', 'hp', 'shield', 'energy', 'mana', 'rage', 'stamina', 'focus', 'ammo', 'heat', 'break_gauge', 'ultimate_charge', 'resonance', 'skill_points', 'battery', 'custom'],
-                triggerEvent: ['', 'on_hit', 'on_crit', 'on_kill', 'on_cast', 'on_use', 'on_equip', 'on_unequip', 'on_dodge', 'on_parry', 'on_block', 'on_take_damage', 'on_heal', 'on_shield_break', 'on_break', 'on_status_apply', 'on_status_expire', 'on_stack_gain', 'on_stack_consume', 'on_resource_full', 'on_resource_empty', 'on_enter_field', 'on_exit_field', 'on_interval', 'on_follow_up', 'on_counter', 'on_combo_step', 'on_trigger', 'custom'],
-                conditionKind: ['', 'target_has_status', 'self_has_status', 'target_hp_below_percent', 'self_hp_below_percent', 'target_hp_above_percent', 'self_hp_above_percent', 'target_hp_below', 'self_hp_below', 'target_hp_above', 'self_hp_above', 'resource_above', 'resource_below', 'while_resource_above', 'while_resource_below', 'while_shielded', 'combo_step', 'weapon_type', 'damage_type', 'in_field', 'stack_count', 'target_distance', 'target_is_elite', 'on_crit_window', 'custom'],
+
+                resourceKind: [
+                    '',
+                    'hp', 'shield', 'energy', 'mana', 'rage', 'stamina', 'focus', 'ammo',
+                    'heat', 'break_gauge', 'ultimate_charge', 'resonance', 'skill_points',
+                    'battery', 'custom'
+                ],
+
+                triggerEvent: [
+                    '',
+                    'on_hit', 'on_crit', 'on_kill', 'on_cast', 'on_use', 'on_equip', 'on_unequip',
+                    'on_dodge', 'on_parry', 'on_block', 'on_take_damage', 'on_heal',
+                    'on_shield_break', 'on_break', 'on_status_apply', 'on_status_expire',
+                    'on_stack_gain', 'on_stack_consume', 'on_resource_full', 'on_resource_empty',
+                    'on_enter_field', 'on_exit_field', 'on_interval', 'on_follow_up',
+                    'on_counter', 'on_combo_step', 'on_trigger', 'custom'
+                ],
+
+                conditionKind: [
+                    '',
+                    'target_has_status', 'self_has_status',
+                    'target_hp_below_percent', 'self_hp_below_percent',
+                    'target_hp_above_percent', 'self_hp_above_percent',
+                    'target_hp_below', 'self_hp_below',
+                    'target_hp_above', 'self_hp_above',
+                    'resource_above', 'resource_below',
+                    'while_resource_above', 'while_resource_below',
+                    'while_shielded', 'combo_step', 'weapon_type',
+                    'damage_type', 'in_field', 'stack_count',
+                    'target_distance', 'target_is_elite',
+                    'on_crit_window', 'custom'
+                ],
+
                 stackingPolicy: ['', 'none', 'refresh', 'extend_duration', 'replace_oldest', 'replace_lowest', 'replace_highest', 'independent', 'custom'],
-                effectKind: ['', 'damage', 'heal', 'shield', 'barrier', 'guard', 'status_apply', 'status_remove', 'buff', 'debuff', 'summon', 'aura', 'field', 'resource_gain', 'resource_spend', 'resource_drain', 'cleanse', 'displacement', 'control', 'grant_stack', 'consume_stack', 'grant_ability', 'proc', 'trigger_effect', 'trigger_on_hit', 'trigger_on_condition', 'custom'],
-                requirementType: ['', 'archetype', 'faction', 'origin', 'level', 'level_gate', 'progression_stage', 'stat', 'tag', 'resource_threshold', 'condition', 'talent', 'item', 'ability', 'mutual_exclusive', 'custom'],
-                modifierStat: ['', 'hp', 'hp_percent', 'atk', 'atk_percent', 'def', 'def_percent', 'crit_rate', 'crit_dmg', 'heal_bonus', 'shield_strength', 'energy_regen', 'elemental_mastery', 'break_effect', 'res_pen', 'status_hit', 'status_resist', 'skill_damage', 'basic_attack_damage', 'ultimate_damage', 'dot_damage', 'damage_bonus', 'incoming_heal_bonus', 'all_damage_bonus', 'all_damage_reduction', 'custom']
+
+                effectKind: [
+                    '',
+                    'damage', 'heal', 'shield', 'barrier', 'guard',
+                    'status_apply', 'status_remove',
+                    'buff', 'debuff',
+                    'summon', 'aura', 'field',
+                    'resource_gain', 'resource_spend', 'resource_drain',
+                    'cleanse', 'displacement', 'control',
+                    'grant_stack', 'consume_stack',
+                    'grant_ability', 'modify_ability',
+                    'proc', 'trigger_effect', 'trigger_on_hit', 'trigger_on_condition',
+                    'custom'
+                ],
+
+                requirementType: [
+                    '',
+                    'archetype', 'faction', 'origin', 'level', 'level_gate',
+                    'progression_stage', 'stat', 'tag', 'resource_threshold',
+                    'condition', 'talent', 'item', 'ability', 'mutual_exclusive', 'custom'
+                ],
+
+                modifierStat: [
+                    '',
+                    'hp', 'hp_percent',
+                    'shield', 'shield_percent', 'shield_strength',
+                    'atk', 'atk_percent',
+                    'def', 'def_percent',
+                    'armor', 'armor_percent',
+                    'speed', 'speed_percent',
+                    'crit_rate', 'crit_dmg',
+                    'heal_bonus', 'healing_done', 'healing_taken',
+                    'energy_regen', 'energy_restore',
+                    'elemental_mastery', 'break_effect',
+                    'res_pen', 'status_hit', 'status_resist',
+                    'basic_attack_damage', 'charged_attack_damage', 'plunge_damage',
+                    'skill_damage', 'ultimate_damage', 'combo_damage',
+                    'follow_up_damage', 'counter_damage', 'summon_damage',
+                    'dot_damage', 'damage_bonus', 'all_damage_bonus', 'incoming_damage_reduction',
+                    'fire_damage', 'ice_damage', 'water_damage', 'wind_damage', 'earth_damage',
+                    'lightning_damage', 'electric_damage', 'poison_damage', 'bleed_damage',
+                    'holy_damage', 'dark_damage', 'void_damage', 'true_damage',
+                    'pyro_damage', 'hydro_damage', 'cryo_damage', 'electro_damage',
+                    'anemo_damage', 'geo_damage', 'dendro_damage',
+                    'imaginary_damage', 'quantum_damage', 'ether_damage',
+                    'fusion_damage', 'glacio_damage', 'aero_damage', 'spectro_damage', 'havoc_damage',
+                    'fire_resist', 'ice_resist', 'water_resist', 'wind_resist', 'earth_resist',
+                    'lightning_resist', 'electric_resist', 'poison_resist', 'bleed_resist',
+                    'holy_resist', 'dark_resist', 'void_resist',
+                    'pyro_resist', 'hydro_resist', 'cryo_resist', 'electro_resist',
+                    'anemo_resist', 'geo_resist', 'dendro_resist',
+                    'imaginary_resist', 'quantum_resist', 'ether_resist',
+                    'fusion_resist', 'glacio_resist', 'aero_resist', 'spectro_resist', 'havoc_resist',
+                    'custom'
+                ]
             };
 
             payload.schema = isService ? 'af_kb.arpg.mechanics.v1' : 'af_kb.arpg.meta.v1';
@@ -1137,21 +1282,34 @@
 
             function renderModifierEditor(container, title, path, includeRank) {
                 var columns = [];
-                if (includeRank) columns.push({ key: 'rank', label: 'rank', type: 'number' });
+                if (includeRank) {
+                    columns.push({ key: 'rank', label: 'rank', type: 'number' });
+                }
+
                 columns = columns.concat([
-                    enumCol('stat', 'stat', [''].concat((data.stats_registry && Array.isArray(data.stats_registry) ? data.stats_registry : []).concat(arpgEnums.modifierStat))),
-                    { key: 'target', label: 'target/scope (self|ally|enemy|party)' },
+                    enumCol('stat', 'stat', [''].concat(
+                        (data.stats_registry && Array.isArray(data.stats_registry) ? data.stats_registry : [])
+                            .concat(arpgEnums.modifierStat)
+                    )),
                     enumCol('mode', 'mode', arpgEnums.modifierMode),
                     { key: 'value', label: 'value', type: 'number' },
+                    { key: 'base_value', label: 'base_value', type: 'number' },
+                    { key: 'per_level_growth', label: 'per_level_growth', type: 'number' },
+                    { key: 'ratio', label: 'ratio', type: 'number' },
+                    { key: 'source_stat', label: 'source_stat' },
                     enumCol('damage_type', 'damage_type', arpgEnums.damageType),
+                    { key: 'target', label: 'target/scope (self|ally|enemy|party)' },
                     { key: 'subtype', label: 'subtype' },
                     { key: 'duration', label: 'duration', type: 'number' },
                     enumCol('stacking', 'stacking', arpgEnums.stackingPolicy),
                     { key: 'condition_ref', label: 'condition_ref' },
                     { key: 'condition', label: 'inline condition' },
+                    { key: 'formula_ref', label: 'formula_ref' },
+                    { key: 'table_ref', label: 'table_ref' },
                     { key: 'source_ref', label: 'source_ref' },
                     { key: 'notes', label: 'notes' }
                 ]);
+
                 renderArrayEditor(container, title, path, columns);
             }
 
@@ -1159,29 +1317,44 @@
                 renderArrayEditor(container, title, path, [
                     enumCol('kind', 'kind', arpgEnums.effectKind),
                     { key: 'target', label: 'target (self|target|area|party)' },
+
                     enumCol('value_mode', 'value_mode', arpgEnums.valueMode),
                     { key: 'value', label: 'value', type: 'number' },
                     { key: 'base_value', label: 'base_value', type: 'number' },
                     { key: 'per_level_growth', label: 'per_level_growth', type: 'number' },
+
                     { key: 'ratio', label: 'ratio/scaling', type: 'number' },
                     { key: 'source_stat', label: 'source_stat' },
+
+                    { key: 'damage', label: 'damage', type: 'number' },
+                    { key: 'heal', label: 'heal', type: 'number' },
+                    { key: 'shield', label: 'shield', type: 'number' },
+                    { key: 'barrier', label: 'barrier', type: 'number' },
+
                     { key: 'formula', label: 'formula' },
                     { key: 'formula_ref', label: 'formula_ref' },
                     { key: 'table_ref', label: 'table_ref/curve_ref' },
                     { key: 'template_ref', label: 'template_ref' },
                     { key: 'snippet_ref', label: 'snippet_ref' },
+
                     enumCol('damage_type', 'damage_type', arpgEnums.damageType),
                     { key: 'status_ref', label: 'status_ref' },
                     { key: 'ability_ref', label: 'ability_ref' },
+
                     enumCol('resource', 'resource', arpgEnums.resourceKind),
                     enumCol('resource_mode', 'resource_mode', arpgEnums.resourceChangeMode),
+
                     enumCol('event', 'trigger event', arpgEnums.triggerEvent),
                     { key: 'condition_ref', label: 'condition_ref' },
+
                     { key: 'duration', label: 'duration', type: 'number' },
                     { key: 'tick_interval', label: 'tick interval', type: 'number' },
                     { key: 'chance', label: 'chance', type: 'number' },
+
                     { key: 'stack_id', label: 'stack_id' },
-                    enumCol('stack_policy', 'stack_policy', arpgEnums.stackingPolicy)
+                    enumCol('stack_policy', 'stack_policy', arpgEnums.stackingPolicy),
+
+                    { key: 'notes', label: 'notes' }
                 ]);
             }
 
@@ -1324,12 +1497,46 @@
                 var kind = payload.entity_kind;
                 if (kind === 'ability') {
                     var ability = ensureDataObject('ability');
-                    var aMain = createSection(entity, 'Ability core', 'Active/passive setup, targeting and delivery.');
-                    aMain.insertAdjacentHTML('beforeend', '<div class="af-kb-row"><div><label>subtype</label><select id="af-arpg-ability-subtype"></select></div><div><label>slot</label><select id="af-arpg-ability-slot"></select></div><div><label>damage_type</label><select id="af-arpg-ability-dmg"></select></div></div><div class="af-kb-row"><div><label>targeting</label><select id="af-arpg-ability-target"></select></div><div><label>cast_profile</label><input id="af-arpg-ability-cast-profile" type="text" /></div><div><label>delivery_kind</label><input id="af-arpg-ability-delivery" type="text" /></div></div><div class="af-kb-row"><div><label>cast_time</label><input id="af-arpg-ability-cast-time" type="number" /></div><div><label>channel_time</label><input id="af-arpg-ability-channel-time" type="number" /></div><div><label>hold_time</label><input id="af-arpg-ability-hold-time" type="number" /></div></div><div class="af-kb-row"><div><label>cooldown.seconds</label><input id="af-arpg-ability-cd" type="number" /></div><div><label>charges.max</label><input id="af-arpg-ability-charges" type="number" /></div><div><label>charges.recharge_seconds</label><input id="af-arpg-ability-charge-regen" type="number" /></div></div><div class="af-kb-row"><div><label>stacking.max_stacks</label><input id="af-arpg-ability-stacks" type="number" /></div><div><label>stacking.refresh_on_apply</label><input id="af-arpg-ability-stack-refresh" type="checkbox" /></div><div><label>upkeep_per_sec</label><input id="af-arpg-ability-upkeep" type="number" /></div></div><div class="af-kb-row"><div><label><input id="af-arpg-ability-is-combo" type="checkbox" /> combo</label></div><div><label><input id="af-arpg-ability-is-follow-up" type="checkbox" /> follow-up</label></div><div><label><input id="af-arpg-ability-is-toggle" type="checkbox" /> toggle/aura</label></div></div>');
+
+                    var aMain = createSection(entity, 'Ability core', 'Полноценная настройка активной/пассивной способности.');
+                    aMain.insertAdjacentHTML(
+                        'beforeend',
+                        '<div class="af-kb-row">' +
+                            '<div><label>subtype</label><select id="af-arpg-ability-subtype"></select></div>' +
+                            '<div><label>slot</label><select id="af-arpg-ability-slot"></select></div>' +
+                            '<div><label>damage_type</label><select id="af-arpg-ability-dmg"></select></div>' +
+                        '</div>' +
+                        '<div class="af-kb-row">' +
+                            '<div><label>targeting</label><select id="af-arpg-ability-target"></select></div>' +
+                            '<div><label>cast_profile</label><input id="af-arpg-ability-cast-profile" type="text" /></div>' +
+                            '<div><label>delivery_kind</label><input id="af-arpg-ability-delivery" type="text" /></div>' +
+                        '</div>' +
+                        '<div class="af-kb-row">' +
+                            '<div><label>cast_time</label><input id="af-arpg-ability-cast-time" type="number" /></div>' +
+                            '<div><label>channel_time</label><input id="af-arpg-ability-channel-time" type="number" /></div>' +
+                            '<div><label>hold_time</label><input id="af-arpg-ability-hold-time" type="number" /></div>' +
+                        '</div>' +
+                        '<div class="af-kb-row">' +
+                            '<div><label>cooldown.seconds</label><input id="af-arpg-ability-cd" type="number" /></div>' +
+                            '<div><label>charges.max</label><input id="af-arpg-ability-charges" type="number" /></div>' +
+                            '<div><label>charges.recharge_seconds</label><input id="af-arpg-ability-charge-regen" type="number" /></div>' +
+                        '</div>' +
+                        '<div class="af-kb-row">' +
+                            '<div><label>stacking.max_stacks</label><input id="af-arpg-ability-stacks" type="number" /></div>' +
+                            '<div><label>stacking.refresh_on_apply</label><input id="af-arpg-ability-stack-refresh" type="checkbox" /></div>' +
+                            '<div><label>upkeep_per_sec</label><input id="af-arpg-ability-upkeep" type="number" /></div>' +
+                        '</div>' +
+                        '<div class="af-kb-row">' +
+                            '<div><label><input id="af-arpg-ability-is-combo" type="checkbox" /> combo</label></div>' +
+                            '<div><label><input id="af-arpg-ability-is-follow-up" type="checkbox" /> follow-up</label></div>' +
+                            '<div><label><input id="af-arpg-ability-is-toggle" type="checkbox" /> toggle/aura</label></div>' +
+                        '</div>'
+                    );
+
                     var subtype = aMain.querySelector('#af-arpg-ability-subtype');
-                    var slot = entity.querySelector('#af-arpg-ability-slot');
-                    var dmg = entity.querySelector('#af-arpg-ability-dmg');
-                    var trg = entity.querySelector('#af-arpg-ability-target');
+                    var slot = aMain.querySelector('#af-arpg-ability-slot');
+                    var dmg = aMain.querySelector('#af-arpg-ability-dmg');
+                    var trg = aMain.querySelector('#af-arpg-ability-target');
                     var cd = aMain.querySelector('#af-arpg-ability-cd');
                     var ch = aMain.querySelector('#af-arpg-ability-charges');
                     var chr = aMain.querySelector('#af-arpg-ability-charge-regen');
@@ -1344,14 +1551,19 @@
                     var isCombo = aMain.querySelector('#af-arpg-ability-is-combo');
                     var isFollowUp = aMain.querySelector('#af-arpg-ability-is-follow-up');
                     var isToggle = aMain.querySelector('#af-arpg-ability-is-toggle');
+
                     [arpgEnums.abilitySubtype, arpgEnums.abilitySlot, arpgEnums.damageType, arpgEnums.targeting].forEach(function (optSet, idx) {
                         var sel = [subtype, slot, dmg, trg][idx];
-                        optSet.forEach(function (v) { sel.insertAdjacentHTML('beforeend', '<option value="' + esc(v) + '">' + esc(v || '—') + '</option>'); });
+                        optSet.forEach(function (v) {
+                            sel.insertAdjacentHTML('beforeend', '<option value="' + esc(v) + '">' + esc(v || '—') + '</option>');
+                        });
                     });
+
                     addSelectOptionIfMissing(subtype, payload.subtype || '');
                     addSelectOptionIfMissing(slot, ability.slot || '');
                     addSelectOptionIfMissing(dmg, ability.damage_type || '');
                     addSelectOptionIfMissing(trg, ability.targeting || '');
+
                     subtype.value = payload.subtype || '';
                     slot.value = ability.slot || '';
                     dmg.value = ability.damage_type || '';
@@ -1370,15 +1582,19 @@
                     isCombo.checked = !!data.is_combo;
                     isFollowUp.checked = !!data.is_follow_up;
                     isToggle.checked = !!data.is_toggle;
+
                     [subtype, slot, dmg, trg, cd, ch, chr, st, stRef, cp, del, upkeep, castTime, channelTime, holdTime, isCombo, isFollowUp, isToggle].forEach(function (node) {
                         bindFieldSync(node, function () {
                             payload.subtype = subtype.value;
                             ability.slot = slot.value.trim();
                             ability.damage_type = dmg.value.trim();
                             ability.targeting = trg.value.trim();
+
                             data.cooldown = ensureObject(data, 'cooldown');
                             data.charges = ensureObject(data, 'charges');
                             data.stacking = ensureObject(data, 'stacking');
+                            data.upkeep = ensureObject(data, 'upkeep');
+
                             data.cooldown.seconds = numberOrZero(cd.value);
                             data.charges.max = numberOrZero(ch.value);
                             data.charges.recharge_seconds = numberOrZero(chr.value);
@@ -1389,24 +1605,65 @@
                             data.cast_time = numberOrZero(castTime.value);
                             data.channel_time = numberOrZero(channelTime.value);
                             data.hold_time = numberOrZero(holdTime.value);
-                            data.upkeep = ensureObject(data, 'upkeep');
                             data.upkeep.per_second = numberOrZero(upkeep.value);
                             data.is_combo = !!isCombo.checked;
                             data.is_follow_up = !!isFollowUp.checked;
                             data.is_toggle = !!isToggle.checked;
+
                             syncToRaw();
                         });
                     });
-                    renderArrayEditor(entity, 'Costs / resources', ['data_json', 'data', 'costs'], [enumCol('resource', 'resource', arpgEnums.resourceKind), { key: 'amount', label: 'amount', type: 'number' }, { key: 'percent_cost', label: 'percent_cost', type: 'number' }, enumCol('mode', 'mode', arpgEnums.resourceChangeMode), { key: 'interval', label: 'interval', type: 'number' }, { key: 'refund_on_condition', label: 'refund_on_condition' }, { key: 'condition_ref', label: 'condition_ref' }]);
-                    renderArrayEditor(entity, 'Scaling / formulas', ['data_json', 'data', 'scaling'], [{ key: 'source_stat', label: 'source_stat' }, { key: 'base_value', label: 'base_value', type: 'number' }, { key: 'ratio', label: 'ratio', type: 'number' }, enumCol('mode', 'mode', arpgEnums.valueMode), { key: 'per_level_growth', label: 'per-level growth', type: 'number' }, { key: 'table_ref', label: 'level_curve/table_ref' }, { key: 'formula_ref', label: 'formula_ref' }]);
+
+                    renderArrayEditor(entity, 'Costs / resources', ['data_json', 'data', 'costs'], [
+                        enumCol('resource', 'resource', arpgEnums.resourceKind),
+                        { key: 'amount', label: 'amount', type: 'number' },
+                        { key: 'percent_cost', label: 'percent_cost', type: 'number' },
+                        enumCol('mode', 'mode', arpgEnums.resourceChangeMode),
+                        { key: 'interval', label: 'interval', type: 'number' },
+                        { key: 'refund_on_condition', label: 'refund_on_condition' },
+                        { key: 'condition_ref', label: 'condition_ref' }
+                    ]);
+
+                    renderArrayEditor(entity, 'Scaling / formulas', ['data_json', 'data', 'scaling'], [
+                        { key: 'source_stat', label: 'source_stat' },
+                        { key: 'base_value', label: 'base_value', type: 'number' },
+                        { key: 'ratio', label: 'ratio', type: 'number' },
+                        enumCol('mode', 'mode', arpgEnums.valueMode),
+                        { key: 'per_level_growth', label: 'per-level growth', type: 'number' },
+                        { key: 'table_ref', label: 'level_curve/table_ref' },
+                        { key: 'formula_ref', label: 'formula_ref' }
+                    ]);
+
                     renderEffectEditor(entity, 'Effects', ['data_json', 'data', 'effects']);
                     renderModifierEditor(entity, 'Embedded modifiers', ['data_json', 'data', 'modifiers']);
-                    renderArrayEditor(entity, 'Conditions', ['data_json', 'data', 'conditions'], [{ key: 'template_ref', label: 'template_ref' }, enumCol('kind', 'kind', arpgEnums.conditionKind), { key: 'value', label: 'value' }, { key: 'ref', label: 'ref target' }, { key: 'resource', label: 'resource' }, { key: 'status_ref', label: 'status_ref' }]);
-                    renderArrayEditor(entity, 'Triggers', ['data_json', 'data', 'triggers'], [{ key: 'template_ref', label: 'template_ref' }, enumCol('event', 'event', arpgEnums.triggerEvent), { key: 'condition_ref', label: 'condition_ref' }, { key: 'effect_ref', label: 'effect_ref' }, { key: 'snippet_ref', label: 'snippet_ref' }, { key: 'chance', label: 'chance', type: 'number' }]);
-                    renderArrayEditor(entity, 'Stacking', ['data_json', 'data', 'stacking_rules'], [enumCol('policy', 'policy', arpgEnums.stackingPolicy), { key: 'max_stacks', label: 'max_stacks', type: 'number' }, { key: 'refresh_behavior', label: 'refresh_behavior' }, { key: 'scope', label: 'scope' }]);
-                    renderArrayEditor(entity, 'Status refs', ['data_json', 'data', 'status_refs'], [{ key: 'ref', label: 'status ref' }]);
-                    renderArrayEditor(entity, 'Snippet refs', ['data_json', 'data', 'snippet_refs'], [{ key: 'ref', label: 'snippet ref' }]);
-                    var aProg = createSection(entity, 'Progression / dependencies', 'Common ARPG upgrade/dependency pattern for future evolution paths.');
+
+                    renderArrayEditor(entity, 'Conditions', ['data_json', 'data', 'conditions'], [
+                        { key: 'template_ref', label: 'template_ref' },
+                        enumCol('kind', 'kind', arpgEnums.conditionKind),
+                        { key: 'value', label: 'value' },
+                        { key: 'ref', label: 'ref target' },
+                        { key: 'resource', label: 'resource' },
+                        { key: 'status_ref', label: 'status_ref' }
+                    ]);
+
+                    renderArrayEditor(entity, 'Triggers', ['data_json', 'data', 'triggers'], [
+                        { key: 'template_ref', label: 'template_ref' },
+                        enumCol('event', 'event', arpgEnums.triggerEvent),
+                        { key: 'condition_ref', label: 'condition_ref' },
+                        { key: 'effect_ref', label: 'effect_ref' },
+                        { key: 'snippet_ref', label: 'snippet_ref' },
+                        { key: 'chance', label: 'chance', type: 'number' }
+                    ]);
+
+                    renderArrayEditor(entity, 'Status refs', ['data_json', 'data', 'status_refs'], [
+                        { key: 'ref', label: 'status ref' }
+                    ]);
+
+                    renderArrayEditor(entity, 'Snippet refs', ['data_json', 'data', 'snippet_refs'], [
+                        { key: 'ref', label: 'snippet ref' }
+                    ]);
+
+                    var aProg = createSection(entity, 'Progression / dependencies', 'Общий задел для прокачки способности.');
                     renderProgressionHooksEditor(aProg, ['data_json', 'data', 'progression']);
                 } else if (kind === 'bestiary') {
                     var bestiary = ensureDataObject('bestiary');
@@ -1499,45 +1756,146 @@
                     renderArrayEditor(entity, 'drops / rewards', ['data_json', 'data', 'loot'], [{ key: 'item_ref', label: 'item_ref' }, { key: 'table_ref', label: 'table_ref' }, { key: 'chance', label: 'chance', type: 'number' }, { key: 'qty', label: 'qty', type: 'number' }]);
                     renderArrayEditor(entity, 'boss phases', ['data_json', 'data', 'phases'], [{ key: 'name', label: 'name' }, { key: 'hp_threshold', label: 'hp_threshold', type: 'number' }, { key: 'script_ref', label: 'script_ref/snippet_ref' }]);
                     renderArrayEditor(entity, 'description content blocks', ['data_json', 'data', 'content_blocks'], [{ key: 'kind', label: 'kind' }, { key: 'title', label: 'title' }, { key: 'text', label: 'text' }]);
-                } else if (kind === 'talent') {
-                    var talent = ensureDataObject('talent');
-                    var tMain = createSection(entity, 'Talent node', 'Tree placement, ranks and progression gates.');
-                    tMain.insertAdjacentHTML('beforeend', '<div class="af-kb-row"><div><label>tree</label><select id="af-arpg-talent-tree"></select></div><div><label>tier</label><input id="af-arpg-talent-tier" type="number" /></div><div><label>max_rank</label><input id="af-arpg-talent-rank" type="number" /></div></div><div class="af-kb-row"><div><label>node_position.x</label><input id="af-arpg-talent-node-x" type="number" /></div><div><label>node_position.y</label><input id="af-arpg-talent-node-y" type="number" /></div><div><label>node_position.group</label><input id="af-arpg-talent-node-g" type="text" /></div></div><div class="af-kb-row"><div><label>progression_path_key</label><input id="af-arpg-talent-path" type="text" /></div><div><label>branch_key</label><input id="af-arpg-talent-branch" type="text" /></div><div><label>tags (csv)</label><input id="af-arpg-talent-tags" type="text" /></div></div>');
-                    var tree = entity.querySelector('#af-arpg-talent-tree');
-                    var tier = entity.querySelector('#af-arpg-talent-tier');
-                    var mr = entity.querySelector('#af-arpg-talent-rank');
-                    var nx = entity.querySelector('#af-arpg-talent-node-x');
-                    var ny = entity.querySelector('#af-arpg-talent-node-y');
-                    var ng = entity.querySelector('#af-arpg-talent-node-g');
-                    var tPath = entity.querySelector('#af-arpg-talent-path');
-                    var tBranch = entity.querySelector('#af-arpg-talent-branch');
-                    var tTags = entity.querySelector('#af-arpg-talent-tags');
-                    arpgEnums.talentTree.forEach(function (v) { tree.insertAdjacentHTML('beforeend', '<option value="' + esc(v) + '">' + esc(v || '—') + '</option>'); });
-                    addSelectOptionIfMissing(tree, talent.tree || '');
-                    tree.value = talent.tree || '';
-                    tier.value = String(numberOrZero(talent.tier || 0));
-                    mr.value = String(numberOrZero(talent.max_rank || 1));
-                    nx.value = String(numberOrZero(((data.node_position || {}).x) || 0));
-                    ny.value = String(numberOrZero(((data.node_position || {}).y) || 0));
-                    ng.value = ((data.node_position || {}).group) || '';
-                    tPath.value = String(data.progression_path_key || '');
-                    tBranch.value = String(data.branch_key || '');
-                    tTags.value = Array.isArray(data.tags) ? data.tags.join(', ') : '';
-                    [tree, tier, mr, nx, ny, ng, tPath, tBranch, tTags].forEach(function (n) { bindFieldSync(n, function () { data.node_position = ensureObject(data, 'node_position'); talent.tree = tree.value.trim(); talent.tier = numberOrZero(tier.value); talent.max_rank = numberOrZero(mr.value); data.node_position.x = numberOrZero(nx.value); data.node_position.y = numberOrZero(ny.value); data.node_position.group = ng.value.trim(); data.progression_path_key = tPath.value.trim(); data.branch_key = tBranch.value.trim(); data.tags = splitCsv(tTags.value); syncToRaw(); }); });
-                    var tReq = createSection(entity, 'Requirements / dependencies', 'Unlock conditions, progression prerequisites and exclusivity.');
-                    renderRequirementEditor(tReq, 'requirements', ['data_json', 'data', 'requirements']);
-                    renderArrayEditor(tReq, 'progression_prerequisites', ['data_json', 'data', 'progression_prerequisites'], [{ key: 'kind', label: 'kind' }, { key: 'ref', label: 'ref' }, { key: 'op', label: 'op' }, { key: 'value', label: 'value' }]);
-                    renderArrayEditor(entity, 'mutual_exclusive_with', ['data_json', 'data', 'mutual_exclusive_with'], [{ key: 'ref', label: 'ref' }]);
-                    renderArrayEditor(entity, 'unlock_conditions', ['data_json', 'data', 'unlock_conditions'], [{ key: 'kind', label: 'kind' }, { key: 'ref', label: 'ref' }, { key: 'value', label: 'value' }, { key: 'condition_ref', label: 'condition_ref' }]);
-                    renderArrayEditor(entity, 'grants / unlocks', ['data_json', 'data', 'grants'], [{ key: 'kind', label: 'kind' }, { key: 'ref', label: 'ref' }, { key: 'value', label: 'value' }, { key: 'ability_ref', label: 'ability_ref' }, { key: 'passive_ref', label: 'passive_ref' }, { key: 'branch_ref', label: 'branch unlock ref' }]);
-                    renderArrayEditor(entity, 'rank_effects', ['data_json', 'data', 'rank_effects'], [{ key: 'rank', label: 'rank', type: 'number' }, enumCol('kind', 'kind', ['modifier', 'effect', 'grant', 'unlock', 'ability_ref', 'trigger_change', 'resource_change', 'status_interaction', 'formula_ref', 'table_ref', 'custom']), enumCol('value_mode', 'value_mode', arpgEnums.valueMode), { key: 'stat', label: 'stat/key' }, { key: 'value', label: 'value', type: 'number' }, { key: 'ref', label: 'ref' }, { key: 'description', label: 'description' }, { key: 'condition_ref', label: 'condition_ref' }]);
-                    renderArrayEditor(entity, 'rank_effect_grants', ['data_json', 'data', 'rank_effect_grants'], [{ key: 'rank', label: 'rank', type: 'number' }, { key: 'kind', label: 'kind' }, { key: 'ref', label: 'ref' }, { key: 'value', label: 'value' }]);
-                    renderModifierEditor(entity, 'rank_modifiers', ['data_json', 'data', 'rank_modifiers'], true);
-                    renderEffectEditor(entity, 'rank_effect_payloads', ['data_json', 'data', 'rank_effect_payloads']);
-                    renderArrayEditor(entity, 'rank_unlocks', ['data_json', 'data', 'rank_unlocks'], [{ key: 'rank', label: 'rank', type: 'number' }, { key: 'unlock_ref', label: 'unlock_ref' }, { key: 'ability_ref', label: 'ability_ref' }, { key: 'notes', label: 'notes' }]);
-                    var tProg = createSection(entity, 'Progression hooks', 'Shared progression contract for costs/materials/dependencies.');
-                    renderProgressionHooksEditor(tProg, ['data_json', 'data', 'progression']);
-                } else if (kind === 'item') {
+                    } else if (kind === 'item') {
+                        var item = ensureDataObject('item');
+
+                        var iMain = createSection(entity, 'Item core', 'Полноценный профиль предмета/экипировки.');
+                        iMain.insertAdjacentHTML(
+                            'beforeend',
+                            '<div class="af-kb-row">' +
+                                '<div><label>item_kind</label><select id="af-arpg-item-kind"></select></div>' +
+                                '<div><label>equip_slot</label><select id="af-arpg-item-slot"></select></div>' +
+                                '<div><label>rarity</label><select id="af-arpg-item-rarity"></select></div>' +
+                            '</div>' +
+                            '<div class="af-kb-row">' +
+                                '<div><label>subtype</label><input id="af-arpg-item-subtype" type="text" /></div>' +
+                                '<div><label>level min</label><input id="af-arpg-item-lmin" type="number" /></div>' +
+                                '<div><label>level max</label><input id="af-arpg-item-lmax" type="number" /></div>' +
+                            '</div>' +
+                            '<div class="af-kb-row">' +
+                                '<div><label>tags (csv)</label><input id="af-arpg-item-tags" type="text" /></div>' +
+                                '<div><label>set_tags (csv)</label><input id="af-arpg-item-set-tags" type="text" /></div>' +
+                                '<div><label>progression_stage</label><input id="af-arpg-item-stage" type="text" /></div>' +
+                            '</div>'
+                        );
+
+                        var ik = entity.querySelector('#af-arpg-item-kind');
+                        var es = entity.querySelector('#af-arpg-item-slot');
+                        var ir = entity.querySelector('#af-arpg-item-rarity');
+                        var lmin = entity.querySelector('#af-arpg-item-lmin');
+                        var lmax = entity.querySelector('#af-arpg-item-lmax');
+                        var iSubtype = entity.querySelector('#af-arpg-item-subtype');
+                        var iTags = entity.querySelector('#af-arpg-item-tags');
+                        var iSetTags = entity.querySelector('#af-arpg-item-set-tags');
+                        var iStage = entity.querySelector('#af-arpg-item-stage');
+
+                        [arpgEnums.itemKind, arpgEnums.equipSlot, arpgEnums.rarity].forEach(function (optSet, idx) {
+                            var sel = [ik, es, ir][idx];
+                            optSet.forEach(function (v) {
+                                sel.insertAdjacentHTML('beforeend', '<option value="' + esc(v) + '">' + esc(v || '—') + '</option>');
+                            });
+                        });
+
+                        addSelectOptionIfMissing(ik, item.item_kind || '');
+                        addSelectOptionIfMissing(es, item.equip_slot || '');
+                        addSelectOptionIfMissing(ir, item.rarity || '');
+
+                        ik.value = item.item_kind || '';
+                        es.value = item.equip_slot || '';
+                        ir.value = item.rarity || '';
+                        lmin.value = String(numberOrZero(((item.level_range || {}).min) || 0));
+                        lmax.value = String(numberOrZero(((item.level_range || {}).max) || 0));
+                        iSubtype.value = String(item.subtype || '');
+                        iTags.value = Array.isArray(data.tags) ? data.tags.join(', ') : '';
+                        iSetTags.value = Array.isArray(data.set_tags) ? data.set_tags.join(', ') : '';
+                        iStage.value = String(data.progression_stage || '');
+
+                        [ik, es, ir, lmin, lmax, iSubtype, iTags, iSetTags, iStage].forEach(function (n) {
+                            bindFieldSync(n, function () {
+                                if (!item.level_range || typeof item.level_range !== 'object') {
+                                    item.level_range = {};
+                                }
+
+                                item.item_kind = ik.value.trim();
+                                item.equip_slot = es.value.trim();
+                                item.rarity = ir.value.trim();
+                                item.subtype = iSubtype.value.trim();
+                                item.level_range.min = numberOrZero(lmin.value);
+                                item.level_range.max = numberOrZero(lmax.value);
+                                data.tags = splitCsv(iTags.value);
+                                data.set_tags = splitCsv(iSetTags.value);
+                                data.progression_stage = iStage.value.trim();
+
+                                syncToRaw();
+                            });
+                        });
+
+                        var statsSection = createSection(entity, 'Base stats', 'Базовые статы предмета.');
+                        renderArrayEditor(statsSection, 'base_stats', ['data_json', 'data', 'base_stats'], [
+                            enumCol('stat', 'stat', arpgEnums.modifierStat),
+                            enumCol('mode', 'mode', arpgEnums.modifierMode),
+                            { key: 'value', label: 'value', type: 'number' }
+                        ]);
+
+                        var substatsSection = createSection(entity, 'Substats', 'Дополнительные статы / роллы.');
+                        renderArrayEditor(substatsSection, 'substats', ['data_json', 'data', 'substats'], [
+                            enumCol('stat', 'stat', arpgEnums.modifierStat),
+                            enumCol('mode', 'mode', arpgEnums.modifierMode),
+                            { key: 'value', label: 'value', type: 'number' },
+                            { key: 'roll_tier', label: 'roll tier' }
+                        ]);
+
+                        renderModifierEditor(entity, 'Combat bonuses / modifiers', ['data_json', 'data', 'modifiers']);
+                        renderEffectEditor(entity, 'Effects / passive effects', ['data_json', 'data', 'effects']);
+
+                        renderArrayEditor(entity, 'Passive refs', ['data_json', 'data', 'passive_refs'], [
+                            { key: 'ability_ref', label: 'passive ability ref' },
+                            { key: 'snippet_ref', label: 'snippet ref' },
+                            { key: 'formula_ref', label: 'formula ref' },
+                            { key: 'trigger_template_ref', label: 'trigger template ref' },
+                            { key: 'condition_template_ref', label: 'condition template ref' },
+                            { key: 'on_event', label: 'on_event' }
+                        ]);
+
+                        renderRequirementEditor(entity, 'Requirements / restrictions', ['data_json', 'data', 'requirements']);
+
+                        renderArrayEditor(entity, 'Triggers', ['data_json', 'data', 'triggers'], [
+                            enumCol('event', 'event', arpgEnums.triggerEvent),
+                            { key: 'template_ref', label: 'template_ref' },
+                            { key: 'condition_ref', label: 'condition_ref' },
+                            { key: 'effect_ref', label: 'effect_ref' }
+                        ]);
+
+                        renderArrayEditor(entity, 'Upgrade / scaling', ['data_json', 'data', 'scaling'], [
+                            { key: 'table_ref', label: 'scaling table' },
+                            { key: 'upgrade_path_ref', label: 'upgrade path ref' },
+                            { key: 'refine_hook', label: 'refine/enhance hook' },
+                            { key: 'formula_ref', label: 'formula_ref' },
+                            { key: 'set_threshold', label: 'set threshold', type: 'number' },
+                            { key: 'passive_rank', label: 'passive rank', type: 'number' }
+                        ]);
+
+                        renderArrayEditor(entity, 'grants', ['data_json', 'data', 'grants'], [
+                            { key: 'kind', label: 'kind' },
+                            { key: 'value', label: 'value/ref' }
+                        ]);
+
+                        renderArrayEditor(entity, 'upgrade_paths', ['data_json', 'data', 'upgrade_paths'], [
+                            { key: 'to_ref', label: 'to_ref' },
+                            { key: 'cost_ref', label: 'cost_ref' },
+                            { key: 'materials_ref', label: 'materials_ref' }
+                        ]);
+
+                        var iProg = createSection(entity, 'Progression / dependencies', 'Общий ARPG-контракт для улучшения предмета.');
+                        renderProgressionHooksEditor(iProg, ['data_json', 'data', 'progression']);
+
+                        var iAdvanced = createSection(entity, 'Advanced optional', 'Редкие/вторичные поля. Прочность не должна мешать базовой работе.');
+                        renderArrayEditor(iAdvanced, 'durability rules', ['data_json', 'data', 'durability_rules'], [
+                            { key: 'max', label: 'max', type: 'number' },
+                            { key: 'degrade_on', label: 'degrade_on' },
+                            { key: 'repair_ref', label: 'repair_ref' }
+                        ]);
+                    } else if (kind === 'item') {
                     var item = ensureDataObject('item');
                     var iMain = createSection(entity, 'Equipment profile', 'Core item identity, quality and level gating.');
                     iMain.insertAdjacentHTML('beforeend', '<div class="af-kb-row"><div><label>item_kind</label><select id="af-arpg-item-kind"></select></div><div><label>equip_slot</label><select id="af-arpg-item-slot"></select></div><div><label>rarity</label><select id="af-arpg-item-rarity"></select></div></div><div class="af-kb-row"><div><label>subtype</label><input id="af-arpg-item-subtype" type="text" /></div><div><label>level min</label><input id="af-arpg-item-lmin" type="number" /></div><div><label>level max</label><input id="af-arpg-item-lmax" type="number" /></div></div><div class="af-kb-row"><div><label>tags (csv)</label><input id="af-arpg-item-tags" type="text" /></div><div><label>set_tags (csv)</label><input id="af-arpg-item-set-tags" type="text" /></div><div><label>progression_stage</label><input id="af-arpg-item-stage" type="text" /></div></div>');
