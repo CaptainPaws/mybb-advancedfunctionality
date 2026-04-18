@@ -839,6 +839,7 @@
             if (t === 'skill') return 'skill';
             if (t === 'spell') return 'spell';
             if (t === 'item') return 'item';
+            if (t === 'bestiary') return 'bestiary';
             if (t === 'perk') return 'perk';
             if (t === 'condition') return 'perk';
             if (t === 'language') return 'language';
@@ -895,6 +896,140 @@
             if (typeof payload.version !== 'string' || !payload.version) payload.version = '1.0';
             if (!payload.classification || typeof payload.classification !== 'object') payload.classification = {};
             if (!payload.abilities || typeof payload.abilities !== 'object') payload.abilities = {};
+            if (type === 'arpg_bestiary') {
+                if (!payload.entity || typeof payload.entity !== 'object') payload.entity = {};
+                if (!payload.stats || typeof payload.stats !== 'object') payload.stats = {};
+                if (!Array.isArray(payload.resistances)) payload.resistances = [];
+                if (!Array.isArray(payload.weaknesses)) payload.weaknesses = [];
+                if (!Array.isArray(payload.statuses)) payload.statuses = [];
+                if (!Array.isArray(payload.abilities)) payload.abilities = [];
+                if (!Array.isArray(payload.loot)) payload.loot = [];
+                if (!Array.isArray(payload.phases)) payload.phases = [];
+                if (!Array.isArray(payload.notes)) payload.notes = [];
+
+                root.innerHTML = [
+                    '<div class="af-kb-help">ARPG bestiary profile: форма монстра/существа без обязательного raw JSON.</div>',
+                    '<div class="af-kb-row"><div><label>Schema</label><input type="text" id="af-kb-arpg-best-schema" readonly="readonly" /></div><div><label>Type profile</label><input type="text" id="af-kb-arpg-best-type-profile" readonly="readonly" /></div></div>',
+                    '<div class="af-kb-row"><div><label>Family</label><input type="text" id="af-kb-arpg-best-family" /></div><div><label>Rank</label><select id="af-kb-arpg-best-rank"><option value="normal">normal</option><option value="elite">elite</option><option value="boss">boss</option><option value="mythic">mythic</option></select></div><div><label>Tier</label><input type="number" id="af-kb-arpg-best-tier" /></div></div>',
+                    '<div class="af-kb-row"><div><label>Category/archetype</label><input type="text" id="af-kb-arpg-best-archetype" /></div><div><label>Faction</label><input type="text" id="af-kb-arpg-best-faction" /></div><div><label>Tags (comma)</label><input type="text" id="af-kb-arpg-best-tags" /></div></div>',
+                    '<div class="af-kb-row"><div><label>Description</label><textarea id="af-kb-arpg-best-description" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Behavior/mechanics notes</label><textarea id="af-kb-arpg-best-notes" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
+                    '<div class="af-kb-row"><div><label>HP</label><input type="number" id="af-kb-arpg-best-hp" /></div><div><label>Barrier</label><input type="number" id="af-kb-arpg-best-barrier" /></div><div><label>Armor</label><input type="number" id="af-kb-arpg-best-armor" /></div></div>',
+                    '<div class="af-kb-row"><div><label>Damage</label><input type="number" id="af-kb-arpg-best-damage" /></div><div><label>Speed</label><input type="number" step="0.1" id="af-kb-arpg-best-speed" /></div><div><label>Accuracy</label><input type="number" id="af-kb-arpg-best-accuracy" /></div></div>',
+                    '<div class="af-kb-row"><div><label>Evasion</label><input type="number" id="af-kb-arpg-best-evasion" /></div><div><label>Crit chance</label><input type="number" id="af-kb-arpg-best-crit-chance" /></div><div><label>Crit damage</label><input type="number" id="af-kb-arpg-best-crit-damage" /></div></div>',
+                    '<div class="af-kb-row"><div><label>Resistances (JSON array)</label><textarea id="af-kb-arpg-best-resistances" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Weaknesses (JSON array)</label><textarea id="af-kb-arpg-best-weaknesses" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
+                    '<div class="af-kb-row"><div><label>Status interactions (JSON array)</label><textarea id="af-kb-arpg-best-statuses" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Abilities (JSON array)</label><textarea id="af-kb-arpg-best-abilities" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
+                    '<div class="af-kb-row"><div><label>Drops / loot (JSON array)</label><textarea id="af-kb-arpg-best-loot" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Phases / boss mechanics (JSON array)</label><textarea id="af-kb-arpg-best-phases" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>'
+                ].join('');
+
+                var bfields = {
+                    schema: root.querySelector('#af-kb-arpg-best-schema'),
+                    typeProfile: root.querySelector('#af-kb-arpg-best-type-profile'),
+                    family: root.querySelector('#af-kb-arpg-best-family'),
+                    rank: root.querySelector('#af-kb-arpg-best-rank'),
+                    tier: root.querySelector('#af-kb-arpg-best-tier'),
+                    archetype: root.querySelector('#af-kb-arpg-best-archetype'),
+                    faction: root.querySelector('#af-kb-arpg-best-faction'),
+                    tags: root.querySelector('#af-kb-arpg-best-tags'),
+                    description: root.querySelector('#af-kb-arpg-best-description'),
+                    notes: root.querySelector('#af-kb-arpg-best-notes'),
+                    hp: root.querySelector('#af-kb-arpg-best-hp'),
+                    barrier: root.querySelector('#af-kb-arpg-best-barrier'),
+                    armor: root.querySelector('#af-kb-arpg-best-armor'),
+                    damage: root.querySelector('#af-kb-arpg-best-damage'),
+                    speed: root.querySelector('#af-kb-arpg-best-speed'),
+                    accuracy: root.querySelector('#af-kb-arpg-best-accuracy'),
+                    evasion: root.querySelector('#af-kb-arpg-best-evasion'),
+                    critChance: root.querySelector('#af-kb-arpg-best-crit-chance'),
+                    critDamage: root.querySelector('#af-kb-arpg-best-crit-damage'),
+                    resistances: root.querySelector('#af-kb-arpg-best-resistances'),
+                    weaknesses: root.querySelector('#af-kb-arpg-best-weaknesses'),
+                    statuses: root.querySelector('#af-kb-arpg-best-statuses'),
+                    abilities: root.querySelector('#af-kb-arpg-best-abilities'),
+                    loot: root.querySelector('#af-kb-arpg-best-loot'),
+                    phases: root.querySelector('#af-kb-arpg-best-phases')
+                };
+
+                bfields.schema.value = 'af_kb.arpg.rules.v1';
+                bfields.typeProfile.value = 'arpg_bestiary';
+                bfields.family.value = String(payload.entity.family || '');
+                bfields.rank.value = String(payload.entity.rank || 'normal');
+                bfields.tier.value = String(numberOrZero(payload.entity.tier != null ? payload.entity.tier : 1));
+                bfields.archetype.value = String(payload.entity.archetype || '');
+                bfields.faction.value = String(payload.entity.faction || '');
+                bfields.tags.value = Array.isArray(payload.entity.tags) ? payload.entity.tags.join(', ') : '';
+                bfields.description.value = String(payload.entity.description || '');
+                bfields.notes.value = Array.isArray(payload.notes) ? payload.notes.join('\n') : '';
+                bfields.hp.value = String(numberOrZero(payload.stats.hp != null ? payload.stats.hp : 100));
+                bfields.barrier.value = String(numberOrZero(payload.stats.barrier != null ? payload.stats.barrier : 0));
+                bfields.armor.value = String(numberOrZero(payload.stats.armor != null ? payload.stats.armor : 0));
+                bfields.damage.value = String(numberOrZero(payload.stats.damage != null ? payload.stats.damage : 10));
+                bfields.speed.value = String(numberOrZero(payload.stats.speed != null ? payload.stats.speed : 1));
+                bfields.accuracy.value = String(numberOrZero(payload.stats.accuracy != null ? payload.stats.accuracy : 100));
+                bfields.evasion.value = String(numberOrZero(payload.stats.evasion != null ? payload.stats.evasion : 0));
+                bfields.critChance.value = String(numberOrZero(payload.stats.crit_chance != null ? payload.stats.crit_chance : 5));
+                bfields.critDamage.value = String(numberOrZero(payload.stats.crit_damage != null ? payload.stats.crit_damage : 150));
+                bfields.resistances.value = JSON.stringify(payload.resistances || [], null, 2);
+                bfields.weaknesses.value = JSON.stringify(payload.weaknesses || [], null, 2);
+                bfields.statuses.value = JSON.stringify(payload.statuses || [], null, 2);
+                bfields.abilities.value = JSON.stringify(payload.abilities || [], null, 2);
+                bfields.loot.value = JSON.stringify(payload.loot || [], null, 2);
+                bfields.phases.value = JSON.stringify(payload.phases || [], null, 2);
+
+                function parseJsonSafe(text, fallback) {
+                    try {
+                        return JSON.parse(text);
+                    } catch (e) {
+                        return fallback;
+                    }
+                }
+
+                function syncArpgBestiaryToRaw() {
+                    var next = readJson(getFieldValue(raw) || '{}', {});
+                    if (!next || typeof next !== 'object') next = {};
+                    next.schema = 'af_kb.arpg.rules.v1';
+                    next.type_profile = 'arpg_bestiary';
+                    next.version = String(next.version || '1.0');
+                    next.entity = {
+                        tier: numberOrZero(bfields.tier.value),
+                        rank: String(bfields.rank.value || 'normal'),
+                        family: String(bfields.family.value || '').trim(),
+                        archetype: String(bfields.archetype.value || '').trim(),
+                        faction: String(bfields.faction.value || '').trim(),
+                        tags: splitCsv(bfields.tags.value),
+                        description: String(bfields.description.value || '').trim()
+                    };
+                    next.stats = {
+                        hp: numberOrZero(bfields.hp.value),
+                        barrier: numberOrZero(bfields.barrier.value),
+                        armor: numberOrZero(bfields.armor.value),
+                        speed: numberOrZero(bfields.speed.value),
+                        damage: numberOrZero(bfields.damage.value),
+                        crit_chance: numberOrZero(bfields.critChance.value),
+                        crit_damage: numberOrZero(bfields.critDamage.value),
+                        accuracy: numberOrZero(bfields.accuracy.value),
+                        evasion: numberOrZero(bfields.evasion.value)
+                    };
+                    next.resistances = parseJsonSafe(bfields.resistances.value, []);
+                    next.weaknesses = parseJsonSafe(bfields.weaknesses.value, []);
+                    next.statuses = parseJsonSafe(bfields.statuses.value, []);
+                    next.abilities = parseJsonSafe(bfields.abilities.value, []);
+                    next.loot = parseJsonSafe(bfields.loot.value, []);
+                    next.phases = parseJsonSafe(bfields.phases.value, []);
+                    next.notes = splitLines(bfields.notes.value);
+
+                    raw.value = JSON.stringify(next, null, 2);
+                    syncRulesToMeta(next);
+                }
+
+                Object.keys(bfields).forEach(function (key) {
+                    if (bfields[key]) {
+                        bfields[key].addEventListener('input', syncArpgBestiaryToRaw);
+                        bfields[key].addEventListener('change', syncArpgBestiaryToRaw);
+                    }
+                });
+                syncArpgBestiaryToRaw();
+                return;
+            }
 
             var block = [
                 '<div class="af-kb-help">ARPG mechanics path: отдельная схема и отдельная валидация без приведения к DnD.</div>',
@@ -1343,6 +1478,33 @@
                 base.schema = 'af_kb.item.v2';
                 return base;
             }
+            if (profile === 'bestiary') {
+                base.creature = {
+                    size: 'medium',
+                    kind: 'humanoid',
+                    alignment: '',
+                    challenge_rating: '1',
+                    xp: 0,
+                    proficiency_bonus: 2,
+                    armor_class: 10,
+                    initiative: 0,
+                    hp: { average: 10, dice: '2d8+2' },
+                    speed: { walk: 30 },
+                    ability_scores: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+                    damage_vulnerabilities: [],
+                    damage_resistances: [],
+                    damage_immunities: [],
+                    condition_immunities: [],
+                    notes: ''
+                };
+                base.traits = [];
+                base.actions = [];
+                base.reactions = [];
+                base.legendary_actions = [];
+                base.loot = [];
+                base.gm_notes = '';
+                return base;
+            }
 
             if (profile === 'perk' || profile === 'condition') {
                 base.perk = {
@@ -1739,6 +1901,33 @@
             ensureObj('item.requirements', {});
             if (!Array.isArray(state.item.requirements.tags_any)) state.item.requirements.tags_any = [];
             if (!Array.isArray(state.item.requirements.tags_all)) state.item.requirements.tags_all = [];
+        }
+        if (uiProfile === 'bestiary') {
+            ensureObj('creature', {});
+            ensureObj('creature.hp', {});
+            ensureObj('creature.speed', {});
+            ensureObj('creature.ability_scores', {});
+            ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach(function (k) {
+                state.creature.ability_scores[k] = numberOrZero(state.creature.ability_scores[k] != null ? state.creature.ability_scores[k] : 10);
+            });
+            state.creature.xp = numberOrZero(state.creature.xp != null ? state.creature.xp : 0);
+            state.creature.armor_class = numberOrZero(state.creature.armor_class != null ? state.creature.armor_class : 10);
+            state.creature.initiative = numberOrZero(state.creature.initiative != null ? state.creature.initiative : 0);
+            state.creature.proficiency_bonus = numberOrZero(state.creature.proficiency_bonus != null ? state.creature.proficiency_bonus : 2);
+            state.creature.hp.average = numberOrZero(state.creature.hp.average != null ? state.creature.hp.average : 10);
+            state.creature.hp.dice = String(state.creature.hp.dice || '2d8+2');
+            state.creature.speed.walk = numberOrZero(state.creature.speed.walk != null ? state.creature.speed.walk : 30);
+            if (!Array.isArray(state.creature.damage_vulnerabilities)) state.creature.damage_vulnerabilities = [];
+            if (!Array.isArray(state.creature.damage_resistances)) state.creature.damage_resistances = [];
+            if (!Array.isArray(state.creature.damage_immunities)) state.creature.damage_immunities = [];
+            if (!Array.isArray(state.creature.condition_immunities)) state.creature.condition_immunities = [];
+            if (typeof state.creature.notes !== 'string') state.creature.notes = '';
+            if (!Array.isArray(state.traits)) state.traits = [];
+            if (!Array.isArray(state.actions)) state.actions = [];
+            if (!Array.isArray(state.reactions)) state.reactions = [];
+            if (!Array.isArray(state.legendary_actions)) state.legendary_actions = [];
+            if (!Array.isArray(state.loot)) state.loot = [];
+            if (typeof state.gm_notes !== 'string') state.gm_notes = '';
         }
         if (uiProfile === 'perk' || uiProfile === 'condition') {
             ensureObj('perk', {});
@@ -2340,6 +2529,53 @@
                         trained_only: !!skillK.trained_only,
                         notes: (typeof skillK.notes === 'string') ? skillK.notes : ''
                     }
+                };
+            }
+            if (profile === 'bestiary') {
+                var c = (p.creature && typeof p.creature === 'object') ? p.creature : {};
+                var hp = (c.hp && typeof c.hp === 'object') ? c.hp : {};
+                var speed = (c.speed && typeof c.speed === 'object') ? c.speed : {};
+                var as = (c.ability_scores && typeof c.ability_scores === 'object') ? c.ability_scores : {};
+                return {
+                    schema: p.schema,
+                    type_profile: expectedTypeProfile || 'bestiary',
+                    version: p.version,
+                    creature: {
+                        size: String(c.size || 'medium'),
+                        kind: String(c.kind || 'humanoid'),
+                        alignment: String(c.alignment || ''),
+                        challenge_rating: String(c.challenge_rating || '1'),
+                        xp: numberOrZero(c.xp != null ? c.xp : 0),
+                        proficiency_bonus: numberOrZero(c.proficiency_bonus != null ? c.proficiency_bonus : 2),
+                        armor_class: numberOrZero(c.armor_class != null ? c.armor_class : 10),
+                        initiative: numberOrZero(c.initiative != null ? c.initiative : 0),
+                        hp: {
+                            average: numberOrZero(hp.average != null ? hp.average : 10),
+                            dice: String(hp.dice || '2d8+2')
+                        },
+                        speed: {
+                            walk: numberOrZero(speed.walk != null ? speed.walk : 30)
+                        },
+                        ability_scores: {
+                            str: numberOrZero(as.str != null ? as.str : 10),
+                            dex: numberOrZero(as.dex != null ? as.dex : 10),
+                            con: numberOrZero(as.con != null ? as.con : 10),
+                            int: numberOrZero(as.int != null ? as.int : 10),
+                            wis: numberOrZero(as.wis != null ? as.wis : 10),
+                            cha: numberOrZero(as.cha != null ? as.cha : 10)
+                        },
+                        damage_vulnerabilities: Array.isArray(c.damage_vulnerabilities) ? c.damage_vulnerabilities : [],
+                        damage_resistances: Array.isArray(c.damage_resistances) ? c.damage_resistances : [],
+                        damage_immunities: Array.isArray(c.damage_immunities) ? c.damage_immunities : [],
+                        condition_immunities: Array.isArray(c.condition_immunities) ? c.condition_immunities : [],
+                        notes: String(c.notes || '')
+                    },
+                    traits: Array.isArray(p.traits) ? p.traits : [],
+                    actions: Array.isArray(p.actions) ? p.actions : [],
+                    reactions: Array.isArray(p.reactions) ? p.reactions : [],
+                    legendary_actions: Array.isArray(p.legendary_actions) ? p.legendary_actions : [],
+                    loot: Array.isArray(p.loot) ? p.loot : [],
+                    gm_notes: String(p.gm_notes || '')
                 };
             }
 
@@ -2983,6 +3219,127 @@
                 reqBoxI.appendChild(reqGridI);
                 fields.profileLists.appendChild(reqBoxI);
 
+                return;
+            }
+            if (uiProfile === 'bestiary') {
+                var creatureDefsTop = [
+                    { name: 'size', label: 'Size', type: 'select', options: ['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan'] },
+                    { name: 'kind', label: 'Category/family', type: 'text' },
+                    { name: 'alignment', label: 'Alignment', type: 'text' },
+                    { name: 'challenge_rating', label: 'Challenge', type: 'text' }
+                ];
+                var creatureDefsCombat = [
+                    { name: 'xp', label: 'XP', type: 'number' },
+                    { name: 'armor_class', label: 'Armor class', type: 'number' },
+                    { name: 'initiative', label: 'Initiative', type: 'number' },
+                    { name: 'proficiency_bonus', label: 'Proficiency bonus', type: 'number' }
+                ];
+                var gridB1 = document.createElement('div');
+                gridB1.className = 'af-kb-row';
+                creatureDefsTop.forEach(function (d) { gridB1.appendChild(createInput(d, state.creature, syncRawDebounced)); });
+                fields.profileFields.appendChild(gridB1);
+
+                var gridB2 = document.createElement('div');
+                gridB2.className = 'af-kb-row';
+                creatureDefsCombat.forEach(function (d) { gridB2.appendChild(createInput(d, state.creature, syncRawDebounced)); });
+                fields.profileFields.appendChild(gridB2);
+
+                var hpSpeedObj = {
+                    average: state.creature.hp.average,
+                    dice: state.creature.hp.dice,
+                    walk: state.creature.speed.walk
+                };
+                var hpSpeedDefs = [
+                    { name: 'average', label: 'HP average', type: 'number' },
+                    { name: 'dice', label: 'HP dice', type: 'text' },
+                    { name: 'walk', label: 'Speed (walk)', type: 'number' }
+                ];
+                var gridB3 = document.createElement('div');
+                gridB3.className = 'af-kb-row';
+                hpSpeedDefs.forEach(function (d) {
+                    gridB3.appendChild(createInput(d, hpSpeedObj, function () {
+                        state.creature.hp.average = numberOrZero(hpSpeedObj.average);
+                        state.creature.hp.dice = String(hpSpeedObj.dice || '');
+                        state.creature.speed.walk = numberOrZero(hpSpeedObj.walk);
+                        syncRawDebounced();
+                    }));
+                });
+                fields.profileFields.appendChild(gridB3);
+
+                var scoreDefs = [
+                    { name: 'str', label: 'STR', type: 'number' },
+                    { name: 'dex', label: 'DEX', type: 'number' },
+                    { name: 'con', label: 'CON', type: 'number' },
+                    { name: 'int', label: 'INT', type: 'number' },
+                    { name: 'wis', label: 'WIS', type: 'number' },
+                    { name: 'cha', label: 'CHA', type: 'number' }
+                ];
+                var gridB4 = document.createElement('div');
+                gridB4.className = 'af-kb-row';
+                scoreDefs.forEach(function (d) { gridB4.appendChild(createInput(d, state.creature.ability_scores, syncRawDebounced)); });
+                fields.profileFields.appendChild(gridB4);
+
+                var notesGrid = document.createElement('div');
+                notesGrid.className = 'af-kb-row';
+                notesGrid.appendChild(createInput({ name: 'notes', label: 'Creature notes', type: 'textarea' }, state.creature, syncRawDebounced));
+                notesGrid.appendChild(createInput({ name: 'gm_notes', label: 'GM notes', type: 'textarea' }, state, syncRawDebounced));
+                fields.profileFields.appendChild(notesGrid);
+
+                var defenseBox = document.createElement('div');
+                defenseBox.className = 'af-kb-rule-card';
+                defenseBox.innerHTML = '<div class="af-kb-rule-card__title"><strong>Defenses</strong></div>';
+                var defenseGrid = document.createElement('div');
+                defenseGrid.className = 'af-kb-row';
+                defenseGrid.appendChild(createInput({ name: 'damage_resistances', label: 'Resistances', type: 'lines' }, state.creature, syncRawDebounced));
+                defenseGrid.appendChild(createInput({ name: 'damage_immunities', label: 'Immunities', type: 'lines' }, state.creature, syncRawDebounced));
+                defenseGrid.appendChild(createInput({ name: 'damage_vulnerabilities', label: 'Weaknesses', type: 'lines' }, state.creature, syncRawDebounced));
+                defenseGrid.appendChild(createInput({ name: 'condition_immunities', label: 'Condition immunities', type: 'lines' }, state.creature, syncRawDebounced));
+                defenseBox.appendChild(defenseGrid);
+                fields.profileLists.appendChild(defenseBox);
+
+                var traitFields = [
+                    { name: 'name', label: 'Name', type: 'text' },
+                    { name: 'desc', label: 'Description', type: 'textarea' }
+                ];
+                var actionFields = [
+                    { name: 'name', label: 'Name', type: 'text' },
+                    { name: 'attack_bonus', label: 'Attack bonus', type: 'number' },
+                    { name: 'damage', label: 'Damage', type: 'text' },
+                    { name: 'desc', label: 'Description', type: 'textarea' }
+                ];
+                var lootFields = [
+                    { name: 'kind', label: 'Kind', type: 'select', options: ['item', 'currency', 'resource', 'table'] },
+                    { name: 'ref_key', label: 'Ref key', type: 'text' },
+                    { name: 'chance', label: 'Chance %', type: 'number' },
+                    { name: 'qty_min', label: 'Qty min', type: 'number' },
+                    { name: 'qty_max', label: 'Qty max', type: 'number' },
+                    { name: 'notes', label: 'Notes', type: 'text' }
+                ];
+
+                var traitsBox = document.createElement('div');
+                traitsBox.className = 'af-kb-rule-card';
+                fields.profileLists.appendChild(traitsBox);
+                renderObjectList(traitsBox, state.traits, 'Traits/features', traitFields, syncRawDebounced, { name: '', desc: '' });
+
+                var actionsBox = document.createElement('div');
+                actionsBox.className = 'af-kb-rule-card';
+                fields.profileLists.appendChild(actionsBox);
+                renderObjectList(actionsBox, state.actions, 'Actions', actionFields, syncRawDebounced, { name: '', attack_bonus: 0, damage: '', desc: '' });
+
+                var reactionsBox = document.createElement('div');
+                reactionsBox.className = 'af-kb-rule-card';
+                fields.profileLists.appendChild(reactionsBox);
+                renderObjectList(reactionsBox, state.reactions, 'Reactions', actionFields, syncRawDebounced, { name: '', attack_bonus: 0, damage: '', desc: '' });
+
+                var legendaryBox = document.createElement('div');
+                legendaryBox.className = 'af-kb-rule-card';
+                fields.profileLists.appendChild(legendaryBox);
+                renderObjectList(legendaryBox, state.legendary_actions, 'Legendary actions', actionFields, syncRawDebounced, { name: '', attack_bonus: 0, damage: '', desc: '' });
+
+                var lootBox = document.createElement('div');
+                lootBox.className = 'af-kb-rule-card';
+                fields.profileLists.appendChild(lootBox);
+                renderObjectList(lootBox, state.loot, 'Drops / rewards', lootFields, syncRawDebounced, { kind: 'item', ref_key: '', chance: 0, qty_min: 1, qty_max: 1, notes: '' });
                 return;
             }
 
