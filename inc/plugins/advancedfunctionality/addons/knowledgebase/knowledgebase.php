@@ -69,6 +69,7 @@ function af_kb_arpg_type_registry(): array
         'arpg_origin' => ['entity_kind' => 'origin', 'service' => false, 'title_ru' => 'ARPG: Происхождения', 'title_en' => 'ARPG: Origins'],
         'arpg_archetype' => ['entity_kind' => 'archetype', 'service' => false, 'title_ru' => 'ARPG: Архетипы', 'title_en' => 'ARPG: Archetypes'],
         'arpg_faction' => ['entity_kind' => 'faction', 'service' => false, 'title_ru' => 'ARPG: Фракции', 'title_en' => 'ARPG: Factions'],
+        'arpg_bestiary' => ['entity_kind' => 'bestiary', 'service' => false, 'title_ru' => 'ARPG: Бестиарий', 'title_en' => 'ARPG: Bestiary'],
         'arpg_ability' => ['entity_kind' => 'ability', 'service' => false, 'title_ru' => 'ARPG: Способности', 'title_en' => 'ARPG: Abilities'],
         'arpg_talent' => ['entity_kind' => 'talent', 'service' => false, 'title_ru' => 'ARPG: Таланты', 'title_en' => 'ARPG: Talents'],
         'arpg_item' => ['entity_kind' => 'item', 'service' => false, 'title_ru' => 'ARPG: Предметы', 'title_en' => 'ARPG: Items'],
@@ -4013,7 +4014,7 @@ function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalized
 
 function af_kb_arpg_public_entity_kinds(): array
 {
-    return ['origin', 'archetype', 'faction', 'ability', 'talent', 'item', 'lore'];
+    return ['origin', 'archetype', 'faction', 'bestiary', 'ability', 'talent', 'item', 'lore'];
 }
 
 function af_kb_arpg_service_entity_kinds(): array
