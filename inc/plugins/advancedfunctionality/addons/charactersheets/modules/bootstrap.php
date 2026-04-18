@@ -4060,7 +4060,8 @@ function af_charactersheets_kb_get_block_html(array $entry, string $blockKey): s
                     if (!is_array($item)) {
                         continue;
                     }
-                    if ((string)($item['key'] ?? '') === $blockKey) {
+                    $item_key = trim((string)($item['key'] ?? $item['block_key'] ?? $item['slug'] ?? ''));
+                    if ($item_key === $blockKey) {
                         $block = $item;
                         break;
                     }
@@ -4071,7 +4072,27 @@ function af_charactersheets_kb_get_block_html(array $entry, string $blockKey): s
         }
     }
 
-    $content = af_charactersheets_kb_pick_text($block, 'content');
+    $isRu = af_charactersheets_is_ru();
+    $content = trim(af_charactersheets_kb_pick_text($block, 'content'));
+    if ($content === '' && function_exists('af_cs_kb_extract_block_content')) {
+        $content = trim((string)af_cs_kb_extract_block_content($block, $isRu));
+    }
+    if ($content === '' && !empty($block['data_json']) && is_string($block['data_json'])) {
+        $decoded_data = function_exists('af_kb_decode_json')
+            ? af_kb_decode_json((string)$block['data_json'])
+            : json_decode((string)$block['data_json'], true);
+        if (is_array($decoded_data)) {
+            if (function_exists('af_cs_kb_extract_block_content')) {
+                $content = trim((string)af_cs_kb_extract_block_content($decoded_data, $isRu));
+            }
+            if ($content === '') {
+                $content = trim((string)($decoded_data[$isRu ? 'content_ru' : 'content_en'] ?? ''));
+                if ($content === '') {
+                    $content = trim((string)($decoded_data['content'] ?? $decoded_data['text'] ?? $decoded_data['html'] ?? ''));
+                }
+            }
+        }
+    }
     if ($content === '') {
         return '<div class="af-cs-muted">Нет данных</div>';
     }
