@@ -1046,6 +1046,25 @@
                 add.setAttribute('data-af-arpg-add', '1');
                 wrap.appendChild(list); wrap.appendChild(add); container.appendChild(wrap);
 
+                function appendEmptyRow() {
+                    logArpgDebug('add click', { title: title, path: path });
+                    var row = {};
+                    columns.forEach(function (col) {
+                        if (col.type === 'number') row[col.key] = 0;
+                        if (col.type === 'checkbox') row[col.key] = false;
+                    });
+                    var targetArr = getArr();
+                    targetArr.push(row);
+                    logArpgDebug('push', { title: title, newLength: targetArr.length, path: path });
+                    redraw();
+                    syncToRaw();
+                }
+
+                add.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    appendEmptyRow();
+                });
+
                 function getArr() {
                     var arr = getPath(payload, path, []);
                     if (!Array.isArray(arr)) { arr = []; setPath(payload, path, arr); }
@@ -1095,6 +1114,16 @@
                         var del = document.createElement('button');
                         del.type = 'button'; del.className = 'af-kb-remove'; del.textContent = 'Удалить';
                         del.setAttribute('data-af-arpg-remove-index', String(idx));
+                        del.addEventListener('click', function (event) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            var removeArr = getArr();
+                            if (idx >= 0 && idx < removeArr.length) {
+                                removeArr.splice(idx, 1);
+                                redraw();
+                                syncToRaw();
+                            }
+                        });
                         card.appendChild(del);
                         list.appendChild(card);
                     });
@@ -1121,17 +1150,7 @@
                     if (!addBtn || !wrap.contains(addBtn)) return;
                     event.preventDefault();
                     event.stopPropagation();
-                    logArpgDebug('add click', { title: title, path: path });
-                    var row = {};
-                    columns.forEach(function (col) {
-                        if (col.type === 'number') row[col.key] = 0;
-                        if (col.type === 'checkbox') row[col.key] = false;
-                    });
-                    var targetArr = getArr();
-                    targetArr.push(row);
-                    logArpgDebug('push', { title: title, newLength: targetArr.length, path: path });
-                    redraw();
-                    syncToRaw();
+                    appendEmptyRow();
                 });
                 redraw();
             }
