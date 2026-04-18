@@ -886,6 +886,116 @@
             raw.addEventListener('change', sync);
         }
 
+        function bindArpgMode() {
+            var payload = readJson(getFieldValue(raw) || '{}', {});
+            if (!payload || typeof payload !== 'object') payload = {};
+
+            if (typeof payload.schema !== 'string' || !payload.schema) payload.schema = 'af_kb.arpg.rules.v1';
+            if (typeof payload.type_profile !== 'string' || !payload.type_profile) payload.type_profile = type || 'arpg';
+            if (typeof payload.version !== 'string' || !payload.version) payload.version = '1.0';
+            if (!payload.classification || typeof payload.classification !== 'object') payload.classification = {};
+            if (!payload.abilities || typeof payload.abilities !== 'object') payload.abilities = {};
+
+            var block = [
+                '<div class="af-kb-help">ARPG mechanics path: отдельная схема и отдельная валидация без приведения к DnD.</div>',
+                '<div class="af-kb-row"><div><label>Schema</label><input type="text" id="af-kb-arpg-schema" readonly="readonly" /></div><div><label>Type profile</label><input type="text" id="af-kb-arpg-type-profile" readonly="readonly" /></div></div>',
+                '<div class="af-kb-row"><div><label>Origin / race</label><input type="text" id="af-kb-arpg-origin" /></div><div><label>Archetype / role</label><input type="text" id="af-kb-arpg-archetype" /></div></div>',
+                '<div class="af-kb-row"><div><label>Path / faction</label><input type="text" id="af-kb-arpg-path" /></div><div><label>Resources / scaling (JSON)</label><textarea id="af-kb-arpg-resources" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
+                '<div class="af-kb-row"><div><label>Talents (JSON array)</label><textarea id="af-kb-arpg-talents" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Items/implants/artifacts (JSON array)</label><textarea id="af-kb-arpg-items" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
+                '<div class="af-kb-row"><div><label>Active abilities (JSON array)</label><textarea id="af-kb-arpg-active" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Passive abilities (JSON array)</label><textarea id="af-kb-arpg-passive" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div></div>',
+                '<div class="af-kb-row"><div><label>Modifiers/statuses (JSON array)</label><textarea id="af-kb-arpg-mods" class="af-kb-plain-textarea" data-af-kb-editor-policy="deny"></textarea></div><div><label>Tags (comma separated)</label><input type="text" id="af-kb-arpg-tags" /></div></div>'
+            ];
+            root.innerHTML = block.join('');
+
+            var fields = {
+                schema: root.querySelector('#af-kb-arpg-schema'),
+                typeProfile: root.querySelector('#af-kb-arpg-type-profile'),
+                origin: root.querySelector('#af-kb-arpg-origin'),
+                archetype: root.querySelector('#af-kb-arpg-archetype'),
+                path: root.querySelector('#af-kb-arpg-path'),
+                resources: root.querySelector('#af-kb-arpg-resources'),
+                talents: root.querySelector('#af-kb-arpg-talents'),
+                items: root.querySelector('#af-kb-arpg-items'),
+                active: root.querySelector('#af-kb-arpg-active'),
+                passive: root.querySelector('#af-kb-arpg-passive'),
+                mods: root.querySelector('#af-kb-arpg-mods'),
+                tags: root.querySelector('#af-kb-arpg-tags')
+            };
+
+            fields.schema.value = 'af_kb.arpg.rules.v1';
+            fields.typeProfile.value = type || 'arpg';
+            fields.origin.value = String((payload.classification.origin || payload.classification.race || '') || '');
+            fields.archetype.value = String((payload.classification.archetype || payload.classification.role || '') || '');
+            fields.path.value = String(((payload.classification.path || '') + (payload.classification.faction ? ' | ' + payload.classification.faction : '')).trim());
+            fields.resources.value = JSON.stringify({ resources: payload.resources || [], scaling: payload.scaling || [] }, null, 2);
+            fields.talents.value = JSON.stringify(payload.talents || [], null, 2);
+            fields.items.value = JSON.stringify(payload.items || [], null, 2);
+            fields.active.value = JSON.stringify((payload.abilities && payload.abilities.active) || [], null, 2);
+            fields.passive.value = JSON.stringify((payload.abilities && payload.abilities.passive) || [], null, 2);
+            fields.mods.value = JSON.stringify({ modifiers: payload.modifiers || [], statuses: payload.statuses || [] }, null, 2);
+            fields.tags.value = Array.isArray(payload.tags) ? payload.tags.join(', ') : '';
+
+            function parseJsonSafe(text, fallback) {
+                try {
+                    var parsed = JSON.parse(text);
+                    return parsed;
+                } catch (e) {
+                    return fallback;
+                }
+            }
+
+            function syncArpgToRaw() {
+                var next = readJson(getFieldValue(raw) || '{}', {});
+                if (!next || typeof next !== 'object') next = {};
+                next.schema = 'af_kb.arpg.rules.v1';
+                next.type_profile = type || 'arpg';
+                next.version = String(next.version || '1.0');
+
+                var pathBits = String(fields.path.value || '').split('|');
+                next.classification = {
+                    origin: String(fields.origin.value || '').trim(),
+                    race: String(fields.origin.value || '').trim(),
+                    archetype: String(fields.archetype.value || '').trim(),
+                    role: String(fields.archetype.value || '').trim(),
+                    path: String((pathBits[0] || '')).trim(),
+                    faction: String((pathBits[1] || '')).trim()
+                };
+
+                var resourcesPayload = parseJsonSafe(fields.resources.value, { resources: [], scaling: [] });
+                next.resources = Array.isArray(resourcesPayload.resources) ? resourcesPayload.resources : [];
+                next.scaling = Array.isArray(resourcesPayload.scaling) ? resourcesPayload.scaling : [];
+                next.talents = parseJsonSafe(fields.talents.value, []);
+                next.items = parseJsonSafe(fields.items.value, []);
+                if (!next.abilities || typeof next.abilities !== 'object') next.abilities = {};
+                next.abilities.active = parseJsonSafe(fields.active.value, []);
+                next.abilities.passive = parseJsonSafe(fields.passive.value, []);
+                var modsPayload = parseJsonSafe(fields.mods.value, { modifiers: [], statuses: [] });
+                next.modifiers = Array.isArray(modsPayload.modifiers) ? modsPayload.modifiers : [];
+                next.statuses = Array.isArray(modsPayload.statuses) ? modsPayload.statuses : [];
+                next.tags = splitCsv(fields.tags.value);
+
+                raw.value = JSON.stringify(next, null, 2);
+                syncRulesToMeta(next);
+            }
+
+            Object.keys(fields).forEach(function (key) {
+                if (fields[key]) {
+                    fields[key].addEventListener('input', syncArpgToRaw);
+                    fields[key].addEventListener('change', syncArpgToRaw);
+                }
+            });
+            syncArpgToRaw();
+        }
+
+        if (mechanic === 'arpg') {
+            if (typeSchema && typeSchema.rules_enabled === false) {
+                bindRawOnlyMode('ARPG тип "' + type + '" ещё не имеет готовой schema-поддержки. Доступен raw-режим с валидационной ошибкой на save.');
+            } else {
+                bindArpgMode();
+            }
+            return;
+        }
+
         if (mechanic !== 'dnd') {
             bindRawOnlyMode('Mechanic "' + mechanic + '" пока не поддерживает визуальный rules-редактор. Доступен raw-режим.');
             return;
