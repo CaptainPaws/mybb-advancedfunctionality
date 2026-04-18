@@ -5735,6 +5735,66 @@ function kb_parse_rules(array $entry): array
     return [];
 }
 
+function af_kb_is_internal_service_type(string $typeKey, ?string $mechanicKey = null): bool
+{
+    if ($typeKey === '') {
+        return false;
+    }
+
+    $normalizedMechanic = af_kb_normalize_mechanic_key((string)$mechanicKey);
+    if ($normalizedMechanic !== '' && $normalizedMechanic !== 'arpg') {
+        return false;
+    }
+
+    return in_array($typeKey, af_kb_arpg_internal_types(), true);
+}
+
+function af_kb_resolve_entry_visibility(array $entry): array
+{
+    $visibility = [
+        'catalog' => true,
+        'search' => true,
+        'internal' => false,
+    ];
+
+    $rules = kb_parse_rules($entry);
+    if (isset($rules['visibility']) && is_array($rules['visibility'])) {
+        foreach (['catalog', 'search', 'internal'] as $flag) {
+            if (array_key_exists($flag, $rules['visibility'])) {
+                $visibility[$flag] = !empty($rules['visibility'][$flag]);
+            }
+        }
+    }
+
+    $type = (string)($entry['type'] ?? '');
+    $mechanicKey = af_kb_get_type_mechanic_key($type);
+    if (af_kb_is_internal_service_type($type, $mechanicKey)) {
+        $visibility['catalog'] = false;
+        $visibility['search'] = false;
+        $visibility['internal'] = true;
+    }
+
+    return $visibility;
+}
+
+function af_kb_entry_visible_in_context(array $entry, string $context, bool $canEdit): bool
+{
+    if ($canEdit) {
+        return true;
+    }
+
+    $visibility = af_kb_resolve_entry_visibility($entry);
+    if (!empty($visibility['internal'])) {
+        return false;
+    }
+
+    if ($context === 'search') {
+        return !empty($visibility['search']);
+    }
+
+    return !empty($visibility['catalog']);
+}
+
 function kb_collect_blocks(array $entry): array
 {
     $out = [];
@@ -7033,6 +7093,11 @@ function af_kb_handle_view(): void
             ]
         );
         while ($row = $db->fetch_array($q)) {
+            $rowType = (string)($row['type'] ?? '');
+            $rowMechanic = af_kb_get_type_mechanic_key($row);
+            if (!af_kb_can_edit() && af_kb_is_internal_service_type($rowType, $rowMechanic)) {
+                continue;
+            }
             $types[] = $row;
         }
 
@@ -7085,6 +7150,11 @@ function af_kb_handle_view(): void
     }
 
     if ($key === '') {
+        $requestedMechanic = af_kb_get_type_mechanic_key($type);
+        if (!af_kb_can_edit() && af_kb_is_internal_service_type($type, $requestedMechanic)) {
+            error($lang->af_kb_not_found ?? 'Not found');
+        }
+
         $escapedType = $db->escape_string($type);
         $where = "e.type='{$escapedType}'";
         if (!af_kb_can_edit()) {
@@ -7166,6 +7236,9 @@ function af_kb_handle_view(): void
         $sql = 'SELECT DISTINCT e.* FROM ' . TABLE_PREFIX . 'af_kb_entries e' . $join . ' WHERE ' . $where . ' ORDER BY e.sortorder ASC, e.title_ru ASC, e.title_en ASC LIMIT ' . $start . ',' . $perpage;
         $q = $db->write_query($sql);
         while ($row = $db->fetch_array($q)) {
+            if (!af_kb_entry_visible_in_context($row, $query !== '' ? 'search' : 'catalog', af_kb_can_edit())) {
+                continue;
+            }
             $entries[] = $row;
         }
 
@@ -7296,6 +7369,9 @@ function af_kb_handle_view(): void
 
     $entry = $db->fetch_array($db->simple_select('af_kb_entries', '*', $where, ['limit' => 1]));
     if (!$entry) {
+        error($lang->af_kb_not_found ?? 'Not found');
+    }
+    if (!af_kb_entry_visible_in_context($entry, 'catalog', af_kb_can_edit())) {
         error($lang->af_kb_not_found ?? 'Not found');
     }
 
@@ -8773,6 +8849,9 @@ function af_kb_handle_json_get(): void
     if (!$entry) {
         af_kb_render_json_error($lang->af_kb_not_found ?? 'Not found', 404);
     }
+    if (!af_kb_entry_visible_in_context($entry, 'catalog', af_kb_can_edit())) {
+        af_kb_render_json_error($lang->af_kb_not_found ?? 'Not found', 404);
+    }
 
     $sectionsHtml = [];
     $bq = $db->simple_select('af_kb_blocks', '*', 'entry_id='.(int)$entry['id'], ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
@@ -8836,6 +8915,11 @@ function af_kb_handle_json_list(): void
     }
 
     $query = trim((string)$mybb->get_input('q'));
+    $typeMechanic = af_kb_get_type_mechanic_key($type);
+    if (!af_kb_can_edit() && af_kb_is_internal_service_type($type, $typeMechanic)) {
+        af_kb_send_json(['success' => true, 'items' => []]);
+    }
+
     $catKey = trim((string)$mybb->get_input('cat'));
     $isAjax = (int)$mybb->get_input('ajax', MyBB::INPUT_INT) === 1;
     $where = "type='".$db->escape_string($type)."'";
@@ -8851,6 +8935,9 @@ function af_kb_handle_json_list(): void
     $items = [];
     $q = $db->simple_select('af_kb_entries', '*', $where, ['order_by' => 'sortorder, title_ru, title_en', 'order_dir' => 'ASC']);
     while ($row = $db->fetch_array($q)) {
+        if (!af_kb_entry_visible_in_context($row, $query !== '' ? 'search' : 'catalog', af_kb_can_edit())) {
+            continue;
+        }
         $entryUi = af_kb_get_entry_ui($row);
         $items[] = [
             'type'  => $row['type'],
@@ -8881,6 +8968,11 @@ function af_kb_handle_json_types(): void
     $items = [];
     $q = $db->simple_select('af_kb_types', '*', $where, ['order_by' => 'sortorder, type', 'order_dir' => 'ASC']);
     while ($row = $db->fetch_array($q)) {
+        $rowType = (string)($row['type'] ?? '');
+        $rowMechanic = af_kb_get_type_mechanic_key($row);
+        if (!af_kb_can_edit() && af_kb_is_internal_service_type($rowType, $rowMechanic)) {
+            continue;
+        }
         $items[] = [
             'type' => $row['type'],
             'mechanic_key' => af_kb_get_type_mechanic_key($row),
