@@ -4154,19 +4154,13 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
     if ($entityKind === 'ability') {
         af_kb_arpg_require_path($payload, 'subtype', 'ARPG ability requires subtype.', $errors);
         af_kb_arpg_require_path($payload, 'data_json.data.ability', 'ARPG ability requires data_json.data.ability.', $errors);
-        foreach (['effects', 'requirements', 'costs', 'cooldown', 'charges', 'modifiers', 'resources', 'scaling', 'triggers', 'conditions', 'stacking'] as $optionalKey) {
-            if (!array_key_exists($optionalKey, (array)($payload['data_json']['data'] ?? []))) {
-                continue;
-            }
-            $value = $payload['data_json']['data'][$optionalKey];
-            if (in_array($optionalKey, ['cooldown', 'charges', 'stacking'], true)) {
-                if (!is_array($value)) {
-                    $errors[] = 'ARPG ability: "' . $optionalKey . '" must be an object.';
-                }
-                continue;
-            }
-            if (!is_array($value)) {
-                $errors[] = 'ARPG ability: "' . $optionalKey . '" must be an array.';
+        foreach (['effects', 'costs', 'scaling', 'modifiers', 'conditions', 'triggers', 'stacking', 'status_refs', 'refs'] as $requiredArrKey) {
+            af_kb_arpg_require_path($payload, 'data_json.data.' . $requiredArrKey, 'ARPG ability requires "' . $requiredArrKey . '" section.', $errors);
+        }
+        foreach (['effects', 'costs', 'scaling', 'modifiers', 'conditions', 'triggers', 'stacking', 'status_refs', 'refs'] as $arrKey) {
+            $value = (array)($payload['data_json']['data'][$arrKey] ?? null);
+            if (!is_array($payload['data_json']['data'][$arrKey] ?? null)) {
+                $errors[] = 'ARPG ability: "' . $arrKey . '" must be an array.';
             }
         }
 
@@ -4196,6 +4190,9 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
         af_kb_arpg_require_path($payload, 'data_json.data.item', 'ARPG item requires data_json.data.item.', $errors);
         af_kb_arpg_require_path($payload, 'data_json.data.item.item_kind', 'ARPG item requires item.item_kind.', $errors);
         af_kb_arpg_require_path($payload, 'data_json.data.item.rarity', 'ARPG item requires item.rarity.', $errors);
+        foreach (['base_stats', 'substats', 'modifiers', 'effects', 'passive_refs', 'requirements', 'triggers', 'scaling', 'grants'] as $requiredArrKey) {
+            af_kb_arpg_require_path($payload, 'data_json.data.' . $requiredArrKey, 'ARPG item requires "' . $requiredArrKey . '" section.', $errors);
+        }
         $item = (array)($payload['data_json']['data']['item'] ?? []);
         $equipableKinds = ['weapon', 'armor', 'accessory', 'artifact', 'implant'];
         if (in_array((string)($item['item_kind'] ?? ''), $equipableKinds, true) && trim((string)($item['equip_slot'] ?? '')) === '') {
@@ -4204,10 +4201,20 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
     }
 
     if ($entityKind === 'talent') {
+        af_kb_arpg_require_path($payload, 'data_json.data.talent', 'ARPG talent requires data_json.data.talent.', $errors);
         af_kb_arpg_require_path($payload, 'data_json.data.talent.tree', 'ARPG talent requires talent.tree.', $errors);
         af_kb_arpg_require_path($payload, 'data_json.data.talent.tier', 'ARPG talent requires talent.tier.', $errors);
         af_kb_arpg_require_path($payload, 'data_json.data.talent.max_rank', 'ARPG talent requires talent.max_rank.', $errors);
         af_kb_arpg_require_path($payload, 'data_json.data.rank_effects', 'ARPG talent requires rank_effects.', $errors);
+        foreach (['requirements', 'mutual_exclusives', 'grants', 'rank_modifiers', 'rank_effect_payloads', 'rank_unlocks'] as $requiredArrKey) {
+            af_kb_arpg_require_path($payload, 'data_json.data.' . $requiredArrKey, 'ARPG talent requires "' . $requiredArrKey . '" section.', $errors);
+        }
+    }
+
+    if ($entityKind === 'bestiary') {
+        foreach (['combat_stats', 'abilities', 'loot'] as $requiredArrKey) {
+            af_kb_arpg_require_path($payload, 'data_json.data.' . $requiredArrKey, 'ARPG bestiary requires "' . $requiredArrKey . '" section.', $errors);
+        }
     }
 }
 
@@ -4235,6 +4242,12 @@ function af_kb_validate_arpg_service_entity(string $entityKind, array $payload, 
                 $errors[] = 'ARPG mechanic_profile statuses ref #' . ($idx + 1) . ' has invalid format.';
             }
         }
+        return;
+    }
+
+    $serviceKindsWithEntries = ['resource_def', 'status_def', 'modifier_template', 'formula_def', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
+    if (in_array($entityKind, $serviceKindsWithEntries, true)) {
+        af_kb_arpg_require_path($payload, 'data_json.data.entries', 'ARPG service entity "' . $entityKind . '" requires data_json.data.entries.', $errors);
     }
 }
 
