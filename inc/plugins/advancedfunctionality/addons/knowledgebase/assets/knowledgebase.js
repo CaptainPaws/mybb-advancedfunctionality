@@ -774,6 +774,7 @@
         }
 
         var type = (root.getAttribute('data-type') || '').trim(); // race/class/theme/lore/...
+        var mechanic = String(root.getAttribute('data-mechanic') || 'dnd').trim().toLowerCase() || 'dnd';
         var typeSchema = readJson(root.getAttribute('data-type-schema') || '{}', {});
         var itemKindOptionsRaw = readJson(root.getAttribute('data-item-kinds') || '[]', []);
         var itemKindOptions = (Array.isArray(itemKindOptionsRaw) && itemKindOptionsRaw.length ? itemKindOptionsRaw : [
@@ -883,6 +884,11 @@
             // input может не стрелять у sceditor, поэтому страхуемся
             raw.addEventListener('input', sync);
             raw.addEventListener('change', sync);
+        }
+
+        if (mechanic !== 'dnd') {
+            bindRawOnlyMode('Mechanic "' + mechanic + '" пока не поддерживает визуальный rules-редактор. Доступен raw-режим.');
+            return;
         }
 
 

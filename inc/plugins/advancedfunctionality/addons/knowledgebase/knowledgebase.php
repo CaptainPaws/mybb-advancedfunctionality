@@ -1477,7 +1477,7 @@ function af_kb_default_ui_schema_for_type(string $typeKey): array
     return $schema;
 }
 
-function af_kb_default_type_rules_config(string $typeKey): array
+function af_kb_default_type_rules_config_dnd(string $typeKey): array
 {
     $defaults = [
         'rules_enabled' => true,
@@ -1570,7 +1570,18 @@ function af_kb_default_type_rules_config(string $typeKey): array
     return array_replace($defaults, (array)($typeConfig[$typeKey] ?? []));
 }
 
-function af_kb_get_type_profile_definition(string $typeKey): array
+function af_kb_default_type_rules_config(string $typeKey, ?string $mechanicKey = null): array
+{
+    $mechanic = af_kb_get_mechanic_profile($mechanicKey ?? af_kb_get_type_mechanic_key($typeKey));
+    $resolver = $mechanic['providers']['rules_config'] ?? 'af_kb_default_type_rules_config_dnd';
+    if (!is_string($resolver) || !function_exists($resolver)) {
+        $resolver = 'af_kb_default_type_rules_config_dnd';
+    }
+
+    return (array)$resolver($typeKey);
+}
+
+function af_kb_get_type_profile_definition_dnd(string $typeKey): array
 {
     $fixedStats = ['str' => 0, 'dex' => 0, 'con' => 0, 'int' => 0, 'wis' => 0, 'cha' => 0];
 
@@ -1832,7 +1843,18 @@ function af_kb_get_type_profile_definition(string $typeKey): array
     return $profile;
 }
 
-function af_kb_get_type_schema(string $typeKey): array
+function af_kb_get_type_profile_definition(string $typeKey, ?string $mechanicKey = null): array
+{
+    $mechanic = af_kb_get_mechanic_profile($mechanicKey ?? af_kb_get_type_mechanic_key($typeKey));
+    $resolver = $mechanic['providers']['type_profile'] ?? 'af_kb_get_type_profile_definition_dnd';
+    if (!is_string($resolver) || !function_exists($resolver)) {
+        $resolver = 'af_kb_get_type_profile_definition_dnd';
+    }
+
+    return (array)$resolver($typeKey);
+}
+
+function af_kb_get_type_schema_dnd(string $typeKey): array
 {
     global $db;
 
@@ -1925,6 +1947,17 @@ function af_kb_get_type_schema(string $typeKey): array
     }
 
     return $schema;
+}
+
+function af_kb_get_type_schema(string $typeKey, ?string $mechanicKey = null): array
+{
+    $mechanic = af_kb_get_mechanic_profile($mechanicKey ?? af_kb_get_type_mechanic_key($typeKey));
+    $resolver = $mechanic['providers']['schema'] ?? 'af_kb_get_type_schema_dnd';
+    if (!is_string($resolver) || !function_exists($resolver)) {
+        $resolver = 'af_kb_get_type_schema_dnd';
+    }
+
+    return (array)$resolver($typeKey);
 }
 
 function af_kb_get_item_kind_overlay(string $kindKey): array
@@ -3269,7 +3302,7 @@ function af_kb_normalize_rules_json(string $raw): string
     return (string)json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
-function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson, array &$errors): string
+function af_kb_validate_rules_json_by_type_dnd(string $type, string $normalizedJson, array &$errors): string
 {
     $typeSchema   = af_kb_get_type_schema($type);
     $rulesEnabled = !empty($typeSchema['rules_enabled']);
@@ -3350,6 +3383,17 @@ function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson,
     }
 
     return json_encode($rulesData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+}
+
+function af_kb_validate_rules_json_by_type(string $type, string $normalizedJson, array &$errors, ?string $mechanicKey = null): string
+{
+    $mechanic = af_kb_get_mechanic_profile($mechanicKey ?? af_kb_get_type_mechanic_key($type));
+    $resolver = $mechanic['providers']['validator'] ?? 'af_kb_validate_rules_json_by_type_dnd';
+    if (!is_string($resolver) || !function_exists($resolver)) {
+        $resolver = 'af_kb_validate_rules_json_by_type_dnd';
+    }
+
+    return (string)$resolver($type, $normalizedJson, $errors);
 }
 
 function af_kb_item_root_fields(): array
@@ -4552,6 +4596,24 @@ function af_kb_get_mechanic_profile(string $mechanicKey): array
             'mechanic_key' => 'arpg',
             'status' => 'stub',
             'enabled' => false,
+            'rules_schema_ids' => [
+                'default' => AF_KB_RULES_SCHEMA,
+                'item' => 'af_kb.item.v2',
+            ],
+            'ui_profile_id' => 'arpg',
+            'ui_config' => [
+                'routing_mode' => 'raw_only',
+            ],
+            'providers' => [
+                'rules_config' => 'af_kb_default_type_rules_config_dnd',
+                'type_profile' => 'af_kb_get_type_profile_definition_dnd',
+                'schema' => 'af_kb_get_type_schema_dnd',
+                'validator' => 'af_kb_validate_rules_json_by_type_dnd',
+            ],
+            'type_profile_map' => [],
+            'validator_hooks' => [
+                'rules_json_by_type' => 'af_kb_validate_rules_json_by_type_dnd',
+            ],
         ];
     }
 
@@ -4559,6 +4621,38 @@ function af_kb_get_mechanic_profile(string $mechanicKey): array
         'mechanic_key' => AF_KB_DEFAULT_MECHANIC_KEY,
         'status' => 'active',
         'enabled' => true,
+        'rules_schema_ids' => [
+            'default' => AF_KB_RULES_SCHEMA,
+            'item' => 'af_kb.item.v2',
+        ],
+        'ui_profile_id' => 'dnd',
+        'ui_config' => [
+            'routing_mode' => 'legacy_dnd',
+        ],
+        'providers' => [
+            'rules_config' => 'af_kb_default_type_rules_config_dnd',
+            'type_profile' => 'af_kb_get_type_profile_definition_dnd',
+            'schema' => 'af_kb_get_type_schema_dnd',
+            'validator' => 'af_kb_validate_rules_json_by_type_dnd',
+        ],
+        'type_profile_map' => [
+            'race' => 'race',
+            'race_variant' => 'race_variant',
+            'class' => 'class',
+            'theme' => 'theme',
+            'skill' => 'skill',
+            'knowledge' => 'knowledge',
+            'language' => 'language',
+            'item' => 'item',
+            'spell' => 'spell',
+            'condition' => 'condition',
+            'perk' => 'perk',
+            'faction' => 'faction',
+            'lore' => 'lore',
+        ],
+        'validator_hooks' => [
+            'rules_json_by_type' => 'af_kb_validate_rules_json_by_type_dnd',
+        ],
     ];
 }
 
@@ -6381,6 +6475,7 @@ function af_kb_handle_edit(): void
 
         $type = trim((string)$mybb->get_input('type'));
         $key = trim((string)$mybb->get_input('key'));
+        $mechanicKey = af_kb_get_type_mechanic_key($type);
 
         if ((int)$mybb->get_input('kb_delete', MyBB::INPUT_INT) === 1) {
             if ($type === '' || $key === '') {
@@ -6505,7 +6600,7 @@ function af_kb_handle_edit(): void
             }
             $metaPayload['item_kind'] = $itemKind;
 
-            $schema = af_kb_get_type_schema('item');
+            $schema = af_kb_get_type_schema('item', $mechanicKey);
             if ($itemKind !== '') {
                 $schema = af_kb_apply_overlay_to_schema($schema, af_kb_get_item_kind_overlay($itemKind));
             }
@@ -6679,7 +6774,7 @@ function af_kb_handle_edit(): void
         }
 
         if (!$errors) {
-            $entryDataJsonNormalized = af_kb_validate_rules_json_by_type($type, $entryDataJsonNormalized, $errors);
+            $entryDataJsonNormalized = af_kb_validate_rules_json_by_type($type, $entryDataJsonNormalized, $errors, $mechanicKey);
         }
 
         if (!$errors) {
@@ -7034,8 +7129,10 @@ function af_kb_handle_edit(): void
     $kb_meta_json = htmlspecialchars_uni($entry['meta_json'] ?: '{}');
     $entryRulesJson = af_kb_get_entry_data_json_for_editor((array)$entry);
     $kb_rules_json = htmlspecialchars_uni($entryRulesJson);
+    $kb_mechanic_raw = af_kb_get_type_mechanic_key($entry['type']);
+    $kb_mechanic_key = htmlspecialchars_uni($kb_mechanic_raw);
 
-    $kb_type_schema = htmlspecialchars_uni(json_encode(af_kb_get_type_schema($entry['type']), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    $kb_type_schema = htmlspecialchars_uni(json_encode(af_kb_get_type_schema($entry['type'], $kb_mechanic_raw), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     $kb_item_kind_value = htmlspecialchars_uni((string)($entry['item_kind'] ?? ''));
     $itemKinds = [];
     if ($db->table_exists('af_kb_item_kinds')) {
