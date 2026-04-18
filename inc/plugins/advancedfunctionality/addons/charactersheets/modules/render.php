@@ -1359,6 +1359,58 @@ function af_charactersheets_build_bonus_html(array $index, array $sheet_view = [
     $race_resolved = $resolve_source('race', $index, $ctx_sources, ['character_race', 'race'], 'Раса');
     $race_variant_resolved = $resolve_source('race_variant', $index, $ctx_sources, ['character_race_variant', 'race_variant', 'racevariant'], '');
 
+    $resolve_race_variant_via_relation = static function (array $race_resolved): array {
+        $fallback = [
+            'key' => '',
+            'key_source' => '',
+            'title' => '',
+            'entry' => [],
+            'bonus_html' => '',
+        ];
+
+        $race_key = trim((string)($race_resolved['key'] ?? ''));
+        if ($race_key === '' || !function_exists('af_kb_get_race_variants')) {
+            return $fallback;
+        }
+
+        $variants = af_kb_get_race_variants($race_key, true);
+        if (!is_array($variants) || empty($variants[0]['variant']) || !is_array($variants[0]['variant'])) {
+            return $fallback;
+        }
+
+        $entry = (array)$variants[0]['variant'];
+        $key = trim((string)($entry['key'] ?? ''));
+        if ($key === '') {
+            return $fallback;
+        }
+
+        $bonus_html = trim((string)af_cs_render_kb_bonuses_text('race_variant', $key, af_charactersheets_is_ru()));
+        if ($bonus_html === '' && function_exists('af_charactersheets_kb_get_block_html')) {
+            $bonus_html = trim((string)af_charactersheets_kb_get_block_html($entry, 'bonuses'));
+            if (strpos($bonus_html, 'af-cs-muted') !== false) {
+                $bonus_html = '';
+            }
+        }
+
+        return [
+            'key' => $key,
+            'key_source' => 'kb.relation:race_has_variant',
+            'title' => af_charactersheets_kb_pick_text($entry, 'title'),
+            'entry' => $entry,
+            'bonus_html' => $bonus_html,
+        ];
+    };
+
+    if (
+        trim((string)($race_variant_resolved['key'] ?? '')) === ''
+        || empty($race_variant_resolved['entry'])
+    ) {
+        $race_variant_from_relation = $resolve_race_variant_via_relation($race_resolved);
+        if (trim((string)($race_variant_from_relation['key'] ?? '')) !== '') {
+            $race_variant_resolved = $race_variant_from_relation;
+        }
+    }
+
     $race_title = $race_resolved['title'];
     $race_variant_title = $race_variant_resolved['title'];
 
