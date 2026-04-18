@@ -426,6 +426,20 @@ function af_kb_get_default_mechanic_mode(): string
     return AF_KB_DEFAULT_MECHANIC_KEY;
 }
 
+function af_kb_get_mechanic_options(): array
+{
+    return [
+        'dnd' => 'DnD-механика',
+        'arpg' => 'ARPG-механика',
+    ];
+}
+
+function af_kb_is_allowed_mechanic_key(string $mechanicKey): bool
+{
+    $options = af_kb_get_mechanic_options();
+    return isset($options[af_kb_normalize_mechanic_key($mechanicKey)]);
+}
+
 function af_kb_ensure_group(string $name, string $title, string $desc): int
 {
     global $db;
@@ -7799,6 +7813,9 @@ function af_kb_handle_type_edit(): void
         $mechanicKey = $mechanicKeyInput !== ''
             ? af_kb_normalize_mechanic_key($mechanicKeyInput)
             : af_kb_get_default_mechanic_mode();
+        if (!af_kb_is_allowed_mechanic_key($mechanicKey)) {
+            $errors[] = 'Mechanic key is invalid.';
+        }
         if ($mechanicKey === 'arpg' && !in_array($type, af_kb_arpg_supported_types(), true)) {
             $errors[] = 'Mechanic "arpg" is allowed only for ARPG-ready types.';
         }
@@ -7899,7 +7916,18 @@ function af_kb_handle_type_edit(): void
 
     $kb_page_title = htmlspecialchars_uni($lang->af_kb_type_edit ?? 'Edit category');
     $kb_type_value = htmlspecialchars_uni($typeRow['type']);
-    $kb_type_mechanic_key = htmlspecialchars_uni(af_kb_get_type_mechanic_key($typeRow));
+    $typeMechanicKey = af_kb_get_type_mechanic_key($typeRow);
+    if (!af_kb_is_allowed_mechanic_key($typeMechanicKey)) {
+        $typeMechanicKey = af_kb_get_default_mechanic_mode();
+    }
+    $kb_type_mechanic_key = htmlspecialchars_uni($typeMechanicKey);
+    $kb_type_mechanic_options = '';
+    foreach (af_kb_get_mechanic_options() as $mechanicKey => $mechanicLabel) {
+        $selected = $mechanicKey === $typeMechanicKey ? ' selected="selected"' : '';
+        $kb_type_mechanic_options .= '<option value="' . htmlspecialchars_uni($mechanicKey) . '"' . $selected . '>'
+            . htmlspecialchars_uni($mechanicLabel)
+            . '</option>';
+    }
     $kb_type_title_ru = htmlspecialchars_uni($typeRow['title_ru']);
     $kb_type_title_en = htmlspecialchars_uni($typeRow['title_en']);
 

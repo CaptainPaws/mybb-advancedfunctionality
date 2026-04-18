@@ -18,8 +18,10 @@
             </div>
             <div>
                 <label>Mechanic key</label>
-                <input type="text" name="mechanic_key" value="{$kb_type_mechanic_key}" />
-                <div class="smalltext">Metadata only (current runtime remains DnD).</div>
+                <select name="mechanic_key">
+                    {$kb_type_mechanic_options}
+                </select>
+                <div class="smalltext">Допустимые значения mechanics registry.</div>
             </div>
             <div>
                 <label>{$lang->af_kb_sortorder}</label>
