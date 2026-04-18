@@ -426,6 +426,25 @@ function af_kb_get_default_mechanic_mode(): string
     return AF_KB_DEFAULT_MECHANIC_KEY;
 }
 
+function af_kb_get_catalog_active_mechanic_key(): string
+{
+    return af_kb_get_default_mechanic_mode();
+}
+
+function af_kb_sql_mechanic_filter(string $column, ?string $mechanicKey = null): string
+{
+    global $db;
+
+    $normalized = af_kb_normalize_mechanic_key((string)($mechanicKey ?? af_kb_get_catalog_active_mechanic_key()));
+    if (!af_kb_is_allowed_mechanic_key($normalized)) {
+        $normalized = AF_KB_DEFAULT_MECHANIC_KEY;
+    }
+
+    $escapedDefault = $db->escape_string(AF_KB_DEFAULT_MECHANIC_KEY);
+    $escapedMechanic = $db->escape_string($normalized);
+    return "(LOWER(COALESCE(NULLIF({$column}, ''), '{$escapedDefault}'))='{$escapedMechanic}')";
+}
+
 function af_kb_get_mechanic_options(): array
 {
     return [
@@ -6452,7 +6471,9 @@ function af_kb_handle_view(): void
             add_breadcrumb($lang->af_kb_catalog_title ?? 'Knowledge Base', 'misc.php?action=kb');
         }
 
+        $activeMechanicKey = af_kb_get_catalog_active_mechanic_key();
         $typesWhere = "active=1 AND type<>'" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "'";
+        $typesWhere .= ' AND ' . af_kb_sql_mechanic_filter('mechanic_key', $activeMechanicKey);
         if ($query !== '') {
             $safeQuery = $db->escape_string($query);
             $typesWhere .= " AND (title_ru LIKE '%{$safeQuery}%' OR title_en LIKE '%{$safeQuery}%')";
