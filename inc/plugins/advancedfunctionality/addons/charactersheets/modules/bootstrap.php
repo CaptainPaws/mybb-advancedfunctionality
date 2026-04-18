@@ -2305,32 +2305,34 @@ function af_cs_render_kb_bonuses_text($type, $key, $isRu): string
         return '';
     }
 
-    if (!is_object($db) || !$db->table_exists('af_kb_blocks')) {
-        return '';
+    $text = '';
+    if (is_object($db) && $db->table_exists('af_kb_blocks')) {
+        $where = "entry_id=" . (int)$entry['id']
+            . " AND block_key='bonuses'";
+        if (!function_exists('af_kb_can_edit') || !af_kb_can_edit()) {
+            $where .= ' AND active=1';
+        }
+
+        $block = $db->fetch_array($db->simple_select(
+            'af_kb_blocks',
+            'content_ru, content_en',
+            $where,
+            ['limit' => 1]
+        ));
+        if (is_array($block)) {
+            $localized_field = (bool)$isRu ? 'content_ru' : 'content_en';
+            $text = trim((string)($block[$localized_field] ?? ''));
+            if ($text === '') {
+                $text = af_charactersheets_kb_pick_text($block, 'content');
+            }
+        }
     }
 
-    $where = "entry_id=" . (int)$entry['id']
-        . " AND block_key='bonuses'";
-    if (!function_exists('af_kb_can_edit') || !af_kb_can_edit()) {
-        $where .= ' AND active=1';
-    }
-
-    $block = $db->fetch_array($db->simple_select(
-        'af_kb_blocks',
-        'content_ru, content_en',
-        $where,
-        ['limit' => 1]
-    ));
-    if (!is_array($block)) {
-        return '';
-    }
-
-    $localized_field = (bool)$isRu ? 'content_ru' : 'content_en';
-    $text = trim((string)($block[$localized_field] ?? ''));
     if ($text === '') {
-        $text = af_charactersheets_kb_pick_text($block, 'content');
-    }
-    if ($text === '') {
+        $fallback_html = trim((string)af_charactersheets_kb_get_block_html($entry, 'bonuses'));
+        if ($fallback_html !== '' && strpos($fallback_html, 'af-cs-muted') === false) {
+            return $fallback_html;
+        }
         return '';
     }
 
