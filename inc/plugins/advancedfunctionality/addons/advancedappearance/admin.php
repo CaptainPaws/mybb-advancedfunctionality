@@ -24,20 +24,8 @@ if (!defined('AF_AA_TARGET_APUI_THREAD_PACK')) {
     define('AF_AA_TARGET_APUI_THREAD_PACK', 'apui_thread_pack');
 }
 
-if (!defined('AF_AA_TARGET_APUI_APPLICATION_PACK')) {
-    define('AF_AA_TARGET_APUI_APPLICATION_PACK', 'apui_application_pack');
-}
-
 if (!defined('AF_AA_TARGET_APUI_SHEET_PACK')) {
     define('AF_AA_TARGET_APUI_SHEET_PACK', 'apui_sheet_pack');
-}
-
-if (!defined('AF_AA_TARGET_APUI_INVENTORY_PACK')) {
-    define('AF_AA_TARGET_APUI_INVENTORY_PACK', 'apui_inventory_pack');
-}
-
-if (!defined('AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK')) {
-    define('AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK', 'apui_achievements_pack');
 }
 
 if (!defined('AF_AA_TARGET_APUI_FRAGMENT_PACK')) {
@@ -116,10 +104,7 @@ class AF_Admin_Advancedappearance
                 'profilepack',
                 'postbitpack',
                 'threadpack',
-                'applicationpack',
                 'sheetpack',
-                'inventorypack',
-                'achievementspack',
                 'fragmentpack',
             ];
 
@@ -269,10 +254,7 @@ class AF_Admin_Advancedappearance
                     'profilepack' => 'Страница профиля',
                     'postbitpack' => 'Постбит в теме',
                     'threadpack' => 'Страница темы',
-                    'applicationpack' => 'Анкеты',
                     'sheetpack' => 'Листы персонажа',
-                    'inventorypack' => 'Инвентарь',
-                    'achievementspack' => 'Ачивки',
                     'fragmentpack' => 'Разное',
                 ];
 
@@ -300,20 +282,8 @@ class AF_Admin_Advancedappearance
                     echo '<p>Раздельные пресеты только для оформления страницы темы showthread. Здесь доступны фон body, overlay, hero banner и пользовательский CSS.</p>';
                     break;
 
-                case 'applicationpack':
-                    echo '<p>Пресеты только для UI анкеты. Сохраняются и применяются как отдельная категория surface-паков.</p>';
-                    break;
-
                 case 'sheetpack':
                     echo '<p>Пресеты только для листа персонажа. Меняют фон, оверлей, панели и custom CSS поверхности sheet.</p>';
-                    break;
-
-                case 'inventorypack':
-                    echo '<p>Пресеты только для инвентаря. Меняют фон, оверлей, панели и custom CSS поверхности inventory.</p>';
-                    break;
-
-                case 'achievementspack':
-                    echo '<p>Пресеты только для ачивок. Меняют фон, оверлей, панели и custom CSS поверхности achievements.</p>';
                     break;
 
                 case 'fragmentpack':
@@ -454,10 +424,7 @@ class AF_Admin_Advancedappearance
             'profilepack' => 'Создать пак профиля',
             'postbitpack' => 'Создать пак постбита',
             'threadpack' => 'Создать пак страницы темы',
-            'applicationpack' => 'Создать пак анкеты',
             'sheetpack' => 'Создать пак листа персонажа',
-            'inventorypack' => 'Создать пак инвентаря',
-            'achievementspack' => 'Создать пак ачивок',
             'fragmentpack' => 'Создать дробный пак',
         ];
 
@@ -490,14 +457,8 @@ class AF_Admin_Advancedappearance
             self::renderPostbitPackFields($settings);
         } elseif ($do === 'threadpack') {
             self::renderThreadPackFields($settings);
-        } elseif ($do === 'applicationpack') {
-            self::renderSurfacePackFields($settings, 'application', 'Оформление анкеты');
         } elseif ($do === 'sheetpack') {
             self::renderSurfacePackFields($settings, 'sheet', 'Оформление листа персонажа');
-        } elseif ($do === 'inventorypack') {
-            self::renderSurfacePackFields($settings, 'inventory', 'Оформление инвентаря');
-        } elseif ($do === 'achievementspack') {
-            self::renderSurfacePackFields($settings, 'achievements', 'Оформление ачивок');
         } else {
             self::renderFragmentPackFields($settings);
         }
@@ -577,17 +538,8 @@ class AF_Admin_Advancedappearance
             case 'postbitpack':
                 return self::getPostbitPackCssExamples();
 
-            case 'applicationpack':
-                return self::getSurfacePackCssExamples('application', 'Анкета');
-
             case 'sheetpack':
                 return self::getSurfacePackCssExamples('sheet', 'Лист персонажа');
-
-            case 'inventorypack':
-                return self::getSurfacePackCssExamples('inventory', 'Инвентарь');
-
-            case 'achievementspack':
-                return self::getSurfacePackCssExamples('achievements', 'Ачивки');
 
             case 'fragmentpack':
                 return self::getFragmentPackCssExamples($settings);
