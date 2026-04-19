@@ -2232,6 +2232,7 @@ function af_advancedshop_slot_lookup(int $slotId): array
 function af_advancedshop_detect_inventory_target_from_kb_meta(array $meta): array
 {
     $supportedKinds = ['weapon', 'armor', 'ammo', 'consumable'];
+    $kbType = mb_strtolower(trim((string)($meta['kb_type'] ?? '')));
     $kind = '';
     $kindSource = 'fallback';
     if (function_exists('af_kb_get_normalized_item_profile')) {
@@ -2243,6 +2244,16 @@ function af_advancedshop_detect_inventory_target_from_kb_meta(array $meta): arra
         $kind = mb_strtolower(trim((string)($itemProfile['item_kind'] ?? '')));
         if ($kind !== '') {
             $kindSource = 'normalized.item_kind';
+        }
+    }
+    if ($kind === '') {
+        $rulesRoot = is_array($meta['rules'] ?? null) ? (array)$meta['rules'] : [];
+        $kind = mb_strtolower(trim((string)($rulesRoot['item_kind'] ?? '')));
+        $kindSource = $kind !== '' ? 'rules.item_kind' : 'fallback';
+        if ($kind === '') {
+            $nestedRules = is_array($rulesRoot['rules'] ?? null) ? (array)$rulesRoot['rules'] : [];
+            $kind = mb_strtolower(trim((string)($nestedRules['item_kind'] ?? '')));
+            $kindSource = $kind !== '' ? 'rules.rules.item_kind' : 'fallback';
         }
     }
     if ($kind === '') {
@@ -2266,24 +2277,35 @@ function af_advancedshop_detect_inventory_target_from_kb_meta(array $meta): arra
         }
     }
 
-    $spellType = '';
-    if (function_exists('af_kb_get_normalized_ability_profile')) {
-        $abilityProfile = af_kb_get_normalized_ability_profile([
-            'type' => (string)($meta['kb_type'] ?? 'spell'),
-            'meta_json' => json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
-        ], 'shop');
-        $spellType = mb_strtolower(trim((string)($abilityProfile['ability_type'] ?? '')));
-    }
-    if ($spellType === '') {
-        $spellType = mb_strtolower(trim((string)($meta['rules']['spell']['type'] ?? $meta['rules']['ritual']['type'] ?? '')));
-    }
-    if (in_array($spellType, ['spell', 'ritual'], true)) {
-        return [
-            'slot' => 'abilities',
-            'subtype' => $spellType,
-            'kind_detected' => $spellType,
-            'kind_source' => 'rules.spell.type',
-        ];
+    $abilityLikeTypes = ['spell', 'ritual', 'arpg_talent', 'arpg_ability'];
+    if (in_array($kbType, $abilityLikeTypes, true)) {
+        $spellType = '';
+        if (function_exists('af_kb_get_normalized_ability_profile')) {
+            $abilityProfile = af_kb_get_normalized_ability_profile([
+                'type' => (string)($meta['kb_type'] ?? 'spell'),
+                'meta_json' => json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
+            ], 'shop');
+            $spellType = mb_strtolower(trim((string)($abilityProfile['ability_type'] ?? '')));
+        }
+        if ($spellType === '') {
+            $spellType = mb_strtolower(trim((string)($meta['rules']['spell']['type'] ?? $meta['rules']['ritual']['type'] ?? '')));
+        }
+        if (in_array($spellType, ['spell', 'ritual'], true)) {
+            return [
+                'slot' => 'abilities',
+                'subtype' => $spellType,
+                'kind_detected' => $spellType,
+                'kind_source' => 'rules.spell.type',
+            ];
+        }
+        if ($kbType === 'arpg_talent' || $kbType === 'arpg_ability') {
+            return [
+                'slot' => 'abilities',
+                'subtype' => $spellType !== '' ? $spellType : 'talent',
+                'kind_detected' => $spellType !== '' ? $spellType : 'talent',
+                'kind_source' => $spellType !== '' ? 'normalized.ability_type' : 'kb_type',
+            ];
+        }
     }
 
     $slot = 'resources';

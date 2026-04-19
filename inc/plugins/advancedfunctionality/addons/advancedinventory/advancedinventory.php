@@ -2480,7 +2480,7 @@ function af_advinv_enrich_items_from_kb(array $items): array
             if (trim((string)($item['icon'] ?? '')) === '' && $fromKb['icon'] !== '') {
                 $item['icon'] = $fromKb['icon'];
             }
-            if (!empty($fromKb['meta']) && is_array($fromKb['meta'])) {
+            if (!empty($fromKb['meta']) && is_array($fromKb['meta']) && af_advinv_is_ability_like_kb_type($kbType)) {
                 $item = array_merge($item, af_advinv_extract_ability_fields($fromKb['meta']));
             }
         } elseif ($kbKey !== '' && trim((string)($item['title'] ?? '')) === '') {
@@ -2549,6 +2549,12 @@ function af_advinv_is_spell_kb_type(string $kbType): bool
 {
     $kbType = mb_strtolower(trim($kbType));
     return in_array($kbType, ['spell', 'ritual'], true);
+}
+
+function af_advinv_is_ability_like_kb_type(string $kbType): bool
+{
+    $kbType = mb_strtolower(trim($kbType));
+    return in_array($kbType, ['spell', 'ritual', 'arpg_ability', 'arpg_talent'], true);
 }
 
 function af_advinv_format_structured_value($value, int $depth = 0): string
@@ -2720,7 +2726,16 @@ function af_advinv_classify_equipment_from_kb_meta(array $kbMeta, string $kbType
         return '';
     };
 
-    $rulesItem = is_array($kbMeta['rules']['item'] ?? null) ? (array)$kbMeta['rules']['item'] : [];
+    $rulesRoot = is_array($kbMeta['rules'] ?? null) ? (array)$kbMeta['rules'] : [];
+    $rulesItem = is_array($rulesRoot['item'] ?? null) ? (array)$rulesRoot['item'] : [];
+    $nestedArpgRules = is_array($rulesRoot['rules'] ?? null) ? (array)$rulesRoot['rules'] : [];
+    $arpgKind = $normalizeKind((string)($rulesRoot['item_kind'] ?? ''));
+    if ($arpgKind === '') {
+        $arpgKind = $normalizeKind((string)($nestedArpgRules['item_kind'] ?? ''));
+    }
+    if ($arpgKind !== '') {
+        return $arpgKind;
+    }
     if (function_exists('af_kb_get_normalized_item_profile')) {
         $normalized = af_kb_get_normalized_item_profile([
             'type' => $kbType,
@@ -2797,7 +2812,7 @@ function af_advinv_match_subtype_by_entity_filters(string $entity, array $kbMeta
 function af_advinv_match_filter_rule(array $rule, array $kbMeta): bool
 {
     $fields = [
-        'kind' => af_advinv_collect_meta_values($kbMeta, ['rules.item.item_kind', 'rules.item.kind', 'item_kind', 'kind']),
+        'kind' => af_advinv_collect_meta_values($kbMeta, ['rules.item_kind', 'rules.rules.item_kind', 'rules.item.item_kind', 'rules.item.kind', 'item_kind', 'kind']),
         'type' => af_advinv_collect_meta_values($kbMeta, ['rules.item.item_type', 'rules.item.type', 'item_type', 'type']),
         'tags' => af_advinv_collect_meta_values($kbMeta, ['rules.item.tags', 'tags']),
     ];
