@@ -287,6 +287,7 @@ function af_kb_default_type_definitions(): array
         'race_variant' => ['Разновидности рас', 'Race Variants'],
         'class' => ['Классы', 'Classes'],
         'theme' => ['Темы', 'Themes'],
+        'character' => ['Персонажи', 'Characters'],
         'bestiary' => ['Бестиарий', 'Bestiary'],
         'skill' => ['Навыки', 'Skills'],
         'knowledge' => ['Знания', 'Knowledge'],
@@ -538,6 +539,87 @@ function af_kb_default_type_definitions(): array
                 ['path' => 'item.equip.armor.ac_bonus', 'type' => 'number', 'default' => 0],
                 ['path' => 'item.equip.armor.armor_type', 'type' => 'select', 'options' => [['value'=>'light'],['value'=>'medium'],['value'=>'heavy']], 'default' => 'light'],
                 ['path' => 'item.on_use.effects', 'type' => 'array', 'item' => ['type' => 'object', 'fields' => [['path'=>'op','type'=>'select','required'=>true,'options'=>[['value'=>'add_stat'],['value'=>'add_hp'],['value'=>'add_ep'],['value'=>'kb_grant'],['value'=>'set_flag']]],['path'=>'stat','type'=>'select','options'=>[['value'=>'str'],['value'=>'dex'],['value'=>'con'],['value'=>'int'],['value'=>'wis'],['value'=>'cha']]],['path'=>'value','type'=>'number'],['path'=>'kb_type','type'=>'string'],['path'=>'kb_key','type'=>'string'],['path'=>'flag','type'=>'string']]], 'default' => []],
+            ];
+        }
+
+        if ($key === 'character') {
+            $schema['root_defaults'] = [
+                'schema' => AF_KB_RULES_SCHEMA,
+                'type_profile' => 'character',
+                'version' => '1.0',
+                'character_profile' => [
+                    'category' => 'canons',
+                    'character_pic' => '',
+                    'character_prototype' => '',
+                    'character_name' => '',
+                    'character_name_ru' => '',
+                    'character_nicknames' => '',
+                    'character_element' => '',
+                    'character_gen' => '',
+                    'character_race' => '',
+                    'character_class' => '',
+                    'character_faction' => '',
+                    'character_app' => '',
+                ],
+                'character_stats' => [
+                    'character_hp' => 0,
+                    'character_defense' => 0,
+                    'character_element_damage_bonus' => 0,
+                    'character_crit_damage' => 0,
+                    'character_healing_received_bonus' => 0,
+                    'character_attack_power' => 0,
+                    'character_elemental_mastery' => 0,
+                    'character_healing_bonus' => 0,
+                    'character_shield_strength' => 0,
+                    'character_luck' => 0,
+                ],
+                'character_abilities' => [],
+                'character_links' => [],
+                'character_meta' => [
+                    'contract' => 'af_kb.character.contract.v1',
+                    'contract_version' => '1.0',
+                    'source' => 'kb_manual',
+                ],
+            ];
+
+            $schema['fields'] = [
+                ['path' => 'schema', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => AF_KB_RULES_SCHEMA],
+                ['path' => 'type_profile', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => 'character'],
+                ['path' => 'version', 'type' => 'string', 'required' => true, 'default' => '1.0'],
+                ['path' => 'character_profile.category', 'type' => 'select', 'required' => true, 'options' => [['value' => 'canons'], ['value' => 'originals'], ['value' => 'roles']], 'default' => 'canons'],
+                ['path' => 'character_profile.character_pic', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_prototype', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_name', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_name_ru', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_nicknames', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_element', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_gen', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_race', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_class', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_faction', 'type' => 'string', 'default' => ''],
+                ['path' => 'character_profile.character_app', 'type' => 'textarea', 'default' => ''],
+                ['path' => 'character_stats.character_hp', 'type' => 'number', 'default' => 0],
+                ['path' => 'character_stats.character_defense', 'type' => 'number', 'default' => 0],
+                ['path' => 'character_stats.character_element_damage_bonus', 'type' => 'number', 'default' => 0],
+                ['path' => 'character_stats.character_crit_damage', 'type' => 'number', 'default' => 0],
+                ['path' => 'character_stats.character_healing_received_bonus', 'type' => 'number', 'default' => 0],
+                ['path' => 'character_stats.character_attack_power', 'type' => 'number', 'default' => 0],
+                ['path' => 'character_stats.character_elemental_mastery', 'type' => 'number', 'default' => 0],
+                ['path' => 'character_stats.character_healing_bonus', 'type' => 'number', 'default' => 0],
+                ['path' => 'character_stats.character_shield_strength', 'type' => 'number', 'default' => 0],
+                ['path' => 'character_stats.character_luck', 'type' => 'number', 'default' => 0],
+                ['path' => 'character_abilities', 'type' => 'array', 'default' => [], 'item' => ['type' => 'object', 'fields' => [
+                    ['path' => 'slot_index', 'type' => 'number', 'required' => true, 'default' => 1],
+                    ['path' => 'ability_name', 'type' => 'string', 'required' => true, 'default' => ''],
+                    ['path' => 'ability_type', 'type' => 'select', 'required' => true, 'options' => [['value' => 'active'], ['value' => 'passive']], 'default' => 'active'],
+                    ['path' => 'ability_description', 'type' => 'textarea', 'default' => ''],
+                    ['path' => 'ability_kb_key', 'type' => 'string', 'default' => ''],
+                    ['path' => 'sortorder', 'type' => 'number', 'default' => 0],
+                ]]],
+                ['path' => 'character_meta.contract', 'type' => 'string', 'required' => true, 'readonly' => true, 'default' => 'af_kb.character.contract.v1'],
+                ['path' => 'character_meta.contract_version', 'type' => 'string', 'required' => true, 'default' => '1.0'],
+                ['path' => 'character_meta.source', 'type' => 'string', 'default' => 'kb_manual'],
+                ['path' => 'character_links', 'type' => 'array', 'default' => [], 'item' => ['type' => 'object']],
             ];
         }
 
@@ -1729,7 +1811,7 @@ function af_kb_seed_defaults(): void
 {
     global $db;
 
-    $requiredTypes = ['race', 'race_variant', 'class', 'theme', 'bestiary', 'skill', 'knowledge', 'language', 'item'];
+    $requiredTypes = ['race', 'race_variant', 'class', 'theme', 'character', 'bestiary', 'skill', 'knowledge', 'language', 'item'];
     $defaultsByType = [];
     foreach (af_kb_default_type_definitions() as $row) {
         $defaultsByType[(string)$row['type_key']] = $row;
@@ -1865,6 +1947,47 @@ function af_kb_seed_defaults(): void
     }
 
     af_kb_seed_arpg_types();
+    af_kb_seed_character_categories();
+}
+
+function af_kb_seed_character_categories(): void
+{
+    global $db;
+
+    if (!$db->table_exists('af_kb_categories')) {
+        return;
+    }
+
+    $defs = [
+        ['key' => 'canons', 'title_ru' => 'Каноны', 'title_en' => 'Canons', 'sortorder' => 10],
+        ['key' => 'originals', 'title_ru' => 'Оригиналы', 'title_en' => 'Originals', 'sortorder' => 20],
+        ['key' => 'roles', 'title_ru' => 'Роли', 'title_en' => 'Roles', 'sortorder' => 30],
+    ];
+
+    foreach ($defs as $row) {
+        $existing = $db->fetch_array($db->simple_select(
+            'af_kb_categories',
+            '*',
+            "type='character' AND `key`='" . $db->escape_string((string)$row['key']) . "'",
+            ['limit' => 1]
+        ));
+
+        if ($existing) {
+            continue;
+        }
+
+        af_kb_cat_create(
+            'character',
+            0,
+            (string)$row['key'],
+            (string)$row['title_ru'],
+            (string)$row['title_en'],
+            '',
+            '',
+            (int)$row['sortorder'],
+            1
+        );
+    }
 }
 
 function af_kb_seed_arpg_types(): void
@@ -2316,6 +2439,12 @@ function af_kb_default_type_rules_config_dnd(string $typeKey): array
             'rules_required_keys' => [],
             'ui_rules_editor' => false,
         ],
+        'character' => [
+            'rules_enabled' => true,
+            'rules_schema' => AF_KB_RULES_SCHEMA,
+            'rules_required_keys' => ['schema', 'type_profile', 'version', 'character_profile', 'character_stats', 'character_abilities'],
+            'ui_rules_editor' => true,
+        ],
     ];
 
     return array_replace($defaults, (array)($typeConfig[$typeKey] ?? []));
@@ -2628,6 +2757,48 @@ function af_kb_get_type_profile_definition_dnd(string $typeKey): array
             'ui_profile' => 'faction',
             'rules_enabled' => false,
             'defaults' => ['meta' => []],
+        ],
+        'character' => [
+            'ui_profile' => 'character',
+            'rules_enabled' => true,
+            'defaults' => [
+                'schema' => AF_KB_RULES_SCHEMA,
+                'type_profile' => 'character',
+                'version' => '1.0',
+                'character_profile' => [
+                    'category' => 'canons',
+                    'character_pic' => '',
+                    'character_prototype' => '',
+                    'character_name' => '',
+                    'character_name_ru' => '',
+                    'character_nicknames' => '',
+                    'character_element' => '',
+                    'character_gen' => '',
+                    'character_race' => '',
+                    'character_class' => '',
+                    'character_faction' => '',
+                    'character_app' => '',
+                ],
+                'character_stats' => [
+                    'character_hp' => 0,
+                    'character_defense' => 0,
+                    'character_element_damage_bonus' => 0,
+                    'character_crit_damage' => 0,
+                    'character_healing_received_bonus' => 0,
+                    'character_attack_power' => 0,
+                    'character_elemental_mastery' => 0,
+                    'character_healing_bonus' => 0,
+                    'character_shield_strength' => 0,
+                    'character_luck' => 0,
+                ],
+                'character_abilities' => [],
+                'character_links' => [],
+                'character_meta' => [
+                    'contract' => 'af_kb.character.contract.v1',
+                    'contract_version' => '1.0',
+                    'source' => 'kb_manual',
+                ],
+            ],
         ],
         'lore' => [
             'ui_profile' => 'lore',
@@ -7809,6 +7980,141 @@ function af_kb_handle_entry_modal(): void
     redirect(af_kb_url(['type' => (string)$entry['type'], 'key' => (string)$entry['key']]));
 }
 
+function af_kb_extract_character_contract(array $entry): array
+{
+    $rules = kb_parse_rules($entry);
+    if (!is_array($rules)) {
+        $rules = [];
+    }
+
+    $defaults = (array)((af_kb_get_type_profile_definition('character', 'dnd')['defaults'] ?? []));
+    $payload = array_replace_recursive($defaults, $rules);
+    $profile = (array)($payload['character_profile'] ?? []);
+    $stats = (array)($payload['character_stats'] ?? []);
+    $abilities = (array)($payload['character_abilities'] ?? []);
+
+    usort($abilities, static function ($a, $b): int {
+        $sa = (int)((is_array($a) ? ($a['sortorder'] ?? 0) : 0));
+        $sb = (int)((is_array($b) ? ($b['sortorder'] ?? 0) : 0));
+        return $sa === $sb
+            ? (int)((is_array($a) ? ($a['slot_index'] ?? 0) : 0)) <=> (int)((is_array($b) ? ($b['slot_index'] ?? 0) : 0))
+            : $sa <=> $sb;
+    });
+
+    return [
+        'profile' => $profile,
+        'stats' => $stats,
+        'abilities' => array_slice($abilities, 0, 8),
+        'meta' => (array)($payload['character_meta'] ?? []),
+        'links' => (array)($payload['character_links'] ?? []),
+    ];
+}
+
+function af_kb_character_catalog_card(array $entry, array $typeRow): string
+{
+    $data = af_kb_extract_character_contract($entry);
+    $profile = (array)($data['profile'] ?? []);
+    $title = trim((string)($profile['character_name_ru'] ?? $profile['character_name'] ?? ''));
+    if ($title === '') {
+        $title = trim((string)af_kb_pick_text($entry, 'title'));
+    }
+    if ($title === '') {
+        $title = (string)($entry['key'] ?? 'character');
+    }
+
+    $short = trim((string)($profile['character_app'] ?? af_kb_pick_text($entry, 'short')));
+    $pic = af_kb_sanitize_url((string)($profile['character_pic'] ?? ''));
+    if ($pic === '') {
+        $entryUi = af_kb_get_entry_ui($entry);
+        $pic = af_kb_sanitize_url((string)($entryUi['icon_url'] ?? ''));
+    }
+
+    $meta = [];
+    foreach (['character_race', 'character_class', 'character_element', 'category'] as $field) {
+        $value = trim((string)($profile[$field] ?? ''));
+        if ($value !== '') {
+            $meta[] = htmlspecialchars_uni($value);
+        }
+    }
+
+    $url = 'misc.php?action=kb&type=' . rawurlencode((string)$entry['type']) . '&key=' . rawurlencode((string)$entry['key']);
+    $kb_entry_url = htmlspecialchars_uni($url);
+    $kb_character_title = htmlspecialchars_uni($title);
+    $kb_character_pic = $pic !== '' ? '<img src="' . htmlspecialchars_uni($pic) . '" alt="" loading="lazy" />' : '<div class="af-kb-char-card__pic-placeholder"></div>';
+    $kb_character_short = $short !== '' ? af_kb_parse_message($short) : '';
+    $kb_character_meta = $meta ? implode(' • ', $meta) : '';
+
+    eval("\$card = \"" . af_kb_get_template('knowledgebase_list_character_entry') . "\";");
+    return $card;
+}
+
+function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu): string
+{
+    $data = af_kb_extract_character_contract($entry);
+    $profile = (array)($data['profile'] ?? []);
+    $stats = (array)($data['stats'] ?? []);
+    $abilities = (array)($data['abilities'] ?? []);
+
+    $title = trim((string)($isRu ? ($profile['character_name_ru'] ?? '') : ($profile['character_name'] ?? '')));
+    if ($title === '') {
+        $title = trim((string)($profile['character_name_ru'] ?? $profile['character_name'] ?? af_kb_pick_text($entry, 'title')));
+    }
+
+    $pic = af_kb_sanitize_url((string)($profile['character_pic'] ?? ''));
+    $banner = af_kb_sanitize_url((string)($entry['banner_url'] ?? ''));
+    $appearance = trim((string)($profile['character_app'] ?? af_kb_pick_text($entry, 'short')));
+    $bio = af_kb_pick_text($entry, 'body');
+
+    $identityRows = '';
+    foreach ([
+        'Prototype' => 'character_prototype',
+        'Nicknames' => 'character_nicknames',
+        'Element' => 'character_element',
+        'Gender' => 'character_gen',
+        'Race' => 'character_race',
+        'Class' => 'character_class',
+        'Faction' => 'character_faction',
+    ] as $label => $field) {
+        $value = trim((string)($profile[$field] ?? ''));
+        if ($value !== '') {
+            $identityRows .= '<div class="af-kb-char-profile__row"><span>' . htmlspecialchars_uni($label) . '</span><strong>' . htmlspecialchars_uni($value) . '</strong></div>';
+        }
+    }
+
+    $statRows = '';
+    foreach ($stats as $key => $value) {
+        if (is_scalar($value)) {
+            $statRows .= '<div class="af-kb-char-stat"><span>' . htmlspecialchars_uni((string)$key) . '</span><strong>' . htmlspecialchars_uni((string)$value) . '</strong></div>';
+        }
+    }
+
+    $abilitiesHtml = '';
+    foreach ($abilities as $ability) {
+        if (!is_array($ability)) {
+            continue;
+        }
+        $abilitiesHtml .= '<article class="af-kb-char-ability"><header><strong>#' . (int)($ability['slot_index'] ?? 0) . ' '
+            . htmlspecialchars_uni((string)($ability['ability_name'] ?? '')) . '</strong><span>'
+            . htmlspecialchars_uni((string)($ability['ability_type'] ?? 'active')) . '</span></header><div>'
+            . af_kb_parse_message((string)($ability['ability_description'] ?? '')) . '</div>'
+            . (!empty($ability['ability_kb_key']) ? '<footer>arpg_ability: ' . htmlspecialchars_uni((string)$ability['ability_kb_key']) . '</footer>' : '')
+            . '</article>';
+    }
+
+    return '<div class="af-kb-char-profile">'
+        . ($banner !== '' ? '<div class="af-kb-char-profile__banner"><img src="' . htmlspecialchars_uni($banner) . '" alt="" loading="lazy" /></div>' : '')
+        . '<section class="af-kb-char-profile__head">'
+        . ($pic !== '' ? '<div class="af-kb-char-profile__avatar"><img src="' . htmlspecialchars_uni($pic) . '" alt="" loading="lazy" /></div>' : '')
+        . '<div class="af-kb-char-profile__identity"><h2>' . htmlspecialchars_uni($title) . '</h2>' . $identityRows . '</div>'
+        . '</section>'
+        . ($appearance !== '' ? '<section class="af-kb-char-profile__section"><h3>Описание</h3><div>' . af_kb_parse_message($appearance) . '</div></section>' : '')
+        . ($bio !== '' ? '<section class="af-kb-char-profile__section"><h3>Биография</h3><div>' . af_kb_parse_message($bio) . '</div></section>' : '')
+        . '<section class="af-kb-char-profile__section"><h3>Характеристики</h3><div class="af-kb-char-stats">' . $statRows . '</div></section>'
+        . '<section class="af-kb-char-profile__section"><h3>Способности</h3><div class="af-kb-char-abilities">' . ($abilitiesHtml !== '' ? $abilitiesHtml : '<div class="af-kb-char-empty">No abilities yet.</div>') . '</div></section>'
+        . '<section class="af-kb-char-profile__service"><button type="button" class="af-kb-btn" disabled>ATF Sync (next task)</button><button type="button" class="af-kb-btn" disabled>Character Sheet Sync (next task)</button></section>'
+        . '</div>';
+}
+
 function af_kb_handle_view(): void
 {
     global $mybb, $db, $lang, $headerinclude, $header, $footer, $theme, $templates;
@@ -8035,6 +8341,11 @@ function af_kb_handle_view(): void
         $typeIconClass = $typeRow ? ($typeRow['icon_class'] ?? '') : '';
         $rows = '';
         foreach ($entries as $row) {
+            if ($type === 'character') {
+                $rows .= af_kb_character_catalog_card($row, (array)$typeRow);
+                continue;
+            }
+
             $title = af_kb_pick_text($row, 'title');
             if ($title === '') {
                 $title = $row['key'];
@@ -8122,7 +8433,8 @@ function af_kb_handle_view(): void
         $kb_page_bg = '';
         $kb_body_style = af_kb_build_body_bg_style($typeRow ? ($typeRow['bg_url'] ?? '') : '');
         $af_kb_content = '';
-        eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_list') . "\";");
+        $listTemplate = $type === 'character' ? 'knowledgebase_list_character' : 'knowledgebase_list';
+        eval("\$af_kb_content = \"" . af_kb_get_template($listTemplate) . "\";");
         eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
         output_page($page);
         exit;
@@ -8158,7 +8470,9 @@ function af_kb_handle_view(): void
 
     $short = af_kb_parse_message($entryLocalized['short']);
     $isRu = af_kb_is_ru();
-    $body = af_kb_render_entry_ui($entry, $typeRow, $isRu);
+    $body = $type === 'character'
+        ? af_kb_render_character_entry($entry, $typeRow, $isRu)
+        : af_kb_render_entry_ui($entry, $typeRow, $isRu);
     if ($body === '') {
         $body = af_kb_parse_message($entryLocalized['body']);
     }
@@ -8327,7 +8641,8 @@ function af_kb_handle_view(): void
     $bodyBgUrl = $entryUi['background_url'] ?: ($typeRow ? ($typeRow['bg_url'] ?? '') : '');
     $kb_body_style = af_kb_build_body_bg_style($bodyBgUrl);
     $af_kb_content = '';
-    eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_view') . "\";");
+    $viewTemplate = $type === 'character' ? 'knowledgebase_view_character' : 'knowledgebase_view';
+    eval("\$af_kb_content = \"" . af_kb_get_template($viewTemplate) . "\";");
 
     if ($isAjax) {
         echo $af_kb_content;
