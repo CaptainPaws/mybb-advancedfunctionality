@@ -442,7 +442,9 @@ function af_charactersheets_arpg_pick_element_label(array $atf_index, array $she
 {
     $element = trim((string)af_charactersheets_pick_field_value($atf_index, ['character_element', 'element', 'affinity']));
     if ($element !== '') {
-        return $element;
+        $entry = af_charactersheets_kb_get_entry('arpg_element', $element);
+        $title = trim(af_charactersheets_kb_pick_text($entry, 'title'));
+        return $title !== '' ? $title : $element;
     }
 
     $fromCtx = trim((string)af_charactersheets_deep_get($sheet_view, 'ctx.aggregate.arpg.element', ''));

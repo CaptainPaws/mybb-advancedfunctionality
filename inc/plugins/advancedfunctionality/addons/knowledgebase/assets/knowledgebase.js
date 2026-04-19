@@ -982,6 +982,7 @@
             var typeMap = {
                 arpg_origin: 'origin',
                 arpg_archetype: 'archetype',
+                arpg_element: 'element',
                 arpg_faction: 'faction',
                 arpg_lore: 'lore',
                 arpg_ability: 'ability',
@@ -991,7 +992,7 @@
                 arpg_mechanics: 'service_mechanics'
             };
 
-            var simpleTypes = ['origin', 'archetype', 'faction', 'lore'];
+            var simpleTypes = ['origin', 'archetype', 'element', 'faction', 'lore'];
             var heavyTypes = ['ability', 'talent', 'item', 'bestiary'];
             var serviceKinds = ['mechanic_profile', 'resource_def', 'status_def', 'modifier_template', 'formula_def', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
 
@@ -1542,6 +1543,14 @@
                         { key: 'story_flags_text', label: 'story_flags_text', default: '' },
                         { key: 'description_text', label: 'description_text', default: '' }
                     ], 'Faction core');
+                }
+
+                if (entityType === 'element') {
+                    renderRuleFields(rulesRoot, [
+                        { key: 'family', label: 'family', default: '' },
+                        { key: 'counter_element', label: 'counter_element', default: '' },
+                        { key: 'description_text', label: 'description_text', default: '' }
+                    ], 'Element core');
                 }
 
                 if (entityType === 'lore') {

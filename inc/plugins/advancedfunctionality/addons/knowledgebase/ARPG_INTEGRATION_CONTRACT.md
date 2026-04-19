@@ -56,6 +56,7 @@ ARPG entry нормализуется только из **single Meta JSON envel
 
 - `arpg_origin`
 - `arpg_archetype`
+- `arpg_element`
 - `arpg_faction`
 - `arpg_bestiary`
 - `arpg_ability`
@@ -128,6 +129,7 @@ CharacterSheets должен работать только через normalized
 - required mapping:
   - `origin_key` -> `arpg_origin`
   - `archetype_key` -> `arpg_archetype`
+  - `element_key` -> `arpg_element`
   - `faction_key` -> `arpg_faction`
 
 ---
