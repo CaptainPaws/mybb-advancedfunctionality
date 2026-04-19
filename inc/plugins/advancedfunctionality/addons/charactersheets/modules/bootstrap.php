@@ -617,10 +617,80 @@ function af_charactersheets_build_application_content_html(int $tid, int $fid = 
     }
 
     if ($content === '') {
+        $content = af_charactersheets_build_application_post_fallback_html($tid);
+    }
+
+    if ($content === '') {
         return '<div class="cs-modal-application"><div class="post_content">Анкета недоступна.</div></div>';
     }
 
     return $content;
+}
+
+function af_charactersheets_build_application_post_fallback_html(int $tid): string
+{
+    global $db, $mybb, $parser;
+
+    if ($tid <= 0) {
+        return '';
+    }
+
+    $thread = get_thread($tid);
+    $pid = (int)($thread['firstpost'] ?? 0);
+    if ($pid <= 0) {
+        return '';
+    }
+
+    $post = $db->fetch_array($db->simple_select(
+        'posts',
+        'pid,uid,username,subject,message,dateline,smilieoff',
+        'pid=' . $pid,
+        ['limit' => 1]
+    ));
+    if (!is_array($post) || empty($post['pid'])) {
+        return '';
+    }
+
+    $subject = trim((string)($post['subject'] ?? ''));
+    if ($subject === '') {
+        $subject = trim((string)($thread['subject'] ?? 'Анкета персонажа'));
+    }
+
+    $message = (string)($post['message'] ?? '');
+    $contentHtml = '';
+    if ($message !== '') {
+        if (!isset($parser) || !is_object($parser)) {
+            require_once MYBB_ROOT . 'inc/class_parser.php';
+            $parser = new postParser;
+        }
+
+        if (isset($parser) && is_object($parser) && method_exists($parser, 'parse_message')) {
+            $parseOptions = [
+                'allow_html' => 0,
+                'allow_mycode' => 1,
+                'allow_smilies' => (int)($post['smilieoff'] ?? 0) === 0,
+                'allow_imgcode' => 1,
+                'allow_videocode' => 1,
+                'filter_badwords' => 1,
+                'nl2br' => 1,
+            ];
+            $contentHtml = (string)$parser->parse_message($message, $parseOptions);
+        } else {
+            $contentHtml = nl2br(htmlspecialchars_uni($message));
+        }
+    }
+
+    if ($contentHtml === '') {
+        return '';
+    }
+
+    $subjectHtml = htmlspecialchars_uni($subject);
+    return '<div class="cs-modal-application">'
+        . '<article class="post_body">'
+        . '<h2 class="post_title">' . $subjectHtml . '</h2>'
+        . '<div class="post_content">' . $contentHtml . '</div>'
+        . '</article>'
+        . '</div>';
 }
 
 function af_charactersheets_output_modal_page(string $content, string $title = ''): void

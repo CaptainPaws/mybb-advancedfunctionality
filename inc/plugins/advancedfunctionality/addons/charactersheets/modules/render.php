@@ -988,7 +988,18 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     $sheet_info_table_html = af_charactersheets_build_info_table_html($atf_index, $sheet_view);
     $sheet_attributes_html = af_charactersheets_build_attributes_html($sheet_view, $can_edit_attributes, $can_view_ledger, $can_staff_reset, $attributes_locked);
     $sheet_bonus_html = af_charactersheets_build_bonus_html($atf_index, $sheet_view);
-    $sheet_application_html = af_charactersheets_build_application_content_html($tid, (int)($thread['fid'] ?? 0));
+
+    $application_tid = $tid;
+    $application_fid = (int)($thread['fid'] ?? 0);
+    if ($uid > 0 && $application_tid <= 0 && function_exists('af_charactersheets_get_application_payload_by_uid')) {
+        $application = af_charactersheets_get_application_payload_by_uid($uid);
+        $application_tid = (int)($application['tid'] ?? 0);
+    }
+    if ($application_tid > 0 && $application_fid <= 0) {
+        $application_thread = get_thread($application_tid);
+        $application_fid = (int)($application_thread['fid'] ?? 0);
+    }
+    $sheet_application_html = af_charactersheets_build_application_content_html($application_tid, $application_fid);
 
     $skills_locked = !empty($build['locked_skills']);
     $can_manage_skills = $can_manage_sheet && (!$skills_locked || $is_staff);
