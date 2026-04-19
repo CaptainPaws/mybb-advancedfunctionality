@@ -717,8 +717,8 @@ body.af-apui-member-profile-page #af-apui-tab-application .af-apui-tab-card__bod
   justify-items: center;
   text-align: center;
   padding: 14px;
-  border: 1px solid #343b51;
-  border-radius: 12px;
+  border: 1px solid #4b4b4b;
+  border-radius: 0px;
   overflow: hidden;
   background-image:
     var(--af-apui-postbit-author-overlay, linear-gradient(to bottom, rgba(18, 25, 43, .18), rgba(12, 16, 28, .22))),
@@ -735,7 +735,7 @@ body.af-apui-member-profile-page #af-apui-tab-application .af-apui-tab-card__bod
 .af-apui-postbit-name-wrap {
   width: 100%;
   padding: 15px;
-  border: 2px solid rgba(255,255,255,.2);
+  border: 0px solid rgba(255,255,255,.2);
   border-radius: 12px 12px 1px 1px;
   background-image:
     var(--af-apui-postbit-name-overlay, linear-gradient(180deg, rgba(10, 14, 24, .18), rgba(10, 14, 24, .28))),
@@ -803,6 +803,12 @@ body.af-apui-member-profile-page #af-apui-tab-application .af-apui-tab-card__bod
 
 .af-apui-postbit-rank {
   opacity: .92;
+  margin-top: -22px !important;
+  background: rgb(19, 19, 19);
+  color: #d6d6d6;
+  padding: 5px 10px 5px 10px;
+  width: min(110%);
+  margin-left: -15px !important;
 }
 
 .af-apui-postbit-profilefields {
@@ -965,7 +971,7 @@ body.af-apui-member-profile-page #af-apui-tab-application .af-apui-tab-card__bod
   gap: 10px;
   min-height: 44px;
   padding: 14px;
-  border: 2px solid rgba(255,255,255,.2);
+  border: 1px solid rgba(255,255,255,.2);
   border-radius: 1px 1px 12px 12px;
   background-image: var(--af-apui-postbit-plaque-overlay, linear-gradient(180deg, rgba(10, 14, 24, .10), rgba(10, 14, 24, .18))), var(--af-apui-postbit-plaque-bg-image, none);
   background-position: center center;
@@ -1496,7 +1502,7 @@ af-apf-postbit-field {
     12px
     calc(var(--af-apui-author-inner-pad) * -1);
   box-sizing: border-box;
-  border-radius: 12px 12px 0 0;
+  border-radius: 0;
 }
 
 .af-apui-postbit-avatar-shell {
@@ -1527,18 +1533,26 @@ af-apf-postbit-field {
 
 .af-apui-postbit-rank {
   opacity: .92;
+  margin-top: -22px !important;
+  background: rgb(19, 19, 19);
+  color: #d6d6d6;
+  padding: 5px 10px 5px 10px;
+  width: min(110%);
+  margin-left: -15px !important;
 }
 
 .af-apui-postbit-profilefields {
-  width: min(88%, 260px);
+  width: min(110%);
+  min-height: 50px;
   display: block;
-  background: rgba(19, 19, 19, 0.47);
-  border: 1px solid rgba(255, 255, 255, .10);
-  border-radius: 8px;
+  background: rgba(19,19,19,0.47);
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 0px;
   padding: 15px;
   backdrop-filter: blur(6px);
   box-sizing: border-box;
   margin-top: -20px;
+  margin-bottom: -25px;
   text-align: justify;
   font-size: 11px;
   font-variant: small-caps;
@@ -1562,7 +1576,7 @@ af-apf-postbit-field {
 
 .af-apui-postbit-plaque {
   margin: 0;
-  border-radius: 0 0 12px 12px;
+  border-radius: 0;
 }
 
 .af-apui-postbit-rail {
@@ -1580,7 +1594,7 @@ af-apf-postbit-field {
   width: min(88%, 260px);
   min-height: 0;
   padding: 0;
-  margin-top: 10px;
+  margin-top: -10px;
   box-sizing: border-box;
   border-radius: 0;
   backdrop-filter: none;
@@ -1646,7 +1660,7 @@ af-apf-postbit-field {
   position: absolute;
   left: 50%;
   bottom: calc(100% + 8px);
-  transform: translateX(-50%) translateY(4px);
+  transform: translateX(-50%) translateY(-30px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1672,7 +1686,7 @@ af-apf-postbit-field {
 .af-apui-postbit-rail .af-apui-stat-item.is-open .af-apui-stat-item__value {
   opacity: 1;
   visibility: visible;
-  transform: translateX(-50%) translateY(0);
+  transform: translateX(-50%) translateY(-30px);
   pointer-events: auto;
 }
 
@@ -1825,7 +1839,7 @@ af-apf-postbit-field {
 
   .af-apui-postbit-name-wrap {
     text-align: center;
-    border-radius: 12px 12px 0 0;
+    border-radius: 0;
   }
 
   .af-apui-postbit-name-wrap a {
@@ -1933,7 +1947,7 @@ af-apf-postbit-field {
 
   .af-apui-postbit-plaque {
     min-height: 40px;
-    border-radius: 0 0 12px 12px;
+    border-radius: 0;
   }
 }
 
