@@ -69,6 +69,8 @@ function af_charactersheets_init(): void
     $plugins->add_hook('showthread_start', 'af_charactersheets_showthread_start');
     $plugins->add_hook('pre_output_page', 'af_charactersheets_pre_output');
     $plugins->add_hook('misc_start', 'af_charactersheets_misc_start');
+    $plugins->add_hook('class_moderation_move_simple', 'af_charactersheets_handle_thread_move_for_acceptance');
+    $plugins->add_hook('class_moderation_move_thread_redirect', 'af_charactersheets_handle_thread_move_for_acceptance');
 }
 
 function af_charactersheets_showthread_start(): void
@@ -84,4 +86,9 @@ function af_charactersheets_pre_output(&$page): void
 function af_charactersheets_misc_start(): void
 {
     af_charactersheets_misc_start_impl();
+}
+
+function af_charactersheets_handle_thread_move_for_acceptance(array $args): void
+{
+    af_charactersheets_handle_thread_move_for_acceptance_impl($args);
 }
