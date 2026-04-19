@@ -5,10 +5,7 @@
   window.__afAaModalScopeLoaded = true;
 
   var ALLOWED_SURFACES = {
-    application: true,
-    sheet: true,
-    inventory: true,
-    achievements: true
+    sheet: true
   };
 
   var OBSERVER_KEY = '__afAaScopeObserver';
@@ -181,20 +178,8 @@
       return true;
     }
 
-    if (surface === 'application') {
-      return hasClass(node, 'af-apui-application-fragment');
-    }
-
     if (surface === 'sheet') {
       return hasClass(node, 'af-apui-sheet-fragment') || hasClass(node, 'af-cs-page');
-    }
-
-    if (surface === 'inventory') {
-      return hasClass(node, 'af-apui-inventory-fragment') || hasClass(node, 'af-inv-page');
-    }
-
-    if (surface === 'achievements') {
-      return hasClass(node, 'af-apui-achievements-fragment');
     }
 
     return false;
@@ -216,15 +201,11 @@
       '.af-cs-modal__body',
       '.af-cs-modal__content',
       '.af-cs-modal__frame',
-      '.af-apui-application-fragment',
       '.af-apui-sheet-fragment',
-      '.af-apui-inventory-fragment',
-      '.af-apui-achievements-fragment',
       '.af-apui-surface-page',
       '.af-apui-surface-body',
       '.af-apui-surface-content',
-      '.af-cs-page',
-      '.af-inv-page'
+      '.af-cs-page'
     ].join(',');
 
     modal.querySelectorAll(selector).forEach(push);
@@ -243,29 +224,6 @@
       }
     });
 
-    if (surface === 'application') {
-      normalizeApplicationModalFragments(modal);
-    }
-  }
-
-  function normalizeApplicationModalFragments(modal) {
-    if (!modal || modal.nodeType !== 1) return;
-
-    var fragments = modal.querySelectorAll('.af-apui-application-fragment');
-    if (!fragments || !fragments.length) return;
-
-    fragments.forEach(function (fragment) {
-      if (!fragment || !fragment.style) return;
-
-      var current = safeLower(fragment.style.position);
-      if (current !== 'absolute') return;
-
-      fragment.style.removeProperty('position');
-
-      if (!trim(fragment.getAttribute('style'))) {
-        fragment.removeAttribute('style');
-      }
-    });
   }
 
   function installObserver(modal, uid, surface) {

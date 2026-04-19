@@ -1644,9 +1644,9 @@ af-apf-postbit-field {
 
 .af-apui-postbit-rail .af-apui-stat-item__value {
   position: absolute;
-  left: calc(100% + 8px);
-  top: 50%;
-  transform: translateY(-50%) translateX(-4px);
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%) translateY(4px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1672,7 +1672,7 @@ af-apf-postbit-field {
 .af-apui-postbit-rail .af-apui-stat-item.is-open .af-apui-stat-item__value {
   opacity: 1;
   visibility: visible;
-  transform: translateY(-50%) translateX(0);
+  transform: translateX(-50%) translateY(0);
   pointer-events: auto;
 }
 

@@ -223,10 +223,7 @@
 
     var previewKind = trim(root.getAttribute('data-aa-preview-kind') || 'profile');
     var customCssKey = {
-      application: 'application_css',
-      sheet: 'sheet_css',
-      inventory: 'inventory_css',
-      achievements: 'achievements_css'
+      sheet: 'sheet_css'
     };
 
     setVar(root, '--af-aa-preview-modal-bg-image', toCssUrl(settings[previewKind + '_bg_url'] || ''));

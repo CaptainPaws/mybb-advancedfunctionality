@@ -269,41 +269,11 @@ function af_aa_get_supported_targets_registry(): array
             'purchasable' => true,
             'useable' => true,
         ],
-        AF_AA_TARGET_APUI_APPLICATION_PACK => [
-            'do' => 'applicationpack',
-            'group' => 'application_pack',
-            'label' => 'Анкеты',
-            'human_label' => 'Пак анкеты',
-            'preset_target' => true,
-            'assignable' => true,
-            'purchasable' => true,
-            'useable' => true,
-        ],
         AF_AA_TARGET_APUI_SHEET_PACK => [
             'do' => 'sheetpack',
             'group' => 'sheet_pack',
             'label' => 'Листы персонажа',
             'human_label' => 'Пак листа персонажа',
-            'preset_target' => true,
-            'assignable' => true,
-            'purchasable' => true,
-            'useable' => true,
-        ],
-        AF_AA_TARGET_APUI_INVENTORY_PACK => [
-            'do' => 'inventorypack',
-            'group' => 'inventory_pack',
-            'label' => 'Инвентарь',
-            'human_label' => 'Пак инвентаря',
-            'preset_target' => true,
-            'assignable' => true,
-            'purchasable' => true,
-            'useable' => true,
-        ],
-        AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK => [
-            'do' => 'achievementspack',
-            'group' => 'achievements_pack',
-            'label' => 'Ачивки',
-            'human_label' => 'Пак ачивок',
             'preset_target' => true,
             'assignable' => true,
             'purchasable' => true,
@@ -397,10 +367,7 @@ function af_aa_get_target_group_labels(): array
         'profile_pack' => 'Профили',
         'postbit_pack' => 'Постбиты',
         'thread_pack' => 'Страница темы',
-        'application_pack' => 'Анкеты',
         'sheet_pack' => 'Листы персонажа',
-        'inventory_pack' => 'Инвентарь',
-        'achievements_pack' => 'Ачивки',
         'fragment_pack' => 'Разное',
     ];
 }
@@ -1705,9 +1672,6 @@ function af_aa_get_surface_custom_css_key(string $surfaceKey): string
 
     $map = [
         'sheet' => 'sheet_css',
-        'application' => 'application_css',
-        'inventory' => 'inventory_css',
-        'achievements' => 'achievements_css',
     ];
 
     return $map[$surfaceKey] ?? 'custom_css';
@@ -2160,63 +2124,6 @@ function af_aa_render_page_css(array $uidsOnPage): string
             $customCssSelectors = !empty($modalSelectors)
                 ? array_values(array_unique(array_merge($modalSelectors, $selectors)))
                 : $selectors;
-
-            if ($surfaceKey === 'application' && !empty($selectors)) {
-                $rootSelectors = af_aa_join_scoped_selectors($selectors);
-                $rootBeforeSelectors = af_aa_join_scoped_selectors($selectors, '::before');
-                $rootChildrenSelectors = af_aa_join_scoped_selectors($selectors, ' > *');
-
-                $panelSelectors = [];
-                foreach ($selectors as $selector) {
-                    $panelSelectors[] = $selector . ' .af-apui-tab-card__body';
-                    $panelSelectors[] = $selector . ' .af-atf-display';
-                    $panelSelectors[] = $selector . ' .af-atf-display-block';
-                    $panelSelectors[] = $selector . ' .post_body';
-                    $panelSelectors[] = $selector . ' .post_content';
-                }
-                $panelCombined = af_aa_join_scoped_selectors($panelSelectors);
-
-                if ($rootSelectors !== '') {
-                    $css .= $rootSelectors . '{'
-                        . 'position:relative;'
-                        . 'isolation:isolate;'
-                        . 'background-color:var(--af-apui-modal-application-panel-bg, rgba(6,12,26,.58));'
-                        . 'background-image:var(--af-apui-modal-application-bg-image, none);'
-                        . 'background-position:center center;'
-                        . 'background-repeat:no-repeat;'
-                        . 'background-size:cover;'
-                        . 'border:1px solid var(--af-apui-modal-application-panel-border, rgba(255,255,255,.10));'
-                        . "}\n";
-                }
-
-                if ($rootBeforeSelectors !== '') {
-                    $css .= $rootBeforeSelectors . '{'
-                        . 'content:"";'
-                        . 'position:absolute;'
-                        . 'inset:0;'
-                        . 'background:var(--af-apui-modal-application-bg-overlay, none);'
-                        . 'pointer-events:none;'
-                        . 'z-index:0;'
-                        . "}\n";
-                }
-
-                if ($rootChildrenSelectors !== '') {
-                    $css .= $rootChildrenSelectors . '{position:relative;z-index:1;}' . "\n";
-                }
-
-                if ($panelCombined !== '') {
-                    $css .= $panelCombined . '{'
-                        . 'background:var(--af-apui-modal-application-panel-bg, rgba(6,12,26,.58));'
-                        . 'border-color:var(--af-apui-modal-application-panel-border, rgba(255,255,255,.10));'
-                        . "}\n";
-                }
-            }
-            // ВАЖНО:
-            // Для application даём ещё и прямой fallback skin на сам surface-root,
-            // чтобы пресет был виден даже если APUI CSS не добрался до extracted fragment.
-            if ($surfaceKey === 'application') {
-                $css .= af_aa_render_application_surface_fallback_css($selectors);
-            }
 
             if (!empty($payload['theme_custom_css_blocks']) && is_array($payload['theme_custom_css_blocks'])) {
                 foreach ($payload['theme_custom_css_blocks'] as $cssBlock) {
@@ -2745,72 +2652,6 @@ function af_aa_get_surface_registry(): array
                 '--af-apui-modal-sheet-panel-border' => ['type' => 'raw', 'key' => 'sheet_panel_border', 'default' => 'rgba(255,255,255,.12)'],
             ],
         ],
-        'application' => [
-            'target_key' => AF_AA_TARGET_APUI_APPLICATION_PACK,
-            'keys' => ['application_bg_url', 'application_bg_overlay', 'application_panel_bg', 'application_panel_border'],
-            'fragment_selectors' => [
-                '.af-apui-application-fragment',
-            ],
-            'root_classes' => [
-                'af-apui-application-fragment',
-            ],
-            'context_markers' => [
-                'data-af-apui-surface="application"',
-                "data-af-apui-surface='application'",
-                'af-apui-application-fragment',
-            ],
-            'var_map' => [
-                '--af-apui-modal-application-bg-image' => ['type' => 'url', 'key' => 'application_bg_url'],
-                '--af-apui-modal-application-bg-overlay' => ['type' => 'raw', 'key' => 'application_bg_overlay', 'default' => 'none'],
-                '--af-apui-modal-application-panel-bg' => ['type' => 'raw', 'key' => 'application_panel_bg', 'default' => 'rgba(6,12,26,.58)'],
-                '--af-apui-modal-application-panel-border' => ['type' => 'raw', 'key' => 'application_panel_border', 'default' => 'rgba(255,255,255,.10)'],
-            ],
-        ],
-        'inventory' => [
-            'target_key' => AF_AA_TARGET_APUI_INVENTORY_PACK,
-            'keys' => ['inventory_bg_url', 'inventory_bg_overlay', 'inventory_panel_bg', 'inventory_panel_border'],
-            'fragment_selectors' => [
-                '.af-apui-inventory-fragment',
-                '.af-inv-page',
-            ],
-            'root_classes' => [
-                'af-apui-inventory-fragment',
-                'af-inv-page',
-            ],
-            'context_markers' => [
-                'data-af-apui-surface="inventory"',
-                "data-af-apui-surface='inventory'",
-                'af-apui-inventory-fragment',
-                'af-inv-page',
-            ],
-            'var_map' => [
-                '--af-apui-modal-inventory-bg-image' => ['type' => 'url', 'key' => 'inventory_bg_url'],
-                '--af-apui-modal-inventory-bg-overlay' => ['type' => 'raw', 'key' => 'inventory_bg_overlay', 'default' => 'none'],
-                '--af-apui-modal-inventory-panel-bg' => ['type' => 'raw', 'key' => 'inventory_panel_bg', 'default' => 'rgba(21,25,34,.92)'],
-                '--af-apui-modal-inventory-panel-border' => ['type' => 'raw', 'key' => 'inventory_panel_border', 'default' => 'rgba(255,255,255,.12)'],
-            ],
-        ],
-        'achievements' => [
-            'target_key' => AF_AA_TARGET_APUI_ACHIEVEMENTS_PACK,
-            'keys' => ['achievements_bg_url', 'achievements_bg_overlay', 'achievements_panel_bg', 'achievements_panel_border'],
-            'fragment_selectors' => [
-                '.af-apui-achievements-fragment',
-            ],
-            'root_classes' => [
-                'af-apui-achievements-fragment',
-            ],
-            'context_markers' => [
-                'data-af-apui-surface="achievements"',
-                "data-af-apui-surface='achievements'",
-                'af-apui-achievements-fragment',
-            ],
-            'var_map' => [
-                '--af-apui-modal-achievements-bg-image' => ['type' => 'url', 'key' => 'achievements_bg_url'],
-                '--af-apui-modal-achievements-bg-overlay' => ['type' => 'raw', 'key' => 'achievements_bg_overlay', 'default' => 'none'],
-                '--af-apui-modal-achievements-panel-bg' => ['type' => 'raw', 'key' => 'achievements_panel_bg', 'default' => 'rgba(13,17,28,.74)'],
-                '--af-apui-modal-achievements-panel-border' => ['type' => 'raw', 'key' => 'achievements_panel_border', 'default' => 'rgba(255,255,255,.12)'],
-            ],
-        ],
     ];
 }
 
@@ -2865,15 +2706,6 @@ function af_aa_get_surface_scope_selectors(int $uid, string $surface, string $pr
     $selectors[] = '.af-apui-surface-page' . $surfaceAttrB . ' .af-apui-surface-body';
     $selectors[] = '.af-apui-surface-page' . $surfaceAttrA . ' .af-apui-surface-content';
     $selectors[] = '.af-apui-surface-page' . $surfaceAttrB . ' .af-apui-surface-content';
-
-    if ($surface === 'application') {
-        $selectors[] = '.af-apui-application-fragment' . $surfaceAttrA;
-        $selectors[] = '.af-apui-application-fragment' . $surfaceAttrB;
-        $selectors[] = '.af-apui-application-fragment' . $uidAttr;
-        $selectors[] = '.af-apui-application-fragment' . $scopedClass;
-        $selectors[] = '.af-apui-application-fragment' . $surfaceAttrA . $scopedClass;
-        $selectors[] = '.af-apui-application-fragment' . $surfaceAttrB . $scopedClass;
-    }
 
     if ($profileSelector !== '') {
         $prefixed = [];
@@ -3008,7 +2840,7 @@ function af_aa_detect_surface_context(string $page): array
     $surface = '';
     $uid = 0;
 
-    $allowedSurfaces = ['sheet', 'application', 'inventory', 'achievements'];
+    $allowedSurfaces = ['sheet'];
 
     $requestedSurface = '';
     $isAjaxSurfaceRequest = false;
@@ -3030,9 +2862,6 @@ function af_aa_detect_surface_context(string $page): array
 
     $standaloneScripts = [
         'charactersheets.php' => 'sheet',
-        'inventory.php' => 'inventory',
-        'achivments.php' => 'achievements',
-        'achievements.php' => 'achievements',
     ];
 
     if ($requestedSurface !== '') {
@@ -4165,12 +3994,9 @@ function af_aa_build_surface_fields_html(array $settingsOrSurfaceMap, array $set
 {
     $surfaceMap = [
         'sheet' => 'Лист персонажа',
-        'application' => 'Анкета',
-        'inventory' => 'Инвентарь',
-        'achievements' => 'Ачивки',
     ];
 
-    $allowedSurfaceKeys = ['sheet', 'application', 'inventory', 'achievements', 'thread'];
+    $allowedSurfaceKeys = ['sheet', 'thread'];
 
     $looksLikeSurfaceMap = true;
     foreach ($settingsOrSurfaceMap as $surfaceKey => $surfaceLabel) {
@@ -4239,10 +4065,7 @@ function af_aa_build_studio_form_html(string $do, array $preset, array $settings
         'profilepack' => 'Конструктор: пак профиля',
         'postbitpack' => 'Конструктор: пак постбита',
         'threadpack' => 'Конструктор: пак страницы темы',
-        'applicationpack' => 'Конструктор: пак анкеты',
         'sheetpack' => 'Конструктор: пак листа персонажа',
-        'inventorypack' => 'Конструктор: пак инвентаря',
-        'achievementspack' => 'Конструктор: пак ачивок',
         'fragmentpack' => 'Конструктор: дробный пак',
     ];
 
@@ -4286,20 +4109,8 @@ function af_aa_build_studio_form_html(string $do, array $preset, array $settings
             $html .= af_aa_build_thread_fields_html($settings, true);
             break;
 
-        case 'applicationpack':
-            $html .= af_aa_build_surface_fields_html(['application' => 'Анкета'], $settings, true);
-            break;
-
         case 'sheetpack':
             $html .= af_aa_build_surface_fields_html(['sheet' => 'Лист персонажа'], $settings, true);
-            break;
-
-        case 'inventorypack':
-            $html .= af_aa_build_surface_fields_html(['inventory' => 'Инвентарь'], $settings, true);
-            break;
-
-        case 'achievementspack':
-            $html .= af_aa_build_surface_fields_html(['achievements' => 'Ачивки'], $settings, true);
             break;
 
         case 'fragmentpack':
@@ -4311,10 +4122,7 @@ function af_aa_build_studio_form_html(string $do, array $preset, array $settings
             $html .= af_aa_build_profile_fields_html($settings, false);
             $html .= af_aa_build_postbit_fields_html($settings, false);
             $html .= af_aa_build_surface_fields_html([
-                'application' => 'Анкета',
                 'sheet' => 'Лист персонажа',
-                'inventory' => 'Инвентарь',
-                'achievements' => 'Ачивки',
             ], $settings);
             $html .= '<section class="af-aa-panel af-aa-form-section">';
             $html .= '<h3 class="af-aa-panel__title">Пользовательский CSS</h3>';
@@ -4698,10 +4506,7 @@ function af_aa_preview_kind_for_do(string $do): string
         'profilepack' => 'profile',
         'postbitpack' => 'postbit',
         'threadpack' => 'thread',
-        'applicationpack' => 'application',
         'sheetpack' => 'sheet',
-        'inventorypack' => 'inventory',
-        'achievementspack' => 'achievements',
         'fragmentpack' => 'misc',
     ];
 
@@ -4727,10 +4532,7 @@ function af_aa_build_preview_postbit_markup(array $ctx): string
 function af_aa_build_preview_modal_markup(string $surface, array $ctx): string
 {
     $titles = [
-        'application' => 'Анкета персонажа',
         'sheet' => 'Лист персонажа',
-        'inventory' => 'Инвентарь',
-        'achievements' => 'Ачивки',
     ];
 
     $title = $titles[$surface] ?? 'Модальное окно';
@@ -4759,7 +4561,7 @@ function af_aa_build_preview_markup(string $kind, array $ctx): string
             . '</div>';
     }
 
-    if (in_array($kind, ['application', 'sheet', 'inventory', 'achievements'], true)) {
+    if (in_array($kind, ['sheet'], true)) {
         return af_aa_build_preview_modal_markup($kind, $ctx);
     }
 
