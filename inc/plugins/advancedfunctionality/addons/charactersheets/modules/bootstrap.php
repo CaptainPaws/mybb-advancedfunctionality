@@ -588,16 +588,39 @@ function af_charactersheets_render_modal_application_page(): void
         error_no_permission();
     }
 
+    $content = af_charactersheets_build_application_content_html($tid, $fid);
+
+    af_charactersheets_output_modal_page($content, (string)($thread['subject'] ?? 'Анкета персонажа'));
+}
+
+function af_charactersheets_build_application_content_html(int $tid, int $fid = 0): string
+{
+    if ($tid <= 0) {
+        return '<div class="cs-modal-application"><div class="post_content">Анкета не найдена.</div></div>';
+    }
+
+    if ($fid <= 0) {
+        $thread = get_thread($tid);
+        $fid = (int)($thread['fid'] ?? 0);
+    }
+
+    if ($fid > 0) {
+        $permissions = forum_permissions($fid);
+        if (empty($permissions['canview']) || empty($permissions['canviewthreads'])) {
+            return '<div class="cs-modal-application"><div class="post_content">Анкета недоступна.</div></div>';
+        }
+    }
+
     $content = '';
-    if (function_exists('af_atf_build_display_block_for_tid_fid')) {
+    if (function_exists('af_atf_build_display_block_for_tid_fid') && $fid > 0) {
         $content = (string)af_atf_build_display_block_for_tid_fid($tid, $fid);
     }
 
     if ($content === '') {
-        $content = '<div class="cs-modal-application"><div class="post_content">Анкета недоступна.</div></div>';
+        return '<div class="cs-modal-application"><div class="post_content">Анкета недоступна.</div></div>';
     }
 
-    af_charactersheets_output_modal_page($content, (string)($thread['subject'] ?? 'Анкета персонажа'));
+    return $content;
 }
 
 function af_charactersheets_output_modal_page(string $content, string $title = ''): void

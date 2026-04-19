@@ -34,6 +34,7 @@
     <div class="af-cs-tabs" data-afcs-tabs>
       <div class="af-cs-tabs__nav">
         <button class="is-active" type="button" data-afcs-tab="main">Основная информация</button>
+        <button type="button" data-afcs-tab="application">Анкета</button>
         <button type="button" data-afcs-tab="skills">Навыки</button>
         <button type="button" data-afcs-tab="knowledge">Знания</button>
         <button type="button" data-afcs-tab="abilities">Способности</button>
@@ -60,6 +61,11 @@
           <div data-afcs-block="skills">
             {$sheet_skills_html}
           </div>
+        </div>
+        <div class="af-cs-tab" data-afcs-tab-content="application">
+          <section class="af-cs-section">
+            {$sheet_application_html}
+          </section>
         </div>
         <div class="af-cs-tab" data-afcs-tab-content="knowledge">
           <div data-afcs-block="knowledge">
