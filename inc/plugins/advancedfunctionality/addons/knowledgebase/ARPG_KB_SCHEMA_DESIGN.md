@@ -54,6 +54,7 @@
 
 - `arpg_origin`
 - `arpg_archetype`
+- `arpg_element`
 - `arpg_faction`
 - `arpg_bestiary`
 - `arpg_ability`
@@ -1723,6 +1724,7 @@ ATF работает как в DnD:
 
 * `origin_key -> arpg_origin`
 * `archetype_key -> arpg_archetype`
+* `element_key -> arpg_element`
 * `faction_key -> arpg_faction`
 
 ---

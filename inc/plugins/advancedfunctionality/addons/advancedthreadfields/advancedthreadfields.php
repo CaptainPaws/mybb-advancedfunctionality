@@ -1123,7 +1123,7 @@ function af_atf_seed_character_contract_fields(): void
         ['name' => 'character_name', 'title' => 'Name (EN)', 'type' => 'text', 'sortorder' => 30, 'maxlen' => 255],
         ['name' => 'character_name_ru', 'title' => 'Name (RU)', 'type' => 'text', 'sortorder' => 40, 'maxlen' => 255],
         ['name' => 'character_nicknames', 'title' => 'Nicknames', 'type' => 'text', 'sortorder' => 50, 'maxlen' => 500],
-        ['name' => 'character_element', 'title' => 'Element', 'type' => 'kb_dynamic', 'sortorder' => 60, 'options' => "kb_type=arpg_elements\nmechanic=arpg", 'maxlen' => 128],
+        ['name' => 'character_element', 'title' => 'Element', 'type' => 'kb_dynamic', 'sortorder' => 60, 'options' => "kb_type=arpg_element\nmechanic=arpg", 'maxlen' => 128],
         ['name' => 'character_gen', 'title' => 'Gender', 'type' => 'select', 'sortorder' => 70, 'options' => "male=Male\nfemale=Female\nnonbinary=Non-binary\nother=Other", 'maxlen' => 64],
         ['name' => 'character_race', 'title' => 'Race / Origin', 'type' => 'kb_mechanic', 'sortorder' => 80, 'options' => "dnd=kb_race\narpg=arpg_origin", 'maxlen' => 128],
         ['name' => 'character_class', 'title' => 'Class / Archetype', 'type' => 'kb_mechanic', 'sortorder' => 90, 'options' => "dnd=kb_class\narpg=arpg_archetype", 'maxlen' => 128],

@@ -68,6 +68,7 @@ function af_kb_arpg_type_registry(): array
     return [
         'arpg_origin' => ['entity_kind' => 'origin', 'service' => false, 'title_ru' => 'ARPG: Происхождения', 'title_en' => 'ARPG: Origins'],
         'arpg_archetype' => ['entity_kind' => 'archetype', 'service' => false, 'title_ru' => 'ARPG: Архетипы', 'title_en' => 'ARPG: Archetypes'],
+        'arpg_element' => ['entity_kind' => 'element', 'service' => false, 'title_ru' => 'ARPG: Стихии', 'title_en' => 'ARPG: Elements'],
         'arpg_faction' => ['entity_kind' => 'faction', 'service' => false, 'title_ru' => 'ARPG: Фракции', 'title_en' => 'ARPG: Factions'],
         'arpg_bestiary' => ['entity_kind' => 'bestiary', 'service' => false, 'title_ru' => 'ARPG: Бестиарий', 'title_en' => 'ARPG: Bestiary'],
         'arpg_ability' => ['entity_kind' => 'ability', 'service' => false, 'title_ru' => 'ARPG: Способности', 'title_en' => 'ARPG: Abilities'],
@@ -153,6 +154,11 @@ function af_kb_default_type_profile_payload_arpg(string $typeKey): array
             'standing_model' => 'neutral',
             'vendor_access_text' => '',
             'story_flags_text' => '',
+            'description_text' => '',
+        ],
+        'arpg_element' => [
+            'family' => '',
+            'counter_element' => '',
             'description_text' => '',
         ],
         'arpg_lore' => [
@@ -653,6 +659,7 @@ function af_kb_default_arpg_type_definitions(): array
         $requiredMap = [
             'arpg_origin' => ['rules.size', 'rules.creature_type', 'rules.base_hp', 'rules.base_damage', 'rules.base_defense', 'rules.movement_speed', 'rules.racial_bonuses_text', 'rules.racial_traits_text', 'rules.starting_notes'],
             'arpg_archetype' => ['rules.role', 'rules.damage_bias', 'rules.defense_bias', 'rules.resource_affinity', 'rules.base_damage_bonus', 'rules.base_defense_bonus', 'rules.slot_rules_text', 'rules.description_notes'],
+            'arpg_element' => ['rules.family', 'rules.counter_element', 'rules.description_text'],
             'arpg_faction' => ['rules.standing_model', 'rules.vendor_access_text', 'rules.story_flags_text', 'rules.description_text'],
             'arpg_lore' => ['rules.linked_entities_text', 'rules.timeline_text', 'rules.source_text'],
             'arpg_ability' => ['rules.type', 'rules.subtype', 'rules.slot', 'rules.damage_type', 'rules.targeting', 'rules.range', 'rules.cast_time', 'rules.cooldown', 'rules.duration', 'rules.max_charges', 'rules.level_cap', 'rules.resources', 'rules.effects', 'rules.modifiers', 'rules.triggers', 'rules.conditions', 'rules.stacking', 'rules.upgrade_requirements'],
@@ -688,6 +695,11 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.standing_model', 'type' => 'string', 'required' => true, 'default' => 'neutral'],
                 ['path' => 'rules.vendor_access_text', 'type' => 'string', 'required' => true, 'default' => ''],
                 ['path' => 'rules.story_flags_text', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.description_text', 'type' => 'string', 'required' => true, 'default' => ''],
+            ],
+            'arpg_element' => [
+                ['path' => 'rules.family', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.counter_element', 'type' => 'string', 'required' => true, 'default' => ''],
                 ['path' => 'rules.description_text', 'type' => 'string', 'required' => true, 'default' => ''],
             ],
             'arpg_lore' => [
@@ -1947,6 +1959,7 @@ function af_kb_seed_defaults(): void
     }
 
     af_kb_seed_arpg_types();
+    af_kb_seed_arpg_elements();
     af_kb_seed_character_categories();
 }
 
@@ -2041,6 +2054,94 @@ function af_kb_seed_arpg_types(): void
     }
 
     af_kb_reorganize_arpg_entries_and_types();
+}
+
+function af_kb_seed_arpg_elements(): void
+{
+    global $db;
+
+    if (!$db->table_exists('af_kb_entries')) {
+        return;
+    }
+
+    $seed = [
+        ['key' => 'fire', 'title_ru' => 'Огонь', 'title_en' => 'Fire', 'counter' => 'water'],
+        ['key' => 'water', 'title_ru' => 'Вода', 'title_en' => 'Water', 'counter' => 'lightning'],
+        ['key' => 'earth', 'title_ru' => 'Земля', 'title_en' => 'Earth', 'counter' => 'wind'],
+        ['key' => 'wind', 'title_ru' => 'Ветер', 'title_en' => 'Wind', 'counter' => 'earth'],
+        ['key' => 'lightning', 'title_ru' => 'Молния', 'title_en' => 'Lightning', 'counter' => 'earth'],
+        ['key' => 'ice', 'title_ru' => 'Лёд', 'title_en' => 'Ice', 'counter' => 'fire'],
+        ['key' => 'light', 'title_ru' => 'Свет', 'title_en' => 'Light', 'counter' => 'shadow'],
+        ['key' => 'shadow', 'title_ru' => 'Тьма', 'title_en' => 'Shadow', 'counter' => 'light'],
+    ];
+
+    foreach ($seed as $idx => $row) {
+        $key = (string)$row['key'];
+        $existing = $db->fetch_array($db->simple_select(
+            'af_kb_entries',
+            'id',
+            "type='arpg_element' AND `key`='" . $db->escape_string($key) . "'",
+            ['limit' => 1]
+        ));
+        if ($existing) {
+            continue;
+        }
+
+        $payload = af_kb_arpg_envelope_defaults('arpg_element');
+        $payload['rules'] = array_replace_recursive(
+            (array)($payload['rules'] ?? []),
+            af_kb_default_type_profile_payload_arpg('arpg_element'),
+            [
+                'family' => $key,
+                'counter_element' => (string)($row['counter'] ?? ''),
+            ]
+        );
+        $metaJson = af_kb_normalize_json((string)json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+
+        $db->insert_query('af_kb_entries', [
+            'type' => 'arpg_element',
+            'key' => $db->escape_string($key),
+            'title_ru' => $db->escape_string((string)$row['title_ru']),
+            'title_en' => $db->escape_string((string)$row['title_en']),
+            'short_ru' => '',
+            'short_en' => '',
+            'body_ru' => '',
+            'body_en' => '',
+            'tech_ru' => '',
+            'tech_en' => '',
+            'meta_json' => $db->escape_string($metaJson),
+            'data_json' => '{}',
+            'icon_class' => '',
+            'icon_url' => '',
+            'banner_url' => '',
+            'bg_url' => '',
+            'active' => 1,
+            'sortorder' => 10 + $idx,
+            'updated_at' => TIME_NOW,
+            'item_kind' => '',
+        ]);
+    }
+}
+
+function af_kb_character_profile_resolved_value(string $field, string $value, bool $isRu): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    $map = [
+        'character_race' => 'arpg_origin',
+        'character_class' => 'arpg_archetype',
+        'character_faction' => 'arpg_faction',
+        'character_element' => 'arpg_element',
+    ];
+    $type = (string)($map[$field] ?? '');
+    if ($type === '') {
+        return $value;
+    }
+
+    return af_kb_resolve_title($type, $value, $isRu ? 'ru' : 'en');
 }
 
 function af_kb_reorganize_arpg_entries_and_types(): void
@@ -8037,6 +8138,7 @@ function af_kb_character_catalog_card(array $entry, array $typeRow): string
     foreach (['character_race', 'character_class', 'character_element', 'category'] as $field) {
         $value = trim((string)($profile[$field] ?? ''));
         if ($value !== '') {
+            $value = af_kb_character_profile_resolved_value($field, $value, true);
             $meta[] = htmlspecialchars_uni($value);
         }
     }
@@ -8080,6 +8182,7 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         'Faction' => 'character_faction',
     ] as $label => $field) {
         $value = trim((string)($profile[$field] ?? ''));
+        $value = af_kb_character_profile_resolved_value((string)$field, $value, $isRu);
         if ($value !== '') {
             $identityRows .= '<div class="af-kb-char-profile__row"><span>' . htmlspecialchars_uni($label) . '</span><strong>' . htmlspecialchars_uni($value) . '</strong></div>';
         }
