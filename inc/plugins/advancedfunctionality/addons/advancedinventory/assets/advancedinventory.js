@@ -295,6 +295,36 @@
       return;
     }
     panel.dataset.afInvBound = '1';
+    panel.__afBulkSelected = panel.__afBulkSelected || {};
+
+    function selectedBulkIds() {
+      return Object.keys(panel.__afBulkSelected || {}).filter(function (id) {
+        return panel.__afBulkSelected[id];
+      });
+    }
+
+    function syncBulkToolbar() {
+      var ids = selectedBulkIds();
+      var countNode = panel.querySelector('[data-af-bulk-count]');
+      if (countNode) {
+        countNode.textContent = 'Выбрано: ' + ids.length;
+      }
+      var deleteBtn = panel.querySelector('[data-af-bulk-delete-btn]');
+      if (deleteBtn) {
+        deleteBtn.disabled = ids.length === 0;
+      }
+      var allBoxes = panel.querySelectorAll('[data-af-bulk-item]');
+      var selectedCount = 0;
+      allBoxes.forEach(function (box) {
+        if (box.checked) {
+          selectedCount += 1;
+        }
+      });
+      var selectAll = panel.querySelector('[data-af-bulk-select-all]');
+      if (selectAll) {
+        selectAll.checked = allBoxes.length > 0 && selectedCount === allBoxes.length;
+      }
+    }
 
     panel.addEventListener('submit', function (e) {
       var searchForm = e.target.closest('[data-af-inv-search-form]');
@@ -331,6 +361,10 @@
     });
 
     panel.addEventListener('click', function (e) {
+      if (e.target && e.target.closest('[data-af-bulk-item]')) {
+        return;
+      }
+
       var slot = e.target.closest('[data-item-select]');
       if (slot && panel.contains(slot)) {
         e.preventDefault();
@@ -369,7 +403,7 @@
       }
 
       var action = actionBtn.getAttribute('data-action') || '';
-      if (['update', 'delete', 'equip', 'unequip', 'sell', 'bind_support_slot', 'unbind_support_slot'].indexOf(action) === -1) {
+      if (['update', 'delete', 'bulk_delete', 'equip', 'unequip', 'sell', 'bind_support_slot', 'unbind_support_slot'].indexOf(action) === -1) {
         return;
       }
 
@@ -380,6 +414,33 @@
         openSupportSlotPicker(page, actionBtn, ctx);
         return;
       }
+      if (action === 'bulk_delete') {
+        var selectedIds = selectedBulkIds();
+        if (!selectedIds.length) {
+          showMessage(page, 'Не выбраны слоты для удаления.', true, { autohide: true });
+          return;
+        }
+        if (!window.confirm('Удалить выбранные слоты (' + selectedIds.length + ')?')) {
+          return;
+        }
+        withLoading(actionBtn, postForm(apiActionUrl(ctx.apiBase, 'api_bulk_delete'), {
+          uid: ctx.uid,
+          item_ids: selectedIds,
+          my_post_key: getPostKey(page)
+        })).then(function (res) {
+          var deletedCount = parseInt((res && res.deleted_count) || selectedIds.length, 10);
+          if (!deletedCount || deletedCount < 0) {
+            deletedCount = selectedIds.length;
+          }
+          showMessage(page, 'Удалено слотов: ' + deletedCount + '.', false, { autohide: true });
+          panel.__afBulkSelected = {};
+          page.__afInvReloadCurrent();
+        }).catch(function (err) {
+          showMessage(page, err.message || 'Не удалось удалить выбранные слоты.', true, { autohide: true });
+        });
+        return;
+      }
+
       var payload = {
         uid: ctx.uid,
         item_id: actionBtn.getAttribute('data-item-id') || '0',
@@ -402,6 +463,10 @@
 
       if (action === 'update' || action === 'sell') {
         payload.qty = String(qtyValue);
+      }
+
+      if (action === 'delete' && !window.confirm('Удалить этот слот?')) {
+        return;
       }
 
       if (action === 'equip' || action === 'unequip') {
@@ -434,7 +499,32 @@
         });
     });
 
+    panel.addEventListener('change', function (e) {
+      var itemCheckbox = e.target.closest('[data-af-bulk-item]');
+      if (itemCheckbox && panel.contains(itemCheckbox)) {
+        var itemId = itemCheckbox.value || '';
+        if (itemId) {
+          panel.__afBulkSelected[itemId] = !!itemCheckbox.checked;
+        }
+        syncBulkToolbar();
+        return;
+      }
+
+      var selectAll = e.target.closest('[data-af-bulk-select-all]');
+      if (selectAll && panel.contains(selectAll)) {
+        panel.querySelectorAll('[data-af-bulk-item]').forEach(function (box) {
+          box.checked = !!selectAll.checked;
+          var itemId = box.value || '';
+          if (itemId) {
+            panel.__afBulkSelected[itemId] = !!selectAll.checked;
+          }
+        });
+        syncBulkToolbar();
+      }
+    });
+
     activateSlot(panel, '');
+    syncBulkToolbar();
   }
 
 
