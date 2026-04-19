@@ -3867,9 +3867,19 @@ function af_kb_render_fullpage(string $innerHtml, string $fullpageTplName): void
         $tpl = af_kb_get_template('knowledgebase_page');
     }
 
+    af_kb_prepare_page_chrome(false);
     eval("\$page = \"" . $tpl . "\";");
     output_page($page);
     exit;
+}
+
+function af_kb_prepare_page_chrome(bool $modalMode): void
+{
+    global $header, $footer, $kb_page_header, $kb_page_footer, $kb_body_attrs;
+
+    $kb_page_header = $modalMode ? '' : (string)$header;
+    $kb_page_footer = $modalMode ? '' : (string)$footer;
+    $kb_body_attrs = $modalMode ? ' class="af-kb-modal-mode"' : '';
 }
 
 
@@ -8425,6 +8435,7 @@ function af_kb_handle_view(): void
     $query = trim((string)$mybb->get_input('q'));
     $catKey = trim((string)$mybb->get_input('cat'));
     $isAjax = (int)$mybb->get_input('ajax', MyBB::INPUT_INT) === 1;
+    $isModal = (int)$mybb->get_input('modal', MyBB::INPUT_INT) === 1;
 
     if ($type === '') {
         if (function_exists('add_breadcrumb')) {
@@ -8521,6 +8532,7 @@ function af_kb_handle_view(): void
         $kb_body_style = '';
         $af_kb_content = '';
         eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_catalog') . "\";");
+        af_kb_prepare_page_chrome($isModal);
         eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
         output_page($page);
         exit;
@@ -8733,6 +8745,7 @@ function af_kb_handle_view(): void
         $af_kb_content = '';
         $listTemplate = $type === 'character' ? 'knowledgebase_list_character' : 'knowledgebase_list';
         eval("\$af_kb_content = \"" . af_kb_get_template($listTemplate) . "\";");
+        af_kb_prepare_page_chrome($isModal);
         eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
         output_page($page);
         exit;
@@ -8947,6 +8960,7 @@ function af_kb_handle_view(): void
         exit;
     }
 
+    af_kb_prepare_page_chrome($isModal);
     eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
     output_page($page);
     exit;
@@ -10213,6 +10227,7 @@ function af_kb_handle_help(): void
 
     $af_kb_content = '';
     eval("\$af_kb_content = \"" . af_kb_get_template('knowledgebase_help') . "\";");
+    af_kb_prepare_page_chrome(false);
     eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
     output_page($page);
     exit;

@@ -1941,7 +1941,9 @@ function af_atf_build_catalog_cta_html(int $fid): string
     $items = [];
 
     if ($charUrl !== '') {
-        $items[] = '<a class="button" href="' . htmlspecialchars_uni($charUrl) . '">' . htmlspecialchars_uni($charLabel) . '</a>';
+        $items[] = '<a class="button af-atf-kb-catalog-cta-link" data-af-atf-kb-catalog-cta="1" data-af-atf-modal-title="'
+            . htmlspecialchars_uni($charLabel)
+            . '" href="' . htmlspecialchars_uni($charUrl) . '">' . htmlspecialchars_uni($charLabel) . '</a>';
     }
 
     if ($rolesUrl !== '') {
