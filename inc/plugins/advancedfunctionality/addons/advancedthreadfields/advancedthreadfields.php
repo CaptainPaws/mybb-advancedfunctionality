@@ -467,32 +467,24 @@ function af_advancedthreadfields_init(): void
     $plugins->add_hook('pre_output_page', 'af_advancedthreadfields_pre_output', 10);
 }
 
-
-
 function af_advancedthreadfields_pre_output(&$page = ''): void
 {
     if (!af_atf_is_enabled()) {
         return;
     }
 
-    if (function_exists('af_is_blacklisted')
-        && af_is_blacklisted(AF_ATF_ID, defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '')
-    ) {
-        return;
-    }
-
-    // Не грузим/не трогаем нерелевантные страницы
     if (!af_atf_is_relevant_script()) {
         return;
     }
 
-    // Не грузим на redirect-страницах
     if (stripos($page, 'id="redirect"') !== false || stripos($page, "id='redirect'") !== false) {
         return;
     }
 
-    /* -------------------- 1) ASSETS (как было) -------------------- */
-    if (strpos($page, AF_ATF_MARK) === false && !af_atf_assets_disabled_for_current_page()) {
+    $assetsDisabled = af_atf_assets_disabled_for_current_page();
+
+    /* -------------------- 1) ASSETS -------------------- */
+    if (strpos($page, AF_ATF_MARK) === false && !$assetsDisabled) {
         global $mybb;
 
         $base = rtrim((string)$mybb->settings['bburl'], '/');
@@ -519,16 +511,14 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         }
     }
 
-    /* -------------------- 2) RUNTIME INSERT (вместо правки шаблонов) -------------------- */
+    /* -------------------- 2) RUNTIME INSERT -------------------- */
 
-    // newthread / editpost: вставка блока полей сразу после subject-ячейки
     if ((defined('THIS_SCRIPT') && (THIS_SCRIPT === 'newthread.php' || THIS_SCRIPT === 'editpost.php'))
         && !empty($GLOBALS['af_atf_input_html'])
         && strpos($page, AF_ATF_TPL_MARK_INPUT) === false
     ) {
         $insert = "\n" . AF_ATF_TPL_MARK_INPUT . "\n" . $GLOBALS['af_atf_input_html'] . "\n";
 
-        // ищем input name="subject" и закрывающий </td> после него
         $count = 0;
         $page2 = @preg_replace(
             '~(<input\b[^>]*\bname=(["\'])subject\2[^>]*>\s*</td>)~is',
@@ -541,7 +531,6 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         if ($count > 0 && is_string($page2)) {
             $page = $page2;
         } else {
-            // fallback: просто после самого input (если структура td необычная)
             $count = 0;
             $page2 = @preg_replace(
                 '~(<input\b[^>]*\bname=(["\'])subject\2[^>]*>)~is',
@@ -556,7 +545,6 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         }
     }
 
-    // showthread: вставка блока сразу после заголовка темы (strong в thead)
     if ((defined('THIS_SCRIPT') && THIS_SCRIPT === 'showthread.php')
         && !empty($GLOBALS['af_atf_showthread_block'])
         && strpos($page, AF_ATF_TPL_MARK_SHOW) === false
@@ -575,7 +563,6 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         if ($count > 0 && is_string($page2)) {
             $page = $page2;
         } else {
-            // fallback: после первого </strong> на странице (на крайний случай)
             $count = 0;
             $page2 = @preg_replace('~(</strong>)~i', '$1' . $insert, $page, 1, $count);
             if ($count > 0 && is_string($page2)) {
@@ -584,18 +571,32 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         }
     }
 
-    // forumdisplay: добавляем CTA рядом с кнопкой "Создать тему" (только для целевого форума группы)
-    if ((defined('THIS_SCRIPT') && THIS_SCRIPT === 'forumdisplay.php')
-        && !empty($GLOBALS['af_atf_forum_catalog_cta_html'])
+    // forumdisplay: вставляем CTA строго перед <!-- start: forumdisplay_newthread -->
+    if (defined('THIS_SCRIPT')
+        && THIS_SCRIPT === 'forumdisplay.php'
         && strpos($page, '<!--AF_ATF_FORUM_CTA-->') === false
+        && af_atf_page_has_newthread_control($page)
     ) {
-        $page = af_atf_inject_catalog_cta_near_newthread_button(
-            $page,
-            (string)$GLOBALS['af_atf_forum_catalog_cta_html']
-        );
+        $ctaHtml = trim((string)($GLOBALS['af_atf_forum_catalog_cta_html'] ?? ''));
+
+        $forumId = af_atf_resolve_current_forum_id();
+        if ($forumId <= 0) {
+            $forumId = af_atf_detect_forum_id_from_forumdisplay_html($page);
+        }
+
+        if ($ctaHtml === '' && $forumId > 0) {
+            $ctaHtml = af_atf_build_catalog_cta_html($forumId);
+            if ($ctaHtml !== '') {
+                $GLOBALS['af_atf_forum_catalog_cta_html'] = $ctaHtml;
+            }
+        }
+
+        if ($ctaHtml !== '') {
+            $page = af_atf_inject_catalog_cta_near_newthread_button($page, $ctaHtml);
+        }
     }
 
-    /* -------------------- 3) PREVIEW INSERT (ВОТ ТВОЯ ПРОБЛЕМА) -------------------- */
+    /* -------------------- 3) PREVIEW INSERT -------------------- */
     if (defined('THIS_SCRIPT')
         && (THIS_SCRIPT === 'newthread.php' || THIS_SCRIPT === 'editpost.php')
         && !empty($GLOBALS['af_atf_preview_html'])
@@ -603,7 +604,6 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
     ) {
         $insert = "\n<!--AF_ATF_PREVIEW-->\n" . $GLOBALS['af_atf_preview_html'] . "\n";
 
-        // 1) Идеально: если в теме есть стандартные комментарии previewpost
         $count = 0;
         $page2 = @preg_replace('~(<!--\s*end:\s*previewpost\s*-->)~i', $insert . '$1', $page, 1, $count);
         if ($count > 0 && is_string($page2)) {
@@ -611,7 +611,6 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
             return;
         }
 
-        // 2) Частый вариант: есть контейнер previewpost по id/классу
         $count = 0;
         $page2 = @preg_replace('~(<div\b[^>]*(?:id|class)=(["\'])(?:previewpost|post_preview|preview_post)\2[^>]*>)~i', $insert . '$1', $page, 1, $count);
         if ($count > 0 && is_string($page2)) {
@@ -619,7 +618,6 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
             return;
         }
 
-        // 3) Надёжный вариант: перед формой создания/редактирования
         $count = 0;
         $page2 = @preg_replace('~(<form\b[^>]*>)~i', $insert . '$1', $page, 1, $count);
         if ($count > 0 && is_string($page2)) {
@@ -627,7 +625,6 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
             return;
         }
 
-        // 4) Последний шанс: после открытия контента
         $count = 0;
         $page2 = @preg_replace('~(<div\b[^>]*\bid=(["\'])content\2[^>]*>)~i', '$1' . $insert, $page, 1, $count);
         if ($count > 0 && is_string($page2)) {
@@ -635,7 +632,6 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
             return;
         }
 
-        // fallback: просто в начало body
         $count = 0;
         $page2 = @preg_replace('~(<body\b[^>]*>)~i', '$1' . $insert, $page, 1, $count);
         if ($count > 0 && is_string($page2)) {
@@ -1202,6 +1198,185 @@ function af_atf_parse_assets_blacklist(string $raw): array
     return $out;
 }
 
+function af_atf_resolve_current_forum_id(): int
+{
+    global $fid, $foruminfo, $thread, $mybb;
+
+    $forumId = 0;
+
+    if (!empty($fid)) {
+        $forumId = (int)$fid;
+    }
+
+    if ($forumId <= 0 && is_array($foruminfo)) {
+        $forumId = (int)($foruminfo['fid'] ?? 0);
+    }
+
+    if ($forumId <= 0 && is_array($thread)) {
+        $forumId = (int)($thread['fid'] ?? 0);
+    }
+
+    if ($forumId <= 0 && isset($mybb) && is_object($mybb)) {
+        $forumId = (int)$mybb->get_input('fid', MyBB::INPUT_INT);
+    }
+
+    if ($forumId <= 0 && isset($_GET['fid'])) {
+        $forumId = (int)$_GET['fid'];
+    }
+
+    return $forumId > 0 ? $forumId : 0;
+}
+
+function af_atf_sort_catalog_groups(array &$groups): void
+{
+    usort($groups, static function (array $a, array $b): int {
+        $sa = (int)($a['sortorder'] ?? 0);
+        $sb = (int)($b['sortorder'] ?? 0);
+
+        if ($sa === $sb) {
+            return ((int)($a['gid'] ?? 0)) <=> ((int)($b['gid'] ?? 0));
+        }
+
+        return $sa <=> $sb;
+    });
+}
+
+function af_atf_get_catalog_group_for_forum_live(int $fid): ?array
+{
+    global $db;
+
+    if ($fid <= 0 || !is_object($db) || !$db->table_exists(AF_ATF_TABLE_GROUPS)) {
+        return null;
+    }
+
+    $selectFields = implode(',', af_atf_group_cache_select_fields());
+
+    $q = $db->simple_select(
+        AF_ATF_TABLE_GROUPS,
+        $selectFields,
+        'active=1',
+        ['order_by' => 'sortorder', 'order_dir' => 'ASC']
+    );
+
+    $explicitMatches = [];
+    $globalMatches = [];
+
+    while ($g = $db->fetch_array($q)) {
+        $showCatalogCta = (int)($g['show_catalog_cta'] ?? 0);
+        if ($showCatalogCta !== 1) {
+            continue;
+        }
+
+        $charUrl = trim((string)($g['catalog_characters_url'] ?? ''));
+        $rolesUrl = trim((string)($g['catalog_roles_url'] ?? ''));
+
+        if ($charUrl === '' && $rolesUrl === '') {
+            continue;
+        }
+
+        $forumsRaw = trim((string)($g['forums'] ?? ''));
+        $forumsSet = af_atf_forums_csv_to_set($forumsRaw);
+
+        $group = [
+            'gid' => (int)($g['gid'] ?? 0),
+            'title' => (string)($g['title'] ?? ''),
+            'forums_raw' => $forumsRaw,
+            'forums_set' => $forumsSet,
+            'active' => (int)($g['active'] ?? 0),
+            'sortorder' => (int)($g['sortorder'] ?? 0),
+            'character_mechanic_mode' => (string)($g['character_mechanic_mode'] ?? 'auto'),
+            'catalog_characters_url' => $charUrl,
+            'catalog_roles_url' => $rolesUrl,
+            'catalog_characters_label' => (string)($g['catalog_characters_label'] ?? ''),
+            'catalog_roles_label' => (string)($g['catalog_roles_label'] ?? ''),
+            'show_catalog_cta' => $showCatalogCta,
+        ];
+
+        if (!empty($forumsSet)) {
+            if (isset($forumsSet[$fid])) {
+                $explicitMatches[] = $group;
+            }
+            continue;
+        }
+
+        $globalMatches[] = $group;
+    }
+
+    if (!empty($explicitMatches)) {
+        af_atf_sort_catalog_groups($explicitMatches);
+        return $explicitMatches[0];
+    }
+
+    if (!empty($globalMatches)) {
+        af_atf_sort_catalog_groups($globalMatches);
+        return $globalMatches[0];
+    }
+
+    return null;
+}
+
+function af_atf_catalog_flag_enabled($value): bool
+{
+    if (is_bool($value)) {
+        return $value;
+    }
+
+    if (is_int($value) || is_float($value)) {
+        return ((int)$value) === 1;
+    }
+
+    $value = strtolower(trim((string)$value));
+    return in_array($value, ['1', 'yes', 'true', 'on'], true);
+}
+
+function af_atf_detect_forum_id_from_forumdisplay_html(string $page): int
+{
+    if ($page === '') {
+        return 0;
+    }
+
+    $decoded = html_entity_decode($page, ENT_QUOTES, 'UTF-8');
+
+    $patterns = [
+        '~newthread\.php\?fid=(\d+)~i',
+        '~newthread-(\d+)\.html~i',
+        '~forumdisplay\.php\?fid=(\d+)~i',
+        '~forum-(\d+)\.html~i',
+    ];
+
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $decoded, $m)) {
+            $fid = (int)($m[1] ?? 0);
+            if ($fid > 0) {
+                return $fid;
+            }
+        }
+    }
+
+    return 0;
+}
+
+function af_atf_page_has_newthread_control(string $page): bool
+{
+    if ($page === '') {
+        return false;
+    }
+
+    if (stripos($page, 'forumdisplay_newthread') !== false) {
+        return true;
+    }
+
+    if (preg_match('~(?:newthread(?:\.php|\-\d+\.html)|action=newthread)~i', $page)) {
+        return true;
+    }
+
+    if (preg_match('~создать\s+тему~iu', $page)) {
+        return true;
+    }
+
+    return false;
+}
+
 function af_atf_inject_catalog_cta_near_newthread_button(string $page, string $ctaHtml): string
 {
     $ctaHtml = trim($ctaHtml);
@@ -1209,70 +1384,41 @@ function af_atf_inject_catalog_cta_near_newthread_button(string $page, string $c
         return $page;
     }
 
+    if (strpos($page, '<!--AF_ATF_FORUM_CTA-->') !== false) {
+        return $page;
+    }
+
     $insert = "\n<!--AF_ATF_FORUM_CTA-->\n" . $ctaHtml . "\n";
 
-    // 1) Точное место для forumdisplay: внутри float_right перед forumdisplay_newthread
-    //    Это главный якорь для тем, где кнопка "Создать тему" рендерится шаблоном forumdisplay_newthread.
-    $count = 0;
-    $page2 = @preg_replace(
-        '~(<[^>]+\bclass=(["\'])[^"\']*\bfloat_right\b[^"\']*\2[^>]*>\s*)(<!--\s*start:\s*forumdisplay_newthread\s*-->)~is',
-        '$1' . $insert . '$3',
-        $page,
-        1,
-        $count
-    );
-    if ($count > 0 && is_string($page2)) {
-        return $page2;
+    // 1) ЖЁСТКИЙ КАНОНИЧНЫЙ ЯКОРЬ:
+    // вставляем РОВНО перед <!-- start: forumdisplay_newthread -->
+    $needle = '<!-- start: forumdisplay_newthread -->';
+    $pos = strpos($page, $needle);
+    if ($pos !== false) {
+        return substr($page, 0, $pos) . $insert . substr($page, $pos);
     }
 
-    // 2) Резерв: если структура обёртки иная, но комментарий forumdisplay_newthread есть.
-    $count = 0;
-    $page2 = @preg_replace(
-        '~(<!--\s*start:\s*forumdisplay_newthread\s*-->)~i',
-        $insert . '$1',
-        $page,
-        1,
-        $count
-    );
-    if ($count > 0 && is_string($page2)) {
-        return $page2;
-    }
+    // 2) Fallback: если комментарий в теме убран, но есть ссылка newthread внутри float_right
+    if (preg_match('~<div\b[^>]*class=(["\'])[^"\']*\bfloat_right\b[^"\']*\1[^>]*>~i', $page, $m, PREG_OFFSET_CAPTURE)) {
+        $blockStart = (int)$m[0][1];
+        $blockHtml = substr($page, $blockStart, 2500);
 
-    // 3) Канон MyBB: href на newthread.php?fid=...
-    $patterns = [
-        '~(<a\b[^>]*href=(["\'])[^"\']*newthread\.php\?[^"\']*\2[^>]*>.*?</a>)~is',
-
-        // 4) SEO/чпу темы: /newthread-123.html или action=newthread
-        '~(<a\b[^>]*href=(["\'])[^"\']*(?:newthread-\d+\.html|action=newthread)[^"\']*\2[^>]*>.*?</a>)~is',
-
-        // 5) Кастомные темы: у ссылки/кнопки есть классы new_thread_button/newthread
-        '~(<a\b[^>]*class=(["\'])[^"\']*(?:new_thread_button|newthread)[^"\']*\2[^>]*>.*?</a>)~is',
-        '~(<button\b[^>]*class=(["\'])[^"\']*(?:new_thread_button|newthread)[^"\']*\2[^>]*>.*?</button>)~is',
-    ];
-
-    foreach ($patterns as $pattern) {
-        $count = 0;
-        $page2 = @preg_replace($pattern, '$1' . $insert, $page, 1, $count);
-        if ($count > 0 && is_string($page2)) {
-            return $page2;
+        if ($blockHtml !== false && preg_match('~<a\b[^>]*href=(["\'])[^"\']*newthread\.php\?fid=\d+[^"\']*\1[^>]*>~i', $blockHtml, $m2, PREG_OFFSET_CAPTURE)) {
+            $relativePos = (int)$m2[0][1];
+            $absolutePos = $blockStart + $relativePos;
+            return substr($page, 0, $absolutePos) . $insert . substr($page, $absolutePos);
         }
     }
 
-    // 6) Мягкий фоллбек: если есть post thread контейнер, вставляем в него
-    $count = 0;
-    $page2 = @preg_replace(
-        '~(<[^>]+\bclass=(["\'])[^"\']*(?:post_thread|newthread)[^"\']*\2[^>]*>)~i',
-        '$1' . $insert,
-        $page,
-        1,
-        $count
-    );
-    if ($count > 0 && is_string($page2)) {
-        return $page2;
+    // 3) Последний fallback: перед любой ссылкой newthread на странице
+    if (preg_match('~<a\b[^>]*href=(["\'])[^"\']*newthread\.php\?fid=\d+[^"\']*\1[^>]*>~i', $page, $m3, PREG_OFFSET_CAPTURE)) {
+        $pos = (int)$m3[0][1];
+        return substr($page, 0, $pos) . $insert . substr($page, $pos);
     }
 
     return $page;
 }
+
 
 function af_atf_seed_character_contract_fields(): void
 {
@@ -1414,18 +1560,21 @@ function af_atf_assets_disabled_for_current_page(): bool
 
 function af_atf_is_relevant_script(): bool
 {
-    if (!defined('THIS_SCRIPT')) {
-        return false;
+    $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
+    if ($script !== '') {
+        $script = strtolower(basename(str_replace('\\', '/', $script)));
     }
 
-    $relevant = [
-        'newthread.php',
-        'editpost.php',
-        'showthread.php',
-        'forumdisplay.php',
-    ];
+    if (in_array($script, ['newthread.php', 'editpost.php', 'showthread.php', 'forumdisplay.php'], true)) {
+        return true;
+    }
 
-    return in_array(THIS_SCRIPT, $relevant, true);
+    // fallback для кастомных маршрутов/алиасов, которые всё равно рендерят форум
+    if (af_atf_resolve_current_forum_id() > 0) {
+        return true;
+    }
+
+    return false;
 }
 
 function af_atf_forum_allowed(array $field, int $fid): bool
@@ -1581,20 +1730,25 @@ function af_atf_get_groups_cached(): array
 
     return (is_array($c) && isset($c['groups']) && is_array($c['groups'])) ? $c['groups'] : [];
 }
-
-function af_atf_get_catalog_group_for_forum(int $fid): ?array
+function af_atf_get_catalog_groups_for_forum(int $fid): array
 {
     if ($fid <= 0) {
-        return null;
+        return [];
     }
 
     $groups = af_atf_get_groups_cached();
     if (empty($groups)) {
-        return null;
+        return [];
     }
 
+    $out = [];
+
     foreach ($groups as $group) {
-        if ((int)($group['active'] ?? 0) !== 1 || (int)($group['show_catalog_cta'] ?? 0) !== 1) {
+        if ((int)($group['active'] ?? 0) !== 1) {
+            continue;
+        }
+
+        if ((int)($group['show_catalog_cta'] ?? 0) !== 1) {
             continue;
         }
 
@@ -1603,50 +1757,205 @@ function af_atf_get_catalog_group_for_forum(int $fid): ?array
             continue;
         }
 
-        return $group;
+        $charUrl  = trim((string)($group['catalog_characters_url'] ?? ''));
+        $rolesUrl = trim((string)($group['catalog_roles_url'] ?? ''));
+
+        // Пустые CTA нам не нужны
+        if ($charUrl === '' && $rolesUrl === '') {
+            continue;
+        }
+
+        $out[] = $group;
     }
 
-    return null;
+    return $out;
 }
 
 function af_atf_build_catalog_cta_html(int $fid): string
 {
-    $group = af_atf_get_catalog_group_for_forum($fid);
-    if (!$group) {
+    global $db;
+
+    $fid = (int)$fid;
+    if ($fid <= 0) {
         return '';
     }
 
-    $charUrl = trim((string)($group['catalog_characters_url'] ?? ''));
+    $group = null;
+
+    if (is_object($db) && $db->table_exists(AF_ATF_TABLE_GROUPS)) {
+        $selectFields = implode(',', af_atf_group_cache_select_fields());
+
+        $q = $db->simple_select(
+            AF_ATF_TABLE_GROUPS,
+            $selectFields,
+            '',
+            ['order_by' => 'sortorder', 'order_dir' => 'ASC']
+        );
+
+        $explicitMatches = [];
+        $globalMatches = [];
+
+        while ($row = $db->fetch_array($q)) {
+            if (!af_atf_catalog_flag_enabled($row['active'] ?? 0)) {
+                continue;
+            }
+
+            if (!af_atf_catalog_flag_enabled($row['show_catalog_cta'] ?? 0)) {
+                continue;
+            }
+
+            $charUrl  = trim((string)($row['catalog_characters_url'] ?? ''));
+            $rolesUrl = trim((string)($row['catalog_roles_url'] ?? ''));
+
+            if ($charUrl === '' && $rolesUrl === '') {
+                continue;
+            }
+
+            $forumsRaw = trim((string)($row['forums'] ?? ''));
+            $forumsSet = af_atf_forums_csv_to_set($forumsRaw);
+
+            $candidate = [
+                'gid' => (int)($row['gid'] ?? 0),
+                'title' => (string)($row['title'] ?? ''),
+                'forums_raw' => $forumsRaw,
+                'forums_set' => $forumsSet,
+                'active' => (int)($row['active'] ?? 0),
+                'sortorder' => (int)($row['sortorder'] ?? 0),
+                'catalog_characters_url' => $charUrl,
+                'catalog_roles_url' => $rolesUrl,
+                'catalog_characters_label' => (string)($row['catalog_characters_label'] ?? ''),
+                'catalog_roles_label' => (string)($row['catalog_roles_label'] ?? ''),
+                'show_catalog_cta' => (int)($row['show_catalog_cta'] ?? 0),
+            ];
+
+            if (!empty($forumsSet)) {
+                if (isset($forumsSet[$fid])) {
+                    $explicitMatches[] = $candidate;
+                }
+            } else {
+                $globalMatches[] = $candidate;
+            }
+        }
+
+        $sortGroups = static function (array &$items): void {
+            usort($items, static function (array $a, array $b): int {
+                $sa = (int)($a['sortorder'] ?? 0);
+                $sb = (int)($b['sortorder'] ?? 0);
+
+                if ($sa === $sb) {
+                    return ((int)($a['gid'] ?? 0)) <=> ((int)($b['gid'] ?? 0));
+                }
+
+                return $sa <=> $sb;
+            });
+        };
+
+        if (!empty($explicitMatches)) {
+            $sortGroups($explicitMatches);
+            $group = $explicitMatches[0];
+        } elseif (!empty($globalMatches)) {
+            $sortGroups($globalMatches);
+            $group = $globalMatches[0];
+        }
+    }
+
+    if (!$group && function_exists('af_atf_get_groups_cached')) {
+        $groups = af_atf_get_groups_cached();
+
+        if (is_array($groups) && !empty($groups)) {
+            $explicitMatches = [];
+            $globalMatches = [];
+
+            foreach ($groups as $row) {
+                if (!af_atf_catalog_flag_enabled($row['active'] ?? 0)) {
+                    continue;
+                }
+
+                if (!af_atf_catalog_flag_enabled($row['show_catalog_cta'] ?? 0)) {
+                    continue;
+                }
+
+                $charUrl  = trim((string)($row['catalog_characters_url'] ?? ''));
+                $rolesUrl = trim((string)($row['catalog_roles_url'] ?? ''));
+
+                if ($charUrl === '' && $rolesUrl === '') {
+                    continue;
+                }
+
+                $forumsSet = is_array($row['forums_set'] ?? null) ? $row['forums_set'] : [];
+
+                if (!empty($forumsSet)) {
+                    if (isset($forumsSet[$fid])) {
+                        $explicitMatches[] = $row;
+                    }
+                } else {
+                    $globalMatches[] = $row;
+                }
+            }
+
+            $sortGroups = static function (array &$items): void {
+                usort($items, static function (array $a, array $b): int {
+                    $sa = (int)($a['sortorder'] ?? 0);
+                    $sb = (int)($b['sortorder'] ?? 0);
+
+                    if ($sa === $sb) {
+                        return ((int)($a['gid'] ?? 0)) <=> ((int)($b['gid'] ?? 0));
+                    }
+
+                    return $sa <=> $sb;
+                });
+            };
+
+            if (!empty($explicitMatches)) {
+                $sortGroups($explicitMatches);
+                $group = $explicitMatches[0];
+            } elseif (!empty($globalMatches)) {
+                $sortGroups($globalMatches);
+                $group = $globalMatches[0];
+            }
+        }
+    }
+
+    if (!$group || !is_array($group)) {
+        return '';
+    }
+
+    $charUrl  = trim((string)($group['catalog_characters_url'] ?? ''));
     $rolesUrl = trim((string)($group['catalog_roles_url'] ?? ''));
+
     if ($charUrl === '' && $rolesUrl === '') {
         return '';
     }
 
-    $charLabel = trim((string)($group['catalog_characters_label'] ?? ''));
+    $charLabel  = trim((string)($group['catalog_characters_label'] ?? ''));
     $rolesLabel = trim((string)($group['catalog_roles_label'] ?? ''));
+
     if ($charLabel === '') {
-        $charLabel = 'Посмотреть канонов';
+        $charLabel = 'Персонажи';
     }
+
     if ($rolesLabel === '') {
-        $rolesLabel = 'Посмотреть списки ролей';
+        $rolesLabel = 'Роли';
     }
 
     $items = [];
+
     if ($charUrl !== '') {
-        $items[] = '<a class="button" href="'.htmlspecialchars_uni($charUrl).'">'.htmlspecialchars_uni($charLabel).'</a>';
+        $items[] = '<a class="button" href="' . htmlspecialchars_uni($charUrl) . '">' . htmlspecialchars_uni($charLabel) . '</a>';
     }
+
     if ($rolesUrl !== '') {
-        $items[] = '<a class="button" href="'.htmlspecialchars_uni($rolesUrl).'">'.htmlspecialchars_uni($rolesLabel).'</a>';
+        $items[] = '<a class="button" href="' . htmlspecialchars_uni($rolesUrl) . '">' . htmlspecialchars_uni($rolesLabel) . '</a>';
     }
 
     if (empty($items)) {
         return '';
     }
 
-    return '<span class="af-atf-catalog-cta" style="display:inline-flex; gap:8px; margin-left:8px;">'.implode('', $items).'</span>';
+    return '<span class="af-atf-catalog-cta" style="display:inline-flex;align-items:center;gap:8px;margin-right:8px;">'
+        . implode('', $items)
+        . '</span>';
 }
-
-
 /* -------------------- CACHE -------------------- */
 
 function af_atf_get_fields_cached(): array
@@ -3933,17 +4242,10 @@ function af_atf_forumdisplay_get_threads(&$query): void
 
 function af_atf_forumdisplay_start(): void
 {
-    global $fid, $foruminfo, $mybb;
-
-    $forumId = (int)$fid;
-    if ($forumId <= 0 && is_array($foruminfo)) {
-        $forumId = (int)($foruminfo['fid'] ?? 0);
-    }
-    if ($forumId <= 0) {
-        $forumId = (int)$mybb->get_input('fid');
-    }
+    $forumId = af_atf_resolve_current_forum_id();
 
     if ($forumId <= 0) {
+        $GLOBALS['af_atf_forum_catalog_cta_html'] = '';
         return;
     }
 
