@@ -281,6 +281,17 @@
 
       let modalState = null;
       const KB_IFRAME_MODAL_STYLE_ID = "af-atf-kb-catalog-modal-frame-style";
+      const DEFAULT_MODAL_TITLE = "Персонажи";
+      const LOADER_HTML =
+        '<div style="width:min(90%,1170px);height:34px;border-radius:999px;background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 1px rgba(255,255,255,.05);"></div>';
+
+      function normalizeTarget(target) {
+        if (!target) return null;
+        if (target.nodeType === 3) {
+          return target.parentElement || null;
+        }
+        return target instanceof Element ? target : null;
+      }
 
       function stashStyle(node) {
         if (!node || !node.style) return;
@@ -296,18 +307,20 @@
 
       function resetIframePresentation(frameDoc) {
         if (!frameDoc || !frameDoc.body) return;
+
         const nodes = frameDoc.querySelectorAll("[data-af-atf-kb-style-stash]");
         nodes.forEach((node) => {
-          const style = node.getAttribute("data-af-atf-kb-style-stash");
-          if (style) {
-            node.setAttribute("style", style);
+          const oldStyle = node.getAttribute("data-af-atf-kb-style-stash");
+          if (oldStyle) {
+            node.setAttribute("style", oldStyle);
           } else {
             node.removeAttribute("style");
           }
           node.removeAttribute("data-af-atf-kb-style-stash");
         });
-        frameDoc.body.classList.remove("af-atf-kb-modal-frame");
+
         frameDoc.documentElement.classList.remove("af-atf-kb-modal-frame");
+        frameDoc.body.classList.remove("af-atf-kb-modal-frame");
       }
 
       function ensureIframeModalStyle(frameDoc) {
@@ -317,57 +330,219 @@
         const style = frameDoc.createElement("style");
         style.id = KB_IFRAME_MODAL_STYLE_ID;
         style.textContent =
-          "html.af-atf-kb-modal-frame, body.af-atf-kb-modal-frame{margin:0!important;padding:0!important;min-height:100%!important;background:transparent!important;}" +
-          "body.af-atf-kb-modal-frame .af-kb-page{margin:0 auto!important;max-width:100%!important;padding:16px!important;box-sizing:border-box!important;}";
+          "html.af-atf-kb-modal-frame, body.af-atf-kb-modal-frame{" +
+            "margin:0!important;" +
+            "padding:0!important;" +
+            "min-height:100%!important;" +
+            "background:#0d1118!important;" +
+            "color:inherit!important;" +
+          "}" +
+          "body.af-atf-kb-modal-frame{" +
+            "overflow:auto!important;" +
+          "}" +
+
+          /* главный контейнер KB — на всю ширину iframe */
+          "body.af-atf-kb-modal-frame .af-kb-page{" +
+            "width:100%!important;" +
+            "max-width:none!important;" +
+            "margin:0!important;" +
+            "padding:20px 24px!important;" +
+            "box-sizing:border-box!important;" +
+            "background:transparent!important;" +
+          "}" +
+
+          /* внутренние layout-обёртки KB тоже не должны зажиматься */
+          "body.af-atf-kb-modal-frame .af-kb-layout," +
+          "body.af-atf-kb-modal-frame .af-kb-main," +
+          "body.af-atf-kb-modal-frame .af-kb-content," +
+          "body.af-atf-kb-modal-frame .af-kb-entries," +
+          "body.af-atf-kb-modal-frame .af-kb-topcats," +
+          "body.af-atf-kb-modal-frame .af-kb-sidebar{" +
+            "width:100%!important;" +
+            "max-width:none!important;" +
+            "box-sizing:border-box!important;" +
+          "}" +
+
+          /* на случай если внутри KB есть wrapper темы */
+          "body.af-atf-kb-modal-frame .wrapper," +
+          "body.af-atf-kb-modal-frame #content," +
+          "body.af-atf-kb-modal-frame main{" +
+            "width:100%!important;" +
+            "max-width:none!important;" +
+            "margin:0!important;" +
+            "padding:0!important;" +
+            "box-sizing:border-box!important;" +
+          "}";
+
         frameDoc.head.appendChild(style);
       }
 
+      function resolveFrameRoot(frameDoc) {
+        if (!frameDoc || !frameDoc.body) return null;
+
+        return (
+          frameDoc.querySelector(".af-kb-page") ||
+          frameDoc.querySelector("[data-af-kb-page]") ||
+          frameDoc.querySelector("main .af-kb-page") ||
+          frameDoc.querySelector("#content .af-kb-page") ||
+          frameDoc.querySelector("main") ||
+          frameDoc.querySelector("#content") ||
+          frameDoc.querySelector(".wrapper") ||
+          frameDoc.body.firstElementChild ||
+          frameDoc.body
+        );
+      }
+
+      function hideSiblingsAlongPath(node, frameDoc) {
+        let current = node;
+        while (current && current !== frameDoc.body) {
+          const parent = current.parentElement;
+          if (!parent) break;
+
+          Array.prototype.forEach.call(parent.children, (sibling) => {
+            if (sibling !== current) {
+              applyStyle(sibling, "display", "none");
+            }
+          });
+
+          current = parent;
+        }
+      }
+
       function applyIframeModalPresentation(frameDoc) {
-        if (!frameDoc || !frameDoc.body) return;
+        if (!frameDoc || !frameDoc.body) {
+          return false;
+        }
 
         resetIframePresentation(frameDoc);
         ensureIframeModalStyle(frameDoc);
 
-        const kbPage = frameDoc.querySelector(".af-kb-page");
-        if (!kbPage) return;
+        const root = resolveFrameRoot(frameDoc);
 
         frameDoc.documentElement.classList.add("af-atf-kb-modal-frame");
         frameDoc.body.classList.add("af-atf-kb-modal-frame");
 
-        const keepPath = new Set();
-        let cursor = kbPage;
-        while (cursor && cursor !== frameDoc.body) {
-          keepPath.add(cursor);
-          cursor = cursor.parentElement;
-        }
-
-        function hideNonPathSiblings(parent) {
-          if (!parent || !parent.children) return;
-
-          Array.prototype.forEach.call(parent.children, (child) => {
-            if (keepPath.has(child)) {
-              hideNonPathSiblings(child);
-              return;
-            }
-            applyStyle(child, "display", "none");
-          });
-        }
-
-        hideNonPathSiblings(frameDoc.body);
+        applyStyle(frameDoc.documentElement, "background", "#0d1118");
+        applyStyle(frameDoc.body, "background", "#0d1118");
+        applyStyle(frameDoc.body, "margin", "0");
+        applyStyle(frameDoc.body, "padding", "0");
         applyStyle(frameDoc.body, "overflow", "auto");
+
+        if (root && root !== frameDoc.body && root !== frameDoc.documentElement) {
+          hideSiblingsAlongPath(root, frameDoc);
+          applyStyle(root, "display", "block");
+          applyStyle(root, "visibility", "visible");
+          applyStyle(root, "margin-left", "auto");
+          applyStyle(root, "margin-right", "auto");
+        }
+
+        return true;
+      }
+
+      function applyCriticalModalStyles(backdrop, modal, header, body, iframe, closeBtn, loader) {
+        backdrop.style.position = "fixed";
+        backdrop.style.inset = "0";
+        backdrop.style.zIndex = "999999";
+        backdrop.style.display = "none";
+        backdrop.style.alignItems = "center";
+        backdrop.style.justifyContent = "center";
+        backdrop.style.background = "rgba(0,0,0,.72)";
+        backdrop.style.padding = "24px";
+        backdrop.style.boxSizing = "border-box";
+
+        modal.style.position = "relative";
+        modal.style.display = "flex";
+        modal.style.flexDirection = "column";
+        modal.style.width = "min(1400px, 96vw)";
+        modal.style.height = "min(900px, 92vh)";
+        modal.style.background = "#0d1118";
+        modal.style.border = "1px solid rgba(255,255,255,.12)";
+        modal.style.borderRadius = "14px";
+        modal.style.overflow = "hidden";
+        modal.style.boxShadow = "0 20px 60px rgba(0,0,0,.45)";
+
+        header.style.display = "flex";
+        header.style.alignItems = "center";
+        header.style.justifyContent = "space-between";
+        header.style.gap = "16px";
+        header.style.padding = "14px 18px";
+        header.style.flex = "0 0 auto";
+        header.style.background = "#05070b";
+
+        body.style.position = "relative";
+        body.style.flex = "1 1 auto";
+        body.style.minHeight = "0";
+        body.style.background = "#0d1118";
+
+        iframe.style.display = "block";
+        iframe.style.width = "100%";
+        iframe.style.height = "100%";
+        iframe.style.border = "0";
+        iframe.style.background = "transparent";
+        iframe.style.visibility = "hidden";
+        iframe.style.opacity = "0";
+        iframe.style.transition = "opacity .15s ease";
+
+        loader.style.position = "absolute";
+        loader.style.inset = "0";
+        loader.style.display = "flex";
+        loader.style.alignItems = "center";
+        loader.style.justifyContent = "center";
+        loader.style.padding = "24px";
+        loader.style.boxSizing = "border-box";
+        loader.style.background = "#0d1118";
+        loader.style.zIndex = "2";
+        loader.style.color = "#fff";
+
+        closeBtn.style.cursor = "pointer";
+        closeBtn.style.fontSize = "28px";
+        closeBtn.style.lineHeight = "1";
+        closeBtn.style.border = "0";
+        closeBtn.style.background = "transparent";
+        closeBtn.style.color = "#fff";
+        closeBtn.style.padding = "0 4px";
+      }
+
+      function resetLoader(state) {
+        if (!state) return;
+        state.loader.innerHTML = LOADER_HTML;
+      }
+
+      function setLoadingState(state, loading) {
+        if (!state) return;
+
+        state.loader.style.display = loading ? "flex" : "none";
+        state.frame.style.visibility = loading ? "hidden" : "visible";
+        state.frame.style.opacity = loading ? "0" : "1";
+      }
+
+      function setFallbackMessage(state, message) {
+        if (!state) return;
+
+        state.loader.innerHTML =
+          '<div style="max-width:780px;padding:16px 20px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:#fff;text-align:center;line-height:1.55;">' +
+          AF_ATF.escapeAttr(message) +
+          "</div>";
+
+        state.loader.style.display = "flex";
+        state.frame.style.visibility = "hidden";
+        state.frame.style.opacity = "0";
       }
 
       function destroyModal() {
         AF_ATF.qsa(".af-atf-kb-catalog-modal-backdrop").forEach((node) => node.remove());
         document.body.classList.remove("af-atf-kb-catalog-modal-open");
+
         if (modalState) {
           modalState.closeBtn.removeEventListener("click", modalState.onClose);
           modalState.backdrop.removeEventListener("click", modalState.onBackdrop);
           document.removeEventListener("keydown", modalState.onKeydown);
+
           if (modalState.frame && modalState.onFrameLoad) {
             modalState.frame.removeEventListener("load", modalState.onFrameLoad);
           }
         }
+
         modalState = null;
       }
 
@@ -397,12 +572,19 @@
         const body = document.createElement("div");
         body.className = "af-atf-kb-catalog-modal-body";
 
+        const loader = document.createElement("div");
+        loader.className = "af-atf-kb-catalog-modal-loader";
+        loader.innerHTML = LOADER_HTML;
+
         const iframe = document.createElement("iframe");
         iframe.className = "af-atf-kb-catalog-modal-frame";
         iframe.setAttribute("loading", "lazy");
         iframe.setAttribute("referrerpolicy", "same-origin");
-        iframe.src = "about:blank";
+        iframe.setAttribute("src", "about:blank");
 
+        applyCriticalModalStyles(backdrop, modal, header, body, iframe, close, loader);
+
+        body.appendChild(loader);
         body.appendChild(iframe);
         header.appendChild(title);
         header.appendChild(close);
@@ -413,20 +595,71 @@
 
         const onClose = (event) => {
           if (event) event.preventDefault();
+
+          backdrop.style.display = "none";
+          document.body.classList.remove("af-atf-kb-catalog-modal-open");
+
+          try {
+            iframe.setAttribute("src", "about:blank");
+          } catch (e) {
+            // ignore
+          }
+
           destroyModal();
         };
+
         const onBackdrop = (event) => {
-          if (event.target === backdrop) onClose(event);
-        };
-        const onKeydown = (event) => {
-          if (event.key === "Escape") onClose(event);
-        };
-        const onFrameLoad = () => {
-          try {
-            applyIframeModalPresentation(iframe.contentDocument);
-          } catch (err) {
-            // cross-origin or inaccessible frame: keep default iframe rendering
+          if (event.target === backdrop) {
+            onClose(event);
           }
+        };
+
+        const onKeydown = (event) => {
+          if (event.key === "Escape") {
+            onClose(event);
+          }
+        };
+
+        const onFrameLoad = () => {
+          const currentSrc = String(iframe.getAttribute("src") || "").trim();
+          if (!currentSrc || currentSrc === "about:blank") {
+            return;
+          }
+
+          let doc = null;
+          let hasMeaningfulContent = false;
+
+          try {
+            doc = iframe.contentDocument;
+            applyIframeModalPresentation(doc);
+            hasMeaningfulContent = !!(
+              doc &&
+              doc.body &&
+              String(doc.body.textContent || "").replace(/\s+/g, "").length
+            );
+          } catch (err) {
+            doc = null;
+          }
+
+          window.requestAnimationFrame(() => {
+            if (!doc) {
+              setFallbackMessage(
+                modalState,
+                "Не удалось прочитать содержимое KB внутри iframe."
+              );
+              return;
+            }
+
+            if (!hasMeaningfulContent) {
+              setFallbackMessage(
+                modalState,
+                "Контент сейчас не отрисовался. Проверь права просмотра KB и публичность категории."
+              );
+              return;
+            }
+
+            setLoadingState(modalState, false);
+          });
         };
 
         close.addEventListener("click", onClose);
@@ -436,38 +669,90 @@
 
         modalState = {
           backdrop,
+          modal,
+          frame: iframe,
+          loader,
           closeBtn: close,
           onClose,
           onBackdrop,
           onKeydown,
           onFrameLoad,
-          frame: iframe,
           open(src, modalTitle) {
-            title.textContent = modalTitle || "Персонажи";
-            iframe.src = src;
+            const cleanSrc = String(src || "").trim();
+            if (!cleanSrc) return;
+
+            title.textContent = String(modalTitle || DEFAULT_MODAL_TITLE).trim() || DEFAULT_MODAL_TITLE;
+
+            backdrop.style.display = "flex";
             document.body.classList.add("af-atf-kb-catalog-modal-open");
+
+            resetLoader(modalState);
+            setLoadingState(modalState, true);
+
+            iframe.setAttribute("src", "about:blank");
+            window.setTimeout(() => {
+              iframe.setAttribute("src", cleanSrc);
+            }, 0);
           }
         };
 
         return modalState;
       }
 
-      document.addEventListener("click", (event) => {
-        const opener = event.target && event.target.closest
-          ? event.target.closest("[data-af-atf-kb-catalog-cta]")
-          : null;
+      function openFromOpener(opener) {
+        if (!opener) return;
+
+        const href = String(opener.getAttribute("href") || "").trim();
+        if (!href || href === "#" || href.toLowerCase().indexOf("javascript:") === 0) {
+          return;
+        }
+
+        const modalTitle = String(
+          opener.getAttribute("data-af-atf-modal-title") ||
+          opener.textContent ||
+          DEFAULT_MODAL_TITLE
+        ).trim();
+
+        const modal = modalState || buildModal();
+        modal.open(href, modalTitle);
+      }
+
+      function onCatalogCtaClick(event) {
+        const target = normalizeTarget(event.target);
+        if (!target) return;
+
+        const opener = target.closest("[data-af-atf-kb-catalog-cta]");
         if (!opener) return;
 
         const href = String(opener.getAttribute("href") || "").trim();
         if (!href) return;
 
         event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === "function") {
+          event.stopImmediatePropagation();
+        }
 
-        const modal = modalState || buildModal();
-        modal.open(
-          href,
-          String(opener.getAttribute("data-af-atf-modal-title") || opener.textContent || "").trim()
-        );
+        openFromOpener(opener);
+        return false;
+      }
+
+      document.addEventListener("click", onCatalogCtaClick, true);
+
+      AF_ATF.qsa("[data-af-atf-kb-catalog-cta]").forEach((opener) => {
+        if (opener.__afAtfKbCatalogBound) return;
+        opener.__afAtfKbCatalogBound = true;
+
+        opener.addEventListener("click", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (typeof event.stopImmediatePropagation === "function") {
+            event.stopImmediatePropagation();
+          }
+
+          openFromOpener(this);
+          return false;
+        }, true);
       });
     },
 
