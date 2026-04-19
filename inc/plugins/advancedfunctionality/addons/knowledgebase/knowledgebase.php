@@ -7657,6 +7657,10 @@ function af_kb_dispatch(): void
         af_kb_handle_migrate_rules();
     }
 
+    if ($action === 'kb_character_apply') {
+        af_kb_handle_character_apply();
+    }
+
     if ($action === 'knowledgebase_entry') {
         af_kb_handle_entry_modal();
     }
@@ -8101,6 +8105,19 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
             . '</article>';
     }
 
+    $isCanon = trim((string)($profile['category'] ?? '')) === 'canons';
+    $applyCtaHtml = '';
+    if ($isCanon) {
+        $targetForumId = af_kb_resolve_character_application_forum_id();
+        if ($targetForumId > 0) {
+            $applyUrl = 'misc.php?action=kb_character_apply&type=' . rawurlencode((string)($entry['type'] ?? 'character'))
+                . '&key=' . rawurlencode((string)($entry['key'] ?? ''));
+            $applyCtaHtml = '<a class="af-kb-btn af-kb-btn--create" href="' . htmlspecialchars_uni($applyUrl) . '">Подать анкету</a>';
+        } else {
+            $applyCtaHtml = '<button type="button" class="af-kb-btn" disabled title="Не настроен форум анкет (ATF group forums).">Подать анкету</button>';
+        }
+    }
+
     return '<div class="af-kb-char-profile">'
         . ($banner !== '' ? '<div class="af-kb-char-profile__banner"><img src="' . htmlspecialchars_uni($banner) . '" alt="" loading="lazy" /></div>' : '')
         . '<section class="af-kb-char-profile__head">'
@@ -8111,8 +8128,163 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         . ($bio !== '' ? '<section class="af-kb-char-profile__section"><h3>Биография</h3><div>' . af_kb_parse_message($bio) . '</div></section>' : '')
         . '<section class="af-kb-char-profile__section"><h3>Характеристики</h3><div class="af-kb-char-stats">' . $statRows . '</div></section>'
         . '<section class="af-kb-char-profile__section"><h3>Способности</h3><div class="af-kb-char-abilities">' . ($abilitiesHtml !== '' ? $abilitiesHtml : '<div class="af-kb-char-empty">No abilities yet.</div>') . '</div></section>'
-        . '<section class="af-kb-char-profile__service"><button type="button" class="af-kb-btn" disabled>ATF Sync (next task)</button><button type="button" class="af-kb-btn" disabled>Character Sheet Sync (next task)</button></section>'
+        . '<section class="af-kb-char-profile__service">' . $applyCtaHtml . '<button type="button" class="af-kb-btn" disabled>Character Sheet Sync (next task)</button></section>'
         . '</div>';
+}
+
+function af_kb_resolve_character_application_forum_id(): int
+{
+    global $db;
+
+    if (!is_object($db) || !$db->table_exists('af_atf_groups') || !$db->table_exists('af_atf_fields')) {
+        return 0;
+    }
+
+    $query = $db->query(
+        "SELECT g.gid, g.forums, g.sortorder,
+            SUM(CASE WHEN f.name LIKE 'character\\_%' THEN 1 ELSE 0 END) AS character_fields,
+            SUM(CASE WHEN f.name='character_abilities' THEN 1 ELSE 0 END) AS has_abilities
+         FROM " . TABLE_PREFIX . "af_atf_groups g
+         LEFT JOIN " . TABLE_PREFIX . "af_atf_fields f
+            ON (f.groupid=g.gid AND f.active=1)
+         WHERE g.active=1
+         GROUP BY g.gid, g.forums, g.sortorder
+         HAVING character_fields > 0
+         ORDER BY has_abilities DESC, character_fields DESC, g.sortorder ASC, g.gid ASC"
+    );
+
+    while ($group = $db->fetch_array($query)) {
+        $forumsRaw = trim((string)($group['forums'] ?? ''));
+        if ($forumsRaw === '') {
+            continue;
+        }
+        $forumIds = array_values(array_filter(array_map('intval', preg_split('~\s*,\s*~', $forumsRaw))));
+        if (!empty($forumIds) && $forumIds[0] > 0) {
+            return (int)$forumIds[0];
+        }
+    }
+
+    return 0;
+}
+
+function af_kb_build_character_application_prefill(array $entry): array
+{
+    $data = af_kb_extract_character_contract($entry);
+    $profile = (array)($data['profile'] ?? []);
+    $stats = (array)($data['stats'] ?? []);
+    $abilities = (array)($data['abilities'] ?? []);
+
+    $prefill = [];
+    foreach ([
+        'character_pic',
+        'character_prototype',
+        'character_name',
+        'character_name_ru',
+        'character_nicknames',
+        'character_element',
+        'character_gen',
+        'character_race',
+        'character_class',
+        'character_faction',
+        'character_app',
+    ] as $fieldName) {
+        if (array_key_exists($fieldName, $profile)) {
+            $prefill[$fieldName] = (string)$profile[$fieldName];
+        }
+    }
+
+    foreach ([
+        'character_hp',
+        'character_defense',
+        'character_element_damage_bonus',
+        'character_crit_damage',
+        'character_healing_received_bonus',
+        'character_attack_power',
+        'character_elemental_mastery',
+        'character_healing_bonus',
+        'character_shield_strength',
+        'character_luck',
+    ] as $fieldName) {
+        if (array_key_exists($fieldName, $stats)) {
+            $prefill[$fieldName] = (string)$stats[$fieldName];
+        }
+    }
+
+    $abilitiesNormalized = [];
+    foreach ($abilities as $idx => $ability) {
+        if (!is_array($ability)) {
+            continue;
+        }
+        $abilitiesNormalized[] = [
+            'ability_name' => (string)($ability['ability_name'] ?? ''),
+            'ability_type' => (string)($ability['ability_type'] ?? 'active'),
+            'ability_description' => (string)($ability['ability_description'] ?? ''),
+            'ability_kb_key' => (string)($ability['ability_kb_key'] ?? ''),
+            'sortorder' => (int)($ability['sortorder'] ?? ($idx + 1)),
+        ];
+    }
+    $prefill['character_abilities'] = json_encode($abilitiesNormalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '[]';
+
+    $mechanic = trim((string)($data['meta']['mechanic'] ?? ''));
+    if ($mechanic !== 'arpg' && $mechanic !== 'dnd') {
+        $mechanic = af_kb_get_type_mechanic_key((string)($entry['type'] ?? 'character'));
+        if ($mechanic !== 'arpg' && $mechanic !== 'dnd') {
+            $mechanic = AF_KB_DEFAULT_MECHANIC_KEY;
+        }
+    }
+
+    return [
+        'source' => 'kb_character',
+        'entry' => [
+            'id' => (int)($entry['id'] ?? 0),
+            'type' => (string)($entry['type'] ?? ''),
+            'key' => (string)($entry['key'] ?? ''),
+        ],
+        'mechanic' => $mechanic,
+        'values' => $prefill,
+    ];
+}
+
+function af_kb_handle_character_apply(): void
+{
+    global $db, $mybb, $cache, $lang;
+
+    if ((int)($mybb->user['uid'] ?? 0) <= 0) {
+        error_no_permission();
+    }
+
+    $type = trim((string)$mybb->get_input('type'));
+    $key = trim((string)$mybb->get_input('key'));
+    if ($type !== 'character' || $key === '') {
+        error($lang->af_kb_not_found ?? 'Entry not found.');
+    }
+
+    $where = "type='character' AND `key`='" . $db->escape_string($key) . "' AND active=1";
+    $entry = $db->fetch_array($db->simple_select('af_kb_entries', '*', $where, ['limit' => 1]));
+    if (!$entry || !af_kb_entry_visible_in_context($entry, 'catalog', af_kb_can_edit())) {
+        error($lang->af_kb_not_found ?? 'Entry not found.');
+    }
+
+    $character = af_kb_extract_character_contract($entry);
+    $category = trim((string)(($character['profile'] ?? [])['category'] ?? ''));
+    if ($category !== 'canons') {
+        error_no_permission();
+    }
+
+    $forumId = af_kb_resolve_character_application_forum_id();
+    if ($forumId <= 0) {
+        error('ATF target forum is not configured.');
+    }
+
+    $token = bin2hex(random_bytes(16));
+    $payload = af_kb_build_character_application_prefill($entry);
+    $payload['uid'] = (int)($mybb->user['uid'] ?? 0);
+    $payload['forum_id'] = $forumId;
+    $payload['expires_at'] = TIME_NOW + 900;
+    $payload['created_at'] = TIME_NOW;
+
+    $cache->update('af_atf_prefill_' . $token, $payload);
+    redirect('newthread.php?fid=' . $forumId . '&af_atf_prefill_token=' . rawurlencode($token));
 }
 
 function af_kb_handle_view(): void
