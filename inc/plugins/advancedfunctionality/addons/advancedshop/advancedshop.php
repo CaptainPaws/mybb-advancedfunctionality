@@ -2388,12 +2388,14 @@ function af_advancedshop_checkout_success_items(array $items): array
 {
     $result = [];
     foreach ($items as $item) {
-        $isAbility = af_advancedshop_checkout_item_is_ability($item);
+        $destination = af_advancedshop_checkout_item_destination($item);
+        $isAbility = ($destination === 'abilities');
         $result[] = [
             'slot_id' => (int)($item['slot_id'] ?? 0),
             'qty' => max(1, (int)($item['qty'] ?? 1)),
             'title' => trim((string)($item['title'] ?? '')),
             'is_ability' => $isAbility,
+            'destination' => $destination,
         ];
     }
 
@@ -2403,6 +2405,12 @@ function af_advancedshop_checkout_success_items(array $items): array
 function af_advancedshop_checkout_item_is_ability(array $item): bool
 {
     $kbType = af_advancedshop_normalize_kb_type((string)($item['kb_type'] ?? ''));
+    if ($kbType === 'arpg_item') {
+        return false;
+    }
+    if ($kbType === 'arpg_talent') {
+        return true;
+    }
     if ($kbType === 'spell') {
         return true;
     }
@@ -2420,6 +2428,11 @@ function af_advancedshop_checkout_item_is_ability(array $item): bool
     $meta = af_advancedshop_json_decode_assoc((string)($item['slot_meta_json'] ?? ''));
     $target = af_advancedshop_detect_inventory_target_from_kb_meta($meta);
     return trim((string)($target['slot'] ?? '')) === 'abilities';
+}
+
+function af_advancedshop_checkout_item_destination(array $item): string
+{
+    return af_advancedshop_checkout_item_is_ability($item) ? 'abilities' : 'inventory';
 }
 
 function af_advancedshop_apply_shop_map_target(array $target, array $item, bool $hasKb): array
@@ -2620,6 +2633,7 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
     $hasKbIdentity = $kbId > 0 || ($kbTypeFromItem !== '' && $kbKeyFromItem !== '');
     $hasKbData = $hasKbIdentity && ($metaPayload !== [] || !empty($kb));
     $target = $hasKbData ? af_advancedshop_detect_inventory_target_from_kb_meta($metaPayload) : ['slot' => 'resources', 'subtype' => '', 'kind_detected' => '', 'kind_source' => 'nonkb'];
+    $baseTarget = $target;
 
     if ($hasKbData && (string)($target['kind_detected'] ?? '') === 'weapon') {
         $target['slot'] = 'equipment';
@@ -2685,6 +2699,18 @@ function af_advancedshop_grant_inventory_item(int $uid, array $item): void
     }
 
     $kbTypeNorm = mb_strtolower(trim((string)$payload['kb_type']));
+    if ($kbTypeNorm === 'arpg_talent') {
+        $payload['slot'] = 'abilities';
+        if (trim((string)$payload['subtype']) === '') {
+            $payload['subtype'] = 'talent';
+        }
+    } elseif ($kbTypeNorm === 'arpg_item' && (string)$payload['slot'] === 'abilities') {
+        $payload['slot'] = (string)($baseTarget['slot'] ?? 'resources');
+        if ((string)$payload['slot'] === 'abilities') {
+            $payload['slot'] = 'resources';
+        }
+        $payload['subtype'] = (string)($baseTarget['subtype'] ?? '');
+    }
     if (in_array($kbTypeNorm, ['spell', 'ritual'], true)) {
         $payload['slot'] = 'abilities';
         if (trim((string)$payload['subtype']) === '') {
