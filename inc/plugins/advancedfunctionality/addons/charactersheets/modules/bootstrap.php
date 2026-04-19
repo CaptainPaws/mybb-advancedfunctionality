@@ -677,6 +677,8 @@ function af_charactersheets_showthread_start_impl(): void
         return;
     }
 
+    $was_accepted = af_charactersheets_is_accepted($tid);
+
     // Если тему вернули обратно в pending после принятия —
     // открываем (чтобы можно было редактировать). Делать это безопасно только для тех,
     // кто имеет право принимать.
@@ -987,6 +989,11 @@ function af_charactersheets_handle_accept_action(): void
         af_charactersheets_autocreate_sheet($tid, $thread);
     }
 
+    af_charactersheets_sync_oc_kb_character($tid, $thread, [
+        'accepted_by_uid' => (int)($mybb->user['uid'] ?? 0),
+        'source' => 'accept_action',
+    ]);
+
     af_charactersheets_handle_accept_exp($tid, (int)$mybb->user['uid']);
 
     $msg = $lang->af_charactersheets_accept_done ?? 'Анкета принята: тема закрыта и перенесена.';
@@ -1085,6 +1092,346 @@ function af_charactersheets_autocreate_sheet(int $tid, array $thread): array
     ]);
 
     return !empty($sheet) ? $sheet : ['slug' => $slug];
+}
+
+function af_charactersheets_handle_thread_move_for_acceptance_impl(array $args): void
+{
+    global $db, $mybb;
+
+    if (!af_charactersheets_is_enabled()) {
+        return;
+    }
+
+    $tid = (int)($args['tid'] ?? 0);
+    if ($tid <= 0) {
+        return;
+    }
+
+    $targetFid = 0;
+    foreach (['moveto', 'new_fid', 'destination_fid', 'fid'] as $candidate) {
+        if (isset($args[$candidate])) {
+            $targetFid = (int)$args[$candidate];
+            if ($targetFid > 0) {
+                break;
+            }
+        }
+    }
+
+    if ($targetFid <= 0 || !af_charactersheets_is_in_accepted_forum($targetFid)) {
+        return;
+    }
+
+    $thread = $db->fetch_array($db->simple_select('threads', '*', 'tid=' . $tid, ['limit' => 1]));
+    if (!$thread || !is_array($thread)) {
+        return;
+    }
+
+    $row = af_charactersheets_get_accept_row($tid);
+    if (empty($row['accepted'])) {
+        af_charactersheets_upsert_accept_row($tid, [
+            'uid' => (int)($thread['uid'] ?? 0),
+            'accepted' => 1,
+            'accepted_by_uid' => (int)($mybb->user['uid'] ?? 0),
+            'accepted_at' => TIME_NOW,
+        ]);
+    }
+
+    if (!empty($mybb->settings['af_charactersheets_sheet_autocreate'])) {
+        af_charactersheets_autocreate_sheet($tid, $thread);
+    }
+
+    af_charactersheets_sync_oc_kb_character($tid, $thread, [
+        'accepted_by_uid' => (int)($mybb->user['uid'] ?? 0),
+        'source' => 'moderation_move',
+    ]);
+}
+
+function af_charactersheets_sync_oc_kb_character(int $tid, array $thread = [], array $context = []): array
+{
+    global $db;
+
+    $result = ['ok' => false, 'entry_id' => 0, 'mode' => 'skip', 'reason' => ''];
+    if ($tid <= 0) {
+        $result['reason'] = 'invalid_tid';
+        return $result;
+    }
+
+    if (
+        !$db->table_exists('af_kb_entries')
+        || !$db->table_exists(AF_CS_TABLE)
+    ) {
+        $result['reason'] = 'kb_unavailable';
+        return $result;
+    }
+
+    if (empty($thread)) {
+        $thread = $db->fetch_array($db->simple_select('threads', '*', 'tid=' . $tid, ['limit' => 1]));
+    }
+    if (!$thread || !is_array($thread)) {
+        $result['reason'] = 'thread_not_found';
+        return $result;
+    }
+
+    $fields = af_charactersheets_get_atf_fields($tid);
+    $index = af_charactersheets_index_fields($fields);
+    if (empty($index)) {
+        $result['reason'] = 'atf_fields_empty';
+        return $result;
+    }
+
+    $characterFieldExists = false;
+    foreach (array_keys($index) as $fieldName) {
+        if (strpos((string)$fieldName, 'character_') === 0) {
+            $characterFieldExists = true;
+            break;
+        }
+    }
+    if (!$characterFieldExists) {
+        $result['reason'] = 'not_character_form';
+        return $result;
+    }
+
+    $entryKey = 'oc-' . $tid;
+    $titleRu = af_charactersheets_pick_field_value($index, ['character_name_ru', 'character_name', 'name', 'char_name']);
+    $titleEn = af_charactersheets_pick_field_value($index, ['character_name', 'character_name_en', 'name', 'char_name']);
+    $subject = trim((string)($thread['subject'] ?? ''));
+    if ($titleRu === '') {
+        $titleRu = $subject !== '' ? $subject : ('OC #' . $tid);
+    }
+    if ($titleEn === '') {
+        $titleEn = $titleRu;
+    }
+
+    $profile = [
+        'category' => 'originals',
+        'character_pic' => af_charactersheets_get_portrait_url($index),
+        'character_prototype' => af_charactersheets_pick_field_value($index, ['character_prototype']),
+        'character_name' => $titleEn,
+        'character_name_ru' => $titleRu,
+        'character_nicknames' => af_charactersheets_pick_field_value($index, ['character_nicknames', 'character_nickname']),
+        'character_element' => af_charactersheets_pick_field_value($index, ['character_element', 'element']),
+        'character_gen' => af_charactersheets_pick_field_value($index, ['character_gen', 'character_gender', 'gender']),
+        'character_race' => af_charactersheets_pick_field_value($index, ['character_race', 'race']),
+        'character_class' => af_charactersheets_pick_field_value($index, ['character_class', 'class']),
+        'character_faction' => af_charactersheets_pick_field_value($index, ['character_faction', 'faction']),
+        'character_app' => af_charactersheets_pick_field_value($index, ['character_app', 'character_about', 'character_bio', 'character_description', 'app']),
+    ];
+
+    $stats = [];
+    foreach ([
+        'character_hp',
+        'character_defense',
+        'character_element_damage_bonus',
+        'character_crit_damage',
+        'character_healing_received_bonus',
+        'character_attack_power',
+        'character_elemental_mastery',
+        'character_healing_bonus',
+        'character_shield_strength',
+        'character_luck',
+    ] as $statName) {
+        $rawValue = af_charactersheets_pick_field_value($index, [$statName], false);
+        $num = af_charactersheets_to_number($rawValue);
+        $stats[$statName] = $num !== null ? $num : 0;
+    }
+
+    $abilities = af_charactersheets_extract_oc_abilities($index);
+    $sourceTid = (int)$tid;
+    $rules = [
+        'schema' => 'af_kb.character.contract.v1',
+        'type_profile' => 'character',
+        'version' => '1.0',
+        'character_profile' => $profile,
+        'character_stats' => $stats,
+        'character_abilities' => $abilities,
+        'character_links' => [],
+        'character_meta' => [
+            'contract' => 'af_kb.character.contract.v1',
+            'contract_version' => '1.0',
+            'source' => 'af_charactersheets',
+            'sync_source' => (string)($context['source'] ?? 'unknown'),
+            'accepted_by_uid' => (int)($context['accepted_by_uid'] ?? 0),
+            'source_tid' => $sourceTid,
+            'source_uid' => (int)($thread['uid'] ?? 0),
+            'synced_at' => TIME_NOW,
+        ],
+    ];
+
+    $rulesJson = json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($rulesJson) || $rulesJson === '') {
+        $result['reason'] = 'rules_encode_failed';
+        return $result;
+    }
+
+    $acceptRow = af_charactersheets_get_accept_row($tid);
+    $entryId = (int)($acceptRow['kb_entry_id'] ?? 0);
+    $existing = [];
+    if ($entryId > 0) {
+        $existing = $db->fetch_array($db->simple_select('af_kb_entries', '*', 'id=' . $entryId, ['limit' => 1]));
+    }
+    if (!$existing) {
+        $existing = $db->fetch_array(
+            $db->simple_select(
+                'af_kb_entries',
+                '*',
+                "type='character' AND `key`='" . $db->escape_string($entryKey) . "'",
+                ['limit' => 1]
+            )
+        );
+        $entryId = (int)($existing['id'] ?? 0);
+    }
+
+    $entryPayload = [
+        'type' => 'character',
+        'key' => $entryKey,
+        'title_ru' => $titleRu,
+        'title_en' => $titleEn,
+        'short_ru' => (string)$profile['character_app'],
+        'short_en' => (string)$profile['character_app'],
+        'body_ru' => (string)$profile['character_app'],
+        'body_en' => (string)$profile['character_app'],
+        'tech_ru' => '{}',
+        'tech_en' => '{}',
+        'meta_json' => json_encode(['rules' => $rules], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
+        'data_json' => $rulesJson,
+        'icon_class' => '',
+        'icon_url' => '',
+        'banner_url' => '',
+        'bg_url' => '',
+        'item_kind' => '',
+        'active' => 1,
+        'sortorder' => 0,
+        'updated_at' => TIME_NOW,
+    ];
+
+    if ($existing && !empty($existing['id'])) {
+        $db->update_query('af_kb_entries', af_charactersheets_db_escape_array($entryPayload), 'id=' . (int)$existing['id']);
+        $entryId = (int)$existing['id'];
+        $result['mode'] = 'update';
+    } else {
+        $entryId = (int)$db->insert_query('af_kb_entries', af_charactersheets_db_escape_array($entryPayload));
+        $result['mode'] = 'create';
+    }
+
+    if ($entryId <= 0) {
+        $result['reason'] = 'save_failed';
+        return $result;
+    }
+
+    if ($db->table_exists('af_kb_blocks')) {
+        $db->delete_query('af_kb_blocks', "entry_id={$entryId} AND block_key='data'");
+        $db->insert_query('af_kb_blocks', [
+            'entry_id' => $entryId,
+            'block_key' => 'data',
+            'title_ru' => '',
+            'title_en' => '',
+            'content_ru' => '',
+            'content_en' => '',
+            'data_json' => $db->escape_string($rulesJson),
+            'icon_class' => '',
+            'icon_url' => '',
+            'active' => 1,
+            'sortorder' => 9999,
+        ]);
+    }
+
+    af_charactersheets_assign_kb_originals_category($entryId);
+
+    af_charactersheets_upsert_accept_row($tid, [
+        'uid' => (int)($thread['uid'] ?? 0),
+        'kb_entry_id' => $entryId,
+        'kb_synced_at' => TIME_NOW,
+    ]);
+
+    $result['ok'] = true;
+    $result['entry_id'] = $entryId;
+    return $result;
+}
+
+function af_charactersheets_assign_kb_originals_category(int $entryId): void
+{
+    global $db;
+
+    if ($entryId <= 0 || !$db->table_exists('af_kb_categories')) {
+        return;
+    }
+
+    $cat = $db->fetch_array(
+        $db->simple_select(
+            'af_kb_categories',
+            'cat_id',
+            "type='character' AND `key`='originals' AND active=1",
+            ['limit' => 1]
+        )
+    );
+    $catId = (int)($cat['cat_id'] ?? 0);
+    if ($catId <= 0) {
+        return;
+    }
+
+    if (function_exists('af_kb_entry_set_categories')) {
+        af_kb_entry_set_categories($entryId, [$catId], $catId);
+        return;
+    }
+
+    if (!$db->table_exists('af_kb_entry_categories')) {
+        return;
+    }
+
+    $db->delete_query('af_kb_entry_categories', 'entry_id=' . $entryId);
+    $db->insert_query('af_kb_entry_categories', [
+        'entry_id' => $entryId,
+        'cat_id' => $catId,
+        'is_primary' => 1,
+    ]);
+}
+
+function af_charactersheets_extract_oc_abilities(array $index): array
+{
+    $abilities = [];
+    $jsonRaw = af_charactersheets_pick_field_value($index, ['character_abilities'], false);
+    if ($jsonRaw !== '') {
+        $decoded = af_charactersheets_json_decode($jsonRaw);
+        if (isset($decoded[0]) && is_array($decoded[0])) {
+            foreach ($decoded as $idx => $ability) {
+                if (!is_array($ability)) {
+                    continue;
+                }
+                $name = trim((string)($ability['ability_name'] ?? $ability['name'] ?? ''));
+                $description = trim((string)($ability['ability_description'] ?? $ability['description'] ?? ''));
+                if ($name === '' && $description === '') {
+                    continue;
+                }
+                $abilities[] = [
+                    'ability_name' => $name,
+                    'ability_type' => trim((string)($ability['ability_type'] ?? 'active')) ?: 'active',
+                    'ability_description' => $description,
+                    'ability_kb_key' => trim((string)($ability['ability_kb_key'] ?? '')),
+                    'sortorder' => (int)($ability['sortorder'] ?? ($idx + 1)),
+                ];
+            }
+        }
+    }
+
+    foreach ($index as $fieldName => $field) {
+        $name = strtolower((string)$fieldName);
+        if (strpos($name, 'character_ability') !== 0) {
+            continue;
+        }
+        $value = trim((string)($field['value_label'] ?? $field['value'] ?? ''));
+        if ($value === '') {
+            continue;
+        }
+        $abilities[] = [
+            'ability_name' => trim((string)($field['title'] ?? $name)),
+            'ability_type' => 'active',
+            'ability_description' => $value,
+            'ability_kb_key' => '',
+            'sortorder' => count($abilities) + 1,
+        ];
+    }
+
+    return $abilities;
 }
 
 
@@ -1445,11 +1792,22 @@ function af_charactersheets_ensure_schema(): void
               accepted_at INT UNSIGNED NOT NULL DEFAULT 0,
               sheet_slug VARCHAR(120) DEFAULT NULL,
               sheet_created TINYINT(1) NOT NULL DEFAULT 0,
+              kb_entry_id INT UNSIGNED DEFAULT NULL,
+              kb_synced_at INT UNSIGNED NOT NULL DEFAULT 0,
               PRIMARY KEY (tid),
               KEY uid (uid),
-              KEY accepted (accepted)
+              KEY accepted (accepted),
+              KEY kb_entry_id (kb_entry_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         ");
+    } else {
+        if (!$db->field_exists('kb_entry_id', AF_CS_TABLE)) {
+            $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_CS_TABLE . " ADD kb_entry_id INT UNSIGNED DEFAULT NULL");
+            $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_CS_TABLE . " ADD KEY kb_entry_id (kb_entry_id)");
+        }
+        if (!$db->field_exists('kb_synced_at', AF_CS_TABLE)) {
+            $db->write_query("ALTER TABLE " . TABLE_PREFIX . AF_CS_TABLE . " ADD kb_synced_at INT UNSIGNED NOT NULL DEFAULT 0");
+        }
     }
 
     if (!$db->table_exists(AF_CS_CONFIG_TABLE)) {

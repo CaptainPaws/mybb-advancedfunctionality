@@ -46,6 +46,8 @@ function af_charactersheets_upsert_accept_row(int $tid, array $data): void
         'accepted_at' => 0,
         'sheet_slug' => null,
         'sheet_created' => 0,
+        'kb_entry_id' => null,
+        'kb_synced_at' => 0,
     ];
     $payload = array_merge($defaults, $row ?: [], $data, ['tid' => $tid]);
 
