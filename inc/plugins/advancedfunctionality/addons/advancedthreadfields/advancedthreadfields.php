@@ -868,7 +868,7 @@ function af_atf_kb_get_endpoint(): void
     $type = strtolower(trim((string)$mybb->get_input('type')));
     $key = strtolower(trim((string)$mybb->get_input('key')));
 
-    if (!in_array($type, af_atf_kb_allowed_types(), true)) {
+    if (!preg_match('/^[a-z0-9_]{2,64}$/', $type)) {
         af_atf_json_response(['ok' => 0, 'error' => 'invalid_type'], 400);
         return;
     }

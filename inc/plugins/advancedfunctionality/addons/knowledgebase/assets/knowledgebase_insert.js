@@ -124,17 +124,43 @@
         return fallback;
     }
 
-    function fetchTypes() {
-        if (cache.types) return Promise.resolve(cache.types);
-        return fetch(afKbEndpoint('types', 'misc.php?action=kb_types'))
+    function detectActiveMechanic() {
+        var fromAtf = document.querySelector('.af-atf-character-mechanic');
+        if (fromAtf) {
+            var atfMode = String(fromAtf.value || '').trim().toLowerCase();
+            if (atfMode === 'arpg' || atfMode === 'dnd') return atfMode;
+        }
+
+        var fromDataset = document.querySelector('[data-mechanic]');
+        if (fromDataset) {
+            var dataMode = String(fromDataset.getAttribute('data-mechanic') || '').trim().toLowerCase();
+            if (dataMode === 'arpg' || dataMode === 'dnd') return dataMode;
+        }
+
+        var fallback = String((window && window.afKbInsertMechanic) ? window.afKbInsertMechanic : '').trim().toLowerCase();
+        if (fallback === 'arpg' || fallback === 'dnd') return fallback;
+
+        return 'dnd';
+    }
+
+    function fetchTypes(mechanic) {
+        var mode = (mechanic === 'arpg' || mechanic === 'dnd') ? mechanic : detectActiveMechanic();
+        var cacheKey = 'types:' + mode;
+        if (cache.types && cache.types[cacheKey]) return Promise.resolve(cache.types[cacheKey]);
+
+        var url = afKbEndpoint('types', 'misc.php?action=kb_types');
+        url += (url.indexOf('?') === -1 ? '?' : '&') + 'mechanic=' + encodeURIComponent(mode);
+
+        return fetch(url)
             .then(function (res) {
                 var ct = res.headers.get('content-type') || '';
                 if (!res.ok || ct.indexOf('application/json') === -1) throw new Error('Invalid response');
                 return res.json();
             })
             .then(function (data) {
-                cache.types = data.items || [];
-                return cache.types;
+                if (!cache.types || typeof cache.types !== 'object') cache.types = {};
+                cache.types[cacheKey] = data.items || [];
+                return cache.types[cacheKey];
             })
             .catch(function () { return []; });
     }
@@ -581,6 +607,7 @@
     function openInsertModal(preferredTarget) {
         var target = resolveTarget(preferredTarget);
         var snap = snapshotSelection(target);
+        var activeMechanic = detectActiveMechanic();
 
         var backdrop = buildModal();
         var searchInput = backdrop.querySelector('.af-kb-insert-search');
@@ -616,8 +643,11 @@
             });
         }
 
-        fetchTypes().then(function (types) {
+        fetchTypes(activeMechanic).then(function (types) {
             if (!state.type && types.length) state.type = types[0].type || '';
+            if (state.type && !types.some(function (item) { return item && item.type === state.type; })) {
+                state.type = types.length ? (types[0].type || '') : '';
+            }
             renderTypeOptions(typeSelect, types, state.type);
             loadList();
         });
