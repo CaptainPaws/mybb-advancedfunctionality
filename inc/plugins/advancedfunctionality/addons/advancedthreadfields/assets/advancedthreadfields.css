@@ -222,6 +222,23 @@
   margin-top: 6px;
 }
 
+.af-atf-kb-dynamic-preview {
+  margin-top: 6px;
+}
+
+.af-atf-element-chip {
+  cursor: help;
+}
+
+.af-atf-element-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  object-fit: contain;
+}
+
 .af-atf-kb-modal-backdrop {
   position: fixed;
   inset: 0;
