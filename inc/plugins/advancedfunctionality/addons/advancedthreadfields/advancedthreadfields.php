@@ -22,6 +22,7 @@ define('AF_ATF_ID', 'advancedthreadfields');
 define('AF_ATF_TABLE_FIELDS', 'af_atf_fields');
 define('AF_ATF_TABLE_VALUES', 'af_atf_values');
 define('AF_ATF_TABLE_GROUPS', 'af_atf_groups');
+define('AF_ATF_TABLE_PREFILL', 'af_atf_prefill_tokens');
 
 
 define('AF_ATF_MARK', '<!--af_atf_assets-->');
@@ -224,6 +225,7 @@ function af_advancedthreadfields_install(): void
         ");
     }
 
+    af_atf_db_ensure_prefill_table();
     af_atf_ensure_settings();
     af_atf_install_templates();
     af_atf_rebuild_cache(true);
@@ -246,6 +248,9 @@ function af_advancedthreadfields_uninstall(): void
     if ($db->table_exists(AF_ATF_TABLE_GROUPS)) {
         $db->drop_table(AF_ATF_TABLE_GROUPS);
     }
+    if ($db->table_exists(AF_ATF_TABLE_PREFILL)) {
+        $db->drop_table(AF_ATF_TABLE_PREFILL);
+    }
 
     af_atf_remove_settings();
     af_atf_rebuild_cache(true);
@@ -261,6 +266,7 @@ function af_advancedthreadfields_activate(): void
 
     af_atf_ensure_settings();
     af_atf_db_ensure_group_columns();
+    af_atf_db_ensure_prefill_table();
     af_atf_install_templates();
 
     af_atf_apply_template_edits();
@@ -271,6 +277,106 @@ function af_advancedthreadfields_activate(): void
 
     af_atf_seed_character_contract_fields();
     af_atf_rebuild_cache(true);
+}
+
+function af_atf_db_ensure_prefill_table(): void
+{
+    global $db;
+
+    if (!is_object($db) || $db->table_exists(AF_ATF_TABLE_PREFILL)) {
+        return;
+    }
+
+    $db->write_query("
+        CREATE TABLE `".TABLE_PREFIX.AF_ATF_TABLE_PREFILL."` (
+          `token` CHAR(64) NOT NULL,
+          `uid` INT UNSIGNED NOT NULL DEFAULT 0,
+          `forum_id` INT UNSIGNED NOT NULL DEFAULT 0,
+          `mechanic` VARCHAR(16) NOT NULL DEFAULT '',
+          `payload_json` MEDIUMTEXT NOT NULL,
+          `created_at` INT UNSIGNED NOT NULL DEFAULT 0,
+          `expires_at` INT UNSIGNED NOT NULL DEFAULT 0,
+          PRIMARY KEY (`token`),
+          KEY `uid_forum` (`uid`,`forum_id`),
+          KEY `expires_at` (`expires_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+}
+
+function af_atf_prefill_store_save(string $token, array $payload): bool
+{
+    global $db;
+
+    $token = strtolower(trim($token));
+    if (!preg_match('~^[a-f0-9]{16,128}$~', $token) || !is_object($db)) {
+        return false;
+    }
+
+    af_atf_db_ensure_prefill_table();
+    if (!$db->table_exists(AF_ATF_TABLE_PREFILL)) {
+        return false;
+    }
+
+    $values = (array)($payload['values'] ?? []);
+    $json = json_encode($values, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($json)) {
+        $json = '{}';
+    }
+
+    $row = [
+        'token' => $db->escape_string($token),
+        'uid' => (int)($payload['uid'] ?? 0),
+        'forum_id' => (int)($payload['forum_id'] ?? 0),
+        'mechanic' => $db->escape_string((string)($payload['mechanic'] ?? '')),
+        'payload_json' => $db->escape_string($json),
+        'created_at' => (int)($payload['created_at'] ?? TIME_NOW),
+        'expires_at' => (int)($payload['expires_at'] ?? (TIME_NOW + 900)),
+    ];
+
+    $db->delete_query(AF_ATF_TABLE_PREFILL, "token='" . $row['token'] . "'");
+    $db->insert_query(AF_ATF_TABLE_PREFILL, $row);
+    $db->delete_query(AF_ATF_TABLE_PREFILL, 'expires_at<' . (int)(TIME_NOW - 3600));
+
+    return true;
+}
+
+function af_atf_prefill_store_consume(string $token, int $uid, int $fid): array
+{
+    global $db;
+
+    $token = strtolower(trim($token));
+    if (!preg_match('~^[a-f0-9]{16,128}$~', $token) || $uid <= 0 || $fid <= 0 || !is_object($db)) {
+        return [];
+    }
+    if (!$db->table_exists(AF_ATF_TABLE_PREFILL)) {
+        return [];
+    }
+
+    $row = $db->fetch_array($db->simple_select(
+        AF_ATF_TABLE_PREFILL,
+        '*',
+        "token='" . $db->escape_string($token) . "'",
+        ['limit' => 1]
+    ));
+    if (!$row) {
+        return [];
+    }
+
+    if ((int)($row['uid'] ?? 0) !== $uid || (int)($row['forum_id'] ?? 0) !== $fid || (int)($row['expires_at'] ?? 0) < TIME_NOW) {
+        return [];
+    }
+
+    $values = json_decode((string)($row['payload_json'] ?? '{}'), true);
+    if (!is_array($values)) {
+        $values = [];
+    }
+
+    $db->delete_query(AF_ATF_TABLE_PREFILL, "token='" . $db->escape_string($token) . "'");
+
+    return [
+        'values' => $values,
+        'mechanic' => (string)($row['mechanic'] ?? ''),
+    ];
 }
 
 
@@ -1923,19 +2029,29 @@ function af_atf_boot_prefill_from_token(int $fid): void
         return;
     }
 
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    $stored = [];
+    if (function_exists('af_atf_prefill_store_consume')) {
+        $stored = af_atf_prefill_store_consume($token, $uid, $fid);
+    }
+    if (!empty($stored)) {
+        $values = (array)($stored['values'] ?? []);
+        if (!empty($values)) {
+            $GLOBALS['af_atf_prefill_named_values'] = $values;
+        }
+        $mechanic = trim((string)($stored['mechanic'] ?? ''));
+        if ($mechanic === 'arpg' || $mechanic === 'dnd') {
+            $GLOBALS['af_atf_prefill_mechanic'] = $mechanic;
+        }
+        return;
+    }
+
     $cacheKey = 'af_atf_prefill_' . strtolower($token);
     $payload = $cache->read($cacheKey);
     if (!is_array($payload)) {
         return;
     }
 
-    if (method_exists($cache, 'delete')) {
-        $cache->delete($cacheKey);
-    } else {
-        $cache->update($cacheKey, null);
-    }
-
-    $uid = (int)($mybb->user['uid'] ?? 0);
     if ($uid <= 0 || (int)($payload['uid'] ?? 0) !== $uid) {
         return;
     }
@@ -1953,6 +2069,12 @@ function af_atf_boot_prefill_from_token(int $fid): void
     $mechanic = trim((string)($payload['mechanic'] ?? ''));
     if ($mechanic === 'arpg' || $mechanic === 'dnd') {
         $GLOBALS['af_atf_prefill_mechanic'] = $mechanic;
+    }
+
+    if (method_exists($cache, 'delete')) {
+        $cache->delete($cacheKey);
+    } else {
+        $cache->update($cacheKey, null);
     }
 }
 
