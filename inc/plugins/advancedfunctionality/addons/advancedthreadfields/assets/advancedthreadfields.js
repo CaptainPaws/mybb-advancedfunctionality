@@ -280,6 +280,82 @@
       AF_ATF.__kbCatalogCtaInited = true;
 
       let modalState = null;
+      const KB_IFRAME_MODAL_STYLE_ID = "af-atf-kb-catalog-modal-frame-style";
+
+      function stashStyle(node) {
+        if (!node || !node.style) return;
+        if (node.hasAttribute("data-af-atf-kb-style-stash")) return;
+        node.setAttribute("data-af-atf-kb-style-stash", node.getAttribute("style") || "");
+      }
+
+      function applyStyle(node, property, value) {
+        if (!node || !node.style) return;
+        stashStyle(node);
+        node.style.setProperty(property, value, "important");
+      }
+
+      function resetIframePresentation(frameDoc) {
+        if (!frameDoc || !frameDoc.body) return;
+        const nodes = frameDoc.querySelectorAll("[data-af-atf-kb-style-stash]");
+        nodes.forEach((node) => {
+          const style = node.getAttribute("data-af-atf-kb-style-stash");
+          if (style) {
+            node.setAttribute("style", style);
+          } else {
+            node.removeAttribute("style");
+          }
+          node.removeAttribute("data-af-atf-kb-style-stash");
+        });
+        frameDoc.body.classList.remove("af-atf-kb-modal-frame");
+        frameDoc.documentElement.classList.remove("af-atf-kb-modal-frame");
+      }
+
+      function ensureIframeModalStyle(frameDoc) {
+        if (!frameDoc || !frameDoc.head) return;
+        if (frameDoc.getElementById(KB_IFRAME_MODAL_STYLE_ID)) return;
+
+        const style = frameDoc.createElement("style");
+        style.id = KB_IFRAME_MODAL_STYLE_ID;
+        style.textContent =
+          "html.af-atf-kb-modal-frame, body.af-atf-kb-modal-frame{margin:0!important;padding:0!important;min-height:100%!important;background:transparent!important;}" +
+          "body.af-atf-kb-modal-frame .af-kb-page{margin:0 auto!important;max-width:100%!important;padding:16px!important;box-sizing:border-box!important;}";
+        frameDoc.head.appendChild(style);
+      }
+
+      function applyIframeModalPresentation(frameDoc) {
+        if (!frameDoc || !frameDoc.body) return;
+
+        resetIframePresentation(frameDoc);
+        ensureIframeModalStyle(frameDoc);
+
+        const kbPage = frameDoc.querySelector(".af-kb-page");
+        if (!kbPage) return;
+
+        frameDoc.documentElement.classList.add("af-atf-kb-modal-frame");
+        frameDoc.body.classList.add("af-atf-kb-modal-frame");
+
+        const keepPath = new Set();
+        let cursor = kbPage;
+        while (cursor && cursor !== frameDoc.body) {
+          keepPath.add(cursor);
+          cursor = cursor.parentElement;
+        }
+
+        function hideNonPathSiblings(parent) {
+          if (!parent || !parent.children) return;
+
+          Array.prototype.forEach.call(parent.children, (child) => {
+            if (keepPath.has(child)) {
+              hideNonPathSiblings(child);
+              return;
+            }
+            applyStyle(child, "display", "none");
+          });
+        }
+
+        hideNonPathSiblings(frameDoc.body);
+        applyStyle(frameDoc.body, "overflow", "auto");
+      }
 
       function destroyModal() {
         AF_ATF.qsa(".af-atf-kb-catalog-modal-backdrop").forEach((node) => node.remove());
@@ -288,6 +364,9 @@
           modalState.closeBtn.removeEventListener("click", modalState.onClose);
           modalState.backdrop.removeEventListener("click", modalState.onBackdrop);
           document.removeEventListener("keydown", modalState.onKeydown);
+          if (modalState.frame && modalState.onFrameLoad) {
+            modalState.frame.removeEventListener("load", modalState.onFrameLoad);
+          }
         }
         modalState = null;
       }
@@ -342,10 +421,18 @@
         const onKeydown = (event) => {
           if (event.key === "Escape") onClose(event);
         };
+        const onFrameLoad = () => {
+          try {
+            applyIframeModalPresentation(iframe.contentDocument);
+          } catch (err) {
+            // cross-origin or inaccessible frame: keep default iframe rendering
+          }
+        };
 
         close.addEventListener("click", onClose);
         backdrop.addEventListener("click", onBackdrop);
         document.addEventListener("keydown", onKeydown);
+        iframe.addEventListener("load", onFrameLoad);
 
         modalState = {
           backdrop,
@@ -353,6 +440,8 @@
           onClose,
           onBackdrop,
           onKeydown,
+          onFrameLoad,
+          frame: iframe,
           open(src, modalTitle) {
             title.textContent = modalTitle || "Персонажи";
             iframe.src = src;
@@ -374,12 +463,9 @@
 
         event.preventDefault();
 
-        const modalUrl = new URL(href, window.location.origin);
-        modalUrl.searchParams.set("modal", "1");
-
         const modal = modalState || buildModal();
         modal.open(
-          modalUrl.toString(),
+          href,
           String(opener.getAttribute("data-af-atf-modal-title") || opener.textContent || "").trim()
         );
       });
