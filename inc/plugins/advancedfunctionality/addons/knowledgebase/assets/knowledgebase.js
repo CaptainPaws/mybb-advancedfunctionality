@@ -713,11 +713,33 @@
 
     // KB types for autocomplete endpoints (если у тебя другие — просто добавь/переименуй тут)
     var kbTypes = ['race', 'class', 'theme', 'lore', 'knowledge', 'language', 'skill', 'item', 'spell', 'perk', 'condition', 'faction'];
+    function detectKbMechanic() {
+        var rulesRoot = document.getElementById('af-kb-rules-ui');
+        if (!rulesRoot) {
+            return 'dnd';
+        }
+
+        var type = String(rulesRoot.getAttribute('data-type') || '').trim();
+        var mechanic = String(rulesRoot.getAttribute('data-mechanic') || 'dnd').trim().toLowerCase() || 'dnd';
+
+        if (/^arpg_/i.test(type)) {
+            mechanic = 'arpg';
+        }
+
+        return mechanic;
+    }
 
     function initMetaUi() {
         var root = document.getElementById('af-kb-meta-ui');
         var raw = document.getElementById('af-kb-meta-json');
         if (!root || !raw) {
+            return;
+        }
+
+        // Для ARPG верхний meta-ui блок не нужен:
+        // там уже есть отдельный envelope, а реальные media-поля живут в обычной форме записи.
+        if (detectKbMechanic() === 'arpg') {
+            root.innerHTML = '';
             return;
         }
 
@@ -730,9 +752,10 @@
         }
 
         root.innerHTML = [
-            '<div class="af-kb-row"><div><label>Tags (через запятую)</label><input type="text" id="af-kb-meta-tags" /></div></div>',
-            '<div class="af-kb-row"><div><label>Icon URL</label><input type="url" id="af-kb-meta-icon-url" /></div><div><label>Icon class</label><input type="text" id="af-kb-meta-icon-class" /></div></div>',
-            '<div class="af-kb-row"><div><label>Background URL</label><input type="url" id="af-kb-meta-bg-url" /></div><div><label>Background tab URL</label><input type="url" id="af-kb-meta-bg-tab-url" /></div></div>'
+            '<details open="open" class="af-kb-collapsible"><summary>Tags</summary><div id="af-kb-arpg-tags"></div></details>',
+            '<details open="open" class="af-kb-collapsible"><summary>Blocks</summary><div id="af-kb-arpg-blocks"></div></details>',
+            '<details open="open" class="af-kb-collapsible"><summary>Rules</summary><div id="af-kb-arpg-rules"></div></details>',
+            '<details class="af-kb-collapsible"><summary>Debug raw JSON</summary><div id="af-kb-arpg-raw"></div></details>'
         ].join('');
 
         var fields = {
@@ -747,7 +770,7 @@
         fields.iconUrl.value = meta.ui.icon_url || '';
         fields.iconClass.value = meta.ui.icon_class || '';
         fields.bgUrl.value = meta.ui.background_url || '';
-        fields.bgTabUrl.value = meta.background_tab_url || meta.ui.background_tab_url || '';
+        fields.bgTabUrl.value = meta.ui.background_tab_url || '';
 
         function syncMeta() {
             meta.tags = splitCsv(fields.tags.value);
@@ -755,7 +778,6 @@
             meta.ui.icon_class = fields.iconClass.value.trim();
             meta.ui.background_url = fields.bgUrl.value.trim();
             meta.ui.background_tab_url = fields.bgTabUrl.value.trim();
-            meta.background_tab_url = fields.bgTabUrl.value.trim();
             raw.value = JSON.stringify(meta, null, 2);
         }
 
@@ -896,85 +918,264 @@
             var payload = readJson(getFieldValue(raw) || '{}', {});
             if (!payload || typeof payload !== 'object' || Array.isArray(payload)) payload = {};
 
-            function parseJsonSafe(text, fallback) { try { return JSON.parse(text); } catch (e) { return fallback; } }
+            function parseJsonSafe(text, fallback) {
+                try { return JSON.parse(text); } catch (e) { return fallback; }
+            }
+
+            function deepClone(value) {
+                if (value == null) return value;
+                try {
+                    return JSON.parse(JSON.stringify(value));
+                } catch (e) {
+                    return value;
+                }
+            }
+
+            function isPlainObject(value) {
+                return !!value && typeof value === 'object' && !Array.isArray(value);
+            }
+
+            function deepMergeDefaults(target, defaults) {
+                if (Array.isArray(defaults)) {
+                    return Array.isArray(target) ? target : deepClone(defaults);
+                }
+
+                if (!isPlainObject(defaults)) {
+                    return target == null ? defaults : target;
+                }
+
+                var out = isPlainObject(target) ? target : {};
+                Object.keys(defaults).forEach(function (key) {
+                    var defVal = defaults[key];
+                    var curVal = out[key];
+
+                    if (Array.isArray(defVal)) {
+                        if (!Array.isArray(curVal)) {
+                            out[key] = deepClone(defVal);
+                        }
+                        return;
+                    }
+
+                    if (isPlainObject(defVal)) {
+                        out[key] = deepMergeDefaults(curVal, defVal);
+                        return;
+                    }
+
+                    if (curVal == null || curVal === '') {
+                        out[key] = defVal;
+                    }
+                });
+
+                return out;
+            }
+
             function ensureObject(parent, key) {
                 if (!parent[key] || typeof parent[key] !== 'object' || Array.isArray(parent[key])) parent[key] = {};
                 return parent[key];
             }
+
             function ensureArray(parent, key) {
                 if (!Array.isArray(parent[key])) parent[key] = [];
                 return parent[key];
             }
+
+            var typeMap = {
+                arpg_origin: 'origin',
+                arpg_archetype: 'archetype',
+                arpg_faction: 'faction',
+                arpg_lore: 'lore',
+                arpg_ability: 'ability',
+                arpg_talent: 'talent',
+                arpg_item: 'item',
+                arpg_bestiary: 'bestiary',
+                arpg_mechanics: 'service_mechanics'
+            };
+
+            var simpleTypes = ['origin', 'archetype', 'faction', 'lore'];
+            var heavyTypes = ['ability', 'talent', 'item', 'bestiary'];
+            var serviceKinds = ['mechanic_profile', 'resource_def', 'status_def', 'modifier_template', 'formula_def', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
+
+            function getRootDefaults() {
+                var defaults = (typeSchema && typeSchema.root_defaults && typeof typeSchema.root_defaults === 'object')
+                    ? deepClone(typeSchema.root_defaults)
+                    : {};
+
+                if (!defaults || typeof defaults !== 'object' || Array.isArray(defaults)) {
+                    defaults = {};
+                }
+
+                return defaults;
+            }
+
             function ensureRoot() {
+                var rootDefaults = getRootDefaults();
+
+                payload = deepMergeDefaults(payload, rootDefaults);
+
                 payload.schema = 'af_kb.arpg.meta.v1';
                 payload.mechanic = 'arpg';
+
                 if (!Array.isArray(payload.tags)) payload.tags = [];
                 var ui = ensureObject(payload, 'ui');
                 if (typeof ui.icon_class !== 'string') ui.icon_class = '';
                 if (typeof ui.icon_url !== 'string') ui.icon_url = '';
                 if (typeof ui.background_url !== 'string') ui.background_url = '';
                 if (typeof ui.background_tab_url !== 'string') ui.background_tab_url = '';
+
                 ensureArray(payload, 'blocks');
+
                 var rules = ensureObject(payload, 'rules');
                 if (typeof rules.schema !== 'string' || !rules.schema) rules.schema = 'af_kb.arpg.rules.v1';
                 if (typeof rules.version !== 'string' || !rules.version) rules.version = '1.0';
-                if (typeof rules.type_profile !== 'string') rules.type_profile = '';
+
+                var entityType = typeMap[type] || rules.type_profile || 'origin';
+                rules.type_profile = entityType;
+
+                // Влить defaults именно в rules после того, как type_profile уже известен.
+                if (rootDefaults.rules && typeof rootDefaults.rules === 'object' && !Array.isArray(rootDefaults.rules)) {
+                    payload.rules = deepMergeDefaults(payload.rules, rootDefaults.rules);
+                    rules = payload.rules;
+                }
+
                 if (typeof rules.service_kind !== 'string') rules.service_kind = '';
+                if (entityType === 'service_mechanics' && serviceKinds.indexOf(rules.service_kind) === -1) {
+                    rules.service_kind = serviceKinds[0];
+                }
+
                 rules.visibility = ensureObject(rules, 'visibility');
                 if (typeof rules.visibility.catalog !== 'boolean') rules.visibility.catalog = false;
                 if (typeof rules.visibility.search !== 'boolean') rules.visibility.search = false;
                 if (typeof rules.visibility.internal !== 'boolean') rules.visibility.internal = false;
+
+                // Страховка для arpg_item: эти поля должны существовать в payload даже до первого input/change.
+                if (entityType === 'item') {
+                    if (typeof rules.item_kind !== 'string' || !rules.item_kind) rules.item_kind = 'weapon';
+                    if (typeof rules.equip_slot !== 'string' || !rules.equip_slot) rules.equip_slot = 'weapon_one_hand';
+                    if (typeof rules.rarity !== 'string' || !rules.rarity) rules.rarity = 'common';
+                    if (typeof rules.subtype !== 'string') rules.subtype = '';
+                    if (typeof rules.progression_stage !== 'string' || !rules.progression_stage) rules.progression_stage = 'base';
+                    if (!Array.isArray(rules.base_stats)) rules.base_stats = [];
+                    if (!Array.isArray(rules.modifiers)) rules.modifiers = [];
+                    if (!Array.isArray(rules.effects)) rules.effects = [];
+                    if (!Array.isArray(rules.passive_effects)) rules.passive_effects = [];
+                    if (!Array.isArray(rules.triggers)) rules.triggers = [];
+                    if (!Array.isArray(rules.grants)) rules.grants = [];
+                    if (!Array.isArray(rules.upgrade_steps)) rules.upgrade_steps = [];
+
+                    if (typeof rules.level_min !== 'number' || !isFinite(rules.level_min)) rules.level_min = 1;
+                    if (typeof rules.level_max !== 'number' || !isFinite(rules.level_max)) rules.level_max = 100;
+                    if (typeof rules.level_cap !== 'number' || !isFinite(rules.level_cap)) rules.level_cap = 100;
+                }
             }
+
             ensureRoot();
 
-            var typeMap = {
-                arpg_origin: 'origin', arpg_archetype: 'archetype', arpg_faction: 'faction', arpg_lore: 'lore',
-                arpg_ability: 'ability', arpg_talent: 'talent', arpg_item: 'item', arpg_bestiary: 'bestiary', arpg_mechanics: 'service_mechanics'
-            };
-            var simpleTypes = ['origin', 'archetype', 'faction', 'lore'];
-            var heavyTypes = ['ability', 'talent', 'item', 'bestiary'];
-            var serviceKinds = ['mechanic_profile', 'resource_def', 'status_def', 'modifier_template', 'formula_def', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
-            var entityType = typeMap[type] || payload.rules.type_profile || 'origin';
-            payload.rules.type_profile = entityType;
-            if (entityType === 'service_mechanics' && serviceKinds.indexOf(payload.rules.service_kind) === -1) payload.rules.service_kind = serviceKinds[0];
+            var entityType = payload.rules.type_profile || typeMap[type] || 'origin';
 
             var enums = {
                 abilitySubtype: ['', 'active', 'passive', 'ultimate', 'support', 'aura', 'toggle', 'summon', 'reaction', 'movement'],
-                abilitySlot: ['', 'basic', 'skill_1', 'skill_2', 'skill_3', 'support', 'ultimate', 'passive'],
-                damageType: ['', 'physical', 'fire', 'ice', 'lightning', 'wind', 'earth', 'water', 'holy', 'dark', 'void', 'true', 'poison', 'bleed'],
-                targeting: ['', 'self', 'single_enemy', 'single_ally', 'line', 'cone', 'aoe_ground', 'aoe_around_self', 'global'],
-                itemKind: ['', 'weapon', 'armor', 'accessory', 'artifact', 'consumable', 'material', 'quest'],
-                equipSlot: ['', 'main_hand', 'off_hand', 'two_hand', 'head', 'chest', 'legs', 'hands', 'feet', 'ring', 'amulet', 'trinket'],
-                rarity: ['', 'common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic', 'set', 'unique']
+                abilitySlot: ['', 'basic', 'skill_1', 'skill_2', 'skill_3', 'support', 'ultimate', 'passive', 'custom'],
+                targeting: ['', 'self', 'single_enemy', 'single_ally', 'line', 'cone', 'aoe_ground', 'aoe_around_self', 'global', 'custom'],
+                rarity: ['', 'common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic', 'set', 'unique', 'custom'],
+                itemKind: ['', 'weapon', 'armor', 'accessory', 'artifact', 'consumable', 'material', 'quest', 'custom'],
+                equipSlot: ['', 'weapon_one_hand', 'weapon_two_hand', 'weapon_catalyst', 'weapon_ranged', 'weapon_polearm', 'head', 'chest', 'legs', 'hands', 'feet', 'ring', 'amulet', 'trinket', 'custom'],
+                talentTree: ['', 'offense', 'defense', 'support', 'utility', 'custom'],
+                talentRank: ['', 'common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'],
+                modifierMode: ['', 'flat', 'percent', 'multiplier', 'override', 'formula_ref', 'table_ref'],
+                effectKind: ['', 'damage', 'heal', 'shield', 'barrier', 'status', 'proc'],
+                grantType: ['', 'tag', 'ability_unlock', 'item_unlock', 'resource_bonus', 'passive_flag', 'custom']
             };
 
             root.innerHTML = [
-                '<div class="af-kb-help">ARPG: единый Meta JSON (schema/mechanic/tags/ui/blocks/rules).</div>',
-                '<details open="open" class="af-kb-collapsible"><summary>UI / visuals</summary><div id="af-kb-arpg-ui"></div></details>',
+                '<details open="open" class="af-kb-collapsible"><summary>UI</summary><div id="af-kb-arpg-ui"></div></details>',
                 '<details open="open" class="af-kb-collapsible"><summary>Tags</summary><div id="af-kb-arpg-tags"></div></details>',
                 '<details open="open" class="af-kb-collapsible"><summary>Blocks</summary><div id="af-kb-arpg-blocks"></div></details>',
                 '<details open="open" class="af-kb-collapsible"><summary>Rules</summary><div id="af-kb-arpg-rules"></div></details>',
                 '<details class="af-kb-collapsible"><summary>Debug raw JSON</summary><div id="af-kb-arpg-raw"></div></details>'
             ].join('');
 
-            var uiRoot = root.querySelector('#af-kb-arpg-ui');
             var tagsRoot = root.querySelector('#af-kb-arpg-tags');
             var blocksRoot = root.querySelector('#af-kb-arpg-blocks');
             var rulesRoot = root.querySelector('#af-kb-arpg-rules');
             var rawRoot = root.querySelector('#af-kb-arpg-raw');
 
-            function syncToRaw() { raw.value = JSON.stringify(payload, null, 2); syncRulesToMeta(payload); }
+            function syncToRaw() {
+                syncEntryMediaToPayload();
+                raw.value = JSON.stringify(payload, null, 2);
+                syncRulesToMeta(payload);
+            }
+
             function bindFieldSync(node, handler) {
                 if (!node || typeof handler !== 'function') return;
                 var tag = String(node.tagName || '').toUpperCase();
                 node.addEventListener((node.type === 'checkbox' || tag === 'SELECT') ? 'change' : 'input', handler);
             }
-            function addSelectOptions(sel, opts) {
-                (opts || []).forEach(function (v) {
-                    var o = document.createElement('option'); o.value = String(v); o.textContent = String(v || '—'); sel.appendChild(o);
+
+            function getEntryMediaFields() {
+                return {
+                    iconUrl: document.querySelector('[name="icon_url"]'),
+                    iconClass: document.querySelector('[name="icon_class"]'),
+                    bannerUrl: document.querySelector('[name="banner_url"]'),
+                    bgUrl: document.querySelector('[name="bg_url"]'),
+                    bgTabUrl: document.querySelector('[name="bg_tab_url"]')
+                };
+            }
+
+            function syncEntryMediaToPayload() {
+                var media = getEntryMediaFields();
+                payload.ui = payload.ui && typeof payload.ui === 'object' && !Array.isArray(payload.ui) ? payload.ui : {};
+
+                if (media.iconUrl) payload.ui.icon_url = String(media.iconUrl.value || '').trim();
+                if (media.iconClass) payload.ui.icon_class = String(media.iconClass.value || '').trim();
+                if (media.bgUrl) payload.ui.background_url = String(media.bgUrl.value || '').trim();
+                if (media.bgTabUrl) payload.ui.background_tab_url = String(media.bgTabUrl.value || '').trim();
+
+                // legacy-compatible optional key; не часть каноничного ARPG schema,
+                // но сохраняем для совместимости с текущим UI записи
+                if (media.bannerUrl) payload.ui.banner_url = String(media.bannerUrl.value || '').trim();
+            }
+
+            function bindEntryMediaFields() {
+                var media = getEntryMediaFields();
+
+                // при первом рендере — если нижние поля пусты, а payload.ui уже содержит значения,
+                // можно подставить их вниз; иначе payload.ui собираем из реальных полей формы
+                if (media.iconUrl && !media.iconUrl.value && payload.ui && payload.ui.icon_url) media.iconUrl.value = String(payload.ui.icon_url || '');
+                if (media.iconClass && !media.iconClass.value && payload.ui && payload.ui.icon_class) media.iconClass.value = String(payload.ui.icon_class || '');
+                if (media.bgUrl && !media.bgUrl.value && payload.ui && payload.ui.background_url) media.bgUrl.value = String(payload.ui.background_url || '');
+                if (media.bgTabUrl && !media.bgTabUrl.value && payload.ui && payload.ui.background_tab_url) media.bgTabUrl.value = String(payload.ui.background_tab_url || '');
+                if (media.bannerUrl && !media.bannerUrl.value && payload.ui && payload.ui.banner_url) media.bannerUrl.value = String(payload.ui.banner_url || '');
+
+                syncEntryMediaToPayload();
+
+                Object.keys(media).forEach(function (key) {
+                    var node = media[key];
+                    if (!node) return;
+
+                    node.addEventListener('input', function () {
+                        syncEntryMediaToPayload();
+                        syncToRaw();
+                    });
+
+                    node.addEventListener('change', function () {
+                        syncEntryMediaToPayload();
+                        syncToRaw();
+                    });
                 });
             }
-            function ensureRuleArray(pathKey) { return ensureArray(payload.rules, pathKey); }
+            function addSelectOptions(sel, opts) {
+                (opts || []).forEach(function (v) {
+                    var o = document.createElement('option');
+                    o.value = String(v);
+                    o.textContent = String(v || '—');
+                    sel.appendChild(o);
+                });
+            }
+
+            function ensureRuleArray(pathKey) {
+                return ensureArray(payload.rules, pathKey);
+            }
+
             function getRuleValue(pathKey, fallback) {
                 if (typeof pathKey !== 'string' || pathKey.indexOf('.') === -1) {
                     return payload.rules[pathKey] != null ? payload.rules[pathKey] : fallback;
@@ -987,6 +1188,7 @@
                 }
                 return cur != null ? cur : fallback;
             }
+
             function setRuleValue(pathKey, value) {
                 if (typeof pathKey !== 'string' || pathKey.indexOf('.') === -1) {
                     payload.rules[pathKey] = value;
@@ -1001,6 +1203,7 @@
                 }
                 cur[parts[parts.length - 1]] = value;
             }
+
             function createSection(container, title, help) {
                 var wrap = document.createElement('div');
                 wrap.className = 'af-kb-kvlist';
@@ -1008,96 +1211,202 @@
                 container.appendChild(wrap);
                 return wrap;
             }
+
             function fieldCell(row, col, onChange) {
                 var cell = document.createElement('div');
-                var label = document.createElement('label'); label.textContent = col.label; cell.appendChild(label);
+                var label = document.createElement('label');
+                label.textContent = col.label;
+                cell.appendChild(label);
+
                 var input;
-                if (col.type === 'select') { input = document.createElement('select'); addSelectOptions(input, col.options || ['']); input.value = String(row[col.key] || ''); }
-                else if (col.type === 'number') { input = document.createElement('input'); input.type = 'number'; input.value = String(numberOrZero(row[col.key] || 0)); }
-                else { input = document.createElement('input'); input.type = 'text'; input.value = row[col.key] != null ? String(row[col.key]) : ''; }
-                bindFieldSync(input, function () { row[col.key] = (col.type === 'number') ? numberOrZero(input.value) : input.value; onChange(); });
+                if (col.type === 'select') {
+                    input = document.createElement('select');
+                    addSelectOptions(input, col.options || ['']);
+                    input.value = row[col.key] != null ? String(row[col.key]) : String(col.default != null ? col.default : '');
+                    if (row[col.key] == null && col.default != null) row[col.key] = col.default;
+                } else if (col.type === 'number') {
+                    input = document.createElement('input');
+                    input.type = 'number';
+                    var numValue = row[col.key];
+                    if (numValue == null || numValue === '') {
+                        numValue = col.default != null ? col.default : 0;
+                        row[col.key] = Number(numValue);
+                    }
+                    input.value = String(numberOrZero(numValue));
+                } else {
+                    input = document.createElement('input');
+                    input.type = 'text';
+                    var textValue = row[col.key];
+                    if (textValue == null) {
+                        textValue = col.default != null ? col.default : '';
+                        row[col.key] = textValue;
+                    }
+                    input.value = String(textValue);
+                }
+
+                bindFieldSync(input, function () {
+                    row[col.key] = (col.type === 'number') ? numberOrZero(input.value) : input.value;
+                    onChange();
+                });
+
                 cell.appendChild(input);
                 return cell;
             }
+
             function renderSeededArrayEditor(container, title, key, columns, seedDefs) {
                 var wrap = createSection(container, title);
                 var list = document.createElement('div');
-                var controls = document.createElement('div'); controls.className = 'af-kb-row';
+                var controls = document.createElement('div');
+                controls.className = 'af-kb-row';
                 var select = document.createElement('select');
-                var add = document.createElement('button'); add.type = 'button'; add.className = 'af-kb-add'; add.textContent = 'Добавить';
+                var add = document.createElement('button');
+                add.type = 'button';
+                add.className = 'af-kb-add';
+                add.textContent = 'Добавить';
+
                 var arr = ensureRuleArray(key);
                 if (!Array.isArray(seedDefs) || !seedDefs.length) {
                     seedDefs = [{ key: 'default', label: 'default', seed: {} }];
                 }
-                seedDefs.forEach(function (d) { var opt = document.createElement('option'); opt.value = d.key; opt.textContent = d.label; select.appendChild(opt); });
-                controls.appendChild(select); controls.appendChild(add); wrap.appendChild(controls); wrap.appendChild(list);
+
+                seedDefs.forEach(function (d) {
+                    var opt = document.createElement('option');
+                    opt.value = d.key;
+                    opt.textContent = d.label;
+                    select.appendChild(opt);
+                });
+
+                controls.appendChild(select);
+                controls.appendChild(add);
+                wrap.appendChild(controls);
+                wrap.appendChild(list);
 
                 function getSeed() {
                     var selected = select.value;
-                    for (var i = 0; i < seedDefs.length; i++) if (seedDefs[i].key === selected) return JSON.parse(JSON.stringify(seedDefs[i].seed || {}));
+                    for (var i = 0; i < seedDefs.length; i++) {
+                        if (seedDefs[i].key === selected) return JSON.parse(JSON.stringify(seedDefs[i].seed || {}));
+                    }
                     return JSON.parse(JSON.stringify(seedDefs[0].seed || {}));
                 }
+
                 function redraw() {
                     list.innerHTML = '';
                     if (!arr.length) {
                         var empty = document.createElement('div');
                         empty.className = 'af-kb-help';
-                        var btn = document.createElement('button'); btn.type = 'button'; btn.className = 'af-kb-add'; btn.textContent = 'Добавить';
-                        btn.addEventListener('click', function () { arr.push(getSeed()); redraw(); syncToRaw(); });
+                        var btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'af-kb-add';
+                        btn.textContent = 'Добавить';
+                        btn.addEventListener('click', function () {
+                            arr.push(getSeed());
+                            redraw();
+                            syncToRaw();
+                        });
                         empty.appendChild(btn);
                         list.appendChild(empty);
                         return;
                     }
+
                     arr.forEach(function (row, idx) {
                         if (!row || typeof row !== 'object' || Array.isArray(row)) row = arr[idx] = {};
-                        var card = document.createElement('div'); card.className = 'af-kb-block-item';
-                        var grid = document.createElement('div'); grid.className = 'af-kb-row';
+                        var card = document.createElement('div');
+                        card.className = 'af-kb-block-item';
+                        var grid = document.createElement('div');
+                        grid.className = 'af-kb-row';
                         columns.forEach(function (col) { grid.appendChild(fieldCell(row, col, syncToRaw)); });
-                        var del = document.createElement('button'); del.type = 'button'; del.className = 'af-kb-remove'; del.textContent = 'Удалить';
-                        del.addEventListener('click', function () { arr.splice(idx, 1); redraw(); syncToRaw(); });
-                        card.appendChild(grid); card.appendChild(del); list.appendChild(card);
+                        var del = document.createElement('button');
+                        del.type = 'button';
+                        del.className = 'af-kb-remove';
+                        del.textContent = 'Удалить';
+                        del.addEventListener('click', function () {
+                            arr.splice(idx, 1);
+                            redraw();
+                            syncToRaw();
+                        });
+                        card.appendChild(grid);
+                        card.appendChild(del);
+                        list.appendChild(card);
                     });
                 }
-                add.addEventListener('click', function () { arr.push(getSeed()); redraw(); syncToRaw(); });
+
+                add.addEventListener('click', function () {
+                    arr.push(getSeed());
+                    redraw();
+                    syncToRaw();
+                });
+
                 redraw();
             }
+
             function renderRuleFields(container, defs, title) {
                 var wrap = createSection(container, title || 'Rule fields');
-                var grid = document.createElement('div'); grid.className = 'af-kb-row';
+                var grid = document.createElement('div');
+                grid.className = 'af-kb-row';
+
                 defs.forEach(function (def) {
                     var cell = document.createElement('div');
-                    var label = document.createElement('label'); label.textContent = def.label; cell.appendChild(label);
+                    var label = document.createElement('label');
+                    label.textContent = def.label;
+                    cell.appendChild(label);
+
+                    var currentValue = getRuleValue(
+                        def.key,
+                        Object.prototype.hasOwnProperty.call(def, 'default') ? def.default : ''
+                    );
+
+                    // Ключевой фикс:
+                    // если поле отсутствовало в payload, материализуем default сразу в rules.
+                    if (getRuleValue(def.key, null) == null && Object.prototype.hasOwnProperty.call(def, 'default')) {
+                        setRuleValue(def.key, def.type === 'number' ? numberOrZero(def.default) : def.default);
+                        currentValue = getRuleValue(def.key, def.default);
+                    }
+
                     var input;
-                    var currentValue = getRuleValue(def.key, '');
-                    if (def.type === 'select') { input = document.createElement('select'); addSelectOptions(input, def.options || ['']); input.value = String(currentValue || ''); }
-                    else if (def.type === 'number') { input = document.createElement('input'); input.type = 'number'; input.value = String(numberOrZero(currentValue || 0)); }
-                    else { input = document.createElement('input'); input.type = 'text'; input.value = currentValue != null ? String(currentValue) : ''; }
-                    bindFieldSync(input, function () { setRuleValue(def.key, (def.type === 'number') ? numberOrZero(input.value) : input.value); syncToRaw(); });
-                    cell.appendChild(input); grid.appendChild(cell);
+                    if (def.type === 'select') {
+                        input = document.createElement('select');
+                        addSelectOptions(input, def.options || ['']);
+                        input.value = String(currentValue || '');
+                    } else if (def.type === 'number') {
+                        input = document.createElement('input');
+                        input.type = 'number';
+                        input.value = String(numberOrZero(currentValue));
+                    } else {
+                        input = document.createElement('input');
+                        input.type = 'text';
+                        input.value = currentValue != null ? String(currentValue) : '';
+                    }
+
+                    bindFieldSync(input, function () {
+                        setRuleValue(def.key, (def.type === 'number') ? numberOrZero(input.value) : input.value);
+                        syncToRaw();
+                    });
+
+                    cell.appendChild(input);
+                    grid.appendChild(cell);
                 });
+
                 wrap.appendChild(grid);
             }
-
-            uiRoot.innerHTML = '<div class="af-kb-row"><div><label>icon_class</label><input id="af-arpg-ui-icon-class" type="text"></div><div><label>icon_url</label><input id="af-arpg-ui-icon-url" type="text"></div><div><label>background_url</label><input id="af-arpg-ui-bg-url" type="text"></div><div><label>background_tab_url</label><input id="af-arpg-ui-bg-tab-url" type="text"></div></div>';
-            var uiFields = ['icon_class', 'icon_url', 'background_url', 'background_tab_url'];
-            var uiIds = ['#af-arpg-ui-icon-class', '#af-arpg-ui-icon-url', '#af-arpg-ui-bg-url', '#af-arpg-ui-bg-tab-url'];
-            uiIds.forEach(function (id, idx) {
-                var node = uiRoot.querySelector(id);
-                node.value = String(payload.ui[uiFields[idx]] || '');
-                bindFieldSync(node, function () { payload.ui[uiFields[idx]] = node.value.trim(); syncToRaw(); });
-            });
 
             tagsRoot.innerHTML = '<div class="af-kb-row"><div><label>tags (csv)</label><input id="af-arpg-tags-csv" type="text"></div></div>';
             var tagsNode = tagsRoot.querySelector('#af-arpg-tags-csv');
             tagsNode.value = (payload.tags || []).join(', ');
-            bindFieldSync(tagsNode, function () { payload.tags = splitCsv(tagsNode.value); syncToRaw(); });
+            bindFieldSync(tagsNode, function () {
+                payload.tags = splitCsv(tagsNode.value);
+                syncToRaw();
+            });
 
             function renderBlocks() {
                 var blockCols = [
-                    { key: 'block_key', label: 'block_key' }, { key: 'level', label: 'level', type: 'number' },
-                    { key: 'title_ru', label: 'title.ru' }, { key: 'title_en', label: 'title.en' },
-                    { key: 'effects_json', label: 'effects (json)' }, { key: 'data_json', label: 'data (json)' }
+                    { key: 'block_key', label: 'block_key' },
+                    { key: 'level', label: 'level', type: 'number', default: 0 },
+                    { key: 'title_ru', label: 'title.ru', default: '' },
+                    { key: 'title_en', label: 'title.en', default: '' },
+                    { key: 'effects_json', label: 'effects (json)', default: '[]' },
+                    { key: 'data_json', label: 'data (json)', default: '[]' }
                 ];
+
                 var blocksCompat = payload.blocks.map(function (b) {
                     return {
                         block_key: b.block_key || '',
@@ -1108,11 +1417,17 @@
                         data_json: JSON.stringify(Array.isArray(b.data) ? b.data : [], null, 2)
                     };
                 });
+
                 payload.blocks = payload.blocks || [];
                 var wrap = createSection(blocksRoot, 'Display / lore blocks');
                 var list = document.createElement('div');
-                var add = document.createElement('button'); add.type = 'button'; add.className = 'af-kb-add'; add.textContent = 'Добавить';
-                wrap.appendChild(list); wrap.appendChild(add);
+                var add = document.createElement('button');
+                add.type = 'button';
+                add.className = 'af-kb-add';
+                add.textContent = 'Добавить';
+                wrap.appendChild(list);
+                wrap.appendChild(add);
+
                 function syncBack() {
                     payload.blocks = blocksCompat.map(function (row) {
                         return {
@@ -1123,238 +1438,388 @@
                             data: parseJsonSafe(row.data_json || '[]', [])
                         };
                     });
+                    bindEntryMediaFields();
                     syncToRaw();
                 }
+
                 function redraw() {
                     list.innerHTML = '';
                     if (!blocksCompat.length) {
-                        var hint = document.createElement('div'); hint.className = 'af-kb-help';
-                        var btn = document.createElement('button'); btn.type = 'button'; btn.className = 'af-kb-add'; btn.textContent = 'Добавить';
-                        btn.addEventListener('click', function () { blocksCompat.push({ block_key: 'lore', level: 0, title_ru: '', title_en: '', effects_json: '[]', data_json: '[]' }); redraw(); syncBack(); });
-                        hint.appendChild(btn); list.appendChild(hint); return;
-                    }
-                    blocksCompat.forEach(function (row, idx) {
-                        var card = document.createElement('div'); card.className = 'af-kb-block-item';
-                        var grid = document.createElement('div'); grid.className = 'af-kb-row';
-                        blockCols.forEach(function (col) {
-                            var cell = document.createElement('div');
-                            var label = document.createElement('label'); label.textContent = col.label; cell.appendChild(label);
-                            var input = (col.key.indexOf('_json') !== -1) ? document.createElement('textarea') : document.createElement('input');
-                            if (input.tagName === 'TEXTAREA') { input.className = 'af-kb-plain-textarea'; input.setAttribute('data-af-kb-editor-policy', 'deny'); }
-                            else { input.type = col.type || 'text'; }
-                            input.value = row[col.key] != null ? String(row[col.key]) : '';
-                            bindFieldSync(input, function () { row[col.key] = (col.type === 'number') ? numberOrZero(input.value) : input.value; syncBack(); });
-                            cell.appendChild(input); grid.appendChild(cell);
+                        var hint = document.createElement('div');
+                        hint.className = 'af-kb-help';
+                        var btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'af-kb-add';
+                        btn.textContent = 'Добавить';
+                        btn.addEventListener('click', function () {
+                            blocksCompat.push({
+                                block_key: 'overview',
+                                level: 0,
+                                title_ru: '',
+                                title_en: '',
+                                effects_json: '[]',
+                                data_json: '[]'
+                            });
+                            redraw();
+                            syncBack();
                         });
-                        var del = document.createElement('button'); del.type = 'button'; del.className = 'af-kb-remove'; del.textContent = 'Удалить';
-                        del.addEventListener('click', function () { blocksCompat.splice(idx, 1); redraw(); syncBack(); });
-                        card.appendChild(grid); card.appendChild(del); list.appendChild(card);
+                        hint.appendChild(btn);
+                        list.appendChild(hint);
+                        return;
+                    }
+
+                    blocksCompat.forEach(function (row, idx) {
+                        var card = document.createElement('div');
+                        card.className = 'af-kb-block-item';
+                        var grid = document.createElement('div');
+                        grid.className = 'af-kb-row';
+                        blockCols.forEach(function (col) { grid.appendChild(fieldCell(row, col, syncBack)); });
+                        var del = document.createElement('button');
+                        del.type = 'button';
+                        del.className = 'af-kb-remove';
+                        del.textContent = 'Удалить';
+                        del.addEventListener('click', function () {
+                            blocksCompat.splice(idx, 1);
+                            redraw();
+                            syncBack();
+                        });
+                        card.appendChild(grid);
+                        card.appendChild(del);
+                        list.appendChild(card);
                     });
                 }
-                add.addEventListener('click', function () { blocksCompat.push({ block_key: 'lore', level: 0, title_ru: '', title_en: '', effects_json: '[]', data_json: '[]' }); redraw(); syncBack(); });
+
+                add.addEventListener('click', function () {
+                    blocksCompat.push({
+                        block_key: 'overview',
+                        level: 0,
+                        title_ru: '',
+                        title_en: '',
+                        effects_json: '[]',
+                        data_json: '[]'
+                    });
+                    redraw();
+                    syncBack();
+                });
+
                 redraw();
             }
-            renderBlocks();
 
             function renderSimpleRules() {
-                renderRuleFields(rulesRoot, [
-                    { key: 'type', label: 'type' }, { key: 'subtype', label: 'subtype' }, { key: 'category', label: 'category' },
-                    { key: 'summary', label: 'summary' }, { key: 'source', label: 'source' }
-                ]);
+                renderRuleFields(rulesRoot, [{ key: 'type_profile', label: 'type_profile', default: entityType }], 'Rule fields');
+
+                if (entityType === 'origin') {
+                    renderRuleFields(rulesRoot, [
+                        { key: 'size', label: 'size', default: 'medium' },
+                        { key: 'creature_type', label: 'creature_type', default: 'humanoid' },
+                        { key: 'base_hp', label: 'base_hp', type: 'number', default: 100 },
+                        { key: 'base_damage', label: 'base_damage', type: 'number', default: 10 },
+                        { key: 'base_defense', label: 'base_defense', type: 'number', default: 5 },
+                        { key: 'movement_speed', label: 'movement_speed', type: 'number', default: 100 },
+                        { key: 'racial_bonuses_text', label: 'racial_bonuses_text', default: '' },
+                        { key: 'racial_traits_text', label: 'racial_traits_text', default: '' },
+                        { key: 'starting_notes', label: 'starting_notes', default: '' }
+                    ], 'Origin core');
+                }
+
+                if (entityType === 'archetype') {
+                    renderRuleFields(rulesRoot, [
+                        { key: 'role', label: 'role', default: 'striker' },
+                        { key: 'damage_bias', label: 'damage_bias', default: 'high' },
+                        { key: 'defense_bias', label: 'defense_bias', default: 'low' },
+                        { key: 'resource_affinity', label: 'resource_affinity', default: 'energy' },
+                        { key: 'base_damage_bonus', label: 'base_damage_bonus', type: 'number', default: 0 },
+                        { key: 'base_defense_bonus', label: 'base_defense_bonus', type: 'number', default: 0 },
+                        { key: 'slot_rules_text', label: 'slot_rules_text', default: '' },
+                        { key: 'description_notes', label: 'description_notes', default: '' }
+                    ], 'Archetype core');
+                }
+
+                if (entityType === 'faction') {
+                    renderRuleFields(rulesRoot, [
+                        { key: 'standing_model', label: 'standing_model', default: 'neutral' },
+                        { key: 'vendor_access_text', label: 'vendor_access_text', default: '' },
+                        { key: 'story_flags_text', label: 'story_flags_text', default: '' },
+                        { key: 'description_text', label: 'description_text', default: '' }
+                    ], 'Faction core');
+                }
+
+                if (entityType === 'lore') {
+                    renderRuleFields(rulesRoot, [
+                        { key: 'linked_entities_text', label: 'linked_entities_text', default: '' },
+                        { key: 'timeline_text', label: 'timeline_text', default: '' },
+                        { key: 'source_text', label: 'source_text', default: '' }
+                    ], 'Lore core');
+                }
             }
+
             function renderAbilityRules() {
                 renderRuleFields(rulesRoot, [
-                    { key: 'type', label: 'type' }, { key: 'subtype', label: 'subtype', type: 'select', options: enums.abilitySubtype },
-                    { key: 'slot', label: 'slot', type: 'select', options: enums.abilitySlot }, { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType },
-                    { key: 'targeting', label: 'targeting', type: 'select', options: enums.targeting }, { key: 'range', label: 'range', type: 'number' },
-                    { key: 'cast_time', label: 'cast_time', type: 'number' }, { key: 'cooldown', label: 'cooldown', type: 'number' },
-                    { key: 'duration', label: 'duration', type: 'number' }, { key: 'max_charges', label: 'max_charges', type: 'number' }, { key: 'level_cap', label: 'level_cap', type: 'number' }
+                    { key: 'type', label: 'type', type: 'select', options: ['', 'active', 'passive', 'ultimate'], default: 'active' },
+                    { key: 'subtype', label: 'subtype', type: 'select', options: enums.abilitySubtype, default: '' },
+                    { key: 'slot', label: 'slot', type: 'select', options: enums.abilitySlot, default: 'skill_1' },
+                    { key: 'damage_type', label: 'damage_type', default: 'physical' },
+                    { key: 'targeting', label: 'targeting', type: 'select', options: enums.targeting, default: 'single_enemy' },
+                    { key: 'range', label: 'range', type: 'number', default: 0 },
+                    { key: 'cast_time', label: 'cast_time', type: 'number', default: 0 },
+                    { key: 'cooldown', label: 'cooldown', type: 'number', default: 0 },
+                    { key: 'duration', label: 'duration', type: 'number', default: 0 },
+                    { key: 'max_charges', label: 'max_charges', type: 'number', default: 1 },
+                    { key: 'level_cap', label: 'level_cap', type: 'number', default: 20 }
+                ], 'Ability core');
+
+                renderSeededArrayEditor(rulesRoot, 'resources', 'resources', [
+                    { key: 'op', label: 'op', default: 'spend' },
+                    { key: 'resource_key', label: 'resource_key', default: '' },
+                    { key: 'value', label: 'value', type: 'number', default: 0 },
+                    { key: 'per', label: 'per', default: 'cast' },
+                    { key: 'duration', label: 'duration', type: 'number', default: 0 },
+                    { key: 'notes', label: 'notes', default: '' }
+                ], [
+                    { key: 'resource_spend', label: 'resource_spend', seed: { op: 'spend', resource_key: '', value: 0, per: 'cast', duration: 0, notes: '' } },
+                    { key: 'resource_gain', label: 'resource_gain', seed: { op: 'gain', resource_key: '', value: 0, per: 'cast', duration: 0, notes: '' } },
+                    { key: 'resource_drain', label: 'resource_drain', seed: { op: 'drain', resource_key: '', value: 0, per: 'cast', duration: 0, notes: '' } },
+                    { key: 'resource_restore', label: 'resource_restore', seed: { op: 'restore', resource_key: '', value: 0, per: 'cast', duration: 0, notes: '' } }
                 ]);
-                renderSeededArrayEditor(rulesRoot, 'resources', 'resources', [{ key: 'kind', label: 'kind' }, { key: 'resource', label: 'resource' }, { key: 'amount', label: 'amount', type: 'number' }], [
-                    { key: 'resource_spend', label: 'resource_spend', seed: { kind: 'resource_spend', resource: 'mana', amount: 10 } },
-                    { key: 'resource_gain', label: 'resource_gain', seed: { kind: 'resource_gain', resource: 'mana', amount: 10 } },
-                    { key: 'resource_drain', label: 'resource_drain', seed: { kind: 'resource_drain', resource: 'mana', amount: 5 } },
-                    { key: 'resource_restore', label: 'resource_restore', seed: { kind: 'resource_restore', resource: 'mana', amount: 15 } }
+
+                renderSeededArrayEditor(rulesRoot, 'effects', 'effects', [
+                    { key: 'kind', label: 'kind', default: 'damage' },
+                    { key: 'damage_type', label: 'damage_type', default: 'physical' },
+                    { key: 'targeting', label: 'targeting', default: 'single_enemy' },
+                    { key: 'value_mode', label: 'value_mode', default: 'flat' },
+                    { key: 'value', label: 'value', type: 'number', default: 0 },
+                    { key: 'formula_ref', label: 'formula_ref', default: '' },
+                    { key: 'duration', label: 'duration', type: 'number', default: 0 },
+                    { key: 'hit_count', label: 'hit_count', type: 'number', default: 1 },
+                    { key: 'status_key', label: 'status_key', default: '' },
+                    { key: 'notes', label: 'notes', default: '' }
+                ], [
+                    { key: 'damage', label: 'damage', seed: { kind: 'damage', damage_type: 'physical', targeting: 'single_enemy', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' } },
+                    { key: 'heal', label: 'heal', seed: { kind: 'heal', damage_type: '', targeting: 'single_ally', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' } },
+                    { key: 'shield', label: 'shield', seed: { kind: 'shield', damage_type: '', targeting: 'single_ally', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' } },
+                    { key: 'barrier', label: 'barrier', seed: { kind: 'barrier', damage_type: '', targeting: 'single_ally', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' } },
+                    { key: 'status', label: 'status', seed: { kind: 'status', damage_type: '', targeting: 'single_enemy', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' } },
+                    { key: 'proc', label: 'proc', seed: { kind: 'proc', damage_type: '', targeting: 'single_enemy', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' } }
                 ]);
-                renderSeededArrayEditor(rulesRoot, 'effects', 'effects', [{ key: 'kind', label: 'kind' }, { key: 'value', label: 'value', type: 'number' }, { key: 'status', label: 'status' }], [
-                    { key: 'damage', label: 'damage', seed: { kind: 'damage', value: 100, damage_type: 'physical' } },
-                    { key: 'heal', label: 'heal', seed: { kind: 'heal', value: 100 } }, { key: 'shield', label: 'shield', seed: { kind: 'shield', value: 100 } },
-                    { key: 'barrier', label: 'barrier', seed: { kind: 'barrier', value: 100 } }, { key: 'status', label: 'status', seed: { kind: 'status', status: 'burn', value: 1 } },
-                    { key: 'proc', label: 'proc', seed: { kind: 'proc', value: 1 } }
-                ]);
-                renderSeededArrayEditor(rulesRoot, 'modifiers', 'modifiers', [{ key: 'kind', label: 'kind' }, { key: 'stat', label: 'stat' }, { key: 'value', label: 'value', type: 'number' }], [
-                    { key: 'flat_bonus', label: 'flat_bonus', seed: { kind: 'flat_bonus', stat: 'atk', value: 10 } },
-                    { key: 'percent_bonus', label: 'percent_bonus', seed: { kind: 'percent_bonus', stat: 'atk', value: 10 } },
-                    { key: 'multiplier_bonus', label: 'multiplier_bonus', seed: { kind: 'multiplier_bonus', stat: 'atk', value: 1.1 } }
-                ]);
-                ['triggers', 'conditions', 'stacking', 'upgrade_requirements'].forEach(function (k) { renderSeededArrayEditor(rulesRoot, k, k, [{ key: 'kind', label: 'kind' }, { key: 'value', label: 'value' }], [{ key: 'default', label: 'default', seed: { kind: '', value: '' } }]); });
+
+                ['modifiers', 'triggers', 'conditions', 'stacking', 'upgrade_requirements'].forEach(function (k) {
+                    renderSeededArrayEditor(
+                        rulesRoot,
+                        k,
+                        k,
+                        [{ key: 'kind', label: 'kind', default: '' }, { key: 'value', label: 'value', default: '' }],
+                        [{ key: 'default', label: 'default', seed: { kind: '', value: '' } }]
+                    );
+                });
             }
+
             function renderTalentRules() {
                 renderRuleFields(rulesRoot, [
-                    { key: 'tree', label: 'tree' }, { key: 'tier', label: 'tier', type: 'number' }, { key: 'rank', label: 'rank', type: 'number' }, { key: 'slot_type', label: 'slot_type' },
-                    { key: 'node_label', label: 'node_label' }, { key: 'rank_weight', label: 'rank_weight', type: 'number' }, { key: 'socket_cost', label: 'socket_cost', type: 'number' }
+                    { key: 'tree', label: 'tree', type: 'select', options: enums.talentTree, default: 'offense' },
+                    { key: 'tier', label: 'tier', type: 'number', default: 1 },
+                    { key: 'rank', label: 'rank', type: 'select', options: enums.talentRank, default: 'rare' },
+                    { key: 'slot_type', label: 'slot_type', default: 'passive' },
+                    { key: 'node_label', label: 'node_label', default: '' },
+                    { key: 'rank_weight', label: 'rank_weight', type: 'number', default: 1 },
+                    { key: 'socket_cost', label: 'socket_cost', type: 'number', default: 1 }
+                ], 'Talent core');
+
+                renderSeededArrayEditor(rulesRoot, 'effects', 'effects', [
+                    { key: 'kind', label: 'kind', default: 'flat_stat_bonus' },
+                    { key: 'target', label: 'target', default: '' },
+                    { key: 'damage_type', label: 'damage_type', default: '' },
+                    { key: 'mode', label: 'mode', default: 'percent' },
+                    { key: 'value', label: 'value', type: 'number', default: 0 },
+                    { key: 'notes', label: 'notes', default: '' }
+                ], [
+                    { key: 'flat_stat_bonus', label: 'flat_stat_bonus', seed: { kind: 'flat_stat_bonus', target: '', damage_type: '', mode: 'flat', value: 0, notes: '' } },
+                    { key: 'percent_stat_bonus', label: 'percent_stat_bonus', seed: { kind: 'percent_stat_bonus', target: '', damage_type: '', mode: 'percent', value: 0, notes: '' } },
+                    { key: 'status_damage_bonus', label: 'status_damage_bonus', seed: { kind: 'status_damage_bonus', target: '', damage_type: '', mode: 'percent', value: 0, notes: '' } },
+                    { key: 'resistance_bonus', label: 'resistance_bonus', seed: { kind: 'resistance_bonus', target: '', damage_type: '', mode: 'percent', value: 0, notes: '' } },
+                    { key: 'passive_proc', label: 'passive_proc', seed: { kind: 'passive_proc', target: '', damage_type: '', mode: 'percent', value: 0, notes: '' } }
                 ]);
-                renderSeededArrayEditor(rulesRoot, 'effects', 'effects', [{ key: 'kind', label: 'kind' }, { key: 'stat', label: 'stat' }, { key: 'value', label: 'value', type: 'number' }], [
-                    { key: 'flat_stat_bonus', label: 'flat_stat_bonus', seed: { kind: 'flat_stat_bonus', stat: 'atk', value: 10 } },
-                    { key: 'percent_stat_bonus', label: 'percent_stat_bonus', seed: { kind: 'percent_stat_bonus', stat: 'atk', value: 10 } },
-                    { key: 'status_damage_bonus', label: 'status_damage_bonus', seed: { kind: 'status_damage_bonus', stat: 'status', value: 10 } },
-                    { key: 'resistance_bonus', label: 'resistance_bonus', seed: { kind: 'resistance_bonus', stat: 'resist', value: 10 } },
-                    { key: 'passive_proc', label: 'passive_proc', seed: { kind: 'passive_proc', stat: 'proc', value: 1 } }
-                ]);
-                ['passive_effects', 'modifiers', 'requirements', 'mutual_exclusives'].forEach(function (k) { renderSeededArrayEditor(rulesRoot, k, k, [{ key: 'kind', label: 'kind' }, { key: 'value', label: 'value' }], [{ key: 'default', label: 'default', seed: { kind: '', value: '' } }]); });
-                renderSeededArrayEditor(rulesRoot, 'grants', 'grants', [{ key: 'kind', label: 'kind' }, { key: 'value', label: 'value' }], [
-                    { key: 'tag', label: 'tag', seed: { kind: 'tag', value: 'tag_key' } }, { key: 'ability_unlock', label: 'ability_unlock', seed: { kind: 'ability_unlock', value: 'ability_key' } },
-                    { key: 'item_unlock', label: 'item_unlock', seed: { kind: 'item_unlock', value: 'item_key' } }, { key: 'resource_bonus', label: 'resource_bonus', seed: { kind: 'resource_bonus', value: 'mana:+10' } },
-                    { key: 'passive_flag', label: 'passive_flag', seed: { kind: 'passive_flag', value: 'flag_key' } }
+
+                ['passive_effects', 'modifiers', 'requirements', 'mutual_exclusives'].forEach(function (k) {
+                    renderSeededArrayEditor(
+                        rulesRoot,
+                        k,
+                        k,
+                        [{ key: 'kind', label: 'kind', default: '' }, { key: 'value', label: 'value', default: '' }],
+                        [{ key: 'default', label: 'default', seed: { kind: '', value: '' } }]
+                    );
+                });
+
+                renderSeededArrayEditor(rulesRoot, 'grants', 'grants', [
+                    { key: 'grant_type', label: 'grant_type', default: 'tag' },
+                    { key: 'value', label: 'value', default: '' },
+                    { key: 'notes', label: 'notes', default: '' }
+                ], [
+                    { key: 'tag', label: 'tag', seed: { grant_type: 'tag', value: '', notes: '' } },
+                    { key: 'ability_unlock', label: 'ability_unlock', seed: { grant_type: 'ability_unlock', value: '', notes: '' } },
+                    { key: 'item_unlock', label: 'item_unlock', seed: { grant_type: 'item_unlock', value: '', notes: '' } },
+                    { key: 'resource_bonus', label: 'resource_bonus', seed: { grant_type: 'resource_bonus', value: '', notes: '' } },
+                    { key: 'passive_flag', label: 'passive_flag', seed: { grant_type: 'passive_flag', value: '', notes: '' } }
                 ]);
             }
+
             function renderItemRules() {
                 renderRuleFields(rulesRoot, [
-                    { key: 'item_kind', label: 'item_kind', type: 'select', options: enums.itemKind }, { key: 'equip_slot', label: 'equip_slot', type: 'select', options: enums.equipSlot },
-                    { key: 'rarity', label: 'rarity', type: 'select', options: enums.rarity }, { key: 'subtype', label: 'subtype' }, { key: 'level_min', label: 'level_min', type: 'number' },
-                    { key: 'level_max', label: 'level_max', type: 'number' }, { key: 'progression_stage', label: 'progression_stage' }, { key: 'level_cap', label: 'level_cap', type: 'number' }
+                    { key: 'item_kind', label: 'item_kind', type: 'select', options: enums.itemKind, default: 'weapon' },
+                    { key: 'equip_slot', label: 'equip_slot', type: 'select', options: enums.equipSlot, default: 'weapon_one_hand' },
+                    { key: 'rarity', label: 'rarity', type: 'select', options: enums.rarity, default: 'common' },
+                    { key: 'subtype', label: 'subtype', default: '' },
+                    { key: 'level_min', label: 'level_min', type: 'number', default: 1 },
+                    { key: 'level_max', label: 'level_max', type: 'number', default: 100 },
+                    { key: 'progression_stage', label: 'progression_stage', default: 'base' },
+                    { key: 'level_cap', label: 'level_cap', type: 'number', default: 100 }
+                ], 'Item core');
+
+                var itemKind = String(payload.rules.item_kind || 'weapon');
+
+                if (itemKind === 'weapon') {
+                    renderRuleFields(rulesRoot, [
+                        { key: 'weapon_class', label: 'weapon_class', default: '' },
+                        { key: 'base_damage', label: 'base_damage', type: 'number', default: 0 },
+                        { key: 'damage_type', label: 'damage_type', default: 'physical' },
+                        { key: 'attack_speed', label: 'attack_speed', type: 'number', default: 0 },
+                        { key: 'range', label: 'range', type: 'number', default: 0 },
+                        { key: 'crit_bonus', label: 'crit_bonus', type: 'number', default: 0 }
+                    ]);
+                }
+
+                if (itemKind === 'armor') {
+                    renderRuleFields(rulesRoot, [
+                        { key: 'armor_class', label: 'armor_class', default: '' },
+                        { key: 'base_defense', label: 'base_defense', type: 'number', default: 0 },
+                        { key: 'resist_profile_text', label: 'resist_profile_text', default: '' }
+                    ]);
+                }
+
+                if (itemKind === 'accessory') {
+                    renderRuleFields(rulesRoot, [
+                        { key: 'accessory_role', label: 'accessory_role', default: '' },
+                        { key: 'passive_focus_text', label: 'passive_focus_text', default: '' }
+                    ]);
+                }
+
+                if (itemKind === 'artifact') {
+                    renderRuleFields(rulesRoot, [
+                        { key: 'artifact_set_text', label: 'artifact_set_text', default: '' },
+                        { key: 'passive_focus_text', label: 'passive_focus_text', default: '' }
+                    ]);
+                }
+
+                if (itemKind === 'consumable') {
+                    renderRuleFields(rulesRoot, [
+                        { key: 'use_kind', label: 'use_kind', default: '' },
+                        { key: 'stack_max', label: 'stack_max', type: 'number', default: 1 },
+                        { key: 'use_cooldown', label: 'use_cooldown', type: 'number', default: 0 }
+                    ]);
+                }
+
+                if (itemKind === 'material') {
+                    renderRuleFields(rulesRoot, [
+                        { key: 'material_grade', label: 'material_grade', default: '' },
+                        { key: 'material_usage_text', label: 'material_usage_text', default: '' }
+                    ]);
+                }
+
+                if (itemKind === 'quest') {
+                    renderRuleFields(rulesRoot, [
+                        { key: 'quest_usage_text', label: 'quest_usage_text', default: '' }
+                    ]);
+                }
+
+                renderSeededArrayEditor(rulesRoot, 'base_stats', 'base_stats', [
+                    { key: 'stat_key', label: 'stat_key', default: '' },
+                    { key: 'mode', label: 'mode', default: 'flat' },
+                    { key: 'value', label: 'value', type: 'number', default: 0 },
+                    { key: 'notes', label: 'notes', default: '' }
+                ], [
+                    { key: 'hp', label: 'hp', seed: { stat_key: 'hp', mode: 'flat', value: 0, notes: '' } },
+                    { key: 'atk', label: 'atk', seed: { stat_key: 'atk', mode: 'flat', value: 0, notes: '' } },
+                    { key: 'def', label: 'def', seed: { stat_key: 'def', mode: 'flat', value: 0, notes: '' } },
+                    { key: 'crit_rate', label: 'crit_rate', seed: { stat_key: 'crit_rate', mode: 'flat', value: 0, notes: '' } },
+                    { key: 'crit_dmg', label: 'crit_dmg', seed: { stat_key: 'crit_dmg', mode: 'flat', value: 0, notes: '' } },
+                    { key: 'status_hit', label: 'status_hit', seed: { stat_key: 'status_hit', mode: 'flat', value: 0, notes: '' } },
+                    { key: 'status_resist', label: 'status_resist', seed: { stat_key: 'status_resist', mode: 'flat', value: 0, notes: '' } }
                 ]);
-                var itemKind = String(payload.rules.item_kind || '');
-                if (itemKind === 'weapon') renderRuleFields(rulesRoot, [{ key: 'weapon_class', label: 'weapon_class' }, { key: 'base_damage', label: 'base_damage', type: 'number' }, { key: 'damage_type', label: 'damage_type' }, { key: 'attack_speed', label: 'attack_speed', type: 'number' }, { key: 'range', label: 'range', type: 'number' }, { key: 'crit_bonus', label: 'crit_bonus', type: 'number' }]);
-                if (itemKind === 'armor') renderRuleFields(rulesRoot, [{ key: 'armor_class', label: 'armor_class' }, { key: 'base_defense', label: 'base_defense', type: 'number' }, { key: 'resist_profile_text', label: 'resist_profile_text' }]);
-                if (itemKind === 'accessory') renderRuleFields(rulesRoot, [{ key: 'accessory_role', label: 'accessory_role' }, { key: 'passive_focus_text', label: 'passive_focus_text' }]);
-                if (itemKind === 'artifact') renderRuleFields(rulesRoot, [{ key: 'artifact_set_text', label: 'artifact_set_text' }, { key: 'passive_focus_text', label: 'passive_focus_text' }]);
-                if (itemKind === 'consumable') renderRuleFields(rulesRoot, [{ key: 'use_kind', label: 'use_kind' }, { key: 'stack_max', label: 'stack_max', type: 'number' }, { key: 'use_cooldown', label: 'use_cooldown', type: 'number' }]);
-                if (itemKind === 'material') renderRuleFields(rulesRoot, [{ key: 'material_grade', label: 'material_grade' }, { key: 'material_usage_text', label: 'material_usage_text' }]);
-                if (itemKind === 'quest') renderRuleFields(rulesRoot, [{ key: 'quest_usage_text', label: 'quest_usage_text' }]);
 
-                renderSeededArrayEditor(rulesRoot, 'base_stats', 'base_stats', [{ key: 'stat', label: 'stat' }, { key: 'value', label: 'value', type: 'number' }], ['hp', 'atk', 'def', 'crit_rate', 'crit_dmg', 'status_hit', 'status_resist'].map(function (s) { return { key: s, label: s, seed: { stat: s, value: 0 } }; }));
-                ['modifiers', 'triggers', 'grants', 'upgrade_steps'].forEach(function (k) { renderSeededArrayEditor(rulesRoot, k, k, [{ key: 'kind', label: 'kind' }, { key: 'value', label: 'value' }], [{ key: 'default', label: 'default', seed: { kind: '', value: '' } }]); });
-                var effectSeeds = ['damage_proc', 'heal_proc', 'shield_proc', 'status_apply', 'on_hit_bonus', 'on_equip_bonus'].map(function (s) { return { key: s, label: s, seed: { kind: s, value: 0 } }; });
-                renderSeededArrayEditor(rulesRoot, 'effects', 'effects', [{ key: 'kind', label: 'kind' }, { key: 'value', label: 'value', type: 'number' }], effectSeeds);
-                renderSeededArrayEditor(rulesRoot, 'passive_effects', 'passive_effects', [{ key: 'kind', label: 'kind' }, { key: 'value', label: 'value', type: 'number' }], effectSeeds);
-            }
-            function renderBestiaryRules() {
-                ensureObject(payload.rules, 'combat_stats');
-                renderRuleFields(rulesRoot, [
-                    { key: 'family', label: 'family' },
-                    { key: 'archetype', label: 'archetype' },
-                    { key: 'faction', label: 'faction' },
-                    { key: 'rank', label: 'rank', type: 'select', options: ['normal', 'elite', 'boss', 'resource'] },
-                    { key: 'threat_tier', label: 'threat_tier', type: 'number' },
-                    { key: 'level', label: 'level', type: 'number' }
-                ], 'Bestiary core');
-                renderRuleFields(rulesRoot, [
-                    { key: 'combat_stats.hp', label: 'hp', type: 'number' },
-                    { key: 'combat_stats.atk', label: 'atk', type: 'number' },
-                    { key: 'combat_stats.def', label: 'def', type: 'number' },
-                    { key: 'combat_stats.armor', label: 'armor', type: 'number' },
-                    { key: 'combat_stats.crit_rate', label: 'crit_rate', type: 'number' },
-                    { key: 'combat_stats.crit_dmg', label: 'crit_dmg', type: 'number' },
-                    { key: 'combat_stats.status_hit', label: 'status_hit', type: 'number' },
-                    { key: 'combat_stats.status_resist', label: 'status_resist', type: 'number' }
-                ], 'Combat stats');
-                renderSeededArrayEditor(
-                    rulesRoot,
-                    'Resists',
-                    'resists',
-                    [{ key: 'damage_type', label: 'damage_type' }, { key: 'value', label: 'value', type: 'number' }, { key: 'notes', label: 'notes' }],
-                    [{ key: 'default', label: 'default', seed: { damage_type: 'physical', value: 0, notes: '' } }]
-                );
-                renderSeededArrayEditor(
-                    rulesRoot,
-                    'Weaknesses',
-                    'weaknesses',
-                    [{ key: 'damage_type', label: 'damage_type' }, { key: 'value', label: 'value', type: 'number' }, { key: 'notes', label: 'notes' }],
-                    [{ key: 'default', label: 'default', seed: { damage_type: 'fire', value: 0, notes: '' } }]
-                );
-                renderSeededArrayEditor(
-                    rulesRoot,
-                    'Abilities',
-                    'ability_keys',
-                    [{ key: 'ability_key', label: 'ability_key' }, { key: 'notes', label: 'notes' }],
-                    [{ key: 'ability_key', label: 'ability_key', seed: { ability_key: '', notes: '' } }]
-                );
-                renderSeededArrayEditor(
-                    rulesRoot,
-                    'Loot / rewards',
-                    'loot',
-                    [
-                        { key: 'loot_key', label: 'loot_key' },
-                        { key: 'kind', label: 'kind', type: 'select', options: ['item', 'currency', 'material', 'reward', 'custom'] },
-                        { key: 'qty_min', label: 'qty_min', type: 'number' },
-                        { key: 'qty_max', label: 'qty_max', type: 'number' },
-                        { key: 'chance', label: 'chance', type: 'number' },
-                        { key: 'notes', label: 'notes' }
-                    ],
-                    [{ key: 'default', label: 'default', seed: { loot_key: '', kind: 'item', qty_min: 1, qty_max: 1, chance: 100, notes: '' } }]
-                );
+                renderSeededArrayEditor(rulesRoot, 'modifiers', 'modifiers', [
+                    { key: 'stat_key', label: 'stat_key', default: '' },
+                    { key: 'mode', label: 'mode', default: 'percent' },
+                    { key: 'value', label: 'value', type: 'number', default: 0 },
+                    { key: 'condition_text', label: 'condition_text', default: '' },
+                    { key: 'notes', label: 'notes', default: '' }
+                ], [
+                    { key: 'default', label: 'default', seed: { stat_key: '', mode: 'percent', value: 0, condition_text: '', notes: '' } }
+                ]);
 
-                var presetWrap = createSection(rulesRoot, 'Add presets');
-                var presetControls = document.createElement('div');
-                presetControls.className = 'af-kb-row';
-                var presetDefs = [
-                    {
-                        key: 'basic_mob',
-                        label: 'базовый моб',
-                        values: {
-                            rank: 'normal',
-                            threat_tier: 1,
-                            level: 1,
-                            combat_stats: { hp: 100, atk: 10, def: 8, armor: 5, crit_rate: 5, crit_dmg: 150, status_hit: 5, status_resist: 5 }
-                        }
-                    },
-                    {
-                        key: 'elite_mob',
-                        label: 'элитный моб',
-                        values: {
-                            rank: 'elite',
-                            threat_tier: 3,
-                            level: 10,
-                            combat_stats: { hp: 500, atk: 35, def: 22, armor: 16, crit_rate: 10, crit_dmg: 175, status_hit: 15, status_resist: 12 }
-                        }
-                    },
-                    {
-                        key: 'boss',
-                        label: 'босс',
-                        values: {
-                            rank: 'boss',
-                            threat_tier: 5,
-                            level: 20,
-                            combat_stats: { hp: 2500, atk: 90, def: 45, armor: 35, crit_rate: 15, crit_dmg: 200, status_hit: 25, status_resist: 22 }
-                        }
-                    },
-                    {
-                        key: 'resource_mob',
-                        label: 'ресурсный моб',
-                        values: {
-                            rank: 'resource',
-                            threat_tier: 1,
-                            level: 1,
-                            combat_stats: { hp: 70, atk: 5, def: 4, armor: 2, crit_rate: 2, crit_dmg: 125, status_hit: 3, status_resist: 4 },
-                            loot: [{ loot_key: 'resource.node', kind: 'material', qty_min: 1, qty_max: 3, chance: 100, notes: '' }]
-                        }
-                    }
-                ];
-                presetDefs.forEach(function (presetDef) {
-                    var btn = document.createElement('button');
-                    btn.type = 'button';
-                    btn.className = 'af-kb-add';
-                    btn.textContent = presetDef.label;
-                    btn.addEventListener('click', function () {
-                        var next = deepClone(presetDef.values || {});
-                        payload.rules.rank = String(next.rank || payload.rules.rank || 'normal');
-                        payload.rules.threat_tier = numberOrZero(next.threat_tier != null ? next.threat_tier : payload.rules.threat_tier);
-                        payload.rules.level = numberOrZero(next.level != null ? next.level : payload.rules.level);
-                        payload.rules.combat_stats = deepMerge(payload.rules.combat_stats || {}, next.combat_stats || {});
-                        if (Array.isArray(next.loot)) payload.rules.loot = deepClone(next.loot);
-                        syncToRaw();
-                    });
-                    presetControls.appendChild(btn);
+                ['effects', 'passive_effects', 'triggers', 'grants', 'upgrade_steps'].forEach(function (k) {
+                    renderSeededArrayEditor(
+                        rulesRoot,
+                        k,
+                        k,
+                        [{ key: 'kind', label: 'kind', default: '' }, { key: 'value', label: 'value', default: '' }],
+                        [{ key: 'default', label: 'default', seed: { kind: '', value: '' } }]
+                    );
                 });
-                presetWrap.appendChild(presetControls);
             }
+
+            function renderBestiaryRules() {
+                renderRuleFields(rulesRoot, [
+                    { key: 'family', label: 'family', default: '' },
+                    { key: 'archetype', label: 'archetype', default: '' },
+                    { key: 'faction', label: 'faction', default: '' },
+                    { key: 'rank', label: 'rank', default: 'normal' },
+                    { key: 'threat_tier', label: 'threat_tier', type: 'number', default: 1 },
+                    { key: 'level', label: 'level', type: 'number', default: 1 }
+                ], 'Bestiary core');
+
+                renderRuleFields(rulesRoot, [
+                    { key: 'combat_stats.hp', label: 'combat_stats.hp', type: 'number', default: 0 },
+                    { key: 'combat_stats.atk', label: 'combat_stats.atk', type: 'number', default: 0 },
+                    { key: 'combat_stats.def', label: 'combat_stats.def', type: 'number', default: 0 },
+                    { key: 'combat_stats.armor', label: 'combat_stats.armor', type: 'number', default: 0 },
+                    { key: 'combat_stats.crit_rate', label: 'combat_stats.crit_rate', type: 'number', default: 0 },
+                    { key: 'combat_stats.crit_dmg', label: 'combat_stats.crit_dmg', type: 'number', default: 0 },
+                    { key: 'combat_stats.status_hit', label: 'combat_stats.status_hit', type: 'number', default: 0 },
+                    { key: 'combat_stats.status_resist', label: 'combat_stats.status_resist', type: 'number', default: 0 }
+                ], 'Combat stats');
+
+                ['resists', 'weaknesses', 'ability_keys', 'loot'].forEach(function (k) {
+                    renderSeededArrayEditor(
+                        rulesRoot,
+                        k,
+                        k,
+                        [{ key: 'kind', label: 'kind', default: '' }, { key: 'value', label: 'value', default: '' }],
+                        [{ key: 'default', label: 'default', seed: { kind: '', value: '' } }]
+                    );
+                });
+            }
+
             function renderServiceRules() {
                 payload.rules.type_profile = 'service_mechanics';
-                renderRuleFields(rulesRoot, [{ key: 'type_profile', label: 'type_profile' }, { key: 'service_kind', label: 'service_kind', type: 'select', options: serviceKinds }, { key: 'category', label: 'category' }]);
-                renderRuleFields(rulesRoot, [{ key: 'visibility.catalog', label: 'visibility.catalog' }, { key: 'visibility.search', label: 'visibility.search' }, { key: 'visibility.internal', label: 'visibility.internal' }]);
-                renderSeededArrayEditor(rulesRoot, 'entries', 'entries', [{ key: 'key', label: 'key' }, { key: 'value', label: 'value' }, { key: 'notes', label: 'notes' }], [{ key: 'default', label: 'default', seed: { key: '', value: '', notes: '' } }]);
+                renderRuleFields(rulesRoot, [
+                    { key: 'type_profile', label: 'type_profile', default: 'service_mechanics' },
+                    { key: 'service_kind', label: 'service_kind', type: 'select', options: serviceKinds, default: serviceKinds[0] },
+                    { key: 'category', label: 'category', default: 'service.mechanics' }
+                ]);
+                renderRuleFields(rulesRoot, [
+                    { key: 'visibility.catalog', label: 'visibility.catalog', default: false },
+                    { key: 'visibility.search', label: 'visibility.search', default: false },
+                    { key: 'visibility.internal', label: 'visibility.internal', default: true }
+                ]);
+                renderSeededArrayEditor(rulesRoot, 'entries', 'entries', [
+                    { key: 'key', label: 'key', default: '' },
+                    { key: 'value', label: 'value', default: '' },
+                    { key: 'notes', label: 'notes', default: '' }
+                ], [
+                    { key: 'default', label: 'default', seed: { key: '', value: '', notes: '' } }
+                ]);
             }
+
+            renderBlocks();
 
             if (simpleTypes.indexOf(entityType) !== -1) renderSimpleRules();
             if (entityType === 'ability') renderAbilityRules();
@@ -1369,12 +1834,15 @@
             rawField.value = JSON.stringify(payload, null, 2);
             rawField.addEventListener('input', function () {
                 var parsed = parseJsonSafe(rawField.value, payload);
-                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) { payload = parsed; ensureRoot(); syncToRaw(); }
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    payload = parsed;
+                    ensureRoot();
+                    syncToRaw();
+                }
             });
 
             syncToRaw();
         }
-
 
         if (mechanic === 'arpg') {
             if (typeSchema && typeSchema.rules_enabled === false) {
@@ -2880,6 +3348,13 @@
         }
 
         function syncRulesToMeta(payload) {
+            // Для ARPG payload уже является полным envelope.
+            // Нельзя повторно засовывать его в meta.rules, иначе получаем дубль:
+            // meta.ui + payload.ui + entry fields.
+            if (mechanic === 'arpg') {
+                return;
+            }
+
             var meta = readJson(getFieldValue(metaRaw) || '{}', {});
             if (!meta || typeof meta !== 'object' || Array.isArray(meta)) {
                 meta = {};
