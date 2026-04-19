@@ -5813,6 +5813,7 @@ function af_kb_get_normalized_item_profile($entry, string $consumer = 'generic')
 {
     $extract = af_kb_extract_rules_for_consumer($entry, $consumer);
     $rules = is_array($extract['rules'] ?? null) ? (array)$extract['rules'] : [];
+    $rulesNested = is_array($rules['rules'] ?? null) ? (array)$rules['rules'] : [];
     $item = is_array($rules['item'] ?? null) ? (array)$rules['item'] : [];
     $equip = is_array($item['equip'] ?? null) ? (array)$item['equip'] : [];
     $weapon = is_array($item['weapon'] ?? null) ? (array)$item['weapon'] : [];
@@ -5827,6 +5828,8 @@ function af_kb_get_normalized_item_profile($entry, string $consumer = 'generic')
         $fallbackKind = trim((string)($entry['item_kind'] ?? $entry['kind'] ?? ''));
     }
 
+    $arpgItemKind = trim((string)($rules['item_kind'] ?? $rulesNested['item_kind'] ?? ''));
+
     $profile = [
         'consumer' => $consumer,
         'mechanic_key' => (string)($extract['mechanic_key'] ?? AF_KB_DEFAULT_MECHANIC_KEY),
@@ -5834,7 +5837,7 @@ function af_kb_get_normalized_item_profile($entry, string $consumer = 'generic')
         'skip' => (bool)($extract['skip'] ?? true),
         'status' => (string)($extract['status'] ?? 'empty'),
         'reason' => (string)($extract['reason'] ?? 'rules_not_found'),
-        'item_kind' => trim((string)($item['item_kind'] ?? $item['kind'] ?? $fallbackKind)),
+        'item_kind' => trim((string)($item['item_kind'] ?? $item['kind'] ?? $arpgItemKind ?? $fallbackKind)),
         'slot' => trim((string)($item['slot'] ?? '')),
         'equip_slot' => trim((string)($equip['slot'] ?? $item['slot'] ?? '')),
         'rarity' => trim((string)($item['rarity'] ?? '')),
@@ -5849,6 +5852,9 @@ function af_kb_get_normalized_item_profile($entry, string $consumer = 'generic')
     ];
 
     if ($profile['mechanic_key'] === 'arpg') {
+        if ($profile['item_kind'] === '') {
+            $profile['item_kind'] = trim((string)($arpgItemKind !== '' ? $arpgItemKind : $fallbackKind));
+        }
         $profile['supported'] = !empty($rules) || $profile['item_kind'] !== '';
         $profile['skip'] = !$profile['supported'];
         if ($profile['status'] === 'empty' && $profile['item_kind'] !== '') {
@@ -8476,6 +8482,14 @@ function af_kb_handle_edit(): void
             $entryRulesRaw = (array)($preparedItem['rules'] ?? []);
             $metaPayload['rules'] = $entryRulesRaw;
             $itemKind = (string)($preparedItem['item_kind'] ?? $itemKind);
+        } elseif ($type === 'arpg_item') {
+            $rulesRoot = is_array($metaPayload['rules'] ?? null) ? (array)$metaPayload['rules'] : [];
+            $rulesNested = is_array($rulesRoot['rules'] ?? null) ? (array)$rulesRoot['rules'] : [];
+            $arpgKind = af_kb_normalize_item_kind((string)($rulesRoot['item_kind'] ?? $rulesNested['item_kind'] ?? ''));
+            if ($arpgKind !== '') {
+                $itemKind = $arpgKind;
+                $metaPayload['item_kind'] = $arpgKind;
+            }
         }
 
         $entryDataJsonNormalized = af_kb_normalize_json(
