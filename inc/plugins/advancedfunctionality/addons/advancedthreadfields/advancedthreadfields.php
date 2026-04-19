@@ -978,6 +978,40 @@ function af_atf_db_ensure_group_columns(): void
     }
 }
 
+function af_atf_group_cache_select_fields(): array
+{
+    global $db;
+
+    // Базовые колонки старой таблицы — считаем обязательными
+    $fields = ['gid', 'title', 'forums', 'active', 'sortorder'];
+
+    // Новые колонки из Prompt 2 — могут ещё отсутствовать на старой БД
+    $optional = [
+        'catalog_characters_url',
+        'catalog_roles_url',
+        'catalog_characters_label',
+        'catalog_roles_label',
+        'show_catalog_cta',
+    ];
+
+    if (!is_object($db) || !$db->table_exists(AF_ATF_TABLE_GROUPS)) {
+        return $fields;
+    }
+
+    // Если field_exists доступен — выбираем только реально существующие колонки
+    if (method_exists($db, 'field_exists')) {
+        foreach ($optional as $col) {
+            if ($db->field_exists($col, AF_ATF_TABLE_GROUPS)) {
+                $fields[] = $col;
+            }
+        }
+        return array_values(array_unique($fields));
+    }
+
+    // fallback: если field_exists вдруг недоступен, пробуем старый + новый набор
+    return array_values(array_unique(array_merge($fields, $optional)));
+}
+
 function af_atf_tpl_rebuild_all_caches(): void
 {
     global $db;
@@ -1363,16 +1397,19 @@ function af_atf_rebuild_cache(bool $force = false): void
     // Подтягиваем группы: именно там хранится forums/active
     $groups = [];
     if ($db->table_exists(AF_ATF_TABLE_GROUPS)) {
+        $groupSelectFields = implode(',', af_atf_group_cache_select_fields());
+
         $qg = $db->simple_select(
             AF_ATF_TABLE_GROUPS,
-            'gid,title,forums,active,sortorder,catalog_characters_url,catalog_roles_url,catalog_characters_label,catalog_roles_label,show_catalog_cta',
+            $groupSelectFields,
             '',
             ['order_by' => 'sortorder', 'order_dir' => 'ASC']
         );
+
         while ($g = $db->fetch_array($qg)) {
             $gid = (int)$g['gid'];
 
-            $forumsRaw = trim((string)$g['forums']);
+            $forumsRaw = trim((string)($g['forums'] ?? ''));
             $forumsSet = af_atf_forums_csv_to_set($forumsRaw);
 
             // expanded CSV (не обязательно, но удобно для дебага)
@@ -1383,12 +1420,14 @@ function af_atf_rebuild_cache(bool $force = false): void
 
             $groups[$gid] = [
                 'gid'            => $gid,
-                'title'          => (string)$g['title'],
+                'title'          => (string)($g['title'] ?? ''),
                 'forums_raw'     => $forumsRaw,
-                'forums_set'     => $forumsSet,       // вот это ключевое
-                'forums_expanded'=> $forumsExpanded,  // опционально
-                'active'         => (int)$g['active'],
-                'sortorder'      => (int)$g['sortorder'],
+                'forums_set'     => $forumsSet,
+                'forums_expanded'=> $forumsExpanded,
+                'active'         => (int)($g['active'] ?? 0),
+                'sortorder'      => (int)($g['sortorder'] ?? 0),
+
+                // новые поля: если колонок ещё нет в БД — спокойно даём дефолты
                 'catalog_characters_url'   => (string)($g['catalog_characters_url'] ?? ''),
                 'catalog_roles_url'        => (string)($g['catalog_roles_url'] ?? ''),
                 'catalog_characters_label' => (string)($g['catalog_characters_label'] ?? ''),
@@ -1408,9 +1447,9 @@ function af_atf_rebuild_cache(bool $force = false): void
             // IMPORTANT:
             // groupid=0 = "без группы" => считаем активным и без ограничения по форумам
             if ($row['groupid'] === 0) {
-                $row['forums'] = '';           // legacy
-                $row['forums_set'] = [];       // empty = All
-                $row['forums_expanded'] = '';  // debug
+                $row['forums'] = '';
+                $row['forums_set'] = [];
+                $row['forums_expanded'] = '';
                 $row['group_active'] = 1;
                 $row['group_title']  = '';
             } else {
@@ -1423,7 +1462,7 @@ function af_atf_rebuild_cache(bool $force = false): void
                 $row['forums_set'] = $g ? (array)$g['forums_set'] : [];
                 $row['forums_expanded'] = $g ? (string)$g['forums_expanded'] : '';
 
-                $row['group_active'] = $g ? (int)$g['active'] : 0; // если группа не найдена — поле скрываем
+                $row['group_active'] = $g ? (int)$g['active'] : 0;
                 $row['group_title']  = $g ? (string)$g['title'] : '';
             }
 
