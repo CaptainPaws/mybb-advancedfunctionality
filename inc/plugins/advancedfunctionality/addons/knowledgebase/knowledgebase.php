@@ -7822,6 +7822,91 @@ function af_kb_render_category_tree_html(array $nodes, string $type, string $act
     return $html;
 }
 
+function af_kb_find_category_path_by_key(array $nodes, string $activeKey): array
+{
+    if ($activeKey === '') {
+        return [];
+    }
+    foreach ($nodes as $node) {
+        $nodeKey = (string)($node['key'] ?? '');
+        if ($nodeKey === $activeKey) {
+            return [$node];
+        }
+        $children = isset($node['children']) && is_array($node['children']) ? $node['children'] : [];
+        if (!empty($children)) {
+            $childPath = af_kb_find_category_path_by_key($children, $activeKey);
+            if (!empty($childPath)) {
+                array_unshift($childPath, $node);
+                return $childPath;
+            }
+        }
+    }
+    return [];
+}
+
+function af_kb_render_category_top_tabs_html(array $nodes, string $type, string $activeKey = ''): string
+{
+    if (empty($nodes)) {
+        return '';
+    }
+
+    $path = af_kb_find_category_path_by_key($nodes, $activeKey);
+    $activePathKeys = [];
+    foreach ($path as $pathNode) {
+        $pathKey = (string)($pathNode['key'] ?? '');
+        if ($pathKey !== '') {
+            $activePathKeys[$pathKey] = true;
+        }
+    }
+
+    $rows = [];
+    $rootRow = '<div class="af-kb-cat-tabs-row af-kb-cat-tabs-row--root"><ul class="af-kb-cat-tabs af-kb-cat-tabs--root">';
+    $rootRow .= '<li class="af-kb-cat-tab-item' . ($activeKey === '' ? ' is-active' : '') . '"><a class="af-kb-cat-tab-link" href="misc.php?action=kb&type=' . urlencode($type) . '">All</a></li>';
+    foreach ($nodes as $node) {
+        $catKey = (string)($node['key'] ?? '');
+        if ($catKey === '') {
+            continue;
+        }
+        $title = af_kb_pick_text($node, 'title');
+        if ($title === '') {
+            $title = $catKey;
+        }
+        $isActive = isset($activePathKeys[$catKey]);
+        $rootRow .= '<li class="af-kb-cat-tab-item' . ($isActive ? ' is-active' : '') . '">'
+            . '<a class="af-kb-cat-tab-link" href="misc.php?action=kb&type=' . urlencode($type) . '&cat=' . urlencode($catKey) . '">' . htmlspecialchars_uni($title) . '</a>'
+            . '</li>';
+    }
+    $rootRow .= '</ul></div>';
+    $rows[] = $rootRow;
+
+    for ($level = 0, $pathCount = count($path); $level < $pathCount; $level++) {
+        $pathNode = $path[$level];
+        $children = isset($pathNode['children']) && is_array($pathNode['children']) ? $pathNode['children'] : [];
+        if (empty($children)) {
+            continue;
+        }
+        $levelRow = '<div class="af-kb-cat-tabs-row af-kb-cat-tabs-row--sub af-kb-cat-tabs-row--level-' . ($level + 1) . '"><ul class="af-kb-cat-tabs af-kb-cat-tabs--sub">';
+        foreach ($children as $childNode) {
+            $childKey = (string)($childNode['key'] ?? '');
+            if ($childKey === '') {
+                continue;
+            }
+            $childTitle = af_kb_pick_text($childNode, 'title');
+            if ($childTitle === '') {
+                $childTitle = $childKey;
+            }
+            $childIsActive = isset($activePathKeys[$childKey]);
+            $levelRow .= '<li class="af-kb-cat-tab-item' . ($childIsActive ? ' is-active' : '') . '">'
+                . '<a class="af-kb-cat-tab-link" href="misc.php?action=kb&type=' . urlencode($type) . '&cat=' . urlencode($childKey) . '">' . htmlspecialchars_uni($childTitle) . '</a>'
+                . '</li>';
+        }
+        $levelRow .= '</ul></div>';
+        $rows[] = $levelRow;
+    }
+
+    return empty($rows) ? '' : '<nav class="af-kb-cat-tabs-nav" aria-label="Knowledge base categories">' . implode('', $rows) . '</nav>';
+}
+
 function af_kb_handle_manage_categories(): void
 {
     global $mybb, $lang, $db;
@@ -8605,17 +8690,14 @@ function af_kb_handle_view(): void
         }
 
         $catFilterIds = [];
-        $catTreeHtml = '';
+        $catTopTabsHtml = '';
         $catSidebarTreeHtml = '';
         $currentCatId = 0;
         if (af_kb_categories_enabled()) {
             $onlyActiveCats = !af_kb_can_edit();
             $catFlat = af_kb_cat_get_flat($type, $onlyActiveCats);
             $catTreeNodes = af_kb_cat_get_tree($type, $onlyActiveCats);
-            $catTreeBody = af_kb_render_category_tree_html($catTreeNodes, $type, $catKey);
-            if ($catTreeBody !== '') {
-                $catTreeHtml = '<ul class="af-kb-cat-tree">' . $catTreeBody . '</ul>';
-            }
+            $catTopTabsHtml = af_kb_render_category_top_tabs_html($catTreeNodes, $type, $catKey);
 
             $sidebarNodes = $catTreeNodes;
             if ($catKey !== '') {
@@ -8740,8 +8822,8 @@ function af_kb_handle_view(): void
         $kb_entries_rows = $rows;
         $kb_entries_style = '';
         $kb_entries_class = '';
-        $kb_categories_tree = $catTreeHtml ?? '';
-        $kb_categories_tree_sidebar = $catSidebarTreeHtml ?: $kb_categories_tree;
+        $kb_categories_tree = $catTopTabsHtml ?? '';
+        $kb_categories_tree_sidebar = $catSidebarTreeHtml;
         $kb_categories_enabled = af_kb_categories_enabled() ? '1' : '0';
         $uiPositionRaw = (string)af_kb_get_setting('af_kb_categories_ui_position', af_kb_get_setting('af_kb_categories_ui', 'sidebar'));
         $kb_ui_position = $uiPositionRaw === 'top' ? 'top' : 'sidebar';
