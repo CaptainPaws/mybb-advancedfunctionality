@@ -8433,7 +8433,8 @@ function af_kb_handle_view(): void
 
         $activeMechanicKey = af_kb_get_catalog_active_mechanic_key();
         $typesWhere = "active=1 AND type<>'" . $db->escape_string(AF_KB_TYPE_RACE_VARIANT) . "'";
-        $typesWhere .= ' AND ' . af_kb_sql_mechanic_filter('mechanic_key', $activeMechanicKey);
+        $mechanicFilter = af_kb_sql_mechanic_filter('mechanic_key', $activeMechanicKey);
+        $typesWhere .= " AND ({$mechanicFilter} OR type='character' OR type_key='character')";
         if ($query !== '') {
             $safeQuery = $db->escape_string($query);
             $typesWhere .= " AND (title_ru LIKE '%{$safeQuery}%' OR title_en LIKE '%{$safeQuery}%')";
