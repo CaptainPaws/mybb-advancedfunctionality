@@ -985,6 +985,72 @@
     return normalized;
   }
 
+  function kbMechanicFromType(type) {
+    var normalized = normalizeKbType(type);
+    if (/^arpg_/i.test(normalized)) { return 'arpg'; }
+    if (normalized === 'all') { return 'all'; }
+    return 'dnd';
+  }
+
+  function setFilterNodeState(node, active) {
+    if (!node) { return; }
+    var label = node.closest ? node.closest('label') : null;
+    node.disabled = !active;
+    if (!active) {
+      node.value = '';
+    }
+    if (label) {
+      label.classList.toggle('is-disabled', !active);
+      label.style.opacity = active ? '' : '0.55';
+    }
+  }
+
+  function updateKbFilterUi(prefix, scope) {
+    var typeNode = kbFilterNode(prefix);
+    var normalizedType = normalizeKbType(typeNode ? typeNode.value : 'all');
+    var resolvedScope = scope && typeof scope === 'object' ? scope : {};
+    if (!Object.prototype.hasOwnProperty.call(resolvedScope, 'item_type')) {
+      resolvedScope.item_type = normalizedType === 'all' || normalizedType === 'item' || normalizedType === 'arpg_item';
+    }
+    if (!Object.prototype.hasOwnProperty.call(resolvedScope, 'spell')) {
+      resolvedScope.spell = normalizedType === 'all' || normalizedType === 'spell';
+    }
+    if (!Object.prototype.hasOwnProperty.call(resolvedScope, 'rarity')) {
+      resolvedScope.rarity = normalizedType === 'all' || normalizedType === 'item' || normalizedType === 'arpg_item';
+    }
+
+    setFilterNodeState(byId(sourcePrefix(prefix + '-kb-rarity')) || byId('af-kb-picker-rarity'), !!resolvedScope.rarity);
+    setFilterNodeState(byId(sourcePrefix(prefix + '-kb-item-type')) || byId('af-kb-picker-item-type'), !!resolvedScope.item_type);
+    var spellLevelNode = byId(sourcePrefix(prefix + '-kb-spell-level')) || byId('af-kb-picker-spell-level');
+    var spellSchoolNode = byId(sourcePrefix(prefix + '-kb-spell-school')) || byId('af-kb-picker-spell-school');
+    setFilterNodeState(spellLevelNode, !!resolvedScope.spell);
+    setFilterNodeState(spellSchoolNode, !!resolvedScope.spell);
+  }
+
+  function applyKbTypeOptions(prefix, schema) {
+    var node = kbFilterNode(prefix);
+    if (!node || !schema || !Array.isArray(schema.types)) { return; }
+
+    var current = normalizeKbType(node.value || 'all');
+    var options = [{ value: 'all', label: 'All' }];
+    schema.types.forEach(function(typeRow) {
+      if (!typeRow || !typeRow.type_key) { return; }
+      options.push({
+        value: normalizeKbType(String(typeRow.type_key)),
+        label: String(typeRow.title || typeRow.type_key)
+      });
+    });
+
+    var seen = {};
+    node.innerHTML = options.map(function(opt) {
+      if (seen[opt.value]) { return ''; }
+      seen[opt.value] = true;
+      return '<option value="' + escapeHtml(opt.value) + '">' + escapeHtml(opt.label) + '</option>';
+    }).join('');
+
+    node.value = seen[current] ? current : 'all';
+  }
+
   function kbFilterNode(prefix) {
     return byId(sourcePrefix(prefix + '-kb-type-filter')) || byId('af-kb-picker-type');
   }
@@ -1382,6 +1448,7 @@
         'shop=' + encodeURIComponent(shopCode)
           + '&q=' + encodeURIComponent(qNode ? (qNode.value || '') : '')
           + '&kb_type=' + encodeURIComponent(typeNode.value || 'item')
+          + '&mechanic_key=' + encodeURIComponent(kbMechanicFromType(typeNode.value || 'all'))
           + '&rarity=' + encodeURIComponent(rarityNode ? (rarityNode.value || '') : '')
           + '&item_type=' + encodeURIComponent(itemTypeNode ? (itemTypeNode.value || '') : '')
           + '&spell_level=' + encodeURIComponent(spellLevelNode ? (spellLevelNode.value || '') : '')
@@ -1396,6 +1463,7 @@
         }
 
         renderKbResults(r, prefix);
+        updateKbFilterUi(prefix, r && r.filter_scope ? r.filter_scope : null);
 
         if (options.enforceSelection !== false) {
           ensureKbSelectionMatchesFilter(prefix);
@@ -1780,8 +1848,16 @@
     };
 
     bindEditor('create');
+    getJSON(buildActionUrl('shop_kb_schema', 'shop=' + encodeURIComponent(shopCode)))
+      .then(function(schemaResp) {
+        if (schemaResp && schemaResp.ok) {
+          applyKbTypeOptions('create', schemaResp);
+        }
+      })
+      .catch(function() {});
     setKbSelection('create', { kb_id: '0', kb_type: 'item', kb_key: '' });
     setAppearanceSelection('create', {});
+    updateKbFilterUi('create', null);
     runKbSearch('create');
     runAppearanceSearch('create');
     loadSlots(shopCode, catId);
