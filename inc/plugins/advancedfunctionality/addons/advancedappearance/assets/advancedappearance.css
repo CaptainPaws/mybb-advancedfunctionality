@@ -479,9 +479,8 @@
 .af-apui-postbit-content,
 .af-apui-postbit-profilefields,
 .af-apui-postbit-userdetails {
-  border-radius: 14px;
-  border: 1px solid rgba(95, 105, 148, .18);
-  background: rgba(14, 18, 30, .7);
+  border-radius: 0px;
+  border: 0px solid rgba(95, 105, 148, .18);
   padding: 14px;
 }
 
