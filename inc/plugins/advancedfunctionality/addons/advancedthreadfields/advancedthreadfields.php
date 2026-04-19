@@ -918,77 +918,22 @@ function af_atf_kb_get_endpoint(): void
         }
     }
 
-    $title = af_atf_kb_pick_text($row, 'title');
-    $short = af_atf_kb_pick_text($row, 'short');
-    $body = af_atf_kb_pick_text($row, 'body');
-
-    $shortHtml = '';
-    $bodyHtml = '';
-
-    if ($short !== '') {
-        if (function_exists('af_kb_parse_message_modal') && function_exists('af_kb_sanitize_rendered_html')) {
-            $shortHtml = af_kb_sanitize_rendered_html(af_kb_parse_message_modal($short));
-        } else {
-            $shortHtml = nl2br(htmlspecialchars_uni($short));
-        }
-    }
-
-    if ($body !== '') {
-        if (function_exists('af_kb_parse_message_modal') && function_exists('af_kb_sanitize_rendered_html')) {
-            $bodyHtml = af_kb_sanitize_rendered_html(af_kb_parse_message_modal($body));
-        } else {
-            $bodyHtml = nl2br(htmlspecialchars_uni($body));
-        }
-    }
-
-    $blocks = [];
-    if ($db->table_exists('af_kb_blocks')) {
-        $bq = $db->simple_select(
-            'af_kb_blocks',
-            '*',
-            'entry_id='.(int)$row['id'],
-            ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']
-        );
-
-        while ($brow = $db->fetch_array($bq)) {
-            if (!(int)$brow['active'] && (!function_exists('af_kb_can_edit') || !af_kb_can_edit())) {
-                continue;
-            }
-
-            $blockTitle = af_atf_kb_pick_text($brow, 'title');
-            $blockContent = af_atf_kb_pick_text($brow, 'content');
-            $blockHtml = '';
-
-            if ($blockContent !== '') {
-                if (function_exists('af_kb_parse_message_modal') && function_exists('af_kb_sanitize_rendered_html')) {
-                    $blockHtml = af_kb_sanitize_rendered_html(af_kb_parse_message_modal($blockContent));
-                } else {
-                    $blockHtml = nl2br(htmlspecialchars_uni($blockContent));
-                }
-            }
-
-            if ($blockTitle === '' && $blockHtml === '') {
-                continue;
-            }
-
-            $blocks[] = [
-                'block_key' => (string)($brow['block_key'] ?? ''),
-                'title' => $blockTitle,
-                'body_html' => $blockHtml,
-            ];
-        }
-    }
+    $canEdit = function_exists('af_kb_can_edit') && af_kb_can_edit();
+    $entryPayload = function_exists('af_kb_build_entry_modal_payload')
+        ? af_kb_build_entry_modal_payload($row, $canEdit)
+        : [
+            'type' => $type,
+            'key' => $key,
+            'title' => af_atf_kb_pick_text($row, 'title'),
+            'short_html' => '',
+            'body_html' => '',
+            'sections_html' => [],
+            'blocks' => [],
+        ];
 
     af_atf_json_response([
         'ok' => 1,
-        'entry' => [
-            'type' => $type,
-            'key' => $key,
-            'title' => $title,
-            'short_html' => $shortHtml,
-            'body_html' => $bodyHtml,
-            'blocks' => $blocks,
-        ],
+        'entry' => $entryPayload,
     ]);
 }
 function af_atf_kb_race_variants_endpoint(): void
