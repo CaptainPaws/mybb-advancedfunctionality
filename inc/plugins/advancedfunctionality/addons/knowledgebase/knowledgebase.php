@@ -4324,31 +4324,73 @@ function af_kb_arpg_migrate_legacy_payload(string $type, array $payload): array
     $typeDef = af_kb_arpg_type_definition($type);
     $typeProfile = (string)($typeDef['entity_kind'] ?? '');
     $isService = !empty($typeDef['service']);
-    $hasEnvelope = isset($payload['schema']) || isset($payload['rules']) || isset($payload['mechanic']);
 
-    if (!$hasEnvelope && isset($payload['meta']) && isset($payload['data_json'])) {
-        $legacyMeta = (array)($payload['meta'] ?? []);
-        $legacyMetaRules = (array)($legacyMeta['rules'] ?? []);
-        $legacyUi = (array)($legacyMeta['ui'] ?? []);
-        $legacyDataRoot = (array)($payload['data_json'] ?? []);
-        $legacyData = (array)($legacyDataRoot['data'] ?? $legacyDataRoot['rules'] ?? $legacyDataRoot);
+    $canonicalRules = isset($payload['rules']) && is_array($payload['rules']) ? (array)$payload['rules'] : [];
+    $legacyMeta = isset($payload['meta']) && is_array($payload['meta']) ? (array)$payload['meta'] : [];
+    $legacyMetaRules = isset($legacyMeta['rules']) && is_array($legacyMeta['rules']) ? (array)$legacyMeta['rules'] : [];
+    $legacyDataRoot = isset($payload['data_json']) && is_array($payload['data_json']) ? (array)$payload['data_json'] : [];
+    $legacyData = $legacyDataRoot !== []
+        ? (array)($legacyDataRoot['data'] ?? $legacyDataRoot['rules'] ?? $legacyDataRoot)
+        : [];
+
+    $canonicalRuleKeys = array_values(array_diff(array_keys($canonicalRules), ['schema', 'type_profile', 'version']));
+    $hasMeaningfulCanonicalRules = !empty($canonicalRuleKeys);
+
+    // Важный кейс:
+    // legacy envelope уже содержит schema/mechanic/entity_kind/data_json,
+    // но ещё НЕ содержит нормальный canonical rules object.
+    $shouldUseLegacyEnvelope = $legacyDataRoot !== [] && !$hasMeaningfulCanonicalRules;
+
+    if ($shouldUseLegacyEnvelope) {
+        $legacyUi = [];
+        if (isset($payload['ui']) && is_array($payload['ui'])) {
+            $legacyUi = (array)$payload['ui'];
+        } elseif (isset($legacyMeta['ui']) && is_array($legacyMeta['ui'])) {
+            $legacyUi = (array)$legacyMeta['ui'];
+        }
+
+        $legacyBlocks = [];
+        if (isset($payload['blocks']) && is_array($payload['blocks'])) {
+            $legacyBlocks = array_values((array)$payload['blocks']);
+        } elseif (isset($legacyDataRoot['blocks']) && is_array($legacyDataRoot['blocks'])) {
+            $legacyBlocks = array_values((array)$legacyDataRoot['blocks']);
+        } elseif (isset($legacyMeta['blocks']) && is_array($legacyMeta['blocks'])) {
+            $legacyBlocks = array_values((array)$legacyMeta['blocks']);
+        }
+
         $payload = [
             'schema' => AF_KB_ARPG_META_SCHEMA,
             'mechanic' => 'arpg',
-            'tags' => (array)($legacyMeta['tags'] ?? $payload['tags'] ?? []),
+            'tags' => array_values((array)($payload['tags'] ?? $legacyMeta['tags'] ?? [])),
             'ui' => [
                 'icon_class' => (string)($legacyUi['icon_class'] ?? $legacyUi['icon'] ?? ''),
                 'icon_url' => (string)($legacyUi['icon_url'] ?? ''),
                 'background_url' => (string)($legacyUi['background_url'] ?? ''),
                 'background_tab_url' => (string)($legacyUi['background_tab_url'] ?? ''),
             ],
-            'blocks' => (array)($legacyDataRoot['blocks'] ?? $legacyMeta['blocks'] ?? []),
+            'blocks' => $legacyBlocks,
             'rules' => array_replace_recursive(
-                ['schema' => AF_KB_ARPG_RULES_SCHEMA, 'type_profile' => $typeProfile, 'version' => (string)($legacyMetaRules['version'] ?? '1.0')],
+                [
+                    'schema' => AF_KB_ARPG_RULES_SCHEMA,
+                    'type_profile' => $typeProfile,
+                    'version' => (string)($legacyMetaRules['version'] ?? $payload['version'] ?? '1.0'),
+                ],
+                $legacyMetaRules,
+                $canonicalRules,
                 $legacyData
             ),
         ];
-    } elseif (!$hasEnvelope || isset($payload['type_profile']) || isset($payload['mechanics']) || isset($payload['classification'])) {
+    } elseif (
+        empty($canonicalRules)
+        && (
+            !isset($payload['schema'])
+            || isset($payload['type_profile'])
+            || isset($payload['mechanics'])
+            || isset($payload['classification'])
+            || isset($payload['data'])
+        )
+    ) {
+        // Старый flat payload без canonical envelope.
         $legacyUi = [];
         if (isset($payload['ui']) && is_array($payload['ui'])) {
             $legacyUi = (array)$payload['ui'];
@@ -4358,16 +4400,16 @@ function af_kb_arpg_migrate_legacy_payload(string $type, array $payload): array
 
         $legacyBlocks = [];
         if (isset($payload['blocks']) && is_array($payload['blocks'])) {
-            $legacyBlocks = (array)$payload['blocks'];
+            $legacyBlocks = array_values((array)$payload['blocks']);
         } elseif (isset($payload['data_json']['blocks']) && is_array($payload['data_json']['blocks'])) {
-            $legacyBlocks = (array)$payload['data_json']['blocks'];
+            $legacyBlocks = array_values((array)$payload['data_json']['blocks']);
         }
 
         $legacyRules = (array)($payload['data'] ?? $payload['mechanics'] ?? $payload['classification'] ?? []);
         $payload = [
             'schema' => AF_KB_ARPG_META_SCHEMA,
             'mechanic' => 'arpg',
-            'tags' => (array)($payload['tags'] ?? []),
+            'tags' => array_values((array)($payload['tags'] ?? [])),
             'ui' => [
                 'icon_class' => (string)($legacyUi['icon_class'] ?? $legacyUi['icon'] ?? ''),
                 'icon_url' => (string)($legacyUi['icon_url'] ?? ''),
@@ -4376,7 +4418,11 @@ function af_kb_arpg_migrate_legacy_payload(string $type, array $payload): array
             ],
             'blocks' => $legacyBlocks,
             'rules' => array_replace_recursive(
-                ['schema' => AF_KB_ARPG_RULES_SCHEMA, 'type_profile' => $typeProfile, 'version' => '1.0'],
+                [
+                    'schema' => AF_KB_ARPG_RULES_SCHEMA,
+                    'type_profile' => $typeProfile,
+                    'version' => '1.0',
+                ],
                 $payload,
                 $legacyRules
             ),
@@ -4395,9 +4441,11 @@ function af_kb_arpg_migrate_legacy_payload(string $type, array $payload): array
 
     $payload['blocks'] = array_values(array_filter((array)$payload['blocks'], static fn($block) => is_array($block)));
     $payload['rules'] = af_kb_arpg_migrate_legacy_rules_contract($type, (array)$payload['rules']);
+
     if (trim((string)($payload['rules']['schema'] ?? '')) === '') {
         $payload['rules']['schema'] = AF_KB_ARPG_RULES_SCHEMA;
     }
+
     if ($isService) {
         $payload['rules']['type_profile'] = 'service_mechanics';
         if (trim((string)($payload['rules']['service_kind'] ?? '')) === '') {
@@ -4476,21 +4524,77 @@ function af_kb_arpg_migrate_legacy_rules_contract(string $type, array $rules): a
         $rules['requirements'] = af_kb_arpg_pick_array($rules, ['requirements', 'prerequisites']);
         $rules['mutual_exclusives'] = af_kb_arpg_pick_array($rules, ['mutual_exclusives', 'exclusive_with']);
     } elseif ($type === 'arpg_item') {
-        $rules['item_kind'] = (string)af_kb_arpg_pick_first($rules, ['item_kind', 'kind', 'item_type'], (string)($rules['item_kind'] ?? ''));
-        $rules['equip_slot'] = (string)af_kb_arpg_pick_first($rules, ['equip_slot', 'slot', 'equipment_slot'], (string)($rules['equip_slot'] ?? ''));
-        $rules['rarity'] = (string)af_kb_arpg_pick_first($rules, ['rarity', 'rank'], (string)($rules['rarity'] ?? ''));
-        $rules['subtype'] = (string)af_kb_arpg_pick_first($rules, ['subtype', 'item_subtype'], (string)($rules['subtype'] ?? ''));
-        $rules['progression_stage'] = (string)af_kb_arpg_pick_first($rules, ['progression_stage', 'stage'], (string)($rules['progression_stage'] ?? ''));
-        foreach (['level_min', 'level_max', 'level_cap', 'base_damage', 'attack_speed', 'range', 'crit_bonus', 'base_defense', 'stack_max', 'use_cooldown'] as $numericKey) {
-            $rules[$numericKey] = af_kb_arpg_pick_first($rules, [$numericKey], $rules[$numericKey] ?? null);
+        $item = (array)($rules['item'] ?? []);
+        $levelRange = (array)($item['level_range'] ?? $rules['level_range'] ?? []);
+
+        $rules['item_kind'] = (string)af_kb_arpg_pick_first(
+            $rules,
+            ['item_kind', 'kind', 'item_type'],
+            (string)af_kb_arpg_pick_first($item, ['item_kind', 'kind', 'item_type'], (string)($rules['item_kind'] ?? ''))
+        );
+        $rules['equip_slot'] = (string)af_kb_arpg_pick_first(
+            $rules,
+            ['equip_slot', 'slot', 'equipment_slot'],
+            (string)af_kb_arpg_pick_first($item, ['equip_slot', 'slot', 'equipment_slot'], (string)($rules['equip_slot'] ?? ''))
+        );
+        $rules['rarity'] = (string)af_kb_arpg_pick_first(
+            $rules,
+            ['rarity', 'rank'],
+            (string)af_kb_arpg_pick_first($item, ['rarity', 'rank'], (string)($rules['rarity'] ?? ''))
+        );
+        $rules['subtype'] = (string)af_kb_arpg_pick_first(
+            $rules,
+            ['subtype', 'item_subtype'],
+            (string)af_kb_arpg_pick_first($item, ['subtype', 'item_subtype'], (string)($rules['subtype'] ?? ''))
+        );
+        $rules['progression_stage'] = (string)af_kb_arpg_pick_first(
+            $rules,
+            ['progression_stage', 'stage'],
+            (string)af_kb_arpg_pick_first($item, ['progression_stage', 'stage'], (string)($rules['progression_stage'] ?? ''))
+        );
+
+        $rules['level_min'] = af_kb_arpg_pick_first(
+            $rules,
+            ['level_min'],
+            af_kb_arpg_pick_first($levelRange, ['min', 'level_min'], $rules['level_min'] ?? null)
+        );
+        $rules['level_max'] = af_kb_arpg_pick_first(
+            $rules,
+            ['level_max'],
+            af_kb_arpg_pick_first($levelRange, ['max', 'level_max'], $rules['level_max'] ?? null)
+        );
+
+        foreach (['level_cap', 'base_damage', 'attack_speed', 'range', 'crit_bonus', 'base_defense', 'stack_max', 'use_cooldown'] as $numericKey) {
+            $rules[$numericKey] = af_kb_arpg_pick_first(
+                $rules,
+                [$numericKey],
+                af_kb_arpg_pick_first($item, [$numericKey], $rules[$numericKey] ?? null)
+            );
         }
+
+        $rules['weapon_class'] = (string)af_kb_arpg_pick_first($rules, ['weapon_class'], (string)af_kb_arpg_pick_first($item, ['weapon_class'], (string)($rules['weapon_class'] ?? '')));
+        $rules['damage_type'] = (string)af_kb_arpg_pick_first($rules, ['damage_type'], (string)af_kb_arpg_pick_first($item, ['damage_type'], (string)($rules['damage_type'] ?? '')));
+        $rules['armor_class'] = (string)af_kb_arpg_pick_first($rules, ['armor_class'], (string)af_kb_arpg_pick_first($item, ['armor_class'], (string)($rules['armor_class'] ?? '')));
+        $rules['resist_profile_text'] = (string)af_kb_arpg_pick_first($rules, ['resist_profile_text'], (string)af_kb_arpg_pick_first($item, ['resist_profile_text'], (string)($rules['resist_profile_text'] ?? '')));
+        $rules['accessory_role'] = (string)af_kb_arpg_pick_first($rules, ['accessory_role'], (string)af_kb_arpg_pick_first($item, ['accessory_role'], (string)($rules['accessory_role'] ?? '')));
+        $rules['passive_focus_text'] = (string)af_kb_arpg_pick_first($rules, ['passive_focus_text'], (string)af_kb_arpg_pick_first($item, ['passive_focus_text'], (string)($rules['passive_focus_text'] ?? '')));
+        $rules['artifact_set_text'] = (string)af_kb_arpg_pick_first($rules, ['artifact_set_text'], (string)af_kb_arpg_pick_first($item, ['artifact_set_text'], (string)($rules['artifact_set_text'] ?? '')));
+        $rules['use_kind'] = (string)af_kb_arpg_pick_first($rules, ['use_kind'], (string)af_kb_arpg_pick_first($item, ['use_kind'], (string)($rules['use_kind'] ?? '')));
+        $rules['material_grade'] = (string)af_kb_arpg_pick_first($rules, ['material_grade'], (string)af_kb_arpg_pick_first($item, ['material_grade'], (string)($rules['material_grade'] ?? '')));
+        $rules['material_usage_text'] = (string)af_kb_arpg_pick_first($rules, ['material_usage_text'], (string)af_kb_arpg_pick_first($item, ['material_usage_text'], (string)($rules['material_usage_text'] ?? '')));
+        $rules['quest_usage_text'] = (string)af_kb_arpg_pick_first($rules, ['quest_usage_text'], (string)af_kb_arpg_pick_first($item, ['quest_usage_text'], (string)($rules['quest_usage_text'] ?? '')));
+
         $rules['base_stats'] = af_kb_arpg_pick_array($rules, ['base_stats', 'stats']);
-        $rules['modifiers'] = af_kb_arpg_pick_array($rules, ['modifiers']);
-        $rules['effects'] = af_kb_arpg_pick_array($rules, ['effects']);
-        $rules['passive_effects'] = af_kb_arpg_pick_array($rules, ['passive_effects', 'passives']);
-        $rules['triggers'] = af_kb_arpg_pick_array($rules, ['triggers']);
-        $rules['grants'] = af_kb_arpg_pick_array($rules, ['grants', 'grant_refs']);
-        $rules['upgrade_steps'] = af_kb_arpg_pick_array($rules, ['upgrade_steps', 'upgrades']);
+        if ($rules['base_stats'] === [] && isset($item['base_stats']) && is_array($item['base_stats'])) {
+            $rules['base_stats'] = array_values((array)$item['base_stats']);
+        }
+
+        foreach (['modifiers', 'effects', 'passive_effects', 'triggers', 'grants', 'upgrade_steps'] as $arrayKey) {
+            $rules[$arrayKey] = af_kb_arpg_pick_array($rules, [$arrayKey]);
+            if ($rules[$arrayKey] === [] && isset($item[$arrayKey]) && is_array($item[$arrayKey])) {
+                $rules[$arrayKey] = array_values((array)$item[$arrayKey]);
+            }
+        }
     } elseif ($type === 'arpg_bestiary') {
         $rules['family'] = (string)af_kb_arpg_pick_first($rules, ['family', 'species_family', 'creature_family'], (string)($rules['family'] ?? ''));
         $rules['archetype'] = (string)af_kb_arpg_pick_first($rules, ['archetype', 'creature_archetype'], (string)($rules['archetype'] ?? ''));
@@ -4498,6 +4602,7 @@ function af_kb_arpg_migrate_legacy_rules_contract(string $type, array $rules): a
         $rules['rank'] = (string)af_kb_arpg_pick_first($rules, ['rank', 'monster_rank'], (string)($rules['rank'] ?? ''));
         $rules['threat_tier'] = af_kb_arpg_pick_first($rules, ['threat_tier', 'threat', 'danger_tier'], $rules['threat_tier'] ?? null);
         $rules['level'] = af_kb_arpg_pick_first($rules, ['level', 'monster_level'], $rules['level'] ?? null);
+
         $legacyCombat = (array)af_kb_arpg_pick_first($rules, ['combat_stats', 'stats', 'combat'], []);
         $rules['combat_stats'] = [
             'hp' => af_kb_arpg_pick_first($legacyCombat, ['hp', 'health'], $legacyCombat['hp'] ?? 0),
@@ -4509,6 +4614,9 @@ function af_kb_arpg_migrate_legacy_rules_contract(string $type, array $rules): a
             'status_hit' => af_kb_arpg_pick_first($legacyCombat, ['status_hit', 'status_accuracy'], $legacyCombat['status_hit'] ?? 0),
             'status_resist' => af_kb_arpg_pick_first($legacyCombat, ['status_resist', 'status_resistance'], $legacyCombat['status_resist'] ?? 0),
         ];
+
+        $rules['resists'] = af_kb_arpg_pick_array($rules, ['resists']);
+        $rules['weaknesses'] = af_kb_arpg_pick_array($rules, ['weaknesses']);
         $rules['ability_keys'] = af_kb_arpg_pick_array($rules, ['ability_keys', 'abilities', 'ability_refs']);
         $rules['loot'] = af_kb_arpg_pick_array($rules, ['loot', 'loot_table', 'drops']);
     } elseif ($type === 'arpg_mechanics') {
@@ -4550,16 +4658,17 @@ function af_kb_arpg_get_payload_path(array $payload, string $path, bool &$exists
     return $cursor;
 }
 
-function af_kb_arpg_require_path(array $payload, string $path, string $error, array &$errors): bool
+function af_kb_arpg_require_path(array $payload, string $path, string $error, array &$errors, bool $allowEmpty = false): bool
 {
     $exists = false;
     $value = af_kb_arpg_get_payload_path($payload, $path, $exists);
+
     if (!$exists) {
         $errors[] = $error;
         return false;
     }
 
-    if ($value === '' || $value === null || (is_array($value) && empty($value))) {
+    if (!$allowEmpty && ($value === '' || $value === null || (is_array($value) && empty($value)))) {
         $errors[] = $error;
         return false;
     }
@@ -4633,8 +4742,16 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
         'bestiary' => ['rules.type_profile', 'rules.family', 'rules.archetype', 'rules.faction', 'rules.rank', 'rules.threat_tier', 'rules.level', 'rules.combat_stats.hp', 'rules.combat_stats.atk', 'rules.combat_stats.def', 'rules.combat_stats.armor', 'rules.combat_stats.crit_rate', 'rules.combat_stats.crit_dmg', 'rules.combat_stats.status_hit', 'rules.combat_stats.status_resist', 'rules.resists', 'rules.weaknesses', 'rules.ability_keys', 'rules.loot'],
     ];
 
+    // Для ARPG requiredMap должен проверять наличие ключа в envelope,
+    // а не требовать, чтобы каждая строка/массив уже были заполнены контентом.
     foreach ((array)($requiredMap[$entityKind] ?? []) as $requiredPath) {
-        af_kb_arpg_require_path($payload, (string)$requiredPath, 'ARPG ' . $entityKind . ' requires "' . $requiredPath . '".', $errors);
+        af_kb_arpg_require_path(
+            $payload,
+            (string)$requiredPath,
+            'ARPG ' . $entityKind . ' requires "' . $requiredPath . '".',
+            $errors,
+            true
+        );
     }
 
     if ((string)($payload['rules']['type_profile'] ?? '') !== $entityKind) {
@@ -4642,11 +4759,24 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
     }
 
     if ($entityKind === 'ability') {
+        foreach (['type', 'slot', 'damage_type', 'targeting'] as $requiredTextKey) {
+            if (trim((string)($payload['rules'][$requiredTextKey] ?? '')) === '') {
+                $errors[] = 'ARPG ability requires non-empty "rules.' . $requiredTextKey . '".';
+            }
+        }
+
+        foreach (['range', 'cast_time', 'cooldown', 'duration', 'max_charges', 'level_cap'] as $requiredNumberKey) {
+            if (!is_numeric($payload['rules'][$requiredNumberKey] ?? null)) {
+                $errors[] = 'ARPG ability requires numeric "rules.' . $requiredNumberKey . '".';
+            }
+        }
+
         foreach (['resources', 'effects', 'modifiers', 'triggers', 'conditions', 'stacking', 'upgrade_requirements'] as $arrKey) {
             if (!is_array($payload['rules'][$arrKey] ?? null)) {
                 $errors[] = 'ARPG ability: "rules.' . $arrKey . '" must be an array.';
             }
         }
+
         foreach ((array)($payload['rules']['triggers'] ?? []) as $idx => $trigger) {
             if (!is_array($trigger)) {
                 $errors[] = 'ARPG ability: trigger #' . ($idx + 1) . ' must be an object.';
@@ -4657,6 +4787,7 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
                 $errors[] = 'ARPG ability: trigger #' . ($idx + 1) . ' has invalid template_ref.';
             }
         }
+
         foreach ((array)($payload['rules']['conditions'] ?? []) as $idx => $condition) {
             if (!is_array($condition)) {
                 $errors[] = 'ARPG ability: condition #' . ($idx + 1) . ' must be an object.';
@@ -4669,18 +4800,65 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
         }
     }
 
-    if ($entityKind === 'item') {
-        $equipableKinds = ['weapon', 'armor', 'accessory', 'artifact'];
-        if (in_array((string)($payload['rules']['item_kind'] ?? ''), $equipableKinds, true) && trim((string)($payload['rules']['equip_slot'] ?? '')) === '') {
-            $errors[] = 'ARPG item requires rules.equip_slot for equipable item_kind.';
-        }
-    }
-
     if ($entityKind === 'talent') {
+        foreach (['tree', 'rank', 'slot_type'] as $requiredTextKey) {
+            if (trim((string)($payload['rules'][$requiredTextKey] ?? '')) === '') {
+                $errors[] = 'ARPG talent requires non-empty "rules.' . $requiredTextKey . '".';
+            }
+        }
+
+        foreach (['tier', 'rank_weight', 'socket_cost'] as $requiredNumberKey) {
+            if (!is_numeric($payload['rules'][$requiredNumberKey] ?? null)) {
+                $errors[] = 'ARPG talent requires numeric "rules.' . $requiredNumberKey . '".';
+            }
+        }
+
         foreach (['effects', 'passive_effects', 'modifiers', 'grants', 'requirements', 'mutual_exclusives'] as $requiredArrKey) {
             if (!is_array($payload['rules'][$requiredArrKey] ?? null)) {
                 $errors[] = 'ARPG talent requires "rules.' . $requiredArrKey . '" array.';
             }
+        }
+    }
+
+    if ($entityKind === 'item') {
+        foreach (['item_kind', 'rarity', 'progression_stage'] as $requiredTextKey) {
+            if (trim((string)($payload['rules'][$requiredTextKey] ?? '')) === '') {
+                $errors[] = 'ARPG item requires non-empty "rules.' . $requiredTextKey . '".';
+            }
+        }
+
+        // subtype должен существовать как поле контракта,
+        // но не обязан быть непустым на самом первом сохранении.
+        if (!array_key_exists('subtype', (array)($payload['rules'] ?? [])) || !is_string($payload['rules']['subtype'])) {
+            $errors[] = 'ARPG item requires string "rules.subtype".';
+        }
+
+        foreach (['level_min', 'level_max', 'level_cap'] as $requiredNumberKey) {
+            if (!is_numeric($payload['rules'][$requiredNumberKey] ?? null)) {
+                $errors[] = 'ARPG item requires numeric "rules.' . $requiredNumberKey . '".';
+            }
+        }
+
+        foreach (['base_stats', 'modifiers', 'effects', 'passive_effects', 'triggers', 'grants', 'upgrade_steps'] as $requiredArrKey) {
+            if (!is_array($payload['rules'][$requiredArrKey] ?? null)) {
+                $errors[] = 'ARPG item requires "rules.' . $requiredArrKey . '" array.';
+            }
+        }
+
+        if (
+            is_numeric($payload['rules']['level_min'] ?? null)
+            && is_numeric($payload['rules']['level_max'] ?? null)
+            && (float)$payload['rules']['level_min'] > (float)$payload['rules']['level_max']
+        ) {
+            $errors[] = 'ARPG item requires rules.level_min <= rules.level_max.';
+        }
+
+        $equipableKinds = ['weapon', 'armor', 'accessory', 'artifact'];
+        if (
+            in_array((string)($payload['rules']['item_kind'] ?? ''), $equipableKinds, true)
+            && trim((string)($payload['rules']['equip_slot'] ?? '')) === ''
+        ) {
+            $errors[] = 'ARPG item requires rules.equip_slot for equipable item_kind.';
         }
     }
 
@@ -4753,7 +4931,11 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
                     $errors[] = 'ARPG bestiary "loot" row #' . ($idx + 1) . ' requires numeric ' . $numKey . '.';
                 }
             }
-            if (is_numeric($row['qty_min'] ?? null) && is_numeric($row['qty_max'] ?? null) && (float)$row['qty_min'] > (float)$row['qty_max']) {
+            if (
+                is_numeric($row['qty_min'] ?? null)
+                && is_numeric($row['qty_max'] ?? null)
+                && (float)$row['qty_min'] > (float)$row['qty_max']
+            ) {
                 $errors[] = 'ARPG bestiary "loot" row #' . ($idx + 1) . ' requires qty_min <= qty_max.';
             }
         }
