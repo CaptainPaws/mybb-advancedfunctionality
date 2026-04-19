@@ -10448,52 +10448,84 @@ function af_kb_handle_json_get(): void
         af_kb_render_json_error($lang->af_kb_not_found ?? 'Not found', 404);
     }
 
-    $sectionsHtml = [];
-    $bq = $db->simple_select('af_kb_blocks', '*', 'entry_id='.(int)$entry['id'], ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
-    while ($row = $db->fetch_array($bq)) {
-        if (!$row['active'] && !af_kb_can_edit()) {
-            continue;
-        }
-        if (af_kb_is_technical_block($row)) {
-            continue;
-        }
+    af_kb_send_json(['entry' => af_kb_build_entry_modal_payload($entry, af_kb_can_edit())]);
+}
 
-        $blockTitle = af_kb_pick_text($row, 'title');
-        $blockContent = af_kb_pick_text($row, 'content');
-        $blockHtml = af_kb_render_block($blockContent);
-        if ($blockTitle === '' && $blockHtml === '') {
-            continue;
-        }
-        $sectionsHtml[] = [
-            'label' => $blockTitle !== '' ? $blockTitle : (string)($row['block_key'] ?? ''),
-            'html' => $blockHtml,
-        ];
-    }
+function af_kb_build_entry_modal_payload(array $entry, bool $canEdit): array
+{
+    global $db;
 
     $entryUi = af_kb_get_entry_ui($entry);
     $entryLocalized = kb_entry_localize($entry);
-    $entryBody = $entryLocalized['body'];
+    $title = (string)($entryLocalized['title'] ?? '');
+    if ($title === '') {
+        $title = (string)($entry['key'] ?? '');
+    }
+
+    $shortRendered = af_kb_render_block((string)($entryLocalized['short'] ?? ''));
+    $type = (string)($entry['type'] ?? '');
+    $typeRow = af_kb_find_type_row($type);
+    $isRu = af_kb_is_ru();
+    $bodyRendered = '';
+    if ($typeRow) {
+        $bodyRendered = $type === 'character'
+            ? af_kb_render_character_entry($entry, $typeRow, $isRu)
+            : af_kb_render_entry_ui($entry, $typeRow, $isRu);
+    }
+    if ($bodyRendered === '') {
+        $bodyRendered = af_kb_render_block((string)($entryLocalized['body'] ?? ''));
+    }
+
+    $sectionsHtml = [];
+    if ($db->table_exists('af_kb_blocks')) {
+        $bq = $db->simple_select('af_kb_blocks', '*', 'entry_id='.(int)($entry['id'] ?? 0), ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']);
+        while ($row = $db->fetch_array($bq)) {
+            if (!(int)($row['active'] ?? 0) && !$canEdit) {
+                continue;
+            }
+            if (af_kb_is_technical_block($row)) {
+                continue;
+            }
+
+            $blockTitle = af_kb_pick_text($row, 'title');
+            $blockContent = af_kb_pick_text($row, 'content');
+            $blockHtml = af_kb_render_block($blockContent);
+            if ($blockTitle === '' && $blockHtml === '') {
+                continue;
+            }
+            $sectionsHtml[] = [
+                'label' => $blockTitle !== '' ? $blockTitle : (string)($row['block_key'] ?? ''),
+                'html' => $blockHtml,
+                'block_key' => (string)($row['block_key'] ?? ''),
+            ];
+        }
+    }
+
     $entryTech = af_kb_pick_text($entry, 'tech');
     $tooltipText = af_kb_strip_tech_icon_tag($entryTech);
-    $bodyRendered  = af_kb_render_block($entryBody);
-    $tooltipHtml   = af_kb_render_block($tooltipText);
-    $techHint = af_kb_build_tech_hint(af_kb_pick_text($entry, 'tech'));
-    $payload = [
-        'entry' => [
-            'type'      => $entry['type'],
-            'key'       => $entry['key'],
-            'title'     => $entryLocalized['title'],
-            'body_html' => $bodyRendered,
-            'sections_html' => $sectionsHtml,
-            'tech_hint' => $techHint,
-            'tooltip_html' => $tooltipHtml,
-            'icon_url'  => $entryUi['icon_url'],
-            'icon_class'=> $entryUi['icon_class'],
-            'banner_url'=> $entry['banner_url'] ?? '',
-        ],
-    ];
+    $tooltipHtml = af_kb_render_block($tooltipText);
 
-    af_kb_send_json($payload);
+    return [
+        'type' => (string)($entry['type'] ?? ''),
+        'key' => (string)($entry['key'] ?? ''),
+        'title' => $title,
+        'short_html' => $shortRendered,
+        'body_html' => $bodyRendered,
+        'sections_html' => $sectionsHtml,
+        // BC для старого ATF consumer.
+        'blocks' => array_map(static function (array $block): array {
+            return [
+                'block_key' => (string)($block['block_key'] ?? ''),
+                'title' => (string)($block['label'] ?? ''),
+                'body_html' => (string)($block['html'] ?? ''),
+            ];
+        }, $sectionsHtml),
+        'tech_hint' => af_kb_build_tech_hint(af_kb_pick_text($entry, 'tech')),
+        'tooltip_html' => $tooltipHtml,
+        'icon_url' => (string)($entryUi['icon_url'] ?? ''),
+        'icon_class' => (string)($entryUi['icon_class'] ?? ''),
+        'banner_url' => (string)($entry['banner_url'] ?? ''),
+    ];
 }
 
 function af_kb_handle_json_list(): void

@@ -627,21 +627,34 @@
           }
 
           let doc = null;
+          let hasKbShell = false;
           let hasMeaningfulContent = false;
+          let hasExplicitAccessError = false;
 
           try {
             doc = iframe.contentDocument;
             applyIframeModalPresentation(doc);
+            hasKbShell = !!(
+              doc &&
+              doc.body &&
+              doc.querySelector &&
+              doc.querySelector(".af-kb-page, .af-kb-layout, .af-kb-main, .af-kb-content")
+            );
             hasMeaningfulContent = !!(
               doc &&
               doc.body &&
               String(doc.body.textContent || "").replace(/\s+/g, "").length
             );
+            hasExplicitAccessError = !!(
+              doc &&
+              doc.body &&
+              /No access|Нет доступа|Not found|Не найдено|Ошибка/i.test(String(doc.body.textContent || ""))
+            );
           } catch (err) {
             doc = null;
           }
 
-          window.requestAnimationFrame(() => {
+          window.setTimeout(() => {
             if (!doc) {
               setFallbackMessage(
                 modalState,
@@ -650,7 +663,15 @@
               return;
             }
 
-            if (!hasMeaningfulContent) {
+            if (hasExplicitAccessError) {
+              setFallbackMessage(
+                modalState,
+                "KB вернула ошибку доступа/видимости. Проверь права просмотра KB и публичность категории."
+              );
+              return;
+            }
+
+            if (!hasKbShell && !hasMeaningfulContent) {
               setFallbackMessage(
                 modalState,
                 "Контент сейчас не отрисовался. Проверь права просмотра KB и публичность категории."
@@ -659,7 +680,7 @@
             }
 
             setLoadingState(modalState, false);
-          });
+          }, 120);
         };
 
         close.addEventListener("click", onClose);
