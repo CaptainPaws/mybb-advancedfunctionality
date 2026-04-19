@@ -273,12 +273,21 @@ class AF_Admin_Advancedthreadfields
     {
         global $db, $mybb;
 
+        if (function_exists('af_atf_db_ensure_group_columns')) {
+            af_atf_db_ensure_group_columns();
+        }
+
         $isEdit = $gid > 0;
 
         $group = [
             'title'       => '',
             'description' => '',
             'forums'      => '',
+            'catalog_characters_url'   => '',
+            'catalog_roles_url'        => '',
+            'catalog_characters_label' => 'Посмотреть канонов',
+            'catalog_roles_label'      => 'Посмотреть списки ролей',
+            'show_catalog_cta'         => 0,
             'active'      => 1,
             'sortorder'   => 0,
         ];
@@ -317,6 +326,11 @@ class AF_Admin_Advancedthreadfields
 
             $active = (int)$mybb->get_input('active');
             $sortorder = (int)$mybb->get_input('sortorder');
+            $catalogCharactersUrl = trim($mybb->get_input('catalog_characters_url'));
+            $catalogRolesUrl = trim($mybb->get_input('catalog_roles_url'));
+            $catalogCharactersLabel = trim($mybb->get_input('catalog_characters_label'));
+            $catalogRolesLabel = trim($mybb->get_input('catalog_roles_label'));
+            $showCatalogCta = (int)$mybb->get_input('show_catalog_cta');
 
             if ($title === '') {
                 flash_message('Title is required', 'error');
@@ -325,6 +339,11 @@ class AF_Admin_Advancedthreadfields
                     'title'       => $db->escape_string($title),
                     'description' => $db->escape_string($description),
                     'forums'      => $db->escape_string($forums),
+                    'catalog_characters_url'   => $db->escape_string($catalogCharactersUrl),
+                    'catalog_roles_url'        => $db->escape_string($catalogRolesUrl),
+                    'catalog_characters_label' => $db->escape_string($catalogCharactersLabel),
+                    'catalog_roles_label'      => $db->escape_string($catalogRolesLabel),
+                    'show_catalog_cta'         => $showCatalogCta ? 1 : 0,
                     'active'      => (int)$active,
                     'sortorder'   => (int)$sortorder,
                 ];
@@ -348,6 +367,11 @@ class AF_Admin_Advancedthreadfields
                 'title' => $title,
                 'description' => $description,
                 'forums' => $forums,
+                'catalog_characters_url' => $catalogCharactersUrl,
+                'catalog_roles_url' => $catalogRolesUrl,
+                'catalog_characters_label' => $catalogCharactersLabel,
+                'catalog_roles_label' => $catalogRolesLabel,
+                'show_catalog_cta' => $showCatalogCta ? 1 : 0,
                 'active' => $active,
                 'sortorder' => $sortorder,
             ]);
@@ -401,6 +425,11 @@ class AF_Admin_Advancedthreadfields
         }
 
         self::row($table, 'Forums', $forumsFieldHtml . $forumsHelp);
+        self::row($table, 'Characters catalog URL', $form->generate_text_box('catalog_characters_url', $group['catalog_characters_url'], ['maxlength' => 500]));
+        self::row($table, 'Roles catalog URL', $form->generate_text_box('catalog_roles_url', $group['catalog_roles_url'], ['maxlength' => 500]));
+        self::row($table, 'Characters button label', $form->generate_text_box('catalog_characters_label', $group['catalog_characters_label'], ['maxlength' => 255]));
+        self::row($table, 'Roles button label', $form->generate_text_box('catalog_roles_label', $group['catalog_roles_label'], ['maxlength' => 255]));
+        self::row($table, 'Show catalog CTA block', $form->generate_yes_no_radio('show_catalog_cta', (int)$group['show_catalog_cta']));
 
         self::row($table, 'Sort order', $form->generate_numeric_field('sortorder', (int)$group['sortorder']));
         self::row($table, 'Active', $form->generate_yes_no_radio('active', (int)$group['active']));
