@@ -2281,7 +2281,7 @@ function af_atf_kb_get_list_by_type_any(string $type): array
     $items = [];
     $q = $db->simple_select(
         'af_kb_entries',
-        'type,`key`,title_ru,title_en,sortorder',
+        'type,`key`,title_ru,title_en,short_ru,short_en,icon_url,icon_class,sortorder',
         "type='" . $db->escape_string($type) . "' AND active=1",
         ['order_by' => 'sortorder, title_ru, title_en', 'order_dir' => 'ASC']
     );
@@ -2289,6 +2289,9 @@ function af_atf_kb_get_list_by_type_any(string $type): array
         $items[] = [
             'key' => (string)($row['key'] ?? ''),
             'title' => af_atf_kb_pick_text($row, 'title') ?: (string)($row['key'] ?? ''),
+            'short' => af_atf_kb_pick_text($row, 'short'),
+            'icon_url' => (string)($row['icon_url'] ?? ''),
+            'icon_class' => (string)($row['icon_class'] ?? ''),
         ];
     }
 
@@ -2330,6 +2333,24 @@ function af_atf_character_infer_mechanic(array $fields, array $valuesByFieldId):
         }
     }
 
+    // fallback for empty direct newthread:
+    // if contract fields are explicitly scoped to ARPG, use ARPG as initial mode.
+    foreach ($fields as $f) {
+        $fieldName = trim((string)($f['name'] ?? ''));
+        if (strpos($fieldName, 'character_') !== 0) {
+            continue;
+        }
+        $opts = af_atf_parse_options((string)($f['options'] ?? ''));
+        $mechanic = trim((string)($opts['mechanic'] ?? ''));
+        if ($mechanic === 'arpg') {
+            return 'arpg';
+        }
+        $provider = trim((string)($opts['provider'] ?? ''));
+        if ($provider !== '' && af_atf_character_provider_type($provider, 'arpg') !== '' && af_atf_character_provider_type($provider, 'dnd') === '') {
+            return 'arpg';
+        }
+    }
+
     return 'dnd';
 }
 
@@ -2340,7 +2361,9 @@ function af_atf_character_provider_type(string $provider, string $mechanic): str
 
     $map = [
         'character_race' => ['dnd' => 'kb_race', 'arpg' => 'arpg_origin'],
+        'character_origin' => ['dnd' => 'kb_race', 'arpg' => 'arpg_origin'],
         'character_class' => ['dnd' => 'kb_class', 'arpg' => 'arpg_archetype'],
+        'character_archetype' => ['dnd' => 'kb_class', 'arpg' => 'arpg_archetype'],
         'character_faction' => ['dnd' => '', 'arpg' => 'arpg_faction'],
         'character_element' => ['dnd' => '', 'arpg' => 'arpg_element'],
     ];
@@ -2521,13 +2544,14 @@ function af_atf_build_input_html(array $field, string $value): string
             $activeMechanic = af_atf_character_active_mechanic();
             $provider = trim((string)($opts['provider'] ?? ''));
             $kbType = trim((string)($opts['kb_type'] ?? ''));
+            $mechanicScope = trim((string)($opts['mechanic'] ?? ''));
+            $providerMechanic = ($mechanicScope === 'arpg' || $mechanicScope === 'dnd') ? $mechanicScope : $activeMechanic;
             if ($provider !== '') {
-                $providerType = af_atf_character_provider_type($provider, $activeMechanic);
+                $providerType = af_atf_character_provider_type($provider, $providerMechanic);
                 if ($providerType !== '') {
                     $kbType = $providerType;
                 }
             }
-            $mechanicScope = trim((string)($opts['mechanic'] ?? ''));
             $list = af_atf_kb_get_list_by_type_any($kbType);
 
             $html = '<div class="af-atf-kb-dynamic" data-character-field="' . htmlspecialchars_uni($fieldName) . '" data-mechanic-scope="' . htmlspecialchars_uni($mechanicScope) . '">';
@@ -2540,12 +2564,25 @@ function af_atf_build_input_html(array $field, string $value): string
                 }
                 $seen[$key] = true;
                 $selected = ($value === $key) ? ' selected="selected"' : '';
-                $html .= '<option value="' . htmlspecialchars_uni($key) . '"' . $selected . '>' . htmlspecialchars_uni((string)($item['title'] ?? $key)) . '</option>';
+                $label = (string)($item['title'] ?? $key);
+                $iconUrl = trim((string)($item['icon_url'] ?? ''));
+                $iconClass = trim((string)($item['icon_class'] ?? ''));
+                $tooltip = trim((string)($item['short'] ?? ''));
+                $html .= '<option value="' . htmlspecialchars_uni($key) . '"'
+                    . $selected
+                    . ($iconUrl !== '' ? ' data-icon-url="' . htmlspecialchars_uni($iconUrl) . '"' : '')
+                    . ($iconClass !== '' ? ' data-icon-class="' . htmlspecialchars_uni($iconClass) . '"' : '')
+                    . ($tooltip !== '' ? ' data-tooltip="' . htmlspecialchars_uni($tooltip) . '"' : '')
+                    . '>' . htmlspecialchars_uni($label) . '</option>';
             }
             if ($value !== '' && !isset($seen[$value])) {
                 $html .= '<option value="' . htmlspecialchars_uni($value) . '" selected="selected">' . htmlspecialchars_uni($value) . '</option>';
             }
-            $html .= '</select></div>';
+            $html .= '</select>';
+            if ($fieldName === 'character_element') {
+                $html .= '<div class="af-atf-kb-dynamic-preview" data-preview-role="element"></div>';
+            }
+            $html .= '</div>';
             return $html;
         }
 
@@ -3990,7 +4027,7 @@ function af_atf_format_value_for_display(array $field, string $val): string
     }
 
     if ($type === 'kb_dynamic' || $type === 'kb_mechanic') {
-        $label = af_atf_kb_resolve_label((string)$field['options'], $val);
+        $label = af_atf_kb_resolve_dynamic_label($field, $val);
         return htmlspecialchars_uni($label !== '' ? $label : $val);
     }
 
@@ -4145,6 +4182,47 @@ function af_atf_format_value_for_display(array $field, string $val): string
         'allow_mycode'  => $allowMycode,
         'allow_smilies' => $allowSmilies,
     ]);
+}
+
+function af_atf_kb_resolve_dynamic_label(array $field, string $key): string
+{
+    $key = trim($key);
+    if ($key === '') {
+        return '';
+    }
+
+    $opts = af_atf_parse_options((string)($field['options'] ?? ''));
+    $provider = trim((string)($opts['provider'] ?? ''));
+    $kbType = trim((string)($opts['kb_type'] ?? ''));
+    $type = trim((string)($field['type'] ?? ''));
+    $mechanic = af_atf_character_active_mechanic();
+
+    if ($type === 'kb_dynamic') {
+        $scope = trim((string)($opts['mechanic'] ?? ''));
+        if ($scope === 'arpg' || $scope === 'dnd') {
+            $mechanic = $scope;
+        }
+    }
+
+    if ($provider !== '') {
+        $mappedType = af_atf_character_provider_type($provider, $mechanic);
+        if ($mappedType !== '') {
+            $kbType = $mappedType;
+        }
+    }
+
+    if ($kbType !== '') {
+        $entry = af_atf_kb_get_entry($kbType, $key);
+        if (!empty($entry)) {
+            $title = af_atf_kb_pick_text($entry, 'title');
+            if ($title !== '') {
+                return $title;
+            }
+        }
+    }
+
+    $fallback = af_atf_kb_resolve_label((string)($field['options'] ?? ''), $key);
+    return $fallback !== '' ? $fallback : $key;
 }
 
 

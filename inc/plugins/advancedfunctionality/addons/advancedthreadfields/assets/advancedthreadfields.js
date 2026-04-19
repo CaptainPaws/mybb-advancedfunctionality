@@ -391,6 +391,55 @@
       update();
     },
 
+    initDynamicKbPreviews() {
+      AF_ATF.qsa(".af-atf-kb-dynamic").forEach((wrap) => {
+        const preview = AF_ATF.qs(".af-atf-kb-dynamic-preview[data-preview-role='element']", wrap);
+        const select = AF_ATF.qs("select", wrap);
+        if (!preview || !select) return;
+
+        function render() {
+          const option = select.options[select.selectedIndex] || null;
+          const key = option ? String(option.value || "").trim() : "";
+          if (!key) {
+            preview.innerHTML = "";
+            return;
+          }
+
+          const label = option ? String(option.textContent || key) : key;
+          const iconUrl = option ? String(option.getAttribute("data-icon-url") || "").trim() : "";
+          const iconClass = option ? String(option.getAttribute("data-icon-class") || "").trim() : "";
+          const tooltip = option ? String(option.getAttribute("data-tooltip") || "").trim() : "";
+
+          const chip = document.createElement("span");
+          chip.className = "af_kb_chip af-atf-element-chip";
+          if (tooltip) chip.title = tooltip;
+
+          if (iconUrl) {
+            const img = document.createElement("img");
+            img.className = "af-atf-element-icon";
+            img.src = iconUrl;
+            img.alt = "";
+            chip.appendChild(img);
+          } else if (iconClass) {
+            const icon = document.createElement("i");
+            icon.className = `af-atf-element-icon ${iconClass}`;
+            chip.appendChild(icon);
+          }
+
+          const text = document.createElement("span");
+          text.className = "af-atf-element-label";
+          text.textContent = label;
+          chip.appendChild(text);
+
+          preview.innerHTML = "";
+          preview.appendChild(chip);
+        }
+
+        select.addEventListener("change", render);
+        render();
+      });
+    },
+
     initCharacterMechanic() {
       const switcher = AF_ATF.qs(".af-atf-character-mechanic");
       if (!switcher) return;
@@ -447,6 +496,7 @@
         });
 
         renderMechanicSelects(activeMode);
+        AF_ATF.initDynamicKbPreviews();
       }
 
       switcher.addEventListener("change", () => applyMode(String(switcher.value || "dnd")));
@@ -846,6 +896,7 @@
     AF_ATF.initKbChips();
     AF_ATF.initPointBuyAll();
     AF_ATF.initCharacterMechanic();
+    AF_ATF.initDynamicKbPreviews();
     AF_ATF.initCharacterAbilities();
   }
 
