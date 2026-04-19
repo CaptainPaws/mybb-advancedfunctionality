@@ -8276,31 +8276,55 @@ function af_kb_extract_character_contract(array $entry): array
     ];
 }
 
-function af_kb_character_catalog_card(array $entry, array $typeRow): string
+function af_kb_catalog_entry_card(array $entry, array $typeRow): string
 {
-    $data = af_kb_extract_character_contract($entry);
-    $profile = (array)($data['profile'] ?? []);
-    $title = trim((string)($profile['character_name_ru'] ?? $profile['character_name'] ?? ''));
-    if ($title === '') {
+    $entryType = (string)($entry['type'] ?? '');
+    $isCharacter = $entryType === 'character';
+
+    $profile = [];
+    if ($isCharacter) {
+        $data = af_kb_extract_character_contract($entry);
+        $profile = (array)($data['profile'] ?? []);
+        $title = trim((string)($profile['character_name_ru'] ?? $profile['character_name'] ?? ''));
+    } else {
         $title = trim((string)af_kb_pick_text($entry, 'title'));
     }
     if ($title === '') {
         $title = (string)($entry['key'] ?? 'character');
     }
 
-    $short = trim((string)($profile['character_app'] ?? af_kb_pick_text($entry, 'short')));
-    $pic = af_kb_sanitize_url((string)($profile['character_pic'] ?? ''));
+    $short = $isCharacter
+        ? trim((string)($profile['character_app'] ?? af_kb_pick_text($entry, 'short')))
+        : trim((string)af_kb_pick_text($entry, 'short'));
+
+    $pic = $isCharacter ? af_kb_sanitize_url((string)($profile['character_pic'] ?? '')) : '';
     if ($pic === '') {
         $entryUi = af_kb_get_entry_ui($entry);
-        $pic = af_kb_sanitize_url((string)($entryUi['icon_url'] ?? ''));
+        $fallbackTypeIcon = af_kb_sanitize_url((string)($typeRow['icon_url'] ?? ''));
+        $pic = af_kb_sanitize_url((string)($entryUi['icon_url'] ?? '')) ?: $fallbackTypeIcon;
+        $entryBgStyle = af_kb_build_bg_style((string)($entryUi['background_tab_url'] ?? ''));
+    } else {
+        $entryBgStyle = '';
     }
 
     $meta = [];
-    foreach (['character_race', 'character_class', 'character_element', 'category'] as $field) {
-        $value = trim((string)($profile[$field] ?? ''));
-        if ($value !== '') {
+    if ($isCharacter) {
+        foreach (['character_race', 'character_class', 'character_element', 'category'] as $field) {
+            $value = trim((string)($profile[$field] ?? ''));
+            if ($value === '') {
+                continue;
+            }
             $value = af_kb_character_profile_resolved_value($field, $value, true);
             $meta[] = htmlspecialchars_uni($value);
+        }
+    } else {
+        $itemKind = trim((string)($entry['item_kind'] ?? ''));
+        if ($itemKind !== '') {
+            $meta[] = htmlspecialchars_uni($itemKind);
+        }
+        $typeTitle = trim((string)af_kb_pick_text($typeRow, 'title'));
+        if ($typeTitle !== '') {
+            $meta[] = htmlspecialchars_uni($typeTitle);
         }
     }
 
@@ -8310,9 +8334,16 @@ function af_kb_character_catalog_card(array $entry, array $typeRow): string
     $kb_character_pic = $pic !== '' ? '<img src="' . htmlspecialchars_uni($pic) . '" alt="" loading="lazy" />' : '<div class="af-kb-char-card__pic-placeholder"></div>';
     $kb_character_short = $short !== '' ? af_kb_parse_message($short) : '';
     $kb_character_meta = $meta ? implode(' • ', $meta) : '';
+    $kb_card_style = $entryBgStyle !== '' ? ' style="' . $entryBgStyle . '"' : '';
+    $kb_card_bg_class = $entryBgStyle !== '' ? ' af-kb-char-card--with-bg' : '';
 
     eval("\$card = \"" . af_kb_get_template('knowledgebase_list_character_entry') . "\";");
     return $card;
+}
+
+function af_kb_character_catalog_card(array $entry, array $typeRow): string
+{
+    return af_kb_catalog_entry_card($entry, $typeRow);
 }
 
 function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu): string
@@ -8779,32 +8810,9 @@ function af_kb_handle_view(): void
             $kb_type_banner = $kb_banner;
         }
 
-        $typeIconUrl = $typeRow ? ($typeRow['icon_url'] ?? '') : '';
-        $typeIconClass = $typeRow ? ($typeRow['icon_class'] ?? '') : '';
         $rows = '';
         foreach ($entries as $row) {
-            if ($type === 'character') {
-                $rows .= af_kb_character_catalog_card($row, (array)$typeRow);
-                continue;
-            }
-
-            $title = af_kb_pick_text($row, 'title');
-            if ($title === '') {
-                $title = $row['key'];
-            }
-            $short = af_kb_parse_message(af_kb_pick_text($row, 'short'));
-            $entryUi = af_kb_get_entry_ui($row);
-            $iconUrl = $entryUi['icon_url'] ?: $typeIconUrl;
-            $iconClass = $entryUi['icon_class'] ?: $typeIconClass;
-            $iconHtml = af_kb_build_icon_html($iconUrl, $iconClass);
-            $iconWrap = $iconHtml !== '' ? '<span class="af-kb-icon">' . $iconHtml . '</span>' : '';
-            $entryBgStyle = af_kb_build_bg_style($entryUi['background_tab_url'] ?? '');
-            $entryStyle = $entryBgStyle !== '' ? ' style="' . $entryBgStyle . '"' : '';
-            $entryClass = $entryBgStyle !== '' ? ' af-kb-entry--with-bg' : '';
-            $rows .= '<div class="af-kb-entry'.$entryClass.'"'.$entryStyle.'>
-                <h3><a href="misc.php?action=kb&type='.htmlspecialchars_uni($row['type']).'&key='.htmlspecialchars_uni($row['key']).'">'.$iconWrap.htmlspecialchars_uni($title).'</a></h3>
-                <div class="af-kb-entry-short">'.$short.'</div>
-            </div>';
+            $rows .= af_kb_catalog_entry_card($row, (array)$typeRow);
         }
 
         if (function_exists('add_breadcrumb')) {
@@ -8876,7 +8884,7 @@ function af_kb_handle_view(): void
         $kb_page_bg = '';
         $kb_body_style = af_kb_build_body_bg_style($typeRow ? ($typeRow['bg_url'] ?? '') : '');
         $af_kb_content = '';
-        $listTemplate = $type === 'character' ? 'knowledgebase_list_character' : 'knowledgebase_list';
+        $listTemplate = 'knowledgebase_list';
         eval("\$af_kb_content = \"" . af_kb_get_template($listTemplate) . "\";");
         eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
         output_page($page);
