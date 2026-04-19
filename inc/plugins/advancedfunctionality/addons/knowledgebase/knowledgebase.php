@@ -8100,6 +8100,67 @@ function af_kb_handle_entry_modal(): void
     redirect(af_kb_url(['type' => (string)$entry['type'], 'key' => (string)$entry['key']]));
 }
 
+function af_kb_back_url_from_referer(string $fallbackUrl, array $allowActions = ['kb']): string
+{
+    global $mybb;
+
+    $fallbackUrl = trim($fallbackUrl);
+    if ($fallbackUrl === '') {
+        $fallbackUrl = af_kb_url();
+    }
+
+    $ref = trim((string)($_SERVER['HTTP_REFERER'] ?? ''));
+    if ($ref === '') {
+        return $fallbackUrl;
+    }
+
+    $refParts = @parse_url($ref);
+    if (!is_array($refParts) || empty($refParts['path'])) {
+        return $fallbackUrl;
+    }
+
+    $bburlParts = @parse_url((string)($mybb->settings['bburl'] ?? ''));
+    if (is_array($bburlParts) && !empty($bburlParts['host'])) {
+        $sameHost = isset($refParts['host']) && strcasecmp((string)$refParts['host'], (string)$bburlParts['host']) === 0;
+        if (!$sameHost) {
+            return $fallbackUrl;
+        }
+    }
+
+    $refPath = strtolower(trim((string)$refParts['path']));
+    $isKbScript = preg_match('~(?:^|/)kb\.php$~', $refPath) === 1;
+    $isMiscScript = preg_match('~(?:^|/)misc\.php$~', $refPath) === 1;
+    if (!$isKbScript && !$isMiscScript) {
+        return $fallbackUrl;
+    }
+
+    parse_str((string)($refParts['query'] ?? ''), $refQuery);
+    $refAction = trim((string)($refQuery['action'] ?? ''));
+    if ($isMiscScript && !in_array($refAction, $allowActions, true)) {
+        return $fallbackUrl;
+    }
+
+    $requestUri = trim((string)($_SERVER['REQUEST_URI'] ?? ''));
+    if ($requestUri !== '' && strpos($requestUri, '/') !== 0) {
+        $requestUri = '/' . ltrim($requestUri, '/');
+    }
+    $refRelative = (string)($refParts['path'] ?? '');
+    if (!empty($refParts['query'])) {
+        $refRelative .= '?' . $refParts['query'];
+    }
+    if ($requestUri !== '' && $refRelative !== '' && strcasecmp($requestUri, $refRelative) === 0) {
+        return $fallbackUrl;
+    }
+
+    return $ref;
+}
+
+function af_kb_back_link_html(string $fallbackUrl, array $allowActions = ['kb'], string $label = 'Назад'): string
+{
+    $url = af_kb_back_url_from_referer($fallbackUrl, $allowActions);
+    return '<a class="af-kb-btn af-kb-btn--back" href="' . htmlspecialchars_uni($url) . '">' . htmlspecialchars_uni($label) . '</a>';
+}
+
 function af_kb_extract_character_contract(array $entry): array
 {
     $rules = kb_parse_rules($entry);
@@ -8510,6 +8571,7 @@ function af_kb_handle_view(): void
         $kb_page_title = $lang->af_kb_catalog_title ?? 'Knowledge Base';
         $kb_types_rows = $rows;
         $kb_query = htmlspecialchars_uni($query);
+        $kb_back_link = af_kb_back_link_html(af_kb_url(), ['kb']);
         $kb_can_edit = af_kb_can_edit() ? '1' : '0';
         $kb_create_link = af_kb_can_manage_types()
             ? '<a class="af-kb-btn af-kb-btn--create af-kb-btn-create" href="misc.php?action=kb_type_edit">'.htmlspecialchars_uni($lang->af_kb_type_create ?? 'Create category').'</a>'
@@ -8708,6 +8770,7 @@ function af_kb_handle_view(): void
             : '';
         $kb_can_edit = af_kb_can_edit() ? '1' : '0';
         $actions = [];
+        $actions[] = af_kb_back_link_html(af_kb_url(), ['kb']);
         if (af_kb_can_edit()) {
             $actions[] = '<a class="af-kb-btn af-kb-btn--create af-kb-btn-create" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'">'.htmlspecialchars_uni($lang->af_kb_create ?? 'Create').'</a>';
         }
@@ -8892,6 +8955,7 @@ function af_kb_handle_view(): void
         $kb_banner = '<img class="af-kb-banner" src="' . htmlspecialchars_uni($bannerUrl) . '" alt="" loading="lazy" />';
     }
     $kb_can_edit = af_kb_can_edit() ? '1' : '0';
+    $kb_back_link = af_kb_back_link_html(af_kb_url(['type' => $type]), ['kb']);
     $kb_edit_link = af_kb_can_edit() ? '<a class="af-kb-btn af-kb-btn--edit af-kb-btn-edit" href="misc.php?action=kb_edit&type='.htmlspecialchars_uni($type).'&key='.htmlspecialchars_uni($key).'">'.htmlspecialchars_uni($lang->af_kb_edit ?? 'Edit').'</a>' : '';
     $kb_delete_form = '';
     if (af_kb_can_edit()) {
