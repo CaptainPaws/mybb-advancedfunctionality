@@ -686,21 +686,7 @@ function af_charactersheets_arpg_render_abilities_group_html(array $items, strin
 
 function af_charactersheets_arpg_render_main_info_html(array $sheet_arpg_vm): string
 {
-    $atf = (array)($sheet_arpg_vm['atf'] ?? []);
-    $rows = [
-        ['Раса', (string)($atf['race'] ?? '—')],
-        ['Класс', (string)($atf['class'] ?? '—')],
-        ['Тема', (string)($atf['theme'] ?? '—')],
-        ['Путь', (string)($sheet_arpg_vm['header_identity_html'] ?? '—')],
-    ];
-
-    $html = '<section class="af-cs-arpg-panel"><h2>Основная информация</h2><div class="af-cs-arpg-main-grid">';
-    foreach ($rows as $row) {
-        $html .= '<article class="af-cs-arpg-main-item"><span>' . htmlspecialchars_uni($row[0]) . '</span><strong>' . htmlspecialchars_uni($row[1] !== '' ? $row[1] : '—') . '</strong></article>';
-    }
-    $html .= '</div></section>';
-
-    return $html;
+    return '<section class="af-cs-arpg-panel"><div class="af-cs-muted">Основная информация будет дополнена позже.</div></section>';
 }
 
 function af_charactersheets_arpg_render_talent_tree_html(array $sheet_arpg_vm, bool $canEdit): string
@@ -1051,6 +1037,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     $sheet_arpg_passive_abilities_html = '<div class="af-cs-muted">Пассивные способности не назначены</div>';
     $sheet_arpg_talents_html = '<div class="af-cs-arpg-placeholder">Древо талантов и прокачка будут выведены здесь. Для улучшения используются Ability Tokens.</div>';
     $sheet_arpg_achievements_html = '<div class="af-cs-arpg-placeholder">Раздел достижений будет подключён позже.</div>';
+    $sheet_achievements_html = '<section class="af-cs-section"><div class="af-cs-muted">Функционал будет добавлен позже.</div></section>';
     $sheet_arpg_main_info_html = '<div class="af-cs-arpg-placeholder">Базовая информация персонажа будет выведена здесь.</div>';
     $sheet_arpg_identity_block_html = '';
     $sheet_arpg_stats_block_html = '';
