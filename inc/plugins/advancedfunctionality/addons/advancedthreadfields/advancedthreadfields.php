@@ -1797,12 +1797,90 @@ function af_atf_prepare_input_block(int $fid, int $tid = 0, bool $isEdit = false
         $values = af_atf_collect_posted_values($fields);
     }
 
+    if (!$isPost && !$isEdit && empty($values)) {
+        $prefillByName = (array)($GLOBALS['af_atf_prefill_named_values'] ?? []);
+        if (!empty($prefillByName)) {
+            $values = af_atf_map_named_values_to_fieldids($fields, $prefillByName);
+        }
+    }
+
     // 2) если это edit и POST пустой (первый заход на страницу редактирования) — берём из БД
     if ($isEdit && empty($values) && $tid > 0) {
         $values = af_atf_get_values_by_tid($tid);
     }
 
     $af_atf_input_html = af_atf_render_inputs($fields, $values);
+}
+
+function af_atf_map_named_values_to_fieldids(array $fields, array $namedValues): array
+{
+    $out = [];
+    if (empty($fields) || empty($namedValues)) {
+        return $out;
+    }
+
+    foreach ($fields as $field) {
+        $fieldName = trim((string)($field['name'] ?? ''));
+        $fieldId = (int)($field['fieldid'] ?? 0);
+        if ($fieldName === '' || $fieldId <= 0 || !array_key_exists($fieldName, $namedValues)) {
+            continue;
+        }
+        $value = $namedValues[$fieldName];
+        if (is_array($value) || is_object($value)) {
+            $value = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+        $out[$fieldId] = is_string($value) ? $value : (string)$value;
+    }
+
+    return $out;
+}
+
+function af_atf_boot_prefill_from_token(int $fid): void
+{
+    global $mybb, $cache;
+
+    $GLOBALS['af_atf_prefill_named_values'] = [];
+    $GLOBALS['af_atf_prefill_mechanic'] = '';
+
+    $token = trim((string)$mybb->get_input('af_atf_prefill_token'));
+    if ($token === '' || !preg_match('~^[a-f0-9]{16,128}$~i', $token)) {
+        return;
+    }
+    if (!is_object($cache) || !method_exists($cache, 'read')) {
+        return;
+    }
+
+    $cacheKey = 'af_atf_prefill_' . strtolower($token);
+    $payload = $cache->read($cacheKey);
+    if (!is_array($payload)) {
+        return;
+    }
+
+    if (method_exists($cache, 'delete')) {
+        $cache->delete($cacheKey);
+    } else {
+        $cache->update($cacheKey, null);
+    }
+
+    $uid = (int)($mybb->user['uid'] ?? 0);
+    if ($uid <= 0 || (int)($payload['uid'] ?? 0) !== $uid) {
+        return;
+    }
+    if ((int)($payload['expires_at'] ?? 0) < TIME_NOW) {
+        return;
+    }
+    if ((int)($payload['forum_id'] ?? 0) !== $fid) {
+        return;
+    }
+
+    $values = (array)($payload['values'] ?? []);
+    if (!empty($values)) {
+        $GLOBALS['af_atf_prefill_named_values'] = $values;
+    }
+    $mechanic = trim((string)($payload['mechanic'] ?? ''));
+    if ($mechanic === 'arpg' || $mechanic === 'dnd') {
+        $GLOBALS['af_atf_prefill_mechanic'] = $mechanic;
+    }
 }
 
 /* -------------------- INPUT RENDER (newthread/editpost) -------------------- */
@@ -1817,6 +1895,7 @@ function af_atf_newthread_start(): void
 
     if ($fidI > 0) {
         $fid = $fidI; // синхронизируем глобалку
+        af_atf_boot_prefill_from_token($fidI);
     }
 
     // чтобы при POST/preview/ошибках поля не стирались
@@ -2051,6 +2130,10 @@ function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
 
     if ($hasCharacterContract) {
         $activeMechanic = af_atf_character_infer_mechanic($fields, $valuesByFieldId);
+        $prefillMechanic = trim((string)($GLOBALS['af_atf_prefill_mechanic'] ?? ''));
+        if (($prefillMechanic === 'dnd' || $prefillMechanic === 'arpg') && !isset($_POST['af_atf_character_mechanic'])) {
+            $activeMechanic = $prefillMechanic;
+        }
         if (isset($_POST['af_atf_character_mechanic'])) {
             $postedMechanic = trim((string)$_POST['af_atf_character_mechanic']);
             if ($postedMechanic === 'dnd' || $postedMechanic === 'arpg') {
