@@ -283,6 +283,7 @@ class AF_Admin_Advancedthreadfields
             'title'       => '',
             'description' => '',
             'forums'      => '',
+            'character_mechanic_mode' => 'auto',
             'catalog_characters_url'   => '',
             'catalog_roles_url'        => '',
             'catalog_characters_label' => 'Посмотреть канонов',
@@ -325,6 +326,10 @@ class AF_Admin_Advancedthreadfields
             }
 
             $active = (int)$mybb->get_input('active');
+            $mechanicMode = trim((string)$mybb->get_input('character_mechanic_mode'));
+            if (!in_array($mechanicMode, ['auto', 'dnd', 'arpg'], true)) {
+                $mechanicMode = 'auto';
+            }
             $sortorder = (int)$mybb->get_input('sortorder');
             $catalogCharactersUrl = trim($mybb->get_input('catalog_characters_url'));
             $catalogRolesUrl = trim($mybb->get_input('catalog_roles_url'));
@@ -339,6 +344,7 @@ class AF_Admin_Advancedthreadfields
                     'title'       => $db->escape_string($title),
                     'description' => $db->escape_string($description),
                     'forums'      => $db->escape_string($forums),
+                    'character_mechanic_mode' => $db->escape_string($mechanicMode),
                     'catalog_characters_url'   => $db->escape_string($catalogCharactersUrl),
                     'catalog_roles_url'        => $db->escape_string($catalogRolesUrl),
                     'catalog_characters_label' => $db->escape_string($catalogCharactersLabel),
@@ -367,6 +373,7 @@ class AF_Admin_Advancedthreadfields
                 'title' => $title,
                 'description' => $description,
                 'forums' => $forums,
+                'character_mechanic_mode' => $mechanicMode,
                 'catalog_characters_url' => $catalogCharactersUrl,
                 'catalog_roles_url' => $catalogRolesUrl,
                 'catalog_characters_label' => $catalogCharactersLabel,
@@ -425,6 +432,15 @@ class AF_Admin_Advancedthreadfields
         }
 
         self::row($table, 'Forums', $forumsFieldHtml . $forumsHelp);
+        self::row(
+            $table,
+            'Character mechanic mode',
+            $form->generate_select_box('character_mechanic_mode', [
+                'auto' => 'Auto (forum/system context)',
+                'dnd' => 'Force DnD',
+                'arpg' => 'Force ARPG',
+            ], (string)$group['character_mechanic_mode'])
+        );
         self::row($table, 'Characters catalog URL', $form->generate_text_box('catalog_characters_url', $group['catalog_characters_url'], ['maxlength' => 500]));
         self::row($table, 'Roles catalog URL', $form->generate_text_box('catalog_roles_url', $group['catalog_roles_url'], ['maxlength' => 500]));
         self::row($table, 'Characters button label', $form->generate_text_box('catalog_characters_label', $group['catalog_characters_label'], ['maxlength' => 255]));

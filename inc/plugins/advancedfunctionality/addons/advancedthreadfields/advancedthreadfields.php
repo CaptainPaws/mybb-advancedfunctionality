@@ -157,6 +157,7 @@ function af_advancedthreadfields_install(): void
               `title` VARCHAR(255) NOT NULL,
               `description` TEXT NOT NULL,
               `forums` TEXT NOT NULL,
+              `character_mechanic_mode` VARCHAR(16) NOT NULL DEFAULT 'auto',
               `catalog_characters_url` VARCHAR(500) NOT NULL DEFAULT '',
               `catalog_roles_url` VARCHAR(500) NOT NULL DEFAULT '',
               `catalog_characters_label` VARCHAR(255) NOT NULL DEFAULT '',
@@ -957,6 +958,7 @@ function af_atf_db_ensure_group_columns(): void
     }
 
     $cols = [
+        'character_mechanic_mode' => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `character_mechanic_mode` VARCHAR(16) NOT NULL DEFAULT 'auto' AFTER `forums`",
         'catalog_characters_url'   => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `catalog_characters_url` VARCHAR(500) NOT NULL DEFAULT '' AFTER `forums`",
         'catalog_roles_url'        => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `catalog_roles_url` VARCHAR(500) NOT NULL DEFAULT '' AFTER `catalog_characters_url`",
         'catalog_characters_label' => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `catalog_characters_label` VARCHAR(255) NOT NULL DEFAULT '' AFTER `catalog_roles_url`",
@@ -980,6 +982,7 @@ function af_atf_group_cache_select_fields(): array
 
     // Новые колонки из Prompt 2 — могут ещё отсутствовать на старой БД
     $optional = [
+        'character_mechanic_mode',
         'catalog_characters_url',
         'catalog_roles_url',
         'catalog_characters_label',
@@ -1146,8 +1149,35 @@ function af_atf_seed_character_contract_fields(): void
         return;
     }
 
-    $group = $db->fetch_array($db->simple_select(AF_ATF_TABLE_GROUPS, 'gid', "title='CTA'", ['limit' => 1]));
-    $groupId = (int)($group['gid'] ?? 0);
+    $groupId = 0;
+    $legacyGroup = $db->fetch_array($db->simple_select(AF_ATF_TABLE_GROUPS, 'gid', "title='CTA'", ['limit' => 1]));
+    if (!empty($legacyGroup['gid'])) {
+        $groupId = (int)$legacyGroup['gid'];
+    }
+
+    if ($groupId <= 0) {
+        $existingCharacterField = $db->fetch_array($db->simple_select(AF_ATF_TABLE_FIELDS, 'groupid', "name='character_name'", ['limit' => 1]));
+        if (!empty($existingCharacterField['groupid'])) {
+            $groupId = (int)$existingCharacterField['groupid'];
+        }
+    }
+
+    if ($groupId <= 0) {
+        $groupId = (int)$db->insert_query(AF_ATF_TABLE_GROUPS, [
+            'title' => $db->escape_string('CTA'),
+            'description' => $db->escape_string('Character contract fields (auto-seeded)'),
+            'forums' => '',
+            'character_mechanic_mode' => $db->escape_string('auto'),
+            'catalog_characters_url' => '',
+            'catalog_roles_url' => '',
+            'catalog_characters_label' => $db->escape_string('Посмотреть канонов'),
+            'catalog_roles_label' => $db->escape_string('Посмотреть списки ролей'),
+            'show_catalog_cta' => 0,
+            'active' => 1,
+            'sortorder' => 0,
+        ]);
+    }
+
     if ($groupId <= 0) {
         return;
     }
@@ -1158,11 +1188,11 @@ function af_atf_seed_character_contract_fields(): void
         ['name' => 'character_name', 'title' => 'Name (EN)', 'type' => 'text', 'sortorder' => 30, 'maxlen' => 255],
         ['name' => 'character_name_ru', 'title' => 'Name (RU)', 'type' => 'text', 'sortorder' => 40, 'maxlen' => 255],
         ['name' => 'character_nicknames', 'title' => 'Nicknames', 'type' => 'text', 'sortorder' => 50, 'maxlen' => 500],
-        ['name' => 'character_element', 'title' => 'Element', 'type' => 'kb_dynamic', 'sortorder' => 60, 'options' => "kb_type=arpg_element\nmechanic=arpg", 'maxlen' => 128],
+        ['name' => 'character_element', 'title' => 'Element', 'type' => 'kb_dynamic', 'sortorder' => 60, 'options' => "provider=character_element\nmechanic=arpg", 'maxlen' => 128],
         ['name' => 'character_gen', 'title' => 'Gender', 'type' => 'select', 'sortorder' => 70, 'options' => "male=Male\nfemale=Female\nnonbinary=Non-binary\nother=Other", 'maxlen' => 64],
-        ['name' => 'character_race', 'title' => 'Race / Origin', 'type' => 'kb_mechanic', 'sortorder' => 80, 'options' => "dnd=kb_race\narpg=arpg_origin", 'maxlen' => 128],
-        ['name' => 'character_class', 'title' => 'Class / Archetype', 'type' => 'kb_mechanic', 'sortorder' => 90, 'options' => "dnd=kb_class\narpg=arpg_archetype", 'maxlen' => 128],
-        ['name' => 'character_faction', 'title' => 'Faction', 'type' => 'kb_dynamic', 'sortorder' => 100, 'options' => "kb_type=arpg_faction\nmechanic=arpg", 'maxlen' => 128],
+        ['name' => 'character_race', 'title' => 'Race / Origin', 'type' => 'kb_mechanic', 'sortorder' => 80, 'options' => "provider=character_race", 'maxlen' => 128],
+        ['name' => 'character_class', 'title' => 'Class / Archetype', 'type' => 'kb_mechanic', 'sortorder' => 90, 'options' => "provider=character_class", 'maxlen' => 128],
+        ['name' => 'character_faction', 'title' => 'Faction', 'type' => 'kb_dynamic', 'sortorder' => 100, 'options' => "provider=character_faction\nmechanic=arpg", 'maxlen' => 128],
         ['name' => 'character_app', 'title' => 'Appearance', 'type' => 'textarea', 'sortorder' => 110],
         ['name' => 'character_hp', 'title' => 'HP', 'type' => 'number', 'sortorder' => 200, 'maxlen' => 11],
         ['name' => 'character_defense', 'title' => 'Defense', 'type' => 'number', 'sortorder' => 210, 'maxlen' => 11],
@@ -1535,6 +1565,7 @@ function af_atf_rebuild_cache(bool $force = false): void
                 'forums_expanded'=> $forumsExpanded,
                 'active'         => (int)($g['active'] ?? 0),
                 'sortorder'      => (int)($g['sortorder'] ?? 0),
+                'character_mechanic_mode' => (string)($g['character_mechanic_mode'] ?? 'auto'),
 
                 // новые поля: если колонок ещё нет в БД — спокойно даём дефолты
                 'catalog_characters_url'   => (string)($g['catalog_characters_url'] ?? ''),
@@ -1753,6 +1784,9 @@ function af_atf_build_preview_block_from_post(int $fid): string
     }
 
     $values = af_atf_collect_posted_values($fields);
+    $GLOBALS['af_atf_context_fid'] = $fid;
+    $GLOBALS['af_atf_context_fields'] = $fields;
+    $GLOBALS['af_atf_context_values'] = $values;
 
     $rows = '';
     foreach ($fields as $f) {
@@ -1819,6 +1853,8 @@ function af_atf_prepare_input_block(int $fid, int $tid = 0, bool $isEdit = false
         return;
     }
 
+    $GLOBALS['af_atf_context_fid'] = $fid;
+
     // 1) при POST/preview/ошибках — ВСЕГДА берём значения из POST, чтобы не стирались
     $isPost = false;
     if (isset($mybb->request_method)) {
@@ -1844,6 +1880,8 @@ function af_atf_prepare_input_block(int $fid, int $tid = 0, bool $isEdit = false
         $values = af_atf_get_values_by_tid($tid);
     }
 
+    $GLOBALS['af_atf_context_fields'] = $fields;
+    $GLOBALS['af_atf_context_values'] = $values;
     $af_atf_input_html = af_atf_render_inputs($fields, $values);
 }
 
@@ -2146,6 +2184,70 @@ function af_atf_character_infer_mechanic(array $fields, array $valuesByFieldId):
     return 'dnd';
 }
 
+function af_atf_character_provider_type(string $provider, string $mechanic): string
+{
+    $provider = trim($provider);
+    $mechanic = $mechanic === 'arpg' ? 'arpg' : 'dnd';
+
+    $map = [
+        'character_race' => ['dnd' => 'kb_race', 'arpg' => 'arpg_origin'],
+        'character_class' => ['dnd' => 'kb_class', 'arpg' => 'arpg_archetype'],
+        'character_faction' => ['dnd' => '', 'arpg' => 'arpg_faction'],
+        'character_element' => ['dnd' => '', 'arpg' => 'arpg_element'],
+    ];
+
+    if (!isset($map[$provider])) {
+        return '';
+    }
+
+    return (string)($map[$provider][$mechanic] ?? '');
+}
+
+function af_atf_character_group_mechanic_for_forum(int $fid): string
+{
+    if ($fid <= 0) {
+        return '';
+    }
+
+    $groups = af_atf_get_groups_cached();
+    if (empty($groups)) {
+        return '';
+    }
+
+    foreach ($groups as $group) {
+        if ((int)($group['active'] ?? 0) !== 1) {
+            continue;
+        }
+
+        $forumsSet = is_array($group['forums_set'] ?? null) ? $group['forums_set'] : [];
+        if (!empty($forumsSet) && !isset($forumsSet[$fid])) {
+            continue;
+        }
+
+        $mode = trim((string)($group['character_mechanic_mode'] ?? ''));
+        if ($mode === 'arpg' || $mode === 'dnd') {
+            return $mode;
+        }
+    }
+
+    return '';
+}
+
+function af_atf_character_resolve_active_mechanic(int $fid, array $fields, array $valuesByFieldId): string
+{
+    $forced = af_atf_character_group_mechanic_for_forum($fid);
+    if ($forced === 'arpg' || $forced === 'dnd') {
+        return $forced;
+    }
+
+    $prefillMechanic = trim((string)($GLOBALS['af_atf_prefill_mechanic'] ?? ''));
+    if ($prefillMechanic === 'arpg' || $prefillMechanic === 'dnd') {
+        return $prefillMechanic;
+    }
+
+    return af_atf_character_infer_mechanic($fields, $valuesByFieldId);
+}
+
 function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
 {
     global $templates;
@@ -2164,25 +2266,9 @@ function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
     }
 
     if ($hasCharacterContract) {
-        $activeMechanic = af_atf_character_infer_mechanic($fields, $valuesByFieldId);
-        $prefillMechanic = trim((string)($GLOBALS['af_atf_prefill_mechanic'] ?? ''));
-        if (($prefillMechanic === 'dnd' || $prefillMechanic === 'arpg') && !isset($_POST['af_atf_character_mechanic'])) {
-            $activeMechanic = $prefillMechanic;
-        }
-        if (isset($_POST['af_atf_character_mechanic'])) {
-            $postedMechanic = trim((string)$_POST['af_atf_character_mechanic']);
-            if ($postedMechanic === 'dnd' || $postedMechanic === 'arpg') {
-                $activeMechanic = $postedMechanic;
-            }
-        }
-
-        $mechanicInput = '<div class="af-atf-character-contract">'
-            . '<label><strong>Mechanic</strong> '
-            . '<select class="select af-atf-character-mechanic" name="af_atf_character_mechanic">'
-            . '<option value="dnd"' . ($activeMechanic === 'dnd' ? ' selected="selected"' : '') . '>DnD</option>'
-            . '<option value="arpg"' . ($activeMechanic === 'arpg' ? ' selected="selected"' : '') . '>ARPG</option>'
-            . '</select></label></div>';
-        $rows .= '<tr class="af-atf-character-mechanic-row"><td class="trow2"><strong>Character mechanic</strong></td><td class="trow2">' . $mechanicInput . '</td></tr>';
+        $fid = (int)($GLOBALS['af_atf_context_fid'] ?? 0);
+        $activeMechanic = af_atf_character_resolve_active_mechanic($fid, $fields, $valuesByFieldId);
+        $rows .= '<tr class="af-atf-character-mechanic-row" style="display:none;"><td colspan="2"><input type="hidden" class="af-atf-character-mechanic" value="' . htmlspecialchars_uni($activeMechanic) . '" /></td></tr>';
     }
 
     foreach ($fields as $f) {
@@ -2283,7 +2369,15 @@ function af_atf_build_input_html(array $field, string $value): string
         }
 
         case 'kb_dynamic': {
+            $activeMechanic = af_atf_character_active_mechanic();
+            $provider = trim((string)($opts['provider'] ?? ''));
             $kbType = trim((string)($opts['kb_type'] ?? ''));
+            if ($provider !== '') {
+                $providerType = af_atf_character_provider_type($provider, $activeMechanic);
+                if ($providerType !== '') {
+                    $kbType = $providerType;
+                }
+            }
             $mechanicScope = trim((string)($opts['mechanic'] ?? ''));
             $list = af_atf_kb_get_list_by_type_any($kbType);
 
@@ -2307,10 +2401,15 @@ function af_atf_build_input_html(array $field, string $value): string
         }
 
         case 'kb_mechanic': {
+            $provider = trim((string)($opts['provider'] ?? ''));
             $providers = [
                 'dnd' => trim((string)($opts['dnd'] ?? '')),
                 'arpg' => trim((string)($opts['arpg'] ?? '')),
             ];
+            if ($provider !== '') {
+                $providers['dnd'] = af_atf_character_provider_type($provider, 'dnd');
+                $providers['arpg'] = af_atf_character_provider_type($provider, 'arpg');
+            }
             $payload = ['dnd' => [], 'arpg' => []];
             foreach ($providers as $mode => $typeKey) {
                 if ($typeKey === '') {
@@ -2319,13 +2418,7 @@ function af_atf_build_input_html(array $field, string $value): string
                 $payload[$mode] = af_atf_kb_get_list_by_type_any($typeKey);
             }
 
-            $activeMechanic = 'dnd';
-            if (isset($_POST['af_atf_character_mechanic'])) {
-                $postedMechanic = trim((string)$_POST['af_atf_character_mechanic']);
-                if ($postedMechanic === 'dnd' || $postedMechanic === 'arpg') {
-                    $activeMechanic = $postedMechanic;
-                }
-            }
+            $activeMechanic = af_atf_character_active_mechanic();
 
             $renderOptions = static function (array $items, string $selectedValue): string {
                 $html = '<option value=""></option>';
@@ -2959,17 +3052,10 @@ function af_atf_force_min_message_if_needed(int $fid): void
 
 function af_atf_character_active_mechanic(): string
 {
-    $mechanic = trim((string)($_POST['af_atf_character_mechanic'] ?? ''));
-    if ($mechanic === 'arpg' || $mechanic === 'dnd') {
-        return $mechanic;
-    }
-    if (function_exists('af_kb_get_default_mechanic_mode')) {
-        $fallback = (string)af_kb_get_default_mechanic_mode();
-        if ($fallback === 'arpg' || $fallback === 'dnd') {
-            return $fallback;
-        }
-    }
-    return 'dnd';
+    $fid = (int)($GLOBALS['af_atf_context_fid'] ?? 0);
+    $fields = is_array($GLOBALS['af_atf_context_fields'] ?? null) ? (array)$GLOBALS['af_atf_context_fields'] : [];
+    $values = is_array($GLOBALS['af_atf_context_values'] ?? null) ? (array)$GLOBALS['af_atf_context_values'] : [];
+    return af_atf_character_resolve_active_mechanic($fid, $fields, $values);
 }
 
 function af_atf_normalize_character_abilities_json(string $raw): string
@@ -3091,6 +3177,9 @@ function af_atf_newthread_do_end(): void
     }
 
     $values = af_atf_collect_posted_values($fields);
+    $GLOBALS['af_atf_context_fid'] = $fidI;
+    $GLOBALS['af_atf_context_fields'] = $fields;
+    $GLOBALS['af_atf_context_values'] = $values;
 
     // лёгкая нормализация (основная валидация уже прошла в DataHandler)
     $activeMechanic = af_atf_character_active_mechanic();
@@ -3192,6 +3281,9 @@ function af_atf_editpost_do_end(): void
     }
 
     $values = af_atf_collect_posted_values($fields);
+    $GLOBALS['af_atf_context_fid'] = $fidI;
+    $GLOBALS['af_atf_context_fields'] = $fields;
+    $GLOBALS['af_atf_context_values'] = $values;
 
     $activeMechanic = af_atf_character_active_mechanic();
     foreach ($fields as $f) {
@@ -3360,6 +3452,9 @@ function af_atf_dh_validate(&$ph): void
     }
 
     $clean = [];
+    $GLOBALS['af_atf_context_fid'] = $forumId;
+    $GLOBALS['af_atf_context_fields'] = $fields;
+    $GLOBALS['af_atf_context_values'] = is_array($incoming) ? $incoming : [];
     $activeMechanic = af_atf_character_active_mechanic();
     foreach ($fields as $f) {
         $fieldid = (int)$f['fieldid'];
