@@ -6495,7 +6495,9 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                 'types' => af_kb_url(['action' => 'kb_types']),
                 'children' => af_kb_url(['action' => 'kb_children']),
                 'json_list' => af_kb_url(['action' => 'kb_json_list']),
-            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';</script>';
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';window.afKbInsertMechanic='
+                . json_encode(af_kb_get_catalog_active_mechanic_key(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                . ';</script>';
 
             $kbUiCss  = af_kb_build_css_include_tag('assets/knowledgebase_kbui.css');
             $chipsJs  = '<script src="'.$assetsBase.'/knowledgebase_chips.js?v='.af_kb_asset_version('knowledgebase_chips.js').'"></script>';
@@ -10515,6 +10517,10 @@ function af_kb_handle_json_types(): void
 
     $items = [];
     $seenTypes = [];
+    $requestedMechanic = af_kb_normalize_mechanic_key(trim((string)$mybb->get_input('mechanic')));
+    if (!af_kb_is_allowed_mechanic_key($requestedMechanic)) {
+        $requestedMechanic = af_kb_get_catalog_active_mechanic_key();
+    }
     $q = $db->simple_select('af_kb_types', '*', $where, ['order_by' => 'sortorder, type', 'order_dir' => 'ASC']);
     while ($row = $db->fetch_array($q)) {
         $rowType = (string)($row['type_key'] ?? '');
@@ -10525,6 +10531,9 @@ function af_kb_handle_json_types(): void
             continue;
         }
         $rowMechanic = af_kb_get_type_mechanic_key($row);
+        if ($requestedMechanic !== '' && $rowMechanic !== $requestedMechanic && $rowType !== 'character') {
+            continue;
+        }
         if (!af_kb_can_edit() && af_kb_is_internal_service_type($rowType, $rowMechanic)) {
             continue;
         }
