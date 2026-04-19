@@ -482,20 +482,10 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
         && !empty($GLOBALS['af_atf_forum_catalog_cta_html'])
         && strpos($page, '<!--AF_ATF_FORUM_CTA-->') === false
     ) {
-        $insert = "\n<!--AF_ATF_FORUM_CTA-->\n" . $GLOBALS['af_atf_forum_catalog_cta_html'] . "\n";
-
-        $count = 0;
-        $page2 = @preg_replace(
-            '~(<a\b[^>]*href=(["\'])[^"\']*newthread\.php\?[^"\']*\2[^>]*>.*?</a>)~is',
-            '$1'.$insert,
+        $page = af_atf_inject_catalog_cta_near_newthread_button(
             $page,
-            1,
-            $count
+            (string)$GLOBALS['af_atf_forum_catalog_cta_html']
         );
-
-        if ($count > 0 && is_string($page2)) {
-            $page = $page2;
-        }
     }
 
     /* -------------------- 3) PREVIEW INSERT (ВОТ ТВОЯ ПРОБЛЕМА) -------------------- */
@@ -1101,6 +1091,51 @@ function af_atf_parse_assets_blacklist(string $raw): array
     }
 
     return $out;
+}
+
+function af_atf_inject_catalog_cta_near_newthread_button(string $page, string $ctaHtml): string
+{
+    $ctaHtml = trim($ctaHtml);
+    if ($ctaHtml === '') {
+        return $page;
+    }
+
+    $insert = "\n<!--AF_ATF_FORUM_CTA-->\n" . $ctaHtml . "\n";
+
+    // 1) Канон MyBB: href на newthread.php?fid=...
+    $patterns = [
+        '~(<a\b[^>]*href=(["\'])[^"\']*newthread\.php\?[^"\']*\2[^>]*>.*?</a>)~is',
+
+        // 2) SEO/чпу темы: /newthread-123.html или action=newthread
+        '~(<a\b[^>]*href=(["\'])[^"\']*(?:newthread-\d+\.html|action=newthread)[^"\']*\2[^>]*>.*?</a>)~is',
+
+        // 3) Кастомные темы: у ссылки/кнопки есть классы new_thread_button/newthread
+        '~(<a\b[^>]*class=(["\'])[^"\']*(?:new_thread_button|newthread)[^"\']*\2[^>]*>.*?</a>)~is',
+        '~(<button\b[^>]*class=(["\'])[^"\']*(?:new_thread_button|newthread)[^"\']*\2[^>]*>.*?</button>)~is',
+    ];
+
+    foreach ($patterns as $pattern) {
+        $count = 0;
+        $page2 = @preg_replace($pattern, '$1' . $insert, $page, 1, $count);
+        if ($count > 0 && is_string($page2)) {
+            return $page2;
+        }
+    }
+
+    // 4) Мягкий фоллбек: если есть post thread контейнер, вставляем в него
+    $count = 0;
+    $page2 = @preg_replace(
+        '~(<[^>]+\bclass=(["\'])[^"\']*(?:post_thread|newthread)[^"\']*\2[^>]*>)~i',
+        '$1' . $insert,
+        $page,
+        1,
+        $count
+    );
+    if ($count > 0 && is_string($page2)) {
+        return $page2;
+    }
+
+    return $page;
 }
 
 function af_atf_seed_character_contract_fields(): void
@@ -3617,9 +3652,16 @@ function af_atf_forumdisplay_get_threads(&$query): void
 
 function af_atf_forumdisplay_start(): void
 {
-    global $fid;
+    global $fid, $foruminfo, $mybb;
 
     $forumId = (int)$fid;
+    if ($forumId <= 0 && is_array($foruminfo)) {
+        $forumId = (int)($foruminfo['fid'] ?? 0);
+    }
+    if ($forumId <= 0) {
+        $forumId = (int)$mybb->get_input('fid');
+    }
+
     if ($forumId <= 0) {
         return;
     }
