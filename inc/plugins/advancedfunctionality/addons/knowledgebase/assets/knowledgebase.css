@@ -530,3 +530,60 @@ display: inline-block;
   .af-kb-layout--sidebar { flex-direction: column; }
   .af-kb-sidebar { width: 100%; flex-basis: auto; }
 }
+
+.af-kb-entries--cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.af-kb-char-card {
+  border: 1px solid #dcdfe6;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.af-kb-char-card__link {
+  color: inherit;
+  text-decoration: none;
+  display: block;
+}
+
+.af-kb-char-card__pic {
+  aspect-ratio: 16 / 9;
+  background: #f2f5ff;
+}
+
+.af-kb-char-card__pic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.af-kb-char-card__pic-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(120deg, #f2f5ff, #dfe6ff);
+}
+
+.af-kb-char-card__body { padding: 10px 12px 12px; }
+.af-kb-char-card__body h3 { margin: 0 0 6px; }
+.af-kb-char-card__meta { font-size: 12px; color: #687087; margin-bottom: 8px; }
+.af-kb-char-card__short { font-size: 13px; color: #2f3340; }
+
+.af-kb-char-profile { display: grid; gap: 14px; }
+.af-kb-char-profile__banner img { width: 100%; max-height: 260px; object-fit: cover; border-radius: 10px; }
+.af-kb-char-profile__head { display: grid; grid-template-columns: 220px 1fr; gap: 12px; }
+.af-kb-char-profile__avatar img { width: 100%; border-radius: 10px; object-fit: cover; }
+.af-kb-char-profile__identity { background: #fff; border: 1px solid #dcdfe6; border-radius: 10px; padding: 12px; }
+.af-kb-char-profile__row { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed #e4e7ef; padding: 4px 0; }
+.af-kb-char-profile__section { background: #fff; border: 1px solid #dcdfe6; border-radius: 10px; padding: 12px; }
+.af-kb-char-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.af-kb-char-stat { background: #f7f9ff; border: 1px solid #d8deee; border-radius: 8px; padding: 6px 8px; display: flex; justify-content: space-between; gap: 8px; }
+.af-kb-char-abilities { display: grid; gap: 8px; }
+.af-kb-char-ability { border: 1px solid #d8deee; border-radius: 8px; padding: 8px; background: #f8fbff; }
+.af-kb-char-ability header { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.af-kb-char-profile__service { display: flex; gap: 8px; flex-wrap: wrap; }
+.af-kb-char-empty { color: #788094; font-style: italic; }
