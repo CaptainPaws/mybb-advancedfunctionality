@@ -1211,14 +1211,41 @@ function af_atf_inject_catalog_cta_near_newthread_button(string $page, string $c
 
     $insert = "\n<!--AF_ATF_FORUM_CTA-->\n" . $ctaHtml . "\n";
 
-    // 1) Канон MyBB: href на newthread.php?fid=...
+    // 1) Точное место для forumdisplay: внутри float_right перед forumdisplay_newthread
+    //    Это главный якорь для тем, где кнопка "Создать тему" рендерится шаблоном forumdisplay_newthread.
+    $count = 0;
+    $page2 = @preg_replace(
+        '~(<[^>]+\bclass=(["\'])[^"\']*\bfloat_right\b[^"\']*\2[^>]*>\s*)(<!--\s*start:\s*forumdisplay_newthread\s*-->)~is',
+        '$1' . $insert . '$3',
+        $page,
+        1,
+        $count
+    );
+    if ($count > 0 && is_string($page2)) {
+        return $page2;
+    }
+
+    // 2) Резерв: если структура обёртки иная, но комментарий forumdisplay_newthread есть.
+    $count = 0;
+    $page2 = @preg_replace(
+        '~(<!--\s*start:\s*forumdisplay_newthread\s*-->)~i',
+        $insert . '$1',
+        $page,
+        1,
+        $count
+    );
+    if ($count > 0 && is_string($page2)) {
+        return $page2;
+    }
+
+    // 3) Канон MyBB: href на newthread.php?fid=...
     $patterns = [
         '~(<a\b[^>]*href=(["\'])[^"\']*newthread\.php\?[^"\']*\2[^>]*>.*?</a>)~is',
 
-        // 2) SEO/чпу темы: /newthread-123.html или action=newthread
+        // 4) SEO/чпу темы: /newthread-123.html или action=newthread
         '~(<a\b[^>]*href=(["\'])[^"\']*(?:newthread-\d+\.html|action=newthread)[^"\']*\2[^>]*>.*?</a>)~is',
 
-        // 3) Кастомные темы: у ссылки/кнопки есть классы new_thread_button/newthread
+        // 5) Кастомные темы: у ссылки/кнопки есть классы new_thread_button/newthread
         '~(<a\b[^>]*class=(["\'])[^"\']*(?:new_thread_button|newthread)[^"\']*\2[^>]*>.*?</a>)~is',
         '~(<button\b[^>]*class=(["\'])[^"\']*(?:new_thread_button|newthread)[^"\']*\2[^>]*>.*?</button>)~is',
     ];
@@ -1231,7 +1258,7 @@ function af_atf_inject_catalog_cta_near_newthread_button(string $page, string $c
         }
     }
 
-    // 4) Мягкий фоллбек: если есть post thread контейнер, вставляем в него
+    // 6) Мягкий фоллбек: если есть post thread контейнер, вставляем в него
     $count = 0;
     $page2 = @preg_replace(
         '~(<[^>]+\bclass=(["\'])[^"\']*(?:post_thread|newthread)[^"\']*\2[^>]*>)~i',
