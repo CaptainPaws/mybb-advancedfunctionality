@@ -878,12 +878,10 @@ function af_atf_kb_get_endpoint(): void
         return;
     }
 
+    // KB должен решать доступ сам.
+    // Не режем здесь доступ через forum-permission вроде canviewthreads:
+    // это отдельная сущность и она ломает просмотр KB обычным пользователям.
     if (function_exists('af_kb_can_view') && !af_kb_can_view()) {
-        af_atf_json_response(['ok' => 0, 'error' => 'no_access'], 403);
-        return;
-    }
-
-    if (empty($mybb->usergroup['canviewthreads'])) {
         af_atf_json_response(['ok' => 0, 'error' => 'no_access'], 403);
         return;
     }
@@ -908,8 +906,10 @@ function af_atf_kb_get_endpoint(): void
     $title = af_atf_kb_pick_text($row, 'title');
     $short = af_atf_kb_pick_text($row, 'short');
     $body = af_atf_kb_pick_text($row, 'body');
+
     $shortHtml = '';
     $bodyHtml = '';
+
     if ($short !== '') {
         if (function_exists('af_kb_parse_message_modal') && function_exists('af_kb_sanitize_rendered_html')) {
             $shortHtml = af_kb_sanitize_rendered_html(af_kb_parse_message_modal($short));
@@ -917,6 +917,7 @@ function af_atf_kb_get_endpoint(): void
             $shortHtml = nl2br(htmlspecialchars_uni($short));
         }
     }
+
     if ($body !== '') {
         if (function_exists('af_kb_parse_message_modal') && function_exists('af_kb_sanitize_rendered_html')) {
             $bodyHtml = af_kb_sanitize_rendered_html(af_kb_parse_message_modal($body));
@@ -924,6 +925,7 @@ function af_atf_kb_get_endpoint(): void
             $bodyHtml = nl2br(htmlspecialchars_uni($body));
         }
     }
+
     $blocks = [];
     if ($db->table_exists('af_kb_blocks')) {
         $bq = $db->simple_select(
@@ -932,13 +934,16 @@ function af_atf_kb_get_endpoint(): void
             'entry_id='.(int)$row['id'],
             ['order_by' => 'sortorder, id', 'order_dir' => 'ASC']
         );
+
         while ($brow = $db->fetch_array($bq)) {
-            if (!$brow['active'] && (!function_exists('af_kb_can_edit') || !af_kb_can_edit())) {
+            if (!(int)$brow['active'] && (!function_exists('af_kb_can_edit') || !af_kb_can_edit())) {
                 continue;
             }
+
             $blockTitle = af_atf_kb_pick_text($brow, 'title');
             $blockContent = af_atf_kb_pick_text($brow, 'content');
             $blockHtml = '';
+
             if ($blockContent !== '') {
                 if (function_exists('af_kb_parse_message_modal') && function_exists('af_kb_sanitize_rendered_html')) {
                     $blockHtml = af_kb_sanitize_rendered_html(af_kb_parse_message_modal($blockContent));
@@ -946,9 +951,11 @@ function af_atf_kb_get_endpoint(): void
                     $blockHtml = nl2br(htmlspecialchars_uni($blockContent));
                 }
             }
+
             if ($blockTitle === '' && $blockHtml === '') {
                 continue;
             }
+
             $blocks[] = [
                 'block_key' => (string)($brow['block_key'] ?? ''),
                 'title' => $blockTitle,
@@ -969,7 +976,6 @@ function af_atf_kb_get_endpoint(): void
         ],
     ]);
 }
-
 function af_atf_kb_race_variants_endpoint(): void
 {
     global $mybb;
@@ -1520,23 +1526,38 @@ function af_atf_seed_character_contract_fields(): void
 
 function af_atf_assets_disabled_for_current_page(): bool
 {
-    if (function_exists('af_is_blacklisted')
-        && af_is_blacklisted(AF_ATF_ID, defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '')
-    ) {
-        return true;
-    }
-
     global $mybb;
 
     $script = defined('THIS_SCRIPT') ? strtolower((string)THIS_SCRIPT) : '';
     if ($script !== '') {
         $script = strtolower(basename(str_replace('\\', '/', $script)));
     }
+
+    $action = '';
+    if (isset($mybb) && is_object($mybb)) {
+        $action = strtolower((string)($mybb->input['action'] ?? ''));
+    }
+
+    // KB и AF KB-эндпоинт никогда не должны глушиться blacklist'ом,
+    // иначе ломается modal/open flow и рендер в iframe.
+    if ($script === 'kb.php') {
+        return false;
+    }
+
+    if ($script === 'misc.php' && in_array($action, ['kb', 'af_kb_get'], true)) {
+        return false;
+    }
+
     if ($script === '') {
         return false;
     }
 
-    $action = strtolower((string)($mybb->input['action'] ?? ''));
+    if (function_exists('af_is_blacklisted')
+        && af_is_blacklisted(AF_ATF_ID, defined('THIS_SCRIPT') ? (string)THIS_SCRIPT : '')
+    ) {
+        return true;
+    }
+
     $blacklistRaw = (string)($mybb->settings['af_atf_assets_blacklist'] ?? '');
     $conditions = af_atf_parse_assets_blacklist($blacklistRaw);
 
@@ -1550,6 +1571,7 @@ function af_atf_assets_disabled_for_current_page(): bool
         if ($condAction === null || $condAction === '') {
             return true;
         }
+
         if ($action === strtolower((string)$condAction)) {
             return true;
         }
@@ -1565,7 +1587,7 @@ function af_atf_is_relevant_script(): bool
         $script = strtolower(basename(str_replace('\\', '/', $script)));
     }
 
-    if (in_array($script, ['newthread.php', 'editpost.php', 'showthread.php', 'forumdisplay.php'], true)) {
+    if (in_array($script, ['newthread.php', 'editpost.php', 'showthread.php', 'forumdisplay.php', 'kb.php'], true)) {
         return true;
     }
 
@@ -4798,8 +4820,7 @@ function af_atf_ensure_settings(): void
 usercp.php
 userlist.php
 search.php
-gallery.php
-misc.php?action=kb",
+gallery.php",
             'disporder' => 17,
         ],
     ];
