@@ -1884,8 +1884,12 @@ function af_kb_seed_defaults(): void
         if ((string)($existing['type_key'] ?? '') === '') {
             $update['type_key'] = $db->escape_string($defaultRow['type_key']);
         }
-        if ((string)($existing['mechanic_key'] ?? '') === '') {
-            $update['mechanic_key'] = $db->escape_string((string)($defaultRow['mechanic_key'] ?? AF_KB_DEFAULT_MECHANIC_KEY));
+        $expectedMechanic = (string)($defaultRow['mechanic_key'] ?? AF_KB_DEFAULT_MECHANIC_KEY);
+        if (
+            (string)($existing['mechanic_key'] ?? '') === ''
+            || ($typeKey === 'character' && (string)($existing['mechanic_key'] ?? '') !== $expectedMechanic)
+        ) {
+            $update['mechanic_key'] = $db->escape_string($expectedMechanic);
         }
 
         $existingRulesSchema = trim((string)($existing['rules_schema'] ?? ''));
@@ -1899,8 +1903,19 @@ function af_kb_seed_defaults(): void
             || $existingUiSchema === '{}'
             || $existingUiSchema === '[]'
             || $typeKey === 'item'
+            || $typeKey === 'character'
         ) {
             $update['ui_schema_json'] = $db->escape_string($defaultRow['ui_schema_json']);
+        }
+        if (
+            $typeKey === 'character'
+            && (
+                (int)($existing['active'] ?? 1) !== 1
+                || (int)($existing['is_active'] ?? ($existing['active'] ?? 1)) !== 1
+            )
+        ) {
+            $update['active'] = 1;
+            $update['is_active'] = 1;
         }
 
         if (!empty($update)) {
