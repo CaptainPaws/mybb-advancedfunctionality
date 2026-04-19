@@ -391,6 +391,164 @@
       update();
     },
 
+    initCharacterMechanic() {
+      const switcher = AF_ATF.qs(".af-atf-character-mechanic");
+      if (!switcher) return;
+
+      function parseOptions(raw) {
+        try {
+          const parsed = JSON.parse(raw || "{}");
+          return parsed && typeof parsed === "object" ? parsed : {};
+        } catch (e) {
+          return {};
+        }
+      }
+
+      function renderMechanicSelects(mode) {
+        AF_ATF.qsa(".af-atf-kb-mechanic").forEach((wrap) => {
+          const select = AF_ATF.qs("select", wrap);
+          if (!select) return;
+          const optionsByMode = parseOptions(wrap.getAttribute("data-options"));
+          const options = Array.isArray(optionsByMode[mode]) ? optionsByMode[mode] : [];
+          const current = String(select.value || "");
+
+          let html = '<option value=""></option>';
+          let hasCurrent = false;
+          options.forEach((item) => {
+            const key = item && item.key ? String(item.key) : "";
+            if (!key) return;
+            if (key === current) hasCurrent = true;
+            const title = item && item.title ? String(item.title) : key;
+            html += `<option value="${AF_ATF.escapeAttr(key)}">${AF_ATF.escapeAttr(title)}</option>`;
+          });
+          if (current && !hasCurrent) {
+            html += `<option value="${AF_ATF.escapeAttr(current)}">${AF_ATF.escapeAttr(current)}</option>`;
+          }
+
+          select.innerHTML = html;
+          if (current) select.value = current;
+        });
+      }
+
+      function applyMode(mode) {
+        const activeMode = mode === "arpg" ? "arpg" : "dnd";
+
+        AF_ATF.qsa(".af-atf-kb-dynamic").forEach((wrap) => {
+          const scope = String(wrap.getAttribute("data-mechanic-scope") || "").trim();
+          const row = wrap.closest("tr");
+          const shouldShow = !scope || scope === activeMode;
+          if (row) {
+            row.style.display = shouldShow ? "" : "none";
+          }
+          if (!shouldShow) {
+            const select = AF_ATF.qs("select", wrap);
+            if (select) select.value = "";
+          }
+        });
+
+        renderMechanicSelects(activeMode);
+      }
+
+      switcher.addEventListener("change", () => applyMode(String(switcher.value || "dnd")));
+      applyMode(String(switcher.value || "dnd"));
+    },
+
+    initCharacterAbilities() {
+      const blocks = AF_ATF.qsa(".af-atf-abilities");
+      if (!blocks.length) return;
+
+      const createAbility = (seed) => ({
+        ability_name: String((seed && seed.ability_name) || ""),
+        ability_type: (seed && seed.ability_type) === "passive" ? "passive" : "active",
+        ability_description: String((seed && seed.ability_description) || ""),
+        ability_kb_key: String((seed && seed.ability_kb_key) || ""),
+        sortorder: Number.isFinite(Number(seed && seed.sortorder)) ? Number(seed.sortorder) : 0
+      });
+
+      blocks.forEach((wrap) => {
+        if (wrap.__afAbilitiesInited) return;
+        wrap.__afAbilitiesInited = true;
+
+        const hidden = AF_ATF.qs(".af-atf-abilities-hidden", wrap);
+        const list = AF_ATF.qs(".af-atf-abilities-list", wrap);
+        const addBtn = AF_ATF.qs(".af-atf-abilities-add", wrap);
+        const maxItems = parseInt(wrap.getAttribute("data-max-items") || "8", 10) || 8;
+        if (!hidden || !list || !addBtn) return;
+
+        let state = [];
+        try {
+          const parsed = JSON.parse(String(hidden.value || "[]"));
+          if (Array.isArray(parsed)) {
+            state = parsed.map((row) => createAbility(row)).slice(0, maxItems);
+          }
+        } catch (e) {
+          state = [];
+        }
+
+        function sync() {
+          hidden.value = JSON.stringify(state.slice(0, maxItems));
+          addBtn.disabled = state.length >= maxItems;
+        }
+
+        function render() {
+          list.innerHTML = "";
+          state.forEach((ability, index) => {
+            const row = document.createElement("div");
+            row.className = "af-atf-ability-item";
+            row.innerHTML = `
+              <div><strong>Ability #${index + 1}</strong></div>
+              <input type="text" class="text_input af-atf-ability-name" placeholder="ability_name" value="${AF_ATF.escapeAttr(ability.ability_name)}" />
+              <select class="select af-atf-ability-type">
+                <option value="active"${ability.ability_type === "active" ? " selected" : ""}>active</option>
+                <option value="passive"${ability.ability_type === "passive" ? " selected" : ""}>passive</option>
+              </select>
+              <textarea class="textarea af-atf-ability-description" rows="3" placeholder="ability_description">${AF_ATF.escapeAttr(ability.ability_description)}</textarea>
+              <input type="text" class="text_input af-atf-ability-kb-key" placeholder="ability_kb_key (optional)" value="${AF_ATF.escapeAttr(ability.ability_kb_key)}" />
+              <input type="number" class="text_input af-atf-ability-sortorder" placeholder="sortorder" value="${AF_ATF.escapeAttr(ability.sortorder)}" />
+              <button type="button" class="button af-atf-ability-remove">Удалить</button>
+            `;
+
+            const setValue = () => {
+              state[index] = createAbility({
+                ability_name: AF_ATF.qs(".af-atf-ability-name", row).value,
+                ability_type: AF_ATF.qs(".af-atf-ability-type", row).value,
+                ability_description: AF_ATF.qs(".af-atf-ability-description", row).value,
+                ability_kb_key: AF_ATF.qs(".af-atf-ability-kb-key", row).value,
+                sortorder: AF_ATF.qs(".af-atf-ability-sortorder", row).value
+              });
+              sync();
+            };
+
+            AF_ATF.qsa("input,select,textarea", row).forEach((el) => {
+              el.addEventListener("input", setValue);
+              el.addEventListener("change", setValue);
+            });
+
+            AF_ATF.qs(".af-atf-ability-remove", row).addEventListener("click", () => {
+              state.splice(index, 1);
+              render();
+              sync();
+            });
+
+            list.appendChild(row);
+          });
+          sync();
+        }
+
+        addBtn.addEventListener("click", () => {
+          if (state.length >= maxItems) return;
+          state.push(createAbility({ sortorder: state.length + 1 }));
+          render();
+          sync();
+        });
+
+        if (!state.length) {
+          state.push(createAbility({ sortorder: 1 }));
+        }
+        render();
+      });
+    },
+
     initUserChipsOne(wrap) {
       if (!wrap || wrap.__af_atf_inited) return;
       wrap.__af_atf_inited = true;
@@ -687,6 +845,8 @@
     AF_ATF.initKbSelects();
     AF_ATF.initKbChips();
     AF_ATF.initPointBuyAll();
+    AF_ATF.initCharacterMechanic();
+    AF_ATF.initCharacterAbilities();
   }
 
   if (document.readyState === "loading") {

@@ -713,6 +713,9 @@ class AF_Admin_Advancedthreadfields
             'kb_race'   => $lang->af_atf_type_kb_race ?? 'KB select: Race',
             'kb_class'  => $lang->af_atf_type_kb_class ?? 'KB select: Class',
             'kb_theme'  => $lang->af_atf_type_kb_theme ?? 'KB select: Theme',
+            'kb_dynamic' => 'KB select: Any KB type',
+            'kb_mechanic' => 'KB select: mechanic-aware (dnd/arpg)',
+            'character_abilities' => 'Character abilities (JSON repeater)',
             'sf_attributes_pointbuy' => $lang->af_atf_type_sf_attributes_pointbuy ?? 'SF attributes point-buy',
         ];
 

@@ -268,6 +268,7 @@ function af_advancedthreadfields_activate(): void
         $cache->update('af_atf_tpl_state', ['applied' => 1, 'time' => TIME_NOW]);
     }
 
+    af_atf_seed_character_contract_fields();
     af_atf_rebuild_cache(true);
 }
 
@@ -295,6 +296,8 @@ function af_advancedthreadfields_on_enable(): void
     if (is_object($cache)) {
         $cache->update('af_atf_tpl_state', ['applied' => 1, 'time' => TIME_NOW]);
     }
+
+    af_atf_seed_character_contract_fields();
 }
 
 function af_advancedthreadfields_on_disable(): void
@@ -1100,6 +1103,77 @@ function af_atf_parse_assets_blacklist(string $raw): array
     return $out;
 }
 
+function af_atf_seed_character_contract_fields(): void
+{
+    global $db;
+
+    if (!is_object($db) || !$db->table_exists(AF_ATF_TABLE_FIELDS) || !$db->table_exists(AF_ATF_TABLE_GROUPS)) {
+        return;
+    }
+
+    $group = $db->fetch_array($db->simple_select(AF_ATF_TABLE_GROUPS, 'gid', "title='CTA'", ['limit' => 1]));
+    $groupId = (int)($group['gid'] ?? 0);
+    if ($groupId <= 0) {
+        return;
+    }
+
+    $definitions = [
+        ['name' => 'character_pic', 'title' => 'Character picture', 'type' => 'image', 'sortorder' => 10, 'maxlen' => 500],
+        ['name' => 'character_prototype', 'title' => 'Prototype', 'type' => 'text', 'sortorder' => 20, 'maxlen' => 255],
+        ['name' => 'character_name', 'title' => 'Name (EN)', 'type' => 'text', 'sortorder' => 30, 'maxlen' => 255],
+        ['name' => 'character_name_ru', 'title' => 'Name (RU)', 'type' => 'text', 'sortorder' => 40, 'maxlen' => 255],
+        ['name' => 'character_nicknames', 'title' => 'Nicknames', 'type' => 'text', 'sortorder' => 50, 'maxlen' => 500],
+        ['name' => 'character_element', 'title' => 'Element', 'type' => 'kb_dynamic', 'sortorder' => 60, 'options' => "kb_type=arpg_elements\nmechanic=arpg", 'maxlen' => 128],
+        ['name' => 'character_gen', 'title' => 'Gender', 'type' => 'select', 'sortorder' => 70, 'options' => "male=Male\nfemale=Female\nnonbinary=Non-binary\nother=Other", 'maxlen' => 64],
+        ['name' => 'character_race', 'title' => 'Race / Origin', 'type' => 'kb_mechanic', 'sortorder' => 80, 'options' => "dnd=kb_race\narpg=arpg_origin", 'maxlen' => 128],
+        ['name' => 'character_class', 'title' => 'Class / Archetype', 'type' => 'kb_mechanic', 'sortorder' => 90, 'options' => "dnd=kb_class\narpg=arpg_archetype", 'maxlen' => 128],
+        ['name' => 'character_faction', 'title' => 'Faction', 'type' => 'kb_dynamic', 'sortorder' => 100, 'options' => "kb_type=arpg_faction\nmechanic=arpg", 'maxlen' => 128],
+        ['name' => 'character_app', 'title' => 'Appearance', 'type' => 'textarea', 'sortorder' => 110],
+        ['name' => 'character_hp', 'title' => 'HP', 'type' => 'number', 'sortorder' => 200, 'maxlen' => 11],
+        ['name' => 'character_defense', 'title' => 'Defense', 'type' => 'number', 'sortorder' => 210, 'maxlen' => 11],
+        ['name' => 'character_element_damage_bonus', 'title' => 'Element damage bonus', 'type' => 'number', 'sortorder' => 220, 'maxlen' => 11],
+        ['name' => 'character_crit_damage', 'title' => 'Crit damage', 'type' => 'number', 'sortorder' => 230, 'maxlen' => 11],
+        ['name' => 'character_healing_received_bonus', 'title' => 'Healing received bonus', 'type' => 'number', 'sortorder' => 240, 'maxlen' => 11],
+        ['name' => 'character_attack_power', 'title' => 'Attack power', 'type' => 'number', 'sortorder' => 250, 'maxlen' => 11],
+        ['name' => 'character_elemental_mastery', 'title' => 'Elemental mastery', 'type' => 'number', 'sortorder' => 260, 'maxlen' => 11],
+        ['name' => 'character_healing_bonus', 'title' => 'Healing bonus', 'type' => 'number', 'sortorder' => 270, 'maxlen' => 11],
+        ['name' => 'character_shield_strength', 'title' => 'Shield strength', 'type' => 'number', 'sortorder' => 280, 'maxlen' => 11],
+        ['name' => 'character_luck', 'title' => 'Luck', 'type' => 'number', 'sortorder' => 290, 'maxlen' => 11],
+        ['name' => 'character_abilities', 'title' => 'Abilities', 'type' => 'character_abilities', 'sortorder' => 300, 'maxlen' => 0],
+    ];
+
+    foreach ($definitions as $def) {
+        $name = (string)$def['name'];
+        $existing = $db->fetch_array($db->simple_select(AF_ATF_TABLE_FIELDS, 'fieldid', "name='" . $db->escape_string($name) . "'", ['limit' => 1]));
+
+        $payload = [
+            'groupid' => $groupId,
+            'name' => $db->escape_string($name),
+            'title' => $db->escape_string((string)$def['title']),
+            'description' => $db->escape_string((string)($def['description'] ?? '')),
+            'type' => $db->escape_string((string)$def['type']),
+            'options' => $db->escape_string((string)($def['options'] ?? '')),
+            'required' => (int)($def['required'] ?? 0),
+            'active' => 1,
+            'show_thread' => 0,
+            'show_forum' => 0,
+            'sortorder' => (int)($def['sortorder'] ?? 0),
+            'maxlen' => (int)($def['maxlen'] ?? 0),
+            'regex' => $db->escape_string((string)($def['regex'] ?? '')),
+            'format' => $db->escape_string((string)($def['format'] ?? '')),
+            'allow_html' => 0,
+            'parse_mycode' => 1,
+            'parse_smilies' => 0,
+        ];
+
+        if (!empty($existing['fieldid'])) {
+            $db->update_query(AF_ATF_TABLE_FIELDS, $payload, "fieldid=" . (int)$existing['fieldid']);
+        } else {
+            $db->insert_query(AF_ATF_TABLE_FIELDS, $payload);
+        }
+    }
+}
+
 function af_atf_assets_disabled_for_current_page(): bool
 {
     if (function_exists('af_is_blacklisted')
@@ -1887,6 +1961,77 @@ function af_atf_render_field_description(array $field): string
     ]);
 }
 
+function af_atf_kb_get_list_by_type_any(string $type): array
+{
+    $type = strtolower(trim($type));
+    if ($type === '' || !preg_match('/^[a-z0-9_]{2,64}$/', $type)) {
+        return [];
+    }
+
+    if (in_array($type, af_atf_kb_allowed_types(), true)) {
+        return af_atf_kb_get_list_by_type($type);
+    }
+
+    global $db;
+    if (!is_object($db) || !$db->table_exists('af_kb_entries')) {
+        return [];
+    }
+
+    $items = [];
+    $q = $db->simple_select(
+        'af_kb_entries',
+        'type,`key`,title_ru,title_en,sortorder',
+        "type='" . $db->escape_string($type) . "' AND active=1",
+        ['order_by' => 'sortorder, title_ru, title_en', 'order_dir' => 'ASC']
+    );
+    while ($row = $db->fetch_array($q)) {
+        $items[] = [
+            'key' => (string)($row['key'] ?? ''),
+            'title' => af_atf_kb_pick_text($row, 'title') ?: (string)($row['key'] ?? ''),
+        ];
+    }
+
+    return $items;
+}
+
+function af_atf_character_infer_mechanic(array $fields, array $valuesByFieldId): string
+{
+    $fieldNameById = [];
+    foreach ($fields as $f) {
+        $fieldNameById[(int)($f['fieldid'] ?? 0)] = (string)($f['name'] ?? '');
+    }
+
+    $valueByName = [];
+    foreach ($valuesByFieldId as $fieldid => $val) {
+        $name = (string)($fieldNameById[(int)$fieldid] ?? '');
+        if ($name !== '') {
+            $valueByName[$name] = trim((string)$val);
+        }
+    }
+
+    if (($valueByName['character_element'] ?? '') !== '' || ($valueByName['character_faction'] ?? '') !== '') {
+        return 'arpg';
+    }
+
+    $race = (string)($valueByName['character_race'] ?? '');
+    $class = (string)($valueByName['character_class'] ?? '');
+    if ($race !== '' && !empty(af_atf_kb_get_entry('arpg_origin', $race))) {
+        return 'arpg';
+    }
+    if ($class !== '' && !empty(af_atf_kb_get_entry('arpg_archetype', $class))) {
+        return 'arpg';
+    }
+
+    if (function_exists('af_kb_get_default_mechanic_mode')) {
+        $mode = (string)af_kb_get_default_mechanic_mode();
+        if ($mode === 'arpg' || $mode === 'dnd') {
+            return $mode;
+        }
+    }
+
+    return 'dnd';
+}
+
 function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
 {
     global $templates;
@@ -1896,6 +2041,32 @@ function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
     }
 
     $rows = '';
+    $hasCharacterContract = false;
+    foreach ($fields as $f) {
+        if (strpos((string)($f['name'] ?? ''), 'character_') === 0) {
+            $hasCharacterContract = true;
+            break;
+        }
+    }
+
+    if ($hasCharacterContract) {
+        $activeMechanic = af_atf_character_infer_mechanic($fields, $valuesByFieldId);
+        if (isset($_POST['af_atf_character_mechanic'])) {
+            $postedMechanic = trim((string)$_POST['af_atf_character_mechanic']);
+            if ($postedMechanic === 'dnd' || $postedMechanic === 'arpg') {
+                $activeMechanic = $postedMechanic;
+            }
+        }
+
+        $mechanicInput = '<div class="af-atf-character-contract">'
+            . '<label><strong>Mechanic</strong> '
+            . '<select class="select af-atf-character-mechanic" name="af_atf_character_mechanic">'
+            . '<option value="dnd"' . ($activeMechanic === 'dnd' ? ' selected="selected"' : '') . '>DnD</option>'
+            . '<option value="arpg"' . ($activeMechanic === 'arpg' ? ' selected="selected"' : '') . '>ARPG</option>'
+            . '</select></label></div>';
+        $rows .= '<tr class="af-atf-character-mechanic-row"><td class="trow2"><strong>Character mechanic</strong></td><td class="trow2">' . $mechanicInput . '</td></tr>';
+    }
+
     foreach ($fields as $f) {
         $fieldid = (int)$f['fieldid'];
 
@@ -1935,6 +2106,7 @@ function af_atf_build_input_html(array $field, string $value): string
 
     $opts = af_atf_parse_options((string)$field['options']);
     $safeValue = htmlspecialchars_uni($value);
+    $fieldName = (string)($field['name'] ?? '');
 
     // textarea id нужен для BBCode-инсертора
     $taId = 'af_atf_ta_'.$fieldid;
@@ -1990,6 +2162,83 @@ function af_atf_build_input_html(array $field, string $value): string
             $html .= '</div>';
 
             return $html;
+        }
+
+        case 'kb_dynamic': {
+            $kbType = trim((string)($opts['kb_type'] ?? ''));
+            $mechanicScope = trim((string)($opts['mechanic'] ?? ''));
+            $list = af_atf_kb_get_list_by_type_any($kbType);
+
+            $html = '<div class="af-atf-kb-dynamic" data-character-field="' . htmlspecialchars_uni($fieldName) . '" data-mechanic-scope="' . htmlspecialchars_uni($mechanicScope) . '">';
+            $html .= '<select class="select af-atf-input" name="' . $nameAttr . '"><option value=""></option>';
+            $seen = [];
+            foreach ($list as $item) {
+                $key = (string)($item['key'] ?? '');
+                if ($key === '') {
+                    continue;
+                }
+                $seen[$key] = true;
+                $selected = ($value === $key) ? ' selected="selected"' : '';
+                $html .= '<option value="' . htmlspecialchars_uni($key) . '"' . $selected . '>' . htmlspecialchars_uni((string)($item['title'] ?? $key)) . '</option>';
+            }
+            if ($value !== '' && !isset($seen[$value])) {
+                $html .= '<option value="' . htmlspecialchars_uni($value) . '" selected="selected">' . htmlspecialchars_uni($value) . '</option>';
+            }
+            $html .= '</select></div>';
+            return $html;
+        }
+
+        case 'kb_mechanic': {
+            $providers = [
+                'dnd' => trim((string)($opts['dnd'] ?? '')),
+                'arpg' => trim((string)($opts['arpg'] ?? '')),
+            ];
+            $payload = ['dnd' => [], 'arpg' => []];
+            foreach ($providers as $mode => $typeKey) {
+                if ($typeKey === '') {
+                    continue;
+                }
+                $payload[$mode] = af_atf_kb_get_list_by_type_any($typeKey);
+            }
+
+            $activeMechanic = 'dnd';
+            if (isset($_POST['af_atf_character_mechanic'])) {
+                $postedMechanic = trim((string)$_POST['af_atf_character_mechanic']);
+                if ($postedMechanic === 'dnd' || $postedMechanic === 'arpg') {
+                    $activeMechanic = $postedMechanic;
+                }
+            }
+
+            $renderOptions = static function (array $items, string $selectedValue): string {
+                $html = '<option value=""></option>';
+                $seen = [];
+                foreach ($items as $item) {
+                    $key = (string)($item['key'] ?? '');
+                    if ($key === '') {
+                        continue;
+                    }
+                    $seen[$key] = true;
+                    $selected = ($selectedValue === $key) ? ' selected="selected"' : '';
+                    $html .= '<option value="' . htmlspecialchars_uni($key) . '"' . $selected . '>' . htmlspecialchars_uni((string)($item['title'] ?? $key)) . '</option>';
+                }
+                if ($selectedValue !== '' && !isset($seen[$selectedValue])) {
+                    $html .= '<option value="' . htmlspecialchars_uni($selectedValue) . '" selected="selected">' . htmlspecialchars_uni($selectedValue) . '</option>';
+                }
+                return $html;
+            };
+
+            $initialOptions = $renderOptions((array)($payload[$activeMechanic] ?? []), $value);
+            return '<div class="af-atf-kb-mechanic" data-character-field="' . htmlspecialchars_uni($fieldName) . '" data-options="' . htmlspecialchars_uni(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}') . '">'
+                . '<select class="select af-atf-input af-atf-kb-mechanic-select" name="' . $nameAttr . '">' . $initialOptions . '</select>'
+                . '</div>';
+        }
+
+        case 'character_abilities': {
+            return '<div class="af-atf-abilities" data-max-items="8">'
+                . '<input type="hidden" class="af-atf-abilities-hidden" name="' . $nameAttr . '" value="' . $safeValue . '" />'
+                . '<div class="af-atf-abilities-list"></div>'
+                . '<button type="button" class="button af-atf-abilities-add">+ добавить способность</button>'
+                . '</div>';
         }
 
         case 'sf_attributes_pointbuy': {
@@ -2590,6 +2839,70 @@ function af_atf_force_min_message_if_needed(int $fid): void
     }
 }
 
+function af_atf_character_active_mechanic(): string
+{
+    $mechanic = trim((string)($_POST['af_atf_character_mechanic'] ?? ''));
+    if ($mechanic === 'arpg' || $mechanic === 'dnd') {
+        return $mechanic;
+    }
+    if (function_exists('af_kb_get_default_mechanic_mode')) {
+        $fallback = (string)af_kb_get_default_mechanic_mode();
+        if ($fallback === 'arpg' || $fallback === 'dnd') {
+            return $fallback;
+        }
+    }
+    return 'dnd';
+}
+
+function af_atf_normalize_character_abilities_json(string $raw): string
+{
+    $raw = trim($raw);
+    if ($raw === '') {
+        return '[]';
+    }
+
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return '[]';
+    }
+
+    $out = [];
+    foreach ($decoded as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $name = trim((string)($row['ability_name'] ?? ''));
+        $type = trim((string)($row['ability_type'] ?? 'active'));
+        $description = trim((string)($row['ability_description'] ?? ''));
+        $kbKey = trim((string)($row['ability_kb_key'] ?? ''));
+        $sortorder = (int)($row['sortorder'] ?? (count($out) + 1));
+
+        if ($name === '' && $description === '' && $kbKey === '') {
+            continue;
+        }
+
+        if ($type !== 'passive') {
+            $type = 'active';
+        }
+        if ($sortorder < 0) {
+            $sortorder = 0;
+        }
+
+        $out[] = [
+            'ability_name' => my_substr($name, 0, 255),
+            'ability_type' => $type,
+            'ability_description' => my_substr($description, 0, 5000),
+            'ability_kb_key' => my_substr($kbKey, 0, 128),
+            'sortorder' => $sortorder,
+        ];
+        if (count($out) >= 8) {
+            break;
+        }
+    }
+
+    return json_encode($out, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '[]';
+}
+
 function af_atf_newthread_do_start(): void
 {
     global $fid, $mybb;
@@ -2662,6 +2975,7 @@ function af_atf_newthread_do_end(): void
     $values = af_atf_collect_posted_values($fields);
 
     // лёгкая нормализация (основная валидация уже прошла в DataHandler)
+    $activeMechanic = af_atf_character_active_mechanic();
     foreach ($fields as $f) {
         $fieldid = (int)$f['fieldid'];
         if ($fieldid <= 0) {
@@ -2677,6 +2991,12 @@ function af_atf_newthread_do_end(): void
         }
 
         $type = (string)$f['type'];
+        $fieldName = (string)($f['name'] ?? '');
+        if ($activeMechanic === 'dnd' && ($fieldName === 'character_element' || $fieldName === 'character_faction')) {
+            $values[$fieldid] = '';
+            continue;
+        }
+
         if ($type === 'kb_race' || $type === 'kb_class' || $type === 'kb_theme') {
             if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
                 $val = '';
@@ -2703,6 +3023,12 @@ function af_atf_newthread_do_end(): void
             $errorKey = null;
             $normalized = af_atf_sf_pointbuy_normalize($val, $settings, $errorKey);
             $val = !empty($normalized['ok']) ? (string)$normalized['json'] : '';
+        } elseif ($type === 'character_abilities') {
+            $val = af_atf_normalize_character_abilities_json($val);
+        } elseif ($type === 'kb_dynamic' || $type === 'kb_mechanic') {
+            if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
+                $val = '';
+            }
         }
 
         if (($type === 'select' || $type === 'radio') && $val !== '') {
@@ -2749,6 +3075,7 @@ function af_atf_editpost_do_end(): void
 
     $values = af_atf_collect_posted_values($fields);
 
+    $activeMechanic = af_atf_character_active_mechanic();
     foreach ($fields as $f) {
         $fieldid = (int)$f['fieldid'];
         if ($fieldid <= 0) {
@@ -2764,6 +3091,12 @@ function af_atf_editpost_do_end(): void
         }
 
         $type = (string)$f['type'];
+        $fieldName = (string)($f['name'] ?? '');
+        if ($activeMechanic === 'dnd' && ($fieldName === 'character_element' || $fieldName === 'character_faction')) {
+            $values[$fieldid] = '';
+            continue;
+        }
+
         if ($type === 'kb_race' || $type === 'kb_class' || $type === 'kb_theme') {
             if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
                 $val = '';
@@ -2790,6 +3123,12 @@ function af_atf_editpost_do_end(): void
             $errorKey = null;
             $normalized = af_atf_sf_pointbuy_normalize($val, $settings, $errorKey);
             $val = !empty($normalized['ok']) ? (string)$normalized['json'] : '';
+        } elseif ($type === 'character_abilities') {
+            $val = af_atf_normalize_character_abilities_json($val);
+        } elseif ($type === 'kb_dynamic' || $type === 'kb_mechanic') {
+            if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
+                $val = '';
+            }
         }
 
         if (($type === 'select' || $type === 'radio') && $val !== '') {
@@ -2903,9 +3242,11 @@ function af_atf_dh_validate(&$ph): void
     }
 
     $clean = [];
+    $activeMechanic = af_atf_character_active_mechanic();
     foreach ($fields as $f) {
         $fieldid = (int)$f['fieldid'];
         $raw = $incoming[$fieldid] ?? '';
+        $fieldName = (string)($f['name'] ?? '');
 
         // checkbox special
         if ((string)$f['type'] === 'checkbox') {
@@ -2913,6 +3254,10 @@ function af_atf_dh_validate(&$ph): void
         }
 
         $type = (string)$f['type'];
+        if ($activeMechanic === 'dnd' && ($fieldName === 'character_element' || $fieldName === 'character_faction')) {
+            $clean[$fieldid] = '';
+            continue;
+        }
 
         // usernames: нормализуем к "uid,uid,uid" (уникальные, >0)
         if ($type === 'usernames') {
@@ -3004,6 +3349,30 @@ function af_atf_dh_validate(&$ph): void
             } else {
                 $clean[$fieldid] = '';
             }
+            continue;
+        }
+
+        if ($type === 'character_abilities') {
+            $val = af_atf_normalize_character_abilities_json(is_string($raw) ? $raw : '');
+            if ((int)$f['required'] === 1 && $val === '[]') {
+                $ph->set_error('missing_required_field_'.$fieldid);
+                continue;
+            }
+            $clean[$fieldid] = $val;
+            continue;
+        }
+
+        if ($type === 'kb_dynamic' || $type === 'kb_mechanic') {
+            $val = is_string($raw) ? trim($raw) : '';
+            if ((int)$f['required'] === 1 && $val === '') {
+                $ph->set_error('missing_required_field_'.$fieldid);
+                continue;
+            }
+            if ($val !== '' && !preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
+                $ph->set_error('invalid_field_'.$fieldid);
+                continue;
+            }
+            $clean[$fieldid] = $val;
             continue;
         }
 
@@ -3249,6 +3618,34 @@ function af_atf_format_value_for_display(array $field, string $val): string
             return '';
         }
         return af_atf_kb_build_chip($kbType, $val, (string)$field['options']);
+    }
+
+    if ($type === 'kb_dynamic' || $type === 'kb_mechanic') {
+        $label = af_atf_kb_resolve_label((string)$field['options'], $val);
+        return htmlspecialchars_uni($label !== '' ? $label : $val);
+    }
+
+    if ($type === 'character_abilities') {
+        $list = json_decode($val, true);
+        if (!is_array($list) || empty($list)) {
+            return '';
+        }
+        $items = [];
+        foreach ($list as $ability) {
+            if (!is_array($ability)) {
+                continue;
+            }
+            $name = trim((string)($ability['ability_name'] ?? ''));
+            $atype = trim((string)($ability['ability_type'] ?? 'active'));
+            if ($name === '') {
+                continue;
+            }
+            $items[] = htmlspecialchars_uni($name . ' [' . ($atype === 'passive' ? 'passive' : 'active') . ']');
+        }
+        if (empty($items)) {
+            return '';
+        }
+        return implode('<br />', $items);
     }
 
     if ($type === 'sf_attributes_pointbuy') {
