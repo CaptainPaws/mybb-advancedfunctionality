@@ -752,10 +752,26 @@
         }
 
         root.innerHTML = [
-            '<details open="open" class="af-kb-collapsible"><summary>Tags</summary><div id="af-kb-arpg-tags"></div></details>',
-            '<details open="open" class="af-kb-collapsible"><summary>Blocks</summary><div id="af-kb-arpg-blocks"></div></details>',
-            '<details open="open" class="af-kb-collapsible"><summary>Rules</summary><div id="af-kb-arpg-rules"></div></details>',
-            '<details class="af-kb-collapsible"><summary>Debug raw JSON</summary><div id="af-kb-arpg-raw"></div></details>'
+            '<details open="open" class="af-kb-collapsible">',
+            '<summary>Tags</summary>',
+            '<label>Tags (comma separated)</label>',
+            '<input type="text" id="af-kb-meta-tags" />',
+            '</details>',
+            '<details open="open" class="af-kb-collapsible">',
+            '<summary>Media/UI</summary>',
+            '<div class="af-kb-row">',
+            '<div><label>Icon URL (meta.ui.icon_url)</label><input type="text" id="af-kb-meta-icon-url" /></div>',
+            '<div><label>Icon Class (meta.ui.icon_class)</label><input type="text" id="af-kb-meta-icon-class" /></div>',
+            '</div>',
+            '<div class="af-kb-row">',
+            '<div><label>Background URL (meta.ui.background_url)</label><input type="text" id="af-kb-meta-bg-url" /></div>',
+            '<div><label>Background Tab URL (meta.ui.background_tab_url)</label><input type="text" id="af-kb-meta-bg-tab-url" /></div>',
+            '</div>',
+            '</details>',
+            '<details class="af-kb-collapsible">',
+            '<summary>Debug raw JSON</summary>',
+            '<textarea id="af-kb-meta-raw-preview" rows="8" readonly="readonly"></textarea>',
+            '</details>'
         ].join('');
 
         var fields = {
@@ -763,8 +779,12 @@
             iconUrl: root.querySelector('#af-kb-meta-icon-url'),
             iconClass: root.querySelector('#af-kb-meta-icon-class'),
             bgUrl: root.querySelector('#af-kb-meta-bg-url'),
-            bgTabUrl: root.querySelector('#af-kb-meta-bg-tab-url')
+            bgTabUrl: root.querySelector('#af-kb-meta-bg-tab-url'),
+            rawPreview: root.querySelector('#af-kb-meta-raw-preview')
         };
+        if (!fields.tags || !fields.iconUrl || !fields.iconClass || !fields.bgUrl || !fields.bgTabUrl) {
+            return;
+        }
 
         fields.tags.value = (meta.tags || []).join(', ');
         fields.iconUrl.value = meta.ui.icon_url || '';
@@ -779,11 +799,18 @@
             meta.ui.background_url = fields.bgUrl.value.trim();
             meta.ui.background_tab_url = fields.bgTabUrl.value.trim();
             raw.value = JSON.stringify(meta, null, 2);
+            if (fields.rawPreview) {
+                fields.rawPreview.value = raw.value;
+            }
         }
 
         Object.keys(fields).forEach(function (key) {
+            if (key === 'rawPreview') {
+                return;
+            }
             fields[key].addEventListener('input', syncMeta);
         });
+        syncMeta();
     }
 
     // ---------- RULES UI (главная часть правки) ----------
@@ -4611,7 +4638,20 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-        initMetaUi();
-        initRulesUi();
+        try {
+            initMetaUi();
+        } catch (errMeta) {
+            if (window.console && typeof window.console.error === 'function') {
+                window.console.error('[AF KB] initMetaUi failed', errMeta);
+            }
+        }
+
+        try {
+            initRulesUi();
+        } catch (errRules) {
+            if (window.console && typeof window.console.error === 'function') {
+                window.console.error('[AF KB] initRulesUi failed', errRules);
+            }
+        }
     });
 })();
