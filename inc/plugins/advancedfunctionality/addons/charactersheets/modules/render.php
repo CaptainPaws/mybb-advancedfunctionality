@@ -124,6 +124,107 @@ function af_charactersheets_deep_get(array $source, string $path, $fallback = nu
     return $cursor;
 }
 
+function af_charactersheets_extract_character_contract_payload(array $entry): array
+{
+    if (function_exists('af_kb_extract_character_contract')) {
+        $extracted = af_kb_extract_character_contract($entry);
+        if (is_array($extracted)) {
+            return [
+                'profile' => (array)($extracted['profile'] ?? []),
+                'stats' => (array)($extracted['stats'] ?? []),
+                'abilities' => (array)($extracted['abilities'] ?? []),
+                'meta' => (array)($extracted['meta'] ?? []),
+            ];
+        }
+    }
+
+    $rules = [];
+    if (!empty($entry['data_json'])) {
+        $rules = af_charactersheets_json_decode((string)$entry['data_json']);
+    }
+    if (!is_array($rules) || empty($rules)) {
+        $meta = af_charactersheets_json_decode((string)($entry['meta_json'] ?? ''));
+        $rules = (array)($meta['rules'] ?? []);
+    }
+
+    return [
+        'profile' => (array)($rules['character_profile'] ?? []),
+        'stats' => (array)($rules['character_stats'] ?? []),
+        'abilities' => (array)($rules['character_abilities'] ?? []),
+        'meta' => (array)($rules['character_meta'] ?? []),
+    ];
+}
+
+function af_charactersheets_resolve_character_kb_entry(int $tid, int $uid, array $accept_row = []): array
+{
+    global $db;
+
+    $empty = [
+        'entry' => [],
+        'payload' => ['profile' => [], 'stats' => [], 'abilities' => [], 'meta' => []],
+        'source' => 'none',
+    ];
+
+    if ($tid <= 0 || !is_object($db) || !$db->table_exists('af_kb_entries')) {
+        return $empty;
+    }
+
+    $normalize = static function (array $entry, string $source): array {
+        return [
+            'entry' => $entry,
+            'payload' => af_charactersheets_extract_character_contract_payload($entry),
+            'source' => $source,
+        ];
+    };
+
+    $entry_id = (int)($accept_row['kb_entry_id'] ?? 0);
+    if ($entry_id > 0) {
+        $entry = $db->fetch_array($db->simple_select('af_kb_entries', '*', 'id=' . $entry_id . " AND type='character'", ['limit' => 1]));
+        if (is_array($entry) && !empty($entry['id'])) {
+            return $normalize($entry, 'accept.kb_entry_id');
+        }
+    }
+
+    $oc_key = 'oc-' . $tid;
+    $oc_entry = af_charactersheets_kb_get_entry('character', $oc_key);
+    if (!empty($oc_entry['id'])) {
+        return $normalize((array)$oc_entry, 'character.key:oc-tid');
+    }
+
+    $q = $db->simple_select(
+        'af_kb_entries',
+        '*',
+        "type='character' AND active=1",
+        ['order_by' => 'updated_at', 'order_dir' => 'DESC', 'limit' => 200]
+    );
+
+    while ($row = $db->fetch_array($q)) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $payload = af_charactersheets_extract_character_contract_payload($row);
+        $meta = (array)($payload['meta'] ?? []);
+        $source_tid = (int)($meta['source_tid'] ?? 0);
+        $source_uid = (int)($meta['source_uid'] ?? 0);
+        if ($source_tid > 0 && $source_tid === $tid) {
+            return [
+                'entry' => $row,
+                'payload' => $payload,
+                'source' => 'character_meta.source_tid',
+            ];
+        }
+        if ($uid > 0 && $source_uid > 0 && $source_uid === $uid) {
+            return [
+                'entry' => $row,
+                'payload' => $payload,
+                'source' => 'character_meta.source_uid',
+            ];
+        }
+    }
+
+    return $empty;
+}
+
 function af_charactersheets_resolve_arpg_primary_stat_specs(array $sheet_view): array
 {
     $paths = [
@@ -459,7 +560,7 @@ function af_charactersheets_arpg_collect_artifacts_data(array $build): array
     return $result;
 }
 
-function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_view, array $atf_index, array $build = []): array
+function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_view, array $atf_index, array $build = [], array $character_source = []): array
 {
     global $mybb;
 
@@ -475,6 +576,9 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $equipment_items = af_charactersheets_arpg_collect_equipment_items($build);
     $inventory_items = af_charactersheets_arpg_collect_inventory_items($build);
     $abilities_items = af_charactersheets_arpg_collect_abilities($build, $sheet_view);
+    $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
+    $character_stats = (array)(($character_source['payload'] ?? [])['stats'] ?? []);
+    $character_abilities = (array)(($character_source['payload'] ?? [])['abilities'] ?? []);
 
     $identityParts = [];
     foreach ([
@@ -503,6 +607,10 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
 
     $primary_stats = af_charactersheets_collect_arpg_primary_stats($sheet_view);
     $element = af_charactersheets_arpg_pick_element_label($atf_index, $sheet_view);
+    $kb_element = trim((string)($character_profile['character_element'] ?? ''));
+    if ($kb_element !== '') {
+        $element = $kb_element;
+    }
     $wallet_raw = (int)($sheet_view['credits'] ?? 0);
     $ability_tokens_raw = (int)($sheet_view['ability_tokens'] ?? 0);
     $wallet_display = function_exists('af_balance_format_credits') ? af_balance_format_credits($wallet_raw) : number_format($wallet_raw / 100, 2, '.', ' ');
@@ -528,6 +636,24 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         $description = trim(strip_tags(af_charactersheets_kb_pick_text($entry, 'description')));
         $activeAbilities[] = ['title' => $title, 'description' => $description];
     }
+    if (!$activeAbilities && $character_abilities) {
+        foreach ($character_abilities as $ability) {
+            if (!is_array($ability)) {
+                continue;
+            }
+            if (trim((string)($ability['ability_type'] ?? 'active')) === 'passive') {
+                continue;
+            }
+            $title = trim((string)($ability['ability_name'] ?? ''));
+            if ($title === '') {
+                continue;
+            }
+            $activeAbilities[] = [
+                'title' => $title,
+                'description' => trim(strip_tags((string)($ability['ability_description'] ?? ''))),
+            ];
+        }
+    }
     $passiveAbilities = [];
     foreach ((array)($sheet_view['character_computed_state']['passive_abilities'] ?? []) as $passive) {
         $title = trim((string)($passive['key'] ?? $passive['kind'] ?? ''));
@@ -536,24 +662,49 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         }
         $passiveAbilities[] = ['title' => $title, 'description' => 'Пассивная способность из вычисленного состояния персонажа'];
     }
+    if (!$passiveAbilities && $character_abilities) {
+        foreach ($character_abilities as $ability) {
+            if (!is_array($ability) || trim((string)($ability['ability_type'] ?? '')) !== 'passive') {
+                continue;
+            }
+            $title = trim((string)($ability['ability_name'] ?? ''));
+            if ($title === '') {
+                continue;
+            }
+            $passiveAbilities[] = [
+                'title' => $title,
+                'description' => trim(strip_tags((string)($ability['ability_description'] ?? ''))),
+            ];
+        }
+    }
 
     $elementSlug = function_exists('my_strtolower') ? my_strtolower($element) : strtolower($element);
+    $kbStat = static function (array $stats, string $key): string {
+        $value = $stats[$key] ?? null;
+        if ($value === null || $value === '') {
+            return '—';
+        }
+        if (is_numeric($value)) {
+            return (string)(0 + $value);
+        }
+        return trim((string)$value) !== '' ? (string)$value : '—';
+    };
     $stats_panel = [
-        ['label' => 'HP', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['mechanics.hp_total'])],
-        ['label' => 'Сила атаки', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['mechanics.damage_bonus', 'mechanics.damage_total'])],
-        ['label' => 'Защита', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['mechanics.ac_total'])],
-        ['label' => 'Мастерство стихий', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.resources.mastery'])],
+        ['label' => 'HP', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['mechanics.hp_total'], $kbStat($character_stats, 'character_hp'))],
+        ['label' => 'Сила атаки', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['mechanics.damage_bonus', 'mechanics.damage_total'], $kbStat($character_stats, 'character_attack_power'))],
+        ['label' => 'Защита', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['mechanics.ac_total'], $kbStat($character_stats, 'character_defense'))],
+        ['label' => 'Мастерство стихий', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.resources.mastery'], $kbStat($character_stats, 'character_elemental_mastery'))],
         ['label' => 'Бонус ' . $element . ' урона', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, [
             'character_computed_state.resources.bonus_' . $elementSlug . '_damage',
             'character_computed_state.resources.element_damage_bonus',
             'mechanics.damage_total',
-        ])],
+        ], $kbStat($character_stats, 'character_element_damage_bonus'))],
         ['label' => 'Шанс крит. попадания', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.fixed_bonuses.crit_rate', 'character_computed_state.resources.crit_rate'])],
-        ['label' => 'Крит. урон', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.fixed_bonuses.crit_dmg', 'character_computed_state.resources.crit_dmg'])],
-        ['label' => 'Бонус лечения', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.resources.healing_bonus'])],
-        ['label' => 'Бонус получаемого лечения', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.resources.incoming_heal_bonus'])],
-        ['label' => 'Прочность щита', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.resources.shield_strength'])],
-        ['label' => 'Удача', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.resources.luck'])],
+        ['label' => 'Крит. урон', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.fixed_bonuses.crit_dmg', 'character_computed_state.resources.crit_dmg'], $kbStat($character_stats, 'character_crit_damage'))],
+        ['label' => 'Бонус лечения', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.resources.healing_bonus'], $kbStat($character_stats, 'character_healing_bonus'))],
+        ['label' => 'Бонус получаемого лечения', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.resources.incoming_heal_bonus'], $kbStat($character_stats, 'character_healing_received_bonus'))],
+        ['label' => 'Прочность щита', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.resources.shield_strength'], $kbStat($character_stats, 'character_shield_strength'))],
+        ['label' => 'Удача', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.resources.luck'], $kbStat($character_stats, 'character_luck'))],
     ];
 
     return [
@@ -603,6 +754,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
             'inventory_html' => af_charactersheets_build_arpg_cards_html($inventory_items, 'Инвентарь пуст'),
         ],
         'build' => $build,
+        'character_source' => $character_source,
     ];
 }
 
@@ -686,7 +838,27 @@ function af_charactersheets_arpg_render_abilities_group_html(array $items, strin
 
 function af_charactersheets_arpg_render_main_info_html(array $sheet_arpg_vm): string
 {
-    return '<section class="af-cs-arpg-panel"><div class="af-cs-muted">Основная информация будет дополнена позже.</div></section>';
+    $profile = (array)(($sheet_arpg_vm['character_source']['payload'] ?? [])['profile'] ?? []);
+    $rows = [];
+    foreach ([
+        'Прототип' => 'character_prototype',
+        'Раса' => 'character_race',
+        'Класс' => 'character_class',
+        'Фракция' => 'character_faction',
+        'Пол' => 'character_gen',
+    ] as $label => $field) {
+        $value = trim((string)($profile[$field] ?? ''));
+        if ($value === '') {
+            continue;
+        }
+        $rows[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">' . htmlspecialchars_uni($label) . '</div><div class="af-cs-info-value">' . htmlspecialchars_uni($value) . '</div></div>';
+    }
+
+    $app = trim((string)($profile['character_app'] ?? ''));
+    $aboutHtml = $app !== '' ? nl2br(htmlspecialchars_uni($app)) : '<span class="af-cs-muted">Нет описания</span>';
+
+    return '<section class="af-cs-arpg-panel"><h2>Основная информация</h2><div class="af-cs-info-table">' . implode('', $rows) . '</div>'
+        . '<div class="af-cs-arpg-main-about"><h3>Описание</h3><div>' . $aboutHtml . '</div></div></section>';
 }
 
 function af_charactersheets_arpg_render_talent_tree_html(array $sheet_arpg_vm, bool $canEdit): string
@@ -923,7 +1095,21 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     $atf_fields = af_charactersheets_get_atf_fields($tid);
     $atf_index = af_charactersheets_index_fields($atf_fields);
 
-    $character_name_en = af_charactersheets_pick_field_value($atf_index, ['character_name_en', 'character_name', 'char_name', 'name']);
+    $sheet = af_charactersheets_get_sheet_by_slug($slug);
+    if (empty($sheet)) {
+        $sheet = af_charactersheets_autocreate_sheet($tid, $thread);
+    }
+    if (empty($sheet)) {
+        return '';
+    }
+    $character_source = af_charactersheets_resolve_character_kb_entry($tid, $uid, $accept_row);
+    $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
+    $character_stats = (array)(($character_source['payload'] ?? [])['stats'] ?? []);
+
+    $character_name_en = trim((string)($character_profile['character_name'] ?? ''));
+    if ($character_name_en === '') {
+        $character_name_en = af_charactersheets_pick_field_value($atf_index, ['character_name_en', 'character_name', 'char_name', 'name']);
+    }
     if ($character_name_en === '') {
         $character_name_en = (string)($thread['subject'] ?? '');
     }
@@ -931,15 +1117,13 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
         $character_name_en = $user['username'] ?? 'Лист персонажа';
     }
 
-    $character_name_ru = af_charactersheets_pick_field_value($atf_index, ['character_name_ru']);
-    $character_nicknames = af_charactersheets_pick_field_value($atf_index, ['character_nicknames', 'character_nickname', 'nickname']);
-
-    $sheet = af_charactersheets_get_sheet_by_slug($slug);
-    if (empty($sheet)) {
-        $sheet = af_charactersheets_autocreate_sheet($tid, $thread);
+    $character_name_ru = trim((string)($character_profile['character_name_ru'] ?? ''));
+    if ($character_name_ru === '') {
+        $character_name_ru = af_charactersheets_pick_field_value($atf_index, ['character_name_ru']);
     }
-    if (empty($sheet)) {
-        return '';
+    $character_nicknames = trim((string)($character_profile['character_nicknames'] ?? ''));
+    if ($character_nicknames === '') {
+        $character_nicknames = af_charactersheets_pick_field_value($atf_index, ['character_nicknames', 'character_nickname', 'nickname']);
     }
 
     $sheet_view = af_charactersheets_compute_sheet_view($sheet);
@@ -971,7 +1155,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
         $delete_redirect
     );
 
-    $sheet_info_table_html = af_charactersheets_build_info_table_html($atf_index, $sheet_view);
+    $sheet_info_table_html = af_charactersheets_build_info_table_html($atf_index, $sheet_view, $character_source);
     $sheet_attributes_html = af_charactersheets_build_attributes_html($sheet_view, $can_edit_attributes, $can_view_ledger, $can_staff_reset, $attributes_locked);
     $sheet_bonus_html = af_charactersheets_build_bonus_html($atf_index, $sheet_view);
     $sheet_application_html = af_charactersheets_build_application_content_html($tid, (int)($thread['fid'] ?? 0));
@@ -994,7 +1178,10 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
 
     $sheet_progress_html = af_charactersheets_build_progress_html($sheet_view, $sheet, $can_award_exp, $can_view_ledger);
 
-    $sheet_portrait_url = af_charactersheets_get_portrait_url($atf_index);
+    $sheet_portrait_url = trim((string)($character_profile['character_pic'] ?? ''));
+    if ($sheet_portrait_url === '') {
+        $sheet_portrait_url = af_charactersheets_get_portrait_url($atf_index);
+    }
     $sheet_level_value = (int)($sheet_view['level'] ?? 1);
     $sheet_level_percent = (int)($sheet_view['level_percent'] ?? 0);
     $sheet_level_exp_label = htmlspecialchars_uni((string)($sheet_view['level_exp_label'] ?? ''));
@@ -1047,15 +1234,15 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     $sheet_arpg_achievements_block_html = '';
 
     if ($is_arpg_sheet) {
-        $sheet_arpg_vm = af_charactersheets_build_arpg_view_model($sheet, $sheet_view, $atf_index, $build);
+        $sheet_arpg_vm = af_charactersheets_build_arpg_view_model($sheet, $sheet_view, $atf_index, $build, $character_source);
         $sheet_arpg_vm_json = htmlspecialchars_uni(af_charactersheets_json_encode($sheet_arpg_vm));
 
         $sheet_arpg_combat = (array)($sheet_arpg_vm['combat'] ?? []);
         $sheet_arpg_race = htmlspecialchars_uni((string)($sheet_arpg_vm['atf']['race'] ?? '—'));
         $sheet_arpg_class = htmlspecialchars_uni((string)($sheet_arpg_vm['atf']['class'] ?? '—'));
         $sheet_arpg_theme = htmlspecialchars_uni((string)($sheet_arpg_vm['atf']['theme'] ?? '—'));
-        $sheet_arpg_hp = htmlspecialchars_uni((string)($sheet_arpg_combat['hp_total'] ?? 0));
-        $sheet_arpg_def = htmlspecialchars_uni((string)($sheet_arpg_combat['def_total'] ?? 0));
+        $sheet_arpg_hp = htmlspecialchars_uni((string)($sheet_arpg_combat['hp_total'] ?? ($character_stats['character_hp'] ?? 0)));
+        $sheet_arpg_def = htmlspecialchars_uni((string)($sheet_arpg_combat['def_total'] ?? ($character_stats['character_defense'] ?? 0)));
         $sheet_arpg_speed = htmlspecialchars_uni((string)($sheet_arpg_combat['speed_total'] ?? 0));
         $sheet_arpg_damage = htmlspecialchars_uni((string)($sheet_arpg_combat['damage_total'] ?? '—'));
         $sheet_arpg_humanity = htmlspecialchars_uni((string)($sheet_arpg_combat['humanity_total'] ?? 0));
@@ -2187,19 +2374,29 @@ function af_charactersheets_build_effects_chip_html(array $sheet_view): string
     return implode('', $chips);
 }
 
-function af_charactersheets_build_info_table_html(array $index, array $sheet_view = []): string
+function af_charactersheets_build_info_table_html(array $index, array $sheet_view = [], array $character_source = []): string
 {
     global $mybb;
 
+    $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
     $age = af_charactersheets_pick_field_value($index, ['character_age', 'age']);
-    $gender = af_charactersheets_pick_field_value($index, ['character_gen', 'character_gender', 'gender']);
-    $race_key = af_charactersheets_pick_field_value($index, ['character_race', 'race'], false);
+    $gender = trim((string)($character_profile['character_gen'] ?? ''));
+    if ($gender === '') {
+        $gender = af_charactersheets_pick_field_value($index, ['character_gen', 'character_gender', 'gender']);
+    }
+    $race_key = trim((string)($character_profile['character_race'] ?? ''));
+    if ($race_key === '') {
+        $race_key = af_charactersheets_pick_field_value($index, ['character_race', 'race'], false);
+    }
     $race_variant_key = af_charactersheets_pick_field_value($index, ['character_race_variant', 'race_variant', 'racevariant'], false);
-    $class_key = af_charactersheets_pick_field_value($index, ['character_class', 'class'], false);
+    $class_key = trim((string)($character_profile['character_class'] ?? ''));
+    if ($class_key === '') {
+        $class_key = af_charactersheets_pick_field_value($index, ['character_class', 'class'], false);
+    }
     $theme_key = af_charactersheets_pick_field_value($index, ['character_themes', 'character_theme', 'theme'], false);
-    $race_label = af_charactersheets_pick_field_value($index, ['character_race', 'race'], true);
+    $race_label = $race_key !== '' ? $race_key : af_charactersheets_pick_field_value($index, ['character_race', 'race'], true);
     $race_variant_label = af_charactersheets_pick_field_value($index, ['character_race_variant', 'race_variant', 'racevariant'], true);
-    $class_label = af_charactersheets_pick_field_value($index, ['character_class', 'class'], true);
+    $class_label = $class_key !== '' ? $class_key : af_charactersheets_pick_field_value($index, ['character_class', 'class'], true);
     $theme_label = af_charactersheets_pick_field_value($index, ['character_themes', 'character_theme', 'theme'], true);
 
     $items = [];
