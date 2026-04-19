@@ -996,6 +996,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
 
     $sheet_knowledge_html = af_charactersheets_build_knowledge_html($sheet_view, $can_edit_sheet, $can_view_ledger, $is_staff);
     $sheet_abilities_html = af_charactersheets_build_abilities_html((int)($sheet['uid'] ?? 0));
+    $sheet_inventory_html = af_charactersheets_build_inventory_tab_html((int)($sheet['uid'] ?? 0));
 
     $can_edit_loadout = $can_edit_sheet || af_charactersheets_user_is_admin_or_moderator($mybb->user ?? [], $fid_for_mod);
     $sheet_owner_uid_for_loadout = (int)($sheet['uid'] ?? 0);
@@ -2670,6 +2671,22 @@ function af_charactersheets_build_inventory_html(int $uid): string
     $tpl = $templates->get('charactersheet_inventory');
     eval("\$out = \"" . $tpl . "\";");
     return $out;
+}
+
+function af_charactersheets_build_inventory_tab_html(int $uid): string
+{
+    if ($uid <= 0) {
+        return '<div class="af-cs-muted">Инвентарь недоступен.</div>';
+    }
+
+    if (function_exists('af_advancedinventory_build_inventory_fragment')) {
+        $fragment = (string)af_advancedinventory_build_inventory_fragment($uid);
+        if ($fragment !== '') {
+            return $fragment;
+        }
+    }
+
+    return af_charactersheets_build_inventory_html($uid);
 }
 
 function af_charactersheets_pick_inventory_category(array $entry): string

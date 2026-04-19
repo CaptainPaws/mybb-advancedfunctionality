@@ -32,6 +32,7 @@
         <button class="is-active" type="button" data-afcs-tab="arpg-main">Основная информация</button>
         <button type="button" data-afcs-tab="arpg-talents">Таланты</button>
         <button type="button" data-afcs-tab="arpg-abilities">Способности</button>
+        <button type="button" data-afcs-tab="arpg-inventory">Инвентарь</button>
         <button type="button" data-afcs-tab="arpg-equipment">Экипировка</button>
         <button type="button" data-afcs-tab="arpg-achievements">Достижения</button>
       </div>
@@ -56,6 +57,10 @@
             <h2>Пассивные способности</h2>
             <div class="af-cs-arpg-ability-grid">{$sheet_arpg_passive_abilities_html}</div>
           </section>
+        </div>
+
+        <div class="af-cs-tab" data-afcs-tab-content="arpg-inventory">
+          <div data-afcs-block="inventory">{$sheet_inventory_html}</div>
         </div>
 
         <div class="af-cs-tab" data-afcs-tab-content="arpg-equipment">
