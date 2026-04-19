@@ -8401,7 +8401,14 @@ function af_kb_handle_character_apply(): void
     $payload['expires_at'] = TIME_NOW + 900;
     $payload['created_at'] = TIME_NOW;
 
-    $cache->update('af_atf_prefill_' . $token, $payload);
+    $stored = false;
+    if (function_exists('af_atf_prefill_store_save')) {
+        $stored = af_atf_prefill_store_save($token, $payload);
+    }
+    if (!$stored) {
+        $cache->update('af_atf_prefill_' . $token, $payload);
+    }
+
     redirect('newthread.php?fid=' . $forumId . '&af_atf_prefill_token=' . rawurlencode($token));
 }
 
