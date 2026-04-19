@@ -275,6 +275,116 @@
       });
     },
 
+    initKbCatalogCtaModal() {
+      if (AF_ATF.__kbCatalogCtaInited) return;
+      AF_ATF.__kbCatalogCtaInited = true;
+
+      let modalState = null;
+
+      function destroyModal() {
+        AF_ATF.qsa(".af-atf-kb-catalog-modal-backdrop").forEach((node) => node.remove());
+        document.body.classList.remove("af-atf-kb-catalog-modal-open");
+        if (modalState) {
+          modalState.closeBtn.removeEventListener("click", modalState.onClose);
+          modalState.backdrop.removeEventListener("click", modalState.onBackdrop);
+          document.removeEventListener("keydown", modalState.onKeydown);
+        }
+        modalState = null;
+      }
+
+      function buildModal() {
+        destroyModal();
+
+        const backdrop = document.createElement("div");
+        backdrop.className = "af-atf-kb-catalog-modal-backdrop";
+
+        const modal = document.createElement("div");
+        modal.className = "af-atf-kb-catalog-modal";
+        modal.setAttribute("role", "dialog");
+        modal.setAttribute("aria-modal", "true");
+
+        const header = document.createElement("div");
+        header.className = "af-atf-kb-catalog-modal-head";
+
+        const title = document.createElement("div");
+        title.className = "af-atf-kb-catalog-modal-title";
+
+        const close = document.createElement("button");
+        close.type = "button";
+        close.className = "af-atf-kb-catalog-modal-close";
+        close.setAttribute("aria-label", "Закрыть");
+        close.textContent = "×";
+
+        const body = document.createElement("div");
+        body.className = "af-atf-kb-catalog-modal-body";
+
+        const iframe = document.createElement("iframe");
+        iframe.className = "af-atf-kb-catalog-modal-frame";
+        iframe.setAttribute("loading", "lazy");
+        iframe.setAttribute("referrerpolicy", "same-origin");
+        iframe.src = "about:blank";
+
+        body.appendChild(iframe);
+        header.appendChild(title);
+        header.appendChild(close);
+        modal.appendChild(header);
+        modal.appendChild(body);
+        backdrop.appendChild(modal);
+        document.body.appendChild(backdrop);
+
+        const onClose = (event) => {
+          if (event) event.preventDefault();
+          destroyModal();
+        };
+        const onBackdrop = (event) => {
+          if (event.target === backdrop) onClose(event);
+        };
+        const onKeydown = (event) => {
+          if (event.key === "Escape") onClose(event);
+        };
+
+        close.addEventListener("click", onClose);
+        backdrop.addEventListener("click", onBackdrop);
+        document.addEventListener("keydown", onKeydown);
+
+        modalState = {
+          backdrop,
+          closeBtn: close,
+          onClose,
+          onBackdrop,
+          onKeydown,
+          open(src, modalTitle) {
+            title.textContent = modalTitle || "Персонажи";
+            iframe.src = src;
+            document.body.classList.add("af-atf-kb-catalog-modal-open");
+          }
+        };
+
+        return modalState;
+      }
+
+      document.addEventListener("click", (event) => {
+        const opener = event.target && event.target.closest
+          ? event.target.closest("[data-af-atf-kb-catalog-cta]")
+          : null;
+        if (!opener) return;
+
+        const href = String(opener.getAttribute("href") || "").trim();
+        if (!href) return;
+
+        event.preventDefault();
+
+        const modalUrl = new URL(href, window.location.origin);
+        modalUrl.searchParams.set("modal", "1");
+
+        const modal = modalState || buildModal();
+        modal.open(
+          modalUrl.toString(),
+          String(opener.getAttribute("data-af-atf-modal-title") || opener.textContent || "").trim()
+        );
+      });
+    },
+
     initPointBuyAll() {
       const blocks = AF_ATF.qsa(".af-atf-pointbuy");
       if (!blocks.length) return;
@@ -894,6 +1004,7 @@
     AF_ATF.initUserChipsAll();
     AF_ATF.initKbSelects();
     AF_ATF.initKbChips();
+    AF_ATF.initKbCatalogCtaModal();
     AF_ATF.initPointBuyAll();
     AF_ATF.initCharacterMechanic();
     AF_ATF.initDynamicKbPreviews();

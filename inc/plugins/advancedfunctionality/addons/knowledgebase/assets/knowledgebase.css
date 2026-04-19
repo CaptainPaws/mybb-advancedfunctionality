@@ -6,6 +6,18 @@
     z-index: 1;
 }
 
+body.af-kb-modal-mode {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+}
+
+body.af-kb-modal-mode .af-kb-page {
+    max-width: none;
+    margin: 0;
+    padding: 16px;
+}
+
 .af-kb-header {
     display: flex;
     align-items: center;

@@ -284,6 +284,71 @@
   margin-left: auto;
 }
 
+body.af-atf-kb-catalog-modal-open {
+  overflow: hidden;
+}
+
+.af-atf-kb-catalog-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0,0,0,.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+}
+
+.af-atf-kb-catalog-modal {
+  width: min(1200px, calc(100vw - 28px));
+  height: min(88vh, 920px);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.2);
+  background: #0f131d;
+  box-shadow: 0 24px 64px rgba(0,0,0,.45);
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.af-atf-kb-catalog-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+
+.af-atf-kb-catalog-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.af-atf-kb-catalog-modal-close {
+  margin-left: auto;
+  border: 1px solid rgba(255,255,255,.15);
+  background: rgba(255,255,255,.08);
+  color: inherit;
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.af-atf-kb-catalog-modal-body {
+  min-height: 0;
+}
+
+.af-atf-kb-catalog-modal-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
 .af-atf-character-contract {
   display: inline-flex;
   align-items: center;
