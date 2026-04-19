@@ -938,46 +938,6 @@ function af_apui_build_postbit_actionbar_html(array $post, array $sheetPayload =
 
     $buttons = [];
 
-    $applicationUrl = af_apui_resolve_application_url($post, $sheetPayload);
-    $applicationFetchUrl = af_apui_resolve_application_fetch_url($sheetPayload);
-    $applicationPid = af_apui_resolve_application_pid($sheetPayload);
-
-    if ($applicationUrl !== '') {
-        $fragmentSelector = '';
-        if ($applicationPid > 0) {
-            $fragmentSelector =
-                '#post_' . $applicationPid
-                . ', [data-pid="' . $applicationPid . '"]';
-        }
-
-        $applicationSourceUrl = af_apui_build_surface_url($applicationUrl, $uid, 'application');
-
-        $applicationModalUrl = af_apui_build_surface_url(
-            $applicationFetchUrl !== '' ? $applicationFetchUrl : $applicationUrl,
-            $uid,
-            'application'
-        );
-        $applicationModalUrl = af_apui_append_query_arg($applicationModalUrl, 'ajax', 1);
-
-        $buttons[] = af_apui_build_postbit_action_button([
-            'label' => 'Анкета',
-            'title' => 'Анкета',
-            'url' => $applicationSourceUrl,
-            'modal_url' => $applicationModalUrl,
-            'modal_kind' => 'application',
-            'icon' => 'fa-regular fa-id-card',
-            'modifier' => 'af-apui-postbit-action--application',
-            'data_attrs' => [
-                'data-af-apui-fetch-url' => $applicationModalUrl,
-                'data-af-apui-source-url' => $applicationSourceUrl,
-                'data-af-apui-application-pid' => $applicationPid > 0 ? (string)$applicationPid : null,
-                'data-af-apui-fragment-selector' => $fragmentSelector !== '' ? $fragmentSelector : null,
-                'data-af-apui-owner-uid' => (string)$uid,
-                'data-af-apui-surface' => 'application',
-            ],
-        ]);
-    }
-
     $sheetUrl = '';
     $sheetLabel = 'Лист персонажа';
     $sheetExtraAttrs = '';
@@ -1015,38 +975,6 @@ function af_apui_build_postbit_actionbar_html(array $post, array $sheetPayload =
             ],
         ]);
     }
-
-    $inventoryUrl = af_apui_build_surface_url('inventory.php?uid=' . $uid, $uid, 'inventory');
-
-    $buttons[] = af_apui_build_postbit_action_button([
-        'label' => 'Инвентарь',
-        'title' => 'Инвентарь',
-        'url' => $inventoryUrl,
-        'modal_url' => $inventoryUrl,
-        'modal_kind' => 'inventory',
-        'icon' => 'fa-solid fa-box-archive',
-        'modifier' => 'af-apui-postbit-action--inventory',
-        'data_attrs' => [
-            'data-af-apui-owner-uid' => (string)$uid,
-            'data-af-apui-surface' => 'inventory',
-        ],
-    ]);
-
-    $achievementsUrl = af_apui_build_surface_url('achivments.php?uid=' . $uid, $uid, 'achievements');
-
-    $buttons[] = af_apui_build_postbit_action_button([
-        'label' => 'Ачивки',
-        'title' => 'Ачивки',
-        'url' => $achievementsUrl,
-        'modal_url' => $achievementsUrl,
-        'modal_kind' => 'achievements',
-        'icon' => 'fa-solid fa-trophy',
-        'modifier' => 'af-apui-postbit-action--achievements',
-        'data_attrs' => [
-            'data-af-apui-owner-uid' => (string)$uid,
-            'data-af-apui-surface' => 'achievements',
-        ],
-    ]);
 
     $buttons = array_values(array_filter($buttons));
     if (!$buttons) {
@@ -1223,41 +1151,17 @@ function af_apui_postbit_compose_userdetails(array &$post): void
     $pid = (int)($post['pid'] ?? 0);
     $post['af_aa_user_class'] = $uid > 0 ? 'af-aa-postbit-user-' . $uid : '';
 
-    $creditsValue = '0.00';
-    $currencySymbol = '¢';
-    $tokensHtml = '';
     $levelValue = '1';
 
     $tooltipMessages = htmlspecialchars_uni('Сообщений');
     $tooltipThreads = htmlspecialchars_uni('Тем');
     $tooltipReputation = htmlspecialchars_uni('Репутация');
     $tooltipPosts = htmlspecialchars_uni('Постов');
-    $tooltipCredits = htmlspecialchars_uni('Кредитов');
-    $tooltipTokens = htmlspecialchars_uni('Абилити токенов');
     $tooltipLevel = htmlspecialchars_uni('Уровень');
 
     if ($uid > 0 && function_exists('af_balance_get_postbit_data')) {
         $balanceData = af_balance_get_postbit_data($uid);
-        $creditsValue = htmlspecialchars_uni((string)($balanceData['credits_display'] ?? '0.00'));
-        $currencySymbol = htmlspecialchars_uni((string)($balanceData['currency_symbol'] ?? '¢'));
         $levelValue = (string)((int)($balanceData['level'] ?? 1));
-
-        if (!empty($balanceData['ability_tokens_show_postbit'])) {
-            $tokensValue = htmlspecialchars_uni((string)($balanceData['ability_tokens_display'] ?? '0.00'));
-            $tokensSymbol = htmlspecialchars_uni((string)($balanceData['ability_tokens_symbol'] ?? '♦'));
-
-            $tokensHtml =
-                '<span class="af-apui-stat-item af-apui-stat-item--tokens"'
-                . ' title="' . $tooltipTokens . '"'
-                . ' data-af-title="' . $tooltipTokens . '"'
-                . ' data-af-balance-ability="1"'
-                . ' data-af-balance-ability-scaled="' . (int)($balanceData['ability_tokens_scaled'] ?? 0) . '"'
-                . ' data-pid="' . $pid . '"'
-                . ' data-uid="' . $uid . '">'
-                    . '<span class="af-apui-stat-item__icon"><i class="fa-solid fa-gem" aria-hidden="true"></i></span>'
-                    . '<span class="af-apui-stat-item__value" data-af-balance-ability-value="1">' . $tokensValue . ' ' . $tokensSymbol . '</span>'
-                . '</span>';
-        }
     }
 
     $isQuickReplyContext = (defined('THIS_SCRIPT') && strtolower((string)THIS_SCRIPT) === 'newreply.php') || defined('IN_XMLHTTP');
@@ -1275,8 +1179,6 @@ function af_apui_postbit_compose_userdetails(array &$post): void
         . '<span class="af-apui-stat-item af-apui-stat-item--threads" title="' . $tooltipThreads . '" data-af-title="' . $tooltipThreads . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-copy" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">' . htmlspecialchars_uni($threadsValue) . '</span></span>'
         . '<span class="af-apui-stat-item af-apui-stat-item--reputation" title="' . $tooltipReputation . '" data-af-title="' . $tooltipReputation . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-heart" aria-hidden="true"></i></span><span class="af-apui-stat-item__value">' . htmlspecialchars_uni($reputationValue) . '</span></span>'
         . '<span class="af-apui-stat-item af-apui-stat-item--posts" title="' . $tooltipPosts . '" data-af-title="' . $tooltipPosts . '" data-af-balance-posts="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-pen" aria-hidden="true"></i></span><span class="af-apui-stat-item__value"><span class="af-apc-slot" data-af-apc-slot="1" data-uid="' . $uid . '">' . $afApcPostbitHtml . '</span></span></span>'
-        . '<span class="af-apui-stat-item af-apui-stat-item--credits" title="' . $tooltipCredits . '" data-af-title="' . $tooltipCredits . '" data-af-balance-credits="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-coins" aria-hidden="true"></i></span><span class="af-apui-stat-item__value" data-af-balance-credits-value="1">' . $creditsValue . ' ' . $currencySymbol . '</span></span>'
-        . $tokensHtml
         . '<span class="af-apui-stat-item af-apui-stat-item--level" title="' . $tooltipLevel . '" data-af-title="' . $tooltipLevel . '" data-af-balance-level="1" data-pid="' . $pid . '" data-uid="' . $uid . '"><span class="af-apui-stat-item__icon"><i class="fa-solid fa-signal" aria-hidden="true"></i></span><span class="af-apui-stat-item__value" data-af-balance-level-value="1">' . htmlspecialchars_uni($levelValue) . '</span></span>'
         . '</div>';
 
