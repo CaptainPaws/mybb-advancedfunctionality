@@ -157,12 +157,19 @@ function af_advancedthreadfields_install(): void
               `title` VARCHAR(255) NOT NULL,
               `description` TEXT NOT NULL,
               `forums` TEXT NOT NULL,
+              `catalog_characters_url` VARCHAR(500) NOT NULL DEFAULT '',
+              `catalog_roles_url` VARCHAR(500) NOT NULL DEFAULT '',
+              `catalog_characters_label` VARCHAR(255) NOT NULL DEFAULT '',
+              `catalog_roles_label` VARCHAR(255) NOT NULL DEFAULT '',
+              `show_catalog_cta` TINYINT(1) NOT NULL DEFAULT 0,
               `active` TINYINT(1) NOT NULL DEFAULT 1,
               `sortorder` INT NOT NULL DEFAULT 0,
               PRIMARY KEY (`gid`),
               KEY `active_sort` (`active`,`sortorder`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         ");
+    } else {
+        af_atf_db_ensure_group_columns();
     }
 
     // 2) fields
@@ -252,6 +259,7 @@ function af_advancedthreadfields_activate(): void
     af_atf_sync_languages();
 
     af_atf_ensure_settings();
+    af_atf_db_ensure_group_columns();
     af_atf_install_templates();
 
     af_atf_apply_template_edits();
@@ -335,6 +343,7 @@ function af_advancedthreadfields_init(): void
     $plugins->add_hook('datahandler_post_update', 'af_atf_dh_update_post');
 
     // Вывод
+    $plugins->add_hook('forumdisplay_start', 'af_atf_forumdisplay_start');
     $plugins->add_hook('showthread_start', 'af_atf_showthread_start');
     $plugins->add_hook('postbit', 'af_atf_postbit');
     $plugins->add_hook('forumdisplay_get_threads', 'af_atf_forumdisplay_get_threads');
@@ -462,6 +471,27 @@ function af_advancedthreadfields_pre_output(&$page = ''): void
             if ($count > 0 && is_string($page2)) {
                 $page = $page2;
             }
+        }
+    }
+
+    // forumdisplay: добавляем CTA рядом с кнопкой "Создать тему" (только для целевого форума группы)
+    if ((defined('THIS_SCRIPT') && THIS_SCRIPT === 'forumdisplay.php')
+        && !empty($GLOBALS['af_atf_forum_catalog_cta_html'])
+        && strpos($page, '<!--AF_ATF_FORUM_CTA-->') === false
+    ) {
+        $insert = "\n<!--AF_ATF_FORUM_CTA-->\n" . $GLOBALS['af_atf_forum_catalog_cta_html'] . "\n";
+
+        $count = 0;
+        $page2 = @preg_replace(
+            '~(<a\b[^>]*href=(["\'])[^"\']*newthread\.php\?[^"\']*\2[^>]*>.*?</a>)~is',
+            '$1'.$insert,
+            $page,
+            1,
+            $count
+        );
+
+        if ($count > 0 && is_string($page2)) {
+            $page = $page2;
         }
     }
 
@@ -925,6 +955,29 @@ function af_atf_db_ensure_columns(): void
     }
 }
 
+function af_atf_db_ensure_group_columns(): void
+{
+    global $db;
+
+    if (!$db->table_exists(AF_ATF_TABLE_GROUPS)) {
+        return;
+    }
+
+    $cols = [
+        'catalog_characters_url'   => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `catalog_characters_url` VARCHAR(500) NOT NULL DEFAULT '' AFTER `forums`",
+        'catalog_roles_url'        => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `catalog_roles_url` VARCHAR(500) NOT NULL DEFAULT '' AFTER `catalog_characters_url`",
+        'catalog_characters_label' => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `catalog_characters_label` VARCHAR(255) NOT NULL DEFAULT '' AFTER `catalog_roles_url`",
+        'catalog_roles_label'      => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `catalog_roles_label` VARCHAR(255) NOT NULL DEFAULT '' AFTER `catalog_characters_label`",
+        'show_catalog_cta'         => "ALTER TABLE `".TABLE_PREFIX.AF_ATF_TABLE_GROUPS."` ADD `show_catalog_cta` TINYINT(1) NOT NULL DEFAULT 0 AFTER `catalog_roles_label`",
+    ];
+
+    foreach ($cols as $col => $sql) {
+        if (method_exists($db, 'field_exists') && !$db->field_exists($col, AF_ATF_TABLE_GROUPS)) {
+            $db->write_query($sql);
+        }
+    }
+}
+
 function af_atf_tpl_rebuild_all_caches(): void
 {
     global $db;
@@ -1210,6 +1263,83 @@ function af_atf_get_fields_for_forum(int $fid): array
     return $out;
 }
 
+function af_atf_get_groups_cached(): array
+{
+    global $cache;
+
+    $c = $cache->read('af_atf_fields');
+    if (!is_array($c) || !isset($c['groups']) || !is_array($c['groups'])) {
+        af_atf_rebuild_cache(true);
+        $c = $cache->read('af_atf_fields');
+    }
+
+    return (is_array($c) && isset($c['groups']) && is_array($c['groups'])) ? $c['groups'] : [];
+}
+
+function af_atf_get_catalog_group_for_forum(int $fid): ?array
+{
+    if ($fid <= 0) {
+        return null;
+    }
+
+    $groups = af_atf_get_groups_cached();
+    if (empty($groups)) {
+        return null;
+    }
+
+    foreach ($groups as $group) {
+        if ((int)($group['active'] ?? 0) !== 1 || (int)($group['show_catalog_cta'] ?? 0) !== 1) {
+            continue;
+        }
+
+        $forumsSet = is_array($group['forums_set'] ?? null) ? $group['forums_set'] : [];
+        if (!empty($forumsSet) && !isset($forumsSet[$fid])) {
+            continue;
+        }
+
+        return $group;
+    }
+
+    return null;
+}
+
+function af_atf_build_catalog_cta_html(int $fid): string
+{
+    $group = af_atf_get_catalog_group_for_forum($fid);
+    if (!$group) {
+        return '';
+    }
+
+    $charUrl = trim((string)($group['catalog_characters_url'] ?? ''));
+    $rolesUrl = trim((string)($group['catalog_roles_url'] ?? ''));
+    if ($charUrl === '' && $rolesUrl === '') {
+        return '';
+    }
+
+    $charLabel = trim((string)($group['catalog_characters_label'] ?? ''));
+    $rolesLabel = trim((string)($group['catalog_roles_label'] ?? ''));
+    if ($charLabel === '') {
+        $charLabel = 'Посмотреть канонов';
+    }
+    if ($rolesLabel === '') {
+        $rolesLabel = 'Посмотреть списки ролей';
+    }
+
+    $items = [];
+    if ($charUrl !== '') {
+        $items[] = '<a class="button" href="'.htmlspecialchars_uni($charUrl).'">'.htmlspecialchars_uni($charLabel).'</a>';
+    }
+    if ($rolesUrl !== '') {
+        $items[] = '<a class="button" href="'.htmlspecialchars_uni($rolesUrl).'">'.htmlspecialchars_uni($rolesLabel).'</a>';
+    }
+
+    if (empty($items)) {
+        return '';
+    }
+
+    return '<span class="af-atf-catalog-cta" style="display:inline-flex; gap:8px; margin-left:8px;">'.implode('', $items).'</span>';
+}
+
 
 /* -------------------- CACHE -------------------- */
 
@@ -1235,7 +1365,7 @@ function af_atf_rebuild_cache(bool $force = false): void
     if ($db->table_exists(AF_ATF_TABLE_GROUPS)) {
         $qg = $db->simple_select(
             AF_ATF_TABLE_GROUPS,
-            'gid,title,forums,active,sortorder',
+            'gid,title,forums,active,sortorder,catalog_characters_url,catalog_roles_url,catalog_characters_label,catalog_roles_label,show_catalog_cta',
             '',
             ['order_by' => 'sortorder', 'order_dir' => 'ASC']
         );
@@ -1252,11 +1382,18 @@ function af_atf_rebuild_cache(bool $force = false): void
             }
 
             $groups[$gid] = [
+                'gid'            => $gid,
                 'title'          => (string)$g['title'],
                 'forums_raw'     => $forumsRaw,
                 'forums_set'     => $forumsSet,       // вот это ключевое
                 'forums_expanded'=> $forumsExpanded,  // опционально
                 'active'         => (int)$g['active'],
+                'sortorder'      => (int)$g['sortorder'],
+                'catalog_characters_url'   => (string)($g['catalog_characters_url'] ?? ''),
+                'catalog_roles_url'        => (string)($g['catalog_roles_url'] ?? ''),
+                'catalog_characters_label' => (string)($g['catalog_characters_label'] ?? ''),
+                'catalog_roles_label'      => (string)($g['catalog_roles_label'] ?? ''),
+                'show_catalog_cta'         => (int)($g['show_catalog_cta'] ?? 0),
             ];
         }
     }
@@ -1308,6 +1445,7 @@ function af_atf_rebuild_cache(bool $force = false): void
     $cache->update('af_atf_fields', [
         'built'  => TIME_NOW,
         'fields' => $fields,
+        'groups' => array_values($groups),
     ]);
 }
 
@@ -2984,6 +3122,18 @@ function af_atf_forumdisplay_get_threads(&$query): void
     } else {
         $query .= " WHERE (".implode(' AND ', $conds).")";
     }
+}
+
+function af_atf_forumdisplay_start(): void
+{
+    global $fid;
+
+    $forumId = (int)$fid;
+    if ($forumId <= 0) {
+        return;
+    }
+
+    $GLOBALS['af_atf_forum_catalog_cta_html'] = af_atf_build_catalog_cta_html($forumId);
 }
 
 function af_atf_forumdisplay_thread(): void
