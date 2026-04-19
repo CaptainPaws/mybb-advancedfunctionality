@@ -442,3 +442,18 @@ body.af-atf-kb-catalog-modal-open {
 .af-atf-pointbuy-display-value {
   font-weight: 700;
 }
+
+.af-atf-kb-catalog-modal-body,
+.af-atf-kb-catalog-modal-loader {
+  background: #0d1118;
+}
+
+.af-atf-kb-catalog-modal-frame {
+  background: transparent;
+}
+
+.af-atf-kb-catalog-modal-head,
+.af-atf-kb-catalog-modal-title,
+.af-atf-kb-catalog-modal-close {
+  color: #fff;
+}
