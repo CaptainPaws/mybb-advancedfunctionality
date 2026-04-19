@@ -866,6 +866,7 @@
             if (t === 'skill') return 'skill';
             if (t === 'spell') return 'spell';
             if (t === 'item') return 'item';
+            if (t === 'character') return 'character';
             if (t === 'bestiary') return 'bestiary';
             if (t === 'perk') return 'perk';
             if (t === 'condition') return 'perk';
@@ -2296,6 +2297,44 @@
                 return base;
             }
 
+            if (profile === 'character') {
+                base.type_profile = 'character';
+                base.character_profile = {
+                    category: 'canons',
+                    character_pic: '',
+                    character_prototype: '',
+                    character_name: '',
+                    character_name_ru: '',
+                    character_nicknames: '',
+                    character_element: '',
+                    character_gen: '',
+                    character_race: '',
+                    character_class: '',
+                    character_faction: '',
+                    character_app: ''
+                };
+                base.character_stats = {
+                    character_hp: 0,
+                    character_defense: 0,
+                    character_element_damage_bonus: 0,
+                    character_crit_damage: 0,
+                    character_healing_received_bonus: 0,
+                    character_attack_power: 0,
+                    character_elemental_mastery: 0,
+                    character_healing_bonus: 0,
+                    character_shield_strength: 0,
+                    character_luck: 0
+                };
+                base.character_abilities = [];
+                base.character_links = [];
+                base.character_meta = {
+                    contract: 'af_kb.character.contract.v1',
+                    contract_version: '1.0',
+                    source: 'kb_manual'
+                };
+                return base;
+            }
+
             return base;
         }
 
@@ -2696,6 +2735,34 @@
             if (!Array.isArray(state.faction.tags)) state.faction.tags = [];
             ensureArr('faction.relations');
             ensureArr('faction.grants');
+        }
+        if (uiProfile === 'character') {
+            ensureObj('character_profile', {});
+            ensureObj('character_stats', {});
+            ensureObj('character_meta', {});
+            ensureArr('character_abilities');
+            ensureArr('character_links');
+            if (!state.character_profile.category) state.character_profile.category = 'canons';
+            ['character_pic', 'character_prototype', 'character_name', 'character_name_ru', 'character_nicknames', 'character_element', 'character_gen', 'character_race', 'character_class', 'character_faction', 'character_app'].forEach(function (k) {
+                state.character_profile[k] = String(state.character_profile[k] || '');
+            });
+            ['character_hp', 'character_defense', 'character_element_damage_bonus', 'character_crit_damage', 'character_healing_received_bonus', 'character_attack_power', 'character_elemental_mastery', 'character_healing_bonus', 'character_shield_strength', 'character_luck'].forEach(function (k) {
+                state.character_stats[k] = numberOrZero(state.character_stats[k] != null ? state.character_stats[k] : 0);
+            });
+            state.character_abilities = state.character_abilities.map(function (ability) {
+                var row = (ability && typeof ability === 'object' && !Array.isArray(ability)) ? ability : {};
+                return {
+                    slot_index: numberOrZero(row.slot_index != null ? row.slot_index : 1),
+                    ability_name: String(row.ability_name || ''),
+                    ability_type: String(row.ability_type || 'active'),
+                    ability_description: String(row.ability_description || ''),
+                    ability_kb_key: String(row.ability_kb_key || ''),
+                    sortorder: numberOrZero(row.sortorder != null ? row.sortorder : 0)
+                };
+            });
+            if (!state.character_meta.contract) state.character_meta.contract = 'af_kb.character.contract.v1';
+            if (!state.character_meta.contract_version) state.character_meta.contract_version = '1.0';
+            if (!state.character_meta.source) state.character_meta.source = 'kb_manual';
         }
 
         // ---------- defs (heritage) ----------
@@ -3308,6 +3375,61 @@
                     legendary_actions: Array.isArray(p.legendary_actions) ? p.legendary_actions : [],
                     loot: Array.isArray(p.loot) ? p.loot : [],
                     gm_notes: String(p.gm_notes || '')
+                };
+            }
+
+            if (profile === 'character') {
+                var profileC = (p.character_profile && typeof p.character_profile === 'object') ? p.character_profile : {};
+                var statsC = (p.character_stats && typeof p.character_stats === 'object') ? p.character_stats : {};
+                var metaC = (p.character_meta && typeof p.character_meta === 'object') ? p.character_meta : {};
+                var abilitiesC = Array.isArray(p.character_abilities) ? p.character_abilities : [];
+                return {
+                    schema: p.schema,
+                    type_profile: 'character',
+                    version: p.version,
+                    character_profile: {
+                        category: String(profileC.category || 'canons'),
+                        character_pic: String(profileC.character_pic || ''),
+                        character_prototype: String(profileC.character_prototype || ''),
+                        character_name: String(profileC.character_name || ''),
+                        character_name_ru: String(profileC.character_name_ru || ''),
+                        character_nicknames: String(profileC.character_nicknames || ''),
+                        character_element: String(profileC.character_element || ''),
+                        character_gen: String(profileC.character_gen || ''),
+                        character_race: String(profileC.character_race || ''),
+                        character_class: String(profileC.character_class || ''),
+                        character_faction: String(profileC.character_faction || ''),
+                        character_app: String(profileC.character_app || '')
+                    },
+                    character_stats: {
+                        character_hp: numberOrZero(statsC.character_hp != null ? statsC.character_hp : 0),
+                        character_defense: numberOrZero(statsC.character_defense != null ? statsC.character_defense : 0),
+                        character_element_damage_bonus: numberOrZero(statsC.character_element_damage_bonus != null ? statsC.character_element_damage_bonus : 0),
+                        character_crit_damage: numberOrZero(statsC.character_crit_damage != null ? statsC.character_crit_damage : 0),
+                        character_healing_received_bonus: numberOrZero(statsC.character_healing_received_bonus != null ? statsC.character_healing_received_bonus : 0),
+                        character_attack_power: numberOrZero(statsC.character_attack_power != null ? statsC.character_attack_power : 0),
+                        character_elemental_mastery: numberOrZero(statsC.character_elemental_mastery != null ? statsC.character_elemental_mastery : 0),
+                        character_healing_bonus: numberOrZero(statsC.character_healing_bonus != null ? statsC.character_healing_bonus : 0),
+                        character_shield_strength: numberOrZero(statsC.character_shield_strength != null ? statsC.character_shield_strength : 0),
+                        character_luck: numberOrZero(statsC.character_luck != null ? statsC.character_luck : 0)
+                    },
+                    character_abilities: abilitiesC.map(function (row) {
+                        var ability = (row && typeof row === 'object' && !Array.isArray(row)) ? row : {};
+                        return {
+                            slot_index: numberOrZero(ability.slot_index != null ? ability.slot_index : 1),
+                            ability_name: String(ability.ability_name || ''),
+                            ability_type: String(ability.ability_type || 'active'),
+                            ability_description: String(ability.ability_description || ''),
+                            ability_kb_key: String(ability.ability_kb_key || ''),
+                            sortorder: numberOrZero(ability.sortorder != null ? ability.sortorder : 0)
+                        };
+                    }),
+                    character_links: Array.isArray(p.character_links) ? p.character_links : [],
+                    character_meta: {
+                        contract: String(metaC.contract || 'af_kb.character.contract.v1'),
+                        contract_version: String(metaC.contract_version || '1.0'),
+                        source: String(metaC.source || 'kb_manual')
+                    }
                 };
             }
 
@@ -4292,6 +4414,74 @@
                     syncRawDebounced();
                 }, { type: '', payload: {} });
 
+                return;
+            }
+
+            if (uiProfile === 'character') {
+                var profileDefs = [
+                    { name: 'category', label: 'Категория', type: 'select', options: ['canons', 'originals', 'roles'] },
+                    { name: 'character_pic', label: 'character_pic', type: 'text' },
+                    { name: 'character_prototype', label: 'character_prototype', type: 'text' },
+                    { name: 'character_name', label: 'character_name', type: 'text' },
+                    { name: 'character_name_ru', label: 'character_name_ru', type: 'text' },
+                    { name: 'character_nicknames', label: 'character_nicknames', type: 'text' },
+                    { name: 'character_element', label: 'character_element', type: 'text' },
+                    { name: 'character_gen', label: 'character_gen', type: 'text' },
+                    { name: 'character_race', label: 'character_race', type: 'text' },
+                    { name: 'character_class', label: 'character_class', type: 'text' },
+                    { name: 'character_faction', label: 'character_faction', type: 'text' },
+                    { name: 'character_app', label: 'character_app', type: 'textarea' }
+                ];
+                var statsDefs = [
+                    { name: 'character_hp', label: 'HP', type: 'number' },
+                    { name: 'character_defense', label: 'Defense', type: 'number' },
+                    { name: 'character_attack_power', label: 'Attack power', type: 'number' },
+                    { name: 'character_element_damage_bonus', label: 'Element dmg bonus', type: 'number' },
+                    { name: 'character_crit_damage', label: 'Crit damage', type: 'number' },
+                    { name: 'character_healing_received_bonus', label: 'Healing received bonus', type: 'number' },
+                    { name: 'character_elemental_mastery', label: 'Elemental mastery', type: 'number' },
+                    { name: 'character_healing_bonus', label: 'Healing bonus', type: 'number' },
+                    { name: 'character_shield_strength', label: 'Shield strength', type: 'number' },
+                    { name: 'character_luck', label: 'Luck', type: 'number' }
+                ];
+
+                var profileGrid = document.createElement('div');
+                profileGrid.className = 'af-kb-row';
+                profileDefs.forEach(function (d) { profileGrid.appendChild(createInput(d, state.character_profile, syncRawDebounced)); });
+                fields.profileFields.appendChild(profileGrid);
+
+                var statsGrid = document.createElement('div');
+                statsGrid.className = 'af-kb-row';
+                statsDefs.forEach(function (d) { statsGrid.appendChild(createInput(d, state.character_stats, syncRawDebounced)); });
+                fields.profileFields.appendChild(statsGrid);
+
+                var abilityFields = [
+                    { name: 'slot_index', label: 'slot_index', type: 'number' },
+                    { name: 'ability_name', label: 'ability_name', type: 'text' },
+                    { name: 'ability_type', label: 'ability_type', type: 'select', options: ['active', 'passive'] },
+                    { name: 'ability_description', label: 'ability_description', type: 'textarea' },
+                    { name: 'ability_kb_key', label: 'ability_kb_key', type: 'text' },
+                    { name: 'sortorder', label: 'sortorder', type: 'number' }
+                ];
+
+                var abilitiesBox = document.createElement('div');
+                abilitiesBox.className = 'af-kb-rule-card';
+                fields.profileLists.appendChild(abilitiesBox);
+                renderObjectList(abilitiesBox, state.character_abilities, 'Character abilities', abilityFields, syncRawDebounced, {
+                    slot_index: 1,
+                    ability_name: '',
+                    ability_type: 'active',
+                    ability_description: '',
+                    ability_kb_key: '',
+                    sortorder: 0
+                });
+
+                var metaGrid = document.createElement('div');
+                metaGrid.className = 'af-kb-row';
+                metaGrid.appendChild(createInput({ name: 'contract', label: 'contract', type: 'text' }, state.character_meta, syncRawDebounced));
+                metaGrid.appendChild(createInput({ name: 'contract_version', label: 'contract_version', type: 'text' }, state.character_meta, syncRawDebounced));
+                metaGrid.appendChild(createInput({ name: 'source', label: 'source', type: 'text' }, state.character_meta, syncRawDebounced));
+                fields.profileLists.appendChild(metaGrid);
                 return;
             }
 
