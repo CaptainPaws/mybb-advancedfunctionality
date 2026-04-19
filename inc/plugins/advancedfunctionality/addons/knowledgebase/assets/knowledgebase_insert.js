@@ -644,19 +644,30 @@
         }
 
         fetchTypes(activeMechanic).then(function (types) {
-            if (!state.type && types.length) state.type = types[0].type || '';
             if (state.type && !types.some(function (item) { return item && item.type === state.type; })) {
-                state.type = types.length ? (types[0].type || '') : '';
+                state.type = '';
             }
             renderTypeOptions(typeSelect, types, state.type);
+            typeSelect.value = state.type;
             loadList();
         });
 
-        typeSelect.onchange = function () { state.type = typeSelect.value; loadList(); };
-        searchInput.oninput = function () { state.query = searchInput.value.trim(); loadList(); };
+        typeSelect.onchange = function () {
+            state.type = typeSelect.value;
+            loadList();
+        };
+        searchInput.oninput = function () {
+            state.query = searchInput.value.trim();
+            if (!state.type) {
+                list.innerHTML = '';
+                renderHint(hint, getLang('kbInsertHint', 'Select category or continue search'));
+                return;
+            }
+            loadList();
+        };
 
         searchInput.value = '';
-        typeSelect.value = state.type;
+        typeSelect.value = '';
 
         backdrop.classList.add('is-active');
         searchInput.focus();
