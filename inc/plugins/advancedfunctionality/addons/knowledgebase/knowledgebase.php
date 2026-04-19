@@ -3979,7 +3979,7 @@ function af_kb_resolve_body_bg_for_request(): string
         return '';
     }
 
-    $type = trim((string)$mybb->get_input('type'));
+    $type = af_kb_resolve_requested_type((string)$mybb->get_input('type'));
     $key  = trim((string)$mybb->get_input('key'));
 
     if ($type === '') {
@@ -6276,6 +6276,7 @@ function af_kb_get_entry_ui(array $entry): array
 
 function af_kb_get_entry_summary(string $type, string $key): array
 {
+    $type = af_kb_resolve_requested_type($type);
     static $cache = [];
     $cacheKey = $type . ':' . $key;
     if (isset($cache[$cacheKey])) {
@@ -6650,6 +6651,50 @@ function af_kb_normalize_mechanic_key(string $mechanicKey): string
 /**
  * @param array|string $typeDefOrKey
  */
+
+function af_kb_resolve_type_alias(string $requestedType): string
+{
+    $type = strtolower(trim($requestedType));
+    if ($type === '') {
+        return '';
+    }
+
+    $aliases = [
+        'origin' => 'arpg_origin',
+        'provenance' => 'arpg_origin',
+        'race_origin' => 'arpg_origin',
+        'archetype' => 'arpg_archetype',
+        'class_arpg' => 'arpg_archetype',
+        'element' => 'arpg_element',
+        'faction' => 'arpg_faction',
+        'bestiary_arpg' => 'arpg_bestiary',
+        'ability_arpg' => 'arpg_ability',
+        'talent_arpg' => 'arpg_talent',
+        'item_arpg' => 'arpg_item',
+        'lore_arpg' => 'arpg_lore',
+    ];
+
+    return (string)($aliases[$type] ?? $type);
+}
+
+function af_kb_resolve_requested_type(string $requestedType): string
+{
+    $type = af_kb_resolve_type_alias($requestedType);
+    if ($type === '') {
+        return '';
+    }
+
+    $typeRow = af_kb_find_type_row($type);
+    if ($typeRow) {
+        $resolved = trim((string)($typeRow['type_key'] ?? $typeRow['type'] ?? ''));
+        if ($resolved !== '') {
+            return $resolved;
+        }
+    }
+
+    return $type;
+}
+
 function af_kb_get_type_mechanic_key($typeDefOrKey): string
 {
     $typeDef = null;
@@ -7917,7 +7962,7 @@ function af_kb_handle_manage_categories(): void
         error_no_permission();
     }
 
-    $type = trim((string)$mybb->get_input('type'));
+    $type = af_kb_resolve_requested_type((string)$mybb->get_input('type'));
     if ($type === '') {
         error('Type is required');
     }
@@ -8550,7 +8595,7 @@ function af_kb_handle_character_apply(): void
         error_no_permission();
     }
 
-    $type = trim((string)$mybb->get_input('type'));
+    $type = af_kb_resolve_requested_type((string)$mybb->get_input('type'));
     $key = trim((string)$mybb->get_input('key'));
     if ($type !== 'character' || $key === '') {
         error($lang->af_kb_not_found ?? 'Entry not found.');
@@ -8599,7 +8644,7 @@ function af_kb_handle_view(): void
         error($lang->af_kb_no_access ?? 'No access.');
     }
 
-    $type = trim((string)$mybb->get_input('type'));
+    $type = af_kb_resolve_requested_type((string)$mybb->get_input('type'));
     $key = trim((string)$mybb->get_input('key'));
     $query = trim((string)$mybb->get_input('q'));
     $catKey = trim((string)$mybb->get_input('cat'));
@@ -10190,7 +10235,7 @@ function af_kb_handle_type_delete(): void
 
     verify_post_check($mybb->get_input('my_post_key'));
 
-    $type = trim((string)$mybb->get_input('type'));
+    $type = af_kb_resolve_requested_type((string)$mybb->get_input('type'));
     if ($type === '') {
         error($lang->af_kb_not_found ?? 'Not found');
     }
@@ -10384,7 +10429,7 @@ function af_kb_handle_json_get(): void
         af_kb_render_json_error($lang->af_kb_no_access ?? 'No access', 403);
     }
 
-    $type = trim((string)$mybb->get_input('type'));
+    $type = af_kb_resolve_requested_type((string)$mybb->get_input('type'));
     $key = trim((string)$mybb->get_input('key'));
     if ($type === '' || $key === '') {
         af_kb_render_json_error('Missing parameters', 400);
@@ -10459,7 +10504,7 @@ function af_kb_handle_json_list(): void
         af_kb_render_json_error($lang->af_kb_no_access ?? 'No access', 403);
     }
 
-    $type = trim((string)$mybb->get_input('type'));
+    $type = af_kb_resolve_requested_type((string)$mybb->get_input('type'));
     if ($type === '') {
         af_kb_render_json_error('Missing type', 400);
     }

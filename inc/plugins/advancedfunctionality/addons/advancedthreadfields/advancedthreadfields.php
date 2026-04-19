@@ -865,7 +865,10 @@ function af_atf_kb_get_endpoint(): void
 {
     global $mybb, $db;
 
-    $type = strtolower(trim((string)$mybb->get_input('type')));
+    $requestedType = strtolower(trim((string)$mybb->get_input('type')));
+    $type = function_exists('af_kb_resolve_requested_type')
+        ? af_kb_resolve_requested_type($requestedType)
+        : $requestedType;
     $key = strtolower(trim((string)$mybb->get_input('key')));
 
     if (!preg_match('/^[a-z0-9_]{2,64}$/', $type)) {
@@ -891,16 +894,28 @@ function af_atf_kb_get_endpoint(): void
         return;
     }
 
+    $where = "type='".$db->escape_string($type)."' AND `key`='".$db->escape_string($key)."'";
+    if (!function_exists('af_kb_can_edit') || !af_kb_can_edit()) {
+        $where .= ' AND active=1';
+    }
+
     $row = $db->fetch_array($db->simple_select(
         'af_kb_entries',
         '*',
-        "type='".$db->escape_string($type)."' AND `key`='".$db->escape_string($key)."' AND active=1",
+        $where,
         ['limit' => 1]
     ));
 
     if (!is_array($row) || empty($row)) {
         af_atf_json_response(['ok' => 0, 'error' => 'not_found'], 404);
         return;
+    }
+
+    if (function_exists('af_kb_entry_visible_in_context') && function_exists('af_kb_can_edit')) {
+        if (!af_kb_entry_visible_in_context($row, 'catalog', af_kb_can_edit())) {
+            af_atf_json_response(['ok' => 0, 'error' => 'not_found'], 404);
+            return;
+        }
     }
 
     $title = af_atf_kb_pick_text($row, 'title');
