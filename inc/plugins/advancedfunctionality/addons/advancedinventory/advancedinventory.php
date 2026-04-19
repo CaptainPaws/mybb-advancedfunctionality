@@ -3845,7 +3845,7 @@ function af_advinv_render_entity_generic(string $entity, int $ownerUid, string $
 function af_advinv_render_workspace(string $entity, array $items, int $selectedItemId, bool $canManage, bool $canEditOwner, array $equipped, array $data = [], int $ownerUid = 0, string $sub = 'all', string $search = ''): string
 {
     if ($entity === 'abilities') {
-        return af_advinv_render_abilities_workspace($entity, $items, $data, $ownerUid, $sub, $search);
+        return af_advinv_render_abilities_workspace($entity, $items, $data, $ownerUid, $sub, $search, $canManage, $canEditOwner, $equipped);
     }
 
     $html = '<div class="af-inv-workspace" data-entity="' . htmlspecialchars_uni($entity) . '">';
@@ -3866,7 +3866,7 @@ function af_advinv_render_workspace(string $entity, array $items, int $selectedI
     return $html;
 }
 
-function af_advinv_render_abilities_workspace(string $entity, array $items, array $data, int $ownerUid, string $sub, string $search): string
+function af_advinv_render_abilities_workspace(string $entity, array $items, array $data, int $ownerUid, string $sub, string $search, bool $canManage, bool $canEditOwner, array $equipped): string
 {
     $page = max(1, (int)($data['page'] ?? 1));
     $perPage = max(1, (int)($data['perPage'] ?? 24));
@@ -3892,7 +3892,7 @@ function af_advinv_render_abilities_workspace(string $entity, array $items, arra
     $html .= af_advinv_render_abilities_list($items, $selectedItemId);
     $html .= '</div>';
     $html .= '<div class="af-inv-preview-pane af-inv-abilities-preview-pane">';
-    $html .= af_advinv_render_abilities_preview_stack($items, $selectedItemId);
+    $html .= af_advinv_render_abilities_preview_stack($items, $selectedItemId, $canManage, $canEditOwner, $equipped);
     $html .= '</div>';
     $html .= '</div>';
     $html .= af_advinv_render_abilities_pagination($ownerUid, $entity, $sub, $search, $page, $pages, $total);
@@ -4117,7 +4117,70 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
         $statusHtml = '<div class="af-inv-preview-status is-inactive">' . (af_inv_is_consumable_item($item) ? 'Предмет готов к быстрому слоту' : 'Предмет готов к экипировке') . '</div>';
     }
 
+    $actions = af_advinv_render_item_action_controls($item, $canManage, $canEditOwner, $equipped);
+
+    $iconHtml = $icon !== ''
+        ? '<img src="' . htmlspecialchars_uni($icon) . '" alt="' . htmlspecialchars_uni($title) . '" loading="lazy">'
+        : '<div class="af-inv-card__placeholder">?</div>';
+
+    $metaHtml = '';
+    if ($metaRows) {
+        $metaHtml .= '<dl class="af-inv-preview-meta">';
+        foreach ($metaRows as $row) {
+            $metaHtml .= '<dt>' . htmlspecialchars_uni((string)$row[0]) . '</dt><dd>' . htmlspecialchars_uni((string)$row[1]) . '</dd>';
+        }
+        $metaHtml .= '</dl>';
+    }
+
+    return '<section class="' . htmlspecialchars_uni(implode(' ', $classes)) . '" data-preview-item="' . $itemId . '"' . ($active ? '' : ' hidden="hidden"') . '>'
+        . '<div class="af-inv-preview-media">' . $iconHtml . '</div>'
+        . '<div class="af-inv-preview-body">'
+        . '<h3 class="af-inv-preview-title">' . htmlspecialchars_uni($title) . '</h3>'
+        . '<div class="af-inv-preview-qty">Количество: x' . $qty . '</div>'
+        . $statusHtml
+        . $metaHtml
+        . '<div class="af-inv-card-actions af-inv-preview-actions">' . $actions . '</div>'
+        . '</div>'
+        . '</section>';
+}
+
+function af_advinv_render_item_action_controls(array $item, bool $canManage, bool $canEditOwner, array $equipped): string
+{
+    global $mybb;
+
+    $itemId = (int)($item['id'] ?? 0);
+    $itemOwnerUid = (int)($item['uid'] ?? 0);
+    $qty = max(1, (int)($item['qty'] ?? 1));
+    $sale = af_advinv_item_sale_profile($item);
+
+    $appearanceInfo = af_advinv_resolve_appearance_item($item);
+    $appearanceMeta = is_array($appearanceInfo['appearance_meta'] ?? null)
+        ? (array)$appearanceInfo['appearance_meta']
+        : [];
+    $kbKey = trim((string)($item['kb_key'] ?? ''));
+    $isVisual = !empty($item['is_visual_item'])
+        || !empty($appearanceInfo['is_visual_item'])
+        || trim((string)($appearanceInfo['source_type'] ?? '')) === 'appearance'
+        || strpos($kbKey, 'appearance:') === 0
+        || !empty($appearanceMeta);
+
+    $appearanceTarget = trim((string)($item['appearance_target'] ?? ($appearanceInfo['target_key'] ?? ($appearanceMeta['target_key'] ?? ''))));
+    $appearancePresetId = (int)($item['appearance_preset_id'] ?? ($appearanceInfo['preset_id'] ?? ($appearanceMeta['preset_id'] ?? 0)));
+    $isThreadAppearance = ($appearanceTarget === 'apui_thread_pack');
+    $isActiveAppearance = !empty($item['appearance_is_active']);
+    if ($isVisual && !$isActiveAppearance && $appearanceTarget !== '') {
+        $uid = (int)($item['uid'] ?? 0);
+        if ($uid > 0) {
+            $activeMap = af_advinv_active_appearance_map($uid);
+            $activeTarget = (array)($activeMap[$appearanceTarget] ?? []);
+            $isActiveAppearance = (((int)($activeTarget['preset_id'] ?? 0) > 0 && (int)($activeTarget['preset_id'] ?? 0) === $appearancePresetId) || ((int)($activeTarget['item_id'] ?? 0) === $itemId));
+        }
+    }
+
+    $slotCandidates = af_inv_candidate_slots_for_item($item);
+    $equippedSlot = af_inv_find_equipped_slot_by_item($equipped, $itemId);
     $actions = '';
+
     if ($canEditOwner) {
         if ($isVisual) {
             if ($isThreadAppearance) {
@@ -4161,29 +4224,7 @@ function af_advinv_render_preview_card(array $item, bool $active, bool $canManag
         $actions .= '<button type="button" class="af-inv-action" data-action="delete" data-item-id="' . $itemId . '">Удалить</button>';
     }
 
-    $iconHtml = $icon !== ''
-        ? '<img src="' . htmlspecialchars_uni($icon) . '" alt="' . htmlspecialchars_uni($title) . '" loading="lazy">'
-        : '<div class="af-inv-card__placeholder">?</div>';
-
-    $metaHtml = '';
-    if ($metaRows) {
-        $metaHtml .= '<dl class="af-inv-preview-meta">';
-        foreach ($metaRows as $row) {
-            $metaHtml .= '<dt>' . htmlspecialchars_uni((string)$row[0]) . '</dt><dd>' . htmlspecialchars_uni((string)$row[1]) . '</dd>';
-        }
-        $metaHtml .= '</dl>';
-    }
-
-    return '<section class="' . htmlspecialchars_uni(implode(' ', $classes)) . '" data-preview-item="' . $itemId . '"' . ($active ? '' : ' hidden="hidden"') . '>'
-        . '<div class="af-inv-preview-media">' . $iconHtml . '</div>'
-        . '<div class="af-inv-preview-body">'
-        . '<h3 class="af-inv-preview-title">' . htmlspecialchars_uni($title) . '</h3>'
-        . '<div class="af-inv-preview-qty">Количество: x' . $qty . '</div>'
-        . $statusHtml
-        . $metaHtml
-        . '<div class="af-inv-card-actions af-inv-preview-actions">' . $actions . '</div>'
-        . '</div>'
-        . '</section>';
+    return $actions;
 }
 
 function af_advancedinventory_decode_assoc(string $json): array
@@ -4414,7 +4455,7 @@ function af_advinv_render_abilities_cards(array $items): string
     return af_advinv_render_abilities_list($items, $selectedItemId);
 }
 
-function af_advinv_render_abilities_preview_stack(array $items, int $selectedItemId): string
+function af_advinv_render_abilities_preview_stack(array $items, int $selectedItemId, bool $canManage = false, bool $canEditOwner = false, array $equipped = []): string
 {
     if (!$items) {
         return '<div class="af-inv-preview-card is-active"><div class="af-inv-empty">Выберите способность слева.</div></div>';
@@ -4501,7 +4542,13 @@ function af_advinv_render_abilities_preview_stack(array $items, int $selectedIte
             $descriptionHtml .= '<div class="af-inv-ability-preview__description">' . nl2br(htmlspecialchars_uni($description)) . '</div>';
         }
 
+        $actions = '';
+        if ($canManage) {
+            $actions = af_advinv_render_item_action_controls($item, $canManage, $canEditOwner, $equipped);
+        }
+
         $actionsHtml = '<div class="af-inv-card-actions af-inv-preview-actions af-inv-ability-preview__actions" data-ability-actions="1">'
+            . $actions
             . '<button type="button" class="af-inv-action" disabled="disabled">Бросок (скоро)</button>'
             . '<button type="button" class="af-inv-action" disabled="disabled">Расширенное действие (скоро)</button>'
             . '</div>';
