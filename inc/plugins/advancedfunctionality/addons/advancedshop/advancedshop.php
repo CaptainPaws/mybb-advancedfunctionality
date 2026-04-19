@@ -378,6 +378,107 @@ function af_advancedshop_kb_cols(): array
     ];
 }
 
+function af_advancedshop_kb_type_registry(): array
+{
+    global $db;
+
+    static $registry = null;
+    if (is_array($registry)) {
+        return $registry;
+    }
+
+    $registry = [];
+    if ($db->table_exists('af_kb_types')) {
+        $q = $db->simple_select(
+            'af_kb_types',
+            'type,type_key,title_ru,title_en,mechanic_key,is_active,active,sortorder',
+            '',
+            ['order_by' => 'sortorder ASC, type_key ASC, type ASC']
+        );
+        while ($row = $db->fetch_array($q)) {
+            $typeKey = mb_strtolower(trim((string)($row['type_key'] ?? $row['type'] ?? '')));
+            if ($typeKey === '') {
+                continue;
+            }
+            $isActive = isset($row['is_active']) ? (int)$row['is_active'] === 1 : ((int)($row['active'] ?? 1) === 1);
+            if (!$isActive) {
+                continue;
+            }
+            $mechanicKey = af_advancedshop_kb_type_mechanic_key($typeKey, $row);
+            $registry[$typeKey] = [
+                'type_key' => $typeKey,
+                'title' => af_advancedshop_pick_lang((string)($row['title_ru'] ?? ''), (string)($row['title_en'] ?? '')) ?: $typeKey,
+                'mechanic_key' => $mechanicKey,
+            ];
+        }
+    }
+
+    if (!$registry) {
+        $fallbackTypes = ['item', 'spell', 'ritual'];
+        foreach ($fallbackTypes as $fallbackType) {
+            $registry[$fallbackType] = [
+                'type_key' => $fallbackType,
+                'title' => $fallbackType,
+                'mechanic_key' => $fallbackType === 'item' || $fallbackType === 'spell' || $fallbackType === 'ritual' ? 'dnd' : 'all',
+            ];
+        }
+    }
+
+    return $registry;
+}
+
+function af_advancedshop_kb_type_mechanic_key(string $typeKey, array $typeRow = []): string
+{
+    $typeKey = mb_strtolower(trim($typeKey));
+    if ($typeKey === '') {
+        return 'all';
+    }
+
+    if (function_exists('af_kb_get_type_mechanic_key')) {
+        return (string)af_kb_get_type_mechanic_key($typeRow ?: $typeKey);
+    }
+
+    if (strpos($typeKey, 'arpg_') === 0) {
+        return 'arpg';
+    }
+
+    return 'dnd';
+}
+
+function af_advancedshop_kb_filter_scope(string $kbType, string $mechanicKey): array
+{
+    $type = mb_strtolower(trim($kbType));
+    $mechanic = mb_strtolower(trim($mechanicKey));
+
+    $isSpellLike = in_array($type, ['spell', 'ritual'], true);
+    $isItemLike = in_array($type, ['item', 'arpg_item'], true);
+
+    if ($type === 'all') {
+        return [
+            'item_type' => true,
+            'spell' => true,
+            'rarity' => true,
+            'mechanic' => $mechanic !== '' ? $mechanic : 'all',
+        ];
+    }
+
+    if ($mechanic === 'arpg') {
+        return [
+            'item_type' => $isItemLike,
+            'spell' => false,
+            'rarity' => $isItemLike,
+            'mechanic' => 'arpg',
+        ];
+    }
+
+    return [
+        'item_type' => $isItemLike,
+        'spell' => $isSpellLike,
+        'rarity' => $isItemLike,
+        'mechanic' => 'dnd',
+    ];
+}
+
 
 function af_advancedshop_normalize_source_type(string $sourceType): string
 {
@@ -3249,10 +3350,19 @@ function af_advancedshop_kb_search(): void
     if ($typeFilter === '' || $typeFilter === 'all') {
         $typeFilter = 'all';
     }
+    $mechanicFilter = mb_strtolower(trim((string)$mybb->get_input('mechanic_key')));
+    if (!in_array($mechanicFilter, ['dnd', 'arpg'], true)) {
+        $mechanicFilter = 'all';
+    }
     $rarityFilter = mb_strtolower(trim((string)$mybb->get_input('rarity')));
     $itemTypeFilter = mb_strtolower(trim((string)$mybb->get_input('item_type')));
     $spellLevelFilter = trim((string)$mybb->get_input('spell_level'));
     $spellSchoolFilter = mb_strtolower(trim((string)$mybb->get_input('spell_school')));
+    $typeRegistry = af_advancedshop_kb_type_registry();
+    if ($typeFilter !== 'all' && isset($typeRegistry[$typeFilter])) {
+        $mechanicFilter = (string)($typeRegistry[$typeFilter]['mechanic_key'] ?? $mechanicFilter);
+    }
+    $scope = af_advancedshop_kb_filter_scope($typeFilter, $mechanicFilter);
     $limit = (int)$mybb->get_input('limit', MyBB::INPUT_INT);
     if ($limit <= 0) { $limit = 50; }
     $limit = min(100, max(1, $limit));
@@ -3274,7 +3384,18 @@ function af_advancedshop_kb_search(): void
         if ($typeFilter === 'spell') {
             $where .= " AND " . ($typeCol === 'type' ? '`type`' : $typeCol) . " IN('spell','ritual')";
         } else {
-            $where .= " AND " . ($typeCol === 'type' ? '`type`' : $typeCol) . "='item'";
+            $where .= " AND " . ($typeCol === 'type' ? '`type`' : $typeCol) . "='" . $db->escape_string($typeFilter) . "'";
+        }
+    }
+    if (!empty($typeCol) && $typeFilter === 'all' && in_array($mechanicFilter, ['dnd', 'arpg'], true)) {
+        $typeValues = [];
+        foreach ($typeRegistry as $rowType => $typeMeta) {
+            if ((string)($typeMeta['mechanic_key'] ?? '') === $mechanicFilter) {
+                $typeValues[] = "'" . $db->escape_string($rowType) . "'";
+            }
+        }
+        if ($typeValues) {
+            $where .= " AND " . ($typeCol === 'type' ? '`type`' : $typeCol) . " IN(" . implode(',', $typeValues) . ")";
         }
     }
     $select = [
@@ -3305,18 +3426,26 @@ function af_advancedshop_kb_search(): void
         $spellLevel = (string)($meta['rules']['spell']['level'] ?? $meta['rules']['ritual']['level'] ?? '');
         $spellSchool = mb_strtolower(trim((string)($meta['rules']['spell']['school'] ?? $meta['rules']['ritual']['school'] ?? '')));
 
-        if ($rarityFilter !== '' && mb_strtolower((string)$profile['rarity']) !== $rarityFilter) { continue; }
-        if ($itemTypeFilter !== '' && $itemType !== $itemTypeFilter) { continue; }
-        if ($spellLevelFilter !== '' && $spellLevel !== $spellLevelFilter) { continue; }
-        if ($spellSchoolFilter !== '' && $spellSchool !== $spellSchoolFilter) { continue; }
+        $kbType = (string)($row['kb_type'] ?? 'item');
+        $rowMechanic = af_advancedshop_kb_type_mechanic_key($kbType, (array)($typeRegistry[$kbType] ?? []));
+        $rowScope = af_advancedshop_kb_filter_scope($kbType, $rowMechanic);
+        if ($mechanicFilter !== 'all' && $rowMechanic !== $mechanicFilter) { continue; }
+        if ($rarityFilter !== '' && !empty($rowScope['rarity'])) {
+            $raritySource = mb_strtolower(trim((string)($profile['rarity_raw'] ?? $profile['rarity'] ?? '')));
+            if ($raritySource !== $rarityFilter) { continue; }
+        }
+        if ($itemTypeFilter !== '' && !empty($rowScope['item_type']) && $itemType !== $itemTypeFilter) { continue; }
+        if ($spellLevelFilter !== '' && !empty($rowScope['spell']) && $spellLevel !== $spellLevelFilter) { continue; }
+        if ($spellSchoolFilter !== '' && !empty($rowScope['spell']) && $spellSchool !== $spellSchoolFilter) { continue; }
 
         $items[] = [
             'kb_id' => (int)$row['kb_id'],
-            'kb_type' => (string)($row['kb_type'] ?? 'item'),
+            'kb_type' => $kbType,
             'kb_key' => (string)($row['kb_key'] ?? ''),
             'title' => $title,
             'icon_url' => (string)($meta['ui']['icon_url'] ?? ''),
             'rarity' => (string)$profile['rarity'],
+            'mechanic_key' => $rowMechanic,
             'stack_max' => (int)$profile['stack_max'],
             'short' => $short,
             'price_minor' => max(0, (int)($profile['price'] ?? 0)),
@@ -3325,12 +3454,13 @@ function af_advancedshop_kb_search(): void
             'item_type' => $itemType,
             'spell_level' => $spellLevel,
             'spell_school' => $spellSchool,
+            'filter_scope' => $rowScope,
         ];
         if (count($items) >= $limit) {
             break;
         }
     }
-    af_advancedshop_json_ok(['items' => $items]);
+    af_advancedshop_json_ok(['items' => $items, 'filter_scope' => $scope, 'mechanic_key' => $mechanicFilter]);
 }
 
 function af_advancedshop_normalize_kb_type(string $type): string
@@ -3700,6 +3830,7 @@ function af_advancedshop_kb_schema(): void
     af_advancedshop_json_ok([
         'kb_table' => (string)($schema['kb_table_sql'] ?? ''),
         'columns' => array_values($schema['columns'] ?? []),
+        'types' => array_values(af_advancedshop_kb_type_registry()),
         'picked' => [
             'id' => (string)($cols['id'] ?? ''),
             'type' => (string)($cols['type'] ?? ''),
