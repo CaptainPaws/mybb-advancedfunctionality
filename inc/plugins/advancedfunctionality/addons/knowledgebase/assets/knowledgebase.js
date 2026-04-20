@@ -1019,6 +1019,16 @@
                 arpg_bestiary: 'bestiary',
                 arpg_mechanics: 'service_mechanics'
             };
+            var arpgTypeAliases = {
+                bestiary_arpg: 'bestiary',
+                ability_arpg: 'ability',
+                talent_arpg: 'talent',
+                item_arpg: 'item',
+                lore_arpg: 'lore',
+                class_arpg: 'archetype',
+                provenance: 'origin',
+                race_origin: 'origin'
+            };
 
             var simpleTypes = ['origin', 'archetype', 'element', 'faction', 'lore'];
             var heavyTypes = ['ability', 'talent', 'item', 'bestiary'];
@@ -1034,6 +1044,14 @@
                 }
 
                 return defaults;
+            }
+
+            function normalizeArpgEntityType(value) {
+                var raw = String(value || '').trim().toLowerCase();
+                if (!raw) return '';
+                if (typeMap[raw]) return typeMap[raw];
+                if (arpgTypeAliases[raw]) return arpgTypeAliases[raw];
+                return raw;
             }
 
             function ensureRoot() {
@@ -1057,7 +1075,7 @@
                 if (typeof rules.schema !== 'string' || !rules.schema) rules.schema = 'af_kb.arpg.rules.v1';
                 if (typeof rules.version !== 'string' || !rules.version) rules.version = '1.0';
 
-                var entityType = typeMap[type] || rules.type_profile || 'origin';
+                var entityType = normalizeArpgEntityType(type) || normalizeArpgEntityType(rules.type_profile) || 'origin';
                 rules.type_profile = entityType;
 
                 // Влить defaults именно в rules после того, как type_profile уже известен.
@@ -1099,7 +1117,7 @@
 
             ensureRoot();
 
-            var entityType = payload.rules.type_profile || typeMap[type] || 'origin';
+            var entityType = normalizeArpgEntityType(payload.rules.type_profile) || normalizeArpgEntityType(type) || 'origin';
 
             var enums = {
                 abilitySubtype: ['', 'active', 'passive', 'ultimate', 'support', 'aura', 'toggle', 'summon', 'reaction', 'movement'],
@@ -1111,6 +1129,7 @@
                 equipSlot: ['', 'weapon_one_hand', 'weapon_two_hand', 'weapon_catalyst', 'weapon_ranged', 'weapon_polearm', 'head', 'chest', 'legs', 'hands', 'feet', 'ring', 'amulet', 'trinket', 'custom'],
                 talentTree: ['', 'offense', 'defense', 'support', 'utility', 'custom'],
                 talentRank: ['', 'common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'],
+                bestiaryRank: ['normal', 'elite', 'rare', 'boss', 'legendary', 'mythic', 'custom'],
                 modifierMode: ['', 'flat', 'percent', 'multiplier', 'override', 'formula_ref', 'table_ref'],
                 effectKind: ['', 'damage', 'heal', 'shield', 'barrier', 'status', 'proc'],
                 grantType: ['', 'tag', 'ability_unlock', 'item_unlock', 'resource_bonus', 'passive_flag', 'custom']
@@ -1809,7 +1828,7 @@
                     { key: 'family', label: 'family', default: '' },
                     { key: 'archetype', label: 'archetype', default: '' },
                     { key: 'faction', label: 'faction', default: '' },
-                    { key: 'rank', label: 'rank', default: 'normal' },
+                    { key: 'rank', label: 'rank', type: 'select', options: enums.bestiaryRank, default: 'normal' },
                     { key: 'threat_tier', label: 'threat_tier', type: 'number', default: 1 },
                     { key: 'level', label: 'level', type: 'number', default: 1 }
                 ], 'Bestiary core');
@@ -1825,15 +1844,35 @@
                     { key: 'combat_stats.status_resist', label: 'combat_stats.status_resist', type: 'number', default: 0 }
                 ], 'Combat stats');
 
-                ['resists', 'weaknesses', 'ability_keys', 'loot'].forEach(function (k) {
-                    renderSeededArrayEditor(
-                        rulesRoot,
-                        k,
-                        k,
-                        [{ key: 'kind', label: 'kind', default: '' }, { key: 'value', label: 'value', default: '' }],
-                        [{ key: 'default', label: 'default', seed: { kind: '', value: '' } }]
-                    );
-                });
+                renderSeededArrayEditor(rulesRoot, 'resists', 'resists', [
+                    { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
+                    { key: 'value', label: 'value', type: 'number', default: 0 }
+                ], [
+                    { key: 'default', label: 'default', seed: { damage_type: 'physical', value: 0 } }
+                ]);
+
+                renderSeededArrayEditor(rulesRoot, 'weaknesses', 'weaknesses', [
+                    { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
+                    { key: 'value', label: 'value', type: 'number', default: 0 }
+                ], [
+                    { key: 'default', label: 'default', seed: { damage_type: 'physical', value: 0 } }
+                ]);
+
+                renderSeededArrayEditor(rulesRoot, 'ability_keys', 'ability_keys', [
+                    { key: 'ability_key', label: 'ability_key', default: '' }
+                ], [
+                    { key: 'default', label: 'default', seed: { ability_key: '' } }
+                ]);
+
+                renderSeededArrayEditor(rulesRoot, 'loot', 'loot', [
+                    { key: 'loot_key', label: 'loot_key', default: '' },
+                    { key: 'kind', label: 'kind', type: 'select', options: ['item', 'currency', 'material', 'reward', 'custom'], default: 'item' },
+                    { key: 'qty_min', label: 'qty_min', type: 'number', default: 1 },
+                    { key: 'qty_max', label: 'qty_max', type: 'number', default: 1 },
+                    { key: 'chance', label: 'chance', type: 'number', default: 100 }
+                ], [
+                    { key: 'default', label: 'default', seed: { loot_key: '', kind: 'item', qty_min: 1, qty_max: 1, chance: 100 } }
+                ]);
             }
 
             function renderServiceRules() {
