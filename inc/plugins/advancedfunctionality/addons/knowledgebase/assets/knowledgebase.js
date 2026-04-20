@@ -744,7 +744,6 @@
         // Для ARPG верхний meta-ui блок не нужен:
         // там уже есть отдельный envelope, а реальные media-поля живут в обычной форме записи.
         if (detectKbMechanic() === 'arpg') {
-            root.innerHTML = '';
             return;
         }
 
@@ -935,7 +934,10 @@
         var rulesEditorEnabled = (typeSchema.ui_rules_editor !== false) && (typeSchema.rules_enabled !== false);
 
         function bindRawOnlyMode(message) {
-            root.innerHTML = '<div class="af-kb-help">' + esc(message) + '</div>';
+            var note = document.createElement('div');
+            note.className = 'af-kb-help';
+            note.textContent = message;
+            root.insertBefore(note, root.firstChild);
             syncRulesToMeta(readJson(getFieldValue(raw) || '{}', {}));
 
             var sync = function () {
@@ -2180,11 +2182,7 @@
         }
 
         if (mechanic === 'arpg') {
-            if (typeSchema && typeSchema.rules_enabled === false) {
-                bindRawOnlyMode('ARPG тип "' + type + '" ещё не имеет готовой schema-поддержки. Доступен raw-режим с валидационной ошибкой на save.');
-            } else {
-                bindArpgMode();
-            }
+            bindArpgMode();
             return;
         }
 
@@ -3909,260 +3907,12 @@
 
         function sanitizePayloadByProfile(payload, profile) {
             var p = deepClone(payload || {});
-            p.schema = p.schema || 'af_kb.rules.v1';
-            p.type_profile = expectedTypeProfile || profile || p.type_profile || 'raw';
-            p.version = p.version || '1.0';
-
-            if (profile === 'skill') {
-                var skill = (p.skill && typeof p.skill === 'object') ? p.skill : {};
-                var keyStat = normalizeSkillStatValue(skill);
-                return {
-                    schema: p.schema,
-                    type_profile: expectedTypeProfile || 'skill',
-                    version: p.version,
-                    skill: {
-                        category: String(skill.category || 'general'),
-                        key_stat: keyStat || null,
-                        attribute: keyStat || null,
-                        rank_max: numberOrZero(skill.rank_max != null ? skill.rank_max : 4),
-                        armor_check_penalty: !!skill.armor_check_penalty,
-                        trained_only: !!skill.trained_only,
-                        notes: (typeof skill.notes === 'string') ? skill.notes : ''
-                    }
-                };
-            }
-
-            if (profile === 'spell') {
-                var s = (p.spell && typeof p.spell === 'object') ? p.spell : {};
-                var reqS = (s.requirements && typeof s.requirements === 'object') ? s.requirements : {};
-                if (!Array.isArray(reqS.tags_any)) reqS.tags_any = [];
-                if (!Array.isArray(reqS.tags_all)) reqS.tags_all = [];
-                if (reqS.level == null) reqS.level = 0;
-
-                return {
-                    schema: p.schema,
-                    type_profile: expectedTypeProfile || 'spell',
-                    version: p.version,
-                    spell: {
-                        tradition: String(s.tradition || ''),
-                        school: String(s.school || ''),
-                        level: numberOrZero(s.level != null ? s.level : 1),
-                        cast_time: String(s.cast_time || ''),
-                        range: String(s.range || ''),
-                        duration: String(s.duration || ''),
-                        cost: (s.cost && typeof s.cost === 'object') ? s.cost : {},
-                        traits: Array.isArray(s.traits) ? s.traits : [],
-                        effects: Array.isArray(s.effects) ? s.effects : [],
-                        requirements: reqS
-                    }
-                };
-            }
-
-            if (profile === 'item') {
-                var it = (p.item && typeof p.item === 'object') ? p.item : {};
-
-                // legacy mapping
-                if (!it.item_kind && it.item_type) {
-                    it.item_kind = it.item_type;
-                }
-
-                var reqI = (it.requirements && typeof it.requirements === 'object') ? it.requirements : {};
-                if (!Array.isArray(reqI.tags_any)) reqI.tags_any = [];
-                if (!Array.isArray(reqI.tags_all)) reqI.tags_all = [];
-                if (reqI.level == null) reqI.level = 0;
-
-                var onUse = (it.on_use && typeof it.on_use === 'object') ? it.on_use : {};
-                if (onUse.cooldown == null) onUse.cooldown = 0;
-                if (!onUse.cost || typeof onUse.cost !== 'object') onUse.cost = {};
-                if (!Array.isArray(onUse.effects)) onUse.effects = [];
-
-                var onEquip = (it.on_equip && typeof it.on_equip === 'object') ? it.on_equip : {};
-                if (!Array.isArray(onEquip.effects)) onEquip.effects = [];
-                if (!Array.isArray(onEquip.grants)) onEquip.grants = [];
-
-                var itemOut = deepClone(it);
-                itemOut.item_kind = normalizeItemKind(it.item_kind || 'gear');
-                itemOut.unique_role = String(it.unique_role || it.unique_base_kind || '');
-                itemOut.unique_base_kind = itemOut.unique_role;
-                itemOut.rarity = String(it.rarity || 'common');
-                itemOut.equip = {
-                    slot: String((it.equip && it.equip.slot) || it.slot || '').replace(/^consumable_/, 'support_'),
-                    armor: {
-                        ac_bonus: numberOrZero((it.equip && it.equip.armor && it.equip.armor.ac_bonus) != null ? it.equip.armor.ac_bonus : 0),
-                        armor_type: String((it.equip && it.equip.armor && it.equip.armor.armor_type) || 'light')
-                    }
-                };
-                itemOut.weapon = (it.weapon && typeof it.weapon === 'object') ? it.weapon : {};
-                itemOut.weapon.damage_bonus = numberOrZero(itemOut.weapon.damage_bonus != null ? itemOut.weapon.damage_bonus : 0);
-                itemOut.weapon.damage_type = String(itemOut.weapon.damage_type || 'kinetic');
-                itemOut.ammo = (it.ammo && typeof it.ammo === 'object') ? it.ammo : {};
-                itemOut.ammo.ammo_type = String(itemOut.ammo.ammo_type || '');
-                itemOut.ammo.damage_type = String(itemOut.ammo.damage_type || 'kinetic');
-                itemOut.ammo.damage_bonus = numberOrZero(itemOut.ammo.damage_bonus != null ? itemOut.ammo.damage_bonus : 0);
-                itemOut.gear = (it.gear && typeof it.gear === 'object') ? it.gear : {};
-                itemOut.gear.subtype = String(itemOut.gear.subtype || '');
-                itemOut.bonuses = normalizeItemBonusRows(Array.isArray(it.bonuses) ? it.bonuses : (Array.isArray(it.passive_bonuses) ? it.passive_bonuses : []));
-                var augmentationRaw = (it.augmentation && typeof it.augmentation === 'object') ? it.augmentation : ((it.cyberware && typeof it.cyberware === 'object') ? it.cyberware : {});
-                itemOut.augmentation = deepClone(augmentationRaw || {});
-                itemOut.augmentation.subtype = String(itemOut.augmentation.subtype || (itemOut.item_kind === 'augmentation' ? 'cybernetic' : ''));
-                itemOut.augmentation.slot = String(itemOut.augmentation.slot || '');
-                var itemOutUniqueRole = String(itemOut.unique_role || '').trim().toLowerCase();
-                var itemOutEffectiveKind = itemOut.item_kind === 'unique' ? (uniqueRoleToKind[itemOutUniqueRole] || '') : itemOut.item_kind;
-                if (!itemOut.augmentation.slot && isAugmentationSlot(itemOut.equip.slot) && (itemOut.item_kind === 'augmentation' || itemOutEffectiveKind === 'augmentation')) {
-                    itemOut.augmentation.slot = String(itemOut.equip.slot || '').trim();
-                    itemOut.equip.slot = '';
-                }
-                var legacyGrade = String(itemOut.augmentation.grade || '');
-                if (!legacyGrade && it.cyberware && typeof it.cyberware === 'object') {
-                    legacyGrade = String(it.cyberware.grade || '');
-                }
-                itemOut.augmentation.grade = legacyGrade;
-                itemOut.augmentation.humanity_cost_percent = Math.max(0, Math.min(100, numberOrZero(itemOut.augmentation.humanity_cost_percent != null ? itemOut.augmentation.humanity_cost_percent : 0)));
-                itemOut.augmentation.modifiers = Array.isArray(itemOut.augmentation.modifiers) ? itemOut.augmentation.modifiers.filter(function (row) { return row && row.type; }) : [];
-                itemOut.augmentation.effects = Array.isArray(itemOut.augmentation.effects) ? itemOut.augmentation.effects.filter(function (row) { return row && row.event && row.effect_type; }) : [];
-                itemOut.augmentation.grants = Array.isArray(itemOut.augmentation.grants) ? itemOut.augmentation.grants.filter(function (row) { return row && row.grant_type; }) : [];
-                itemOut.augmentation.requirements = (itemOut.augmentation.requirements && typeof itemOut.augmentation.requirements === 'object') ? itemOut.augmentation.requirements : {};
-                itemOut.augmentation.conflicts = (itemOut.augmentation.conflicts && typeof itemOut.augmentation.conflicts === 'object') ? itemOut.augmentation.conflicts : {};
-                itemOut.cyberware = deepClone(itemOut.augmentation);
-                itemOut.price = numberOrZero(it.price != null ? it.price : 0);
-                itemOut.currency = String(it.currency || 'credits');
-                itemOut.weight = numberOrZero(it.weight != null ? it.weight : 0);
-                itemOut.stack_max = numberOrZero(it.stack_max != null ? it.stack_max : 1);
-                itemOut.tags = Array.isArray(it.tags) ? it.tags : [];
-                itemOut.on_use = onUse;
-                itemOut.on_equip = onEquip;
-                itemOut.requirements = reqI;
-                return normalizeItemCanonical({ schema: 'af_kb.item.v2', type_profile: expectedTypeProfile || 'item', version: p.version, item: itemOut });
-            }
-
-            if (profile === 'knowledge') {
-                var skillK = (p.skill && typeof p.skill === 'object') ? p.skill : {};
-                var keyStatK = normalizeSkillStatValue(skillK);
-                return {
-                    schema: p.schema,
-                    type_profile: 'knowledge',
-                    version: p.version,
-                    knowledge_group: String(p.knowledge_group || ''),
-                    skill: {
-                        category: 'knowledge',
-                        key_stat: keyStatK || null,
-                        attribute: keyStatK || null,
-                        rank_max: numberOrZero(skillK.rank_max != null ? skillK.rank_max : 4),
-                        armor_check_penalty: !!skillK.armor_check_penalty,
-                        trained_only: !!skillK.trained_only,
-                        notes: (typeof skillK.notes === 'string') ? skillK.notes : ''
-                    }
-                };
-            }
-            if (profile === 'bestiary') {
-                var c = (p.creature && typeof p.creature === 'object') ? p.creature : {};
-                var hp = (c.hp && typeof c.hp === 'object') ? c.hp : {};
-                var speed = (c.speed && typeof c.speed === 'object') ? c.speed : {};
-                var as = (c.ability_scores && typeof c.ability_scores === 'object') ? c.ability_scores : {};
-                return {
-                    schema: p.schema,
-                    type_profile: expectedTypeProfile || 'bestiary',
-                    version: p.version,
-                    creature: {
-                        size: String(c.size || 'medium'),
-                        kind: String(c.kind || 'humanoid'),
-                        alignment: String(c.alignment || ''),
-                        challenge_rating: String(c.challenge_rating || '1'),
-                        xp: numberOrZero(c.xp != null ? c.xp : 0),
-                        proficiency_bonus: numberOrZero(c.proficiency_bonus != null ? c.proficiency_bonus : 2),
-                        armor_class: numberOrZero(c.armor_class != null ? c.armor_class : 10),
-                        initiative: numberOrZero(c.initiative != null ? c.initiative : 0),
-                        hp: {
-                            average: numberOrZero(hp.average != null ? hp.average : 10),
-                            dice: String(hp.dice || '2d8+2')
-                        },
-                        speed: {
-                            walk: numberOrZero(speed.walk != null ? speed.walk : 30)
-                        },
-                        ability_scores: {
-                            str: numberOrZero(as.str != null ? as.str : 10),
-                            dex: numberOrZero(as.dex != null ? as.dex : 10),
-                            con: numberOrZero(as.con != null ? as.con : 10),
-                            int: numberOrZero(as.int != null ? as.int : 10),
-                            wis: numberOrZero(as.wis != null ? as.wis : 10),
-                            cha: numberOrZero(as.cha != null ? as.cha : 10)
-                        },
-                        damage_vulnerabilities: Array.isArray(c.damage_vulnerabilities) ? c.damage_vulnerabilities : [],
-                        damage_resistances: Array.isArray(c.damage_resistances) ? c.damage_resistances : [],
-                        damage_immunities: Array.isArray(c.damage_immunities) ? c.damage_immunities : [],
-                        condition_immunities: Array.isArray(c.condition_immunities) ? c.condition_immunities : [],
-                        notes: String(c.notes || '')
-                    },
-                    traits: Array.isArray(p.traits) ? p.traits : [],
-                    actions: Array.isArray(p.actions) ? p.actions : [],
-                    reactions: Array.isArray(p.reactions) ? p.reactions : [],
-                    legendary_actions: Array.isArray(p.legendary_actions) ? p.legendary_actions : [],
-                    loot: Array.isArray(p.loot) ? p.loot : [],
-                    gm_notes: String(p.gm_notes || '')
-                };
-            }
-
-            if (profile === 'character') {
-                var profileC = (p.character_profile && typeof p.character_profile === 'object') ? p.character_profile : {};
-                var statsC = (p.character_stats && typeof p.character_stats === 'object') ? p.character_stats : {};
-                var metaC = (p.character_meta && typeof p.character_meta === 'object') ? p.character_meta : {};
-                var abilitiesC = Array.isArray(p.character_abilities) ? p.character_abilities : [];
-                return {
-                    schema: p.schema,
-                    type_profile: 'character',
-                    version: p.version,
-                    character_profile: {
-                        category: String(profileC.category || 'canons'),
-                        character_pic: String(profileC.character_pic || ''),
-                        character_prototype: String(profileC.character_prototype || ''),
-                        character_name: String(profileC.character_name || ''),
-                        character_name_ru: String(profileC.character_name_ru || ''),
-                        character_nicknames: String(profileC.character_nicknames || ''),
-                        character_element: String(profileC.character_element || ''),
-                        character_gen: String(profileC.character_gen || ''),
-                        character_race: String(profileC.character_race || ''),
-                        character_class: String(profileC.character_class || ''),
-                        character_faction: String(profileC.character_faction || ''),
-                        character_app: String(profileC.character_app || '')
-                    },
-                    character_stats: {
-                        character_hp: numberOrZero(statsC.character_hp != null ? statsC.character_hp : 0),
-                        character_defense: numberOrZero(statsC.character_defense != null ? statsC.character_defense : 0),
-                        character_element_damage_bonus: numberOrZero(statsC.character_element_damage_bonus != null ? statsC.character_element_damage_bonus : 0),
-                        character_crit_damage: numberOrZero(statsC.character_crit_damage != null ? statsC.character_crit_damage : 0),
-                        character_healing_received_bonus: numberOrZero(statsC.character_healing_received_bonus != null ? statsC.character_healing_received_bonus : 0),
-                        character_attack_power: numberOrZero(statsC.character_attack_power != null ? statsC.character_attack_power : 0),
-                        character_elemental_mastery: numberOrZero(statsC.character_elemental_mastery != null ? statsC.character_elemental_mastery : 0),
-                        character_healing_bonus: numberOrZero(statsC.character_healing_bonus != null ? statsC.character_healing_bonus : 0),
-                        character_shield_strength: numberOrZero(statsC.character_shield_strength != null ? statsC.character_shield_strength : 0),
-                        character_luck: numberOrZero(statsC.character_luck != null ? statsC.character_luck : 0)
-                    },
-                    character_abilities: abilitiesC.map(function (row) {
-                        return normalizeCharacterAbilityRow(row, 0);
-                    }),
-                    character_links: Array.isArray(p.character_links) ? p.character_links : [],
-                    character_meta: {
-                        contract: String(metaC.contract || 'af_kb.character.contract.v1'),
-                        contract_version: String(metaC.contract_version || '1.0'),
-                        source: String(metaC.source || 'kb_manual')
-                    }
-                };
-            }
-
-            if (profile === 'heritage') {
-                ['size', 'creature_type', 'speed', 'hp_base'].forEach(function (k) {
-                    if (p[k] === '') delete p[k];
-                });
-                if (typeof p.size !== 'string' || !p.size.trim()) delete p.size;
-                if (typeof p.creature_type !== 'string' || !p.creature_type.trim()) delete p.creature_type;
-                if (p.speed == null || p.speed === '') delete p.speed;
-                if (p.hp_base == null || p.hp_base === '') delete p.hp_base;
-                return p;
-            }
-
-            // прочие профили пока не режем жёстко
+            if (!p.schema) p.schema = 'af_kb.rules.v1';
+            if (!p.type_profile) p.type_profile = expectedTypeProfile || profile || 'raw';
+            if (!p.version) p.version = '1.0';
             return p;
         }
+
 
         function toPayload() {
             if (uiProfile === 'item') {
@@ -4188,8 +3938,6 @@
                     return out;
                 });
             }
-
-            payload = sanitizePayloadByProfile(payload, uiProfile);
 
             return payload;
         }
@@ -5242,8 +4990,7 @@
                             { name: 'damage_value', label: 'Урон', type: 'number' },
                             { name: 'shield_value', label: 'Щит', type: 'number' },
                             { name: 'heal_value', label: 'Лечение', type: 'number' },
-                            { name: 'ability_description', label: 'Описание способности', type: 'textarea_bb' },
-                            { name: 'sortorder', label: 'Порядок', type: 'number' }
+                            { name: 'ability_description', label: 'Описание способности', type: 'textarea_bb' }
                         ];
                         var coreGrid = document.createElement('div');
                         coreGrid.className = 'af-kb-row';
@@ -5332,10 +5079,6 @@
                 // заменяем state и заново нормализуем по профилю через merged-подход.
                 var next = merge3(defaultsForProfile(uiProfile, expectedTypeProfile), schemaDefaults, parsed);
                 state = deepClone(next);
-                // чистим raw/дефолты от мусора по профилю
-                state = sanitizePayloadByProfile(state, uiProfile);
-
-
                 // re-normalize by profile (минимум, чтобы UI не падал)
                 if (uiProfile === 'heritage') {
                     if (!state.fixed_bonuses) state.fixed_bonuses = { stats: {} };
