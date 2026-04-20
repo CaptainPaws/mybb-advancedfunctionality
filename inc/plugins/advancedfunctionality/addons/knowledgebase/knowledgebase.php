@@ -2025,6 +2025,7 @@ function af_kb_seed_defaults(): void
 
     af_kb_seed_arpg_types();
     af_kb_seed_arpg_elements();
+    af_kb_seed_arpg_mechanics_option_sets();
     af_kb_seed_character_categories();
 }
 
@@ -2186,6 +2187,283 @@ function af_kb_seed_arpg_elements(): void
             'item_kind' => '',
         ]);
     }
+}
+
+function af_kb_arpg_mechanics_option_set_definitions(): array
+{
+    return [
+        'ability_type' => [
+            'title_ru' => 'ARPG: Тип способности',
+            'title_en' => 'ARPG: Ability Type',
+            'service_kind' => 'snippet',
+            'entries' => [
+                ['key' => 'active', 'label_ru' => 'Активная', 'label_en' => 'Active'],
+                ['key' => 'passive', 'label_ru' => 'Пассивная', 'label_en' => 'Passive'],
+                ['key' => 'ultimate', 'label_ru' => 'Ультимативная', 'label_en' => 'Ultimate'],
+            ],
+        ],
+        'ability_subtype' => [
+            'title_ru' => 'ARPG: Подтип способности',
+            'title_en' => 'ARPG: Ability Subtype',
+            'service_kind' => 'snippet',
+            'entries' => [
+                ['key' => 'strike', 'label_ru' => 'Удар', 'label_en' => 'Strike'],
+                ['key' => 'projectile', 'label_ru' => 'Снаряд', 'label_en' => 'Projectile'],
+                ['key' => 'summon', 'label_ru' => 'Призыв', 'label_en' => 'Summon'],
+                ['key' => 'buff', 'label_ru' => 'Усиление', 'label_en' => 'Buff'],
+                ['key' => 'debuff', 'label_ru' => 'Ослабление', 'label_en' => 'Debuff'],
+                ['key' => 'mobility', 'label_ru' => 'Мобильность', 'label_en' => 'Mobility'],
+                ['key' => 'utility', 'label_ru' => 'Утилита', 'label_en' => 'Utility'],
+                ['key' => 'healing', 'label_ru' => 'Лечение', 'label_en' => 'Healing'],
+                ['key' => 'shield', 'label_ru' => 'Щит', 'label_en' => 'Shield'],
+                ['key' => 'control', 'label_ru' => 'Контроль', 'label_en' => 'Control'],
+            ],
+        ],
+        'ability_slot' => [
+            'title_ru' => 'ARPG: Слот способности',
+            'title_en' => 'ARPG: Ability Slot',
+            'service_kind' => 'snippet',
+            'entries' => [
+                ['key' => 'skill_1', 'label_ru' => 'Навык 1', 'label_en' => 'Skill 1'],
+                ['key' => 'skill_2', 'label_ru' => 'Навык 2', 'label_en' => 'Skill 2'],
+                ['key' => 'skill_3', 'label_ru' => 'Навык 3', 'label_en' => 'Skill 3'],
+                ['key' => 'skill_4', 'label_ru' => 'Навык 4', 'label_en' => 'Skill 4'],
+                ['key' => 'ultimate', 'label_ru' => 'Ульта', 'label_en' => 'Ultimate'],
+                ['key' => 'passive', 'label_ru' => 'Пассивный', 'label_en' => 'Passive'],
+                ['key' => 'support', 'label_ru' => 'Поддержка', 'label_en' => 'Support'],
+                ['key' => 'special', 'label_ru' => 'Особый', 'label_en' => 'Special'],
+            ],
+        ],
+        'ability_damage_type' => [
+            'title_ru' => 'ARPG: Тип урона способности',
+            'title_en' => 'ARPG: Ability Damage Type',
+            'service_kind' => 'snippet',
+            'entries' => [
+                ['key' => 'physical', 'label_ru' => 'Физический', 'label_en' => 'Physical'],
+                ['key' => 'elemental', 'label_ru' => 'Стихийный', 'label_en' => 'Elemental'],
+                ['key' => 'true', 'label_ru' => 'Истинный', 'label_en' => 'True'],
+                ['key' => 'healing', 'label_ru' => 'Лечение', 'label_en' => 'Healing'],
+                ['key' => 'hybrid', 'label_ru' => 'Гибридный', 'label_en' => 'Hybrid'],
+            ],
+        ],
+        'ability_targeting' => [
+            'title_ru' => 'ARPG: Таргетинг способности',
+            'title_en' => 'ARPG: Ability Targeting',
+            'service_kind' => 'snippet',
+            'entries' => [
+                ['key' => 'self', 'label_ru' => 'На себя', 'label_en' => 'Self'],
+                ['key' => 'single_enemy', 'label_ru' => 'Один враг', 'label_en' => 'Single enemy'],
+                ['key' => 'single_ally', 'label_ru' => 'Один союзник', 'label_en' => 'Single ally'],
+                ['key' => 'line', 'label_ru' => 'Линия', 'label_en' => 'Line'],
+                ['key' => 'cone', 'label_ru' => 'Конус', 'label_en' => 'Cone'],
+                ['key' => 'aoe_ground', 'label_ru' => 'Область', 'label_en' => 'Ground AOE'],
+                ['key' => 'aoe_around_self', 'label_ru' => 'Вокруг себя', 'label_en' => 'Around self'],
+                ['key' => 'global', 'label_ru' => 'Глобально', 'label_en' => 'Global'],
+                ['key' => 'custom', 'label_ru' => 'Другое', 'label_en' => 'Custom'],
+            ],
+        ],
+        'ability_value_mode' => [
+            'title_ru' => 'ARPG: Режим значения способности',
+            'title_en' => 'ARPG: Ability Value Mode',
+            'service_kind' => 'snippet',
+            'entries' => [
+                ['key' => 'flat', 'label_ru' => 'Плоское значение', 'label_en' => 'Flat'],
+                ['key' => 'percent', 'label_ru' => 'Процент', 'label_en' => 'Percent'],
+                ['key' => 'text', 'label_ru' => 'Текст', 'label_en' => 'Text'],
+            ],
+        ],
+        'character_gender' => [
+            'title_ru' => 'ARPG: Пол персонажа',
+            'title_en' => 'ARPG: Character Gender',
+            'service_kind' => 'snippet',
+            'entries' => [
+                ['key' => 'male', 'label_ru' => 'Мужской', 'label_en' => 'Male'],
+                ['key' => 'female', 'label_ru' => 'Женский', 'label_en' => 'Female'],
+            ],
+        ],
+    ];
+}
+
+function af_kb_arpg_mechanics_options_fallback(string $setKey): array
+{
+    $definitions = af_kb_arpg_mechanics_option_set_definitions();
+    return (array)($definitions[$setKey]['entries'] ?? []);
+}
+
+function af_kb_seed_arpg_mechanics_option_sets(): void
+{
+    global $db;
+
+    if (!$db->table_exists('af_kb_entries')) {
+        return;
+    }
+
+    foreach (af_kb_arpg_mechanics_option_set_definitions() as $setKey => $definition) {
+        $existing = $db->fetch_array($db->simple_select(
+            'af_kb_entries',
+            '*',
+            "type='arpg_mechanics' AND `key`='" . $db->escape_string((string)$setKey) . "'",
+            ['limit' => 1]
+        ));
+
+        $entriesByKey = [];
+        foreach ((array)($definition['entries'] ?? []) as $row) {
+            $optionKey = trim((string)($row['key'] ?? ''));
+            if ($optionKey === '') {
+                continue;
+            }
+            $entriesByKey[$optionKey] = [
+                'key' => $optionKey,
+                'label_ru' => (string)($row['label_ru'] ?? $optionKey),
+                'label_en' => (string)($row['label_en'] ?? $optionKey),
+            ];
+        }
+
+        $payload = af_kb_arpg_envelope_defaults('arpg_mechanics');
+        $payload['rules']['service_kind'] = trim((string)($definition['service_kind'] ?? 'snippet')) ?: 'snippet';
+        $payload['rules']['entries'] = array_values($entriesByKey);
+
+        if ($existing) {
+            $current = af_kb_decode_json((string)($existing['data_json'] ?? '{}'));
+            if (!is_array($current)) {
+                $current = [];
+            }
+            $currentRules = is_array($current['rules'] ?? null) ? $current['rules'] : [];
+            $currentEntries = is_array($currentRules['entries'] ?? null) ? $currentRules['entries'] : [];
+            foreach ($currentEntries as $row) {
+                $optionKey = trim((string)($row['key'] ?? ''));
+                if ($optionKey === '') {
+                    continue;
+                }
+                if (!isset($entriesByKey[$optionKey])) {
+                    $entriesByKey[$optionKey] = [
+                        'key' => $optionKey,
+                        'label_ru' => (string)($row['label_ru'] ?? $optionKey),
+                        'label_en' => (string)($row['label_en'] ?? $optionKey),
+                    ];
+                    continue;
+                }
+
+                $entriesByKey[$optionKey]['label_ru'] = (string)($entriesByKey[$optionKey]['label_ru'] !== '' ? $entriesByKey[$optionKey]['label_ru'] : ($row['label_ru'] ?? $optionKey));
+                $entriesByKey[$optionKey]['label_en'] = (string)($entriesByKey[$optionKey]['label_en'] !== '' ? $entriesByKey[$optionKey]['label_en'] : ($row['label_en'] ?? $optionKey));
+            }
+
+            $payload = array_replace_recursive($payload, $current);
+            $payload['rules']['type_profile'] = 'service_mechanics';
+            $payload['rules']['category'] = 'service.mechanics';
+            $payload['rules']['visibility'] = ['catalog' => false, 'search' => false, 'internal' => true];
+            $payload['rules']['service_kind'] = trim((string)($payload['rules']['service_kind'] ?? '')) ?: 'snippet';
+            $payload['rules']['entries'] = array_values($entriesByKey);
+
+            $db->update_query('af_kb_entries', [
+                'title_ru' => $db->escape_string((string)($definition['title_ru'] ?? $setKey)),
+                'title_en' => $db->escape_string((string)($definition['title_en'] ?? $setKey)),
+                'data_json' => $db->escape_string(af_kb_normalize_json((string)json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES))),
+                'updated_at' => TIME_NOW,
+            ], 'id=' . (int)$existing['id']);
+            continue;
+        }
+
+        $db->insert_query('af_kb_entries', [
+            'type' => 'arpg_mechanics',
+            'key' => $db->escape_string((string)$setKey),
+            'title_ru' => $db->escape_string((string)($definition['title_ru'] ?? $setKey)),
+            'title_en' => $db->escape_string((string)($definition['title_en'] ?? $setKey)),
+            'short_ru' => '',
+            'short_en' => '',
+            'body_ru' => '',
+            'body_en' => '',
+            'tech_ru' => '',
+            'tech_en' => '',
+            'meta_json' => '{}',
+            'data_json' => $db->escape_string(af_kb_normalize_json((string)json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES))),
+            'icon_class' => '',
+            'icon_url' => '',
+            'banner_url' => '',
+            'bg_url' => '',
+            'active' => 1,
+            'sortorder' => 200,
+            'updated_at' => TIME_NOW,
+            'item_kind' => '',
+        ]);
+    }
+}
+
+function af_kb_get_arpg_mechanics_entry(string $serviceKind, string $entryKey): ?array
+{
+    global $db;
+
+    $serviceKind = trim($serviceKind);
+    $entryKey = trim($entryKey);
+    if ($serviceKind === '' || $entryKey === '' || !$db->table_exists('af_kb_entries')) {
+        return null;
+    }
+
+    $row = $db->fetch_array($db->simple_select(
+        'af_kb_entries',
+        '*',
+        "type='arpg_mechanics' AND `key`='" . $db->escape_string($entryKey) . "'",
+        ['limit' => 1]
+    ));
+    if (!$row) {
+        return null;
+    }
+
+    $payload = af_kb_decode_json((string)($row['data_json'] ?? '{}'));
+    if (!is_array($payload)) {
+        $payload = [];
+    }
+    $rules = is_array($payload['rules'] ?? null) ? $payload['rules'] : [];
+    if ((string)($rules['service_kind'] ?? '') !== $serviceKind) {
+        return null;
+    }
+
+    return [
+        'id' => (int)($row['id'] ?? 0),
+        'type' => (string)($row['type'] ?? ''),
+        'key' => (string)($row['key'] ?? ''),
+        'title_ru' => (string)($row['title_ru'] ?? ''),
+        'title_en' => (string)($row['title_en'] ?? ''),
+        'rules' => $rules,
+        'entries' => is_array($rules['entries'] ?? null) ? $rules['entries'] : [],
+    ];
+}
+
+function af_kb_get_arpg_mechanics_options(string $entryKey, string $serviceKind = 'snippet'): array
+{
+    $entry = af_kb_get_arpg_mechanics_entry($serviceKind, $entryKey);
+    $rows = is_array($entry['entries'] ?? null) ? $entry['entries'] : af_kb_arpg_mechanics_options_fallback($entryKey);
+    $result = [];
+    foreach ($rows as $row) {
+        $key = trim((string)($row['key'] ?? ''));
+        if ($key === '') {
+            continue;
+        }
+        $result[] = [
+            'key' => $key,
+            'label_ru' => (string)($row['label_ru'] ?? $key),
+            'label_en' => (string)($row['label_en'] ?? $key),
+        ];
+    }
+    return $result;
+}
+
+function af_kb_get_arpg_mechanics_option_label(string $entryKey, string $optionKey, bool $isRu = true, string $serviceKind = 'snippet'): string
+{
+    $optionKey = trim($optionKey);
+    if ($optionKey === '') {
+        return '';
+    }
+
+    foreach (af_kb_get_arpg_mechanics_options($entryKey, $serviceKind) as $row) {
+        if ((string)($row['key'] ?? '') !== $optionKey) {
+            continue;
+        }
+        $localized = $isRu ? (string)($row['label_ru'] ?? '') : (string)($row['label_en'] ?? '');
+        return $localized !== '' ? $localized : $optionKey;
+    }
+
+    return $optionKey;
 }
 
 function af_kb_character_profile_resolved_value(string $field, string $value, bool $isRu): string
