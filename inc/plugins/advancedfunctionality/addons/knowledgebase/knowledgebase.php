@@ -7463,7 +7463,7 @@ function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
         $iconHtml = '<span class="af-kb-char-ability__icon-fallback" aria-hidden="true">✦</span>';
     }
 
-    $rows = [];
+    $chips = [];
     $fieldMap = [
         'type' => $isRu ? 'Тип' : 'Type',
         'subtype' => $isRu ? 'Подтип' : 'Subtype',
@@ -7474,7 +7474,7 @@ function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
     foreach ($fieldMap as $key => $label) {
         $value = af_kb_arpg_inline_label($key, (string)($row[$key] ?? ''), $isRu);
         if ($value !== '') {
-            $rows[] = '<li><strong>' . htmlspecialchars_uni($label) . ':</strong> ' . htmlspecialchars_uni($value) . '</li>';
+            $chips[] = '<span class="af-kb-char-ability__chip"><strong>' . htmlspecialchars_uni($label) . ':</strong> ' . htmlspecialchars_uni($value) . '</span>';
         }
     }
 
@@ -7491,9 +7491,10 @@ function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
         if (!is_numeric($raw) || (float)$raw <= 0) {
             continue;
         }
-        $rows[] = '<li><strong>' . htmlspecialchars_uni($label) . ':</strong> ' . htmlspecialchars_uni(af_kb_arpg_inline_number($raw)) . '</li>';
+        $chips[] = '<span class="af-kb-char-ability__chip"><strong>' . htmlspecialchars_uni($label) . ':</strong> ' . htmlspecialchars_uni(af_kb_arpg_inline_number($raw)) . '</span>';
     }
 
+    $rows = [];
     $effectsRows = [];
     foreach ((array)($row['effects'] ?? []) as $effect) {
         if (!is_array($effect)) {
@@ -7512,9 +7513,10 @@ function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
 
     $description = trim((string)($row['ability_description'] ?? ''));
     $kbRef = trim((string)($row['ability_kb_key'] ?? ''));
+    $headerTitle = '#' . (int)($row['slot_index'] ?? 0) . ' ' . htmlspecialchars_uni($name);
 
     return '<article class="af-kb-char-ability">'
-        . '<header><span class="af-kb-char-ability__icon">' . $iconHtml . '</span><strong>#' . (int)($row['slot_index'] ?? 0) . ' ' . htmlspecialchars_uni($name) . '</strong></header>'
+        . '<header class="af-kb-char-ability__header"><span class="af-kb-char-ability__icon">' . $iconHtml . '</span><div class="af-kb-char-ability__head-main"><strong class="af-kb-char-ability__title">' . $headerTitle . '</strong>' . ($chips ? '<div class="af-kb-char-ability__chips">' . implode('', $chips) . '</div>' : '') . '</div></header>'
         . ($description !== '' ? '<div>' . af_kb_parse_message($description) . '</div>' : '')
         . ($rows ? '<ul class="af-kb-char-ability__meta">' . implode('', $rows) . '</ul>' : '')
         . ($kbRef !== '' ? '<footer>arpg_ability: ' . htmlspecialchars_uni($kbRef) . '</footer>' : '')
