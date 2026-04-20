@@ -631,11 +631,9 @@ function af_kb_default_type_definitions(): array
                     ['path' => 'ability_name', 'type' => 'string', 'required' => true, 'default' => ''],
                     ['path' => 'icon_url', 'type' => 'string', 'default' => ''],
                     ['path' => 'icon_class', 'type' => 'string', 'default' => ''],
-                    ['path' => 'ability_type', 'type' => 'select', 'required' => true, 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_registry_values('ability_type', false)), 'default' => 'active'],
-                    ['path' => 'subtype', 'type' => 'select', 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_registry_values('ability_subtype', false)), 'default' => ''],
-                    ['path' => 'slot', 'type' => 'select', 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_registry_values('ability_slot', false)), 'default' => ''],
-                    ['path' => 'damage_type', 'type' => 'select', 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_registry_values('ability_damage_type', false)), 'default' => ''],
-                    ['path' => 'targeting', 'type' => 'select', 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_registry_values('ability_targeting', false)), 'default' => ''],
+                    ['path' => 'ability_type', 'type' => 'select', 'required' => true, 'options' => [['value' => 'active'], ['value' => 'passive']], 'default' => 'active'],
+                    ['path' => 'damage_type', 'type' => 'string', 'default' => ''],
+                    ['path' => 'targeting', 'type' => 'string', 'default' => ''],
                     ['path' => 'range', 'type' => 'number', 'default' => 0],
                     ['path' => 'cast_time', 'type' => 'number', 'default' => 0],
                     ['path' => 'cooldown', 'type' => 'number', 'default' => 0],
@@ -735,11 +733,11 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.source_text', 'type' => 'string', 'required' => true, 'default' => ''],
             ],
             'arpg_ability' => [
-                ['path' => 'rules.type', 'type' => 'select', 'required' => true, 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_registry_values('ability_type', false)), 'default' => 'active'],
-                ['path' => 'rules.subtype', 'type' => 'select', 'required' => true, 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_registry_values('ability_subtype', false)), 'default' => ''],
-                ['path' => 'rules.slot', 'type' => 'select', 'required' => true, 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_registry_values('ability_slot', false)), 'default' => 'skill_1'],
+                ['path' => 'rules.type', 'type' => 'string', 'required' => true, 'default' => 'active'],
+                ['path' => 'rules.subtype', 'type' => 'string', 'required' => true, 'default' => ''],
+                ['path' => 'rules.slot', 'type' => 'string', 'required' => true, 'default' => 'skill_1'],
                 ['path' => 'rules.damage_type', 'type' => 'select', 'required' => true, 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_damage_type_values()), 'default' => 'physical'],
-                ['path' => 'rules.targeting', 'type' => 'select', 'required' => true, 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_registry_values('ability_targeting', false)), 'default' => 'single_enemy'],
+                ['path' => 'rules.targeting', 'type' => 'string', 'required' => true, 'default' => 'single_enemy'],
                 ['path' => 'rules.range', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.cast_time', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.cooldown', 'type' => 'number', 'required' => true, 'default' => 0],
@@ -773,7 +771,7 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.item_kind', 'type' => 'string', 'required' => true, 'default' => 'weapon'],
                 ['path' => 'rules.equip_slot', 'type' => 'string', 'required' => true, 'default' => 'weapon_one_hand'],
                 ['path' => 'rules.rarity', 'type' => 'string', 'required' => true, 'default' => 'common'],
-                ['path' => 'rules.subtype', 'type' => 'select', 'required' => true, 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_registry_values('ability_subtype', false)), 'default' => ''],
+                ['path' => 'rules.subtype', 'type' => 'string', 'required' => true, 'default' => ''],
                 ['path' => 'rules.level_min', 'type' => 'number', 'required' => true, 'default' => 1],
                 ['path' => 'rules.level_max', 'type' => 'number', 'required' => true, 'default' => 100],
                 ['path' => 'rules.progression_stage', 'type' => 'string', 'required' => true, 'default' => 'base'],
@@ -826,12 +824,12 @@ function af_kb_default_arpg_type_definitions(): array
                     ['path' => 'ability_name', 'type' => 'string', 'default' => ''],
                     ['path' => 'icon_url', 'type' => 'string', 'default' => ''],
                     ['path' => 'icon_class', 'type' => 'string', 'default' => ''],
-                    ['path' => 'type', 'type' => 'select', 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_registry_values('ability_type', false)), 'default' => 'active'],
-                    ['path' => 'ability_type', 'type' => 'select', 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_registry_values('ability_type', false)), 'default' => 'active'],
-                    ['path' => 'subtype', 'type' => 'select', 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_registry_values('ability_subtype', false)), 'default' => ''],
-                    ['path' => 'slot', 'type' => 'select', 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_registry_values('ability_slot', false)), 'default' => ''],
+                    ['path' => 'type', 'type' => 'select', 'options' => [['value' => 'active'], ['value' => 'passive'], ['value' => 'ultimate']], 'default' => 'active'],
+                    ['path' => 'ability_type', 'type' => 'select', 'options' => [['value' => 'active'], ['value' => 'passive']], 'default' => 'active'],
+                    ['path' => 'subtype', 'type' => 'string', 'default' => ''],
+                    ['path' => 'slot', 'type' => 'string', 'default' => ''],
                     ['path' => 'damage_type', 'type' => 'select', 'options' => [['value' => 'physical'], ['value' => 'fire'], ['value' => 'ice'], ['value' => 'water'], ['value' => 'electric'], ['value' => 'wind'], ['value' => 'earth'], ['value' => 'nature'], ['value' => 'light'], ['value' => 'dark'], ['value' => 'void'], ['value' => 'quantum'], ['value' => 'imaginary'], ['value' => 'aether'], ['value' => 'anomaly'], ['value' => 'ether'], ['value' => 'fusion'], ['value' => 'glacio'], ['value' => 'aero'], ['value' => 'havoc'], ['value' => 'spectro'], ['value' => 'dendro'], ['value' => 'pyro'], ['value' => 'hydro'], ['value' => 'electro'], ['value' => 'cryo'], ['value' => 'anemo'], ['value' => 'geo'], ['value' => 'lightning'], ['value' => 'poison'], ['value' => 'acid'], ['value' => 'bleed'], ['value' => 'arcane'], ['value' => 'holy'], ['value' => 'shadow'], ['value' => 'slash'], ['value' => 'pierce'], ['value' => 'blunt'], ['value' => 'true'], ['value' => 'kinetic'], ['value' => 'custom']], 'default' => 'physical'],
-                    ['path' => 'targeting', 'type' => 'select', 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_registry_values('ability_targeting', false)), 'default' => 'single_enemy'],
+                    ['path' => 'targeting', 'type' => 'select', 'options' => [['value' => 'self'], ['value' => 'single_enemy'], ['value' => 'single_ally'], ['value' => 'line'], ['value' => 'cone'], ['value' => 'aoe_ground'], ['value' => 'aoe_around_self'], ['value' => 'global'], ['value' => 'custom']], 'default' => 'single_enemy'],
                     ['path' => 'range', 'type' => 'number', 'default' => 0],
                     ['path' => 'cast_time', 'type' => 'number', 'default' => 0],
                     ['path' => 'cooldown', 'type' => 'number', 'default' => 0],
@@ -1203,24 +1201,6 @@ CREATE TABLE {TABLE_PREFIX}af_kb_item_kinds (
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   sortorder INT NOT NULL DEFAULT 0,
   updated_at INT UNSIGNED NOT NULL DEFAULT 0
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-SQL;
-        $db->write_query(str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql));
-    }
-
-    if (!$db->table_exists('af_kb_arpg_registries')) {
-        $sql = <<<SQL
-CREATE TABLE {TABLE_PREFIX}af_kb_arpg_registries (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  registry_key VARCHAR(64) NOT NULL,
-  value_key VARCHAR(64) NOT NULL,
-  label_ru VARCHAR(255) NOT NULL DEFAULT '',
-  label_en VARCHAR(255) NOT NULL DEFAULT '',
-  sortorder INT NOT NULL DEFAULT 0,
-  is_active TINYINT(1) NOT NULL DEFAULT 1,
-  updated_at INT UNSIGNED NOT NULL DEFAULT 0,
-  UNIQUE KEY uniq_registry_value (registry_key, value_key),
-  KEY idx_registry_active_sort (registry_key, is_active, sortorder, value_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 SQL;
         $db->write_query(str_replace('{TABLE_PREFIX}', TABLE_PREFIX, $sql));
@@ -1604,8 +1584,6 @@ function af_kb_remove_alias_file_if_owned(): void
     if (af_kb_alias_is_ours($target)) {
         @unlink($target);
     }
-
-    af_kb_arpg_registry_seed_defaults();
 }
 
 function af_kb_url(array $params = [], bool $html = false): string
@@ -1802,24 +1780,6 @@ function af_kb_ensure_schema(): void
             . ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
         $db->write_query($sql);
     }
-
-    if (!$db->table_exists('af_kb_arpg_registries')) {
-        $sql = "CREATE TABLE " . TABLE_PREFIX . "af_kb_arpg_registries ("
-            . "  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,"
-            . "  registry_key VARCHAR(64) NOT NULL,"
-            . "  value_key VARCHAR(64) NOT NULL,"
-            . "  label_ru VARCHAR(255) NOT NULL DEFAULT '',"
-            . "  label_en VARCHAR(255) NOT NULL DEFAULT '',"
-            . "  sortorder INT NOT NULL DEFAULT 0,"
-            . "  is_active TINYINT(1) NOT NULL DEFAULT 1,"
-            . "  updated_at INT UNSIGNED NOT NULL DEFAULT 0,"
-            . "  UNIQUE KEY uniq_registry_value (registry_key, value_key),"
-            . "  KEY idx_registry_active_sort (registry_key, is_active, sortorder, value_key)"
-            . ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
-        $db->write_query($sql);
-    }
-
-    af_kb_arpg_registry_seed_defaults();
 
     if (!$db->table_exists('af_kb_entry_categories')) {
         $sql = "CREATE TABLE " . TABLE_PREFIX . "af_kb_entry_categories (
@@ -5262,216 +5222,7 @@ function af_kb_arpg_service_entity_kinds(): array
 
 function af_kb_arpg_damage_type_values(): array
 {
-    return af_kb_arpg_registry_values('ability_damage_type', true);
-}
-
-function af_kb_arpg_registry_keys_for_admin(): array
-{
-    return ['ability_type', 'ability_subtype', 'ability_slot', 'ability_damage_type', 'ability_targeting'];
-}
-
-function af_kb_arpg_registry_default_map(): array
-{
-    return [
-        'ability_type' => [
-            'active' => ['ru' => 'Активная', 'en' => 'Active'],
-            'passive' => ['ru' => 'Пассивная', 'en' => 'Passive'],
-            'ultimate' => ['ru' => 'Ультимейт', 'en' => 'Ultimate'],
-            'support' => ['ru' => 'Поддержка', 'en' => 'Support'],
-            'aura' => ['ru' => 'Аура', 'en' => 'Aura'],
-            'toggle' => ['ru' => 'Переключаемая', 'en' => 'Toggle'],
-            'summon' => ['ru' => 'Призыв', 'en' => 'Summon'],
-            'reaction' => ['ru' => 'Реакция', 'en' => 'Reaction'],
-            'movement' => ['ru' => 'Движение', 'en' => 'Movement'],
-        ],
-        'ability_subtype' => [
-            'active' => ['ru' => 'Активная', 'en' => 'Active'],
-            'passive' => ['ru' => 'Пассивная', 'en' => 'Passive'],
-            'ultimate' => ['ru' => 'Ультимейт', 'en' => 'Ultimate'],
-            'support' => ['ru' => 'Поддержка', 'en' => 'Support'],
-            'aura' => ['ru' => 'Аура', 'en' => 'Aura'],
-            'toggle' => ['ru' => 'Переключаемая', 'en' => 'Toggle'],
-            'summon' => ['ru' => 'Призыв', 'en' => 'Summon'],
-            'reaction' => ['ru' => 'Реакция', 'en' => 'Reaction'],
-            'movement' => ['ru' => 'Движение', 'en' => 'Movement'],
-        ],
-        'ability_slot' => [
-            'basic' => ['ru' => 'Базовый', 'en' => 'Basic'],
-            'skill_1' => ['ru' => 'Навык 1', 'en' => 'Skill 1'],
-            'skill_2' => ['ru' => 'Навык 2', 'en' => 'Skill 2'],
-            'skill_3' => ['ru' => 'Навык 3', 'en' => 'Skill 3'],
-            'support' => ['ru' => 'Слот поддержки', 'en' => 'Support slot'],
-            'ultimate' => ['ru' => 'Слот ультимейта', 'en' => 'Ultimate slot'],
-            'passive' => ['ru' => 'Пассивный слот', 'en' => 'Passive slot'],
-            'custom' => ['ru' => 'Пользовательский', 'en' => 'Custom'],
-        ],
-        'ability_damage_type' => [
-            'physical' => ['ru' => 'Физический', 'en' => 'Physical'],
-            'fire' => ['ru' => 'Огонь', 'en' => 'Fire'],
-            'ice' => ['ru' => 'Лёд', 'en' => 'Ice'],
-            'water' => ['ru' => 'Вода', 'en' => 'Water'],
-            'electric' => ['ru' => 'Электричество', 'en' => 'Electric'],
-            'wind' => ['ru' => 'Ветер', 'en' => 'Wind'],
-            'earth' => ['ru' => 'Земля', 'en' => 'Earth'],
-            'nature' => ['ru' => 'Природа', 'en' => 'Nature'],
-            'light' => ['ru' => 'Свет', 'en' => 'Light'],
-            'dark' => ['ru' => 'Тьма', 'en' => 'Dark'],
-            'void' => ['ru' => 'Пустота', 'en' => 'Void'],
-            'quantum' => ['ru' => 'Квантовый', 'en' => 'Quantum'],
-            'imaginary' => ['ru' => 'Мнимый', 'en' => 'Imaginary'],
-            'aether' => ['ru' => 'Эфир', 'en' => 'Aether'],
-            'anomaly' => ['ru' => 'Аномалия', 'en' => 'Anomaly'],
-            'ether' => ['ru' => 'Этер', 'en' => 'Ether'],
-            'fusion' => ['ru' => 'Фьюжн', 'en' => 'Fusion'],
-            'glacio' => ['ru' => 'Глацио', 'en' => 'Glacio'],
-            'aero' => ['ru' => 'Аэро', 'en' => 'Aero'],
-            'havoc' => ['ru' => 'Хаос', 'en' => 'Havoc'],
-            'spectro' => ['ru' => 'Спектро', 'en' => 'Spectro'],
-            'dendro' => ['ru' => 'Дендро', 'en' => 'Dendro'],
-            'pyro' => ['ru' => 'Пиро', 'en' => 'Pyro'],
-            'hydro' => ['ru' => 'Гидро', 'en' => 'Hydro'],
-            'electro' => ['ru' => 'Электро', 'en' => 'Electro'],
-            'cryo' => ['ru' => 'Крио', 'en' => 'Cryo'],
-            'anemo' => ['ru' => 'Анемо', 'en' => 'Anemo'],
-            'geo' => ['ru' => 'Гео', 'en' => 'Geo'],
-            'lightning' => ['ru' => 'Молния', 'en' => 'Lightning'],
-            'poison' => ['ru' => 'Яд', 'en' => 'Poison'],
-            'acid' => ['ru' => 'Кислота', 'en' => 'Acid'],
-            'bleed' => ['ru' => 'Кровотечение', 'en' => 'Bleed'],
-            'arcane' => ['ru' => 'Тайная магия', 'en' => 'Arcane'],
-            'holy' => ['ru' => 'Святой', 'en' => 'Holy'],
-            'shadow' => ['ru' => 'Тень', 'en' => 'Shadow'],
-            'slash' => ['ru' => 'Режущий', 'en' => 'Slash'],
-            'pierce' => ['ru' => 'Колющий', 'en' => 'Pierce'],
-            'blunt' => ['ru' => 'Дробящий', 'en' => 'Blunt'],
-            'true' => ['ru' => 'Истинный', 'en' => 'True'],
-            'kinetic' => ['ru' => 'Кинетический', 'en' => 'Kinetic'],
-            'custom' => ['ru' => 'Пользовательский', 'en' => 'Custom'],
-        ],
-        'ability_targeting' => [
-            'self' => ['ru' => 'На себя', 'en' => 'Self'],
-            'single_enemy' => ['ru' => 'Один враг', 'en' => 'Single enemy'],
-            'single_ally' => ['ru' => 'Один союзник', 'en' => 'Single ally'],
-            'line' => ['ru' => 'Линия', 'en' => 'Line'],
-            'cone' => ['ru' => 'Конус', 'en' => 'Cone'],
-            'aoe_ground' => ['ru' => 'Область на земле', 'en' => 'Ground AoE'],
-            'aoe_around_self' => ['ru' => 'Область вокруг себя', 'en' => 'AoE around self'],
-            'global' => ['ru' => 'Глобальная', 'en' => 'Global'],
-            'custom' => ['ru' => 'Пользовательская', 'en' => 'Custom'],
-        ],
-    ];
-}
-
-function af_kb_arpg_registry_seed_defaults(): void
-{
-    global $db;
-    if (!is_object($db) || !$db->table_exists('af_kb_arpg_registries')) {
-        return;
-    }
-
-    $map = af_kb_arpg_registry_default_map();
-    foreach ($map as $registryKey => $rows) {
-        $sortorder = 0;
-        foreach ($rows as $valueKey => $labels) {
-            $where = "registry_key='" . $db->escape_string($registryKey) . "' AND value_key='" . $db->escape_string($valueKey) . "'";
-            $existing = $db->fetch_array($db->simple_select('af_kb_arpg_registries', 'id', $where, ['limit' => 1]));
-            if (!$existing) {
-                $db->insert_query('af_kb_arpg_registries', [
-                    'registry_key' => $db->escape_string($registryKey),
-                    'value_key' => $db->escape_string($valueKey),
-                    'label_ru' => $db->escape_string((string)($labels['ru'] ?? '')),
-                    'label_en' => $db->escape_string((string)($labels['en'] ?? '')),
-                    'sortorder' => $sortorder,
-                    'is_active' => 1,
-                    'updated_at' => TIME_NOW,
-                ]);
-            }
-            $sortorder += 10;
-        }
-    }
-}
-
-function af_kb_arpg_registry_rows(string $registryKey, bool $onlyActive = true): array
-{
-    global $db;
-    $registryKey = trim($registryKey);
-    if ($registryKey === '') {
-        return [];
-    }
-
-    $rows = [];
-    if (is_object($db) && $db->table_exists('af_kb_arpg_registries')) {
-        $where = "registry_key='" . $db->escape_string($registryKey) . "'";
-        if ($onlyActive) {
-            $where .= " AND is_active=1";
-        }
-        $q = $db->simple_select('af_kb_arpg_registries', '*', $where, ['order_by' => 'sortorder, value_key', 'order_dir' => 'ASC']);
-        while ($row = $db->fetch_array($q)) {
-            $rows[] = [
-                'value_key' => (string)($row['value_key'] ?? ''),
-                'label_ru' => (string)($row['label_ru'] ?? ''),
-                'label_en' => (string)($row['label_en'] ?? ''),
-                'sortorder' => (int)($row['sortorder'] ?? 0),
-                'is_active' => (int)($row['is_active'] ?? 0),
-            ];
-        }
-    }
-
-    if (!$rows) {
-        foreach ((array)(af_kb_arpg_registry_default_map()[$registryKey] ?? []) as $valueKey => $labels) {
-            $rows[] = [
-                'value_key' => (string)$valueKey,
-                'label_ru' => (string)($labels['ru'] ?? ''),
-                'label_en' => (string)($labels['en'] ?? ''),
-                'sortorder' => 0,
-                'is_active' => 1,
-            ];
-        }
-    }
-    return $rows;
-}
-
-function af_kb_arpg_registry_values(string $registryKey, bool $withEmpty = false): array
-{
-    $values = [];
-    foreach (af_kb_arpg_registry_rows($registryKey, true) as $row) {
-        $valueKey = trim((string)($row['value_key'] ?? ''));
-        if ($valueKey !== '') {
-            $values[] = $valueKey;
-        }
-    }
-    if ($withEmpty) {
-        array_unshift($values, '');
-    }
-    return array_values(array_unique($values));
-}
-
-function af_kb_arpg_registry_label(string $registryKey, string $valueKey, bool $isRu): string
-{
-    $valueKey = trim($valueKey);
-    if ($valueKey === '') {
-        return '';
-    }
-    foreach (af_kb_arpg_registry_rows($registryKey, true) as $row) {
-        if ((string)($row['value_key'] ?? '') !== $valueKey) {
-            continue;
-        }
-        $label = $isRu ? (string)($row['label_ru'] ?? '') : (string)($row['label_en'] ?? '');
-        return $label !== '' ? $label : $valueKey;
-    }
-
-    $fallback = (array)(af_kb_arpg_registry_default_map()[$registryKey][$valueKey] ?? []);
-    $label = $isRu ? (string)($fallback['ru'] ?? '') : (string)($fallback['en'] ?? '');
-    return $label !== '' ? $label : $valueKey;
-}
-
-function af_kb_arpg_registry_payload_for_editor(): array
-{
-    $payload = [];
-    foreach (af_kb_arpg_registry_keys_for_admin() as $registryKey) {
-        $payload[$registryKey] = af_kb_arpg_registry_rows($registryKey, true);
-    }
-    return $payload;
+    return ['', 'physical', 'fire', 'ice', 'lightning', 'poison', 'acid', 'bleed', 'arcane', 'holy', 'shadow', 'true', 'kinetic', 'custom'];
 }
 
 function af_kb_arpg_get_payload_path(array $payload, string $path, bool &$exists = false)
@@ -7524,11 +7275,92 @@ function af_kb_humanize_effect(array $effect, bool $isRu): string
 function af_kb_arpg_inline_enum_registry(): array
 {
     return [
-        'type' => af_kb_arpg_registry_default_map()['ability_type'],
-        'subtype' => af_kb_arpg_registry_default_map()['ability_subtype'],
-        'slot' => af_kb_arpg_registry_default_map()['ability_slot'],
-        'damage_type' => af_kb_arpg_registry_default_map()['ability_damage_type'],
-        'targeting' => af_kb_arpg_registry_default_map()['ability_targeting'],
+        'type' => [
+            'active' => ['ru' => 'Активная', 'en' => 'Active'],
+            'passive' => ['ru' => 'Пассивная', 'en' => 'Passive'],
+            'ultimate' => ['ru' => 'Ультимейт', 'en' => 'Ultimate'],
+            'support' => ['ru' => 'Поддержка', 'en' => 'Support'],
+            'aura' => ['ru' => 'Аура', 'en' => 'Aura'],
+            'toggle' => ['ru' => 'Переключаемая', 'en' => 'Toggle'],
+            'summon' => ['ru' => 'Призыв', 'en' => 'Summon'],
+            'reaction' => ['ru' => 'Реакция', 'en' => 'Reaction'],
+            'movement' => ['ru' => 'Движение', 'en' => 'Movement'],
+        ],
+        'subtype' => [
+            'active' => ['ru' => 'Активная', 'en' => 'Active'],
+            'passive' => ['ru' => 'Пассивная', 'en' => 'Passive'],
+            'ultimate' => ['ru' => 'Ультимейт', 'en' => 'Ultimate'],
+            'support' => ['ru' => 'Поддержка', 'en' => 'Support'],
+            'aura' => ['ru' => 'Аура', 'en' => 'Aura'],
+            'toggle' => ['ru' => 'Переключаемая', 'en' => 'Toggle'],
+            'summon' => ['ru' => 'Призыв', 'en' => 'Summon'],
+            'reaction' => ['ru' => 'Реакция', 'en' => 'Reaction'],
+            'movement' => ['ru' => 'Движение', 'en' => 'Movement'],
+        ],
+        'slot' => [
+            'basic' => ['ru' => 'Базовый', 'en' => 'Basic'],
+            'skill_1' => ['ru' => 'Навык 1', 'en' => 'Skill 1'],
+            'skill_2' => ['ru' => 'Навык 2', 'en' => 'Skill 2'],
+            'skill_3' => ['ru' => 'Навык 3', 'en' => 'Skill 3'],
+            'support' => ['ru' => 'Слот поддержки', 'en' => 'Support slot'],
+            'ultimate' => ['ru' => 'Слот ультимейта', 'en' => 'Ultimate slot'],
+            'passive' => ['ru' => 'Пассивный слот', 'en' => 'Passive slot'],
+            'custom' => ['ru' => 'Пользовательский', 'en' => 'Custom'],
+        ],
+        'damage_type' => [
+            'physical' => ['ru' => 'Физический', 'en' => 'Physical'],
+            'fire' => ['ru' => 'Огонь', 'en' => 'Fire'],
+            'ice' => ['ru' => 'Лёд', 'en' => 'Ice'],
+            'water' => ['ru' => 'Вода', 'en' => 'Water'],
+            'electric' => ['ru' => 'Электричество', 'en' => 'Electric'],
+            'wind' => ['ru' => 'Ветер', 'en' => 'Wind'],
+            'earth' => ['ru' => 'Земля', 'en' => 'Earth'],
+            'nature' => ['ru' => 'Природа', 'en' => 'Nature'],
+            'light' => ['ru' => 'Свет', 'en' => 'Light'],
+            'dark' => ['ru' => 'Тьма', 'en' => 'Dark'],
+            'void' => ['ru' => 'Пустота', 'en' => 'Void'],
+            'quantum' => ['ru' => 'Квантовый', 'en' => 'Quantum'],
+            'imaginary' => ['ru' => 'Мнимый', 'en' => 'Imaginary'],
+            'aether' => ['ru' => 'Эфир', 'en' => 'Aether'],
+            'anomaly' => ['ru' => 'Аномалия', 'en' => 'Anomaly'],
+            'ether' => ['ru' => 'Этер', 'en' => 'Ether'],
+            'fusion' => ['ru' => 'Фьюжн', 'en' => 'Fusion'],
+            'glacio' => ['ru' => 'Глацио', 'en' => 'Glacio'],
+            'aero' => ['ru' => 'Аэро', 'en' => 'Aero'],
+            'havoc' => ['ru' => 'Хаос', 'en' => 'Havoc'],
+            'spectro' => ['ru' => 'Спектро', 'en' => 'Spectro'],
+            'dendro' => ['ru' => 'Дендро', 'en' => 'Dendro'],
+            'pyro' => ['ru' => 'Пиро', 'en' => 'Pyro'],
+            'hydro' => ['ru' => 'Гидро', 'en' => 'Hydro'],
+            'electro' => ['ru' => 'Электро', 'en' => 'Electro'],
+            'cryo' => ['ru' => 'Крио', 'en' => 'Cryo'],
+            'anemo' => ['ru' => 'Анемо', 'en' => 'Anemo'],
+            'geo' => ['ru' => 'Гео', 'en' => 'Geo'],
+            'lightning' => ['ru' => 'Молния', 'en' => 'Lightning'],
+            'poison' => ['ru' => 'Яд', 'en' => 'Poison'],
+            'acid' => ['ru' => 'Кислота', 'en' => 'Acid'],
+            'bleed' => ['ru' => 'Кровотечение', 'en' => 'Bleed'],
+            'arcane' => ['ru' => 'Тайная магия', 'en' => 'Arcane'],
+            'holy' => ['ru' => 'Святой', 'en' => 'Holy'],
+            'shadow' => ['ru' => 'Тень', 'en' => 'Shadow'],
+            'slash' => ['ru' => 'Режущий', 'en' => 'Slash'],
+            'pierce' => ['ru' => 'Колющий', 'en' => 'Pierce'],
+            'blunt' => ['ru' => 'Дробящий', 'en' => 'Blunt'],
+            'true' => ['ru' => 'Истинный', 'en' => 'True'],
+            'kinetic' => ['ru' => 'Кинетический', 'en' => 'Kinetic'],
+            'custom' => ['ru' => 'Пользовательский', 'en' => 'Custom'],
+        ],
+        'targeting' => [
+            'self' => ['ru' => 'На себя', 'en' => 'Self'],
+            'single_enemy' => ['ru' => 'Один враг', 'en' => 'Single enemy'],
+            'single_ally' => ['ru' => 'Один союзник', 'en' => 'Single ally'],
+            'line' => ['ru' => 'Линия', 'en' => 'Line'],
+            'cone' => ['ru' => 'Конус', 'en' => 'Cone'],
+            'aoe_ground' => ['ru' => 'Область на земле', 'en' => 'Ground AoE'],
+            'aoe_around_self' => ['ru' => 'Область вокруг себя', 'en' => 'AoE around self'],
+            'global' => ['ru' => 'Глобальная', 'en' => 'Global'],
+            'custom' => ['ru' => 'Пользовательская', 'en' => 'Custom'],
+        ],
         'effect_kind' => [
             'damage' => ['ru' => 'Урон', 'en' => 'Damage'],
             'heal' => ['ru' => 'Лечение', 'en' => 'Heal'],
@@ -7545,17 +7377,6 @@ function af_kb_arpg_inline_label(string $dict, string $key, bool $isRu): string
     $cleanKey = trim((string)$key);
     if ($cleanKey === '') {
         return '';
-    }
-
-    $dictToRegistry = [
-        'type' => 'ability_type',
-        'subtype' => 'ability_subtype',
-        'slot' => 'ability_slot',
-        'damage_type' => 'ability_damage_type',
-        'targeting' => 'ability_targeting',
-    ];
-    if (isset($dictToRegistry[$dict])) {
-        return af_kb_arpg_registry_label($dictToRegistry[$dict], $cleanKey, $isRu);
     }
 
     $registry = af_kb_arpg_inline_enum_registry();
@@ -10614,7 +10435,6 @@ function af_kb_handle_edit(): void
         }
     }
     $kb_item_kinds_json = htmlspecialchars_uni(json_encode($itemKinds, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-    $kb_arpg_registries_json = htmlspecialchars_uni(json_encode(af_kb_arpg_registry_payload_for_editor(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
     $kb_categories_editor = '';
     if (af_kb_categories_enabled() && !empty($entry['type'])) {
