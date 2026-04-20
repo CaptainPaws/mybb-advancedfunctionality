@@ -1859,9 +1859,27 @@
                 ]);
 
                 renderSeededArrayEditor(rulesRoot, 'ability_keys', 'ability_keys', [
-                    { key: 'ability_key', label: 'ability_key', default: '' }
+                    { key: 'slot_index', label: 'slot_index', type: 'number', default: 1 },
+                    { key: 'ability_name', label: 'ability_name', default: '' },
+                    { key: 'ability_type', label: 'ability_type', type: 'select', options: ['active', 'passive'], default: 'active' },
+                    { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
+                    { key: 'targeting', label: 'targeting', default: '' },
+                    { key: 'range', label: 'range', type: 'number', default: 0 },
+                    { key: 'cast_time', label: 'cast_time', type: 'number', default: 0 },
+                    { key: 'cooldown', label: 'cooldown', type: 'number', default: 0 },
+                    { key: 'duration', label: 'duration', type: 'number', default: 0 },
+                    { key: 'max_charges', label: 'max_charges', type: 'number', default: 0 },
+                    { key: 'level_cap', label: 'level_cap', type: 'number', default: 0 },
+                    { key: 'ability_description', label: 'ability_description', default: '' },
+                    { key: 'effects', label: 'effects', default: [] },
+                    { key: 'modifiers', label: 'modifiers', default: [] },
+                    { key: 'grants', label: 'grants', default: [] },
+                    { key: 'ability_kb_key', label: 'ability_kb_key', default: '' },
+                    { key: 'ability_key', label: 'ability_key (legacy)', default: '' },
+                    { key: 'sortorder', label: 'sortorder', type: 'number', default: 0 },
+                    { key: 'notes', label: 'notes', default: '' }
                 ], [
-                    { key: 'default', label: 'default', seed: { ability_key: '' } }
+                    { key: 'default', label: 'default', seed: { slot_index: 1, ability_name: '', ability_type: 'active', damage_type: 'physical', targeting: '', range: 0, cast_time: 0, cooldown: 0, duration: 0, max_charges: 0, level_cap: 0, ability_description: '', effects: [], modifiers: [], grants: [], ability_kb_key: '', ability_key: '', sortorder: 0, notes: '' } }
                 ]);
 
                 renderSeededArrayEditor(rulesRoot, 'loot', 'loot', [
@@ -2818,12 +2836,24 @@
             });
             state.character_abilities = state.character_abilities.map(function (ability) {
                 var row = (ability && typeof ability === 'object' && !Array.isArray(ability)) ? ability : {};
+                var abilityKbKey = String(row.ability_kb_key || row.ability_key || '');
                 return {
                     slot_index: numberOrZero(row.slot_index != null ? row.slot_index : 1),
                     ability_name: String(row.ability_name || ''),
                     ability_type: String(row.ability_type || 'active'),
+                    damage_type: String(row.damage_type || ''),
+                    targeting: String(row.targeting || ''),
+                    range: numberOrZero(row.range != null ? row.range : 0),
+                    cast_time: numberOrZero(row.cast_time != null ? row.cast_time : 0),
+                    cooldown: numberOrZero(row.cooldown != null ? row.cooldown : 0),
+                    duration: numberOrZero(row.duration != null ? row.duration : 0),
+                    max_charges: numberOrZero(row.max_charges != null ? row.max_charges : 0),
+                    level_cap: numberOrZero(row.level_cap != null ? row.level_cap : 0),
                     ability_description: String(row.ability_description || ''),
-                    ability_kb_key: String(row.ability_kb_key || ''),
+                    effects: Array.isArray(row.effects) ? row.effects : [],
+                    modifiers: Array.isArray(row.modifiers) ? row.modifiers : [],
+                    grants: Array.isArray(row.grants) ? row.grants : [],
+                    ability_kb_key: abilityKbKey,
                     sortorder: numberOrZero(row.sortorder != null ? row.sortorder : 0)
                 };
             });
@@ -3486,8 +3516,19 @@
                             slot_index: numberOrZero(ability.slot_index != null ? ability.slot_index : 1),
                             ability_name: String(ability.ability_name || ''),
                             ability_type: String(ability.ability_type || 'active'),
+                            damage_type: String(ability.damage_type || ''),
+                            targeting: String(ability.targeting || ''),
+                            range: numberOrZero(ability.range != null ? ability.range : 0),
+                            cast_time: numberOrZero(ability.cast_time != null ? ability.cast_time : 0),
+                            cooldown: numberOrZero(ability.cooldown != null ? ability.cooldown : 0),
+                            duration: numberOrZero(ability.duration != null ? ability.duration : 0),
+                            max_charges: numberOrZero(ability.max_charges != null ? ability.max_charges : 0),
+                            level_cap: numberOrZero(ability.level_cap != null ? ability.level_cap : 0),
                             ability_description: String(ability.ability_description || ''),
-                            ability_kb_key: String(ability.ability_kb_key || ''),
+                            effects: Array.isArray(ability.effects) ? ability.effects : [],
+                            modifiers: Array.isArray(ability.modifiers) ? ability.modifiers : [],
+                            grants: Array.isArray(ability.grants) ? ability.grants : [],
+                            ability_kb_key: String(ability.ability_kb_key || ability.ability_key || ''),
                             sortorder: numberOrZero(ability.sortorder != null ? ability.sortorder : 0)
                         };
                     }),
@@ -4526,7 +4567,18 @@
                     { name: 'slot_index', label: 'slot_index', type: 'number' },
                     { name: 'ability_name', label: 'ability_name', type: 'text' },
                     { name: 'ability_type', label: 'ability_type', type: 'select', options: ['active', 'passive'] },
+                    { name: 'damage_type', label: 'damage_type', type: 'text' },
+                    { name: 'targeting', label: 'targeting', type: 'text' },
+                    { name: 'range', label: 'range', type: 'number' },
+                    { name: 'cast_time', label: 'cast_time', type: 'number' },
+                    { name: 'cooldown', label: 'cooldown', type: 'number' },
+                    { name: 'duration', label: 'duration', type: 'number' },
+                    { name: 'max_charges', label: 'max_charges', type: 'number' },
+                    { name: 'level_cap', label: 'level_cap', type: 'number' },
                     { name: 'ability_description', label: 'ability_description', type: 'textarea' },
+                    { name: 'effects', label: 'effects', type: 'json' },
+                    { name: 'modifiers', label: 'modifiers', type: 'json' },
+                    { name: 'grants', label: 'grants', type: 'json' },
                     { name: 'ability_kb_key', label: 'ability_kb_key', type: 'text' },
                     { name: 'sortorder', label: 'sortorder', type: 'number' }
                 ];
@@ -4538,7 +4590,18 @@
                     slot_index: 1,
                     ability_name: '',
                     ability_type: 'active',
+                    damage_type: '',
+                    targeting: '',
+                    range: 0,
+                    cast_time: 0,
+                    cooldown: 0,
+                    duration: 0,
+                    max_charges: 0,
+                    level_cap: 0,
                     ability_description: '',
+                    effects: [],
+                    modifiers: [],
+                    grants: [],
                     ability_kb_key: '',
                     sortorder: 0
                 });
