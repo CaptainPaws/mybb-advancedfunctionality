@@ -5253,7 +5253,11 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
         'slot' => (string)($row['slot'] ?? ''),
         'damage_type' => (string)($row['damage_type'] ?? ''),
         'targeting' => (string)($row['targeting'] ?? ''),
+        'value_mode' => (string)($row['value_mode'] ?? 'flat'),
         'range' => isset($row['range']) ? (float)$row['range'] : 0.0,
+        'damage_value' => isset($row['damage_value']) ? (float)$row['damage_value'] : 0.0,
+        'shield_value' => isset($row['shield_value']) ? (float)$row['shield_value'] : 0.0,
+        'heal_value' => isset($row['heal_value']) ? (float)$row['heal_value'] : 0.0,
         'cast_time' => isset($row['cast_time']) ? (float)$row['cast_time'] : 0.0,
         'cooldown' => isset($row['cooldown']) ? (float)$row['cooldown'] : 0.0,
         'duration' => isset($row['duration']) ? (float)$row['duration'] : 0.0,
@@ -5378,6 +5382,7 @@ function af_kb_reduce_embedded_ability_to_application_dto(array $ability, int $f
         'damage_type' => trim((string)($normalized['damage_type'] ?? '')),
         'targeting' => trim((string)($normalized['targeting'] ?? '')),
         'range' => trim((string)($normalized['range'] ?? '')),
+        'damage_value' => af_kb_extract_inline_ability_summary_value($normalized, 'damage'),
         'shield_value' => af_kb_extract_inline_ability_summary_value($normalized, 'shield'),
         'heal_value' => af_kb_extract_inline_ability_summary_value($normalized, 'heal'),
         'ability_description' => trim((string)($normalized['ability_description'] ?? '')),
@@ -9339,11 +9344,13 @@ function af_kb_build_character_application_prefill(array $entry): array
         'character_name' => ['character_name', 'name'],
         'character_name_ru' => ['character_name_ru', 'name_ru', 'name_rus'],
         'character_nicknames' => ['character_nicknames', 'nicknames'],
+        'character_age' => ['character_age', 'age'],
         'character_element' => ['character_element', 'element'],
         'character_gen' => ['character_gen', 'gender', 'sex'],
         'character_race' => ['character_race', 'character_origin', 'origin', 'race'],
         'character_class' => ['character_class', 'character_archetype', 'archetype', 'class'],
         'character_faction' => ['character_faction', 'faction'],
+        'character_activity' => ['character_activity', 'activity', 'occupation'],
         'character_app' => ['character_app', 'appearance', 'description'],
     ];
     foreach ($profileMap as $targetField => $candidates) {
@@ -9382,6 +9389,17 @@ function af_kb_build_character_application_prefill(array $entry): array
             }
             $prefill[$targetField] = trim((string)$stats[$candidate]);
             break;
+        }
+    }
+    if (!isset($prefill['character_stats'])) {
+        $statsCompact = [];
+        foreach (array_keys($statMap) as $statKey) {
+            if (array_key_exists($statKey, $prefill)) {
+                $statsCompact[$statKey] = $prefill[$statKey];
+            }
+        }
+        if (!empty($statsCompact)) {
+            $prefill['character_stats'] = json_encode($statsCompact, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
         }
     }
 

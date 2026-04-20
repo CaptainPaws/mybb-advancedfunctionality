@@ -561,12 +561,13 @@
         const rawType = String(source.type || source.ability_type || "active").toLowerCase();
         ability.ability_name = String(source.ability_name || "");
         ability.icon_url = String(source.icon_url || "");
-        ability.type = rawType === "passive" ? "passive" : "active";
+        ability.type = rawType || "active";
         ability.subtype = String(source.subtype || "");
         ability.slot = String(source.slot || "");
         ability.damage_type = String(source.damage_type || "");
         ability.targeting = String(source.targeting || "");
         ability.range = String(source.range || "");
+        ability.damage_value = String(source.damage_value || "");
         ability.shield_value = String(source.shield_value || "");
         ability.heal_value = String(source.heal_value || "");
         ability.ability_description = String(source.ability_description || "");
@@ -581,10 +582,48 @@
         wrap.__afAbilitiesInited = true;
 
         const hidden = AF_ATF.qs(".af-atf-abilities-hidden", wrap);
+        const optionsScript = AF_ATF.qs(".af-atf-abilities-options", wrap);
         const list = AF_ATF.qs(".af-atf-abilities-list", wrap);
         const addBtn = AF_ATF.qs(".af-atf-abilities-add", wrap);
         const maxItems = parseInt(wrap.getAttribute("data-max-items") || "8", 10) || 8;
         if (!hidden || !list || !addBtn) return;
+        let selectOptions = {};
+        try {
+          selectOptions = JSON.parse(String(optionsScript && optionsScript.textContent ? optionsScript.textContent : "{}")) || {};
+        } catch (e) {
+          selectOptions = {};
+        }
+        const optionLabel = (row) => {
+          if (!row || typeof row !== "object") return "";
+          return String(row.label_ru || row.label_en || row.key || "");
+        };
+        const renderSelectOptions = (setName, currentValue) => {
+          let html = '<option value=""></option>';
+          const rows = Array.isArray(selectOptions[setName]) ? selectOptions[setName] : [];
+          const seen = new Set();
+          rows.forEach((row) => {
+            if (!row || typeof row !== "object") return;
+            const key = String(row.key || "").trim();
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            html += `<option value="${AF_ATF.escapeAttr(key)}"${String(currentValue) === key ? " selected" : ""}>${AF_ATF.escapeAttr(optionLabel(row) || key)}</option>`;
+          });
+          const raw = String(currentValue || "").trim();
+          if (raw && !seen.has(raw)) {
+            html += `<option value="${AF_ATF.escapeAttr(raw)}" selected>${AF_ATF.escapeAttr(raw)}</option>`;
+          }
+          return html;
+        };
+        const insertBbTag = (textarea, openTag, closeTag = "") => {
+          if (!textarea) return;
+          const start = textarea.selectionStart || 0;
+          const end = textarea.selectionEnd || 0;
+          const selected = textarea.value.substring(start, end);
+          const text = `${openTag}${selected}${closeTag}`;
+          textarea.setRangeText(text, start, end, "end");
+          textarea.focus();
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
+        };
 
         let state = [];
         try {
@@ -607,51 +646,56 @@
             const row = document.createElement("div");
             row.className = "af-atf-ability-item";
             row.innerHTML = `
-              <div><strong>Способность #${index + 1}</strong></div>
-              <label>Название способности
-                <input type="text" class="text_input af-atf-ability-name" placeholder="Название способности" value="${AF_ATF.escapeAttr(ability.ability_name)}" />
-              </label>
-              <label>Иконка
-                <input type="text" class="text_input af-atf-ability-icon-url" placeholder="https://..." value="${AF_ATF.escapeAttr(ability.icon_url)}" />
-              </label>
-              <label>Тип
-                <select class="select af-atf-ability-type">
-                  <option value="active"${ability.type === "active" ? " selected" : ""}>Активная</option>
-                  <option value="passive"${ability.type === "passive" ? " selected" : ""}>Пассивная</option>
-                </select>
-              </label>
-              <label>Подтип
-                <input type="text" class="text_input af-atf-ability-subtype" placeholder="Подтип" value="${AF_ATF.escapeAttr(ability.subtype)}" />
-              </label>
-              <label>Слот
-                <input type="text" class="text_input af-atf-ability-slot" placeholder="Слот" value="${AF_ATF.escapeAttr(ability.slot)}" />
-              </label>
-              <label>Тип урона
-                <input type="text" class="text_input af-atf-ability-damage-type" placeholder="Тип урона" value="${AF_ATF.escapeAttr(ability.damage_type)}" />
-              </label>
-              <label>Цель
-                <input type="text" class="text_input af-atf-ability-targeting" placeholder="Цель" value="${AF_ATF.escapeAttr(ability.targeting)}" />
-              </label>
-              <label>Дальность
-                <input type="text" class="text_input af-atf-ability-range" placeholder="Дальность" value="${AF_ATF.escapeAttr(ability.range)}" />
-              </label>
-              <label>Щит
-                <input type="text" class="text_input af-atf-ability-shield" placeholder="0" value="${AF_ATF.escapeAttr(ability.shield_value)}" />
-              </label>
-              <label>Лечение
-                <input type="text" class="text_input af-atf-ability-heal" placeholder="0" value="${AF_ATF.escapeAttr(ability.heal_value)}" />
-              </label>
-              <label>Описание способности
-                <textarea class="textarea af-atf-ability-description" rows="3" placeholder="Описание способности">${AF_ATF.escapeAttr(ability.ability_description)}</textarea>
+              <div class="af-atf-ability-header"><strong>Способность #${index + 1}</strong></div>
+              <div class="af-atf-ability-grid">
+                <label>Название способности
+                  <input type="text" class="text_input af-atf-ability-name" placeholder="Название способности" value="${AF_ATF.escapeAttr(ability.ability_name)}" />
+                </label>
+                <label>Иконка
+                  <input type="url" class="text_input af-atf-ability-icon-url" placeholder="https://..." value="${AF_ATF.escapeAttr(ability.icon_url)}" />
+                </label>
+                <label>Тип
+                  <select class="select af-atf-ability-type">${renderSelectOptions("type", ability.type)}</select>
+                </label>
+                <label>Подтип
+                  <select class="select af-atf-ability-subtype">${renderSelectOptions("subtype", ability.subtype)}</select>
+                </label>
+                <label>Слот
+                  <select class="select af-atf-ability-slot">${renderSelectOptions("slot", ability.slot)}</select>
+                </label>
+                <label>Тип урона
+                  <select class="select af-atf-ability-damage-type">${renderSelectOptions("damage_type", ability.damage_type)}</select>
+                </label>
+                <label>Цель
+                  <select class="select af-atf-ability-targeting">${renderSelectOptions("targeting", ability.targeting)}</select>
+                </label>
+                <label>Дальность
+                  <input type="number" class="text_input af-atf-ability-range" placeholder="0" value="${AF_ATF.escapeAttr(ability.range)}" />
+                </label>
+                <label>Урон
+                  <input type="number" class="text_input af-atf-ability-damage" placeholder="0" value="${AF_ATF.escapeAttr(ability.damage_value)}" />
+                </label>
+                <label>Щит
+                  <input type="number" class="text_input af-atf-ability-shield" placeholder="0" value="${AF_ATF.escapeAttr(ability.shield_value)}" />
+                </label>
+                <label>Лечение
+                  <input type="number" class="text_input af-atf-ability-heal" placeholder="0" value="${AF_ATF.escapeAttr(ability.heal_value)}" />
+                </label>
+                <label>Порядок
+                  <input type="number" class="text_input af-atf-ability-sortorder" placeholder="sortorder" value="${AF_ATF.escapeAttr(ability.sortorder || index + 1)}" />
+                </label>
+              </div>
+              <label class="af-atf-ability-description-wrap">Описание способности
+                <div class="af-atf-ability-bb-toolbar">
+                  <button type="button" class="button af-atf-ability-bb" data-open="[b]" data-close="[/b]"><b>B</b></button>
+                  <button type="button" class="button af-atf-ability-bb" data-open="[i]" data-close="[/i]"><i>I</i></button>
+                  <button type="button" class="button af-atf-ability-bb" data-open="[u]" data-close="[/u]"><u>U</u></button>
+                  <button type="button" class="button af-atf-ability-bb" data-open="[url=]" data-close="[/url]">URL</button>
+                </div>
+                <textarea class="textarea af-atf-ability-description" rows="4" placeholder="Описание способности">${AF_ATF.escapeAttr(ability.ability_description)}</textarea>
               </label>
               <label style="display:none;">
                 <input type="number" class="text_input af-atf-ability-slot-index" value="${AF_ATF.escapeAttr(ability.slot_index || index + 1)}" />
-              </label>
-              <label>KB key (служебное, опционально)
-                <input type="text" class="text_input af-atf-ability-kb-key" placeholder="ability_kb_key" value="${AF_ATF.escapeAttr(ability.ability_kb_key)}" />
-              </label>
-              <label>Порядок (служебное)
-                <input type="number" class="text_input af-atf-ability-sortorder" placeholder="sortorder" value="${AF_ATF.escapeAttr(ability.sortorder || index + 1)}" />
               </label>
               <button type="button" class="button af-atf-ability-remove">Удалить</button>
             `;
@@ -668,10 +712,11 @@
                 damage_type: AF_ATF.qs(".af-atf-ability-damage-type", row).value,
                 targeting: AF_ATF.qs(".af-atf-ability-targeting", row).value,
                 range: AF_ATF.qs(".af-atf-ability-range", row).value,
+                damage_value: AF_ATF.qs(".af-atf-ability-damage", row).value,
                 shield_value: AF_ATF.qs(".af-atf-ability-shield", row).value,
                 heal_value: AF_ATF.qs(".af-atf-ability-heal", row).value,
                 ability_description: AF_ATF.qs(".af-atf-ability-description", row).value,
-                ability_kb_key: AF_ATF.qs(".af-atf-ability-kb-key", row).value,
+                ability_kb_key: state[index] && state[index].ability_kb_key ? state[index].ability_kb_key : "",
                 sortorder: AF_ATF.qs(".af-atf-ability-sortorder", row).value
               });
               sync();
@@ -680,6 +725,13 @@
             AF_ATF.qsa("input,select,textarea", row).forEach((el) => {
               el.addEventListener("input", setValue);
               el.addEventListener("change", setValue);
+            });
+
+            AF_ATF.qsa(".af-atf-ability-bb", row).forEach((btn) => {
+              btn.addEventListener("click", () => {
+                const ta = AF_ATF.qs(".af-atf-ability-description", row);
+                insertBbTag(ta, String(btn.getAttribute("data-open") || ""), String(btn.getAttribute("data-close") || ""));
+              });
             });
 
             AF_ATF.qs(".af-atf-ability-remove", row).addEventListener("click", () => {
