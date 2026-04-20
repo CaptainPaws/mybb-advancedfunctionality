@@ -1399,12 +1399,26 @@ function af_charactersheets_extract_oc_abilities(array $index): array
                 }
                 $name = trim((string)($ability['ability_name'] ?? $ability['name'] ?? ''));
                 $description = trim((string)($ability['ability_description'] ?? $ability['description'] ?? ''));
+                $type = trim((string)($ability['type'] ?? $ability['ability_type'] ?? 'active'));
+                if ($type !== 'passive') {
+                    $type = 'active';
+                }
                 if ($name === '' && $description === '') {
                     continue;
                 }
                 $abilities[] = [
+                    'slot_index' => max(1, (int)($ability['slot_index'] ?? ($idx + 1))),
                     'ability_name' => $name,
-                    'ability_type' => trim((string)($ability['ability_type'] ?? 'active')) ?: 'active',
+                    'icon_url' => trim((string)($ability['icon_url'] ?? '')),
+                    'type' => $type,
+                    'ability_type' => $type,
+                    'subtype' => trim((string)($ability['subtype'] ?? '')),
+                    'slot' => trim((string)($ability['slot'] ?? '')),
+                    'damage_type' => trim((string)($ability['damage_type'] ?? '')),
+                    'targeting' => trim((string)($ability['targeting'] ?? '')),
+                    'range' => trim((string)($ability['range'] ?? '')),
+                    'shield_value' => trim((string)($ability['shield_value'] ?? '')),
+                    'heal_value' => trim((string)($ability['heal_value'] ?? '')),
                     'ability_description' => $description,
                     'ability_kb_key' => trim((string)($ability['ability_kb_key'] ?? '')),
                     'sortorder' => (int)($ability['sortorder'] ?? ($idx + 1)),
@@ -1423,8 +1437,18 @@ function af_charactersheets_extract_oc_abilities(array $index): array
             continue;
         }
         $abilities[] = [
+            'slot_index' => count($abilities) + 1,
             'ability_name' => trim((string)($field['title'] ?? $name)),
+            'icon_url' => '',
+            'type' => 'active',
             'ability_type' => 'active',
+            'subtype' => '',
+            'slot' => '',
+            'damage_type' => '',
+            'targeting' => '',
+            'range' => '',
+            'shield_value' => '',
+            'heal_value' => '',
             'ability_description' => $value,
             'ability_kb_key' => '',
             'sortorder' => count($abilities) + 1,
