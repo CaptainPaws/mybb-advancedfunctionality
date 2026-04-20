@@ -4,6 +4,11 @@
             return false;
         }
 
+        var explicitPolicy = String(field.getAttribute('data-af-kb-editor-policy') || '').trim().toLowerCase();
+        if (explicitPolicy === 'allow') {
+            return true;
+        }
+
         var name = String(field.getAttribute('name') || '').trim().toLowerCase();
         if (!name) {
             return false;
@@ -2195,6 +2200,97 @@
         }
 
         // ---------- Универсальные билд-блоки формы ----------
+        var kbTypeOptionsCache = {};
+
+        function resolveLocalizedLabel(row) {
+            var isRuUi = String((document.documentElement && document.documentElement.lang) || '').toLowerCase().indexOf('ru') === 0;
+            if (!row || typeof row !== 'object') {
+                return '';
+            }
+
+            var localized = isRuUi ? row.label_ru : row.label_en;
+            if (localized != null && String(localized).trim() !== '') {
+                return String(localized);
+            }
+
+            if (row.label != null && String(row.label).trim() !== '') {
+                return String(row.label);
+            }
+
+            return String(row.key != null ? row.key : '');
+        }
+
+        function getMechanicsSelectOptions(setKey) {
+            var map = (window && window.afKbArpgMechanicsOptionSets && typeof window.afKbArpgMechanicsOptionSets === 'object')
+                ? window.afKbArpgMechanicsOptionSets
+                : {};
+            var rows = Array.isArray(map[setKey]) ? map[setKey] : [];
+            var out = [];
+            rows.forEach(function (row) {
+                var value = String((row && row.key != null) ? row.key : '').trim();
+                if (!value) return;
+                out.push({ value: value, label: resolveLocalizedLabel(row) || value });
+            });
+            return out;
+        }
+
+        function populateSelectFromKbType(select, typeName, selectedValue, allowEmpty, emptyLabel) {
+            if (!select || !typeName) return;
+            var cacheKey = String(typeName).trim();
+            if (!cacheKey) return;
+
+            var applyRows = function (rows) {
+                while (select.options.length) {
+                    select.remove(0);
+                }
+
+                if (allowEmpty) {
+                    var emptyOption = document.createElement('option');
+                    emptyOption.value = '';
+                    emptyOption.textContent = emptyLabel || '—';
+                    select.appendChild(emptyOption);
+                }
+
+                rows.forEach(function (item) {
+                    var option = document.createElement('option');
+                    option.value = String(item.value);
+                    option.textContent = String(item.label);
+                    select.appendChild(option);
+                });
+
+                select.value = selectedValue != null ? String(selectedValue) : '';
+            };
+
+            if (kbTypeOptionsCache[cacheKey]) {
+                applyRows(kbTypeOptionsCache[cacheKey]);
+                return;
+            }
+
+            fetch(
+                afKbEndpoint('json_list', 'misc.php?action=kb_json_list')
+                + '&type=' + encodeURIComponent(cacheKey),
+                { credentials: 'same-origin' }
+            )
+                .then(function (res) { return res.json(); })
+                .then(function (payload) {
+                    var rows = [];
+                    if (payload && Array.isArray(payload.items)) {
+                        payload.items.forEach(function (item) {
+                            var key = String((item && item.key != null) ? item.key : '').trim();
+                            if (!key) return;
+                            var label = String((item && item.title != null) ? item.title : key).trim();
+                            rows.push({ value: key, label: label || key });
+                        });
+                    }
+                    kbTypeOptionsCache[cacheKey] = rows;
+                    applyRows(rows);
+                })
+                .catch(function () {
+                    kbTypeOptionsCache[cacheKey] = [];
+                    applyRows([]);
+                });
+        }
+
         function createInput(def, obj, onChange) {
             var wrap = document.createElement('div');
             var label = document.createElement('label');
@@ -2245,12 +2341,29 @@
                     input.appendChild(option);
                 });
 
-                input.value = value != null ? String(value) : String((def.options && def.options[0]) || '');
+                var fallbackValue = '';
+                if (def.options && def.options.length) {
+                    if (def.options[0] && typeof def.options[0] === 'object') {
+                        fallbackValue = String(def.options[0].value != null ? def.options[0].value : '');
+                    } else {
+                        fallbackValue = String(def.options[0]);
+                    }
+                }
+                input.value = value != null ? String(value) : fallbackValue;
                 obj[def.name] = input.value;
+            } else if (def.type === 'textarea_bb') {
+                input = document.createElement('textarea');
+                input.value = value || '';
+                input.classList.add('af-kb-plain-textarea');
+                input.setAttribute('data-af-kb-editor-policy', 'allow');
             } else if (def.type === 'checkbox') {
                 input = document.createElement('input');
                 input.type = 'checkbox';
                 input.checked = !!value;
+            } else if (def.type === 'url') {
+                input = document.createElement('input');
+                input.type = 'url';
+                input.value = value || '';
             } else if (def.type === 'fixed') {
                 input = document.createElement('input');
                 input.type = 'text';
@@ -2334,7 +2447,28 @@
                 }
             }
 
-            wrap.appendChild(input);
+            if (def.type === 'number' && def.suffix) {
+                var numberWrap = document.createElement('div');
+                numberWrap.className = 'af-kb-input-suffix';
+                numberWrap.appendChild(input);
+                var suffix = document.createElement('span');
+                suffix.className = 'af-kb-input-suffix__text';
+                suffix.textContent = String(def.suffix);
+                numberWrap.appendChild(suffix);
+                wrap.appendChild(numberWrap);
+            } else {
+                wrap.appendChild(input);
+            }
+
+            if (def.type === 'select' && def.optionsSource && def.optionsSource.kind === 'kb_type') {
+                populateSelectFromKbType(
+                    input,
+                    String(def.optionsSource.type || ''),
+                    value != null ? String(value) : '',
+                    !!def.allowEmpty,
+                    def.emptyLabel || '—'
+                );
+            }
 
             if (def.hint) {
                 wrap.insertAdjacentHTML('beforeend', '<div class="af-kb-help">' + esc(def.hint) + '</div>');
@@ -3080,20 +3214,19 @@
                 slot_index: slotIndex,
                 ability_name: String(row.ability_name || ''),
                 icon_url: String(row.icon_url || ''),
-                icon_class: String(row.icon_class || ''),
                 type: abilityType,
                 ability_type: abilityType,
                 subtype: String(row.subtype || ''),
                 slot: String(row.slot || ''),
                 damage_type: String(row.damage_type || ''),
                 targeting: String(row.targeting || ''),
+                value_mode: String(row.value_mode || 'flat'),
                 range: numberOrZero(row.range != null ? row.range : 0),
-                cast_time: numberOrZero(row.cast_time != null ? row.cast_time : 0),
-                cooldown: numberOrZero(row.cooldown != null ? row.cooldown : 0),
-                duration: numberOrZero(row.duration != null ? row.duration : 0),
-                max_charges: numberOrZero(row.max_charges != null ? row.max_charges : 0),
-                level_cap: numberOrZero(row.level_cap != null ? row.level_cap : 0),
+                duration: String(row.duration != null ? row.duration : ''),
                 ability_description: String(row.ability_description || ''),
+                damage_value: numberOrZero(row.damage_value != null ? row.damage_value : 0),
+                shield_value: numberOrZero(row.shield_value != null ? row.shield_value : 0),
+                heal_value: numberOrZero(row.heal_value != null ? row.heal_value : 0),
                 resources: normalizeRows(row.resources, [
                     { key: 'op', default: 'spend' },
                     { key: 'resource_key', default: '' },
@@ -3219,6 +3352,11 @@
                     aoe_around_self: { ru: 'Область вокруг себя', en: 'AoE around self' },
                     global: { ru: 'Глобальная', en: 'Global' },
                     custom: { ru: 'Пользовательская', en: 'Custom' }
+                },
+                value_mode: {
+                    flat: { ru: 'Плоское', en: 'Flat' },
+                    percent: { ru: 'Процент', en: 'Percent' },
+                    text: { ru: 'Текст', en: 'Text' }
                 }
             };
             var fieldLabels = isRuUi
@@ -3228,12 +3366,9 @@
                     slot: 'Слот',
                     damage_type: 'Тип урона',
                     targeting: 'Цель',
+                    value_mode: 'Режим',
                     range: 'Дальность',
-                    cast_time: 'Время каста',
-                    cooldown: 'Перезарядка',
-                    duration: 'Длительность',
-                    max_charges: 'Макс. заряды',
-                    level_cap: 'Предел уровня'
+                    duration: 'Длительность'
                 }
                 : {
                     type: 'Type',
@@ -3241,12 +3376,9 @@
                     slot: 'Slot',
                     damage_type: 'Damage type',
                     targeting: 'Targeting',
+                    value_mode: 'Value mode',
                     range: 'Range',
-                    cast_time: 'Cast time',
-                    cooldown: 'Cooldown',
-                    duration: 'Duration',
-                    max_charges: 'Max charges',
-                    level_cap: 'Level cap'
+                    duration: 'Duration'
                 };
             var resolveEnumLabel = function (dict, key) {
                 var cleanKey = String(key || '').trim();
@@ -3304,18 +3436,15 @@
                 ['slot', ability ? ability.slot : ''],
                 ['damage_type', ability ? ability.damage_type : ''],
                 ['targeting', ability ? ability.targeting : ''],
+                ['value_mode', ability ? ability.value_mode : ''],
                 ['range', ability ? ability.range : ''],
-                ['cast_time', ability ? ability.cast_time : ''],
-                ['cooldown', ability ? ability.cooldown : ''],
-                ['duration', ability ? ability.duration : ''],
-                ['max_charges', ability ? ability.max_charges : ''],
-                ['level_cap', ability ? ability.level_cap : '']
+                ['duration', ability ? ability.duration : '']
             ].forEach(function (pair) {
                 var key = pair[0];
                 var value = pair[1];
                 if (value == null || value === '') return;
                 if (typeof value === 'number' && value <= 0) return;
-                if (key === 'subtype' || key === 'slot' || key === 'damage_type' || key === 'targeting') {
+                if (key === 'subtype' || key === 'slot' || key === 'damage_type' || key === 'targeting' || key === 'value_mode') {
                     value = resolveEnumLabel(key, value);
                 }
                 addChip(fieldLabels[key] || key, value, false);
@@ -3328,10 +3457,7 @@
                 ['resources', ability ? ability.resources : []],
                 ['effects', ability ? ability.effects : []],
                 ['modifiers', ability ? ability.modifiers : []],
-                ['triggers', ability ? ability.triggers : []],
-                ['conditions', ability ? ability.conditions : []],
-                ['stacking', ability ? ability.stacking : []],
-                ['upgrade requirements', ability ? ability.upgrade_requirements : []]
+                ['grants', ability ? ability.grants : []]
             ].forEach(function (item) {
                 var count = Array.isArray(item[1]) ? item[1].length : 0;
                 if (!count) return;
@@ -5008,36 +5134,38 @@
             }
 
             if (uiProfile === 'character') {
-                var abilityTypeOptions = ['active', 'passive', 'ultimate'];
-                var abilitySubtypeOptions = ['aura', 'summon', 'toggle', 'stance', 'field', 'support', 'counter', 'movement', 'custom'];
-                var abilitySlotOptions = ['basic', 'skill_1', 'skill_2', 'skill_3', 'support', 'ultimate', 'passive', 'custom'];
-                var abilityDamageTypeOptions = ['physical', 'fire', 'ice', 'water', 'electric', 'wind', 'earth', 'nature', 'light', 'dark', 'void', 'quantum', 'imaginary', 'aether', 'anomaly', 'ether', 'fusion', 'glacio', 'aero', 'havoc', 'spectro', 'dendro', 'pyro', 'hydro', 'electro', 'cryo', 'anemo', 'geo', 'lightning', 'slash', 'pierce', 'blunt', 'true', 'custom'];
-                var abilityTargetingOptions = ['self', 'single_enemy', 'single_ally', 'line', 'cone', 'aoe_ground', 'aoe_around_self', 'global', 'custom'];
+                var abilityTypeOptions = getMechanicsSelectOptions('ability_type');
+                var abilitySubtypeOptions = getMechanicsSelectOptions('ability_subtype');
+                var abilitySlotOptions = getMechanicsSelectOptions('ability_slot');
+                var abilityDamageTypeOptions = getMechanicsSelectOptions('ability_damage_type');
+                var abilityTargetingOptions = getMechanicsSelectOptions('ability_targeting');
+                var abilityValueModeOptions = getMechanicsSelectOptions('ability_value_mode');
+                var genderOptions = getMechanicsSelectOptions('character_gender');
                 var profileDefs = [
                     { name: 'category', label: 'Категория', type: 'select', options: ['canons', 'originals', 'roles'] },
-                    { name: 'character_pic', label: 'character_pic', type: 'text' },
-                    { name: 'character_prototype', label: 'character_prototype', type: 'text' },
-                    { name: 'character_name', label: 'character_name', type: 'text' },
-                    { name: 'character_name_ru', label: 'character_name_ru', type: 'text' },
-                    { name: 'character_nicknames', label: 'character_nicknames', type: 'text' },
-                    { name: 'character_element', label: 'character_element', type: 'text' },
-                    { name: 'character_gen', label: 'character_gen', type: 'text' },
-                    { name: 'character_race', label: 'character_race', type: 'text' },
-                    { name: 'character_class', label: 'character_class', type: 'text' },
-                    { name: 'character_faction', label: 'character_faction', type: 'text' },
-                    { name: 'character_app', label: 'character_app', type: 'textarea' }
+                    { name: 'character_pic', label: 'Изображение персонажа', type: 'url' },
+                    { name: 'character_prototype', label: 'Прототип', type: 'text' },
+                    { name: 'character_name', label: 'Имя (EN)', type: 'text' },
+                    { name: 'character_name_ru', label: 'Имя (RU)', type: 'text' },
+                    { name: 'character_nicknames', label: 'Прозвища', type: 'text' },
+                    { name: 'character_element', label: 'Стихия', type: 'select', allowEmpty: true, optionsSource: { kind: 'kb_type', type: 'arpg_element' } },
+                    { name: 'character_gen', label: 'Пол', type: 'select', allowEmpty: true, options: genderOptions },
+                    { name: 'character_race', label: 'Происхождение', type: 'select', allowEmpty: true, optionsSource: { kind: 'kb_type', type: 'arpg_origin' } },
+                    { name: 'character_class', label: 'Архетип', type: 'select', allowEmpty: true, optionsSource: { kind: 'kb_type', type: 'arpg_archetype' } },
+                    { name: 'character_faction', label: 'Фракция', type: 'select', allowEmpty: true, optionsSource: { kind: 'kb_type', type: 'arpg_faction' } },
+                    { name: 'character_app', label: 'Внешность', type: 'textarea_bb' }
                 ];
                 var statsDefs = [
                     { name: 'character_hp', label: 'HP', type: 'number' },
-                    { name: 'character_defense', label: 'Defense', type: 'number' },
-                    { name: 'character_attack_power', label: 'Attack power', type: 'number' },
-                    { name: 'character_element_damage_bonus', label: 'Element dmg bonus', type: 'number' },
-                    { name: 'character_crit_damage', label: 'Crit damage', type: 'number' },
-                    { name: 'character_healing_received_bonus', label: 'Healing received bonus', type: 'number' },
-                    { name: 'character_elemental_mastery', label: 'Elemental mastery', type: 'number' },
-                    { name: 'character_healing_bonus', label: 'Healing bonus', type: 'number' },
-                    { name: 'character_shield_strength', label: 'Shield strength', type: 'number' },
-                    { name: 'character_luck', label: 'Luck', type: 'number' }
+                    { name: 'character_defense', label: 'Защита', type: 'number' },
+                    { name: 'character_attack_power', label: 'Сила атаки', type: 'number' },
+                    { name: 'character_element_damage_bonus', label: 'Бонус стихийного урона', type: 'number', suffix: '%' },
+                    { name: 'character_crit_damage', label: 'Критический урон', type: 'number', suffix: '%' },
+                    { name: 'character_healing_received_bonus', label: 'Бонус получаемого лечения', type: 'number', suffix: '%' },
+                    { name: 'character_elemental_mastery', label: 'Мастерство стихий', type: 'number' },
+                    { name: 'character_healing_bonus', label: 'Бонус лечения', type: 'number', suffix: '%' },
+                    { name: 'character_shield_strength', label: 'Прочность щита', type: 'number', suffix: '%' },
+                    { name: 'character_luck', label: 'Удача', type: 'number', suffix: '%' }
                 ];
 
                 var profileGrid = document.createElement('div');
@@ -5053,13 +5181,6 @@
                 var abilitiesBox = document.createElement('div');
                 abilitiesBox.className = 'af-kb-rule-card';
                 fields.profileLists.appendChild(abilitiesBox);
-                function renderAbilityNestedRows(container, title, rows, defs, seed) {
-                    var box = document.createElement('div');
-                    box.className = 'af-kb-rule-card';
-                    container.appendChild(box);
-                    renderObjectList(box, rows, title, defs, syncRawDebounced, seed);
-                }
-
                 function renderCharacterAbilities() {
                     abilitiesBox.innerHTML = '';
 
@@ -5107,24 +5228,22 @@
                         card.appendChild(title);
 
                         var coreDefs = [
-                            { name: 'slot_index', label: 'slot_index', type: 'number' },
-                            { name: 'ability_name', label: 'ability_name', type: 'text' },
-                            { name: 'icon_url', label: 'icon_url', type: 'text' },
-                            { name: 'icon_class', label: 'icon_class', type: 'text' },
-                            { name: 'type', label: 'type', type: 'select', options: abilityTypeOptions },
-                            { name: 'subtype', label: 'subtype', type: 'select', options: abilitySubtypeOptions },
-                            { name: 'slot', label: 'slot', type: 'select', options: abilitySlotOptions },
-                            { name: 'damage_type', label: 'damage_type', type: 'select', options: abilityDamageTypeOptions },
-                            { name: 'targeting', label: 'targeting', type: 'select', options: abilityTargetingOptions },
-                            { name: 'range', label: 'range', type: 'number' },
-                            { name: 'cast_time', label: 'cast_time', type: 'number' },
-                            { name: 'cooldown', label: 'cooldown', type: 'number' },
-                            { name: 'duration', label: 'duration', type: 'number' },
-                            { name: 'max_charges', label: 'max_charges', type: 'number' },
-                            { name: 'level_cap', label: 'level_cap', type: 'number' },
-                            { name: 'ability_description', label: 'ability_description', type: 'textarea' },
-                            { name: 'ability_kb_key', label: 'ability_kb_key', type: 'text' },
-                            { name: 'sortorder', label: 'sortorder', type: 'number' }
+                            { name: 'slot_index', label: 'Индекс слота', type: 'number' },
+                            { name: 'ability_name', label: 'Название способности', type: 'text' },
+                            { name: 'icon_url', label: 'Иконка', type: 'url' },
+                            { name: 'type', label: 'Тип', type: 'select', options: abilityTypeOptions },
+                            { name: 'subtype', label: 'Подтип', type: 'select', options: abilitySubtypeOptions, allowEmpty: true },
+                            { name: 'slot', label: 'Слот', type: 'select', options: abilitySlotOptions, allowEmpty: true },
+                            { name: 'damage_type', label: 'Тип урона', type: 'select', options: abilityDamageTypeOptions, allowEmpty: true },
+                            { name: 'targeting', label: 'Цель', type: 'select', options: abilityTargetingOptions, allowEmpty: true },
+                            { name: 'value_mode', label: 'Режим значения', type: 'select', options: abilityValueModeOptions, allowEmpty: true },
+                            { name: 'range', label: 'Дальность', type: 'number' },
+                            { name: 'duration', label: 'Продолжительность', type: 'text' },
+                            { name: 'damage_value', label: 'Урон', type: 'number' },
+                            { name: 'shield_value', label: 'Щит', type: 'number' },
+                            { name: 'heal_value', label: 'Лечение', type: 'number' },
+                            { name: 'ability_description', label: 'Описание способности', type: 'textarea_bb' },
+                            { name: 'sortorder', label: 'Порядок', type: 'number' }
                         ];
                         var coreGrid = document.createElement('div');
                         coreGrid.className = 'af-kb-row';
@@ -5134,67 +5253,6 @@
                             syncRawDebounced();
                         })); });
                         card.appendChild(coreGrid);
-
-                        renderAbilityNestedRows(card, 'resources', normalized.resources, [
-                            { name: 'op', label: 'op', type: 'text' },
-                            { name: 'resource_key', label: 'resource_key', type: 'text' },
-                            { name: 'value', label: 'value', type: 'number' },
-                            { name: 'per', label: 'per', type: 'text' },
-                            { name: 'duration', label: 'duration', type: 'number' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { op: 'spend', resource_key: '', value: 0, per: 'cast', duration: 0, notes: '' });
-                        renderAbilityNestedRows(card, 'effects', normalized.effects, [
-                            { name: 'kind', label: 'kind', type: 'text' },
-                            { name: 'damage_type', label: 'damage_type', type: 'select', options: abilityDamageTypeOptions },
-                            { name: 'targeting', label: 'targeting', type: 'select', options: abilityTargetingOptions },
-                            { name: 'value_mode', label: 'value_mode', type: 'text' },
-                            { name: 'value', label: 'value', type: 'number' },
-                            { name: 'formula_ref', label: 'formula_ref', type: 'text' },
-                            { name: 'duration', label: 'duration', type: 'number' },
-                            { name: 'hit_count', label: 'hit_count', type: 'number' },
-                            { name: 'status_key', label: 'status_key', type: 'text' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { kind: 'damage', damage_type: '', targeting: '', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' });
-                        renderAbilityNestedRows(card, 'modifiers', normalized.modifiers, [
-                            { name: 'stat_key', label: 'stat_key', type: 'text' },
-                            { name: 'mode', label: 'mode', type: 'text' },
-                            { name: 'value', label: 'value', type: 'number' },
-                            { name: 'duration', label: 'duration', type: 'number' },
-                            { name: 'condition_text', label: 'condition_text', type: 'text' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { stat_key: '', mode: 'flat', value: 0, duration: 0, condition_text: '', notes: '' });
-                        renderAbilityNestedRows(card, 'triggers', normalized.triggers, [
-                            { name: 'event', label: 'event', type: 'text' },
-                            { name: 'action_text', label: 'action_text', type: 'text' },
-                            { name: 'condition_text', label: 'condition_text', type: 'text' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { event: '', action_text: '', condition_text: '', notes: '' });
-                        renderAbilityNestedRows(card, 'conditions', normalized.conditions, [
-                            { name: 'condition_type', label: 'condition_type', type: 'text' },
-                            { name: 'value', label: 'value', type: 'text' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { condition_type: '', value: '', notes: '' });
-                        renderAbilityNestedRows(card, 'stacking', normalized.stacking, [
-                            { name: 'stack_key', label: 'stack_key', type: 'text' },
-                            { name: 'max_stacks', label: 'max_stacks', type: 'number' },
-                            { name: 'policy', label: 'policy', type: 'text' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { stack_key: '', max_stacks: 1, policy: '', notes: '' });
-                        renderAbilityNestedRows(card, 'upgrade_requirements', normalized.upgrade_requirements, [
-                            { name: 'level', label: 'level', type: 'number' },
-                            { name: 'required_item_key', label: 'required_item_key', type: 'text' },
-                            { name: 'required_qty', label: 'required_qty', type: 'number' },
-                            { name: 'required_currency_key', label: 'required_currency_key', type: 'text' },
-                            { name: 'required_currency_qty', label: 'required_currency_qty', type: 'number' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { level: 1, required_item_key: '', required_qty: 0, required_currency_key: '', required_currency_qty: 0, notes: '' });
-                        renderAbilityNestedRows(card, 'grants', normalized.grants, [
-                            { name: 'grant_type', label: 'grant_type', type: 'text' },
-                            { name: 'value', label: 'value', type: 'text' },
-                            { name: 'value_num', label: 'value_num', type: 'number' },
-                            { name: 'duration', label: 'duration', type: 'number' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { grant_type: '', value: '', value_num: 0, duration: 0, notes: '' });
 
                         var del = document.createElement('button');
                         del.type = 'button';
