@@ -2668,6 +2668,29 @@ function af_atf_character_provider_type(string $provider, string $mechanic): str
     return (string)($map[$provider][$mechanic] ?? '');
 }
 
+function af_atf_character_arpg_contract_types(): array
+{
+    return [
+        'character_element' => 'arpg_element',
+        'character_race' => 'arpg_origin',
+        'character_origin' => 'arpg_origin',
+        'character_class' => 'arpg_archetype',
+        'character_archetype' => 'arpg_archetype',
+        'character_faction' => 'arpg_faction',
+    ];
+}
+
+function af_atf_character_arpg_contract_type(string $fieldName): string
+{
+    $fieldName = trim($fieldName);
+    if ($fieldName === '') {
+        return '';
+    }
+
+    $map = af_atf_character_arpg_contract_types();
+    return (string)($map[$fieldName] ?? '');
+}
+
 function af_atf_character_effective_mechanic_for_render(string $fallback = ''): string
 {
     $mechanic = ($fallback === 'arpg' || $fallback === 'dnd') ? $fallback : af_atf_character_active_mechanic();
@@ -2859,6 +2882,56 @@ function af_atf_build_input_html(array $field, string $value): string
         }
     }
 
+    $activeMechanic = af_atf_character_effective_mechanic_for_render();
+    $arpgContractType = af_atf_character_arpg_contract_type($fieldName);
+
+    $renderKbSelect = static function (string $nameAttr, string $selectedValue, array $list, string $fallbackLabel = ''): string {
+        $html = '<select class="select af-atf-input" name="' . $nameAttr . '"><option value=""></option>';
+        $seen = [];
+        foreach ($list as $item) {
+            $key = (string)($item['key'] ?? '');
+            if ($key === '') {
+                continue;
+            }
+            $seen[$key] = true;
+            $selected = ($selectedValue === $key) ? ' selected="selected"' : '';
+            $label = (string)($item['title'] ?? $key);
+            $iconUrl = trim((string)($item['icon_url'] ?? ''));
+            $iconClass = trim((string)($item['icon_class'] ?? ''));
+            $tooltip = trim((string)($item['short'] ?? ''));
+            $html .= '<option value="' . htmlspecialchars_uni($key) . '"'
+                . $selected
+                . ($iconUrl !== '' ? ' data-icon-url="' . htmlspecialchars_uni($iconUrl) . '"' : '')
+                . ($iconClass !== '' ? ' data-icon-class="' . htmlspecialchars_uni($iconClass) . '"' : '')
+                . ($tooltip !== '' ? ' data-tooltip="' . htmlspecialchars_uni($tooltip) . '"' : '')
+                . '>' . htmlspecialchars_uni($label) . '</option>';
+        }
+        if ($selectedValue !== '' && !isset($seen[$selectedValue])) {
+            $label = $fallbackLabel !== '' ? $fallbackLabel : $selectedValue;
+            $html .= '<option value="' . htmlspecialchars_uni($selectedValue) . '" selected="selected">' . htmlspecialchars_uni($label) . '</option>';
+        }
+        $html .= '</select>';
+        return $html;
+    };
+
+    $shouldForceArpgContract = $arpgContractType !== '' && (
+        $activeMechanic === 'arpg'
+        || $fieldName === 'character_element'
+        || $fieldName === 'character_faction'
+    );
+
+    if ($shouldForceArpgContract) {
+        $list = af_atf_kb_get_list_by_type_any($arpgContractType);
+        $fallbackLabel = af_atf_kb_resolve_dynamic_label($field, $value);
+        $html = '<div class="af-atf-kb-dynamic" data-character-field="' . htmlspecialchars_uni($fieldName) . '" data-mechanic-scope="arpg">';
+        $html .= $renderKbSelect($nameAttr, $value, $list, $fallbackLabel);
+        if ($fieldName === 'character_element') {
+            $html .= '<div class="af-atf-kb-dynamic-preview" data-preview-role="element"></div>';
+        }
+        $html .= '</div>';
+        return $html;
+    }
+
     switch ($type) {
         case 'kb_race':
         case 'kb_class':
@@ -2955,8 +3028,6 @@ function af_atf_build_input_html(array $field, string $value): string
                 }
                 $payload[$mode] = af_atf_kb_get_list_by_type_any($typeKey);
             }
-
-            $activeMechanic = af_atf_character_effective_mechanic_for_render();
 
             $renderOptions = static function (array $items, string $selectedValue) use ($field): string {
                 $html = '<option value=""></option>';
@@ -4405,7 +4476,10 @@ function af_atf_format_value_for_display(array $field, string $val): string
 
     if ($type === 'kb_dynamic' || $type === 'kb_mechanic') {
         $fieldName = trim((string)($field['name'] ?? ''));
-        $kbType = af_atf_character_resolve_kb_type($field, $val);
+        $kbType = af_atf_character_arpg_contract_type($fieldName);
+        if ($kbType === '' || af_atf_character_active_mechanic() !== 'arpg') {
+            $kbType = af_atf_character_resolve_kb_type($field, $val);
+        }
 
         if ($fieldName === 'character_element') {
             $entry = $kbType !== '' ? af_atf_kb_get_entry($kbType, $val) : [];
@@ -4595,7 +4669,11 @@ function af_atf_kb_resolve_dynamic_label(array $field, string $key): string
         return '';
     }
 
-    $kbType = af_atf_character_resolve_kb_type($field, $key);
+    $fieldName = trim((string)($field['name'] ?? ''));
+    $kbType = af_atf_character_arpg_contract_type($fieldName);
+    if ($kbType === '' || af_atf_character_active_mechanic() !== 'arpg') {
+        $kbType = af_atf_character_resolve_kb_type($field, $key);
+    }
 
     if ($kbType !== '') {
         $entry = af_atf_kb_get_entry($kbType, $key);
