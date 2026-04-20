@@ -161,9 +161,6 @@
         var banner = entry.banner_url
             ? '<img class="af-kb-banner" src="' + escapeHtml(entry.banner_url) + '" alt="" loading="lazy" />'
             : '';
-        var short = entry.short_html
-            ? '<div class="af-kb-modal-short">' + entry.short_html + '</div>'
-            : '';
         var bodyText = entry.body_html
             ? '<div class="af-kb-modal-main">' + entry.body_html + '</div>'
             : '';
@@ -183,7 +180,7 @@
             });
         }
 
-        body.innerHTML = banner + short + bodyText + blocksHtml;
+        body.innerHTML = banner + bodyText + blocksHtml;
     }
 
     function initChips() {
