@@ -2299,25 +2299,20 @@ function af_kb_seed_arpg_mechanics_option_sets(): void
     }
 
     foreach (af_kb_arpg_mechanics_option_set_definitions() as $setKey => $definition) {
-        $exists = $db->fetch_field($db->simple_select(
+        $existing = $db->fetch_array($db->simple_select(
             'af_kb_entries',
-            'id',
+            '*',
             "type='arpg_mechanics' AND `key`='" . $db->escape_string((string)$setKey) . "'",
             ['limit' => 1]
-        ), 'id');
+        ));
 
-        if ((int)$exists > 0) {
-            continue;
-        }
-
-        $entries = [];
+        $entriesByKey = [];
         foreach ((array)($definition['entries'] ?? []) as $row) {
             $optionKey = trim((string)($row['key'] ?? ''));
             if ($optionKey === '') {
                 continue;
             }
-
-            $entries[] = [
+            $entriesByKey[$optionKey] = [
                 'key' => $optionKey,
                 'label_ru' => (string)($row['label_ru'] ?? $optionKey),
                 'label_en' => (string)($row['label_en'] ?? $optionKey),
@@ -2326,41 +2321,68 @@ function af_kb_seed_arpg_mechanics_option_sets(): void
 
         $payload = af_kb_arpg_envelope_defaults('arpg_mechanics');
         $payload['rules']['service_kind'] = trim((string)($definition['service_kind'] ?? 'snippet')) ?: 'snippet';
-        $payload['rules']['entries'] = $entries;
+        $payload['rules']['entries'] = array_values($entriesByKey);
 
-        $meta = [
-            'schema' => AF_KB_META_SCHEMA,
-            'version' => '1.0',
-            'ui' => [
-                'icon_class' => 'fa-solid fa-sliders',
-                'icon_url' => '',
-                'background_url' => '',
-            ],
-            'tags' => ['arpg', 'service', 'mechanics', (string)$setKey],
-            'kind_key' => 'service',
-            'seo' => ['slug' => '', 'keywords' => [], 'description' => ''],
-            'refs' => [],
-        ];
+        if ($existing) {
+            $current = af_kb_decode_json((string)($existing['data_json'] ?? '{}'));
+            if (!is_array($current)) {
+                $current = [];
+            }
+            $currentRules = is_array($current['rules'] ?? null) ? $current['rules'] : [];
+            $currentEntries = is_array($currentRules['entries'] ?? null) ? $currentRules['entries'] : [];
+            foreach ($currentEntries as $row) {
+                $optionKey = trim((string)($row['key'] ?? ''));
+                if ($optionKey === '') {
+                    continue;
+                }
+                if (!isset($entriesByKey[$optionKey])) {
+                    $entriesByKey[$optionKey] = [
+                        'key' => $optionKey,
+                        'label_ru' => (string)($row['label_ru'] ?? $optionKey),
+                        'label_en' => (string)($row['label_en'] ?? $optionKey),
+                    ];
+                    continue;
+                }
+
+                $entriesByKey[$optionKey]['label_ru'] = (string)($entriesByKey[$optionKey]['label_ru'] !== '' ? $entriesByKey[$optionKey]['label_ru'] : ($row['label_ru'] ?? $optionKey));
+                $entriesByKey[$optionKey]['label_en'] = (string)($entriesByKey[$optionKey]['label_en'] !== '' ? $entriesByKey[$optionKey]['label_en'] : ($row['label_en'] ?? $optionKey));
+            }
+
+            $payload = array_replace_recursive($payload, $current);
+            $payload['rules']['type_profile'] = 'service_mechanics';
+            $payload['rules']['category'] = 'service.mechanics';
+            $payload['rules']['visibility'] = ['catalog' => false, 'search' => false, 'internal' => true];
+            $payload['rules']['service_kind'] = trim((string)($payload['rules']['service_kind'] ?? '')) ?: 'snippet';
+            $payload['rules']['entries'] = array_values($entriesByKey);
+
+            $db->update_query('af_kb_entries', [
+                'title_ru' => $db->escape_string((string)($definition['title_ru'] ?? $setKey)),
+                'title_en' => $db->escape_string((string)($definition['title_en'] ?? $setKey)),
+                'data_json' => $db->escape_string(af_kb_normalize_json((string)json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES))),
+                'updated_at' => TIME_NOW,
+            ], 'id=' . (int)$existing['id']);
+            continue;
+        }
 
         $db->insert_query('af_kb_entries', [
             'type' => 'arpg_mechanics',
             'key' => $db->escape_string((string)$setKey),
             'title_ru' => $db->escape_string((string)($definition['title_ru'] ?? $setKey)),
             'title_en' => $db->escape_string((string)($definition['title_en'] ?? $setKey)),
-            'summary_ru' => '',
-            'summary_en' => '',
+            'short_ru' => '',
+            'short_en' => '',
             'body_ru' => '',
             'body_en' => '',
             'tech_ru' => '',
             'tech_en' => '',
-            'meta_json' => $db->escape_string(af_kb_normalize_json((string)json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES))),
+            'meta_json' => '{}',
             'data_json' => $db->escape_string(af_kb_normalize_json((string)json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES))),
             'icon_class' => '',
             'icon_url' => '',
             'banner_url' => '',
             'bg_url' => '',
             'active' => 1,
-            'sortorder' => 1000,
+            'sortorder' => 200,
             'updated_at' => TIME_NOW,
             'item_kind' => '',
         ]);
@@ -2406,7 +2428,6 @@ function af_kb_get_arpg_mechanics_entry(string $serviceKind, string $entryKey): 
         'entries' => is_array($rules['entries'] ?? null) ? $rules['entries'] : [],
     ];
 }
-
 
 function af_kb_get_arpg_mechanics_options(string $entryKey, string $serviceKind = 'snippet'): array
 {
