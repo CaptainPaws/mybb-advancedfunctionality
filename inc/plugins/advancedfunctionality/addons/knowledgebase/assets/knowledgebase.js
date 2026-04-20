@@ -1122,14 +1122,14 @@
             var enums = {
                 abilitySubtype: ['', 'active', 'passive', 'ultimate', 'support', 'aura', 'toggle', 'summon', 'reaction', 'movement'],
                 abilitySlot: ['', 'basic', 'skill_1', 'skill_2', 'skill_3', 'support', 'ultimate', 'passive', 'custom'],
-                damageType: ['', 'physical', 'fire', 'ice', 'lightning', 'poison', 'acid', 'bleed', 'arcane', 'holy', 'shadow', 'true', 'kinetic', 'custom'],
+                damageType: ['', 'physical', 'fire', 'ice', 'water', 'electric', 'wind', 'earth', 'nature', 'light', 'dark', 'void', 'quantum', 'imaginary', 'aether', 'anomaly', 'ether', 'fusion', 'glacio', 'aero', 'havoc', 'spectro', 'dendro', 'pyro', 'hydro', 'electro', 'cryo', 'anemo', 'geo', 'lightning', 'poison', 'acid', 'bleed', 'arcane', 'holy', 'shadow', 'slash', 'pierce', 'blunt', 'true', 'kinetic', 'custom'],
                 targeting: ['', 'self', 'single_enemy', 'single_ally', 'line', 'cone', 'aoe_ground', 'aoe_around_self', 'global', 'custom'],
                 rarity: ['', 'common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic', 'set', 'unique', 'custom'],
                 itemKind: ['', 'weapon', 'armor', 'accessory', 'artifact', 'consumable', 'material', 'quest', 'custom'],
                 equipSlot: ['', 'weapon_one_hand', 'weapon_two_hand', 'weapon_catalyst', 'weapon_ranged', 'weapon_polearm', 'head', 'chest', 'legs', 'hands', 'feet', 'ring', 'amulet', 'trinket', 'custom'],
                 talentTree: ['', 'offense', 'defense', 'support', 'utility', 'custom'],
                 talentRank: ['', 'common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'],
-                bestiaryRank: ['normal', 'elite', 'rare', 'boss', 'legendary', 'mythic', 'custom'],
+                bestiaryRank: ['normal', 'elite', 'champion', 'boss', 'world_boss', 'raid_boss', 'custom'],
                 modifierMode: ['', 'flat', 'percent', 'multiplier', 'override', 'formula_ref', 'table_ref'],
                 effectKind: ['', 'damage', 'heal', 'shield', 'barrier', 'status', 'proc'],
                 grantType: ['', 'tag', 'ability_unlock', 'item_unlock', 'resource_bonus', 'passive_flag', 'custom']
@@ -1824,6 +1824,87 @@
             }
 
             function renderBestiaryRules() {
+                function normalizeBestiaryAbilityRow(row, fallbackSortorder) {
+                    var source = (row && typeof row === 'object' && !Array.isArray(row)) ? row : {};
+                    var sort = numberOrZero(source.sortorder != null ? source.sortorder : (fallbackSortorder || 0));
+                    var slotIndex = numberOrZero(source.slot_index != null ? source.slot_index : (sort > 0 ? sort : 1));
+                    var abilityType = String(source.type || source.ability_type || 'active');
+                    var normalizeRows = function (items, schema) {
+                        return (Array.isArray(items) ? items : []).map(function (item) {
+                            var src = (item && typeof item === 'object' && !Array.isArray(item)) ? item : {};
+                            var out = {};
+                            schema.forEach(function (def) {
+                                if (def.type === 'number') out[def.key] = numberOrZero(src[def.key] != null ? src[def.key] : def.default);
+                                else out[def.key] = String(src[def.key] != null ? src[def.key] : def.default || '');
+                            });
+                            return out;
+                        });
+                    };
+                    return {
+                        slot_index: slotIndex,
+                        ability_name: String(source.ability_name || ''),
+                        type: abilityType,
+                        ability_type: abilityType,
+                        subtype: String(source.subtype || ''),
+                        slot: String(source.slot || ''),
+                        damage_type: String(source.damage_type || 'physical'),
+                        targeting: String(source.targeting || 'single_enemy'),
+                        range: numberOrZero(source.range != null ? source.range : 0),
+                        cast_time: numberOrZero(source.cast_time != null ? source.cast_time : 0),
+                        cooldown: numberOrZero(source.cooldown != null ? source.cooldown : 0),
+                        duration: numberOrZero(source.duration != null ? source.duration : 0),
+                        max_charges: numberOrZero(source.max_charges != null ? source.max_charges : 0),
+                        level_cap: numberOrZero(source.level_cap != null ? source.level_cap : 0),
+                        ability_description: String(source.ability_description || ''),
+                        resources: normalizeRows(source.resources, [
+                            { key: 'op', default: 'spend' },
+                            { key: 'resource_key', default: '' },
+                            { key: 'value', type: 'number', default: 0 },
+                            { key: 'per', default: 'cast' },
+                            { key: 'duration', type: 'number', default: 0 },
+                            { key: 'notes', default: '' }
+                        ]),
+                        effects: normalizeRows(source.effects, [
+                            { key: 'kind', default: 'damage' },
+                            { key: 'damage_type', default: '' },
+                            { key: 'targeting', default: '' },
+                            { key: 'value_mode', default: 'flat' },
+                            { key: 'value', type: 'number', default: 0 },
+                            { key: 'formula_ref', default: '' },
+                            { key: 'duration', type: 'number', default: 0 },
+                            { key: 'hit_count', type: 'number', default: 1 },
+                            { key: 'status_key', default: '' },
+                            { key: 'notes', default: '' }
+                        ]),
+                        modifiers: normalizeRows(source.modifiers, [
+                            { key: 'stat_key', default: '' },
+                            { key: 'mode', default: 'flat' },
+                            { key: 'value', type: 'number', default: 0 },
+                            { key: 'duration', type: 'number', default: 0 },
+                            { key: 'condition_text', default: '' },
+                            { key: 'notes', default: '' }
+                        ]),
+                        grants: normalizeRows(source.grants, [
+                            { key: 'grant_type', default: '' },
+                            { key: 'value', default: '' },
+                            { key: 'value_num', type: 'number', default: 0 },
+                            { key: 'duration', type: 'number', default: 0 },
+                            { key: 'notes', default: '' }
+                        ]),
+                        ability_kb_key: String(source.ability_kb_key || source.ability_key || ''),
+                        ability_key: String(source.ability_key || ''),
+                        notes: String(source.notes || ''),
+                        sortorder: sort
+                    };
+                }
+
+                function renderBestiaryNestedRows(container, title, rows, defs, seed) {
+                    var box = document.createElement('div');
+                    box.className = 'af-kb-rule-card';
+                    container.appendChild(box);
+                    renderObjectList(box, rows, title, defs, syncToRaw, seed);
+                }
+
                 renderRuleFields(rulesRoot, [
                     { key: 'family', label: 'family', default: '' },
                     { key: 'archetype', label: 'archetype', default: '' },
@@ -1846,50 +1927,133 @@
 
                 renderSeededArrayEditor(rulesRoot, 'resists', 'resists', [
                     { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
-                    { key: 'value', label: 'value', type: 'number', default: 0 }
+                    { key: 'value', label: 'value', type: 'number', default: 0 },
+                    { key: 'notes', label: 'notes', default: '' }
                 ], [
-                    { key: 'default', label: 'default', seed: { damage_type: 'physical', value: 0 } }
+                    { key: 'default', label: 'default', seed: { damage_type: 'physical', value: 0, notes: '' } }
                 ]);
 
                 renderSeededArrayEditor(rulesRoot, 'weaknesses', 'weaknesses', [
                     { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
-                    { key: 'value', label: 'value', type: 'number', default: 0 }
-                ], [
-                    { key: 'default', label: 'default', seed: { damage_type: 'physical', value: 0 } }
-                ]);
-
-                renderSeededArrayEditor(rulesRoot, 'ability_keys', 'ability_keys', [
-                    { key: 'slot_index', label: 'slot_index', type: 'number', default: 1 },
-                    { key: 'ability_name', label: 'ability_name', default: '' },
-                    { key: 'ability_type', label: 'ability_type', type: 'select', options: ['active', 'passive'], default: 'active' },
-                    { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
-                    { key: 'targeting', label: 'targeting', default: '' },
-                    { key: 'range', label: 'range', type: 'number', default: 0 },
-                    { key: 'cast_time', label: 'cast_time', type: 'number', default: 0 },
-                    { key: 'cooldown', label: 'cooldown', type: 'number', default: 0 },
-                    { key: 'duration', label: 'duration', type: 'number', default: 0 },
-                    { key: 'max_charges', label: 'max_charges', type: 'number', default: 0 },
-                    { key: 'level_cap', label: 'level_cap', type: 'number', default: 0 },
-                    { key: 'ability_description', label: 'ability_description', default: '' },
-                    { key: 'effects', label: 'effects', default: [] },
-                    { key: 'modifiers', label: 'modifiers', default: [] },
-                    { key: 'grants', label: 'grants', default: [] },
-                    { key: 'ability_kb_key', label: 'ability_kb_key', default: '' },
-                    { key: 'ability_key', label: 'ability_key (legacy)', default: '' },
-                    { key: 'sortorder', label: 'sortorder', type: 'number', default: 0 },
+                    { key: 'value', label: 'value', type: 'number', default: 0 },
                     { key: 'notes', label: 'notes', default: '' }
                 ], [
-                    { key: 'default', label: 'default', seed: { slot_index: 1, ability_name: '', ability_type: 'active', damage_type: 'physical', targeting: '', range: 0, cast_time: 0, cooldown: 0, duration: 0, max_charges: 0, level_cap: 0, ability_description: '', effects: [], modifiers: [], grants: [], ability_kb_key: '', ability_key: '', sortorder: 0, notes: '' } }
+                    { key: 'default', label: 'default', seed: { damage_type: 'physical', value: 0, notes: '' } }
                 ]);
+
+                (function renderBestiaryAbilities() {
+                    var wrap = createSection(rulesRoot, 'ability_keys');
+                    var list = document.createElement('div');
+                    wrap.appendChild(list);
+                    var addBtn = document.createElement('button');
+                    addBtn.type = 'button';
+                    addBtn.className = 'af-kb-add';
+                    addBtn.textContent = 'Добавить ability';
+                    wrap.appendChild(addBtn);
+                    var arr = ensureRuleArray('ability_keys');
+
+                    function redrawAbilities() {
+                        list.innerHTML = '';
+                        if (!arr.length) {
+                            var empty = document.createElement('div');
+                            empty.className = 'af-kb-help';
+                            empty.textContent = 'Список ability_keys пуст.';
+                            list.appendChild(empty);
+                            return;
+                        }
+
+                        arr.forEach(function (row, idx) {
+                            var normalized = normalizeBestiaryAbilityRow(row, idx + 1);
+                            arr[idx] = normalized;
+                            var card = document.createElement('div');
+                            card.className = 'af-kb-block-item';
+                            list.appendChild(card);
+
+                            var title = document.createElement('h4');
+                            title.textContent = 'Ability #' + (idx + 1);
+                            card.appendChild(title);
+
+                            var coreGrid = document.createElement('div');
+                            coreGrid.className = 'af-kb-row';
+                            [
+                                { key: 'slot_index', label: 'slot_index', type: 'number', default: 1 },
+                                { key: 'ability_name', label: 'ability_name', default: '' },
+                                { key: 'type', label: 'type', type: 'select', options: ['active', 'passive', 'ultimate'] },
+                                { key: 'subtype', label: 'subtype', type: 'select', options: enums.abilitySubtype },
+                                { key: 'slot', label: 'slot', type: 'select', options: enums.abilitySlot },
+                                { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
+                                { key: 'targeting', label: 'targeting', type: 'select', options: enums.targeting, default: 'single_enemy' },
+                                { key: 'range', label: 'range', type: 'number', default: 0 },
+                                { key: 'cast_time', label: 'cast_time', type: 'number', default: 0 },
+                                { key: 'cooldown', label: 'cooldown', type: 'number', default: 0 },
+                                { key: 'duration', label: 'duration', type: 'number', default: 0 },
+                                { key: 'max_charges', label: 'max_charges', type: 'number', default: 0 },
+                                { key: 'level_cap', label: 'level_cap', type: 'number', default: 0 },
+                                { key: 'ability_kb_key', label: 'ability_kb_key', default: '' },
+                                { key: 'sortorder', label: 'sortorder', type: 'number', default: 0 },
+                                { key: 'notes', label: 'notes', default: '' }
+                            ].forEach(function (col) { coreGrid.appendChild(fieldCell(normalized, col, syncToRaw)); });
+                            card.appendChild(coreGrid);
+
+                            renderBestiaryNestedRows(card, 'effects', normalized.effects, [
+                                { name: 'kind', label: 'kind', type: 'select', options: enums.effectKind },
+                                { name: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType },
+                                { name: 'targeting', label: 'targeting', type: 'select', options: enums.targeting },
+                                { name: 'value_mode', label: 'value_mode', type: 'text' },
+                                { name: 'value', label: 'value', type: 'number' },
+                                { name: 'formula_ref', label: 'formula_ref', type: 'text' },
+                                { name: 'duration', label: 'duration', type: 'number' },
+                                { name: 'hit_count', label: 'hit_count', type: 'number' },
+                                { name: 'status_key', label: 'status_key', type: 'text' },
+                                { name: 'notes', label: 'notes', type: 'text' }
+                            ], { kind: 'damage', damage_type: '', targeting: '', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' });
+                            renderBestiaryNestedRows(card, 'modifiers', normalized.modifiers, [
+                                { name: 'stat_key', label: 'stat_key', type: 'text' },
+                                { name: 'mode', label: 'mode', type: 'text' },
+                                { name: 'value', label: 'value', type: 'number' },
+                                { name: 'duration', label: 'duration', type: 'number' },
+                                { name: 'condition_text', label: 'condition_text', type: 'text' },
+                                { name: 'notes', label: 'notes', type: 'text' }
+                            ], { stat_key: '', mode: 'flat', value: 0, duration: 0, condition_text: '', notes: '' });
+                            renderBestiaryNestedRows(card, 'grants', normalized.grants, [
+                                { name: 'grant_type', label: 'grant_type', type: 'select', options: enums.grantType },
+                                { name: 'value', label: 'value', type: 'text' },
+                                { name: 'value_num', label: 'value_num', type: 'number' },
+                                { name: 'duration', label: 'duration', type: 'number' },
+                                { name: 'notes', label: 'notes', type: 'text' }
+                            ], { grant_type: '', value: '', value_num: 0, duration: 0, notes: '' });
+
+                            var del = document.createElement('button');
+                            del.type = 'button';
+                            del.className = 'af-kb-remove';
+                            del.textContent = 'Удалить';
+                            del.addEventListener('click', function () {
+                                arr.splice(idx, 1);
+                                redrawAbilities();
+                                syncToRaw();
+                            });
+                            card.appendChild(del);
+                        });
+                    }
+
+                    addBtn.addEventListener('click', function () {
+                        arr.push(normalizeBestiaryAbilityRow({}, arr.length + 1));
+                        redrawAbilities();
+                        syncToRaw();
+                    });
+
+                    redrawAbilities();
+                })();
 
                 renderSeededArrayEditor(rulesRoot, 'loot', 'loot', [
                     { key: 'loot_key', label: 'loot_key', default: '' },
                     { key: 'kind', label: 'kind', type: 'select', options: ['item', 'currency', 'material', 'reward', 'custom'], default: 'item' },
                     { key: 'qty_min', label: 'qty_min', type: 'number', default: 1 },
                     { key: 'qty_max', label: 'qty_max', type: 'number', default: 1 },
-                    { key: 'chance', label: 'chance', type: 'number', default: 100 }
+                    { key: 'chance', label: 'chance', type: 'number', default: 100 },
+                    { key: 'notes', label: 'notes', default: '' }
                 ], [
-                    { key: 'default', label: 'default', seed: { loot_key: '', kind: 'item', qty_min: 1, qty_max: 1, chance: 100 } }
+                    { key: 'default', label: 'default', seed: { loot_key: '', kind: 'item', qty_min: 1, qty_max: 1, chance: 100, notes: '' } }
                 ]);
             }
 
