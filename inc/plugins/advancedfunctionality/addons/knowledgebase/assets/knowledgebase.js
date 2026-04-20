@@ -3162,6 +3162,99 @@
         function renderInlineAbilitySummary(container, ability, idx, titlePrefix) {
             container.innerHTML = '';
             container.className = 'af-kb-inline-ability-summary';
+            var isRuUi = String((document.documentElement && document.documentElement.lang) || '').toLowerCase().indexOf('ru') === 0;
+            var enumLabels = {
+                type: {
+                    active: { ru: 'Активная', en: 'Active' },
+                    passive: { ru: 'Пассивная', en: 'Passive' },
+                    ultimate: { ru: 'Ультимативная', en: 'Ultimate' },
+                    support: { ru: 'Поддержка', en: 'Support' },
+                    aura: { ru: 'Аура', en: 'Aura' },
+                    toggle: { ru: 'Переключаемая', en: 'Toggle' },
+                    summon: { ru: 'Призыв', en: 'Summon' },
+                    reaction: { ru: 'Реакция', en: 'Reaction' },
+                    movement: { ru: 'Движение', en: 'Movement' }
+                },
+                subtype: {
+                    active: { ru: 'Активная', en: 'Active' },
+                    passive: { ru: 'Пассивная', en: 'Passive' },
+                    ultimate: { ru: 'Ультимативная', en: 'Ultimate' },
+                    support: { ru: 'Поддержка', en: 'Support' },
+                    aura: { ru: 'Аура', en: 'Aura' },
+                    toggle: { ru: 'Переключаемая', en: 'Toggle' },
+                    summon: { ru: 'Призыв', en: 'Summon' },
+                    reaction: { ru: 'Реакция', en: 'Reaction' },
+                    movement: { ru: 'Движение', en: 'Movement' }
+                },
+                slot: {
+                    basic: { ru: 'Базовый', en: 'Basic' },
+                    skill_1: { ru: 'Навык 1', en: 'Skill 1' },
+                    skill_2: { ru: 'Навык 2', en: 'Skill 2' },
+                    skill_3: { ru: 'Навык 3', en: 'Skill 3' },
+                    support: { ru: 'Слот поддержки', en: 'Support slot' },
+                    ultimate: { ru: 'Слот ультимейта', en: 'Ultimate slot' },
+                    passive: { ru: 'Пассивный слот', en: 'Passive slot' },
+                    custom: { ru: 'Пользовательский', en: 'Custom' }
+                },
+                damage_type: {
+                    physical: { ru: 'Физический', en: 'Physical' },
+                    fire: { ru: 'Огонь', en: 'Fire' },
+                    ice: { ru: 'Лёд', en: 'Ice' },
+                    water: { ru: 'Вода', en: 'Water' },
+                    electric: { ru: 'Электричество', en: 'Electric' },
+                    wind: { ru: 'Ветер', en: 'Wind' },
+                    earth: { ru: 'Земля', en: 'Earth' },
+                    nature: { ru: 'Природа', en: 'Nature' },
+                    light: { ru: 'Свет', en: 'Light' },
+                    dark: { ru: 'Тьма', en: 'Dark' },
+                    anemo: { ru: 'Анемо', en: 'Anemo' }
+                },
+                targeting: {
+                    self: { ru: 'На себя', en: 'Self' },
+                    single_enemy: { ru: 'Один враг', en: 'Single enemy' },
+                    single_ally: { ru: 'Один союзник', en: 'Single ally' },
+                    line: { ru: 'Линия', en: 'Line' },
+                    cone: { ru: 'Конус', en: 'Cone' },
+                    aoe_ground: { ru: 'Область на земле', en: 'Ground AoE' },
+                    aoe_around_self: { ru: 'Область вокруг себя', en: 'AoE around self' },
+                    global: { ru: 'Глобальная', en: 'Global' },
+                    custom: { ru: 'Пользовательская', en: 'Custom' }
+                }
+            };
+            var fieldLabels = isRuUi
+                ? {
+                    type: 'Тип',
+                    subtype: 'Подтип',
+                    slot: 'Слот',
+                    damage_type: 'Тип урона',
+                    targeting: 'Цель',
+                    range: 'Дальность',
+                    cast_time: 'Время каста',
+                    cooldown: 'Перезарядка',
+                    duration: 'Длительность',
+                    max_charges: 'Макс. заряды',
+                    level_cap: 'Предел уровня'
+                }
+                : {
+                    type: 'Type',
+                    subtype: 'Subtype',
+                    slot: 'Slot',
+                    damage_type: 'Damage type',
+                    targeting: 'Targeting',
+                    range: 'Range',
+                    cast_time: 'Cast time',
+                    cooldown: 'Cooldown',
+                    duration: 'Duration',
+                    max_charges: 'Max charges',
+                    level_cap: 'Level cap'
+                };
+            var resolveEnumLabel = function (dict, key) {
+                var cleanKey = String(key || '').trim();
+                if (!cleanKey) return '';
+                var row = enumLabels[dict] && enumLabels[dict][cleanKey];
+                if (row) return isRuUi ? row.ru : row.en;
+                return cleanKey.replace(/_/g, ' ').replace(/\b\w/g, function (ch) { return ch.toUpperCase(); });
+            };
             var iconWrap = document.createElement('div');
             iconWrap.className = 'af-kb-inline-ability-summary__icon';
             var iconUrl = String((ability && ability.icon_url) || '').trim();
@@ -3205,7 +3298,7 @@
                 chip.textContent = out !== '' ? (label + ': ' + out) : label;
                 chips.appendChild(chip);
             };
-            addChip('type', String((ability && (ability.type || ability.ability_type)) || 'active') || 'active', true);
+            addChip(fieldLabels.type, resolveEnumLabel('type', String((ability && (ability.type || ability.ability_type)) || 'active') || 'active'), true);
             [
                 ['subtype', ability ? ability.subtype : ''],
                 ['slot', ability ? ability.slot : ''],
@@ -3218,10 +3311,14 @@
                 ['max_charges', ability ? ability.max_charges : ''],
                 ['level_cap', ability ? ability.level_cap : '']
             ].forEach(function (pair) {
+                var key = pair[0];
                 var value = pair[1];
                 if (value == null || value === '') return;
                 if (typeof value === 'number' && value <= 0) return;
-                addChip(pair[0], value, false);
+                if (key === 'subtype' || key === 'slot' || key === 'damage_type' || key === 'targeting') {
+                    value = resolveEnumLabel(key, value);
+                }
+                addChip(fieldLabels[key] || key, value, false);
             });
 
             var counters = document.createElement('div');
