@@ -2821,6 +2821,106 @@
             ensureArr('faction.relations');
             ensureArr('faction.grants');
         }
+        function normalizeCharacterAbilityRow(ability, fallbackSortorder) {
+            var row = (ability && typeof ability === 'object' && !Array.isArray(ability)) ? ability : {};
+            var sort = numberOrZero(row.sortorder != null ? row.sortorder : (fallbackSortorder || 0));
+            var slotIndex = numberOrZero(row.slot_index != null ? row.slot_index : (sort > 0 ? sort : 1));
+            var abilityType = String(row.ability_type || row.type || 'active');
+            var normalizeRows = function (items, schema) {
+                return (Array.isArray(items) ? items : []).map(function (item) {
+                    var source = (item && typeof item === 'object' && !Array.isArray(item)) ? item : {};
+                    var out = {};
+                    schema.forEach(function (def) {
+                        if (def.type === 'number') {
+                            out[def.key] = numberOrZero(source[def.key] != null ? source[def.key] : def.default);
+                        } else {
+                            out[def.key] = String(source[def.key] != null ? source[def.key] : def.default || '');
+                        }
+                    });
+                    return out;
+                });
+            };
+
+            return {
+                slot_index: slotIndex,
+                ability_name: String(row.ability_name || ''),
+                type: abilityType,
+                ability_type: abilityType,
+                subtype: String(row.subtype || ''),
+                slot: String(row.slot || ''),
+                damage_type: String(row.damage_type || ''),
+                targeting: String(row.targeting || ''),
+                range: numberOrZero(row.range != null ? row.range : 0),
+                cast_time: numberOrZero(row.cast_time != null ? row.cast_time : 0),
+                cooldown: numberOrZero(row.cooldown != null ? row.cooldown : 0),
+                duration: numberOrZero(row.duration != null ? row.duration : 0),
+                max_charges: numberOrZero(row.max_charges != null ? row.max_charges : 0),
+                level_cap: numberOrZero(row.level_cap != null ? row.level_cap : 0),
+                ability_description: String(row.ability_description || ''),
+                resources: normalizeRows(row.resources, [
+                    { key: 'op', default: 'spend' },
+                    { key: 'resource_key', default: '' },
+                    { key: 'value', type: 'number', default: 0 },
+                    { key: 'per', default: 'cast' },
+                    { key: 'duration', type: 'number', default: 0 },
+                    { key: 'notes', default: '' }
+                ]),
+                effects: normalizeRows(row.effects, [
+                    { key: 'kind', default: 'damage' },
+                    { key: 'damage_type', default: '' },
+                    { key: 'targeting', default: '' },
+                    { key: 'value_mode', default: 'flat' },
+                    { key: 'value', type: 'number', default: 0 },
+                    { key: 'formula_ref', default: '' },
+                    { key: 'duration', type: 'number', default: 0 },
+                    { key: 'hit_count', type: 'number', default: 1 },
+                    { key: 'status_key', default: '' },
+                    { key: 'notes', default: '' }
+                ]),
+                modifiers: normalizeRows(row.modifiers, [
+                    { key: 'stat_key', default: '' },
+                    { key: 'mode', default: 'flat' },
+                    { key: 'value', type: 'number', default: 0 },
+                    { key: 'duration', type: 'number', default: 0 },
+                    { key: 'condition_text', default: '' },
+                    { key: 'notes', default: '' }
+                ]),
+                triggers: normalizeRows(row.triggers, [
+                    { key: 'event', default: '' },
+                    { key: 'action_text', default: '' },
+                    { key: 'condition_text', default: '' },
+                    { key: 'notes', default: '' }
+                ]),
+                conditions: normalizeRows(row.conditions, [
+                    { key: 'condition_type', default: '' },
+                    { key: 'value', default: '' },
+                    { key: 'notes', default: '' }
+                ]),
+                stacking: normalizeRows(row.stacking, [
+                    { key: 'stack_key', default: '' },
+                    { key: 'max_stacks', type: 'number', default: 1 },
+                    { key: 'policy', default: '' },
+                    { key: 'notes', default: '' }
+                ]),
+                upgrade_requirements: normalizeRows(row.upgrade_requirements, [
+                    { key: 'level', type: 'number', default: 1 },
+                    { key: 'required_item_key', default: '' },
+                    { key: 'required_qty', type: 'number', default: 0 },
+                    { key: 'required_currency_key', default: '' },
+                    { key: 'required_currency_qty', type: 'number', default: 0 },
+                    { key: 'notes', default: '' }
+                ]),
+                grants: normalizeRows(row.grants, [
+                    { key: 'grant_type', default: '' },
+                    { key: 'value', default: '' },
+                    { key: 'value_num', type: 'number', default: 0 },
+                    { key: 'duration', type: 'number', default: 0 },
+                    { key: 'notes', default: '' }
+                ]),
+                ability_kb_key: String(row.ability_kb_key || row.ability_key || ''),
+                sortorder: sort
+            };
+        }
         if (uiProfile === 'character') {
             ensureObj('character_profile', {});
             ensureObj('character_stats', {});
@@ -2835,27 +2935,7 @@
                 state.character_stats[k] = numberOrZero(state.character_stats[k] != null ? state.character_stats[k] : 0);
             });
             state.character_abilities = state.character_abilities.map(function (ability) {
-                var row = (ability && typeof ability === 'object' && !Array.isArray(ability)) ? ability : {};
-                var abilityKbKey = String(row.ability_kb_key || row.ability_key || '');
-                return {
-                    slot_index: numberOrZero(row.slot_index != null ? row.slot_index : 1),
-                    ability_name: String(row.ability_name || ''),
-                    ability_type: String(row.ability_type || 'active'),
-                    damage_type: String(row.damage_type || ''),
-                    targeting: String(row.targeting || ''),
-                    range: numberOrZero(row.range != null ? row.range : 0),
-                    cast_time: numberOrZero(row.cast_time != null ? row.cast_time : 0),
-                    cooldown: numberOrZero(row.cooldown != null ? row.cooldown : 0),
-                    duration: numberOrZero(row.duration != null ? row.duration : 0),
-                    max_charges: numberOrZero(row.max_charges != null ? row.max_charges : 0),
-                    level_cap: numberOrZero(row.level_cap != null ? row.level_cap : 0),
-                    ability_description: String(row.ability_description || ''),
-                    effects: Array.isArray(row.effects) ? row.effects : [],
-                    modifiers: Array.isArray(row.modifiers) ? row.modifiers : [],
-                    grants: Array.isArray(row.grants) ? row.grants : [],
-                    ability_kb_key: abilityKbKey,
-                    sortorder: numberOrZero(row.sortorder != null ? row.sortorder : 0)
-                };
+                return normalizeCharacterAbilityRow(ability, 0);
             });
             if (!state.character_meta.contract) state.character_meta.contract = 'af_kb.character.contract.v1';
             if (!state.character_meta.contract_version) state.character_meta.contract_version = '1.0';
@@ -3511,26 +3591,7 @@
                         character_luck: numberOrZero(statsC.character_luck != null ? statsC.character_luck : 0)
                     },
                     character_abilities: abilitiesC.map(function (row) {
-                        var ability = (row && typeof row === 'object' && !Array.isArray(row)) ? row : {};
-                        return {
-                            slot_index: numberOrZero(ability.slot_index != null ? ability.slot_index : 1),
-                            ability_name: String(ability.ability_name || ''),
-                            ability_type: String(ability.ability_type || 'active'),
-                            damage_type: String(ability.damage_type || ''),
-                            targeting: String(ability.targeting || ''),
-                            range: numberOrZero(ability.range != null ? ability.range : 0),
-                            cast_time: numberOrZero(ability.cast_time != null ? ability.cast_time : 0),
-                            cooldown: numberOrZero(ability.cooldown != null ? ability.cooldown : 0),
-                            duration: numberOrZero(ability.duration != null ? ability.duration : 0),
-                            max_charges: numberOrZero(ability.max_charges != null ? ability.max_charges : 0),
-                            level_cap: numberOrZero(ability.level_cap != null ? ability.level_cap : 0),
-                            ability_description: String(ability.ability_description || ''),
-                            effects: Array.isArray(ability.effects) ? ability.effects : [],
-                            modifiers: Array.isArray(ability.modifiers) ? ability.modifiers : [],
-                            grants: Array.isArray(ability.grants) ? ability.grants : [],
-                            ability_kb_key: String(ability.ability_kb_key || ability.ability_key || ''),
-                            sortorder: numberOrZero(ability.sortorder != null ? ability.sortorder : 0)
-                        };
+                        return normalizeCharacterAbilityRow(row, 0);
                     }),
                     character_links: Array.isArray(p.character_links) ? p.character_links : [],
                     character_meta: {
@@ -4526,6 +4587,11 @@
             }
 
             if (uiProfile === 'character') {
+                var abilityTypeOptions = ['active', 'passive', 'ultimate'];
+                var abilitySubtypeOptions = ['aura', 'summon', 'toggle', 'stance', 'field', 'support', 'counter', 'movement', 'custom'];
+                var abilitySlotOptions = ['basic', 'skill_1', 'skill_2', 'skill_3', 'support', 'ultimate', 'passive', 'custom'];
+                var abilityDamageTypeOptions = ['physical', 'fire', 'ice', 'water', 'electric', 'wind', 'earth', 'nature', 'light', 'dark', 'void', 'quantum', 'imaginary', 'aether', 'anomaly', 'ether', 'fusion', 'glacio', 'aero', 'havoc', 'spectro', 'dendro', 'pyro', 'hydro', 'electro', 'cryo', 'anemo', 'geo', 'lightning', 'slash', 'pierce', 'blunt', 'true', 'custom'];
+                var abilityTargetingOptions = ['self', 'single_enemy', 'single_ally', 'line', 'cone', 'aoe_ground', 'aoe_around_self', 'global', 'custom'];
                 var profileDefs = [
                     { name: 'category', label: 'Категория', type: 'select', options: ['canons', 'originals', 'roles'] },
                     { name: 'character_pic', label: 'character_pic', type: 'text' },
@@ -4563,48 +4629,154 @@
                 statsDefs.forEach(function (d) { statsGrid.appendChild(createInput(d, state.character_stats, syncRawDebounced)); });
                 fields.profileFields.appendChild(statsGrid);
 
-                var abilityFields = [
-                    { name: 'slot_index', label: 'slot_index', type: 'number' },
-                    { name: 'ability_name', label: 'ability_name', type: 'text' },
-                    { name: 'ability_type', label: 'ability_type', type: 'select', options: ['active', 'passive'] },
-                    { name: 'damage_type', label: 'damage_type', type: 'text' },
-                    { name: 'targeting', label: 'targeting', type: 'text' },
-                    { name: 'range', label: 'range', type: 'number' },
-                    { name: 'cast_time', label: 'cast_time', type: 'number' },
-                    { name: 'cooldown', label: 'cooldown', type: 'number' },
-                    { name: 'duration', label: 'duration', type: 'number' },
-                    { name: 'max_charges', label: 'max_charges', type: 'number' },
-                    { name: 'level_cap', label: 'level_cap', type: 'number' },
-                    { name: 'ability_description', label: 'ability_description', type: 'textarea' },
-                    { name: 'effects', label: 'effects', type: 'json' },
-                    { name: 'modifiers', label: 'modifiers', type: 'json' },
-                    { name: 'grants', label: 'grants', type: 'json' },
-                    { name: 'ability_kb_key', label: 'ability_kb_key', type: 'text' },
-                    { name: 'sortorder', label: 'sortorder', type: 'number' }
-                ];
-
                 var abilitiesBox = document.createElement('div');
                 abilitiesBox.className = 'af-kb-rule-card';
                 fields.profileLists.appendChild(abilitiesBox);
-                renderObjectList(abilitiesBox, state.character_abilities, 'Character abilities', abilityFields, syncRawDebounced, {
-                    slot_index: 1,
-                    ability_name: '',
-                    ability_type: 'active',
-                    damage_type: '',
-                    targeting: '',
-                    range: 0,
-                    cast_time: 0,
-                    cooldown: 0,
-                    duration: 0,
-                    max_charges: 0,
-                    level_cap: 0,
-                    ability_description: '',
-                    effects: [],
-                    modifiers: [],
-                    grants: [],
-                    ability_kb_key: '',
-                    sortorder: 0
-                });
+                function renderAbilityNestedRows(container, title, rows, defs, seed) {
+                    var box = document.createElement('div');
+                    box.className = 'af-kb-rule-card';
+                    container.appendChild(box);
+                    renderObjectList(box, rows, title, defs, syncRawDebounced, seed);
+                }
+
+                function renderCharacterAbilities() {
+                    abilitiesBox.innerHTML = '';
+
+                    var list = document.createElement('div');
+                    abilitiesBox.appendChild(list);
+
+                    var addBtn = document.createElement('button');
+                    addBtn.type = 'button';
+                    addBtn.className = 'af-kb-add';
+                    addBtn.textContent = 'Добавить способность';
+                    addBtn.addEventListener('click', function () {
+                        state.character_abilities.push(normalizeCharacterAbilityRow({}, state.character_abilities.length + 1));
+                        renderCharacterAbilities();
+                        syncRawDebounced();
+                    });
+                    abilitiesBox.appendChild(addBtn);
+
+                    if (!state.character_abilities.length) {
+                        var empty = document.createElement('div');
+                        empty.className = 'af-kb-help';
+                        empty.textContent = 'Список способностей пуст.';
+                        list.appendChild(empty);
+                        return;
+                    }
+
+                    state.character_abilities.forEach(function (ability, idx) {
+                        var normalized = normalizeCharacterAbilityRow(ability, idx + 1);
+                        state.character_abilities[idx] = normalized;
+
+                        var card = document.createElement('div');
+                        card.className = 'af-kb-block-item';
+                        list.appendChild(card);
+
+                        var title = document.createElement('h4');
+                        title.textContent = 'Способность #' + (idx + 1);
+                        card.appendChild(title);
+
+                        var coreDefs = [
+                            { name: 'slot_index', label: 'slot_index', type: 'number' },
+                            { name: 'ability_name', label: 'ability_name', type: 'text' },
+                            { name: 'type', label: 'type', type: 'select', options: abilityTypeOptions },
+                            { name: 'subtype', label: 'subtype', type: 'select', options: abilitySubtypeOptions },
+                            { name: 'slot', label: 'slot', type: 'select', options: abilitySlotOptions },
+                            { name: 'damage_type', label: 'damage_type', type: 'select', options: abilityDamageTypeOptions },
+                            { name: 'targeting', label: 'targeting', type: 'select', options: abilityTargetingOptions },
+                            { name: 'range', label: 'range', type: 'number' },
+                            { name: 'cast_time', label: 'cast_time', type: 'number' },
+                            { name: 'cooldown', label: 'cooldown', type: 'number' },
+                            { name: 'duration', label: 'duration', type: 'number' },
+                            { name: 'max_charges', label: 'max_charges', type: 'number' },
+                            { name: 'level_cap', label: 'level_cap', type: 'number' },
+                            { name: 'ability_description', label: 'ability_description', type: 'textarea' },
+                            { name: 'ability_kb_key', label: 'ability_kb_key', type: 'text' },
+                            { name: 'sortorder', label: 'sortorder', type: 'number' }
+                        ];
+                        var coreGrid = document.createElement('div');
+                        coreGrid.className = 'af-kb-row';
+                        coreDefs.forEach(function (d) { coreGrid.appendChild(createInput(d, normalized, function () {
+                            normalized.ability_type = normalized.type || 'active';
+                            syncRawDebounced();
+                        })); });
+                        card.appendChild(coreGrid);
+
+                        renderAbilityNestedRows(card, 'resources', normalized.resources, [
+                            { name: 'op', label: 'op', type: 'text' },
+                            { name: 'resource_key', label: 'resource_key', type: 'text' },
+                            { name: 'value', label: 'value', type: 'number' },
+                            { name: 'per', label: 'per', type: 'text' },
+                            { name: 'duration', label: 'duration', type: 'number' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { op: 'spend', resource_key: '', value: 0, per: 'cast', duration: 0, notes: '' });
+                        renderAbilityNestedRows(card, 'effects', normalized.effects, [
+                            { name: 'kind', label: 'kind', type: 'text' },
+                            { name: 'damage_type', label: 'damage_type', type: 'select', options: abilityDamageTypeOptions },
+                            { name: 'targeting', label: 'targeting', type: 'select', options: abilityTargetingOptions },
+                            { name: 'value_mode', label: 'value_mode', type: 'text' },
+                            { name: 'value', label: 'value', type: 'number' },
+                            { name: 'formula_ref', label: 'formula_ref', type: 'text' },
+                            { name: 'duration', label: 'duration', type: 'number' },
+                            { name: 'hit_count', label: 'hit_count', type: 'number' },
+                            { name: 'status_key', label: 'status_key', type: 'text' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { kind: 'damage', damage_type: '', targeting: '', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' });
+                        renderAbilityNestedRows(card, 'modifiers', normalized.modifiers, [
+                            { name: 'stat_key', label: 'stat_key', type: 'text' },
+                            { name: 'mode', label: 'mode', type: 'text' },
+                            { name: 'value', label: 'value', type: 'number' },
+                            { name: 'duration', label: 'duration', type: 'number' },
+                            { name: 'condition_text', label: 'condition_text', type: 'text' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { stat_key: '', mode: 'flat', value: 0, duration: 0, condition_text: '', notes: '' });
+                        renderAbilityNestedRows(card, 'triggers', normalized.triggers, [
+                            { name: 'event', label: 'event', type: 'text' },
+                            { name: 'action_text', label: 'action_text', type: 'text' },
+                            { name: 'condition_text', label: 'condition_text', type: 'text' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { event: '', action_text: '', condition_text: '', notes: '' });
+                        renderAbilityNestedRows(card, 'conditions', normalized.conditions, [
+                            { name: 'condition_type', label: 'condition_type', type: 'text' },
+                            { name: 'value', label: 'value', type: 'text' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { condition_type: '', value: '', notes: '' });
+                        renderAbilityNestedRows(card, 'stacking', normalized.stacking, [
+                            { name: 'stack_key', label: 'stack_key', type: 'text' },
+                            { name: 'max_stacks', label: 'max_stacks', type: 'number' },
+                            { name: 'policy', label: 'policy', type: 'text' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { stack_key: '', max_stacks: 1, policy: '', notes: '' });
+                        renderAbilityNestedRows(card, 'upgrade_requirements', normalized.upgrade_requirements, [
+                            { name: 'level', label: 'level', type: 'number' },
+                            { name: 'required_item_key', label: 'required_item_key', type: 'text' },
+                            { name: 'required_qty', label: 'required_qty', type: 'number' },
+                            { name: 'required_currency_key', label: 'required_currency_key', type: 'text' },
+                            { name: 'required_currency_qty', label: 'required_currency_qty', type: 'number' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { level: 1, required_item_key: '', required_qty: 0, required_currency_key: '', required_currency_qty: 0, notes: '' });
+                        renderAbilityNestedRows(card, 'grants', normalized.grants, [
+                            { name: 'grant_type', label: 'grant_type', type: 'text' },
+                            { name: 'value', label: 'value', type: 'text' },
+                            { name: 'value_num', label: 'value_num', type: 'number' },
+                            { name: 'duration', label: 'duration', type: 'number' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { grant_type: '', value: '', value_num: 0, duration: 0, notes: '' });
+
+                        var del = document.createElement('button');
+                        del.type = 'button';
+                        del.className = 'af-kb-remove';
+                        del.textContent = 'Удалить способность';
+                        del.addEventListener('click', function () {
+                            state.character_abilities.splice(idx, 1);
+                            renderCharacterAbilities();
+                            syncRawDebounced();
+                        });
+                        card.appendChild(del);
+                    });
+                }
+
+                renderCharacterAbilities();
 
                 var metaGrid = document.createElement('div');
                 metaGrid.className = 'af-kb-row';

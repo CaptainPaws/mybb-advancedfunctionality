@@ -4997,11 +4997,38 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
 
     $sort = isset($row['sortorder']) ? (int)$row['sortorder'] : $fallbackSortorder;
     $slotIndex = isset($row['slot_index']) ? (int)$row['slot_index'] : ($sort > 0 ? $sort : 1);
+    $abilityType = (string)($row['ability_type'] ?? $row['type'] ?? 'active');
+    $normalizeTypedRows = static function ($items, array $defs): array {
+        $rows = [];
+        foreach ((array)$items as $item) {
+            $source = is_array($item) ? $item : [];
+            $rowOut = [];
+            foreach ($defs as $def) {
+                $key = (string)($def['key'] ?? '');
+                if ($key === '') {
+                    continue;
+                }
+                $default = $def['default'] ?? '';
+                $type = (string)($def['type'] ?? 'string');
+                $value = $source[$key] ?? $default;
+                if ($type === 'number') {
+                    $rowOut[$key] = (float)$value;
+                } else {
+                    $rowOut[$key] = (string)$value;
+                }
+            }
+            $rows[] = $rowOut;
+        }
+        return array_values($rows);
+    };
 
     return [
         'slot_index' => $slotIndex,
         'ability_name' => (string)($row['ability_name'] ?? ''),
-        'ability_type' => (string)($row['ability_type'] ?? 'active'),
+        'type' => $abilityType,
+        'ability_type' => $abilityType,
+        'subtype' => (string)($row['subtype'] ?? ''),
+        'slot' => (string)($row['slot'] ?? ''),
         'damage_type' => (string)($row['damage_type'] ?? ''),
         'targeting' => (string)($row['targeting'] ?? ''),
         'range' => isset($row['range']) ? (float)$row['range'] : 0.0,
@@ -5011,9 +5038,66 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
         'max_charges' => isset($row['max_charges']) ? (int)$row['max_charges'] : 0,
         'level_cap' => isset($row['level_cap']) ? (int)$row['level_cap'] : 0,
         'ability_description' => (string)($row['ability_description'] ?? ''),
-        'effects' => is_array($row['effects'] ?? null) ? array_values((array)$row['effects']) : [],
-        'modifiers' => is_array($row['modifiers'] ?? null) ? array_values((array)$row['modifiers']) : [],
-        'grants' => is_array($row['grants'] ?? null) ? array_values((array)$row['grants']) : [],
+        'resources' => $normalizeTypedRows($row['resources'] ?? [], [
+            ['key' => 'op', 'default' => 'spend'],
+            ['key' => 'resource_key', 'default' => ''],
+            ['key' => 'value', 'type' => 'number', 'default' => 0],
+            ['key' => 'per', 'default' => 'cast'],
+            ['key' => 'duration', 'type' => 'number', 'default' => 0],
+            ['key' => 'notes', 'default' => ''],
+        ]),
+        'effects' => $normalizeTypedRows($row['effects'] ?? [], [
+            ['key' => 'kind', 'default' => 'damage'],
+            ['key' => 'damage_type', 'default' => ''],
+            ['key' => 'targeting', 'default' => ''],
+            ['key' => 'value_mode', 'default' => 'flat'],
+            ['key' => 'value', 'type' => 'number', 'default' => 0],
+            ['key' => 'formula_ref', 'default' => ''],
+            ['key' => 'duration', 'type' => 'number', 'default' => 0],
+            ['key' => 'hit_count', 'type' => 'number', 'default' => 1],
+            ['key' => 'status_key', 'default' => ''],
+            ['key' => 'notes', 'default' => ''],
+        ]),
+        'modifiers' => $normalizeTypedRows($row['modifiers'] ?? [], [
+            ['key' => 'stat_key', 'default' => ''],
+            ['key' => 'mode', 'default' => 'flat'],
+            ['key' => 'value', 'type' => 'number', 'default' => 0],
+            ['key' => 'duration', 'type' => 'number', 'default' => 0],
+            ['key' => 'condition_text', 'default' => ''],
+            ['key' => 'notes', 'default' => ''],
+        ]),
+        'triggers' => $normalizeTypedRows($row['triggers'] ?? [], [
+            ['key' => 'event', 'default' => ''],
+            ['key' => 'action_text', 'default' => ''],
+            ['key' => 'condition_text', 'default' => ''],
+            ['key' => 'notes', 'default' => ''],
+        ]),
+        'conditions' => $normalizeTypedRows($row['conditions'] ?? [], [
+            ['key' => 'condition_type', 'default' => ''],
+            ['key' => 'value', 'default' => ''],
+            ['key' => 'notes', 'default' => ''],
+        ]),
+        'stacking' => $normalizeTypedRows($row['stacking'] ?? [], [
+            ['key' => 'stack_key', 'default' => ''],
+            ['key' => 'max_stacks', 'type' => 'number', 'default' => 1],
+            ['key' => 'policy', 'default' => ''],
+            ['key' => 'notes', 'default' => ''],
+        ]),
+        'upgrade_requirements' => $normalizeTypedRows($row['upgrade_requirements'] ?? [], [
+            ['key' => 'level', 'type' => 'number', 'default' => 1],
+            ['key' => 'required_item_key', 'default' => ''],
+            ['key' => 'required_qty', 'type' => 'number', 'default' => 0],
+            ['key' => 'required_currency_key', 'default' => ''],
+            ['key' => 'required_currency_qty', 'type' => 'number', 'default' => 0],
+            ['key' => 'notes', 'default' => ''],
+        ]),
+        'grants' => $normalizeTypedRows($row['grants'] ?? [], [
+            ['key' => 'grant_type', 'default' => ''],
+            ['key' => 'value', 'default' => ''],
+            ['key' => 'value_num', 'type' => 'number', 'default' => 0],
+            ['key' => 'duration', 'type' => 'number', 'default' => 0],
+            ['key' => 'notes', 'default' => ''],
+        ]),
         'ability_kb_key' => $abilityKbKey,
         'ability_key' => $legacyKey,
         'notes' => (string)($row['notes'] ?? ''),
