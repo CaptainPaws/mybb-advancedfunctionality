@@ -831,6 +831,7 @@
         }
         var typeSchema = readJson(root.getAttribute('data-type-schema') || '{}', {});
         var itemKindOptionsRaw = readJson(root.getAttribute('data-item-kinds') || '[]', []);
+        var arpgRegistriesRaw = readJson(root.getAttribute('data-arpg-registries') || '{}', {});
         var itemKindOptions = (Array.isArray(itemKindOptionsRaw) && itemKindOptionsRaw.length ? itemKindOptionsRaw : [
             { value: 'weapon' }, { value: 'armor' }, { value: 'gear' }, { value: 'consumable' },
             { value: 'ammo' }, { value: 'augmentation' }, { value: 'artifact' }, { value: 'unique' }
@@ -1134,6 +1135,24 @@
                 effectKind: ['', 'damage', 'heal', 'shield', 'barrier', 'status', 'proc'],
                 grantType: ['', 'tag', 'ability_unlock', 'item_unlock', 'resource_bonus', 'passive_flag', 'custom']
             };
+            function normalizeRegistryOptions(registryKey, fallback) {
+                var rows = arpgRegistriesRaw && arpgRegistriesRaw[registryKey];
+                if (!Array.isArray(rows) || !rows.length) return fallback.slice();
+                var keys = [];
+                rows.forEach(function (row) {
+                    var value = String((row && row.value_key) || '').trim();
+                    if (value) keys.push(value);
+                });
+                return keys.length ? keys : fallback.slice();
+            }
+            var abilitySubtypeOptionsDynamic = normalizeRegistryOptions('ability_subtype', enums.abilitySubtype.slice(1));
+            var abilitySlotOptionsDynamic = normalizeRegistryOptions('ability_slot', enums.abilitySlot.slice(1));
+            var abilityDamageTypeOptionsDynamic = normalizeRegistryOptions('ability_damage_type', enums.damageType.slice(1));
+            var abilityTargetingOptionsDynamic = normalizeRegistryOptions('ability_targeting', enums.targeting.slice(1));
+            enums.abilitySubtype = [''].concat(abilitySubtypeOptionsDynamic);
+            enums.abilitySlot = [''].concat(abilitySlotOptionsDynamic);
+            enums.damageType = [''].concat(abilityDamageTypeOptionsDynamic);
+            enums.targeting = [''].concat(abilityTargetingOptionsDynamic);
 
             root.innerHTML = [
                 '<details open="open" class="af-kb-collapsible"><summary>UI</summary><div id="af-kb-arpg-ui"></div></details>',
@@ -1612,7 +1631,7 @@
 
             function renderAbilityRules() {
                 renderRuleFields(rulesRoot, [
-                    { key: 'type', label: 'type', type: 'select', options: ['', 'active', 'passive', 'ultimate'], default: 'active' },
+                    { key: 'type', label: 'type', type: 'select', options: [''].concat(normalizeRegistryOptions('ability_type', ['active', 'passive', 'ultimate'])), default: 'active' },
                     { key: 'subtype', label: 'subtype', type: 'select', options: enums.abilitySubtype, default: '' },
                     { key: 'slot', label: 'slot', type: 'select', options: enums.abilitySlot, default: 'skill_1' },
                     { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
@@ -5008,11 +5027,11 @@
             }
 
             if (uiProfile === 'character') {
-                var abilityTypeOptions = ['active', 'passive', 'ultimate'];
-                var abilitySubtypeOptions = ['aura', 'summon', 'toggle', 'stance', 'field', 'support', 'counter', 'movement', 'custom'];
-                var abilitySlotOptions = ['basic', 'skill_1', 'skill_2', 'skill_3', 'support', 'ultimate', 'passive', 'custom'];
-                var abilityDamageTypeOptions = ['physical', 'fire', 'ice', 'water', 'electric', 'wind', 'earth', 'nature', 'light', 'dark', 'void', 'quantum', 'imaginary', 'aether', 'anomaly', 'ether', 'fusion', 'glacio', 'aero', 'havoc', 'spectro', 'dendro', 'pyro', 'hydro', 'electro', 'cryo', 'anemo', 'geo', 'lightning', 'slash', 'pierce', 'blunt', 'true', 'custom'];
-                var abilityTargetingOptions = ['self', 'single_enemy', 'single_ally', 'line', 'cone', 'aoe_ground', 'aoe_around_self', 'global', 'custom'];
+                var abilityTypeOptions = normalizeRegistryOptions('ability_type', ['active', 'passive', 'ultimate']);
+                var abilitySubtypeOptions = normalizeRegistryOptions('ability_subtype', ['aura', 'summon', 'toggle', 'stance', 'field', 'support', 'counter', 'movement', 'custom']);
+                var abilitySlotOptions = normalizeRegistryOptions('ability_slot', ['basic', 'skill_1', 'skill_2', 'skill_3', 'support', 'ultimate', 'passive', 'custom']);
+                var abilityDamageTypeOptions = normalizeRegistryOptions('ability_damage_type', ['physical', 'fire', 'ice', 'water', 'electric', 'wind', 'earth', 'nature', 'light', 'dark', 'void', 'quantum', 'imaginary', 'aether', 'anomaly', 'ether', 'fusion', 'glacio', 'aero', 'havoc', 'spectro', 'dendro', 'pyro', 'hydro', 'electro', 'cryo', 'anemo', 'geo', 'lightning', 'slash', 'pierce', 'blunt', 'true', 'custom']);
+                var abilityTargetingOptions = normalizeRegistryOptions('ability_targeting', ['self', 'single_enemy', 'single_ally', 'line', 'cone', 'aoe_ground', 'aoe_around_self', 'global', 'custom']);
                 var profileDefs = [
                     { name: 'category', label: 'Категория', type: 'select', options: ['canons', 'originals', 'roles'] },
                     { name: 'character_pic', label: 'character_pic', type: 'text' },
