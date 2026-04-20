@@ -60,7 +60,7 @@ function af_kb_arpg_internal_types(): array
 
 function af_kb_arpg_reference_types(): array
 {
-    return [];
+    return array_values(array_unique(array_values(af_kb_arpg_character_field_type_contract())));
 }
 
 function af_kb_arpg_type_registry(): array
@@ -76,6 +76,18 @@ function af_kb_arpg_type_registry(): array
         'arpg_item' => ['entity_kind' => 'item', 'service' => false, 'title_ru' => 'ARPG: Предметы', 'title_en' => 'ARPG: Items'],
         'arpg_lore' => ['entity_kind' => 'lore', 'service' => false, 'title_ru' => 'ARPG: Лор', 'title_en' => 'ARPG: Lore'],
         'arpg_mechanics' => ['entity_kind' => 'service_mechanics', 'service' => true, 'title_ru' => 'ARPG: Сервисная механика', 'title_en' => 'ARPG: Service Mechanics'],
+    ];
+}
+
+function af_kb_arpg_character_field_type_contract(): array
+{
+    return [
+        'character_element' => 'arpg_element',
+        'character_race' => 'arpg_origin',
+        'character_origin' => 'arpg_origin',
+        'character_class' => 'arpg_archetype',
+        'character_archetype' => 'arpg_archetype',
+        'character_faction' => 'arpg_faction',
     ];
 }
 
@@ -6875,6 +6887,10 @@ function af_kb_resolve_type_alias(string $requestedType): string
         'item_arpg' => 'arpg_item',
         'lore_arpg' => 'arpg_lore',
     ];
+
+    foreach (af_kb_arpg_character_field_type_contract() as $fieldName => $typeKey) {
+        $aliases[$fieldName] = $typeKey;
+    }
 
     return (string)($aliases[$type] ?? $type);
 }
