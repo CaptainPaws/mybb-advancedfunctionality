@@ -3571,13 +3571,44 @@ function af_atf_normalize_character_abilities_json(string $raw): string
             $sortorder = 0;
         }
 
-        $out[] = [
+        $normalized = [
             'ability_name' => my_substr($name, 0, 255),
             'ability_type' => $type,
             'ability_description' => my_substr($description, 0, 5000),
             'ability_kb_key' => my_substr($kbKey, 0, 128),
             'sortorder' => $sortorder,
         ];
+        foreach ([
+            'slot_index',
+            'damage_type',
+            'targeting',
+            'range',
+            'cast_time',
+            'cooldown',
+            'duration',
+            'max_charges',
+            'level_cap',
+            'effects',
+            'modifiers',
+            'grants',
+            'ability_key',
+            'notes',
+        ] as $extraKey) {
+            if (!array_key_exists($extraKey, $row)) {
+                continue;
+            }
+            $extraValue = $row[$extraKey];
+            if ($extraKey === 'effects' || $extraKey === 'modifiers' || $extraKey === 'grants') {
+                $normalized[$extraKey] = is_array($extraValue) ? array_values($extraValue) : [];
+                continue;
+            }
+            if (is_array($extraValue) || is_object($extraValue)) {
+                continue;
+            }
+            $normalized[$extraKey] = $extraValue;
+        }
+
+        $out[] = $normalized;
         if (count($out) >= 8) {
             break;
         }

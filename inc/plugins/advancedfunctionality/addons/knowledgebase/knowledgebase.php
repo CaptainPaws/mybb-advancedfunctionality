@@ -8633,38 +8633,55 @@ function af_kb_build_character_application_prefill(array $entry): array
     $abilities = (array)($data['abilities'] ?? []);
 
     $prefill = [];
-    foreach ([
-        'character_pic',
-        'character_prototype',
-        'character_name',
-        'character_name_ru',
-        'character_nicknames',
-        'character_element',
-        'character_gen',
-        'character_race',
-        'character_class',
-        'character_faction',
-        'character_app',
-    ] as $fieldName) {
-        if (array_key_exists($fieldName, $profile)) {
-            $prefill[$fieldName] = (string)$profile[$fieldName];
+    $profileMap = [
+        'character_pic' => ['character_pic', 'pic', 'avatar'],
+        'character_prototype' => ['character_prototype', 'prototype'],
+        'character_name' => ['character_name', 'name'],
+        'character_name_ru' => ['character_name_ru', 'name_ru', 'name_rus'],
+        'character_nicknames' => ['character_nicknames', 'nicknames'],
+        'character_element' => ['character_element', 'element'],
+        'character_gen' => ['character_gen', 'gender', 'sex'],
+        'character_race' => ['character_race', 'character_origin', 'origin', 'race'],
+        'character_class' => ['character_class', 'character_archetype', 'archetype', 'class'],
+        'character_faction' => ['character_faction', 'faction'],
+        'character_app' => ['character_app', 'appearance', 'description'],
+    ];
+    foreach ($profileMap as $targetField => $candidates) {
+        foreach ($candidates as $candidate) {
+            if (!array_key_exists($candidate, $profile)) {
+                continue;
+            }
+            $value = is_scalar($profile[$candidate]) ? trim((string)$profile[$candidate]) : '';
+            if ($value === '') {
+                continue;
+            }
+            $prefill[$targetField] = $value;
+            break;
         }
     }
 
-    foreach ([
-        'character_hp',
-        'character_defense',
-        'character_element_damage_bonus',
-        'character_crit_damage',
-        'character_healing_received_bonus',
-        'character_attack_power',
-        'character_elemental_mastery',
-        'character_healing_bonus',
-        'character_shield_strength',
-        'character_luck',
-    ] as $fieldName) {
-        if (array_key_exists($fieldName, $stats)) {
-            $prefill[$fieldName] = (string)$stats[$fieldName];
+    $statMap = [
+        'character_hp' => ['character_hp', 'hp', 'health'],
+        'character_defense' => ['character_defense', 'defense', 'def'],
+        'character_element_damage_bonus' => ['character_element_damage_bonus', 'element_damage_bonus', 'elemental_damage_bonus'],
+        'character_crit_damage' => ['character_crit_damage', 'crit_damage', 'critical_damage'],
+        'character_healing_received_bonus' => ['character_healing_received_bonus', 'healing_received_bonus'],
+        'character_attack_power' => ['character_attack_power', 'attack_power', 'atk', 'attack'],
+        'character_elemental_mastery' => ['character_elemental_mastery', 'elemental_mastery', 'mastery'],
+        'character_healing_bonus' => ['character_healing_bonus', 'healing_bonus'],
+        'character_shield_strength' => ['character_shield_strength', 'shield_strength'],
+        'character_luck' => ['character_luck', 'luck'],
+    ];
+    foreach ($statMap as $targetField => $candidates) {
+        foreach ($candidates as $candidate) {
+            if (!array_key_exists($candidate, $stats)) {
+                continue;
+            }
+            if (!is_scalar($stats[$candidate])) {
+                continue;
+            }
+            $prefill[$targetField] = trim((string)$stats[$candidate]);
+            break;
         }
     }
 
