@@ -4,6 +4,10 @@
             return false;
         }
 
+        if (String(field.getAttribute('data-af-kb-editor-policy') || '').toLowerCase() === 'allow') {
+            return true;
+        }
+
         var name = String(field.getAttribute('name') || '').trim().toLowerCase();
         if (!name) {
             return false;
@@ -2223,6 +2227,10 @@
                 input = document.createElement('input');
                 input.type = 'number';
                 input.value = value != null ? String(value) : '0';
+            } else if (def.type === 'url') {
+                input = document.createElement('input');
+                input.type = 'url';
+                input.value = value || '';
             } else if (def.type === 'select') {
                 input = document.createElement('select');
 
@@ -2305,6 +2313,9 @@
             }
 
             input.dataset.field = def.name;
+            if (def.editorPolicy) {
+                input.setAttribute('data-af-kb-editor-policy', def.editorPolicy);
+            }
 
             function commitValue() {
                 if (def.type === 'lines') {
@@ -2334,7 +2345,18 @@
                 }
             }
 
-            wrap.appendChild(input);
+            if (def.suffix && def.type === 'number') {
+                var suffixWrap = document.createElement('div');
+                suffixWrap.className = 'af-kb-input-suffix';
+                suffixWrap.appendChild(input);
+                var suffixText = document.createElement('span');
+                suffixText.className = 'af-kb-input-suffix__text';
+                suffixText.textContent = String(def.suffix);
+                suffixWrap.appendChild(suffixText);
+                wrap.appendChild(suffixWrap);
+            } else {
+                wrap.appendChild(input);
+            }
 
             if (def.hint) {
                 wrap.insertAdjacentHTML('beforeend', '<div class="af-kb-help">' + esc(def.hint) + '</div>');
@@ -3087,12 +3109,16 @@
                 slot: String(row.slot || ''),
                 damage_type: String(row.damage_type || ''),
                 targeting: String(row.targeting || ''),
+                value_mode: String(row.value_mode || ''),
                 range: numberOrZero(row.range != null ? row.range : 0),
                 cast_time: numberOrZero(row.cast_time != null ? row.cast_time : 0),
                 cooldown: numberOrZero(row.cooldown != null ? row.cooldown : 0),
-                duration: numberOrZero(row.duration != null ? row.duration : 0),
+                duration: String(row.duration != null ? row.duration : ''),
                 max_charges: numberOrZero(row.max_charges != null ? row.max_charges : 0),
                 level_cap: numberOrZero(row.level_cap != null ? row.level_cap : 0),
+                damage_value: numberOrZero(row.damage_value != null ? row.damage_value : 0),
+                shield_value: numberOrZero(row.shield_value != null ? row.shield_value : 0),
+                heal_value: numberOrZero(row.heal_value != null ? row.heal_value : 0),
                 ability_description: String(row.ability_description || ''),
                 resources: normalizeRows(row.resources, [
                     { key: 'op', default: 'spend' },
@@ -5008,36 +5034,71 @@
             }
 
             if (uiProfile === 'character') {
-                var abilityTypeOptions = ['active', 'passive', 'ultimate'];
-                var abilitySubtypeOptions = ['aura', 'summon', 'toggle', 'stance', 'field', 'support', 'counter', 'movement', 'custom'];
-                var abilitySlotOptions = ['basic', 'skill_1', 'skill_2', 'skill_3', 'support', 'ultimate', 'passive', 'custom'];
-                var abilityDamageTypeOptions = ['physical', 'fire', 'ice', 'water', 'electric', 'wind', 'earth', 'nature', 'light', 'dark', 'void', 'quantum', 'imaginary', 'aether', 'anomaly', 'ether', 'fusion', 'glacio', 'aero', 'havoc', 'spectro', 'dendro', 'pyro', 'hydro', 'electro', 'cryo', 'anemo', 'geo', 'lightning', 'slash', 'pierce', 'blunt', 'true', 'custom'];
-                var abilityTargetingOptions = ['self', 'single_enemy', 'single_ally', 'line', 'cone', 'aoe_ground', 'aoe_around_self', 'global', 'custom'];
+                var mechanicsOptionSets = (window.afKbArpgMechanicsOptionSets && typeof window.afKbArpgMechanicsOptionSets === 'object')
+                    ? window.afKbArpgMechanicsOptionSets
+                    : {};
+                var publicTypeOptions = (window.afKbArpgPublicTypeOptions && typeof window.afKbArpgPublicTypeOptions === 'object')
+                    ? window.afKbArpgPublicTypeOptions
+                    : {};
+                var mapOptionRows = function (rows, fallback) {
+                    var out = [];
+                    (Array.isArray(rows) ? rows : []).forEach(function (row) {
+                        if (row && typeof row === 'object') {
+                            var value = String(row.key != null ? row.key : (row.value != null ? row.value : '')).trim();
+                            if (!value) return;
+                            var label = String(row.label_ru != null ? row.label_ru : (row.label_en != null ? row.label_en : value));
+                            out.push({ value: value, label: label });
+                            return;
+                        }
+                        var primitiveValue = String(row || '').trim();
+                        if (!primitiveValue) return;
+                        out.push({ value: primitiveValue, label: primitiveValue });
+                    });
+                    if (out.length) return out;
+                    return (fallback || []).map(function (value) { return { value: String(value), label: String(value) }; });
+                };
+                var optionsFromPublicType = function (typeKey) {
+                    return mapOptionRows(publicTypeOptions[typeKey], []);
+                };
+                var optionsFromMechanics = function (setKey, fallback) {
+                    return mapOptionRows(mechanicsOptionSets[setKey], fallback || []);
+                };
+                var abilityTypeOptions = optionsFromMechanics('ability_type', ['active', 'passive', 'ultimate']);
+                var abilitySubtypeOptions = optionsFromMechanics('ability_subtype', ['strike', 'projectile', 'summon', 'buff', 'debuff', 'mobility', 'utility', 'healing', 'shield', 'control']);
+                var abilitySlotOptions = optionsFromMechanics('ability_slot', ['skill_1', 'skill_2', 'skill_3', 'skill_4', 'ultimate', 'passive', 'support', 'special']);
+                var abilityDamageTypeOptions = optionsFromMechanics('ability_damage_type', ['physical', 'elemental', 'true', 'healing', 'hybrid']);
+                var abilityTargetingOptions = optionsFromMechanics('ability_targeting', ['self', 'single_enemy', 'single_ally', 'line', 'cone', 'aoe_ground', 'aoe_around_self', 'global', 'custom']);
+                var abilityValueModeOptions = optionsFromMechanics('ability_value_mode', ['flat', 'percent', 'text']);
+                var characterGenderOptions = optionsFromMechanics('character_gender', ['male', 'female']);
+                var characterElementOptions = optionsFromPublicType('arpg_element');
+                var characterRaceOptions = optionsFromPublicType('arpg_origin');
+                var characterClassOptions = optionsFromPublicType('arpg_archetype');
+                var characterFactionOptions = optionsFromPublicType('arpg_faction');
                 var profileDefs = [
                     { name: 'category', label: 'Категория', type: 'select', options: ['canons', 'originals', 'roles'] },
-                    { name: 'character_pic', label: 'character_pic', type: 'text' },
-                    { name: 'character_prototype', label: 'character_prototype', type: 'text' },
-                    { name: 'character_name', label: 'character_name', type: 'text' },
-                    { name: 'character_name_ru', label: 'character_name_ru', type: 'text' },
-                    { name: 'character_nicknames', label: 'character_nicknames', type: 'text' },
-                    { name: 'character_element', label: 'character_element', type: 'text' },
-                    { name: 'character_gen', label: 'character_gen', type: 'text' },
-                    { name: 'character_race', label: 'character_race', type: 'text' },
-                    { name: 'character_class', label: 'character_class', type: 'text' },
-                    { name: 'character_faction', label: 'character_faction', type: 'text' },
-                    { name: 'character_app', label: 'character_app', type: 'textarea' }
+                    { name: 'character_pic', label: 'Изображение персонажа', type: 'url' },
+                    { name: 'character_prototype', label: 'Прототип', type: 'text' },
+                    { name: 'character_name', label: 'Имя (EN)', type: 'text' },
+                    { name: 'character_name_ru', label: 'Имя (RU)', type: 'text' },
+                    { name: 'character_nicknames', label: 'Прозвища', type: 'text' },
+                    { name: 'character_element', label: 'Стихия', type: 'select', options: characterElementOptions, allowEmpty: true, emptyLabel: '—' },
+                    { name: 'character_gen', label: 'Пол', type: 'select', options: characterGenderOptions, allowEmpty: true, emptyLabel: '—' },
+                    { name: 'character_race', label: 'Раса', type: 'select', options: characterRaceOptions, allowEmpty: true, emptyLabel: '—' },
+                    { name: 'character_class', label: 'Класс', type: 'select', options: characterClassOptions, allowEmpty: true, emptyLabel: '—' },
+                    { name: 'character_faction', label: 'Фракция', type: 'select', options: characterFactionOptions, allowEmpty: true, emptyLabel: '—' },
+                    { name: 'character_app', label: 'Внешность', type: 'textarea', editorPolicy: 'allow' }
                 ];
                 var statsDefs = [
                     { name: 'character_hp', label: 'HP', type: 'number' },
                     { name: 'character_defense', label: 'Defense', type: 'number' },
                     { name: 'character_attack_power', label: 'Attack power', type: 'number' },
-                    { name: 'character_element_damage_bonus', label: 'Element dmg bonus', type: 'number' },
-                    { name: 'character_crit_damage', label: 'Crit damage', type: 'number' },
-                    { name: 'character_healing_received_bonus', label: 'Healing received bonus', type: 'number' },
+                    { name: 'character_element_damage_bonus', label: 'Element dmg bonus', type: 'number', suffix: '%' },
+                    { name: 'character_crit_damage', label: 'Crit damage', type: 'number', suffix: '%' },
+                    { name: 'character_healing_received_bonus', label: 'Healing received bonus', type: 'number', suffix: '%' },
                     { name: 'character_elemental_mastery', label: 'Elemental mastery', type: 'number' },
-                    { name: 'character_healing_bonus', label: 'Healing bonus', type: 'number' },
-                    { name: 'character_shield_strength', label: 'Shield strength', type: 'number' },
-                    { name: 'character_luck', label: 'Luck', type: 'number' }
+                    { name: 'character_healing_bonus', label: 'Healing bonus', type: 'number', suffix: '%' },
+                    { name: 'character_shield_strength', label: 'Shield strength', type: 'number', suffix: '%' },
+                    { name: 'character_luck', label: 'Luck', type: 'number', suffix: '%' }
                 ];
 
                 var profileGrid = document.createElement('div');
@@ -5053,13 +5114,6 @@
                 var abilitiesBox = document.createElement('div');
                 abilitiesBox.className = 'af-kb-rule-card';
                 fields.profileLists.appendChild(abilitiesBox);
-                function renderAbilityNestedRows(container, title, rows, defs, seed) {
-                    var box = document.createElement('div');
-                    box.className = 'af-kb-rule-card';
-                    container.appendChild(box);
-                    renderObjectList(box, rows, title, defs, syncRawDebounced, seed);
-                }
-
                 function renderCharacterAbilities() {
                     abilitiesBox.innerHTML = '';
 
@@ -5107,24 +5161,21 @@
                         card.appendChild(title);
 
                         var coreDefs = [
-                            { name: 'slot_index', label: 'slot_index', type: 'number' },
-                            { name: 'ability_name', label: 'ability_name', type: 'text' },
-                            { name: 'icon_url', label: 'icon_url', type: 'text' },
-                            { name: 'icon_class', label: 'icon_class', type: 'text' },
-                            { name: 'type', label: 'type', type: 'select', options: abilityTypeOptions },
-                            { name: 'subtype', label: 'subtype', type: 'select', options: abilitySubtypeOptions },
-                            { name: 'slot', label: 'slot', type: 'select', options: abilitySlotOptions },
-                            { name: 'damage_type', label: 'damage_type', type: 'select', options: abilityDamageTypeOptions },
-                            { name: 'targeting', label: 'targeting', type: 'select', options: abilityTargetingOptions },
-                            { name: 'range', label: 'range', type: 'number' },
-                            { name: 'cast_time', label: 'cast_time', type: 'number' },
-                            { name: 'cooldown', label: 'cooldown', type: 'number' },
-                            { name: 'duration', label: 'duration', type: 'number' },
-                            { name: 'max_charges', label: 'max_charges', type: 'number' },
-                            { name: 'level_cap', label: 'level_cap', type: 'number' },
-                            { name: 'ability_description', label: 'ability_description', type: 'textarea' },
-                            { name: 'ability_kb_key', label: 'ability_kb_key', type: 'text' },
-                            { name: 'sortorder', label: 'sortorder', type: 'number' }
+                            { name: 'slot_index', label: 'Индекс слота', type: 'number' },
+                            { name: 'ability_name', label: 'Название способности', type: 'text' },
+                            { name: 'icon_url', label: 'Иконка', type: 'url' },
+                            { name: 'type', label: 'Тип', type: 'select', options: abilityTypeOptions, allowEmpty: true, emptyLabel: '—' },
+                            { name: 'subtype', label: 'Подтип', type: 'select', options: abilitySubtypeOptions, allowEmpty: true, emptyLabel: '—' },
+                            { name: 'slot', label: 'Слот', type: 'select', options: abilitySlotOptions, allowEmpty: true, emptyLabel: '—' },
+                            { name: 'damage_type', label: 'Тип урона', type: 'select', options: abilityDamageTypeOptions, allowEmpty: true, emptyLabel: '—' },
+                            { name: 'targeting', label: 'Цель', type: 'select', options: abilityTargetingOptions, allowEmpty: true, emptyLabel: '—' },
+                            { name: 'value_mode', label: 'Режим значения', type: 'select', options: abilityValueModeOptions, allowEmpty: true, emptyLabel: '—' },
+                            { name: 'range', label: 'Дальность', type: 'number' },
+                            { name: 'duration', label: 'Продолжительность', type: 'text' },
+                            { name: 'damage_value', label: 'Урон', type: 'number' },
+                            { name: 'shield_value', label: 'Щит', type: 'number' },
+                            { name: 'heal_value', label: 'Лечение', type: 'number' },
+                            { name: 'ability_description', label: 'Описание способности', type: 'textarea', editorPolicy: 'allow' }
                         ];
                         var coreGrid = document.createElement('div');
                         coreGrid.className = 'af-kb-row';
@@ -5134,67 +5185,6 @@
                             syncRawDebounced();
                         })); });
                         card.appendChild(coreGrid);
-
-                        renderAbilityNestedRows(card, 'resources', normalized.resources, [
-                            { name: 'op', label: 'op', type: 'text' },
-                            { name: 'resource_key', label: 'resource_key', type: 'text' },
-                            { name: 'value', label: 'value', type: 'number' },
-                            { name: 'per', label: 'per', type: 'text' },
-                            { name: 'duration', label: 'duration', type: 'number' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { op: 'spend', resource_key: '', value: 0, per: 'cast', duration: 0, notes: '' });
-                        renderAbilityNestedRows(card, 'effects', normalized.effects, [
-                            { name: 'kind', label: 'kind', type: 'text' },
-                            { name: 'damage_type', label: 'damage_type', type: 'select', options: abilityDamageTypeOptions },
-                            { name: 'targeting', label: 'targeting', type: 'select', options: abilityTargetingOptions },
-                            { name: 'value_mode', label: 'value_mode', type: 'text' },
-                            { name: 'value', label: 'value', type: 'number' },
-                            { name: 'formula_ref', label: 'formula_ref', type: 'text' },
-                            { name: 'duration', label: 'duration', type: 'number' },
-                            { name: 'hit_count', label: 'hit_count', type: 'number' },
-                            { name: 'status_key', label: 'status_key', type: 'text' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { kind: 'damage', damage_type: '', targeting: '', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' });
-                        renderAbilityNestedRows(card, 'modifiers', normalized.modifiers, [
-                            { name: 'stat_key', label: 'stat_key', type: 'text' },
-                            { name: 'mode', label: 'mode', type: 'text' },
-                            { name: 'value', label: 'value', type: 'number' },
-                            { name: 'duration', label: 'duration', type: 'number' },
-                            { name: 'condition_text', label: 'condition_text', type: 'text' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { stat_key: '', mode: 'flat', value: 0, duration: 0, condition_text: '', notes: '' });
-                        renderAbilityNestedRows(card, 'triggers', normalized.triggers, [
-                            { name: 'event', label: 'event', type: 'text' },
-                            { name: 'action_text', label: 'action_text', type: 'text' },
-                            { name: 'condition_text', label: 'condition_text', type: 'text' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { event: '', action_text: '', condition_text: '', notes: '' });
-                        renderAbilityNestedRows(card, 'conditions', normalized.conditions, [
-                            { name: 'condition_type', label: 'condition_type', type: 'text' },
-                            { name: 'value', label: 'value', type: 'text' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { condition_type: '', value: '', notes: '' });
-                        renderAbilityNestedRows(card, 'stacking', normalized.stacking, [
-                            { name: 'stack_key', label: 'stack_key', type: 'text' },
-                            { name: 'max_stacks', label: 'max_stacks', type: 'number' },
-                            { name: 'policy', label: 'policy', type: 'text' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { stack_key: '', max_stacks: 1, policy: '', notes: '' });
-                        renderAbilityNestedRows(card, 'upgrade_requirements', normalized.upgrade_requirements, [
-                            { name: 'level', label: 'level', type: 'number' },
-                            { name: 'required_item_key', label: 'required_item_key', type: 'text' },
-                            { name: 'required_qty', label: 'required_qty', type: 'number' },
-                            { name: 'required_currency_key', label: 'required_currency_key', type: 'text' },
-                            { name: 'required_currency_qty', label: 'required_currency_qty', type: 'number' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { level: 1, required_item_key: '', required_qty: 0, required_currency_key: '', required_currency_qty: 0, notes: '' });
-                        renderAbilityNestedRows(card, 'grants', normalized.grants, [
-                            { name: 'grant_type', label: 'grant_type', type: 'text' },
-                            { name: 'value', label: 'value', type: 'text' },
-                            { name: 'value_num', label: 'value_num', type: 'number' },
-                            { name: 'duration', label: 'duration', type: 'number' },
-                            { name: 'notes', label: 'notes', type: 'text' }
-                        ], { grant_type: '', value: '', value_num: 0, duration: 0, notes: '' });
 
                         var del = document.createElement('button');
                         del.type = 'button';
