@@ -4,11 +4,6 @@
             return false;
         }
 
-        var explicitPolicy = String(field.getAttribute('data-af-kb-editor-policy') || '').trim().toLowerCase();
-        if (explicitPolicy === 'allow') {
-            return true;
-        }
-
         var name = String(field.getAttribute('name') || '').trim().toLowerCase();
         if (!name) {
             return false;
@@ -744,6 +739,7 @@
         // Для ARPG верхний meta-ui блок не нужен:
         // там уже есть отдельный envelope, а реальные media-поля живут в обычной форме записи.
         if (detectKbMechanic() === 'arpg') {
+            root.innerHTML = '';
             return;
         }
 
@@ -934,10 +930,7 @@
         var rulesEditorEnabled = (typeSchema.ui_rules_editor !== false) && (typeSchema.rules_enabled !== false);
 
         function bindRawOnlyMode(message) {
-            var note = document.createElement('div');
-            note.className = 'af-kb-help';
-            note.textContent = message;
-            root.insertBefore(note, root.firstChild);
+            root.innerHTML = '<div class="af-kb-help">' + esc(message) + '</div>';
             syncRulesToMeta(readJson(getFieldValue(raw) || '{}', {}));
 
             var sync = function () {
@@ -2182,7 +2175,11 @@
         }
 
         if (mechanic === 'arpg') {
-            bindArpgMode();
+            if (typeSchema && typeSchema.rules_enabled === false) {
+                bindRawOnlyMode('ARPG тип "' + type + '" ещё не имеет готовой schema-поддержки. Доступен raw-режим с валидационной ошибкой на save.');
+            } else {
+                bindArpgMode();
+            }
             return;
         }
 
@@ -2198,97 +2195,6 @@
         }
 
         // ---------- Универсальные билд-блоки формы ----------
-        var kbTypeOptionsCache = {};
-
-        function resolveLocalizedLabel(row) {
-            var isRuUi = String((document.documentElement && document.documentElement.lang) || '').toLowerCase().indexOf('ru') === 0;
-            if (!row || typeof row !== 'object') {
-                return '';
-            }
-
-            var localized = isRuUi ? row.label_ru : row.label_en;
-            if (localized != null && String(localized).trim() !== '') {
-                return String(localized);
-            }
-
-            if (row.label != null && String(row.label).trim() !== '') {
-                return String(row.label);
-            }
-
-            return String(row.key != null ? row.key : '');
-        }
-
-        function getMechanicsSelectOptions(setKey) {
-            var map = (window && window.afKbArpgMechanicsOptionSets && typeof window.afKbArpgMechanicsOptionSets === 'object')
-                ? window.afKbArpgMechanicsOptionSets
-                : {};
-            var rows = Array.isArray(map[setKey]) ? map[setKey] : [];
-            var out = [];
-            rows.forEach(function (row) {
-                var value = String((row && row.key != null) ? row.key : '').trim();
-                if (!value) return;
-                out.push({ value: value, label: resolveLocalizedLabel(row) || value });
-            });
-            return out;
-        }
-
-        function populateSelectFromKbType(select, typeName, selectedValue, allowEmpty, emptyLabel) {
-            if (!select || !typeName) return;
-            var cacheKey = String(typeName).trim();
-            if (!cacheKey) return;
-
-            var applyRows = function (rows) {
-                while (select.options.length) {
-                    select.remove(0);
-                }
-
-                if (allowEmpty) {
-                    var emptyOption = document.createElement('option');
-                    emptyOption.value = '';
-                    emptyOption.textContent = emptyLabel || '—';
-                    select.appendChild(emptyOption);
-                }
-
-                rows.forEach(function (item) {
-                    var option = document.createElement('option');
-                    option.value = String(item.value);
-                    option.textContent = String(item.label);
-                    select.appendChild(option);
-                });
-
-                select.value = selectedValue != null ? String(selectedValue) : '';
-            };
-
-            if (kbTypeOptionsCache[cacheKey]) {
-                applyRows(kbTypeOptionsCache[cacheKey]);
-                return;
-            }
-
-            fetch(
-                afKbEndpoint('json_list', 'misc.php?action=kb_json_list')
-                + '&type=' + encodeURIComponent(cacheKey),
-                { credentials: 'same-origin' }
-            )
-                .then(function (res) { return res.json(); })
-                .then(function (payload) {
-                    var rows = [];
-                    if (payload && Array.isArray(payload.items)) {
-                        payload.items.forEach(function (item) {
-                            var key = String((item && item.key != null) ? item.key : '').trim();
-                            if (!key) return;
-                            var label = String((item && item.title != null) ? item.title : key).trim();
-                            rows.push({ value: key, label: label || key });
-                        });
-                    }
-                    kbTypeOptionsCache[cacheKey] = rows;
-                    applyRows(rows);
-                })
-                .catch(function () {
-                    kbTypeOptionsCache[cacheKey] = [];
-                    applyRows([]);
-                });
-        }
-
         function createInput(def, obj, onChange) {
             var wrap = document.createElement('div');
             var label = document.createElement('label');
@@ -2339,29 +2245,12 @@
                     input.appendChild(option);
                 });
 
-                var fallbackValue = '';
-                if (def.options && def.options.length) {
-                    if (def.options[0] && typeof def.options[0] === 'object') {
-                        fallbackValue = String(def.options[0].value != null ? def.options[0].value : '');
-                    } else {
-                        fallbackValue = String(def.options[0]);
-                    }
-                }
-                input.value = value != null ? String(value) : fallbackValue;
+                input.value = value != null ? String(value) : String((def.options && def.options[0]) || '');
                 obj[def.name] = input.value;
-            } else if (def.type === 'textarea_bb') {
-                input = document.createElement('textarea');
-                input.value = value || '';
-                input.classList.add('af-kb-plain-textarea');
-                input.setAttribute('data-af-kb-editor-policy', 'allow');
             } else if (def.type === 'checkbox') {
                 input = document.createElement('input');
                 input.type = 'checkbox';
                 input.checked = !!value;
-            } else if (def.type === 'url') {
-                input = document.createElement('input');
-                input.type = 'url';
-                input.value = value || '';
             } else if (def.type === 'fixed') {
                 input = document.createElement('input');
                 input.type = 'text';
@@ -2445,28 +2334,7 @@
                 }
             }
 
-            if (def.type === 'number' && def.suffix) {
-                var numberWrap = document.createElement('div');
-                numberWrap.className = 'af-kb-input-suffix';
-                numberWrap.appendChild(input);
-                var suffix = document.createElement('span');
-                suffix.className = 'af-kb-input-suffix__text';
-                suffix.textContent = String(def.suffix);
-                numberWrap.appendChild(suffix);
-                wrap.appendChild(numberWrap);
-            } else {
-                wrap.appendChild(input);
-            }
-
-            if (def.type === 'select' && def.optionsSource && def.optionsSource.kind === 'kb_type') {
-                populateSelectFromKbType(
-                    input,
-                    String(def.optionsSource.type || ''),
-                    value != null ? String(value) : '',
-                    !!def.allowEmpty,
-                    def.emptyLabel || '—'
-                );
-            }
+            wrap.appendChild(input);
 
             if (def.hint) {
                 wrap.insertAdjacentHTML('beforeend', '<div class="af-kb-help">' + esc(def.hint) + '</div>');
@@ -3212,19 +3080,20 @@
                 slot_index: slotIndex,
                 ability_name: String(row.ability_name || ''),
                 icon_url: String(row.icon_url || ''),
+                icon_class: String(row.icon_class || ''),
                 type: abilityType,
                 ability_type: abilityType,
                 subtype: String(row.subtype || ''),
                 slot: String(row.slot || ''),
                 damage_type: String(row.damage_type || ''),
                 targeting: String(row.targeting || ''),
-                value_mode: String(row.value_mode || 'flat'),
                 range: numberOrZero(row.range != null ? row.range : 0),
-                duration: String(row.duration != null ? row.duration : ''),
+                cast_time: numberOrZero(row.cast_time != null ? row.cast_time : 0),
+                cooldown: numberOrZero(row.cooldown != null ? row.cooldown : 0),
+                duration: numberOrZero(row.duration != null ? row.duration : 0),
+                max_charges: numberOrZero(row.max_charges != null ? row.max_charges : 0),
+                level_cap: numberOrZero(row.level_cap != null ? row.level_cap : 0),
                 ability_description: String(row.ability_description || ''),
-                damage_value: numberOrZero(row.damage_value != null ? row.damage_value : 0),
-                shield_value: numberOrZero(row.shield_value != null ? row.shield_value : 0),
-                heal_value: numberOrZero(row.heal_value != null ? row.heal_value : 0),
                 resources: normalizeRows(row.resources, [
                     { key: 'op', default: 'spend' },
                     { key: 'resource_key', default: '' },
@@ -3350,11 +3219,6 @@
                     aoe_around_self: { ru: 'Область вокруг себя', en: 'AoE around self' },
                     global: { ru: 'Глобальная', en: 'Global' },
                     custom: { ru: 'Пользовательская', en: 'Custom' }
-                },
-                value_mode: {
-                    flat: { ru: 'Плоское', en: 'Flat' },
-                    percent: { ru: 'Процент', en: 'Percent' },
-                    text: { ru: 'Текст', en: 'Text' }
                 }
             };
             var fieldLabels = isRuUi
@@ -3364,9 +3228,12 @@
                     slot: 'Слот',
                     damage_type: 'Тип урона',
                     targeting: 'Цель',
-                    value_mode: 'Режим',
                     range: 'Дальность',
-                    duration: 'Длительность'
+                    cast_time: 'Время каста',
+                    cooldown: 'Перезарядка',
+                    duration: 'Длительность',
+                    max_charges: 'Макс. заряды',
+                    level_cap: 'Предел уровня'
                 }
                 : {
                     type: 'Type',
@@ -3374,9 +3241,12 @@
                     slot: 'Slot',
                     damage_type: 'Damage type',
                     targeting: 'Targeting',
-                    value_mode: 'Value mode',
                     range: 'Range',
-                    duration: 'Duration'
+                    cast_time: 'Cast time',
+                    cooldown: 'Cooldown',
+                    duration: 'Duration',
+                    max_charges: 'Max charges',
+                    level_cap: 'Level cap'
                 };
             var resolveEnumLabel = function (dict, key) {
                 var cleanKey = String(key || '').trim();
@@ -3434,15 +3304,18 @@
                 ['slot', ability ? ability.slot : ''],
                 ['damage_type', ability ? ability.damage_type : ''],
                 ['targeting', ability ? ability.targeting : ''],
-                ['value_mode', ability ? ability.value_mode : ''],
                 ['range', ability ? ability.range : ''],
-                ['duration', ability ? ability.duration : '']
+                ['cast_time', ability ? ability.cast_time : ''],
+                ['cooldown', ability ? ability.cooldown : ''],
+                ['duration', ability ? ability.duration : ''],
+                ['max_charges', ability ? ability.max_charges : ''],
+                ['level_cap', ability ? ability.level_cap : '']
             ].forEach(function (pair) {
                 var key = pair[0];
                 var value = pair[1];
                 if (value == null || value === '') return;
                 if (typeof value === 'number' && value <= 0) return;
-                if (key === 'subtype' || key === 'slot' || key === 'damage_type' || key === 'targeting' || key === 'value_mode') {
+                if (key === 'subtype' || key === 'slot' || key === 'damage_type' || key === 'targeting') {
                     value = resolveEnumLabel(key, value);
                 }
                 addChip(fieldLabels[key] || key, value, false);
@@ -3455,7 +3328,10 @@
                 ['resources', ability ? ability.resources : []],
                 ['effects', ability ? ability.effects : []],
                 ['modifiers', ability ? ability.modifiers : []],
-                ['grants', ability ? ability.grants : []]
+                ['triggers', ability ? ability.triggers : []],
+                ['conditions', ability ? ability.conditions : []],
+                ['stacking', ability ? ability.stacking : []],
+                ['upgrade requirements', ability ? ability.upgrade_requirements : []]
             ].forEach(function (item) {
                 var count = Array.isArray(item[1]) ? item[1].length : 0;
                 if (!count) return;
@@ -3907,12 +3783,260 @@
 
         function sanitizePayloadByProfile(payload, profile) {
             var p = deepClone(payload || {});
-            if (!p.schema) p.schema = 'af_kb.rules.v1';
-            if (!p.type_profile) p.type_profile = expectedTypeProfile || profile || 'raw';
-            if (!p.version) p.version = '1.0';
+            p.schema = p.schema || 'af_kb.rules.v1';
+            p.type_profile = expectedTypeProfile || profile || p.type_profile || 'raw';
+            p.version = p.version || '1.0';
+
+            if (profile === 'skill') {
+                var skill = (p.skill && typeof p.skill === 'object') ? p.skill : {};
+                var keyStat = normalizeSkillStatValue(skill);
+                return {
+                    schema: p.schema,
+                    type_profile: expectedTypeProfile || 'skill',
+                    version: p.version,
+                    skill: {
+                        category: String(skill.category || 'general'),
+                        key_stat: keyStat || null,
+                        attribute: keyStat || null,
+                        rank_max: numberOrZero(skill.rank_max != null ? skill.rank_max : 4),
+                        armor_check_penalty: !!skill.armor_check_penalty,
+                        trained_only: !!skill.trained_only,
+                        notes: (typeof skill.notes === 'string') ? skill.notes : ''
+                    }
+                };
+            }
+
+            if (profile === 'spell') {
+                var s = (p.spell && typeof p.spell === 'object') ? p.spell : {};
+                var reqS = (s.requirements && typeof s.requirements === 'object') ? s.requirements : {};
+                if (!Array.isArray(reqS.tags_any)) reqS.tags_any = [];
+                if (!Array.isArray(reqS.tags_all)) reqS.tags_all = [];
+                if (reqS.level == null) reqS.level = 0;
+
+                return {
+                    schema: p.schema,
+                    type_profile: expectedTypeProfile || 'spell',
+                    version: p.version,
+                    spell: {
+                        tradition: String(s.tradition || ''),
+                        school: String(s.school || ''),
+                        level: numberOrZero(s.level != null ? s.level : 1),
+                        cast_time: String(s.cast_time || ''),
+                        range: String(s.range || ''),
+                        duration: String(s.duration || ''),
+                        cost: (s.cost && typeof s.cost === 'object') ? s.cost : {},
+                        traits: Array.isArray(s.traits) ? s.traits : [],
+                        effects: Array.isArray(s.effects) ? s.effects : [],
+                        requirements: reqS
+                    }
+                };
+            }
+
+            if (profile === 'item') {
+                var it = (p.item && typeof p.item === 'object') ? p.item : {};
+
+                // legacy mapping
+                if (!it.item_kind && it.item_type) {
+                    it.item_kind = it.item_type;
+                }
+
+                var reqI = (it.requirements && typeof it.requirements === 'object') ? it.requirements : {};
+                if (!Array.isArray(reqI.tags_any)) reqI.tags_any = [];
+                if (!Array.isArray(reqI.tags_all)) reqI.tags_all = [];
+                if (reqI.level == null) reqI.level = 0;
+
+                var onUse = (it.on_use && typeof it.on_use === 'object') ? it.on_use : {};
+                if (onUse.cooldown == null) onUse.cooldown = 0;
+                if (!onUse.cost || typeof onUse.cost !== 'object') onUse.cost = {};
+                if (!Array.isArray(onUse.effects)) onUse.effects = [];
+
+                var onEquip = (it.on_equip && typeof it.on_equip === 'object') ? it.on_equip : {};
+                if (!Array.isArray(onEquip.effects)) onEquip.effects = [];
+                if (!Array.isArray(onEquip.grants)) onEquip.grants = [];
+
+                var itemOut = deepClone(it);
+                itemOut.item_kind = normalizeItemKind(it.item_kind || 'gear');
+                itemOut.unique_role = String(it.unique_role || it.unique_base_kind || '');
+                itemOut.unique_base_kind = itemOut.unique_role;
+                itemOut.rarity = String(it.rarity || 'common');
+                itemOut.equip = {
+                    slot: String((it.equip && it.equip.slot) || it.slot || '').replace(/^consumable_/, 'support_'),
+                    armor: {
+                        ac_bonus: numberOrZero((it.equip && it.equip.armor && it.equip.armor.ac_bonus) != null ? it.equip.armor.ac_bonus : 0),
+                        armor_type: String((it.equip && it.equip.armor && it.equip.armor.armor_type) || 'light')
+                    }
+                };
+                itemOut.weapon = (it.weapon && typeof it.weapon === 'object') ? it.weapon : {};
+                itemOut.weapon.damage_bonus = numberOrZero(itemOut.weapon.damage_bonus != null ? itemOut.weapon.damage_bonus : 0);
+                itemOut.weapon.damage_type = String(itemOut.weapon.damage_type || 'kinetic');
+                itemOut.ammo = (it.ammo && typeof it.ammo === 'object') ? it.ammo : {};
+                itemOut.ammo.ammo_type = String(itemOut.ammo.ammo_type || '');
+                itemOut.ammo.damage_type = String(itemOut.ammo.damage_type || 'kinetic');
+                itemOut.ammo.damage_bonus = numberOrZero(itemOut.ammo.damage_bonus != null ? itemOut.ammo.damage_bonus : 0);
+                itemOut.gear = (it.gear && typeof it.gear === 'object') ? it.gear : {};
+                itemOut.gear.subtype = String(itemOut.gear.subtype || '');
+                itemOut.bonuses = normalizeItemBonusRows(Array.isArray(it.bonuses) ? it.bonuses : (Array.isArray(it.passive_bonuses) ? it.passive_bonuses : []));
+                var augmentationRaw = (it.augmentation && typeof it.augmentation === 'object') ? it.augmentation : ((it.cyberware && typeof it.cyberware === 'object') ? it.cyberware : {});
+                itemOut.augmentation = deepClone(augmentationRaw || {});
+                itemOut.augmentation.subtype = String(itemOut.augmentation.subtype || (itemOut.item_kind === 'augmentation' ? 'cybernetic' : ''));
+                itemOut.augmentation.slot = String(itemOut.augmentation.slot || '');
+                var itemOutUniqueRole = String(itemOut.unique_role || '').trim().toLowerCase();
+                var itemOutEffectiveKind = itemOut.item_kind === 'unique' ? (uniqueRoleToKind[itemOutUniqueRole] || '') : itemOut.item_kind;
+                if (!itemOut.augmentation.slot && isAugmentationSlot(itemOut.equip.slot) && (itemOut.item_kind === 'augmentation' || itemOutEffectiveKind === 'augmentation')) {
+                    itemOut.augmentation.slot = String(itemOut.equip.slot || '').trim();
+                    itemOut.equip.slot = '';
+                }
+                var legacyGrade = String(itemOut.augmentation.grade || '');
+                if (!legacyGrade && it.cyberware && typeof it.cyberware === 'object') {
+                    legacyGrade = String(it.cyberware.grade || '');
+                }
+                itemOut.augmentation.grade = legacyGrade;
+                itemOut.augmentation.humanity_cost_percent = Math.max(0, Math.min(100, numberOrZero(itemOut.augmentation.humanity_cost_percent != null ? itemOut.augmentation.humanity_cost_percent : 0)));
+                itemOut.augmentation.modifiers = Array.isArray(itemOut.augmentation.modifiers) ? itemOut.augmentation.modifiers.filter(function (row) { return row && row.type; }) : [];
+                itemOut.augmentation.effects = Array.isArray(itemOut.augmentation.effects) ? itemOut.augmentation.effects.filter(function (row) { return row && row.event && row.effect_type; }) : [];
+                itemOut.augmentation.grants = Array.isArray(itemOut.augmentation.grants) ? itemOut.augmentation.grants.filter(function (row) { return row && row.grant_type; }) : [];
+                itemOut.augmentation.requirements = (itemOut.augmentation.requirements && typeof itemOut.augmentation.requirements === 'object') ? itemOut.augmentation.requirements : {};
+                itemOut.augmentation.conflicts = (itemOut.augmentation.conflicts && typeof itemOut.augmentation.conflicts === 'object') ? itemOut.augmentation.conflicts : {};
+                itemOut.cyberware = deepClone(itemOut.augmentation);
+                itemOut.price = numberOrZero(it.price != null ? it.price : 0);
+                itemOut.currency = String(it.currency || 'credits');
+                itemOut.weight = numberOrZero(it.weight != null ? it.weight : 0);
+                itemOut.stack_max = numberOrZero(it.stack_max != null ? it.stack_max : 1);
+                itemOut.tags = Array.isArray(it.tags) ? it.tags : [];
+                itemOut.on_use = onUse;
+                itemOut.on_equip = onEquip;
+                itemOut.requirements = reqI;
+                return normalizeItemCanonical({ schema: 'af_kb.item.v2', type_profile: expectedTypeProfile || 'item', version: p.version, item: itemOut });
+            }
+
+            if (profile === 'knowledge') {
+                var skillK = (p.skill && typeof p.skill === 'object') ? p.skill : {};
+                var keyStatK = normalizeSkillStatValue(skillK);
+                return {
+                    schema: p.schema,
+                    type_profile: 'knowledge',
+                    version: p.version,
+                    knowledge_group: String(p.knowledge_group || ''),
+                    skill: {
+                        category: 'knowledge',
+                        key_stat: keyStatK || null,
+                        attribute: keyStatK || null,
+                        rank_max: numberOrZero(skillK.rank_max != null ? skillK.rank_max : 4),
+                        armor_check_penalty: !!skillK.armor_check_penalty,
+                        trained_only: !!skillK.trained_only,
+                        notes: (typeof skillK.notes === 'string') ? skillK.notes : ''
+                    }
+                };
+            }
+            if (profile === 'bestiary') {
+                var c = (p.creature && typeof p.creature === 'object') ? p.creature : {};
+                var hp = (c.hp && typeof c.hp === 'object') ? c.hp : {};
+                var speed = (c.speed && typeof c.speed === 'object') ? c.speed : {};
+                var as = (c.ability_scores && typeof c.ability_scores === 'object') ? c.ability_scores : {};
+                return {
+                    schema: p.schema,
+                    type_profile: expectedTypeProfile || 'bestiary',
+                    version: p.version,
+                    creature: {
+                        size: String(c.size || 'medium'),
+                        kind: String(c.kind || 'humanoid'),
+                        alignment: String(c.alignment || ''),
+                        challenge_rating: String(c.challenge_rating || '1'),
+                        xp: numberOrZero(c.xp != null ? c.xp : 0),
+                        proficiency_bonus: numberOrZero(c.proficiency_bonus != null ? c.proficiency_bonus : 2),
+                        armor_class: numberOrZero(c.armor_class != null ? c.armor_class : 10),
+                        initiative: numberOrZero(c.initiative != null ? c.initiative : 0),
+                        hp: {
+                            average: numberOrZero(hp.average != null ? hp.average : 10),
+                            dice: String(hp.dice || '2d8+2')
+                        },
+                        speed: {
+                            walk: numberOrZero(speed.walk != null ? speed.walk : 30)
+                        },
+                        ability_scores: {
+                            str: numberOrZero(as.str != null ? as.str : 10),
+                            dex: numberOrZero(as.dex != null ? as.dex : 10),
+                            con: numberOrZero(as.con != null ? as.con : 10),
+                            int: numberOrZero(as.int != null ? as.int : 10),
+                            wis: numberOrZero(as.wis != null ? as.wis : 10),
+                            cha: numberOrZero(as.cha != null ? as.cha : 10)
+                        },
+                        damage_vulnerabilities: Array.isArray(c.damage_vulnerabilities) ? c.damage_vulnerabilities : [],
+                        damage_resistances: Array.isArray(c.damage_resistances) ? c.damage_resistances : [],
+                        damage_immunities: Array.isArray(c.damage_immunities) ? c.damage_immunities : [],
+                        condition_immunities: Array.isArray(c.condition_immunities) ? c.condition_immunities : [],
+                        notes: String(c.notes || '')
+                    },
+                    traits: Array.isArray(p.traits) ? p.traits : [],
+                    actions: Array.isArray(p.actions) ? p.actions : [],
+                    reactions: Array.isArray(p.reactions) ? p.reactions : [],
+                    legendary_actions: Array.isArray(p.legendary_actions) ? p.legendary_actions : [],
+                    loot: Array.isArray(p.loot) ? p.loot : [],
+                    gm_notes: String(p.gm_notes || '')
+                };
+            }
+
+            if (profile === 'character') {
+                var profileC = (p.character_profile && typeof p.character_profile === 'object') ? p.character_profile : {};
+                var statsC = (p.character_stats && typeof p.character_stats === 'object') ? p.character_stats : {};
+                var metaC = (p.character_meta && typeof p.character_meta === 'object') ? p.character_meta : {};
+                var abilitiesC = Array.isArray(p.character_abilities) ? p.character_abilities : [];
+                return {
+                    schema: p.schema,
+                    type_profile: 'character',
+                    version: p.version,
+                    character_profile: {
+                        category: String(profileC.category || 'canons'),
+                        character_pic: String(profileC.character_pic || ''),
+                        character_prototype: String(profileC.character_prototype || ''),
+                        character_name: String(profileC.character_name || ''),
+                        character_name_ru: String(profileC.character_name_ru || ''),
+                        character_nicknames: String(profileC.character_nicknames || ''),
+                        character_element: String(profileC.character_element || ''),
+                        character_gen: String(profileC.character_gen || ''),
+                        character_race: String(profileC.character_race || ''),
+                        character_class: String(profileC.character_class || ''),
+                        character_faction: String(profileC.character_faction || ''),
+                        character_app: String(profileC.character_app || '')
+                    },
+                    character_stats: {
+                        character_hp: numberOrZero(statsC.character_hp != null ? statsC.character_hp : 0),
+                        character_defense: numberOrZero(statsC.character_defense != null ? statsC.character_defense : 0),
+                        character_element_damage_bonus: numberOrZero(statsC.character_element_damage_bonus != null ? statsC.character_element_damage_bonus : 0),
+                        character_crit_damage: numberOrZero(statsC.character_crit_damage != null ? statsC.character_crit_damage : 0),
+                        character_healing_received_bonus: numberOrZero(statsC.character_healing_received_bonus != null ? statsC.character_healing_received_bonus : 0),
+                        character_attack_power: numberOrZero(statsC.character_attack_power != null ? statsC.character_attack_power : 0),
+                        character_elemental_mastery: numberOrZero(statsC.character_elemental_mastery != null ? statsC.character_elemental_mastery : 0),
+                        character_healing_bonus: numberOrZero(statsC.character_healing_bonus != null ? statsC.character_healing_bonus : 0),
+                        character_shield_strength: numberOrZero(statsC.character_shield_strength != null ? statsC.character_shield_strength : 0),
+                        character_luck: numberOrZero(statsC.character_luck != null ? statsC.character_luck : 0)
+                    },
+                    character_abilities: abilitiesC.map(function (row) {
+                        return normalizeCharacterAbilityRow(row, 0);
+                    }),
+                    character_links: Array.isArray(p.character_links) ? p.character_links : [],
+                    character_meta: {
+                        contract: String(metaC.contract || 'af_kb.character.contract.v1'),
+                        contract_version: String(metaC.contract_version || '1.0'),
+                        source: String(metaC.source || 'kb_manual')
+                    }
+                };
+            }
+
+            if (profile === 'heritage') {
+                ['size', 'creature_type', 'speed', 'hp_base'].forEach(function (k) {
+                    if (p[k] === '') delete p[k];
+                });
+                if (typeof p.size !== 'string' || !p.size.trim()) delete p.size;
+                if (typeof p.creature_type !== 'string' || !p.creature_type.trim()) delete p.creature_type;
+                if (p.speed == null || p.speed === '') delete p.speed;
+                if (p.hp_base == null || p.hp_base === '') delete p.hp_base;
+                return p;
+            }
+
+            // прочие профили пока не режем жёстко
             return p;
         }
-
 
         function toPayload() {
             if (uiProfile === 'item') {
@@ -3938,6 +4062,8 @@
                     return out;
                 });
             }
+
+            payload = sanitizePayloadByProfile(payload, uiProfile);
 
             return payload;
         }
@@ -4882,38 +5008,36 @@
             }
 
             if (uiProfile === 'character') {
-                var abilityTypeOptions = getMechanicsSelectOptions('ability_type');
-                var abilitySubtypeOptions = getMechanicsSelectOptions('ability_subtype');
-                var abilitySlotOptions = getMechanicsSelectOptions('ability_slot');
-                var abilityDamageTypeOptions = getMechanicsSelectOptions('ability_damage_type');
-                var abilityTargetingOptions = getMechanicsSelectOptions('ability_targeting');
-                var abilityValueModeOptions = getMechanicsSelectOptions('ability_value_mode');
-                var genderOptions = getMechanicsSelectOptions('character_gender');
+                var abilityTypeOptions = ['active', 'passive', 'ultimate'];
+                var abilitySubtypeOptions = ['aura', 'summon', 'toggle', 'stance', 'field', 'support', 'counter', 'movement', 'custom'];
+                var abilitySlotOptions = ['basic', 'skill_1', 'skill_2', 'skill_3', 'support', 'ultimate', 'passive', 'custom'];
+                var abilityDamageTypeOptions = ['physical', 'fire', 'ice', 'water', 'electric', 'wind', 'earth', 'nature', 'light', 'dark', 'void', 'quantum', 'imaginary', 'aether', 'anomaly', 'ether', 'fusion', 'glacio', 'aero', 'havoc', 'spectro', 'dendro', 'pyro', 'hydro', 'electro', 'cryo', 'anemo', 'geo', 'lightning', 'slash', 'pierce', 'blunt', 'true', 'custom'];
+                var abilityTargetingOptions = ['self', 'single_enemy', 'single_ally', 'line', 'cone', 'aoe_ground', 'aoe_around_self', 'global', 'custom'];
                 var profileDefs = [
                     { name: 'category', label: 'Категория', type: 'select', options: ['canons', 'originals', 'roles'] },
-                    { name: 'character_pic', label: 'Изображение персонажа', type: 'url' },
-                    { name: 'character_prototype', label: 'Прототип', type: 'text' },
-                    { name: 'character_name', label: 'Имя (EN)', type: 'text' },
-                    { name: 'character_name_ru', label: 'Имя (RU)', type: 'text' },
-                    { name: 'character_nicknames', label: 'Прозвища', type: 'text' },
-                    { name: 'character_element', label: 'Стихия', type: 'select', allowEmpty: true, optionsSource: { kind: 'kb_type', type: 'arpg_element' } },
-                    { name: 'character_gen', label: 'Пол', type: 'select', allowEmpty: true, options: genderOptions },
-                    { name: 'character_race', label: 'Происхождение', type: 'select', allowEmpty: true, optionsSource: { kind: 'kb_type', type: 'arpg_origin' } },
-                    { name: 'character_class', label: 'Архетип', type: 'select', allowEmpty: true, optionsSource: { kind: 'kb_type', type: 'arpg_archetype' } },
-                    { name: 'character_faction', label: 'Фракция', type: 'select', allowEmpty: true, optionsSource: { kind: 'kb_type', type: 'arpg_faction' } },
-                    { name: 'character_app', label: 'Внешность', type: 'textarea_bb' }
+                    { name: 'character_pic', label: 'character_pic', type: 'text' },
+                    { name: 'character_prototype', label: 'character_prototype', type: 'text' },
+                    { name: 'character_name', label: 'character_name', type: 'text' },
+                    { name: 'character_name_ru', label: 'character_name_ru', type: 'text' },
+                    { name: 'character_nicknames', label: 'character_nicknames', type: 'text' },
+                    { name: 'character_element', label: 'character_element', type: 'text' },
+                    { name: 'character_gen', label: 'character_gen', type: 'text' },
+                    { name: 'character_race', label: 'character_race', type: 'text' },
+                    { name: 'character_class', label: 'character_class', type: 'text' },
+                    { name: 'character_faction', label: 'character_faction', type: 'text' },
+                    { name: 'character_app', label: 'character_app', type: 'textarea' }
                 ];
                 var statsDefs = [
                     { name: 'character_hp', label: 'HP', type: 'number' },
-                    { name: 'character_defense', label: 'Защита', type: 'number' },
-                    { name: 'character_attack_power', label: 'Сила атаки', type: 'number' },
-                    { name: 'character_element_damage_bonus', label: 'Бонус стихийного урона', type: 'number', suffix: '%' },
-                    { name: 'character_crit_damage', label: 'Критический урон', type: 'number', suffix: '%' },
-                    { name: 'character_healing_received_bonus', label: 'Бонус получаемого лечения', type: 'number', suffix: '%' },
-                    { name: 'character_elemental_mastery', label: 'Мастерство стихий', type: 'number' },
-                    { name: 'character_healing_bonus', label: 'Бонус лечения', type: 'number', suffix: '%' },
-                    { name: 'character_shield_strength', label: 'Прочность щита', type: 'number', suffix: '%' },
-                    { name: 'character_luck', label: 'Удача', type: 'number', suffix: '%' }
+                    { name: 'character_defense', label: 'Defense', type: 'number' },
+                    { name: 'character_attack_power', label: 'Attack power', type: 'number' },
+                    { name: 'character_element_damage_bonus', label: 'Element dmg bonus', type: 'number' },
+                    { name: 'character_crit_damage', label: 'Crit damage', type: 'number' },
+                    { name: 'character_healing_received_bonus', label: 'Healing received bonus', type: 'number' },
+                    { name: 'character_elemental_mastery', label: 'Elemental mastery', type: 'number' },
+                    { name: 'character_healing_bonus', label: 'Healing bonus', type: 'number' },
+                    { name: 'character_shield_strength', label: 'Shield strength', type: 'number' },
+                    { name: 'character_luck', label: 'Luck', type: 'number' }
                 ];
 
                 var profileGrid = document.createElement('div');
@@ -4929,6 +5053,13 @@
                 var abilitiesBox = document.createElement('div');
                 abilitiesBox.className = 'af-kb-rule-card';
                 fields.profileLists.appendChild(abilitiesBox);
+                function renderAbilityNestedRows(container, title, rows, defs, seed) {
+                    var box = document.createElement('div');
+                    box.className = 'af-kb-rule-card';
+                    container.appendChild(box);
+                    renderObjectList(box, rows, title, defs, syncRawDebounced, seed);
+                }
+
                 function renderCharacterAbilities() {
                     abilitiesBox.innerHTML = '';
 
@@ -4976,21 +5107,24 @@
                         card.appendChild(title);
 
                         var coreDefs = [
-                            { name: 'slot_index', label: 'Индекс слота', type: 'number' },
-                            { name: 'ability_name', label: 'Название способности', type: 'text' },
-                            { name: 'icon_url', label: 'Иконка', type: 'url' },
-                            { name: 'type', label: 'Тип', type: 'select', options: abilityTypeOptions },
-                            { name: 'subtype', label: 'Подтип', type: 'select', options: abilitySubtypeOptions, allowEmpty: true },
-                            { name: 'slot', label: 'Слот', type: 'select', options: abilitySlotOptions, allowEmpty: true },
-                            { name: 'damage_type', label: 'Тип урона', type: 'select', options: abilityDamageTypeOptions, allowEmpty: true },
-                            { name: 'targeting', label: 'Цель', type: 'select', options: abilityTargetingOptions, allowEmpty: true },
-                            { name: 'value_mode', label: 'Режим значения', type: 'select', options: abilityValueModeOptions, allowEmpty: true },
-                            { name: 'range', label: 'Дальность', type: 'number' },
-                            { name: 'duration', label: 'Продолжительность', type: 'text' },
-                            { name: 'damage_value', label: 'Урон', type: 'number' },
-                            { name: 'shield_value', label: 'Щит', type: 'number' },
-                            { name: 'heal_value', label: 'Лечение', type: 'number' },
-                            { name: 'ability_description', label: 'Описание способности', type: 'textarea_bb' }
+                            { name: 'slot_index', label: 'slot_index', type: 'number' },
+                            { name: 'ability_name', label: 'ability_name', type: 'text' },
+                            { name: 'icon_url', label: 'icon_url', type: 'text' },
+                            { name: 'icon_class', label: 'icon_class', type: 'text' },
+                            { name: 'type', label: 'type', type: 'select', options: abilityTypeOptions },
+                            { name: 'subtype', label: 'subtype', type: 'select', options: abilitySubtypeOptions },
+                            { name: 'slot', label: 'slot', type: 'select', options: abilitySlotOptions },
+                            { name: 'damage_type', label: 'damage_type', type: 'select', options: abilityDamageTypeOptions },
+                            { name: 'targeting', label: 'targeting', type: 'select', options: abilityTargetingOptions },
+                            { name: 'range', label: 'range', type: 'number' },
+                            { name: 'cast_time', label: 'cast_time', type: 'number' },
+                            { name: 'cooldown', label: 'cooldown', type: 'number' },
+                            { name: 'duration', label: 'duration', type: 'number' },
+                            { name: 'max_charges', label: 'max_charges', type: 'number' },
+                            { name: 'level_cap', label: 'level_cap', type: 'number' },
+                            { name: 'ability_description', label: 'ability_description', type: 'textarea' },
+                            { name: 'ability_kb_key', label: 'ability_kb_key', type: 'text' },
+                            { name: 'sortorder', label: 'sortorder', type: 'number' }
                         ];
                         var coreGrid = document.createElement('div');
                         coreGrid.className = 'af-kb-row';
@@ -5000,6 +5134,67 @@
                             syncRawDebounced();
                         })); });
                         card.appendChild(coreGrid);
+
+                        renderAbilityNestedRows(card, 'resources', normalized.resources, [
+                            { name: 'op', label: 'op', type: 'text' },
+                            { name: 'resource_key', label: 'resource_key', type: 'text' },
+                            { name: 'value', label: 'value', type: 'number' },
+                            { name: 'per', label: 'per', type: 'text' },
+                            { name: 'duration', label: 'duration', type: 'number' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { op: 'spend', resource_key: '', value: 0, per: 'cast', duration: 0, notes: '' });
+                        renderAbilityNestedRows(card, 'effects', normalized.effects, [
+                            { name: 'kind', label: 'kind', type: 'text' },
+                            { name: 'damage_type', label: 'damage_type', type: 'select', options: abilityDamageTypeOptions },
+                            { name: 'targeting', label: 'targeting', type: 'select', options: abilityTargetingOptions },
+                            { name: 'value_mode', label: 'value_mode', type: 'text' },
+                            { name: 'value', label: 'value', type: 'number' },
+                            { name: 'formula_ref', label: 'formula_ref', type: 'text' },
+                            { name: 'duration', label: 'duration', type: 'number' },
+                            { name: 'hit_count', label: 'hit_count', type: 'number' },
+                            { name: 'status_key', label: 'status_key', type: 'text' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { kind: 'damage', damage_type: '', targeting: '', value_mode: 'flat', value: 0, formula_ref: '', duration: 0, hit_count: 1, status_key: '', notes: '' });
+                        renderAbilityNestedRows(card, 'modifiers', normalized.modifiers, [
+                            { name: 'stat_key', label: 'stat_key', type: 'text' },
+                            { name: 'mode', label: 'mode', type: 'text' },
+                            { name: 'value', label: 'value', type: 'number' },
+                            { name: 'duration', label: 'duration', type: 'number' },
+                            { name: 'condition_text', label: 'condition_text', type: 'text' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { stat_key: '', mode: 'flat', value: 0, duration: 0, condition_text: '', notes: '' });
+                        renderAbilityNestedRows(card, 'triggers', normalized.triggers, [
+                            { name: 'event', label: 'event', type: 'text' },
+                            { name: 'action_text', label: 'action_text', type: 'text' },
+                            { name: 'condition_text', label: 'condition_text', type: 'text' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { event: '', action_text: '', condition_text: '', notes: '' });
+                        renderAbilityNestedRows(card, 'conditions', normalized.conditions, [
+                            { name: 'condition_type', label: 'condition_type', type: 'text' },
+                            { name: 'value', label: 'value', type: 'text' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { condition_type: '', value: '', notes: '' });
+                        renderAbilityNestedRows(card, 'stacking', normalized.stacking, [
+                            { name: 'stack_key', label: 'stack_key', type: 'text' },
+                            { name: 'max_stacks', label: 'max_stacks', type: 'number' },
+                            { name: 'policy', label: 'policy', type: 'text' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { stack_key: '', max_stacks: 1, policy: '', notes: '' });
+                        renderAbilityNestedRows(card, 'upgrade_requirements', normalized.upgrade_requirements, [
+                            { name: 'level', label: 'level', type: 'number' },
+                            { name: 'required_item_key', label: 'required_item_key', type: 'text' },
+                            { name: 'required_qty', label: 'required_qty', type: 'number' },
+                            { name: 'required_currency_key', label: 'required_currency_key', type: 'text' },
+                            { name: 'required_currency_qty', label: 'required_currency_qty', type: 'number' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { level: 1, required_item_key: '', required_qty: 0, required_currency_key: '', required_currency_qty: 0, notes: '' });
+                        renderAbilityNestedRows(card, 'grants', normalized.grants, [
+                            { name: 'grant_type', label: 'grant_type', type: 'text' },
+                            { name: 'value', label: 'value', type: 'text' },
+                            { name: 'value_num', label: 'value_num', type: 'number' },
+                            { name: 'duration', label: 'duration', type: 'number' },
+                            { name: 'notes', label: 'notes', type: 'text' }
+                        ], { grant_type: '', value: '', value_num: 0, duration: 0, notes: '' });
 
                         var del = document.createElement('button');
                         del.type = 'button';
@@ -5079,6 +5274,10 @@
                 // заменяем state и заново нормализуем по профилю через merged-подход.
                 var next = merge3(defaultsForProfile(uiProfile, expectedTypeProfile), schemaDefaults, parsed);
                 state = deepClone(next);
+                // чистим raw/дефолты от мусора по профилю
+                state = sanitizePayloadByProfile(state, uiProfile);
+
+
                 // re-normalize by profile (минимум, чтобы UI не падал)
                 if (uiProfile === 'heritage') {
                     if (!state.fixed_bonuses) state.fixed_bonuses = { stats: {} };
