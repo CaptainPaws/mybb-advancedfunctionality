@@ -1929,74 +1929,10 @@ function af_kb_seed_defaults(): void
             continue;
         }
 
-        $update = [];
-
-        if ((string)($existing['type_key'] ?? '') === '') {
-            $update['type_key'] = $db->escape_string($defaultRow['type_key']);
-        }
-        $expectedMechanic = (string)($defaultRow['mechanic_key'] ?? AF_KB_DEFAULT_MECHANIC_KEY);
-        if (
-            (string)($existing['mechanic_key'] ?? '') === ''
-            || ($typeKey === 'character' && (string)($existing['mechanic_key'] ?? '') !== $expectedMechanic)
-        ) {
-            $update['mechanic_key'] = $db->escape_string($expectedMechanic);
-        }
-
-        $existingRulesSchema = trim((string)($existing['rules_schema'] ?? ''));
-        if ($existingRulesSchema === '' || $existingRulesSchema !== $defaultRulesSchema) {
-            $update['rules_schema'] = $db->escape_string($defaultRulesSchema);
-        }
-
-        $existingUiSchema = trim((string)($existing['ui_schema_json'] ?? ''));
-        if (
-            $existingUiSchema === ''
-            || $existingUiSchema === '{}'
-            || $existingUiSchema === '[]'
-            || $typeKey === 'item'
-            || $typeKey === 'character'
-        ) {
-            $update['ui_schema_json'] = $db->escape_string($defaultRow['ui_schema_json']);
-        }
-        if (
-            $typeKey === 'character'
-            && (
-                (int)($existing['active'] ?? 1) !== 1
-                || (int)($existing['is_active'] ?? ($existing['active'] ?? 1)) !== 1
-            )
-        ) {
-            $update['active'] = 1;
-            $update['is_active'] = 1;
-        }
-
-        if (!empty($update)) {
-            $update['updated_at'] = TIME_NOW;
-            $db->update_query('af_kb_types', $update, 'id='.(int)$existing['id']);
-        }
+        continue;
     }
 
     if ($db->table_exists('af_kb_item_kinds')) {
-        $canonicalKinds = [];
-        foreach (af_kb_default_item_kind_definitions() as $row) {
-            $canonicalKinds[(string)$row['kind_key']] = true;
-        }
-        $deprecatedKinds = ['cyberware', 'implant', 'weapon_offhand', 'helmet'];
-
-        foreach ($deprecatedKinds as $deprecatedKind) {
-            $normalizedKind = af_kb_normalize_item_kind($deprecatedKind);
-            if ($normalizedKind === $deprecatedKind || empty($canonicalKinds[$normalizedKind])) {
-                continue;
-            }
-            $db->update_query('af_kb_item_kinds', [
-                'is_active' => 0,
-                'updated_at' => TIME_NOW,
-            ], "kind_key='".$db->escape_string($deprecatedKind)."'");
-            if ($db->table_exists('af_kb_entries')) {
-                $db->update_query('af_kb_entries', [
-                    'item_kind' => $db->escape_string($normalizedKind),
-                ], "item_kind='".$db->escape_string($deprecatedKind)."'");
-            }
-        }
-
         foreach (af_kb_default_item_kind_definitions() as $row) {
             $existing = $db->fetch_array($db->simple_select('af_kb_item_kinds', '*', "kind_key='".$db->escape_string($row['kind_key'])."'", ['limit' => 1]));
             if (!$existing) {
@@ -2012,13 +1948,6 @@ function af_kb_seed_defaults(): void
                     'updated_at' => TIME_NOW,
                 ]);
                 continue;
-            }
-            $kindSchema = trim((string)($existing['ui_schema_json'] ?? ''));
-            if ($kindSchema === '' || $kindSchema === '{}' || $kindSchema === '[]') {
-                $db->update_query('af_kb_item_kinds', [
-                    'ui_schema_json' => $db->escape_string($row['ui_schema_json']),
-                    'updated_at' => TIME_NOW,
-                ], 'id='.(int)$existing['id']);
             }
         }
     }
@@ -2104,22 +2033,8 @@ function af_kb_seed_arpg_types(): void
             continue;
         }
 
-        $update = [
-            'mechanic_key' => $db->escape_string('arpg'),
-            'rules_schema' => $db->escape_string((string)($defaultRow['rules_schema'] ?? AF_KB_ARPG_META_SCHEMA)),
-            'active' => (int)($defaultRow['is_active'] ?? 1),
-            'is_active' => (int)($defaultRow['is_active'] ?? 1),
-            'sortorder' => 100 + $idx,
-            'updated_at' => TIME_NOW,
-        ];
-        $existingUiSchema = trim((string)($existing['ui_schema_json'] ?? ''));
-        if ($existingUiSchema === '' || $existingUiSchema === '{}' || $existingUiSchema === '[]') {
-            $update['ui_schema_json'] = $db->escape_string((string)($defaultRow['ui_schema_json'] ?? '{}'));
-        }
-        $db->update_query('af_kb_types', $update, 'id='.(int)$existing['id']);
+        continue;
     }
-
-    af_kb_reorganize_arpg_entries_and_types();
 }
 
 function af_kb_seed_arpg_elements(): void
@@ -2478,6 +2393,15 @@ function af_kb_character_profile_resolved_value(string $field, string $value, bo
         'character_faction' => 'arpg_faction',
         'character_element' => 'arpg_element',
     ];
+    $mechanicsMap = [
+        'character_gen' => 'character_gender',
+    ];
+
+    $mechanicsSet = (string)($mechanicsMap[$field] ?? '');
+    if ($mechanicsSet !== '') {
+        return af_kb_get_arpg_mechanics_option_label($mechanicsSet, $value, $isRu);
+    }
+
     $type = (string)($map[$field] ?? '');
     if ($type === '') {
         return $value;
@@ -7675,6 +7599,22 @@ function af_kb_arpg_inline_label(string $dict, string $key, bool $isRu): string
         return '';
     }
 
+    $mechanicsMap = [
+        'type' => 'ability_type',
+        'subtype' => 'ability_subtype',
+        'slot' => 'ability_slot',
+        'damage_type' => 'ability_damage_type',
+        'targeting' => 'ability_targeting',
+        'value_mode' => 'ability_value_mode',
+    ];
+    $setKey = (string)($mechanicsMap[$dict] ?? '');
+    if ($setKey !== '') {
+        $mechanicLabel = af_kb_get_arpg_mechanics_option_label($setKey, $cleanKey, $isRu);
+        if ($mechanicLabel !== '' && $mechanicLabel !== $cleanKey) {
+            return $mechanicLabel;
+        }
+    }
+
     $registry = af_kb_arpg_inline_enum_registry();
     $dictRows = (array)($registry[$dict] ?? []);
     $row = (array)($dictRows[$cleanKey] ?? []);
@@ -7766,6 +7706,7 @@ function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
         'slot' => $isRu ? 'Слот' : 'Slot',
         'damage_type' => $isRu ? 'Тип урона' : 'Damage type',
         'targeting' => $isRu ? 'Цель' : 'Targeting',
+        'value_mode' => $isRu ? 'Режим значения' : 'Value mode',
     ];
     foreach ($fieldMap as $key => $label) {
         $value = af_kb_arpg_inline_label($key, (string)($row[$key] ?? ''), $isRu);
@@ -7783,6 +7724,19 @@ function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
         'level_cap' => $isRu ? 'Предел уровня' : 'Level cap',
     ];
     foreach ($numericFieldMap as $key => $label) {
+        $raw = $row[$key] ?? null;
+        if (!is_numeric($raw) || (float)$raw <= 0) {
+            continue;
+        }
+        $chips[] = '<span class="af-kb-char-ability__chip"><strong>' . htmlspecialchars_uni($label) . ':</strong> ' . htmlspecialchars_uni(af_kb_arpg_inline_number($raw)) . '</span>';
+    }
+
+    $impactFieldMap = [
+        'damage_value' => $isRu ? 'Урон' : 'Damage',
+        'shield_value' => $isRu ? 'Щит' : 'Shield',
+        'heal_value' => $isRu ? 'Лечение' : 'Heal',
+    ];
+    foreach ($impactFieldMap as $key => $label) {
         $raw = $row[$key] ?? null;
         if (!is_numeric($raw) || (float)$raw <= 0) {
             continue;
