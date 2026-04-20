@@ -555,13 +555,16 @@
       const blocks = AF_ATF.qsa(".af-atf-abilities");
       if (!blocks.length) return;
 
-      const createAbility = (seed) => ({
-        ability_name: String((seed && seed.ability_name) || ""),
-        ability_type: (seed && seed.ability_type) === "passive" ? "passive" : "active",
-        ability_description: String((seed && seed.ability_description) || ""),
-        ability_kb_key: String((seed && seed.ability_kb_key) || ""),
-        sortorder: Number.isFinite(Number(seed && seed.sortorder)) ? Number(seed.sortorder) : 0
-      });
+      const createAbility = (seed) => {
+        const source = seed && typeof seed === "object" ? seed : {};
+        const ability = { ...source };
+        ability.ability_name = String(source.ability_name || "");
+        ability.ability_type = source.ability_type === "passive" ? "passive" : "active";
+        ability.ability_description = String(source.ability_description || "");
+        ability.ability_kb_key = String(source.ability_kb_key || "");
+        ability.sortorder = Number.isFinite(Number(source.sortorder)) ? Number(source.sortorder) : 0;
+        return ability;
+      };
 
       blocks.forEach((wrap) => {
         if (wrap.__afAbilitiesInited) return;
@@ -608,6 +611,7 @@
 
             const setValue = () => {
               state[index] = createAbility({
+                ...(state[index] || {}),
                 ability_name: AF_ATF.qs(".af-atf-ability-name", row).value,
                 ability_type: AF_ATF.qs(".af-atf-ability-type", row).value,
                 ability_description: AF_ATF.qs(".af-atf-ability-description", row).value,
