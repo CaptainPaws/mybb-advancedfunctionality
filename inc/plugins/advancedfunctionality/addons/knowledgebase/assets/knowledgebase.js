@@ -1843,6 +1843,8 @@
                     return {
                         slot_index: slotIndex,
                         ability_name: String(source.ability_name || ''),
+                        icon_url: String(source.icon_url || ''),
+                        icon_class: String(source.icon_class || ''),
                         type: abilityType,
                         ability_type: abilityType,
                         subtype: String(source.subtype || ''),
@@ -1882,6 +1884,31 @@
                             { key: 'value', type: 'number', default: 0 },
                             { key: 'duration', type: 'number', default: 0 },
                             { key: 'condition_text', default: '' },
+                            { key: 'notes', default: '' }
+                        ]),
+                        triggers: normalizeRows(source.triggers, [
+                            { key: 'event', default: '' },
+                            { key: 'action_text', default: '' },
+                            { key: 'condition_text', default: '' },
+                            { key: 'notes', default: '' }
+                        ]),
+                        conditions: normalizeRows(source.conditions, [
+                            { key: 'condition_type', default: '' },
+                            { key: 'value', default: '' },
+                            { key: 'notes', default: '' }
+                        ]),
+                        stacking: normalizeRows(source.stacking, [
+                            { key: 'stack_key', default: '' },
+                            { key: 'max_stacks', type: 'number', default: 1 },
+                            { key: 'policy', default: '' },
+                            { key: 'notes', default: '' }
+                        ]),
+                        upgrade_requirements: normalizeRows(source.upgrade_requirements, [
+                            { key: 'level', type: 'number', default: 1 },
+                            { key: 'required_item_key', default: '' },
+                            { key: 'required_qty', type: 'number', default: 0 },
+                            { key: 'required_currency_key', default: '' },
+                            { key: 'required_currency_qty', type: 'number', default: 0 },
                             { key: 'notes', default: '' }
                         ]),
                         grants: normalizeRows(source.grants, [
@@ -1969,6 +1996,15 @@
                             card.className = 'af-kb-block-item';
                             list.appendChild(card);
 
+                            var summary = document.createElement('div');
+                            card.appendChild(summary);
+                            var refreshSummary = function () {
+                                renderInlineAbilitySummary(summary, normalized, idx, 'Ability');
+                            };
+                            refreshSummary();
+                            card.addEventListener('input', refreshSummary);
+                            card.addEventListener('change', refreshSummary);
+
                             var title = document.createElement('h4');
                             title.textContent = 'Ability #' + (idx + 1);
                             card.appendChild(title);
@@ -1978,6 +2014,8 @@
                             [
                                 { key: 'slot_index', label: 'slot_index', type: 'number', default: 1 },
                                 { key: 'ability_name', label: 'ability_name', default: '' },
+                                { key: 'icon_url', label: 'icon_url', default: '' },
+                                { key: 'icon_class', label: 'icon_class', default: '' },
                                 { key: 'type', label: 'type', type: 'select', options: ['active', 'passive', 'ultimate'] },
                                 { key: 'subtype', label: 'subtype', type: 'select', options: enums.abilitySubtype },
                                 { key: 'slot', label: 'slot', type: 'select', options: enums.abilitySlot },
@@ -1992,9 +2030,17 @@
                                 { key: 'ability_kb_key', label: 'ability_kb_key', default: '' },
                                 { key: 'sortorder', label: 'sortorder', type: 'number', default: 0 },
                                 { key: 'notes', label: 'notes', default: '' }
-                            ].forEach(function (col) { coreGrid.appendChild(fieldCell(normalized, col, syncToRaw)); });
+                            ].forEach(function (col) { coreGrid.appendChild(fieldCell(normalized, col, function () { refreshSummary(); syncToRaw(); })); });
                             card.appendChild(coreGrid);
 
+                            renderBestiaryNestedRows(card, 'resources', normalized.resources, [
+                                { name: 'op', label: 'op', type: 'text' },
+                                { name: 'resource_key', label: 'resource_key', type: 'text' },
+                                { name: 'value', label: 'value', type: 'number' },
+                                { name: 'per', label: 'per', type: 'text' },
+                                { name: 'duration', label: 'duration', type: 'number' },
+                                { name: 'notes', label: 'notes', type: 'text' }
+                            ], { op: 'spend', resource_key: '', value: 0, per: 'cast', duration: 0, notes: '' });
                             renderBestiaryNestedRows(card, 'effects', normalized.effects, [
                                 { name: 'kind', label: 'kind', type: 'select', options: enums.effectKind },
                                 { name: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType },
@@ -2015,6 +2061,31 @@
                                 { name: 'condition_text', label: 'condition_text', type: 'text' },
                                 { name: 'notes', label: 'notes', type: 'text' }
                             ], { stat_key: '', mode: 'flat', value: 0, duration: 0, condition_text: '', notes: '' });
+                            renderBestiaryNestedRows(card, 'triggers', normalized.triggers, [
+                                { name: 'event', label: 'event', type: 'text' },
+                                { name: 'action_text', label: 'action_text', type: 'text' },
+                                { name: 'condition_text', label: 'condition_text', type: 'text' },
+                                { name: 'notes', label: 'notes', type: 'text' }
+                            ], { event: '', action_text: '', condition_text: '', notes: '' });
+                            renderBestiaryNestedRows(card, 'conditions', normalized.conditions, [
+                                { name: 'condition_type', label: 'condition_type', type: 'text' },
+                                { name: 'value', label: 'value', type: 'text' },
+                                { name: 'notes', label: 'notes', type: 'text' }
+                            ], { condition_type: '', value: '', notes: '' });
+                            renderBestiaryNestedRows(card, 'stacking', normalized.stacking, [
+                                { name: 'stack_key', label: 'stack_key', type: 'text' },
+                                { name: 'max_stacks', label: 'max_stacks', type: 'number' },
+                                { name: 'policy', label: 'policy', type: 'text' },
+                                { name: 'notes', label: 'notes', type: 'text' }
+                            ], { stack_key: '', max_stacks: 1, policy: '', notes: '' });
+                            renderBestiaryNestedRows(card, 'upgrade_requirements', normalized.upgrade_requirements, [
+                                { name: 'level', label: 'level', type: 'number' },
+                                { name: 'required_item_key', label: 'required_item_key', type: 'text' },
+                                { name: 'required_qty', label: 'required_qty', type: 'number' },
+                                { name: 'required_currency_key', label: 'required_currency_key', type: 'text' },
+                                { name: 'required_currency_qty', label: 'required_currency_qty', type: 'number' },
+                                { name: 'notes', label: 'notes', type: 'text' }
+                            ], { level: 1, required_item_key: '', required_qty: 0, required_currency_key: '', required_currency_qty: 0, notes: '' });
                             renderBestiaryNestedRows(card, 'grants', normalized.grants, [
                                 { name: 'grant_type', label: 'grant_type', type: 'select', options: enums.grantType },
                                 { name: 'value', label: 'value', type: 'text' },
@@ -3008,6 +3079,8 @@
             return {
                 slot_index: slotIndex,
                 ability_name: String(row.ability_name || ''),
+                icon_url: String(row.icon_url || ''),
+                icon_class: String(row.icon_class || ''),
                 type: abilityType,
                 ability_type: abilityType,
                 subtype: String(row.subtype || ''),
@@ -3085,6 +3158,93 @@
                 sortorder: sort
             };
         }
+
+        function renderInlineAbilitySummary(container, ability, idx, titlePrefix) {
+            container.innerHTML = '';
+            container.className = 'af-kb-inline-ability-summary';
+            var iconWrap = document.createElement('div');
+            iconWrap.className = 'af-kb-inline-ability-summary__icon';
+            var iconUrl = String((ability && ability.icon_url) || '').trim();
+            var iconClass = String((ability && ability.icon_class) || '').trim();
+            if (iconUrl) {
+                var img = document.createElement('img');
+                img.src = iconUrl;
+                img.alt = '';
+                img.loading = 'lazy';
+                iconWrap.appendChild(img);
+            } else if (iconClass) {
+                var icon = document.createElement('i');
+                icon.className = iconClass;
+                icon.setAttribute('aria-hidden', 'true');
+                iconWrap.appendChild(icon);
+            } else {
+                var fallback = document.createElement('span');
+                fallback.className = 'af-kb-inline-ability-summary__icon-fallback';
+                fallback.textContent = '∅';
+                iconWrap.appendChild(fallback);
+            }
+            container.appendChild(iconWrap);
+
+            var body = document.createElement('div');
+            body.className = 'af-kb-inline-ability-summary__body';
+            container.appendChild(body);
+
+            var title = document.createElement('div');
+            title.className = 'af-kb-inline-ability-summary__title';
+            title.textContent = String((ability && ability.ability_name) || '').trim() || ((titlePrefix || 'Ability') + ' #' + (idx + 1));
+            body.appendChild(title);
+
+            var chips = document.createElement('div');
+            chips.className = 'af-kb-inline-ability-summary__chips';
+            body.appendChild(chips);
+            var addChip = function (label, value, always) {
+                var out = String(value != null ? value : '').trim();
+                if (!always && out === '') return;
+                var chip = document.createElement('span');
+                chip.className = 'af-kb-inline-ability-summary__chip';
+                chip.textContent = out !== '' ? (label + ': ' + out) : label;
+                chips.appendChild(chip);
+            };
+            addChip('type', String((ability && (ability.type || ability.ability_type)) || 'active') || 'active', true);
+            [
+                ['subtype', ability ? ability.subtype : ''],
+                ['slot', ability ? ability.slot : ''],
+                ['damage_type', ability ? ability.damage_type : ''],
+                ['targeting', ability ? ability.targeting : ''],
+                ['range', ability ? ability.range : ''],
+                ['cast_time', ability ? ability.cast_time : ''],
+                ['cooldown', ability ? ability.cooldown : ''],
+                ['duration', ability ? ability.duration : ''],
+                ['max_charges', ability ? ability.max_charges : ''],
+                ['level_cap', ability ? ability.level_cap : '']
+            ].forEach(function (pair) {
+                var value = pair[1];
+                if (value == null || value === '') return;
+                if (typeof value === 'number' && value <= 0) return;
+                addChip(pair[0], value, false);
+            });
+
+            var counters = document.createElement('div');
+            counters.className = 'af-kb-inline-ability-summary__counters';
+            body.appendChild(counters);
+            [
+                ['resources', ability ? ability.resources : []],
+                ['effects', ability ? ability.effects : []],
+                ['modifiers', ability ? ability.modifiers : []],
+                ['triggers', ability ? ability.triggers : []],
+                ['conditions', ability ? ability.conditions : []],
+                ['stacking', ability ? ability.stacking : []],
+                ['upgrade requirements', ability ? ability.upgrade_requirements : []]
+            ].forEach(function (item) {
+                var count = Array.isArray(item[1]) ? item[1].length : 0;
+                if (!count) return;
+                var chip = document.createElement('span');
+                chip.className = 'af-kb-inline-ability-summary__counter';
+                chip.textContent = item[0] + ': ' + count;
+                counters.appendChild(chip);
+            });
+        }
+
         if (uiProfile === 'character') {
             ensureObj('character_profile', {});
             ensureObj('character_stats', {});
@@ -4836,6 +4996,15 @@
                         card.className = 'af-kb-block-item';
                         list.appendChild(card);
 
+                        var summary = document.createElement('div');
+                        card.appendChild(summary);
+                        var refreshSummary = function () {
+                            renderInlineAbilitySummary(summary, normalized, idx, 'Способность');
+                        };
+                        refreshSummary();
+                        card.addEventListener('input', refreshSummary);
+                        card.addEventListener('change', refreshSummary);
+
                         var title = document.createElement('h4');
                         title.textContent = 'Способность #' + (idx + 1);
                         card.appendChild(title);
@@ -4843,6 +5012,8 @@
                         var coreDefs = [
                             { name: 'slot_index', label: 'slot_index', type: 'number' },
                             { name: 'ability_name', label: 'ability_name', type: 'text' },
+                            { name: 'icon_url', label: 'icon_url', type: 'text' },
+                            { name: 'icon_class', label: 'icon_class', type: 'text' },
                             { name: 'type', label: 'type', type: 'select', options: abilityTypeOptions },
                             { name: 'subtype', label: 'subtype', type: 'select', options: abilitySubtypeOptions },
                             { name: 'slot', label: 'slot', type: 'select', options: abilitySlotOptions },
@@ -4862,6 +5033,7 @@
                         coreGrid.className = 'af-kb-row';
                         coreDefs.forEach(function (d) { coreGrid.appendChild(createInput(d, normalized, function () {
                             normalized.ability_type = normalized.type || 'active';
+                            refreshSummary();
                             syncRawDebounced();
                         })); });
                         card.appendChild(coreGrid);

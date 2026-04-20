@@ -332,6 +332,65 @@ background: #000;
     background: #0f0f0f;
 }
 
+.af-kb-inline-ability-summary {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid #3f4b64;
+    border-radius: 8px;
+    background: #111827;
+}
+
+.af-kb-inline-ability-summary__icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #1f2937;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.af-kb-inline-ability-summary__icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.af-kb-inline-ability-summary__icon-fallback {
+    color: #93a6c6;
+    font-size: 16px;
+}
+
+.af-kb-inline-ability-summary__title {
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.af-kb-inline-ability-summary__chips,
+.af-kb-inline-ability-summary__counters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.af-kb-inline-ability-summary__counters {
+    margin-top: 6px;
+}
+
+.af-kb-inline-ability-summary__chip,
+.af-kb-inline-ability-summary__counter {
+    font-size: 11px;
+    line-height: 1.2;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: #1f2a44;
+    color: #c9d6ef;
+}
+
 .af-kb-rule-card__title {
     display: flex;
     justify-content: space-between;

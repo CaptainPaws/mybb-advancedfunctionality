@@ -629,6 +629,8 @@ function af_kb_default_type_definitions(): array
                 ['path' => 'character_abilities', 'type' => 'array', 'default' => [], 'item' => ['type' => 'object', 'fields' => [
                     ['path' => 'slot_index', 'type' => 'number', 'required' => true, 'default' => 1],
                     ['path' => 'ability_name', 'type' => 'string', 'required' => true, 'default' => ''],
+                    ['path' => 'icon_url', 'type' => 'string', 'default' => ''],
+                    ['path' => 'icon_class', 'type' => 'string', 'default' => ''],
                     ['path' => 'ability_type', 'type' => 'select', 'required' => true, 'options' => [['value' => 'active'], ['value' => 'passive']], 'default' => 'active'],
                     ['path' => 'damage_type', 'type' => 'string', 'default' => ''],
                     ['path' => 'targeting', 'type' => 'string', 'default' => ''],
@@ -820,6 +822,8 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.ability_keys', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [
                     ['path' => 'slot_index', 'type' => 'number', 'default' => 1],
                     ['path' => 'ability_name', 'type' => 'string', 'default' => ''],
+                    ['path' => 'icon_url', 'type' => 'string', 'default' => ''],
+                    ['path' => 'icon_class', 'type' => 'string', 'default' => ''],
                     ['path' => 'type', 'type' => 'select', 'options' => [['value' => 'active'], ['value' => 'passive'], ['value' => 'ultimate']], 'default' => 'active'],
                     ['path' => 'ability_type', 'type' => 'select', 'options' => [['value' => 'active'], ['value' => 'passive']], 'default' => 'active'],
                     ['path' => 'subtype', 'type' => 'string', 'default' => ''],
@@ -5040,6 +5044,8 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
     return [
         'slot_index' => $slotIndex,
         'ability_name' => (string)($row['ability_name'] ?? ''),
+        'icon_url' => (string)($row['icon_url'] ?? ''),
+        'icon_class' => (string)($row['icon_class'] ?? ''),
         'type' => $abilityType,
         'ability_type' => $abilityType,
         'subtype' => (string)($row['subtype'] ?? ''),
