@@ -7188,6 +7188,255 @@ function af_kb_humanize_effect(array $effect, bool $isRu): string
     return $map[$op] ?? (($isRu ? 'Неизвестный эффект: op=' : 'Unknown effect: op=') . $op);
 }
 
+function af_kb_arpg_inline_enum_registry(): array
+{
+    return [
+        'type' => [
+            'active' => ['ru' => 'Активная', 'en' => 'Active'],
+            'passive' => ['ru' => 'Пассивная', 'en' => 'Passive'],
+            'ultimate' => ['ru' => 'Ультимейт', 'en' => 'Ultimate'],
+            'support' => ['ru' => 'Поддержка', 'en' => 'Support'],
+            'aura' => ['ru' => 'Аура', 'en' => 'Aura'],
+            'toggle' => ['ru' => 'Переключаемая', 'en' => 'Toggle'],
+            'summon' => ['ru' => 'Призыв', 'en' => 'Summon'],
+            'reaction' => ['ru' => 'Реакция', 'en' => 'Reaction'],
+            'movement' => ['ru' => 'Движение', 'en' => 'Movement'],
+        ],
+        'subtype' => [
+            'active' => ['ru' => 'Активная', 'en' => 'Active'],
+            'passive' => ['ru' => 'Пассивная', 'en' => 'Passive'],
+            'ultimate' => ['ru' => 'Ультимейт', 'en' => 'Ultimate'],
+            'support' => ['ru' => 'Поддержка', 'en' => 'Support'],
+            'aura' => ['ru' => 'Аура', 'en' => 'Aura'],
+            'toggle' => ['ru' => 'Переключаемая', 'en' => 'Toggle'],
+            'summon' => ['ru' => 'Призыв', 'en' => 'Summon'],
+            'reaction' => ['ru' => 'Реакция', 'en' => 'Reaction'],
+            'movement' => ['ru' => 'Движение', 'en' => 'Movement'],
+        ],
+        'slot' => [
+            'basic' => ['ru' => 'Базовый', 'en' => 'Basic'],
+            'skill_1' => ['ru' => 'Навык 1', 'en' => 'Skill 1'],
+            'skill_2' => ['ru' => 'Навык 2', 'en' => 'Skill 2'],
+            'skill_3' => ['ru' => 'Навык 3', 'en' => 'Skill 3'],
+            'support' => ['ru' => 'Слот поддержки', 'en' => 'Support slot'],
+            'ultimate' => ['ru' => 'Слот ультимейта', 'en' => 'Ultimate slot'],
+            'passive' => ['ru' => 'Пассивный слот', 'en' => 'Passive slot'],
+            'custom' => ['ru' => 'Пользовательский', 'en' => 'Custom'],
+        ],
+        'damage_type' => [
+            'physical' => ['ru' => 'Физический', 'en' => 'Physical'],
+            'fire' => ['ru' => 'Огонь', 'en' => 'Fire'],
+            'ice' => ['ru' => 'Лёд', 'en' => 'Ice'],
+            'water' => ['ru' => 'Вода', 'en' => 'Water'],
+            'electric' => ['ru' => 'Электричество', 'en' => 'Electric'],
+            'wind' => ['ru' => 'Ветер', 'en' => 'Wind'],
+            'earth' => ['ru' => 'Земля', 'en' => 'Earth'],
+            'nature' => ['ru' => 'Природа', 'en' => 'Nature'],
+            'light' => ['ru' => 'Свет', 'en' => 'Light'],
+            'dark' => ['ru' => 'Тьма', 'en' => 'Dark'],
+            'void' => ['ru' => 'Пустота', 'en' => 'Void'],
+            'quantum' => ['ru' => 'Квантовый', 'en' => 'Quantum'],
+            'imaginary' => ['ru' => 'Мнимый', 'en' => 'Imaginary'],
+            'aether' => ['ru' => 'Эфир', 'en' => 'Aether'],
+            'anomaly' => ['ru' => 'Аномалия', 'en' => 'Anomaly'],
+            'ether' => ['ru' => 'Этер', 'en' => 'Ether'],
+            'fusion' => ['ru' => 'Фьюжн', 'en' => 'Fusion'],
+            'glacio' => ['ru' => 'Глацио', 'en' => 'Glacio'],
+            'aero' => ['ru' => 'Аэро', 'en' => 'Aero'],
+            'havoc' => ['ru' => 'Хаос', 'en' => 'Havoc'],
+            'spectro' => ['ru' => 'Спектро', 'en' => 'Spectro'],
+            'dendro' => ['ru' => 'Дендро', 'en' => 'Dendro'],
+            'pyro' => ['ru' => 'Пиро', 'en' => 'Pyro'],
+            'hydro' => ['ru' => 'Гидро', 'en' => 'Hydro'],
+            'electro' => ['ru' => 'Электро', 'en' => 'Electro'],
+            'cryo' => ['ru' => 'Крио', 'en' => 'Cryo'],
+            'anemo' => ['ru' => 'Анемо', 'en' => 'Anemo'],
+            'geo' => ['ru' => 'Гео', 'en' => 'Geo'],
+            'lightning' => ['ru' => 'Молния', 'en' => 'Lightning'],
+            'poison' => ['ru' => 'Яд', 'en' => 'Poison'],
+            'acid' => ['ru' => 'Кислота', 'en' => 'Acid'],
+            'bleed' => ['ru' => 'Кровотечение', 'en' => 'Bleed'],
+            'arcane' => ['ru' => 'Тайная магия', 'en' => 'Arcane'],
+            'holy' => ['ru' => 'Святой', 'en' => 'Holy'],
+            'shadow' => ['ru' => 'Тень', 'en' => 'Shadow'],
+            'slash' => ['ru' => 'Режущий', 'en' => 'Slash'],
+            'pierce' => ['ru' => 'Колющий', 'en' => 'Pierce'],
+            'blunt' => ['ru' => 'Дробящий', 'en' => 'Blunt'],
+            'true' => ['ru' => 'Истинный', 'en' => 'True'],
+            'kinetic' => ['ru' => 'Кинетический', 'en' => 'Kinetic'],
+            'custom' => ['ru' => 'Пользовательский', 'en' => 'Custom'],
+        ],
+        'targeting' => [
+            'self' => ['ru' => 'На себя', 'en' => 'Self'],
+            'single_enemy' => ['ru' => 'Один враг', 'en' => 'Single enemy'],
+            'single_ally' => ['ru' => 'Один союзник', 'en' => 'Single ally'],
+            'line' => ['ru' => 'Линия', 'en' => 'Line'],
+            'cone' => ['ru' => 'Конус', 'en' => 'Cone'],
+            'aoe_ground' => ['ru' => 'Область на земле', 'en' => 'Ground AoE'],
+            'aoe_around_self' => ['ru' => 'Область вокруг себя', 'en' => 'AoE around self'],
+            'global' => ['ru' => 'Глобальная', 'en' => 'Global'],
+            'custom' => ['ru' => 'Пользовательская', 'en' => 'Custom'],
+        ],
+        'effect_kind' => [
+            'damage' => ['ru' => 'Урон', 'en' => 'Damage'],
+            'heal' => ['ru' => 'Лечение', 'en' => 'Heal'],
+            'shield' => ['ru' => 'Щит', 'en' => 'Shield'],
+            'barrier' => ['ru' => 'Барьер', 'en' => 'Barrier'],
+            'status' => ['ru' => 'Статус', 'en' => 'Status'],
+            'proc' => ['ru' => 'Прок', 'en' => 'Proc'],
+        ],
+    ];
+}
+
+function af_kb_arpg_inline_label(string $dict, string $key, bool $isRu): string
+{
+    $cleanKey = trim((string)$key);
+    if ($cleanKey === '') {
+        return '';
+    }
+
+    $registry = af_kb_arpg_inline_enum_registry();
+    $dictRows = (array)($registry[$dict] ?? []);
+    $row = (array)($dictRows[$cleanKey] ?? []);
+    $label = $isRu ? (string)($row['ru'] ?? '') : (string)($row['en'] ?? '');
+    if ($label !== '') {
+        return $label;
+    }
+
+    return ucwords(str_replace('_', ' ', $cleanKey));
+}
+
+function af_kb_arpg_inline_number($value): string
+{
+    if (!is_numeric($value)) {
+        return '';
+    }
+    $num = (float)$value;
+    if (abs($num - round($num)) < 0.00001) {
+        return (string)(int)round($num);
+    }
+    return rtrim(rtrim(number_format($num, 2, '.', ''), '0'), '.');
+}
+
+function af_kb_render_inline_ability_effect_row(array $effect, bool $isRu): string
+{
+    $kind = af_kb_arpg_inline_label('effect_kind', (string)($effect['kind'] ?? ''), $isRu);
+    $value = af_kb_arpg_inline_number($effect['value'] ?? '');
+    $damageType = af_kb_arpg_inline_label('damage_type', (string)($effect['damage_type'] ?? ''), $isRu);
+    $targeting = af_kb_arpg_inline_label('targeting', (string)($effect['targeting'] ?? ''), $isRu);
+    $duration = af_kb_arpg_inline_number($effect['duration'] ?? '');
+    $statusKey = trim((string)($effect['status_key'] ?? ''));
+    $formula = trim((string)($effect['formula_ref'] ?? ''));
+    $notes = trim((string)($effect['notes'] ?? ''));
+
+    $parts = [];
+    if ($value !== '') {
+        $parts[] = $value;
+    }
+    if ($damageType !== '') {
+        $parts[] = ($isRu ? 'тип: ' : 'type: ') . $damageType;
+    }
+    if ($targeting !== '') {
+        $parts[] = ($isRu ? 'цель: ' : 'target: ') . $targeting;
+    }
+    if ($duration !== '' && (float)$duration > 0) {
+        $parts[] = ($isRu ? 'длительность: ' : 'duration: ') . $duration;
+    }
+    if ($statusKey !== '') {
+        $parts[] = ($isRu ? 'статус: ' : 'status: ') . $statusKey;
+    }
+    if ($formula !== '') {
+        $parts[] = ($isRu ? 'формула: ' : 'formula: ') . $formula;
+    }
+    if ($notes !== '') {
+        $parts[] = $notes;
+    }
+
+    if ($kind === '' && !$parts) {
+        return '';
+    }
+
+    $title = $kind !== '' ? $kind : ($isRu ? 'Эффект' : 'Effect');
+    return '<li><strong>' . htmlspecialchars_uni($title) . ':</strong> ' . htmlspecialchars_uni(implode(', ', $parts)) . '</li>';
+}
+
+function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
+{
+    $row = af_kb_normalize_inline_ability_row($ability, (int)($ability['sortorder'] ?? 0));
+    $name = trim((string)($row['ability_name'] ?? ''));
+    if ($name === '') {
+        $name = $isRu ? 'Способность' : 'Ability';
+    }
+
+    $iconHtml = '';
+    $iconUrl = af_kb_sanitize_url((string)($row['icon_url'] ?? ''));
+    $iconClass = trim((string)($row['icon_class'] ?? ''));
+    if ($iconUrl !== '') {
+        $iconHtml = '<img src="' . htmlspecialchars_uni($iconUrl) . '" alt="" loading="lazy" />';
+    } elseif ($iconClass !== '') {
+        $iconHtml = '<i class="' . htmlspecialchars_uni($iconClass) . '" aria-hidden="true"></i>';
+    } else {
+        $iconHtml = '<span class="af-kb-char-ability__icon-fallback" aria-hidden="true">✦</span>';
+    }
+
+    $rows = [];
+    $fieldMap = [
+        'type' => $isRu ? 'Тип' : 'Type',
+        'subtype' => $isRu ? 'Подтип' : 'Subtype',
+        'slot' => $isRu ? 'Слот' : 'Slot',
+        'damage_type' => $isRu ? 'Тип урона' : 'Damage type',
+        'targeting' => $isRu ? 'Цель' : 'Targeting',
+    ];
+    foreach ($fieldMap as $key => $label) {
+        $value = af_kb_arpg_inline_label($key, (string)($row[$key] ?? ''), $isRu);
+        if ($value !== '') {
+            $rows[] = '<li><strong>' . htmlspecialchars_uni($label) . ':</strong> ' . htmlspecialchars_uni($value) . '</li>';
+        }
+    }
+
+    $numericFieldMap = [
+        'range' => $isRu ? 'Дальность' : 'Range',
+        'cast_time' => $isRu ? 'Время каста' : 'Cast time',
+        'cooldown' => $isRu ? 'Перезарядка' : 'Cooldown',
+        'duration' => $isRu ? 'Длительность' : 'Duration',
+        'max_charges' => $isRu ? 'Макс. заряды' : 'Max charges',
+        'level_cap' => $isRu ? 'Предел уровня' : 'Level cap',
+    ];
+    foreach ($numericFieldMap as $key => $label) {
+        $raw = $row[$key] ?? null;
+        if (!is_numeric($raw) || (float)$raw <= 0) {
+            continue;
+        }
+        $rows[] = '<li><strong>' . htmlspecialchars_uni($label) . ':</strong> ' . htmlspecialchars_uni(af_kb_arpg_inline_number($raw)) . '</li>';
+    }
+
+    $effectsRows = [];
+    foreach ((array)($row['effects'] ?? []) as $effect) {
+        if (!is_array($effect)) {
+            continue;
+        }
+        $effectRowHtml = af_kb_render_inline_ability_effect_row($effect, $isRu);
+        if ($effectRowHtml !== '') {
+            $effectsRows[] = $effectRowHtml;
+        }
+    }
+    if ($effectsRows) {
+        $rows[] = '<li><strong>' . htmlspecialchars_uni($isRu ? 'Эффекты' : 'Effects') . ':</strong><ul>' . implode('', $effectsRows) . '</ul></li>';
+    } elseif (!empty($row['effects'])) {
+        $rows[] = '<li><strong>' . htmlspecialchars_uni($isRu ? 'Эффекты' : 'Effects') . ':</strong> ' . htmlspecialchars_uni((string)count((array)$row['effects'])) . '</li>';
+    }
+
+    $description = trim((string)($row['ability_description'] ?? ''));
+    $kbRef = trim((string)($row['ability_kb_key'] ?? ''));
+
+    return '<article class="af-kb-char-ability">'
+        . '<header><span class="af-kb-char-ability__icon">' . $iconHtml . '</span><strong>#' . (int)($row['slot_index'] ?? 0) . ' ' . htmlspecialchars_uni($name) . '</strong></header>'
+        . ($description !== '' ? '<div>' . af_kb_parse_message($description) . '</div>' : '')
+        . ($rows ? '<ul class="af-kb-char-ability__meta">' . implode('', $rows) . '</ul>' : '')
+        . ($kbRef !== '' ? '<footer>arpg_ability: ' . htmlspecialchars_uni($kbRef) . '</footer>' : '')
+        . '</article>';
+}
+
 function af_kb_render_ui_block(array $block, array $vm, array $entry, bool $isRu): string
 {
     $source = (string)($block['source'] ?? '');
@@ -7289,6 +7538,17 @@ function af_kb_render_ui_block(array $block, array $vm, array $entry, bool $isRu
                 }
             }
             return $lines;
+        }
+
+        if ($path === 'ability_keys' && is_array($v)) {
+            $cards = '';
+            foreach ($v as $abilityRow) {
+                if (!is_array($abilityRow)) {
+                    continue;
+                }
+                $cards .= af_kb_render_inline_ability_card($abilityRow, $isRu);
+            }
+            return $cards !== '' ? '<div class="af-kb-char-abilities">' . $cards . '</div>' : '';
         }
 
         // дефолт: карточка со значением
@@ -8664,12 +8924,7 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         if (!is_array($ability)) {
             continue;
         }
-        $abilitiesHtml .= '<article class="af-kb-char-ability"><header><strong>#' . (int)($ability['slot_index'] ?? 0) . ' '
-            . htmlspecialchars_uni((string)($ability['ability_name'] ?? '')) . '</strong><span>'
-            . htmlspecialchars_uni((string)($ability['ability_type'] ?? 'active')) . '</span></header><div>'
-            . af_kb_parse_message((string)($ability['ability_description'] ?? '')) . '</div>'
-            . (!empty($ability['ability_kb_key']) ? '<footer>arpg_ability: ' . htmlspecialchars_uni((string)$ability['ability_kb_key']) . '</footer>' : '')
-            . '</article>';
+        $abilitiesHtml .= af_kb_render_inline_ability_card($ability, $isRu);
     }
 
     $isCanon = trim((string)($profile['category'] ?? '')) === 'canons';
