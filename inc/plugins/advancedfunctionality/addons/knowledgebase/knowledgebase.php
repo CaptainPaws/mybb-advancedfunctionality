@@ -2306,6 +2306,10 @@ function af_kb_seed_arpg_mechanics_option_sets(): void
             ['limit' => 1]
         ));
 
+        if ($existing) {
+            continue;
+        }
+
         $entriesByKey = [];
         foreach ((array)($definition['entries'] ?? []) as $row) {
             $optionKey = trim((string)($row['key'] ?? ''));
@@ -2322,47 +2326,6 @@ function af_kb_seed_arpg_mechanics_option_sets(): void
         $payload = af_kb_arpg_envelope_defaults('arpg_mechanics');
         $payload['rules']['service_kind'] = trim((string)($definition['service_kind'] ?? 'snippet')) ?: 'snippet';
         $payload['rules']['entries'] = array_values($entriesByKey);
-
-        if ($existing) {
-            $current = af_kb_decode_json((string)($existing['data_json'] ?? '{}'));
-            if (!is_array($current)) {
-                $current = [];
-            }
-            $currentRules = is_array($current['rules'] ?? null) ? $current['rules'] : [];
-            $currentEntries = is_array($currentRules['entries'] ?? null) ? $currentRules['entries'] : [];
-            foreach ($currentEntries as $row) {
-                $optionKey = trim((string)($row['key'] ?? ''));
-                if ($optionKey === '') {
-                    continue;
-                }
-                if (!isset($entriesByKey[$optionKey])) {
-                    $entriesByKey[$optionKey] = [
-                        'key' => $optionKey,
-                        'label_ru' => (string)($row['label_ru'] ?? $optionKey),
-                        'label_en' => (string)($row['label_en'] ?? $optionKey),
-                    ];
-                    continue;
-                }
-
-                $entriesByKey[$optionKey]['label_ru'] = (string)($entriesByKey[$optionKey]['label_ru'] !== '' ? $entriesByKey[$optionKey]['label_ru'] : ($row['label_ru'] ?? $optionKey));
-                $entriesByKey[$optionKey]['label_en'] = (string)($entriesByKey[$optionKey]['label_en'] !== '' ? $entriesByKey[$optionKey]['label_en'] : ($row['label_en'] ?? $optionKey));
-            }
-
-            $payload = array_replace_recursive($payload, $current);
-            $payload['rules']['type_profile'] = 'service_mechanics';
-            $payload['rules']['category'] = 'service.mechanics';
-            $payload['rules']['visibility'] = ['catalog' => false, 'search' => false, 'internal' => true];
-            $payload['rules']['service_kind'] = trim((string)($payload['rules']['service_kind'] ?? '')) ?: 'snippet';
-            $payload['rules']['entries'] = array_values($entriesByKey);
-
-            $db->update_query('af_kb_entries', [
-                'title_ru' => $db->escape_string((string)($definition['title_ru'] ?? $setKey)),
-                'title_en' => $db->escape_string((string)($definition['title_en'] ?? $setKey)),
-                'data_json' => $db->escape_string(af_kb_normalize_json((string)json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES))),
-                'updated_at' => TIME_NOW,
-            ], 'id=' . (int)$existing['id']);
-            continue;
-        }
 
         $db->insert_query('af_kb_entries', [
             'type' => 'arpg_mechanics',
@@ -2387,6 +2350,42 @@ function af_kb_seed_arpg_mechanics_option_sets(): void
             'item_kind' => '',
         ]);
     }
+}
+
+function af_kb_get_public_type_options(string $typeKey, int $limit = 500): array
+{
+    global $db;
+
+    $typeKey = trim($typeKey);
+    if ($typeKey === '' || !$db->table_exists('af_kb_entries')) {
+        return [];
+    }
+
+    $rows = [];
+    $query = $db->simple_select(
+        'af_kb_entries',
+        '`key`, title_ru, title_en',
+        "type='" . $db->escape_string($typeKey) . "' AND active=1",
+        [
+            'order_by' => 'sortorder, `key`',
+            'order_dir' => 'ASC',
+            'limit' => max(1, min(1000, (int)$limit)),
+        ]
+    );
+
+    while ($row = $db->fetch_array($query)) {
+        $entryKey = trim((string)($row['key'] ?? ''));
+        if ($entryKey === '') {
+            continue;
+        }
+        $rows[] = [
+            'key' => $entryKey,
+            'label_ru' => (string)($row['title_ru'] ?? $entryKey),
+            'label_en' => (string)($row['title_en'] ?? $entryKey),
+        ];
+    }
+
+    return $rows;
 }
 
 function af_kb_get_arpg_mechanics_entry(string $serviceKind, string $entryKey): ?array
@@ -7081,6 +7080,12 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                 'ability_value_mode' => af_kb_get_arpg_mechanics_options('ability_value_mode'),
                 'character_gender' => af_kb_get_arpg_mechanics_options('character_gender'),
             ];
+            $arpgPublicTypeUiOptions = [
+                'arpg_element' => af_kb_get_public_type_options('arpg_element'),
+                'arpg_origin' => af_kb_get_public_type_options('arpg_origin'),
+                'arpg_archetype' => af_kb_get_public_type_options('arpg_archetype'),
+                'arpg_faction' => af_kb_get_public_type_options('arpg_faction'),
+            ];
             $endpointTag = '<script>window.afKbEndpoints=' . json_encode([
                 'get' => af_kb_url(['action' => 'kb_get']),
                 'list' => af_kb_url(['action' => 'kb_list']),
@@ -7091,6 +7096,8 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                 . json_encode(af_kb_get_catalog_active_mechanic_key(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
                 . ';window.afKbArpgMechanicsOptionSets='
                 . json_encode($arpgMechanicsUiOptions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                . ';window.afKbArpgPublicTypeOptions='
+                . json_encode($arpgPublicTypeUiOptions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
                 . ';</script>';
 
             $kbUiCss  = af_kb_build_css_include_tag('assets/knowledgebase_kbui.css');
