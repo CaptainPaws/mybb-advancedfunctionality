@@ -314,6 +314,10 @@ background: #000;
     gap: 12px;
 }
 
+.af-kb-row > .af-kb-field--full {
+    grid-column: 1 / -1;
+}
+
 .af-kb-inline {
     display: flex;
     align-items: center;

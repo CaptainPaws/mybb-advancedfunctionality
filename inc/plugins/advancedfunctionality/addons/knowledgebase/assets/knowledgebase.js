@@ -2201,6 +2201,9 @@
         // ---------- Универсальные билд-блоки формы ----------
         function createInput(def, obj, onChange) {
             var wrap = document.createElement('div');
+            if (def.fullWidth) {
+                wrap.classList.add('af-kb-field--full');
+            }
             var label = document.createElement('label');
             label.textContent = def.label || def.name;
             wrap.appendChild(label);
@@ -3189,63 +3192,16 @@
             container.innerHTML = '';
             container.className = 'af-kb-inline-ability-summary';
             var isRuUi = String((document.documentElement && document.documentElement.lang) || '').toLowerCase().indexOf('ru') === 0;
-            var enumLabels = {
-                type: {
-                    active: { ru: 'Активная', en: 'Active' },
-                    passive: { ru: 'Пассивная', en: 'Passive' },
-                    ultimate: { ru: 'Ультимативная', en: 'Ultimate' },
-                    support: { ru: 'Поддержка', en: 'Support' },
-                    aura: { ru: 'Аура', en: 'Aura' },
-                    toggle: { ru: 'Переключаемая', en: 'Toggle' },
-                    summon: { ru: 'Призыв', en: 'Summon' },
-                    reaction: { ru: 'Реакция', en: 'Reaction' },
-                    movement: { ru: 'Движение', en: 'Movement' }
-                },
-                subtype: {
-                    active: { ru: 'Активная', en: 'Active' },
-                    passive: { ru: 'Пассивная', en: 'Passive' },
-                    ultimate: { ru: 'Ультимативная', en: 'Ultimate' },
-                    support: { ru: 'Поддержка', en: 'Support' },
-                    aura: { ru: 'Аура', en: 'Aura' },
-                    toggle: { ru: 'Переключаемая', en: 'Toggle' },
-                    summon: { ru: 'Призыв', en: 'Summon' },
-                    reaction: { ru: 'Реакция', en: 'Reaction' },
-                    movement: { ru: 'Движение', en: 'Movement' }
-                },
-                slot: {
-                    basic: { ru: 'Базовый', en: 'Basic' },
-                    skill_1: { ru: 'Навык 1', en: 'Skill 1' },
-                    skill_2: { ru: 'Навык 2', en: 'Skill 2' },
-                    skill_3: { ru: 'Навык 3', en: 'Skill 3' },
-                    support: { ru: 'Слот поддержки', en: 'Support slot' },
-                    ultimate: { ru: 'Слот ультимейта', en: 'Ultimate slot' },
-                    passive: { ru: 'Пассивный слот', en: 'Passive slot' },
-                    custom: { ru: 'Пользовательский', en: 'Custom' }
-                },
-                damage_type: {
-                    physical: { ru: 'Физический', en: 'Physical' },
-                    fire: { ru: 'Огонь', en: 'Fire' },
-                    ice: { ru: 'Лёд', en: 'Ice' },
-                    water: { ru: 'Вода', en: 'Water' },
-                    electric: { ru: 'Электричество', en: 'Electric' },
-                    wind: { ru: 'Ветер', en: 'Wind' },
-                    earth: { ru: 'Земля', en: 'Earth' },
-                    nature: { ru: 'Природа', en: 'Nature' },
-                    light: { ru: 'Свет', en: 'Light' },
-                    dark: { ru: 'Тьма', en: 'Dark' },
-                    anemo: { ru: 'Анемо', en: 'Anemo' }
-                },
-                targeting: {
-                    self: { ru: 'На себя', en: 'Self' },
-                    single_enemy: { ru: 'Один враг', en: 'Single enemy' },
-                    single_ally: { ru: 'Один союзник', en: 'Single ally' },
-                    line: { ru: 'Линия', en: 'Line' },
-                    cone: { ru: 'Конус', en: 'Cone' },
-                    aoe_ground: { ru: 'Область на земле', en: 'Ground AoE' },
-                    aoe_around_self: { ru: 'Область вокруг себя', en: 'AoE around self' },
-                    global: { ru: 'Глобальная', en: 'Global' },
-                    custom: { ru: 'Пользовательская', en: 'Custom' }
-                }
+            var mechanicsOptionSets = (window.afKbArpgMechanicsOptionSets && typeof window.afKbArpgMechanicsOptionSets === 'object')
+                ? window.afKbArpgMechanicsOptionSets
+                : {};
+            var enumSets = {
+                type: 'ability_type',
+                subtype: 'ability_subtype',
+                slot: 'ability_slot',
+                damage_type: 'ability_damage_type',
+                targeting: 'ability_targeting',
+                value_mode: 'ability_value_mode'
             };
             var fieldLabels = isRuUi
                 ? {
@@ -3254,6 +3210,7 @@
                     slot: 'Слот',
                     damage_type: 'Тип урона',
                     targeting: 'Цель',
+                    value_mode: 'Режим значения',
                     range: 'Дальность',
                     cast_time: 'Время каста',
                     cooldown: 'Перезарядка',
@@ -3267,6 +3224,7 @@
                     slot: 'Slot',
                     damage_type: 'Damage type',
                     targeting: 'Targeting',
+                    value_mode: 'Value mode',
                     range: 'Range',
                     cast_time: 'Cast time',
                     cooldown: 'Cooldown',
@@ -3277,8 +3235,25 @@
             var resolveEnumLabel = function (dict, key) {
                 var cleanKey = String(key || '').trim();
                 if (!cleanKey) return '';
-                var row = enumLabels[dict] && enumLabels[dict][cleanKey];
-                if (row) return isRuUi ? row.ru : row.en;
+                var setKey = enumSets[dict] || '';
+                if (setKey) {
+                    var rows = Array.isArray(mechanicsOptionSets[setKey]) ? mechanicsOptionSets[setKey] : [];
+                    for (var i = 0; i < rows.length; i += 1) {
+                        var row = rows[i];
+                        if (!row || String(row.key || '').trim() !== cleanKey) {
+                            continue;
+                        }
+                        var localized = String(isRuUi ? (row.label_ru != null ? row.label_ru : '') : (row.label_en != null ? row.label_en : ''));
+                        if (localized) {
+                            return localized;
+                        }
+                        var fallbackLabel = String(row.label_ru != null ? row.label_ru : (row.label_en != null ? row.label_en : ''));
+                        if (fallbackLabel) {
+                            return fallbackLabel;
+                        }
+                        break;
+                    }
+                }
                 return cleanKey.replace(/_/g, ' ').replace(/\b\w/g, function (ch) { return ch.toUpperCase(); });
             };
             var iconWrap = document.createElement('div');
@@ -3330,6 +3305,7 @@
                 ['slot', ability ? ability.slot : ''],
                 ['damage_type', ability ? ability.damage_type : ''],
                 ['targeting', ability ? ability.targeting : ''],
+                ['value_mode', ability ? ability.value_mode : ''],
                 ['range', ability ? ability.range : ''],
                 ['cast_time', ability ? ability.cast_time : ''],
                 ['cooldown', ability ? ability.cooldown : ''],
@@ -3341,7 +3317,7 @@
                 var value = pair[1];
                 if (value == null || value === '') return;
                 if (typeof value === 'number' && value <= 0) return;
-                if (key === 'subtype' || key === 'slot' || key === 'damage_type' || key === 'targeting') {
+                if (key === 'subtype' || key === 'slot' || key === 'damage_type' || key === 'targeting' || key === 'value_mode') {
                     value = resolveEnumLabel(key, value);
                 }
                 addChip(fieldLabels[key] || key, value, false);
@@ -5085,8 +5061,10 @@
                     { name: 'character_gen', label: 'Пол', type: 'select', options: characterGenderOptions, allowEmpty: true, emptyLabel: '—' },
                     { name: 'character_race', label: 'Раса', type: 'select', options: characterRaceOptions, allowEmpty: true, emptyLabel: '—' },
                     { name: 'character_class', label: 'Класс', type: 'select', options: characterClassOptions, allowEmpty: true, emptyLabel: '—' },
-                    { name: 'character_faction', label: 'Фракция', type: 'select', options: characterFactionOptions, allowEmpty: true, emptyLabel: '—' },
-                    { name: 'character_app', label: 'Внешность', type: 'textarea', editorPolicy: 'allow' }
+                    { name: 'character_faction', label: 'Фракция', type: 'select', options: characterFactionOptions, allowEmpty: true, emptyLabel: '—' }
+                ];
+                var profileTextareaDefs = [
+                    { name: 'character_app', label: 'Внешность', type: 'textarea', editorPolicy: 'allow', fullWidth: true }
                 ];
                 var statsDefs = [
                     { name: 'character_hp', label: 'HP', type: 'number' },
@@ -5105,6 +5083,10 @@
                 profileGrid.className = 'af-kb-row';
                 profileDefs.forEach(function (d) { profileGrid.appendChild(createInput(d, state.character_profile, syncRawDebounced)); });
                 fields.profileFields.appendChild(profileGrid);
+                var profileTextareaGrid = document.createElement('div');
+                profileTextareaGrid.className = 'af-kb-row';
+                profileTextareaDefs.forEach(function (d) { profileTextareaGrid.appendChild(createInput(d, state.character_profile, syncRawDebounced)); });
+                fields.profileFields.appendChild(profileTextareaGrid);
 
                 var statsGrid = document.createElement('div');
                 statsGrid.className = 'af-kb-row';
@@ -5174,8 +5156,10 @@
                             { name: 'duration', label: 'Продолжительность', type: 'text' },
                             { name: 'damage_value', label: 'Урон', type: 'number' },
                             { name: 'shield_value', label: 'Щит', type: 'number' },
-                            { name: 'heal_value', label: 'Лечение', type: 'number' },
-                            { name: 'ability_description', label: 'Описание способности', type: 'textarea', editorPolicy: 'allow' }
+                            { name: 'heal_value', label: 'Лечение', type: 'number' }
+                        ];
+                        var coreTextareaDefs = [
+                            { name: 'ability_description', label: 'Описание способности', type: 'textarea', editorPolicy: 'allow', fullWidth: true }
                         ];
                         var coreGrid = document.createElement('div');
                         coreGrid.className = 'af-kb-row';
@@ -5185,6 +5169,14 @@
                             syncRawDebounced();
                         })); });
                         card.appendChild(coreGrid);
+                        var coreTextareaGrid = document.createElement('div');
+                        coreTextareaGrid.className = 'af-kb-row';
+                        coreTextareaDefs.forEach(function (d) { coreTextareaGrid.appendChild(createInput(d, normalized, function () {
+                            normalized.ability_type = normalized.type || 'active';
+                            refreshSummary();
+                            syncRawDebounced();
+                        })); });
+                        card.appendChild(coreTextareaGrid);
 
                         var del = document.createElement('button');
                         del.type = 'button';
