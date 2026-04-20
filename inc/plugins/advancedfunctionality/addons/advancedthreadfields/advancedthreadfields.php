@@ -1476,9 +1476,7 @@ function af_atf_seed_character_contract_fields(): void
             'parse_smilies' => 0,
         ];
 
-        if (!empty($existing['fieldid'])) {
-            $db->update_query(AF_ATF_TABLE_FIELDS, $payload, "fieldid=" . (int)$existing['fieldid']);
-        } else {
+        if (empty($existing['fieldid'])) {
             $db->insert_query(AF_ATF_TABLE_FIELDS, $payload);
         }
     }
@@ -2691,6 +2689,48 @@ function af_atf_character_arpg_contract_type(string $fieldName): string
     return (string)($map[$fieldName] ?? '');
 }
 
+function af_atf_get_character_ability_select_payload(): array
+{
+    $setMap = [
+        'type' => 'ability_type',
+        'subtype' => 'ability_subtype',
+        'slot' => 'ability_slot',
+        'damage_type' => 'ability_damage_type',
+        'targeting' => 'ability_targeting',
+    ];
+
+    $payload = [];
+    foreach ($setMap as $target => $setKey) {
+        $rows = [];
+        if (function_exists('af_kb_get_arpg_mechanics_options')) {
+            $rows = (array)af_kb_get_arpg_mechanics_options($setKey);
+        }
+        if (empty($rows) && function_exists('af_kb_arpg_mechanics_options_fallback')) {
+            $rows = (array)af_kb_arpg_mechanics_options_fallback($setKey);
+        }
+        $normalized = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $key = trim((string)($row['key'] ?? ''));
+            if ($key === '') {
+                continue;
+            }
+            $labelRu = trim((string)($row['label_ru'] ?? ''));
+            $labelEn = trim((string)($row['label_en'] ?? ''));
+            $normalized[] = [
+                'key' => $key,
+                'label_ru' => $labelRu !== '' ? $labelRu : ($labelEn !== '' ? $labelEn : $key),
+                'label_en' => $labelEn !== '' ? $labelEn : ($labelRu !== '' ? $labelRu : $key),
+            ];
+        }
+        $payload[$target] = $normalized;
+    }
+
+    return $payload;
+}
+
 function af_atf_character_effective_mechanic_for_render(string $fallback = ''): string
 {
     $mechanic = ($fallback === 'arpg' || $fallback === 'dnd') ? $fallback : af_atf_character_active_mechanic();
@@ -3055,8 +3095,10 @@ function af_atf_build_input_html(array $field, string $value): string
         }
 
         case 'character_abilities': {
+            $abilitySelects = af_atf_get_character_ability_select_payload();
             return '<div class="af-atf-abilities" data-max-items="8">'
                 . '<input type="hidden" class="af-atf-abilities-hidden" name="' . $nameAttr . '" value="' . $safeValue . '" />'
+                . '<script type="application/json" class="af-atf-abilities-options">' . htmlspecialchars_uni(json_encode($abilitySelects, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}') . '</script>'
                 . '<div class="af-atf-abilities-list"></div>'
                 . '<button type="button" class="button af-atf-abilities-add">+ добавить способность</button>'
                 . '</div>';
@@ -3696,7 +3738,8 @@ function af_atf_normalize_character_abilities_json(string $raw): string
             continue;
         }
 
-        if ($type !== 'passive') {
+        $type = strtolower($type);
+        if ($type === '') {
             $type = 'active';
         }
         if ($sortorder < 0) {
@@ -3714,6 +3757,7 @@ function af_atf_normalize_character_abilities_json(string $raw): string
             'damage_type' => my_substr(trim((string)($row['damage_type'] ?? '')), 0, 128),
             'targeting' => my_substr(trim((string)($row['targeting'] ?? '')), 0, 128),
             'range' => my_substr(trim((string)($row['range'] ?? '')), 0, 64),
+            'damage_value' => my_substr(trim((string)($row['damage_value'] ?? '')), 0, 64),
             'shield_value' => my_substr(trim((string)($row['shield_value'] ?? '')), 0, 64),
             'heal_value' => my_substr(trim((string)($row['heal_value'] ?? '')), 0, 64),
             'ability_description' => my_substr($description, 0, 5000),
@@ -3721,7 +3765,7 @@ function af_atf_normalize_character_abilities_json(string $raw): string
             'sortorder' => $sortorder,
         ];
 
-        if ($normalized['shield_value'] === '' || $normalized['heal_value'] === '') {
+        if ($normalized['damage_value'] === '' || $normalized['shield_value'] === '' || $normalized['heal_value'] === '') {
             $effects = is_array($row['effects'] ?? null) ? (array)$row['effects'] : [];
             foreach ($effects as $effect) {
                 if (!is_array($effect)) {
@@ -3736,8 +3780,10 @@ function af_atf_normalize_character_abilities_json(string $raw): string
                     $normalized['shield_value'] = my_substr($value, 0, 64);
                 } elseif ($kind === 'heal' && $normalized['heal_value'] === '') {
                     $normalized['heal_value'] = my_substr($value, 0, 64);
+                } elseif ($kind === 'damage' && $normalized['damage_value'] === '') {
+                    $normalized['damage_value'] = my_substr($value, 0, 64);
                 }
-                if ($normalized['shield_value'] !== '' && $normalized['heal_value'] !== '') {
+                if ($normalized['damage_value'] !== '' && $normalized['shield_value'] !== '' && $normalized['heal_value'] !== '') {
                     break;
                 }
             }
@@ -4528,7 +4574,15 @@ function af_atf_format_value_for_display(array $field, string $val): string
             if ($name === '') {
                 continue;
             }
-            $items[] = htmlspecialchars_uni($name . ' [' . ($atype === 'passive' ? 'passive' : 'active') . ']');
+            $atypeLabel = '';
+            if (function_exists('af_kb_get_arpg_mechanics_option_label')) {
+                $atypeLabel = (string)af_kb_get_arpg_mechanics_option_label('ability_type', $atype, true);
+            }
+            if ($atypeLabel === '') {
+                $atypeLabel = $atype;
+            }
+            $suffix = trim((string)$atypeLabel) !== '' ? ' [' . $atypeLabel . ']' : '';
+            $items[] = htmlspecialchars_uni($name . $suffix);
         }
         if (empty($items)) {
             return '';

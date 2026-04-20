@@ -368,6 +368,31 @@ body.af-atf-kb-catalog-modal-open {
   display: grid;
   gap: 8px;
 }
+.af-atf-ability-header {
+  margin-bottom: 2px;
+}
+.af-atf-ability-grid {
+  display: grid;
+  gap: 8px 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.af-atf-ability-description-wrap {
+  display: grid;
+  gap: 6px;
+}
+.af-atf-ability-description-wrap textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+.af-atf-ability-bb-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.af-atf-ability-bb-toolbar .button {
+  min-width: 34px;
+  padding: 4px 8px;
+}
 
 .af-atf-kb-meta-table {
   width: 100%;
