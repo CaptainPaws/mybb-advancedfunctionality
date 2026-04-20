@@ -5126,6 +5126,90 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
     ];
 }
 
+function af_kb_extract_inline_ability_summary_value(array $ability, string $kind): string
+{
+    if (array_key_exists($kind . '_value', $ability) && is_scalar($ability[$kind . '_value'])) {
+        return trim((string)$ability[$kind . '_value']);
+    }
+
+    $effects = is_array($ability['effects'] ?? null) ? (array)$ability['effects'] : [];
+    foreach ($effects as $effect) {
+        if (!is_array($effect)) {
+            continue;
+        }
+        $effectKind = trim((string)($effect['kind'] ?? ''));
+        if ($effectKind !== $kind) {
+            continue;
+        }
+        if (array_key_exists('value', $effect) && is_scalar($effect['value'])) {
+            return trim((string)$effect['value']);
+        }
+    }
+
+    return '';
+}
+
+function af_kb_reduce_embedded_ability_to_application_dto(array $ability, int $fallbackSortorder = 0): array
+{
+    $normalized = af_kb_normalize_inline_ability_row($ability, $fallbackSortorder);
+    $type = trim((string)($normalized['type'] ?? $normalized['ability_type'] ?? 'active'));
+    if ($type !== 'passive') {
+        $type = 'active';
+    }
+
+    $sortorder = (int)($normalized['sortorder'] ?? $fallbackSortorder);
+    if ($sortorder <= 0) {
+        $sortorder = $fallbackSortorder > 0 ? $fallbackSortorder : 1;
+    }
+
+    $slotIndex = (int)($normalized['slot_index'] ?? 0);
+    if ($slotIndex <= 0) {
+        $slotIndex = $sortorder;
+    }
+
+    return [
+        'slot_index' => $slotIndex,
+        'ability_name' => trim((string)($normalized['ability_name'] ?? '')),
+        'icon_url' => trim((string)($normalized['icon_url'] ?? '')),
+        'type' => $type,
+        'subtype' => trim((string)($normalized['subtype'] ?? '')),
+        'slot' => trim((string)($normalized['slot'] ?? '')),
+        'damage_type' => trim((string)($normalized['damage_type'] ?? '')),
+        'targeting' => trim((string)($normalized['targeting'] ?? '')),
+        'range' => trim((string)($normalized['range'] ?? '')),
+        'shield_value' => af_kb_extract_inline_ability_summary_value($normalized, 'shield'),
+        'heal_value' => af_kb_extract_inline_ability_summary_value($normalized, 'heal'),
+        'ability_description' => trim((string)($normalized['ability_description'] ?? '')),
+        'ability_kb_key' => trim((string)($normalized['ability_kb_key'] ?? '')),
+        'sortorder' => $sortorder,
+    ];
+}
+
+function af_kb_reduce_embedded_abilities_to_application_dto(array $abilities): array
+{
+    $reduced = [];
+    foreach ($abilities as $idx => $ability) {
+        if (!is_array($ability)) {
+            continue;
+        }
+        $dto = af_kb_reduce_embedded_ability_to_application_dto($ability, $idx + 1);
+        if (
+            $dto['ability_name'] === ''
+            && $dto['ability_description'] === ''
+            && $dto['ability_kb_key'] === ''
+            && $dto['icon_url'] === ''
+        ) {
+            continue;
+        }
+        $reduced[] = $dto;
+        if (count($reduced) >= 8) {
+            break;
+        }
+    }
+
+    return $reduced;
+}
+
 function af_kb_arpg_public_entity_kinds(): array
 {
     return ['origin', 'archetype', 'faction', 'bestiary', 'ability', 'talent', 'item', 'lore'];
@@ -9049,31 +9133,7 @@ function af_kb_build_character_application_prefill(array $entry): array
         }
     }
 
-    $abilitiesNormalized = [];
-    foreach ($abilities as $idx => $ability) {
-        if (!is_array($ability)) {
-            continue;
-        }
-        $abilitiesNormalized[] = [
-            'slot_index' => (int)($ability['slot_index'] ?? ($idx + 1)),
-            'ability_name' => (string)($ability['ability_name'] ?? ''),
-            'ability_type' => (string)($ability['ability_type'] ?? 'active'),
-            'damage_type' => (string)($ability['damage_type'] ?? ''),
-            'targeting' => (string)($ability['targeting'] ?? ''),
-            'range' => (float)($ability['range'] ?? 0),
-            'cast_time' => (float)($ability['cast_time'] ?? 0),
-            'cooldown' => (float)($ability['cooldown'] ?? 0),
-            'duration' => (float)($ability['duration'] ?? 0),
-            'max_charges' => (int)($ability['max_charges'] ?? 0),
-            'level_cap' => (int)($ability['level_cap'] ?? 0),
-            'ability_description' => (string)($ability['ability_description'] ?? ''),
-            'effects' => is_array($ability['effects'] ?? null) ? array_values((array)$ability['effects']) : [],
-            'modifiers' => is_array($ability['modifiers'] ?? null) ? array_values((array)$ability['modifiers']) : [],
-            'grants' => is_array($ability['grants'] ?? null) ? array_values((array)$ability['grants']) : [],
-            'ability_kb_key' => (string)($ability['ability_kb_key'] ?? ''),
-            'sortorder' => (int)($ability['sortorder'] ?? ($idx + 1)),
-        ];
-    }
+    $abilitiesNormalized = af_kb_reduce_embedded_abilities_to_application_dto($abilities);
     $prefill['character_abilities'] = json_encode($abilitiesNormalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '[]';
 
     $mechanic = trim((string)($data['meta']['mechanic'] ?? ''));

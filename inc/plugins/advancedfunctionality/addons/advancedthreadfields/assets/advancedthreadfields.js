@@ -558,10 +558,20 @@
       const createAbility = (seed) => {
         const source = seed && typeof seed === "object" ? seed : {};
         const ability = { ...source };
+        const rawType = String(source.type || source.ability_type || "active").toLowerCase();
         ability.ability_name = String(source.ability_name || "");
-        ability.ability_type = source.ability_type === "passive" ? "passive" : "active";
+        ability.icon_url = String(source.icon_url || "");
+        ability.type = rawType === "passive" ? "passive" : "active";
+        ability.subtype = String(source.subtype || "");
+        ability.slot = String(source.slot || "");
+        ability.damage_type = String(source.damage_type || "");
+        ability.targeting = String(source.targeting || "");
+        ability.range = String(source.range || "");
+        ability.shield_value = String(source.shield_value || "");
+        ability.heal_value = String(source.heal_value || "");
         ability.ability_description = String(source.ability_description || "");
         ability.ability_kb_key = String(source.ability_kb_key || "");
+        ability.slot_index = Number.isFinite(Number(source.slot_index)) ? Number(source.slot_index) : 0;
         ability.sortorder = Number.isFinite(Number(source.sortorder)) ? Number(source.sortorder) : 0;
         return ability;
       };
@@ -597,23 +607,69 @@
             const row = document.createElement("div");
             row.className = "af-atf-ability-item";
             row.innerHTML = `
-              <div><strong>Ability #${index + 1}</strong></div>
-              <input type="text" class="text_input af-atf-ability-name" placeholder="ability_name" value="${AF_ATF.escapeAttr(ability.ability_name)}" />
-              <select class="select af-atf-ability-type">
-                <option value="active"${ability.ability_type === "active" ? " selected" : ""}>active</option>
-                <option value="passive"${ability.ability_type === "passive" ? " selected" : ""}>passive</option>
-              </select>
-              <textarea class="textarea af-atf-ability-description" rows="3" placeholder="ability_description">${AF_ATF.escapeAttr(ability.ability_description)}</textarea>
-              <input type="text" class="text_input af-atf-ability-kb-key" placeholder="ability_kb_key (optional)" value="${AF_ATF.escapeAttr(ability.ability_kb_key)}" />
-              <input type="number" class="text_input af-atf-ability-sortorder" placeholder="sortorder" value="${AF_ATF.escapeAttr(ability.sortorder)}" />
+              <div><strong>Способность #${index + 1}</strong></div>
+              <label>Название способности
+                <input type="text" class="text_input af-atf-ability-name" placeholder="Название способности" value="${AF_ATF.escapeAttr(ability.ability_name)}" />
+              </label>
+              <label>Иконка
+                <input type="text" class="text_input af-atf-ability-icon-url" placeholder="https://..." value="${AF_ATF.escapeAttr(ability.icon_url)}" />
+              </label>
+              <label>Тип
+                <select class="select af-atf-ability-type">
+                  <option value="active"${ability.type === "active" ? " selected" : ""}>Активная</option>
+                  <option value="passive"${ability.type === "passive" ? " selected" : ""}>Пассивная</option>
+                </select>
+              </label>
+              <label>Подтип
+                <input type="text" class="text_input af-atf-ability-subtype" placeholder="Подтип" value="${AF_ATF.escapeAttr(ability.subtype)}" />
+              </label>
+              <label>Слот
+                <input type="text" class="text_input af-atf-ability-slot" placeholder="Слот" value="${AF_ATF.escapeAttr(ability.slot)}" />
+              </label>
+              <label>Тип урона
+                <input type="text" class="text_input af-atf-ability-damage-type" placeholder="Тип урона" value="${AF_ATF.escapeAttr(ability.damage_type)}" />
+              </label>
+              <label>Цель
+                <input type="text" class="text_input af-atf-ability-targeting" placeholder="Цель" value="${AF_ATF.escapeAttr(ability.targeting)}" />
+              </label>
+              <label>Дальность
+                <input type="text" class="text_input af-atf-ability-range" placeholder="Дальность" value="${AF_ATF.escapeAttr(ability.range)}" />
+              </label>
+              <label>Щит
+                <input type="text" class="text_input af-atf-ability-shield" placeholder="0" value="${AF_ATF.escapeAttr(ability.shield_value)}" />
+              </label>
+              <label>Лечение
+                <input type="text" class="text_input af-atf-ability-heal" placeholder="0" value="${AF_ATF.escapeAttr(ability.heal_value)}" />
+              </label>
+              <label>Описание способности
+                <textarea class="textarea af-atf-ability-description" rows="3" placeholder="Описание способности">${AF_ATF.escapeAttr(ability.ability_description)}</textarea>
+              </label>
+              <label style="display:none;">
+                <input type="number" class="text_input af-atf-ability-slot-index" value="${AF_ATF.escapeAttr(ability.slot_index || index + 1)}" />
+              </label>
+              <label>KB key (служебное, опционально)
+                <input type="text" class="text_input af-atf-ability-kb-key" placeholder="ability_kb_key" value="${AF_ATF.escapeAttr(ability.ability_kb_key)}" />
+              </label>
+              <label>Порядок (служебное)
+                <input type="number" class="text_input af-atf-ability-sortorder" placeholder="sortorder" value="${AF_ATF.escapeAttr(ability.sortorder || index + 1)}" />
+              </label>
               <button type="button" class="button af-atf-ability-remove">Удалить</button>
             `;
 
             const setValue = () => {
               state[index] = createAbility({
                 ...(state[index] || {}),
+                slot_index: AF_ATF.qs(".af-atf-ability-slot-index", row).value,
                 ability_name: AF_ATF.qs(".af-atf-ability-name", row).value,
-                ability_type: AF_ATF.qs(".af-atf-ability-type", row).value,
+                icon_url: AF_ATF.qs(".af-atf-ability-icon-url", row).value,
+                type: AF_ATF.qs(".af-atf-ability-type", row).value,
+                subtype: AF_ATF.qs(".af-atf-ability-subtype", row).value,
+                slot: AF_ATF.qs(".af-atf-ability-slot", row).value,
+                damage_type: AF_ATF.qs(".af-atf-ability-damage-type", row).value,
+                targeting: AF_ATF.qs(".af-atf-ability-targeting", row).value,
+                range: AF_ATF.qs(".af-atf-ability-range", row).value,
+                shield_value: AF_ATF.qs(".af-atf-ability-shield", row).value,
+                heal_value: AF_ATF.qs(".af-atf-ability-heal", row).value,
                 ability_description: AF_ATF.qs(".af-atf-ability-description", row).value,
                 ability_kb_key: AF_ATF.qs(".af-atf-ability-kb-key", row).value,
                 sortorder: AF_ATF.qs(".af-atf-ability-sortorder", row).value
@@ -639,13 +695,13 @@
 
         addBtn.addEventListener("click", () => {
           if (state.length >= maxItems) return;
-          state.push(createAbility({ sortorder: state.length + 1 }));
+          state.push(createAbility({ sortorder: state.length + 1, slot_index: state.length + 1 }));
           render();
           sync();
         });
 
         if (!state.length) {
-          state.push(createAbility({ sortorder: 1 }));
+          state.push(createAbility({ sortorder: 1, slot_index: 1 }));
         }
         render();
       });

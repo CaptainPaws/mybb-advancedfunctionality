@@ -3685,13 +3685,14 @@ function af_atf_normalize_character_abilities_json(string $raw): string
         if (!is_array($row)) {
             continue;
         }
-        $name = trim((string)($row['ability_name'] ?? ''));
-        $type = trim((string)($row['ability_type'] ?? 'active'));
+        $name = trim((string)($row['ability_name'] ?? $row['name'] ?? ''));
+        $type = trim((string)($row['type'] ?? $row['ability_type'] ?? 'active'));
         $description = trim((string)($row['ability_description'] ?? ''));
         $kbKey = trim((string)($row['ability_kb_key'] ?? ''));
         $sortorder = (int)($row['sortorder'] ?? (count($out) + 1));
+        $iconUrl = trim((string)($row['icon_url'] ?? ''));
 
-        if ($name === '' && $description === '' && $kbKey === '') {
+        if ($name === '' && $description === '' && $kbKey === '' && $iconUrl === '') {
             continue;
         }
 
@@ -3703,40 +3704,43 @@ function af_atf_normalize_character_abilities_json(string $raw): string
         }
 
         $normalized = [
+            'slot_index' => max(1, (int)($row['slot_index'] ?? ($sortorder > 0 ? $sortorder : (count($out) + 1)))),
             'ability_name' => my_substr($name, 0, 255),
+            'icon_url' => my_substr($iconUrl, 0, 500),
+            'type' => $type,
             'ability_type' => $type,
+            'subtype' => my_substr(trim((string)($row['subtype'] ?? '')), 0, 128),
+            'slot' => my_substr(trim((string)($row['slot'] ?? '')), 0, 128),
+            'damage_type' => my_substr(trim((string)($row['damage_type'] ?? '')), 0, 128),
+            'targeting' => my_substr(trim((string)($row['targeting'] ?? '')), 0, 128),
+            'range' => my_substr(trim((string)($row['range'] ?? '')), 0, 64),
+            'shield_value' => my_substr(trim((string)($row['shield_value'] ?? '')), 0, 64),
+            'heal_value' => my_substr(trim((string)($row['heal_value'] ?? '')), 0, 64),
             'ability_description' => my_substr($description, 0, 5000),
             'ability_kb_key' => my_substr($kbKey, 0, 128),
             'sortorder' => $sortorder,
         ];
-        foreach ([
-            'slot_index',
-            'damage_type',
-            'targeting',
-            'range',
-            'cast_time',
-            'cooldown',
-            'duration',
-            'max_charges',
-            'level_cap',
-            'effects',
-            'modifiers',
-            'grants',
-            'ability_key',
-            'notes',
-        ] as $extraKey) {
-            if (!array_key_exists($extraKey, $row)) {
-                continue;
+
+        if ($normalized['shield_value'] === '' || $normalized['heal_value'] === '') {
+            $effects = is_array($row['effects'] ?? null) ? (array)$row['effects'] : [];
+            foreach ($effects as $effect) {
+                if (!is_array($effect)) {
+                    continue;
+                }
+                $kind = trim((string)($effect['kind'] ?? ''));
+                if (!array_key_exists('value', $effect) || !is_scalar($effect['value'])) {
+                    continue;
+                }
+                $value = trim((string)$effect['value']);
+                if ($kind === 'shield' && $normalized['shield_value'] === '') {
+                    $normalized['shield_value'] = my_substr($value, 0, 64);
+                } elseif ($kind === 'heal' && $normalized['heal_value'] === '') {
+                    $normalized['heal_value'] = my_substr($value, 0, 64);
+                }
+                if ($normalized['shield_value'] !== '' && $normalized['heal_value'] !== '') {
+                    break;
+                }
             }
-            $extraValue = $row[$extraKey];
-            if ($extraKey === 'effects' || $extraKey === 'modifiers' || $extraKey === 'grants') {
-                $normalized[$extraKey] = is_array($extraValue) ? array_values($extraValue) : [];
-                continue;
-            }
-            if (is_array($extraValue) || is_object($extraValue)) {
-                continue;
-            }
-            $normalized[$extraKey] = $extraValue;
         }
 
         $out[] = $normalized;
@@ -4520,7 +4524,7 @@ function af_atf_format_value_for_display(array $field, string $val): string
                 continue;
             }
             $name = trim((string)($ability['ability_name'] ?? ''));
-            $atype = trim((string)($ability['ability_type'] ?? 'active'));
+            $atype = trim((string)($ability['type'] ?? $ability['ability_type'] ?? 'active'));
             if ($name === '') {
                 continue;
             }
