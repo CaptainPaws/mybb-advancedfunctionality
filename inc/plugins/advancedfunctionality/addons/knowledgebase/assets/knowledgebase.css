@@ -548,6 +548,20 @@ background: #000;
   background: #000;
   color: #aeaeae;
 }
+.af-kb-input-suffix {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.af-kb-input-suffix > input {
+    flex: 1 1 auto;
+}
+
+.af-kb-input-suffix__text {
+    color: #8f98a8;
+    font-weight: 600;
+}
 .af-kb-row-ip {
 display: inline-block;
 }

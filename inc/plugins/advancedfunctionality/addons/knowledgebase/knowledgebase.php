@@ -7072,6 +7072,15 @@ function af_knowledgebase_pre_output(string &$page = ''): void
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
             $langTag = $langPayload !== false ? '<script>window.afKbLang='.$langPayload.';</script>' : '';
+            $arpgMechanicsUiOptions = [
+                'ability_type' => af_kb_get_arpg_mechanics_options('ability_type'),
+                'ability_subtype' => af_kb_get_arpg_mechanics_options('ability_subtype'),
+                'ability_slot' => af_kb_get_arpg_mechanics_options('ability_slot'),
+                'ability_damage_type' => af_kb_get_arpg_mechanics_options('ability_damage_type'),
+                'ability_targeting' => af_kb_get_arpg_mechanics_options('ability_targeting'),
+                'ability_value_mode' => af_kb_get_arpg_mechanics_options('ability_value_mode'),
+                'character_gender' => af_kb_get_arpg_mechanics_options('character_gender'),
+            ];
             $endpointTag = '<script>window.afKbEndpoints=' . json_encode([
                 'get' => af_kb_url(['action' => 'kb_get']),
                 'list' => af_kb_url(['action' => 'kb_list']),
@@ -7080,6 +7089,8 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                 'json_list' => af_kb_url(['action' => 'kb_json_list']),
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';window.afKbInsertMechanic='
                 . json_encode(af_kb_get_catalog_active_mechanic_key(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                . ';window.afKbArpgMechanicsOptionSets='
+                . json_encode($arpgMechanicsUiOptions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
                 . ';</script>';
 
             $kbUiCss  = af_kb_build_css_include_tag('assets/knowledgebase_kbui.css');
