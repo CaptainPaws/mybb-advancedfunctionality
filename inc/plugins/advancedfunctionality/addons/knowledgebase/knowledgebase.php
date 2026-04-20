@@ -2159,6 +2159,41 @@ function af_kb_character_profile_resolved_value(string $field, string $value, bo
     return af_kb_resolve_title($type, $value, $isRu ? 'ru' : 'en');
 }
 
+function af_kb_character_stats_labels_dictionary(): array
+{
+    return [
+        'character_hp' => ['ru' => 'HP', 'en' => 'HP'],
+        'character_defense' => ['ru' => 'Защита', 'en' => 'Defense'],
+        'character_element_damage_bonus' => ['ru' => 'Бонус урона стихией', 'en' => 'Elemental Damage Bonus'],
+        'character_crit_damage' => ['ru' => 'Крит. урон', 'en' => 'Critical Damage'],
+        'character_healing_received_bonus' => ['ru' => 'Бонус входящего лечения', 'en' => 'Healing Received Bonus'],
+        'character_attack_power' => ['ru' => 'Сила атаки', 'en' => 'Attack Power'],
+        'character_elemental_mastery' => ['ru' => 'Мастерство стихий', 'en' => 'Elemental Mastery'],
+        'character_healing_bonus' => ['ru' => 'Бонус лечения', 'en' => 'Healing Bonus'],
+        'character_shield_strength' => ['ru' => 'Сила щита', 'en' => 'Shield Strength'],
+        'character_luck' => ['ru' => 'Удача', 'en' => 'Luck'],
+    ];
+}
+
+function af_kb_character_stat_label(string $key, bool $isRu): string
+{
+    $key = trim($key);
+    if ($key === '') {
+        return '';
+    }
+
+    $dict = af_kb_character_stats_labels_dictionary();
+    $row = $dict[$key] ?? null;
+    if (is_array($row)) {
+        $localized = $isRu ? (string)($row['ru'] ?? '') : (string)($row['en'] ?? '');
+        if ($localized !== '') {
+            return $localized;
+        }
+    }
+
+    return $key;
+}
+
 function af_kb_reorganize_arpg_entries_and_types(): void
 {
     global $db;
@@ -8430,7 +8465,8 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
     $statRows = '';
     foreach ($stats as $key => $value) {
         if (is_scalar($value)) {
-            $statRows .= '<div class="af-kb-char-stat"><span>' . htmlspecialchars_uni((string)$key) . '</span><strong>' . htmlspecialchars_uni((string)$value) . '</strong></div>';
+            $label = af_kb_character_stat_label((string)$key, $isRu);
+            $statRows .= '<div class="af-kb-char-stat"><span>' . htmlspecialchars_uni($label) . '</span><strong>' . htmlspecialchars_uni((string)$value) . '</strong></div>';
         }
     }
 
