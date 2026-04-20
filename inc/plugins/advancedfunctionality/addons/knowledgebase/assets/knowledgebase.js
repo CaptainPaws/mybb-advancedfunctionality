@@ -1104,6 +1104,7 @@
             var enums = {
                 abilitySubtype: ['', 'active', 'passive', 'ultimate', 'support', 'aura', 'toggle', 'summon', 'reaction', 'movement'],
                 abilitySlot: ['', 'basic', 'skill_1', 'skill_2', 'skill_3', 'support', 'ultimate', 'passive', 'custom'],
+                damageType: ['', 'physical', 'fire', 'ice', 'lightning', 'poison', 'acid', 'bleed', 'arcane', 'holy', 'shadow', 'true', 'kinetic', 'custom'],
                 targeting: ['', 'self', 'single_enemy', 'single_ally', 'line', 'cone', 'aoe_ground', 'aoe_around_self', 'global', 'custom'],
                 rarity: ['', 'common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic', 'set', 'unique', 'custom'],
                 itemKind: ['', 'weapon', 'armor', 'accessory', 'artifact', 'consumable', 'material', 'quest', 'custom'],
@@ -1595,7 +1596,7 @@
                     { key: 'type', label: 'type', type: 'select', options: ['', 'active', 'passive', 'ultimate'], default: 'active' },
                     { key: 'subtype', label: 'subtype', type: 'select', options: enums.abilitySubtype, default: '' },
                     { key: 'slot', label: 'slot', type: 'select', options: enums.abilitySlot, default: 'skill_1' },
-                    { key: 'damage_type', label: 'damage_type', default: 'physical' },
+                    { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
                     { key: 'targeting', label: 'targeting', type: 'select', options: enums.targeting, default: 'single_enemy' },
                     { key: 'range', label: 'range', type: 'number', default: 0 },
                     { key: 'cast_time', label: 'cast_time', type: 'number', default: 0 },
@@ -1621,8 +1622,8 @@
 
                 renderSeededArrayEditor(rulesRoot, 'effects', 'effects', [
                     { key: 'kind', label: 'kind', default: 'damage' },
-                    { key: 'damage_type', label: 'damage_type', default: 'physical' },
-                    { key: 'targeting', label: 'targeting', default: 'single_enemy' },
+                    { key: 'damage_type', label: 'damage_type', type: 'select', options: enums.damageType, default: 'physical' },
+                    { key: 'targeting', label: 'targeting', type: 'select', options: enums.targeting, default: 'single_enemy' },
                     { key: 'value_mode', label: 'value_mode', default: 'flat' },
                     { key: 'value', label: 'value', type: 'number', default: 0 },
                     { key: 'formula_ref', label: 'formula_ref', default: '' },
