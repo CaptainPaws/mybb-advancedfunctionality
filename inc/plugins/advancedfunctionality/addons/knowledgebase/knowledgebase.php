@@ -711,7 +711,7 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.type', 'type' => 'string', 'required' => true, 'default' => 'active'],
                 ['path' => 'rules.subtype', 'type' => 'string', 'required' => true, 'default' => ''],
                 ['path' => 'rules.slot', 'type' => 'string', 'required' => true, 'default' => 'skill_1'],
-                ['path' => 'rules.damage_type', 'type' => 'string', 'required' => true, 'default' => 'physical'],
+                ['path' => 'rules.damage_type', 'type' => 'select', 'required' => true, 'options' => array_map(static fn($value) => ['value' => $value], af_kb_arpg_damage_type_values()), 'default' => 'physical'],
                 ['path' => 'rules.targeting', 'type' => 'string', 'required' => true, 'default' => 'single_enemy'],
                 ['path' => 'rules.range', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.cast_time', 'type' => 'number', 'required' => true, 'default' => 0],
@@ -4962,6 +4962,11 @@ function af_kb_arpg_public_entity_kinds(): array
 function af_kb_arpg_service_entity_kinds(): array
 {
     return ['mechanic_profile', 'resource_def', 'status_def', 'modifier_template', 'formula_def', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
+}
+
+function af_kb_arpg_damage_type_values(): array
+{
+    return ['', 'physical', 'fire', 'ice', 'lightning', 'poison', 'acid', 'bleed', 'arcane', 'holy', 'shadow', 'true', 'kinetic', 'custom'];
 }
 
 function af_kb_arpg_get_payload_path(array $payload, string $path, bool &$exists = false)
