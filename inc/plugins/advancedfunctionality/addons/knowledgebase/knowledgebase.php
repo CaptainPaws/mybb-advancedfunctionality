@@ -618,7 +618,18 @@ function af_kb_default_type_definitions(): array
                     ['path' => 'slot_index', 'type' => 'number', 'required' => true, 'default' => 1],
                     ['path' => 'ability_name', 'type' => 'string', 'required' => true, 'default' => ''],
                     ['path' => 'ability_type', 'type' => 'select', 'required' => true, 'options' => [['value' => 'active'], ['value' => 'passive']], 'default' => 'active'],
+                    ['path' => 'damage_type', 'type' => 'string', 'default' => ''],
+                    ['path' => 'targeting', 'type' => 'string', 'default' => ''],
+                    ['path' => 'range', 'type' => 'number', 'default' => 0],
+                    ['path' => 'cast_time', 'type' => 'number', 'default' => 0],
+                    ['path' => 'cooldown', 'type' => 'number', 'default' => 0],
+                    ['path' => 'duration', 'type' => 'number', 'default' => 0],
+                    ['path' => 'max_charges', 'type' => 'number', 'default' => 0],
+                    ['path' => 'level_cap', 'type' => 'number', 'default' => 0],
                     ['path' => 'ability_description', 'type' => 'textarea', 'default' => ''],
+                    ['path' => 'effects', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                    ['path' => 'modifiers', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                    ['path' => 'grants', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
                     ['path' => 'ability_kb_key', 'type' => 'string', 'default' => ''],
                     ['path' => 'sortorder', 'type' => 'number', 'default' => 0],
                 ]]],
@@ -794,7 +805,27 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.combat_stats.status_resist', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.resists', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [['path' => 'damage_type', 'type' => 'string', 'required' => true], ['path' => 'value', 'type' => 'number', 'required' => true], ['path' => 'notes', 'type' => 'string', 'default' => '']]], 'default' => []],
                 ['path' => 'rules.weaknesses', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [['path' => 'damage_type', 'type' => 'string', 'required' => true], ['path' => 'value', 'type' => 'number', 'required' => true], ['path' => 'notes', 'type' => 'string', 'default' => '']]], 'default' => []],
-                ['path' => 'rules.ability_keys', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [['path' => 'ability_key', 'type' => 'string', 'required' => true], ['path' => 'notes', 'type' => 'string', 'default' => '']]], 'default' => []],
+                ['path' => 'rules.ability_keys', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [
+                    ['path' => 'slot_index', 'type' => 'number', 'default' => 1],
+                    ['path' => 'ability_name', 'type' => 'string', 'default' => ''],
+                    ['path' => 'ability_type', 'type' => 'select', 'options' => [['value' => 'active'], ['value' => 'passive']], 'default' => 'active'],
+                    ['path' => 'damage_type', 'type' => 'string', 'default' => ''],
+                    ['path' => 'targeting', 'type' => 'string', 'default' => ''],
+                    ['path' => 'range', 'type' => 'number', 'default' => 0],
+                    ['path' => 'cast_time', 'type' => 'number', 'default' => 0],
+                    ['path' => 'cooldown', 'type' => 'number', 'default' => 0],
+                    ['path' => 'duration', 'type' => 'number', 'default' => 0],
+                    ['path' => 'max_charges', 'type' => 'number', 'default' => 0],
+                    ['path' => 'level_cap', 'type' => 'number', 'default' => 0],
+                    ['path' => 'ability_description', 'type' => 'string', 'default' => ''],
+                    ['path' => 'effects', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                    ['path' => 'modifiers', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                    ['path' => 'grants', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                    ['path' => 'ability_kb_key', 'type' => 'string', 'default' => ''],
+                    ['path' => 'ability_key', 'type' => 'string', 'default' => ''],
+                    ['path' => 'notes', 'type' => 'string', 'default' => ''],
+                    ['path' => 'sortorder', 'type' => 'number', 'default' => 0],
+                ]], 'default' => []],
                 ['path' => 'rules.loot', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [['path' => 'loot_key', 'type' => 'string', 'required' => true], ['path' => 'kind', 'type' => 'string', 'required' => true], ['path' => 'qty_min', 'type' => 'number', 'required' => true], ['path' => 'qty_max', 'type' => 'number', 'required' => true], ['path' => 'chance', 'type' => 'number', 'required' => true], ['path' => 'notes', 'type' => 'string', 'default' => '']]], 'default' => []],
             ],
             'arpg_mechanics' => [
@@ -4940,6 +4971,7 @@ function af_kb_arpg_migrate_legacy_rules_contract(string $type, array $rules): a
         $rules['resists'] = af_kb_arpg_pick_array($rules, ['resists']);
         $rules['weaknesses'] = af_kb_arpg_pick_array($rules, ['weaknesses']);
         $rules['ability_keys'] = af_kb_arpg_pick_array($rules, ['ability_keys', 'abilities', 'ability_refs']);
+        $rules['ability_keys'] = array_values(array_map('af_kb_normalize_inline_ability_row', (array)$rules['ability_keys']));
         $rules['loot'] = af_kb_arpg_pick_array($rules, ['loot', 'loot_table', 'drops']);
     } elseif ($type === 'arpg_mechanics') {
         $legacyKind = (string)af_kb_arpg_pick_first($rules, ['service_kind', 'entity_kind', 'kind', 'mechanic_kind'], '');
@@ -4952,6 +4984,41 @@ function af_kb_arpg_migrate_legacy_rules_contract(string $type, array $rules): a
     }
 
     return $rules;
+}
+
+function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0): array
+{
+    $row = is_array($ability) ? $ability : [];
+    $abilityKbKey = trim((string)($row['ability_kb_key'] ?? ''));
+    $legacyKey = trim((string)($row['ability_key'] ?? ''));
+    if ($abilityKbKey === '' && $legacyKey !== '') {
+        $abilityKbKey = $legacyKey;
+    }
+
+    $sort = isset($row['sortorder']) ? (int)$row['sortorder'] : $fallbackSortorder;
+    $slotIndex = isset($row['slot_index']) ? (int)$row['slot_index'] : ($sort > 0 ? $sort : 1);
+
+    return [
+        'slot_index' => $slotIndex,
+        'ability_name' => (string)($row['ability_name'] ?? ''),
+        'ability_type' => (string)($row['ability_type'] ?? 'active'),
+        'damage_type' => (string)($row['damage_type'] ?? ''),
+        'targeting' => (string)($row['targeting'] ?? ''),
+        'range' => isset($row['range']) ? (float)$row['range'] : 0.0,
+        'cast_time' => isset($row['cast_time']) ? (float)$row['cast_time'] : 0.0,
+        'cooldown' => isset($row['cooldown']) ? (float)$row['cooldown'] : 0.0,
+        'duration' => isset($row['duration']) ? (float)$row['duration'] : 0.0,
+        'max_charges' => isset($row['max_charges']) ? (int)$row['max_charges'] : 0,
+        'level_cap' => isset($row['level_cap']) ? (int)$row['level_cap'] : 0,
+        'ability_description' => (string)($row['ability_description'] ?? ''),
+        'effects' => is_array($row['effects'] ?? null) ? array_values((array)$row['effects']) : [],
+        'modifiers' => is_array($row['modifiers'] ?? null) ? array_values((array)$row['modifiers']) : [],
+        'grants' => is_array($row['grants'] ?? null) ? array_values((array)$row['grants']) : [],
+        'ability_kb_key' => $abilityKbKey,
+        'ability_key' => $legacyKey,
+        'notes' => (string)($row['notes'] ?? ''),
+        'sortorder' => $sort,
+    ];
 }
 
 function af_kb_arpg_public_entity_kinds(): array
@@ -5235,8 +5302,16 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
                 $errors[] = 'ARPG bestiary "ability_keys" row #' . ($idx + 1) . ' must be an object.';
                 continue;
             }
-            if (trim((string)($row['ability_key'] ?? '')) === '') {
-                $errors[] = 'ARPG bestiary "ability_keys" row #' . ($idx + 1) . ' requires ability_key.';
+            $row = af_kb_normalize_inline_ability_row($row, $idx + 1);
+            $inlineName = trim((string)($row['ability_name'] ?? ''));
+            $inlineRef = trim((string)($row['ability_kb_key'] ?? $row['ability_key'] ?? ''));
+            if ($inlineName === '' && $inlineRef === '') {
+                $errors[] = 'ARPG bestiary "ability_keys" row #' . ($idx + 1) . ' requires ability_name or ability_kb_key.';
+            }
+            foreach (['effects', 'modifiers', 'grants'] as $arrKey) {
+                if (!is_array($row[$arrKey] ?? null)) {
+                    $errors[] = 'ARPG bestiary "ability_keys" row #' . ($idx + 1) . ' requires array ' . $arrKey . '.';
+                }
             }
         }
 
@@ -8344,7 +8419,7 @@ function af_kb_extract_character_contract(array $entry): array
     $payload = array_replace_recursive($defaults, $rules);
     $profile = (array)($payload['character_profile'] ?? []);
     $stats = (array)($payload['character_stats'] ?? []);
-    $abilities = (array)($payload['character_abilities'] ?? []);
+    $abilities = array_values(array_map('af_kb_normalize_inline_ability_row', (array)($payload['character_abilities'] ?? [])));
 
     usort($abilities, static function ($a, $b): int {
         $sa = (int)((is_array($a) ? ($a['sortorder'] ?? 0) : 0));
@@ -8599,9 +8674,21 @@ function af_kb_build_character_application_prefill(array $entry): array
             continue;
         }
         $abilitiesNormalized[] = [
+            'slot_index' => (int)($ability['slot_index'] ?? ($idx + 1)),
             'ability_name' => (string)($ability['ability_name'] ?? ''),
             'ability_type' => (string)($ability['ability_type'] ?? 'active'),
+            'damage_type' => (string)($ability['damage_type'] ?? ''),
+            'targeting' => (string)($ability['targeting'] ?? ''),
+            'range' => (float)($ability['range'] ?? 0),
+            'cast_time' => (float)($ability['cast_time'] ?? 0),
+            'cooldown' => (float)($ability['cooldown'] ?? 0),
+            'duration' => (float)($ability['duration'] ?? 0),
+            'max_charges' => (int)($ability['max_charges'] ?? 0),
+            'level_cap' => (int)($ability['level_cap'] ?? 0),
             'ability_description' => (string)($ability['ability_description'] ?? ''),
+            'effects' => is_array($ability['effects'] ?? null) ? array_values((array)$ability['effects']) : [],
+            'modifiers' => is_array($ability['modifiers'] ?? null) ? array_values((array)$ability['modifiers']) : [],
+            'grants' => is_array($ability['grants'] ?? null) ? array_values((array)$ability['grants']) : [],
             'ability_kb_key' => (string)($ability['ability_kb_key'] ?? ''),
             'sortorder' => (int)($ability['sortorder'] ?? ($idx + 1)),
         ];
