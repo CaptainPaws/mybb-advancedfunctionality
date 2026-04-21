@@ -355,6 +355,33 @@ body.af-atf-kb-catalog-modal-open {
   gap: 8px;
 }
 
+.af-atf-character-top-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.af-atf-character-top-grid-item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.af-atf-character-top-grid-label {
+  display: block;
+  font-weight: 700;
+}
+
+.af-atf-character-top-grid-desc {
+  font-size: 12px;
+  opacity: .82;
+}
+
+.af-atf-character-top-grid-control .af-atf-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .af-atf-abilities-list {
   display: grid;
   gap: 10px;
@@ -412,15 +439,6 @@ body.af-atf-kb-catalog-modal-open {
 .af-atf-ability-description-wrap textarea {
   width: 100%;
   box-sizing: border-box;
-}
-.af-atf-ability-bb-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.af-atf-ability-bb-toolbar .button {
-  min-width: 34px;
-  padding: 4px 8px;
 }
 
 .af-atf-character-stats {
@@ -484,6 +502,9 @@ body.af-atf-kb-catalog-modal-open {
   font-weight: 700;
 }
 @media (max-width: 1200px) {
+  .af-atf-character-top-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
   .af-atf-ability-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -493,6 +514,9 @@ body.af-atf-kb-catalog-modal-open {
   }
 }
 @media (max-width: 900px) {
+  .af-atf-character-top-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .af-atf-ability-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -502,6 +526,9 @@ body.af-atf-kb-catalog-modal-open {
   }
 }
 @media (max-width: 640px) {
+  .af-atf-character-top-grid {
+    grid-template-columns: 1fr;
+  }
   .af-atf-ability-grid {
     grid-template-columns: 1fr;
   }

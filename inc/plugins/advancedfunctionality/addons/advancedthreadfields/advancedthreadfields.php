@@ -2806,6 +2806,39 @@ function af_atf_get_character_ability_select_payload(): array
     return $payload;
 }
 
+function af_atf_get_arpg_mechanics_select_options(string $setKey): array
+{
+    $setKey = trim($setKey);
+    if ($setKey === '') {
+        return [];
+    }
+
+    $rows = [];
+    if (function_exists('af_kb_get_arpg_mechanics_options')) {
+        $rows = (array)af_kb_get_arpg_mechanics_options($setKey);
+    }
+
+    $normalized = [];
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $key = trim((string)($row['key'] ?? ''));
+        if ($key === '') {
+            continue;
+        }
+        $labelRu = trim((string)($row['label_ru'] ?? ''));
+        $labelEn = trim((string)($row['label_en'] ?? ''));
+        $normalized[] = [
+            'key' => $key,
+            'label_ru' => $labelRu !== '' ? $labelRu : ($labelEn !== '' ? $labelEn : $key),
+            'label_en' => $labelEn !== '' ? $labelEn : ($labelRu !== '' ? $labelRu : $key),
+        ];
+    }
+
+    return $normalized;
+}
+
 function af_atf_character_effective_mechanic_for_render(string $fallback = ''): string
 {
     $mechanic = ($fallback === 'arpg' || $fallback === 'dnd') ? $fallback : af_atf_character_active_mechanic();
@@ -2941,8 +2974,78 @@ function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
         $rows .= '<tr class="af-atf-character-mechanic-row" style="display:none;"><td colspan="2"><input type="hidden" class="af-atf-character-mechanic" value="' . htmlspecialchars_uni($activeMechanic) . '" /></td></tr>';
     }
 
+    $characterTopFieldNames = [
+        'character_element',
+        'character_pic',
+        'character_image',
+        'character_prototype',
+        'character_name',
+        'character_name_ru',
+        'character_nicknames',
+        'character_age',
+        'character_gen',
+        'character_gender',
+        'character_race',
+        'character_origin',
+        'character_class',
+        'character_archetype',
+        'character_faction',
+        'character_activity',
+        'character_occupation',
+    ];
+    $characterTopFieldNameMap = array_fill_keys($characterTopFieldNames, true);
+    $characterTopRows = [];
+    $skipFieldIds = [];
+
+    foreach ($fields as $f) {
+        $fieldName = trim((string)($f['name'] ?? ''));
+        if ($fieldName === '' || !isset($characterTopFieldNameMap[$fieldName])) {
+            continue;
+        }
+
+        $fieldid = (int)($f['fieldid'] ?? 0);
+        if ($fieldid <= 0) {
+            continue;
+        }
+
+        $valRaw = $valuesByFieldId[$fieldid] ?? '';
+        $characterTopRows[] = [
+            'field' => $f,
+            'value' => is_string($valRaw) ? $valRaw : '',
+        ];
+    }
+
+    if (count($characterTopRows) >= 10) {
+        $gridHtml = '<div class="af-atf-character-top-grid">';
+        foreach ($characterTopRows as $item) {
+            $f = (array)$item['field'];
+            $fieldid = (int)($f['fieldid'] ?? 0);
+            if ($fieldid <= 0) {
+                continue;
+            }
+            $skipFieldIds[$fieldid] = true;
+
+            $title = htmlspecialchars_uni((string)($f['title'] ?? ''));
+            $desc = af_atf_render_field_description($f);
+            $required = ((int)($f['required'] ?? 0) === 1);
+            $requiredMark = $required ? '<span class="af-atf-required">*</span>' : '';
+            $input = af_atf_build_input_html($f, (string)$item['value']);
+
+            $gridHtml .= '<div class="af-atf-character-top-grid-item">'
+                . '<label class="af-atf-character-top-grid-label">' . $title . $requiredMark . '</label>'
+                . ($desc !== '' ? '<div class="af-atf-character-top-grid-desc">' . $desc . '</div>' : '')
+                . '<div class="af-atf-character-top-grid-control">' . $input . '</div>'
+                . '</div>';
+        }
+        $gridHtml .= '</div>';
+        $rows .= '<tr class="af-atf-character-top-grid-row"><td class="trow2" colspan="2">' . $gridHtml . '</td></tr>';
+    }
+
     foreach ($fields as $f) {
         $fieldid = (int)$f['fieldid'];
+        if (isset($skipFieldIds[$fieldid])) {
+            continue;
+        }
 
         $title   = htmlspecialchars_uni((string)$f['title']);
         $desc    = af_atf_render_field_description($f);
@@ -2999,6 +3102,35 @@ function af_atf_build_input_html(array $field, string $value): string
 
     $activeMechanic = af_atf_character_effective_mechanic_for_render();
     $arpgContractType = af_atf_character_arpg_contract_type($fieldName);
+
+    if ($fieldName === 'character_gen' || $fieldName === 'character_gender') {
+        $mechanicsRows = af_atf_get_arpg_mechanics_select_options('character_gender');
+        if (!empty($mechanicsRows)) {
+            $html = '<select class="select af-atf-input" name="' . $nameAttr . '"><option value=""></option>';
+            $seen = [];
+            foreach ($mechanicsRows as $row) {
+                $key = trim((string)($row['key'] ?? ''));
+                if ($key === '') {
+                    continue;
+                }
+                $seen[$key] = true;
+                $selected = ((string)$value === $key) ? ' selected="selected"' : '';
+                $label = trim((string)($row['label_ru'] ?? ''));
+                if ($label === '') {
+                    $label = trim((string)($row['label_en'] ?? ''));
+                }
+                if ($label === '') {
+                    $label = $key;
+                }
+                $html .= '<option value="' . htmlspecialchars_uni($key) . '"' . $selected . '>' . htmlspecialchars_uni($label) . '</option>';
+            }
+            if ($value !== '' && !isset($seen[$value])) {
+                $html .= '<option value="' . htmlspecialchars_uni($value) . '" selected="selected">' . htmlspecialchars_uni($value) . '</option>';
+            }
+            $html .= '</select>';
+            return $html;
+        }
+    }
 
     $renderKbSelect = static function (string $nameAttr, string $selectedValue, array $list, string $fallbackLabel = ''): string {
         $html = '<select class="select af-atf-input" name="' . $nameAttr . '"><option value=""></option>';
@@ -4903,6 +5035,17 @@ function af_atf_format_value_for_display(array $field, string $val): string
         }
 
         return '<span class="af-atf-userchips-out">'.implode(' ', $out).'</span>';
+    }
+
+    $fieldName = trim((string)($field['name'] ?? ''));
+    if (($fieldName === 'character_gen' || $fieldName === 'character_gender') && $val !== '') {
+        if (function_exists('af_kb_get_arpg_mechanics_option_label')) {
+            $label = (string)af_kb_get_arpg_mechanics_option_label('character_gender', $val, true);
+            if ($label !== '') {
+                return htmlspecialchars_uni($label);
+            }
+        }
+        return htmlspecialchars_uni($val);
     }
 
     // 1) select/radio: сохраняем key, но показываем label

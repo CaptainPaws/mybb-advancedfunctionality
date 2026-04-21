@@ -613,17 +613,6 @@
           }
           return html;
         };
-        const insertBbTag = (textarea, openTag, closeTag = "") => {
-          if (!textarea) return;
-          const start = textarea.selectionStart || 0;
-          const end = textarea.selectionEnd || 0;
-          const selected = textarea.value.substring(start, end);
-          const text = `${openTag}${selected}${closeTag}`;
-          textarea.setRangeText(text, start, end, "end");
-          textarea.focus();
-          textarea.dispatchEvent(new Event("input", { bubbles: true }));
-        };
-
         let state = [];
         try {
           const parsed = JSON.parse(String(hidden.value || "[]"));
@@ -701,12 +690,6 @@
               </div>
               <label class="af-atf-ability-description-wrap">
                 <span class="af-atf-ability-label">Описание способности</span>
-                <div class="af-atf-ability-bb-toolbar">
-                  <button type="button" class="button af-atf-ability-bb" data-open="[b]" data-close="[/b]"><b>B</b></button>
-                  <button type="button" class="button af-atf-ability-bb" data-open="[i]" data-close="[/i]"><i>I</i></button>
-                  <button type="button" class="button af-atf-ability-bb" data-open="[u]" data-close="[/u]"><u>U</u></button>
-                  <button type="button" class="button af-atf-ability-bb" data-open="[url=]" data-close="[/url]">URL</button>
-                </div>
                 <textarea class="textbox textarea af-atf-input af-atf-ability-description" rows="4" placeholder="Описание способности">${AF_ATF.escapeAttr(ability.ability_description)}</textarea>
               </label>
               <label style="display:none;">
@@ -738,13 +721,6 @@
             AF_ATF.qsa("input,select,textarea", row).forEach((el) => {
               el.addEventListener("input", setValue);
               el.addEventListener("change", setValue);
-            });
-
-            AF_ATF.qsa(".af-atf-ability-bb", row).forEach((btn) => {
-              btn.addEventListener("click", () => {
-                const ta = AF_ATF.qs(".af-atf-ability-description", row);
-                insertBbTag(ta, String(btn.getAttribute("data-open") || ""), String(btn.getAttribute("data-close") || ""));
-              });
             });
 
             AF_ATF.qs(".af-atf-ability-remove", row).addEventListener("click", () => {
