@@ -4374,6 +4374,30 @@ function af_atf_handle_character_kb_bridge_action(bool $syncOnly): void
     redirect($entryUrl, $msg);
 }
 
+function af_atf_render_character_kb_moderation_button(int $tid, int $uid, array $acceptRow = [], string $postKey = ''): string
+{
+    global $lang;
+
+    if ($tid <= 0 || !function_exists('af_charactersheets_resolve_character_kb_entry') || !function_exists('af_charactersheets_url')) {
+        return '';
+    }
+
+    $kbSource = af_charactersheets_resolve_character_kb_entry($tid, $uid, $acceptRow);
+    $kbExists = !empty(($kbSource['entry'] ?? [])['id']);
+    $action = $kbExists ? 'af_atf_character_kb_sync' : 'af_atf_character_kb_create';
+    $label = $kbExists
+        ? ($lang->af_charactersheets_kb_sync_button ?? 'Синхронизировать анкету → KB')
+        : ($lang->af_charactersheets_kb_button ?? 'Создать запись в KB');
+
+    $kbUrl = af_charactersheets_url([
+        'action' => $action,
+        'tid' => $tid,
+        'my_post_key' => $postKey,
+    ]);
+
+    return '<a class="button af-cs-accept-button af-cs-accept-button--kb" target="_blank" rel="noopener" href="' . htmlspecialchars_uni($kbUrl) . '"><span>' . htmlspecialchars_uni($label) . '</span></a>';
+}
+
 function af_atf_character_bridge_store_thread_kb_link(int $tid, int $fid, int $uid): void
 {
     global $db;

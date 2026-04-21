@@ -702,24 +702,21 @@ function af_charactersheets_showthread_start_impl(): void
 
     $acceptRow = af_charactersheets_get_accept_row($tid);
     $uid = (int)($thread['uid'] ?? 0);
-    $kbSource = af_charactersheets_resolve_character_kb_entry($tid, $uid, $acceptRow);
-    $kbExists = !empty(($kbSource['entry'] ?? [])['id']);
 
     $sheetExists = af_charactersheets_resolve_existing_sheet_for_thread($tid, $uid, $acceptRow);
 
     $acceptUrl = af_charactersheets_url(['action' => 'af_charactersheets_accept', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
-    $kbUrl = af_charactersheets_url(['action' => 'af_atf_character_kb_create', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
-    $kbSyncUrl = af_charactersheets_url(['action' => 'af_atf_character_kb_sync', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
     $sheetUrl = af_charactersheets_url(['action' => 'af_charactersheets_create_sheet', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
 
     $buttons = [];
     if (!$was_accepted) {
         $buttons[] = '<a class="button af-cs-accept-button" href="' . htmlspecialchars_uni($acceptUrl) . '"><span>' . htmlspecialchars_uni($acceptText) . '</span></a>';
     }
-    if (!$kbExists) {
-        $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--kb" target="_blank" rel="noopener" href="' . htmlspecialchars_uni($kbUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_kb_button ?? 'Создать запись в KB') . '</span></a>';
-    } else {
-        $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--kb" target="_blank" rel="noopener" href="' . htmlspecialchars_uni($kbSyncUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_kb_sync_button ?? 'Синхронизировать анкету → KB') . '</span></a>';
+    if (function_exists('af_atf_render_character_kb_moderation_button')) {
+        $kbButton = (string)af_atf_render_character_kb_moderation_button($tid, $uid, $acceptRow, (string)$mybb->post_code);
+        if ($kbButton !== '') {
+            $buttons[] = $kbButton;
+        }
     }
     if (empty($sheetExists)) {
         $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--sheet" target="_blank" rel="noopener" href="' . htmlspecialchars_uni($sheetUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_create_sheet_button ?? 'Создать лист персонажа') . '</span></a>';
