@@ -9359,6 +9359,22 @@ function af_kb_render_character_status_badge(array $availability, bool $isRu): s
     return '<span class="af-kb-status-badge af-kb-status-badge--' . htmlspecialchars_uni($status) . '">' . htmlspecialchars_uni($title) . '</span>';
 }
 
+function af_kb_render_character_status_link(array $availability, bool $isRu, string $context = 'entry'): string
+{
+    $status = (string)($availability['effective_status'] ?? 'free');
+    if (!in_array($status, ['occupied', 'held'], true)) {
+        return '';
+    }
+
+    $url = af_kb_sanitize_url((string)($availability['link_url'] ?? ''));
+    if ($url === '') {
+        return '';
+    }
+
+    $title = $isRu ? 'Открыть ссылку' : 'Open link';
+    return '<a class="af-kb-status-link af-kb-status-link--' . htmlspecialchars_uni($context) . '" href="' . htmlspecialchars_uni($url) . '" target="_blank" rel="noopener noreferrer" title="' . htmlspecialchars_uni($title) . '" aria-label="' . htmlspecialchars_uni($title) . '">🔗</a>';
+}
+
 function af_kb_catalog_entry_card(array $entry, array $typeRow): string
 {
     $entryType = (string)($entry['type'] ?? '');
@@ -9417,6 +9433,11 @@ function af_kb_catalog_entry_card(array $entry, array $typeRow): string
     $kb_character_pic = $pic !== '' ? '<img src="' . htmlspecialchars_uni($pic) . '" alt="" loading="lazy" />' : '<div class="af-kb-char-card__pic-placeholder"></div>';
     $kb_character_short = $short !== '' ? af_kb_parse_message($short) : '';
     $kb_character_meta = $meta ? implode(' • ', $meta) : '';
+    $kb_character_status_badge = '';
+    if ($isCharacter) {
+        $availability = af_kb_get_character_availability_payload($entry);
+        $kb_character_status_badge = af_kb_render_character_status_badge($availability, true);
+    }
     $kb_card_style = $entryBgStyle !== '' ? ' style="' . $entryBgStyle . '"' : '';
     $kb_card_bg_class = $entryBgStyle !== '' ? ' af-kb-char-card--with-bg' : '';
 
@@ -9524,7 +9545,7 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         . ($bio !== '' ? '<section class="af-kb-char-profile__section"><h3>Биография</h3><div>' . af_kb_parse_message($bio) . '</div></section>' : '')
         . '<section class="af-kb-char-profile__section"><h3>Характеристики</h3><div class="af-kb-char-stats">' . $statRows . '</div></section>'
         . '<section class="af-kb-char-profile__section"><h3>Способности</h3><div class="af-kb-char-abilities">' . ($abilitiesHtml !== '' ? $abilitiesHtml : '<div class="af-kb-char-empty">No abilities yet.</div>') . '</div></section>'
-        . '<section class="af-kb-char-profile__service">' . $applyCtaHtml . '<button type="button" class="af-kb-btn" disabled>Character Sheet Sync (next task)</button></section>'
+        . '<section class="af-kb-char-profile__service">' . $applyCtaHtml . '</section>'
         . '</div>';
 }
 
@@ -10248,11 +10269,13 @@ function af_kb_handle_view(): void
     $kb_page_title = htmlspecialchars_uni($title);
     $kb_title = htmlspecialchars_uni($title);
     $kb_status_badge = '';
+    $kb_status_link = '';
     $kb_character_status_button = '';
     $kb_character_status_modal = '';
     if ($type === 'character') {
         $availability = af_kb_get_character_availability_payload($entry);
         $kb_status_badge = af_kb_render_character_status_badge($availability, $isRu);
+        $kb_status_link = af_kb_render_character_status_link($availability, $isRu, 'entry');
         if (af_kb_can_edit() && empty($availability['is_author'])) {
             $storedStatus = (string)($availability['stored_status'] ?? 'free');
             $statusSaveUrl = 'misc.php?action=kb_character_status_save';
