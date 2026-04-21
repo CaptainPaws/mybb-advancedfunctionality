@@ -9432,15 +9432,17 @@ function af_kb_character_catalog_card(array $entry, array $typeRow): string
 function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu): string
 {
     $data = af_kb_extract_character_contract($entry);
-    $profile = (array)($data['profile'] ?? []);
-    $stats = (array)($data['stats'] ?? []);
+    $profile = is_array($data['profile'] ?? null) ? $data['profile'] : [];
+    $stats = is_array($data['stats'] ?? null) ? $data['stats'] : [];
+    $rules = is_array($data['rules'] ?? null) ? $data['rules'] : [];
+
     $abilities = [];
-    if (array_key_exists('character_abilities', $rules) && is_array($rules['character_abilities'])) {
-        $abilities = (array)$rules['character_abilities'];
-    } elseif (array_key_exists('character_abilities', $profile) && is_array($profile['character_abilities'])) {
-        $abilities = (array)$profile['character_abilities'];
+    if (isset($rules['character_abilities']) && is_array($rules['character_abilities'])) {
+        $abilities = $rules['character_abilities'];
+    } elseif (isset($profile['character_abilities']) && is_array($profile['character_abilities'])) {
+        $abilities = $profile['character_abilities'];
     } else {
-        $abilities = (array)($data['abilities'] ?? []);
+        $abilities = is_array($data['abilities'] ?? null) ? $data['abilities'] : [];
     }
 
     $title = trim((string)($isRu ? ($profile['character_name_ru'] ?? '') : ($profile['character_name'] ?? '')));
