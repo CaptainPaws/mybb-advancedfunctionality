@@ -5043,13 +5043,13 @@
                 var optionsFromMechanics = function (setKey, fallback) {
                     return mapOptionRows(mechanicsOptionSets[setKey], fallback || []);
                 };
-                var abilityTypeOptions = optionsFromMechanics('ability_type', ['active', 'passive', 'ultimate']);
-                var abilitySubtypeOptions = optionsFromMechanics('ability_subtype', ['strike', 'projectile', 'summon', 'buff', 'debuff', 'mobility', 'utility', 'healing', 'shield', 'control']);
-                var abilitySlotOptions = optionsFromMechanics('ability_slot', ['skill_1', 'skill_2', 'skill_3', 'skill_4', 'ultimate', 'passive', 'support', 'special']);
-                var abilityDamageTypeOptions = optionsFromMechanics('ability_damage_type', ['physical', 'elemental', 'true', 'healing', 'hybrid']);
-                var abilityTargetingOptions = optionsFromMechanics('ability_targeting', ['self', 'single_enemy', 'single_ally', 'line', 'cone', 'aoe_ground', 'aoe_around_self', 'global', 'custom']);
-                var abilityValueModeOptions = optionsFromMechanics('ability_value_mode', ['flat', 'percent', 'text']);
-                var characterGenderOptions = optionsFromMechanics('character_gender', ['male', 'female']);
+                var abilityTypeOptions = optionsFromMechanics('ability_type', []);
+                var abilitySubtypeOptions = optionsFromMechanics('ability_subtype', []);
+                var abilitySlotOptions = optionsFromMechanics('ability_slot', []);
+                var abilityDamageTypeOptions = optionsFromMechanics('ability_damage_type', []);
+                var abilityTargetingOptions = optionsFromMechanics('ability_targeting', []);
+                var abilityValueModeOptions = optionsFromMechanics('ability_value_mode', []);
+                var characterGenderOptions = optionsFromMechanics('character_gender', []);
                 var characterElementOptions = optionsFromPublicType('arpg_element');
                 var characterRaceOptions = optionsFromPublicType('arpg_origin');
                 var characterClassOptions = optionsFromPublicType('arpg_archetype');

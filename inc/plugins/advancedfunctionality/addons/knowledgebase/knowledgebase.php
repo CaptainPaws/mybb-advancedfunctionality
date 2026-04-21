@@ -2392,10 +2392,55 @@ function af_kb_get_arpg_mechanics_entry(string $serviceKind, string $entryKey): 
     ];
 }
 
+function af_kb_get_arpg_mechanics_entry_by_key(string $entryKey): ?array
+{
+    global $db;
+
+    $entryKey = trim($entryKey);
+    if ($entryKey === '' || !$db->table_exists('af_kb_entries')) {
+        return null;
+    }
+
+    $row = $db->fetch_array($db->simple_select(
+        'af_kb_entries',
+        '*',
+        "type='arpg_mechanics' AND `key`='" . $db->escape_string($entryKey) . "'",
+        ['limit' => 1]
+    ));
+    if (!$row) {
+        return null;
+    }
+
+    $payload = af_kb_decode_json((string)($row['data_json'] ?? '{}'));
+    if (!is_array($payload)) {
+        $payload = [];
+    }
+    $rules = is_array($payload['rules'] ?? null) ? $payload['rules'] : [];
+
+    return [
+        'id' => (int)($row['id'] ?? 0),
+        'type' => (string)($row['type'] ?? ''),
+        'key' => (string)($row['key'] ?? ''),
+        'title_ru' => (string)($row['title_ru'] ?? ''),
+        'title_en' => (string)($row['title_en'] ?? ''),
+        'rules' => $rules,
+        'entries' => is_array($rules['entries'] ?? null) ? $rules['entries'] : [],
+    ];
+}
+
 function af_kb_get_arpg_mechanics_options(string $entryKey, string $serviceKind = 'snippet'): array
 {
     $entry = af_kb_get_arpg_mechanics_entry($serviceKind, $entryKey);
-    $rows = is_array($entry['entries'] ?? null) ? $entry['entries'] : af_kb_arpg_mechanics_options_fallback($entryKey);
+    if (!$entry) {
+        $entry = af_kb_get_arpg_mechanics_entry_by_key($entryKey);
+    }
+
+    $rows = [];
+    if (is_array($entry['entries'] ?? null)) {
+        $rows = (array)$entry['entries'];
+    } elseif ($entry === null) {
+        $rows = af_kb_arpg_mechanics_options_fallback($entryKey);
+    }
     $normalizedRows = [];
     foreach ((array)$rows as $idx => $row) {
         $normalized = af_kb_normalize_arpg_mechanics_entry_row($row, $idx + 1);
