@@ -3994,6 +3994,23 @@ function af_atf_character_stats_labels(): array
     ];
 }
 
+function af_atf_character_ability_display_label(string $setKey, string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    if (function_exists('af_kb_get_arpg_mechanics_option_label')) {
+        $label = trim((string)af_kb_get_arpg_mechanics_option_label($setKey, $value, true));
+        if ($label !== '') {
+            return $label;
+        }
+    }
+
+    return $value;
+}
+
 function af_atf_normalize_character_stats_json(string $raw): string
 {
     $raw = trim($raw);
@@ -4905,30 +4922,84 @@ function af_atf_format_value_for_display(array $field, string $val): string
         if (!is_array($list) || empty($list)) {
             return '';
         }
-        $items = [];
+
+        $cards = '';
+        $chipMeta = [
+            ['key' => 'type', 'label' => 'Тип', 'set' => 'ability_type'],
+            ['key' => 'subtype', 'label' => 'Подтип', 'set' => 'ability_subtype'],
+            ['key' => 'damage_type', 'label' => 'Тип урона', 'set' => 'ability_damage_type'],
+            ['key' => 'targeting', 'label' => 'Цель', 'set' => 'ability_targeting'],
+            ['key' => 'range', 'label' => 'Дальность', 'set' => ''],
+            ['key' => 'damage_value', 'label' => 'Урон', 'set' => ''],
+            ['key' => 'shield_value', 'label' => 'Щит', 'set' => ''],
+            ['key' => 'heal_value', 'label' => 'Лечение', 'set' => ''],
+        ];
+
         foreach ($list as $ability) {
             if (!is_array($ability)) {
                 continue;
             }
             $name = trim((string)($ability['ability_name'] ?? ''));
-            $atype = trim((string)($ability['type'] ?? $ability['ability_type'] ?? 'active'));
-            if ($name === '') {
+            $description = trim((string)($ability['ability_description'] ?? ''));
+            $iconUrl = trim((string)($ability['icon_url'] ?? ''));
+            if ($name === '' && $description === '' && $iconUrl === '') {
                 continue;
             }
-            $atypeLabel = '';
-            if (function_exists('af_kb_get_arpg_mechanics_option_label')) {
-                $atypeLabel = (string)af_kb_get_arpg_mechanics_option_label('ability_type', $atype, true);
+
+            $chips = '';
+            foreach ($chipMeta as $meta) {
+                $rawValue = trim((string)($ability[$meta['key']] ?? ''));
+                if ($rawValue === '') {
+                    continue;
+                }
+
+                $displayValue = $meta['set'] !== ''
+                    ? af_atf_character_ability_display_label($meta['set'], $rawValue)
+                    : $rawValue;
+                if ($displayValue === '') {
+                    continue;
+                }
+
+                $chips .= '<span class="af-atf-ability-display-chip">'
+                    . '<span class="af-atf-ability-display-chip-label">' . htmlspecialchars_uni($meta['label']) . ':</span> '
+                    . '<span class="af-atf-ability-display-chip-value">' . htmlspecialchars_uni($displayValue) . '</span>'
+                    . '</span>';
             }
-            if ($atypeLabel === '') {
-                $atypeLabel = $atype;
+
+            $iconHtml = '';
+            if ($iconUrl !== '') {
+                $iconHtml = '<span class="af-atf-ability-display-icon-wrap"><img class="af-atf-ability-display-icon" src="'
+                    . htmlspecialchars_uni($iconUrl)
+                    . '" alt="" loading="lazy" /></span>';
             }
-            $suffix = trim((string)$atypeLabel) !== '' ? ' [' . $atypeLabel . ']' : '';
-            $items[] = htmlspecialchars_uni($name . $suffix);
+
+            $titleHtml = $name !== ''
+                ? '<div class="af-atf-ability-display-name">' . htmlspecialchars_uni($name) . '</div>'
+                : '<div class="af-atf-ability-display-name af-atf-ability-display-name-muted">Способность</div>';
+
+            $descriptionHtml = $description !== ''
+                ? '<div class="af-atf-ability-display-description">' . nl2br(htmlspecialchars_uni($description)) . '</div>'
+                : '';
+
+            $chipsHtml = $chips !== ''
+                ? '<div class="af-atf-ability-display-chips">' . $chips . '</div>'
+                : '';
+
+            $cards .= '<article class="af-atf-ability-display-card">'
+                . '<div class="af-atf-ability-display-head">' . $iconHtml . $titleHtml . '</div>'
+                . $chipsHtml
+                . $descriptionHtml
+                . '</article>';
         }
-        if (empty($items)) {
+
+        if ($cards === '') {
             return '';
         }
-        return implode('<br />', $items);
+
+        return '<section class="af-atf-abilities-display">'
+            . '<div class="af-atf-abilities-display-title">Способности</div>'
+            . '<div class="af-atf-abilities-display-list">' . $cards . '</div>'
+            . '</section>';
     }
 
     if ($type === 'character_stats') {
@@ -4960,7 +5031,10 @@ function af_atf_format_value_for_display(array $field, string $val): string
             return '';
         }
 
-        return '<div class="af-atf-character-stats-display">' . $rows . '</div>';
+        return '<section class="af-atf-character-stats-display-wrap">'
+            . '<div class="af-atf-character-stats-display-title">Характеристики</div>'
+            . '<div class="af-atf-character-stats-display">' . $rows . '</div>'
+            . '</section>';
     }
 
     if ($type === 'sf_attributes_pointbuy') {
