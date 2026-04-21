@@ -380,8 +380,32 @@ body.af-atf-kb-catalog-modal-open {
   gap: 8px 10px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
+.af-atf-ability-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.af-atf-ability-label {
+  display: block;
+  font-size: 12px;
+  opacity: .9;
+}
+.af-atf-ability-field .af-atf-input,
+.af-atf-ability-description-wrap .af-atf-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.af-atf-ability-field select.af-atf-input {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: inherit;
+  color: inherit;
+}
 .af-atf-ability-description-wrap {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
   grid-column: 1 / -1;
 }

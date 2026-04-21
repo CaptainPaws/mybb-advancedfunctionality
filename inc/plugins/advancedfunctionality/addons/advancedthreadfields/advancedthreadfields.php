@@ -2371,6 +2371,23 @@ function af_atf_map_named_values_to_fieldids(array $fields, array $namedValues):
             continue;
         }
 
+        if ($fieldType === 'character_abilities') {
+            $rawAbilities = null;
+            if (array_key_exists($fieldName, $namedValues)) {
+                $rawAbilities = $namedValues[$fieldName];
+            } elseif (array_key_exists('character_abilities', $namedValues)) {
+                $rawAbilities = $namedValues['character_abilities'];
+            }
+            if ($rawAbilities === null) {
+                continue;
+            }
+            if (is_array($rawAbilities) || is_object($rawAbilities)) {
+                $rawAbilities = json_encode($rawAbilities, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+            $out[$fieldId] = af_atf_normalize_character_abilities_json(is_string($rawAbilities) ? $rawAbilities : (string)$rawAbilities);
+            continue;
+        }
+
         $value = null;
         if (array_key_exists($fieldName, $namedValues)) {
             $value = $namedValues[$fieldName];
