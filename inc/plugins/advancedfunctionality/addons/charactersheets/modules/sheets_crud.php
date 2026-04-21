@@ -160,11 +160,17 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
     $hasUid = ($uid > 0);
 
     $existing = [];
-    if ($hasUid) {
-        $existing = af_charactersheets_get_sheet_by_uid($uid);
-    }
-    if (empty($existing) && $tid > 0) {
+    if ($tid > 0) {
         $existing = af_charactersheets_get_sheet_by_tid($tid);
+    }
+    if (empty($existing) && $slug !== '') {
+        $existing = af_charactersheets_get_sheet_by_slug($slug);
+    }
+    // Важно: не используем uid как primary duplicate guard для тредовых листов.
+    // Иначе второй персонаж того же автора "прилипает" к уже существующему листу,
+    // что ломает create-sheet flow для ARPG/KB path.
+    if (empty($existing) && $hasUid && $tid <= 0) {
+        $existing = af_charactersheets_get_sheet_by_uid($uid);
     }
 
     if (!empty($existing)) {

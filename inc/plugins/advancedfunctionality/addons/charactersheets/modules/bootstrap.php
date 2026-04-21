@@ -1132,6 +1132,7 @@ function af_charactersheets_handle_create_sheet_action(): void
         if ($slug !== '') {
             af_charactersheets_upsert_accept_row($tid, [
                 'uid' => $uid,
+                'kb_entry_id' => $entryId,
                 'sheet_slug' => $slug,
                 'sheet_created' => 1,
             ]);
@@ -1157,6 +1158,7 @@ function af_charactersheets_handle_create_sheet_action(): void
     if ($sheetSlug !== '') {
         af_charactersheets_upsert_accept_row($tid, [
             'uid' => $uid,
+            'kb_entry_id' => $entryId,
             'sheet_slug' => $sheetSlug,
             'sheet_created' => 1,
         ]);
@@ -1224,7 +1226,9 @@ function af_charactersheets_resolve_existing_sheet_for_thread(int $tid, int $uid
         }
     }
 
-    if ($uid > 0) {
+    // Для тредовой анкеты не считаем лист по uid "дубликатом":
+    // у одного пользователя может быть несколько персонажей.
+    if ($uid > 0 && $tid <= 0) {
         $sheet = af_charactersheets_get_sheet_by_uid($uid);
         if (!empty($sheet['id'])) {
             return $sheet;
