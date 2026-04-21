@@ -727,22 +727,29 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         }
         return trim((string)$value) !== '' ? (string)$value : '—';
     };
+    $statsPanelValue = static function (array $stats, string $kbKey, array $sheetPaths, array $sheetView) use ($kbStat): string {
+        $kbValue = $kbStat($stats, $kbKey);
+        if ($kbValue !== '—') {
+            return $kbValue;
+        }
+        return af_charactersheets_arpg_pick_stat($sheetView, $sheetPaths, '—');
+    };
     $stats_panel = [
-        ['label' => 'HP', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['mechanics.hp_total'], $kbStat($character_stats, 'character_hp'))],
-        ['label' => 'Сила атаки', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['mechanics.damage_bonus', 'mechanics.damage_total'], $kbStat($character_stats, 'character_attack_power'))],
-        ['label' => 'Защита', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['mechanics.ac_total'], $kbStat($character_stats, 'character_defense'))],
-        ['label' => 'Мастерство стихий', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.resources.mastery'], $kbStat($character_stats, 'character_elemental_mastery'))],
-        ['label' => 'Бонус ' . $element . ' урона', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, [
+        ['label' => 'HP', 'value' => $statsPanelValue($character_stats, 'character_hp', ['mechanics.hp_total'], $sheet_view)],
+        ['label' => 'Сила атаки', 'value' => $statsPanelValue($character_stats, 'character_attack_power', ['mechanics.damage_bonus', 'mechanics.damage_total'], $sheet_view)],
+        ['label' => 'Защита', 'value' => $statsPanelValue($character_stats, 'character_defense', ['mechanics.ac_total'], $sheet_view)],
+        ['label' => 'Мастерство стихий', 'value' => $statsPanelValue($character_stats, 'character_elemental_mastery', ['character_computed_state.resources.mastery'], $sheet_view)],
+        ['label' => 'Бонус ' . $element . ' урона', 'value' => $statsPanelValue($character_stats, 'character_element_damage_bonus', [
             'character_computed_state.resources.bonus_' . $elementSlug . '_damage',
             'character_computed_state.resources.element_damage_bonus',
             'mechanics.damage_total',
-        ], $kbStat($character_stats, 'character_element_damage_bonus'))],
+        ], $sheet_view)],
         ['label' => 'Шанс крит. попадания', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.fixed_bonuses.crit_rate', 'character_computed_state.resources.crit_rate'])],
-        ['label' => 'Крит. урон', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.fixed_bonuses.crit_dmg', 'character_computed_state.resources.crit_dmg'], $kbStat($character_stats, 'character_crit_damage'))],
-        ['label' => 'Бонус лечения', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.resources.healing_bonus'], $kbStat($character_stats, 'character_healing_bonus'))],
-        ['label' => 'Бонус получаемого лечения', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.resources.incoming_heal_bonus'], $kbStat($character_stats, 'character_healing_received_bonus'))],
-        ['label' => 'Прочность щита', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.resources.shield_strength'], $kbStat($character_stats, 'character_shield_strength'))],
-        ['label' => 'Удача', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.resources.luck'], $kbStat($character_stats, 'character_luck'))],
+        ['label' => 'Крит. урон', 'value' => $statsPanelValue($character_stats, 'character_crit_damage', ['character_computed_state.fixed_bonuses.crit_dmg', 'character_computed_state.resources.crit_dmg'], $sheet_view)],
+        ['label' => 'Бонус лечения', 'value' => $statsPanelValue($character_stats, 'character_healing_bonus', ['character_computed_state.resources.healing_bonus'], $sheet_view)],
+        ['label' => 'Бонус получаемого лечения', 'value' => $statsPanelValue($character_stats, 'character_healing_received_bonus', ['character_computed_state.resources.incoming_heal_bonus'], $sheet_view)],
+        ['label' => 'Прочность щита', 'value' => $statsPanelValue($character_stats, 'character_shield_strength', ['character_computed_state.resources.shield_strength'], $sheet_view)],
+        ['label' => 'Удача', 'value' => $statsPanelValue($character_stats, 'character_luck', ['character_computed_state.resources.luck'], $sheet_view)],
     ];
 
     return [
@@ -774,6 +781,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
             'character_prototype' => af_charactersheets_pick_field_value($atf_index, ['character_prototype', 'prototype']),
             'character_nicknames' => af_charactersheets_pick_field_value($atf_index, ['character_nicknames', 'character_nickname', 'nickname']),
             'character_age' => af_charactersheets_pick_field_value($atf_index, ['character_age', 'age']),
+            'character_origin' => af_charactersheets_pick_field_value($atf_index, ['character_origin']),
         ],
         'header_identity_html' => $identityParts ? implode(' • ', $identityParts) : 'ARPG profile',
         'header_progress_html' => implode('', $chips),
@@ -884,11 +892,52 @@ function af_charactersheets_arpg_render_main_info_html(array $sheet_arpg_vm): st
 {
     $atfProfile = (array)($sheet_arpg_vm['atf_profile'] ?? []);
     $profile = (array)(($sheet_arpg_vm['character_source']['payload'] ?? [])['profile'] ?? []);
+    $resolveOption = static function (string $field, string $value, string $fallback = ''): array {
+        $value = trim($value);
+        if ($value === '') {
+            return ['value' => $fallback, 'html' => htmlspecialchars_uni($fallback !== '' ? $fallback : '—')];
+        }
+
+        $typesMap = [
+            'character_element' => ['arpg_element'],
+            'character_gen' => ['character_gender'],
+            'character_race' => ['arpg_origin'],
+            'character_origin' => ['arpg_origin'],
+            'character_class' => ['arpg_archetype'],
+            'character_faction' => ['arpg_faction'],
+        ];
+        $types = (array)($typesMap[$field] ?? []);
+        $resolved = [];
+        foreach ($types as $kbType) {
+            $resolved = af_charactersheets_kb_resolve_entry($kbType, $value);
+            if (!empty($resolved['entry'])) {
+                break;
+            }
+        }
+
+        $entry = (array)($resolved['entry'] ?? []);
+        $label = trim((string)($resolved['title'] ?? ''));
+        if ($label === '') {
+            $label = trim(af_charactersheets_kb_pick_text($entry, 'title'));
+        }
+        if ($label === '') {
+            $label = $fallback !== '' ? $fallback : $value;
+        }
+
+        $iconUrl = trim((string)($entry['icon_url'] ?? ''));
+        $iconHtml = $iconUrl !== ''
+            ? '<img class="af-cs-kb-icon-img" src="' . htmlspecialchars_uni($iconUrl) . '" alt="" loading="lazy" />'
+            : '';
+        $html = '<span class="af-cs-chip">' . $iconHtml . htmlspecialchars_uni($label) . '</span>';
+
+        return ['value' => $label, 'html' => $html];
+    };
     $rows = [];
     foreach ([
         'Прототип' => 'character_prototype',
         'Прозвища' => 'character_nicknames',
         'Возраст' => 'character_age',
+        'Происхождение' => 'character_origin',
         'Раса / происхождение' => 'character_race',
         'Архетип' => 'character_class',
         'Фракция' => 'character_faction',
@@ -897,6 +946,11 @@ function af_charactersheets_arpg_render_main_info_html(array $sheet_arpg_vm): st
     ] as $label => $field) {
         $value = trim((string)($atfProfile[$field] ?? $profile[$field] ?? ''));
         if ($value === '') {
+            continue;
+        }
+        if (in_array($field, ['character_origin', 'character_race', 'character_class', 'character_faction', 'character_element', 'character_gen'], true)) {
+            $resolved = $resolveOption($field, $value, $value);
+            $rows[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">' . htmlspecialchars_uni($label) . '</div><div class="af-cs-info-value">' . (string)$resolved['html'] . '</div></div>';
             continue;
         }
         $rows[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">' . htmlspecialchars_uni($label) . '</div><div class="af-cs-info-value">' . htmlspecialchars_uni($value) . '</div></div>';
