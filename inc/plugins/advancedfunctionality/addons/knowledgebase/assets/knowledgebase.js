@@ -711,6 +711,25 @@
         field.value = String(value || '');
     }
 
+    function flushEditorValues(container) {
+        var scope = container || document;
+        if (!scope || typeof scope.querySelectorAll !== 'function') {
+            return;
+        }
+        var fields = scope.querySelectorAll('textarea');
+        Array.prototype.forEach.call(fields, function (field) {
+            var inst = getEditorInstance(field);
+            if (!inst) {
+                return;
+            }
+            if (typeof inst.updateOriginal === 'function') {
+                try { inst.updateOriginal(); } catch (e) {}
+            } else if (typeof inst.val === 'function') {
+                try { field.value = String(inst.val() || ''); } catch (e2) {}
+            }
+        });
+    }
+
     var stats = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
     var rankOptions = ['trained', 'expert', 'master', 'legendary', '0', '1', '2', '3', '4'];
     var slugPattern = /^[a-z0-9_\-:.]+$/;
@@ -1016,6 +1035,7 @@
                 arpg_archetype: 'archetype',
                 arpg_element: 'element',
                 arpg_faction: 'faction',
+                arpg_character: 'character',
                 arpg_lore: 'lore',
                 arpg_ability: 'ability',
                 arpg_talent: 'talent',
@@ -1031,11 +1051,12 @@
                 lore_arpg: 'lore',
                 class_arpg: 'archetype',
                 provenance: 'origin',
-                race_origin: 'origin'
+                race_origin: 'origin',
+                character_arpg: 'character'
             };
 
-            var simpleTypes = ['origin', 'archetype', 'element', 'faction', 'lore'];
-            var heavyTypes = ['ability', 'talent', 'item', 'bestiary'];
+            var simpleTypes = ['origin', 'archetype', 'element', 'faction', 'lore', 'character'];
+            var heavyTypes = ['ability', 'talent', 'item', 'bestiary', 'character'];
             var serviceKinds = ['mechanic_profile', 'resource_def', 'status_def', 'modifier_template', 'formula_def', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
 
             function getRootDefaults() {
@@ -1611,6 +1632,57 @@
                         { key: 'timeline_text', label: 'timeline_text', default: '' },
                         { key: 'source_text', label: 'source_text', default: '' }
                     ], 'Lore core');
+                }
+
+                if (entityType === 'character') {
+                    renderRuleFields(rulesRoot, [
+                        { key: 'type_profile', label: 'type_profile', default: 'character' },
+                        { key: 'character_profile.category', label: 'character_profile.category', type: 'select', options: ['canons', 'originals', 'roles'], default: 'canons' },
+                        { key: 'character_profile.character_pic', label: 'character_profile.character_pic', default: '' },
+                        { key: 'character_profile.character_prototype', label: 'character_profile.character_prototype', default: '' },
+                        { key: 'character_profile.character_name', label: 'character_profile.character_name', default: '' },
+                        { key: 'character_profile.character_name_ru', label: 'character_profile.character_name_ru', default: '' },
+                        { key: 'character_profile.character_nicknames', label: 'character_profile.character_nicknames', default: '' },
+                        { key: 'character_profile.character_element', label: 'character_profile.character_element', default: '' },
+                        { key: 'character_profile.character_gen', label: 'character_profile.character_gen', default: '' },
+                        { key: 'character_profile.character_race', label: 'character_profile.character_race', default: '' },
+                        { key: 'character_profile.character_class', label: 'character_profile.character_class', default: '' },
+                        { key: 'character_profile.character_faction', label: 'character_profile.character_faction', default: '' },
+                        { key: 'character_profile.character_app', label: 'character_profile.character_app', default: '' }
+                    ], 'Character profile');
+
+                    renderRuleFields(rulesRoot, [
+                        { key: 'character_stats.character_hp', label: 'character_stats.character_hp', type: 'number', default: 0 },
+                        { key: 'character_stats.character_defense', label: 'character_stats.character_defense', type: 'number', default: 0 },
+                        { key: 'character_stats.character_element_damage_bonus', label: 'character_stats.character_element_damage_bonus', type: 'number', default: 0 },
+                        { key: 'character_stats.character_crit_damage', label: 'character_stats.character_crit_damage', type: 'number', default: 0 },
+                        { key: 'character_stats.character_healing_received_bonus', label: 'character_stats.character_healing_received_bonus', type: 'number', default: 0 },
+                        { key: 'character_stats.character_attack_power', label: 'character_stats.character_attack_power', type: 'number', default: 0 },
+                        { key: 'character_stats.character_elemental_mastery', label: 'character_stats.character_elemental_mastery', type: 'number', default: 0 },
+                        { key: 'character_stats.character_healing_bonus', label: 'character_stats.character_healing_bonus', type: 'number', default: 0 },
+                        { key: 'character_stats.character_shield_strength', label: 'character_stats.character_shield_strength', type: 'number', default: 0 },
+                        { key: 'character_stats.character_luck', label: 'character_stats.character_luck', type: 'number', default: 0 }
+                    ], 'Character stats');
+
+                    renderSeededArrayEditor(rulesRoot, 'character_abilities', 'character_abilities', [
+                        { key: 'slot_index', label: 'slot_index', type: 'number', default: 1 },
+                        { key: 'ability_name', label: 'ability_name', default: '' },
+                        { key: 'icon_url', label: 'icon_url', default: '' },
+                        { key: 'ability_type', label: 'ability_type', default: 'active' },
+                        { key: 'damage_type', label: 'damage_type', default: '' },
+                        { key: 'targeting', label: 'targeting', default: '' },
+                        { key: 'range', label: 'range', type: 'number', default: 0 },
+                        { key: 'cast_time', label: 'cast_time', type: 'number', default: 0 },
+                        { key: 'cooldown', label: 'cooldown', type: 'number', default: 0 },
+                        { key: 'duration', label: 'duration', type: 'number', default: 0 },
+                        { key: 'max_charges', label: 'max_charges', type: 'number', default: 0 },
+                        { key: 'level_cap', label: 'level_cap', type: 'number', default: 0 },
+                        { key: 'ability_description', label: 'ability_description', default: '' },
+                        { key: 'ability_kb_key', label: 'ability_kb_key', default: '' },
+                        { key: 'sortorder', label: 'sortorder', type: 'number', default: 0 }
+                    ], [
+                        { key: 'default', label: 'default', seed: { slot_index: 1, ability_name: '', icon_url: '', ability_type: 'active', damage_type: '', targeting: '', range: 0, cast_time: 0, cooldown: 0, duration: 0, max_charges: 0, level_cap: 0, ability_description: '', ability_kb_key: '', sortorder: 0 } }
+                    ]);
                 }
             }
 
@@ -2325,16 +2397,17 @@
             }
 
             function commitValue() {
+                var liveValue = getFieldValue(input);
                 if (def.type === 'lines') {
-                    obj[def.name] = splitLines(input.value);
+                    obj[def.name] = splitLines(liveValue);
                 } else if (def.type === 'json') {
-                    obj[def.name] = readJson(input.value, {});
+                    obj[def.name] = readJson(liveValue, {});
                 } else if (def.type === 'number') {
-                    obj[def.name] = numberOrZero(input.value);
+                    obj[def.name] = numberOrZero(liveValue);
                 } else if (def.type === 'checkbox') {
                     obj[def.name] = input.checked;
                 } else {
-                    obj[def.name] = input.value;
+                    obj[def.name] = liveValue;
                 }
 
                 if (typeof onChange === 'function') {
@@ -5302,6 +5375,7 @@
         var form = raw.closest('form');
         if (form) {
             form.addEventListener('submit', function () {
+                flushEditorValues(form);
                 syncRawNow();
                 if (window.__afKbEditorGuard) {
                     window.__afKbEditorGuard.refreshEditorPolicy(root);
