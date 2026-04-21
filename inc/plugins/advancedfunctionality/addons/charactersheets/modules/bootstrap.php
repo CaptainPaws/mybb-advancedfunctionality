@@ -1476,45 +1476,7 @@ function af_charactersheets_sync_oc_kb_character(int $tid, array $thread = [], a
         'character_app' => af_charactersheets_pick_field_value($index, ['character_app', 'character_about', 'character_bio', 'character_description', 'app']),
     ];
 
-    $stats = [];
-    $statsJsonRaw = af_charactersheets_pick_field_value($index, ['character_stats'], false);
-    if ($statsJsonRaw !== '') {
-        $decodedStats = af_charactersheets_json_decode($statsJsonRaw);
-        if (is_array($decodedStats)) {
-            foreach ($decodedStats as $statKey => $statValue) {
-                $key = trim((string)$statKey);
-                if ($key === '') {
-                    continue;
-                }
-                if (is_numeric($statValue)) {
-                    $stats[$key] = 0 + $statValue;
-                } elseif (is_string($statValue) && trim($statValue) !== '' && is_numeric(trim($statValue))) {
-                    $stats[$key] = 0 + trim($statValue);
-                }
-            }
-        }
-    }
-
-    foreach ([
-        'character_hp',
-        'character_defense',
-        'character_element_damage_bonus',
-        'character_crit_damage',
-        'character_healing_received_bonus',
-        'character_attack_power',
-        'character_elemental_mastery',
-        'character_healing_bonus',
-        'character_shield_strength',
-        'character_luck',
-    ] as $statName) {
-        $rawValue = af_charactersheets_pick_field_value($index, [$statName], false);
-        $num = af_charactersheets_to_number($rawValue);
-        if ($num !== null) {
-            $stats[$statName] = $num;
-        } elseif (!array_key_exists($statName, $stats)) {
-            $stats[$statName] = 0;
-        }
-    }
+    $stats = af_charactersheets_extract_oc_stats($index);
 
     $abilities = af_charactersheets_extract_oc_abilities($index);
     $sourceTid = (int)$tid;
@@ -1704,7 +1666,12 @@ function af_charactersheets_assign_kb_originals_category(int $entryId): void
 function af_charactersheets_extract_oc_abilities(array $index): array
 {
     $abilities = [];
-    $jsonRaw = af_charactersheets_pick_field_value($index, ['character_abilities'], false);
+    $jsonRaw = af_charactersheets_pick_field_value($index, [
+        'character_abilities',
+        'abilities',
+        'arpg_abilities',
+        'character_skills',
+    ], false);
     if ($jsonRaw !== '') {
         $decoded = af_charactersheets_json_decode($jsonRaw);
         $rows = [];
@@ -1712,6 +1679,10 @@ function af_charactersheets_extract_oc_abilities(array $index): array
             $rows = $decoded;
         } elseif (is_array($decoded['items'] ?? null)) {
             $rows = (array)$decoded['items'];
+        } elseif (is_array($decoded['abilities'] ?? null)) {
+            $rows = (array)$decoded['abilities'];
+        } elseif (is_array($decoded['rows'] ?? null)) {
+            $rows = (array)$decoded['rows'];
         } elseif (is_array($decoded)) {
             $rows = array_values(array_filter($decoded, 'is_array'));
         }
@@ -1721,12 +1692,13 @@ function af_charactersheets_extract_oc_abilities(array $index): array
                     continue;
                 }
                 $name = trim((string)($ability['ability_name'] ?? $ability['name'] ?? $ability['title'] ?? ''));
-                $description = trim((string)($ability['ability_description'] ?? $ability['description'] ?? ''));
-                $type = trim((string)($ability['type'] ?? $ability['ability_type'] ?? 'active'));
+                $description = trim((string)($ability['ability_description'] ?? $ability['description'] ?? $ability['desc'] ?? $ability['text'] ?? ''));
+                $type = trim((string)($ability['type'] ?? $ability['ability_type'] ?? $ability['kind'] ?? 'active'));
                 if ($type !== 'passive') {
                     $type = 'active';
                 }
-                if ($name === '' && $description === '') {
+                $kbKey = trim((string)($ability['ability_kb_key'] ?? $ability['ability_key'] ?? $ability['kb_key'] ?? $ability['key'] ?? ''));
+                if ($name === '' && $description === '' && $kbKey === '') {
                     continue;
                 }
                 $abilities[] = [
@@ -1737,13 +1709,14 @@ function af_charactersheets_extract_oc_abilities(array $index): array
                     'ability_type' => $type,
                     'subtype' => trim((string)($ability['subtype'] ?? '')),
                     'slot' => trim((string)($ability['slot'] ?? '')),
-                    'damage_type' => trim((string)($ability['damage_type'] ?? '')),
-                    'targeting' => trim((string)($ability['targeting'] ?? '')),
+                    'damage_type' => trim((string)($ability['damage_type'] ?? $ability['dmg_type'] ?? '')),
+                    'targeting' => trim((string)($ability['targeting'] ?? $ability['target'] ?? '')),
                     'range' => trim((string)($ability['range'] ?? '')),
-                    'shield_value' => trim((string)($ability['shield_value'] ?? '')),
-                    'heal_value' => trim((string)($ability['heal_value'] ?? '')),
+                    'damage_value' => trim((string)($ability['damage_value'] ?? $ability['damage'] ?? $ability['dmg'] ?? '')),
+                    'shield_value' => trim((string)($ability['shield_value'] ?? $ability['shield'] ?? '')),
+                    'heal_value' => trim((string)($ability['heal_value'] ?? $ability['heal'] ?? '')),
                     'ability_description' => $description,
-                    'ability_kb_key' => trim((string)($ability['ability_kb_key'] ?? '')),
+                    'ability_kb_key' => $kbKey,
                     'sortorder' => (int)($ability['sortorder'] ?? ($idx + 1)),
                 ];
             }
@@ -1779,6 +1752,82 @@ function af_charactersheets_extract_oc_abilities(array $index): array
     }
 
     return $abilities;
+}
+
+function af_charactersheets_character_stat_aliases(): array
+{
+    return [
+        'character_hp' => ['character_hp', 'hp', 'health'],
+        'character_defense' => ['character_defense', 'defense', 'def'],
+        'character_element_damage_bonus' => ['character_element_damage_bonus', 'element_damage_bonus', 'elemental_damage_bonus', 'edmg'],
+        'character_crit_damage' => ['character_crit_damage', 'crit_damage', 'critical_damage', 'critdmg'],
+        'character_healing_received_bonus' => ['character_healing_received_bonus', 'healing_received_bonus', 'incoming_heal_bonus'],
+        'character_attack_power' => ['character_attack_power', 'attack_power', 'atk', 'attack'],
+        'character_elemental_mastery' => ['character_elemental_mastery', 'elemental_mastery', 'mastery'],
+        'character_healing_bonus' => ['character_healing_bonus', 'healing_bonus'],
+        'character_shield_strength' => ['character_shield_strength', 'shield_strength', 'shield'],
+        'character_luck' => ['character_luck', 'luck'],
+    ];
+}
+
+function af_charactersheets_extract_oc_stats(array $index): array
+{
+    $aliases = af_charactersheets_character_stat_aliases();
+    $stats = [];
+    foreach (array_keys($aliases) as $key) {
+        $stats[$key] = 0;
+    }
+
+    $statsJsonRaw = af_charactersheets_pick_field_value($index, [
+        'character_stats',
+        'stats',
+        'arpg_stats',
+        'character_attributes',
+    ], false);
+
+    $sources = [];
+    if ($statsJsonRaw !== '') {
+        $decodedStats = af_charactersheets_json_decode($statsJsonRaw);
+        if (is_array($decodedStats)) {
+            $sources[] = $decodedStats;
+            foreach (['stats', 'attributes', 'character_stats'] as $nestedKey) {
+                if (isset($decodedStats[$nestedKey]) && is_array($decodedStats[$nestedKey])) {
+                    $sources[] = (array)$decodedStats[$nestedKey];
+                }
+            }
+        }
+    }
+
+    foreach ($sources as $source) {
+        foreach ($aliases as $targetKey => $keys) {
+            foreach ($keys as $sourceKey) {
+                if (!array_key_exists($sourceKey, $source)) {
+                    continue;
+                }
+                $raw = $source[$sourceKey];
+                $num = null;
+                if (is_numeric($raw)) {
+                    $num = 0 + $raw;
+                } elseif (is_string($raw)) {
+                    $num = af_charactersheets_to_number($raw);
+                }
+                if ($num !== null) {
+                    $stats[$targetKey] = $num;
+                    break;
+                }
+            }
+        }
+    }
+
+    foreach ($aliases as $targetKey => $keys) {
+        $rawValue = af_charactersheets_pick_field_value($index, $keys, false);
+        $num = af_charactersheets_to_number($rawValue);
+        if ($num !== null) {
+            $stats[$targetKey] = $num;
+        }
+    }
+
+    return $stats;
 }
 
 
