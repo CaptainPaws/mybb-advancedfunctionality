@@ -2275,6 +2275,9 @@
         }
 
         // ---------- Универсальные билд-блоки формы ----------
+        // Регистрируем все commit-функции полей, чтобы на submit гарантированно
+        // снять актуальные значения (включая textarea под SCEditor).
+        var liveFieldCommitters = [];
         function createInput(def, obj, onChange) {
             var wrap = document.createElement('div');
             if (def.fullWidth) {
@@ -2414,6 +2417,8 @@
                     onChange();
                 }
             }
+
+            liveFieldCommitters.push(commitValue);
 
             if (def.type === 'select' || def.type === 'checkbox') {
                 input.addEventListener('change', commitValue);
@@ -5376,6 +5381,11 @@
         if (form) {
             form.addEventListener('submit', function () {
                 flushEditorValues(form);
+                liveFieldCommitters.forEach(function (commit) {
+                    if (typeof commit === 'function') {
+                        commit();
+                    }
+                });
                 syncRawNow();
                 if (window.__afKbEditorGuard) {
                     window.__afKbEditorGuard.refreshEditorPolicy(root);
