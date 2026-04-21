@@ -9359,7 +9359,14 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
     $data = af_kb_extract_character_contract($entry);
     $profile = (array)($data['profile'] ?? []);
     $stats = (array)($data['stats'] ?? []);
-    $abilities = (array)($data['abilities'] ?? []);
+    $abilities = [];
+    if (array_key_exists('character_abilities', $rules) && is_array($rules['character_abilities'])) {
+        $abilities = (array)$rules['character_abilities'];
+    } elseif (array_key_exists('character_abilities', $profile) && is_array($profile['character_abilities'])) {
+        $abilities = (array)$profile['character_abilities'];
+    } else {
+        $abilities = (array)($data['abilities'] ?? []);
+    }
 
     $title = trim((string)($isRu ? ($profile['character_name_ru'] ?? '') : ($profile['character_name'] ?? '')));
     if ($title === '') {
@@ -9493,7 +9500,14 @@ function af_kb_build_character_application_prefill(array $entry): array
     if (empty($stats)) {
         $stats = (array)($profile['character_stats'] ?? []);
     }
-    $abilities = (array)($data['abilities'] ?? []);
+    $abilities = [];
+    if (array_key_exists('character_abilities', $rules) && is_array($rules['character_abilities'])) {
+        $abilities = (array)$rules['character_abilities'];
+    } elseif (array_key_exists('character_abilities', $profile) && is_array($profile['character_abilities'])) {
+        $abilities = (array)$profile['character_abilities'];
+    } else {
+        $abilities = (array)($data['abilities'] ?? []);
+    }
 
     $prefill = [];
     $profileMap = [
