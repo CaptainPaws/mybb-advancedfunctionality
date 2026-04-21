@@ -4402,10 +4402,30 @@ function af_atf_render_character_kb_moderation_button(int $tid, int $uid, array 
         'tid' => $tid,
     ], '', '&', PHP_QUERY_RFC3986);
 
-    return '<form class="af-cs-inline-form af-cs-inline-form--kb" method="post" action="' . htmlspecialchars_uni($kbUrl) . '" target="_blank" rel="noopener" style="display:inline">'
-        . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($postKey) . '">'
-        . '<button type="submit" class="button af-cs-accept-button af-cs-accept-button--kb"><span>' . htmlspecialchars_uni($label) . '</span></button>'
-        . '</form>';
+    $jsUrl = json_encode($kbUrl, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $jsPostKey = json_encode($postKey, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($jsUrl) || !is_string($jsPostKey) || $jsUrl === '' || $jsPostKey === '') {
+        return '';
+    }
+
+    $onClick = "(function(btn){"
+        . "var d=document,f=d.createElement('form');"
+        . "f.method='post';"
+        . "f.action=" . $jsUrl . ";"
+        . "f.target='_blank';"
+        . "f.rel='noopener';"
+        . "f.style.display='none';"
+        . "var k=d.createElement('input');"
+        . "k.type='hidden';"
+        . "k.name='my_post_key';"
+        . "k.value=" . $jsPostKey . ";"
+        . "f.appendChild(k);"
+        . "d.body.appendChild(f);"
+        . "f.submit();"
+        . "d.body.removeChild(f);"
+        . "})(this); return false;";
+
+    return '<button type="button" class="button af-cs-accept-button af-cs-accept-button--kb" onclick="' . htmlspecialchars_uni($onClick) . '"><span>' . htmlspecialchars_uni($label) . '</span></button>';
 }
 
 function af_atf_character_bridge_store_thread_kb_link(int $tid, int $fid, int $uid): void
