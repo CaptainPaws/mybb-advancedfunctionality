@@ -443,6 +443,14 @@ function af_charactersheets_dispatch(): void
         af_charactersheets_handle_accept_action();
         return;
     }
+    if ($action === 'af_charactersheets_create_kb_entry') {
+        af_charactersheets_handle_create_kb_entry_action();
+        return;
+    }
+    if ($action === 'af_charactersheets_create_sheet') {
+        af_charactersheets_handle_create_sheet_action();
+        return;
+    }
 
     error_no_permission();
     exit;
@@ -702,17 +710,20 @@ function af_charactersheets_showthread_start_impl(): void
         return;
     }
 
-    $text = $was_accepted
+    $acceptText = $was_accepted
         ? ($lang->af_charactersheets_accept_button_reaccept ?? 'Принять заново')
         : ($lang->af_charactersheets_accept_button ?? 'Принять анкету');
 
-    $url = af_charactersheets_url(['action' => 'af_charactersheets_accept', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
+    $acceptUrl = af_charactersheets_url(['action' => 'af_charactersheets_accept', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
+    $kbUrl = af_charactersheets_url(['action' => 'af_charactersheets_create_kb_entry', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
+    $sheetUrl = af_charactersheets_url(['action' => 'af_charactersheets_create_sheet', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
 
-    // ВАЖНО: не оборачиваем в div — чтобы кнопка вставлялась в один ряд с input-кнопками
-    $GLOBALS['af_charactersheets_accept_button'] =
-        '<a class="button af-cs-accept-button" href="' . htmlspecialchars_uni($url) . '">'
-        . '<span>' . htmlspecialchars_uni($text) . '</span>'
-        . '</a>';
+    $buttons = [];
+    $buttons[] = '<a class="button af-cs-accept-button" href="' . htmlspecialchars_uni($acceptUrl) . '"><span>' . htmlspecialchars_uni($acceptText) . '</span></a>';
+    $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--kb" href="' . htmlspecialchars_uni($kbUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_kb_button ?? 'Создать запись в KB') . '</span></a>';
+    $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--sheet" href="' . htmlspecialchars_uni($sheetUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_create_sheet_button ?? 'Создать лист персонажа') . '</span></a>';
+
+    $GLOBALS['af_charactersheets_accept_button'] = implode("\n", $buttons);
 }
 
 function af_charactersheets_pre_output_impl(&$page): void
@@ -873,6 +884,10 @@ function af_charactersheets_misc_start_impl(): void
 
     if ($action === 'af_charactersheets_accept') {
         af_charactersheets_handle_accept_action();
+    } elseif ($action === 'af_charactersheets_create_kb_entry') {
+        af_charactersheets_handle_create_kb_entry_action();
+    } elseif ($action === 'af_charactersheets_create_sheet') {
+        af_charactersheets_handle_create_sheet_action();
     }
 }
 
@@ -913,47 +928,51 @@ function af_charactersheets_handle_accept_action(): void
 
 
 
-    $message = af_charactersheets_build_accept_message($thread);
-
-    require_once MYBB_ROOT . 'inc/datahandlers/post.php';
-    $posthandler = new PostDataHandler('insert');
-    $posthandler->action = 'reply';
-
-    $subject = 'Re: ' . (string)$thread['subject'];
-
-    $post_data = [
-        'tid' => $tid,
-        'fid' => $fid,
-        'subject' => $subject,
-        'uid' => (int)$mybb->user['uid'],
-        'username' => (string)$mybb->user['username'],
-        'message' => $message,
-        'ipaddress' => $session->ipaddress ?? '',
-        'longipaddress' => $session->packedip ?? '',
-        'options' => [
-            'signature' => 0,
-            'disablesmilies' => 0,
-            'subscriptionmethod' => 0,
-        ],
-    ];
-
-    $posthandler->set_data($post_data);
-
-    if (!$posthandler->validate_post()) {
-        af_charactersheets_log('Post validation failed', [
-            'tid' => $tid,
-            'errors' => $posthandler->get_friendly_errors(),
-        ]);
-        $msg = $lang->af_charactersheets_accept_error ?? 'Не удалось принять анкету.';
-        redirect('showthread.php?tid=' . $tid, $msg);
-    }
-
-    $postinfo = $posthandler->insert_post();
-    $accepted_pid = (int)($postinfo['pid'] ?? 0);
+    $existingRow = af_charactersheets_get_accept_row($tid);
+    $accepted_pid = af_charactersheets_resolve_existing_accept_post_pid($tid, $existingRow);
     if ($accepted_pid <= 0) {
-        af_charactersheets_log('Post insert failed', ['tid' => $tid]);
-        $msg = $lang->af_charactersheets_accept_error ?? 'Не удалось принять анкету.';
-        redirect('showthread.php?tid=' . $tid, $msg);
+        $message = af_charactersheets_build_accept_message($thread);
+
+        require_once MYBB_ROOT . 'inc/datahandlers/post.php';
+        $posthandler = new PostDataHandler('insert');
+        $posthandler->action = 'reply';
+
+        $subject = 'Re: ' . (string)$thread['subject'];
+
+        $post_data = [
+            'tid' => $tid,
+            'fid' => $fid,
+            'subject' => $subject,
+            'uid' => (int)$mybb->user['uid'],
+            'username' => (string)$mybb->user['username'],
+            'message' => $message,
+            'ipaddress' => $session->ipaddress ?? '',
+            'longipaddress' => $session->packedip ?? '',
+            'options' => [
+                'signature' => 0,
+                'disablesmilies' => 0,
+                'subscriptionmethod' => 0,
+            ],
+        ];
+
+        $posthandler->set_data($post_data);
+
+        if (!$posthandler->validate_post()) {
+            af_charactersheets_log('Post validation failed', [
+                'tid' => $tid,
+                'errors' => $posthandler->get_friendly_errors(),
+            ]);
+            $msg = $lang->af_charactersheets_accept_error ?? 'Не удалось принять анкету.';
+            redirect('showthread.php?tid=' . $tid, $msg);
+        }
+
+        $postinfo = $posthandler->insert_post();
+        $accepted_pid = (int)($postinfo['pid'] ?? 0);
+        if ($accepted_pid <= 0) {
+            af_charactersheets_log('Post insert failed', ['tid' => $tid]);
+            $msg = $lang->af_charactersheets_accept_error ?? 'Не удалось принять анкету.';
+            redirect('showthread.php?tid=' . $tid, $msg);
+        }
     }
 
     af_charactersheets_upsert_accept_row($tid, [
@@ -985,18 +1004,126 @@ function af_charactersheets_handle_accept_action(): void
         'accepted_at' => TIME_NOW,
     ]);
 
-    if (!empty($mybb->settings['af_charactersheets_sheet_autocreate'])) {
-        af_charactersheets_autocreate_sheet($tid, $thread);
-    }
-
-    af_charactersheets_sync_oc_kb_character($tid, $thread, [
-        'accepted_by_uid' => (int)($mybb->user['uid'] ?? 0),
-        'source' => 'accept_action',
-    ]);
-
     af_charactersheets_handle_accept_exp($tid, (int)$mybb->user['uid']);
 
     $msg = $lang->af_charactersheets_accept_done ?? 'Анкета принята: тема закрыта и перенесена.';
+    redirect('showthread.php?tid=' . $tid, $msg);
+}
+
+function af_charactersheets_resolve_existing_accept_post_pid(int $tid, array $row = []): int
+{
+    global $db;
+
+    if ($tid <= 0 || !is_object($db)) {
+        return 0;
+    }
+
+    $pid = (int)($row['accepted_pid'] ?? 0);
+    if ($pid > 0) {
+        $exists = (int)$db->fetch_field(
+            $db->simple_select('posts', 'pid', 'pid=' . $pid . ' AND tid=' . $tid, ['limit' => 1]),
+            'pid'
+        );
+        if ($exists > 0) {
+            return $exists;
+        }
+    }
+
+    return 0;
+}
+
+function af_charactersheets_handle_create_kb_entry_action(): void
+{
+    global $mybb, $db, $lang;
+
+    af_charactersheets_load_lang();
+    verify_post_check($mybb->get_input('my_post_key'));
+
+    $tid = (int)$mybb->get_input('tid');
+    if ($tid <= 0) {
+        af_charactersheets_deny('Invalid tid', ['tid' => $tid]);
+    }
+
+    $thread = $db->fetch_array($db->simple_select('threads', '*', 'tid=' . $tid, ['limit' => 1]));
+    if (empty($thread)) {
+        af_charactersheets_deny('Thread not found', ['tid' => $tid]);
+    }
+
+    $fid = (int)($thread['fid'] ?? 0);
+    if (!af_charactersheets_user_can_accept($mybb->user ?? [], $fid)) {
+        af_charactersheets_deny('User cannot create kb entry', ['tid' => $tid, 'uid' => $mybb->user['uid'] ?? 0]);
+    }
+
+    $result = af_charactersheets_sync_oc_kb_character($tid, $thread, [
+        'accepted_by_uid' => (int)($mybb->user['uid'] ?? 0),
+        'source' => 'manual_button',
+    ]);
+
+    if (empty($result['ok'])) {
+        $msg = $lang->af_charactersheets_kb_create_error ?? 'Не удалось создать запись KB.';
+        redirect('showthread.php?tid=' . $tid, $msg . ' (' . htmlspecialchars_uni((string)($result['reason'] ?? 'unknown')) . ')');
+    }
+
+    $mode = (string)($result['mode'] ?? 'create');
+    $msg = $mode === 'update'
+        ? ($lang->af_charactersheets_kb_create_exists ?? 'KB-запись уже существовала, связь обновлена.')
+        : ($lang->af_charactersheets_kb_create_done ?? 'KB-запись персонажа создана.');
+
+    redirect('showthread.php?tid=' . $tid, $msg);
+}
+
+function af_charactersheets_handle_create_sheet_action(): void
+{
+    global $mybb, $db, $lang;
+
+    af_charactersheets_load_lang();
+    verify_post_check($mybb->get_input('my_post_key'));
+
+    $tid = (int)$mybb->get_input('tid');
+    if ($tid <= 0) {
+        af_charactersheets_deny('Invalid tid', ['tid' => $tid]);
+    }
+
+    $thread = $db->fetch_array($db->simple_select('threads', '*', 'tid=' . $tid, ['limit' => 1]));
+    if (empty($thread)) {
+        af_charactersheets_deny('Thread not found', ['tid' => $tid]);
+    }
+
+    $fid = (int)($thread['fid'] ?? 0);
+    if (!af_charactersheets_user_can_accept($mybb->user ?? [], $fid)) {
+        af_charactersheets_deny('User cannot create sheet', ['tid' => $tid, 'uid' => $mybb->user['uid'] ?? 0]);
+    }
+
+    $acceptRow = af_charactersheets_get_accept_row($tid);
+    $uid = (int)($thread['uid'] ?? 0);
+    $characterSource = af_charactersheets_resolve_character_kb_entry($tid, $uid, $acceptRow);
+    $entryId = (int)(($characterSource['entry'] ?? [])['id'] ?? 0);
+    if ($entryId <= 0) {
+        $msg = $lang->af_charactersheets_sheet_requires_kb ?? 'Сначала создайте или привяжите KB-запись персонажа.';
+        redirect('showthread.php?tid=' . $tid, $msg);
+    }
+
+    $existing = af_charactersheets_get_sheet_by_tid($tid);
+    if (!empty($existing['id'])) {
+        $slug = (string)($existing['slug'] ?? '');
+        if ($slug !== '') {
+            af_charactersheets_upsert_accept_row($tid, [
+                'uid' => $uid,
+                'sheet_slug' => $slug,
+                'sheet_created' => 1,
+            ]);
+        }
+        $msg = $lang->af_charactersheets_sheet_create_exists ?? 'Лист персонажа уже существует.';
+        redirect('showthread.php?tid=' . $tid, $msg);
+    }
+
+    $sheet = af_charactersheets_autocreate_sheet($tid, $thread);
+    if (empty($sheet['id']) && empty($sheet['slug'])) {
+        $msg = $lang->af_charactersheets_sheet_create_error ?? 'Не удалось создать лист персонажа.';
+        redirect('showthread.php?tid=' . $tid, $msg);
+    }
+
+    $msg = $lang->af_charactersheets_sheet_create_done ?? 'Лист персонажа создан.';
     redirect('showthread.php?tid=' . $tid, $msg);
 }
 
@@ -1136,14 +1263,8 @@ function af_charactersheets_handle_thread_move_for_acceptance_impl(array $args):
         ]);
     }
 
-    if (!empty($mybb->settings['af_charactersheets_sheet_autocreate'])) {
-        af_charactersheets_autocreate_sheet($tid, $thread);
-    }
-
-    af_charactersheets_sync_oc_kb_character($tid, $thread, [
-        'accepted_by_uid' => (int)($mybb->user['uid'] ?? 0),
-        'source' => 'moderation_move',
-    ]);
+    // На переносе больше не создаём KB/лист автоматически:
+    // это отдельные модераторские действия.
 }
 
 function af_charactersheets_sync_oc_kb_character(int $tid, array $thread = [], array $context = []): array
