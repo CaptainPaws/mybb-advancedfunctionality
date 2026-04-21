@@ -5505,10 +5505,7 @@ function af_kb_extract_inline_ability_summary_value(array $ability, string $kind
 function af_kb_reduce_embedded_ability_to_application_dto(array $ability, int $fallbackSortorder = 0): array
 {
     $normalized = af_kb_normalize_inline_ability_row($ability, $fallbackSortorder);
-    $type = trim((string)($normalized['type'] ?? $normalized['ability_type'] ?? 'active'));
-    if ($type !== 'passive') {
-        $type = 'active';
-    }
+    $type = trim((string)($normalized['type'] ?? $normalized['ability_type'] ?? ''));
 
     $sortorder = (int)($normalized['sortorder'] ?? $fallbackSortorder);
     if ($sortorder <= 0) {
@@ -5534,7 +5531,6 @@ function af_kb_reduce_embedded_ability_to_application_dto(array $ability, int $f
         'shield_value' => af_kb_extract_inline_ability_summary_value($normalized, 'shield'),
         'heal_value' => af_kb_extract_inline_ability_summary_value($normalized, 'heal'),
         'ability_description' => trim((string)($normalized['ability_description'] ?? '')),
-        'ability_kb_key' => trim((string)($normalized['ability_kb_key'] ?? '')),
         'sortorder' => $sortorder,
     ];
 }
@@ -5550,7 +5546,6 @@ function af_kb_reduce_embedded_abilities_to_application_dto(array $abilities): a
         if (
             $dto['ability_name'] === ''
             && $dto['ability_description'] === ''
-            && $dto['ability_kb_key'] === ''
             && $dto['icon_url'] === ''
         ) {
             continue;
@@ -9488,6 +9483,9 @@ function af_kb_build_character_application_prefill(array $entry): array
     $data = af_kb_extract_character_contract($entry);
     $profile = (array)($data['profile'] ?? []);
     $stats = (array)($data['stats'] ?? []);
+    if (empty($stats)) {
+        $stats = (array)($profile['character_stats'] ?? []);
+    }
     $abilities = (array)($data['abilities'] ?? []);
 
     $prefill = [];
