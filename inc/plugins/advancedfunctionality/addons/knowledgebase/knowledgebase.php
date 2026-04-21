@@ -2534,6 +2534,30 @@ function af_kb_character_profile_resolved_value(string $field, string $value, bo
     return af_kb_resolve_title($type, $value, $isRu ? 'ru' : 'en');
 }
 
+function af_kb_render_character_element_value(string $elementKey, bool $isRu): string
+{
+    $elementKey = trim($elementKey);
+    if ($elementKey === '') {
+        return '';
+    }
+
+    $resolvedTitle = af_kb_character_profile_resolved_value('character_element', $elementKey, $isRu);
+    if ($resolvedTitle === '') {
+        $resolvedTitle = $elementKey;
+    }
+
+    $summary = af_kb_get_entry_summary('arpg_element', $elementKey);
+    $iconUrl = af_kb_sanitize_url((string)($summary['icon_url'] ?? ''));
+
+    if ($iconUrl === '') {
+        return htmlspecialchars_uni($resolvedTitle);
+    }
+
+    return '<span class="af-kb-char-element" title="' . htmlspecialchars_uni($resolvedTitle) . '">'
+        . '<img src="' . htmlspecialchars_uni($iconUrl) . '" alt="' . htmlspecialchars_uni($resolvedTitle) . '" loading="lazy" />'
+        . '</span>';
+}
+
 function af_kb_character_stats_labels_dictionary(): array
 {
     return [
@@ -7752,7 +7776,7 @@ function af_kb_arpg_inline_label(string $dict, string $key, bool $isRu): string
         return $label;
     }
 
-    return ucwords(str_replace('_', ' ', $cleanKey));
+    return $cleanKey;
 }
 
 function af_kb_arpg_inline_number($value): string
@@ -7832,10 +7856,8 @@ function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
     $fieldMap = [
         'type' => $isRu ? 'Тип' : 'Type',
         'subtype' => $isRu ? 'Подтип' : 'Subtype',
-        'slot' => $isRu ? 'Слот' : 'Slot',
         'damage_type' => $isRu ? 'Тип урона' : 'Damage type',
         'targeting' => $isRu ? 'Цель' : 'Targeting',
-        'value_mode' => $isRu ? 'Режим значения' : 'Value mode',
     ];
     foreach ($fieldMap as $key => $label) {
         $value = af_kb_arpg_inline_label($key, (string)($row[$key] ?? ''), $isRu);
@@ -7846,11 +7868,6 @@ function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
 
     $numericFieldMap = [
         'range' => $isRu ? 'Дальность' : 'Range',
-        'cast_time' => $isRu ? 'Время каста' : 'Cast time',
-        'cooldown' => $isRu ? 'Перезарядка' : 'Cooldown',
-        'duration' => $isRu ? 'Длительность' : 'Duration',
-        'max_charges' => $isRu ? 'Макс. заряды' : 'Max charges',
-        'level_cap' => $isRu ? 'Предел уровня' : 'Level cap',
     ];
     foreach ($numericFieldMap as $key => $label) {
         $raw = $row[$key] ?? null;
@@ -9370,6 +9387,18 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         'Фракция' => 'character_faction',
     ] as $label => $field) {
         $value = trim((string)($profile[$field] ?? ''));
+        if ($value === '') {
+            continue;
+        }
+
+        if ($field === 'character_element') {
+            $rendered = af_kb_render_character_element_value($value, $isRu);
+            if ($rendered !== '') {
+                $identityRows .= '<div class="af-kb-char-profile__row"><span>' . htmlspecialchars_uni($label) . '</span><strong>' . $rendered . '</strong></div>';
+            }
+            continue;
+        }
+
         $value = af_kb_character_profile_resolved_value((string)$field, $value, $isRu);
         if ($value !== '') {
             $identityRows .= '<div class="af-kb-char-profile__row"><span>' . htmlspecialchars_uni($label) . '</span><strong>' . htmlspecialchars_uni($value) . '</strong></div>';
