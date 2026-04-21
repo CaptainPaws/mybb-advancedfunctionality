@@ -732,6 +732,7 @@ class AF_Admin_Advancedthreadfields
             'kb_dynamic' => 'KB select: Any KB type',
             'kb_mechanic' => 'KB select: mechanic-aware (dnd/arpg)',
             'character_abilities' => 'Character abilities (JSON repeater)',
+            'character_stats' => 'Character stats (structured block)',
             'sf_attributes_pointbuy' => $lang->af_atf_type_sf_attributes_pointbuy ?? 'SF attributes point-buy',
         ];
 

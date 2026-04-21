@@ -2317,6 +2317,7 @@ function af_atf_map_named_values_to_fieldids(array $fields, array $namedValues):
     }
 
     $statsByKey = [];
+    $statsJson = '';
     if (array_key_exists('character_stats', $namedValues)) {
         $rawStats = $namedValues['character_stats'];
         if (is_string($rawStats) && trim($rawStats) !== '') {
@@ -2329,6 +2330,7 @@ function af_atf_map_named_values_to_fieldids(array $fields, array $namedValues):
                     $statsByKey[(string)$k] = trim((string)$v);
                 }
             }
+            $statsJson = af_atf_normalize_character_stats_json($rawStats);
         } elseif (is_array($rawStats)) {
             foreach ($rawStats as $k => $v) {
                 if (!is_scalar($v)) {
@@ -2336,13 +2338,36 @@ function af_atf_map_named_values_to_fieldids(array $fields, array $namedValues):
                 }
                 $statsByKey[(string)$k] = trim((string)$v);
             }
+            $statsJson = af_atf_normalize_character_stats_json(json_encode($rawStats, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}');
         }
     }
 
     foreach ($fields as $field) {
         $fieldName = trim((string)($field['name'] ?? ''));
         $fieldId = (int)($field['fieldid'] ?? 0);
+        $fieldType = trim((string)($field['type'] ?? ''));
         if ($fieldName === '' || $fieldId <= 0) {
+            continue;
+        }
+
+        if ($fieldType === 'character_stats') {
+            if ($statsJson !== '' && $statsJson !== '{}') {
+                $out[$fieldId] = $statsJson;
+                continue;
+            }
+
+            $statsPayload = [];
+            foreach (af_atf_character_stats_field_keys() as $statKey) {
+                if (array_key_exists($statKey, $namedValues) && is_scalar($namedValues[$statKey])) {
+                    $statsPayload[$statKey] = trim((string)$namedValues[$statKey]);
+                } elseif (array_key_exists($statKey, $statsByKey)) {
+                    $statsPayload[$statKey] = $statsByKey[$statKey];
+                }
+            }
+
+            if (!empty($statsPayload)) {
+                $out[$fieldId] = af_atf_normalize_character_stats_json(json_encode($statsPayload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}');
+            }
             continue;
         }
 
@@ -3139,6 +3164,37 @@ function af_atf_build_input_html(array $field, string $value): string
                 . '</div>';
         }
 
+        case 'character_stats': {
+            $normalized = af_atf_normalize_character_stats_json($value);
+            $decoded = json_decode($normalized, true);
+            if (!is_array($decoded)) {
+                $decoded = [];
+            }
+            $labels = af_atf_character_stats_labels();
+            $percent = array_flip(af_atf_character_stats_percent_keys());
+
+            $html = '<div class="af-atf-character-stats">';
+            $html .= '<input type="hidden" class="af-atf-character-stats-hidden" name="' . $nameAttr . '" value="' . htmlspecialchars_uni($normalized) . '" />';
+            $html .= '<div class="af-atf-character-stats-grid">';
+            foreach (af_atf_character_stats_field_keys() as $key) {
+                $label = htmlspecialchars_uni((string)($labels[$key] ?? $key));
+                $val = '';
+                if (array_key_exists($key, $decoded) && is_scalar($decoded[$key])) {
+                    $val = (string)$decoded[$key];
+                }
+                $suffix = isset($percent[$key]) ? '<span class="af-atf-character-stats-suffix">%</span>' : '';
+                $html .= '<label class="af-atf-character-stats-item">'
+                    . '<span class="af-atf-character-stats-label">' . $label . '</span>'
+                    . '<span class="af-atf-character-stats-control">'
+                    . '<input type="number" step="0.01" class="textbox text_input af-atf-character-stats-input" data-key="' . htmlspecialchars_uni($key) . '" value="' . htmlspecialchars_uni($val) . '" />'
+                    . $suffix
+                    . '</span>'
+                    . '</label>';
+            }
+            $html .= '</div></div>';
+            return $html;
+        }
+
         case 'sf_attributes_pointbuy': {
             $settings = af_atf_sf_pointbuy_get_settings();
             $curveJson = json_encode($settings['curve'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -3745,6 +3801,93 @@ function af_atf_character_active_mechanic(): string
     return af_atf_character_resolve_active_mechanic($fid, $fields, $values);
 }
 
+function af_atf_character_stats_field_keys(): array
+{
+    return [
+        'character_hp',
+        'character_defense',
+        'character_attack_power',
+        'character_element_damage_bonus',
+        'character_crit_damage',
+        'character_healing_received_bonus',
+        'character_elemental_mastery',
+        'character_healing_bonus',
+        'character_shield_strength',
+        'character_luck',
+    ];
+}
+
+function af_atf_character_stats_percent_keys(): array
+{
+    return [
+        'character_element_damage_bonus',
+        'character_crit_damage',
+        'character_healing_received_bonus',
+        'character_healing_bonus',
+        'character_shield_strength',
+        'character_luck',
+    ];
+}
+
+function af_atf_character_stats_labels(): array
+{
+    return [
+        'character_hp' => 'HP',
+        'character_defense' => 'Защита',
+        'character_attack_power' => 'Сила атаки',
+        'character_element_damage_bonus' => 'Бонус урона стихий',
+        'character_crit_damage' => 'Крит. урон',
+        'character_healing_received_bonus' => 'Бонус входящего лечения',
+        'character_elemental_mastery' => 'Мастерство стихий',
+        'character_healing_bonus' => 'Бонус лечения',
+        'character_shield_strength' => 'Сила щита',
+        'character_luck' => 'Удача',
+    ];
+}
+
+function af_atf_normalize_character_stats_json(string $raw): string
+{
+    $raw = trim($raw);
+    if ($raw === '') {
+        return '{}';
+    }
+
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return '{}';
+    }
+
+    $normalized = [];
+    foreach (af_atf_character_stats_field_keys() as $key) {
+        if (!array_key_exists($key, $decoded)) {
+            continue;
+        }
+        $val = $decoded[$key];
+        if (!is_scalar($val) || $val === '') {
+            continue;
+        }
+
+        if (is_numeric($val)) {
+            $num = (float)$val;
+            $normalized[$key] = ((float)(int)$num === $num) ? (int)$num : round($num, 2);
+            continue;
+        }
+
+        $clean = trim((string)$val);
+        if ($clean === '') {
+            continue;
+        }
+        $clean = str_replace(',', '.', $clean);
+        if (!is_numeric($clean)) {
+            continue;
+        }
+        $num = (float)$clean;
+        $normalized[$key] = ((float)(int)$num === $num) ? (int)$num : round($num, 2);
+    }
+
+    return json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+}
+
 function af_atf_normalize_character_abilities_json(string $raw): string
 {
     $raw = trim($raw);
@@ -3956,6 +4099,8 @@ function af_atf_newthread_do_end(): void
             $errorKey = null;
             $normalized = af_atf_sf_pointbuy_normalize($val, $settings, $errorKey);
             $val = !empty($normalized['ok']) ? (string)$normalized['json'] : '';
+        } elseif ($type === 'character_stats') {
+            $val = af_atf_normalize_character_stats_json($val);
         } elseif ($type === 'character_abilities') {
             $val = af_atf_normalize_character_abilities_json($val);
         } elseif ($type === 'kb_dynamic' || $type === 'kb_mechanic') {
@@ -4059,6 +4204,8 @@ function af_atf_editpost_do_end(): void
             $errorKey = null;
             $normalized = af_atf_sf_pointbuy_normalize($val, $settings, $errorKey);
             $val = !empty($normalized['ok']) ? (string)$normalized['json'] : '';
+        } elseif ($type === 'character_stats') {
+            $val = af_atf_normalize_character_stats_json($val);
         } elseif ($type === 'character_abilities') {
             $val = af_atf_normalize_character_abilities_json($val);
         } elseif ($type === 'kb_dynamic' || $type === 'kb_mechanic') {
@@ -4294,6 +4441,16 @@ function af_atf_dh_validate(&$ph): void
         if ($type === 'character_abilities') {
             $val = af_atf_normalize_character_abilities_json(is_string($raw) ? $raw : '');
             if ((int)$f['required'] === 1 && $val === '[]') {
+                $ph->set_error('missing_required_field_'.$fieldid);
+                continue;
+            }
+            $clean[$fieldid] = $val;
+            continue;
+        }
+
+        if ($type === 'character_stats') {
+            $val = af_atf_normalize_character_stats_json(is_string($raw) ? $raw : '');
+            if ((int)$f['required'] === 1 && ($val === '' || $val === '{}')) {
                 $ph->set_error('missing_required_field_'.$fieldid);
                 continue;
             }
@@ -4623,6 +4780,38 @@ function af_atf_format_value_for_display(array $field, string $val): string
             return '';
         }
         return implode('<br />', $items);
+    }
+
+    if ($type === 'character_stats') {
+        $decoded = json_decode($val, true);
+        if (!is_array($decoded) || empty($decoded)) {
+            return '';
+        }
+
+        $labels = af_atf_character_stats_labels();
+        $percent = array_flip(af_atf_character_stats_percent_keys());
+        $rows = '';
+        foreach (af_atf_character_stats_field_keys() as $key) {
+            if (!array_key_exists($key, $decoded) || !is_scalar($decoded[$key])) {
+                continue;
+            }
+            $num = trim((string)$decoded[$key]);
+            if ($num === '') {
+                continue;
+            }
+            $label = htmlspecialchars_uni((string)($labels[$key] ?? $key));
+            $suffix = isset($percent[$key]) ? '%' : '';
+            $rows .= '<div class="af-atf-character-stats-display-item">'
+                . '<span class="af-atf-character-stats-display-label">' . $label . '</span>'
+                . '<span class="af-atf-character-stats-display-value">' . htmlspecialchars_uni($num) . $suffix . '</span>'
+                . '</div>';
+        }
+
+        if ($rows === '') {
+            return '';
+        }
+
+        return '<div class="af-atf-character-stats-display">' . $rows . '</div>';
     }
 
     if ($type === 'sf_attributes_pointbuy') {
