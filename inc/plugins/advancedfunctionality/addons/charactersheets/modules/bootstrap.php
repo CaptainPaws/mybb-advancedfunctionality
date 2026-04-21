@@ -713,6 +713,7 @@ function af_charactersheets_showthread_start_impl(): void
 
     $acceptUrl = af_charactersheets_url(['action' => 'af_charactersheets_accept', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
     $kbUrl = af_charactersheets_url(['action' => 'af_charactersheets_create_kb_entry', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
+    $kbSyncUrl = af_charactersheets_url(['action' => 'af_charactersheets_sync_kb_entry', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
     $sheetUrl = af_charactersheets_url(['action' => 'af_charactersheets_create_sheet', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
 
     $buttons = [];
@@ -721,6 +722,8 @@ function af_charactersheets_showthread_start_impl(): void
     }
     if (!$kbExists) {
         $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--kb" target="_blank" rel="noopener" href="' . htmlspecialchars_uni($kbUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_kb_button ?? 'Создать запись в KB') . '</span></a>';
+    } else {
+        $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--kb" target="_blank" rel="noopener" href="' . htmlspecialchars_uni($kbSyncUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_kb_sync_button ?? 'Синхронизировать анкету → KB') . '</span></a>';
     }
     if (empty($sheetExists)) {
         $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--sheet" target="_blank" rel="noopener" href="' . htmlspecialchars_uni($sheetUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_create_sheet_button ?? 'Создать лист персонажа') . '</span></a>';
@@ -893,6 +896,8 @@ function af_charactersheets_misc_start_impl(): void
         af_charactersheets_handle_accept_action();
     } elseif ($action === 'af_charactersheets_create_kb_entry') {
         af_charactersheets_handle_create_kb_entry_action();
+    } elseif ($action === 'af_charactersheets_sync_kb_entry') {
+        af_charactersheets_handle_sync_kb_entry_action();
     } elseif ($action === 'af_charactersheets_create_sheet') {
         af_charactersheets_handle_create_sheet_action();
     }
@@ -1162,6 +1167,46 @@ function af_charactersheets_handle_create_sheet_action(): void
     redirect($sheetUrl, $msg);
 }
 
+function af_charactersheets_handle_sync_kb_entry_action(): void
+{
+    global $mybb, $db, $lang;
+
+    af_charactersheets_load_lang();
+    verify_post_check($mybb->get_input('my_post_key'));
+
+    $tid = (int)$mybb->get_input('tid');
+    if ($tid <= 0) {
+        af_charactersheets_deny('Invalid tid', ['tid' => $tid]);
+    }
+
+    $thread = $db->fetch_array($db->simple_select('threads', '*', 'tid=' . $tid, ['limit' => 1]));
+    if (empty($thread)) {
+        af_charactersheets_deny('Thread not found', ['tid' => $tid]);
+    }
+
+    $fid = (int)($thread['fid'] ?? 0);
+    if (!af_charactersheets_user_can_accept($mybb->user ?? [], $fid)) {
+        af_charactersheets_deny('User cannot sync kb entry', ['tid' => $tid, 'uid' => $mybb->user['uid'] ?? 0]);
+    }
+
+    $result = af_charactersheets_sync_oc_kb_character($tid, $thread, [
+        'accepted_by_uid' => (int)($mybb->user['uid'] ?? 0),
+        'source' => 'manual_sync_button',
+        'sync_only' => true,
+        'require_existing' => true,
+    ]);
+
+    if (empty($result['ok'])) {
+        $msg = $lang->af_charactersheets_kb_sync_error ?? 'Не удалось синхронизировать KB-запись.';
+        redirect('showthread.php?tid=' . $tid, $msg . ' (' . htmlspecialchars_uni((string)($result['reason'] ?? 'unknown')) . ')');
+    }
+
+    $entryId = (int)($result['entry_id'] ?? 0);
+    $entryUrl = af_charactersheets_build_kb_entry_url($entryId, $tid);
+    $msg = $lang->af_charactersheets_kb_sync_done ?? 'KB-запись синхронизирована с анкетой.';
+    redirect($entryUrl, $msg);
+}
+
 function af_charactersheets_resolve_existing_sheet_for_thread(int $tid, int $uid, array $acceptRow = []): array
 {
     if ($tid > 0) {
@@ -1409,6 +1454,8 @@ function af_charactersheets_sync_oc_kb_character(int $tid, array $thread = [], a
         $titleEn = $titleRu;
     }
 
+    $syncOnly = !empty($context['sync_only']);
+
     $profile = [
         'category' => 'originals',
         'character_pic' => af_charactersheets_get_portrait_url($index),
@@ -1419,12 +1466,31 @@ function af_charactersheets_sync_oc_kb_character(int $tid, array $thread = [], a
         'character_element' => af_charactersheets_pick_field_value($index, ['character_element', 'element']),
         'character_gen' => af_charactersheets_pick_field_value($index, ['character_gen', 'character_gender', 'gender']),
         'character_race' => af_charactersheets_pick_field_value($index, ['character_race', 'race']),
+        'character_origin' => af_charactersheets_pick_field_value($index, ['character_origin']),
         'character_class' => af_charactersheets_pick_field_value($index, ['character_class', 'class']),
         'character_faction' => af_charactersheets_pick_field_value($index, ['character_faction', 'faction']),
         'character_app' => af_charactersheets_pick_field_value($index, ['character_app', 'character_about', 'character_bio', 'character_description', 'app']),
     ];
 
     $stats = [];
+    $statsJsonRaw = af_charactersheets_pick_field_value($index, ['character_stats'], false);
+    if ($statsJsonRaw !== '') {
+        $decodedStats = af_charactersheets_json_decode($statsJsonRaw);
+        if (is_array($decodedStats)) {
+            foreach ($decodedStats as $statKey => $statValue) {
+                $key = trim((string)$statKey);
+                if ($key === '') {
+                    continue;
+                }
+                if (is_numeric($statValue)) {
+                    $stats[$key] = 0 + $statValue;
+                } elseif (is_string($statValue) && trim($statValue) !== '' && is_numeric(trim($statValue))) {
+                    $stats[$key] = 0 + trim($statValue);
+                }
+            }
+        }
+    }
+
     foreach ([
         'character_hp',
         'character_defense',
@@ -1439,7 +1505,11 @@ function af_charactersheets_sync_oc_kb_character(int $tid, array $thread = [], a
     ] as $statName) {
         $rawValue = af_charactersheets_pick_field_value($index, [$statName], false);
         $num = af_charactersheets_to_number($rawValue);
-        $stats[$statName] = $num !== null ? $num : 0;
+        if ($num !== null) {
+            $stats[$statName] = $num;
+        } elseif (!array_key_exists($statName, $stats)) {
+            $stats[$statName] = 0;
+        }
     }
 
     $abilities = af_charactersheets_extract_oc_abilities($index);
@@ -1487,16 +1557,50 @@ function af_charactersheets_sync_oc_kb_character(int $tid, array $thread = [], a
         );
         $entryId = (int)($existing['id'] ?? 0);
     }
+    if (!empty($context['require_existing']) && (!$existing || empty($existing['id']))) {
+        $result['reason'] = 'existing_entry_not_found';
+        return $result;
+    }
+
+    $existingRules = [];
+    if (!empty($existing['data_json'])) {
+        $existingRules = af_charactersheets_json_decode((string)$existing['data_json']);
+    }
+    if (!is_array($existingRules) || empty($existingRules)) {
+        $existingMeta = af_charactersheets_json_decode((string)($existing['meta_json'] ?? ''));
+        $existingRules = (array)($existingMeta['rules'] ?? []);
+    }
+
+    $mergedProfile = array_merge((array)($existingRules['character_profile'] ?? []), $profile);
+    foreach ($profile as $fieldKey => $incomingValue) {
+        if (trim((string)$incomingValue) === '' && array_key_exists($fieldKey, (array)($existingRules['character_profile'] ?? []))) {
+            $mergedProfile[$fieldKey] = (string)$existingRules['character_profile'][$fieldKey];
+        }
+    }
+    $mergedStats = array_merge((array)($existingRules['character_stats'] ?? []), $stats);
+    $mergedAbilities = $abilities;
+    if (empty($mergedAbilities)) {
+        $mergedAbilities = array_values(array_filter((array)($existingRules['character_abilities'] ?? []), 'is_array'));
+    }
+    $rules['character_profile'] = $mergedProfile;
+    $rules['character_stats'] = $mergedStats;
+    $rules['character_abilities'] = $mergedAbilities;
+    $rules['character_meta']['sync_mode'] = $syncOnly ? 'sync' : 'create_or_update';
+    $rulesJson = json_encode($rules, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($rulesJson) || $rulesJson === '') {
+        $result['reason'] = 'rules_encode_failed';
+        return $result;
+    }
 
     $entryPayload = [
         'type' => 'character',
         'key' => $entryKey,
         'title_ru' => $titleRu,
         'title_en' => $titleEn,
-        'short_ru' => (string)$profile['character_app'],
-        'short_en' => (string)$profile['character_app'],
-        'body_ru' => (string)$profile['character_app'],
-        'body_en' => (string)$profile['character_app'],
+        'short_ru' => (string)$mergedProfile['character_app'],
+        'short_en' => (string)$mergedProfile['character_app'],
+        'body_ru' => '',
+        'body_en' => '',
         'tech_ru' => '{}',
         'tech_en' => '{}',
         'meta_json' => json_encode(['rules' => $rules], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
@@ -1599,12 +1703,20 @@ function af_charactersheets_extract_oc_abilities(array $index): array
     $jsonRaw = af_charactersheets_pick_field_value($index, ['character_abilities'], false);
     if ($jsonRaw !== '') {
         $decoded = af_charactersheets_json_decode($jsonRaw);
+        $rows = [];
         if (isset($decoded[0]) && is_array($decoded[0])) {
-            foreach ($decoded as $idx => $ability) {
+            $rows = $decoded;
+        } elseif (is_array($decoded['items'] ?? null)) {
+            $rows = (array)$decoded['items'];
+        } elseif (is_array($decoded)) {
+            $rows = array_values(array_filter($decoded, 'is_array'));
+        }
+        if ($rows) {
+            foreach ($rows as $idx => $ability) {
                 if (!is_array($ability)) {
                     continue;
                 }
-                $name = trim((string)($ability['ability_name'] ?? $ability['name'] ?? ''));
+                $name = trim((string)($ability['ability_name'] ?? $ability['name'] ?? $ability['title'] ?? ''));
                 $description = trim((string)($ability['ability_description'] ?? $ability['description'] ?? ''));
                 $type = trim((string)($ability['type'] ?? $ability['ability_type'] ?? 'active'));
                 if ($type !== 'passive') {
