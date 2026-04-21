@@ -764,6 +764,25 @@ display: inline-block;
 .af-kb-char-ability__icon-fallback { opacity: .75; font-size: 14px; line-height: 1; }
 .af-kb-char-profile__service { display: flex; gap: 8px; flex-wrap: wrap; }
 .af-kb-char-empty { color: #788094; font-style: italic; }
+.af-kb-status-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 10px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.af-kb-status-badge--free { background: #e7f8ec; color: #1f7a3e; }
+.af-kb-status-badge--occupied { background: #fdeaea; color: #a22b2b; }
+.af-kb-status-badge--held { background: #eaf1ff; color: #2a4ca8; }
+.af-kb-status-badge--author { background: #f2ebff; color: #6a3da8; }
+.af-kb-status-form { display: grid; gap: 10px; }
+.af-kb-status-form label { display: grid; gap: 6px; font-weight: 600; }
+.af-kb-status-form input,
+.af-kb-status-form select { width: 100%; box-sizing: border-box; padding: 7px 8px; }
+.af-kb-status-form__actions { display: flex; justify-content: flex-end; }
 
 @media (max-width: 640px) {
   .af-kb-char-ability__chip {

@@ -8696,7 +8696,7 @@ function af_kb_misc_route(): void
     global $mybb;
 
     $action = $mybb->get_input('action');
-    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_race_variants', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_debug_entry', 'kb_migrate_rules', 'kb_manage_categories', 'kb_manage_categories_save', 'kb_entry_categories_save', 'kb_debug_entry_cats'], true)) {
+    if (!in_array($action, ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_race_variants', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types', 'knowledgebase_entry', 'kb_debug_entry', 'kb_migrate_rules', 'kb_manage_categories', 'kb_manage_categories_save', 'kb_entry_categories_save', 'kb_debug_entry_cats', 'kb_character_status_save'], true)) {
         return;
     }
 
@@ -8783,6 +8783,9 @@ function af_kb_dispatch(): void
 
     if ($action === 'kb_character_apply') {
         af_kb_handle_character_apply();
+    }
+    if ($action === 'kb_character_status_save') {
+        af_kb_handle_character_status_save();
     }
 
     if ($action === 'knowledgebase_entry') {
@@ -9284,6 +9287,78 @@ function af_kb_extract_character_contract(array $entry): array
     ];
 }
 
+function af_kb_character_status_labels(bool $isRu): array
+{
+    return [
+        'free' => $isRu ? 'Свободен' : 'Free',
+        'occupied' => $isRu ? 'Занят' : 'Occupied',
+        'held' => $isRu ? 'Придержан' : 'Held',
+        'author' => $isRu ? 'Авторский' : 'Original',
+    ];
+}
+
+function af_kb_parse_hold_until_timestamp(string $raw): int
+{
+    $raw = trim($raw);
+    if ($raw === '') {
+        return 0;
+    }
+    if (preg_match('~^\d{4}-\d{2}-\d{2}$~', $raw)) {
+        $ts = strtotime($raw . ' 23:59:59 UTC');
+        return $ts !== false ? (int)$ts : 0;
+    }
+    if (ctype_digit($raw)) {
+        return (int)$raw;
+    }
+    $ts = strtotime($raw);
+    return $ts !== false ? (int)$ts : 0;
+}
+
+function af_kb_get_character_availability_payload(array $entry): array
+{
+    $character = af_kb_extract_character_contract($entry);
+    $profile = (array)($character['profile'] ?? []);
+    $meta = (array)($character['meta'] ?? []);
+    $availability = (array)($meta['availability'] ?? []);
+
+    $category = strtolower(trim((string)($profile['category'] ?? '')));
+    $isAuthorCategory = in_array($category, ['originals', 'original', 'author', 'authors'], true);
+
+    $storedStatus = strtolower(trim((string)($availability['status'] ?? 'free')));
+    if (!in_array($storedStatus, ['free', 'occupied', 'held'], true)) {
+        $storedStatus = 'free';
+    }
+
+    $linkUrl = af_kb_sanitize_url((string)($availability['link_url'] ?? ''));
+    $holdUntilRaw = trim((string)($availability['hold_until'] ?? ''));
+    $holdUntilTs = af_kb_parse_hold_until_timestamp($holdUntilRaw);
+
+    $effectiveStatus = $storedStatus;
+    if ($isAuthorCategory) {
+        $effectiveStatus = 'author';
+    } elseif ($storedStatus === 'held' && ($holdUntilTs <= 0 || $holdUntilTs < TIME_NOW)) {
+        $effectiveStatus = 'free';
+    }
+
+    return [
+        'is_author' => $isAuthorCategory,
+        'stored_status' => $storedStatus,
+        'effective_status' => $effectiveStatus,
+        'link_url' => $linkUrl,
+        'hold_until' => $holdUntilRaw,
+        'hold_until_ts' => $holdUntilTs,
+        'can_apply' => $category === 'canons' && $effectiveStatus === 'free',
+    ];
+}
+
+function af_kb_render_character_status_badge(array $availability, bool $isRu): string
+{
+    $status = (string)($availability['effective_status'] ?? 'free');
+    $labels = af_kb_character_status_labels($isRu);
+    $title = $labels[$status] ?? $labels['free'];
+    return '<span class="af-kb-status-badge af-kb-status-badge--' . htmlspecialchars_uni($status) . '">' . htmlspecialchars_uni($title) . '</span>';
+}
+
 function af_kb_catalog_entry_card(array $entry, array $typeRow): string
 {
     $entryType = (string)($entry['type'] ?? '');
@@ -9423,9 +9498,10 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         $abilitiesHtml .= af_kb_render_inline_ability_card($ability, $isRu);
     }
 
+    $availability = af_kb_get_character_availability_payload($entry);
     $isCanon = trim((string)($profile['category'] ?? '')) === 'canons';
     $applyCtaHtml = '';
-    if ($isCanon) {
+    if ($isCanon && !empty($availability['can_apply'])) {
         $targetForumId = af_kb_resolve_character_application_forum_id();
         if ($targetForumId > 0) {
             $applyUrl = 'misc.php?action=kb_character_apply&type=' . rawurlencode((string)($entry['type'] ?? 'character'))
@@ -9623,6 +9699,10 @@ function af_kb_handle_character_apply(): void
     if ($category !== 'canons') {
         error_no_permission();
     }
+    $availability = af_kb_get_character_availability_payload($entry);
+    if (empty($availability['can_apply'])) {
+        error($lang->af_kb_no_access ?? 'Character is not available for application.');
+    }
 
     $forumId = af_kb_resolve_character_application_forum_id();
     if ($forumId <= 0) {
@@ -9645,6 +9725,76 @@ function af_kb_handle_character_apply(): void
     }
 
     redirect('newthread.php?fid=' . $forumId . '&af_atf_prefill_token=' . rawurlencode($token));
+}
+
+function af_kb_handle_character_status_save(): void
+{
+    global $mybb, $db, $lang;
+
+    if (!af_kb_can_edit()) {
+        error_no_permission();
+    }
+    if (strtoupper((string)$mybb->request_method) !== 'POST') {
+        error_no_permission();
+    }
+    verify_post_check($mybb->get_input('my_post_key'));
+
+    $type = af_kb_resolve_requested_type((string)$mybb->get_input('type'));
+    $key = trim((string)$mybb->get_input('key'));
+    if ($type !== 'character' || $key === '') {
+        error($lang->af_kb_not_found ?? 'Not found');
+    }
+
+    $entry = $db->fetch_array($db->simple_select(
+        'af_kb_entries',
+        '*',
+        "type='character' AND `key`='" . $db->escape_string($key) . "'",
+        ['limit' => 1]
+    ));
+    if (!$entry) {
+        error($lang->af_kb_not_found ?? 'Not found');
+    }
+
+    $status = strtolower(trim((string)$mybb->get_input('character_status')));
+    if (!in_array($status, ['free', 'occupied', 'held'], true)) {
+        error('Некорректный статус.');
+    }
+
+    $linkUrl = af_kb_sanitize_url((string)$mybb->get_input('status_link_url'));
+    $holdUntil = trim((string)$mybb->get_input('hold_until'));
+    if (($status === 'occupied' || $status === 'held') && $linkUrl === '') {
+        error('Для выбранного статуса требуется ссылка на профиль/анкету.');
+    }
+    if ($status === 'held' && !preg_match('~^\d{4}-\d{2}-\d{2}$~', $holdUntil)) {
+        error('Для статуса "Придержан" требуется корректная дата.');
+    }
+    if ($status !== 'held') {
+        $holdUntil = '';
+    }
+
+    $meta = af_kb_decode_json((string)($entry['meta_json'] ?? '{}'));
+    if (!is_array($meta)) {
+        $meta = [];
+    }
+    $rules = isset($meta['rules']) && is_array($meta['rules']) ? (array)$meta['rules'] : [];
+    $characterMeta = isset($rules['character_meta']) && is_array($rules['character_meta']) ? (array)$rules['character_meta'] : [];
+    $characterMeta['availability'] = [
+        'status' => $status,
+        'link_url' => $linkUrl,
+        'hold_until' => $holdUntil,
+        'updated_at' => TIME_NOW,
+        'updated_by' => (int)($mybb->user['uid'] ?? 0),
+    ];
+    $rules['character_meta'] = $characterMeta;
+    $meta['rules'] = $rules;
+
+    $metaJson = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($metaJson === false || $metaJson === '') {
+        error('Не удалось сохранить статус.');
+    }
+
+    $db->update_query('af_kb_entries', ['meta_json' => $db->escape_string($metaJson)], 'id=' . (int)$entry['id']);
+    redirect('misc.php?action=kb&type=character&key=' . rawurlencode($key), 'Статус персонажа обновлён.');
 }
 
 function af_kb_handle_view(): void
@@ -10095,6 +10245,33 @@ function af_kb_handle_view(): void
     $kb_entry_icon = $entryIconHtml !== '' ? '<span class="af-kb-icon">' . $entryIconHtml . '</span>' : '';
     $kb_page_title = htmlspecialchars_uni($title);
     $kb_title = htmlspecialchars_uni($title);
+    $kb_status_badge = '';
+    $kb_character_status_button = '';
+    $kb_character_status_modal = '';
+    if ($type === 'character') {
+        $availability = af_kb_get_character_availability_payload($entry);
+        $kb_status_badge = af_kb_render_character_status_badge($availability, $isRu);
+        if (af_kb_can_edit() && empty($availability['is_author'])) {
+            $storedStatus = (string)($availability['stored_status'] ?? 'free');
+            $statusSaveUrl = 'misc.php?action=kb_character_status_save';
+            $kb_character_status_button = '<button type="button" class="af-kb-btn af-kb-btn--edit" data-af-kb-status-open="1">Изменить статус</button>';
+            $kb_character_status_modal = '<div class="af-kb-modal-backdrop af-kb-status-modal" data-af-kb-status-modal="1" style="display:none;">'
+                . '<div class="af-kb-modal"><div class="af-kb-modal-header"><h3>Статус персонажа</h3><button type="button" class="af-kb-modal-close" data-af-kb-status-close="1">&times;</button></div>'
+                . '<div class="af-kb-modal-body"><form method="post" action="' . htmlspecialchars_uni($statusSaveUrl) . '" class="af-kb-status-form" data-af-kb-status-form="1">'
+                . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($mybb->post_code) . '" />'
+                . '<input type="hidden" name="type" value="character" />'
+                . '<input type="hidden" name="key" value="' . htmlspecialchars_uni($key) . '" />'
+                . '<label>Статус<select name="character_status" data-af-kb-status-select="1">'
+                . '<option value="free"' . ($storedStatus === 'free' ? ' selected="selected"' : '') . '>Свободен</option>'
+                . '<option value="occupied"' . ($storedStatus === 'occupied' ? ' selected="selected"' : '') . '>Занят</option>'
+                . '<option value="held"' . ($storedStatus === 'held' ? ' selected="selected"' : '') . '>Придержан</option>'
+                . '</select></label>'
+                . '<label data-af-kb-status-link-wrap="1">Ссылка на профиль/анкету<input type="url" name="status_link_url" value="' . htmlspecialchars_uni((string)($availability['link_url'] ?? '')) . '" data-af-kb-status-link="1" placeholder="https://..." /></label>'
+                . '<label data-af-kb-status-date-wrap="1">Придержан до<input type="date" name="hold_until" value="' . htmlspecialchars_uni((string)($availability['hold_until'] ?? '')) . '" data-af-kb-status-date="1" /></label>'
+                . '<div class="af-kb-status-form__actions"><button type="submit" class="af-kb-btn af-kb-btn--create">Сохранить</button></div>'
+                . '</form></div></div></div>';
+        }
+    }
     $kb_short = '';
     $kb_entry_body = $body;
     $kb_banner = '';
