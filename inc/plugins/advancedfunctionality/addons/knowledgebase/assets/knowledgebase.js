@@ -2146,10 +2146,14 @@
                 ]);
                 renderSeededArrayEditor(rulesRoot, 'entries', 'entries', [
                     { key: 'key', label: 'key', default: '' },
-                    { key: 'value', label: 'value', default: '' },
-                    { key: 'notes', label: 'notes', default: '' }
+                    { key: 'label_ru', label: 'label_ru', default: '' },
+                    { key: 'label_en', label: 'label_en', default: '' },
+                    { key: 'label_img', label: 'label_img', default: '' },
+                    { key: 'notes', label: 'notes', default: '' },
+                    { key: 'sortorder', label: 'sortorder', type: 'number', default: 0 },
+                    { key: 'is_active', label: 'is_active', type: 'number', default: 1 }
                 ], [
-                    { key: 'default', label: 'default', seed: { key: '', value: '', notes: '' } }
+                    { key: 'default', label: 'default', seed: { key: '', label_ru: '', label_en: '', label_img: '', notes: '', sortorder: 0, is_active: 1 } }
                 ]);
             }
 

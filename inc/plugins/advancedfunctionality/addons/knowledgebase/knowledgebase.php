@@ -861,7 +861,15 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.talent_rank_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
                 ['path' => 'rules.item_rarity_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
                 ['path' => 'rules.bestiary_rank_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
-                ['path' => 'rules.entries', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.entries', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [
+                    ['path' => 'key', 'type' => 'string', 'required' => true, 'default' => ''],
+                    ['path' => 'label_ru', 'type' => 'string', 'default' => ''],
+                    ['path' => 'label_en', 'type' => 'string', 'default' => ''],
+                    ['path' => 'label_img', 'type' => 'string', 'default' => ''],
+                    ['path' => 'notes', 'type' => 'string', 'default' => ''],
+                    ['path' => 'sortorder', 'type' => 'number', 'default' => 0],
+                    ['path' => 'is_active', 'type' => 'number', 'default' => 1],
+                ]], 'default' => []],
             ],
         ];
 
@@ -2202,7 +2210,51 @@ function af_kb_arpg_mechanics_option_set_definitions(): array
 function af_kb_arpg_mechanics_options_fallback(string $setKey): array
 {
     $definitions = af_kb_arpg_mechanics_option_set_definitions();
-    return (array)($definitions[$setKey]['entries'] ?? []);
+    $rows = (array)($definitions[$setKey]['entries'] ?? []);
+    $normalized = [];
+    foreach ($rows as $idx => $row) {
+        $normalized[] = af_kb_normalize_arpg_mechanics_entry_row($row, $idx + 1);
+    }
+    return $normalized;
+}
+
+function af_kb_normalize_arpg_mechanics_entry_row($row, int $fallbackSortorder = 0): array
+{
+    $source = is_array($row) ? $row : [];
+    $key = trim((string)($source['key'] ?? ''));
+    if ($key === '') {
+        return [];
+    }
+
+    $legacyValue = trim((string)($source['value'] ?? ''));
+    $labelRu = trim((string)($source['label_ru'] ?? ''));
+    $labelEn = trim((string)($source['label_en'] ?? ''));
+    if ($labelRu === '' && $legacyValue !== '') {
+        $labelRu = $legacyValue;
+    }
+    if ($labelEn === '' && $legacyValue !== '') {
+        $labelEn = $legacyValue;
+    }
+    if ($labelRu === '') {
+        $labelRu = $key;
+    }
+    if ($labelEn === '') {
+        $labelEn = $labelRu;
+    }
+
+    $sortorder = isset($source['sortorder']) ? (int)$source['sortorder'] : $fallbackSortorder;
+    $activeRaw = $source['is_active'] ?? $source['active'] ?? 1;
+    $isActive = (int)(is_numeric($activeRaw) ? (int)$activeRaw : (($activeRaw === false || $activeRaw === '0') ? 0 : 1));
+
+    return [
+        'key' => $key,
+        'label_ru' => $labelRu,
+        'label_en' => $labelEn,
+        'label_img' => trim((string)($source['label_img'] ?? '')),
+        'notes' => trim((string)($source['notes'] ?? '')),
+        'sortorder' => $sortorder,
+        'is_active' => $isActive,
+    ];
 }
 
 function af_kb_seed_arpg_mechanics_option_sets(): void
@@ -2226,16 +2278,13 @@ function af_kb_seed_arpg_mechanics_option_sets(): void
         }
 
         $entriesByKey = [];
-        foreach ((array)($definition['entries'] ?? []) as $row) {
-            $optionKey = trim((string)($row['key'] ?? ''));
+        foreach ((array)($definition['entries'] ?? []) as $idx => $row) {
+            $normalized = af_kb_normalize_arpg_mechanics_entry_row($row, $idx + 1);
+            $optionKey = trim((string)($normalized['key'] ?? ''));
             if ($optionKey === '') {
                 continue;
             }
-            $entriesByKey[$optionKey] = [
-                'key' => $optionKey,
-                'label_ru' => (string)($row['label_ru'] ?? $optionKey),
-                'label_en' => (string)($row['label_en'] ?? $optionKey),
-            ];
+            $entriesByKey[$optionKey] = $normalized;
         }
 
         $payload = af_kb_arpg_envelope_defaults('arpg_mechanics');
@@ -2347,16 +2396,38 @@ function af_kb_get_arpg_mechanics_options(string $entryKey, string $serviceKind 
 {
     $entry = af_kb_get_arpg_mechanics_entry($serviceKind, $entryKey);
     $rows = is_array($entry['entries'] ?? null) ? $entry['entries'] : af_kb_arpg_mechanics_options_fallback($entryKey);
-    $result = [];
-    foreach ($rows as $row) {
-        $key = trim((string)($row['key'] ?? ''));
+    $normalizedRows = [];
+    foreach ((array)$rows as $idx => $row) {
+        $normalized = af_kb_normalize_arpg_mechanics_entry_row($row, $idx + 1);
+        $key = trim((string)($normalized['key'] ?? ''));
         if ($key === '') {
             continue;
         }
+        if ((int)($normalized['is_active'] ?? 1) !== 1) {
+            continue;
+        }
+        $normalizedRows[] = $normalized;
+    }
+
+    usort($normalizedRows, static function (array $a, array $b): int {
+        $leftSort = (int)($a['sortorder'] ?? 0);
+        $rightSort = (int)($b['sortorder'] ?? 0);
+        if ($leftSort !== $rightSort) {
+            return $leftSort <=> $rightSort;
+        }
+        return strcmp((string)($a['key'] ?? ''), (string)($b['key'] ?? ''));
+    });
+
+    $result = [];
+    foreach ($normalizedRows as $row) {
         $result[] = [
-            'key' => $key,
-            'label_ru' => (string)($row['label_ru'] ?? $key),
-            'label_en' => (string)($row['label_en'] ?? $key),
+            'key' => (string)$row['key'],
+            'label_ru' => (string)($row['label_ru'] ?? (string)$row['key']),
+            'label_en' => (string)($row['label_en'] ?? (string)($row['label_ru'] ?? $row['key'])),
+            'label_img' => (string)($row['label_img'] ?? ''),
+            'notes' => (string)($row['notes'] ?? ''),
+            'sortorder' => (int)($row['sortorder'] ?? 0),
+            'is_active' => (int)($row['is_active'] ?? 1),
         ];
     }
     return $result;
@@ -2374,7 +2445,15 @@ function af_kb_get_arpg_mechanics_option_label(string $entryKey, string $optionK
             continue;
         }
         $localized = $isRu ? (string)($row['label_ru'] ?? '') : (string)($row['label_en'] ?? '');
-        return $localized !== '' ? $localized : $optionKey;
+        if ($localized !== '') {
+            return $localized;
+        }
+        $fallback = (string)($isRu ? ($row['label_en'] ?? '') : ($row['label_ru'] ?? ''));
+        if ($fallback !== '') {
+            return $fallback;
+        }
+        $imgFallback = trim((string)($row['label_img'] ?? ''));
+        return $imgFallback !== '' ? $imgFallback : $optionKey;
     }
 
     return $optionKey;
