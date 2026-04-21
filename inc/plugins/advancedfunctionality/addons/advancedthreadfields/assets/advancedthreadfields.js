@@ -759,6 +759,60 @@
       });
     },
 
+    initCharacterStats() {
+      const blocks = AF_ATF.qsa(".af-atf-character-stats");
+      if (!blocks.length) return;
+
+      blocks.forEach((wrap) => {
+        if (wrap.__afCharacterStatsInited) return;
+        wrap.__afCharacterStatsInited = true;
+
+        const hidden = AF_ATF.qs(".af-atf-character-stats-hidden", wrap);
+        const inputs = AF_ATF.qsa(".af-atf-character-stats-input", wrap);
+        if (!hidden || !inputs.length) return;
+
+        function parseHidden(raw) {
+          try {
+            const parsed = JSON.parse(String(raw || "{}"));
+            return parsed && typeof parsed === "object" ? parsed : {};
+          } catch (e) {
+            return {};
+          }
+        }
+
+        const state = parseHidden(hidden.value);
+        inputs.forEach((input) => {
+          const key = String(input.getAttribute("data-key") || "").trim();
+          if (!key) return;
+          if (Object.prototype.hasOwnProperty.call(state, key) && state[key] !== null && state[key] !== "") {
+            input.value = String(state[key]);
+          }
+        });
+
+        function sync() {
+          const payload = {};
+          inputs.forEach((input) => {
+            const key = String(input.getAttribute("data-key") || "").trim();
+            if (!key) return;
+            const raw = String(input.value || "").trim();
+            if (!raw) return;
+            const normalized = raw.replace(",", ".");
+            if (!Number.isNaN(Number(normalized))) {
+              payload[key] = Number(normalized);
+            }
+          });
+          hidden.value = JSON.stringify(payload);
+        }
+
+        inputs.forEach((input) => {
+          input.addEventListener("input", sync);
+          input.addEventListener("change", sync);
+        });
+
+        sync();
+      });
+    },
+
     initUserChipsOne(wrap) {
       if (!wrap || wrap.__af_atf_inited) return;
       wrap.__af_atf_inited = true;
@@ -1059,6 +1113,7 @@
     AF_ATF.initCharacterMechanic();
     AF_ATF.initDynamicKbPreviews();
     AF_ATF.initCharacterAbilities();
+    AF_ATF.initCharacterStats();
   }
 
   if (document.readyState === "loading") {

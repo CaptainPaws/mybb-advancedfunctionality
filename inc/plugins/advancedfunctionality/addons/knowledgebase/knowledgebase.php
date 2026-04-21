@@ -9481,8 +9481,15 @@ function af_kb_resolve_character_application_forum_id(): int
 function af_kb_build_character_application_prefill(array $entry): array
 {
     $data = af_kb_extract_character_contract($entry);
+    $rules = kb_parse_rules($entry);
+    if (!is_array($rules)) {
+        $rules = [];
+    }
     $profile = (array)($data['profile'] ?? []);
-    $stats = (array)($data['stats'] ?? []);
+    $stats = (array)($rules['character_stats'] ?? []);
+    if (empty($stats)) {
+        $stats = (array)($data['stats'] ?? []);
+    }
     if (empty($stats)) {
         $stats = (array)($profile['character_stats'] ?? []);
     }
