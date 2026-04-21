@@ -4376,9 +4376,9 @@ function af_atf_handle_character_kb_bridge_action(bool $syncOnly): void
 
 function af_atf_render_character_kb_moderation_button(int $tid, int $uid, array $acceptRow = [], string $postKey = ''): string
 {
-    global $lang;
+    global $lang, $mybb;
 
-    if ($tid <= 0 || !function_exists('af_charactersheets_resolve_character_kb_entry') || !function_exists('af_charactersheets_url')) {
+    if ($tid <= 0 || !function_exists('af_charactersheets_resolve_character_kb_entry')) {
         return '';
     }
 
@@ -4389,13 +4389,23 @@ function af_atf_render_character_kb_moderation_button(int $tid, int $uid, array 
         ? ($lang->af_charactersheets_kb_sync_button ?? 'Синхронизировать анкету → KB')
         : ($lang->af_charactersheets_kb_button ?? 'Создать запись в KB');
 
-    $kbUrl = af_charactersheets_url([
+    $postKey = trim($postKey);
+    if ($postKey === '' && isset($mybb) && is_object($mybb)) {
+        $postKey = (string)($mybb->post_code ?? '');
+    }
+    if ($postKey === '') {
+        return '';
+    }
+
+    $kbUrl = 'misc.php?' . http_build_query([
         'action' => $action,
         'tid' => $tid,
-        'my_post_key' => $postKey,
-    ]);
+    ], '', '&', PHP_QUERY_RFC3986);
 
-    return '<a class="button af-cs-accept-button af-cs-accept-button--kb" target="_blank" rel="noopener" href="' . htmlspecialchars_uni($kbUrl) . '"><span>' . htmlspecialchars_uni($label) . '</span></a>';
+    return '<form class="af-cs-inline-form af-cs-inline-form--kb" method="post" action="' . htmlspecialchars_uni($kbUrl) . '" target="_blank" rel="noopener" style="display:inline">'
+        . '<input type="hidden" name="my_post_key" value="' . htmlspecialchars_uni($postKey) . '">'
+        . '<button type="submit" class="button af-cs-accept-button af-cs-accept-button--kb"><span>' . htmlspecialchars_uni($label) . '</span></button>'
+        . '</form>';
 }
 
 function af_atf_character_bridge_store_thread_kb_link(int $tid, int $fid, int $uid): void
