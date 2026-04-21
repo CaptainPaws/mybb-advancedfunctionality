@@ -675,11 +675,6 @@ function af_charactersheets_showthread_start_impl(): void
         return;
     }
 
-    // Кнопка и логика — только в pending-форумах
-    if (!af_charactersheets_is_pending_forum($fid)) {
-        return;
-    }
-
     // Права (группы)
     if (!af_charactersheets_user_can_accept($mybb->user, $fid)) {
         return;
@@ -705,23 +700,35 @@ function af_charactersheets_showthread_start_impl(): void
         }
     }
 
-    // В accepted-форуме кнопка не нужна (на всякий)
-    if (af_charactersheets_is_in_accepted_forum($fid)) {
-        return;
-    }
-
     $acceptText = $was_accepted
         ? ($lang->af_charactersheets_accept_button_reaccept ?? 'Принять заново')
         : ($lang->af_charactersheets_accept_button ?? 'Принять анкету');
+
+    $acceptRow = af_charactersheets_get_accept_row($tid);
+    $uid = (int)($thread['uid'] ?? 0);
+    $kbSource = af_charactersheets_resolve_character_kb_entry($tid, $uid, $acceptRow);
+    $kbExists = !empty(($kbSource['entry'] ?? [])['id']);
+
+    $sheetExists = af_charactersheets_resolve_existing_sheet_for_thread($tid, $uid, $acceptRow);
 
     $acceptUrl = af_charactersheets_url(['action' => 'af_charactersheets_accept', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
     $kbUrl = af_charactersheets_url(['action' => 'af_charactersheets_create_kb_entry', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
     $sheetUrl = af_charactersheets_url(['action' => 'af_charactersheets_create_sheet', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
 
     $buttons = [];
-    $buttons[] = '<a class="button af-cs-accept-button" href="' . htmlspecialchars_uni($acceptUrl) . '"><span>' . htmlspecialchars_uni($acceptText) . '</span></a>';
-    $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--kb" href="' . htmlspecialchars_uni($kbUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_kb_button ?? 'Создать запись в KB') . '</span></a>';
-    $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--sheet" href="' . htmlspecialchars_uni($sheetUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_create_sheet_button ?? 'Создать лист персонажа') . '</span></a>';
+    if (!$was_accepted) {
+        $buttons[] = '<a class="button af-cs-accept-button" href="' . htmlspecialchars_uni($acceptUrl) . '"><span>' . htmlspecialchars_uni($acceptText) . '</span></a>';
+    }
+    if (!$kbExists) {
+        $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--kb" target="_blank" rel="noopener" href="' . htmlspecialchars_uni($kbUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_kb_button ?? 'Создать запись в KB') . '</span></a>';
+    }
+    if (empty($sheetExists)) {
+        $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--sheet" target="_blank" rel="noopener" href="' . htmlspecialchars_uni($sheetUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_create_sheet_button ?? 'Создать лист персонажа') . '</span></a>';
+    }
+
+    if (empty($buttons)) {
+        return;
+    }
 
     $GLOBALS['af_charactersheets_accept_button'] = implode("\n", $buttons);
 }
@@ -1064,12 +1071,15 @@ function af_charactersheets_handle_create_kb_entry_action(): void
         redirect('showthread.php?tid=' . $tid, $msg . ' (' . htmlspecialchars_uni((string)($result['reason'] ?? 'unknown')) . ')');
     }
 
+    $entryId = (int)($result['entry_id'] ?? 0);
+    $entryUrl = af_charactersheets_build_kb_entry_url($entryId, $tid);
+
     $mode = (string)($result['mode'] ?? 'create');
     $msg = $mode === 'update'
         ? ($lang->af_charactersheets_kb_create_exists ?? 'KB-запись уже существовала, связь обновлена.')
         : ($lang->af_charactersheets_kb_create_done ?? 'KB-запись персонажа создана.');
 
-    redirect('showthread.php?tid=' . $tid, $msg);
+    redirect($entryUrl, $msg);
 }
 
 function af_charactersheets_handle_create_sheet_action(): void
@@ -1097,6 +1107,14 @@ function af_charactersheets_handle_create_sheet_action(): void
     $acceptRow = af_charactersheets_get_accept_row($tid);
     $uid = (int)($thread['uid'] ?? 0);
     $characterSource = af_charactersheets_resolve_character_kb_entry($tid, $uid, $acceptRow);
+    $sourceUid = (int)(($characterSource['payload'] ?? [])['meta']['source_uid'] ?? 0);
+    if ($uid <= 0 && $sourceUid > 0) {
+        $uid = $sourceUid;
+    }
+    if ($uid <= 0) {
+        $uid = (int)($acceptRow['uid'] ?? 0);
+    }
+
     $entryId = (int)(($characterSource['entry'] ?? [])['id'] ?? 0);
     if ($entryId <= 0) {
         $msg = $lang->af_charactersheets_sheet_requires_kb ?? 'Сначала создайте или привяжите KB-запись персонажа.';
@@ -1114,17 +1132,85 @@ function af_charactersheets_handle_create_sheet_action(): void
             ]);
         }
         $msg = $lang->af_charactersheets_sheet_create_exists ?? 'Лист персонажа уже существует.';
-        redirect('showthread.php?tid=' . $tid, $msg);
+        $sheetUrl = af_charactersheets_build_sheet_url($slug, $tid);
+        redirect($sheetUrl, $msg);
     }
 
+    $thread['uid'] = $uid;
     $sheet = af_charactersheets_autocreate_sheet($tid, $thread);
-    if (empty($sheet['id']) && empty($sheet['slug'])) {
+    $sheetId = (int)($sheet['id'] ?? 0);
+    $sheetSlug = (string)($sheet['slug'] ?? '');
+    if ($sheetId <= 0 && $sheetSlug === '') {
         $msg = $lang->af_charactersheets_sheet_create_error ?? 'Не удалось создать лист персонажа.';
         redirect('showthread.php?tid=' . $tid, $msg);
     }
 
+    if ($sheetSlug === '' && $sheetId > 0) {
+        $existingById = af_charactersheets_get_sheet_by_id($sheetId);
+        $sheetSlug = (string)($existingById['slug'] ?? '');
+    }
+    if ($sheetSlug !== '') {
+        af_charactersheets_upsert_accept_row($tid, [
+            'uid' => $uid,
+            'sheet_slug' => $sheetSlug,
+            'sheet_created' => 1,
+        ]);
+    }
+
     $msg = $lang->af_charactersheets_sheet_create_done ?? 'Лист персонажа создан.';
-    redirect('showthread.php?tid=' . $tid, $msg);
+    $sheetUrl = af_charactersheets_build_sheet_url($sheetSlug, $tid);
+    redirect($sheetUrl, $msg);
+}
+
+function af_charactersheets_resolve_existing_sheet_for_thread(int $tid, int $uid, array $acceptRow = []): array
+{
+    if ($tid > 0) {
+        $sheet = af_charactersheets_get_sheet_by_tid($tid);
+        if (!empty($sheet['id'])) {
+            return $sheet;
+        }
+    }
+
+    $acceptSlug = trim((string)($acceptRow['sheet_slug'] ?? ''));
+    if ($acceptSlug !== '') {
+        $sheet = af_charactersheets_get_sheet_by_slug($acceptSlug);
+        if (!empty($sheet['id'])) {
+            return $sheet;
+        }
+    }
+
+    if ($uid > 0) {
+        $sheet = af_charactersheets_get_sheet_by_uid($uid);
+        if (!empty($sheet['id'])) {
+            return $sheet;
+        }
+    }
+
+    return [];
+}
+
+function af_charactersheets_build_kb_entry_url(int $entryId, int $tid): string
+{
+    global $db;
+
+    if ($entryId > 0 && is_object($db) && $db->table_exists('af_kb_entries')) {
+        $entry = $db->fetch_array($db->simple_select('af_kb_entries', 'type,`key`', 'id=' . $entryId, ['limit' => 1]));
+        if (!empty($entry['type']) && !empty($entry['key'])) {
+            return 'misc.php?action=kb&type=' . rawurlencode((string)$entry['type']) . '&key=' . rawurlencode((string)$entry['key']);
+        }
+    }
+
+    return 'showthread.php?tid=' . $tid;
+}
+
+function af_charactersheets_build_sheet_url(string $slug, int $tid): string
+{
+    $slug = trim($slug);
+    if ($slug !== '') {
+        return af_charactersheets_url(['slug' => $slug]);
+    }
+
+    return 'showthread.php?tid=' . $tid;
 }
 
 /* -------------------- ACCEPT LOGIC -------------------- */
