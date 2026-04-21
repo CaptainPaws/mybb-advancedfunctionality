@@ -571,7 +571,6 @@
         ability.shield_value = String(source.shield_value || "");
         ability.heal_value = String(source.heal_value || "");
         ability.ability_description = String(source.ability_description || "");
-        ability.ability_kb_key = String(source.ability_kb_key || "");
         ability.slot_index = Number.isFinite(Number(source.slot_index)) ? Number(source.slot_index) : 0;
         ability.sortorder = Number.isFinite(Number(source.sortorder)) ? Number(source.sortorder) : 0;
         return ability;
@@ -646,43 +645,46 @@
             const row = document.createElement("div");
             row.className = "af-atf-ability-item";
             row.innerHTML = `
-              <div class="af-atf-ability-header"><strong>Способность #${index + 1}</strong></div>
+              <div class="af-atf-ability-header">
+                <strong>Способность #${index + 1}</strong>
+                <button type="button" class="button af-atf-ability-remove">Удалить</button>
+              </div>
               <div class="af-atf-ability-grid">
                 <label>Название способности
-                  <input type="text" class="text_input af-atf-ability-name" placeholder="Название способности" value="${AF_ATF.escapeAttr(ability.ability_name)}" />
+                  <input type="text" class="textbox text_input af-atf-ability-name" placeholder="Название способности" value="${AF_ATF.escapeAttr(ability.ability_name)}" />
                 </label>
                 <label>Иконка
-                  <input type="url" class="text_input af-atf-ability-icon-url" placeholder="https://..." value="${AF_ATF.escapeAttr(ability.icon_url)}" />
+                  <input type="url" class="textbox text_input af-atf-ability-icon-url" placeholder="https://..." value="${AF_ATF.escapeAttr(ability.icon_url)}" />
                 </label>
                 <label>Тип
-                  <select class="select af-atf-ability-type">${renderSelectOptions("type", ability.type)}</select>
+                  <select class="select textbox af-atf-ability-type">${renderSelectOptions("type", ability.type)}</select>
                 </label>
                 <label>Подтип
-                  <select class="select af-atf-ability-subtype">${renderSelectOptions("subtype", ability.subtype)}</select>
+                  <select class="select textbox af-atf-ability-subtype">${renderSelectOptions("subtype", ability.subtype)}</select>
                 </label>
                 <label>Слот
-                  <select class="select af-atf-ability-slot">${renderSelectOptions("slot", ability.slot)}</select>
+                  <select class="select textbox af-atf-ability-slot">${renderSelectOptions("slot", ability.slot)}</select>
                 </label>
                 <label>Тип урона
-                  <select class="select af-atf-ability-damage-type">${renderSelectOptions("damage_type", ability.damage_type)}</select>
+                  <select class="select textbox af-atf-ability-damage-type">${renderSelectOptions("damage_type", ability.damage_type)}</select>
                 </label>
                 <label>Цель
-                  <select class="select af-atf-ability-targeting">${renderSelectOptions("targeting", ability.targeting)}</select>
+                  <select class="select textbox af-atf-ability-targeting">${renderSelectOptions("targeting", ability.targeting)}</select>
                 </label>
                 <label>Дальность
-                  <input type="number" class="text_input af-atf-ability-range" placeholder="0" value="${AF_ATF.escapeAttr(ability.range)}" />
+                  <input type="number" class="textbox text_input af-atf-ability-range" placeholder="0" value="${AF_ATF.escapeAttr(ability.range)}" />
                 </label>
                 <label>Урон
-                  <input type="number" class="text_input af-atf-ability-damage" placeholder="0" value="${AF_ATF.escapeAttr(ability.damage_value)}" />
+                  <input type="number" class="textbox text_input af-atf-ability-damage" placeholder="0" value="${AF_ATF.escapeAttr(ability.damage_value)}" />
                 </label>
                 <label>Щит
-                  <input type="number" class="text_input af-atf-ability-shield" placeholder="0" value="${AF_ATF.escapeAttr(ability.shield_value)}" />
+                  <input type="number" class="textbox text_input af-atf-ability-shield" placeholder="0" value="${AF_ATF.escapeAttr(ability.shield_value)}" />
                 </label>
                 <label>Лечение
-                  <input type="number" class="text_input af-atf-ability-heal" placeholder="0" value="${AF_ATF.escapeAttr(ability.heal_value)}" />
+                  <input type="number" class="textbox text_input af-atf-ability-heal" placeholder="0" value="${AF_ATF.escapeAttr(ability.heal_value)}" />
                 </label>
                 <label>Порядок
-                  <input type="number" class="text_input af-atf-ability-sortorder" placeholder="sortorder" value="${AF_ATF.escapeAttr(ability.sortorder || index + 1)}" />
+                  <input type="number" class="textbox text_input af-atf-ability-sortorder" placeholder="sortorder" value="${AF_ATF.escapeAttr(ability.sortorder || index + 1)}" />
                 </label>
               </div>
               <label class="af-atf-ability-description-wrap">Описание способности
@@ -692,12 +694,11 @@
                   <button type="button" class="button af-atf-ability-bb" data-open="[u]" data-close="[/u]"><u>U</u></button>
                   <button type="button" class="button af-atf-ability-bb" data-open="[url=]" data-close="[/url]">URL</button>
                 </div>
-                <textarea class="textarea af-atf-ability-description" rows="4" placeholder="Описание способности">${AF_ATF.escapeAttr(ability.ability_description)}</textarea>
+                <textarea class="textbox textarea af-atf-ability-description" rows="4" placeholder="Описание способности">${AF_ATF.escapeAttr(ability.ability_description)}</textarea>
               </label>
               <label style="display:none;">
-                <input type="number" class="text_input af-atf-ability-slot-index" value="${AF_ATF.escapeAttr(ability.slot_index || index + 1)}" />
+                <input type="number" class="textbox text_input af-atf-ability-slot-index" value="${AF_ATF.escapeAttr(ability.slot_index || index + 1)}" />
               </label>
-              <button type="button" class="button af-atf-ability-remove">Удалить</button>
             `;
 
             const setValue = () => {
@@ -716,7 +717,6 @@
                 shield_value: AF_ATF.qs(".af-atf-ability-shield", row).value,
                 heal_value: AF_ATF.qs(".af-atf-ability-heal", row).value,
                 ability_description: AF_ATF.qs(".af-atf-ability-description", row).value,
-                ability_kb_key: state[index] && state[index].ability_kb_key ? state[index].ability_kb_key : "",
                 sortorder: AF_ATF.qs(".af-atf-ability-sortorder", row).value
               });
               sync();

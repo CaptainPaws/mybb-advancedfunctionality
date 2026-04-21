@@ -370,15 +370,20 @@ body.af-atf-kb-catalog-modal-open {
 }
 .af-atf-ability-header {
   margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 .af-atf-ability-grid {
   display: grid;
   gap: 8px 10px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .af-atf-ability-description-wrap {
   display: grid;
   gap: 6px;
+  grid-column: 1 / -1;
 }
 .af-atf-ability-description-wrap textarea {
   width: 100%;
@@ -392,6 +397,21 @@ body.af-atf-kb-catalog-modal-open {
 .af-atf-ability-bb-toolbar .button {
   min-width: 34px;
   padding: 4px 8px;
+}
+@media (max-width: 1200px) {
+  .af-atf-ability-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 900px) {
+  .af-atf-ability-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .af-atf-ability-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .af-atf-kb-meta-table {

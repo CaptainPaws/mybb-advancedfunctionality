@@ -2316,13 +2316,46 @@ function af_atf_map_named_values_to_fieldids(array $fields, array $namedValues):
         return $out;
     }
 
+    $statsByKey = [];
+    if (array_key_exists('character_stats', $namedValues)) {
+        $rawStats = $namedValues['character_stats'];
+        if (is_string($rawStats) && trim($rawStats) !== '') {
+            $decoded = json_decode($rawStats, true);
+            if (is_array($decoded)) {
+                foreach ($decoded as $k => $v) {
+                    if (!is_scalar($v)) {
+                        continue;
+                    }
+                    $statsByKey[(string)$k] = trim((string)$v);
+                }
+            }
+        } elseif (is_array($rawStats)) {
+            foreach ($rawStats as $k => $v) {
+                if (!is_scalar($v)) {
+                    continue;
+                }
+                $statsByKey[(string)$k] = trim((string)$v);
+            }
+        }
+    }
+
     foreach ($fields as $field) {
         $fieldName = trim((string)($field['name'] ?? ''));
         $fieldId = (int)($field['fieldid'] ?? 0);
-        if ($fieldName === '' || $fieldId <= 0 || !array_key_exists($fieldName, $namedValues)) {
+        if ($fieldName === '' || $fieldId <= 0) {
             continue;
         }
-        $value = $namedValues[$fieldName];
+
+        $value = null;
+        if (array_key_exists($fieldName, $namedValues)) {
+            $value = $namedValues[$fieldName];
+        } elseif (strpos($fieldName, 'character_') === 0 && array_key_exists($fieldName, $statsByKey)) {
+            $value = $statsByKey[$fieldName];
+        }
+        if ($value === null) {
+            continue;
+        }
+
         if (is_array($value) || is_object($value)) {
             $value = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }
@@ -3096,9 +3129,11 @@ function af_atf_build_input_html(array $field, string $value): string
 
         case 'character_abilities': {
             $abilitySelects = af_atf_get_character_ability_select_payload();
+            $optionsJson = json_encode($abilitySelects, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+            $optionsJson = str_replace('</', '<\/', $optionsJson);
             return '<div class="af-atf-abilities" data-max-items="8">'
                 . '<input type="hidden" class="af-atf-abilities-hidden" name="' . $nameAttr . '" value="' . $safeValue . '" />'
-                . '<script type="application/json" class="af-atf-abilities-options">' . htmlspecialchars_uni(json_encode($abilitySelects, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}') . '</script>'
+                . '<script type="application/json" class="af-atf-abilities-options">' . $optionsJson . '</script>'
                 . '<div class="af-atf-abilities-list"></div>'
                 . '<button type="button" class="button af-atf-abilities-add">+ добавить способность</button>'
                 . '</div>';
