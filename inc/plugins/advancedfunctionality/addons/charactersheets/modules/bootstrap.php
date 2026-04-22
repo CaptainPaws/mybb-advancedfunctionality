@@ -713,10 +713,14 @@ function af_charactersheets_showthread_start_impl(): void
     $sheetUrl = af_charactersheets_url(['action' => 'af_charactersheets_create_sheet', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
 
     $buttons = [];
-    if ($isPendingForum) {
+    $canAccept = function_exists('af_cwf_can_accept') ? af_cwf_can_accept($tid, $thread, $acceptRow) : $isPendingForum;
+    $canTransfer = function_exists('af_cwf_can_transfer') ? af_cwf_can_transfer($tid, $thread, $acceptRow) : ($was_accepted && !$isAcceptedForum);
+    $canCreateSheet = function_exists('af_cwf_can_create_sheet') ? af_cwf_can_create_sheet($tid, $thread, $acceptRow) : empty($sheetExists);
+
+    if ($canAccept) {
         $buttons[] = '<a class="button af-cs-accept-button" href="' . htmlspecialchars_uni($acceptUrl) . '"><span>' . htmlspecialchars_uni($acceptText) . '</span></a>';
     }
-    if ($was_accepted && !$isAcceptedForum) {
+    if ($canTransfer) {
         $transferText = $lang->af_charactersheets_transfer_button ?? 'Перенести анкету';
         $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--transfer" href="' . htmlspecialchars_uni($transferUrl) . '"><span>' . htmlspecialchars_uni($transferText) . '</span></a>';
     }
@@ -726,7 +730,7 @@ function af_charactersheets_showthread_start_impl(): void
             $buttons[] = $kbButton;
         }
     }
-    if (empty($sheetExists)) {
+    if ($canCreateSheet) {
         $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--sheet" target="_blank" rel="noopener" href="' . htmlspecialchars_uni($sheetUrl) . '"><span>' . htmlspecialchars_uni($lang->af_charactersheets_create_sheet_button ?? 'Создать лист персонажа') . '</span></a>';
     }
 
@@ -1040,7 +1044,10 @@ function af_charactersheets_handle_transfer_action(): void
         redirect('showthread.php?tid=' . $tid, $msg);
     }
 
-    $targetFid = (int)($mybb->settings['af_charactersheets_accepted_forum'] ?? 0);
+    $targetForumIds = function_exists('af_cwf_get_target_forum_ids')
+        ? af_cwf_get_target_forum_ids()
+        : [(int)($mybb->settings['af_charactersheets_accepted_forum'] ?? 0)];
+    $targetFid = (int)($targetForumIds[0] ?? 0);
     if ($targetFid <= 0) {
         $msg = $lang->af_charactersheets_accept_error ?? 'Не удалось перенести анкету.';
         redirect('showthread.php?tid=' . $tid, $msg);
@@ -1114,6 +1121,10 @@ function af_charactersheets_handle_create_sheet_action(): void
     }
 
     $acceptRow = af_charactersheets_get_accept_row($tid);
+    if (function_exists('af_cwf_can_create_sheet') && !af_cwf_can_create_sheet($tid, $thread, $acceptRow)) {
+        $msg = $lang->af_charactersheets_sheet_create_exists ?? 'Лист персонажа уже существует.';
+        redirect('showthread.php?tid=' . $tid, $msg);
+    }
     $uid = (int)($thread['uid'] ?? 0);
     $characterSource = af_charactersheets_resolve_character_kb_entry($tid, $uid, $acceptRow);
     $sourceUid = (int)(($characterSource['payload'] ?? [])['meta']['source_uid'] ?? 0);
