@@ -2805,6 +2805,7 @@ function af_atf_get_character_ability_select_payload(): array
         'slot' => 'ability_slot',
         'damage_type' => 'ability_damage_type',
         'targeting' => 'ability_targeting',
+        'formula_profile' => 'formula_profile',
     ];
 
     $payload = [];
@@ -4104,12 +4105,12 @@ function af_atf_normalize_character_abilities_json(string $raw): string
         if (!is_array($row)) {
             continue;
         }
-        $name = trim((string)($row['ability_name'] ?? $row['name'] ?? ''));
+        $name = trim((string)($row['title'] ?? $row['ability_name'] ?? $row['name'] ?? ''));
         $type = trim((string)($row['type'] ?? $row['ability_type'] ?? 'active'));
-        $description = trim((string)($row['ability_description'] ?? ''));
+        $description = trim((string)($row['description'] ?? $row['ability_description'] ?? ''));
         $kbKey = trim((string)($row['ability_kb_key'] ?? ''));
         $sortorder = (int)($row['sortorder'] ?? (count($out) + 1));
-        $iconUrl = trim((string)($row['icon_url'] ?? ''));
+        $iconUrl = trim((string)($row['icon'] ?? $row['icon_url'] ?? ''));
 
         if ($name === '' && $description === '' && $kbKey === '' && $iconUrl === '') {
             continue;
@@ -4125,18 +4126,24 @@ function af_atf_normalize_character_abilities_json(string $raw): string
 
         $normalized = [
             'slot_index' => max(1, (int)($row['slot_index'] ?? ($sortorder > 0 ? $sortorder : (count($out) + 1)))),
+            'title' => my_substr($name, 0, 255),
             'ability_name' => my_substr($name, 0, 255),
+            'icon' => my_substr($iconUrl, 0, 500),
             'icon_url' => my_substr($iconUrl, 0, 500),
             'type' => $type,
             'ability_type' => $type,
             'subtype' => my_substr(trim((string)($row['subtype'] ?? '')), 0, 128),
             'slot' => my_substr(trim((string)($row['slot'] ?? '')), 0, 128),
             'damage_type' => my_substr(trim((string)($row['damage_type'] ?? '')), 0, 128),
-            'targeting' => my_substr(trim((string)($row['targeting'] ?? '')), 0, 128),
+            'target' => my_substr(trim((string)($row['target'] ?? $row['targeting'] ?? '')), 0, 128),
+            'targeting' => my_substr(trim((string)($row['target'] ?? $row['targeting'] ?? '')), 0, 128),
+            'formula_profile' => my_substr(trim((string)($row['formula_profile'] ?? '')), 0, 128),
+            'duration_value' => my_substr(trim((string)($row['duration_value'] ?? $row['duration'] ?? '')), 0, 64),
             'range' => my_substr(trim((string)($row['range'] ?? '')), 0, 64),
             'damage_value' => my_substr(trim((string)($row['damage_value'] ?? '')), 0, 64),
             'shield_value' => my_substr(trim((string)($row['shield_value'] ?? '')), 0, 64),
             'heal_value' => my_substr(trim((string)($row['heal_value'] ?? '')), 0, 64),
+            'description' => my_substr($description, 0, 5000),
             'ability_description' => my_substr($description, 0, 5000),
             'ability_kb_key' => my_substr($kbKey, 0, 128),
             'sortorder' => $sortorder,
@@ -5374,21 +5381,20 @@ function af_atf_format_value_for_display(array $field, string $val): string
         $chipMeta = [
             ['key' => 'type', 'label' => 'Тип', 'set' => 'ability_type'],
             ['key' => 'subtype', 'label' => 'Подтип', 'set' => 'ability_subtype'],
+            ['key' => 'slot', 'label' => 'Слот', 'set' => 'ability_slot'],
             ['key' => 'damage_type', 'label' => 'Тип урона', 'set' => 'ability_damage_type'],
-            ['key' => 'targeting', 'label' => 'Цель', 'set' => 'ability_targeting'],
-            ['key' => 'range', 'label' => 'Дальность', 'set' => ''],
-            ['key' => 'damage_value', 'label' => 'Урон', 'set' => ''],
-            ['key' => 'shield_value', 'label' => 'Щит', 'set' => ''],
-            ['key' => 'heal_value', 'label' => 'Лечение', 'set' => ''],
+            ['key' => 'target', 'label' => 'Цель', 'set' => 'ability_targeting'],
+            ['key' => 'formula_profile', 'label' => 'Formula Profile', 'set' => 'formula_profile'],
+            ['key' => 'duration_value', 'label' => 'Длительность', 'set' => ''],
         ];
 
         foreach ($list as $ability) {
             if (!is_array($ability)) {
                 continue;
             }
-            $name = trim((string)($ability['ability_name'] ?? ''));
-            $description = trim((string)($ability['ability_description'] ?? ''));
-            $iconUrl = trim((string)($ability['icon_url'] ?? ''));
+            $name = trim((string)($ability['title'] ?? $ability['ability_name'] ?? ''));
+            $description = trim((string)($ability['description'] ?? $ability['ability_description'] ?? ''));
+            $iconUrl = trim((string)($ability['icon'] ?? $ability['icon_url'] ?? ''));
             if ($name === '' && $description === '' && $iconUrl === '') {
                 continue;
             }
@@ -5396,6 +5402,9 @@ function af_atf_format_value_for_display(array $field, string $val): string
             $chips = '';
             foreach ($chipMeta as $meta) {
                 $rawValue = trim((string)($ability[$meta['key']] ?? ''));
+                if ($meta['key'] === 'target' && $rawValue === '') {
+                    $rawValue = trim((string)($ability['targeting'] ?? ''));
+                }
                 if ($rawValue === '') {
                     continue;
                 }

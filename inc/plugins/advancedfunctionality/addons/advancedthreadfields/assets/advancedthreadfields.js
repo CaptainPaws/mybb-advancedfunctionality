@@ -559,18 +559,20 @@
         const source = seed && typeof seed === "object" ? seed : {};
         const ability = { ...source };
         const rawType = String(source.type || source.ability_type || "active").toLowerCase();
-        ability.ability_name = String(source.ability_name || "");
-        ability.icon_url = String(source.icon_url || "");
+        ability.title = String(source.title || source.ability_name || "");
+        ability.ability_name = ability.title;
+        ability.icon = String(source.icon || source.icon_url || "");
+        ability.icon_url = ability.icon;
         ability.type = rawType || "active";
         ability.subtype = String(source.subtype || "");
         ability.slot = String(source.slot || "");
         ability.damage_type = String(source.damage_type || "");
-        ability.targeting = String(source.targeting || "");
-        ability.range = String(source.range || "");
-        ability.damage_value = String(source.damage_value || "");
-        ability.shield_value = String(source.shield_value || "");
-        ability.heal_value = String(source.heal_value || "");
-        ability.ability_description = String(source.ability_description || "");
+        ability.target = String(source.target || source.targeting || "");
+        ability.targeting = ability.target;
+        ability.formula_profile = String(source.formula_profile || "");
+        ability.duration_value = String(source.duration_value || source.duration || "");
+        ability.description = String(source.description || source.ability_description || "");
+        ability.ability_description = ability.description;
         ability.slot_index = Number.isFinite(Number(source.slot_index)) ? Number(source.slot_index) : 0;
         ability.sortorder = Number.isFinite(Number(source.sortorder)) ? Number(source.sortorder) : 0;
         return ability;
@@ -641,11 +643,11 @@
               <div class="af-atf-ability-grid">
                 <label class="af-atf-ability-field">
                   <span class="af-atf-ability-label">Название способности</span>
-                  <input type="text" class="textbox text_input af-atf-input af-atf-ability-name" placeholder="Название способности" value="${AF_ATF.escapeAttr(ability.ability_name)}" />
+                  <input type="text" class="textbox text_input af-atf-input af-atf-ability-name" placeholder="Название способности" value="${AF_ATF.escapeAttr(ability.title)}" />
                 </label>
                 <label class="af-atf-ability-field">
                   <span class="af-atf-ability-label">Иконка</span>
-                  <input type="url" class="textbox text_input af-atf-input af-atf-ability-icon-url" placeholder="https://..." value="${AF_ATF.escapeAttr(ability.icon_url)}" />
+                  <input type="url" class="textbox text_input af-atf-input af-atf-ability-icon-url" placeholder="https://..." value="${AF_ATF.escapeAttr(ability.icon)}" />
                 </label>
                 <label class="af-atf-ability-field">
                   <span class="af-atf-ability-label">Тип</span>
@@ -665,23 +667,15 @@
                 </label>
                 <label class="af-atf-ability-field">
                   <span class="af-atf-ability-label">Цель</span>
-                  <select class="select af-atf-input af-atf-ability-targeting">${renderSelectOptions("targeting", ability.targeting)}</select>
+                  <select class="select af-atf-input af-atf-ability-targeting">${renderSelectOptions("targeting", ability.target)}</select>
                 </label>
                 <label class="af-atf-ability-field">
-                  <span class="af-atf-ability-label">Дальность</span>
-                  <input type="number" class="textbox text_input af-atf-input af-atf-ability-range" placeholder="0" value="${AF_ATF.escapeAttr(ability.range)}" />
+                  <span class="af-atf-ability-label">Formula Profile</span>
+                  <select class="select af-atf-input af-atf-ability-formula-profile">${renderSelectOptions("formula_profile", ability.formula_profile)}</select>
                 </label>
                 <label class="af-atf-ability-field">
-                  <span class="af-atf-ability-label">Урон</span>
-                  <input type="number" class="textbox text_input af-atf-input af-atf-ability-damage" placeholder="0" value="${AF_ATF.escapeAttr(ability.damage_value)}" />
-                </label>
-                <label class="af-atf-ability-field">
-                  <span class="af-atf-ability-label">Щит</span>
-                  <input type="number" class="textbox text_input af-atf-input af-atf-ability-shield" placeholder="0" value="${AF_ATF.escapeAttr(ability.shield_value)}" />
-                </label>
-                <label class="af-atf-ability-field">
-                  <span class="af-atf-ability-label">Лечение</span>
-                  <input type="number" class="textbox text_input af-atf-input af-atf-ability-heal" placeholder="0" value="${AF_ATF.escapeAttr(ability.heal_value)}" />
+                  <span class="af-atf-ability-label">Длительность</span>
+                  <input type="text" class="textbox text_input af-atf-input af-atf-ability-duration-value" placeholder="" value="${AF_ATF.escapeAttr(ability.duration_value)}" />
                 </label>
                 <label class="af-atf-ability-field">
                   <span class="af-atf-ability-label">Порядок</span>
@@ -690,7 +684,7 @@
               </div>
               <label class="af-atf-ability-description-wrap">
                 <span class="af-atf-ability-label">Описание способности</span>
-                <textarea class="textbox textarea af-atf-input af-atf-ability-description" rows="4" placeholder="Описание способности">${AF_ATF.escapeAttr(ability.ability_description)}</textarea>
+                <textarea class="textbox textarea af-atf-input af-atf-ability-description" rows="4" placeholder="Описание способности">${AF_ATF.escapeAttr(ability.description)}</textarea>
               </label>
               <label style="display:none;">
                 <input type="number" class="textbox text_input af-atf-ability-slot-index" value="${AF_ATF.escapeAttr(ability.slot_index || index + 1)}" />
@@ -701,18 +695,16 @@
               state[index] = createAbility({
                 ...(state[index] || {}),
                 slot_index: AF_ATF.qs(".af-atf-ability-slot-index", row).value,
-                ability_name: AF_ATF.qs(".af-atf-ability-name", row).value,
-                icon_url: AF_ATF.qs(".af-atf-ability-icon-url", row).value,
+                title: AF_ATF.qs(".af-atf-ability-name", row).value,
+                icon: AF_ATF.qs(".af-atf-ability-icon-url", row).value,
                 type: AF_ATF.qs(".af-atf-ability-type", row).value,
                 subtype: AF_ATF.qs(".af-atf-ability-subtype", row).value,
                 slot: AF_ATF.qs(".af-atf-ability-slot", row).value,
                 damage_type: AF_ATF.qs(".af-atf-ability-damage-type", row).value,
-                targeting: AF_ATF.qs(".af-atf-ability-targeting", row).value,
-                range: AF_ATF.qs(".af-atf-ability-range", row).value,
-                damage_value: AF_ATF.qs(".af-atf-ability-damage", row).value,
-                shield_value: AF_ATF.qs(".af-atf-ability-shield", row).value,
-                heal_value: AF_ATF.qs(".af-atf-ability-heal", row).value,
-                ability_description: AF_ATF.qs(".af-atf-ability-description", row).value,
+                target: AF_ATF.qs(".af-atf-ability-targeting", row).value,
+                formula_profile: AF_ATF.qs(".af-atf-ability-formula-profile", row).value,
+                duration_value: AF_ATF.qs(".af-atf-ability-duration-value", row).value,
+                description: AF_ATF.qs(".af-atf-ability-description", row).value,
                 sortorder: AF_ATF.qs(".af-atf-ability-sortorder", row).value
               });
               sync();
