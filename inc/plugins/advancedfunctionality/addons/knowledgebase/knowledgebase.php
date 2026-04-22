@@ -5808,6 +5808,7 @@ function af_kb_reduce_embedded_ability_to_application_dto(array $ability, int $f
         'duration_value' => trim((string)($normalized['duration_value'] ?? $normalized['duration'] ?? '')),
         'description' => trim((string)($normalized['description'] ?? $normalized['ability_description'] ?? '')),
         'ability_description' => trim((string)($normalized['description'] ?? $normalized['ability_description'] ?? '')),
+        'desc' => trim((string)($normalized['description'] ?? $normalized['ability_description'] ?? '')),
         'sortorder' => $sortorder,
     ];
 }

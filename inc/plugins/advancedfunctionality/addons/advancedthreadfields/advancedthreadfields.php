@@ -4157,6 +4157,7 @@ function af_atf_normalize_character_ability_row(array $row, int $fallbackSortord
         'heal_value' => my_substr(trim((string)($row['heal_value'] ?? '')), 0, 64),
         'description' => my_substr($description, 0, 5000),
         'ability_description' => my_substr($description, 0, 5000),
+        'desc' => my_substr($description, 0, 5000),
         'ability_kb_key' => my_substr($kbKey, 0, 128),
         'sortorder' => max(0, $sortorder),
     ];

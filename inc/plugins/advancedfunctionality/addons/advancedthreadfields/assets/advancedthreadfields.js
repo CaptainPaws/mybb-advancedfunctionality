@@ -571,8 +571,9 @@
         ability.targeting = ability.target;
         ability.formula_profile = String(source.formula_profile || "");
         ability.duration_value = String(source.duration_value || source.duration || "");
-        ability.description = String(source.description || source.ability_description || "");
+        ability.description = String(source.description || source.ability_description || source.desc || "");
         ability.ability_description = ability.description;
+        ability.desc = ability.description;
         ability.slot_index = Number.isFinite(Number(source.slot_index)) ? Number(source.slot_index) : 0;
         ability.sortorder = Number.isFinite(Number(source.sortorder)) ? Number(source.sortorder) : 0;
         return ability;
@@ -705,6 +706,7 @@
                 formula_profile: AF_ATF.qs(".af-atf-ability-formula-profile", row).value,
                 duration_value: AF_ATF.qs(".af-atf-ability-duration-value", row).value,
                 description: AF_ATF.qs(".af-atf-ability-description", row).value,
+                desc: AF_ATF.qs(".af-atf-ability-description", row).value,
                 sortorder: AF_ATF.qs(".af-atf-ability-sortorder", row).value
               });
               sync();
