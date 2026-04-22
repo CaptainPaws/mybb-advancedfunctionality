@@ -139,7 +139,7 @@ function af_cwf_ensure_settings(): void
 
     af_cwf_ensure_setting($gid, 'af_characterworkflow_enabled', $lang->af_characterworkflow_enabled ?? 'Enable CharacterWorkflow', $lang->af_characterworkflow_enabled_desc ?? 'Enables workflow state table and moderation orchestration API.', 'yesno', '1', 1);
     af_cwf_ensure_setting($gid, 'af_characterworkflow_target_forums', $lang->af_characterworkflow_target_forums ?? 'Target accepted forum ids', $lang->af_characterworkflow_target_forums_desc ?? 'CSV forum IDs used as transfer target(s).', 'text', '', 2);
-    af_cwf_ensure_setting($gid, 'af_characterworkflow_transfer_group_ids', $lang->af_characterworkflow_transfer_group_ids ?? 'Groups to assign on transfer', $lang->af_characterworkflow_transfer_group_ids_desc ?? 'CSV group IDs assigned to thread author after transfer.', 'text', '', 3);
+    af_cwf_ensure_setting($gid, 'af_characterworkflow_transfer_group_ids', $lang->af_characterworkflow_transfer_group_ids ?? 'Additional groups on transfer', $lang->af_characterworkflow_transfer_group_ids_desc ?? 'CSV group IDs to add into additional groups for the thread author after transfer.', 'text', '', 3);
     af_cwf_ensure_setting($gid, 'af_characterworkflow_greeting_mode', $lang->af_characterworkflow_greeting_mode ?? 'Greeting behavior', $lang->af_characterworkflow_greeting_mode_desc ?? 'inherit = CharacterSheets logic, always = always attempt greeting post, never = do not post greeting.', "select\ninherit=Inherit CharacterSheets\nalways=Always post\nnever=Never post", 'inherit', 4);
     af_cwf_ensure_setting($gid, 'af_characterworkflow_canon_source_policy', $lang->af_characterworkflow_canon_source_policy ?? 'Canon source-of-truth policy', $lang->af_characterworkflow_canon_source_policy_desc ?? 'Defines policy for canon characters.', "select\nkb=KB only", 'kb', 5);
     af_cwf_ensure_setting($gid, 'af_characterworkflow_original_source_policy', $lang->af_characterworkflow_original_source_policy ?? 'Original source-of-truth policy', $lang->af_characterworkflow_original_source_policy_desc ?? 'Defines policy for original characters before/after KB creation.', "select\nthread_then_kb=Thread/ATF before KB, KB after create", 'thread_then_kb', 6);
@@ -274,7 +274,12 @@ function af_cwf_can_request_revision(int $tid, array $thread = [], array $accept
 
 function af_cwf_accept_character_application(int $tid, int $actorUid, array $context = []): array
 {
+    global $db;
+
     $thread = is_array($context['thread'] ?? null) ? (array)$context['thread'] : [];
+    if (empty($thread) && is_object($db)) {
+        $thread = (array)$db->fetch_array($db->simple_select('threads', '*', 'tid=' . $tid, ['limit' => 1]));
+    }
     $acceptedPid = (int)($context['accepted_pid'] ?? 0);
 
     $update = [
@@ -293,6 +298,7 @@ function af_cwf_accept_character_application(int $tid, int $actorUid, array $con
     }
 
     af_cwf_upsert_row($tid, $update);
+    af_cwf_assign_transfer_groups((int)($thread['uid'] ?? 0));
 
     return ['ok' => true, 'state' => AF_CWF_STATE_APPROVED, 'tid' => $tid];
 }
@@ -369,9 +375,20 @@ function af_cwf_assign_transfer_groups(int $uid): void
     if (empty($groups)) {
         return;
     }
-    $primary = (int)array_shift($groups);
-    $additional = implode(',', $groups);
-    $payload = ['usergroup' => $primary, 'additionalgroups' => $additional];
+
+    $user = (array)$db->fetch_array($db->simple_select('users', 'uid,additionalgroups', 'uid=' . $uid, ['limit' => 1]));
+    if (empty($user)) {
+        return;
+    }
+
+    $existingAdditional = af_cwf_csv_to_ids((string)($user['additionalgroups'] ?? ''));
+    $mergedAdditional = array_values(array_unique(array_merge($existingAdditional, $groups)));
+
+    if ($mergedAdditional === $existingAdditional) {
+        return;
+    }
+
+    $payload = ['additionalgroups' => implode(',', $mergedAdditional)];
     $db->update_query('users', af_cwf_db_escape_array($payload), 'uid=' . $uid);
 }
 

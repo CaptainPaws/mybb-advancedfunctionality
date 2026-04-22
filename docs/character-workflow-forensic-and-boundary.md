@@ -62,9 +62,14 @@ KB предоставляет CRUD и view-роутинг (`kb`, `kb_edit`, `kb_
 
 ### 1.6 Как сейчас выдаются группы
 
-Явной выдачи групп при принятии/переносе в текущем коде не найдено.
+Выдача групп реализована в CharacterWorkflow через `af_cwf_assign_transfer_groups()`, которая вызывается из:
 
-Итог: group assignment пока не централизован и должен быть перенесён в orchestration layer отдельным шагом.
+- `af_cwf_accept_character_application()`;
+- `af_cwf_transfer_character_application()`.
+
+Policy: значения из `af_characterworkflow_transfer_group_ids` добавляются в `users.additionalgroups` автора анкеты без изменения `users.usergroup`.
+
+Логика идемпотентна: существующие additional groups сохраняются, повторный accept/transfer не создаёт дублей gid.
 
 ### 1.7 Как сейчас постится приветственное сообщение
 
@@ -172,7 +177,6 @@ KB предоставляет CRUD и view-роутинг (`kb`, `kb_edit`, `kb_
 
 1. Полностью убрать из CharacterSheets прямой вызов moderation move/close и оставить только делегирование в orchestrator service.
 2. Добавить явный endpoint «Вернуть на доработку» (из UI и state: `needs_revision`).
-3. Вынести group assignment в `CharacterWorkflow` с конфигурируемой policy (например mapping по forum/profile mechanics).
+3. Расширить group assignment policy (например mapping по forum/profile mechanics), сохраняя базовое правило добавления только в additional groups.
 4. Добавить журнал событий workflow (event log) для аудита.
 5. Перенести рендер всех workflow-кнопок в отдельный provider, чтобы CharacterSheets не управлял lifecycle модерации.
-
