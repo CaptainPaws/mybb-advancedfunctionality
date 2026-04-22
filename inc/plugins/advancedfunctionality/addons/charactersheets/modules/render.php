@@ -645,12 +645,14 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $resistances = (array)($sheet_view['character_computed_state']['resistances'] ?? []);
     $equipment_items = af_charactersheets_arpg_collect_equipment_items($build);
     $inventory_items = af_charactersheets_arpg_collect_inventory_items($build);
-    $abilities_items = af_charactersheets_arpg_collect_abilities($build, $sheet_view);
+    $abilities_items = [];
     $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
     $character_stats = (array)(($character_source['payload'] ?? [])['stats'] ?? []);
     $character_abilities = (array)(($character_source['payload'] ?? [])['abilities'] ?? []);
-    if (!$abilities_items && $character_abilities) {
+    if ($character_abilities) {
         $abilities_items = af_charactersheets_arpg_collect_character_contract_abilities($character_abilities);
+    } else {
+        $abilities_items = af_charactersheets_arpg_collect_abilities($build, $sheet_view);
     }
 
     $identityParts = [];
@@ -693,25 +695,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $weapon = af_charactersheets_arpg_collect_weapon_data($build);
     $artifacts = af_charactersheets_arpg_collect_artifacts_data($build);
     $activeAbilities = [];
-    foreach ((array)($build['abilities']['owned'] ?? []) as $abilityItem) {
-        if (!is_array($abilityItem)) {
-            continue;
-        }
-        $kb_type = af_charactersheets_get_inventory_item_type($abilityItem);
-        $kb_key = af_charactersheets_get_inventory_item_key($abilityItem);
-        if ($kb_type === '' || $kb_key === '') {
-            continue;
-        }
-        $entry = af_charactersheets_kb_get_entry($kb_type, $kb_key);
-        $title = trim(af_charactersheets_kb_pick_text($entry, 'title'));
-        if ($title === '') {
-            $title = $kb_key;
-        }
-        $description = trim(strip_tags(af_charactersheets_kb_pick_text($entry, 'description')));
-        $activeAbilities[] = ['title' => $title, 'description' => $description];
-    }
     if ($character_abilities) {
-        $activeAbilities = [];
         foreach ($character_abilities as $ability) {
             if (!is_array($ability)) {
                 continue;
@@ -728,6 +712,24 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
                 'title' => $title,
                 'description' => trim(strip_tags((string)($ability['ability_description'] ?? ''))),
             ];
+        }
+    } else {
+        foreach ((array)($build['abilities']['owned'] ?? []) as $abilityItem) {
+            if (!is_array($abilityItem)) {
+                continue;
+            }
+            $kb_type = af_charactersheets_get_inventory_item_type($abilityItem);
+            $kb_key = af_charactersheets_get_inventory_item_key($abilityItem);
+            if ($kb_type === '' || $kb_key === '') {
+                continue;
+            }
+            $entry = af_charactersheets_kb_get_entry($kb_type, $kb_key);
+            $title = trim(af_charactersheets_kb_pick_text($entry, 'title'));
+            if ($title === '') {
+                $title = $kb_key;
+            }
+            $description = trim(strip_tags(af_charactersheets_kb_pick_text($entry, 'description')));
+            $activeAbilities[] = ['title' => $title, 'description' => $description];
         }
     }
     $passiveAbilities = [];
