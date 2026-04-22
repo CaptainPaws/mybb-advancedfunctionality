@@ -2786,6 +2786,33 @@ function af_atf_character_arpg_contract_types(): array
     ];
 }
 
+function af_atf_character_canonical_profile_key(string $fieldName): string
+{
+    $fieldName = trim($fieldName);
+    if ($fieldName === '') {
+        return '';
+    }
+
+    $map = [
+        'character_weapon' => 'weapon_type',
+        'character_weapon_type' => 'weapon_type',
+        'weapon_type' => 'weapon_type',
+    ];
+
+    return (string)($map[$fieldName] ?? $fieldName);
+}
+
+function af_atf_character_mechanics_set_for_field(string $fieldName): string
+{
+    $canonical = af_atf_character_canonical_profile_key($fieldName);
+    $map = [
+        'character_gen' => 'character_gender',
+        'character_gender' => 'character_gender',
+        'weapon_type' => 'weapon_type',
+    ];
+    return (string)($map[$canonical] ?? '');
+}
+
 function af_atf_character_arpg_contract_type(string $fieldName): string
 {
     $fieldName = trim($fieldName);
@@ -3023,6 +3050,8 @@ function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
         'character_origin',
         'character_class',
         'character_archetype',
+        'character_weapon',
+        'character_weapon_type',
         'character_faction',
         'character_activity',
         'character_occupation',
@@ -3137,8 +3166,9 @@ function af_atf_build_input_html(array $field, string $value): string
     $activeMechanic = af_atf_character_effective_mechanic_for_render();
     $arpgContractType = af_atf_character_arpg_contract_type($fieldName);
 
-    if ($fieldName === 'character_gen' || $fieldName === 'character_gender') {
-        $mechanicsRows = af_atf_get_arpg_mechanics_select_options('character_gender');
+    $mechanicsSet = af_atf_character_mechanics_set_for_field($fieldName);
+    if ($mechanicsSet !== '' && ($type === 'kb_dynamic' || $type === 'kb_mechanic' || $type === 'select')) {
+        $mechanicsRows = af_atf_get_arpg_mechanics_select_options($mechanicsSet);
         if (!empty($mechanicsRows)) {
             $html = '<select class="select af-atf-input" name="' . $nameAttr . '"><option value=""></option>';
             $seen = [];
@@ -4598,7 +4628,7 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
         'character_class' => af_charactersheets_pick_field_value($index, ['character_class', 'class']),
         'character_faction' => af_charactersheets_pick_field_value($index, ['character_faction', 'faction']),
         'character_app' => af_charactersheets_pick_field_value($index, ['character_app', 'character_about', 'character_bio', 'character_description', 'app']),
-        'weapon_type' => af_charactersheets_pick_field_value($index, ['weapon_type', 'character_weapon_type'], false),
+        'weapon_type' => af_charactersheets_pick_field_value($index, ['weapon_type', 'character_weapon', 'character_weapon_type'], false),
     ];
     $profile += af_atf_bridge_collect_character_profile_extras($index, array_keys($profile));
     $abilities = af_atf_bridge_extract_oc_abilities($index);
@@ -5662,9 +5692,10 @@ function af_atf_format_value_for_display(array $field, string $val): string
     }
 
     $fieldName = trim((string)($field['name'] ?? ''));
-    if (($fieldName === 'character_gen' || $fieldName === 'character_gender') && $val !== '') {
+    $mechanicsSet = af_atf_character_mechanics_set_for_field($fieldName);
+    if ($mechanicsSet !== '' && $val !== '') {
         if (function_exists('af_kb_get_arpg_mechanics_option_label')) {
-            $label = (string)af_kb_get_arpg_mechanics_option_label('character_gender', $val, true);
+            $label = (string)af_kb_get_arpg_mechanics_option_label($mechanicsSet, $val, true);
             if ($label !== '') {
                 return htmlspecialchars_uni($label);
             }
@@ -5736,6 +5767,14 @@ function af_atf_kb_resolve_dynamic_label(array $field, string $key): string
     }
 
     $fieldName = trim((string)($field['name'] ?? ''));
+    $mechanicsSet = af_atf_character_mechanics_set_for_field($fieldName);
+    if ($mechanicsSet !== '' && function_exists('af_kb_get_arpg_mechanics_option_label')) {
+        $label = trim((string)af_kb_get_arpg_mechanics_option_label($mechanicsSet, $key, true));
+        if ($label !== '') {
+            return $label;
+        }
+    }
+
     $kbType = af_atf_character_arpg_contract_type($fieldName);
     if ($kbType === '' || af_atf_character_active_mechanic() !== 'arpg') {
         $kbType = af_atf_character_resolve_kb_type($field, $key);
