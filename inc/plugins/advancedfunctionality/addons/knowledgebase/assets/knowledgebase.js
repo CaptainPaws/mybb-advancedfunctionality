@@ -2218,15 +2218,18 @@
                 ]);
                 var serviceKind = String(payload.rules.service_kind || '');
                 if (serviceKind === 'formula_profile') {
+                    if ((!Array.isArray(payload.rules.entries) || !payload.rules.entries.length) && Array.isArray(payload.rules.formula_profile_registry)) {
+                        payload.rules.entries = payload.rules.formula_profile_registry.slice();
+                    }
                     renderSeededArrayEditor(rulesRoot, 'entries', 'formula_profile', [
-                        { key: 'key', label: 'key', default: '' },
-                        { key: 'title', label: 'title', default: '' },
-                        { key: 'group', label: 'group', type: 'select', options: ['damage', 'shield', 'heal', 'buff', 'debuff', 'control', 'utility', 'mobility', 'passive'], default: 'utility' },
-                        { key: 'description', label: 'description', default: '' },
-                        { key: 'calc_family', label: 'calc_family', type: 'select', options: ['damage', 'shield', 'heal', 'buff', 'debuff', 'control', 'utility', 'mobility', 'passive'], default: 'utility' },
-                        { key: 'duration_supported', label: 'duration_supported', type: 'number', default: 0 },
-                        { key: 'ui_hint', label: 'ui_hint', default: '' },
-                        { key: 'active', label: 'active', type: 'number', default: 1 }
+                        { key: 'key', label: 'Key', default: '' },
+                        { key: 'title', label: 'Title (human-readable)', default: '' },
+                        { key: 'group', label: 'Group', type: 'select', options: ['damage', 'shield', 'heal', 'buff', 'debuff', 'control', 'utility', 'mobility', 'passive'], default: 'utility' },
+                        { key: 'description', label: 'Description', default: '' },
+                        { key: 'calc_family', label: 'Calc family', type: 'select', options: ['damage', 'shield', 'heal', 'buff', 'debuff', 'control', 'utility', 'mobility', 'passive'], default: 'utility' },
+                        { key: 'duration_supported', label: 'Duration supported (0/1)', type: 'number', default: 0 },
+                        { key: 'ui_hint', label: 'UI hint (human-readable)', default: '' },
+                        { key: 'active', label: 'Active (0/1)', type: 'number', default: 1 }
                     ], [
                         { key: 'default', label: 'default', seed: { key: '', title: '', group: 'utility', description: '', calc_family: 'utility', duration_supported: 0, ui_hint: '', active: 1 } }
                     ]);
