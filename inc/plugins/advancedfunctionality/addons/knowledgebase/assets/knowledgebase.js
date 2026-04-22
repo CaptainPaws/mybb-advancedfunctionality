@@ -2237,7 +2237,7 @@
                     if ((!Array.isArray(payload.rules.entries) || !payload.rules.entries.length) && Array.isArray(payload.rules.formula_profile_registry)) {
                         payload.rules.entries = payload.rules.formula_profile_registry.slice();
                     }
-                    renderSeededArrayEditor(rulesRoot, 'entries', 'formula_profile', [
+                    renderSeededArrayEditor(rulesRoot, 'entries', 'entries', [
                         { key: 'key', label: 'Key', default: '' },
                         { key: 'title', label: 'Title (human-readable)', default: '' },
                         { key: 'group', label: 'Group', type: 'select', options: ['damage', 'shield', 'heal', 'buff', 'debuff', 'control', 'utility', 'mobility', 'passive'], default: 'utility' },
@@ -2253,7 +2253,7 @@
                 }
 
                 if (serviceKind === 'weapon_type') {
-                    renderSeededArrayEditor(rulesRoot, 'entries', 'weapon_type', [
+                    renderSeededArrayEditor(rulesRoot, 'entries', 'entries', [
                         { key: 'key', label: 'key', default: '' },
                         { key: 'title', label: 'title', default: '' },
                         { key: 'description', label: 'description', default: '' },
