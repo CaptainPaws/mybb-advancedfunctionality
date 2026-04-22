@@ -410,6 +410,41 @@ function af_charactersheets_arpg_collect_abilities(array $build, array $sheet_vi
     return $result;
 }
 
+function af_charactersheets_arpg_collect_character_contract_abilities(array $abilities): array
+{
+    $result = [];
+    foreach ($abilities as $ability) {
+        if (!is_array($ability)) {
+            continue;
+        }
+        $title = trim((string)($ability['title'] ?? $ability['ability_name'] ?? ''));
+        if ($title === '') {
+            continue;
+        }
+        $abilityType = trim((string)($ability['type'] ?? $ability['ability_type'] ?? 'active'));
+        $meta = [];
+        foreach (['subtype', 'slot', 'damage_type', 'target', 'formula_profile'] as $metaKey) {
+            $metaValue = trim((string)($ability[$metaKey] ?? ''));
+            if ($metaValue !== '') {
+                $meta[] = $metaValue;
+            }
+        }
+        $description = trim(strip_tags((string)($ability['description'] ?? $ability['ability_description'] ?? '')));
+        $result[] = [
+            'type' => $abilityType !== '' ? $abilityType : 'active',
+            'key' => trim((string)($ability['ability_kb_key'] ?? $title)),
+            'label' => $title,
+            'qty' => 1,
+            'meta' => implode(' • ', $meta),
+            'desc' => $description,
+        ];
+        if (count($result) >= 8) {
+            break;
+        }
+    }
+    return $result;
+}
+
 function af_charactersheets_build_arpg_cards_html(array $items, string $empty_label): string
 {
     if (!$items) {
@@ -430,10 +465,15 @@ function af_charactersheets_build_arpg_cards_html(array $items, string $empty_la
         if ($qty > 1) {
             $meta[] = 'x' . $qty;
         }
+        if (!empty($item['meta'])) {
+            $meta[] = (string)$item['meta'];
+        }
+        $description = trim((string)($item['desc'] ?? ''));
 
         $html .= '<article class="af-cs-arpg-card">'
             . '<h3>' . $title . '</h3>'
             . '<div class="af-cs-muted">' . htmlspecialchars_uni(implode(' • ', $meta)) . '</div>'
+            . ($description !== '' ? '<p class="af-cs-muted">' . htmlspecialchars_uni($description) . '</p>' : '')
             . '</article>';
     }
 
@@ -609,6 +649,9 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
     $character_stats = (array)(($character_source['payload'] ?? [])['stats'] ?? []);
     $character_abilities = (array)(($character_source['payload'] ?? [])['abilities'] ?? []);
+    if (!$abilities_items && $character_abilities) {
+        $abilities_items = af_charactersheets_arpg_collect_character_contract_abilities($character_abilities);
+    }
 
     $identityParts = [];
     foreach ([
