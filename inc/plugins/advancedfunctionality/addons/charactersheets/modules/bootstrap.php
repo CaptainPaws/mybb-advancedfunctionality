@@ -1067,18 +1067,18 @@ function af_charactersheets_handle_create_sheet_action(): void
     }
 
     $entryId = (int)(($characterSource['entry'] ?? [])['id'] ?? 0);
-    if ($entryId <= 0) {
-        $msg = $lang->af_charactersheets_sheet_requires_kb ?? 'Сначала создайте или привяжите KB-запись персонажа.';
-        redirect('showthread.php?tid=' . $tid, $msg);
+    $acceptUpdate = [
+        'uid' => $uid,
+    ];
+    if ($entryId > 0) {
+        $acceptUpdate['kb_entry_id'] = $entryId;
     }
 
     $existing = af_charactersheets_get_sheet_by_tid($tid);
     if (!empty($existing['id'])) {
         $slug = (string)($existing['slug'] ?? '');
         if ($slug !== '') {
-            af_charactersheets_upsert_accept_row($tid, [
-                'uid' => $uid,
-                'kb_entry_id' => $entryId,
+            af_charactersheets_upsert_accept_row($tid, $acceptUpdate + [
                 'sheet_slug' => $slug,
                 'sheet_created' => 1,
             ]);
@@ -1102,9 +1102,7 @@ function af_charactersheets_handle_create_sheet_action(): void
         $sheetSlug = (string)($existingById['slug'] ?? '');
     }
     if ($sheetSlug !== '') {
-        af_charactersheets_upsert_accept_row($tid, [
-            'uid' => $uid,
-            'kb_entry_id' => $entryId,
+        af_charactersheets_upsert_accept_row($tid, $acceptUpdate + [
             'sheet_slug' => $sheetSlug,
             'sheet_created' => 1,
         ]);
