@@ -53,13 +53,6 @@ function af_charactersheets_uninstall_impl(): void
 
     $db->delete_query('settings', "name IN (
         'af_charactersheets_enabled',
-        'af_charactersheets_accept_groups',
-        'af_charactersheets_pending_forums',
-        'af_charactersheets_accepted_forum',
-        'af_charactersheets_accept_wrap_htmlbb',
-        'af_charactersheets_accept_close_thread',
-        'af_charactersheets_accept_move_thread',
-        'af_charactersheets_sheet_autocreate',
         'af_charactersheets_attr_pool_max',
         'af_charactersheets_attr_cap',
         'af_charactersheets_exp_per_char',
@@ -83,6 +76,7 @@ function af_charactersheets_uninstall_impl(): void
         'af_cs_assets_blacklist',
         'af_charactersheets_render_path_mode'
     )");
+    $db->delete_query('settings', "name IN ('af_charactersheets_accept_groups','af_charactersheets_pending_forums','af_charactersheets_accepted_forum','af_charactersheets_accept_wrap_htmlbb','af_charactersheets_accept_close_thread','af_charactersheets_accept_move_thread','af_charactersheets_sheet_autocreate','af_charactersheets_level_cap','af_charactersheets_level_req_base','af_charactersheets_level_req_step','af_charactersheets_skill_points_per_level')");
     $db->delete_query('settinggroups', "name='af_charactersheets'");
     $db->delete_query('templates', "title LIKE 'charactersheets_%'");
     $db->delete_query('templates', "title IN ('charactersheet_fullpage','charactersheet_inner','charactersheet_inner_arpg','charactersheet_modal','af_cs_modal_fullpage','af_cs_page_modal','postbit_plaque','charactersheet_rct_cards','charactersheet_stats_bars','charactersheet_attributes','charactersheet_progress','charactersheet_skills','charactersheet_feats','charactersheet_abilities','charactersheet_inventory','charactersheet_augmentations','charactersheet_equipment','charactersheet_knowledge','charactersheets_catalog','charactersheets_catalog_card')");
@@ -122,129 +116,12 @@ function af_charactersheets_ensure_settings(): void
     );
     af_charactersheets_ensure_setting(
         $gid,
-        'af_charactersheets_accept_groups',
-        $lang->af_charactersheets_accept_groups ?? 'Groups allowed to accept',
-        $lang->af_charactersheets_accept_groups_desc ?? 'CSV group ids',
-        'text',
-        '4,3,6',
-        2
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_pending_forums',
-        $lang->af_charactersheets_pending_forums ?? 'Pending forums',
-        $lang->af_charactersheets_pending_forums_desc ?? 'CSV forum ids',
-        'text',
-        '',
-        3
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_accepted_forum',
-        $lang->af_charactersheets_accepted_forum ?? 'Accepted forum',
-        $lang->af_charactersheets_accepted_forum_desc ?? 'Forum id',
-        'text',
-        '',
-        4
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_accept_wrap_htmlbb',
-        $lang->af_charactersheets_accept_wrap_htmlbb ?? 'Wrap in [html]',
-        $lang->af_charactersheets_accept_wrap_htmlbb_desc ?? 'Wrap acceptance post',
-        'yesno',
-        '1',
-        5
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_accept_close_thread',
-        $lang->af_charactersheets_accept_close_thread ?? 'Close thread',
-        $lang->af_charactersheets_accept_close_thread_desc ?? 'Close thread after acceptance',
-        'yesno',
-        '1',
-        6
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_accept_move_thread',
-        $lang->af_charactersheets_accept_move_thread ?? 'Move thread',
-        $lang->af_charactersheets_accept_move_thread_desc ?? 'Move thread after acceptance',
-        'yesno',
-        '1',
-        7
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_sheet_autocreate',
-        $lang->af_charactersheets_sheet_autocreate ?? 'Auto-create sheet',
-        $lang->af_charactersheets_sheet_autocreate_desc ?? 'Trigger sheet generator stub',
-        'yesno',
-        '1',
-        8
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
         'af_charactersheets_render_path_mode',
         $lang->af_charactersheets_render_path_mode ?? 'Sheet render path',
         $lang->af_charactersheets_render_path_mode_desc ?? 'auto = detect by mechanic profile, dnd/arpg = force selected render path.',
         "select\nauto=Auto\ndnd=DnD\narpg=ARPG",
         'auto',
         9
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_attr_pool_max',
-        $lang->af_charactersheets_attr_pool_max ?? 'Attribute pool max',
-        $lang->af_charactersheets_attr_pool_max_desc ?? 'Maximum attribute points available for allocation.',
-        'text',
-        '10',
-        20
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_attr_cap',
-        $lang->af_charactersheets_attr_cap ?? 'Attribute cap',
-        $lang->af_charactersheets_attr_cap_desc ?? 'Maximum final attribute value after bonuses (0 disables cap).',
-        'text',
-        '0',
-        21
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_level_cap',
-        $lang->af_charactersheets_level_cap ?? 'Level cap',
-        $lang->af_charactersheets_level_cap_desc ?? 'Maximum level.',
-        'text',
-        '20',
-        40
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_level_req_base',
-        $lang->af_charactersheets_level_req_base ?? 'Level requirement base',
-        $lang->af_charactersheets_level_req_base_desc ?? 'EXP required to reach level 2.',
-        'text',
-        '2000',
-        41
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_level_req_step',
-        $lang->af_charactersheets_level_req_step ?? 'Level requirement step',
-        $lang->af_charactersheets_level_req_step_desc ?? 'Additional EXP required per level.',
-        'text',
-        '1000',
-        42
-    );
-    af_charactersheets_ensure_setting(
-        $gid,
-        'af_charactersheets_skill_points_per_level',
-        $lang->af_charactersheets_skill_points_per_level ?? 'Skill points per level',
-        $lang->af_charactersheets_skill_points_per_level_desc ?? 'Skill points granted on each level up.',
-        'text',
-        '0',
-        44
     );
     af_charactersheets_ensure_setting(
         $gid,
@@ -304,6 +181,7 @@ function af_charactersheets_ensure_settings(): void
 
     $db->delete_query('settings', "name IN ('af_charactersheets_exp_per_char','af_charactersheets_exp_on_register','af_charactersheets_exp_on_accept','af_charactersheets_exp_manual_groups','af_charactersheets_exp_forum_categories','af_charactersheets_exp_forum_forums','af_charactersheets_exp_forum_exclude','af_charactersheets_exp_forum_mode','af_charactersheets_exp_allow_negative','af_charactersheets_exp_allow_overdraw')");
     $db->delete_query('settings', "name LIKE 'af_charactersheets_credits_%'");
+    $db->delete_query('settings', "name IN ('af_charactersheets_accept_groups','af_charactersheets_pending_forums','af_charactersheets_accepted_forum','af_charactersheets_accept_wrap_htmlbb','af_charactersheets_accept_close_thread','af_charactersheets_accept_move_thread','af_charactersheets_sheet_autocreate','af_charactersheets_attr_pool_max','af_charactersheets_attr_cap','af_charactersheets_level_cap','af_charactersheets_level_req_base','af_charactersheets_level_req_step','af_charactersheets_skill_points_per_level')");
 
     $db->delete_query('settings', "name IN ('af_charactersheets_attr_points_per_level','af_charactersheets_humanity_base')");
 
@@ -702,7 +580,7 @@ function af_charactersheets_showthread_start_impl(): void
 
     $isPendingForum = function_exists('af_cwf_is_pending_forum')
         ? af_cwf_is_pending_forum($fid)
-        : af_charactersheets_is_pending_forum($fid);
+        : false;
     $isAcceptedForum = af_charactersheets_is_in_accepted_forum($fid);
 
     $acceptText = $was_accepted
@@ -719,8 +597,8 @@ function af_charactersheets_showthread_start_impl(): void
     $sheetUrl = af_charactersheets_url(['action' => 'af_charactersheets_create_sheet', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
 
     $buttons = [];
-    $canAccept = function_exists('af_cwf_can_accept') ? af_cwf_can_accept($tid, $thread, $acceptRow) : $isPendingForum;
-    $canTransfer = function_exists('af_cwf_can_transfer') ? af_cwf_can_transfer($tid, $thread, $acceptRow) : ($was_accepted && !$isAcceptedForum);
+    $canAccept = function_exists('af_cwf_can_accept') ? af_cwf_can_accept($tid, $thread, $acceptRow) : false;
+    $canTransfer = function_exists('af_cwf_can_transfer') ? af_cwf_can_transfer($tid, $thread, $acceptRow) : false;
     $canCreateSheet = function_exists('af_cwf_can_create_sheet') ? af_cwf_can_create_sheet($tid, $thread, $acceptRow) : empty($sheetExists);
 
     if ($canAccept) {
@@ -914,7 +792,7 @@ function af_charactersheets_misc_start_impl(): void
 
 function af_charactersheets_handle_accept_action(): void
 {
-    global $mybb, $db, $lang, $session;
+    global $mybb, $db, $lang;
 
     af_charactersheets_load_lang();
 
@@ -935,15 +813,8 @@ function af_charactersheets_handle_accept_action(): void
     }
 
     $fid = (int)$thread['fid'];
-    $isPendingForum = function_exists('af_cwf_is_pending_forum')
-        ? af_cwf_is_pending_forum($fid)
-        : af_charactersheets_is_pending_forum($fid);
-    if (!$isPendingForum) {
-        af_charactersheets_deny('Thread not in pending forum', ['tid' => $tid, 'fid' => $fid]);
-    }
-
-    if (af_charactersheets_is_in_accepted_forum($fid)) {
-        af_charactersheets_deny('Thread already in accepted forum', ['tid' => $tid, 'fid' => $fid]);
+    if (!function_exists('af_cwf_can_accept') || !af_cwf_can_accept($tid, $thread, af_charactersheets_get_accept_row($tid))) {
+        af_charactersheets_deny('Thread cannot be accepted by workflow policy', ['tid' => $tid, 'fid' => $fid]);
     }
 
     if (!af_charactersheets_user_can_accept($mybb->user, $fid)) {
@@ -954,49 +825,8 @@ function af_charactersheets_handle_accept_action(): void
 
     $existingRow = af_charactersheets_get_accept_row($tid);
     $accepted_pid = af_charactersheets_resolve_existing_accept_post_pid($tid, $existingRow);
-    if ($accepted_pid <= 0) {
-        $message = af_charactersheets_build_accept_message($thread);
-
-        require_once MYBB_ROOT . 'inc/datahandlers/post.php';
-        $posthandler = new PostDataHandler('insert');
-        $posthandler->action = 'reply';
-
-        $subject = 'Re: ' . (string)$thread['subject'];
-
-        $post_data = [
-            'tid' => $tid,
-            'fid' => $fid,
-            'subject' => $subject,
-            'uid' => (int)$mybb->user['uid'],
-            'username' => (string)$mybb->user['username'],
-            'message' => $message,
-            'ipaddress' => $session->ipaddress ?? '',
-            'longipaddress' => $session->packedip ?? '',
-            'options' => [
-                'signature' => 0,
-                'disablesmilies' => 0,
-                'subscriptionmethod' => 0,
-            ],
-        ];
-
-        $posthandler->set_data($post_data);
-
-        if (!$posthandler->validate_post()) {
-            af_charactersheets_log('Post validation failed', [
-                'tid' => $tid,
-                'errors' => $posthandler->get_friendly_errors(),
-            ]);
-            $msg = $lang->af_charactersheets_accept_error ?? 'Не удалось принять анкету.';
-            redirect('showthread.php?tid=' . $tid, $msg);
-        }
-
-        $postinfo = $posthandler->insert_post();
-        $accepted_pid = (int)($postinfo['pid'] ?? 0);
-        if ($accepted_pid <= 0) {
-            af_charactersheets_log('Post insert failed', ['tid' => $tid]);
-            $msg = $lang->af_charactersheets_accept_error ?? 'Не удалось принять анкету.';
-            redirect('showthread.php?tid=' . $tid, $msg);
-        }
+    if ($accepted_pid <= 0 && function_exists('af_cwf_create_acceptance_greeting_post')) {
+        $accepted_pid = (int)af_cwf_create_acceptance_greeting_post($tid, $thread, (int)($mybb->user['uid'] ?? 0));
     }
 
     af_charactersheets_upsert_accept_row($tid, [
@@ -1064,13 +894,12 @@ function af_charactersheets_handle_transfer_action(): void
 
     $targetFid = function_exists('af_cwf_resolve_transfer_target_forum_id')
         ? af_cwf_resolve_transfer_target_forum_id($fid)
-        : (int)($mybb->settings['af_charactersheets_accepted_forum'] ?? 0);
+        : 0;
     if ($targetFid <= 0) {
         af_charactersheets_log('Transfer target forum is not configured or invalid', [
             'tid' => $tid,
             'current_fid' => $fid,
             'configured_targets' => function_exists('af_cwf_get_target_forum_ids') ? af_cwf_get_target_forum_ids() : [],
-            'legacy_target' => (int)($mybb->settings['af_charactersheets_accepted_forum'] ?? 0),
         ]);
         $msg = $lang->af_charactersheets_accept_error ?? 'Не удалось перенести анкету.';
         redirect('showthread.php?tid=' . $tid, $msg);
@@ -1080,12 +909,6 @@ function af_charactersheets_handle_transfer_action(): void
         require_once MYBB_ROOT . 'inc/class_moderation.php';
         $moderation = new Moderation;
         $moderation->move_thread($tid, $targetFid, 0);
-    }
-
-    if (!empty($mybb->settings['af_charactersheets_accept_close_thread'])) {
-        require_once MYBB_ROOT . 'inc/class_moderation.php';
-        $moderation = isset($moderation) && $moderation instanceof Moderation ? $moderation : new Moderation;
-        $moderation->close_threads([$tid]);
     }
 
     if (function_exists('af_cwf_transfer_character_application')) {
@@ -1308,13 +1131,6 @@ function af_charactersheets_build_accept_message(array $thread): string
     ];
 
     $rendered = strtr($template, $replacements);
-
-    // ВАЖНО: если ты хочешь, чтобы {mention} точно стал кликабельным — НЕ заворачиваем в [html]
-    if (!empty($mybb->settings['af_charactersheets_accept_wrap_htmlbb'])) {
-        // Оставляю как опцию, но предупреждаю: внутри [html] упоминания чаще всего не парсятся.
-        // Лучше выключить настройку wrap_htmlbb для принятия.
-        $rendered = "[html]\n" . $rendered . "\n[/html]";
-    }
 
     return $rendered;
 }
@@ -1627,23 +1443,14 @@ function af_charactersheets_is_accepted(int $tid): bool
 
 function af_charactersheets_is_pending_forum(int $fid): bool
 {
-    global $mybb;
-
     if (function_exists('af_cwf_is_pending_forum')) {
         return af_cwf_is_pending_forum($fid);
     }
-
-    $pending = af_charactersheets_csv_to_ids($mybb->settings['af_charactersheets_pending_forums'] ?? '');
-    if (!$pending) {
-        return false;
-    }
-    return in_array($fid, $pending, true);
+    return false;
 }
 
 function af_charactersheets_is_in_accepted_forum(int $fid): bool
 {
-    global $mybb;
-
     if ($fid <= 0) {
         return false;
     }
@@ -1655,8 +1462,7 @@ function af_charactersheets_is_in_accepted_forum(int $fid): bool
         }
     }
 
-    $accepted_fid = (int)($mybb->settings['af_charactersheets_accepted_forum'] ?? 0);
-    return $accepted_fid > 0 && $fid === $accepted_fid;
+    return false;
 }
 
 function af_charactersheets_csv_to_ids(string $csv): array

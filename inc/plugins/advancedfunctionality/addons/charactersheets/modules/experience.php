@@ -3,72 +3,6 @@ if (!defined('IN_MYBB')) {
     die('No direct access');
 }
 
-function af_charactersheets_compute_level_legacy(float $exp): array
-{
-    global $mybb;
-
-    $level_cap = (int)($mybb->settings['af_charactersheets_level_cap'] ?? 0);
-    $base = (float)($mybb->settings['af_charactersheets_level_req_base'] ?? 0);
-    $step = (float)($mybb->settings['af_charactersheets_level_req_step'] ?? 0);
-
-    if ($base <= 0) {
-        return [
-            'level' => 1,
-            'percent' => 0,
-            'next_req' => 0,
-            'prev_req_total' => 0,
-            'next_req_total' => 0,
-            'exp_in_level' => 0,
-            'exp_need' => 0,
-            'exp_current' => 0,
-            'progress_percent' => 0,
-            'cap' => max(1, $level_cap),
-        ];
-    }
-
-    $level = 1;
-    $next_req = $base;
-    $remaining = $exp;
-    $prev_req_total = 0.0;
-
-    while ($remaining >= $next_req && ($level_cap <= 0 || $level < $level_cap)) {
-        $remaining -= $next_req;
-        $prev_req_total += $next_req;
-        $level++;
-        $next_req = $base + (($level - 1) * $step);
-        if ($next_req <= 0) {
-            break;
-        }
-    }
-
-    $next_req_total = $prev_req_total + max(0.0, $next_req);
-    $exp_in_level = max(0.0, $exp - $prev_req_total);
-    $exp_need = max(0.0, $next_req_total - $prev_req_total);
-
-    $percent = 0;
-    if ($exp_need > 0) {
-        $percent = (int)floor(($exp_in_level / $exp_need) * 100);
-        if ($percent < 0) {
-            $percent = 0;
-        } elseif ($percent > 100) {
-            $percent = 100;
-        }
-    }
-
-    return [
-        'level' => $level,
-        'percent' => $percent,
-        'progress_percent' => $percent,
-        'next_req' => $next_req,
-        'prev_req_total' => $prev_req_total,
-        'next_req_total' => $next_req_total,
-        'exp_in_level' => $exp_in_level,
-        'exp_current' => $exp_in_level,
-        'exp_need' => $exp_need,
-        'cap' => max(1, $level_cap),
-    ];
-}
-
 function af_charactersheets_compute_level(float $exp): array
 {
     if (function_exists('af_balance_compute_level')) {
@@ -95,7 +29,18 @@ function af_charactersheets_compute_level(float $exp): array
         }
     }
 
-    return af_charactersheets_compute_level_legacy($exp);
+    return [
+        'level' => 1,
+        'cap' => 1,
+        'percent' => 0,
+        'progress_percent' => 0,
+        'next_req' => 0,
+        'prev_req_total' => 0.0,
+        'next_req_total' => 0.0,
+        'exp_in_level' => 0.0,
+        'exp_current' => 0.0,
+        'exp_need' => 0.0,
+    ];
 }
 
 function af_charactersheets_award_exp_manual(array $sheet, array $user, int $fid, string $amount_raw, string $reason): array
@@ -126,76 +71,7 @@ function af_charactersheets_balance_snapshot(int $uid): array
 
 function af_charactersheets_grant_exp(int $sheet_id, float $amount, string $event_key, string $event_type, array $meta): bool
 {
-    global $db, $mybb;
-
-    if ($sheet_id <= 0 || !$db->table_exists(AF_CS_SHEETS_TABLE) || !$db->table_exists(AF_CS_EXP_LEDGER_TABLE)) {
-        return false;
-    }
-
-    $sheet = af_charactersheets_get_sheet_by_id($sheet_id);
-    if (empty($sheet)) {
-        return false;
-    }
-
-    $progress = af_charactersheets_json_decode((string)($sheet['progress_json'] ?? ''));
-    $current_exp = (float)($progress['exp'] ?? 0);
-    $new_exp = $current_exp + $amount;
-
-    if ($new_exp < 0 && empty($mybb->settings['af_charactersheets_exp_allow_overdraw'])) {
-        return false;
-    }
-
-    $progress['exp'] = $new_exp;
-
-    $level_data = af_charactersheets_compute_level($new_exp);
-    $prev_level = (int)($progress['level'] ?? 1);
-    $progress['level'] = $level_data['level'];
-
-    $delta = $level_data['level'] - $prev_level;
-    if ($delta > 0) {
-        $skill_points_per_level = (int)($mybb->settings['af_charactersheets_skill_points_per_level'] ?? 0);
-        $progress['skill_points_free'] = (int)($progress['skill_points_free'] ?? 0) + $delta * $skill_points_per_level;
-    }
-
-    // --- ledger meta normalize (reason + awarded by) ---
-    if (!isset($meta['reason'])) {
-        $meta['reason'] = '';
-    } else {
-        $meta['reason'] = trim((string)$meta['reason']);
-    }
-
-    // "Кто начислил" имеет смысл прежде всего для ручных/админских начислений.
-    // Если бэк при grant_exp не положил by_* сам — добавим.
-    if (!isset($meta['by_uid']) && !isset($meta['by_username'])) {
-        $actor_uid = (int)($mybb->user['uid'] ?? 0);
-
-        // считаем "ручным", если event_type явно manual/award/grant/admin/moderator
-        $manual_types = ['manual', 'award', 'grant', 'grant_exp', 'admin', 'moderator'];
-        $is_manual = in_array($event_type, $manual_types, true);
-
-        if ($is_manual && $actor_uid > 0) {
-            $meta['by_uid'] = $actor_uid;
-            $meta['by_username'] = (string)($mybb->user['username'] ?? '');
-        } else {
-            // автособытия (посты/регистрация) — можно показывать как "Система"
-            $meta['by_uid'] = 0;
-            $meta['by_username'] = 'Система';
-        }
-    }
-
-    $db->insert_query(AF_CS_EXP_LEDGER_TABLE, [
-        'sheet_id' => $sheet_id,
-        'uid' => (int)($sheet['uid'] ?? 0),
-        'event_key' => $db->escape_string($event_key),
-        'event_type' => $db->escape_string($event_type),
-        'amount' => $amount,
-        'meta_json' => $db->escape_string(af_charactersheets_json_encode($meta)),
-        'created_at' => TIME_NOW,
-    ]);
-
-    af_charactersheets_update_sheet_json($sheet_id, af_charactersheets_json_decode((string)($sheet['base_json'] ?? '')), af_charactersheets_json_decode((string)($sheet['build_json'] ?? '')), $progress);
-
-    return true;
+    return false;
 }
 
 function af_charactersheets_handle_accept_exp(int $tid, int $accepted_by_uid): void
@@ -294,36 +170,7 @@ function af_charactersheets_post_do_newpost_end(): void
 
 function af_charactersheets_is_exp_forum_allowed(int $fid): bool
 {
-    global $mybb;
-
-    if ($fid <= 0) {
-        return false;
-    }
-
-    $mode = (string)($mybb->settings['af_charactersheets_exp_forum_mode'] ?? 'include');
-    $category_ids = af_charactersheets_csv_to_ids((string)($mybb->settings['af_charactersheets_exp_forum_categories'] ?? ''));
-    $forum_ids = af_charactersheets_csv_to_ids((string)($mybb->settings['af_charactersheets_exp_forum_forums'] ?? ''));
-    $exclude_ids = af_charactersheets_csv_to_ids((string)($mybb->settings['af_charactersheets_exp_forum_exclude'] ?? ''));
-    if ($exclude_ids && in_array($fid, $exclude_ids, true)) {
-        return false;
-    }
-
-    $selected = array_values(array_unique(array_merge(
-        $forum_ids,
-        af_charactersheets_expand_forum_ids_with_children($category_ids)
-    )));
-
-    if ($mode === 'exclude') {
-        if (!$selected) {
-            return true;
-        }
-        return !in_array($fid, $selected, true);
-    }
-
-    if (!$selected) {
-        return true;
-    }
-    return in_array($fid, $selected, true);
+    return false;
 }
 
 function af_charactersheets_render_exp_ledger_html(int $sheet_id, int $limit = 30): string
@@ -421,13 +268,6 @@ function af_charactersheets_on_exp_changed($uid, $oldExp, $newExp, $meta): void
     $level_data = af_charactersheets_compute_level($newFloat);
     $prev_level = (int)($progress['level'] ?? 1);
     $progress['level'] = (int)$level_data['level'];
-
-    $delta = (int)$level_data['level'] - $prev_level;
-    if ($delta > 0) {
-        global $mybb;
-        $skill_points_per_level = (int)($mybb->settings['af_charactersheets_skill_points_per_level'] ?? 0);
-        $progress['skill_points_free'] = (int)($progress['skill_points_free'] ?? 0) + $delta * $skill_points_per_level;
-    }
 
     af_charactersheets_update_sheet_json(
         (int)$sheet['id'],
