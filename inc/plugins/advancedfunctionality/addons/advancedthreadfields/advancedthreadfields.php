@@ -4358,6 +4358,19 @@ function af_atf_handle_character_kb_bridge_action(bool $syncOnly): void
     if (!function_exists('af_charactersheets_user_can_accept') || !af_charactersheets_user_can_accept($mybb->user ?? [], $fid)) {
         error_no_permission();
     }
+    $acceptRow = function_exists('af_charactersheets_get_accept_row') ? af_charactersheets_get_accept_row($tid) : [];
+    if ($syncOnly) {
+        $allowed = function_exists('af_cwf_can_sync_kb') ? af_cwf_can_sync_kb($tid, $thread, $acceptRow) : true;
+        if (!$allowed) {
+            redirect('showthread.php?tid=' . $tid, $lang->af_charactersheets_kb_sync_error ?? 'Не удалось синхронизировать KB-запись.');
+        }
+    } else {
+        $allowed = function_exists('af_cwf_can_create_kb') ? af_cwf_can_create_kb($tid, $thread, $acceptRow) : true;
+        if (!$allowed) {
+            $msg = $lang->af_charactersheets_kb_create_exists ?? 'KB-запись уже существовала, связь обновлена.';
+            redirect('showthread.php?tid=' . $tid, $msg);
+        }
+    }
 
     $result = af_atf_bridge_sync_character_kb_from_thread($tid, $thread, [
         'accepted_by_uid' => (int)($mybb->user['uid'] ?? 0),
@@ -4402,10 +4415,17 @@ function af_atf_render_character_kb_moderation_button(int $tid, int $uid, array 
         return '';
     }
 
-    $kbSource = af_charactersheets_resolve_character_kb_entry($tid, $uid, $acceptRow);
-    $kbExists = !empty(($kbSource['entry'] ?? [])['id']);
-    $action = $kbExists ? 'af_atf_character_kb_sync' : 'af_atf_character_kb_create';
-    $label = $kbExists
+    $thread = [];
+    if (isset($GLOBALS['thread']) && is_array($GLOBALS['thread'])) {
+        $thread = (array)$GLOBALS['thread'];
+    }
+    $canCreate = function_exists('af_cwf_can_create_kb') ? af_cwf_can_create_kb($tid, $thread, $acceptRow) : true;
+    $canSync = function_exists('af_cwf_can_sync_kb') ? af_cwf_can_sync_kb($tid, $thread, $acceptRow) : false;
+    if (!$canCreate && !$canSync) {
+        return '';
+    }
+    $action = $canSync ? 'af_atf_character_kb_sync' : 'af_atf_character_kb_create';
+    $label = $canSync
         ? ($lang->af_charactersheets_kb_sync_button ?? 'Синхронизировать анкету → KB')
         : ($lang->af_charactersheets_kb_button ?? 'Создать запись в KB');
 
