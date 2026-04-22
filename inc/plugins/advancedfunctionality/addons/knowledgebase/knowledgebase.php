@@ -2515,6 +2515,24 @@ function af_kb_get_arpg_mechanics_options(string $entryKey, string $serviceKind 
         $entry = af_kb_get_arpg_mechanics_entry_by_key($entryKey);
     }
 
+    $resolvedServiceKind = trim($serviceKind);
+    if (is_array($entry)) {
+        $entryServiceKind = trim((string)($entry['rules']['service_kind'] ?? ''));
+        if ($entryServiceKind !== '') {
+            $resolvedServiceKind = $entryServiceKind;
+        }
+    }
+    if ($resolvedServiceKind === '' || $resolvedServiceKind === 'snippet') {
+        $definitions = af_kb_arpg_mechanics_option_set_definitions();
+        $definitionServiceKind = trim((string)($definitions[$entryKey]['service_kind'] ?? ''));
+        if ($definitionServiceKind !== '') {
+            $resolvedServiceKind = $definitionServiceKind;
+        }
+    }
+    if ($resolvedServiceKind === '') {
+        $resolvedServiceKind = 'snippet';
+    }
+
     $rows = [];
     if (is_array($entry['entries'] ?? null)) {
         $rows = (array)$entry['entries'];
@@ -2523,12 +2541,15 @@ function af_kb_get_arpg_mechanics_options(string $entryKey, string $serviceKind 
     }
     $normalizedRows = [];
     foreach ((array)$rows as $idx => $row) {
-        $normalized = af_kb_normalize_arpg_mechanics_entry_row($row, $idx + 1);
+        $normalized = af_kb_normalize_arpg_mechanics_entry_row_by_service_kind($row, $resolvedServiceKind, $idx + 1);
         $key = trim((string)($normalized['key'] ?? ''));
         if ($key === '') {
             continue;
         }
-        if ((int)($normalized['is_active'] ?? 1) !== 1) {
+        $isActive = array_key_exists('is_active', $normalized)
+            ? (int)($normalized['is_active'] ?? 1)
+            : (int)($normalized['active'] ?? 1);
+        if ($isActive !== 1) {
             continue;
         }
         $normalizedRows[] = $normalized;
@@ -2545,14 +2566,30 @@ function af_kb_get_arpg_mechanics_options(string $entryKey, string $serviceKind 
 
     $result = [];
     foreach ($normalizedRows as $row) {
+        $labelRu = (string)($row['label_ru'] ?? '');
+        $labelEn = (string)($row['label_en'] ?? '');
+        if ($resolvedServiceKind === 'formula_profile' || $resolvedServiceKind === 'weapon_type') {
+            $title = trim((string)($row['title'] ?? ''));
+            if ($title !== '') {
+                $labelRu = $title;
+                $labelEn = $title;
+            }
+        }
+        if ($labelRu === '') {
+            $labelRu = (string)($row['key'] ?? '');
+        }
+        if ($labelEn === '') {
+            $labelEn = $labelRu;
+        }
+
         $result[] = [
             'key' => (string)$row['key'],
-            'label_ru' => (string)($row['label_ru'] ?? (string)$row['key']),
-            'label_en' => (string)($row['label_en'] ?? (string)($row['label_ru'] ?? $row['key'])),
+            'label_ru' => $labelRu,
+            'label_en' => $labelEn,
             'label_img' => (string)($row['label_img'] ?? ''),
             'notes' => (string)($row['notes'] ?? ''),
             'sortorder' => (int)($row['sortorder'] ?? 0),
-            'is_active' => (int)($row['is_active'] ?? 1),
+            'is_active' => array_key_exists('is_active', $row) ? (int)($row['is_active'] ?? 1) : (int)($row['active'] ?? 1),
         ];
     }
     return $result;

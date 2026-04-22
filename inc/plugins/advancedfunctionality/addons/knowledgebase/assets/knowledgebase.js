@@ -2206,6 +2206,22 @@
 
             function renderServiceRules() {
                 payload.rules.type_profile = 'service_mechanics';
+                var entryKeyInput = document.querySelector('input[name="key"]');
+                var entryKey = entryKeyInput ? String(entryKeyInput.value || '').trim() : '';
+                var serviceKindByEntryKey = {
+                    formula_profile: 'formula_profile',
+                    weapon_type: 'weapon_type',
+                    ability_type: 'snippet',
+                    ability_subtype: 'snippet',
+                    ability_slot: 'snippet',
+                    ability_damage_type: 'snippet',
+                    ability_targeting: 'snippet',
+                    character_gender: 'snippet'
+                };
+                var presetServiceKind = serviceKindByEntryKey[entryKey] || '';
+                if (!String(payload.rules.service_kind || '').trim() && presetServiceKind) {
+                    payload.rules.service_kind = presetServiceKind;
+                }
                 renderRuleFields(rulesRoot, [
                     { key: 'type_profile', label: 'type_profile', default: 'service_mechanics' },
                     { key: 'service_kind', label: 'service_kind', type: 'select', options: serviceKinds, default: serviceKinds[0] },
