@@ -506,6 +506,84 @@ function af_charactersheets_arpg_pick_stat(array $sheet_view, array $paths, stri
     return $fallback;
 }
 
+function af_charactersheets_arpg_is_dice_notation(string $value): bool
+{
+    $normalized = strtolower(trim($value));
+    if ($normalized === '') {
+        return false;
+    }
+
+    return (bool)preg_match('/^\d+d\d+(?:\s*[+\-]\s*\d+)?$/', $normalized);
+}
+
+function af_charactersheets_arpg_stat_from_sources(
+    array $character_stats,
+    string $character_stat_key,
+    array $sheet_view,
+    array $sheet_paths = [],
+    bool $allow_dice = false
+): string {
+    $kbValue = $character_stats[$character_stat_key] ?? null;
+    if ($kbValue !== null && $kbValue !== '') {
+        $formatted = af_charactersheets_arpg_format_value($kbValue);
+        if ($allow_dice || !af_charactersheets_arpg_is_dice_notation($formatted)) {
+            return $formatted;
+        }
+    }
+
+    foreach ($sheet_paths as $path) {
+        $value = af_charactersheets_deep_get($sheet_view, (string)$path, null);
+        if ($value === null || $value === '') {
+            continue;
+        }
+        $formatted = af_charactersheets_arpg_format_value($value);
+        if (!$allow_dice && af_charactersheets_arpg_is_dice_notation($formatted)) {
+            continue;
+        }
+        return $formatted;
+    }
+
+    return '—';
+}
+
+function af_charactersheets_arpg_payload_is_canonical(array $character_source): bool
+{
+    $payload = (array)($character_source['payload'] ?? []);
+    $meta = (array)($payload['meta'] ?? []);
+
+    $schemaCandidates = [
+        (string)($meta['schema'] ?? ''),
+        (string)($meta['rules_schema'] ?? ''),
+        (string)($meta['type_profile'] ?? ''),
+        (string)($meta['mechanic_profile'] ?? ''),
+    ];
+
+    foreach ($schemaCandidates as $candidate) {
+        $candidate = strtolower(trim($candidate));
+        if ($candidate === '') {
+            continue;
+        }
+        if (strpos($candidate, 'af_kb.arpg') !== false || strpos($candidate, 'arpg') !== false) {
+            return true;
+        }
+    }
+
+    $stats = (array)($payload['stats'] ?? []);
+    foreach ([
+        'character_attack_power',
+        'character_defense',
+        'character_elemental_mastery',
+        'character_element_damage_bonus',
+        'character_shield_strength',
+    ] as $canonicalKey) {
+        if (array_key_exists($canonicalKey, $stats)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function af_charactersheets_arpg_pick_element_label(array $atf_index, array $sheet_view): string
 {
     $element = trim((string)af_charactersheets_pick_field_value($atf_index, ['character_element', 'element', 'affinity']));
@@ -647,7 +725,9 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $inventory_items = af_charactersheets_arpg_collect_inventory_items($build);
     $abilities_items = [];
     $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
-    $character_stats = (array)(($character_source['payload'] ?? [])['stats'] ?? []);
+    $character_stats = af_charactersheets_arpg_payload_is_canonical($character_source)
+        ? (array)(($character_source['payload'] ?? [])['stats'] ?? [])
+        : [];
     $character_abilities = (array)(($character_source['payload'] ?? [])['abilities'] ?? []);
     if ($character_abilities) {
         $abilities_items = af_charactersheets_arpg_collect_character_contract_abilities($character_abilities);
@@ -762,39 +842,19 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     }
 
     $elementSlug = function_exists('my_strtolower') ? my_strtolower($element) : strtolower($element);
-    $kbStat = static function (array $stats, string $key): string {
-        $value = $stats[$key] ?? null;
-        if ($value === null || $value === '') {
-            return '—';
-        }
-        if (is_numeric($value)) {
-            return (string)(0 + $value);
-        }
-        return trim((string)$value) !== '' ? (string)$value : '—';
-    };
-    $statsPanelValue = static function (array $stats, string $kbKey, array $sheetPaths, array $sheetView) use ($kbStat): string {
-        $kbValue = $kbStat($stats, $kbKey);
-        if ($kbValue !== '—') {
-            return $kbValue;
-        }
-        return af_charactersheets_arpg_pick_stat($sheetView, $sheetPaths, '—');
-    };
     $stats_panel = [
-        ['label' => 'HP', 'value' => $statsPanelValue($character_stats, 'character_hp', ['mechanics.hp_total'], $sheet_view)],
-        ['label' => 'Сила атаки', 'value' => $statsPanelValue($character_stats, 'character_attack_power', ['mechanics.damage_bonus', 'mechanics.damage_total'], $sheet_view)],
-        ['label' => 'Защита', 'value' => $statsPanelValue($character_stats, 'character_defense', ['mechanics.ac_total'], $sheet_view)],
-        ['label' => 'Мастерство стихий', 'value' => $statsPanelValue($character_stats, 'character_elemental_mastery', ['character_computed_state.resources.mastery'], $sheet_view)],
-        ['label' => 'Бонус ' . $element . ' урона', 'value' => $statsPanelValue($character_stats, 'character_element_damage_bonus', [
+        ['label' => 'HP', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_hp', $sheet_view, ['mechanics.hp_total'])],
+        ['label' => 'Защита', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_defense', $sheet_view, ['mechanics.ac_total'])],
+        ['label' => 'Сила атаки', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_attack_power', $sheet_view, ['mechanics.damage_bonus'])],
+        ['label' => 'Крит. урон', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_crit_damage', $sheet_view, ['character_computed_state.fixed_bonuses.crit_dmg', 'character_computed_state.resources.crit_dmg'])],
+        ['label' => 'Мастерство стихий', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_elemental_mastery', $sheet_view, ['character_computed_state.resources.mastery'])],
+        ['label' => 'Бонус стихийного урона', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_element_damage_bonus', $sheet_view, [
             'character_computed_state.resources.bonus_' . $elementSlug . '_damage',
             'character_computed_state.resources.element_damage_bonus',
-            'mechanics.damage_total',
-        ], $sheet_view)],
-        ['label' => 'Шанс крит. попадания', 'value' => af_charactersheets_arpg_pick_stat($sheet_view, ['character_computed_state.fixed_bonuses.crit_rate', 'character_computed_state.resources.crit_rate'])],
-        ['label' => 'Крит. урон', 'value' => $statsPanelValue($character_stats, 'character_crit_damage', ['character_computed_state.fixed_bonuses.crit_dmg', 'character_computed_state.resources.crit_dmg'], $sheet_view)],
-        ['label' => 'Бонус лечения', 'value' => $statsPanelValue($character_stats, 'character_healing_bonus', ['character_computed_state.resources.healing_bonus'], $sheet_view)],
-        ['label' => 'Бонус получаемого лечения', 'value' => $statsPanelValue($character_stats, 'character_healing_received_bonus', ['character_computed_state.resources.incoming_heal_bonus'], $sheet_view)],
-        ['label' => 'Прочность щита', 'value' => $statsPanelValue($character_stats, 'character_shield_strength', ['character_computed_state.resources.shield_strength'], $sheet_view)],
-        ['label' => 'Удача', 'value' => $statsPanelValue($character_stats, 'character_luck', ['character_computed_state.resources.luck'], $sheet_view)],
+        ])],
+        ['label' => 'Бонус лечения', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_healing_bonus', $sheet_view, ['character_computed_state.resources.healing_bonus'])],
+        ['label' => 'Прочность щита / Shield bonus', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_shield_strength', $sheet_view, ['character_computed_state.resources.shield_strength', 'mechanics.shield_bonus'])],
+        ['label' => 'Удача', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_luck', $sheet_view, ['character_computed_state.resources.luck'])],
     ];
 
     return [
@@ -808,7 +868,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
             'hp_total' => (int)($mechanics['hp_total'] ?? 0),
             'def_total' => (int)($mechanics['ac_total'] ?? 0),
             'speed_total' => (int)($mechanics['speed_total'] ?? 0),
-            'damage_total' => (string)($mechanics['damage_total'] ?? '—'),
+            'damage_total' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_attack_power', $sheet_view, ['mechanics.damage_bonus']),
             'humanity_total' => (float)($mechanics['humanity_total'] ?? 0),
         ],
         'resources' => $resources,
