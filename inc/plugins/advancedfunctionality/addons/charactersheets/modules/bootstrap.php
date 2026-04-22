@@ -696,6 +696,9 @@ function af_charactersheets_showthread_start_impl(): void
         }
     }
 
+    $isPendingForum = af_charactersheets_is_pending_forum($fid);
+    $isAcceptedForum = af_charactersheets_is_in_accepted_forum($fid);
+
     $acceptText = $was_accepted
         ? ($lang->af_charactersheets_accept_button_reaccept ?? 'Принять заново')
         : ($lang->af_charactersheets_accept_button ?? 'Принять анкету');
@@ -706,11 +709,16 @@ function af_charactersheets_showthread_start_impl(): void
     $sheetExists = af_charactersheets_resolve_existing_sheet_for_thread($tid, $uid, $acceptRow);
 
     $acceptUrl = af_charactersheets_url(['action' => 'af_charactersheets_accept', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
+    $transferUrl = af_charactersheets_url(['action' => 'af_charactersheets_transfer', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
     $sheetUrl = af_charactersheets_url(['action' => 'af_charactersheets_create_sheet', 'tid' => $tid, 'my_post_key' => $mybb->post_code]);
 
     $buttons = [];
-    if (!$was_accepted) {
+    if ($isPendingForum) {
         $buttons[] = '<a class="button af-cs-accept-button" href="' . htmlspecialchars_uni($acceptUrl) . '"><span>' . htmlspecialchars_uni($acceptText) . '</span></a>';
+    }
+    if ($was_accepted && !$isAcceptedForum) {
+        $transferText = $lang->af_charactersheets_transfer_button ?? 'Перенести анкету';
+        $buttons[] = '<a class="button af-cs-accept-button af-cs-accept-button--transfer" href="' . htmlspecialchars_uni($transferUrl) . '"><span>' . htmlspecialchars_uni($transferText) . '</span></a>';
     }
     if (function_exists('af_atf_render_character_kb_moderation_button')) {
         $kbButton = (string)af_atf_render_character_kb_moderation_button($tid, $uid, $acceptRow, (string)$mybb->post_code);
@@ -887,6 +895,8 @@ function af_charactersheets_misc_start_impl(): void
 
     if ($action === 'af_charactersheets_accept') {
         af_charactersheets_handle_accept_action();
+    } elseif ($action === 'af_charactersheets_transfer') {
+        af_charactersheets_handle_transfer_action();
     } elseif ($action === 'af_charactersheets_create_sheet') {
         af_charactersheets_handle_create_sheet_action();
     }
@@ -981,22 +991,6 @@ function af_charactersheets_handle_accept_action(): void
         'accepted_pid' => $accepted_pid,
     ]);
 
-    if (!empty($mybb->settings['af_charactersheets_accept_move_thread'])) {
-        $target_fid = (int)($mybb->settings['af_charactersheets_accepted_forum'] ?? 0);
-        if ($target_fid > 0 && $target_fid !== $fid) {
-            require_once MYBB_ROOT . 'inc/class_moderation.php';
-            $moderation = new Moderation;
-            $moderation->move_thread($tid, $target_fid, 0);
-            $fid = $target_fid;
-        }
-    }
-
-    if (!empty($mybb->settings['af_charactersheets_accept_close_thread'])) {
-        require_once MYBB_ROOT . 'inc/class_moderation.php';
-        $moderation = new Moderation;
-        $moderation->close_threads([$tid]);
-    }
-
     af_charactersheets_upsert_accept_row($tid, [
         'uid' => (int)$thread['uid'],
         'accepted' => 1,
@@ -1007,7 +1001,71 @@ function af_charactersheets_handle_accept_action(): void
 
     af_charactersheets_handle_accept_exp($tid, (int)$mybb->user['uid']);
 
-    $msg = $lang->af_charactersheets_accept_done ?? 'Анкета принята: тема закрыта и перенесена.';
+    if (function_exists('af_cwf_accept_character_application')) {
+        af_cwf_accept_character_application($tid, (int)$mybb->user['uid'], [
+            'thread' => $thread,
+            'accepted_pid' => $accepted_pid,
+        ]);
+    }
+
+    $msg = $lang->af_charactersheets_accept_done ?? 'Анкета принята.';
+    redirect('showthread.php?tid=' . $tid, $msg);
+}
+
+function af_charactersheets_handle_transfer_action(): void
+{
+    global $mybb, $db, $lang;
+
+    af_charactersheets_load_lang();
+    verify_post_check($mybb->get_input('my_post_key'));
+
+    $tid = (int)$mybb->get_input('tid');
+    if ($tid <= 0) {
+        af_charactersheets_deny('Invalid tid', ['tid' => $tid]);
+    }
+
+    $thread = $db->fetch_array($db->simple_select('threads', '*', 'tid=' . $tid, ['limit' => 1]));
+    if (empty($thread)) {
+        af_charactersheets_deny('Thread not found', ['tid' => $tid]);
+    }
+
+    $fid = (int)($thread['fid'] ?? 0);
+    if (!af_charactersheets_user_can_accept($mybb->user ?? [], $fid)) {
+        af_charactersheets_deny('User cannot transfer', ['tid' => $tid, 'uid' => $mybb->user['uid'] ?? 0]);
+    }
+
+    $acceptRow = af_charactersheets_get_accept_row($tid);
+    if (empty($acceptRow['accepted'])) {
+        $msg = $lang->af_charactersheets_accept_already ?? 'Сначала примите анкету.';
+        redirect('showthread.php?tid=' . $tid, $msg);
+    }
+
+    $targetFid = (int)($mybb->settings['af_charactersheets_accepted_forum'] ?? 0);
+    if ($targetFid <= 0) {
+        $msg = $lang->af_charactersheets_accept_error ?? 'Не удалось перенести анкету.';
+        redirect('showthread.php?tid=' . $tid, $msg);
+    }
+
+    if (!af_charactersheets_is_in_accepted_forum($fid) && $targetFid !== $fid) {
+        require_once MYBB_ROOT . 'inc/class_moderation.php';
+        $moderation = new Moderation;
+        $moderation->move_thread($tid, $targetFid, 0);
+    }
+
+    if (!empty($mybb->settings['af_charactersheets_accept_close_thread'])) {
+        require_once MYBB_ROOT . 'inc/class_moderation.php';
+        $moderation = isset($moderation) && $moderation instanceof Moderation ? $moderation : new Moderation;
+        $moderation->close_threads([$tid]);
+    }
+
+    if (function_exists('af_cwf_transfer_character_application')) {
+        af_cwf_transfer_character_application($tid, (int)($mybb->user['uid'] ?? 0), [
+            'thread' => $thread,
+            'target_fid' => $targetFid,
+        ]);
+    }
+
+    $msg = $lang->af_charactersheets_transfer_done ?? 'Анкета перенесена.';
     redirect('showthread.php?tid=' . $tid, $msg);
 }
 
@@ -1106,6 +1164,9 @@ function af_charactersheets_handle_create_sheet_action(): void
             'sheet_slug' => $sheetSlug,
             'sheet_created' => 1,
         ]);
+    }
+    if (function_exists('af_cwf_bind_sheet')) {
+        af_cwf_bind_sheet($tid, $sheetId, $sheetSlug, (int)($mybb->user['uid'] ?? 0));
     }
 
     $msg = $lang->af_charactersheets_sheet_create_done ?? 'Лист персонажа создан.';
