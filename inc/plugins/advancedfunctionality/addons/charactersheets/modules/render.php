@@ -445,6 +445,53 @@ function af_charactersheets_arpg_collect_character_contract_abilities(array $abi
     return $result;
 }
 
+function af_charactersheets_arpg_build_ability_labels(array $ability): array
+{
+    $labels = [];
+    $fieldMap = [
+        'type' => ['type', 'ability_type'],
+        'подтип' => ['subtype', 'ability_subtype'],
+        'слот' => ['slot', 'ability_slot'],
+        'тип урона' => ['damage_type', 'ability_damage_type'],
+        'цель' => ['target', 'targeting', 'ability_targeting'],
+        'длительность' => ['duration_value', 'duration'],
+        'formula' => ['formula_profile'],
+        'value mode' => ['value_mode'],
+    ];
+    foreach ($fieldMap as $label => $keys) {
+        foreach ($keys as $key) {
+            $value = trim((string)($ability[$key] ?? ''));
+            if ($value === '' || $value === '0') {
+                continue;
+            }
+            $labels[] = [
+                'label' => $label,
+                'value' => $value,
+            ];
+            break;
+        }
+    }
+    return $labels;
+}
+
+function af_charactersheets_arpg_normalize_ability_card(array $ability, array $fallback = []): array
+{
+    $title = trim((string)($ability['title'] ?? $ability['ability_name'] ?? $ability['name'] ?? $fallback['title'] ?? ''));
+    $description = trim(strip_tags((string)($ability['description'] ?? $ability['ability_description'] ?? $ability['desc'] ?? $fallback['description'] ?? '')));
+    $icon = trim((string)($ability['icon'] ?? $ability['icon_url'] ?? $ability['image'] ?? $fallback['icon'] ?? ''));
+    $labels = af_charactersheets_arpg_build_ability_labels($ability);
+    if (!$labels && is_array($fallback['labels'] ?? null)) {
+        $labels = (array)$fallback['labels'];
+    }
+
+    return [
+        'title' => $title !== '' ? $title : '—',
+        'description' => $description,
+        'icon' => $icon,
+        'labels' => $labels,
+    ];
+}
+
 function af_charactersheets_build_arpg_cards_html(array $items, string $empty_label): string
 {
     if (!$items) {
@@ -875,14 +922,11 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
             if ($abilityType === 'passive') {
                 continue;
             }
-            $title = trim((string)($ability['ability_name'] ?? ''));
-            if ($title === '') {
+            $card = af_charactersheets_arpg_normalize_ability_card($ability);
+            if ($card['title'] === '—') {
                 continue;
             }
-            $activeAbilities[] = [
-                'title' => $title,
-                'description' => trim(strip_tags((string)($ability['ability_description'] ?? ''))),
-            ];
+            $activeAbilities[] = $card;
         }
     } else {
         foreach ((array)($build['abilities']['owned'] ?? []) as $abilityItem) {
@@ -900,7 +944,11 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
                 $title = $kb_key;
             }
             $description = trim(strip_tags(af_charactersheets_kb_pick_text($entry, 'description')));
-            $activeAbilities[] = ['title' => $title, 'description' => $description];
+            $activeAbilities[] = af_charactersheets_arpg_normalize_ability_card($entry, [
+                'title' => $title,
+                'description' => $description,
+                'icon' => trim((string)($entry['icon_url'] ?? '')),
+            ]);
         }
     }
     $passiveAbilities = [];
@@ -909,7 +957,10 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         if ($title === '') {
             continue;
         }
-        $passiveAbilities[] = ['title' => $title, 'description' => 'Пассивная способность из вычисленного состояния персонажа'];
+        $passiveAbilities[] = [
+            'title' => $title,
+            'description' => 'Пассивная способность из вычисленного состояния персонажа',
+        ];
     }
     if ($character_abilities) {
         $passiveAbilities = [];
@@ -921,14 +972,11 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
             if ($abilityType !== 'passive') {
                 continue;
             }
-            $title = trim((string)($ability['ability_name'] ?? ''));
-            if ($title === '') {
+            $card = af_charactersheets_arpg_normalize_ability_card($ability);
+            if ($card['title'] === '—') {
                 continue;
             }
-            $passiveAbilities[] = [
-                'title' => $title,
-                'description' => trim(strip_tags((string)($ability['ability_description'] ?? ''))),
-            ];
+            $passiveAbilities[] = $card;
         }
     }
 
@@ -1077,8 +1125,27 @@ function af_charactersheets_arpg_render_abilities_group_html(array $items, strin
 
     $html = '';
     foreach ($items as $item) {
+        $icon = trim((string)($item['icon'] ?? $item['icon_url'] ?? $item['image'] ?? ''));
+        $labels = is_array($item['labels'] ?? null) ? (array)$item['labels'] : [];
+        $labelsHtml = '';
+        foreach ($labels as $label) {
+            if (!is_array($label)) {
+                continue;
+            }
+            $labelName = trim((string)($label['label'] ?? ''));
+            $labelValue = trim((string)($label['value'] ?? ''));
+            if ($labelValue === '') {
+                continue;
+            }
+            $labelsHtml .= '<span class="af-cs-chip">'
+                . ($labelName !== '' ? htmlspecialchars_uni($labelName) . ': ' : '')
+                . htmlspecialchars_uni($labelValue)
+                . '</span>';
+        }
         $html .= '<article class="af-cs-arpg-ability-card">'
+            . ($icon !== '' ? '<div class="af-cs-arpg-ability-card__icon"><img src="' . htmlspecialchars_uni($icon) . '" alt="" loading="lazy" /></div>' : '')
             . '<h4>' . htmlspecialchars_uni((string)($item['title'] ?? '—')) . '</h4>'
+            . ($labelsHtml !== '' ? '<div class="af-cs-arpg-ability-card__chips">' . $labelsHtml . '</div>' : '')
             . '<p>' . htmlspecialchars_uni((string)($item['description'] ?? '')) . '</p>'
             . '</article>';
     }
@@ -1111,7 +1178,6 @@ function af_charactersheets_arpg_render_main_info_html(array $sheet_arpg_vm): st
         'Прозвища' => 'character_nicknames',
         'Возраст' => 'character_age',
         'Происхождение' => 'character_origin',
-        'Раса / происхождение' => 'character_race',
         'Архетип' => 'character_class',
         'Фракция' => 'character_faction',
         'Стихия' => 'character_element',
@@ -1129,14 +1195,20 @@ function af_charactersheets_arpg_render_main_info_html(array $sheet_arpg_vm): st
         $rows[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">' . htmlspecialchars_uni($label) . '</div><div class="af-cs-info-value">' . htmlspecialchars_uni($value) . '</div></div>';
     }
 
+    return '<section class="af-cs-arpg-panel"><h2>Информация о персонаже</h2><div class="af-cs-info-table">' . implode('', $rows) . '</div></section>';
+}
+
+function af_charactersheets_arpg_render_description_html(array $sheet_arpg_vm): string
+{
+    $atfProfile = (array)($sheet_arpg_vm['atf_profile'] ?? []);
+    $profile = (array)(($sheet_arpg_vm['character_source']['payload'] ?? [])['profile'] ?? []);
     $app = trim((string)($atfProfile['character_app'] ?? ''));
     if ($app === '') {
         $app = trim((string)($profile['character_app'] ?? ''));
     }
     $aboutHtml = $app !== '' ? nl2br(htmlspecialchars_uni($app)) : '<span class="af-cs-muted">Нет описания</span>';
 
-    return '<section class="af-cs-arpg-panel"><h2>Основная информация</h2><div class="af-cs-info-table">' . implode('', $rows) . '</div>'
-        . '<div class="af-cs-arpg-main-about"><h3>Описание</h3><div>' . $aboutHtml . '</div></div></section>';
+    return '<section class="af-cs-arpg-panel"><h2>Описание персонажа</h2><div class="af-cs-arpg-main-about"><div>' . $aboutHtml . '</div></div></section>';
 }
 
 function af_charactersheets_arpg_render_talent_tree_html(array $sheet_arpg_vm, bool $canEdit): string
@@ -1509,6 +1581,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
     $sheet_arpg_achievements_html = '<div class="af-cs-arpg-placeholder">Раздел достижений будет подключён позже.</div>';
     $sheet_achievements_html = '<section class="af-cs-section"><div class="af-cs-muted">Функционал будет добавлен позже.</div></section>';
     $sheet_arpg_main_info_html = '<div class="af-cs-arpg-placeholder">Базовая информация персонажа будет выведена здесь.</div>';
+    $sheet_arpg_description_block_html = '<section class="af-cs-arpg-panel"><h2>Описание персонажа</h2><div class="af-cs-muted">Нет описания</div></section>';
     $sheet_arpg_identity_block_html = '';
     $sheet_arpg_stats_block_html = '';
     $sheet_arpg_weapon_block_html = '';
@@ -1552,6 +1625,7 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
         $sheet_arpg_passive_abilities_html = af_charactersheets_arpg_render_abilities_group_html((array)($sheet_arpg_vm['abilities_groups']['passive'] ?? []), 'Пассивные способности не назначены');
         $sheet_arpg_talents_html = af_charactersheets_arpg_render_talent_tree_html($sheet_arpg_vm, $can_edit_loadout);
         $sheet_arpg_main_info_html = af_charactersheets_arpg_render_main_info_html($sheet_arpg_vm);
+        $sheet_arpg_description_block_html = af_charactersheets_arpg_render_description_html($sheet_arpg_vm);
         $sheet_equipment_html = af_charactersheets_build_arpg_equipment_html($build, $can_edit_loadout, $sheet_owner_uid_for_loadout);
 
         eval("\$sheet_arpg_identity_block_html = \"" . $templates->get('charactersheet_arpg_identity') . "\";");
