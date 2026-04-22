@@ -5446,10 +5446,10 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
     $sort = isset($row['sortorder']) ? (int)$row['sortorder'] : $fallbackSortorder;
     $slotIndex = isset($row['slot_index']) ? (int)$row['slot_index'] : ($sort > 0 ? $sort : 1);
     $abilityType = (string)($row['ability_type'] ?? $row['type'] ?? 'active');
-    $title = (string)($row['title'] ?? $row['ability_name'] ?? '');
+    $title = (string)($row['title'] ?? $row['ability_name'] ?? $row['name'] ?? '');
     $icon = (string)($row['icon'] ?? $row['icon_url'] ?? '');
     $target = (string)($row['target'] ?? $row['targeting'] ?? '');
-    $description = (string)($row['description'] ?? $row['ability_description'] ?? '');
+    $description = (string)($row['description'] ?? $row['ability_description'] ?? $row['desc'] ?? '');
     $normalizeTypedRows = static function ($items, array $defs): array {
         $rows = [];
         foreach ((array)$items as $item) {
@@ -5567,6 +5567,53 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
         'notes' => (string)($row['notes'] ?? ''),
         'sortorder' => $sort,
     ];
+}
+
+function af_kb_extract_character_abilities_from_payload(array $payload): array
+{
+    $candidates = [];
+    if (is_array($payload['character_abilities'] ?? null)) {
+        $candidates[] = (array)$payload['character_abilities'];
+    }
+    if (is_array($payload['abilities'] ?? null)) {
+        $candidates[] = (array)$payload['abilities'];
+    }
+    if (is_array($payload['character_profile']['character_abilities'] ?? null)) {
+        $candidates[] = (array)$payload['character_profile']['character_abilities'];
+    }
+    if (is_array($payload['rules']['character_abilities'] ?? null)) {
+        $candidates[] = (array)$payload['rules']['character_abilities'];
+    }
+
+    foreach ($candidates as $rows) {
+        if (!$rows) {
+            continue;
+        }
+        $normalized = [];
+        foreach ($rows as $idx => $ability) {
+            if (!is_array($ability)) {
+                continue;
+            }
+            $row = af_kb_normalize_inline_ability_row($ability, (int)$idx + 1);
+            if (
+                trim((string)($row['title'] ?? '')) === ''
+                && trim((string)($row['description'] ?? '')) === ''
+                && trim((string)($row['icon'] ?? '')) === ''
+                && trim((string)($row['ability_kb_key'] ?? '')) === ''
+            ) {
+                continue;
+            }
+            $normalized[] = $row;
+            if (count($normalized) >= 8) {
+                break;
+            }
+        }
+        if ($normalized) {
+            return $normalized;
+        }
+    }
+
+    return [];
 }
 
 function af_kb_extract_inline_ability_summary_value(array $ability, string $kind): string
@@ -7632,6 +7679,15 @@ function kb_parse_rules(array $entry): array
     if (is_array($entry['rules'] ?? null)) {
         $candidates[] = (array)$entry['rules'];
     }
+    if (!empty($entry['data_json'])) {
+        $dataRoot = af_kb_decode_json((string)$entry['data_json']);
+        if (is_array($dataRoot) && $dataRoot) {
+            $candidates[] = $dataRoot;
+            if (is_array($dataRoot['rules'] ?? null)) {
+                $candidates[] = (array)$dataRoot['rules'];
+            }
+        }
+    }
     foreach ($candidates as $rules) {
         if (is_array($rules) && $rules) {
             return $rules;
@@ -9470,7 +9526,7 @@ function af_kb_extract_character_contract(array $entry): array
     $payload = array_replace_recursive($defaults, $rules);
     $profile = (array)($payload['character_profile'] ?? []);
     $stats = (array)($payload['character_stats'] ?? []);
-    $abilities = array_values(array_map('af_kb_normalize_inline_ability_row', (array)($payload['character_abilities'] ?? [])));
+    $abilities = af_kb_extract_character_abilities_from_payload($payload);
 
     usort($abilities, static function ($a, $b): int {
         $sa = (int)((is_array($a) ? ($a['sortorder'] ?? 0) : 0));
@@ -9657,16 +9713,7 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
     $data = af_kb_extract_character_contract($entry);
     $profile = is_array($data['profile'] ?? null) ? $data['profile'] : [];
     $stats = is_array($data['stats'] ?? null) ? $data['stats'] : [];
-    $rules = is_array($data['rules'] ?? null) ? $data['rules'] : [];
-
-    $abilities = [];
-    if (isset($rules['character_abilities']) && is_array($rules['character_abilities'])) {
-        $abilities = $rules['character_abilities'];
-    } elseif (isset($profile['character_abilities']) && is_array($profile['character_abilities'])) {
-        $abilities = $profile['character_abilities'];
-    } else {
-        $abilities = is_array($data['abilities'] ?? null) ? $data['abilities'] : [];
-    }
+    $abilities = is_array($data['abilities'] ?? null) ? $data['abilities'] : [];
 
     $title = trim((string)($isRu ? ($profile['character_name_ru'] ?? '') : ($profile['character_name'] ?? '')));
     if ($title === '') {
