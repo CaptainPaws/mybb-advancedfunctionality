@@ -1312,24 +1312,44 @@ function af_charactersheets_autocreate_sheet(int $tid, array $thread): array
     if (!empty($row['sheet_slug'])) {
         $slug = (string)$row['sheet_slug'];
         $sheet = af_charactersheets_ensure_sheet($tid, (int)($thread['uid'] ?? 0), $slug);
+        if (!empty($sheet['id'])) {
+            af_charactersheets_upsert_accept_row($tid, [
+                'uid' => (int)($thread['uid'] ?? 0),
+                'sheet_slug' => $slug,
+                'sheet_created' => 1,
+            ]);
+            return $sheet;
+        }
+
         af_charactersheets_upsert_accept_row($tid, [
             'uid' => (int)($thread['uid'] ?? 0),
             'sheet_slug' => $slug,
-            'sheet_created' => 1,
+            'sheet_created' => 0,
         ]);
-        return !empty($sheet) ? $sheet : ['slug' => $slug];
+
+        return ['slug' => $slug];
     }
 
     $slug = af_charactersheets_slugify((string)($thread['subject'] ?? ''), $tid);
 
     $sheet = af_charactersheets_ensure_sheet($tid, (int)($thread['uid'] ?? 0), $slug);
+    if (!empty($sheet['id'])) {
+        af_charactersheets_upsert_accept_row($tid, [
+            'uid' => (int)($thread['uid'] ?? 0),
+            'sheet_slug' => $slug,
+            'sheet_created' => 1,
+        ]);
+
+        return $sheet;
+    }
+
     af_charactersheets_upsert_accept_row($tid, [
         'uid' => (int)($thread['uid'] ?? 0),
         'sheet_slug' => $slug,
-        'sheet_created' => 1,
+        'sheet_created' => 0,
     ]);
 
-    return !empty($sheet) ? $sheet : ['slug' => $slug];
+    return ['slug' => $slug];
 }
 
 function af_charactersheets_handle_thread_move_for_acceptance_impl(array $args): void
@@ -1766,6 +1786,24 @@ function af_charactersheets_ensure_schema(): void
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         ");
     }
+
+    if ($db->table_exists(AF_CS_SHEETS_TABLE)) {
+        $table = TABLE_PREFIX . AF_CS_SHEETS_TABLE;
+        $uid_index_is_unique = false;
+        $idx_result = $db->write_query("SHOW INDEX FROM `" . $table . "` WHERE Key_name='uid'");
+        while ($idx = $db->fetch_array($idx_result)) {
+            if ((int)($idx['Non_unique'] ?? 1) === 0) {
+                $uid_index_is_unique = true;
+                break;
+            }
+        }
+
+        if ($uid_index_is_unique) {
+            $db->write_query("ALTER TABLE `" . $table . "` DROP INDEX `uid`");
+            $db->write_query("ALTER TABLE `" . $table . "` ADD KEY `uid` (`uid`)");
+        }
+    }
+
 
     if (!$db->table_exists(AF_CS_EXP_LEDGER_TABLE)) {
         $db->write_query("

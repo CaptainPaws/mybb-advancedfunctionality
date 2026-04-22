@@ -1202,7 +1202,10 @@ function af_charactersheets_build_sheet_inner_html(string $slug): string
 
     $sheet = af_charactersheets_get_sheet_by_slug($slug);
     if (empty($sheet)) {
-        return '';
+        $sheet = af_charactersheets_recover_sheet_for_accept_row($accept_row);
+    }
+    if (empty($sheet)) {
+        return '<div class="af-cs-page"><div class="af-cs-muted">Лист не найден. Запись анкеты помечена для восстановления: откройте тему анкеты и повторно создайте лист.</div></div>';
     }
     $character_source = af_charactersheets_resolve_character_kb_entry($tid, $uid, $accept_row);
     $character_profile = (array)(($character_source['payload'] ?? [])['profile'] ?? []);
@@ -3624,6 +3627,15 @@ function af_charactersheets_render_catalog_page(): void
     foreach ($rows as $row) {
         $tid = (int)($row['tid'] ?? 0);
         $slug = (string)($row['sheet_slug'] ?? '');
+
+        $sheet = af_charactersheets_get_sheet_by_slug($slug);
+        if (empty($sheet)) {
+            $sheet = af_charactersheets_recover_sheet_for_accept_row($row);
+        }
+        if (empty($sheet['id'])) {
+            continue;
+        }
+
         $fields = $atf_map[$tid] ?? [];
         $index = af_charactersheets_index_fields($fields);
 
