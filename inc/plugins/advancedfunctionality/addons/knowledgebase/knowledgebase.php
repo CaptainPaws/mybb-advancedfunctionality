@@ -3911,8 +3911,11 @@ function af_kb_strip_assets_from_html(string &$html): void
         '~\s*<!--\s*af_kb_assets\s*-->\s*~i',
         '~\s*' . preg_quote(AF_KB_MARK, '~') . '\s*~i',
         '~\s*<link[^>]+href=["\"][^"\"]*/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase(?:_kbui)?\.css(?:\?[^"\"]*)?["\"][^>]*>\s*~i',
+        '~\s*<script[^>]+src=["\"][^"\"]*/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase\.js(?:\?[^"\"]*)?["\"][^>]*>\s*</script>\s*~i',
         '~\s*<script[^>]+src=["\"][^"\"]*/inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase(?:_chips|_insert)?\.js(?:\?[^"\"]*)?["\"][^>]*>\s*</script>\s*~i',
         '~\s*<script[^>]*>\s*window\.afKbLang\s*=.*?</script>\s*~is',
+        '~\s*<script[^>]*>\s*window\.afKbEndpoints\s*=.*?</script>\s*~is',
+        '~\s*<script[^>]*>\s*window\.afKbRuntimeMode\s*=.*?</script>\s*~is',
     ];
 
     foreach ($patterns as $pattern) {
@@ -7410,6 +7413,8 @@ function af_knowledgebase_pre_output(string &$page = ''): void
         ['kb', 'kb_edit', 'kb_get', 'kb_list', 'kb_children', 'kb_type_edit', 'kb_type_delete', 'kb_help', 'kb_types'],
         true
     );
+    $isKbViewPage = ($action === 'kb');
+    $isKbEditorPage = in_array($action, ['kb_edit', 'kb_type_edit'], true);
 
     $enabled = !empty($mybb->settings['af_knowledgebase_enabled']);
     $assetsDisabled = af_kb_assets_disabled_for_current_page();
@@ -7427,71 +7432,100 @@ function af_knowledgebase_pre_output(string &$page = ''): void
             $editorAssets = '';
             $editorInit = '';
             $bodyBgCss = '';
+            $langTag = '';
+            $endpointTag = '';
+            $chipsJs = '';
+            $insertJs = '';
+            $runtimeModeTag = '';
+            $kbUiCss = '';
 
             if ($is_kb_page) {
                 // KB base css/js
                 $cssTag .= af_kb_build_css_include_tag('assets/knowledgebase.css');
-                $jsTag  .= '<script src="'.$assetsBase.'/knowledgebase.js?v='.af_kb_asset_version('knowledgebase.js').'"></script>';
+                $kbUiCss  = af_kb_build_css_include_tag('assets/knowledgebase_kbui.css');
+
+                if ($isKbEditorPage) {
+                    // Heavy editor runtime must stay only on KB edit/create paths.
+                    $jsTag  .= '<script src="'.$assetsBase.'/knowledgebase.js?v='.af_kb_asset_version('knowledgebase.js').'"></script>';
+                } else {
+                    // Lightweight runtime for KB view/list/category/modal pages.
+                    $chipsJs  = '<script src="'.$assetsBase.'/knowledgebase_chips.js?v='.af_kb_asset_version('knowledgebase_chips.js').'"></script>';
+                }
 
                 // ✅ ВАЖНО: фон для body — инжектим в конец <head>, с !important
                 // и только для action=kb (витрина категории/записи)
-                if ((string)$action === 'kb' && strpos($page, '<!--af_kb_body_bg-->') === false) {
+                if ($isKbViewPage && strpos($page, '<!--af_kb_body_bg-->') === false) {
                     $bgUrl = af_kb_resolve_body_bg_for_request();
                     $bodyBgCss = af_kb_build_body_bg_style($bgUrl);
                 }
             }
 
             // SCEditor только на страницах редактирования KB
-            if (in_array($action, ['kb_edit', 'kb_type_edit'], true)) {
+            if ($isKbEditorPage) {
                 $bundle = af_kb_build_sceditor_assets_and_init($bburl, $page);
                 $editorAssets = $bundle['assets'] ?? '';
                 $editorInit   = $bundle['init'] ?? '';
             }
 
-            af_knowledgebase_load_lang(false);
-            $langPayload = json_encode([
-                'kbInsertLabel'  => $lang->af_kb_kb_insert_label ?? 'KB',
-                'kbInsertTitle'  => $lang->af_kb_kb_insert_title ?? 'Insert KB',
-                'kbInsertSearch' => $lang->af_kb_kb_insert_search ?? 'Search...',
-                'kbInsertSelect' => $lang->af_kb_kb_insert_select ?? 'Select category',
-                'kbInsertEmpty'  => $lang->af_kb_kb_insert_empty ?? 'Nothing found',
-                'kbInsertHint'   => $lang->af_kb_kb_insert_hint ?? 'Select category or continue search',
-                'kbInsertButton' => $lang->af_kb_kb_insert_button ?? 'Insert',
-            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if ($is_kb_page) {
+                $runtimeModeTag = '<script>window.afKbRuntimeMode='
+                    . json_encode($isKbEditorPage ? 'editor' : 'view', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                    . ';</script>';
 
-            $langTag = $langPayload !== false ? '<script>window.afKbLang='.$langPayload.';</script>' : '';
-            $arpgMechanicsUiOptions = [
-                'ability_type' => af_kb_get_arpg_mechanics_options('ability_type'),
-                'ability_subtype' => af_kb_get_arpg_mechanics_options('ability_subtype'),
-                'ability_slot' => af_kb_get_arpg_mechanics_options('ability_slot'),
-                'ability_damage_type' => af_kb_get_arpg_mechanics_options('ability_damage_type'),
-                'ability_targeting' => af_kb_get_arpg_mechanics_options('ability_targeting'),
-                'formula_profile' => af_kb_get_arpg_mechanics_options('formula_profile'),
-                'character_gender' => af_kb_get_arpg_mechanics_options('character_gender'),
-            ];
-            $arpgPublicTypeUiOptions = [
-                'arpg_element' => af_kb_get_public_type_options('arpg_element'),
-                'arpg_origin' => af_kb_get_public_type_options('arpg_origin'),
-                'arpg_archetype' => af_kb_get_public_type_options('arpg_archetype'),
-                'arpg_faction' => af_kb_get_public_type_options('arpg_faction'),
-            ];
-            $endpointTag = '<script>window.afKbEndpoints=' . json_encode([
-                'get' => af_kb_url(['action' => 'kb_get']),
-                'list' => af_kb_url(['action' => 'kb_list']),
-                'types' => af_kb_url(['action' => 'kb_types']),
-                'children' => af_kb_url(['action' => 'kb_children']),
-                'json_list' => af_kb_url(['action' => 'kb_json_list']),
-            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';window.afKbInsertMechanic='
-                . json_encode(af_kb_get_catalog_active_mechanic_key(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
-                . ';window.afKbArpgMechanicsOptionSets='
-                . json_encode($arpgMechanicsUiOptions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
-                . ';window.afKbArpgPublicTypeOptions='
-                . json_encode($arpgPublicTypeUiOptions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
-                . ';</script>';
+                $endpointTag = '<script>window.afKbEndpoints=' . json_encode([
+                    'get' => af_kb_url(['action' => 'kb_get']),
+                    'list' => af_kb_url(['action' => 'kb_list']),
+                    'types' => af_kb_url(['action' => 'kb_types']),
+                    'children' => af_kb_url(['action' => 'kb_children']),
+                    'json_list' => af_kb_url(['action' => 'kb_json_list']),
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';</script>';
 
-            $kbUiCss  = af_kb_build_css_include_tag('assets/knowledgebase_kbui.css');
-            $chipsJs  = '<script src="'.$assetsBase.'/knowledgebase_chips.js?v='.af_kb_asset_version('knowledgebase_chips.js').'"></script>';
-            $insertJs = '<script src="'.$assetsBase.'/knowledgebase_insert.js?v='.af_kb_asset_version('knowledgebase_insert.js').'"></script>';
+                if ($isKbEditorPage) {
+                    af_knowledgebase_load_lang(false);
+                    $langPayload = json_encode([
+                        'kbInsertLabel'  => $lang->af_kb_kb_insert_label ?? 'KB',
+                        'kbInsertTitle'  => $lang->af_kb_kb_insert_title ?? 'Insert KB',
+                        'kbInsertSearch' => $lang->af_kb_kb_insert_search ?? 'Search...',
+                        'kbInsertSelect' => $lang->af_kb_kb_insert_select ?? 'Select category',
+                        'kbInsertEmpty'  => $lang->af_kb_kb_insert_empty ?? 'Nothing found',
+                        'kbInsertHint'   => $lang->af_kb_kb_insert_hint ?? 'Select category or continue search',
+                        'kbInsertButton' => $lang->af_kb_kb_insert_button ?? 'Insert',
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    $langTag = $langPayload !== false ? '<script>window.afKbLang='.$langPayload.';</script>' : '';
+
+                    $arpgMechanicsUiOptions = [
+                        'ability_type' => af_kb_get_arpg_mechanics_options('ability_type'),
+                        'ability_subtype' => af_kb_get_arpg_mechanics_options('ability_subtype'),
+                        'ability_slot' => af_kb_get_arpg_mechanics_options('ability_slot'),
+                        'ability_damage_type' => af_kb_get_arpg_mechanics_options('ability_damage_type'),
+                        'ability_targeting' => af_kb_get_arpg_mechanics_options('ability_targeting'),
+                        'formula_profile' => af_kb_get_arpg_mechanics_options('formula_profile'),
+                        'character_gender' => af_kb_get_arpg_mechanics_options('character_gender'),
+                    ];
+                    $arpgPublicTypeUiOptions = [
+                        'arpg_element' => af_kb_get_public_type_options('arpg_element'),
+                        'arpg_origin' => af_kb_get_public_type_options('arpg_origin'),
+                        'arpg_archetype' => af_kb_get_public_type_options('arpg_archetype'),
+                        'arpg_faction' => af_kb_get_public_type_options('arpg_faction'),
+                    ];
+                    $endpointTag = '<script>window.afKbEndpoints=' . json_encode([
+                        'get' => af_kb_url(['action' => 'kb_get']),
+                        'list' => af_kb_url(['action' => 'kb_list']),
+                        'types' => af_kb_url(['action' => 'kb_types']),
+                        'children' => af_kb_url(['action' => 'kb_children']),
+                        'json_list' => af_kb_url(['action' => 'kb_json_list']),
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';window.afKbInsertMechanic='
+                        . json_encode(af_kb_get_catalog_active_mechanic_key(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                        . ';window.afKbArpgMechanicsOptionSets='
+                        . json_encode($arpgMechanicsUiOptions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                        . ';window.afKbArpgPublicTypeOptions='
+                        . json_encode($arpgPublicTypeUiOptions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                        . ';</script>';
+
+                    $chipsJs  = '<script src="'.$assetsBase.'/knowledgebase_chips.js?v='.af_kb_asset_version('knowledgebase_chips.js').'"></script>';
+                    $insertJs = '<script src="'.$assetsBase.'/knowledgebase_insert.js?v='.af_kb_asset_version('knowledgebase_insert.js').'"></script>';
+                }
+            }
 
             // ✅ bodyBgCss ставим ближе к концу head, чтобы перебить тему
             $inject = $cssTag
@@ -7502,6 +7536,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                 . $insertJs
                 . $langTag
                 . $endpointTag
+                . $runtimeModeTag
                 . $editorInit
                 . $bodyBgCss
                 . AF_KB_MARK;
