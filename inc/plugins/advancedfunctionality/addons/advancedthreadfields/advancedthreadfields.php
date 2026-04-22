@@ -4728,7 +4728,14 @@ function af_atf_bridge_assign_kb_originals_category(int $entryId): void
 
 function af_atf_bridge_extract_oc_abilities(array $index): array
 {
-    $jsonRaw = af_charactersheets_pick_field_value($index, ['character_abilities', 'abilities', 'arpg_abilities', 'character_skills'], false);
+    $jsonRaw = af_charactersheets_pick_field_value($index, [
+        'character_abilities',
+        'character_abil',
+        'character_ability',
+        'abilities',
+        'arpg_abilities',
+        'character_skills',
+    ], false);
     if ($jsonRaw === '') {
         return [];
     }
@@ -4779,7 +4786,7 @@ function af_atf_bridge_collect_character_profile_extras(array $index, array $kno
     }
 
     $excluded = array_flip(array_merge(
-        ['character_abilities', 'character_stats'],
+        ['character_abilities', 'character_abil', 'character_ability', 'character_stats'],
         af_atf_character_stats_field_keys()
     ));
 

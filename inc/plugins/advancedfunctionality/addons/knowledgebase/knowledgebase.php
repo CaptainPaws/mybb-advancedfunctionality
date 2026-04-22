@@ -5669,9 +5669,21 @@ function af_kb_extract_character_abilities_from_payload(array $payload): array
     if ($profileAbilities) {
         $candidates[] = $profileAbilities;
     }
+    $profileLegacyAbilities = $decodeRows($payload['character_profile']['character_abil'] ?? null);
+    if ($profileLegacyAbilities) {
+        $candidates[] = $profileLegacyAbilities;
+    }
+    $profileLegacyAbilitiesAlt = $decodeRows($payload['character_profile']['character_ability'] ?? null);
+    if ($profileLegacyAbilitiesAlt) {
+        $candidates[] = $profileLegacyAbilitiesAlt;
+    }
     $rulesAbilities = $decodeRows($payload['rules']['character_abilities'] ?? null);
     if ($rulesAbilities) {
         $candidates[] = $rulesAbilities;
+    }
+    $rulesProfileLegacyAbilities = $decodeRows($payload['rules']['character_profile']['character_abil'] ?? null);
+    if ($rulesProfileLegacyAbilities) {
+        $candidates[] = $rulesProfileLegacyAbilities;
     }
 
     foreach ($candidates as $rows) {
@@ -9942,14 +9954,12 @@ function af_kb_build_character_application_prefill(array $entry): array
     if (empty($stats)) {
         $stats = (array)($profile['character_stats'] ?? []);
     }
-    $abilities = [];
-    if (array_key_exists('character_abilities', $rules) && is_array($rules['character_abilities'])) {
-        $abilities = (array)$rules['character_abilities'];
-    } elseif (array_key_exists('character_abilities', $profile) && is_array($profile['character_abilities'])) {
-        $abilities = (array)$profile['character_abilities'];
-    } else {
-        $abilities = (array)($data['abilities'] ?? []);
-    }
+    $abilities = af_kb_extract_character_abilities_from_payload([
+        'character_abilities' => $rules['character_abilities'] ?? null,
+        'character_profile' => $profile,
+        'rules' => $rules,
+        'abilities' => $data['abilities'] ?? null,
+    ]);
 
     $prefill = [];
     $profileMap = [
