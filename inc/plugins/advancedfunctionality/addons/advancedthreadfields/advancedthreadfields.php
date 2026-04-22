@@ -4550,7 +4550,9 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
         'character_class' => af_charactersheets_pick_field_value($index, ['character_class', 'class']),
         'character_faction' => af_charactersheets_pick_field_value($index, ['character_faction', 'faction']),
         'character_app' => af_charactersheets_pick_field_value($index, ['character_app', 'character_about', 'character_bio', 'character_description', 'app']),
+        'weapon_type' => af_charactersheets_pick_field_value($index, ['weapon_type', 'character_weapon_type'], false),
     ];
+    $profile += af_atf_bridge_collect_character_profile_extras($index, array_keys($profile));
     $stats = af_atf_bridge_extract_oc_stats($index);
     $abilities = af_atf_bridge_extract_oc_abilities($index);
 
@@ -4679,42 +4681,78 @@ function af_atf_bridge_assign_kb_originals_category(int $entryId): void
 
 function af_atf_bridge_extract_oc_abilities(array $index): array
 {
-    $abilities = [];
     $jsonRaw = af_charactersheets_pick_field_value($index, ['character_abilities', 'abilities', 'arpg_abilities', 'character_skills'], false);
-    if ($jsonRaw !== '') {
-        $decoded = function_exists('af_charactersheets_json_decode') ? af_charactersheets_json_decode($jsonRaw) : (array)json_decode($jsonRaw, true);
-        $rows = [];
-        if (isset($decoded[0]) && is_array($decoded[0])) {
-            $rows = $decoded;
-        } elseif (is_array($decoded['items'] ?? null)) {
-            $rows = (array)$decoded['items'];
-        } elseif (is_array($decoded['abilities'] ?? null)) {
-            $rows = (array)$decoded['abilities'];
-        } elseif (is_array($decoded)) {
-            $rows = array_values(array_filter($decoded, 'is_array'));
-        }
-        foreach ($rows as $idx => $ability) {
-            if (!is_array($ability)) {
-                continue;
-            }
-            $name = trim((string)($ability['ability_name'] ?? $ability['name'] ?? $ability['title'] ?? ''));
-            $description = trim((string)($ability['ability_description'] ?? $ability['description'] ?? $ability['desc'] ?? ''));
-            $kbKey = trim((string)($ability['ability_kb_key'] ?? $ability['ability_key'] ?? $ability['kb_key'] ?? $ability['key'] ?? ''));
-            if ($name === '' && $description === '' && $kbKey === '') {
-                continue;
-            }
-            $abilities[] = [
-                'slot_index' => max(1, (int)($ability['slot_index'] ?? ($idx + 1))),
-                'ability_name' => $name,
-                'icon_url' => trim((string)($ability['icon_url'] ?? '')),
-                'type' => trim((string)($ability['type'] ?? 'active')) === 'passive' ? 'passive' : 'active',
-                'ability_description' => $description,
-                'ability_kb_key' => $kbKey,
-                'sortorder' => (int)($ability['sortorder'] ?? ($idx + 1)),
-            ];
-        }
+    if ($jsonRaw === '') {
+        return [];
     }
-    return $abilities;
+
+    $decoded = function_exists('af_charactersheets_json_decode') ? af_charactersheets_json_decode($jsonRaw) : (array)json_decode($jsonRaw, true);
+    $rows = [];
+    if (isset($decoded[0]) && is_array($decoded[0])) {
+        $rows = $decoded;
+    } elseif (is_array($decoded['items'] ?? null)) {
+        $rows = (array)$decoded['items'];
+    } elseif (is_array($decoded['abilities'] ?? null)) {
+        $rows = (array)$decoded['abilities'];
+    } elseif (is_array($decoded)) {
+        $rows = array_values(array_filter($decoded, 'is_array'));
+    }
+
+    if (empty($rows)) {
+        return [];
+    }
+
+    $rowsJson = json_encode($rows, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($rowsJson) || $rowsJson === '') {
+        return [];
+    }
+
+    $normalizedJson = af_atf_normalize_character_abilities_json($rowsJson);
+    $normalized = json_decode($normalizedJson, true);
+    if (!is_array($normalized)) {
+        return [];
+    }
+
+    return array_values(array_filter($normalized, static function ($row): bool {
+        return is_array($row);
+    }));
+}
+
+function af_atf_bridge_collect_character_profile_extras(array $index, array $knownKeys = []): array
+{
+    $known = [];
+    foreach ($knownKeys as $key) {
+        $normalized = trim((string)$key);
+        if ($normalized === '') {
+            continue;
+        }
+        $known[$normalized] = true;
+    }
+
+    $excluded = array_flip(array_merge(
+        ['character_abilities', 'character_stats'],
+        af_atf_character_stats_field_keys()
+    ));
+
+    $extras = [];
+    foreach ($index as $fieldName => $field) {
+        $fieldName = trim((string)$fieldName);
+        if ($fieldName === '' || !preg_match('~^character_[a-z0-9_]+$~', $fieldName)) {
+            continue;
+        }
+        if (isset($known[$fieldName]) || isset($excluded[$fieldName])) {
+            continue;
+        }
+
+        $value = trim((string)($field['value'] ?? ''));
+        if ($value === '') {
+            continue;
+        }
+
+        $extras[$fieldName] = $value;
+    }
+
+    return $extras;
 }
 
 function af_atf_bridge_extract_oc_stats(array $index): array
