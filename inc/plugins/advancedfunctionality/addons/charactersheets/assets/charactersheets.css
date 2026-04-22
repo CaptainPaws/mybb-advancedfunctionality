@@ -2735,6 +2735,22 @@
   margin: 8px 0;
 }
 
+.af-cs-arpg-element-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.af-cs-arpg-element-icon--fallback {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 700;
+}
+
 .af-cs-arpg-wallet {
   margin-top: 12px;
   display: grid;
