@@ -4566,7 +4566,6 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
         'weapon_type' => af_charactersheets_pick_field_value($index, ['weapon_type', 'character_weapon_type'], false),
     ];
     $profile += af_atf_bridge_collect_character_profile_extras($index, array_keys($profile));
-    $stats = af_atf_bridge_extract_oc_stats($index);
     $abilities = af_atf_bridge_extract_oc_abilities($index);
 
     $rules = [
@@ -4574,13 +4573,13 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
         'type_profile' => 'character',
         'version' => '1.0',
         'character_profile' => $profile,
-        'character_stats' => $stats,
         'character_abilities' => $abilities,
         'character_links' => [],
         'character_meta' => [
             'contract' => 'af_kb.character.contract.v1',
             'contract_version' => '1.0',
             'source' => 'af_atf_bridge',
+            'mechanic' => 'arpg',
             'sync_source' => (string)($context['source'] ?? 'unknown'),
             'accepted_by_uid' => (int)($context['accepted_by_uid'] ?? 0),
             'source_tid' => (int)$tid,

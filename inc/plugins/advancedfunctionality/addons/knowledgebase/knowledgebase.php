@@ -2673,6 +2673,50 @@ function af_kb_character_stat_label(string $key, bool $isRu): string
     return $key;
 }
 
+function af_kb_is_arpg_character_payload(array $payload): bool
+{
+    if (!empty($payload['mechanic']) && trim((string)$payload['mechanic']) === 'arpg') {
+        return true;
+    }
+
+    $meta = (array)($payload['character_meta'] ?? []);
+    if (trim((string)($meta['mechanic'] ?? '')) === 'arpg') {
+        return true;
+    }
+
+    $rulesMeta = (array)($payload['meta'] ?? []);
+    if (trim((string)($rulesMeta['mechanic'] ?? '')) === 'arpg') {
+        return true;
+    }
+
+    return false;
+}
+
+function af_kb_strip_character_stats_from_schema(array $schema): array
+{
+    if (isset($schema['fields']) && is_array($schema['fields'])) {
+        $schema['fields'] = array_values(array_filter($schema['fields'], static function ($field): bool {
+            $path = trim((string)((is_array($field) ? ($field['path'] ?? '') : '')));
+            return strpos($path, 'character_stats') !== 0;
+        }));
+    }
+
+    if (isset($schema['rules_required_keys']) && is_array($schema['rules_required_keys'])) {
+        $schema['rules_required_keys'] = array_values(array_filter($schema['rules_required_keys'], static function ($key): bool {
+            return trim((string)$key) !== 'character_stats';
+        }));
+    }
+
+    if (isset($schema['root_defaults']['character_stats'])) {
+        unset($schema['root_defaults']['character_stats']);
+    }
+    if (isset($schema['defaults']['character_stats'])) {
+        unset($schema['defaults']['character_stats']);
+    }
+
+    return $schema;
+}
+
 function af_kb_reorganize_arpg_entries_and_types(): void
 {
     global $db;
@@ -5039,6 +5083,15 @@ function af_kb_validate_rules_json_by_type_dnd(string $type, string $normalizedJ
     }
 
     $requiredKeys = (array)($typeSchema['rules_required_keys'] ?? []);
+    if ($type === 'character' && af_kb_is_arpg_character_payload($rulesData)) {
+        unset($rulesData['character_stats']);
+        if (isset($defaults['character_stats'])) {
+            unset($defaults['character_stats']);
+        }
+        $requiredKeys = array_values(array_filter($requiredKeys, static function ($key): bool {
+            return trim((string)$key) !== 'character_stats';
+        }));
+    }
     $needsEffects = in_array('effects', $requiredKeys, true) || array_key_exists('effects', $defaults);
     if ($needsEffects && (!isset($rulesData['effects']) || !is_array($rulesData['effects']))) {
         $rulesData['effects'] = [];
@@ -9525,7 +9578,8 @@ function af_kb_extract_character_contract(array $entry): array
     $defaults = (array)((af_kb_get_type_profile_definition('character', 'dnd')['defaults'] ?? []));
     $payload = array_replace_recursive($defaults, $rules);
     $profile = (array)($payload['character_profile'] ?? []);
-    $stats = (array)($payload['character_stats'] ?? []);
+    $isArpgCharacter = af_kb_is_arpg_character_payload($payload);
+    $stats = $isArpgCharacter ? [] : (array)($payload['character_stats'] ?? []);
     $abilities = af_kb_extract_character_abilities_from_payload($payload);
 
     usort($abilities, static function ($a, $b): int {
@@ -9714,6 +9768,7 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
     $profile = is_array($data['profile'] ?? null) ? $data['profile'] : [];
     $stats = is_array($data['stats'] ?? null) ? $data['stats'] : [];
     $abilities = is_array($data['abilities'] ?? null) ? $data['abilities'] : [];
+    $isArpgCharacter = trim((string)(($data['meta'] ?? [])['mechanic'] ?? '')) === 'arpg';
 
     $title = trim((string)($isRu ? ($profile['character_name_ru'] ?? '') : ($profile['character_name'] ?? '')));
     if ($title === '') {
@@ -9755,10 +9810,12 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
     }
 
     $statRows = '';
-    foreach ($stats as $key => $value) {
-        if (is_scalar($value)) {
-            $label = af_kb_character_stat_label((string)$key, $isRu);
-            $statRows .= '<div class="af-kb-char-stat"><span>' . htmlspecialchars_uni($label) . '</span><strong>' . htmlspecialchars_uni((string)$value) . '</strong></div>';
+    if (!$isArpgCharacter) {
+        foreach ($stats as $key => $value) {
+            if (is_scalar($value)) {
+                $label = af_kb_character_stat_label((string)$key, $isRu);
+                $statRows .= '<div class="af-kb-char-stat"><span>' . htmlspecialchars_uni($label) . '</span><strong>' . htmlspecialchars_uni((string)$value) . '</strong></div>';
+            }
         }
     }
 
@@ -9792,7 +9849,7 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         . '</section>'
         . ($appearance !== '' ? '<section class="af-kb-char-profile__section"><h3>Описание</h3><div>' . af_kb_parse_message($appearance) . '</div></section>' : '')
         . ($bio !== '' ? '<section class="af-kb-char-profile__section"><h3>Биография</h3><div>' . af_kb_parse_message($bio) . '</div></section>' : '')
-        . '<section class="af-kb-char-profile__section"><h3>Характеристики</h3><div class="af-kb-char-stats">' . $statRows . '</div></section>'
+        . ($isArpgCharacter ? '' : '<section class="af-kb-char-profile__section"><h3>Характеристики</h3><div class="af-kb-char-stats">' . $statRows . '</div></section>')
         . '<section class="af-kb-char-profile__section"><h3>Способности</h3><div class="af-kb-char-abilities">' . ($abilitiesHtml !== '' ? $abilitiesHtml : '<div class="af-kb-char-empty">No abilities yet.</div>') . '</div></section>'
         . '<section class="af-kb-char-profile__service">' . $applyCtaHtml . '</section>'
         . '</div>';
@@ -9840,6 +9897,7 @@ function af_kb_build_character_application_prefill(array $entry): array
     if (!is_array($rules)) {
         $rules = [];
     }
+    $isArpgCharacter = trim((string)(($data['meta'] ?? [])['mechanic'] ?? '')) === 'arpg';
     $profile = (array)($data['profile'] ?? []);
     $stats = (array)($rules['character_stats'] ?? []);
     if (empty($stats)) {
@@ -9899,27 +9957,29 @@ function af_kb_build_character_application_prefill(array $entry): array
         'character_shield_strength' => ['character_shield_strength', 'shield_strength'],
         'character_luck' => ['character_luck', 'luck'],
     ];
-    foreach ($statMap as $targetField => $candidates) {
-        foreach ($candidates as $candidate) {
-            if (!array_key_exists($candidate, $stats)) {
-                continue;
-            }
-            if (!is_scalar($stats[$candidate])) {
-                continue;
-            }
-            $prefill[$targetField] = trim((string)$stats[$candidate]);
-            break;
-        }
-    }
-    if (!isset($prefill['character_stats'])) {
-        $statsCompact = [];
-        foreach (array_keys($statMap) as $statKey) {
-            if (array_key_exists($statKey, $prefill)) {
-                $statsCompact[$statKey] = $prefill[$statKey];
+    if (!$isArpgCharacter) {
+        foreach ($statMap as $targetField => $candidates) {
+            foreach ($candidates as $candidate) {
+                if (!array_key_exists($candidate, $stats)) {
+                    continue;
+                }
+                if (!is_scalar($stats[$candidate])) {
+                    continue;
+                }
+                $prefill[$targetField] = trim((string)$stats[$candidate]);
+                break;
             }
         }
-        if (!empty($statsCompact)) {
-            $prefill['character_stats'] = json_encode($statsCompact, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+        if (!isset($prefill['character_stats'])) {
+            $statsCompact = [];
+            foreach (array_keys($statMap) as $statKey) {
+                if (array_key_exists($statKey, $prefill)) {
+                    $statsCompact[$statKey] = $prefill[$statKey];
+                }
+            }
+            if (!empty($statsCompact)) {
+                $prefill['character_stats'] = json_encode($statsCompact, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+            }
         }
     }
 
@@ -11316,7 +11376,14 @@ function af_kb_handle_edit(): void
     $kb_mechanic_raw = af_kb_get_type_mechanic_key($entry['type']);
     $kb_mechanic_key = htmlspecialchars_uni($kb_mechanic_raw);
 
-    $kb_type_schema = htmlspecialchars_uni(json_encode(af_kb_get_type_schema($entry['type'], $kb_mechanic_raw), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    $typeSchema = af_kb_get_type_schema($entry['type'], $kb_mechanic_raw);
+    if ((string)($entry['type'] ?? '') === 'character') {
+        $entryRulesDecoded = af_kb_decode_json($entryRulesJson);
+        if (is_array($entryRulesDecoded) && af_kb_is_arpg_character_payload($entryRulesDecoded)) {
+            $typeSchema = af_kb_strip_character_stats_from_schema($typeSchema);
+        }
+    }
+    $kb_type_schema = htmlspecialchars_uni(json_encode($typeSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     $kb_item_kind_value = htmlspecialchars_uni((string)($entry['item_kind'] ?? ''));
     $itemKinds = [];
     if ($db->table_exists('af_kb_item_kinds')) {
