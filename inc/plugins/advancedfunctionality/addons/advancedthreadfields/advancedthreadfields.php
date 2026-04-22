@@ -4118,11 +4118,34 @@ function af_atf_normalize_character_stats_json(string $raw): string
     return json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
 }
 
+function af_atf_character_pick_ability_description(array $row): string
+{
+    $aliases = ['description', 'ability_description', 'desc'];
+    foreach ($aliases as $key) {
+        if (!array_key_exists($key, $row) || !is_scalar($row[$key])) {
+            continue;
+        }
+        $value = trim((string)$row[$key]);
+        if ($value !== '') {
+            return $value;
+        }
+    }
+
+    foreach ($aliases as $key) {
+        if (!array_key_exists($key, $row) || !is_scalar($row[$key])) {
+            continue;
+        }
+        return trim((string)$row[$key]);
+    }
+
+    return '';
+}
+
 function af_atf_normalize_character_ability_row(array $row, int $fallbackSortorder = 0): array
 {
     $name = trim((string)($row['title'] ?? $row['ability_name'] ?? $row['name'] ?? ''));
     $type = trim((string)($row['type'] ?? $row['ability_type'] ?? 'active'));
-    $description = trim((string)($row['description'] ?? $row['ability_description'] ?? $row['desc'] ?? ''));
+    $description = af_atf_character_pick_ability_description($row);
     $kbKey = trim((string)($row['ability_kb_key'] ?? $row['ability_key'] ?? ''));
     $iconUrl = trim((string)($row['icon'] ?? $row['icon_url'] ?? ''));
     $target = trim((string)($row['target'] ?? $row['targeting'] ?? ''));
@@ -5518,7 +5541,7 @@ function af_atf_format_value_for_display(array $field, string $val): string
                 continue;
             }
             $name = trim((string)($ability['title'] ?? $ability['ability_name'] ?? ''));
-            $description = trim((string)($ability['description'] ?? $ability['ability_description'] ?? ''));
+            $description = af_atf_character_pick_ability_description((array)$ability);
             $iconUrl = trim((string)($ability['icon'] ?? $ability['icon_url'] ?? ''));
             if ($name === '' && $description === '' && $iconUrl === '') {
                 continue;

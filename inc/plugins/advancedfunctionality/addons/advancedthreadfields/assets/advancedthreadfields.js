@@ -706,6 +706,7 @@
                 formula_profile: AF_ATF.qs(".af-atf-ability-formula-profile", row).value,
                 duration_value: AF_ATF.qs(".af-atf-ability-duration-value", row).value,
                 description: AF_ATF.qs(".af-atf-ability-description", row).value,
+                ability_description: AF_ATF.qs(".af-atf-ability-description", row).value,
                 desc: AF_ATF.qs(".af-atf-ability-description", row).value,
                 sortorder: AF_ATF.qs(".af-atf-ability-sortorder", row).value
               });
