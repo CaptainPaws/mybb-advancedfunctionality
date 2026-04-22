@@ -630,22 +630,16 @@ function af_kb_default_type_definitions(): array
                 ['path' => 'character_stats.character_luck', 'type' => 'number', 'default' => 0],
                 ['path' => 'character_abilities', 'type' => 'array', 'default' => [], 'item' => ['type' => 'object', 'fields' => [
                     ['path' => 'slot_index', 'type' => 'number', 'required' => true, 'default' => 1],
-                    ['path' => 'ability_name', 'type' => 'string', 'required' => true, 'default' => ''],
-                    ['path' => 'icon_url', 'type' => 'string', 'default' => ''],
-                    ['path' => 'icon_class', 'type' => 'string', 'default' => ''],
-                    ['path' => 'ability_type', 'type' => 'select', 'required' => true, 'options' => [['value' => 'active'], ['value' => 'passive']], 'default' => 'active'],
+                    ['path' => 'title', 'type' => 'string', 'required' => true, 'default' => ''],
+                    ['path' => 'icon', 'type' => 'string', 'default' => ''],
+                    ['path' => 'type', 'type' => 'select', 'required' => true, 'options' => [['value' => 'active'], ['value' => 'passive']], 'default' => 'active'],
+                    ['path' => 'subtype', 'type' => 'string', 'default' => ''],
+                    ['path' => 'slot', 'type' => 'string', 'default' => ''],
                     ['path' => 'damage_type', 'type' => 'string', 'default' => ''],
-                    ['path' => 'targeting', 'type' => 'string', 'default' => ''],
-                    ['path' => 'range', 'type' => 'number', 'default' => 0],
-                    ['path' => 'cast_time', 'type' => 'number', 'default' => 0],
-                    ['path' => 'cooldown', 'type' => 'number', 'default' => 0],
-                    ['path' => 'duration', 'type' => 'number', 'default' => 0],
-                    ['path' => 'max_charges', 'type' => 'number', 'default' => 0],
-                    ['path' => 'level_cap', 'type' => 'number', 'default' => 0],
-                    ['path' => 'ability_description', 'type' => 'textarea', 'default' => ''],
-                    ['path' => 'effects', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
-                    ['path' => 'modifiers', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
-                    ['path' => 'grants', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                    ['path' => 'target', 'type' => 'string', 'default' => ''],
+                    ['path' => 'formula_profile', 'type' => 'string', 'default' => ''],
+                    ['path' => 'duration_value', 'type' => 'string', 'default' => ''],
+                    ['path' => 'description', 'type' => 'textarea', 'default' => ''],
                     ['path' => 'ability_kb_key', 'type' => 'string', 'default' => ''],
                     ['path' => 'sortorder', 'type' => 'number', 'default' => 0],
                 ]]],
@@ -5452,6 +5446,10 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
     $sort = isset($row['sortorder']) ? (int)$row['sortorder'] : $fallbackSortorder;
     $slotIndex = isset($row['slot_index']) ? (int)$row['slot_index'] : ($sort > 0 ? $sort : 1);
     $abilityType = (string)($row['ability_type'] ?? $row['type'] ?? 'active');
+    $title = (string)($row['title'] ?? $row['ability_name'] ?? '');
+    $icon = (string)($row['icon'] ?? $row['icon_url'] ?? '');
+    $target = (string)($row['target'] ?? $row['targeting'] ?? '');
+    $description = (string)($row['description'] ?? $row['ability_description'] ?? '');
     $normalizeTypedRows = static function ($items, array $defs): array {
         $rows = [];
         foreach ((array)$items as $item) {
@@ -5478,15 +5476,19 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
 
     return [
         'slot_index' => $slotIndex,
-        'ability_name' => (string)($row['ability_name'] ?? ''),
-        'icon_url' => (string)($row['icon_url'] ?? ''),
+        'title' => $title,
+        'ability_name' => $title,
+        'icon' => $icon,
+        'icon_url' => $icon,
         'icon_class' => (string)($row['icon_class'] ?? ''),
         'type' => $abilityType,
         'ability_type' => $abilityType,
         'subtype' => (string)($row['subtype'] ?? ''),
         'slot' => (string)($row['slot'] ?? ''),
         'damage_type' => (string)($row['damage_type'] ?? ''),
-        'targeting' => (string)($row['targeting'] ?? ''),
+        'target' => $target,
+        'targeting' => $target,
+        'formula_profile' => (string)($row['formula_profile'] ?? ''),
         'value_mode' => (string)($row['value_mode'] ?? 'flat'),
         'range' => isset($row['range']) ? (float)$row['range'] : 0.0,
         'damage_value' => isset($row['damage_value']) ? (float)$row['damage_value'] : 0.0,
@@ -5497,7 +5499,9 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
         'duration' => isset($row['duration']) ? (float)$row['duration'] : 0.0,
         'max_charges' => isset($row['max_charges']) ? (int)$row['max_charges'] : 0,
         'level_cap' => isset($row['level_cap']) ? (int)$row['level_cap'] : 0,
-        'ability_description' => (string)($row['ability_description'] ?? ''),
+        'duration_value' => (string)($row['duration_value'] ?? $row['duration'] ?? ''),
+        'description' => $description,
+        'ability_description' => $description,
         'resources' => $normalizeTypedRows($row['resources'] ?? [], [
             ['key' => 'op', 'default' => 'spend'],
             ['key' => 'resource_key', 'default' => ''],
@@ -5605,18 +5609,20 @@ function af_kb_reduce_embedded_ability_to_application_dto(array $ability, int $f
 
     return [
         'slot_index' => $slotIndex,
-        'ability_name' => trim((string)($normalized['ability_name'] ?? '')),
-        'icon_url' => trim((string)($normalized['icon_url'] ?? '')),
+        'title' => trim((string)($normalized['title'] ?? $normalized['ability_name'] ?? '')),
+        'ability_name' => trim((string)($normalized['title'] ?? $normalized['ability_name'] ?? '')),
+        'icon' => trim((string)($normalized['icon'] ?? $normalized['icon_url'] ?? '')),
+        'icon_url' => trim((string)($normalized['icon'] ?? $normalized['icon_url'] ?? '')),
         'type' => $type,
         'subtype' => trim((string)($normalized['subtype'] ?? '')),
         'slot' => trim((string)($normalized['slot'] ?? '')),
         'damage_type' => trim((string)($normalized['damage_type'] ?? '')),
-        'targeting' => trim((string)($normalized['targeting'] ?? '')),
-        'range' => trim((string)($normalized['range'] ?? '')),
-        'damage_value' => af_kb_extract_inline_ability_summary_value($normalized, 'damage'),
-        'shield_value' => af_kb_extract_inline_ability_summary_value($normalized, 'shield'),
-        'heal_value' => af_kb_extract_inline_ability_summary_value($normalized, 'heal'),
-        'ability_description' => trim((string)($normalized['ability_description'] ?? '')),
+        'target' => trim((string)($normalized['target'] ?? $normalized['targeting'] ?? '')),
+        'targeting' => trim((string)($normalized['target'] ?? $normalized['targeting'] ?? '')),
+        'formula_profile' => trim((string)($normalized['formula_profile'] ?? '')),
+        'duration_value' => trim((string)($normalized['duration_value'] ?? $normalized['duration'] ?? '')),
+        'description' => trim((string)($normalized['description'] ?? $normalized['ability_description'] ?? '')),
+        'ability_description' => trim((string)($normalized['description'] ?? $normalized['ability_description'] ?? '')),
         'sortorder' => $sortorder,
     ];
 }
@@ -7274,7 +7280,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                 'ability_slot' => af_kb_get_arpg_mechanics_options('ability_slot'),
                 'ability_damage_type' => af_kb_get_arpg_mechanics_options('ability_damage_type'),
                 'ability_targeting' => af_kb_get_arpg_mechanics_options('ability_targeting'),
-                'ability_value_mode' => af_kb_get_arpg_mechanics_options('ability_value_mode'),
+                'formula_profile' => af_kb_get_arpg_mechanics_options('formula_profile'),
                 'character_gender' => af_kb_get_arpg_mechanics_options('character_gender'),
             ];
             $arpgPublicTypeUiOptions = [
@@ -7877,7 +7883,9 @@ function af_kb_arpg_inline_label(string $dict, string $key, bool $isRu): string
         'subtype' => 'ability_subtype',
         'slot' => 'ability_slot',
         'damage_type' => 'ability_damage_type',
+        'target' => 'ability_targeting',
         'targeting' => 'ability_targeting',
+        'formula_profile' => 'formula_profile',
         'value_mode' => 'ability_value_mode',
     ];
     $setKey = (string)($mechanicsMap[$dict] ?? '');
@@ -7976,38 +7984,21 @@ function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
     $fieldMap = [
         'type' => $isRu ? 'Тип' : 'Type',
         'subtype' => $isRu ? 'Подтип' : 'Subtype',
+        'slot' => $isRu ? 'Слот' : 'Slot',
         'damage_type' => $isRu ? 'Тип урона' : 'Damage type',
-        'targeting' => $isRu ? 'Цель' : 'Targeting',
+        'target' => $isRu ? 'Цель' : 'Target',
+        'formula_profile' => 'Formula Profile',
+        'duration_value' => $isRu ? 'Длительность' : 'Duration',
     ];
     foreach ($fieldMap as $key => $label) {
-        $value = af_kb_arpg_inline_label($key, (string)($row[$key] ?? ''), $isRu);
+        $rawValue = (string)($row[$key] ?? '');
+        if ($key === 'target' && $rawValue === '') {
+            $rawValue = (string)($row['targeting'] ?? '');
+        }
+        $value = af_kb_arpg_inline_label($key, $rawValue, $isRu);
         if ($value !== '') {
             $chips[] = '<span class="af-kb-char-ability__chip"><strong>' . htmlspecialchars_uni($label) . ':</strong> ' . htmlspecialchars_uni($value) . '</span>';
         }
-    }
-
-    $numericFieldMap = [
-        'range' => $isRu ? 'Дальность' : 'Range',
-    ];
-    foreach ($numericFieldMap as $key => $label) {
-        $raw = $row[$key] ?? null;
-        if (!is_numeric($raw) || (float)$raw <= 0) {
-            continue;
-        }
-        $chips[] = '<span class="af-kb-char-ability__chip"><strong>' . htmlspecialchars_uni($label) . ':</strong> ' . htmlspecialchars_uni(af_kb_arpg_inline_number($raw)) . '</span>';
-    }
-
-    $impactFieldMap = [
-        'damage_value' => $isRu ? 'Урон' : 'Damage',
-        'shield_value' => $isRu ? 'Щит' : 'Shield',
-        'heal_value' => $isRu ? 'Лечение' : 'Heal',
-    ];
-    foreach ($impactFieldMap as $key => $label) {
-        $raw = $row[$key] ?? null;
-        if (!is_numeric($raw) || (float)$raw <= 0) {
-            continue;
-        }
-        $chips[] = '<span class="af-kb-char-ability__chip"><strong>' . htmlspecialchars_uni($label) . ':</strong> ' . htmlspecialchars_uni(af_kb_arpg_inline_number($raw)) . '</span>';
     }
 
     $rows = [];

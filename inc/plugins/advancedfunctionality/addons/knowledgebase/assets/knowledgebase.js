@@ -3199,6 +3199,9 @@
             var sort = numberOrZero(row.sortorder != null ? row.sortorder : (fallbackSortorder || 0));
             var slotIndex = numberOrZero(row.slot_index != null ? row.slot_index : (sort > 0 ? sort : 1));
             var abilityType = String(row.ability_type || row.type || 'active');
+            var title = String(row.title || row.ability_name || '');
+            var icon = String(row.icon || row.icon_url || '');
+            var target = String(row.target || row.targeting || '');
             var normalizeRows = function (items, schema) {
                 return (Array.isArray(items) ? items : []).map(function (item) {
                     var source = (item && typeof item === 'object' && !Array.isArray(item)) ? item : {};
@@ -3216,26 +3219,32 @@
 
             return {
                 slot_index: slotIndex,
-                ability_name: String(row.ability_name || ''),
-                icon_url: String(row.icon_url || ''),
+                title: title,
+                ability_name: title,
+                icon: icon,
+                icon_url: icon,
                 icon_class: String(row.icon_class || ''),
                 type: abilityType,
                 ability_type: abilityType,
                 subtype: String(row.subtype || ''),
                 slot: String(row.slot || ''),
                 damage_type: String(row.damage_type || ''),
-                targeting: String(row.targeting || ''),
+                target: target,
+                targeting: target,
+                formula_profile: String(row.formula_profile || ''),
                 value_mode: String(row.value_mode || ''),
                 range: numberOrZero(row.range != null ? row.range : 0),
                 cast_time: numberOrZero(row.cast_time != null ? row.cast_time : 0),
                 cooldown: numberOrZero(row.cooldown != null ? row.cooldown : 0),
+                duration_value: String(row.duration_value != null ? row.duration_value : (row.duration != null ? row.duration : '')),
                 duration: String(row.duration != null ? row.duration : ''),
                 max_charges: numberOrZero(row.max_charges != null ? row.max_charges : 0),
                 level_cap: numberOrZero(row.level_cap != null ? row.level_cap : 0),
                 damage_value: numberOrZero(row.damage_value != null ? row.damage_value : 0),
                 shield_value: numberOrZero(row.shield_value != null ? row.shield_value : 0),
                 heal_value: numberOrZero(row.heal_value != null ? row.heal_value : 0),
-                ability_description: String(row.ability_description || ''),
+                description: String(row.description || row.ability_description || ''),
+                ability_description: String(row.description || row.ability_description || ''),
                 resources: normalizeRows(row.resources, [
                     { key: 'op', default: 'spend' },
                     { key: 'resource_key', default: '' },
@@ -3313,8 +3322,9 @@
                 subtype: 'ability_subtype',
                 slot: 'ability_slot',
                 damage_type: 'ability_damage_type',
+                target: 'ability_targeting',
                 targeting: 'ability_targeting',
-                value_mode: 'ability_value_mode'
+                formula_profile: 'formula_profile'
             };
             var fieldLabels = isRuUi
                 ? {
@@ -3322,28 +3332,18 @@
                     subtype: 'Подтип',
                     slot: 'Слот',
                     damage_type: 'Тип урона',
-                    targeting: 'Цель',
-                    value_mode: 'Режим значения',
-                    range: 'Дальность',
-                    cast_time: 'Время каста',
-                    cooldown: 'Перезарядка',
-                    duration: 'Длительность',
-                    max_charges: 'Макс. заряды',
-                    level_cap: 'Предел уровня'
+                    target: 'Цель',
+                    formula_profile: 'Formula Profile',
+                    duration_value: 'Длительность'
                 }
                 : {
                     type: 'Type',
                     subtype: 'Subtype',
                     slot: 'Slot',
                     damage_type: 'Damage type',
-                    targeting: 'Targeting',
-                    value_mode: 'Value mode',
-                    range: 'Range',
-                    cast_time: 'Cast time',
-                    cooldown: 'Cooldown',
-                    duration: 'Duration',
-                    max_charges: 'Max charges',
-                    level_cap: 'Level cap'
+                    target: 'Target',
+                    formula_profile: 'Formula Profile',
+                    duration_value: 'Duration'
                 };
             var resolveEnumLabel = function (dict, key) {
                 var cleanKey = String(key || '').trim();
@@ -3417,20 +3417,15 @@
                 ['subtype', ability ? ability.subtype : ''],
                 ['slot', ability ? ability.slot : ''],
                 ['damage_type', ability ? ability.damage_type : ''],
-                ['targeting', ability ? ability.targeting : ''],
-                ['value_mode', ability ? ability.value_mode : ''],
-                ['range', ability ? ability.range : ''],
-                ['cast_time', ability ? ability.cast_time : ''],
-                ['cooldown', ability ? ability.cooldown : ''],
-                ['duration', ability ? ability.duration : ''],
-                ['max_charges', ability ? ability.max_charges : ''],
-                ['level_cap', ability ? ability.level_cap : '']
+                ['target', ability ? (ability.target || ability.targeting) : ''],
+                ['formula_profile', ability ? ability.formula_profile : ''],
+                ['duration_value', ability ? (ability.duration_value || ability.duration) : '']
             ].forEach(function (pair) {
                 var key = pair[0];
                 var value = pair[1];
                 if (value == null || value === '') return;
                 if (typeof value === 'number' && value <= 0) return;
-                if (key === 'subtype' || key === 'slot' || key === 'damage_type' || key === 'targeting' || key === 'value_mode') {
+                if (key === 'subtype' || key === 'slot' || key === 'damage_type' || key === 'target' || key === 'targeting' || key === 'formula_profile') {
                     value = resolveEnumLabel(key, value);
                 }
                 addChip(fieldLabels[key] || key, value, false);
@@ -5157,7 +5152,7 @@
                 var abilitySlotOptions = optionsFromMechanics('ability_slot', []);
                 var abilityDamageTypeOptions = optionsFromMechanics('ability_damage_type', []);
                 var abilityTargetingOptions = optionsFromMechanics('ability_targeting', []);
-                var abilityValueModeOptions = optionsFromMechanics('ability_value_mode', []);
+                var abilityFormulaProfileOptions = optionsFromMechanics('formula_profile', []);
                 var characterGenderOptions = optionsFromMechanics('character_gender', []);
                 var characterElementOptions = optionsFromPublicType('arpg_element');
                 var characterRaceOptions = optionsFromPublicType('arpg_origin');
@@ -5257,27 +5252,28 @@
 
                         var coreDefs = [
                             { name: 'slot_index', label: 'Индекс слота', type: 'number' },
-                            { name: 'ability_name', label: 'Название способности', type: 'text' },
-                            { name: 'icon_url', label: 'Иконка', type: 'url' },
+                            { name: 'title', label: 'Название способности', type: 'text' },
+                            { name: 'icon', label: 'Иконка', type: 'url' },
                             { name: 'type', label: 'Тип', type: 'select', options: abilityTypeOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'subtype', label: 'Подтип', type: 'select', options: abilitySubtypeOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'slot', label: 'Слот', type: 'select', options: abilitySlotOptions, allowEmpty: true, emptyLabel: '—' },
                             { name: 'damage_type', label: 'Тип урона', type: 'select', options: abilityDamageTypeOptions, allowEmpty: true, emptyLabel: '—' },
-                            { name: 'targeting', label: 'Цель', type: 'select', options: abilityTargetingOptions, allowEmpty: true, emptyLabel: '—' },
-                            { name: 'value_mode', label: 'Режим значения', type: 'select', options: abilityValueModeOptions, allowEmpty: true, emptyLabel: '—' },
-                            { name: 'range', label: 'Дальность', type: 'number' },
-                            { name: 'duration', label: 'Продолжительность', type: 'text' },
-                            { name: 'damage_value', label: 'Урон', type: 'number' },
-                            { name: 'shield_value', label: 'Щит', type: 'number' },
-                            { name: 'heal_value', label: 'Лечение', type: 'number' }
+                            { name: 'target', label: 'Цель', type: 'select', options: abilityTargetingOptions, allowEmpty: true, emptyLabel: '—' },
+                            { name: 'formula_profile', label: 'Formula Profile', type: 'select', options: abilityFormulaProfileOptions, allowEmpty: true, emptyLabel: '—' },
+                            { name: 'duration_value', label: 'Продолжительность', type: 'text' }
                         ];
                         var coreTextareaDefs = [
-                            { name: 'ability_description', label: 'Описание способности', type: 'textarea', editorPolicy: 'allow', fullWidth: true }
+                            { name: 'description', label: 'Описание способности', type: 'textarea', editorPolicy: 'allow', fullWidth: true }
                         ];
                         var coreGrid = document.createElement('div');
                         coreGrid.className = 'af-kb-row';
                         coreDefs.forEach(function (d) { coreGrid.appendChild(createInput(d, normalized, function () {
                             normalized.ability_type = normalized.type || 'active';
+                            normalized.ability_name = normalized.title || '';
+                            normalized.icon_url = normalized.icon || '';
+                            normalized.targeting = normalized.target || '';
+                            normalized.ability_description = normalized.description || '';
+                            normalized.duration = normalized.duration_value || '';
                             refreshSummary();
                             syncRawDebounced();
                         })); });
@@ -5286,6 +5282,11 @@
                         coreTextareaGrid.className = 'af-kb-row';
                         coreTextareaDefs.forEach(function (d) { coreTextareaGrid.appendChild(createInput(d, normalized, function () {
                             normalized.ability_type = normalized.type || 'active';
+                            normalized.ability_name = normalized.title || '';
+                            normalized.icon_url = normalized.icon || '';
+                            normalized.targeting = normalized.target || '';
+                            normalized.ability_description = normalized.description || '';
+                            normalized.duration = normalized.duration_value || '';
                             refreshSummary();
                             syncRawDebounced();
                         })); });
