@@ -8158,13 +8158,30 @@ function af_kb_render_inline_ability_effect_row(array $effect, bool $isRu): stri
 function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
 {
     $row = af_kb_normalize_inline_ability_row($ability, (int)($ability['sortorder'] ?? 0));
+    $kbRef = trim((string)($row['ability_kb_key'] ?? ''));
+    $resolvedKbEntry = null;
+    if ($kbRef !== '') {
+        foreach (['arpg_ability', 'ability'] as $abilityType) {
+            $candidate = af_kb_get_entry($abilityType, $kbRef);
+            if (is_array($candidate) && $candidate) {
+                $resolvedKbEntry = $candidate;
+                break;
+            }
+        }
+    }
     $name = trim((string)($row['ability_name'] ?? ''));
+    if ($name === '' && is_array($resolvedKbEntry)) {
+        $name = trim((string)af_kb_pick_text($resolvedKbEntry, 'title'));
+    }
     if ($name === '') {
         $name = $isRu ? 'Способность' : 'Ability';
     }
 
     $iconHtml = '';
     $iconUrl = af_kb_sanitize_url((string)($row['icon_url'] ?? ''));
+    if ($iconUrl === '' && is_array($resolvedKbEntry)) {
+        $iconUrl = af_kb_sanitize_url((string)($resolvedKbEntry['icon_url'] ?? ''));
+    }
     $iconClass = trim((string)($row['icon_class'] ?? ''));
     if ($iconUrl !== '') {
         $iconHtml = '<img src="' . htmlspecialchars_uni($iconUrl) . '" alt="" loading="lazy" />';
@@ -8212,8 +8229,10 @@ function af_kb_render_inline_ability_card(array $ability, bool $isRu): string
         $rows[] = '<li><strong>' . htmlspecialchars_uni($isRu ? 'Эффекты' : 'Effects') . ':</strong> ' . htmlspecialchars_uni((string)count((array)$row['effects'])) . '</li>';
     }
 
-    $description = trim((string)($row['ability_description'] ?? ''));
-    $kbRef = trim((string)($row['ability_kb_key'] ?? ''));
+    $description = trim((string)($row['ability_description'] ?? $row['description'] ?? ''));
+    if ($description === '' && is_array($resolvedKbEntry)) {
+        $description = trim((string)af_kb_pick_text($resolvedKbEntry, 'description'));
+    }
     $headerTitle = '#' . (int)($row['slot_index'] ?? 0) . ' ' . htmlspecialchars_uni($name);
 
     return '<article class="af-kb-char-ability">'
