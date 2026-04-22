@@ -4088,6 +4088,50 @@ function af_atf_normalize_character_stats_json(string $raw): string
     return json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
 }
 
+function af_atf_normalize_character_ability_row(array $row, int $fallbackSortorder = 0): array
+{
+    $name = trim((string)($row['title'] ?? $row['ability_name'] ?? $row['name'] ?? ''));
+    $type = trim((string)($row['type'] ?? $row['ability_type'] ?? 'active'));
+    $description = trim((string)($row['description'] ?? $row['ability_description'] ?? $row['desc'] ?? ''));
+    $kbKey = trim((string)($row['ability_kb_key'] ?? $row['ability_key'] ?? ''));
+    $iconUrl = trim((string)($row['icon'] ?? $row['icon_url'] ?? ''));
+    $target = trim((string)($row['target'] ?? $row['targeting'] ?? ''));
+    $sortorder = isset($row['sortorder']) ? (int)$row['sortorder'] : $fallbackSortorder;
+    if ($sortorder <= 0) {
+        $sortorder = $fallbackSortorder > 0 ? $fallbackSortorder : 1;
+    }
+
+    $type = strtolower($type);
+    if ($type === '') {
+        $type = 'active';
+    }
+
+    return [
+        'slot_index' => max(1, (int)($row['slot_index'] ?? $sortorder)),
+        'title' => my_substr($name, 0, 255),
+        'ability_name' => my_substr($name, 0, 255),
+        'icon' => my_substr($iconUrl, 0, 500),
+        'icon_url' => my_substr($iconUrl, 0, 500),
+        'type' => $type,
+        'ability_type' => $type,
+        'subtype' => my_substr(trim((string)($row['subtype'] ?? '')), 0, 128),
+        'slot' => my_substr(trim((string)($row['slot'] ?? '')), 0, 128),
+        'damage_type' => my_substr(trim((string)($row['damage_type'] ?? '')), 0, 128),
+        'target' => my_substr($target, 0, 128),
+        'targeting' => my_substr($target, 0, 128),
+        'formula_profile' => my_substr(trim((string)($row['formula_profile'] ?? '')), 0, 128),
+        'duration_value' => my_substr(trim((string)($row['duration_value'] ?? $row['duration'] ?? '')), 0, 64),
+        'range' => my_substr(trim((string)($row['range'] ?? '')), 0, 64),
+        'damage_value' => my_substr(trim((string)($row['damage_value'] ?? '')), 0, 64),
+        'shield_value' => my_substr(trim((string)($row['shield_value'] ?? '')), 0, 64),
+        'heal_value' => my_substr(trim((string)($row['heal_value'] ?? '')), 0, 64),
+        'description' => my_substr($description, 0, 5000),
+        'ability_description' => my_substr($description, 0, 5000),
+        'ability_kb_key' => my_substr($kbKey, 0, 128),
+        'sortorder' => max(0, $sortorder),
+    ];
+}
+
 function af_atf_normalize_character_abilities_json(string $raw): string
 {
     $raw = trim($raw);
@@ -4105,49 +4149,15 @@ function af_atf_normalize_character_abilities_json(string $raw): string
         if (!is_array($row)) {
             continue;
         }
-        $name = trim((string)($row['title'] ?? $row['ability_name'] ?? $row['name'] ?? ''));
-        $type = trim((string)($row['type'] ?? $row['ability_type'] ?? 'active'));
-        $description = trim((string)($row['description'] ?? $row['ability_description'] ?? ''));
-        $kbKey = trim((string)($row['ability_kb_key'] ?? ''));
-        $sortorder = (int)($row['sortorder'] ?? (count($out) + 1));
-        $iconUrl = trim((string)($row['icon'] ?? $row['icon_url'] ?? ''));
-
-        if ($name === '' && $description === '' && $kbKey === '' && $iconUrl === '') {
+        $normalized = af_atf_normalize_character_ability_row($row, count($out) + 1);
+        if (
+            $normalized['title'] === ''
+            && $normalized['description'] === ''
+            && $normalized['ability_kb_key'] === ''
+            && $normalized['icon'] === ''
+        ) {
             continue;
         }
-
-        $type = strtolower($type);
-        if ($type === '') {
-            $type = 'active';
-        }
-        if ($sortorder < 0) {
-            $sortorder = 0;
-        }
-
-        $normalized = [
-            'slot_index' => max(1, (int)($row['slot_index'] ?? ($sortorder > 0 ? $sortorder : (count($out) + 1)))),
-            'title' => my_substr($name, 0, 255),
-            'ability_name' => my_substr($name, 0, 255),
-            'icon' => my_substr($iconUrl, 0, 500),
-            'icon_url' => my_substr($iconUrl, 0, 500),
-            'type' => $type,
-            'ability_type' => $type,
-            'subtype' => my_substr(trim((string)($row['subtype'] ?? '')), 0, 128),
-            'slot' => my_substr(trim((string)($row['slot'] ?? '')), 0, 128),
-            'damage_type' => my_substr(trim((string)($row['damage_type'] ?? '')), 0, 128),
-            'target' => my_substr(trim((string)($row['target'] ?? $row['targeting'] ?? '')), 0, 128),
-            'targeting' => my_substr(trim((string)($row['target'] ?? $row['targeting'] ?? '')), 0, 128),
-            'formula_profile' => my_substr(trim((string)($row['formula_profile'] ?? '')), 0, 128),
-            'duration_value' => my_substr(trim((string)($row['duration_value'] ?? $row['duration'] ?? '')), 0, 64),
-            'range' => my_substr(trim((string)($row['range'] ?? '')), 0, 64),
-            'damage_value' => my_substr(trim((string)($row['damage_value'] ?? '')), 0, 64),
-            'shield_value' => my_substr(trim((string)($row['shield_value'] ?? '')), 0, 64),
-            'heal_value' => my_substr(trim((string)($row['heal_value'] ?? '')), 0, 64),
-            'description' => my_substr($description, 0, 5000),
-            'ability_description' => my_substr($description, 0, 5000),
-            'ability_kb_key' => my_substr($kbKey, 0, 128),
-            'sortorder' => $sortorder,
-        ];
 
         if ($normalized['damage_value'] === '' || $normalized['shield_value'] === '' || $normalized['heal_value'] === '') {
             $effects = is_array($row['effects'] ?? null) ? (array)$row['effects'] : [];
@@ -4716,8 +4726,10 @@ function af_atf_bridge_extract_oc_abilities(array $index): array
         return [];
     }
 
-    return array_values(array_filter($normalized, static function ($row): bool {
-        return is_array($row);
+    return array_values(array_filter(array_map(static function ($row, $idx): array {
+        return is_array($row) ? af_atf_normalize_character_ability_row($row, (int)$idx + 1) : [];
+    }, $normalized, array_keys($normalized)), static function ($row): bool {
+        return is_array($row) && $row !== [];
     }));
 }
 
