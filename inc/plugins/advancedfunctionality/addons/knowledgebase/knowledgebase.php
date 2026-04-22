@@ -5479,8 +5479,17 @@ function af_kb_arpg_migrate_legacy_rules_contract(string $type, array $rules): a
         if ($legacyKind !== '') {
             $rules['service_kind'] = $legacyKind;
         }
-        if (!isset($rules['entries']) || !is_array($rules['entries'])) {
-            $rules['entries'] = af_kb_arpg_pick_array($rules, ['entries', 'templates', 'items']);
+        $serviceKind = trim((string)($rules['service_kind'] ?? ''));
+        $entrySources = ['entries', 'templates', 'items'];
+        if ($serviceKind === 'formula_profile') {
+            $entrySources[] = 'formula_profile_registry';
+        } elseif ($serviceKind === 'weapon_type') {
+            $entrySources[] = 'weapon_type_registry';
+        }
+
+        $hasEntries = isset($rules['entries']) && is_array($rules['entries']) && $rules['entries'] !== [];
+        if (!$hasEntries) {
+            $rules['entries'] = af_kb_arpg_pick_array($rules, $entrySources);
         }
     }
 
