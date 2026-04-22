@@ -700,7 +700,9 @@ function af_charactersheets_showthread_start_impl(): void
         }
     }
 
-    $isPendingForum = af_charactersheets_is_pending_forum($fid);
+    $isPendingForum = function_exists('af_cwf_is_pending_forum')
+        ? af_cwf_is_pending_forum($fid)
+        : af_charactersheets_is_pending_forum($fid);
     $isAcceptedForum = af_charactersheets_is_in_accepted_forum($fid);
 
     $acceptText = $was_accepted
@@ -933,7 +935,10 @@ function af_charactersheets_handle_accept_action(): void
     }
 
     $fid = (int)$thread['fid'];
-    if (!af_charactersheets_is_pending_forum($fid)) {
+    $isPendingForum = function_exists('af_cwf_is_pending_forum')
+        ? af_cwf_is_pending_forum($fid)
+        : af_charactersheets_is_pending_forum($fid);
+    if (!$isPendingForum) {
         af_charactersheets_deny('Thread not in pending forum', ['tid' => $tid, 'fid' => $fid]);
     }
 
@@ -1623,6 +1628,10 @@ function af_charactersheets_is_accepted(int $tid): bool
 function af_charactersheets_is_pending_forum(int $fid): bool
 {
     global $mybb;
+
+    if (function_exists('af_cwf_is_pending_forum')) {
+        return af_cwf_is_pending_forum($fid);
+    }
 
     $pending = af_charactersheets_csv_to_ids($mybb->settings['af_charactersheets_pending_forums'] ?? '');
     if (!$pending) {

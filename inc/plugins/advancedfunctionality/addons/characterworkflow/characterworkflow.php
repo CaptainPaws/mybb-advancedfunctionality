@@ -50,6 +50,7 @@ function af_characterworkflow_uninstall(): void
 
     $db->delete_query('settings', "name IN (
         'af_characterworkflow_enabled',
+        'af_characterworkflow_pending_forums',
         'af_characterworkflow_target_forums',
         'af_characterworkflow_transfer_group_ids',
         'af_characterworkflow_greeting_mode',
@@ -138,11 +139,12 @@ function af_cwf_ensure_settings(): void
     );
 
     af_cwf_ensure_setting($gid, 'af_characterworkflow_enabled', $lang->af_characterworkflow_enabled ?? 'Enable CharacterWorkflow', $lang->af_characterworkflow_enabled_desc ?? 'Enables workflow state table and moderation orchestration API.', 'yesno', '1', 1);
-    af_cwf_ensure_setting($gid, 'af_characterworkflow_target_forums', $lang->af_characterworkflow_target_forums ?? 'Target accepted forum ids', $lang->af_characterworkflow_target_forums_desc ?? 'CSV forum IDs used as transfer target(s).', 'text', '', 2);
-    af_cwf_ensure_setting($gid, 'af_characterworkflow_transfer_group_ids', $lang->af_characterworkflow_transfer_group_ids ?? 'Additional groups on transfer', $lang->af_characterworkflow_transfer_group_ids_desc ?? 'CSV group IDs to add into additional groups for the thread author after transfer.', 'text', '', 3);
-    af_cwf_ensure_setting($gid, 'af_characterworkflow_greeting_mode', $lang->af_characterworkflow_greeting_mode ?? 'Greeting behavior', $lang->af_characterworkflow_greeting_mode_desc ?? 'inherit = CharacterSheets logic, always = always attempt greeting post, never = do not post greeting.', "select\ninherit=Inherit CharacterSheets\nalways=Always post\nnever=Never post", 'inherit', 4);
-    af_cwf_ensure_setting($gid, 'af_characterworkflow_canon_source_policy', $lang->af_characterworkflow_canon_source_policy ?? 'Canon source-of-truth policy', $lang->af_characterworkflow_canon_source_policy_desc ?? 'Defines policy for canon characters.', "select\nkb=KB only", 'kb', 5);
-    af_cwf_ensure_setting($gid, 'af_characterworkflow_original_source_policy', $lang->af_characterworkflow_original_source_policy ?? 'Original source-of-truth policy', $lang->af_characterworkflow_original_source_policy_desc ?? 'Defines policy for original characters before/after KB creation.', "select\nthread_then_kb=Thread/ATF before KB, KB after create", 'thread_then_kb', 6);
+    af_cwf_ensure_setting($gid, 'af_characterworkflow_pending_forums', $lang->af_characterworkflow_pending_forums ?? 'Pending application forums', $lang->af_characterworkflow_pending_forums_desc ?? 'CSV forum IDs where applications are considered pending.', 'text', '', 2);
+    af_cwf_ensure_setting($gid, 'af_characterworkflow_target_forums', $lang->af_characterworkflow_target_forums ?? 'Target accepted forum ids', $lang->af_characterworkflow_target_forums_desc ?? 'CSV forum IDs used as transfer target(s).', 'text', '', 3);
+    af_cwf_ensure_setting($gid, 'af_characterworkflow_transfer_group_ids', $lang->af_characterworkflow_transfer_group_ids ?? 'Additional groups on transfer', $lang->af_characterworkflow_transfer_group_ids_desc ?? 'CSV group IDs to add into additional groups for the thread author after transfer.', 'text', '', 4);
+    af_cwf_ensure_setting($gid, 'af_characterworkflow_greeting_mode', $lang->af_characterworkflow_greeting_mode ?? 'Greeting behavior', $lang->af_characterworkflow_greeting_mode_desc ?? 'inherit = CharacterSheets logic, always = always attempt greeting post, never = do not post greeting.', "select\ninherit=Inherit CharacterSheets\nalways=Always post\nnever=Never post", 'inherit', 5);
+    af_cwf_ensure_setting($gid, 'af_characterworkflow_canon_source_policy', $lang->af_characterworkflow_canon_source_policy ?? 'Canon source-of-truth policy', $lang->af_characterworkflow_canon_source_policy_desc ?? 'Defines policy for canon characters.', "select\nkb=KB only", 'kb', 6);
+    af_cwf_ensure_setting($gid, 'af_characterworkflow_original_source_policy', $lang->af_characterworkflow_original_source_policy ?? 'Original source-of-truth policy', $lang->af_characterworkflow_original_source_policy_desc ?? 'Defines policy for original characters before/after KB creation.', "select\nthread_then_kb=Thread/ATF before KB, KB after create", 'thread_then_kb', 7);
 }
 
 function af_cwf_is_enabled(): bool
@@ -171,6 +173,26 @@ function af_cwf_get_target_forum_ids(): array
     }
     $fallback = (int)($mybb->settings['af_charactersheets_accepted_forum'] ?? 0);
     return $fallback > 0 ? [$fallback] : [];
+}
+
+function af_cwf_get_pending_forum_ids(): array
+{
+    global $mybb;
+    $ids = af_cwf_csv_to_ids((string)($mybb->settings['af_characterworkflow_pending_forums'] ?? ''));
+    if (!empty($ids)) {
+        return $ids;
+    }
+
+    // Compatibility fallback for legacy installations not migrated yet.
+    return af_cwf_csv_to_ids((string)($mybb->settings['af_charactersheets_pending_forums'] ?? ''));
+}
+
+function af_cwf_is_pending_forum(int $fid): bool
+{
+    if ($fid <= 0) {
+        return false;
+    }
+    return in_array($fid, af_cwf_get_pending_forum_ids(), true);
 }
 
 function af_cwf_get_transfer_group_ids(): array
@@ -268,7 +290,7 @@ function af_cwf_get_context(int $tid, array $thread = [], array $acceptRow = [])
         'was_accepted' => $wasAccepted,
         'workflow_accepted' => $workflowAccepted,
         'legacy_accepted' => $legacyAccepted,
-        'is_pending_forum' => function_exists('af_charactersheets_is_pending_forum') ? af_charactersheets_is_pending_forum((int)($thread['fid'] ?? 0)) : false,
+        'is_pending_forum' => af_cwf_is_pending_forum((int)($thread['fid'] ?? 0)),
         'is_target_forum' => in_array((int)($thread['fid'] ?? 0), af_cwf_get_target_forum_ids(), true),
         'kb_linked' => $kbLinked,
         'sheet_exists' => $sheetExists,
