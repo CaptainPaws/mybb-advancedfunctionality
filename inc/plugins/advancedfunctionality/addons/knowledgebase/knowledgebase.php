@@ -5633,18 +5633,45 @@ function af_kb_normalize_inline_ability_row($ability, int $fallbackSortorder = 0
 
 function af_kb_extract_character_abilities_from_payload(array $payload): array
 {
+    $decodeRows = static function ($value): array {
+        if (is_array($value)) {
+            return $value;
+        }
+        if (!is_string($value)) {
+            return [];
+        }
+        $decoded = af_kb_decode_json($value);
+        if (!is_array($decoded)) {
+            return [];
+        }
+        if (isset($decoded[0]) && is_array($decoded[0])) {
+            return $decoded;
+        }
+        if (is_array($decoded['items'] ?? null)) {
+            return (array)$decoded['items'];
+        }
+        if (is_array($decoded['abilities'] ?? null)) {
+            return (array)$decoded['abilities'];
+        }
+        return array_values(array_filter($decoded, 'is_array'));
+    };
+
     $candidates = [];
-    if (is_array($payload['character_abilities'] ?? null)) {
-        $candidates[] = (array)$payload['character_abilities'];
+    $characterAbilities = $decodeRows($payload['character_abilities'] ?? null);
+    if ($characterAbilities) {
+        $candidates[] = $characterAbilities;
     }
-    if (is_array($payload['abilities'] ?? null)) {
-        $candidates[] = (array)$payload['abilities'];
+    $abilities = $decodeRows($payload['abilities'] ?? null);
+    if ($abilities) {
+        $candidates[] = $abilities;
     }
-    if (is_array($payload['character_profile']['character_abilities'] ?? null)) {
-        $candidates[] = (array)$payload['character_profile']['character_abilities'];
+    $profileAbilities = $decodeRows($payload['character_profile']['character_abilities'] ?? null);
+    if ($profileAbilities) {
+        $candidates[] = $profileAbilities;
     }
-    if (is_array($payload['rules']['character_abilities'] ?? null)) {
-        $candidates[] = (array)$payload['rules']['character_abilities'];
+    $rulesAbilities = $decodeRows($payload['rules']['character_abilities'] ?? null);
+    if ($rulesAbilities) {
+        $candidates[] = $rulesAbilities;
     }
 
     foreach ($candidates as $rows) {

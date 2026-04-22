@@ -4144,8 +4144,23 @@ function af_atf_normalize_character_abilities_json(string $raw): string
         return '[]';
     }
 
+    $rows = [];
+    if (isset($decoded[0]) && is_array($decoded[0])) {
+        $rows = $decoded;
+    } elseif (is_array($decoded['items'] ?? null)) {
+        $rows = (array)$decoded['items'];
+    } elseif (is_array($decoded['abilities'] ?? null)) {
+        $rows = (array)$decoded['abilities'];
+    } elseif (is_array($decoded)) {
+        $rows = array_values(array_filter($decoded, 'is_array'));
+    }
+
+    if (!$rows) {
+        return '[]';
+    }
+
     $out = [];
-    foreach ($decoded as $row) {
+    foreach ($rows as $row) {
         if (!is_array($row)) {
             continue;
         }
