@@ -1395,7 +1395,7 @@ function af_charactersheets_compute_sheet_view(array $sheet): array
 
     $skill_pool_spent = $manual_spent;
     $level = (int)($level_data['level'] ?? 1);
-    $skill_base_per_level = (int)($mybb->settings['af_charactersheets_skill_points_per_level'] ?? 0);
+    $skill_base_per_level = 0;
     $skill_base_start = (int)($mybb->settings['af_charactersheets_skill_points_start'] ?? 0);
     $skill_pool_total = ($skill_base_per_level * max(1, $level)) + $skill_base_start + $bonus_skill_points;
     $skill_pool_remaining = $skill_pool_total - $skill_pool_spent;

@@ -371,6 +371,64 @@ function af_cwf_accept_character_application(int $tid, int $actorUid, array $con
     return ['ok' => true, 'state' => AF_CWF_STATE_APPROVED, 'tid' => $tid];
 }
 
+function af_cwf_create_acceptance_greeting_post(int $tid, array $thread = [], int $actorUid = 0): int
+{
+    global $db, $mybb, $session;
+
+    if ($tid <= 0 || !is_object($db)) {
+        return 0;
+    }
+
+    if (empty($thread)) {
+        $thread = (array)$db->fetch_array($db->simple_select('threads', '*', 'tid=' . $tid, ['limit' => 1]));
+    }
+    if (empty($thread)) {
+        return 0;
+    }
+
+    $mode = (string)($mybb->settings['af_characterworkflow_greeting_mode'] ?? 'inherit');
+    if ($mode === 'never') {
+        return 0;
+    }
+
+    if (!function_exists('af_charactersheets_build_accept_message')) {
+        return 0;
+    }
+
+    $message = trim((string)af_charactersheets_build_accept_message($thread));
+    if ($message === '') {
+        return 0;
+    }
+
+    require_once MYBB_ROOT . 'inc/datahandlers/post.php';
+    $posthandler = new PostDataHandler('insert');
+    $posthandler->action = 'reply';
+
+    $post_data = [
+        'tid' => (int)($thread['tid'] ?? $tid),
+        'fid' => (int)($thread['fid'] ?? 0),
+        'subject' => 'Re: ' . (string)($thread['subject'] ?? ''),
+        'uid' => $actorUid > 0 ? $actorUid : (int)($mybb->user['uid'] ?? 0),
+        'username' => (string)($mybb->user['username'] ?? ''),
+        'message' => $message,
+        'ipaddress' => $session->ipaddress ?? '',
+        'longipaddress' => $session->packedip ?? '',
+        'options' => [
+            'signature' => 0,
+            'disablesmilies' => 0,
+            'subscriptionmethod' => 0,
+        ],
+    ];
+
+    $posthandler->set_data($post_data);
+    if (!$posthandler->validate_post()) {
+        return 0;
+    }
+
+    $postinfo = $posthandler->insert_post();
+    return (int)($postinfo['pid'] ?? 0);
+}
+
 function af_cwf_transfer_character_application(int $tid, int $actorUid, array $context = []): array
 {
     global $db;

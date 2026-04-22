@@ -156,36 +156,10 @@ function af_charactersheets_user_can_manage_knowledge_selection(array $sheet, ar
 
 function af_charactersheets_user_can_accept(array $user, int $fid): bool
 {
-    global $mybb;
-
-    if (empty($mybb->settings['af_charactersheets_accept_groups'])) {
+    if (!function_exists('af_cwf_is_enabled') || !af_cwf_is_enabled()) {
         return false;
     }
-
-    $groups = af_charactersheets_csv_to_ids($mybb->settings['af_charactersheets_accept_groups']);
-    if (empty($groups)) {
-        return false;
-    }
-
-    $primary = (int)($user['usergroup'] ?? 0);
-    if ($primary > 0 && in_array($primary, $groups, true)) {
-        return true;
-    }
-
-    $additional = array_filter(array_map('intval', explode(',', (string)($user['additionalgroups'] ?? ''))));
-    foreach ($additional as $gid) {
-        if (in_array($gid, $groups, true)) {
-            return true;
-        }
-    }
-
-    if ($fid > 0 && function_exists('is_moderator')) {
-        if (is_moderator($fid)) {
-            return true;
-        }
-    }
-
-    return false;
+    return af_charactersheets_user_is_admin_or_moderator($user, $fid);
 }
 
 function af_charactersheets_user_can_delete_sheet(array $sheet, array $user): bool
