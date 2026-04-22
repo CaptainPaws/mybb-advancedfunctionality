@@ -1044,11 +1044,16 @@ function af_charactersheets_handle_transfer_action(): void
         redirect('showthread.php?tid=' . $tid, $msg);
     }
 
-    $targetForumIds = function_exists('af_cwf_get_target_forum_ids')
-        ? af_cwf_get_target_forum_ids()
-        : [(int)($mybb->settings['af_charactersheets_accepted_forum'] ?? 0)];
-    $targetFid = (int)($targetForumIds[0] ?? 0);
+    $targetFid = function_exists('af_cwf_resolve_transfer_target_forum_id')
+        ? af_cwf_resolve_transfer_target_forum_id($fid)
+        : (int)($mybb->settings['af_charactersheets_accepted_forum'] ?? 0);
     if ($targetFid <= 0) {
+        af_charactersheets_log('Transfer target forum is not configured or invalid', [
+            'tid' => $tid,
+            'current_fid' => $fid,
+            'configured_targets' => function_exists('af_cwf_get_target_forum_ids') ? af_cwf_get_target_forum_ids() : [],
+            'legacy_target' => (int)($mybb->settings['af_charactersheets_accepted_forum'] ?? 0),
+        ]);
         $msg = $lang->af_charactersheets_accept_error ?? 'Не удалось перенести анкету.';
         redirect('showthread.php?tid=' . $tid, $msg);
     }
@@ -1616,6 +1621,18 @@ function af_charactersheets_is_pending_forum(int $fid): bool
 function af_charactersheets_is_in_accepted_forum(int $fid): bool
 {
     global $mybb;
+
+    if ($fid <= 0) {
+        return false;
+    }
+
+    if (function_exists('af_cwf_get_target_forum_ids')) {
+        $targetForumIds = af_cwf_get_target_forum_ids();
+        if (!empty($targetForumIds)) {
+            return in_array($fid, $targetForumIds, true);
+        }
+    }
+
     $accepted_fid = (int)($mybb->settings['af_charactersheets_accepted_forum'] ?? 0);
     return $accepted_fid > 0 && $fid === $accepted_fid;
 }

@@ -179,6 +179,44 @@ function af_cwf_get_transfer_group_ids(): array
     return af_cwf_csv_to_ids((string)($mybb->settings['af_characterworkflow_transfer_group_ids'] ?? ''));
 }
 
+
+function af_cwf_forum_exists_and_is_postable(int $fid): bool
+{
+    global $db;
+
+    if ($fid <= 0 || !is_object($db)) {
+        return false;
+    }
+
+    $forum = $db->fetch_array($db->simple_select('forums', 'fid,type', 'fid=' . $fid, ['limit' => 1]));
+    if (!is_array($forum) || (int)($forum['fid'] ?? 0) <= 0) {
+        return false;
+    }
+
+    return (string)($forum['type'] ?? 'f') !== 'c';
+}
+
+function af_cwf_resolve_transfer_target_forum_id(int $currentFid = 0): int
+{
+    $targetForumIds = af_cwf_get_target_forum_ids();
+    if (empty($targetForumIds)) {
+        return 0;
+    }
+
+    if ($currentFid > 0 && in_array($currentFid, $targetForumIds, true) && af_cwf_forum_exists_and_is_postable($currentFid)) {
+        return $currentFid;
+    }
+
+    foreach ($targetForumIds as $targetFid) {
+        $candidate = (int)$targetFid;
+        if ($candidate > 0 && af_cwf_forum_exists_and_is_postable($candidate)) {
+            return $candidate;
+        }
+    }
+
+    return 0;
+}
+
 function af_cwf_detect_character_kind(int $tid, int $uid, array $acceptRow = []): string
 {
     if (!function_exists('af_charactersheets_resolve_character_kb_entry')) {
