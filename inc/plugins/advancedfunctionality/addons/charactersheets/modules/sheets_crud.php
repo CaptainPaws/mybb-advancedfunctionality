@@ -156,7 +156,9 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
         return [];
     }
 
+    $tid = (int)$tid;
     $uid = (int)$uid;
+    $slug = trim($slug);
     $hasUid = ($uid > 0);
 
     $existing = [];
@@ -166,31 +168,37 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
     if (empty($existing) && $slug !== '') {
         $existing = af_charactersheets_get_sheet_by_slug($slug);
     }
-    // Важно: не используем uid как primary duplicate guard для тредовых листов.
-    // Иначе второй персонаж того же автора "прилипает" к уже существующему листу,
-    // что ломает create-sheet flow для ARPG/KB path.
-    if (empty($existing) && $hasUid && $tid <= 0) {
+
+    // ВАЖНО:
+    // В текущей схеме таблицы uid уникален, поэтому uid обязан участвовать
+    // в duplicate guard всегда, иначе INSERT падает на Duplicate entry по uid.
+    if (empty($existing) && $hasUid) {
         $existing = af_charactersheets_get_sheet_by_uid($uid);
     }
 
     if (!empty($existing)) {
         $updates = [];
+
         if ($slug !== '' && (string)($existing['slug'] ?? '') !== $slug) {
             $updates['slug'] = $slug;
         }
         if ($tid > 0 && (int)($existing['tid'] ?? 0) !== $tid) {
             $updates['tid'] = $tid;
         }
-
         if ($hasUid && (int)($existing['uid'] ?? 0) !== $uid) {
             $updates['uid'] = $uid;
         }
 
         if ($updates) {
             $updates['updated_at'] = TIME_NOW;
-            $db->update_query(AF_CS_SHEETS_TABLE, af_charactersheets_db_escape_array($updates), 'id=' . (int)$existing['id']);
+            $db->update_query(
+                AF_CS_SHEETS_TABLE,
+                af_charactersheets_db_escape_array($updates),
+                'id=' . (int)$existing['id']
+            );
             $existing = af_charactersheets_get_sheet_by_id((int)$existing['id']);
         }
+
         return $existing;
     }
 
@@ -229,14 +237,56 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
         'updated_at' => TIME_NOW,
     ];
 
-    $id = (int)$db->insert_query(AF_CS_SHEETS_TABLE, $row);
+    try {
+        $id = (int)$db->insert_query(AF_CS_SHEETS_TABLE, $row);
+    } catch (Throwable $e) {
+        // Защита от гонки / повторного создания в рамках текущей UNIQUE-схемы по uid.
+        $fallback = [];
+
+        if ($tid > 0) {
+            $fallback = af_charactersheets_get_sheet_by_tid($tid);
+        }
+        if (empty($fallback) && $slug !== '') {
+            $fallback = af_charactersheets_get_sheet_by_slug($slug);
+        }
+        if (empty($fallback) && $hasUid) {
+            $fallback = af_charactersheets_get_sheet_by_uid($uid);
+        }
+
+        if (!empty($fallback)) {
+            $updates = [];
+
+            if ($slug !== '' && (string)($fallback['slug'] ?? '') !== $slug) {
+                $updates['slug'] = $slug;
+            }
+            if ($tid > 0 && (int)($fallback['tid'] ?? 0) !== $tid) {
+                $updates['tid'] = $tid;
+            }
+            if ($hasUid && (int)($fallback['uid'] ?? 0) !== $uid) {
+                $updates['uid'] = $uid;
+            }
+
+            if ($updates) {
+                $updates['updated_at'] = TIME_NOW;
+                $db->update_query(
+                    AF_CS_SHEETS_TABLE,
+                    af_charactersheets_db_escape_array($updates),
+                    'id=' . (int)$fallback['id']
+                );
+                $fallback = af_charactersheets_get_sheet_by_id((int)$fallback['id']);
+            }
+
+            return $fallback;
+        }
+
+        throw $e;
+    }
+
     if ($id <= 0) {
         return [];
     }
 
-    $sheet = af_charactersheets_get_sheet_by_id($id);
-
-    return $sheet;
+    return af_charactersheets_get_sheet_by_id($id);
 }
 
 function af_charactersheets_update_sheet_json(int $sheet_id, array $base, array $build, array $progress): void
