@@ -4365,6 +4365,9 @@ function af_atf_handle_character_kb_bridge_action(bool $syncOnly): void
     }
 
     $entryId = (int)($result['entry_id'] ?? 0);
+    if ($entryId > 0 && function_exists('af_cwf_bind_kb_entry')) {
+        af_cwf_bind_kb_entry($tid, $entryId, (int)($mybb->user['uid'] ?? 0));
+    }
     $entryUrl = $showThreadUrl;
     if ($entryId > 0 && function_exists('af_charactersheets_build_kb_entry_url')) {
         $entryUrl = af_charactersheets_build_kb_entry_url($entryId, $tid);
