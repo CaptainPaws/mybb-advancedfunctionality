@@ -274,6 +274,8 @@ function af_kb_default_type_profile_payload_arpg(string $typeKey): array
             'talent_rank_registry' => [],
             'item_rarity_registry' => [],
             'bestiary_rank_registry' => [],
+            'formula_profile_registry' => [],
+            'weapon_type_registry' => [],
             'entries' => [],
         ],
     ];
@@ -861,8 +863,19 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.talent_rank_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
                 ['path' => 'rules.item_rarity_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
                 ['path' => 'rules.bestiary_rank_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.formula_profile_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+                ['path' => 'rules.weapon_type_registry', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
                 ['path' => 'rules.entries', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object', 'fields' => [
                     ['path' => 'key', 'type' => 'string', 'required' => true, 'default' => ''],
+                    ['path' => 'title', 'type' => 'string', 'default' => ''],
+                    ['path' => 'group', 'type' => 'string', 'default' => ''],
+                    ['path' => 'description', 'type' => 'string', 'default' => ''],
+                    ['path' => 'calc_family', 'type' => 'string', 'default' => ''],
+                    ['path' => 'duration_supported', 'type' => 'number', 'default' => 0],
+                    ['path' => 'ui_hint', 'type' => 'string', 'default' => ''],
+                    ['path' => 'active', 'type' => 'number', 'default' => 1],
+                    ['path' => 'default_range_profile', 'type' => 'string', 'default' => ''],
+                    ['path' => 'starter_weapon_template', 'type' => 'string', 'default' => ''],
                     ['path' => 'label_ru', 'type' => 'string', 'default' => ''],
                     ['path' => 'label_en', 'type' => 'string', 'default' => ''],
                     ['path' => 'label_img', 'type' => 'string', 'default' => ''],
@@ -2204,26 +2217,93 @@ function af_kb_arpg_mechanics_option_set_definitions(): array
                 ['key' => 'female', 'label_ru' => 'Женский', 'label_en' => 'Female'],
             ],
         ],
+        'formula_profile' => [
+            'title_ru' => 'ARPG: Профили формул',
+            'title_en' => 'ARPG: Formula Profiles',
+            'service_kind' => 'formula_profile',
+            'entries' => [
+                ['key' => 'damage_flat', 'title' => 'Damage Flat', 'group' => 'damage', 'description' => 'Flat damage value.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'damage_percent', 'title' => 'Damage Percent', 'group' => 'damage', 'description' => 'Percent damage value.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'damage_hybrid_flat', 'title' => 'Damage Hybrid Flat', 'group' => 'damage', 'description' => 'Hybrid flat component.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => 'flat+attr', 'active' => 1],
+                ['key' => 'damage_hybrid_percent', 'title' => 'Damage Hybrid Percent', 'group' => 'damage', 'description' => 'Hybrid percent component.', 'calc_family' => 'damage', 'duration_supported' => 0, 'ui_hint' => '%+attr', 'active' => 1],
+                ['key' => 'shield_flat', 'title' => 'Shield Flat', 'group' => 'shield', 'description' => 'Flat shield amount.', 'calc_family' => 'shield', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'shield_percent', 'title' => 'Shield Percent', 'group' => 'shield', 'description' => 'Percent shield amount.', 'calc_family' => 'shield', 'duration_supported' => 1, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'heal_flat', 'title' => 'Heal Flat', 'group' => 'heal', 'description' => 'Flat healing amount.', 'calc_family' => 'heal', 'duration_supported' => 0, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'heal_percent', 'title' => 'Heal Percent', 'group' => 'heal', 'description' => 'Percent healing amount.', 'calc_family' => 'heal', 'duration_supported' => 0, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'buff_flat', 'title' => 'Buff Flat', 'group' => 'buff', 'description' => 'Flat buff modifier.', 'calc_family' => 'buff', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'buff_percent', 'title' => 'Buff Percent', 'group' => 'buff', 'description' => 'Percent buff modifier.', 'calc_family' => 'buff', 'duration_supported' => 1, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'debuff_flat', 'title' => 'Debuff Flat', 'group' => 'debuff', 'description' => 'Flat debuff modifier.', 'calc_family' => 'debuff', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'debuff_percent', 'title' => 'Debuff Percent', 'group' => 'debuff', 'description' => 'Percent debuff modifier.', 'calc_family' => 'debuff', 'duration_supported' => 1, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'control_fixed', 'title' => 'Control Fixed', 'group' => 'control', 'description' => 'Fixed control effect.', 'calc_family' => 'control', 'duration_supported' => 1, 'ui_hint' => 'seconds', 'active' => 1],
+                ['key' => 'utility_fixed', 'title' => 'Utility Fixed', 'group' => 'utility', 'description' => 'Fixed utility effect.', 'calc_family' => 'utility', 'duration_supported' => 1, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'mobility_fixed', 'title' => 'Mobility Fixed', 'group' => 'mobility', 'description' => 'Fixed mobility effect.', 'calc_family' => 'mobility', 'duration_supported' => 1, 'ui_hint' => 'units', 'active' => 1],
+                ['key' => 'passive_flat', 'title' => 'Passive Flat', 'group' => 'passive', 'description' => 'Flat passive modifier.', 'calc_family' => 'passive', 'duration_supported' => 0, 'ui_hint' => 'value', 'active' => 1],
+                ['key' => 'passive_percent', 'title' => 'Passive Percent', 'group' => 'passive', 'description' => 'Percent passive modifier.', 'calc_family' => 'passive', 'duration_supported' => 0, 'ui_hint' => '%', 'active' => 1],
+                ['key' => 'passive_conditional', 'title' => 'Passive Conditional', 'group' => 'passive', 'description' => 'Conditional passive modifier.', 'calc_family' => 'passive', 'duration_supported' => 0, 'ui_hint' => 'condition', 'active' => 1],
+            ],
+        ],
+        'weapon_type' => [
+            'title_ru' => 'ARPG: Типы оружия',
+            'title_en' => 'ARPG: Weapon Types',
+            'service_kind' => 'weapon_type',
+            'entries' => [
+                ['key' => 'sword', 'title' => 'Sword', 'description' => 'Balanced one-handed melee weapon.', 'default_range_profile' => 'melee_short', 'starter_weapon_template' => '', 'active' => 1],
+                ['key' => 'greatsword', 'title' => 'Greatsword', 'description' => 'Two-handed heavy blade.', 'default_range_profile' => 'melee_wide', 'starter_weapon_template' => '', 'active' => 1],
+                ['key' => 'spear', 'title' => 'Spear', 'description' => 'Reach-focused melee weapon.', 'default_range_profile' => 'melee_reach', 'starter_weapon_template' => '', 'active' => 1],
+                ['key' => 'bow', 'title' => 'Bow', 'description' => 'Ranged projectile weapon.', 'default_range_profile' => 'ranged_long', 'starter_weapon_template' => '', 'active' => 1],
+                ['key' => 'catalyst', 'title' => 'Catalyst', 'description' => 'Magical focus weapon.', 'default_range_profile' => 'ranged_magic', 'starter_weapon_template' => '', 'active' => 1],
+                ['key' => 'firearm', 'title' => 'Firearm', 'description' => 'Gunpowder or ballistic ranged weapon.', 'default_range_profile' => 'ranged_ballistic', 'starter_weapon_template' => '', 'active' => 1],
+            ],
+        ],
     ];
 }
 
 function af_kb_arpg_mechanics_options_fallback(string $setKey): array
 {
     $definitions = af_kb_arpg_mechanics_option_set_definitions();
+    $serviceKind = (string)($definitions[$setKey]['service_kind'] ?? 'snippet');
     $rows = (array)($definitions[$setKey]['entries'] ?? []);
     $normalized = [];
     foreach ($rows as $idx => $row) {
-        $normalized[] = af_kb_normalize_arpg_mechanics_entry_row($row, $idx + 1);
+        $normalized[] = af_kb_normalize_arpg_mechanics_entry_row_by_service_kind($row, $serviceKind, $idx + 1);
     }
     return $normalized;
 }
 
-function af_kb_normalize_arpg_mechanics_entry_row($row, int $fallbackSortorder = 0): array
+function af_kb_normalize_arpg_mechanics_entry_row_by_service_kind($row, string $serviceKind, int $fallbackSortorder = 0): array
 {
     $source = is_array($row) ? $row : [];
     $key = trim((string)($source['key'] ?? ''));
     if ($key === '') {
         return [];
+    }
+
+    $serviceKind = trim($serviceKind);
+
+    if ($serviceKind === 'formula_profile') {
+        $group = trim((string)($source['group'] ?? ''));
+        $calcFamily = trim((string)($source['calc_family'] ?? ''));
+        return [
+            'key' => $key,
+            'title' => trim((string)($source['title'] ?? $key)),
+            'group' => $group !== '' ? $group : 'utility',
+            'description' => trim((string)($source['description'] ?? '')),
+            'calc_family' => $calcFamily !== '' ? $calcFamily : ($group !== '' ? $group : 'utility'),
+            'duration_supported' => !empty($source['duration_supported']) ? 1 : 0,
+            'ui_hint' => trim((string)($source['ui_hint'] ?? '')),
+            'active' => !isset($source['active']) || !empty($source['active']) ? 1 : 0,
+        ];
+    }
+
+    if ($serviceKind === 'weapon_type') {
+        return [
+            'key' => $key,
+            'title' => trim((string)($source['title'] ?? $key)),
+            'description' => trim((string)($source['description'] ?? '')),
+            'default_range_profile' => trim((string)($source['default_range_profile'] ?? '')),
+            'starter_weapon_template' => trim((string)($source['starter_weapon_template'] ?? '')),
+            'active' => !isset($source['active']) || !empty($source['active']) ? 1 : 0,
+        ];
     }
 
     $legacyValue = trim((string)($source['value'] ?? ''));
@@ -2257,6 +2337,11 @@ function af_kb_normalize_arpg_mechanics_entry_row($row, int $fallbackSortorder =
     ];
 }
 
+function af_kb_normalize_arpg_mechanics_entry_row($row, int $fallbackSortorder = 0): array
+{
+    return af_kb_normalize_arpg_mechanics_entry_row_by_service_kind($row, 'snippet', $fallbackSortorder);
+}
+
 function af_kb_seed_arpg_mechanics_option_sets(): void
 {
     global $db;
@@ -2278,8 +2363,9 @@ function af_kb_seed_arpg_mechanics_option_sets(): void
         }
 
         $entriesByKey = [];
+        $serviceKind = trim((string)($definition['service_kind'] ?? 'snippet')) ?: 'snippet';
         foreach ((array)($definition['entries'] ?? []) as $idx => $row) {
-            $normalized = af_kb_normalize_arpg_mechanics_entry_row($row, $idx + 1);
+            $normalized = af_kb_normalize_arpg_mechanics_entry_row_by_service_kind($row, $serviceKind, $idx + 1);
             $optionKey = trim((string)($normalized['key'] ?? ''));
             if ($optionKey === '') {
                 continue;
@@ -2288,7 +2374,7 @@ function af_kb_seed_arpg_mechanics_option_sets(): void
         }
 
         $payload = af_kb_arpg_envelope_defaults('arpg_mechanics');
-        $payload['rules']['service_kind'] = trim((string)($definition['service_kind'] ?? 'snippet')) ?: 'snippet';
+        $payload['rules']['service_kind'] = $serviceKind;
         $payload['rules']['entries'] = array_values($entriesByKey);
 
         $db->insert_query('af_kb_entries', [
@@ -5566,7 +5652,7 @@ function af_kb_arpg_public_entity_kinds(): array
 
 function af_kb_arpg_service_entity_kinds(): array
 {
-    return ['mechanic_profile', 'resource_def', 'status_def', 'modifier_template', 'formula_def', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
+    return ['mechanic_profile', 'resource_def', 'status_def', 'modifier_template', 'formula_def', 'formula_profile', 'weapon_type', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
 }
 
 function af_kb_arpg_damage_type_values(): array
@@ -5904,6 +5990,45 @@ function af_kb_validate_arpg_service_entity(string $entityKind, array $payload, 
         foreach (['stats_registry', 'damage_type_registry', 'targeting_registry', 'resource_ops_registry', 'modifier_modes_registry', 'talent_rank_registry', 'item_rarity_registry', 'bestiary_rank_registry'] as $registryKey) {
             if (!is_array($payload['rules'][$registryKey] ?? null)) {
                 $errors[] = 'ARPG mechanic_profile requires rules.' . $registryKey . ' array.';
+            }
+        }
+    }
+    if ($entityKind === 'formula_profile') {
+        $allowedGroups = ['damage', 'shield', 'heal', 'buff', 'debuff', 'control', 'utility', 'mobility', 'passive'];
+        foreach ((array)($payload['rules']['entries'] ?? []) as $idx => $entry) {
+            if (!is_array($entry)) {
+                $errors[] = 'ARPG formula_profile entry #' . ($idx + 1) . ' must be an object.';
+                continue;
+            }
+            if (trim((string)($entry['key'] ?? '')) === '') {
+                $errors[] = 'ARPG formula_profile entry #' . ($idx + 1) . ' requires key.';
+            }
+            if (trim((string)($entry['title'] ?? '')) === '') {
+                $errors[] = 'ARPG formula_profile entry #' . ($idx + 1) . ' requires title.';
+            }
+            $group = trim((string)($entry['group'] ?? ''));
+            if ($group === '' || !in_array($group, $allowedGroups, true)) {
+                $errors[] = 'ARPG formula_profile entry #' . ($idx + 1) . ' has invalid group.';
+            }
+            if (trim((string)($entry['calc_family'] ?? '')) === '') {
+                $errors[] = 'ARPG formula_profile entry #' . ($idx + 1) . ' requires calc_family.';
+            }
+        }
+    }
+    if ($entityKind === 'weapon_type') {
+        foreach ((array)($payload['rules']['entries'] ?? []) as $idx => $entry) {
+            if (!is_array($entry)) {
+                $errors[] = 'ARPG weapon_type entry #' . ($idx + 1) . ' must be an object.';
+                continue;
+            }
+            if (trim((string)($entry['key'] ?? '')) === '') {
+                $errors[] = 'ARPG weapon_type entry #' . ($idx + 1) . ' requires key.';
+            }
+            if (trim((string)($entry['title'] ?? '')) === '') {
+                $errors[] = 'ARPG weapon_type entry #' . ($idx + 1) . ' requires title.';
+            }
+            if (trim((string)($entry['default_range_profile'] ?? '')) === '') {
+                $errors[] = 'ARPG weapon_type entry #' . ($idx + 1) . ' requires default_range_profile.';
             }
         }
     }
@@ -8285,6 +8410,85 @@ function af_kb_build_resolved_ui_schema(array $typeRow, array $entry): array
     return $schema;
 }
 
+function af_kb_render_arpg_mechanics_reference(array $rules, bool $isRu): string
+{
+    $serviceKind = trim((string)($rules['service_kind'] ?? ''));
+    $entries = is_array($rules['entries'] ?? null) ? $rules['entries'] : [];
+    if ($entries === []) {
+        return '';
+    }
+
+    if ($serviceKind === 'formula_profile') {
+        $rows = [];
+        foreach ($entries as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $title = trim((string)($entry['title'] ?? ''));
+            $key = trim((string)($entry['key'] ?? ''));
+            if ($title === '' && $key === '') {
+                continue;
+            }
+            $group = trim((string)($entry['group'] ?? ''));
+            $description = trim((string)($entry['description'] ?? ''));
+            $uiHint = trim((string)($entry['ui_hint'] ?? ''));
+            $rows[] = '<tr>'
+                . '<td>' . htmlspecialchars_uni($title !== '' ? $title : $key) . '</td>'
+                . '<td><code>' . htmlspecialchars_uni($key) . '</code></td>'
+                . '<td>' . htmlspecialchars_uni($group) . '</td>'
+                . '<td>' . htmlspecialchars_uni($description) . '</td>'
+                . '<td>' . htmlspecialchars_uni($uiHint) . '</td>'
+                . '</tr>';
+        }
+        if ($rows) {
+            return '<section class="af-kb-rule-section"><h3>'
+                . htmlspecialchars_uni($isRu ? 'Справочник Formula Profile' : 'Formula Profile reference')
+                . '</h3><div class="af-kb-table-wrap"><table class="tborder"><thead><tr><th>'
+                . htmlspecialchars_uni($isRu ? 'Название' : 'Title')
+                . '</th><th>key</th><th>group</th><th>'
+                . htmlspecialchars_uni($isRu ? 'Описание' : 'Description')
+                . '</th><th>ui_hint</th></tr></thead><tbody>'
+                . implode('', $rows)
+                . '</tbody></table></div></section>';
+        }
+    }
+
+    if ($serviceKind === 'weapon_type') {
+        $rows = [];
+        foreach ($entries as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $title = trim((string)($entry['title'] ?? ''));
+            $key = trim((string)($entry['key'] ?? ''));
+            if ($title === '' && $key === '') {
+                continue;
+            }
+            $description = trim((string)($entry['description'] ?? ''));
+            $rangeProfile = trim((string)($entry['default_range_profile'] ?? ''));
+            $rows[] = '<tr>'
+                . '<td>' . htmlspecialchars_uni($title !== '' ? $title : $key) . '</td>'
+                . '<td><code>' . htmlspecialchars_uni($key) . '</code></td>'
+                . '<td>' . htmlspecialchars_uni($description) . '</td>'
+                . '<td>' . htmlspecialchars_uni($rangeProfile) . '</td>'
+                . '</tr>';
+        }
+        if ($rows) {
+            return '<section class="af-kb-rule-section"><h3>'
+                . htmlspecialchars_uni($isRu ? 'Справочник Weapon Type' : 'Weapon Type reference')
+                . '</h3><div class="af-kb-table-wrap"><table class="tborder"><thead><tr><th>'
+                . htmlspecialchars_uni($isRu ? 'Название' : 'Title')
+                . '</th><th>key</th><th>'
+                . htmlspecialchars_uni($isRu ? 'Описание' : 'Description')
+                . '</th><th>default_range_profile</th></tr></thead><tbody>'
+                . implode('', $rows)
+                . '</tbody></table></div></section>';
+        }
+    }
+
+    return '';
+}
+
 function af_kb_render_structured_rules(array $entry, array $typeRow, bool $isRu): string
 {
     $typeKey = (string)($typeRow['type_key'] ?? ($typeRow['id'] ?? ($typeRow['key'] ?? '')));
@@ -8310,6 +8514,13 @@ function af_kb_render_structured_rules(array $entry, array $typeRow, bool $isRu)
 
     $sections = (array)($schema['sections'] ?? []);
     $chunks = [];
+
+    if ((string)($entry['type'] ?? '') === 'arpg_mechanics') {
+        $mechanicsHtml = af_kb_render_arpg_mechanics_reference($rules, $isRu);
+        if ($mechanicsHtml !== '') {
+            $chunks[] = $mechanicsHtml;
+        }
+    }
 
     foreach ($sections as $section) {
         if (!is_array($section)) {

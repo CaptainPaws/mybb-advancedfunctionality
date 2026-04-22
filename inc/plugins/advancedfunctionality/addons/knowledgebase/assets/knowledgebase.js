@@ -1057,7 +1057,7 @@
 
             var simpleTypes = ['origin', 'archetype', 'element', 'faction', 'lore', 'character'];
             var heavyTypes = ['ability', 'talent', 'item', 'bestiary', 'character'];
-            var serviceKinds = ['mechanic_profile', 'resource_def', 'status_def', 'modifier_template', 'formula_def', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
+            var serviceKinds = ['mechanic_profile', 'resource_def', 'status_def', 'modifier_template', 'formula_def', 'formula_profile', 'weapon_type', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
 
             function getRootDefaults() {
                 var defaults = (typeSchema && typeSchema.root_defaults && typeof typeSchema.root_defaults === 'object')
@@ -2216,6 +2216,37 @@
                     { key: 'visibility.search', label: 'visibility.search', default: false },
                     { key: 'visibility.internal', label: 'visibility.internal', default: true }
                 ]);
+                var serviceKind = String(payload.rules.service_kind || '');
+                if (serviceKind === 'formula_profile') {
+                    renderSeededArrayEditor(rulesRoot, 'entries', 'formula_profile', [
+                        { key: 'key', label: 'key', default: '' },
+                        { key: 'title', label: 'title', default: '' },
+                        { key: 'group', label: 'group', type: 'select', options: ['damage', 'shield', 'heal', 'buff', 'debuff', 'control', 'utility', 'mobility', 'passive'], default: 'utility' },
+                        { key: 'description', label: 'description', default: '' },
+                        { key: 'calc_family', label: 'calc_family', type: 'select', options: ['damage', 'shield', 'heal', 'buff', 'debuff', 'control', 'utility', 'mobility', 'passive'], default: 'utility' },
+                        { key: 'duration_supported', label: 'duration_supported', type: 'number', default: 0 },
+                        { key: 'ui_hint', label: 'ui_hint', default: '' },
+                        { key: 'active', label: 'active', type: 'number', default: 1 }
+                    ], [
+                        { key: 'default', label: 'default', seed: { key: '', title: '', group: 'utility', description: '', calc_family: 'utility', duration_supported: 0, ui_hint: '', active: 1 } }
+                    ]);
+                    return;
+                }
+
+                if (serviceKind === 'weapon_type') {
+                    renderSeededArrayEditor(rulesRoot, 'entries', 'weapon_type', [
+                        { key: 'key', label: 'key', default: '' },
+                        { key: 'title', label: 'title', default: '' },
+                        { key: 'description', label: 'description', default: '' },
+                        { key: 'default_range_profile', label: 'default_range_profile', default: '' },
+                        { key: 'starter_weapon_template', label: 'starter_weapon_template', default: '' },
+                        { key: 'active', label: 'active', type: 'number', default: 1 }
+                    ], [
+                        { key: 'default', label: 'default', seed: { key: '', title: '', description: '', default_range_profile: '', starter_weapon_template: '', active: 1 } }
+                    ]);
+                    return;
+                }
+
                 renderSeededArrayEditor(rulesRoot, 'entries', 'entries', [
                     { key: 'key', label: 'key', default: '' },
                     { key: 'label_ru', label: 'label_ru', default: '' },
