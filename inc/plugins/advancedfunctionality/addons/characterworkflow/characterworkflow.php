@@ -245,6 +245,12 @@ function af_cwf_get_context(int $tid, array $thread = [], array $acceptRow = [])
     }
     $uid = (int)($thread['uid'] ?? ($acceptRow['uid'] ?? 0));
     $workflow = af_cwf_get_row($tid);
+    $workflowState = (string)($workflow['state'] ?? '');
+    $workflowAccepted = in_array($workflowState, [AF_CWF_STATE_APPROVED, AF_CWF_STATE_TRANSFERRED, AF_CWF_STATE_ACCEPTED], true)
+        || (int)($workflow['accepted_at'] ?? 0) > 0
+        || (int)($workflow['transferred_at'] ?? 0) > 0;
+    $legacyAccepted = function_exists('af_charactersheets_is_accepted') ? af_charactersheets_is_accepted($tid) : false;
+    $wasAccepted = $workflowAccepted || $legacyAccepted;
     $kbLinked = (int)($workflow['kb_entry_id'] ?? ($acceptRow['kb_entry_id'] ?? 0)) > 0;
     $sheetExists = function_exists('af_charactersheets_resolve_existing_sheet_for_thread')
         ? !empty(af_charactersheets_resolve_existing_sheet_for_thread($tid, $uid, $acceptRow))
@@ -258,8 +264,10 @@ function af_cwf_get_context(int $tid, array $thread = [], array $acceptRow = [])
         'workflow' => $workflow,
         'uid' => $uid,
         'fid' => (int)($thread['fid'] ?? 0),
-        'state' => (string)($workflow['state'] ?? ''),
-        'was_accepted' => function_exists('af_charactersheets_is_accepted') ? af_charactersheets_is_accepted($tid) : false,
+        'state' => $workflowState,
+        'was_accepted' => $wasAccepted,
+        'workflow_accepted' => $workflowAccepted,
+        'legacy_accepted' => $legacyAccepted,
         'is_pending_forum' => function_exists('af_charactersheets_is_pending_forum') ? af_charactersheets_is_pending_forum((int)($thread['fid'] ?? 0)) : false,
         'is_target_forum' => in_array((int)($thread['fid'] ?? 0), af_cwf_get_target_forum_ids(), true),
         'kb_linked' => $kbLinked,

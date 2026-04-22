@@ -443,6 +443,10 @@ function af_charactersheets_dispatch(): void
         af_charactersheets_handle_accept_action();
         return;
     }
+    if ($action === 'af_charactersheets_transfer') {
+        af_charactersheets_handle_transfer_action();
+        return;
+    }
     if ($action === 'af_charactersheets_create_sheet') {
         af_charactersheets_handle_create_sheet_action();
         return;
@@ -1039,7 +1043,16 @@ function af_charactersheets_handle_transfer_action(): void
     }
 
     $acceptRow = af_charactersheets_get_accept_row($tid);
-    if (empty($acceptRow['accepted'])) {
+    $canTransfer = function_exists('af_cwf_can_transfer')
+        ? af_cwf_can_transfer($tid, $thread, $acceptRow)
+        : !empty($acceptRow['accepted']);
+    if (!$canTransfer) {
+        af_charactersheets_log('Transfer denied by policy', [
+            'tid' => $tid,
+            'fid' => $fid,
+            'workflow_state' => function_exists('af_cwf_get_row') ? (string)(af_cwf_get_row($tid)['state'] ?? '') : '',
+            'accepted_flag' => (int)($acceptRow['accepted'] ?? 0),
+        ]);
         $msg = $lang->af_charactersheets_accept_already ?? 'Сначала примите анкету.';
         redirect('showthread.php?tid=' . $tid, $msg);
     }
