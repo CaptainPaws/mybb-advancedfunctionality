@@ -228,7 +228,7 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
     ];
 
     $row = [
-        'uid' => $hasUid ? $uid : null,
+        'uid' => $hasUid ? $uid : 0,
         'tid' => $tid,
         'slug' => $slug,
         'base_json' => $db->escape_string(af_charactersheets_json_encode($base)),
@@ -287,6 +287,52 @@ function af_charactersheets_ensure_sheet(int $tid, int $uid, string $slug): arra
     }
 
     return af_charactersheets_get_sheet_by_id($id);
+}
+
+
+function af_charactersheets_recover_sheet_for_accept_row(array $accept_row): array
+{
+    $tid = (int)($accept_row['tid'] ?? 0);
+    $uid = (int)($accept_row['uid'] ?? 0);
+    $slug = trim((string)($accept_row['sheet_slug'] ?? ''));
+
+    $sheet = [];
+    if ($tid > 0) {
+        $sheet = af_charactersheets_get_sheet_by_tid($tid);
+    }
+    if (empty($sheet) && $slug !== '') {
+        $sheet = af_charactersheets_get_sheet_by_slug($slug);
+    }
+
+    if (!empty($sheet['id'])) {
+        return $sheet;
+    }
+
+    if ($slug === '' || $tid <= 0) {
+        return [];
+    }
+
+    try {
+        $sheet = af_charactersheets_ensure_sheet($tid, $uid, $slug);
+    } catch (Throwable $e) {
+        af_charactersheets_log('Sheet recovery failed', [
+            'tid' => $tid,
+            'uid' => $uid,
+            'slug' => $slug,
+            'error' => $e->getMessage(),
+        ]);
+        return [];
+    }
+
+    if (!empty($sheet['id'])) {
+        af_charactersheets_upsert_accept_row($tid, [
+            'uid' => $uid,
+            'sheet_slug' => (string)($sheet['slug'] ?? $slug),
+            'sheet_created' => 1,
+        ]);
+    }
+
+    return $sheet;
 }
 
 function af_charactersheets_update_sheet_json(int $sheet_id, array $base, array $build, array $progress): void
@@ -351,6 +397,14 @@ function af_charactersheets_delete_sheet(int $sheet_id, array $actor, string $re
                 'sheet_created' => 0,
             ], "sheet_slug='" . $db->escape_string($slug) . "'");
         }
+    }
+
+    if (defined('AF_CWF_TABLE') && $db->table_exists(AF_CWF_TABLE) && $tid > 0) {
+        $db->update_query(AF_CWF_TABLE, [
+            'sheet_id' => null,
+            'sheet_slug' => null,
+            'updated_at' => TIME_NOW,
+        ], 'tid=' . $tid);
     }
 
     af_charactersheets_log('Sheet deleted', [
