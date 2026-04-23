@@ -476,7 +476,6 @@ function af_charactersheets_arpg_build_ability_labels(array $ability): array
         'тип урона' => ['damage_type', 'ability_damage_type'],
         'цель' => ['target', 'targeting', 'ability_targeting'],
         'длительность' => ['duration_value', 'duration'],
-        'formula' => ['formula_profile'],
         'value mode' => ['value_mode'],
     ];
     foreach ($fieldMap as $label => $keys) {
@@ -507,6 +506,88 @@ function af_charactersheets_arpg_build_ability_labels(array $ability): array
     return $labels;
 }
 
+function af_charactersheets_arpg_build_formula_profile_applied(array $ability): array
+{
+    $profileKey = trim((string)($ability['formula_profile'] ?? ''));
+    if ($profileKey === '') {
+        return [];
+    }
+
+    $entry = [];
+    if (function_exists('af_kb_get_arpg_mechanics_options')) {
+        foreach ((array)af_kb_get_arpg_mechanics_options('formula_profile') as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            if (trim((string)($row['key'] ?? '')) === $profileKey) {
+                $entry = $row;
+                break;
+            }
+        }
+    }
+
+    $calcFamily = trim((string)($entry['calc_family'] ?? $entry['group'] ?? ''));
+    $uiHint = trim((string)($entry['ui_hint'] ?? ''));
+    $durationSupported = (int)($entry['duration_supported'] ?? 0) === 1;
+    $durationValue = trim((string)($ability['duration_value'] ?? $ability['duration'] ?? ''));
+
+    $familyLabels = [
+        'damage' => 'Урон',
+        'heal' => 'Лечение',
+        'shield' => 'Щит',
+        'buff' => 'Бафф',
+        'debuff' => 'Дебафф',
+        'control' => 'Контроль',
+        'utility' => 'Эффект',
+        'mobility' => 'Мобильность',
+        'passive' => 'Пассивный эффект',
+    ];
+    $primaryLabel = (string)($familyLabels[$calcFamily] ?? '');
+    if ($primaryLabel === '') {
+        $primaryLabel = trim((string)($entry['title'] ?? 'Эффект'));
+    }
+
+    $primaryValue = '';
+    if ($calcFamily === 'damage') {
+        $primaryValue = trim((string)($ability['damage_value'] ?? ''));
+    } elseif ($calcFamily === 'heal') {
+        $primaryValue = trim((string)($ability['heal_value'] ?? ''));
+    } elseif ($calcFamily === 'shield') {
+        $primaryValue = trim((string)($ability['shield_value'] ?? ''));
+    }
+    if ($primaryValue === '') {
+        foreach (['damage_value', 'heal_value', 'shield_value'] as $key) {
+            $candidate = trim((string)($ability[$key] ?? ''));
+            if ($candidate !== '') {
+                $primaryValue = $candidate;
+                break;
+            }
+        }
+    }
+
+    $lines = [];
+    if ($primaryValue !== '') {
+        $suffix = $uiHint !== '' ? ' ' . $uiHint : '';
+        if ($uiHint === '%' && substr($primaryValue, -1) === '%') {
+            $suffix = '';
+        }
+        $lines[] = $primaryLabel . ': ' . $primaryValue . $suffix;
+    } else {
+        $description = trim((string)($entry['description'] ?? ''));
+        if ($description !== '') {
+            $lines[] = $primaryLabel . ': ' . $description;
+        } elseif ($primaryLabel !== '') {
+            $lines[] = $primaryLabel;
+        }
+    }
+
+    if ($durationSupported && $durationValue !== '') {
+        $lines[] = 'Длительность: ' . $durationValue;
+    }
+
+    return $lines;
+}
+
 function af_charactersheets_arpg_normalize_ability_card(array $ability, array $fallback = []): array
 {
     $title = trim((string)($ability['title'] ?? $ability['ability_name'] ?? $ability['name'] ?? $fallback['title'] ?? ''));
@@ -517,12 +598,15 @@ function af_charactersheets_arpg_normalize_ability_card(array $ability, array $f
         $labels = (array)$fallback['labels'];
     }
 
+    $appliedProfile = af_charactersheets_arpg_build_formula_profile_applied($ability);
+
     return [
         'title' => $title !== '' ? $title : '—',
         'description' => $description,
         'desc' => $description,
         'icon' => $icon,
         'labels' => $labels,
+        'applied_profile' => $appliedProfile,
     ];
 }
 
@@ -1177,6 +1261,21 @@ function af_charactersheets_arpg_render_abilities_group_html(array $items, strin
                 . '</span>';
         }
         $description = trim((string)($item['description'] ?? $item['desc'] ?? ''));
+        $appliedProfile = is_array($item['applied_profile'] ?? null) ? (array)$item['applied_profile'] : [];
+        $appliedHtml = '';
+        if (!empty($appliedProfile)) {
+            $rows = '';
+            foreach ($appliedProfile as $line) {
+                $line = trim((string)$line);
+                if ($line === '') {
+                    continue;
+                }
+                $rows .= '<div class="af-cs-muted">' . htmlspecialchars_uni($line) . '</div>';
+            }
+            if ($rows !== '') {
+                $appliedHtml = '<div class="af-cs-arpg-ability-card__applied">' . $rows . '</div>';
+            }
+        }
         $html .= '<article class="af-cs-arpg-ability-card">'
             . '<div class="af-cs-arpg-ability-card__head">'
             . ($icon !== '' ? '<div class="af-cs-arpg-ability-card__icon"><img src="' . htmlspecialchars_uni($icon) . '" alt="" loading="lazy" /></div>' : '')
@@ -1185,6 +1284,7 @@ function af_charactersheets_arpg_render_abilities_group_html(array $items, strin
             . ($labelsHtml !== '' ? '<div class="af-cs-arpg-ability-card__chips">' . $labelsHtml . '</div>' : '')
             . '</div></div>'
             . ($description !== '' ? '<p class="af-cs-arpg-ability-card__description">' . htmlspecialchars_uni($description) . '</p>' : '')
+            . $appliedHtml
             . '</article>';
     }
     return $html;
