@@ -391,11 +391,12 @@
 
     function initCopyButtons() {
         document.addEventListener('click', function (event) {
-            var target = event.target;
-            if (!(target instanceof HTMLElement)) {
+            var source = event.target;
+            if (!(source instanceof HTMLElement)) {
                 return;
             }
-            if (!target.classList.contains('af-kb-copy-json')) {
+            var target = source.closest('.af-kb-copy-json');
+            if (!(target instanceof HTMLElement)) {
                 return;
             }
 
@@ -404,23 +405,29 @@
                 return;
             }
 
+            var fallbackCopy = function () {
+                var temp = document.createElement('textarea');
+                temp.value = payload;
+                temp.style.position = 'fixed';
+                temp.style.opacity = '0';
+                document.body.appendChild(temp);
+                temp.select();
+                try {
+                    document.execCommand('copy');
+                } catch (err) {
+                    // ignore
+                }
+                document.body.removeChild(temp);
+            };
+
             if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(payload);
+                navigator.clipboard.writeText(payload).catch(function () {
+                    fallbackCopy();
+                });
                 return;
             }
 
-            var temp = document.createElement('textarea');
-            temp.value = payload;
-            temp.style.position = 'fixed';
-            temp.style.opacity = '0';
-            document.body.appendChild(temp);
-            temp.select();
-            try {
-                document.execCommand('copy');
-            } catch (err) {
-                // ignore
-            }
-            document.body.removeChild(temp);
+            fallbackCopy();
         });
     }
 
