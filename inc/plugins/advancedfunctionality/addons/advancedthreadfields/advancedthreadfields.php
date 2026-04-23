@@ -4120,7 +4120,7 @@ function af_atf_normalize_character_stats_json(string $raw): string
 
 function af_atf_character_pick_ability_description(array $row): string
 {
-    $aliases = ['description', 'ability_description', 'desc'];
+    $aliases = ['ability_description', 'description', 'desc'];
     foreach ($aliases as $key) {
         if (!array_key_exists($key, $row) || !is_scalar($row[$key])) {
             continue;
@@ -4145,7 +4145,7 @@ function af_atf_normalize_character_ability_row(array $row, int $fallbackSortord
 {
     $name = trim((string)($row['title'] ?? $row['ability_name'] ?? $row['name'] ?? ''));
     $type = trim((string)($row['type'] ?? $row['ability_type'] ?? 'active'));
-    $description = af_atf_character_pick_ability_description($row);
+    $abilityDescription = af_atf_character_pick_ability_description($row);
     $kbKey = trim((string)($row['ability_kb_key'] ?? $row['ability_key'] ?? ''));
     $iconUrl = trim((string)($row['icon'] ?? $row['icon_url'] ?? ''));
     $target = trim((string)($row['target'] ?? $row['targeting'] ?? ''));
@@ -4178,12 +4178,94 @@ function af_atf_normalize_character_ability_row(array $row, int $fallbackSortord
         'damage_value' => my_substr(trim((string)($row['damage_value'] ?? '')), 0, 64),
         'shield_value' => my_substr(trim((string)($row['shield_value'] ?? '')), 0, 64),
         'heal_value' => my_substr(trim((string)($row['heal_value'] ?? '')), 0, 64),
-        'description' => my_substr($description, 0, 5000),
-        'ability_description' => my_substr($description, 0, 5000),
-        'desc' => my_substr($description, 0, 5000),
+        'ability_description' => my_substr($abilityDescription, 0, 5000),
+        'description' => my_substr($abilityDescription, 0, 5000),
+        'desc' => my_substr($abilityDescription, 0, 5000),
         'ability_kb_key' => my_substr($kbKey, 0, 128),
         'sortorder' => max(0, $sortorder),
     ];
+}
+
+function af_atf_character_ability_profile_applied_lines(array $ability): array
+{
+    $profileKey = trim((string)($ability['formula_profile'] ?? ''));
+    if ($profileKey === '') {
+        return [];
+    }
+
+    $entry = [];
+    if (function_exists('af_kb_get_arpg_mechanics_options')) {
+        foreach ((array)af_kb_get_arpg_mechanics_options('formula_profile') as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            if (trim((string)($row['key'] ?? '')) === $profileKey) {
+                $entry = $row;
+                break;
+            }
+        }
+    }
+
+    $calcFamily = trim((string)($entry['calc_family'] ?? $entry['group'] ?? ''));
+    $uiHint = trim((string)($entry['ui_hint'] ?? ''));
+    $durationSupported = (int)($entry['duration_supported'] ?? 0) === 1;
+    $durationValue = trim((string)($ability['duration_value'] ?? $ability['duration'] ?? ''));
+
+    $familyLabels = [
+        'damage' => 'Урон',
+        'heal' => 'Лечение',
+        'shield' => 'Щит',
+        'buff' => 'Бафф',
+        'debuff' => 'Дебафф',
+        'control' => 'Контроль',
+        'utility' => 'Эффект',
+        'mobility' => 'Мобильность',
+        'passive' => 'Пассивный эффект',
+    ];
+    $primaryLabel = (string)($familyLabels[$calcFamily] ?? '');
+    if ($primaryLabel === '') {
+        $primaryLabel = trim((string)($entry['title'] ?? 'Эффект'));
+    }
+
+    $primaryValue = '';
+    if ($calcFamily === 'damage') {
+        $primaryValue = trim((string)($ability['damage_value'] ?? ''));
+    } elseif ($calcFamily === 'heal') {
+        $primaryValue = trim((string)($ability['heal_value'] ?? ''));
+    } elseif ($calcFamily === 'shield') {
+        $primaryValue = trim((string)($ability['shield_value'] ?? ''));
+    }
+    if ($primaryValue === '') {
+        foreach (['damage_value', 'heal_value', 'shield_value'] as $key) {
+            $candidate = trim((string)($ability[$key] ?? ''));
+            if ($candidate !== '') {
+                $primaryValue = $candidate;
+                break;
+            }
+        }
+    }
+
+    $lines = [];
+    if ($primaryValue !== '') {
+        $suffix = $uiHint !== '' ? ' ' . $uiHint : '';
+        if ($uiHint === '%' && substr($primaryValue, -1) === '%') {
+            $suffix = '';
+        }
+        $lines[] = $primaryLabel . ': ' . $primaryValue . $suffix;
+    } else {
+        $description = trim((string)($entry['description'] ?? ''));
+        if ($description !== '') {
+            $lines[] = $primaryLabel . ': ' . $description;
+        } elseif ($primaryLabel !== '') {
+            $lines[] = $primaryLabel;
+        }
+    }
+
+    if ($durationSupported && $durationValue !== '') {
+        $lines[] = 'Длительность: ' . $durationValue;
+    }
+
+    return $lines;
 }
 
 function af_atf_normalize_character_abilities_json(string $raw): string
@@ -5532,7 +5614,6 @@ function af_atf_format_value_for_display(array $field, string $val): string
             ['key' => 'slot', 'label' => 'Слот', 'set' => 'ability_slot'],
             ['key' => 'damage_type', 'label' => 'Тип урона', 'set' => 'ability_damage_type'],
             ['key' => 'target', 'label' => 'Цель', 'set' => 'ability_targeting'],
-            ['key' => 'formula_profile', 'label' => 'Formula Profile', 'set' => 'formula_profile'],
             ['key' => 'duration_value', 'label' => 'Длительность', 'set' => ''],
         ];
 
@@ -5584,6 +5665,21 @@ function af_atf_format_value_for_display(array $field, string $val): string
             $descriptionHtml = $description !== ''
                 ? '<div class="af-atf-ability-display-description">' . nl2br(htmlspecialchars_uni($description)) . '</div>'
                 : '';
+            $appliedLines = af_atf_character_ability_profile_applied_lines((array)$ability);
+            $appliedHtml = '';
+            if (!empty($appliedLines)) {
+                $rows = '';
+                foreach ($appliedLines as $line) {
+                    $line = trim((string)$line);
+                    if ($line === '') {
+                        continue;
+                    }
+                    $rows .= '<div class="af-atf-ability-display-applied-line">' . htmlspecialchars_uni($line) . '</div>';
+                }
+                if ($rows !== '') {
+                    $appliedHtml = '<div class="af-atf-ability-display-applied">' . $rows . '</div>';
+                }
+            }
 
             $chipsHtml = $chips !== ''
                 ? '<div class="af-atf-ability-display-chips">' . $chips . '</div>'
@@ -5593,6 +5689,7 @@ function af_atf_format_value_for_display(array $field, string $val): string
                 . '<div class="af-atf-ability-display-head">' . $iconHtml . $titleHtml . '</div>'
                 . $chipsHtml
                 . $descriptionHtml
+                . $appliedHtml
                 . '</article>';
         }
 
