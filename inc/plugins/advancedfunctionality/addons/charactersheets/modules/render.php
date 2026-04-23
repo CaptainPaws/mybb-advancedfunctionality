@@ -810,6 +810,35 @@ function af_charactersheets_arpg_stat_from_sources(
     return '—';
 }
 
+function af_charactersheets_arpg_merge_runtime_stats(array $characterStats, array $computedKbStats): array
+{
+    $merged = $characterStats;
+    foreach ($computedKbStats as $statKey => $computedValue) {
+        $hasRaw = array_key_exists($statKey, $merged);
+        $rawValue = $hasRaw ? $merged[$statKey] : null;
+        $rawNumeric = is_numeric($rawValue) ? (float)$rawValue : null;
+        $computedNumeric = (float)$computedValue;
+
+        $shouldOverride = !$hasRaw
+            || $rawValue === null
+            || $rawValue === ''
+            || $rawNumeric === 0.0;
+
+        if ($shouldOverride) {
+            $merged[$statKey] = $computedNumeric;
+        }
+    }
+
+    return $merged;
+}
+
+function af_charactersheets_arpg_debug_trace_enabled(): bool
+{
+    global $mybb;
+
+    return isset($mybb) && (string)$mybb->get_input('afcs_trace') === '1';
+}
+
 function af_charactersheets_arpg_payload_is_canonical(array $character_source): bool
 {
     $payload = (array)($character_source['payload'] ?? []);
@@ -1218,11 +1247,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $archetypeResolved = af_charactersheets_arpg_resolve_kb_entry_flexible('arpg_archetype', $rawArchetype);
     $archetypeRules = af_charactersheets_arpg_extract_entry_rules((array)($archetypeResolved['entry'] ?? []));
     $computedKbStats = af_charactersheets_arpg_build_stats_from_kb($originRules, $archetypeRules, $level);
-    foreach ($computedKbStats as $statKey => $statValue) {
-        if (!array_key_exists($statKey, $character_stats) || $character_stats[$statKey] === '' || $character_stats[$statKey] === null) {
-            $character_stats[$statKey] = $statValue;
-        }
-    }
+    $character_stats = af_charactersheets_arpg_merge_runtime_stats($character_stats, $computedKbStats);
 
     $chips = [];
     $chips[] = '<span class="af-cs-arpg-chip">Lv. ' . htmlspecialchars_uni((string)$level) . '</span>';
@@ -1330,6 +1355,23 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         ['label' => 'Бонус щита', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_shield_strength', $sheet_view, ['character_computed_state.resources.shield_strength', 'mechanics.shield_bonus'])],
     ];
 
+    $arpgStatsTrace = [
+        'origin_raw' => $rawOrigin,
+        'archetype_raw' => $rawArchetype,
+        'origin_resolved_key' => (string)($originResolved['resolved_key'] ?? ''),
+        'origin_resolved_by' => (string)($originResolved['resolved_by'] ?? ''),
+        'archetype_resolved_key' => (string)($archetypeResolved['resolved_key'] ?? ''),
+        'archetype_resolved_by' => (string)($archetypeResolved['resolved_by'] ?? ''),
+        'origin_rules' => $originRules,
+        'archetype_rules' => $archetypeRules,
+        'computed_kb_stats' => $computedKbStats,
+        'render_character_stats' => $character_stats,
+        'render_stats_panel' => $stats_panel,
+    ];
+    if (af_charactersheets_arpg_debug_trace_enabled() && function_exists('af_charactersheets_log')) {
+        af_charactersheets_log('arpg_stats_runtime_trace', $arpgStatsTrace);
+    }
+
     return [
         'mode' => 'arpg',
         'render_profile' => 'arpg',
@@ -1375,6 +1417,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
                 'kb_type' => 'arpg_archetype',
             ],
         ],
+        'arpg_stats_trace' => $arpgStatsTrace,
         'header_identity_html' => $identityParts ? implode(' • ', $identityParts) : 'ARPG profile',
         'header_progress_html' => implode('', $chips),
         'element' => $element,
