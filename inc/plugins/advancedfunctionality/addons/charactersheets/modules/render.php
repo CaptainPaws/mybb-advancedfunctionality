@@ -506,7 +506,80 @@ function af_charactersheets_arpg_build_ability_labels(array $ability): array
     return $labels;
 }
 
-function af_charactersheets_arpg_build_formula_profile_applied(array $ability): array
+function af_charactersheets_arpg_read_numeric_stat(array $character_stats, array $sheet_view, string $statKey, array $paths = []): float
+{
+    $raw = $character_stats[$statKey] ?? null;
+    if ($raw !== null && $raw !== '') {
+        if (is_numeric($raw)) {
+            return (float)$raw;
+        }
+        $normalized = str_replace([',', ' '], ['.', ''], trim((string)$raw));
+        if (is_numeric($normalized)) {
+            return (float)$normalized;
+        }
+    }
+
+    foreach ($paths as $path) {
+        $value = af_charactersheets_deep_get($sheet_view, (string)$path, null);
+        if ($value === null || $value === '') {
+            continue;
+        }
+        if (is_numeric($value)) {
+            return (float)$value;
+        }
+        $normalized = str_replace([',', ' '], ['.', ''], trim((string)$value));
+        if (is_numeric($normalized)) {
+            return (float)$normalized;
+        }
+    }
+
+    return 0.0;
+}
+
+function af_charactersheets_arpg_parse_scalar_value($raw): float
+{
+    if ($raw === null || $raw === '') {
+        return 0.0;
+    }
+    if (is_numeric($raw)) {
+        return (float)$raw;
+    }
+    $normalized = preg_replace('/[^0-9,\.\-]/', '', (string)$raw);
+    if (!is_string($normalized) || $normalized === '' || $normalized === '-' || $normalized === '.' || $normalized === ',') {
+        return 0.0;
+    }
+    $normalized = str_replace(',', '.', $normalized);
+    return is_numeric($normalized) ? (float)$normalized : 0.0;
+}
+
+function af_charactersheets_arpg_pick_first_ability_scalar(array $ability, array $keys): float
+{
+    foreach ($keys as $key) {
+        if (!array_key_exists($key, $ability)) {
+            continue;
+        }
+        $value = af_charactersheets_arpg_parse_scalar_value($ability[$key]);
+        if ($value != 0.0) {
+            return $value;
+        }
+    }
+    return 0.0;
+}
+
+function af_charactersheets_arpg_resolve_ability_scaling_stat(array $ability, array $statMap): float
+{
+    $damageType = strtolower(trim((string)($ability['damage_type'] ?? $ability['ability_damage_type'] ?? '')));
+    $formulaProfile = strtolower(trim((string)($ability['formula_profile'] ?? '')));
+    if ($damageType === 'anemo' || $damageType === 'geo' || $damageType === 'dendro' || strpos($formulaProfile, 'mastery') !== false) {
+        return (float)($statMap['em'] ?? 0.0);
+    }
+    if ($damageType === 'physical') {
+        return (float)($statMap['atk'] ?? 0.0);
+    }
+    return (float)($statMap['atk'] ?? 0.0);
+}
+
+function af_charactersheets_arpg_build_formula_profile_applied(array $ability, array $character_stats, array $sheet_view): array
 {
     $profileKey = trim((string)($ability['formula_profile'] ?? ''));
     if ($profileKey === '') {
@@ -526,59 +599,85 @@ function af_charactersheets_arpg_build_formula_profile_applied(array $ability): 
         }
     }
 
-    $calcFamily = trim((string)($entry['calc_family'] ?? $entry['group'] ?? ''));
-    $uiHint = trim((string)($entry['ui_hint'] ?? ''));
+    $calcFamily = trim((string)($entry['calc_family'] ?? $entry['group'] ?? 'utility'));
     $durationSupported = (int)($entry['duration_supported'] ?? 0) === 1;
     $durationValue = trim((string)($ability['duration_value'] ?? $ability['duration'] ?? ''));
 
-    $familyLabels = [
-        'damage' => 'Урон',
-        'heal' => 'Лечение',
-        'shield' => 'Щит',
-        'buff' => 'Бафф',
-        'debuff' => 'Дебафф',
-        'control' => 'Контроль',
-        'utility' => 'Эффект',
-        'mobility' => 'Мобильность',
-        'passive' => 'Пассивный эффект',
+    $statMap = [
+        'hp' => af_charactersheets_arpg_read_numeric_stat($character_stats, $sheet_view, 'character_hp', ['mechanics.hp_total']),
+        'atk' => af_charactersheets_arpg_read_numeric_stat($character_stats, $sheet_view, 'character_attack_power', ['mechanics.damage_bonus']),
+        'def' => af_charactersheets_arpg_read_numeric_stat($character_stats, $sheet_view, 'character_defense', ['mechanics.ac_total']),
+        'em' => af_charactersheets_arpg_read_numeric_stat($character_stats, $sheet_view, 'character_elemental_mastery', ['character_computed_state.resources.mastery']),
+        'damage_bonus' => af_charactersheets_arpg_read_numeric_stat($character_stats, $sheet_view, 'character_element_damage_bonus', ['character_computed_state.resources.element_damage_bonus']),
+        'crit_dmg' => af_charactersheets_arpg_read_numeric_stat($character_stats, $sheet_view, 'character_crit_damage', ['character_computed_state.fixed_bonuses.crit_dmg', 'character_computed_state.resources.crit_dmg']),
+        'healing_bonus' => af_charactersheets_arpg_read_numeric_stat($character_stats, $sheet_view, 'character_healing_bonus', ['character_computed_state.resources.healing_bonus']),
+        'shield_bonus' => af_charactersheets_arpg_read_numeric_stat($character_stats, $sheet_view, 'character_shield_strength', ['character_computed_state.resources.shield_strength', 'mechanics.shield_bonus']),
     ];
-    $primaryLabel = (string)($familyLabels[$calcFamily] ?? '');
-    if ($primaryLabel === '') {
-        $primaryLabel = trim((string)($entry['title'] ?? 'Эффект'));
-    }
 
-    $primaryValue = '';
-    if ($calcFamily === 'damage') {
-        $primaryValue = trim((string)($ability['damage_value'] ?? ''));
-    } elseif ($calcFamily === 'heal') {
-        $primaryValue = trim((string)($ability['heal_value'] ?? ''));
-    } elseif ($calcFamily === 'shield') {
-        $primaryValue = trim((string)($ability['shield_value'] ?? ''));
-    }
-    if ($primaryValue === '') {
-        foreach (['damage_value', 'heal_value', 'shield_value'] as $key) {
-            $candidate = trim((string)($ability[$key] ?? ''));
-            if ($candidate !== '') {
-                $primaryValue = $candidate;
-                break;
-            }
-        }
-    }
-
+    $damageValue = af_charactersheets_arpg_pick_first_ability_scalar($ability, ['damage_value', 'value']);
+    $healValue = af_charactersheets_arpg_pick_first_ability_scalar($ability, ['heal_value', 'value']);
+    $shieldValue = af_charactersheets_arpg_pick_first_ability_scalar($ability, ['shield_value', 'value']);
+    $genericValue = af_charactersheets_arpg_pick_first_ability_scalar($ability, ['value', 'damage_value', 'heal_value', 'shield_value']);
+    $scaleStat = af_charactersheets_arpg_resolve_ability_scaling_stat($ability, $statMap);
+    $duration = af_charactersheets_arpg_parse_scalar_value($durationValue);
     $lines = [];
-    if ($primaryValue !== '') {
-        $suffix = $uiHint !== '' ? ' ' . $uiHint : '';
-        if ($uiHint === '%' && substr($primaryValue, -1) === '%') {
-            $suffix = '';
+
+    if (strpos($profileKey, 'damage_') === 0 || $calcFamily === 'damage') {
+        $base = 0.0;
+        if ($profileKey === 'damage_percent') {
+            $base = $scaleStat * ($damageValue / 100);
+        } elseif ($profileKey === 'damage_hybrid_flat') {
+            $base = $damageValue + ($scaleStat * 0.35);
+        } elseif ($profileKey === 'damage_hybrid_percent') {
+            $base = ($scaleStat * ($damageValue / 100)) + ((float)$statMap['em'] * 0.25);
+        } else {
+            $base = $damageValue + ($scaleStat * 0.2);
         }
-        $lines[] = $primaryLabel . ': ' . $primaryValue . $suffix;
+        $withBonus = $base * (1 + ((float)$statMap['damage_bonus'] / 100));
+        $lines[] = 'Эффект: Урон ' . af_charactersheets_arpg_format_value(max(0, round($withBonus)));
+        if ((float)$statMap['crit_dmg'] > 0) {
+            $critHit = $withBonus * (1 + ((float)$statMap['crit_dmg'] / 100));
+            $lines[] = 'Крит. урон: ' . af_charactersheets_arpg_format_value(max(0, round($critHit)));
+        }
+    } elseif (strpos($profileKey, 'shield_') === 0 || $calcFamily === 'shield') {
+        $baseStat = (float)$statMap['hp'] > 0 ? (float)$statMap['hp'] : ((float)$statMap['def'] > 0 ? (float)$statMap['def'] : (float)$statMap['atk']);
+        $base = $profileKey === 'shield_percent'
+            ? ($baseStat * ($shieldValue / 100))
+            : ($shieldValue + ($baseStat * 0.4));
+        $total = $base * (1 + ((float)$statMap['shield_bonus'] / 100));
+        $lines[] = 'Эффект: Прочность щита ' . af_charactersheets_arpg_format_value(max(0, round($total)));
+    } elseif (strpos($profileKey, 'heal_') === 0 || $calcFamily === 'heal') {
+        $baseStat = (float)$statMap['atk'] > 0 ? (float)$statMap['atk'] : (float)$statMap['hp'];
+        $base = $profileKey === 'heal_percent'
+            ? ($baseStat * ($healValue / 100))
+            : ($healValue + ($baseStat * 0.25));
+        $total = $base * (1 + ((float)$statMap['healing_bonus'] / 100));
+        $lines[] = 'Эффект: Лечение ' . af_charactersheets_arpg_format_value(max(0, round($total)));
+    } elseif ($profileKey === 'buff_percent') {
+        $lines[] = 'Эффект: Бафф +' . af_charactersheets_arpg_format_value($genericValue, '%');
+    } elseif ($profileKey === 'buff_flat') {
+        $lines[] = 'Эффект: Бафф +' . af_charactersheets_arpg_format_value($genericValue);
+    } elseif ($profileKey === 'debuff_percent') {
+        $lines[] = 'Эффект: Дебафф −' . af_charactersheets_arpg_format_value($genericValue, '%');
+    } elseif ($profileKey === 'debuff_flat') {
+        $lines[] = 'Эффект: Дебафф −' . af_charactersheets_arpg_format_value($genericValue);
+    } elseif ($profileKey === 'control_fixed') {
+        $controlDuration = $duration > 0 ? $duration : $genericValue;
+        $lines[] = 'Эффект: Контроль ' . af_charactersheets_arpg_format_value(max(0, $controlDuration), ' сек.');
+    } elseif ($profileKey === 'mobility_fixed') {
+        $lines[] = 'Эффект: Мобильность +' . af_charactersheets_arpg_format_value($genericValue, '%');
+    } elseif ($profileKey === 'utility_fixed') {
+        $lines[] = 'Эффект: Утилитарный эффект ' . af_charactersheets_arpg_format_value($genericValue);
+    } elseif ($profileKey === 'passive_percent') {
+        $lines[] = 'Эффект: Пассивный бонус +' . af_charactersheets_arpg_format_value($genericValue, '%');
+    } elseif ($profileKey === 'passive_flat') {
+        $lines[] = 'Эффект: Пассивный бонус +' . af_charactersheets_arpg_format_value($genericValue);
+    } elseif ($profileKey === 'passive_conditional') {
+        $desc = trim((string)($ability['description'] ?? $ability['ability_description'] ?? ''));
+        $lines[] = 'Эффект: Условная пассивка' . ($desc !== '' ? ' — ' . $desc : '');
     } else {
-        $description = trim((string)($entry['description'] ?? ''));
-        if ($description !== '') {
-            $lines[] = $primaryLabel . ': ' . $description;
-        } elseif ($primaryLabel !== '') {
-            $lines[] = $primaryLabel;
-        }
+        $title = trim((string)($entry['title'] ?? 'Эффект'));
+        $lines[] = 'Эффект: ' . ($title !== '' ? $title : 'Специальное действие');
     }
 
     if ($durationSupported && $durationValue !== '') {
@@ -588,7 +687,7 @@ function af_charactersheets_arpg_build_formula_profile_applied(array $ability): 
     return $lines;
 }
 
-function af_charactersheets_arpg_normalize_ability_card(array $ability, array $fallback = []): array
+function af_charactersheets_arpg_normalize_ability_card(array $ability, array $character_stats = [], array $sheet_view = [], array $fallback = []): array
 {
     $title = trim((string)($ability['title'] ?? $ability['ability_name'] ?? $ability['name'] ?? $fallback['title'] ?? ''));
     $description = trim(strip_tags((string)($ability['description'] ?? $ability['ability_description'] ?? $ability['desc'] ?? $ability['ability_desc'] ?? $fallback['description'] ?? '')));
@@ -598,7 +697,7 @@ function af_charactersheets_arpg_normalize_ability_card(array $ability, array $f
         $labels = (array)$fallback['labels'];
     }
 
-    $appliedProfile = af_charactersheets_arpg_build_formula_profile_applied($ability);
+    $appliedProfile = af_charactersheets_arpg_build_formula_profile_applied($ability, $character_stats, $sheet_view);
 
     return [
         'title' => $title !== '' ? $title : '—',
@@ -1040,7 +1139,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
             if ($abilityType === 'passive') {
                 continue;
             }
-            $card = af_charactersheets_arpg_normalize_ability_card($ability);
+            $card = af_charactersheets_arpg_normalize_ability_card($ability, $character_stats, $sheet_view);
             if ($card['title'] === '—') {
                 continue;
             }
@@ -1062,7 +1161,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
                 $title = $kb_key;
             }
             $description = trim(strip_tags(af_charactersheets_kb_pick_text($entry, 'description')));
-            $activeAbilities[] = af_charactersheets_arpg_normalize_ability_card($entry, [
+            $activeAbilities[] = af_charactersheets_arpg_normalize_ability_card($entry, $character_stats, $sheet_view, [
                 'title' => $title,
                 'description' => $description,
                 'icon' => trim((string)($entry['icon_url'] ?? '')),
@@ -1090,7 +1189,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
             if ($abilityType !== 'passive') {
                 continue;
             }
-            $card = af_charactersheets_arpg_normalize_ability_card($ability);
+            $card = af_charactersheets_arpg_normalize_ability_card($ability, $character_stats, $sheet_view);
             if ($card['title'] === '—') {
                 continue;
             }

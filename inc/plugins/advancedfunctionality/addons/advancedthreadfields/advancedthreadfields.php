@@ -5665,22 +5665,6 @@ function af_atf_format_value_for_display(array $field, string $val): string
             $descriptionHtml = $description !== ''
                 ? '<div class="af-atf-ability-display-description">' . nl2br(htmlspecialchars_uni($description)) . '</div>'
                 : '';
-            $appliedLines = af_atf_character_ability_profile_applied_lines((array)$ability);
-            $appliedHtml = '';
-            if (!empty($appliedLines)) {
-                $rows = '';
-                foreach ($appliedLines as $line) {
-                    $line = trim((string)$line);
-                    if ($line === '') {
-                        continue;
-                    }
-                    $rows .= '<div class="af-atf-ability-display-applied-line">' . htmlspecialchars_uni($line) . '</div>';
-                }
-                if ($rows !== '') {
-                    $appliedHtml = '<div class="af-atf-ability-display-applied">' . $rows . '</div>';
-                }
-            }
-
             $chipsHtml = $chips !== ''
                 ? '<div class="af-atf-ability-display-chips">' . $chips . '</div>'
                 : '';
@@ -5689,7 +5673,6 @@ function af_atf_format_value_for_display(array $field, string $val): string
                 . '<div class="af-atf-ability-display-head">' . $iconHtml . $titleHtml . '</div>'
                 . $chipsHtml
                 . $descriptionHtml
-                . $appliedHtml
                 . '</article>';
         }
 
