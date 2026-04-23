@@ -9906,9 +9906,7 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
 {
     $data = af_kb_extract_character_contract($entry);
     $profile = is_array($data['profile'] ?? null) ? $data['profile'] : [];
-    $stats = is_array($data['stats'] ?? null) ? $data['stats'] : [];
     $abilities = is_array($data['abilities'] ?? null) ? $data['abilities'] : [];
-    $isArpgCharacter = trim((string)(($data['meta'] ?? [])['mechanic'] ?? '')) === 'arpg';
 
     $title = trim((string)($isRu ? ($profile['character_name_ru'] ?? '') : ($profile['character_name'] ?? '')));
     if ($title === '') {
@@ -9949,16 +9947,6 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         }
     }
 
-    $statRows = '';
-    if (!$isArpgCharacter) {
-        foreach ($stats as $key => $value) {
-            if (is_scalar($value)) {
-                $label = af_kb_character_stat_label((string)$key, $isRu);
-                $statRows .= '<div class="af-kb-char-stat"><span>' . htmlspecialchars_uni($label) . '</span><strong>' . htmlspecialchars_uni((string)$value) . '</strong></div>';
-            }
-        }
-    }
-
     $abilitiesHtml = '';
     foreach ($abilities as $ability) {
         if (!is_array($ability)) {
@@ -9989,7 +9977,6 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         . '</section>'
         . ($appearance !== '' ? '<section class="af-kb-char-profile__section"><h3>Описание</h3><div>' . af_kb_parse_message($appearance) . '</div></section>' : '')
         . ($bio !== '' ? '<section class="af-kb-char-profile__section"><h3>Биография</h3><div>' . af_kb_parse_message($bio) . '</div></section>' : '')
-        . ($isArpgCharacter ? '' : '<section class="af-kb-char-profile__section"><h3>Характеристики</h3><div class="af-kb-char-stats">' . $statRows . '</div></section>')
         . '<section class="af-kb-char-profile__section"><h3>Способности</h3><div class="af-kb-char-abilities">' . ($abilitiesHtml !== '' ? $abilitiesHtml : '<div class="af-kb-char-empty">No abilities yet.</div>') . '</div></section>'
         . '<section class="af-kb-char-profile__service">' . $applyCtaHtml . '</section>'
         . '</div>';
@@ -11516,10 +11503,7 @@ function af_kb_handle_edit(): void
 
     $typeSchema = af_kb_get_type_schema($entry['type'], $kb_mechanic_raw);
     if ((string)($entry['type'] ?? '') === 'character') {
-        $entryRulesDecoded = af_kb_decode_json($entryRulesJson);
-        if (is_array($entryRulesDecoded) && af_kb_is_arpg_character_payload($entryRulesDecoded)) {
-            $typeSchema = af_kb_strip_character_stats_from_schema($typeSchema);
-        }
+        $typeSchema = af_kb_strip_character_stats_from_schema($typeSchema);
     }
     $kb_type_schema = htmlspecialchars_uni(json_encode($typeSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
     $kb_item_kind_value = htmlspecialchars_uni((string)($entry['item_kind'] ?? ''));

@@ -5193,18 +5193,6 @@
                 var profileTextareaDefs = [
                     { name: 'character_app', label: 'Внешность', type: 'textarea', editorPolicy: 'allow', fullWidth: true }
                 ];
-                var statsDefs = [
-                    { name: 'character_hp', label: 'HP', type: 'number' },
-                    { name: 'character_defense', label: 'Defense', type: 'number' },
-                    { name: 'character_attack_power', label: 'Attack power', type: 'number' },
-                    { name: 'character_element_damage_bonus', label: 'Element dmg bonus', type: 'number', suffix: '%' },
-                    { name: 'character_crit_damage', label: 'Crit damage', type: 'number', suffix: '%' },
-                    { name: 'character_healing_received_bonus', label: 'Healing received bonus', type: 'number', suffix: '%' },
-                    { name: 'character_elemental_mastery', label: 'Elemental mastery', type: 'number' },
-                    { name: 'character_healing_bonus', label: 'Healing bonus', type: 'number', suffix: '%' },
-                    { name: 'character_shield_strength', label: 'Shield strength', type: 'number', suffix: '%' },
-                    { name: 'character_luck', label: 'Luck', type: 'number', suffix: '%' }
-                ];
 
                 var profileGrid = document.createElement('div');
                 profileGrid.className = 'af-kb-row';
@@ -5214,11 +5202,6 @@
                 profileTextareaGrid.className = 'af-kb-row';
                 profileTextareaDefs.forEach(function (d) { profileTextareaGrid.appendChild(createInput(d, state.character_profile, syncRawDebounced)); });
                 fields.profileFields.appendChild(profileTextareaGrid);
-
-                var statsGrid = document.createElement('div');
-                statsGrid.className = 'af-kb-row';
-                statsDefs.forEach(function (d) { statsGrid.appendChild(createInput(d, state.character_stats, syncRawDebounced)); });
-                fields.profileFields.appendChild(statsGrid);
 
                 var abilitiesBox = document.createElement('div');
                 abilitiesBox.className = 'af-kb-rule-card';
