@@ -148,6 +148,18 @@ function af_kb_default_type_profile_payload_arpg(string $typeKey): array
             'base_damage' => 10,
             'base_defense' => 5,
             'movement_speed' => 100,
+            'hp_base' => 100,
+            'defense_base' => 5,
+            'attack_power_base' => 10,
+            'crit_damage_base' => 0,
+            'elemental_mastery_base' => 0,
+            'elemental_damage_bonus_base' => 0,
+            'healing_bonus_base' => 0,
+            'shield_bonus_base' => 0,
+            'hp_per_level' => 0,
+            'defense_per_level' => 0,
+            'attack_power_per_level' => 0,
+            'elemental_mastery_per_level' => 0,
             'racial_bonuses_text' => '',
             'racial_traits_text' => '',
             'starting_notes' => '',
@@ -159,6 +171,18 @@ function af_kb_default_type_profile_payload_arpg(string $typeKey): array
             'resource_affinity' => 'energy',
             'base_damage_bonus' => 0,
             'base_defense_bonus' => 0,
+            'hp_base' => 0,
+            'defense_base' => 0,
+            'attack_power_base' => 0,
+            'crit_damage_base' => 0,
+            'elemental_mastery_base' => 0,
+            'elemental_damage_bonus_base' => 0,
+            'healing_bonus_base' => 0,
+            'shield_bonus_base' => 0,
+            'hp_per_level' => 0,
+            'defense_per_level' => 0,
+            'attack_power_per_level' => 0,
+            'elemental_mastery_per_level' => 0,
             'slot_rules_text' => '',
             'description_notes' => '',
         ],
@@ -678,8 +702,8 @@ function af_kb_default_arpg_type_definitions(): array
         $isService = !empty($typeDef['service']);
         $rootDefaults = af_kb_arpg_envelope_defaults($typeKey);
         $requiredMap = [
-            'arpg_origin' => ['rules.size', 'rules.creature_type', 'rules.base_hp', 'rules.base_damage', 'rules.base_defense', 'rules.movement_speed', 'rules.racial_bonuses_text', 'rules.racial_traits_text', 'rules.starting_notes'],
-            'arpg_archetype' => ['rules.role', 'rules.damage_bias', 'rules.defense_bias', 'rules.resource_affinity', 'rules.base_damage_bonus', 'rules.base_defense_bonus', 'rules.slot_rules_text', 'rules.description_notes'],
+            'arpg_origin' => ['rules.size', 'rules.creature_type', 'rules.base_hp', 'rules.base_damage', 'rules.base_defense', 'rules.movement_speed', 'rules.hp_base', 'rules.defense_base', 'rules.attack_power_base', 'rules.crit_damage_base', 'rules.elemental_mastery_base', 'rules.elemental_damage_bonus_base', 'rules.healing_bonus_base', 'rules.shield_bonus_base', 'rules.hp_per_level', 'rules.defense_per_level', 'rules.attack_power_per_level', 'rules.elemental_mastery_per_level', 'rules.racial_bonuses_text', 'rules.racial_traits_text', 'rules.starting_notes'],
+            'arpg_archetype' => ['rules.role', 'rules.damage_bias', 'rules.defense_bias', 'rules.resource_affinity', 'rules.base_damage_bonus', 'rules.base_defense_bonus', 'rules.hp_base', 'rules.defense_base', 'rules.attack_power_base', 'rules.crit_damage_base', 'rules.elemental_mastery_base', 'rules.elemental_damage_bonus_base', 'rules.healing_bonus_base', 'rules.shield_bonus_base', 'rules.hp_per_level', 'rules.defense_per_level', 'rules.attack_power_per_level', 'rules.elemental_mastery_per_level', 'rules.slot_rules_text', 'rules.description_notes'],
             'arpg_element' => ['rules.family', 'rules.counter_element', 'rules.description_text'],
             'arpg_faction' => ['rules.standing_model', 'rules.vendor_access_text', 'rules.story_flags_text', 'rules.description_text'],
             'arpg_lore' => ['rules.linked_entities_text', 'rules.timeline_text', 'rules.source_text'],
@@ -698,6 +722,18 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.base_damage', 'type' => 'number', 'required' => true, 'default' => 10],
                 ['path' => 'rules.base_defense', 'type' => 'number', 'required' => true, 'default' => 5],
                 ['path' => 'rules.movement_speed', 'type' => 'number', 'required' => true, 'default' => 100],
+                ['path' => 'rules.hp_base', 'type' => 'number', 'required' => true, 'default' => 100],
+                ['path' => 'rules.defense_base', 'type' => 'number', 'required' => true, 'default' => 5],
+                ['path' => 'rules.attack_power_base', 'type' => 'number', 'required' => true, 'default' => 10],
+                ['path' => 'rules.crit_damage_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.elemental_mastery_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.elemental_damage_bonus_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.healing_bonus_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.shield_bonus_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.hp_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.defense_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.attack_power_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.elemental_mastery_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.racial_bonuses_text', 'type' => 'string', 'required' => true, 'default' => ''],
                 ['path' => 'rules.racial_traits_text', 'type' => 'string', 'required' => true, 'default' => ''],
                 ['path' => 'rules.starting_notes', 'type' => 'string', 'required' => true, 'default' => ''],
@@ -709,6 +745,18 @@ function af_kb_default_arpg_type_definitions(): array
                 ['path' => 'rules.resource_affinity', 'type' => 'string', 'required' => true, 'default' => 'energy'],
                 ['path' => 'rules.base_damage_bonus', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.base_defense_bonus', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.hp_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.defense_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.attack_power_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.crit_damage_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.elemental_mastery_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.elemental_damage_bonus_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.healing_bonus_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.shield_bonus_base', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.hp_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.defense_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.attack_power_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
+                ['path' => 'rules.elemental_mastery_per_level', 'type' => 'number', 'required' => true, 'default' => 0],
                 ['path' => 'rules.slot_rules_text', 'type' => 'string', 'required' => true, 'default' => ''],
                 ['path' => 'rules.description_notes', 'type' => 'string', 'required' => true, 'default' => ''],
             ],
@@ -5945,8 +5993,8 @@ function af_kb_validate_arpg_envelope(string $type, array $payload, bool $isServ
 function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, array &$errors): void
 {
     $requiredMap = [
-        'origin' => ['rules.type_profile', 'rules.size', 'rules.creature_type', 'rules.base_hp', 'rules.base_damage', 'rules.base_defense', 'rules.movement_speed', 'rules.racial_bonuses_text', 'rules.racial_traits_text', 'rules.starting_notes'],
-        'archetype' => ['rules.type_profile', 'rules.role', 'rules.damage_bias', 'rules.defense_bias', 'rules.resource_affinity', 'rules.base_damage_bonus', 'rules.base_defense_bonus', 'rules.slot_rules_text', 'rules.description_notes'],
+        'origin' => ['rules.type_profile', 'rules.size', 'rules.creature_type', 'rules.base_hp', 'rules.base_damage', 'rules.base_defense', 'rules.movement_speed', 'rules.hp_base', 'rules.defense_base', 'rules.attack_power_base', 'rules.crit_damage_base', 'rules.elemental_mastery_base', 'rules.elemental_damage_bonus_base', 'rules.healing_bonus_base', 'rules.shield_bonus_base', 'rules.hp_per_level', 'rules.defense_per_level', 'rules.attack_power_per_level', 'rules.elemental_mastery_per_level', 'rules.racial_bonuses_text', 'rules.racial_traits_text', 'rules.starting_notes'],
+        'archetype' => ['rules.type_profile', 'rules.role', 'rules.damage_bias', 'rules.defense_bias', 'rules.resource_affinity', 'rules.base_damage_bonus', 'rules.base_defense_bonus', 'rules.hp_base', 'rules.defense_base', 'rules.attack_power_base', 'rules.crit_damage_base', 'rules.elemental_mastery_base', 'rules.elemental_damage_bonus_base', 'rules.healing_bonus_base', 'rules.shield_bonus_base', 'rules.hp_per_level', 'rules.defense_per_level', 'rules.attack_power_per_level', 'rules.elemental_mastery_per_level', 'rules.slot_rules_text', 'rules.description_notes'],
         'faction' => ['rules.type_profile', 'rules.standing_model', 'rules.vendor_access_text', 'rules.story_flags_text', 'rules.description_text'],
         'lore' => ['rules.type_profile', 'rules.linked_entities_text', 'rules.timeline_text', 'rules.source_text'],
         'ability' => ['rules.type_profile', 'rules.type', 'rules.subtype', 'rules.slot', 'rules.damage_type', 'rules.targeting', 'rules.range', 'rules.cast_time', 'rules.cooldown', 'rules.duration', 'rules.max_charges', 'rules.level_cap', 'rules.resources', 'rules.effects', 'rules.modifiers', 'rules.triggers', 'rules.conditions', 'rules.stacking', 'rules.upgrade_requirements'],
@@ -9708,6 +9756,130 @@ function af_kb_back_link_html(string $fallbackUrl, array $allowActions = ['kb'],
     return '<a class="af-kb-btn af-kb-btn--back" href="' . htmlspecialchars_uni($url) . '">' . htmlspecialchars_uni($label) . '</a>';
 }
 
+function af_kb_arpg_to_float($value): float
+{
+    if ($value === null || $value === '') {
+        return 0.0;
+    }
+    if (is_numeric($value)) {
+        return (float)$value;
+    }
+    $normalized = str_replace(',', '.', trim((string)$value));
+    return is_numeric($normalized) ? (float)$normalized : 0.0;
+}
+
+function af_kb_arpg_entry_rules_by_key(string $type, string $key): array
+{
+    $key = trim($key);
+    if ($key === '') {
+        return [];
+    }
+
+    $entry = af_kb_get_entry($type, $key);
+    if (!is_array($entry)) {
+        return [];
+    }
+
+    $meta = (array)($entry['meta'] ?? []);
+    $rules = (array)($meta['rules'] ?? []);
+    return is_array($rules) ? $rules : [];
+}
+
+function af_kb_arpg_pick_rule_number(array $rules, array $keys): float
+{
+    foreach ($keys as $key) {
+        if (!array_key_exists($key, $rules)) {
+            continue;
+        }
+        return af_kb_arpg_to_float($rules[$key]);
+    }
+    return 0.0;
+}
+
+function af_kb_build_arpg_character_stats(array $profile, array $manualStats = []): array
+{
+    $originKey = trim((string)($profile['character_origin'] ?? $profile['character_race'] ?? ''));
+    $archetypeKey = trim((string)($profile['character_archetype'] ?? $profile['character_class'] ?? ''));
+    $level = max(1, (int)af_kb_arpg_to_float($profile['character_level'] ?? $profile['level'] ?? 1));
+    $levelSteps = max(0, $level - 1);
+
+    $originRules = af_kb_arpg_entry_rules_by_key('arpg_origin', $originKey);
+    $archetypeRules = af_kb_arpg_entry_rules_by_key('arpg_archetype', $archetypeKey);
+
+    $buildValue = static function (string $stat) use ($originRules, $archetypeRules, $levelSteps): float {
+        $baseMap = [
+            'character_hp' => ['hp_base', 'base_hp'],
+            'character_defense' => ['defense_base', 'base_defense'],
+            'character_attack_power' => ['attack_power_base', 'base_damage'],
+            'character_crit_damage' => ['crit_damage_base'],
+            'character_elemental_mastery' => ['elemental_mastery_base'],
+            'character_element_damage_bonus' => ['elemental_damage_bonus_base'],
+            'character_healing_bonus' => ['healing_bonus_base'],
+            'character_shield_strength' => ['shield_bonus_base'],
+            'character_healing_received_bonus' => ['healing_received_bonus_base'],
+            'character_luck' => ['luck_base'],
+        ];
+        $growthMap = [
+            'character_hp' => ['hp_per_level'],
+            'character_defense' => ['defense_per_level'],
+            'character_attack_power' => ['attack_power_per_level'],
+            'character_elemental_mastery' => ['elemental_mastery_per_level'],
+        ];
+
+        $originBase = af_kb_arpg_pick_rule_number($originRules, (array)($baseMap[$stat] ?? []));
+        $archetypeBase = af_kb_arpg_pick_rule_number($archetypeRules, (array)($baseMap[$stat] ?? []));
+        $originGrowth = af_kb_arpg_pick_rule_number($originRules, (array)($growthMap[$stat] ?? []));
+        $archetypeGrowth = af_kb_arpg_pick_rule_number($archetypeRules, (array)($growthMap[$stat] ?? []));
+
+        if ($stat === 'character_defense') {
+            $archetypeBase += af_kb_arpg_pick_rule_number($archetypeRules, ['base_defense_bonus']);
+        }
+        if ($stat === 'character_attack_power') {
+            $archetypeBase += af_kb_arpg_pick_rule_number($archetypeRules, ['base_damage_bonus']);
+        }
+
+        return $originBase + $archetypeBase + (($originGrowth + $archetypeGrowth) * $levelSteps);
+    };
+
+    $stats = [
+        'character_hp' => $buildValue('character_hp'),
+        'character_defense' => $buildValue('character_defense'),
+        'character_attack_power' => $buildValue('character_attack_power'),
+        'character_crit_damage' => $buildValue('character_crit_damage'),
+        'character_elemental_mastery' => $buildValue('character_elemental_mastery'),
+        'character_element_damage_bonus' => $buildValue('character_element_damage_bonus'),
+        'character_healing_bonus' => $buildValue('character_healing_bonus'),
+        'character_shield_strength' => $buildValue('character_shield_strength'),
+        'character_healing_received_bonus' => $buildValue('character_healing_received_bonus'),
+        'character_luck' => $buildValue('character_luck'),
+    ];
+
+    $manualMap = [
+        'character_hp' => ['character_hp', 'hp', 'health'],
+        'character_defense' => ['character_defense', 'defense', 'def'],
+        'character_attack_power' => ['character_attack_power', 'attack_power', 'atk', 'attack'],
+        'character_crit_damage' => ['character_crit_damage', 'crit_damage', 'critical_damage'],
+        'character_elemental_mastery' => ['character_elemental_mastery', 'elemental_mastery', 'mastery'],
+        'character_element_damage_bonus' => ['character_element_damage_bonus', 'element_damage_bonus', 'elemental_damage_bonus'],
+        'character_healing_bonus' => ['character_healing_bonus', 'healing_bonus'],
+        'character_shield_strength' => ['character_shield_strength', 'shield_strength'],
+        'character_healing_received_bonus' => ['character_healing_received_bonus', 'healing_received_bonus'],
+        'character_luck' => ['character_luck', 'luck'],
+    ];
+
+    foreach ($manualMap as $target => $aliases) {
+        foreach ($aliases as $alias) {
+            if (!array_key_exists($alias, $manualStats)) {
+                continue;
+            }
+            $stats[$target] += af_kb_arpg_to_float($manualStats[$alias]);
+            break;
+        }
+    }
+
+    return $stats;
+}
+
 function af_kb_extract_character_contract(array $entry): array
 {
     $rules = kb_parse_rules($entry);
@@ -9719,7 +9891,9 @@ function af_kb_extract_character_contract(array $entry): array
     $payload = array_replace_recursive($defaults, $rules);
     $profile = (array)($payload['character_profile'] ?? []);
     $isArpgCharacter = af_kb_is_arpg_character_payload($payload);
-    $stats = $isArpgCharacter ? [] : (array)($payload['character_stats'] ?? []);
+    $stats = $isArpgCharacter
+        ? af_kb_build_arpg_character_stats($profile, (array)($payload['character_stats'] ?? []))
+        : (array)($payload['character_stats'] ?? []);
     $abilities = af_kb_extract_character_abilities_from_payload($payload);
 
     usort($abilities, static function ($a, $b): int {
