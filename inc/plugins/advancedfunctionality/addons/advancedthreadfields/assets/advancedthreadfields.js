@@ -627,6 +627,52 @@
           state = [];
         }
 
+        function getAbilityDescriptionValue(row) {
+          const textarea = AF_ATF.qs(".af-atf-ability-description", row);
+          if (!textarea) return "";
+
+          if (window.jQuery && typeof window.jQuery === "function") {
+            try {
+              const instance = window.jQuery(textarea).sceditor("instance");
+              if (instance && typeof instance.val === "function") {
+                const richValue = instance.val();
+                if (richValue !== null && richValue !== undefined) {
+                  return String(richValue);
+                }
+              }
+            } catch (e) {
+              // SCEditor may not be attached
+            }
+          }
+
+          return String(textarea.value || "");
+        }
+
+        function collectAbilityFromRow(row, index) {
+          const descriptionValue = getAbilityDescriptionValue(row);
+          return createAbility({
+            ...(state[index] || {}),
+            slot_index: AF_ATF.qs(".af-atf-ability-slot-index", row).value,
+            title: AF_ATF.qs(".af-atf-ability-name", row).value,
+            icon: AF_ATF.qs(".af-atf-ability-icon-url", row).value,
+            type: AF_ATF.qs(".af-atf-ability-type", row).value,
+            subtype: AF_ATF.qs(".af-atf-ability-subtype", row).value,
+            slot: AF_ATF.qs(".af-atf-ability-slot", row).value,
+            damage_type: AF_ATF.qs(".af-atf-ability-damage-type", row).value,
+            target: AF_ATF.qs(".af-atf-ability-targeting", row).value,
+            formula_profile: AF_ATF.qs(".af-atf-ability-formula-profile", row).value,
+            duration_value: AF_ATF.qs(".af-atf-ability-duration-value", row).value,
+            ability_description: descriptionValue,
+            sortorder: AF_ATF.qs(".af-atf-ability-sortorder", row).value
+          });
+        }
+
+        function syncStateFromDom() {
+          AF_ATF.qsa(".af-atf-ability-item", list).forEach((row, index) => {
+            state[index] = collectAbilityFromRow(row, index);
+          });
+        }
+
         function sync() {
           hidden.value = JSON.stringify(state.slice(0, maxItems));
           addBtn.disabled = state.length >= maxItems;
@@ -694,23 +740,7 @@
             `;
 
             const setValue = () => {
-              state[index] = createAbility({
-                ...(state[index] || {}),
-                slot_index: AF_ATF.qs(".af-atf-ability-slot-index", row).value,
-                title: AF_ATF.qs(".af-atf-ability-name", row).value,
-                icon: AF_ATF.qs(".af-atf-ability-icon-url", row).value,
-                type: AF_ATF.qs(".af-atf-ability-type", row).value,
-                subtype: AF_ATF.qs(".af-atf-ability-subtype", row).value,
-                slot: AF_ATF.qs(".af-atf-ability-slot", row).value,
-                damage_type: AF_ATF.qs(".af-atf-ability-damage-type", row).value,
-                target: AF_ATF.qs(".af-atf-ability-targeting", row).value,
-                formula_profile: AF_ATF.qs(".af-atf-ability-formula-profile", row).value,
-                duration_value: AF_ATF.qs(".af-atf-ability-duration-value", row).value,
-                ability_description: AF_ATF.qs(".af-atf-ability-description", row).value,
-                description: AF_ATF.qs(".af-atf-ability-description", row).value,
-                desc: AF_ATF.qs(".af-atf-ability-description", row).value,
-                sortorder: AF_ATF.qs(".af-atf-ability-sortorder", row).value
-              });
+              state[index] = collectAbilityFromRow(row, index);
               sync();
             };
 
@@ -736,6 +766,24 @@
           render();
           sync();
         });
+
+        const form = wrap.closest("form");
+        if (form && !form.__afAtfAbilitiesSubmitSync) {
+          form.__afAtfAbilitiesSubmitSync = true;
+          form.addEventListener("submit", () => {
+            AF_ATF.qsa(".af-atf-abilities", form).forEach((block) => {
+              if (typeof block.__afAtfSyncStateFromDom === "function") {
+                block.__afAtfSyncStateFromDom();
+              }
+              if (typeof block.__afAtfSyncHidden === "function") {
+                block.__afAtfSyncHidden();
+              }
+            });
+          });
+        }
+
+        wrap.__afAtfSyncStateFromDom = syncStateFromDom;
+        wrap.__afAtfSyncHidden = sync;
 
         if (!state.length) {
           state.push(createAbility({ sortorder: 1, slot_index: 1 }));
