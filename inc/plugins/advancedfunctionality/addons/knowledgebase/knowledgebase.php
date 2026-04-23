@@ -7100,9 +7100,12 @@ function af_kb_extract_rules_for_consumer($entry, string $consumer = 'generic'):
 
     if ($result['mechanic_key'] === 'arpg') {
         $result['rules'] = $rules;
+        if ($consumer === 'charactersheets' && function_exists('af_kb_arpg_extract_rules_leaf')) {
+            $result['rules'] = af_kb_arpg_extract_rules_leaf((array)$rules);
+        }
         $result['status'] = 'arpg_partial';
         $result['reason'] = 'arpg_partial_support';
-        $result['supported'] = in_array($consumer, ['shop', 'inventory', 'generic'], true);
+        $result['supported'] = in_array($consumer, ['shop', 'inventory', 'generic', 'charactersheets'], true);
         $result['skip'] = !$result['supported'];
         return $result;
     }
@@ -9777,7 +9780,39 @@ function af_kb_arpg_entry_rules_by_key(string $type, string $key): array
 
     $meta = (array)($entry['meta'] ?? []);
     $rules = (array)($meta['rules'] ?? []);
+    if (function_exists('af_kb_arpg_extract_rules_leaf')) {
+        $rules = af_kb_arpg_extract_rules_leaf($rules);
+    }
     return is_array($rules) ? $rules : [];
+}
+
+function af_kb_arpg_extract_rules_leaf(array $payload): array
+{
+    $cursor = $payload;
+
+    for ($i = 0; $i < 4; $i++) {
+        if (!is_array($cursor) || empty($cursor)) {
+            return [];
+        }
+
+        if ((string)($cursor['schema'] ?? '') === AF_KB_ARPG_RULES_SCHEMA) {
+            return $cursor;
+        }
+
+        $nestedRules = is_array($cursor['rules'] ?? null) ? (array)$cursor['rules'] : [];
+        if (!$nestedRules) {
+            break;
+        }
+
+        $nestedSchema = (string)($nestedRules['schema'] ?? '');
+        if ($nestedSchema === AF_KB_ARPG_RULES_SCHEMA) {
+            return $nestedRules;
+        }
+
+        $cursor = $nestedRules;
+    }
+
+    return is_array($cursor) ? $cursor : [];
 }
 
 function af_kb_arpg_pick_rule_number(array $rules, array $keys): float

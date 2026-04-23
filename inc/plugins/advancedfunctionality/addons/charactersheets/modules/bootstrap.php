@@ -2324,7 +2324,12 @@ function cs_kb_get_data_rules($entry): array
         $rules = is_array($raw) ? $raw : [];
     }
 
-    if ((string)($rules['schema'] ?? '') !== 'af_kb.rules.v1') {
+    $schema = (string)($rules['schema'] ?? '');
+    if ($schema === 'af_kb.arpg.rules.v1') {
+        return $rules;
+    }
+
+    if ($schema !== 'af_kb.rules.v1') {
         return [];
     }
 
@@ -2721,7 +2726,7 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
     }
 
     $schema = (string)($rules['schema'] ?? '');
-    if ($schema !== 'af_kb.rules.v1') {
+    if (!in_array($schema, ['af_kb.rules.v1', 'af_kb.arpg.rules.v1'], true)) {
         return $cache[$cache_key] = [
             'ok' => false,
             'reason' => 'BAD_SCHEMA',
@@ -2733,11 +2738,15 @@ function af_cs_kb_get_data_rules_result(string $kbType, string $kbKey): array
         ];
     }
 
+    $normalizedRules = $schema === 'af_kb.rules.v1'
+        ? cs_kb_rules_normalize($rules)
+        : (array)$rules;
+
     return $cache[$cache_key] = [
         'ok' => true,
         'reason' => 'OK',
         'schema' => $schema,
-        'rules' => cs_kb_rules_normalize($rules),
+        'rules' => $normalizedRules,
         'meta' => cs_kb_get_meta($entry),
         'entry' => $entry,
         'data_source' => 'entries.meta_json.rules',

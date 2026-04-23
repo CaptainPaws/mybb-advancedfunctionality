@@ -914,11 +914,17 @@ function af_charactersheets_arpg_extract_entry_rules(array $entry): array
     if (function_exists('af_kb_extract_rules_for_consumer')) {
         $extract = af_kb_extract_rules_for_consumer($entry, 'charactersheets');
         if (!empty($extract['supported']) && is_array($extract['rules'] ?? null)) {
-            return array_replace($raw, (array)$extract['rules']);
+            $raw = array_replace($raw, (array)$extract['rules']);
         }
     }
 
-    return $raw;
+    if (function_exists('af_kb_arpg_extract_rules_leaf')) {
+        $raw = af_kb_arpg_extract_rules_leaf((array)$raw);
+    } elseif (is_array($raw['rules'] ?? null)) {
+        $raw = (array)$raw['rules'];
+    }
+
+    return is_array($raw) ? $raw : [];
 }
 
 function af_charactersheets_arpg_resolve_kb_entry_flexible(string $type, string $rawValue): array
