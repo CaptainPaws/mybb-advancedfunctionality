@@ -1586,9 +1586,6 @@
                     renderRuleFields(rulesRoot, [
                         { key: 'size', label: 'size', default: 'medium' },
                         { key: 'creature_type', label: 'creature_type', default: 'humanoid' },
-                        { key: 'base_hp', label: 'base_hp', type: 'number', default: 100 },
-                        { key: 'base_damage', label: 'base_damage', type: 'number', default: 10 },
-                        { key: 'base_defense', label: 'base_defense', type: 'number', default: 5 },
                         { key: 'movement_speed', label: 'movement_speed', type: 'number', default: 100 },
                         { key: 'hp_base', label: 'hp_base', type: 'number', default: 100 },
                         { key: 'defense_base', label: 'defense_base', type: 'number', default: 5 },
@@ -1610,10 +1607,6 @@
 
                 if (entityType === 'archetype') {
                     renderRuleFields(rulesRoot, [
-                        { key: 'role', label: 'role', default: 'striker' },
-                        { key: 'damage_bias', label: 'damage_bias', default: 'high' },
-                        { key: 'defense_bias', label: 'defense_bias', default: 'low' },
-                        { key: 'resource_affinity', label: 'resource_affinity', default: 'energy' },
                         { key: 'base_damage_bonus', label: 'base_damage_bonus', type: 'number', default: 0 },
                         { key: 'base_defense_bonus', label: 'base_defense_bonus', type: 'number', default: 0 },
                         { key: 'hp_base', label: 'hp_base', type: 'number', default: 0 },
