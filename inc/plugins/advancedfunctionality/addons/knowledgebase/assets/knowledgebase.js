@@ -2343,7 +2343,7 @@
             return;
         }
 
-        if (mechanic !== 'dnd') {
+        if (mechanic !== 'dnd' && !(mechanic === 'arpg' && uiProfile === 'character')) {
             bindRawOnlyMode('Mechanic "' + mechanic + '" пока не поддерживает визуальный rules-редактор. Доступен raw-режим.');
             return;
         }
@@ -2816,7 +2816,10 @@
                     character_element: '',
                     character_gen: '',
                     character_race: '',
+                    character_origin: '',
+                    character_origin_variant: '',
                     character_class: '',
+                    character_archetype: '',
                     character_faction: '',
                     character_app: ''
                 };
@@ -2837,7 +2840,8 @@
                 base.character_meta = {
                     contract: 'af_kb.character.contract.v1',
                     contract_version: '1.0',
-                    source: 'kb_manual'
+                    source: 'kb_manual',
+                    mechanic: mechanic === 'arpg' ? 'arpg' : 'dnd'
                 };
                 return base;
             }
@@ -3508,7 +3512,7 @@
             ensureArr('character_abilities');
             ensureArr('character_links');
             if (!state.character_profile.category) state.character_profile.category = 'canons';
-            ['character_pic', 'character_prototype', 'character_name', 'character_name_ru', 'character_nicknames', 'character_element', 'character_gen', 'character_race', 'character_class', 'character_faction', 'character_app'].forEach(function (k) {
+            ['character_pic', 'character_prototype', 'character_name', 'character_name_ru', 'character_nicknames', 'character_element', 'character_gen', 'character_race', 'character_origin', 'character_origin_variant', 'character_class', 'character_archetype', 'character_faction', 'character_app'].forEach(function (k) {
                 state.character_profile[k] = String(state.character_profile[k] || '');
             });
             ['character_hp', 'character_defense', 'character_element_damage_bonus', 'character_crit_damage', 'character_healing_received_bonus', 'character_attack_power', 'character_elemental_mastery', 'character_healing_bonus', 'character_shield_strength', 'character_luck'].forEach(function (k) {
@@ -3520,6 +3524,7 @@
             if (!state.character_meta.contract) state.character_meta.contract = 'af_kb.character.contract.v1';
             if (!state.character_meta.contract_version) state.character_meta.contract_version = '1.0';
             if (!state.character_meta.source) state.character_meta.source = 'kb_manual';
+            if (!state.character_meta.mechanic) state.character_meta.mechanic = mechanic;
         }
 
         // ---------- defs (heritage) ----------
@@ -4154,7 +4159,10 @@
                         character_element: String(profileC.character_element || ''),
                         character_gen: String(profileC.character_gen || ''),
                         character_race: String(profileC.character_race || ''),
+                        character_origin: String(profileC.character_origin || ''),
+                        character_origin_variant: String(profileC.character_origin_variant || ''),
                         character_class: String(profileC.character_class || ''),
+                        character_archetype: String(profileC.character_archetype || ''),
                         character_faction: String(profileC.character_faction || ''),
                         character_app: String(profileC.character_app || '')
                     },
@@ -4177,7 +4185,8 @@
                     character_meta: {
                         contract: String(metaC.contract || 'af_kb.character.contract.v1'),
                         contract_version: String(metaC.contract_version || '1.0'),
-                        source: String(metaC.source || 'kb_manual')
+                        source: String(metaC.source || 'kb_manual'),
+                        mechanic: String(metaC.mechanic || mechanic)
                     }
                 };
             }
@@ -5207,26 +5216,58 @@
                 var characterRaceOptions = optionsFromPublicType('arpg_origin');
                 var characterClassOptions = optionsFromPublicType('arpg_archetype');
                 var characterFactionOptions = optionsFromPublicType('arpg_faction');
+                var isArpgCharacter = mechanic === 'arpg';
+                var variantOptionSets = (window.afKbArpgOriginVariantOptions && typeof window.afKbArpgOriginVariantOptions === 'object')
+                    ? window.afKbArpgOriginVariantOptions
+                    : {};
+                var selectedOrigin = String(state.character_profile.character_origin || '');
+                var characterVariantOptions = mapOptionRows(variantOptionSets[selectedOrigin], []);
                 var profileDefs = [
-                    { name: 'category', label: 'Категория', type: 'select', options: ['canons', 'originals', 'roles'] },
+                    { name: 'category', label: 'Категория', type: 'select', options: [{ value: 'canons', label: 'Каноны' }, { value: 'originals', label: 'Авторские' }, { value: 'roles', label: 'Ролевые' }] },
                     { name: 'character_pic', label: 'Изображение персонажа', type: 'url' },
                     { name: 'character_prototype', label: 'Прототип', type: 'text' },
                     { name: 'character_name', label: 'Имя (EN)', type: 'text' },
                     { name: 'character_name_ru', label: 'Имя (RU)', type: 'text' },
                     { name: 'character_nicknames', label: 'Прозвища', type: 'text' },
                     { name: 'character_element', label: 'Стихия', type: 'select', options: characterElementOptions, allowEmpty: true, emptyLabel: '—' },
-                    { name: 'character_gen', label: 'Пол', type: 'select', options: characterGenderOptions, allowEmpty: true, emptyLabel: '—' },
-                    { name: 'character_race', label: 'Раса', type: 'select', options: characterRaceOptions, allowEmpty: true, emptyLabel: '—' },
-                    { name: 'character_class', label: 'Класс', type: 'select', options: characterClassOptions, allowEmpty: true, emptyLabel: '—' },
-                    { name: 'character_faction', label: 'Фракция', type: 'select', options: characterFactionOptions, allowEmpty: true, emptyLabel: '—' }
+                    { name: 'character_gen', label: 'Пол', type: 'select', options: characterGenderOptions, allowEmpty: true, emptyLabel: '—' }
                 ];
+                if (isArpgCharacter) {
+                    profileDefs.push({ name: 'character_origin', label: 'Происхождение', type: 'select', options: characterRaceOptions, allowEmpty: true, emptyLabel: '—' });
+                    if (characterVariantOptions.length || state.character_profile.character_origin_variant) {
+                        profileDefs.push({ name: 'character_origin_variant', label: 'Разновидность происхождения', type: 'select', options: characterVariantOptions, allowEmpty: true, emptyLabel: '—' });
+                    }
+                    profileDefs.push({ name: 'character_archetype', label: 'Архетип', type: 'select', options: characterClassOptions, allowEmpty: true, emptyLabel: '—' });
+                } else {
+                    profileDefs.push({ name: 'character_race', label: 'Раса', type: 'select', options: characterRaceOptions, allowEmpty: true, emptyLabel: '—' });
+                    profileDefs.push({ name: 'character_class', label: 'Класс', type: 'select', options: characterClassOptions, allowEmpty: true, emptyLabel: '—' });
+                }
+                profileDefs.push(
+                    { name: 'character_faction', label: 'Фракция', type: 'select', options: characterFactionOptions, allowEmpty: true, emptyLabel: '—' }
+                );
                 var profileTextareaDefs = [
                     { name: 'character_app', label: 'Внешность', type: 'textarea', editorPolicy: 'allow', fullWidth: true }
                 ];
 
                 var profileGrid = document.createElement('div');
                 profileGrid.className = 'af-kb-row';
-                profileDefs.forEach(function (d) { profileGrid.appendChild(createInput(d, state.character_profile, syncRawDebounced)); });
+                profileDefs.forEach(function (d) {
+                    var control = createInput(d, state.character_profile, syncRawDebounced);
+                    profileGrid.appendChild(control);
+                    if (isArpgCharacter && d.name === 'character_origin') {
+                        var originSelect = control.querySelector('select');
+                        if (originSelect) {
+                            originSelect.addEventListener('change', function () {
+                                var allowed = mapOptionRows(variantOptionSets[String(originSelect.value || '')], []).map(function (row) { return row.value; });
+                                if (allowed.indexOf(String(state.character_profile.character_origin_variant || '')) === -1) {
+                                    state.character_profile.character_origin_variant = '';
+                                }
+                                renderProfile();
+                                syncRawDebounced();
+                            });
+                        }
+                    }
+                });
                 fields.profileFields.appendChild(profileGrid);
                 var profileTextareaGrid = document.createElement('div');
                 profileTextareaGrid.className = 'af-kb-row';

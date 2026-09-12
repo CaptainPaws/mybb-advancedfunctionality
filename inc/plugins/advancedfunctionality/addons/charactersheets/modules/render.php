@@ -1384,7 +1384,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $level = (int)($sheet_view['level'] ?? 1);
     $rawOrigin = trim((string)($character_profile['character_origin'] ?? af_charactersheets_pick_field_value($atf_index, ['character_origin', 'character_race', 'race'])));
     $rawOriginVariant = trim((string)($character_profile['character_origin_variant'] ?? af_charactersheets_pick_field_value($atf_index, ['character_origin_variant', 'origin_variant'])));
-    $rawArchetype = trim((string)($character_profile['character_class'] ?? $character_profile['character_archetype'] ?? af_charactersheets_pick_field_value($atf_index, ['character_class', 'character_archetype', 'class'])));
+    $rawArchetype = trim((string)($character_profile['character_archetype'] ?? $character_profile['character_class'] ?? af_charactersheets_pick_field_value($atf_index, ['character_archetype', 'character_class', 'archetype', 'class'])));
 
     $originResolved = af_charactersheets_arpg_resolve_kb_entry_flexible('arpg_origin', $rawOrigin);
     $originRules = af_charactersheets_arpg_extract_entry_rules((array)($originResolved['entry'] ?? []));

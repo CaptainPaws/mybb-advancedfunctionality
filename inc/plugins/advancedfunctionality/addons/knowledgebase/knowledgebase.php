@@ -2816,6 +2816,7 @@ function af_kb_character_profile_resolved_value(string $field, string $value, bo
         'character_origin' => 'arpg_origin',
         'character_origin_variant' => 'arpg_origin_variant',
         'character_class' => 'arpg_archetype',
+        'character_archetype' => 'arpg_archetype',
         'character_faction' => 'arpg_faction',
         'character_element' => 'arpg_element',
     ];
@@ -3846,6 +3847,10 @@ function af_kb_get_type_profile_definition_arpg(string $typeKey): array
     if ($typeKey === 'character') {
         $profile = af_kb_get_type_profile_definition_dnd($typeKey);
         $profile['internal_profile'] = 'arpg_character';
+        $profile['defaults']['character_profile']['character_origin'] = '';
+        $profile['defaults']['character_profile']['character_origin_variant'] = '';
+        $profile['defaults']['character_profile']['character_archetype'] = '';
+        $profile['defaults']['character_meta']['mechanic'] = 'arpg';
         return $profile;
     }
 
@@ -3976,6 +3981,16 @@ function af_kb_get_type_schema_arpg(string $typeKey): array
     if ($typeKey === 'character') {
         $schema = af_kb_get_type_schema_dnd($typeKey);
         $schema['internal_profile'] = 'arpg_character';
+        $profile = af_kb_get_type_profile_definition_arpg($typeKey);
+        $schema['defaults'] = array_replace_recursive(
+            (array)($schema['defaults'] ?? []),
+            (array)($profile['defaults'] ?? [])
+        );
+        $schema['root_defaults'] = array_replace_recursive(
+            (array)($schema['root_defaults'] ?? []),
+            (array)($profile['defaults'] ?? [])
+        );
+        $schema = af_kb_strip_character_stats_from_schema($schema);
         return $schema;
     }
 
@@ -5515,7 +5530,27 @@ function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalized
     // CharacterSheets in this shape. Keep it lossless while dispatching it
     // through the ARPG mechanic profile.
     if ($type === 'character') {
-        return af_kb_validate_rules_json_by_type_dnd($type, $normalizedJson, $errors);
+        $decoded = af_kb_decode_json($normalizedJson);
+        if (!is_array($decoded)) {
+            $decoded = [];
+        }
+        $profile = is_array($decoded['character_profile'] ?? null) ? $decoded['character_profile'] : [];
+        $origin = trim((string)($profile['character_origin'] ?? ''));
+        $variant = trim((string)($profile['character_origin_variant'] ?? ''));
+        if ($variant !== '') {
+            $parent = af_kb_get_origin_parent_for_variant($variant, false);
+            $parentKey = trim((string)(($parent['origin'] ?? [])['key'] ?? ''));
+            if ($origin === '' || $parentKey === '' || $parentKey !== $origin) {
+                $errors[] = 'Selected origin variant does not belong to the selected origin.';
+            }
+        }
+        $decoded['character_meta'] = is_array($decoded['character_meta'] ?? null) ? $decoded['character_meta'] : [];
+        $decoded['character_meta']['mechanic'] = 'arpg';
+        return af_kb_validate_rules_json_by_type_dnd(
+            $type,
+            json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
+            $errors
+        );
     }
 
     $rulesData = af_kb_decode_json($normalizedJson);
@@ -7895,6 +7930,26 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                         'arpg_archetype' => af_kb_get_public_type_options('arpg_archetype'),
                         'arpg_faction' => af_kb_get_public_type_options('arpg_faction'),
                     ];
+                    $arpgOriginVariantUiOptions = [];
+                    foreach ($arpgPublicTypeUiOptions['arpg_origin'] as $originOption) {
+                        $originKey = trim((string)($originOption['key'] ?? $originOption['value'] ?? ''));
+                        if ($originKey === '') {
+                            continue;
+                        }
+                        $arpgOriginVariantUiOptions[$originKey] = [];
+                        foreach (af_kb_get_origin_variants($originKey, true) as $relation) {
+                            $variant = (array)($relation['variant'] ?? []);
+                            $variantKey = trim((string)($variant['key'] ?? ''));
+                            if ($variantKey === '') {
+                                continue;
+                            }
+                            $arpgOriginVariantUiOptions[$originKey][] = [
+                                'key' => $variantKey,
+                                'label_ru' => (string)($variant['title_ru'] ?? $variantKey),
+                                'label_en' => (string)($variant['title_en'] ?? $variant['title_ru'] ?? $variantKey),
+                            ];
+                        }
+                    }
                     $endpointTag = '<script>window.afKbEndpoints=' . json_encode([
                         'get' => af_kb_url(['action' => 'kb_get']),
                         'list' => af_kb_url(['action' => 'kb_list']),
@@ -7907,6 +7962,8 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                         . json_encode($arpgMechanicsUiOptions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
                         . ';window.afKbArpgPublicTypeOptions='
                         . json_encode($arpgPublicTypeUiOptions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                        . ';window.afKbArpgOriginVariantOptions='
+                        . json_encode($arpgOriginVariantUiOptions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
                         . ';</script>';
 
                     $chipsJs  = '<script src="'.$assetsBase.'/knowledgebase_chips.js?v='.af_kb_asset_version('knowledgebase_chips.js').'"></script>';
@@ -10493,6 +10550,10 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
     if ($displayProfile['character_origin'] === '') {
         $displayProfile['character_origin'] = trim((string)($profile['character_race'] ?? ''));
     }
+    $displayProfile['character_archetype'] = trim((string)($profile['character_archetype'] ?? ''));
+    if ($displayProfile['character_archetype'] === '') {
+        $displayProfile['character_archetype'] = trim((string)($profile['character_class'] ?? ''));
+    }
     foreach ([
         'Прототип' => 'character_prototype',
         'Прозвище' => 'character_nicknames',
@@ -10500,7 +10561,7 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
         'Пол' => 'character_gen',
         'Происхождение' => 'character_origin',
         'Разновидность' => 'character_origin_variant',
-        'Архетип' => 'character_class',
+        'Архетип' => 'character_archetype',
         'Фракция' => 'character_faction',
     ] as $label => $field) {
         $value = trim((string)($displayProfile[$field] ?? ''));
