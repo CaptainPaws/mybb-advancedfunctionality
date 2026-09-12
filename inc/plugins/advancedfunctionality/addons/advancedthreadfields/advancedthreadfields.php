@@ -6104,8 +6104,17 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
         'character_height' => 130,
         'character_weight' => 140,
     ];
-    $wikiStatFields = array_fill_keys(array_merge(['character_stats'], af_atf_character_stats_field_keys()), true);
-    $wikiAboutFields = array_fill_keys(['character_app', 'character_about', 'character_bio', 'character_description'], true);
+    $wikiSectionFields = [
+        'about' => array_fill_keys(['character_app', 'character_about', 'character_bio', 'character_description'], true),
+        'stats' => array_fill_keys(array_merge(['character_stats'], af_atf_character_stats_field_keys()), true),
+        'abilities' => array_fill_keys(['character_abilities'], true),
+        'post' => array_fill_keys(['character_post'], true),
+        'player' => array_fill_keys(['character_player'], true),
+        'additional_info' => array_fill_keys([
+            'character_feedback', 'character_additional', 'character_additional_info',
+            'character_meta', 'character_links',
+        ], true),
+    ];
     $supportedElements = [
         'fire', 'water', 'air', 'wind', 'earth', 'ice', 'lightning', 'electric',
         'nature', 'light', 'dark', 'space', 'void', 'mind', 'quantum', 'imaginary',
@@ -6189,17 +6198,17 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
                 . '</div>';
             $preservedRow = '<div class="af-atf-display-row"><div class="af-atf-field af-atf-profile-field af-atf-field-'.$nameClass.'" data-fieldid="'.$fieldid.'">'.$infoRow.'</div></div>';
             $wikiInfoboxRows[] = ['order' => $wikiInfoboxOrder[$fieldName], 'sequence' => $rowSequence++, 'html' => $preservedRow];
-        } elseif (isset($wikiStatFields[$fieldName])) {
-            $wikiStatsRows .= $row;
-        } elseif ($fieldName === 'character_abilities') {
-            $wikiAbilitiesRows .= $row;
-        } elseif (isset($wikiAboutFields[$fieldName])) {
+        } elseif (isset($wikiSectionFields['about'][$fieldName])) {
             $wikiAboutRows .= $row;
-        } elseif ($fieldName === 'character_post') {
+        } elseif (isset($wikiSectionFields['stats'][$fieldName])) {
+            $wikiStatsRows .= $row;
+        } elseif (isset($wikiSectionFields['abilities'][$fieldName])) {
+            $wikiAbilitiesRows .= $row;
+        } elseif (isset($wikiSectionFields['post'][$fieldName])) {
             $wikiPostRows .= $row;
-        } elseif ($fieldName === 'character_player') {
+        } elseif (isset($wikiSectionFields['player'][$fieldName])) {
             $wikiPlayerRows .= $row;
-        } else {
+        } elseif (isset($wikiSectionFields['additional_info'][$fieldName])) {
             $wikiOtherRows .= $row;
         }
     }
@@ -6229,9 +6238,9 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
             . '<div class="af-atf-wiki__section-body">'.$content.'</div>'
             . '</section>';
     };
-    $wikiContent = $wikiSection('Характеристики', $wikiStatsRows, 'af-atf-wiki__section--stats')
+    $wikiContent = $wikiSection('О персонаже', $wikiAboutRows)
+        . $wikiSection('Характеристики', $wikiStatsRows, 'af-atf-wiki__section--stats')
         . $wikiSection('Способности', $wikiAbilitiesRows, 'af-atf-wiki__section--abilities')
-        . $wikiSection('О персонаже', $wikiAboutRows)
         . $wikiSection('Пост', $wikiPostRows)
         . $wikiSection('Об игроке', $wikiPlayerRows)
         . $wikiSection('Дополнительные сведения', $wikiOtherRows, 'af-atf-wiki__section--additional');
