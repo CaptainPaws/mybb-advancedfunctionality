@@ -1384,16 +1384,7 @@
                     if (!arr.length) {
                         var empty = document.createElement('div');
                         empty.className = 'af-kb-help';
-                        var btn = document.createElement('button');
-                        btn.type = 'button';
-                        btn.className = 'af-kb-add';
-                        btn.textContent = 'Добавить';
-                        btn.addEventListener('click', function () {
-                            arr.push(getSeed());
-                            redraw();
-                            syncToRaw();
-                        });
-                        empty.appendChild(btn);
+                        empty.textContent = 'Список пуст.';
                         list.appendChild(empty);
                         return;
                     }
@@ -1540,23 +1531,7 @@
                     if (!blocksCompat.length) {
                         var hint = document.createElement('div');
                         hint.className = 'af-kb-help';
-                        var btn = document.createElement('button');
-                        btn.type = 'button';
-                        btn.className = 'af-kb-add';
-                        btn.textContent = 'Добавить';
-                        btn.addEventListener('click', function () {
-                            blocksCompat.push({
-                                block_key: 'overview',
-                                level: 0,
-                                title_ru: '',
-                                title_en: '',
-                                effects_json: '[]',
-                                data_json: '[]'
-                            });
-                            redraw();
-                            syncBack();
-                        });
-                        hint.appendChild(btn);
+                        hint.textContent = 'Список блоков пуст.';
                         list.appendChild(hint);
                         return;
                     }
