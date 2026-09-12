@@ -39,6 +39,18 @@ function af_kb_arpg_supported_types(): array
     return array_keys(af_kb_arpg_type_registry());
 }
 
+/**
+ * Public KB types which may use the ARPG mechanic.
+ *
+ * `character` deliberately keeps its historical public key and legacy
+ * character payload. Internally it is the ARPG character profile; unlike the
+ * other ARPG entities it is not an af_kb.arpg.meta.v1 envelope.
+ */
+function af_kb_is_arpg_ready_type(string $typeKey): bool
+{
+    return $typeKey === 'character' || in_array($typeKey, af_kb_arpg_supported_types(), true);
+}
+
 function af_kb_arpg_public_top_level_types(): array
 {
     $result = [];
@@ -789,6 +801,9 @@ function af_kb_default_type_definitions(): array
             'is_active' => $key === 'spell' ? 0 : 1,
             'sortorder' => count($defs),
         ];
+        if ($key === 'character') {
+            $defs[array_key_last($defs)]['mechanic_key'] = 'arpg';
+        }
     }
 
     foreach (af_kb_default_arpg_type_definitions() as $arpgDef) {
@@ -2102,6 +2117,16 @@ function af_kb_seed_defaults(): void
             continue;
         }
 
+        // Character has always used the ARPG character contract (ARPG
+        // origins/elements/archetypes and character_* combat stats). Correct
+        // only the type metadata; entry keys and payloads stay untouched.
+        if ($typeKey === 'character' && af_kb_get_type_mechanic_key($existing) !== 'arpg') {
+            $db->update_query('af_kb_types', [
+                'mechanic_key' => $db->escape_string('arpg'),
+                'updated_at' => TIME_NOW,
+            ], 'id=' . (int)$existing['id']);
+        }
+
         continue;
     }
 
@@ -3324,6 +3349,10 @@ function af_kb_default_type_rules_config_dnd(string $typeKey): array
 
 function af_kb_default_type_rules_config_arpg(string $typeKey): array
 {
+    if ($typeKey === 'character') {
+        return af_kb_default_type_rules_config_dnd($typeKey);
+    }
+
     $typeDef = af_kb_arpg_type_definition($typeKey);
     $isSupported = !empty($typeDef);
     $isService = !empty($typeDef['service']);
@@ -3699,6 +3728,12 @@ function af_kb_get_type_profile_definition_dnd(string $typeKey): array
 
 function af_kb_get_type_profile_definition_arpg(string $typeKey): array
 {
+    if ($typeKey === 'character') {
+        $profile = af_kb_get_type_profile_definition_dnd($typeKey);
+        $profile['internal_profile'] = 'arpg_character';
+        return $profile;
+    }
+
     $typeDef = af_kb_arpg_type_definition($typeKey);
     $base = af_kb_arpg_envelope_defaults($typeKey);
     $base['rules'] = array_replace_recursive((array)($base['rules'] ?? []), af_kb_default_type_profile_payload_arpg($typeKey));
@@ -3823,6 +3858,12 @@ function af_kb_get_type_schema_dnd(string $typeKey): array
 
 function af_kb_get_type_schema_arpg(string $typeKey): array
 {
+    if ($typeKey === 'character') {
+        $schema = af_kb_get_type_schema_dnd($typeKey);
+        $schema['internal_profile'] = 'arpg_character';
+        return $schema;
+    }
+
     $row = af_kb_find_type_row($typeKey);
 
     $schema = $row ? af_kb_decode_json((string)($row['ui_schema_json'] ?? '{}')) : [];
@@ -5355,6 +5396,13 @@ function af_kb_validate_rules_json_by_type_dnd(string $type, string $normalizedJ
 
 function af_kb_validate_rules_json_by_type_arpg(string $type, string $normalizedJson, array &$errors): string
 {
+    // The public character route predates ARPG envelopes and is consumed by
+    // CharacterSheets in this shape. Keep it lossless while dispatching it
+    // through the ARPG mechanic profile.
+    if ($type === 'character') {
+        return af_kb_validate_rules_json_by_type_dnd($type, $normalizedJson, $errors);
+    }
+
     $rulesData = af_kb_decode_json($normalizedJson);
     if (!is_array($rulesData)) {
         $rulesData = [];
@@ -7980,6 +8028,7 @@ function af_kb_get_mechanic_profile(string $mechanicKey): array
         foreach (af_kb_arpg_supported_types() as $supportedType) {
             $typeProfileMap[$supportedType] = $supportedType;
         }
+        $typeProfileMap['character'] = 'arpg_character';
 
         return [
             'mechanic_key' => 'arpg',
@@ -12176,7 +12225,7 @@ function af_kb_handle_type_edit(): void
         if (!af_kb_is_allowed_mechanic_key($mechanicKey)) {
             $errors[] = 'Mechanic key is invalid.';
         }
-        if ($mechanicKey === 'arpg' && !in_array($type, af_kb_arpg_supported_types(), true)) {
+        if ($mechanicKey === 'arpg' && !af_kb_is_arpg_ready_type($type)) {
             $errors[] = 'Mechanic "arpg" is allowed only for ARPG-ready types.';
         }
 
