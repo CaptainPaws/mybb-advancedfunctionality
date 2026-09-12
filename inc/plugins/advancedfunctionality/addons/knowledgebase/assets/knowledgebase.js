@@ -1175,7 +1175,7 @@
             };
 
             root.innerHTML = [
-                '<details open="open" class="af-kb-collapsible"><summary>UI</summary><div id="af-kb-arpg-ui"></div></details>',
+                '<details open="open" class="af-kb-collapsible"><summary>UI</summary><div id="af-kb-arpg-ui" class="af-kb-help">Presentation fields from <code>ui</code> are edited in the Icon, Banner and Background fields below. Unknown <code>ui</code> keys remain available in raw JSON and are preserved.</div></details>',
                 '<details open="open" class="af-kb-collapsible"><summary>Tags</summary><div id="af-kb-arpg-tags"></div></details>',
                 '<details open="open" class="af-kb-collapsible"><summary>Blocks</summary><div id="af-kb-arpg-blocks"></div></details>',
                 '<details open="open" class="af-kb-collapsible"><summary>Rules</summary><div id="af-kb-arpg-rules"></div></details>',
@@ -1499,12 +1499,13 @@
 
                 var blocksCompat = payload.blocks.map(function (b) {
                     return {
+                        original: deepClone(b),
                         block_key: b.block_key || '',
                         level: numberOrZero(b.level || 0),
                         title_ru: (b.title && b.title.ru) || '',
                         title_en: (b.title && b.title.en) || '',
                         effects_json: JSON.stringify(Array.isArray(b.effects) ? b.effects : [], null, 2),
-                        data_json: JSON.stringify(Array.isArray(b.data) ? b.data : [], null, 2)
+                        data_json: JSON.stringify((b.data && typeof b.data === 'object') ? b.data : [], null, 2)
                     };
                 });
 
@@ -1520,13 +1521,15 @@
 
                 function syncBack() {
                     payload.blocks = blocksCompat.map(function (row) {
-                        return {
+                        var updated = Object.assign({}, isPlainObject(row.original) ? row.original : {}, {
                             block_key: String(row.block_key || ''),
                             level: numberOrZero(row.level || 0),
                             title: { ru: String(row.title_ru || ''), en: String(row.title_en || '') },
                             effects: parseJsonSafe(row.effects_json || '[]', []),
                             data: parseJsonSafe(row.data_json || '[]', [])
-                        };
+                        });
+                        row.original = deepClone(updated);
+                        return updated;
                     });
                     bindEntryMediaFields();
                     syncToRaw();
