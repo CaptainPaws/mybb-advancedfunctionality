@@ -5121,17 +5121,47 @@ function af_kb_decode_json(string $raw): array
 
 function af_kb_cleanup_meta_payload(array $meta): array
 {
-    if (array_key_exists('stats', $meta)) {
-        unset($meta['stats']);
-    }
-    if (array_key_exists('bonuses', $meta)) {
-        unset($meta['bonuses']);
-    }
-    if (array_key_exists('links', $meta)) {
-        unset($meta['links']);
+    // Ordinary edits are deliberately non-migrating.  Legacy and extension
+    // keys may still have consumers outside the current schema-driven form.
+    return $meta;
+}
+
+function af_kb_merge_meta_blocks_for_save(array $existingBlocks, array $parsedBlocks): array
+{
+    $existingByKey = [];
+    foreach ($existingBlocks as $existingBlock) {
+        if (!is_array($existingBlock)) {
+            continue;
+        }
+        $blockKey = (string)($existingBlock['block_key'] ?? '');
+        $existingByKey[$blockKey][] = $existingBlock;
     }
 
-    return $meta;
+    $result = [];
+    foreach ($parsedBlocks as $parsedBlock) {
+        $blockKey = (string)($parsedBlock['block_key'] ?? '');
+        $existingBlock = [];
+        if (!empty($existingByKey[$blockKey])) {
+            $existingBlock = array_shift($existingByKey[$blockKey]);
+        }
+
+        $blockData = af_kb_decode_json((string)($parsedBlock['data_json'] ?? '{}'));
+        $mergedBlock = $existingBlock;
+        $mergedBlock['block_key'] = $blockKey;
+        $mergedBlock['level'] = (int)($blockData['level'] ?? $existingBlock['level'] ?? 0);
+        $mergedBlock['title'] = array_replace(
+            is_array($existingBlock['title'] ?? null) ? $existingBlock['title'] : [],
+            [
+                'ru' => (string)($parsedBlock['title_ru'] ?? ''),
+                'en' => (string)($parsedBlock['title_en'] ?? ''),
+            ]
+        );
+        $mergedBlock['effects'] = isset($blockData['effects']) && is_array($blockData['effects']) ? $blockData['effects'] : [];
+        $mergedBlock['data'] = $blockData;
+        $result[] = $mergedBlock;
+    }
+
+    return $result;
 }
 
 function af_kb_is_empty_json(string $raw): bool
@@ -11556,20 +11586,10 @@ function af_kb_handle_edit(): void
             if (!isset($metaPayload['ui']) || !is_array($metaPayload['ui'])) {
                 $metaPayload['ui'] = [];
             }
-            $metaPayload['blocks'] = [];
-            foreach ($parsedBlocks as $metaBlock) {
-                $blockData = af_kb_decode_json((string)($metaBlock['data_json'] ?? '{}'));
-                $metaPayload['blocks'][] = [
-                    'block_key' => (string)($metaBlock['block_key'] ?? ''),
-                    'level' => (int)($blockData['level'] ?? 0),
-                    'title' => [
-                        'ru' => (string)($metaBlock['title_ru'] ?? ''),
-                        'en' => (string)($metaBlock['title_en'] ?? ''),
-                    ],
-                    'effects' => isset($blockData['effects']) && is_array($blockData['effects']) ? $blockData['effects'] : [],
-                    'data' => $blockData,
-                ];
-            }
+            $metaPayload['blocks'] = af_kb_merge_meta_blocks_for_save(
+                is_array($metaPayload['blocks'] ?? null) ? $metaPayload['blocks'] : [],
+                $parsedBlocks
+            );
             $metaPayload['ui']['icon_class'] = $entryIconClass;
             $metaPayload['ui']['icon_url'] = $entryIconUrl;
             $metaPayload['ui']['background_url'] = $entryBgUrl;
