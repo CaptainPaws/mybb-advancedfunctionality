@@ -358,6 +358,7 @@ function af_advancededitor_build_payload(): array
 
     // CustomDefs include pack buttons + DB custom buttons (same format)
     $customDefs = af_advancededitor_get_all_custom_defs();
+    $available = af_advancededitor_get_available_buttons($bburl, $customDefs);
 
     // Normalized assets base url (addon assets/)
     $assetsBaseUrl = af_advancededitor_url('inc/plugins/advancedfunctionality/addons/' . AF_AE_ID . '/assets/');
