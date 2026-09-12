@@ -78,6 +78,272 @@
 .af-atf-display .af-atf-character-stats-display-wrap,.af-atf-display .af-atf-character-stats-display-item,.af-atf-display .af-atf-ability-display-card,.af-atf-display .af-atf-ability-display-icon-wrap { border-color:var(--af-element-border); }
 .af-atf-display .af-atf-character-stats-display-title,.af-atf-display .af-atf-abilities-display-title,.af-atf-display .af-atf-ability-display-name { color:var(--af-element-accent); }
 
+/* Character sheet display: quiet, element-aware encyclopaedia layout. */
+.af-atf-display {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  padding: clamp(12px, 2.5vw, 28px);
+  color: inherit;
+  background: rgba(12, 15, 20, .2);
+  overflow-wrap: anywhere;
+}
+
+.af-atf-wiki,
+.af-atf-wiki * {
+  box-sizing: border-box;
+}
+
+.af-atf-wiki__header {
+  margin-bottom: clamp(18px, 3vw, 32px);
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--af-element-main);
+}
+
+.af-atf-wiki__heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  min-width: 0;
+}
+
+.af-atf-wiki__title {
+  min-width: 0;
+  margin: 0;
+  color: inherit;
+  font-size: clamp(1.65rem, 4vw, 2.75rem);
+  font-weight: 650;
+  line-height: 1.08;
+  letter-spacing: .025em;
+  overflow-wrap: anywhere;
+}
+
+.af-atf-wiki__element {
+  flex: 0 1 auto;
+}
+
+.af-atf-wiki__element .af-atf-element-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--af-element-border);
+  border-radius: 999px;
+  background: var(--af-element-soft);
+  font-size: .82rem;
+}
+
+.af-atf-wiki__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  grid-template-areas: "content infobox";
+  align-items: start;
+  gap: clamp(24px, 4vw, 52px);
+}
+
+.af-atf-wiki__content {
+  grid-area: content;
+  min-width: 0;
+}
+
+.af-atf-wiki__infobox {
+  grid-area: infobox;
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-top: 3px solid var(--af-element-main);
+  background: rgba(7, 10, 14, .24);
+}
+
+.af-atf-wiki__infobox .af-atf-display-row,
+.af-atf-wiki__infobox .af-atf-field {
+  padding: 0;
+}
+
+.af-atf-display .af-atf-wiki__infobox .af-atf-profile-field {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.af-atf-wiki-info {
+  display: grid;
+  grid-template-columns: minmax(92px, .8fr) minmax(0, 1.2fr);
+  gap: 12px;
+  padding: 9px 12px;
+  border-top: 1px solid rgba(255, 255, 255, .075);
+  line-height: 1.4;
+}
+
+.af-atf-wiki__infobox .af-atf-display-row:first-child .af-atf-wiki-info {
+  border-top: 0;
+}
+
+.af-atf-wiki-info__label {
+  color: var(--af-element-accent);
+  font-size: .82rem;
+  font-weight: 650;
+}
+
+.af-atf-wiki-info__value {
+  min-width: 0;
+}
+
+.af-atf-wiki-info--name {
+  display: block;
+  padding: 13px 14px;
+  text-align: center;
+  background: var(--af-element-soft);
+}
+
+.af-atf-wiki-info--name .af-atf-wiki-info__label {
+  display: none;
+}
+
+.af-atf-wiki-info--name .af-atf-wiki-info__value {
+  font-size: clamp(1.05rem, 2vw, 1.3rem);
+  font-weight: 700;
+}
+
+.af-atf-wiki-info--image {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+}
+
+.af-atf-wiki-info--image .af-atf-wiki-info__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.af-atf-wiki-info--image img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 460px;
+  object-fit: cover;
+}
+
+.af-atf-wiki__section + .af-atf-wiki__section {
+  margin-top: clamp(24px, 4vw, 42px);
+}
+
+.af-atf-wiki__section-title {
+  margin: 0 0 14px;
+  padding: 0 0 7px;
+  border-bottom: 1px solid var(--af-element-border);
+  color: inherit;
+  font-size: clamp(1.15rem, 2vw, 1.4rem);
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.af-atf-wiki__section-body,
+.af-atf-wiki__section-body .af-atf-field,
+.af-atf-wiki__section-body .af-atf-value {
+  min-width: 0;
+}
+
+.af-atf-wiki__section-body > .af-atf-display-row {
+  padding: 6px 0;
+}
+
+.af-atf-wiki__section--stats .af-atf-character-stats-display-title,
+.af-atf-wiki__section--abilities .af-atf-abilities-display-title {
+  display: none;
+}
+
+.af-atf-wiki__section--stats .af-atf-character-stats-display-wrap {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.af-atf-wiki__section--stats .af-atf-character-stats-display {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px;
+}
+
+.af-atf-wiki__section--stats .af-atf-character-stats-display-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 16px;
+  padding: 7px 0;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, .075);
+  border-radius: 0;
+}
+
+.af-atf-wiki__section--stats .af-atf-character-stats-display-label,
+.af-atf-wiki__section--stats .af-atf-character-stats-display-value {
+  font-size: inherit;
+}
+
+.af-atf-wiki__section--abilities .af-atf-abilities-display-list {
+  gap: 14px;
+}
+
+.af-atf-wiki__section--abilities .af-atf-ability-display-card {
+  padding: 13px 14px;
+  border-width: 0 0 0 2px;
+  border-radius: 0;
+  background: rgba(255, 255, 255, .025);
+}
+
+.af-atf-wiki a {
+  transition: color .15s ease;
+}
+
+.af-atf-wiki a:hover {
+  color: var(--af-element-accent);
+}
+
+@media (max-width: 820px) {
+  .af-atf-wiki__layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "infobox"
+      "content";
+  }
+
+  .af-atf-wiki__infobox {
+    width: 100%;
+    max-width: 560px;
+  }
+}
+
+@media (max-width: 520px) {
+  .af-atf-display {
+    padding: 12px;
+  }
+
+  .af-atf-wiki__title {
+    font-size: clamp(1.4rem, 8vw, 2rem);
+  }
+
+  .af-atf-wiki-info {
+    grid-template-columns: minmax(84px, .75fr) minmax(0, 1.25fr);
+    gap: 9px;
+    padding: 8px 10px;
+  }
+
+  .af-atf-wiki__section--stats .af-atf-character-stats-display {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .af-atf-ability-display-head,
+  .af-atf-ability-display-chips {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+}
+
 .af-atf-display-row {
   padding: 4px 0;
 }
