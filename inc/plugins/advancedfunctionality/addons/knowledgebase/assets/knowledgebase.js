@@ -1039,6 +1039,7 @@
 
             var typeMap = {
                 arpg_origin: 'origin',
+                arpg_origin_variant: 'origin_variant',
                 arpg_archetype: 'archetype',
                 arpg_element: 'element',
                 arpg_faction: 'faction',
@@ -1062,9 +1063,12 @@
                 character_arpg: 'character'
             };
 
-            var simpleTypes = ['origin', 'archetype', 'element', 'faction', 'lore', 'character'];
+            var simpleTypes = ['origin', 'origin_variant', 'archetype', 'element', 'faction', 'lore', 'character'];
             var heavyTypes = ['ability', 'talent', 'item', 'bestiary', 'character'];
             var serviceKinds = ['mechanic_profile', 'resource_def', 'status_def', 'modifier_template', 'formula_def', 'formula_profile', 'weapon_type', 'trigger_template', 'condition_template', 'scaling_table', 'combat_template', 'snippet'];
+            var modifierStatOptions = Array.isArray(typeSchema.modifier_stat_options)
+                ? typeSchema.modifier_stat_options.slice()
+                : [];
 
             function getRootDefaults() {
                 var defaults = (typeSchema && typeSchema.root_defaults && typeof typeSchema.root_defaults === 'object')
@@ -1610,6 +1614,23 @@
                         { key: 'racial_traits_text', label: 'racial_traits_text', default: '' },
                         { key: 'starting_notes', label: 'starting_notes', default: '' }
                     ], 'Origin core');
+                }
+
+                if (entityType === 'origin_variant') {
+                    payload.rules.inherits_from_origin = true;
+                    createSection(rulesRoot, 'Origin relation', 'This variant inherits its selected parent Origin.');
+
+                    // These keys are the existing ARPG Character Sheet stat contract.
+                    // The builder edits only recognized flat rows; all other/legacy
+                    // modifier objects remain untouched in the same ordered array.
+                    renderSeededArrayEditor(rulesRoot, 'Variant modifiers', 'modifiers', [
+                        { key: 'stat_key', label: 'Stat', type: 'select', options: modifierStatOptions, default: modifierStatOptions[0] || 'hp' },
+                        { key: 'mode', label: 'Operation', type: 'select', options: ['flat'], default: 'flat' },
+                        { key: 'value', label: 'Value', type: 'number', default: 0 },
+                        { key: 'notes', label: 'Notes', default: '' }
+                    ], [
+                        { key: 'add', label: '+ Add modifier', seed: { stat_key: 'hp', mode: 'flat', value: 0, notes: '' } }
+                    ]);
                 }
 
                 if (entityType === 'archetype') {

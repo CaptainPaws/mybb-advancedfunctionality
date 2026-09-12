@@ -975,12 +975,34 @@ function af_charactersheets_arpg_numeric_rule(array $rules, string $key): float
     return (float)$rules[$key];
 }
 
+function af_charactersheets_arpg_apply_flat_modifiers(array $stats, array $rules): array
+{
+    $modifierTargets = [
+        'hp' => 'character_hp', 'atk' => 'character_attack_power', 'def' => 'character_defense',
+        'armor' => 'character_armor', 'speed' => 'character_speed', 'crit_rate' => 'character_crit_rate',
+        'crit_dmg' => 'character_crit_damage', 'status_hit' => 'character_status_hit',
+        'status_resist' => 'character_status_resist', 'mastery' => 'character_elemental_mastery',
+        'element_damage_bonus' => 'character_element_damage_bonus', 'healing_bonus' => 'character_healing_bonus',
+        'shield_strength' => 'character_shield_strength', 'luck' => 'character_luck',
+    ];
+    foreach ((array)($rules['modifiers'] ?? []) as $modifier) {
+        if (!is_array($modifier) || (string)($modifier['mode'] ?? 'flat') !== 'flat') {
+            continue;
+        }
+        $target = $modifierTargets[trim((string)($modifier['stat_key'] ?? ''))] ?? '';
+        if ($target === '' || !is_numeric($modifier['value'] ?? null)) {
+            continue;
+        }
+        $stats[$target] = (float)($stats[$target] ?? 0) + (float)$modifier['value'];
+    }
+    return $stats;
+}
+
 function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $archetypeRules, int $level, array $originVariantRules = []): array
 {
     $lvlScale = max(0, $level - 1);
-    $sum = static function (string $key) use ($originRules, $archetypeRules, $originVariantRules): float {
+    $sum = static function (string $key) use ($originRules, $archetypeRules): float {
         return af_charactersheets_arpg_numeric_rule($originRules, $key)
-            + af_charactersheets_arpg_numeric_rule($originVariantRules, $key)
             + af_charactersheets_arpg_numeric_rule($archetypeRules, $key);
     };
 
@@ -993,10 +1015,17 @@ function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $
         'character_element_damage_bonus' => $sum('elemental_damage_bonus_base'),
         'character_healing_bonus' => $sum('healing_bonus_base'),
         'character_shield_strength' => $sum('shield_bonus_base'),
+        'character_armor' => 0.0,
+        'character_speed' => af_charactersheets_arpg_numeric_rule($originRules, 'movement_speed'),
+        'character_crit_rate' => 0.0,
+        'character_status_hit' => 0.0,
+        'character_status_resist' => 0.0,
     ];
 
     $stats['character_attack_power'] += $sum('base_damage_bonus');
     $stats['character_defense'] += $sum('base_defense_bonus');
+
+    $stats = af_charactersheets_arpg_apply_flat_modifiers($stats, $originVariantRules);
 
     foreach ($stats as $key => $value) {
         $stats[$key] = (float)$value;
@@ -1363,6 +1392,9 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         ['label' => 'HP', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_hp', $sheet_view, ['mechanics.hp_total'])],
         ['label' => 'Защита', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_defense', $sheet_view, ['mechanics.ac_total'])],
         ['label' => 'Сила атаки', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_attack_power', $sheet_view, ['mechanics.damage_bonus'])],
+        ['label' => 'Броня', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_armor', $sheet_view, ['mechanics.armor_total'])],
+        ['label' => 'Скорость', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_speed', $sheet_view, ['mechanics.speed_total'])],
+        ['label' => 'Шанс крита', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_crit_rate', $sheet_view, ['character_computed_state.fixed_bonuses.crit_rate'])],
         ['label' => 'Крит. урон', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_crit_damage', $sheet_view, ['character_computed_state.fixed_bonuses.crit_dmg', 'character_computed_state.resources.crit_dmg'])],
         ['label' => 'Мастерство стихий', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_elemental_mastery', $sheet_view, ['character_computed_state.resources.mastery'])],
         ['label' => 'Бонус стихийного урона', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_element_damage_bonus', $sheet_view, [
@@ -1371,6 +1403,8 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         ])],
         ['label' => 'Бонус лечения', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_healing_bonus', $sheet_view, ['character_computed_state.resources.healing_bonus'])],
         ['label' => 'Бонус щита', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_shield_strength', $sheet_view, ['character_computed_state.resources.shield_strength', 'mechanics.shield_bonus'])],
+        ['label' => 'Шанс статуса', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_status_hit', $sheet_view, ['character_computed_state.resources.status_hit'])],
+        ['label' => 'Сопротивление статусу', 'value' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_status_resist', $sheet_view, ['character_computed_state.resources.status_resist'])],
     ];
 
     $arpgStatsTrace = [
