@@ -451,6 +451,9 @@ function af_advancedthreadfields_init(): void
     $plugins->add_hook('datahandler_post_validate', 'af_atf_dh_validate');
     $plugins->add_hook('datahandler_post_insert_thread', 'af_atf_dh_insert_thread');
     $plugins->add_hook('datahandler_post_update', 'af_atf_dh_update_post');
+    // Валидация/сохранение в MyBB 1.8.40
+    $plugins->add_hook('datahandler_post_validate_post', 'af_atf_dh_validate');
+    $plugins->add_hook('datahandler_post_validate_thread', 'af_atf_dh_validate');
 
     // Вывод
     $plugins->add_hook('forumdisplay_start', 'af_atf_forumdisplay_start');
