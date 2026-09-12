@@ -32,6 +32,8 @@ $requiredVariant = ['modifiers' => [
     ['stat_key' => 'atk', 'mode' => 'flat', 'value' => 25],
     ['stat_key' => 'def', 'mode' => 'flat', 'value' => 5],
     ['stat_key' => 'speed', 'mode' => 'flat', 'value' => -10],
+    ['stat_key' => 'crit_dmg', 'mode' => 'flat', 'value' => 12.5],
+    ['stat_key' => 'mastery', 'mode' => 'flat', 'value' => 30],
 ]];
 $required = af_charactersheets_arpg_build_stats_from_kb(
     ['hp_base' => 1000, 'attack_power_base' => 100, 'defense_base' => 20, 'movement_speed' => 100],
@@ -43,6 +45,8 @@ assert_same(1150.0, $required['character_hp'], 'Required HP VM example failed');
 assert_same(125.0, $required['character_attack_power'], 'Required attack VM example failed');
 assert_same(25.0, $required['character_defense'], 'Required defense VM example failed');
 assert_same(90.0, $required['character_speed'], 'Required negative speed VM example failed');
+assert_same(12.5, $required['character_crit_damage'], 'Crit Damage modifier failed');
+assert_same(30.0, $required['character_elemental_mastery'], 'Elemental Mastery modifier failed');
 
 $perLevel = af_charactersheets_arpg_build_stats_from_kb(
     ['hp_base' => 1000, 'hp_per_level' => 50],
@@ -51,6 +55,40 @@ $perLevel = af_charactersheets_arpg_build_stats_from_kb(
     ['modifiers' => [['stat_key' => 'hp_per_level', 'mode' => 'flat', 'value' => 10]]]
 );
 assert_same(1120.0, $perLevel['character_hp'], 'Per-level modifier was not applied before level scaling');
+
+$withEquipment = af_charactersheets_arpg_build_stats_from_kb(
+    ['hp_base' => 1000],
+    [],
+    1,
+    ['modifiers' => [['stat_key' => 'hp', 'mode' => 'flat', 'value' => 150]]],
+    [[
+        'base_stats' => [['stat_key' => 'hp', 'mode' => 'flat', 'value' => 50]],
+        'modifiers' => [
+            ['stat_key' => 'def', 'mode' => 'flat', 'value' => 8],
+            ['stat_key' => 'atk', 'mode' => 'percent', 'value' => 999],
+            ['stat_key' => 'speed', 'mode' => 'flat', 'value' => 5, 'condition_text' => 'while sprinting'],
+        ],
+    ]]
+);
+assert_same(1200.0, $withEquipment['character_hp'], 'Origin + variant + equipment HP aggregation failed');
+assert_same(8.0, $withEquipment['character_defense'], 'Unconditional flat equipment modifier failed');
+assert_same(0.0, $withEquipment['character_attack_power'], 'Unsupported equipment percent modifier was calculated');
+assert_same(0.0, $withEquipment['character_speed'], 'Conditional equipment modifier was calculated without combat context');
+
+$collections = af_charactersheets_arpg_merge_rule_collections(
+    ['resistances' => ['fire' => 2], 'abilities' => ['parent' => 'parent']],
+    [
+        ['resistances' => ['ice' => 3], 'weaknesses' => ['lightning'], 'immunities' => ['poison'], 'resources' => ['rage' => 5]],
+        ['resistances' => ['fire' => 1], 'abilities' => ['variant'], 'skills' => ['survival'], 'proficiencies' => ['bows'], 'grants' => [['op' => 'resource', 'key' => 'focus', 'value' => 2]]],
+    ]
+);
+assert_same(3.0, $collections['resistances']['fire'], 'Variant destroyed or failed to add to parent resistance');
+assert_same(3.0, $collections['resistances']['ice'], 'Variant resistance was not collected');
+assert_true(isset($collections['abilities']['parent'], $collections['abilities']['variant']), 'Variant destroyed parent abilities');
+assert_true(isset($collections['weaknesses']['lightning'], $collections['immunities']['poison']), 'Weakness/immunity collection failed');
+assert_true(isset($collections['skills']['survival'], $collections['proficiencies']['bows']), 'Skill/proficiency collection failed');
+assert_same(5.0, $collections['resources']['rage'], 'Resource collection failed');
+assert_true(count($collections['grants']) === 1, 'Grant collection failed');
 
 $duplicatesAndDecimals = af_charactersheets_arpg_apply_origin_variant_modifiers(
     ['character_hp' => 100],
@@ -126,6 +164,10 @@ foreach ([
 assert_true(strpos($jsSource, "v.label || v.value") !== false, 'Selector does not separate labels from keys');
 assert_true(strpos($jsSource, "input.step = 'any'") !== false, 'Decimal modifier input is not enabled');
 assert_true(!file_exists(__DIR__ . '/../inc/plugins/advancedfunctionality/addons/arpg_stat_contract.php'), 'Global ARPG stat contract file still exists');
+
+$renderSource = file_get_contents(__DIR__ . '/../inc/plugins/advancedfunctionality/addons/charactersheets/modules/render.php');
+assert_true(is_string($renderSource), 'Unable to inspect Character Sheet renderer');
+assert_true(strpos($renderSource, "'speed_total' => (int)af_charactersheets_arpg_read_numeric_stat") !== false, 'Combat summary bypasses calculated speed VM');
 
 echo "origin variant regression checks passed\n";
 echo "stored JSON example: " . $json . "\n";
