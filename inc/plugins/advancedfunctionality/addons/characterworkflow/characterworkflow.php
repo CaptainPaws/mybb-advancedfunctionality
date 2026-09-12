@@ -141,7 +141,7 @@ function af_cwf_ensure_settings(): void
     af_cwf_ensure_setting($gid, 'af_characterworkflow_enabled', $lang->af_characterworkflow_enabled ?? 'Enable CharacterWorkflow', $lang->af_characterworkflow_enabled_desc ?? 'Enables workflow state table and moderation orchestration API.', 'yesno', '1', 1);
     af_cwf_ensure_setting($gid, 'af_characterworkflow_pending_forums', $lang->af_characterworkflow_pending_forums ?? 'Pending application forums', $lang->af_characterworkflow_pending_forums_desc ?? 'CSV forum IDs where applications are considered pending.', 'text', '', 2);
     af_cwf_ensure_setting($gid, 'af_characterworkflow_target_forums', $lang->af_characterworkflow_target_forums ?? 'Target accepted forum ids', $lang->af_characterworkflow_target_forums_desc ?? 'CSV forum IDs used as transfer target(s).', 'text', '', 3);
-    af_cwf_ensure_setting($gid, 'af_characterworkflow_transfer_group_ids', $lang->af_characterworkflow_transfer_group_ids ?? 'Additional groups on transfer', $lang->af_characterworkflow_transfer_group_ids_desc ?? 'CSV group IDs to add into additional groups for the thread author after transfer.', 'text', '', 4);
+    af_cwf_ensure_setting($gid, 'af_characterworkflow_transfer_group_ids', $lang->af_characterworkflow_transfer_group_ids ?? 'Additional groups on transfer', $lang->af_characterworkflow_transfer_group_ids_desc ?? 'CSV group IDs to add into additional groups for the thread author after transfer.', 'text', '2', 4);
     af_cwf_ensure_setting($gid, 'af_characterworkflow_greeting_mode', $lang->af_characterworkflow_greeting_mode ?? 'Greeting behavior', $lang->af_characterworkflow_greeting_mode_desc ?? 'inherit = CharacterSheets logic, always = always attempt greeting post, never = do not post greeting.', "select\ninherit=Inherit CharacterSheets\nalways=Always post\nnever=Never post", 'inherit', 5);
     af_cwf_ensure_setting($gid, 'af_characterworkflow_canon_source_policy', $lang->af_characterworkflow_canon_source_policy ?? 'Canon source-of-truth policy', $lang->af_characterworkflow_canon_source_policy_desc ?? 'Defines policy for canon characters.', "select\nkb=KB only", 'kb', 6);
     af_cwf_ensure_setting($gid, 'af_characterworkflow_original_source_policy', $lang->af_characterworkflow_original_source_policy ?? 'Original source-of-truth policy', $lang->af_characterworkflow_original_source_policy_desc ?? 'Defines policy for original characters before/after KB creation.', "select\nthread_then_kb=Thread/ATF before KB, KB after create", 'thread_then_kb', 7);
@@ -195,10 +195,37 @@ function af_cwf_is_pending_forum(int $fid): bool
     return in_array($fid, af_cwf_get_pending_forum_ids(), true);
 }
 
+function af_cwf_is_allowed_forum(int $fid): bool
+{
+    if ($fid <= 0) {
+        return false;
+    }
+
+    $allowedForumIds = array_values(array_unique(array_merge(
+        af_cwf_get_pending_forum_ids(),
+        af_cwf_get_target_forum_ids()
+    )));
+    return in_array($fid, $allowedForumIds, true);
+}
+
 function af_cwf_get_transfer_group_ids(): array
 {
-    global $mybb;
-    return af_cwf_csv_to_ids((string)($mybb->settings['af_characterworkflow_transfer_group_ids'] ?? ''));
+    global $mybb, $db;
+
+    $configured = af_cwf_csv_to_ids((string)($mybb->settings['af_characterworkflow_transfer_group_ids'] ?? ''));
+    if (empty($configured) || !is_object($db)) {
+        return [];
+    }
+
+    $existing = [];
+    $query = $db->simple_select('usergroups', 'gid', 'gid IN (' . implode(',', $configured) . ')');
+    while ($row = $db->fetch_array($query)) {
+        $existing[(int)$row['gid']] = true;
+    }
+
+    return array_values(array_filter($configured, static function ($gid) use ($existing) {
+        return isset($existing[$gid]);
+    }));
 }
 
 
@@ -292,6 +319,7 @@ function af_cwf_get_context(int $tid, array $thread = [], array $acceptRow = [])
         'legacy_accepted' => $legacyAccepted,
         'is_pending_forum' => af_cwf_is_pending_forum((int)($thread['fid'] ?? 0)),
         'is_target_forum' => in_array((int)($thread['fid'] ?? 0), af_cwf_get_target_forum_ids(), true),
+        'is_allowed_forum' => af_cwf_is_allowed_forum((int)($thread['fid'] ?? 0)),
         'kb_linked' => $kbLinked,
         'sheet_exists' => $sheetExists,
         'character_kind' => $kind,
@@ -313,7 +341,7 @@ function af_cwf_can_transfer(int $tid, array $thread = [], array $acceptRow = []
 function af_cwf_can_create_sheet(int $tid, array $thread = [], array $acceptRow = []): bool
 {
     $ctx = af_cwf_get_context($tid, $thread, $acceptRow);
-    return empty($ctx['sheet_exists']);
+    return !empty($ctx['is_allowed_forum']) && empty($ctx['sheet_exists']);
 }
 
 function af_cwf_can_create_kb(int $tid, array $thread = [], array $acceptRow = []): bool
@@ -322,7 +350,7 @@ function af_cwf_can_create_kb(int $tid, array $thread = [], array $acceptRow = [
     if (($ctx['character_kind'] ?? 'original') === 'canon') {
         return false;
     }
-    return empty($ctx['kb_linked']);
+    return !empty($ctx['is_allowed_forum']) && empty($ctx['kb_linked']);
 }
 
 function af_cwf_can_sync_kb(int $tid, array $thread = [], array $acceptRow = []): bool
@@ -331,7 +359,7 @@ function af_cwf_can_sync_kb(int $tid, array $thread = [], array $acceptRow = [])
     if (($ctx['character_kind'] ?? 'original') === 'canon') {
         return false;
     }
-    return !empty($ctx['kb_linked']);
+    return !empty($ctx['is_allowed_forum']) && !empty($ctx['kb_linked']);
 }
 
 function af_cwf_can_request_revision(int $tid, array $thread = [], array $acceptRow = []): bool
@@ -546,7 +574,6 @@ function af_cwf_ensure_setting(int $gid, string $name, string $title, string $de
         'title' => $db->escape_string($title),
         'description' => $db->escape_string($desc),
         'optionscode' => $db->escape_string($type),
-        'value' => $db->escape_string($value),
         'disporder' => $order,
         'gid' => $gid,
     ];
@@ -554,6 +581,7 @@ function af_cwf_ensure_setting(int $gid, string $name, string $title, string $de
         $db->update_query('settings', $row, 'sid=' . $sid);
         return;
     }
+    $row['value'] = $db->escape_string($value);
     $db->insert_query('settings', $row);
 }
 
