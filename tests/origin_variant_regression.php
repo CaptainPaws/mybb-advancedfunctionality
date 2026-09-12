@@ -8,6 +8,8 @@ function af_charactersheets_json_decode(string $json): array
     return is_array($decoded) ? $decoded : [];
 }
 require_once __DIR__ . '/../inc/plugins/advancedfunctionality/addons/charactersheets/modules/render.php';
+define('AF_ADDONS', __DIR__ . '/../inc/plugins/advancedfunctionality/addons/');
+require_once __DIR__ . '/../inc/plugins/advancedfunctionality/addons/knowledgebase/knowledgebase.php';
 
 function assert_same(float $expected, float $actual, string $message): void
 {
@@ -50,7 +52,7 @@ $perLevel = af_charactersheets_arpg_build_stats_from_kb(
 );
 assert_same(1120.0, $perLevel['character_hp'], 'Per-level modifier was not applied before level scaling');
 
-$duplicatesAndDecimals = af_arpg_apply_origin_variant_modifiers(
+$duplicatesAndDecimals = af_charactersheets_arpg_apply_origin_variant_modifiers(
     ['character_hp' => 100],
     ['modifiers' => [
         ['stat_key' => 'hp', 'mode' => 'flat', 'value' => 100],
@@ -67,24 +69,24 @@ assert_same(100.0, $withoutVariant['character_hp'], 'Origin without variant chan
 $legacyVariant = af_charactersheets_arpg_build_stats_from_kb(['hp_base' => 100], [], 1, ['hp_base' => 15]);
 assert_same(115.0, $legacyVariant['character_hp'], 'Legacy direct-field variant was not preserved');
 
-$definitions = af_arpg_origin_modifier_stat_definitions();
+$definitions = af_kb_arpg_origin_modifier_stat_definitions();
 $expectedKeys = [
     'hp', 'def', 'atk', 'speed', 'crit_dmg', 'mastery', 'element_damage_bonus',
     'healing_bonus', 'shield_strength', 'hp_per_level', 'defense_per_level',
     'attack_power_per_level', 'elemental_mastery_per_level',
 ];
-assert_true(array_keys($definitions) === $expectedKeys, 'Modifier selector contract keys changed');
+assert_true(array_keys($definitions) === $expectedKeys, 'Schema-derived modifier selector keys changed');
 foreach (['size', 'creature_type', 'racial_bonuses_text', 'racial_traits_text', 'starting_notes'] as $nonMechanical) {
     assert_true(!isset($definitions[$nonMechanical]), 'Non-mechanical Origin field exposed: ' . $nonMechanical);
 }
 foreach ([-10, 0, 1.25] as $numericValue) {
-    assert_true(af_arpg_validate_origin_variant_modifier([
+    assert_true(af_kb_arpg_validate_origin_variant_modifier([
         'stat_key' => 'hp', 'mode' => 'flat', 'value' => $numericValue, 'notes' => 'valid',
     ]) === [], 'Validator rejected a valid numeric modifier');
 }
-assert_true(af_arpg_validate_origin_variant_modifier(['stat_key' => '', 'mode' => 'flat', 'value' => 0]) !== [], 'Validator accepted an empty stat');
-assert_true(af_arpg_validate_origin_variant_modifier(['stat_key' => 'hp', 'mode' => 'percent', 'value' => 1]) !== [], 'Validator accepted an unsupported operation');
-assert_true(af_arpg_validate_origin_variant_modifier(['stat_key' => 'hp', 'mode' => 'flat', 'value' => 'invalid']) !== [], 'Validator accepted a non-numeric value');
+assert_true(af_kb_arpg_validate_origin_variant_modifier(['stat_key' => '', 'mode' => 'flat', 'value' => 0]) !== [], 'Validator accepted an empty stat');
+assert_true(af_kb_arpg_validate_origin_variant_modifier(['stat_key' => 'hp', 'mode' => 'percent', 'value' => 1]) !== [], 'Validator accepted an unsupported operation');
+assert_true(af_kb_arpg_validate_origin_variant_modifier(['stat_key' => 'hp', 'mode' => 'flat', 'value' => 'invalid']) !== [], 'Validator accepted a non-numeric value');
 
 $json = json_encode(['rules' => $requiredVariant], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 $roundTrip = json_decode((string)$json, true);
@@ -105,12 +107,15 @@ foreach ([
     "origin_parent_key=' . htmlspecialchars_uni(\$key)",
     "define('AF_KB_TYPE_RACE_VARIANT', 'race_variant')",
     "\$schema['modifier_stat_options'] = af_kb_arpg_character_stat_options()",
-    "af_arpg_apply_origin_variant_modifiers(\$stats, \$originVariantRules, \$levelSteps)",
+    "af_kb_arpg_apply_origin_variant_modifiers(\$stats, \$originVariantRules, \$levelSteps)",
+    "\$originSchema = af_kb_default_type_profile_payload_arpg('arpg_origin')",
+    "array_key_exists(\$originField, \$originSchema)",
 ] as $contract) {
     assert_true(strpos($kbSource, $contract) !== false, 'Missing KB/relation contract: ' . $contract);
 }
 assert_true(strpos($jsSource, "v.label || v.value") !== false, 'Selector does not separate labels from keys');
 assert_true(strpos($jsSource, "input.step = 'any'") !== false, 'Decimal modifier input is not enabled');
+assert_true(!file_exists(__DIR__ . '/../inc/plugins/advancedfunctionality/addons/arpg_stat_contract.php'), 'Global ARPG stat contract file still exists');
 
 echo "origin variant regression checks passed\n";
 echo "stored JSON example: " . $json . "\n";

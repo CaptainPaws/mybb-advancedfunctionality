@@ -1,5 +1,4 @@
 <?php
-require_once dirname(__DIR__, 2) . '/arpg_stat_contract.php';
 if (!defined('IN_MYBB')) {
     die('No direct access');
 }
@@ -978,7 +977,42 @@ function af_charactersheets_arpg_numeric_rule(array $rules, string $key): float
 
 function af_charactersheets_arpg_apply_flat_modifiers(array $stats, array $rules): array
 {
-    return af_arpg_apply_origin_variant_modifiers($stats, $rules);
+    return af_charactersheets_arpg_apply_origin_variant_modifiers($stats, $rules);
+}
+
+function af_charactersheets_arpg_apply_origin_variant_modifiers(array $stats, array $rules, int $levelSteps = 0): array
+{
+    if (function_exists('af_kb_arpg_apply_origin_variant_modifiers')) {
+        return af_kb_arpg_apply_origin_variant_modifiers($stats, $rules, $levelSteps);
+    }
+
+    $targets = [
+        'hp' => ['character_hp', false],
+        'def' => ['character_defense', false],
+        'atk' => ['character_attack_power', false],
+        'speed' => ['character_speed', false],
+        'crit_dmg' => ['character_crit_damage', false],
+        'mastery' => ['character_elemental_mastery', false],
+        'element_damage_bonus' => ['character_element_damage_bonus', false],
+        'healing_bonus' => ['character_healing_bonus', false],
+        'shield_strength' => ['character_shield_strength', false],
+        'hp_per_level' => ['character_hp', true],
+        'defense_per_level' => ['character_defense', true],
+        'attack_power_per_level' => ['character_attack_power', true],
+        'elemental_mastery_per_level' => ['character_elemental_mastery', true],
+    ];
+    foreach ((array)($rules['modifiers'] ?? []) as $modifier) {
+        if (!is_array($modifier) || (string)($modifier['mode'] ?? 'flat') !== 'flat' || !is_numeric($modifier['value'] ?? null)) {
+            continue;
+        }
+        $target = $targets[trim((string)($modifier['stat_key'] ?? ''))] ?? null;
+        if (!is_array($target)) {
+            continue;
+        }
+        $scale = $target[1] ? max(0, $levelSteps) : 1;
+        $stats[$target[0]] = (float)($stats[$target[0]] ?? 0) + (float)$modifier['value'] * $scale;
+    }
+    return $stats;
 }
 
 function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $archetypeRules, int $level, array $originVariantRules = []): array
@@ -1013,7 +1047,7 @@ function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $
     $stats['character_attack_power'] += $sum('base_damage_bonus');
     $stats['character_defense'] += $sum('base_defense_bonus');
 
-    $stats = af_arpg_apply_origin_variant_modifiers($stats, $originVariantRules, $lvlScale);
+    $stats = af_charactersheets_arpg_apply_origin_variant_modifiers($stats, $originVariantRules, $lvlScale);
 
     foreach ($stats as $key => $value) {
         $stats[$key] = (float)$value;
