@@ -20,7 +20,22 @@
 
 <!-- TEMPLATE: display_block -->
 <div class="af-atf-display">
-  {$rows}
+  <article class="af-atf-wiki">
+    <header class="af-atf-wiki__header">
+      <div class="af-atf-wiki__heading">
+        <h1 class="af-atf-wiki__title">{$wikiTitle}</h1>
+        {$wikiElement}
+      </div>
+    </header>
+
+    <div class="af-atf-wiki__layout">
+      <main class="af-atf-wiki__content">
+        {$wikiContent}
+      </main>
+
+      {$wikiInfobox}
+    </div>
+  </article>
 </div>
 
 <!-- TEMPLATE: display_row -->
