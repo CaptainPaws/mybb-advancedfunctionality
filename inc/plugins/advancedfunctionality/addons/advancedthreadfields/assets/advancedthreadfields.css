@@ -120,18 +120,25 @@
 }
 
 .af-atf-wiki__element {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  line-height: 1;
 }
 
 .af-atf-wiki__element .af-atf-element-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 9px;
+  justify-content: center;
+  padding: 5px;
   border: 1px solid var(--af-element-border);
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--af-element-soft);
-  font-size: .82rem;
+  color: var(--af-element-accent);
+}
+
+.af-atf-wiki__element:focus-visible {
+  outline: 2px solid var(--af-element-accent);
+  outline-offset: 3px;
+  border-radius: 50%;
 }
 
 .af-atf-wiki__layout {
@@ -237,8 +244,14 @@
   margin-top: clamp(24px, 4vw, 42px);
 }
 
-.af-atf-wiki__section-title {
+.af-atf-wiki__section-heading {
+  overflow: hidden;
   margin: 0 0 14px;
+}
+
+.af-atf-wiki__section-title {
+  display: block;
+  margin: 0;
   padding: 0 0 7px;
   border-bottom: 1px solid var(--af-element-border);
   color: inherit;

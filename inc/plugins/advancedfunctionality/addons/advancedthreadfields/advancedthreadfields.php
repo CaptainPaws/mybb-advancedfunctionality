@@ -6149,6 +6149,21 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
         if ($area === 'header') {
             if ($fieldName === 'character_name' && $wikiTitle === '') {
                 $wikiTitle = $valueHtml;
+            } elseif ($fieldName === 'character_element') {
+                // The regular formatter remains the source of the element icon;
+                // the Wiki header presents that icon without the chip's text.
+                $elementIconHtml = preg_replace(
+                    '~\s*<span class="af-atf-element-label">.*?</span>~s',
+                    '',
+                    $valueHtml
+                ) ?? $valueHtml;
+                if (strpos($elementIconHtml, 'af-atf-element-chip') !== false) {
+                    $elementTooltip = 'Стихия: '.af_atf_kb_resolve_dynamic_label($f, $val);
+                    $elementTooltipEscaped = htmlspecialchars_uni($elementTooltip);
+                    $wikiElement .= '<span class="af-atf-wiki__element '.$fieldClass.'" data-fieldid="'.$fieldid.'"'
+                        . ' tabindex="0" title="'.$elementTooltipEscaped.'" aria-label="'.$elementTooltipEscaped.'">'
+                        . $elementIconHtml.'</span>';
+                }
             } else {
                 $wikiElement .= '<div class="af-atf-wiki__element '.$fieldClass.'" data-fieldid="'.$fieldid.'">'.$valueHtml.'</div>';
             }
@@ -6171,7 +6186,7 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
             ? ' af-atf-wiki__section--abilities'
             : '';
         $wikiMainSections[] = '<section class="af-atf-wiki__section'.$modifier.' '.$fieldClass.'" data-fieldid="'.$fieldid.'">'
-            . '<h2 class="af-atf-wiki__section-title">'.$label.'</h2>'
+            . '<div class="af-atf-wiki__section-heading"><h2 class="af-atf-wiki__section-title">'.$label.'</h2></div>'
             . '<div class="af-atf-wiki__section-body">'.$valueHtml.'</div></section>';
     }
 
