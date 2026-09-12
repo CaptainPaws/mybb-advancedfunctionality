@@ -76,6 +76,16 @@ $expectedKeys = [
     'attack_power_per_level', 'elemental_mastery_per_level',
 ];
 assert_true(array_keys($definitions) === $expectedKeys, 'Schema-derived modifier selector keys changed');
+$variantEnvelope = af_kb_arpg_envelope_defaults('arpg_origin_variant');
+$variantEnvelope['rules'] = array_replace_recursive(
+    $variantEnvelope['rules'],
+    af_kb_default_type_profile_payload_arpg('arpg_origin_variant')
+);
+assert_true($variantEnvelope['schema'] === 'af_kb.arpg.meta.v1', 'Variant left the canonical ARPG envelope');
+assert_true($variantEnvelope['rules']['schema'] === 'af_kb.arpg.rules.v1', 'Variant left the canonical ARPG rules schema');
+assert_true($variantEnvelope['rules']['type_profile'] === 'origin_variant', 'Variant type profile changed');
+assert_true(array_key_exists('modifiers', $variantEnvelope['rules']), 'Variant modifiers are not nested in rules');
+assert_true(!array_key_exists('variant_stats', $variantEnvelope), 'Parallel variant stat payload was introduced');
 foreach (['size', 'creature_type', 'racial_bonuses_text', 'racial_traits_text', 'starting_notes'] as $nonMechanical) {
     assert_true(!isset($definitions[$nonMechanical]), 'Non-mechanical Origin field exposed: ' . $nonMechanical);
 }
