@@ -583,6 +583,7 @@ class AF_Admin_Advancedthreadfields
             'description' => '',
             'type'        => 'text',
             'options'     => '',
+            'wiki_area'   => '',
             'required'    => 0,
             'active'      => 1,
             'show_thread' => 1,
@@ -602,6 +603,7 @@ class AF_Admin_Advancedthreadfields
             $row = $db->fetch_array($q);
             if ($row) {
                 $field = array_merge($field, $row);
+                $field['wiki_area'] = self::wikiAreaFromOptions((string)($field['options'] ?? ''));
             } else {
                 flash_message('Field not found', 'error');
                 self::go();
@@ -629,6 +631,11 @@ class AF_Admin_Advancedthreadfields
             $description = $mybb->get_input('description');
             $type = $mybb->get_input('type');
             $options = $mybb->get_input('options');
+            $wiki_area = strtolower(trim($mybb->get_input('wiki_area')));
+            if (!in_array($wiki_area, ['', 'header', 'infobox', 'main', 'hidden'], true)) {
+                $wiki_area = '';
+            }
+            $options = self::optionsWithWikiArea((string)$options, $wiki_area);
             $format = $mybb->get_input('format');
             $regex = $mybb->get_input('regex');
 
@@ -692,6 +699,7 @@ class AF_Admin_Advancedthreadfields
                 'description' => $description,
                 'type' => $type,
                 'options' => $options,
+                'wiki_area' => $wiki_area,
                 'format' => $format,
                 'regex' => $regex,
                 'required' => $required,
@@ -769,6 +777,13 @@ class AF_Admin_Advancedthreadfields
         self::row($table, 'Description', $form->generate_text_area('description', $field['description'], ['rows' => 4]));
         self::row($table, 'Type', $form->generate_select_box('type', $types, $field['type']));
         self::row($table, 'Options (one per line)', $form->generate_text_area('options', $field['options'], ['rows' => 8]).$optionsHelp);
+        self::row($table, 'Wiki display area', $form->generate_select_box('wiki_area', [
+            '' => 'Automatic (compatibility/default)',
+            'header' => 'Header',
+            'infobox' => 'Infobox',
+            'main' => 'Main content',
+            'hidden' => 'Hidden from Wiki template',
+        ], (string)$field['wiki_area']));
         self::row($table, 'Sort order', $form->generate_numeric_field('sortorder', (int)$field['sortorder']));
         self::row($table, 'Max length (0=off)', $form->generate_numeric_field('maxlen', (int)$field['maxlen']));
         self::row($table, 'Regex validation (optional)', $form->generate_text_box('regex', $field['regex']));
@@ -795,6 +810,26 @@ class AF_Admin_Advancedthreadfields
         echo '<div style="margin-top:10px;">
             <a class="button" href="'.self::url(['do' => 'group_view', 'gid' => $backGid]).'">← Back to group</a>
         </div>';
+    }
+
+    private static function wikiAreaFromOptions(string $options): string
+    {
+        if (preg_match('~(?:^|\R)\s*wiki_area\s*=\s*(header|infobox|main|hidden)\s*(?:\R|$)~i', $options, $match)) {
+            return strtolower($match[1]);
+        }
+        return '';
+    }
+
+    private static function optionsWithWikiArea(string $options, string $area): string
+    {
+        $lines = preg_split('~\R~', $options) ?: [];
+        $lines = array_values(array_filter($lines, static function (string $line): bool {
+            return !preg_match('~^\s*wiki_area\s*=~i', $line);
+        }));
+        if ($area !== '') {
+            $lines[] = 'wiki_area='.$area;
+        }
+        return trim(implode("\n", $lines));
     }
 
 
