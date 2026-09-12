@@ -1510,7 +1510,7 @@ function af_atf_seed_character_contract_fields(): void
         ['name' => 'character_healing_bonus', 'title' => 'Healing bonus', 'type' => 'number', 'sortorder' => 270, 'maxlen' => 11],
         ['name' => 'character_shield_strength', 'title' => 'Shield strength', 'type' => 'number', 'sortorder' => 280, 'maxlen' => 11],
         ['name' => 'character_luck', 'title' => 'Luck', 'type' => 'number', 'sortorder' => 290, 'maxlen' => 11],
-        ['name' => 'character_abilities', 'title' => 'Abilities', 'type' => 'character_abilities', 'sortorder' => 300, 'maxlen' => 0],
+        ['name' => 'character_abil', 'title' => 'Abilities', 'type' => 'character_abilities', 'sortorder' => 300, 'maxlen' => 0],
     ];
 
     foreach ($definitions as $def) {
@@ -3664,6 +3664,10 @@ function af_atf_parse_options(string $raw): array
     foreach ($lines as $line) {
         if (strpos($line, '=') !== false) {
             [$k, $v] = array_map('trim', explode('=', $line, 2));
+            // Presentation metadata is not a selectable field value.
+            if (strtolower($k) === 'wiki_area') {
+                continue;
+            }
             if ($k === '') {
                 $k = $v;
             }
@@ -3673,6 +3677,30 @@ function af_atf_parse_options(string $raw): array
         }
     }
     return $out;
+}
+
+function af_atf_get_wiki_area(array $field): string
+{
+    $options = str_replace(["\r\n", "\r"], "\n", (string)($field['options'] ?? ''));
+    if (preg_match('~(?:^|\n)\s*wiki_area\s*=\s*(header|infobox|main|hidden)\s*(?:\n|$)~i', $options, $match)) {
+        return strtolower($match[1]);
+    }
+
+    // Compatibility placement decides only the area. Registry sortorder wins.
+    $name = trim((string)($field['name'] ?? ''));
+    if ($name === 'character_name' || $name === 'character_element') {
+        return 'header';
+    }
+    if ($name === 'character_pic') {
+        return 'infobox';
+    }
+    $legacyInfoboxFields = [
+        'character_name_ru', 'character_nicknames', 'character_prototype',
+        'character_origin', 'character_origin_variant', 'character_class',
+        'character_faction', 'character_activity', 'character_weapon',
+        'character_gen', 'character_age', 'character_height', 'character_weight',
+    ];
+    return in_array($name, $legacyInfoboxFields, true) ? 'infobox' : 'main';
 }
 
 /* -------------------- KB HELPERS -------------------- */
@@ -6075,82 +6103,26 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
         return '';
     }
 
-    $profileFields = array_fill_keys([
-        'character_prototype', 'character_element', 'character_gen', 'character_gender',
-        'character_race', 'character_origin', 'character_origin_variant', 'character_class',
-        'character_archetype', 'character_weapon', 'character_weapon_type', 'weapon_type',
-        'character_age', 'character_faction', 'character_activity', 'character_occupation',
-    ], true);
-    $wikiInfoboxOrder = [
-        'character_name_ru' => 10,
-        'character_pic' => 20,
-        'character_image' => 20,
-        'character_nicknames' => 30,
-        'character_prototype' => 40,
-        'character_race' => 50,
-        'character_origin' => 50,
-        'character_origin_variant' => 60,
-        'character_class' => 70,
-        'character_archetype' => 70,
-        'character_faction' => 80,
-        'character_activity' => 90,
-        'character_occupation' => 90,
-        'character_weapon' => 100,
-        'character_weapon_type' => 100,
-        'weapon_type' => 100,
-        'character_gen' => 110,
-        'character_gender' => 110,
-        'character_age' => 120,
-        'character_height' => 130,
-        'character_weight' => 140,
-    ];
-    $wikiSectionFields = [
-        'about' => array_fill_keys(['character_app', 'character_about', 'character_bio', 'character_description'], true),
-        'stats' => array_fill_keys(array_merge(['character_stats'], af_atf_character_stats_field_keys()), true),
-        'abilities' => array_fill_keys(['character_abilities'], true),
-        'post' => array_fill_keys(['character_post'], true),
-        'player' => array_fill_keys(['character_player'], true),
-        'additional_info' => array_fill_keys([
-            'character_feedback', 'character_additional', 'character_additional_info',
-            'character_meta', 'character_links',
-        ], true),
-    ];
     $supportedElements = [
         'fire', 'water', 'air', 'wind', 'earth', 'ice', 'lightning', 'electric',
         'nature', 'light', 'dark', 'space', 'void', 'mind', 'quantum', 'imaginary',
         'aether', 'ether', 'anomaly', 'fusion', 'glacio', 'aero', 'havoc', 'spectro',
     ];
     $elementThemeKey = '';
-    foreach ($fields as $field) {
-        if (trim((string)($field['name'] ?? '')) !== 'character_element') {
-            continue;
-        }
-        $elementFieldId = (int)($field['fieldid'] ?? 0);
-        $elementValue = strtolower(trim(is_string($values[$elementFieldId] ?? null) ? (string)$values[$elementFieldId] : ''));
-        $elementThemeKey = in_array($elementValue, $supportedElements, true) ? $elementValue : '';
-        break;
-    }
-
     $wikiTitle = '';
     $wikiElement = '';
     $wikiInfoboxRows = [];
-    $wikiStatsRows = '';
-    $wikiAbilitiesRows = '';
-    $wikiAboutRows = '';
-    $wikiPostRows = '';
-    $wikiPlayerRows = '';
-    $wikiOtherRows = '';
-    $rowSequence = 0;
+    $wikiMainSections = [];
+
+    // The active field registry is already in ATF sortorder. Never reorder here.
     foreach ($fields as $f) {
         if ((int)($f['show_thread'] ?? 0) !== 1) {
             continue;
         }
-
         $fieldid = (int)($f['fieldid'] ?? 0);
         if ($fieldid <= 0) {
             continue;
         }
-
         $val = $values[$fieldid] ?? '';
         $val = is_string($val) ? trim($val) : '';
         if ($val === '') {
@@ -6159,92 +6131,61 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
 
         $fieldName = trim((string)($f['name'] ?? ''));
         $nameClass = preg_replace('~[^a-z0-9_]+~i', '_', $fieldName);
-        $label = htmlspecialchars_uni((string)$f['title']);
+        $label = htmlspecialchars_uni((string)($f['title'] ?? ''));
         $valueHtml = af_atf_format_value_for_display($f, $val);
         if ($valueHtml === '') {
             continue;
         }
+        if ($fieldName === 'character_element') {
+            $elementValue = strtolower($val);
+            $elementThemeKey = in_array($elementValue, $supportedElements, true) ? $elementValue : '';
+        }
 
-        if ($fieldName === 'character_name' || $fieldName === 'character_name_en') {
-            if ($wikiTitle === '') {
+        $area = af_atf_get_wiki_area($f);
+        if ($area === 'hidden') {
+            continue;
+        }
+        $fieldClass = 'af-atf-field af-atf-field-'.$nameClass;
+        if ($area === 'header') {
+            if ($fieldName === 'character_name' && $wikiTitle === '') {
                 $wikiTitle = $valueHtml;
+            } else {
+                $wikiElement .= '<div class="af-atf-wiki__element '.$fieldClass.'" data-fieldid="'.$fieldid.'">'.$valueHtml.'</div>';
             }
             continue;
         }
-        if ($fieldName === 'character_element') {
-            $wikiElement = '<div class="af-atf-wiki__element af-atf-field af-atf-field-'.$nameClass.'" data-fieldid="'.$fieldid.'">'.$valueHtml.'</div>';
-            continue;
-        }
-
-        $format = trim((string)$f['format']);
-        if ($format === '') {
-            $format = '<span class="af-atf-label">{LABEL}:</span> <span class="af-atf-value">{VALUE}</span>';
-        }
-
-        $line = str_replace(['{LABEL}', '{VALUE}'], [$label, $valueHtml], $format);
-        $profileClass = isset($profileFields[$fieldName]) ? ' af-atf-profile-field' : '';
-        $line = '<div class="af-atf-field'.$profileClass.' af-atf-field-'.$nameClass.'" data-fieldid="'.$fieldid.'">'.$line.'</div>';
-
-        $row = '';
-        eval("\$row = \"".$templates->get('af_atf_display_row')."\";");
-        if (isset($wikiInfoboxOrder[$fieldName])) {
-            $variant = ($fieldName === 'character_name_ru') ? ' af-atf-wiki-info--name' : '';
-            if ($fieldName === 'character_pic' || $fieldName === 'character_image') {
+        if ($area === 'infobox') {
+            $variant = $fieldName === 'character_name_ru' ? ' af-atf-wiki-info--name' : '';
+            if ((string)($f['type'] ?? '') === 'image') {
                 $variant = ' af-atf-wiki-info--image';
             }
             $infoRow = '<div class="af-atf-wiki-info'.$variant.'">'
                 . '<div class="af-atf-wiki-info__label">'.$label.'</div>'
-                . '<div class="af-atf-wiki-info__value">'.$valueHtml.'</div>'
-                . '</div>';
-            $preservedRow = '<div class="af-atf-display-row"><div class="af-atf-field af-atf-profile-field af-atf-field-'.$nameClass.'" data-fieldid="'.$fieldid.'">'.$infoRow.'</div></div>';
-            $wikiInfoboxRows[] = ['order' => $wikiInfoboxOrder[$fieldName], 'sequence' => $rowSequence++, 'html' => $preservedRow];
-        } elseif (isset($wikiSectionFields['about'][$fieldName])) {
-            $wikiAboutRows .= $row;
-        } elseif (isset($wikiSectionFields['stats'][$fieldName])) {
-            $wikiStatsRows .= $row;
-        } elseif (isset($wikiSectionFields['abilities'][$fieldName])) {
-            $wikiAbilitiesRows .= $row;
-        } elseif (isset($wikiSectionFields['post'][$fieldName])) {
-            $wikiPostRows .= $row;
-        } elseif (isset($wikiSectionFields['player'][$fieldName])) {
-            $wikiPlayerRows .= $row;
-        } elseif (isset($wikiSectionFields['additional_info'][$fieldName])) {
-            $wikiOtherRows .= $row;
+                . '<div class="af-atf-wiki-info__value">'.$valueHtml.'</div></div>';
+            $wikiInfoboxRows[] = '<div class="af-atf-display-row"><div class="'.$fieldClass.' af-atf-profile-field" data-fieldid="'.$fieldid.'">'.$infoRow.'</div></div>';
+            continue;
         }
+
+        // Title and specialized value renderer both come from field metadata.
+        $modifier = (string)($f['type'] ?? '') === 'character_abilities'
+            ? ' af-atf-wiki__section--abilities'
+            : '';
+        $wikiMainSections[] = '<section class="af-atf-wiki__section'.$modifier.' '.$fieldClass.'" data-fieldid="'.$fieldid.'">'
+            . '<h2 class="af-atf-wiki__section-title">'.$label.'</h2>'
+            . '<div class="af-atf-wiki__section-body">'.$valueHtml.'</div></section>';
     }
 
-    if ($wikiTitle === '' && $wikiElement === '' && empty($wikiInfoboxRows) && $wikiStatsRows === '' && $wikiAbilitiesRows === '' && $wikiAboutRows === '' && $wikiPostRows === '' && $wikiPlayerRows === '' && $wikiOtherRows === '') {
+    if ($wikiTitle === '' && $wikiElement === '' && empty($wikiInfoboxRows) && empty($wikiMainSections)) {
         return '';
     }
-
     if ($wikiTitle === '') {
         $wikiTitle = htmlspecialchars_uni('Анкета персонажа');
     }
-
-    usort($wikiInfoboxRows, static function (array $a, array $b): int {
-        return [$a['order'], $a['sequence']] <=> [$b['order'], $b['sequence']];
-    });
-    $wikiInfoboxBody = implode('', array_column($wikiInfoboxRows, 'html'));
+    $wikiInfoboxBody = implode('', $wikiInfoboxRows);
     $wikiInfobox = $wikiInfoboxBody !== ''
         ? '<aside class="af-atf-wiki__infobox" aria-label="Краткая информация">'.$wikiInfoboxBody.'</aside>'
         : '';
-
-    $wikiSection = static function (string $title, string $content, string $modifier = ''): string {
-        if ($content === '') {
-            return '';
-        }
-        return '<section class="af-atf-wiki__section'.($modifier !== '' ? ' '.$modifier : '').'">'
-            . '<h2 class="af-atf-wiki__section-title">'.htmlspecialchars_uni($title).'</h2>'
-            . '<div class="af-atf-wiki__section-body">'.$content.'</div>'
-            . '</section>';
-    };
-    $wikiContent = $wikiSection('О персонаже', $wikiAboutRows)
-        . $wikiSection('Характеристики', $wikiStatsRows, 'af-atf-wiki__section--stats')
-        . $wikiSection('Способности', $wikiAbilitiesRows, 'af-atf-wiki__section--abilities')
-        . $wikiSection('Пост', $wikiPostRows)
-        . $wikiSection('Об игроке', $wikiPlayerRows)
-        . $wikiSection('Дополнительные сведения', $wikiOtherRows, 'af-atf-wiki__section--additional');
-
+    $wikiContent = implode('', $wikiMainSections);
     $block = '';
     eval("\$block = \"".$templates->get('af_atf_display_block')."\";");
     if ($elementThemeKey !== '') {
