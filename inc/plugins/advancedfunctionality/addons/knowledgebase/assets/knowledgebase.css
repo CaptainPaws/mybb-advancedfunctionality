@@ -252,6 +252,15 @@
     border: 1px solid #ccd2dd;
 }
 
+.af-kb-character-filters { margin: 0 0 18px; padding: 12px; border: 1px solid #dcdfe6; border-radius: 8px; background: #fff; }
+.af-kb-character-filter-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.af-kb-character-filter-tab { padding: 7px 12px; border: 1px solid #ccd2dd; border-radius: 999px; text-decoration: none; color: #334; }
+.af-kb-character-filter-tab.is-active { border-color: #8da7e4; background: #e8f0ff; color: #29498c; font-weight: 700; }
+.af-kb-character-filter-fields { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.af-kb-character-filter-fields label { display: grid; gap: 4px; min-width: 180px; font-size: .9em; color: #555; }
+.af-kb-character-filter-fields select { padding: 7px 9px; border: 1px solid #ccd2dd; border-radius: 4px; background: #fff; }
+.af-kb-empty { grid-column: 1 / -1; padding: 28px 18px; border: 1px dashed #ccd2dd; border-radius: 8px; text-align: center; color: #687080; background: #fafbfc; }
+
 .af-kb-help {
     font-size: 0.9em;
     color: #97989b;
