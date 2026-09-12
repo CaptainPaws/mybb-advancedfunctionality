@@ -553,6 +553,10 @@ function af_charactersheets_showthread_start_impl(): void
         return;
     }
 
+    if (!function_exists('af_cwf_is_allowed_forum') || !af_cwf_is_allowed_forum($fid)) {
+        return;
+    }
+
     // Права (группы)
     if (!af_charactersheets_user_can_accept($mybb->user, $fid)) {
         return;
@@ -873,6 +877,11 @@ function af_charactersheets_handle_transfer_action(): void
     }
 
     $fid = (int)($thread['fid'] ?? 0);
+    if (!function_exists('af_cwf_is_allowed_forum')
+        || !af_cwf_is_allowed_forum($fid)
+        || !af_cwf_forum_exists_and_is_postable($fid)) {
+        af_charactersheets_deny('Thread forum is not allowed by workflow policy', ['tid' => $tid, 'fid' => $fid]);
+    }
     if (!af_charactersheets_user_can_accept($mybb->user ?? [], $fid)) {
         af_charactersheets_deny('User cannot transfer', ['tid' => $tid, 'uid' => $mybb->user['uid'] ?? 0]);
     }
@@ -962,6 +971,12 @@ function af_charactersheets_handle_create_sheet_action(): void
     }
 
     $fid = (int)($thread['fid'] ?? 0);
+    if (!function_exists('af_cwf_is_allowed_forum')
+        || !af_cwf_is_allowed_forum($fid)
+        || !function_exists('af_cwf_forum_exists_and_is_postable')
+        || !af_cwf_forum_exists_and_is_postable($fid)) {
+        af_charactersheets_deny('Thread forum is not allowed by workflow policy', ['tid' => $tid, 'fid' => $fid]);
+    }
     if (!af_charactersheets_user_can_accept($mybb->user ?? [], $fid)) {
         af_charactersheets_deny('User cannot create sheet', ['tid' => $tid, 'uid' => $mybb->user['uid'] ?? 0]);
     }
