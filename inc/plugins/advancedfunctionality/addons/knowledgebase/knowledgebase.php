@@ -7467,6 +7467,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
 
     // Dedupe KB assets/markers regardless of source of injection.
     af_kb_strip_assets_from_html($page);
+    $hasKbChips = stripos($page, 'af-kb-chip') !== false;
 
     if ($enabled && !$assetsDisabled) {
         $bburl = rtrim((string)($mybb->settings['bburl'] ?? ''), '/');
@@ -7485,7 +7486,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
             $runtimeModeTag = '';
             $kbUiCss = '';
 
-            if ($is_kb_page) {
+            if ($is_kb_page || $hasKbChips) {
                 // KB base css/js
                 $cssTag .= af_kb_build_css_include_tag('assets/knowledgebase.css');
                 $kbUiCss  = af_kb_build_css_include_tag('assets/knowledgebase_kbui.css');
@@ -7513,7 +7514,7 @@ function af_knowledgebase_pre_output(string &$page = ''): void
                 $editorInit   = $bundle['init'] ?? '';
             }
 
-            if ($is_kb_page) {
+            if ($is_kb_page || $hasKbChips) {
                 $runtimeModeTag = '<script>window.afKbRuntimeMode='
                     . json_encode($isKbEditorPage ? 'editor' : 'view', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
                     . ';</script>';
