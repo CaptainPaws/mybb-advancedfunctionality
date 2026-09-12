@@ -158,6 +158,10 @@ foreach ([
     "af_kb_arpg_apply_origin_variant_modifiers(\$stats, \$originVariantRules, \$levelSteps)",
     "\$originSchema = af_kb_default_type_profile_payload_arpg('arpg_origin')",
     "array_key_exists(\$originField, \$originSchema)",
+    "'character_origin' => 'arpg_origin'",
+    "'character_origin_variant' => 'arpg_origin_variant'",
+    "'Происхождение' => 'character_origin'",
+    "'Разновидность' => 'character_origin_variant'",
 ] as $contract) {
     assert_true(strpos($kbSource, $contract) !== false, 'Missing KB/relation contract: ' . $contract);
 }

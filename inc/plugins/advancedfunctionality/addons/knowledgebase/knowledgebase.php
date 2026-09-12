@@ -2788,6 +2788,8 @@ function af_kb_character_profile_resolved_value(string $field, string $value, bo
 
     $map = [
         'character_race' => 'arpg_origin',
+        'character_origin' => 'arpg_origin',
+        'character_origin_variant' => 'arpg_origin_variant',
         'character_class' => 'arpg_archetype',
         'character_faction' => 'arpg_faction',
         'character_element' => 'arpg_element',
@@ -10258,8 +10260,13 @@ function af_kb_catalog_entry_card(array $entry, array $typeRow): string
 
     $meta = [];
     if ($isCharacter) {
-        foreach (['character_race', 'character_class', 'character_element', 'category'] as $field) {
-            $value = trim((string)($profile[$field] ?? ''));
+        $catalogProfile = $profile;
+        $catalogProfile['character_origin'] = trim((string)($profile['character_origin'] ?? ''));
+        if ($catalogProfile['character_origin'] === '') {
+            $catalogProfile['character_origin'] = trim((string)($profile['character_race'] ?? ''));
+        }
+        foreach (['character_origin', 'character_origin_variant', 'character_class', 'character_element', 'category'] as $field) {
+            $value = trim((string)($catalogProfile[$field] ?? ''));
             if ($value === '') {
                 continue;
             }
@@ -10317,16 +10324,22 @@ function af_kb_render_character_entry(array $entry, array $typeRow, bool $isRu):
     $bio = af_kb_pick_text($entry, 'body');
 
     $identityRows = '';
+    $displayProfile = $profile;
+    $displayProfile['character_origin'] = trim((string)($profile['character_origin'] ?? ''));
+    if ($displayProfile['character_origin'] === '') {
+        $displayProfile['character_origin'] = trim((string)($profile['character_race'] ?? ''));
+    }
     foreach ([
         'Прототип' => 'character_prototype',
         'Прозвище' => 'character_nicknames',
         'Стихия' => 'character_element',
         'Пол' => 'character_gen',
-        'Происхождение' => 'character_race',
+        'Происхождение' => 'character_origin',
+        'Разновидность' => 'character_origin_variant',
         'Архетип' => 'character_class',
         'Фракция' => 'character_faction',
     ] as $label => $field) {
-        $value = trim((string)($profile[$field] ?? ''));
+        $value = trim((string)($displayProfile[$field] ?? ''));
         if ($value === '') {
             continue;
         }
