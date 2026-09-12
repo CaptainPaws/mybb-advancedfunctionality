@@ -53,7 +53,8 @@
     var modal = document.querySelector('[data-afcs-modal]');
     if (modal) {
       var frame = modal.querySelector('[data-afcs-frame]');
-      if (frame) return { modal: modal, frame: frame };
+      var loader = modal.querySelector('[data-afcs-loader]');
+      if (frame && loader) return { modal: modal, frame: frame, loader: loader };
     }
 
     var wrap = document.createElement('div');
@@ -68,14 +69,25 @@
         '<button type="button" class="af-cs-modal__close" data-afcs-close="1" aria-label="Закрыть">×</button>' +
         '<div class="af-cs-modal__body">' +
           '<iframe class="af-cs-modal__frame" data-afcs-frame="1" src="" loading="lazy"></iframe>' +
+          '<div class="af-cs-modal__loader" data-afcs-loader="1" role="status" aria-live="polite">' +
+            '<span class="af-cs-modal__spinner" aria-hidden="true"></span>' +
+            '<span>Загрузка листа персонажа…</span>' +
+          '</div>' +
         '</div>' +
       '</div>';
 
     document.body.appendChild(wrap);
 
+    var frame = wrap.querySelector('[data-afcs-frame]');
+    var loader = wrap.querySelector('[data-afcs-loader]');
+    frame.addEventListener('load', function () {
+      loader.hidden = true;
+    });
+
     return {
       modal: wrap,
-      frame: wrap.querySelector('[data-afcs-frame]')
+      frame: frame,
+      loader: loader
     };
   }
 
@@ -106,6 +118,7 @@
       loadUrl += (loadUrl.indexOf('?') === -1 ? '?' : '&') + 'embed=1';
     }
 
+    mf.loader.hidden = false;
     mf.frame.setAttribute('src', loadUrl);
     mf.modal.classList.add('is-open');
   }
