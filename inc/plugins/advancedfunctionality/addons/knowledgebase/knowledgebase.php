@@ -96,6 +96,15 @@ function af_kb_arpg_character_field_type_contract(): array
     ];
 }
 
+function af_kb_arpg_character_stat_keys(): array
+{
+    return [
+        'hp', 'atk', 'def', 'armor', 'speed', 'crit_rate', 'crit_dmg', 'status_hit',
+        'status_resist', 'mastery', 'element_damage_bonus', 'healing_bonus',
+        'shield_strength', 'luck',
+    ];
+}
+
 function af_kb_arpg_type_definition(string $typeKey): array
 {
     return (array)(af_kb_arpg_type_registry()[$typeKey] ?? []);
@@ -167,22 +176,13 @@ function af_kb_default_type_profile_payload_arpg(string $typeKey): array
             'starting_notes' => '',
         ],
         'arpg_origin_variant' => [
-            'hp_base' => 0,
-            'defense_base' => 0,
-            'attack_power_base' => 0,
-            'crit_damage_base' => 0,
-            'elemental_mastery_base' => 0,
-            'elemental_damage_bonus_base' => 0,
-            'healing_bonus_base' => 0,
-            'shield_bonus_base' => 0,
-            'hp_per_level' => 0,
-            'defense_per_level' => 0,
-            'attack_power_per_level' => 0,
-            'elemental_mastery_per_level' => 0,
-            'racial_bonuses_text' => '',
-            'racial_traits_text' => '',
-            'starting_notes' => '',
             'inherits_from_origin' => true,
+            'modifiers' => [],
+            'effects' => [],
+            'grants' => [],
+            'resources' => [],
+            'resistances' => [],
+            'weaknesses' => [],
         ],
         'arpg_archetype' => [
             'base_damage_bonus' => 0,
@@ -939,21 +939,15 @@ function af_kb_default_arpg_type_definitions(): array
             ],
         ];
 
-        // Origin variants use the same established ARPG rules envelope and editor
-        // fields as origins, but numeric values are additive deltas by default.
-        $requiredMap['arpg_origin_variant'] = $requiredMap['arpg_origin'];
-        $fieldsMap['arpg_origin_variant'] = array_map(static function (array $field): array {
-            if (($field['type'] ?? '') === 'number') {
-                $field['default'] = 0;
-            }
-            return $field;
-        }, $fieldsMap['arpg_origin']);
-        $fieldsMap['arpg_origin_variant'][] = [
-            'path' => 'rules.inherits_from_origin',
-            'type' => 'bool',
-            'required' => true,
-            'readonly' => true,
-            'default' => true,
+        $requiredMap['arpg_origin_variant'] = ['rules.inherits_from_origin', 'rules.modifiers'];
+        $fieldsMap['arpg_origin_variant'] = [
+            ['path' => 'rules.inherits_from_origin', 'type' => 'bool', 'required' => true, 'readonly' => true, 'default' => true],
+            ['path' => 'rules.modifiers', 'type' => 'array', 'required' => true, 'item' => ['type' => 'object'], 'default' => []],
+            ['path' => 'rules.effects', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+            ['path' => 'rules.grants', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+            ['path' => 'rules.resources', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+            ['path' => 'rules.resistances', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
+            ['path' => 'rules.weaknesses', 'type' => 'array', 'item' => ['type' => 'object'], 'default' => []],
         ];
 
         $schema = [
@@ -964,6 +958,7 @@ function af_kb_default_arpg_type_definitions(): array
             'ui_profile' => 'arpg',
             'rules_enabled' => true,
             'ui_rules_editor' => true,
+            'modifier_stat_options' => $typeKey === 'arpg_origin_variant' ? af_kb_arpg_character_stat_keys() : [],
             'rules_schema' => AF_KB_ARPG_META_SCHEMA,
             'rules_required_keys' => ['schema', 'mechanic', 'tags', 'ui', 'blocks', 'rules'],
             'required_paths' => array_values($requiredMap[$typeKey] ?? []),
@@ -9909,10 +9904,8 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
         ];
 
         $originBase = af_kb_arpg_pick_rule_number($originRules, (array)($baseMap[$stat] ?? []));
-        $originBase += af_kb_arpg_pick_rule_number($originVariantRules, (array)($baseMap[$stat] ?? []));
         $archetypeBase = af_kb_arpg_pick_rule_number($archetypeRules, (array)($baseMap[$stat] ?? []));
         $originGrowth = af_kb_arpg_pick_rule_number($originRules, (array)($growthMap[$stat] ?? []));
-        $originGrowth += af_kb_arpg_pick_rule_number($originVariantRules, (array)($growthMap[$stat] ?? []));
         $archetypeGrowth = af_kb_arpg_pick_rule_number($archetypeRules, (array)($growthMap[$stat] ?? []));
 
         if ($stat === 'character_defense') {
@@ -9936,7 +9929,31 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
         'character_shield_strength' => $buildValue('character_shield_strength'),
         'character_healing_received_bonus' => $buildValue('character_healing_received_bonus'),
         'character_luck' => $buildValue('character_luck'),
+        'character_armor' => 0.0,
+        'character_speed' => af_kb_arpg_pick_rule_number($originRules, ['movement_speed']),
+        'character_crit_rate' => 0.0,
+        'character_status_hit' => 0.0,
+        'character_status_resist' => 0.0,
     ];
+
+    $modifierTargets = [
+        'hp' => 'character_hp', 'atk' => 'character_attack_power', 'def' => 'character_defense',
+        'armor' => 'character_armor', 'speed' => 'character_speed', 'crit_rate' => 'character_crit_rate',
+        'crit_dmg' => 'character_crit_damage', 'status_hit' => 'character_status_hit',
+        'status_resist' => 'character_status_resist', 'mastery' => 'character_elemental_mastery',
+        'element_damage_bonus' => 'character_element_damage_bonus', 'healing_bonus' => 'character_healing_bonus',
+        'shield_strength' => 'character_shield_strength', 'luck' => 'character_luck',
+    ];
+    foreach ((array)($originVariantRules['modifiers'] ?? []) as $modifier) {
+        if (!is_array($modifier) || (string)($modifier['mode'] ?? 'flat') !== 'flat') {
+            continue;
+        }
+        $target = $modifierTargets[trim((string)($modifier['stat_key'] ?? ''))] ?? '';
+        if ($target === '' || !is_numeric($modifier['value'] ?? null)) {
+            continue;
+        }
+        $stats[$target] = (float)($stats[$target] ?? 0) + (float)$modifier['value'];
+    }
 
     $manualMap = [
         'character_hp' => ['character_hp', 'hp', 'health'],
