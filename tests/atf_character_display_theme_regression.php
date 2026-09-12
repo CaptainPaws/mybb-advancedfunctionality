@@ -6,6 +6,7 @@ $root = dirname(__DIR__);
 $php = file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/advancedthreadfields/advancedthreadfields.php');
 $admin = file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/advancedthreadfields/admin.php');
 $template = file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/advancedthreadfields/templates/advancedthreadfields.html');
+$css = file_get_contents($root.'/inc/plugins/advancedfunctionality/addons/advancedthreadfields/assets/advancedthreadfields.css');
 
 function atf_display_assert(bool $condition, string $message): void
 {
@@ -29,6 +30,12 @@ atf_display_assert(strpos($php, "\$wikiSection('Об игроке'") === false, 
 atf_display_assert(strpos($php, '$wikiMainSections[]') !== false, 'Registry fields are not appended dynamically');
 atf_display_assert(strpos($php, 'usort($wikiInfoboxRows') === false, 'Infobox still overrides ATF sortorder');
 atf_display_assert(strpos($php, "strtolower(\$k) === 'wiki_area'") !== false, 'Wiki metadata can leak into selectable options');
+atf_display_assert(strpos($template, '{$wikiInfobox}') < strpos($template, '{$wikiContent}'), 'Infobox must precede main content for float wrapping');
+atf_display_assert(strpos($css, '.af-atf-wiki__infobox {') !== false && strpos($css, 'float: right;') !== false, 'Desktop infobox is not floated');
+atf_display_assert(strpos($css, '.af-atf-wiki__layout::after') !== false && strpos($css, 'clear: both;') !== false, 'Wiki layout clearfix is missing');
+atf_display_assert(strpos($css, 'grid-template-areas: "content infobox";') === false, 'Independent Wiki columns remain');
+atf_display_assert(strpos($css, 'float: none;') !== false && strpos($css, 'width: 100%;') !== false, 'Mobile infobox does not return to normal flow');
+atf_display_assert(strpos($css, '.af-atf-wiki__section {\n  clear:') === false, 'Wiki sections must not clear the infobox float');
 
 // Model the data-driven loop's observable metadata behavior with the current
 // registry plus a future field: order and renamed titles must need no PHP map.
