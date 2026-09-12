@@ -2836,6 +2836,121 @@ function af_kb_character_profile_resolved_value(string $field, string $value, bo
     return af_kb_resolve_title($type, $value, $isRu ? 'ru' : 'en');
 }
 
+/**
+ * Return the registered values that may be used by the public character filters.
+ * Keys, rather than translated labels, are the persisted Character contract.
+ */
+function af_kb_character_filter_options(string $filter, bool $isRu = true): array
+{
+    global $db;
+
+    $options = [];
+    if ($filter === 'gender') {
+        foreach (af_kb_get_arpg_mechanics_options('character_gender') as $row) {
+            if (empty($row['is_active'])) {
+                continue;
+            }
+            $key = trim((string)($row['key'] ?? ''));
+            if ($key === '') {
+                continue;
+            }
+            $label = trim((string)($row[$isRu ? 'label_ru' : 'label_en'] ?? ''));
+            $options[$key] = $label !== '' ? $label : $key;
+        }
+        return $options;
+    }
+
+    $type = $filter === 'origin' ? AF_KB_TYPE_ORIGIN : ($filter === 'element' ? 'arpg_element' : '');
+    if ($type === '' || !is_object($db) || !$db->table_exists('af_kb_entries')) {
+        return [];
+    }
+
+    $where = "type='" . $db->escape_string($type) . "' AND active=1";
+    $query = $db->simple_select('af_kb_entries', '`key`,title_ru,title_en', $where, [
+        'order_by' => 'sortorder, title_ru, title_en',
+        'order_dir' => 'ASC',
+    ]);
+    while ($row = $db->fetch_array($query)) {
+        $key = trim((string)($row['key'] ?? ''));
+        if ($key === '') {
+            continue;
+        }
+        $label = trim((string)($row[$isRu ? 'title_ru' : 'title_en'] ?? ''));
+        if ($label === '') {
+            $label = trim((string)($row[$isRu ? 'title_en' : 'title_ru'] ?? ''));
+        }
+        $options[$key] = $label !== '' ? $label : $key;
+    }
+    return $options;
+}
+
+function af_kb_character_normalize_filters(array $input, array $optionSets): array
+{
+    $kindAliases = ['canon' => 'canons', 'original' => 'originals'];
+    $kind = trim((string)($input['kind'] ?? ''));
+    $filters = ['kind' => (string)($kindAliases[$kind] ?? '')];
+
+    foreach (['gender', 'origin', 'element'] as $name) {
+        $value = trim((string)($input[$name] ?? ''));
+        $allowed = (array)($optionSets[$name] ?? []);
+        $filters[$name] = $value !== '' && array_key_exists($value, $allowed) ? $value : '';
+    }
+    return $filters;
+}
+
+function af_kb_character_matches_filters(array $entry, array $filters): bool
+{
+    $rules = kb_parse_rules($entry);
+    $profile = is_array($rules['character_profile'] ?? null) ? (array)$rules['character_profile'] : [];
+    $values = [
+        'kind' => strtolower(trim((string)($profile['category'] ?? ''))),
+        'gender' => trim((string)($profile['character_gen'] ?? '')),
+        'origin' => trim((string)($profile['character_origin'] ?? $profile['character_race'] ?? '')),
+        'element' => trim((string)($profile['character_element'] ?? '')),
+    ];
+
+    foreach ($values as $name => $value) {
+        if (($filters[$name] ?? '') !== '' && $filters[$name] !== $value) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function af_kb_render_character_filters(array $filters, array $optionSets, string $query): string
+{
+    $base = 'misc.php?action=kb&amp;type=character';
+    $queryPart = $query !== '' ? '&amp;q=' . rawurlencode($query) : '';
+    $dimensionPart = '';
+    foreach (['gender', 'origin', 'element'] as $name) {
+        $value = (string)($filters[$name] ?? '');
+        if ($value !== '') {
+            $dimensionPart .= '&amp;' . $name . '=' . rawurlencode($value);
+        }
+    }
+    $activeKind = (string)($filters['kind'] ?? '');
+    $tabs = '<a class="af-kb-character-filter-tab' . ($activeKind === '' ? ' is-active' : '') . '" href="' . $base . $queryPart . '">Все</a>';
+    foreach (['canon' => 'Каноны', 'original' => 'Авторские'] as $key => $label) {
+        $persisted = $key === 'canon' ? 'canons' : 'originals';
+        $tabs .= '<a class="af-kb-character-filter-tab' . ($activeKind === $persisted ? ' is-active' : '') . '" href="' . $base . '&amp;kind=' . $key . $dimensionPart . $queryPart . '">' . $label . '</a>';
+    }
+
+    $html = '<div class="af-kb-character-filters"><nav class="af-kb-character-filter-tabs" aria-label="Тип персонажа">' . $tabs . '</nav>'
+        . '<form class="af-kb-character-filter-fields" method="get" action="misc.php">'
+        . '<input type="hidden" name="action" value="kb" /><input type="hidden" name="type" value="character" />'
+        . '<input type="hidden" name="kind" value="' . htmlspecialchars_uni($activeKind === 'canons' ? 'canon' : ($activeKind === 'originals' ? 'original' : '')) . '" />'
+        . ($query !== '' ? '<input type="hidden" name="q" value="' . htmlspecialchars_uni($query) . '" />' : '');
+    foreach (['gender' => 'Пол', 'origin' => 'Происхождение', 'element' => 'Стихия'] as $name => $label) {
+        $html .= '<label><span>' . $label . '</span><select name="' . $name . '"><option value="">Все</option>';
+        foreach ((array)($optionSets[$name] ?? []) as $value => $optionLabel) {
+            $selected = ($filters[$name] ?? '') === $value ? ' selected="selected"' : '';
+            $html .= '<option value="' . htmlspecialchars_uni((string)$value) . '"' . $selected . '>' . htmlspecialchars_uni((string)$optionLabel) . '</option>';
+        }
+        $html .= '</select></label>';
+    }
+    return $html . '<button type="submit" class="af-kb-btn">Применить</button></form></div>';
+}
+
 function af_kb_render_character_element_value(string $elementKey, bool $isRu): string
 {
     $elementKey = trim($elementKey);
@@ -10845,11 +10960,30 @@ function af_kb_handle_view(): void
             $where .= " AND (e.title_ru LIKE '%{$safeQuery}%' OR e.title_en LIKE '%{$safeQuery}%')";
         }
 
+        $isCharacterList = $type === 'character';
+        $characterOptionSets = [];
+        $characterFilters = [];
+        if ($isCharacterList) {
+            $characterOptionSets = [
+                'gender' => af_kb_character_filter_options('gender', af_kb_is_ru()),
+                'origin' => af_kb_character_filter_options('origin', af_kb_is_ru()),
+                'element' => af_kb_character_filter_options('element', af_kb_is_ru()),
+            ];
+            $characterFilters = af_kb_character_normalize_filters([
+                'kind' => $mybb->get_input('kind'),
+                'gender' => $mybb->get_input('gender'),
+                'origin' => $mybb->get_input('origin'),
+                'element' => $mybb->get_input('element'),
+            ], $characterOptionSets);
+        }
+
         $catFilterIds = [];
         $catTopTabsHtml = '';
         $catSidebarTreeHtml = '';
         $currentCatId = 0;
-        if (af_kb_categories_enabled()) {
+        // Character uses its contract-backed filters, not the generic category tree.
+        // The latter is the source of the unrelated seeded "Roles" filter.
+        if (af_kb_categories_enabled() && !$isCharacterList) {
             $onlyActiveCats = !af_kb_can_edit();
             $catFlat = af_kb_cat_get_flat($type, $onlyActiveCats);
             $catTreeNodes = af_kb_cat_get_tree($type, $onlyActiveCats);
@@ -10905,18 +11039,27 @@ function af_kb_handle_view(): void
         $perpage = AF_KB_PERPAGE;
         $start = ($page - 1) * $perpage;
 
-        $join = !empty($catFilterIds) ? ' LEFT JOIN ' . TABLE_PREFIX . 'af_kb_entry_categories ec ON ec.entry_id=e.id ' : '';
-        $totalRow = $db->fetch_array($db->write_query('SELECT COUNT(DISTINCT e.id) AS cnt FROM ' . TABLE_PREFIX . 'af_kb_entries e' . $join . ' WHERE ' . $where));
-        $total = (int)($totalRow['cnt'] ?? 0);
-
         $entries = [];
-        $sql = 'SELECT DISTINCT e.* FROM ' . TABLE_PREFIX . 'af_kb_entries e' . $join . ' WHERE ' . $where . ' ORDER BY e.sortorder ASC, e.title_ru ASC, e.title_en ASC LIMIT ' . $start . ',' . $perpage;
+        $join = !empty($catFilterIds) ? ' LEFT JOIN ' . TABLE_PREFIX . 'af_kb_entry_categories ec ON ec.entry_id=e.id ' : '';
+        $hasCharacterFilters = $isCharacterList && count(array_filter($characterFilters, static fn($value): bool => $value !== '')) > 0;
+        $limit = $hasCharacterFilters ? '' : ' LIMIT ' . $start . ',' . $perpage;
+        $sql = 'SELECT DISTINCT e.* FROM ' . TABLE_PREFIX . 'af_kb_entries e' . $join . ' WHERE ' . $where . ' ORDER BY e.sortorder ASC, e.title_ru ASC, e.title_en ASC' . $limit;
         $q = $db->write_query($sql);
         while ($row = $db->fetch_array($q)) {
             if (!af_kb_entry_visible_in_context($row, $query !== '' ? 'search' : 'catalog', af_kb_can_edit())) {
                 continue;
             }
+            if ($hasCharacterFilters && !af_kb_character_matches_filters($row, $characterFilters)) {
+                continue;
+            }
             $entries[] = $row;
+        }
+        if ($hasCharacterFilters) {
+            $total = count($entries);
+            $entries = array_slice($entries, $start, $perpage);
+        } else {
+            $totalRow = $db->fetch_array($db->write_query('SELECT COUNT(DISTINCT e.id) AS cnt FROM ' . TABLE_PREFIX . 'af_kb_entries e' . $join . ' WHERE ' . $where));
+            $total = (int)($totalRow['cnt'] ?? 0);
         }
 
         $typeRow = af_kb_find_type_row($type);
@@ -10938,6 +11081,9 @@ function af_kb_handle_view(): void
         $rows = '';
         foreach ($entries as $row) {
             $rows .= af_kb_catalog_entry_card($row, (array)$typeRow);
+        }
+        if ($rows === '') {
+            $rows = '<div class="af-kb-empty">По выбранным фильтрам персонажи не найдены.</div>';
         }
 
         if (function_exists('add_breadcrumb')) {
@@ -10973,12 +11119,27 @@ function af_kb_handle_view(): void
         }
         $kb_sidebar_html = $sidebar_enabled ? '<aside class="af-kb-sidebar">' . $kb_categories_tree_sidebar . '</aside>' : '';
         $kb_topcats_html = $top_enabled ? '<div class="af-kb-topcats">' . $kb_categories_tree . '</div>' : '';
+        $kb_character_filters = $isCharacterList
+            ? af_kb_render_character_filters($characterFilters, $characterOptionSets, $query)
+            : '';
         $paginationUrl = 'misc.php?action=kb&type=' . urlencode($type);
         if ($query !== '') {
             $paginationUrl .= '&q=' . urlencode($query);
         }
         if ($catKey !== '') {
             $paginationUrl .= '&cat=' . urlencode($catKey);
+        }
+        if ($isCharacterList) {
+            foreach (['kind', 'gender', 'origin', 'element'] as $filterName) {
+                $filterValue = (string)($characterFilters[$filterName] ?? '');
+                if ($filterValue === '') {
+                    continue;
+                }
+                if ($filterName === 'kind') {
+                    $filterValue = $filterValue === 'canons' ? 'canon' : 'original';
+                }
+                $paginationUrl .= '&' . $filterName . '=' . urlencode($filterValue);
+            }
         }
         $kb_pagination = $total > $perpage && function_exists('multipage')
             ? multipage($total, $perpage, $page, $paginationUrl)
@@ -11013,7 +11174,7 @@ function af_kb_handle_view(): void
         $kb_page_bg = '';
         $kb_body_style = af_kb_build_body_bg_style($typeRow ? ($typeRow['bg_url'] ?? '') : '');
         $af_kb_content = '';
-        $listTemplate = 'knowledgebase_list';
+        $listTemplate = $isCharacterList ? 'knowledgebase_list_character' : 'knowledgebase_list';
         eval("\$af_kb_content = \"" . af_kb_get_template($listTemplate) . "\";");
         eval("\$page = \"" . af_kb_get_template('knowledgebase_page') . "\";");
         output_page($page);
