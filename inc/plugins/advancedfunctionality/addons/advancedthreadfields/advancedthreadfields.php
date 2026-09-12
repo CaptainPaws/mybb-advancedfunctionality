@@ -6075,6 +6075,28 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
         return '';
     }
 
+    $profileFields = array_fill_keys([
+        'character_prototype', 'character_element', 'character_gen', 'character_gender',
+        'character_race', 'character_origin', 'character_origin_variant', 'character_class',
+        'character_archetype', 'character_weapon', 'character_weapon_type', 'weapon_type',
+        'character_age', 'character_faction', 'character_activity', 'character_occupation',
+    ], true);
+    $supportedElements = [
+        'fire', 'water', 'air', 'wind', 'earth', 'ice', 'lightning', 'electric',
+        'nature', 'light', 'dark', 'space', 'void', 'mind', 'quantum', 'imaginary',
+        'aether', 'ether', 'anomaly', 'fusion', 'glacio', 'aero', 'havoc', 'spectro',
+    ];
+    $elementThemeKey = '';
+    foreach ($fields as $field) {
+        if (trim((string)($field['name'] ?? '')) !== 'character_element') {
+            continue;
+        }
+        $elementFieldId = (int)($field['fieldid'] ?? 0);
+        $elementValue = strtolower(trim(is_string($values[$elementFieldId] ?? null) ? (string)$values[$elementFieldId] : ''));
+        $elementThemeKey = in_array($elementValue, $supportedElements, true) ? $elementValue : '';
+        break;
+    }
+
     $rows = '';
     foreach ($fields as $f) {
         if ((int)($f['show_thread'] ?? 0) !== 1) {
@@ -6092,7 +6114,8 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
             continue;
         }
 
-        $nameClass = preg_replace('~[^a-z0-9_]+~i', '_', (string)$f['name']);
+        $fieldName = trim((string)($f['name'] ?? ''));
+        $nameClass = preg_replace('~[^a-z0-9_]+~i', '_', $fieldName);
         $label = htmlspecialchars_uni((string)$f['title']);
         $valueHtml = af_atf_format_value_for_display($f, $val);
 
@@ -6102,7 +6125,8 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
         }
 
         $line = str_replace(['{LABEL}', '{VALUE}'], [$label, $valueHtml], $format);
-        $line = '<div class="af-atf-field af-atf-field-'.$nameClass.'" data-fieldid="'.$fieldid.'">'.$line.'</div>';
+        $profileClass = isset($profileFields[$fieldName]) ? ' af-atf-profile-field' : '';
+        $line = '<div class="af-atf-field'.$profileClass.' af-atf-field-'.$nameClass.'" data-fieldid="'.$fieldid.'">'.$line.'</div>';
 
         $row = '';
         eval("\$row = \"".$templates->get('af_atf_display_row')."\";");
@@ -6115,6 +6139,10 @@ function af_atf_build_display_block_for_tid_fid(int $tid, int $fid): string
 
     $block = '';
     eval("\$block = \"".$templates->get('af_atf_display_block')."\";");
+    if ($elementThemeKey !== '') {
+        $elementAttribute = ' data-element="'.htmlspecialchars_uni($elementThemeKey).'"';
+        $block = preg_replace('~(<div\\b[^>]*\\bclass="[^"]*\\baf-atf-display\\b[^"]*")~i', '$1'.$elementAttribute, $block, 1) ?? $block;
+    }
 
     // Обёртка именно “внутри поста”, чтобы можно было отдельно стилизовать
     return '<div class="af-atf-inpost">'.$block.'</div>';

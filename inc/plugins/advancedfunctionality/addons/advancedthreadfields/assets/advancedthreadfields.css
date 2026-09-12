@@ -46,11 +46,37 @@
 }
 
 .af-atf-display {
+  --af-element-main: #4ea6ff;
+  --af-element-accent: #8bd3ff;
+  --af-element-soft: rgba(78, 166, 255, .18);
+  --af-element-border: rgba(78, 166, 255, .55);
   margin: 10px 0;
   padding: 10px;
   border: 0px solid rgba(255,255,255,0.08);
   border-radius: 10px;
 }
+
+.af-atf-display[data-element="fire"] { --af-element-main:#ef5b3f; --af-element-accent:#ffad52; --af-element-soft:rgba(239,91,63,.18); --af-element-border:rgba(255,130,72,.58); }
+.af-atf-display[data-element="water"] { --af-element-main:#328ce6; --af-element-accent:#73c8ff; --af-element-soft:rgba(50,140,230,.18); --af-element-border:rgba(77,167,255,.58); }
+.af-atf-display[data-element="ice"],.af-atf-display[data-element="glacio"] { --af-element-main:#55cbd3; --af-element-accent:#b1f3f3; --af-element-soft:rgba(85,203,211,.17); --af-element-border:rgba(112,222,226,.58); }
+.af-atf-display[data-element="lightning"],.af-atf-display[data-element="electric"] { --af-element-main:#865ee8; --af-element-accent:#d39cff; --af-element-soft:rgba(134,94,232,.19); --af-element-border:rgba(171,119,255,.62); }
+.af-atf-display[data-element="air"],.af-atf-display[data-element="wind"],.af-atf-display[data-element="aero"] { --af-element-main:#54bca1; --af-element-accent:#9ce9cf; --af-element-soft:rgba(84,188,161,.17); --af-element-border:rgba(104,209,179,.56); }
+.af-atf-display[data-element="earth"] { --af-element-main:#b07b45; --af-element-accent:#dfbd72; --af-element-soft:rgba(176,123,69,.18); --af-element-border:rgba(202,157,91,.58); }
+.af-atf-display[data-element="nature"] { --af-element-main:#54a94d; --af-element-accent:#9bd66d; --af-element-soft:rgba(84,169,77,.18); --af-element-border:rgba(111,192,88,.58); }
+.af-atf-display[data-element="light"],.af-atf-display[data-element="spectro"] { --af-element-main:#e5bf4f; --af-element-accent:#fff1a3; --af-element-soft:rgba(229,191,79,.18); --af-element-border:rgba(245,211,103,.62); }
+.af-atf-display[data-element="dark"],.af-atf-display[data-element="havoc"] { --af-element-main:#76528f; --af-element-accent:#bd86d5; --af-element-soft:rgba(118,82,143,.2); --af-element-border:rgba(155,102,184,.6); }
+.af-atf-display[data-element="space"],.af-atf-display[data-element="void"] { --af-element-main:#5261ad; --af-element-accent:#9d9be8; --af-element-soft:rgba(82,97,173,.2); --af-element-border:rgba(112,119,204,.6); }
+.af-atf-display[data-element="mind"],.af-atf-display[data-element="imaginary"] { --af-element-main:#d06aae; --af-element-accent:#f4abd9; --af-element-soft:rgba(208,106,174,.18); --af-element-border:rgba(225,127,190,.58); }
+.af-atf-display[data-element="quantum"] { --af-element-main:#6155d9; --af-element-accent:#a59cff; --af-element-soft:rgba(97,85,217,.2); --af-element-border:rgba(128,116,238,.6); }
+.af-atf-display[data-element="aether"],.af-atf-display[data-element="ether"] { --af-element-main:#3eaaa6; --af-element-accent:#86e1d7; --af-element-soft:rgba(62,170,166,.18); --af-element-border:rgba(80,195,186,.58); }
+.af-atf-display[data-element="anomaly"] { --af-element-main:#c34f88; --af-element-accent:#f092bd; --af-element-soft:rgba(195,79,136,.19); --af-element-border:rgba(218,99,157,.6); }
+.af-atf-display[data-element="fusion"] { --af-element-main:#e06b42; --af-element-accent:#ffc06e; --af-element-soft:rgba(224,107,66,.18); --af-element-border:rgba(239,134,77,.6); }
+
+.af-atf-display .af-atf-profile-field { display:flex; align-items:baseline; gap:8px; padding:8px 10px; border:1px solid var(--af-element-border); border-radius:8px; background:linear-gradient(135deg,var(--af-element-soft),transparent 72%); }
+.af-atf-display .af-atf-profile-field > .af-atf-label { color:var(--af-element-accent); }
+.af-atf-display .af-atf-element-chip,.af-atf-display .af-atf-ability-display-chip { border-color:var(--af-element-border); background:var(--af-element-soft); }
+.af-atf-display .af-atf-character-stats-display-wrap,.af-atf-display .af-atf-character-stats-display-item,.af-atf-display .af-atf-ability-display-card,.af-atf-display .af-atf-ability-display-icon-wrap { border-color:var(--af-element-border); }
+.af-atf-display .af-atf-character-stats-display-title,.af-atf-display .af-atf-abilities-display-title,.af-atf-display .af-atf-ability-display-name { color:var(--af-element-accent); }
 
 .af-atf-display-row {
   padding: 4px 0;
