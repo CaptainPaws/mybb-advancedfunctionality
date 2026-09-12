@@ -2332,7 +2332,9 @@
             syncToRaw();
         }
 
-        if (mechanic === 'arpg') {
+        // `character` is an ARPG-ready public type with a deliberately legacy,
+        // non-envelope payload contract. Keep using its dedicated editor.
+        if (mechanic === 'arpg' && uiProfile !== 'character') {
             if (typeSchema && typeSchema.rules_enabled === false) {
                 bindRawOnlyMode('ARPG тип "' + type + '" ещё не имеет готовой schema-поддержки. Доступен raw-режим с валидационной ошибкой на save.');
             } else {
@@ -4229,7 +4231,7 @@
             // Для ARPG payload уже является полным envelope.
             // Нельзя повторно засовывать его в meta.rules, иначе получаем дубль:
             // meta.ui + payload.ui + entry fields.
-            if (mechanic === 'arpg') {
+            if (mechanic === 'arpg' && uiProfile !== 'character') {
                 return;
             }
 
