@@ -358,6 +358,27 @@ function af_charactersheets_arpg_collect_equipment_items(array $build): array
     return $result;
 }
 
+function af_charactersheets_arpg_collect_equipment_rule_sources(array $build): array
+{
+    $sources = [];
+    foreach ((array)($build['equipment']['slots'] ?? []) as $slotItem) {
+        if (!is_array($slotItem)) {
+            continue;
+        }
+        $type = af_charactersheets_get_inventory_item_type($slotItem);
+        $key = af_charactersheets_get_inventory_item_key($slotItem);
+        if ($type === '' || $key === '') {
+            continue;
+        }
+        $entry = af_charactersheets_kb_get_entry($type, $key);
+        $rules = af_charactersheets_arpg_extract_entry_rules($entry);
+        if ($rules) {
+            $sources[] = $rules;
+        }
+    }
+    return $sources;
+}
+
 function af_charactersheets_arpg_collect_inventory_items(array $build): array
 {
     $result = [];
@@ -1015,7 +1036,69 @@ function af_charactersheets_arpg_apply_origin_variant_modifiers(array $stats, ar
     return $stats;
 }
 
-function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $archetypeRules, int $level, array $originVariantRules = []): array
+function af_charactersheets_arpg_apply_equipment_rules(array $stats, array $ruleSources): array
+{
+    foreach ($ruleSources as $rules) {
+        if (!is_array($rules)) {
+            continue;
+        }
+        // ARPG item base_stats and unconditional flat modifiers share the same
+        // stat keys. Conditional and percentage modes are descriptive until a
+        // combat context can evaluate their conditions and operation order.
+        foreach (['base_stats', 'modifiers'] as $bucket) {
+            $flatRules = ['modifiers' => []];
+            foreach ((array)($rules[$bucket] ?? []) as $modifier) {
+                if (!is_array($modifier) || trim((string)($modifier['mode'] ?? 'flat')) !== 'flat') {
+                    continue;
+                }
+                if (trim((string)($modifier['condition_text'] ?? '')) !== '') {
+                    continue;
+                }
+                $flatRules['modifiers'][] = $modifier;
+            }
+            $stats = af_charactersheets_arpg_apply_origin_variant_modifiers($stats, $flatRules);
+        }
+    }
+    return $stats;
+}
+
+function af_charactersheets_arpg_merge_rule_collections(array $initial, array $ruleSources): array
+{
+    $merged = $initial;
+    foreach ($ruleSources as $rules) {
+        if (!is_array($rules)) {
+            continue;
+        }
+        foreach (['resistances', 'weaknesses', 'resources'] as $bucket) {
+            foreach ((array)($rules[$bucket] ?? []) as $key => $value) {
+                if (is_int($key)) {
+                    $key = trim((string)$value);
+                    $value = 1;
+                }
+                $key = trim((string)$key);
+                if ($key !== '') {
+                    $merged[$bucket][$key] = (float)($merged[$bucket][$key] ?? 0) + (float)$value;
+                }
+            }
+        }
+        foreach (['immunities', 'abilities', 'skills', 'proficiencies'] as $bucket) {
+            foreach ((array)($rules[$bucket] ?? []) as $value) {
+                $key = is_array($value) ? trim((string)($value['key'] ?? $value['id'] ?? '')) : trim((string)$value);
+                if ($key !== '') {
+                    $merged[$bucket][$key] = $value;
+                }
+            }
+        }
+        foreach ((array)($rules['grants'] ?? []) as $grant) {
+            if (is_array($grant)) {
+                $merged['grants'][] = $grant;
+            }
+        }
+    }
+    return $merged;
+}
+
+function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $archetypeRules, int $level, array $originVariantRules = [], array $equipmentRuleSources = []): array
 {
     $lvlScale = max(0, $level - 1);
     // Direct variant fields are retained as a legacy compatibility input. New
@@ -1048,6 +1131,7 @@ function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $
     $stats['character_defense'] += $sum('base_defense_bonus');
 
     $stats = af_charactersheets_arpg_apply_origin_variant_modifiers($stats, $originVariantRules, $lvlScale);
+    $stats = af_charactersheets_arpg_apply_equipment_rules($stats, $equipmentRuleSources);
 
     foreach ($stats as $key => $value) {
         $stats[$key] = (float)$value;
@@ -1315,8 +1399,15 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     }
     $archetypeResolved = af_charactersheets_arpg_resolve_kb_entry_flexible('arpg_archetype', $rawArchetype);
     $archetypeRules = af_charactersheets_arpg_extract_entry_rules((array)($archetypeResolved['entry'] ?? []));
-    $computedKbStats = af_charactersheets_arpg_build_stats_from_kb($originRules, $archetypeRules, $level, $originVariantRules);
+    $equipmentRuleSources = af_charactersheets_arpg_collect_equipment_rule_sources($build);
+    $computedKbStats = af_charactersheets_arpg_build_stats_from_kb($originRules, $archetypeRules, $level, $originVariantRules, $equipmentRuleSources);
     $character_stats = af_charactersheets_arpg_merge_runtime_stats($character_stats, $computedKbStats);
+    $ruleCollections = af_charactersheets_arpg_merge_rule_collections(
+        ['resources' => $resources, 'resistances' => $resistances],
+        array_merge([$originRules, $originVariantRules, $archetypeRules], $equipmentRuleSources)
+    );
+    $resources = (array)($ruleCollections['resources'] ?? []);
+    $resistances = (array)($ruleCollections['resistances'] ?? []);
 
     $chips = [];
     $chips[] = '<span class="af-cs-arpg-chip">Lv. ' . htmlspecialchars_uni((string)$level) . '</span>';
@@ -1439,6 +1530,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         'origin_rules' => $originRules,
         'archetype_rules' => $archetypeRules,
         'computed_kb_stats' => $computedKbStats,
+        'equipment_rules' => $equipmentRuleSources,
         'render_character_stats' => $character_stats,
         'render_stats_panel' => $stats_panel,
     ];
@@ -1456,12 +1548,13 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
         'combat' => [
             'hp_total' => (int)af_charactersheets_arpg_read_numeric_stat($character_stats, $sheet_view, 'character_hp', ['mechanics.hp_total']),
             'def_total' => (int)af_charactersheets_arpg_read_numeric_stat($character_stats, $sheet_view, 'character_defense', ['mechanics.ac_total']),
-            'speed_total' => (int)($mechanics['speed_total'] ?? 0),
+            'speed_total' => (int)af_charactersheets_arpg_read_numeric_stat($character_stats, $sheet_view, 'character_speed', ['mechanics.speed_total']),
             'damage_total' => af_charactersheets_arpg_stat_from_sources($character_stats, 'character_attack_power', $sheet_view, ['mechanics.damage_bonus']),
             'humanity_total' => (float)($mechanics['humanity_total'] ?? 0),
         ],
         'resources' => $resources,
         'resistances' => $resistances,
+        'rule_collections' => $ruleCollections,
         'abilities' => $abilities_items,
         'inventory' => $inventory_items,
         'equipment' => $equipment_items,
