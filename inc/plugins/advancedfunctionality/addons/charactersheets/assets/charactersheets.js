@@ -4,8 +4,6 @@
   if (window.__afCharactersheetsInit) return;
   window.__afCharactersheetsInit = true;
 
-  var modalRequestToken = 0;
-
   function onReady(fn) {
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', fn, { once: true });
@@ -55,8 +53,7 @@
     var modal = document.querySelector('[data-afcs-modal]');
     if (modal) {
       var frame = modal.querySelector('[data-afcs-frame]');
-      var state = modal.querySelector('[data-afcs-load-state]');
-      if (frame && state) return { modal: modal, frame: frame, state: state };
+      if (frame) return { modal: modal, frame: frame };
     }
 
     var wrap = document.createElement('div');
@@ -70,11 +67,7 @@
       '<div class="af-cs-modal__dialog" role="dialog" aria-modal="true">' +
         '<button type="button" class="af-cs-modal__close" data-afcs-close="1" aria-label="Закрыть">×</button>' +
         '<div class="af-cs-modal__body">' +
-          '<div class="af-cs-modal__load-state" data-afcs-load-state="1" role="status" aria-live="polite">' +
-            '<span class="af-cs-modal__spinner" aria-hidden="true"></span>' +
-            '<span data-afcs-load-message="1">Загрузка листа персонажа…</span>' +
-          '</div>' +
-          '<iframe class="af-cs-modal__frame" data-afcs-frame="1" src="" loading="lazy" hidden></iframe>' +
+          '<iframe class="af-cs-modal__frame" data-afcs-frame="1" src="" loading="lazy"></iframe>' +
         '</div>' +
       '</div>';
 
@@ -82,26 +75,18 @@
 
     return {
       modal: wrap,
-      frame: wrap.querySelector('[data-afcs-frame]'),
-      state: wrap.querySelector('[data-afcs-load-state]')
+      frame: wrap.querySelector('[data-afcs-frame]')
     };
   }
 
   function closeModal() {
-    modalRequestToken++;
-
     var m = document.querySelector('[data-afcs-modal]');
     if (!m) return;
 
     m.classList.remove('is-open');
 
     var f = m.querySelector('[data-afcs-frame]');
-    if (f) {
-      f.onload = null;
-      f.onerror = null;
-      f.hidden = true;
-      f.removeAttribute('src');
-    }
+    if (f) f.removeAttribute('src');
   }
 
   function openModal(url) {
@@ -113,7 +98,6 @@
     }
 
     var mf = ensureModal();
-    var requestToken = ++modalRequestToken;
 
     loadUrl = loadUrl.replace(/([?&])ajax=1(?:&|$)/i, '$1');
     loadUrl = loadUrl.replace(/[?&]$/, '');
@@ -122,36 +106,8 @@
       loadUrl += (loadUrl.indexOf('?') === -1 ? '?' : '&') + 'embed=1';
     }
 
-    mf.frame.onload = null;
-    mf.frame.onerror = null;
-    mf.frame.hidden = true;
-    mf.frame.removeAttribute('src');
-
-    mf.state.classList.remove('is-error');
-    mf.state.setAttribute('role', 'status');
-    mf.state.querySelector('[data-afcs-load-message]').textContent = 'Загрузка листа персонажа…';
-    mf.state.hidden = false;
-    mf.modal.classList.add('is-open');
-
-    mf.frame.onload = function () {
-      if (requestToken !== modalRequestToken) return;
-
-      mf.state.hidden = true;
-      mf.frame.hidden = false;
-    };
-
-    mf.frame.onerror = function () {
-      if (requestToken !== modalRequestToken) return;
-
-      mf.frame.onload = null;
-      mf.frame.hidden = true;
-      mf.state.classList.add('is-error');
-      mf.state.setAttribute('role', 'alert');
-      mf.state.querySelector('[data-afcs-load-message]').textContent = 'Не удалось загрузить лист персонажа.';
-      mf.state.hidden = false;
-    };
-
     mf.frame.setAttribute('src', loadUrl);
+    mf.modal.classList.add('is-open');
   }
 
   document.addEventListener('click', function (event) {
