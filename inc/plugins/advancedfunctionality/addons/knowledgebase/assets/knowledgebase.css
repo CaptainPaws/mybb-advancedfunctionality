@@ -253,6 +253,22 @@
 }
 
 .af-kb-character-filters { margin: 0 0 18px; padding: 12px; border: 1px solid #dcdfe6; border-radius: 8px; background: #fff; }
+.af-kb-character-results { position: relative; transition: opacity 0.15s ease; }
+.af-kb-character-results.is-loading { opacity: 0.55; cursor: progress; }
+.af-kb-character-results.is-loading::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(42, 63, 116, 0.25);
+  border-top-color: #2a3f74;
+  border-radius: 50%;
+  animation: af-kb-character-spin 0.7s linear infinite;
+}
+.af-kb-character-results-error { margin-top: 10px; padding: 8px 10px; color: #8f2525; background: #fdeaea; border-radius: 6px; }
+@keyframes af-kb-character-spin { to { transform: rotate(360deg); } }
 .af-kb-character-filter-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .af-kb-character-filter-tab { padding: 7px 12px; border: 1px solid #ccd2dd; border-radius: 999px; text-decoration: none; color: #334; }
 .af-kb-character-filter-tab.is-active { border-color: #8da7e4; background: #e8f0ff; color: #29498c; font-weight: 700; }
