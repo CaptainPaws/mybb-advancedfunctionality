@@ -5544,6 +5544,125 @@
         syncFields();
     }
 
+    function initCharacterAjaxFilters() {
+        var results = document.getElementById('kb-character-results');
+        var filters = document.querySelector('.af-kb-character-filters');
+        var form = filters ? filters.querySelector('.af-kb-character-filter-fields') : null;
+        if (!results || !filters || !form || !window.fetch || !window.history) {
+            return;
+        }
+
+        var controller = null;
+        var sequence = 0;
+
+        function pageUrl(input) {
+            var url = new URL(input || window.location.href, window.location.href);
+            url.hash = '';
+            url.searchParams.delete('ajax');
+            if (/\/kb\.php$/i.test(window.location.pathname)) {
+                url.pathname = window.location.pathname;
+                url.searchParams.delete('action');
+            }
+            return url;
+        }
+
+        function syncControls(url) {
+            ['kind', 'gender', 'origin', 'element'].forEach(function (name) {
+                var control = form.elements[name];
+                if (control) control.value = url.searchParams.get(name) || '';
+            });
+            var kind = url.searchParams.get('kind') || '';
+            filters.querySelectorAll('.af-kb-character-filter-tab').forEach(function (tab) {
+                var tabKind = new URL(tab.href, window.location.href).searchParams.get('kind') || '';
+                tab.classList.toggle('is-active', tabKind === kind);
+            });
+        }
+
+        function showError() {
+            var error = results.querySelector('.af-kb-character-results-error');
+            if (!error) {
+                error = document.createElement('div');
+                error.className = 'af-kb-character-results-error';
+                error.setAttribute('role', 'status');
+                results.appendChild(error);
+            }
+            error.textContent = 'Не удалось обновить список персонажей.';
+            error.hidden = false;
+        }
+
+        function load(url, push) {
+            var target = pageUrl(url);
+            var requestUrl = new URL(target.href);
+            requestUrl.searchParams.set('ajax', '1');
+            if (controller) controller.abort();
+            controller = window.AbortController ? new window.AbortController() : null;
+            var requestSequence = ++sequence;
+            results.classList.add('is-loading');
+            results.setAttribute('aria-busy', 'true');
+
+            return fetch(requestUrl.href, {
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                signal: controller ? controller.signal : undefined
+            }).then(function (response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.text();
+            }).then(function (html) {
+                if (requestSequence !== sequence) return;
+                results.innerHTML = html;
+                syncControls(target);
+                if (push) window.history.pushState({ afKbCharacter: true }, '', target.href);
+            }).catch(function (error) {
+                if (error && error.name === 'AbortError') return;
+                if (requestSequence === sequence) showError();
+            }).then(function () {
+                if (requestSequence === sequence) {
+                    results.classList.remove('is-loading');
+                    results.removeAttribute('aria-busy');
+                }
+            });
+        }
+
+        function urlFromForm() {
+            var url = pageUrl(window.location.href);
+            ['kind', 'gender', 'origin', 'element'].forEach(function (name) {
+                var control = form.elements[name];
+                var value = control ? String(control.value || '') : '';
+                if (value) url.searchParams.set(name, value);
+                else url.searchParams.delete(name);
+            });
+            url.searchParams.delete('page');
+            return url;
+        }
+
+        form.addEventListener('change', function (event) {
+            if (event.target && event.target.matches('select[name]')) load(urlFromForm(), true);
+        });
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            load(urlFromForm(), true);
+        });
+        filters.addEventListener('click', function (event) {
+            var tab = event.target.closest('.af-kb-character-filter-tab');
+            if (!tab) return;
+            event.preventDefault();
+            var tabUrl = pageUrl(tab.href);
+            form.elements.kind.value = tabUrl.searchParams.get('kind') || '';
+            load(urlFromForm(), true);
+        });
+        results.addEventListener('click', function (event) {
+            var link = event.target.closest('.af-kb-pagination a');
+            if (!link) return;
+            event.preventDefault();
+            load(pageUrl(link.href), true);
+        });
+        window.addEventListener('popstate', function () {
+            var url = pageUrl(window.location.href);
+            syncControls(url);
+            load(url, false);
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         try {
             initMetaUi();
@@ -5566,6 +5685,14 @@
         } catch (errStatusModal) {
             if (window.console && typeof window.console.error === 'function') {
                 window.console.error('[AF KB] initCharacterStatusModal failed', errStatusModal);
+            }
+        }
+
+        try {
+            initCharacterAjaxFilters();
+        } catch (errCharacterFilters) {
+            if (window.console && typeof window.console.error === 'function') {
+                window.console.error('[AF KB] initCharacterAjaxFilters failed', errCharacterFilters);
             }
         }
     });

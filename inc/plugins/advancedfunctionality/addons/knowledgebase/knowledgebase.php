@@ -11144,6 +11144,17 @@ function af_kb_handle_view(): void
         $kb_pagination = $total > $perpage && function_exists('multipage')
             ? multipage($total, $perpage, $page, $paginationUrl)
             : '';
+        $kb_character_results = '<div class="af-kb-entries af-kb-entries--cards' . $kb_entries_class . '"' . $kb_entries_style . '>'
+            . $kb_entries_rows
+            . '</div><div class="af-kb-pagination">' . $kb_pagination . '</div>'
+            . '<div class="af-kb-character-results-error" role="status" aria-live="polite" hidden>Не удалось обновить список персонажей.</div>';
+
+        // The fragment is produced only after the normal Character query, visibility
+        // checks, card renderer, empty state, and pagination have all run.
+        if ($isCharacterList && $isAjax) {
+            echo $kb_character_results;
+            exit;
+        }
         $kb_can_edit = af_kb_can_edit() ? '1' : '0';
         $actions = [];
         $actions[] = af_kb_back_link_html(af_kb_url(), ['kb']);
