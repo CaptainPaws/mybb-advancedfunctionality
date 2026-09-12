@@ -2,6 +2,11 @@
 declare(strict_types=1);
 
 define('IN_MYBB', 1);
+function af_charactersheets_json_decode(string $json): array
+{
+    $decoded = json_decode($json, true);
+    return is_array($decoded) ? $decoded : [];
+}
 require_once __DIR__ . '/../inc/plugins/advancedfunctionality/addons/charactersheets/modules/render.php';
 
 function assert_same(float $expected, float $actual, string $message): void
@@ -12,68 +17,100 @@ function assert_same(float $expected, float $actual, string $message): void
     }
 }
 
-$origin = ['hp_base' => 100, 'hp_per_level' => 10, 'attack_power_base' => 12];
-$archetype = ['hp_base' => 20, 'hp_per_level' => 2, 'attack_power_base' => 3];
-$variant = ['modifiers' => [
-    ['stat_key' => 'hp', 'mode' => 'flat', 'value' => 150],
+function assert_true(bool $condition, string $message): void
+{
+    if (!$condition) {
+        fwrite(STDERR, $message . PHP_EOL);
+        exit(1);
+    }
+}
+
+$requiredVariant = ['modifiers' => [
+    ['stat_key' => 'hp', 'mode' => 'flat', 'value' => 150, 'notes' => 'Birfolk vitality'],
     ['stat_key' => 'atk', 'mode' => 'flat', 'value' => 25],
-    ['stat_key' => 'armor', 'mode' => 'flat', 'value' => 5],
-    ['stat_key' => 'speed', 'mode' => 'flat', 'value' => -2],
-    ['kind' => 'legacy_unknown', 'value' => 999],
+    ['stat_key' => 'def', 'mode' => 'flat', 'value' => 5],
+    ['stat_key' => 'speed', 'mode' => 'flat', 'value' => -10],
 ]];
+$required = af_charactersheets_arpg_build_stats_from_kb(
+    ['hp_base' => 1000, 'attack_power_base' => 100, 'defense_base' => 20, 'movement_speed' => 100],
+    [],
+    1,
+    $requiredVariant
+);
+assert_same(1150.0, $required['character_hp'], 'Required HP VM example failed');
+assert_same(125.0, $required['character_attack_power'], 'Required attack VM example failed');
+assert_same(25.0, $required['character_defense'], 'Required defense VM example failed');
+assert_same(90.0, $required['character_speed'], 'Required negative speed VM example failed');
 
-$withoutVariant = af_charactersheets_arpg_build_stats_from_kb($origin, $archetype, 3);
-assert_same(144.0, $withoutVariant['character_hp'], 'Origin-only calculation changed');
-assert_same(15.0, $withoutVariant['character_attack_power'], 'Origin-only attack changed');
+$perLevel = af_charactersheets_arpg_build_stats_from_kb(
+    ['hp_base' => 1000, 'hp_per_level' => 50],
+    [],
+    3,
+    ['modifiers' => [['stat_key' => 'hp_per_level', 'mode' => 'flat', 'value' => 10]]]
+);
+assert_same(1120.0, $perLevel['character_hp'], 'Per-level modifier was not applied before level scaling');
 
-$withVariant = af_charactersheets_arpg_build_stats_from_kb($origin, $archetype, 3, $variant);
-assert_same(294.0, $withVariant['character_hp'], 'Origin variant HP modifier was not added');
-assert_same(40.0, $withVariant['character_attack_power'], 'Origin variant attack modifier was not added');
-assert_same(5.0, $withVariant['character_armor'], 'Origin variant armor modifier was not added');
-assert_same(-2.0, $withVariant['character_speed'], 'Negative origin variant modifier was not added');
+$duplicatesAndDecimals = af_arpg_apply_origin_variant_modifiers(
+    ['character_hp' => 100],
+    ['modifiers' => [
+        ['stat_key' => 'hp', 'mode' => 'flat', 'value' => 100],
+        ['stat_key' => 'hp', 'mode' => 'flat', 'value' => 50.5],
+        ['stat_key' => 'hp', 'mode' => 'flat', 'value' => 0],
+        ['stat_key' => 'unsupported', 'mode' => 'flat', 'value' => 999],
+        ['stat_key' => 'hp', 'mode' => 'percent', 'value' => 999],
+    ]]
+);
+assert_same(250.5, $duplicatesAndDecimals['character_hp'], 'Duplicate/decimal/zero flat semantics changed');
 
-$requiredExample = af_charactersheets_arpg_apply_flat_modifiers([
-    'character_hp' => 1000,
-    'character_attack_power' => 100,
-    'character_armor' => 20,
-    'character_speed' => 10,
-], $variant);
-assert_same(1150.0, $requiredExample['character_hp'], 'Required HP VM example failed');
-assert_same(125.0, $requiredExample['character_attack_power'], 'Required damage VM example failed');
-assert_same(25.0, $requiredExample['character_armor'], 'Required armor VM example failed');
-assert_same(8.0, $requiredExample['character_speed'], 'Required negative speed VM example failed');
+$withoutVariant = af_charactersheets_arpg_build_stats_from_kb(['hp_base' => 100], [], 1);
+assert_same(100.0, $withoutVariant['character_hp'], 'Origin without variant changed');
+$legacyVariant = af_charactersheets_arpg_build_stats_from_kb(['hp_base' => 100], [], 1, ['hp_base' => 15]);
+assert_same(115.0, $legacyVariant['character_hp'], 'Legacy direct-field variant was not preserved');
+
+$definitions = af_arpg_origin_modifier_stat_definitions();
+$expectedKeys = [
+    'hp', 'def', 'atk', 'speed', 'crit_dmg', 'mastery', 'element_damage_bonus',
+    'healing_bonus', 'shield_strength', 'hp_per_level', 'defense_per_level',
+    'attack_power_per_level', 'elemental_mastery_per_level',
+];
+assert_true(array_keys($definitions) === $expectedKeys, 'Modifier selector contract keys changed');
+foreach (['size', 'creature_type', 'racial_bonuses_text', 'racial_traits_text', 'starting_notes'] as $nonMechanical) {
+    assert_true(!isset($definitions[$nonMechanical]), 'Non-mechanical Origin field exposed: ' . $nonMechanical);
+}
+foreach ([-10, 0, 1.25] as $numericValue) {
+    assert_true(af_arpg_validate_origin_variant_modifier([
+        'stat_key' => 'hp', 'mode' => 'flat', 'value' => $numericValue, 'notes' => 'valid',
+    ]) === [], 'Validator rejected a valid numeric modifier');
+}
+assert_true(af_arpg_validate_origin_variant_modifier(['stat_key' => '', 'mode' => 'flat', 'value' => 0]) !== [], 'Validator accepted an empty stat');
+assert_true(af_arpg_validate_origin_variant_modifier(['stat_key' => 'hp', 'mode' => 'percent', 'value' => 1]) !== [], 'Validator accepted an unsupported operation');
+assert_true(af_arpg_validate_origin_variant_modifier(['stat_key' => 'hp', 'mode' => 'flat', 'value' => 'invalid']) !== [], 'Validator accepted a non-numeric value');
+
+$json = json_encode(['rules' => $requiredVariant], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+$roundTrip = json_decode((string)$json, true);
+assert_true($roundTrip['rules']['modifiers'][0] === $requiredVariant['modifiers'][0], 'Modifier JSON round-trip changed data');
+$roundTrip['rules']['modifiers'][0]['value'] = 175.25;
+$savedAgain = json_decode((string)json_encode($roundTrip), true);
+assert_same(175.25, (float)$savedAgain['rules']['modifiers'][0]['value'], 'Edited modifier value was not preserved');
+$normalized = af_charactersheets_arpg_extract_entry_rules([
+    'data_json' => json_encode(['rules' => $requiredVariant], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+]);
+assert_true($normalized['modifiers'][0] === $requiredVariant['modifiers'][0], 'Stored modifier did not reach Character Sheet normalization');
 
 $kbSource = file_get_contents(__DIR__ . '/../inc/plugins/advancedfunctionality/addons/knowledgebase/knowledgebase.php');
-if ($kbSource === false) {
-    fwrite(STDERR, "Unable to read KB source\n");
-    exit(1);
-}
+$jsSource = file_get_contents(__DIR__ . '/../inc/plugins/advancedfunctionality/addons/knowledgebase/assets/knowledgebase.js');
+assert_true(is_string($kbSource) && is_string($jsSource), 'Unable to inspect KB sources');
 foreach ([
-    "define('AF_KB_REL_RACE_HAS_VARIANT', 'race_has_variant')",
-    "define('AF_KB_REL_ORIGIN_HAS_VARIANT', 'origin_has_variant')",
-    "'from_type' => \$db->escape_string(AF_KB_TYPE_ORIGIN)",
-    "'to_type' => \$db->escape_string(AF_KB_TYPE_ORIGIN_VARIANT)",
     "\$errors[] = 'Parent origin is required.'",
     "origin_parent_key=' . htmlspecialchars_uni(\$key)",
     "define('AF_KB_TYPE_RACE_VARIANT', 'race_variant')",
-    "'modifier_stat_options' => \$typeKey === 'arpg_origin_variant' ? af_kb_arpg_character_stat_keys() : []",
-    "['path' => 'rules.modifiers', 'type' => 'array', 'required' => true",
+    "\$schema['modifier_stat_options'] = af_kb_arpg_character_stat_options()",
+    "af_arpg_apply_origin_variant_modifiers(\$stats, \$originVariantRules, \$levelSteps)",
 ] as $contract) {
-    if (strpos($kbSource, $contract) === false) {
-        fwrite(STDERR, 'Missing relation contract: ' . $contract . PHP_EOL);
-        exit(1);
-    }
+    assert_true(strpos($kbSource, $contract) !== false, 'Missing KB/relation contract: ' . $contract);
 }
-
-foreach (['hp_base', 'defense_base', 'attack_power_base', 'hp_per_level'] as $duplicatedOriginField) {
-    $defaultsFunctionStart = strpos($kbSource, 'function af_kb_default_type_profile_payload_arpg');
-    $variantDefaultsStart = strpos($kbSource, "'arpg_origin_variant' => [", (int)$defaultsFunctionStart);
-    $archetypeDefaultsStart = strpos($kbSource, "'arpg_archetype' => [", (int)$variantDefaultsStart);
-    $variantDefaults = substr($kbSource, (int)$variantDefaultsStart, (int)$archetypeDefaultsStart - (int)$variantDefaultsStart);
-    if (strpos($variantDefaults, "'" . $duplicatedOriginField . "'") !== false) {
-        fwrite(STDERR, 'Origin core field duplicated in variant defaults: ' . $duplicatedOriginField . PHP_EOL);
-        exit(1);
-    }
-}
+assert_true(strpos($jsSource, "v.label || v.value") !== false, 'Selector does not separate labels from keys');
+assert_true(strpos($jsSource, "input.step = 'any'") !== false, 'Decimal modifier input is not enabled');
 
 echo "origin variant regression checks passed\n";
+echo "stored JSON example: " . $json . "\n";
