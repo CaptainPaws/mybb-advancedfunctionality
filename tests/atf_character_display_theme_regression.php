@@ -17,6 +17,7 @@ function atf_display_assert(bool $condition, string $message): void
 }
 
 atf_display_assert(strpos($template, '<h1 class="af-atf-wiki__title">{$wikiTitle}</h1>') !== false, 'Wiki header was removed');
+atf_display_assert(strpos($template, '{$wikiElement}') < strpos($template, '<h1 class="af-atf-wiki__title">'), 'Element icon must precede the Wiki title');
 atf_display_assert(strpos($php, "function af_atf_get_wiki_area(array \$field): string") !== false, 'Dynamic Wiki area resolver is missing');
 atf_display_assert(strpos($admin, "'main' => 'Main content'") !== false, 'ACP Wiki area selector is missing');
 atf_display_assert(strpos($php, "\$area = af_atf_get_wiki_area(\$f);") !== false, 'Renderer does not resolve area from field metadata');
@@ -36,6 +37,10 @@ atf_display_assert(strpos($css, '.af-atf-wiki__layout::after') !== false && strp
 atf_display_assert(strpos($css, 'grid-template-areas: "content infobox";') === false, 'Independent Wiki columns remain');
 atf_display_assert(strpos($css, 'float: none;') !== false && strpos($css, 'width: 100%;') !== false, 'Mobile infobox does not return to normal flow');
 atf_display_assert(strpos($css, '.af-atf-wiki__section {\n  clear:') === false, 'Wiki sections must not clear the infobox float');
+atf_display_assert(strpos($php, '<div class="af-atf-wiki__section-heading"><h2 class="af-atf-wiki__section-title">') !== false, 'Section heading wrapper is missing');
+atf_display_assert(strpos($css, '.af-atf-wiki__section-heading {') !== false && strpos($css, 'overflow: hidden;') !== false, 'Section heading does not respect the available width beside the float');
+atf_display_assert(strpos($php, "'Стихия: '.af_atf_kb_resolve_dynamic_label(\$f, \$val)") !== false, 'Element tooltip does not use the display label source');
+atf_display_assert(strpos($php, 'tabindex="0" title="') !== false && strpos($php, 'aria-label="') !== false, 'Element tooltip is not keyboard and screen-reader accessible');
 
 // Model the data-driven loop's observable metadata behavior with the current
 // registry plus a future field: order and renamed titles must need no PHP map.
