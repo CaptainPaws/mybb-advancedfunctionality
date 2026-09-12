@@ -49,12 +49,37 @@
     return raw;
   }
 
+  function getModalParts(modal, frame, loader) {
+    if (!frame.__afcsLoaderBound) {
+      frame.addEventListener('load', function () {
+        loader.hidden = true;
+      });
+      frame.__afcsLoaderBound = true;
+    }
+
+    return { modal: modal, frame: frame, loader: loader };
+  }
+
   function ensureModal() {
     var modal = document.querySelector('[data-afcs-modal]');
     if (modal) {
       var frame = modal.querySelector('[data-afcs-frame]');
       var loader = modal.querySelector('[data-afcs-loader]');
-      if (frame && loader) return { modal: modal, frame: frame, loader: loader };
+      var body = modal.querySelector('.af-cs-modal__body');
+
+      if (frame && !loader && body) {
+        loader = document.createElement('div');
+        loader.className = 'af-cs-modal__loader';
+        loader.setAttribute('data-afcs-loader', '1');
+        loader.setAttribute('role', 'status');
+        loader.setAttribute('aria-live', 'polite');
+        loader.innerHTML =
+          '<span class="af-cs-modal__spinner" aria-hidden="true"></span>' +
+          '<span>Загрузка листа персонажа…</span>';
+        body.appendChild(loader);
+      }
+
+      if (frame && loader) return getModalParts(modal, frame, loader);
     }
 
     var wrap = document.createElement('div');
@@ -80,15 +105,7 @@
 
     var frame = wrap.querySelector('[data-afcs-frame]');
     var loader = wrap.querySelector('[data-afcs-loader]');
-    frame.addEventListener('load', function () {
-      loader.hidden = true;
-    });
-
-    return {
-      modal: wrap,
-      frame: frame,
-      loader: loader
-    };
+    return getModalParts(wrap, frame, loader);
   }
 
   function closeModal() {
