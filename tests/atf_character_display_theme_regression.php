@@ -44,7 +44,26 @@ atf_display_assert(strpos($php, "if (\$val === '')") !== false, 'Empty ATF value
 atf_display_assert(strpos($php, "'character_name_ru' => 10") !== false, 'Russian name is not first in infobox ordering');
 atf_display_assert(strpos($php, "'character_weight' => 140") !== false, 'Infobox ordering does not include weight');
 atf_display_assert(strpos($php, "\$wikiSection('Способности'") !== false, 'Abilities section is missing');
-atf_display_assert(strpos($php, "\$wikiSection('Дополнительные сведения'") !== false, 'Fallback section for existing fields is missing');
+atf_display_assert(strpos($php, "'abilities' => array_fill_keys(['character_abilities']") !== false, 'Abilities are not explicitly mapped to their own section');
+atf_display_assert(strpos($php, "'additional_info' => array_fill_keys") !== false, 'Additional-information fields are not explicitly mapped');
+atf_display_assert(strpos($php, "} else {\n            \$wikiOtherRows .= \$row;") === false, 'Unknown fields still fall back to additional information');
+
+$sectionOrder = [
+    "\$wikiSection('О персонаже'",
+    "\$wikiSection('Характеристики'",
+    "\$wikiSection('Способности'",
+    "\$wikiSection('Пост'",
+    "\$wikiSection('Об игроке'",
+    "\$wikiSection('Дополнительные сведения'",
+];
+$previousSectionPosition = -1;
+foreach ($sectionOrder as $sectionCall) {
+    $sectionPosition = strpos($php, $sectionCall);
+    atf_display_assert($sectionPosition !== false, 'Wiki section is missing: ' . $sectionCall);
+    atf_display_assert($sectionPosition > $previousSectionPosition, 'Wiki sections are rendered in the wrong order at: ' . $sectionCall);
+    $previousSectionPosition = $sectionPosition;
+}
+atf_display_assert(strpos($php, "if (\$content === '')") !== false, 'Empty Wiki section headings are no longer omitted');
 atf_display_assert(strpos($css, 'grid-template-areas: "content infobox"') !== false, 'Desktop content/infobox layout is missing');
 atf_display_assert(strpos($css, '"infobox"') !== false && strpos($css, '"content"') !== false, 'Mobile infobox-first layout is missing');
 atf_display_assert(strpos($css, '.af-atf-wiki-info--image img') !== false, 'Responsive infobox image rule is missing');
