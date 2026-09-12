@@ -975,11 +975,12 @@ function af_charactersheets_arpg_numeric_rule(array $rules, string $key): float
     return (float)$rules[$key];
 }
 
-function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $archetypeRules, int $level): array
+function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $archetypeRules, int $level, array $originVariantRules = []): array
 {
     $lvlScale = max(0, $level - 1);
-    $sum = static function (string $key) use ($originRules, $archetypeRules): float {
+    $sum = static function (string $key) use ($originRules, $archetypeRules, $originVariantRules): float {
         return af_charactersheets_arpg_numeric_rule($originRules, $key)
+            + af_charactersheets_arpg_numeric_rule($originVariantRules, $key)
             + af_charactersheets_arpg_numeric_rule($archetypeRules, $key);
     };
 
@@ -1014,6 +1015,7 @@ function af_charactersheets_arpg_resolve_profile_option(array $atf_index, string
     $kbTypeMap = [
         'character_race' => 'arpg_origin',
         'character_origin' => 'arpg_origin',
+        'character_origin_variant' => 'arpg_origin_variant',
         'character_class' => 'arpg_archetype',
         'character_archetype' => 'arpg_archetype',
         'character_faction' => 'arpg_faction',
@@ -1246,13 +1248,23 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
     $path = trim((string)af_charactersheets_pick_field_value($atf_index, ['path', 'character_path']));
     $level = (int)($sheet_view['level'] ?? 1);
     $rawOrigin = trim((string)($character_profile['character_origin'] ?? af_charactersheets_pick_field_value($atf_index, ['character_origin', 'character_race', 'race'])));
+    $rawOriginVariant = trim((string)($character_profile['character_origin_variant'] ?? af_charactersheets_pick_field_value($atf_index, ['character_origin_variant', 'origin_variant'])));
     $rawArchetype = trim((string)($character_profile['character_class'] ?? $character_profile['character_archetype'] ?? af_charactersheets_pick_field_value($atf_index, ['character_class', 'character_archetype', 'class'])));
 
     $originResolved = af_charactersheets_arpg_resolve_kb_entry_flexible('arpg_origin', $rawOrigin);
     $originRules = af_charactersheets_arpg_extract_entry_rules((array)($originResolved['entry'] ?? []));
+    $originVariantResolved = af_charactersheets_arpg_resolve_kb_entry_flexible('arpg_origin_variant', $rawOriginVariant);
+    $originVariantRules = af_charactersheets_arpg_extract_entry_rules((array)($originVariantResolved['entry'] ?? []));
+    if ($rawOriginVariant !== '' && function_exists('af_kb_get_origin_parent_for_variant')) {
+        $variantParent = af_kb_get_origin_parent_for_variant((string)($originVariantResolved['resolved_key'] ?? ''), true);
+        if ((string)(($variantParent['origin'] ?? [])['key'] ?? '') !== (string)($originResolved['resolved_key'] ?? '')) {
+            $originVariantResolved = ['entry' => [], 'resolved_key' => '', 'resolved_by' => 'parent_mismatch'];
+            $originVariantRules = [];
+        }
+    }
     $archetypeResolved = af_charactersheets_arpg_resolve_kb_entry_flexible('arpg_archetype', $rawArchetype);
     $archetypeRules = af_charactersheets_arpg_extract_entry_rules((array)($archetypeResolved['entry'] ?? []));
-    $computedKbStats = af_charactersheets_arpg_build_stats_from_kb($originRules, $archetypeRules, $level);
+    $computedKbStats = af_charactersheets_arpg_build_stats_from_kb($originRules, $archetypeRules, $level, $originVariantRules);
     $character_stats = af_charactersheets_arpg_merge_runtime_stats($character_stats, $computedKbStats);
 
     $chips = [];
@@ -1408,6 +1420,7 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
             'character_nicknames' => af_charactersheets_pick_field_value($atf_index, ['character_nicknames', 'character_nickname', 'nickname']),
             'character_age' => af_charactersheets_pick_field_value($atf_index, ['character_age', 'age']),
             'character_origin' => af_charactersheets_pick_field_value($atf_index, ['character_origin']),
+            'character_origin_variant' => af_charactersheets_pick_field_value($atf_index, ['character_origin_variant', 'origin_variant']),
         ],
         'arpg_sources' => [
             'origin' => [
@@ -1415,6 +1428,12 @@ function af_charactersheets_build_arpg_view_model(array $sheet, array $sheet_vie
                 'resolved_key' => (string)($originResolved['resolved_key'] ?? ''),
                 'resolved_by' => (string)($originResolved['resolved_by'] ?? ''),
                 'kb_type' => 'arpg_origin',
+            ],
+            'origin_variant' => [
+                'raw' => $rawOriginVariant,
+                'resolved_key' => (string)($originVariantResolved['resolved_key'] ?? ''),
+                'resolved_by' => (string)($originVariantResolved['resolved_by'] ?? ''),
+                'kb_type' => 'arpg_origin_variant',
             ],
             'archetype' => [
                 'raw' => $rawArchetype,
@@ -1596,6 +1615,7 @@ function af_charactersheets_arpg_render_main_info_html(array $sheet_arpg_vm): st
         'Прозвища' => 'character_nicknames',
         'Возраст' => 'character_age',
         'Происхождение' => 'character_origin',
+        'Разновидность' => 'character_origin_variant',
         'Архетип' => 'character_class',
         'Фракция' => 'character_faction',
         'Стихия' => 'character_element',
@@ -1605,7 +1625,7 @@ function af_charactersheets_arpg_render_main_info_html(array $sheet_arpg_vm): st
         if ($value === '') {
             continue;
         }
-        if (in_array($field, ['character_origin', 'character_race', 'character_class', 'character_archetype', 'character_faction', 'character_element', 'character_gen'], true)) {
+        if (in_array($field, ['character_origin', 'character_origin_variant', 'character_race', 'character_class', 'character_archetype', 'character_faction', 'character_element', 'character_gen'], true)) {
             $resolved = $resolveOption($field, $value, $value);
             $rows[] = '<div class="af-cs-info-row"><div class="af-cs-info-label">' . htmlspecialchars_uni($label) . '</div><div class="af-cs-info-value">' . (string)$resolved['html'] . '</div></div>';
             continue;
