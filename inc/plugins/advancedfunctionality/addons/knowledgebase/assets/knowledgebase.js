@@ -1069,6 +1069,9 @@
             var modifierStatOptions = Array.isArray(typeSchema.modifier_stat_options)
                 ? typeSchema.modifier_stat_options.slice()
                 : [];
+            var modifierOperations = Array.isArray(typeSchema.modifier_operations)
+                ? typeSchema.modifier_operations.slice()
+                : ['flat'];
 
             function getRootDefaults() {
                 var defaults = (typeSchema && typeSchema.root_defaults && typeof typeSchema.root_defaults === 'object')
@@ -1251,8 +1254,9 @@
             function addSelectOptions(sel, opts) {
                 (opts || []).forEach(function (v) {
                     var o = document.createElement('option');
-                    o.value = String(v);
-                    o.textContent = String(v || '—');
+                    var isDefinition = v && typeof v === 'object' && !Array.isArray(v);
+                    o.value = String(isDefinition ? (v.value || '') : v);
+                    o.textContent = String(isDefinition ? (v.label || v.value || '—') : (v || '—'));
                     sel.appendChild(o);
                 });
             }
@@ -1312,6 +1316,7 @@
                 } else if (col.type === 'number') {
                     input = document.createElement('input');
                     input.type = 'number';
+                    input.step = 'any';
                     var numValue = row[col.key];
                     if (numValue == null || numValue === '') {
                         numValue = col.default != null ? col.default : 0;
@@ -1624,12 +1629,12 @@
                     // The builder edits only recognized flat rows; all other/legacy
                     // modifier objects remain untouched in the same ordered array.
                     renderSeededArrayEditor(rulesRoot, 'Variant modifiers', 'modifiers', [
-                        { key: 'stat_key', label: 'Stat', type: 'select', options: modifierStatOptions, default: modifierStatOptions[0] || 'hp' },
-                        { key: 'mode', label: 'Operation', type: 'select', options: ['flat'], default: 'flat' },
+                        { key: 'stat_key', label: 'Stat', type: 'select', options: modifierStatOptions, default: modifierStatOptions.length ? modifierStatOptions[0].value : '' },
+                        { key: 'mode', label: 'Operation', type: 'select', options: modifierOperations, default: modifierOperations[0] || 'flat' },
                         { key: 'value', label: 'Value', type: 'number', default: 0 },
                         { key: 'notes', label: 'Notes', default: '' }
                     ], [
-                        { key: 'add', label: '+ Add modifier', seed: { stat_key: 'hp', mode: 'flat', value: 0, notes: '' } }
+                        { key: 'add', label: '+ Add modifier', seed: { stat_key: modifierStatOptions.length ? modifierStatOptions[0].value : '', mode: modifierOperations[0] || 'flat', value: 0, notes: '' } }
                     ]);
                 }
 

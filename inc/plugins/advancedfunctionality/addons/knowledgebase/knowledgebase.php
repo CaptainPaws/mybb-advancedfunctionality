@@ -7,6 +7,8 @@
 if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
+require_once dirname(__DIR__) . '/arpg_stat_contract.php';
+
 define('AF_KB_ID', 'knowledgebase');
 define('AF_KB_VER', '1.0.0');
 define('AF_KB_BASE', AF_ADDONS . AF_KB_ID . '/');
@@ -98,11 +100,16 @@ function af_kb_arpg_character_field_type_contract(): array
 
 function af_kb_arpg_character_stat_keys(): array
 {
-    return [
-        'hp', 'atk', 'def', 'armor', 'speed', 'crit_rate', 'crit_dmg', 'status_hit',
-        'status_resist', 'mastery', 'element_damage_bonus', 'healing_bonus',
-        'shield_strength', 'luck',
-    ];
+    return array_keys(af_arpg_origin_modifier_stat_definitions());
+}
+
+function af_kb_arpg_character_stat_options(): array
+{
+    $options = [];
+    foreach (af_arpg_origin_modifier_stat_definitions() as $key => $definition) {
+        $options[] = ['value' => $key, 'label' => (string)$definition['label']];
+    }
+    return $options;
 }
 
 function af_kb_arpg_type_definition(string $typeKey): array
@@ -958,7 +965,8 @@ function af_kb_default_arpg_type_definitions(): array
             'ui_profile' => 'arpg',
             'rules_enabled' => true,
             'ui_rules_editor' => true,
-            'modifier_stat_options' => $typeKey === 'arpg_origin_variant' ? af_kb_arpg_character_stat_keys() : [],
+            'modifier_stat_options' => $typeKey === 'arpg_origin_variant' ? af_kb_arpg_character_stat_options() : [],
+            'modifier_operations' => $typeKey === 'arpg_origin_variant' ? af_arpg_origin_modifier_operations() : [],
             'rules_schema' => AF_KB_ARPG_META_SCHEMA,
             'rules_required_keys' => ['schema', 'mechanic', 'tags', 'ui', 'blocks', 'rules'],
             'required_paths' => array_values($requiredMap[$typeKey] ?? []),
@@ -3767,6 +3775,13 @@ function af_kb_get_type_schema_arpg(string $typeKey): array
         (array)($schema['validators'] ?? [])
     );
 
+    // Runtime-owned contract fields must not depend on a possibly stale
+    // ui_schema_json persisted when the type was first installed.
+    if ($typeKey === AF_KB_TYPE_ORIGIN_VARIANT) {
+        $schema['modifier_stat_options'] = af_kb_arpg_character_stat_options();
+        $schema['modifier_operations'] = af_arpg_origin_modifier_operations();
+    }
+
     return $schema;
 }
 
@@ -6050,6 +6065,19 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
 
     if ((string)($payload['rules']['type_profile'] ?? '') !== $entityKind) {
         $errors[] = 'ARPG ' . $entityKind . ': rules.type_profile must be "' . $entityKind . '".';
+    }
+
+    if ($entityKind === 'origin_variant') {
+        if (!is_array($payload['rules']['modifiers'] ?? null)) {
+            $errors[] = 'ARPG origin_variant: "rules.modifiers" must be an array.';
+        } else {
+            foreach ($payload['rules']['modifiers'] as $idx => $modifier) {
+                $number = $idx + 1;
+                foreach (af_arpg_validate_origin_variant_modifier($modifier) as $modifierError) {
+                    $errors[] = 'ARPG origin_variant: modifier #' . $number . ' ' . $modifierError . '.';
+                }
+            }
+        }
     }
 
     if ($entityKind === 'ability') {
@@ -9904,8 +9932,10 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
         ];
 
         $originBase = af_kb_arpg_pick_rule_number($originRules, (array)($baseMap[$stat] ?? []));
+        $originBase += af_kb_arpg_pick_rule_number($originVariantRules, (array)($baseMap[$stat] ?? []));
         $archetypeBase = af_kb_arpg_pick_rule_number($archetypeRules, (array)($baseMap[$stat] ?? []));
         $originGrowth = af_kb_arpg_pick_rule_number($originRules, (array)($growthMap[$stat] ?? []));
+        $originGrowth += af_kb_arpg_pick_rule_number($originVariantRules, (array)($growthMap[$stat] ?? []));
         $archetypeGrowth = af_kb_arpg_pick_rule_number($archetypeRules, (array)($growthMap[$stat] ?? []));
 
         if ($stat === 'character_defense') {
@@ -9930,30 +9960,14 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
         'character_healing_received_bonus' => $buildValue('character_healing_received_bonus'),
         'character_luck' => $buildValue('character_luck'),
         'character_armor' => 0.0,
-        'character_speed' => af_kb_arpg_pick_rule_number($originRules, ['movement_speed']),
+        'character_speed' => af_kb_arpg_pick_rule_number($originRules, ['movement_speed'])
+            + af_kb_arpg_pick_rule_number($originVariantRules, ['movement_speed']),
         'character_crit_rate' => 0.0,
         'character_status_hit' => 0.0,
         'character_status_resist' => 0.0,
     ];
 
-    $modifierTargets = [
-        'hp' => 'character_hp', 'atk' => 'character_attack_power', 'def' => 'character_defense',
-        'armor' => 'character_armor', 'speed' => 'character_speed', 'crit_rate' => 'character_crit_rate',
-        'crit_dmg' => 'character_crit_damage', 'status_hit' => 'character_status_hit',
-        'status_resist' => 'character_status_resist', 'mastery' => 'character_elemental_mastery',
-        'element_damage_bonus' => 'character_element_damage_bonus', 'healing_bonus' => 'character_healing_bonus',
-        'shield_strength' => 'character_shield_strength', 'luck' => 'character_luck',
-    ];
-    foreach ((array)($originVariantRules['modifiers'] ?? []) as $modifier) {
-        if (!is_array($modifier) || (string)($modifier['mode'] ?? 'flat') !== 'flat') {
-            continue;
-        }
-        $target = $modifierTargets[trim((string)($modifier['stat_key'] ?? ''))] ?? '';
-        if ($target === '' || !is_numeric($modifier['value'] ?? null)) {
-            continue;
-        }
-        $stats[$target] = (float)($stats[$target] ?? 0) + (float)$modifier['value'];
-    }
+    $stats = af_arpg_apply_origin_variant_modifiers($stats, $originVariantRules, $levelSteps);
 
     $manualMap = [
         'character_hp' => ['character_hp', 'hp', 'health'],

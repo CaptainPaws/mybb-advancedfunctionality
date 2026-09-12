@@ -1,4 +1,5 @@
 <?php
+require_once dirname(__DIR__, 2) . '/arpg_stat_contract.php';
 if (!defined('IN_MYBB')) {
     die('No direct access');
 }
@@ -977,32 +978,18 @@ function af_charactersheets_arpg_numeric_rule(array $rules, string $key): float
 
 function af_charactersheets_arpg_apply_flat_modifiers(array $stats, array $rules): array
 {
-    $modifierTargets = [
-        'hp' => 'character_hp', 'atk' => 'character_attack_power', 'def' => 'character_defense',
-        'armor' => 'character_armor', 'speed' => 'character_speed', 'crit_rate' => 'character_crit_rate',
-        'crit_dmg' => 'character_crit_damage', 'status_hit' => 'character_status_hit',
-        'status_resist' => 'character_status_resist', 'mastery' => 'character_elemental_mastery',
-        'element_damage_bonus' => 'character_element_damage_bonus', 'healing_bonus' => 'character_healing_bonus',
-        'shield_strength' => 'character_shield_strength', 'luck' => 'character_luck',
-    ];
-    foreach ((array)($rules['modifiers'] ?? []) as $modifier) {
-        if (!is_array($modifier) || (string)($modifier['mode'] ?? 'flat') !== 'flat') {
-            continue;
-        }
-        $target = $modifierTargets[trim((string)($modifier['stat_key'] ?? ''))] ?? '';
-        if ($target === '' || !is_numeric($modifier['value'] ?? null)) {
-            continue;
-        }
-        $stats[$target] = (float)($stats[$target] ?? 0) + (float)$modifier['value'];
-    }
-    return $stats;
+    return af_arpg_apply_origin_variant_modifiers($stats, $rules);
 }
 
 function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $archetypeRules, int $level, array $originVariantRules = []): array
 {
     $lvlScale = max(0, $level - 1);
-    $sum = static function (string $key) use ($originRules, $archetypeRules): float {
+    // Direct variant fields are retained as a legacy compatibility input. New
+    // variants use rules.modifiers, so the two representations are never
+    // synthesized from one another and a modifier is not applied twice.
+    $sum = static function (string $key) use ($originRules, $originVariantRules, $archetypeRules): float {
         return af_charactersheets_arpg_numeric_rule($originRules, $key)
+            + af_charactersheets_arpg_numeric_rule($originVariantRules, $key)
             + af_charactersheets_arpg_numeric_rule($archetypeRules, $key);
     };
 
@@ -1016,7 +1003,8 @@ function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $
         'character_healing_bonus' => $sum('healing_bonus_base'),
         'character_shield_strength' => $sum('shield_bonus_base'),
         'character_armor' => 0.0,
-        'character_speed' => af_charactersheets_arpg_numeric_rule($originRules, 'movement_speed'),
+        'character_speed' => af_charactersheets_arpg_numeric_rule($originRules, 'movement_speed')
+            + af_charactersheets_arpg_numeric_rule($originVariantRules, 'movement_speed'),
         'character_crit_rate' => 0.0,
         'character_status_hit' => 0.0,
         'character_status_resist' => 0.0,
@@ -1025,7 +1013,7 @@ function af_charactersheets_arpg_build_stats_from_kb(array $originRules, array $
     $stats['character_attack_power'] += $sum('base_damage_bonus');
     $stats['character_defense'] += $sum('base_defense_bonus');
 
-    $stats = af_charactersheets_arpg_apply_flat_modifiers($stats, $originVariantRules);
+    $stats = af_arpg_apply_origin_variant_modifiers($stats, $originVariantRules, $lvlScale);
 
     foreach ($stats as $key => $value) {
         $stats[$key] = (float)$value;
