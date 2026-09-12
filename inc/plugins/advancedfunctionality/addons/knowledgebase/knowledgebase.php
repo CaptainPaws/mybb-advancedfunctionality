@@ -7,8 +7,6 @@
 if (!defined('IN_MYBB')) { die('No direct access'); }
 if (!defined('AF_ADDONS')) { die('AdvancedFunctionality core required'); }
 
-require_once dirname(__DIR__) . '/arpg_stat_contract.php';
-
 define('AF_KB_ID', 'knowledgebase');
 define('AF_KB_VER', '1.0.0');
 define('AF_KB_BASE', AF_ADDONS . AF_KB_ID . '/');
@@ -100,16 +98,97 @@ function af_kb_arpg_character_field_type_contract(): array
 
 function af_kb_arpg_character_stat_keys(): array
 {
-    return array_keys(af_arpg_origin_modifier_stat_definitions());
+    return array_keys(af_kb_arpg_origin_modifier_stat_definitions());
 }
 
 function af_kb_arpg_character_stat_options(): array
 {
     $options = [];
-    foreach (af_arpg_origin_modifier_stat_definitions() as $key => $definition) {
+    foreach (af_kb_arpg_origin_modifier_stat_definitions() as $key => $definition) {
         $options[] = ['value' => $key, 'label' => (string)$definition['label']];
     }
     return $options;
+}
+
+/**
+ * Adapts mechanical Origin schema fields to the canonical keys consumed by
+ * Character Sheets. The Origin defaults below remain the source of truth: a
+ * mapping entry is exposed only while its schema field actually exists there.
+ */
+function af_kb_arpg_origin_modifier_stat_definitions(): array
+{
+    $originSchema = af_kb_default_type_profile_payload_arpg('arpg_origin');
+    $fieldMap = [
+        'hp_base' => ['key' => 'hp', 'label' => 'HP', 'vm_field' => 'character_hp'],
+        'defense_base' => ['key' => 'def', 'label' => 'Defense', 'vm_field' => 'character_defense'],
+        'attack_power_base' => ['key' => 'atk', 'label' => 'Attack Power', 'vm_field' => 'character_attack_power'],
+        'movement_speed' => ['key' => 'speed', 'label' => 'Movement Speed', 'vm_field' => 'character_speed'],
+        'crit_damage_base' => ['key' => 'crit_dmg', 'label' => 'Crit Damage', 'vm_field' => 'character_crit_damage'],
+        'elemental_mastery_base' => ['key' => 'mastery', 'label' => 'Elemental Mastery', 'vm_field' => 'character_elemental_mastery'],
+        'elemental_damage_bonus_base' => ['key' => 'element_damage_bonus', 'label' => 'Elemental Damage Bonus', 'vm_field' => 'character_element_damage_bonus'],
+        'healing_bonus_base' => ['key' => 'healing_bonus', 'label' => 'Healing Bonus', 'vm_field' => 'character_healing_bonus'],
+        'shield_bonus_base' => ['key' => 'shield_strength', 'label' => 'Shield Bonus', 'vm_field' => 'character_shield_strength'],
+        'hp_per_level' => ['key' => 'hp_per_level', 'label' => 'HP per Level', 'vm_field' => 'character_hp', 'level_scaled' => true],
+        'defense_per_level' => ['key' => 'defense_per_level', 'label' => 'Defense per Level', 'vm_field' => 'character_defense', 'level_scaled' => true],
+        'attack_power_per_level' => ['key' => 'attack_power_per_level', 'label' => 'Attack Power per Level', 'vm_field' => 'character_attack_power', 'level_scaled' => true],
+        'elemental_mastery_per_level' => ['key' => 'elemental_mastery_per_level', 'label' => 'Elemental Mastery per Level', 'vm_field' => 'character_elemental_mastery', 'level_scaled' => true],
+    ];
+
+    $definitions = [];
+    foreach ($fieldMap as $originField => $definition) {
+        if (!array_key_exists($originField, $originSchema) || !is_numeric($originSchema[$originField])) {
+            continue;
+        }
+        $key = (string)$definition['key'];
+        unset($definition['key']);
+        $definition['origin_field'] = $originField;
+        $definitions[$key] = $definition;
+    }
+    return $definitions;
+}
+
+function af_kb_arpg_origin_modifier_operations(): array
+{
+    return ['flat'];
+}
+
+function af_kb_arpg_apply_origin_variant_modifiers(array $stats, array $rules, int $levelSteps = 0): array
+{
+    $definitions = af_kb_arpg_origin_modifier_stat_definitions();
+    foreach ((array)($rules['modifiers'] ?? []) as $modifier) {
+        if (!is_array($modifier) || (string)($modifier['mode'] ?? 'flat') !== 'flat') {
+            continue;
+        }
+        $definition = $definitions[trim((string)($modifier['stat_key'] ?? ''))] ?? null;
+        if (!is_array($definition) || !is_numeric($modifier['value'] ?? null)) {
+            continue;
+        }
+        $target = (string)$definition['vm_field'];
+        $scale = !empty($definition['level_scaled']) ? max(0, $levelSteps) : 1;
+        $stats[$target] = (float)($stats[$target] ?? 0) + ((float)$modifier['value'] * $scale);
+    }
+    return $stats;
+}
+
+function af_kb_arpg_validate_origin_variant_modifier($modifier): array
+{
+    if (!is_array($modifier)) {
+        return ['must be an object'];
+    }
+    $errors = [];
+    if (!isset(af_kb_arpg_origin_modifier_stat_definitions()[trim((string)($modifier['stat_key'] ?? ''))])) {
+        $errors[] = 'has unsupported stat_key';
+    }
+    if (!in_array(trim((string)($modifier['mode'] ?? 'flat')), af_kb_arpg_origin_modifier_operations(), true)) {
+        $errors[] = 'has unsupported mode';
+    }
+    if (!array_key_exists('value', $modifier) || !is_numeric($modifier['value'])) {
+        $errors[] = 'value must be numeric';
+    }
+    if (isset($modifier['notes']) && !is_string($modifier['notes'])) {
+        $errors[] = 'notes must be a string';
+    }
+    return $errors;
 }
 
 function af_kb_arpg_type_definition(string $typeKey): array
@@ -966,7 +1045,7 @@ function af_kb_default_arpg_type_definitions(): array
             'rules_enabled' => true,
             'ui_rules_editor' => true,
             'modifier_stat_options' => $typeKey === 'arpg_origin_variant' ? af_kb_arpg_character_stat_options() : [],
-            'modifier_operations' => $typeKey === 'arpg_origin_variant' ? af_arpg_origin_modifier_operations() : [],
+            'modifier_operations' => $typeKey === 'arpg_origin_variant' ? af_kb_arpg_origin_modifier_operations() : [],
             'rules_schema' => AF_KB_ARPG_META_SCHEMA,
             'rules_required_keys' => ['schema', 'mechanic', 'tags', 'ui', 'blocks', 'rules'],
             'required_paths' => array_values($requiredMap[$typeKey] ?? []),
@@ -3779,7 +3858,7 @@ function af_kb_get_type_schema_arpg(string $typeKey): array
     // ui_schema_json persisted when the type was first installed.
     if ($typeKey === AF_KB_TYPE_ORIGIN_VARIANT) {
         $schema['modifier_stat_options'] = af_kb_arpg_character_stat_options();
-        $schema['modifier_operations'] = af_arpg_origin_modifier_operations();
+        $schema['modifier_operations'] = af_kb_arpg_origin_modifier_operations();
     }
 
     return $schema;
@@ -6073,7 +6152,7 @@ function af_kb_validate_arpg_public_entity(string $entityKind, array $payload, a
         } else {
             foreach ($payload['rules']['modifiers'] as $idx => $modifier) {
                 $number = $idx + 1;
-                foreach (af_arpg_validate_origin_variant_modifier($modifier) as $modifierError) {
+                foreach (af_kb_arpg_validate_origin_variant_modifier($modifier) as $modifierError) {
                     $errors[] = 'ARPG origin_variant: modifier #' . $number . ' ' . $modifierError . '.';
                 }
             }
@@ -9967,7 +10046,7 @@ function af_kb_build_arpg_character_stats(array $profile, array $manualStats = [
         'character_status_resist' => 0.0,
     ];
 
-    $stats = af_arpg_apply_origin_variant_modifiers($stats, $originVariantRules, $levelSteps);
+    $stats = af_kb_arpg_apply_origin_variant_modifiers($stats, $originVariantRules, $levelSteps);
 
     $manualMap = [
         'character_hp' => ['character_hp', 'hp', 'health'],

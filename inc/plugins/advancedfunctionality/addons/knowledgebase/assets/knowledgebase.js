@@ -1625,9 +1625,9 @@
                     payload.rules.inherits_from_origin = true;
                     createSection(rulesRoot, 'Origin relation', 'This variant inherits its selected parent Origin.');
 
-                    // These keys are the existing ARPG Character Sheet stat contract.
-                    // The builder edits only recognized flat rows; all other/legacy
-                    // modifier objects remain untouched in the same ordered array.
+                    // Options are supplied by the server from the mechanical fields
+                    // in the ARPG Origin schema. Other/legacy modifier objects remain
+                    // untouched in the same ordered array.
                     renderSeededArrayEditor(rulesRoot, 'Variant modifiers', 'modifiers', [
                         { key: 'stat_key', label: 'Stat', type: 'select', options: modifierStatOptions, default: modifierStatOptions.length ? modifierStatOptions[0].value : '' },
                         { key: 'mode', label: 'Operation', type: 'select', options: modifierOperations, default: modifierOperations[0] || 'flat' },
