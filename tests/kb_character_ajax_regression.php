@@ -29,5 +29,12 @@ kb_character_ajax_assert(strpos($js, 'requestSequence !== sequence') !== false, 
 kb_character_ajax_assert(strpos($js, 'window.history.pushState') !== false, 'Character filter URL history update is missing');
 kb_character_ajax_assert(strpos($js, "window.addEventListener('popstate'") !== false, 'Back/Forward restoration is missing');
 kb_character_ajax_assert(strpos($js, ".closest('.af-kb-pagination a')") !== false, 'AJAX pagination delegation is missing');
+kb_character_ajax_assert(
+    preg_match(
+        "/form\\.addEventListener\\('change',[\\s\\S]*?event\\.preventDefault\\(\\);[\\s\\S]*?event\\.stopPropagation\\(\\);[\\s\\S]*?load\\(urlFromForm\\(\\), true\\);/",
+        $js
+    ) === 1,
+    'Character select changes can escape into legacy GET navigation'
+);
 
 echo "KB Character AJAX regression checks passed.\n";

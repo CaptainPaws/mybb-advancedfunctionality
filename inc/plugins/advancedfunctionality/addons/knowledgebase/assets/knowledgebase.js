@@ -5636,7 +5636,10 @@
         }
 
         form.addEventListener('change', function (event) {
-            if (event.target && event.target.matches('select[name]')) load(urlFromForm(), true);
+            if (!event.target || !event.target.matches('select[name]')) return;
+            event.preventDefault();
+            event.stopPropagation();
+            load(urlFromForm(), true);
         });
         form.addEventListener('submit', function (event) {
             event.preventDefault();
