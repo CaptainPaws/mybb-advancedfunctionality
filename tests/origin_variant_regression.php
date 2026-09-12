@@ -169,5 +169,20 @@ $renderSource = file_get_contents(__DIR__ . '/../inc/plugins/advancedfunctionali
 assert_true(is_string($renderSource), 'Unable to inspect Character Sheet renderer');
 assert_true(strpos($renderSource, "'speed_total' => (int)af_charactersheets_arpg_read_numeric_stat") !== false, 'Combat summary bypasses calculated speed VM');
 
+$atfSource = file_get_contents(__DIR__ . '/../inc/plugins/advancedfunctionality/addons/advancedthreadfields/advancedthreadfields.php');
+$atfJsSource = file_get_contents(__DIR__ . '/../inc/plugins/advancedfunctionality/addons/advancedthreadfields/assets/advancedthreadfields.js');
+assert_true(is_string($atfSource) && is_string($atfJsSource), 'Unable to inspect ATF sources');
+foreach ([
+    "'character_origin_variant' => 'arpg_origin_variant'",
+    "af_kb_get_origin_variants(\$originKey, true)",
+    "af_kb_get_origin_parent_for_variant(\$val, true)",
+    "'character_origin_variant' => af_charactersheets_pick_field_value",
+] as $contract) {
+    assert_true(strpos($atfSource, $contract) !== false, 'Missing ATF Origin Variant contract: ' . $contract);
+}
+assert_true(strpos($atfJsSource, 'initOriginVariantDependency()') !== false, 'Origin Variant dependency is not initialized');
+assert_true(strpos($atfJsSource, 'originSelect.addEventListener("change", () => load(false))') !== false, 'Origin changes do not clear/reload variants');
+assert_true(strpos($atfJsSource, 'setVisible(variantSelect.options.length > 1)') !== false, 'Empty Origin Variant selector is not hidden');
+
 echo "origin variant regression checks passed\n";
 echo "stored JSON example: " . $json . "\n";

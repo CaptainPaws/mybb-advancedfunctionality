@@ -676,6 +676,11 @@ function af_atf_misc_start(): void
         af_atf_kb_race_variants_endpoint(); // die внутри
     }
 
+    if ($action === 'af_atf_kb_origin_variants') {
+        af_atf_clean_output_buffers();
+        af_atf_kb_origin_variants_endpoint();
+    }
+
     if ($action === 'af_atf_character_kb_create') {
         af_atf_handle_character_kb_bridge_action(false);
     }
@@ -718,6 +723,11 @@ function af_atf_early_ajax_router(): void
     if ($action === 'af_atf_kb_race_variants') {
         af_atf_clean_output_buffers();
         af_atf_kb_race_variants_endpoint(); // внутри будет die
+    }
+
+    if ($action === 'af_atf_kb_origin_variants') {
+        af_atf_clean_output_buffers();
+        af_atf_kb_origin_variants_endpoint();
     }
 
     if ($action === 'af_atf_character_kb_create') {
@@ -1009,6 +1019,37 @@ function af_atf_kb_race_variants_endpoint(): void
             'label_key' => 'label',
         ],
     ]);
+}
+
+function af_atf_kb_origin_variants_endpoint(): void
+{
+    global $mybb;
+
+    $originKey = strtolower(trim((string)$mybb->get_input('origin')));
+    if (!preg_match('/^[a-z0-9_-]{2,64}$/i', $originKey)) {
+        af_atf_json_response(['ok' => 0, 'error' => 'invalid_origin'], 400);
+        return;
+    }
+    if (function_exists('af_kb_can_view') && !af_kb_can_view()) {
+        af_atf_json_response(['ok' => 0, 'error' => 'no_access'], 403);
+        return;
+    }
+
+    $rows = function_exists('af_kb_get_origin_variants') ? af_kb_get_origin_variants($originKey, true) : [];
+    $items = [];
+    foreach ($rows as $row) {
+        $entry = is_array($row['variant'] ?? null) ? $row['variant'] : [];
+        $value = trim((string)($entry['key'] ?? ''));
+        if ($value === '') {
+            continue;
+        }
+        $items[] = [
+            'value' => $value,
+            'label' => af_atf_kb_pick_text($entry, 'title') ?: $value,
+        ];
+    }
+
+    af_atf_json_response(['ok' => 1, 'origin' => $originKey, 'items' => $items]);
 }
 
 /* -------------------- DB UPGRADE HELPERS -------------------- */
@@ -1455,6 +1496,7 @@ function af_atf_seed_character_contract_fields(): void
         ['name' => 'character_element', 'title' => 'Element', 'type' => 'kb_dynamic', 'sortorder' => 60, 'options' => "provider=character_element\nmechanic=arpg", 'maxlen' => 128],
         ['name' => 'character_gen', 'title' => 'Gender', 'type' => 'select', 'sortorder' => 70, 'options' => "male=Male\nfemale=Female\nnonbinary=Non-binary\nother=Other", 'maxlen' => 64],
         ['name' => 'character_race', 'title' => 'Race / Origin', 'type' => 'kb_mechanic', 'sortorder' => 80, 'options' => "provider=character_race", 'maxlen' => 128],
+        ['name' => 'character_origin_variant', 'title' => 'Origin Variant / Разновидность происхождения', 'type' => 'kb_dynamic', 'sortorder' => 85, 'options' => "provider=character_origin_variant\nmechanic=arpg", 'maxlen' => 128],
         ['name' => 'character_class', 'title' => 'Class / Archetype', 'type' => 'kb_mechanic', 'sortorder' => 90, 'options' => "provider=character_class", 'maxlen' => 128],
         ['name' => 'character_faction', 'title' => 'Faction', 'type' => 'kb_dynamic', 'sortorder' => 100, 'options' => "provider=character_faction\nmechanic=arpg", 'maxlen' => 128],
         ['name' => 'character_app', 'title' => 'Appearance', 'type' => 'textarea', 'sortorder' => 110],
@@ -2764,6 +2806,7 @@ function af_atf_character_provider_type(string $provider, string $mechanic): str
     $map = [
         'character_race' => ['dnd' => 'kb_race', 'arpg' => 'arpg_origin'],
         'character_origin' => ['dnd' => 'kb_race', 'arpg' => 'arpg_origin'],
+        'character_origin_variant' => ['dnd' => '', 'arpg' => 'arpg_origin_variant'],
         'character_class' => ['dnd' => 'kb_class', 'arpg' => 'arpg_archetype'],
         'character_archetype' => ['dnd' => 'kb_class', 'arpg' => 'arpg_archetype'],
         'character_faction' => ['dnd' => '', 'arpg' => 'arpg_faction'],
@@ -2783,6 +2826,7 @@ function af_atf_character_arpg_contract_types(): array
         'character_element' => 'arpg_element',
         'character_race' => 'arpg_origin',
         'character_origin' => 'arpg_origin',
+        'character_origin_variant' => 'arpg_origin_variant',
         'character_class' => 'arpg_archetype',
         'character_archetype' => 'arpg_archetype',
         'character_faction' => 'arpg_faction',
@@ -3051,6 +3095,7 @@ function af_atf_render_inputs(array $fields, array $valuesByFieldId): string
         'character_gender',
         'character_race',
         'character_origin',
+        'character_origin_variant',
         'character_class',
         'character_archetype',
         'character_weapon',
@@ -3227,6 +3272,49 @@ function af_atf_build_input_html(array $field, string $value): string
         $html .= '</select>';
         return $html;
     };
+
+    if ($fieldName === 'character_origin_variant') {
+        $originKey = '';
+        $contextFields = (array)($GLOBALS['af_atf_context_fields'] ?? []);
+        $contextValues = (array)($GLOBALS['af_atf_context_values'] ?? []);
+        foreach ($contextFields as $contextField) {
+            $contextName = (string)($contextField['name'] ?? '');
+            if ($contextName === 'character_origin' || ($originKey === '' && $contextName === 'character_race')) {
+                $originKey = trim((string)($contextValues[(int)($contextField['fieldid'] ?? 0)] ?? ''));
+                if ($contextName === 'character_origin' && $originKey !== '') {
+                    break;
+                }
+            }
+        }
+
+        $list = [];
+        if ($originKey !== '' && function_exists('af_kb_get_origin_variants')) {
+            foreach (af_kb_get_origin_variants($originKey, true) as $relation) {
+                $entry = is_array($relation['variant'] ?? null) ? $relation['variant'] : [];
+                if (!empty($entry['key'])) {
+                    $list[] = [
+                        'key' => (string)$entry['key'],
+                        'title' => af_atf_kb_pick_text($entry, 'title') ?: (string)$entry['key'],
+                    ];
+                }
+            }
+        }
+        $knownVariant = false;
+        foreach ($list as $item) {
+            if ((string)($item['key'] ?? '') === $value) {
+                $knownVariant = true;
+                break;
+            }
+        }
+        if (!$knownVariant) {
+            $value = '';
+        }
+        $base = rtrim((string)$mybb->settings['bburl'], '/');
+        $html = '<div class="af-atf-origin-variant" data-endpoint="' . htmlspecialchars_uni($base . '/misc.php?action=af_atf_kb_origin_variants') . '" data-selected="' . $safeValue . '">';
+        $html .= $renderKbSelect($nameAttr, $value, $list);
+        $html .= '</div>';
+        return $html;
+    }
 
     $shouldForceArpgContract = $arpgContractType !== '' && (
         $activeMechanic === 'arpg'
@@ -4744,7 +4832,8 @@ function af_atf_bridge_sync_character_kb_from_thread(int $tid, array $thread = [
         'character_element' => af_charactersheets_pick_field_value($index, ['character_element', 'element']),
         'character_gen' => af_charactersheets_pick_field_value($index, ['character_gen', 'character_gender', 'gender']),
         'character_race' => af_charactersheets_pick_field_value($index, ['character_race', 'race']),
-        'character_origin' => af_charactersheets_pick_field_value($index, ['character_origin']),
+        'character_origin' => af_charactersheets_pick_field_value($index, ['character_origin', 'character_race', 'race']),
+        'character_origin_variant' => af_charactersheets_pick_field_value($index, ['character_origin_variant', 'origin_variant']),
         'character_class' => af_charactersheets_pick_field_value($index, ['character_class', 'class']),
         'character_faction' => af_charactersheets_pick_field_value($index, ['character_faction', 'faction']),
         'character_app' => af_charactersheets_pick_field_value($index, ['character_app', 'character_about', 'character_bio', 'character_description', 'app']),
@@ -5193,6 +5282,10 @@ function af_atf_dh_validate(&$ph): void
     $GLOBALS['af_atf_context_fields'] = $fields;
     $GLOBALS['af_atf_context_values'] = is_array($incoming) ? $incoming : [];
     $activeMechanic = af_atf_character_active_mechanic();
+    $incomingByName = [];
+    foreach ($fields as $incomingField) {
+        $incomingByName[(string)($incomingField['name'] ?? '')] = trim((string)($incoming[(int)($incomingField['fieldid'] ?? 0)] ?? ''));
+    }
     foreach ($fields as $f) {
         $fieldid = (int)$f['fieldid'];
         $raw = $incoming[$fieldid] ?? '';
@@ -5331,6 +5424,20 @@ function af_atf_dh_validate(&$ph): void
             if ($val !== '' && !preg_match('/^[a-z0-9_-]{2,64}$/i', $val)) {
                 $ph->set_error('invalid_field_'.$fieldid);
                 continue;
+            }
+            if ($fieldName === 'character_origin_variant' && $val !== '') {
+                $originKey = (string)($incomingByName['character_origin'] ?? '');
+                if ($originKey === '') {
+                    $originKey = (string)($incomingByName['character_race'] ?? '');
+                }
+                $parent = function_exists('af_kb_get_origin_parent_for_variant')
+                    ? af_kb_get_origin_parent_for_variant($val, true)
+                    : null;
+                if ($originKey === '' || (string)(($parent['origin'] ?? [])['key'] ?? '') !== $originKey) {
+                    $ph->set_error('invalid_field_'.$fieldid);
+                    $clean[$fieldid] = '';
+                    continue;
+                }
             }
             $clean[$fieldid] = $val;
             continue;

@@ -488,6 +488,60 @@
       });
     },
 
+    initOriginVariantDependency() {
+      const wrap = AF_ATF.qs(".af-atf-origin-variant");
+      if (!wrap) return;
+      const variantSelect = AF_ATF.qs("select", wrap);
+      const originWrap = AF_ATF.qs("[data-character-field='character_origin']")
+        || AF_ATF.qs("[data-character-field='character_race']");
+      const originSelect = originWrap ? AF_ATF.qs("select", originWrap) : null;
+      const container = wrap.closest(".af-atf-character-top-grid-item") || wrap.closest("tr");
+      const endpoint = String(wrap.getAttribute("data-endpoint") || "");
+      if (!variantSelect || !originSelect || !endpoint) return;
+
+      let requestId = 0;
+      const setVisible = (visible) => {
+        if (container) container.style.display = visible ? "" : "none";
+        variantSelect.disabled = !visible;
+      };
+      const replaceOptions = (items, selected) => {
+        variantSelect.innerHTML = '<option value=""></option>';
+        (Array.isArray(items) ? items : []).forEach((item) => {
+          const value = item && item.value ? String(item.value) : "";
+          if (!value) return;
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = item.label ? String(item.label) : value;
+          variantSelect.appendChild(option);
+        });
+        if (selected && Array.from(variantSelect.options).some((option) => option.value === selected)) {
+          variantSelect.value = selected;
+        }
+        setVisible(variantSelect.options.length > 1);
+      };
+
+      const load = async (preserveCurrent) => {
+        const currentRequest = ++requestId;
+        const origin = String(originSelect.value || "").trim();
+        const selected = preserveCurrent ? String(variantSelect.value || "") : "";
+        replaceOptions([], "");
+        if (!origin) return;
+        try {
+          const url = new URL(endpoint, window.location.origin);
+          url.searchParams.set("origin", origin);
+          const response = await fetch(url.toString(), { credentials: "same-origin" });
+          const data = await response.json();
+          if (currentRequest !== requestId || !data || data.ok !== 1) return;
+          replaceOptions(data.items, selected);
+        } catch (e) {
+          if (currentRequest === requestId) replaceOptions([], "");
+        }
+      };
+
+      originSelect.addEventListener("change", () => load(false));
+      setVisible(variantSelect.options.length > 1);
+    },
+
     initCharacterMechanic() {
       const switcher = AF_ATF.qs(".af-atf-character-mechanic");
       if (!switcher) return;
@@ -1144,6 +1198,7 @@
     AF_ATF.initKbCatalogCtaModal();
     AF_ATF.initPointBuyAll();
     AF_ATF.initCharacterMechanic();
+    AF_ATF.initOriginVariantDependency();
     AF_ATF.initDynamicKbPreviews();
     AF_ATF.initCharacterAbilities();
     AF_ATF.initCharacterStats();
